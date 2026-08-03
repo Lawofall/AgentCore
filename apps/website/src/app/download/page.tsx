@@ -1,3 +1,4 @@
+import BrandMark from "@/components/BrandMark";
 import DownloadPageHero from "@/components/DownloadPageHero";
 import DownloadPanel from "@/components/DownloadPanel";
 import {
@@ -15,20 +16,6 @@ export const metadata: Metadata = {
   description:
     "下载 AgentCore 桌面客户端 for Windows 与 macOS（Apple Silicon）。Multi-Agent 协作工作台，自动更新。",
 };
-
-function BrandMark() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
-      <line x1="6" y1="7" x2="13" y2="13" stroke="var(--border)" strokeWidth="1.5" />
-      <line x1="20" y1="7" x2="13" y2="13" stroke="var(--border)" strokeWidth="1.5" />
-      <line x1="7" y1="20" x2="13" y2="13" stroke="var(--border)" strokeWidth="1.5" />
-      <circle cx="13" cy="13" r="3.4" fill="var(--primary)" />
-      <circle cx="6" cy="7" r="2.2" fill="var(--brand-2)" />
-      <circle cx="20" cy="7" r="2.2" fill="var(--brand-2)" />
-      <circle cx="7" cy="20" r="2.2" fill="var(--brand-2)" />
-    </svg>
-  );
-}
 
 function InstallStepList({ steps }: { steps: string[] }) {
   return (
@@ -51,8 +38,8 @@ export default function DownloadPage() {
       <header className="sticky top-0 z-50 border-b border-border/60 bg-[color-mix(in_oklab,var(--background),transparent_25%)] backdrop-blur-xl">
         <nav className="container-x flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark />
-            <span className="text-[1.05rem] font-bold tracking-tight">AgentCore</span>
+            <BrandMark size={20} />
+            <span className="text-base font-semibold tracking-tight">AgentCore</span>
           </Link>
           <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
             ← 返回首页

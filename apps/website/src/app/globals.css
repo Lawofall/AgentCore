@@ -1,8 +1,10 @@
 @import "tailwindcss";
 
 /*
- * AgentCore 官网配色 —— 复用桌面端品牌体系（OKLCH，hue 255 为品牌蓝）。
- * 官网整体走暗色科技调，故 :root 直接采用暗色面板值。
+ * AgentCore 官网配色 —— 暗色科技调，OKLCH 单一来源。
+ *
+ * 中性色统一落在 hue 265~270 的冷灰家族；品牌主色为薄荷绿（hue 167），
+ * 副色为长春花蓝（hue 270，与中性同 hue），专用于「协商 / 辩论」语义。
  * 所有颜色都以语义 token 定义于此处单一来源，组件内禁止硬编码 hex。
  */
 @theme inline {
@@ -10,6 +12,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-panel: var(--panel);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -22,38 +25,64 @@
   --color-warning: var(--warning);
   --color-info: var(--info);
   --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-border-strong: var(--border-strong);
   --color-ring: var(--ring);
   --color-brand-2: var(--brand-2);
+
+  /* 中性文本阶梯：dim > faint > ghost，越往后越弱。 */
+  --color-dim: var(--dim);
+  --color-faint: var(--faint);
+  --color-ghost: var(--ghost);
+  --color-line: var(--line);
+
+  --font-display: var(--font-space-grotesk), "PingFang SC", "Hiragino Sans GB",
+    var(--font-noto-sans-sc), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular,
+    monospace;
 }
 
 :root {
-  --background: oklch(0.15 0.012 260);
-  --foreground: oklch(0.98 0.005 255);
-  --card: oklch(0.19 0.014 260);
-  --card-foreground: oklch(0.98 0.005 255);
-  --primary: oklch(0.62 0.18 255);
-  --primary-foreground: oklch(0.985 0.01 255);
-  --secondary: oklch(0.25 0.015 255);
-  --secondary-foreground: oklch(0.98 0.005 255);
-  --muted: oklch(0.25 0.015 255);
-  --muted-foreground: oklch(0.72 0.02 255);
-  --accent: oklch(0.27 0.02 255);
-  --accent-foreground: oklch(0.98 0.005 255);
-  --success: oklch(0.7 0.16 155);
+  --background: oklch(0.14 0.007 270);
+  --foreground: oklch(0.941 0.01 273);
+
+  /* 面板层次：card 为节点/卡片底，panel 为分区块底（比 card 更沉）。 */
+  --card: oklch(0.173 0.011 268);
+  --card-foreground: oklch(0.941 0.01 273);
+  --panel: oklch(0.154 0.009 264);
+
+  --primary: oklch(0.83 0.135 167);
+  --primary-foreground: oklch(0.14 0.007 270);
+  --brand-2: oklch(0.803 0.098 270);
+
+  --secondary: oklch(0.29 0.023 267);
+  --secondary-foreground: oklch(0.941 0.01 273);
+  --muted: oklch(0.29 0.023 267);
+  --muted-foreground: oklch(0.705 0.028 266);
+  --accent: oklch(0.31 0.03 269);
+  --accent-foreground: oklch(0.941 0.01 273);
+
+  --success: oklch(0.83 0.135 167);
   --warning: oklch(0.8 0.15 75);
-  --info: oklch(0.68 0.16 255);
-  --border: oklch(0.3 0.018 260);
-  --ring: oklch(0.62 0.18 255);
+  --info: oklch(0.803 0.098 270);
 
-  /* 品牌副色：偏青的蓝，用于渐变高光与节点动效（同属冷色家族）。 */
-  --brand-2: oklch(0.8 0.13 220);
+  /* 文本阶梯（对应设计稿 #8A92A6 / #6B7285 / #5C6478）。 */
+  --dim: oklch(0.66 0.031 268);
+  --faint: oklch(0.553 0.031 269);
+  --ghost: oklch(0.504 0.033 268);
 
-  /* 装饰性辉光（Hero/分区背景），作为正式 token 而非就地造色。 */
-  --glow-1: oklch(0.45 0.16 262 / 0.32);
-  --glow-2: oklch(0.55 0.13 220 / 0.18);
+  /* 描边：设计稿用半透明白发丝线，保留 alpha 以便叠在任意面板上。 */
+  --border: oklch(0.941 0.01 273 / 0.09);
+  --border-soft: oklch(0.941 0.01 273 / 0.06);
+  --border-strong: oklch(0.941 0.01 273 / 0.14);
+  --line: oklch(0.311 0.03 269);
+  --ring: oklch(0.83 0.135 167);
 
-  /* 协作图 Agent 身份色：仅协作图内联 var() 使用，非状态语义。
-     冷色家族为主体队员，辩论正/反用暖色对比，体现「一支多元的团队」。 */
+  /* 装饰性辉光（Hero / CTA 背景），作为正式 token 而非就地造色。 */
+  --glow-1: oklch(0.83 0.135 167 / 0.1);
+  --glow-2: oklch(0.803 0.098 270 / 0.09);
+
+  /* 协作图 Agent 身份色：仅协作图内联 var() 使用，非状态语义。 */
   --agent-1: oklch(0.72 0.15 255);
   --agent-2: oklch(0.75 0.13 222);
   --agent-3: oklch(0.76 0.12 192);
@@ -64,72 +93,146 @@
   --agent-8: oklch(0.72 0.17 28);
 }
 
-* {
-  border-color: var(--border);
-  box-sizing: border-box;
+@layer base {
+  * {
+    border-color: var(--border);
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+    background: var(--background);
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--foreground);
+    background: var(--background);
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
-html {
-  scroll-behavior: smooth;
-  scroll-padding-top: 5rem;
-}
+/*
+ * 以下全部放进 @layer components：Tailwind 的工具类在 utilities 层，
+ * 层级晚于 components，因此 `class="section-title mb-9"` 里的 mb-9 能正常
+ * 覆盖 .section-title 的 margin。若写成无层级样式，工具类反而会被压过。
+ */
+@layer components {
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  color: var(--foreground);
-  background:
-    radial-gradient(1100px 620px at 50% -8%, var(--glow-1), transparent 62%),
-    radial-gradient(820px 520px at 86% 6%, var(--glow-2), transparent 58%),
-    var(--background);
-  background-attachment: fixed;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-/* ── 复用工具类 ───────────────────────────────────────────── */
+/* ── 版心 / 排版 ─────────────────────────────────────────── */
 
 .container-x {
-  width: 100%;
-  max-width: 76rem;
+  width: min(77.5rem, 100% - 3.5rem);
   margin-inline: auto;
-  padding-inline: 1.5rem;
 }
 
+@media (max-width: 40rem) {
+  .container-x {
+    width: min(77.5rem, 100% - 2.25rem);
+  }
+}
+
+/* 分区之间的发丝分隔线 + 统一纵向留白。 */
+.section {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--border-soft);
+  padding-block: clamp(3.25rem, 7vw, 7.5rem) clamp(3.75rem, 8vw, 8.125rem);
+}
+
+/* 分区小标：一段短横线 + 等宽大写标签。 */
 .eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--brand-2);
-  text-transform: none;
+  gap: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.eyebrow::before {
+  content: "";
+  width: 1.25rem;
+  height: 1px;
+  background: var(--primary);
+  flex: 0 0 auto;
+}
+.eyebrow-alt::before {
+  background: var(--brand-2);
 }
 
-.text-gradient {
-  background: linear-gradient(
-    104deg,
-    var(--foreground) 0%,
-    var(--primary) 46%,
-    var(--brand-2) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+.section-title {
+  margin: 0;
+  font-size: clamp(1.875rem, 3.6vw, 3.125rem);
+  line-height: 1.14;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  text-wrap: pretty;
 }
+
+.section-lead {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.mono-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--dim);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5625rem 0.8125rem;
+}
+
+.spec-pill {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.65625rem;
+  letter-spacing: 0.09em;
+  color: var(--faint);
+  border: 1px solid var(--border-soft);
+  border-radius: 1.25rem;
+  padding: 0.375rem 0.6875rem;
+}
+
+/* ── 面板 ─────────────────────────────────────────────────── */
 
 .surface {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 1rem;
+}
+
+/* 主色强调面板（AgentCore 一侧、Team 卡片等）。 */
+.surface-accent {
+  border: 1px solid color-mix(in oklab, var(--primary), transparent 72%);
+  border-radius: 1rem;
   background: linear-gradient(
     180deg,
-    color-mix(in oklab, var(--card), transparent 8%),
-    color-mix(in oklab, var(--background), transparent 30%)
+    color-mix(in oklab, var(--primary), transparent 95%),
+    color-mix(in oklab, var(--primary), transparent 99%)
   );
-  border: 1px solid var(--border);
-  border-radius: 1rem;
 }
 
 .surface-hover {
@@ -140,65 +243,344 @@ body {
 }
 .surface-hover:hover {
   transform: translateY(-3px);
-  border-color: color-mix(in oklab, var(--primary), transparent 45%);
+  border-color: color-mix(in oklab, var(--primary), transparent 62%);
   box-shadow: 0 18px 40px -24px var(--primary);
 }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.75rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: color-mix(in oklab, var(--card), transparent 20%);
-  color: var(--muted-foreground);
-}
+/* ── 按钮 ─────────────────────────────────────────────────── */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.7rem 1.3rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  border-radius: 0.75rem;
+  gap: 0.625rem;
+  padding: 0.875rem 1.375rem;
+  font-size: 0.90625rem;
+  font-weight: 500;
+  border-radius: 0.625rem;
   border: 1px solid transparent;
   cursor: pointer;
+  white-space: nowrap;
   transition:
-    transform 0.18s ease,
-    box-shadow 0.25s ease,
     background 0.25s ease,
-    border-color 0.25s ease;
-}
-.btn:active {
-  transform: translateY(1px);
+    border-color 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.25s ease;
 }
 .btn-primary {
-  background: linear-gradient(180deg, var(--primary), oklch(0.55 0.18 258));
+  background: var(--primary);
   color: var(--primary-foreground);
-  box-shadow: 0 14px 34px -18px var(--primary);
 }
 .btn-primary:hover {
-  box-shadow: 0 18px 42px -16px var(--primary);
+  box-shadow: 0 12px 34px -14px var(--primary);
 }
 .btn-ghost {
-  background: color-mix(in oklab, var(--card), transparent 30%);
-  border-color: var(--border);
   color: var(--foreground);
+  border-color: var(--border-strong);
 }
 .btn-ghost:hover {
-  border-color: color-mix(in oklab, var(--primary), transparent 40%);
-  background: color-mix(in oklab, var(--card), transparent 10%);
+  border-color: color-mix(in oklab, var(--primary), transparent 55%);
+}
+.btn-quiet {
+  color: var(--muted-foreground);
+  border-color: var(--border);
+}
+.btn-quiet:hover {
+  color: var(--foreground);
+  border-color: var(--border-strong);
+}
+
+/* ── 背景竖向栅格（固定，六等分版心）───────────────────────── */
+
+.grid-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+.grid-backdrop > span {
+  width: min(77.5rem, 100% - 3.5rem);
+  height: 100%;
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--foreground), transparent 96%) 1px,
+    transparent 1px
+  );
+  background-size: calc(100% / 6) 100%;
+  border-right: 1px solid
+    color-mix(in oklab, var(--foreground), transparent 96%);
+}
+
+/* ── 滚动入场动画 ─────────────────────────────────────────── */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.float-in {
+  animation: float-in 0.95s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 命题区：整段先暗，逐行点亮。 */
+.thesis-line {
+  color: var(--ghost);
+  transition: color 0.6s ease;
+}
+.thesis-line.is-visible {
+  color: var(--foreground);
+}
+
+/* ── Hero 控制台 ──────────────────────────────────────────── */
+
+@keyframes console-caret {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  49%,
+  100% {
+    opacity: 0;
+  }
+}
+.console-caret {
+  animation: console-caret 1.05s steps(1) infinite;
+}
+
+@keyframes console-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.console-pulse {
+  animation: console-pulse 1.8s ease-in-out infinite;
+}
+
+/* 日志逐条浮现 → 停留 → 整体淡出，无限循环（周期 8.4s）。 */
+@keyframes console-log {
+  0% {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  6%,
+  76% {
+    opacity: 1;
+    transform: none;
+  }
+  86%,
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+.console-log {
+  opacity: 0;
+  animation: console-log 8.4s ease-out infinite;
+}
+
+/* 进度条与日志同周期：从 0 涨到各自目标值后保持。 */
+@keyframes console-bar {
+  0% {
+    transform: scaleX(0);
+  }
+  22%,
+  100% {
+    transform: scaleX(var(--bar-scale, 1));
+  }
+}
+.console-bar {
+  transform-origin: left center;
+  transform: scaleX(var(--bar-scale, 1));
+  animation: console-bar 8.4s ease-out infinite;
+}
+
+/* ── 协作机制作战图 ───────────────────────────────────────── */
+
+/* 连线：未激活为暗描边，激活后描边生长 + 叠一层流动虚线。 */
+.board-link {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.2;
+  stroke-dasharray: var(--len);
+  stroke-dashoffset: var(--len);
+  transition:
+    stroke-dashoffset 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+    stroke 0.4s ease;
+}
+.board-link.is-on {
+  stroke-dashoffset: 0;
+  stroke: color-mix(in oklab, var(--line), var(--foreground) 18%);
+}
+
+.board-flow {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 3 13;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  animation: board-flow 1.4s linear infinite;
+}
+.board-flow.is-on {
+  opacity: 0.95;
+}
+@keyframes board-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+.board-node {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5625rem;
+  background: var(--card);
+  transition:
+    border-color 0.45s ease,
+    background-color 0.45s ease,
+    box-shadow 0.45s ease;
+}
+.board-node .board-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: 0 0 auto;
+  transition: background-color 0.35s ease;
+}
+.board-node .board-label {
+  font-size: 0.78125rem;
+  color: var(--dim);
+  white-space: nowrap;
+  transition: color 0.35s ease;
+}
+.board-node.is-on {
+  border-color: color-mix(in oklab, var(--node-accent), transparent 58%);
+  background: color-mix(in oklab, var(--node-accent), var(--card) 94%);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--node-accent), transparent 84%),
+    0 10px 32px color-mix(in oklab, var(--node-accent), transparent 90%);
+}
+.board-node.is-on .board-dot {
+  background: var(--node-accent);
+}
+.board-node.is-on .board-label {
+  color: var(--foreground);
+}
+
+/* 左侧步骤条目：随滚动进度点亮当前步。 */
+.step-item {
+  padding: 0.9375rem 0 0.9375rem 1.125rem;
+  border-left: 1px solid var(--border);
+  transition: border-color 0.3s ease;
+}
+.step-item .step-idx,
+.step-item .step-title,
+.step-item .step-desc {
+  transition: color 0.3s ease;
+}
+.step-item .step-idx {
+  color: var(--ghost);
+}
+.step-item .step-title {
+  color: var(--faint);
+}
+.step-item .step-desc {
+  color: oklch(0.454 0.034 268);
+}
+.step-item.is-active {
+  border-left-color: var(--primary);
+}
+.step-item.is-active .step-idx {
+  color: var(--primary);
+}
+.step-item.is-active .step-title {
+  color: var(--foreground);
+}
+.step-item.is-active .step-desc {
+  color: var(--muted-foreground);
+}
+
+/* ── 「一个助手 vs 一支团队」示意图 ────────────────────────── */
+
+.chain-part {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+.is-visible .chain-part {
+  opacity: 1;
+}
+.is-visible .chain-part:nth-child(1) { transition-delay: 0ms; }
+.is-visible .chain-part:nth-child(2) { transition-delay: 70ms; }
+.is-visible .chain-part:nth-child(3) { transition-delay: 140ms; }
+.is-visible .chain-part:nth-child(4) { transition-delay: 210ms; }
+.is-visible .chain-part:nth-child(5) { transition-delay: 280ms; }
+.is-visible .chain-part:nth-child(6) { transition-delay: 350ms; }
+.is-visible .chain-part:nth-child(7) { transition-delay: 420ms; }
+.is-visible .chain-part:nth-child(8) { transition-delay: 490ms; }
+.is-visible .chain-part:nth-child(9) { transition-delay: 560ms; }
+
+.branch-path {
+  stroke-dasharray: var(--len);
+  stroke-dashoffset: var(--len);
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.is-visible .branch-path {
+  stroke-dashoffset: 0;
+}
+
+/* ── 角色演进连线 / 移动端步骤竖轴 ─────────────────────────── */
+
+.role-line {
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.is-visible .role-line {
+  transform: scaleX(1);
+}
+
+.rail-fill {
+  transform: scaleY(0);
+  transform-origin: top center;
+  transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.is-visible .rail-fill {
+  transform: scaleY(1);
 }
 
 /* ── 3D 沉浸宇宙（/preview/universe）───────────────────────── */
 
 .uv-panel {
-  border: 1px solid color-mix(in oklab, var(--border), transparent 30%);
+  border: 1px solid var(--border);
   border-radius: 1.25rem;
   padding: 2rem 2.25rem;
   background: color-mix(in oklab, var(--background), transparent 38%);
@@ -231,54 +613,8 @@ body {
   animation: uv-scroll-dot 1.8s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .uv-scroll-dot {
-    animation: none;
-  }
-}
+/* ── 协作图（多 Agent 作战地图 · /preview/maps）动效 ────────── */
 
-/* ── 滚动入场动画 ─────────────────────────────────────────── */
-
-.reveal {
-  opacity: 0;
-  transform: translateY(22px);
-  transition:
-    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
-}
-.reveal.is-visible {
-  opacity: 1;
-  transform: none;
-}
-
-@keyframes float-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.float-in {
-  animation: float-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes pulse-soft {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-/* ── 协作图（多 Agent 作战地图）动效 ──
- * 任务流向上叠加流动短划、共享枢纽呼吸、运行态状态环旋转、
- * 阻塞升级路径闪烁、产物 token 沿路径游走。全部在 reduced-motion 下停用。 */
 @keyframes am-flow {
   to {
     stroke-dashoffset: -28;
@@ -344,6 +680,8 @@ body {
   animation: am-token 3.2s linear infinite;
 }
 
+/* ── 降级：尊重系统减弱动效偏好 ───────────────────────────── */
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -353,9 +691,13 @@ body {
     transform: none;
     transition: none;
   }
-  .float-in {
-    animation: none;
-  }
+  .float-in,
+  .console-caret,
+  .console-pulse,
+  .console-log,
+  .console-bar,
+  .board-flow,
+  .uv-scroll-dot,
   .am-flow,
   .am-comm,
   .am-pulse,
@@ -367,4 +709,22 @@ body {
   .am-token {
     display: none;
   }
+  .console-log {
+    opacity: 1;
+  }
+  .thesis-line {
+    color: var(--foreground);
+  }
+  .chain-part,
+  .branch-path,
+  .role-line,
+  .rail-fill,
+  .board-link {
+    opacity: 1;
+    transform: none;
+    stroke-dashoffset: 0;
+    transition: none;
+  }
 }
+
+} /* @layer components */
