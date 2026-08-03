@@ -11,6 +11,9 @@ import { DOWNLOAD_PAGE_PATH, WEB_APP_URL } from "@/lib/download";
  *
  * 三件事随滚动变化：底部 1px 进度条、导航底色由透明转实、移动端菜单。
  * 进度与底色都在同一个 rAF 节流的 scroll 回调里算，避免多处监听。
+ *
+ * `home={false}` 为子页形态（如下载页）：不列分区锚点，改为「返回首页」，
+ * 因而也不需要汉堡菜单。
  */
 export default function SiteHeader({ home = true }: { home?: boolean }) {
   const { lang, t, toggle } = useLang();
@@ -59,8 +62,6 @@ export default function SiteHeader({ home = true }: { home?: boolean }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
-  const navHref = (href: string) => (home ? href : `/${href}`);
-
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-50">
@@ -81,7 +82,7 @@ export default function SiteHeader({ home = true }: { home?: boolean }) {
 
         <div className="container-x relative flex h-[3.375rem] items-center justify-between gap-6 sm:h-[4.25rem]">
           <a
-            href={navHref("#top")}
+            href={home ? "#top" : "/"}
             className="flex items-center gap-2.5"
             onClick={() => setMenuOpen(false)}
           >
@@ -91,17 +92,19 @@ export default function SiteHeader({ home = true }: { home?: boolean }) {
             </span>
           </a>
 
-          <nav className="hidden items-center gap-[1.875rem] lg:flex">
-            {NAV.map((item) => (
-              <a
-                key={item.href}
-                href={navHref(item.href)}
-                className="text-[0.84375rem] text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {t(item.label)}
-              </a>
-            ))}
-          </nav>
+          {home && (
+            <nav className="hidden items-center gap-[1.875rem] lg:flex">
+              {NAV.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="text-[0.84375rem] text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {t(item.label)}
+                </a>
+              ))}
+            </nav>
+          )}
 
           <div className="flex items-center gap-2">
             <button
@@ -114,10 +117,10 @@ export default function SiteHeader({ home = true }: { home?: boolean }) {
             </button>
 
             <a
-              href={DOWNLOAD_PAGE_PATH}
-              className="hidden px-3 py-2 text-[0.8125rem] text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+              href={home ? DOWNLOAD_PAGE_PATH : "/"}
+              className="hidden px-3 py-2 text-[0.8125rem] text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
             >
-              {t(CTA.desktop)}
+              {t(home ? CTA.desktop : CTA.backHome)}
             </a>
             <a
               href={WEB_APP_URL}
@@ -128,44 +131,46 @@ export default function SiteHeader({ home = true }: { home?: boolean }) {
               {t(CTA.webAppShort)}
             </a>
 
-            <button
-              type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-expanded={menuOpen}
-              aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
-              className="flex h-[2.125rem] w-11 flex-col items-center justify-center gap-[5px] rounded-[0.4375rem] border border-border transition-colors hover:border-border-strong lg:hidden"
-            >
-              <span
-                className="block h-[1.5px] w-4 rounded-sm bg-foreground/80 transition-transform duration-300"
-                style={
-                  menuOpen
-                    ? { transform: "translateY(3.25px) rotate(45deg)" }
-                    : undefined
-                }
-              />
-              <span
-                className="block h-[1.5px] w-4 rounded-sm bg-foreground/80 transition-transform duration-300"
-                style={
-                  menuOpen
-                    ? { transform: "translateY(-3.25px) rotate(-45deg)" }
-                    : undefined
-                }
-              />
-            </button>
+            {home && (
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-expanded={menuOpen}
+                aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
+                className="flex h-[2.125rem] w-11 flex-col items-center justify-center gap-[5px] rounded-[0.4375rem] border border-border transition-colors hover:border-border-strong lg:hidden"
+              >
+                <span
+                  className="block h-[1.5px] w-4 rounded-sm bg-foreground/80 transition-transform duration-300"
+                  style={
+                    menuOpen
+                      ? { transform: "translateY(3.25px) rotate(45deg)" }
+                      : undefined
+                  }
+                />
+                <span
+                  className="block h-[1.5px] w-4 rounded-sm bg-foreground/80 transition-transform duration-300"
+                  style={
+                    menuOpen
+                      ? { transform: "translateY(-3.25px) rotate(-45deg)" }
+                      : undefined
+                  }
+                />
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {/* 移动端全屏菜单 */}
+      {/* 移动端全屏菜单（仅首页有分区锚点可列） */}
       <div
         className={`fixed inset-x-0 bottom-0 top-[3.375rem] z-40 flex-col gap-0.5 bg-[color-mix(in_oklab,var(--background),transparent_3%)] px-[1.125rem] py-6 backdrop-blur-[20px] lg:hidden ${
-          menuOpen ? "flex" : "hidden"
+          home && menuOpen ? "flex" : "hidden"
         }`}
       >
         {NAV.map((item, i) => (
           <a
             key={item.href}
-            href={navHref(item.href)}
+            href={item.href}
             onClick={() => setMenuOpen(false)}
             className="flex min-h-14 items-center justify-between border-b border-border-soft text-[1.375rem] font-medium"
           >

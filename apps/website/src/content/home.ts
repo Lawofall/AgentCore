@@ -29,6 +29,7 @@ export const CTA = {
   mobileWeb: { zh: "手机网页版", en: "Mobile web" },
   mobileStart: { zh: "立即使用 · 手机版", en: "Start on mobile" },
   desktopSite: { zh: "电脑版网站", en: "Desktop site" },
+  backHome: { zh: "返回首页", en: "Back to site" },
 } satisfies Record<string, T>;
 
 /* ── Hero ─────────────────────────────────────────────────── */

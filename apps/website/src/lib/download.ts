@@ -37,10 +37,12 @@ export const RELEASES_LATEST = `${RELEASES_REPO}/releases/latest` as const;
 
 export type PlatformId = "win" | "mac" | "linux" | "android";
 
+/**
+ * 平台的「事实」：是否已发布、直链、文件名。
+ * 展示文案（平台名、系统要求、安装步骤）在 content/download.ts，勿在此处写死。
+ */
 export type PlatformDownload = {
   id: PlatformId;
-  label: string;
-  subtitle: string;
   available: boolean;
   url?: string;
   fileLabel?: string;
@@ -60,34 +62,23 @@ export function platformsFromArtifacts(artifacts: {
   return [
     {
       id: "win",
-      label: "Windows",
-      subtitle: "Windows 10/11 · 64 位",
       available: true,
       url: artifacts.winUrl,
       fileLabel: artifacts.winFilename,
     },
     {
       id: "mac",
-      label: "macOS",
-      subtitle: "Apple Silicon（M 系列 / arm64）",
       available: macReady,
       url: macReady ? artifacts.macUrl : undefined,
       fileLabel: macReady ? artifacts.macFilename : undefined,
     },
     {
       id: "android",
-      label: "Android",
-      subtitle: "APK 直装",
       available: androidReady,
       url: androidReady ? artifacts.androidUrl : undefined,
       fileLabel: androidReady ? artifacts.androidFilename : undefined,
     },
-    {
-      id: "linux",
-      label: "Linux",
-      subtitle: "AppImage",
-      available: false,
-    },
+    { id: "linux", available: false },
   ];
 }
 
@@ -99,45 +90,6 @@ export const PLATFORMS: PlatformDownload[] = platformsFromArtifacts({
   androidUrl: ANDROID_APK_URL,
   androidFilename: ANDROID_APK_FILENAME,
 });
-
-export const SYSTEM_REQUIREMENTS: Record<PlatformId, string[]> = {
-  win: [
-    "Windows 10 或 11（64 位）",
-    "8 GB 内存（推荐 16 GB）",
-    "约 500 MB 可用磁盘空间",
-    "可访问 agentcore 云端 API（需联网）",
-  ],
-  mac: [
-    "Apple Silicon Mac（M 系列 / arm64）",
-    "Intel Mac 不在支持范围",
-    "macOS 13 Ventura 或更高版本",
-    "8 GB 内存（推荐 16 GB）",
-    "内测包未签名：首次打开须右键 → 打开",
-  ],
-  android: [
-    "Android 8.0 或更高版本",
-    "允许安装未知来源应用",
-    "可访问 agentcore 云端 API（需联网）",
-  ],
-  linux: ["即将推出"],
-};
-
-export const WIN_INSTALL_STEPS = [
-  "下载并运行安装程序，按向导完成安装。",
-  "首次启动注册账号并登录。",
-  "在设置 → 关于 可检查更新；已安装用户会自动收到新版本。",
-];
-
-export const MAC_INSTALL_STEPS = [
-  "下载 DMG，将 AgentCore 拖入「应用程序」文件夹。",
-  "首次打开：在启动台或应用程序文件夹中右键 AgentCore →「打开」→ 确认（内测包未签名，勿直接双击）。",
-  "注册账号并登录；设置 → 关于 可检查更新（更新安装后可能需再次右键打开）。",
-];
-
-export const ANDROID_INSTALL_STEPS = [
-  "下载 APK 后，在系统设置中允许安装未知来源应用。",
-  "打开文件并安装，首次启动注册账号并登录。",
-];
 
 export const DOWNLOAD_PAGE_PATH = "/download" as const;
 
