@@ -1,17 +1,28 @@
 import type { Metadata, Viewport } from "next";
-import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { JetBrains_Mono, Newsreader, Outfit } from "next/font/google";
 import LangProvider from "@/components/LangProvider";
 import "./globals.css";
 
 /*
- * 只自托管两款拉丁字体：Space Grotesk（标题/正文）与 JetBrains Mono（标签/日志）。
- * 中文走系统字体栈（PingFang SC / 微软雅黑，见 globals.css 的 --font-display），
+ * 只自托管三款拉丁字体：
+ *   Outfit      — 几何无衬线，标题与正文的主力；
+ *   Newsreader  — 高对比衬线，只在点睛词上用斜体（.accent）；
+ *   JetBrains Mono — 标签、序号、日志。
+ * 中文走系统字体栈（PingFang SC / 宋体，见 globals.css 的 --font-display / --font-serif），
  * 避免为一套 CJK 字体在静态导出里塞进十几 MB 子集。
  */
-const spaceGrotesk = Space_Grotesk({
+const outfit = Outfit({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-space-grotesk",
+  variable: "--font-outfit",
+  display: "swap",
+});
+
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  style: ["normal", "italic"],
+  variable: "--font-newsreader",
   display: "swap",
 });
 
@@ -52,7 +63,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#08090c",
+  themeColor: "#0a0a0a",
   width: "device-width",
   initialScale: 1,
 };
@@ -65,7 +76,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}
+      className={`${outfit.variable} ${newsreader.variable} ${jetbrainsMono.variable}`}
     >
       <body>
         <LangProvider>{children}</LangProvider>

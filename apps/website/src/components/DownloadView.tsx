@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/components/LangProvider";
 import Reveal from "@/components/Reveal";
-import SiteFooter from "@/components/SiteFooter";
-import SiteHeader from "@/components/SiteHeader";
+import PaperFooter from "@/components/PaperFooter";
+import PillNav from "@/components/PillNav";
 import {
   AUTO_UPDATE,
   HERO,
@@ -82,35 +82,42 @@ export default function DownloadView() {
 
   return (
     <>
-      <div aria-hidden="true" className="grid-backdrop">
-        <span />
-      </div>
+      <PillNav home={false} />
 
-      <SiteHeader home={false} />
-
-      <main>
+      {/* 与首页同一套：main 不给背景，各分区自带不透明底；
+          最后一张暗纸的下圆角要透出底下的白纸页脚。 */}
+      <main className="relative z-10">
         {/* ── Hero ── */}
-        <section className="relative z-[1] overflow-hidden pb-14 pt-[6.5rem] sm:pb-[4.75rem] sm:pt-[9.375rem]">
+        <section className="relative z-0 overflow-hidden bg-[var(--ink-deep)] pb-20 pt-32 sm:pb-28 sm:pt-40">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -top-32 left-1/2 h-[32.5rem] w-[min(61.25rem,100vw)] -translate-x-1/2"
-            style={{
-              background:
-                "radial-gradient(ellipse at center, var(--glow-1), transparent 62%)",
-            }}
+            className="starfield pointer-events-none absolute inset-0 opacity-80"
           />
-          <div className="container-x relative">
-            <p className="eyebrow float-in mb-5 sm:mb-[1.625rem]">
+          <div
+            aria-hidden="true"
+            className="aurora pointer-events-none absolute inset-0"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[12.5rem] bg-gradient-to-t from-background via-background/70 to-transparent"
+          />
+          <div className="container-x relative z-[2]">
+            <p className="float-in mb-5 inline-flex items-center gap-3 font-mono text-[0.6875rem] uppercase tracking-[0.2em] text-dim sm:mb-6">
+              <span
+                aria-hidden="true"
+                className="block h-px w-5 shrink-0"
+                style={{ background: "var(--brand-gradient)" }}
+              />
               {t(HERO.eyebrow)}
             </p>
             <h1
-              className="float-in m-0 max-w-[47.5rem] text-[clamp(2.25rem,4.4vw,3.75rem)] font-semibold leading-[1.1] tracking-[-0.035em] [text-wrap:pretty]"
+              className="display-title float-in m-0 max-w-[47.5rem]"
               style={{ animationDelay: "80ms" }}
             >
               {t(HERO.title)}
             </h1>
             <p
-              className="float-in mt-5 max-w-[35rem] text-[0.96875rem] leading-[1.75] text-muted-foreground [text-wrap:pretty] sm:mt-6 sm:text-[1.0625rem]"
+              className="float-in display-lead mt-6 max-w-[36rem] text-muted-foreground"
               style={{ animationDelay: "160ms" }}
             >
               {t(HERO.lead)}
@@ -123,7 +130,7 @@ export default function DownloadView() {
               {primaryReady ? (
                 <a
                   href={primary.url}
-                  className="btn btn-primary max-sm:w-full max-sm:min-h-[3.25rem] sm:px-[1.625rem] sm:py-4 sm:text-[0.9375rem]"
+                  className="btn-grad max-sm:min-h-[3.25rem] max-sm:w-full sm:px-7 sm:py-4"
                 >
                   <DownloadIcon />
                   {t(HERO.cta)}
@@ -138,7 +145,11 @@ export default function DownloadView() {
               ) : (
                 <a
                   href="#platforms"
-                  className="btn btn-ghost max-sm:w-full max-sm:min-h-[3.25rem] sm:px-[1.625rem] sm:py-4 sm:text-[0.9375rem]"
+                  className="btn-outline max-sm:min-h-[3.25rem] max-sm:w-full sm:px-7 sm:py-4"
+                  style={{
+                    background:
+                      "linear-gradient(var(--ink-deep), var(--ink-deep)) padding-box, var(--brand-gradient) border-box",
+                  }}
                 >
                   {t(LABELS.allPlatforms)}
                 </a>
@@ -153,7 +164,10 @@ export default function DownloadView() {
         </section>
 
         {/* ── 平台卡 ── */}
-        <section id="platforms" className="relative z-[1] pb-16 sm:pb-[7.5rem]">
+        <section
+          id="platforms"
+          className="panel panel-top noise panel-pad relative z-20 scroll-mt-28 bg-background"
+        >
           <div className="container-x grid gap-4 sm:gap-5 lg:grid-cols-2">
             {PLATFORM_ORDER.map((id, i) => {
               const p = byId[id];
@@ -164,10 +178,8 @@ export default function DownloadView() {
               return (
                 <Reveal key={id} delay={i * 70} className="h-full">
                   <div
-                    className={`flex h-full flex-col rounded-[1.125rem] px-6 pb-[1.875rem] pt-[1.75rem] sm:px-8 sm:pt-[2.125rem] ${
-                      isCurrent
-                        ? "surface-accent"
-                        : "border border-border-soft bg-[var(--panel)]"
+                    className={`dl-card flex h-full flex-col ${
+                      isCurrent ? "is-current" : ""
                     }`}
                   >
                     <div className="mb-6 flex items-center justify-between gap-3 sm:mb-[1.875rem]">
@@ -175,7 +187,7 @@ export default function DownloadView() {
                         {copy.label}
                       </span>
                       {isCurrent ? (
-                        <span className="rounded-[1.25rem] bg-primary px-2.5 py-1 font-mono text-[0.625rem] tracking-[0.14em] text-primary-foreground">
+                        <span className="dl-badge">
                           {t(LABELS.currentDevice)}
                         </span>
                       ) : !p?.available ? (
@@ -196,12 +208,12 @@ export default function DownloadView() {
                       {ready ? (
                         <a
                           href={p.url}
-                          className="flex items-center justify-between gap-4 rounded-[0.6875rem] border border-border-strong px-[1.125rem] py-[0.9375rem] text-[0.90625rem] transition-colors hover:border-[color-mix(in_oklab,var(--primary),transparent_55%)]"
+                          className="dl-file"
                         >
                           <span className="min-w-0 truncate">
                             {p.fileLabel}
                           </span>
-                          <span className="shrink-0 font-mono text-[0.6875rem] text-primary">
+                          <span className="dl-file-action">
                             {t(LABELS.download)} ↓
                           </span>
                         </a>
@@ -229,7 +241,7 @@ export default function DownloadView() {
                   href={entry.key === "web" ? WEB_APP_URL : MOBILE_WEB_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between gap-5 rounded-2xl border border-border-soft bg-[var(--panel)] px-6 py-6 transition-colors hover:border-[color-mix(in_oklab,var(--primary),transparent_62%)] sm:px-7"
+                  className="dl-quick"
                 >
                   <span>
                     <span className="mb-1.5 block text-[1.0625rem] font-semibold">
@@ -239,9 +251,7 @@ export default function DownloadView() {
                       {t(entry.body)}
                     </span>
                   </span>
-                  <span className="shrink-0 font-mono text-[0.6875rem] text-primary">
-                    OPEN →
-                  </span>
+                  <span className="dl-file-action">OPEN →</span>
                 </a>
               </Reveal>
             ))}
@@ -249,11 +259,22 @@ export default function DownloadView() {
         </section>
 
         {/* ── 安装步骤 + 系统要求 ── */}
-        <section className="section">
-          <div className="container-x grid gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-[4.5rem]">
+        <section className="panel panel-top panel-foot noise panel-pad relative z-40 bg-[var(--ink-deep)] pb-32 sm:pb-40">
+          <div
+            aria-hidden="true"
+            className="starfield pointer-events-none absolute inset-0 opacity-40"
+          />
+          <div aria-hidden="true" className="aurora-wash panel-wash z-[3]" />
+          <div aria-hidden="true" className="aurora-grain panel-wash z-[4]" />
+          <div className="container-x relative z-[2] grid gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-[4.5rem]">
             <div>
               <Reveal>
-                <p className="eyebrow mb-7 sm:mb-[2.125rem]">
+                <p className="dl-kicker mb-7 sm:mb-9">
+                  <span
+                    aria-hidden="true"
+                    className="block h-px w-5 shrink-0"
+                    style={{ background: "var(--brand-gradient)" }}
+                  />
                   {t(INSTALL.eyebrow)}
                 </p>
               </Reveal>
@@ -291,7 +312,7 @@ export default function DownloadView() {
 
             <div>
               <Reveal>
-                <div className="rounded-2xl border border-border-soft bg-[var(--panel)] px-7 py-[1.875rem]">
+                <div className="dl-panel">
                   <p className="mb-6 font-mono text-[0.65625rem] uppercase tracking-[0.18em] text-ghost">
                     {t(REQUIREMENTS.eyebrow)}
                   </p>
@@ -312,7 +333,7 @@ export default function DownloadView() {
               </Reveal>
 
               <Reveal delay={80}>
-                <div className="mt-5 rounded-2xl border border-border-soft bg-[var(--panel)] px-7 py-6">
+                <div className="dl-panel mt-5">
                   <p className="mb-3.5 font-mono text-[0.65625rem] uppercase tracking-[0.18em] text-ghost">
                     {t(AUTO_UPDATE.eyebrow)}
                   </p>
@@ -323,7 +344,7 @@ export default function DownloadView() {
               </Reveal>
 
               <Reveal delay={160}>
-                <div className="mt-5 rounded-2xl border border-border-soft bg-[var(--panel)] px-7 py-6">
+                <div className="dl-panel mt-5">
                   <p className="mb-3.5 font-mono text-[0.65625rem] uppercase tracking-[0.18em] text-ghost">
                     {t(RELEASE.eyebrow)}
                   </p>
@@ -352,7 +373,7 @@ export default function DownloadView() {
         </section>
       </main>
 
-      <SiteFooter home={false} />
+      <PaperFooter home={false} />
     </>
   );
 }

@@ -9,6 +9,10 @@ import {
   WEB_APP_URL,
 } from "@/lib/download";
 
+/**
+ * 暗色页脚（子页形态，如下载页）。
+ * 首页用的是白纸大字标页脚，见 components/PaperFooter.tsx。
+ */
 export default function SiteFooter({ home = true }: { home?: boolean }) {
   const { t } = useLang();
   const anchor = (href: string) => (home ? href : `/${href}`);

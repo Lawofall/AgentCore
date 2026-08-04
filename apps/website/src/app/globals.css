@@ -1,10 +1,11 @@
 @import "tailwindcss";
 
 /*
- * AgentCore 官网配色 —— 暗色科技调，OKLCH 单一来源。
+ * AgentCore 官网配色 —— 暖调近黑，OKLCH 单一来源。
  *
- * 中性色统一落在 hue 265~270 的冷灰家族；品牌主色为薄荷绿（hue 167），
- * 副色为长春花蓝（hue 270，与中性同 hue），专用于「协商 / 辩论」语义。
+ * 中性色统一落在 hue 100 的暖灰家族（近黑画布 + 象牙白文本）；
+ * 品牌主色为陶土橙（hue 39），副色为雾蓝（hue 248），专用于「协商 / 辩论」语义
+ * ——副色刻意取冷调，才能在同一张作战图里与主色、success、warning 四者互不混淆。
  * 所有颜色都以语义 token 定义于此处单一来源，组件内禁止硬编码 hex。
  */
 @theme inline {
@@ -36,61 +37,114 @@
   --color-ghost: var(--ghost);
   --color-line: var(--line);
 
-  --font-display: var(--font-space-grotesk), "PingFang SC", "Hiragino Sans GB",
-    var(--font-noto-sans-sc), system-ui, sans-serif;
+  --font-display: var(--font-outfit), "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular,
     monospace;
+  /* 点睛词专用衬线：拉丁走 Newsreader 斜体，中文回落到系统宋体（CJK 无真斜体）。 */
+  --font-serif: var(--font-newsreader), "Songti SC", "Source Han Serif SC",
+    "Noto Serif CJK SC", serif;
+
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-paper-ink: var(--paper-ink);
+  --color-paper-dim: var(--paper-dim);
+  --color-paper-faint: var(--paper-faint);
+  --color-paper-line: var(--paper-line);
 }
 
 :root {
-  --background: oklch(0.14 0.007 270);
-  --foreground: oklch(0.941 0.01 273);
+  /* 画布：中性近黑（不再是暖灰），暖只留给品牌色本身——与深靛黑 Hero 拉开层次。 */
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(1 0 0);
+
+  /* Hero 专用深靛黑：比画布更冷更沉，星野与极光都叠在它上面。 */
+  --ink: oklch(0.145 0 0);
+  --ink-deep: oklch(0.13 0.045 285);
+
+  /* 白色分区（明暗交替的另一半）。 */
+  --paper: oklch(1 0 0);
+  --paper-ink: oklch(0.16 0.01 285);
+  --paper-dim: oklch(0.44 0.008 285);
+  --paper-faint: oklch(0.6 0.006 285);
+  --paper-line: oklch(0.9 0.004 285);
 
   /* 面板层次：card 为节点/卡片底，panel 为分区块底（比 card 更沉）。 */
-  --card: oklch(0.173 0.011 268);
-  --card-foreground: oklch(0.941 0.01 273);
-  --panel: oklch(0.154 0.009 264);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(1 0 0);
+  --panel: oklch(0.178 0 0);
 
-  --primary: oklch(0.83 0.135 167);
-  --primary-foreground: oklch(0.14 0.007 270);
-  --brand-2: oklch(0.803 0.098 270);
+  --primary: oklch(0.672 0.131 39);
+  --primary-foreground: oklch(0.145 0 0);
+  --brand-2: oklch(0.78 0.075 248);
 
-  --secondary: oklch(0.29 0.023 267);
-  --secondary-foreground: oklch(0.941 0.01 273);
-  --muted: oklch(0.29 0.023 267);
-  --muted-foreground: oklch(0.705 0.028 266);
-  --accent: oklch(0.31 0.03 269);
-  --accent-foreground: oklch(0.941 0.01 273);
+  /* 招牌四段渐变（蓝 → 紫 → 粉 → 橙）：描边、辉光、主 CTA 共用一条。 */
+  --grad-1: oklch(0.623 0.214 259.8);
+  --grad-2: oklch(0.627 0.266 303.9);
+  --grad-3: oklch(0.656 0.241 354.3);
+  --grad-4: oklch(0.7 0.198 47.6);
+  --brand-gradient: linear-gradient(
+    90deg,
+    var(--grad-1) 0%,
+    var(--grad-2) 38%,
+    var(--grad-3) 68%,
+    var(--grad-4) 100%
+  );
+  /* 四步机制的阶段色（紫 → 蓝 → 橙 → 绿）：路径渐变、卡片高亮、末端按钮
+     共用这四个。前三个直接复用招牌渐变里的色，只有收尾的绿是新加的——
+     四步走完要有「落地」的感觉，暖色收不住。 */
+  --pp-c1: var(--grad-2);
+  --pp-c2: var(--grad-1);
+  --pp-c3: var(--grad-4);
+  --pp-c4: oklch(0.7 0.16 162);
 
-  --success: oklch(0.83 0.135 167);
-  --warning: oklch(0.8 0.15 75);
-  --info: oklch(0.803 0.098 270);
+  /* 标题渐变字：橙 → 红 → 粉，比招牌渐变更暖、更短。 */
+  --head-gradient: linear-gradient(
+    100deg,
+    oklch(0.75 0.183 55.9) 0%,
+    oklch(0.704 0.191 22.2) 50%,
+    oklch(0.718 0.202 349.8) 100%
+  );
 
-  /* 文本阶梯（对应设计稿 #8A92A6 / #6B7285 / #5C6478）。 */
-  --dim: oklch(0.66 0.031 268);
-  --faint: oklch(0.553 0.031 269);
-  --ghost: oklch(0.504 0.033 268);
+  --secondary: oklch(0.3 0.006 100);
+  --secondary-foreground: oklch(0.948 0.011 95);
+  --muted: oklch(0.3 0.006 100);
+  --muted-foreground: oklch(0.705 0.008 100);
+  --accent: oklch(0.325 0.007 100);
+  --accent-foreground: oklch(0.948 0.011 95);
 
-  /* 描边：设计稿用半透明白发丝线，保留 alpha 以便叠在任意面板上。 */
-  --border: oklch(0.941 0.01 273 / 0.09);
-  --border-soft: oklch(0.941 0.01 273 / 0.06);
-  --border-strong: oklch(0.941 0.01 273 / 0.14);
-  --line: oklch(0.311 0.03 269);
-  --ring: oklch(0.83 0.135 167);
+  /* 状态色与品牌色分离：primary 已是暖橙，success 单独取青绿以免语义混淆。 */
+  --success: oklch(0.8 0.115 150);
+  --warning: oklch(0.83 0.14 82);
+  --info: oklch(0.78 0.075 248);
+
+  /* 文本阶梯：dim > faint > ghost，中性灰，越往后越弱。 */
+  --dim: oklch(0.72 0.005 285);
+  --faint: oklch(0.58 0.005 285);
+  --ghost: oklch(0.48 0.005 285);
+
+  /* 描边：半透明纯白发丝线，保留 alpha 以便叠在任意面板上。 */
+  --border: oklch(1 0 0 / 0.1);
+  --border-soft: oklch(1 0 0 / 0.06);
+  --border-strong: oklch(1 0 0 / 0.16);
+  --line: oklch(0.34 0.004 285);
+  --ring: oklch(0.672 0.131 39);
 
   /* 装饰性辉光（Hero / CTA 背景），作为正式 token 而非就地造色。 */
-  --glow-1: oklch(0.83 0.135 167 / 0.1);
-  --glow-2: oklch(0.803 0.098 270 / 0.09);
+  --glow-1: oklch(0.7 0.198 47.6 / 0.16);
+  --glow-2: oklch(0.627 0.266 303.9 / 0.2);
+  --glow-3: oklch(0.656 0.241 354.3 / 0.14);
 
-  /* 协作图 Agent 身份色：仅协作图内联 var() 使用，非状态语义。 */
-  --agent-1: oklch(0.72 0.15 255);
-  --agent-2: oklch(0.75 0.13 222);
-  --agent-3: oklch(0.76 0.12 192);
-  --agent-4: oklch(0.78 0.14 162);
-  --agent-5: oklch(0.73 0.16 292);
-  --agent-6: oklch(0.75 0.15 322);
-  --agent-7: oklch(0.82 0.13 96);
-  --agent-8: oklch(0.72 0.17 28);
+  /* 协作图 Agent 身份色：仅协作图内联 var() 使用，非状态语义。
+     统一压低彩度、对齐明度，让 8 个身份读起来像同一套家族而非彩虹。 */
+  --agent-1: oklch(0.74 0.125 42);
+  --agent-2: oklch(0.8 0.1 70);
+  --agent-3: oklch(0.84 0.105 100);
+  --agent-4: oklch(0.8 0.115 150);
+  --agent-5: oklch(0.79 0.09 195);
+  --agent-6: oklch(0.78 0.085 248);
+  --agent-7: oklch(0.755 0.1 305);
+  --agent-8: oklch(0.72 0.13 8);
 }
 
 @layer base {
@@ -117,8 +171,8 @@
   }
 
   ::selection {
-    background: var(--primary);
-    color: var(--primary-foreground);
+    background: color-mix(in oklab, var(--grad-4), transparent 70%);
+    color: inherit;
   }
 
   a {
@@ -514,7 +568,7 @@
   color: var(--faint);
 }
 .step-item .step-desc {
-  color: oklch(0.454 0.034 268);
+  color: oklch(0.45 0.007 100);
 }
 .step-item.is-active {
   border-left-color: var(--primary);
@@ -680,9 +734,1652 @@
   animation: am-token 3.2s linear infinite;
 }
 
+/* ══ 堆叠圆角面板系统 ══════════════════════════════════════
+ *
+ * 首页的骨架：每个分区是一张独立的「纸」，自带底色与顶部大圆角，
+ * 用负 margin 咬进上一张、z-index 递增、顶部投影压出厚度——
+ * 滚动时像一叠纸依次推上来。圆角尺寸与咬合深度都随断点放大。
+ */
+
+.panel {
+  position: relative;
+  overflow: hidden;
+}
+
+/* 上缘圆角 + 咬进上一张纸。z 由调用处按顺序递增（z-10 / z-20 / z-30…）。 */
+.panel-top {
+  border-top-left-radius: 2.5rem;
+  border-top-right-radius: 2.5rem;
+  margin-top: -2rem;
+  box-shadow: 0 -1px 0 0 var(--border-soft), 0 -30px 60px -10px rgb(0 0 0 / 0.5);
+}
+
+/* 下缘圆角：给「上面这张纸的底」收口，露出下一张的白。 */
+.panel-bottom {
+  border-bottom-left-radius: 2.5rem;
+  border-bottom-right-radius: 2.5rem;
+  box-shadow: 0 30px 60px -10px rgb(0 0 0 / 0.5);
+}
+
+@media (min-width: 48rem) {
+  .panel-top {
+    border-top-left-radius: 4rem;
+    border-top-right-radius: 4rem;
+    margin-top: -3rem;
+  }
+  .panel-bottom {
+    border-bottom-left-radius: 5rem;
+    border-bottom-right-radius: 5rem;
+  }
+}
+
+/* 纸内的统一纵向留白（比旧 .section 更松，配合大圆角才不显挤）。 */
+.panel-pad {
+  padding-block: clamp(3.5rem, 8vw, 7rem);
+}
+
+/* 白纸分区：文字色阶整体切到深色一侧。 */
+.paper-panel {
+  background: var(--paper);
+  color: var(--paper-ink);
+}
+.paper-panel .text-soft {
+  color: var(--paper-dim);
+}
+.paper-panel .text-softer {
+  color: var(--paper-faint);
+}
+
+/* 最后一张暗纸的下缘：也收圆角，让它像一张纸压在白页脚上。
+   放在 .panel-top 之后，box-shadow 合并成上下两向。 */
+.panel-foot {
+  border-bottom-left-radius: 2.5rem;
+  border-bottom-right-radius: 2.5rem;
+  box-shadow:
+    0 -1px 0 0 var(--border-soft),
+    0 -30px 60px -10px rgb(0 0 0 / 0.5),
+    0 30px 60px -10px rgb(0 0 0 / 0.45);
+}
+
+@media (min-width: 48rem) {
+  .panel-foot {
+    border-bottom-left-radius: 5rem;
+    border-bottom-right-radius: 5rem;
+  }
+}
+
+/* ══ 材质与光 ══════════════════════════════════════════════ */
+
+/* 招牌彩虹「洗色」。
+ *
+ * 暗纸下缘与页脚字标共用同一条渐变、同一档模糊、同一层噪点——接缝两侧
+ * 必须是同一套纹理，才读得出「一束光从纸背后透过来」而不是两处装饰。
+ * 高度与 z 由调用处给（两边的字高不同，带高要各自配）。
+ */
+.aurora-wash,
+.aurora-grain {
+  position: absolute;
+  right: -2rem;
+  bottom: 0;
+  left: -2rem;
+  pointer-events: none;
+}
+.aurora-wash {
+  opacity: 0.75;
+  filter: blur(40px);
+  background: linear-gradient(
+    90deg,
+    oklch(0.9 0.058 230),
+    oklch(0.623 0.214 259.8),
+    oklch(0.627 0.266 303.9),
+    oklch(0.656 0.241 354.3),
+    oklch(0.637 0.237 25.3),
+    oklch(0.7 0.198 47.6)
+  );
+}
+/* 噪点跟着洗色走，但它没有 blur——不加 mask 就是个硬边矩形。15% 的灰噪叠在
+   近黑的暗纸上会把亮度抬到两倍以上，那条上缘会直接变成一道横切线，把渐变
+   切成上下两块。淡入的节奏要对着 wash 被 blur(64px) 糊开的坡度来：光大约在
+   带高六成处才到满，噪点也从那里开始满。 */
+.aurora-grain {
+  opacity: 0.15;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  mask-image: linear-gradient(to bottom, transparent 0, #000 62%);
+}
+
+/* 暗纸下缘的带高。别忘了 blur(64px) 还会往上再糊出 ~100px——
+   带高按「可见洗色 ≈ 带高 + 100」倒推，否则 CTA 下面会空出一大片死区。 */
+.panel-wash {
+  height: clamp(6rem, 11vw, 10.5rem);
+}
+/* 同一条光透过黑纸，亮度自然要压下来——只降 wash，噪点仍与页脚同档。 */
+.aurora-wash.panel-wash {
+  opacity: 0.45;
+}
+
+@media (min-width: 48rem) {
+  .aurora-wash,
+  .aurora-grain {
+    right: -3rem;
+    left: -3rem;
+  }
+  .aurora-wash {
+    filter: blur(64px);
+  }
+}
+
+/* 噪点：内联 feTurbulence，省一张贴图；上下用 mask 淡出避免出现硬边。 */
+.noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  mask-image: linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+/* Hero 星野：三层不同疏密的点阵，靠错位的 background-size 制造随机感。 */
+.starfield {
+  background-image:
+    radial-gradient(1.4px 1.4px at 18% 26%, rgb(255 255 255 / 0.55), transparent 50%),
+    radial-gradient(1px 1px at 62% 12%, rgb(255 255 255 / 0.4), transparent 50%),
+    radial-gradient(1.2px 1.2px at 84% 62%, rgb(255 255 255 / 0.45), transparent 50%),
+    radial-gradient(1px 1px at 34% 78%, rgb(255 255 255 / 0.3), transparent 50%),
+    radial-gradient(1.6px 1.6px at 8% 58%, rgb(255 255 255 / 0.35), transparent 50%);
+  background-size: 340px 300px, 210px 260px, 430px 380px, 280px 220px, 520px 460px;
+}
+
+/* 极光：Hero 与 CTA 背后的大面积柔光，三色对应招牌渐变的三段。 */
+.aurora {
+  background:
+    radial-gradient(60% 46% at 22% 62%, var(--glow-2), transparent 68%),
+    radial-gradient(52% 40% at 74% 40%, var(--glow-3), transparent 66%),
+    radial-gradient(44% 38% at 50% 92%, var(--glow-1), transparent 70%);
+  filter: blur(14px);
+}
+
+/* Hero 窗口的后仰。只在宽屏生效——窄屏是满宽布局，一旋转右缘就出框。 */
+@media (min-width: 64rem) {
+  .frame-tilt {
+    transform: rotateY(-7deg) rotateX(2deg);
+    transform-origin: left center;
+  }
+}
+
+/* ══ 排版原语 ══════════════════════════════════════════════ */
+
+/* 渐变标题字。 */
+.grad-text {
+  background: var(--head-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 点睛词：衬线斜体。中文没有真斜体，落到宋体并取消倾斜。 */
+.accent {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+}
+html[lang="zh-CN"] .accent {
+  font-style: normal;
+}
+
+/* 大标题：比旧 .section-title 更重更紧，对齐 amphora 的几何无衬线气质。 */
+.display-title {
+  margin: 0;
+  font-size: clamp(2.125rem, 5.2vw, 4rem);
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.display-lead {
+  font-size: clamp(1rem, 1.4vw, 1.125rem);
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+/* 手绘波浪下划线，压在最后一个词底下。 */
+.squiggle {
+  position: relative;
+  display: inline-block;
+}
+.squiggle::after {
+  content: "";
+  position: absolute;
+  left: -0.04em;
+  right: -0.04em;
+  bottom: -0.24em;
+  height: 0.19em;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'%3E%3Cpath d='M1 8.5 Q 13 1.5, 25 7 T 49 7 T 74 7 T 99 6' fill='none' stroke='%23f97316' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+/* ══ 能交付什么：左右交替的图文卡 ══════════════════════════
+ *
+ * 每张卡的主色由内联 --uc 注入（取招牌渐变的一个色停），
+ * 图、图标、勾选、按钮、辉光全部引用它——换色只改调用处一个变量。
+ */
+
+.uc-card {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 1.25rem;
+  background: var(--panel);
+  color: inherit;
+  transition:
+    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.4s ease,
+    box-shadow 0.5s ease;
+}
+
+/* 悬停：整卡上浮 + 主色外发光 + 描边提亮。照片、图标、角标、按钮
+   各自的响应写在下面——它们必须同时发生，分头触发会显得散。 */
+.uc-card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in oklab, var(--uc), transparent 45%);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--uc), transparent 72%),
+    0 2rem 4rem -1.5rem color-mix(in oklab, var(--uc), transparent 52%);
+}
+.uc-card:focus-visible {
+  outline: 2px solid var(--uc);
+  outline-offset: 3px;
+}
+
+@media (min-width: 48rem) {
+  .uc-card {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── 实拍那一半 ── */
+
+.uc-media {
+  position: relative;
+  min-height: 13rem;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--uc), var(--background) 86%);
+}
+
+@media (min-width: 48rem) {
+  .uc-media {
+    min-height: 21rem;
+  }
+}
+
+.uc-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* 照片各自跑色（冷调手机 / 暖调毕业照），先统一压一档饱和与亮度，
+     再由 .uc-tint 叠主色，四张摆在一起才像一套。 */
+  filter: saturate(0.75) brightness(0.82) contrast(1.05);
+  transition:
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.5s ease;
+}
+.uc-card:hover .uc-photo {
+  transform: scale(1.055);
+  filter: saturate(0.92) brightness(0.94) contrast(1.05);
+}
+
+/* 主色叠加：靠近文案那一侧重、远端轻，让图与文之间有过渡而不是硬接。 */
+.uc-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--uc), transparent 82%),
+      color-mix(in oklab, var(--background), transparent 30%)
+    ),
+    radial-gradient(
+      120% 100% at 50% 120%,
+      color-mix(in oklab, var(--uc), transparent 70%),
+      transparent 70%
+    );
+  mix-blend-mode: multiply;
+}
+
+/* 图与文的接缝：窄屏在下缘、宽屏在贴着文案的那条边淡出。 */
+.uc-media::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 35%;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--panel), transparent);
+}
+
+@media (min-width: 48rem) {
+  .uc-media::after {
+    inset: 0 auto 0 auto;
+    width: 28%;
+    height: auto;
+    background: linear-gradient(to left, var(--panel), transparent);
+  }
+  /* 图在右时，淡出边换到左侧。 */
+  .md\:order-2.uc-media::after {
+    right: auto;
+    left: 0;
+    background: linear-gradient(to right, var(--panel), transparent);
+  }
+  .uc-media::after {
+    right: 0;
+  }
+}
+
+/* ── 文案那一半 ── */
+
+.uc-body {
+  position: relative;
+  padding: 1.75rem 1.5rem 2rem;
+  background: radial-gradient(
+    90% 80% at 12% 0%,
+    color-mix(in oklab, var(--uc), transparent 90%),
+    transparent 70%
+  );
+}
+
+@media (min-width: 48rem) {
+  .uc-body {
+    padding: 2.5rem 2.25rem;
+  }
+}
+
+.uc-corner {
+  position: absolute;
+  top: 1.1rem;
+  right: 1.1rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid color-mix(in oklab, var(--uc), transparent 66%);
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--uc);
+  transition:
+    background-color 0.4s ease,
+    border-color 0.4s ease,
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.uc-card:hover .uc-corner {
+  transform: translate(2px, -2px);
+  border-color: color-mix(in oklab, var(--uc), transparent 32%);
+  background: color-mix(in oklab, var(--uc), transparent 86%);
+}
+
+.uc-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid color-mix(in oklab, var(--uc), transparent 62%);
+  border-radius: 0.7rem;
+  background: color-mix(in oklab, var(--uc), transparent 88%);
+  color: var(--uc);
+  box-shadow: 0 0 1.5rem -0.4rem color-mix(in oklab, var(--uc), transparent 55%);
+}
+.uc-icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+.uc-card:hover .uc-icon {
+  border-color: color-mix(in oklab, var(--uc), transparent 30%);
+  background: color-mix(in oklab, var(--uc), transparent 78%);
+  box-shadow: 0 0 2.25rem -0.3rem color-mix(in oklab, var(--uc), transparent 35%);
+}
+
+.uc-eyebrow {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--uc);
+}
+
+.uc-title {
+  margin: 0 0 0.625rem;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  text-wrap: pretty;
+}
+
+@media (min-width: 48rem) {
+  .uc-title {
+    font-size: 1.5rem;
+  }
+}
+
+.uc-desc {
+  margin: 0 0 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.uc-list {
+  margin: 0 0 1.75rem;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+.uc-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.uc-check {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--uc), transparent 80%);
+  color: var(--uc);
+}
+.uc-check svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.uc-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.1rem;
+  border: 1px solid color-mix(in oklab, var(--uc), transparent 60%);
+  border-radius: 0.625rem;
+  background: color-mix(in oklab, var(--uc), transparent 92%);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--foreground);
+  white-space: nowrap;
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.uc-card:hover .uc-cta {
+  border-color: color-mix(in oklab, var(--uc), transparent 35%);
+  background: color-mix(in oklab, var(--uc), transparent 82%);
+}
+.uc-cta span {
+  font-size: 0.75rem;
+  color: var(--uc);
+}
+
+/* ══ 首屏引文块 ══════════════════════════════════════════
+ *
+ * 左侧一条渐变竖线 + 一个大引号，末句用点睛词收。
+ * 末句的 .accent 在这里刻意不走衬线斜体——引文本身已经够"文",
+ * 再来一层斜体衬线会显得端着。
+ */
+
+.hero-quote {
+  position: relative;
+  margin: 0;
+  max-width: 34rem;
+  padding: 0.25rem 0 0.25rem 1.5rem;
+}
+.hero-quote::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--brand-gradient);
+}
+
+.hero-quote-mark {
+  position: absolute;
+  top: -0.35em;
+  left: 1.1rem;
+  font-family: var(--font-serif);
+  font-size: 3rem;
+  line-height: 1;
+  color: color-mix(in oklab, var(--grad-2), transparent 55%);
+  pointer-events: none;
+}
+
+.hero-quote-line {
+  margin: 0;
+  font-size: clamp(0.9375rem, 1.3vw, 1.0625rem);
+  line-height: 1.85;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.hero-quote-punch {
+  margin: 0.875rem 0 0;
+  font-size: clamp(0.9375rem, 1.3vw, 1.0625rem);
+  line-height: 1.85;
+  color: var(--foreground);
+  text-wrap: pretty;
+}
+/* 点睛词在引文里改走无衬线加粗——衬线斜体叠在引文上过于端着。 */
+.hero-quote-punch .accent {
+  font-family: inherit;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* ══ 下载页 ══════════════════════════════════════════════
+ *
+ * 复用首页那套「纸 + 主色」语言：卡片同一档圆角与描边，
+ * 强调态（当前设备）走招牌渐变描边而不是实心主色块。
+ */
+
+.dl-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.dl-card {
+  padding: 1.75rem 1.5rem 1.875rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 1.25rem;
+  background: var(--panel);
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.4s ease,
+    box-shadow 0.4s ease;
+}
+.dl-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-strong);
+}
+
+/* 当前设备那张：渐变描边 + 主色辉光，不用实心色块——
+   实心块会把卡里的文件名压得看不清。 */
+.dl-card.is-current {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    var(--brand-gradient) border-box;
+  box-shadow: 0 1.5rem 3rem -1.5rem color-mix(in oklab, var(--grad-2), transparent 55%);
+}
+
+@media (min-width: 40rem) {
+  .dl-card {
+    padding: 2.125rem 2rem 2rem;
+  }
+}
+
+.dl-badge {
+  padding: 0.25rem 0.625rem;
+  border-radius: 1.25rem;
+  background: var(--brand-gradient);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  color: #fff;
+}
+
+/* 文件行：整行可点，右侧动作用主色。 */
+.dl-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9375rem 1.125rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
+  font-size: 0.90625rem;
+  transition:
+    border-color 0.3s ease,
+    background-color 0.3s ease;
+}
+.dl-file:hover {
+  border-color: color-mix(in oklab, var(--grad-4), transparent 45%);
+  background: color-mix(in oklab, var(--grad-4), transparent 94%);
+}
+.dl-file-action {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--grad-4);
+}
+
+/* 免安装入口 */
+.dl-quick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 1rem;
+  background: var(--panel);
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.4s ease;
+}
+.dl-quick:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--grad-1), transparent 55%);
+}
+
+@media (min-width: 40rem) {
+  .dl-quick {
+    padding: 1.5rem 1.75rem;
+  }
+}
+
+/* 右栏信息卡 */
+.dl-panel {
+  padding: 1.75rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 1rem;
+  background: var(--panel);
+}
+
+/* ══ 悬浮胶囊导航 ══════════════════════════════════════════ */
+
+.pill-nav {
+  background: var(--paper);
+  border: 1px solid oklch(0.9 0.004 285);
+  border-radius: 1rem;
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.25),
+    0 4px 6px -4px rgb(0 0 0 / 0.2);
+}
+.pill-link {
+  font-size: 0.78125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--paper-ink);
+  transition: color 0.2s ease;
+}
+.pill-link:hover {
+  color: var(--grad-4);
+}
+
+/* 字标：走招牌渐变，与右侧 CTA 是同一条光。
+   渐变裁在字形上，字号和字重都要够——细小的渐变字会糊成一团。 */
+.brand-word {
+  font-size: 1.3125rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-word-sm {
+  font-size: 1.125rem;
+}
+
+/* ══ 渐变主 CTA ════════════════════════════════════════════ */
+
+.btn-grad {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  padding: 0.875rem 1.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.90625rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--brand-gradient);
+  box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--grad-2), transparent 40%);
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease;
+}
+/* 顶部内高光——amphora 那颗按钮的「玻璃感」全来自这一层。 */
+.btn-grad::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.25), transparent);
+}
+.btn-grad:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px -14px color-mix(in oklab, var(--grad-2), transparent 25%);
+}
+.btn-grad > * {
+  position: relative;
+}
+
+/* 描边按钮（暗底）：1px 渐变环，靠双层背景省一个伪元素做的 mask。 */
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  font-size: 0.90625rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--foreground);
+  background:
+    linear-gradient(var(--background), var(--background)) padding-box,
+    var(--brand-gradient) border-box;
+  opacity: 0.85;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.btn-outline:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+/* ══ 模型厂商 logo 墙 ══════════════════════════════════════
+ *
+ * 灰度 + 压低不透明度：这一屏要说的是「都能接」，十一个彩色标识
+ * 一起亮会把版面吵散。hover 才还原本色，作为一点可探索的细节。
+ */
+
+/* 用的是各家官方单色锁定版（fill=currentColor，经 <img> 加载即渲染为黑），
+   所以这里不做 grayscale——只压不透明度，hover 还原。改色会踩到部分厂商的
+   brand guideline，单色版本身就是官方发布的形态。 */
+.logo-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  opacity: 0.55;
+  transition: opacity 0.35s ease;
+}
+.logo-item:hover {
+  opacity: 1;
+}
+
+@media (min-width: 48rem) {
+  .logo-item {
+    height: 2.5rem;
+  }
+}
+
+/* 锁定形态：图标定方在前，字标定高等比在后，中间一个固定间距。 */
+.logo-item {
+  gap: 0.55em;
+}
+.logo-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: auto;
+  height: 100%;
+  aspect-ratio: 1;
+}
+/* 字标略矮于图标——图标是满格 24×24，字标含 x-height 留白，
+   等高排会显得字比图大一号。 */
+.logo-mark {
+  display: block;
+  width: auto;
+  height: 82%;
+  object-fit: contain;
+}
+
+/* 降级字标：克制的字重与字距，读起来像一枚标识而不是一行列表文字。 */
+.logo-word {
+  display: block;
+  white-space: nowrap;
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--paper-ink);
+}
+
+@media (min-width: 48rem) {
+  .logo-word {
+    font-size: 1.75rem;
+  }
+}
+
+/* 墙上方的小标：大写、宽字距，与参考站同一种「客户墙」语气。 */
+.wall-heading {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-ink);
+}
+
+/* ══ 跑马灯 ════════════════════════════════════════════════ */
+
+.marquee {
+  display: flex;
+  width: 100%;
+  overflow: hidden;
+  gap: var(--gap, 4rem);
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+/* 轨道渲染两份相同内容，位移半程后无缝接回。 */
+.marquee-track {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--gap, 4rem);
+  padding-right: var(--gap, 4rem);
+  animation: marquee var(--duration, 38s) linear infinite;
+}
+.marquee-reverse .marquee-track {
+  animation-direction: reverse;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+/* ══ 白纸页脚（幕布式收尾）════════════════════════════════
+ *
+ * 宽屏：占位块撑出滚动距离，实体块 fixed 在视口底部、z 沉到内容之下，
+ * 靠上面那张暗纸滚走来「揭开」。窄屏回到常规文档流——移动端浏览器
+ * 地址栏会改变视口高度，fixed 幕布在那里站不住。
+ */
+
+.paper-curtain-inner {
+  position: relative;
+  min-height: 32rem;
+}
+
+@media (min-width: 48rem) {
+  .paper-curtain {
+    height: min(59.375rem, 100dvh);
+  }
+  /* z 必须是 0 而不是负值：html 和 body 都设了背景色，html 的背景会传播到画布，
+     body 的背景则退化成普通元素背景绘制——它的层级高于负 z-index 的定位元素，
+     会把幕布整个盖黑。用 0（在 body 背景之上）+ main 的 z-10（在幕布之上）来分层。 */
+  .paper-curtain-inner {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 0;
+    height: min(59.375rem, 100dvh);
+  }
+}
+
+/* 24px 网格圆点底纹 */
+.footer-dots {
+  background-image: radial-gradient(oklch(0.71 0.013 286) 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.4;
+}
+
+.footer-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* 页脚大字链接：hover 时一条渐变下划线从左展开。 */
+.footer-link {
+  position: relative;
+  display: inline-block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: oklch(0.371 0 0);
+}
+.footer-link::after {
+  content: "";
+  position: absolute;
+  bottom: -0.25rem;
+  left: 0;
+  height: 3px;
+  width: 0;
+  background: var(--brand-gradient);
+  transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.footer-link:hover::after {
+  width: 100%;
+}
+/* 纯标题（「关于」），不参与 hover 下划线。 */
+.footer-link-static::after {
+  content: none;
+}
+
+.footer-sublink {
+  color: var(--paper-dim);
+  transition: color 0.2s ease;
+}
+.footer-sublink:hover {
+  color: var(--paper-ink);
+}
+
+/* 巨型字标：完整不裁切，尺寸随视口宽走，下缘由上面的彩虹层去「洗」。 */
+.footer-wordmark {
+  display: inline-block;
+  font-size: min(20vw, 8.5rem);
+  padding-bottom: 0.1em;
+}
+
+/* 辉光带高度跟着字标走。宽屏约等于字标 ink 高度的六成（amphora 是 320/520）：
+   「AgentCore」九个字符，同宽下字比「amphora」矮，带高必须一起收。
+   窄屏它沉到字标背后当光晕，可以放大一点。 */
+.footer-glow {
+  height: 10rem;
+}
+
+@media (min-width: 48rem) {
+  .footer-link {
+    font-size: 1.875rem;
+  }
+  .footer-wordmark {
+    font-size: min(20.6vw, 22rem);
+  }
+  .footer-glow {
+    height: clamp(7rem, 10.5vw, 14rem);
+  }
+}
+
+/* ══ Hero 协作图（复刻产品内的协作画布）══════════════════
+ *
+ * 浅色，因为产品本体就是浅色——第一屏放一块真实界面，比放一张抽象示意图
+ * 更能说明「多 Agent 协作」不是概念。字号全部走 cqi，跟着容器宽缩放，
+ * 宽窄两套几何各配一档。
+ */
+
+.cg-shell {
+  overflow: hidden;
+  border-radius: 0.5em;
+  background: var(--paper);
+}
+
+/* 产品顶栏：任务名 + 停止 / 协作图 */
+.cg-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid oklch(0.92 0.003 285);
+  background: var(--paper);
+  font-size: 0.72rem;
+  color: var(--paper-ink);
+}
+.cg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid oklch(0.9 0.004 285);
+  border-radius: 0.4rem;
+  color: var(--paper-dim);
+}
+
+.cg {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--paper-ink);
+  container-type: inline-size;
+}
+
+.cg-canvas {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(oklch(0.88 0.004 285) 1px, transparent 1px);
+  background-size: 2.6cqi 2.6cqi;
+}
+
+/* ── 节点 ── */
+
+.cg-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3em;
+  padding: 0.65em 0.8em;
+  border: 1px solid oklch(0.9 0.004 285);
+  border-radius: 0.7em;
+  background: var(--paper);
+  font-size: 2.05cqi;
+  line-height: 1.35;
+  transition:
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    opacity 0.4s ease,
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 窄屏几何下容器变窄、卡片却变宽，字号要单独抬一档才读得清。 */
+/* 阈值必须与 CollabGraph 里的 WIDE_AT（560px）严格一致：那边按容器宽选几何，
+   这边按容器宽选字号，错开一点就会出现「宽几何 + 窄字号」把卡片撑破。 */
+@container (max-width: 35rem) {
+  .cg-node {
+    padding: 0.5em 0.7em;
+    font-size: 3.4cqi;
+  }
+  .cg-canvas {
+    background-size: 4.4cqi 4.4cqi;
+  }
+}
+
+.cg-node-task {
+  background: oklch(0.975 0.002 285);
+  border-style: dashed;
+}
+
+.cg-node.is-idle {
+  opacity: 0.45;
+  transform: scale(0.985);
+}
+
+.cg-node.is-active {
+  border-color: oklch(0.55 0.2 259);
+  box-shadow:
+    0 0 0 1px oklch(0.55 0.2 259 / 0.28),
+    0 0.5em 1.4em -0.6em oklch(0.55 0.2 259 / 0.5);
+}
+
+.cg-node.is-done {
+  border-color: oklch(0.72 0.15 155 / 0.55);
+  box-shadow: 0 0 0 1px oklch(0.72 0.15 155 / 0.16);
+}
+
+.cg-title {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.cg-sub,
+.cg-meta {
+  margin: 0;
+  font-size: 0.8em;
+  color: var(--paper-faint);
+}
+.cg-meta {
+  padding-top: 0.15em;
+  border-top: 1px solid oklch(0.93 0.003 285);
+  margin-top: 0.15em;
+}
+
+.cg-status {
+  margin: 0;
+  font-size: 0.85em;
+  font-weight: 500;
+  color: oklch(0.55 0.2 259);
+}
+.cg-status.is-done {
+  color: oklch(0.58 0.14 155);
+}
+.cg-node.is-idle .cg-status {
+  color: var(--paper-faint);
+  font-weight: 400;
+}
+
+/* 工具调用回显：截断到一行，靠打字效果表示「正在干活」。 */
+.cg-note {
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.78em;
+  font-style: italic;
+  color: oklch(0.68 0.005 285);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cg-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.75em;
+  height: 1.75em;
+  border-radius: 0.42em;
+  font-size: 0.82em;
+  font-weight: 600;
+}
+.cg-avatar-user {
+  color: var(--paper-faint);
+  background: oklch(0.93 0.003 285);
+}
+.cg-avatar-ceo {
+  color: oklch(0.5 0.2 259);
+  background: oklch(0.93 0.05 259);
+}
+
+.cg-check {
+  flex: 0 0 auto;
+  font-size: 0.9em;
+  color: oklch(0.58 0.14 155);
+}
+
+/* 波次标记：把「按依赖分波」写在卡面上，不然只靠时序观众读不出来。 */
+.cg-wave {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  min-width: 1.35em;
+  height: 1.35em;
+  padding: 0 0.28em;
+  border-radius: 0.35em;
+  background: oklch(0.94 0.003 285);
+  font-size: 0.72em;
+  font-weight: 600;
+  color: var(--paper-faint);
+}
+.cg-node.is-active .cg-wave {
+  background: oklch(0.93 0.05 259);
+  color: oklch(0.5 0.2 259);
+}
+
+/* ── 连线 ── */
+
+.cg-edge {
+  fill: none;
+  stroke: oklch(0.88 0.004 285);
+  stroke-width: 1.6;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transition:
+    stroke-dashoffset 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+    stroke 0.4s ease;
+}
+.cg-edge.is-on {
+  stroke-dashoffset: 0;
+}
+/* 派活的那一段用主色加粗：任务是「推」下去的，回流只是交付。 */
+.cg-edge-in.is-on {
+  stroke: oklch(0.55 0.2 259);
+  stroke-width: 2.2;
+}
+
+.cg-flow {
+  fill: none;
+  stroke: oklch(0.72 0.16 259);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 3 11;
+  animation: cg-flow 1.1s linear infinite;
+}
+@keyframes cg-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+.cg-caret {
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 0.1em;
+  vertical-align: -0.15em;
+  background: oklch(0.55 0.2 259);
+  animation: console-caret 1.05s steps(1) infinite;
+}
+
+.cg-spin {
+  display: block;
+  width: 1em;
+  height: 1em;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: am-spin 0.9s linear infinite;
+}
+
+/* ══ 四步机制：之字形卡片 + 蛇形路径 ══════════════════════
+ *
+ * 背景是这一屏的主角：青 → 蓝 → 紫的大面积极光，左下角压一团暖橙，
+ * 中间留黑，再盖一层噪点。卡片本身要暗、要半透，让极光从背后透出来——
+ * 卡片如果给不透明底，整屏就散成四个孤立的块。
+ */
+
+/* 极光要铺满整屏而不是版心：左右撑到 100vw，上方一直盖过标题区。
+ *
+ * 上下必须用 mask 淡出——这层是个矩形，只要它的边落在分区内部，就会在
+ * 纯黑底上切出一条横线（标题下方那道硬边就是这么来的）。渐变中心也要
+ * 相应下移，否则色团压在被 mask 吃掉的那一段里，白铺不到画面上。
+ */
+.pp-aurora {
+  position: absolute;
+  top: -30rem;
+  bottom: -8rem;
+  left: 50%;
+  width: 100vw;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background:
+    radial-gradient(58% 26% at 16% 22%, oklch(0.62 0.12 205 / 0.5), transparent 70%),
+    radial-gradient(52% 24% at 64% 19%, oklch(0.5 0.19 275 / 0.55), transparent 72%),
+    radial-gradient(44% 24% at 4% 47%, oklch(0.5 0.2 300 / 0.4), transparent 70%),
+    radial-gradient(38% 18% at 6% 88%, oklch(0.62 0.17 55 / 0.34), transparent 72%),
+    radial-gradient(48% 26% at 92% 67%, oklch(0.45 0.17 300 / 0.26), transparent 74%);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 16%,
+    #000 84%,
+    transparent 100%
+  );
+}
+
+.pp {
+  position: relative;
+  width: 100%;
+}
+
+/* ── 之字形画布 ──
+ *
+ * 高度写死是有意的：跟着宽度按比例缩放的话，窄一点的桌面会被拉出一大片
+ * 空黑，曲线也会被卡片挤扁。宽度上限与卡片的百分比落位配套。
+ */
+.pp-stage {
+  position: relative;
+  width: 100%;
+  max-width: 71.25rem;
+  height: 1340px;
+  margin-inline: auto;
+}
+
+/* preserveAspectRatio=none：画布高度恒等于 viewBox 高度，只有横向会被压
+   到 0.85~1 倍。卡片是按百分比落位的，路径必须跟着同一套比例走，否则
+   窄一点就会脱开接点。 */
+.pp-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* ── 路径 ── */
+
+.pp-track {
+  stroke: oklch(0.55 0.03 265 / 0.42);
+  stroke-width: 2;
+  stroke-dasharray: 4 8;
+  stroke-linecap: square;
+}
+
+.pp-s1 {
+  stop-color: var(--pp-c1);
+}
+.pp-s2 {
+  stop-color: var(--pp-c2);
+}
+.pp-s3 {
+  stop-color: var(--pp-c3);
+}
+.pp-s4 {
+  stop-color: var(--pp-c4);
+}
+
+/* 高亮段：stroke-dasharray 由滚动进度驱动（见 ProcessPath.tsx）。
+   pathLength=1，所以「已走过的长度」就是进度本身。 */
+.pp-glow {
+  stroke: url(#pp-flow);
+  stroke-width: 4;
+  stroke-linecap: round;
+  filter: url(#pp-bloom);
+}
+
+/* ── 卡片 ── */
+
+/* 入场（进视口就位，不再退回）与点亮（跟着光路走）是两件事，分开两组
+   class：混在一起会出现「卡片还没出现就已经是高亮色」。 */
+.pp-slot {
+  position: absolute;
+  width: 300px;
+  opacity: 0;
+  transform: translateY(20px) scale(0.9);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pp-slot.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (min-width: 80rem) {
+  .pp-slot {
+    width: 320px;
+  }
+}
+
+.pp-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem;
+  border: 1px solid oklch(1 0 0 / 0.1);
+  border-radius: 1rem;
+  background: oklch(0.16 0.03 288 / 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition:
+    border-color 0.4s ease,
+    box-shadow 0.4s ease,
+    background-color 0.4s ease;
+}
+
+.pp-slot.is-active .pp-card {
+  border-color: color-mix(in oklab, var(--pp-accent), transparent 50%);
+  background: oklch(0.18 0.04 290 / 0.82);
+  box-shadow: 0 0 20px color-mix(in oklab, var(--pp-accent), transparent 87%);
+}
+
+/* 图标外框：四角那几个细十字，照参考站的「工程图纸」味道。 */
+.pp-icon-wrap {
+  position: relative;
+  display: block;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: 1rem;
+  padding: 0.4rem;
+  background-image: var(--pp-cross), var(--pp-cross), var(--pp-cross),
+    var(--pp-cross);
+  background-repeat: no-repeat;
+  background-position: 0 0, 100% 0, 0 100%, 100% 100%;
+}
+
+:root {
+  --pp-cross: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9'%3E%3Cpath d='M4.5 0v9M0 4.5h9' stroke='white' stroke-opacity='0.22' stroke-width='1'/%3E%3C/svg%3E");
+}
+
+.pp-icon {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 1px solid oklch(1 0 0 / 0.1);
+  border-radius: 0.7rem;
+  background: oklch(1 0 0 / 0.04);
+  color: oklch(0.72 0.01 285);
+  transition:
+    border-color 0.5s ease,
+    color 0.5s ease,
+    box-shadow 0.5s ease,
+    background-color 0.5s ease;
+}
+.pp-icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.pp-slot.is-active .pp-icon {
+  border-color: color-mix(in oklab, var(--pp-accent), transparent 62%);
+  background: color-mix(in oklab, var(--pp-accent), transparent 88%);
+  color: var(--pp-accent);
+  box-shadow: 0 0 1.25rem -0.25rem color-mix(
+      in oklab,
+      var(--pp-accent),
+      transparent 45%
+    );
+}
+
+.pp-step {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  color: var(--ghost);
+  transition: color 0.4s ease;
+}
+.pp-slot.is-active .pp-step {
+  color: var(--pp-accent);
+}
+
+.pp-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+}
+
+.pp-body {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+/* ── 末端 CTA ──
+ *
+ * 路径最后一笔落在 (568, 1290)，正好是画布的横向正中、离底 50px；按钮往上
+ * 提 2.5rem 去接这一笔，看上去就是光顺着流进了按钮。亮度/饱和度由进度在
+ * 0.88→1 之间推（见 ProcessPath.tsx）——光没到之前按钮是暗的。
+ */
+.pp-cta {
+  display: flex;
+  justify-content: center;
+  filter: brightness(0.55) saturate(0.4);
+}
+/* 提亮是 JS 推的；没有脚本就别把按钮永远压暗。 */
+@media (scripting: none) {
+  .pp-cta {
+    filter: none;
+  }
+}
+.pp:not(.pp-column) .pp-cta {
+  margin-top: -2.5rem;
+}
+.pp-column .pp-cta {
+  margin-top: 2.5rem;
+}
+
+.pp-cta-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  padding: 0.875rem 1.75rem;
+  border-radius: 0.75rem;
+  background: oklch(0.13 0.01 285);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+  white-space: nowrap;
+  box-shadow:
+    0 10px 30px -8px color-mix(in oklab, var(--pp-c4), transparent 60%),
+    0 4px 14px -4px color-mix(in oklab, var(--pp-c4), transparent 80%),
+    inset 0 0 0 1px color-mix(in oklab, var(--pp-c4), transparent 72%);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s ease;
+}
+/* 底部那团绿雾：按钮的「被点亮」感全来自这一层，hover 时整个铺开。 */
+.pp-cta-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    75% 140% at 50% 115%,
+    color-mix(in oklab, var(--pp-c4), transparent 62%) 0%,
+    transparent 72%
+  );
+  transition: background 0.3s ease;
+}
+.pp-cta-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 16px 38px -10px color-mix(in oklab, var(--pp-c4), transparent 45%),
+    0 4px 14px -4px color-mix(in oklab, var(--pp-c4), transparent 70%),
+    inset 0 0 0 1px color-mix(in oklab, var(--pp-c4), transparent 58%);
+}
+.pp-cta-btn:hover::before {
+  background: radial-gradient(
+    95% 170% at 50% 115%,
+    color-mix(in oklab, var(--pp-c4), transparent 32%) 0%,
+    transparent 70%
+  );
+}
+
+/* 掠过按钮的那道高光。 */
+.pp-cta-shine {
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 50%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 0.18) 50%,
+    transparent 100%
+  );
+  transform: skewX(-20deg);
+  transition: transform 0.7s ease-out;
+}
+.pp-cta-btn:hover .pp-cta-shine {
+  transform: skewX(-20deg) translateX(300%);
+}
+
+.pp-cta-label,
+.pp-cta-arrow {
+  position: relative;
+}
+.pp-cta-arrow {
+  font-size: 0.75rem;
+  transition: transform 0.3s ease;
+}
+.pp-cta-btn:hover .pp-cta-arrow {
+  transform: translate(2px, -2px);
+}
+
+/* ── 窄屏：竖直单列 ── */
+
+.pp-column {
+  position: relative;
+  padding-left: 0.125rem;
+}
+.pp-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.pp-rail,
+.pp-rail-glow {
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: 0.6875rem;
+  width: 2px;
+  border-radius: 2px;
+}
+.pp-rail {
+  background: repeating-linear-gradient(
+    to bottom,
+    oklch(1 0 0 / 0.2) 0 5px,
+    transparent 5px 14px
+  );
+}
+/* 竖列也走同一条紫蓝橙绿，只是把曲线拉直了。 */
+.pp-rail-glow {
+  background: linear-gradient(
+    to bottom,
+    var(--pp-c1) 0%,
+    var(--pp-c2) 33%,
+    var(--pp-c3) 67%,
+    var(--pp-c4) 100%
+  );
+  transform-origin: top center;
+  transform: scaleY(0);
+  box-shadow: 0 0 10px oklch(0.68 0.14 280 / 0.55);
+}
+
+/* 竖列里 slot 不再绝对定位，只保留入场动画。 */
+.pp-slot-row {
+  position: relative;
+  width: auto;
+  padding-left: 2.25rem;
+}
+
+.pp-dot {
+  position: absolute;
+  top: 2rem;
+  left: 0.1875rem;
+  z-index: 1;
+  width: 0.8125rem;
+  height: 0.8125rem;
+  border: 2px solid oklch(0.3 0.01 285);
+  border-radius: 50%;
+  background: var(--background);
+  transition:
+    border-color 0.4s ease,
+    box-shadow 0.4s ease;
+}
+.pp-slot.is-active .pp-dot {
+  border-color: var(--pp-accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--pp-accent), transparent 82%);
+}
+
 /* ── 降级：尊重系统减弱动效偏好 ───────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .cg-flow,
+  .cg-caret,
+  .cg-spin {
+    animation: none;
+  }
+  /* 协作图停在「都已交付」那一帧，连线不再做生长过渡。 */
+  .cg-edge,
+  .cg-node,
+  .uc-card,
+  .uc-photo {
+    transition: none;
+  }
+  .uc-card:hover {
+    transform: none;
+  }
+  .uc-card:hover .uc-photo {
+    transform: none;
+  }
+  .uc-card:hover .uc-corner {
+    transform: none;
+  }
   html {
     scroll-behavior: auto;
   }
@@ -724,6 +2421,15 @@
     transform: none;
     stroke-dashoffset: 0;
     transition: none;
+  }
+  /* 四步机制：四张卡直接就位，光路和末端按钮直接停在「走完」那一帧。 */
+  .pp-slot {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .pp-cta {
+    filter: none;
   }
 }
 

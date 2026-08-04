@@ -17,7 +17,14 @@ const STAGGER = 0.42;
  * 纯装饰：日志与进度条是 CSS 循环动画，不接任何实时数据；
  * 因此整块对辅助技术隐藏，文案信息在下方各分区都有等价表达。
  */
-export default function TaskConsole({ compact = false }: { compact?: boolean }) {
+export default function TaskConsole({
+  compact = false,
+  bare = false,
+}: {
+  compact?: boolean;
+  /** 外框由 <BrowserFrame> 提供时开启：去掉自带的圆角描边与 mac 三点。 */
+  bare?: boolean;
+}) {
   const { t } = useLang();
   const logs = compact ? CONSOLE.logs.filter((_, i) => i !== 3) : CONSOLE.logs;
   const bars = compact ? CONSOLE.bars.filter((_, i) => i !== 1) : CONSOLE.bars;
@@ -25,11 +32,15 @@ export default function TaskConsole({ compact = false }: { compact?: boolean }) 
   return (
     <div
       aria-hidden="true"
-      className="overflow-hidden rounded-2xl border border-border-strong bg-[linear-gradient(180deg,var(--card),color-mix(in_oklab,var(--background),var(--card)_45%))] shadow-[0_40px_90px_-40px_oklch(0_0_0/0.9)]"
+      className={
+        bare
+          ? "bg-[linear-gradient(180deg,color-mix(in_oklab,var(--ink-deep),white_4%),var(--ink-deep))]"
+          : "overflow-hidden rounded-2xl border border-border-strong bg-[linear-gradient(180deg,var(--card),color-mix(in_oklab,var(--background),var(--card)_45%))] shadow-[0_40px_90px_-40px_oklch(0_0_0/0.9)]"
+      }
     >
       {/* 标题栏 */}
       <div className="flex items-center gap-3 border-b border-border-soft px-4 py-3">
-        {!compact && (
+        {!compact && !bare && (
           <span className="flex gap-1.5">
             <span className="block size-2 rounded-full bg-secondary" />
             <span className="block size-2 rounded-full bg-secondary" />

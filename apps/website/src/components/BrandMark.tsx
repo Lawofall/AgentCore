@@ -1,8 +1,17 @@
 /**
  * 品牌标记：一个方框内三个不等亮度的小方块——
  * 主色 / 副色 / 中性各一，对应「一支多元的团队」而非单个节点。
+ *
+ * `onLight` 用于白底（悬浮胶囊导航、白色页脚）：第三块由「白的 35%」
+ * 换成「黑的 30%」，否则在白纸上直接消失。
  */
-export default function BrandMark({ size = 22 }: { size?: number }) {
+export default function BrandMark({
+  size = 22,
+  onLight = false,
+}: {
+  size?: number;
+  onLight?: boolean;
+}) {
   const unit = size / 22;
   const box = 5 * unit;
   const inset = 4 * unit;
@@ -26,7 +35,9 @@ export default function BrandMark({ size = 22 }: { size?: number }) {
         style={{ right: inset, top: inset, width: box, height: box }}
       />
       <span
-        className="absolute block rounded-[1px] bg-foreground/35"
+        className={`absolute block rounded-[1px] ${
+          onLight ? "bg-paper-ink/30" : "bg-foreground/35"
+        }`}
         style={{ left: 8.5 * unit, bottom: inset, width: box, height: box }}
       />
     </span>
