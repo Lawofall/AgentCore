@@ -8,7 +8,7 @@ dependencies = [
     # >=0.50: `--ws auto` defaults to websockets-sansio, dropping the deprecated
     # websockets.legacy import path (warning-free with websockets>=14).
     "uvicorn[standard]>=0.50",
-    "pydantic>=2.10",
+    "pydantic>=2.13.4",
     "pydantic-settings>=2.7",
     "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.30",
@@ -41,7 +41,7 @@ dependencies = [
 # agentcore 包本体 + 本组依赖。**改闭包时需同步本组并跑 bundle:sidecar 冒烟（含 docx/pdf）。**
 # 否决：为瘦身砍掉 Office 却仍跑同一 ``run_chat_pipeline``（缺 ``docx``/``fpdf2`` → PIPELINE_ERROR）。
 sidecar = [
-    "pydantic>=2.10",
+    "pydantic>=2.13.4",
     "pydantic-settings>=2.7",
     "httpx>=0.28",
     "structlog>=24.4",
