@@ -84,7 +84,7 @@ jobs:
       # ---- Frontend toolchain ----
       - name: Setup pnpm
         if: steps.key.outputs.present == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.28.1
 
