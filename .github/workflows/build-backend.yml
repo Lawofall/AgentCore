@@ -61,7 +61,7 @@ jobs:
       # GIT_SHA/BUILT_AT 构建期钉入镜像 ENV（运行时经 GET /version 暴露，§7.1）。
       # GitHub Actions 网络直连 Docker Hub/ghcr，无需国内镜像。gha 缓存复用层。
       - name: Build & push (<short-sha> + latest)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: apps/server
           push: true
