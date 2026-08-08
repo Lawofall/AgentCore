@@ -24,7 +24,7 @@ dependencies = [
     "cryptography>=49.0.0",
     "pyotp>=2.9",
     "pillow>=12.3.0",
-    "markdown-it-py>=3.0",
+    "markdown-it-py>=4.2.0",
     "tree-sitter>=0.23",
     "tree-sitter-python>=0.23",
     "tree-sitter-typescript>=0.23",
@@ -48,7 +48,7 @@ sidecar = [
     "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.30",
     # Office literacy（与主 dependencies 同版本约束；云 API 镜像走主依赖，本地引擎走本组）
-    "markdown-it-py>=3.0",
+    "markdown-it-py>=4.2.0",
     "markitdown[docx,pdf,pptx]>=0.1.6",
     "python-docx>=1.2.0",
     "fpdf2>=2.8.0",
