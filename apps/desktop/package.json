@@ -108,7 +108,7 @@
     "lucide-react": "^0.400.0",
     "markmap-lib": "^0.18.12",
     "markmap-view": "^0.18.12",
-    "mermaid": "^11.15.0",
+    "mermaid": "^11.16.1",
     "playwright": "1.61.0",
     "postcss": "^8.5.18",
     "react": "^19.0.0",
