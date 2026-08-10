@@ -1,11 +1,16 @@
 @import "tailwindcss";
 
 /*
- * AgentCore 官网配色 —— 暖调近黑，OKLCH 单一来源。
+ * AgentCore 官网配色 —— 靛青，OKLCH 单一来源。
  *
- * 中性色统一落在 hue 100 的暖灰家族（近黑画布 + 象牙白文本）；
- * 品牌主色为陶土橙（hue 39），副色为雾蓝（hue 248），专用于「协商 / 辩论」语义
- * ——副色刻意取冷调，才能在同一张作战图里与主色、success、warning 四者互不混淆。
+ * 单色相体系：画布是深蓝近黑（hue 265），点缀在 hue 200–275 之间摆动，
+ * 从深靛到亮青一条渐变走完，不再有第二个色相家族。中性色也不是纯灰，
+ * 一律带一点同族的蓝——纯灰压在蓝底上会显脏。
+ *
+ * 一条规矩：亮色渐变只在暗画布上成立。落到白纸分区（生态、对比、页脚、
+ * 胶囊导航）必须换成深色版，否则等于消失——见下方 --paper-g* 与
+ * 「白纸分区里的点缀反向」那条规则。
+ *
  * 所有颜色都以语义 token 定义于此处单一来源，组件内禁止硬编码 hex。
  */
 @theme inline {
@@ -54,97 +59,188 @@
 }
 
 :root {
-  /* 画布：中性近黑（不再是暖灰），暖只留给品牌色本身——与深靛黑 Hero 拉开层次。 */
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(1 0 0);
+  /* 画布：深蓝近黑。中性色也带一点同族的蓝——纯灰压在蓝底上会显脏。 */
+  --background: oklch(0.155 0.018 265);
+  --foreground: oklch(0.97 0.005 260);
 
-  /* Hero 专用深靛黑：比画布更冷更沉，星野与极光都叠在它上面。 */
-  --ink: oklch(0.145 0 0);
-  --ink-deep: oklch(0.13 0.045 285);
+  /* Hero / 收尾 CTA 专用：比画布更沉更冷，星野与极光都叠在它上面。 */
+  --ink: oklch(0.155 0.018 265);
+  --ink-deep: oklch(0.13 0.028 268);
 
   /* 白色分区（明暗交替的另一半）。 */
   --paper: oklch(1 0 0);
-  --paper-ink: oklch(0.16 0.01 285);
-  --paper-dim: oklch(0.44 0.008 285);
-  --paper-faint: oklch(0.6 0.006 285);
-  --paper-line: oklch(0.9 0.004 285);
+  --paper-ink: oklch(0.18 0.02 265);
+  --paper-dim: oklch(0.45 0.02 260);
+  --paper-faint: oklch(0.6 0.015 260);
+  --paper-line: oklch(0.9 0.006 255);
 
   /* 面板层次：card 为节点/卡片底，panel 为分区块底（比 card 更沉）。 */
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(1 0 0);
-  --panel: oklch(0.178 0 0);
+  --card: oklch(0.215 0.02 265);
+  --card-foreground: var(--foreground);
+  --panel: oklch(0.19 0.02 265);
 
-  --primary: oklch(0.672 0.131 39);
-  --primary-foreground: oklch(0.145 0 0);
-  --brand-2: oklch(0.78 0.075 248);
+  --primary: oklch(0.75 0.13 235);
+  --primary-foreground: oklch(0.15 0.03 265);
+  --brand-2: oklch(0.78 0.09 210);
 
-  /* 招牌四段渐变（蓝 → 紫 → 粉 → 橙）：描边、辉光、主 CTA 共用一条。 */
-  --grad-1: oklch(0.623 0.214 259.8);
-  --grad-2: oklch(0.627 0.266 303.9);
-  --grad-3: oklch(0.656 0.241 354.3);
-  --grad-4: oklch(0.7 0.198 47.6);
+  /* 招牌渐变（深靛 → 亮青）：描边、辉光、主 CTA 共用一条。
+     四个色停都在 hue 200–275 内，是同一条光的四个位置，不是四种颜色。 */
+  --grad-1: oklch(0.65 0.15 270);
+  --grad-2: oklch(0.72 0.14 250);
+  --grad-3: oklch(0.8 0.12 225);
+  --grad-4: oklch(0.86 0.1 205);
   --brand-gradient: linear-gradient(
     90deg,
-    var(--grad-1) 0%,
-    var(--grad-2) 38%,
-    var(--grad-3) 68%,
-    var(--grad-4) 100%
+    oklch(0.62 0.16 272) 0%,
+    oklch(0.72 0.14 248) 40%,
+    oklch(0.8 0.12 226) 70%,
+    oklch(0.88 0.1 202) 100%
   );
-  /* 四步机制的阶段色（紫 → 蓝 → 橙 → 绿）：路径渐变、卡片高亮、末端按钮
-     共用这四个。前三个直接复用招牌渐变里的色，只有收尾的绿是新加的——
-     四步走完要有「落地」的感觉，暖色收不住。 */
-  --pp-c1: var(--grad-2);
-  --pp-c2: var(--grad-1);
-  --pp-c3: var(--grad-4);
-  --pp-c4: oklch(0.7 0.16 162);
+  /* 四步机制的阶段色：跟着招牌渐变同向走，越往后越亮——
+     四步走完要有「越来越实」的感觉，靠明度递进而不是换色相。 */
+  --pp-c1: oklch(0.6 0.16 275);
+  --pp-c2: oklch(0.7 0.14 250);
+  --pp-c3: oklch(0.8 0.12 226);
+  --pp-c4: oklch(0.88 0.1 200);
 
-  /* 标题渐变字：橙 → 红 → 粉，比招牌渐变更暖、更短。 */
+  /* 标题渐变字：与招牌渐变同族，但反向铺（亮青起、深靛收），比它更短。 */
   --head-gradient: linear-gradient(
     100deg,
-    oklch(0.75 0.183 55.9) 0%,
-    oklch(0.704 0.191 22.2) 50%,
-    oklch(0.718 0.202 349.8) 100%
+    oklch(0.88 0.1 205) 0%,
+    oklch(0.74 0.14 245) 50%,
+    oklch(0.66 0.16 270) 100%
   );
 
-  --secondary: oklch(0.3 0.006 100);
-  --secondary-foreground: oklch(0.948 0.011 95);
-  --muted: oklch(0.3 0.006 100);
-  --muted-foreground: oklch(0.705 0.008 100);
-  --accent: oklch(0.325 0.007 100);
-  --accent-foreground: oklch(0.948 0.011 95);
+  /* 压在招牌渐变之上的文字色（主 CTA、下载页徽标、生态区那张高亮卡）。
+     渐变是亮色，所以这里必须是深色，否则白字直接消失。 */
+  --on-brand: oklch(0.14 0.03 265);
 
-  /* 状态色与品牌色分离：primary 已是暖橙，success 单独取青绿以免语义混淆。 */
-  --success: oklch(0.8 0.115 150);
-  --warning: oklch(0.83 0.14 82);
-  --info: oklch(0.78 0.075 248);
+  /* 白纸分区专用的深色点缀。
+     亮色渐变落到白纸上等于没有，那几个容器里整套 --grad-* 都要换深色版
+     （见下方「白纸分区里的点缀反向」）。 */
+  --paper-g1: oklch(0.5 0.15 262);
+  --paper-g2: oklch(0.4 0.16 258);
+  --paper-g3: oklch(0.46 0.15 245);
+  --paper-g4: oklch(0.38 0.13 232);
+  --paper-on-brand: oklch(1 0 0);
+  --paper-brand-gradient: linear-gradient(
+    90deg,
+    oklch(0.46 0.16 272) 0%,
+    oklch(0.38 0.15 252) 45%,
+    oklch(0.42 0.14 235) 72%,
+    oklch(0.5 0.13 215) 100%
+  );
+  --paper-head-gradient: linear-gradient(
+    100deg,
+    oklch(0.48 0.14 220) 0%,
+    oklch(0.3 0.12 258) 55%,
+    oklch(0.46 0.16 272) 100%
+  );
 
-  /* 文本阶梯：dim > faint > ghost，中性灰，越往后越弱。 */
-  --dim: oklch(0.72 0.005 285);
-  --faint: oklch(0.58 0.005 285);
-  --ghost: oklch(0.48 0.005 285);
+  /* Hero 浏览器外框：框体、发丝线、地址栏。抽成 token 是为了换配色时
+     整块窗口能跟着走——写死的 white/10 在浅底上会整个不见。 */
+  --frame-bg: color-mix(in oklab, var(--ink-deep), black 20%);
+  --frame-line: oklch(1 0 0 / 0.1);
+  --frame-line-soft: oklch(1 0 0 / 0.07);
+  --frame-url-bg: oklch(1 0 0 / 0.06);
+  --frame-url-ink: oklch(1 0 0 / 0.45);
+  --frame-shadow: 0 40px 90px -30px rgb(0 0 0 / 0.9);
+
+  --secondary: color-mix(in oklab, var(--foreground), var(--background) 82%);
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in oklab, var(--foreground), var(--background) 82%);
+  --muted-foreground: var(--dim);
+  --accent: color-mix(in oklab, var(--foreground), var(--background) 79%);
+  --accent-foreground: var(--foreground);
+
+  /* 状态色：主色已占掉蓝一段，success / warning 各自拉开足够的色相距离，
+     免得在同一张作战图里读成同一个意思。 */
+  --success: oklch(0.8 0.11 175);
+  --warning: oklch(0.83 0.1 85);
+  --info: oklch(0.78 0.11 230);
+
+  /* 文本阶梯：dim > faint > ghost，带一点蓝的中性灰，越往后越弱。 */
+  --dim: oklch(0.75 0.015 255);
+  --faint: oklch(0.6 0.015 255);
+  --ghost: oklch(0.48 0.015 258);
 
   /* 描边：半透明纯白发丝线，保留 alpha 以便叠在任意面板上。 */
   --border: oklch(1 0 0 / 0.1);
   --border-soft: oklch(1 0 0 / 0.06);
   --border-strong: oklch(1 0 0 / 0.16);
-  --line: oklch(0.34 0.004 285);
-  --ring: oklch(0.672 0.131 39);
+  --line: oklch(0.34 0.02 265);
+  --ring: var(--primary);
 
   /* 装饰性辉光（Hero / CTA 背景），作为正式 token 而非就地造色。 */
-  --glow-1: oklch(0.7 0.198 47.6 / 0.16);
-  --glow-2: oklch(0.627 0.266 303.9 / 0.2);
-  --glow-3: oklch(0.656 0.241 354.3 / 0.14);
+  --glow-1: oklch(0.6 0.16 270 / 0.14);
+  --glow-2: oklch(0.72 0.14 240 / 0.12);
+  --glow-3: oklch(0.8 0.12 210 / 0.1);
+
+  /* 大面积装饰层同样收进 token —— 换配色时这几层必须跟着走，
+     写死在规则里就会变成「主色换了、光还是旧的」。 */
+  --wash-gradient: linear-gradient(
+    90deg,
+    oklch(0.88 0.08 205),
+    oklch(0.62 0.16 272),
+    oklch(0.74 0.14 245),
+    oklch(0.58 0.15 285),
+    oklch(0.84 0.11 215)
+  );
+  --wash-opacity: 0.6;
+  --wash-opacity-panel: 0.36;
+  --wash-grain-opacity: 0.15;
+
+  --pp-aurora-bg:
+    radial-gradient(58% 26% at 16% 22%, oklch(0.62 0.14 205 / 0.4), transparent 70%),
+    radial-gradient(52% 24% at 64% 19%, oklch(0.5 0.18 272 / 0.45), transparent 72%),
+    radial-gradient(44% 24% at 4% 47%, oklch(0.5 0.16 250 / 0.34), transparent 70%),
+    radial-gradient(38% 18% at 6% 88%, oklch(0.58 0.14 225 / 0.28), transparent 72%),
+    radial-gradient(48% 26% at 92% 67%, oklch(0.45 0.16 285 / 0.24), transparent 74%);
+
+  /* 实拍图统一调色：四张照片各自跑色，先压到同一档再谈叠色。 */
+  --photo-filter: saturate(0.62) brightness(0.84) contrast(1.05);
+  --photo-filter-hover: saturate(0.88) brightness(0.95) contrast(1.05);
+
+  --footer-dot: oklch(0.71 0.013 286);
+
+  /* 产品画布（Hero 里那块协作图）的状态色。它永远落在白纸上，
+     所以跟画布明暗无关，只跟着主色家族走。 */
+  --cg-accent: oklch(0.52 0.18 258);
+  --cg-accent-deep: oklch(0.46 0.18 258);
+  --cg-accent-flow: oklch(0.7 0.14 240);
+  --cg-accent-tint: oklch(0.93 0.05 250);
+  --cg-done: oklch(0.7 0.11 195);
+  --cg-done-ink: oklch(0.54 0.1 195);
 
   /* 协作图 Agent 身份色：仅协作图内联 var() 使用，非状态语义。
-     统一压低彩度、对齐明度，让 8 个身份读起来像同一套家族而非彩虹。 */
-  --agent-1: oklch(0.74 0.125 42);
-  --agent-2: oklch(0.8 0.1 70);
-  --agent-3: oklch(0.84 0.105 100);
-  --agent-4: oklch(0.8 0.115 150);
-  --agent-5: oklch(0.79 0.09 195);
-  --agent-6: oklch(0.78 0.085 248);
-  --agent-7: oklch(0.755 0.1 305);
-  --agent-8: oklch(0.72 0.13 8);
+     八个身份在 hue 195–285 里摆动、明度错开——同一套家族里的八个位置，
+     不是八种颜色。 */
+  --agent-1: oklch(0.66 0.14 272);
+  --agent-2: oklch(0.72 0.13 252);
+  --agent-3: oklch(0.78 0.12 232);
+  --agent-4: oklch(0.84 0.1 210);
+  --agent-5: oklch(0.74 0.11 195);
+  --agent-6: oklch(0.7 0.13 262);
+  --agent-7: oklch(0.8 0.11 220);
+  --agent-8: oklch(0.62 0.15 285);
+}
+
+/* 白纸分区里的点缀反向。
+ *
+ * 亮色渐变压在深蓝画布上很干净，落到白纸分区就等于消失。这里在那几个容器上
+ * 就地重声明同名变量——自定义属性会继承下去，所有 var(--grad-*) /
+ * var(--brand-gradient) 的用法自动跟着翻深，不必给每个用到的地方单独写规则。 */
+.pill-nav,
+.paper-panel,
+.paper-curtain {
+  --grad-1: var(--paper-g1);
+  --grad-2: var(--paper-g2);
+  --grad-3: var(--paper-g3);
+  --grad-4: var(--paper-g4);
+  --primary: var(--paper-g2);
+  --brand-gradient: var(--paper-brand-gradient);
+  --head-gradient: var(--paper-head-gradient);
+  --on-brand: var(--paper-on-brand);
 }
 
 @layer base {
@@ -568,7 +664,7 @@
   color: var(--faint);
 }
 .step-item .step-desc {
-  color: oklch(0.45 0.007 100);
+  color: var(--faint);
 }
 .step-item.is-active {
   border-left-color: var(--primary);
@@ -825,24 +921,16 @@
   pointer-events: none;
 }
 .aurora-wash {
-  opacity: 0.75;
+  opacity: var(--wash-opacity);
   filter: blur(40px);
-  background: linear-gradient(
-    90deg,
-    oklch(0.9 0.058 230),
-    oklch(0.623 0.214 259.8),
-    oklch(0.627 0.266 303.9),
-    oklch(0.656 0.241 354.3),
-    oklch(0.637 0.237 25.3),
-    oklch(0.7 0.198 47.6)
-  );
+  background: var(--wash-gradient);
 }
 /* 噪点跟着洗色走，但它没有 blur——不加 mask 就是个硬边矩形。15% 的灰噪叠在
    近黑的暗纸上会把亮度抬到两倍以上，那条上缘会直接变成一道横切线，把渐变
    切成上下两块。淡入的节奏要对着 wash 被 blur(64px) 糊开的坡度来：光大约在
    带高六成处才到满，噪点也从那里开始满。 */
 .aurora-grain {
-  opacity: 0.15;
+  opacity: var(--wash-grain-opacity);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   mask-image: linear-gradient(to bottom, transparent 0, #000 62%);
 }
@@ -854,7 +942,7 @@
 }
 /* 同一条光透过黑纸，亮度自然要压下来——只降 wash，噪点仍与页脚同档。 */
 .aurora-wash.panel-wash {
-  opacity: 0.45;
+  opacity: var(--wash-opacity-panel);
 }
 
 @media (min-width: 48rem) {
@@ -898,6 +986,11 @@
     radial-gradient(52% 40% at 74% 40%, var(--glow-3), transparent 66%),
     radial-gradient(44% 38% at 50% 92%, var(--glow-1), transparent 70%);
   filter: blur(14px);
+}
+
+/* 窗口背后的那团辉光。写成 class 而不是内联 style，换配色时才压得住。 */
+.bf-glow {
+  background: var(--brand-gradient);
 }
 
 /* Hero 窗口的后仰。只在宽屏生效——窄屏是满宽布局，一旋转右缘就出框。 */
@@ -956,7 +1049,7 @@ html[lang="zh-CN"] .accent {
   right: -0.04em;
   bottom: -0.24em;
   height: 0.19em;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'%3E%3Cpath d='M1 8.5 Q 13 1.5, 25 7 T 49 7 T 74 7 T 99 6' fill='none' stroke='%23f97316' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 12' preserveAspectRatio='none'%3E%3Cpath d='M1 8.5 Q 13 1.5, 25 7 T 49 7 T 74 7 T 99 6' fill='none' stroke='%233b9eff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-size: 100% 100%;
 }
@@ -1023,14 +1116,14 @@ html[lang="zh-CN"] .accent {
   object-fit: cover;
   /* 照片各自跑色（冷调手机 / 暖调毕业照），先统一压一档饱和与亮度，
      再由 .uc-tint 叠主色，四张摆在一起才像一套。 */
-  filter: saturate(0.75) brightness(0.82) contrast(1.05);
+  filter: var(--photo-filter);
   transition:
     transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
     filter 0.5s ease;
 }
 .uc-card:hover .uc-photo {
   transform: scale(1.055);
-  filter: saturate(0.92) brightness(0.94) contrast(1.05);
+  filter: var(--photo-filter-hover);
 }
 
 /* 主色叠加：靠近文案那一侧重、远端轻，让图与文之间有过渡而不是硬接。 */
@@ -1345,7 +1438,7 @@ html[lang="zh-CN"] .accent {
   font-family: var(--font-mono);
   font-size: 0.625rem;
   letter-spacing: 0.14em;
-  color: #fff;
+  color: var(--on-brand);
 }
 
 /* 文件行：整行可点，右侧动作用主色。 */
@@ -1459,7 +1552,7 @@ html[lang="zh-CN"] .accent {
   border-radius: 0.75rem;
   font-size: 0.90625rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--on-brand);
   white-space: nowrap;
   cursor: pointer;
   background: var(--brand-gradient);
@@ -1642,7 +1735,7 @@ html[lang="zh-CN"] .accent {
 
 /* 24px 网格圆点底纹 */
 .footer-dots {
-  background-image: radial-gradient(oklch(0.71 0.013 286) 1px, transparent 1px);
+  background-image: radial-gradient(var(--footer-dot) 1px, transparent 1px);
   background-size: 24px 24px;
   opacity: 0.4;
 }
@@ -1658,7 +1751,7 @@ html[lang="zh-CN"] .accent {
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: oklch(0.371 0 0);
+  color: color-mix(in oklab, var(--paper-ink), var(--paper) 18%);
 }
 .footer-link::after {
   content: "";
@@ -1808,15 +1901,15 @@ html[lang="zh-CN"] .accent {
 }
 
 .cg-node.is-active {
-  border-color: oklch(0.55 0.2 259);
+  border-color: var(--cg-accent);
   box-shadow:
-    0 0 0 1px oklch(0.55 0.2 259 / 0.28),
-    0 0.5em 1.4em -0.6em oklch(0.55 0.2 259 / 0.5);
+    0 0 0 1px color-mix(in oklab, var(--cg-accent), transparent 72%),
+    0 0.5em 1.4em -0.6em color-mix(in oklab, var(--cg-accent), transparent 50%);
 }
 
 .cg-node.is-done {
-  border-color: oklch(0.72 0.15 155 / 0.55);
-  box-shadow: 0 0 0 1px oklch(0.72 0.15 155 / 0.16);
+  border-color: color-mix(in oklab, var(--cg-done), transparent 45%);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--cg-done), transparent 84%);
 }
 
 .cg-title {
@@ -1841,10 +1934,10 @@ html[lang="zh-CN"] .accent {
   margin: 0;
   font-size: 0.85em;
   font-weight: 500;
-  color: oklch(0.55 0.2 259);
+  color: var(--cg-accent);
 }
 .cg-status.is-done {
-  color: oklch(0.58 0.14 155);
+  color: var(--cg-done-ink);
 }
 .cg-node.is-idle .cg-status {
   color: var(--paper-faint);
@@ -1877,14 +1970,14 @@ html[lang="zh-CN"] .accent {
   background: oklch(0.93 0.003 285);
 }
 .cg-avatar-ceo {
-  color: oklch(0.5 0.2 259);
-  background: oklch(0.93 0.05 259);
+  color: var(--cg-accent-deep);
+  background: var(--cg-accent-tint);
 }
 
 .cg-check {
   flex: 0 0 auto;
   font-size: 0.9em;
-  color: oklch(0.58 0.14 155);
+  color: var(--cg-done-ink);
 }
 
 /* 波次标记：把「按依赖分波」写在卡面上，不然只靠时序观众读不出来。 */
@@ -1902,8 +1995,8 @@ html[lang="zh-CN"] .accent {
   color: var(--paper-faint);
 }
 .cg-node.is-active .cg-wave {
-  background: oklch(0.93 0.05 259);
-  color: oklch(0.5 0.2 259);
+  background: var(--cg-accent-tint);
+  color: var(--cg-accent-deep);
 }
 
 /* ── 连线 ── */
@@ -1923,13 +2016,13 @@ html[lang="zh-CN"] .accent {
 }
 /* 派活的那一段用主色加粗：任务是「推」下去的，回流只是交付。 */
 .cg-edge-in.is-on {
-  stroke: oklch(0.55 0.2 259);
+  stroke: var(--cg-accent);
   stroke-width: 2.2;
 }
 
 .cg-flow {
   fill: none;
-  stroke: oklch(0.72 0.16 259);
+  stroke: var(--cg-accent-flow);
   stroke-width: 2.4;
   stroke-linecap: round;
   stroke-dasharray: 3 11;
@@ -1947,7 +2040,7 @@ html[lang="zh-CN"] .accent {
   height: 1em;
   margin-left: 0.1em;
   vertical-align: -0.15em;
-  background: oklch(0.55 0.2 259);
+  background: var(--cg-accent);
   animation: console-caret 1.05s steps(1) infinite;
 }
 
@@ -1982,12 +2075,7 @@ html[lang="zh-CN"] .accent {
   width: 100vw;
   transform: translateX(-50%);
   pointer-events: none;
-  background:
-    radial-gradient(58% 26% at 16% 22%, oklch(0.62 0.12 205 / 0.5), transparent 70%),
-    radial-gradient(52% 24% at 64% 19%, oklch(0.5 0.19 275 / 0.55), transparent 72%),
-    radial-gradient(44% 24% at 4% 47%, oklch(0.5 0.2 300 / 0.4), transparent 70%),
-    radial-gradient(38% 18% at 6% 88%, oklch(0.62 0.17 55 / 0.34), transparent 72%),
-    radial-gradient(48% 26% at 92% 67%, oklch(0.45 0.17 300 / 0.26), transparent 74%);
+  background: var(--pp-aurora-bg);
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
@@ -2088,7 +2176,7 @@ html[lang="zh-CN"] .accent {
   padding: 1.25rem;
   border: 1px solid oklch(1 0 0 / 0.1);
   border-radius: 1rem;
-  background: oklch(0.16 0.03 288 / 0.8);
+  background: color-mix(in oklab, var(--panel), transparent 20%);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   transition:
@@ -2099,7 +2187,7 @@ html[lang="zh-CN"] .accent {
 
 .pp-slot.is-active .pp-card {
   border-color: color-mix(in oklab, var(--pp-accent), transparent 50%);
-  background: oklch(0.18 0.04 290 / 0.82);
+  background: color-mix(in oklab, var(--card), transparent 16%);
   box-shadow: 0 0 20px color-mix(in oklab, var(--pp-accent), transparent 87%);
 }
 
@@ -2434,3 +2522,4 @@ html[lang="zh-CN"] .accent {
 }
 
 } /* @layer components */
+

@@ -204,7 +204,7 @@ export default function Home() {
         {/* ══ 2 · 命题 ══ 第一张暗纸，下缘收圆角压住白纸 ══════════ */}
         <section
           id="thesis"
-          className="panel panel-bottom noise panel-pad relative z-40 border-b border-white/[0.06] bg-background"
+          className="panel panel-bottom noise panel-pad relative z-40 border-b border-border-soft bg-background"
         >
           <div className="container-x relative z-[2] text-center">
             <Reveal>
@@ -296,7 +296,7 @@ export default function Home() {
                     <div
                       className={`flex h-full flex-col rounded-2xl border px-5 pb-7 pt-6 transition-transform duration-300 hover:-translate-y-1 ${
                         asset.featured
-                          ? "border-transparent text-white"
+                          ? "border-transparent text-[var(--on-brand)]"
                           : "border-paper-line bg-white"
                       }`}
                       style={
@@ -309,7 +309,7 @@ export default function Home() {
                         className="mb-8 block size-[9px] rounded-sm sm:mb-11"
                         style={{
                           background: asset.featured
-                            ? "rgb(255 255 255 / 0.9)"
+                            ? "color-mix(in oklab, var(--on-brand), transparent 10%)"
                             : asset.accent === "primary"
                               ? "var(--grad-4)"
                               : "var(--grad-1)",
@@ -320,14 +320,18 @@ export default function Home() {
                       </p>
                       <p
                         className={`m-0 mb-3 text-[0.8125rem] ${
-                          asset.featured ? "text-white/70" : "text-paper-faint"
+                          asset.featured
+                            ? "text-[color-mix(in_oklab,var(--on-brand),transparent_30%)]"
+                            : "text-paper-faint"
                         }`}
                       >
                         {t(asset.name)}
                       </p>
                       <p
                         className={`m-0 text-[0.84375rem] leading-[1.7] ${
-                          asset.featured ? "text-white/85" : "text-paper-dim"
+                          asset.featured
+                            ? "text-[color-mix(in_oklab,var(--on-brand),transparent_15%)]"
+                            : "text-paper-dim"
                         }`}
                       >
                         {t(asset.body)}

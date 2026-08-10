@@ -63,7 +63,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  /* 与 globals.css 的 --background 对齐（靛青画布 oklch(0.155 0.018 265)）。 */
+  themeColor: "#080c14",
   width: "device-width",
   initialScale: 1,
 };
