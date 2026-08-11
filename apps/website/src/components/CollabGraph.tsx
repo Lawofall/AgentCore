@@ -74,16 +74,24 @@ type Geometry = {
  * 分波全靠列位置和两个闸门说话：不画泳道底、不写「波次 ①②③」标签——
  * 三块灰底会把注意力从卡片抢走，而列已经把同波次的人对齐了。
  *
- * 卡宽只有 0.176·vw（两栏 Hero 下约 106px）——五个波段是这张 DAG 的下限，
+ * 卡宽只有 0.176·vw（两栏 Hero 下约 119px）——五个波段是这张 DAG 的下限，
  * 再宽就挤不下。所以卡面做了减法：波次标记只留给窄几何，✓ 移进状态行，
  * 宽几何只留「头像 + 名字 / 状态 / 工具回显」。改动时别把它们加回来。
+ *
+ * 两个比例分别由不同的数管，别搞混：
+ *   · 卡片形状 = CW : CH。卡片的 px 宽高都是 (?/vw)·容器宽，vh 被约掉了——
+ *     所以改 vh 不会让方卡变扁，只有压 CH 才行。
+ *   · 画布形状 = vw : vh。这里取 1000:552 ≈ 1.81:1，贴着浏览器视口的比例，
+ *     整块读起来才像「一块屏」而不是一张方图。
+ * CH 的下限是内容高：标题 1.5em + 状态 1.15em + 回显两行 2.03em + 间距/内边距
+ * 1.64em ≈ 6.32em，换算 130 单位。142 只留了 9% 裕度，再压就切字。
  */
 const WIDE: Geometry = (() => {
   const CW = 176; // worker 卡宽
-  const CH = 160; // worker 卡高
+  const CH = 142; // worker 卡高（下限 130，见上）
   const COL = [188, 402, 616]; // 三个波次的列起点
-  const TOP = 128; // 上行卡片中线
-  const BOT = 498; // 下行卡片中线
+  const TOP = 107; // 上行卡片中线
+  const BOT = 451; // 下行卡片中线
   const MID = (TOP + BOT) / 2; // 主干中线：任务 / 闸门 / ③ / CEO 都落在这条线上
   const rowY = (cy: number) => cy - CH / 2;
   const gate = (i: number) => COL[i] + CW + 19; // 闸门 x：落在两条泳道之间的沟里
@@ -96,10 +104,10 @@ const WIDE: Geometry = (() => {
 
   return {
     vw: 1000,
-    vh: 626,
+    vh: 558,
     /* 任务卡缩成一枚方章：顶栏已经写了「5 个 worker · 按依赖分波」，
        卡面再重复一遍纯属浪费——省下的 32 单位全给了右边的 CEO 卡。 */
-    task: { x: 12, y: MID - 60, w: 124, h: 120 },
+    task: { x: 12, y: MID - 58, w: 124, h: 116 },
     workers: [
       { x: COL[0], y: rowY(TOP), w: CW, h: CH },
       { x: COL[0], y: rowY(BOT), w: CW, h: CH },
@@ -107,7 +115,9 @@ const WIDE: Geometry = (() => {
       { x: COL[1], y: rowY(BOT), w: CW, h: CH },
       { x: COL[2], y: rowY(MID), w: CW, h: CH },
     ],
-    ceo: { x: CEO_X, y: MID - 78, w: 174, h: 156 },
+    /* CEO 卡比 worker 高一档：它的状态行（「等待团队 (2/5) · 已等 5s」）
+       在这个卡宽下必然折成两行，按最高的那个状态给高度，否则说明会漏出下缘。 */
+    ceo: { x: CEO_X, y: MID - 79, w: 174, h: 158 },
     edges: [
       // 任务扇出到波次 ①
       { pts: [{ x: TASK_R, y: MID }, { x: FAN, y: MID }, { x: FAN, y: TOP }, { x: COL[0], y: TOP }], drive: 0, kind: "push" },
