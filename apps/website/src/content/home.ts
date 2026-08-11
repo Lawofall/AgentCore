@@ -116,7 +116,8 @@ export const GRAPH = {
       },
     },
     {
-      name: { zh: "数据采集", en: "Data ingest" },
+      /* EN 名字必须短：分波几何下卡宽只有 0.176·vw，"Data ingest" 会被截成 "Data ing…"。 */
+      name: { zh: "数据采集", en: "Ingest" },
       wave: "①",
       tool: "Fetch page",
       note: {

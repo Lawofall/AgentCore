@@ -1858,22 +1858,21 @@ html[lang="zh-CN"] .accent {
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--cg-done), transparent 84%);
 }
 
+/* 名字要截断：宽几何下标题行只剩 ~5.3em，英文的 "Data ingest" 一类会顶出去。 */
 .cg-title {
   margin: 0;
+  overflow: hidden;
+  min-width: 0;
   font-size: 1em;
   font-weight: 600;
   letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.cg-sub,
-.cg-meta {
+.cg-sub {
   margin: 0;
   font-size: 0.8em;
   color: var(--paper-faint);
-}
-.cg-meta {
-  padding-top: 0.15em;
-  border-top: 1px solid oklch(0.93 0.003 285);
-  margin-top: 0.15em;
 }
 
 .cg-status {
@@ -1890,15 +1889,21 @@ html[lang="zh-CN"] .accent {
   font-weight: 400;
 }
 
-/* 工具调用回显：截断到一行，靠打字效果表示「正在干活」。 */
+/* 工具调用回显：靠打字效果表示「正在干活」。
+   两行截断，不是一行——宽几何下卡片只有 ~7.2em 内容宽，单行放不下几个字，
+   打到第 5 个字就顶到省略号不动了，看起来像卡死。 */
 .cg-note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   margin: 0;
   overflow: hidden;
   font-size: 0.78em;
   font-style: italic;
+  line-height: 1.3;
   color: oklch(0.68 0.005 285);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .cg-avatar {
@@ -1920,13 +1925,15 @@ html[lang="zh-CN"] .accent {
   background: var(--cg-accent-tint);
 }
 
+/* ✓ 长在状态行里（不是标题行）：标题行那 1.2em 要留给名字。 */
 .cg-check {
   flex: 0 0 auto;
-  font-size: 0.9em;
+  font-size: 1em;
   color: var(--cg-done-ink);
 }
 
-/* 波次标记：把「按依赖分波」写在卡面上，不然只靠时序观众读不出来。 */
+/* 波次标记：窄几何没有「列」这个维度，只能把波次写在卡面上。
+   宽几何下由上面的 @container 关掉——那边同波次的人已经对齐在同一列了。 */
 .cg-wave {
   display: grid;
   flex: 0 0 auto;
@@ -1998,6 +2005,52 @@ html[lang="zh-CN"] .accent {
   border-right-color: transparent;
   border-radius: 50%;
   animation: am-spin 0.9s linear infinite;
+}
+
+/* 依赖闸门：两波之间的汇合点。上一波「全部」交付才填色放行——
+   ① 里跑得快的那个会停在「已完成」等同伴，这个点就是那次等待的落点。 */
+.cg-gate {
+  fill: var(--paper);
+  stroke: oklch(0.86 0.004 285);
+  stroke-width: 1.6;
+  transition:
+    fill 0.4s ease,
+    stroke 0.4s ease;
+}
+.cg-gate.is-open {
+  fill: var(--cg-accent);
+  stroke: color-mix(in oklab, var(--cg-accent), white 55%);
+}
+
+/* ── 宽几何的卡面减法 ──
+ *
+ * 五个波段挤在一行，worker 卡宽只剩 0.176·vw（两栏 Hero 下约 106px）。
+ * 下面四条就是「能塞下五个波段」的全部余量，加回任何一条都会撑破卡片：
+ *   · 波次标记 ①②③ 只留给窄几何——宽几何里同波次的人已经对齐在同一列了；
+ *   · 头像收到 1.5em，行距收紧；
+ *   · 任务卡竖排（横着放「头像 + 你的任务」放不下）。
+ *
+ * 这一块必须留在 .cg 段的最末尾：它和被覆盖的基础规则同为单类选择器，
+ * 特异性打平、只能靠顺序取胜——往上挪一行，.cg-wave 就又冒出来了。
+ */
+@container (min-width: 35rem) {
+  .cg-wave {
+    display: none;
+  }
+  .cg-avatar {
+    width: 1.5em;
+    height: 1.5em;
+    font-size: 0.8em;
+  }
+  .cg-node {
+    gap: 0.22em;
+    padding: 0.6em 0.7em;
+  }
+  .cg-task-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3em;
+  }
 }
 
 /* ══ 四步机制：之字形卡片 + 蛇形路径 ══════════════════════

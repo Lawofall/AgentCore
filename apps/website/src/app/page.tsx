@@ -26,6 +26,7 @@ import {
 import {
   DOWNLOAD_PAGE_PATH,
   MOBILE_WEB_URL,
+  WEB_APP_HOST,
   WEB_APP_URL,
 } from "@/lib/download";
 
@@ -85,7 +86,7 @@ export default function Home() {
 
           {/* 两栏推到 xl 而不是 lg：lg（1024px）下右栏只剩 ~470px，
               协作图会被迫退到窄几何，反而比整宽单栏更挤。 */}
-          <div className="container-x relative grid items-center gap-14 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.06fr)] xl:gap-16">
+          <div className="container-x relative grid items-center gap-14 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.32fr)] xl:gap-14">
             <div>
               {/* 品类行：首屏必须有一句说清「这是个什么平台」。
                   改版时一度被我换成头像堆丢掉了，补回来。 */}
@@ -175,7 +176,7 @@ export default function Home() {
               className="float-in mx-auto w-full max-w-[44rem] max-sm:-mx-1 xl:max-w-none"
               style={{ animationDelay: "420ms" }}
             >
-              <BrowserFrame url="app.agentcore.dev">
+              <BrowserFrame url={WEB_APP_HOST}>
                 <CollabGraph />
               </BrowserFrame>
             </div>
