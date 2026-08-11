@@ -98,3 +98,6 @@ export const MOBILE_WEB_URL = "https://m.fashitianxia.xyz" as const;
 
 /** 主力 web 客户端（apps/desktop 渲染层跑浏览器，同源托管在 app. 根路径；免安装、需登录）。 */
 export const WEB_APP_URL = "https://app.fashitianxia.xyz" as const;
+
+/** Hero 那块「产品截图」地址栏里显示的 host。从 WEB_APP_URL 推，别再手写第二份。 */
+export const WEB_APP_HOST = WEB_APP_URL.replace(/^https?:\/\//, "");

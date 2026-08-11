@@ -26,6 +26,7 @@ import {
 import {
   DOWNLOAD_PAGE_PATH,
   MOBILE_WEB_URL,
+  WEB_APP_HOST,
   WEB_APP_URL,
 } from "@/lib/download";
 
@@ -175,7 +176,7 @@ export default function Home() {
               className="float-in mx-auto w-full max-w-[44rem] max-sm:-mx-1 xl:max-w-none"
               style={{ animationDelay: "420ms" }}
             >
-              <BrowserFrame url="app.agentcore.dev">
+              <BrowserFrame url={WEB_APP_HOST}>
                 <CollabGraph />
               </BrowserFrame>
             </div>
