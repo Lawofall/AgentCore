@@ -37,7 +37,7 @@
     "@capgo/capacitor-speech-recognition": "^8.1.9",
     "katex": "^0.17.0",
     "lucide-react": "^0.400.0",
-    "mermaid": "^11.15.0",
+    "mermaid": "^11.16.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
