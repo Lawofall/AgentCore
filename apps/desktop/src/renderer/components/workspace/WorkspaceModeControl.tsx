@@ -90,9 +90,17 @@ export function useWorkspaceModeState(
   }
 
   // Guard in-flight refresh: a slow getWorkspaceBinding for conv A must not
-  // write back after the user has already switched to conv B.
+  // write back after the user has already switched to conv B, and must not
+  // setState after unmount (jsdom teardown then throws `window is not defined`).
   const conversationIdRef = useRef(conversationId);
   conversationIdRef.current = conversationId;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const fsApi = typeof window !== "undefined" ? window.fsApi : undefined;
 
@@ -102,9 +110,10 @@ export function useWorkspaceModeState(
   );
 
   const refresh = useCallback(async () => {
-    if (!conversationId) return;
+    if (!conversationId || !mountedRef.current) return;
     const forId = conversationId;
     const conv = getConversations().find((c) => c.id === forId) ?? null;
+    if (!mountedRef.current || conversationIdRef.current !== forId) return;
     setContainerRootId(conv?.localContainerRootId ?? null);
     const folder = conv?.folderId
       ? (getFolders().find((f) => f.id === conv.folderId) ?? null)
@@ -115,11 +124,11 @@ export function useWorkspaceModeState(
         getWorkspaceBinding(forId, { fresh: true }),
         loadRoots(),
       ]);
-      if (conversationIdRef.current !== forId) return;
+      if (!mountedRef.current || conversationIdRef.current !== forId) return;
       setBinding(b);
       setRoots(r);
     } catch {
-      if (conversationIdRef.current !== forId) return;
+      if (!mountedRef.current || conversationIdRef.current !== forId) return;
       setBinding(null);
     }
   }, [conversationId, loadRoots]);

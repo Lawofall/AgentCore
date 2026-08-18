@@ -148,4 +148,44 @@ describe("useWorkspaceModeState conversation switch", () => {
       expect(result.current?.effective.rootId).toBe("root-b");
     });
   });
+
+  it("does not write binding after unmount when the in-flight lookup rejects", async () => {
+    let rejectBinding!: (reason: unknown) => void;
+    getBinding.mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectBinding = reject;
+        }),
+    );
+
+    const { unmount } = renderHook(() => useWorkspaceModeState("conv-a"));
+    await waitFor(() =>
+      expect(getBinding).toHaveBeenCalledWith("conv-a", { fresh: true }),
+    );
+    unmount();
+
+    await act(async () => {
+      rejectBinding(new ReferenceError("window is not defined"));
+    });
+  });
+
+  it("does not write binding after unmount when the in-flight lookup resolves", async () => {
+    let resolveBinding!: (value: typeof bindingA) => void;
+    getBinding.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveBinding = resolve;
+        }),
+    );
+
+    const { unmount } = renderHook(() => useWorkspaceModeState("conv-a"));
+    await waitFor(() =>
+      expect(getBinding).toHaveBeenCalledWith("conv-a", { fresh: true }),
+    );
+    unmount();
+
+    await act(async () => {
+      resolveBinding(bindingA);
+    });
+  });
 });
