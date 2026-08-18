@@ -123,8 +123,22 @@ export function useFileTreeData(
   sourceRef.current = source;
   const sourceId = source.id;
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  // 代次只跟 source.id：同树并行 listDir 共享一代，切源才作废。
+  // 不能每请求 ++（那会让同层并行展开互相丢结果）。
+  const genRef = useRef(0);
+  const trackedSourceIdRef = useRef(sourceId);
+
+  // 切源当帧清空，避免一帧「树还是 A、sourceRef 已是 B」时点开旧路径。
+  if (trackedSourceIdRef.current !== sourceId) {
+    trackedSourceIdRef.current = sourceId;
+    genRef.current += 1;
+    childrenRef.current = new Map();
+    statusRef.current = new Map();
+    truncatedRef.current = new Set();
+  }
 
   const loadEager = useCallback(async (silent = false) => {
+    const gen = genRef.current;
     const listTree = sourceRef.current.listTree;
     if (!listTree) return;
     const rootReady = statusRef.current.get("") === "ready";
@@ -134,19 +148,23 @@ export function useFileTreeData(
     }
     try {
       const all = await listTree();
+      if (gen !== genRef.current) return;
       childrenRef.current = bucketTree(all, sortRef.current);
       const status = new Map<string, DirStatus>();
       for (const dir of childrenRef.current.keys()) status.set(dir, "ready");
       statusRef.current = status;
     } catch {
+      if (gen !== genRef.current) return;
       if (!silent || !rootReady) {
         statusRef.current = new Map([["", "error"]]);
       }
     }
+    if (gen !== genRef.current) return;
     bump();
   }, []);
 
   const loadDir = useCallback(async (dir: string, silent = false) => {
+    const gen = genRef.current;
     const src = sourceRef.current;
     const status = statusRef.current.get(dir);
     // 静默路径不替用户展开：没加载过的层跳过。loading / ready / error 才补丁。
@@ -169,15 +187,18 @@ export function useFileTreeData(
       const res = bounded
         ? await bounded(dir)
         : { entries: await src.listDir(dir), truncated: false };
+      if (gen !== genRef.current) return;
       childrenRef.current.set(dir, sortNodes(res.entries, sortRef.current));
       if (res.truncated) truncatedRef.current.add(dir);
       else truncatedRef.current.delete(dir);
       statusRef.current.set(dir, "ready");
     } catch {
+      if (gen !== genRef.current) return;
       if (!silent || status !== "ready") {
         statusRef.current.set(dir, "error");
       }
     }
+    if (gen !== genRef.current) return;
     bump();
   }, []);
 
@@ -187,6 +208,7 @@ export function useFileTreeData(
     childrenRef.current = new Map();
     statusRef.current = new Map();
     truncatedRef.current = new Set();
+    genRef.current += 1;
     bump();
     if (sourceRef.current.listTree) void loadEager();
     else void loadDir("");

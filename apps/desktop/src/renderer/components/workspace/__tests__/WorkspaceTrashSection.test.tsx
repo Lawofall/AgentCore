@@ -7,7 +7,7 @@
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/workspaces", () => ({
@@ -20,10 +20,34 @@ vi.mock("@/services/workspace", () => ({
   restoreTrash: vi.fn(),
 }));
 
+import { listTrash, restoreTrash } from "@/services/workspace";
 import { wsListTrash, wsRestoreTrash } from "@/services/workspaces";
-import { WorkspaceTrashSection } from "../TrashSection";
+import { TrashSection, WorkspaceTrashSection } from "../TrashSection";
 
 afterEach(() => vi.restoreAllMocks());
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+const entryA = {
+  entryId: "t-a",
+  originalPath: "old/a.md",
+  name: "a.md",
+  isDir: false,
+  deletedAt: "2026-08-04T00:00:00Z",
+};
+const entryB = {
+  entryId: "t-b",
+  originalPath: "old/b.md",
+  name: "b.md",
+  isDir: false,
+  deletedAt: "2026-08-04T00:00:00Z",
+};
 
 describe("文件页的软删区", () => {
   it("按 ws id 列出条目、照实说保留期，并能还原回原路径", async () => {
@@ -75,5 +99,103 @@ describe("文件页的软删区", () => {
     );
 
     expect(await screen.findByText("软删区为空")).toBeTruthy();
+  });
+});
+
+describe("软删区切身份后旧请求晚回", () => {
+  it("对话右坞切 conversationId：A 的晚到列表不得覆盖 B，还原打到 B", async () => {
+    const hangA = deferred<{
+      entries: typeof entryA[];
+      retentionDays: number;
+    }>();
+    const hangB = deferred<{
+      entries: typeof entryB[];
+      retentionDays: number;
+    }>();
+    vi.mocked(listTrash).mockImplementation((id: string) => {
+      if (id === "conv-a") return hangA.promise;
+      return hangB.promise;
+    });
+    vi.mocked(restoreTrash).mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const { rerender } = render(
+      <TooltipProvider>
+        <TrashSection conversationId="conv-a" />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(listTrash).toHaveBeenCalledWith("conv-a"));
+
+    rerender(
+      <TooltipProvider>
+        <TrashSection conversationId="conv-b" />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(listTrash).toHaveBeenCalledWith("conv-b"));
+
+    await act(async () => {
+      hangA.resolve({ entries: [entryA], retentionDays: 30 });
+    });
+    expect(screen.queryByText("a.md")).toBeNull();
+
+    await act(async () => {
+      hangB.resolve({ entries: [entryB], retentionDays: 30 });
+    });
+    expect(await screen.findByText("b.md")).toBeTruthy();
+    expect(screen.queryByText("a.md")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("还原"));
+    await waitFor(() =>
+      expect(restoreTrash).toHaveBeenCalledWith("conv-b", "t-b"),
+    );
+    expect(restoreTrash).not.toHaveBeenCalledWith("conv-a", "t-a");
+    expect(restoreTrash).not.toHaveBeenCalledWith("conv-b", "t-a");
+  });
+
+  it("文件页切 wsId：A 的晚到列表不得覆盖 B，还原打到 B", async () => {
+    const hangA = deferred<{
+      entries: typeof entryA[];
+      retentionDays: number;
+    }>();
+    const hangB = deferred<{
+      entries: typeof entryB[];
+      retentionDays: number;
+    }>();
+    vi.mocked(wsListTrash).mockImplementation((id: string) => {
+      if (id === "folder:a") return hangA.promise;
+      return hangB.promise;
+    });
+    vi.mocked(wsRestoreTrash).mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const { rerender } = render(
+      <TooltipProvider>
+        <WorkspaceTrashSection wsId="folder:a" />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(wsListTrash).toHaveBeenCalledWith("folder:a"));
+
+    rerender(
+      <TooltipProvider>
+        <WorkspaceTrashSection wsId="folder:b" />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(wsListTrash).toHaveBeenCalledWith("folder:b"));
+
+    await act(async () => {
+      hangA.resolve({ entries: [entryA], retentionDays: 30 });
+    });
+    expect(screen.queryByText("a.md")).toBeNull();
+
+    await act(async () => {
+      hangB.resolve({ entries: [entryB], retentionDays: 30 });
+    });
+    expect(await screen.findByText("b.md")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("还原"));
+    await waitFor(() =>
+      expect(wsRestoreTrash).toHaveBeenCalledWith("folder:b", "t-b"),
+    );
+    expect(wsRestoreTrash).not.toHaveBeenCalledWith("folder:a", "t-a");
   });
 });

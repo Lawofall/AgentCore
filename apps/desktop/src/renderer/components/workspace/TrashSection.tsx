@@ -9,7 +9,7 @@ import {
 } from "@/services/workspace";
 import { wsListTrash, wsRestoreTrash } from "@/services/workspaces";
 import { Loader2, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * AgentCore/trash list + one-click restore.
@@ -44,23 +44,38 @@ function TrashPanel({
   const [retentionDays, setRetentionDays] = useState(30);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
+  // 切会话 / ws / root 不关层：丢弃在途 list，还原闭包绑到列出这批的身份。
+  const genRef = useRef(0);
+  const restoreForListRef = useRef(restore);
 
   const reload = useCallback(async () => {
+    const gen = ++genRef.current;
+    const restoreForThisLoad = restore;
     setLoading(true);
     setError(false);
     try {
       const res = await load();
+      if (gen !== genRef.current) return;
+      restoreForListRef.current = restoreForThisLoad;
       setEntries(res.entries);
       if (res.retentionDays !== undefined) setRetentionDays(res.retentionDays);
     } catch {
+      if (gen !== genRef.current) return;
       setError(true);
     } finally {
-      setLoading(false);
+      if (gen === genRef.current) setLoading(false);
     }
-  }, [load]);
+  }, [load, restore]);
 
+  // load 身份变了：先清列表，避免 A 的条目配上 B 的 restore。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps 故意含 reload，切换时跑 cleanup bump gen
   useEffect(() => {
+    setEntries(null);
+    setError(false);
     void reload();
+    return () => {
+      genRef.current += 1;
+    };
   }, [reload]);
 
   return (
@@ -107,7 +122,7 @@ function TrashPanel({
               <TrashRow
                 key={e.entryId}
                 entry={e}
-                onRestore={() => restore(e.entryId)}
+                onRestore={() => restoreForListRef.current(e.entryId)}
                 onRestored={() => void reload()}
               />
             ))}

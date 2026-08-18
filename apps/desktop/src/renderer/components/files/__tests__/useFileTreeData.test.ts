@@ -113,6 +113,69 @@ describe("useFileTreeData silent patch", () => {
     expect(listed.some((c) => c.startsWith("workspace:other:"))).toBe(true);
   });
 
+  it("切 source.id 后较慢的 listDir 不得写进已 reset 的树", async () => {
+    const hangA = deferred<FileNode[]>();
+    const hangB = deferred<FileNode[]>();
+    const { result, rerender } = renderHook(({ src }) => useFileTreeData(src), {
+      initialProps: {
+        src: stubSource("workspace:a", async () => hangA.promise),
+      },
+    });
+
+    rerender({ src: stubSource("workspace:b", async () => hangB.promise) });
+    expect(result.current.childrenOf("")).toBeUndefined();
+
+    await act(async () => {
+      hangA.resolve([file("from-a.md")]);
+    });
+    expect(result.current.childrenOf("")?.map((n) => n.name)).not.toEqual([
+      "from-a.md",
+    ]);
+
+    await act(async () => {
+      hangB.resolve([file("from-b.md")]);
+    });
+    await waitFor(() =>
+      expect(result.current.childrenOf("")?.map((n) => n.name)).toEqual([
+        "from-b.md",
+      ]),
+    );
+  });
+
+  it("切 source.id 后较慢的 listTree 不得写进已 reset 的树", async () => {
+    const hangA = deferred<FileNode[]>();
+    const hangB = deferred<FileNode[]>();
+    const { result, rerender } = renderHook(({ src }) => useFileTreeData(src), {
+      initialProps: {
+        src: stubSource("eager:a", async () => [], {
+          listTree: async () => hangA.promise,
+        }),
+      },
+    });
+
+    rerender({
+      src: stubSource("eager:b", async () => [], {
+        listTree: async () => hangB.promise,
+      }),
+    });
+
+    await act(async () => {
+      hangA.resolve([file("from-a.md")]);
+    });
+    expect(result.current.childrenOf("")?.map((n) => n.name)).not.toEqual([
+      "from-a.md",
+    ]);
+
+    await act(async () => {
+      hangB.resolve([file("from-b.md")]);
+    });
+    await waitFor(() =>
+      expect(result.current.childrenOf("")?.map((n) => n.name)).toEqual([
+        "from-b.md",
+      ]),
+    );
+  });
+
   it("silent 不拉从未展开的层", async () => {
     const listed: string[] = [];
     const source = stubSource("workspace:skip-unexpanded", async (folder) => {

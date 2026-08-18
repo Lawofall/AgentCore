@@ -14,7 +14,7 @@ import {
 } from "@/services/messaging";
 import { useMessagingStore } from "@/stores/messaging";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PresenceAvatar } from "./PresenceAvatar";
 import { avatarInitial } from "./chatDisplay";
 
@@ -44,32 +44,54 @@ export function UserProfileDialog({
   const [busy, setBusy] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [confirmUnfriend, setConfirmUnfriend] = useState(false);
+  // MessagesPage 单实例不重挂：切 userId / 开关卡时丢弃在途 getUserProfile。
+  const genRef = useRef(0);
+
+  const resetCardChrome = () => {
+    setError(null);
+    setMessage("");
+    setShowRequestForm(false);
+    setConfirmBlock(false);
+    setConfirmUnfriend(false);
+    setBusy(false);
+  };
 
   const reload = useCallback(async (id: string) => {
+    // 代次只跟 open/userId：同人重叠刷新 last-write-wins；切人由 cleanup bump。
+    // 不能每请求 ++——run 在 reload 之后还要清 busy / 刷通讯录。
+    const gen = genRef.current;
     setLoading(true);
     setError(null);
     try {
       const p = await getUserProfile(id);
+      if (gen !== genRef.current) return;
       setProfile(p);
     } catch (err) {
+      if (gen !== genRef.current) return;
       setProfile(null);
       setError(messagingErrorMessage(err, "无法加载资料"));
     } finally {
-      setLoading(false);
+      if (gen === genRef.current) setLoading(false);
     }
   }, []);
+
+  // userId / open 切换或卸载：丢弃在途结果（同 useGitRepoStatus）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps 故意含 open/userId，切换时跑 cleanup bump gen
+  useEffect(() => {
+    return () => {
+      genRef.current += 1;
+    };
+  }, [open, userId]);
 
   useEffect(() => {
     if (!open || !userId) {
       setProfile(null);
-      setError(null);
-      setMessage("");
-      setShowRequestForm(false);
-      setConfirmBlock(false);
-      setConfirmUnfriend(false);
-      setBusy(false);
+      resetCardChrome();
       return;
     }
+    // 先清上一份，避免卡上仍是 A、操作闭包已是 B。
+    setProfile(null);
+    resetCardChrome();
     void reload(userId);
   }, [open, userId, reload]);
 
@@ -89,37 +111,50 @@ export function UserProfileDialog({
   }, [open, userId, reload]);
 
   const run = async (action: () => Promise<void>) => {
+    // 只对「当前卡身份 = 列出这份资料的人」动手；切走了不改下一张卡。
+    if (!userId || !profile || profile.id !== userId) return;
+    const actingId = profile.id;
+    const gen = genRef.current;
     setBusy(true);
     setError(null);
     try {
       await action();
-      if (userId) await reload(userId);
+      if (gen !== genRef.current) return;
+      await reload(actingId);
+      if (gen !== genRef.current) return;
       void useMessagingStore.getState().fetchFriendRequests();
       void useMessagingStore.getState().fetchFriends();
     } catch (err) {
+      if (gen !== genRef.current) return;
       setError(messagingErrorMessage(err, "操作失败，请重试"));
     } finally {
-      setBusy(false);
-      setConfirmBlock(false);
-      setConfirmUnfriend(false);
-      setShowRequestForm(false);
-      setMessage("");
+      if (gen === genRef.current) {
+        setBusy(false);
+        setConfirmBlock(false);
+        setConfirmUnfriend(false);
+        setShowRequestForm(false);
+        setMessage("");
+      }
     }
   };
 
   const handleSendMessage = async () => {
-    if (!profile) return;
+    if (!profile || !userId || profile.id !== userId) return;
+    const actingId = profile.id;
+    const gen = genRef.current;
     setBusy(true);
     setError(null);
     try {
-      const chat = await startDm(profile.id);
+      const chat = await startDm(actingId);
+      if (gen !== genRef.current) return;
       useMessagingStore.getState().upsertChat(chat);
       onOpenChat(chat.id);
       onClose();
     } catch (err) {
+      if (gen !== genRef.current) return;
       setError(messagingErrorMessage(err, "无法发起私信"));
     } finally {
-      setBusy(false);
+      if (gen === genRef.current) setBusy(false);
     }
   };
 
