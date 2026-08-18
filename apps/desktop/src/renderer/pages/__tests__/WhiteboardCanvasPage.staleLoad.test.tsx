@@ -4,7 +4,13 @@
  * persistScene 也不得在来源 id 与当前路由不一致时写回。
  */
 import { getBoard, saveBoardScene } from "@/services/boards";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,7 +60,11 @@ function board(id: string, title: string) {
     id,
     title,
     version: 1,
-    scene: { format: "agentcore-board" as const, schemaVersion: 1, elements: [] },
+    scene: {
+      format: "agentcore-board" as const,
+      schemaVersion: 1,
+      elements: [],
+    },
     created_at: "2026-08-01T00:00:00Z",
     updated_at: "2026-08-01T00:00:00Z",
   };

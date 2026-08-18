@@ -47,14 +47,14 @@ export function UserProfileDialog({
   // MessagesPage 单实例不重挂：切 userId / 开关卡时丢弃在途 getUserProfile。
   const genRef = useRef(0);
 
-  const resetCardChrome = () => {
+  const resetCardChrome = useCallback(() => {
     setError(null);
     setMessage("");
     setShowRequestForm(false);
     setConfirmBlock(false);
     setConfirmUnfriend(false);
     setBusy(false);
-  };
+  }, []);
 
   const reload = useCallback(async (id: string) => {
     // 代次只跟 open/userId：同人重叠刷新 last-write-wins；切人由 cleanup bump。
@@ -93,7 +93,7 @@ export function UserProfileDialog({
     setProfile(null);
     resetCardChrome();
     void reload(userId);
-  }, [open, userId, reload]);
+  }, [open, userId, reload, resetCardChrome]);
 
   // Firehose may change relation while the card is open — re-fetch on request events.
   useEffect(() => {

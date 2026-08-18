@@ -7,7 +7,13 @@
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/workspaces", () => ({
@@ -105,11 +111,11 @@ describe("文件页的软删区", () => {
 describe("软删区切身份后旧请求晚回", () => {
   it("对话右坞切 conversationId：A 的晚到列表不得覆盖 B，还原打到 B", async () => {
     const hangA = deferred<{
-      entries: typeof entryA[];
+      entries: (typeof entryA)[];
       retentionDays: number;
     }>();
     const hangB = deferred<{
-      entries: typeof entryB[];
+      entries: (typeof entryB)[];
       retentionDays: number;
     }>();
     vi.mocked(listTrash).mockImplementation((id: string) => {
@@ -154,11 +160,11 @@ describe("软删区切身份后旧请求晚回", () => {
 
   it("文件页切 wsId：A 的晚到列表不得覆盖 B，还原打到 B", async () => {
     const hangA = deferred<{
-      entries: typeof entryA[];
+      entries: (typeof entryA)[];
       retentionDays: number;
     }>();
     const hangB = deferred<{
-      entries: typeof entryB[];
+      entries: (typeof entryB)[];
       retentionDays: number;
     }>();
     vi.mocked(wsListTrash).mockImplementation((id: string) => {

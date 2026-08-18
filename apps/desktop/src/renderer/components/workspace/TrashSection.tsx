@@ -68,7 +68,6 @@ function TrashPanel({
   }, [load, restore]);
 
   // load 身份变了：先清列表，避免 A 的条目配上 B 的 restore。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: deps 故意含 reload，切换时跑 cleanup bump gen
   useEffect(() => {
     setEntries(null);
     setError(false);

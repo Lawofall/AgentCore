@@ -80,6 +80,7 @@ export function WorkflowEditorPage() {
     void load();
   }, [load]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps 故意含 workflowId，切换时跑 cleanup bump gen
   useEffect(() => {
     return () => {
       loadGenRef.current += 1;

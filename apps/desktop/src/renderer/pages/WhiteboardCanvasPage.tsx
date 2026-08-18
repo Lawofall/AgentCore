@@ -115,6 +115,7 @@ export function WhiteboardCanvasPage() {
   }, [fetchBoard]);
 
   // Drop in-flight load + pending autosave when the route id changes (or unmount).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps 故意含 boardId，切换时跑 cleanup bump gen
   useEffect(() => {
     return () => {
       loadGenRef.current += 1;
