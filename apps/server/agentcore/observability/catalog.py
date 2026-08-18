@@ -15,6 +15,7 @@ from agentcore.observability.events import EventSpec, FieldType
 
 # fields empty means name-only registration.
 EVENTS: list[EventSpec] = [
+    EventSpec(name='account.cloud_chat_context_failed'),
     EventSpec(name='account.cloud_read_failed'),
     EventSpec(name='account.cloud_search_failed'),
     EventSpec(
@@ -29,9 +30,13 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(
         name='account.rules_memory_cache_miss',
-        description='prepare rules/memory 只读缓存未命中（空注入；不 await 云）',
+        description=(
+            'prepare rules/memory 只读缓存未命中（空注入；不 await 云；origin=execution_harvest 时'
+            '为收口空注入）'
+        ),
         fields={
             'folder_id': FieldType('str'),
+            'origin': FieldType('str'),
             'user_id': FieldType('str'),
         },
     ),
@@ -200,6 +205,16 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='board.read_timeout'),
     EventSpec(name='board.read_vision_failed'),
     EventSpec(
+        name='browser.cgroup_unwritable_ignore',
+        description=(
+            '容器内 cgroup2 subtree_control 只读，自动加 --ignore-cgroups（会话 OCI 限额不生效，容'
+            '器 mem_limit 仍在）'
+        ),
+        fields={
+            'reason': FieldType('str'),
+        },
+    ),
+    EventSpec(
         name='browser.close_all_timeout',
         description='停机 close_all 超过墙钟上限，放弃等待交重启/reaper',
         fields={
@@ -236,6 +251,21 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='browser.screencast_started'),
     EventSpec(name='browser.screencast_stopped'),
     EventSpec(name='browser.session_closed'),
+    EventSpec(
+        name='browser.session_open_failed',
+        description=(
+            'runsc 浏览器会话握手失败；stderr_preview 为 runsc/driver 尾部（此前 PIPE 会丢掉）'
+        ),
+        fields={
+            'conversation_id': FieldType('str'),
+            'error': FieldType('str'),
+            'error_type': FieldType('str'),
+            'ignore_cgroups': FieldType('bool'),
+            'ignore_reason': FieldType('str'),
+            'returncode': FieldType('int'),
+            'stderr_preview': FieldType('str'),
+        },
+    ),
     EventSpec(name='browser.session_opened'),
     EventSpec(name='browser.takeover_ended'),
     EventSpec(name='browser.takeover_finalize_failed'),
@@ -332,11 +362,13 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='chat.title_degraded',
         description=(
-            '侧栏标题落的是首条消息裁出来的降级短标题、不是模型产出；reason=rate_limit/timeout/empt'
-            'y_model_title/gate_* 归因，mint_no_write 为 REST auto-title 兜底那次'
+            '铸题未产出模型标题；persisted=false 未写入 conversations.title（保持空以便后续回合再铸'
+            '），persisted=true 为历史语义（曾把 fallback_title 落库）；reason=rate_limit/timeout/e'
+            'mpty_model_title/gate_* 归因'
         ),
         fields={
             'conversation_id': FieldType('str'),
+            'persisted': FieldType('bool'),
             'reason': FieldType('str'),
             'title_chars': FieldType('int'),
         },
@@ -404,6 +436,10 @@ EVENTS: list[EventSpec] = [
             'user_message_id': FieldType('str'),
         },
     ),
+    EventSpec(name='chat_context.model_resolve_failed'),
+    EventSpec(name='chat_context.sidecar_fetch_failed'),
+    EventSpec(name='chat_context.sidecar_unavailable'),
+    EventSpec(name='chat_context.window_unknown_no_ticket'),
     EventSpec(name='checkpoint.finalized'),
     EventSpec(name='checkpoint.persist_failed'),
     EventSpec(name='checkpoint.persist_unavailable'),
@@ -554,9 +590,11 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.file_ownership_snapshot_failed'),
     EventSpec(name='coordination.harvest_armed_while_attached'),
     EventSpec(name='coordination.harvest_attach_cleared'),
+    EventSpec(name='coordination.harvest_attach_waiting_live_occupant'),
     EventSpec(name='coordination.harvest_cancelled'),
     EventSpec(name='coordination.harvest_channel_dead_after_turn'),
     EventSpec(name='coordination.harvest_channel_dead_skip_llm'),
+    EventSpec(name='coordination.harvest_chat_context_unavailable'),
     EventSpec(name='coordination.harvest_claim_continue'),
     EventSpec(name='coordination.harvest_closing_turn_done'),
     EventSpec(name='coordination.harvest_closing_turn_failed'),
@@ -661,7 +699,8 @@ EVENTS: list[EventSpec] = [
         name='cost.prefix_cache',
         description=(
             '前缀缓存实测（hit_ratio 命中率 + breach/breach_section 击穿归因 + reusable/forfeited；'
-            'cache_reported=false 表示上游没报缓存，不等于 0% 命中）'
+            'cache_reported=false 表示上游没报缓存，不等于 0% 命中）；debug 级：默认 LOG_LEVEL=info'
+            ' 查不到，要留行须 LOG_LEVEL=DEBUG'
         ),
         fields={
             'breach': FieldType('str'),
@@ -1042,12 +1081,16 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(
         name='desktop.mcp_list_cache_miss',
-        description='MCP list 只读缓存未命中（prepare/resume；不发 ClientTool）',
+        description=(
+            'MCP list 只读缓存未命中（prepare/resume；不发 ClientTool；origin=execution_harvest 时'
+            '为收口空装配）'
+        ),
         fields={
             'cache_scope': FieldType('str'),
             'conversation_id': FieldType('str'),
             'detail': FieldType('str'),
             'duration_ms': FieldType('int'),
+            'origin': FieldType('str'),
             'tool_count': FieldType('int'),
         },
     ),
@@ -1137,6 +1180,22 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='engine.delivery_idle_narrow_apply'),
     EventSpec(name='engine.delivery_idle_nudge'),
     EventSpec(name='engine.finish_guard_auto_deep_read'),
+    EventSpec(
+        name='engine.finish_guard_honesty_shadow',
+        description=(
+            '收口诚实性本该回炉但只观测：verdict_state / hit=posture_a|draft_ack|overview_length / '
+            'has_delivered_files / gap_reasons（不记正文；不回炉不 reset）'
+        ),
+        fields={
+            'execution_id': FieldType('str'),
+            'gap_reasons': FieldType('list'),
+            'has_delivered_files': FieldType('bool'),
+            'hit': FieldType('str'),
+            'requires_draft_ack': FieldType('bool'),
+            'tier_label': FieldType('str'),
+            'verdict_state': FieldType('str'),
+        },
+    ),
     EventSpec(name='engine.finish_guard_rework'),
     EventSpec(name='engine.force_finalize_failed'),
     EventSpec(name='engine.force_finalize_hard_failed'),
@@ -2122,6 +2181,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='sidecar.paused_delete_failed'),
     EventSpec(name='sidecar.paused_list_failed'),
     EventSpec(name='sidecar.paused_load_failed'),
+    EventSpec(name='sidecar.paused_outcome_stamp_failed'),
     EventSpec(name='sidecar.paused_rollback_claim_failed'),
     EventSpec(name='sidecar.paused_save_failed'),
     EventSpec(name='sidecar.paused_stale_claim_consumed'),
@@ -2173,6 +2233,7 @@ EVENTS: list[EventSpec] = [
             'folder_id': FieldType('str'),
             'memory_file_count': FieldType('int'),
             'topic_count': FieldType('int'),
+            'ttl_seconds': FieldType('float'),
             'user_id': FieldType('str'),
         },
     ),
@@ -2192,6 +2253,14 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='sidecar.warm_mcp_discover',
         description='静默暖 MCP 列表进进程缓存（warmMcpDiscover RPC seed）',
+        fields={
+            'degraded': FieldType('bool'),
+            'failed_servers': FieldType('int'),
+            'ready_servers': FieldType('int'),
+            'tool_count': FieldType('int'),
+            'ttl_seconds': FieldType('float'),
+            'user_id': FieldType('str'),
+        },
     ),
     EventSpec(name='simulation.create_scripted'),
     EventSpec(name='simulation.persona_slice'),

@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -67,9 +68,126 @@ _SUPERVISOR_EXIT_TIMEOUT = 10.0
 # this bound (killing the runsc child) with a warning; a legitimately slow force-delete still
 # completes within it.
 _RUNSC_CMD_TIMEOUT = 180.0
+# Docker's default cgroup2 mount is read-only inside the api container. Non-rootless
+# runsc then dies at create (``subtree_control: read-only file system``) and the host
+# only sees stdout EOF → RpcChannelClosedError. Keep a tail of runsc stderr so that
+# failure is diagnosable; drain continuously so a chatty driver cannot fill the pipe.
+_CGROUP_SUBTREE_CONTROL = Path("/sys/fs/cgroup/cgroup.subtree_control")
+_STDERR_KEEP = 8 * 1024
+_STDERR_PREVIEW = 1500
+_STDERR_DRAIN_TIMEOUT = 1.0
 
 _slot_lock = asyncio.Lock()
 _used_slots: set[int] = set()
+
+
+def cgroup_subtree_control_writable(path: Path | None = None) -> bool:
+    """True when runsc can write cgroup v2 ``subtree_control``.
+
+    A missing path (Windows / cgroup v1) is not the Docker-RO case — return True so
+    we still apply session OCI limits unless configured otherwise or the v2 file
+    exists and is not writable.
+    """
+    target = path if path is not None else _CGROUP_SUBTREE_CONTROL
+    try:
+        if not target.exists():
+            return True
+        return os.access(target, os.W_OK)
+    except OSError:
+        return False
+
+
+def ignore_browser_cgroups_reason(
+    *, configured: bool, writable: bool | None = None
+) -> str | None:
+    """Why ``--ignore-cgroups`` should be added, or ``None`` to apply OCI limits."""
+    if configured:
+        return "configured"
+    if writable is None:
+        writable = cgroup_subtree_control_writable()
+    if not writable:
+        return "cgroup_subtree_control_unwritable"
+    return None
+
+
+def build_browser_runsc_cmd(
+    *,
+    runsc_path: str,
+    runtime_root: str,
+    bundle_dir: str,
+    container_id: str,
+    ignore_cgroups: bool,
+) -> list[str]:
+    cmd = [runsc_path, "--platform=systrap", "--network=sandbox"]
+    if ignore_cgroups:
+        cmd.append("--ignore-cgroups")
+    cmd += [f"--root={runtime_root}", "run", f"--bundle={bundle_dir}", container_id]
+    return cmd
+
+
+def stderr_preview(buf: bytes | bytearray, *, limit: int = _STDERR_PREVIEW) -> str:
+    text = bytes(buf).decode("utf-8", errors="replace").strip()
+    if len(text) > limit:
+        return text[-limit:]
+    return text
+
+
+async def _drain_stderr(stream: asyncio.StreamReader, buf: bytearray) -> None:
+    try:
+        while True:
+            chunk = await stream.read(4096)
+            if not chunk:
+                break
+            buf.extend(chunk)
+            overflow = len(buf) - _STDERR_KEEP
+            if overflow > 0:
+                del buf[:overflow]
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        return
+
+
+async def _stderr_preview_after(task: asyncio.Task | None, buf: bytearray) -> str:
+    if task is not None:
+        with contextlib.suppress(TimeoutError, asyncio.CancelledError, Exception):
+            await asyncio.wait_for(asyncio.shield(task), timeout=_STDERR_DRAIN_TIMEOUT)
+    return stderr_preview(buf)
+
+
+async def _cancel_stderr_task(task: asyncio.Task | None) -> None:
+    if task is None or task.done():
+        return
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await task
+
+
+async def _log_session_open_failed(
+    *,
+    conversation_id: str,
+    exc: BaseException,
+    process: asyncio.subprocess.Process | None,
+    stderr_task: asyncio.Task | None,
+    stderr_buf: bytearray,
+    ignore_reason: str | None,
+) -> None:
+    preview = await _stderr_preview_after(stderr_task, stderr_buf)
+    rc = process.returncode if process is not None else None
+    if process is not None and rc is None:
+        with contextlib.suppress(TimeoutError, Exception):
+            await asyncio.wait_for(process.wait(), timeout=0.2)
+        rc = process.returncode
+    logger.warning(
+        "browser.session_open_failed",
+        conversation_id=conversation_id,
+        error=str(exc)[:300],
+        error_type=type(exc).__name__,
+        stderr_preview=preview,
+        returncode=rc,
+        ignore_cgroups=bool(ignore_reason),
+        ignore_reason=ignore_reason or "",
+    )
 
 
 def browser_sessions_supported() -> bool:
@@ -108,6 +226,7 @@ class GVisorBrowserSession:
         runtime_root: str,
         process: asyncio.subprocess.Process,
         channel: StdioRpcChannel,
+        stderr_task: asyncio.Task | None = None,
     ) -> None:
         self.conversation_id = conversation_id
         self.created_at = time.time()
@@ -120,6 +239,7 @@ class GVisorBrowserSession:
         self._runtime_root = runtime_root
         self._process = process
         self._channel = channel
+        self._stderr_task = stderr_task
         self._alive = True
         # Teardown-idempotency flag, SEPARATE from ``_alive``: a driver crash marks the
         # session dead (``_alive=False``) but its host-side resources (netns / veth / slot /
@@ -218,6 +338,8 @@ class GVisorBrowserSession:
         if self._closed:
             return
         self._closed = True
+        await _cancel_stderr_task(self._stderr_task)
+        self._stderr_task = None
         was_alive = self._alive
         self._alive = False
         if was_alive:
@@ -307,6 +429,30 @@ async def open_gvisor_browser_session(
     bundle_dir = tempfile.mkdtemp(prefix="agentcore_browser_")
     container_id = f"agentcore-browser-{uuid.uuid4().hex[:12]}"
     process: asyncio.subprocess.Process | None = None
+    stderr_task: asyncio.Task | None = None
+    stderr_buf = bytearray()
+    ignore_reason = ignore_browser_cgroups_reason(
+        configured=bool(settings.browser_sandbox_ignore_cgroups)
+    )
+    if ignore_reason == "cgroup_subtree_control_unwritable":
+        logger.warning("browser.cgroup_unwritable_ignore", reason=ignore_reason)
+    logged_fail = False
+
+    async def _note_fail(exc: BaseException) -> None:
+        nonlocal logged_fail
+        if logged_fail:
+            return
+        logged_fail = True
+        await _log_session_open_failed(
+            conversation_id=request.conversation_id,
+            exc=exc,
+            process=process,
+            stderr_task=stderr_task,
+            stderr_buf=stderr_buf,
+            ignore_reason=ignore_reason,
+        )
+        await _cancel_stderr_task(stderr_task)
+
     try:
         try:
             await netns.setup()
@@ -336,10 +482,13 @@ async def open_gvisor_browser_session(
         )
         (Path(bundle_dir) / "config.json").write_text(json.dumps(config), encoding="utf-8")
 
-        cmd = [runsc_path, "--platform=systrap", "--network=sandbox"]
-        if settings.browser_sandbox_ignore_cgroups:
-            cmd.append("--ignore-cgroups")
-        cmd += [f"--root={runtime_root}", "run", f"--bundle={bundle_dir}", container_id]
+        cmd = build_browser_runsc_cmd(
+            runsc_path=runsc_path,
+            runtime_root=runtime_root,
+            bundle_dir=bundle_dir,
+            container_id=container_id,
+            ignore_cgroups=bool(ignore_reason),
+        )
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -347,6 +496,10 @@ async def open_gvisor_browser_session(
             stderr=asyncio.subprocess.PIPE,
             limit=_STREAM_LIMIT,
         )
+        if process.stderr is not None:
+            stderr_task = asyncio.create_task(
+                _drain_stderr(process.stderr, stderr_buf), name="browser-runsc-stderr"
+            )
 
         async def _write(data: bytes) -> None:
             assert process is not None and process.stdin is not None
@@ -370,17 +523,20 @@ async def open_gvisor_browser_session(
             runtime_root=runtime_root,
             process=process,
             channel=channel,
+            stderr_task=stderr_task,
         )
         # Route driver-INITIATED event lines (M1 live frames) into the session.
         channel.set_event_handler(session._handle_driver_event)
         logger.info("browser.session_opened", conversation_id=request.conversation_id, slot=slot)
         return session
-    except BrowserSessionError:
+    except BrowserSessionError as exc:
+        await _note_fail(exc)
         await _cleanup_partial(
             process, netns, slot, bundle_dir, container_id, runsc_path, runtime_root
         )
         raise
     except Exception as exc:  # noqa: BLE001 - any launch failure → explainable error
+        await _note_fail(exc)
         await _cleanup_partial(
             process, netns, slot, bundle_dir, container_id, runsc_path, runtime_root
         )

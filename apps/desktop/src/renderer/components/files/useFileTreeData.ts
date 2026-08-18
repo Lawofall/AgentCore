@@ -6,12 +6,12 @@ import type { FileSortBy } from "./fileTreeTypes";
 export type DirStatus = "loading" | "ready" | "error";
 
 /**
- * 兄弟排序档位：目录 → 文件 → 「AI 工作间」（盘上 ``AgentCore/``）。工作间装的是 AI
- * 的过程材料，用户平时不必打开，故沉到同级最后，不抢用户自己文件的位置。
+ * 兄弟排序档位：「AI 工作间」（盘上 ``AgentCore/``）→ 目录 → 文件。工作间仍是过程
+ * 材料、次要呈现；钉在同级最前，是为了侧栏窄视口里够得着，不跟整棵用户树抢滚动。
  */
 function siblingRank(node: FileNode): number {
-  if (isAgentCoreRootDir(node.path)) return 2;
-  return node.isDir ? 0 : 1;
+  if (isAgentCoreRootDir(node.path)) return 0;
+  return node.isDir ? 1 : 2;
 }
 
 /** 降序比较一项可缺失的数值元信息（新的在前；缺失沉底）。 */

@@ -121,7 +121,6 @@ function openMember(
       executionId={opts.executionId === undefined ? EID : opts.executionId}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "展开协作列表" }));
   // 一次点击即达：列表上那张卡就是入口。
   fireEvent.click(screen.getByText("调研员"));
 }

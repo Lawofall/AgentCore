@@ -84,6 +84,7 @@ async def _wire_consult_if_entries(
         folder_id=folder_id,
         memory_enabled=memory_enabled,
         skill_audience=skill_audience,
+        tool_registry=registry,
     )
     entries = await source.list_directory(user_id)
     if not entries:

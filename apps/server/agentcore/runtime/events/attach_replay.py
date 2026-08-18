@@ -615,17 +615,22 @@ def mark_full_replay_segment(
 
 
 def replay_close_event(
-    finish_reason: FinishReason, *, outcome: str | None = None
+    finish_reason: FinishReason,
+    *,
+    outcome: str | None = None,
+    team_batch: dict[str, Any] | None = None,
 ) -> SSEEvent:
     """The minimal ``message_end`` an attach segment closes with.
 
-    Carries ``finish_reason`` (+ optional ``outcome``). Usage / cost live on the
-    Message columns a reload rehydrates; clients' undefined-guarded meta merge
-    leaves any hydrated values intact.
+    Carries ``finish_reason`` (+ optional ``outcome`` / ``team_batch``).
+    Usage / cost live on the Message columns a reload rehydrates; clients'
+    undefined-guarded meta merge leaves any hydrated values intact.
     """
     payload: dict[str, Any] = {"finish_reason": finish_reason.value}
     if outcome in ("ok", "partial", "paused", "error"):
         payload["outcome"] = outcome
+    if isinstance(team_batch, dict) and team_batch.get("kind"):
+        payload["team_batch"] = team_batch
     return SSEEvent(type=EventType.MESSAGE_END, payload=payload)
 
 
@@ -656,7 +661,9 @@ def _turn_end_close_event(rows: list[dict[str, Any]]) -> SSEEvent | None:
             finish = FinishReason.END_TURN
         raw_outcome = (row.get("payload") or {}).get("outcome")
         outcome = raw_outcome if raw_outcome in ("ok", "partial", "paused", "error") else None
-        return replay_close_event(finish, outcome=outcome)
+        from agentcore.runtime.journal.team_batch import team_batch_from_entries
+
+        return replay_close_event(finish, outcome=outcome, team_batch=team_batch_from_entries(rows))
     return None
 
 

@@ -701,9 +701,12 @@ def test_the_real_ceo_layers_splice_into_leaf_sections():
     bind_log_context(conversation_id="conv-real", trace_id="t1")
     shared_base = assemble_system_prompt(
         rules_markdown="记住：用户偏好简洁",
+    )
+    ceo_prompt = compose_ceo_chat_prompt(
+        shared_base,
+        ceo_tool_names=set(),
         workspace_context="<workspace_context>本地桌面</workspace_context>",
     )
-    ceo_prompt = compose_ceo_chat_prompt(shared_base, ceo_tool_names=set())
     (
         ContextAssembler()
         .add("ceo_prompt", ceo_prompt, SectionOrder.BASE)
@@ -716,6 +719,8 @@ def test_the_real_ceo_layers_splice_into_leaf_sections():
     assert "ceo_prompt" not in keys and "ceo_base" not in keys  # containers were spliced
     assert keys[0] == "base"
     assert {"runtime_context", "workspace_facts", "memory_rules", "ceo_core"} <= set(keys)
+    assert keys.index("ceo_core") < keys.index("workspace_facts")
+    assert keys.index("workspace_facts") < keys.index("workspace_context")
     assert keys[-1] == "workspace_context"  # the volatile tail stays last
 
 

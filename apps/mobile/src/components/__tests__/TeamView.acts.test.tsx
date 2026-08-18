@@ -8,7 +8,7 @@ import type {
   ProjectedAgent,
   ProjectedRun,
 } from "@agentcore/protocol-conformance";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 afterEach(cleanup);
@@ -109,7 +109,6 @@ describe("TeamView · 多幕分组", () => {
     expect(screen.getByText("2 幕")).toBeTruthy();
     // 多幕时不扁平标「辩论」
     expect(screen.queryByText("辩论", { selector: ".team-tag" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "展开协作列表" }));
     expect(screen.getByText("多视角调研")).toBeTruthy();
     expect(screen.getByText("辩论对抗")).toBeTruthy();
     expect(screen.getByText("经推进卡授权")).toBeTruthy();
@@ -133,7 +132,6 @@ describe("TeamView · 多幕分组", () => {
         progress={{ completed: 0, total: 1 }}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "展开协作列表" }));
     expect(screen.getByText("待命")).toBeTruthy();
     cleanup();
     render(
@@ -153,7 +151,6 @@ describe("TeamView · 多幕分组", () => {
         progress={{ completed: 0, total: 1 }}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "展开协作列表" }));
     expect(screen.getByText("未传唤")).toBeTruthy();
   });
 
@@ -192,7 +189,6 @@ describe("TeamView · 多幕分组", () => {
           }}
         />,
       );
-      fireEvent.click(screen.getByRole("button", { name: "展开协作列表" }));
       expect(screen.getByText(c.label)).toBeTruthy();
     }
   });
@@ -224,7 +220,6 @@ describe("TeamView · 多幕分组", () => {
       />,
     );
     expect(screen.getByText("辩论", { selector: ".team-tag" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "展开协作列表" }));
     expect(
       screen.queryByText("辩论对抗", { selector: ".team-act-title" }),
     ).toBeNull();

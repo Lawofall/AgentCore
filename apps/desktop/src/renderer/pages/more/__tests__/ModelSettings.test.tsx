@@ -389,6 +389,45 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.queryByText(/主模型不能看图时再配/)).toBeNull();
   });
 
+  it("greys off-protocol catalog rows and shows why they cannot be selected", () => {
+    useModelsMock.mockReturnValue({
+      data: {
+        ...defaultCatalog(),
+        models: [
+          ...defaultCatalog().models,
+          {
+            id: "grok-4.5",
+            origin: "byok" as const,
+            display_name: "Grok 4.5",
+            vendor: "xAI",
+            provider_id: "p1",
+            provider_label: "DeepSeek",
+            capabilities: [] as string[],
+            available: false,
+            unavailable_reason: {
+              code: "upstream_protocol_unsupported",
+              required_protocol: "openai_responses",
+            },
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useModels>);
+    mockProviders(providersResponse());
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "新建" }));
+    const list = openModelPicker("profile-main");
+    const grok = within(list).getByRole("option", { name: /Grok 4.5/ });
+    expect(grok.getAttribute("aria-disabled")).toBe("true");
+    expect(grok.textContent).toMatch(/\/responses/);
+    fireEvent.click(grok);
+    expect(document.getElementById("profile-main")?.textContent).not.toMatch(
+      /Grok 4.5/,
+    );
+  });
+
   it("saves an edited user profile and shows success feedback", async () => {
     vi.mocked(updateLlmModelProfile).mockResolvedValue({
       id: "user-mine",

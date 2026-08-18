@@ -80,7 +80,7 @@ function firstSlotFromGroups(
   groups: DefaultProviderGroup[],
 ): ModelProfileSlot | null {
   for (const g of groups) {
-    const m = g.models[0];
+    const m = g.models.find((opt) => opt.available !== false);
     if (!m) continue;
     return decodePointer(encodePointer(g.providerId, m.model));
   }

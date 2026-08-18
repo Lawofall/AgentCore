@@ -182,6 +182,7 @@ def downgrade_verdict_for_unresolved_write_ownership(
     execution_id: str | None = None,
     run_ids: set[str] | frozenset[str] | list[str] | None = None,
     coordinator: Any = None,
+    promotion_ledger: Any = None,
 ) -> None:
     """Internal honesty: unresolved write ownership → cannot stay ``delivered``.
 
@@ -197,29 +198,33 @@ def downgrade_verdict_for_unresolved_write_ownership(
         return
     from agentcore.runtime.delegate.delivery_status import (
         DeliveryVerdict,
-        current_delivery_verdict,
+        bind_delivery_verdict,
+        read_delivery_verdict,
     )
 
-    verdict = current_delivery_verdict.get()
+    verdict = read_delivery_verdict(promotion_ledger=promotion_ledger)
     eid = (execution_id or "").strip() or "write_ownership_conflict"
     if verdict is None:
-        current_delivery_verdict.set(
+        bind_delivery_verdict(
             DeliveryVerdict(
                 state="partial",
                 delivered_files=(),
                 execution_id=eid,
-            )
+            ),
+            promotion_ledger=promotion_ledger,
         )
         return
     if not is_formal_complete_tier(verdict.state):
         return
-    current_delivery_verdict.set(
+    bind_delivery_verdict(
         DeliveryVerdict(
             state="partial",
             delivered_files=verdict.delivered_files,
             execution_id=verdict.execution_id,
             requires_draft_ack=verdict.requires_draft_ack,
-        )
+            gap_reasons=getattr(verdict, "gap_reasons", ()),
+        ),
+        promotion_ledger=promotion_ledger,
     )
 
 

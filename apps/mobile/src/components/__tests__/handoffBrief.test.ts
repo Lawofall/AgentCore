@@ -44,8 +44,6 @@ describe("handoffBrief 判定", () => {
 
   it("hasDebriefDetails 只认要点/假设/下一步", () => {
     expect(hasDebriefDetails({ summary: "只写了结论" })).toBe(false);
-    expect(hasDebriefDetails({ summary: "有", key_points: ["a"] })).toBe(
-      true,
-    );
+    expect(hasDebriefDetails({ summary: "有", key_points: ["a"] })).toBe(true);
   });
 });

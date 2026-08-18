@@ -645,6 +645,88 @@ describe("ModelSettings (profiles + providers)", () => {
     ).toBe(true);
   });
 
+  it("shows why an unavailable BYOK catalog model cannot be selected", async () => {
+    catalogState.override = {
+      ...CATALOG,
+      models: [
+        ...CATALOG.models,
+        {
+          id: "grok-4.5",
+          origin: "byok",
+          provider_id: "prov-deepseek",
+          provider_label: "DeepSeek",
+          display_name: "Grok 4.5",
+          vendor: "xAI",
+          capabilities: [],
+          context_length: null,
+          price: null,
+          available: false,
+          unavailable_reason: {
+            code: "upstream_protocol_unsupported",
+            required_protocol: "openai_responses",
+          },
+        },
+      ],
+    };
+    mockList.mockResolvedValue(makeProviders());
+    stubProfiles([SYSTEM_52], SYSTEM_52.id);
+    render(<ModelSettings />);
+
+    await waitFor(() => expect(screen.getByTestId("profile-new")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("profile-new"));
+    await screen.findByTestId("profile-main-combobox");
+    fireEvent.change(screen.getByTestId("profile-main-provider"), {
+      target: { value: "prov-deepseek" },
+    });
+    expect(
+      screen.getByTestId("profile-main-unavailable-grok-4.5").textContent,
+    ).toMatch(/\/responses/);
+  });
+
+  it("platform select greys unavailable rows with the protocol reason", async () => {
+    catalogState.override = {
+      byok_configured: false,
+      current: { id: "platform-flash", origin: "platform" },
+      models: [
+        CATALOG.models[0],
+        {
+          id: "grok-4.5",
+          origin: "platform",
+          display_name: "Grok 4.5",
+          vendor: "xAI",
+          capabilities: [],
+          context_length: null,
+          price: null,
+          available: false,
+          unavailable_reason: {
+            code: "upstream_protocol_unsupported",
+            required_protocol: "openai_responses",
+          },
+        },
+      ],
+    };
+    mockList.mockResolvedValue(
+      makeProviders({
+        providers: [],
+        platform_available: true,
+        platform_model: "platform-flash",
+      }),
+    );
+    stubProfiles([SYSTEM_52], SYSTEM_52.id);
+    render(<ModelSettings />);
+
+    await waitFor(() => expect(screen.getByTestId("profile-new")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("profile-new"));
+    const mainSelect = (await screen.findByTestId(
+      "profile-main-select",
+    )) as HTMLSelectElement;
+    const grok = [...mainSelect.options].find((o) =>
+      o.value.includes("grok-4.5"),
+    );
+    expect(grok?.disabled).toBe(true);
+    expect(grok?.textContent).toMatch(/\/responses/);
+  });
+
   it("does not offer edit/delete on system presets", async () => {
     mockList.mockResolvedValue(makeProviders());
     stubProfiles([SYSTEM_52], SYSTEM_52.id);

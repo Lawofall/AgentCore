@@ -10,7 +10,9 @@ entries use a shorter negative TTL.
 Entries lapse, and a lapsed entry injects **nothing** (no cloud fallback), so the
 warmer owns renewal: the warm RPC hands back this entry's remaining life
 (``account_rules_memory_ttl_remaining``) and the desktop re-warms before it runs
-out. Never let a caller assume "warmed once" means "warm forever".
+out — including on a TTL cadence while an execution is still in flight, so
+sidecar-internal harvest turns still hit. Never let a caller assume "warmed once"
+means "warm forever".
 
 During prepare→assemble, ``prepare_reads_cache_only`` is bound so
 ``DocumentMemoryStore`` list/load/save also stay on this snapshot (no sync cloud).
@@ -90,6 +92,14 @@ class _CacheEntry:
 _cache: dict[tuple[str, str | None], _CacheEntry] = {}
 
 
+def _cache_miss_origin_fields() -> dict[str, str]:
+    """Searchable origin on empty injection (harvest turns bind ``execution_harvest``)."""
+    from agentcore.runtime.delegate.post_close_gate import current_user_message_origin
+
+    origin = current_user_message_origin()
+    return {"origin": origin} if origin else {}
+
+
 def clear_account_rules_memory_cache() -> None:
     """Drop process-local prepare cache (tests / forced refresh)."""
     _cache.clear()
@@ -120,6 +130,7 @@ def get_account_rules_memory_snapshot(
         "account.rules_memory_cache_miss",
         user_id=key[0] or None,
         folder_id=folder_id,
+        **_cache_miss_origin_fields(),
     )
     return None
 
@@ -131,9 +142,11 @@ def account_rules_memory_ttl_remaining(
     """Seconds this snapshot still serves prepare (0.0 = absent / lapsed).
 
     The renewal handshake's authoritative half: warm callers (desktop sidecar
-    manager) re-warm within this window, because prepare reads cache-only and a
-    lapsed entry silently injects no rules / memory. Unlike
-    ``get_account_rules_memory_snapshot`` this is a plain read — no hit/miss log.
+    manager) re-warm within this window — including while a long execution is
+    still in flight, so sidecar-internal harvest turns do not see a lapsed
+    cache. Prepare reads cache-only and a lapsed entry injects no rules /
+    memory. Unlike ``get_account_rules_memory_snapshot`` this is a plain
+    read — no hit/miss log.
     """
     entry = _cache.get(_cache_key(user_id, folder_id))
     if entry is None:

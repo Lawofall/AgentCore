@@ -10,6 +10,7 @@ import {
   messageCheckpoints,
   messageNonBlockingAsks,
   messagePlanReviews,
+  noteColdServerSettled,
   useInteractionStore,
 } from "../interactions";
 import { beginPausedSnapshot } from "../pausedTurns";
@@ -173,6 +174,39 @@ describe("InteractionStore", () => {
     expect(store().get("e1")?.status).toBe("pending");
     store().markOrphaned("e1");
     expect(store().get("e1")?.status).toBe("orphaned");
+  });
+
+  it("reopen does not flip a server-settled cold card back to pending", () => {
+    store().upsertRequired({
+      kind: "team_preview",
+      conversationId: "c1",
+      messageId: "m1",
+      payload: {
+        checkpoint_id: "tp-settled",
+        primitive: "delegate",
+        workers: [],
+      },
+    });
+    expect(store().beginSubmit("tp-settled")).toBe(true);
+    noteColdServerSettled("tp-settled");
+    store().reopen("tp-settled");
+    expect(store().get("tp-settled")?.status).toBe("submitting");
+  });
+
+  it("reopen still returns an unsettled cold card to pending", () => {
+    store().upsertRequired({
+      kind: "team_preview",
+      conversationId: "c1",
+      messageId: "m1",
+      payload: {
+        checkpoint_id: "tp-live",
+        primitive: "delegate",
+        workers: [],
+      },
+    });
+    expect(store().beginSubmit("tp-live")).toBe(true);
+    store().reopen("tp-live");
+    expect(store().get("tp-live")?.status).toBe("pending");
   });
 
   it("orphanConversation flips only hot pending cards", () => {

@@ -201,10 +201,15 @@ class TurnPromotionLedger:
     ``reconciliation`` = 本回合最近一次 ``delivery_status`` 载荷（accepted 闸门的真源；
     归位只读它，**不重算验收**）。``promotions`` = 已归位行，顺序即归位序。
     读写口径见 :mod:`agentcore.runtime.delegate.promotion`。
+
+    ``delivery_verdict`` = 同一对象上的收口档位槽（``DeliveryVerdict | None``）。
+    后台 drive 的 ContextVar ``set`` 写不回 CEO 父任务，必须挂在这本共享账上；
+    禁止再造第三种通道、禁止改去查 turn_journal。
     """
 
     reconciliation: dict[str, Any] | None = None
     promotions: list[dict[str, str]] = field(default_factory=list)
+    delivery_verdict: Any = None
 
 
 @dataclass
@@ -485,7 +490,8 @@ class ToolContext:
     # Wave3 B：本 run 内各相对路径成功 ``file_read`` 次数（共享可变 dict；
     # ``dataclasses.replace`` 浅拷贝仍指向同一计数器）。从第 1 行要满安全顶的整读计次；
     # 开窗仅当本次请求行范围已被此前交付覆盖、且投影窗内仍有该 path 正文时计次。
-    # 超 ``FILE_READ_SAME_PATH_MAX`` 且投影窗内仍有该 path 正文、又无再读授额时拒绝。
+    # ``tool_clear`` 全文已清后的重读不计次。超 ``FILE_READ_SAME_PATH_MAX`` 且投影窗内
+    # 仍有该 path 正文、又无再读授额时拒绝。
     file_read_counts: dict[str, int] = field(default_factory=dict)
     # 已交付行范围（path → 合并后的闭区间）+ 最近一次成功读的总行数（供把请求裁到 EOF）。
     # 与 ``file_read_counts`` 同生命周期：写成功必须一并清，否则写后核对会按旧范围误拒。
@@ -496,11 +502,14 @@ class ToolContext:
     # 保持纯 ``FILE_READ_SAME_PATH_MAX`` 硬顶。``frozenset`` = 投影窗内仍有 verbatim
     # ``file_read`` 正文的 path 集合（空集 = 该窗内全部已清）。正文已清时不因授额用尽硬拒。
     file_read_verbatim_paths: frozenset[str] | None = None
-    # R1：每 path 每 run sticky「已授再读」标记（共享可变 dict；值恒 True）。
-    # 一旦发出，清窗再次发生也不二次授额（写成功 ``refresh_file_read_reread_grant`` 可刷新）。
+    # 同一投影写下的「全文已清」path：至少一条 ``file_read`` stub，且该 path 无 verbatim。
+    # ``None`` = 未同步，不按清后重读豁免计次。清后重读不计 ``FILE_READ_SAME_PATH_MAX``。
+    file_read_cleared_paths: frozenset[str] | None = None
+    # 写成功 / citation ``refresh_file_read_reread_grant`` 的 sticky 标记（共享可变 dict；值恒 True）。
     file_read_reread_issued: dict[str, bool] = field(default_factory=dict)
-    # R1：各 path 剩余再读次数（共享可变 dict）。engine / 写成功授额；成功再读时工具扣减。
+    # 写成功 / citation 授额剩余次数（共享可变 dict）。成功再读时工具扣减。
     # 授额 > 0 时可覆盖仍在窗内的 stale 正文（写后核对 / citation refresh）。
+    # ``tool_clear`` 清后重读走 ``file_read_cleared_paths``，不消耗本授额、不计同 path 上限。
     file_read_reread_remaining: dict[str, int] = field(default_factory=dict)
     # Artifact-first Writing：本 execution 已落盘 path → ``skeleton`` | ``prose``（共享可变
     # dict；``dataclasses.replace`` 浅拷贝与 ``file_read_counts`` 同模式）。``prose`` = 成篇

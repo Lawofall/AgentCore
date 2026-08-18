@@ -92,7 +92,7 @@ CEO 是**管理者**（不是调查员）：主要持只读 / 检索工具，用
 
 **✅ `promote_product`（成品归位）**：CEO 收口前把用户要的成品从 AI 工作间（`AgentCore/文档/*`）移进**用户工作区**的显式动作，只认 `delivery_status` 里 `accepted` 的产物。**为何独立工具而非放开 `file_move`**：后者 worker-only 且语义太宽，给 CEO 一把通用移动权会被拿去干别的；本工具语义单一，且移动本身就是可见的归位记录。**为何是收口时刻**——派单时 CEO 还不知道 worker 会产出几个文件、哪个是主的；写盘时 worker 手上只有自己的任务书（局部视角，且没有自贬动机，人人都说自己那份是成品则该字段作废）；收口是全链路唯一同时看得见用户原始请求与全部实际产出的位置。零归位合法（多幕中间幕），须在收口正文说明，**不设硬闸**。**跨回合可用**：批次收尾 → `ask_user` 问用户要不要 → 下一轮再搬，这是主流路径不是边角；回合台账取不到对账时回退本会话最近一条落盘 `delivery_status`（同 conversation、台账优先、仍只放行 accepted）——那是已落盘的对账结果，不是重算验收。归位后按同 `execution_id` 重发，结构化路径字段（`delivered_files` · `artifacts[].path` / `derived_from` · `gaps[].paths`）一并按归一化路径改写，自由文里的路径**不扫不替**；跨回合再归位时旧 `{from,to}` 行保留（旧路径唯一的回查线索）→ [执行引擎 · 可用性诚实性](/docs/03-AI核心/执行引擎架构设计.md)、[术语表 · 成品归位](/docs/01-产品/术语表.md)。
 
-协调模式（根 CEO；**含单 worker**）：默认后台跑、CEO 继续 ReAct；`coordinate=false` / 嵌套 lead / 含 `checkpoint_after` 仍阻塞。单 worker 也进协调，是为让用户插话在派单期可达（阻塞路径下 CEO 把执行权交给了 worker，插话读到也无从响应）并让 CEO 手上有 `cancel_worker`；开工卡与团队合成预览各自的 ≥2 闸**独立保留**，单 worker 的零摩擦外观不因此变重。结构跟着证据走：调研成篇用 `depends_on` + `checkpoint_after` 把「定结构」摆到调研之后。委派后用团队产出写综述（提示强化，非硬禁只读）；根 CEO 探路成功的 list/read/grep 可摘要注入 worker 开局。worker 协作通道 → [Agent 协作模式](/docs/03-AI核心/Agent协作模式.md)。协调 `wait` 在用户侧热审批/授权未决时禁止空等（勿假装推进）；用户显式停止 / regenerate 会 orphan 热交互并写入 journal（取活 turn 的 `message_id` 作 `turn_id`，非路径上的用户消息 id）。**协调期 CEO 可见面纪律**（提示/工具 schema）：图在转无新结论时可静默；禁止用用户可见 content 复述「谁还在跑」类进度（协作图是进度真相）；开口仅请示 / 报告阻塞与选项 / 宣布阶段结论；插话须先回用户句；`update_synthesis` 禁纯进度播报；协调态进度旁白经 `deliverable_only` 不进终稿 `messages.content`（过程仍进 process）。
+协调模式（根 CEO；**含单 worker**）：默认后台跑、CEO 继续 ReAct；`coordinate=false` / 嵌套 lead / 含 `checkpoint_after` 仍阻塞。单 worker 也进协调，是为让用户插话在派单期可达（阻塞路径下 CEO 把执行权交给了 worker，插话读到也无从响应）并让 CEO 手上有 `cancel_worker`；开工卡与团队合成预览各自的 ≥2 闸**独立保留**，单 worker 的零摩擦外观不因此变重。结构跟着证据走：调研成篇用 `depends_on` + `checkpoint_after` 把「定结构」摆到调研之后。委派后用团队产出写综述（提示强化，非硬禁只读）；根 CEO 探路成功的 list/read/grep/code_search 经路径筛选后摘要注入 worker 开局。worker 协作通道 → [Agent 协作模式](/docs/03-AI核心/Agent协作模式.md)。协调 `wait` 在用户侧热审批/授权未决时禁止空等（勿假装推进）；用户显式停止 / regenerate 会 orphan 热交互并写入 journal（取活 turn 的 `message_id` 作 `turn_id`，非路径上的用户消息 id）。**协调期 CEO 可见面纪律**（提示/工具 schema）：图在转无新结论时可静默；禁止用用户可见 content 复述「谁还在跑」类进度（协作图是进度真相）；开口仅请示 / 报告阻塞与选项 / 宣布阶段结论；插话须先回用户句；`update_synthesis` 禁纯进度播报；协调态进度旁白经 `deliverable_only` 不进终稿 `messages.content`（过程仍进 process）。
 
 ### 批次入闸 vs 回合收敛（边界）
 
@@ -151,7 +151,7 @@ CEO 是**管理者**（不是调查员）：主要持只读 / 检索工具，用
 | `continue_from_run_id` | 带现场续派；权威 → [多轮编排与同人续派](/docs/03-AI核心/多轮编排与同人续派.md) |
 | worker 模型 ✅ | 每 worker **节点/run** 可选显式模型身份（与辩论辩手身份同族）；**省略** = Worker 槽（空则 follow 主）。CEO/`tasks[]` 节点显式仍有效；开工卡确认面**不**提供人改模。定案全文 ↓ |
 
-嵌套委派：硬上限 `depth≤3`（合法链 CEO → depth1 → depth2 → depth3 叶子；depth&lt;3 默认获 `delegate`，`replan` 在已有子计划后挂上），无 `can_delegate` 字段。worker 工具集缺省全量（内部装配）；CEO **不必也不应**手填 `tasks[].tools` 收窄（填了也不生效）。depth=1 captain 对路径 B 形 brief（成果级目标·约束·验收、本轮无结构钉成单切片）→ **优先**先再 `delegate` 补编制再整合（优先级 nudge，非硬流程、非「未嵌套禁写」）；豁免：单文件 / 已钉薄壳 / 强耦合同 run 切片 / 小修·机械单步。整里程碑 M0 / 空仓多模块骨架不在豁免内。**禁止**「凡大活必嵌套」；失败只回退提示词，不升级闸。父节点已盖 `code_audit_gate` 时，手写嵌套 tasks **继承**收工纪律（盖 gate、补 `*.audit.json`、注入一次交接短提示）——不重跑整本 `code_audit` playbook，以免单点子审被扩成多模块团；普通非审计嵌套不误挂。
+嵌套委派：硬上限 `depth≤3`（合法链 CEO → depth1 → depth2 → depth3 叶子；depth&lt;3 默认获 `delegate`，`replan` 在已有子计划后挂上），无 `can_delegate` 字段。worker 工具集缺省全量（内部装配）；CEO **不必也不应**手填 `tasks[].tools` 收窄（填了也不生效）。depth=1 captain 对路径 B 形 brief（成果级目标·约束·验收、本轮无结构钉成单切片）→ **优先**先再 `delegate` 补编制再整合（优先级 nudge，非硬流程、非「未嵌套禁写」）；豁免：单文件 / 已钉薄壳 / 强耦合同 run 切片 / 小修·机械单步。整里程碑 M0 / 空仓多模块骨架不在豁免内。**禁止**「凡大活必嵌套」；失败只回退提示词，不升级闸。父节点已盖 `code_audit_gate` 时，手写嵌套 tasks **继承**收工纪律（盖 gate、补 `*.audit.json`、注入一次交接短提示、补与 playbook 同字面的 `required_sections`——含独立「设计如此」栏）——不重跑整本 `code_audit` playbook，以免单点子审被扩成多模块团；普通非审计嵌套不误挂。 CEO 手写路（不传 playbook）对已声明 `reviews/` 落盘的审计节点同样盖上该章节契约（不扫 role/task）。
 
 ### ✅ S3 · 删除 `completion_criteria` kind 体系
 
@@ -165,7 +165,7 @@ CEO 是**管理者**（不是调查员）：主要持只读 / 检索工具，用
 - **目标**：从 CEO/`replan` 可见契约删掉低价值参数，减少填参面与 soft 验收噪音。
 - **已删**：`playbook_none_reason`、`deliverable.name`、`tasks[].objective`、`must_contain`、`min_length`、`requires_files`。写盘只认 `form=files` 和/或非空 `artifacts`；目标语义并入 `task`。
 - **成篇硬门**：只认具名 `playbook=research_report`；**否决**字数结构腿与扫 task 自由文补门。handoff 正文地板 = 非空（不暴露 CEO 字数旋钮）。
-- **`code_audit` 报告纪律 ✅**（与成篇硬门正交）：具名 `playbook=code_audit`；Markdown + 配套 `*.audit.json`；字段闭集含验证方式 / 定案 / 严重度（未读全·待核实不得标中+）；`code_audit_gate` 结构闸；写盘通道死时缺 JSON 不硬充结构失败。→ 见代码: `runtime/runs/playbooks/audit.py` · `code_audit_gate.py`
+- **`code_audit` 报告纪律 ✅**（与成篇硬门正交）：具名 `playbook=code_audit`；Markdown + 配套 `*.audit.json`；章节契约区分属实缺陷 / 设计如此（模块 docstring 或设计文档已写明的目标形态，独立成栏、不进 N）/ 观察与工程债；手写路经同一继承函数盖上同字面 `required_sections`；字段闭集含验证方式 / 定案 / 严重度（未读全·待核实不得标中+）；`code_audit_gate` 结构闸；写盘通道死时缺 JSON 不硬充结构失败。→ 见代码: `runtime/runs/playbooks/audit.py` · `code_audit_gate.py`
 - **边界**：保留 `form` / `artifacts` / `artifact_dir` / `strict` / `required_sections` / `output_format`；顶层 D 档旋钮（`complexity_hint` 等）本刀不动；内部 `write_scope` 不变。建站 `must_contain_soft` 位保留（非已删 `must_contain`）。
 - **验收**：schema / 类型 / 合同 / 预算 / 切片钉无上述字段功能依赖；→ 见代码: `tools/builtin/delegate/schema.py` + `runtime/runs/types.py` + `runtime/runs/contract.py`
 
@@ -233,6 +233,8 @@ CEO 是**管理者**（不是调查员）：主要持只读 / 检索工具，用
 | 累计 N 次只读软提醒护栏 | A/B 净负已移除；靠提示词边界 + 失控硬兜底 |
 | 默认加硬闸/软闸「优化服从度」 | **否决**；阶梯见 `.cursor/rules/intercept-discipline.mdc`（提示词→观测→一次性软提示→结构化硬拒） |
 | 扩大收口姿势 A / 完成话术正则冒充近零误报 | **否决** → [执行引擎 · 可用性诚实性](/docs/03-AI核心/执行引擎架构设计.md) |
+| 未派工靠禁语表 / 完成话术正则拦正文 | ✅ **已撤**（诚实性走 `team_batch` 结构面）→ 同上 |
+| 无对账卡时拦同条 A∪C | ✅ **已撤**（无卡不拦正文）→ 同上 |
 | 零写落盘声称扫词硬回炉（答完清气泡） | ✅ **已撤**（2026-08-09 定案 B；解释禁语误伤）→ 同上 |
 | 领域 kind 扩表 / 边删 kind 边加启发式完成硬闸 | **否决**；S3 接盘见上节 |
 | `validate_criteria_kind_fit` 扫 task 拟合硬闸 | ✅ **已随 S3 退役** |

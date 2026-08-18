@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
+import pytest
+
 from agentcore.desktop.channel import DesktopClientChannel
 from agentcore.sidecar.identity import LOCAL_USER_ID
 from agentcore.sidecar.protocol import NOT_INITIALIZED
@@ -89,7 +91,8 @@ def test_warm_mcp_discover_seeds_scope_cache(tmp_path: Path) -> None:
     asyncio.run(run())
 
     ok = next(m for m in sent if m.get("id") == 2 and "result" in m)
-    assert ok["result"] == {"ok": True}
+    assert ok["result"]["ok"] is True
+    assert ok["result"]["ttlSeconds"] == pytest.approx(300.0, abs=1.0)
     init = next(m for m in sent if m.get("id") == 1 and "result" in m)
     assert init["result"]["capabilities"]["warmMcpDiscover"] is True
 
@@ -201,7 +204,8 @@ def test_warm_mcp_login_uuid_warm_then_prepare_hits(tmp_path: Path) -> None:
 
     asyncio.run(run())
     ok = next(m for m in sent if m.get("id") == 2 and "result" in m)
-    assert ok["result"] == {"ok": True}
+    assert ok["result"]["ok"] is True
+    assert ok["result"]["ttlSeconds"] == pytest.approx(300.0, abs=1.0)
 
     async def hit() -> None:
         channel = DesktopClientChannel(
@@ -267,7 +271,8 @@ def test_warm_mcp_refresh_user_id_no_local_dual_write(tmp_path: Path) -> None:
 
     asyncio.run(run())
     ok = next(m for m in sent if m.get("id") == 2 and "result" in m)
-    assert ok["result"] == {"ok": True}
+    assert ok["result"]["ok"] is True
+    assert ok["result"]["ttlSeconds"] == pytest.approx(300.0, abs=1.0)
 
     async def assert_scopes() -> None:
         channel = DesktopClientChannel(

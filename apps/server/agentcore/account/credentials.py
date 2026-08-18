@@ -129,6 +129,33 @@ async def cloud_search_conversations(
     return data
 
 
+async def cloud_chat_context(
+    creds: AccountCredentials,
+    *,
+    conversation_id: str,
+) -> dict[str, Any]:
+    """POST ``…/account/conversations/chat-context`` → assembled CEO window."""
+    url = f"{_root_url(creds.base_url)}/conversations/chat-context"
+    try:
+        async with outbound_async_client(timeout=_ACCOUNT_HTTP_TIMEOUT) as client:
+            resp = await client.post(
+                url,
+                json={"conversation_id": conversation_id},
+                headers=_auth_headers(creds),
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("account.cloud_chat_context_failed", error=str(exc))
+        raise AccountCloudError(
+            f"conversation chat-context unreachable: {exc}",
+            code="account_cloud_unreachable",
+        ) from exc
+    _raise_for_status(resp, op="chat_context")
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise AccountCloudError("account chat-context response is not an object")
+    return data
+
+
 async def cloud_read_conversation(
     creds: AccountCredentials,
     *,

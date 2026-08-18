@@ -10,6 +10,7 @@ import { useChatMembers, useMessagingStore } from "@/stores/messaging";
 import { LogOut, Megaphone } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { GovernanceBadge } from "./GovernanceBadge";
 import { PresenceAvatar } from "./PresenceAvatar";
 import {
   avatarInitial,
@@ -19,7 +20,6 @@ import {
   chatDisplayName,
   memberGovernanceBadge,
 } from "./chatDisplay";
-import { GovernanceBadge } from "./GovernanceBadge";
 
 interface Props {
   chatId: string;

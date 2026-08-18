@@ -7,6 +7,8 @@
 Authority: count ``role=member`` ledger rows, and union completed worker
 ``message_final`` facts from the journal (phase present discriminates workers from the
 captain bubble) so a pause/resume segment still reports the workers that already finished.
+Local finalize has no ``cost_runs`` on the write-back; it passes journal entries only
+(the same half this helper already uses when pause defers ledger fold).
 """
 
 from __future__ import annotations

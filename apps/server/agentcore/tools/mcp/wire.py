@@ -149,6 +149,30 @@ def seed_mcp_discover_cache(
     )
 
 
+def mcp_discover_ttl_remaining(
+    *,
+    conversation_id: str = "",
+    cache_scope: str | None = None,
+) -> float:
+    """Seconds this discover cache still serves prepare (0.0 = absent / lapsed).
+
+    Same renewal-handshake half as ``account_rules_memory_ttl_remaining``: the
+    desktop re-warms within this window so cache_only harvest turns still hit.
+    """
+    now = time.monotonic()
+    conv = (conversation_id or "").strip()
+    if conv:
+        cached = _discover_cache.get(_conv_cache_key(conv))
+        if cached is not None and cached.expires_at > now:
+            return cached.expires_at - now
+    scope_key = _scope_cache_key(cache_scope or "")
+    if scope_key is not None:
+        cached = _discover_cache.get(scope_key)
+        if cached is not None and cached.expires_at > now:
+            return cached.expires_at - now
+    return 0.0
+
+
 def parse_mcp_list_payload(value: Any) -> McpDiscoverResult:
     """Parse a desktop ``list_tools`` payload into ``McpDiscoverResult`` (no I/O).
 
@@ -230,6 +254,14 @@ def _duration_ms(started: float) -> int:
     return int((time.monotonic() - started) * 1000)
 
 
+def _cache_miss_origin_fields() -> dict[str, str]:
+    """Searchable origin on empty MCP injection (harvest binds ``execution_harvest``)."""
+    from agentcore.runtime.delegate.post_close_gate import current_user_message_origin
+
+    origin = current_user_message_origin()
+    return {"origin": origin} if origin else {}
+
+
 async def discover_mcp_tools(
     channel: DesktopClientChannel | None,
     *,
@@ -270,6 +302,7 @@ async def discover_mcp_tools(
         return cached
 
     if cache_only:
+        origin_fields = _cache_miss_origin_fields()
         logger.info(
             "desktop.mcp_list_cache_miss",
             conversation_id=cache_key_conv,
@@ -277,6 +310,7 @@ async def discover_mcp_tools(
             detail="cache_miss",
             duration_ms=_duration_ms(started),
             tool_count=0,
+            **origin_fields,
         )
         return McpDiscoverResult(detail="cache_miss")
 

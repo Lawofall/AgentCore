@@ -769,10 +769,45 @@ async def _run_local_harvest_closing_turn(
                     folders_credentials_scope(sidecar._folders_creds),
                     account_credentials_scope(sidecar._account_creds),
                 ):
+                    from agentcore.sidecar.chat_history import (
+                        ChatContextUnavailableError,
+                        resolve_sidecar_turn_history,
+                    )
+
+                    try:
+                        history = await resolve_sidecar_turn_history(
+                            conversation_id,
+                            creds=sidecar._account_creds,
+                            fallback=sidecar.stamped_history(conversation_id),
+                        )
+                    except ChatContextUnavailableError as exc:
+                        logger.warning(
+                            "coordination.harvest_chat_context_unavailable",
+                            conversation_id=conversation_id,
+                            execution_id=execution_id,
+                            error=exc.message,
+                            via="sidecar",
+                        )
+                        with contextlib.suppress(Exception):
+                            await _persist_harvest_fallback_local(
+                                sidecar,
+                                conversation_id=conversation_id,
+                                execution_id=execution_id,
+                                user_id=user_id,
+                                session=session,
+                                kind=kind,
+                                error_message=exc.message,
+                                user_message=user_text,
+                                user_message_id=user_message_id,
+                                message_id=message_id,
+                                trace_id=trace_id,
+                            )
+                        return
+                    sidecar.stamp_turn_history(conversation_id, history)
                     result = await sidecar_server.run_chat_pipeline(
                         conversation_id=conversation_id,
                         user_message=user_text,
-                        history=sidecar.history_for(conversation_id),
+                        history=history,
                         sink=sink,
                         user_id=user_id,
                         backend=backend,

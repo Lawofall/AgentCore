@@ -55,6 +55,11 @@ vi.mock("@/services/accountToken", () => ({
   looksLikeAccountTokenFailure: vi.fn(() => false),
 }));
 
+vi.mock("@/services/chatContext", () => ({
+  fetchChatContext: vi.fn(async () => []),
+  CHAT_CONTEXT_UNAVAILABLE_MESSAGE: "未能加载对话历史，请稍后重试。",
+}));
+
 import { getConversations } from "@/hooks/useConversations";
 import { getFolders } from "@/hooks/useFolders";
 import { notifyWarning } from "@/lib/toast";
@@ -62,6 +67,10 @@ import {
   looksLikeAccountTokenFailure,
   resolveSidecarAccountAuth,
 } from "@/services/accountToken";
+import {
+  CHAT_CONTEXT_UNAVAILABLE_MESSAGE,
+  fetchChatContext,
+} from "@/services/chatContext";
 import {
   looksLikeFoldersTokenFailure,
   resolveSidecarFoldersAuth,
@@ -99,6 +108,7 @@ const looksLikeAccountTokenFailureMock = vi.mocked(
 const notifyWarningMock = vi.mocked(notifyWarning);
 const getConversationsMock = vi.mocked(getConversations);
 const getFoldersMock = vi.mocked(getFolders);
+const fetchChatContextMock = vi.mocked(fetchChatContext);
 
 type EventPush = { conversationId: string; turnId: string; event: unknown };
 
@@ -175,6 +185,8 @@ beforeEach(() => {
   resolveSidecarAccountAuthMock.mockResolvedValue(null);
   looksLikeAccountTokenFailureMock.mockReset();
   looksLikeAccountTokenFailureMock.mockReturnValue(false);
+  fetchChatContextMock.mockReset();
+  fetchChatContextMock.mockResolvedValue([]);
 
   onEventCb = null;
   resumeMock = vi.fn();
@@ -778,6 +790,162 @@ describe("streamConversationViaSidecar", () => {
     });
 
     expect(turnCommit.committed).toBe(true);
+  });
+
+  it("passes cookie chat-context as history fallback even when accountAuth is present", async () => {
+    fetchChatContextMock.mockResolvedValue([
+      { role: "user", content: "先前问" },
+      { role: "assistant", content: "先前答" },
+    ]);
+    resolveSidecarAccountAuthMock.mockResolvedValue({
+      baseUrl: "https://api.test.example/v1/account",
+      apiKey: "account-jwt",
+    });
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockResolvedValue(turnResult());
+
+    await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+    });
+
+    expect(fetchChatContextMock).toHaveBeenCalledTimes(1);
+    expect(fetchChatContextMock).toHaveBeenCalledWith("c1");
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountAuth: {
+          baseUrl: "https://api.test.example/v1/account",
+          apiKey: "account-jwt",
+        },
+        history: [
+          { role: "user", content: "先前问" },
+          { role: "assistant", content: "先前答" },
+        ],
+      }),
+    );
+  });
+
+  it("does not refetch chat-context when caller already confirmed history", async () => {
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockResolvedValue(turnResult());
+
+    await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+      history: [
+        { role: "user", content: "先前问" },
+        { role: "assistant", content: "先前答" },
+      ],
+    });
+
+    expect(fetchChatContextMock).not.toHaveBeenCalled();
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        history: [
+          { role: "user", content: "先前问" },
+          { role: "assistant", content: "先前答" },
+        ],
+      }),
+    );
+  });
+
+  it("treats caller-confirmed empty history as the window and does not refetch", async () => {
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockResolvedValue(turnResult());
+
+    await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+      history: [],
+    });
+
+    expect(fetchChatContextMock).not.toHaveBeenCalled();
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({ history: [] }),
+    );
+  });
+
+  it("fails the turn when cookie chat-context fails and there is no accountAuth", async () => {
+    fetchChatContextMock.mockRejectedValue(new Error("cloud 503"));
+    resolveSidecarAccountAuthMock.mockResolvedValue(null);
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+
+    const err = await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(StreamError);
+    expect((err as StreamError).kind).toBe("sidecar");
+    expect((err as StreamError).serverMessage).toBe(
+      CHAT_CONTEXT_UNAVAILABLE_MESSAGE,
+    );
+    expect((err as StreamError).recoverable).toBe(false);
+    expect(startTurnMock).not.toHaveBeenCalled();
+  });
+
+  it("omits history when cookie chat-context fails but accountAuth can still fetch", async () => {
+    fetchChatContextMock.mockRejectedValue(new Error("cloud 503"));
+    resolveSidecarAccountAuthMock.mockResolvedValue({
+      baseUrl: "https://api.test.example/v1/account",
+      apiKey: "account-jwt",
+    });
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockResolvedValue(turnResult());
+
+    await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+    });
+
+    expect(fetchChatContextMock).toHaveBeenCalledTimes(1);
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountAuth: {
+          baseUrl: "https://api.test.example/v1/account",
+          apiKey: "account-jwt",
+        },
+        history: undefined,
+      }),
+    );
+  });
+
+  it("surfaces sidecar chat-context failure as a non-recoverable banner", async () => {
+    resolveSidecarAccountAuthMock.mockResolvedValue({
+      baseUrl: "https://api.test.example/v1/account",
+      apiKey: "account-jwt",
+    });
+    fetchChatContextMock.mockRejectedValue(new Error("cloud 503"));
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockRejectedValue(
+      new Error(
+        "Error invoking remote method 'sidecar:startTurn': Error: 未能加载对话历史，请稍后重试。",
+      ),
+    );
+
+    const err = await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+    }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(StreamError);
+    const se = err as StreamError;
+    expect(se.kind).toBe("sidecar");
+    expect(se.recoverable).toBe(false);
+    expect(se.serverMessage).toContain("未能加载对话历史");
+    expect(startTurnMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not report turnCommit when outbox flush is still pending", async () => {

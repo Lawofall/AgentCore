@@ -1,5 +1,8 @@
 import { useConversationStore } from "@/stores/conversation";
-import { useInteractionStore } from "@/stores/interactions";
+import {
+  hydrateInteractionsFromJournal,
+  useInteractionStore,
+} from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import type {
   CheckpointRequiredPayload,
@@ -407,6 +410,119 @@ describe("listVisibleColdResumes (InteractionStore authority)", () => {
     });
     expect(resolveResumeOrigin(CID, "m-server-1")).toBe("sidecar");
     expect(conversationHasColdPending(CID)).toBe(true);
+  });
+});
+
+describe("cold checkpoint terminal authority", () => {
+  function stampJournalResolved(
+    checkpointId: string,
+    type:
+      | "team_preview_resolved"
+      | "checkpoint_resolved" = "team_preview_resolved",
+  ): void {
+    const assistant = [...getMessages()]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    if (!assistant) throw new Error("expected assistant");
+    conv().updateMessage(
+      assistant.id,
+      {
+        runs: {
+          events: [
+            {
+              type,
+              timestamp: "",
+              payload: { checkpoint_id: checkpointId },
+            },
+          ],
+          finishReason: "stop",
+        },
+      },
+      CID,
+    );
+  }
+
+  function getMessages() {
+    return conv().byId[CID]?.messages ?? [];
+  }
+
+  it("POST drop reopen keeps submitting when journal already has *_resolved", () => {
+    seedTurn("m-server-tp");
+    upsertTeamPreview("m-server-tp");
+    expect(ix().beginSubmit("tp1")).toBe(true);
+    stampJournalResolved("tp1");
+
+    ix().reopen("tp1");
+
+    expect(ix().get("tp1")?.status).toBe("submitting");
+    expect(listVisibleColdResumes(CID)).toHaveLength(0);
+    expect(conversationHasColdPending(CID)).toBe(false);
+  });
+
+  it("attach replay of required after journal resolved does not paint a clickable card", () => {
+    seedTurn("5e78ddbf-turn");
+    upsertTeamPreview("5e78ddbf-turn");
+    expect(ix().beginSubmit("tp1")).toBe(true);
+    stampJournalResolved("tp1");
+    ix().reopen("tp1");
+    expect(ix().get("tp1")?.status).toBe("submitting");
+
+    ix().upsertRequired({
+      kind: "team_preview",
+      conversationId: CID,
+      messageId: "5e78ddbf-turn",
+      payload: {
+        checkpoint_id: "tp1",
+        conversation_id: CID,
+        primitive: "delegate",
+        workers: [
+          { run_id: "r1", role: "调研", task: "做调研", depends_on: [] },
+        ],
+        tools: ["file_write"],
+        motion: "",
+        form: "",
+        sides: [],
+        max_rounds: 0,
+        thorough: true,
+      },
+    });
+    surfaceResumeFromLiveTurn(CID, "server");
+
+    expect(listVisibleColdResumes(CID)).toHaveLength(0);
+  });
+
+  it("message_end(paused) shell is not clickable when journal has *_resolved", () => {
+    seedTurn("m-server-tp");
+    upsertTeamPreview("m-server-tp");
+    stampJournalResolved("tp1");
+    surfaceResumeFromLiveTurn(CID, "server");
+
+    expect(paused().pending.length).toBeGreaterThan(0);
+    expect(listVisibleColdResumes(CID)).toHaveLength(0);
+  });
+
+  it("switch-back journal hydrate of required→resolved does not paint", () => {
+    seedTurn("m-hydrated");
+    hydrateInteractionsFromJournal(CID, "m-hydrated", [
+      {
+        type: "team_preview_required",
+        payload: {
+          checkpoint_id: "tp-hy",
+          conversation_id: CID,
+          primitive: "delegate",
+          workers: [],
+        },
+      },
+      {
+        type: "team_preview_resolved",
+        payload: { checkpoint_id: "tp-hy", decision: "continue" },
+      },
+    ]);
+    stampJournalResolved("tp-hy");
+    surfaceResumeFromLiveTurn(CID, "server");
+
+    expect(ix().get("tp-hy")?.status).toBe("resolved");
+    expect(listVisibleColdResumes(CID)).toHaveLength(0);
   });
 });
 

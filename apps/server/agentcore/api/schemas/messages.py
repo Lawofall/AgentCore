@@ -1,7 +1,7 @@
 """Message, attachment, interaction-resolve, and turn schemas."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -732,6 +732,41 @@ class RunsPayload(BaseModel):
     auto_folder: AutoFolderNotice | None = None
 
 
+class TeamBatchNoBatch(BaseModel):
+    """本回合未派出队员——确定态，不是信息缺失。"""
+
+    kind: Literal["no_batch"]
+
+
+class TeamBatchInFlight(BaseModel):
+    """本波 kickoff 编制已派出、尚未全部收工。``worker_count`` 不含 captain / 历史队员。"""
+
+    kind: Literal["in_flight"]
+    worker_count: int
+
+
+class TeamBatchSettled(BaseModel):
+    """本波队员已全部终态（或本 execution 已发出 delivery_status）。"""
+
+    kind: Literal["settled"]
+    worker_count: int
+
+
+TeamBatchStatus = Annotated[
+    TeamBatchNoBatch | TeamBatchInFlight | TeamBatchSettled,
+    Field(discriminator="kind"),
+]
+
+
+def parse_team_batch(raw: dict[str, Any]) -> TeamBatchStatus:
+    kind = raw.get("kind")
+    if kind == "in_flight":
+        return TeamBatchInFlight.model_validate(raw)
+    if kind == "settled":
+        return TeamBatchSettled.model_validate(raw)
+    return TeamBatchNoBatch(kind="no_batch")
+
+
 class TurnCollabMetrics(BaseModel):
     """Per-turn orchestration signals (学·度量 §2.5) — the user-facing slice of turn_metrics.
 
@@ -815,6 +850,9 @@ class MessageDetail(BaseModel):
     # 协作质量 (学·度量 §2.5, 诊断模式): orchestration signals nested in the usage column;
     # projected on read like ``rounds``. null for single-agent / pre-feature rows.
     collab: TurnCollabMetrics | None = None
+    # 本回合团队状态（turn journal 派生，读路径投影；不写入 usage JSON）。
+    # 没派工是 no_batch，不是缺字段。null for user rows.
+    team_batch: TeamBatchStatus | None = None
     # 回合结果质量（与 finish_reason / usage.status 正交）：ok | partial | paused | error。
     # 写入 usage JSON，读路径投影。本波不产出 paused。null for user / pre-feature rows.
     outcome: Literal["ok", "partial", "paused", "error"] | None = None

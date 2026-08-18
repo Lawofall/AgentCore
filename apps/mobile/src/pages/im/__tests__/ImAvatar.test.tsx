@@ -10,7 +10,9 @@ afterEach(cleanup);
 
 describe("ImAvatar", () => {
   it("renders an image for a server url and prefixes relative paths", () => {
-    const { container } = render(<ImAvatar name="Alice" url="/avatars/a.png" />);
+    const { container } = render(
+      <ImAvatar name="Alice" url="/avatars/a.png" />,
+    );
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "https://api.example/avatars/a.png",
     );
@@ -23,8 +25,13 @@ describe("ImAvatar", () => {
   });
 
   it("falls back to the initial when the image errors", () => {
-    const { container } = render(<ImAvatar name="Alice" url="/avatars/a.png" />);
-    fireEvent.error(container.querySelector("img")!);
+    const { container } = render(
+      <ImAvatar name="Alice" url="/avatars/a.png" />,
+    );
+    const img = container.querySelector("img");
+    if (!img)
+      throw new Error("expected an <img> before firing its error event");
+    fireEvent.error(img);
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("span")?.textContent).toBe("A");
   });

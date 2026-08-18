@@ -294,7 +294,10 @@ def test_turn_end_close_event_finished_turn_emits_message_end():
     ev = _turn_end_close_event(rows)
     assert ev is not None
     assert ev.type == EventType.MESSAGE_END
-    assert ev.payload == {"finish_reason": "end_turn"}
+    assert ev.payload == {
+        "finish_reason": "end_turn",
+        "team_batch": {"kind": "no_batch"},
+    }
 
 
 def test_turn_end_close_event_copies_outcome():
@@ -302,7 +305,11 @@ def test_turn_end_close_event_copies_outcome():
         [{"kind": "turn_end", "payload": {"finish_reason": "degraded", "outcome": "partial"}}]
     )
     assert ev is not None
-    assert ev.payload == {"finish_reason": "degraded", "outcome": "partial"}
+    assert ev.payload == {
+        "finish_reason": "degraded",
+        "outcome": "partial",
+        "team_batch": {"kind": "no_batch"},
+    }
 
 
 def test_turn_end_close_event_paused_preserves_reason():

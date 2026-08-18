@@ -207,8 +207,10 @@ import { inspectZeroOutputSendRollback } from "@/lib/zeroOutputSendRollback";
 import {
   type EscalationSlotEsc,
   extractAsks,
+  extractCoordinationWait,
   extractEscalationSlots,
   extractEvidenceLedger,
+  extractExecutionDetached,
   extractGraphAppendActKinds,
   extractGraphAppendAuthorizedBy,
   extractHotDecisionTraces,
@@ -830,6 +832,14 @@ function AssistantBubble({
     () => extractWorkerToolPhases(turn.events),
     [turn.events],
   );
+  const waitProgress = useMemo(
+    () => extractCoordinationWait(turn.events),
+    [turn.events],
+  );
+  const detached = useMemo(
+    () => extractExecutionDetached(turn.events),
+    [turn.events],
+  );
   // 阻塞式求决策「待你拍板」: runId→escalation id from interactions[] (P3 · 按 id 精确提交).
   const pendingEscalations = useMemo(() => {
     const map = new Map<string, string>();
@@ -932,6 +942,8 @@ function AssistantBubble({
         workerToolPhases,
         evidenceLedger: debateEvidenceLedger,
         elapsedMs: turnElapsedMs(turn.events),
+        waitProgress,
+        detached,
         outcome,
         supportIds,
         onRetry,
@@ -1105,6 +1117,8 @@ function HistoryAssistant({
             // 辩论场级 `#eN`（勿写入 Message.evidence_ledger 语义）
             evidenceLedger: extractEvidenceLedger(events),
             elapsedMs: turnElapsedMs(events),
+            waitProgress: extractCoordinationWait(events),
+            detached: extractExecutionDetached(events),
           }
         : undefined;
     return {

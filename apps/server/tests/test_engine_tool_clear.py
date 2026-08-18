@@ -162,9 +162,18 @@ def test_idempotent():
 def test_placeholder_names_the_call():
     ph = cleared_placeholder("file_read", json.dumps({"path": "src/foo.py"}), 8421)
     assert "file_read" in ph and "src/foo.py" in ph and "8421" in ph
-    assert "可重新调用该工具获取" in ph
+    assert "status=content_cleared" in ph
+    assert "reread=allowed" in ph
+    assert "path='src/foo.py'" in ph
     # deterministic
     assert ph == cleared_placeholder("file_read", json.dumps({"path": "src/foo.py"}), 8421)
+
+
+def test_grep_placeholder_keeps_refetch_invite():
+    ph = cleared_placeholder("grep", json.dumps({"path": "src/foo.py", "pattern": "x"}), 900)
+    assert "可重新调用该工具获取" in ph
+    assert "如仍需要可重新调用该工具获取" not in ph
+    assert "仍有该正文则勿重调" in ph
 
 
 def test_exec_placeholder_forbids_rerun():
@@ -367,7 +376,7 @@ def test_grep_clear_stays_pointer_only_even_with_summary_budget():
             assert "自动" not in (m.content or "")
 
 
-def test_apply_file_read_clear_state_grants_only_when_zero_verbatim():
+def test_apply_file_read_clear_state_records_fully_cleared_paths():
     from agentcore.runtime.engine.tool_clear import apply_file_read_clear_state
     from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
 
@@ -381,7 +390,7 @@ def test_apply_file_read_clear_state_grants_only_when_zero_verbatim():
 
     ctx = _context()
     ctx.file_read_counts["a.md"] = FILE_READ_SAME_PATH_MAX
-    # keep_recent=2 → c2,c3 kept; c0,c1 cleared → a.md zero verbatim → grant
+    # keep_recent=2 → c2,c3 kept; c0,c1 cleared → a.md zero verbatim → cleared ledger
     synced = apply_file_read_clear_state(
         ctx,
         msgs,
@@ -389,13 +398,14 @@ def test_apply_file_read_clear_state_grants_only_when_zero_verbatim():
         keep_recent=2,
         min_chars=100,
         summary_max_chars=0,
-        reread_grant=1,
     )
     assert "a.md" not in (synced.file_read_verbatim_paths or frozenset())
-    assert synced.file_read_reread_issued.get("a.md") is True
-    assert synced.file_read_reread_remaining.get("a.md") == 1
+    assert "a.md" in (synced.file_read_cleared_paths or frozenset())
+    # Clear no longer issues a sticky grant — recovery does not consume quota.
+    assert "a.md" not in synced.file_read_reread_issued
+    assert synced.file_read_reread_remaining.get("a.md", 0) == 0
 
-    # Partial clear: keep_recent=3 keeps one a.md verbatim → no grant
+    # Partial clear: keep_recent=3 keeps one a.md verbatim → not fully cleared
     ctx2 = _context()
     ctx2.file_read_counts["a.md"] = FILE_READ_SAME_PATH_MAX
     partial = apply_file_read_clear_state(
@@ -405,13 +415,13 @@ def test_apply_file_read_clear_state_grants_only_when_zero_verbatim():
         keep_recent=3,
         min_chars=100,
         summary_max_chars=0,
-        reread_grant=1,
     )
     assert "a.md" in (partial.file_read_verbatim_paths or frozenset())
+    assert "a.md" not in (partial.file_read_cleared_paths or frozenset())
     assert "a.md" not in partial.file_read_reread_issued
 
 
-def test_apply_file_read_clear_state_sticky_no_second_grant():
+def test_apply_file_read_clear_state_cleared_ledger_is_projection_snapshot():
     from agentcore.runtime.engine.tool_clear import apply_file_read_clear_state
     from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
 
@@ -421,7 +431,7 @@ def test_apply_file_read_clear_state_sticky_no_second_grant():
     msgs += _read_pair("a1", "a.md", body)
     msgs += _read_pair("f0", "filler0.md", body)
     msgs += _read_pair("f1", "filler1.md", body)
-    # keep_recent=1 keeps only filler1 → a.md fully cleared → grant once.
+    # keep_recent=1 keeps only filler1 → a.md fully cleared.
 
     ctx = _context()
     ctx.file_read_counts["a.md"] = FILE_READ_SAME_PATH_MAX
@@ -432,12 +442,10 @@ def test_apply_file_read_clear_state_sticky_no_second_grant():
         keep_recent=1,
         min_chars=100,
         summary_max_chars=0,
-        reread_grant=1,
     )
     assert "a.md" not in (first.file_read_verbatim_paths or frozenset())
-    assert first.file_read_reread_remaining["a.md"] == 1
-    # Simulate grant consumed, then another clear cycle — must not re-grant.
-    first.file_read_reread_remaining["a.md"] = 0
+    assert "a.md" in (first.file_read_cleared_paths or frozenset())
+    # Re-projecting the same window must restate the same ledger, not invent a grant.
     first.file_read_counts["a.md"] = FILE_READ_SAME_PATH_MAX + 1
     second = apply_file_read_clear_state(
         first,
@@ -446,10 +454,9 @@ def test_apply_file_read_clear_state_sticky_no_second_grant():
         keep_recent=1,
         min_chars=100,
         summary_max_chars=0,
-        reread_grant=1,
     )
-    assert second.file_read_reread_remaining["a.md"] == 0
-    assert second.file_read_reread_issued["a.md"] is True
+    assert "a.md" in (second.file_read_cleared_paths or frozenset())
+    assert second.file_read_reread_remaining.get("a.md", 0) == 0
 
 
 def test_refresh_file_read_reread_grant_allows_rework_reread():
@@ -518,7 +525,9 @@ def test_exec_and_investigation_windows_independent(monkeypatch):
     assert "p0" in (stub.content or "")
     assert "勿仅为回看而重跑" in (stub.content or "")
     read_stub = next(m for m in out if m.tool_call_id == "r0")
-    assert "可重新调用该工具获取" in (read_stub.content or "")
+    assert "path='src/f0.py'" in (read_stub.content or "")
+    assert "status=content_cleared" in (read_stub.content or "")
+    assert "reread=allowed" in (read_stub.content or "")
 
 
 def test_build_request_window_leaves_code_execute(monkeypatch):

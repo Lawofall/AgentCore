@@ -38,6 +38,18 @@ class WireDialect:
     # ``probe_tools``: HTTP 400 under ``tool_choice=required`` → retry without it.
     # Default True preserves the historical universal fallback (DeepSeek V4 etc.).
     retry_forced_tool_choice_on_400: bool = True
+    # Official o-series Chat Completions wants ``max_completion_tokens``, not
+    # ``max_tokens``. Probe and the hot path share :meth:`apply_token_limit`.
+    use_max_completion_tokens: bool = False
+
+    @property
+    def token_limit_field(self) -> Literal["max_tokens", "max_completion_tokens"]:
+        return "max_completion_tokens" if self.use_max_completion_tokens else "max_tokens"
+
+    def apply_token_limit(self, payload: dict, max_tokens: int | None) -> None:
+        """Write the dialect's token-cap field when a limit is set."""
+        if max_tokens:
+            payload[self.token_limit_field] = max_tokens
 
 
 @dataclass(frozen=True)
@@ -50,6 +62,7 @@ class _DialectOverlay:
     thinking_type_switch: bool | None = None
     omit_temperature: bool | None = None
     retry_forced_tool_choice_on_400: bool | None = None
+    use_max_completion_tokens: bool | None = None
 
     def matches(self, leaf: str) -> bool:
         if self.kind == "exact":
@@ -101,6 +114,29 @@ _DIALECT_OVERLAYS: tuple[_DialectOverlay, ...] = (
     # Kimi leaf ids (incl. OpenCode Zen / Go / other relays hosting ``kimi-*``).
     # Do not blanket whole endpoints that happen to list Kimi models.
     _DialectOverlay("prefix", "kimi-", omit_temperature=True),
+    # OpenAI o-series: official Chat Completions rejects ``temperature`` and
+    # requires ``max_completion_tokens``. Keyed on the leaf (not base_url) so
+    # third-party relays hosting the same ids are covered. Bare names stay
+    # ``exact`` and families carry the hyphen: a two-char ``o1`` prefix would
+    # swallow any unrelated leaf starting with those characters.
+    *tuple(
+        _DialectOverlay(
+            "exact",
+            name,
+            omit_temperature=True,
+            use_max_completion_tokens=True,
+        )
+        for name in ("o1", "o3", "o4")
+    ),
+    *tuple(
+        _DialectOverlay(
+            "prefix",
+            prefix,
+            omit_temperature=True,
+            use_max_completion_tokens=True,
+        )
+        for prefix in ("o1-", "o3-", "o4-")
+    ),
 )
 
 
@@ -118,6 +154,7 @@ def resolve_wire_dialect(model: str, *, base_url: str | None = None) -> WireDial
     omit_temp = False
     # Universal default: keep forced-tool_choice 400 retry (historical behaviour).
     retry_required = True
+    use_max_completion = False
     for rule in _DIALECT_OVERLAYS:
         if not rule.matches(leaf):
             continue
@@ -129,6 +166,8 @@ def resolve_wire_dialect(model: str, *, base_url: str | None = None) -> WireDial
             omit_temp = omit_temp or rule.omit_temperature
         if rule.retry_forced_tool_choice_on_400 is not None:
             retry_required = rule.retry_forced_tool_choice_on_400
+        if rule.use_max_completion_tokens is not None:
+            use_max_completion = use_max_completion or rule.use_max_completion_tokens
     # Moonshot BYOK: sampling is fixed for current Kimi leaves; legacy
     # ``moonshot-v1*`` still accepts temperature → keep sending it.
     if base_url:
@@ -140,4 +179,5 @@ def resolve_wire_dialect(model: str, *, base_url: str | None = None) -> WireDial
         thinking_type_switch=thinking,
         omit_temperature=omit_temp,
         retry_forced_tool_choice_on_400=retry_required,
+        use_max_completion_tokens=use_max_completion,
     )

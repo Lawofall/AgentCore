@@ -126,7 +126,6 @@ function openMember(opts: {
       }
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "展开协作列表" }));
   fireEvent.click(screen.getByText("调研员"));
 }
 
@@ -193,7 +192,7 @@ describe("TeamView · handoff 简报卡", () => {
       ],
     });
 
-    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.getByText("失败")).toBeTruthy();
     expect(screen.getByText("Handoff")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Handoff/ }));
     expect(screen.getByText("简报校验失败")).toBeTruthy();

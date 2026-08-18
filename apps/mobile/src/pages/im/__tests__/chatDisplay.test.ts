@@ -195,8 +195,8 @@ describe("bubbleAvatarUrl", () => {
   });
 
   it("uses the session icon only for official bubbles", () => {
-    expect(bubbleAvatarUrl({ mine: false, chatType: "official", ...urls })).toBe(
-      urls.chatAvatarUrl,
-    );
+    expect(
+      bubbleAvatarUrl({ mine: false, chatType: "official", ...urls }),
+    ).toBe(urls.chatAvatarUrl);
   });
 });

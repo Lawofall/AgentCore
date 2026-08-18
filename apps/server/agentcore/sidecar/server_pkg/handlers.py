@@ -149,6 +149,7 @@ class HandlerMixin:
             )
             return
         from agentcore.tools.mcp.wire import (
+            mcp_discover_ttl_remaining,
             parse_mcp_list_payload,
             seed_mcp_discover_cache,
         )
@@ -159,6 +160,7 @@ class HandlerMixin:
         self._refresh_user_id(params)
         # Open-project warm has no conversation yet — user-scoped key only.
         seed_mcp_discover_cache("", result, cache_scope=self._user_id)
+        ttl_seconds = mcp_discover_ttl_remaining(cache_scope=self._user_id)
         logger.info(
             "sidecar.warm_mcp_discover",
             user_id=self._user_id,
@@ -166,8 +168,17 @@ class HandlerMixin:
             ready_servers=result.ready_servers,
             failed_servers=result.failed_servers,
             degraded=result.degraded,
+            ttl_seconds=ttl_seconds,
         )
-        await self._reply(request_id, {"ok": True})
+        await self._reply(
+            request_id,
+            {
+                "ok": True,
+                # 续期握手：本条 MCP 列表的剩余寿命。缓存过期即空装配（不 await
+                # ClientTool），调用方必须在此窗口内重暖（含长任务在途周期续暖）。
+                "ttlSeconds": ttl_seconds,
+            },
+        )
 
     async def _on_warm_account_rules_memory(
         self, request_id: Any, params: dict[str, Any]
@@ -970,6 +981,12 @@ class HandlerMixin:
                     prewrite_sidecar_resume_settlement,
                 )
 
+                await outbox.reopen_for_resume(
+                    turn_id=message_id,
+                    user_message_id=umid,
+                    conversation_id=conversation_id,
+                    trace_id=trace_id,
+                )
                 await prewrite_sidecar_resume_settlement(
                     outbox,
                     peeked,
@@ -996,6 +1013,12 @@ class HandlerMixin:
                     )
                 )
                 return
+            await self._outbox_resume_writeback(
+                outbox,
+                conversation_id=conversation_id,
+                message_id=message_id,
+                trace_id=trace_id,
+            )
 
         ev = resume_deferred(
             message_id=message_id,

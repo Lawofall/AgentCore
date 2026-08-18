@@ -19,6 +19,8 @@ export type ModelCatalogItem = Schemas["ModelCatalogItem"];
 export type ModelCatalogCurrent = Schemas["ModelCatalogCurrent"];
 /** 复用的单价卡（USD 每百万 token，字符串；金额从不用浮点）。 */
 export type ModelPriceCard = Schemas["ModelPriceCard"];
+/** 结构化不可选原因（前端自己渲染文案）。 */
+export type ModelUnavailableReason = Schemas["ModelUnavailableReason"];
 
 /** 已识别的模型能力标签（vision / tools / reasoning 的子集）。 */
 export type ModelCapability = "vision" | "tools" | "reasoning";

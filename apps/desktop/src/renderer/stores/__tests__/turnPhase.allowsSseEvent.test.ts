@@ -50,6 +50,27 @@ describe("allowsSseEvent — interaction *_required on stopping/terminal", () =>
     for (const phase of TERMINAL_OR_STOPPING) {
       expect(allowsSseEvent(phase, "content_delta")).toBe(false);
       expect(allowsSseEvent(phase, "tool_use_start")).toBe(false);
+      expect(
+        allowsSseEvent(phase, "tool_use_start", { tool_call_id: "ceo" }),
+      ).toBe(false);
+    }
+  });
+
+  it("allows worker-scoped tool_use_* on stopping/terminal (detached graph chrome)", () => {
+    const worker = {
+      tool_call_id: "tc",
+      run_id: "r1",
+      tool_name: "web_search",
+    };
+    for (const phase of TERMINAL_OR_STOPPING) {
+      expect(allowsSseEvent(phase, "tool_use_start", worker)).toBe(true);
+      expect(allowsSseEvent(phase, "tool_use_end", worker)).toBe(true);
+      expect(
+        allowsSseEvent(phase, "tool_use_progress", {
+          ...worker,
+          phase: "querying",
+        }),
+      ).toBe(true);
     }
   });
 
@@ -106,4 +127,11 @@ describe("allowsSseEvent — interaction *_required on stopping/terminal", () =>
       expect(allowsSseEvent(phase, "workspace_snapshot_failed")).toBe(true);
     }
   });
+
+  it.each(TERMINAL_OR_STOPPING)(
+    "allows team_synthesis_preview in phase %s (detached captain-node live preview)",
+    (phase) => {
+      expect(allowsSseEvent(phase, "team_synthesis_preview")).toBe(true);
+    },
+  );
 });

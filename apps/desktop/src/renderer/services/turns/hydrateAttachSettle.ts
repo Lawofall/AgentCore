@@ -27,7 +27,10 @@ import {
   settleOrphanEmptyAssistants,
 } from "./recovery";
 import { attachSidecarTurn } from "./sidecarAttach";
-import { hasLocalConversationStream } from "./streamOwnership";
+import {
+  beginLocalConversationStream,
+  hasLocalConversationStream,
+} from "./streamOwnership";
 
 /** Kick attach/settle when recovery lands. Does not delay overlay reveal. */
 export function scheduleHydrateAttachSettle(
@@ -58,13 +61,15 @@ export async function runHydrateAttachSettle(
     paused_count: recovery.pausedCount,
     branch: useLocal ? "local" : "cloud",
   });
-  // 对话级订阅由揭窗立刻 sync(id)；hydrate 只在本机 sidecar / unsynced 时卸订
-  // （那些回合服务端没有 run）。迟到的 hydrate 不抢订：已切走则不动全局那一条。
+  // 对话级订阅由揭窗立刻 sync(id)。unsynced 仍卸订（服务端没有 run）。
+  // 本机 sidecar 活着不拆 slot：本端连接闸挂起，回合结束后 follow 自动连回。
+  // 迟到的 hydrate 不抢订：已切走则不动全局那一条。
+  // 卸订 ≠ 用户切走：follow_closed.reason 必须是让位因由，禁止冒充 switched_away。
   if (
     useConversationStore.getState().currentConversationId === conversationId
   ) {
-    if (recovery.sidecarLive || recovery.unsynced.length > 0) {
-      syncConversationFollow(null);
+    if (recovery.unsynced.length > 0) {
+      syncConversationFollow(null, "unsynced");
     }
     // 打开对话不再清 `ai_attention`：权威是 fulfill 快照 / 增量。当前页 banner
     // 自己过滤；侧栏灯必须留下，否则帽外 required 一进对话就灭。
@@ -74,19 +79,29 @@ export async function runHydrateAttachSettle(
     return useLocal ? "local" : "cloud";
   }
   if (useLocal) {
-    projectUnsyncedTurns(conversationId, recovery.unsynced);
-    // Paused local turns skip attach (no live buffer). Cloud pause writeback
-    // omits turn_journal, so reinject display runs from the pause frame.
-    if (recovery.pausedCount > 0) {
-      projectPausedRuns(conversationId, recovery.pausedRuns ?? {});
+    // 判定与 attachSidecarTurn.beginLocal 之间 follow 仍活着；先占闸，避免
+    // 段首 full_replay 被跟播再被 sidecar 快照折一遍。嵌套 claim，回合结束才放。
+    const releaseSidecarYield =
+      recovery.sidecarLive && recovery.pausedCount === 0
+        ? beginLocalConversationStream(conversationId)
+        : null;
+    try {
+      projectUnsyncedTurns(conversationId, recovery.unsynced);
+      // Paused local turns skip attach (no live buffer). Cloud pause writeback
+      // omits turn_journal, so reinject display runs from the pause frame.
+      if (recovery.pausedCount > 0) {
+        projectPausedRuns(conversationId, recovery.pausedRuns ?? {});
+      }
+      // After unsynced project: seal any blank open/ghost assistants as「已中断」.
+      settleOrphanEmptyAssistants(conversationId);
+      if (recovery.sidecarLive && recovery.pausedCount === 0) {
+        // 切会话不卸观察泵 — 无页级 signal。
+        await attachSidecarTurn(conversationId);
+      }
+      return "local";
+    } finally {
+      releaseSidecarYield?.();
     }
-    // After unsynced project: seal any blank open/ghost assistants as「已中断」.
-    settleOrphanEmptyAssistants(conversationId);
-    if (recovery.sidecarLive && recovery.pausedCount === 0) {
-      // 切会话不卸观察泵 — 无页级 signal。
-      await attachSidecarTurn(conversationId);
-    }
-    return "local";
   }
   const last = getRuntime(conversationId).messages.at(-1);
   if (last) {

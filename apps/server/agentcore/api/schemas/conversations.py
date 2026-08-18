@@ -100,7 +100,11 @@ class CreateConversationRequest(BaseModel):
 
 class ConversationSummary(BaseModel):
     id: str
-    title: str | None
+    title: str | None = Field(
+        description=(
+            "会话标题。可能是服务端从首条用户消息算出的兜底展示值，不代表已铸出真标题。"
+        ),
+    )
     updated_at: datetime
     created_at: datetime
     message_count: int = 0
@@ -145,6 +149,7 @@ def conversation_summary_from_orm(
     message_count: int | None = None,
     unfolded_messages: int | None = None,
     last_message_preview: str | None = None,
+    first_user_message: str | None = None,
 ) -> ConversationSummary:
     """Assemble ``ConversationSummary`` with ``context_compacted`` (no summary body).
 
@@ -155,6 +160,9 @@ def conversation_summary_from_orm(
 
     ``last_message_preview`` is the same batch overlay as ``message_count``: list /
     grouped fills it; create / get / patch leave the default null.
+
+    ``first_user_message`` is a read-side overlay for an empty DB ``title``: the
+    truncated first user line (``fallback_title``). It never writes the column.
     """
     summary = ConversationSummary.model_validate(conv)
     compacted = bool(
@@ -165,6 +173,13 @@ def conversation_summary_from_orm(
         "context_compacted": compacted,
         "last_message_preview": last_message_preview,
     }
+    db_title = (summary.title or "").strip()
+    if not db_title and first_user_message:
+        from agentcore.conversation.common import fallback_title
+
+        label = fallback_title(first_user_message)
+        if label:
+            updates["title"] = label
     if message_count is not None:
         updates["message_count"] = message_count
     if unfolded_messages is not None:
@@ -265,7 +280,11 @@ class AutoTitleRequest(BaseModel):
 
 
 class AutoTitleResponse(BaseModel):
-    """Resulting conversation title (existing or freshly minted)."""
+    """Resulting conversation title (existing or freshly minted).
+
+    Empty string means the mint did not persist a title (failure leaves the
+    column empty so a later turn can retry). Not an error.
+    """
 
     title: str
 

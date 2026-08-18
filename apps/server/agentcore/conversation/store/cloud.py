@@ -9,10 +9,16 @@ from typing import Any, Literal
 
 from sqlalchemy.exc import IntegrityError
 
-from agentcore.billing.gate import BackgroundLlmResult, run_background_llm
+from agentcore.billing.gate import BackgroundLlmResult, BackgroundLlmSkip, run_background_llm
 from agentcore.config import settings
-from agentcore.conversation.common import generate_title as mint_title
-from agentcore.conversation.common import log_cost_recorded
+from agentcore.conversation.common import (
+    fallback_title,
+    log_cost_recorded,
+    log_title_degraded,
+)
+from agentcore.conversation.common import (
+    generate_title as mint_title,
+)
 from agentcore.conversation.compaction import schedule_compaction_if_due
 from agentcore.conversation.store.merge import (
     DEFAULT_FAILED_ERROR_MESSAGE,
@@ -41,6 +47,7 @@ from agentcore.folders.placement import resolve_folder_placement
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.factory import build_provider
 from agentcore.llm.resolve import resolve_turn_model as resolve_user_model
+from agentcore.memory import TitleResult
 from agentcore.memory.consolidation import schedule_consolidation
 from agentcore.runtime.events import (
     EventSink,
@@ -202,6 +209,100 @@ def _usage_metadata(
     return meta
 
 
+def _local_metrics_status(
+    *,
+    is_paused: bool,
+    terminal_status: str,
+    local_outcome: str | None,
+) -> str:
+    """Map local settle facts onto ``turn_metrics.status`` (ok|partial|paused|error)."""
+    if is_paused:
+        return "paused"
+    if terminal_status == MESSAGE_STATUS_FAILED:
+        return "error"
+    if local_outcome in ("ok", "partial", "paused", "error"):
+        return local_outcome
+    return "ok"
+
+
+def _local_metrics_error(run_error: object) -> str | None:
+    if isinstance(run_error, dict):
+        raw = run_error.get("message") or run_error.get("code")
+        return str(raw)[:1000] if raw else None
+    if run_error:
+        return str(run_error)[:1000]
+    return None
+
+
+def _local_metrics_duration_ms(runs: dict | None) -> int:
+    """Wall-clock if the write-back already carried it; otherwise 0 (no invented clock)."""
+    if not isinstance(runs, dict):
+        return 0
+    raw = runs.get("duration_ms")
+    if raw is None:
+        return 0
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _record_local_turn_metrics(
+    session: object,
+    *,
+    turn_id: str,
+    conversation_id: str,
+    user_id: str,
+    trace_id: str,
+    kind: str,
+    status: str,
+    finish_reason: str | None,
+    error: str | None,
+    rounds: int,
+    duration_ms: int,
+    durable: list[dict[str, Any]] | None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+) -> None:
+    """Best-effort sidecar ``turn_metrics`` row.
+
+    Token fields are the same finalize values already stamped onto
+    ``messages.usage``. ``delegated`` / ``workers`` use ``turn_worker_stats`` on
+    the journal (no ``cost_runs`` on local write-back — same journal-half
+    fallback cloud uses when pause defers ledger fold). ``turn_id`` is the
+    assistant message id: local write-back has no engine ``attempt_id``.
+    """
+    delegated, workers = turn_worker_stats({"journal_entries": durable or []})
+    try:
+        await TurnMetricsRepository(session).record(  # type: ignore[arg-type]
+            turn_id=turn_id,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            trace_id=trace_id,
+            agent_id="CEO",
+            kind=kind,
+            mode="local",
+            status=status,
+            finish_reason=finish_reason,
+            error=error,
+            rounds=int(rounds or 0),
+            duration_ms=duration_ms,
+            delegated=delegated,
+            workers=workers,
+            input_tokens=int(input_tokens or 0),
+            output_tokens=int(output_tokens or 0),
+        )
+    except Exception as e:
+        with contextlib.suppress(Exception):
+            await session.rollback()  # type: ignore[union-attr]
+        logger.warning(
+            "observability.turn_metrics_write_failed",
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            error=str(e),
+        )
+
+
 class CloudStore:
     """Postgres ConversationStore (收编 placeholder / journal / finalize / salvage)."""
 
@@ -327,6 +428,7 @@ class CloudStore:
                             "finish_reason": FinishReason.CANCELLED.value,
                         }
                     ),
+                    replace=False,
                 )
             # 时序不变量: terminal snapshot landed → drop in-flight segments.
             with contextlib.suppress(Exception):
@@ -588,6 +690,7 @@ class CloudStore:
                         conversation_id=conversation_id,
                         trace_id=trace_id,
                         entries=durable_entries,
+                        replace=False,
                     )
 
             # Reconcile even when in-memory cost_runs is thin: cost_calls (call meter)
@@ -658,6 +761,7 @@ class CloudStore:
                     trace_id=trace_id,
                     agent_id="CEO",
                     kind=kind,
+                    mode="cloud",
                     status=outcome,
                     finish_reason=finish_value,
                     error=str(turn_error)[:1000] if turn_error else None,
@@ -802,6 +906,7 @@ class CloudStore:
                         conversation_id=conversation_id,
                         trace_id=trace_id,
                         entries=journal_entries,
+                        replace=False,
                     )
                 delegated, workers = turn_worker_stats(result)
                 collab = result.get("collab") or {}
@@ -813,6 +918,7 @@ class CloudStore:
                         trace_id=trace_id,
                         agent_id="CEO",
                         kind=kind,
+                        mode="cloud",
                         status="paused",
                         finish_reason=finish_value,
                         error=str(turn_error)[:1000] if turn_error else None,
@@ -1134,6 +1240,7 @@ class CloudStore:
             if existing_assistant is not None
             else {}
         )
+        prior_paused = bool(existing_usage.get("paused"))
         has_open_assistant = bool(
             existing_assistant is not None
             and (
@@ -1181,35 +1288,66 @@ class CloudStore:
                     merge=True,
                 )
                 assistant_message_id = assistant_msg.id
-                if not is_paused:
-                    # Progressive journal is the sole fact source when present
-                    # (execution-only facts like late run_completed). Else project
-                    # display ``runs``; crash salvage may pass journal alone.
-                    if isinstance(journal, list) and journal:
-                        durable = journal
-                    elif runs_for_journal is not None:
-                        durable = journal_entries_from_display_runs(runs_for_journal)
-                    else:
-                        durable = None
-                    # Same口径 as cloud live: FAILED must land structured error on
-                    # turn_end even when progressive journal omitted / sparsed it.
-                    if (
-                        terminal_status == MESSAGE_STATUS_FAILED
-                        and run_error is not None
-                    ):
-                        durable = _merge_run_error_into_journal_entries(
-                            durable,
-                            run_error,
-                            finish_reason=finish_value,
-                        )
-                    if durable is not None:
-                        await persist_turn_journal(
-                            session,
-                            message_id=assistant_msg.id,
-                            conversation_id=conversation_id,
-                            trace_id=trace_id,
-                            entries=durable,
-                        )
+                # Pause must snapshot journal too: sidecar has no ``save_paused_turn``
+                # → PG path, and GET messages projects ``team_batch`` only from
+                # ``turn_journal``. Same choke point as complete/cancel
+                # (``persist_turn_journal`` → ``obs.turn_spans``). Cloud live pause
+                # still skips this in ``_finalize_cloud`` because ``save_paused_turn``
+                # already wrote the table. Title / compaction stay skipped below.
+                # Progressive journal is the sole fact source when present
+                # (execution-only facts like late run_completed). Else project
+                # display ``runs``; crash salvage may pass journal alone.
+                if isinstance(journal, list) and journal:
+                    durable = journal
+                elif runs_for_journal is not None:
+                    durable = journal_entries_from_display_runs(runs_for_journal)
+                else:
+                    durable = None
+                # Same口径 as cloud live: FAILED must land structured error on
+                # turn_end even when progressive journal omitted / sparsed it.
+                if (
+                    terminal_status == MESSAGE_STATUS_FAILED
+                    and run_error is not None
+                ):
+                    durable = _merge_run_error_into_journal_entries(
+                        durable,
+                        run_error,
+                        finish_reason=finish_value,
+                    )
+                if durable is not None:
+                    # Outbox writeback holds this turn's authoritative stream
+                    # (pause snapshot or resume complete rewrite). Replace so a
+                    # resume reusing ``turn_id`` overwrites the pause prefix.
+                    await persist_turn_journal(
+                        session,
+                        message_id=assistant_msg.id,
+                        conversation_id=conversation_id,
+                        trace_id=trace_id,
+                        entries=durable,
+                        replace=True,
+                    )
+                await _record_local_turn_metrics(
+                    session,
+                    turn_id=assistant_msg.id,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    kind="resume" if prior_paused else "turn",
+                    status=_local_metrics_status(
+                        is_paused=is_paused,
+                        terminal_status=terminal_status,
+                        local_outcome=local_outcome,
+                    ),
+                    finish_reason=finish_value,
+                    error=_local_metrics_error(run_error),
+                    rounds=rounds,
+                    duration_ms=_local_metrics_duration_ms(
+                        runs if isinstance(runs, dict) else None
+                    ),
+                    durable=durable,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
             # 时序不变量: local terminal/pause snapshot landed → drop segments.
             with contextlib.suppress(Exception):
                 await self.clear_stream_segments(turn_id=message_id)
@@ -1281,19 +1419,18 @@ class CloudStore:
         if needs_title:
             from agentcore.llm.background_failure import classify_background_llm_failure
 
-            async def _title_runner(credentials: LLMCredentials) -> str | None:
+            async def _title_runner(credentials: LLMCredentials) -> TitleResult:
                 model = resolve_user_model(credentials)
                 provider = build_provider(credentials, purpose="platform_internal")
                 try:
                     # Align with cloud early mint: first user message only.
-                    minted = await mint_title(
+                    return await mint_title(
                         provider=provider,
                         conversation_id=conversation_id,
                         user_message=user_message,
                         assistant_reply="",
                         model=model,
                     )
-                    return minted.title
                 finally:
                     await provider.close()
 
@@ -1301,18 +1438,35 @@ class CloudStore:
                 bg = await run_background_llm(
                     user_id, purpose="title", runner=_title_runner
                 )
-                if isinstance(bg, BackgroundLlmResult) and bg.value:
-                    async with async_session_factory() as session:
-                        updated = await ConversationRepository(session).update_title_if_empty(
-                            conversation_id, bg.value
+                if isinstance(bg, BackgroundLlmResult) and bg.value is not None:
+                    minted = bg.value
+                    if minted.degraded_reason or not minted.title.strip():
+                        log_title_degraded(
+                            conversation_id=conversation_id,
+                            reason=minted.degraded_reason or "empty_model_title",
+                            title_chars=len(minted.title),
+                            persisted=False,
                         )
-                        if updated is not None:
-                            title = updated.title
-                        else:
-                            conv = await ConversationRepository(session).get_by_id_unscoped(
-                                conversation_id
-                            )
-                            title = conv.title if conv else existing_title
+                    else:
+                        async with async_session_factory() as session:
+                            updated = await ConversationRepository(
+                                session
+                            ).update_title_if_empty(conversation_id, minted.title)
+                            if updated is not None:
+                                title = updated.title
+                            else:
+                                conv = await ConversationRepository(
+                                    session
+                                ).get_by_id_unscoped(conversation_id)
+                                title = conv.title if conv else existing_title
+                elif isinstance(bg, BackgroundLlmSkip):
+                    skipped = fallback_title(user_message)
+                    log_title_degraded(
+                        conversation_id=conversation_id,
+                        reason=f"gate_{bg.reason.value}",
+                        title_chars=len(skipped),
+                        persisted=False,
+                    )
             except Exception as e:
                 reason = classify_background_llm_failure(e)
                 logger.warning(

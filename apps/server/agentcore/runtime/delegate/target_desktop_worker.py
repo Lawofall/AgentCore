@@ -43,6 +43,7 @@ async def registry_rewire_consult_tools(
         folder_id=folder_id,
         memory_enabled=memory_enabled,
         skill_audience="worker",
+        tool_registry=registry,
     )
     if await source.list_directory(user_id):
         registry.register(ConsultTool(source=source))
@@ -84,7 +85,6 @@ async def rebuild_worker_prompt_for_target(
     )
     shared_base = assemble_system_prompt(
         rules_markdown=rules_markdown,
-        workspace_context=workspace_facts,
     )
     provisional = build_worker_registry(desktop_online=desktop_online)
     source = build_merged_consult_source(
@@ -94,10 +94,12 @@ async def rebuild_worker_prompt_for_target(
         folder_id=folder_id,
         memory_enabled=memory_enabled,
         skill_audience="worker",
+        tool_registry=provisional,
     )
     entries = list(await source.list_directory(user_id))
     return compose_worker_base_prompt(
         shared_base,
         on_demand_entries=entries,
         attachment_context=attachment_context,
+        workspace_context=workspace_facts,
     )

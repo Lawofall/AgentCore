@@ -10,6 +10,8 @@ round ceiling as「必须续写长文」.
 
 from __future__ import annotations
 
+from typing import Any
+
 from .core import (
     claims_posture_a,
     is_formal_complete_tier,
@@ -95,38 +97,46 @@ def enforce_ceiling_closing_honesty(content: str, *, reason: str) -> str:
     return text
 
 
-def downgrade_verdict_for_ceiling(*, reason: str = "max_rounds") -> None:
+def downgrade_verdict_for_ceiling(
+    *,
+    reason: str = "max_rounds",
+    promotion_ledger: Any = None,
+) -> None:
     """Mark delivery informal when CEO hits a hard ceiling (cannot stay ``delivered``)."""
     from agentcore.runtime.delegate.delivery_status import (
         DeliveryVerdict,
-        current_delivery_verdict,
+        bind_delivery_verdict,
+        read_delivery_verdict,
     )
 
     r = (reason or "").strip() or "max_rounds"
     if r not in _CEILING_HONESTY_REASONS:
         r = "max_rounds"
-    verdict = current_delivery_verdict.get()
+    verdict = read_delivery_verdict(promotion_ledger=promotion_ledger)
     if verdict is None:
-        current_delivery_verdict.set(
+        bind_delivery_verdict(
             DeliveryVerdict(
                 state="partial",
                 delivered_files=(),
                 execution_id=f"ceiling_{r}",
-            )
+            ),
+            promotion_ledger=promotion_ledger,
         )
         return
     if not is_formal_complete_tier(verdict.state):
         return
-    current_delivery_verdict.set(
+    bind_delivery_verdict(
         DeliveryVerdict(
             state="partial",
             delivered_files=verdict.delivered_files,
             execution_id=verdict.execution_id,
             requires_draft_ack=verdict.requires_draft_ack,
-        )
+            gap_reasons=getattr(verdict, "gap_reasons", ()),
+        ),
+        promotion_ledger=promotion_ledger,
     )
 
 
-def downgrade_verdict_for_max_rounds() -> None:
+def downgrade_verdict_for_max_rounds(*, promotion_ledger: Any = None) -> None:
     """Alias: mark informal when CEO hits max_rounds."""
-    downgrade_verdict_for_ceiling(reason="max_rounds")
+    downgrade_verdict_for_ceiling(reason="max_rounds", promotion_ledger=promotion_ledger)

@@ -440,6 +440,14 @@ class DelegateTool:
                 tasks=len(tasks_raw),
                 depth=self._depth,
             )
+        elif playbook is None and isinstance(tasks_raw, list):
+            from agentcore.runtime.runs.playbooks.audit import (
+                apply_inherited_code_audit_discipline,
+            )
+
+            tasks_raw = apply_inherited_code_audit_discipline(
+                tasks_raw, only_shaped=True
+            )
         if isinstance(tasks_raw, list) and tasks_raw:
             from agentcore.runtime.delegate.task_models import (
                 ensure_delegate_route_extras,

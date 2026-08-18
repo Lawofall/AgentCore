@@ -82,8 +82,9 @@ describe("FileBrowser · rename", () => {
     await waitFor(() => {
       expect(ops.move).toHaveBeenCalledWith("note.txt", "笔记.txt");
       expect(screen.getByText("已重命名为「笔记.txt」")).toBeTruthy();
+      // Re-list lands after the toast; asserting outside waitFor raced under load.
+      expect(list).toHaveBeenCalledTimes(2);
     });
-    expect(list).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the backend's refusal visible instead of pretending it worked", async () => {

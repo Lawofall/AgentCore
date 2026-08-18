@@ -15,7 +15,6 @@ import type { SupportDiagnosticIds } from "@/lib/supportDiagnostics";
 import { notifyInfo } from "@/lib/toast";
 import { markSidecarUnhealthy, probeSidecar } from "@/services/sidecarHealth";
 import {
-  buildSidecarHistory,
   isSidecarEnabled,
   resolveConversationLocalTarget,
   resolveSidecarRoot,
@@ -273,7 +272,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           rootId: sidecarTarget.rootId,
           subpath: sidecarTarget.subpath,
           content,
-          history: buildSidecarHistory(conversationId, optimisticUserId),
           optimisticUserId,
           agentMentions,
           askId,

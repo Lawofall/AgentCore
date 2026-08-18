@@ -3,11 +3,48 @@
 Mirrors ``apps/desktop/src/renderer/lib/byokProviderPresets.ts`` (baseUrl / aliases /
 models / defaultModel). Catalog merge matches providers by normalized ``base_url``;
 unknown endpoints get no preset rows.
+
+Off-protocol model ids (need ``/responses`` or ``/messages``; this gateway only
+speaks ``chat/completions``) live in :data:`BYOK_OFF_PROTOCOL_MODELS` — the single
+exact-id map for OpenCode seed exclusion, BYOK catalog unavailability, **and**
+platform-allowlist catalog unavailability. Name kept (historical); both origins
+call :func:`off_protocol_kind`.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Literal
+
+OffProtocolKind = Literal["openai_responses", "anthropic_messages"]
+
+# Exact ids only — never substring / regex. Shared by BYOK (OpenCode Go/Zen
+# discovery) and platform (operator allowlist). OpenCode ``GET /models`` still
+# returns these; they stay out of chat/completions seeds and are listed-but-
+# unselectable in the catalog merge (not dropped at discovery / allowlist).
+BYOK_OFF_PROTOCOL_MODELS: Mapping[str, OffProtocolKind] = MappingProxyType(
+    {
+        "grok-4.5": "openai_responses",
+        "gpt-5.6-luna": "openai_responses",
+        "minimax-m2.7": "anthropic_messages",
+        "qwen3.7-max": "anthropic_messages",
+    }
+)
+
+
+def off_protocol_kind(model_id: str) -> OffProtocolKind | None:
+    """Required upstream protocol if ``model_id`` is a known off-protocol id.
+
+    Origin-agnostic lookup (BYOK OpenCode rows and platform allowlist rows).
+    """
+    return BYOK_OFF_PROTOCOL_MODELS.get((model_id or "").strip())
+
+
+def chat_completions_seed(*model_ids: str) -> tuple[str, ...]:
+    """Drop known off-protocol ids from a seed. OpenCode Go/Zen seeds use this."""
+    return tuple(mid for mid in model_ids if mid not in BYOK_OFF_PROTOCOL_MODELS)
 
 
 @dataclass(frozen=True)
@@ -96,7 +133,8 @@ BYOK_PROVIDER_PRESETS: tuple[ByokProviderPreset, ...] = (
         base_url="https://opencode.ai/zen/v1",
         default_model="deepseek-v4-flash",
         # Short seed for discovery-miss; full catalog = GET /models union.
-        models=("deepseek-v4-flash", "kimi-k2.6", "glm-5.2"),
+        # Off-protocol ids: :data:`BYOK_OFF_PROTOCOL_MODELS` (not this tuple).
+        models=chat_completions_seed("deepseek-v4-flash", "kimi-k2.6", "glm-5.2"),
     ),
     ByokProviderPreset(
         id="opencode_go",
@@ -105,8 +143,11 @@ BYOK_PROVIDER_PRESETS: tuple[ByokProviderPreset, ...] = (
         # swallowed by a prefix/contains check on ``…/zen/v1``.
         base_url="https://opencode.ai/zen/go/v1",
         default_model="deepseek-v4-flash",
-        # chat/completions seed only; /responses and /messages ids stay off-seed.
-        models=("deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2"),
+        # chat/completions seed only; /responses and /messages ids stay off-seed
+        # via :func:`chat_completions_seed` / :data:`BYOK_OFF_PROTOCOL_MODELS`.
+        models=chat_completions_seed(
+            "deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2"
+        ),
     ),
 )
 
@@ -153,7 +194,21 @@ def is_opencode_zen_base_url(base_url: str) -> bool:
     return preset is not None and preset.id == "opencode_zen"
 
 
-def preset_models_for_base_url(base_url: str) -> tuple[str, ...]:
-    """Model ids from the matching vendor preset, or empty when unknown/custom."""
+def is_opencode_byok_endpoint(base_url: str) -> bool:
+    """True for OpenCode Zen or Go canonical endpoints (exact preset match)."""
     preset = match_byok_provider_preset(base_url)
-    return preset.models if preset is not None else ()
+    return preset is not None and preset.id in ("opencode_go", "opencode_zen")
+
+
+def preset_models_for_base_url(base_url: str) -> tuple[str, ...]:
+    """Model ids from the matching vendor preset, or empty when unknown/custom.
+
+    OpenCode Go/Zen seeds are filtered through :func:`chat_completions_seed` so a
+    leaked off-protocol id in the tuple cannot re-enter the catalog via presets.
+    """
+    preset = match_byok_provider_preset(base_url)
+    if preset is None:
+        return ()
+    if is_opencode_byok_endpoint(base_url):
+        return chat_completions_seed(*preset.models)
+    return preset.models

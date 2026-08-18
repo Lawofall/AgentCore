@@ -388,6 +388,7 @@ class TurnMetricsRow(Base):
             name="ck_turn_metrics_status",
         ),
         CheckConstraint("kind in ('turn', 'resume')", name="ck_turn_metrics_kind"),
+        CheckConstraint("mode in ('cloud', 'local')", name="ck_turn_metrics_mode"),
         # 全站健康看板: window aggregates + the daily trend filter/group on created_at.
         Index("ix_turn_metrics_created", "created_at"),
         # 会话复盘 (P2): every turn of one conversation, newest-first.
@@ -395,8 +396,14 @@ class TurnMetricsRow(Base):
     )
 
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
-    # The turn id minted at chat.turn_start (core.types.new_id == str(uuid4())); the
-    # log correlation handle, not the assistant message id (that is the journal's key).
+    # mode=cloud: ``attempt_id`` minted at ``chat.turn_start`` (core.types.new_id);
+    # log correlation handle (log_context.attempt_id). Resume mints a fresh one.
+    # Not the assistant message_id (that is the journal's key).
+    # mode=local: sidecar write-back has no attempt_id (not on RecordTurnRequest).
+    # Stores assistant message_id — the only UUID local finalize holds. Do not
+    # invent one. Consumers must branch on ``mode``: join local rows to
+    # messages/journal by this value (≡ message_id) or by ``trace_id``; do not
+    # join local ``turn_id`` to JSONL ``attempt_id``.
     turn_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
     conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), index=True)
@@ -406,7 +413,15 @@ class TurnMetricsRow(Base):
     trace_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     # turn = fresh send / regenerate; resume = 结构化挂起 continuation.
     kind: Mapped[str] = mapped_column(String(16), default="turn", server_default=text("'turn'"))
-    # ok | partial | paused | error. ``paused`` is reserved (not written this wave).
+    # Engine location — same fork as ``CloudStore.finalize(mode="cloud"|"local")``.
+    # Not ``chat.turn_start.location`` (workspace on user disk vs server) and not
+    # ``via`` (``cloud`` / ``sidecar``); the three are orthogonal. Old rows are
+    # cloud: local turns did not write this table until after this column landed.
+    mode: Mapped[str] = mapped_column(
+        String(16), default="cloud", server_default=text("'cloud'")
+    )
+    # ok | partial | paused | error. ``paused`` is written by the CEO-continue pause
+    # (cloud) and by the local settle; it is no longer a reserved value.
     status: Mapped[str] = mapped_column(String(8), default="ok", server_default=text("'ok'"))
     # The turn's terminal finish_reason (FinishReason value), e.g. stop / length / error.
     finish_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -414,6 +429,9 @@ class TurnMetricsRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     rounds: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     duration_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # Both modes: ``turn_worker_stats`` (completed member workers = cost_runs
+    # role=member ∪ journal message_final phase=completed). Not team_batch
+    # kickoff roster. Local write-back has no cost_runs — journal half only.
     delegated: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     workers: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))

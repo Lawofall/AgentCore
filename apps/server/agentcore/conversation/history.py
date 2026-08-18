@@ -9,6 +9,13 @@ system-framed note so the next turn can attribute prior failures correctly
 instead of inventing causes. Error prose stays in the note — never as ordinary
 assistant content back to the LLM.
 
+Synthetic harvest user rows (``usage.origin=execution_harvest``, or the
+``【系统收口】`` prefix on legacy rows) become a short user-role system note.
+The CEO still sees extras (draft / 团队成品) when present; the template lead
+that says the wave "already finished" does not re-enter later windows as a
+bare user utterance. Current-turn harvest still passes the full synthetic
+text as ``user_message``.
+
 Empty user turns that carry attachment metadata become a short system note
 listing names / workspace paths, so later turns still see that files were sent.
 No fake user prose; empty user turns without attachments stay dropped.
@@ -36,6 +43,16 @@ _DETAIL_CLIP = 120
 # Attachment-only user notes enter every later turn's window — keep them short.
 _ATTACHMENT_NOTE_MAX_ITEMS = 3
 _ATTACHMENT_NOTE_CLIP = 160
+# Harvest extras (draft / 团队成品) stay in the note; clip so N waves cannot
+# re-inflate the window the way the raw template used to.
+_HARVEST_EXTRA_CLIP = 800
+_HARVEST_USER_PREFIX = "【系统收口】"
+_HARVEST_USER_ORIGIN = "execution_harvest"
+_HARVEST_NOTE_LEAD = {
+    "success": "后台团队本波已收口。",
+    "failure": "后台团队本波已结束，其中有失败。",
+    "cancelled": "后台团队本波已取消或中断。",
+}
 
 # The whole context a chat gets when it has no rolling summary to lean on — the
 # safety cap in :func:`load_chat_context`, not a tuning knob. Named because it is
@@ -135,6 +152,49 @@ def _user_attachment_note(attachments: list[Any]) -> dict:
     return {"role": "user", "content": body}
 
 
+def _is_harvest_user(msg: Any) -> bool:
+    """Structured harvest claim — origin first; prefix is legacy hydrate only."""
+    if getattr(msg, "role", None) != "user":
+        return False
+    origin = usage_of(msg).get("origin")
+    if origin == _HARVEST_USER_ORIGIN:
+        return True
+    content = getattr(msg, "content", None) or ""
+    return content.startswith(_HARVEST_USER_PREFIX)
+
+
+def _harvest_kind(msg: Any) -> str:
+    kind = usage_of(msg).get("harvest_kind")
+    return kind if kind in _HARVEST_NOTE_LEAD else "success"
+
+
+def _harvest_extras(content: str) -> str:
+    """Keep labeled extras after the template lead; drop the lead itself."""
+    text = (content or "").strip()
+    if text.startswith(_HARVEST_USER_PREFIX):
+        parts = text.split("\n\n", 1)
+        extra = parts[1].strip() if len(parts) > 1 else ""
+    else:
+        extra = ""
+    if len(extra) > _HARVEST_EXTRA_CLIP:
+        extra = extra[: _HARVEST_EXTRA_CLIP - 1] + "…"
+    return extra
+
+
+def _harvest_note(msg: Any) -> dict:
+    """User-role system note so ``_from_first_user`` still sees a boundary.
+
+    Not a bare user utterance of the harvest template — same posture as
+    attachment-only notes.
+    """
+    lead = _HARVEST_NOTE_LEAD[_harvest_kind(msg)]
+    extra = _harvest_extras(getattr(msg, "content", None) or "")
+    body = (
+        f"（系统注记：{lead.rstrip('。')}。\n{extra}）" if extra else f"（系统注记：{lead}）"
+    )
+    return {"role": "user", "content": body}
+
+
 def _fold_history_messages(messages: list[Any]) -> list[dict]:
     """Fold ORM message rows into ``[{role, content}]``, merging consecutive failures."""
     history: list[dict] = []
@@ -153,7 +213,10 @@ def _fold_history_messages(messages: list[Any]) -> list[dict]:
         atts = _attachments_of(msg) if role == "user" else []
         if role == "user" and content:
             flush_failures()
-            history.append({"role": "user", "content": content})
+            if _is_harvest_user(msg):
+                history.append(_harvest_note(msg))
+            else:
+                history.append({"role": "user", "content": content})
         elif role == "user" and atts:
             flush_failures()
             history.append(_user_attachment_note(atts))

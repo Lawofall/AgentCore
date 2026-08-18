@@ -37,7 +37,7 @@ from agentcore.api.schemas import (
     StatusResponse,
     StopTurnResponse,
 )
-from agentcore.api.schemas.messages import TurnCollabMetrics
+from agentcore.api.schemas.messages import TurnCollabMetrics, parse_team_batch
 from agentcore.api.sse import (
     parse_last_event_id,
     release_request_db_before_sse,
@@ -65,6 +65,7 @@ from agentcore.llm.resolve import resolve_user_llm_credentials
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.journal import runs_from_entries_cached
 from agentcore.runtime.journal.entries import _PROCESS_PREFIX
+from agentcore.runtime.journal.team_batch import team_batch_from_entries
 from agentcore.runtime.turn.runs import turn_runs
 
 from ._helpers import (
@@ -243,6 +244,10 @@ async def list_messages(
         collab = usage.get("collab")
         if collab is not None:
             detail.collab = TurnCollabMetrics.model_validate(collab)
+        if m.role == "assistant":
+            detail.team_batch = parse_team_batch(
+                team_batch_from_entries(journal_map.get(m.id) or [])
+            )
         raw_outcome = usage.get("outcome")
         if raw_outcome in ("ok", "partial", "paused", "error"):
             detail.outcome = raw_outcome
@@ -753,19 +758,21 @@ async def attach_stream(
     deltas, then live tail. Without the header (same-process fast path): the sink's own
     in-memory history.
 
-    A non-empty catch-up段 opens with a ``message_start``, and that frame states which
-    kind of段 follows (nothing to replay = no head at all: a reset order with no body
-    behind it would clear local state nothing brings back):
+    A non-empty catch-up段 opens with a ``message_start``, and that frame
+    states which kind of段 follows (nothing to replay = no head at all: a
+    reset order with no body behind it would clear local state nothing
+    brings back):
 
     - ``full_replay: true`` — RESET the local streaming state held for that
-      ``message_id`` (content / reasoning / process timeline); the段 is the turn's whole
-      story. Always the case without the header, and the fallback whenever the cursor
-      cannot be trusted (no cursor / it belongs to another turn / turn already settled /
-      it names no fact this turn ever stamped).
-    - no ``full_replay`` — an INCREMENTAL段: keep what you hold for this turn and fold
-      the段 onto it. Only the facts after ``Last-Event-ID`` are shipped, so structural
-      pairs may look「不完整」(a ``tool_use_end`` whose start was pre-cursor) — that is
-      correct, the client has the前文.
+      ``message_id`` (content / reasoning / process timeline); the段 is the
+      turn's whole story. Always the case without the header, and the
+      fallback whenever the cursor cannot be trusted (no cursor / it belongs
+      to another turn / turn already settled / it names no fact this turn
+      ever stamped).
+    - no ``full_replay`` — an INCREMENTAL段: keep what you hold for this
+      turn and fold the段 onto it. Only the facts after ``Last-Event-ID``
+      are shipped, so structural pairs may look「不完整」(a ``tool_use_end``
+      whose start was pre-cursor) — that is correct, the client has the前文.
 
     Clients must act on the flag instead of comparing the id against the bubble on
     screen: guessing wrong folds the body twice. A live first frame (and any plain

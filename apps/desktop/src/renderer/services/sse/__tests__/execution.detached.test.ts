@@ -113,7 +113,7 @@ describe("execution_detached / execution_completed live path", () => {
     );
   });
 
-  it("detached → clears frozen toolProgress / workerToolPhases (D3)", () => {
+  it("detached → keeps live toolProgress / workerToolPhases", () => {
     seedTurn();
     const exec = useExecutionStore.getState();
     exec.startExecution(plan, MID);
@@ -128,18 +128,6 @@ describe("execution_detached / execution_completed live path", () => {
       },
       MID,
     );
-
-    const before = projectRuntime(rt());
-    expect(before?.agents.find((a) => a.id === "a1")?.toolProgress).toEqual({
-      toolName: "file_write",
-      chars: 1200,
-    });
-    expect(
-      before?.agents.find((a) => a.id === "a1")?.toolExecutionLive,
-    ).toEqual({
-      toolName: "file_write",
-      phase: "writing",
-    });
 
     handleExecutionEvent(
       {
@@ -156,11 +144,19 @@ describe("execution_detached / execution_completed live path", () => {
       { conversationId: CID, source: "server" },
     );
 
-    expect(rt().workerToolPhases).toEqual({});
+    expect(rt().workerToolPhases).toEqual({
+      r1: { phase: "writing", toolName: "file_write" },
+    });
     const after = projectRuntime(rt());
     const agent = after?.agents.find((a) => a.id === "a1");
-    expect(agent?.toolProgress).toBeNull();
-    expect(agent?.toolExecutionLive).toBeNull();
+    expect(agent?.toolProgress).toEqual({
+      toolName: "file_write",
+      chars: 1200,
+    });
+    expect(agent?.toolExecutionLive).toEqual({
+      toolName: "file_write",
+      phase: "writing",
+    });
   });
 
   it("completed → 清后台、标完成、触发刷新", () => {

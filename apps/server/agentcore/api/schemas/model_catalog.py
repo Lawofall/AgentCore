@@ -24,6 +24,20 @@ class ModelCatalogCurrent(BaseModel):
     )
 
 
+class ModelUnavailableReason(BaseModel):
+    """Why a listed catalog row cannot be selected. Clients render copy (i18n)."""
+
+    code: Literal["upstream_protocol_unsupported"] = Field(
+        description="Structured unavailability code — never a finished user-facing string.",
+    )
+    required_protocol: Literal["openai_responses", "anthropic_messages"] = Field(
+        description=(
+            "Upstream protocol this model needs that this gateway does not speak "
+            "(chat/completions only)."
+        ),
+    )
+
+
 class ModelCatalogItem(BaseModel):
     """One selectable (or greyed-out) model in the user's catalog.
 
@@ -65,6 +79,14 @@ class ModelCatalogItem(BaseModel):
     )
     provider_label: str | None = Field(
         default=None, description="Display name of the provider (byok rows only)."
+    )
+    unavailable_reason: ModelUnavailableReason | None = Field(
+        default=None,
+        description=(
+            "Present when available=false for a known structured reason. Clients render "
+            "copy from code + required_protocol. Null when unspecified or the row is "
+            "selectable. Optional for backward compatibility."
+        ),
     )
 
 

@@ -17,7 +17,13 @@ import {
   setDefaultModelProfile,
   updateModelProfile,
 } from "@/api/modelProfiles";
-import { type ModelCatalog, findCatalogItem, useModels } from "@/api/models";
+import {
+  type ModelCatalog,
+  type ModelCatalogItem,
+  findCatalogItem,
+  unavailableReasonCopy,
+  useModels,
+} from "@/api/models";
 import { ConfirmDialog } from "@/components/conversations";
 import { ProviderForm } from "@/pages/more/ProviderForm";
 import { useEffect, useState } from "react";
@@ -61,10 +67,18 @@ function capabilityLabel(supportsTools: boolean | null | undefined): string {
 }
 
 /** A titled option group for slot selectors (platform or BYOK). */
+type SlotModelItem = {
+  id: string;
+  display_name: string;
+  value: string;
+  available?: boolean;
+  unavailable_reason?: ModelCatalogItem["unavailable_reason"];
+};
+
 type ProviderModelGroup = {
   key: string;
   title: string;
-  items: { id: string; display_name: string; value: string }[];
+  items: SlotModelItem[];
 };
 
 const PLATFORM_POINTER_ID = "__platform__";
@@ -91,7 +105,8 @@ function decodeSlot(value: string): ModelProfileSlot | null {
 /**
  * Per-provider option groups for slot selectors.
  * BYOK candidates = catalog rows ∪ provider.default_model ∪ live slot models;
- * platform group only from available catalog (+ optional platform_model fallback).
+ * platform group from catalog (+ optional platform_model fallback); unavailable
+ * rows stay listed so the picker can grey them and show why.
  * 有 BYOK 时槽位用 combobox 手填；仅 platform 时用本分组喂纯 select。
  */
 function defaultModelGroups(
@@ -104,7 +119,11 @@ function defaultModelGroups(
 
   const platformItems: ProviderModelGroup["items"] = [];
   const platformSeen = new Set<string>();
-  const addPlatform = (id: string, displayName: string) => {
+  const addPlatform = (
+    id: string,
+    displayName: string,
+    extra?: Pick<SlotModelItem, "available" | "unavailable_reason">,
+  ) => {
     const m = id.trim();
     if (!m || platformSeen.has(m)) return;
     platformSeen.add(m);
@@ -112,11 +131,16 @@ function defaultModelGroups(
       id: m,
       display_name: displayName.trim() || m,
       value: `${PLATFORM_POINTER_ID}::${m}`,
+      available: extra?.available !== false,
+      unavailable_reason: extra?.unavailable_reason,
     });
   };
   for (const item of catalog?.models ?? []) {
-    if (item.origin !== "platform" || !item.available) continue;
-    addPlatform(item.id, item.display_name);
+    if (item.origin !== "platform") continue;
+    addPlatform(item.id, item.display_name, {
+      available: item.available,
+      unavailable_reason: item.unavailable_reason,
+    });
   }
   const fallback = platformModel?.trim();
   if (fallback) addPlatform(fallback, fallback);
@@ -131,7 +155,11 @@ function defaultModelGroups(
   for (const p of providers) {
     const items: ProviderModelGroup["items"] = [];
     const seen = new Set<string>();
-    const add = (id: string, displayName?: string | null) => {
+    const add = (
+      id: string,
+      displayName?: string | null,
+      extra?: Pick<SlotModelItem, "available" | "unavailable_reason">,
+    ) => {
       const m = id.trim();
       if (!m || seen.has(m)) return;
       seen.add(m);
@@ -139,11 +167,16 @@ function defaultModelGroups(
         id: m,
         display_name: displayName?.trim() || m,
         value: `${p.id}::${m}`,
+        available: extra?.available !== false,
+        unavailable_reason: extra?.unavailable_reason,
       });
     };
     for (const item of catalog?.models ?? []) {
       if (item.origin === "byok" && item.provider_id === p.id) {
-        add(item.id, item.display_name);
+        add(item.id, item.display_name, {
+          available: item.available,
+          unavailable_reason: item.unavailable_reason,
+        });
       }
     }
     if (p.default_model) add(p.default_model);
@@ -176,9 +209,9 @@ function defaultModelGroups(
   return groups;
 }
 
-/** groups 内所有 items 合计为空（有 provider 但 models 空也算）。 */
+/** groups 内有可选（非置灰）项才算有目录可选。 */
 function hasSelectableModels(groups: ProviderModelGroup[]): boolean {
-  return groups.some((g) => g.items.length > 0);
+  return groups.some((g) => g.items.some((i) => i.available !== false));
 }
 
 /** 存在 BYOK 服务商分组时，即使目录为空也可手填 model id。 */
@@ -685,11 +718,19 @@ function SlotModelPlatformSelect({
         )}
         {groups.map((g) => (
           <optgroup key={g.key} label={g.title}>
-            {g.items.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.display_name}
-              </option>
-            ))}
+            {g.items.map((m) => {
+              const unavailable = m.available === false;
+              const reason = unavailable
+                ? unavailableReasonCopy(m.unavailable_reason)
+                : null;
+              return (
+                <option key={m.value} value={m.value} disabled={unavailable}>
+                  {unavailable && reason
+                    ? `${m.display_name}（${reason}）`
+                    : m.display_name}
+                </option>
+              );
+            })}
           </optgroup>
         ))}
       </select>
@@ -796,11 +837,14 @@ function SlotModelCombobox({
           }
           const provider = providers.find((p) => p.id === pid);
           const defaultId = provider?.default_model?.trim() ?? "";
+          const selectable = nextSuggestions.filter(
+            (s) => s.available !== false,
+          );
           const fallback =
-            (defaultId && nextSuggestions.some((s) => s.id === defaultId)
+            (defaultId && selectable.some((s) => s.id === defaultId)
               ? defaultId
               : "") ||
-            nextSuggestions[0]?.id ||
+            selectable[0]?.id ||
             "";
           setModel(fallback);
           emit(pid, fallback);
@@ -840,10 +884,36 @@ function SlotModelCombobox({
         }}
       />
       <datalist id={datalistId}>
-        {suggestions.map((s) => (
-          <option key={s.id} value={s.id} label={s.display_name} />
-        ))}
+        {suggestions.map((s) => {
+          const reason =
+            s.available === false
+              ? unavailableReasonCopy(s.unavailable_reason)
+              : null;
+          return (
+            <option
+              key={s.id}
+              value={s.id}
+              label={reason ? `${s.display_name}（${reason}）` : s.display_name}
+            />
+          );
+        })}
       </datalist>
+      {suggestions
+        .filter((s) => s.available === false)
+        .map((s) => {
+          const reason = unavailableReasonCopy(s.unavailable_reason);
+          if (!reason) return null;
+          return (
+            <p
+              key={s.id}
+              className="muted"
+              style={{ fontSize: 12, marginTop: 4 }}
+              data-testid={`${id}-unavailable-${s.id}`}
+            >
+              {s.display_name}不可选：{reason}
+            </p>
+          );
+        })}
       {followLabel !== undefined ? (
         value ? (
           <button
@@ -906,7 +976,9 @@ function ProfileForm({
     profile?.vision,
   );
   const firstMain =
-    groups.find((g) => g.items.length > 0)?.items[0]?.value ??
+    groups
+      .find((g) => g.items.some((i) => i.available !== false))
+      ?.items.find((i) => i.available !== false)?.value ??
     (platformModel ? `${PLATFORM_POINTER_ID}::${platformModel}` : "");
   const canChoose = canChooseModel(groups);
   const canChooseVision = canChooseModel(visionGroups);

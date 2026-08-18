@@ -200,7 +200,7 @@ describe("ConversationDrawer · 最近删除", () => {
     expect(listConversations).not.toHaveBeenCalled();
   });
 
-  it("子视图 ← 对话可跳另一子视图", async () => {
+  it("子视图返回对话可跳另一子视图", async () => {
     listConversations.mockResolvedValue([
       conv({ id: "arch-1", title: "旧归档", archived: true }),
     ]);
@@ -210,7 +210,7 @@ describe("ConversationDrawer · 最近删除", () => {
       fireEvent.click(screen.getByRole("button", { name: "已归档" }));
     });
     await screen.findByText("旧归档");
-    expect(screen.getByRole("button", { name: "← 对话" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "返回对话" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "最近删除" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "已归档" })).toBeNull();
 
@@ -218,7 +218,7 @@ describe("ConversationDrawer · 最近删除", () => {
       fireEvent.click(screen.getByRole("button", { name: "最近删除" }));
     });
     await screen.findByText("定价讨论");
-    expect(screen.getByRole("button", { name: "← 对话" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "返回对话" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "已归档" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "最近删除" })).toBeNull();
   });

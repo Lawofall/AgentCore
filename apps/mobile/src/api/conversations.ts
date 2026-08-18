@@ -88,6 +88,8 @@ export interface MessageDetail {
   /** 回合协作计数（`usage.collab`）：内部口径，用户面不展示。live 走 message_end；
    *  这里是重载路径——message_end 是 DERIVED（不进 journal），历史只能从这列拿。 */
   collab?: Schemas["TurnCollabMetrics"] | null;
+  /** 本回合团队状态（journal 派生；没派工是 no_batch）。live 走 message_end。 */
+  team_batch?: import("@agentcore/contract-types").TeamBatchStatus | null;
   created_at: string;
 }
 
@@ -390,6 +392,7 @@ export function toMessageDetail(row: Schemas["MessageDetail"]): MessageDetail {
     usage: row.usage ?? null,
     rounds: row.rounds ?? null,
     collab: row.collab ?? null,
+    team_batch: row.team_batch ?? null,
     created_at: row.created_at,
   };
 }

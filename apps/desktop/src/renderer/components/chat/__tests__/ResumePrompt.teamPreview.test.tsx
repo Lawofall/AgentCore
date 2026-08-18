@@ -79,16 +79,22 @@ vi.mock("@/stores/pausedTurns", () => ({
     sel({ pending: pendingRef.current }),
 }));
 
-vi.mock("@/stores/interactions", () => ({
-  useInteractionStore: (
-    sel: (s: {
-      byId: Map<
-        string,
-        { kind?: string; payload?: Record<string, unknown>; status?: string }
-      >;
-    }) => unknown,
-  ) => sel({ byId: interactionById }),
-}));
+vi.mock("@/stores/interactions", async () => {
+  const actual = await vi.importActual<typeof import("@/stores/interactions")>(
+    "@/stores/interactions",
+  );
+  return {
+    ...actual,
+    useInteractionStore: (
+      sel: (s: {
+        byId: Map<
+          string,
+          { kind?: string; payload?: Record<string, unknown>; status?: string }
+        >;
+      }) => unknown,
+    ) => sel({ byId: interactionById }),
+  };
+});
 
 function openKickoffNote() {
   fireEvent.click(screen.getByRole("button", { name: /加一句嘱咐/ }));

@@ -29,16 +29,25 @@
   正解是删掉核里那份，改成指事实行 / 挂门 / 进 skill。
 
 数字 = 当次实测值向上取整到十位；只许降不许升。
+量的是 **CEO 常驻总长**（``assemble_system_prompt`` + ``_CEO_CORE_HINT``），不是核单列——
+同一条纪律跨基座/核搬迁时核字数会涨、总长才是真实成本。
 """
 
 from __future__ import annotations
 
 import pytest
 
-from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT, assemble_ceo_core
+from agentcore.runtime.resolve.prompt import (
+    _CEO_CORE_HINT,
+    assemble_ceo_core,
+    assemble_system_prompt,
+)
 
-# 当次实测 19055（区外两步交付 HOW 已搬去 external_mount_readonly 挂门手册）。
-_CORE_CAP = 19060
+# 2026-08-19 跨界搬迁：交付验收对照 / 可用性短问 / 概览契约从共享基座迁入核
+# （队员开场用不到；finish_guard 仅 CEO 路径查）。核 +319、基座 −467，
+# 基座+核 24472 → 24324（净 −148）。核单列不再代表真实成本，改量 CEO 常驻总长。
+# 当次实测 24324。
+_RESIDENT_CAP = 24330
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 _GATED_MANUALS: tuple[tuple[str, str], ...] = (
@@ -50,10 +59,21 @@ _GATED_MANUALS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _ceo_resident_chars() -> int:
+    """CEO 实际付账的稳定前缀：共享基座 + 常驻核（不含按需目录 / 挂门手册 / 易变尾）。
+
+    2026-08-19 起这句才名副其实：``workspace_facts`` 已从基座（原 order 250、核前）
+    挪到 order 750（核后、紧邻易变尾），所以 ``assemble_system_prompt()`` + 核不再把
+    每回合变的环境事实算进这段前缀。量的仍是无 facts 的基座——与生产付账前缀对齐。
+    """
+    return len(assemble_system_prompt()) + len(_CEO_CORE_HINT)
+
+
 def test_resident_core_chars_within_cap():
-    chars = len(_CEO_CORE_HINT)
-    assert chars <= _CORE_CAP, (
-        f"常驻核 {chars} 字符 > 上限 {_CORE_CAP}；先看是不是该搬去事实行 / 挂门 / 进 skill"
+    chars = _ceo_resident_chars()
+    assert chars <= _RESIDENT_CAP, (
+        f"CEO 常驻总长（基座+核）{chars} 字符 > 上限 {_RESIDENT_CAP}；"
+        "先看是不是该搬去事实行 / 挂门 / 进 skill"
     )
 
 

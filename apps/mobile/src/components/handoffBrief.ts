@@ -7,10 +7,7 @@ export const HANDOFF_TOOL_NAME = "handoff";
  * 成功 handoff 行脸 ↔ 队员详情是否画页脚 DebriefBlock 的同一判定。
  * 成功 → 工具行即简报卡，页脚不再画；失败 / 未打到工具才把 debrief 留给页脚。
  */
-export function isSuccessfulHandoff(
-  toolName: string,
-  status: string,
-): boolean {
+export function isSuccessfulHandoff(toolName: string, status: string): boolean {
   return toolName === HANDOFF_TOOL_NAME && status === "success";
 }
 

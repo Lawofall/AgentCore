@@ -225,6 +225,13 @@ class SidecarServer(HandlerMixin, TurnExecutionMixin):
             return []
         return list(self._turn_history.get(cid) or [])
 
+    def stamped_history(self, conversation_id: str) -> list[Any] | None:
+        """Prior-turn window if startTurn/resume stamped one; ``None`` if never set."""
+        cid = (conversation_id or "").strip()
+        if not cid or cid not in self._turn_history:
+            return None
+        return list(self._turn_history[cid])
+
     def permission_axes_for(self, conversation_id: str) -> PermissionAxes:
         """Per-conversation axes, else the initialize default (never another conv's last)."""
         cid = (conversation_id or "").strip()

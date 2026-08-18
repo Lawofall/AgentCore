@@ -10,7 +10,13 @@ import {
   TeamView,
   escalationDetail,
 } from "@/components/TeamView";
-import { toolDetail, toolLabel } from "@/components/assistantLabels";
+import {
+  TOOL_GUIDANCE_LABEL,
+  TOOL_STATUS_LABEL,
+  toolDetail,
+  toolLabel,
+  toolPhaseText,
+} from "@/components/assistantLabels";
 import { isSuccessfulHandoff } from "@/components/handoffBrief";
 import {
   codeDiagnosticsSummary,
@@ -198,30 +204,15 @@ export interface TeamProjection {
   evidenceLedger?: EvidenceLedgerEntry[];
   /** 回合墙钟跨度（`turnElapsedMs(events)`，与桌面同量）：条上「用时」。缺省 0 = 不显示。 */
   elapsedMs?: number;
+  /** Live `coordination_wait` n/m（旁路 extract，不进 ProjectedTurn）。有则盖过 fold progress。 */
+  waitProgress?: { completed: number; total: number } | null;
+  /** Live `execution_detached`（旁路 extract）。hydrate 后 TeamView 仍可用队员在跑补徽标。 */
+  detached?: boolean;
   /** Arbiter verdict when the strip is the primary failure face. */
   outcome?: TurnOutcome | null;
   supportIds?: SupportDiagnosticIds;
   onRetry?: () => void;
 }
-
-/** Tool execution phase → waiting-state chrome (transport-only `tool_use_progress`,
- *  read live via extractToolPhases) — so a slow tool reads「Searching / Fetching page /
- *  Running」rather than a bare「Running」status. Mirrors desktop (各端全新建; chrome, not
- *  shared logic). Unknown phase → generic「Working」. */
-const TOOL_PHASE_TEXT: Record<ToolPhase, string> = {
-  queued: "Queued",
-  querying: "Searching",
-  fallback: "Trying fallback",
-  fetching: "Fetching page",
-  reading: "Extracting",
-  executing: "Running",
-  blocked: "Network blocked",
-  git_queued: "Waiting for repo",
-  git_credentials: "Checking credentials",
-  git_remote: "Contacting remote",
-};
-const toolPhaseText = (phase: ToolPhase | undefined): string | null =>
-  phase ? (TOOL_PHASE_TEXT[phase] ?? "Working") : null;
 
 /** Seconds a tool has been running, ticking client-side from when this row first saw `running`
  *  (≈ the tool_use_start instant) — a liveliness cue for a BLOCKING tool (web_search) whose
@@ -359,7 +350,9 @@ function toolGroupSummary(tools: ToolStepData[]): string {
   const sameKind = tools.every((t) => t.tool_name === tools[0].tool_name);
   if (sameKind && tools.length <= 3) {
     const label = toolLabel(tools[0].tool_name);
-    const names = tools.map((t) => baseName(toolDetail(t.arguments)));
+    const names = tools.map((t) =>
+      baseName(toolDetail(t.arguments, t.tool_name)),
+    );
     if (names.every(Boolean)) return `${label} ${names.join(" · ")}`;
   }
   const order: string[] = [];
@@ -889,7 +882,7 @@ function ToolGroup({
           {running && <ThinkingDots />}
           <span className="tool-group-summary">{toolGroupSummary(tools)}</span>
           {errorCount > 0 && (
-            <span className="tool-group-error">{errorCount} failed</span>
+            <span className="tool-group-error">{errorCount} 失败</span>
           )}
           {!running && (
             <span className="thinking-chevron" aria-hidden>
@@ -909,15 +902,11 @@ function ToolGroup({
   );
 }
 
-const TOOL_STATUS: Record<ToolStepData["status"], string> = {
-  running: "Running",
-  success: "Done",
-  error: "Failed",
-};
-
-/** A tool call: English name (+ its arg detail) · status, expandable to its full arguments and
- *  result. While running, the status shows the coarse phase (Searching / Queued / Trying fallback,
- *  from the live `phase`) + an elapsed timer — a live waiting cue instead of a static「Running」. */
+/** A tool call: English name (+ its arg detail) · 中文状态, expandable to its full arguments and
+ *  result. While running, the status shows the coarse phase（正在检索 / 排队中 / 改用备用）
+ *  from the live `phase` + an elapsed timer — a live waiting cue instead of a static「进行中」.
+ *  Successful `wait` is sealed (no expand, no model receipt / reason). Failures still
+ *  expand to the product sentence. */
 function ToolStep({
   step,
   phase,
@@ -931,6 +920,11 @@ function ToolStep({
   return <GenericToolStep step={step} phase={phase} />;
 }
 
+/** wait 成功/进行中：无用户可见参数与回执，不可展开。失败仍展产品句。 */
+function isSealedWait(step: ToolStepData): boolean {
+  return step.tool_name === "wait" && step.status !== "error";
+}
+
 function GenericToolStep({
   step,
   phase,
@@ -939,8 +933,15 @@ function GenericToolStep({
   phase?: ToolPhase;
 }) {
   const [open, setOpen] = useState(false);
-  const args = Object.keys(step.arguments).length > 0 ? step.arguments : null;
-  const detail = toolDetail(step.arguments);
+  const sealedWait = isSealedWait(step);
+  // wait.reason 用户不可见；展开 JSON 同样禁泄。其它工具仍可展开看参数。
+  const args =
+    step.tool_name === "wait"
+      ? null
+      : Object.keys(step.arguments).length > 0
+        ? step.arguments
+        : null;
+  const detail = toolDetail(step.arguments, step.tool_name);
   const running = step.status === "running";
   const ceilingGuidance =
     step.status === "error" &&
@@ -949,17 +950,18 @@ function GenericToolStep({
   const diagnostics = extractCodeDiagnostics(step.display);
   const elapsed = useRunningElapsed(running);
   // Prefer product `failure.message`; fall back to model-facing `result` when absent.
-  const faceText = step.failure?.message ?? step.result;
+  // Sealed wait: never surface the coordination ack as a result body.
+  const faceText = sealedWait ? null : (step.failure?.message ?? step.result);
   const doneStatus = ceilingGuidance
     ? isVerifyBudgetExceeded(step.display)
       ? "验证未完成"
-      : "Notice"
+      : TOOL_GUIDANCE_LABEL
     : diagnostics
       ? codeDiagnosticsSummary(diagnostics)
-      : TOOL_STATUS[step.status];
+      : TOOL_STATUS_LABEL[step.status];
   const runningStatus = running
     ? [
-        toolPhaseText(phase) ?? TOOL_STATUS.running,
+        toolPhaseText(phase) ?? TOOL_STATUS_LABEL.running,
         elapsed >= 1 ? `${elapsed}s` : null,
       ]
         .filter(Boolean)
@@ -968,20 +970,29 @@ function GenericToolStep({
   const shellClass = ceilingGuidance
     ? "tool tool-guidance"
     : `tool tool-${step.status}`;
+  const head = (
+    <>
+      <span className="tool-name">
+        <span className="tool-label">{toolLabel(step.tool_name)}</span>
+        {detail && <span className="tool-detail">{detail}</span>}
+      </span>
+      <span className="tool-status">{runningStatus}</span>
+    </>
+  );
   return (
     <div className={shellClass}>
-      <button
-        type="button"
-        className="tool-head"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="tool-name">
-          {toolLabel(step.tool_name)}
-          {detail && <span className="tool-detail">{detail}</span>}
-        </span>
-        <span className="tool-status">{runningStatus}</span>
-      </button>
-      {open && (args || faceText != null || diagnostics) && (
+      {sealedWait ? (
+        <div className="tool-head">{head}</div>
+      ) : (
+        <button
+          type="button"
+          className="tool-head"
+          onClick={() => setOpen((o) => !o)}
+        >
+          {head}
+        </button>
+      )}
+      {open && !sealedWait && (args || faceText != null || diagnostics) && (
         <div className="tool-body">
           {isVerifyBudgetExceeded(step.display) && (
             <div className="tool-incomplete">验证未完成（预算耗尽）</div>

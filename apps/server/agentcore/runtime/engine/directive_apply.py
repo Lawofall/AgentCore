@@ -36,7 +36,12 @@ from .segments import join_segments
 from .tool_exec import execute_tools
 
 
-def _captain_closing_honesty(content: str, controller: LoopController) -> str:
+def _captain_closing_honesty(
+    content: str,
+    controller: LoopController,
+    *,
+    promotion_ledger: Any = None,
+) -> str:
     """CEO soft banners: softⅡ′ → write-ownership → cutoff/partial → cloud-web verify.
 
     Each enforce_* skips when an honesty banner prefix is already present.
@@ -53,7 +58,9 @@ def _captain_closing_honesty(content: str, controller: LoopController) -> str:
         rewrite_stale_ask_after_dispatch,
     )
 
-    downgrade_verdict_for_unresolved_write_ownership()
+    downgrade_verdict_for_unresolved_write_ownership(
+        promotion_ledger=promotion_ledger,
+    )
     out = rewrite_stale_ask_after_dispatch(content)
     out = enforce_ceo_mutation_honesty(
         out,
@@ -162,7 +169,11 @@ async def apply_loop_directive(
                 )
             # CEO soft banners：软Ⅱ′零写盘假改 + 云端装包拒仍称验绿 → 仅加横幅，不丢稿不拒发。
             if role == "captain" and content:
-                content = _captain_closing_honesty(content, controller)
+                content = _captain_closing_honesty(
+                    content,
+                    controller,
+                    promotion_ledger=tool_context.promotion_ledger,
+                )
             # LLM 讲不出话但已有结构化产出：把降级正文推上直播气泡（此前从未 stream）。
             if (
                 outcome.llm_failed
@@ -305,6 +316,7 @@ async def apply_loop_directive(
                         content=_captain_closing_honesty(
                             join_segments(final_content, terminal.final_text or ""),
                             controller,
+                            promotion_ledger=tool_context.promotion_ledger,
                         )
                         if role == "captain"
                         else join_segments(final_content, terminal.final_text or ""),
@@ -371,7 +383,11 @@ async def apply_loop_directive(
             return DirectiveApplyResult(
                 action="return",
                 content=(
-                    _captain_closing_honesty(final_content, controller)
+                    _captain_closing_honesty(
+                        final_content,
+                        controller,
+                        promotion_ledger=tool_context.promotion_ledger,
+                    )
                     if role == "captain"
                     else final_content
                 ),
@@ -391,6 +407,7 @@ async def apply_loop_directive(
                 citation_sink=citation_sink,
                 finish_guard_reworks=finish_guard_reworks,
                 turn_evidence_ledger=turn_evidence_ledger,
+                promotion_ledger=tool_context.promotion_ledger,
             )
             return DirectiveApplyResult(
                 action="rework",

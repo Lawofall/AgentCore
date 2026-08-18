@@ -61,6 +61,20 @@ export function allowsStreamingMutations(phase: TurnPhase): boolean {
   return phase === "streaming";
 }
 
+/** Worker-scoped tool_use_* — graph/strip chrome only, not captain timeline. */
+function isWorkerScopedToolUse(eventType: string, payload: unknown): boolean {
+  if (
+    eventType !== "tool_use_start" &&
+    eventType !== "tool_use_end" &&
+    eventType !== "tool_use_progress"
+  ) {
+    return false;
+  }
+  if (!payload || typeof payload !== "object") return false;
+  const runId = (payload as { run_id?: unknown }).run_id;
+  return typeof runId === "string" && runId.length > 0;
+}
+
 /**
  * stopping：诚实过渡态——继续消费 run_*（含级联终态帧），正文/工具突变仍挡；
  * 仅后端 message_end/error 才定格。terminal：放行下一回合 message_start + 无害 meta。
@@ -68,7 +82,12 @@ export function allowsStreamingMutations(phase: TurnPhase): boolean {
  * terminal 也放行 run_*：对齐云端 / sidecar D1——`message_end` 后 sink 仍可为 live
  * detached drive 续推 `run_completed` / `run_tool_progress`（conformance
  * `async_delivery`：detached → message_end → run_completed → execution_completed）。
- * 若挡掉，协作图会冻在收口前快照，直到（若有）execution_completed 刷新。
+ * 另放行**带 `run_id` 的** `tool_use_start` / `tool_use_end` / `tool_use_progress`：
+ * 队员工具不进船长气泡（`appendToolStep` 已按 `run_id` 跳过），只驱动协作图 /
+ * 状态条活体；挡掉则 detached 后最长执行窗零相位反馈。CEO 自身工具（无 `run_id`）
+ * 仍挡——那是收口后的内容突变。
+ * 若挡掉 run_* / 队员 tool_use_* / `team_synthesis_preview`，协作图会冻在收口前
+ * 快照（队长节点团队进展预览同窗），直到（若有）execution_completed 刷新。
  *
  * stopping + terminal 另放行 INTERACTION_KIND_WIRE 的 `*_required`（见上常量）：
  * 冷挂起 ask 常紧挨 `message_end(paused)`，门闩若挡掉则 live 看不到拍板卡。
@@ -89,7 +108,11 @@ export function allowsStreamingMutations(phase: TurnPhase): boolean {
  * abort 在飞 op。Sidecar 本地回合的同类帧在 `dispatchSSEEvent` 里于门闩之前履约
  *（`origin: "sidecar"`），故此处继续挡它们也不会误伤 sidecar。
  */
-export function allowsSseEvent(phase: TurnPhase, eventType: string): boolean {
+export function allowsSseEvent(
+  phase: TurnPhase,
+  eventType: string,
+  payload?: unknown,
+): boolean {
   if (phase === "idle" || phase === "preflight" || phase === "streaming") {
     return true;
   }
@@ -97,10 +120,11 @@ export function allowsSseEvent(phase: TurnPhase, eventType: string): boolean {
   if (eventType === "message_start" && isTerminalPhase(phase)) {
     return true;
   }
-  // stopping + terminal：run_* 必须入折（停止级联 / 异步团队后台帧）。
+  // stopping + terminal：run_* 必须入折（停止级联 / 异步团队后台帧）；
+  // 队员 tool_use_* 同窗放行，驱动 detached 后的图节点 / 状态条。
   if (
     (phase === "stopping" || isTerminalPhase(phase)) &&
-    eventType.startsWith("run_")
+    (eventType.startsWith("run_") || isWorkerScopedToolUse(eventType, payload))
   ) {
     return true;
   }
@@ -145,7 +169,9 @@ export function allowsSseEvent(phase: TurnPhase, eventType: string): boolean {
     // phase 推进 terminal。挡掉等于把卡永远钉在「提交中」。
     eventType === "resume_settled" ||
     // 异步团队：detached 可落在 message_end 前后；completed 常在 terminal 后同连接到达。
+    // `team_synthesis_preview` 同窗续推（队长节点团队进展，非气泡正文）。
     eventType === "execution_detached" ||
-    eventType === "execution_completed"
+    eventType === "execution_completed" ||
+    eventType === "team_synthesis_preview"
   );
 }

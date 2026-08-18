@@ -257,6 +257,98 @@ async def test_discover_mcp_tools_cache_only_miss_skips_channel(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_mcp_cache_miss_logs_harvest_origin(monkeypatch):
+    """Harvest cache_only miss is grep-able via origin=execution_harvest."""
+    events: list[tuple[str, dict]] = []
+
+    def _capture(event: str, **kwargs):
+        events.append((event, kwargs))
+
+    monkeypatch.setattr("agentcore.tools.mcp.wire.logger.info", _capture)
+    from agentcore.runtime.delegate.post_close_gate import (
+        bind_user_message_origin,
+        reset_user_message_origin,
+    )
+
+    channel = DesktopClientChannel(
+        user_id="u-test",
+        conversation_id="c-harvest-miss",
+        registry=AsyncMock(),
+        timeout_seconds=5,
+    )
+    token = bind_user_message_origin("execution_harvest")
+    try:
+        result = await discover_mcp_tools(
+            channel, cache_scope="user-1", cache_only=True
+        )
+    finally:
+        reset_user_message_origin(token)
+    assert result.detail == "cache_miss"
+    miss = [e for e in events if e[0] == "desktop.mcp_list_cache_miss"]
+    assert len(miss) == 1
+    assert miss[0][1]["origin"] == "execution_harvest"
+
+
+@pytest.mark.asyncio
+async def test_mcp_keepalive_rewarm_keeps_cache_only_hit_past_ttl(monkeypatch):
+    """Re-seed before TTL so a later harvest-style cache_only discover still hits."""
+    import agentcore.tools.mcp.wire as mcp_wire
+
+    class _Clock:
+        def __init__(self) -> None:
+            self._now = 10_000.0
+
+        def monotonic(self) -> float:
+            return self._now
+
+        def advance(self, seconds: float) -> None:
+            self._now += seconds
+
+    clock = _Clock()
+    monkeypatch.setattr(mcp_wire, "time", clock)
+    payload = {
+        "servers": [
+            {
+                "id": "ok",
+                "name": "OK",
+                "status": "ready",
+                "tools": [{"name": "echo", "description": "Echo"}],
+            }
+        ]
+    }
+    seeded = parse_mcp_list_payload(payload)
+    seed_mcp_discover_cache("", seeded, cache_scope="user-keep")
+    assert mcp_wire.mcp_discover_ttl_remaining(cache_scope="user-keep") == pytest.approx(
+        300.0
+    )
+
+    clock.advance(280.0)
+    channel = DesktopClientChannel(
+        user_id="u-test",
+        conversation_id="c-harvest-keep",
+        registry=AsyncMock(),
+        timeout_seconds=5,
+    )
+    channel.request_mcp = AsyncMock(  # type: ignore[method-assign]
+        side_effect=AssertionError("cache_only must not call request_mcp")
+    )
+
+    result = await discover_mcp_tools(
+        channel, cache_scope="user-keep", cache_only=True
+    )
+    assert result.tool_count == 1
+    seed_mcp_discover_cache("", seeded, cache_scope="user-keep")
+    clock.advance(280.0)
+    result = await discover_mcp_tools(
+        channel, cache_scope="user-keep", cache_only=True
+    )
+    assert result.tool_count == 1
+    assert mcp_wire.mcp_discover_ttl_remaining(cache_scope="user-keep") == pytest.approx(
+        20.0
+    )
+
+
+@pytest.mark.asyncio
 async def test_seed_then_cache_only_prepare_path_hits():
     """Non-turn seed → prepare-style cache_only discover hits without network."""
     payload = {

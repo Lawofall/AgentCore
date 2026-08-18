@@ -16,6 +16,7 @@ Subpackages:
 - ``entries`` — write path (runs payload → ordered facts)
 - ``fold`` — read path (facts → runs / LLM window / resume seed)
 - ``persist`` — best-effort Postgres write
+- ``team_batch`` — 本回合团队状态三态（journal 纯函数投影）
 """
 
 from .entries import KIND_TURN_END, entries_from_runs, journal_entries_from_display_runs
@@ -27,6 +28,7 @@ from .fold import (
     window_from_journal,
 )
 from .fold_cache import clear_runs_cache, runs_from_entries_cached
+from .team_batch import team_batch_from_entries
 
 __all__ = [
     "KIND_TURN_END",
@@ -40,6 +42,7 @@ __all__ = [
     "persist_turn_journal",
     "plan_from_journal",
     "runs_from_entries",
+    "team_batch_from_entries",
     "runs_from_entries_cached",
     "window_from_journal",
 ]

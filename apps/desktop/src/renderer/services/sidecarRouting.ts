@@ -5,9 +5,7 @@ import { queryClient } from "@/lib/queryClient";
 import { workspaceKeys } from "@/lib/queryKeys";
 import { bareConversationScratchSubpath } from "@/services/bareScratchPath";
 import type { WorkspaceInfo } from "@/services/workspaces";
-import { getRuntime } from "@/stores/conversation";
 import { useUIStore } from "@/stores/ui";
-import type { SidecarHistoryEntry } from "@shared/sidecar-contract";
 
 /**
  * 会话路由判定：一个回合该走本地 sidecar，还是云端 SSE。
@@ -205,28 +203,4 @@ export async function canConversationUseSidecar(
 ): Promise<boolean> {
   if (!hasLocalEngine()) return false;
   return (await resolveConversationLocalTarget(conversationId)) !== null;
-}
-
-/**
- * 从本地会话切片重建喂给 sidecar 的历史（`{role, content}` 列表）。
- *
- * sidecar 无库（Slice 1 `ConversationStore` 为 no-op），故先前轮次的上下文须由
- * renderer 喂入。取 `uptoUserId`（本回合用户消息）**之前**的 user/assistant 消息，
- * 滤掉流式中与空内容的气泡。
- */
-export function buildSidecarHistory(
-  conversationId: string,
-  uptoUserId: string,
-): SidecarHistoryEntry[] {
-  const messages = getRuntime(conversationId).messages;
-  const idx = messages.findIndex((m) => m.id === uptoUserId);
-  const prior = idx >= 0 ? messages.slice(0, idx) : messages;
-  return prior
-    .filter(
-      (m) =>
-        (m.role === "user" || m.role === "assistant") &&
-        !m.isStreaming &&
-        m.content.trim().length > 0,
-    )
-    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 }

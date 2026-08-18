@@ -48,6 +48,21 @@ describe("formatProcessExport", () => {
     expect(text).toContain("方向跑偏");
   });
 
+  it("does not export wait.reason; labels the row Wait", () => {
+    expect(
+      formatProcessExport([
+        {
+          kind: "tool",
+          id: "w1",
+          tool_name: "wait",
+          arguments: { reason: "学术视角研究员仍在跑…" },
+          result: null,
+          status: "success",
+        },
+      ]),
+    ).toBe("· Wait");
+  });
+
   it("rework chip: in-progress while streaming with empty body after reset", () => {
     const reworking: ProcessStep[] = [
       { kind: "reasoning", text: "核验未过" },

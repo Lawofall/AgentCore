@@ -75,6 +75,7 @@ def _summary_with_count(
     counts: dict[str, int],
     unfolded: dict[str, int] | None = None,
     previews: dict[str, str] | None = None,
+    first_user_messages: dict[str, str] | None = None,
 ) -> ConversationSummary:
     """Build a conversation summary, filling ``message_count`` from a counts map.
 
@@ -85,23 +86,39 @@ def _summary_with_count(
     ``previews`` is the same batch overlay for ``last_message_preview`` (last
     visible assistant sentence; absent → null, never a user turn).
 
+    ``first_user_messages`` is the same batch overlay for an empty DB ``title``
+    (display-only ``fallback_title``; absent → leave empty). Never writes the column.
+
     ``unfolded`` is the same trick for the un-folded backlog (:func:`_unfolded_counts`),
     and only its keys get a ``context_gap`` verdict — a conversation left out was never
     a candidate, which is not the same as one proven intact.
     """
     preview = None if previews is None else previews.get(conv.id)
+    first_user = None if first_user_messages is None else first_user_messages.get(conv.id)
     if unfolded is not None and conv.id in unfolded:
         return conversation_summary_from_orm(
             conv,
             message_count=counts.get(conv.id, 0),
             unfolded_messages=unfolded[conv.id],
             last_message_preview=preview,
+            first_user_message=first_user,
         )
     return conversation_summary_from_orm(
         conv,
         message_count=counts.get(conv.id, 0),
         last_message_preview=preview,
+        first_user_message=first_user,
     )
+
+
+async def _first_user_contents_for_untitled(
+    msg_repo: MessageRepository, conversations: list[Conversation]
+) -> dict[str, str]:
+    """Batch first user bodies for conversations whose DB ``title`` is still empty."""
+    untitled = [c.id for c in conversations if not (c.title and str(c.title).strip())]
+    if not untitled:
+        return {}
+    return await msg_repo.first_user_contents_for_conversations(untitled)
 
 
 async def _unfolded_counts(msg_repo: MessageRepository, counts: dict[str, int]) -> dict[str, int]:
@@ -279,9 +296,13 @@ async def list_conversations(
     ids = [c.id for c in conversations]
     counts = await msg_repo.counts_for_conversations(ids)
     previews = await msg_repo.previews_for_conversations(ids)
+    first_users = await _first_user_contents_for_untitled(msg_repo, conversations)
     unfolded = await _unfolded_counts(msg_repo, counts)
     return ConversationListResponse(
-        data=[_summary_with_count(c, counts, unfolded, previews) for c in conversations],
+        data=[
+            _summary_with_count(c, counts, unfolded, previews, first_users)
+            for c in conversations
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -305,12 +326,13 @@ async def list_conversations_grouped(
     ids = [c.id for c in conversations]
     counts = await msg_repo.counts_for_conversations(ids)
     previews = await msg_repo.previews_for_conversations(ids)
+    first_users = await _first_user_contents_for_untitled(msg_repo, conversations)
     unfolded = await _unfolded_counts(msg_repo, counts)
 
     buckets: dict[str, list[ConversationSummary]] = {f.id: [] for f in folders}
     ungrouped: list[ConversationSummary] = []
     for conv in conversations:
-        summary = _summary_with_count(conv, counts, unfolded, previews)
+        summary = _summary_with_count(conv, counts, unfolded, previews, first_users)
         if conv.folder_id in buckets:
             buckets[conv.folder_id].append(summary)
         else:
@@ -426,11 +448,16 @@ async def get_conversation(
     conversation_id: str,
     user: AuthUser,
     repo: ConversationRepository = Depends(get_conversation_repo),
+    msg_repo: MessageRepository = Depends(get_message_repo),
 ):
     conv = await repo.get_by_id(conversation_id, user_id=user.user_id)
     if not conv:
         raise NotFoundError("对话不存在")
-    return conversation_summary_from_orm(conv)
+    first_user = None
+    if not (conv.title and str(conv.title).strip()):
+        first_users = await msg_repo.first_user_contents_for_conversations([conversation_id])
+        first_user = first_users.get(conversation_id)
+    return conversation_summary_from_orm(conv, first_user_message=first_user)
 
 
 @router.post("/{conversation_id}/auto-title", response_model=AutoTitleResponse)
@@ -447,6 +474,7 @@ async def auto_title_conversation(
     ``schedule_title_generation`` (user message only; ``assistant_reply=""``).
 
     Already-titled conversations return the existing title without calling the LLM.
+    Mint failure returns ``title=""`` (HTTP 200) and does not persist a fallback.
     """
     conv = await repo.get_by_id(conversation_id, user_id=user.user_id)
     if not conv:
@@ -461,22 +489,9 @@ async def auto_title_conversation(
         user_message=body.user_message,
         sink=None,
     )
-    if not title:
-        # Mint failed without a write — degrade to truncation so the client always
-        # gets a non-empty title string (sidebar already shows a provisional).
-        from agentcore.conversation.common import fallback_title
-
-        title = fallback_title(body.user_message)
-        logger.info(
-            "chat.title_degraded",
-            conversation_id=conversation_id,
-            reason="mint_no_write",
-            title_chars=len(title),
-        )
-        updated = await repo.update_title_if_empty(conversation_id, title)
-        if updated is not None and updated.title:
-            title = str(updated.title)
-    return AutoTitleResponse(title=title)
+    # Empty string is a successful "no title yet" — not an HTTP error. Degraded
+    # mints do not write ``conversations.title`` (so a later turn can retry).
+    return AutoTitleResponse(title=title or "")
 
 
 @router.put("/{conversation_id}/permission-axes", response_model=ConversationSummary)

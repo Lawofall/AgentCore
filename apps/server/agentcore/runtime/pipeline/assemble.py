@@ -232,6 +232,7 @@ async def assemble_ceo_turn(
     # The entry chat agent gets the SLIM CEO core + the unified ``<按需目录>``.
     # Advanced HOW detail is pulled via ``consult``.
     ceo_tool_names = {schema.name for schema in chat_tools.list_all()}
+    ceo_offered_names = set(chat_tools.offered_names)
     on_demand_entries: list = []
     consult_tool = chat_tools.get_optional("consult")
     if consult_tool is not None and getattr(consult_tool, "source", None) is not None:
@@ -328,8 +329,10 @@ async def assemble_ceo_turn(
         prepared.system_prompt,
         skill_registry=prepared.skill_registry,
         ceo_tool_names=ceo_tool_names,
+        ceo_offered_names=ceo_offered_names,
         on_demand_entries=on_demand_entries,
         folder_catalog=prepared.folder_catalog,
+        workspace_context=prepared.workspace_facts,
         cold_start_explore=explore_reason or False,
         folder_nav_stale=folder_nav_stale,
         folder_profile_empty_soft=folder_profile_empty_soft,

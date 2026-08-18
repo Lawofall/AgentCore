@@ -14,10 +14,21 @@ from agentcore.api.schemas import (
     ModelCatalogItem,
     ModelCatalogResponse,
     ModelPriceCard,
+    ModelUnavailableReason,
 )
-from agentcore.llm.catalog import ModelCatalog, resolve_model_catalog
+from agentcore.llm.catalog import ModelCatalog, ModelCatalogEntry, resolve_model_catalog
 
 router = APIRouter(prefix="/users/me/models", tags=["models"])
+
+
+def _unavailable_reason(item: ModelCatalogEntry) -> ModelUnavailableReason | None:
+    reason = item.unavailable_reason
+    if reason is None:
+        return None
+    return ModelUnavailableReason(
+        code=reason.code,
+        required_protocol=reason.required_protocol,
+    )
 
 
 def _to_response(catalog: ModelCatalog) -> ModelCatalogResponse:
@@ -41,6 +52,7 @@ def _to_response(catalog: ModelCatalog) -> ModelCatalogResponse:
                 available=item.available,
                 provider_id=item.provider_id,
                 provider_label=item.provider_label,
+                unavailable_reason=_unavailable_reason(item),
             )
             for item in catalog.models
         ],

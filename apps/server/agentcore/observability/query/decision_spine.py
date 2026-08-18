@@ -6,6 +6,7 @@ Product surface for product-AI logs (飞行记录仪证据面). Distinct from
 
 Summary truth = persisted ``turn_metrics`` (or export ``turn_metrics.jsonl``).
 Cost truth = ``cost_events`` by ``trace_id`` (turn_metrics has no cost columns).
+``total_nano`` is billed (quota SUM); ``estimated_nano`` is BYOK display-only.
 Drift L1 = JSONL-internal ``collab_drift``; Drift L2 = turn_metrics ⋈ JSONL
 close/recompute — never silently pick one side.
 
@@ -310,6 +311,8 @@ def _tail_from_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             tail[f] = metrics[f]
     if "kind" in metrics:
         tail["kind"] = metrics["kind"]
+    if "mode" in metrics:
+        tail["mode"] = metrics["mode"]
     if "turn_id" in metrics:
         tail["turn_id"] = metrics["turn_id"]
     # resume 收口折账 ≠ 全 trace llm 合计（pause 前段不在本段 usage）。
@@ -415,7 +418,10 @@ def _cost_block(
         return {
             "source": "cost_events",
             "total_nano": cost_events.get("total_nano"),
+            "estimated_nano": cost_events.get("estimated_nano"),
             "currency": cost_events.get("currency"),
+            "estimated_currency": cost_events.get("estimated_currency"),
+            "billing": cost_events.get("billing"),
             "runs": cost_events.get("runs"),
             "models": cost_events.get("models"),
         }
@@ -533,6 +539,26 @@ def build_decision_spine(
     }
 
 
+def _format_cost_line(cost: dict[str, Any]) -> str:
+    """Keep billed ``total_nano``; surface BYOK estimate so ops do not read 0 as free."""
+    bits = [
+        f"source={cost.get('source')}",
+        f"total_nano={cost.get('total_nano')}",
+    ]
+    estimated = cost.get("estimated_nano")
+    billing = cost.get("billing")
+    if estimated not in (None, 0) or billing in ("BYOK", "mixed"):
+        bits.append(f"estimated_nano={0 if estimated is None else estimated}")
+        if billing:
+            bits.append(f"billing={billing}")
+        est_cur = cost.get("estimated_currency")
+        if est_cur:
+            bits.append(f"estimated_currency={est_cur}")
+    if cost.get("runs") is not None:
+        bits.append(f"runs={cost.get('runs')}")
+    return "  Cost  " + "  ".join(bits)
+
+
 def format_decision_spine(spine: dict[str, Any]) -> str:
     """Human-readable rendering isomorphic to the ``decision_spine`` JSON."""
     lines: list[str] = [
@@ -623,6 +649,7 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
         f"finish={tail.get('finish_reason')}",
         f"status={tail.get('status')}" if "status" in tail else None,
         f"kind={tail.get('kind')}" if "kind" in tail else None,
+        f"mode={tail.get('mode')}" if tail.get("mode") else None,
         f"delegated={tail.get('delegated')}" if "delegated" in tail else None,
         f"workers={tail.get('workers')}" if "workers" in tail else None,
         f"rounds={tail.get('rounds')}" if "rounds" in tail else None,
@@ -673,10 +700,7 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
 
     cost = spine.get("cost") or {}
     if cost.get("source") != "none":
-        lines.append(
-            f"  Cost  source={cost.get('source')}  total_nano={cost.get('total_nano')}"
-            + (f"  runs={cost.get('runs')}" if cost.get("runs") is not None else "")
-        )
+        lines.append(_format_cost_line(cost))
     else:
         lines.append("  Cost  (none)")
 

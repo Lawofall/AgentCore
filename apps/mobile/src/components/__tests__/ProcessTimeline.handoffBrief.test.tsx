@@ -59,7 +59,7 @@ describe("ProcessTimeline · handoff 简报卡", () => {
 
   it("失败 handoff 保持错误行", () => {
     render(<ProcessTimeline steps={[failedHandoff]} isStreaming />);
-    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.getByText("失败")).toBeTruthy();
     expect(screen.getByText("Handoff")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Handoff/ }));
     expect(screen.getByText("简报校验失败")).toBeTruthy();

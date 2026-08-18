@@ -32,14 +32,24 @@ class SectionOrder(IntEnum):
     across turns — a **cost optimization** for exact-prefix cache billing (e.g. DeepSeek),
     not a product invariant. Discipline: new sections only append after the current tail
     or insert at a new stable key between existing slots; never reorder existing keys.
+
+    Exception (2026-08-19): ``WORKSPACE_FACTS`` moved 250 → 750. That discipline exists
+    so a later edit cannot silently reshuffle the billed prefix; this move *is* the
+    prefix-cache fix, measured on production ``cost.prefix_cache`` (CEO first call of
+    each turn, hit_ratio): overall 35.75%; ``workspace_facts`` changed in 45.7% of
+    adjacent openings vs ``folder_catalog`` 13.2%; facts-only turns hit 6.49% vs
+    catalog-only 28.69%. The gap is whether the ~19k resident core sits downstream of
+    the volatile section. Facts used to ride the shared-base blob (order 250) in front
+    of the core, so a location / capability restamp invalidated the whole core.
+    Catalog already sits after the core (570). Moving facts after the core, adjacent
+    to the volatile tail (overview = 800), makes shared-base + resident core one
+    uninterrupted byte-stable prefix. CEO and workers share that base and add facts
+    at this same key — do not fork a second facts section. Do not revert this to
+    restore "never reorder" without a new measurement showing the gap closed.
     """
 
     BASE = 100
     RUNTIME_CONTEXT = 200
-    # Per-turn environment facts (location / desktop / capabilities). Volatile with
-    # binding changes; sits after the date line so the shared base can carry it to
-    # both CEO and workers without riding the CEO-only overview tail.
-    WORKSPACE_FACTS = 250
     MEMORY = 300
     CEO_CORE = 400
     SKILL_DIRECTORY = 500
@@ -55,6 +65,11 @@ class SectionOrder(IntEnum):
     FOLDER_CATALOG = 570
     CITATION = 600
     CEO_VISUALIZATION = 700
+    # Per-turn environment facts (location / desktop / capabilities). Volatile with
+    # binding changes. Was 250 (in front of the ~19k CEO core); moved 2026-08-19 —
+    # see class docstring Exception. Both CEO and worker composers add this key;
+    # it is not baked into ``assemble_system_prompt``.
+    WORKSPACE_FACTS = 750
     WORKSPACE_OVERVIEW = 800
     # CEO-only conversation state: the newest appendable team graph (跨回合同图追加's
     # cross-turn id echo — history replays no tool I/O, so it rides the volatile tail).

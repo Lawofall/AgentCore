@@ -22,6 +22,7 @@ import type {
   ContentDeltaPayload,
   ContentResetPayload,
   ContextBlockWire,
+  CoordinationWaitPayload,
   CostBreakdown,
   DebateNarrativeRound,
   DebatePretrialCompletedPayload,
@@ -1579,6 +1580,7 @@ export function extractPrevExecutionIds(
  * 加字段要动后端 oracle + 重出 golden，而这只是旁路（桌面同样挂在 `message.collab`
  * 上，不进投影）。**只覆盖 live 流**——`message_end` 是 DERIVED、不进 journal，回放的收口
  * 帧只带 finish_reason；历史读 REST `MessageDetail.collab`（messages.usage 列）。
+ * ``team_batch`` 同为旁路 chrome，不进本投影。
  */
 export function extractTurnCollab(events: SSEEvent[]): CollabCounts | null {
   let collab: CollabCounts | null = null;
@@ -1986,4 +1988,29 @@ export function extractRunToolCalls(
     }
   }
   return byRun;
+}
+
+/** CEO `coordination_wait`：最新一条的 completed/total。`waiting=false` 清除。
+ *  EPHEMERAL、不进 {@link ProjectedTurn}（与桌面 live stamp 同语义；历史 journal 通常没有）。 */
+export function extractCoordinationWait(
+  events: SSEEvent[],
+): { completed: number; total: number } | null {
+  let wait: { completed: number; total: number } | null = null;
+  for (const ev of events) {
+    if (ev.type !== "coordination_wait") continue;
+    const p = ev.payload as CoordinationWaitPayload;
+    wait = p.waiting ? { completed: p.completed, total: p.total } : null;
+  }
+  return wait;
+}
+
+/** `execution_detached` 后为真，`execution_completed` 清除。
+ *  EPHEMERAL；hydrate 后若事件不在，TeamView 用「已收口但仍有人在跑」补徽标。 */
+export function extractExecutionDetached(events: SSEEvent[]): boolean {
+  let detached = false;
+  for (const ev of events) {
+    if (ev.type === "execution_detached") detached = true;
+    else if (ev.type === "execution_completed") detached = false;
+  }
+  return detached;
 }

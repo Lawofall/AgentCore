@@ -157,6 +157,8 @@ export interface BackendMessage {
     escalations: number;
     audit_drops?: number;
   } | null;
+  /** 本回合团队状态（journal 派生；没派工是 no_batch）。 */
+  team_batch?: import("@/types/events").TeamBatchStatus | null;
   /** 回合 ¥ 成本 (P2 DERIVED)：messages.cost 列；重载 footer 直接用。 */
   cost?: import("@/services/usage").CostBreakdown | null;
   created_at: string;
@@ -333,6 +335,7 @@ export function toMessage(m: BackendMessage): Message {
     rounds: m.rounds ?? undefined,
     durationMs: m.duration_ms ?? undefined,
     collab: m.collab ?? undefined,
+    teamBatch: m.team_batch ?? undefined,
     // 回复反馈 (点赞/点踩): replay the persisted rating so a reloaded bubble shows the
     // user's thumbs; null server-side → null (未评价).
     feedback: m.feedback ?? null,

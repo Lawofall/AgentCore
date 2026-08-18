@@ -375,14 +375,22 @@ function startSlot(conversationId: string): void {
  *
  * 同时只留一条订阅——每访问一个会话就多挂一条空闲 SSE 会吃光连接池。切走立刻停。
  *
+ * ``closeReason`` 写入 ``follow_closed.reason``。默认 ``switched_away`` = 订阅跟到
+ * 另一个会话（含切草稿）。调用方卸订须显式传入 ``local_sidecar`` / ``unsynced``，
+ * 不得冒充用户切走。本机 sidecar 活着由 ``beginLocalConversationStream`` 挂起，
+ * hydrate 不再为此拆 slot。
+ *
  * 只管当前会话的回合跟播。跨会话的账号态（队列、被别处结掉的挂起卡）走设备长连接
  * （``accountStateIngress``），不由这条订阅的开合去猜。
  */
-export function syncConversationFollow(conversationId: string | null): void {
+export function syncConversationFollow(
+  conversationId: string | null,
+  closeReason = "switched_away",
+): void {
   if (typeof window !== "undefined" && window.__WEB_PREVIEW__) return;
   for (const slot of [...slots.values()]) {
     if (slot.conversationId !== conversationId) {
-      stopSlot(slot, "switched_away");
+      stopSlot(slot, closeReason);
     }
   }
   if (!conversationId) return;

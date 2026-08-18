@@ -1458,8 +1458,9 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
     assert tool is not None
     prompt = captured["base_system_prompt"]
     assert "<按需目录>" in prompt
-    # Worker catalog: keep team HOW; CEO-only product_help is not listed.
-    assert "- team_orchestration_advanced" in prompt
+    # Worker catalog: 队员干活手册留下；派单/协调主管手册与 product_help 都不列。
+    assert "- team_orchestration_advanced" not in prompt
+    assert "- work_discipline" in prompt
     assert "- product_help" not in prompt
 
 

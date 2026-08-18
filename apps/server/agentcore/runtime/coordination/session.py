@@ -620,7 +620,8 @@ class CoordinationSession:
         self.attached_inject_visible_close = True
 
     def clear_attached_inject_visible_close(self) -> None:
-        """``content_reset`` emptied the captain bubble; harvest skip is invalid until it fills again."""
+        """``content_reset`` emptied the captain bubble; harvest skip is invalid
+        until it fills again."""
         self.attached_inject_visible_close = False
 
     def check_terminal_settlement(self) -> None:
@@ -1961,9 +1962,11 @@ def _release_turn_one(eid: str, session: CoordinationSession | None) -> None:
 
 
 # After drive finally: wait this long for release_turn detach before
-# force-harvesting. Covers fire-and-forget and the cross-turn append
-# ContextVar miss (gather child wrote host eid; parent teardown released
-# the mint id → turn_attached stuck True). Inject does not cancel this wait.
+# force-harvesting an *empty* slot. Covers fire-and-forget and the
+# cross-turn append ContextVar miss (gather child wrote host eid; parent
+# teardown released the mint id → turn_attached stuck True). A still-live
+# occupant is not stale — keep waiting for it; do not stretch this grace
+# to "cover one LLM round". Inject does not cancel this wait.
 _HARVEST_ATTACH_GRACE_S = 5.0
 _HARVEST_ATTACH_POLL_S = 0.05
 
@@ -1976,8 +1979,10 @@ def finish_detached_coordination(session: CoordinationSession) -> None:
     released a different ContextVar eid after cross-turn append — leaving this
     session flagged attached forever. Defer briefly so a still-live CEO turn can
     finish (harvest defers while the slot is busy); then harvest unless the
-    attached turn already streamed a visible close. Same-turn ``wait`` inject
-    does **not** cancel harvest — inject is not a user-visible closing appearance.
+    attached turn already streamed a visible close. Grace expiry force-detaches
+    only when the conversation slot has no live occupant. Same-turn ``wait``
+    inject does **not** cancel harvest — inject is not a user-visible closing
+    appearance.
     """
     if session.user_stopped:
         if session.active:
@@ -2104,15 +2109,41 @@ def _arm_harvest_now(session: CoordinationSession) -> None:
     _retain_harvest_task(session, task)
 
 
+def _conversation_slot_has_live_occupant(conversation_id: str) -> bool:
+    """True when ``turn_runs`` or sidecar still holds a live turn for this conversation.
+
+    Stale attach is ``turn_attached`` with an empty slot. Occupancy matches
+    ``harvest._wait_slot_or_backoff`` — do not inspect host prose.
+    """
+    cid = (conversation_id or "").strip()
+    if not cid:
+        return False
+    from agentcore.runtime.turn.runs import turn_runs
+
+    existing = turn_runs.get(cid)
+    if existing is not None and not existing.task.done():
+        return True
+    from agentcore.sidecar.server_pkg.core import get_active_sidecar
+
+    sidecar = get_active_sidecar()
+    if sidecar is None:
+        return False
+    live = sidecar.live_turn_task(cid)
+    return live is not None and not live.done()
+
+
 async def _run_harvest_after_attach_grace(session: CoordinationSession) -> None:
-    """Wait for detach; on grace expiry force-harvest stale attach.
+    """Wait for detach; force-harvest only empty-slot stale attach.
 
     ``all_completed_injected`` is ignored here: the live turn may still be the
     waiting bubble. After detach (or stale-attach force), ``_arm_harvest_now``
     skips only when ``attached_inject_visible_close`` already happened.
+    Grace expiry with a live occupant keeps waiting — the occupant is still
+    the attached turn, not a stuck flag.
     """
     loop = asyncio.get_running_loop()
     deadline = loop.time() + _HARVEST_ATTACH_GRACE_S
+    logged_live_wait = False
     while True:
         if session.user_stopped:
             session.harvest_scheduled = False
@@ -2132,15 +2163,26 @@ async def _run_harvest_after_attach_grace(session: CoordinationSession) -> None:
             )
             break
         if loop.time() >= deadline:
-            logger.warning(
-                "coordination.harvest_stale_attach_forcing",
-                execution_id=session.execution_id,
-                conversation_id=session.conversation_id or "",
-                grace_s=_HARVEST_ATTACH_GRACE_S,
-                terminal_posted=session.terminal_posted,
-            )
-            session.turn_attached = False
-            break
+            if _conversation_slot_has_live_occupant(session.conversation_id or ""):
+                if not logged_live_wait:
+                    logged_live_wait = True
+                    logger.info(
+                        "coordination.harvest_attach_waiting_live_occupant",
+                        execution_id=session.execution_id,
+                        conversation_id=session.conversation_id or "",
+                        grace_s=_HARVEST_ATTACH_GRACE_S,
+                        terminal_posted=session.terminal_posted,
+                    )
+            else:
+                logger.warning(
+                    "coordination.harvest_stale_attach_forcing",
+                    execution_id=session.execution_id,
+                    conversation_id=session.conversation_id or "",
+                    grace_s=_HARVEST_ATTACH_GRACE_S,
+                    terminal_posted=session.terminal_posted,
+                )
+                session.turn_attached = False
+                break
         await asyncio.sleep(_HARVEST_ATTACH_POLL_S)
 
     if session.user_stopped or session.soft_stop:

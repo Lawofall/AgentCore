@@ -13,10 +13,14 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+from agentcore.core.logging import get_logger
 
 if TYPE_CHECKING:
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+
+logger = get_logger(__name__)
 
 # 正式完成档（唯一允许姿势 A 的对账态）。
 _FORMAL_COMPLETE_TIERS = frozenset({"delivered"})
@@ -44,7 +48,8 @@ _POSTURE_A_CLAIMS = re.compile(
     r")"
 )
 
-# (C) 需用户确认 / 关键缺口阻塞——仅无档位时的 A∪C 与 resume 确认姿势用；保持极窄。
+# (C) 需用户确认 / 关键缺口阻塞——resume 确认姿势用；保持极窄。
+# 无对账卡时不再用 A∪C 拦正文。
 _POSTURE_C_CLAIMS = re.compile(
     r"(?:"
     r"请确认|"
@@ -129,18 +134,64 @@ claims_full_delivery = claims_posture_a
 claims_needs_confirm = claims_posture_c
 
 
+def closing_honesty_verdict_hit(
+    content: str,
+    delivery_verdict: DeliveryVerdict | None,
+) -> Literal["posture_a", "draft_ack"] | None:
+    """档位诚实性命中（姿势 A / draft_ack 缺失）。不扫 B1、不改词表。"""
+    if delivery_verdict is None:
+        return None
+    text = content or ""
+    if not text.strip():
+        return None
+    state = delivery_verdict.state
+    if not tier_forbids_posture_a(state):
+        return None
+    if claims_posture_a(text):
+        return "posture_a"
+    if getattr(delivery_verdict, "requires_draft_ack", False) and (
+        not claims_draft_acknowledgment(text)
+    ):
+        return "draft_ack"
+    return None
+
+
+def _log_honesty_shadow(
+    hit: Literal["posture_a", "draft_ack", "overview_length"],
+    delivery_verdict: DeliveryVerdict,
+) -> None:
+    """Observe a would-rework hit without applying it (团队路径闸从未生效过).
+
+    ``hit`` 区分闸：``posture_a`` / ``draft_ack``（档位诚实性）或
+    ``overview_length``（概览篇幅）。同一事件、同一套字段，不另开影子通道。
+    """
+    logger.info(
+        "engine.finish_guard_honesty_shadow",
+        verdict_state=delivery_verdict.state,
+        hit=hit,
+        has_delivered_files=bool(delivery_verdict.delivered_files),
+        gap_reasons=list(getattr(delivery_verdict, "gap_reasons", ()) or ()),
+        requires_draft_ack=bool(getattr(delivery_verdict, "requires_draft_ack", False)),
+        execution_id=delivery_verdict.execution_id or None,
+        tier_label=_TIER_LABEL.get(delivery_verdict.state, delivery_verdict.state),
+    )
+
+
 def closing_honesty_rework(
     content: str,
     delivery_verdict: DeliveryVerdict | None = None,
 ) -> str | None:
-    """档位驱动的收口诚实性回炉项；无档位时退回薄 A∪C。
+    """档位驱动的收口诚实性回炉项；无档位时不拦正文。
 
     主路径：``delivery_verdict.state`` ∉ 正式完成 → 不得姿势 A；
     ``requires_draft_ack``（evidence_deficit / thin_review / verify_failed /
     node_failed / artifact_rejected）另须正文出现草稿/缺口承认（正向要求，不靠加完成词）。
     B1：浏览器声称须 tool 成功；超席/空交接/cancel·0 须 PARTIAL 缺口清单。
     零写落盘声称扫词硬回炉已撤（2026-08-09 定案 B）。
-    无对账卡：同条不得既 C 又 A（少靠双边大词表；C/A 均为闭集）。
+    无对账卡（含本轮 ``no_batch``）：不扫完成话术、不回炉；团队状态以结构面为准。
+
+    档位命中（姿势 A / draft_ack）本轮只打影子日志、不回炉——闸在团队路径从未
+    真正跑过，须先观测误伤面。B1 结构轴仍回炉（它们不依赖跨 Task verdict）。
     """
     # Late imports: B1 probe axes live in sibling latch modules (avoid import cycles).
     from .b1 import (
@@ -167,46 +218,13 @@ def closing_honesty_rework(
         if hit:
             return hit
 
-    if delivery_verdict is not None:
-        state = delivery_verdict.state
-        if not tier_forbids_posture_a(state):
-            return None
-        label = _TIER_LABEL.get(state, state)
-        if claims_posture_a(text):
-            return (
-                f"本回合交付对账档位为「{label}」（state={state}，见交付状态卡）——"
-                "非正式完成档，正文不得姿势 A（宣称完整交付 / 全员收卷收齐 / "
-                "已完整可用 / 已修好或验绿等）。"
-                "请按档位改写：blocked → 承认阻塞与缺口；"
-                "partial/notes → 标部分完成并点名未完成项；"
-                "不要用完成话术盖过对账档位。"
-                "真源=delivery_verdict 档位；禁止案面加完成话术词修案。"
-            )
-        if getattr(delivery_verdict, "requires_draft_ack", False) and (
-            not claims_draft_acknowledgment(text)
-        ):
-            return (
-                f"本回合交付对账档位为「{label}」（state={state}，须草稿/缺口承认）——"
-                "正文须在开场承认草稿/部分完成/证据不足或点名未完成项，"
-                "不得仅用字数或「已完成」叙事冒充正式交付。"
-                "请把缺口写在最前面；真源=对账档位，禁止靠加完成话术词修案。"
-            )
+    verdict_hit = closing_honesty_verdict_hit(text, delivery_verdict)
+    if verdict_hit is not None and delivery_verdict is not None:
+        _log_honesty_shadow(verdict_hit, delivery_verdict)
         return None
-
-    # 无对账卡：仅拦同条 A∪C 自相矛盾。
-    if not (claims_posture_a(text) and claims_posture_c(text)):
-        return None
-    return (
-        "本条收口正文同时出现「需用户确认 / 关键缺口」（姿势 C）与"
-        "「完整交付 / 收卷收齐 / 验绿」类宣称（姿势 A）——"
-        "完成态互斥：同一条用户可见收口只能是其一："
-        "(A) 已交付完整结果；(B) 部分完成并标明未完成项；(C) 阻塞/需确认（不声称已交付）。"
-        "请改写为单一姿势：若仍缺关键信息 → 只保留确认请求（可再调 ask_user），"
-        "删除收卷/已收齐/完整交付宣称；"
-        "若已可交付 → 删除请确认/关键缺口话术，只写交付概览与缺口（有则标部分完成）。"
-    )
+    return None
 
 
 def mutual_exclusion_rework(content: str) -> str | None:
-    """无档位时的 A∪C 互斥（兼容旧调用）；有档位请用 :func:`closing_honesty_rework`。"""
+    """兼容旧调用：无档位不再拦 A∪C；请用 :func:`closing_honesty_rework`。"""
     return closing_honesty_rework(content, delivery_verdict=None)

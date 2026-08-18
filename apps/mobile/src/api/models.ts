@@ -26,6 +26,28 @@ export type ModelCatalog = Omit<RawCatalog, "current" | "models"> & {
 };
 /** Credential origin when a model is selected. */
 export type ModelOrigin = ModelCatalogItem["origin"];
+/** Structured reason a listed row cannot be selected (clients render copy). */
+export type ModelUnavailableReason = NonNullable<
+  ModelCatalogItem["unavailable_reason"]
+>;
+
+/** Client-side copy for a structured catalog unavailability. Null if unknown/absent. */
+export function unavailableReasonCopy(
+  reason: ModelCatalogItem["unavailable_reason"] | undefined | null,
+): string | null {
+  if (!reason) return null;
+  if (reason.code === "upstream_protocol_unsupported") {
+    if (reason.required_protocol === "openai_responses") {
+      return "需要 OpenAI /responses 协议，当前接入不支持";
+    }
+    if (reason.required_protocol === "anthropic_messages") {
+      return "需要 Anthropic /messages 协议，当前接入不支持";
+    }
+    return "当前接入不支持该模型所需协议";
+  }
+  return null;
+}
+
 /** Slot selection key. For BYOK, `providerId` disambiguates the same model id across providers. */
 export type ModelPick = {
   id: string;

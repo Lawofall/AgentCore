@@ -11,6 +11,12 @@ import type {
 } from "@/types/interactionExt";
 import { create } from "zustand";
 import {
+  clearColdServerSettled,
+  forgetColdServerSettled,
+  isColdCheckpointSettled,
+  noteColdServerSettled,
+} from "./coldSettlement";
+import {
   type ColdResumeKind,
   type InteractionEntry,
   idFromRequiredPayload,
@@ -230,6 +236,7 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
         if (!forcedPending && !resolvedStub && !coldNewHost) {
           return {};
         }
+        if (isColdResumeKind(kind)) forgetColdServerSettled(id);
       }
       // Idempotent re-delivery: keep the first pending/submitting payload.
       if (prev && (prev.status === "pending" || prev.status === "submitting")) {
@@ -263,6 +270,7 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
   },
 
   markResolved: ({ kind, id, resolution, settledElsewhere }) => {
+    if (isColdResumeKind(kind)) noteColdServerSettled(id);
     set((state) => {
       const prev = state.byId.get(id);
       const next = mapCopy(state.byId);
@@ -292,6 +300,7 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
   },
 
   markSettledByReceipt: ({ kind, id, conversationId }) => {
+    if (isColdResumeKind(kind)) noteColdServerSettled(id);
     set((state) => {
       const prev = state.byId.get(id);
       if (prev?.status === "resolved" || prev?.status === "orphaned") return {};
@@ -321,6 +330,7 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
     decidedAt,
     turnStatus,
   }) => {
+    noteColdServerSettled(id);
     set((state) => {
       const prev = state.byId.get(id);
       // 作废的卡不复活：orphan 说的是「没人能再收答复」，与本帧说的「已经有人决定过」
@@ -344,6 +354,8 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
   },
 
   markOrphaned: (id, opts) => {
+    const prevKind = get().byId.get(id)?.kind ?? opts?.kind;
+    if (prevKind && isColdResumeKind(prevKind)) noteColdServerSettled(id);
     set((state) => {
       const prev = state.byId.get(id);
       if (prev?.status === "resolved") return {};
@@ -407,6 +419,17 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
     set((state) => {
       const prev = state.byId.get(id);
       if (!prev || prev.status !== "submitting") return {};
+      // 冷卡：传输失败不得把「连接断了」读成「卡又待答」。终态判据与画卡共用。
+      if (
+        isColdResumeKind(prev.kind) &&
+        isColdCheckpointSettled({
+          checkpointId: id,
+          entry: prev,
+          conversationId: prev.conversationId,
+        })
+      ) {
+        return {};
+      }
       const next = mapCopy(state.byId);
       next.set(id, {
         ...prev,
@@ -428,7 +451,10 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
 
   clear: (conversationId) => {
     set((state) => {
-      if (conversationId === undefined) return { byId: new Map() };
+      if (conversationId === undefined) {
+        clearColdServerSettled();
+        return { byId: new Map() };
+      }
       const next = new Map<string, InteractionEntry>();
       for (const [id, entry] of state.byId) {
         if (entry.conversationId !== conversationId) next.set(id, entry);

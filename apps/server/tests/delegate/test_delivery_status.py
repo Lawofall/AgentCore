@@ -703,6 +703,56 @@ def test_declared_path_a_landed_b_is_mismatch_not_in_delivered_files():
     assert all(g.get("severity") != "warning" for g in mismatch)
 
 
+def test_bare_artifacts_artifact_dir_workspace_native_joined_path_delivered():
+    """生产组合：裸名 + artifact_dir + workspace_native，落盘 {dir}/{裸名} → accepted。"""
+    from agentcore.runtime.runs.artifact_dir import apply_artifact_dir_defaults
+    from agentcore.workspace.stage_dirs import REVIEWS_DIR
+
+    names = [
+        "前端刷新审计-对话页面.md",
+        "前端刷新审计-工作台.md",
+        "前端刷新审计-协作图.md",
+    ]
+    landed = [f"{REVIEWS_DIR}/{n}" for n in names]
+    nodes: list[RunSpec] = []
+    results: dict[str, RunState] = {}
+    for i, (name, path) in enumerate(zip(names, landed, strict=True), start=1):
+        deliverable = Deliverable(
+            form="files",
+            artifacts=[name],
+            artifact_dir=REVIEWS_DIR,
+            workspace_native=True,
+        )
+        apply_artifact_dir_defaults(deliverable)
+        run_id = f"w{i}"
+        nodes.append(
+            RunSpec(
+                run_id=run_id,
+                task=f"审 {name}",
+                role="审查官",
+                deliverable=deliverable,
+            )
+        )
+        results[run_id] = RunState(
+            phase=RunPhase.COMPLETED,
+            content="ok",
+            files_touched=[path],
+            file_acceptance=_accepted(path),
+        )
+    payload = build_delivery_status(
+        RunPlan(nodes=nodes),
+        results,
+        execution_id="e-native-adir-bare",
+    )
+    assert payload is not None
+    assert payload["state"] == "delivered"
+    assert payload["delivered_files"] == landed
+    by_path = {a["path"]: a for a in payload["artifacts"]}
+    for path in landed:
+        assert by_path[path]["status"] == "accepted"
+    assert not any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
+
+
 def test_declared_path_match_still_delivered():
     """声明路径与落盘一致 → 仍可 accepted / delivered。"""
     path = "external/AgentCode/research/01-topic.md"

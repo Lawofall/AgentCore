@@ -63,9 +63,10 @@ export function dispatchSSEEvent(event: SSEEvent, ctx: DispatchContext): void {
     return;
   }
 
-  // 停止生命周期事件门：stopping 仍消费 run_*，挡正文突变；terminal 只放行终态/meta。
+  // 停止生命周期事件门：stopping 仍消费 run_* / 队员 tool_use_*，挡正文突变；
+  // terminal 只放行终态/meta + 后台 drive 帧。
   const turnPhase = getTurnPhase(ctx.conversationId);
-  if (!allowsSseEvent(turnPhase, event.type)) {
+  if (!allowsSseEvent(turnPhase, event.type, event.payload)) {
     // 可观测丢点：勿扫用户长文；只记 event_type / phase（钉门闩 vs 传输丢包）。
     logEvent("warn", "sse.event_dropped", {
       conversation_id: ctx.conversationId,

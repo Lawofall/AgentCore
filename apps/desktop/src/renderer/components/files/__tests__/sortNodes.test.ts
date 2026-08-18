@@ -24,12 +24,12 @@ describe("sortNodes", () => {
     ]);
   });
 
-  it("盘上 AgentCore/（AI 工作间）沉到同级最后", () => {
+  it("盘上 AgentCore/（AI 工作间）钉在同级最前", () => {
     const nodes = [dir("AgentCore"), file("报告.md"), dir("合同")];
     expect(sortNodes(nodes).map((n) => n.path)).toEqual([
+      "AgentCore",
       "合同",
       "报告.md",
-      "AgentCore",
     ]);
   });
 
@@ -51,9 +51,9 @@ describe("sortNodes", () => {
       file("readme.md"),
     ]);
     expect(map.get("")?.map((n) => n.path)).toEqual([
+      "AgentCore",
       "src",
       "readme.md",
-      "AgentCore",
     ]);
     expect(map.get("src")?.map((n) => n.path)).toEqual([
       "src/AgentCore",

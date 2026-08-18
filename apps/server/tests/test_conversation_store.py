@@ -29,6 +29,14 @@ from agentcore.runtime.ports import ConversationStore
 pytestmark = pytest.mark.anyio
 
 
+class _NoopMetricsRepo:
+    def __init__(self, _s):
+        pass
+
+    async def record(self, **_kw):
+        return None
+
+
 # --- D7 pure helpers ---
 
 
@@ -230,6 +238,7 @@ async def test_finalize_cloud_settles_empty_error_with_error_code(monkeypatch):
 
     upserted: dict[str, Any] = {}
     journaled: list[Any] = []
+    metrics: dict[str, Any] = {}
 
     class MsgRepo:
         def __init__(self, _s):
@@ -246,8 +255,8 @@ async def test_finalize_cloud_settles_empty_error_with_error_code(monkeypatch):
         def __init__(self, _s):
             pass
 
-        async def record(self, **_kw):
-            return None
+        async def record(self, **kw):
+            metrics.update(kw)
 
     class CM:
         async def __aenter__(self):
@@ -286,6 +295,8 @@ async def test_finalize_cloud_settles_empty_error_with_error_code(monkeypatch):
             "error_code": ErrorCode.LLM_TIMEOUT,
             "finish_reason": FinishReason.ERROR,
             "rounds": 0,
+            "input_tokens": 11,
+            "output_tokens": 5,
             "journal_entries": [
                 {
                     "kind": "turn_end",
@@ -320,6 +331,13 @@ async def test_finalize_cloud_settles_empty_error_with_error_code(monkeypatch):
         "code": ErrorCode.LLM_TIMEOUT,
         "message": "连接超时",
     }
+    assert metrics["status"] == "error"
+    assert metrics["delegated"] is False
+    assert metrics["workers"] == 0
+    assert metrics["mode"] == "cloud"
+    assert metrics["input_tokens"] == 11
+    assert metrics["output_tokens"] == 5
+    assert metrics["duration_ms"] == 10
 
 
 async def test_finalize_cloud_synthesizes_error_when_missing(monkeypatch):
@@ -877,6 +895,7 @@ async def test_finalize_local_settles_empty_error_with_error_code(monkeypatch):
     monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
     monkeypatch.setattr(cloud_mod, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", _persist_journal)
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
     monkeypatch.setattr(
@@ -969,6 +988,7 @@ async def test_finalize_local_synthesizes_error_when_missing(monkeypatch):
     monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
     monkeypatch.setattr(cloud_mod, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", _persist_journal)
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
     monkeypatch.setattr(
@@ -1057,6 +1077,7 @@ async def test_finalize_local_merges_error_into_incomplete_progressive_journal(
     monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
     monkeypatch.setattr(cloud_mod, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", _persist_journal)
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
     monkeypatch.setattr(
@@ -1158,6 +1179,7 @@ async def test_finalize_local_keeps_existing_partial_on_empty_error(monkeypatch)
     monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
     monkeypatch.setattr(cloud_mod, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", AsyncMock())
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
     monkeypatch.setattr(
@@ -1310,6 +1332,7 @@ async def test_finalize_local_fills_journal_via_persist(monkeypatch):
     monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
     monkeypatch.setattr(cloud_mod, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", fake_persist)
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
 
@@ -1385,6 +1408,7 @@ async def test_finalize_local_persists_raw_journal_when_runs_missing(monkeypatch
     monkeypatch.setattr(cloud_mod, "async_session_factory", lambda: CM())
     monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", fake_persist)
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
 
     facts = [
         {"kind": "run_started", "payload": {"id": "r1"}, "ts": "t0"},
@@ -1460,6 +1484,7 @@ async def test_finalize_local_does_not_mint_followups(monkeypatch):
     monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
     monkeypatch.setattr(cloud_mod, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", AsyncMock())
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
     monkeypatch.setattr(
@@ -1525,6 +1550,7 @@ async def test_finalize_local_skips_stage_when_not_end_turn(monkeypatch):
     monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
     monkeypatch.setattr(cloud_mod, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", AsyncMock())
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
     monkeypatch.setattr(
@@ -1548,15 +1574,19 @@ async def test_finalize_local_skips_stage_when_not_end_turn(monkeypatch):
     assert result["followups"] is None
 
 
-async def test_persist_turn_journal_upserts_by_seq(monkeypatch):
-    """D7: finalize full journal fills holes via seq upsert (no length heuristic)."""
+async def test_persist_turn_journal_merges_by_seq_by_default(monkeypatch):
+    """Default persist is seq insert-if-absent (salvage / cloud live must not wipe)."""
     from agentcore.runtime.journal.persist import persist_turn_journal
 
     appended: list[int] = []
+    recorded: list[object] = []
 
     class Repo:
         def __init__(self, _s):
             pass
+
+        async def record(self, **_kw) -> None:
+            recorded.append(_kw)
 
         async def append(self, *, turn_id, seq, conversation_id, trace_id, entry) -> int | None:
             appended.append(seq)
@@ -1583,7 +1613,52 @@ async def test_persist_turn_journal_upserts_by_seq(monkeypatch):
         trace_id="t",
         entries=entries,
     )
+    assert recorded == []
     assert appended == [0, 1, 2]
+
+
+async def test_persist_turn_journal_replaces_via_record(monkeypatch):
+    """``replace=True`` wholesale-replaces via record() (resume / outbox overwrite)."""
+    from agentcore.runtime.journal.persist import persist_turn_journal
+
+    recorded: list[tuple[str, list]] = []
+    appended: list[int] = []
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def record(self, *, turn_id, conversation_id, trace_id, entries) -> None:
+            recorded.append((turn_id, list(entries)))
+
+        async def append(self, *, turn_id, seq, conversation_id, trace_id, entry) -> int | None:
+            appended.append(seq)
+            return seq
+
+    class Session:
+        async def rollback(self):
+            pass
+
+    monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
+    monkeypatch.setattr(
+        "agentcore.config.settings.observability_span_export_enabled", False
+    )
+
+    entries = [
+        {"kind": "run_plan", "payload": {}},
+        {"kind": "run_completed", "payload": {}},
+        {"kind": "turn_end", "payload": {"finish_reason": "end_turn"}},
+    ]
+    await persist_turn_journal(
+        Session(),  # type: ignore[arg-type]
+        message_id="m1",
+        conversation_id="c1",
+        trace_id="t",
+        entries=entries,
+        replace=True,
+    )
+    assert recorded == [("m1", entries)]
+    assert appended == []
 
 
 async def test_salvage_writes_incomplete_status(monkeypatch):

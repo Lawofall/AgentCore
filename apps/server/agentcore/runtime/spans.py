@@ -599,6 +599,7 @@ class LogSpanExporter:
             duration_ms=root.duration_ms,
             finish_reason=root.attributes.get("agentcore.finish_reason"),
             workers=root.attributes.get("agentcore.workers", 0),
+            team_batch=root.attributes.get("agentcore.team_batch"),
             spans=[s.to_log_dict() for s in kept],
         )
 
@@ -616,15 +617,34 @@ def export_turn_spans(
 ) -> None:
     """Project ``entries`` into a span tree and hand it to the exporter — best-effort.
 
-    Called off the user path at turn end (from ``journal.persist_turn_journal``, the
+    Called off the user path when the durable journal is persisted (complete,
+    salvage, and local pause snapshot — ``journal.persist_turn_journal``, the
     single durable-journal choke point for every turn path). Observability must NEVER
     break a turn (文档铁律, same posture as the journal / cost ledger): any failure is
-    swallowed with a warning. A ``None`` projection (nothing to trace) is a silent no-op.
+    swallowed with a warning. Empty ``entries`` is a silent no-op. A turn with facts but
+    no run/tool tree still logs ``team_batch`` (零人回合的 no_batch 必须进云端投影).
     """
     try:
+        from agentcore.runtime.journal.team_batch import team_batch_from_entries
+
+        status = team_batch_from_entries(entries)
         root = spans_from_entries(entries)
         if root is None:
+            if not entries:
+                return
+            logger.info(
+                "obs.turn_spans",
+                trace_id=trace_id,
+                message_id=message_id,
+                conversation_id=conversation_id,
+                span_count=0,
+                truncated=False,
+                dropped=0,
+                team_batch=status,
+                spans=[],
+            )
             return
+        root.attributes["agentcore.team_batch"] = status
         (exporter or _default_exporter).export(
             root,
             trace_id=trace_id,

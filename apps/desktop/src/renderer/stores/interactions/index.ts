@@ -4,6 +4,12 @@ export {
   hydrateInteractionsFromJournal,
 } from "./store";
 export {
+  collectMessageJournalEvents,
+  isColdCheckpointSettled,
+  noteColdServerSettled,
+  settledColdIdsFromEvents,
+} from "./coldSettlement";
+export {
   type InteractionEntry,
   type InteractionSubmitPath,
   type ColdResumeKind,

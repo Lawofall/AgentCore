@@ -568,6 +568,20 @@ async def test_egress_unavailable_from_wrapped_netns_message(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_session_error_does_not_double_prefix(tmp_path):
+    tool = BrowserNavigateTool(
+        registry=_FakeRegistry(
+            acquire_error=BrowserSessionError(
+                "浏览器会话启动失败：RpcChannelClosedError: driver stdio channel closed"
+            )
+        )
+    )
+    result = await tool.execute({"url": "https://x/"}, _ctx(tmp_path))
+    assert not result.success
+    assert _fail_text(result).count("浏览器会话启动失败") == 1
+
+
+@pytest.mark.asyncio
 async def test_acquire_session_bound_elsewhere_metadata_code(tmp_path):
     tool = BrowserNavigateTool(
         registry=_FakeRegistry(

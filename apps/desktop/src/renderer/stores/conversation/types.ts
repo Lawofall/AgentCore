@@ -312,6 +312,8 @@ export interface Message {
    * message_end; reload via messages API (nested in usage column). Orchestration
    * counts also surface in the assistant footer; audit_drops is diagnostic-only. */
   collab?: import("@/types/events").TurnCollabMetrics;
+  /** 本回合团队状态（`message_end.team_batch` live；REST 从 journal 派生）。 */
+  teamBatch?: import("@/types/events").TeamBatchStatus;
   runs?: ExecutionJournal;
   captainContext?: ContextBlockWire[];
   error?: {

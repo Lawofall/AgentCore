@@ -100,7 +100,12 @@ vi.mock("react-router-dom", async () => {
 import { useKeyboardInsetBridge } from "@/lib/keyboardInsets";
 import { ChatThreadPage } from "@/pages/im/ChatThreadPage";
 
-function peer(overrides: { avatar_url?: string | null; group_role?: "owner" | "admin" | "member" } = {}) {
+function peer(
+  overrides: {
+    avatar_url?: string | null;
+    group_role?: "owner" | "admin" | "member";
+  } = {},
+) {
   return {
     id: "u2",
     username: "alice",
@@ -332,7 +337,10 @@ describe("ChatThreadPage", () => {
   });
 
   it("renders the DM peer avatar from peer.avatar_url", async () => {
-    route.chat = { ...dmChat(), peer: peer({ avatar_url: "/avatars/alice.png" }) };
+    route.chat = {
+      ...dmChat(),
+      peer: peer({ avatar_url: "/avatars/alice.png" }),
+    };
     messaging.listMessages.mockResolvedValue(pageOf([peerMsg()]));
     render(<ChatThreadPage />);
     await screen.findByText("hi");

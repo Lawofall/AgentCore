@@ -20,13 +20,21 @@ A」vs「on provider B」vs「on platform free quota」are genuinely different o
   normalized ``base_url`` ``∪`` proxied ``GET /models`` (cached ~10min per
   ``(provider_id, base_url)``). Discovery failure / empty still keeps preset + default
   (never a 500); unknown/custom ``base_url`` has no preset (default + discovery only).
+  OpenCode Go/Zen ids in the shared off-protocol map
+  (:data:`agentcore.llm.byok_provider_presets.BYOK_OFF_PROTOCOL_MODELS`) stay
+  listed (not silently dropped) but ``available=False`` with
+  :class:`ModelUnavailableReason`.
 * **platform** rows — the operator platform model set when platform credentials exist.
+  Allowlist ids in the same off-protocol map stay listed (not silently dropped)
+  but ``available=False`` with :class:`ModelUnavailableReason`. No endpoint
+  gate — see :func:`_platform_entry`.
 
 A keyless user on a deployment with no platform subsidy gets an EMPTY catalog — the UI
 shows an empty state that guides to 设置·模型配置 (no greyed-out「add a key」guide rows).
 
 BYOK id set = default ∪ base_url presets ∪ discovery; ``model_metadata`` only
 ENRICHES display fields. Pricing reuses the community chain (:func:`pricing_for_model`).
+Off-protocol OpenCode ids are kept in that set (visible, not selectable).
 """
 
 from __future__ import annotations
@@ -44,7 +52,12 @@ from agentcore.billing.preference import (
 )
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
-from agentcore.llm.byok_provider_presets import preset_models_for_base_url
+from agentcore.llm.byok_provider_presets import (
+    OffProtocolKind,
+    is_opencode_byok_endpoint,
+    off_protocol_kind,
+    preset_models_for_base_url,
+)
 from agentcore.llm.credentials import LLMCredentials
 from agentcore.llm.model_metadata import model_metadata_for
 from agentcore.llm.pricing import (
@@ -78,6 +91,14 @@ class ModelCatalogCurrent:
 
 
 @dataclass(frozen=True)
+class ModelUnavailableReason:
+    """Why a listed catalog row is not selectable (never a silent drop)."""
+
+    code: Literal["upstream_protocol_unsupported"]
+    required_protocol: OffProtocolKind
+
+
+@dataclass(frozen=True)
 class ModelCatalogEntry:
     """One selectable (or grey-out) model row for the catalog UI."""
 
@@ -94,6 +115,8 @@ class ModelCatalogEntry:
     # BYOK rows: which 服务商 this row runs on (None for platform / guide rows).
     provider_id: str | None = None
     provider_label: str | None = None
+    # Set when listed but not selectable (e.g. gateway lacks the upstream protocol).
+    unavailable_reason: ModelUnavailableReason | None = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +145,7 @@ def _entry(
     credential_source: CredentialSource,
     provider_id: str | None = None,
     provider_label: str | None = None,
+    unavailable_reason: ModelUnavailableReason | None = None,
 ) -> ModelCatalogEntry:
     meta = model_metadata_for(model_id)
     return ModelCatalogEntry(
@@ -136,7 +160,26 @@ def _entry(
         available=available,
         provider_id=provider_id,
         provider_label=provider_label,
+        unavailable_reason=unavailable_reason,
     )
+
+
+def _off_protocol_unavailable(model_id: str) -> ModelUnavailableReason | None:
+    """Structured reason when ``model_id`` is in the shared exact-id off-protocol map."""
+    protocol = off_protocol_kind(model_id)
+    if protocol is None:
+        return None
+    return ModelUnavailableReason(
+        code="upstream_protocol_unsupported",
+        required_protocol=protocol,
+    )
+
+
+def _off_protocol_reason(model_id: str, base_url: str) -> ModelUnavailableReason | None:
+    """OpenCode Go/Zen only: known off-protocol ids are listed but not selectable."""
+    if not is_opencode_byok_endpoint(base_url):
+        return None
+    return _off_protocol_unavailable(model_id)
 
 
 def _dedupe(ids: list[str]) -> list[str]:
@@ -181,17 +224,21 @@ def _provider_entries(
     discovered_ids = discovered if discovered is not None else []
     ids = _dedupe([current, *presets, *discovered_ids])
     label = (row.label or "").strip() or None
-    return [
-        _entry(
-            mid,
-            origin="byok",
-            available=True,
-            credential_source="user",
-            provider_id=row.id,
-            provider_label=label,
+    entries: list[ModelCatalogEntry] = []
+    for mid in ids:
+        reason = _off_protocol_reason(mid, creds.base_url)
+        entries.append(
+            _entry(
+                mid,
+                origin="byok",
+                available=reason is None,
+                credential_source="user",
+                provider_id=row.id,
+                provider_label=label,
+                unavailable_reason=reason,
+            )
         )
-        for mid in ids
-    ]
+    return entries
 
 
 def _platform_model_ids() -> list[str]:
@@ -213,15 +260,17 @@ def _platform_model_ids() -> list[str]:
 def platform_listable_model_ids() -> list[str]:
     """Allowlist / fallback ids that may appear in catalog and system presets (F4).
 
-    **Public fact source** for the platform 上架 set. Missing curated price card →
-    hard-exclude (不上架); log once per id for ops. Does **not** apply the billing
-    visibility gate — see :func:`visible_platform_listable_model_ids`.
+    **Public fact source** for the platform 上架 set (selectable catalog + presets).
+    Missing curated price card → hard-exclude (不上架); log once per id for ops.
+    Off-protocol allowlist ids skip that warning — they list as unavailable via
+    :func:`_platform_catalog_ids`. Does **not** apply the billing visibility gate
+    — see :func:`visible_platform_listable_model_ids`.
     """
     listable: list[str] = []
     for mid in _platform_model_ids():
         if has_curated_pricing(mid):
             listable.append(mid)
-        else:
+        elif off_protocol_kind(mid) is None:
             logger.warning("platform_catalog.pricing_missing", model=mid)
     return listable
 
@@ -237,8 +286,10 @@ def is_platform_listable(model_id: str) -> bool:
 def visible_platform_listable_model_ids() -> list[str]:
     """上架 set when the platform catalog gate is open; else ``[]``.
 
-    Single conjunction for catalog platform rows **and** system-preset listing —
+    Single conjunction for **selectable** platform 上架 / system-preset listing —
     callers must not re-check :func:`platform_catalog_visible` separately.
+    Catalog assembly may additionally list off-protocol allowlist ids as
+    unavailable (see :func:`_platform_catalog_ids`).
     """
     if not platform_catalog_visible():
         return []
@@ -267,20 +318,50 @@ def platform_model_label(model_id: str) -> str:
 
 
 def _platform_entry(model_id: str) -> ModelCatalogEntry:
-    """One platform-billed catalog row (nominal-price ledger, F4). Caller must pass
-    a listable (curated) model id — see :func:`platform_listable_model_ids`.
+    """One platform-billed catalog row (nominal-price ledger, F4).
+
+    Off-protocol ids use the shared exact map (:func:`off_protocol_kind`) and are
+    listed but not selectable. **No base_url gate** on this path: platform rows
+    have no per-row endpoint at catalog time (credentials resolve later via the
+    operator pool / per-model override / ``PLATFORM_BASE_URL``), and the default
+    URL is DeepSeek — gating on that URL would miss the allowlist misconfig this
+    exists to catch. BYOK still gates on OpenCode endpoints because the same id
+    can be chat/completions on another user-configured relay (JiuRelay).
     """
-    return _entry(model_id, origin="platform", available=True, credential_source="platform")
+    reason = _off_protocol_unavailable(model_id)
+    return _entry(
+        model_id,
+        origin="platform",
+        available=reason is None,
+        credential_source="platform",
+        unavailable_reason=reason,
+    )
+
+
+def _platform_catalog_ids(*, require_visible: bool = False) -> list[str]:
+    """Ids that become platform catalog rows.
+
+    Selectable 上架 set (priced allowlist / fallback) plus exact off-protocol
+    allowlist ids that pricing excluded — those list as unavailable rather than
+    disappearing. System presets still read :func:`platform_listable_model_ids`
+    only, so an unselectable id does not become a combo.
+    """
+    if require_visible and not platform_catalog_visible():
+        return []
+    priced = platform_listable_model_ids()
+    extras = [
+        mid
+        for mid in _platform_model_ids()
+        if off_protocol_kind(mid) is not None and mid not in priced
+    ]
+    return _dedupe([*priced, *extras])
 
 
 def _platform_entries(*, require_visible: bool = False) -> list[ModelCatalogEntry]:
     """Platform catalog rows. ``require_visible=True`` applies the billing gate."""
-    ids = (
-        visible_platform_listable_model_ids()
-        if require_visible
-        else platform_listable_model_ids()
-    )
-    return [_platform_entry(mid) for mid in ids]
+    return [
+        _platform_entry(mid) for mid in _platform_catalog_ids(require_visible=require_visible)
+    ]
 
 
 # Back-compat alias (tests / older call sites may still patch the private name).

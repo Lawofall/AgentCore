@@ -159,6 +159,21 @@ def _map_workspace_read_error(exc: WorkspaceError, *, path: str, start: float) -
     return _error(f"读取文件失败：{exc}", start, user_face=False)
 
 
+def _file_read_path_ceiling_message(path: str, *, max_reads: int) -> str:
+    """Copy when same-path cap hits (body treated as present, including unsynced).
+
+    Do not assert the body is still in the window: ``file_read_verbatim_paths``
+    may be None (unsynced) and ``_file_read_body_present`` treats that as present.
+    Cleared recovery / grant remains the only path to re-read.
+    """
+    return (
+        f"已多次读取 `{path}`（本 run 上限 {max_reads} 次）。"
+        "请直接使用对话中已有正文，勿再读；"
+        "可换其它文件，或基于已有正文落盘 / handoff。"
+        "仅当该正文已被清理、对话中不再有全文时才可再读。"
+    )
+
+
 def _file_read_path_ceiling_error(error: str, start: float) -> ToolResult:
     """Reject a same-path over-cap read (path-scoped; does not retire ``file_read``)."""
     return _error(

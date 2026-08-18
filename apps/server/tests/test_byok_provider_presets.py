@@ -1,11 +1,15 @@
 """Unit tests for BYOK vendor presets (Moonshot / Kimi catalog seed)."""
 
 from agentcore.llm.byok_provider_presets import (
+    BYOK_OFF_PROTOCOL_MODELS,
     BYOK_PROVIDER_PRESETS,
+    chat_completions_seed,
+    is_opencode_byok_endpoint,
     is_opencode_go_base_url,
     is_opencode_zen_base_url,
     match_byok_provider_preset,
     normalize_byok_base_url,
+    off_protocol_kind,
     preset_models_for_base_url,
 )
 
@@ -136,3 +140,43 @@ def test_byok_preset_base_urls_are_unique():
             key = normalize_byok_base_url(url)
             assert key not in seen, key
             seen.add(key)
+
+
+def test_off_protocol_ids_are_exact_known_catalog_ids():
+    from agentcore.llm.catalog import off_protocol_kind as catalog_fn
+
+    # Catalog (BYOK + platform) must read this mapping, not a twin list.
+    assert catalog_fn is off_protocol_kind
+    assert dict(BYOK_OFF_PROTOCOL_MODELS) == {
+        "grok-4.5": "openai_responses",
+        "gpt-5.6-luna": "openai_responses",
+        "minimax-m2.7": "anthropic_messages",
+        "qwen3.7-max": "anthropic_messages",
+    }
+    assert off_protocol_kind("grok-4.5") == "openai_responses"
+    assert off_protocol_kind("minimax-m2.7") == "anthropic_messages"
+    # No substring / regex guessing.
+    assert off_protocol_kind("grok-4.5-fast") is None
+    assert off_protocol_kind("x-ai/grok-4.5") is None
+    assert off_protocol_kind("qwen-max") is None
+
+
+def test_chat_completions_seed_is_the_opencode_exclusion_source():
+    assert chat_completions_seed("deepseek-v4-flash", "grok-4.5", "glm-5.2") == (
+        "deepseek-v4-flash",
+        "glm-5.2",
+    )
+    assert chat_completions_seed("grok-4.5-fast", "x-ai/grok-4.5") == (
+        "grok-4.5-fast",
+        "x-ai/grok-4.5",
+    )
+    for preset in BYOK_PROVIDER_PRESETS:
+        if preset.id in ("opencode_go", "opencode_zen"):
+            assert preset.models == chat_completions_seed(*preset.models)
+            assert set(preset.models).isdisjoint(BYOK_OFF_PROTOCOL_MODELS)
+            assert is_opencode_byok_endpoint(preset.base_url) is True
+    # JiuRelay keeps grok-4.5 — that relay speaks chat/completions for it.
+    jiurelay = match_byok_provider_preset("https://jiurelay.com/openai/v1")
+    assert jiurelay is not None
+    assert "grok-4.5" in jiurelay.models
+    assert is_opencode_byok_endpoint(jiurelay.base_url) is False

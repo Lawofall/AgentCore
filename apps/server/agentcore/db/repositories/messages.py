@@ -461,6 +461,41 @@ class MessageRepository:
                 out[cid] = preview
         return out
 
+    async def first_user_contents_for_conversations(
+        self, conversation_ids: Sequence[str]
+    ) -> dict[str, str]:
+        """Earliest non-empty user-message body per conversation (display-title fallback).
+
+        One windowed read for the whole list — same batch shape as
+        :meth:`counts_for_conversations` / :meth:`previews_for_conversations`.
+        Ids with no non-empty user row are absent (callers leave ``title`` empty).
+        """
+        if not conversation_ids:
+            return {}
+        stripped = func.btrim(func.coalesce(Message.content, ""))
+        ranked = (
+            select(
+                Message.conversation_id,
+                Message.content,
+                func.row_number()
+                .over(
+                    partition_by=Message.conversation_id,
+                    order_by=Message.created_at.asc(),
+                )
+                .label("rn"),
+            )
+            .where(
+                Message.conversation_id.in_(conversation_ids),
+                Message.role == "user",
+                stripped != "",
+            )
+            .subquery()
+        )
+        result = await self._session.execute(
+            select(ranked.c.conversation_id, ranked.c.content).where(ranked.c.rn == 1)
+        )
+        return {cid: content for cid, content in result.all() if content}
+
     async def unfolded_counts_for_conversations(
         self, conversation_ids: Sequence[str]
     ) -> dict[str, int]:

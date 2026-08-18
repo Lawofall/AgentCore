@@ -80,8 +80,9 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
       "AssistantView · 旧 journal 跨回合同图追加锚点（fold → process.graph_append）；新路径用 run_plan.prev_execution_id + 本回合 TeamView",
   },
   coordination_wait: {
-    verdict: "internal",
-    reason: "协调等待实时信号；手机 fold no-op，等待态由 run/status 派生呈现",
+    verdict: "ported",
+    surface:
+      "TeamView · 团队条 n/m（旁路 extractCoordinationWait，不进 ProjectedTurn）",
   },
   workspace_lock_wait: {
     verdict: "internal",
@@ -186,9 +187,10 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
   // —— 团队便签墙 ——
   team_note_posted: { verdict: "ported", surface: "TeamView · 团队便签" },
   team_synthesis_preview: {
-    verdict: "ported",
-    surface:
-      "TeamView · 协调进展预览（桌面状态条已收成工具栏，不再挂合成草稿行）",
+    verdict: "simplified",
+    surface: "队员卡 · 产出预览 / RunDetail",
+    reason:
+      "fold 入库；用户面不画合成行（对齐桌面已收工具栏）。摘要只在队员卡 / RunDetail",
   },
   delivery_status: {
     verdict: "ported",
@@ -226,8 +228,9 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
       "冷 resume 撞上已被消费的挂起帧（EPHEMERAL 幂等成功：200 + 本帧取代旧 404）；不落 journal、不进 ProjectedTurn，两端 fold 均 no-op。手机沿用既有收口：ChatPage resume() 的流正常收尾后 markColdResolved 撤卡，不读 kind/decision/decided_at/turn_status。桌面已用本帧出中性信息态收口条（ResumeSettledNotices）；手机本轮不做 UI，缺口记在锚 B 同名键上",
   },
   execution_detached: {
-    verdict: "internal",
-    reason: "异步团队转后台：v1 fold no-op；UI 呈现另行委派",
+    verdict: "ported",
+    surface:
+      "TeamView · 团队条「后台」徽标（旁路 extractExecutionDetached；hydrate 后靠队员仍在跑补）",
   },
   execution_completed: {
     verdict: "ported",
@@ -578,16 +581,16 @@ export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
     verdict: "ported",
     surface: "AssistantView · 来源可信度徽标",
   },
-  StatusStrip: { verdict: "ported", surface: "ChatPage · 状态 meta 行" },
+  StatusStrip: {
+    verdict: "simplified",
+    surface: "TeamView · 团队条（图标 + n/m）",
+    reason:
+      "有意精简：无桌面图控件、打开辩论室；后台只挂徽标，协调等待只盖 n/m",
+  },
   DebateProgressLine: {
     verdict: "simplified",
     surface: "TeamView · 辩论进展预览（fold 对齐 StatusStrip）",
     reason: "进展预览有；无桌面状态条「打开辩论室」进赛事页 CTA",
-  },
-  TeamSynthesisPreviewLine: {
-    verdict: "simplified",
-    surface: "TeamView · 协调进展预览",
-    reason: "桌面状态条只留细工具栏，不再挂合成草稿行；手机列表仍有进展预览",
   },
   TurnWarningBanner: {
     verdict: "ported",

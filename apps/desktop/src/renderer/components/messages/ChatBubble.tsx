@@ -19,14 +19,14 @@ import type { ChatType } from "@/services/messaging";
 import { Download, FileText, Folder, Pencil, Reply, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ChatImageGallery } from "./ChatImageGallery";
-import { ProductNoticeCard } from "./ProductNoticeCard";
 import { GovernanceBadge } from "./GovernanceBadge";
 import { PresenceAvatar } from "./PresenceAvatar";
+import { ProductNoticeCard } from "./ProductNoticeCard";
 import {
+  type MemberGovernanceBadge,
   avatarInitial,
   canOfferEdit,
   canOfferRecall,
-  type MemberGovernanceBadge,
   messageMentionsUser,
   splitContentByMentions,
 } from "./chatDisplay";

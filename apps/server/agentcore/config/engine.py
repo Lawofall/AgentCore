@@ -39,8 +39,9 @@ class EngineSettings(BaseModel):
     # ≤0 关闭。默认 8：给一次刹车（不依赖已退役的调查轮绝对顶）。
     engine_recon_idle_nudge_rounds: int = 8
     engine_finish_guard_max_reworks: int = 2
-    # C2 概览契约：本回合已发 delivery_status 时，CEO 终稿超过此字数 → finish_guard 回炉压缩。
-    # 细节已在交付卡 / 产物卡 / run 详情；气泡只做索引。≤0 关闭。无交付卡的 prose 回合不设顶。
+    # C2 概览契约：本回合已发 delivery_status 时，CEO 终稿超过此字数 → finish_guard
+    # 影子观测（hit=overview_length），不回炉。细节已在交付卡 / 产物卡 / run 详情。
+    # ≤0 关闭探测。无交付卡的 prose 回合不设顶。默认值勿当「未复述 UI」硬闸。
     engine_ceo_overview_max_chars: int = 1000
 
     # Captain (CEO) ReAct ceiling — higher than chat default (16) because coordination
@@ -61,7 +62,7 @@ class EngineSettings(BaseModel):
 
     # 当轮调查结果（NEVER + FILESYSTEM/SEARCH/RESEARCH）投影窗：只留最近 N 条
     # ≥min_chars 的全文。journal / UI 仍全文。旧结果 → 稳定指针；file_read 另附
-    # ≤1200 字结构摘要 + 再读授额。2 打堆叠税（工人长调查把多份读窗整段
+    # ≤1200 字结构摘要；清后重读不计同 path 上限。2 打堆叠税（工人长调查把多份读窗整段
     # 带进下一轮 LLM）；不拧单次安全顶、不把 file_read 塞回通用 4k 头尾裁
     # （那伤单次读手感）。host_shell / terminal 走独立 exec 窗，不进本集合。
     engine_tool_clear_keep_recent: int = 2
@@ -74,12 +75,11 @@ class EngineSettings(BaseModel):
     # digest (chars). 0 = pointer-only rollback (no summary). Must keep
     # pointer+summary strictly below engine_tool_clear_min_chars (idempotency).
     engine_tool_clear_file_read_summary_max_chars: int = 1200
-    # R1: when a path has zero verbatim file_read bodies left in the projected
-    # window, grant this many sticky extra successful full-reads beyond
-    # FILE_READ_SAME_PATH_MAX (per path per run sticky issue; write success may
-    # refresh via refresh_file_read_reread_grant). Cleared paths are not hard-
-    # rejected when grant is exhausted. 0 = disable sticky grant (hard cap only
-    # while verbatim still present).
+    # Write-success / citation refresh: sticky extra successful full-reads
+    # beyond FILE_READ_SAME_PATH_MAX while verbatim may still be present
+    # (refresh_file_read_reread_grant). tool_clear recovery is a separate
+    # ledger (file_read_cleared_paths) and does not consume this grant.
+    # 0 = disable the write/citation grant.
     engine_file_read_reread_grant: int = 1
     # C3 较强文件归属：True = 协调会话级归属表（声明即占、完成后仍占、写时互斥含
     # str_replace/write_section）。False = 回滚「仅未完成启发式 overlap + 批内

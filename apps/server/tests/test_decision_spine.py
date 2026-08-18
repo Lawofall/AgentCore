@@ -202,16 +202,45 @@ def test_tail_prefers_turn_metrics_and_l2_aligned() -> None:
         "revises": 0,
         "escalations": 0,
         "kind": "turn",
+        "mode": "cloud",
         "turn_id": "t1",
     }
     spine = build_decision_spine(events, turn_metrics=metrics, cost_events={"total_nano": 42})
     assert spine["tail"]["source"] == "turn_metrics"
+    assert spine["tail"]["mode"] == "cloud"
     assert spine["tail"]["finish_reason"] == "stop"
     assert spine["tail"]["delegated"] is True
     assert spine["cost"]["source"] == "cost_events"
     assert spine["cost"]["total_nano"] == 42
     assert spine["health"]["drift_l2"]["ok"] is True
     assert spine["health"]["drift_l2"]["compared"] is True
+    text = format_decision_spine(spine)
+    assert "mode=cloud" in text
+    assert "Cost  source=cost_events  total_nano=42" in text
+    assert "estimated_nano" not in text
+    assert "billing=" not in text
+
+
+def test_spine_cost_line_shows_byok_estimate() -> None:
+    events = _events_delegated_ok()
+    spine = build_decision_spine(
+        events,
+        cost_events={
+            "total_nano": 0,
+            "estimated_nano": 9_001,
+            "estimated_currency": "USD",
+            "billing": "BYOK",
+            "runs": 3,
+        },
+    )
+    assert spine["cost"]["total_nano"] == 0
+    assert spine["cost"]["estimated_nano"] == 9_001
+    assert spine["cost"]["billing"] == "BYOK"
+    text = format_decision_spine(spine)
+    assert (
+        "Cost  source=cost_events  total_nano=0  estimated_nano=9001  "
+        "billing=BYOK  estimated_currency=USD  runs=3"
+    ) in text
 
 
 def test_drift_l2_marks_mismatch() -> None:

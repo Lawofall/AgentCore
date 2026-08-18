@@ -53,16 +53,27 @@ _WORKSPACE_CONTEXT_RE = re.compile(
 
 
 def restamp_workspace_facts(prompt: str, facts: str) -> str:
-    """Replace/append ``<workspace_context>`` for post-bind resume workers."""
+    """Replace/append ``<workspace_context>`` for post-bind resume workers.
+
+    Insertion matches :data:`~agentcore.runtime.context.contributor.SectionOrder.WORKSPACE_FACTS`
+    (750): immediately before the attachment volatile tail, not after
+    ``</runtime_context>`` (that was the pre-2026-08-19 slot in front of the core).
+    """
     stripped = _WORKSPACE_CONTEXT_RE.sub("", prompt or "").rstrip()
     if not facts:
         return stripped
-    marker = "</runtime_context>"
-    idx = stripped.find(marker)
-    if idx >= 0:
-        insert_at = idx + len(marker)
-        return stripped[:insert_at] + "\n" + facts + stripped[insert_at:]
-    return stripped + "\n" + facts
+    insert_at = -1
+    for marker in ("<attached_files>", "<agent_mentions>", "<ask_reply"):
+        idx = stripped.find(marker)
+        if idx >= 0 and (insert_at < 0 or idx < insert_at):
+            insert_at = idx
+    if insert_at >= 0:
+        head = stripped[:insert_at].rstrip()
+        tail = stripped[insert_at:]
+        if head:
+            return f"{head}\n{facts}\n{tail}"
+        return f"{facts}\n{tail}"
+    return f"{stripped}\n{facts}" if stripped else facts
 
 
 @dataclass
@@ -249,7 +260,9 @@ async def _wire_continuation_toolset(
 
     bound_execution_id = base_tool_context.execution_id
     execution_id_token = current_execution_id.set(bound_execution_id)
-    reset_turn_scoped_closing_state()
+    reset_turn_scoped_closing_state(
+        promotion_ledger=base_tool_context.promotion_ledger,
+    )
     if permission_axes is None:
         permission_axes = DEFAULT_PERMISSION_AXES
     approval_gate = (

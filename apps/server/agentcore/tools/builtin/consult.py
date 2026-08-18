@@ -1,4 +1,4 @@
-"""consult — unified on-demand pull for skills / rules / memory topics (步 1 · 按需三合一).
+"""consult — unified on-demand pull for skills / rules / memory / deferred tools.
 
 One tool + one ``<按需目录>`` for CEO and workers. Backed by a single
 :class:`~agentcore.runtime.context.consult_sources.MergedConsultSource` so the
@@ -18,6 +18,7 @@ from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.context.consultable import Consultable
 from agentcore.runtime.memory_consult_cache import lookup_consult, remember_consult
+from agentcore.tools.on_demand import is_on_demand_tool
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
     AUDIENCE_BOTH,
@@ -49,9 +50,10 @@ class ConsultTool:
         return ToolSchema(
             name="consult",
             description=(
-                "按 name 查阅一条按需条目的全文：系统提示词「按需目录」列出可查阅的 name"
-                "与一行说明（系统能力指引、按需用户规则、记忆主题笔记）。相关时用本工具"
-                "把全文拉回来再据此执行/遵守。常驻内容已在 ``<rules>``，无需查阅。"
+                "按 name 查阅一条按需条目：系统提示词「按需目录」列出 name 与一行说明"
+                "（系统能力指引、按需用户规则、记忆主题笔记、本回合未进工具表的低频工具）。"
+                "相关时拉全文再执行/遵守。低频工具 consult 后下一轮才进入可调用工具表；"
+                "常驻内容已在 ``<rules>``，常驻工具已在工具表，无需查阅。"
             ),
             parameters={
                 "type": "object",
@@ -74,7 +76,7 @@ class ConsultTool:
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         raw = str(arguments.get("name") or "").strip()
-        if raw:
+        if raw and not is_on_demand_tool(raw):
             cached = lookup_consult(raw)
             if cached is not None:
                 logger.info("consult.reuse", name=raw)
@@ -104,7 +106,8 @@ class ConsultTool:
             logger.info("consult.miss", name=raw)
             return ToolResult(tool_call_id="", success=True, output=head + tail)
 
-        remember_consult(raw, body)
+        if not is_on_demand_tool(raw):
+            remember_consult(raw, body)
         return ToolResult(
             tool_call_id="",
             success=True,

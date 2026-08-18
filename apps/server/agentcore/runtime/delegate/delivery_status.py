@@ -25,8 +25,10 @@ CEO finish；写盘通道挂仍可在备注里诚实归因。
 
 用户面零落盘缺口投影为 ``files_not_landed`` soft（甲⁺：warning/notes，不挡整批）：
 有队员归因时按角色保留「本队员本波未交卷」（定案 B）；仅批次谓词时仍可落「本批未见落盘」。
-发射时写入回合 :data:`current_delivery_verdict`，供 CEO ``finish_guard`` 对照终答，
-禁止与对账矛盾的假完成。
+发射时写入回合 :data:`current_delivery_verdict` **以及** ``promotion_ledger.delivery_verdict``
+（跨 Task 共享槽，与成品归位台账同一对象）。只写 ContextVar 时，后台
+``asyncio.create_task(_background_drive)`` 的 ``set`` 到不了 CEO 父任务的
+``finish_guard``。禁止改去查 turn_journal。
 
 文献成文（``research_report`` / 同等成文综述）：证据不足时注入
 ``reason=evidence_deficit`` blocking gap → state 不得 ``delivered``（见
@@ -145,6 +147,9 @@ class DeliveryVerdict:
     # True when gaps include evidence_deficit / thin_review / verify_failed /
     # node_failed / artifact_rejected (draft / gap acknowledgment required).
     requires_draft_ack: bool = False
+    # Structured gap reasons from the same delivery_status payload (no prose).
+    # Shadow honesty logs read this; path reconciliation does not.
+    gap_reasons: tuple[str, ...] = ()
 
 
 def _gaps_require_draft_ack(gaps: list[Any] | tuple[Any, ...] | None) -> bool:
@@ -169,6 +174,46 @@ def acceptance_counts(
 current_delivery_verdict: ContextVar[DeliveryVerdict | None] = ContextVar(
     "current_delivery_verdict", default=None
 )
+
+
+def _gap_reasons_from(gaps: list[Any] | tuple[Any, ...] | None) -> tuple[str, ...]:
+    """Extract non-empty gap reasons; never includes gap descriptions / prose."""
+    reasons: list[str] = []
+    for gap in gaps or []:
+        if not isinstance(gap, dict):
+            continue
+        reason = str(gap.get("reason") or "").strip()
+        if reason:
+            reasons.append(reason)
+    return tuple(reasons)
+
+
+def bind_delivery_verdict(
+    verdict: DeliveryVerdict | None,
+    *,
+    promotion_ledger: TurnPromotionLedger | None = None,
+) -> None:
+    """Stamp the turn verdict on ContextVar (same-task) and the shared ledger slot.
+
+    ``asyncio.create_task`` copies Context: a child ``ContextVar.set`` is invisible
+    to the CEO parent. ``TurnPromotionLedger.delivery_verdict`` is the same object
+    the parent already holds (``dataclasses.replace`` shallow-copy), matching
+    ``promotion_ledger`` itself.
+    """
+    current_delivery_verdict.set(verdict)
+    if promotion_ledger is not None:
+        promotion_ledger.delivery_verdict = verdict
+
+
+def read_delivery_verdict(
+    *,
+    promotion_ledger: TurnPromotionLedger | None = None,
+) -> DeliveryVerdict | None:
+    """Prefer the shared ledger slot when the caller has one; else ContextVar."""
+    if promotion_ledger is not None:
+        return promotion_ledger.delivery_verdict
+    return current_delivery_verdict.get()
+
 
 # sink → {execution_id: fingerprint} — same sink + same conclusion → skip re-emit.
 _emitted_delivery_fp: WeakKeyDictionary[Any, dict[str, str]] = WeakKeyDictionary()
@@ -1294,13 +1339,15 @@ def maybe_emit_delivery_status(
         if payload is None:
             return
         gaps = payload.get("gaps") or []
-        current_delivery_verdict.set(
+        bind_delivery_verdict(
             DeliveryVerdict(
                 state=str(payload["state"]),
                 delivered_files=tuple(payload.get("delivered_files") or ()),
                 execution_id=execution_id,
                 requires_draft_ack=_gaps_require_draft_ack(gaps),
-            )
+                gap_reasons=_gap_reasons_from(gaps),
+            ),
+            promotion_ledger=promotion_ledger,
         )
         from agentcore.runtime.closing_posture import (
             downgrade_verdict_for_unresolved_write_ownership,
@@ -1310,7 +1357,10 @@ def maybe_emit_delivery_status(
         )
 
         # P0-B belt: latch already stamped in build; ensure delivered cannot stick.
-        downgrade_verdict_for_unresolved_write_ownership(execution_id=execution_id)
+        downgrade_verdict_for_unresolved_write_ownership(
+            execution_id=execution_id,
+            promotion_ledger=promotion_ledger,
+        )
         note_cloud_web_verify_gap_from_delivery(gaps, criteria_gaps=criteria_gaps)
         note_verify_budget_from_delivery(gaps)
         # B′：token_budget / writing cutoff → CEO 综收软横幅 latch（真源=结构化 gaps）。
@@ -1392,6 +1442,7 @@ def _payload_to_verdict(payload: dict[str, Any]) -> DeliveryVerdict | None:
         delivered_files=tuple(str(p) for p in files if p),
         execution_id=execution_id,
         requires_draft_ack=_gaps_require_draft_ack(payload.get("gaps") or []),
+        gap_reasons=_gap_reasons_from(payload.get("gaps") or []),
     )
 
 
@@ -1406,13 +1457,13 @@ async def maybe_reinject_recent_delivery_for_availability_ask(
     """On narrow availability short asks, re-emit the latest delivery_status onto this turn.
 
     Reuses the conversation's most recent durable delivery reconciliation (不另造第二套).
-    Sets ``current_delivery_verdict`` for finish_guard. Returns True when a card was
-    re-emitted. Never raises.
+    Sets ``current_delivery_verdict`` and the shared ledger slot for finish_guard.
+    Returns True when a card was re-emitted. Never raises.
     """
     if not is_availability_status_question(user_message):
         return False
     # Same-turn batch already stamped a verdict — no need to pull prior journal.
-    if current_delivery_verdict.get() is not None:
+    if read_delivery_verdict(promotion_ledger=promotion_ledger) is not None:
         return False
     cid = (conversation_id or "").strip()
     if not cid:
@@ -1447,7 +1498,7 @@ async def maybe_reinject_recent_delivery_for_availability_ask(
         summary = str(payload.get("summary") or "").strip() or (
             f"已交付 {len(files)} 个文件" if files else "无交付缺口"
         )
-        current_delivery_verdict.set(verdict)
+        bind_delivery_verdict(verdict, promotion_ledger=promotion_ledger)
         from agentcore.runtime.delegate.promotion import adopt_journaled_reconciliation
         from agentcore.runtime.events import delivery_status
 

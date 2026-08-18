@@ -12,7 +12,7 @@ import {
   slotDisplayName,
 } from "@/api/modelProfiles";
 import type { ModelCatalog } from "@/api/models";
-import { modelDisplayLabel } from "@/api/models";
+import { modelDisplayLabel, unavailableReasonCopy } from "@/api/models";
 import { afterEach, describe, expect, it } from "vitest";
 
 const CATALOG: ModelCatalog = {
@@ -87,6 +87,24 @@ describe("modelDisplayLabel (slot catalog)", () => {
 
   it("returns null when nothing is known yet", () => {
     expect(modelDisplayLabel(null, null)).toBeNull();
+  });
+});
+
+describe("unavailableReasonCopy", () => {
+  it("renders protocol copy for known codes", () => {
+    expect(
+      unavailableReasonCopy({
+        code: "upstream_protocol_unsupported",
+        required_protocol: "openai_responses",
+      }),
+    ).toBe("需要 OpenAI /responses 协议，当前接入不支持");
+    expect(
+      unavailableReasonCopy({
+        code: "upstream_protocol_unsupported",
+        required_protocol: "anthropic_messages",
+      }),
+    ).toBe("需要 Anthropic /messages 协议，当前接入不支持");
+    expect(unavailableReasonCopy(null)).toBeNull();
   });
 });
 

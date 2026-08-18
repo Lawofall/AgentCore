@@ -549,7 +549,7 @@ async def _build_ceo_context(
         code_execute_enabled=code_execute,
         browser_enabled=browser,
     )
-    base = assemble_system_prompt(workspace_context=workspace_facts)
+    base = assemble_system_prompt()
     ctx = ToolContext.create(
         execution_id=new_id(), run_id=new_id(), agent_id="probe", backend=backend, user_id="probe"
     )
@@ -577,7 +577,10 @@ async def _build_ceo_context(
     )
     ceo_tool_names = set(chat_tools.names)
     ceo_prompt = compose_ceo_chat_prompt(
-        base, skill_registry=skill_registry, ceo_tool_names=ceo_tool_names
+        base,
+        skill_registry=skill_registry,
+        ceo_tool_names=ceo_tool_names,
+        workspace_context=workspace_facts,
     )
     tool_defs = resolve_openai_tool_defs(chat_tools, None, set())
     # 闸用能力：覆盖优先，否则跟 backend 谓词（与 workspace 行一致）

@@ -107,25 +107,6 @@ function overlayRunProcesses(exec: Execution, rt: ExecutionRuntime): Execution {
 }
 
 /**
- * Pillar D3: while `execution_detached` is stamped, suppress frozen live tool
- * chrome (toolProgress from last `run_tool_progress` frame + toolExecutionLive).
- * Static「后台运行中」replaces per-node「正在生成 …」until the drive settles.
- */
-function clearLiveToolChromeWhenDetached(
-  exec: Execution,
-  rt: ExecutionRuntime,
-): Execution {
-  if (rt.executionDetached == null) return exec;
-  let changed = false;
-  const agents = exec.agents.map((a) => {
-    if (a.toolProgress == null && a.toolExecutionLive == null) return a;
-    changed = true;
-    return { ...a, toolProgress: null, toolExecutionLive: null };
-  });
-  return changed ? { ...exec, agents } : exec;
-}
-
-/**
  * Project a runtime snapshot to its {@link Execution} (WeakMap-cached per `rt`, so one
  * finalize per snapshot shared across all consumers of that turn-frame). The shared
  * source of truth for "what runs this turn has" — including 修订 vN revisions that are
@@ -143,10 +124,7 @@ export function projectRuntime(rt: ExecutionRuntime): Execution | null {
       projectionCache.set(rt, exec);
       return exec;
     })();
-  return clearLiveToolChromeWhenDetached(
-    overlayRunProcesses(overlayWorkerToolPhases(base, rt), rt),
-    rt,
-  );
+  return overlayRunProcesses(overlayWorkerToolPhases(base, rt), rt);
 }
 
 function computeProjection(

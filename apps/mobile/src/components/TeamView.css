@@ -1,4 +1,4 @@
-/* TeamView — StatusStrip-like header + richer member cards (bubble-local; styles.css untouched). */
+/* TeamView — 协作图外壳 / 队员卡 / 便签。升级卡、登录决策、队员详情仍在 styles.css（时间线共用）。 */
 
 .team {
   display: flex;
@@ -121,19 +121,6 @@
   padding: 8px 10px;
 }
 
-.team-bar {
-  height: 3px;
-  overflow: hidden;
-  background: var(--border);
-}
-
-.team-bar-fill {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
-}
-
 .team-body {
   display: flex;
   flex-direction: column;
@@ -216,73 +203,6 @@
   line-height: 1.4;
   color: var(--fg);
   overflow-wrap: anywhere;
-}
-
-/* 协调进展：对齐桌面 TeamSynthesisPreviewLine（确定性 run 摘要） */
-.team-synthesis {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  background: color-mix(in srgb, var(--muted) 8%, transparent);
-  border-radius: 8px;
-}
-
-.team-synthesis.is-live {
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-
-.team-synthesis-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.team-synthesis-badge {
-  flex-shrink: 0;
-  padding: 1px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border-radius: 999px;
-}
-
-.team-synthesis-title {
-  min-width: 0;
-  flex: 1;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--fg);
-  overflow-wrap: anywhere;
-}
-
-.team-synthesis.is-live .team-synthesis-title {
-  color: var(--accent);
-}
-
-.team-synthesis-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.team-synthesis-item {
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.team-synthesis-item strong {
-  font-weight: 500;
-  color: var(--fg);
 }
 
 /* 成员卡 */

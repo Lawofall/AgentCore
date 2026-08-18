@@ -120,6 +120,18 @@ async def prewrite_sidecar_resume_settlement(
         user_message_id=user_message_id,
     )
     suspension.journal_entries = list(suspension.journal_entries) + [entry]
+    # Same conclusion a cloud claim writes: local JSON is the frame, but a later
+    # cloud POST resume reads ``paused_turn_outcomes``. Best-effort inside the
+    # helper (outbox settlement is already durable; a PG miss degrades to today's
+    # regenerated 404 rather than blocking local resume).
+    from agentcore.sidecar.paused_store import stamp_sidecar_paused_outcome
+
+    await stamp_sidecar_paused_outcome(
+        message_id=tid,
+        conversation_id=cid,
+        frame=suspension.to_json(),
+        decision=decision,
+    )
     return entry
 
 
@@ -139,6 +151,65 @@ def settlement_keys_in_entries(
     return found
 
 
+_KIND_TO_RESOLVED = {
+    "ask_user": "checkpoint_resolved",
+    "plan_review": "plan_review_resolved",
+    "team_preview": "team_preview_resolved",
+}
+
+
+def _matching_resolved_payload(
+    outbox_base: Any,
+    *,
+    message_id: str,
+    checkpoint_id: str,
+    suspension_kind: str,
+) -> dict[str, Any] | None:
+    """Payload of the matching ``*_resolved`` journal row, if any."""
+    from pathlib import Path
+
+    from agentcore.conversation.store.outbox import list_outbox_records
+
+    resolved_kind = _KIND_TO_RESOLVED.get(suspension_kind)
+    if not resolved_kind or not checkpoint_id:
+        return None
+    base = Path(outbox_base)
+    for record in list_outbox_records(base):
+        if str(record.get("message_id") or "") != message_id:
+            continue
+        for entry in journal_entries_from_map(record.get("journal")) or []:
+            kind = str(entry.get("kind") or entry.get("type") or "")
+            payload = dict(entry.get("payload") or {})
+            if kind == resolved_kind and str(payload.get("checkpoint_id") or "") == checkpoint_id:
+                return payload
+    return None
+
+
+def outbox_settlement_decision_for_frame(
+    outbox_base: Any,
+    *,
+    message_id: str,
+    checkpoint_id: str,
+    suspension_kind: str,
+) -> str:
+    """Decision on the matching ``*_resolved`` row, or ``""`` when none."""
+    payload = _matching_resolved_payload(
+        outbox_base,
+        message_id=message_id,
+        checkpoint_id=checkpoint_id,
+        suspension_kind=suspension_kind,
+    )
+    if payload is None:
+        return ""
+    decision = str(payload.get("decision") or "")
+    if decision:
+        return decision
+    blob = payload.get("resume_frame")
+    if isinstance(blob, dict):
+        return str(blob.get("decision") or "")
+    return ""
+
+
 def outbox_has_settlement_for_frame(
     outbox_base: Any,
     *,
@@ -147,23 +218,12 @@ def outbox_has_settlement_for_frame(
     suspension_kind: str,
 ) -> bool:
     """True when an outbox journal already holds the matching ``*_resolved``."""
-    from pathlib import Path
-
-    from agentcore.conversation.store.outbox import list_outbox_records
-
-    kind_to_resolved = {
-        "ask_user": "checkpoint_resolved",
-        "plan_review": "plan_review_resolved",
-        "team_preview": "team_preview_resolved",
-    }
-    resolved_kind = kind_to_resolved.get(suspension_kind)
-    if not resolved_kind or not checkpoint_id:
-        return False
-    base = Path(outbox_base)
-    for record in list_outbox_records(base):
-        if str(record.get("message_id") or "") != message_id:
-            continue
-        entries = journal_entries_from_map(record.get("journal")) or []
-        if (resolved_kind, checkpoint_id) in settlement_keys_in_entries(entries):
-            return True
-    return False
+    return (
+        _matching_resolved_payload(
+            outbox_base,
+            message_id=message_id,
+            checkpoint_id=checkpoint_id,
+            suspension_kind=suspension_kind,
+        )
+        is not None
+    )

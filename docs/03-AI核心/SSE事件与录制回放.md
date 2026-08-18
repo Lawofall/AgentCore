@@ -34,6 +34,7 @@ skip_if:
 - **`replace`**（✅ additive；四条正文类 delta：`content_delta` / `reasoning_delta` / `run_output_delta` / `run_reasoning_delta`）：帧级标记，`true` = 本帧携带该通道**末尾那个尚未闭合的文本块**的完整内容，客户端换掉那一块而非追加（末尾已被工具/标记步闭合时当普通新块折）。attach 回放段专用，覆盖两种全文帧——按通道合成的整块，以及增量段里跨游标那步 `process_*` 行携带的整步全文（客户端手里只有它的前半截）；两者互斥（已被 process 覆盖的通道不再出合成块），故一个语义够用。live 帧永不带。→ 见代码：`runtime/events/attach_replay.py`
 - **`run_failed.failure_kind`**（✅ additive）：协作图失败脸优先按此类贴文案——`quality`→「未达标」、`format`→「格式未过」（结构/格式闸：code_audit·缺章节·JSON）、`model`→「模型中断」、`call`→「调用失败」；缺省→「失败」/空 error「调用失败」。禁前端扫正文猜脸。→ 见代码：`RunFailureKind` · `runtime/events/payloads/run.py`
 - **`message_end.outcome`**（✅ additive）：回合结果质量，与 `finish_reason` 正交。`ok | partial | paused | error`，四值均已产出。`paused` = 瞬时上游限流导致的**可续跑**暂停（闸卡暂停仍是 `finish=paused` 且 `outcome=null`，靠这个区分）；续跑入口与「为何不是 Interaction」→ [运行时三模型 · Interaction](/docs/03-AI核心/运行时三模型与挂起.md#interaction唯一交互式挂起原语)。fold 缺字段时从已有表达位回推：`delivery_status.state=partial` / `run_failed.product_landed` / `tool_use_end.partial_failure`。→ 见代码：`runtime/turn/outcome.py`
+- **`message_end.team_batch`**（✅）：本回合团队状态，turn journal 派生。`no_batch` | `in_flight` | `settled`。没派工是确定态。不进 ProjectedTurn（旁路字段，与 `collab` 同）；**用户面不渲染**。→ [执行引擎 · 团队状态](/docs/03-AI核心/执行引擎架构设计.md)
 
 `finish_reason` → 见代码 `FinishReason`。
 

@@ -54,6 +54,7 @@ const TOOL_LABEL: Record<string, string> = {
   cancel_worker: "Cancel worker",
   resolve_escalation: "Resolve escalate",
   queue_user_message: "Queue message",
+  wait: "Wait",
   post_note: "Post note",
   read_notes: "Read notes",
   amend_note: "Amend note",
@@ -94,7 +95,9 @@ function isInternalIdArg(key: string): boolean {
   return key === "id" || key.endsWith("_id");
 }
 
-function toolDetail(args: Record<string, unknown>): string {
+function toolDetail(args: Record<string, unknown>, toolName?: string): string {
+  // WaitTool.reason 仅记日志，复制稿同样不摆。
+  if (toolName === "wait") return "";
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -108,7 +111,7 @@ function toolDetail(args: Record<string, unknown>): string {
 
 function formatToolLine(step: Extract<ProcessStep, { kind: "tool" }>): string {
   const label = TOOL_LABEL[step.tool_name] ?? step.tool_name;
-  const detail = toolDetail(step.arguments ?? {});
+  const detail = toolDetail(step.arguments ?? {}, step.tool_name);
   const status =
     step.status === "error"
       ? "（失败）"

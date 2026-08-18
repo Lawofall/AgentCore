@@ -10,7 +10,10 @@ import pytest
 from sqlalchemy import Update
 from sqlalchemy.dialects import postgresql
 
-from agentcore.api.routes.conversations.crud import _summary_with_count
+from agentcore.api.routes.conversations.crud import (
+    _first_user_contents_for_untitled,
+    _summary_with_count,
+)
 from agentcore.api.schemas.conversations import conversation_summary_from_orm
 from agentcore.conversation.list_preview import (
     PREVIEW_CHROME_ONLY,
@@ -238,6 +241,68 @@ def test_summary_with_count_uses_preview_map():
     assert empty.last_message_preview is None
 
 
+def test_summary_fills_fallback_title_when_db_empty():
+    """DB ``title`` stays empty; response overlay uses ``fallback_title``."""
+    from agentcore.conversation.common import fallback_title
+
+    conv = _conv(title=None)
+    user = "帮我做一个季度销售复盘\n数据在 sales.csv，需要按大区拆分"
+    summary = conversation_summary_from_orm(conv, first_user_message=user)
+    assert conv.title is None
+    assert summary.title == fallback_title(user)
+    assert summary.title == "帮我做一个季度销售复盘…"
+
+
+def test_summary_keeps_empty_title_without_user_message():
+    conv = _conv(title=None)
+    summary = conversation_summary_from_orm(conv)
+    assert conv.title is None
+    assert summary.title is None
+
+
+def test_summary_does_not_overlay_minted_title():
+    conv = _conv(title="季度复盘")
+    summary = conversation_summary_from_orm(
+        conv, first_user_message="帮我做一个季度销售复盘\n数据在 sales.csv"
+    )
+    assert summary.title == "季度复盘"
+    assert conv.title == "季度复盘"
+
+
+def test_summary_with_count_uses_first_user_map_when_untitled():
+    from agentcore.conversation.common import fallback_title
+
+    conv = _conv(title=None)
+    user = "帮我写一份周报"
+    summary = _summary_with_count(
+        conv, {CONV_ID: 2}, first_user_messages={CONV_ID: user}
+    )
+    assert conv.title is None
+    assert summary.title == fallback_title(user)
+
+
+@pytest.mark.asyncio
+async def test_untitled_batch_only_queries_empty_titles():
+    called: list[list[str]] = []
+
+    class _Repo:
+        async def first_user_contents_for_conversations(self, ids: list[str]) -> dict[str, str]:
+            called.append(list(ids))
+            return {ids[0]: "帮我写周报"} if ids else {}
+
+    titled = _conv(title="已铸")
+    empty_id = "22222222-2222-4222-8222-222222222222"
+    empty = _conv(id=empty_id, title=None)
+    out = await _first_user_contents_for_untitled(_Repo(), [titled, empty])  # type: ignore[arg-type]
+    assert called == [[empty_id]]
+    assert out == {empty_id: "帮我写周报"}
+
+    called.clear()
+    skipped = await _first_user_contents_for_untitled(_Repo(), [titled])  # type: ignore[arg-type]
+    assert called == []
+    assert skipped == {}
+
+
 # --- touch_activity SQL -------------------------------------------------------
 
 
@@ -267,6 +332,29 @@ async def test_previews_query_is_assistant_only():
     assert "messages.role = 'assistant'" in sql
     assert "messages.role = 'user'" not in sql
     assert "row_number" in sql.lower()
+
+
+@pytest.mark.asyncio
+async def test_first_user_contents_skips_empty_ids():
+    session = _RecordingSession()
+    out = await MessageRepository(session).first_user_contents_for_conversations([])
+    assert out == {}
+    assert session.statements == []
+
+
+@pytest.mark.asyncio
+async def test_first_user_contents_is_one_user_query():
+    other = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    session = _RecordingSession([_Result(rows=[(CONV_ID, "帮我写周报")])])
+    out = await MessageRepository(session).first_user_contents_for_conversations(
+        [CONV_ID, other]
+    )
+    assert len(session.statements) == 1
+    sql = _sql(session.statements[0])
+    assert "messages.role = 'user'" in sql
+    assert "row_number" in sql.lower()
+    assert "messages.role = 'assistant'" not in sql
+    assert out == {CONV_ID: "帮我写周报"}
 
 
 @pytest.mark.asyncio

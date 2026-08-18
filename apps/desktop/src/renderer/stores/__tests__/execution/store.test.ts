@@ -713,6 +713,39 @@ describe("worker tool_use_progress overlay", () => {
     expect(cleared?.toolExecutionLive).toBeNull();
   });
 
+  it("keeps worker tool phase overlay after execution_detached", () => {
+    store().startExecution(plan, MID);
+    store().recordFrame(started("agent-1", "run-1"), MID);
+    store().setWorkerToolPhase(
+      {
+        tool_call_id: "tc-1",
+        tool_name: "web_search",
+        phase: "querying",
+        run_id: "run-1",
+      },
+      MID,
+    );
+    store().setExecutionDetached(
+      {
+        execution_id: "exec-1",
+        conversation_id: "c1",
+        completed: 0,
+        total: 1,
+        host_turn_id: MID,
+      },
+      MID,
+    );
+    expect(rt().workerToolPhases["run-1"]).toEqual({
+      phase: "querying",
+      toolName: "web_search",
+    });
+    const agent = projectRuntime(rt())?.agents.find((a) => a.id === "agent-1");
+    expect(agent?.toolExecutionLive).toEqual({
+      toolName: "web_search",
+      phase: "querying",
+    });
+  });
+
   it("ignores worker tool phase without run_id", () => {
     store().startExecution(plan, MID);
     store().recordFrame(started("agent-1", "run-1"), MID);

@@ -248,7 +248,7 @@ export function handleExecutionEvent(
       return true;
     }
     // 执行转后台：附着回合已收口，团队继续跑。EPHEMERAL live stamp → StatusStrip
-    // 静态「后台」徽标；conformanceFold 保持 no-op。
+    // 「后台」徽标；进度与节点活体跟后续 run_* / 队员 tool_use_*。conformanceFold no-op。
     // Soft refresh：拉最新 message.runs，配合 hydrate 终态优先，愈合 live 丢的
     // worker `run_completed`（样本：detach 后图仍 Thinking、journal 已绿）。
     case "execution_detached": {

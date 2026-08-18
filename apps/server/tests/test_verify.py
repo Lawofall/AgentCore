@@ -7,6 +7,7 @@ two light-layer checks: fabricated citations and structural completeness (unclos
 empty-bodied code fences).
 """
 
+from agentcore.runtime.closing_posture import closing_honesty_verdict_hit
 from agentcore.runtime.verify import finish_guard, format_guard_steer
 
 
@@ -302,18 +303,13 @@ def test_partial_verdict_rejects_all_success_claim():
         delivered_files=("src/a.ts",),
         execution_id="e1",
     )
-    reworks = finish_guard(
-        "团队已全部完成，所有任务都已就绪，请直接使用。",
-        citation_count=0,
-        delivery_verdict=verdict,
-    )
-    assert len(reworks) == 1
-    assert "部分未满足" in reworks[0] or "档位" in reworks[0]
-    assert "姿势 A" in reworks[0]
+    claim = "团队已全部完成，所有任务都已就绪，请直接使用。"
+    assert closing_honesty_verdict_hit(claim, verdict) == "posture_a"
+    assert finish_guard(claim, citation_count=0, delivery_verdict=verdict) == []
 
 
 def test_partial_verdict_rejects_fully_usable_claim():
-    """可用性诚实性：blocked/partial +「已完整可用」→ finish_guard 回炉（档位禁 A）。"""
+    """可用性诚实性：blocked/partial +「已完整可用」本轮影子观测，不回炉。"""
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
@@ -321,13 +317,9 @@ def test_partial_verdict_rejects_fully_usable_claim():
         delivered_files=("site/index.html",),
         execution_id="e1",
     )
-    reworks = finish_guard(
-        "质检面板已完整可用，可以开始用了。",
-        citation_count=0,
-        delivery_verdict=verdict,
-    )
-    assert len(reworks) == 1
-    assert "姿势 A" in reworks[0]
+    claim = "质检面板已完整可用，可以开始用了。"
+    assert closing_honesty_verdict_hit(claim, verdict) == "posture_a"
+    assert finish_guard(claim, citation_count=0, delivery_verdict=verdict) == []
 
 
 def test_blocked_verdict_rejects_fully_usable_claim():
@@ -338,12 +330,9 @@ def test_blocked_verdict_rejects_fully_usable_claim():
         delivered_files=(),
         execution_id="e1",
     )
-    reworks = finish_guard(
-        "已经可以使用了。",
-        citation_count=0,
-        delivery_verdict=verdict,
-    )
-    assert any("姿势 A" in r or "档位" in r for r in reworks)
+    claim = "已经可以使用了。"
+    assert closing_honesty_verdict_hit(claim, verdict) == "posture_a"
+    assert finish_guard(claim, citation_count=0, delivery_verdict=verdict) == []
 
 
 def test_bare_now_usable_does_not_trigger_fully_usable_gate():
@@ -402,7 +391,7 @@ def test_partial_verdict_allows_honest_gap_summary():
 
 
 def test_partial_verdict_rejects_fixed_claim():
-    """乙并入姿势 A：blocked/partial +「已修好」→ finish_guard 回炉。"""
+    """乙并入姿势 A：blocked/partial +「已修好」本轮影子观测，不回炉。"""
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
@@ -410,17 +399,13 @@ def test_partial_verdict_rejects_fixed_claim():
         delivered_files=("src/a.ts",),
         execution_id="e1",
     )
-    reworks = finish_guard(
-        "缺陷已修好，可以收工。",
-        citation_count=0,
-        delivery_verdict=verdict,
-    )
-    assert len(reworks) == 1
-    assert "姿势 A" in reworks[0]
+    claim = "缺陷已修好，可以收工。"
+    assert closing_honesty_verdict_hit(claim, verdict) == "posture_a"
+    assert finish_guard(claim, citation_count=0, delivery_verdict=verdict) == []
 
 
 def test_blocked_verdict_rejects_verified_green_claims():
-    """乙并入姿势 A：blocked + 验证通过 / 测试已通过 / 已跑通 → 回炉。"""
+    """乙并入姿势 A：blocked + 验证通过 / 测试已通过 / 已跑通 → 命中但不回炉。"""
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
@@ -437,12 +422,8 @@ def test_blocked_verdict_rejects_verified_green_claims():
         "修复已完成。",
         "bug 已修复。",
     ):
-        reworks = finish_guard(
-            claim,
-            citation_count=0,
-            delivery_verdict=verdict,
-        )
-        assert any("姿势 A" in r or "档位" in r for r in reworks), claim
+        assert closing_honesty_verdict_hit(claim, verdict) == "posture_a", claim
+        assert finish_guard(claim, citation_count=0, delivery_verdict=verdict) == [], claim
 
 
 def test_partial_verdict_allows_negated_fixed_phrase():
@@ -484,7 +465,7 @@ def test_partial_verdict_allows_honest_fix_gap_summary():
 
 
 def test_partial_verdict_rejects_delivery_done_claims():
-    """交付完成闭集并入姿势 A：partial + 文件 → 回炉。站点「做好了」已退役（禁加词）。"""
+    """交付完成闭集并入姿势 A：partial + 文件 → 命中但不回炉。站点「做好了」已退役。"""
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(
@@ -502,12 +483,8 @@ def test_partial_verdict_rejects_delivery_done_claims():
         "三路调研已收齐，汇总如下。",
         "已全部收齐。",
     ):
-        reworks = finish_guard(
-            claim,
-            citation_count=0,
-            delivery_verdict=verdict,
-        )
-        assert any("姿势 A" in r or "档位" in r for r in reworks), claim
+        assert closing_honesty_verdict_hit(claim, verdict) == "posture_a", claim
+        assert finish_guard(claim, citation_count=0, delivery_verdict=verdict) == [], claim
 
 
 def test_site_done_phrase_not_expanded_into_posture_a():
@@ -651,14 +628,9 @@ def test_blocked_with_files_rejects_all_success_not_file_claim():
         )
         == []
     )
-    reworks = finish_guard(
-        "全部完成，可以收工。",
-        citation_count=0,
-        delivery_verdict=verdict,
-    )
-    assert len(reworks) == 1
-    assert "姿势 A" in reworks[0]
-    assert "档位" in reworks[0] or "未满足" in reworks[0]
+    claim = "全部完成，可以收工。"
+    assert closing_honesty_verdict_hit(claim, verdict) == "posture_a"
+    assert finish_guard(claim, citation_count=0, delivery_verdict=verdict) == []
 
 
 def test_notes_verdict_rejects_posture_a_claim():
@@ -670,17 +642,27 @@ def test_notes_verdict_rejects_posture_a_claim():
         delivered_files=("src/a.ts",),
         execution_id="e1",
     )
-    reworks = finish_guard(
-        "全部完成，产物见工作区。",
-        citation_count=0,
-        delivery_verdict=verdict,
-        overview_max_chars=1000,
+    claim = "全部完成，产物见工作区。"
+    assert closing_honesty_verdict_hit(claim, verdict) == "posture_a"
+    assert (
+        finish_guard(
+            claim,
+            citation_count=0,
+            delivery_verdict=verdict,
+            overview_max_chars=1000,
+        )
+        == []
     )
-    assert any("姿势 A" in r or "档位" in r for r in reworks)
 
 
-def test_delivery_verdict_rejects_oversized_overview():
+def test_delivery_verdict_oversized_overview_is_shadow_only(monkeypatch):
+    """篇幅超限只打影子日志，不回炉、不改写终稿。"""
+    from agentcore.runtime.closing_posture import core as honesty_core
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from tests.conftest import LogSpy
+
+    spy = LogSpy()
+    monkeypatch.setattr(honesty_core, "logger", spy)
 
     verdict = DeliveryVerdict(
         state="delivered",
@@ -694,9 +676,13 @@ def test_delivery_verdict_rejects_oversized_overview():
         delivery_verdict=verdict,
         overview_max_chars=1000,
     )
-    assert len(reworks) == 1
-    assert "简短概览" in reworks[0]
-    assert "1000" in reworks[0]
+    assert reworks == []
+    fields = spy.get("engine.finish_guard_honesty_shadow")
+    assert fields["hit"] == "overview_length"
+    assert fields["verdict_state"] == "delivered"
+    assert fields["has_delivered_files"] is True
+    assert "content" not in fields
+    assert "preview" not in fields
 
 
 def test_delivery_verdict_allows_short_overview():
@@ -770,6 +756,34 @@ def test_overview_length_skipped_for_workers():
         )
         == []
     )
+
+
+def test_delivery_structure_rework_still_fires_when_overview_also_over(monkeypatch):
+    """篇幅影子不得吞掉产物结构窄闸：无 .pptx 仍回炉。"""
+    from agentcore.runtime.closing_posture import core as honesty_core
+    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from tests.conftest import LogSpy
+
+    spy = LogSpy()
+    monkeypatch.setattr(honesty_core, "logger", spy)
+
+    verdict = DeliveryVerdict(
+        state="partial",
+        delivered_files=("build_pptx.py", "讲稿.md"),
+        execution_id="e1",
+    )
+    body = "课件 PPT 已落盘，可直接打开使用。" + ("细节复述。" * 200)
+    reworks = finish_guard(
+        body,
+        citation_count=0,
+        delivery_verdict=verdict,
+        overview_max_chars=1000,
+    )
+    assert len(reworks) == 1
+    assert ".pptx" in reworks[0]
+    assert "不得宣称" in reworks[0]
+    fields = spy.get("engine.finish_guard_honesty_shadow")
+    assert fields["hit"] == "overview_length"
 
 
 def test_partial_md_only_rejects_pptx_ready_claim():

@@ -271,6 +271,7 @@ async def test_finalize_cloud_ceo_pause_writes_metrics_and_lock(monkeypatch):
     assert journaled and journaled[0]["entries"][0]["kind"] == "turn_paused"
     assert metrics["status"] == "paused"
     assert metrics["finish_reason"] == FinishReason.PAUSED.value
+    assert metrics["mode"] == "cloud"
     assert locks == [
         {
             "message_id": "m-pause",

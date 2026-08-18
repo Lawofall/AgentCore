@@ -258,6 +258,7 @@ from .model_catalog import (
     ModelCatalogItem,
     ModelCatalogResponse,
     ModelPriceCard,
+    ModelUnavailableReason,
 )
 from .notices import (
     ActiveNotice,
@@ -487,6 +488,7 @@ __all__ = [
     "SetDefaultModelProfileRequest",
     # model catalog (模型目录)
     "ModelPriceCard",
+    "ModelUnavailableReason",
     "ModelCatalogCurrent",
     "ModelCatalogItem",
     "ModelCatalogResponse",

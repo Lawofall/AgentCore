@@ -6,6 +6,7 @@ from agentcore.runtime.closing_posture import (
     claims_posture_a,
     claims_posture_c,
     closing_honesty_rework,
+    closing_honesty_verdict_hit,
     is_formal_complete_tier,
     mutual_exclusion_rework,
     reconcile_resume_closing,
@@ -26,29 +27,25 @@ def test_tier_truth_source():
     assert not tier_forbids_posture_a("delivered")
 
 
-def test_cef27dfa_auc_same_message_flagged():
-    """cef27dfa：同条「请确认」+「已全部收卷」→ finish_guard 回炉（无卡时 A∪C）。"""
+def test_cef27dfa_auc_same_message_not_flagged_without_verdict():
+    """cef27dfa：无对账卡时同条 A∪C 不再回炉（团队状态走结构面）。"""
     content = (
         "方向：先问你 / 关键缺口（调研对象未定）调研对象未明确——请确认：\n"
         "三路调研 + 独立审计已全部收卷，以下是决策简报。"
     )
     assert claims_needs_confirm(content)
     assert claims_full_delivery(content)
-    rework = mutual_exclusion_rework(content)
-    assert rework is not None
-    assert "互斥" in rework
-    reworks = finish_guard(content, citation_count=0)
-    assert any("互斥" in r for r in reworks)
+    assert mutual_exclusion_rework(content) is None
+    assert finish_guard(content, citation_count=0) == []
 
 
-def test_e8fb470c_auc_same_message_flagged():
-    """e8fb470c：同条「需要先确认关键信息」+「均已落盘」。"""
+def test_e8fb470c_auc_same_message_not_flagged_without_verdict():
+    """e8fb470c：无对账卡时同条「请确认」+「均已落盘」不回炉。"""
     content = (
         "调研可以并行展开，但需要先确认一个关键信息：**调研的对象是什么？**\n"
         "审计已完成，三份调研成稿均已落盘。"
     )
-    reworks = finish_guard(content, citation_count=0)
-    assert any("互斥" in r for r in reworks)
+    assert finish_guard(content, citation_count=0) == []
 
 
 def test_auc_skipped_for_workers():
@@ -187,16 +184,14 @@ def test_partial_verdict_rejects_posture_a():
         delivered_files=("research/a.md",),
         execution_id="e1",
     )
-    rework = closing_honesty_rework("三路调研已全部收卷。", verdict)
-    assert rework is not None
-    assert "档位" in rework
-    assert "姿势 A" in rework
+    assert closing_honesty_verdict_hit("三路调研已全部收卷。", verdict) == "posture_a"
+    assert closing_honesty_rework("三路调研已全部收卷。", verdict) is None
     reworks = finish_guard(
         "三路调研已全部收卷。",
         citation_count=0,
         delivery_verdict=verdict,
     )
-    assert any("姿势 A" in r or "档位" in r for r in reworks)
+    assert not any("姿势 A" in r or "档位" in r for r in reworks)
 
 
 def test_partial_verdict_rejects_gathered_claim():
@@ -215,12 +210,13 @@ def test_partial_verdict_rejects_gathered_claim():
         "已收齐。",
     ):
         assert claims_posture_a(claim), claim
+        assert closing_honesty_verdict_hit(claim, verdict) == "posture_a", claim
         reworks = finish_guard(
             claim,
             citation_count=0,
             delivery_verdict=verdict,
         )
-        assert any("姿势 A" in r or "档位" in r for r in reworks), claim
+        assert not any("姿势 A" in r or "档位" in r for r in reworks), claim
 
 
 def test_notes_verdict_rejects_posture_a():
@@ -232,26 +228,26 @@ def test_notes_verdict_rejects_posture_a():
         delivered_files=("src/a.ts",),
         execution_id="e1",
     )
+    assert closing_honesty_verdict_hit("全部完成，产物见工作区。", verdict) == "posture_a"
     reworks = finish_guard(
         "全部完成，产物见工作区。",
         citation_count=0,
         delivery_verdict=verdict,
         overview_max_chars=1000,
     )
-    assert any("姿势 A" in r or "档位" in r for r in reworks)
+    assert not any("姿势 A" in r or "档位" in r for r in reworks)
 
 
-def test_gathered_auc_same_message_flagged():
-    """「请确认」+「已收齐」同条 → 完成态互斥。"""
+def test_gathered_auc_same_message_not_flagged_without_verdict():
+    """无对账卡：同条「请确认」+「已收齐」不回炉。"""
     content = (
         "方向：先问你 / 关键缺口（调研对象未定）调研对象未明确——请确认：\n"
         "三路调研已收齐，汇总如下。"
     )
     assert claims_posture_c(content)
     assert claims_posture_a(content)
-    assert mutual_exclusion_rework(content) is not None
-    reworks = finish_guard(content, citation_count=0)
-    assert any("互斥" in r for r in reworks)
+    assert mutual_exclusion_rework(content) is None
+    assert finish_guard(content, citation_count=0) == []
 
 
 def test_bare_completed_not_posture_a():
@@ -278,15 +274,15 @@ def test_partial_requires_draft_acknowledgment_without_adding_completion_words()
     )
     assert not claims_posture_a(hollow)
     assert not claims_draft_acknowledgment(hollow)
-    rework = closing_honesty_rework(hollow, verdict)
-    assert rework is not None
-    assert "承认" in rework or "缺口" in rework
+    assert closing_honesty_verdict_hit(hollow, verdict) == "draft_ack"
+    assert closing_honesty_rework(hollow, verdict) is None
 
     honest = (
         "先交一版草稿（证据不足）：缺参考文献列表，关键数据待核实。"
         "成稿见工作区；要我按审校意见补引用吗？"
     )
     assert claims_draft_acknowledgment(honest)
+    assert closing_honesty_verdict_hit(honest, verdict) is None
     assert closing_honesty_rework(honest, verdict) is None
 
 
@@ -334,9 +330,8 @@ def test_node_failed_draft_ack_blocks_hollow_verified_landing_opening():
         execution_id="e-cap4",
         requires_draft_ack=True,
     )
-    rework = closing_honesty_rework(hollow, verdict)
-    assert rework is not None
-    assert "承认" in rework or "缺口" in rework
+    assert closing_honesty_verdict_hit(hollow, verdict) == "draft_ack"
+    assert closing_honesty_rework(hollow, verdict) is None
 
     honest = (
         "部分完成：模块B契约未过，已验收见产物卡，仍有缺口。"
@@ -817,3 +812,130 @@ def test_b1_cancel_zero_requires_gap_ack():
     honest = "部分完成：三份机理评审均未落盘（0/3）；缺口清单：调研员/审校/执笔；建议续派或缩小范围。"
     assert closing_honesty_rework(honest) is None
     clear_b1_closing_latches()
+
+
+def test_delivery_verdict_set_in_child_task_readable_via_shared_ledger():
+    """后台 Task 的 ContextVar set 到不了父任务；共享 ledger 槽必须能读到。"""
+    import asyncio
+
+    from agentcore.llm.provider.protocol import TokenUsage
+    from agentcore.runtime.delegate.delivery_status import (
+        DeliveryVerdict,
+        bind_delivery_verdict,
+        current_delivery_verdict,
+        read_delivery_verdict,
+    )
+    from agentcore.runtime.engine.directive import Return
+    from agentcore.runtime.engine.outcome import RoundOutcome
+    from agentcore.runtime.engine.round import decide_no_tool_round
+    from agentcore.runtime.loop_controller import LoopController
+    from agentcore.tools.protocol import TurnPromotionLedger
+
+    ledger = TurnPromotionLedger()
+    stamped = DeliveryVerdict(
+        state="partial",
+        delivered_files=("research/a.md",),
+        execution_id="e-bg",
+        requires_draft_ack=True,
+        gap_reasons=("evidence_deficit", "thin_review"),
+    )
+
+    async def child() -> None:
+        bind_delivery_verdict(stamped, promotion_ledger=ledger)
+
+    async def parent() -> None:
+        await asyncio.create_task(child())
+        assert current_delivery_verdict.get() is None
+        got = read_delivery_verdict(promotion_ledger=ledger)
+        assert got is not None
+        assert got.state == "partial"
+        assert got.execution_id == "e-bg"
+        assert got.gap_reasons == ("evidence_deficit", "thin_review")
+
+    asyncio.run(parent())
+
+    claim = "三路调研已全部收卷。"
+    assert closing_honesty_verdict_hit(claim, ledger.delivery_verdict) == "posture_a"
+    controller = LoopController(
+        empty_threshold=2,
+        tool_failure_warn=3,
+        tool_failure_disable=5,
+        unproductive_threshold=3,
+        convergence_finalize_rounds=3,
+        investigation_tools=frozenset(),
+    )
+    directive = decide_no_tool_round(
+        RoundOutcome(content=claim, reasoning="", usage=TokenUsage()),
+        final_content=claim,
+        controller=controller,
+        annotate_citations=True,
+        citation_sink=None,
+        finish_guard_reworks=0,
+        promotion_ledger=ledger,
+    )
+    assert isinstance(directive, Return)
+
+
+def test_honesty_shadow_does_not_rework_or_reset(monkeypatch):
+    """本该回炉的档位命中只打影子日志，不回炉、不 content_reset。"""
+    from agentcore.llm.provider.protocol import TokenUsage
+    from agentcore.runtime.closing_posture import core as honesty_core
+    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+    from agentcore.runtime.engine.directive import Return
+    from agentcore.runtime.engine.outcome import RoundOutcome
+    from agentcore.runtime.engine.round import decide_no_tool_round
+    from agentcore.runtime.loop_controller import LoopController
+    from agentcore.tools.protocol import TurnPromotionLedger
+    from tests.conftest import LogSpy
+
+    spy = LogSpy()
+    monkeypatch.setattr(honesty_core, "logger", spy)
+
+    ledger = TurnPromotionLedger()
+    verdict = DeliveryVerdict(
+        state="partial",
+        delivered_files=("AgentCore/文档/research/报告.md",),
+        execution_id="e-shadow",
+        requires_draft_ack=True,
+        gap_reasons=("evidence_deficit",),
+    )
+    ledger.delivery_verdict = verdict
+    claim = "三路调研已全部收卷。"
+    assert closing_honesty_verdict_hit(claim, verdict) == "posture_a"
+    assert closing_honesty_rework(claim, verdict) is None
+    fields = spy.get("engine.finish_guard_honesty_shadow")
+    assert fields["verdict_state"] == "partial"
+    assert fields["hit"] == "posture_a"
+    assert fields["has_delivered_files"] is True
+    assert fields["gap_reasons"] == ["evidence_deficit"]
+    assert "content" not in fields
+    assert "preview" not in fields
+    assert finish_guard(claim, citation_count=0, delivery_verdict=verdict) == []
+
+    hollow = "综述已完成。团队产出了一份全面综述。"
+    assert closing_honesty_verdict_hit(hollow, verdict) == "draft_ack"
+    assert closing_honesty_rework(hollow, verdict) is None
+    draft_fields = [
+        kw for name, kw in spy.events if name == "engine.finish_guard_honesty_shadow"
+    ][-1]
+    assert draft_fields["hit"] == "draft_ack"
+    assert draft_fields["gap_reasons"] == ["evidence_deficit"]
+
+    controller = LoopController(
+        empty_threshold=2,
+        tool_failure_warn=3,
+        tool_failure_disable=5,
+        unproductive_threshold=3,
+        convergence_finalize_rounds=3,
+        investigation_tools=frozenset(),
+    )
+    directive = decide_no_tool_round(
+        RoundOutcome(content=claim, reasoning="", usage=TokenUsage()),
+        final_content=claim,
+        controller=controller,
+        annotate_citations=True,
+        citation_sink=None,
+        finish_guard_reworks=0,
+        promotion_ledger=ledger,
+    )
+    assert isinstance(directive, Return)

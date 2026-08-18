@@ -55,7 +55,7 @@ function capturingTransport(opts?: {
             JSON.stringify({
               jsonrpc: "2.0",
               id: msg.id,
-              result: { ok: true },
+              result: { ok: true, ttlSeconds: 300 },
             }),
           );
         };

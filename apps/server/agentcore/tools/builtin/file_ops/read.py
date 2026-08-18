@@ -44,6 +44,7 @@ from agentcore.workspace.sparse_listing import should_hide_ai_noise_from_list
 from .errors import (
     _error,
     _file_read_path_ceiling_error,
+    _file_read_path_ceiling_message,
     _map_workspace_read_error,
     _maybe_channel_dead_error,
     _office_extract_budget_error,
@@ -179,12 +180,12 @@ def _effective_line_limit(limit: object) -> int:
 
 
 def _is_ceiling_counted_read(offset: object, limit: object) -> bool:
-    """From line 1 filling the safety cap — always counts toward the same-path ceiling.
+    """From line 1 filling the safety cap — counts unless tool_clear recovery.
 
-    双省 / 只传 offset=1 / 只传 limit=行顶 (and offset=1+limit≥行顶) count.
-    Point windows count only when the requested span was already delivered
-    and the path body is still in the projection window (see
-    ``_file_read_should_count``).
+    双省 / 只传 offset=1 / 只传 limit=行顶 (and offset=1+limit≥行顶) are this
+    shape. ``_file_read_should_count`` skips the increment when the path is
+    fully cleared. Point windows count only when the requested span was
+    already delivered and the path body is still in the projection window.
     """
     if _effective_offset(offset) > 1:
         return False
@@ -197,6 +198,18 @@ def _file_read_body_present(context: ToolContext, path_key: str) -> bool:
     """``None`` verbatim set = projection not synced → treat body as still present."""
     verbatim = context.file_read_verbatim_paths
     return verbatim is None or path_key in verbatim
+
+
+def _file_read_cleared_recovery(context: ToolContext, path_key: str) -> bool:
+    """True when tool_clear recorded this path as fully cleared (stub, no verbatim).
+
+    ``file_read_cleared_paths is None`` = projection not synced → no recovery
+    exemption (same as treating the body as still present for the ceiling).
+    """
+    cleared = context.file_read_cleared_paths
+    if cleared is None or path_key not in cleared:
+        return False
+    return not _file_read_body_present(context, path_key)
 
 
 def _merge_line_range(
@@ -253,10 +266,13 @@ def _file_read_should_count(
 ) -> bool:
     """Whether this successful read increments ``file_read_counts``.
 
-    Fill-cap whole reads always count. A point window counts only when the
+    tool_clear recovery (path fully cleared in the projection) never counts.
+    Fill-cap whole reads otherwise count. A point window counts only when the
     requested line range was already delivered *and* the path body is still in
     the projection window. A new range (pagination) never counts.
     """
+    if _file_read_cleared_recovery(context, path_key):
+        return False
     if _is_ceiling_counted_read(offset, limit):
         return True
     return _file_read_body_present(
@@ -591,7 +607,8 @@ def _note_file_read_success(
         output += (
             f"\n\n[系统提示] 本 run 对 `{path_key}` 的 file_read 已达上限 "
             f"（{FILE_READ_SAME_PATH_MAX} 次）；请求的行范围已在对话正文中，"
-            "请依据已有正文推进或落盘，勿再读此文件。"
+            "请依据已有正文推进或落盘，勿再读。"
+            "仅当该正文已被清理、对话中不再有全文时才可再读。"
         )
     return output
 
@@ -647,7 +664,7 @@ class FileReadTool:
                 "同一相对路径本 run 对成功 file_read 有次数上限（从第 1 行要满安全顶的整读计次；"
                 "开窗仅当本次请求行范围此前已交付且正文仍在对话中时计次；新范围分页不计）。"
                 "触顶且正文仍在对话中、又无再读授额时仅拒绝该路径，其它文件仍可 file_read。"
-                "正文已被清理或写成功后可再读核对。"
+                "正文已被清理时可再读且不计次；写成功后可再读核对。"
                 "已落盘产物优先以写/append 回执中的 artifact manifest 验真。"
             ),
             parameters={
@@ -684,10 +701,12 @@ class FileReadTool:
         offset = arguments.get("offset")
         limit = arguments.get("limit")
 
-        # Same-path ceiling: fill-cap whole reads always count; a point window
-        # counts only when its requested span was already delivered AND the path
-        # body is still in the projected window. New ranges (pagination) skip
-        # the gate. Cleared body → allow recovery even with remaining == 0.
+        # Same-path ceiling: fill-cap whole reads always count unless tool_clear
+        # recorded the path as fully cleared (recovery does not consume quota).
+        # A point window counts only when its requested span was already
+        # delivered AND the path body is still in the projected window. New
+        # ranges (pagination) skip the gate. Cleared body → allow recovery
+        # even with remaining == 0.
         from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
@@ -708,10 +727,8 @@ class FileReadTool:
                     using_reread = True
                 elif _file_read_body_present(context, path_key):
                     return _file_read_path_ceiling_error(
-                        (
-                            f"已多次读取 `{path_key}`（本 run 上限 "
-                            f"{FILE_READ_SAME_PATH_MAX} 次）。正文已在对话中，勿再读此文件；"
-                            "可换其它文件，或基于已有正文落盘 / handoff。"
+                        _file_read_path_ceiling_message(
+                            path_key, max_reads=FILE_READ_SAME_PATH_MAX
                         ),
                         start,
                     )

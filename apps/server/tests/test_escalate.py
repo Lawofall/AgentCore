@@ -164,13 +164,13 @@ def test_escalate_schema_teaches_blocking_choice():
     schema = EscalateTool().schema
     desc = schema.description
     assert "默认 false" in desc
-    assert "猜错产物基本作废" in desc
-    assert "不确定就问" in desc
-    assert "该停时别装非阻塞" in desc
-    assert "能自行合理假设的小事" in desc
+    assert "猜错作废" in desc
+    assert "小事勿升级" in desc
+    assert "报一声继续" in desc
+    assert "只有上级能定" in desc
     blocking = schema.parameters["properties"]["blocking"]["description"]
     assert "默认 false" in blocking
-    assert "该停时别装非阻塞" in blocking
+    assert "报一声继续" in blocking or "原地等" in blocking
     # default philosophy unchanged: missing blocking stays non-blocking
     assert schema.parameters["properties"]["blocking"].get("default") in (None, False)
 

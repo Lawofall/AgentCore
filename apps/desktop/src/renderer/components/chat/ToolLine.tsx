@@ -34,7 +34,9 @@ import {
 import { useEffect, useState } from "react";
 import {
   BrowserActivityCard,
+  browserResultTail,
   isBrowserActivityGroup,
+  isBrowserDisplay,
 } from "./BrowserActivityCard";
 import {
   ReadUrlSourceCollection,
@@ -85,21 +87,35 @@ const PEEK_SUPPRESSED = new Set([
   // 用户认的是「上次那场讨论」，不是一串 id。
   "file_read",
   "file_list",
-  // 写盘家族：标题已有 path；成功 ack「已写入/已编辑/已追加」与 path 重复。
+  // 写盘家族：标题已有 path / source→destination；成功 ack 与路径重复。
   // 类型诊断不走第二行，折叠态并进标题（见 writeFamilyDiagnosticPeek）。
   "file_write",
   "file_append",
   "str_replace",
+  "file_delete",
+  "file_move",
+  "file_copy",
+  "mkdir",
   // CEO 协调原语：标题已自解释（撤队员 / 裁决求助另挂角色名），peek 只是操作确认文案。
+  // wait 成功回执不是过程信息（无 peek / 无 chevron，见 hasToolResultBody）。
   "update_synthesis",
   "replan",
   "cancel_worker",
   "resolve_escalation",
   "queue_user_message",
+  "wait",
+  "post_note",
+  "amend_note",
+  "desktop_notify",
   // 本机 Host：标题已自解释；正文是 untrusted JSON，勿 peek 刷屏。
   "host_ping",
   "host_info",
   "host_audio_devices",
+  "host_storage",
+  "host_power",
+  "host_network_summary",
+  "host_apps",
+  "host_os_log_summary",
   "host_shell",
   "host_open_settings",
   "host_audio_set_default",
@@ -290,7 +306,12 @@ export function ToolLine({
   );
   const { Icon, label } = toolMeta(step.tool_name);
   const targetRole = useRunTargetRole(step, turnKey);
-  const detail = targetRole || toolDetail(step.arguments);
+  const browserTail =
+    step.status === "success" && isBrowserDisplay(step.display)
+      ? browserResultTail(step.display) || null
+      : null;
+  // display.detail 已进标题时不再 chip args.url / text，避免 Navigate 叠两遍 URL。
+  const detail = browserTail ? "" : targetRole || toolDetail(step.arguments);
   const data: ToolResultData = {
     toolName: step.tool_name,
     args: step.arguments,
@@ -309,7 +330,7 @@ export function ToolLine({
   // Product failure face must stay visible on the collapsed row even for tools
   // whose success peek is suppressed (title already self-explanatory).
   const suppressesPeek =
-    PEEK_SUPPRESSED.has(step.tool_name) &&
+    (PEEK_SUPPRESSED.has(step.tool_name) || isBrowserTool(step.tool_name)) &&
     !(step.status === "error" && !!step.failure?.message?.trim());
   // Real backend-ish start anchor (stamped at tool_use_start) keyed by tool_call_id (= step.id),
   // so the running timer survives this row remounting. Undefined on a reloaded turn (tool done).
@@ -327,7 +348,7 @@ export function ToolLine({
         .join(" · ")
     : "";
   // 完成态元信息并进标题行、不另起 peek：web_search「N results」、grep 匹配计数、
-  // write 家族类型诊断。handoff summary 走 inlineBody（标题主内容，随 label truncate）。
+  // write 家族类型诊断、browser_* detail。handoff summary 走 inlineBody。
   const writeDiagPeek =
     step.status === "success" && WRITE_FAMILY.has(step.tool_name)
       ? writeFamilyDiagnosticPeek(data)
@@ -335,11 +356,13 @@ export function ToolLine({
   const inlineMeta =
     step.status !== "success"
       ? null
-      : !nested && step.tool_name === "web_search" && hasBody
-        ? peek || null
-        : step.tool_name === "grep"
+      : browserTail
+        ? browserTail
+        : !nested && step.tool_name === "web_search" && hasBody
           ? peek || null
-          : writeDiagPeek;
+          : step.tool_name === "grep"
+            ? peek || null
+            : writeDiagPeek;
   const inlineBody = successfulHandoff && peek ? peek : null;
   return (
     <div className="min-w-0">

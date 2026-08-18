@@ -1,9 +1,10 @@
 """Non-retryable consolidation failures advance memory_synced_at (stop sweeper loops).
 
 Mirrors the abnormal-turn skip posture: deterministic failures drop the window;
-retryable AgentCoreError leaves the watermark so the next sweep re-selects. A pool
-checkout timeout counts as retryable even though it is no AgentCoreError — it is the
-one failure here that would otherwise drop a window nothing had read.
+retryable AgentCoreError or transient ``llm_failure_class`` (a 429 whose leaf HTTP
+budget is spent still counts) leaves the watermark so the next sweep re-selects.
+A pool checkout timeout counts as retryable even though it is no AgentCoreError —
+it is the one failure here that would otherwise drop a window nothing had read.
 
 Retryable failures are layered: shared upstream (rate limit / 5xx / quota) arms a
 whole-sweep cooldown and aborts the rest of the batch; conversation-local
@@ -23,7 +24,13 @@ import pytest
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 
 from agentcore.billing.gate import BackgroundLlmSkip, BackgroundSkipReason
-from agentcore.core.errors import LLMAuthError, LLMRateLimitError, LLMTimeoutError, LLMUpstreamError
+from agentcore.core.errors import (
+    RETRY_AFTER_FROM_BACKOFF,
+    LLMAuthError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    LLMUpstreamError,
+)
 from agentcore.memory import consolidation
 
 
@@ -365,6 +372,47 @@ async def test_rate_limit_via_consolidate_arms_shared_cooldown(monkeypatch):
     assert backoff["reason"] == "rate_limit"
     assert backoff["cooldown_seconds"] == 300.0
     assert backoff["streak"] == 1
+
+
+@pytest.mark.asyncio
+async def test_exhausted_rate_limit_keeps_watermark_and_stays_pending(monkeypatch):
+    """退避 2→4→8→16 后下一次冷却 32s 超出 30s 上限：leaf 把 retryable 翻 False。
+
+    那是本次调用的 HTTP 预算耗尽，不是「这窗永远做不成」。按 retryable 推进水位
+    会把窗口永久丢掉；failure_class 仍是 transient，留给下次 sweep。
+    """
+    fail = LLMRateLimitError(
+        retry_after=32.0,
+        retry_after_source=RETRY_AFTER_FROM_BACKOFF,
+    )
+    assert fail.retryable is False
+    state = _wire_failing_consolidate(monkeypatch, fail=fail)
+    spy = _SpyLogger()
+    monkeypatch.setattr(consolidation, "logger", spy)
+    monkeypatch.setattr(
+        consolidation.settings,
+        "memory_consolidation_shared_failure_cooldown_base_seconds",
+        300,
+        raising=True,
+    )
+    monkeypatch.setattr(
+        consolidation.settings,
+        "memory_consolidation_shared_failure_cooldown_max_seconds",
+        1800,
+        raising=True,
+    )
+    assert _pending(state) == ["c-fail"]
+
+    changed = await consolidation.consolidate_conversation("c-fail")
+
+    assert changed is False
+    assert state["synced_at"] is None
+    assert _pending(state) == ["c-fail"]
+    assert "memory.consolidation_window_dropped" not in spy.events
+    assert "memory.consolidation_failed" in spy.events
+    # Same shared-upstream cooldown as a still-retryable 429 — not a busy reburn.
+    assert consolidation._in_shared_failure_cooldown()
+    assert "c-fail" not in consolidation._failure_cooldown_until
 
 
 @pytest.mark.asyncio

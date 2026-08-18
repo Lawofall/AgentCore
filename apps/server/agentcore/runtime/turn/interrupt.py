@@ -420,7 +420,8 @@ async def close_turn_interrupted(
             if journal is not None:
                 # Best-effort display salvage. Progressive append-on-emit may already own
                 # denser seqs; merge-mode persist (seq=0..n) can no-op and drop turn_end —
-                # the ensure-append below is the reliable closer.
+                # the ensure-append below is the reliable closer. Never wholesale-replace:
+                # this snapshot is a sparse display view, not the full fact stream.
                 await persist_turn_journal(
                     session,
                     message_id=message_id,
@@ -432,6 +433,7 @@ async def close_turn_interrupted(
                             "finish_reason": finish.value,
                         }
                     ),
+                    replace=False,
                 )
             # turn_end 必写：message 终态与 fold 的 finish_reason 同源。后台 execution
             # 事实在收口后继续追加（批次1）是特性——这里只保证收口时终态事实已落盘。

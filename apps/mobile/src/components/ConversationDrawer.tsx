@@ -501,17 +501,25 @@ export function ConversationDrawer({
         aria-label="对话历史"
       >
         <header className="bar">
-          {view === "live" ? (
-            <span>对话历史</span>
-          ) : (
-            <button
-              type="button"
-              className="link"
-              onClick={() => setView("live")}
-            >
-              ← 对话
-            </button>
-          )}
+          <div className="drawer-bar-lead">
+            {view !== "live" && (
+              <button
+                type="button"
+                className="link drawer-back"
+                aria-label="返回对话"
+                onClick={() => setView("live")}
+              >
+                ←
+              </button>
+            )}
+            <span className="drawer-bar-heading">
+              {view === "archived"
+                ? "已归档"
+                : view === "trash"
+                  ? "最近删除"
+                  : "对话历史"}
+            </span>
+          </div>
           <div className="bar-right">
             {view !== "archived" && (
               <button
@@ -782,7 +790,7 @@ function FolderGroupBlock({
       <div className="conv-group-head">
         <button
           type="button"
-          className="conv-group-new"
+          className="conv-group-toggle"
           aria-expanded={expanded}
           aria-label={expanded ? `收起${folder.name}` : `展开${folder.name}`}
           onClick={onToggle}
@@ -793,11 +801,9 @@ function FolderGroupBlock({
             <ChevronRight size={16} aria-hidden />
           )}
         </button>
-        {cloud ? (
-          <Cloud size={16} aria-hidden />
-        ) : (
-          <Folder size={16} aria-hidden />
-        )}
+        <span className="conv-group-mode" aria-hidden>
+          {cloud ? <Cloud size={16} /> : <Folder size={16} />}
+        </span>
         {cloud ? (
           <button
             type="button"

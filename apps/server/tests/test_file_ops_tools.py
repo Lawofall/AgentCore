@@ -414,6 +414,8 @@ async def test_file_read_allows_up_to_same_path_max(tmp_path: Path):
     assert ctx.file_read_counts.get("site/CONTRACT.md") == FILE_READ_SAME_PATH_MAX
     assert "再开窗" not in (result.output or "")
     assert "已在对话正文中" in (result.output or "")
+    assert "勿再读此文件" not in (result.output or "")
+    assert "已被清理" in (result.output or "")
 
 
 async def test_file_read_rejects_same_path_over_max(tmp_path: Path):
@@ -431,7 +433,12 @@ async def test_file_read_rejects_same_path_over_max(tmp_path: Path):
     assert blocked.contract_failure is True
     assert "已多次读取" in (blocked.error or "")
     assert "site/DESIGN.md" in (blocked.error or "")
-    assert "勿再读此文件" in (blocked.error or "")
+    assert "勿再读" in (blocked.error or "")
+    assert "勿再读此文件" not in (blocked.error or "")
+    assert "仍在当前对话中" not in (blocked.error or "")
+    assert "正文已在对话中" not in (blocked.error or "")
+    assert "已有正文" in (blocked.error or "")
+    assert "已被清理" in (blocked.error or "")
     assert "可换其它文件" in (blocked.error or "")
     # Path-scoped only: must not retire the whole tool.
     assert "retire_tools" not in (blocked.metadata or {})
@@ -454,7 +461,7 @@ async def test_file_read_same_path_limit_is_per_path(tmp_path: Path):
 
 
 async def test_file_read_reread_after_clear_allows_recovery(tmp_path: Path):
-    """Cleared verbatim: grant tip optional; exhausted grant must not hard-reject."""
+    """Cleared ledger: recovery succeeds and does not consume same-path quota."""
     from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
 
     (tmp_path / "doc.md").write_text("# Doc\nbody", encoding="utf-8")
@@ -463,22 +470,115 @@ async def test_file_read_reread_after_clear_allows_recovery(tmp_path: Path):
     tool = FileReadTool()
     for _ in range(FILE_READ_SAME_PATH_MAX):
         assert (await tool.execute({"path": "doc.md"}, ctx)).success is True
-    # Projection synced: zero verbatim + sticky grant → one more success.
     ctx.file_read_verbatim_paths = frozenset()
-    ctx.file_read_reread_issued["doc.md"] = True
-    ctx.file_read_reread_remaining["doc.md"] = 1
+    ctx.file_read_cleared_paths = frozenset({"doc.md"})
     ok = await tool.execute({"path": "doc.md"}, ctx)
     assert ok.success is True
-    assert ctx.file_read_counts["doc.md"] == FILE_READ_SAME_PATH_MAX + 1
-    assert ctx.file_read_reread_remaining["doc.md"] == 0
-    assert "再读授额已用尽" in (ok.output or "")
-    # Grant exhausted but body still cleared → recovery full-read still allowed.
+    assert ctx.file_read_counts["doc.md"] == FILE_READ_SAME_PATH_MAX
+    assert "再读授额已用尽" not in (ok.output or "")
     recovered = await tool.execute({"path": "doc.md"}, ctx)
     assert recovered.success is True
     assert "body" in (recovered.output or "")
-    assert ctx.file_read_counts["doc.md"] == FILE_READ_SAME_PATH_MAX + 2
+    assert ctx.file_read_counts["doc.md"] == FILE_READ_SAME_PATH_MAX
     peer = await tool.execute({"path": "peer.md"}, ctx)
     assert peer.success is True
+
+
+async def test_file_read_after_tool_clear_does_not_consume_quota(tmp_path: Path):
+    """Read → tool_clear fully drops the path → re-read succeeds and does not count."""
+    import json
+
+    from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
+    from agentcore.runtime.engine.tool_clear import (
+        apply_file_read_clear_state,
+        project_cleared_window,
+    )
+    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
+
+    def pair(call_id: str, path: str, result: str) -> list[LLMMessage]:
+        return [
+            LLMMessage(
+                role="assistant",
+                content=None,
+                tool_calls=[
+                    ToolCall(
+                        id=call_id,
+                        function=ToolCallFunction(
+                            name="file_read",
+                            arguments=json.dumps({"path": path}),
+                        ),
+                    )
+                ],
+            ),
+            LLMMessage(role="tool", content=result, tool_call_id=call_id),
+        ]
+
+    body = "\n".join(f"line-{i} " + ("x" * 80) for i in range(80))
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "target.py").write_text(body + "\n", encoding="utf-8")
+    (tmp_path / "src" / "other.py").write_text(body + "\n", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+    tool = FileReadTool()
+    outputs: list[str] = []
+    for _ in range(FILE_READ_SAME_PATH_MAX):
+        result = await tool.execute({"path": "src/target.py"}, ctx)
+        assert result.success is True
+        outputs.append(result.output or "")
+        assert len(result.output or "") >= 100
+    assert ctx.file_read_counts["src/target.py"] == FILE_READ_SAME_PATH_MAX
+
+    msgs: list[LLMMessage] = [LLMMessage(role="user", content="go")]
+    for i, output in enumerate(outputs):
+        msgs += pair(f"t{i}", "src/target.py", output)
+    for i in range(2):
+        other = await tool.execute({"path": "src/other.py"}, ctx)
+        assert other.success is True
+        msgs += pair(f"o{i}", "src/other.py", other.output or "")
+
+    projected = project_cleared_window(
+        msgs,
+        clearable_tools=frozenset({"file_read"}),
+        keep_recent=2,
+        min_chars=100,
+        summary_max_chars=0,
+    )
+    stub = next(m for m in projected if m.tool_call_id == "t0")
+    assert (stub.content or "").startswith("[已清理")
+    assert "path='src/target.py'" in (stub.content or "")
+    assert "status=content_cleared" in (stub.content or "")
+    assert "reread=allowed" in (stub.content or "")
+
+    synced = apply_file_read_clear_state(
+        ctx,
+        msgs,
+        investigation_tools=frozenset({"file_read"}),
+        keep_recent=2,
+        min_chars=100,
+        summary_max_chars=0,
+    )
+    assert "src/target.py" not in (synced.file_read_verbatim_paths or frozenset())
+    assert "src/target.py" in (synced.file_read_cleared_paths or frozenset())
+
+    recovered = await tool.execute({"path": "src/target.py"}, synced)
+    assert recovered.success is True
+    assert "line-0" in (recovered.output or "")
+    assert synced.file_read_counts["src/target.py"] == FILE_READ_SAME_PATH_MAX
+
+    msgs += pair("t-recover", "src/target.py", recovered.output or "")
+    after = apply_file_read_clear_state(
+        synced,
+        msgs,
+        investigation_tools=frozenset({"file_read"}),
+        keep_recent=2,
+        min_chars=100,
+        summary_max_chars=0,
+    )
+    assert "src/target.py" in (after.file_read_verbatim_paths or frozenset())
+    assert "src/target.py" not in (after.file_read_cleared_paths or frozenset())
+    blocked = await tool.execute({"path": "src/target.py"}, after)
+    assert blocked.success is False
+    assert blocked.contract_failure is True
+    assert after.file_read_counts["src/target.py"] == FILE_READ_SAME_PATH_MAX
 
 
 async def test_file_read_reread_grant_overrides_verbatim(tmp_path: Path):
@@ -498,11 +598,13 @@ async def test_file_read_reread_grant_overrides_verbatim(tmp_path: Path):
     assert "keep-body" in (ok.output or "")
     assert ctx.file_read_reread_remaining["keep.md"] == 0
     assert ctx.file_read_counts["keep.md"] == FILE_READ_SAME_PATH_MAX + 1
-    # Grant spent + verbatim still present → hard reject (正文已在对话中).
+    # Grant spent + verbatim still present → hard reject (use existing body).
     blocked = await tool.execute({"path": "keep.md"}, ctx)
     assert blocked.success is False
     assert blocked.contract_failure is True
-    assert "勿再读此文件" in (blocked.error or "")
+    assert "勿再读" in (blocked.error or "")
+    assert "仍在当前对话中" not in (blocked.error or "")
+    assert "已有正文" in (blocked.error or "")
     assert "再读次数已用尽" not in (blocked.error or "")
     next_ok = await tool.execute({"path": "next.md"}, ctx)
     assert next_ok.success is True
@@ -523,7 +625,9 @@ async def test_file_read_reread_refresh_after_citation_rework(tmp_path: Path):
     ctx.file_read_reread_remaining["draft.md"] = 0
     blocked = await tool.execute({"path": "draft.md"}, ctx)
     assert blocked.success is False
-    assert "勿再读此文件" in (blocked.error or "")
+    assert "勿再读" in (blocked.error or "")
+    assert "仍在当前对话中" not in (blocked.error or "")
+    assert "已有正文" in (blocked.error or "")
 
     refresh_file_read_reread_grant(ctx, ["draft.md"])
     ok = await tool.execute({"path": "draft.md"}, ctx)
@@ -606,7 +710,9 @@ async def test_file_read_window_inside_prior_full_read_counts(tmp_path: Path):
     assert ctx.file_read_counts["full.md"] == FILE_READ_SAME_PATH_MAX
     blocked = await tool.execute({"path": "full.md", "offset": 5, "limit": 3}, ctx)
     assert blocked.success is False
-    assert "勿再读此文件" in (blocked.error or "")
+    assert "勿再读" in (blocked.error or "")
+    assert "仍在当前对话中" not in (blocked.error or "")
+    assert "已有正文" in (blocked.error or "")
 
 
 async def test_file_read_cleared_verbatim_window_does_not_hit(tmp_path: Path):
@@ -624,6 +730,7 @@ async def test_file_read_cleared_verbatim_window_does_not_hit(tmp_path: Path):
         ).success is True
     assert ctx.file_read_counts["clr.md"] == FILE_READ_SAME_PATH_MAX
     ctx.file_read_verbatim_paths = frozenset()
+    ctx.file_read_cleared_paths = frozenset({"clr.md"})
     recovered = await tool.execute({"path": "clr.md", "offset": 2, "limit": 3}, ctx)
     assert recovered.success is True
     assert "L2" in (recovered.output or "")
@@ -651,7 +758,9 @@ async def test_file_read_reread_grant_allows_delivered_window(tmp_path: Path):
     assert ctx.file_read_counts["grant.md"] == FILE_READ_SAME_PATH_MAX + 1
     blocked = await tool.execute({"path": "grant.md", "offset": 1, "limit": 4}, ctx)
     assert blocked.success is False
-    assert "勿再读此文件" in (blocked.error or "")
+    assert "勿再读" in (blocked.error or "")
+    assert "仍在当前对话中" not in (blocked.error or "")
+    assert "已有正文" in (blocked.error or "")
 
 
 async def test_file_read_write_success_allows_same_window_reread(tmp_path: Path):

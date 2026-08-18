@@ -361,6 +361,69 @@ async def test_rewarm_after_lapse_restores_injection(
     assert "沟通偏好" in renewed_md
 
 
+async def test_keepalive_rewarm_keeps_harvest_cache_only_hit_past_ttl(
+    monkeypatch: pytest.MonkeyPatch, account_creds, cache_clock: _Clock
+):
+    """Desktop TTL keepalive: re-seed before expiry so a later harvest still hits.
+
+    Without the mid-window re-warm, 280s + 280s would lapse the first seed (300s
+    TTL) and a cache_only harvest prepare would inject nothing.
+    """
+    clear_account_rules_memory_cache()
+    _forbid_cloud(monkeypatch)
+    seed_account_rules_memory_cache("u1", "F1", _injectable_snapshot())
+
+    cache_clock.advance(280.0)
+    assert get_account_rules_memory_snapshot("u1", "F1") is not None
+
+    seed_account_rules_memory_cache("u1", "F1", _injectable_snapshot())
+    cache_clock.advance(280.0)
+    snap = get_account_rules_memory_snapshot("u1", "F1")
+    assert snap is not None
+    with account_credentials_scope(account_creds):
+        from agentcore.runtime.delegate.post_close_gate import (
+            bind_user_message_origin,
+            reset_user_message_origin,
+        )
+
+        token = bind_user_message_origin("execution_harvest")
+        try:
+            rules_md, _, _ = await _prepare_injection("u1", "F1")
+        finally:
+            reset_user_message_origin(token)
+    assert "总是用中文回答" in rules_md
+
+
+async def test_cache_miss_logs_harvest_origin_for_empty_injection(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Lapsed / missing snapshot under harvest origin is grep-able, not silent."""
+    clear_account_rules_memory_cache()
+    events: list[tuple[str, dict]] = []
+
+    def _capture(event: str, **kwargs):
+        events.append((event, kwargs))
+
+    monkeypatch.setattr(
+        "agentcore.memory.account_prepare_cache.logger.info", _capture
+    )
+    from agentcore.runtime.delegate.post_close_gate import (
+        bind_user_message_origin,
+        reset_user_message_origin,
+    )
+
+    token = bind_user_message_origin("execution_harvest")
+    try:
+        assert get_account_rules_memory_snapshot("u1", "F1") is None
+    finally:
+        reset_user_message_origin(token)
+    miss = [e for e in events if e[0] == "account.rules_memory_cache_miss"]
+    assert len(miss) == 1
+    assert miss[0][1]["origin"] == "execution_harvest"
+    assert miss[0][1]["user_id"] == "u1"
+    assert miss[0][1]["folder_id"] == "F1"
+
+
 async def test_warm_rules_list_once_and_seeds(
     monkeypatch: pytest.MonkeyPatch, account_creds
 ):

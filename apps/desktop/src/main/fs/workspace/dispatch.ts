@@ -64,8 +64,7 @@ function resolveOpSrcRoot(
   args: Record<string, unknown>,
 ): { ok: true; root: StoredRoot } | { ok: false; error: WorkspaceOpResult } {
   const raw = args.src_root_id;
-  const srcRootId =
-    typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  const srcRootId = typeof raw === "string" && raw.trim() ? raw.trim() : null;
   if (!srcRootId || srcRootId === dstRoot.id) {
     return { ok: true, root: dstRoot };
   }
@@ -626,8 +625,7 @@ export async function executeWorkspaceOp(
           Boolean(args.permanent),
         );
       case "copy": {
-        const srcData =
-          typeof args.src_data === "string" ? args.src_data : "";
+        const srcData = typeof args.src_data === "string" ? args.src_data : "";
         if (srcData) {
           return await opCopyFromBytes(root, String(args.dst ?? ""), srcData);
         }

@@ -10,6 +10,8 @@ a single late-import surface.
 
 from __future__ import annotations
 
+from typing import Any
+
 from .browser import (
     _browser_claim_rework,
     clear_browser_tool_success,
@@ -59,7 +61,7 @@ def clear_b1_closing_latches() -> None:
     clear_verify_budget_exhausted()
 
 
-def reset_turn_scoped_closing_state() -> None:
+def reset_turn_scoped_closing_state(*, promotion_ledger: Any = None) -> None:
     """Forget everything a previous turn latched, so ``finish_guard`` judges this one.
 
     The single owner of「新回合必须忘掉什么」。Both turn entries (prepare / resume wire)
@@ -69,9 +71,9 @@ def reset_turn_scoped_closing_state() -> None:
     collection order. Add a new turn-scoped latch here, not at the call sites.
     """
     # Lazy: delivery_status imports this package, so a module-level import cycles.
-    from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
+    from agentcore.runtime.delegate.delivery_status import bind_delivery_verdict
 
-    current_delivery_verdict.set(None)
+    bind_delivery_verdict(None, promotion_ledger=promotion_ledger)
     clear_cloud_web_verify_gap()
     clear_cutoff_delivery_gap()
     clear_unresolved_write_ownership()

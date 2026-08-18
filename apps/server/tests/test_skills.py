@@ -19,6 +19,10 @@ from pathlib import Path
 from agentcore.config import settings
 from agentcore.core.types import ToolCategory
 from agentcore.runtime.context.consult_sources import MergedConsultSource, SkillConsultSource
+from agentcore.runtime.runs.playbooks.audit import (
+    CODE_AUDIT_REQUIRED_SECTIONS,
+    CODE_AUDIT_SECTION_BY_DESIGN,
+)
 from agentcore.runtime.skills import (
     CONSULT_TEAM_ORCH_BY_SCENE,
     SkillRegistry,
@@ -34,7 +38,7 @@ from agentcore.workspace.server import ServerWorkspace
 # debate / delegate are wired on every path; ask_user is live-user only.
 # verify_and_fix / long_form_writing / data_file_landing ride consult audience
 # (worker loop vs CEO 派工); long_form_landing is worker-only landing HOW.
-# team_orchestration_advanced is ungated.
+# team_orchestration_advanced / build_* / deep_multi_lens 是主管手册（audience=ceo）。
 _FULL_TOOLS = {"delegate", "ask_user", "debate"}
 _NO_LIVE_USER = {"delegate", "debate"}  # autonomous path: no ask_user
 
@@ -149,12 +153,18 @@ def test_available_audience_hides_ceo_only_from_workers():
     assert "product_help_faq" not in worker
     assert "product_bug_triage" not in worker
     assert "revising_a_product" not in worker
-    assert "team_orchestration_advanced" in worker
+    assert "team_orchestration_advanced" not in worker
+    assert "build_website" not in worker
+    assert "build_app" not in worker
+    assert "deep_multi_lens_research" not in worker
     assert "work_discipline" in worker
     assert "long_form_landing" in worker
     assert "verify_and_fix" in worker
     assert "data_file_landing" in worker
     assert "long_form_writing" not in worker
+    # 持 delegate 的嵌套 lead 目录也必须与叶子同名，避免队员之间打散前缀。
+    lead = {s.name for s in reg.available({"delegate"}, audience="worker")}
+    assert lead == worker
     ceo = {s.name for s in reg.available(_FULL_TOOLS, audience="ceo")}
     assert "product_help" in ceo
     assert "revising_a_product" in ceo
@@ -175,14 +185,14 @@ async def test_worker_consult_source_hides_ceo_only_listing_and_fetch():
     names = {e.name for e in await source.list_directory("u")}
     assert "product_help" not in names
     assert "revising_a_product" not in names
-    assert "team_orchestration_advanced" in names
+    assert "team_orchestration_advanced" not in names
     assert "long_form_landing" in names
     assert "verify_and_fix" in names
     assert "data_file_landing" in names
     assert "long_form_writing" not in names
     assert await source.fetch_by_name("u", "product_help") is None
     assert await source.fetch_by_name("u", "long_form_writing") is None
-    assert await source.fetch_by_name("u", "team_orchestration_advanced") is not None
+    assert await source.fetch_by_name("u", "team_orchestration_advanced") is None
     assert await source.fetch_by_name("u", "long_form_landing") is not None
     assert await source.fetch_by_name("u", "data_file_landing") is not None
 
@@ -490,6 +500,11 @@ def test_team_orchestration_skill_teaches_shape_vocabulary():
     assert "上限 8" in body or "上限8" in body
     assert "超限末槽折叠" in body
     assert "凡审计必两拨人" not in body
+    for title in CODE_AUDIT_REQUIRED_SECTIONS:
+        assert title in body
+    assert CODE_AUDIT_SECTION_BY_DESIGN in body
+    assert "独立成栏" in body
+    assert "不扫 role/task" in body or "不扫 role" in body
 
 
 def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
@@ -520,6 +535,10 @@ def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
     # 未明示成文仍宜 parallel_brief（旧 A 语义保留）
     assert "parallel_brief" in body
     assert "未明示" in body
+    # 与常驻核同一套明示成文定义：写一篇论文/综述=成文；仅当资料源才 ≠
+    assert "写一篇" in body and "综述" in body
+    assert "写一篇…论文/综述" in body or "写一篇论文" in body
+    assert "收成单人主笔" in body
     # 派摸底验收：手写也要目标·手段·收工；够用即停 + handoff
     assert "派摸底" in body or "摸底·验收" in body or "了解到什么算够" in body
     assert "够用即停" in body
@@ -789,6 +808,9 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     assert "finalize" not in CONSULT_TEAM_ORCH_BY_SCENE
     assert "规格已齐建站" in CONSULT_TEAM_ORCH_BY_SCENE
     assert "建站/工具台套 playbook" not in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "勿因单人免查" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "非成文短文落盘" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "写一篇论文" in CONSULT_TEAM_ORCH_BY_SCENE or "综述" in CONSULT_TEAM_ORCH_BY_SCENE
     assert "depends_on" in body and "同一层" in body
     # 依赖流水线 bullet 须教「派前先判生产者→消费者」+ 正反例（何时串行 / 何时并行），
     # 而非只讲 DAG 机械怎么填——修复 CEO 默认全平铺把有先后的流水线拍平的根因。
@@ -1112,10 +1134,10 @@ def test_debate_skill_teaches_thin_stance():
     stance_desc = DEBATE_PARAMETERS["properties"]["sides"]["items"]["properties"]["stance"][
         "description"
     ]
-    assert "一句话立场倾向" in stance_desc or "立场倾向" in stance_desc
+    assert "一句话立场" in stance_desc or "立场倾向" in stance_desc
     assert "单句" in stance_desc or "一句话" in stance_desc
     assert "background" in stance_desc
-    assert "核心论点" in stance_desc or "系统论证" in stance_desc
+    assert "核心论点" in stance_desc or "系统论证" in stance_desc or "主张结论" in stance_desc
     assert stance_desc.count(str(STANCE_MAX_CHARS)) >= 1
     assert DEBATE_PARAMETERS["properties"]["sides"]["items"]["properties"]["stance"][
         "maxLength"
@@ -1514,6 +1536,35 @@ def test_data_file_landing_skill_teaches_script_transform_and_invariants():
     assert "不变量" in skill.summary
     assert "结构报告" in skill.summary
     assert "待跑" in skill.summary
+    assert "表质量基线" in skill.summary
+    assert "明细与汇总" in skill.summary
+    assert "冻结" in skill.summary and "筛选" in skill.summary
+    assert "合计" in skill.summary
+    assert "口径写进表内" in skill.summary
+    assert "任意表" in skill.summary
+
+
+def test_data_file_landing_table_quality_baseline_is_generic():
+    """交表质量基线对任意表格成立；禁止写成账单/财务专用模板。"""
+    skill = build_system_skill_registry().get("data_file_landing")
+    assert skill is not None
+    body = skill.body
+    assert "【表格产物·质量基线】" in body
+    baseline = body.split("【表格产物·质量基线】", 1)[1].split("【口径】", 1)[0]
+    assert "明细" in baseline and "汇总" in baseline
+    assert "日期" in baseline and "数值" in baseline
+    assert "千分位" in baseline
+    assert "冻结" in baseline and "筛选" in baseline
+    assert "合计" in baseline
+    assert "口径" in baseline and "产物内" in baseline
+    assert "required_sections" in baseline
+    assert "task" in baseline or "team_brief" in baseline
+    # 通用：不绑数据源 / 行业剧本。
+    assert "微信" not in baseline
+    assert "支付宝" not in baseline
+    assert "账单" not in baseline
+    assert "财务" not in baseline
+    assert "专用模板" in baseline or "数据源" in baseline
 
 
 def test_data_file_landing_no_exec_is_complete_delivery():

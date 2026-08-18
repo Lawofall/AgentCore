@@ -13,6 +13,7 @@ from agentcore.account.credentials import (
     AccountCloudError,
     AccountCredentials,
     account_credentials_scope,
+    cloud_chat_context,
     cloud_read_conversation,
     cloud_search_conversations,
 )
@@ -165,6 +166,31 @@ async def test_cloud_read_ok(monkeypatch: pytest.MonkeyPatch, account_creds):
     )
     assert data["status"] == "ok"
     assert data["transcript"] == "hello"
+
+
+async def test_cloud_chat_context_ok(monkeypatch: pytest.MonkeyPatch, account_creds):
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert str(request.url) == (
+            "https://cloud.example/v1/account/conversations/chat-context"
+        )
+        assert request.headers["Authorization"] == "Bearer account-jwt"
+        return httpx.Response(
+            200,
+            json={
+                "history": [
+                    {"role": "user", "content": "hi"},
+                    {"role": "assistant", "content": "ok"},
+                ]
+            },
+        )
+
+    monkeypatch.setattr(
+        "agentcore.account.credentials.outbound_async_client",
+        lambda **kwargs: httpx.AsyncClient(transport=_FakeTransport(_handler), **kwargs),
+    )
+    data = await cloud_chat_context(account_creds, conversation_id="c1")
+    assert data["history"][0]["content"] == "hi"
 
 
 async def test_cloud_search_unauthorized(monkeypatch: pytest.MonkeyPatch, account_creds):

@@ -33,7 +33,27 @@ export type DefaultModelOption = {
   price?: ModelPriceCard | null;
   /** 不在目录中的手填 / 孤儿 id。 */
   custom?: boolean;
+  /** False = listed but not selectable (grey + reason). Default true. */
+  available?: boolean;
+  unavailableReason?: ModelCatalogItem["unavailable_reason"];
 };
+
+/** Client-side copy for a structured catalog unavailability. Null if unknown/absent. */
+export function unavailableReasonCopy(
+  reason: ModelCatalogItem["unavailable_reason"] | undefined | null,
+): string | null {
+  if (!reason) return null;
+  if (reason.code === "upstream_protocol_unsupported") {
+    if (reason.required_protocol === "openai_responses") {
+      return "需要 OpenAI /responses 协议，当前接入不支持";
+    }
+    if (reason.required_protocol === "anthropic_messages") {
+      return "需要 Anthropic /messages 协议，当前接入不支持";
+    }
+    return "当前接入不支持该模型所需协议";
+  }
+  return null;
+}
 
 export type DefaultProviderGroup = {
   providerId: string;
@@ -108,6 +128,8 @@ function optionFromCatalogItem(item: ModelCatalogItem): DefaultModelOption {
     capabilities: item.capabilities ?? [],
     price: item.price ?? null,
     custom: false,
+    available: item.available !== false,
+    unavailableReason: item.unavailable_reason ?? null,
   };
 }
 
@@ -132,7 +154,8 @@ function resolveSlotOption(
 
 /**
  * Build the per-provider option groups for slot selectors.
- * Includes a 「平台额度」 group when the catalog exposes available `origin=platform` rows.
+ * Includes a 「平台额度」 group when the catalog exposes `origin=platform` rows
+ * (unavailable rows stay listed so the picker can grey them and show why).
  * `slots` are **current-edit** pointers only — folded in with catalog labels when possible.
  */
 export function buildDefaultProviderGroups(
@@ -179,7 +202,7 @@ export function buildDefaultProviderGroups(
   const platformModels: DefaultModelOption[] = [];
   const platformSeen = new Set<string>();
   for (const item of catalog?.models ?? []) {
-    if (item.origin !== "platform" || item.available === false) continue;
+    if (item.origin !== "platform") continue;
     const m = item.id.trim();
     if (!m || platformSeen.has(m)) continue;
     platformSeen.add(m);

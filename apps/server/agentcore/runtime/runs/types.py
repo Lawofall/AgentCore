@@ -95,12 +95,16 @@ class Deliverable:
     artifacts: list[str] = field(default_factory=list)
     # Dossier landing directory (workspace-relative, no trailing slash). Runtime may
     # fill from ``stage_dirs`` when form=files / files_written is dossier-semantic;
-    # worker picks filenames under this dir. Acceptance uses ``artifacts`` prefix.
+    # worker picks filenames under this dir. Acceptance: empty artifacts →
+    # prefix-match this dir; non-empty artifacts → exact / trailing-/ / glob on
+    # those paths only (this field is not a fallback).
     artifact_dir: str = ""
     # 产物 = 用户工作区原生文件（源码 / 项目文件，就地改或新建），不套 AI 工作间落点。
     # ``resolve_artifact_dir`` 里优先级最高：为真直接返回空落点，压过 ``artifacts``
-    # 推导与显式 ``artifact_dir``。写码类节点（build_feature / repair_code）盖此戳，
-    # 否则 ``form=files`` 语义过载会把业务代码引向默认的 ``文档/工作稿/``。
+    # 推导与显式 ``artifact_dir``。``apply_artifact_dir_defaults`` 另把两字段收成互斥：
+    # leftover 目录旁已是全路径 → 清 leftover；裸名 + 显式目录 → join 并关本戳。
+    # 写码类节点（build_feature / repair_code）盖此戳，否则 ``form=files`` 语义过载
+    # 会把业务代码引向默认的 ``文档/工作稿/``。
     workspace_native: bool = False
     # When set (e.g. ``site/``), the contract gate cross-checks HTML↔CSS↔JS seams
     # across ALL web files under this workspace prefix — not only this run's batch.

@@ -62,28 +62,39 @@ const TOOL_LABEL: Record<string, string> = {
   revise: "Revise",
   escalate: "Escalate",
   handoff: "Handoff",
+  wait: "Wait",
 };
 
 export const toolLabel = (name: string): string => TOOL_LABEL[name] ?? name;
 
-/** Tool execution phase → waiting-state chrome (network UX). Mirrors desktop `toolPhaseText`. */
+/** 工具行右侧生命周期，与桌面勾/失败标同一语义；手机写汉字以免 Done 挤死窄行。 */
+export const TOOL_STATUS_LABEL = {
+  running: "进行中",
+  success: "完成",
+  error: "失败",
+} as const;
+
+/** 工具执行阶段 → 等待态文案（联网 UX）。桌面 `toolPhaseText` 仍是英文；手机跟生命周期一样写汉字。 */
 const TOOL_PHASE_TEXT: Record<ToolPhase, string> = {
-  queued: "Queued",
-  querying: "Searching",
-  fallback: "Trying fallback",
-  fetching: "Fetching page",
-  reading: "Extracting",
-  executing: "Running",
-  blocked: "Network blocked",
-  git_queued: "Waiting for repo",
-  git_credentials: "Checking credentials",
-  git_remote: "Contacting remote",
+  queued: "排队中",
+  querying: "正在检索",
+  fallback: "改用备用",
+  fetching: "正在打开页面",
+  reading: "正在提取",
+  executing: "进行中",
+  blocked: "网络不可用",
+  git_queued: "等待仓库",
+  git_credentials: "核对凭据",
+  git_remote: "连接远端",
 };
 
 export function toolPhaseText(phase: string | undefined): string | null {
   if (!phase) return null;
-  return TOOL_PHASE_TEXT[phase as ToolPhase] ?? "Working";
+  return TOOL_PHASE_TEXT[phase as ToolPhase] ?? TOOL_STATUS_LABEL.running;
 }
+
+/** 读文件触顶 / 验证预算等「不是失败」的工具行状态。 */
+export const TOOL_GUIDANCE_LABEL = "提示";
 
 /** Worker mid-flight `run.phase` → badge copy (SSE `run_phase`).
  *  queued = status pending →「排队中」; skipped = status skipped →「未执行」(caller).
@@ -122,7 +133,12 @@ function isInternalIdArg(key: string): boolean {
   return key === "id" || key.endsWith("_id");
 }
 
-export function toolDetail(args: Record<string, unknown>): string {
+export function toolDetail(
+  args: Record<string, unknown>,
+  toolName?: string,
+): string {
+  // WaitTool.reason 仅记日志；画进标题会变成「右边已完成、中间还说仍在跑」。
+  if (toolName === "wait") return "";
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
     if (typeof v === "string" && v.trim()) return v.trim();

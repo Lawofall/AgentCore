@@ -12,6 +12,10 @@ import {
 } from "@/services/accountToken";
 import { ApiError } from "@/services/api";
 import {
+  CHAT_CONTEXT_UNAVAILABLE_MESSAGE,
+  fetchChatContext,
+} from "@/services/chatContext";
+import {
   clearSidecarFoldersAuth,
   looksLikeFoldersTokenFailure,
   resolveSidecarFoldersAuth,
@@ -80,7 +84,7 @@ export interface StreamViaSidecarOptions {
    *  使懒建的 per 对话本地工作区各跑在自己目录里。空 = 该根自身（现行为）。 */
   subpath?: string;
   content: string;
-  /** 先前对话历史（sidecar 无库，需由调用方从本地会话切片喂入）。 */
+  /** 已确认的服务端装配窗口（含空窗）。缺省则桌面用会话 cookie 拉同一窗口。 */
   history?: SidecarHistoryEntry[];
   /** 本轮用户气泡的乐观 id：回写落库后据此把它换成云端权威 id（仅当它仍是末条 user
    *  消息时——防用户在回写返回前又发了一条而误改）。 */
@@ -244,7 +248,7 @@ export async function streamConversationViaSidecar({
   rootId,
   subpath,
   content,
-  history,
+  history: historyArg,
   optimisticUserId,
   agentMentions,
   askId,
@@ -258,14 +262,28 @@ export async function streamConversationViaSidecar({
   // 推理票：开跑前无票 → force remint 一次 → 仍无则 INFERENCE_TOKEN_EXPIRED、不发 RPC
   // （引擎硬拒空凭据；无本机平台模型回退）。folders / account 缺票仍可下发，工具侧诚实失败。
   // 开跑前鉴权失败（尚无事件）可对各票 force remint 一次，不对每回合 force。
-  const [inferenceRaw, foldersAuthRaw, accountAuthRaw] = await Promise.all([
-    resolveSidecarInference({ conversationId }),
-    resolveSidecarFoldersAuth(),
-    resolveSidecarAccountAuth(),
-  ]);
+  // 调用方已确认（含空窗）则不再拉；否则 cookie 与窄票并行，拉到即下发、sidecar 不打云。
+  const needCookieWindow = historyArg === undefined;
+  const [inferenceRaw, foldersAuthRaw, accountAuthRaw, cookieWindow] =
+    await Promise.all([
+      resolveSidecarInference({ conversationId }),
+      resolveSidecarFoldersAuth(),
+      resolveSidecarAccountAuth(),
+      needCookieWindow
+        ? fetchChatContext(conversationId).then(
+            (rows) => ({ ok: true as const, rows }),
+            () => ({ ok: false as const }),
+          )
+        : Promise.resolve({ ok: true as const, rows: historyArg }),
+    ]);
   let inference = inferenceRaw ?? undefined;
   let foldersAuth = foldersAuthRaw ?? undefined;
   let accountAuth = accountAuthRaw ?? undefined;
+  // 拉失败且有票：省略 history，让 sidecar 拉。拉失败且无票：本回合明确失败。
+  let history: SidecarHistoryEntry[] | undefined;
+  if (cookieWindow.ok) {
+    history = cookieWindow.rows;
+  }
   // 本会话权限轴随回合送达本地引擎；取不到则 sidecar 沿用其当前值。
   const permissionAxes =
     await resolveConversationPermissionAxes(conversationId);
@@ -273,6 +291,12 @@ export async function streamConversationViaSidecar({
   const { folderId, localRootId, localSubpath } =
     resolveProjectTurnBinding(conversationId);
   throwIfCannotOpenStream(conversationId, signal);
+  if (!cookieWindow.ok && !accountAuth) {
+    throw new StreamError("sidecar", undefined, {
+      serverMessage: CHAT_CONTEXT_UNAVAILABLE_MESSAGE,
+      recoverable: false,
+    });
+  }
   return runSidecarTurn({
     conversationId,
     rootId,
@@ -606,6 +630,20 @@ async function runSidecarTurn({
     // 无票 / remint 失败：已带产品码，勿再包成通用 sidecar 文案或标 recoverable 改道云端。
     if (err instanceof StreamError && err.code === "INFERENCE_TOKEN_EXPIRED") {
       throw err;
+    }
+    // 拉窗失败：禁止标 recoverable 改道云端空跑；文案已是用户可见说明。
+    if (
+      err instanceof StreamError &&
+      err.serverMessage === CHAT_CONTEXT_UNAVAILABLE_MESSAGE
+    ) {
+      throw err;
+    }
+    const chatContextMsg = unwrapSidecarRejectMessage(err);
+    if (chatContextMsg?.includes("未能加载对话历史")) {
+      throw new StreamError("sidecar", undefined, {
+        serverMessage: chatContextMsg,
+        recoverable: false,
+      });
     }
     // 换票时被 CSRF 中间件拒（后端不补票的那种，见 inferenceToken）：本地引擎没病，别记坏
     // 这个根、也别把安全拒绝套成「本地引擎出错：API 403 …」。原样上抛走统一错误映射。

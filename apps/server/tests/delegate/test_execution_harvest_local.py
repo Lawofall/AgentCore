@@ -387,6 +387,125 @@ async def test_local_harvest_uses_stamped_history_not_empty(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_local_harvest_prefers_cloud_chat_context(tmp_path):
+    import agentcore.conversation.execution_harvest as eh
+    from agentcore.account.credentials import AccountCredentials
+
+    session = _session()
+    set_active_coordination(session)
+    sidecar = _sidecar(tmp_path)
+    sidecar._account_creds = AccountCredentials(
+        api_key="acct",
+        base_url="https://cloud.example/v1/account",
+    )
+    sidecar.stamp_turn_history(
+        "conv-local",
+        [{"role": "user", "content": "stamped"}],
+    )
+    captured: dict = {}
+
+    async def _pipeline(**kwargs):
+        captured["history"] = kwargs.get("history")
+        return {"message_id": kwargs["message_id"], "content": "终稿", "journal_entries": []}
+
+    async def _cloud(creds, *, conversation_id):
+        assert conversation_id == "conv-local"
+        assert creds.api_key == "acct"
+        return {"history": [{"role": "user", "content": "from-cloud"}]}
+
+    with (
+        patch.object(eh, "async_session_factory", side_effect=_pg_forbidden),
+        patch.object(eh, "notify_user", AsyncMock()),
+        patch("agentcore.sidecar.server.run_chat_pipeline", new=_pipeline),
+        patch("agentcore.sidecar.chat_history.cloud_chat_context", new=_cloud),
+    ):
+        await eh.run_harvest_closing_turn(
+            conversation_id="conv-local",
+            execution_id="exec-local",
+        )
+
+    assert captured["history"] == [{"role": "user", "content": "from-cloud"}]
+
+
+@pytest.mark.asyncio
+async def test_local_harvest_cloud_fail_without_stamp_does_not_run_empty(tmp_path):
+    import agentcore.conversation.execution_harvest as eh
+    from agentcore.account.credentials import AccountCloudError, AccountCredentials
+
+    session = _session()
+    set_active_coordination(session)
+    sidecar = _sidecar(tmp_path)
+    sidecar._account_creds = AccountCredentials(
+        api_key="acct",
+        base_url="https://cloud.example/v1/account",
+    )
+    ran = {"pipeline": False}
+
+    async def _pipeline(**_kwargs):
+        ran["pipeline"] = True
+        return {"message_id": "x", "content": "不应开跑", "journal_entries": []}
+
+    async def _boom(*_a, **_k):
+        raise AccountCloudError("down", code="account_cloud_unreachable")
+
+    with (
+        patch.object(eh, "async_session_factory", side_effect=_pg_forbidden),
+        patch.object(eh, "notify_user", AsyncMock()),
+        patch("agentcore.sidecar.server.run_chat_pipeline", new=_pipeline),
+        patch("agentcore.sidecar.chat_history.cloud_chat_context", new=_boom),
+    ):
+        await eh.run_harvest_closing_turn(
+            conversation_id="conv-local",
+            execution_id="exec-local",
+        )
+
+    assert ran["pipeline"] is False
+    records = list_outbox_records(tmp_path / "outbox")
+    assert len(records) == 1
+    content = to_record_turn_body(records[0])["content"]
+    assert "未能加载对话历史" in content
+
+
+@pytest.mark.asyncio
+async def test_local_harvest_cloud_fail_uses_stamped_window(tmp_path):
+    import agentcore.conversation.execution_harvest as eh
+    from agentcore.account.credentials import AccountCloudError, AccountCredentials
+
+    session = _session()
+    set_active_coordination(session)
+    sidecar = _sidecar(tmp_path)
+    sidecar._account_creds = AccountCredentials(
+        api_key="acct",
+        base_url="https://cloud.example/v1/account",
+    )
+    sidecar.stamp_turn_history(
+        "conv-local",
+        [{"role": "user", "content": "stamped-ok"}],
+    )
+    captured: dict = {}
+
+    async def _pipeline(**kwargs):
+        captured["history"] = kwargs.get("history")
+        return {"message_id": kwargs["message_id"], "content": "终稿", "journal_entries": []}
+
+    async def _boom(*_a, **_k):
+        raise AccountCloudError("down", code="account_cloud_unreachable")
+
+    with (
+        patch.object(eh, "async_session_factory", side_effect=_pg_forbidden),
+        patch.object(eh, "notify_user", AsyncMock()),
+        patch("agentcore.sidecar.server.run_chat_pipeline", new=_pipeline),
+        patch("agentcore.sidecar.chat_history.cloud_chat_context", new=_boom),
+    ):
+        await eh.run_harvest_closing_turn(
+            conversation_id="conv-local",
+            execution_id="exec-local",
+        )
+
+    assert captured["history"] == [{"role": "user", "content": "stamped-ok"}]
+
+
+@pytest.mark.asyncio
 async def test_local_harvest_missing_outbox_is_not_success(tmp_path):
     import agentcore.conversation.execution_harvest as eh
     from agentcore.conversation.execution_harvest import HarvestNotReadyError

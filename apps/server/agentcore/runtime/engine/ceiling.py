@@ -211,7 +211,10 @@ async def ceiling_finalize(
             note_cutoff_delivery_gap,
         )
 
-        downgrade_verdict_for_ceiling(reason=ceiling_reason)
+        downgrade_verdict_for_ceiling(
+            reason=ceiling_reason,
+            promotion_ledger=tool_context.promotion_ledger,
+        )
         if ceiling_reason == "token_budget":
             note_cutoff_delivery_gap()
 

@@ -158,9 +158,11 @@ class WorkspaceSettings(BaseModel):
     browser_sandbox_memory_limit_mb: int = 2048
     browser_sandbox_pids_limit: int = 512
     browser_sandbox_cpu_limit: float = 2.0
-    # Some nested/dev cgroup layouts don't delegate the pids controller to runsc
-    # (Docker Desktop cgroup v1 — see PoC finding #6). Enable to skip OCI cgroup
-    # application; a production host with proper delegation keeps it off (limits apply).
+    # Skip runsc OCI cgroup application. Docker's default cgroup2 mount inside the
+    # api container is read-only — non-rootless browser runsc then dies at create.
+    # Code auto-adds ``--ignore-cgroups`` when ``cgroup.subtree_control`` exists
+    # and is not writable; this flag forces the same. Session memory/pids/cpu
+    # limits then do not apply (container ``mem_limit`` still does).
     browser_sandbox_ignore_cgroups: bool = False
     # Playwright Chromium bundle location inside the runtime image (ro-bind into the
     # sandbox; the product's 5 host binds don't cover /opt, so add exactly this one).

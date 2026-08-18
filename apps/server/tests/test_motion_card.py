@@ -266,10 +266,10 @@ def test_handoff_schema_teaches_motion_card_is_sole_structured_carrier():
     """Tool description must make the structured field the only debate-suggest channel."""
     desc = HandoffTool().schema.description
     assert "motion_card" in desc
-    assert "唯一" in desc or "一律不算" in desc
+    assert "唯一" in desc or "一律不算" in desc or "不能代替" in desc
     card_desc = HandoffTool().schema.parameters["properties"]["motion_card"]["description"]
     assert "对象" in card_desc or "结构化" in card_desc
-    assert "散文" in card_desc or "表格" in card_desc or "不能" in card_desc
+    assert "必填" in card_desc or "省略" in card_desc
 
 
 # ── serialize ─────────────────────────────────────────────────────

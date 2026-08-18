@@ -1015,6 +1015,8 @@ button.link {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 10px;
+  /* 气泡 `word-break: break-word` 会把短英文名（wait）挤成竖排 */
+  word-break: normal;
 }
 
 .tool-head {
@@ -1041,6 +1043,11 @@ button.link {
   gap: 6px;
 }
 
+.tool-label {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .tool-detail {
   min-width: 0;
   overflow: hidden;
@@ -1053,6 +1060,7 @@ button.link {
 }
 
 .tool-status {
+  flex-shrink: 0;
   font-size: 12px;
   font-weight: 400;
   color: var(--muted);
@@ -1676,211 +1684,7 @@ button.link {
   color: var(--muted);
 }
 
-/* --- Multi-agent team view (多 Agent 团队视图): progress + vertical worker cards --- */
-.team {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.team-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.team-count {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg);
-}
-
-.team-tag {
-  padding: 1px 8px;
-  font-size: 11px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border-radius: 999px;
-}
-
-.team-bar {
-  height: 4px;
-  overflow: hidden;
-  background: var(--border);
-  border-radius: 999px;
-}
-
-.team-bar-fill {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.3s ease;
-}
-
-.team-runs {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* 多幕列表分组头（批 A4）：手机列表语言，非桌面幕分带。 */
-.team-act-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 4px 0 2px;
-}
-
-.team-act-head:first-child {
-  margin-top: 0;
-}
-
-.team-act-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-}
-
-.team-act-kind {
-  padding: 1px 7px;
-  font-size: 11px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border-radius: 999px;
-}
-
-.team-act-auth {
-  padding: 1px 7px;
-  font-size: 11px;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--muted) 12%, transparent);
-  border-radius: 999px;
-}
-
-.run {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border);
-  border-radius: 8px;
-}
-
-.run-run {
-  border-left-color: var(--accent);
-}
-
-.run-ok {
-  border-left-color: var(--success);
-}
-
-.run-err {
-  border-left-color: var(--error);
-}
-
-/* 深度检视入口 (RunDetail): the card summary is ONE tap target that opens the run detail. A flush,
-   transparent button reset so the peek looks identical to the old static card; the escalation
-   answer card renders as a sibling BELOW this button, so its controls are never hijacked. */
-.run-open {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  text-align: start;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.run-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.run-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg);
-}
-
-.run-badge {
-  flex-shrink: 0;
-  padding: 1px 8px;
-  font-size: 11px;
-  border-radius: 999px;
-}
-
-.badge-muted {
-  color: var(--muted);
-  background: var(--border);
-}
-
-.badge-run {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.badge-ok {
-  color: var(--success);
-  background: color-mix(in srgb, var(--success) 16%, transparent);
-}
-
-.badge-err {
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 16%, transparent);
-}
-
-.run-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.run-pill {
-  padding: 1px 7px;
-  font-size: 11px;
-  color: var(--muted);
-  background: var(--border);
-  border-radius: 999px;
-}
-
-/* 「需要你」pill（待放行 / 待你拍板）——拍板类不用琥珀（2026-07 拍板），蓝=行动信号。 */
-.pill-act {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.run-task {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.run-preview {
-  overflow: hidden;
-  font-size: 12px;
-  color: var(--fg);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.run-error {
-  font-size: 12px;
-  color: var(--error);
-}
+/* 协作图外壳 / 队员卡 / 便签 → TeamView.css。以下为时间线与详情面共用的升级卡、登录决策、队员详情。 */
 
 /* 升级实时可见: a worker's 向上求决策 (escalate), surfaced inline on its run card.
    Read-only record → neutral（拍板类不用琥珀，与桌面 RaisedEscalation 同调）。 */
@@ -2008,111 +1812,6 @@ button.link {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.run-foot {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-/* 团队便签墙 (§2.2 通): the one-line decisions / heads-ups workers broadcast to their concurrent
-   siblings — a glass-box notes panel under the team runs (贴事实·不要求回应, NOT a chat).
-   Collapsible via the same <details> fold idiom as 思考 (.reasoning) / 工具组 (.tool-group). */
-.team-notes {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.team-notes-head {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
-  list-style: none;
-}
-
-.team-notes-head::-webkit-details-marker {
-  display: none;
-}
-
-.team-notes-head::before {
-  content: "▸ ";
-}
-
-.team-notes[open] > .team-notes-head::before {
-  content: "▾ ";
-}
-
-.team-notes-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.team-note {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 8px 10px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.team-note-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.team-note-kind {
-  flex-shrink: 0;
-  padding: 1px 7px;
-  font-size: 11px;
-  border-radius: 999px;
-  color: var(--muted);
-  background: var(--border);
-}
-
-.team-note-author {
-  overflow: hidden;
-  font-size: 12px;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.team-note-text {
-  font-size: 13px;
-  color: var(--fg);
-  overflow-wrap: anywhere;
-}
-
-/* 便签会过期 → supersession (§2.2): a 改写 (superseded) / 作废 (voided) note is dimmed and its text
-   struck through, so a stale decision is never mistaken for current truth. */
-.team-note-stale {
-  opacity: 0.6;
-}
-
-.team-note-stale .team-note-text {
-  text-decoration: line-through;
-}
-
-.team-note-status {
-  flex-shrink: 0;
-  padding: 1px 7px;
-  font-size: 11px;
-  font-weight: 500;
-  border-radius: 999px;
-}
-
-.team-note-status.status-superseded,
-.team-note-status.status-voided {
-  color: var(--muted);
-  background: var(--border);
 }
 
 /* --- 深度检视单个队员 · RunDetail 详情面 (native <dialog> bottom sheet) ---
@@ -3879,33 +3578,46 @@ dialog.run-detail::backdrop {
 .conv-group-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
   min-height: 44px;
-  padding: 8px 14px;
+  padding: 4px 8px 4px 4px;
+  color: var(--fg);
+}
+
+.conv-group-mode {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--muted);
+}
+
+/* Ghost: must beat the global `button` CTA (accent fill + white text). */
+.conv-group-head-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 6px;
   color: var(--fg);
   background: transparent;
   border: none;
   border-radius: 10px;
+  font: inherit;
   text-align: left;
 }
 
-.conv-group-head:active {
+.conv-group-head-main:active {
   background: var(--panel);
-}
-
-.conv-group-head-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .conv-group-name {
   overflow: hidden;
   font-size: 13px;
   font-weight: 600;
+  color: var(--fg);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -3913,11 +3625,13 @@ dialog.run-detail::backdrop {
 .conv-group-sub {
   overflow: hidden;
   font-size: 12px;
+  font-weight: 400;
   color: var(--muted);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
+.conv-group-toggle,
 .conv-group-new {
   flex-shrink: 0;
   display: inline-flex;
@@ -3925,19 +3639,22 @@ dialog.run-detail::backdrop {
   justify-content: center;
   width: 36px;
   height: 36px;
+  min-height: 36px;
+  padding: 0;
   color: var(--muted);
   background: transparent;
   border: none;
   border-radius: 10px;
 }
 
+.conv-group-toggle:active,
 .conv-group-new:active {
   background: var(--panel);
   color: var(--fg);
 }
 
 .conv-group-body .conv-row {
-  padding-left: 6px;
+  padding-left: 32px;
 }
 
 /* 抽屉三区：无区标题，相邻区用分隔线区分（置顶 / 组 / 裸聊）. */
@@ -3954,6 +3671,30 @@ dialog.run-detail::backdrop {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 2px;
+}
+
+.drawer-bar-lead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.drawer-bar-heading {
+  overflow: hidden;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drawer-back {
+  flex-shrink: 0;
+}
+
+.drawer .bar-right {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 /* Search bar (跨会话搜索). The clear ✕ overlays the input's right edge. */

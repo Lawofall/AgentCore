@@ -11,9 +11,10 @@ carried by the long-term `ai_maintained` rule file. See docs/03-AI核心/Agent�
 
 `LLMTitleGenerator` is the concrete `TitleGenerator` (fast, non-thinking model),
 wired in `conversation/common.py`: on the first turn it generates the title,
-retries once on an empty model body, and falls back to truncating the first user
-message if the model output is still empty, the call times out (no retry), or
-the call fails.
+retries once on an empty model body, and returns a degraded `TitleResult`
+(truncated first user message + `degraded_reason`) if the model output is still
+empty, the call times out (no retry), or the call fails. Persist callers write
+only a real model title.
 """
 
 import json
@@ -63,10 +64,10 @@ class TitleResult:
     """Sidebar title from the first-turn minting call.
 
     ``degraded_reason`` is set when ``title`` is the truncated-first-message
-    fallback rather than something the model produced. The caller persists both
-    kinds through the same write, so without this flag a degraded label is
-    indistinguishable from a real one once it reaches the sidebar — which is how
-    a rate-limited mint went unnoticed in production.
+    fallback rather than something the model produced. Persist callers write
+    only a real model title; a degraded result stays out of ``conversations.title``
+    so a later empty-title turn can retry. The flag exists so logs can still
+    attribute the miss (``chat.title_degraded``) without locking the column.
     """
 
     title: str

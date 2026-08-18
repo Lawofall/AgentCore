@@ -543,6 +543,85 @@ describe("ToolLine · 过程工具默认折叠", () => {
   });
 });
 
+describe("ToolLine · browser 单步折叠一行", () => {
+  it("inlines click detail into the title and drops the peek line", () => {
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "browser_click",
+          arguments: { ref: "e13" },
+          result: "ok",
+          display: {
+            kind: "browser",
+            action: "click",
+            url: "https://example.com",
+            detail: "点击元素 e13",
+          },
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getAllByText("Click")).toHaveLength(1);
+    expect(screen.getByText(/点击元素 e13/)).toBeTruthy();
+    expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("does not also chip navigate url when display.detail is present", () => {
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "browser_navigate",
+          arguments: { url: "https://example.com" },
+          result: "ok",
+          display: {
+            kind: "browser",
+            action: "navigate",
+            url: "https://example.com",
+            detail: "打开 https://example.com",
+          },
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Navigate")).toBeTruthy();
+    expect(screen.getByText(/打开 https:\/\/example.com/)).toBeTruthy();
+    expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("keeps a running click as a single title line", () => {
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "browser_click",
+          arguments: { ref: "e13" },
+          status: "running",
+          result: null,
+        })}
+      />,
+    );
+    expect(screen.getByText("Click")).toBeTruthy();
+    expect(screen.queryByText(/点击元素/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("surfaces failure.message on the collapsed row", () => {
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "browser_click",
+          arguments: { ref: "e13" },
+          result: "ElementNotFound: e13",
+          status: "error",
+          failure: { message: "未找到元素 e13。", code: "NOT_FOUND" },
+        })}
+      />,
+    );
+    expect(screen.getByText("未找到元素 e13。")).toBeTruthy();
+    expect(screen.queryByText(/ElementNotFound/)).toBeNull();
+    expect(collapsedSubline(container)).toBeTruthy();
+  });
+});
+
 describe("ToolLineGroup · read_url 来源集合", () => {
   const sources = [
     readUrlStep("r1", {
@@ -853,6 +932,179 @@ describe("ToolLine · handoff brief card", () => {
   });
 });
 
+describe("ToolLine · wait 一行收口", () => {
+  it("successful wait is one line: no peek, no chevron", () => {
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "wait",
+          arguments: {},
+          result: "已等待队员回合结束。",
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Wait")).toBeTruthy();
+    expect(screen.queryByText(/已等待/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
+    expect(container.querySelector(".lucide-chevron-right")).toBeNull();
+    expect(container.querySelector(".lucide-chevron-down")).toBeNull();
+    fireEvent.click(screen.getByText("Wait"));
+    expect(screen.queryByText(/已等待/)).toBeNull();
+  });
+
+  it("failed wait still shows the product failure face", () => {
+    render(
+      <ToolLine
+        step={step({
+          tool_name: "wait",
+          arguments: {},
+          result: "WaitError: internal timeout",
+          status: "error",
+          failure: {
+            message: "等待队员超时。",
+            code: "WAIT_TIMEOUT",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText("等待队员超时。")).toBeTruthy();
+    expect(screen.queryByText(/WaitError/)).toBeNull();
+  });
+});
+
+describe("ToolLine · ack 族成功无 peek", () => {
+  it.each([
+    {
+      tool: "file_delete",
+      label: "Delete file",
+      args: { path: "gone.md" },
+      ack: "已删除 gone.md",
+      detail: "gone.md",
+    },
+    {
+      tool: "file_move",
+      label: "Move file",
+      args: { source: "draft.md", destination: "out/final.md" },
+      ack: "已移动 draft.md",
+      detail: "draft.md → out/final.md",
+    },
+    {
+      tool: "file_copy",
+      label: "Copy file",
+      args: { source: "a.md", destination: "b.md" },
+      ack: "已复制 a.md",
+      detail: "a.md → b.md",
+    },
+    {
+      tool: "mkdir",
+      label: "Make dir",
+      args: { path: "out" },
+      ack: "已创建目录 out",
+      detail: "out",
+    },
+    {
+      tool: "host_storage",
+      label: "Host storage",
+      args: {},
+      ack: '{"disks":[{"name":"C:"}]}',
+      detail: null,
+    },
+    {
+      tool: "host_power",
+      label: "Host power",
+      args: {},
+      ack: '{"battery":80}',
+      detail: null,
+    },
+    {
+      tool: "host_network_summary",
+      label: "Network summary",
+      args: {},
+      ack: '{"ifaces":["eth0"]}',
+      detail: null,
+    },
+    {
+      tool: "host_apps",
+      label: "Host apps",
+      args: {},
+      ack: '{"apps":["Notes"]}',
+      detail: null,
+    },
+    {
+      tool: "host_os_log_summary",
+      label: "OS log summary",
+      args: { source: "system" },
+      ack: '{"events":[]}',
+      detail: null,
+    },
+    {
+      tool: "post_note",
+      label: "Post note",
+      args: {},
+      ack: "已发布便签。",
+      detail: null,
+    },
+    {
+      tool: "amend_note",
+      label: "Amend note",
+      args: {},
+      ack: "已修订便签。",
+      detail: null,
+    },
+    {
+      tool: "desktop_notify",
+      label: "Notify",
+      args: {},
+      ack: "已发送桌面通知。",
+      detail: null,
+    },
+  ] as const)(
+    "suppresses $tool success peek",
+    ({ tool, label, args, ack, detail }) => {
+      const { container } = render(
+        <ToolLine
+          step={step({
+            tool_name: tool,
+            arguments: { ...args },
+            result: ack,
+            status: "success",
+          })}
+        />,
+      );
+      expect(screen.getByText(label)).toBeTruthy();
+      if (detail) expect(screen.getByText(detail)).toBeTruthy();
+      expect(screen.queryByText(ack)).toBeNull();
+      expect(collapsedSubline(container)).toBeNull();
+    },
+  );
+
+  it.each([
+    ["file_delete", "Delete file"],
+    ["host_storage", "Host storage"],
+    ["post_note", "Post note"],
+    ["desktop_notify", "Notify"],
+  ] as const)("surfaces failure.message for %s", (tool, label) => {
+    render(
+      <ToolLine
+        step={step({
+          tool_name: tool,
+          arguments: {},
+          result: `${tool} boom: leaked internals`,
+          status: "error",
+          failure: {
+            message: "操作失败，请稍后重试。",
+            code: "TOOL_ERROR",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.getByText("操作失败，请稍后重试。")).toBeTruthy();
+    expect(screen.queryByText(/leaked internals/)).toBeNull();
+  });
+});
+
 describe("toolDetail · title chip", () => {
   it("prefers path / name over long prose bodies", () => {
     expect(toolDetail({ path: "a/b.md", draft: "## 长草稿\n更多" })).toBe(
@@ -884,6 +1136,17 @@ describe("toolDetail · title chip", () => {
 
   it("does not chip handoff summary into toolDetail (ToolLine inlines peek instead)", () => {
     expect(toolDetail({ summary: "交叉验证完成，建议一周内表态" })).toBe("");
+  });
+
+  it("chips file_move / file_copy source → destination, not a lone verb", () => {
+    expect(
+      toolDetail({ source: "draft.md", destination: "out/final.md" }),
+    ).toBe("draft.md → out/final.md");
+    expect(toolDetail({ source: "a.md", destination: "b.md" })).toBe(
+      "a.md → b.md",
+    );
+    expect(toolDetail({ source: "only-src.md" })).toBe("");
+    expect(toolDetail({ destination: "only-dest.md" })).toBe("");
   });
 });
 

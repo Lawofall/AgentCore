@@ -490,6 +490,47 @@ def test_export_turn_spans_noop_on_empty():
     export_turn_spans([], trace_id="tr", conversation_id="c1", message_id="m1", exporter=_Boom())
 
 
+def test_export_turn_spans_logs_no_batch_without_workers(monkeypatch):
+    """零人回合：有 facts、无队员编制 → obs.turn_spans 仍带 no_batch。"""
+    entries = [
+        _started(),
+        _run_started("cap", "cap", kind="captain", ts="t0"),
+        _run_completed("cap", "cap", duration_ms=50, ts="t1"),
+        _fact("turn_end", {"finish_reason": "end_turn"}),
+    ]
+    spy = LogSpy()
+    monkeypatch.setattr(spans_mod, "logger", spy)
+    export_turn_spans(entries, trace_id="tr", conversation_id="c1", message_id="m1")
+    line = spy.get("obs.turn_spans")
+    assert line["team_batch"] == {"kind": "no_batch"}
+
+
+def test_export_turn_spans_paused_in_flight_team_batch(monkeypatch):
+    """Paused mid-flight still exports ``team_batch`` (persist choke point, not turn-end only)."""
+    entries = [
+        _started(),
+        {
+            "kind": "run_plan",
+            "payload": {
+                "execution_id": "e1",
+                "runs": [
+                    {"id": "cap", "kind": "captain"},
+                    {"id": "w1", "kind": "agent"},
+                ],
+            },
+        },
+        _run_started("cap", "cap", kind="captain", ts="t0"),
+        _run_started("w1", "w1", kind="agent", parent="cap", ts="t1"),
+        _fact("turn_end", {"finish_reason": "paused"}),
+    ]
+    spy = LogSpy()
+    monkeypatch.setattr(spans_mod, "logger", spy)
+    export_turn_spans(entries, trace_id="tr", conversation_id="c1", message_id="m1")
+    line = spy.get("obs.turn_spans")
+    assert line["team_batch"] == {"kind": "in_flight", "worker_count": 1}
+    assert line["finish_reason"] == "paused"
+
+
 def test_noop_exporter_returns_none():
     root = spans_from_entries(
         [

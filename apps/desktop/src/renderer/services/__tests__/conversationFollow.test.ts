@@ -4,6 +4,7 @@
  * 覆盖三条硬边界：空闲不转圈、另一端开跑能自动出现 + 跟播、与本端自有连接互斥
  * （同一回合绝不折两次）。
  */
+import * as logMod from "@/lib/log";
 import { getRuntime, useConversationStore } from "@/stores/conversation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as dispatchMod from "../sse/dispatch";
@@ -13,8 +14,11 @@ import {
   stopAllConversationFollows,
   syncConversationFollow,
 } from "../turns/conversationFollow";
+import { runHydrateAttachSettle } from "../turns/hydrateAttachSettle";
+import * as sidecarAttach from "../turns/sidecarAttach";
 import {
   beginLocalConversationStream,
+  hasLocalConversationStream,
   resetStreamOwnershipForTests,
 } from "../turns/streamOwnership";
 
@@ -357,6 +361,36 @@ describe("syncConversationFollow (对话级订阅)", () => {
     for (const s of streams) s.close();
   });
 
+  it("hydrate 让位本机引擎不冒充 switched_away", async () => {
+    const { response, close } = sseStream();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(response)),
+    );
+    const logs = vi.spyOn(logMod, "logEvent");
+
+    syncConversationFollow(CID);
+    await tick();
+    expect(followedConversationIds()).toEqual([CID]);
+
+    syncConversationFollow(null, "local_sidecar");
+    expect(followedConversationIds()).toEqual([]);
+    expect(logs).toHaveBeenCalledWith(
+      "info",
+      "conversation.follow_closed",
+      expect.objectContaining({
+        conversation_id: CID,
+        reason: "local_sidecar",
+      }),
+    );
+    expect(logs).not.toHaveBeenCalledWith(
+      "info",
+      "conversation.follow_closed",
+      expect.objectContaining({ reason: "switched_away" }),
+    );
+    close();
+  });
+
   it("切会话只开当前会话这一条，不额外拉别处的账", async () => {
     const fetchMock = vi.fn((..._args: unknown[]) =>
       Promise.resolve(sseStream().response),
@@ -461,5 +495,84 @@ describe("syncConversationFollow (对话级订阅)", () => {
     await tick();
     expect(peekLastEventId(CID)).toBe("21");
     live.close();
+  });
+
+  it("本机回合流结束后 follow 自动连回", async () => {
+    const first = sseStream();
+    const second = sseStream();
+    let n = 0;
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(n++ === 0 ? first.response : second.response),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    syncConversationFollow(CID);
+    await tick();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    first.push(": attach-caught-up\n\n");
+    await tick();
+
+    const release = beginLocalConversationStream(CID);
+    // mock fetch 不响应 AbortSignal；显式断流 = 生产里闸 abort 关掉这条跟播。
+    first.close();
+    await tick();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    release();
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(followedConversationIds()).toEqual([CID]);
+    second.close();
+  });
+
+  it("让位窗口内同一回合不双折：hydrate sidecarLive 到 attach 占闸前 full_replay 不进 follow", async () => {
+    const first = sseStream();
+    const second = sseStream();
+    let n = 0;
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(n++ === 0 ? first.response : second.response),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const attachSpy = vi
+      .spyOn(sidecarAttach, "attachSidecarTurn")
+      .mockImplementation(async () => {
+        expect(hasLocalConversationStream(CID)).toBe(true);
+        first.push(
+          frame("message_start", { message_id: "srv-1", full_replay: true }),
+        );
+        first.push(frame("content_delta", { delta: "叠" }));
+        first.push(frame("message_end", { finish_reason: "end_turn" }));
+        await tick();
+        expect(dispatched).toEqual([]);
+        first.close();
+        await tick();
+        return true;
+      });
+
+    syncConversationFollow(CID);
+    await tick();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    first.push(": attach-caught-up\n\n");
+    await tick();
+
+    await runHydrateAttachSettle(CID, {
+      sidecarLive: true,
+      cloudLive: false,
+      cloudKnown: true,
+      pausedCount: 0,
+      unsynced: [],
+    });
+
+    expect(attachSpy).toHaveBeenCalledTimes(1);
+    expect(dispatched).toEqual([]);
+    expect(hasLocalConversationStream(CID)).toBe(false);
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+    expect(followedConversationIds()).toEqual([CID]);
+    second.close();
   });
 });

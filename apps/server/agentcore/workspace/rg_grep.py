@@ -142,15 +142,24 @@ def _parse_count_line(line: str) -> tuple[str, int] | None:
     return m.group(1), int(m.group(2))
 
 
+def _regex_diagnostic_detail(stderr: str) -> str:
+    """Keep rg's useful diagnostic, not a header-only first line.
+
+    ``rg: regex parse error:`` is a label; the reason and caret live on the
+    following lines. Clipping to first (or last) line drops that reason — or,
+    for ``the literal "\\n" is not allowed``, drops the multiline hint.
+    """
+    lines = [ln.rstrip() for ln in (stderr or "").splitlines() if ln.strip()]
+    return "\n".join(lines) if lines else (stderr or "").strip()
+
+
 def _regex_error_message(stderr: str) -> str | None:
     text = (stderr or "").strip()
     if not text:
         return None
     lower = text.lower()
     if "regex" in lower or "parse error" in lower or "syntax error" in lower:
-        # Prefer the useful last/first non-empty line.
-        first = next((ln.strip() for ln in text.splitlines() if ln.strip()), text)
-        return f"正则表达式无效：{first}"
+        return f"正则表达式无效：{_regex_diagnostic_detail(text)}"
     return None
 
 

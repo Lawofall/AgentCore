@@ -8,6 +8,11 @@ from agentcore.runtime.coordination.session import (
     MAX_COORDINATION_BUDGET,
 )
 from agentcore.runtime.runs.playbooks import available_playbooks
+from agentcore.runtime.runs.playbooks.audit import (
+    CODE_AUDIT_REQUIRED_SECTIONS,
+    CODE_AUDIT_SECTION_BY_DESIGN,
+    CODE_AUDIT_SECTION_DEFECTS,
+)
 from agentcore.workspace.stage_dirs import RESEARCH_DIR, REVIEWS_DIR
 
 # 探路轮上限唯一真源（局部拼接，与 RESEARCH_DIR / 协调预算同构）。
@@ -15,12 +20,15 @@ _IR = str(settings.engine_team_gate_investigation_rounds)
 
 # playbook 降级为形状词汇教学示例（协作优先重设计阶段 2）：listing 仍嵌进 skill，口径改为对照学形状。
 _PLAYBOOK_LISTING = available_playbooks()
+_CODE_AUDIT_SECTIONS_JSON = (
+    "[" + ", ".join(f'"{s}"' for s in CODE_AUDIT_REQUIRED_SECTIONS) + "]"
+)
 
 # Shared with ``prompt._CEO_CORE_HINT``. Intensity must match the core's
 # 「规格已齐 → 立刻派，勿先查」：建站已齐则直接派，禁止本常量写成「建站必查」。
 CONSULT_TEAM_ORCH_BY_SCENE = (
-    "按场面：拿不准怎么拆 / 跨文件夹 / 绿场切片 / 成文档 / Office → 必查 `team_orchestration_advanced`；"
-    "规格已齐建站、常见对比、单人落盘、提问卡 → 直接派不必查，收口仍回 CEO"
+    "按场面：拿不准怎么拆 / 跨文件夹 / 绿场切片 / 成文（写一篇论文/综述等，勿因单人免查） / Office → 必查 `team_orchestration_advanced`；"
+    "规格已齐建站、常见对比、非成文短文落盘、提问卡 → 直接派不必查，收口仍回 CEO"
 )
 
 _TEAM_ORCHESTRATION_ADVANCED = """\
@@ -133,7 +141,7 @@ choice 服务下一步动作，【禁止】正文候选菜单再投卡催收敛�
 默认推荐「先多角度摸清、对话对齐」；次选「写成文档并保存」；可选「先聊暂不派队」。\
 桌上结果已是对话本身（共创、审美对齐、闲聊式探讨）→ 正文推进，不发卡。\
 选项只说桌上结果，【禁止】写内部编制（几人几步、学术审校）。\
-用户原话已明示报告/落盘/交文档 → 可直接成文，不必多拦。\
+用户原话已明示写一篇论文/综述/报告/落盘/交文档 → 可直接成文，不必多拦。\
 **代码审计**（找 bug / 安全复查 / 静态审计代码并落盘纪律化报告）→ 默认手写 / 快捷模板【二选一】，\
 【禁止】`code_audit`（或其它具名 playbook）与 `tasks` 同时传：\
 ①【手写路·默认】天然两缝且角色自制（如云端引擎员+本地引擎员）→ 只手写 `tasks`\
@@ -142,11 +150,17 @@ choice 服务下一步动作，【禁止】正文候选菜单再投卡催收敛�
 整仓/多子系统 → 填 `modules` 短名/路径（≥2 可独立并行缝，按自然缝扇出，常 4–8、能少则少、\
 上限 8、超限末槽折叠）\
 → 并行审计+主管速览；单缝省略 modules；【禁止】整仓只填 scope 当单人）；【禁止】再传 `tasks`。\
-两路共通：【禁止】指望 playbook 从 scope 自动拆；【禁止】把多目录拼进 scope 字符串冒充多模块；\
+两路共通：每名审计员 `deliverable.required_sections` 必须是\
+""" + _CODE_AUDIT_SECTIONS_JSON + """\
+（与模板路同字面；引擎按小标题验收；禁止近义改写）。\
+「""" + CODE_AUDIT_SECTION_BY_DESIGN + """」独立成栏：模块 docstring / 设计文档已写明的目标形态入此栏，\
+禁止标进「""" + CODE_AUDIT_SECTION_DEFECTS + """」、不进 N。\
+手写未写章节时引擎盖上同一列表（不另起一套、不扫 role/task）。\
+【禁止】指望 playbook 从 scope 自动拆；【禁止】把多目录拼进 scope 字符串冒充多模块；\
 【禁止】套 `research_report` 学术审校环；【禁止】与 `repair_code` 混用——审计只报告，修码另开。\
-**默认 A**：用户说调研/摸清/看 gap/看论文与开源，**未**明示「写成报告/成文/交一篇」→ \
+**默认 A**：用户说调研/摸清/看 gap/看论文与开源，**未**明示成文 → \
 【宜】`parallel_brief`（topic+少扇出 angles，常 2；【禁止】一上来 `research_report` 三路成文；\
-「论文/开源」当资料源 ≠ 明示成文）。\
+仅把「论文/开源」当资料源 ≠ 明示成文；「写一篇…论文/综述」=明示成文）。\
 **【缺主体先问】**三路/多路调研未点名主体（产品/市场/事件/对象）→ 先 `ask_user`\
 （题须预填 `default`）；用户 continue = 确认该 default，派工标「按确认默认」；\
 无 default 不得 continue 派工；【禁止】静默自拟 topic/市场占位再派。\
@@ -156,8 +170,8 @@ choice 服务下一步动作，【禁止】正文候选菜单再投卡催收敛�
 【勿】一点成文就上满编学术审校：\
 **档 1 轻**：主题大 / 形态未定 → 先短摸底（宜 `parallel_brief` 少扇出）或提纲过目，再长文；\
 普通产品构想可手写轻成文，【不】默认学术审校。\
-**档 2 标准**：边界清、需取证成文 → 少路调研（宜 2）→ 提纲（尽量 `checkpoint_after`）→ 撰稿；\
-【宜】手写轻成文；【禁止】套 `research_report` 满编（含末环审校）。\
+**档 2 标准**：边界清、需取证成文（含规格已齐的论文/综述）→ 少路调研（宜 2）→ 提纲（尽量 `checkpoint_after`）→ 撰稿；\
+【宜】手写轻成文；【禁止】套 `research_report` 满编（含末环审校）；【禁止】收成单人主笔。\
 **档 3 重 / B 成文满编**：明确长文/多章/可提交、或用户点名审校，且尚需 ≥2 可并行取证角 → \
 【宜】`research_report`（内含末环审校；禁止一人自搜+成文）；手写同构须齐\
 【各角调研笔记 + 主笔终稿 + 独立审校】：\

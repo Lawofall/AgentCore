@@ -157,7 +157,23 @@ describe("TeamView 团队条 · 用时", () => {
         elapsedMs={42_000}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "展开协作列表" }));
     expect(screen.getByText(/39\.0s/)).toBeTruthy();
+  });
+
+  it("默认展开队员列表，仍可收起", () => {
+    render(
+      <TeamView
+        agents={PARALLEL_TURN.agents}
+        runs={PARALLEL_TURN.runs}
+        progress={PARALLEL_TURN.progress}
+        status="completed"
+        elapsedMs={42_000}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "收起协作列表" })).toBeTruthy();
+    expect(screen.getByText("调研员")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "收起协作列表" }));
+    expect(screen.queryByText("调研员")).toBeNull();
+    expect(screen.getByRole("button", { name: "展开协作列表" })).toBeTruthy();
   });
 });

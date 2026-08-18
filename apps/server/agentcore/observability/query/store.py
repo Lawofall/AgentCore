@@ -48,6 +48,7 @@ _TURN_METRICS_KEYS = (
     "agent_id",
     "trace_id",
     "kind",
+    "mode",
     "status",
     "finish_reason",
     "error",
@@ -78,27 +79,79 @@ def _project_turn_metrics_row(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _row_credential_source(row: dict[str, Any]) -> str | None:
+    raw = row.get("credential_source")
+    if not raw:
+        cost = row.get("cost")
+        if isinstance(cost, str):
+            try:
+                cost = json.loads(cost)
+            except json.JSONDecodeError:
+                cost = None
+        if isinstance(cost, dict):
+            raw = cost.get("credential_source")
+    return str(raw) if raw else None
+
+
+def _billing_label(sources: set[str], billed: int, estimated: int) -> str | None:
+    """Spine-only display: BYOK / platform / mixed. Does not change quota semantics."""
+    has_user = "user" in sources
+    has_billed_src = bool(sources - {"user"})
+    if has_user and has_billed_src:
+        return "mixed"
+    if has_user:
+        return "BYOK"
+    if has_billed_src:
+        return "platform"
+    if estimated and billed:
+        return "mixed"
+    if estimated:
+        return "BYOK"
+    if billed:
+        return "platform"
+    return None
+
+
 def _aggregate_cost_rows(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not rows:
         return None
     total_nano = 0
+    estimated_nano = 0
     models: dict[str, int] = {}
     currency: str | None = None
+    billed_currency: str | None = None
+    estimated_currency: str | None = None
+    sources: set[str] = set()
     for r in rows:
         nano = r.get("cost_total_nano")
+        billed = 0
         if nano is None and r.get("cost") is not None:
             # Some legacy rows only carry float ``cost``; leave nano unset then.
             pass
         else:
-            total_nano += int(nano or 0)
+            billed = int(nano or 0)
+            total_nano += billed
+        estimated = int(r.get("cost_estimated_nano") or 0)
+        estimated_nano += estimated
         model = r.get("model")
         if model:
             models[str(model)] = models.get(str(model), 0) + 1
-        if currency is None and r.get("currency"):
-            currency = str(r["currency"])
+        row_currency = str(r["currency"]) if r.get("currency") else None
+        if currency is None and row_currency:
+            currency = row_currency
+        if billed and billed_currency is None and row_currency:
+            billed_currency = row_currency
+        if estimated and estimated_currency is None and row_currency:
+            estimated_currency = row_currency
+        src = _row_credential_source(r)
+        if src:
+            sources.add(src)
     return {
         "total_nano": total_nano,
-        "currency": currency,
+        "estimated_nano": estimated_nano,
+        "currency": billed_currency or currency,
+        "estimated_currency": estimated_currency,
+        "billing": _billing_label(sources, total_nano, estimated_nano),
         "runs": len(rows),
         "models": [{"model": m, "runs": n} for m, n in sorted(models.items())],
     }
@@ -354,7 +407,8 @@ class PostgresConversationStore:
             rows = (
                 await conn.execute(
                     text(
-                        "SELECT model, cost_total_nano, currency "
+                        "SELECT model, cost_total_nano, cost_estimated_nano, "
+                        "currency, cost "
                         "FROM cost_events WHERE trace_id = :tid"
                     ),
                     {"tid": trace_id},

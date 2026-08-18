@@ -6,7 +6,7 @@ Desktop convention (parallel desktop inject):
 - Sidecar inject: ``accountAuth: {baseUrl, apiKey}`` where
   ``baseUrl`` = ``{apiOrigin}/v1/account`` and ``apiKey`` = minted token.
 - Cloud calls (account ticket **or** access):
-  ``POST {baseUrl}/conversations/search|read``,
+  ``POST {baseUrl}/conversations/search|read|chat-context``,
   ``POST {baseUrl}/rules/list|remember`` (list = always + on_demand bodies for
   规则目录 / ``consult``),
   ``POST {baseUrl}/memory/{list,load,save,delete,project-scopes}``.
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -32,6 +32,7 @@ from agentcore.conversation.log_export import (
     render_conversation_log,
     search_snippet_from_messages,
 )
+from agentcore.core.errors import NotFoundError
 from agentcore.db.models import Document
 from agentcore.db.repositories import (
     ConversationRepository,
@@ -172,6 +173,63 @@ class ConversationReadResponse(BaseModel):
     message_count: int = 0
     char_offset: int = 0
     total_chars: int = 0
+
+
+class ChatContextItem(BaseModel):
+    """One ``load_chat_context`` row (role/content; ledger is engine-only)."""
+
+    role: Literal["user", "assistant"]
+    content: str
+    evidence_ledger: list[Any] | None = None
+
+
+class ChatContextRequest(BaseModel):
+    conversation_id: str
+
+
+class ChatContextResponse(BaseModel):
+    history: list[ChatContextItem]
+
+
+def _chat_context_items(rows: list[dict[str, Any]]) -> list[ChatContextItem]:
+    items: list[ChatContextItem] = []
+    for row in rows:
+        role = row.get("role")
+        content = row.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            continue
+        ledger = row.get("evidence_ledger")
+        items.append(
+            ChatContextItem(
+                role=role,
+                content=content,
+                evidence_ledger=ledger if isinstance(ledger, list) and ledger else None,
+            )
+        )
+    return items
+
+
+@router.post("/conversations/chat-context", response_model=ChatContextResponse)
+async def account_chat_context(
+    body: ChatContextRequest,
+    user: AccountApiUser,
+    session: AsyncSession = Depends(get_db),
+) -> ChatContextResponse:
+    """Owner-scoped CEO window (same ``load_chat_context`` as a cloud send).
+
+    Engine-minimal: sidecar start/harvest and desktop fallback when the account
+    ticket is missing. Not UI message CRUD — does not expose compaction text
+    as its own field (it rides inside the assembled assistant summary block).
+    """
+    from agentcore.conversation.chat_context import assemble_owned_chat_context
+
+    cid = (body.conversation_id or "").strip()
+    if not cid:
+        raise NotFoundError("对话不存在")
+    history = await assemble_owned_chat_context(
+        session, cid, user_id=user.user_id
+    )
+    return ChatContextResponse(history=_chat_context_items(history))
 
 
 @router.post("/conversations/read", response_model=ConversationReadResponse)

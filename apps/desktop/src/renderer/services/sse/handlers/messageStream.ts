@@ -283,6 +283,7 @@ export function handleMessageStreamEvent(
           finishReason: payload.finish_reason,
           collab: payload.collab,
           outcome: payload.outcome ?? null,
+          teamBatch: payload.team_batch,
         },
         conversationId,
       );

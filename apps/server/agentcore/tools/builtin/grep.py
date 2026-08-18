@@ -74,7 +74,10 @@ class GrepTool:
                 "properties": {
                     "pattern": {
                         "type": "string",
-                        "description": "要搜索的正则表达式（ripgrep / Rust regex 语法）。",
+                        "description": (
+                            "要搜索的正则表达式（ripgrep / Rust regex 语法）。"
+                            "禁止把字面 \\n 当正则。"
+                        ),
                     },
                     "path": {
                         "type": "string",

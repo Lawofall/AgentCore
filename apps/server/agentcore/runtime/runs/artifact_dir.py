@@ -6,6 +6,9 @@
 **落点只认显式来源**（按序）：``deliverable.workspace_native``（真 = 产物是用户
 工作区原生文件，无约定落点）→ 已声明 ``artifacts`` 推导出的目录 → 显式
 ``deliverable.artifact_dir`` → 默认 ``DRAFTS_DIR``（``AgentCore/文档/工作稿``）。
+``workspace_native`` 与 leftover ``artifact_dir`` 在 ``apply_artifact_dir_defaults``
+互斥：已定位路径旁的 leftover 目录清掉（native 压过误钉的工作间路径）；裸文件名
++ 显式目录则 join 成全路径并关掉 native（目录是路径合同，避免任务书两句打架）。
 运行时**不**扫 role / task 自由文猜「像调研还是像审查」——那条整链已净删除
 （意图分类器形态，且误判对用户不可见）。``research/`` 有机器语义（辩手读它
 取证），只经 playbook 常量或显式声明进入。→ 双模式工作区 §四
@@ -184,12 +187,39 @@ def is_file_ownership_path(path: str) -> bool:
     return not is_acceptance_only_artifact_pattern(path)
 
 
+def _has_relocatable_bare_filename(artifacts: list[str] | None) -> bool:
+    """True when a concrete filename has no directory and can join under ``artifact_dir``."""
+    for raw in artifacts or []:
+        if not isinstance(raw, str):
+            continue
+        raw_s = raw.replace("\\", "/").strip()
+        if not raw_s or is_acceptance_only_artifact_pattern(raw_s):
+            continue
+        norm = normalize_artifact_dir(raw_s)
+        if norm and "/" not in norm:
+            return True
+    return False
+
+
 def apply_artifact_dir_defaults(deliverable: Deliverable) -> None:
     """Fill ``artifact_dir``; relocate bare filenames under it (in-place).
 
     Empty ``artifacts`` stays empty — acceptance uses ``artifact_dir`` directly;
     do not inject ``[dir/]`` (that falsely exclusivizes a shared dossier).
+
+    ``workspace_native`` and an explicit ``artifact_dir`` never both survive:
+    leftover dir next to already-located paths is dropped (native outranks a
+    mistaken dossier pin); leftover dir + bare filenames is a path contract —
+    native is cleared so the join runs and task briefs stay consistent.
     """
+    leftover = normalize_artifact_dir(deliverable.artifact_dir)
+    if deliverable.workspace_native:
+        if leftover and _has_relocatable_bare_filename(deliverable.artifacts):
+            deliverable.workspace_native = False
+        else:
+            deliverable.artifact_dir = ""
+            return
+
     resolved = resolve_artifact_dir(deliverable)
     if not resolved:
         return

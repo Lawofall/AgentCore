@@ -48,7 +48,6 @@ import {
   useActiveExecField,
   useExecutionScope,
 } from "@/stores/execution";
-import type { ExecutionDetachedPayload } from "@/types/events";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -220,7 +219,7 @@ export function StatusStrip(props: StatusStripProps) {
   return <RunningOrBackgroundStrip {...props} />;
 }
 
-/** running：有 execution_detached → 静态后台条；否则 RunningStrip。
+/** running：有 execution_detached → RunningStrip +「后台」徽标（活体 n/m / 转圈）。
  * 停止中优先走 RunningStrip，保留转圈过渡，不回退成后台。 */
 function RunningOrBackgroundStrip(props: StatusStripProps) {
   const turnPhase = useActiveTurnPhase();
@@ -229,7 +228,7 @@ function RunningOrBackgroundStrip(props: StatusStripProps) {
     return <RunningStrip {...props} />;
   }
   if (detached) {
-    return <BackgroundRunningStrip {...props} detached={detached} />;
+    return <RunningStrip {...props} backgroundBadge />;
   }
   return <RunningStrip {...props} />;
 }
@@ -327,20 +326,24 @@ function RunningStrip({
   onMaximize,
   onReplay,
   pendingBatchBadge,
-}: StatusStripProps) {
+  backgroundBadge,
+}: StatusStripProps & { backgroundBadge?: boolean }) {
   const turnPhase = useActiveTurnPhase();
   const stopping = turnPhase === "stopping";
   const coordinationWait = useActiveExecField((rt) => rt.coordinationWait);
+  // Background (detached): follow live execution.progress, not a frozen wait stamp.
+  // stopping/terminal drop coordination_wait, so the pre-detach stamp never moves.
+  const liveWait = backgroundBadge ? null : coordinationWait;
   const synthesizing =
     !isDebate(execution) &&
-    !coordinationWait &&
+    !liveWait &&
     isTeamSynthesizing(execution, {
       turnTerminal: isTerminalPhase(turnPhase),
     });
   const workers = workerProgress(execution);
   const { completed, total } = execution.progress;
-  const progressLabel = coordinationWait
-    ? `${coordinationWait.completed}/${coordinationWait.total}`
+  const progressLabel = liveWait
+    ? `${liveWait.completed}/${liveWait.total}`
     : synthesizing
       ? `${workers.completed}/${workers.total}`
       : `${completed}/${total}`;
@@ -348,16 +351,20 @@ function RunningStrip({
     ? "status-strip-stopping"
     : pendingBatchBadge
       ? "status-strip-pending-batch"
-      : coordinationWait
-        ? "status-strip-coordination-wait"
-        : synthesizing
-          ? "status-strip-synthesizing"
-          : undefined;
+      : backgroundBadge
+        ? "status-strip-background"
+        : liveWait
+          ? "status-strip-coordination-wait"
+          : synthesizing
+            ? "status-strip-synthesizing"
+            : undefined;
 
   return (
     <div className="px-3 py-1.5" data-testid={testId}>
       <div className="flex items-center gap-2">
-        <LifeIcon label={stopping ? "停止中" : "进行中"}>
+        <LifeIcon
+          label={stopping ? "停止中" : backgroundBadge ? "后台运行" : "进行中"}
+        >
           <Loader2 size={14} className="animate-spin text-primary" />
         </LifeIcon>
         {isDebate(execution) && <DebateTag />}
@@ -369,6 +376,16 @@ function RunningStrip({
             data-testid="status-strip-pending-batch-badge"
           >
             新批次待确认
+          </Badge>
+        ) : null}
+        {backgroundBadge ? (
+          <Badge
+            tone="primary"
+            pill
+            className="shrink-0 font-medium"
+            data-testid="status-strip-background-title"
+          >
+            后台
           </Badge>
         ) : null}
         <span className="min-w-0 flex-1" />
@@ -424,52 +441,6 @@ function PausedStrip({
         ) : (
           <span className="min-w-0 flex-1" />
         )}
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {completed}/{total}
-        </span>
-        <StripControls
-          execution={execution}
-          expanded={expanded}
-          onToggle={onToggle}
-          onMaximize={onMaximize}
-          onReplay={onReplay}
-        />
-      </div>
-    </div>
-  );
-}
-
-/**
- * 异步团队转后台：CEO 回合已收口，团队继续跑。
- * 静态（无转圈）——诚实呈现后台，区别于 live RunningStrip。
- */
-function BackgroundRunningStrip({
-  execution,
-  detached,
-  expanded,
-  onToggle,
-  onMaximize,
-  onReplay,
-}: StatusStripProps & { detached: ExecutionDetachedPayload }) {
-  const completed = detached.completed;
-  const total = detached.total;
-
-  return (
-    <div className="px-3 py-1.5" data-testid="status-strip-background">
-      <div className="flex items-center gap-2">
-        <LifeIcon label="后台运行">
-          <Pause size={14} className="text-primary" />
-        </LifeIcon>
-        {isDebate(execution) && <DebateTag />}
-        <Badge
-          tone="primary"
-          pill
-          className="shrink-0 font-medium"
-          data-testid="status-strip-background-title"
-        >
-          后台
-        </Badge>
-        <span className="min-w-0 flex-1" />
         <span className="shrink-0 text-xs text-muted-foreground">
           {completed}/{total}
         </span>
@@ -762,7 +733,7 @@ function FailureStrip({
             后台
           </Badge>
           <span className="text-muted-foreground">
-            {detached.completed}/{detached.total}
+            {execution.progress.completed}/{execution.progress.total}
           </span>
         </div>
       ) : null}

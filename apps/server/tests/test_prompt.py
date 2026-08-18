@@ -306,6 +306,16 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "通识长文当交付" in local
     assert "ask_user(browser_login=true)" in local
 
+    # Production assemble passes offered_names (deferred withheld) — HOW follows that set.
+    deferred = compose_ceo_chat_prompt(
+        assemble_system_prompt(),
+        ceo_tool_names={"delegate", "terminal", "host_shell", "browser_navigate"},
+        ceo_offered_names={"delegate"},
+    )
+    assert "wait_for" not in deferred
+    assert "通识长文当交付" not in deferred
+    assert "ask_user(browser_login=true)" not in deferred
+
 
 def test_core_teaches_split_criterion_over_count():
     # 路由清晰化：按活的自然缝拆人；第一拍一句定方向；短文落盘单人。
@@ -342,7 +352,9 @@ def test_core_teaches_split_criterion_over_count():
     assert "档 2" in hint and "轻成文" in hint
     assert "学术审校" in hint
     assert "少扇出" in hint or "常 2" in hint
-    assert "论文" in hint and ("资料" in hint or "开源" in hint)  # 论文/开源 ≠ 明示成文
+    assert "论文" in hint and ("资料" in hint or "开源" in hint)  # 论文/开源当资料 ≠ 明示成文
+    assert "写一篇" in hint and "综述" in hint  # 「写一篇…论文/综述」=明示成文
+    assert "写一篇…论文/综述" in hint or "写一篇论文" in hint
     # 派摸底验收：核留短钩（目标·手段·收工 / 够用即停）；检索手册在编排 skill
     assert "派摸底" in hint or "摸底·验收" in hint
     assert "够用即停" in hint
@@ -497,24 +509,32 @@ def test_core_teaches_split_criterion_over_count():
     assert "绿场 Web" in hint or "云端装包" in hint
     assert "自检全过" in hint or "跑绿" in hint
     assert "单测已绿" in hint or "跑绿" in hint
-    # 案 fake-dispatch-stall-claim A：未 delegate 前禁「已派/已开工」；ask_user 须「先确认再派」。
-    assert "派工·时序诚实" in hint
-    assert "先确认再派" in hint or "尚未派工" in hint
-    assert "已开工" in hint  # 禁表出现在提示里
+    # 团队状态以结构面为准，禁止用正文替代；不再枚举「已派/已开工」禁语。
+    assert "团队状态" in hint and "结构面" in hint
+    assert "派工·时序诚实" not in hint
+    assert "已开工" not in hint
+    assert "尚未真正派工" not in hint
+    assert "先确认再派" not in hint
+    # 派前先给用户一句可见打算（引导，不拦工具）；再调 delegate。
+    assert "派前·先露一句" in hint
+    assert "打算怎么干" in hint and "派谁" in hint
+    assert "先给用户一句可见打算" in hint
+    assert "不固定句式" in hint
+    assert "只有工具调用" in hint or "用户面前空白" in hint
     # 派完若结束本回合：可见正文只留「人已派出」；禁「还在等/你不用管」当终稿。
     assert "派完·可见面" in hint
     assert "人已派出" in hint
     assert "还在等" in hint and "你不用管" in hint
     assert "谁在后台、完成后会再汇报" not in hint
-    # 夜巡残差 A′：无 ask_user 的 kickoff+pause / 「继续」重派；开工预览确认前禁「已跑起来」。
-    assert "尚未真正派工" in hint or "还在准备" in hint
-    assert "kickoff" in hint or "方向：派团队" in hint
-    assert "确认后开工" in hint or "方案已备好" in hint
     assert "至少 N 人" in hint or "tasks 至少" in hint
     # 按场面 consult：与按需目录 preamble 同强度（禁「可选 vs 必先查」对打）。
     from agentcore.runtime.skills import CONSULT_TEAM_ORCH_BY_SCENE
 
     assert CONSULT_TEAM_ORCH_BY_SCENE in hint
+    # 成文 consult 不以「是否单人」为前提，否则永远读不到档 2「不宜单人」。
+    assert "勿因单人免查" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "非成文短文落盘" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "单人落盘、提问卡" not in CONSULT_TEAM_ORCH_BY_SCENE
     assert "可选，非开场必做" not in hint
     assert "先 `consult(team_orchestration_advanced)` 再规划" not in hint
     skill = _TEAM_ORCHESTRATION_ADVANCED
@@ -599,6 +619,7 @@ def test_directory_preamble_only_says_what_and_how_to_pull():
 
     preamble = "\n".join(_on_demand_preamble(with_summaries=True))
     assert "consult(name)" in preamble and "按需条目" in preamble
+    assert "低频工具" in preamble
     for restated in (
         "intensity",
         "playbook",
@@ -861,6 +882,8 @@ def test_core_worker_capability_follows_workspace_facts():
     assert "code_execute=未装配" in hint
     assert "能写文件、不能运行" in hint
     assert "data_file_landing" in hint
+    assert "表质量基线" in hint
+    assert "冒充表结构" in hint
     assert "表格 → `.csv`" not in hint
     assert "源数据文件下一步" in hint
     assert "无法可靠解析的源数据文件" in hint
@@ -1135,7 +1158,8 @@ def test_skill_teaches_environment_capability_constraint():
 
 
 def test_shared_base_teaches_delivery_baseline():
-    # B3 一期：共享基座前置「交付底线」（围栏闭合 + #rN ∈ 台账 + 交付验收对照）。
+    # 共享基座只留队员也会过的机械底线（围栏 + #rN + 出处 + 只读口径）。
+    # 综述对账 / 口头验收 / 可用性短问 / 概览契约是队长收口，见 CEO core。
     from agentcore.runtime.resolve.prompt import _DEFAULT_SYSTEM_PROMPT
 
     assert "<delivery_baseline>" in _DEFAULT_SYSTEM_PROMPT
@@ -1146,13 +1170,61 @@ def test_shared_base_teaches_delivery_baseline():
     assert "真假引擎查" in _DEFAULT_SYSTEM_PROMPT
     assert "搜到" in _DEFAULT_SYSTEM_PROMPT and "可挂来源号" in _DEFAULT_SYSTEM_PROMPT
     assert "read_url" in _DEFAULT_SYSTEM_PROMPT  # 成稿挂号须先深读
-    assert "交付验收对照" in _DEFAULT_SYSTEM_PROMPT
-    assert "禁口头验收" in _DEFAULT_SYSTEM_PROMPT
     assert "只读口径" in _DEFAULT_SYSTEM_PROMPT
-    assert "通过验收" in _DEFAULT_SYSTEM_PROMPT
     assert "全程只读" in _DEFAULT_SYSTEM_PROMPT
-    assert "可用性短问" in _DEFAULT_SYSTEM_PROMPT
-    assert "已完整可用" in _DEFAULT_SYSTEM_PROMPT
+    assert "交付验收对照" not in _DEFAULT_SYSTEM_PROMPT
+    assert "禁口头验收" not in _DEFAULT_SYSTEM_PROMPT
+    assert "可用性短问" not in _DEFAULT_SYSTEM_PROMPT
+    assert "概览契约" not in _DEFAULT_SYSTEM_PROMPT
+    assert "派持" not in _DEFAULT_SYSTEM_PROMPT
+    hint = _CEO_CORE_HINT
+    assert "交付验收对照" in hint
+    assert "可用性短问" in hint
+    assert "概览契约" in hint
+    assert "队员交卷" in hint
+
+
+def test_worker_opening_drops_captain_only_context():
+    """队员开场不含派单/协调/跨路复核语境；叶子与嵌套 lead 目录同名（前缀一致）。"""
+    from agentcore.runtime.context.consultable import ConsultDirectoryEntry
+    from agentcore.runtime.skills.registry import AUDIENCE_WORKER
+
+    base = assemble_system_prompt()
+    worker_bare = compose_worker_base_prompt(base)
+    for token in (
+        "交付验收对照",
+        "禁口头验收",
+        "可用性短问",
+        "概览契约",
+        "派持",
+        "team_orchestration_advanced",
+        "build_website",
+        "build_app",
+        "deep_multi_lens_research",
+    ):
+        assert token not in worker_bare, token
+
+    reg = build_system_skill_registry()
+    leaf_names = {s.name for s in reg.available(set(), audience=AUDIENCE_WORKER)}
+    lead_names = {s.name for s in reg.available({"delegate"}, audience=AUDIENCE_WORKER)}
+    assert leaf_names == lead_names
+    for captain_manual in (
+        "team_orchestration_advanced",
+        "build_website",
+        "build_app",
+        "deep_multi_lens_research",
+    ):
+        assert captain_manual not in leaf_names
+    worker_dir = compose_worker_base_prompt(
+        base,
+        on_demand_entries=[
+            ConsultDirectoryEntry(name=s.name, summary=s.summary)
+            for s in reg.available(set(), audience=AUDIENCE_WORKER)
+        ],
+    )
+    assert "team_orchestration_advanced" not in worker_dir
+    assert "work_discipline" in worker_dir
+    assert "long_form_landing" in worker_dir
 
 
 def test_shared_base_teaches_claim_evidence_soft_constraint():

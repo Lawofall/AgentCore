@@ -410,6 +410,41 @@ class PausedTurnRepository:
         await self._session.commit()
         return row
 
+    async def stamp_settled(
+        self,
+        *,
+        message_id: str,
+        conversation_id: str,
+        frame: dict,
+        decision: str,
+        settled_by: str = "",
+    ) -> None:
+        """Stamp a settled conclusion without requiring a ``paused_turns`` row.
+
+        Cloud :meth:`claim` writes this row in the same transaction that deletes the
+        frame. Sidecar never inserts ``paused_turns`` (local JSON is its frame), so a
+        later cloud ``POST .../resume`` would otherwise see ``outcome is None`` and
+        report the card as regenerated. Any leftover frame is dropped here too
+        (frame ⊕ outcome never coexist).
+        """
+        await self._session.execute(
+            delete(PausedTurnRow).where(
+                PausedTurnRow.message_id == message_id,
+                PausedTurnRow.conversation_id == conversation_id,
+            )
+        )
+        await self._session.execute(
+            _outcome_upsert(
+                message_id=message_id,
+                conversation_id=conversation_id,
+                frame=frame,
+                outcome=PAUSED_TURN_SETTLED,
+                decision=decision,
+                settled_by=settled_by,
+            )
+        )
+        await self._session.commit()
+
     async def list_pending(self, conversation_id: str) -> Sequence[PausedTurnRow]:
         """A conversation's paused turns (oldest first) for reopen-time rehydration."""
         result = await self._session.execute(
@@ -1216,13 +1251,16 @@ class TurnMetricsRepository:
         revises: int = 0,
         escalations: int = 0,
         audit_drops: int = 0,
+        mode: str = "cloud",
     ) -> None:
         """Append one telemetry row for a completed turn (one commit).
 
         The caller (conversation service) supplies the already-computed turn
         outcome — this layer stays pure storage. A row id is minted here (Core
-        bulk paths skip the ORM default, but this is a single ORM ``add``). The
-        协作质量 counters (boundary_yields / scope_signals / revises / escalations,
+        bulk paths skip the ORM default, but this is a single ORM ``add``).
+        ``mode`` is the ``finalize(mode=cloud|local)`` fork (engine location),
+        default cloud so historical / seed writes stay correct. The 协作质量
+        counters (boundary_yields / scope_signals / revises / escalations,
         学·度量 §2.5) default 0 so a plain single-agent turn writes zeros.
         """
         self._session.add(
@@ -1234,6 +1272,7 @@ class TurnMetricsRepository:
                 trace_id=trace_id,
                 agent_id=agent_id,
                 kind=kind,
+                mode=mode,
                 status=status,
                 finish_reason=finish_reason,
                 error=error,
@@ -1257,10 +1296,12 @@ class TurnMetricsRepository:
 
         One round-trip returns the rollup the dashboard needs: turn count, error
         count (status='error'), delegated count, average + p95 latency, average
-        rounds, and token totals. The caller derives the rates (errors/turns,
-        delegated/turns) so this layer returns only raw aggregates. p95 uses
-        Postgres ``percentile_cont`` (NULL → 0 on an empty window). Filters on
-        ``ix_turn_metrics_created``.
+        rounds, and token totals. Token sums count ``mode='cloud'`` only —
+        local rows are sidecar / BYOK usage, not platform spend. Do not filter
+        the window by ``input_tokens = 0``. The caller derives the rates
+        (errors/turns, delegated/turns) so this layer returns only raw
+        aggregates. p95 uses Postgres ``percentile_cont`` (NULL → 0 on an empty
+        window). Filters on ``ix_turn_metrics_created``.
         """
         err = case((TurnMetricsRow.status == "error", 1), else_=0)
         dele = case((TurnMetricsRow.delegated.is_(True), 1), else_=0)
@@ -1280,8 +1321,18 @@ class TurnMetricsRepository:
             .within_group(TurnMetricsRow.duration_ms.asc())
             .label("p95_duration"),
             func.coalesce(func.avg(TurnMetricsRow.rounds), 0).label("avg_rounds"),
-            func.coalesce(func.sum(TurnMetricsRow.input_tokens), 0).label("input_tokens"),
-            func.coalesce(func.sum(TurnMetricsRow.output_tokens), 0).label("output_tokens"),
+            func.coalesce(
+                func.sum(
+                    case((TurnMetricsRow.mode == "cloud", TurnMetricsRow.input_tokens), else_=0)
+                ),
+                0,
+            ).label("input_tokens"),
+            func.coalesce(
+                func.sum(
+                    case((TurnMetricsRow.mode == "cloud", TurnMetricsRow.output_tokens), else_=0)
+                ),
+                0,
+            ).label("output_tokens"),
             func.coalesce(func.sum(survived), 0).label("first_plan_survived"),
             func.coalesce(func.sum(TurnMetricsRow.boundary_yields), 0).label("boundary_yields"),
             func.coalesce(func.sum(TurnMetricsRow.scope_signals), 0).label("scope_signals"),

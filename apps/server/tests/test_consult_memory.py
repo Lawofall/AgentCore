@@ -188,7 +188,7 @@ async def test_wire_worker_consult_when_topics_exist(tmp_path, monkeypatch):
     assert consult is not None
     names = {e.name for e in await consult.source.list_directory("u")}
     assert "部署流程" in names
-    assert "team_orchestration_advanced" in names
+    assert "team_orchestration_advanced" not in names
     assert "product_help" not in names
     assert "revising_a_product" not in names
     assert "long_form_landing" in names

@@ -213,7 +213,7 @@ async def test_captain_identity_carries_when_to_split_guidance():
     sys = provider.system_messages[0]
     assert "再向下委派一层子团队" in sys
     assert "不要为委派而委派" in sys
-    assert "consult(team_orchestration_advanced)" in sys
+    assert "consult(team_orchestration_advanced)" not in sys
     assert "先招人再整合" in sys
     assert "未钉成单切片" in sys
     assert "不是先深读再招" in sys
@@ -225,8 +225,13 @@ async def test_captain_identity_carries_when_to_split_guidance():
     assert "本来就小" in sys
     assert "不授权一个人扛里程碑" in sys
     assert "你的子成员仍可再向下委派一层" in sys
-    # Path-B encyclopedia moved to consult — identity itself must not carry it
-    # (full system prompt still has 豁免 in shared <work_authority>).
+    # 嵌套 lead 编排 HOW 住 identity（已有 captain 分叉），不进共享目录。
+    assert "怎么拆" in sys
+    assert "假两段" in sys
+    assert "何时不该拆" in sys
+    assert "计划已让出" in sys
+    assert "replan" in sys
+    # Path-B encyclopedia 仍不进 identity。
     from agentcore.runtime.runs.executor.identities import build_worker_identity
 
     identity = build_worker_identity(has_dependents=False, captain=True)
@@ -236,6 +241,9 @@ async def test_captain_identity_carries_when_to_split_guidance():
     assert "共写同一目标文件" not in identity
     assert "豁免" not in identity
     assert "4 个 sub-worker" not in identity
+    leaf = build_worker_identity(has_dependents=False, captain=False)
+    assert "怎么拆" not in leaf
+    assert "计划已让出" not in leaf
 
 
 async def test_depth_three_subworker_keeps_leaf_identity():
@@ -391,7 +399,7 @@ async def test_handoff_prompt_splits_by_topology():
     desc = HandoffTool().schema.description
     assert "接力契约 + 增量交代" in desc
     assert "必须" in desc
-    assert "不必为交而交" in desc
+    assert "不必为交而交" in desc or "短答自明可省" in desc
 
 
 def test_worker_identity_states_no_execution_capability():
@@ -424,6 +432,7 @@ def test_worker_identity_states_no_execution_capability():
     assert "手抄" not in with_exec
     assert "刚落盘的表格" in with_exec
     assert "file_read 回读自检" in with_exec
+    assert "consult(data_file_landing)" in with_exec
     # 默认参数与显式 True 字节一致（不惊扰既有路径）。
     assert with_exec == build_worker_identity(has_dependents=False)
 

@@ -1021,6 +1021,7 @@ async def react_loop(
                         tools_offered=tool_defs is not None,
                         supports_tools=supports_tools,
                         turn_evidence_ledger=turn_evidence_ledger,
+                        promotion_ledger=tool_context.promotion_ledger,
                     )
                     # Soft debate-commitment / audit-gate: captain wrap-up —
                     # discard the draft, inject nudge, continue (one-shot each).

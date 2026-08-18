@@ -9,7 +9,7 @@ from agentcore.runtime.runs.artifact_dir import (
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.contract import check_contract, describe_deliverable
 from agentcore.runtime.runs.types import Deliverable
-from agentcore.workspace.stage_dirs import DRAFTS_DIR, RESEARCH_DIR
+from agentcore.workspace.stage_dirs import DRAFTS_DIR, RESEARCH_DIR, REVIEWS_DIR
 
 
 def test_resolve_defaults_to_drafts_without_declared_path():
@@ -41,6 +41,48 @@ def test_apply_workspace_native_leaves_paths_untouched():
     apply_artifact_dir_defaults(d)
     assert d.artifact_dir == ""
     assert d.artifacts == ["app.py"]
+
+
+def test_apply_workspace_native_clears_leftover_dir_when_paths_already_located():
+    """已定位路径 + leftover 目录：native 赢，清 leftover，路径不动。"""
+    located = [f"{DRAFTS_DIR}/patch.py"]
+    d = Deliverable(
+        form="files",
+        artifact_dir=RESEARCH_DIR,
+        artifacts=located,
+        workspace_native=True,
+    )
+    apply_artifact_dir_defaults(d)
+    assert d.workspace_native is True
+    assert d.artifact_dir == ""
+    assert d.artifacts == located
+
+
+def test_apply_workspace_native_empty_artifacts_clears_leftover_dir():
+    """写码节点误带 artifact_dir、无文件名合同 → leftover 清掉，不套默认工作稿。"""
+    d = Deliverable(form="files", artifact_dir=RESEARCH_DIR, workspace_native=True)
+    apply_artifact_dir_defaults(d)
+    assert d.workspace_native is True
+    assert d.artifact_dir == ""
+    assert d.artifacts == []
+
+
+def test_apply_joins_bare_names_when_artifact_dir_conflicts_with_workspace_native():
+    """生产组合：裸名 + 显式目录 + native → join 成全路径，关掉 native，目录留下。"""
+    name = "前端刷新审计-对话页面.md"
+    d = Deliverable(
+        form="files",
+        artifacts=[name],
+        artifact_dir=REVIEWS_DIR,
+        workspace_native=True,
+    )
+    apply_artifact_dir_defaults(d)
+    assert d.workspace_native is False
+    assert d.artifact_dir == REVIEWS_DIR
+    assert d.artifacts == [f"{REVIEWS_DIR}/{name}"]
+    desc = describe_deliverable(d)
+    assert "不要落进 `AgentCore/文档/`" not in desc
+    assert f"建议约定文档落盘目录：`{REVIEWS_DIR}/`" in desc
 
 
 def test_describe_workspace_native_replaces_drafts_hint():
@@ -214,6 +256,31 @@ def test_build_run_plan_workspace_native_skips_default_drafts_dir():
     assert coder.workspace_native is True
     assert coder.artifact_dir == ""
     assert researcher.artifact_dir == DRAFTS_DIR
+
+
+def test_build_run_plan_joins_bare_review_names_despite_workspace_native():
+    """生产组合经 builder：裸名 reviews 文件 + native 误戳 → 进入验收的是全路径。"""
+    name = "前端刷新审计-对话页面.md"
+    plan, errors = build_run_plan(
+        [
+            {
+                "role": "审查官",
+                "task": "审对话页刷新",
+                "deliverable": {
+                    "form": "files",
+                    "artifacts": [name],
+                    "artifact_dir": REVIEWS_DIR,
+                    "workspace_native": True,
+                },
+            }
+        ]
+    )
+    assert errors == []
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.workspace_native is False
+    assert d.artifact_dir == REVIEWS_DIR
+    assert d.artifacts == [f"{REVIEWS_DIR}/{name}"]
 
 
 def test_ceo_schema_exposes_workspace_native():

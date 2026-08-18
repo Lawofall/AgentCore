@@ -66,6 +66,7 @@ async def persist_job_turn(*, user_id: str, conversation_id: str, result: dict) 
                 conversation_id=conversation_id,
                 trace_id=None,
                 entries=result.get("journal_entries"),
+                replace=False,
             )
         if ledger_drained is not None:
             try:

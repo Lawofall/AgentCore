@@ -137,7 +137,7 @@ def test_store_round_trips_journal_entries_and_history(tmp_path):
 
 def test_store_save_pins_display_runs_for_desktop_reopen(tmp_path):
     """Pause frames pin ``display_runs`` so desktop hydrate can rebuild the collab graph
-    while cloud paused writeback still skips ``turn_journal``."""
+    before local-turns journal writeback lands."""
     store = LocalPausedTurnStore(tmp_path / "paused")
     entries = [
         {"kind": "run_plan", "payload": {"execution_id": "e1"}, "ts": "t0"},
@@ -194,6 +194,106 @@ def test_store_confirm_claim_drops_frame(tmp_path):
         return [s.message_id for s in await store.list_pending("c1")]
 
     assert asyncio.run(drive()) == []
+
+
+@pytest.mark.asyncio
+async def test_sidecar_settlement_stamps_outcome_classify_resume_miss_settled(
+    tmp_path, monkeypatch
+):
+    """本机结算留下结论行后，云端扑空判据是 settled（不是 regenerated 404）。"""
+    import contextlib
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from agentcore.conversation.store.outbox import OutboxStore
+    from agentcore.db.models import PAUSED_TURN_SETTLED
+    from agentcore.runtime.suspension import consumed as consumed_mod
+    from agentcore.runtime.suspension.consumed import classify_resume_miss
+    from agentcore.sidecar.settlement_prewrite import prewrite_sidecar_resume_settlement
+
+    mid, cid = str(uuid4()), str(uuid4())
+    outcomes: dict[tuple[str, str], SimpleNamespace] = {}
+
+    @contextlib.asynccontextmanager
+    async def _session():
+        yield None
+
+    class _Paused:
+        def __init__(self, _db) -> None:  # noqa: ANN001
+            pass
+
+        async def stamp_settled(
+            self,
+            *,
+            message_id: str,
+            conversation_id: str,
+            frame: dict,
+            decision: str,
+            settled_by: str = "",
+        ) -> None:
+            data = frame if isinstance(frame, dict) else {}
+            outcomes[(message_id, conversation_id)] = SimpleNamespace(
+                outcome=PAUSED_TURN_SETTLED,
+                card_kind=str(data.get("kind") or ""),
+                checkpoint_id=str(data.get("checkpoint_id") or ""),
+                decision=decision,
+                settled_by=settled_by,
+                decided_at=datetime(2026, 8, 19, 3, 0, tzinfo=UTC),
+            )
+
+        async def get_outcome(self, message_id: str, *, conversation_id: str):
+            return outcomes.get((message_id, conversation_id))
+
+    class _Messages:
+        def __init__(self, _db) -> None:  # noqa: ANN001
+            pass
+
+        async def get_by_id(self, _message_id: str, *, conversation_id: str):  # noqa: ANN001
+            return None
+
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", _session)
+    monkeypatch.setattr("agentcore.db.repositories.PausedTurnRepository", _Paused)
+    monkeypatch.setattr(
+        "agentcore.fulfill.origin.current_origin_device", lambda: "dev-sidecar"
+    )
+    monkeypatch.setattr(consumed_mod, "async_session_factory", _session)
+    monkeypatch.setattr(consumed_mod, "PausedTurnRepository", _Paused)
+    monkeypatch.setattr(consumed_mod, "MessageRepository", _Messages)
+
+    data = tmp_path / "data"
+    store = LocalPausedTurnStore(data / "paused", outbox_base=data / "outbox")
+    outbox = OutboxStore(data / "outbox")
+    susp = _team_preview_suspension(mid, cid)
+    await store.save(susp)
+    claimed = await store.claim(mid, conversation_id=cid)
+    assert claimed is not None
+    outbox.bind_turn(
+        conversation_id=cid,
+        user_message_id="u1",
+        user_message="开工",
+        message_id=mid,
+        trace_id="a" * 32,
+    )
+    await outbox.begin_turn(conversation_id=cid, message_id=mid, trace_id="a" * 32)
+    await prewrite_sidecar_resume_settlement(
+        outbox,
+        claimed,
+        decision="continue",
+        user_message_id="u1",
+        trace_id="a" * 32,
+    )
+    # Settlement prewrite itself stamps (deferred path has no confirm yet).
+    assert (mid, cid) in outcomes
+    await store.confirm_claim(mid)
+
+    miss = await classify_resume_miss(conversation_id=cid, message_id=mid)
+    assert miss.kind == "settled"
+    assert miss.card_kind == "team_preview"
+    assert miss.checkpoint_id == f"ck-{mid}"
+    assert miss.decision == "continue"
+    assert miss.settled_by == "dev-sidecar"
+    assert await store.list_pending(cid) == []
 
 
 def test_store_save_raises_on_write_failure(tmp_path, monkeypatch):

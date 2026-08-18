@@ -12,7 +12,7 @@
 ``requires_draft_ack`` 亦闩 ``thin_review``（已声明复核落盘未对齐）、``verify_failed``
 （丙轴验证失败）、以及 ``node_failed`` / ``artifact_rejected``（契约硬失败·节点 FAILED·
 拒收产物）——仍不扩姿势 A 词表。
-无对账卡时，仅拦同条正文 A∪C 自相矛盾（resume 拼接同理）。
+无对账卡 / ``no_batch``：不拦正文（团队状态走结构面，禁止完成话术拦截）。
 
 resume / plan_review：派工过程 kickoff（方向：派团队…）不进用户可见续写基底与 G6 重灌，
 终稿另写交付说明，避免过程流水账（ce1ecfc2）。
@@ -84,6 +84,7 @@ from .core import (
     claims_posture_a,
     claims_posture_c,
     closing_honesty_rework,
+    closing_honesty_verdict_hit,
     is_formal_complete_tier,
     mutual_exclusion_rework,
     tier_forbids_posture_a,
@@ -161,6 +162,7 @@ __all__ = [
     "clear_unresolved_write_ownership",
     "clear_verify_budget_exhausted",
     "closing_honesty_rework",
+    "closing_honesty_verdict_hit",
     "collect_unresolved_write_ownership_paths",
     "downgrade_verdict_for_ceiling",
     "downgrade_verdict_for_max_rounds",

@@ -18,7 +18,8 @@ byte-identical to the old assembly. Keeping that foundation prefix stable across
 **cost optimization** for providers that discount exact-prefix cache hits (e.g. DeepSeek) —
 not an irrevocable product invariant. Discipline lives here (:class:`SectionOrder`): new
 sections append at the volatile tail or insert at a stable key between existing slots;
-never reorder existing keys. ``observe`` emits ``assembly_hash`` so drift is searchable
+never reorder existing keys (exception: ``WORKSPACE_FACTS`` 250→750, 2026-08-19 —
+see :class:`SectionOrder`). ``observe`` emits ``assembly_hash`` so drift is searchable
 without enforcing a hard PrefixStabilityPolicy — and, since the discount is a claim about
 BILLING rather than about the assembled text, ``track_sections`` feeds
 ``observability.prefix_cache`` so ``cost.prefix_cache`` can check that claim against what the

@@ -95,7 +95,7 @@ async def handle_tool_calls_round(
         tool_context,
         round_content_chars=len(outcome.content or ""),
     )
-    # R1: sync projected-window verbatim / sticky re-read grants before tools run.
+    # R1: sync projected-window verbatim / fully-cleared file_read ledger before tools run.
     from agentcore.runtime.engine.tool_clear import apply_file_read_clear_state
 
     tool_context = apply_file_read_clear_state(

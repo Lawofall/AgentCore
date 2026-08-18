@@ -22,7 +22,7 @@ packages/       protocol-conformance + contract-types + design-tokens + protocol
 ## 硬规则
 
 1. **各端全新建实现**——stores / services / 协议 fold / 组件，每端一套。**不共享业务逻辑实现**（连 headless hook 也各写）。
-2. **唯一共享面 = 规范 + 契约 + token + 协议常量**——`protocol-conformance`（向量 / golden / schema）、事件 / REST 类型、`design-tokens`、**可选** `@agentcore/protocol-fold-kit`（编排工具集 / marker 谓词 / finish→status 等纯常量；**仍否决共享 fold 实现**）。**可选**共享纯渲染叶子（Markdown / Diagram，无 drift）。**绝不共享业务逻辑 / fold 实现核。**
+2. **唯一共享面 = 规范 + 契约 + token + 协议常量**——`protocol-conformance`（向量 / golden / schema）、事件 / REST 类型、`design-tokens`、**可选** `@agentcore/protocol-fold-kit`（编排工具集 / marker 谓词 / finish→status / `formatCollabSummary` 等纯常量；**仍否决共享 fold 实现**）。**可选**共享纯渲染叶子（Markdown / Diagram，无 drift）。**绝不共享业务逻辑 / fold 实现核。**
 3. **零跨平台分支**——禁 `if(platform)`；每端独立树，只实现自己有的能力（手机不建本地文件 / MCP）。
 4. **协议 fold 是唯一危险面**——SSE→state / run 树 / resume / 审批，各端实现**必须对齐 conformance 规范**、过 `pnpm conformance` 才算对（见 [`protocol-conformance.mdc`](/.cursor/rules/protocol-conformance.mdc)）。
 

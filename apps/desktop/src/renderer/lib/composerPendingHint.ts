@@ -1,6 +1,5 @@
-import { isColdPendingDrawable } from "@/services/resume";
+import { listVisibleColdResumes } from "@/services/resume";
 import { useInteractionStore } from "@/stores/interactions";
-import { usePausedTurnStore } from "@/stores/pausedTurns";
 
 /** Persistent composer hint while a decision card is waiting (弱提示 · 不强拦). */
 export const COMPOSER_PENDING_HINT =
@@ -17,11 +16,6 @@ const sendDespitePendingAcks = new Set<string>();
 export function conversationHasPendingDecision(
   conversationId: string,
 ): boolean {
-  const paused = usePausedTurnStore
-    .getState()
-    .pending.some((p) => p.conversationId === conversationId);
-  if (paused) return true;
-
   const byId = useInteractionStore.getState().byId;
   for (const e of byId.values()) {
     if (e.conversationId !== conversationId) continue;
@@ -29,16 +23,9 @@ export function conversationHasPendingDecision(
     if (e.kind === "approval" || e.kind === "delegation_authorization") {
       return true;
     }
-    if (
-      e.kind === "ask_user" ||
-      e.kind === "plan_review" ||
-      e.kind === "team_preview"
-    ) {
-      // Align with ResumePrompt: no stamp → no clickable card → no composer claim.
-      if (isColdPendingDrawable(conversationId, e.messageId)) return true;
-    }
   }
-  return false;
+  // Cold clickability = ResumePrompt gate (journal / noted settlement).
+  return listVisibleColdResumes(conversationId).length > 0;
 }
 
 export function hasAckedSendDespitePending(conversationId: string): boolean {

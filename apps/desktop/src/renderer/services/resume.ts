@@ -4,13 +4,17 @@ import { finalizeGeneratingForPausedConversation } from "@/services/turns/helper
 import { getRuntime } from "@/stores/conversation";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import {
+  collectMessageJournalEvents,
   entryToCheckpoint,
   entryToColdResume,
   entryToPlanReview,
   entryToTeamPreview,
+  isColdCheckpointSettled,
+  settledColdIdsFromEvents,
   useInteractionStore,
 } from "@/stores/interactions";
 import type { InteractionEntry } from "@/stores/interactions";
+import { registerColdJournalReader } from "@/stores/interactions/coldSettlement";
 import {
   type PausedTurnEntry,
   type PendingResume,
@@ -527,9 +531,16 @@ function keepLatestTeamPreview(cards: PendingResume[]): PendingResume[] {
   return cards.filter((c, i) => c.kind !== "team_preview" || i === best);
 }
 
+registerColdJournalReader((conversationId) =>
+  settledColdIdsFromEvents(
+    collectMessageJournalEvents(getRuntime(conversationId).messages),
+  ),
+);
+
 /**
  * Pure paint selector: InteractionStore cold pending is live authority;
  * pausedTurns covers recovery/`setForConversation` shells not covered by IX.
+ * Clickability uses {@link isColdCheckpointSettled} — the only terminal gate.
  */
 export function selectVisibleColdResumes(args: {
   conversationId: string;
@@ -540,9 +551,13 @@ export function selectVisibleColdResumes(args: {
     id: string;
     content?: string;
     serverMessageId?: string;
+    runs?: { events?: ReadonlyArray<{ type?: string; payload?: unknown }> };
   }>;
 }): PendingResume[] {
   const { conversationId, byId, pausedPending, messages } = args;
+  const journalSettledIds = settledColdIdsFromEvents(
+    collectMessageJournalEvents(messages),
+  );
   const priorUser = [...messages].reverse().find((m) => m.role === "user");
   const pausedForConv = pausedPending.filter(
     (p) => p.conversationId === conversationId,
@@ -563,7 +578,15 @@ export function selectVisibleColdResumes(args: {
     }
     if (!entry.id || !entry.payload) continue;
     const full = entry as InteractionEntry;
-    if (full.status === "orphaned" || full.status === "resolved") continue;
+    if (
+      isColdCheckpointSettled({
+        checkpointId: full.id,
+        entry: full,
+        journalSettledIds,
+      })
+    ) {
+      continue;
+    }
     const resumeKey = resolveColdResumeKeyFromMessages(
       messages,
       full.messageId,
@@ -590,8 +613,15 @@ export function selectVisibleColdResumes(args: {
 
   for (const p of pausedForConv) {
     if (covered.has(p.checkpointId)) continue;
-    const ixStatus = byId.get(p.checkpointId)?.status;
-    if (ixStatus === "orphaned" || ixStatus === "resolved") continue;
+    if (
+      isColdCheckpointSettled({
+        checkpointId: p.checkpointId,
+        entry: byId.get(p.checkpointId),
+        journalSettledIds,
+      })
+    ) {
+      continue;
+    }
     out.push(p);
   }
 
@@ -656,15 +686,7 @@ export function isColdPendingDrawable(
 }
 
 export function conversationHasColdPending(conversationId: string): boolean {
-  const messages = getRuntime(conversationId).messages;
-  for (const e of useInteractionStore
-    .getState()
-    .listPending(conversationId, ["ask_user", "plan_review", "team_preview"])) {
-    if (resolveColdResumeKeyFromMessages(messages, e.messageId)) return true;
-  }
-  return usePausedTurnStore
-    .getState()
-    .pending.some((p) => p.conversationId === conversationId);
+  return listVisibleColdResumes(conversationId).length > 0;
 }
 
 export function surfaceResumeFromLiveTurn(

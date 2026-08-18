@@ -19,6 +19,8 @@ def _msg(
     finish_reason=None,
     error_message=None,
     attachments=None,
+    origin=None,
+    harvest_kind=None,
 ):
     usage = {}
     if status is not None:
@@ -29,6 +31,10 @@ def _msg(
         usage["finish_reason"] = finish_reason
     if error_message is not None:
         usage["error_message"] = error_message
+    if origin is not None:
+        usage["origin"] = origin
+    if harvest_kind is not None:
+        usage["harvest_kind"] = harvest_kind
     return SimpleNamespace(
         role=role, content=content, usage=usage or None, attachments=attachments
     )
@@ -156,3 +162,62 @@ def test_fold_empty_user_many_attachments_truncates_note():
     assert "f0.png" in note
     assert "另有 5 个" in note
     assert "f7.png" not in note
+
+
+def test_fold_harvest_user_is_system_note_not_bare_template():
+    rows = [
+        _msg("user", "帮我写报告"),
+        _msg("assistant", "先派团队"),
+        _msg(
+            "user",
+            "【系统收口】后台团队本波任务已全部完成。请综合队员产出，按终稿纪律向老板报告本波结果。\n\n"
+            "团队成品：\n交付文件 ready.md",
+            origin="execution_harvest",
+            harvest_kind="success",
+        ),
+        _msg("assistant", "终稿在这里"),
+    ]
+    out = _fold_history_messages(rows)
+    assert out[0] == {"role": "user", "content": "帮我写报告"}
+    assert out[1] == {"role": "assistant", "content": "先派团队"}
+    note = out[2]
+    assert note["role"] == "user"
+    assert note["content"].startswith("（系统注记：")
+    assert "已收口" in note["content"]
+    assert "已全部完成" not in note["content"]
+    assert "【系统收口】" not in note["content"]
+    assert "团队成品" in note["content"]
+    assert "ready.md" in note["content"]
+    assert out[3] == {"role": "assistant", "content": "终稿在这里"}
+
+
+def test_fold_harvest_prefix_without_origin_still_notes():
+    """Legacy rows may only have the structured prefix."""
+    out = _fold_history_messages(
+        [
+            _msg(
+                "user",
+                "【系统收口】后台团队任务已结束，但有队员失败。请综合已有产出。",
+            )
+        ]
+    )
+    assert len(out) == 1
+    assert out[0]["role"] == "user"
+    assert out[0]["content"].startswith("（系统注记：")
+    assert "已全部完成" not in out[0]["content"]
+    assert "【系统收口】" not in out[0]["content"]
+
+
+def test_fold_harvest_failure_kind_lead():
+    out = _fold_history_messages(
+        [
+            _msg(
+                "user",
+                "【系统收口】后台团队任务已结束，但有队员失败。",
+                origin="execution_harvest",
+                harvest_kind="failure",
+            )
+        ]
+    )
+    assert "失败" in out[0]["content"]
+    assert out[0]["content"].startswith("（系统注记：")

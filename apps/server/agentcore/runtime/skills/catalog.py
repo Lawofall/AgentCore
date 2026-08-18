@@ -49,6 +49,8 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
             "多 worker 流水线 / 契约 / 嵌套委派(depth≤3) / 摸底波与专班自判 / 协调墙的进阶用法"
         ),
         body=_TEAM_ORCHESTRATION_ADVANCED,
+        # 派单 / 协调 / 跨路复核：队员开场目录与 consult 共用此滤，避免叶子与嵌套 lead 两套前缀。
+        audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="work_discipline",
@@ -107,6 +109,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         ),
         body=_BUILD_WEBSITE,
         requires_tools=("delegate",),
+        audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="build_app",
@@ -116,6 +119,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         ),
         body=_BUILD_APP,
         requires_tools=("delegate",),
+        audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="debate_and_review",
@@ -200,6 +204,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         summary=(
             "账单/报表/导出记录/凭证：用户丢数据文件+一句话要可打开产物"
             "（整理成 excel/表、分栏、汇总）→ 有执行：脚本变换+不变量校验后交文件；"
+            "表质量基线（任意表）：明细与汇总分表、单元格真类型、冻结+筛选、明细带合计、口径写进表内；"
             "无执行：form=files 交结构报告+待跑脚本（完整交付），"
             "下一步只说运算环境暂时不可用稍后再试；禁手抄、禁谎称已校验"
         ),
@@ -217,6 +222,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         ),
         body=_DEEP_MULTI_LENS_RESEARCH,
         requires_tools=("delegate",),
+        audience=AUDIENCE_CEO_ONLY,
     ),
 )
 

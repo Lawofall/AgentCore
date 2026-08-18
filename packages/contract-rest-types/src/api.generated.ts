@@ -115,6 +115,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/conversations/chat-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Account Chat Context
+         * @description Owner-scoped CEO window (same ``load_chat_context`` as a cloud send).
+         *
+         *     Engine-minimal: sidecar start/harvest and desktop fallback when the account
+         *     ticket is missing. Not UI message CRUD — does not expose compaction text
+         *     as its own field (it rides inside the assembled assistant summary block).
+         */
+        post: operations["account_chat_context_v1_account_conversations_chat_context_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/conversations/read": {
         parameters: {
             query?: never;
@@ -1806,6 +1830,7 @@ export interface paths {
          *     ``schedule_title_generation`` (user message only; ``assistant_reply=""``).
          *
          *     Already-titled conversations return the existing title without calling the LLM.
+         *     Mint failure returns ``title=""`` (HTTP 200) and does not persist a fallback.
          */
         post: operations["auto_title_conversation_v1_conversations__conversation_id__auto_title_post"];
         delete?: never;
@@ -2882,19 +2907,21 @@ export interface paths {
          *     deltas, then live tail. Without the header (same-process fast path): the sink's own
          *     in-memory history.
          *
-         *     A non-empty catch-up段 opens with a ``message_start``, and that frame states which
-         *     kind of段 follows (nothing to replay = no head at all: a reset order with no body
-         *     behind it would clear local state nothing brings back):
+         *     A non-empty catch-up段 opens with a ``message_start``, and that frame
+         *     states which kind of段 follows (nothing to replay = no head at all: a
+         *     reset order with no body behind it would clear local state nothing
+         *     brings back):
          *
          *     - ``full_replay: true`` — RESET the local streaming state held for that
-         *       ``message_id`` (content / reasoning / process timeline); the段 is the turn's whole
-         *       story. Always the case without the header, and the fallback whenever the cursor
-         *       cannot be trusted (no cursor / it belongs to another turn / turn already settled /
-         *       it names no fact this turn ever stamped).
-         *     - no ``full_replay`` — an INCREMENTAL段: keep what you hold for this turn and fold
-         *       the段 onto it. Only the facts after ``Last-Event-ID`` are shipped, so structural
-         *       pairs may look「不完整」(a ``tool_use_end`` whose start was pre-cursor) — that is
-         *       correct, the client has the前文.
+         *       ``message_id`` (content / reasoning / process timeline); the段 is the
+         *       turn's whole story. Always the case without the header, and the
+         *       fallback whenever the cursor cannot be trusted (no cursor / it belongs
+         *       to another turn / turn already settled / it names no fact this turn
+         *       ever stamped).
+         *     - no ``full_replay`` — an INCREMENTAL段: keep what you hold for this
+         *       turn and fold the段 onto it. Only the facts after ``Last-Event-ID``
+         *       are shipped, so structural pairs may look「不完整」(a ``tool_use_end``
+         *       whose start was pre-cursor) — that is correct, the client has the前文.
          *
          *     Clients must act on the flag instead of comparing the id against the bubble on
          *     screen: guessing wrong folds the body twice. A live first frame (and any plain
@@ -7501,6 +7528,9 @@ export interface components {
         /**
          * AutoTitleResponse
          * @description Resulting conversation title (existing or freshly minted).
+         *
+         *     Empty string means the mint did not persist a title (failure leaves the
+         *     column empty so a later turn can retry). Not an error.
          */
         AutoTitleResponse: {
             /** Title */
@@ -7998,6 +8028,31 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /**
+         * ChatContextItem
+         * @description One ``load_chat_context`` row (role/content; ledger is engine-only).
+         */
+        ChatContextItem: {
+            /** Content */
+            content: string;
+            /** Evidence Ledger */
+            evidence_ledger?: unknown[] | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+        };
+        /** ChatContextRequest */
+        ChatContextRequest: {
+            /** Conversation Id */
+            conversation_id: string;
+        };
+        /** ChatContextResponse */
+        ChatContextResponse: {
+            /** History */
+            history: components["schemas"]["ChatContextItem"][];
         };
         /**
          * ChatFileUploadResponse
@@ -8542,7 +8597,10 @@ export interface components {
              * @default false
              */
             pinned: boolean;
-            /** Title */
+            /**
+             * Title
+             * @description 会话标题。可能是服务端从首条用户消息算出的兜底展示值，不代表已铸出真标题。
+             */
             title: string | null;
             /**
              * Updated At
@@ -10756,6 +10814,8 @@ export interface components {
             runs?: components["schemas"]["RunsPayload"] | null;
             /** Status */
             status?: ("running" | "complete" | "incomplete" | "failed") | null;
+            /** Team Batch */
+            team_batch?: (components["schemas"]["TeamBatchNoBatch"] | components["schemas"]["TeamBatchInFlight"] | components["schemas"]["TeamBatchSettled"]) | null;
             /** Trace Id */
             trace_id?: string | null;
             usage?: components["schemas"]["UsageBreakdown"] | null;
@@ -10914,6 +10974,8 @@ export interface components {
              * @description Display name of the provider (byok rows only).
              */
             provider_label?: string | null;
+            /** @description Present when available=false for a known structured reason. Clients render copy from code + required_protocol. Null when unspecified or the row is selectable. Optional for backward compatibility. */
+            unavailable_reason?: components["schemas"]["ModelUnavailableReason"] | null;
             /** Vendor */
             vendor: string;
         };
@@ -11000,6 +11062,24 @@ export interface components {
              * @description BYOK provider id when origin=byok; must be null for platform
              */
             provider_id?: string | null;
+        };
+        /**
+         * ModelUnavailableReason
+         * @description Why a listed catalog row cannot be selected. Clients render copy (i18n).
+         */
+        ModelUnavailableReason: {
+            /**
+             * Code
+             * @description Structured unavailability code — never a finished user-facing string.
+             * @constant
+             */
+            code: "upstream_protocol_unsupported";
+            /**
+             * Required Protocol
+             * @description Upstream protocol this model needs that this gateway does not speak (chat/completions only).
+             * @enum {string}
+             */
+            required_protocol: "openai_responses" | "anthropic_messages";
         };
         /**
          * MountSharedSpaceRequest
@@ -13055,6 +13135,43 @@ export interface components {
          */
         SuspensionKind: "plan_review" | "ask_user" | "team_preview";
         /**
+         * TeamBatchInFlight
+         * @description 本波 kickoff 编制已派出、尚未全部收工。``worker_count`` 不含 captain / 历史队员。
+         */
+        TeamBatchInFlight: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "in_flight";
+            /** Worker Count */
+            worker_count: number;
+        };
+        /**
+         * TeamBatchNoBatch
+         * @description 本回合未派出队员——确定态，不是信息缺失。
+         */
+        TeamBatchNoBatch: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "no_batch";
+        };
+        /**
+         * TeamBatchSettled
+         * @description 本波队员已全部终态（或本 execution 已发出 delivery_status）。
+         */
+        TeamBatchSettled: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "settled";
+            /** Worker Count */
+            worker_count: number;
+        };
+        /**
          * TeamKickoffAxis
          * @description Whether / when the team kickoff card (plan + capability halves) hangs.
          * @enum {string}
@@ -14345,6 +14462,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UpdatesPolicyResponse"];
+                };
+            };
+        };
+    };
+    account_chat_context_v1_account_conversations_chat_context_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatContextRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatContextResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

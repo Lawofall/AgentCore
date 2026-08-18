@@ -27,10 +27,17 @@ vi.mock("@/stores/pausedTurns", () => ({
     sel({ pending: [] }),
 }));
 
-vi.mock("@/stores/interactions", () => ({
-  useInteractionStore: (sel: (s: { byId: Map<string, unknown> }) => unknown) =>
-    sel({ byId: new Map() }),
-}));
+vi.mock("@/stores/interactions", async () => {
+  const actual = await vi.importActual<typeof import("@/stores/interactions")>(
+    "@/stores/interactions",
+  );
+  return {
+    ...actual,
+    useInteractionStore: (
+      sel: (s: { byId: Map<string, unknown> }) => unknown,
+    ) => sel({ byId: new Map() }),
+  };
+});
 
 afterEach(() => {
   cleanup();

@@ -151,7 +151,6 @@ async def production_crash_delegate_factory(
         )
         system_prompt = assemble_system_prompt(
             rules_markdown=rules_markdown,
-            workspace_context=workspace_facts,
         )
         skill_registry = build_system_skill_registry(enabled_packs=enabled_packs())
         provisional_tools = build_worker_registry(
@@ -168,12 +167,14 @@ async def production_crash_delegate_factory(
                 folder_id=folder_id,
                 memory_enabled=memory_enabled,
                 skill_audience="worker",
+                tool_registry=provisional_tools,
             ).list_directory(user_id)
         )
         base_system_prompt = compose_worker_base_prompt(
             system_prompt,
             on_demand_entries=on_demand_entries,
             attachment_context="",
+            workspace_context=workspace_facts,
         )
 
         captain_run_id = _captain_run_id_from_journal(state.entries) or new_id()

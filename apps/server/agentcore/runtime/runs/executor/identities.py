@@ -64,7 +64,8 @@ _WORKER_LANDING_DISCIPLINE = """\
 【以此验真】，【禁止】为空转质检再 code_execute / file_read 回读刚写正文。本 run 刚落盘的\
 表格（csv/xlsx/tsv 等）可用 file_read 回读自检。下一步仅 \
 str_replace（局部修订）或同轮 handoff，勿为空转自检。成篇 md【禁止】用 write_section \
-或 `<!-- SECTION: -->`（二者仅用于建站 site HTML）。超长成篇细则 consult(long_form_landing)。"""
+或 `<!-- SECTION: -->`（二者仅用于建站 site HTML）。超长成篇细则 consult(long_form_landing)。\
+交可打开的表（xlsx 等）时质量基线 consult(data_file_landing)。"""
 
 # Legacy two-way form policy (form omitted): worker judges prose vs files itself.
 # Kept as the default so omitting form preserves prior behaviour.
@@ -281,10 +282,9 @@ def _deliverable_policy(
     return f"{_form_block(form)}\n\n{handoff}\n\n{_WORKER_DELIVERY_HONESTY}"
 
 # Shared by every delegated worker (leaf + captain): when to post on the team note
-# wall. HOW (kinds / amend / 并行审查) lives in consult(team_orchestration_advanced).
-# Solo setup strips this constant by exact replace — keep the replacement mechanism.
+# wall. Solo setup strips this constant by exact replace — keep the replacement mechanism.
 _WORKER_TEAM_NOTE_POLICY = """\
-会改变还在跑的队友才 post_note 一行；完工别贴。细则 consult(team_orchestration_advanced)。"""
+会改变还在跑的队友才 post_note 一行；完工别贴。"""
 
 # 环境能力自述（能写 ≠ 能跑）: appended ONLY when the turn's worker registry carries no
 # execution class (cloud location=server without sandbox — see
@@ -348,9 +348,9 @@ _WORKER_LEAF_INTRO = f"""\
 你不能再向下委派。{_WORKER_PROBLEM_HANDLING}"""
 
 # Captain intro for any worker within the depth cap (delegation is on by default —
-# there is no per-node opt-in flag). WHEN 短判决（成果级先招 / 薄切片读出整仓 escalate /
-# 有 delegate 即可招）lives here; HOW (怎么拆 / 何时不该拆 / replan 续跑) lives in
-# consult(team_orchestration_advanced). Nesting honesty branches on ``depth`` vs
+# there is no per-node opt-in flag). WHEN 短判决 + 嵌套 lead 编排 HOW（怎么拆 /
+# 何时不该拆 / 控制权交回后怎么续跑）都住 identity——共享目录不列编排手册，以保住
+# 全体队员前缀一致。Nesting honesty branches on ``depth`` vs
 # ``MAX_DELEGATION_DEPTH``: children of a near-cap captain are leaves; shallower
 # captains' children may still nest. Workers at the cap get the leaf intro.
 
@@ -372,8 +372,13 @@ def _worker_captain_intro(*, depth: int) -> str:
 好的任务，外加完成它所需的上下文；你够不到用户、不会有人实时答疑。接到整座成果且任务未钉成\
 单切片 → 先招人再整合（不是先深读再招）。接到的已是薄切片、读仓后发现是整座仓 → \
 escalate（范围），禁止默默扩编。有 delegate 就可以招，不看任务里有没有「先组队」。\
-「不要为委派而委派」只约束本来就小的活，不授权一个人扛里程碑。怎么拆、何时不该拆、\
-控制权交回后怎么续跑 → consult(team_orchestration_advanced)。
+「不要为委派而委派」只约束本来就小的活，不授权一个人扛里程碑。
+怎么拆：按活的自然缝，不按工种凑人。一块够大、够独立 → delegate 交子成员，task 只写目标·约束·验收；\
+细粒度已清楚 → 本层一次拆完。同一摊只走一条路，勿自己带队同时又平级再派同职责。\
+【假两段·禁】两个阶段写进同一 task 不算两段——须拆成不同 task，或等控制权交回后再派下一波。\
+何时不该拆：单文件 / 已钉薄壳 / 小修自己干。\
+控制权交回（delegate 返回『计划已让出』）后用 replan 把未跑步骤定稿，或不续跑则 stop；\
+replan 只在已有子计划后出现，开场只有 delegate。
 {nest_honesty}{_WORKER_PROBLEM_HANDLING}"""
 
 

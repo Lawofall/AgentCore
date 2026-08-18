@@ -106,13 +106,9 @@ DEBATE_PARAMETERS = {
                     },
                     "stance": {
                         "type": "string",
-                        # 生成侧兜底：maxLength 拦极端超长；真意图靠 validate_stance 语义形状。
                         "maxLength": STANCE_MAX_CHARS,
                         "description": (
-                            f"一句话立场倾向（单句；硬上限 {STANCE_MAX_CHARS} 字）："
-                            "只写主张结论；禁论证/论点清单"
-                            "（如「核心论点…系统论证」）；事实归 background。"
-                            "细则→debate_and_review。"
+                            f"一句话立场（≤{STANCE_MAX_CHARS} 字）；只写主张结论，事实归 background。"
                         ),
                     },
                     "is_subject": {
@@ -121,20 +117,16 @@ DEBATE_PARAMETERS = {
                     },
                     "model": {
                         "type": "string",
-                        "description": (
-                            "（可选）辩手模型：目录裸 id 或可读提及"
-                            "（如「glm-5.2」「DeepSeek」）；禁路由键（含 /）。"
-                            "origin/provider_id 可省略，runtime 消歧；空=跟 turn 主模型。"
-                        ),
+                        "description": "辩手模型（目录裸 id 或可读提及）；禁路由键（含 /）。空=跟主模型。",
                     },
                     "origin": {
                         "type": "string",
                         "enum": ["platform", "byok"],
-                        "description": "platform|byok；可选，缺省由 model 提及消歧。",
+                        "description": "platform|byok；缺省由 model 提及消歧。",
                     },
                     "provider_id": {
                         "type": "string",
-                        "description": "BYOK 服务商 id（origin=byok 最终必填；platform 勿填）。",
+                        "description": "BYOK 服务商 id（origin=byok 必填）。",
                     },
                 },
                 "required": ["key", "name", "stance"],

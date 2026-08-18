@@ -137,6 +137,7 @@ export interface ConversationState {
       finishReason?: string;
       collab?: import("@/types/events").TurnCollabMetrics;
       outcome?: "ok" | "partial" | "paused" | "error" | null;
+      teamBatch?: import("@/types/events").TeamBatchStatus;
     },
     conversationId?: string | null,
   ) => void;

@@ -38,6 +38,21 @@ describe("formatMessageExport (mobile)", () => {
     expect(formatProcessExport(steps)).toContain("AgentCore");
   });
 
+  it("does not export wait.reason as the tool line detail", () => {
+    expect(
+      formatProcessExport([
+        {
+          kind: "tool",
+          id: "w1",
+          tool_name: "wait",
+          arguments: { reason: "学术视角研究员仍在跑…" },
+          result: null,
+          status: "success",
+        },
+      ]),
+    ).toBe("· Wait");
+  });
+
   it("exports rework in completed tense (copy is not live)", () => {
     expect(
       formatProcessExport([

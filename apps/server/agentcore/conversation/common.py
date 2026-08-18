@@ -85,14 +85,16 @@ _TITLE_TRAILING = " 　。．.！!？?；;，,、:：-—_*#"
 
 
 def fallback_title(user_message: str) -> str:
-    """A readable short label for when the title model never produced one.
+    """A readable short label derived from the first user message.
 
-    The model is best-effort, so every failure — 429, timeout, spent allowance —
-    lands here, and this string is what the user actually lives with in the
-    sidebar. Slicing the first 30 characters off a pasted task card produced a
-    label torn out of mid-sentence; instead take the message's first meaningful
-    line (its topic, minus markdown decoration) and, if that still overflows, end
-    it at the last clause boundary that fits.
+    Title mint failures (429, timeout, spent allowance) **do not** write this
+    string to ``conversations.title`` — that column stays empty so a later turn
+    can retry. The string is still used for ``chat.title_degraded.title_chars``
+    and as the shape-signal for ``auto_cloud_desk_name``. Slicing the first 30
+    characters off a pasted task card produced a label torn out of mid-sentence;
+    instead take the message's first meaningful line (its topic, minus markdown
+    decoration) and, if that still overflows, end it at the last clause boundary
+    that fits.
 
     Anything left behind — later lines as much as a mid-line cut — keeps the
     trailing ``…``. That marker is not decoration: ``auto_cloud_desk_name`` reads
@@ -225,11 +227,12 @@ async def generate_title(
     assistant_reply: str,
     model: str | None = None,
 ) -> TitleResult:
-    """Best-effort title via the fast model; falls back to truncation.
+    """Best-effort title via the fast model; degrades with ``fallback_title``.
 
     ``LLMTitleGenerator`` already retries once on an empty model body (timeout
     does not retry). An empty result after that — or any non-auth call-level
-    error — degrades to ``fallback_title`` (first user message, ≤30 chars).
+    error — returns ``fallback_title`` plus ``degraded_reason``. Persist callers
+    must not write a degraded result to ``conversations.title``.
 
     ``LLMAuthError`` is **re-raised** so ``run_background_llm`` can try user BYOK.
     """
@@ -264,6 +267,23 @@ async def generate_title(
         return TitleResult(title=fallback, degraded_reason=reason)
 
 
+def log_title_degraded(
+    *,
+    conversation_id: str,
+    reason: str,
+    title_chars: int,
+    persisted: bool,
+) -> None:
+    """Mint miss: ``persisted`` distinguishes a fallback write from leaving ``title`` empty."""
+    logger.info(
+        "chat.title_degraded",
+        conversation_id=conversation_id,
+        reason=reason,
+        title_chars=title_chars,
+        persisted=persisted,
+    )
+
+
 async def _read_conversation_title(conversation_id: str) -> str | None:
     """Return a non-empty title string, or ``None`` when missing / blank."""
     async with async_session_factory() as session:
@@ -281,10 +301,12 @@ async def _mint_title_core(
     user_message: str,
     sink: EventSink | None = None,
 ) -> str | None:
-    """Shared early-title mint: user-message-only LLM → ``update_title_if_empty`` → optional SSE.
+    """Shared early-title mint: user-message-only LLM → persist only a real title → optional SSE.
 
     Never raises. Skips the LLM when the conversation already has a title (user rename
-    race). Emit is best-effort — a closed sink must not undo a successful DB write.
+    race). A degraded ``TitleResult`` (rate limit / timeout / empty body / gate skip)
+    is logged and **not** written, so a later empty-title turn can retry. Emit is
+    best-effort — a closed sink must not undo a successful DB write.
     Does **not** manage ``_title_inflight`` (caller owns dedupe).
     """
     try:
@@ -313,9 +335,10 @@ async def _mint_title_core(
                 await provider.close()
 
         result = await run_background_llm(user_id, purpose="title", runner=_runner)
-        # Any gate refusal (no platform/BYOK key, platform allowance spent, auth
-        # failed both sides) → degrade to truncation. A sidebar label is not worth
-        # scheduling a retry for, so the refusal's own detail is not consulted here.
+        # Gate refusal (no platform/BYOK key, platform allowance spent, auth
+        # failed both sides) is the same as a model miss: log and leave ``title``
+        # empty so a later turn can retry. Do not consult the refusal's cooldown
+        # here — this layer does not own retries.
         if isinstance(result, BackgroundLlmResult):
             minted_title = result.value.title
             degraded_reason = result.value.degraded_reason
@@ -323,18 +346,16 @@ async def _mint_title_core(
             minted_title = fallback_title(user_message)
             degraded_reason = f"gate_{result.reason.value}"
 
-        if not minted_title:
-            return None
         if degraded_reason:
-            # The write below is the same either way, so a degraded label is
-            # invisible downstream — this line is the only place the sidebar's
-            # 「一段正文当标题」can be counted and attributed upstream.
-            logger.info(
-                "chat.title_degraded",
+            log_title_degraded(
                 conversation_id=conversation_id,
                 reason=degraded_reason,
-                title_chars=len(minted_title),
+                title_chars=len(minted_title or ""),
+                persisted=False,
             )
+            return None
+        if not minted_title:
+            return None
 
         async with async_session_factory() as session:
             updated = await ConversationRepository(session).update_title_if_empty(
@@ -374,7 +395,7 @@ async def mint_title_if_empty(
     ``sink`` emits ``title_generated`` after a successful conditional write.
 
     Returns the conversation title after the call (existing or freshly minted), or
-    ``None`` when the row is missing / mint failed without a write.
+    ``None`` when the row is missing / mint failed (degraded results are not written).
     """
     existing = await _read_conversation_title(conversation_id)
     if existing is not None:

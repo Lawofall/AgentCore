@@ -430,7 +430,10 @@ class _BrowserToolBase:
                 return _egress_unavailable_result(start)
             if code == "host_unavailable":
                 return _error(str(exc), start, code=code)
-            return _error(f"浏览器会话启动失败：{exc}", start, code=code)
+            text = str(exc)
+            if "浏览器会话启动失败" not in text:
+                text = f"浏览器会话启动失败：{text}"
+            return _error(text, start, code=code)
 
         entry = registry.peek_entry(
             context.conversation_id, session_id=want_sid, run_id=context.run_id or None

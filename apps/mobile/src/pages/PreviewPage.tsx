@@ -5,8 +5,10 @@ import { resolveFileArtifactsForCard } from "@/lib/fileArtifacts";
 import { PREVIEW_FIXTURES } from "@/preview/fixtures";
 import {
   extractAsks,
+  extractCoordinationWait,
   extractEscalationSlots,
   extractEvidenceLedger,
+  extractExecutionDetached,
   extractGraphAppendActKinds,
   extractGraphAppendAuthorizedBy,
   extractHotDecisionTraces,
@@ -82,6 +84,8 @@ export function PreviewPage() {
     return map;
   }, [projected.interactions]);
   const runToolCalls = useMemo(() => extractRunToolCalls(events), [events]);
+  const waitProgress = useMemo(() => extractCoordinationWait(events), [events]);
+  const detached = useMemo(() => extractExecutionDetached(events), [events]);
   const debateEvidenceLedger = useMemo(
     () => extractEvidenceLedger(events),
     [events],
@@ -119,6 +123,8 @@ export function PreviewPage() {
         workerToolPhases,
         evidenceLedger: debateEvidenceLedger,
         elapsedMs: turnElapsedMs(events),
+        waitProgress,
+        detached,
       }
     : undefined;
 

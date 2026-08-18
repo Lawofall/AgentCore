@@ -72,9 +72,9 @@ def turn_has_product_write_evidence(
         return True
     if delivery_verdict is not None:
         return bool(delivery_verdict.delivered_files)
-    from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
+    from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
 
-    verdict = current_delivery_verdict.get()
+    verdict = read_delivery_verdict()
     if verdict is None:
         return False
     return bool(verdict.delivered_files)

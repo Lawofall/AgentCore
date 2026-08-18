@@ -94,13 +94,13 @@ beforeEach(() => {
 });
 
 describe("StatusStrip · execution_detached 后台运行", () => {
-  it("静态「后台」徽标 + n/m，无转圈", () => {
+  it("「后台」徽标 + 活体 n/m + 转圈（不冻 stamp 快照）", () => {
     useExecutionStore.getState().startExecution(plan, MID);
     useExecutionStore.getState().setExecutionDetached(
       {
         execution_id: "exec-bg",
         conversation_id: "c1",
-        completed: 1,
+        completed: 0,
         total: 2,
         host_turn_id: MID,
       },
@@ -114,8 +114,50 @@ describe("StatusStrip · execution_detached 后台运行", () => {
       screen.getByTestId("status-strip-background-title").textContent,
     ).toBe("后台");
     expect(screen.queryByText("团队后台运行中")).toBeNull();
+    // Live frames: r1 completed, r2 running → 1/2, not frozen detached 0/2.
     expect(screen.getByText("1/2")).toBeTruthy();
-    expect(container.querySelector(".animate-spin")).toBeNull();
+    expect(screen.queryByText("0/2")).toBeNull();
+    expect(container.querySelector(".animate-spin")).toBeTruthy();
+  });
+
+  it("detached 后不显示冻结的 coordinationWait n/m（含迟到心跳）", () => {
+    useExecutionStore.getState().startExecution(plan, MID);
+    useExecutionStore.getState().setCoordinationWait(
+      {
+        execution_id: "exec-bg",
+        waiting: true,
+        completed: 0,
+        total: 4,
+      },
+      MID,
+    );
+    useExecutionStore.getState().setExecutionDetached(
+      {
+        execution_id: "exec-bg",
+        conversation_id: "c1",
+        completed: 0,
+        total: 2,
+        host_turn_id: MID,
+      },
+      MID,
+    );
+    // Late wait heartbeat (still allowed while streaming). Must not revive 0/4.
+    useExecutionStore.getState().setCoordinationWait(
+      {
+        execution_id: "exec-bg",
+        waiting: true,
+        completed: 0,
+        total: 4,
+      },
+      MID,
+    );
+    const exec = projectExecution(plan, runningFrames, "running");
+    renderStrip(exec);
+
+    expect(screen.getByTestId("status-strip-background")).toBeTruthy();
+    expect(screen.getByText("1/2")).toBeTruthy();
+    expect(screen.queryByText("0/4")).toBeNull();
+    expect(screen.queryByTestId("status-strip-coordination-wait")).toBeNull();
   });
 
   it("未 stamp detached 时保持旧 hold 转圈（兼容）", () => {

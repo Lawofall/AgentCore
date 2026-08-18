@@ -248,8 +248,8 @@ async def test_mint_skips_write_when_title_already_set(monkeypatch):
     assert "c1" not in common._title_inflight
 
 
-async def test_mint_writes_fallback_and_emits_when_llm_fails(monkeypatch):
-    """LLM failure → truncated user message written (only if still empty) + SSE."""
+async def test_mint_skips_write_and_does_not_emit_when_llm_fails(monkeypatch):
+    """LLM failure → no DB write, no SSE title_generated (column stays empty)."""
     writes: list[tuple[str, str]] = []
     user = "这是一条足够长的首条用户消息用来验证截断降级行为是否正确"
 
@@ -287,7 +287,11 @@ async def test_mint_writes_fallback_and_emits_when_llm_fails(monkeypatch):
     monkeypatch.setattr(
         common,
         "generate_title",
-        AsyncMock(return_value=TitleResult(title=fallback_title(user))),
+        AsyncMock(
+            return_value=TitleResult(
+                title=fallback_title(user), degraded_reason="other"
+            )
+        ),
     )
     common._title_inflight.add("c-fail")  # simulate schedule having armed it
 
@@ -308,19 +312,16 @@ async def test_mint_writes_fallback_and_emits_when_llm_fails(monkeypatch):
         sink=sink,
     )
 
-    assert writes == [("c-fail", fallback_title(user))]
-    assert len(writes[0][1]) <= TITLE_MAX_CHARS + 1  # chars + optional ellipsis
+    assert writes == []
     title_events = [e for e in events if e.type == EventType.TITLE_GENERATED]
-    assert len(title_events) == 1
-    assert title_events[0].payload["title"] == fallback_title(user)
+    assert title_events == []
     assert "c-fail" not in common._title_inflight
 
 
-# --- 降级要落日志 -------------------------------------------------------------
+# --- 降级要落日志、不得写库 ---------------------------------------------------
 #
-# 兜底标题和模型标题走同一次写库，落到侧栏后再也分不出来——线上就是这样让「429 把标题
-# 打挂」整整静默了下去（只留下 llm.rate_limit_no_retry → llm.call_failed 三段，且没有
-# 一条说得出侧栏最后显示了什么）。
+# 失败若把 fallback 写入 title，字段变非空，所有铸题入口都不再触发——限流恢复后
+# 永远不会再铸。chat.title_degraded.persisted 区分「曾落库」与「未写、可再铸」。
 
 
 def _stub_mint_deps(monkeypatch, *, writes: list[tuple[str, str]]) -> None:
@@ -346,7 +347,7 @@ def _stub_mint_deps(monkeypatch, *, writes: list[tuple[str, str]]) -> None:
 
 
 async def test_mint_logs_the_degrade_when_the_title_model_fails(monkeypatch):
-    """模型侧失败（429 等）落兜底标题时打 chat.title_degraded，带得出归因。"""
+    """模型侧失败（429 等）打 chat.title_degraded 且不写库。"""
     from tests.conftest import LogSpy
 
     writes: list[tuple[str, str]] = []
@@ -368,15 +369,17 @@ async def test_mint_logs_the_degrade_when_the_title_model_fails(monkeypatch):
     spy = LogSpy()
     monkeypatch.setattr(common, "logger", spy)
 
-    await common.mint_title_if_empty(
+    out = await common.mint_title_if_empty(
         conversation_id="c-degraded", user_id="u1", user_message="随便什么首条消息"
     )
 
-    assert writes == [("c-degraded", "兜底短标题")]
+    assert out is None
+    assert writes == []
     line = spy.get("chat.title_degraded")
     assert line["conversation_id"] == "c-degraded"
     assert line["reason"] == "rate_limit"
     assert line["title_chars"] == len("兜底短标题")
+    assert line["persisted"] is False
 
 
 async def test_mint_logs_a_gate_refusal_as_its_own_reason(monkeypatch):
@@ -399,8 +402,10 @@ async def test_mint_logs_a_gate_refusal_as_its_own_reason(monkeypatch):
         conversation_id="c-gated", user_id="u1", user_message=user
     )
 
-    assert writes == [("c-gated", "帮我做一个季度销售复盘…")]
-    assert spy.get("chat.title_degraded")["reason"] == "gate_no_credentials"
+    assert writes == []
+    line = spy.get("chat.title_degraded")
+    assert line["reason"] == "gate_no_credentials"
+    assert line["persisted"] is False
 
 
 async def test_mint_stays_quiet_when_the_model_answers(monkeypatch):
@@ -707,6 +712,14 @@ async def test_mint_title_if_empty_runs_core_when_untitled(monkeypatch):
     assert out == "并行铸题"
     assert writes == [("c-await", "并行铸题")]
     assert "c-await" not in common._title_inflight
+
+
+def test_auto_title_response_allows_empty_title():
+    """Mint miss returns HTTP 200 with empty title — not a validation error."""
+    from agentcore.api.schemas.conversations import AutoTitleResponse
+
+    assert AutoTitleResponse(title="").title == ""
+    assert AutoTitleResponse(title="周报").title == "周报"
 
 
 async def test_mint_title_if_empty_waits_on_inflight(monkeypatch):

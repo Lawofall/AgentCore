@@ -9,6 +9,7 @@ import {
   encodePointer,
   isPlatformGroupId,
   modelInChannelCatalog,
+  unavailableReasonCopy,
 } from "@/lib/llmDefaults";
 import { cn } from "@/lib/utils";
 import type { ModelPriceCard } from "@/services/models";
@@ -233,13 +234,16 @@ export function ProfileModelSelect({
     return groups
       .map((g) => ({
         ...g,
-        models: g.models.filter(
-          (m) =>
+        models: g.models.filter((m) => {
+          const reason = unavailableReasonCopy(m.unavailableReason) ?? "";
+          return (
             m.label.toLowerCase().includes(q) ||
             m.model.toLowerCase().includes(q) ||
             (m.vendor ?? "").toLowerCase().includes(q) ||
-            (m.badge ?? "").toLowerCase().includes(q),
-        ),
+            (m.badge ?? "").toLowerCase().includes(q) ||
+            reason.toLowerCase().includes(q)
+          );
+        }),
       }))
       .filter(
         (g) => g.models.length > 0 || g.providerLabel.toLowerCase().includes(q),
@@ -275,10 +279,16 @@ export function ProfileModelSelect({
       };
     }
     if (opt) {
+      const reason =
+        opt.available === false
+          ? unavailableReasonCopy(opt.unavailableReason)
+          : null;
       return {
         title: opt.label,
         badge: opt.badge,
-        sub: triggerSecondaryLine(selectedGroup?.providerLabel, opt, false),
+        sub:
+          reason ||
+          triggerSecondaryLine(selectedGroup?.providerLabel, opt, false),
       };
     }
     return {
@@ -485,22 +495,39 @@ function ModelOptionRow({
   selected: boolean;
   onPick: () => void;
 }) {
-  const secondary = modelOptionSecondary(option);
+  const unavailable = option.available === false;
+  const reason = unavailable
+    ? unavailableReasonCopy(option.unavailableReason)
+    : null;
+  const secondary = reason ?? modelOptionSecondary(option);
   return (
     <button
       type="button"
       // biome-ignore lint/a11y/useSemanticElements: listbox option must stay a button for Enter/click; native <option> is not focusable in this popup.
       role="option"
       aria-selected={selected}
-      onClick={onPick}
+      aria-disabled={unavailable || undefined}
+      onClick={() => {
+        if (unavailable) return;
+        onPick();
+      }}
       className={cn(
         "flex w-full items-start gap-2 px-2.5 py-1.5 text-left",
-        selected ? "bg-primary/10" : "hover:bg-accent/50",
+        unavailable
+          ? "cursor-not-allowed opacity-60"
+          : selected
+            ? "bg-primary/10"
+            : "hover:bg-accent/50",
       )}
     >
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-1.5">
-          <span className="truncate text-sm text-foreground">
+          <span
+            className={cn(
+              "truncate text-sm",
+              unavailable ? "text-muted-foreground" : "text-foreground",
+            )}
+          >
             {option.label}
           </span>
           {option.badge ? <Badge tone="primary">{option.badge}</Badge> : null}
@@ -512,7 +539,7 @@ function ModelOptionRow({
           </span>
         ) : null}
       </span>
-      {selected ? (
+      {selected && !unavailable ? (
         <Check size={14} className="mt-0.5 shrink-0 text-primary" />
       ) : null}
     </button>
@@ -524,7 +551,9 @@ function ModelOptionRow({
  * 仅孤儿自定义折叠项不算「可继续选」。
  */
 export function canChooseFromGroups(groups: DefaultProviderGroup[]): boolean {
-  const hasCatalog = groups.some((g) => g.models.some((m) => !m.custom));
+  const hasCatalog = groups.some((g) =>
+    g.models.some((m) => !m.custom && m.available !== false),
+  );
   const hasByok = groups.some(
     (g) => !isPlatformGroupId(g.providerId) && !g.orphan,
   );

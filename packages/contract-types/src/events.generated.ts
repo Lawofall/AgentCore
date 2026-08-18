@@ -1547,6 +1547,13 @@ export interface TurnCollabMetrics {
   revises_by_user?: number;
 }
 
+/** 本回合团队状态（turn journal 派生）：no_batch / in_flight / settled。
+ * 没派工是确定态，不是信息缺失。worker_count = 本波 kickoff 编制，不含 captain。 */
+export type TeamBatchStatus =
+  | { kind: "no_batch" }
+  | { kind: "in_flight"; worker_count: number }
+  | { kind: "settled"; worker_count: number };
+
 /** Turn token totals (long-key form, contrast `UsageBreakdown` short keys on runs). */
 export interface MessageEndUsage {
   input_tokens: number;
@@ -1564,6 +1571,8 @@ export interface MessageEndPayload {
   cost?: CostBreakdown;
   rounds?: number;
   collab?: TurnCollabMetrics;
+  /** 本回合团队状态（turn journal 派生）。没派工是 no_batch，不是缺字段。 */
+  team_batch?: TeamBatchStatus;
   duration_ms?: number;
   /** Turn-level result quality, independent of finish_reason. partial = landed product with gaps. paused is reserved (not produced this wave). */
   outcome?: "ok" | "partial" | "paused" | "error";

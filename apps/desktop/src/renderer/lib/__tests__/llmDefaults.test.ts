@@ -6,6 +6,7 @@ import {
   encodePointer,
   modelInChannelCatalog,
   pointerValue,
+  unavailableReasonCopy,
 } from "@/lib/llmDefaults";
 import type { ModelProfileSlot } from "@/services/llmModelProfiles";
 import type { LlmProviderView } from "@/services/llmProviders";
@@ -283,5 +284,63 @@ describe("buildDefaultProviderGroups", () => {
     );
     expect(modelInChannelCatalog(groups[0], "deepseek-v4-flash")).toBe(true);
     expect(modelInChannelCatalog(groups[0], "ep-x")).toBe(false);
+  });
+
+  it("keeps unavailable catalog rows and carries the structured reason", () => {
+    const groups = buildDefaultProviderGroups(
+      [
+        provider({
+          id: "p1",
+          label: "OpenCode Go",
+          default_model: "kimi-k2.5",
+        }),
+      ],
+      catalog([
+        catalogItem({
+          id: "kimi-k2.5",
+          provider_id: "p1",
+          display_name: "Kimi K2.5",
+        }),
+        catalogItem({
+          id: "grok-4.5",
+          provider_id: "p1",
+          display_name: "Grok 4.5",
+          available: false,
+          unavailable_reason: {
+            code: "upstream_protocol_unsupported",
+            required_protocol: "openai_responses",
+          },
+        }),
+      ]),
+    );
+    const go = groups.find((g) => g.providerId === "p1");
+    const grok = go?.models.find((m) => m.model === "grok-4.5");
+    expect(grok?.available).toBe(false);
+    expect(grok?.unavailableReason).toEqual({
+      code: "upstream_protocol_unsupported",
+      required_protocol: "openai_responses",
+    });
+    expect(go?.models.find((m) => m.model === "kimi-k2.5")?.available).toBe(
+      true,
+    );
+  });
+});
+
+describe("unavailableReasonCopy", () => {
+  it("renders protocol copy for known codes and stays silent otherwise", () => {
+    expect(
+      unavailableReasonCopy({
+        code: "upstream_protocol_unsupported",
+        required_protocol: "openai_responses",
+      }),
+    ).toBe("需要 OpenAI /responses 协议，当前接入不支持");
+    expect(
+      unavailableReasonCopy({
+        code: "upstream_protocol_unsupported",
+        required_protocol: "anthropic_messages",
+      }),
+    ).toBe("需要 Anthropic /messages 协议，当前接入不支持");
+    expect(unavailableReasonCopy(null)).toBeNull();
+    expect(unavailableReasonCopy(undefined)).toBeNull();
   });
 });

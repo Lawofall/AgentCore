@@ -50,17 +50,48 @@ class ToolRegistry:
 
     def __init__(self):
         self._tools: dict[str, Tool] = {}
+        # Registered on-demand tools withheld from ``get_openai_definitions``
+        # until :meth:`offer` (consult / family promote). Execute still works.
+        self._deferred: set[str] = set()
 
     def register(self, tool: Tool) -> None:
         """Register a tool. Raises ValueError if name already registered."""
+        from agentcore.tools.on_demand import is_on_demand_tool
+
         name = tool.schema.name
         if name in self._tools:
             raise ValueError(f"Tool '{name}' is already registered")
         self._tools[name] = tool
+        if is_on_demand_tool(name):
+            self._deferred.add(name)
 
     def unregister(self, name: str) -> None:
         """Remove a tool by name. No-op when not registered."""
         self._tools.pop(name, None)
+        self._deferred.discard(name)
+
+    def offer(self, name: str) -> bool:
+        """Promote ``name`` (and assembled family siblings) onto the OpenAI table.
+
+        Returns True when the deferred set changed.
+        """
+        from agentcore.tools.on_demand import family_of
+
+        changed = False
+        for sibling in family_of(name):
+            if sibling in self._deferred:
+                self._deferred.discard(sibling)
+                changed = True
+        return changed
+
+    def inherit_offers(self, src: ToolRegistry) -> None:
+        """After cloning by re-register, restore promotions already made on ``src``.
+
+        New extra tools (not on ``src``) keep their register-time deferred bit.
+        """
+        for name in list(self._deferred):
+            if name in src._tools and name not in src._deferred:
+                self._deferred.discard(name)
 
     def get(self, name: str) -> Tool:
         """Get a tool by name. Raises ToolNotFoundError if not found."""
@@ -106,15 +137,24 @@ class ToolRegistry:
     def get_openai_definitions(self, tool_names: list[str] | None = None) -> list[dict]:
         """Return tool definitions in OpenAI function calling format.
 
-        If tool_names is None, returns all tools.
-        If tool_names is provided, returns only those tools.
+        On-demand tools stay out until :meth:`offer`. ``list_all`` / ``names``
+        still include them (catalog, execute, skill gates).
         """
         if tool_names is None:
-            tools = list(self._tools.values())
+            names = [n for n in self._tools if n not in self._deferred]
         else:
-            tools = [self._tools[name] for name in tool_names if name in self._tools]
+            names = [n for n in tool_names if n in self._tools and n not in self._deferred]
+        return [tool_schema_to_openai_format(self._tools[n].schema) for n in names]
 
-        return [tool_schema_to_openai_format(tool.schema) for tool in tools]
+    @property
+    def offered_names(self) -> list[str]:
+        """Names currently on the OpenAI tool table (registration order)."""
+        return [n for n in self._tools if n not in self._deferred]
+
+    @property
+    def deferred_names(self) -> list[str]:
+        """Registered on-demand names not yet offered this turn."""
+        return [n for n in self._tools if n in self._deferred]
 
     @property
     def count(self) -> int:

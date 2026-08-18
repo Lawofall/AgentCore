@@ -8,7 +8,8 @@ call happened without carrying the full body.
 Two families, **independent** keep-windows (do not share ``keep_recent``; do not
 put exec tools into ``investigation_tools`` — that set also drives idle-governance):
 
-- Investigation (read-only, re-fetchable): pointer invites a fresh call.
+- Investigation (read-only, re-fetchable): pointer says use remaining
+  verbatim; only invite a fresh call when that body is gone from context.
 - Exec output (``host_shell`` / ``terminal``): pointer forbids re-run-to-recover.
   ``code_execute`` / ``test_run`` stay verbatim.
 
@@ -32,11 +33,12 @@ SEARCH / RESEARCH) past ``keep_recent`` and ≥ ``min_chars``. Exec clear =
 ``EXEC_OUTPUT_CLEAR_TOOLS`` on a separate pass. Never cleared: ``code_execute`` /
 ``test_run`` / ``file_write`` / interaction cards / steers / assistant / system.
 
-R1 (file_read): cleared ``file_read`` results may append a deterministic structural
-digest (no LLM). When a path has zero verbatim bodies left in the projected window,
-the engine may grant a sticky +1 re-read beyond ``FILE_READ_SAME_PATH_MAX`` (hint /
-grant override while verbatim still present). Cleared paths are never hard-rejected
-solely for exhausted re-read grants — recovery full-reads remain allowed.
+R1 (file_read): cleared ``file_read`` results become a structured stub (path /
+content_cleared / reread=allowed) plus an optional deterministic digest (no LLM).
+The same projection writes ``file_read_cleared_paths`` (fully-cleared: stub
+present, zero verbatim). Recovery reads of those paths do not increment
+``FILE_READ_SAME_PATH_MAX``. Write-success / citation refresh still uses
+``refresh_file_read_reread_grant`` to override while verbatim remains.
 """
 
 from __future__ import annotations
@@ -121,6 +123,10 @@ def cleared_placeholder(
 
     ``already_executed``: exec-family stdout (host_shell / terminal). The command
     already ran; the pointer must not invite a re-issue just to recover text.
+
+    ``file_read`` stubs are structured (path / content_cleared / reread=allowed)
+    so the model and the same-path ceiling share one ledger produced here — not
+    reconstructed later from journal prose.
     """
     hint = _key_arg(arguments)
     head = f"{tool_name}({hint})" if hint else tool_name
@@ -130,10 +136,17 @@ def cleared_placeholder(
             "已从上下文窗口移除以节省 token；"
             "该调用已发生，勿仅为回看而重跑（长驻新日志用 terminal read）。]"
         )
+    if tool_name == "file_read":
+        path = _path_from_arguments(arguments)
+        path_part = f" path={path!r}" if path else ""
+        return (
+            f"{_CLEARED_PREFIX}: file_read{path_part} "
+            f"chars={original_len} status=content_cleared reread=allowed]"
+        )
     return (
         f"{_CLEARED_PREFIX}: {head} 的输出（{original_len} 字符）"
-        "已从上下文窗口移除以节省 token；"
-        "如仍需要可重新调用该工具获取。]"
+        "已从上下文窗口移除以节省 token。"
+        "仍有该正文则勿重调；仅正文不在上下文时才可重新调用该工具获取。]"
     )
 
 
@@ -293,14 +306,18 @@ def _call_info_map(messages: list[LLMMessage]) -> dict[str, tuple[str, str]]:
     return call_info
 
 
-def collect_file_read_verbatim_paths(messages: list[LLMMessage]) -> frozenset[str]:
-    """Paths whose ``file_read`` tool results are still verbatim in ``messages``.
+def _file_read_projection_path_sets(
+    messages: list[LLMMessage],
+) -> tuple[frozenset[str], frozenset[str]]:
+    """Return ``(verbatim_paths, stub_paths)`` from a projected window.
 
-    ``messages`` should already be a ``project_cleared_window`` view (or equivalent).
-    Cleared stubs (``[已清理…``) do not count. Small never-cleared results do.
+    Path identity comes from the originating tool-call args — the same source
+    ``project_cleared_window`` used when it wrote the stub. Does not parse stub
+    prose or inspect an unprojected journal.
     """
     call_info = _call_info_map(messages)
-    paths: set[str] = set()
+    verbatim: set[str] = set()
+    stubs: set[str] = set()
     for message in messages:
         if message.role != "tool" or message.tool_call_id is None:
             continue
@@ -310,12 +327,36 @@ def collect_file_read_verbatim_paths(messages: list[LLMMessage]) -> frozenset[st
         name, arguments = info
         if name != "file_read":
             continue
-        if is_cleared_tool_content(message.content):
-            continue
         path = _path_from_arguments(arguments)
-        if path:
-            paths.add(path)
-    return frozenset(paths)
+        if not path:
+            continue
+        if is_cleared_tool_content(message.content):
+            stubs.add(path)
+        else:
+            verbatim.add(path)
+    return frozenset(verbatim), frozenset(stubs)
+
+
+def collect_file_read_verbatim_paths(messages: list[LLMMessage]) -> frozenset[str]:
+    """Paths whose ``file_read`` tool results are still verbatim in ``messages``.
+
+    ``messages`` should already be a ``project_cleared_window`` view (or equivalent).
+    Cleared stubs (``[已清理…``) do not count. Small never-cleared results do.
+    """
+    verbatim, _stubs = _file_read_projection_path_sets(messages)
+    return verbatim
+
+
+def collect_file_read_cleared_paths(messages: list[LLMMessage]) -> frozenset[str]:
+    """Paths whose ``file_read`` bodies are fully gone in the projected window.
+
+    Fully cleared = at least one stub written by this projection family, and
+    zero verbatim bodies left for that path. Partial clear (keep_recent still
+    holds a body) is not in this set — idle re-reads of remaining text still
+    count toward the same-path ceiling.
+    """
+    verbatim, stubs = _file_read_projection_path_sets(messages)
+    return stubs - verbatim
 
 
 def apply_file_read_clear_state(
@@ -326,21 +367,19 @@ def apply_file_read_clear_state(
     keep_recent: int | None = None,
     min_chars: int | None = None,
     summary_max_chars: int | None = None,
-    reread_grant: int | None = None,
 ) -> ToolContext:
-    """Project the canonical window and sync re-read dual-state onto ``ToolContext``.
+    """Project the canonical window and sync clear dual-state onto ``ToolContext``.
 
     Call before each ``execute_tools``. Judgment uses the same
     ``project_cleared_window`` settings as ``build_request_window`` — never journal /
     unprojected messages alone.
 
-    Sticky grant: when a path has ``file_read_counts >= FILE_READ_SAME_PATH_MAX`` and
-    zero verbatim bodies in the projection, issue at most ``reread_grant`` once per
-    path per run (``file_read_reread_issued``). Grant enables override while
-    verbatim is still present; cleared paths allow recovery reads without grant.
+    Writes ``file_read_verbatim_paths`` (bodies still in the projection) and
+    ``file_read_cleared_paths`` (fully-cleared stubs). Recovery reads of the
+    latter do not consume ``FILE_READ_SAME_PATH_MAX``. Write-success / citation
+    still refresh ``file_read_reread_remaining`` separately.
     """
     from agentcore.config import settings
-    from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
 
     keep = (
         settings.engine_tool_clear_keep_recent if keep_recent is None else keep_recent
@@ -351,12 +390,13 @@ def apply_file_read_clear_state(
         if summary_max_chars is None
         else summary_max_chars
     )
-    grant = (
-        settings.engine_file_read_reread_grant if reread_grant is None else reread_grant
-    )
 
     if not investigation_tools:
-        return replace(context, file_read_verbatim_paths=frozenset())
+        return replace(
+            context,
+            file_read_verbatim_paths=frozenset(),
+            file_read_cleared_paths=frozenset(),
+        )
 
     projected = project_cleared_window(
         messages,
@@ -365,22 +405,12 @@ def apply_file_read_clear_state(
         min_chars=min_c,
         summary_max_chars=sum_max,
     )
-    verbatim = collect_file_read_verbatim_paths(projected)
-
-    if grant > 0:
-        issued = context.file_read_reread_issued
-        remaining = context.file_read_reread_remaining
-        for path, count in context.file_read_counts.items():
-            if not path or path in verbatim:
-                continue
-            if int(count) < FILE_READ_SAME_PATH_MAX:
-                continue
-            if path in issued:
-                continue
-            issued[path] = True
-            remaining[path] = grant
-
-    return replace(context, file_read_verbatim_paths=verbatim)
+    verbatim, stubs = _file_read_projection_path_sets(projected)
+    return replace(
+        context,
+        file_read_verbatim_paths=verbatim,
+        file_read_cleared_paths=stubs - verbatim,
+    )
 
 
 def refresh_file_read_reread_grant(

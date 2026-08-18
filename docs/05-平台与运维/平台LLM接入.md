@@ -112,12 +112,12 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 
 | 项 | 约束 |
 |---|---|
-| 协议 | 只跑 OpenAI `chat/completions` 子集。Go 目录里走 `/responses`（Grok 4.5、GPT 5.6 Luna）与 `/messages`（MiniMax、Qwen）的模型**不进种子、不开新协议分叉**。`GET /models` **仍会列出**被区域闸住的 id——目录有 ≠ 一定能跑（与 Zen 同姿势；影响发现与默认选模） |
+| 协议 | 只跑 OpenAI `chat/completions` 子集。已知只走 `/responses`（`grok-4.5`、`gpt-5.6-luna`）或 `/messages`（`minimax-m2.7`、`qwen3.7-max`）的 id **不进种子**（与目录过滤同一份清单）。目录合并层仍列出这些 id（不静默隐藏），但标为不可选并带结构化原因「本网关未实现该模型所需的上游协议」。过滤不在 HTTP discovery：`GET /models` 原样返回。被区域闸住的 id 仍可能出现在发现结果里——目录有 ≠ 一定能跑 |
 | BYOK | 用户自备**对应端点**的 key；估算价卡按现有 BYOK 两层解析；**不**进平台配额。打错端点时付费 Flash 会在 Zen 路上 `CreditsError`（扣的是 Zen 余额，Go 订阅管不到） |
 | 平台代付 | ✅ `PLATFORM_*` 可指向 Zen **或** Go；**现网钉 Go + 付费 Flash**（见 §五·附）。换上游 / 改 `quota_*` 须改生产 `.env` 并重启 api |
 | 上下文 | 按 **SKU id**：付费 `deepseek-v4-flash` **1M**；仅 `deepseek-v4-flash-free` **200K**（Zen 网关 cap）。禁止按端点猜窗（Go 无 free 档也不把 Flash 当成 200K） |
 | 错误分类 | 一张按上游嵌套 `error.type` 的表（信封 `{"type":"error","error":{"type":…}}`），禁止扫 `error.message`。**`GoUsageLimitError`（429）= Go 订阅配额用尽**（等窗口或控制台 `Use balance`），不是余额不足；**`CreditsError`（401）**收窄为无支付方式 / 订阅未激活 / 余额空；`MonthlyLimitError` / `UserLimitError` = 工作区月限或成员限；`ModelError` = 模型不支持 / 禁用 / trial 结束；`AuthError` 才是 Key 废；`RegionError`（403）= 中国区托管 opt-in。BYOK 可带用户自己的工作区链接；**platform 叶绝不回显工作区 URL / id**。上游透传的 `403 This model is not available in your region` **不是** `RegionError`；顶层 `Router.Unavailable` 不在本表。未知 type 走现有兜底 |
-| 未做 | `zen/` / `opencode-go/` 前缀路由；为本网关开 Anthropic / Responses 分叉 |
+| 未做 | `zen/` / `opencode-go/` 前缀路由；为本网关开 Anthropic `/messages` / OpenAI `/responses` 协议分叉（触发条件：产品要上一个只说这两种协议的模型，而不是工具调用质量问题） |
 | 隐私 | Zen **BYOK** free 档限时且可能用于改进模型。**现网 platform 走 Go**：DeepSeek ZDR 写到 **2026-08-31 且按月续约**（见 §五·附），不得写成永久承诺，也不得沿用免费档措辞。中国区托管 opt-in 是另一维度，勿与 ZDR 混成一句 |
 
 ## 五、platform 模式与故障排查

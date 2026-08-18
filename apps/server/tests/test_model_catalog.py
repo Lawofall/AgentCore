@@ -335,6 +335,49 @@ async def test_catalog_platform_allowlist_drives_rows(monkeypatch):
     assert all(m.available and m.price is not None for m in cat.models if m.origin == "platform")
 
 
+async def test_catalog_platform_allowlist_marks_off_protocol_unselectable(monkeypatch):
+    """Allowlist off-protocol ids list as unavailable; priced platform rows stay selectable."""
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "sk-platform")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "platform")
+    monkeypatch.setattr(catalog.settings, "platform_model", "glm-5.2")
+    monkeypatch.setattr(
+        catalog.settings,
+        "platform_models",
+        "glm-5.2,grok-4.5,minimax-m2.7,grok-4.5-fast",
+    )
+    _mock_catalog(
+        monkeypatch,
+        providers=[],
+        selection=ModelSelection(model="glm-5.2", origin="platform", provider_id=None),
+    )
+    cat = await resolve_model_catalog(None, "u1")
+    platform = {m.id: m for m in cat.models if m.origin == "platform"}
+
+    glm = platform["glm-5.2"]
+    assert glm.available is True
+    assert glm.unavailable_reason is None
+
+    grok = platform["grok-4.5"]
+    assert grok.available is False
+    assert grok.unavailable_reason is not None
+    assert grok.unavailable_reason.code == "upstream_protocol_unsupported"
+    assert grok.unavailable_reason.required_protocol == "openai_responses"
+
+    minimax = platform["minimax-m2.7"]
+    assert minimax.available is False
+    assert minimax.unavailable_reason is not None
+    assert minimax.unavailable_reason.required_protocol == "anthropic_messages"
+
+    # Lookalike / unpriced non-map id still hard-excluded (exact id only).
+    assert "grok-4.5-fast" not in platform
+    assert catalog.is_platform_listable("glm-5.2") is True
+    assert catalog.is_platform_listable("grok-4.5") is False
+
+    assert await validate_model_choice(None, "u1", "grok-4.5", "platform") is False
+    assert await validate_model_choice(None, "u1", "minimax-m2.7", "platform") is False
+    assert await validate_model_choice(None, "u1", "glm-5.2", "platform") is True
+
+
 async def test_catalog_excludes_models_without_curated_pricing(monkeypatch):
     """缺 curated 价卡 → 不上架（不进目录），不只 warning 仍 available。"""
     monkeypatch.setattr(catalog.settings, "platform_api_key", "sk-platform")
@@ -354,6 +397,156 @@ async def test_catalog_excludes_models_without_curated_pricing(monkeypatch):
     platform_ids = [m.id for m in cat.models if m.origin == "platform"]
     assert platform_ids == ["glm-5.2"]
     assert "totally-unknown-relay-model" not in platform_ids
+
+
+# --- OpenCode off-protocol catalog (listed, not selectable) -------------------
+
+
+def _byok_off_protocol_row(mid: str, models: list):
+    hits = [m for m in models if m.id == mid and m.origin == "byok"]
+    assert len(hits) == 1, mid
+    return hits[0]
+
+
+async def test_opencode_go_catalog_marks_off_protocol_unselectable(monkeypatch):
+    reset_discovery_cache_for_tests()
+    row = _prov(
+        "prov-go",
+        default_model="deepseek-v4-flash",
+        label="OpenCode Go",
+        base_url="https://opencode.ai/zen/go/v1",
+    )
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "byok")
+    _mock_catalog(
+        monkeypatch,
+        providers=[row],
+        selection=ModelSelection(
+            model="deepseek-v4-flash", origin="byok", provider_id="prov-go"
+        ),
+        discovered={
+            "prov-go": [
+                "deepseek-v4-flash",
+                "grok-4.5",
+                "gpt-5.6-luna",
+                "minimax-m2.7",
+                "qwen3.7-max",
+            ]
+        },
+    )
+    cat = await resolve_model_catalog(None, "u1")
+    grok = _byok_off_protocol_row("grok-4.5", cat.models)
+    assert grok.available is False
+    assert grok.unavailable_reason is not None
+    assert grok.unavailable_reason.code == "upstream_protocol_unsupported"
+    assert grok.unavailable_reason.required_protocol == "openai_responses"
+
+    luna = _byok_off_protocol_row("gpt-5.6-luna", cat.models)
+    assert luna.available is False
+    assert luna.unavailable_reason is not None
+    assert luna.unavailable_reason.required_protocol == "openai_responses"
+
+    minimax = _byok_off_protocol_row("minimax-m2.7", cat.models)
+    assert minimax.available is False
+    assert minimax.unavailable_reason is not None
+    assert minimax.unavailable_reason.required_protocol == "anthropic_messages"
+
+    qwen = _byok_off_protocol_row("qwen3.7-max", cat.models)
+    assert qwen.available is False
+    assert qwen.unavailable_reason is not None
+    assert qwen.unavailable_reason.required_protocol == "anthropic_messages"
+
+    flash = _byok_off_protocol_row("deepseek-v4-flash", cat.models)
+    assert flash.available is True
+    assert flash.unavailable_reason is None
+    glm = _byok_off_protocol_row("glm-5.2", cat.models)
+    assert glm.available is True
+    assert glm.unavailable_reason is None
+
+    assert (
+        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-go") is False
+    )
+    assert (
+        await validate_model_choice(None, "u1", "deepseek-v4-flash", "byok", "prov-go")
+        is True
+    )
+
+
+async def test_opencode_zen_catalog_marks_grok_unselectable(monkeypatch):
+    reset_discovery_cache_for_tests()
+    row = _prov(
+        "prov-zen",
+        default_model="deepseek-v4-flash",
+        label="OpenCode Zen",
+        base_url="https://opencode.ai/zen/v1/",
+    )
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "byok")
+    _mock_catalog(
+        monkeypatch,
+        providers=[row],
+        selection=ModelSelection(
+            model="deepseek-v4-flash", origin="byok", provider_id="prov-zen"
+        ),
+        discovered={"prov-zen": ["kimi-k2.6", "grok-4.5"]},
+    )
+    cat = await resolve_model_catalog(None, "u1")
+    grok = _byok_off_protocol_row("grok-4.5", cat.models)
+    assert grok.available is False
+    assert grok.unavailable_reason is not None
+    assert grok.unavailable_reason.code == "upstream_protocol_unsupported"
+    assert grok.unavailable_reason.required_protocol == "openai_responses"
+    kimi = _byok_off_protocol_row("kimi-k2.6", cat.models)
+    assert kimi.available is True
+    assert kimi.unavailable_reason is None
+    assert (
+        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-zen") is False
+    )
+
+
+async def test_jiurelay_grok_stays_selectable(monkeypatch):
+    """JiuRelay's grok-4.5 is chat/completions — OpenCode off-protocol gate must not hit it."""
+    reset_discovery_cache_for_tests()
+    row = _prov(
+        "prov-jiu",
+        default_model="glm-5.2",
+        label="JiuRelay",
+        base_url="https://jiurelay.com/openai/v1",
+    )
+    monkeypatch.setattr(catalog.settings, "platform_api_key", "")
+    monkeypatch.setattr(catalog.settings, "billing_mode", "byok")
+    _mock_catalog(
+        monkeypatch,
+        providers=[row],
+        selection=ModelSelection(model="glm-5.2", origin="byok", provider_id="prov-jiu"),
+        discovered={"prov-jiu": ["grok-4.5"]},
+    )
+    cat = await resolve_model_catalog(None, "u1")
+    grok = _byok_off_protocol_row("grok-4.5", cat.models)
+    assert grok.available is True
+    assert grok.unavailable_reason is None
+    assert (
+        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-jiu") is True
+    )
+
+
+def test_catalog_off_protocol_filter_uses_preset_singleton():
+    """Seed exclusion and catalog filter must read the same mapping (no twin lists)."""
+    from agentcore.llm.byok_provider_presets import off_protocol_kind as preset_fn
+
+    assert catalog.off_protocol_kind is preset_fn
+    # Lookalike ids must not be guessed at the merge layer either.
+    assert catalog._off_protocol_reason("grok-4.5-fast", "https://opencode.ai/zen/go/v1") is None
+    assert catalog._off_protocol_reason("grok-4.5", "https://opencode.ai/zen/go/v1") is not None
+    assert catalog._off_protocol_reason("grok-4.5", "https://jiurelay.com/openai/v1") is None
+    # Platform path: same function object, no endpoint gate (see _platform_entry).
+    assert catalog._off_protocol_unavailable("grok-4.5") is not None
+    assert catalog._off_protocol_unavailable("grok-4.5-fast") is None
+    assert catalog._off_protocol_unavailable("glm-5.2") is None
+    assert (
+        catalog._off_protocol_unavailable("grok-4.5").required_protocol
+        == preset_fn("grok-4.5")
+    )
 
 
 # --- validate_model_choice ----------------------------------------------------

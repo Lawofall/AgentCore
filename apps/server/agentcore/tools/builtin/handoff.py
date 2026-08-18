@@ -129,15 +129,10 @@ class HandoffTool:
         return ToolSchema(
             name=HANDOFF_TOOL_NAME,
             description=(
-                "提交交接简报并收尾。简报=【接力契约 + 增量交代】（给主管/下游，不是正文复述）。\n"
-                "有下游：完成后【必须】调用。无下游：有工具活动或较长交付须交短摘要；"
-                "短答自明、无工具时写完正文即可，不必为交而交。\n"
-                "先写完交付（files 先落盘），再同一轮调用；调用即完成。"
-                "短字段、勿塞长文（超长易 JSON 写坏）。"
-                "form=files：summary 必填且含路径，勿空交。\n"
-                "motion_card：建议开辩时【必须】填此对象——唯一结构化载体；"
-                "正文表/key_points 写「命题卡已就位」一律不算。\n"
-                "别把简报重复写进正文，也别没产出就调。"
+                "提交交接简报并收尾。简报=【接力契约 + 增量交代】（给主管/下游，不是正文复述）。"
+                "有下游：完成后必须调用。无下游：有工具活动或较长交付须交短摘要；短答自明可省。"
+                "先写完交付再同一轮调用。form=files：summary 须含路径。"
+                "建议开辩时必须填 motion_card 对象（正文表不能代替）。"
             ),
             parameters={
                 "type": "object",
@@ -175,39 +170,26 @@ class HandoffTool:
                     },
                     "motion_card": {
                         "type": "object",
-                        "description": (
-                            "建议开辩时【必填】的结构化命题卡对象（不是字符串、不是正文表格）。"
-                            "省略=不开辩。散文提及【不能】代替本对象。"
-                        ),
+                        "description": "建议开辩时必填的命题卡对象。省略=不开辩。",
                         "properties": {
                             "motion": {
                                 "type": "string",
-                                "description": "争议命题（可直接作 debate 的 motion）。",
+                                "description": "争议命题（可直接作 debate.motion）。",
                             },
                             "sides": {
                                 "type": "array",
                                 "description": (
-                                    "参与方（≥2）：每方 key / name / stance；"
-                                    f"stance 一句话立场倾向（硬上限 {STANCE_MAX_CHARS} 字作兜底）。"
+                                    f"参与方（≥2）；stance 一句话（≤{STANCE_MAX_CHARS} 字）。"
                                 ),
                                 "items": {
                                     "type": "object",
                                     "properties": {
-                                        "key": {
-                                            "type": "string",
-                                            "description": "机器标识（唯一英文短词）。",
-                                        },
-                                        "name": {
-                                            "type": "string",
-                                            "description": "展示名（立场 / 视角名）。",
-                                        },
+                                        "key": {"type": "string", "description": "唯一英文短词。"},
+                                        "name": {"type": "string", "description": "展示立场名。"},
                                         "stance": {
                                             "type": "string",
                                             "maxLength": STANCE_MAX_CHARS,
-                                            "description": (
-                                                f"一句话结论倾向（硬上限 {STANCE_MAX_CHARS} 字"
-                                                "作兜底）；禁换行/分号/论证展开与论点清单。"
-                                            ),
+                                            "description": "一句话结论倾向；禁换行/分号/论证展开。",
                                         },
                                     },
                                     "required": ["key", "name", "stance"],
@@ -216,15 +198,11 @@ class HandoffTool:
                             "fact_pointers": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": (
-                                    "支撑事实指针（#rN 台账 / 文件路径 / URL）；只指事实不装论点。"
-                                ),
+                                "description": "事实指针（#rN / 路径 / URL）；不装论点。",
                             },
                             "rationale": {
                                 "type": "string",
-                                "description": (
-                                    "为何必须对抗交锋而非继续调研（防见分歧就建议开辩）。"
-                                ),
+                                "description": "为何必须对抗交锋而非继续调研。",
                             },
                             "form": {
                                 "type": "string",

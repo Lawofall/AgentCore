@@ -14,6 +14,11 @@ from agentcore.runtime.runs.playbooks import (
     expand_playbook,
     playbook_args_schema_description,
 )
+from agentcore.runtime.runs.playbooks.audit import (
+    CODE_AUDIT_REQUIRED_SECTIONS,
+    CODE_AUDIT_SECTION_BY_DESIGN,
+    apply_inherited_code_audit_discipline,
+)
 from agentcore.workspace.stage_dirs import REVIEWS_DIR
 
 
@@ -45,6 +50,8 @@ def test_code_audit_single_module_one_auditor():
     assert d["artifacts"][0] == f"{REVIEWS_DIR}/code-audit-0-main.md"
     assert d["artifacts"][1].endswith(".audit.json")
     assert "〇、人审速览" in d["required_sections"]
+    assert d["required_sections"] == list(CODE_AUDIT_REQUIRED_SECTIONS)
+    assert CODE_AUDIT_SECTION_BY_DESIGN in t["task"]
     assert "验证方式" in t["task"] and "定案" in t["task"]
     assert "must_contain" not in d
     assert "name" not in d
@@ -76,6 +83,36 @@ def test_code_audit_single_module_one_auditor():
     assert plan.nodes[0].deliverable.code_audit_gate is True
 
 
+def test_code_audit_section_titles_literal_across_playbook_inherit_skill():
+    """契约定义 / 继承函数 / skill 三处小标题必须同字面。"""
+    from agentcore.runtime.skills import build_system_skill_registry
+
+    tasks, errors = expand_playbook("code_audit", {"scope": "x"})
+    assert errors == []
+    playbook_secs = tasks[0]["deliverable"]["required_sections"]
+    assert playbook_secs == list(CODE_AUDIT_REQUIRED_SECTIONS)
+    handwritten = apply_inherited_code_audit_discipline(
+        [
+            {
+                "role": "审计员",
+                "task": "审",
+                "deliverable": {
+                    "form": "files",
+                    "artifacts": ["AgentCore/文档/reviews/a.md"],
+                },
+            }
+        ],
+        only_shaped=True,
+    )
+    assert handwritten[0]["deliverable"]["required_sections"] == playbook_secs
+    body = build_system_skill_registry().get("team_orchestration_advanced").body
+    json_lit = "[" + ", ".join(f'"{s}"' for s in CODE_AUDIT_REQUIRED_SECTIONS) + "]"
+    assert json_lit in body
+    for title in CODE_AUDIT_REQUIRED_SECTIONS:
+        assert title in tasks[0]["task"]
+        assert title in body
+
+
 def test_code_audit_multi_module_parallel_plus_synth():
     tasks, errors = expand_playbook(
         "code_audit",
@@ -95,6 +132,8 @@ def test_code_audit_multi_module_parallel_plus_synth():
     assert synth["role"] == "审计主管"
     assert set(synth["depends_on"]) == {"audit_0", "audit_1", "audit_2"}
     assert synth["deliverable"]["artifacts"] == [f"{REVIEWS_DIR}/code-audit-summary.md"]
+    assert "设计如此" in synth["deliverable"]["required_sections"]
+    assert "设计如此栏" in synth["task"]
     assert "缺陷id|严重度|一句话" in synth["task"]
     assert "不得以 handoff 代落盘" in synth["task"]
     assert "一次交接" in synth["task"]

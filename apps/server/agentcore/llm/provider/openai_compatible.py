@@ -1113,8 +1113,7 @@ class OpenAICompatibleProvider:
         # Restricted Anthropic leaves reject temperature → omit (not default).
         if not dialect.omit_temperature:
             payload["temperature"] = request.temperature
-        if request.max_tokens:
-            payload["max_tokens"] = request.max_tokens
+        dialect.apply_token_limit(payload, request.max_tokens)
         if request.tools:
             payload["tools"] = request.tools
             payload["tool_choice"] = request.tool_choice
@@ -1570,12 +1569,13 @@ class OpenAICompatibleProvider:
         raise last_error or LLMError(f"{self._display_name} 多次重试后仍失败，请稍后重试")
 
     async def probe(self, *, model: str) -> None:
+        dialect = resolve_wire_dialect(model, base_url=self._base_url)
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": "ping"}],
-            "max_tokens": 1,
             "stream": False,
         }
+        dialect.apply_token_limit(payload, 1)
         try:
             response = await self._client.post("/chat/completions", json=payload)
         except httpx.HTTPError as e:
@@ -1685,6 +1685,7 @@ class OpenAICompatibleProvider:
     async def _probe_tools_once(
         self, *, model: str, tool_choice: str | None
     ) -> bool | None | Literal["retry_without_required"]:
+        dialect = resolve_wire_dialect(model, base_url=self._base_url)
         payload: dict = {
             "model": model,
             "messages": [{"role": "user", "content": "Call the dummy tool."}],
@@ -1698,9 +1699,9 @@ class OpenAICompatibleProvider:
                     },
                 }
             ],
-            "max_tokens": _PROBE_TOOLS_MAX_TOKENS,
             "stream": False,
         }
+        dialect.apply_token_limit(payload, _PROBE_TOOLS_MAX_TOKENS)
         if tool_choice is not None:
             payload["tool_choice"] = tool_choice
         try:
@@ -1724,7 +1725,7 @@ class OpenAICompatibleProvider:
         if (
             code == 400
             and tool_choice == "required"
-            and resolve_wire_dialect(model).retry_forced_tool_choice_on_400
+            and dialect.retry_forced_tool_choice_on_400
         ):
             return _PROBE_TOOLS_RETRY
         try:

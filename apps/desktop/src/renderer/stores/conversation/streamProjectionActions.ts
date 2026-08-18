@@ -391,6 +391,9 @@ export function createStreamProjectionActions(
               : {}),
             ...(meta.collab !== undefined ? { collab: meta.collab } : {}),
             ...(meta.outcome !== undefined ? { outcome: meta.outcome } : {}),
+            ...(meta.teamBatch !== undefined
+              ? { teamBatch: meta.teamBatch }
+              : {}),
           };
         }
         return { messages };

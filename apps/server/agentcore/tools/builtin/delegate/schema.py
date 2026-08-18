@@ -15,10 +15,7 @@ from agentcore.runtime.runs.playbooks import PLAYBOOKS, playbook_args_schema_des
 # Shared task-level deliverable shape (delegate tasks + replan binds/add).
 TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
     "type": "object",
-    "description": (
-        "可选交付物（form 等）。用户已拍板验收口径写入「已确认约束」；"
-        "细节→team_orchestration_advanced。"
-    ),
+    "description": "可选交付物。form；已拍板验收写入「已确认约束」；细则→team_orchestration_advanced。",
     "properties": {
         "form": {
             "type": "string",
@@ -30,27 +27,16 @@ TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
         "artifacts": {"type": "array", "items": {"type": "string"}},
         "artifact_dir": {
             "type": "string",
-            "description": (
-                "约定落盘目录（可选；可共享；省略落 AgentCore/文档/工作稿）。"
-                "写码类【勿】填这个，改用 workspace_native。"
-            ),
+            "description": "约定落盘目录（可省；写码类改 workspace_native）。",
         },
         "workspace_native": {
             "type": "boolean",
-            "description": (
-                "true=产物是用户工作区原生文件（源码 / 项目文件，就地改或新建），"
-                "不套 AI 工作间落点——实现功能 / 改代码 / 写测试类节点填 true，"
-                "路径未知也能填（worker 自己定位）。"
-                "优先级最高：与 artifacts / artifact_dir 里的 AgentCore/文档 落点冲突时以本字段为准。"
-            ),
+            "description": "true=用户工作区原生文件（改代码/写测试）；与 AgentCore/文档 落点冲突时以本字段为准。",
         },
         "citation_mode": {
             "type": "string",
             "enum": ["immediate", "two_phase"],
-            "description": (
-                "调研成稿引用验收档：two_phase=A 草案不跑成稿引用闸、同 worker 升 B 再验。"
-                "手写成文同构（多角调研 + 主笔）须显式声明，省略即不进两阶段。"
-            ),
+            "description": "two_phase=A 草案不跑成稿闸、同 worker 升 B 再验。省略=非两阶段。",
         },
         "strict": {
             "type": "boolean",
@@ -92,27 +78,21 @@ DELEGATE_PARAMETERS = {
                     "task": {
                         "type": "string",
                         "description": (
-                            "自包含=目标+边界+验收（宜短；worker 看不到完整历史）。"
-                            "已拍板项写入「已确认约束：…」块；"
-                            "细则进任务范围/required_sections/artifacts；"
-                            "全队共识进 team_brief。"
+                            "自包含=目标+边界+验收（worker 看不到完整历史）。"
+                            "细则进 artifacts/team_brief。已拍板写入「已确认约束」。"
                         ),
                     },
                     "deliverable": TASK_DELIVERABLE_SCHEMA,
                     "id": {
                         "type": "string",
-                        "description": (
-                            "节点 id（可选）。铸 run_id={prefix}_{id}；"
-                            "depends_on 可引用此字面值。"
-                        ),
+                        "description": "节点 id（可选）。铸 run_id={prefix}_{id}；depends_on 可引用此字面值。",
                     },
                     "depends_on": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "依赖 id（DAG）：本批 id / 同回合节点 id 或角色名；"
-                            "勿手抄 del_*。跨回合须 append_to_execution_id。"
-                            "何时填（生产者→消费者）见系统提示。"
+                            "生产者→消费者（本批 id / 角色名；勿手抄 del_*）。"
+                            "跨回合须 append_to_execution_id。"
                         ),
                     },
                     "result_handling": {
@@ -144,11 +124,8 @@ DELEGATE_PARAMETERS = {
                     "target_folder_id": {
                         "type": "string",
                         "description": (
-                            "已解析文件夹 id。指定该队员坐哪张桌（换桌+记忆跟桌；"
-                            "不改本会话 folder_id）。跨已登记文件夹（只读摸底与写盘通吃）须点名；"
-                            "写不写盘由 write_scope/grant 正交（默认 none）；"
-                            "裸聊写盘缺桌由运行时自动建云桌，勿为过闸 create_folder；"
-                            "有出生省略=默认桌；子派默认继承。"
+                            "已解析文件夹 id（该队员坐哪张桌）。跨已登记文件夹须点名；"
+                            "裸聊写盘缺桌由运行时建云桌，勿为过闸 create_folder。"
                         ),
                     },
                     **TASK_MODEL_SCHEMA_PROPS,
@@ -172,23 +149,19 @@ DELEGATE_PARAMETERS = {
             "type": "array",
             "items": {"type": "string", "enum": list(FORCE_GATES)},
             "description": (
-                "逐闸点名放行（只开列出的那道，没有「全开」）：见各闸拒绝正文里的 scope 名。"
-                "动同一支团队请改用 tasks[].continue_from_run_id / replaces_run_id，别用本参数。"
+                "逐闸点名放行（只开列出的那道，无「全开」）：见各闸拒绝正文里的 scope 名。"
+                "同团队用 continue_from_run_id/replaces_run_id。"
             ),
         },
         "playbook": {
             "type": "string",
             "enum": sorted(PLAYBOOKS),
-            "description": (
-                "进阶/快捷（非默认）：固化流水线形状名；填了就不要传 tasks；槽位进 playbook_args。"
-                "建站快捷→build_website；绿场→build_app；亦可用 playbook_id。"
-            ),
+            "description": "固化流水线名（非默认）；填了就不要传 tasks。建站→build_website；绿场→build_app。",
         },
         "playbook_id": {
             "type": "string",
             "description": (
-                '进阶/快捷（非默认）：playbook 名，或 "none"（手写 tasks 时用 none/省略，勿再带具名）；'
-                "与 playbook 同义优先。"
+                '快捷进阶名，或 "none"（手写 tasks 时用 none/省略）。与 playbook 同义优先。'
             ),
         },
         "playbook_args": {

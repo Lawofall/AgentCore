@@ -25,9 +25,11 @@
        **真源 = 对账档位**（见 ``closing_posture``）：``delivered``=正式完成；
        ``partial``/``notes``≈草稿·部分；``blocked``=阻塞。档位非正式完成时不得姿势 A
        （完整交付 / 收卷收齐 / 完整可用 / 修好验绿闭集；**禁止**案面加完成话术词修案）。
-       无对账卡时仅拦同条 A∪C。另：**产物结构**窄闸——``blocked`` 且无落盘时不得「已生成 /
-       请下载」；有落盘但无 ``.pptx`` 时不得宣称 PPT 可打开。有交付卡时终稿超
-       ``engine_ceo_overview_max_chars`` → 回炉压缩为概览（细节在卡 / run 详情）。
+       无对账卡 / 本轮 ``no_batch`` 不拦正文。另：**产物结构**窄闸——``blocked``
+       且无落盘时不得「已生成 / 请下载」；有落盘但无 ``.pptx`` 时不得宣称 PPT
+       可打开。有交付卡时终稿超 ``engine_ceo_overview_max_chars`` → 只打
+       ``engine.finish_guard_honesty_shadow``（``hit=overview_length``），
+       不回炉、不改写终稿。
 
 处置（回炉 / 放行 / 计数）在 react_loop：``#rN`` **仅**成稿可引用集失败且无其它闸时，
 引擎可先自动 ``read_url`` 升级台账再验；仍不过则剥号放行（见 ``engine/round.py``），
@@ -119,9 +121,9 @@ def finish_guard(
     2. **结构完整性**（始终查）：:func:`_code_fence_reworks`。
     3. **交付验收对照**（仅 ``check_citations``）：
        - 收口诚实性（``closing_honesty_rework``）：真源=``delivery_verdict`` 档位；
-         非正式完成不得姿势 A；无卡时仅拦同条 A∪C；
-       - 产物结构窄闸（空盘下载宣称 / 无 pptx 说 PPT）；
-       - 有交付卡时的概览篇幅（``overview_max_chars``，默认读设置）。
+         非正式完成不得姿势 A；无卡 / ``no_batch`` 不拦正文；
+       - 产物结构窄闸（空盘下载宣称 / 无 pptx 说 PPT）——直接回炉；
+       - 有交付卡时的概览篇幅（``overview_max_chars``，默认读设置）——只影子观测。
     """
     reworks: list[str] = []
     if check_citations:
@@ -349,7 +351,7 @@ def _overview_length_reworks(
     *,
     overview_max_chars: int | None = None,
 ) -> list[str]:
-    """C2：有交付卡时终稿须为短概览；超阈值则回炉（字数是「未复述 UI」的近零误报代理）。"""
+    """C2：有交付卡时终稿超阈值只打影子、不回炉（字数是「未复述 UI」的启发式代理）。"""
     if delivery_verdict is None:
         return []
     if not content or not content.strip():
@@ -360,12 +362,10 @@ def _overview_length_reworks(
     n = len(content.strip())
     if n <= limit:
         return []
-    return [
-        f"本回合已发出交付状态卡（细节在交付卡 / 产物卡 / run 详情）——"
-        f"终稿应是简短概览，当前约 {n} 字，超过上限 {limit} 字。"
-        "请压缩为：结论与影响 → 看哪里（点路径/卡片，勿展开模块清单或工作日志）→ "
-        "缺口与下一步（有则点名）。禁止复述各 worker 全文或重做状态大表。"
-    ]
+    from agentcore.runtime.closing_posture.core import _log_honesty_shadow
+
+    _log_honesty_shadow("overview_length", delivery_verdict)
+    return []
 
 
 def _has_landed_pptx(delivered_files: tuple[str, ...]) -> bool:

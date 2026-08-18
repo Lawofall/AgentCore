@@ -52,6 +52,7 @@ import {
   BrowserActivityCard,
   BrowserResult,
   browserResultPeek,
+  browserResultTail,
   isBrowserActivityGroup,
   isBrowserDisplay,
 } from "../BrowserActivityCard";
@@ -157,6 +158,18 @@ describe("browser 聚合判定", () => {
 });
 
 describe("browserResultPeek · 单步折叠一行", () => {
+  it("tail prefers detail over title/url", () => {
+    expect(
+      browserResultTail({
+        kind: "browser",
+        action: "click",
+        url: "https://ex.com",
+        title: "Example",
+        detail: "点击元素 e13",
+      }),
+    ).toBe("点击元素 e13");
+  });
+
   it("prefers detail, falls back to title/url", () => {
     expect(
       browserResultPeek({

@@ -610,3 +610,38 @@ async def test_retention_sweep_clears_orphan_turn_journal(session_factory, monke
     async with session_factory() as s:
         assert await PausedTurnRepository(s).list_pending(cid) == []
         assert await TurnJournalRepository(s).load(mid) == []
+
+
+async def test_stamp_settled_without_paused_row_classifies_as_settled(
+    session_factory, monkeypatch
+):
+    """Sidecar never writes ``paused_turns``; stamping the conclusion is enough.
+
+    Cloud ``claim`` writes the outcome while deleting the frame. Local settlement
+    has no PG frame to delete, but a later cloud POST resume still reads
+    ``classify_resume_miss`` — which must see ``settled`` with the winner's
+    card identity, not ``regenerated``.
+    """
+    from agentcore.runtime.suspension import consumed as consumed_mod
+    from agentcore.runtime.suspension.consumed import classify_resume_miss
+
+    monkeypatch.setattr(consumed_mod, "async_session_factory", session_factory)
+    mid, cid = str(uuid4()), str(uuid4())
+    async with session_factory() as s:
+        await PausedTurnRepository(s).stamp_settled(
+            message_id=mid,
+            conversation_id=cid,
+            frame={"kind": "team_preview", "checkpoint_id": "ck-go"},
+            decision="continue",
+            settled_by="dev-sidecar",
+        )
+
+    miss = await classify_resume_miss(conversation_id=cid, message_id=mid)
+    assert miss.kind == "settled"
+    assert miss.card_kind == "team_preview"
+    assert miss.checkpoint_id == "ck-go"
+    assert miss.decision == "continue"
+    assert miss.settled_by == "dev-sidecar"
+
+    async with session_factory() as s:
+        assert await PausedTurnRepository(s).get(mid) is None

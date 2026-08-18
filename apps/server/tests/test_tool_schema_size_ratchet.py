@@ -2,8 +2,8 @@
 
 ## 为什么有这道棘轮
 
-工具 schema 是**每一轮**都重发的输入：CEO 回合 39 个工具的 OpenAI JSON 实测近 4 万字符，
-占单轮输入 token 的约四分之一，而且它坐在 prefix 前段——一改就是全量 miss。它的膨胀方式
+工具 schema 是**每一轮**都重发的输入：低频工具改按需后开场表已瘦一截，但常驻面
+（delegate / git / ask_user …）仍坐在 prefix 前段——一改就是全量 miss。它的膨胀方式
 几乎总是同一种：同一条约束在工具描述、参数描述、兄弟工具里各抄一份，或者字段删了、负面
 清单还留着。每份副本单看都「只多几十字」，没人拦就月月长。
 
@@ -47,20 +47,20 @@ _CAPS: dict[str, int] = {
     "browser_snapshot": 590,
     "browser_console": 560,
     "browser_screenshot": 450,
-    "git": 2590,
+    "git": 2400,
     "terminal": 1440,
-    "delegate": 5400,
-    "ask_user": 3510,  # +10：schema 触发句扩成「按默认继续或声明后半等人」
+    "delegate": 4970,
+    "ask_user": 3020,
 }
 _TOTAL_CAP = sum(_CAPS.values())
 
 # 非桌面（web）态 ask_user：桌面独有的 action / well_known 等选项不装配。
-_ASK_USER_WEB_CAP = 2560  # 与桌面同一次语义扩展，实测 2553
+_ASK_USER_WEB_CAP = 2200
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
 _WORKER_CAPS: dict[str, int] = {
-    "escalate": 1880,
-    "handoff": 1900,
+    "escalate": 1730,
+    "handoff": 1660,
     "file_write": 910,
     "file_append": 510,
     "str_replace": 840,

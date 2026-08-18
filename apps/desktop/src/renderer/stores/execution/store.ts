@@ -103,12 +103,13 @@ export interface ExecutionRuntime {
    * 不再挂合成草稿行。 */
   teamSynthesisPreview: TeamSynthesisPreviewPayload | null;
   /** CEO 协调等待（`coordination_wait`）：captain 空等团队事件。EPHEMERAL——仅 live
-   * stream；waiting=false / 回合结束清除。状态条只报 n/m。 */
+   * stream；waiting=false / 回合结束 / `execution_detached` 清除。状态条只报 n/m。 */
   coordinationWait: CoordinationWaitPayload | null;
   /** Client-only: wall-clock ms when the current wait segment began (heartbeats keep it). */
   coordinationWaitStartedAt: number | null;
   /** 执行转后台（`execution_detached`）：附着回合已收口、团队继续跑。EPHEMERAL——仅 live；
-   * 驱动 StatusStrip 静态「后台」徽标 + n/m。`execution_completed` / 终态清除。 */
+   * 驱动 StatusStrip「后台」徽标。n/m 与节点活体跟后续帧/相位，不冻在 stamp 快照。
+   * `execution_completed` / 终态清除。 */
   executionDetached: ExecutionDetachedPayload | null;
   /** 交付状态（`delivery_status`，同 execution_id 保最新）：delegate 批次收尾的结构化交付
    * 对账（已交付/缺口/待用户操作）。DURABLE：重载由 hydrateFromJournal 取最后一条重建，
@@ -573,6 +574,17 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
     setCoordinationWait: (wait, messageId) =>
       patchExec(messageId, (cur) => {
         if (!cur.plan) return null;
+        // Detached: n/m follows live execution.progress (run_*). Wait is
+        // CEO-foreground chrome; late heartbeats must not revive a frozen stamp.
+        if (cur.executionDetached != null) {
+          if (
+            cur.coordinationWait == null &&
+            cur.coordinationWaitStartedAt == null
+          ) {
+            return null;
+          }
+          return { coordinationWait: null, coordinationWaitStartedAt: null };
+        }
         if (wait == null || wait.waiting === false) {
           if (
             cur.coordinationWait == null &&
@@ -598,11 +610,15 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
             ? null
             : { executionDetached: null };
         }
-        // D3: stamp 后台运行中 and clear live tool chrome so nodes do not freeze on
-        // 「正在生成 Write file · N 字」after the arming turn detaches.
+        // Keep live worker tool chrome: the detached window is the longest
+        // stretch of worker activity. Clearing phases here froze nodes/strip
+        // at the stamp snapshot until execution_completed.
+        // Drop coordinationWait: terminal/stopping no longer apply wait
+        // heartbeats, so keeping the stamp froze the strip at wait n/m.
         return {
           executionDetached: detached,
-          workerToolPhases: {},
+          coordinationWait: null,
+          coordinationWaitStartedAt: null,
         };
       }),
 

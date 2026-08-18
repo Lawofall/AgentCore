@@ -703,6 +703,11 @@ class EventSink:
             raw_outcome = (event.payload or {}).get("outcome")
             if raw_outcome in ("ok", "partial", "paused", "error"):
                 self._stream_outcome = str(raw_outcome)
+            # 团队状态由本回合 journal 派生；未显式传入时在此盖章（所有 emit 口同一真源）。
+            if not (event.payload or {}).get("team_batch"):
+                from agentcore.runtime.journal.team_batch import team_batch_from_entries
+
+                event.payload["team_batch"] = team_batch_from_entries(self._journal)
         if event.type is EventType.ERROR:
             self._last_error = dict(event.payload)
         # Accumulate FIRST: closed process_* / run_process_* schedule before the
@@ -868,9 +873,12 @@ class EventSink:
         """
         snapshot = list(self._history)
         if self._stream_finish_reason is not None:
+            from agentcore.runtime.journal.team_batch import team_batch_from_entries
+
             close_payload: dict[str, Any] = {"finish_reason": self._stream_finish_reason}
             if self._stream_outcome is not None:
                 close_payload["outcome"] = self._stream_outcome
+            close_payload["team_batch"] = team_batch_from_entries(self._journal)
             snapshot.append(
                 SSEEvent(
                     type=EventType.MESSAGE_END,

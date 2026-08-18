@@ -320,7 +320,7 @@ describe("AssistantContent", () => {
     render(<AssistantContent content="" process={process} isStreaming />);
     expect(screen.getByText("Search web")).toBeTruthy();
     expect(screen.getByText("openai 新闻")).toBeTruthy();
-    expect(screen.getByText("Done")).toBeTruthy();
+    expect(screen.getByText("完成")).toBeTruthy();
   });
 
   it("shows wait tool rows and wait-idle reasoning (no view-layer omit)", () => {
@@ -330,14 +330,24 @@ describe("AssistantContent", () => {
         kind: "tool",
         id: "w1",
         tool_name: "wait",
-        arguments: {},
-        result: null,
+        arguments: {
+          reason: "工程实践研究员已完成，学术视角研究员仍在跑…",
+        },
+        result:
+          "已确认等待团队事件（无需处置）。继续静默听团；勿再为等待而调用 delegate / update_synthesis。",
         status: "success",
       },
       { kind: "content", text: "旁白" },
     ];
     render(<AssistantContent content="" process={process} isStreaming />);
-    expect(screen.getByText("wait")).toBeTruthy();
+    expect(screen.getByText("Wait")).toBeTruthy();
+    expect(screen.getByText("完成")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Wait/ })).toBeNull();
+    expect(screen.queryByText(/研究员仍在跑/)).toBeNull();
+    expect(screen.queryByText(/已确认等待团队事件/)).toBeNull();
+    fireEvent.click(screen.getByText("Wait"));
+    expect(screen.queryByText(/研究员仍在跑/)).toBeNull();
+    expect(screen.queryByText(/已确认等待团队事件/)).toBeNull();
     expect(screen.getByText("Thought")).toBeTruthy();
     fireEvent.click(screen.getByText("Thought"));
     expect(screen.getByText("空等队员")).toBeTruthy();
@@ -364,12 +374,13 @@ describe("AssistantContent", () => {
         toolPhases={new Map([["t1", "querying"]])}
       />,
     );
-    // Phase text replaces the bare "Running" (a timer may be appended once ≥1s elapses).
-    expect(screen.getByText(/Searching/)).toBeTruthy();
-    expect(screen.queryByText("Running")).toBeNull();
+    // Phase text replaces the bare「进行中」(a timer may be appended once ≥1s elapses).
+    expect(screen.getByText("正在检索")).toBeTruthy();
+    expect(screen.queryByText("进行中")).toBeNull();
+    expect(screen.queryByText("Searching")).toBeNull();
   });
 
-  it("falls back to Running for a running tool with no known phase", () => {
+  it("falls back to 进行中 for a running tool with no known phase", () => {
     const process: ProcessStep[] = [
       {
         kind: "tool",
@@ -381,7 +392,7 @@ describe("AssistantContent", () => {
       },
     ];
     render(<AssistantContent content="" process={process} isStreaming />);
-    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.getByText("进行中")).toBeTruthy();
   });
 
   it("collapses settled Thought+tools into a process summary", () => {

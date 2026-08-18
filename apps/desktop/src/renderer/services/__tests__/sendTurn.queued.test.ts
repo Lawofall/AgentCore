@@ -11,7 +11,6 @@ vi.mock("@/hooks/useConversations", () => ({
 vi.mock("@/services/sidecarRouting", () => ({
   resolveSidecarRoot: vi.fn(() => Promise.resolve(null)),
   resolveConversationLocalTarget: vi.fn(() => Promise.resolve(null)),
-  buildSidecarHistory: vi.fn(() => []),
   isSidecarEnabled: vi.fn(() => true),
 }));
 vi.mock("@/lib/capabilities", () => ({

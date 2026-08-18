@@ -24,6 +24,7 @@ import {
   type SidecarTurnFilesDiffResult,
   type SidecarTurnResult,
   type SidecarWarmAccountRulesMemoryResult,
+  type SidecarWarmMcpDiscoverResult,
   type SidecarWorkspaceVersionResult,
   buildSidecarResumeRpcParams,
 } from "@shared/sidecar-contract";
@@ -97,12 +98,17 @@ function accountWarmKey(
 
 /**
  * 暖回复 → 本地可信新鲜窗口（ms）。缺 `ttlSeconds` / 非正数 ⇒ 0（下个回合重暖）：
- * 多暖一次只是一次 HTTP，谎报新鲜则是静默丢掉全部规则与长期记忆。
+ * 多暖一次只是一次 HTTP，谎报新鲜则是静默丢掉规则 / 长期记忆 / MCP 工具。
  */
-function accountWarmFreshMs(reply: unknown): number {
+function warmFreshMs(reply: unknown): number {
   const ttlSeconds = Number(
-    (reply as SidecarWarmAccountRulesMemoryResult | null | undefined)
-      ?.ttlSeconds,
+    (
+      reply as
+        | SidecarWarmAccountRulesMemoryResult
+        | SidecarWarmMcpDiscoverResult
+        | null
+        | undefined
+    )?.ttlSeconds,
   );
   if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) return 0;
   return Math.max(0, ttlSeconds * 1000 - ACCOUNT_WARM_RENEW_MARGIN_MS);
@@ -137,6 +143,24 @@ interface SidecarEntry {
   accountRulesMemoryWarmInflight: Map<string, Promise<void>>;
   /** 在途 MCP / account rules-memory 暖；startTurn/resume 发回合 RPC 前 await。 */
   inflightWarms: Set<Promise<void>>;
+  /**
+   * MCP 暖有效期（`Date.now()`）。`undefined` = 本进程还没成功记过 TTL，
+   * 不在回合入口自动踢（仍由打开/登记项目显式暖）。记过之后过期即续暖。
+   */
+  mcpDiscoverFreshUntil?: number;
+  mcpDiscoverWarmInflight?: Promise<void>;
+  /** startTurn/resume 写入的续暖凭据；RPC 返回后仍保留，供 detached execution 续暖。 */
+  warmLease: {
+    rootId: string;
+    folderId?: string | null;
+    accountAuth?: SidecarAccountAuth;
+    userId?: string;
+  } | null;
+  /** 嵌套 startTurn/resume 在途持有数（附着长回合）；与 {@link executionWarmIds} 独立。 */
+  warmLeaseHolders: number;
+  /** 已 `execution_detached`、尚未 `execution_completed` 的 execution_id。 */
+  executionWarmIds: Set<string>;
+  warmKeepaliveTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface ActiveTurn {
@@ -226,10 +250,12 @@ export class SidecarManager {
    * 索引；MCP list 须桌面打开/登记显式 IPC（{@link warmCodeIndex} /
    * {@link warmMcpDiscover}）。每回合 ensure（含 cache hit）再踢会与 prepare 叠跑。
    *
-   * `warmAccountRulesMemory`：ensure 本身不踢；{@link startTurn} / {@link resume}（及显式
-   * {@link warmAccountRulesMemory}）在有票且该快照键**已过期**时续暖（见
-   * `accountRulesMemoryFreshUntil`）；无票跳过不锁死。回合发 RPC 前 await 在途 warm
-   * （失败只记日志）。
+   * `warmAccountRulesMemory` / `warmMcpDiscover`：ensure 本身不踢；
+   * {@link startTurn} / {@link resume}（及显式暖）在有票且该快照键**已过期**时续暖
+   * （见 `accountRulesMemoryFreshUntil` / `mcpDiscoverFreshUntil`）；无票跳过不锁死。
+   * 回合发 RPC 前 await 在途 warm（失败只记日志）。keepalive 绑 **detached
+   * execution 存活期**（`execution_detached` → `execution_completed` 的
+   * `turn/event`），不绑 startTurn RPC 在途：CEO 已 pause 返回后团队仍跑时继续续暖。
    */
   private ensure(
     rootId: string,
@@ -253,6 +279,8 @@ export class SidecarManager {
       this.onNotification(method, params),
     );
     client.onClosed((err) => {
+      const gone = this.entries.get(key);
+      if (gone) this.clearWarmKeepaliveTimer(gone);
       this.entries.delete(key);
       this.pushStatus({ rootId, phase: "exited", detail: err.message });
       this.finalizeEphemeralTurns(rootId, subpath, err);
@@ -275,6 +303,8 @@ export class SidecarManager {
       })
       .catch((err: unknown) => {
         // 初始化失败（uv/venv 找不到、引擎导入失败等）——逐出，下次重拉；上抛给 startTurn。
+        const gone = this.entries.get(key);
+        if (gone) this.clearWarmKeepaliveTimer(gone);
         this.entries.delete(key);
         const detail = err instanceof Error ? err.message : String(err);
         this.pushStatus({ rootId, phase: "error", detail });
@@ -289,6 +319,9 @@ export class SidecarManager {
       accountRulesMemoryFreshUntil: new Map(),
       accountRulesMemoryWarmInflight: new Map(),
       inflightWarms: new Set(),
+      warmLease: null,
+      warmLeaseHolders: 0,
+      executionWarmIds: new Set(),
     };
     this.entries.set(key, entry);
     return entry;
@@ -344,13 +377,20 @@ export class SidecarManager {
       req.userId,
     );
     await entry.ready; // 初始化失败则在此抛出 → renderer 据此降级
-    // 有票且快照已过期则续暖 account rules/memory；随后 await 在途 warm（含打开项目踢的 MCP）。
+    // 有票且快照已过期则续暖 account rules/memory；MCP 仅在曾经暖过且过期时续。
     this.maybeKickAccountRulesMemoryWarm(entry, req.rootId, {
       folderId: req.folderId,
       accountAuth: req.accountAuth,
       userId: req.userId,
     });
+    this.maybeKickMcpDiscoverWarm(entry, req.rootId, { userId: req.userId });
     await this.awaitInflightWarms(entry, req.rootId);
+    this.beginExecutionWarmLease(entry, {
+      rootId: req.rootId,
+      folderId: req.folderId,
+      accountAuth: req.accountAuth,
+      userId: req.userId,
+    });
 
     this.dropEphemeralTurns(req.conversationId);
     this.turns.set(req.turnId, {
@@ -378,7 +418,9 @@ export class SidecarManager {
         userMessage: req.userMessage,
         // Outbox idempotency anchor (as-built: 双模式工作区 §10.3).
         userMessageId: req.userMessageId,
-        history: req.history ?? [],
+        // Omit when renderer did not confirm a window — ``[]`` would look like
+        // a new chat and skip / empty-run instead of letting sidecar fetch.
+        ...(req.history !== undefined ? { history: req.history } : {}),
         ...(req.agentMentions && req.agentMentions.length > 0
           ? { agentMentions: req.agentMentions }
           : {}),
@@ -413,6 +455,7 @@ export class SidecarManager {
       throw err;
     } finally {
       this.turns.delete(req.turnId);
+      this.endExecutionWarmLease(entry);
     }
   }
 
@@ -475,24 +518,7 @@ export class SidecarManager {
       opts.userId,
     );
     await entry.ready;
-    const work = (async () => {
-      try {
-        const listed = await listMcpToolsValue();
-        const servers = Array.isArray(listed.servers) ? listed.servers : [];
-        await entry.client.request("warmMcpDiscover", {
-          servers,
-          ...(opts.userId?.trim() ? { userId: opts.userId.trim() } : {}),
-        });
-      } catch (err: unknown) {
-        const detail = err instanceof Error ? err.message : String(err);
-        logDesktop({
-          level: "warn",
-          event: "sidecar.warm_mcp_discover_failed",
-          fields: { rootId, detail },
-        });
-      }
-    })();
-    await this.trackWarm(entry, work);
+    await this.kickMcpDiscover(entry, rootId, opts);
   }
 
   /**
@@ -563,7 +589,7 @@ export class SidecarManager {
           accountAuth: opts.accountAuth,
           ...(userId ? { userId } : {}),
         });
-        freshMs = accountWarmFreshMs(reply);
+        freshMs = warmFreshMs(reply);
       } catch (err: unknown) {
         const detail = err instanceof Error ? err.message : String(err);
         logDesktop({
@@ -579,6 +605,180 @@ export class SidecarManager {
     entry.accountRulesMemoryWarmInflight.set(key, work);
     this.trackWarm(entry, work);
     return work;
+  }
+
+  /**
+   * 显式 / 周期续暖 MCP 列表。失败只记日志；成功按回复 ttl 记账。
+   * 打开项目走这条（无 TTL 门槛）；回合入口走 {@link maybeKickMcpDiscoverWarm}。
+   */
+  private kickMcpDiscover(
+    entry: SidecarEntry,
+    rootId: string,
+    opts: { userId?: string },
+  ): Promise<void> {
+    const inflight = entry.mcpDiscoverWarmInflight;
+    if (inflight) return inflight;
+    const userId = opts.userId?.trim();
+    if (userId) entry.userId = userId;
+    const work = (async () => {
+      let freshMs: number | undefined;
+      try {
+        const listed = await listMcpToolsValue();
+        const servers = Array.isArray(listed.servers) ? listed.servers : [];
+        const reply = await entry.client.request("warmMcpDiscover", {
+          servers,
+          ...(userId ? { userId } : {}),
+        });
+        freshMs = warmFreshMs(reply);
+      } catch (err: unknown) {
+        const detail = err instanceof Error ? err.message : String(err);
+        logDesktop({
+          level: "warn",
+          event: "sidecar.warm_mcp_discover_failed",
+          fields: { rootId, detail },
+        });
+        if (entry.mcpDiscoverFreshUntil !== undefined) {
+          freshMs = ACCOUNT_WARM_RETRY_BACKOFF_MS;
+        }
+      } finally {
+        entry.mcpDiscoverWarmInflight = undefined;
+        if (freshMs !== undefined) {
+          entry.mcpDiscoverFreshUntil = Date.now() + freshMs;
+        }
+      }
+    })();
+    entry.mcpDiscoverWarmInflight = work;
+    this.trackWarm(entry, work);
+    return work;
+  }
+
+  /**
+   * 本 sidecar 曾经暖过 MCP 且 TTL 已过期时续暖。从未暖过则跳过
+   * （仍由打开/登记项目显式 {@link warmMcpDiscover} 做第一次）。
+   */
+  private maybeKickMcpDiscoverWarm(
+    entry: SidecarEntry,
+    rootId: string,
+    opts: { userId?: string },
+  ): Promise<void> | undefined {
+    if (entry.mcpDiscoverFreshUntil === undefined) return undefined;
+    if (entry.mcpDiscoverWarmInflight) return entry.mcpDiscoverWarmInflight;
+    if (entry.mcpDiscoverFreshUntil > Date.now()) return undefined;
+    return this.kickMcpDiscover(entry, rootId, opts);
+  }
+
+  private beginExecutionWarmLease(
+    entry: SidecarEntry,
+    lease: SidecarEntry["warmLease"],
+  ): void {
+    entry.warmLease = lease;
+    entry.warmLeaseHolders += 1;
+    this.scheduleWarmKeepalive(entry);
+  }
+
+  private endExecutionWarmLease(entry: SidecarEntry): void {
+    entry.warmLeaseHolders = Math.max(0, entry.warmLeaseHolders - 1);
+    this.scheduleWarmKeepalive(entry);
+  }
+
+  /** Keepalive while a turn RPC is in-flight **or** a detached execution is live. */
+  private isWarmKeepaliveLive(entry: SidecarEntry): boolean {
+    return entry.warmLeaseHolders > 0 || entry.executionWarmIds.size > 0;
+  }
+
+  private onExecutionWarmLifecycle(
+    type: string,
+    params: Record<string, unknown>,
+    payload: unknown,
+  ): void {
+    const fromPayload =
+      payload && typeof payload === "object"
+        ? String(
+            (payload as { conversation_id?: unknown }).conversation_id ?? "",
+          ).trim()
+        : "";
+    const conversationId =
+      String(params.conversationId ?? "").trim() || fromPayload;
+    const executionId =
+      payload && typeof payload === "object"
+        ? String(
+            (payload as { execution_id?: unknown }).execution_id ?? "",
+          ).trim()
+        : "";
+    if (!executionId) return;
+    const resolved = conversationId
+      ? this.resolveConversationWindow(conversationId)
+      : null;
+    if (!resolved) return;
+    const entry = this.entries.get(entryKey(resolved.rootId, resolved.subpath));
+    if (!entry) return;
+    if (type === "execution_detached") {
+      entry.executionWarmIds.add(executionId);
+    } else {
+      entry.executionWarmIds.delete(executionId);
+    }
+    this.scheduleWarmKeepalive(entry);
+  }
+
+  private clearWarmKeepaliveTimer(entry: SidecarEntry): void {
+    if (entry.warmKeepaliveTimer !== undefined) {
+      clearTimeout(entry.warmKeepaliveTimer);
+      entry.warmKeepaliveTimer = undefined;
+    }
+  }
+
+  /**
+   * 按快照剩余寿命调度下一次续暖。租约跟 detached execution 存活期
+   * （及附着回合 RPC 在途），不在 startTurn finally 里无条件停。
+   */
+  private scheduleWarmKeepalive(entry: SidecarEntry, afterTick = false): void {
+    this.clearWarmKeepaliveTimer(entry);
+    if (!this.isWarmKeepaliveLive(entry)) return;
+    if (!entry.warmLease) return;
+    const dueAt = this.nextWarmDueAt(entry);
+    if (!Number.isFinite(dueAt)) return;
+    let delay = Math.max(0, dueAt - Date.now());
+    // 缺 ttl / 刚踢完仍到期：不要 0ms 空转猛踢，按失败退避再探。
+    if (afterTick && delay === 0) delay = ACCOUNT_WARM_RETRY_BACKOFF_MS;
+    entry.warmKeepaliveTimer = setTimeout(() => {
+      entry.warmKeepaliveTimer = undefined;
+      void this.tickWarmKeepalive(entry);
+    }, delay);
+  }
+
+  private nextWarmDueAt(entry: SidecarEntry): number {
+    const lease = entry.warmLease;
+    const dues: number[] = [];
+    if (lease?.accountAuth) {
+      const key = accountWarmKey(entry.userId, lease.folderId);
+      dues.push(entry.accountRulesMemoryFreshUntil.get(key) ?? 0);
+    }
+    if (entry.mcpDiscoverFreshUntil !== undefined) {
+      dues.push(entry.mcpDiscoverFreshUntil);
+    }
+    if (dues.length === 0) return Number.POSITIVE_INFINITY;
+    return Math.min(...dues);
+  }
+
+  private async tickWarmKeepalive(entry: SidecarEntry): Promise<void> {
+    if (!this.isWarmKeepaliveLive(entry)) return;
+    const lease = entry.warmLease;
+    if (!lease) return;
+    logDesktop({
+      level: "info",
+      event: "sidecar.warm_cache_keepalive",
+      fields: { rootId: lease.rootId },
+    });
+    this.maybeKickAccountRulesMemoryWarm(entry, lease.rootId, {
+      folderId: lease.folderId,
+      accountAuth: lease.accountAuth,
+      userId: lease.userId,
+    });
+    this.maybeKickMcpDiscoverWarm(entry, lease.rootId, {
+      userId: lease.userId,
+    });
+    await this.awaitInflightWarms(entry, lease.rootId);
+    this.scheduleWarmKeepalive(entry, true);
   }
 
   /** A1+ 本机真 diff：ensure sidecar → `turnFilesDiff` RPC（相对本地基线 zip）。 */
@@ -698,7 +898,14 @@ export class SidecarManager {
       accountAuth: req.accountAuth,
       userId: req.userId,
     });
+    this.maybeKickMcpDiscoverWarm(entry, req.rootId, { userId: req.userId });
     await this.awaitInflightWarms(entry, req.rootId);
+    this.beginExecutionWarmLease(entry, {
+      rootId: req.rootId,
+      folderId: req.folderId,
+      accountAuth: req.accountAuth,
+      userId: req.userId,
+    });
 
     this.dropEphemeralTurns(req.conversationId);
     this.turns.set(req.messageId, {
@@ -736,6 +943,7 @@ export class SidecarManager {
       throw err;
     } finally {
       this.turns.delete(req.messageId);
+      this.endExecutionWarmLease(entry);
     }
   }
 
@@ -951,6 +1159,7 @@ export class SidecarManager {
   /** 退出时清理所有 sidecar（尽力发 shutdown 再终止进程）。 */
   disposeAll(): void {
     for (const [, entry] of this.entries) {
+      this.clearWarmKeepaliveTimer(entry);
       void entry.client.request("shutdown", {}).catch(() => {});
       entry.client.dispose();
     }
@@ -978,6 +1187,13 @@ export class SidecarManager {
           })
         : null;
     if (!event?.type) return;
+
+    if (
+      event.type === "execution_detached" ||
+      event.type === "execution_completed"
+    ) {
+      this.onExecutionWarmLifecycle(event.type, params, event.payload);
+    }
 
     const turnId = String(params.turnId ?? "");
     const turn = this.turns.get(turnId) ?? this.adoptOrphanTurn(turnId, params);

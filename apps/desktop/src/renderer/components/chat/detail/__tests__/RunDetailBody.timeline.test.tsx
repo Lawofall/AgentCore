@@ -174,10 +174,7 @@ describe("RunDetailBody process timeline", () => {
       summary: "交叉验证完成",
       key_points: ["共识：一周内需清晰立场"],
     };
-    run.process = [
-      { kind: "reasoning", text: "收尾。" },
-      handoffStep,
-    ];
+    run.process = [{ kind: "reasoning", text: "收尾。" }, handoffStep];
     try {
       render(
         <MemoryRouter>

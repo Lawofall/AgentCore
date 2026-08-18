@@ -11,11 +11,18 @@ monkeypatched subprocess, so it runs off-Linux without runsc.
 from __future__ import annotations
 
 import asyncio
+import sys
+from pathlib import Path
 
 import pytest
+from structlog.testing import capture_logs
 
 from agentcore.tools.sandbox.browser import gvisor_session as gs
 from agentcore.tools.sandbox.browser.gvisor_session import GVisorBrowserSession
+from agentcore.tools.sandbox.browser.protocol import (
+    BrowserSessionError,
+    BrowserSessionRequest,
+)
 
 _CID = "agentcore-browser-test"
 
@@ -219,3 +226,166 @@ async def test_run_runsc_bounded_swallows_spawn_failure(monkeypatch):
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _boom)
 
     await gs._run_runsc_bounded("runsc", "/tmp/root", "delete", "--force", _CID)
+
+
+def test_cgroup_subtree_control_writable_missing():
+    assert gs.cgroup_subtree_control_writable(Path("/no/such/cgroup.subtree_control")) is True
+
+
+def test_cgroup_subtree_control_writable_ro(tmp_path, monkeypatch):
+    path = tmp_path / "cgroup.subtree_control"
+    path.write_text("")
+    monkeypatch.setattr(gs.os, "access", lambda _path, _mode: False)
+    assert gs.cgroup_subtree_control_writable(path) is False
+
+
+def test_cgroup_subtree_control_writable_rw(tmp_path, monkeypatch):
+    path = tmp_path / "cgroup.subtree_control"
+    path.write_text("")
+    monkeypatch.setattr(gs.os, "access", lambda _path, _mode: True)
+    assert gs.cgroup_subtree_control_writable(path) is True
+
+
+def test_ignore_browser_cgroups_reason_matrix():
+    assert gs.ignore_browser_cgroups_reason(configured=True, writable=True) == "configured"
+    assert (
+        gs.ignore_browser_cgroups_reason(configured=False, writable=False)
+        == "cgroup_subtree_control_unwritable"
+    )
+    assert gs.ignore_browser_cgroups_reason(configured=False, writable=True) is None
+
+
+def test_build_browser_runsc_cmd_toggles_ignore_cgroups():
+    kwargs = {
+        "runsc_path": "runsc",
+        "runtime_root": "/data/sandbox",
+        "bundle_dir": "/b",
+        "container_id": "c1",
+    }
+    plain = gs.build_browser_runsc_cmd(**kwargs, ignore_cgroups=False)
+    flagged = gs.build_browser_runsc_cmd(**kwargs, ignore_cgroups=True)
+    assert "--ignore-cgroups" not in plain
+    assert "--ignore-cgroups" in flagged
+    assert plain[:3] == ["runsc", "--platform=systrap", "--network=sandbox"]
+
+
+def test_stderr_preview_keeps_tail():
+    buf = ("head-" + ("x" * 80) + "-TAILMARK").encode()
+    text = gs.stderr_preview(buf, limit=12)
+    assert text == "x" * 3 + "-TAILMARK"
+    assert gs.stderr_preview(b"  short  ") == "short"
+
+
+_REAL_CREATE_SUBPROCESS_EXEC = asyncio.create_subprocess_exec
+
+
+class _FakeProxy:
+    port = 8899
+
+
+class _OpenFakeNetns:
+    def __init__(self, **_kwargs):
+        self.host_ip = "10.201.0.1"
+        self.netns_path = "/var/run/netns/acbrw0"
+
+    async def setup(self) -> None:
+        return None
+
+    async def teardown(self) -> None:
+        return None
+
+
+async def _dying_runsc_exec(*argv, **kwargs):
+    """Stand-in for ``runsc run``: write the prod cgroup error to stderr and exit."""
+    if "run" in argv and any(str(a).startswith("--bundle=") for a in argv):
+        return await _REAL_CREATE_SUBPROCESS_EXEC(
+            sys.executable,
+            "-c",
+            (
+                "import sys;"
+                "sys.stderr.write("
+                "'cannot set up cgroup for root: open /sys/fs/cgroup/"
+                "cgroup.subtree_control: read-only file system\\n');"
+                "sys.exit(128)"
+            ),
+            stdin=kwargs.get("stdin", asyncio.subprocess.PIPE),
+            stdout=kwargs.get("stdout", asyncio.subprocess.PIPE),
+            stderr=kwargs.get("stderr", asyncio.subprocess.PIPE),
+            limit=kwargs.get("limit"),
+        )
+    return await _REAL_CREATE_SUBPROCESS_EXEC(
+        sys.executable,
+        "-c",
+        "raise SystemExit(0)",
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+
+
+def _install_open_mocks(monkeypatch, *, writable: bool, configured: bool, exec_fn):
+    monkeypatch.setattr(gs, "_IS_LINUX", True)
+    monkeypatch.setattr(gs.settings, "browser_sandbox_ignore_cgroups", configured)
+    monkeypatch.setattr(gs, "cgroup_subtree_control_writable", lambda: writable)
+
+    async def _proxy():
+        return _FakeProxy()
+
+    monkeypatch.setattr(gs, "ensure_browser_proxy", _proxy)
+    monkeypatch.setattr(gs, "SessionNetns", _OpenFakeNetns)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", exec_fn)
+    gs._used_slots.clear()
+
+
+@pytest.mark.asyncio
+async def test_open_session_auto_ignores_ro_cgroup_and_logs_stderr(monkeypatch, tmp_path):
+    captured: list[list[str]] = []
+
+    async def _exec(*argv, **kwargs):
+        captured.append([str(a) for a in argv])
+        return await _dying_runsc_exec(*argv, **kwargs)
+
+    _install_open_mocks(monkeypatch, writable=False, configured=False, exec_fn=_exec)
+    request = BrowserSessionRequest(conversation_id="c-ro")
+
+    with (
+        capture_logs() as logs,
+        pytest.raises(BrowserSessionError, match="RpcChannelClosedError"),
+    ):
+        await gs.open_gvisor_browser_session(
+            request, runsc_path="runsc", runtime_root=str(tmp_path / "rt")
+        )
+
+    run_argv = next(a for a in captured if "run" in a and any(x.startswith("--bundle=") for x in a))
+    assert "--ignore-cgroups" in run_argv
+    events = {row["event"]: row for row in logs if "event" in row}
+    assert events["browser.cgroup_unwritable_ignore"]["reason"] == (
+        "cgroup_subtree_control_unwritable"
+    )
+    failed = events["browser.session_open_failed"]
+    assert failed["conversation_id"] == "c-ro"
+    assert "subtree_control" in failed["stderr_preview"]
+    assert failed["ignore_cgroups"] is True
+    assert failed["error_type"] == "RpcChannelClosedError"
+
+
+@pytest.mark.asyncio
+async def test_open_session_keeps_cgroups_when_writable(monkeypatch, tmp_path):
+    captured: list[list[str]] = []
+
+    async def _exec(*argv, **kwargs):
+        captured.append([str(a) for a in argv])
+        return await _dying_runsc_exec(*argv, **kwargs)
+
+    _install_open_mocks(monkeypatch, writable=True, configured=False, exec_fn=_exec)
+
+    with capture_logs() as logs, pytest.raises(BrowserSessionError):
+        await gs.open_gvisor_browser_session(
+            BrowserSessionRequest(conversation_id="c-rw"),
+            runsc_path="runsc",
+            runtime_root=str(tmp_path / "rt"),
+        )
+
+    run_argv = next(a for a in captured if "run" in a and any(x.startswith("--bundle=") for x in a))
+    assert "--ignore-cgroups" not in run_argv
+    assert not any(row.get("event") == "browser.cgroup_unwritable_ignore" for row in logs)

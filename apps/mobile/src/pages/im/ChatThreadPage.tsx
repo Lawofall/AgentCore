@@ -410,9 +410,7 @@ export function ChatThreadPage() {
               ? member.display_name || member.username
               : undefined;
             const senderGovernance =
-              isGroup && !mine && member
-                ? memberGovernanceBadge(member)
-                : null;
+              isGroup && !mine && member ? memberGovernanceBadge(member) : null;
             const avatarName = mine
               ? myAvatarName
               : isDm
@@ -588,7 +586,11 @@ export function ChatThreadPage() {
 
 function SenderRoleMark({ badge }: { badge: MemberGovernanceBadge }) {
   const Icon =
-    badge.kind === "platform" ? UserCog : badge.kind === "owner" ? Crown : Shield;
+    badge.kind === "platform"
+      ? UserCog
+      : badge.kind === "owner"
+        ? Crown
+        : Shield;
   return (
     <span
       className={`im-role ${badge.kind === "platform" ? "im-role-platform" : "im-role-group"}`}
@@ -659,9 +661,7 @@ function MessageRow({
           {!mine && isGroup && senderName && (
             <span className="im-sender-row">
               <span className="im-sender">{senderName}</span>
-              {senderGovernance && (
-                <SenderRoleMark badge={senderGovernance} />
-              )}
+              {senderGovernance && <SenderRoleMark badge={senderGovernance} />}
             </span>
           )}
           {(hasText || reply) && (

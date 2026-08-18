@@ -394,20 +394,34 @@ class _EpisodicDigest:
 def _consolidation_failure_retryable(exc: BaseException) -> bool:
     """True when a later sweep could still get this window through — keep the watermark.
 
-    Two shapes qualify. ``AgentCoreError`` with ``retryable=True`` is the failure
-    saying so itself (upstream blip / rate / timeout). A primary-pool checkout
-    timeout is the other: it is our own saturation, the window was never even shown
-    to the LLM, and it drains on its own. ``sqlalchemy.exc.TimeoutError`` is not an
-    ``AgentCoreError``, so reading the flag alone filed it under *deterministic* and
-    advanced the watermark past a window nothing had read — the only way this path
-    loses data rather than just delaying it.
+    Three shapes qualify. ``AgentCoreError`` with ``retryable=True`` is the failure
+    saying so itself (upstream blip / timeout still inside the leaf's HTTP budget).
+    A primary-pool checkout timeout is the second: it is our own saturation, the
+    window was never even shown to the LLM, and it drains on its own.
+    ``sqlalchemy.exc.TimeoutError`` is not an ``AgentCoreError``, so reading the
+    flag alone filed it under *deterministic* and advanced the watermark past a
+    window nothing had read — the only way this path loses data rather than just
+    delaying it.
 
-    Everything else (AttributeError-class bugs, non-retryable AgentCoreError) stays
-    deterministic: advancing the watermark stops the sweeper re-burning LLM on them.
+    The third is ``llm_failure_class == transient``. Leaf ``retryable`` is the
+    in-call HTTP budget, not 「下次 sweep 还值不值得试」: a 429 whose next cooldown
+    (32s) outgrew the 30s ceiling comes back ``retryable=False`` while still
+    transient. Wave already reads :func:`llm_failure_class` for that split;
+    consolidation must too, or the watermark advances and the window is gone.
+
+    Everything else (AttributeError-class bugs, non-retryable terminal
+    AgentCoreError) stays deterministic: advancing the watermark stops the sweeper
+    re-burning LLM on them.
     """
-    from agentcore.core.errors import AgentCoreError
+    from agentcore.core.errors import (
+        LLM_FAILURE_TRANSIENT,
+        AgentCoreError,
+        llm_failure_class,
+    )
 
     if is_pool_timeout_error(exc):
+        return True
+    if llm_failure_class(exc) == LLM_FAILURE_TRANSIENT:
         return True
     return isinstance(exc, AgentCoreError) and bool(exc.retryable)
 

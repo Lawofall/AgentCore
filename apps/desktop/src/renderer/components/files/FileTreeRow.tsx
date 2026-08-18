@@ -178,7 +178,7 @@ export function FileTreeRow(props: FileTreeRowProps) {
   const stageCaption = stage
     ? stageDirCaption(stage, countDescendantFiles(node.path, data.childrenOf))
     : null;
-  // 约定根改叫「AI 工作间」并退成次要行：与条目区（「全局设定」/「本文件夹设定」）消歧，且它是过程材料。
+  // 约定根改叫「AI 工作间」并退成次要行（钉顶、不跟用户文件抢视觉权重）：与条目区消歧，且它是过程材料。
   const isWorkroom = isAgentCoreRootDir(node.path);
 
   return (

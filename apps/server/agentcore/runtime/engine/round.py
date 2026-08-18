@@ -411,16 +411,17 @@ async def maybe_auto_deep_read_search_only_refs(
     from agentcore.runtime.closing_posture import (
         downgrade_verdict_for_unresolved_write_ownership,
     )
-    from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
+    from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
 
-    downgrade_verdict_for_unresolved_write_ownership()
+    ledger = tool_context.promotion_ledger
+    downgrade_verdict_for_unresolved_write_ownership(promotion_ledger=ledger)
     bad_only = uncitable_ledger_refs_only(
         content,
         citation_count=len(citation_sink or []),
         check_citations=annotate_citations,
         citable_ids=_citable_ids(turn_evidence_ledger),
         ledger_entries=_ledger_entries(turn_evidence_ledger),
-        delivery_verdict=current_delivery_verdict.get(),
+        delivery_verdict=read_delivery_verdict(promotion_ledger=ledger),
     )
     if bad_only is None or not bad_only:
         return
@@ -489,6 +490,7 @@ def decide_no_tool_round(
     tools_offered: bool = False,
     supports_tools: bool | None = None,
     turn_evidence_ledger: EvidenceLedgerCore | None = None,
+    promotion_ledger: Any = None,
 ) -> LoopDirective:
     """Pick the directive for a round with no tool calls.
 
@@ -505,11 +507,13 @@ def decide_no_tool_round(
         from agentcore.runtime.closing_posture import (
             downgrade_verdict_for_unresolved_write_ownership,
         )
-        from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
+        from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
 
         # P0-B: latch from write collisions may exist without a delivery card.
-        downgrade_verdict_for_unresolved_write_ownership()
-        verdict = current_delivery_verdict.get()
+        downgrade_verdict_for_unresolved_write_ownership(
+            promotion_ledger=promotion_ledger,
+        )
+        verdict = read_delivery_verdict(promotion_ledger=promotion_ledger)
         citable = _citable_ids(turn_evidence_ledger)
         entries = _ledger_entries(turn_evidence_ledger)
         cite_count = len(citation_sink or [])
@@ -570,6 +574,7 @@ def apply_finish_guard_rework(
     citation_sink: list[dict[str, Any]] | None,
     finish_guard_reworks: int,
     turn_evidence_ledger: EvidenceLedgerCore | None = None,
+    promotion_ledger: Any = None,
 ) -> tuple[str, int]:
     """Discard rejected content, inject steer, return updated content and rework count.
 
@@ -580,16 +585,18 @@ def apply_finish_guard_rework(
     from agentcore.runtime.closing_posture import (
         downgrade_verdict_for_unresolved_write_ownership,
     )
-    from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
+    from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
 
-    downgrade_verdict_for_unresolved_write_ownership()
+    downgrade_verdict_for_unresolved_write_ownership(
+        promotion_ledger=promotion_ledger,
+    )
     reworks = finish_guard(
         final_content,
         citation_count=len(citation_sink or []),
         check_citations=annotate_citations,
         citable_ids=_citable_ids(turn_evidence_ledger),
         ledger_entries=_ledger_entries(turn_evidence_ledger),
-        delivery_verdict=current_delivery_verdict.get(),
+        delivery_verdict=read_delivery_verdict(promotion_ledger=promotion_ledger),
     )
     steer = format_guard_steer(reworks)
     logger.info(

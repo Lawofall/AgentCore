@@ -5,8 +5,10 @@ Each method serializes into a per-turn outbox record under ``<dataDir>/outbox/``
 records via ``POST .../local-turns`` → ``CloudStore.finalize(mode="local")``.
 
 Record lifecycle: ``open`` (begin + journal + stream_segments) → ``ready``
-(finalize / salvage) → deleted after cloud ack. Idempotent: begin is create-once;
-journal appends dedupe on ``seq``; finalize is once. Mid-turn prose durability is
+(finalize / salvage) → deleted after cloud ack. Resume unseals a leftover
+``ready`` record (``reopen_for_resume``) so the same turn can rewrite its
+journal. Idempotent: begin is create-once; journal appends dedupe on ``seq``;
+finalize is once per seal (resume unseals first). Mid-turn prose durability is
 ``upsert_stream_segments`` → ``turn_stream_state`` (not ``messages.content``).
 """
 
@@ -393,6 +395,72 @@ class OutboxStore:
             record.setdefault("ops", []).append("begin_turn")
 
         await self._mutate(user_message_id, mutate)
+
+    def _reopen_for_resume_sync(
+        self,
+        user_message_id: str,
+        turn_id: str,
+        conversation_id: str | None,
+        trace_id: str | None,
+    ) -> None:
+        """Unseal READY in place. Missing file → no-op (never invent an empty shell)."""
+        try:
+            record = self._read_sync(user_message_id)
+        except OutboxReadError:
+            return
+        if record is None:
+            return
+        if record.get("phase") != PHASE_READY:
+            return
+        existing_mid = str(record.get("message_id") or "")
+        if existing_mid and existing_mid != turn_id:
+            return
+        record["phase"] = PHASE_OPEN
+        if conversation_id:
+            record["conversation_id"] = conversation_id
+        if turn_id:
+            record["message_id"] = turn_id
+        if trace_id:
+            record["trace_id"] = trace_id
+        ops = [op for op in list(record.get("ops") or []) if op != "finalize"]
+        if "reopen_for_resume" not in ops:
+            ops.append("reopen_for_resume")
+        record["ops"] = ops
+        self._write_sync(user_message_id, record)
+
+    async def reopen_for_resume(
+        self,
+        *,
+        turn_id: str,
+        user_message_id: str,
+        conversation_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> None:
+        """Unseal a pause-READY record so this turn can rewrite its fact stream.
+
+        Pause ``finalize`` stamps ``PHASE_READY`` + ``ops.finalize``; ``append_journal``
+        and a later complete ``finalize`` then no-op. Resume reuses the same
+        ``message_id`` / umid file — drop the seal, keep the hang-frame journal.
+        Missing file (writeback already deleted it) is a no-op; never creates a
+        new record. Failure is logged and does not raise.
+        """
+        if not user_message_id or not _is_safe_id(user_message_id):
+            return
+        try:
+            async with self._lock_for(user_message_id):
+                await asyncio.to_thread(
+                    self._reopen_for_resume_sync,
+                    user_message_id,
+                    turn_id,
+                    conversation_id,
+                    trace_id,
+                )
+        except Exception as e:  # noqa: BLE001 — outbox must never break the turn
+            logger.error(
+                "sidecar.outbox_write_failed",
+                user_message_id=user_message_id,
+                error=str(e),
+            )
 
     async def append_journal(
         self,

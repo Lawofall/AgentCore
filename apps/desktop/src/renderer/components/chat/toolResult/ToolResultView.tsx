@@ -6,8 +6,8 @@ import {
 import { DebriefDetails } from "@/components/chat/detail/sections/RunDebrief";
 import {
   debriefFromHandoffArgs,
-  hasDebriefDetails,
   handoffSummaryPeek,
+  hasDebriefDetails,
   isSuccessfulHandoff,
 } from "@/components/chat/handoffBrief";
 import { PromptDocument } from "@/components/prompt/PromptDocument";
@@ -149,6 +149,8 @@ export function hasToolResultBody(d: ToolResultData): boolean {
   if (isSuccessfulHandoff(d.toolName, d.status)) {
     return hasDebriefDetails(debriefFromHandoffArgs(d.args));
   }
+  // Successful wait: receipt-only — one line, no chevron (same as summary-only handoff).
+  if (d.toolName === "wait" && d.status === "success") return false;
   if (d.display) return true;
   if (isFileEdit(d)) return true;
   if (isFileWrite(d)) return true;
@@ -261,7 +263,11 @@ export function toolResultPeek(d: ToolResultData): string {
 /** Collapsed grep meta — pattern already lives in the ToolLine title, so drop it
  * from the count line. Unknown shapes fall back to the first result line. */
 function grepCollapsedPeek(result: string | null): string {
-  const line = (result ?? "").split("\n").find((l) => l.trim())?.trim() ?? "";
+  const line =
+    (result ?? "")
+      .split("\n")
+      .find((l) => l.trim())
+      ?.trim() ?? "";
   if (!line) return "";
   const hits = line.match(/^(\d+) 处匹配，分布在 (\d+) 个文件/);
   if (hits) return `${hits[1]} 处匹配 · ${hits[2]} 个文件`;

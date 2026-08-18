@@ -17,6 +17,8 @@ from agentcore.runtime.resolve.prompt import (
     _DEFAULT_SYSTEM_PROMPT,
     assemble_ceo_core,
     assemble_system_prompt,
+    compose_ceo_chat_prompt,
+    compose_worker_base_prompt,
 )
 from agentcore.tools.builtin import build_ceo_tool_registry
 
@@ -608,21 +610,34 @@ def test_cloud_desktop_online_allows_external_grant_without_bind():
     assert "grant_readonly_folder" not in out
 
 
-def test_assemble_system_prompt_includes_workspace_facts():
+def test_assemble_system_prompt_omits_workspace_facts():
+    """Facts are not in the shared base — they ride the compose layer after the core."""
+    bare = assemble_system_prompt()
+    # Shared HOW may mention the tag name; the injected block is the closing tag.
+    assert "</workspace_context>" not in bare
+    assert "<workspace_context>\n" not in bare
+
+
+def test_workspace_facts_follow_resident_core_for_ceo_and_worker():
     facts = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
         code_execute_enabled=False,
         terminal_enabled=False,
     )
-    prompt = assemble_system_prompt(workspace_context=facts)
-    assert "<workspace_context>" in prompt
-    assert "云端沙箱" in prompt
-    # Without facts, no block (prefix-cache identity for catalog / bare tests).
-    # Shared HOW may mention the tag name; the injected block is the closing tag.
-    bare = assemble_system_prompt()
-    assert "</workspace_context>" not in bare
-    assert "<workspace_context>\n" not in bare
+    base = assemble_system_prompt()
+    ceo = compose_ceo_chat_prompt(
+        base,
+        ceo_tool_names={"delegate"},
+        workspace_context=facts,
+    )
+    worker = compose_worker_base_prompt(base, workspace_context=facts)
+    assert "<workspace_context>\n" in ceo
+    assert "<workspace_context>\n" in worker
+    assert "云端沙箱" in ceo and "云端沙箱" in worker
+    # Actual XML block (newline after the tag), not the core/base tag mention.
+    assert ceo.index("<role>") < ceo.index("<workspace_context>\n")
+    assert worker.index("</runtime_context>") < worker.index("<workspace_context>\n")
 
 
 def test_git_fact_present_line_no_soft_init_tip(tmp_path):

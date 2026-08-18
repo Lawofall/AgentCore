@@ -8,6 +8,7 @@ export const REST_PATH_TEMPLATES = [
   "/readyz",
   "/shared/{token}",
   "/updates/policy",
+  "/v1/account/conversations/chat-context",
   "/v1/account/conversations/read",
   "/v1/account/conversations/search",
   "/v1/account/memory/delete",

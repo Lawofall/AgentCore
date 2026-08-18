@@ -130,6 +130,9 @@ def test_identity_form_prose_has_no_file_write_guidance():
     assert "consult(long_form_landing)" in files
     assert "consult(long_form_landing)" in omitted
     assert "consult(long_form_landing)" not in prose
+    assert "consult(data_file_landing)" in files
+    assert "consult(data_file_landing)" in omitted
+    assert "consult(data_file_landing)" not in prose
 
     # omit = legacy two-way + 同一套压缩落盘纪律
     assert "可独立阅读的文字" in omitted

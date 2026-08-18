@@ -77,14 +77,11 @@ class EscalateTool:
         return ToolSchema(
             name=ESCALATE_TOOL_NAME,
             description=(
-                "向上通道：把必须由上级/用户拍板的问题，或职责偏离，报上去。"
-                "能自行合理假设的小事不要升级。何时停、何时报一声见身份段。\n"
-                "blocking 默认 false（报一声继续）；猜错产物基本作废 / 用户明确要求"
-                "不确定就问 / 只有上级能定 → true（须 assumption，原地等）。"
-                "该停时别装非阻塞。\n"
-                "kind：normal 待决；scope 职责偏离；dep 缺还不存在的输入"
-                "（先 read_notes，别硬猜）。scope/dep 不停工。\n"
-                "browser_login=true 强制 blocking（用户接管登录，AI 不经手密码）。"
+                "向上通道：必须由上级/用户拍板或职责偏离才报。小事勿升级。"
+                "blocking 默认 false（报一声继续）；"
+                "猜错作废 / 只有上级能定 → true（须 assumption）。"
+                "kind：normal / scope 偏离 / dep 缺输入（先 read_notes）。"
+                "browser_login=true 强制 blocking。"
             ),
             parameters={
                 "type": "object",
@@ -102,11 +99,7 @@ class EscalateTool:
                     },
                     "blocking": {
                         "type": "boolean",
-                        "description": (
-                            "可选，默认 false。false=报一声继续；true=猜错作废 / "
-                            "不确定就问 / 只有上级能定，原地等（须 assumption）。"
-                            "该停时别装非阻塞。"
-                        ),
+                        "description": "默认 false=报一声继续；true=原地等（须 assumption）。",
                     },
                     "browser_login": {
                         "type": "boolean",

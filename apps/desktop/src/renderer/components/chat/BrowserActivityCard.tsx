@@ -535,10 +535,15 @@ export function BrowserResult({
   );
 }
 
-/** A compact one-line peek for a collapsed single browser step (ToolLine). */
+/** Collapsed ToolLine chip for one browser step — human detail, else page title, else url. */
+export function browserResultTail(display: BrowserDisplay): string {
+  return (display.detail || display.title || display.url).trim();
+}
+
+/** A compact one-line label for a frame / leftover peek (title row uses {@link browserResultTail}). */
 export function browserResultPeek(display: BrowserDisplay): string {
   const { label } = browserActionMeta(display.action);
-  const tail = display.detail || display.title || display.url;
+  const tail = browserResultTail(display);
   const line = tail ? `${label} · ${tail}` : label;
   return line.length > 140 ? `${line.slice(0, 140)}…` : line;
 }

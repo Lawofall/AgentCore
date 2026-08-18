@@ -262,6 +262,26 @@ class TurnCollabMetrics(WirePayload):
     )
 
 
+class TeamBatchNoBatch(WirePayload):
+    """本回合未派出队员——确定态，不是信息缺失。"""
+
+    kind: Literal["no_batch"]
+
+
+class TeamBatchInFlight(WirePayload):
+    """本波 kickoff 编制已派出、尚未全部收工。``worker_count`` 不含 captain / 历史队员。"""
+
+    kind: Literal["in_flight"]
+    worker_count: int
+
+
+class TeamBatchSettled(WirePayload):
+    """本波队员已全部终态（或本 execution 已发出 delivery_status）。"""
+
+    kind: Literal["settled"]
+    worker_count: int
+
+
 class MessageEndPayload(WirePayload):
     """Terminal turn event. `finish_reason=paused` = 挂起即收口: the turn finalized AT a
     durable checkpoint and awaits POST .../resume — NOT done and not aborted."""
@@ -271,6 +291,10 @@ class MessageEndPayload(WirePayload):
     cost: CostBreakdown | None = absent()
     rounds: int | None = absent()
     collab: TurnCollabMetrics | None = absent()
+    team_batch: TeamBatchNoBatch | TeamBatchInFlight | TeamBatchSettled | None = absent(
+        "本回合团队状态（turn journal 派生）。没派工是 no_batch，不是缺字段。",
+        ts_type="TeamBatchStatus",
+    )
     # 回合墙钟用时 (主回复 meta)：与 chat.turn_complete / turn_metrics 同锚；可选，旧向量可省略。
     duration_ms: int | None = absent()
     # 回合结果质量（与 finish_reason 正交）：ok | partial | paused | error。

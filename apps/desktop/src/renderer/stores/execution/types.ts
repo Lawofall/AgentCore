@@ -114,6 +114,7 @@ export const TOOL_LABELS: Record<string, string> = {
   cancel_worker: "Cancel worker",
   resolve_escalation: "Resolve escalate",
   queue_user_message: "Queue message",
+  wait: "Wait",
   // 团队便签墙 / 交接 / 白板 / 桌面通知 — keep in sync with TOOL_META English chrome.
   post_note: "Post note",
   read_notes: "Read notes",

@@ -80,7 +80,57 @@ async def test_grep_access_permission_is_policy_retire():
 async def test_grep_rejects_invalid_regex(tmp_path: Path):
     result = await GrepTool().execute({"pattern": "("}, _ctx(tmp_path))
     assert result.success is False
-    assert "正则" in result.error
+    err = result.error or ""
+    assert "正则" in err
+    assert "unclosed group" in err
+
+
+async def test_grep_literal_newline_pattern_keeps_rg_reason(tmp_path: Path):
+    (tmp_path / "a.txt").write_text("foo\nbar\n", encoding="utf-8")
+    result = await GrepTool().execute({"pattern": "foo\nbar"}, _ctx(tmp_path))
+    assert result.success is False
+    err = result.error or ""
+    assert "正则" in err
+    assert "literal" in err.lower()
+    assert "\\n" in err
+
+
+def test_regex_error_message_keeps_multiline_rg_diagnostic():
+    from agentcore.workspace.rg_grep import _regex_error_message
+
+    stderr = (
+        "rg: regex parse error:\n"
+        "    (?:()\n"
+        "    ^\n"
+        "error: unclosed group\n"
+    )
+    msg = _regex_error_message(stderr)
+    assert msg is not None
+    assert msg.startswith("正则表达式无效：")
+    assert "unclosed group" in msg
+    assert "^" in msg
+    assert msg != "正则表达式无效：rg: regex parse error:"
+
+
+def test_regex_error_message_keeps_literal_newline_diagnostic():
+    from agentcore.workspace.rg_grep import _regex_error_message
+
+    stderr = (
+        'rg: the literal "\\n" is not allowed in a regex\n\n'
+        "Consider enabling multiline mode with the --multiline flag "
+        "(or -U for short).\n"
+        "When multiline mode is enabled, new line characters can be matched.\n"
+    )
+    msg = _regex_error_message(stderr)
+    assert msg is not None
+    assert 'literal "\\n"' in msg
+    assert "multiline" in msg.lower()
+
+
+def test_grep_schema_forbids_literal_newline_as_regex():
+    desc = GrepTool().schema.parameters["properties"]["pattern"]["description"]
+    assert "禁止把字面" in desc
+    assert "\\n" in desc
 
 
 async def test_grep_rejects_path_outside_workspace(tmp_path: Path):

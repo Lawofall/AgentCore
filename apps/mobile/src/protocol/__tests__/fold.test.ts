@@ -4,8 +4,10 @@
 // static 进行中 — and clears a tool's phase the moment it ends.
 
 import {
+  extractCoordinationWait,
   extractEscalationSlots,
   extractEvidenceLedger,
+  extractExecutionDetached,
   extractGraphAppendActKinds,
   extractGraphAppendAuthorizedBy,
   extractPrevExecutionIds,
@@ -470,6 +472,81 @@ describe("extractToolPhases", () => {
       }),
     ]);
     expect(phases.size).toBe(0);
+  });
+});
+
+describe("extractCoordinationWait", () => {
+  it("keeps the latest waiting n/m", () => {
+    expect(
+      extractCoordinationWait([
+        ev("coordination_wait", {
+          execution_id: "e1",
+          waiting: true,
+          completed: 0,
+          total: 2,
+        }),
+        ev("coordination_wait", {
+          execution_id: "e1",
+          waiting: true,
+          completed: 1,
+          total: 2,
+        }),
+      ]),
+    ).toEqual({ completed: 1, total: 2 });
+  });
+
+  it("clears when waiting=false", () => {
+    expect(
+      extractCoordinationWait([
+        ev("coordination_wait", {
+          execution_id: "e1",
+          waiting: true,
+          completed: 1,
+          total: 2,
+        }),
+        ev("coordination_wait", {
+          execution_id: "e1",
+          waiting: false,
+          completed: 2,
+          total: 2,
+        }),
+      ]),
+    ).toBeNull();
+  });
+});
+
+describe("extractExecutionDetached", () => {
+  it("stays true after execution_detached", () => {
+    expect(
+      extractExecutionDetached([
+        ev("execution_detached", {
+          execution_id: "e1",
+          conversation_id: "c1",
+          completed: 1,
+          total: 2,
+        }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("clears on execution_completed", () => {
+    expect(
+      extractExecutionDetached([
+        ev("execution_detached", {
+          execution_id: "e1",
+          conversation_id: "c1",
+          completed: 1,
+          total: 2,
+        }),
+        ev("execution_completed", {
+          execution_id: "e1",
+          conversation_id: "c1",
+          completed: 2,
+          total: 2,
+          status: "completed",
+        }),
+      ]),
+    ).toBe(false);
   });
 });
 

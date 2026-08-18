@@ -149,6 +149,16 @@ function runRg(
   });
 }
 
+function regexDiagnosticDetail(stderr: string): string {
+  // Keep rg's useful diagnostic, not a header-only first line.
+  // ``rg: regex parse error:`` is a label; the reason lives on later lines.
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((l) => l.replace(/[ \t]+$/g, ""))
+    .filter((l) => l.trim().length > 0);
+  return lines.length > 0 ? lines.join("\n") : stderr.trim();
+}
+
 function regexErrorMessage(stderr: string): string | null {
   const text = stderr.trim();
   if (!text) return null;
@@ -158,12 +168,7 @@ function regexErrorMessage(stderr: string): string | null {
     lower.includes("parse error") ||
     lower.includes("syntax error")
   ) {
-    const first =
-      text
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .find(Boolean) ?? text;
-    return `正则表达式无效：${first}`;
+    return `正则表达式无效：${regexDiagnosticDetail(text)}`;
   }
   return null;
 }

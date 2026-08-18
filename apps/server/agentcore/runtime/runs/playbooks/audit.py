@@ -11,17 +11,24 @@ from agentcore.runtime.runs.playbooks._common import (
     fold_fanout_slots,
 )
 from agentcore.workspace._paths import clean_path_segment, sanitize_write_relpath
-from agentcore.workspace.stage_dirs import REVIEWS_DIR
+from agentcore.workspace.stage_dirs import REVIEWS_DIR, REVIEWS_PREFIX
 
 # 与规划定案一致：每工人模块 Phase B 最多定案条数。
 _DEFAULT_K = 8
 
-_REQUIRED_SECTIONS = [
+# 引擎按小标题字面验收；playbook / 继承函数 / CEO·skill 必须抄同一列表。
+CODE_AUDIT_REQUIRED_SECTIONS: tuple[str, ...] = (
     "〇、人审速览",
     "一、属实缺陷",
-    "二、已撤销",
-    "三、观察与工程债",
-]
+    "二、设计如此",
+    "三、已撤销",
+    "四、观察与工程债",
+)
+CODE_AUDIT_SECTION_DEFECTS = CODE_AUDIT_REQUIRED_SECTIONS[1]
+CODE_AUDIT_SECTION_BY_DESIGN = CODE_AUDIT_REQUIRED_SECTIONS[2]
+
+# 旧四栏编号（插入「设计如此」前）；手写若仍抄旧表则升级为现行五栏。
+_LEGACY_AUDIT_SECTIONS = frozenset({"二、已撤销", "三、观察与工程债"})
 
 # 嵌套子任务继承父审计语境时注入（不重跑整本 playbook；防「再确认」空转）。
 _NESTED_AUDIT_HANDOFF_SUPPLEMENT = """\
@@ -29,6 +36,13 @@ _NESTED_AUDIT_HANDOFF_SUPPLEMENT = """\
 （findings 允许候选态/空），再补全字段，最后写 Markdown 成文并一次 handoff；\
 禁止以「再多读一点 / 再确认」无限扩读。骨架先落 → 补全 → 成文；handoff 后勿改同一报告再交。\
 summary/key_points 须可执行，禁空话「审计完成」。"""
+
+_CODE_AUDIT_SECTION_SUPPLEMENT = (
+    "【审计分栏】报告大节须用这些小标题（引擎按字面验收）："
+    + " → ".join(CODE_AUDIT_REQUIRED_SECTIONS)
+    + f"。「{CODE_AUDIT_SECTION_BY_DESIGN}」收模块 docstring / 设计文档已写明的目标形态，"
+    f"禁止写入「{CODE_AUDIT_SECTION_DEFECTS}」、不进 N。"
+)
 
 
 def companion_audit_json_path(artifact: str) -> str:
@@ -43,46 +57,136 @@ def _landed_artifact_path(path: str) -> str:
     return sanitize_write_relpath(path)
 
 
-def apply_inherited_code_audit_discipline(tasks: list[Any]) -> list[dict[str, Any]]:
-    """父 worker 带 ``code_audit_gate`` 时，给手写嵌套 tasks 盖同等收工戳。
+def _deliverable_artifact_paths(deliverable: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    arts = deliverable.get("artifacts")
+    if isinstance(arts, list):
+        out.extend(str(p).strip() for p in arts if str(p).strip())
+    ad = deliverable.get("artifact_dir")
+    if isinstance(ad, str) and ad.strip():
+        out.append(ad.strip())
+    return out
 
-    - 未显式设置时盖 ``code_audit_gate=True``
-    - Markdown 产物补配套 ``*.audit.json``（若尚无）
-    - 追加一次交接短纪律到 ``system_prompt_supplement``（不覆盖已有补充）
+
+def _code_audit_landing_kind(task: dict[str, Any]) -> str | None:
+    """Handwritten audit landing by **declared** deliverable only (no role/task scan).
+
+    ``full`` = gate / ``code-audit-`` / ``*.audit.json`` → 盖全文纪律。
+    ``sections`` = ``reviews/`` Markdown（或目录）且非 JSON → 只盖章节契约。
+    """
+    d_raw = task.get("deliverable")
+    if not isinstance(d_raw, dict):
+        return None
+    if d_raw.get("code_audit_gate") is False:
+        return None
+    fmt = str(d_raw.get("output_format") or "").strip().lower()
+    if fmt == "json":
+        return None
+    tight = d_raw.get("code_audit_gate") is True
+    reviews_md = False
+    for raw_path in _deliverable_artifact_paths(d_raw):
+        norm = raw_path.replace("\\", "/").lstrip("/")
+        name = norm.rsplit("/", 1)[-1]
+        if name.endswith(".audit.json") or "code-audit-" in name:
+            tight = True
+        is_reviews = norm == REVIEWS_DIR or norm.startswith(REVIEWS_PREFIX)
+        if is_reviews and (
+            name.endswith(".md") or name.endswith(".audit.json") or name == "" or "." not in name
+        ):
+            reviews_md = True
+    if tight:
+        return "full"
+    if reviews_md:
+        return "sections"
+    return None
+
+
+def _looks_like_audit_section_list(sections: list[str]) -> bool:
+    markers = set(CODE_AUDIT_REQUIRED_SECTIONS) | _LEGACY_AUDIT_SECTIONS
+    return any(s in markers for s in sections)
+
+
+def _ensure_code_audit_sections(
+    deliverable: dict[str, Any], *, replace: bool
+) -> None:
+    if deliverable.get("code_audit_gate") is False:
+        return
+    existing = deliverable.get("required_sections")
+    current: list[str] = []
+    if isinstance(existing, list):
+        current = [str(s).strip() for s in existing if str(s).strip()]
+    canonical = list(CODE_AUDIT_REQUIRED_SECTIONS)
+    if current == canonical:
+        return
+    if replace or not current or _looks_like_audit_section_list(current):
+        deliverable["required_sections"] = canonical
+
+
+def _append_supplement(task: dict[str, Any], blob: str) -> None:
+    prior = clean_str(task.get("system_prompt_supplement"))
+    if blob in (prior or ""):
+        return
+    task["system_prompt_supplement"] = (
+        f"{prior}\n\n{blob}".strip() if prior else blob
+    )
+
+
+def _stamp_audit_json_companion(deliverable: dict[str, Any]) -> None:
+    arts = deliverable.get("artifacts")
+    if not isinstance(arts, list):
+        return
+    paths = [str(p).strip() for p in arts if str(p).strip()]
+    existing = {p.replace("\\", "/") for p in paths}
+    extra: list[str] = []
+    for p in paths:
+        if not p.endswith(".md"):
+            continue
+        twin = companion_audit_json_path(p)
+        if twin.replace("\\", "/") not in existing:
+            extra.append(twin)
+            existing.add(twin.replace("\\", "/"))
+    if extra:
+        deliverable["artifacts"] = [*paths, *extra]
+
+
+def apply_inherited_code_audit_discipline(
+    tasks: list[Any],
+    *,
+    only_shaped: bool = False,
+) -> list[dict[str, Any]]:
+    """给手写审计 tasks 盖收工戳 + 章节契约（与 playbook 同字面）。
+
+    - ``only_shaped=False``（父节点已盖 ``code_audit_gate``）：本批每个 dict task
+      都盖全文——gate、配套 ``*.audit.json``、交接短纪律、``required_sections``。
+    - ``only_shaped=True``（CEO 手写路、不传 playbook）：只盖已声明落盘形态的节点，
+      **不扫** role/task。紧形态盖全文；仅 ``reviews/`` Markdown 只盖章节契约。
+
     不重跑 ``code_audit`` playbook，避免把单点子审扩成整团多模块图。
     """
     out: list[dict[str, Any]] = []
     for raw in tasks:
         if not isinstance(raw, dict):
             continue
+        kind = _code_audit_landing_kind(raw) if only_shaped else "full"
+        if only_shaped and kind is None:
+            out.append(dict(raw))
+            continue
+        full = kind == "full" or not only_shaped
         task = dict(raw)
         d_raw = task.get("deliverable")
         deliverable: dict[str, Any] = dict(d_raw) if isinstance(d_raw, dict) else {}
-        if "code_audit_gate" not in deliverable:
-            deliverable["code_audit_gate"] = True
-        arts = deliverable.get("artifacts")
-        if isinstance(arts, list):
-            paths = [str(p).strip() for p in arts if str(p).strip()]
-            existing = {p.replace("\\", "/") for p in paths}
-            extra: list[str] = []
-            for p in paths:
-                if not p.endswith(".md"):
-                    continue
-                twin = companion_audit_json_path(p)
-                if twin.replace("\\", "/") not in existing:
-                    extra.append(twin)
-                    existing.add(twin.replace("\\", "/"))
-            if extra:
-                deliverable["artifacts"] = [*paths, *extra]
+        if full:
+            if "code_audit_gate" not in deliverable:
+                deliverable["code_audit_gate"] = True
+            _stamp_audit_json_companion(deliverable)
+        _ensure_code_audit_sections(deliverable, replace=full)
         if deliverable:
             task["deliverable"] = deliverable
-        prior = clean_str(task.get("system_prompt_supplement"))
-        if _NESTED_AUDIT_HANDOFF_SUPPLEMENT not in (prior or ""):
-            task["system_prompt_supplement"] = (
-                f"{prior}\n\n{_NESTED_AUDIT_HANDOFF_SUPPLEMENT}".strip()
-                if prior
-                else _NESTED_AUDIT_HANDOFF_SUPPLEMENT
-            )
+        if full:
+            _append_supplement(task, _NESTED_AUDIT_HANDOFF_SUPPLEMENT)
+        sections = deliverable.get("required_sections")
+        if sections == list(CODE_AUDIT_REQUIRED_SECTIONS):
+            _append_supplement(task, _CODE_AUDIT_SECTION_SUPPLEMENT)
         out.append(task)
     return out
 
@@ -92,7 +196,8 @@ _AUDIT_DISCIPLINE = """
 再 B 定案（读全函数体、追上游、查根+包内配置）。
 【分段交付】Phase A 结束即先 file_write `.audit.json` 骨架（findings 允许候选态/空）；
 Phase B 补全 JSON 字段；Markdown 成文放最后再写。结构化 JSON 是便宜产物，必须前置落盘。
-向用户「共 N 条缺陷」只计 B 定案属实且落入「一、属实缺陷」者；A 候选未进 B 不进 N。
+向用户「共 N 条缺陷」只计 B 定案属实且落入「{defect}」者；A 候选未进 B 不进 N；\
+「{by_design}」不进 N。
 预算不够则少报：本模块 Phase B 最多定案 K={k} 条；未覆盖面最多一行「未覆盖缺口」。
 
 【每条发现强制字段】验证方式∈全文精读|运行验证|静态推断·未读全|待核实；
@@ -122,9 +227,20 @@ P0/critical/high→高，P1/medium→中，P2/low→低，P3/info/observation→
 ⑦标高必须写出谁在什么输入下触发。
 
 【交付骨架·唯一】报告须含且仅以这些大节组织：
-〇、人审速览（仍成立中+ / 已撤销 / 待核实与缺口）→ 一、属实缺陷 → 二、已撤销 → 三、观察与工程债。
+{skeleton}。
+人审速览仍列仍成立中+ / 设计如此 / 已撤销 / 待核实与缺口。
+「{by_design}」= 模块 docstring 或设计文档已写明的目标形态；禁止写入「{defect}」、不进 N。
 正向确认默认不写。禁止套 research_report 学术审校环；质量靠 A/B+本契约。
 """.strip()
+
+
+def _formatted_audit_discipline(k: int) -> str:
+    return _AUDIT_DISCIPLINE.format(
+        k=k,
+        skeleton=" → ".join(CODE_AUDIT_REQUIRED_SECTIONS),
+        defect=CODE_AUDIT_SECTION_DEFECTS,
+        by_design=CODE_AUDIT_SECTION_BY_DESIGN,
+    )
 
 
 # 产物路径权威（约定文档命名公约）：``code-audit-{slot}-{slug}.md``；
@@ -187,7 +303,7 @@ def _auditor_task_body(
     return (
         f"对范围【{scope}】中的模块【{module}】做代码审计（只读调查：默认不改业务源码；"
         f"允许 file_write/str_replace 写入约定文档报告，除此以外勿改工程）。{focus_line}"
-        f"{_AUDIT_DISCIPLINE.format(k=k)}"
+        f"{_formatted_audit_discipline(k)}"
         f"【交付顺序】骨架先落 → 补全 → 成文："
         f"Phase A 结束即先 file_write `{json_artifact}` 骨架"
         "（findings 允许候选态/空；severity/verification/verdict/evidence 字段面保持；"
@@ -196,7 +312,7 @@ def _auditor_task_body(
         "handoff 人审速览（可执行摘要，不代落盘）："
         "【一次交接】JSON 骨架先行、补全后再写 Markdown 终稿，再调用一次 handoff；"
         "handoff 后勿再改同一报告并二次 handoff（除非主管续派）。"
-        "summary 写共 N 条属实（只计「一、属实缺陷」）与报告完整相对路径"
+        f"summary 写共 N 条属实（只计「{CODE_AUDIT_SECTION_DEFECTS}」）与报告完整相对路径"
         f"（须含约定文档前缀，如 `{artifact}`，禁裸 reviews/…）；禁空话「审计完成」。"
         "key_points 须覆盖属实缺陷——每条格式 `缺陷id|严重度|一句话`，"
         "另含完整报告路径一条；空话不够。"
@@ -216,7 +332,7 @@ def _auditor_deliverable(artifact: str) -> dict[str, Any]:
     return {
         "form": "files",
         "artifacts": [artifact, json_artifact],
-        "required_sections": list(_REQUIRED_SECTIONS),
+        "required_sections": list(CODE_AUDIT_REQUIRED_SECTIONS),
         "strict": True,
         "code_audit_gate": True,
     }
@@ -313,8 +429,9 @@ def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
             "depends_on": list(audit_ids),
             "task": (
                 f"汇总主题【{scope}】下各路代码审计报告，产出**跨模块人审速览**（一页内）："
-                "仍成立的中+（去重）/ 已撤销 / 待核实与未覆盖缺口；"
-                "N 只计各路「一、属实缺陷」合并去重后的条数。"
+                "仍成立的中+（去重）/ 设计如此 / 已撤销 / 待核实与未覆盖缺口；"
+                f"N 只计各路「{CODE_AUDIT_SECTION_DEFECTS}」合并去重后的条数；"
+                "设计如此栏不得升格进属实中+/N。"
                 "速览须显著短于交接/合成上限，细节只进落盘文件、勿把分册全文塞进汇总或 handoff。"
                 "【合并硬规则】同模块多份报告必须去重；条目冲突标「冲突·未定案」且不得进 N；"
                 "某路称「模块/目录未检出」时，主管须对照 apps/* 核实后再写缺口。"
@@ -331,7 +448,7 @@ def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
                 "form": "files",
                 "artifacts": [synth_path],
                 # 原 must_contain（属实/撤销）主题约束已在 task + required_sections。
-                "required_sections": ["人审速览", "属实中+", "缺口"],
+                "required_sections": ["人审速览", "属实中+", "设计如此", "缺口"],
             },
         }
     )

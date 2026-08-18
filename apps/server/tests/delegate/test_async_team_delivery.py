@@ -587,6 +587,138 @@ async def test_attached_inject_visible_close_skips_harvest():
 
 
 @pytest.mark.asyncio
+async def test_live_occupant_past_grace_then_visible_close_skips_harvest():
+    """注入后 grace 到期时槽位仍有活回合 → 不得当粘滞强拆；主回合稍后写出正文则不再系统收口。"""
+    from structlog.testing import capture_logs
+
+    import agentcore.runtime.coordination.session as session_mod
+    from agentcore.runtime.turn.runs import turn_runs
+
+    writer = _RecordingWriter()
+    session = CoordinationSession(
+        execution_id="exec-live-then-close",
+        total_workers=1,
+        conversation_id="conv-live-then-close",
+    )
+    session.turn_attached = True
+    session.all_completed_injected = True
+    session.mark_settled("attached_inject")
+    bind_host_journal(session, writer=writer)
+    set_active_coordination(session)
+
+    async def _hold() -> None:
+        await asyncio.Event().wait()
+
+    occupant = asyncio.create_task(_hold())
+    turn_runs.register(
+        conversation_id="conv-live-then-close",
+        task=occupant,
+        sink=EventSink(),
+    )
+    try:
+        with (
+            patch.object(session_mod, "_HARVEST_ATTACH_GRACE_S", 0.05),
+            patch.object(session_mod, "_HARVEST_ATTACH_POLL_S", 0.02),
+            patch(
+                "agentcore.runtime.coordination.harvest.harvest_detached_execution",
+                new_callable=AsyncMock,
+            ) as harvest,
+            capture_logs() as logs,
+        ):
+            finish_detached_coordination(session)
+            assert session.harvest_scheduled is True
+            await asyncio.sleep(0.2)
+            harvest.assert_not_awaited()
+            assert session.turn_attached is True
+            assert session.settled_via == "attached_inject"
+            assert not any(
+                e.get("event") == "coordination.harvest_stale_attach_forcing"
+                for e in logs
+            )
+            assert any(
+                e.get("event") == "coordination.harvest_attach_waiting_live_occupant"
+                for e in logs
+            )
+
+            session.note_attached_inject_visible_close("交付终稿")
+            assert session.attached_inject_visible_close is True
+            session.turn_attached = False
+            await asyncio.sleep(0.1)
+            harvest.assert_not_awaited()
+            assert session.harvest_scheduled is False
+            assert session.settled_via == "attached_inject"
+            assert any(
+                e.get("event") == "coordination.harvest_skipped_attached_visible_close"
+                for e in logs
+            )
+            assert any(e.get("kind") == "execution_completed" for e in writer.entries)
+            assert active_coordination("exec-live-then-close") is None
+    finally:
+        occupant.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await occupant
+
+
+@pytest.mark.asyncio
+async def test_live_occupant_past_grace_then_empty_slot_still_harvests():
+    """活回合在 grace 后离开且未写出可见正文 → 槽位已空，仍须 harvest。"""
+    from structlog.testing import capture_logs
+
+    import agentcore.runtime.coordination.session as session_mod
+    from agentcore.runtime.turn.runs import turn_runs
+
+    session = CoordinationSession(
+        execution_id="exec-live-then-empty",
+        total_workers=1,
+        conversation_id="conv-live-then-empty",
+    )
+    session.turn_attached = True
+    session.all_completed_injected = True
+    session.mark_settled("attached_inject")
+    set_active_coordination(session)
+
+    async def _hold() -> None:
+        await asyncio.Event().wait()
+
+    occupant = asyncio.create_task(_hold())
+    turn_runs.register(
+        conversation_id="conv-live-then-empty",
+        task=occupant,
+        sink=EventSink(),
+    )
+    try:
+        with (
+            patch.object(session_mod, "_HARVEST_ATTACH_GRACE_S", 0.05),
+            patch.object(session_mod, "_HARVEST_ATTACH_POLL_S", 0.02),
+            patch(
+                "agentcore.runtime.coordination.harvest.harvest_detached_execution",
+                new_callable=AsyncMock,
+            ) as harvest,
+            capture_logs() as logs,
+        ):
+            finish_detached_coordination(session)
+            await asyncio.sleep(0.2)
+            harvest.assert_not_awaited()
+            assert session.settled_via == "attached_inject"
+            occupant.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await occupant
+            await asyncio.sleep(0.15)
+            harvest.assert_awaited_once()
+            assert session.turn_attached is False
+            assert session.settled_via == "harvest"
+            assert any(
+                e.get("event") == "coordination.harvest_stale_attach_forcing"
+                for e in logs
+            )
+    finally:
+        if not occupant.done():
+            occupant.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await occupant
+
+
+@pytest.mark.asyncio
 async def test_attached_inject_without_visible_close_still_harvests():
     """首回合未产出可见正文 → harvest 仍照旧兜住。"""
     import agentcore.runtime.coordination.session as session_mod

@@ -55,7 +55,7 @@ describe("ProcessTimeline · wait visibility (CEO bubble)", () => {
       { kind: "content", text: "对用户说一句" },
     ];
     renderTimeline(process, false);
-    expect(screen.getByText("wait")).toBeTruthy();
+    expect(screen.getByText("Wait")).toBeTruthy();
     expect(screen.getByText("空等听团")).toBeTruthy();
     expect(screen.getByText("仍在听")).toBeTruthy();
     expect(screen.getByText("对用户说一句")).toBeTruthy();
@@ -73,7 +73,7 @@ describe("ProcessTimeline · wait visibility (CEO bubble)", () => {
       },
     ];
     renderTimeline(process, true);
-    expect(screen.getByText("wait")).toBeTruthy();
+    expect(screen.getByText("Wait")).toBeTruthy();
     expect(screen.queryByText(/Thinking/i)).toBeNull();
   });
 

@@ -2900,7 +2900,7 @@
         "type": "object"
       },
       "AutoTitleResponse": {
-        "description": "Resulting conversation title (existing or freshly minted).",
+        "description": "Resulting conversation title (existing or freshly minted).\n\nEmpty string means the mint did not persist a title (failure leaves the\ncolumn empty so a later turn can retry). Not an error.",
         "properties": {
           "title": {
             "title": "Title",
@@ -3995,6 +3995,70 @@
           "new_password"
         ],
         "title": "ChangePasswordRequest",
+        "type": "object"
+      },
+      "ChatContextItem": {
+        "description": "One ``load_chat_context`` row (role/content; ledger is engine-only).",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "evidence_ledger": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Ledger"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatContextItem",
+        "type": "object"
+      },
+      "ChatContextRequest": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id"
+        ],
+        "title": "ChatContextRequest",
+        "type": "object"
+      },
+      "ChatContextResponse": {
+        "properties": {
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ChatContextItem"
+            },
+            "title": "History",
+            "type": "array"
+          }
+        },
+        "required": [
+          "history"
+        ],
+        "title": "ChatContextResponse",
         "type": "object"
       },
       "ChatFileUploadResponse": {
@@ -5243,6 +5307,7 @@
                 "type": "null"
               }
             ],
+            "description": "会话标题。可能是服务端从首条用户消息算出的兜底展示值，不代表已铸出真标题。",
             "title": "Title"
           },
           "updated_at": {
@@ -10359,6 +10424,35 @@
             ],
             "title": "Status"
           },
+          "team_batch": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "in_flight": "#/components/schemas/TeamBatchInFlight",
+                    "no_batch": "#/components/schemas/TeamBatchNoBatch",
+                    "settled": "#/components/schemas/TeamBatchSettled"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TeamBatchNoBatch"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TeamBatchInFlight"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TeamBatchSettled"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Batch"
+          },
           "trace_id": {
             "anyOf": [
               {
@@ -10660,6 +10754,17 @@
             "description": "Display name of the provider (byok rows only).",
             "title": "Provider Label"
           },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelUnavailableReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present when available=false for a known structured reason. Clients render copy from code + required_protocol. Null when unspecified or the row is selectable. Optional for backward compatibility."
+          },
           "vendor": {
             "title": "Vendor",
             "type": "string"
@@ -10853,6 +10958,32 @@
           "model"
         ],
         "title": "ModelProfileSlot",
+        "type": "object"
+      },
+      "ModelUnavailableReason": {
+        "description": "Why a listed catalog row cannot be selected. Clients render copy (i18n).",
+        "properties": {
+          "code": {
+            "const": "upstream_protocol_unsupported",
+            "description": "Structured unavailability code — never a finished user-facing string.",
+            "title": "Code",
+            "type": "string"
+          },
+          "required_protocol": {
+            "description": "Upstream protocol this model needs that this gateway does not speak (chat/completions only).",
+            "enum": [
+              "openai_responses",
+              "anthropic_messages"
+            ],
+            "title": "Required Protocol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "required_protocol"
+        ],
+        "title": "ModelUnavailableReason",
         "type": "object"
       },
       "MountSharedSpaceRequest": {
@@ -15427,6 +15558,61 @@
         "title": "SuspensionKind",
         "type": "string"
       },
+      "TeamBatchInFlight": {
+        "description": "本波 kickoff 编制已派出、尚未全部收工。``worker_count`` 不含 captain / 历史队员。",
+        "properties": {
+          "kind": {
+            "const": "in_flight",
+            "title": "Kind",
+            "type": "string"
+          },
+          "worker_count": {
+            "title": "Worker Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "worker_count"
+        ],
+        "title": "TeamBatchInFlight",
+        "type": "object"
+      },
+      "TeamBatchNoBatch": {
+        "description": "本回合未派出队员——确定态，不是信息缺失。",
+        "properties": {
+          "kind": {
+            "const": "no_batch",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "TeamBatchNoBatch",
+        "type": "object"
+      },
+      "TeamBatchSettled": {
+        "description": "本波队员已全部终态（或本 execution 已发出 delivery_status）。",
+        "properties": {
+          "kind": {
+            "const": "settled",
+            "title": "Kind",
+            "type": "string"
+          },
+          "worker_count": {
+            "title": "Worker Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "worker_count"
+        ],
+        "title": "TeamBatchSettled",
+        "type": "object"
+      },
       "TeamKickoffAxis": {
         "description": "Whether / when the team kickoff card (plan + capability halves) hangs.",
         "enum": [
@@ -18069,7 +18255,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.6.6"
+    "version": "0.6.7"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -18185,6 +18371,82 @@
         "summary": "Updates Policy",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/v1/account/conversations/chat-context": {
+      "post": {
+        "description": "Owner-scoped CEO window (same ``load_chat_context`` as a cloud send).\n\nEngine-minimal: sidecar start/harvest and desktop fallback when the account\nticket is missing. Not UI message CRUD — does not expose compaction text\nas its own field (it rides inside the assembled assistant summary block).",
+        "operationId": "account_chat_context_v1_account_conversations_chat_context_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatContextResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Account Chat Context",
+        "tags": [
+          "account"
         ]
       }
     },
@@ -25247,7 +25509,7 @@
     },
     "/v1/conversations/{conversation_id}/auto-title": {
       "post": {
-        "description": "Mint a conversation title from the first user message (await).\n\nLocal sidecar has no cloud SSE ``title_generated`` path — the desktop calls this\nin parallel with the first local turn. Shares the same mint core as cloud\n``schedule_title_generation`` (user message only; ``assistant_reply=\"\"``).\n\nAlready-titled conversations return the existing title without calling the LLM.",
+        "description": "Mint a conversation title from the first user message (await).\n\nLocal sidecar has no cloud SSE ``title_generated`` path — the desktop calls this\nin parallel with the first local turn. Shares the same mint core as cloud\n``schedule_title_generation`` (user message only; ``assistant_reply=\"\"``).\n\nAlready-titled conversations return the existing title without calling the LLM.\nMint failure returns ``title=\"\"`` (HTTP 200) and does not persist a fallback.",
         "operationId": "auto_title_conversation_v1_conversations__conversation_id__auto_title_post",
         "parameters": [
           {
@@ -29259,7 +29521,7 @@
     },
     "/v1/conversations/{conversation_id}/stream": {
       "get": {
-        "description": "Re-attach to the conversation's in-flight turn and 续看 it live (C1 · slice 1b).\n\nSince a disconnect no longer cancels a turn (slice 1a — it runs detached + persists\nin the background), a client that dropped (network blip) or reopened the app can\nrejoin the live run here: the SSE replays the transcript so far (coalesced — one\ncontent / reasoning block, the team graph, finished tool calls) then tails new\nevents, all in the SAME event shape as the original stream, so the client folds it\nthrough one dispatch path.\n\nWith ``Last-Event-ID`` (P3): journal-backed durable replay + stream_state synthetic\ndeltas, then live tail. Without the header (same-process fast path): the sink's own\nin-memory history.\n\nA non-empty catch-up段 opens with a ``message_start``, and that frame states which\nkind of段 follows (nothing to replay = no head at all: a reset order with no body\nbehind it would clear local state nothing brings back):\n\n- ``full_replay: true`` — RESET the local streaming state held for that\n  ``message_id`` (content / reasoning / process timeline); the段 is the turn's whole\n  story. Always the case without the header, and the fallback whenever the cursor\n  cannot be trusted (no cursor / it belongs to another turn / turn already settled /\n  it names no fact this turn ever stamped).\n- no ``full_replay`` — an INCREMENTAL段: keep what you hold for this turn and fold\n  the段 onto it. Only the facts after ``Last-Event-ID`` are shipped, so structural\n  pairs may look「不完整」(a ``tool_use_end`` whose start was pre-cursor) — that is\n  correct, the client has the前文.\n\nClients must act on the flag instead of comparing the id against the bubble on\nscreen: guessing wrong folds the body twice. A live first frame (and any plain\nsame-id re-stamp) omits it and keeps meaning「同回合重开」.\n\n**Cursor contract**: ``Last-Event-ID`` is the last SSE ``id:`` this client folded,\nechoed back verbatim. That id reads ``<turn_id>:<seq>`` — journal seq is numbered per\nturn from 0, so the turn it belongs to travels with it and a cursor kept per\nCONVERSATION (both clients do) cannot be mistaken for one from the turn now being\nreplayed. The增量段 is offered only for a cursor naming this turn; one naming another\nturn, and a bare ``<seq>`` from a client that predates the format, both get the full\njournal replay. A client that discards its local turn state (clear-then-fold rejoin,\nfresh bubble) should still send ``0`` / omit the header rather than an id it no longer\nhas the prefix for. Text deltas carry no ``id:``, so the cursor lags into the middle\nof a text block; the段 therefore marks whole-block frames with ``replace`` (see the\n``content_delta`` / ``run_output_delta`` payloads).\n\n``follow=true`` (对话级订阅) makes the subscription track the **conversation**: an\nidle conversation holds the connection (heartbeats) instead of 204ing, and每个新回合\nis replayed + tailed on the same stream. That is what lets a second device parked on\nan idle conversation see the turn another device just started — with回合级 attach it\ntook a 204 and then had no way to learn anything ever happened.\n\nWithout it (default), returns ``204 No Content`` when no run is live for the\nconversation (already finished / never started / suspended at a checkpoint) — the\nclient then falls back to the persisted transcript (reload) / durable resume, and\nthe stream ends when that one turn does. Kept as the default because a客户端 that\nalso opens the POST turn stream would otherwise fold the next turn twice; opting in\nis the客户端's statement that this is its ONE connection for the conversation.\n\nEither way a pure observer: dropping this stream only unsubscribes it (never\ncancels, and never touches the other端); an explicit 停止 still goes through\n``POST .../stop``. Owner-gated.",
+        "description": "Re-attach to the conversation's in-flight turn and 续看 it live (C1 · slice 1b).\n\nSince a disconnect no longer cancels a turn (slice 1a — it runs detached + persists\nin the background), a client that dropped (network blip) or reopened the app can\nrejoin the live run here: the SSE replays the transcript so far (coalesced — one\ncontent / reasoning block, the team graph, finished tool calls) then tails new\nevents, all in the SAME event shape as the original stream, so the client folds it\nthrough one dispatch path.\n\nWith ``Last-Event-ID`` (P3): journal-backed durable replay + stream_state synthetic\ndeltas, then live tail. Without the header (same-process fast path): the sink's own\nin-memory history.\n\nA non-empty catch-up段 opens with a ``message_start``, and that frame\nstates which kind of段 follows (nothing to replay = no head at all: a\nreset order with no body behind it would clear local state nothing\nbrings back):\n\n- ``full_replay: true`` — RESET the local streaming state held for that\n  ``message_id`` (content / reasoning / process timeline); the段 is the\n  turn's whole story. Always the case without the header, and the\n  fallback whenever the cursor cannot be trusted (no cursor / it belongs\n  to another turn / turn already settled / it names no fact this turn\n  ever stamped).\n- no ``full_replay`` — an INCREMENTAL段: keep what you hold for this\n  turn and fold the段 onto it. Only the facts after ``Last-Event-ID``\n  are shipped, so structural pairs may look「不完整」(a ``tool_use_end``\n  whose start was pre-cursor) — that is correct, the client has the前文.\n\nClients must act on the flag instead of comparing the id against the bubble on\nscreen: guessing wrong folds the body twice. A live first frame (and any plain\nsame-id re-stamp) omits it and keeps meaning「同回合重开」.\n\n**Cursor contract**: ``Last-Event-ID`` is the last SSE ``id:`` this client folded,\nechoed back verbatim. That id reads ``<turn_id>:<seq>`` — journal seq is numbered per\nturn from 0, so the turn it belongs to travels with it and a cursor kept per\nCONVERSATION (both clients do) cannot be mistaken for one from the turn now being\nreplayed. The增量段 is offered only for a cursor naming this turn; one naming another\nturn, and a bare ``<seq>`` from a client that predates the format, both get the full\njournal replay. A client that discards its local turn state (clear-then-fold rejoin,\nfresh bubble) should still send ``0`` / omit the header rather than an id it no longer\nhas the prefix for. Text deltas carry no ``id:``, so the cursor lags into the middle\nof a text block; the段 therefore marks whole-block frames with ``replace`` (see the\n``content_delta`` / ``run_output_delta`` payloads).\n\n``follow=true`` (对话级订阅) makes the subscription track the **conversation**: an\nidle conversation holds the connection (heartbeats) instead of 204ing, and每个新回合\nis replayed + tailed on the same stream. That is what lets a second device parked on\nan idle conversation see the turn another device just started — with回合级 attach it\ntook a 204 and then had no way to learn anything ever happened.\n\nWithout it (default), returns ``204 No Content`` when no run is live for the\nconversation (already finished / never started / suspended at a checkpoint) — the\nclient then falls back to the persisted transcript (reload) / durable resume, and\nthe stream ends when that one turn does. Kept as the default because a客户端 that\nalso opens the POST turn stream would otherwise fold the next turn twice; opting in\nis the客户端's statement that this is its ONE connection for the conversation.\n\nEither way a pure observer: dropping this stream only unsubscribes it (never\ncancels, and never touches the other端); an explicit 停止 still goes through\n``POST .../stop``. Owner-gated.",
         "operationId": "attach_stream_v1_conversations__conversation_id__stream_get",
         "parameters": [
           {

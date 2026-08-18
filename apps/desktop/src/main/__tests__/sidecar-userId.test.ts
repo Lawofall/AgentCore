@@ -294,6 +294,67 @@ describe("SidecarManager userId passthrough", () => {
     });
   });
 
+  it("startTurn RPC omits history when renderer did not confirm a window", async () => {
+    const t = capturingTransport();
+    const manager = new SidecarManager(() => t.transport);
+
+    await manager.startTurn(
+      { isDestroyed: () => false, send: vi.fn() } as never,
+      {
+        conversationId: "c-no-history",
+        rootId: "r-no-history",
+        turnId: "turn-no-history",
+        traceId: "c".repeat(32),
+        userMessageId: "u-no-history",
+        userMessage: "hello",
+      },
+      "/tmp/ws",
+    );
+
+    const start = t.sent.find((m) => m.method === "startTurn");
+    expect(start?.params).not.toHaveProperty("history");
+  });
+
+  it("startTurn RPC forwards confirmed history including an empty window", async () => {
+    const emptyT = capturingTransport();
+    const managerA = new SidecarManager(() => emptyT.transport);
+    await managerA.startTurn(
+      { isDestroyed: () => false, send: vi.fn() } as never,
+      {
+        conversationId: "c-empty-history",
+        rootId: "r-empty-history",
+        turnId: "turn-empty-history",
+        traceId: "d".repeat(32),
+        userMessageId: "u-empty-history",
+        userMessage: "hello",
+        history: [],
+      },
+      "/tmp/ws",
+    );
+    const emptyStart = emptyT.sent.find((m) => m.method === "startTurn");
+    expect(emptyStart?.params?.history).toEqual([]);
+
+    const rowsT = capturingTransport();
+    const managerB = new SidecarManager(() => rowsT.transport);
+    await managerB.startTurn(
+      { isDestroyed: () => false, send: vi.fn() } as never,
+      {
+        conversationId: "c-rows-history",
+        rootId: "r-rows-history",
+        turnId: "turn-rows-history",
+        traceId: "e".repeat(32),
+        userMessageId: "u-rows-history",
+        userMessage: "hello",
+        history: [{ role: "user", content: "先前问" }],
+      },
+      "/tmp/ws",
+    );
+    const rowsStart = rowsT.sent.find((m) => m.method === "startTurn");
+    expect(rowsStart?.params?.history).toEqual([
+      { role: "user", content: "先前问" },
+    ]);
+  });
+
   it("startTurn RPC omits accountAuth when mint absent", async () => {
     const t = capturingTransport();
     const manager = new SidecarManager(() => t.transport);

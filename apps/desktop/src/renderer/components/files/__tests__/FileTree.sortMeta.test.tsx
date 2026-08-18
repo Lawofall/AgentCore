@@ -115,4 +115,32 @@ describe("文件树的修改时间", () => {
     await waitFor(() => expect(screen.getByText("aaa.md")).toBeTruthy());
     expect(rowNames()).toEqual(["zzz", "aaa.md"]);
   });
+
+  it("盘上 AgentCore/（AI 工作间）钉在同级最前，换排序也不例外", async () => {
+    const src = source([
+      file("报告.md", 100, NOW),
+      {
+        path: "合同",
+        name: "合同",
+        isDir: true,
+        sizeBytes: null,
+        mtimeMs: NOW,
+      },
+      {
+        path: "AgentCore",
+        name: "AgentCore",
+        isDir: true,
+        sizeBytes: null,
+        mtimeMs: 1,
+      },
+    ]);
+    render(
+      <TooltipProvider>
+        <FileTree source={src} onOpenFile={() => {}} sortBy="mtime" />
+      </TooltipProvider>,
+    );
+
+    expect(await screen.findByText("AI 工作间")).toBeTruthy();
+    expect(rowNames()).toEqual(["AI 工作间", "合同", "报告.md"]);
+  });
 });

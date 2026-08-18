@@ -13,12 +13,16 @@ Covered:
 * **no cost ledger is ever written**;
 * the user row is pinned to the client-minted id;
 * a retried write-back is an idempotent D7 merge upsert (no early-return abandon);
-* ``finish_reason=paused`` upserts an assistant snapshot without title / consolidation;
+* ``finish_reason=paused`` upserts an assistant snapshot without title / consolidation,
+  and still persists the journal snapshot (``team_batch`` / ``obs.turn_spans``);
 * resume completion updates a paused snapshot in place;
 * a re-pause write-back with a fresh client user id reuses the paired user row;
 * a non-UUID ``user_message_id`` (sidecar ``resume-{turn_id}``) does not throw
   and reuses the assistant-paired user row (miss before PG UUID bind);
 * unpaired ``resume-*`` is not pinned as ``messages.id`` on create.
+* complete / pause / cancel write-backs land a ``turn_metrics`` row;
+  ``delegated`` / ``workers`` use ``turn_worker_stats`` (journal ``message_final``);
+  tokens match the same finalize fields as ``messages.usage``.
 """
 
 from types import SimpleNamespace
@@ -32,11 +36,61 @@ from sqlalchemy.exc import DBAPIError
 from agentcore.conversation import local_turn as local_turn_mod
 from agentcore.conversation.service import record_local_turn
 from agentcore.conversation.store import cloud as cloud_mod
+from agentcore.conversation.store.cloud import _local_metrics_status
+from agentcore.conversation.store.merge import MESSAGE_STATUS_FAILED
+from agentcore.conversation.turn_stats import turn_worker_stats
 from agentcore.runtime.events import FinishReason
+from agentcore.runtime.facts import FactKind
+from agentcore.runtime.journal.team_batch import team_batch_from_entries
+from agentcore.runtime.runs.types import RunPhase
 
 pytestmark = pytest.mark.anyio
 
 _TRACE = "0123456789abcdef0123456789abcdef"
+
+
+def _completed_final(run_id: str) -> dict:
+    return {
+        "kind": FactKind.MESSAGE_FINAL.value,
+        "payload": {"run_id": run_id, "phase": RunPhase.COMPLETED.value},
+    }
+
+
+async def test_local_metrics_status_from_settle_facts():
+    assert (
+        _local_metrics_status(
+            is_paused=True,
+            terminal_status="running",
+            local_outcome=None,
+        )
+        == "paused"
+    )
+    assert (
+        _local_metrics_status(
+            is_paused=False,
+            terminal_status=MESSAGE_STATUS_FAILED,
+            local_outcome="ok",
+        )
+        == "error"
+    )
+    assert (
+        _local_metrics_status(
+            is_paused=False,
+            terminal_status="complete",
+            local_outcome="partial",
+        )
+        == "partial"
+    )
+    assert (
+        _local_metrics_status(
+            is_paused=False,
+            terminal_status="incomplete",
+            local_outcome=None,
+        )
+        == "ok"
+    )
+
+
 _USER_MSG_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 _PINNED_USER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
@@ -186,6 +240,13 @@ def _patch_persistence(
     async def _fake_journal(_session, **kw):
         events.append(("journal", kw.get("message_id")))
 
+    class _FakeMetricsRepo:
+        def __init__(self, _session):
+            pass
+
+        async def record(self, **kw):
+            events.append(("metrics", kw))
+
     consolidation_calls: list[str] = []
 
     class _FakeLeaseRepo:
@@ -203,6 +264,7 @@ def _patch_persistence(
     )
     monkeypatch.setattr(cloud_mod, "ConversationRepository", _FakeConvRepo)
     monkeypatch.setattr(cloud_mod, "persist_turn_journal", _fake_journal)
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _FakeMetricsRepo)
     monkeypatch.setattr(
         cloud_mod,
         "schedule_consolidation",
@@ -350,6 +412,37 @@ async def test_record_local_turn_skips_title_when_already_named(monkeypatch):
     assert not any(e[0] == "title_mint" for e in events)
     assert not any(e[0] == "title" for e in events)
     assert result["title"] == "已有标题"
+
+
+async def test_record_local_turn_skips_title_write_when_mint_degrades(monkeypatch):
+    """LLM miss must not persist fallback_title — column stays empty for retry."""
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title=None)
+
+    from agentcore.memory.conversation_title import TitleResult
+
+    async def _degraded(**kw):
+        events.append(
+            ("title_mint", kw.get("assistant_reply"), kw.get("user_message"))
+        )
+        return TitleResult(title="兜底短标题", degraded_reason="rate_limit")
+
+    monkeypatch.setattr(cloud_mod, "mint_title", _degraded)
+
+    result = await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="列出本地文件",
+        assistant_content="已列出。",
+        runs={"events": [], "finish_reason": "end_turn"},
+        user_message_id=_USER_MSG_ID,
+        message_id="m-degraded-title",
+        trace_id=_TRACE,
+    )
+
+    assert ("title_mint", "", "列出本地文件") in events
+    assert not any(e[0] == "title" for e in events)
+    assert result["title"] is None
 
 
 async def test_record_local_turn_empty_reply_skips_assistant_and_journal(monkeypatch):
@@ -522,6 +615,11 @@ async def test_record_local_turn_empty_error_settles_assistant(monkeypatch):
     assert content[2] == ""
     assert result["assistant_message_id"] == "assistant-id"
     assert result["noop"] is False
+    metrics = next(e[1] for e in events if e[0] == "metrics")
+    assert metrics["status"] == "error"
+    assert metrics["finish_reason"] == "error"
+    assert metrics["input_tokens"] == 0
+    assert metrics["output_tokens"] == 0
 
 
 async def test_record_local_turn_records_no_cost_ledger(monkeypatch):
@@ -648,6 +746,301 @@ async def test_record_local_turn_paused_skips_title_and_consolidation(monkeypatc
     assert result["title"] is None
 
 
+async def test_record_local_turn_paused_persists_in_flight_journal(monkeypatch):
+    """Sidecar pause snapshots journal like cloud ``save_paused_turn``.
+
+    ``ask_user`` / ``plan_review`` after ``run_started`` must stay ``in_flight``
+    on GET messages — empty journal would project ``no_batch``.
+    """
+    events: list = []
+    journal_entries: list = []
+    consolidation = _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    async def _capture_journal(_session, **kw):
+        events.append(("journal", kw.get("message_id")))
+        journal_entries.append(kw.get("entries"))
+
+    monkeypatch.setattr(cloud_mod, "persist_turn_journal", _capture_journal)
+
+    facts = [
+        {
+            "kind": "run_plan",
+            "payload": {
+                "execution_id": "e1",
+                "runs": [
+                    {"id": "cap", "kind": "captain"},
+                    {"id": "w1", "kind": "agent"},
+                ],
+            },
+            "ts": "t0",
+        },
+        {"kind": "run_started", "payload": {"run_id": "w1", "kind": "agent"}, "ts": "t1"},
+        {"kind": "checkpoint_required", "payload": {"id": "cp"}, "ts": "t2"},
+    ]
+    result = await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="要继续吗？",
+        journal=facts,
+        user_message_id=_USER_MSG_ID,
+        message_id="m-pause-inflight",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.PAUSED.value,
+    )
+
+    assert ("upsert", "assistant", "c1") in events
+    assert ("journal", "assistant-id") in events
+    assert journal_entries == [facts]
+    assert team_batch_from_entries(journal_entries[0]) == {
+        "kind": "in_flight",
+        "worker_count": 1,
+    }
+    assert not any(e[0] == "title" for e in events)
+    assert consolidation == []
+    assert result["title"] is None
+
+
+async def test_record_local_turn_paused_preview_journal_is_no_batch(monkeypatch):
+    """Kickoff preview (plan, no ``run_started``) still projects ``no_batch`` after persist."""
+    events: list = []
+    journal_entries: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    async def _capture_journal(_session, **kw):
+        events.append(("journal", kw.get("message_id")))
+        journal_entries.append(kw.get("entries"))
+
+    monkeypatch.setattr(cloud_mod, "persist_turn_journal", _capture_journal)
+
+    facts = [
+        {
+            "kind": "run_plan",
+            "payload": {
+                "execution_id": "e1",
+                "runs": [
+                    {"id": "cap", "kind": "captain"},
+                    {"id": "w1", "kind": "agent"},
+                ],
+            },
+            "ts": "t0",
+        },
+        {"kind": "team_preview_required", "payload": {"id": "tp"}, "ts": "t1"},
+    ]
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="开工前确认编制",
+        journal=facts,
+        user_message_id=_USER_MSG_ID,
+        message_id="m-pause-preview",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.PAUSED.value,
+    )
+
+    assert ("journal", "assistant-id") in events
+    assert journal_entries == [facts]
+    assert team_batch_from_entries(journal_entries[0]) == {"kind": "no_batch"}
+    metrics = next(e[1] for e in events if e[0] == "metrics")
+    assert metrics["delegated"] is False
+    assert metrics["workers"] == 0
+    assert metrics["status"] == "paused"
+    assert metrics["mode"] == "local"
+
+
+async def test_record_local_turn_writes_metrics_on_complete(monkeypatch):
+    """Sidecar complete lands turn_metrics with the same tokens as messages.usage."""
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="done",
+        runs={"events": [], "finish_reason": "end_turn", "duration_ms": 1200},
+        user_message_id=_USER_MSG_ID,
+        message_id="m-metrics-ok",
+        input_tokens=99,
+        output_tokens=42,
+        rounds=3,
+        trace_id=_TRACE,
+        finish_reason=FinishReason.END_TURN.value,
+    )
+
+    metrics = next(e[1] for e in events if e[0] == "metrics")
+    assert metrics["turn_id"] == "assistant-id"
+    assert metrics["conversation_id"] == "c1"
+    assert metrics["user_id"] == "u1"
+    assert metrics["trace_id"] == _TRACE
+    assert metrics["kind"] == "turn"
+    assert metrics["status"] == "ok"
+    assert metrics["finish_reason"] == FinishReason.END_TURN.value
+    assert metrics["rounds"] == 3
+    assert metrics["duration_ms"] == 1200
+    assert metrics["delegated"] is False
+    assert metrics["workers"] == 0
+    assert metrics["mode"] == "local"
+    assert metrics["input_tokens"] == 99
+    assert metrics["output_tokens"] == 42
+
+
+async def test_record_local_turn_metrics_follows_turn_worker_stats(monkeypatch):
+    """delegated / workers use turn_worker_stats (journal message_final), not team_batch."""
+    events: list = []
+    journal_entries: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    async def _capture_journal(_session, **kw):
+        events.append(("journal", kw.get("message_id")))
+        journal_entries.append(kw.get("entries"))
+
+    monkeypatch.setattr(cloud_mod, "persist_turn_journal", _capture_journal)
+
+    facts = [
+        {
+            "kind": "run_plan",
+            "payload": {
+                "execution_id": "e1",
+                "runs": [
+                    {"id": "cap", "kind": "captain"},
+                    {"id": "w1", "kind": "agent"},
+                    {"id": "w2", "kind": "agent"},
+                ],
+            },
+            "ts": "t0",
+        },
+        {"kind": "run_started", "payload": {"run_id": "w1", "kind": "agent"}, "ts": "t1"},
+        {"kind": "run_started", "payload": {"run_id": "w2", "kind": "agent"}, "ts": "t2"},
+        {"kind": "run_completed", "payload": {"run_id": "w1"}, "ts": "t3"},
+        {"kind": "run_completed", "payload": {"run_id": "w2"}, "ts": "t4"},
+        _completed_final("w1"),
+        _completed_final("w2"),
+    ]
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="团队收工",
+        journal=facts,
+        user_message_id=_USER_MSG_ID,
+        message_id="m-metrics-batch",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.END_TURN.value,
+    )
+
+    batch = team_batch_from_entries(journal_entries[0])
+    assert batch == {"kind": "settled", "worker_count": 2}
+    metrics = next(e[1] for e in events if e[0] == "metrics")
+    assert turn_worker_stats({"journal_entries": facts}) == (True, 2)
+    assert metrics["delegated"] is True
+    assert metrics["workers"] == 2
+    assert metrics["mode"] == "local"
+
+
+async def test_record_local_turn_paused_writes_metrics(monkeypatch):
+    events: list = []
+    journal_entries: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    async def _capture_journal(_session, **kw):
+        events.append(("journal", kw.get("message_id")))
+        journal_entries.append(kw.get("entries"))
+
+    monkeypatch.setattr(cloud_mod, "persist_turn_journal", _capture_journal)
+
+    facts = [
+        {
+            "kind": "run_plan",
+            "payload": {
+                "execution_id": "e1",
+                "runs": [
+                    {"id": "cap", "kind": "captain"},
+                    {"id": "w1", "kind": "agent"},
+                ],
+            },
+            "ts": "t0",
+        },
+        {"kind": "run_started", "payload": {"run_id": "w1", "kind": "agent"}, "ts": "t1"},
+        {"kind": "checkpoint_required", "payload": {"id": "cp"}, "ts": "t2"},
+    ]
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="要继续吗？",
+        journal=facts,
+        user_message_id=_USER_MSG_ID,
+        message_id="m-metrics-pause",
+        input_tokens=50,
+        output_tokens=10,
+        trace_id=_TRACE,
+        finish_reason=FinishReason.PAUSED.value,
+    )
+
+    batch = team_batch_from_entries(journal_entries[0])
+    assert batch == {"kind": "in_flight", "worker_count": 1}
+    metrics = next(e[1] for e in events if e[0] == "metrics")
+    assert metrics["status"] == "paused"
+    assert metrics["finish_reason"] == FinishReason.PAUSED.value
+    assert metrics["kind"] == "turn"
+    # In-flight plan is team_batch, not completed members — same as cloud pause.
+    assert turn_worker_stats({"journal_entries": facts}) == (False, 0)
+    assert metrics["delegated"] is False
+    assert metrics["workers"] == 0
+    assert metrics["mode"] == "local"
+    assert metrics["input_tokens"] == 50
+    assert metrics["output_tokens"] == 10
+
+
+async def test_record_local_turn_cancelled_writes_metrics(monkeypatch):
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    facts = [
+        {"kind": "run_started", "payload": {"id": "r1"}, "ts": "t0"},
+        {"kind": "run_completed", "payload": {"id": "r1"}, "ts": None},
+    ]
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="partial reply",
+        runs=None,
+        journal=facts,
+        user_message_id=_USER_MSG_ID,
+        message_id="m-metrics-cancel",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.CANCELLED.value,
+    )
+
+    metrics = next(e[1] for e in events if e[0] == "metrics")
+    assert metrics["status"] == "ok"
+    assert metrics["finish_reason"] == FinishReason.CANCELLED.value
+    assert metrics["kind"] == "turn"
+    assert metrics["delegated"] is False
+    assert metrics["workers"] == 0
+    assert metrics["mode"] == "local"
+
+
+async def test_record_local_turn_empty_reply_skips_metrics(monkeypatch):
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="",
+        user_message_id=_USER_MSG_ID,
+        message_id="m-metrics-noop",
+        trace_id=_TRACE,
+    )
+
+    assert not any(e[0] == "metrics" for e in events)
+
+
 async def test_record_local_turn_resume_after_pause_updates_assistant(monkeypatch):
     events: list = []
     consolidation = _patch_persistence(
@@ -680,6 +1073,9 @@ async def test_record_local_turn_resume_after_pause_updates_assistant(monkeypatc
     usage = next(e for e in events if e[0] == "usage")
     assert usage[2]["status"] == "complete"
     assert "paused" not in usage[2]
+    metrics = next(e[1] for e in events if e[0] == "metrics")
+    assert metrics["kind"] == "resume"
+    assert metrics["status"] == "ok"
 
 
 async def test_record_local_turn_non_uuid_umid_reuses_paired_user(monkeypatch):

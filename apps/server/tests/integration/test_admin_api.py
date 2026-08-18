@@ -952,6 +952,7 @@ async def _seed_turn(
     scope_signals: int = 0,
     revises: int = 0,
     escalations: int = 0,
+    mode: str = "cloud",
 ) -> None:
     """Seed one turn_metrics row for ``user_id`` landing in today's window
     (created_at server-defaults to now). The write path is exercised end-to-end by
@@ -964,6 +965,7 @@ async def _seed_turn(
             trace_id=uuid4().hex,
             agent_id="CEO",
             kind="turn",
+            mode=mode,
             status=status,
             finish_reason=finish_reason,
             error=error,
@@ -1070,7 +1072,7 @@ async def test_admin_observability_summary_aggregates(client, make_admin, sessio
     assert today["error_rate"] == 0.25
     assert today["delegated_turns"] == 1
     assert today["delegated_rate"] == 0.25
-    # rounds: (1 + 1 + 3 + 1) / 4 = 1.5; tokens SUM across all 4 turns.
+    # rounds: (1 + 1 + 3 + 1) / 4 = 1.5; token SUM over mode=cloud (all 4 here).
     assert today["avg_rounds"] == 1.5
     assert today["input_tokens"] == 400
     assert today["output_tokens"] == 150
@@ -1091,6 +1093,31 @@ async def test_admin_observability_summary_aggregates(client, make_admin, sessio
     assert trend[-1]["turns"] == 4
     assert trend[-1]["errors"] == 1
     assert sum(p["turns"] for p in trend) == 4
+
+
+async def test_admin_observability_token_sums_skip_local_mode(
+    client, make_admin, session_factory
+):
+    """Health tokens count mode=cloud only; local rows still sit in the turn count."""
+    username, password = await make_admin()
+    await login_admin(client, username, password)
+    user = await _seed_user(session_factory, "tokmix")
+
+    await _seed_turn(session_factory, user_id=user, input_tokens=100, output_tokens=50)
+    await _seed_turn(
+        session_factory,
+        user_id=user,
+        mode="local",
+        input_tokens=0,
+        output_tokens=0,
+    )
+
+    r = await client.get("/v1/admin/observability/summary")
+    assert r.status_code == 200, r.text
+    today = r.json()["today"]
+    assert today["turns"] == 2
+    assert today["input_tokens"] == 100
+    assert today["output_tokens"] == 50
 
 
 async def test_admin_observability_summary_empty_is_zero(client, make_admin):

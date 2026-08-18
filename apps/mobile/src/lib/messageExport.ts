@@ -12,7 +12,7 @@ export type MessageCopyMode = "deliverable" | "with_process";
 
 function formatToolLine(step: Extract<ProcessStep, { kind: "tool" }>): string {
   const label = toolLabel(step.tool_name);
-  const detail = toolDetail(step.arguments ?? {});
+  const detail = toolDetail(step.arguments ?? {}, step.tool_name);
   const status =
     step.status === "error"
       ? "（失败）"

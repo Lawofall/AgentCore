@@ -27,6 +27,8 @@ import { Modal } from "@/components/Modal";
 import { TurnOutcomeActions } from "@/components/TurnOutcomeActions";
 import {
   CONTEXT_CHANNEL_LABEL,
+  TOOL_GUIDANCE_LABEL,
+  TOOL_STATUS_LABEL,
   runPhaseLabel,
   toolDetail,
   toolLabel,
@@ -353,6 +355,8 @@ export function TeamView({
   workerToolPhases,
   evidenceLedger = [],
   elapsedMs = 0,
+  waitProgress = null,
+  detached = false,
   outcome = null,
   supportIds,
   onRetry,
@@ -386,6 +390,10 @@ export function TeamView({
   /** 回合墙钟跨度（`turnElapsedMs(turn.events)`）：条上「用时」。绝不用队员时长求和
    *  顶替，那是工时，并行越多数字越大。缺省 0 = 不显示用时。 */
   elapsedMs?: number;
+  /** Live `coordination_wait` n/m。有则盖过 fold `progress`（条上只换数字，不写长句）。 */
+  waitProgress?: { completed: number; total: number } | null;
+  /** Live `execution_detached`。CEO 已收口、队员还在跑时条上挂「后台」。 */
+  detached?: boolean;
   /** Arbiter verdict: when `surface==="strip"` this bar is the primary failure face. */
   outcome?: TurnOutcome | null;
   supportIds?: SupportDiagnosticIds;
@@ -395,7 +403,8 @@ export function TeamView({
   // panel navigates to another run (修订链切换 / 关系跳转) by swapping the selected id — the run
   // list is the same ProjectedTurn slice whether live or replayed.
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  // 默认展开：手机上看团队就是看队员卡；箭头仍可收起，不按对话落盘。
+  const [expanded, setExpanded] = useState(true);
   const workers = runs.filter((r) => r.kind !== "captain");
   const ledgerMap = useMemo(
     () => (evidenceLedger.length ? buildLedgerMap(evidenceLedger) : null),
@@ -411,40 +420,31 @@ export function TeamView({
   // 单幕辩论：头部保留「辩论」徽标；多幕时改由分组头表达，避免整队被扁平标成辩论。
   const isDebate =
     !multiAct && (acts[0]?.kind === "debate" || workers.some((r) => r.stance));
-  const pct =
-    progress.total > 0 ? (progress.completed / progress.total) * 100 : 0;
   const notesDefaultOpen = teamNotesDefaultExpanded(status, teamNotes);
-  const strip = teamStripFace(status, outcome);
+  const showBackground =
+    status !== "cancelled" &&
+    status !== "paused" &&
+    (detached ||
+      (status === "completed" && workers.some((r) => r.status === "running")));
+  const stripStatus =
+    showBackground && (status === "completed" || status === "running")
+      ? "running"
+      : status;
+  const strip = teamStripFace(
+    stripStatus,
+    showBackground && status === "completed" ? null : outcome,
+  );
+  const displayProgress =
+    waitProgress && waitProgress.total > 0 ? waitProgress : progress;
   const stripMeta = teamStripMeta({
     workers,
-    progress,
-    status,
+    progress: displayProgress,
+    status: stripStatus,
     elapsedMs,
     skipPartialBit: outcome?.kind === "partial",
   });
   const stripOwnsVerdict = outcome?.surface === "strip";
   const showDebateEntry = isDebate;
-  const synthesisBlurbs = workers
-    .filter((r) => r.status === "completed" && !!r.outputSummary)
-    .map((r) => ({
-      id: r.id,
-      role: r.role ?? agents.find((a) => a.id === r.agentId)?.role ?? r.agentId,
-      summary: r.outputSummary as string,
-    }));
-  const synthesizing =
-    status === "running" &&
-    progress.total > 0 &&
-    workers.length > 0 &&
-    workers.every(
-      (r) =>
-        r.status === "completed" ||
-        r.status === "failed" ||
-        r.status === "cancelled" ||
-        r.status === "skipped",
-    );
-  const showSynthesis =
-    synthesisBlurbs.length > 0 &&
-    (status === "running" || status === "paused" || synthesizing);
 
   // Indent a nested delegate by how many worker parents it chains through (stage-2 子任务).
   const depthOf = (run: ProjectedRun): number => {
@@ -507,11 +507,19 @@ export function TeamView({
               aria-hidden
             />
             <div className="team-strip-body">
-              {strip.title || multiAct || isDebate ? (
+              {strip.title || multiAct || isDebate || showBackground ? (
                 <div
                   className={`team-strip-title${strip.phase ? " is-phase" : ""}`}
                 >
                   {strip.title ? <span>{strip.title}</span> : null}
+                  {showBackground ? (
+                    <span
+                      className="team-tag"
+                      data-testid="team-strip-background"
+                    >
+                      后台
+                    </span>
+                  ) : null}
                   {multiAct ? (
                     <span className="team-tag">{acts.length} 幕</span>
                   ) : isDebate ? (
@@ -527,7 +535,7 @@ export function TeamView({
               <span
                 className={`team-strip-progress${strip.phase ? " is-phase" : ""}`}
               >
-                {progress.completed}/{progress.total}
+                {displayProgress.completed}/{displayProgress.total}
               </span>
             )}
             <button
@@ -551,9 +559,6 @@ export function TeamView({
             </div>
           ) : null}
         </div>
-        <div className="team-bar">
-          <span className="team-bar-fill" style={{ width: `${pct}%` }} />
-        </div>
         {expanded && (
           <div className="team-body">
             {showDebateEntry ? (
@@ -565,30 +570,6 @@ export function TeamView({
                 <span className="team-debate-entry-text">
                   {debateEntryText(workers)}
                 </span>
-              </div>
-            ) : null}
-            {showSynthesis ? (
-              <div
-                className={`team-synthesis${synthesizing ? " is-live" : ""}`}
-                data-testid="team-synthesis-preview"
-              >
-                <div className="team-synthesis-head">
-                  <span className="team-synthesis-badge">
-                    {synthesizing ? "生成汇总" : "团队进展"}
-                  </span>
-                  <span className="team-synthesis-title">
-                    {synthesizing
-                      ? `${progress.completed}/${progress.total} 已完成，正在生成汇总`
-                      : `${synthesisBlurbs.length} 人已产出摘要`}
-                  </span>
-                </div>
-                <ul className="team-synthesis-list">
-                  {synthesisBlurbs.map((w) => (
-                    <li key={w.id} className="team-synthesis-item">
-                      <strong>{w.role}</strong>：{w.summary}
-                    </li>
-                  ))}
-                </ul>
               </div>
             ) : null}
             <div className="team-runs">{runCards}</div>
@@ -776,7 +757,8 @@ function RunCard({
       };
     } else if (workerToolPhase) {
       activity = {
-        heading: toolPhaseText(workerToolPhase.phase) ?? "Working",
+        heading:
+          toolPhaseText(workerToolPhase.phase) ?? TOOL_STATUS_LABEL.running,
         text: toolLabel(workerToolPhase.toolName),
         live: true,
       };
@@ -1609,18 +1591,18 @@ function RunToolRow({ call }: { call: RunToolCall }) {
 function GenericRunToolRow({ call }: { call: RunToolCall }) {
   const [open, setOpen] = useState(false);
   const args = Object.keys(call.arguments).length > 0 ? call.arguments : null;
-  const detail = toolDetail(call.arguments);
+  const detail = toolDetail(call.arguments, call.toolName);
   const ceilingGuidance =
     call.status === "error" &&
     isFileReadCeilingGuidance(call.toolName, call.result);
   const status =
     call.status === "running"
-      ? "Running"
+      ? TOOL_STATUS_LABEL.running
       : ceilingGuidance
-        ? "Notice"
+        ? TOOL_GUIDANCE_LABEL
         : call.status === "error"
-          ? "Failed"
-          : "Done";
+          ? TOOL_STATUS_LABEL.error
+          : TOOL_STATUS_LABEL.success;
   // Prefer product `failure.message`; fall back to model-facing `result` when absent.
   const faceText = call.failure?.message ?? call.result;
   const hasBody = !!args || (faceText != null && faceText !== "");
@@ -1635,7 +1617,7 @@ function GenericRunToolRow({ call }: { call: RunToolCall }) {
         onClick={() => setOpen((o) => !o)}
       >
         <span className="tool-name">
-          {toolLabel(call.toolName)}
+          <span className="tool-label">{toolLabel(call.toolName)}</span>
           {detail && <span className="tool-detail">{detail}</span>}
         </span>
         <span className="tool-status">{status}</span>

@@ -119,8 +119,10 @@ export interface SidecarStartTurnRequest {
    */
   askId?: string | null;
   /**
-   * 先前对话历史（`{role, content}` 列表）。云模式由服务端从库里取；sidecar 无库
-   * （Slice 1 的 `ConversationStore` 为 no-op），故由 renderer 从本地会话切片喂入。
+   * 先前对话历史（`{role, content}` 列表）。已提供（含空窗 = 新会话）= 桌面
+   * 已用会话 cookie 拉过同一 ``chat-context`` 窗口，sidecar **不再**打云。
+   * 缺省 = 窗口未知：sidecar 用 account 窄票拉；拉不到 → 回合明确失败，
+   * 禁止空窗开跑。主进程不得把缺省收成 ``[]``。禁止再从本地 store 拼全量原文。
    */
   history?: SidecarHistoryEntry[];
   /**
@@ -519,6 +521,12 @@ export type SidecarWarmCodeIndexRequest = SidecarProbeRequest;
  * 进 sidecar 进程缓存。回合 ensure 不自动踢。
  * 须带登录 ``userId``（与 prepare ``cache_scope`` / ``warmAccountRulesMemory`` 对齐）；
  * open/register 可 fire-and-forget，但 ``startTurn``/``resume`` 会 await 在途 warm。
+ *
+ * **续期是契约的一半**：服务端列表有 TTL，过期后 prepare 只读缓存 → 未装配 MCP
+ * （不 await ClientTool）。回复带 {@link SidecarWarmMcpDiscoverResult.ttlSeconds}，
+ * 主进程记有效期；``startTurn`` / ``resume`` 在过期后自动续暖，并在 detached
+ * execution 存活期（``execution_detached`` → ``execution_completed``）按同一 TTL
+ * 周期续暖，避免 sidecar 内部收口回合空装配。
  */
 export interface SidecarWarmMcpDiscoverRequest {
   rootId: string;
@@ -526,6 +534,15 @@ export interface SidecarWarmMcpDiscoverRequest {
   subpath?: string;
   /** 登录账号 id；与 startTurn.userId / prepare cache_scope 同形。 */
   userId?: string;
+}
+
+/** `warmMcpDiscover` JSON-RPC 的回复（主进程内部消费，不过 IPC 到 renderer）。 */
+export interface SidecarWarmMcpDiscoverResult {
+  ok: boolean;
+  /**
+   * 该列表在服务端进程缓存里的**剩余寿命**（秒）。缺省 / ≤0 视为「立即过期」。
+   */
+  ttlSeconds?: number;
 }
 
 /**
@@ -536,7 +553,9 @@ export interface SidecarWarmMcpDiscoverRequest {
  * **续期是契约的一半**：服务端快照有 TTL，过期后 prepare 只读缓存 → 空注入（不回落
  * 云端），表现为规则与长期记忆整体消失。故回复带 {@link
  * SidecarWarmAccountRulesMemoryResult.ttlSeconds}，主进程按「账号 + folderId」记有效期，
- * `startTurn` / `resume` 在过期后自动续暖；无票跳过不锁死，晚登录/补票可再踢。
+ * `startTurn` / `resume` 在过期后自动续暖，并在 **detached execution 存活期**
+ * （`execution_detached` → `execution_completed`）按同一 TTL 周期续暖
+ * （sidecar 内部收口回合不走桌面入口；CEO 回合 RPC 已返回后团队仍跑时必须续）。
  * open/register 可 fire-and-forget；回合发 RPC 前会 await 在途 warm。
  */
 export interface SidecarWarmAccountRulesMemoryRequest {

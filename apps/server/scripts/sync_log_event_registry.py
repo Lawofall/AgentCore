@@ -132,6 +132,7 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "conversation_id": "str",
         "reason": "str",
         "title_chars": "int",
+        "persisted": "bool",
     },
     "fulfill.no_fulfiller": {
         "reason": "str",
@@ -215,6 +216,7 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "detail": "str",
         "duration_ms": "int",
         "tool_count": "int",
+        "origin": "str",
     },
     "desktop.mcp_list_cache_seed": {
         "conversation_id": "str",
@@ -231,6 +233,7 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
     "account.rules_memory_cache_miss": {
         "user_id": "str",
         "folder_id": "str",
+        "origin": "str",
     },
     "account.rules_memory_cache_seed": {
         "user_id": "str",
@@ -246,12 +249,21 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "part": "str",
         "error": "str",
     },
+    "sidecar.warm_mcp_discover": {
+        "user_id": "str",
+        "tool_count": "int",
+        "ready_servers": "int",
+        "failed_servers": "int",
+        "degraded": "bool",
+        "ttl_seconds": "float",
+    },
     "sidecar.warm_account_rules_memory": {
         "user_id": "str",
         "folder_id": "str",
         "degraded": "bool",
         "topic_count": "int",
         "memory_file_count": "int",
+        "ttl_seconds": "float",
     },
     "sidecar.warm_account_rules_memory_failed": {
         "user_id": "str",
@@ -383,6 +395,15 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "remaining": "int",
         "critical": "bool",
         "final": "bool",
+    },
+    "engine.finish_guard_honesty_shadow": {
+        "verdict_state": "str",
+        "hit": "str",
+        "has_delivered_files": "bool",
+        "gap_reasons": "list",
+        "requires_draft_ack": "bool",
+        "execution_id": "str",
+        "tier_label": "str",
     },
     "llm.call": {
         "scenario": "str",
@@ -603,6 +624,18 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "session_count": "int",
         "timeout_seconds": "float",
     },
+    "browser.cgroup_unwritable_ignore": {
+        "reason": "str",
+    },
+    "browser.session_open_failed": {
+        "conversation_id": "str",
+        "error": "str",
+        "error_type": "str",
+        "ignore_cgroups": "bool",
+        "ignore_reason": "str",
+        "returncode": "int",
+        "stderr_preview": "str",
+    },
     "compaction.shutdown_timeout": {
         "pending": "int",
         "timeout_seconds": "float",
@@ -795,9 +828,9 @@ KEY_DESC: dict[str, str] = {
         "idempotent_hit=true 表示这次重复请求原样返回了首次那条（没新建、没跑回合）"
     ),
     "chat.title_degraded": (
-        "侧栏标题落的是首条消息裁出来的降级短标题、不是模型产出；"
-        "reason=rate_limit/timeout/empty_model_title/gate_* 归因，"
-        "mint_no_write 为 REST auto-title 兜底那次"
+        "铸题未产出模型标题；persisted=false 未写入 conversations.title（保持空以便后续回合再铸），"
+        "persisted=true 为历史语义（曾把 fallback_title 落库）；"
+        "reason=rate_limit/timeout/empty_model_title/gate_* 归因"
     ),
     "fulfill.no_fulfiller": (
         "回合中途派单落空（reason=desktop_offline 桌面未连接 / root_not_held 桌面在线未声明该 root；"
@@ -813,7 +846,10 @@ KEY_DESC: dict[str, str] = {
     "desktop.mcp_list_ok": "MCP list 成功（duration_ms / tool_count）",
     "desktop.mcp_list_degraded": "MCP list 超时或降级（带 duration_ms）",
     "desktop.mcp_list_cache_hit": "MCP list 命中进程内缓存（含 cache_scope / duration_ms）",
-    "desktop.mcp_list_cache_miss": "MCP list 只读缓存未命中（prepare/resume；不发 ClientTool）",
+    "desktop.mcp_list_cache_miss": (
+        "MCP list 只读缓存未命中（prepare/resume；不发 ClientTool；"
+        "origin=execution_harvest 时为收口空装配）"
+    ),
     "desktop.mcp_list_cache_seed": "MCP list 结果写入进程内缓存（非回合暖）",
     "delegate.started": "编排委派开始（agents/plan/waves；task_chars=完整 task 长度）",
     "delegate.context_capped": (
@@ -843,6 +879,11 @@ KEY_DESC: dict[str, str] = {
     "engine.retrieval_budget_awareness": (
         "检索余额注入（分项用量变化记一行；final=true 是每个 worker run 的最终 searches/reads）"
     ),
+    "engine.finish_guard_honesty_shadow": (
+        "收口诚实性本该回炉但只观测：verdict_state / "
+        "hit=posture_a|draft_ack|overview_length / "
+        "has_delivered_files / gap_reasons（不记正文；不回炉不 reset）"
+    ),
     "llm.call": "单次 LLM 调用（latency/tokens/cost_nano；平台代付可带 platform_credential_id）",
     "llm.request": "LLM prompt 截断脱敏（需 LOG_LLM_BODIES）",
     "llm.response": "LLM 回复截断脱敏（需 LOG_LLM_BODIES）",
@@ -866,6 +907,7 @@ KEY_DESC: dict[str, str] = {
     "cost.prefix_cache": (
         "前缀缓存实测（hit_ratio 命中率 + breach/breach_section 击穿归因 + "
         "reusable/forfeited；cache_reported=false 表示上游没报缓存，不等于 0% 命中）"
+        "；debug 级：默认 LOG_LEVEL=info 查不到，要留行须 LOG_LEVEL=DEBUG"
     ),
     "pipeline.error": "回合管线未捕获异常",
     "http.unhandled_error": "HTTP 层未捕获异常",
@@ -917,6 +959,13 @@ KEY_DESC: dict[str, str] = {
     ),
     "server.shutdown_teardown_timeout": "lifespan 抢救后的收尾超过 shutdown_teardown_seconds",
     "browser.close_all_timeout": "停机 close_all 超过墙钟上限，放弃等待交重启/reaper",
+    "browser.cgroup_unwritable_ignore": (
+        "容器内 cgroup2 subtree_control 只读，自动加 --ignore-cgroups"
+        "（会话 OCI 限额不生效，容器 mem_limit 仍在）"
+    ),
+    "browser.session_open_failed": (
+        "runsc 浏览器会话握手失败；stderr_preview 为 runsc/driver 尾部（此前 PIPE 会丢掉）"
+    ),
     "compaction.shutdown_timeout": "停机 flush 在飞 fold 超时（best-effort，取消剩余 task）",
     "memory.consolidation_window_dropped": (
         "不可重试 consolidation 失败：推进水位并丢弃本窗口（防 sweeper 无限重选）"
@@ -973,7 +1022,8 @@ KEY_DESC: dict[str, str] = {
     "sidecar.warm_account_rules_memory_failed": "warmAccountRulesMemory 拉取失败",
     "account.rules_memory_cache_hit": "prepare rules/memory 命中进程快照缓存",
     "account.rules_memory_cache_miss": (
-        "prepare rules/memory 只读缓存未命中（空注入；不 await 云）"
+        "prepare rules/memory 只读缓存未命中（空注入；不 await 云；"
+        "origin=execution_harvest 时为收口空注入）"
     ),
     "account.rules_memory_cache_seed": "账户 rules/memory 快照写入进程缓存（非回合暖）",
     "account.rules_memory_warm_failed": "warm 拉取 rules/memory 部分失败（degraded seed）",

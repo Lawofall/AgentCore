@@ -426,7 +426,10 @@ async def test_history_snapshot_synthesizes_message_end_after_detached_close():
 
     snapshot = sink.history_snapshot()
     assert [e.type for e in snapshot] == [EventType.CONTENT_DELTA, EventType.MESSAGE_END]
-    assert snapshot[-1].payload == {"finish_reason": "end_turn"}
+    assert snapshot[-1].payload == {
+        "finish_reason": "end_turn",
+        "team_batch": {"kind": "no_batch"},
+    }
 
 
 async def test_attach_generator_no_cursor_replays_message_end(monkeypatch):

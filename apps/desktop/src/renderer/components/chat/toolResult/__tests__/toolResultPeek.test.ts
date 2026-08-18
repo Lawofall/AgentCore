@@ -190,7 +190,8 @@ describe("toolResultPeek", () => {
       toolResultPeek(
         data({
           toolName: "grep",
-          result: "本次 grep 未匹配 /Nope/。不要据此断定代码不存在。可执行下一步：① 收窄",
+          result:
+            "本次 grep 未匹配 /Nope/。不要据此断定代码不存在。可执行下一步：① 收窄",
         }),
       ),
     ).toBe("未匹配");
@@ -304,6 +305,30 @@ describe("hasToolResultBody", () => {
     expect(hasToolResultBody(data({ toolName: "grep", result: "  " }))).toBe(
       false,
     );
+  });
+
+  it("successful wait has no expandable body (receipt-only)", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "wait",
+          result: "已等待队员回合结束。",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("failed wait stays expandable when a result is present", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "wait",
+          status: "error",
+          result: "等待队员超时。",
+          failure: { message: "等待队员超时。", code: "WAIT_TIMEOUT" },
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("successful handoff is expandable only when the brief has details", () => {

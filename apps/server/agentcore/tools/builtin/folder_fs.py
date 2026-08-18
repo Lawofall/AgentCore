@@ -124,6 +124,7 @@ async def _open_target_folder(
         file_read_line_totals={},
         file_read_reread_remaining={},
         file_read_verbatim_paths=None,
+        file_read_cleared_paths=None,
     )
     logger.info(
         "folder_fs.target_opened",

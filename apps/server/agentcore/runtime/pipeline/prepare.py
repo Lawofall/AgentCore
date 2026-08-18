@@ -66,6 +66,7 @@ class PreparedTurn:
 
     llm: object
     system_prompt: str
+    workspace_facts: str
     worker_base_prompt: str
     worker_tools: ToolRegistry
     skill_registry: object
@@ -202,7 +203,6 @@ async def prepare_fresh_turn(
     )
     system_prompt = assemble_system_prompt(
         rules_markdown=rules_markdown,
-        workspace_context=workspace_facts,
     )
     # Resolve vision before attachment context so resident images can eye→text.
     # Turn-level ``role=vision`` sink is shared by REFERENCE with ToolContext
@@ -248,7 +248,8 @@ async def prepare_fresh_turn(
         attachment_context, agent_mentions, ask_id=ask_id
     )
     # Workers hold no CEO hints; their base is the shared base + the same
-    # ``<按需目录>`` (name＋摘要) + the same attachment block at the end.
+    # ``<按需目录>`` (name＋摘要) + workspace facts (after the directory, same
+    # SectionOrder as the CEO) + the same attachment block at the end.
     from agentcore.runtime.capability_packs import enabled_packs
 
     skill_registry = build_system_skill_registry(enabled_packs=enabled_packs())
@@ -273,6 +274,7 @@ async def prepare_fresh_turn(
         system_prompt,
         on_demand_entries=on_demand_entries,
         attachment_context=attachment_context,
+        workspace_context=workspace_facts,
     )
     # System skills back the unified consult tool + ``<按需目录>`` (CEO wires later).
     # Capability packs (e.g. legal) layer in for every user when the deployment gate is on.
@@ -373,7 +375,9 @@ async def prepare_fresh_turn(
     bound_execution_id = base_tool_context.execution_id
     execution_id_token = current_execution_id.set(bound_execution_id)
     # Fresh turn: nothing a prior batch latched may reach this turn's finish_guard.
-    reset_turn_scoped_closing_state()
+    reset_turn_scoped_closing_state(
+        promotion_ledger=base_tool_context.promotion_ledger,
+    )
 
     # Pillar B: if a background execution is already live for this conversation,
     # adopt it so the CEO wait path / interjection routing share one registry key.
@@ -394,6 +398,7 @@ async def prepare_fresh_turn(
     return PreparedTurn(
         llm=llm,
         system_prompt=system_prompt,
+        workspace_facts=workspace_facts,
         worker_base_prompt=worker_base_prompt,
         worker_tools=worker_tools,
         skill_registry=skill_registry,

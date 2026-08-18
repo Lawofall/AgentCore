@@ -303,7 +303,35 @@ class TurnExecutionMixin:
         assert self._root is not None  # guarded by _on_start_turn
         conversation_id = str(params.get("conversationId") or turn_id)
         user_message = str(params.get("userMessage") or "")
-        history = params.get("history") or []
+        from agentcore.sidecar.chat_history import (
+            ChatContextUnavailableError,
+            resolve_sidecar_turn_history,
+        )
+
+        raw_history = params.get("history")
+        desktop_confirmed = isinstance(raw_history, list)
+        try:
+            history = await resolve_sidecar_turn_history(
+                conversation_id,
+                creds=self._account_creds,
+                fallback=raw_history if desktop_confirmed else None,
+                # Desktop cookie window is the same endpoint; do not fetch twice.
+                prefer_cloud=not desktop_confirmed,
+            )
+        except ChatContextUnavailableError as exc:
+            logger.warning(
+                "chat_context.sidecar_unavailable",
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                error=exc.message,
+            )
+            try:
+                await self._send(
+                    protocol.make_error(request_id, protocol.INTERNAL_ERROR, exc.message)
+                )
+            finally:
+                self._unregister_turn(turn_id)
+            return
         self.stamp_turn_history(conversation_id, history)
         agent_mentions = rpc_agent_mentions(params)
         ask_id = rpc_ask_id(params)
@@ -657,6 +685,41 @@ class TurnExecutionMixin:
             harvest_kind=harvest_kind,
         )
 
+    async def _outbox_resume_writeback(
+        self,
+        outbox: Any,
+        *,
+        conversation_id: str,
+        message_id: str,
+        trace_id: str,
+    ) -> None:
+        """Best-effort PG replace of the current outbox journal. Must not raise.
+
+        Symmetric with pause ``_outbox_finalize`` → local-turns persist: after
+        settlement is durable, land hang-frame + ``*_resolved`` so a hard refresh
+        does not keep the pause hang-frame. Failure must not block 开工.
+        """
+        from agentcore.conversation.store.outbox import journal_entries_from_map
+        from agentcore.runtime.journal.persist import persist_sidecar_journal_best_effort
+
+        try:
+            record = outbox.find_record_by_message_id(message_id)
+            entries = (
+                journal_entries_from_map(record.get("journal")) if record else None
+            )
+            await persist_sidecar_journal_best_effort(
+                message_id=message_id,
+                conversation_id=conversation_id,
+                trace_id=trace_id,
+                entries=entries,
+            )
+        except Exception as e:  # noqa: BLE001 — resume start must not wait on PG
+            logger.warning(
+                "journal.persist_failed",
+                message_id=message_id,
+                error=str(e),
+            )
+
     async def _run_resume(
         self,
         request_id: Any,
@@ -746,6 +809,12 @@ class TurnExecutionMixin:
                 message_id=turn_id,
                 trace_id=trace_id,
             )
+            await outbox.reopen_for_resume(
+                turn_id=turn_id,
+                user_message_id=umid,
+                conversation_id=conversation_id,
+                trace_id=trace_id,
+            )
             await outbox.begin_turn(
                 conversation_id=conversation_id,
                 message_id=turn_id,
@@ -808,6 +877,14 @@ class TurnExecutionMixin:
         else:
             # No outbox ⇒ cannot durable-prewrite; keep legacy confirm-on-success.
             settlement_durable = False
+
+        if outbox is not None and settlement_durable:
+            await self._outbox_resume_writeback(
+                outbox,
+                conversation_id=conversation_id,
+                message_id=turn_id,
+                trace_id=trace_id,
+            )
 
         pump = asyncio.create_task(
             self._pump(turn_id, sink, conversation_id=conversation_id)

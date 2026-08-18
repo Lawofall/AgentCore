@@ -256,6 +256,14 @@ TS_EXPORTS: tuple[TsExport, ...] = (
     TsInterface(debate.DebatePretrialOrdersPayload),
     TsInterface(debate.DebatePretrialCompletedPayload),
     TsInterface(chat.TurnCollabMetrics),
+    TsInlineUnion(
+        "TeamBatchStatus",
+        (chat.TeamBatchNoBatch, chat.TeamBatchInFlight, chat.TeamBatchSettled),
+        doc=(
+            "本回合团队状态（turn journal 派生）：no_batch / in_flight / settled。\n"
+            "没派工是确定态，不是信息缺失。worker_count = 本波 kickoff 编制，不含 captain。"
+        ),
+    ),
     TsInterface(chat.MessageEndUsage),
     TsInterface(chat.MessageEndPayload),
     TsInterface(chat.ErrorContext),

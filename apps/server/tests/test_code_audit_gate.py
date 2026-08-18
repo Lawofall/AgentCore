@@ -5,7 +5,23 @@ from agentcore.runtime.runs.code_audit_gate import (
     validate_code_audit_payload,
 )
 from agentcore.runtime.runs.contract import check_contract
+from agentcore.runtime.runs.playbooks.audit import (
+    CODE_AUDIT_REQUIRED_SECTIONS,
+    CODE_AUDIT_SECTION_BY_DESIGN,
+)
 from agentcore.runtime.runs.types import Deliverable
+
+_AUDIT_SECTIONS = list(CODE_AUDIT_REQUIRED_SECTIONS)
+
+
+def _audit_md() -> str:
+    chunks: list[str] = []
+    for title in CODE_AUDIT_REQUIRED_SECTIONS:
+        if title == "一、属实缺陷":
+            chunks.append(f"## {title}\n验证方式\n定案\n")
+        else:
+            chunks.append(f"## {title}\n")
+    return "".join(chunks)
 
 
 def _ok_finding(**overrides):
@@ -218,14 +234,14 @@ def test_validate_english_pending_still_blocks_medium():
 
 
 def test_check_contract_code_audit_gate_wires_through():
-    md = "## 〇、人审速览\n## 一、属实缺陷\n验证方式\n定案\n## 二、已撤销\n## 三、观察与工程债\n"
+    md = _audit_md()
     json_path = "AgentCore/文档/reviews/x.audit.json"
     md_path = "AgentCore/文档/reviews/x.md"
     bad_json = '{"findings":[{"severity":"中","verification":"静态推断·未读全","verdict":"属实","evidence":"a:1","summary":"x"}]}'
     d = Deliverable(
         form="files",
         artifacts=[md_path, json_path],
-        required_sections=["〇、人审速览", "一、属实缺陷", "二、已撤销", "三、观察与工程债"],
+        required_sections=_AUDIT_SECTIONS,
         strict=True,
         code_audit_gate=True,
     )
@@ -245,7 +261,7 @@ def test_check_contract_code_audit_gate_wires_through():
 
 
 def test_check_contract_accepts_p3_audit_json():
-    md = "## 〇、人审速览\n## 一、属实缺陷\n验证方式\n定案\n## 二、已撤销\n## 三、观察与工程债\n"
+    md = _audit_md()
     json_path = "AgentCore/文档/reviews/x.audit.json"
     md_path = "AgentCore/文档/reviews/x.md"
     ok_json = (
@@ -255,7 +271,7 @@ def test_check_contract_accepts_p3_audit_json():
     d = Deliverable(
         form="files",
         artifacts=[md_path, json_path],
-        required_sections=["〇、人审速览", "一、属实缺陷", "二、已撤销", "三、观察与工程债"],
+        required_sections=_AUDIT_SECTIONS,
         strict=True,
         code_audit_gate=True,
     )
@@ -318,7 +334,7 @@ def test_check_contract_code_audit_still_validates_loaded_json_when_channel_dead
     from agentcore.runtime.runs.contract import check_contract, contract_run_failure_kind
     from agentcore.runtime.runs.types import Deliverable
 
-    md = "## 〇、人审速览\n## 一、属实缺陷\n验证方式\n定案\n## 二、已撤销\n## 三、观察与工程债\n"
+    md = _audit_md()
     json_path = "AgentCore/文档/reviews/x.audit.json"
     md_path = "AgentCore/文档/reviews/x.md"
     bad_json = (
@@ -328,7 +344,7 @@ def test_check_contract_code_audit_still_validates_loaded_json_when_channel_dead
     d = Deliverable(
         form="files",
         artifacts=[md_path, json_path],
-        required_sections=["〇、人审速览", "一、属实缺陷", "二、已撤销", "三、观察与工程债"],
+        required_sections=_AUDIT_SECTIONS,
         strict=True,
         code_audit_gate=True,
     )
@@ -350,16 +366,13 @@ def test_check_contract_md_landed_missing_json_is_partial_not_failed():
     from agentcore.runtime.runs.contract import check_contract
     from agentcore.runtime.runs.types import Deliverable
 
-    md = (
-        "## 〇、人审速览\n## 一、属实缺陷\n验证方式\n定案\n"
-        "## 二、已撤销\n## 三、观察与工程债\n"
-    )
+    md = _audit_md()
     json_path = "AgentCore/文档/reviews/x.audit.json"
     md_path = "AgentCore/文档/reviews/x.md"
     d = Deliverable(
         form="files",
         artifacts=[md_path, json_path],
-        required_sections=["〇、人审速览", "一、属实缺陷", "二、已撤销", "三、观察与工程债"],
+        required_sections=_AUDIT_SECTIONS,
         strict=True,
         code_audit_gate=True,
     )
@@ -419,3 +432,30 @@ def test_describe_deliverable_code_audit_skeleton_first_hint():
     )
     assert "骨架" in desc
     assert "补写修复" in desc or "可补写" in desc
+
+
+def test_check_contract_missing_by_design_section_fails():
+    """独立「设计如此」栏是章节契约：缺标题即格式失败（不扫正文猜意图）。"""
+    md = "".join(
+        f"## {s}\n验证方式\n定案\n" if s == "一、属实缺陷" else f"## {s}\n"
+        for s in CODE_AUDIT_REQUIRED_SECTIONS
+        if s != CODE_AUDIT_SECTION_BY_DESIGN
+    )
+    json_path = "AgentCore/文档/reviews/x.audit.json"
+    md_path = "AgentCore/文档/reviews/x.md"
+    d = Deliverable(
+        form="files",
+        artifacts=[md_path, json_path],
+        required_sections=_AUDIT_SECTIONS,
+        strict=True,
+        code_audit_gate=True,
+    )
+    verdict = check_contract(
+        "简报",
+        d,
+        files_written=2,
+        workspace_paths=[md_path, json_path],
+        artifact_contents={md_path: md, json_path: '{"findings":[]}'},
+    )
+    assert not verdict.ok
+    assert any(CODE_AUDIT_SECTION_BY_DESIGN in f for f in verdict.failures)

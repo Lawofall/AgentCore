@@ -5,6 +5,7 @@ import {
   BookOpen,
   Brain,
   Camera,
+  Clock,
   Code2,
   Compass,
   FileText,
@@ -87,6 +88,7 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   cancel_worker: { Icon: UserX, label: "Cancel worker" },
   resolve_escalation: { Icon: Gavel, label: "Resolve escalate" },
   queue_user_message: { Icon: Inbox, label: "Queue message" },
+  wait: { Icon: Clock, label: "Wait" },
   // L3 团队浏览器（worker-only）：连续步聚合成「浏览器活动卡」（BrowserActivityCard），
   // 单步走通用 ToolLine + ToolResultView 的 browser 分支。
   browser_navigate: { Icon: Compass, label: "Navigate" },
@@ -160,7 +162,9 @@ export function toolPhaseText(phase: string | undefined): string | null {
  * 处置得对不对。撤队员 / 裁决求助的标题改挂角色名（{@link RUN_TARGET_ARG_TOOLS}），
  * 查阅历史对话改挂对话标题（结果 peek）。
  * `summary` 故意不在此列：handoff 摘要由 ToolLine 在标题行内联，不经 toolDetail
- * 再塞一遍（否则和内联摘要重复）。 */
+ * 再塞一遍（否则和内联摘要重复）。
+ * `source` / `destination` 也不单列：file_move / file_copy 没有 `path`，须成对
+ * 拼进标题，见 {@link fileTransferDetail}。 */
 const TOOL_DETAIL_KEYS = [
   "query",
   "url",
@@ -203,7 +207,18 @@ function asTitleDetail(raw: string): string {
     : line;
 }
 
+/** file_move / file_copy 标题：成对路径，避免只剩「Move file」动词。 */
+function fileTransferDetail(args: Record<string, unknown>): string {
+  const src = typeof args.source === "string" ? args.source.trim() : "";
+  const dest =
+    typeof args.destination === "string" ? args.destination.trim() : "";
+  if (!src || !dest) return "";
+  return asTitleDetail(`${src} → ${dest}`);
+}
+
 export function toolDetail(args: Record<string, unknown>): string {
+  const transfer = fileTransferDetail(args);
+  if (transfer) return transfer;
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
     if (typeof v === "string" && v.trim()) return asTitleDetail(v);

@@ -261,19 +261,16 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
         "paths": {
             "type": "array",
             "items": {"type": "string"},
-            "description": (
-                "status/diff/add/show/blame 路径过滤；add/blame 必填（blame 仅一文件）。"
-                "大仓宜收窄。"
-            ),
+            "description": "status/diff/add/show/blame 路径；add/blame 必填（blame 仅一文件）。",
         },
         "staged": {
             "type": "boolean",
-            "description": "diff 只看暂存区（--cached）。默认 false。",
+            "description": "diff --cached。",
             "default": False,
         },
         "include_untracked": {
             "type": "boolean",
-            "description": "status 含未跟踪；默认 false（大仓更快）。",
+            "description": "status 含未跟踪。",
             "default": False,
         },
         "max_count": {
@@ -283,12 +280,12 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "oneline": {
             "type": "boolean",
-            "description": "log 用 --oneline。默认 true。",
+            "description": "log --oneline。",
             "default": True,
         },
         "message": {
             "type": "string",
-            "description": "commit 必填说明；stash push 可选。",
+            "description": "commit 必填；stash push 可选。",
         },
         "branch": {
             "type": "string",
@@ -296,45 +293,41 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "create": {
             "type": "boolean",
-            "description": "checkout 时 -b 建分支。默认 false。",
+            "description": "checkout -b。",
             "default": False,
         },
         "remote": {
             "type": "string",
-            "description": "fetch/pull/push 远程名（默认 origin；禁 refspec/选项）。",
+            "description": "fetch/pull/push 远程名（默认 origin）。",
             "default": "origin",
         },
         "set_upstream": {
             "type": "boolean",
-            "description": "push 设上游（--set-upstream）。默认 false。",
+            "description": "push --set-upstream。",
             "default": False,
         },
         "object": {
             "type": "string",
-            "description": "show 对象（默认 HEAD；禁 '-' 开头）。",
+            "description": "show 对象（默认 HEAD）。",
             "default": "HEAD",
         },
         "action": {
             "type": "string",
             "enum": ["list", "push", "pop", "create", "add"],
-            "description": (
-                "stash：list|push|pop（禁 drop/clear）；"
-                "tag：list|create（禁删）；"
-                "remote：list|add（禁 remove）。默认 list。"
-            ),
+            "description": "stash：list|push|pop；tag：list|create；remote：list|add。默认 list。",
             "default": "list",
         },
         "ref": {
             "type": "string",
-            "description": "merge/rebase/cherry-pick 目标引用（禁 '-' 开头）。",
+            "description": "merge/rebase/cherry-pick 目标引用。",
         },
         "name": {
             "type": "string",
-            "description": "tag create 标签名；remote add 远程名（禁 '-'）。",
+            "description": "tag create 名；remote add 远程名。",
         },
         "url": {
             "type": "string",
-            "description": "remote add 的 URL/路径（禁 '-' 开头）。",
+            "description": "remote add 的 URL/路径。",
         },
         "title": {
             "type": "string",
@@ -342,16 +335,16 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "body": {
             "type": "string",
-            "description": "create_pr 正文（可选）。",
+            "description": "create_pr 正文。",
             "default": "",
         },
         "base": {
             "type": "string",
-            "description": "create_pr 目标分支（可选；默认 default_branch）。",
+            "description": "create_pr 目标分支。",
         },
         "head": {
             "type": "string",
-            "description": "create_pr 源分支（可选；默认当前；须已推远程）。",
+            "description": "create_pr 源分支（须已推远程）。",
         },
     },
     "required": ["subcommand"],

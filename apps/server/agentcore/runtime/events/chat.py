@@ -230,6 +230,7 @@ def message_end(
     collab: dict[str, int] | None = None,
     duration_ms: int | None = None,
     outcome: str | None = None,
+    team_batch: dict[str, Any] | None = None,
 ) -> SSEEvent:
     # 未显式传入时复用 TurnLatencyProbe（与 chat.turn_complete 同锚）；无 probe 则省略字段。
     if duration_ms is None:
@@ -256,6 +257,8 @@ def message_end(
         payload["duration_ms"] = int(duration_ms)
     if outcome in ("ok", "partial", "paused", "error"):
         payload["outcome"] = outcome
+    if isinstance(team_batch, dict) and team_batch.get("kind"):
+        payload["team_batch"] = team_batch
     return SSEEvent(type=EventType.MESSAGE_END, payload=payload)
 
 
