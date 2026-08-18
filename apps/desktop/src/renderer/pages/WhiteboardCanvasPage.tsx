@@ -67,7 +67,9 @@ export function WhiteboardCanvasPage() {
   // CAS version of the last load/save; sent as the next write's baseline.
   const versionRef = useRef(0);
   // Latest scene snapshot from the engine (the debounced flush reads this).
+  // Tagged with the board the change came from so a stale timer cannot flush A onto B.
   const latestRef = useRef<{
+    boardId: string;
     elements: SceneElement[];
     viewport: Viewport;
   } | null>(null);
@@ -76,32 +78,54 @@ export function WhiteboardCanvasPage() {
   const savedSceneRef = useRef("");
   const conflictRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Generation + source id: same-component route switch must not apply A onto B,
+  // and persist must not write unless the route still matches the loaded board.
+  const loadGenRef = useRef(0);
+  const loadedSourceIdRef = useRef<string | null>(null);
 
   const fetchBoard = useCallback(() => {
+    const requestedId = boardId;
+    const gen = ++loadGenRef.current;
+    loadedSourceIdRef.current = null;
+    latestRef.current = null;
+    versionRef.current = 0;
+    savedSceneRef.current = "";
     setBoard(null);
+    setTitle("");
     setLoadError(false);
     setStatus("idle");
     setConflict(false);
     conflictRef.current = false;
-    latestRef.current = null;
-    getBoard(boardId)
+    getBoard(requestedId)
       .then((b) => {
+        if (gen !== loadGenRef.current) return;
         versionRef.current = b.version;
+        loadedSourceIdRef.current = b.id;
         setTitle(b.title);
         setBoard(b);
       })
-      .catch(() => setLoadError(true));
+      .catch(() => {
+        if (gen !== loadGenRef.current) return;
+        setLoadError(true);
+      });
   }, [boardId]);
 
   useEffect(() => {
     fetchBoard();
   }, [fetchBoard]);
 
+  // Drop in-flight load + pending autosave when the route id changes (or unmount).
   useEffect(() => {
     return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
+      loadGenRef.current += 1;
+      loadedSourceIdRef.current = null;
+      latestRef.current = null;
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
     };
-  }, []);
+  }, [boardId]);
 
   const initialData = useMemo(() => {
     if (!board) return null;
@@ -118,6 +142,8 @@ export function WhiteboardCanvasPage() {
       elements: SceneElement[],
       viewport: Viewport,
     ): Promise<number | null> => {
+      const sourceId = loadedSourceIdRef.current;
+      if (!sourceId || sourceId !== boardId) return null;
       const key = JSON.stringify(elements);
       if (key === savedSceneRef.current) return versionRef.current;
       setStatus("saving");
@@ -126,7 +152,10 @@ export function WhiteboardCanvasPage() {
           elements,
           viewport,
         ) as unknown as BoardScene;
-        const res = await saveBoardScene(boardId, scene, versionRef.current);
+        const res = await saveBoardScene(sourceId, scene, versionRef.current);
+        if (loadedSourceIdRef.current !== sourceId) {
+          return res.conflict ? null : res.version;
+        }
         if (res.conflict) {
           conflictRef.current = true;
           setConflict(true);
@@ -138,6 +167,7 @@ export function WhiteboardCanvasPage() {
         setStatus("saved");
         return res.version;
       } catch {
+        if (loadedSourceIdRef.current !== sourceId) return null;
         setStatus("error");
         return null;
       }
@@ -148,17 +178,23 @@ export function WhiteboardCanvasPage() {
   const flush = useCallback(async () => {
     const snap = latestRef.current;
     if (!snap || conflictRef.current) return;
+    if (
+      snap.boardId !== boardId ||
+      snap.boardId !== loadedSourceIdRef.current
+    ) {
+      return;
+    }
     await persistScene(snap.elements, snap.viewport);
-  }, [persistScene]);
+  }, [persistScene, boardId]);
 
   const handleChange = useCallback(
     (elements: SceneElement[], viewport: Viewport) => {
-      latestRef.current = { elements, viewport };
+      latestRef.current = { boardId, elements, viewport };
       if (conflictRef.current) return;
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => void flush(), 1500);
     },
-    [flush],
+    [flush, boardId],
   );
 
   // The AI's hands on this canvas (AI协作白板.md §六 M2): apply the op batch through the
@@ -220,8 +256,13 @@ export function WhiteboardCanvasPage() {
       setTitle(board?.title ?? "");
       return;
     }
+    if (board.id !== boardId || loadedSourceIdRef.current !== boardId) {
+      setTitle(board.title);
+      return;
+    }
     try {
       const updated = await renameBoard(boardId, next);
+      if (loadedSourceIdRef.current !== boardId) return;
       setBoard((b) => (b ? { ...b, title: updated.title } : b));
     } catch {
       setTitle(board.title);

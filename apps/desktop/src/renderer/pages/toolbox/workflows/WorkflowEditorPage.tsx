@@ -45,23 +45,34 @@ export function WorkflowEditorPage() {
   const [runOpen, setRunOpen] = useState(false);
   // 画布上那份最后与服务端对齐过的 definition：引用还是它 = 用户没动过画布。
   const syncedDef = useRef<WorkflowDefinition | null>(null);
+  // Generation + source id: same-component route switch must not apply A onto B,
+  // and save must not PATCH unless the route still matches the loaded workflow.
+  const loadGenRef = useRef(0);
+  const loadedSourceIdRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!workflowId) return;
+    const requestedId = workflowId;
+    const gen = ++loadGenRef.current;
+    loadedSourceIdRef.current = null;
     setLoading(true);
+    setSaving(false);
     setError(null);
     try {
-      const w = await getWorkflow(workflowId);
+      const w = await getWorkflow(requestedId);
+      if (gen !== loadGenRef.current) return;
+      loadedSourceIdRef.current = w.id;
       setWorkflow(w);
       setName(w.name);
       setDescription(w.description ?? "");
       setDefinition(w.definition);
       syncedDef.current = w.definition;
     } catch (e) {
+      if (gen !== loadGenRef.current) return;
       setError(errMsg(e, "加载工作流失败"));
       setWorkflow(null);
     } finally {
-      setLoading(false);
+      if (gen === loadGenRef.current) setLoading(false);
     }
   }, [workflowId]);
 
@@ -69,13 +80,22 @@ export function WorkflowEditorPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    return () => {
+      loadGenRef.current += 1;
+      loadedSourceIdRef.current = null;
+    };
+  }, [workflowId]);
+
   const issues = useMemo(
     () => (definition ? validateWorkflowDefinition(definition) : []),
     [definition],
   );
 
   const save = async () => {
+    const sourceId = loadedSourceIdRef.current;
     if (!workflowId || !definition || saving) return;
+    if (!sourceId || sourceId !== workflowId) return;
     if (!name.trim()) {
       setError("请填写名称");
       return;
@@ -87,18 +107,20 @@ export function WorkflowEditorPage() {
     setSaving(true);
     setError(null);
     try {
-      const next = await patchWorkflow(workflowId, {
+      const next = await patchWorkflow(sourceId, {
         name: name.trim(),
         description: description.trim() || null,
         definition,
       });
+      if (loadedSourceIdRef.current !== sourceId) return;
       setWorkflow(next);
       syncedDef.current = definition;
       notifySuccess("工作流已保存");
     } catch (e) {
+      if (loadedSourceIdRef.current !== sourceId) return;
       setError(errMsg(e, "保存失败"));
     } finally {
-      setSaving(false);
+      if (loadedSourceIdRef.current === sourceId) setSaving(false);
     }
   };
 
@@ -108,6 +130,7 @@ export function WorkflowEditorPage() {
    * 动过就只更新已存快照——他手上的编辑不能被这个后台结果盖掉。
    */
   const adoptSuggestedSlots = useCallback((next: UserWorkflow) => {
+    if (loadedSourceIdRef.current !== next.id) return;
     setDefinition((cur) => (cur === syncedDef.current ? next.definition : cur));
     syncedDef.current = next.definition;
     setWorkflow(next);
