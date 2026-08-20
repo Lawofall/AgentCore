@@ -7,7 +7,8 @@ streamed captain content only — stop / interrupt chrome is UI StatusStrip, not
 parenthetical suffix.
 
 After the durable incomplete write, this closer also best-effort reconciles the turn
-cost ledger (``cost.recorded`` + ``messages.cost``) so /stop does not drop payroll.
+cost ledger (``cost.recorded`` + ``messages.cost`` + ``messages.usage`` tokens) so
+/stop does not drop payroll or the bubble token split.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ _TERMINAL_FINISH = frozenset(
         FinishReason.INTERRUPTED.value,
     }
 )
+
 
 class TurnInterruptReason(StrEnum):
     USER_STOP = "user_stop"
@@ -189,10 +191,13 @@ async def _reconcile_interrupted_turn_cost(
 
     Successful LLM calls usually already sit in ``cost_calls``; interrupt closers
     historically skipped turn-end reconcile, so ``cost.recorded`` / ``messages.cost``
-    never landed. Reuse the same ``reconcile_turn_cost_ledger`` + ``log_cost_recorded``
+    never landed, and ``messages.usage`` kept only incomplete chrome (no token
+    fields). Reuse the same ``reconcile_turn_cost_ledger`` + ``log_cost_recorded``
     path as cloud finalize with empty ``cost_runs`` (no forged orphans — vision sink
-    may still be lost on cancel). Skip emit when ``messages.cost`` is already stamped
-    so a second closer does not double-log ``cost.recorded``.
+    may still be lost on cancel). Stamp ledger token totals onto ``messages.usage``
+    *before* ``messages.cost`` so a crash between the two writes retries (cost not
+    yet stamped). Skip emit when ``messages.cost`` is already stamped so a second
+    closer does not double-log ``cost.recorded``.
     """
     from agentcore.billing.turn_ledger import (
         drain_cost_ledger_before_reconcile,
@@ -200,7 +205,7 @@ async def _reconcile_interrupted_turn_cost(
     )
     from agentcore.conversation.common import log_cost_recorded
     from agentcore.db.repositories import ConversationRepository, MessageRepository
-    from agentcore.runtime.costing import aggregate_cost
+    from agentcore.runtime.costing import aggregate_cost, aggregate_usage_tokens
 
     # Drain before main-pool session (same discipline as cloud finalize / handoff).
     ledger_drained = await drain_cost_ledger_before_reconcile(
@@ -247,6 +252,13 @@ async def _reconcile_interrupted_turn_cost(
             return
         log_cost_recorded(conversation_id, message_id, ledger_rows)
         try:
+            # Tokens first: ``set_cost`` is the skip latch. A crash after cost but
+            # before usage would leave the bubble empty on retry (early return).
+            await msg_repo.merge_usage(
+                message_id,
+                conversation_id=conversation_id,
+                usage=aggregate_usage_tokens(ledger_rows),
+            )
             await msg_repo.set_cost(
                 message_id,
                 conversation_id=conversation_id,
@@ -370,9 +382,7 @@ async def close_turn_interrupted(
                 message_id, conversation_id=conversation_id
             )
             existing_usage = existing.usage if existing is not None else None
-            resolved_trace = trace_id or (
-                existing.trace_id if existing is not None else None
-            )
+            resolved_trace = trace_id or (existing.trace_id if existing is not None else None)
 
             skip_upsert = _already_terminal_incomplete(
                 existing_usage if isinstance(existing_usage, dict) else None
@@ -380,9 +390,7 @@ async def close_turn_interrupted(
 
             if not skip_upsert:
                 existing_content = existing.content if existing else None
-                existing_reasoning = (
-                    existing.reasoning_content if existing else None
-                )
+                existing_reasoning = existing.reasoning_content if existing else None
                 if load_stream_state:
                     raw = pick_monotonic_content(existing_content, seg_content)
                     # Passed salvage (e.g. content_reset stash) must join the
@@ -394,11 +402,7 @@ async def close_turn_interrupted(
                         pick_monotonic_content(existing_reasoning, seg_reasoning) or None
                     )
                 else:
-                    raw = (
-                        body_content
-                        if body_content is not None
-                        else (existing_content or "")
-                    )
+                    raw = body_content if body_content is not None else (existing_content or "")
                     if body_reasoning is None and existing_reasoning:
                         body_reasoning = existing_reasoning
                 body = compose_interrupt_body(raw or "", reason=resolved)
@@ -437,9 +441,7 @@ async def close_turn_interrupted(
                 )
             # turn_end 必写：message 终态与 fold 的 finish_reason 同源。后台 execution
             # 事实在收口后继续追加（批次1）是特性——这里只保证收口时终态事实已落盘。
-            entries = await TurnJournalRepository(session).load_owned(
-                message_id, conversation_id
-            )
+            entries = await TurnJournalRepository(session).load_owned(message_id, conversation_id)
             if not _journal_has_turn_end(entries or []):
                 await TurnJournalRepository(session).append(
                     turn_id=message_id,

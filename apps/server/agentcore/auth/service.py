@@ -14,17 +14,24 @@ with in-memory fakes (no DB).
 import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypedDict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.auth.client import ClientPlatform, is_product_platform, platform_to_audience
+from agentcore.auth.email_codes import normalize_email
 from agentcore.auth.mfa import AdminMfaService
+from agentcore.auth.usernames import (
+    USERNAME_COOLDOWN_DAYS,
+    is_generated_handle,
+    validate_username_for_claim,
+)
 from agentcore.config import settings
 from agentcore.core.errors import (
     AdminProductForbiddenError,
     AuthenticationError,
     AuthorizationError,
+    EmailNotVerifiedError,
     NotFoundError,
     ValidationError,
 )
@@ -78,6 +85,16 @@ _DUMMY_PASSWORD_HASH = hash_password("agentcore-login-timing-equalizer")
 # Sentinel for "field not provided" in a partial profile update, distinct from an
 # explicit None (which clears the nullable email column).
 _UNSET: Any = object()
+
+
+class _ProfileUpdate(TypedDict, total=False):
+    """Partial kwargs for :meth:`UserRepository.update` (never ``commit``)."""
+
+    display_name: str
+    email: str | None
+    email_verified_at: datetime | None
+    username: str
+    username_changed_at: datetime
 
 
 @dataclass(frozen=True)
@@ -168,14 +185,18 @@ class AuthService:
         if not settings.registration_open:
             raise AuthorizationError("注册已关闭")
 
-        username = username.strip()
-        if not username:
-            raise ValidationError("请输入用户名")
+        username = validate_username_for_claim(username)
         if len(password) < _MIN_PASSWORD_LENGTH:
             raise ValidationError(f"密码至少需要 {_MIN_PASSWORD_LENGTH} 个字符")
 
         if await self._users.get_by_username(username) is not None:
             raise ValidationError("该用户名已被占用")
+        if email:
+            email = email.strip() or None
+        if email:
+            existing = await self._users.get_by_email(email)
+            if existing is not None:
+                raise ValidationError("该邮箱已被占用")
 
         # One txn: user + credentials (avoid orphan user if credentials insert fails).
         user = await self._users.create(
@@ -191,6 +212,23 @@ class AuthService:
         await self._commit()
         return user
 
+    async def _resolve_login_user(self, identifier: str) -> User | None:
+        """Username field accepts email (contains ``@``) or a handle.
+
+        Malformed email shapes return None so login stays a uniform 401.
+        Accounts with a null email are found only via the handle path.
+        """
+        raw = identifier.strip()
+        if not raw:
+            return None
+        if "@" in raw:
+            try:
+                email = normalize_email(raw)
+            except ValidationError:
+                return None
+            return await self._users.get_by_email(email)
+        return await self._users.get_by_username(raw)
+
     async def login(
         self,
         *,
@@ -200,9 +238,9 @@ class AuthService:
         meta: SessionMeta | None = None,
         persist_session: bool = True,
     ) -> LoginResult:
-        user = await self._users.get_by_username(username.strip())
+        user = await self._resolve_login_user(username)
         creds = await self._credentials.get_by_user_id(user.user_id) if user else None
-        # Uniform failure: never reveal whether the username exists. Run one verify
+        # Uniform failure: never reveal whether the account exists. Run one verify
         # against a dummy hash so a missing user takes the same wall-clock as a wrong
         # password — no timing oracle for username enumeration (SEC-004). Result ignored.
         if user is None or creds is None:
@@ -237,6 +275,9 @@ class AuthService:
 
         if creds.failed_attempts or creds.locked_until is not None:
             await self._credentials.reset_failure_state(user.user_id)
+
+        if settings.require_email_verified and getattr(user, "email_verified_at", None) is None:
+            raise EmailNotVerifiedError()
 
         if user.role == "admin" and is_product_platform(platform):
             raise AdminProductForbiddenError()
@@ -598,33 +639,58 @@ class AuthService:
         user_id: str,
         display_name: str | object = _UNSET,
         email: str | None | object = _UNSET,
+        username: str | object = _UNSET,
     ) -> User:
         """Update a user's profile (个人资料编辑: 显示名 / 邮箱), returning the new row.
 
         Patch semantics — only the passed fields change. Display name must be
         non-empty; email must be unique (a collision with another live account → 422),
-        and an explicit ``None``/blank clears it. Raises ``NotFoundError`` for an
-        unknown user, ``ValidationError`` on an empty display name or a taken email.
+        and an explicit ``None``/blank clears it. Username claims enforce handle
+        policy, occupancy, and the post-claim cooldown. Raises ``NotFoundError`` for
+        an unknown user, ``ValidationError`` on invalid or conflicting fields.
         """
         user = await self._users.get_by_id(user_id)
         if user is None:
             raise NotFoundError("用户不存在")
 
-        changed: dict[str, object | None] = {}
+        changed: _ProfileUpdate = {}
         if display_name is not _UNSET:
             name = display_name.strip() if isinstance(display_name, str) else ""
             if not name:
-                raise ValidationError("显示名不能为空")
+                raise ValidationError("昵称不能为空")
             changed["display_name"] = name
         if email is not _UNSET:
             normalized = email.strip() if isinstance(email, str) else ""
             if not normalized:
                 changed["email"] = None
+                changed["email_verified_at"] = None
             else:
+                normalized = normalized.lower()
                 existing = await self._users.get_by_email(normalized)
                 if existing is not None and existing.user_id != user_id:
                     raise ValidationError("该邮箱已被占用")
                 changed["email"] = normalized
+                current = (user.email or "").strip().lower()
+                if normalized != current:
+                    changed["email_verified_at"] = None
+        if username is not _UNSET:
+            if not isinstance(username, str):
+                raise ValidationError("用户名无效")
+            new_username = validate_username_for_claim(username)
+            if new_username != user.username.lower():
+                holder = await self._users.get_by_username(new_username)
+                if holder is not None and holder.user_id != user_id:
+                    raise ValidationError("该用户名已被占用")
+                if not is_generated_handle(user.username):
+                    changed_at = getattr(user, "username_changed_at", None)
+                    if changed_at is not None:
+                        now = datetime.now(UTC)
+                        if now - changed_at < timedelta(days=USERNAME_COOLDOWN_DAYS):
+                            raise ValidationError(
+                                f"用户名 {USERNAME_COOLDOWN_DAYS} 天内只能修改一次"
+                            )
+                changed["username"] = new_username
+                changed["username_changed_at"] = datetime.now(UTC)
 
         if not changed:
             return user

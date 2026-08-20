@@ -1,6 +1,6 @@
-// Auth flow for the mobile bearer client (M3). Register uses the platform-neutral
-// /v1/auth/register; session uses bearer /v1/auth/token*. REST DTOs track OpenAPI
-// via @agentcore/contract-rest-types.
+// Auth flow for the mobile bearer client (M3). Register is two-step
+// (/register/send-code + /verify); session uses bearer /v1/auth/token*.
+// REST DTOs track OpenAPI via @agentcore/contract-rest-types.
 import {
   apiFetch,
   apiUrl,
@@ -16,11 +16,30 @@ import { clearAiAttention } from "@/lib/aiAttention";
 import { clearAiTurnActivity } from "@/lib/aiTurnActivity";
 import { clientHeaders } from "@/lib/clientBuildInfo";
 import { clearConversationListCache } from "@/lib/conversationListCache";
+import { normalizeEmailCodeExpiresIn } from "@/lib/emailAuth";
 import type { components } from "@/types/api.generated";
+import { restPath } from "@agentcore/contract-rest-types/paths";
 
 type Schemas = components["schemas"];
 
 export type User = Schemas["UserResponse"];
+
+/** Login REST failure: keeps `{error.code}` so the page can branch without matching copy. */
+export class AuthApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "AuthApiError";
+  }
+}
+
+function asUser(raw: unknown): User {
+  return raw as User;
+}
+
 type TokenResponse = Schemas["TokenResponse"];
 
 // /readyz has no response_model — keep a local shape (mirrors desktop auth.ts).
@@ -29,30 +48,101 @@ interface ReadinessResponse {
   database: boolean;
 }
 
-export interface RegisterInput {
-  username: string;
+export interface RegisterSendCodeInput {
+  email: string;
   password: string;
-  displayName?: string;
 }
 
-/** Create an account (no session). Caller should follow with {@link login}. */
-export async function register(input: RegisterInput): Promise<User> {
-  const res = await fetch(apiUrl("/v1/auth/register"), {
+/** Step 1 of two-step register: persist pending signup and email a 6-digit code. */
+export async function sendRegisterCode(
+  input: RegisterSendCodeInput,
+): Promise<{ expiresIn: number }> {
+  const res = await fetch(apiUrl(restPath("/v1/auth/register/send-code")), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...clientHeaders(),
+    },
+    // email + password only; username is allocated server-side.
+    // OpenAPI types may still list the old fields until the next gen:types.
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "发送验证码失败"));
+  }
+  let body: Schemas["EmailCodeAcceptedResponse"] | undefined;
+  try {
+    body = (await res.json()) as Schemas["EmailCodeAcceptedResponse"];
+  } catch {
+    body = undefined;
+  }
+  return { expiresIn: normalizeEmailCodeExpiresIn(body?.expires_in) };
+}
+
+/** Step 2 of two-step register: same success payload as the old `/register`. */
+export async function verifyRegister(
+  email: string,
+  code: string,
+  displayName?: string,
+): Promise<User> {
+  const body: { email: string; code: string; display_name?: string } = {
+    email,
+    code,
+  };
+  const trimmedName = displayName?.trim();
+  if (trimmedName) body.display_name = trimmedName;
+  const res = await fetch(apiUrl(restPath("/v1/auth/register/verify")), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...clientHeaders(),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "注册失败"));
+  }
+  return asUser(await res.json());
+}
+
+/** Always 202 — does not reveal whether the email is registered. */
+export async function forgotPassword(email: string): Promise<void> {
+  const res = await fetch(apiUrl(restPath("/v1/auth/password/forgot")), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...clientHeaders(),
+    },
+    body: JSON.stringify({ email } satisfies Schemas["PasswordForgotRequest"]),
+  });
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, "发送验证码失败"));
+  }
+}
+
+export async function resetPassword(
+  email: string,
+  code: string,
+  newPassword: string,
+): Promise<void> {
+  const res = await fetch(apiUrl(restPath("/v1/auth/password/reset")), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...clientHeaders(),
     },
     body: JSON.stringify({
-      username: input.username,
-      password: input.password,
-      display_name: input.displayName || undefined,
-    } satisfies Schemas["RegisterRequest"]),
+      email,
+      code,
+      new_password: newPassword,
+    } satisfies Schemas["PasswordResetRequest"]),
   });
   if (!res.ok) {
-    throw new Error(await errorMessage(res, "注册失败"));
+    throw new Error(await errorMessage(res, "重置密码失败"));
   }
-  return (await res.json()) as User;
 }
 
 export async function login(username: string, password: string): Promise<User> {
@@ -69,7 +159,7 @@ export async function login(username: string, password: string): Promise<User> {
     } satisfies Schemas["LoginRequest"]),
   });
   if (!res.ok) {
-    throw new Error(await errorMessage(res, "登录失败"));
+    throw await loginError(res);
   }
   const data = (await res.json()) as TokenResponse;
   setTokens({
@@ -79,13 +169,13 @@ export async function login(username: string, password: string): Promise<User> {
   void enablePush();
   startRealtime();
   startFulfill();
-  return data.user ?? (await me());
+  return data.user ? asUser(data.user) : await me();
 }
 
 export async function me(): Promise<User> {
   const res = await apiFetch("/v1/auth/me");
   if (!res.ok) throw new Error("未认证");
-  return (await res.json()) as User;
+  return asUser(await res.json());
 }
 
 export async function logout(): Promise<void> {
@@ -179,11 +269,32 @@ async function devAutoLogin(): Promise<boolean> {
   }
 }
 
-async function errorMessage(res: Response, fallback: string): Promise<string> {
+async function readErrorBody(
+  res: Response,
+): Promise<{ code?: string; message?: string }> {
   try {
-    const body = (await res.json()) as { error?: { message?: string } };
-    return body.error?.message ?? `${fallback} (${res.status})`;
+    const body = (await res.json()) as {
+      error?: { code?: string; message?: string };
+    };
+    return { code: body.error?.code, message: body.error?.message };
   } catch {
-    return `${fallback} (${res.status})`;
+    return {};
   }
+}
+
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const { message } = await readErrorBody(res);
+  return message ?? `${fallback} (${res.status})`;
+}
+
+/** Login-only: 403 EMAIL_NOT_VERIFIED ≠ 401 wrong password. No intercept page. */
+async function loginError(res: Response): Promise<AuthApiError> {
+  const { code, message } = await readErrorBody(res);
+  const text =
+    code === "EMAIL_NOT_VERIFIED"
+      ? "请先验证邮箱"
+      : res.status === 401
+        ? "用户名或密码错误"
+        : (message ?? `登录失败 (${res.status})`);
+  return new AuthApiError(res.status, text, code);
 }

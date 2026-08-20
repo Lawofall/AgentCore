@@ -104,6 +104,9 @@ class SidecarServer(HandlerMixin, TurnExecutionMixin):
         # turn_id → conversation_id (cancel cascades coordination without FE always
         # repeating conversationId; cleared with ``_turns``).
         self._turn_conversations: dict[str, str] = {}
+        # turn_id → monotonic deadline. Cancel of an unknown turnId (desktop is
+        # still awaiting in-flight warm before startTurn RPC) so startTurn refuses.
+        self._cancel_tombstones: dict[str, float] = {}
         # Cold resume × live: at most one deferred waiter per conversation.
         # Same message_id joins; a different message_id supersedes (last click wins).
         self._resume_deferred: dict[str, SidecarResumeDeferredWaiter] = {}

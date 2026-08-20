@@ -37,6 +37,7 @@ from agentcore.core.errors import (
 from agentcore.core.logging import get_logger
 from agentcore.core.net import outbound_async_client
 from agentcore.llm.errors import (
+    apply_locator_context,
     body_preview,
     client_error_message,
     diagnose_empty_response,
@@ -52,6 +53,7 @@ from agentcore.llm.errors import (
     opencode_typed_rate_limit_message,
     our_inference_service_5xx_error,
     parse_agentcore_error_envelope,
+    unsupported_tool_schema_error_details,
     upstream_client_error,
     upstream_error,
 )
@@ -82,7 +84,7 @@ from agentcore.llm.provider.protocol import (
     ToolCallFunction,
     connect_retry_policy,
 )
-from agentcore.llm.provider.wire_dialect import resolve_wire_dialect
+from agentcore.llm.provider.wire_dialect import resolve_wire_dialect, wire_model_leaf
 from agentcore.llm.sub2api_probe import probe_sub2api_diagnosis_result
 
 logger = get_logger(__name__)
@@ -153,6 +155,21 @@ def _is_tools_unsupported_rejection(status: int, body: str) -> bool:
 def _usage_from(usage_data: dict) -> TokenUsage:
     """Wire-usage parse — both DeepSeek and OpenAI prompt-cache dialects (protocol.py)."""
     return TokenUsage.from_openai_wire(usage_data)
+
+
+def _reasoning_text(obj: dict | None) -> str | None:
+    """DeepSeek ``reasoning_content`` plus OpenAI-compatible aliases.
+
+    Some relays (OpenCode Go) stream CoT on ``reasoning`` / ``reasoning_text``
+    and leave ``reasoning_content`` empty. First non-empty string wins.
+    """
+    if not obj:
+        return None
+    for key in ("reasoning_content", "reasoning", "reasoning_text"):
+        val = obj.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return None
 
 
 class RetryAfter(NamedTuple):
@@ -488,6 +505,19 @@ class OpenAICompatibleProvider:
     def _uses_platform_pool(self) -> bool:
         return self._name == "platform" and not self._is_inference_hop
 
+    def _enforce_declared_tool_surface(self, payload: dict) -> None:
+        """Fail locally when this pool member declared a cap the assembled tools exceed."""
+        tools = payload.get("tools")
+        if not isinstance(tools, list) or not tools:
+            return
+        if not self._uses_platform_pool():
+            return
+        from agentcore.llm.tool_surface import enforce_platform_member_tool_surface
+
+        enforce_platform_member_tool_surface(
+            tools, api_key=self._api_key, base_url=self._base_url
+        )
+
     @staticmethod
     def _is_pool_failover_signal(error: LLMError) -> bool:
         # Long attested 429s become LLMQuotaExceededError on the platform leaf;
@@ -700,7 +730,7 @@ class OpenAICompatibleProvider:
         # Success / failure metrics: ``observe_provider`` fence (build_provider).
         return LLMResponse(
             content=content,
-            reasoning_content=message.get("reasoning_content"),
+            reasoning_content=_reasoning_text(message) or message.get("reasoning_content"),
             tool_calls=tool_calls,
             usage=usage,
             finish_reason=finish_reason,
@@ -772,6 +802,7 @@ class OpenAICompatibleProvider:
         self._ensure_client_open()
 
         for attempt in range(_IO_ATTEMPT_CEILING):
+            self._enforce_declared_tool_surface(payload)
             # Same per-attempt narrowing as the unary loop. Streaming turns are the
             # interactive ones and carry no patience, so this is normally the
             # unchanged ``MAX_RETRY_AFTER`` — and a request that arrived carrying one
@@ -820,6 +851,7 @@ class OpenAICompatibleProvider:
                         attempt=attempt,
                         scenario=request.scenario,
                         retry_ceiling=ceiling,
+                        payload=payload,
                     )
                     clear_cooldown(self._cooldown_key)
                     async for line in response.aiter_lines():
@@ -859,7 +891,7 @@ class OpenAICompatibleProvider:
                         choice = choices[0]
                         delta = choice.get("delta", {})
                         content_delta = delta.get("content")
-                        reasoning_delta = delta.get("reasoning_content")
+                        reasoning_delta = _reasoning_text(delta)
                         raw_tool_calls = delta.get("tool_calls")
                         if content_delta:
                             has_content = True
@@ -1119,15 +1151,22 @@ class OpenAICompatibleProvider:
             payload["tool_choice"] = request.tool_choice
         if stream:
             payload["stream_options"] = {"include_usage": True}
-        # Models with thinking_type_switch default thinking on. Background
-        # one-shots (title / memory / …) must disable it or a tight max_tokens
-        # budget is spent on reasoning_content and the JSON body comes back
-        # empty → fallback_title = raw user input in the sidebar.
+        # thinking_type_switch models: send the switch explicitly. Official
+        # DeepSeek treats omit as on; OpenCode Go / some relays treat omit as
+        # off (no reasoning_content, reasoning_tokens=0). None and True both
+        # mean on. Background one-shots (title / memory / …) must send
+        # disabled or a tight max_tokens budget is eaten by reasoning and
+        # the JSON body comes back empty → fallback_title = raw user input.
         if dialect.thinking_type_switch:
             if request.thinking is False:
                 payload["thinking"] = {"type": "disabled"}
-            elif request.thinking is True:
+            else:
                 payload["thinking"] = {"type": "enabled"}
+                # Official V4 default effort is high. Some relays honor
+                # reasoning_effort but ignore thinking.type — without it the
+                # stream has no CoT (OpenCode Go dogfood 2026-08-19).
+                if wire_model_leaf(request.model).startswith("deepseek-v4"):
+                    payload["reasoning_effort"] = "high"
         return payload
 
     async def _log_sub2api_diagnosis(self, err: LLMUpstreamError) -> LLMUpstreamError:
@@ -1169,6 +1208,7 @@ class OpenAICompatibleProvider:
         attempt: int = 0,
         scenario: str = "chat",
         retry_ceiling: float | None = None,
+        payload: dict | None = None,
     ) -> None:
         # Sidecar→cloud hop: our own error envelope is the first truth source, and
         # the status-based classification below is the fallback for answers we did
@@ -1243,7 +1283,8 @@ class OpenAICompatibleProvider:
                 body_preview=body_preview(body),
             )
             # Sidecar cloud proxy: Bearer is the short-lived inference JWT, not a BYOK key.
-            # Map to a distinct code so the desktop remints / retries instead of「去设置」.
+            # Map to a distinct code so the client remints / retries instead of
+            # offering a Key-config CTA.
             if self._is_inference_hop:
                 raise InferenceTokenExpiredError(
                     upstream_status=status_code,
@@ -1272,6 +1313,9 @@ class OpenAICompatibleProvider:
                 client_error_message(self._display_name, status_code, body),
                 status=status_code,
                 body=body,
+                **unsupported_tool_schema_error_details(
+                    body, payload=payload, profile=scenario
+                ),
             )
         if status_code == 402:
             raise self._insufficient_balance_error(status=status_code, body=body)
@@ -1288,6 +1332,7 @@ class OpenAICompatibleProvider:
             # envelope with an LLM_* code (true upstream, wrapped by the proxy).
             # Never sniff free text / vendor gateway tutorials.
             relayed: str | None = None
+            envelope = None
             if self._is_inference_hop:
                 our_err = our_inference_service_5xx_error(status=status_code, body=body)
                 if our_err is not None:
@@ -1308,6 +1353,8 @@ class OpenAICompatibleProvider:
                 body=body,
                 retry_attempts=attempt,
             )
+            if envelope is not None:
+                apply_locator_context(err, envelope.context)
             if headers.get("x-upstream-retried"):
                 err.retryable = False
             raise err
@@ -1327,6 +1374,9 @@ class OpenAICompatibleProvider:
                 client_error_message(self._display_name, status_code, body),
                 status=status_code,
                 body=body,
+                **unsupported_tool_schema_error_details(
+                    body, payload=payload, profile=scenario
+                ),
             )
 
     @staticmethod
@@ -1459,6 +1509,7 @@ class OpenAICompatibleProvider:
         started = time.monotonic()
         self._ensure_client_open()
         for attempt in range(_IO_ATTEMPT_CEILING):
+            self._enforce_declared_tool_surface(payload)
             # Recomputed each attempt: a 429 we already slept off spent part of the
             # caller's wall clock, so the next cooldown is judged against what is
             # actually left rather than the patience we started with.
@@ -1488,6 +1539,7 @@ class OpenAICompatibleProvider:
                     attempt=attempt,
                     scenario=scenario,
                     retry_ceiling=ceiling,
+                    payload=payload,
                 )
                 clear_cooldown(self._cooldown_key)
                 try:

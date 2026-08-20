@@ -68,7 +68,10 @@ export interface OutboxRecord {
   reasoning_content?: string | null;
   citations?: unknown[];
   runs?: unknown;
-  /** seq(str) → {kind,payload,ts} — progressive journal; crash salvage has no runs. */
+  /** seq(str) → {kind,payload,ts,ord?} — progressive journal; crash salvage has no runs.
+   *  ``ord`` is emission order (outbox twin of Postgres ``created_at``). JS
+   *  ``JSON.parse`` reorders integer-like keys, so readers must sort by ``ord``.
+   */
   journal?: Record<string, unknown>;
   /**
    * Mid-stream channel snapshots from StreamCheckpointer (D6).
@@ -123,18 +126,64 @@ export function computeBackoffDelayMs(
   return base + jitter;
 }
 
+/** Same key as Python ``JOURNAL_ENTRY_ORD_KEY`` — emission index on the entry. */
+const JOURNAL_ENTRY_ORD_KEY = "ord";
+
+function entryOrd(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = (value as Record<string, unknown>)[JOURNAL_ENTRY_ORD_KEY];
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+  return raw;
+}
+
+function stripEntryOrd(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  if (!Object.prototype.hasOwnProperty.call(value, JOURNAL_ENTRY_ORD_KEY)) {
+    return value;
+  }
+  const copy = { ...(value as Record<string, unknown>) };
+  delete copy[JOURNAL_ENTRY_ORD_KEY];
+  return copy;
+}
+
+function isNumericJournalKey(key: string): boolean {
+  if (!key) return false;
+  const n = Number(key);
+  return Number.isFinite(n) && String(n) === key;
+}
+
 export function journalEntriesFromMap(
   journal: Record<string, unknown> | undefined,
 ): unknown[] | undefined {
   if (!journal || typeof journal !== "object") return undefined;
-  const keys = Object.keys(journal).sort((a, b) => {
+  const keys = Object.keys(journal);
+  if (keys.length === 0) return undefined;
+
+  const numericKeys = keys.filter(isNumericJournalKey);
+  const numericOrds = numericKeys.map((k) => entryOrd(journal[k]));
+  if (
+    numericKeys.length > 0 &&
+    numericOrds.every((item): item is number => item !== null)
+  ) {
+    const ordered = [...numericKeys].sort((a, b) => {
+      const d =
+        (entryOrd(journal[a]) as number) - (entryOrd(journal[b]) as number);
+      if (d !== 0) return d;
+      return Number(a) - Number(b);
+    });
+    const other = keys.filter((k) => !isNumericJournalKey(k));
+    return [...ordered, ...other].map((k) => stripEntryOrd(journal[k]));
+  }
+
+  // Legacy files without ``ord``: integer-key order (JS already lost insertion
+  // order at JSON.parse). Same behaviour the previous `.sort()` pinned.
+  const sorted = [...keys].sort((a, b) => {
     const na = Number(a);
     const nb = Number(b);
     if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
     return a.localeCompare(b);
   });
-  if (keys.length === 0) return undefined;
-  return keys.map((k) => journal[k]);
+  return sorted.map((k) => journal[k]);
 }
 
 const TOOL_FAILURE_MESSAGE_MAX = 200;

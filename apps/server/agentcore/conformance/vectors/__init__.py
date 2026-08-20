@@ -1,4 +1,4 @@
-"""Curated conformance vectors — representative SSE event sequences (前端技术与架构 §十二).
+"""Curated conformance vectors — representative SSE event sequences (前端技术与架构 §十 SSE 与协议一致性).
 
 Built with the REAL event builders (:mod:`agentcore.runtime.events`). Split by scenario
 under this package (``single_agent`` / ``gates`` / ``multi_agent/`` / ``debate/`` / ``legal``
@@ -24,6 +24,7 @@ from .memory import MEMORY_VECTORS, MemoryConsolidationVector
 from .multi_agent import VECTORS as _MULTI_AGENT
 from .resume_reload import VECTORS as _RESUME_RELOAD
 from .single_agent import VECTORS as _SINGLE_AGENT
+from .turn_verdict import VECTORS as _TURN_VERDICT
 
 VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     **_SINGLE_AGENT,
@@ -35,4 +36,5 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     **_BOARD,
     **_MCP,
     **_RESUME_RELOAD,
+    **_TURN_VERDICT,
 }

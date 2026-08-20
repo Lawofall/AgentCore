@@ -359,6 +359,7 @@ async def run_and_persist(
                     # obs.turn_spans, turn-metrics/snapshot/title warnings) inherits this turn's
                     # trace_id / attempt_id from the log context — otherwise those lines fire after
                     # the scope closes and lose the single 全链路 join key (conversation-logs.mdc).
+                    # persist-then-D1-await, same as continue_chat (await lives at stream_chat).
                     await persist_turn_result(
                         result=result,
                         conversation_id=conversation_id,
@@ -590,6 +591,8 @@ async def run_mechanism_direct_and_persist(
                         workflow_version=workflow_version,
                         **latency_probe.as_log_fields(),
                     )
+                    # persist-then-D1-await, same as continue_chat. Callers close the
+                    # sink on return, so the await sits after lease release below.
                     await persist_turn_result(
                         result=result,
                         conversation_id=conversation_id,
@@ -630,4 +633,7 @@ async def run_mechanism_direct_and_persist(
                     reset_prepare_local_io_deadline(budget_token)
     finally:
         reset_turn_latency(latency_token)
+    from agentcore.runtime.coordination import await_live_detached_drive
+
+    await await_live_detached_drive(conversation_id)
     return outcome

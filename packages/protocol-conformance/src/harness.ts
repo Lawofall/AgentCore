@@ -1,5 +1,5 @@
 ﻿// Conformance harness — runs a frontend `fold` against the backend-exported golden
-// vectors and reports ProjectedTurn drift (前端技术与架构 §十二).
+// vectors and reports ProjectedTurn drift (前端技术与架构 §十 SSE 与协议一致性).
 //
 // Vectors + golden are committed JSON under ./fixtures/, produced by the backend
 // oracle (the single source: runtime/conformance/export.py). This package holds NO
@@ -13,9 +13,24 @@ import type { SSEEvent } from "@agentcore/contract-types";
 import { hasProjectedFailureFace } from "./failureFace";
 import type { ProjectedTurn } from "./projectedTurn";
 import { isTurnFixture, type TurnFixtureWire } from "./fixtureKind";
+import {
+  type ProjectedTurnVerdict,
+  turnVerdictHostContradiction,
+} from "./turnVerdict";
+import {
+  TURN_VERDICT_KNOWN_GAPS,
+  knownGapFieldsFor,
+  turnVerdictDiffField,
+} from "./turnVerdictGaps";
 
 /** A frontend's protocol fold under test: events[] → normalized ProjectedTurn. */
 export type Fold = (events: SSEEvent[]) => ProjectedTurn;
+
+/** Optional turnOutcome adapter: folded turn → comparison envelope. */
+export type Verdict = (
+  events: SSEEvent[],
+  projected: ProjectedTurn,
+) => ProjectedTurnVerdict;
 
 /** One committed conformance case: a real-shaped event sequence + the backend
  * oracle's expected projection. */
@@ -93,12 +108,31 @@ export interface ConformanceResult {
   failed: number;
 }
 
+/** Diff only keys the golden asked for (partial sidecar). Extra actual fields are ignored. */
+export function diffTurnVerdict(
+  golden: Record<string, unknown>,
+  actual: Record<string, unknown>,
+): string[] {
+  const sliced: Record<string, unknown> = {};
+  for (const key of Object.keys(golden)) {
+    sliced[key] = actual[key];
+  }
+  return diffProjected(golden, sliced).map((d) =>
+    d.startsWith("turnVerdict.") ? d : `turnVerdict.${d}`,
+  );
+}
+
 /**
  * Run one fold against every fixture, print a single red/green report with
  * ProjectedTurn diffs, and set process.exitCode on any drift (CI gate). Returns the
- * tallies so a caller can aggregate multiple folds.
+ * tallies so a caller can aggregate multiple folds. Optional ``verdict`` diffs the
+ * turnOutcome sidecar when the fixture carries ``turnVerdict``.
  */
-export function runConformance(impl: { name: string; fold: Fold }): ConformanceResult {
+export function runConformance(impl: {
+  name: string;
+  fold: Fold;
+  verdict?: Verdict;
+}): ConformanceResult {
   const fixtures = loadFixtures();
   let passed = 0;
   let failed = 0;
@@ -122,6 +156,50 @@ export function runConformance(impl: { name: string; fold: Fold }): ConformanceR
         diffs.push("fold projected missing failure face (empty_face_*)");
       }
     }
+    // turnOutcome sidecar: same fixture / same diff, optional envelope on the vector.
+    // Known-gap ledger is field-level only (turnVerdictGaps.ts); unregistered drift stays red.
+    if (fx.turnVerdict) {
+      const goldenHostBad = turnVerdictHostContradiction(fx.turnVerdict);
+      if (goldenHostBad) {
+        diffs.push(`turnVerdict: ${goldenHostBad}`);
+      }
+      if (!impl.verdict) {
+        diffs.push("turnVerdict: impl did not register a verdict adapter");
+      } else if (actual) {
+        try {
+          const got = impl.verdict(fx.events, actual);
+          const actualHostBad = turnVerdictHostContradiction(got);
+          if (actualHostBad) {
+            diffs.push(`turnVerdict: ${actualHostBad}`);
+          }
+          const verdictDiffs = diffTurnVerdict(
+            fx.turnVerdict as Record<string, unknown>,
+            got as Record<string, unknown>,
+          );
+          const registered = knownGapFieldsFor(impl.name, fx.name);
+          const seen = new Set<string>();
+          for (const d of verdictDiffs) {
+            const field = turnVerdictDiffField(d);
+            if (field && registered.has(field)) {
+              seen.add(field);
+              continue;
+            }
+            diffs.push(d);
+          }
+          for (const field of registered) {
+            if (!seen.has(field)) {
+              diffs.push(
+                `turnVerdict.${field}: 登记的 known gap 已愈合（本端不再漂移），请从 TURN_VERDICT_KNOWN_GAPS 删掉该字段`,
+              );
+            }
+          }
+        } catch (e) {
+          diffs.push(
+            `turnVerdict (threw) ${e instanceof Error ? e.stack ?? e.message : String(e)}`,
+          );
+        }
+      }
+    }
     if (diffs.length === 0) {
       passed++;
       console.log(`  ✓ ${fx.name}`);
@@ -132,7 +210,36 @@ export function runConformance(impl: { name: string; fold: Fold }): ConformanceR
       if (diffs.length > 20) console.log(`      …(+${diffs.length - 20} more)`);
     }
   }
-  console.log(`  ${failed === 0 ? "PASS" : "FAIL"} (${passed}/${fixtures.length})`);
+  const byName = new Map(fixtures.map((f) => [f.name, f]));
+  for (const gap of TURN_VERDICT_KNOWN_GAPS) {
+    const fields = knownGapFieldsFor(impl.name, gap.fixture);
+    if (fields.size === 0) continue;
+    const booked = byName.get(gap.fixture);
+    if (!booked) {
+      failed++;
+      console.log(
+        `  ✗ ${gap.fixture} — turnVerdict known-gap 指向不存在的向量，请从 TURN_VERDICT_KNOWN_GAPS 删掉`,
+      );
+    } else if (!booked.turnVerdict) {
+      failed++;
+      console.log(
+        `  ✗ ${gap.fixture} — turnVerdict known-gap 指向无 sidecar 的向量，请从 TURN_VERDICT_KNOWN_GAPS 删掉`,
+      );
+    }
+  }
+  if (failed === 0 && TURN_VERDICT_KNOWN_GAPS.length > 0) {
+    console.log(
+      `  known gaps (${TURN_VERDICT_KNOWN_GAPS.length} simplified/impossible — documented, not failures):`,
+    );
+    for (const g of TURN_VERDICT_KNOWN_GAPS) {
+      console.log(`  ○ [turnVerdict] ${g.fixture} — ${g.verdict}: ${g.reason}`);
+    }
+    console.log(
+      `  PASS (${passed}/${fixtures.length}; 0 problems; ${TURN_VERDICT_KNOWN_GAPS.length} known gaps)`,
+    );
+  } else {
+    console.log(`  ${failed === 0 ? "PASS" : "FAIL"} (${passed}/${fixtures.length})`);
+  }
   if (failed > 0) process.exitCode = 1;
   return { passed, failed };
 }

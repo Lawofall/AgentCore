@@ -5,6 +5,8 @@ export interface AuthUser {
   username: string;
   displayName: string;
   email: string | null;
+  /** ISO timestamp when the email was verified; null = unverified. */
+  emailVerifiedAt: string | null;
   role: string;
   /** Ready-to-render avatar URL (头像), already absolute (services/auth resolves the
    * backend's relative path against the API base); null = no avatar, show the initial. */

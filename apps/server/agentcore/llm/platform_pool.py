@@ -12,7 +12,23 @@ Empty / all-disabled snapshot → callers fall back to the env single key.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class ToolSurfaceLimits:
+    """Declared upstream tool-surface caps. ``None`` on a field = unlimited."""
+
+    max_tools: int | None = None
+    max_properties_total: int | None = None
+    max_properties_per_tool: int | None = None
+
+    def is_unrestricted(self) -> bool:
+        return (
+            self.max_tools is None
+            and self.max_properties_total is None
+            and self.max_properties_per_tool is None
+        )
 
 
 @dataclass(frozen=True)
@@ -25,6 +41,7 @@ class PlatformPoolMember:
     base_url: str
     subscription_day: int
     enabled: bool
+    tool_surface_limits: ToolSurfaceLimits = field(default_factory=ToolSurfaceLimits)
 
 
 _snapshot: tuple[PlatformPoolMember, ...] = ()

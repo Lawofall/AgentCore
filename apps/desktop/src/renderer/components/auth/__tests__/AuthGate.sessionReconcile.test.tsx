@@ -56,6 +56,7 @@ const USER = {
   username: "alice",
   displayName: "Alice",
   email: null,
+  emailVerifiedAt: null,
   role: "user",
   avatarUrl: null,
 };

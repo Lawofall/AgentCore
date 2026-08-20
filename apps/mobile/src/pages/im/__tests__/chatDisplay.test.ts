@@ -32,9 +32,17 @@ function msg(
 
 describe("reply preview helpers", () => {
   it("truncates long text with an ellipsis", () => {
-    const long = "a".repeat(100);
+    const exact = "a".repeat(100);
+    expect(truncateReplyPreview(exact)).toBe(exact);
+    const long = "a".repeat(101);
     expect(truncateReplyPreview(long).endsWith("…")).toBe(true);
-    expect(truncateReplyPreview(long).length).toBe(81);
+    expect(truncateReplyPreview(long).length).toBe(101);
+  });
+
+  it("collapses whitespace before truncating", () => {
+    expect(truncateReplyPreview("hello\n\nbob   there")).toBe(
+      "hello bob there",
+    );
   });
 
   it("uses attachment labels when content is empty", () => {

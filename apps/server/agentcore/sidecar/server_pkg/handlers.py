@@ -180,6 +180,72 @@ class HandlerMixin:
             },
         )
 
+    def _schedule_account_rules_memory_warm(
+        self, request_id: Any, folder_id: str | None
+    ) -> None:
+        """Fire-and-forget the cloud fetch; reply when seeded (stdin stays free).
+
+        Same posture as ``warmCodeIndex``: the read loop must not await HTTP.
+        Unlike the index warm, this RPC's ``ttlSeconds`` *is* the renewal
+        handshake, so the reply is sent from the scheduled task after seed —
+        not an empty ``{ok: true}`` that would make desktop treat the cache as
+        already fresh / immediately expired.
+        """
+        creds = self._account_creds
+        user_id = self._user_id
+        if creds is None:
+            return
+
+        async def _run() -> None:
+            from agentcore.memory.account_prepare_cache import (
+                account_rules_memory_ttl_remaining,
+                warm_account_rules_memory,
+            )
+
+            try:
+                snapshot = await warm_account_rules_memory(
+                    creds,
+                    user_id=user_id,
+                    folder_id=folder_id,
+                )
+            except Exception as e:  # noqa: BLE001 - warm must not kill the sidecar
+                logger.warning(
+                    "sidecar.warm_account_rules_memory_failed",
+                    user_id=user_id,
+                    folder_id=folder_id,
+                    error=str(e),
+                )
+                await self._send(
+                    protocol.make_error(request_id, protocol.INTERNAL_ERROR, str(e))
+                )
+                return
+            ttl_seconds = account_rules_memory_ttl_remaining(user_id, folder_id)
+            logger.info(
+                "sidecar.warm_account_rules_memory",
+                user_id=user_id,
+                folder_id=folder_id,
+                degraded=snapshot.degraded,
+                topic_count=len(snapshot.memory_topics),
+                memory_file_count=len(snapshot.memory_bodies),
+                ttl_seconds=ttl_seconds,
+            )
+            await self._reply(
+                request_id,
+                {
+                    "ok": True,
+                    "degraded": snapshot.degraded,
+                    "topicCount": len(snapshot.memory_topics),
+                    "memoryFileCount": len(snapshot.memory_bodies),
+                    # 续期握手：本条快照的剩余寿命。缓存过期即空注入（不回落云端），
+                    # 故调用方必须在此窗口内重暖，不能把「暖过一次」当永久有效。
+                    "ttlSeconds": ttl_seconds,
+                },
+            )
+
+        task = asyncio.create_task(_run())
+        self._pending_sends.add(task)
+        task.add_done_callback(self._pending_sends.discard)
+
     async def _on_warm_account_rules_memory(
         self, request_id: Any, params: dict[str, Any]
     ) -> None:
@@ -188,6 +254,9 @@ class HandlerMixin:
         The reply's ``ttlSeconds`` is the seeded entry's remaining life — the
         caller must re-warm within it. Prepare reads this cache only, so a lapsed
         entry means empty rules / memory injection, not a cloud re-fetch.
+
+        Schedules the fetch (``warmCodeIndex`` pattern) so a later ``cancel``
+        line is not stuck behind this HTTP in the stdin reader.
         """
         if not self._initialized:
             await self._send(
@@ -208,10 +277,6 @@ class HandlerMixin:
                 )
             )
             return
-        from agentcore.memory.account_prepare_cache import (
-            account_rules_memory_ttl_remaining,
-            warm_account_rules_memory,
-        )
         from agentcore.sidecar.server_pkg.turns import normalize_folder_id_param
 
         folder_id = (
@@ -219,45 +284,7 @@ class HandlerMixin:
             if "folderId" in params
             else None
         )
-        try:
-            snapshot = await warm_account_rules_memory(
-                self._account_creds,
-                user_id=self._user_id,
-                folder_id=folder_id,
-            )
-        except Exception as e:  # noqa: BLE001 - warm must not kill the sidecar
-            logger.warning(
-                "sidecar.warm_account_rules_memory_failed",
-                user_id=self._user_id,
-                folder_id=folder_id,
-                error=str(e),
-            )
-            await self._send(
-                protocol.make_error(request_id, protocol.INTERNAL_ERROR, str(e))
-            )
-            return
-        ttl_seconds = account_rules_memory_ttl_remaining(self._user_id, folder_id)
-        logger.info(
-            "sidecar.warm_account_rules_memory",
-            user_id=self._user_id,
-            folder_id=folder_id,
-            degraded=snapshot.degraded,
-            topic_count=len(snapshot.memory_topics),
-            memory_file_count=len(snapshot.memory_bodies),
-            ttl_seconds=ttl_seconds,
-        )
-        await self._reply(
-            request_id,
-            {
-                "ok": True,
-                "degraded": snapshot.degraded,
-                "topicCount": len(snapshot.memory_topics),
-                "memoryFileCount": len(snapshot.memory_bodies),
-                # 续期握手：本条快照的剩余寿命。缓存过期即空注入（不回落云端），
-                # 故调用方必须在此窗口内重暖，不能把「暖过一次」当永久有效。
-                "ttlSeconds": ttl_seconds,
-            },
-        )
+        self._schedule_account_rules_memory_warm(request_id, folder_id)
 
     @staticmethod
     def _install_recorder_if_enabled(data_dir: str) -> None:
@@ -528,6 +555,24 @@ class HandlerMixin:
             )
             return
         conversation_id = str(params.get("conversationId") or turn_id)
+        from agentcore.sidecar.server_pkg.cancel_tombstone import cancel_tombstone_blocks
+
+        if cancel_tombstone_blocks(self._cancel_tombstones, turn_id):
+            # Stop arrived before this turn registered (desktop awaited warm).
+            # Refuse with the same RPC shape as a cancelled in-flight turn.
+            logger.info(
+                "sidecar.turn_cancelled",
+                turn_id=turn_id,
+                conversation_id=conversation_id or None,
+                reason="user_stop",
+                salvaged=False,
+            )
+            await self._send(
+                protocol.make_error(
+                    request_id, protocol.TURN_CANCELLED, "turn cancelled"
+                )
+            )
+            return
         if turn_id in self._turns:
             await self._reject_turn_already_running(
                 request_id,
@@ -1191,15 +1236,23 @@ class HandlerMixin:
         task_found = task is not None
         task_done = bool(task is not None and task.done())
         task_cancelled = False
+        tombstoned = False
         if task is not None and not task.done():
             setattr(task, CANCEL_REASON_ATTR, reason)
             task.cancel()
             task_cancelled = True
             await self._reply(request_id, {"cancelled": True, "mode": "cancel"})
         else:
+            if not task_found and turn_id.strip():
+                from agentcore.sidecar.server_pkg.cancel_tombstone import (
+                    mark_cancel_tombstone,
+                )
+
+                mark_cancel_tombstone(self._cancel_tombstones, turn_id)
+                tombstoned = True
             await self._reply(
                 request_id,
-                {"cancelled": cascaded, "mode": "cancel"},
+                {"cancelled": bool(cascaded or tombstoned), "mode": "cancel"},
             )
         logger.info(
             "sidecar.turn_cancel_requested",
@@ -1211,6 +1264,7 @@ class HandlerMixin:
             task_found=task_found,
             task_done=task_done,
             task_cancelled=task_cancelled,
+            tombstoned=tombstoned,
             client_tools_cancelled=client_tools_cancelled,
         )
 

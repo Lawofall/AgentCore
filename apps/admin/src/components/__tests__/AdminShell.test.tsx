@@ -25,6 +25,7 @@ beforeEach(() => {
       username: "root",
       displayName: "Root Admin",
       email: null,
+      emailVerifiedAt: null,
       role: "admin",
       passwordMustChange: false,
     },

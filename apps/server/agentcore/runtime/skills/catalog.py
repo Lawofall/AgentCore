@@ -76,7 +76,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         name="product_help_map",
         summary=(
             "用户点名某入口 / UI /「××在哪」（含文件面板 / .md 阅读预览 vs HTML 完整预览）"
-            "→ 入口地图短答；桌面可附手册深链，手机只短答勿承诺深链"
+            "→ 入口地图短答；桌面可附手册深链，手机只短答勿承诺深链；页名按端写"
         ),
         body=_PRODUCT_HELP_MAP,
         audience=AUDIENCE_CEO_ONLY,
@@ -86,7 +86,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         summary=(
             "产品面 FAQ（组团 / 费用 / Key / 官网·下载 / 断网 / .md·文件面板怎么打开 / "
             "Cursor 规则↔AgentCore 用户规则…）"
-            "→ 自含短答；桌面可附对应手册节"
+            "→ 自含短答；桌面可附对应手册节；页名按端写"
         ),
         body=_PRODUCT_HELP_FAQ,
         audience=AUDIENCE_CEO_ONLY,

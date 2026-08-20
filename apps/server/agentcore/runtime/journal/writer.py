@@ -13,6 +13,27 @@ from agentcore.runtime.journal.pending_interactions import settlement_dedupe_key
 
 logger = get_logger(__name__)
 
+# Post-pause facts that belong to a background execution, not the frozen pause
+# snapshot. ``seal()`` must keep the pause stream frozen (trailing ``*_required``
+# / suspending ``tool_use_end`` already sit in the snapshot); these terminals
+# still have to land or the collab graph freezes on ``running``.
+SEAL_OVERFLOW_KINDS = frozenset(
+    {
+        "run_completed",
+        "run_failed",
+        "run_cancelled",
+        "run_skipped",
+        "execution_detached",
+        "execution_completed",
+    }
+)
+
+
+def is_seal_overflow_kind(kind: str) -> bool:
+    """True when ``kind`` must survive ``seal()`` via the overflow writer."""
+    return kind in SEAL_OVERFLOW_KINDS
+
+
 # Bound for the duration of a turn (fresh or resumed). When set, every
 # :func:`~agentcore.runtime.facts.record_turn_fact` schedules a durable append
 # before the matching SSE event is delivered.
@@ -54,14 +75,21 @@ class TurnJournalWriter:
         conversation_id: str,
         trace_id: str | None,
         initial_seq: int = 0,
+        overflow_band: bool = False,
     ) -> None:
         self.turn_id = turn_id
         self.conversation_id = conversation_id
         self.trace_id = trace_id
         # Soft counter for resume seed / diagnostics; live DB seq is authoritative.
         self._next_seq = initial_seq
+        # Post-seal overflow writer allocates in the overflow band so a later
+        # prefix rewrite cannot occupy those keys.
+        self._overflow_band = overflow_band
         self._degraded = False
         self._sealed = False
+        # Same turn identity, never sealed by this pause — worker/execution
+        # terminals that still hit the sealed ContextVar writer are forwarded here.
+        self._overflow: TurnJournalWriter | None = None
         self._buffer: deque[_BufferItem] = deque()
         self._drain_task: asyncio.Task[None] | None = None
         # (turn_id, kind, id) — process-local settlement dedupe (D8).
@@ -74,8 +102,18 @@ class TurnJournalWriter:
 
     @property
     def sealed(self) -> bool:
-        """True after a durable pause save — further appends are no-ops."""
+        """True after a durable pause save — pause-stream appends are refused.
+
+        Execution terminals are forwarded to :meth:`writable` (unsealed overflow
+        on the same ``turn_id``) so they cannot silently vanish.
+        """
         return self._sealed
+
+    def writable(self) -> TurnJournalWriter:
+        """Writer that still accepts appends (self, or the post-seal overflow)."""
+        if self._sealed:
+            return self._ensure_overflow()
+        return self
 
     @property
     def next_seq(self) -> int:
@@ -136,10 +174,11 @@ class TurnJournalWriter:
         front: bool,
     ) -> asyncio.Future[int | None] | None:
         if self._sealed:
-            return None
+            return self._enqueue_sealed(entry, critical=critical, front=front)
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
+            self._log_enqueue_refused(entry, reason="no_running_loop")
             return None
 
         # Dedupe: awaiter re-emit after prewrite → skip journal, resolve immediately.
@@ -201,6 +240,7 @@ class TurnJournalWriter:
                     conversation_id=self.conversation_id,
                     trace_id=self.trace_id,
                     entry=entry,
+                    overflow=self._overflow_band,
                 )
                 if key is not None:
                     self._settlement_dedupe.add(key)
@@ -228,15 +268,84 @@ class TurnJournalWriter:
                 await self._drain_task
         if self._buffer:
             await self._drain()
+        overflow = self._overflow
+        if overflow is not None and overflow is not self:
+            await overflow.flush()
 
     async def seal(self) -> None:
-        """Hard-stop durable appends after a successful pause save."""
+        """Freeze the pause snapshot stream; keep an overflow writer for execution terminals.
+
+        Pause snapshots must not grow trailing ``*_required`` / suspending
+        ``tool_use_end`` after the durable record. Background ``run_*`` /
+        ``execution_*`` terminals are not that stream — they route to an
+        unsealed overflow writer on the same ``turn_id``.
+        """
         if self._sealed:
             return
         await self.flush()
         self._sealed = True
+        overflow = self._ensure_overflow()
+        self._rebind_host_writers(overflow)
         logger.info(
             "journal.sealed_at_pause",
             turn_id=self.turn_id,
             next_seq=self._next_seq,
         )
+
+    def _ensure_overflow(self) -> TurnJournalWriter:
+        if self._overflow is None:
+            self._overflow = TurnJournalWriter(
+                turn_id=self.turn_id,
+                conversation_id=self.conversation_id,
+                trace_id=self.trace_id,
+                initial_seq=self._next_seq,
+                overflow_band=True,
+            )
+        return self._overflow
+
+    def _enqueue_sealed(
+        self,
+        entry: dict[str, Any],
+        *,
+        critical: bool,
+        front: bool,
+    ) -> asyncio.Future[int | None] | None:
+        kind = str(entry.get("kind") or "")
+        if is_seal_overflow_kind(kind):
+            overflow = self._ensure_overflow()
+            logger.info(
+                "journal.sealed_overflow",
+                turn_id=self.turn_id,
+                kind=kind,
+            )
+            return overflow._enqueue(entry, critical=critical, front=front)
+        self._log_enqueue_refused(entry, reason="pause_snapshot")
+        return None
+
+    def _log_enqueue_refused(self, entry: dict[str, Any], *, reason: str) -> None:
+        kind = str(entry.get("kind") or "")
+        if is_seal_overflow_kind(kind):
+            logger.error(
+                "journal.sealed_drop",
+                turn_id=self.turn_id,
+                kind=kind,
+                reason=reason,
+            )
+            return
+        if self._sealed:
+            logger.info(
+                "journal.sealed_skip",
+                turn_id=self.turn_id,
+                kind=kind,
+                reason=reason,
+            )
+
+    def _rebind_host_writers(self, overflow: TurnJournalWriter) -> None:
+        """Point live coordination sessions at the unsealed overflow writer."""
+        try:
+            from agentcore.runtime.coordination.session import (
+                rebind_host_journal_writer,
+            )
+        except ImportError:
+            return
+        rebind_host_journal_writer(self, overflow)

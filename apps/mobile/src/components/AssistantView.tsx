@@ -19,6 +19,7 @@ import {
 } from "@/components/ProcessTimeline";
 import { SourceCards, buildCitationDisplayMap } from "@/components/SourceCards";
 import { TeamView } from "@/components/TeamView";
+import { UnproductiveToolFailureHint } from "@/components/UnproductiveToolFailureHint";
 import { useColdInteractions } from "@/lib/coldInteractions";
 import type { SupportDiagnosticIds } from "@/lib/supportDiagnostics";
 import type {
@@ -282,6 +283,12 @@ export function AssistantContent({
           turnClosed={turnClosed}
         />
       ) : null}
+      <UnproductiveToolFailureHint
+        finishReason={finishReason}
+        content={content}
+        process={process}
+        isStreaming={isStreaming}
+      />
       {citations && citations.length > 0 ? (
         <SourceCards
           items={citations}

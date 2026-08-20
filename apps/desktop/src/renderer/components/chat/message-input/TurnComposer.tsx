@@ -27,6 +27,7 @@ import {
   getActiveRuntime,
   useActiveError,
   useActiveGenerating,
+  useActiveTurnPhase,
   useConversationStore,
 } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
@@ -139,6 +140,8 @@ export function TurnComposer({
     ? MIN_COMPOSER_HEIGHT_BAR
     : MIN_COMPOSER_HEIGHT_CARD;
   const isGenerating = useActiveGenerating();
+  const turnPhase = useActiveTurnPhase();
+  const isStopping = turnPhase === "stopping";
   const conversationId = useConversationStore((s) => s.currentConversationId);
   const conversations = useConversations();
   const contextCompacted = Boolean(
@@ -530,15 +533,22 @@ export function TurnComposer({
   const queueDisabled = !hasDraft || sendBlocked || isSending;
   const midFlightLabel = "排队发送";
   const midFlightHint = "排队至本回合结束后发送（Enter）；Ctrl/Cmd+Enter 插队";
+  const stopLabel = isStopping ? "停止中…" : "停止生成";
   const stopButton = (
     <IconButton
       size="sm"
       tone="destructive"
       onClick={stopGeneration}
-      aria-label="停止生成"
-      title="停止生成"
+      aria-label={stopLabel}
+      title={stopLabel}
+      aria-busy={isStopping || undefined}
+      className={isStopping ? "opacity-75" : undefined}
     >
-      <Square size={16} />
+      {isStopping ? (
+        <Loader2 size={16} className="animate-spin" aria-hidden />
+      ) : (
+        <Square size={16} aria-hidden />
+      )}
     </IconButton>
   );
   const sendControls = isGenerating ? (

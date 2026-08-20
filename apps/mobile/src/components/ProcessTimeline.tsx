@@ -202,8 +202,10 @@ export interface TeamProjection {
   workerToolPhases?: Map<string, { phase: string; toolName: string }>;
   /** 场级证据台账（`extractEvidenceLedger`）：辩论徽章 `#eN` 解析。 */
   evidenceLedger?: EvidenceLedgerEntry[];
-  /** 回合墙钟跨度（`turnElapsedMs(events)`，与桌面同量）：条上「用时」。缺省 0 = 不显示。 */
+  /** 终态条「用时」= 回合墙钟跨度（`turnElapsedMs(events)`）。缺省 0 = 不显示。 */
   elapsedMs?: number;
+  /** 运行态条「用时」墙钟锚点（首条协作事件 epoch ms）。 */
+  startedAtMs?: number | null;
   /** Live `coordination_wait` n/m（旁路 extract，不进 ProjectedTurn）。有则盖过 fold progress。 */
   waitProgress?: { completed: number; total: number } | null;
   /** Live `execution_detached`（旁路 extract）。hydrate 后 TeamView 仍可用队员在跑补徽标。 */

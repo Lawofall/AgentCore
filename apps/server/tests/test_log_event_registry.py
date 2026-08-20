@@ -52,6 +52,19 @@ def test_backpressure_drop_fields_registered():
         assert "dropped_total" in fields
 
 
+def test_idle_eviction_logs_victim_id_not_canonical_conversation_id():
+    # Victim cid must stay off canonical conversation_id so merge_contextvars
+    # keeps the evicting request's user_id / trace_id.
+    for name in (
+        "roster.conversation_evicted",
+        "search_cache.conversation_evicted",
+        "url_cache.conversation_evicted",
+    ):
+        fields = get_registry().requires(name).fields
+        assert "evicted_conversation_id" in fields
+        assert "conversation_id" not in fields
+
+
 def test_stream_detach_timing_fields_registered():
     detach = get_registry().requires("event_sink.detach").fields
     assert "duration_ms" in detach

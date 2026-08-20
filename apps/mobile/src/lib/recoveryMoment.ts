@@ -1,3 +1,8 @@
+import {
+  recoveryMomentRecoveryClause,
+  recoveryMomentResetClause,
+} from "@agentcore/protocol-fold-kit";
+
 /**
  * 把服务端下发的**结构化恢复时刻**渲染成用户本机时区的文案（429 / 平台配额闸门）。
  *
@@ -6,12 +11,12 @@
  * 时间次日零点——照 UTC 读就会算错，回来再撞同一堵墙。
  *
  * 两条规则：
- * - 拿到时刻 → 渲染成本机时区的「8 月 15 日 00:00」，**不标时区名**：渲染出来的就是用户
- *   自己的钟，标了反倒像在说别人的时间。
- * - 拿不到（旧服务端、字段非法、冷加载的 `runs.error` 只有 code + message）→ **原样**转述
- *   服务端那句，绝不自己编一个时间。
+ * - 拿到时刻 → 保留服务端原句，只在后面追加本机时区的时刻子句。**不标时区名**：渲染
+ *   出来的就是用户自己的钟，标了反倒像在说别人的时间。
+ * - 拿不到（旧服务端、字段非法、冷加载的 `runs.error` 只有 code + message）→ **原样**
+ *   转述服务端那句，绝不自己编一个时间。
  *
- * 桌面端同期做同一件事，两端文案与格式必须逐字一致。
+ * 不按错误码整句重写。成文函数（本文件）两端各写一份；子句已逐字一致，走 kit。
  */
 
 /**
@@ -53,31 +58,17 @@ export function formatLocalMoment(
   return `${pick("month")} 月 ${pick("day")} 日 ${pick("hour")}:${pick("minute")}`;
 }
 
-/** 上游 429 / 平台额度撞墙的整句——线上原文，只把时刻换成本地时刻。 */
-function upstreamRecoveryCopy(
-  moment: string,
-  code: string | null | undefined,
-  credentialSource: string | null | undefined,
-): string {
-  if (code === "QUOTA_EXCEEDED") {
-    return `平台模型额度已用完，本回合无法继续。上游将于 ${moment} 恢复；或在「设置 · 服务商」接入自己的 API Key 立即继续。`;
-  }
-  // BYOK 被限的是用户自己的额度；来源不明时不猜是谁的钱，退回泛指的「上游额度」。
-  const whose = credentialSource === "user" ? "你的服务商额度" : "上游额度";
-  return `上游限流，本回合无法继续。${whose}将于 ${moment} 恢复，在此之前重试仍会失败。`;
-}
-
 /**
  * 给一句服务端错误文案补上本机时区的时刻。没有可用时刻时原样返回。
  *
- * 两种姿势，取决于那句话里还有没有客户端拿不到的东西：
- * - `recovery_at`（上游 429 / 平台额度撞墙）：整句由客户端出。那句话除了时刻没有别的服务端
- *   独有数据，重写一遍最干净，措辞逐字复刻线上原文。
- * - `reset_at`（平台配额闸门）：服务端那句带着「已达每日 token 上限（1,234 / 5,000）」这类
- *   只有它知道的用量数字，客户端无从重写——保留原句，另起一句说重置时刻。
+ * `recovery_at`（上游 429 / 平台额度撞墙）与 `reset_at`（平台配额闸门）同一姿势：保留
+ * 原句，另起一句说时刻。配额闸门那句带着「已达每日 token 上限（1,234 / 5,000）」这类
+ * 只有服务端知道的用量数字，客户端无从重写。
  *
  * 两个字段同时出现时以 `recovery_at` 为准：上游那堵墙比本地配额窗口更晚放行，说早的那个
  * 会让用户白跑一趟。
+ *
+ * `opts.code` 仍被调用方传入（errors / ChatPage / turnOutcome），成文不再按码分叉。
  */
 export function withLocalRecoveryMoment(
   message: string,
@@ -88,17 +79,14 @@ export function withLocalRecoveryMoment(
 ): string {
   const context = opts.context;
   const recovery = formatLocalMoment(context?.recovery_at);
-  if (recovery) {
-    return upstreamRecoveryCopy(
-      recovery,
-      opts.code,
-      context?.credential_source,
-    );
-  }
-  const reset = formatLocalMoment(context?.reset_at);
-  if (!reset) return message;
+  const reset = recovery ? null : formatLocalMoment(context?.reset_at);
+  const tail = recovery
+    ? recoveryMomentRecoveryClause(recovery)
+    : reset
+      ? recoveryMomentResetClause(reset)
+      : null;
+  if (!tail) return message;
   const base = message.trimEnd();
-  const tail = `额度将于 ${reset} 重置。`;
   if (!base) return tail;
   return /[。；！？]$/.test(base) ? `${base}${tail}` : `${base}。${tail}`;
 }

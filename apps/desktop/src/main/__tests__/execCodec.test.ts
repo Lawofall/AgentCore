@@ -4,11 +4,15 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  EXEC_ENV_PROBE_FAIL_MARKER,
+  EXEC_ENV_SPAWN_DENIED_CODE,
   _setPathExistsForTests,
   decodePipeChunk,
+  isSpawnDeniedError,
   isWslBashTrampoline,
   probeAvailableLanguages,
   resolveBashLauncher,
+  spawnDeniedStderr,
 } from "../fs/workspace/execCodec";
 
 describe("decodePipeChunk", () => {
@@ -151,5 +155,30 @@ describe("probeAvailableLanguages (Windows)", () => {
       );
     });
     expect(probeAvailableLanguages()).toEqual(["python", "javascript", "bash"]);
+  });
+});
+
+describe("spawnDeniedStderr", () => {
+  it("emits the server-equal marker and reason tag", () => {
+    expect(spawnDeniedStderr("spawn python EACCES")).toBe(
+      `${EXEC_ENV_PROBE_FAIL_MARKER} [${EXEC_ENV_SPAWN_DENIED_CODE}] spawn python EACCES`,
+    );
+  });
+
+  it("keys on err.code, never on the message prose", () => {
+    const eacces = Object.assign(new Error("spawn python EACCES"), {
+      code: "EACCES",
+    });
+    const eperm = Object.assign(new Error("spawn python EPERM"), {
+      code: "EPERM",
+    });
+    const enoent = Object.assign(new Error("spawn python ENOENT"), {
+      code: "ENOENT",
+    });
+    expect(isSpawnDeniedError(eacces)).toBe(true);
+    expect(isSpawnDeniedError(eperm)).toBe(true);
+    expect(isSpawnDeniedError(enoent)).toBe(false);
+    expect(isSpawnDeniedError(new Error("Permission denied"))).toBe(false);
+    expect(isSpawnDeniedError(new Error("spawn python EACCES"))).toBe(false);
   });
 });

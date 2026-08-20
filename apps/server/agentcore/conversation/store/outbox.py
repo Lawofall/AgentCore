@@ -298,6 +298,11 @@ class OutboxStore:
         self._base.mkdir(parents=True, exist_ok=True)
         target = self._path(user_message_id)
         tmp = target.with_suffix(".json.tmp")
+        journal = record.get("journal")
+        if isinstance(journal, dict):
+            from agentcore.runtime.journal.seq_space import stamp_missing_ords
+
+            stamp_missing_ords(journal)
         record["updated_at"] = time.time()
         tmp.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
         # Electron writebacker / AV may briefly hold the destination on Windows
@@ -470,6 +475,7 @@ class OutboxStore:
         conversation_id: str,
         trace_id: str | None,
         entry: dict[str, Any],
+        overflow: bool = False,
     ) -> int | None:
         user_message_id = self._resolve_user_message_id(turn_id)
         if not user_message_id:
@@ -481,18 +487,44 @@ class OutboxStore:
         allocated: list[int | None] = [None]
 
         def mutate(record: dict[str, Any]) -> None:
+            from agentcore.runtime.journal.seq_space import (
+                next_live_seq,
+                next_overflow_seq,
+            )
+            from agentcore.runtime.journal.writer import is_seal_overflow_kind
+
+            kind = str(entry.get("kind") or "")
             if record.get("phase") == PHASE_READY:
-                return
+                # Pause finalize seals READY so a later complete finalize cannot
+                # replace the snapshot. Execution terminals that arrive after
+                # that seal must still append — same family as TurnJournalWriter
+                # overflow; refusing them here would recreate the silent drop.
+                if not overflow and not is_seal_overflow_kind(kind):
+                    logger.info(
+                        "sidecar.outbox_ready_skip",
+                        turn_id=turn_id,
+                        kind=kind,
+                    )
+                    return
+                logger.info(
+                    "sidecar.outbox_ready_overflow",
+                    turn_id=turn_id,
+                    kind=kind,
+                )
             record["conversation_id"] = conversation_id or record.get("conversation_id")
             record["message_id"] = turn_id or record.get("message_id")
             if trace_id:
                 record["trace_id"] = trace_id
             journal = record.setdefault("journal", {})
-            # Live seq=None：本地 outbox 用 max+1 分配；merge 显式 seq 幂等。
+            existing_seqs = [
+                int(k) for k in journal if str(k).lstrip("-").isdigit()
+            ]
+            # Live seq=None：live-band max+1；post-seal overflow 走 overflow band。
             if seq is None:
-                existing = [int(k) for k in journal if str(k).lstrip("-").isdigit()]
-                next_seq = (max(existing) + 1) if existing else 0
-                key = str(next_seq)
+                if overflow or record.get("phase") == PHASE_READY:
+                    key = str(next_overflow_seq(existing_seqs))
+                else:
+                    key = str(next_live_seq(existing_seqs))
             else:
                 key = str(seq)
             if key not in journal:  # seq-idempotent
@@ -579,8 +611,10 @@ class OutboxStore:
             if not record.get("user_message_id"):
                 record["user_message_id"] = user_message_id
             journal = record.setdefault("journal", {})
-            existing = [int(k) for k in journal if str(k).lstrip("-").isdigit()]
-            next_seq = (max(existing) + 1) if existing else 0
+            from agentcore.runtime.journal.seq_space import next_live_seq, seqs_from_map
+
+            existing = seqs_from_map(journal)
+            next_seq = next_live_seq(existing)
             # Dedupe by settlement identity (kind + checkpoint_id) so retries don't fan out.
             kind = str(entry.get("kind") or "")
             payload = dict(entry.get("payload") or {})
@@ -686,11 +720,11 @@ class OutboxStore:
             # map would otherwise eclipse full ``runs`` (CEO process_* lost).
             journal_entries = kwargs.get("journal_entries")
             if isinstance(journal_entries, list):
-                journal_map: dict[str, Any] = {}
-                for i, entry in enumerate(journal_entries):
-                    if isinstance(entry, dict):
-                        journal_map[str(i)] = entry
-                record["journal"] = journal_map
+                from agentcore.runtime.journal.seq_space import replace_prefix_map
+
+                record["journal"] = replace_prefix_map(
+                    journal_entries, record.get("journal")
+                )
             for key in (
                 "input_tokens",
                 "output_tokens",
@@ -952,17 +986,15 @@ def captain_text_from_stream_segments(
 
 
 def journal_entries_from_map(journal: dict[str, Any] | None) -> list[dict[str, Any]] | None:
-    """Sort an outbox ``journal`` map (seq → entry) into a list for ``RecordTurnRequest``."""
+    """Sort an outbox ``journal`` map into a list in emission order."""
     if not journal:
         return None
+    from agentcore.runtime.journal.seq_space import (
+        map_values_in_emission_order,
+        strip_entry_ord,
+    )
 
-    def _seq_key(key: str) -> tuple[int, str]:
-        try:
-            return (0, f"{int(key):020d}")
-        except (TypeError, ValueError):
-            return (1, str(key))
-
-    entries = [journal[k] for k in sorted(journal.keys(), key=_seq_key)]
+    entries = [strip_entry_ord(item) for item in map_values_in_emission_order(journal)]
     return entries or None
 
 

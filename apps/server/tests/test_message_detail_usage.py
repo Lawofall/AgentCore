@@ -43,6 +43,42 @@ def test_usage_row_projects_to_short_keys():
     assert (d.usage.cache_hit, d.usage.cache_miss) == (30, 70)
 
 
+def test_omitted_cache_split_projects_whole_prompt_as_miss():
+    """Upstream omitted hit/miss (BYOK gpt-5.6-sol): display miss = input, hit stays 0."""
+    d = MessageDetail.model_validate(
+        _row(
+            {
+                "input_tokens": 800,
+                "output_tokens": 40,
+                "reasoning_tokens": 0,
+                "cache_hit_tokens": 0,
+                "cache_miss_tokens": 0,
+            }
+        )
+    )
+    assert d.usage is not None
+    assert d.usage.input == 800
+    assert d.usage.cache_hit == 0
+    assert d.usage.cache_miss == 800
+
+
+def test_deepseek_true_zero_cache_hit_projects_unchanged():
+    """DeepSeek 真 0 命中 already has miss=input; projection is a no-op."""
+    d = MessageDetail.model_validate(
+        _row(
+            {
+                "input_tokens": 800,
+                "output_tokens": 40,
+                "reasoning_tokens": 0,
+                "cache_hit_tokens": 0,
+                "cache_miss_tokens": 800,
+            }
+        )
+    )
+    assert d.usage is not None
+    assert (d.usage.cache_hit, d.usage.cache_miss) == (0, 800)
+
+
 def test_no_spend_turn_omits_usage():
     # 报错/空回合 stored zeros without structured error → no token meta on reload,
     # parity with the live bubble.
@@ -194,3 +230,18 @@ def test_inflight_fixture_validates_against_message_detail():
     assert d.status == "running"
     assert d.content
     assert d.reasoning_content
+
+
+def test_usage_breakdown_omitted_cache_split_fills_miss():
+    from agentcore.api.cost_view import usage_breakdown
+
+    u = usage_breakdown({"input": 800, "output": 40, "cache_hit": 0, "cache_miss": 0})
+    assert u.cache_hit == 0
+    assert u.cache_miss == 800
+
+
+def test_usage_breakdown_deepseek_true_zero_hit_unchanged():
+    from agentcore.api.cost_view import usage_breakdown
+
+    u = usage_breakdown({"input": 800, "output": 40, "cache_hit": 0, "cache_miss": 800})
+    assert (u.cache_hit, u.cache_miss) == (0, 800)

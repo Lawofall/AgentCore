@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "桌面/手机两端共享的事件与 REST 契约类型（单一源，理想由后端 schema 生成）",
+  "description": "桌面/手机两端共享的 SSE 事件契约类型（EventType / payload / InteractionKind / ErrorCode 由后端经 pnpm gen:types 生成；REST 见 @agentcore/contract-rest-types）",
   "exports": {
     ".": "./src/index.ts",
     "./sidecar-ipc.json": "./src/sidecar-ipc.json"

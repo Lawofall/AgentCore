@@ -19,10 +19,13 @@ from agentcore.tools.builtin.file_ops.mutate import WriteSectionTool
 from agentcore.tools.builtin.file_ops.read import FileReadTool
 from agentcore.tools.builtin.host import HostInfoTool, HostPingTool
 from agentcore.tools.builtin.terminal import TerminalTool
+from agentcore.tools.mcp.dynamic import McpDynamicTool
+from agentcore.tools.mcp.wire import McpDiscoverResult, McpToolSpec, register_mcp_tools
 from agentcore.tools.on_demand import (
     ON_DEMAND_SUMMARIES,
     ON_DEMAND_TOOL_NAMES,
     family_of,
+    is_mcp_tool_name,
     is_on_demand_tool,
 )
 from agentcore.tools.protocol import ToolContext
@@ -77,6 +80,11 @@ def test_resident_tools_are_not_on_the_roster():
         "remember",
     ):
         assert not is_on_demand_tool(name), name
+    # Dynamic MCP names are not in the static set, but still ride the same gate.
+    assert "mcp_playwright_browser_navigate" not in ON_DEMAND_TOOL_NAMES
+    assert is_mcp_tool_name("mcp_playwright_browser_navigate")
+    assert is_on_demand_tool("mcp_playwright_browser_navigate")
+    assert not is_on_demand_tool("mcp")  # prefix is mcp_ + server + tool
 
 
 def test_openai_defs_omit_deferred_until_offer():
@@ -193,6 +201,10 @@ def test_family_of_covers_browser_and_solo_tools():
     assert family_of("terminal") == frozenset({"terminal"})
     assert family_of("desktop_notify") == frozenset({"desktop_notify"})
     assert family_of("write_section") == frozenset({"write_section"})
+    # Without a live registry the Server siblings are unknown — name stands alone.
+    assert family_of("mcp_playwright_browser_navigate") == frozenset(
+        {"mcp_playwright_browser_navigate"}
+    )
 
 
 async def test_terminal_consult_returns_runtime_how():
@@ -288,3 +300,146 @@ def test_stuffed_worker_opening_table_omits_on_demand_tools():
     assert "md_to_docx" in deferred
     assert "write_section" in deferred
     assert "post_note" not in deferred
+
+
+def _playwright_mcp_result(*, tool_count: int = 24) -> McpDiscoverResult:
+    """A Playwright-sized batch: many tools, none should land on the opening table."""
+    specs = tuple(
+        McpToolSpec(
+            server_id="playwright",
+            server_name="Playwright",
+            mcp_tool_name=f"browser_{i}",
+            description=f"Playwright browser action {i}",
+            input_schema={"type": "object", "properties": {}},
+        )
+        for i in range(tool_count)
+    )
+    return McpDiscoverResult(
+        ready_servers=1,
+        tool_count=tool_count,
+        server_labels=("Playwright",),
+        specs=specs,
+    )
+
+
+async def test_stuffed_worker_opening_table_omits_mcp_tools():
+    """Hanging MCP must not grow the opening FC table (Playwright = 24 schemas)."""
+    registry = _stuffed_worker()
+    opening_before = _def_names(registry)
+    count_before = registry.count
+    assert count_before == 51
+    assert opening_before == _STUFFED_WORKER_RESIDENT
+
+    registered = register_mcp_tools(registry, _playwright_mcp_result(tool_count=24))
+    assert registered == 24
+    assert registry.count == 75
+    offered = _def_names(registry)
+    assert offered == opening_before
+    mcp_names = {n for n in registry.names if n.startswith("mcp_")}
+    assert len(mcp_names) == 24
+    assert mcp_names <= set(registry.deferred_names)
+    assert mcp_names.isdisjoint(offered)
+
+    first = next(iter(sorted(mcp_names)))
+    src = ToolConsultSource(registry=registry)
+    body = await src.fetch_by_name("u", first)
+    assert body is not None
+    assert f"已启用工具 `{first}`" in body
+    offered_after = _def_names(registry)
+    assert mcp_names <= offered_after
+    assert offered_after == opening_before | mcp_names
+    playwright_family = family_of(first, registry=registry)
+    assert playwright_family == mcp_names
+
+
+async def test_mcp_directory_lists_assembled_tools_and_consult_promotes_server_family():
+    """Catalog lists MCP by live description; consult offers the whole Server."""
+    registry = ToolRegistry()
+    registry.register(FileReadTool())
+    registry.register(
+        McpDynamicTool(
+            fc_name="mcp_echo_ping",
+            server_id="echo",
+            server_name="Echo",
+            mcp_tool_name="ping",
+            description="Ping the echo server",
+            input_schema={"type": "object", "properties": {}},
+        )
+    )
+    registry.register(
+        McpDynamicTool(
+            fc_name="mcp_echo_list",
+            server_id="echo",
+            server_name="Echo",
+            mcp_tool_name="list",
+            description="List echo resources",
+            input_schema={"type": "object", "properties": {}},
+        )
+    )
+    registry.register(
+        McpDynamicTool(
+            fc_name="mcp_fs_read",
+            server_id="filesystem",
+            server_name="Filesystem",
+            mcp_tool_name="read",
+            description="Read a file",
+            input_schema={"type": "object", "properties": {}},
+        )
+    )
+    assert _def_names(registry) == {"file_read"}
+    src = ToolConsultSource(registry=registry)
+    entries = await src.list_directory("u")
+    names = [e.name for e in entries]
+    assert names == ["mcp_echo_ping", "mcp_echo_list", "mcp_fs_read"]
+    by_name = {e.name: e.summary for e in entries}
+    assert "Ping the echo server" in by_name["mcp_echo_ping"]
+    assert "Echo" in by_name["mcp_echo_ping"]
+    assert "file_read" not in names
+
+    body = await src.fetch_by_name("u", "mcp_echo_ping")
+    assert body is not None
+    assert "已启用工具 `mcp_echo_ping`" in body
+    assert "mcp_echo_list" in body
+    assert _def_names(registry) == {"file_read", "mcp_echo_ping", "mcp_echo_list"}
+    assert "mcp_fs_read" in registry.deferred_names
+
+
+async def test_consult_unknown_mcp_name_is_miss_until_assembled():
+    src = ToolConsultSource(registry=ToolRegistry())
+    assert await src.fetch_by_name("u", "mcp_echo_ping") is None
+
+
+async def test_consult_tool_promotes_mcp_and_skips_stale_cache():
+    """Same wire as other on-demand tools: consult always calls offer()."""
+    token = consulted_memory_cache.set({})
+    try:
+        remember_consult("mcp_echo_ping", "STALE — must not skip offer")
+        reg = ToolRegistry()
+        reg.register(
+            McpDynamicTool(
+                fc_name="mcp_echo_ping",
+                server_id="echo",
+                server_name="Echo",
+                mcp_tool_name="ping",
+                description="Ping",
+                input_schema=None,
+            )
+        )
+        tool = ConsultTool(
+            source=build_merged_consult_source(
+                skill_registry=None,
+                tool_names=set(reg.names),
+                memory_store=None,
+                folder_id=None,
+                include_rules=False,
+                tool_registry=reg,
+                skill_audience="worker",
+            )
+        )
+        result = await tool.execute({"name": "mcp_echo_ping"}, _ctx())
+        assert result.success
+        assert result.output != "STALE — must not skip offer"
+        assert "已启用工具 `mcp_echo_ping`" in (result.output or "")
+        assert "mcp_echo_ping" in _def_names(reg)
+    finally:
+        consulted_memory_cache.reset(token)

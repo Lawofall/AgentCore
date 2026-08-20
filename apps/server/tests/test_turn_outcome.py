@@ -20,6 +20,7 @@ from agentcore.runtime.turn.outcome import (
     salvage_captain_delegate_reply,
 )
 from agentcore.tools.file_products import FILE_PRODUCTS_MARKER_PREFIX
+from agentcore.tools.protocol import TOOL_AUDIENCE_CEO
 
 
 def test_coerce_produces_paused_when_explicit():
@@ -140,6 +141,113 @@ def test_salvage_from_events_last_delegate_only():
     assert last_delegate_tool_output_from_events(sink.history_snapshot()).startswith(
         "已落盘"
     )
+
+
+def test_salvage_refuses_ceo_audience_delegate_echo():
+    """Coordination host echo is CEO-audience — not a user-bubble deliverable."""
+    echo = (
+        "【团队已启动·协调模式】已派出 2 名队员（调研、写手）；"
+        "系统已豁免——派完若结束本回合。"
+    )
+    messages = [
+        LLMMessage(
+            role="assistant",
+            content="",
+            tool_calls=[
+                ToolCall(
+                    id="dc1",
+                    function=ToolCallFunction(name="delegate", arguments="{}"),
+                )
+            ],
+        ),
+        LLMMessage(
+            role="tool",
+            content=echo,
+            tool_call_id="dc1",
+            audience=TOOL_AUDIENCE_CEO,
+        ),
+    ]
+    assert last_delegate_tool_output(messages) == ""
+    assert (
+        salvage_captain_delegate_reply(
+            final_content="", messages=messages, role="captain"
+        )
+        == ""
+    )
+
+    sink = EventSink()
+    sink.emit(
+        tool_use_end(
+            "dc1",
+            "delegate",
+            success=True,
+            output=echo,
+            audience=TOOL_AUDIENCE_CEO,
+        )
+    )
+    assert last_delegate_tool_output_from_events(sink.history_snapshot()) == ""
+
+
+def test_salvage_does_not_fall_back_past_ceo_audience_delegate():
+    """Last non-empty delegate is orchestration — do not reuse an older synthesis."""
+    messages = [
+        LLMMessage(
+            role="assistant",
+            content="",
+            tool_calls=[
+                ToolCall(
+                    id="old",
+                    function=ToolCallFunction(name="delegate", arguments="{}"),
+                ),
+                ToolCall(
+                    id="new",
+                    function=ToolCallFunction(name="delegate", arguments="{}"),
+                ),
+            ],
+        ),
+        LLMMessage(role="tool", content="已落盘 订单.csv。", tool_call_id="old"),
+        LLMMessage(
+            role="tool",
+            content="【团队已启动·协调模式】系统已豁免",
+            tool_call_id="new",
+            audience=TOOL_AUDIENCE_CEO,
+        ),
+    ]
+    assert last_delegate_tool_output(messages) == ""
+
+    sink = EventSink()
+    sink.emit(
+        tool_use_end(
+            "old", "delegate", success=True, output="已落盘 订单.csv。"
+        )
+    )
+    sink.emit(
+        tool_use_end(
+            "new",
+            "delegate",
+            success=True,
+            output="【团队已启动·协调模式】系统已豁免",
+            audience=TOOL_AUDIENCE_CEO,
+        )
+    )
+    assert last_delegate_tool_output_from_events(sink.history_snapshot()) == ""
+
+
+def test_tool_use_end_omits_audience_unless_ceo():
+    from agentcore.runtime.events.payloads.chat import ToolUseEndPayload
+
+    plain = tool_use_end("t1", "delegate", success=True, output="已落盘 订单.csv。")
+    assert "audience" not in plain.payload
+    ToolUseEndPayload.model_validate(plain.payload)
+    ceo = tool_use_end(
+        "t1",
+        "delegate",
+        success=True,
+        output="【团队已启动】",
+        audience=TOOL_AUDIENCE_CEO,
+    )
+    assert ceo.payload["audience"] == TOOL_AUDIENCE_CEO
+    ToolUseEndPayload.model_validate(ceo.payload)
 
 
 def test_resolve_from_live_sse_objects():

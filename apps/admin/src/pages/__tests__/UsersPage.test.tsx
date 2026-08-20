@@ -58,6 +58,7 @@ beforeEach(() => {
       username: "admin",
       displayName: "管理员",
       email: null,
+      emailVerifiedAt: null,
       role: "admin",
       passwordMustChange: false,
     },

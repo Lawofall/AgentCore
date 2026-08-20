@@ -953,7 +953,8 @@ class MessagingService:
             return "[已撤回]"
         text = (message.content or "").strip()
         if text:
-            return text[:_REPLY_PREVIEW_MAX]
+            compact = " ".join(text.split())
+            return compact[:_REPLY_PREVIEW_MAX]
         label = _ATTACHMENT_PREVIEW_LABELS.get(message.content_type)
         if label:
             return label

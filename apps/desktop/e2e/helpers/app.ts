@@ -10,7 +10,7 @@ export async function openWebapp(page: Page): Promise<void> {
 
 /** Land on the webapp shell and finish AuthGate (login form or already authed). */
 export async function ensureAuthed(page: Page): Promise<void> {
-  const userBox = page.getByPlaceholder("用户名");
+  const userBox = page.getByPlaceholder("邮箱或用户名");
   const composer = page.getByPlaceholder(/输入消息/);
   const outage = page.getByText("服务暂时不可用");
   await Promise.race([

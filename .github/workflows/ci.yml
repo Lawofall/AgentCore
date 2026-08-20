@@ -113,6 +113,9 @@ jobs:
       - name: Check legal Markdown mirror (desktop content.ts ↔ TERMS/PRIVACY ↔ mobile)
         run: node scripts/sync-legal-md.mjs --check
 
+      - name: Check doc section pointers (compound §N title → heading)
+        run: node scripts/check-doc-section-pointers.mjs
+
       - name: Fail on uncommitted drift
         run: git diff --exit-code
 
@@ -146,10 +149,8 @@ jobs:
         run: python3 apps/server/scripts/fetch_ripgrep.py --install-desktop
 
       - name: Lint
+        # desktop `lint` already runs check-ui-tokens; do not add a second step.
         run: pnpm --filter agentcore-desktop lint
-
-      - name: UI token gate
-        run: pnpm --filter agentcore-desktop check-ui-tokens
 
       - name: Typecheck
         run: pnpm --filter agentcore-desktop typecheck
@@ -159,6 +160,31 @@ jobs:
 
       - name: Test
         run: pnpm --filter agentcore-desktop test -- --run
+
+  # No `needs` on this job: sharing install via a setup job would serialize
+  # lint/test (~6 min) in front of shoot (~16 min) and lengthen wall clock.
+  # Shoot stays on the PR trigger face (see frontend-preview.mdc).
+  frontend-shoot:
+    name: Frontend (preview shoot + web smoke)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter agentcore-desktop...
 
       # Render smoke gate: replay every committed conformance vector through the
       # real components in a headless browser (#/preview) and fail if any AI state
@@ -245,6 +271,11 @@ jobs:
 
       - name: Conformance
         run: pnpm --filter agentcore-mobile conformance
+
+      # Shared protocol predicates (desktop + mobile). Stay on this short job
+      # so they do not lengthen the shoot job (typical PR critical path).
+      - name: Protocol fold-kit test
+        run: pnpm --filter @agentcore/protocol-fold-kit test
 
       - name: Test
         run: pnpm --filter agentcore-mobile test -- --run

@@ -1,9 +1,9 @@
 /**
  * EpisodeManifest v1 — AgentTown 节目模式导播产物（自包含台词 / 镜头 / tick 引用）。
  *
- * 观看层形状对齐 `apps/website/src/components/show/types.ts` 的 Episode；
- * 在此之上增加 segment / shot / tick 维度，供 simulation 录播 → 播出消费。
- * 世界运动不内嵌：shot 按 `tick_at` 引用 run tick 快照。
+ * 手写 TS 真源。播出消费镜像 `apps/town/Assets/Scripts/Show/EpisodeManifest.cs`；
+ * 后端 pydantic 镜像 `apps/server/agentcore/simulation/show/manifest.py`。
+ * 官网无观看层副本。世界运动不内嵌：shot 按 `tick_at` 引用 run tick 快照。
  */
 
 export const EPISODE_MANIFEST_VERSION = 1 as const;
@@ -32,7 +32,7 @@ export interface EpisodeTickSpan {
 
 /**
  * Overlay 字幕 / 独白 / 字卡 — 文本自包含，锚在 tick 或 shot。
- * kind 对齐网站 ShowEvent，便于 demo → manifest 转写。
+ * kind 供 AgentTown HUD 播出（`EpisodeOverlayView`），不是官网 demo 事件。
  */
 export type EpisodeOverlay =
   | {

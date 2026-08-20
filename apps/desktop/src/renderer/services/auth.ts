@@ -1,3 +1,4 @@
+import { normalizeEmailCodeExpiresIn } from "@/lib/emailAuth";
 import { logEvent } from "@/lib/log";
 import { clearSidecarAccountAuth } from "@/services/accountToken";
 import { clearAgentTownSession } from "@/services/agentTownSession";
@@ -20,6 +21,7 @@ import { clearSidecarInference } from "@/services/inferenceToken";
 import { clearDefaultPermissionAxesCache } from "@/services/permissionAxes";
 import type { AuthUser } from "@/stores/auth";
 import type { components } from "@/types/api.generated";
+import { restPath } from "@agentcore/contract-rest-types/paths";
 
 /** Server user payload (`/auth/me|register`), generated from OpenAPI. */
 type BackendUser = components["schemas"]["UserResponse"];
@@ -27,6 +29,11 @@ type LoginResponse = components["schemas"]["LoginResponse"];
 type SessionListResponse = components["schemas"]["SessionListResponse"];
 type SessionSummary = components["schemas"]["SessionSummary"];
 type StatusResponse = components["schemas"]["StatusResponse"];
+type EmailCodeAccepted = components["schemas"]["EmailCodeAcceptedResponse"];
+type EmailCodeBody = components["schemas"]["EmailCodeRequest"];
+type PasswordForgotBody = components["schemas"]["PasswordForgotRequest"];
+type PasswordResetBody = components["schemas"]["PasswordResetRequest"];
+type EmailSendCodeBody = components["schemas"]["EmailSendCodeRequest"];
 
 /** One active login device (refresh-token family). Re-exported for UI consumers. */
 export type { SessionSummary };
@@ -45,6 +52,7 @@ function toUser(u: BackendUser): AuthUser {
     username: u.username,
     displayName: u.display_name,
     email: u.email,
+    emailVerifiedAt: u.email_verified_at ?? null,
     role: u.role,
     avatarUrl: avatarSrc(u.avatar_url),
   };
@@ -81,25 +89,77 @@ export async function login(
   return user;
 }
 
-export interface RegisterInput {
-  username: string;
+export interface RegisterSendCodeInput {
+  email: string;
   password: string;
-  displayName?: string;
 }
 
-export async function register(input: RegisterInput): Promise<AuthUser> {
+/** Step 1 of two-step register: persist pending signup and email a 6-digit code. */
+export async function sendRegisterCode(
+  input: RegisterSendCodeInput,
+): Promise<{ expiresIn: number }> {
+  // Body is email + password only (username is allocated server-side).
+  // OpenAPI types may still list the old fields until the next gen:types.
+  const body = await api.post<EmailCodeAccepted>(
+    restPath("/v1/auth/register/send-code"),
+    { email: input.email, password: input.password },
+  );
+  return { expiresIn: normalizeEmailCodeExpiresIn(body?.expires_in) };
+}
+
+/** Step 2 of two-step register: 201 UserResponse, no session cookie. */
+export async function verifyRegister(
+  email: string,
+  code: string,
+  displayName?: string,
+): Promise<AuthUser> {
+  const body: Record<string, string> = { email, code };
+  const trimmedName = displayName?.trim();
+  if (trimmedName) body.display_name = trimmedName;
   const user = toUser(
-    await api.post<BackendUser>("/v1/auth/register", {
-      username: input.username,
-      password: input.password,
-      display_name: input.displayName || undefined,
-    }),
+    await api.post<BackendUser>(restPath("/v1/auth/register/verify"), body),
   );
   clearSidecarInference(); // fresh session → drop any prior-user token (see login)
   clearSidecarFoldersAuth();
   clearSidecarAccountAuth();
   clearDefaultPermissionAxesCache();
   return user;
+}
+
+/** Always 202 — does not reveal whether the email is registered. */
+export async function forgotPassword(email: string): Promise<void> {
+  const body: PasswordForgotBody = { email };
+  await api.post<EmailCodeAccepted>(restPath("/v1/auth/password/forgot"), body);
+}
+
+export async function resetPassword(
+  email: string,
+  code: string,
+  newPassword: string,
+): Promise<void> {
+  const body: PasswordResetBody = {
+    email,
+    code,
+    new_password: newPassword,
+  };
+  await api.post<StatusResponse>(restPath("/v1/auth/password/reset"), body);
+}
+
+/** Logged-in catch-up: send a verification code to `email`. */
+export async function sendEmailCode(email: string): Promise<void> {
+  const body: EmailSendCodeBody = { email };
+  await api.post<EmailCodeAccepted>(restPath("/v1/auth/email/send-code"), body);
+}
+
+/** Logged-in catch-up: confirm the 6-digit code and refresh the user. */
+export async function verifyEmail(
+  email: string,
+  code: string,
+): Promise<AuthUser> {
+  const body: EmailCodeBody = { email, code };
+  return toUser(
+    await api.post<BackendUser>(restPath("/v1/auth/email/verify"), body),
+  );
 }
 
 /**
@@ -174,6 +234,7 @@ export async function changePassword(
  *  `email: null` to clear it (PATCH semantics, mirrored on the backend). */
 export interface ProfileUpdate {
   displayName?: string;
+  username?: string;
   email?: string | null;
 }
 
@@ -182,6 +243,7 @@ export interface ProfileUpdate {
 export async function updateProfile(update: ProfileUpdate): Promise<AuthUser> {
   const body: Record<string, unknown> = {};
   if (update.displayName !== undefined) body.display_name = update.displayName;
+  if (update.username !== undefined) body.username = update.username;
   if (update.email !== undefined) body.email = update.email;
   return toUser(await api.patch<BackendUser>("/v1/auth/me", body));
 }

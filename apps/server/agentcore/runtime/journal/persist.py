@@ -33,13 +33,15 @@ async def persist_turn_journal(
     Two write semantics — callers must pick explicitly; there is no length /
     count heuristic (a shorter snapshot is not "less complete"):
 
-    * ``replace=True``: caller holds the complete authoritative fact stream
-      (sidecar resume rewrite / outbox writeback). Wholesale
-      :meth:`TurnJournalRepository.record` (delete-then-insert) so a resume
-      reusing ``turn_id`` overwrites the pause prefix.
+    * ``replace=True``: caller holds the authoritative *prefix* (sidecar resume
+      rewrite / outbox writeback). :meth:`TurnJournalRepository.record` deletes
+      only the live-band occupancy ``[0, n)`` this snapshot occupies so a resume
+      reusing ``turn_id`` overwrites the pause prefix. Overflow-band rows stay;
+      they are not copied back by kind.
     * ``replace=False`` (default): merge via seq ``append`` (insert-if-absent).
       Salvage / cloud live may hold a sparser display view; occupied seqs stay
-      because progressive append-on-emit already owns denser rows.
+      because progressive append-on-emit already owns denser rows. Extra
+      overflow-band rows beyond ``len(entries)`` are left in place.
 
     A failure must NEVER break the turn: it rolls back only this write and logs
     — the reply is already committed and the worst case is a turn that won't

@@ -161,6 +161,11 @@ class ToolUseEndPayload(WirePayload):
         "Delegate batch finished with FAILED/SKIPPED nodes (tool meta ``partial_failure``). "
         "Absent when false / non-delegate."
     )
+    audience: Literal["ceo"] | None = absent(
+        "CEO-only tool output (coordination host echo / orchestration). User-bubble "
+        "writers refuse it. Absent for user-salvageable results (blocking delegate "
+        "synthesis)."
+    )
 
 
 class TitleGeneratedPayload(WirePayload):
@@ -223,8 +228,15 @@ class ErrorContext(WirePayload):
         "平台配额窗口翻篇的绝对时刻（ISO-8601 UTC）；同 recovery_at 由客户端本地化。"
     )
     credential_source: str | None = absent(
-        "LLM_KEY_INVALID CTA 分流：user=去设置换 Key；platform=接入自己的 Key / 联系管理员。"
+        "LLM_KEY_INVALID CTA 分流：user=各端换 Key（桌面「去服务商」、手机「去配置」）；"
+        "platform=接入自己的 Key / 联系管理员。"
     )
+    vendor_code: str | None = absent(
+        "上游 vendor 子码（message 方括号或 error.code），供排查包定位 tool schema 拒绝。"
+    )
+    model: str | None = absent("本轮请求的模型 id。")
+    profile: str | None = absent("本轮 scenario / 推理 profile 名（chat / agent / …）。")
+    tool_count: int | None = absent("本轮发给上游的 tools 条数。")
 
 
 class ErrorPayload(WirePayload):

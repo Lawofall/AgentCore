@@ -7,6 +7,10 @@ import { Button, Card, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact, formatCost, formatDisplayCost } from "@/lib/format";
 import { useUsageStore } from "@/stores/usage";
+import {
+  CACHE_BILLED_AS_MISS_LABEL,
+  cacheUsageDisplay,
+} from "@agentcore/protocol-fold-kit";
 import { KeyRound, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 import { SettingsHeader } from "./SettingsHeader";
@@ -362,15 +366,19 @@ function UsageDetail({
 }) {
   const { today, month } = summary;
   const input = today.usage.input;
-  const hitRate =
-    input > 0 ? Math.round((today.usage.cache_hit / input) * 100) : 0;
+  const cache = cacheUsageDisplay(today.usage);
 
   const rows: { label: string; value: string }[] = [
     {
       label: "今日 tokens",
       value: `输入 ${formatCompact(input)} · 输出 ${formatCompact(today.usage.output)}`,
     },
-    { label: "今日缓存命中率", value: `${hitRate}%` },
+    cache.billedAsMiss
+      ? {
+          label: "今日缓存",
+          value: `${CACHE_BILLED_AS_MISS_LABEL} · ${formatCompact(cache.cacheMiss)}`,
+        }
+      : { label: "今日缓存命中率", value: `${cache.hitRatePercent ?? 0}%` },
   ];
   if (!byok) {
     rows.push(

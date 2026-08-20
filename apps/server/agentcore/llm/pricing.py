@@ -403,6 +403,37 @@ def pricing_for_model(
     return resolved.card
 
 
+def reconcile_cache_miss_tokens(
+    input_tokens: int,
+    cache_hit_tokens: int,
+    cache_miss_tokens: int,
+) -> int:
+    """Price-side cache-split guard: missing split ⇒ whole prompt as miss, not zero.
+
+    ``max(input − hit, miss)`` is a no-op on the native DeepSeek path
+    (``hit + miss == input``). Callers that persist ``TokenUsage`` must not use this
+    to rewrite the 0/0 tripwire — only pricing and read-side projection.
+    """
+    return max(input_tokens - cache_hit_tokens, cache_miss_tokens)
+
+
+def project_cache_miss_tokens(
+    input_tokens: int,
+    cache_hit_tokens: int,
+    cache_miss_tokens: int,
+) -> int:
+    """Read-side ``UsageBreakdown`` projection of ``cache_miss``.
+
+    Only the omitted shape (``input > 0`` and hit/miss both 0) is rewritten, with
+    the same formula as :func:`reconcile_cache_miss_tokens`. DeepSeek true-zero
+    (``miss == input``) is unchanged. Parse-layer ``TokenUsage`` stays 0/0 — that
+    shape is the billing-fairness tripwire and must remain queryable.
+    """
+    if input_tokens > 0 and cache_hit_tokens == 0 and cache_miss_tokens == 0:
+        return reconcile_cache_miss_tokens(input_tokens, cache_hit_tokens, cache_miss_tokens)
+    return cache_miss_tokens
+
+
 def calculate_cost(
     model: str,
     usage: TokenUsage,
@@ -464,7 +495,9 @@ def calculate_cost(
             output_tokens=usage.output_tokens,
         )
 
-    cache_miss_tokens = max(usage.input_tokens - usage.cache_hit_tokens, usage.cache_miss_tokens)
+    cache_miss_tokens = reconcile_cache_miss_tokens(
+        usage.input_tokens, usage.cache_hit_tokens, usage.cache_miss_tokens
+    )
     cached = _nano(usage.cache_hit_tokens, card["cache_hit"])
     uncached = _nano(cache_miss_tokens, card["cache_miss"])
     output = _nano(usage.output_tokens, card["output"])

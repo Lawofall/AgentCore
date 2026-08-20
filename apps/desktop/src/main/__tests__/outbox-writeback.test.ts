@@ -484,7 +484,9 @@ describe("drainOutbox", () => {
     expect(empty.user_message).toBe("");
   });
 
-  it("includes sorted journal on writeback when runs is missing (crash salvage)", async () => {
+  it("includes seq-sorted journal on writeback when ord is missing (legacy crash salvage)", async () => {
+    // No ``ord``: keep the old integer-key order. Overflow+resume emission
+    // order is the twin test below (``ord`` on each entry).
     writeReady("u-j", {
       runs: null,
       finish_reason: "cancelled",
@@ -515,6 +517,69 @@ describe("drainOutbox", () => {
     expect(body.journal).toEqual([
       { kind: "run_started", payload: { id: "r1" }, ts: "t0" },
       { kind: "run_completed", payload: { id: "r1" }, ts: null },
+    ]);
+  });
+
+  it("writeback journal is emission order after pause overflow and resume live", async () => {
+    // Twin of server test_journal_overflow_seq_projection: seal prefix →
+    // overflow terminals → resume live tail. Integer-like keys reorder under
+    // JSON.parse / JS index order; ``ord`` is the shared order fact.
+    const overflow = 1_000_000;
+    writeReady("u-ord", {
+      runs: null,
+      finish_reason: "cancelled",
+      journal: {
+        "0": { kind: "run_plan", payload: {}, ts: "t0", ord: 0 },
+        "1": { kind: "run_started", payload: { id: "r1" }, ts: "t1", ord: 1 },
+        "2": { kind: "checkpoint_required", payload: {}, ts: "t2", ord: 2 },
+        [String(overflow)]: {
+          kind: "run_completed",
+          payload: { id: "r1" },
+          ts: "t-ov",
+          ord: 3,
+        },
+        [String(overflow + 1)]: {
+          kind: "execution_completed",
+          payload: {},
+          ts: "t-ov2",
+          ord: 4,
+        },
+        "3": {
+          kind: "checkpoint_resolved",
+          payload: {},
+          ts: "t5",
+          ord: 5,
+        },
+        "4": { kind: "run_started", payload: { id: "r2" }, ts: "t6", ord: 6 },
+      },
+    });
+    h.bearerPostJson.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: {
+        user_message_id: "u-ord",
+        assistant_message_id: "m1",
+        title: null,
+      },
+    });
+
+    await drainOutbox();
+    expect(h.bearerPostJson).toHaveBeenCalledOnce();
+    const body = h.bearerPostJson.mock.calls[0]?.[1] as {
+      journal?: Array<{
+        kind?: string;
+        payload?: { id?: string };
+        ts?: string;
+      }>;
+    };
+    expect(body.journal).toEqual([
+      { kind: "run_plan", payload: {}, ts: "t0" },
+      { kind: "run_started", payload: { id: "r1" }, ts: "t1" },
+      { kind: "checkpoint_required", payload: {}, ts: "t2" },
+      { kind: "run_completed", payload: { id: "r1" }, ts: "t-ov" },
+      { kind: "execution_completed", payload: {}, ts: "t-ov2" },
+      { kind: "checkpoint_resolved", payload: {}, ts: "t5" },
+      { kind: "run_started", payload: { id: "r2" }, ts: "t6" },
     ]);
   });
 

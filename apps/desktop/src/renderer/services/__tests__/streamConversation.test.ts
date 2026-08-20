@@ -70,17 +70,16 @@ describe("describeStreamError", () => {
   it("surfaces the backend's actionable message for a 402 missing BYOK key", () => {
     const err = new StreamError("http", 402, {
       code: "LLM_KEY_REQUIRED",
-      serverMessage:
-        "请先在「设置 · 服务商」中填入你的 DeepSeek API Key，再发起对话。",
+      serverMessage: "请先接入自己的 API Key，再发起对话。",
     });
     expect(describeStreamError(err)).toBe(
-      "请先在「设置 · 服务商」中填入你的 DeepSeek API Key，再发起对话。",
+      "请先接入自己的 API Key，再发起对话。",
     );
   });
 
   it("falls back to a config hint for a 402 with no server message", () => {
     const err = new StreamError("http", 402, { code: "LLM_KEY_REQUIRED" });
-    expect(describeStreamError(err)).toContain("服务商");
+    expect(describeStreamError(err)).toContain("API Key");
     expect(describeStreamError(err)).not.toContain("服务暂时不可用");
   });
 
@@ -151,11 +150,11 @@ describe("isRetriableStreamError", () => {
 describe("errorActionForCode", () => {
   it("routes missing and invalid keys to the providers page", () => {
     expect(errorActionForCode("LLM_KEY_REQUIRED")).toEqual({
-      label: "去设置",
+      label: "去服务商",
       href: "/more/providers",
     });
     expect(errorActionForCode("LLM_KEY_INVALID")).toEqual({
-      label: "去设置",
+      label: "去服务商",
       href: "/more/providers",
     });
   });
@@ -168,7 +167,7 @@ describe("errorActionForCode", () => {
 
   it("routes balance errors to settings; quota offers a BYOK secondary exit (F6)", () => {
     expect(errorActionForCode("LLM_INSUFFICIENT_BALANCE")).toEqual({
-      label: "去设置",
+      label: "去服务商",
       href: "/more/providers",
     });
     // 平台额度耗尽补次级 CTA「接入自己的 Key」(成本配额与计费 §〇·六 F6).
@@ -184,7 +183,7 @@ describe("errorActionForCode", () => {
       streamErrorAction(
         new StreamError("http", 402, { code: "LLM_KEY_REQUIRED" }),
       ),
-    ).toEqual({ label: "去设置", href: "/more/providers" });
+    ).toEqual({ label: "去服务商", href: "/more/providers" });
     expect(streamErrorAction(new Error("boom"))).toBeNull();
   });
 });

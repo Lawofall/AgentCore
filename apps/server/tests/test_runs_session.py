@@ -6,7 +6,10 @@ appended instruction, extends the transcript, and emits continuation graph
 events with ``continues_run_id`` = session root and ``parent_run_id`` = true parent.
 """
 
+import asyncio
 from pathlib import Path
+
+import pytest
 
 from agentcore.core.types import ToolCategory
 from agentcore.llm.provider.protocol import (
@@ -348,3 +351,71 @@ async def test_continue_run_failure_returns_failed_state():
     assert "provider down" in state.error
     sink.close()
     assert EventType.RUN_FAILED in [e.type async for e in sink]
+
+
+_RUN_TERMINALS = frozenset(
+    {
+        EventType.RUN_COMPLETED,
+        EventType.RUN_FAILED,
+        EventType.RUN_CANCELLED,
+        EventType.RUN_SKIPPED,
+    }
+)
+
+
+async def test_continue_run_mid_cancel_emits_terminal_frame():
+    """中途取消续写：``run_started`` 之后必有终态帧（CancelledError 不再穿过去留洞）。"""
+    session = _session_with_reasoning()
+    sink = EventSink()
+
+    class _Hang:
+        async def stream(self, request):  # noqa: ANN001, ARG002
+            yield LLMChunk(delta_content="半成品")
+            await asyncio.sleep(30)
+            yield LLMChunk(delta_content="…")
+
+    task = asyncio.create_task(
+        continue_run(
+            session=session,
+            feedback="把语气改正式",
+            continuation_run_id="t_1_rev1",
+            llm=_Hang(),
+            tools=ToolRegistry(),
+            sink=sink,
+            base_tool_context=_ctx(),
+            execution_id="e",
+            approval_gate=None,
+        )
+    )
+    for _ in range(200):
+        if any(
+            e.type is EventType.RUN_STARTED and e.payload.get("run_id") == "t_1_rev1"
+            for e in sink._history  # noqa: SLF001
+        ):
+            break
+        await asyncio.sleep(0.01)
+    else:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        pytest.fail("continue_run 从未发出 run_started")
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    events = list(sink._history)  # noqa: SLF001
+    started = [
+        e
+        for e in events
+        if e.type is EventType.RUN_STARTED and e.payload.get("run_id") == "t_1_rev1"
+    ]
+    assert started, "续写必须先发 run_started"
+    terminals = [
+        e
+        for e in events
+        if e.type in _RUN_TERMINALS and e.payload.get("run_id") == "t_1_rev1"
+    ]
+    assert len(terminals) == 1
+    assert terminals[0].type is EventType.RUN_CANCELLED
+    assert terminals[0].payload.get("reason") == "stop"

@@ -124,7 +124,7 @@ skip_if:
 
 | 阶段 | 内容 | 验收要点 |
 |---|---|---|
-| **S1 回复可用化** ✅ | 校验 + 引用快照 API/事件；桌面：回复入口、composer 引用条、气泡引用块、点击滚到原消息 | 跨端收到带快照的回复；非法 `reply_to`（跨会话/不存在）→ **422**；乐观发送与 firehose 一致；快照落库列 `chat_messages.reply_to`（JSONB，冻结 `sender_user_id` / `sender_display_name` / `body_preview`，预览截断 100 字） |
+| **S1 回复可用化** ✅ | 校验 + 引用快照 API/事件；桌面：回复入口、composer 引用条、气泡引用块、点击滚到原消息 | 跨端收到带快照的回复；非法 `reply_to`（跨会话/不存在）→ **422**；乐观发送与 firehose 一致；快照落库列 `chat_messages.reply_to`（JSONB，冻结 `sender_user_id` / `sender_display_name` / `body_preview`，预览截断 100 字、空白折成单行） |
 | **S2 @人 + @所有人** ✅ | `mentions` 落库与校验；composer `@` 菜单；高亮；静音弱通知；平台 admin **或群管理员** `@所有人`（群） | 非 accepted 成员 id → 422；普通成员发 `@所有人` → 403；单聊 everyone → 422；静音用户被 @ 有列表角标 + 弱通知；未读策略不破坏现有 `last_read_*` |
 | **S3 撤回** ✅ | recall API + firehose `chat_message_updated`；2 分钟窗；平台 admin / 群管理员治理撤；官方/system_card 仅平台 admin | 超时本人撤 → 403；撤后引用仍显示快照；列表预览不露出已撤正文 |
 | **S4 编辑** ✅ | `PATCH .../messages/{id}` + `edited_at`；气泡「已编辑」；15 分钟窗；composer 编辑态 | 附件消息拒编辑；已撤拒编辑；他端实时看到正文替换 |

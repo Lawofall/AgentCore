@@ -29,6 +29,9 @@ from agentcore.runtime.runs.executor.context import (
     _context_block_payloads,
 )
 from agentcore.runtime.runs.executor.shared import _priced_failure, resolve_finish_override
+from agentcore.runtime.runs.executor.started_run_close import (
+    emit_run_cancelled_if_unterminated,
+)
 from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunSpec, RunState
 from agentcore.runtime.suspension import captain_transcript
 from agentcore.tools.protocol import ToolContext
@@ -340,6 +343,13 @@ async def _drive_captain_loop(
         # back to the rounds-derived default.
         return replace(failed, finish_override=resolve_finish_override(finish_override))
     finally:
+        # CancelledError bypasses except Exception: close the journal if we started.
+        emit_run_cancelled_if_unterminated(
+            sink,
+            spec.run_id,
+            agent_id,
+            execution_id=getattr(tool_ctx, "execution_id", "") or "",
+        )
         # Browser B: same as worker executor.node — release this captain run's session
         # bind so the next user turn (new captain_run_id) can reuse the conversation's
         # unbound unique/active live tab. Without this, solo CEO browser_* stacks

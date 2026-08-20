@@ -142,6 +142,45 @@ describe("AssistantMessageFooter", () => {
     expect(screen.getByText("思考")).toBeTruthy();
   });
 
+  it("omitted cache split (0/0 with input) shows billing口径, not 0 命中", () => {
+    render(
+      <AssistantMessageFooter
+        content="答案"
+        usage={{
+          input: 800,
+          output: 40,
+          reasoning: 0,
+          cache_hit: 0,
+          cache_miss: 0,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("assistant-footer-more"));
+    const billed = screen.getByText("按未命中计价");
+    expect(billed.parentElement?.textContent).toContain("800");
+    expect(screen.queryByText("缓存命中")).toBeNull();
+    expect(screen.queryByText("缓存未命中")).toBeNull();
+  });
+
+  it("DeepSeek true 0 hit (miss=input) keeps miss count and still bills as miss", () => {
+    render(
+      <AssistantMessageFooter
+        content="答案"
+        usage={{
+          input: 800,
+          output: 40,
+          reasoning: 0,
+          cache_hit: 0,
+          cache_miss: 800,
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("assistant-footer-more"));
+    const billed = screen.getByText("按未命中计价");
+    expect(billed.parentElement?.textContent).toContain("800");
+    expect(screen.queryByText("缓存命中")).toBeNull();
+  });
+
   it("streaming footer is copy-only", () => {
     render(<AssistantMessageFooter content="streaming…" isStreaming />);
     expect(

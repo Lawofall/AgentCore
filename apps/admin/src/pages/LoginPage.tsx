@@ -2,13 +2,17 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import {
+  loginIdentifierError,
+  passwordFieldError,
+} from "@/lib/emailAuth";
+import {
   loadRememberedUsername,
   saveRememberedUsername,
 } from "@/lib/rememberedUsername";
 import { errorMessage } from "@/services/api";
 import { login, loginMfa } from "@/services/auth";
 import { useAuthStore } from "@/stores/auth";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
 
@@ -29,6 +33,8 @@ export function LoginPage() {
   const [step, setStep] = useState<Step>(pendingMfaToken ? "mfa" : "credentials");
   const [username, setUsername] = useState(() => loadRememberedUsername());
   const [password, setPassword] = useState("");
+  const [revealPassword, setRevealPassword] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   /** Default off — session persistence is opt-in via「保持登录」. */
   const [persistSession, setPersistSession] = useState(false);
   const [totpCode, setTotpCode] = useState("");
@@ -38,13 +44,21 @@ export function LoginPage() {
   const mfaLength = mfaMode === "totp" ? TOTP_LENGTH : RECOVERY_LENGTH;
   const mfaReady = totpCode.length === mfaLength;
 
+  const identifierErr = loginIdentifierError(username);
+  const passwordErr = passwordFieldError(password);
+  const identifierDirty = attempted || username.length > 0;
+  const passwordDirty = attempted || password.length > 0;
+  const credentialsReady = !identifierErr && !passwordErr;
+
   const handleCredentials = async (e: FormEvent) => {
     e.preventDefault();
-    if (!username || !password || submitting) return;
+    setAttempted(true);
+    if (!credentialsReady || submitting) return;
     setSubmitting(true);
     try {
-      const outcome = await login(username, password, persistSession);
-      saveRememberedUsername(username);
+      const trimmed = username.trim();
+      const outcome = await login(trimmed, password, persistSession);
+      saveRememberedUsername(trimmed);
       if (outcome.kind === "mfa_required") {
         setPendingMfaToken(outcome.pendingToken);
         setStep("mfa");
@@ -83,7 +97,7 @@ export function LoginPage() {
         setSubmitting(false);
         return;
       }
-      saveRememberedUsername(username);
+      saveRememberedUsername(username.trim());
       if (outcome.user.role === "admin") setAuthenticated(outcome.user);
       else setForbidden(outcome.user);
     } catch (err) {
@@ -127,25 +141,60 @@ export function LoginPage() {
         </div>
 
         {step === "credentials" ? (
-          <form onSubmit={(e) => void handleCredentials(e)} className="flex flex-col gap-3">
-            <Input
-              type="text"
-              autoComplete="username"
-              placeholder="用户名"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={submitting}
-              // biome-ignore lint/a11y/noAutofocus: single-purpose login form
-              autoFocus
-            />
-            <Input
-              type="password"
-              autoComplete="current-password"
-              placeholder="密码"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={submitting}
-            />
+          <form
+            noValidate
+            onSubmit={(e) => void handleCredentials(e)}
+            className="flex flex-col gap-3"
+          >
+            <div className="flex flex-col gap-1">
+              <Input
+                type="text"
+                autoComplete="username"
+                placeholder="邮箱或用户名"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={submitting}
+                aria-invalid={
+                  Boolean(identifierDirty && identifierErr) || undefined
+                }
+                // biome-ignore lint/a11y/noAutofocus: single-purpose login form
+                autoFocus
+              />
+              {identifierDirty && identifierErr && (
+                <p className="text-xs text-muted-foreground" role="alert">
+                  {identifierErr}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="relative">
+                <Input
+                  type={revealPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="密码"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={submitting}
+                  aria-invalid={
+                    Boolean(passwordDirty && passwordErr) || undefined
+                  }
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  aria-label={revealPassword ? "隐藏密码" : "显示密码"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setRevealPassword((v) => !v)}
+                >
+                  {revealPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {passwordDirty && passwordErr && (
+                <p className="text-xs text-muted-foreground" role="alert">
+                  {passwordErr}
+                </p>
+              )}
+            </div>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
@@ -158,7 +207,7 @@ export function LoginPage() {
             </label>
             <Button
               type="submit"
-              disabled={submitting || !username || !password}
+              disabled={submitting}
               className="mt-1 w-full"
             >
               {submitting && <Spinner />}

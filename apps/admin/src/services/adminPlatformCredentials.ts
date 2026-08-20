@@ -1,14 +1,30 @@
 import { api } from "@/services/api";
 import type { components } from "@/types/api.generated";
 
-export type PlatformCredentialView =
-  components["schemas"]["PlatformCredentialView"];
-export type PlatformCredentialListResponse =
-  components["schemas"]["PlatformCredentialListResponse"];
-export type CreatePlatformCredentialRequest =
-  components["schemas"]["CreatePlatformCredentialRequest"];
-export type UpdatePlatformCredentialRequest =
-  components["schemas"]["UpdatePlatformCredentialRequest"];
+/** Per-credential declared upstream tool-surface caps. Null / omitted = unlimited. */
+export type ToolSurfaceLimits = {
+  max_tools?: number | null;
+  max_properties_total?: number | null;
+  max_properties_per_tool?: number | null;
+};
+
+type GeneratedView = components["schemas"]["PlatformCredentialView"];
+type GeneratedCreate = components["schemas"]["CreatePlatformCredentialRequest"];
+type GeneratedUpdate = components["schemas"]["UpdatePlatformCredentialRequest"];
+
+export type PlatformCredentialView = GeneratedView & {
+  tool_surface_limits?: ToolSurfaceLimits;
+};
+export type PlatformCredentialListResponse = Omit<
+  components["schemas"]["PlatformCredentialListResponse"],
+  "data"
+> & { data: PlatformCredentialView[] };
+export type CreatePlatformCredentialRequest = GeneratedCreate & {
+  tool_surface_limits?: ToolSurfaceLimits;
+};
+export type UpdatePlatformCredentialRequest = GeneratedUpdate & {
+  tool_surface_limits?: ToolSurfaceLimits | null;
+};
 
 export async function listPlatformCredentials(): Promise<PlatformCredentialListResponse> {
   return api.get<PlatformCredentialListResponse>(

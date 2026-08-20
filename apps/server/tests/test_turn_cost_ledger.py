@@ -129,6 +129,7 @@ def test_log_cost_recorded_by_role_shape():
     assert by_role[ROLE_MEMBER] == {"runs": 2, "total_nano": 600, "input": 80, "output": 12}
     log_cost_recorded("c1", "m1", rows)
 
+
 @pytest.mark.asyncio
 async def test_reconcile_materializes_worker_from_calls_not_cost_runs():
     """Even when cost_runs is captain-only, calls for a member run upsert into events."""
@@ -283,6 +284,7 @@ async def test_reconcile_interrupted_turn_cost_emits_and_stamps(monkeypatch):
     )
     recorded: list[tuple] = []
     set_cost = AsyncMock()
+    merge_usage = AsyncMock()
 
     class _ConvRepo:
         def __init__(self, _session):
@@ -300,6 +302,9 @@ async def test_reconcile_interrupted_turn_cost_emits_and_stamps(monkeypatch):
 
         async def set_cost(self, *a, **k):
             await set_cost(*a, **k)
+
+        async def merge_usage(self, *a, **k):
+            await merge_usage(*a, **k)
 
     class _FakeSession:
         async def __aenter__(self):
@@ -346,7 +351,145 @@ async def test_reconcile_interrupted_turn_cost_emits_and_stamps(monkeypatch):
     assert recorded[0][0] == "c1"
     assert recorded[0][1] == "m1"
     assert {r["role"] for r in recorded[0][2]} == {ROLE_CAPTAIN, ROLE_MEMBER}
+    merge_usage.assert_awaited_once()
     set_cost.assert_awaited_once()
+    assert merge_usage.await_args.args[0] == "m1"
+    assert merge_usage.await_args.kwargs["usage"]["input_tokens"] == 60
+    assert merge_usage.await_args.kwargs["usage"]["output_tokens"] == 10
+    assert merge_usage.await_args.kwargs["usage"]["cache_hit_tokens"] == 0
+    # Tokens land before cost — cost is the skip latch for a second closer.
+    assert merge_usage.await_args_list[0].args[0] == "m1"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_interrupted_user_stop_stamps_usage_tokens_from_ledger(
+    monkeypatch,
+):
+    """user_stop interrupt usage must carry token fields that match the ledger.
+
+    Production shape: ``messages.usage`` is only incomplete chrome (no token
+    keys; API projects ``usage: null`` so the bubble hides spend) while
+    ``cost_events`` for the same ``message_id`` already has the full split.
+    Incoming ledger totals overwrite any partial in-memory tokens (9676f5bb).
+    """
+    from agentcore.runtime.turn import interrupt as interrupt_mod
+
+    ledger_rows = [
+        {
+            "run_id": "cap_1",
+            "role": ROLE_CAPTAIN,
+            "tokens": {
+                "input": 3_676_943,
+                "output": 12_000,
+                "reasoning": 100,
+                "cache_hit": 3_000_000,
+                "cache_miss": 676_943,
+            },
+            "cost_total_nano": 1,
+            "cost": {"total": 1},
+        },
+        {
+            "run_id": "w1",
+            "role": ROLE_MEMBER,
+            "tokens": {
+                "input": 16_728_448,
+                "output": 343_915,
+                "reasoning": 50,
+                "cache_hit": 13_728_448,
+                "cache_miss": 3_000_000,
+            },
+            "cost_total_nano": 2,
+            "cost": {"total": 2},
+        },
+    ]
+    ops: list[str] = []
+
+    async def _merge(*_a, **_k):
+        ops.append("usage")
+
+    async def _cost(*_a, **_k):
+        ops.append("cost")
+
+    merge_usage = AsyncMock(side_effect=_merge)
+    set_cost = AsyncMock(side_effect=_cost)
+
+    class _ConvRepo:
+        def __init__(self, _session):
+            pass
+
+        async def get_by_id_unscoped(self, _cid):
+            return SimpleNamespace(user_id="u1")
+
+    class _MsgRepo:
+        def __init__(self, _session):
+            pass
+
+        async def get_by_id(self, _mid, conversation_id=None):
+            return SimpleNamespace(
+                cost=None,
+                usage={
+                    "status": "incomplete",
+                    "incomplete": True,
+                    "finish_reason": "cancelled",
+                    "interrupt_reason": "user_stop",
+                    # Partial captain tokens already on the row (merge kept them).
+                    "input_tokens": 400_000,
+                    "output_tokens": 1_000,
+                },
+            )
+
+        async def set_cost(self, *a, **k):
+            await set_cost(*a, **k)
+
+        async def merge_usage(self, *a, **k):
+            await merge_usage(*a, **k)
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def rollback(self):
+            return None
+
+    monkeypatch.setattr(interrupt_mod, "async_session_factory", lambda: _FakeSession())
+    monkeypatch.setattr(
+        "agentcore.db.repositories.ConversationRepository",
+        _ConvRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.db.repositories.MessageRepository",
+        _MsgRepo,
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.turn_ledger.drain_cost_ledger_before_reconcile",
+        AsyncMock(return_value=object()),
+    )
+    monkeypatch.setattr(
+        "agentcore.billing.turn_ledger.reconcile_turn_cost_ledger",
+        AsyncMock(return_value=ledger_rows),
+    )
+    monkeypatch.setattr(
+        "agentcore.conversation.common.log_cost_recorded",
+        lambda *a, **k: None,
+    )
+
+    await interrupt_mod._reconcile_interrupted_turn_cost(
+        message_id="0aba6f35-34dc-482d-9baa-dca9d665b3f4",
+        conversation_id="3a0f3a6f-c856-4318-95f9-e3d11bf8fd9a",
+        trace_id="tr",
+    )
+
+    merge_usage.assert_awaited_once()
+    usage = merge_usage.await_args.kwargs["usage"]
+    assert usage["input_tokens"] == 20_405_391
+    assert usage["output_tokens"] == 355_915
+    assert usage["reasoning_tokens"] == 150
+    assert usage["cache_hit_tokens"] == 16_728_448
+    assert usage["cache_miss_tokens"] == 3_676_943
+    assert ops == ["usage", "cost"]
 
 
 @pytest.mark.asyncio

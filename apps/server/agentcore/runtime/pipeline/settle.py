@@ -46,7 +46,10 @@ def _salvage_reply_and_outcome(
     content: str,
     finish: object,
 ) -> tuple[str, str | None]:
-    """Fill empty captain prose from last delegate synthesis; stamp turn outcome."""
+    """Fill empty captain prose from last user-facing delegate output; stamp turn outcome.
+
+    Coordination host echo is CEO-audience and is not copied into the user bubble.
+    """
     events = sink.history_snapshot()
     if not (content or "").strip():
         salvaged = last_delegate_tool_output_from_events(events)

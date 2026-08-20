@@ -33,12 +33,15 @@ from .conversations import (
 )
 from .devices import PushDeviceRow
 from .documents import DisputedLine, Document
+from .email_auth import EmailChallenge, PendingRegistration
 from .feedback import FeedbackRow
 from .llm_profiles import LlmModelProfile
 from .memory_pipeline import MemoryEpisode, MemoryScopeState
 from .notices import ProductNoticeDismissalRow, ProductNoticeRow
 from .platform import PlatformCredential
 from .runs import (
+    JOURNAL_BAND_LIVE,
+    JOURNAL_BAND_OVERFLOW,
     PAUSED_TURN_EXPIRED,
     PAUSED_TURN_SETTLED,
     HandoffJob,
@@ -80,9 +83,12 @@ __all__ = [
     "Credentials",
     "DisputedLine",
     "Document",
+    "EmailChallenge",
     "FeedbackRow",
     "Folder",
     "HandoffJob",
+    "JOURNAL_BAND_LIVE",
+    "JOURNAL_BAND_OVERFLOW",
     "LlmModelProfile",
     "MemoryEpisode",
     "MemoryScopeState",
@@ -93,6 +99,7 @@ __all__ = [
     "PAUSED_TURN_SETTLED",
     "PausedTurnOutcomeRow",
     "PausedTurnRow",
+    "PendingRegistration",
     "PlatformCredential",
     "ProductNoticeDismissalRow",
     "ProductNoticeRow",

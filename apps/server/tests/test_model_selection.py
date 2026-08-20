@@ -23,6 +23,17 @@ def test_select_call_pairs_model_with_scenario_params():
     assert selected.profile.max_rounds == 1
 
 
+def test_chat_and_agent_profiles_enable_thinking():
+    assert get_profile("chat").thinking is True
+    assert get_profile("agent").thinking is True
+    req = build_selected_request(
+        select_call("chat", "deepseek-v4-flash"),
+        [LLMMessage(role="user", content="hi")],
+    )
+    assert req.thinking is True
+    assert req.scenario == "chat"
+
+
 def test_select_for_scenario_uses_worker_route_prefix():
     turn = TurnProfiles(
         model="ceo-pro",

@@ -14,9 +14,12 @@ from agentcore.runtime.resolve.prompt.base import (
     _RUNTIME_CONTEXT_TEMPLATE,
 )
 from agentcore.runtime.resolve.prompt.ceo_core import (
+    _ATTACHMENT_MATERIAL_HINT,
     _CEO_CORE_HINT,
     _CEO_CORE_HINT_TEMPLATE,
+    _attachment_material_block,
     assemble_ceo_core,
+    attachment_material_scene,
 )
 from agentcore.runtime.resolve.prompt.citation import CHAT_CITATION_HINT
 from agentcore.runtime.resolve.prompt.cold_start import (
@@ -45,6 +48,7 @@ from agentcore.runtime.resolve.prompt.visualization import _CEO_VISUALIZATION_HI
 
 __all__ = [
     "CHAT_CITATION_HINT",
+    "_ATTACHMENT_MATERIAL_HINT",
     "_CEO_CORE_HINT",
     "_CEO_CORE_HINT_TEMPLATE",
     "_CEO_VISUALIZATION_HINT",
@@ -59,10 +63,12 @@ __all__ = [
     "_RULES_ROUTING_FENCE",
     "_RULES_TEMPLATE",
     "_RUNTIME_CONTEXT_TEMPLATE",
+    "_attachment_material_block",
     "_explore_act_block",
     "_format_rules",
     "assemble_ceo_core",
     "assemble_system_prompt",
+    "attachment_material_scene",
     "compose_ceo_chat_prompt",
     "compose_worker_base_prompt",
     "derive_ceo_addon",

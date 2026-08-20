@@ -72,13 +72,15 @@ import type {
   TurnStatus,
 } from "@agentcore/protocol-conformance";
 import {
+  CACHE_BILLED_AS_MISS_LABEL,
   type InterveneGate,
+  cacheUsageDisplay,
   interveneAckText,
   isLiveRunStatus,
   runRedirectGate,
   runStopGate,
 } from "@agentcore/protocol-fold-kit";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import "./TeamView.css";
 
 /** 幕 kind → 列表分组头短标签（无 title 时回落；手机列表语言，非桌面幕分带）。 */
@@ -291,20 +293,40 @@ function debateEntryText(workers: readonly ProjectedRun[]): string {
   return parts.length > 0 ? parts.join(" · ") : "辩论协作进行中";
 }
 
+/** Live wall-clock seconds since a stable start (first collab event). Same
+ *  shape as desktop ToolLine: 1s ticker only re-renders; value is recomputed
+ *  from Date.now() so fold/remount does not reset. 36h clamp matches desktop
+ *  `runningElapsedSec` (offline preview skew → omit, don't show millions of s). */
+const MAX_SANE_RUNNING_ELAPSED_SEC = 36 * 60 * 60;
+
+function useRunningElapsed(
+  ticking: boolean,
+  startedAt: number | null | undefined,
+): number {
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!ticking) return;
+    const id = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [ticking]);
+  if (!ticking || startedAt == null || !Number.isFinite(startedAt)) return 0;
+  const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  return sec > MAX_SANE_RUNNING_ELAPSED_SEC ? 0 : sec;
+}
+
 /**
- * 完工的一行账：子任务 n/m、用时、花费。
+ * 一行账：子任务 n/m、用时、花费。运行态用时由调用方传入墙钟值（非冻结跨度）。
  *
  * 并行省时已从产品删掉——不计算、不写进条、不写进 title。
  */
 function teamStripMeta(args: {
   workers: readonly ProjectedRun[];
   progress: { completed: number; total: number };
-  status: TurnStatus | null | undefined;
   elapsedMs: number;
   /** Partial verdict already lives in the strip title — don't repeat 部分完成 in meta. */
   skipPartialBit?: boolean;
 }): string {
-  const { workers, progress, status, elapsedMs, skipPartialBit } = args;
+  const { workers, progress, elapsedMs, skipPartialBit } = args;
   const bits: string[] = [];
   // 「N 个 Agent」已删——与图/列表上成员重复；保留子任务 n/m。
   bits.push(`${progress.completed}/${progress.total} 子任务`);
@@ -312,8 +334,8 @@ function teamStripMeta(args: {
   if (failedBit && !(skipPartialBit && failedBit === PARTIAL_NOTICE)) {
     bits.push(failedBit);
   }
-  // 用时 = 回合墙钟跨度。曾按队员时长求和，并行越多数字越大。
-  if (elapsedMs > 0 && status !== "running") {
+  // 用时 = 回合墙钟。终态用首末跨度；运行态用 Date.now() − 起点，避免长工具无新帧时冻住。
+  if (elapsedMs > 0) {
     bits.push(`用时 ${formatDuration(elapsedMs)}`);
   }
   const money = aggregateWorkerCost(workers);
@@ -355,6 +377,7 @@ export function TeamView({
   workerToolPhases,
   evidenceLedger = [],
   elapsedMs = 0,
+  startedAtMs = null,
   waitProgress = null,
   detached = false,
   outcome = null,
@@ -387,9 +410,11 @@ export function TeamView({
   workerToolPhases?: Map<string, { phase: string; toolName: string }>;
   /** 场级证据台账（`extractEvidenceLedger`）：辩论发言徽章 `#eN` 解析（O7）。 */
   evidenceLedger?: EvidenceLedgerEntry[];
-  /** 回合墙钟跨度（`turnElapsedMs(turn.events)`）：条上「用时」。绝不用队员时长求和
+  /** 终态条「用时」= 回合墙钟跨度（`turnElapsedMs(turn.events)`）。绝不用队员时长求和
    *  顶替，那是工时，并行越多数字越大。缺省 0 = 不显示用时。 */
   elapsedMs?: number;
+  /** 运行态条「用时」的墙钟锚点（首条协作事件 epoch ms）。缺省则运行中不显示用时。 */
+  startedAtMs?: number | null;
   /** Live `coordination_wait` n/m。有则盖过 fold `progress`（条上只换数字，不写长句）。 */
   waitProgress?: { completed: number; total: number } | null;
   /** Live `execution_detached`。CEO 已收口、队员还在跑时条上挂「后台」。 */
@@ -406,6 +431,16 @@ export function TeamView({
   // 默认展开：手机上看团队就是看队员卡；箭头仍可收起，不按对话落盘。
   const [expanded, setExpanded] = useState(true);
   const workers = runs.filter((r) => r.kind !== "captain");
+  const showBackground =
+    status !== "cancelled" &&
+    status !== "paused" &&
+    (detached ||
+      (status === "completed" && workers.some((r) => r.status === "running")));
+  const stripStatus =
+    showBackground && (status === "completed" || status === "running")
+      ? "running"
+      : status;
+  const liveSec = useRunningElapsed(stripStatus === "running", startedAtMs);
   const ledgerMap = useMemo(
     () => (evidenceLedger.length ? buildLedgerMap(evidenceLedger) : null),
     [evidenceLedger],
@@ -421,26 +456,17 @@ export function TeamView({
   const isDebate =
     !multiAct && (acts[0]?.kind === "debate" || workers.some((r) => r.stance));
   const notesDefaultOpen = teamNotesDefaultExpanded(status, teamNotes);
-  const showBackground =
-    status !== "cancelled" &&
-    status !== "paused" &&
-    (detached ||
-      (status === "completed" && workers.some((r) => r.status === "running")));
-  const stripStatus =
-    showBackground && (status === "completed" || status === "running")
-      ? "running"
-      : status;
   const strip = teamStripFace(
     stripStatus,
     showBackground && status === "completed" ? null : outcome,
   );
   const displayProgress =
     waitProgress && waitProgress.total > 0 ? waitProgress : progress;
+  const liveMs = liveSec > 0 ? liveSec * 1000 : 0;
   const stripMeta = teamStripMeta({
     workers,
     progress: displayProgress,
-    status: stripStatus,
-    elapsedMs,
+    elapsedMs: stripStatus === "running" ? liveMs : elapsedMs,
     skipPartialBit: outcome?.kind === "partial",
   });
   const stripOwnsVerdict = outcome?.surface === "strip";
@@ -1685,10 +1711,7 @@ function ResourceBlock({
   // 未计价 ≠ 估算：社区价目未命中时连估算值都没有，标注要如实（与桌面同口径）。
   const byokLabel =
     cost?.pricing_source === "unpriced" ? "自带密钥·未计价" : "自带密钥·估算";
-  const cacheRate =
-    usage && usage.input > 0
-      ? Math.round((usage.cache_hit / usage.input) * 100)
-      : 0;
+  const cache = usage ? cacheUsageDisplay(usage) : null;
   return (
     <RunSection title="资源">
       <div className="rd-metrics">
@@ -1711,10 +1734,17 @@ function ResourceBlock({
         {usage && (
           <>
             <MetricRow label="输入 token" value={formatCompact(usage.input)} />
-            <MetricRow
-              label="缓存命中"
-              value={`${formatCompact(usage.cache_hit)} · ${cacheRate}%`}
-            />
+            {cache?.billedAsMiss ? (
+              <MetricRow
+                label={CACHE_BILLED_AS_MISS_LABEL}
+                value={formatCompact(cache.cacheMiss)}
+              />
+            ) : (
+              <MetricRow
+                label="缓存命中"
+                value={`${formatCompact(usage.cache_hit)} · ${cache?.hitRatePercent ?? 0}%`}
+              />
+            )}
             <MetricRow label="输出 token" value={formatCompact(usage.output)} />
             <MetricRow
               label="推理 token"

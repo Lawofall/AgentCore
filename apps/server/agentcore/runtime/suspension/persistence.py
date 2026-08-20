@@ -75,7 +75,8 @@ async def save_paused_turn(suspension: TurnSuspension) -> None:
     try:
         async with async_session_factory() as db:
             if journal_entries:
-                await TurnJournalRepository(db).record(
+                repo = TurnJournalRepository(db)
+                await repo.record(
                     turn_id=suspension.message_id,
                     conversation_id=suspension.conversation_id,
                     trace_id=trace_id,
@@ -415,7 +416,10 @@ async def claim_paused_turn(
     assert claimed is not None
     try:
         async with async_session_factory() as db:
-            entries = await TurnJournalRepository(db).load(message_id)
+            rows = await TurnJournalRepository(db).load_after(message_id, -1)
+        from agentcore.runtime.journal.seq_space import split_live_and_overflow_rows
+
+        live, overflow = split_live_and_overflow_rows(rows)
         suspension = suspension_from_json(claimed["frame"])
     except Exception as e:
         logger.error(
@@ -433,7 +437,7 @@ async def claim_paused_turn(
         raise
 
     aligned = align_cold_resume_resolved_to_winner(
-        list(entries or []),
+        live,
         turn_id=message_id,
         checkpoint_id=str(suspension.checkpoint_id or ""),
         decision=decision,
@@ -453,8 +457,8 @@ async def claim_paused_turn(
                 message_id=message_id,
                 error=str(e),
             )
-        entries = aligned
-    suspension.journal_entries = list(entries or [])
+        live = aligned
+    suspension.journal_entries = [*live, *overflow]
 
     if suspension.journal_degraded and not suspension.journal_entries:
         logger.warning(

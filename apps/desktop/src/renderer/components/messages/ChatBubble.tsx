@@ -100,7 +100,9 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-/** Inline reply quote inside a bubble (not the AI-chat @attachment chip). */
+/** Inline reply quote inside a bubble (not the AI-chat @attachment chip).
+ * Isolate from the bubble's pre-wrap / overflow-wrap so 2-line clamp can fire.
+ */
 function ReplyQuote({
   reply,
   mine,
@@ -116,7 +118,7 @@ function ReplyQuote({
     <button
       type="button"
       onClick={onClick}
-      className={`mb-1.5 w-full min-w-0 max-w-full rounded-lg border-l-2 px-2 py-1 text-left transition-colors ${
+      className={`mb-1.5 w-full min-w-0 max-w-full overflow-hidden whitespace-normal rounded-lg border-l-2 px-2 py-1 text-left [overflow-wrap:break-word] transition-colors ${
         mine
           ? "border-primary-foreground/40 bg-primary-foreground/10 text-primary-foreground/80 hover:bg-primary-foreground/15"
           : "border-primary/50 bg-muted/60 text-muted-foreground hover:bg-muted"
@@ -126,7 +128,7 @@ function ReplyQuote({
         {reply.sender_display_name}
         {targetRecalled ? " · 原消息已撤回" : ""}
       </span>
-      <span className="block truncate text-xs opacity-80">
+      <span className="block line-clamp-2 min-w-0 break-words text-xs opacity-80">
         {reply.body_preview}
       </span>
     </button>

@@ -108,6 +108,27 @@ export const BASH_UNAVAILABLE_HINT =
   "本机没有可用的 bash（Windows 上 PATH 的 bash 常是不可用的 WSL 蹦床）。" +
   "请改用 language=javascript 或 python 直接跑代码，不要用 bash 外壳包一层。";
 
+/** Byte-equal with ``agentcore.tools.sandbox.exec_env`` spawn-site contract. */
+export const EXEC_ENV_PROBE_FAIL_MARKER = "ExecEnvProbeFailed:";
+export const EXEC_ENV_SPAWN_DENIED_CODE = "exec_env_spawn_denied";
+
+/** True when Node's spawn errno is a refused start (not a missing binary). */
+export function isSpawnDeniedError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code;
+  return code === "EACCES" || code === "EPERM";
+}
+
+/**
+ * Thin spawn-site envelope: marker + reason tag + the OS error we caught.
+ * Server ``annotate_real_exec_failure`` keys on the tag, never on OS prose.
+ */
+export function spawnDeniedStderr(detail: string): string {
+  const trimmed = detail.trim();
+  return trimmed
+    ? `${EXEC_ENV_PROBE_FAIL_MARKER} [${EXEC_ENV_SPAWN_DENIED_CODE}] ${trimmed}`
+    : `${EXEC_ENV_PROBE_FAIL_MARKER} [${EXEC_ENV_SPAWN_DENIED_CODE}]`;
+}
+
 export function launcherMissingStderr(
   launcher: string,
   language: string,

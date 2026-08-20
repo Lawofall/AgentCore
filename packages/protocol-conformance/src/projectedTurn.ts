@@ -1,5 +1,5 @@
 // ProjectedTurn — the platform-neutral, serializable normalized turn state that is
-// the conformance JUDGE (前端技术与架构 §十二; protocol-conformance.mdc). Each end
+// the conformance JUDGE (前端技术与架构 §十 SSE 与协议一致性; protocol-conformance.mdc). Each end
 // implements `fold(events[]) → ProjectedTurn` and must match the backend-projected
 // golden for every vector. Internal store shapes may differ (desktop's Zustand
 // `Execution` vs mobile's reducer) — only this snapshot is asserted equal.
@@ -10,6 +10,10 @@
 // backend `EventSink._accumulate_process` fold (the single-agent process timeline —
 // runtime/events.py). The backend oracle (runtime/conformance/projection.py) is the
 // single source that emits the golden in exactly this shape.
+//
+// Hand-written on purpose — generating this from the oracle is REJECTED (rationale in
+// 前端技术与架构 §十 SSE 与协议一致性): the oracle returns bare dicts, so generation would first have
+// to restructure the one reference implementation everything else is judged against.
 //
 // Wire-shaped leaves (usage/cost/process step / arguments) are carried VERBATIM from
 // the SSE payloads (snake_case kept) so the fold copies them without lossy transforms;

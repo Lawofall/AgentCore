@@ -7,6 +7,8 @@ SessionRegistry 的 conversation 维度跨回合留存 + 空闲回收 + 会话�
 
 import time
 
+import pytest
+
 from agentcore.llm.provider.protocol import LLMMessage
 from agentcore.runtime.runs import RunSession, RunSpec
 from agentcore.runtime.sessions import (
@@ -141,6 +143,28 @@ def test_registry_reaps_idle_conversation():
     fresh = reg.get_or_create("c1")
     assert fresh is not store
     assert "r1" not in fresh
+
+
+def test_registry_idle_eviction_logs_victim_id_not_canonical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Reap happens inside the evictor's get_or_create; victim must not be written
+    # as conversation_id (merge_contextvars would pair it with the evictor's ids).
+    from agentcore.runtime import sessions as sessions_mod
+
+    recorded: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        sessions_mod.logger,
+        "info",
+        lambda event, **kwargs: recorded.append((event, dict(kwargs))),
+    )
+    reg = SessionRegistry(conversation_ttl_seconds=10)
+    idle = reg.get_or_create("victim")
+    idle.last_access = time.time() - 100
+    reg.get_or_create("evictor")
+    assert recorded == [
+        ("roster.conversation_evicted", {"evicted_conversation_id": "victim"}),
+    ]
 
 
 def test_default_registry_is_process_singleton():

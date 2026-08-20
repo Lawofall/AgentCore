@@ -37,6 +37,7 @@ class AdminUserResponse(BaseModel):
     username: str
     display_name: str
     email: str | None
+    email_verified_at: datetime | None = None
     role: Literal["user", "admin"]
     status: Literal["active", "disabled"]
     is_unlimited: bool
@@ -214,11 +215,28 @@ class AdminGoWindows(BaseModel):
     members: list[AdminGoCredentialWindows] = Field(default_factory=list)
 
 
+class ToolSurfaceLimits(BaseModel):
+    """Operator-declared upstream tool-surface caps on one pool member.
+
+    Each field is independent. ``null`` / omitted = that dimension is unlimited.
+    Values are filled by ops (subscription tiers differ); this schema does not
+    encode any vendor's exact cap. Counting at assemble time is our OpenAI-format
+    surface: tool count, and top-level ``function.parameters.properties`` keys.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    max_tools: int | None = Field(default=None, ge=0)
+    max_properties_total: int | None = Field(default=None, ge=0)
+    max_properties_per_tool: int | None = Field(default=None, ge=0)
+
+
 class PlatformCredentialView(BaseModel):
     """Admin view of one platform-pool member — never the plaintext key.
 
     ``status`` / ``recovery_at`` / ``limit_name`` are live pool-state (Redis or
     process memory), not Postgres columns. Absence of a store record is healthy.
+    ``tool_surface_limits`` is stored on the row; empty / all-null = unlimited.
     """
 
     id: str
@@ -232,6 +250,7 @@ class PlatformCredentialView(BaseModel):
     status: Literal["healthy", "cooling", "exhausted", "blocked"] = "healthy"
     recovery_at: datetime | None = None
     limit_name: str | None = None
+    tool_surface_limits: ToolSurfaceLimits = Field(default_factory=ToolSurfaceLimits)
 
 
 class PlatformCredentialListResponse(BaseModel):
@@ -264,6 +283,7 @@ class CreatePlatformCredentialRequest(BaseModel):
     )
     subscription_day: int = Field(..., ge=1, le=31)
     enabled: bool = True
+    tool_surface_limits: ToolSurfaceLimits | None = None
 
 
 class UpdatePlatformCredentialRequest(BaseModel):
@@ -274,6 +294,7 @@ class UpdatePlatformCredentialRequest(BaseModel):
     base_url: str | None = Field(default=None, min_length=1, max_length=500)
     subscription_day: int | None = Field(default=None, ge=1, le=31)
     enabled: bool | None = None
+    tool_surface_limits: ToolSurfaceLimits | None = None
 
 
 class AdminSystemStatus(BaseModel):

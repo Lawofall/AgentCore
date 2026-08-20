@@ -26,6 +26,7 @@ from agentcore.api.dependencies import (
     get_conversation_share_repo,
     get_credentials_repo,
     get_db,
+    get_email_auth_service,
     get_messaging_service,
     get_shared_space_service,
     get_user_llm_provider_repo,
@@ -35,6 +36,9 @@ from agentcore.api.dependencies import (
 from agentcore.api.schemas import (
     ChangePasswordRequest,
     DeleteAccountRequest,
+    EmailCodeAcceptedResponse,
+    EmailCodeRequest,
+    EmailSendCodeRequest,
     LoginMfaRequest,
     LoginRequest,
     LoginResponse,
@@ -42,7 +46,11 @@ from agentcore.api.schemas import (
     MfaConfirmResponse,
     MfaSetupResponse,
     MfaStatusResponse,
+    PasswordForgotRequest,
+    PasswordResetRequest,
     RegisterRequest,
+    RegisterSendCodeRequest,
+    RegisterVerifyRequest,
     SessionListResponse,
     SessionSummary,
     StatusResponse,
@@ -54,10 +62,12 @@ from agentcore.api.schemas import (
 )
 from agentcore.auth import AuthService, TokenPair
 from agentcore.auth.client import ClientPlatform, parse_client_platform
+from agentcore.auth.email_codes import is_legacy_register_enabled
+from agentcore.auth.email_service import EmailAuthService
 from agentcore.auth.mfa import AdminMfaService
 from agentcore.auth.service import LoginResult, SessionMeta
 from agentcore.config import settings
-from agentcore.core.errors import AuthenticationError, ValidationError
+from agentcore.core.errors import AuthenticationError, GoneError, ValidationError
 from agentcore.core.logging import get_logger
 from agentcore.db.models import User
 from agentcore.db.repositories import (
@@ -190,13 +200,19 @@ def _clear_auth_cookies(response: Response, *, user_id: str | None = None) -> No
     # session), and it is only ever carried in a response header, never a cookie.
 
 
-@router.post("/register", response_model=UserResponse, status_code=201)
+@router.post("/register", response_model=UserResponse, status_code=201, deprecated=True)
 async def register(
     body: RegisterRequest,
     request: Request,
     service: AuthService = Depends(get_auth_service),
     messaging: MessagingService = Depends(get_messaging_service),
 ):
+    """Immediate-create hatch. Closed in production (410); public signup is
+    ``/register/send-code`` then ``/register/verify`` so ``users.email`` cannot
+    be squatted before inbox proof.
+    """
+    if not is_legacy_register_enabled():
+        raise GoneError("请使用邮箱验证注册：POST /v1/auth/register/send-code")
     from agentcore.middleware.rate_limit import get_client_ip
 
     user = await service.register(
@@ -218,6 +234,114 @@ async def register(
     return _user_response(user)
 
 
+@router.post(
+    "/register/send-code",
+    response_model=EmailCodeAcceptedResponse,
+    status_code=202,
+)
+async def register_send_code(
+    body: RegisterSendCodeRequest,
+    request: Request,
+    email_auth: EmailAuthService = Depends(get_email_auth_service),
+):
+    """Start verify-then-create signup. Username is allocated server-side
+    (``user_`` + random). Optional nickname is submitted on ``/register/verify``.
+    """
+    from agentcore.middleware.rate_limit import get_client_ip
+
+    ip = get_client_ip(request)
+    expires_in = await email_auth.start_registration(
+        password=body.password,
+        email=body.email,
+        registration_ip=ip,
+        client_ip=ip,
+    )
+    return EmailCodeAcceptedResponse(expires_in=expires_in)
+
+
+@router.post("/register/verify", response_model=UserResponse, status_code=201)
+async def register_verify(
+    body: RegisterVerifyRequest,
+    email_auth: EmailAuthService = Depends(get_email_auth_service),
+    messaging: MessagingService = Depends(get_messaging_service),
+):
+    user = await email_auth.verify_registration(
+        email=body.email,
+        code=body.code,
+        display_name=body.display_name,
+    )
+    try:
+        await messaging.join_auto_join_chats(user_id=user.user_id)
+    except Exception:
+        logger.warning("chat.auto_join_failed", user=user.user_id, exc_info=True)
+    return _user_response(user)
+
+
+@router.post(
+    "/password/forgot",
+    response_model=EmailCodeAcceptedResponse,
+    status_code=202,
+)
+async def password_forgot(
+    body: PasswordForgotRequest,
+    request: Request,
+    email_auth: EmailAuthService = Depends(get_email_auth_service),
+):
+    from agentcore.middleware.rate_limit import get_client_ip
+
+    expires_in = await email_auth.start_password_reset(
+        email=body.email,
+        client_ip=get_client_ip(request),
+    )
+    return EmailCodeAcceptedResponse(expires_in=expires_in)
+
+
+@router.post("/password/reset", response_model=StatusResponse)
+async def password_reset(
+    body: PasswordResetRequest,
+    email_auth: EmailAuthService = Depends(get_email_auth_service),
+):
+    await email_auth.reset_password(
+        email=body.email,
+        code=body.code,
+        new_password=body.new_password,
+    )
+    return StatusResponse()
+
+
+@router.post(
+    "/email/send-code",
+    response_model=EmailCodeAcceptedResponse,
+    status_code=202,
+)
+async def email_send_code(
+    body: EmailSendCodeRequest,
+    request: Request,
+    user: AuthUser,
+    email_auth: EmailAuthService = Depends(get_email_auth_service),
+):
+    from agentcore.middleware.rate_limit import get_client_ip
+
+    expires_in = await email_auth.start_email_verification(
+        user_id=user.user_id,
+        email=body.email,
+        client_ip=get_client_ip(request),
+    )
+    return EmailCodeAcceptedResponse(expires_in=expires_in)
+
+
+@router.post("/email/verify", response_model=UserResponse)
+async def email_verify(
+    body: EmailCodeRequest,
+    user: AuthUser,
+    email_auth: EmailAuthService = Depends(get_email_auth_service),
+):
+    updated = await email_auth.verify_email(
+        user_id=user.user_id, email=body.email, code=body.code
+    )
+    return _user_response(updated)
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login(
     body: LoginRequest,
@@ -227,6 +351,7 @@ async def login(
     service: AuthService = Depends(get_auth_service),
     creds_repo: CredentialsRepository = Depends(get_credentials_repo),
 ):
+    """Cookie login. ``username`` accepts email (contains ``@``) or handle."""
     result = await service.login(
         username=body.username,
         password=body.password,
@@ -340,8 +465,8 @@ async def token_login(
     service: AuthService = Depends(get_auth_service),
     creds_repo: CredentialsRepository = Depends(get_credentials_repo),
 ):
-    """Bearer-token login: same credential check as cookie ``/login`` but returns the
-    access + refresh tokens in the JSON body (plus the user — identity in one call)."""
+    """Bearer-token login: same credential check as cookie ``/login``
+    (``username`` = email or handle) but returns tokens in the JSON body."""
     result = await service.login(
         username=body.username,
         password=body.password,

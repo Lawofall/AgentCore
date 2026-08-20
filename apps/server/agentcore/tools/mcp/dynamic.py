@@ -80,6 +80,11 @@ class McpDynamicTool:
     def schema(self) -> ToolSchema:
         return self._schema
 
+    @property
+    def mcp_server_id(self) -> str:
+        """Stable Server key for on-demand family promote (not the FC name)."""
+        return self._server_id
+
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         channel = context.desktop_channel
         if channel is None:

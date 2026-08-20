@@ -1,11 +1,8 @@
 # AgentCore 工作区（项目结构 §三 · packages + 跨端应用）
 #
-# 作用域刻意最小：只纳入「新代码」——共享规范/类型/token 包 + 手机端 app。
-# 现有 apps（desktop/admin/website 用 pnpm，promo 用 npm）暂不纳入，
-# 避免用根 lockfile 重解析正在运行的 desktop 与并行 agent 的安装。
-#   - apps/mobile：M3 已加入（全新手机端实现）
-#   - apps/desktop：M1 已加入（接入 @agentcore/contract-types + protocol-conformance）
-#   - apps/admin：接入 @agentcore/contract-rest-types（与 desktop 共享 OpenAPI 单一源）
+# 纳入：packages/* + apps/desktop + apps/mobile + apps/admin。
+# 不纳入：apps/server（uv）、apps/town（Unity）、apps/website / apps/promo
+#（各自独立 lockfile，避免根 lockfile 重解析）。
 packages:
   - "packages/*"
   - "apps/mobile"

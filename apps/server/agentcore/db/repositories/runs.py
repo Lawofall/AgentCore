@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.core.types import new_id
 from agentcore.db.models import (
+    JOURNAL_BAND_LIVE,
+    JOURNAL_BAND_OVERFLOW,
     PAUSED_TURN_EXPIRED,
     PAUSED_TURN_SETTLED,
     Conversation,
@@ -26,6 +28,14 @@ from agentcore.db.models import (
 )
 
 from ._base import commit_or_flush, strip_nul
+
+# Emission order: created_at (prefix rewrite preserves it), then band-local seq.
+# ``band`` is a tie-break so live sorts before overflow at an identical timestamp.
+_JOURNAL_EMIT_ORDER = (
+    TurnJournalRow.created_at.asc(),
+    TurnJournalRow.seq.asc(),
+    TurnJournalRow.band.asc(),
+)
 
 
 class HandoffJobRepository:
@@ -645,13 +655,15 @@ class PausedTurnRepository:
 class TurnJournalRepository:
     """The §8.6 ``Journal`` port's Postgres impl — the唯一事实源 store (§8.3).
 
-    A turn's execution facts are stored append-only, ordered by ``seq`` within a
-    ``turn_id`` (== the assistant ``message_id``). :meth:`record` replaces the turn's
-    rows wholesale (idempotent for a resume that reuses the id); :meth:`load_map`
-    batch-loads several turns for the read-time projection (no N+1 when a history
-    page renders). Entries are plain ``{kind, payload, ts}`` dicts — the
-    ``runs``↔entries transform lives in ``runtime/journal.py`` (the engine domain),
-    keeping this layer pure storage.
+    A turn's execution facts are stored append-only, keyed by
+    ``(turn_id, band, seq)`` (``turn_id`` == the assistant ``message_id``).
+    :meth:`record` replaces the live-band prefix occupancy ``[0, n)`` (idempotent
+    for a resume that reuses the id) and leaves the overflow band in place;
+    :meth:`load` returns emission order (``created_at``, then band-local ``seq``);
+    :meth:`load_map` batch-loads several turns for the read-time projection (no N+1
+    when a history page renders). Entries are plain ``{kind, payload, ts}`` dicts —
+    the ``runs``↔entries transform lives in ``runtime/journal.py`` (the engine
+    domain), keeping this layer pure storage.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -665,28 +677,70 @@ class TurnJournalRepository:
         trace_id: str | None,
         entries: Sequence[dict],
     ) -> None:
-        """Replace a turn's journal with ``entries`` (delete-then-insert, one commit).
+        """Replace the live-band prefix this snapshot occupies; leave overflow.
 
-        Replace (not append) so a resume reusing the same ``turn_id`` re-persists the
-        full, current fact stream without duplicating the pre-pause prefix. A no-op
-        for empty ``entries`` after clearing any stale rows.
+        The snapshot is a dense prefix publication: ``n`` facts occupy live
+        ``seq = 0..n-1``. Delete only that occupancy (empty snapshot: the whole
+        live band) so a resume reusing ``turn_id`` can rewrite the pause prefix
+        without wiping post-seal overflow. Existing live ``created_at`` is copied
+        onto the rewrite so emission order stays prefix → overflow → resume tail.
+
+        Under the same advisory lock as :meth:`append` so a concurrent
+        ``MAX+1`` cannot land in the deleted occupancy between delete and insert.
         """
-        await self._session.execute(delete(TurnJournalRow).where(TurnJournalRow.turn_id == turn_id))
-        if entries:
-            self._session.add_all(
-                [
-                    TurnJournalRow(
-                        turn_id=turn_id,
-                        seq=seq,
-                        kind=str(entry.get("kind") or ""),
-                        payload=strip_nul(entry.get("payload") or {}),
-                        ts=entry.get("ts"),
-                        conversation_id=conversation_id,
-                        trace_id=trace_id,
-                    )
-                    for seq, entry in enumerate(entries)
-                ]
+        from sqlalchemy import text
+
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:tid))"),
+            {"tid": turn_id},
+        )
+        to_write = [entry for entry in entries if isinstance(entry, dict)]
+        if not to_write:
+            await self._session.execute(
+                delete(TurnJournalRow).where(
+                    TurnJournalRow.turn_id == turn_id,
+                    TurnJournalRow.band == JOURNAL_BAND_LIVE,
+                )
             )
+            await self._session.commit()
+            return
+
+        exclusive_end = len(to_write)
+        existing = await self._session.execute(
+            select(TurnJournalRow.seq, TurnJournalRow.created_at).where(
+                TurnJournalRow.turn_id == turn_id,
+                TurnJournalRow.band == JOURNAL_BAND_LIVE,
+                TurnJournalRow.seq < exclusive_end,
+            )
+        )
+        created_by_seq = {row[0]: row[1] for row in existing.all()}
+        await self._session.execute(
+            delete(TurnJournalRow).where(
+                TurnJournalRow.turn_id == turn_id,
+                TurnJournalRow.band == JOURNAL_BAND_LIVE,
+                TurnJournalRow.seq < exclusive_end,
+            )
+        )
+        self._session.add_all(
+            [
+                TurnJournalRow(
+                    turn_id=turn_id,
+                    band=JOURNAL_BAND_LIVE,
+                    seq=seq,
+                    kind=str(entry.get("kind") or ""),
+                    payload=strip_nul(entry.get("payload") or {}),
+                    ts=entry.get("ts"),
+                    conversation_id=conversation_id,
+                    trace_id=trace_id,
+                    **(
+                        {"created_at": created_by_seq[seq]}
+                        if seq in created_by_seq
+                        else {}
+                    ),
+                )
+                for seq, entry in enumerate(to_write)
+            ]
+        )
         await self._session.commit()
 
     async def append(
@@ -697,37 +751,42 @@ class TurnJournalRepository:
         conversation_id: str,
         trace_id: str | None,
         entry: dict,
+        overflow: bool = False,
     ) -> int | None:
         """Append one journal fact (emit-on-write path, one commit).
 
         **seq 双模式 (D7)**：
         - ``seq is None`` (live)：事务内 ``pg_advisory_xact_lock(hash(turn_id))`` 后
-          ``COALESCE(MAX(seq),-1)+1`` 原子分配——跨 writer 无竞态。禁止无锁 MAX+1。
-        - ``seq is int`` (merge / outbox 回写)：显式 seq + ``(turn_id, seq)`` 幂等去重，
-          禁止云端重排。
+          live-band ``COALESCE(MAX(seq),-1)+1`` 原子分配——跨 writer 无竞态。禁止无锁 MAX+1。
+        - ``seq is None`` + ``overflow=True``：same lock, overflow-band MAX+1.
+        - ``seq is int`` (merge / outbox 回写)：显式 seq + ``(turn_id, band, seq)`` 幂等
+          去重，禁止云端重排。``overflow`` selects the band.
 
         Returns the durable ``seq`` on fresh insert, or ``None`` on merge-mode duplicate
         no-op (so the SSE barrier can stamp ``id:`` without a second read).
         """
         from sqlalchemy import text
 
+        band = JOURNAL_BAND_OVERFLOW if overflow else JOURNAL_BAND_LIVE
+        # Live MAX+1 *and* merge explicit-seq share this lock so persist_turn_journal
+        # enumerate cannot collide with post-detach append-on-emit (unique seq).
+        await self._session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:tid))"),
+            {"tid": turn_id},
+        )
         if seq is None:
-            # Live: advisory lock serializes same-turn writers, then allocate.
-            # hashtext is stable for a given turn_id within PG.
-            await self._session.execute(
-                text("SELECT pg_advisory_xact_lock(hashtext(:tid))"),
-                {"tid": turn_id},
-            )
             result = await self._session.execute(
                 text(
-                    "SELECT COALESCE(MAX(seq), -1) + 1 FROM turn_journal WHERE turn_id = :tid"
+                    "SELECT COALESCE(MAX(seq), -1) + 1 FROM turn_journal "
+                    "WHERE turn_id = :tid AND band = :band"
                 ),
-                {"tid": turn_id},
+                {"tid": turn_id, "band": band},
             )
             allocated = int(result.scalar_one())
             self._session.add(
                 TurnJournalRow(
                     turn_id=turn_id,
+                    band=band,
                     seq=allocated,
                     kind=str(entry.get("kind") or ""),
                     payload=strip_nul(entry.get("payload") or {}),
@@ -739,11 +798,11 @@ class TurnJournalRepository:
             await self._session.commit()
             return allocated
 
-        # Merge mode: explicit seq + idempotent conflict.
         stmt = (
             pg_insert(TurnJournalRow)
             .values(
                 turn_id=turn_id,
+                band=band,
                 seq=seq,
                 kind=str(entry.get("kind") or ""),
                 payload=strip_nul(entry.get("payload") or {}),
@@ -751,7 +810,7 @@ class TurnJournalRepository:
                 conversation_id=conversation_id,
                 trace_id=trace_id,
             )
-            .on_conflict_do_nothing(index_elements=["turn_id", "seq"])
+            .on_conflict_do_nothing(index_elements=["turn_id", "band", "seq"])
             .returning(TurnJournalRow.turn_id)
         )
         result = await self._session.execute(stmt)
@@ -760,11 +819,11 @@ class TurnJournalRepository:
         return seq if inserted else None
 
     async def load(self, turn_id: str) -> list[dict]:
-        """One turn's facts as ordered ``{kind, payload, ts}`` entries (``[]`` if none)."""
+        """One turn's facts as emission-ordered ``{kind, payload, ts}`` (``[]`` if none)."""
         result = await self._session.execute(
             select(TurnJournalRow)
             .where(TurnJournalRow.turn_id == turn_id)
-            .order_by(TurnJournalRow.seq.asc())
+            .order_by(*_JOURNAL_EMIT_ORDER)
         )
         return [{"kind": r.kind, "payload": r.payload, "ts": r.ts} for r in result.scalars().all()]
 
@@ -1145,29 +1204,43 @@ class TurnJournalRepository:
         return str(row[0]) if row and row[0] else None
 
     async def load_after(self, turn_id: str, after_seq: int) -> list[dict]:
-        """Facts with ``seq > after_seq`` as ordered ``{seq, kind, payload, ts}`` (P3 cursor)."""
+        """Facts with band-local ``seq > after_seq`` in emission order (P3 cursor).
+
+        ``after_seq=-1`` loads the whole turn (both bands). Rows include ``band`` so
+        callers can split live vs overflow without a seq-axis heuristic.
+        """
         result = await self._session.execute(
             select(TurnJournalRow)
             .where(
                 TurnJournalRow.turn_id == turn_id,
                 TurnJournalRow.seq > after_seq,
             )
-            .order_by(TurnJournalRow.seq.asc())
+            .order_by(*_JOURNAL_EMIT_ORDER)
         )
         return [
-            {"seq": r.seq, "kind": r.kind, "payload": r.payload, "ts": r.ts}
+            {
+                "seq": r.seq,
+                "band": r.band,
+                "kind": r.kind,
+                "payload": r.payload,
+                "ts": r.ts,
+            }
             for r in result.scalars().all()
         ]
 
     async def max_seq(self, turn_id: str) -> int | None:
-        """Highest journal ``seq`` for ``turn_id``, or ``None`` when the turn has no rows.
+        """Highest **live-band** ``seq`` for ``turn_id``, or ``None`` when no live rows.
 
         Resume uses this to seed :class:`TurnJournalWriter` past any live append-on-emit
         facts that outran the pause snapshot (sidecar ``journal_entries`` can be shorter
-        than the DB), avoiding UniqueViolation on the next append.
+        than the DB), avoiding UniqueViolation on the next append. Overflow-band seqs
+        are a separate occupancy and must not inflate this watermark.
         """
         result = await self._session.execute(
-            select(func.max(TurnJournalRow.seq)).where(TurnJournalRow.turn_id == turn_id)
+            select(func.max(TurnJournalRow.seq)).where(
+                TurnJournalRow.turn_id == turn_id,
+                TurnJournalRow.band == JOURNAL_BAND_LIVE,
+            )
         )
         return result.scalar_one_or_none()
 
@@ -1185,16 +1258,16 @@ class TurnJournalRepository:
                 TurnJournalRow.turn_id == turn_id,
                 TurnJournalRow.conversation_id == conversation_id,
             )
-            .order_by(TurnJournalRow.seq.asc())
+            .order_by(*_JOURNAL_EMIT_ORDER)
         )
         return [{"kind": r.kind, "payload": r.payload, "ts": r.ts} for r in result.scalars().all()]
 
     async def load_map(self, turn_ids: Sequence[str]) -> dict[str, list[dict]]:
-        """Several turns' facts keyed by ``turn_id`` (ordered entries), batched.
+        """Several turns' facts keyed by ``turn_id`` (emission-ordered entries), batched.
 
-        One query over all ids (ordered by turn_id, seq) grouped in Python, so a
-        history page projects every assistant message's replay payload without an
-        N+1. Turns with no facts are simply absent from the map.
+        One query over all ids grouped in Python, so a history page projects every
+        assistant message's replay payload without an N+1. Turns with no facts are
+        simply absent from the map.
         """
         ids = list(dict.fromkeys(turn_ids))
         if not ids:
@@ -1202,7 +1275,7 @@ class TurnJournalRepository:
         result = await self._session.execute(
             select(TurnJournalRow)
             .where(TurnJournalRow.turn_id.in_(ids))
-            .order_by(TurnJournalRow.turn_id.asc(), TurnJournalRow.seq.asc())
+            .order_by(TurnJournalRow.turn_id.asc(), *_JOURNAL_EMIT_ORDER)
         )
         grouped: dict[str, list[dict]] = {}
         for r in result.scalars().all():

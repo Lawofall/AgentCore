@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
- * 团队条「用时」= 回合墙钟跨度。
+ * 团队条「用时」= 回合墙钟。
  *
  * 回归钉：曾按队员时长求和，同一回合桌面「用时 40s」、手机「用时 2m10s」——并行度越高手机
  * 的数字越大。用时只认墙钟，不回潮成队员工时之和。
+ * 运行态不读冻结跨度（长工具无新帧），按首条协作事件墙钟自增。
  */
 import { TeamView } from "@/components/TeamView";
 import type {
@@ -11,10 +12,19 @@ import type {
   ProjectedRun,
 } from "@agentcore/protocol-conformance";
 import { turnElapsedMs } from "@agentcore/protocol-fold-kit";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 function makeAgent(
   p: Partial<ProjectedAgent> & { id: string; role: string },
@@ -123,7 +133,33 @@ describe("TeamView 团队条 · 用时", () => {
     expect(stripText()).toContain("用时 42s");
   });
 
-  it("进行中不显示用时；无跨度（0）也不显示", () => {
+  it("进行中按墙钟自增显示用时，不读冻结跨度", () => {
+    vi.useFakeTimers();
+    const now = 1_700_000_042_000;
+    vi.setSystemTime(now);
+    render(
+      <TeamView
+        agents={PARALLEL_TURN.agents}
+        runs={[
+          { ...PARALLEL_TURN.runs[0], status: "completed" },
+          { ...PARALLEL_TURN.runs[1], status: "running", durationMs: null },
+          { ...PARALLEL_TURN.runs[2], status: "pending", durationMs: null },
+        ]}
+        progress={{ completed: 1, total: 3 }}
+        status="running"
+        elapsedMs={2_000}
+        startedAtMs={now - 42_000}
+      />,
+    );
+    expect(stripText()).toContain("用时 42s");
+    expect(stripText()).not.toContain("用时 2s");
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(stripText()).toContain("用时 43s");
+  });
+
+  it("进行中没有起点锚则不显示用时；无跨度（0）也不显示", () => {
     render(
       <TeamView
         agents={PARALLEL_TURN.agents}

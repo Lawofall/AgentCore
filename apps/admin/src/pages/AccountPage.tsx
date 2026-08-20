@@ -89,7 +89,7 @@ function ProfileSection() {
   return (
     <FormSection
       title="个人资料"
-      description="显示名会展示在侧栏；邮箱用于后续找回密码（可选）。"
+      description="显示名会展示在侧栏。邮箱用于找回密码；未验证不影响登录。更改邮箱后需重新验证。"
       onSubmit={() => {
         if (canSave) void save();
       }}
@@ -113,7 +113,15 @@ function ProfileSection() {
           disabled={saving}
         />
       </LabeledField>
-      <LabeledField label="邮箱（可选）">
+      <LabeledField
+        label={
+          user?.emailVerifiedAt
+            ? "邮箱 · 已验证"
+            : user?.email
+              ? "邮箱 · 未验证"
+              : "邮箱 · 未填写"
+        }
+      >
         <Input
           type="email"
           value={email}

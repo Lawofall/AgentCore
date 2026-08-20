@@ -41,11 +41,18 @@ class User(Base):
     user_id: Mapped[str] = mapped_column(
         PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid
     )
-    # Login identifier (D1: username + password). Unique, required.
+    # Public handle (IM / roster). Unique, required. Must not contain ``@`` —
+    # login treats a ``username`` field containing ``@`` as an email.
     username: Mapped[str] = mapped_column(String(100), unique=True)
     display_name: Mapped[str] = mapped_column(String(200), server_default=text("''"))
-    # Optional, reserved for future password recovery / OAuth.
+    # Unique when set. New signups prove inbox ownership before the users row
+    # is created (pending_registrations); a timestamp here is that proof.
+    # NULL = never verified (legacy accounts still log in unless the
+    # require_email_verified setting is on).
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Object-storage key of the user's avatar (头像), e.g.
     # ``avatars/<user_id>/<hash>.webp``; NULL = no avatar (UI shows the initial).
     # Stores the storage key, not a URL — the served URL is derived at the API edge
@@ -101,6 +108,11 @@ class User(Base):
     # Client IP captured at registration (加强可查). NULL for pre-column rows /
     # seeded accounts. Same width as refresh_tokens.ip; written via get_client_ip.
     registration_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Last self-selected username claim/change — enforces 14-day cooldown after the
+    # first non-system handle. NULL = never self-selected or still on a system handle.
+    username_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Self-service account deletion (注销账户). NULL = live account; a timestamp marks
     # a user-initiated deletion. On delete the row is soft-deleted + anonymized
     # (username → "deleted_<id>", email → NULL) so the unique identifiers free up for

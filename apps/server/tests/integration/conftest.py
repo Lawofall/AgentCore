@@ -125,6 +125,9 @@ def _enforce_csrf(monkeypatch) -> None:
     sets ``CSRF_ENABLED=false``.
     """
     monkeypatch.setattr(settings, "csrf_enabled", True)
+    # Immediate-create hatch stays on so register_and_login / existing suites work.
+    monkeypatch.setattr(settings, "legacy_register_enabled", True)
+    monkeypatch.setattr(settings, "require_email_verified", False)
 
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})

@@ -96,10 +96,12 @@ class Journal(Protocol):
     The engine records each turn's ordered execution facts (``{kind, payload, ts}``)
     keyed by ``turn_id`` (== the assistant message id); everything replayable — the
     message's ``runs`` payload — is a projection of these facts (see
-    ``runtime/journal.py``). ``record`` replaces a turn's facts wholesale (idempotent
-    for a resume reusing the id); ``load_map`` batch-loads for the read-time
-    projection. Postgres impl = ``db.repositories.TurnJournalRepository``; a future
-    Sidecar swaps a local (SQLite / in-proc) one without touching the engine.
+    ``runtime/journal.py``). ``record`` replaces the live-band prefix occupancy
+    (idempotent for a resume reusing the id) and leaves the overflow band in place;
+    ``load`` returns emission order; ``load_map`` batch-loads for the read-time
+    projection. Postgres impl =
+    ``db.repositories.TurnJournalRepository``; a future Sidecar swaps a local
+    (SQLite / in-proc) one without touching the engine.
     """
 
     async def record(
@@ -148,8 +150,12 @@ class ConversationStore(Protocol):
         conversation_id: str,
         trace_id: str | None,
         entry: dict[str, Any],
+        overflow: bool = False,
     ) -> int | None:
-        """Append one fact; returns durable seq on insert, None on merge duplicate."""
+        """Append one fact; returns durable seq on insert, None on merge duplicate.
+
+        ``overflow=True`` allocates in the post-seal overflow band.
+        """
         ...
 
     async def finalize(

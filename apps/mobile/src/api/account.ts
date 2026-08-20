@@ -1,10 +1,11 @@
-import type { User } from "@/api/auth";
 // Self-service account management for the mobile client (设置·账户设置).
 //
 // Profile / password / avatar / 注销 over the same endpoints the desktop uses.
 // REST DTOs track OpenAPI via @agentcore/contract-rest-types.
+import type { User } from "@/api/auth";
 import { apiFetch } from "@/api/client";
 import type { components } from "@/types/api.generated";
+import { restPath } from "@agentcore/contract-rest-types/paths";
 
 type Schemas = components["schemas"];
 
@@ -16,10 +17,35 @@ async function readUser(res: Response, fallback: string): Promise<User> {
   return (await res.json()) as User;
 }
 
-/** Edit display name and/or email (PATCH semantics). Returns the refreshed user. */
-export async function updateProfile(
-  update: Schemas["UpdateProfileRequest"],
-): Promise<User> {
+/** Logged-in catch-up: send a verification code to `email`. */
+export async function sendEmailCode(email: string): Promise<void> {
+  const res = await apiFetch(restPath("/v1/auth/email/send-code"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email } satisfies Schemas["EmailSendCodeRequest"]),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "发送验证码失败"));
+}
+
+/** Logged-in catch-up: confirm the 6-digit code and refresh the user. */
+export async function verifyEmail(email: string, code: string): Promise<User> {
+  const res = await apiFetch(restPath("/v1/auth/email/verify"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code } satisfies Schemas["EmailCodeRequest"]),
+  });
+  return readUser(res, "验证失败");
+}
+
+/** Patch profile fields. OpenAPI types may lag username on `UpdateProfileRequest`. */
+export interface UpdateProfileInput {
+  display_name?: string;
+  email?: string | null;
+  username?: string;
+}
+
+/** Edit nickname, username, and/or email (PATCH semantics). Returns the refreshed user. */
+export async function updateProfile(update: UpdateProfileInput): Promise<User> {
   const res = await apiFetch("/v1/auth/me", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

@@ -32,7 +32,7 @@ from agentcore.runtime.coordination.session import (
     split_coordination_budget,
 )
 from agentcore.runtime.delegate.team_synthesis import worker_output_blurb
-from agentcore.tools.protocol import ToolResult
+from agentcore.tools.protocol import TOOL_AUDIENCE_CEO, ToolResult
 
 if TYPE_CHECKING:
     from agentcore.runtime.runs.plan import RunPlan
@@ -41,6 +41,12 @@ if TYPE_CHECKING:
 DelegateTool = Any
 
 logger = get_logger(__name__)
+
+
+def _ceo_result(**kwargs: Any) -> ToolResult:
+    """Stamp coordination-host output as CEO-audience (user-bubble salvage refuses)."""
+    kwargs["audience"] = TOOL_AUDIENCE_CEO
+    return ToolResult(**kwargs)
 
 
 def should_defer_run_plan_emit_to_merge(
@@ -157,7 +163,7 @@ def admit_before_run_plan_emit(
                 total=existing.total_workers,
             )
             return annotate_batch_meta(
-                ToolResult(
+                _ceo_result(
                     tool_call_id="",
                     success=False,
                     output="",
@@ -199,7 +205,7 @@ def admit_before_run_plan_emit(
                 via="pre_emit",
             )
             return annotate_batch_meta(
-                ToolResult(
+                _ceo_result(
                     tool_call_id="",
                     success=False,
                     output="",
@@ -245,7 +251,7 @@ def admit_before_run_plan_emit(
                 total=len(host_plan.nodes),
             )
             return annotate_batch_meta(
-                ToolResult(
+                _ceo_result(
                     tool_call_id="",
                     success=False,
                     output="",
@@ -278,7 +284,7 @@ def admit_before_run_plan_emit(
                 via="pre_emit_cross_turn",
             )
             return annotate_batch_meta(
-                ToolResult(
+                _ceo_result(
                     tool_call_id="",
                     success=False,
                     output="",
@@ -309,7 +315,7 @@ def admit_before_run_plan_emit(
                 via="pre_emit",
             )
             return annotate_batch_meta(
-                ToolResult(
+                _ceo_result(
                     tool_call_id="",
                     success=False,
                     output="",
@@ -324,13 +330,15 @@ def admit_before_run_plan_emit(
 
 
 def _bind_session_host_journal(session: CoordinationSession) -> None:
-    """Pin the arming turn's journal writer onto the session (pillar A)."""
+    """Pin the arming turn's journal writer + fact log onto the session (pillar A)."""
     from agentcore.runtime.journal.writer import current_journal_writer
 
     writer = current_journal_writer.get()
-    if writer is None:
-        return
-    bind_host_journal(session, writer=writer, turn_id=getattr(writer, "turn_id", None))
+    bind_host_journal(
+        session,
+        writer=writer,
+        turn_id=getattr(writer, "turn_id", None) if writer is not None else None,
+    )
 
 
 def _seed_session_completed(
@@ -562,7 +570,7 @@ def _merge_into_active_coordination(
             call=call_idx,
         )
         return annotate_batch_meta(
-            ToolResult(
+            _ceo_result(
                 tool_call_id="",
                 success=False,
                 output="",
@@ -582,7 +590,7 @@ def _merge_into_active_coordination(
             total_workers=session.total_workers,
         )
         return annotate_batch_meta(
-            ToolResult(
+            _ceo_result(
                 tool_call_id="",
                 success=False,
                 output="",
@@ -637,7 +645,7 @@ def _merge_into_active_coordination(
             call=call_idx,
         )
         return annotate_batch_meta(
-            ToolResult(
+            _ceo_result(
                 tool_call_id="",
                 success=False,
                 output="",
@@ -756,7 +764,7 @@ def _merge_into_active_coordination(
             "取消请求与仲裁态保留；你将继续收到团队事件，全部完成后做最终合成。"
         )
     return annotate_batch_meta(
-        ToolResult(
+        _ceo_result(
             tool_call_id="",
             success=True,
             output=output,
@@ -859,7 +867,7 @@ def try_start_coordination(
                 via="try_start",
             )
             return annotate_batch_meta(
-                ToolResult(
+                _ceo_result(
                     tool_call_id="",
                     success=False,
                     output="",
@@ -973,7 +981,7 @@ def try_start_coordination(
     from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
 
     return annotate_batch_meta(
-        ToolResult(
+        _ceo_result(
             tool_call_id="",
             success=True,
             output=_coordination_start_echo(

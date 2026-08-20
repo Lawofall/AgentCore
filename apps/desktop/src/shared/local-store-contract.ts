@@ -13,6 +13,8 @@ export interface LocalStoreUser {
   username: string;
   displayName: string;
   email: string | null;
+  /** Absent on pre-email-verify caches; readers treat missing as unverified. */
+  emailVerifiedAt?: string | null;
   role: string;
   avatarUrl: string | null;
 }

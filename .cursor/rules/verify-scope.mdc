@@ -5,7 +5,9 @@ alwaysApply: false
 
 # 验证范围与窄化配方
 
-**全量很贵（本机实测）**：一次干净 `pnpm release:gate` **20–30+ min**，其中桌面 `shoot` 约 **10 min**（486 张图）、后端全量 pytest ~5 min、桌面全量 vitest 数分钟。反过来，根 `pnpm typecheck` 只要**数秒**——别为它收窄，力气花错地方。
+**全量很贵（本机实测）**：一次干净 `pnpm release:gate` **20–30+ min**，其中桌面 `shoot` 约 **10 min**（数百张图；张数 = turn 向量数 × 帧切数，随向量增长，**别写死具体张数**；CI 另按 `SHOOT_FRAMES=3` 跑，实测 15–16 min）、后端全量 pytest ~5 min、桌面全量 vitest 数分钟。反过来，单包 `pnpm --filter <包> typecheck` 只要**数秒**——别为它收窄，力气花错地方。
+
+**根上没有 `typecheck` / `lint` / 前端 `test` 脚本**（根 `package.json` 只有契约生成、发布门禁、依赖审计、后端 pytest、部署、小镇六类）。三档第 2 档的前端命令都挂在各 app 上，用 `--filter` 取；别在根上找。
 
 三档阶梯（默认档 1）见 `AGENTS.md`；跳档要有具体理由（改了配置 / 依赖 / 契约），写在回复里。
 
@@ -15,7 +17,7 @@ alwaysApply: false
 
 **前端 vitest**（3.2.6）：点名文件 `pnpm --filter agentcore-desktop exec vitest run <路径>`；点名用例追加 `-t "<用例名>"`；按改动文件反查相关测试 `pnpm --filter <包> exec vitest related --run <改动文件...>`（`related` 是**子命令**不是 flag，且必须带 `--run`，否则进 watch 挂住）。包级 `pnpm --filter <包> test -- --run` 只在收尾跑。
 
-**桌面截图**：`pnpm -C apps/desktop shoot <场景名过滤>` —— **默认带场景过滤**，无过滤的全量 486 张只在发布门禁跑。
+**桌面截图**：`pnpm -C apps/desktop shoot <场景名过滤>` —— **默认带场景过滤**，无过滤的全量（数百张）只在发布门禁跑。
 
 **类型 / lint**：改动落在单包就 `pnpm --filter <包> typecheck|lint`。
 
@@ -27,7 +29,7 @@ alwaysApply: false
 
 **失败后怎么续**：修完哪段就 `--from <该段>` 续跑到底（下游段吃上游产物，故用 `--from` 而非 `--only`）。
 
-**发布依据默认是一次不中断的完整全绿**；但改动范围**可证与已绿段无关**时，允许用 `--from <失败段>` 的绿拼接上一轮结果，不必重拍 486 张与改动无关的截图。三条同时满足才算「可证」：1. 两次运行之间的改动只落在失败段及其下游所属的包；2. 未碰契约 / 生成物（`packages/contract-*`、OpenAPI、`gen:types` 产物）、根配置、依赖清单、跨包共享代码——碰到任一项则上游段结论作废，必须完整重跑；3. 交付说明写明哪几段来自哪次运行、两次之间改了哪些文件。判不准就重跑全量：这条是给「证据明确无关」用的，不是给「感觉应该没事」用的。
+**发布依据默认是一次不中断的完整全绿**；但改动范围**可证与已绿段无关**时，允许用 `--from <失败段>` 的绿拼接上一轮结果，不必重拍与改动无关的全量截图。三条同时满足才算「可证」：1. 两次运行之间的改动只落在失败段及其下游所属的包；2. 未碰契约 / 生成物（`packages/contract-*`、OpenAPI、`gen:types` 产物）、根配置、依赖清单、跨包共享代码——碰到任一项则上游段结论作废，必须完整重跑；3. 交付说明写明哪几段来自哪次运行、两次之间改了哪些文件。判不准就重跑全量：这条是给「证据明确无关」用的，不是给「感觉应该没事」用的。
 
 ## 反空转
 
@@ -41,3 +43,4 @@ alwaysApply: false
 - 只改 A 包 → **不跑 B 包套件**。desktop 改动不需要后端 pytest，反之亦然。
 - 跨端 `pnpm gen:types` + `pnpm conformance` **仅当**真动了 `packages/contract-*` / OpenAPI schema / SSE 事件类型 / 两端 fold（细则见 `protocol-conformance.mdc`）；没动契约别跑。
 - `pnpm -r` 系列够不到 `apps/server`（不在 workspace），别指望它覆盖后端。
+- **改共享类型 / 往 `packages/` 搬代码 → 点名 vitest 会「假绿」**：vitest 只转译不做类型检查，把共享类型悄悄窄化了也照样全绿。这类改动**必须**补跑各消费方 `pnpm --filter <app> typecheck`（按实际消费方取 desktop / mobile / admin），两端全绿才算过。

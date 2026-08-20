@@ -11,18 +11,19 @@ from agentcore.llm.provider.protocol import LLMProvider
 from agentcore.llm.provider.router import ProviderRouter
 from agentcore.llm.resolve import ProviderPurpose
 
-# Sibling catalog-miss path (inference proxy ValidationError) guides users to
-# re-pick a model in settings. Same product semantics here when credentials are
-# absent at build_* (no silent platform key) — invariant text stays in details.
+# Sibling catalog-miss path (inference proxy ValidationError) asks the user to
+# re-pick a model. Same product semantics here when credentials are absent at
+# build_* (no silent platform key) — invariant text stays in details. Copy does
+# not name a client page: the same sentence is sent to every client.
 _MISSING_LLM_CREDENTIALS_USER_MESSAGE = (
-    "当前模型不可用或凭据未就绪，请在「设置 · 模型」中改选可用模型后再试。"
+    "当前模型不可用或凭据未就绪，请改选可用模型后再试。"
 )
 
 
 class MissingLLMCredentialsError(ValidationError):
     """``build_*`` called without explicit credentials (no silent platform key).
 
-    User face is curated zh (settings / model change). The English invariant that
+    User face is curated zh (re-pick a model). The English invariant that
     named the call site is stored under ``details["invariant"]`` for logs only.
     """
 

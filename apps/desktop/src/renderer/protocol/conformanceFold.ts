@@ -1,5 +1,5 @@
 // Desktop's fold → ProjectedTurn snapshot adapter for the cross-platform protocol
-// 巡检 (前端技术与架构 §十二; protocol-conformance.mdc). The conformance test asserts
+// 巡检 (前端技术与架构 §十 SSE 与协议一致性; protocol-conformance.mdc). The conformance test asserts
 // this == the backend-exported golden, the SAME golden the mobile fold is pinned to —
 // so desktop and mobile can't diverge on the protocol without the gate going red.
 //

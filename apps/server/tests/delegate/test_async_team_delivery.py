@@ -27,6 +27,7 @@ from agentcore.runtime.coordination.session import (
 from agentcore.runtime.coordination.wait import await_coordination_injection
 from agentcore.runtime.events import EventSink, EventType, execution_completed
 from agentcore.runtime.events.types import SSEEvent
+from agentcore.runtime.facts import Fact, TurnFactLog, current_fact_log
 from agentcore.runtime.journal.fold import _splice_synthetic_deltas
 
 
@@ -1418,3 +1419,157 @@ async def test_host_journal_after_contextvar_reset_receives_run_completed():
 
     assert EventType.RUN_COMPLETED.value in [e.get("kind") for e in writer.entries]
     assert not stale.entries  # must not land on the stale ContextVar writer
+
+
+@pytest.mark.asyncio
+async def test_post_detach_run_failed_enters_host_fact_log_and_refresh_snapshot():
+    """detach 后终态：host fact log + writer 都落盘，finalize 快照含该帧（非契约变更）。"""
+    from agentcore.runtime.events import FinishReason, run_failed
+    from agentcore.runtime.journal.writer import current_journal_writer
+    from agentcore.runtime.pipeline.finalize import refresh_result_journal_from_host
+
+    writer = _RecordingWriter()
+    fact_log = TurnFactLog()
+    fact_log.record_fact(Fact(kind="run_started", payload={"run_id": "r2"}, ts="t0"))
+    session = CoordinationSession(
+        execution_id="exec-post-detach",
+        total_workers=2,
+        conversation_id="conv-post-detach",
+    )
+    session.turn_attached = False
+    fl_token = current_fact_log.set(fact_log)
+    try:
+        bind_host_journal(session, writer=writer, turn_id="host-turn")
+    finally:
+        current_fact_log.reset(fl_token)
+    assert session.host_fact_log is fact_log
+    set_active_coordination(session)
+
+    jw_token = current_journal_writer.set(None)
+    try:
+        sink = EventSink(conversation_id="conv-post-detach", message_id="host-turn")
+        sink.emit(
+            run_failed(
+                "r2",
+                "w2",
+                "余额不足",
+                execution_id="exec-post-detach",
+            )
+        )
+        result = {
+            "finish_reason": FinishReason.END_TURN,
+            "journal_entries": [
+                {"kind": "run_started", "payload": {"run_id": "r2"}, "ts": "t0"},
+            ],
+        }
+        refresh_result_journal_from_host(result, sink=sink)
+    finally:
+        current_journal_writer.reset(jw_token)
+
+    assert EventType.RUN_FAILED.value in [e.get("kind") for e in writer.entries]
+    assert "run_failed" in [e.get("kind") for e in fact_log.entries()]
+    assert "run_failed" in [e.get("kind") for e in (result.get("journal_entries") or [])]
+
+
+@pytest.mark.asyncio
+async def test_await_live_detached_drive_logs_unsettled_when_host_journal_missing_run():
+    """post-detach：harvest 已盖 settled_via，但宿主 journal 缺终态帧 → terminal_unsettled。"""
+    from structlog.testing import capture_logs
+
+    from agentcore.runtime.coordination.session import await_live_detached_drive
+
+    async def _done() -> None:
+        return None
+
+    fact_log = TurnFactLog()
+    fact_log.record_fact(Fact(kind="run_failed", payload={"run_id": "w1"}))
+    session = CoordinationSession(
+        execution_id="exec-unsettle-post",
+        total_workers=2,
+        conversation_id="conv-unsettle-post",
+    )
+    session.turn_attached = False
+    session.completed_run_ids.update({"w1", "w2"})
+    session.host_fact_log = fact_log
+    session.drive_task = asyncio.create_task(_done())
+    session.mark_settled("harvest")
+    set_active_coordination(session)
+    with capture_logs() as logs:
+        awaited = await await_live_detached_drive("conv-unsettle-post")
+    assert awaited is True
+    unsettle = [e for e in logs if e.get("event") == "coordination.terminal_unsettled"]
+    assert unsettle
+    assert "w2" in (unsettle[0].get("missing_run_ids") or [])
+
+
+@pytest.mark.asyncio
+async def test_sealed_host_writer_still_persists_run_completed():
+    """pause seal + still-attached ContextVar：worker 终态落到 overflow host，不静默丢。"""
+    from agentcore.runtime.events import run_completed as run_completed_ev
+    from agentcore.runtime.journal.writer import TurnJournalWriter, current_journal_writer
+
+    written: list[dict] = []
+
+    class Repo:
+        def __init__(self, session: object) -> None:
+            pass
+
+        async def append(
+            self, *, turn_id, seq, conversation_id, trace_id, entry, overflow=False
+        ) -> int | None:
+            written.append(dict(entry))
+            return len(written) - 1
+
+    class _Sess:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    import agentcore.conversation.store.cloud as cloud_mod
+
+    with (
+        patch.object(cloud_mod, "telemetry_session_factory", lambda: _Sess()),
+        patch.object(cloud_mod, "TurnJournalRepository", Repo),
+        patch("agentcore.runtime.audit.hooks.on_journal_fact_appended", lambda entry: None),
+    ):
+        writer = TurnJournalWriter(turn_id="host-turn", conversation_id="conv-seal", trace_id=None)
+        fact_log = TurnFactLog()
+        session = CoordinationSession(
+            execution_id="exec-seal-host",
+            total_workers=1,
+            conversation_id="conv-seal",
+        )
+        fl = current_fact_log.set(fact_log)
+        wt = current_journal_writer.set(writer)
+        try:
+            bind_host_journal(session, writer=writer, turn_id="host-turn")
+            set_active_coordination(session)
+            await writer.seal()
+            assert session.host_journal_writer is not writer
+            sink = EventSink(conversation_id="conv-seal", message_id="host-turn")
+            sink.emit(
+                run_completed_ev(
+                    "r1",
+                    "w1",
+                    output_summary="done",
+                    duration_ms=1,
+                    execution_id="exec-seal-host",
+                )
+            )
+            await writer.flush()
+        finally:
+            clear_active_coordination("exec-seal-host")
+            current_journal_writer.reset(wt)
+            current_fact_log.reset(fl)
+
+    assert EventType.RUN_COMPLETED.value in [e.get("kind") for e in written]
+    assert "run_completed" in [e.get("kind") for e in fact_log.entries()]
+    session.completed_run_ids.add("r1")
+    session.mark_settled("harvest")
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        session.check_terminal_settlement(journal_entries=fact_log.entries())
+    assert not any(e.get("event") == "coordination.terminal_unsettled" for e in logs)

@@ -211,7 +211,7 @@ class LLMRateLimitError(LLMError):
             # header-less 429 is as likely to be throttling as an exhausted quota.
             message = (
                 "平台模型被上游限流，本回合无法继续。"
-                "可在「设置 · 服务商」接入自己的 API Key 立即继续，或稍后重新发送。"
+                "可接入自己的 API Key 立即继续，或稍后重新发送。"
                 if kwargs.get("credential_source") == "platform"
                 else "上游限流，本回合无法继续。请稍后重新发送。"
             )
@@ -262,8 +262,7 @@ class LLMQuotaExceededError(LLMError):
     retryable = False
 
     _DEFAULT_MESSAGE = (
-        "额度已用完，本回合无法继续。请等待额度重置，"
-        "或在「设置 · 服务商」接入自己的 API Key。"
+        "额度已用完，本回合无法继续。请等待额度重置，或接入自己的 API Key。"
     )
 
     def __init__(
@@ -321,7 +320,7 @@ def upstream_rate_limit_error(
     ):
         return LLMQuotaExceededError(
             "平台模型额度已用完，本回合无法继续。请等待上游额度恢复，"
-            "或在「设置 · 服务商」接入自己的 API Key 立即继续。",
+            "或接入自己的 API Key 立即继续。",
             retry_after=declared,
             recovery_at=recovery_at_iso(declared, now=now),
             retry_after_source=retry_after_source,
@@ -425,10 +424,11 @@ class LLMInsufficientBalanceError(LLMError):
 
 
 # Single source for「你还没配 key」across the leaf error and the route preflights
-# (conversations / inference proxy pass it as ``byok_missing_message``). It named a
-# 「模型配置」page that never existed, and the rename had to touch four copies —
-# one constant so the next wording change is one edit.
-BYOK_KEY_REQUIRED_MESSAGE = "请先在「设置 · 服务商」中填入你的 API Key，再发起对话。"
+# (conversations / inference proxy pass it as ``byok_missing_message``). One
+# constant so the next wording change is one edit. The sentence does not name a
+# client page: the same copy is sent to desktop, mobile, and admin, and their
+# Key-config screens do not share a name. Navigation is each client's CTA.
+BYOK_KEY_REQUIRED_MESSAGE = "请先接入自己的 API Key，再发起对话。"
 
 
 class LLMKeyRequiredError(LLMError):
@@ -436,13 +436,13 @@ class LLMKeyRequiredError(LLMError):
 
     Wire twin of :class:`BYOKKeyMissingError` (route preflight, HTTP 402) for the
     sidecar leaf: the cloud ``/inference/`` hop refuses before it ever contacts a
-    vendor, and the leaf must keep the ``LLM_KEY_REQUIRED`` code so the client
-    routes to 设置·服务商. Distinct from :class:`LLMInsufficientBalanceError` —
-    there is no key and no account to top up, so 充值 is the wrong remedy — and not
-    retryable, since only the user adding a key can change the outcome.
+    vendor, and the leaf must keep the ``LLM_KEY_REQUIRED`` code so each client
+    can offer its own Key-config CTA. Distinct from
+    :class:`LLMInsufficientBalanceError` — there is no key and no account to top
+    up, so 充值 is the wrong remedy — and not retryable, since only the user
+    adding a key can change the outcome.
 
-    Copy names 服务商 because that is the settings page keys actually live on;
-    「模型配置」 was a page this product never shipped.
+    Copy does not name a settings page: the same sentence is sent to every client.
     """
 
     code = ErrorCode.LLM_KEY_REQUIRED
@@ -462,8 +462,8 @@ class LLMAuthError(LLMError):
     Distinct from ``BYOKKeyMissingError`` (no key at all, refused at preflight): a
     *configured* key fails mid-turn, so it surfaces as an inline ``error`` event. Not
     retryable — re-sending with the same bad key just re-fails — and its message (and
-    the ``LLM_KEY_INVALID`` code, which the client maps to a "去配置" action) routes
-    the user back to 设置·服务商 to fix the key.
+    the ``LLM_KEY_INVALID`` code, which each client maps to its own Key-config CTA)
+    lets the user fix the key.
 
     Platform keys are operator-owned: default copy must not echo upstream gateway
     help (e.g. CC Switch tutorials) or the internal provider label ``platform``.
@@ -494,8 +494,9 @@ class LLMAuthError(LLMError):
                     label = name
                 else:
                     label = "服务商"
-                message = f"{label} API Key 无效或无权限，请在「设置 · 服务商」中更新后重试。"
-        # Wire CTA 分流：platform → 接入自己的 Key；user/BYOK → 去设置换 Key。
+                message = f"{label} API Key 无效或无权限，请更新后重试。"
+        # Wire CTA 分流：platform → 接入自己的 Key；user/BYOK → 各端换 Key
+        # （桌面「去服务商」、手机「去配置」）。句子本身不点名页面。
         if "credential_source" not in kwargs:
             kwargs["credential_source"] = "platform" if name == "platform" else "user"
         if provider_name is not None and "provider_name" not in kwargs:
@@ -507,7 +508,7 @@ class InferenceTokenExpiredError(LLMAuthError):
     """Sidecar→cloud inference proxy JWT rejected (invalid / expired).
 
     Distinct from BYOK ``LLM_KEY_INVALID``: the user should remint / re-login /
-    retry the turn — not open「设置 · 服务商」to edit an API key. ``retryable``
+    retry the turn — not open a Key-config screen to edit an API key. ``retryable``
     so the desktop can clear the cache, mint once, and retry the turn.
     """
 
@@ -520,7 +521,7 @@ class InferenceTokenExpiredError(LLMAuthError):
     )
 
     def __init__(self, message: str | None = None, **kwargs):
-        # Bypass LLMAuthError's BYOK「去设置」default copy.
+        # Bypass LLMAuthError's BYOK default copy.
         LLMError.__init__(self, message or self._DEFAULT_MESSAGE, **kwargs)
 
 
@@ -598,6 +599,27 @@ class AuthenticationError(AgentCoreError):
 
     code = ErrorCode.AUTH_ERROR
     status_code = 401
+
+
+class EmailNotVerifiedError(AuthenticationError):
+    """Credentials are valid but the account has not verified its inbox.
+
+    Only raised when ``require_email_verified`` is on (default off). 403 so
+    clients do not treat this as a wrong-password 401 and wipe the session.
+    """
+
+    code = ErrorCode.EMAIL_NOT_VERIFIED
+    status_code = 403
+
+    def __init__(self, message: str = "请先验证邮箱", **kwargs):
+        super().__init__(message, **kwargs)
+
+
+class GoneError(AgentCoreError):
+    """The resource / endpoint is no longer available (HTTP 410)."""
+
+    code = ErrorCode.GONE
+    status_code = 410
 
 
 class AuthorizationError(AgentCoreError):
@@ -733,8 +755,8 @@ class BYOKKeyMissingError(AgentCoreError):
 
     In BYOK billing mode every user-facing turn runs on the user's own API key;
     with none configured the turn is refused *before* the SSE opens (route preflight)
-    so the client can route the user to 设置·服务商 rather than getting a
-    half-opened stream. 402 Payment Required fits "you must supply your own
+    so each client can offer its own Key-config CTA rather than getting a
+    half-opened stream. 402 Payment Required fits "you must supply your own"
     billing credentials to proceed", and the ``LLM_KEY_REQUIRED`` code lets the
     client distinguish it from auth (401) / quota (429).
 

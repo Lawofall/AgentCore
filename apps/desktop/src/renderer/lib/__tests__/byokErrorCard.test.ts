@@ -233,7 +233,7 @@ describe("upstream 429 is a refusal, not a connectivity fault", () => {
       }),
     );
     expect(described?.message).toBe(QUOTA_RESET_MESSAGE);
-    // Waiting is the only fix — no「去设置」CTA next to a working key.
+    // Waiting is the only fix — no「去服务商」CTA next to a working key.
     expect(described?.action).toBeNull();
   });
 
@@ -389,12 +389,12 @@ describe("isEmptyResponseUserSurface", () => {
 });
 
 describe("error action by type", () => {
-  it("auth / balance → 去设置; connectivity → null (retry in bubble)", () => {
-    expect(errorActionForCode("LLM_KEY_INVALID")?.label).toBe("去设置");
+  it("auth / balance → 去服务商; connectivity → null (retry in bubble)", () => {
+    expect(errorActionForCode("LLM_KEY_INVALID")?.label).toBe("去服务商");
     expect(
       errorActionForCode("LLM_KEY_INVALID", { credentialSource: "user" })
         ?.label,
-    ).toBe("去设置");
+    ).toBe("去服务商");
     expect(
       errorActionForCode("LLM_KEY_INVALID", { credentialSource: "platform" })
         ?.label,
@@ -405,7 +405,7 @@ describe("error action by type", () => {
       })?.label,
     ).toBe("接入自己的 Key");
     expect(errorActionForCode("LLM_INSUFFICIENT_BALANCE")?.label).toBe(
-      "去设置",
+      "去服务商",
     );
     expect(errorActionForCode("LLM_TIMEOUT")).toBeNull();
     expect(errorActionForCode("INFERENCE_TOKEN_EXPIRED")).toBeNull();
@@ -417,7 +417,7 @@ describe("error action by type", () => {
     expect(isConnectivityErrorCode("LLM_KEY_INVALID")).toBe(false);
   });
 
-  it("inference JWT expiry → retry, never 去设置 (incl. legacy English copy)", () => {
+  it("inference JWT expiry → retry, never 去服务商 (incl. legacy English copy)", () => {
     const coded = describeError(
       new StreamError("http", undefined, {
         code: "INFERENCE_TOKEN_EXPIRED",

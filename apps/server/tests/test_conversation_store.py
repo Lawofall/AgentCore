@@ -57,6 +57,33 @@ def test_d7_merge_usage_status_keeps_terminal():
     assert merged["input_tokens"] == 12
 
 
+def test_merge_usage_keeps_interrupt_chrome_when_stamping_tokens():
+    """Ledger token backfill must not drop user_stop incomplete chrome."""
+    merged = merge_usage_status(
+        {
+            "status": MESSAGE_STATUS_INCOMPLETE,
+            "incomplete": True,
+            "finish_reason": "cancelled",
+            "interrupt_reason": "user_stop",
+            "input_tokens": 400_000,
+        },
+        {
+            "input_tokens": 20_405_391,
+            "output_tokens": 355_915,
+            "reasoning_tokens": 150,
+            "cache_hit_tokens": 16_728_448,
+            "cache_miss_tokens": 3_676_943,
+        },
+    )
+    assert merged["status"] == MESSAGE_STATUS_INCOMPLETE
+    assert merged["incomplete"] is True
+    assert merged["finish_reason"] == "cancelled"
+    assert merged["interrupt_reason"] == "user_stop"
+    assert merged["input_tokens"] == 20_405_391
+    assert merged["output_tokens"] == 355_915
+    assert merged["cache_hit_tokens"] == 16_728_448
+
+
 def test_d7_merge_usage_clears_paused_on_terminal():
     """终态必非暂停：二次 merge 不得从 existing 复活 paused latch。"""
     paused_running = {
@@ -101,6 +128,48 @@ def test_d7_merge_usage_clears_paused_on_explicit_false_while_running():
     assert merged["input_tokens"] == 2
 
 
+def test_hardkill_harvest_empty_close_only_fills_unstamped_harvest_prefix():
+    """Leg 2: hard-kill harvest (prefix, no origin) gets the same compose as salvage."""
+    from agentcore.conversation.store.cloud import _compose_hardkill_harvest_empty_close
+    from agentcore.runtime.turn.interrupt import INTERRUPTED_EMPTY_USER_VISIBLE
+
+    filled = _compose_hardkill_harvest_empty_close(
+        user_message="【系统收口】后台团队任务已全部完成。",
+        origin=None,
+    )
+    assert filled == INTERRUPTED_EMPTY_USER_VISIBLE
+    assert "已完成" not in filled
+    assert "已交付" not in filled
+
+    # Live salvage already stamped origin — USER_STOP silence / composed body stay.
+    assert (
+        _compose_hardkill_harvest_empty_close(
+            user_message="【系统收口】后台团队任务已全部完成。",
+            origin="execution_harvest",
+        )
+        == ""
+    )
+    assert (
+        _compose_hardkill_harvest_empty_close(
+            user_message="【系统收口】",
+            origin=None,
+            harvest_kind="success",
+        )
+        == ""
+    )
+    # Ordinary startTurn empty cancelled — client synthesizes; do not fill.
+    assert _compose_hardkill_harvest_empty_close(user_message="hi", origin=None) == ""
+
+
+def test_hardkill_harvest_prefix_is_history_prefix():
+    """Cloud closer must share history's prefix object — a second literal would drift."""
+    from agentcore.conversation import history
+    from agentcore.conversation.store import cloud
+
+    assert cloud._HARVEST_USER_PREFIX is history._HARVEST_USER_PREFIX
+    assert cloud._HARVEST_USER_PREFIX == "【系统收口】"
+
+
 def test_d7_pick_monotonic_content_prefers_longer():
     assert pick_monotonic_content("short", "much longer text") == "much longer text"
     assert pick_monotonic_content("already long enough", "short") == "already long enough"
@@ -122,10 +191,7 @@ def test_d7_salvage_paths_keep_monotonic_protection():
     long_draft = "checkpoint body that is longer than salvage"
     short_salvage = "salvage"
     for status in (MESSAGE_STATUS_INCOMPLETE, MESSAGE_STATUS_FAILED, MESSAGE_STATUS_RUNNING):
-        assert (
-            pick_merged_content(long_draft, short_salvage, incoming_status=status)
-            == long_draft
-        )
+        assert pick_merged_content(long_draft, short_salvage, incoming_status=status) == long_draft
     assert (
         pick_merged_content(
             "short",
@@ -190,13 +256,9 @@ async def test_begin_turn_creates_placeholder(monkeypatch):
         _settle,
     )
 
-    await CloudStore().begin_turn(
-        conversation_id="c1", message_id="m1", trace_id="t" * 32
-    )
+    await CloudStore().begin_turn(conversation_id="c1", message_id="m1", trace_id="t" * 32)
     assert settled == [{"conversation_id": "c1", "keep_message_id": "m1"}]
-    assert calls == [
-        {"conversation_id": "c1", "message_id": "m1", "trace_id": "t" * 32}
-    ]
+    assert calls == [{"conversation_id": "c1", "message_id": "m1", "trace_id": "t" * 32}]
 
 
 async def test_begin_turn_propagates_placeholder_failure(monkeypatch):
@@ -227,9 +289,7 @@ async def test_begin_turn_propagates_placeholder_failure(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="db down"):
-        await CloudStore().begin_turn(
-            conversation_id="c1", message_id="m1", trace_id="t" * 32
-        )
+        await CloudStore().begin_turn(conversation_id="c1", message_id="m1", trace_id="t" * 32)
 
 
 async def test_finalize_cloud_settles_empty_error_with_error_code(monkeypatch):
@@ -421,9 +481,7 @@ async def test_finalize_cloud_synthesizes_error_when_missing(monkeypatch):
         "message": DEFAULT_FAILED_ERROR_MESSAGE,
     }
     assert journaled
-    turn_end = next(
-        e for e in journaled[0]["entries"] if e.get("kind") == "turn_end"
-    )
+    turn_end = next(e for e in journaled[0]["entries"] if e.get("kind") == "turn_end")
     assert turn_end["payload"]["error"] == {
         "code": ErrorCode.PIPELINE_ERROR,
         "message": DEFAULT_FAILED_ERROR_MESSAGE,
@@ -749,7 +807,6 @@ async def test_finalize_cloud_auto_snapshot_passes_folder_id(monkeypatch):
             "finish_reason": FinishReason.END_TURN,
             "rounds": 1,
         },
-
         conversation_id="c-folder",
         user_id="u1",
         folder_id="folder-42",
@@ -930,9 +987,7 @@ async def test_finalize_local_settles_empty_error_with_error_code(monkeypatch):
     assert meta["error"] == {"code": ErrorCode.LLM_TIMEOUT, "message": "超时"}
     assert meta["finish_reason"] == FinishReason.ERROR.value
     assert journaled
-    turn_end = next(
-        e for e in journaled[0]["entries"] if e.get("kind") == "turn_end"
-    )
+    turn_end = next(e for e in journaled[0]["entries"] if e.get("kind") == "turn_end")
     assert turn_end["payload"]["error"] == {
         "code": ErrorCode.LLM_TIMEOUT,
         "message": "超时",
@@ -1018,9 +1073,7 @@ async def test_finalize_local_synthesizes_error_when_missing(monkeypatch):
         "message": DEFAULT_FAILED_ERROR_MESSAGE,
     }
     assert journaled
-    turn_end = next(
-        e for e in journaled[0]["entries"] if e.get("kind") == "turn_end"
-    )
+    turn_end = next(e for e in journaled[0]["entries"] if e.get("kind") == "turn_end")
     assert turn_end["payload"]["error"] == {
         "code": ErrorCode.PIPELINE_ERROR,
         "message": DEFAULT_FAILED_ERROR_MESSAGE,
@@ -1239,9 +1292,7 @@ async def test_append_journal_uses_telemetry_pool(monkeypatch):
     monkeypatch.setattr(cloud_mod, "telemetry_session_factory", lambda: CM())
     monkeypatch.setattr(cloud_mod, "async_session_factory", primary_boom)
     monkeypatch.setattr(cloud_mod, "TurnJournalRepository", Repo)
-    monkeypatch.setattr(
-        "agentcore.runtime.audit.hooks.on_journal_fact_appended", lambda _e: None
-    )
+    monkeypatch.setattr("agentcore.runtime.audit.hooks.on_journal_fact_appended", lambda _e: None)
 
     await CloudStore().append_journal(
         turn_id="m1",
@@ -1553,9 +1604,7 @@ async def test_finalize_local_skips_stage_when_not_end_turn(monkeypatch):
     monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
     monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
     monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
-    monkeypatch.setattr(
-        "agentcore.runtime.kickoff.stage_card.emit_stage_card_for_motion", stage
-    )
+    monkeypatch.setattr("agentcore.runtime.kickoff.stage_card.emit_stage_card_for_motion", stage)
 
     result = await CloudStore().finalize(
         mode="local",
@@ -1597,9 +1646,7 @@ async def test_persist_turn_journal_merges_by_seq_by_default(monkeypatch):
             pass
 
     monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
-    monkeypatch.setattr(
-        "agentcore.config.settings.observability_span_export_enabled", False
-    )
+    monkeypatch.setattr("agentcore.config.settings.observability_span_export_enabled", False)
 
     entries = [
         {"kind": "run_plan", "payload": {}},
@@ -1618,7 +1665,7 @@ async def test_persist_turn_journal_merges_by_seq_by_default(monkeypatch):
 
 
 async def test_persist_turn_journal_replaces_via_record(monkeypatch):
-    """``replace=True`` wholesale-replaces via record() (resume / outbox overwrite)."""
+    """``replace=True`` rewrites the live-band prefix via record() (resume / outbox)."""
     from agentcore.runtime.journal.persist import persist_turn_journal
 
     recorded: list[tuple[str, list]] = []
@@ -1640,9 +1687,7 @@ async def test_persist_turn_journal_replaces_via_record(monkeypatch):
             pass
 
     monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
-    monkeypatch.setattr(
-        "agentcore.config.settings.observability_span_export_enabled", False
-    )
+    monkeypatch.setattr("agentcore.config.settings.observability_span_export_enabled", False)
 
     entries = [
         {"kind": "run_plan", "payload": {}},
@@ -1659,6 +1704,125 @@ async def test_persist_turn_journal_replaces_via_record(monkeypatch):
     )
     assert recorded == [("m1", entries)]
     assert appended == []
+
+
+async def test_persist_turn_journal_replace_keeps_overflow_terminals(monkeypatch):
+    """Resume / second-pause replace=True must not drop overflow-band terminals."""
+    from agentcore.runtime.journal.persist import persist_turn_journal
+    from agentcore.runtime.journal.seq_space import (
+        JOURNAL_OVERFLOW_SEQ_START,
+        replace_prefix_map,
+    )
+
+    store: dict[str, dict[str, dict]] = {
+        "m1": {
+            "0": {"kind": "run_plan", "payload": {"execution_id": "e1"}},
+            "1": {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck-1"}},
+            str(JOURNAL_OVERFLOW_SEQ_START): {
+                "kind": "run_completed",
+                "payload": {"run_id": "w1"},
+            },
+            str(JOURNAL_OVERFLOW_SEQ_START + 1): {
+                "kind": "execution_completed",
+                "payload": {"execution_id": "e1"},
+            },
+        }
+    }
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def record(self, *, turn_id, conversation_id, trace_id, entries) -> None:
+            del conversation_id, trace_id
+            store[turn_id] = replace_prefix_map(list(entries), store.get(turn_id, {}))
+
+        async def load(self, turn_id) -> list:
+            mapped = store.get(turn_id, {})
+            return [mapped[k] for k in sorted(mapped, key=lambda key: int(key))]
+
+        async def append(self, **_kw) -> int | None:
+            raise AssertionError("replace must use record()")
+
+    class Session:
+        async def rollback(self):
+            pass
+
+    monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
+    monkeypatch.setattr("agentcore.config.settings.observability_span_export_enabled", False)
+
+    snapshot = [
+        {"kind": "run_plan", "payload": {"execution_id": "e1"}},
+        {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck-2"}},
+    ]
+    await persist_turn_journal(
+        Session(),  # type: ignore[arg-type]
+        message_id="m1",
+        conversation_id="c1",
+        trace_id="t",
+        entries=snapshot,
+        replace=True,
+    )
+    loaded = await Repo(None).load("m1")
+    kinds = [e.get("kind") for e in loaded]
+    assert kinds[:2] == ["run_plan", "team_preview_required"]
+    assert loaded[1]["payload"]["checkpoint_id"] == "ck-2"
+    assert "run_completed" in kinds
+    assert "execution_completed" in kinds
+    assert loaded[kinds.index("run_completed")]["payload"]["run_id"] == "w1"
+
+
+async def test_persist_turn_journal_replace_keeps_unlisted_late_fact(monkeypatch):
+    """A late higher-seq fact of a non-overflow kind must survive prefix rewrite."""
+    from agentcore.runtime.journal.persist import persist_turn_journal
+    from agentcore.runtime.journal.seq_space import replace_prefix_map
+
+    store: dict[str, dict[str, dict]] = {
+        "m1": {
+            "0": {"kind": "run_plan", "payload": {}},
+            "1": {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck-1"}},
+            "2": {"kind": "note", "payload": {"content": "late-unrelated"}},
+        }
+    }
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def record(self, *, turn_id, conversation_id, trace_id, entries) -> None:
+            del conversation_id, trace_id
+            store[turn_id] = replace_prefix_map(list(entries), store.get(turn_id, {}))
+
+        async def load(self, turn_id) -> list:
+            mapped = store.get(turn_id, {})
+            return [mapped[k] for k in sorted(mapped, key=lambda key: int(key))]
+
+        async def append(self, **_kw) -> int | None:
+            raise AssertionError("replace must use record()")
+
+    class Session:
+        async def rollback(self):
+            pass
+
+    monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
+    monkeypatch.setattr("agentcore.config.settings.observability_span_export_enabled", False)
+
+    await persist_turn_journal(
+        Session(),  # type: ignore[arg-type]
+        message_id="m1",
+        conversation_id="c1",
+        trace_id="t",
+        entries=[
+            {"kind": "run_plan", "payload": {}},
+            {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck-2"}},
+        ],
+        replace=True,
+    )
+    loaded = await Repo(None).load("m1")
+    kinds = [e.get("kind") for e in loaded]
+    assert kinds[:2] == ["run_plan", "team_preview_required"]
+    assert "note" in kinds
+    assert loaded[kinds.index("note")]["payload"]["content"] == "late-unrelated"
 
 
 async def test_salvage_writes_incomplete_status(monkeypatch):

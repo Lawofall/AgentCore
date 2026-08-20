@@ -1,14 +1,18 @@
-"""每条用户面错误文案指向的出口，必须真的存在。
+"""每条用户面错误文案指向的出口，必须真的存在；且不得点名客户端页面。
 
 两个反复踩的坑，各自烧掉过一批用户的时间：
 
-1. **「设置 · 模型配置」**——设置里并列的是「模型」和「服务商」两项，从来没有
-   叫「模型配置」的页。文案让人去填 key，人翻遍设置找不到那一页。
+1. **点名客户端页面**——同一句要发给桌面、手机、admin，而各端 Key / 模型入口
+   名字不同（桌面「设置 · 服务商」/「设置 · 模型」，手机只有「模型配置」）。
+   句子里写任何一个页名，都会在另外两端指向不存在的页。导航由各端 CTA 负责。
 2. **「点重试」/「点击重试」**——红错误卡按定案 A 不挂重试入口
    （``AssistantMessage.tsx``），最接近的「重新生成」还会截断后续历史。点名一个
    不存在的按钮，等于让人在屏幕上白找。「请稍后再试」= 重发本条，没有这个问题。
 
 新增用户面文案时把它挂进 ``_USER_FACING_COPY`` 即可，这两条不必再各写一遍。
+经 AI 复述到用户的**静态**共享系统提示同样挂进来（例如凭据卫生）。运行时拼装的大模板
+不要硬塞；``product_help*`` 是导航技能、按端分文案由
+``test_product_help_manual_links`` 守，也不在此列。
 """
 
 from __future__ import annotations
@@ -46,9 +50,21 @@ from agentcore.llm.tools_gate import (
     TOOLS_SOFT_GATE_WARNING,
     TOOLS_UNAVAILABLE_RUNTIME_MESSAGE,
 )
+from agentcore.runtime.resolve.prompt import (
+    _CEO_CORE_HINT,
+    _DEFAULT_SYSTEM_PROMPT,
+)
 
-# 设置里真实存在的两页（apps/desktop … MorePage.tsx: /more/model · /more/providers）。
-_REAL_SETTINGS_PAGES = ("设置 · 模型", "设置 · 服务商", "设置·模型", "设置·服务商")
+# 服务端共享句不得点名任何一端的页。桌面有「模型」「服务商」两页，手机只有「模型配置」。
+_CLIENT_PAGE_NAMES = (
+    "设置 · 服务商",
+    "设置·服务商",
+    "设置 · 模型配置",
+    "设置·模型配置",
+    "设置 · 模型",
+    "设置·模型",
+    "模型配置",
+)
 
 _USER_FACING_COPY: dict[str, str] = {
     "byok_key_required": BYOK_KEY_REQUIRED_MESSAGE,
@@ -90,12 +106,16 @@ _USER_FACING_COPY: dict[str, str] = {
     "missing_credentials": _MISSING_LLM_CREDENTIALS_USER_MESSAGE,
     "tools_soft_gate": TOOLS_SOFT_GATE_WARNING,
     "tools_unavailable": TOOLS_UNAVAILABLE_RUNTIME_MESSAGE,
+    "shared_system_prompt_base": _DEFAULT_SYSTEM_PROMPT,
+    "ceo_core_hint": _CEO_CORE_HINT,
 }
 
 
 @pytest.mark.parametrize("name", sorted(_USER_FACING_COPY))
-def test_copy_never_names_a_settings_page_that_does_not_exist(name):
-    assert "模型配置" not in _USER_FACING_COPY[name]
+def test_copy_never_names_a_client_page(name):
+    copy = _USER_FACING_COPY[name]
+    for page in _CLIENT_PAGE_NAMES:
+        assert page not in copy
 
 
 @pytest.mark.parametrize("name", sorted(_USER_FACING_COPY))
@@ -103,15 +123,6 @@ def test_copy_never_tells_the_user_to_press_a_retry_button(name):
     copy = _USER_FACING_COPY[name]
     assert "点重试" not in copy
     assert "点击重试" not in copy
-
-
-@pytest.mark.parametrize("name", sorted(_USER_FACING_COPY))
-def test_copy_that_routes_to_settings_names_a_real_page(name):
-    """提到「设置」就必须落在真实那两页之一，不能是含糊的第三个名字。"""
-    copy = _USER_FACING_COPY[name]
-    if "设置" not in copy:
-        return
-    assert any(page in copy for page in _REAL_SETTINGS_PAGES), copy
 
 
 def test_key_required_copy_is_single_sourced_across_leaf_and_preflight():
@@ -124,12 +135,21 @@ def test_key_required_copy_is_single_sourced_across_leaf_and_preflight():
     assert proxy.BYOK_KEY_REQUIRED_MESSAGE is BYOK_KEY_REQUIRED_MESSAGE
 
 
-def test_key_related_copy_points_at_the_provider_page_not_the_model_page():
-    """key 存在「服务商」，换模型才是「模型」——两页别互指。"""
-    assert "设置 · 服务商" in BYOK_KEY_REQUIRED_MESSAGE
-    assert "设置 · 服务商" in LLMAuthError(provider_name="user").message
-    assert "设置 · 模型" in TOOLS_UNAVAILABLE_RUNTIME_MESSAGE
-    assert "设置 · 模型" in _MISSING_LLM_CREDENTIALS_USER_MESSAGE
+def test_key_related_copy_names_the_remedy_not_a_page():
+    """Key 出口是接入/更新 API Key；换模型出口是更换模型。页名留给各端 CTA。"""
+    assert "API Key" in BYOK_KEY_REQUIRED_MESSAGE
+    assert "API Key" in LLMAuthError(provider_name="user").message
+    assert "更换" in TOOLS_UNAVAILABLE_RUNTIME_MESSAGE
+    assert "模型" in TOOLS_UNAVAILABLE_RUNTIME_MESSAGE
+    assert "改选" in _MISSING_LLM_CREDENTIALS_USER_MESSAGE
+    assert "模型" in _MISSING_LLM_CREDENTIALS_USER_MESSAGE
+    for copy in (
+        BYOK_KEY_REQUIRED_MESSAGE,
+        LLMAuthError(provider_name="user").message,
+        TOOLS_UNAVAILABLE_RUNTIME_MESSAGE,
+        _MISSING_LLM_CREDENTIALS_USER_MESSAGE,
+    ):
+        assert "设置" not in copy
 
 
 def test_platform_region_copy_does_not_leak_workspace():

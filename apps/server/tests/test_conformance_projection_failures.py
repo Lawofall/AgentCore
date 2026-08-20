@@ -541,3 +541,57 @@ def test_multi_agent_ceo_rate_limit_paused_pins_continue_face(projected):
     assert p["error"] == {"code": ErrorCode.LLM_RATE_LIMIT, "message": error}
     assert [r["id"] for r in p["runs"]] == ["r1"]
     assert p["runs"][0]["status"] == "failed"
+
+
+# ── turnOutcome 旁路（turn_verdict_*）：协议外判决对账，不抄 golden ──────────────
+
+
+_TURN_VERDICT_PROBES = (
+    "turn_verdict_team_host",
+    "turn_verdict_unproductive_body_tool",
+)
+
+
+def test_turn_verdict_probes_are_enumerated():
+    """A new turn_verdict_* vector must land here, not slip in uncovered."""
+    assert set(_TURN_VERDICT_PROBES) == {n for n in VECTORS if n.startswith("turn_verdict_")}
+
+
+def test_turn_verdict_team_host_has_a_team_error_face(projected):
+    """Hand-derived: run_plan + run_failed + attested outcome=error → strip host."""
+    p = projected["turn_verdict_team_host"]
+    assert p["runs"], "team graph must exist so the strip can own the verdict"
+    assert p["outcome"] == "error"
+    assert p["status"] == "failed"
+    assert p["finishReason"] == "error"
+    assert (p["error"] or {}).get("code") == "LLM_ERROR"
+
+
+def test_turn_verdict_unproductive_body_tool_keeps_failed_tool(projected):
+    """Hand-derived: non-empty body + unproductive + host_shell status=error."""
+    p = projected["turn_verdict_unproductive_body_tool"]
+    assert (p["content"] or "").strip()
+    assert p["finishReason"] == "unproductive"
+    assert p["runs"] == []
+    tools = [s for s in p["process"] if s.get("kind") == "tool"]
+    assert any(s.get("tool_name") == "host_shell" and s.get("status") == "error" for s in tools)
+
+
+def test_turn_verdict_sidecar_is_exported():
+    """Export attaches the partial envelope; values are wire / documented host rule."""
+    from agentcore.conformance.export import build_fixtures
+    from agentcore.conformance.turn_verdict import project_turn_verdict
+
+    by_name = {fx["name"]: fx for fx in build_fixtures()}
+    team = by_name["turn_verdict_team_host"]
+    assert team["turnVerdict"] == project_turn_verdict("turn_verdict_team_host", team["projected"])
+    assert team["turnVerdict"] == {
+        "hasTeamStrip": True,
+        "supportPackHost": "strip",
+    }
+    body = by_name["turn_verdict_unproductive_body_tool"]
+    assert body["turnVerdict"] == project_turn_verdict(
+        "turn_verdict_unproductive_body_tool",
+        body["projected"],
+    )
+    assert body["turnVerdict"]["failedToolHintNames"] == ["host_shell"]

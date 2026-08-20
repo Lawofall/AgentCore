@@ -20,6 +20,7 @@ from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from agentcore.llm.pricing import reconcile_cache_miss_tokens
 from agentcore.llm.provider.protocol import TokenUsage
 
 MODEL_ID = "deepseek-v4-flash"
@@ -104,7 +105,9 @@ def estimate_go_public_usd_nano(
         return 0
     usage = _usage_from_ledger(tokens)
     card = go_public_card(at)
-    cache_miss_tokens = max(usage.input_tokens - usage.cache_hit_tokens, usage.cache_miss_tokens)
+    cache_miss_tokens = reconcile_cache_miss_tokens(
+        usage.input_tokens, usage.cache_hit_tokens, usage.cache_miss_tokens
+    )
     cached = _nano(usage.cache_hit_tokens, card["cache_hit"])
     uncached = _nano(cache_miss_tokens, card["input"])
     output = _nano(usage.output_tokens, card["output"])

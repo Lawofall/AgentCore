@@ -34,7 +34,7 @@ from agentcore.runtime.events.process_persist import (
 )
 from agentcore.runtime.events.stream_checkpointer import StreamCheckpointer
 from agentcore.runtime.events.types import EventType, SSEEvent
-from agentcore.runtime.facts import Fact, record_turn_fact
+from agentcore.runtime.facts import Fact, current_fact_log, record_turn_fact
 
 # One run_id may enter a terminal face once (live + journal). Duplicate
 # run_failed / run_completed / run_cancelled / run_skipped for the same id
@@ -671,6 +671,16 @@ class EventSink:
             with contextlib.suppress(asyncio.QueueFull):
                 self._queue.put_nowait(event)
 
+    def run_has_terminal(self, run_id: str) -> bool:
+        """True when this sink already emitted a terminal frame for ``run_id``.
+
+        Terminal = ``run_completed`` / ``run_failed`` / ``run_cancelled`` /
+        ``run_skipped``. Used by the executor ``finally`` so a started run cannot
+        leave the journal without a close frame (CancelledError bypasses
+        ``except Exception``).
+        """
+        return bool(run_id) and run_id in self._terminal_run_ids
+
     def emit(self, event: SSEEvent) -> bool:
         """Emit ``event`` to every live观察端. True iff at least one got it.
 
@@ -744,7 +754,10 @@ class EventSink:
     ) -> asyncio.Future[int | None] | None:
         """Append a DURABLE fact to the host/execution journal (sink-lifetime independent)."""
         from agentcore.runtime.delegate.graph_append import register_graph_host
-        from agentcore.runtime.journal.writer import current_journal_writer
+        from agentcore.runtime.journal.writer import (
+            current_journal_writer,
+            is_seal_overflow_kind,
+        )
 
         if event.type is EventType.RUN_PLAN and self._message_id:
             register_graph_host(
@@ -765,43 +778,72 @@ class EventSink:
         # (``turn_attached=False``), DURABLE ``run_*`` / ``execution_*`` must land
         # on the execution-bound host writer — child tasks may still see a stale
         # ContextVar pointing at a sealed/new-turn writer.
+        # Pause ``seal()`` is the same family: the live writer is frozen, so
+        # execution terminals must take the (rebound, unsealed) host writer
+        # instead of silently no-op'ing on the sealed ContextVar.
+        kind = event.type.value
+        live_writer = current_journal_writer.get()
         host_writer = self._execution_host_writer(event)
         detached = self._coordination_detached(event)
-        if current_journal_writer.get() is not None and not detached:
+        sealed_live = live_writer is not None and getattr(live_writer, "sealed", False)
+        use_host = detached or (sealed_live and is_seal_overflow_kind(kind))
+        if live_writer is not None and not use_host:
             return record_turn_fact(
                 Fact(
-                    kind=event.type.value,
+                    kind=kind,
                     payload=persist_payload,
                     ts=event.timestamp,
                 )
             )
-        if host_writer is not None:
-            return host_writer.schedule_append(
-                {
-                    "kind": event.type.value,
-                    "payload": persist_payload,
-                    "ts": event.timestamp,
-                }
-            )
-        return record_turn_fact(
-            Fact(
-                kind=event.type.value,
-                payload=persist_payload,
-                ts=event.timestamp,
-            )
+        # ContextVar writer is gone (or a child still holds a stale other-turn
+        # writer). Keep the arming turn's fact log in sync so the post-drive
+        # finalize snapshot includes these frames — schedule_append alone does
+        # not update fact_log, and sidecar READY would otherwise replace the
+        # progressive journal with the pre-detach settle copy.
+        session = self._coordination_session_for_event(event)
+        log = getattr(session, "host_fact_log", None) if session is not None else None
+        persist_entry = {
+            "kind": kind,
+            "payload": persist_payload,
+            "ts": event.timestamp,
+        }
+        fact = Fact(
+            kind=kind,
+            payload=persist_payload,
+            ts=event.timestamp,
         )
+        future: asyncio.Future[int | None] | None
+        if host_writer is not None:
+            future = host_writer.schedule_append(persist_entry)
+        else:
+            future = record_turn_fact(fact)
+            # ``record_turn_fact`` already updated ``current_fact_log`` (may be
+            # the same object as ``host_fact_log``). Avoid a duplicate row.
+            if log is not None and current_fact_log.get() is log:
+                return future
+        overflow = is_seal_overflow_kind(kind)
+        if log is not None and (future is not None or not overflow):
+            log.record_fact(fact)
+        return future
 
     def _execution_host_writer(self, event: SSEEvent):
         """Bound host journal writer for the event's execution, if any.
 
         Resolve order: payload.execution_id → current_execution_id ContextVar →
         conversation registry (cross-task after turn teardown resets ContextVars).
+        A sealed pause writer is not a dead end — ``writable()`` is the unsealed
+        overflow successor on the same ``turn_id``.
         """
         session = self._coordination_session_for_event(event)
         if session is None:
             return None
         writer = getattr(session, "host_journal_writer", None)
-        if writer is None or getattr(writer, "sealed", False):
+        if writer is None:
+            return None
+        writable = getattr(writer, "writable", None)
+        if callable(writable):
+            return writable()
+        if getattr(writer, "sealed", False):
             return None
         return writer
 
@@ -809,13 +851,13 @@ class EventSink:
         """Live coordination session for ``event``, if any."""
         from agentcore.runtime.coordination.session import (
             active_coordination,
-            active_coordination_for_conversation,
+            registered_coordination_for_conversation,
         )
 
         eid = str((event.payload or {}).get("execution_id") or "").strip()
         session = active_coordination(eid) if eid else active_coordination()
         if session is None and self._conversation_id:
-            session = active_coordination_for_conversation(self._conversation_id)
+            session = registered_coordination_for_conversation(self._conversation_id)
         return session
 
     def _coordination_detached(self, event: SSEEvent) -> bool:

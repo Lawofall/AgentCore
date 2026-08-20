@@ -328,6 +328,10 @@ export interface Message {
       body_kind?: string;
       /** Provider endpoint root for BYOK empty-response 排查包. */
       base_url?: string;
+      vendor_code?: string | null;
+      model?: string | null;
+      profile?: string | null;
+      tool_count?: number | null;
       credential_source?: "user" | "platform" | string | null;
       /** 上游额度恢复的绝对时刻（ISO8601 UTC，如 `2026-08-14T16:00:00Z`）。后端句子里
        * 不再带时刻，红卡按用户本机时区成文（`lib/recoveryMoment`）。 */

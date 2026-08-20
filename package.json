@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@10.28.1",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
     "conformance": "pnpm -r run conformance",
@@ -13,6 +13,7 @@
     "gen:story-packs:check": "node scripts/sync-story-packs.mjs --check",
     "sync:legal": "node scripts/sync-legal-md.mjs",
     "sync:legal:check": "node scripts/sync-legal-md.mjs --check",
+    "check:doc-sections": "node scripts/check-doc-section-pointers.mjs",
     "bump-version": "node scripts/bump-version.mjs",
     "release:gate": "node scripts/release-gate.mjs",
     "release:gate:lite": "node scripts/release-gate.mjs --lite",

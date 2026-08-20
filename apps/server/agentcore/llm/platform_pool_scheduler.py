@@ -294,6 +294,6 @@ def platform_pool_unavailable_error(
         return LLMAuthError(provider_name="platform")
     return LLMQuotaExceededError(
         "平台模型额度已用完，本回合无法继续。请等待上游额度恢复，"
-        "或在「设置 · 服务商」接入自己的 API Key 立即继续。",
+        "或接入自己的 API Key 立即继续。",
         credential_source="platform",
     )

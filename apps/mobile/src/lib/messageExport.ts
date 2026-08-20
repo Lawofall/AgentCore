@@ -7,17 +7,25 @@
 
 import { toolDetail, toolLabel } from "@/components/assistantLabels";
 import type { ProcessStep } from "@agentcore/contract-types";
+import {
+  MESSAGE_EXPORT_DELIVERABLE_HEADING,
+  MESSAGE_EXPORT_PROCESS_HEADING,
+  MESSAGE_EXPORT_REASONING_HEADING,
+  MESSAGE_EXPORT_STEP_CHROME,
+  MESSAGE_EXPORT_TOOL_STATUS_SUFFIX,
+  type MessageCopyMode,
+} from "@agentcore/protocol-fold-kit";
 
-export type MessageCopyMode = "deliverable" | "with_process";
+export type { MessageCopyMode };
 
 function formatToolLine(step: Extract<ProcessStep, { kind: "tool" }>): string {
   const label = toolLabel(step.tool_name);
   const detail = toolDetail(step.arguments ?? {}, step.tool_name);
   const status =
     step.status === "error"
-      ? "（失败）"
+      ? MESSAGE_EXPORT_TOOL_STATUS_SUFFIX.error
       : step.status === "running"
-        ? "（进行中）"
+        ? MESSAGE_EXPORT_TOOL_STATUS_SUFFIX.running
         : "";
   return detail ? `· ${label}${status}：${detail}` : `· ${label}${status}`;
 }
@@ -31,7 +39,7 @@ export function formatProcessExport(
     switch (step.kind) {
       case "reasoning": {
         const t = step.text.trim();
-        if (t) lines.push(`【思考】\n${t}`);
+        if (t) lines.push(`${MESSAGE_EXPORT_REASONING_HEADING}\n${t}`);
         break;
       }
       case "content": {
@@ -46,19 +54,19 @@ export function formatProcessExport(
         lines.push("· （引用/格式核验后已重写）");
         break;
       case "team":
-        lines.push("· （团队协作）");
+        lines.push(MESSAGE_EXPORT_STEP_CHROME.team);
         break;
       case "checkpoint":
-        lines.push("· （向你确认）");
+        lines.push(MESSAGE_EXPORT_STEP_CHROME.checkpoint);
         break;
       case "ask":
-        lines.push("· （提问）");
+        lines.push(MESSAGE_EXPORT_STEP_CHROME.ask);
         break;
       case "plan_review":
-        lines.push("· （计划复核）");
+        lines.push(MESSAGE_EXPORT_STEP_CHROME.plan_review);
         break;
       case "team_preview":
-        lines.push("· （团队预览）");
+        lines.push(MESSAGE_EXPORT_STEP_CHROME.team_preview);
         break;
       case "user_interjection":
         // 零宽 positional marker；正文在旁路 userInterjections，导出不复述。
@@ -94,14 +102,15 @@ export function formatMessageExport(
 
   const processText = formatProcessExport(process);
   if (!processText) return deliverable;
-  if (!deliverable) return `【过程】\n\n${processText}`;
+  if (!deliverable)
+    return `${MESSAGE_EXPORT_PROCESS_HEADING}\n\n${processText}`;
 
   const endsWithDeliverable =
     processText === deliverable || processText.endsWith(deliverable);
   if (endsWithDeliverable) {
-    return `【过程】\n\n${processText}`;
+    return `${MESSAGE_EXPORT_PROCESS_HEADING}\n\n${processText}`;
   }
-  return `【过程】\n\n${processText}\n\n【交付】\n\n${deliverable}`;
+  return `${MESSAGE_EXPORT_PROCESS_HEADING}\n\n${processText}\n\n${MESSAGE_EXPORT_DELIVERABLE_HEADING}\n\n${deliverable}`;
 }
 
 export async function copyText(text: string): Promise<boolean> {

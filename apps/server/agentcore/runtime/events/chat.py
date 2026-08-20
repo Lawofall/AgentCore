@@ -170,6 +170,7 @@ def tool_use_end(
     failure: dict[str, str] | None = None,
     run_id: str = "",
     partial_failure: bool = False,
+    audience: str | None = None,
 ) -> SSEEvent:
     """Build ``tool_use_end``.
 
@@ -195,6 +196,8 @@ def tool_use_end(
         payload["run_id"] = run_id
     if partial_failure:
         payload["partial_failure"] = True
+    if audience == "ceo":
+        payload["audience"] = "ceo"
     return SSEEvent(type=EventType.TOOL_USE_END, payload=payload)
 
 

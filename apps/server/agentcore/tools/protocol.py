@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 WriteScope = Literal["none", "explore_memory", "project"]
+# Tool-output audience: stamped at production. User-bubble writers refuse ``ceo``.
+ToolAudience = Literal["user", "ceo"]
+TOOL_AUDIENCE_USER: ToolAudience = "user"
+TOOL_AUDIENCE_CEO: ToolAudience = "ceo"
 
 from agentcore.core.text import truncate_head_tail
 from agentcore.core.types import ToolApproval, ToolCategory, ToolEffect
@@ -645,6 +649,11 @@ class ToolResult:
     number* back into the tool's model-facing output, so the model can cite by a
     card-aligned number (see ``engine._annotate_tool_citations``).
 
+    ``audience`` is stamped at production: ``ceo`` means this ``output`` is
+    orchestration text for the captain loop (coordination start/merge echo, host
+    rejects). User-bubble writers (captain salvage) refuse it. Blocking delegate
+    synthesis stays default ``user`` so salvage can still reuse a real deliverable.
+
     ``display`` is an OPTIONAL render-oriented payload, distinct from the
     model-facing ``output`` string: a tool that has a richer client rendering than
     plain text (``web_search`` → result cards, ``read_url`` → source card + body
@@ -697,6 +706,7 @@ class ToolResult:
     # round recording) still treats it as a normal failure. Twin of ``ToolAttempt.policy_failure``
     # (upstream policy/environment block) but for a self-correctable参数打回, not a refusal.
     contract_failure: bool = False
+    audience: ToolAudience = TOOL_AUDIENCE_USER
 
     _MAX_OUTPUT_LEN = 4000
 

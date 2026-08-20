@@ -236,7 +236,16 @@ def _extract_upstream_message(preview: str | None) -> str | None:
     return str(msg) if msg else None
 
 
-def _extract_upstream_code(preview: str | None) -> str | None:
+# OpenCode Go (and similar relays) put the real vendor subcode in the message
+# as ``[unsupported_tool_schema]``, often with a parenthetical reason
+# ``(tool_count_limit)``. JSON ``error.code`` is frequently missing or a generic
+# ``invalid_request_error`` — so the bracket token is the authoritative subcode.
+_VENDOR_CODE_IN_MESSAGE = re.compile(r"\[([a-z][a-z0-9_]{1,64})\]", re.IGNORECASE)
+_VENDOR_SUBREASON_IN_MESSAGE = re.compile(r"\(([a-z][a-z0-9_]{1,64})\)", re.IGNORECASE)
+_UNSUPPORTED_TOOL_SCHEMA = "unsupported_tool_schema"
+
+
+def _extract_json_error_code(preview: str | None) -> str | None:
     if not preview:
         return None
     try:
@@ -250,6 +259,40 @@ def _extract_upstream_code(preview: str | None) -> str | None:
         code = err.get("code")
         return str(code) if code else None
     return None
+
+
+def _extract_bracket_vendor_code(preview: str | None) -> str | None:
+    """Vendor subcode in ``error.message``, e.g. ``[unsupported_tool_schema]``."""
+    extracted = _extract_upstream_message(preview) or ""
+    match = _VENDOR_CODE_IN_MESSAGE.search(extracted)
+    return match.group(1).lower() if match else None
+
+
+def _extract_upstream_code(preview: str | None) -> str | None:
+    """JSON ``error.code``, else the ``[vendor_code]`` token in the message."""
+    return _extract_json_error_code(preview) or _extract_bracket_vendor_code(preview)
+
+
+def _extract_vendor_code(preview: str | None) -> str | None:
+    """Prefer ``[vendor_code]`` in the message; JSON ``error.code`` is fallback.
+
+    Bracket-first because Go 400s keep a generic JSON code (or none) and stamp
+    the real subcode in ``[…]``.
+    """
+    bracket = _extract_bracket_vendor_code(preview)
+    if bracket:
+        return bracket
+    code = (_extract_json_error_code(preview) or "").strip().lower()
+    return code or None
+
+
+def _extract_vendor_subreason(preview: str | None) -> str | None:
+    """Parenthetical reason after the vendor bracket, e.g. ``(tool_count_limit)``."""
+    extracted = _extract_upstream_message(preview) or ""
+    bracket = _VENDOR_CODE_IN_MESSAGE.search(extracted)
+    haystack = extracted[bracket.end() :] if bracket else extracted
+    match = _VENDOR_SUBREASON_IN_MESSAGE.search(haystack)
+    return match.group(1).lower() if match else None
 
 
 @dataclass(frozen=True)
@@ -530,6 +573,21 @@ _CONTEXT_OVERFLOW_MARKERS = re.compile(
 )
 # Product face — short Chinese; upstream body stays in preview / logs only.
 _CONTEXT_OVERFLOW_PRODUCT = "对话上下文过长，本轮无法继续。请压缩较早对话后重试"
+
+# OpenCode Go tool-schema 400 (entry reject, 0 token). Honest: upstream limit,
+# no charge. Do not promise auto-retry or auto-trim — we have neither.
+UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE = (
+    "上游服务端拒绝了本次请求：工具数量或规模超过该模型允许的上限。"
+    "请求在入口即被拒绝，未消耗 token、未产生费用。"
+)
+UNSUPPORTED_TOOL_SCHEMA_KEYWORD_MESSAGE = (
+    "上游服务端拒绝了本次请求：工具定义含有该模型不支持的字段。"
+    "请求在入口即被拒绝，未消耗 token、未产生费用。"
+)
+UNSUPPORTED_TOOL_SCHEMA_MESSAGE = (
+    "上游服务端拒绝了本次请求：工具定义不被该模型支持。"
+    "请求在入口即被拒绝，未消耗 token、未产生费用。"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -837,6 +895,90 @@ def is_temperature_deprecated(body: bytes | str | None) -> bool:
     return bool(extracted and _TEMPERATURE_DEPRECATED_MARKERS.search(extracted))
 
 
+def is_unsupported_tool_schema(body: bytes | str | None) -> bool:
+    """True when upstream rejected the request for an unsupported tool schema."""
+    return _extract_vendor_code(body_preview(body)) == _UNSUPPORTED_TOOL_SCHEMA
+
+
+def unsupported_tool_schema_product_message(body: bytes | str | None) -> str:
+    """Honest Chinese copy for OpenCode Go ``unsupported_tool_schema`` 400s."""
+    reason = _extract_vendor_subreason(body_preview(body))
+    if reason == "tool_count_limit":
+        return UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE
+    if reason == "unsupported_keyword":
+        return UNSUPPORTED_TOOL_SCHEMA_KEYWORD_MESSAGE
+    return UNSUPPORTED_TOOL_SCHEMA_MESSAGE
+
+
+def unsupported_tool_schema_error_details(
+    body: bytes | str | None,
+    *,
+    payload: dict | None = None,
+    profile: str | None = None,
+) -> dict[str, Any]:
+    """Client-visible locator fields for 排查包. Never includes credentials."""
+    if not is_unsupported_tool_schema(body):
+        return {}
+    details: dict[str, Any] = {
+        "vendor_code": _extract_vendor_code(body_preview(body)) or _UNSUPPORTED_TOOL_SCHEMA,
+    }
+    if payload is not None:
+        model = payload.get("model")
+        if isinstance(model, str) and model.strip():
+            details["model"] = model.strip()
+        tools = payload.get("tools")
+        details["tool_count"] = len(tools) if isinstance(tools, list) else 0
+    if isinstance(profile, str) and profile.strip():
+        details["profile"] = profile.strip()
+    return details
+
+
+def apply_locator_context(err: LLMError, context: dict | None) -> None:
+    """Copy vendor locator fields from a relayed envelope onto ``err.details``.
+
+    Only fires when the envelope already classified a vendor subcode — generic
+    5xx relays stay untouched. Credentials are not copied.
+    """
+    if not isinstance(context, dict):
+        return
+    vendor = context.get("vendor_code")
+    if not isinstance(vendor, str) or not vendor.strip():
+        return
+    err.details["vendor_code"] = vendor.strip()
+    model = context.get("model")
+    if isinstance(model, str) and model.strip():
+        err.details["model"] = model.strip()
+    profile = context.get("profile")
+    if isinstance(profile, str) and profile.strip():
+        err.details["profile"] = profile.strip()
+    tool_count = context.get("tool_count")
+    if isinstance(tool_count, int):
+        err.details["tool_count"] = tool_count
+    status = context.get("upstream_status")
+    if isinstance(status, int):
+        err.details["upstream_status"] = status
+    preview = context.get("upstream_body_preview")
+    if isinstance(preview, str) and preview.strip():
+        err.details["upstream_body_preview"] = preview
+
+
+def _locator_fields_from_details(details: dict) -> dict[str, int | str]:
+    out: dict[str, int | str] = {}
+    vendor = details.get("vendor_code")
+    if isinstance(vendor, str) and vendor.strip():
+        out["vendor_code"] = vendor.strip()
+    model = details.get("model")
+    if isinstance(model, str) and model.strip():
+        out["model"] = model.strip()
+    profile = details.get("profile")
+    if isinstance(profile, str) and profile.strip():
+        out["profile"] = profile.strip()
+    tool_count = details.get("tool_count")
+    if isinstance(tool_count, int):
+        out["tool_count"] = tool_count
+    return out
+
+
 def client_error_message(
     provider_name: str, status_code: int, body: bytes | str | None
 ) -> str:
@@ -857,6 +999,8 @@ def client_error_message(
         return _CONTEXT_OVERFLOW_PRODUCT
     if status_code == 400 and is_temperature_deprecated(body):
         return f"{provider_name} 当前模型不接受 temperature 参数，请重试或更换模型"
+    if is_unsupported_tool_schema(body):
+        return unsupported_tool_schema_product_message(body)
     if extracted:
         return f"{provider_name} {extracted}"
     if status_code == 400:
@@ -869,12 +1013,16 @@ def upstream_client_error(
     *,
     status: int,
     body: bytes | str | None = None,
+    **details: Any,
 ) -> LLMError:
-    return LLMError(
-        message,
-        upstream_status=status,
-        upstream_body_preview=body_preview(body),
-    )
+    merged: dict[str, Any] = {
+        "upstream_status": status,
+        "upstream_body_preview": body_preview(body),
+    }
+    for key, value in details.items():
+        if value is not None:
+            merged[key] = value
+    return LLMError(message, **merged)
 
 
 def upstream_error(
@@ -927,11 +1075,13 @@ def error_context_from(exc: BaseException) -> dict[str, int | str | float | None
             retry_after = getattr(exc, "retry_after", None)
     credential_source = exc.details.get("credential_source")
     moments = wire_moments(exc)
+    locator = _locator_fields_from_details(exc.details)
 
     if (
         status is None
         and retry_after is None
         and not moments
+        and not locator
         and not isinstance(exc, LLMRateLimitError)
         and credential_source not in ("user", "platform")
     ):
@@ -946,7 +1096,10 @@ def error_context_from(exc: BaseException) -> dict[str, int | str | float | None
         with contextlib.suppress(TypeError, ValueError):
             ctx["retry_after"] = float(retry_after)
     ctx.update(moments)
-    if credential_source in ("user", "platform"):
+    ctx.update(locator)
+    # Vendor-schema locators are for 排查包; credentials stay on server logs
+    # (join via trace_id). Other LLM_* CTAs still need the user/platform split.
+    if credential_source in ("user", "platform") and "vendor_code" not in locator:
         ctx["credential_source"] = credential_source
     # No Sub2API relay diagnosis here on purpose: it describes the *operator's*
     # upstream accounts, and this dict is the user-visible SSE / REST error

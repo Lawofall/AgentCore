@@ -20,6 +20,7 @@ from agentcore.conversation.common import (
     generate_title as mint_title,
 )
 from agentcore.conversation.compaction import schedule_compaction_if_due
+from agentcore.conversation.history import _HARVEST_USER_PREFIX
 from agentcore.conversation.store.merge import (
     DEFAULT_FAILED_ERROR_MESSAGE,
     MESSAGE_STATUS_COMPLETE,
@@ -80,8 +81,44 @@ _SKIP_DERIVED_FINISH = frozenset(
 
 
 def _incomplete_body(content: str) -> str:
-    """Streamed captain text only; interrupt chrome is metadata + UI, not body copy."""
+    """Streamed captain text only; interrupt chrome is metadata + UI, not body copy.
+
+    Ordinary startTurn empty cancelled stays empty (client synthesizes). Harvest
+    hard-kill fill is :func:`_compose_hardkill_harvest_empty_close` — do not fold
+    that into this helper or every incomplete write-back would gain a sentence.
+    """
     return (content or "").strip()
+
+
+# Re-export: same object as ``history._HARVEST_USER_PREFIX`` (hard-kill closer).
+# Do not re-literal the prefix here — drift silently disables the empty-close fill.
+
+
+def _compose_hardkill_harvest_empty_close(
+    *,
+    user_message: str,
+    origin: str | None,
+    harvest_kind: str | None = None,
+) -> str:
+    """Honesty note for hard-kill harvest write-back; ``""`` means do not fill.
+
+    Live sidecar salvage stamps ``origin`` / ``harvest_kind`` and already composed
+    (or chose USER_STOP silence). Desktop ``salvageOpen`` after a dead sidecar
+    promotes OPEN→READY cancelled without composing, and ``begin_turn`` never
+    persisted those stamps — that is the only gap this closer fills.
+
+    Regular empty cancelled has neither stamp nor the harvest user prefix.
+    """
+    if (origin or "").strip() or (harvest_kind or "").strip():
+        return ""
+    if not (user_message or "").strip().startswith(_HARVEST_USER_PREFIX):
+        return ""
+    from agentcore.runtime.turn.interrupt import (
+        TurnInterruptReason,
+        compose_interrupt_body,
+    )
+
+    return compose_interrupt_body("", reason=TurnInterruptReason.LEASE_EXPIRED)
 
 
 def _is_synthetic_local_user_message(user_message: str) -> bool:
@@ -350,10 +387,12 @@ class CloudStore:
         conversation_id: str,
         trace_id: str | None,
         entry: dict[str, Any],
+        overflow: bool = False,
     ) -> int | None:
         """Append-on-emit journal fact via the telemetry pool (no primary-pool contention).
 
-        ``seq=None`` ⇒ DB 原子分配（live）；``seq=int`` ⇒ merge 幂等去重（outbox 回写）。
+        ``seq=None`` ⇒ DB 原子分配（live band，or overflow band when ``overflow``）；
+        ``seq=int`` ⇒ merge 幂等去重（outbox 回写）。
         Returns the durable seq on insert, or ``None`` on merge duplicate no-op.
         """
         from agentcore.runtime.audit.hooks import on_journal_fact_appended
@@ -365,6 +404,7 @@ class CloudStore:
                 conversation_id=conversation_id,
                 trace_id=trace_id,
                 entry=entry,
+                overflow=overflow,
             )
         if allocated is not None:
             on_journal_fact_appended(entry)
@@ -1166,6 +1206,14 @@ class CloudStore:
         content_to_write = (
             _incomplete_body(assistant_content) if is_incomplete else assistant_content
         )
+        if is_incomplete and not content_to_write:
+            filled = _compose_hardkill_harvest_empty_close(
+                user_message=user_message,
+                origin=origin,
+                harvest_kind=harvest_kind,
+            )
+            if filled:
+                content_to_write = filled
 
         usage_metadata: dict[str, Any] = {
             "status": terminal_status,
@@ -1315,9 +1363,10 @@ class CloudStore:
                         finish_reason=finish_value,
                     )
                 if durable is not None:
-                    # Outbox writeback holds this turn's authoritative stream
-                    # (pause snapshot or resume complete rewrite). Replace so a
-                    # resume reusing ``turn_id`` overwrites the pause prefix.
+                    # Outbox writeback holds this turn's authoritative prefix
+                    # (pause snapshot or resume complete rewrite). Replace the
+                    # live-band occupancy so a resume reusing ``turn_id``
+                    # overwrites the pause prefix; higher seqs stay.
                     await persist_turn_journal(
                         session,
                         message_id=assistant_msg.id,

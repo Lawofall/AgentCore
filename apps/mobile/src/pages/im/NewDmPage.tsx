@@ -96,7 +96,7 @@ export function NewDmPage() {
         <input
           className="search-input"
           value={query}
-          placeholder="按用户名或显示名精确搜索"
+          placeholder="按用户名或 ID 精确搜索"
           // biome-ignore lint/a11y/noAutofocus: 找人页打开即聚焦搜索框是刻意的移动端 UX（用户来此页就是为了立刻搜索）
           autoFocus
           onChange={(e) => setQuery(e.target.value)}
@@ -170,9 +170,7 @@ export function NewDmPage() {
             ))}
           </>
         ) : (
-          <p className="muted hint">
-            输入用户名或显示名精确搜索，即可发起对话。
-          </p>
+          <p className="muted hint">输入用户名或 ID 精确搜索，即可发起对话。</p>
         )}
       </div>
     </div>

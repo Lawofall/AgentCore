@@ -81,4 +81,27 @@ describe("ChatBubble width", () => {
     const bodyCol = textBubble?.parentElement?.parentElement;
     expect(bodyCol?.className).not.toContain("flex-1");
   });
+
+  it("clamps the reply quote to two lines, isolated from bubble pre-wrap", () => {
+    const preview = "被引用的预览 ".repeat(20);
+    const { container } = renderBubble(
+      baseMessage({
+        content: "短回复",
+        reply_to: {
+          sender_user_id: "u2",
+          sender_display_name: "对方",
+          body_preview: preview,
+        },
+        reply_to_message_id: "m0",
+      }),
+      false,
+    );
+    const quoteBody = [...container.querySelectorAll("span")].find(
+      (el) => el.textContent === preview,
+    );
+    expect(quoteBody?.className).toContain("line-clamp-2");
+    expect(quoteBody?.className).not.toContain("truncate");
+    expect(quoteBody?.parentElement?.className).toContain("whitespace-normal");
+    expect(quoteBody?.parentElement?.className).toContain("overflow-hidden");
+  });
 });

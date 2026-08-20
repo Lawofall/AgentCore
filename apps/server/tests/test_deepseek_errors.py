@@ -14,7 +14,10 @@ from agentcore.core.errors import (
     LLMUpstreamError,
 )
 from agentcore.llm.profiles import DEEPSEEK_V4_FLASH
-from agentcore.llm.provider.openai_compatible import OpenAICompatibleProvider
+from agentcore.llm.provider.openai_compatible import (
+    OpenAICompatibleProvider,
+    _reasoning_text,
+)
 from agentcore.llm.provider.protocol import LLMMessage, LLMRequest, ToolCall, ToolCallFunction
 
 
@@ -859,7 +862,8 @@ async def test_complete_maps_401_403_to_auth_error(code):
             await provider.complete(_req())
         assert "DeepSeek" not in ei.value.message
         assert "invalid api key" not in ei.value.message
-        assert "设置 · 服务商" in ei.value.message
+        assert "设置 · 服务商" not in ei.value.message
+        assert "请更新后重试" in ei.value.message
         assert ei.value.details.get("upstream_status") == code
         assert "invalid api key" in (ei.value.details.get("upstream_body_preview") or "")
     finally:
@@ -909,7 +913,8 @@ async def test_complete_maps_key_expired_to_auth_error_with_upstream_in_preview(
             await provider.complete(_req())
         assert "CC Switch" not in ei.value.message
         assert "expired" not in ei.value.message.lower()
-        assert "设置 · 服务商" in ei.value.message
+        assert "设置 · 服务商" not in ei.value.message
+        assert "请更新后重试" in ei.value.message
         assert ei.value.details.get("upstream_status") == 401
         assert "expired" in (ei.value.details.get("upstream_body_preview") or "").lower()
     finally:
@@ -944,7 +949,8 @@ async def test_byok_auth_uses_product_copy_not_upstream_gateway_text():
         assert "revoked" not in ei.value.message.lower()
         assert "当前模型" not in ei.value.message
         assert "服务商" in ei.value.message
-        assert "设置 · 服务商" in ei.value.message
+        assert "设置 · 服务商" not in ei.value.message
+        assert "请更新后重试" in ei.value.message
         assert ei.value.details.get("upstream_status") == 401
         assert "revoked" in (ei.value.details.get("upstream_body_preview") or "").lower()
         assert ei.value.details.get("credential_source") == "user"
@@ -1040,7 +1046,7 @@ async def test_llm_auth_error_platform_default_message():
     assert "平台模型暂时不可用" in err.message
     assert "platform" not in err.message
     assert "CC Switch" not in err.message
-    assert "设置 · 服务商" not in err.message  # BYOK remedy, not platform
+    assert "设置 · 服务商" not in err.message
 
 
 async def test_complete_maps_model_not_allowed_403_to_client_error_not_auth():
@@ -1184,6 +1190,7 @@ def test_build_payload_disables_thinking_for_deepseek_v4_background():
     )
     payload = provider._build_payload(req, stream=False)
     assert payload["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in payload
 
     # Non-DeepSeek / non-Hy3 models must not get the thinking-type field.
     other = LLMRequest(
@@ -1194,12 +1201,52 @@ def test_build_payload_disables_thinking_for_deepseek_v4_background():
     )
     assert "thinking" not in provider._build_payload(other, stream=False)
 
-    # Default (None) leaves thinking omitted so V4 keeps its enabled default.
+    # None = explicit enabled (do not omit: OpenCode Go treats omit as off).
     default = LLMRequest(
         messages=[LLMMessage(role="user", content="hi")],
         model=DEEPSEEK_V4_FLASH,
     )
-    assert "thinking" not in provider._build_payload(default, stream=False)
+    default_payload = provider._build_payload(default, stream=False)
+    assert default_payload["thinking"] == {"type": "enabled"}
+    assert default_payload["reasoning_effort"] == "high"
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    (
+        "https://api.deepseek.com",
+        "https://opencode.ai/zen/go/v1",
+        "https://opencode.ai/zen/v1",
+    ),
+)
+def test_build_payload_sends_thinking_enabled_on_v4_chat_across_gateways(base_url: str):
+    """Chat/CEO path must write thinking.enabled — OpenCode Go omit = off."""
+    provider = OpenAICompatibleProvider(name="test", api_key="k", base_url=base_url)
+    chat = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model=DEEPSEEK_V4_FLASH,
+        thinking=True,
+        scenario="chat",
+    )
+    chat_payload = provider._build_payload(chat, stream=True)
+    assert chat_payload["thinking"] == {"type": "enabled"}
+    assert chat_payload["reasoning_effort"] == "high"
+    omitted = LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model=DEEPSEEK_V4_FLASH,
+    )
+    omitted_payload = provider._build_payload(omitted, stream=True)
+    assert omitted_payload["thinking"] == {"type": "enabled"}
+    assert omitted_payload["reasoning_effort"] == "high"
+
+
+def test_reasoning_text_reads_openai_aliases():
+    assert _reasoning_text({"reasoning_content": "官方"}) == "官方"
+    assert _reasoning_text({"reasoning": "别名"}) == "别名"
+    assert _reasoning_text({"reasoning_text": "第三键"}) == "第三键"
+    assert _reasoning_text({"reasoning_content": "", "reasoning": "回落"}) == "回落"
+    assert _reasoning_text({"reasoning": 1}) is None
+    assert _reasoning_text({}) is None
 
 
 @pytest.mark.parametrize("model", ["hy3", "hy3-preview", "tokenhub/hy3", "tokenhub/hy3-preview"])
@@ -1254,13 +1301,17 @@ def test_build_payload_thinking_switch_for_hy3(model: str):
         model=model,
         thinking=True,
     )
-    assert provider._build_payload(enabled, stream=False)["thinking"] == {"type": "enabled"}
+    enabled_payload = provider._build_payload(enabled, stream=False)
+    assert enabled_payload["thinking"] == {"type": "enabled"}
+    assert "reasoning_effort" not in enabled_payload
 
     default = LLMRequest(
         messages=[LLMMessage(role="user", content="hi")],
         model=model,
     )
-    assert "thinking" not in provider._build_payload(default, stream=False)
+    default_payload = provider._build_payload(default, stream=False)
+    assert default_payload["thinking"] == {"type": "enabled"}
+    assert "reasoning_effort" not in default_payload
 
 
 def test_build_payload_hy_siblings_do_not_get_hy3_dialect():
@@ -1448,11 +1499,234 @@ def test_client_error_message_413_is_context_overflow_product_copy():
 
 
 def test_client_error_message_400_unrelated_still_passthrough():
+    """Unclassified 400 still echoes the upstream message (not rewritten)."""
     from agentcore.llm.errors import client_error_message
 
     body = b'{"error":{"message":"max_tokens too large"}}'
     msg = client_error_message("平台", 400, body)
     assert msg == "平台 max_tokens too large"
+
+
+def _go_tool_schema_body(
+    *, reason: str | None = "tool_count_limit", json_code: str | None = None
+) -> bytes:
+    reason_bit = f" ({reason})" if reason else ""
+    msg = (
+        "Error from provider (Console Go): Upstream request failed: "
+        f"[unsupported_tool_schema] The tool schema is not supported{reason_bit}."
+    )
+    err: dict = {"message": msg}
+    if json_code is not None:
+        err["code"] = json_code
+    return json.dumps({"error": err}).encode()
+
+
+def _assert_honest_tool_schema_copy(msg: str) -> None:
+    assert "上游服务端拒绝了本次请求" in msg
+    assert "入口即被拒绝" in msg
+    assert "未消耗 token" in msg
+    assert "未产生费用" in msg
+    assert "自动" not in msg
+    assert "裁剪" not in msg
+    assert "重试" not in msg
+    assert "unsupported_tool_schema" not in msg
+    assert "tool_count_limit" not in msg
+    assert "unsupported_keyword" not in msg
+    assert "The tool schema is not supported" not in msg
+
+
+def test_client_error_message_400_unknown_bracket_code_still_passthrough():
+    """Unknown vendor bracket codes keep the unclassified 400 passthrough."""
+    from agentcore.llm.errors import client_error_message
+
+    body = (
+        b'{"error":{"message":"Upstream request failed: [some_other_code] nope."}}'
+    )
+    msg = client_error_message("平台", 400, body)
+    assert msg == "平台 Upstream request failed: [some_other_code] nope."
+
+
+def test_client_error_message_unsupported_tool_schema_splits_subreasons():
+    from agentcore.llm.errors import (
+        UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE,
+        UNSUPPORTED_TOOL_SCHEMA_KEYWORD_MESSAGE,
+        UNSUPPORTED_TOOL_SCHEMA_MESSAGE,
+        client_error_message,
+        is_unsupported_tool_schema,
+    )
+
+    count_body = _go_tool_schema_body(reason="tool_count_limit")
+    assert is_unsupported_tool_schema(count_body) is True
+    count_msg = client_error_message("平台", 400, count_body)
+    assert count_msg == UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE
+    assert "工具数量或规模" in count_msg
+    _assert_honest_tool_schema_copy(count_msg)
+
+    keyword_body = _go_tool_schema_body(reason="unsupported_keyword")
+    keyword_msg = client_error_message("OpenCode", 400, keyword_body)
+    assert keyword_msg == UNSUPPORTED_TOOL_SCHEMA_KEYWORD_MESSAGE
+    assert "不支持的字段" in keyword_msg
+    _assert_honest_tool_schema_copy(keyword_msg)
+
+    generic_body = _go_tool_schema_body(reason=None)
+    generic_msg = client_error_message("平台", 400, generic_body)
+    assert generic_msg == UNSUPPORTED_TOOL_SCHEMA_MESSAGE
+    _assert_honest_tool_schema_copy(generic_msg)
+
+
+def test_vendor_code_prefers_message_brackets_over_generic_json_code():
+    from agentcore.llm.errors import (
+        UNSUPPORTED_TOOL_SCHEMA_KEYWORD_MESSAGE,
+        client_error_message,
+        is_unsupported_tool_schema,
+    )
+
+    body = _go_tool_schema_body(
+        reason="unsupported_keyword", json_code="invalid_request_error"
+    )
+    assert is_unsupported_tool_schema(body) is True
+    assert (
+        client_error_message("平台", 400, body)
+        == UNSUPPORTED_TOOL_SCHEMA_KEYWORD_MESSAGE
+    )
+
+
+def test_vendor_code_falls_back_to_json_error_code_without_brackets():
+    from agentcore.llm.errors import (
+        UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE,
+        client_error_message,
+        is_unsupported_tool_schema,
+    )
+
+    body = json.dumps(
+        {
+            "error": {
+                "code": "unsupported_tool_schema",
+                "message": "The tool schema is not supported (tool_count_limit).",
+            }
+        }
+    ).encode()
+    assert is_unsupported_tool_schema(body) is True
+    assert (
+        client_error_message("平台", 400, body)
+        == UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE
+    )
+
+
+def _tool_schema_req(*, n_tools: int = 3, scenario: str = "agent") -> LLMRequest:
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": f"tool_{i}",
+                "description": "x",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+        for i in range(n_tools)
+    ]
+    return LLMRequest(
+        messages=[LLMMessage(role="user", content="hi")],
+        model=DEEPSEEK_V4_FLASH,
+        tools=tools,
+        scenario=scenario,
+    )
+
+
+async def test_complete_maps_opencode_tool_schema_400_to_zh_and_locator_context():
+    from agentcore.llm.errors import (
+        UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE,
+        error_context_from,
+    )
+    from agentcore.runtime.events.payloads.chat import ErrorPayload
+
+    body = _go_tool_schema_body(reason="tool_count_limit")
+    provider = await _mock_provider(lambda request: httpx.Response(400, content=body))
+    try:
+        with pytest.raises(LLMError) as ei:
+            await provider.complete(_tool_schema_req(n_tools=12, scenario="agent"))
+        err = ei.value
+        assert err.retryable is False
+        assert err.message == UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE
+        _assert_honest_tool_schema_copy(err.message)
+        ctx = error_context_from(err)
+        assert ctx is not None
+        assert ctx.get("upstream_status") == 400
+        assert "unsupported_tool_schema" in (ctx.get("upstream_body_preview") or "")
+        assert ctx.get("vendor_code") == "unsupported_tool_schema"
+        assert ctx.get("model") == DEEPSEEK_V4_FLASH
+        assert ctx.get("profile") == "agent"
+        assert ctx.get("tool_count") == 12
+        assert "credential_source" not in ctx
+        assert "platform_credential_id" not in ctx
+        assert "credential_id" not in ctx
+        ErrorPayload.model_validate(
+            {"code": err.code, "message": err.message, "context": ctx}
+        )
+    finally:
+        await provider.close()
+
+
+async def test_stream_maps_opencode_tool_schema_keyword_400_to_zh():
+    from agentcore.llm.errors import UNSUPPORTED_TOOL_SCHEMA_KEYWORD_MESSAGE
+
+    body = _go_tool_schema_body(reason="unsupported_keyword")
+    provider = await _mock_provider(lambda request: httpx.Response(400, content=body))
+    try:
+        with pytest.raises(LLMError) as ei:
+            async for _ in provider.stream(_tool_schema_req(n_tools=2, scenario="chat")):
+                pass
+        assert ei.value.message == UNSUPPORTED_TOOL_SCHEMA_KEYWORD_MESSAGE
+        assert ei.value.details.get("vendor_code") == "unsupported_tool_schema"
+        assert ei.value.details.get("profile") == "chat"
+        assert ei.value.details.get("tool_count") == 2
+    finally:
+        await provider.close()
+
+
+def test_inference_hop_preserves_tool_schema_locator_without_credentials():
+    from agentcore.llm.errors import (
+        UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE,
+        error_context_from,
+    )
+
+    envelope = json.dumps(
+        {
+            "error": {
+                "code": "LLM_ERROR",
+                "message": UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE,
+                "context": {
+                    "upstream_status": 400,
+                    "upstream_body_preview": "[unsupported_tool_schema] (tool_count_limit)",
+                    "vendor_code": "unsupported_tool_schema",
+                    "model": DEEPSEEK_V4_FLASH,
+                    "profile": "agent",
+                    "tool_count": 12,
+                    "credential_source": "platform",
+                    "platform_credential_id": "go-1",
+                },
+            }
+        },
+        ensure_ascii=False,
+    ).encode()
+    leaf = OpenAICompatibleProvider(
+        name="user",
+        api_key="tok",
+        base_url="http://127.0.0.1:8000/v1/inference/v1",
+    )
+    with pytest.raises(LLMUpstreamError) as ei:
+        leaf._raise_for_status(502, 1.0, {}, body=envelope, attempt=0)
+    err = ei.value
+    assert err.message == UNSUPPORTED_TOOL_SCHEMA_COUNT_MESSAGE
+    ctx = error_context_from(err) or {}
+    assert ctx.get("vendor_code") == "unsupported_tool_schema"
+    assert ctx.get("model") == DEEPSEEK_V4_FLASH
+    assert ctx.get("profile") == "agent"
+    assert ctx.get("tool_count") == 12
+    assert ctx.get("upstream_status") == 400
+    assert "credential_source" not in ctx
+    assert "platform_credential_id" not in ctx
+    assert "go-1" not in str(ctx)
 
 
 async def test_probe_maps_dns_failure_to_public_endpoint_copy():

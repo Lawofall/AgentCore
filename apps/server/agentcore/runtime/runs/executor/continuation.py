@@ -46,6 +46,9 @@ from agentcore.runtime.runs.executor.shared import (
     _priced_failure,
     _react_and_capture,
 )
+from agentcore.runtime.runs.executor.started_run_close import (
+    emit_run_cancelled_if_unterminated,
+)
 from agentcore.runtime.runs.landing_product import filter_product_landing_paths
 from agentcore.runtime.runs.serialize import (
     debrief_from_transcript,
@@ -569,6 +572,10 @@ async def _continue_run_scoped(
             content=content_from_transcript(frozen) if frozen else "",
         )
     finally:
+        # CancelledError bypasses except Exception: close the journal if we started.
+        emit_run_cancelled_if_unterminated(
+            sink, continuation_run_id, agent_id, execution_id=execution_id
+        )
         # Browser B: same run-bind release as executor.node (continuation uses a new run id).
         try:
             from agentcore.runtime.browser.registry import default_browser_session_registry

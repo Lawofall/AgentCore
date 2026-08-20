@@ -17,6 +17,7 @@ import {
 } from "./scripts.ts";
 import {
   conversationSummary,
+  emailCodeAccepted,
   emptyGrouped,
   emptyMessages,
   emptyRecovery,
@@ -186,6 +187,7 @@ const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const CSRF_EXEMPT_PREFIXES = [
   "/v1/auth/login",
   "/v1/auth/register",
+  "/v1/auth/password",
   "/v1/auth/refresh",
   "/v1/auth/token",
 ];
@@ -427,6 +429,30 @@ async function route(
     return;
   }
 
+  if (method === "POST" && path === "/v1/auth/register/send-code") {
+    await readBody(req);
+    json(req, res, 202, emailCodeAccepted());
+    return;
+  }
+
+  if (method === "POST" && path === "/v1/auth/register/verify") {
+    await readBody(req);
+    json(req, res, 201, MOCK_USER);
+    return;
+  }
+
+  if (method === "POST" && path === "/v1/auth/password/forgot") {
+    await readBody(req);
+    json(req, res, 202, emailCodeAccepted());
+    return;
+  }
+
+  if (method === "POST" && path === "/v1/auth/password/reset") {
+    await readBody(req);
+    json(req, res, 200, { status: "ok" });
+    return;
+  }
+
   if (method === "POST" && path === "/v1/auth/login") {
     await readBody(req);
     // The handshake is where the token is handed out — see §八.
@@ -461,6 +487,18 @@ async function route(
 
   if (csrfRejected(req, method, path)) {
     csrfFailed(req, res);
+    return;
+  }
+
+  if (method === "POST" && path === "/v1/auth/email/send-code") {
+    await readBody(req);
+    json(req, res, 202, {});
+    return;
+  }
+
+  if (method === "POST" && path === "/v1/auth/email/verify") {
+    await readBody(req);
+    json(req, res, 200, MOCK_USER);
     return;
   }
 

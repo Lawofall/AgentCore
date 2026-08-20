@@ -647,7 +647,10 @@ def record_turn_fact(fact: Fact) -> asyncio.Future[int | None] | None:
     ``prewrite_settlement`` (which bypasses the fact log) still records once so the
     log catches up with the durable row.
     """
-    from agentcore.runtime.journal.writer import current_journal_writer
+    from agentcore.runtime.journal.writer import (
+        current_journal_writer,
+        is_seal_overflow_kind,
+    )
 
     entry = fact.entry()
     log = current_fact_log.get()
@@ -657,6 +660,16 @@ def record_turn_fact(fact: Fact) -> asyncio.Future[int | None] | None:
         if log is not None and not _settlement_key_in_fact_log(log, writer.turn_id, entry):
             log.record_fact(fact)
         return _resolved_seq_future(None)
+
+    if writer is not None and writer.sealed:
+        # Overflow kinds that cannot be queued must stay out of the fact log so
+        # ``coordination.terminal_unsettled`` still sees the durable gap.
+        future = writer.schedule_append(entry)
+        if log is not None and (
+            future is not None or not is_seal_overflow_kind(str(entry.get("kind") or ""))
+        ):
+            log.record_fact(fact)
+        return future
 
     if log is not None:
         log.record_fact(fact)

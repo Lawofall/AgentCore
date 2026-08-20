@@ -532,8 +532,12 @@ class TurnExecutionMixin:
                         # and outbox READY is not sealed mid-DURABLE append. Cancel /
                         # exception skip this await and still close below.
                         from agentcore.runtime.coordination import await_live_detached_drive
+                        from agentcore.runtime.pipeline.finalize import (
+                            refresh_result_journal_from_host,
+                        )
 
                         await await_live_detached_drive(conversation_id)
+                        refresh_result_journal_from_host(result, sink=sink)
                         await _settle_ask_replies_if_committed(
                             conversation_id=conversation_id,
                             result=result,
@@ -937,8 +941,12 @@ class TurnExecutionMixin:
                         )
                         # Same D1 hold as _run_turn: delay close while detached drive lives.
                         from agentcore.runtime.coordination import await_live_detached_drive
+                        from agentcore.runtime.pipeline.finalize import (
+                            refresh_result_journal_from_host,
+                        )
 
                         await await_live_detached_drive(conversation_id)
+                        refresh_result_journal_from_host(result, sink=sink)
                         await _settle_ask_replies_if_committed(
                             conversation_id=conversation_id,
                             result=result,

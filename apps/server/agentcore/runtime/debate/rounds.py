@@ -73,10 +73,21 @@ async def _gather_settled(
     结辩），语义与「网关重试耗尽、该方缺席」逐字一致，不新增降级分支。
 
     非 ``Exception``（``CancelledError`` / ``KeyboardInterrupt``）照旧传播——整轮停止不得
-    被当成某一方失败吞掉。
+    被当成某一方失败吞掉。外层取消时先 ``cancel("stop")`` 并 ``shield`` 等到子任务拆完
+    （与 WaveScheduler 同口径），让 ``continue_run`` 的 ``finally`` 补上 ``run_cancelled``。
     """
+    tasks = [asyncio.ensure_future(c) for c in coros]
+    try:
+        raw = await asyncio.gather(*tasks, return_exceptions=True)
+    except BaseException:
+        for task in tasks:
+            if not task.done():
+                task.cancel("stop")
+        if tasks:
+            await asyncio.shield(asyncio.gather(*tasks, return_exceptions=True))
+        raise
     settled: list = []
-    for item in await asyncio.gather(*coros, return_exceptions=True):
+    for item in raw:
         if isinstance(item, BaseException):
             if not isinstance(item, Exception):
                 raise item

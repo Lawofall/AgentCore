@@ -527,7 +527,7 @@ def _multi_agent_coordination_wait() -> list[SSEEvent]:
     """多 Agent·协调等待 UX：CEO 空等团队事件时 ``coordination_wait``（EPHEMERAL）。
 
     挂起态快照——1/2 worker 已完成、CEO 进入等待；无 message_end，回合仍 running。
-    用于 #/preview / ``pnpm shoot`` 自检 StatusStrip「等待团队成员完成 (1/2)…」。
+    用于 #/preview / ``pnpm shoot`` 自检 StatusStrip 只报 1/2（成员细节在协作图节点）。
     """
     agents = [
         {

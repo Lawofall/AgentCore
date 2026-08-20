@@ -515,6 +515,12 @@ def _recorder() -> tuple[list[dict[str, Any]], Any]:
     return sent, write_line
 
 
+async def _flush_pending(server: SidecarServer) -> None:
+    pending = [t for t in list(server._pending_sends) if not t.done()]
+    if pending:
+        await asyncio.gather(*pending)
+
+
 def test_warm_account_rules_memory_requires_initialize(tmp_path: Path) -> None:
     clear_account_rules_memory_cache()
     sent, write_line = _recorder()
@@ -634,6 +640,7 @@ def test_warm_account_rules_memory_seeds_cache(
                 }
             )
         )
+        await _flush_pending(server)
 
     asyncio.run(run())
     init = next(m for m in sent if m.get("id") == 1)
@@ -700,6 +707,7 @@ def test_warm_account_rules_memory_reply_carries_renewal_ttl(
                 }
             )
         )
+        await _flush_pending(server)
 
     asyncio.run(run())
     ttl = next(m for m in sent if m.get("id") == 2)["result"]["ttlSeconds"]

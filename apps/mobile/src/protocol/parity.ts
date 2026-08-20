@@ -811,6 +811,11 @@ export const DESKTOP_PAGE_PARITY: Record<string, ParityEntry> = {
     reason: "桌面 #/preview 离线 onboarding 场景页；手机无对等预览路由",
   },
   LoginPage: { verdict: "ported", surface: "LoginPage" },
+  "login/AuthBits": {
+    verdict: "internal",
+    reason:
+      "登录页共享渲染叶（inputClass / FieldError / AuthOutcome 等，非独立面）",
+  },
   FilesPage: {
     verdict: "ported",
     surface:

@@ -394,8 +394,8 @@ body {
 .auth-legal {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 0;
 }
 
 .auth-check {
@@ -403,7 +403,7 @@ body {
   gap: 8px;
   align-items: flex-start;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.4;
   color: var(--muted);
   text-align: left;
 }
@@ -419,6 +419,91 @@ body {
   color: var(--fg);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.auth-code-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.auth-code-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.auth-code-row button {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 0 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.auth-code-hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+.auth-field-error {
+  margin: -4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.auth-outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.auth-outcome.ok {
+  color: var(--success);
+}
+
+.auth-outcome.error,
+.error.auth-outcome {
+  color: var(--fg);
+}
+
+.auth-password {
+  position: relative;
+}
+
+.auth-password input {
+  padding-right: 44px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .legal-scroll {
@@ -635,6 +720,17 @@ button.link {
 
 .turn-warning {
   margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklch, var(--muted) 12%, transparent);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.unproductive-tool-hint {
+  display: block;
+  margin-top: 8px;
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--border);

@@ -248,6 +248,21 @@
   gap: 8px;
 }
 
+.field-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field-inline input {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-inline .btn-sm {
+  flex-shrink: 0;
+}
+
 /* Secondary (outline) button used across settings. */
 .btn-outline {
   color: var(--fg);

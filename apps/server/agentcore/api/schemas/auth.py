@@ -12,16 +12,75 @@ if TYPE_CHECKING:
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(..., min_length=3, max_length=100)
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=100,
+        pattern=r"^[^@]+$",
+        description=(
+            "Handle only. Must not contain @ "
+            "(reserved so login can tell email from username)."
+        ),
+    )
     password: str = Field(..., min_length=8, max_length=256)
     display_name: str | None = Field(None, max_length=200)
-    # Plain string for now (email is a reserved/optional profile field); upgrade
-    # to validated EmailStr if/when email-validator is added as a dependency.
+    # Plain string (no email-validator dependency). Public signup uses
+    # RegisterSendCodeRequest where email is required.
     email: str | None = Field(None, max_length=255)
 
 
+class RegisterSendCodeRequest(BaseModel):
+    """Public signup: inbox + password. Username is allocated server-side."""
+
+    password: str = Field(..., min_length=8, max_length=256)
+    email: str = Field(..., min_length=3, max_length=255)
+
+
+class EmailCodeRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class RegisterVerifyRequest(BaseModel):
+    """Finish verify-then-create signup; optional nickname only here."""
+
+    email: str = Field(..., min_length=3, max_length=255)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    display_name: str | None = Field(None, max_length=200)
+
+
+class PasswordForgotRequest(BaseModel):
+    # min_length=1 so a junk shape still hits the 202 anti-enumeration path.
+    email: str = Field(..., min_length=1, max_length=255)
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(..., min_length=8, max_length=256)
+
+
+class EmailSendCodeRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+
+
+class EmailCodeAcceptedResponse(BaseModel):
+    """202 body for every send-code path (including password-forgot)."""
+
+    status: Literal["accepted"] = "accepted"
+    expires_in: int = Field(..., description="Code TTL in seconds")
+
+
 class LoginRequest(BaseModel):
-    username: str = Field(..., min_length=1, max_length=100)
+    username: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description=(
+            "Email or username. Contains @ → normalized email lookup; "
+            "otherwise username lookup. Field name is unchanged on purpose."
+        ),
+    )
     password: str = Field(..., min_length=1, max_length=256)
     persist_session: bool = Field(
         True,
@@ -81,6 +140,13 @@ class UpdateProfileRequest(BaseModel):
 
     display_name: str | None = Field(None, max_length=200)
     email: str | None = Field(None, max_length=255)
+    username: str | None = Field(
+        None,
+        min_length=3,
+        max_length=32,
+        pattern=r"^[a-zA-Z0-9](?:[a-zA-Z0-9._-]*[a-zA-Z0-9])?$",
+        description="Self-selected handle; stored lowercase after claim.",
+    )
 
 
 class DeleteAccountRequest(BaseModel):
@@ -95,6 +161,7 @@ class UserResponse(BaseModel):
     username: str
     display_name: str
     email: str | None
+    email_verified_at: datetime | None = None
     role: str
     created_at: datetime
     # Served avatar URL (头像) derived from the stored object key, e.g.
@@ -115,6 +182,7 @@ class UserResponse(BaseModel):
             username=user.username,
             display_name=user.display_name,
             email=user.email,
+            email_verified_at=getattr(user, "email_verified_at", None),
             role=user.role,
             created_at=user.created_at,
             avatar_url=_avatar_url(user.user_id, user.avatar_key),

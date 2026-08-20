@@ -9,7 +9,7 @@ alwaysApply: false
 
 # 前端跨端架构（各端全新建 + 极小共享）
 
-桌面 + 手机是**同一产品**：手机端 = 桌面端 − 手机物理做不到的能力层。**实现策略 = 各端全新建，零共享业务逻辑。** 权威蓝图 → [`前端技术与架构.md` §七/§十二](/docs/04-前端/前端技术与架构.md)；原生壳 / 商店余项 → [产品路线图摘要](/docs/01-产品/产品路线图摘要.md)（详细提案不在公开仓 / 维护者本地）。
+桌面 + 手机是**同一产品**：手机端 = 桌面端 − 手机物理做不到的能力层。**实现策略 = 各端全新建，零共享业务逻辑。** 权威蓝图 → [`前端技术与架构.md` §五 客户端架构（桌面 + 手机） / §十 SSE 与协议一致性](/docs/04-前端/前端技术与架构.md)；原生壳 / 商店余项 → [产品路线图摘要](/docs/01-产品/产品路线图摘要.md)（详细提案不在公开仓 / 维护者本地）。
 
 ## 结构（✅ 已落地）
 
@@ -22,7 +22,8 @@ packages/       protocol-conformance + contract-types + design-tokens + protocol
 ## 硬规则
 
 1. **各端全新建实现**——stores / services / 协议 fold / 组件，每端一套。**不共享业务逻辑实现**（连 headless hook 也各写）。
-2. **唯一共享面 = 规范 + 契约 + token + 协议常量**——`protocol-conformance`（向量 / golden / schema）、事件 / REST 类型、`design-tokens`、**可选** `@agentcore/protocol-fold-kit`（编排工具集 / marker 谓词 / finish→status / `formatCollabSummary` 等纯常量；**仍否决共享 fold 实现**）。**可选**共享纯渲染叶子（Markdown / Diagram，无 drift）。**绝不共享业务逻辑 / fold 实现核。**
+2. **唯一共享面 = 规范 + 契约 + token + 协议常量/文案**——`protocol-conformance`（向量 / golden / schema）、事件 / REST 类型、`design-tokens`、**可选** `@agentcore/protocol-fold-kit`（编排工具集 / marker 谓词 / finish→status / `formatCollabSummary`；**协议文案层**：空失败脸与降级 chip 表、挂问文案、导出 chrome、恢复时刻子句；**仍否决共享 fold 实现**）。**可选**共享纯渲染叶子（Markdown / Diagram，无 drift）。**绝不共享业务逻辑 / fold 实现核。**
+   - **搬进 kit 的判据 = 两端逐字一致**。内容已分叉的留在各端——那是产品行为差异，不是重复（例：错误 CTA 按钮文案，桌面「去服务商」vs 手机「去配置」）。判不准就不搬，宁少勿多。
 3. **零跨平台分支**——禁 `if(platform)`；每端独立树，只实现自己有的能力（手机不建本地文件 / MCP）。
 4. **协议 fold 是唯一危险面**——SSE→state / run 树 / resume / 审批，各端实现**必须对齐 conformance 规范**、过 `pnpm conformance` 才算对（见 [`protocol-conformance.mdc`](/.cursor/rules/protocol-conformance.mdc)）。
 

@@ -304,3 +304,80 @@ def test_rate_limit_backend_rejects_unknown_value():
 
     with pytest.raises(ValidationError):
         AuthSettings(rate_limit_backend="memcache")
+
+
+# --- SMTP + open registration: boot warning only (send path unchanged) ----------
+
+
+def test_smtp_unconfigured_warns_when_registration_open(prod_settings, monkeypatch):
+    from tests.conftest import LogSpy
+
+    spy = LogSpy()
+    monkeypatch.setattr(prod_settings, "billing_mode", "platform")
+    monkeypatch.setattr(prod_settings, "registration_open", True)
+    monkeypatch.setattr(prod_settings, "smtp_host", "")
+    monkeypatch.setattr(prod_settings, "smtp_from_address", "")
+    monkeypatch.setattr("agentcore.main.get_logger", lambda _name: spy)
+
+    _validate_production_security()  # no raise
+
+    detail = spy.get("email.smtp_unconfigured_registration")["detail"]
+    assert "REGISTRATION_OPEN=true" in detail
+    assert "SMTP_HOST" in detail
+    assert "/v1/auth/register/send-code" in detail
+
+
+def test_smtp_unconfigured_silent_in_debug(monkeypatch):
+    from tests.conftest import LogSpy
+
+    spy = LogSpy()
+    monkeypatch.setattr(settings, "debug", True)
+    monkeypatch.setattr(settings, "jwt_secret_key", _GOOD_JWT)
+    monkeypatch.setattr(settings, "allow_insecure_jwt_secret", False)
+    monkeypatch.setattr(settings, "registration_open", True)
+    monkeypatch.setattr(settings, "smtp_host", "")
+    monkeypatch.setattr(settings, "smtp_from_address", "")
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+    monkeypatch.delenv("UVICORN_WORKERS", raising=False)
+    monkeypatch.delenv("AGENTCORE_API_WORKERS", raising=False)
+    monkeypatch.setattr("agentcore.main.get_logger", lambda _name: spy)
+
+    _validate_production_security()  # no raise
+
+    assert not any(
+        name == "email.smtp_unconfigured_registration" for name, _ in spy.events
+    )
+
+
+def test_smtp_unconfigured_silent_when_registration_closed(prod_settings, monkeypatch):
+    from tests.conftest import LogSpy
+
+    spy = LogSpy()
+    monkeypatch.setattr(prod_settings, "billing_mode", "platform")
+    monkeypatch.setattr(prod_settings, "registration_open", False)
+    monkeypatch.setattr(prod_settings, "smtp_host", "")
+    monkeypatch.setattr(prod_settings, "smtp_from_address", "")
+    monkeypatch.setattr("agentcore.main.get_logger", lambda _name: spy)
+
+    _validate_production_security()  # no raise
+
+    assert not any(
+        name == "email.smtp_unconfigured_registration" for name, _ in spy.events
+    )
+
+
+def test_smtp_configured_silent_when_registration_open(prod_settings, monkeypatch):
+    from tests.conftest import LogSpy
+
+    spy = LogSpy()
+    monkeypatch.setattr(prod_settings, "billing_mode", "platform")
+    monkeypatch.setattr(prod_settings, "registration_open", True)
+    monkeypatch.setattr(prod_settings, "smtp_host", "smtp.test.local")
+    monkeypatch.setattr(prod_settings, "smtp_from_address", "noreply@example.com")
+    monkeypatch.setattr("agentcore.main.get_logger", lambda _name: spy)
+
+    _validate_production_security()  # no raise
+
+    assert not any(
+        name == "email.smtp_unconfigured_registration" for name, _ in spy.events
+    )

@@ -10,6 +10,10 @@ vi.mock("@/api/client", () => ({
   BASE_URL: "",
 }));
 
+vi.mock("@/api/auth", () => ({
+  me: vi.fn().mockRejectedValue(new Error("unused")),
+}));
+
 const { listChats } = vi.hoisted(() => ({
   listChats: vi.fn(),
 }));

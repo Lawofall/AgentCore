@@ -150,6 +150,16 @@ def _pin_cloud_execution_posture_to_defaults(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _pin_smtp_unconfigured(monkeypatch):
+    """A local ``.env`` with real SMTP must not send mail from the unit suite."""
+    from agentcore.config import settings
+
+    monkeypatch.setattr(settings, "smtp_host", "")
+    monkeypatch.setattr(settings, "smtp_from_address", "")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _pin_legal_vertical_gate_to_defaults(monkeypatch):
     """Pin ``legal_vertical_enabled`` to its production default (off) for every test.
 

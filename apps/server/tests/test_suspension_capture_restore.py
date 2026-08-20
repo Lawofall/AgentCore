@@ -185,7 +185,7 @@ async def test_claim_paused_turn_restores_frame_on_hydrate_failure() -> None:
         factory.return_value.__aenter__.return_value = session
         repo_cls.return_value.get = AsyncMock(return_value=row)
         repo_cls.return_value.claim = AsyncMock(return_value=row)
-        journal_cls.return_value.load = AsyncMock(return_value=[])
+        journal_cls.return_value.load_after = AsyncMock(return_value=[])
 
         with pytest.raises(ValueError, match="bad frame"):
             await persist_mod.claim_paused_turn(
@@ -242,7 +242,9 @@ async def test_claim_paused_turn_rewrites_loser_prewrite_to_winner_decision() ->
         repo_cls.return_value.get = AsyncMock(return_value=row)
         repo_cls.return_value.claim = AsyncMock(return_value=row)
         journal = journal_cls.return_value
-        journal.load = AsyncMock(return_value=[loser])
+        journal.load_after = AsyncMock(
+            return_value=[{"seq": 0, **loser}]
+        )
         journal.record = AsyncMock()
 
         claimed = await persist_mod.claim_paused_turn(
@@ -299,7 +301,9 @@ async def test_claim_paused_turn_does_not_rewrite_already_matching_journal() -> 
         repo_cls.return_value.get = AsyncMock(return_value=row)
         repo_cls.return_value.claim = AsyncMock(return_value=row)
         journal = journal_cls.return_value
-        journal.load = AsyncMock(return_value=[matching])
+        journal.load_after = AsyncMock(
+            return_value=[{"seq": 0, **matching}]
+        )
         journal.record = AsyncMock()
 
         claimed = await persist_mod.claim_paused_turn(

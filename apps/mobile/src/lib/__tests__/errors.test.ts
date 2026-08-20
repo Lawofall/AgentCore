@@ -47,6 +47,14 @@ describe("errorActionForCode", () => {
     expect(errorActionForCode("SOME_UNKNOWN")).toBeNull();
     expect(errorActionForCode(undefined)).toBeNull();
   });
+
+  // 钱包见底有两条出路：去厂商充值（后端原句带），或换一把 Key —— 后者正是配置页干的事。
+  it("routes LLM_INSUFFICIENT_BALANCE to 去配置", () => {
+    expect(errorActionForCode("LLM_INSUFFICIENT_BALANCE")).toEqual({
+      label: "去配置",
+      href: MODEL_CONFIG_PATH,
+    });
+  });
 });
 
 describe("describeStreamHttpError", () => {
@@ -54,10 +62,10 @@ describe("describeStreamHttpError", () => {
     const err = new StreamHttpError(
       402,
       "LLM_KEY_REQUIRED",
-      "请先在「设置 · 模型配置」中填入你的 API Key，再发起对话。",
+      "请先接入自己的 API Key，再发起对话。",
     );
     expect(describeStreamHttpError(err)).toEqual({
-      message: "请先在「设置 · 模型配置」中填入你的 API Key，再发起对话。",
+      message: "请先接入自己的 API Key，再发起对话。",
       action: { label: "去配置", href: MODEL_CONFIG_PATH },
     });
   });
@@ -65,7 +73,7 @@ describe("describeStreamHttpError", () => {
   it("falls back to a config hint when the body has no message", () => {
     const err = new StreamHttpError(402, "LLM_KEY_REQUIRED");
     const d = describeStreamHttpError(err);
-    expect(d.message).toContain("模型配置");
+    expect(d.message).toContain("API Key");
     expect(d.action?.label).toBe("去配置");
   });
 
@@ -78,17 +86,20 @@ describe("describeStreamHttpError", () => {
   });
 
   // 429 拒绝：后端只给结构化时刻 + 不含时刻的兜底句，本机时区的那句由前端出。
+  // 真触发：`upstream_rate_limit_error` 平台日额度墙 → QUOTA_EXCEEDED（SSE 开流前 JSON）。
   it("renders a refusal's recovery moment in the device's own zone", () => {
-    const err = new StreamHttpError(
-      429,
-      "QUOTA_EXCEEDED",
-      "平台模型额度已用完，本回合无法继续。",
-      { recovery_at: "2026-08-14T16:00:00Z", credential_source: "platform" },
-    );
+    const server =
+      "平台模型额度已用完，本回合无法继续。请等待上游额度恢复，或接入自己的 API Key 立即继续。";
+    const err = new StreamHttpError(429, "QUOTA_EXCEEDED", server, {
+      recovery_at: "2026-08-14T16:00:00Z",
+      credential_source: "platform",
+    });
     const d = describeStreamHttpError(err);
     expect(d.message).toBe(
-      `平台模型额度已用完，本回合无法继续。上游将于 ${formatLocalMoment("2026-08-14T16:00:00Z")} 恢复；或在「设置 · 服务商」接入自己的 API Key 立即继续。`,
+      `${server}额度将于 ${formatLocalMoment("2026-08-14T16:00:00Z")} 恢复。`,
     );
+    expect(d.message.startsWith(server)).toBe(true);
+    expect(d.message).not.toContain("上游将于");
     expect(d.message).not.toContain("UTC");
     expect(d.action).toEqual({
       label: "接入自己的 Key",

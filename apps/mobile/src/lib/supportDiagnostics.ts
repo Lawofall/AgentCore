@@ -2,68 +2,41 @@ import type {
   ErrorPayload,
   MessageStartPayload,
   SSEEvent,
+  TurnSavedPayload,
 } from "@agentcore/contract-types";
+import {
+  type SupportDiagnosticIds,
+  supportDiagnosticExtrasFromError,
+} from "@agentcore/protocol-fold-kit";
 
-export type SupportDiagnosticIds = {
-  conversationId?: string | null;
-  messageId?: string | null;
-  traceId?: string | null;
-  executionId?: string | null;
-  /** Optional error extras (SSE ErrorContext / empty-response); only appended when ≥1 id present. */
-  errorCode?: string | null;
-  emptyDiagnosis?: string | null;
-  bodyKind?: string | null;
-  baseUrl?: string | null;
-  /** Product chat is stream=true; set for empty-response packs. */
-  stream?: boolean | null;
-};
+export {
+  formatSupportDiagnosticText,
+  supportDiagnosticExtrasFromError,
+  type SupportDiagnosticIds,
+} from "@agentcore/protocol-fold-kit";
 
-/**
- * Format a paste-ready「排查包」for support / Cursor AI log lookup.
- * Lead line triggers conversation-logs workflow; trailing line is log_timeline.py.
- * Always available (no 诊断模式 on mobile) — parity with desktop error card / bubble「更多」.
- * Extras (`error_code` / `empty_diagnosis` / …) append only when at least one id line exists.
- */
-export function formatSupportDiagnosticText(ids: SupportDiagnosticIds): string {
-  const conversationId = ids.conversationId?.trim() || "";
-  const messageId = ids.messageId?.trim() || "";
-  const traceId = ids.traceId?.trim() || "";
-  const executionId = ids.executionId?.trim() || "";
-
-  const idLines: string[] = [];
-  if (conversationId) idLines.push(`conversation_id: ${conversationId}`);
-  if (messageId) idLines.push(`message_id: ${messageId}`);
-  if (traceId) idLines.push(`trace_id: ${traceId}`);
-  if (executionId) idLines.push(`execution_id: ${executionId}`);
-  if (idLines.length === 0) return "";
-
-  const errorCode = ids.errorCode?.trim() || "";
-  const emptyDiagnosis = ids.emptyDiagnosis?.trim() || "";
-  const bodyKind = ids.bodyKind?.trim() || "";
-  const baseUrl = ids.baseUrl?.trim() || "";
-  if (errorCode) idLines.push(`error_code: ${errorCode}`);
-  if (emptyDiagnosis) idLines.push(`empty_diagnosis: ${emptyDiagnosis}`);
-  if (bodyKind) idLines.push(`body_kind: ${bodyKind}`);
-  if (baseUrl) idLines.push(`base_url: ${baseUrl}`);
-  if (ids.stream === true) idLines.push("stream: true");
-
-  const lines = ["阅读这段产品AI日志：", ...idLines];
-  if (traceId) {
-    lines.push(`uv run python scripts/log_timeline.py --trace ${traceId}`);
-  } else if (conversationId) {
-    lines.push(`uv run python scripts/log_timeline.py ${conversationId}`);
+/** Preceding user bubble id for an assistant message (regenerate / 排查包). */
+export function precedingUserMessageId(
+  messages: ReadonlyArray<{ id: string; role: string }>,
+  assistantMessageId: string,
+): string | null {
+  const idx = messages.findIndex((m) => m.id === assistantMessageId);
+  if (idx <= 0) return null;
+  for (let i = idx - 1; i >= 0; i--) {
+    if (messages[i].role === "user") return messages[i].id;
   }
-
-  return lines.join("\n");
+  return null;
 }
 
 /** Pull support ids from a live/history SSE journal (message_start + first run_plan). */
 export function extractSupportIdsFromEvents(events: readonly SSEEvent[]): {
   messageId?: string;
+  userMessageId?: string;
   traceId?: string;
   executionId?: string;
 } {
   let messageId: string | undefined;
+  let userMessageId: string | undefined;
   let traceId: string | undefined;
   let executionId: string | undefined;
   for (const ev of events) {
@@ -74,9 +47,12 @@ export function extractSupportIdsFromEvents(events: readonly SSEEvent[]): {
     } else if (!executionId && ev.type === "run_plan") {
       const id = (ev.payload as { execution_id?: string }).execution_id?.trim();
       if (id) executionId = id;
+    } else if (ev.type === "turn_saved") {
+      const id = (ev.payload as TurnSavedPayload).user_message_id?.trim();
+      if (id) userMessageId = id;
     }
   }
-  return { messageId, traceId, executionId };
+  return { messageId, userMessageId, traceId, executionId };
 }
 
 /**
@@ -88,33 +64,22 @@ export function supportIdsFromEvents(
   events: readonly SSEEvent[],
   rest?: {
     messageId?: string | null;
+    userMessageId?: string | null;
     traceId?: string | null;
   },
 ): SupportDiagnosticIds {
   const ids = extractSupportIdsFromEvents(events);
-  let errorCode: string | undefined;
-  let emptyDiagnosis: string | undefined;
-  let bodyKind: string | undefined;
-  let baseUrl: string | undefined;
+  let extras: ReturnType<typeof supportDiagnosticExtrasFromError> = {};
   for (const ev of events) {
     if (ev.type !== "error") continue;
-    const p = ev.payload as ErrorPayload;
-    errorCode = p.code;
-    emptyDiagnosis = p.context?.empty_diagnosis;
-    bodyKind = p.context?.body_kind;
-    baseUrl = p.context?.base_url;
+    extras = supportDiagnosticExtrasFromError(ev.payload as ErrorPayload);
   }
-  const stream =
-    !!emptyDiagnosis || errorCode === "LLM_EMPTY_RESPONSE" ? true : undefined;
   return {
     conversationId: conversationId || undefined,
     messageId: rest?.messageId || ids.messageId,
+    userMessageId: rest?.userMessageId || ids.userMessageId,
     traceId: rest?.traceId || ids.traceId,
     executionId: ids.executionId,
-    errorCode,
-    emptyDiagnosis,
-    bodyKind,
-    baseUrl,
-    stream,
+    ...extras,
   };
 }

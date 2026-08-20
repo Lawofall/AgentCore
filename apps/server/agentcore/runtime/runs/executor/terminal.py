@@ -1,7 +1,4 @@
-"""AGENT-node salvage / cancel / terminal RunState builders.
-
-Split from ``.node`` — pure move; consumed only by the node facade.
-"""
+"""AGENT-node salvage / cancel / terminal RunState builders."""
 
 from __future__ import annotations
 
@@ -550,6 +547,22 @@ def build_terminal_run_state(
     )
 
 
+def cancel_reason_from_exc(exc: BaseException | None) -> str:
+    """Wire ``run_cancelled.reason`` — same mapping as the Wave member path.
+
+    ``cancel(arg)`` is the only carrier of WHY the task was killed: a hard-timeout
+    kill says ``worker_timeout``, never「已改方向」.
+    """
+    if not isinstance(exc, asyncio.CancelledError):
+        return "stop"
+    arg = str(exc.args[0]) if exc.args else ""
+    if arg in ("redirect", "worker_timeout"):
+        return arg
+    if arg == "user_stop":
+        return "user_stop"
+    return "stop"
+
+
 def handle_agent_node_cancel(
     env: AgentExecutorEnv,
     spec: RunSpec,
@@ -576,13 +589,7 @@ def handle_agent_node_cancel(
     1:1 onto the wire ``run_cancelled.reason``: a hard-timeout kill says
     ``worker_timeout``, never「已改方向」.
     """
-    arg = str(e.args[0]) if e.args else ""
-    if arg in ("redirect", "worker_timeout"):
-        cancel_reason = arg
-    elif arg == "user_stop":
-        cancel_reason = "user_stop"
-    else:
-        cancel_reason = "stop"
+    cancel_reason = cancel_reason_from_exc(e)
     env.sink.emit(
         run_cancelled(
             spec.run_id,

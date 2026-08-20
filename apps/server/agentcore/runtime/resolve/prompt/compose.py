@@ -24,6 +24,7 @@ from agentcore.runtime.resolve.prompt.base import (
 from agentcore.runtime.resolve.prompt.ceo_core import (
     _CEO_CORE_HINT,
     _PROMOTE_PRODUCT_TOOL_HINT,
+    _attachment_material_block,
     capability_how_suffix,
 )
 from agentcore.runtime.resolve.prompt.citation import CHAT_CITATION_HINT
@@ -186,6 +187,7 @@ def compose_ceo_chat_prompt(
     cold_start_explore: bool | str | None = False,
     folder_nav_stale: bool = False,
     folder_profile_empty_soft: bool = False,
+    attachment_material: bool = False,
     ceo_offered_names: set[str] | None = None,
     # Deprecated: skill_registry / memory_topics / on_demand_rules — prefer on_demand_entries.
     skill_registry: object | None = None,
@@ -219,6 +221,7 @@ def compose_ceo_chat_prompt(
     else:
         reason = None
     explore_block = _explore_act_block(reason)
+    material_block = _attachment_material_block(attachment_material)
     empty_soft_block = (
         _FOLDER_PROFILE_EMPTY_SOFT_HINT.strip()
         if folder_profile_empty_soft and not explore_block
@@ -255,6 +258,7 @@ def compose_ceo_chat_prompt(
         .add("ceo_base", base_prompt, SectionOrder.BASE)
         .add("ceo_core", ceo_core, SectionOrder.CEO_CORE)
         .add("cold_start_explore", explore_block, SectionOrder.CEO_CORE)
+        .add("attachment_material", material_block, SectionOrder.CEO_CORE)
         .add("folder_profile_empty_soft", empty_soft_block, SectionOrder.CEO_CORE)
         .add("folder_nav_stale", stale_block, SectionOrder.CEO_CORE)
         .add("on_demand_directory", on_demand_block, SectionOrder.SKILL_DIRECTORY)

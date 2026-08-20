@@ -9,7 +9,7 @@ unit of the breakdown's own ``currency`` (``nano / 1e9``); no FX.
 """
 
 from agentcore.api.schemas import CostBreakdown, UsageBreakdown
-from agentcore.llm.pricing import CURRENCY_CNY, nano_to_major
+from agentcore.llm.pricing import CURRENCY_CNY, nano_to_major, project_cache_miss_tokens
 
 
 def cost_breakdown(cost: dict) -> CostBreakdown:
@@ -55,11 +55,19 @@ def estimated_cost_breakdown(
 
 
 def usage_breakdown(tokens: dict) -> UsageBreakdown:
-    """Map a ledger token dict to the API schema (absent keys → 0)."""
+    """Map a ledger token dict to the API schema (absent keys → 0).
+
+    Omitted cache split (input>0 and hit/miss both 0) projects miss via the
+    pricing guard so the client does not render「0 命中 / 无缓存」. Amounts are
+    already priced at write time — this does not re-price.
+    """
+    input_tokens = int(tokens.get("input", 0))
+    cache_hit = int(tokens.get("cache_hit", 0))
+    cache_miss = int(tokens.get("cache_miss", 0))
     return UsageBreakdown(
-        input=int(tokens.get("input", 0)),
+        input=input_tokens,
         output=int(tokens.get("output", 0)),
         reasoning=int(tokens.get("reasoning", 0)),
-        cache_hit=int(tokens.get("cache_hit", 0)),
-        cache_miss=int(tokens.get("cache_miss", 0)),
+        cache_hit=cache_hit,
+        cache_miss=project_cache_miss_tokens(input_tokens, cache_hit, cache_miss),
     )

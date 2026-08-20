@@ -1,4 +1,4 @@
-// Last-used login username (prefs only — never password). Survives logout so the
+// Last-used login identifier, email or username (prefs only — never password).
 // next visit to LoginPage can prefill. localStorage works for both Capacitor WebView
 // and plain web; mirrors agentcore.mobile.* prefs (e.g. lastModelProfile).
 

@@ -635,6 +635,7 @@ async def resume_chat(
                 # Persist INSIDE the trace scope (same as run_and_persist) so the
                 # resumed turn's tail (cost.recorded / obs.turn_spans / metrics)
                 # inherits trace_id / attempt_id instead of losing the join key.
+                # persist-then-D1-await, same as continue_chat.
                 await persist_turn_result(
                     result=result,
                     conversation_id=conversation_id,

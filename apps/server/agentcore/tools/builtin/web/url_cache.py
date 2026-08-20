@@ -195,7 +195,9 @@ class UrlCacheRegistry:
         idle = [cid for cid, c in self._caches.items() if c.is_idle(self._conversation_ttl)]
         for cid in idle:
             del self._caches[cid]
-            logger.info("url_cache.conversation_evicted", conversation_id=cid)
+            # Victim id is not canonical conversation_id: this runs in the caller's
+            # request context, and merge_contextvars would mix user_id / trace_id.
+            logger.info("url_cache.conversation_evicted", evicted_conversation_id=cid)
 
     def __len__(self) -> int:
         return len(self._caches)

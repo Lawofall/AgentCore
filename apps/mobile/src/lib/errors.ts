@@ -1,7 +1,9 @@
 /**
- * Mobile error triage for chat transport refusals (parity with desktop
- * `lib/errors.ts` · RetryBanner「去配置」). Shared code catalog from
- * `@agentcore/contract-types` so both clients route the same BYOK codes.
+ * Mobile error triage for chat transport refusals. Shared code catalog from
+ * `@agentcore/contract-types` so both clients route the same BYOK codes — but the
+ * route and its label stay per-platform on purpose: mobile「去配置」→ 模型配置
+ * (BYOK + 组合同页), desktop「去服务商」→ `/more/providers`. Same rule ("land on the
+ * page where a key can be entered"), different page names; don't unify the href.
  */
 import {
   type RecoveryMomentContext,
@@ -11,8 +13,26 @@ import {
   KEY_CONFIG_ERROR_CODES,
   isUnstartedSendRefusal as matchUnstartedSendRefusal,
 } from "@agentcore/contract-types";
+import {
+  EMPTY_RESPONSE_CHIP_LABELS,
+  LLM_EMPTY_RESPONSE_MESSAGE,
+  LLM_ERROR_MESSAGE,
+  LLM_UNPRODUCTIVE_MESSAGE,
+  TURN_INTERRUPTED_EMPTY_MESSAGE,
+  degradedFinishChipLabel,
+  isEmptyResponseUserSurface,
+} from "@agentcore/protocol-fold-kit";
 
 export { isZeroOutputSendRefusalCode } from "@agentcore/contract-types";
+export {
+  EMPTY_RESPONSE_CHIP_LABELS,
+  LLM_EMPTY_RESPONSE_MESSAGE,
+  LLM_ERROR_MESSAGE,
+  LLM_UNPRODUCTIVE_MESSAGE,
+  TURN_INTERRUPTED_EMPTY_MESSAGE,
+  degradedFinishChipLabel,
+  isEmptyResponseUserSurface,
+};
 
 /** One-click remedy that routes the user to fix the cause (not a retry). */
 export interface ErrorAction {
@@ -20,7 +40,7 @@ export interface ErrorAction {
   href: string;
 }
 
-/** Mobile model-config route (对齐桌面 `/more/model`). */
+/** 手机能填 Key 的落地页。桌面对应页是 `/more/providers`，两端 IA 不同，路径不求一致。 */
 export const MODEL_CONFIG_PATH = "/more/model";
 
 /**
@@ -114,9 +134,7 @@ export function describeStreamHttpError(err: StreamHttpError): {
 } {
   let message: string;
   if (err.code === "LLM_KEY_REQUIRED") {
-    message =
-      err.serverMessage ??
-      "请先在「设置 · 模型配置」中填入你的 API Key，再发起对话。";
+    message = err.serverMessage ?? "请先接入自己的 API Key，再发起对话。";
   } else if (err.serverMessage) {
     message = err.serverMessage;
   } else {
@@ -158,11 +176,10 @@ export function emptyChatCopy(): {
 export function emptyFailureNotice(
   finishReason: string | null | undefined,
 ): string | null {
-  if (finishReason === "error") return "模型调用失败，请重试。";
-  if (finishReason === "unproductive")
-    return "工具连续无有效进展或参数无效，请重试。";
-  if (finishReason === "degraded") return "模型返回空内容，请重试。";
-  if (finishReason === "interrupted") return "已中断。直接发送下一条即可重试。";
+  if (finishReason === "error") return LLM_ERROR_MESSAGE;
+  if (finishReason === "unproductive") return LLM_UNPRODUCTIVE_MESSAGE;
+  if (finishReason === "degraded") return LLM_EMPTY_RESPONSE_MESSAGE;
+  if (finishReason === "interrupted") return TURN_INTERRUPTED_EMPTY_MESSAGE;
   if (finishReason === "max_rounds") return "已达最大轮次 · 提前收尾";
   return null;
 }
@@ -213,47 +230,6 @@ export function resolveEmptyFailureNotice(opts: {
   // Seam: error finish with body but lost error payload — red card, not gray chip.
   if (opts.finishReason === "error") return emptyFailureNotice("error");
   return null;
-}
-
-/** Short diagnosis labels for degraded empty-response finishes (mirrors backend / desktop). */
-export const EMPTY_RESPONSE_CHIP_LABELS: Record<string, string> = {
-  upstream_non_api: "上游返回了网页或登录页，请检查服务商地址与鉴权",
-  // Old journals may still stamp oauth_expired — same surface as upstream_non_api.
-  oauth_expired: "上游返回了网页或登录页，请检查服务商地址与鉴权",
-  content_filtered: "内容被过滤",
-  model_unknown: "模型名未被上游识别",
-  silent_empty: "模型返回空内容",
-  format_mismatch: "上游响应格式异常",
-  length_empty: "输出长度截断 · 返回空内容",
-};
-
-/**
- * True when the assistant bubble already owns the empty-response red card —
- * FinishReasonChip must not stack on top (单一用户面).
- */
-export function isEmptyResponseUserSurface(opts: {
-  code?: string | null;
-  emptyDiagnosis?: string | null;
-  message?: string | null;
-}): boolean {
-  if (opts.code === "LLM_EMPTY_RESPONSE") return true;
-  if (opts.emptyDiagnosis) return true;
-  const msg = opts.message ?? "";
-  return msg.includes("模型多次空响应") || msg.includes("模型空响应");
-}
-
-/** Chip suffix for degraded finish when an empty-response diagnosis is available. */
-export function degradedFinishChipLabel(
-  diagnosis: string | undefined,
-  errorMessage: string | undefined,
-): string | undefined {
-  if (diagnosis && EMPTY_RESPONSE_CHIP_LABELS[diagnosis]) {
-    return EMPTY_RESPONSE_CHIP_LABELS[diagnosis];
-  }
-  if (errorMessage?.includes(" · ")) {
-    return errorMessage.split(" · ", 2)[1];
-  }
-  return undefined;
 }
 
 /**

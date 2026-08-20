@@ -202,7 +202,7 @@ async def test_salvage_pipeline_exception_preserves_agentcore_product_copy():
 
 @pytest.mark.asyncio
 async def test_salvage_missing_llm_credentials_uses_settings_guidance():
-    """MissingLLMCredentialsError is AgentCoreError — product face guides to settings."""
+    """MissingLLMCredentialsError is AgentCoreError — product face asks to re-pick a model."""
     from agentcore.llm.factory import MissingLLMCredentialsError
 
     sink = EventSink()
@@ -220,7 +220,8 @@ async def test_salvage_missing_llm_credentials_uses_settings_guidance():
         roster_writer=None,
     )
     assert result["error_code"] == ErrorCode.VALIDATION_ERROR
-    assert "设置" in result["error"]
+    assert "改选可用模型" in result["error"]
+    assert "设置" not in result["error"]
     assert "build_turn_router" not in result["error"]
     assert exc.details.get("invariant", "").startswith("build_turn_router")
 
@@ -305,5 +306,79 @@ async def test_settle_salvages_delegate_reply_as_partial():
     assert any(
         getattr(e.type, "value", e.type) == "content_delta"
         and (e.payload or {}).get("delta") == debrief
+        for e in sink.history_snapshot()
+    )
+
+
+@pytest.mark.asyncio
+async def test_settle_refuses_ceo_audience_coordination_echo_on_degraded_rate_limit():
+    """0538c624 shape: empty captain + coordination echo + degraded 429.
+
+    Salvage must not copy the host echo into the user bubble. The turn still
+    carries LLM_RATE_LIMIT so the client paints the rate-limit face (not an
+    empty hidden bubble — hideEmptyBubble is cancel-only).
+    """
+    from agentcore.tools.protocol import TOOL_AUDIENCE_CEO
+
+    echo = (
+        "【团队已启动·协调模式】已派出 2 名队员（调研、写手）；图共 2 名，其中 0 名已完成。\n"
+        "调度在后台继续；完成态由图事件异步呈现。\n"
+        "你将收到团队事件（worker_completed / note / escalation / "
+        "user_interjection / all_completed）。无需处置时调 wait（或空响应，系统已豁免）——"
+        "派完若结束本回合：可见正文只留一句短的「人已派出」。"
+    )
+    sink = EventSink()
+    sink.emit(
+        tool_use_end(
+            "dc1",
+            "delegate",
+            success=True,
+            output=echo,
+            audience=TOOL_AUDIENCE_CEO,
+        )
+    )
+    sink.emit(error_event(ErrorCode.LLM_RATE_LIMIT, "上游限流，请约 4 秒后再试"))
+
+    captain_state = SimpleNamespace(
+        content="",
+        reasoning="",
+        rounds=2,
+        usage=TokenUsage().as_dict(),
+        cost={"total": 0, "currency": "USD"},
+        model="deepseek-v4-flash",
+        duration_ms=0,
+        finish_override=FinishReason.DEGRADED,
+    )
+    result = await settle_successful_turn(
+        message_id="m-coord-rl",
+        captain_run_id="cap",
+        captain_state=captain_state,
+        delegate_tool=SimpleNamespace(
+            usage={},
+            run_ledger=[],
+            citations=[],
+            collab={"boundary_yields": 0, "scope_signals": 0, "escalations": 0},
+            continuation_count=0,
+            user_continuation_count=0,
+            dispose_open_supervised=AsyncMock(),
+        ),
+        debate_tool=SimpleNamespace(usage={}, run_ledger=[], citations=[]),
+        profile=SimpleNamespace(max_rounds=20),
+        citations=[],
+        vision_cost_sink=[],
+        sink=sink,
+        fact_log=None,
+        audit_recorder=SimpleNamespace(drops=0, flush=AsyncMock()),
+        roster_writer=None,
+        journal_writer=SimpleNamespace(flush=AsyncMock()),
+    )
+
+    assert result["content"] == ""
+    assert result["finish_reason"] is FinishReason.DEGRADED
+    assert result["error_code"] == ErrorCode.LLM_RATE_LIMIT
+    assert "系统已豁免" not in (result.get("error") or "")
+    assert not any(
+        getattr(e.type, "value", e.type) == "content_delta"
+        and "系统已豁免" in str((e.payload or {}).get("delta") or "")
         for e in sink.history_snapshot()
     )

@@ -45,8 +45,9 @@ if TYPE_CHECKING:
 
 # Secondary weakened exit appended to platform-quota refusals (成本配额与计费 §〇·六
 # F6): platform额度耗尽 = 等重置 / 联系管理员为主, 「接入自己的 key」为次级出口 (byok
-# 回合不查配额, 是真正的绕过路径). The client maps QUOTA_EXCEEDED → 设置·服务商 CTA.
-_BYOK_EXIT = "或接入自己的 key 继续（设置 · 服务商）"
+# 回合不查配额, 是真正的绕过路径). Each client maps QUOTA_EXCEEDED to its own
+# Key-config CTA; this sentence does not name a page.
+_BYOK_EXIT = "或接入自己的 key 继续"
 
 # What every refusal says instead of naming a clock time. The windows are UTC-bounded
 # and「明日 0 点（UTC）重置」made the reader do the conversion — for a China user that

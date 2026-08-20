@@ -119,7 +119,7 @@ describe("TeamView strip · arbiter owns the verdict", () => {
     );
   });
 
-  it("interrupted send_next hangs 排查包 on the strip, not a second 已停止", () => {
+  it("interrupted send_next keeps 已中断 on the strip; 排查包 follows composer", () => {
     render(
       <MemoryRouter>
         <TeamView
@@ -129,6 +129,7 @@ describe("TeamView strip · arbiter owns the verdict", () => {
           status="cancelled"
           outcome={stripOutcome({
             notice: "已中断。直接发送下一条即可重试。",
+            surface: "composer",
             recovery: { kind: "send_next" },
           })}
           supportIds={{ conversationId: "c1", messageId: "m1" }}
@@ -137,8 +138,11 @@ describe("TeamView strip · arbiter owns the verdict", () => {
     );
     expect(screen.getByText(INTERRUPTED_STRIP_TITLE)).toBeTruthy();
     expect(screen.queryByText("已停止")).toBeNull();
-    expect(screen.getByText("复制排查包")).toBeTruthy();
-    expect(screen.queryByText("重试")).toBeNull();
+    expect(screen.queryByText("复制排查包")).toBeNull();
+    expect(screen.queryByTestId("turn-outcome")).toBeNull();
+    expect(document.querySelector(".team-strip")?.textContent).not.toContain(
+      "直接发送下一条",
+    );
   });
 
   it("partial + composer hint: strip only paints 部分完成 战绩, no why or delivery summary", () => {

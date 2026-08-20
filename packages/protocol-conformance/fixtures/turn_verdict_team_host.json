@@ -1,0 +1,239 @@
+{
+  "name": "turn_verdict_team_host",
+  "description": "判决对账：团队图 + attested error → 条是主判决（hasTeamStrip + supportPackHost）",
+  "events": [
+    {
+      "type": "message_start",
+      "payload": {
+        "message_id": "m1",
+        "conversation_id": "conv_demo"
+      },
+      "timestamp": "2026-01-01T00:00:00.001Z"
+    },
+    {
+      "type": "content_delta",
+      "payload": {
+        "delta": "我来安排调研。"
+      },
+      "timestamp": "2026-01-01T00:00:00.002Z"
+    },
+    {
+      "type": "tool_use_start",
+      "payload": {
+        "tool_call_id": "dc1",
+        "tool_name": "delegate",
+        "arguments": {
+          "tasks": [
+            {
+              "role": "研究员"
+            }
+          ]
+        }
+      },
+      "timestamp": "2026-01-01T00:00:00.003Z"
+    },
+    {
+      "type": "run_plan",
+      "payload": {
+        "execution_id": "exec1",
+        "plan_type": "multi_agent",
+        "task_summary": "调研 X",
+        "agents": [
+          {
+            "id": "w1",
+            "role": "研究员",
+            "thinking": true
+          }
+        ],
+        "runs": [
+          {
+            "id": "r1",
+            "agent_id": "w1",
+            "task": "调研",
+            "depends_on": []
+          }
+        ]
+      },
+      "timestamp": "2026-01-01T00:00:00.004Z"
+    },
+    {
+      "type": "run_started",
+      "payload": {
+        "run_id": "r1",
+        "agent_id": "w1",
+        "parent_run_id": null,
+        "kind": "agent"
+      },
+      "timestamp": "2026-01-01T00:00:00.005Z"
+    },
+    {
+      "type": "run_failed",
+      "payload": {
+        "run_id": "r1",
+        "agent_id": "w1",
+        "error": "调研失败",
+        "failure_kind": "quality"
+      },
+      "timestamp": "2026-01-01T00:00:00.006Z"
+    },
+    {
+      "type": "tool_use_end",
+      "payload": {
+        "tool_call_id": "dc1",
+        "tool_name": "delegate",
+        "status": "success",
+        "result": "团队完成（含 1 项失败）。"
+      },
+      "timestamp": "2026-01-01T00:00:00.007Z"
+    },
+    {
+      "type": "error",
+      "payload": {
+        "code": "LLM_ERROR",
+        "message": "本轮未能完成，请重试。"
+      },
+      "timestamp": "2026-01-01T00:00:00.008Z"
+    },
+    {
+      "type": "content_delta",
+      "payload": {
+        "delta": " 调研未完成。"
+      },
+      "timestamp": "2026-01-01T00:00:00.009Z"
+    },
+    {
+      "type": "message_end",
+      "payload": {
+        "finish_reason": "error",
+        "usage": {
+          "input_tokens": 2000,
+          "output_tokens": 400,
+          "reasoning_tokens": 0,
+          "cache_hit_tokens": 0,
+          "cache_miss_tokens": 0
+        },
+        "cost": {
+          "input": 240000,
+          "cached": 64000,
+          "output": 120000,
+          "total": 360000,
+          "currency": "CNY",
+          "pricing_source": "curated"
+        },
+        "rounds": 0,
+        "outcome": "error"
+      },
+      "timestamp": "2026-01-01T00:00:00.010Z"
+    }
+  ],
+  "projected": {
+    "status": "failed",
+    "finishReason": "error",
+    "outcome": "error",
+    "error": {
+      "code": "LLM_ERROR",
+      "message": "本轮未能完成，请重试。"
+    },
+    "content": "我来安排调研。 调研未完成。",
+    "reasoning": "",
+    "captainContext": [],
+    "process": [
+      {
+        "kind": "content",
+        "text": "我来安排调研。"
+      },
+      {
+        "kind": "team",
+        "execution_id": "exec1"
+      },
+      {
+        "kind": "content",
+        "text": " 调研未完成。"
+      }
+    ],
+    "citations": [],
+    "evidenceLedger": [],
+    "citedIds": [],
+    "agents": [
+      {
+        "id": "w1",
+        "role": "研究员",
+        "thinking": true,
+        "status": "error",
+        "currentRunId": "r1",
+        "output": "",
+        "reasoning": "",
+        "toolProgress": null
+      }
+    ],
+    "runs": [
+      {
+        "id": "r1",
+        "agentId": "w1",
+        "task": "调研",
+        "status": "failed",
+        "dependsOn": [],
+        "outputSummary": null,
+        "debrief": null,
+        "durationMs": null,
+        "error": "调研失败",
+        "failureKind": "quality",
+        "productLanded": null,
+        "parentRunId": null,
+        "kind": "agent",
+        "role": null,
+        "model": null,
+        "usage": null,
+        "cost": null,
+        "stance": null,
+        "group": null,
+        "round": 0,
+        "continuesRunId": null,
+        "revised": null,
+        "replacesRunId": null,
+        "actId": "act-1",
+        "checkpoint": null,
+        "receivedContext": [],
+        "escalations": [],
+        "process": []
+      }
+    ],
+    "acts": [
+      {
+        "actId": "act-1",
+        "kind": "multi_agent",
+        "title": null,
+        "anchorRunId": null,
+        "authorizedBy": null
+      }
+    ],
+    "progress": {
+      "completed": 0,
+      "total": 1
+    },
+    "interactions": [],
+    "cost": {
+      "input": 240000,
+      "cached": 64000,
+      "output": 120000,
+      "total": 360000,
+      "currency": "CNY",
+      "pricing_source": "curated"
+    },
+    "debate": null,
+    "debateRounds": [],
+    "debatePretrial": null,
+    "crossExamEnabled": false,
+    "debateOpening": null,
+    "teamSynthesisPreview": null,
+    "deliveryStatus": null,
+    "turnWarning": null,
+    "autoFolder": null,
+    "teamNotes": [],
+    "userInterjections": []
+  },
+  "turnVerdict": {
+    "hasTeamStrip": true,
+    "supportPackHost": "strip"
+  }
+}

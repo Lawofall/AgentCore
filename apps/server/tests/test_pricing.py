@@ -23,6 +23,8 @@ from agentcore.llm.pricing import (
     has_curated_pricing,
     nano_to_yuan,
     pricing_for_model,
+    project_cache_miss_tokens,
+    reconcile_cache_miss_tokens,
 )
 from agentcore.llm.profiles import DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH_FREE, DEEPSEEK_V4_PRO
 from agentcore.llm.provider.protocol import TokenUsage
@@ -73,9 +75,7 @@ def test_input_splits_cache_hit_vs_miss():
 
 def test_unknown_model_falls_back_to_glm():
     usage = _usage(output_tokens=1_000_000)
-    assert calculate_cost("totally-unknown", usage) == calculate_cost(
-        PLATFORM_RELAY_GLM_52, usage
-    )
+    assert calculate_cost("totally-unknown", usage) == calculate_cost(PLATFORM_RELAY_GLM_52, usage)
 
 
 def test_doubao_priced_at_vendor_cny_not_glm():
@@ -180,6 +180,27 @@ def test_native_cache_split_is_a_noop():
         _usage(cache_hit_tokens=1_000_000, cache_miss_tokens=1_000_000),
     )
     assert with_input == split_only
+
+
+def test_project_cache_miss_omitted_split_uses_pricing_guard():
+    """BYOK gpt-5.6-sol shape: hit=0 miss=0 input>0 → display miss = whole prompt."""
+    assert project_cache_miss_tokens(800, 0, 0) == reconcile_cache_miss_tokens(800, 0, 0)
+    assert project_cache_miss_tokens(800, 0, 0) == 800
+
+
+def test_project_cache_miss_deepseek_true_zero_hit_unchanged():
+    """Native DeepSeek 真 0 命中 reports miss=input; projection must not rewrite it."""
+    assert project_cache_miss_tokens(800, 0, 800) == 800
+    assert project_cache_miss_tokens(100, 20, 80) == 80
+    assert project_cache_miss_tokens(100, 60, 0) == 0
+
+
+def test_from_openai_wire_keeps_omitted_split_as_zero_zero():
+    """Parse layer must not fill 0/0 — that shape is the billing-fairness tripwire."""
+    usage = TokenUsage.from_openai_wire({"prompt_tokens": 800, "completion_tokens": 40})
+    assert usage.cache_hit_tokens == 0
+    assert usage.cache_miss_tokens == 0
+    assert usage.input_tokens == 800
 
 
 # --- pricing fallback is observable, not silent ---

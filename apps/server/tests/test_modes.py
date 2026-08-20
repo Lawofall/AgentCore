@@ -64,3 +64,6 @@ def test_turn_profiles_route_model_for_platform_agent():
 
 def test_get_profile_falls_back_to_chat():
     assert get_profile("unknown").name == "chat"
+    assert get_profile("unknown").thinking is True
+    assert PROFILES["chat"].thinking is True
+    assert PROFILES["agent"].thinking is True

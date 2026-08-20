@@ -39,6 +39,7 @@ from agentcore.tools.builtin.web import read_url as read_url_mod
 from agentcore.tools.builtin.web import search as search_mod
 from agentcore.tools.builtin.web import search_backend as search_backend_mod
 from agentcore.tools.builtin.web import search_cache as search_cache_mod
+from agentcore.tools.builtin.web import url_cache as url_cache_mod
 from agentcore.tools.builtin.web._net import (
     circuit_remaining,
     note_failure,
@@ -1984,13 +1985,22 @@ def test_search_cache_registry_caps_conversation_count_lru():
     assert "c" in reg
 
 
-def test_search_cache_registry_reaps_idle_conversation():
+def test_search_cache_registry_reaps_idle_conversation(monkeypatch: pytest.MonkeyPatch):
+    recorded: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        search_cache_mod.logger,
+        "info",
+        lambda event, **kwargs: recorded.append((event, dict(kwargs))),
+    )
     reg = SearchCacheRegistry(conversation_ttl_seconds=10.0)
     idle = reg.get_or_create("idle")
     idle.last_access = time.time() - 100  # force past the idle window
     reg.get_or_create("fresh")  # creation triggers idle reaping
     assert "idle" not in reg
     assert "fresh" in reg
+    assert recorded == [
+        ("search_cache.conversation_evicted", {"evicted_conversation_id": "idle"}),
+    ]
 
 
 async def test_web_search_caches_within_conversation(monkeypatch):
@@ -3120,13 +3130,22 @@ def test_url_cache_registry_caps_conversation_count_lru():
     assert "c" in reg
 
 
-def test_url_cache_registry_reaps_idle_conversation():
+def test_url_cache_registry_reaps_idle_conversation(monkeypatch: pytest.MonkeyPatch):
+    recorded: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        url_cache_mod.logger,
+        "info",
+        lambda event, **kwargs: recorded.append((event, dict(kwargs))),
+    )
     reg = UrlCacheRegistry(conversation_ttl_seconds=10.0)
     idle = reg.get_or_create("idle")
     idle.last_access = time.time() - 100  # force past the idle window
     reg.get_or_create("fresh")  # creation triggers idle reaping
     assert "idle" not in reg
     assert "fresh" in reg
+    assert recorded == [
+        ("url_cache.conversation_evicted", {"evicted_conversation_id": "idle"}),
+    ]
 
 
 def test_stop_read_hint_aligns_closing_with_howto_path_honesty():

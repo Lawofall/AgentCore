@@ -64,8 +64,10 @@ _ATTACHMENT_VISION_PROMPT = (
 )
 
 _IMAGE_VISION_UNCONFIGURED = (
-    "未配置识图（组合 vision 槽或 platform VISION_*）：本回合未注入图片可见事实。"
-    "勿把工作区路径当作已读图；勿默认建议用 code_execute 打开图片。"
+    "未配置识图（组合 vision 槽或 platform VISION_*）："
+    "该图已随本回合附件送达、路径可用，但本配置下无法读取图像内容，本回合未注入可见事实。"
+    "勿把工作区路径当作已读图；勿默认建议用 code_execute 打开图片；"
+    "勿索要重发，应直说限制。"
 )
 
 _IMAGE_NATIVE_INDEX = (
@@ -175,10 +177,7 @@ async def _read_image_attachment_block(
 ) -> str:
     """Eye→text for a resident image, or an honest unconfigured / failure note."""
     if vision_reader is None or backend is None:
-        return (
-            f"--- File: {name} ({path}) [image] ---\n"
-            f"{_IMAGE_VISION_UNCONFIGURED}"
-        )
+        return f"--- File: {name} ({path}) [image] ---\n{_IMAGE_VISION_UNCONFIGURED}"
     try:
         raw = await backend.read_bytes(ws_path)
     except Exception as exc:  # noqa: BLE001 — prepare must not crash on one attachment
@@ -195,8 +194,7 @@ async def _read_image_attachment_block(
         )
     if not raw:
         return (
-            f"--- File: {name} ({path}) [image / empty] ---\n"
-            "工作区图片为空，本回合未注入可见事实。"
+            f"--- File: {name} ({path}) [image / empty] ---\n工作区图片为空，本回合未注入可见事实。"
         )
     b64 = base64.b64encode(raw).decode("ascii")
     try:

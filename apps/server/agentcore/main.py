@@ -54,6 +54,7 @@ from agentcore.conversation.question_retention import question_posted_retention_
 from agentcore.core.errors import AgentCoreError, wire_moments
 from agentcore.core.logging import get_logger, setup_logging
 from agentcore.db.migration_check import check_migrations
+from agentcore.mail.sender import is_smtp_configured
 from agentcore.memory.consolidation import consolidation_loop, shutdown_scheduler
 from agentcore.memory.explore_refresh import shutdown_explore_refresh_scheduler
 from agentcore.middleware.client_version import ClientMinVersionMiddleware
@@ -196,6 +197,26 @@ def _validate_cors_credentials() -> None:
     raise RuntimeError(detail)
 
 
+def _validate_smtp_for_open_registration() -> None:
+    """Warn when open registration cannot deliver verification emails.
+
+    ``ConsoleEmailSender`` in non-DEBUG logs ``email.unconfigured`` and never raises,
+    so ``POST /v1/auth/register/send-code`` returns 202 while signup cannot complete.
+    Loud at boot — not fatal (same posture as ``security.csrf_disabled``).
+    """
+    if not settings.registration_open or is_smtp_configured():
+        return
+    get_logger(__name__).warning(
+        "email.smtp_unconfigured_registration",
+        detail=(
+            "REGISTRATION_OPEN=true but SMTP is not configured (SMTP_HOST and "
+            "SMTP_FROM_ADDRESS required). POST /v1/auth/register/send-code will "
+            "return 202 while no verification email is delivered; signup cannot "
+            "complete. Configure SMTP or set REGISTRATION_OPEN=false."
+        ),
+    )
+
+
 def _validate_production_security() -> None:
     """Fail fast on insecure config. JWT secret always checked; other guards skip in debug."""
     _validate_jwt_secret()
@@ -203,6 +224,7 @@ def _validate_production_security() -> None:
     _validate_single_process_assumptions()
     if settings.debug:
         return
+    _validate_smtp_for_open_registration()
     # byok makes a per-user API key mandatory, so a usable master key is required
     # to store it. Without one the model-config page can't save a key and every
     # turn is blocked — fail closed at boot rather than ship a server that looks

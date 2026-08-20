@@ -6,12 +6,18 @@ import {
   deleteAccount,
   deleteAvatar,
   fetchMe,
+  forgotPassword,
   listSessions,
   logout,
+  resetPassword,
   revokeOtherSessions,
   revokeSession,
+  sendEmailCode,
+  sendRegisterCode,
   updateProfile,
   uploadAvatar,
+  verifyEmail,
+  verifyRegister,
 } from "../auth";
 
 const ME = "/v1/auth/me";
@@ -267,6 +273,15 @@ describe("updateProfile", () => {
     expect(user.displayName).toBe("New Name");
   });
 
+  it("PATCHes username when claiming a handle", async () => {
+    const calls = captureFetch(json({ ...backendUser, username: "alice" }));
+
+    const user = await updateProfile({ username: "alice" });
+
+    expect(calls[0].body).toEqual({ username: "alice" });
+    expect(user.username).toBe("alice");
+  });
+
   it("sends an explicit null to clear the email", async () => {
     const calls = captureFetch(json({ ...backendUser, email: null }));
 
@@ -456,6 +471,111 @@ describe("deleteAvatar", () => {
     expect(calls[0].url).toContain("/v1/users/me/avatar");
     expect(calls[0].method).toBe("DELETE");
     expect(user.avatarUrl).toBeNull();
+  });
+});
+
+describe("email register / reset / catch-up", () => {
+  it("POSTs register send-code and returns expires_in", async () => {
+    const calls = captureFetch(json({ status: "accepted", expires_in: 900 }));
+    const result = await sendRegisterCode({
+      password: "password1",
+      email: "alice@example.com",
+    });
+    expect(calls[0].url).toContain("/v1/auth/register/send-code");
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].body).toEqual({
+      password: "password1",
+      email: "alice@example.com",
+    });
+    expect(result.expiresIn).toBe(900);
+  });
+
+  it("falls back when register send-code omits expires_in", async () => {
+    captureFetch(new Response(null, { status: 202 }));
+    const result = await sendRegisterCode({
+      password: "password1",
+      email: "alice@example.com",
+    });
+    expect(result.expiresIn).toBe(600);
+  });
+
+  it("POSTs register verify and maps email_verified_at", async () => {
+    const calls = captureFetch(
+      json({
+        ...backendUser,
+        email: "alice@example.com",
+        email_verified_at: "2026-08-19T00:00:00Z",
+      }),
+    );
+    const user = await verifyRegister("alice@example.com", "123456");
+    expect(calls[0].url).toContain("/v1/auth/register/verify");
+    expect(calls[0].body).toEqual({
+      email: "alice@example.com",
+      code: "123456",
+    });
+    expect(user.email).toBe("alice@example.com");
+    expect(user.emailVerifiedAt).toBe("2026-08-19T00:00:00Z");
+  });
+
+  it("POSTs register verify with display_name when nickname is provided", async () => {
+    const calls = captureFetch(
+      json({
+        ...backendUser,
+        email: "alice@example.com",
+        display_name: "小艾",
+        email_verified_at: "2026-08-19T00:00:00Z",
+      }),
+    );
+    await verifyRegister("alice@example.com", "123456", "小艾");
+    expect(calls[0].body).toEqual({
+      email: "alice@example.com",
+      code: "123456",
+      display_name: "小艾",
+    });
+  });
+
+  it("POSTs password forgot / reset", async () => {
+    const forgot = captureFetch(new Response(null, { status: 202 }));
+    await forgotPassword("alice@example.com");
+    expect(forgot[0].url).toContain("/v1/auth/password/forgot");
+    expect(forgot[0].body).toEqual({ email: "alice@example.com" });
+
+    const reset = captureFetch(json({ status: "ok" }));
+    await resetPassword("alice@example.com", "123456", "newpass12");
+    expect(reset[0].url).toContain("/v1/auth/password/reset");
+    expect(reset[0].body).toEqual({
+      email: "alice@example.com",
+      code: "123456",
+      new_password: "newpass12",
+    });
+  });
+
+  it("POSTs logged-in email send-code / verify", async () => {
+    const send = captureFetch(new Response(null, { status: 202 }));
+    await sendEmailCode("alice@example.com");
+    expect(send[0].url).toContain("/v1/auth/email/send-code");
+    expect(send[0].body).toEqual({ email: "alice@example.com" });
+
+    const verify = captureFetch(
+      json({
+        ...backendUser,
+        email: "alice@example.com",
+        email_verified_at: "2026-08-19T00:00:00Z",
+      }),
+    );
+    const user = await verifyEmail("alice@example.com", "654321");
+    expect(verify[0].url).toContain("/v1/auth/email/verify");
+    expect(verify[0].body).toEqual({
+      email: "alice@example.com",
+      code: "654321",
+    });
+    expect(user.emailVerifiedAt).toBe("2026-08-19T00:00:00Z");
+  });
+
+  it("maps a missing email_verified_at to null", async () => {
+    captureFetch(json({ ...backendUser, email: "legacy@example.com" }));
+    const user = await fetchMe();
+    expect(user.emailVerifiedAt).toBeNull();
   });
 });
 

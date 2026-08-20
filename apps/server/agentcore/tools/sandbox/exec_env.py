@@ -1,9 +1,10 @@
 """Execution-environment failure markers + remaining health-check probes.
 
 Per-execute classification is driven by the **first real run**, not a
-shortest-program preflight. A missing interpreter or a refused spawn retires
-the language it proved; a timeout never does (that is slow user code or
-machine jitter, not a dead environment).
+shortest-program preflight. A missing interpreter (exit 127) or a spawn-site
+refused-spawn tag retires the language it proved; a timeout never does (that
+is slow user code or machine jitter, not a dead environment). Generic OS
+permission strings never retire a real run.
 
 The one remaining pre-run is a sandbox whose health signal starts no
 interpreter at all — gVisor smoke-runs the ``runsc`` runtime — which keeps a
@@ -124,9 +125,10 @@ def is_exec_env_probe_failure(stderr_or_text: str | None) -> bool:
     return EXEC_ENV_PROBE_FAIL_MARKER in (stderr_or_text or "")
 
 
-# Spawn was refused by the OS — the interpreter exists, starting it was denied.
-# Node ``child.on("error")`` → ``spawn python EACCES`` / ``EPERM``; CPython
-# ``OSError`` → ``[Errno 13] Permission denied`` / ``[WinError 5] 拒绝访问``.
+# Probe-only. These are generic OS strings: a user script's ``PermissionError``
+# (busy file, etc.) contains them too. Real-run retire of a refused spawn is the
+# spawn-site tag (``spawn_denied_stderr`` / desktop ``spawnDeniedStderr``), never
+# these tokens. Probe may keep reading them — it only ever runs ``print('ok')``.
 _SPAWN_DENIED_MARKERS = (
     "eacces",
     "eperm",
@@ -248,6 +250,18 @@ def _one_line(text: str | None, *, limit: int = 200) -> str:
     return " ".join((text or "").split())[:limit]
 
 
+def spawn_denied_stderr(detail: str | None = None) -> str:
+    """Thin spawn-site envelope: marker + reason tag + the OS error we caught.
+
+    Real-run retire keys on the marker/tag (see ``annotate_real_exec_failure``),
+    never on the OS prose — that prose is evidence, not the classifier.
+    """
+    trimmed = (detail or "").strip()
+    if trimmed:
+        return f"{EXEC_ENV_PROBE_FAIL_MARKER} [{EXEC_ENV_SPAWN_DENIED_CODE}] {trimmed}"
+    return f"{EXEC_ENV_PROBE_FAIL_MARKER} [{EXEC_ENV_SPAWN_DENIED_CODE}]"
+
+
 def classify_probe_failure(
     *,
     exit_code: int | None,
@@ -259,11 +273,14 @@ def classify_probe_failure(
 
     Only evidence-backed verdicts get a code — an unrecognised failure keeps
     ``EXEC_ENV_PROBE_FAIL_CODE`` instead of picking a plausible-sounding cause
-    (the「安全软件」guess this taxonomy replaces). Order matters: a killed probe
-    reports its own timeout envelope, and a refused spawn must be read as a
-    denial before the generic launcher-startup wording is considered.
+    (the「安全软件」guess this taxonomy replaces). Order matters: a spawn-site
+    tag is the declaration (not OS-string guessing); a killed probe reports
+    its own timeout envelope; unmarked probe denials still use the OS tokens
+    below (probe never runs user code).
     """
     text = (stderr or "").strip()
+    if is_exec_env_probe_failure(text):
+        return exec_env_probe_failure_code(text)
     lowered = text.lower()
     if (
         is_idle_timeout_text(text)
@@ -315,8 +332,9 @@ def annotate_real_exec_failure(
 
     Returns ``(result, None)`` when the run succeeded, timed out, or failed
     without hard evidence — the original envelope stands. A missing interpreter
-    or refused spawn becomes the sticky marker consumers already know how to
-    retire on, plus a dead verdict the workspace can memo.
+    (exit 127) or a spawn-site refused-spawn tag becomes the sticky marker
+    consumers already know how to retire on, plus a dead verdict the workspace
+    can memo. Generic OS permission strings never retire a real run.
     """
     if result.success:
         return result, None
@@ -327,6 +345,27 @@ def annotate_real_exec_failure(
         return result, None
     stderr = result.stderr or result.stdout
     if is_exec_env_probe_failure(stderr):
+        tagged = exec_env_probe_failure_code(stderr)
+        # Spawn site declares a refused spawn with the thin marker+tag. Wrap
+        # once into the model-facing envelope (skip if already wrapped).
+        if tagged == EXEC_ENV_SPAWN_DENIED_CODE and should_retire_exec_env(
+            tagged, language=language
+        ):
+            verdict = ExecEnvProbeVerdict(
+                alive=False,
+                code=tagged,
+                evidence=probe_evidence(
+                    exit_code=result.exit_code,
+                    duration_ms=result.duration_ms,
+                    stderr=stderr,
+                ),
+            )
+            if exec_env_probe_failure_language(stderr) is not None:
+                return result, verdict
+            wrapped = verdict.failure_result(
+                language=language, duration_ms=result.duration_ms
+            )
+            return wrapped, verdict
         return result, None
     code = classify_probe_failure(
         exit_code=result.exit_code,
@@ -334,6 +373,19 @@ def annotate_real_exec_failure(
         stderr=stderr,
         timeout_seconds=0,
     )
+    # Probe still reads ``_NO_INTERPRETER_MARKERS`` (spawn-time ENOENT race).
+    # The same strings appear in a user script's ``open(missing)`` traceback at
+    # exit 1; real-run retire of a missing interpreter is only POSIX 127.
+    if (
+        code == EXEC_ENV_NO_INTERPRETER_CODE
+        and result.exit_code != _NO_INTERPRETER_EXIT_CODE
+    ):
+        return result, None
+    # Same cut for spawn-denied: the eight OS strings are not evidence. Only a
+    # spawn-site tag (handled above) retires. Unmarked EACCES from an old
+    # desktop build must not take ``test_run`` down.
+    if code == EXEC_ENV_SPAWN_DENIED_CODE:
+        return result, None
     if not should_retire_exec_env(code, language=language):
         return result, None
     verdict = ExecEnvProbeVerdict(

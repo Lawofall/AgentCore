@@ -1,4 +1,4 @@
-// The mobile protocol fold: SSE events → normalized ProjectedTurn (前端技术与架构 §十二).
+// The mobile protocol fold: SSE events → normalized ProjectedTurn (前端技术与架构 §十 SSE 与协议一致性).
 //
 // This is the ONE dangerous surface the conformance巡检 guards (cross-platform-
 // frontend.mdc §四): it must match the backend oracle's golden for every vector

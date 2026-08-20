@@ -156,10 +156,9 @@ def test_platform_day_reset_takes_the_quota_face():
     assert err.retryable is False
     assert err.message == (
         "平台模型额度已用完，本回合无法继续。请等待上游额度恢复，"
-        "或在「设置 · 服务商」接入自己的 API Key 立即继续。"
+        "或接入自己的 API Key 立即继续。"
     )
-    # 设置里并列「模型」与「服务商」——从来没有叫「模型配置」的页。
-    assert "模型配置" not in err.message
+    assert "设置" not in err.message
     ctx = error_context_from(err)
     assert ctx is not None
     assert ctx["credential_source"] == "platform"
@@ -319,7 +318,8 @@ async def test_a_headerless_429_on_a_platform_key_dates_nothing(monkeypatch):
         assert "额度" not in err.message
         assert "恢复" not in err.message
         # 保留的那个入口：接自己的 key 是真能立即继续的。
-        assert "设置 · 服务商" in err.message
+        assert "接入自己的 API Key" in err.message
+        assert "设置" not in err.message
     finally:
         await provider.close()
 

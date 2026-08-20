@@ -59,6 +59,67 @@ async def test_save_paused_turn_records_journal_snapshot() -> None:
 
 
 @pytest.mark.asyncio
+async def test_save_paused_turn_keeps_overflow_terminals_on_replace() -> None:
+    """Second pause snapshot must not delete-then-insert away overflow-band terminals."""
+    from agentcore.runtime.journal.seq_space import (
+        JOURNAL_OVERFLOW_SEQ_START,
+        replace_prefix_map,
+    )
+
+    snapshot = [
+        {"kind": "run_plan", "payload": {"execution_id": "e1"}, "ts": None},
+        {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck-2"}, "ts": None},
+    ]
+    store: dict[str, dict[str, dict]] = {
+        "msg-1": {
+            "0": {"kind": "run_plan", "payload": {"execution_id": "e1"}, "ts": None},
+            str(JOURNAL_OVERFLOW_SEQ_START): {
+                "kind": "run_completed",
+                "payload": {"run_id": "w1"},
+                "ts": "t-overflow",
+            },
+        }
+    }
+
+    class FakeJournal:
+        async def record(self, *, turn_id, conversation_id, trace_id, entries) -> None:
+            del conversation_id, trace_id
+            store[turn_id] = replace_prefix_map(list(entries), store.get(turn_id, {}))
+
+        async def load(self, turn_id) -> list:
+            mapped = store.get(turn_id, {})
+            return [mapped[k] for k in sorted(mapped, key=lambda key: int(key))]
+
+    suspension = _ask_user_suspension()
+    suspension.journal_entries = list(snapshot)
+    with patch(
+        "agentcore.runtime.suspension.persistence.async_session_factory"
+    ) as factory:
+        session = AsyncMock()
+        factory.return_value.__aenter__.return_value = session
+        with patch(
+            "agentcore.runtime.suspension.persistence.PausedTurnRepository"
+        ) as repo_cls, patch(
+            "agentcore.runtime.suspension.persistence.TurnJournalRepository",
+            return_value=FakeJournal(),
+        ):
+            repo_cls.return_value.upsert = AsyncMock()
+            with patch(
+                "agentcore.runtime.suspension.persistence._notify_pause",
+                AsyncMock(),
+            ):
+                await save_paused_turn(suspension)
+    loaded = store["msg-1"]
+    kinds = [
+        loaded[k].get("kind")
+        for k in sorted(loaded, key=lambda key: int(key))
+    ]
+    assert kinds[:2] == ["run_plan", "team_preview_required"]
+    assert "run_completed" in kinds
+    assert loaded[str(JOURNAL_OVERFLOW_SEQ_START)]["payload"]["run_id"] == "w1"
+
+
+@pytest.mark.asyncio
 async def test_save_paused_turn_marks_degraded_when_writer_failed() -> None:
     suspension = _ask_user_suspension()
     writer = TurnJournalWriter(
@@ -118,6 +179,7 @@ async def test_save_paused_turn_seals_writer_after_persist() -> None:
                 "agentcore.runtime.suspension.persistence.TurnJournalRepository"
             ) as journal_cls:
                 repo_cls.return_value.upsert = AsyncMock()
+                journal_cls.return_value.load = AsyncMock(return_value=[])
                 journal_cls.return_value.record = AsyncMock()
                 with patch(
                     "agentcore.runtime.suspension.persistence._notify_pause",

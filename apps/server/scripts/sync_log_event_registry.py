@@ -24,6 +24,33 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$")
 
 # Lightweight field schemas for high-value events (docs / debugging).
 KEY_FIELDS: dict[str, dict[str, str]] = {
+    "journal.append_failed": {
+        "turn_id": "str",
+        "kind": "str",
+        "critical": "bool",
+        "error": "str",
+    },
+    "journal.live_seq_near_overflow": {
+        "seq": "int",
+        "overflow_start": "int",
+        "remaining": "int",
+        "op": "str",
+        "turn_id": "str",
+    },
+    "journal.sealed_drop": {
+        "turn_id": "str",
+        "kind": "str",
+        "reason": "str",
+    },
+    "journal.sealed_overflow": {
+        "turn_id": "str",
+        "kind": "str",
+    },
+    "journal.sealed_skip": {
+        "turn_id": "str",
+        "kind": "str",
+        "reason": "str",
+    },
     "llm.rate_limit_no_retry": {
         "provider": "str",
         "scenario": "str",
@@ -33,6 +60,16 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "cooldown_source": "str",
         "ceiling_sec": "float",
         "reason": "str",
+    },
+    "llm.tool_surface.limit_exceeded": {
+        "platform_credential_id": "str",
+        "tool_count": "int",
+        "properties_total": "int",
+        "properties_per_tool_max": "int",
+        "max_tools": "int",
+        "max_properties_total": "int",
+        "max_properties_per_tool": "int",
+        "exceeded": "list",
     },
     "platform_pool.blocked": {
         "credential_id": "str",
@@ -299,6 +336,9 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "reason": "str",
         "cause": "str",
     },
+    "roster.conversation_evicted": {
+        "evicted_conversation_id": "str",
+    },
     "roster.session_evicted": {
         "run_id": "str",
         "reason": "str",
@@ -306,6 +346,12 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "total_bytes": "int",
         "max_bytes": "int",
         "n_sessions": "int",
+    },
+    "search_cache.conversation_evicted": {
+        "evicted_conversation_id": "str",
+    },
+    "url_cache.conversation_evicted": {
+        "evicted_conversation_id": "str",
     },
     "session_roster.wired": {
         "persist": "bool",
@@ -796,6 +842,10 @@ KEY_DESC: dict[str, str] = {
         "不再走 2→4→8→16；retry_after_sec 只记上游声明值，无头时为 null；"
         "ceiling_sec = 该上限（后台一次性调用按剩余预算算，交互回合为 30s）"
     ),
+    "llm.tool_surface.limit_exceeded": (
+        "平台凭据声明的上游工具面上限装不下当前装配的工具面；未发给上游、未自动裁剪。"
+        "exceeded 为触发的维度名；max_* 为声明值（未声明的维度为 null）"
+    ),
     "platform_pool.blocked": (
         "平台池成员 401（封号或坏 key）或 403 RegionError 已摘除，需人工重新启用。"
         "401 不换号重试；403 允许 commit 前换号"
@@ -1050,6 +1100,29 @@ KEY_DESC: dict[str, str] = {
     "push.skipped": "推送未发出（reason=unconfigured 未配置推送 / no_devices 无注册设备）",
     "push.notified": (
         "用户级推送扇出结果；accepted=0 表示一台都没送出（区分「压根没发」与「发了但没到」）"
+    ),
+    "journal.live_seq_near_overflow": (
+        "live-band seq 逼近或越过 overflow 段起点；只告警，不改分配"
+    ),
+    "journal.sealed_drop": (
+        "pause 封盘后 execution 终态帧无法写入（无 event loop / 仍封的 host）；"
+        "不允许静默丢弃"
+    ),
+    "journal.sealed_overflow": "pause 封盘后的 run_*/execution_* 终态转到未封 overflow writer",
+    "journal.sealed_skip": "pause 快照流在 seal 后被拒绝追加（trailing *_required 等，有意定格）",
+    "sidecar.outbox_ready_overflow": "outbox 已 READY 仍追加 execution 终态（pause 快照定格、终态不丢）",
+    "sidecar.outbox_ready_skip": "outbox 已 READY，非 execution 终态的 journal append 被跳过",
+    "roster.conversation_evicted": (
+        "空闲 TTL 清掉另一会话的进程内 roster；victim 记 evicted_conversation_id，"
+        "不写 canonical conversation_id（本行发生在驱逐方请求的 contextvars 里）"
+    ),
+    "search_cache.conversation_evicted": (
+        "空闲 TTL 清掉另一会话的检索缓存；victim 记 evicted_conversation_id，"
+        "不写 canonical conversation_id（本行发生在驱逐方请求的 contextvars 里）"
+    ),
+    "url_cache.conversation_evicted": (
+        "空闲 TTL 清掉另一会话的 URL 缓存；victim 记 evicted_conversation_id，"
+        "不写 canonical conversation_id（本行发生在驱逐方请求的 contextvars 里）"
     ),
 }
 

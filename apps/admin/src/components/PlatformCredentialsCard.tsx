@@ -17,6 +17,7 @@ import {
   type CreatePlatformCredentialRequest,
   type PlatformCredentialListResponse,
   type PlatformCredentialView,
+  type ToolSurfaceLimits,
   type UpdatePlatformCredentialRequest,
   clearPlatformCredentialRuntime,
   createPlatformCredential,
@@ -70,6 +71,55 @@ function runtimeTone(
 
 function canClearRuntime(status: RuntimeStatus): boolean {
   return status === "blocked" || status === "cooling";
+}
+
+function formatToolSurface(
+  limits: PlatformCredentialView["tool_surface_limits"],
+): string {
+  const parts: string[] = [];
+  if (limits?.max_tools != null) parts.push(`条数≤${limits.max_tools}`);
+  if (limits?.max_properties_total != null) {
+    parts.push(`属性合计≤${limits.max_properties_total}`);
+  }
+  if (limits?.max_properties_per_tool != null) {
+    parts.push(`每工具属性≤${limits.max_properties_per_tool}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "不限";
+}
+
+function optionalLimitField(raw: string): number | undefined | "invalid" {
+  const text = raw.trim();
+  if (!text) return undefined;
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < 0) return "invalid";
+  return n;
+}
+
+function limitsPayload(
+  maxTools: string,
+  maxPropertiesTotal: string,
+  maxPropertiesPerTool: string,
+): { ok: true; value: ToolSurfaceLimits } | { ok: false } {
+  const max_tools = optionalLimitField(maxTools);
+  const max_properties_total = optionalLimitField(maxPropertiesTotal);
+  const max_properties_per_tool = optionalLimitField(maxPropertiesPerTool);
+  if (
+    max_tools === "invalid" ||
+    max_properties_total === "invalid" ||
+    max_properties_per_tool === "invalid"
+  ) {
+    return { ok: false };
+  }
+  return {
+    ok: true,
+    value: {
+      ...(max_tools !== undefined ? { max_tools } : {}),
+      ...(max_properties_total !== undefined ? { max_properties_total } : {}),
+      ...(max_properties_per_tool !== undefined
+        ? { max_properties_per_tool }
+        : {}),
+    },
+  };
 }
 
 export function PlatformCredentialsCard({
@@ -154,7 +204,7 @@ export function PlatformCredentialsCard({
         {error && !data ? (
           <ErrorState message={error} onRetry={() => void load()} />
         ) : !data && loading ? (
-          <TableSkeleton rows={3} columns={8} />
+          <TableSkeleton rows={3} columns={9} />
         ) : data && data.data.length === 0 ? (
           <EmptyState
             title="还没有池成员"
@@ -165,13 +215,14 @@ export function PlatformCredentialsCard({
             <p className="text-muted-foreground text-sm">
               {FALLBACK_HINT[data.fallback]}
             </p>
-            <TableFrame minWidth={1100}>
+            <TableFrame minWidth={1240}>
               <THead>
                 <Th>名称</Th>
                 <Th>标识</Th>
                 <Th>Base URL</Th>
                 <Th>订阅日</Th>
                 <Th>Key</Th>
+                <Th>工具面</Th>
                 <Th>状态</Th>
                 <Th>运行态</Th>
                 <Th>恢复时间</Th>
@@ -191,6 +242,12 @@ export function PlatformCredentialsCard({
                     </Td>
                     <Td className="tabular-nums">{row.subscription_day}</Td>
                     <Td className="tabular-nums">{row.masked_key ?? "••••"}</Td>
+                    <Td
+                      className="max-w-[220px] truncate text-muted-foreground"
+                      title={formatToolSurface(row.tool_surface_limits)}
+                    >
+                      {formatToolSurface(row.tool_surface_limits)}
+                    </Td>
                     <Td>
                       <Badge tone={row.enabled ? "success" : "warning"}>
                         {row.enabled ? "启用" : "已禁用"}
@@ -334,6 +391,21 @@ function CredentialEditorDialog({
     String(initial?.subscription_day ?? 1),
   );
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+  const [maxTools, setMaxTools] = useState(
+    initial?.tool_surface_limits?.max_tools != null
+      ? String(initial.tool_surface_limits.max_tools)
+      : "",
+  );
+  const [maxPropertiesTotal, setMaxPropertiesTotal] = useState(
+    initial?.tool_surface_limits?.max_properties_total != null
+      ? String(initial.tool_surface_limits.max_properties_total)
+      : "",
+  );
+  const [maxPropertiesPerTool, setMaxPropertiesPerTool] = useState(
+    initial?.tool_surface_limits?.max_properties_per_tool != null
+      ? String(initial.tool_surface_limits.max_properties_per_tool)
+      : "",
+  );
   const [saving, setSaving] = useState(false);
 
   const handleSave = async (e: FormEvent) => {
@@ -348,6 +420,11 @@ function CredentialEditorDialog({
       toast.error("API Key 不能为空");
       return;
     }
+    const limits = limitsPayload(maxTools, maxPropertiesTotal, maxPropertiesPerTool);
+    if (!limits.ok) {
+      toast.error("工具面上限须为空（不限）或非负整数");
+      return;
+    }
     setSaving(true);
     try {
       if (creating) {
@@ -357,6 +434,7 @@ function CredentialEditorDialog({
           base_url: baseUrl.trim(),
           subscription_day: day,
           enabled,
+          tool_surface_limits: limits.value,
         };
         const row = await createPlatformCredential(body);
         toast.success("已加入账号池");
@@ -367,6 +445,7 @@ function CredentialEditorDialog({
           base_url: baseUrl.trim(),
           subscription_day: day,
           enabled,
+          tool_surface_limits: limits.value,
         };
         if (apiKey.trim()) patch.api_key = apiKey.trim();
         const row = await updatePlatformCredential(initial.id, patch);
@@ -446,6 +525,36 @@ function CredentialEditorDialog({
           />
           启用（取消勾选 = 立刻从选钥中摘除）
         </label>
+        <p className="text-muted-foreground text-xs">
+          上游工具面：空=不限。超限时该号装不下当前开场表，不会发给上游，也不会自动裁剪。
+        </p>
+        <Field label="工具条数上限（空=不限）">
+          <Input
+            type="number"
+            min={0}
+            value={maxTools}
+            onChange={(e) => setMaxTools(e.target.value)}
+            placeholder="空=不限"
+          />
+        </Field>
+        <Field label="属性合计上限（空=不限）">
+          <Input
+            type="number"
+            min={0}
+            value={maxPropertiesTotal}
+            onChange={(e) => setMaxPropertiesTotal(e.target.value)}
+            placeholder="空=不限"
+          />
+        </Field>
+        <Field label="每工具属性数上限（空=不限）">
+          <Input
+            type="number"
+            min={0}
+            value={maxPropertiesPerTool}
+            onChange={(e) => setMaxPropertiesPerTool(e.target.value)}
+            placeholder="空=不限"
+          />
+        </Field>
       </form>
     </Dialog>
   );

@@ -15,6 +15,7 @@ function toUser(u: BackendUser): AuthUser {
     username: u.username,
     displayName: u.display_name,
     email: u.email,
+    emailVerifiedAt: u.email_verified_at ?? null,
     role: u.role,
     passwordMustChange: u.password_must_change,
   };

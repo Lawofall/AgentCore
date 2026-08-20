@@ -145,3 +145,53 @@ def _journal_entries_for_turn(
         return entries
 
     return journal_entries_from_display_runs(runs)
+
+
+def _coerce_finish_reason(value: Any) -> FinishReason:
+    if isinstance(value, FinishReason):
+        return value
+    raw = getattr(value, "value", value)
+    if isinstance(raw, str):
+        try:
+            return FinishReason(raw)
+        except ValueError:
+            pass
+    return FinishReason.END_TURN
+
+
+def refresh_result_journal_from_host(
+    result: dict[str, Any] | None, *, sink: EventSink
+) -> None:
+    """Rebuild ``result.journal_entries`` from the host fact log after a detached drive.
+
+    Pipeline settle snapshots the fact log *before* post-detach run terminals.
+    Sidecar outbox finalize then replaces the progressive journal with that
+    snapshot — dropping frames that landed on the host writer after detach.
+    """
+    if not isinstance(result, dict):
+        return
+    from agentcore.runtime.coordination.session import (
+        registered_coordination_for_conversation,
+    )
+
+    cid = str(getattr(sink, "_conversation_id", None) or "").strip()
+    session = registered_coordination_for_conversation(cid) if cid else None
+    fact_log = getattr(session, "host_fact_log", None) if session is not None else None
+    if fact_log is None or not hasattr(fact_log, "entries"):
+        return
+    finish = _coerce_finish_reason(result.get("finish_reason"))
+    outcome = result.get("outcome")
+    if outcome not in ("ok", "partial", "paused", "error"):
+        outcome = None
+    entries = _journal_entries_for_turn(
+        fact_log, sink=sink, finish=finish, outcome=outcome
+    )
+    if entries is None:
+        # Surface gate can hide a display journal that only grew post-detach
+        # run terminals (no run_plan on this sink). The host fact log is the
+        # source of truth for finalize replacement.
+        entries = fact_log.entries()
+        if entries and not _entries_already_have_turn_end(entries):
+            entries = entries + [_turn_end_entry(finish, outcome=outcome)]
+    if entries:
+        result["journal_entries"] = entries

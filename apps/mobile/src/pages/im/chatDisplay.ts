@@ -66,8 +66,8 @@ export function bubbleAvatarUrl(opts: {
   return opts.chatAvatarUrl ?? null;
 }
 
-/** Max chars for a reply quote preview (composer bar + bubble quote). */
-export const REPLY_BODY_PREVIEW_MAX = 80;
+/** Max chars for a reply quote preview; matches server `_REPLY_PREVIEW_MAX`. */
+export const REPLY_BODY_PREVIEW_MAX = 100;
 
 /** Truncate a reply body preview with an ellipsis when over the soft cap. */
 export function truncateReplyPreview(

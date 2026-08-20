@@ -1,6 +1,6 @@
 {
   "name": "agentcore-desktop",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "AgentCore Desktop - Multi-Agent AI Workspace",
   "author": "AgentCore",
   "main": "./out/main/index.js",
@@ -52,7 +52,7 @@
     "lint:fix": "biome check --write src/",
     "check-ui-tokens": "node ../../scripts/check-ui-tokens.mjs --src apps/desktop/src/renderer",
     "test": "vitest",
-    "conformance": "tsx src/renderer/protocol/conformance.run.ts",
+    "conformance": "vitest run --config vitest.conformance.config.ts",
     "typecheck": "tsc --noEmit",
     "rebuild:native": "node ./scripts/rebuild-native.mjs",
     "postinstall": "node ./scripts/install-electron.mjs && node ./scripts/rebuild-native.mjs"

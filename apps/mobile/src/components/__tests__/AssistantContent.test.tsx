@@ -232,6 +232,52 @@ describe("AssistantContent", () => {
     expect(screen.queryByTestId("finish-reason-chip")).toBeNull();
   });
 
+  it("names the failed tool on unproductive-with-body", () => {
+    const process: ProcessStep[] = [
+      { kind: "content", text: "已写完大半" },
+      {
+        kind: "tool",
+        id: "tc1",
+        tool_name: "host_shell",
+        arguments: { command: "do_work" },
+        result: "host_shell failed",
+        status: "error",
+      },
+    ];
+    render(
+      <AssistantContent
+        content="已写完大半"
+        process={process}
+        finishReason="unproductive"
+      />,
+    );
+    expect(
+      screen.getByTestId("unproductive-tool-failure-hint").textContent,
+    ).toBe("host_shell 未成功");
+  });
+
+  it("hides the failed-tool hint while streaming", () => {
+    const process: ProcessStep[] = [
+      {
+        kind: "tool",
+        id: "tc1",
+        tool_name: "host_shell",
+        arguments: {},
+        result: "failed",
+        status: "error",
+      },
+    ];
+    render(
+      <AssistantContent
+        content="已写完大半"
+        process={process}
+        finishReason="unproductive"
+        isStreaming
+      />,
+    );
+    expect(screen.queryByTestId("unproductive-tool-failure-hint")).toBeNull();
+  });
+
   it("renders citation tier badges when tier is present", () => {
     const citations: Citation[] = [
       {

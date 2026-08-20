@@ -44,6 +44,8 @@ class ErrorCode(StrEnum):
 
     # ── Auth / quota / rate ──────────────────────────────────────────────
     AUTH_ERROR = "AUTH_ERROR"
+    EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED"
+    GONE = "GONE"
     FORBIDDEN = "FORBIDDEN"
     # Cookie-session mutating request without a usable X-CSRF-Token (HTTP 403,
     # emitted by CsrfMiddleware before the route runs).

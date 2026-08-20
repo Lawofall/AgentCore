@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, LargeBinary, String, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +19,8 @@ class PlatformCredential(Base):
     as BYOK. ``id`` is the stable ``platform_credential_id`` stamped on logs and
     ``cost_calls``. ``subscription_day`` is this Go account's monthly-window
     anniversary (accounts are bought in batches, so anchors differ).
+    ``tool_surface_limits`` is the operator-declared upstream tool-surface cap
+    (empty object = unlimited).
     """
 
     __tablename__ = "platform_credentials"
@@ -25,6 +28,10 @@ class PlatformCredential(Base):
         CheckConstraint(
             "subscription_day >= 1 AND subscription_day <= 31",
             name="ck_platform_credentials_subscription_day",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(tool_surface_limits) = 'object'",
+            name="ck_platform_credentials_tool_surface_limits_object",
         ),
         Index("ix_platform_credentials_enabled_created", "enabled", "created_at"),
     )
@@ -40,6 +47,10 @@ class PlatformCredential(Base):
     subscription_day: Mapped[int] = mapped_column(Integer)
     enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=text("true")
+    )
+    # Operator-declared upstream tool-surface caps. ``{}`` = unlimited.
+    tool_surface_limits: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")

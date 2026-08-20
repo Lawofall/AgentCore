@@ -769,7 +769,7 @@ async def test_recover_expired_lease_redrive_facts_land_on_original_turn(monkeyp
 
     class _FakeStore:
         async def append_journal(
-            self, *, turn_id, seq, conversation_id, trace_id, entry
+            self, *, turn_id, seq, conversation_id, trace_id, entry, overflow=False
         ):
             appended.append(
                 {

@@ -100,12 +100,12 @@ describe("RetryBanner", () => {
   });
 
   it("uses primary chrome when a config action is offered", () => {
-    error = "请先在「设置 · 服务商」中填入你的 API Key，再发起对话。";
-    action = { label: "去设置", href: "/more/providers" };
+    error = "请先接入自己的 API Key，再发起对话。";
+    action = { label: "去服务商", href: "/more/providers" };
     const { container } = render(<RetryBanner />);
     const banner = container.firstElementChild as HTMLElement;
     expect(banner.className).toContain("bg-primary/10");
     expect(banner.className).not.toContain("destructive");
-    expect(screen.getByRole("button", { name: "去设置" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "去服务商" })).toBeTruthy();
   });
 });

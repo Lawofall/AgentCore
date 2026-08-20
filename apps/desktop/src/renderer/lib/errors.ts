@@ -8,6 +8,25 @@ import {
   NON_RETRIABLE_ERROR_CODES,
   isUnstartedSendRefusal as matchUnstartedSendRefusal,
 } from "@agentcore/contract-types";
+import {
+  EMPTY_RESPONSE_CHIP_LABELS,
+  LLM_EMPTY_RESPONSE_MESSAGE,
+  LLM_ERROR_MESSAGE,
+  LLM_UNPRODUCTIVE_MESSAGE,
+  TURN_INTERRUPTED_EMPTY_MESSAGE,
+  degradedFinishChipLabel,
+  isEmptyResponseUserSurface,
+} from "@agentcore/protocol-fold-kit";
+
+export {
+  EMPTY_RESPONSE_CHIP_LABELS,
+  LLM_EMPTY_RESPONSE_MESSAGE,
+  LLM_ERROR_MESSAGE,
+  LLM_UNPRODUCTIVE_MESSAGE,
+  TURN_INTERRUPTED_EMPTY_MESSAGE,
+  degradedFinishChipLabel,
+  isEmptyResponseUserSurface,
+};
 
 /**
  * One place that turns any backend / transport error into the three things the
@@ -116,47 +135,6 @@ export async function streamErrorFromResponse(
   });
 }
 
-/** Short diagnosis labels for degraded empty-response finishes (mirrors backend). */
-export const EMPTY_RESPONSE_CHIP_LABELS: Record<string, string> = {
-  upstream_non_api: "上游返回了网页或登录页，请检查服务商地址与鉴权",
-  // Old journals may still stamp oauth_expired — same surface as upstream_non_api.
-  oauth_expired: "上游返回了网页或登录页，请检查服务商地址与鉴权",
-  content_filtered: "内容被过滤",
-  model_unknown: "模型名未被上游识别",
-  silent_empty: "模型返回空内容",
-  format_mismatch: "上游响应格式异常",
-  length_empty: "输出长度截断 · 返回空内容",
-};
-
-/** Chip suffix for degraded finish when an empty-response diagnosis is available. */
-export function degradedFinishChipLabel(
-  diagnosis: string | undefined,
-  errorMessage: string | undefined,
-): string | undefined {
-  if (diagnosis && EMPTY_RESPONSE_CHIP_LABELS[diagnosis]) {
-    return EMPTY_RESPONSE_CHIP_LABELS[diagnosis];
-  }
-  if (errorMessage?.includes(" · ")) {
-    return errorMessage.split(" · ", 2)[1];
-  }
-  return undefined;
-}
-
-/**
- * True when the assistant bubble already owns the empty-response red card —
- * FinishReasonChip must not stack on top (单一用户面).
- */
-export function isEmptyResponseUserSurface(opts: {
-  code?: string | null;
-  emptyDiagnosis?: string | null;
-  message?: string | null;
-}): boolean {
-  if (opts.code === "LLM_EMPTY_RESPONSE") return true;
-  if (opts.emptyDiagnosis) return true;
-  const msg = opts.message ?? "";
-  return msg.includes("模型多次空响应") || msg.includes("模型空响应");
-}
-
 /** Product copy for upstream 429 (mirrors backend LLMRateLimitError / history 注记). */
 export const LLM_RATE_LIMIT_WHY = "上游限流，暂时无法继续本回合。";
 export const LLM_RATE_LIMIT_MESSAGE = `${LLM_RATE_LIMIT_WHY}请稍后再试。`;
@@ -212,15 +190,6 @@ export function formatAssistantErrorMessage(error: {
   }
   return text;
 }
-
-/**
- * Codes whose primary remedy is opening 设置·服务商 (auth / balance / key missing).
- * Extends {@link KEY_CONFIG_ERROR_CODES} with balance so the bubble offers「去设置」.
- */
-const SETTINGS_ERROR_CODES: readonly string[] = [
-  ...(KEY_CONFIG_ERROR_CODES as readonly string[]),
-  "LLM_INSUFFICIENT_BALANCE",
-];
 
 /**
  * Connectivity / transport-ish codes — bubble offers「重试」, not settings, and a
@@ -382,19 +351,8 @@ export function resetSessionConnectivityFailures(): void {
   _countedErrorMessageIds.clear();
 }
 
-/** Product copy for empty unproductive turns (tool loop / invalid args). */
-export const LLM_UNPRODUCTIVE_MESSAGE =
-  "工具连续无有效进展或参数无效，请重试。";
-
 /** Empty cancelled (user Stop) — synthetic code for fold/preview skips; chat timeline omits the face (P1). */
 export const TURN_CANCELLED_EMPTY_MESSAGE = "已停止";
-
-/**
- * Empty interrupted / preempted placeholder — layer-1 recoverability
- * (send next turn); keep in sync with composerContinueHint copy.
- */
-export const TURN_INTERRUPTED_EMPTY_MESSAGE =
-  "已中断。直接发送下一条即可重试。";
 
 /**
  * Platform auth dead product sentence (align byok/platform 甲; not byok main fix).
@@ -413,11 +371,11 @@ const PRODUCT_COPY_BY_CODE: Record<string, string> = {
   LLM_UNPRODUCTIVE: LLM_UNPRODUCTIVE_MESSAGE,
   LLM_INSUFFICIENT_BALANCE: "上游账户余额不足，请充值或更换 Key。",
   LLM_TIMEOUT: "连接超时，请检查网络后重试。",
-  LLM_EMPTY_RESPONSE: "模型返回空内容，请重试。",
+  LLM_EMPTY_RESPONSE: LLM_EMPTY_RESPONSE_MESSAGE,
   PIPELINE_ERROR: "管线执行失败，请重试。",
   TURN_INTERRUPTED: TURN_INTERRUPTED_EMPTY_MESSAGE,
   TURN_CANCELLED: TURN_CANCELLED_EMPTY_MESSAGE,
-  LLM_ERROR: "模型调用失败，请重试。",
+  LLM_ERROR: LLM_ERROR_MESSAGE,
   DATABASE_UNAVAILABLE: OUR_SERVICE_UNAVAILABLE_MESSAGE,
   KEY_STORAGE_UNAVAILABLE: OUR_SERVICE_UNAVAILABLE_MESSAGE,
   PLATFORM_BILLING_UNAVAILABLE: OUR_SERVICE_UNAVAILABLE_MESSAGE,
@@ -660,7 +618,7 @@ export interface DescribedError {
  * connectivity codes return null (the bubble shows「重试」instead).
  *
  * ``LLM_KEY_INVALID`` CTA 按凭据来源分流（甲）：
- * - user BYOK →「去设置」换 Key
+ * - user BYOK →「去服务商」换 Key
  * - platform →「接入自己的 Key」（与 QUOTA_EXCEEDED 同出口；主文案已引导联系管理员）
  * ``INFERENCE_TOKEN_EXPIRED`` 永不进 settings。
  */
@@ -671,7 +629,7 @@ export function errorActionForCode(
     message?: string | null;
   },
 ): ErrorAction | null {
-  // Inference JWT ≠ BYOK key — never push「去设置 · 服务商」.
+  // Inference JWT ≠ BYOK key — never push「去服务商」.
   if (code === "INFERENCE_TOKEN_EXPIRED") {
     return null;
   }
@@ -689,10 +647,13 @@ export function errorActionForCode(
     if (src === "platform") {
       return { label: "接入自己的 Key", href: "/more/providers" };
     }
-    return { label: "去设置", href: "/more/providers" };
+    return { label: "去服务商", href: "/more/providers" };
   }
-  if (code !== undefined && SETTINGS_ERROR_CODES.includes(code)) {
-    return { label: "去设置", href: "/more/providers" };
+  if (
+    code !== undefined &&
+    (KEY_CONFIG_ERROR_CODES as readonly string[]).includes(code)
+  ) {
+    return { label: "去服务商", href: "/more/providers" };
   }
   // 平台额度耗尽 (QUOTA_EXCEEDED, 成本配额与计费 §〇·六 F6): 主文案是等重置 / 联系管理员，
   // 这里补一个「接入自己的 Key」次级出口 —— byok 回合不查配额, 是真正的绕过路径。
@@ -786,10 +747,7 @@ function resolveMessage(f: ErrorFacts): string {
     return LLM_RATE_LIMIT_MESSAGE;
   }
   if (f.code === "LLM_KEY_REQUIRED") {
-    return (
-      f.serverMessage ??
-      "请先在「设置 · 服务商」中填入你的 API Key，再发起对话。"
-    );
+    return f.serverMessage ?? "请先接入自己的 API Key，再发起对话。";
   }
   if (f.code === "INFERENCE_TOKEN_EXPIRED") {
     return (

@@ -5,17 +5,27 @@ import {
   SettingsSection,
   SettingsStack,
 } from "@/components/settings";
-import { Button, Card, ConfirmDialog, Input } from "@/components/ui";
+import { Badge, Button, Card, ConfirmDialog, Input } from "@/components/ui";
+import {
+  EMAIL_CODE_LENGTH,
+  isLikelyEmail,
+  isSystemUsername,
+  normalizeEmailCode,
+  useResendCountdown,
+  usernameFieldError,
+} from "@/lib/emailAuth";
 import { errMsg } from "@/lib/errMsg";
 import { notifySuccess } from "@/lib/toast";
 import {
   changePassword,
   deleteAccount,
   deleteAvatar,
+  sendEmailCode,
   updateProfile,
   uploadAvatar,
+  verifyEmail,
 } from "@/services/auth";
-import { useAuthStore } from "@/stores/auth";
+import { type AuthUser, useAuthStore } from "@/stores/auth";
 import { Loader2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { LoginSessionsSection } from "./LoginSessionsSection";
@@ -148,33 +158,59 @@ function AvatarSection() {
   );
 }
 
-/** 个人资料: edit display name + email; on save, refresh the auth store. */
+function emailStatusLabel(
+  email: string | null | undefined,
+  verifiedAt: string | null | undefined,
+): { label: string; tone: "success" | "muted" } {
+  if (verifiedAt) return { label: "已验证", tone: "success" };
+  if (email) return { label: "未验证", tone: "muted" };
+  return { label: "未填写", tone: "muted" };
+}
+
+/** 个人资料: edit nickname + username + email; on save, refresh the auth store. */
 function ProfileSection() {
   const user = useAuthStore((s) => s.user);
   const setAuthenticated = useAuthStore((s) => s.setAuthenticated);
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
+  const [username, setUsername] = useState(user?.username ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const trimmedName = displayName.trim();
+  const trimmedUsername = username.trim();
   const trimmedEmail = email.trim();
-  const dirty =
-    trimmedName !== (user?.displayName ?? "") ||
-    trimmedEmail !== (user?.email ?? "");
-  const canSave = dirty && trimmedName.length > 0 && !saving;
+  const nameDirty = trimmedName !== (user?.displayName ?? "");
+  const usernameDirty = trimmedUsername !== (user?.username ?? "");
+  const emailDirty = trimmedEmail !== (user?.email ?? "");
+  const dirty = nameDirty || usernameDirty || emailDirty;
+  const nicknameErr = trimmedName.length === 0 ? "昵称不能为空" : null;
+  const usernameErr = usernameDirty
+    ? usernameFieldError(trimmedUsername)
+    : null;
+  const canSave =
+    dirty && trimmedName.length > 0 && !nicknameErr && !usernameErr && !saving;
+  const verifiedAt = user?.emailVerifiedAt ?? null;
+  const status = emailStatusLabel(user?.email, verifiedAt);
+  const needsCatchup = !verifiedAt;
+  const systemUsername = user ? isSystemUsername(user.username) : false;
 
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
-      const updated = await updateProfile({
-        displayName: trimmedName,
-        // empty clears the (nullable) email server-side
-        email: trimmedEmail,
-      });
+      const patch: {
+        displayName?: string;
+        username?: string;
+        email?: string;
+      } = {};
+      if (nameDirty) patch.displayName = trimmedName;
+      if (usernameDirty) patch.username = trimmedUsername;
+      if (emailDirty) patch.email = trimmedEmail;
+      const updated = await updateProfile(patch);
       setAuthenticated(updated);
       setDisplayName(updated.displayName);
+      setUsername(updated.username);
       setEmail(updated.email ?? "");
     } catch (e) {
       setError(errMsg(e, "保存失败，请重试"));
@@ -186,26 +222,47 @@ function ProfileSection() {
   return (
     <SettingsSection
       title="个人资料"
-      description="显示名会展示给团队成员；邮箱用于后续找回密码（可选）。"
+      description="昵称会展示给团队成员。用户名是找人码，别人可用它搜到你。邮箱用于找回密码；未验证不影响登录。更改邮箱后需重新验证，不会自动发送验证码。"
     >
       <Card className="space-y-3 p-4">
-        <SettingField label="用户名" htmlFor="account-profile-username">
-          <Input
-            id="account-profile-username"
-            value={user?.username ?? ""}
-            disabled
-          />
-        </SettingField>
-        <SettingField label="显示名" htmlFor="account-profile-display-name">
+        <SettingField
+          label="昵称"
+          htmlFor="account-profile-display-name"
+          error={nicknameErr}
+        >
           <Input
             id="account-profile-display-name"
             value={displayName}
             maxLength={200}
-            placeholder="你的显示名"
+            placeholder="你的昵称"
             onChange={(e) => setDisplayName(e.target.value)}
           />
         </SettingField>
-        <SettingField label="邮箱（可选）" htmlFor="account-profile-email">
+        <SettingField
+          label="用户名"
+          htmlFor="account-profile-username"
+          hint={
+            user && systemUsername
+              ? "这是系统分配的找人码。改成你容易记住的名字即可，随时能再改。"
+              : user && !systemUsername
+                ? "用户名 14 天内只能改一次。"
+                : undefined
+          }
+          error={usernameErr}
+        >
+          <Input
+            id="account-profile-username"
+            value={username}
+            maxLength={32}
+            autoComplete="username"
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </SettingField>
+        <SettingField
+          label="邮箱"
+          htmlFor="account-profile-email"
+          action={<Badge tone={status.tone}>{status.label}</Badge>}
+        >
           <Input
             id="account-profile-email"
             type="email"
@@ -216,6 +273,15 @@ function ProfileSection() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </SettingField>
+        {needsCatchup && (
+          <EmailCatchup
+            email={trimmedEmail || user?.email || ""}
+            onVerified={(updated) => {
+              setAuthenticated(updated);
+              setEmail(updated.email ?? "");
+            }}
+          />
+        )}
         <SettingsFormMessage>{error}</SettingsFormMessage>
         <div className="flex justify-end">
           <Button
@@ -233,6 +299,96 @@ function ProfileSection() {
         </div>
       </Card>
     </SettingsSection>
+  );
+}
+
+/** Logged-in catch-up: send-code + verify. Never blocks the rest of the account page. */
+function EmailCatchup({
+  email,
+  onVerified,
+}: {
+  email: string;
+  onVerified: (user: AuthUser) => void;
+}) {
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const resend = useResendCountdown();
+  const canSend = isLikelyEmail(email) && !busy && resend.canResend;
+  const canVerify = code.length === EMAIL_CODE_LENGTH && !busy;
+
+  const send = async () => {
+    if (!canSend) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await sendEmailCode(email.trim());
+      setSent(true);
+      resend.start();
+    } catch (e) {
+      setError(errMsg(e, "发送验证码失败，请重试"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verify = async () => {
+    if (!canVerify) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onVerified(await verifyEmail(email.trim(), code));
+      setCode("");
+      setSent(false);
+    } catch (e) {
+      setError(errMsg(e, "验证失败，请重试"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+      <p className="text-xs text-muted-foreground">
+        {email
+          ? "验证邮箱后可用于找回密码。未验证不影响登录。"
+          : "填写邮箱后即可发送验证码。未验证不影响登录。"}
+      </p>
+      {sent && (
+        <Input
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          placeholder="验证码（6 位）"
+          aria-label="验证码（6 位）"
+          value={code}
+          onChange={(e) => setCode(normalizeEmailCode(e.target.value))}
+        />
+      )}
+      <SettingsFormMessage>{error}</SettingsFormMessage>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          size="md"
+          variant="neutral"
+          disabled={!canSend}
+          onClick={() => void send()}
+        >
+          {busy && !sent
+            ? "发送中…"
+            : resend.canResend
+              ? sent
+                ? "重新发送"
+                : "发送验证码"
+              : `重新发送（${resend.left}s）`}
+        </Button>
+        {sent && (
+          <Button size="md" disabled={!canVerify} onClick={() => void verify()}>
+            {busy ? "验证中…" : "验证"}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

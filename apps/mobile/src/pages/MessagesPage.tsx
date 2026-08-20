@@ -2,6 +2,7 @@ import { getTokens } from "@/api/client";
 import { type ChatSummary, chatTitle, listChats } from "@/api/messaging";
 import { relativeTime } from "@/lib/time";
 import { usePolling } from "@/lib/usePolling";
+import { DisplayNameHint } from "@/pages/im/DisplayNameHint";
 import { ImAvatar } from "@/pages/im/ImAvatar";
 // 消息 list (人际 IM 会话列表) — the human↔human inbox, separate from the AI 对话 home.
 //
@@ -46,6 +47,7 @@ export function MessagesPage() {
       </header>
 
       <div className="list">
+        <DisplayNameHint />
         {chats === null && !error && <p className="muted hint">加载中…</p>}
         {error && <p className="error hint">{error}</p>}
         {chats !== null && chats.length === 0 && !error && (

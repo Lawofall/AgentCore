@@ -40,6 +40,7 @@ class PlatformCredentialRepository:
         base_url: str,
         subscription_day: int,
         enabled: bool = True,
+        tool_surface_limits: dict | None = None,
         credential_id: str | None = None,
         commit: bool = True,
     ) -> PlatformCredential:
@@ -50,6 +51,7 @@ class PlatformCredentialRepository:
             base_url=base_url.strip(),
             subscription_day=subscription_day,
             enabled=enabled,
+            tool_surface_limits=dict(tool_surface_limits or {}),
         )
         self._session.add(row)
         await commit_or_flush(self._session, commit=commit)
@@ -65,6 +67,7 @@ class PlatformCredentialRepository:
         base_url: str | object = _UNSET,
         subscription_day: int | object = _UNSET,
         enabled: bool | object = _UNSET,
+        tool_surface_limits: dict | object = _UNSET,
         commit: bool = True,
     ) -> PlatformCredential | None:
         row = await self.get(credential_id)
@@ -80,6 +83,10 @@ class PlatformCredentialRepository:
             row.subscription_day = int(subscription_day)  # type: ignore[arg-type]
         if enabled is not _UNSET:
             row.enabled = bool(enabled)
+        if tool_surface_limits is not _UNSET:
+            row.tool_surface_limits = (
+                dict(tool_surface_limits) if isinstance(tool_surface_limits, dict) else {}
+            )
         await commit_or_flush(self._session, commit=commit)
         await self._session.refresh(row)
         return row

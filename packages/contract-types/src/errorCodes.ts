@@ -8,13 +8,16 @@ import { ERROR_CODES, type ErrorCode } from "./errorCodes.generated";
 
 export { ERROR_CODES, type ErrorCode };
 
-/** Codes whose remedy is to (re)configure the BYOK key in 设置·模型配置 — the client
- * offers a one-click "去配置" route instead of a retry. `LLM_INSUFFICIENT_BALANCE` is
- * deliberately NOT here: its fix is DeepSeek's billing page (surfaced via the backend's
- * own message), not AgentCore's key settings. */
+/** Codes whose remedy is to (re)configure the BYOK key — each client offers its
+ * own one-click config route instead of a retry. `LLM_INSUFFICIENT_BALANCE` belongs
+ * here too: a drained wallet has two real exits — top up at the vendor (carried by the
+ * backend's own message) or swap in a different key — and the config page is exactly
+ * where the second one happens. Suppressing retry is a separate concern
+ * ({@link NON_RETRIABLE_ERROR_CODES}); this list only decides the one-click route. */
 export const KEY_CONFIG_ERROR_CODES: readonly ErrorCode[] = [
   "LLM_KEY_REQUIRED",
   "LLM_KEY_INVALID",
+  "LLM_INSUFFICIENT_BALANCE",
 ];
 
 /** Codes where an immediate retry is pointless until the user acts — top up the wallet,

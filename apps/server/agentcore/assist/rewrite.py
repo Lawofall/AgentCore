@@ -124,7 +124,7 @@ async def _resolve_assist_credentials(
         user=user,
         cost_repo=cost_repo,
         byok_missing_message=(
-            "请先在「设置 · 服务商」中填入你的 DeepSeek API Key，再使用 AI 改写。"
+            "请先填入你的 DeepSeek API Key，再使用 AI 改写。"
         ),
         model_origin=selection.origin,
         provider_id=selection.provider_id,
@@ -133,7 +133,7 @@ async def _resolve_assist_credentials(
         credentials = platform_llm_credentials(model=selection.model)
         if credentials is None:
             raise PlatformBillingUnavailableError(
-                "平台模型暂不可用，请稍后再试或在「设置 · 服务商」中接入自己的 API Key。"
+                "平台模型暂不可用，请稍后再试或接入自己的 API Key。"
             )
     return credentials
 

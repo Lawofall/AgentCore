@@ -152,6 +152,10 @@ export interface ConversationState {
         empty_diagnosis?: string;
         body_kind?: string;
         base_url?: string;
+        vendor_code?: string | null;
+        model?: string | null;
+        profile?: string | null;
+        tool_count?: number | null;
         credential_source?: "user" | "platform" | string | null;
         /** 额度恢复 / 配额重置的绝对时刻（ISO8601 UTC）——红卡按本机时区成文。 */
         recovery_at?: string | null;

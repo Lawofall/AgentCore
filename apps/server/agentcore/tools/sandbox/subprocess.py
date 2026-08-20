@@ -206,6 +206,14 @@ class _CancelledError(Exception):
     """Internal: blocking run aborted because the asyncio caller was cancelled."""
 
 
+class _SpawnDeniedError(Exception):
+    """Popen was refused by the OS (EACCES / EPERM). Not a user-script error."""
+
+    def __init__(self, cause: PermissionError) -> None:
+        self.cause = cause
+        super().__init__(str(cause))
+
+
 def _new_group_kwargs() -> dict:
     """Spawn kwargs that make the child the head of its own killable group.
 
@@ -312,19 +320,26 @@ def _execute_blocking(
     process: subprocess.Popen[bytes] | None = None
     readers: list[threading.Thread] = []
     try:
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            # Sidecar stdin is the JSON-RPC pipe. Inherit it and a child that
-            # never reads stdin can still stall until the probe/run timeout
-            # (same reason desktop ``git_run`` uses stdio ignore, and desktop
-            # ``execute`` always allocates a fresh pipe instead of inheriting).
-            stdin=subprocess.PIPE if stdin_bytes is not None else subprocess.DEVNULL,
-            cwd=cwd,
-            env=env,
-            **_new_group_kwargs(),
-        )
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                # Sidecar stdin is the JSON-RPC pipe. Inherit it and a child that
+                # never reads stdin can still stall until the probe/run timeout
+                # (same reason desktop ``git_run`` uses stdio ignore, and desktop
+                # ``execute`` always allocates a fresh pipe instead of inheriting).
+                stdin=subprocess.PIPE if stdin_bytes is not None else subprocess.DEVNULL,
+                cwd=cwd,
+                env=env,
+                **_new_group_kwargs(),
+            )
+        except PermissionError as exc:
+            # Launcher exists (which() already passed) but the OS refused to
+            # start it. Declare at this site — do not let classify guess from
+            # the user script's later PermissionError traceback.
+            raise _SpawnDeniedError(exc) from exc
+        assert process is not None
         # Capture the pid up front: after a clean exit the OS can recycle it, so
         # cleanup keys off this snapshot.
         child_pid = process.pid
@@ -545,6 +560,17 @@ class SubprocessSandbox:
                     success=False,
                     stdout="",
                     stderr=detail,
+                    exit_code=-1,
+                    duration_ms=duration_ms,
+                )
+            except _SpawnDeniedError as e:
+                duration_ms = int((time.monotonic() - start) * 1000)
+                from agentcore.tools.sandbox.exec_env import spawn_denied_stderr
+
+                return ExecutionResult(
+                    success=False,
+                    stdout="",
+                    stderr=spawn_denied_stderr(str(e.cause)),
                     exit_code=-1,
                     duration_ms=duration_ms,
                 )

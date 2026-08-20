@@ -74,6 +74,13 @@ def test_register_mcp_tools_worker_only_grantable():
     tool = registry.get("mcp_echo_ping")
     assert tool.schema.approval is ToolApproval.GRANTABLE
     assert "MCP" in tool.schema.description
+    assert "mcp_echo_ping" in registry.names
+    assert "mcp_echo_ping" in registry.deferred_names
+    offered = {
+        str((d.get("function") or {}).get("name") or d.get("name") or "")
+        for d in registry.get_openai_definitions()
+    }
+    assert "mcp_echo_ping" not in offered
 
 
 def test_desktop_touch_tool_names_cover_mcp_and_host():
@@ -141,6 +148,12 @@ def test_ceo_registry_has_no_mcp_tools_by_default():
     )
     worker_names = {s.name for s in worker.list_all()}
     assert "mcp_s_t" in worker_names
+    assert "mcp_s_t" in worker.deferred_names
+    offered = {
+        str((d.get("function") or {}).get("name") or d.get("name") or "")
+        for d in worker.get_openai_definitions()
+    }
+    assert "mcp_s_t" not in offered
     assert not any(n.startswith("mcp_") for n in ceo)
 
 

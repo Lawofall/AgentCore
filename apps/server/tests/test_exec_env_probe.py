@@ -30,6 +30,7 @@ from agentcore.tools.sandbox.exec_env import (
     probe_failure_retire_steer,
     probe_failure_retire_tools,
     should_retire_exec_env,
+    spawn_denied_stderr,
 )
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
 from agentcore.workspace.channel import WorkspaceOp
@@ -187,6 +188,23 @@ class _HostChannel(_FakeChannel):
 _LAUNCHER_MISSING = (
     "代码执行环境启动失败：找不到命令 'python'。 请确认 PATH 上有 python 可执行文件。"
 )
+# User script ``open(missing)`` — same ENOENT / FileNotFoundError tokens the
+# probe taxonomy reads, but with the script's own exit 1.
+_USER_FILE_NOT_FOUND = (
+    "Traceback (most recent call last):\n"
+    '  File "<stdin>", line 1, in <module>\n'
+    "FileNotFoundError: [Errno 2] No such file or directory: 'missing.txt'\n"
+)
+# User script writing a busy file — same PermissionError tokens the probe
+# taxonomy reads. Process started; exit 1 is the script, not a refused spawn.
+_USER_PERMISSION_ERROR = (
+    "Traceback (most recent call last):\n"
+    '  File "main.py", line 1, in <module>\n'
+    "PermissionError: [Errno 13] Permission denied: 'busy.txt'\n"
+)
+# Spawn-site tag whose detail deliberately has none of the eight OS strings, so
+# a classifier that still guesses from prose cannot pass this by accident.
+_SPAWN_DENIED_TAGGED = spawn_denied_stderr("CreateProcess refused")
 
 
 @pytest.mark.parametrize(
@@ -214,8 +232,8 @@ _LAUNCHER_MISSING = (
         ),
         # No marker, but the probe burned its whole budget without a clean exit.
         (-1, 5000, "", EXEC_ENV_PROBE_TIMEOUT_CODE),
-        # Spawn refused by the OS — read as a denial even when the generic
-        # 「代码执行环境启动失败」 startup wording is also present.
+        # Spawn refused by the OS — probe still names these unmarked strings
+        # (it never runs user code). Real-run retire is the spawn-site tag.
         (-1, 11, "Failed to start process: spawn python EACCES", EXEC_ENV_SPAWN_DENIED_CODE),
         (-1, 11, "Failed to start process: spawn python EPERM", EXEC_ENV_SPAWN_DENIED_CODE),
         (
@@ -230,6 +248,12 @@ _LAUNCHER_MISSING = (
             "SandboxError: 代码执行环境启动失败：[WinError 5] 拒绝访问。",
             EXEC_ENV_SPAWN_DENIED_CODE,
         ),
+        # Spawn site declared it — even when the detail has no OS permission
+        # tokens (the eight strings must not be what the real-run keys on).
+        (-1, 11, _SPAWN_DENIED_TAGGED, EXEC_ENV_SPAWN_DENIED_CODE),
+        # Probe still names a spawn-time FileNotFoundError. Real-run retire of
+        # the same traceback is a separate cut (see annotate tests below).
+        (1, 40, _USER_FILE_NOT_FOUND, EXEC_ENV_NO_INTERPRETER_CODE),
         # Unprovable: a launcher that ran and said nothing (Windows Store alias
         # stub), a plain non-zero exit, a slow clean exit. No guessing.
         (0, 120, "", EXEC_ENV_PROBE_FAIL_CODE),
@@ -290,6 +314,90 @@ def test_annotate_real_exec_failure_exit_127_wraps():
     assert verdict.code == EXEC_ENV_NO_INTERPRETER_CODE
     assert exec_env_probe_failure_code(annotated.stderr) == EXEC_ENV_NO_INTERPRETER_CODE
     assert "自检" not in annotated.stderr
+
+
+def test_annotate_real_exec_failure_user_filenotfound_passes_through():
+    """User ``open(missing)`` is exit 1, not a dead interpreter — do not wrap."""
+    raw = ExecutionResult(
+        success=False,
+        stdout="",
+        stderr=_USER_FILE_NOT_FOUND,
+        exit_code=1,
+        duration_ms=40,
+    )
+    annotated, verdict = annotate_real_exec_failure(raw, language="python")
+    assert annotated is raw
+    assert verdict is None
+    assert not is_exec_env_probe_failure(annotated.stderr)
+    assert annotated.exit_code == 1
+    assert "退出码 127" not in annotated.stderr
+    assert "FileNotFoundError" in annotated.stderr
+
+
+def test_annotate_real_exec_failure_user_permissionerror_passes_through():
+    """User-script PermissionError (exit 1) is not a refused spawn — do not wrap."""
+    raw = ExecutionResult(
+        success=False,
+        stdout="",
+        stderr=_USER_PERMISSION_ERROR,
+        exit_code=1,
+        duration_ms=40,
+    )
+    annotated, verdict = annotate_real_exec_failure(raw, language="python")
+    assert annotated is raw
+    assert verdict is None
+    assert not is_exec_env_probe_failure(annotated.stderr)
+    assert annotated.exit_code == 1
+    assert "PermissionError" in annotated.stderr
+    assert "进程启动这一步被拦下" not in annotated.stderr
+
+
+def test_annotate_real_exec_failure_unmarked_eacces_passes_through():
+    """Old desktop EACCES envelope (no spawn-site tag) must not retire."""
+    raw = ExecutionResult(
+        success=False,
+        stdout="",
+        stderr="Failed to start process: spawn python EACCES",
+        exit_code=-1,
+        duration_ms=11,
+    )
+    annotated, verdict = annotate_real_exec_failure(raw, language="python")
+    assert annotated is raw
+    assert verdict is None
+    assert not is_exec_env_probe_failure(annotated.stderr)
+
+
+def test_annotate_real_exec_failure_spawn_denied_tag_wraps():
+    """Spawn-site marker+tag is the refused-spawn declaration — wrap and memo."""
+    raw = ExecutionResult(
+        success=False,
+        stdout="",
+        stderr=_SPAWN_DENIED_TAGGED,
+        exit_code=-1,
+        duration_ms=11,
+    )
+    annotated, verdict = annotate_real_exec_failure(raw, language="python")
+    assert verdict is not None
+    assert verdict.code == EXEC_ENV_SPAWN_DENIED_CODE
+    assert exec_env_probe_failure_code(annotated.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
+    assert exec_env_probe_failure_language(annotated.stderr) == "python"
+    assert "启动 python 解释器进程时被系统拒绝" in annotated.stderr
+    assert "CreateProcess refused" in annotated.stderr
+    assert "进程启动这一步被拦下" in annotated.stderr
+
+
+def test_annotate_real_exec_failure_spawn_denied_already_wrapped_does_not_nest():
+    first = probe_failure_result(
+        duration_ms=11,
+        code=EXEC_ENV_SPAWN_DENIED_CODE,
+        language="python",
+        evidence="exit=-1 stderr=CreateProcess refused",
+    )
+    annotated, verdict = annotate_real_exec_failure(first, language="python")
+    assert annotated is first
+    assert verdict is not None
+    assert verdict.code == EXEC_ENV_SPAWN_DENIED_CODE
+    assert annotated.stderr.count(EXEC_ENV_PROBE_FAIL_MARKER) == 1
 
 
 def test_probe_failure_result_carries_reason_and_evidence():
@@ -421,11 +529,7 @@ async def test_server_workspace_probe_fail_keeps_sandbox_verdict(tmp_path: Path)
             EXEC_ENV_NO_INTERPRETER_CODE,
         ),
         (
-            _envelope(
-                stderr="Failed to start process: spawn python EACCES",
-                exit_code=-1,
-                duration_ms=12,
-            ),
+            _envelope(stderr=_SPAWN_DENIED_TAGGED, exit_code=-1, duration_ms=12),
             EXEC_ENV_SPAWN_DENIED_CODE,
         ),
     ],
@@ -448,11 +552,7 @@ async def test_local_workspace_real_run_wraps_hard_evidence(
 @pytest.mark.anyio
 async def test_local_workspace_sticky_fail_repeats_the_same_cause():
     channel = _FakeChannel(
-        _envelope(
-            stderr="Failed to start process: spawn python EACCES",
-            exit_code=-1,
-            duration_ms=12,
-        )
+        _envelope(stderr=_SPAWN_DENIED_TAGGED, exit_code=-1, duration_ms=12)
     )
     ws = LocalWorkspace(channel)  # type: ignore[arg-type]
     first = await ws.execute(
@@ -463,7 +563,8 @@ async def test_local_workspace_sticky_fail_repeats_the_same_cause():
     )
     assert exec_env_probe_failure_code(first.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
     assert exec_env_probe_failure_code(again.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
-    assert "EACCES" in again.stderr
+    assert "启动 python 解释器进程时被系统拒绝" in again.stderr
+    assert "CreateProcess refused" in again.stderr
     # First real run proved the death; the repeat is fail-fast.
     assert len(channel.calls) == 1
     assert channel.calls[0]["args"]["code"] == "print(1)"
@@ -733,6 +834,297 @@ async def test_real_execution_exit_127_still_retires_with_honest_reason():
 
 
 @pytest.mark.anyio
+async def test_real_execution_user_filenotfound_does_not_retire(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Acceptance: user-script FileNotFoundError (exit 1) must not retire python / test_run."""
+    from agentcore.tools.builtin.code_execute import CodeExecuteTool
+    from agentcore.tools.builtin.test_run import TestRunTool
+    from agentcore.tools.protocol import ToolContext
+
+    channel = _FakeChannel(
+        _envelope(stderr=_USER_FILE_NOT_FOUND, exit_code=1, duration_ms=40),
+        _envelope(stderr=_USER_FILE_NOT_FOUND, exit_code=1, duration_ms=41),
+    )
+    ws = LocalWorkspace(channel)  # type: ignore[arg-type]
+    first = await ws.execute(
+        ExecutionRequest(code="open('missing.txt')", language="python", timeout_seconds=30)
+    )
+    assert first.success is False
+    assert first.exit_code == 1
+    assert not is_exec_env_probe_failure(first.stderr)
+    assert "FileNotFoundError" in first.stderr
+    assert "退出码 127" not in first.stderr
+    # Language stays live — a second run hits the desktop again.
+    again = await ws.execute(
+        ExecutionRequest(code="open('missing.txt')", language="python", timeout_seconds=30)
+    )
+    assert not is_exec_env_probe_failure(again.stderr)
+    assert again.exit_code == 1
+    assert len(channel.calls) == 2
+
+    class _UserFnfBackend:
+        async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+            return ExecutionResult(
+                success=False,
+                stdout="",
+                stderr=_USER_FILE_NOT_FOUND,
+                exit_code=1,
+                duration_ms=40,
+            )
+
+    tool = await CodeExecuteTool().execute(
+        {"code": "open('missing.txt')", "language": "python"},
+        ToolContext.create(
+            execution_id="e",
+            run_id="s",
+            agent_id="a",
+            backend=_UserFnfBackend(),  # type: ignore[arg-type]
+            user_id="u",
+        ),
+    )
+    assert tool.success is False
+    assert tool.metadata is None or "retire_tools" not in tool.metadata
+    assert (tool.metadata or {}).get("error_class") != "permanent"
+    assert (tool.metadata or {}).get("code") != EXEC_ENV_NO_INTERPRETER_CODE
+    assert tool.display is not None
+    assert tool.display.get("exit_code") == 1
+    assert "退出码 127" not in (tool.error or "")
+    assert "退出码 127" not in (tool.output or "")
+
+    class _TestRunFnfBackend:
+        location = "server"
+
+        async def read(self, path: str) -> bytes:
+            raise FileNotFoundError(path)
+
+        async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+            return ExecutionResult(
+                success=False,
+                stdout="",
+                stderr=_USER_FILE_NOT_FOUND,
+                exit_code=1,
+                duration_ms=40,
+            )
+
+        async def index_files(self, *, cap: int = 50, order: str = "recent"):
+            return [], 0
+
+    async def _empty_profile(_backend):
+        from agentcore.runtime.context.workspace_profile import WorkspaceProfile
+
+        return WorkspaceProfile(
+            languages=[],
+            frameworks=[],
+            package_managers=[],
+            test_commands=[],
+        )
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        _empty_profile,
+    )
+    test_run = await TestRunTool().execute(
+        {"check": "command", "command": "npx tsc --noEmit"},
+        ToolContext.create(
+            execution_id="e",
+            run_id="s",
+            agent_id="a",
+            backend=_TestRunFnfBackend(),  # type: ignore[arg-type]
+            user_id="u",
+        ),
+    )
+    assert test_run.success is False
+    assert test_run.metadata is None or "retire_tools" not in test_run.metadata
+    assert (test_run.metadata or {}).get("error_class") != "permanent"
+    assert test_run.display is not None
+    assert test_run.display.get("exit_code") == 1
+    assert "退出码 127" not in (test_run.error or "")
+    assert "退出码 127" not in (test_run.output or "")
+
+
+@pytest.mark.anyio
+async def test_real_execution_user_permissionerror_does_not_retire(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Acceptance: user-script PermissionError must not retire python / test_run."""
+    from agentcore.tools.builtin.code_execute import CodeExecuteTool
+    from agentcore.tools.builtin.test_run import TestRunTool
+    from agentcore.tools.protocol import ToolContext
+
+    channel = _FakeChannel(
+        _envelope(stderr=_USER_PERMISSION_ERROR, exit_code=1, duration_ms=40),
+        _envelope(stderr=_USER_PERMISSION_ERROR, exit_code=1, duration_ms=41),
+    )
+    ws = LocalWorkspace(channel)  # type: ignore[arg-type]
+    first = await ws.execute(
+        ExecutionRequest(
+            code="open('busy.txt', 'w')", language="python", timeout_seconds=30
+        )
+    )
+    assert first.success is False
+    assert first.exit_code == 1
+    assert not is_exec_env_probe_failure(first.stderr)
+    assert "PermissionError" in first.stderr
+    assert "进程启动这一步被拦下" not in first.stderr
+    again = await ws.execute(
+        ExecutionRequest(
+            code="open('busy.txt', 'w')", language="python", timeout_seconds=30
+        )
+    )
+    assert not is_exec_env_probe_failure(again.stderr)
+    assert again.exit_code == 1
+    assert len(channel.calls) == 2
+
+    class _UserPermBackend:
+        async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+            return ExecutionResult(
+                success=False,
+                stdout="",
+                stderr=_USER_PERMISSION_ERROR,
+                exit_code=1,
+                duration_ms=40,
+            )
+
+    tool = await CodeExecuteTool().execute(
+        {"code": "open('busy.txt', 'w')", "language": "python"},
+        ToolContext.create(
+            execution_id="e",
+            run_id="s",
+            agent_id="a",
+            backend=_UserPermBackend(),  # type: ignore[arg-type]
+            user_id="u",
+        ),
+    )
+    assert tool.success is False
+    assert tool.metadata is None or "retire_tools" not in tool.metadata
+    assert (tool.metadata or {}).get("error_class") != "permanent"
+    assert (tool.metadata or {}).get("code") != EXEC_ENV_SPAWN_DENIED_CODE
+    assert tool.display is not None
+    assert tool.display.get("exit_code") == 1
+    assert "进程启动这一步被拦下" not in (tool.error or "")
+    assert "进程启动这一步被拦下" not in (tool.output or "")
+
+    class _TestRunPermBackend:
+        location = "server"
+
+        async def read(self, path: str) -> bytes:
+            raise FileNotFoundError(path)
+
+        async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+            return ExecutionResult(
+                success=False,
+                stdout="",
+                stderr=_USER_PERMISSION_ERROR,
+                exit_code=1,
+                duration_ms=40,
+            )
+
+        async def index_files(self, *, cap: int = 50, order: str = "recent"):
+            return [], 0
+
+    async def _empty_profile(_backend):
+        from agentcore.runtime.context.workspace_profile import WorkspaceProfile
+
+        return WorkspaceProfile(
+            languages=[],
+            frameworks=[],
+            package_managers=[],
+            test_commands=[],
+        )
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        _empty_profile,
+    )
+    test_run = await TestRunTool().execute(
+        {"check": "command", "command": "npx tsc --noEmit"},
+        ToolContext.create(
+            execution_id="e",
+            run_id="s",
+            agent_id="a",
+            backend=_TestRunPermBackend(),  # type: ignore[arg-type]
+            user_id="u",
+        ),
+    )
+    assert test_run.success is False
+    assert test_run.metadata is None or "retire_tools" not in test_run.metadata
+    assert (test_run.metadata or {}).get("error_class") != "permanent"
+    assert test_run.display is not None
+    assert test_run.display.get("exit_code") == 1
+    assert "进程启动这一步被拦下" not in (test_run.error or "")
+    assert "进程启动这一步被拦下" not in (test_run.output or "")
+
+
+@pytest.mark.anyio
+async def test_real_execution_spawn_denied_tag_still_retires():
+    """Acceptance: spawn-site tag still retires and names a refused start."""
+    from agentcore.tools.builtin.code_execute import CodeExecuteTool
+    from agentcore.tools.protocol import ToolContext
+
+    channel = _FakeChannel(
+        _envelope(stderr=_SPAWN_DENIED_TAGGED, exit_code=-1, duration_ms=11)
+    )
+    ws = LocalWorkspace(channel)  # type: ignore[arg-type]
+    wrapped = await ws.execute(
+        ExecutionRequest(code="print(1)", language="python", timeout_seconds=30)
+    )
+    assert exec_env_probe_failure_code(wrapped.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
+    assert "启动 python 解释器进程时被系统拒绝" in wrapped.stderr
+    assert "进程启动这一步被拦下" in wrapped.stderr
+    assert "CreateProcess refused" in wrapped.stderr
+
+    class _DeniedBackend:
+        async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+            return wrapped
+
+    tool = await CodeExecuteTool().execute(
+        {"code": "print(1)", "language": "python"},
+        ToolContext.create(
+            execution_id="e",
+            run_id="s",
+            agent_id="a",
+            backend=_DeniedBackend(),  # type: ignore[arg-type]
+            user_id="u",
+        ),
+    )
+    assert tool.success is False
+    assert tool.metadata is not None
+    assert tool.metadata.get("code") == EXEC_ENV_SPAWN_DENIED_CODE
+    assert tool.metadata.get("retire_tools") == ["test_run"]
+    assert tool.metadata.get("error_class") == "permanent"
+    assert "启动解释器进程被系统拒绝" in (tool.metadata.get("retire_message") or "")
+
+
+@pytest.mark.anyio
+async def test_local_workspace_unmarked_eacces_does_not_stick():
+    """Old desktop unmarked EACCES: no wrap, no memo — next call hits the channel."""
+    channel = _FakeChannel(
+        _envelope(
+            stderr="Failed to start process: spawn python EACCES",
+            exit_code=-1,
+            duration_ms=11,
+        ),
+        _envelope(
+            stderr="Failed to start process: spawn python EACCES",
+            exit_code=-1,
+            duration_ms=12,
+        ),
+    )
+    ws = LocalWorkspace(channel)  # type: ignore[arg-type]
+    first = await ws.execute(
+        ExecutionRequest(code="print(1)", language="python", timeout_seconds=30)
+    )
+    again = await ws.execute(
+        ExecutionRequest(code="print(2)", language="python", timeout_seconds=30)
+    )
+    assert not is_exec_env_probe_failure(first.stderr)
+    assert not is_exec_env_probe_failure(again.stderr)
+    assert first.stderr == "Failed to start process: spawn python EACCES"
+    assert len(channel.calls) == 2
+
+
+@pytest.mark.anyio
 async def test_subprocess_sandbox_probes_the_language_it_is_asked_about(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -795,6 +1187,20 @@ async def test_subprocess_sandbox_health_check_classifies_launcher_and_denial(
     assert sandbox.last_health_failure_code == EXEC_ENV_SPAWN_DENIED_CODE
     assert sandbox.last_health_failure is not None
     assert sandbox.last_health_failure[0] == "raised"
+
+    async def denied_tagged(request: ExecutionRequest) -> ExecutionResult:
+        return ExecutionResult(
+            success=False,
+            stdout="",
+            stderr=_SPAWN_DENIED_TAGGED,
+            exit_code=-1,
+            duration_ms=11,
+        )
+
+    monkeypatch.setattr(sandbox, "execute", denied_tagged)
+    assert await sandbox.health_check() is False
+    assert sandbox.last_health_failure_code == EXEC_ENV_SPAWN_DENIED_CODE
+    assert "CreateProcess refused" in (sandbox.last_health_evidence or "")
 
 
 @pytest.mark.anyio

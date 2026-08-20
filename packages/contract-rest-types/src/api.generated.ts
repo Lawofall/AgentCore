@@ -1167,6 +1167,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/email/send-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email Send Code */
+        post: operations["email_send_code_v1_auth_email_send_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/email/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email Verify */
+        post: operations["email_verify_v1_auth_email_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/login": {
         parameters: {
             query?: never;
@@ -1176,7 +1210,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Login */
+        /**
+         * Login
+         * @description Cookie login. ``username`` accepts email (contains ``@``) or handle.
+         */
         post: operations["login_v1_auth_login_post"];
         delete?: never;
         options?: never;
@@ -1301,6 +1338,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Password Forgot */
+        post: operations["password_forgot_v1_auth_password_forgot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Password Reset */
+        post: operations["password_reset_v1_auth_password_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/refresh": {
         parameters: {
             query?: never;
@@ -1327,8 +1398,52 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Register */
+        /**
+         * Register
+         * @deprecated
+         * @description Immediate-create hatch. Closed in production (410); public signup is
+         *     ``/register/send-code`` then ``/register/verify`` so ``users.email`` cannot
+         *     be squatted before inbox proof.
+         */
         post: operations["register_v1_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/register/send-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Send Code
+         * @description Start verify-then-create signup. Username is allocated server-side
+         *     (``user_`` + random). Optional nickname is submitted on ``/register/verify``.
+         */
+        post: operations["register_send_code_v1_auth_register_send_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/register/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Register Verify */
+        post: operations["register_verify_v1_auth_register_verify_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1409,8 +1524,8 @@ export interface paths {
         put?: never;
         /**
          * Token Login
-         * @description Bearer-token login: same credential check as cookie ``/login`` but returns the
-         *     access + refresh tokens in the JSON body (plus the user — identity in one call).
+         * @description Bearer-token login: same credential check as cookie ``/login``
+         *     (``username`` = email or handle) but returns tokens in the JSON body.
          */
         post: operations["token_login_v1_auth_token_post"];
         delete?: never;
@@ -7265,6 +7380,8 @@ export interface components {
             display_name: string;
             /** Email */
             email: string | null;
+            /** Email Verified At */
+            email_verified_at?: string | null;
             /** Id */
             id: string;
             /** Is Unlimited */
@@ -7326,6 +7443,8 @@ export interface components {
             display_name: string;
             /** Email */
             email: string | null;
+            /** Email Verified At */
+            email_verified_at?: string | null;
             /** Id */
             id: string;
             /** Is Unlimited */
@@ -8875,6 +8994,7 @@ export interface components {
             label: string;
             /** Subscription Day */
             subscription_day: number;
+            tool_surface_limits?: components["schemas"]["ToolSurfaceLimits"] | null;
         };
         /**
          * CreateShareRequest
@@ -9530,6 +9650,35 @@ export interface components {
         EditChatMessageRequest: {
             /** Content */
             content: string;
+        };
+        /**
+         * EmailCodeAcceptedResponse
+         * @description 202 body for every send-code path (including password-forgot).
+         */
+        EmailCodeAcceptedResponse: {
+            /**
+             * Expires In
+             * @description Code TTL in seconds
+             */
+            expires_in: number;
+            /**
+             * Status
+             * @default accepted
+             * @constant
+             */
+            status: "accepted";
+        };
+        /** EmailCodeRequest */
+        EmailCodeRequest: {
+            /** Code */
+            code: string;
+            /** Email */
+            email: string;
+        };
+        /** EmailSendCodeRequest */
+        EmailSendCodeRequest: {
+            /** Email */
+            email: string;
         };
         /**
          * EnsureStandingTaskTemplateRequest
@@ -10320,7 +10469,10 @@ export interface components {
              * @default true
              */
             persist_session: boolean;
-            /** Username */
+            /**
+             * Username
+             * @description Email or username. Contains @ → normalized email lookup; otherwise username lookup. Field name is unchanged on purpose.
+             */
             username: string;
         };
         /**
@@ -11187,6 +11339,20 @@ export interface components {
              */
             updated_at: string;
         };
+        /** PasswordForgotRequest */
+        PasswordForgotRequest: {
+            /** Email */
+            email: string;
+        };
+        /** PasswordResetRequest */
+        PasswordResetRequest: {
+            /** Code */
+            code: string;
+            /** Email */
+            email: string;
+            /** New Password */
+            new_password: string;
+        };
         /** PatchShowEpisodePublishRequest */
         PatchShowEpisodePublishRequest: {
             /**
@@ -11393,6 +11559,7 @@ export interface components {
          *
          *     ``status`` / ``recovery_at`` / ``limit_name`` are live pool-state (Redis or
          *     process memory), not Postgres columns. Absence of a store record is healthy.
+         *     ``tool_surface_limits`` is stored on the row; empty / all-null = unlimited.
          */
         PlatformCredentialView: {
             /** Base Url */
@@ -11419,6 +11586,7 @@ export interface components {
             status: "healthy" | "cooling" | "exhausted" | "blocked";
             /** Subscription Day */
             subscription_day: number;
+            tool_surface_limits?: components["schemas"]["ToolSurfaceLimits"];
             /** Updated At */
             updated_at?: string | null;
         };
@@ -11651,8 +11819,33 @@ export interface components {
             email?: string | null;
             /** Password */
             password: string;
-            /** Username */
+            /**
+             * Username
+             * @description Handle only. Must not contain @ (reserved so login can tell email from username).
+             */
             username: string;
+        };
+        /**
+         * RegisterSendCodeRequest
+         * @description Public signup: inbox + password. Username is allocated server-side.
+         */
+        RegisterSendCodeRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /**
+         * RegisterVerifyRequest
+         * @description Finish verify-then-create signup; optional nickname only here.
+         */
+        RegisterVerifyRequest: {
+            /** Code */
+            code: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email: string;
         };
         /**
          * ReplayConversation
@@ -13286,6 +13479,23 @@ export interface components {
          * @enum {string}
          */
         ToolCategory: "filesystem" | "search" | "execution" | "research" | "orchestration" | "interaction" | "skill";
+        /**
+         * ToolSurfaceLimits
+         * @description Operator-declared upstream tool-surface caps on one pool member.
+         *
+         *     Each field is independent. ``null`` / omitted = that dimension is unlimited.
+         *     Values are filled by ops (subscription tiers differ); this schema does not
+         *     encode any vendor's exact cap. Counting at assemble time is our OpenAI-format
+         *     surface: tool count, and top-level ``function.parameters.properties`` keys.
+         */
+        ToolSurfaceLimits: {
+            /** Max Properties Per Tool */
+            max_properties_per_tool?: number | null;
+            /** Max Properties Total */
+            max_properties_total?: number | null;
+            /** Max Tools */
+            max_tools?: number | null;
+        };
         /** TownGovernanceState */
         TownGovernanceState: {
             /**
@@ -13724,6 +13934,7 @@ export interface components {
             label?: string | null;
             /** Subscription Day */
             subscription_day?: number | null;
+            tool_surface_limits?: components["schemas"]["ToolSurfaceLimits"] | null;
         };
         /**
          * UpdateProfileRequest
@@ -13736,6 +13947,11 @@ export interface components {
             display_name?: string | null;
             /** Email */
             email?: string | null;
+            /**
+             * Username
+             * @description Self-selected handle; stored lowercase after claim.
+             */
+            username?: string | null;
         };
         /** UpdateSharedSpaceMemberRequest */
         UpdateSharedSpaceMemberRequest: {
@@ -13928,6 +14144,8 @@ export interface components {
             display_name: string;
             /** Email */
             email: string | null;
+            /** Email Verified At */
+            email_verified_at?: string | null;
             /** Id */
             id: string;
             /**
@@ -16329,6 +16547,80 @@ export interface operations {
             };
         };
     };
+    email_send_code_v1_auth_email_send_code_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailSendCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailCodeAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    email_verify_v1_auth_email_verify_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_v1_auth_login_post: {
         parameters: {
             query?: never;
@@ -16641,6 +16933,72 @@ export interface operations {
             };
         };
     };
+    password_forgot_v1_auth_password_forgot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordForgotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailCodeAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    password_reset_v1_auth_password_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     refresh_v1_auth_refresh_post: {
         parameters: {
             query?: never;
@@ -16682,6 +17040,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_send_code_v1_auth_register_send_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterSendCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailCodeAcceptedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_verify_v1_auth_register_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterVerifyRequest"];
             };
         };
         responses: {

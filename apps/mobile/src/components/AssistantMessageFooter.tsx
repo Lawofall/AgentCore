@@ -17,6 +17,10 @@ import type {
   ProcessStep,
   UsageBreakdown,
 } from "@agentcore/contract-types";
+import {
+  CACHE_BILLED_AS_MISS_LABEL,
+  cacheUsageDisplay,
+} from "@agentcore/protocol-fold-kit";
 import { Check, Copy, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import "./AssistantMessageFooter.css";
@@ -27,9 +31,54 @@ function formatCompact(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
-function cacheRatePercent(usage: UsageBreakdown): number | null {
-  if (usage.input <= 0) return null;
-  return Math.round((usage.cache_hit / usage.input) * 100);
+function UsageDetailRows({ usage }: { usage: UsageBreakdown }) {
+  const cache = cacheUsageDisplay(usage);
+  return (
+    <div className="amf-usage-detail">
+      <div className="amf-usage-row">
+        <span>输入</span>
+        <span className="amf-usage-val">{formatCompact(usage.input)}</span>
+      </div>
+      {cache.billedAsMiss ? (
+        <div className="amf-usage-row">
+          <span>{CACHE_BILLED_AS_MISS_LABEL}</span>
+          <span className="amf-usage-val">
+            {formatCompact(cache.cacheMiss)}
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="amf-usage-row">
+            <span>缓存命中</span>
+            <span className="amf-usage-val">
+              {formatCompact(cache.cacheHit)}
+              {cache.hitRatePercent != null
+                ? ` · ${cache.hitRatePercent}%`
+                : ""}
+            </span>
+          </div>
+          <div className="amf-usage-row">
+            <span>缓存未命中</span>
+            <span className="amf-usage-val">
+              {formatCompact(cache.cacheMiss)}
+            </span>
+          </div>
+        </>
+      )}
+      <div className="amf-usage-row">
+        <span>输出</span>
+        <span className="amf-usage-val">{formatCompact(usage.output)}</span>
+      </div>
+      {usage.reasoning > 0 && (
+        <div className="amf-usage-row">
+          <span>思考</span>
+          <span className="amf-usage-val">
+            {formatCompact(usage.reasoning)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Signal-only footer meta (cost / rounds / duration / clock); token detail lives in ⋯ Sheet. */
@@ -57,41 +106,6 @@ function UsageSummary({
   return (
     <div className="amf-usage" data-testid="assistant-usage-summary">
       {parts.join(" · ")}
-    </div>
-  );
-}
-
-function UsageDetailRows({ usage }: { usage: UsageBreakdown }) {
-  const rate = cacheRatePercent(usage);
-  return (
-    <div className="amf-usage-detail">
-      <div className="amf-usage-row">
-        <span>输入</span>
-        <span className="amf-usage-val">{formatCompact(usage.input)}</span>
-      </div>
-      <div className="amf-usage-row">
-        <span>缓存命中</span>
-        <span className="amf-usage-val">
-          {formatCompact(usage.cache_hit)}
-          {rate != null ? ` · ${rate}%` : ""}
-        </span>
-      </div>
-      <div className="amf-usage-row">
-        <span>缓存未命中</span>
-        <span className="amf-usage-val">{formatCompact(usage.cache_miss)}</span>
-      </div>
-      <div className="amf-usage-row">
-        <span>输出</span>
-        <span className="amf-usage-val">{formatCompact(usage.output)}</span>
-      </div>
-      {usage.reasoning > 0 && (
-        <div className="amf-usage-row">
-          <span>思考</span>
-          <span className="amf-usage-val">
-            {formatCompact(usage.reasoning)}
-          </span>
-        </div>
-      )}
     </div>
   );
 }

@@ -12,7 +12,9 @@ dev auto-login.
 
 This is a dev-only convenience: it creates a REAL user that logs in through the
 normal ``/auth/login`` flow, so it never touches the auth code path and carries
-no production bypass risk. Safe to re-run — existing users are left untouched.
+no production bypass risk. It does **not** need ``LEGACY_REGISTER_ENABLED``
+(that flag only reopens HTTP ``POST /v1/auth/register``). Safe to re-run —
+existing users are left untouched.
 """
 
 from __future__ import annotations

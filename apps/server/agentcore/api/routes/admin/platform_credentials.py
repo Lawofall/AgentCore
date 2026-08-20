@@ -14,6 +14,7 @@ from agentcore.api.schemas import (
     PlatformCredentialListResponse,
     PlatformCredentialView,
     StatusResponse,
+    ToolSurfaceLimits,
     UpdatePlatformCredentialRequest,
 )
 from agentcore.config import settings
@@ -28,6 +29,7 @@ from agentcore.llm.platform_pool_scheduler import (
     account_runtime_for_admin,
     clear_account_runtime_state,
 )
+from agentcore.llm.tool_surface import tool_surface_limits_as_dict
 
 router = APIRouter(tags=["admin"])
 
@@ -40,6 +42,7 @@ def get_platform_credential_service(
 
 def _view(row: ServiceView) -> PlatformCredentialView:
     runtime = account_runtime_for_admin(row.id)
+    limits = row.tool_surface_limits
     return PlatformCredentialView(
         id=row.id,
         label=row.label,
@@ -52,6 +55,11 @@ def _view(row: ServiceView) -> PlatformCredentialView:
         status=runtime.status,
         recovery_at=runtime.recovery_at,
         limit_name=runtime.limit_name,
+        tool_surface_limits=ToolSurfaceLimits(
+            max_tools=limits.max_tools,
+            max_properties_total=limits.max_properties_total,
+            max_properties_per_tool=limits.max_properties_per_tool,
+        ),
     )
 
 
@@ -69,6 +77,7 @@ def _audit_detail(view: ServiceView) -> dict[str, object]:
         "base_url": view.base_url,
         "subscription_day": view.subscription_day,
         "enabled": view.enabled,
+        "tool_surface_limits": tool_surface_limits_as_dict(view.tool_surface_limits),
     }
 
 
@@ -103,6 +112,9 @@ async def create_platform_credential(
         base_url=body.base_url,
         subscription_day=body.subscription_day,
         enabled=body.enabled,
+        tool_surface_limits=(
+            body.tool_surface_limits.model_dump() if body.tool_surface_limits is not None else None
+        ),
     )
     await record_admin_audit(
         db,
@@ -132,6 +144,9 @@ async def update_platform_credential(
         base_url=body.base_url,
         subscription_day=body.subscription_day,
         enabled=body.enabled,
+        tool_surface_limits=(
+            body.tool_surface_limits.model_dump() if body.tool_surface_limits is not None else None
+        ),
     )
     await record_admin_audit(
         db,

@@ -2,7 +2,7 @@
 
 This is the backend-authoritative twin of the frontend folds (mobile
 ``src/protocol/fold.ts``; desktop ``stores/execution.ts`` + ``streamConversation``).
-Its output IS the golden every端 must match (前端技术与架构 §十二).
+Its output IS the golden every端 must match (前端技术与架构 §十 SSE 与协议一致性).
 
 Semantics are deliberately a port of the two PROVEN frontend/runtime projections, so
 the oracle never invents behavior the product doesn't already have:

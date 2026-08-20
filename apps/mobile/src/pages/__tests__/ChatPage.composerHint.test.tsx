@@ -359,3 +359,71 @@ describe("ChatPage · partial + 限流 composer hint", () => {
     });
   });
 });
+
+describe("ChatPage · empty interrupt + team graph composer hint", () => {
+  it("团队条不挂「发下一条」；同一句提示在输入区", async () => {
+    vi.mocked(getMessages).mockResolvedValue({
+      messages: [
+        historyUser(),
+        {
+          id: "m-asst",
+          role: "assistant",
+          content: "",
+          reasoning_content: null,
+          citations: [],
+          runs: {
+            events: [
+              ev("message_start", {
+                message_id: "m-asst",
+                conversation_id: "conv-1",
+                trace_id: "a".repeat(32),
+              }),
+              ev("run_plan", {
+                execution_id: "exec_int",
+                plan_type: "multi_agent",
+                task_summary: "调研",
+                agents: [{ id: "w1", role: "调研员", thinking: false }],
+                runs: [
+                  { id: "r1", agent_id: "w1", task: "调研", depends_on: [] },
+                ],
+              }),
+              ev("run_started", {
+                run_id: "r1",
+                agent_id: "w1",
+                parent_run_id: null,
+                kind: "agent",
+              }),
+              ev("run_failed", {
+                run_id: "r1",
+                agent_id: "w1",
+                error: "调研失败",
+              }),
+              ev("message_end", { finish_reason: "interrupted" }),
+            ],
+            finish_reason: "interrupted",
+            process: null,
+            error: null,
+          },
+          created_at: "2026-08-01T00:00:01Z",
+          outcome: "error",
+          paused: false,
+          trace_id: "a".repeat(32),
+        },
+      ],
+      hasMoreBefore: false,
+      memoryUpdates: [],
+    });
+    openConv();
+
+    expect(await screen.findByTestId("team-view")).toBeTruthy();
+    expect(await screen.findByTestId("composer-outcome-hint")).toBeTruthy();
+    const hint = screen.getByTestId("composer-outcome-hint");
+    expect(hint.textContent).toMatch(/直接发送下一条/);
+    expect(hint.textContent).toContain("复制排查包");
+
+    const strip = document.querySelector(".team-strip")?.textContent ?? "";
+    expect(strip).not.toContain("直接发送下一条");
+    expect(strip).not.toContain("复制排查包");
+    expect(screen.queryByTestId("turn-outcome")).toBeNull();
+  });
+});

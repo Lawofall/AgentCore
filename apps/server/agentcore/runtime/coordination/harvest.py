@@ -277,7 +277,22 @@ def _emit_coordination_durable(session: CoordinationSession, event: object) -> N
             sink.emit(event)
             return
     writer = session.host_journal_writer
-    if writer is not None and not getattr(writer, "sealed", False):
+    if writer is not None:
+        writable = getattr(writer, "writable", None)
+        if callable(writable):
+            writer = writable()
+        log = getattr(session, "host_fact_log", None)
+        if log is not None:
+            from agentcore.runtime.facts import Fact
+
+            with contextlib.suppress(Exception):
+                log.record_fact(
+                    Fact(
+                        kind=event.type.value,
+                        payload=event.payload,
+                        ts=event.timestamp,
+                    )
+                )
         with contextlib.suppress(Exception):
             writer.schedule_append(
                 {

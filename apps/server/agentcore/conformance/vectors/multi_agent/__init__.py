@@ -215,7 +215,8 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         _multi_agent_coordinate,
     ),
     "multi_agent_coordination_wait": (
-        "协调等待 UX：coordination_wait(waiting=true) EPHEMERAL → StatusStrip「等待团队成员完成」",
+        "协调等待 UX：coordination_wait(waiting=true) EPHEMERAL → StatusStrip 只报 n/m"
+        "（成员细节在协作图节点；无长文案 / 内联成员列表 / 「协调等待」徽标）",
         _multi_agent_coordination_wait,
     ),
     "multi_agent_delivery_status_partial": (

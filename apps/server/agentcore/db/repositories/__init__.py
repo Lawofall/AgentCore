@@ -42,6 +42,7 @@ from .conversation_shares import ConversationShareRepository
 from .conversations import ConversationRepository
 from .devices import PushDeviceRepository
 from .documents import DocumentRepository
+from .email_auth import EmailChallengeRepository, PendingRegistrationRepository
 from .external_grants import ExternalGrantRepository
 from .feedback import FeedbackRepository
 from .folders import FolderRepository
@@ -84,6 +85,7 @@ __all__ = [
     "ConversationShareRepository",
     "CostEventRepository",
     "DocumentRepository",
+    "EmailChallengeRepository",
     "CredentialsRepository",
     "ExternalGrantRepository",
     "FeedbackRepository",
@@ -94,6 +96,7 @@ __all__ = [
     "MemoryUpdateRepository",
     "MessageRepository",
     "PausedTurnRepository",
+    "PendingRegistrationRepository",
     "PlatformCredentialRepository",
     "ProductNoticeRepository",
     "PushDeviceRepository",

@@ -46,15 +46,15 @@ describe("notifyError", () => {
 
   it("后端错误带补救动作：一键去配置的按钮跟着出", () => {
     notifyError(
-      apiError(402, "LLM_KEY_REQUIRED", "请先在「设置 · 服务商」填入 API Key"),
+      apiError(402, "LLM_KEY_REQUIRED", "请先接入自己的 API Key"),
       "附件驻留失败",
     );
 
     expect(toastFn).toHaveBeenCalledWith(
       "附件驻留失败",
       expect.objectContaining({
-        description: "请先在「设置 · 服务商」填入 API Key",
-        action: expect.objectContaining({ label: "去设置" }),
+        description: "请先接入自己的 API Key",
+        action: expect.objectContaining({ label: "去服务商" }),
       }),
     );
   });

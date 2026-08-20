@@ -240,7 +240,7 @@ def test_tightened_byok_family_no_longer_eats_web_403():
         event="tool.execute_end", text="网页读取失败：HTTP 403。该站点反爬 / 拒绝访问"
     )
     assert "byok_key_balance" in reg.match(
-        event="llm.call_failed", text="当前模型 API Key 无效或无权限，请在「设置 · 服务商」中更新"
+        event="llm.call_failed", text="当前模型 API Key 无效或无权限，请更新后重试"
     )
 
 

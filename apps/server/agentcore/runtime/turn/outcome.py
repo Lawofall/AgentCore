@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from agentcore.llm.provider.protocol import LLMMessage, llm_content_text
 from agentcore.tools.file_products import strip_file_products_markers
+from agentcore.tools.protocol import TOOL_AUDIENCE_CEO
 
 TurnOutcome = Literal["ok", "partial", "paused", "error"]
 
@@ -103,11 +104,16 @@ def resolve_turn_outcome(
 
 
 def last_delegate_tool_output(messages: list[LLMMessage] | None) -> str:
-    """Last ``delegate`` tool result in the CEO transcript (synthesis text)."""
+    """Last user-facing ``delegate`` tool result in the CEO transcript.
+
+    CEO-audience orchestration (coordination start/merge echo) is skipped: if
+    that is the last non-empty delegate output, salvage returns empty rather
+    than falling back to an older batch. Blocking synthesis stays unmarked.
+    """
     if not messages:
         return ""
     delegate_ids: list[str] = []
-    by_id: dict[str, str] = {}
+    by_id: dict[str, tuple[str, str | None]] = {}
     for message in messages:
         if message.role == "assistant" and message.tool_calls:
             for call in message.tool_calls:
@@ -118,18 +124,26 @@ def last_delegate_tool_output(messages: list[LLMMessage] | None) -> str:
                 if name == _DELEGATE_TOOL and call.id:
                     delegate_ids.append(call.id)
         elif message.role == "tool" and message.tool_call_id:
-            by_id[message.tool_call_id] = _clean_tool_text(
-                llm_content_text(message.content)
+            by_id[message.tool_call_id] = (
+                _clean_tool_text(llm_content_text(message.content)),
+                getattr(message, "audience", None),
             )
     for call_id in reversed(delegate_ids):
-        text = by_id.get(call_id, "").strip()
-        if text:
-            return text
+        text, audience = by_id.get(call_id, ("", None))
+        text = text.strip()
+        if not text:
+            continue
+        if audience == TOOL_AUDIENCE_CEO:
+            return ""
+        return text
     return ""
 
 
 def last_delegate_tool_output_from_events(events: object) -> str:
-    """Last ``tool_use_end.result`` for ``delegate`` (SSE / journal)."""
+    """Last user-facing ``tool_use_end.result`` for ``delegate`` (SSE / journal).
+
+    ``audience=ceo`` on the event (coordination host echo) is not salvageable.
+    """
     last = ""
     if isinstance(events, str | bytes) or not isinstance(events, Iterable):
         return last
@@ -140,8 +154,12 @@ def last_delegate_tool_output_from_events(events: object) -> str:
         if payload.get("tool_name") != _DELEGATE_TOOL:
             continue
         text = _clean_tool_text(str(payload.get("result") or ""))
-        if text:
-            last = text
+        if not text:
+            continue
+        if payload.get("audience") == TOOL_AUDIENCE_CEO:
+            last = ""
+            continue
+        last = text
     return last
 
 
@@ -151,10 +169,10 @@ def salvage_captain_delegate_reply(
     messages: list[LLMMessage] | None,
     role: str,
 ) -> str:
-    """When the captain has nothing to say, reuse the last delegate synthesis.
+    """When the captain has nothing to say, reuse the last user-facing delegate output.
 
     Empty string means "do not replace". Workers are never salvaged into the
-    user-facing bubble.
+    user-facing bubble. Coordination host echo is CEO-audience and is refused.
     """
     if role != "captain" or (final_content or "").strip():
         return ""

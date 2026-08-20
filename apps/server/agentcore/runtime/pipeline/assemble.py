@@ -18,7 +18,10 @@ from agentcore.runtime.context import (
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.evidence_ledger import EvidenceLedgerCore, format_registered_sources_prompt
 from agentcore.runtime.interaction import default_interaction_registry
-from agentcore.runtime.resolve.prompt import compose_ceo_chat_prompt
+from agentcore.runtime.resolve.prompt import (
+    attachment_material_scene,
+    compose_ceo_chat_prompt,
+)
 from agentcore.runtime.sessions import SessionLoader, SessionSaver, default_session_registry
 from agentcore.runtime.suspension import SuspensionDeleter, SuspensionSaver
 from agentcore.tools.builtin import (
@@ -336,6 +339,7 @@ async def assemble_ceo_turn(
         cold_start_explore=explore_reason or False,
         folder_nav_stale=folder_nav_stale,
         folder_profile_empty_soft=folder_profile_empty_soft,
+        attachment_material=attachment_material_scene(prepared.attachment_context),
     )
     # Real-time workspace overview (工作区上下文): a compact, newest-first listing of
     # the files already on disk in this conversation's workspace, so the CEO can

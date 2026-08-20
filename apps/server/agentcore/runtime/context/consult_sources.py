@@ -82,11 +82,19 @@ class ToolConsultSource:
         del user_id
         from agentcore.tools.on_demand import is_on_demand_tool, on_demand_summary
 
-        return [
-            ConsultDirectoryEntry(name=name, summary=on_demand_summary(name))
-            for name in self.registry.names
-            if is_on_demand_tool(name)
-        ]
+        entries: list[ConsultDirectoryEntry] = []
+        for name in self.registry.names:
+            if not is_on_demand_tool(name):
+                continue
+            tool = self.registry.get_optional(name)
+            description = tool.schema.description if tool is not None else ""
+            entries.append(
+                ConsultDirectoryEntry(
+                    name=name,
+                    summary=on_demand_summary(name, description=description),
+                )
+            )
+        return entries
 
     async def fetch_by_name(self, user_id: str, name: str) -> str | None:
         del user_id
@@ -105,7 +113,8 @@ class ToolConsultSource:
         enabled = [
             n
             for n in self.registry.names
-            if n in family_of(key) and n not in self.registry.deferred_names
+            if n in family_of(key, registry=self.registry)
+            and n not in self.registry.deferred_names
         ]
         tool = self.registry.get(key)
         return render_tool_consult_body(

@@ -12,7 +12,10 @@
 降级口径：留下已跑轮次 + 诚实说明缺了什么，**不**补重试、**不**编兜底结论。
 """
 
+import asyncio
 import json
+
+import pytest
 
 from agentcore.llm.provider.protocol import LLMChunk, LLMResponse, TokenUsage
 from agentcore.runtime.events import EventSink, EventType
@@ -88,6 +91,27 @@ class _DebateLLM:
         yield LLMChunk(usage=_USAGE)
 
 
+class _HangContinueLLM(_DebateLLM):
+    """首轮正常说完；一旦 journal 出现续写 ``run_started``，后续 stream 挂住等取消。"""
+
+    def __init__(self, sink: EventSink, **kwargs) -> None:  # noqa: ANN003
+        super().__init__(**kwargs)
+        self._sink = sink
+
+    async def stream(self, request):  # noqa: ANN001
+        if any(
+            e.type is EventType.RUN_STARTED and e.payload.get("continues_run_id")
+            for e in self._sink._history  # noqa: SLF001
+        ):
+            self.stream_calls += 1
+            yield LLMChunk(delta_content="半成品")
+            await asyncio.sleep(60)
+            yield LLMChunk(delta_content="…")
+            return
+        async for chunk in super().stream(request):
+            yield chunk
+
+
 def _ctx(tmp_path) -> ToolContext:  # noqa: ANN001
     return ToolContext.create(
         execution_id="e",
@@ -140,6 +164,32 @@ def _terminal_frames(events: list, run_id: str) -> list:
     return [
         e for e in events if e.type in terminal and e.payload.get("run_id") == run_id
     ]
+
+
+_ALL_RUN_TERMINALS = frozenset(
+    {
+        EventType.RUN_COMPLETED,
+        EventType.RUN_FAILED,
+        EventType.RUN_CANCELLED,
+        EventType.RUN_SKIPPED,
+    }
+)
+
+
+def _assert_started_runs_have_terminal(events: list) -> None:
+    """每个 ``run_started`` 的 run_id 之后必有 completed|failed|cancelled|skipped 之一。"""
+    started: set[str] = set()
+    closed: set[str] = set()
+    for e in events:
+        rid = (e.payload or {}).get("run_id")
+        if not isinstance(rid, str) or not rid:
+            continue
+        if e.type is EventType.RUN_STARTED:
+            started.add(rid)
+        elif e.type in _ALL_RUN_TERMINALS:
+            closed.add(rid)
+    missing = sorted(started - closed)
+    assert not missing, f"run_started 之后无终态帧: {missing}"
 
 
 def _moderator_ledger_row(tool: DebateTool):
@@ -316,3 +366,82 @@ async def test_debater_crash_does_not_sink_the_whole_wave(tmp_path, monkeypatch)
     assert round2["pro"]["absent"] is True  # 缺席轮一等语义，与网关重试耗尽同口径
     assert round2["con"]["ok"] is True
     assert _terminal_frames(events, payload["moderator_run_id"])
+
+
+async def test_later_round_cancel_closes_started_continue_runs(tmp_path):
+    """后续轮 continue_run 中途取消：已 ``run_started`` 的续写必有终态帧。
+
+    ``_gather_settled`` 对 CancelledError 再抛且不补帧，主持人 finally 只收主持人自己。
+    修在 ``continue_run`` 的 finally（与 Wave 队员 ``run_cancelled`` 同口径），取消仍上抛。
+    """
+    sink = EventSink()
+    llm = _HangContinueLLM(sink, converge_at=2)
+    tool = _tool(llm, ctx=_ctx(tmp_path), sink=sink)
+    task = asyncio.create_task(
+        tool.execute(
+            {"motion": "该不该做 X", "form": "debate", "sides": _sides()},
+            _ctx(tmp_path),
+        )
+    )
+    for _ in range(500):
+        if any(
+            e.type is EventType.RUN_STARTED and e.payload.get("continues_run_id")
+            for e in sink._history  # noqa: SLF001
+        ):
+            break
+        await asyncio.sleep(0.02)
+    else:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        pytest.fail("辩论后续轮 continue_run 从未发出 run_started")
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    events = list(sink._history)  # noqa: SLF001
+    _assert_started_runs_have_terminal(events)
+    cont_ids = {
+        e.payload["run_id"]
+        for e in events
+        if e.type is EventType.RUN_STARTED and e.payload.get("continues_run_id")
+    }
+    assert cont_ids, "应至少有一个续写 run 已开播"
+    for rid in cont_ids:
+        terms = [
+            e
+            for e in events
+            if e.type in _ALL_RUN_TERMINALS and e.payload.get("run_id") == rid
+        ]
+        assert terms, f"{rid} started without terminal"
+        assert terms[0].type is EventType.RUN_CANCELLED
+
+
+async def test_gather_settled_cancel_waits_for_children_and_reraises():
+    """整轮停止不得当成某方缺席吞掉；子任务必须拆完（Wave shield 口径）再上抛。"""
+    from agentcore.runtime.debate.rounds import _gather_settled
+
+    cleaned: list[str] = []
+
+    async def _hang(key: str):
+        try:
+            await asyncio.sleep(30)
+            return key, 1
+        except asyncio.CancelledError:
+            cleaned.append(key)
+            raise
+
+    task = asyncio.create_task(
+        _gather_settled(
+            (_hang("a"), _hang("b")),
+            fallback=(None, 0),
+            beat="statement",
+            round_no=2,
+        )
+    )
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert set(cleaned) == {"a", "b"}

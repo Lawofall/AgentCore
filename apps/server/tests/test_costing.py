@@ -18,6 +18,7 @@ from agentcore.runtime.costing import (
     ROLE_VISION,
     WorkerResultAccumulator,
     aggregate_cost,
+    aggregate_usage_tokens,
     captain_run_cost_from_state,
     member_run_cost,
     vision_run_cost,
@@ -109,14 +110,10 @@ def test_resolve_run_models_arena_falls_back_to_main_not_worker():
     priced_x, _ = resolve_run_models(profiles, "injected-main", cost_role=ROLE_ARENA)
     assert priced_x == "injected-main"
     # Route-key injection: price bare id, request keeps prefix.
-    priced_r, request_r = resolve_run_models(
-        profiles, "platform/gpt-4o", cost_role=ROLE_ARENA
-    )
+    priced_r, request_r = resolve_run_models(profiles, "platform/gpt-4o", cost_role=ROLE_ARENA)
     assert priced_r == "gpt-4o"
     assert request_r == "platform/gpt-4o"
-    priced_b, request_b = resolve_run_models(
-        profiles, "prov-1/deepseek-chat", cost_role=ROLE_ARENA
-    )
+    priced_b, request_b = resolve_run_models(profiles, "prov-1/deepseek-chat", cost_role=ROLE_ARENA)
     assert priced_b == "deepseek-chat"
     assert request_b == "prov-1/deepseek-chat"
 
@@ -167,6 +164,7 @@ def test_captain_run_cost_from_state_reads_priced_state():
     assert row.duration_ms == 4321
     assert row.currency == "CNY"
 
+
 def test_captain_cost_values_are_integers():
     # Money is integer nano-CNY end to end — no Decimal/float may leak out.
     usage = TokenUsage(input_tokens=123, output_tokens=45, cache_miss_tokens=123)
@@ -180,7 +178,11 @@ def test_captain_cost_values_are_integers():
 
     row = captain_run_cost_from_state("c", state)
 
-    assert all(isinstance(v, int) for k, v in row.cost.items() if k in ("input", "cached", "output", "total"))
+    assert all(
+        isinstance(v, int)
+        for k, v in row.cost.items()
+        if k in ("input", "cached", "output", "total")
+    )
     assert isinstance(row.cost_total_nano, int)
 
 
@@ -216,7 +218,9 @@ def test_vision_run_cost_prices_subcall_under_vision_role():
     assert row.cost["total"] == 1_088_000
     assert row.cost["pricing_source"] == "estimated"
     assert all(
-        isinstance(v, int) for k, v in row.cost.items() if k in ("input", "cached", "output", "total")
+        isinstance(v, int)
+        for k, v in row.cost.items()
+        if k in ("input", "cached", "output", "total")
     )
 
 
@@ -274,6 +278,29 @@ def test_aggregate_cost_empty_is_zero():
         "currency": "CNY",
         "estimated_currency": "CNY",
         "pricing_source": "curated",
+    }
+
+
+def test_aggregate_usage_tokens_sums_ledger_rows():
+    """Bubble ``messages.usage`` long-keys must match summed ``cost_events.tokens``."""
+    rows = [
+        {"tokens": {"input": 10, "output": 2, "cache_hit": 3, "cache_miss": 7}},
+        {"tokens": {"input": 50, "output": 8, "reasoning": 1, "cache_hit": 4}},
+        {"tokens": None},
+    ]
+    assert aggregate_usage_tokens(rows) == {
+        "input_tokens": 60,
+        "output_tokens": 10,
+        "reasoning_tokens": 1,
+        "cache_hit_tokens": 7,
+        "cache_miss_tokens": 7,
+    }
+    assert aggregate_usage_tokens([]) == {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_hit_tokens": 0,
+        "cache_miss_tokens": 0,
     }
 
 

@@ -48,10 +48,17 @@ class FakeUsers:
         return {uid: self._by_id[uid] for uid in user_ids if uid in self._by_id}
 
     async def search(self, query, *, limit=20):
-        q = query.strip().lower()
+        q = query.strip()
         if not q:
             return []
-        hits = [u for u in self._by_id.values() if u.username.lower() == q and u.status == "active"]
+        by_id = self._by_id.get(q)
+        if by_id is not None and by_id.status == "active":
+            return [by_id]
+        q_lower = q.lower()
+        hits = [
+            u for u in self._by_id.values()
+            if u.username.lower() == q_lower and u.status == "active"
+        ]
         return hits[:limit]
 
 
@@ -862,6 +869,29 @@ async def test_send_message_reply_freezes_snapshot():
     _recipients, event = events.published[-1]
     assert event["message"]["reply_to_message_id"] == original.id
     assert event["message"]["reply_to"] == reply.reply_to
+
+
+async def test_send_message_reply_preview_collapses_whitespace_and_caps():
+    svc, users, *_ = _make()
+    alice = users.add("alice", display_name="Alice")
+    bob = users.add("bob")
+    chat = (await svc.start_dm(requester_id=alice.user_id, peer_id=bob.user_id)).chat
+    original = await svc.send_message(
+        chat_id=chat.id,
+        sender_id=alice.user_id,
+        content="hello\n\nbob   there " + ("x" * 120),
+    )
+    reply = await svc.send_message(
+        chat_id=chat.id,
+        sender_id=bob.user_id,
+        content="ok",
+        reply_to_message_id=original.id,
+    )
+    preview = reply.reply_to["body_preview"]
+    assert "\n" not in preview
+    assert "  " not in preview
+    assert preview.startswith("hello bob there ")
+    assert len(preview) == 100
 
 
 async def test_send_message_reply_attachment_preview_label():
@@ -2170,3 +2200,12 @@ async def test_list_co_member_ids_excludes_self_and_strangers():
     assert set(ids) == {bob.user_id, carol.user_id}
     assert stranger.user_id not in ids
     assert alice.user_id not in ids
+
+
+async def test_search_by_exact_user_id():
+    svc, users, *_ = _make()
+    alice = users.add("alice")
+    bob = users.add("bob")
+    hits = await svc.search_users(requester_id=bob.user_id, query=alice.user_id)
+    assert len(hits) == 1
+    assert hits[0].user_id == alice.user_id

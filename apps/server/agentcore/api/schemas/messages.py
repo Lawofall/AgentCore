@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agentcore.api.schemas.usage import CostBreakdown, UsageBreakdown
+from agentcore.llm.pricing import project_cache_miss_tokens
 from agentcore.runtime.approvals import ApprovalDecision, DelegationAuthorizationDecision
 from agentcore.runtime.checkpoints import AskCheckpointIntent, CheckpointDecision
 from agentcore.runtime.suspension import SuspensionKind
@@ -875,9 +876,7 @@ class MessageDetail(BaseModel):
         if v is None:
             return []
         if isinstance(v, list):
-            return to_stored_agent_mentions(
-                [item if isinstance(item, dict) else {} for item in v]
-            )
+            return to_stored_agent_mentions([item if isinstance(item, dict) else {} for item in v])
         return []
 
     @field_validator("usage", mode="before")
@@ -902,12 +901,17 @@ class MessageDetail(BaseModel):
             has_tokens = bool(v.get("input_tokens") or v.get("output_tokens"))
             if not has_tokens and usage_error is None:
                 return None
+            input_n = v.get("input_tokens", 0) or 0
+            cache_hit_n = v.get("cache_hit_tokens", 0) or 0
+            cache_miss_n = v.get("cache_miss_tokens", 0) or 0
             out: dict[str, object] = {
-                "input": v.get("input_tokens", 0) or 0,
+                "input": input_n,
                 "output": v.get("output_tokens", 0) or 0,
                 "reasoning": v.get("reasoning_tokens", 0) or 0,
-                "cache_hit": v.get("cache_hit_tokens", 0) or 0,
-                "cache_miss": v.get("cache_miss_tokens", 0) or 0,
+                "cache_hit": cache_hit_n,
+                "cache_miss": project_cache_miss_tokens(
+                    int(input_n), int(cache_hit_n), int(cache_miss_n)
+                ),
             }
             if usage_error is not None:
                 out["error"] = usage_error
@@ -1070,11 +1074,7 @@ def normalize_local_turn_tool_failure_code(message: str, *, code: str | None = N
     raw = message or ""
     if "缺少必填参数" in raw:
         return "schema"
-    if (
-        "searxng" in text
-        or "搜索服务" in raw
-        or ("unreachable" in text and "searx" in text)
-    ):
+    if "searxng" in text or "搜索服务" in raw or ("unreachable" in text and "searx" in text):
         return "searxng_unreachable"
     if any(
         needle in text
@@ -1158,10 +1158,11 @@ class RecordTurnRequest(BaseModel):
     # 引用即出处 P1 · Q9：与云路径同形落盘；缺字段 legacy 降级。
     evidence_ledger: list[EvidenceLedgerEntryRest] = Field(default_factory=list, max_length=200)
     runs: RunsPayload | None = None
-    # Progressive outbox journal facts (``{kind, payload, ts}``), ordered by seq.
+    # Progressive outbox journal facts (``{kind, payload, ts}``), emission order.
     # Optional + backward-compatible: crash/cancel salvage often has no ``runs``
     # projection, only the mid-turn ``outbox.journal`` map — finalize persists these
     # directly when ``runs`` is absent. Happy-path write-back still sends ``runs``.
+    # Storage ``ord`` is stripped; list order is the fact.
     journal: list[dict[str, Any]] | None = None
     # Optional failed-tool rollup for server-side stats (journal tool_call success=false).
     # Omitted by legacy clients → empty list; never blocks write-back.

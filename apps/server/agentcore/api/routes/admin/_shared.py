@@ -204,6 +204,7 @@ def _admin_user_response(user: User) -> AdminUserResponse:
         username=user.username,
         display_name=user.display_name,
         email=user.email,
+        email_verified_at=getattr(user, "email_verified_at", None),
         role=user.role,
         status=user.status,
         is_unlimited=user.is_unlimited,

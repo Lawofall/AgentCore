@@ -2404,3 +2404,56 @@ def test_check_terminal_settlement_logs_unsettled():
         clear_active_coordination("e-unsettle")
     assert any(e.get("event") == "coordination.terminal_unsettled" for e in logs)
 
+
+def test_terminal_unsettled_post_detach_missing_durable_run_terminal():
+    """detach 后 harvest 已 stamp settled_via，但宿主 journal 缺 worker 终态 → 仍告警。"""
+    from structlog.testing import capture_logs
+
+    session = CoordinationSession(
+        execution_id="e-post-detach-journal",
+        total_workers=2,
+        conversation_id="c-post-detach-journal",
+    )
+    session.turn_attached = False
+    session.completed_run_ids.update({"w1", "w2"})
+    session.mark_settled("harvest")
+    session.post(
+        CoordinationEvent(
+            kind=CoordinationEventKind.ALL_COMPLETED,
+            payload={"completed": 2, "total": 2},
+        )
+    )
+    stale = [
+        {"kind": "run_started", "payload": {"run_id": "w1"}},
+        {"kind": "run_failed", "payload": {"run_id": "w1"}},
+        {"kind": "run_started", "payload": {"run_id": "w2"}},
+        {"kind": "turn_end", "payload": {"finish_reason": "end_turn"}},
+    ]
+    with capture_logs() as logs:
+        session.check_terminal_settlement(journal_entries=stale)
+    unsettle = [e for e in logs if e.get("event") == "coordination.terminal_unsettled"]
+    assert unsettle
+    assert unsettle[0].get("missing_run_ids") == ["w2"]
+
+
+def test_terminal_settlement_ok_when_post_detach_journal_has_all_terminals():
+    """post-detach journal 终态齐全时，即使已 harvest 也不再打 terminal_unsettled。"""
+    from structlog.testing import capture_logs
+
+    session = CoordinationSession(
+        execution_id="e-post-detach-ok",
+        total_workers=2,
+        conversation_id="c-post-detach-ok",
+    )
+    session.turn_attached = False
+    session.completed_run_ids.update({"w1", "w2"})
+    session.mark_settled("harvest")
+    complete = [
+        {"kind": "run_failed", "payload": {"run_id": "w1"}},
+        {"kind": "run_failed", "payload": {"run_id": "w2"}},
+        {"kind": "turn_end", "payload": {"finish_reason": "end_turn"}},
+    ]
+    with capture_logs() as logs:
+        session.check_terminal_settlement(journal_entries=complete)
+    assert not any(e.get("event") == "coordination.terminal_unsettled" for e in logs)
+

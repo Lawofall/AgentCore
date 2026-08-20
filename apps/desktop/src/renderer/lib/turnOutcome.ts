@@ -21,6 +21,7 @@ import {
 } from "@/lib/errors";
 import type { ErrorAction } from "@/lib/errors";
 import { withRecoveryMoment } from "@/lib/recoveryMoment";
+import { shouldShowUnproductiveToolFailureHint } from "@/lib/unproductiveToolFailureHint";
 import { assistantProjectionId } from "@/stores/conversation";
 import type { Message } from "@/stores/conversation";
 import type {
@@ -28,6 +29,14 @@ import type {
   ExecutionStatus,
   RunFrame,
 } from "@/stores/execution";
+import type { SSEEvent } from "@/types/events";
+import type { ProjectedTurn } from "@agentcore/protocol-conformance/projectedTurn";
+import {
+  type ProjectedTurnVerdict,
+  projectedFailedToolNames,
+  projectedHasDedicatedPauseUi,
+  projectedHasTeamGraph,
+} from "@agentcore/protocol-conformance/turnVerdict";
 
 /** Server-attested / client-derived turn conclusion.
  * Attested `paused` = CEO rate-limit continue (not a checkpoint). */
@@ -717,4 +726,64 @@ export function turnOutcomeForAssistant(
 
 export function projectionSlotKey(message: Message): string {
   return assistantProjectionId(message);
+}
+
+/** Conformance envelope — judge encoding is ``hasTeamStrip`` + ``supportPackHost``. */
+export function toConformanceTurnVerdict(args: {
+  outcome: TurnOutcome;
+  hasTeamStrip: boolean | null;
+  failedToolHintNames?: readonly string[];
+}): ProjectedTurnVerdict {
+  return {
+    kind: args.outcome.kind,
+    hideEmptyBubble: args.outcome.hideEmptyBubble,
+    notice: args.outcome.message,
+    hasTeamStrip: args.hasTeamStrip,
+    supportPackHost: args.outcome.supportPackHost,
+    failedToolHintNames: [...(args.failedToolHintNames ?? [])],
+  };
+}
+
+/** Fold → desktop turnOutcome snapshot for the shared conformance sidecar. */
+export function turnVerdictFromProjected(
+  _events: readonly SSEEvent[],
+  projected: ProjectedTurn,
+): ProjectedTurnVerdict {
+  const hasTeamStrip = projectedHasTeamGraph(projected);
+  const outcome = arbitrateTurnOutcome({
+    content: projected.content,
+    reasoning: projected.reasoning,
+    processLength: projected.process.length,
+    citationCount: projected.citations.length,
+    turnWarning: Boolean(projected.turnWarning),
+    finishReason: projected.finishReason,
+    messageError: projected.error,
+    attestedKind: projected.outcome,
+    deliveryState: projected.deliveryStatus?.state ?? null,
+    deliverySummary: projected.deliveryStatus?.summary ?? null,
+    hasTeamStrip,
+    hasDedicatedPauseOrAskUi: projectedHasDedicatedPauseUi(projected),
+    executionStatus: projected.status,
+    runs: projected.runs
+      .filter((r) => r.status === "failed")
+      .map((r) => ({
+        id: r.id,
+        status: r.status,
+        error: r.error,
+        productLanded: r.productLanded,
+      })),
+  });
+  const failed = projectedFailedToolNames(projected);
+  const hintNames = shouldShowUnproductiveToolFailureHint({
+    finishReason: projected.finishReason ?? undefined,
+    content: projected.content,
+    failedToolNames: failed,
+  })
+    ? failed
+    : [];
+  return toConformanceTurnVerdict({
+    outcome,
+    hasTeamStrip,
+    failedToolHintNames: hintNames,
+  });
 }

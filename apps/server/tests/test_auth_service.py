@@ -10,6 +10,7 @@ from agentcore.config import settings
 from agentcore.core.errors import (
     AuthenticationError,
     AuthorizationError,
+    EmailNotVerifiedError,
     NotFoundError,
     ValidationError,
 )
@@ -28,6 +29,7 @@ _PW = "password123"
 def _open_registration(monkeypatch):
     """Unit tests assume open registration; local .env may close the gate."""
     monkeypatch.setattr(settings, "registration_open", True)
+    monkeypatch.setattr(settings, "require_email_verified", False)
 
 
 async def _do_login(svc: AuthService, **kwargs):
@@ -44,7 +46,11 @@ class FakeUsers:
         return self._by_id.get(user_id)
 
     async def get_by_username(self, username):
-        return next((u for u in self._by_id.values() if u.username == username), None)
+        lowered = username.strip().lower()
+        return next(
+            (u for u in self._by_id.values() if u.username.lower() == lowered),
+            None,
+        )
 
     async def get_by_email(self, email):
         target = email.strip().lower()
@@ -59,6 +65,7 @@ class FakeUsers:
         username,
         display_name=None,
         email=None,
+        email_verified_at=None,
         role="user",
         status="active",
         registration_ip=None,
@@ -69,16 +76,19 @@ class FakeUsers:
             username=username,
             display_name=display_name or "",
             email=email,
+            email_verified_at=email_verified_at,
             role=role,
             status=status,
             registration_ip=registration_ip,
             deleted_at=None,
+            username_changed_at=None,
         )
         self._by_id[user.user_id] = user
         return user
 
     async def update(self, user_id, **fields):
         # Mirrors the real repo: the service only forwards the keys that changed.
+        fields.pop("commit", None)
         user = self._by_id.get(user_id)
         if user is None:
             return None
@@ -289,6 +299,12 @@ async def test_register_rejects_weak_password():
         await svc.register(username="eve", password="short")
 
 
+async def test_register_rejects_at_in_username():
+    svc, *_ = _make()
+    with pytest.raises(ValidationError, match="@"):
+        await svc.register(username="ada@example.com", password=_PW)
+
+
 # --- login ---
 
 
@@ -300,6 +316,39 @@ async def test_login_success_issues_tokens():
     assert decode_access_token(pair.access_token) == user.user_id
     assert pair.refresh_token
     assert len(tokens.records) == 1
+
+
+async def test_login_by_email_success():
+    svc, *_ = _make()
+    user = await svc.register(
+        username="frankmail", password=_PW, email="Frank@Example.com"
+    )
+    logged, _pair = await _do_login(svc, username="frank@example.com", password=_PW)
+    assert logged.user_id == user.user_id
+    again, _pair = await _do_login(svc, username="frankmail", password=_PW)
+    assert again.user_id == user.user_id
+
+
+async def test_login_empty_email_account_still_uses_username():
+    svc, *_ = _make()
+    user = await svc.register(username="legacy", password=_PW)
+    assert user.email is None
+    logged, _pair = await _do_login(svc, username="legacy", password=_PW)
+    assert logged.user_id == user.user_id
+    with pytest.raises(AuthenticationError, match="用户名或密码"):
+        await svc.login(username="legacy@example.com", password=_PW)
+
+
+async def test_login_unknown_email_matches_unknown_username():
+    svc, *_ = _make()
+    with pytest.raises(AuthenticationError, match="用户名或密码"):
+        await svc.login(username="ghost@example.com", password=_PW)
+
+
+async def test_login_malformed_email_is_auth_error():
+    svc, *_ = _make()
+    with pytest.raises(AuthenticationError, match="用户名或密码"):
+        await svc.login(username="not-an-email@", password=_PW)
 
 
 async def test_login_wrong_password_raises_and_counts():
@@ -376,6 +425,31 @@ async def test_login_resets_failures_on_success():
     await _do_login(svc,username="ivan", password=_PW)
     cred = await creds.get_by_user_id(user.user_id)
     assert cred.failed_attempts == 0 and cred.locked_until is None
+
+
+async def test_login_unverified_allowed_by_default():
+    svc, users, _c, _t = _make()
+    user = await svc.register(username="unverified", password=_PW)
+    assert user.email_verified_at is None
+    logged, _pair = await _do_login(svc, username="unverified", password=_PW)
+    assert logged.user_id == user.user_id
+
+
+async def test_login_unverified_blocked_when_required(monkeypatch):
+    monkeypatch.setattr(settings, "require_email_verified", True)
+    svc, _u, _c, _t = _make()
+    await svc.register(username="gated", password=_PW)
+    with pytest.raises(EmailNotVerifiedError):
+        await svc.login(username="gated", password=_PW)
+
+
+async def test_login_verified_passes_when_required(monkeypatch):
+    monkeypatch.setattr(settings, "require_email_verified", True)
+    svc, users, _c, _t = _make()
+    user = await svc.register(username="proved", password=_PW)
+    users._by_id[user.user_id].email_verified_at = datetime.now(UTC)
+    logged, _pair = await _do_login(svc, username="proved", password=_PW)
+    assert logged.user_id == user.user_id
 
 
 # --- refresh / logout ---
@@ -698,6 +772,16 @@ async def test_update_profile_sets_and_clears_email():
     assert updated.email == "ula@example.com"
     cleared = await svc.update_profile(user_id=user.user_id, email=None)
     assert cleared.email is None
+    assert cleared.email_verified_at is None
+
+
+async def test_update_profile_email_change_clears_verified_at():
+    svc, users, _c, _t = _make()
+    user = await svc.register(username="vera", password=_PW, email="vera@example.com")
+    users._by_id[user.user_id].email_verified_at = datetime.now(UTC)
+    updated = await svc.update_profile(user_id=user.user_id, email="new@example.com")
+    assert updated.email == "new@example.com"
+    assert updated.email_verified_at is None
 
 
 async def test_update_profile_rejects_duplicate_email():
@@ -1045,3 +1129,41 @@ async def test_refresh_propagates_mfa_claim_for_enrolled_admin():
     rotated = await svc.refresh(refresh_token=pair.refresh_token)
     assert decode_access_token_mfa_verified(rotated.access_token) is True
 
+
+
+async def test_login_username_is_case_insensitive():
+    svc, _u, _c, _t = _make()
+    user = await svc.register(username="alice", password=_PW)
+    logged, _pair = await _do_login(svc, username="Alice", password=_PW)
+    assert logged.user_id == user.user_id
+
+
+async def test_update_profile_claims_username_from_system_handle():
+    svc, users, _c, _t = _make()
+    user = await users.create(username="user_a3f90d12", display_name="user_a3f90d12")
+    updated = await svc.update_profile(user_id=user.user_id, username="alice")
+    assert updated.username == "alice"
+    assert updated.username_changed_at is not None
+
+
+async def test_update_profile_rejects_taken_username():
+    svc, users, _c, _t = _make()
+    await svc.register(username="bob", password=_PW)
+    user = await users.create(username="user_b1c2d3e4", display_name="user_b1c2d3e4")
+    with pytest.raises(ValidationError, match="占用"):
+        await svc.update_profile(user_id=user.user_id, username="bob")
+
+
+async def test_update_profile_username_cooldown_after_claim():
+    svc, users, _c, _t = _make()
+    user = await users.create(username="alice", display_name="Alice")
+    users._by_id[user.user_id].username_changed_at = datetime.now(UTC)
+    with pytest.raises(ValidationError, match="14"):
+        await svc.update_profile(user_id=user.user_id, username="alicia")
+
+
+async def test_update_profile_rejects_reserved_username():
+    svc, users, _c, _t = _make()
+    user = await users.create(username="user_c3d4e5f6", display_name="x")
+    with pytest.raises(ValidationError, match="不可用"):
+        await svc.update_profile(user_id=user.user_id, username="admin")

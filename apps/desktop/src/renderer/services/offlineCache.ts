@@ -35,6 +35,7 @@ function toStoreUser(user: AuthUser): LocalStoreUser {
     username: user.username,
     displayName: user.displayName,
     email: user.email,
+    emailVerifiedAt: user.emailVerifiedAt,
     role: user.role,
     avatarUrl: user.avatarUrl,
   };
@@ -46,6 +47,7 @@ export function fromStoreUser(user: LocalStoreUser): AuthUser {
     username: user.username,
     displayName: user.displayName,
     email: user.email,
+    emailVerifiedAt: user.emailVerifiedAt ?? null,
     role: user.role,
     avatarUrl: user.avatarUrl,
   };

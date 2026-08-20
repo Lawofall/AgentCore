@@ -75,14 +75,14 @@ describe("ComposerSendErrorNotice", () => {
 
   it("uses primary chrome when a config action is offered", () => {
     composerError = {
-      message: "请先在「设置 · 服务商」中填入你的 API Key，再发起对话。",
-      action: { label: "去设置", href: "/more/providers" },
+      message: "请先接入自己的 API Key，再发起对话。",
+      action: { label: "去服务商", href: "/more/providers" },
     };
     render(<ComposerSendErrorNotice draftKey="__draft__" />);
     const banner = screen.getByTestId("composer-send-error");
     expect(banner.className).toContain("bg-primary/10");
     expect(banner.className).not.toContain("destructive");
-    expect(screen.getByRole("button", { name: "去设置" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "去服务商" })).toBeTruthy();
   });
 
   it("suppressSession hides sessionError", () => {

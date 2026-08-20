@@ -1,7 +1,9 @@
-"""Static on-demand tool roster — listed in ``<按需目录>``, omitted from the
+"""On-demand tool roster — listed in ``<按需目录>``, omitted from the
 opening OpenAI tool table until ``consult(name)`` (or a family sibling) promotes them.
 
-Not an intent classifier: the split is a fixed name set, identical for every task.
+Not an intent classifier: the builtin split is a fixed name set, identical for
+every task. Discovered MCP tools (``mcp_*``) join the same gate by prefix so
+their schemas stay off the opening table; the catalog still lists them.
 Tools stay registered (catalog / execute / skill gates / capability lines); only
 ``ToolRegistry.get_openai_definitions`` withholds them until offered.
 """
@@ -11,8 +13,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 # ---------------------------------------------------------------------------
-# Roster (single source). Adding a name here is what moves a tool off the
-# always-offered table. Keep the tool class, schema, and execute path intact.
+# Roster (single source for builtins). Adding a name here is what moves a
+# builtin off the always-offered table. Keep the tool class, schema, and
+# execute path intact. Dynamic MCP names are not listed here — ``is_on_demand_tool``
+# recognizes the ``mcp_`` prefix produced by ``sanitize_mcp_tool_name``.
 #
 # Defer = optional capability face (consult first is an extra round, not a
 # missing channel). Do NOT defer a mode primitive the runtime already
@@ -137,20 +141,52 @@ _FAMILIES: tuple[frozenset[str], ...] = (
 )
 
 
+def is_mcp_tool_name(name: str) -> bool:
+    """FC names minted by ``sanitize_mcp_tool_name`` (``mcp_{server}_{tool}``)."""
+    return name.startswith("mcp_")
+
+
 def is_on_demand_tool(name: str) -> bool:
-    return name in ON_DEMAND_TOOL_NAMES
+    return name in ON_DEMAND_TOOL_NAMES or is_mcp_tool_name(name)
 
 
-def family_of(name: str) -> frozenset[str]:
-    """Name plus any family siblings (always includes ``name`` itself)."""
+def family_of(name: str, *, registry: object | None = None) -> frozenset[str]:
+    """Name plus any family siblings (always includes ``name`` itself).
+
+    Builtin families are the static table. MCP tools share a family per
+    assembled Server (``McpDynamicTool.mcp_server_id``); without a registry
+    the dynamic siblings are unknown, so the name stands alone.
+    """
     for family in _FAMILIES:
         if name in family:
             return family
+    if registry is not None and is_mcp_tool_name(name):
+        get = getattr(registry, "get_optional", None)
+        names = getattr(registry, "names", None)
+        if callable(get) and names is not None:
+            tool = get(name)
+            server_id = getattr(tool, "mcp_server_id", None) if tool is not None else None
+            if server_id:
+                siblings = [
+                    n
+                    for n in names
+                    if is_mcp_tool_name(n)
+                    and getattr(get(n), "mcp_server_id", None) == server_id
+                ]
+                if siblings:
+                    return frozenset(siblings)
     return frozenset({name})
 
 
-def on_demand_summary(name: str) -> str:
-    return ON_DEMAND_SUMMARIES.get(name) or name
+def on_demand_summary(name: str, *, description: str = "") -> str:
+    """One-line catalog text. Builtins use the static table; MCP uses live schema."""
+    static = ON_DEMAND_SUMMARIES.get(name)
+    if static:
+        return static
+    if is_mcp_tool_name(name):
+        desc = " ".join((description or "").split())
+        return desc or name
+    return name
 
 
 def render_tool_consult_body(

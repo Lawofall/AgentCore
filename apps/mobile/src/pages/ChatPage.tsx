@@ -190,8 +190,10 @@ import {
 } from "@/lib/stopLifecycle";
 import {
   type SupportDiagnosticIds,
+  precedingUserMessageId,
   supportIdsFromEvents,
 } from "@/lib/supportDiagnostics";
+import { firstCollabAtMs } from "@/lib/time";
 import {
   type TurnOutcome,
   isCeoContinuePause,
@@ -425,11 +427,13 @@ function historySupportIds(
   m: MessageDetail,
   conversationId: string | null,
   extras?: ReturnType<typeof supportErrorExtras>,
+  userMessageId?: string | null,
 ): SupportDiagnosticIds {
   if (m.runs?.events?.length) {
     return supportIdsFromEvents(conversationId, m.runs.events, {
       messageId: m.id,
       traceId: m.trace_id,
+      userMessageId,
     });
   }
   let executionId: string | undefined;
@@ -444,6 +448,7 @@ function historySupportIds(
   return {
     conversationId,
     messageId: m.id,
+    userMessageId: userMessageId || undefined,
     traceId: m.trace_id ?? undefined,
     executionId,
     ...extras,
@@ -942,6 +947,7 @@ function AssistantBubble({
         workerToolPhases,
         evidenceLedger: debateEvidenceLedger,
         elapsedMs: turnElapsedMs(turn.events),
+        startedAtMs: firstCollabAtMs(turn.events),
         waitProgress,
         detached,
         outcome,
@@ -1040,6 +1046,7 @@ function AssistantBubble({
 function HistoryAssistant({
   m,
   conversationId,
+  userMessageId,
   onFill,
   onRetry,
   onContinue,
@@ -1048,6 +1055,7 @@ function HistoryAssistant({
 }: {
   m: MessageDetail;
   conversationId: string | null;
+  userMessageId?: string | null;
   onFill: (text: string) => void;
   onRetry?: () => void;
   onContinue?: () => Promise<void> | void;
@@ -1117,6 +1125,7 @@ function HistoryAssistant({
             // 辩论场级 `#eN`（勿写入 Message.evidence_ledger 语义）
             evidenceLedger: extractEvidenceLedger(events),
             elapsedMs: turnElapsedMs(events),
+            startedAtMs: firstCollabAtMs(events),
             waitProgress: extractCoordinationWait(events),
             detached: extractExecutionDetached(events),
           }
@@ -1250,6 +1259,7 @@ function HistoryAssistant({
       bodyKind: chrome.bodyKind,
       baseUrl: chrome.baseUrl,
     }),
+    userMessageId,
   );
   const finishDiagnosis = degradedFinishChipLabel(
     chrome.emptyDiagnosis,
@@ -3511,7 +3521,12 @@ export function ChatPage() {
       owns: turnOwnsUserFacingOutlet(out),
       pause: isCeoContinuePause(out),
       outcome: out,
-      supportIds: historySupportIds(hist, conversationId ?? null),
+      supportIds: historySupportIds(
+        hist,
+        conversationId ?? null,
+        undefined,
+        precedingUserMessageId(history ?? [], hist.id),
+      ),
     };
   }, [turns, history, busy, activeStreamTurnId, conversationId]);
   const latestOwnsOutlet = latestOutlet.owns;
@@ -3533,6 +3548,7 @@ export function ChatPage() {
           key={m.id}
           m={m}
           conversationId={conversationId ?? null}
+          userMessageId={precedingUserMessageId(history ?? [], m.id)}
           onFill={fillComposer}
           isLast={isLast}
           onRetry={isLast ? () => void retryInterrupted() : undefined}

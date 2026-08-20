@@ -407,7 +407,8 @@ def test_build_provider_rejects_none_credentials():
         build_provider(None)
     err = ei.value
     assert err.code == ErrorCode.VALIDATION_ERROR
-    assert "设置" in err.message
+    assert "改选可用模型" in err.message
+    assert "设置" not in err.message
     assert "explicit credentials" in (err.details.get("invariant") or "")
     assert "silent" in (err.details.get("invariant") or "")
 

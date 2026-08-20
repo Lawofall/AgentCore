@@ -247,7 +247,7 @@ describe("ChatThreadPage", () => {
     expect(screen.queryByText("退出会话")).toBeNull();
   });
 
-  it("renders a reply quote as a single-line preview block", async () => {
+  it("renders a reply quote as a two-line preview block", async () => {
     const quoted = "总是与服务器断开连接就是VPN的问题。VPN关掉就好了。";
     messaging.listMessages.mockResolvedValue({
       messages: [

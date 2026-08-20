@@ -78,7 +78,7 @@ class ToolRegistry:
         from agentcore.tools.on_demand import family_of
 
         changed = False
-        for sibling in family_of(name):
+        for sibling in family_of(name, registry=self):
             if sibling in self._deferred:
                 self._deferred.discard(sibling)
                 changed = True

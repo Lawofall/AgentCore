@@ -2,8 +2,9 @@
 
 Run from the server app: ``python -m agentcore.conformance.export``. Writes one
 ``<name>.json`` per vector into ``packages/protocol-conformance/fixtures/`` as
-``{name, description, events, projected}`` — the single source the frontend folds are
-asserted against (``pnpm conformance``). Also writes
+``{name, description, events, projected}`` (plus optional ``turnVerdict`` sidecar)
+— the single source the frontend folds are asserted against (``pnpm conformance``).
+Also writes
 ``simulation-region-positions.json`` from ``locations.REGION_POSITIONS``. Re-run after
 changing a vector or the oracle (then the frontends turn red until aligned, per
 protocol-conformance.mdc).
@@ -25,6 +26,7 @@ from agentcore.conformance.timestamps import (
     format_stable_timestamp,
     wall_clock_ms_sequence,
 )
+from agentcore.conformance.turn_verdict import project_turn_verdict
 from agentcore.conformance.vectors import VECTORS
 from agentcore.runtime.events import SSEEvent
 
@@ -57,14 +59,17 @@ def build_fixtures() -> list[dict[str, Any]]:
     fixtures: list[dict[str, Any]] = []
     for name, (description, builder) in VECTORS.items():
         events = _serialize_events(list(builder()))
-        fixtures.append(
-            {
-                "name": name,
-                "description": description,
-                "events": events,
-                "projected": project_turn(events),
-            }
-        )
+        projected = project_turn(events)
+        fixture: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "events": events,
+            "projected": projected,
+        }
+        turn_verdict = project_turn_verdict(name, projected)
+        if turn_verdict is not None:
+            fixture["turnVerdict"] = turn_verdict
+        fixtures.append(fixture)
     return fixtures
 
 

@@ -32,6 +32,10 @@ import {
 import { turnDetailPath } from "@/stores/ui";
 import type { ContextBlockWire } from "@/types/events";
 import {
+  CACHE_BILLED_AS_MISS_LABEL,
+  cacheUsageDisplay,
+} from "@agentcore/protocol-fold-kit";
+import {
   Bookmark,
   Check,
   Copy,
@@ -47,11 +51,6 @@ import { type ReactNode, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MessageTime, RegenerateMessageAction } from "./MessageActions";
 import { useCopyAction } from "./useCopyAction";
-
-function cacheRatePercent(usage: UsageBreakdown): number | null {
-  if (usage.input <= 0) return null;
-  return Math.round((usage.cache_hit / usage.input) * 100);
-}
 
 /** Signal-only summary (cost / rounds / duration) — token detail lives in「更多」. */
 function MessageUsageSummary({
@@ -99,26 +98,39 @@ function MessageUsageSummary({
 }
 
 function UsageDetailPanel({ usage }: { usage: UsageBreakdown }) {
-  const rate = cacheRatePercent(usage);
+  const cache = cacheUsageDisplay(usage);
   return (
     <div className="space-y-1 px-3 py-1.5 text-xs text-muted-foreground">
       <div className="flex justify-between gap-3 tabular-nums">
         <span>输入</span>
         <span className="text-foreground">{formatCompact(usage.input)}</span>
       </div>
-      <div className="flex justify-between gap-3 tabular-nums">
-        <span>缓存命中</span>
-        <span className="text-foreground">
-          {formatCompact(usage.cache_hit)}
-          {rate != null ? ` · ${rate}%` : ""}
-        </span>
-      </div>
-      <div className="flex justify-between gap-3 tabular-nums">
-        <span>缓存未命中</span>
-        <span className="text-foreground">
-          {formatCompact(usage.cache_miss)}
-        </span>
-      </div>
+      {cache.billedAsMiss ? (
+        <div className="flex justify-between gap-3 tabular-nums">
+          <span>{CACHE_BILLED_AS_MISS_LABEL}</span>
+          <span className="text-foreground">
+            {formatCompact(cache.cacheMiss)}
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="flex justify-between gap-3 tabular-nums">
+            <span>缓存命中</span>
+            <span className="text-foreground">
+              {formatCompact(cache.cacheHit)}
+              {cache.hitRatePercent != null
+                ? ` · ${cache.hitRatePercent}%`
+                : ""}
+            </span>
+          </div>
+          <div className="flex justify-between gap-3 tabular-nums">
+            <span>缓存未命中</span>
+            <span className="text-foreground">
+              {formatCompact(cache.cacheMiss)}
+            </span>
+          </div>
+        </>
+      )}
       <div className="flex justify-between gap-3 tabular-nums">
         <span>输出</span>
         <span className="text-foreground">{formatCompact(usage.output)}</span>

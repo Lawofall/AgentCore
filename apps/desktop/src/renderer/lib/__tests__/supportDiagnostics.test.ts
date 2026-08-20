@@ -133,6 +133,39 @@ describe("formatSupportDiagnosticText", () => {
       ].join("\n"),
     );
   });
+
+  it("appends LLM schema-reject extras after ids", () => {
+    expect(
+      formatSupportDiagnosticText({
+        conversationId: "conv-1",
+        messageId: "asst-1",
+        userMessageId: "user-1",
+        errorCode: "LLM_ERROR",
+        vendorCode: "invalid_request_error",
+        model: "deepseek-chat",
+        profile: "platform-fast",
+        toolCount: 42,
+        upstreamStatus: 400,
+        upstreamBodyPreview:
+          '{"error":{"message":"Invalid schema for function x"}}',
+      }),
+    ).toBe(
+      [
+        "阅读这段产品AI日志：",
+        "conversation_id: conv-1",
+        "user_message_id: user-1",
+        "message_id: asst-1",
+        "error_code: LLM_ERROR",
+        "vendor_code: invalid_request_error",
+        "model: deepseek-chat",
+        "profile: platform-fast",
+        "tool_count: 42",
+        "upstream_status: 400",
+        'upstream_body_preview: {"error":{"message":"Invalid schema for function x"}}',
+        "uv run python scripts/log_timeline.py conv-1",
+      ].join("\n"),
+    );
+  });
 });
 
 describe("supportDiagnosticExtrasFromError", () => {
@@ -173,6 +206,32 @@ describe("supportDiagnosticExtrasFromError", () => {
     ).toEqual({
       errorCode: "LLM_ERROR",
       bodyKind: "json",
+    });
+  });
+
+  it("copies vendor/model/upstream extras for schema-reject failures", () => {
+    expect(
+      supportDiagnosticExtrasFromError({
+        code: "LLM_ERROR",
+        context: {
+          vendor_code: "invalid_request_error",
+          model: "deepseek-chat",
+          profile: "platform-fast",
+          tool_count: 42,
+          upstream_status: 400,
+          upstream_body_preview:
+            '{"error":{"message":"Invalid schema for function x"}}',
+        },
+      }),
+    ).toEqual({
+      errorCode: "LLM_ERROR",
+      vendorCode: "invalid_request_error",
+      model: "deepseek-chat",
+      profile: "platform-fast",
+      toolCount: 42,
+      upstreamStatus: 400,
+      upstreamBodyPreview:
+        '{"error":{"message":"Invalid schema for function x"}}',
     });
   });
 });

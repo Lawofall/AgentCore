@@ -347,8 +347,8 @@ def _incremental_verdict(
        one with no turn at all (``cursor_unversioned`` — an old client, or a value minted
        before the format carried it) is exactly as untrustworthy.
     3. **The turn has no ``turn_end`` row** — a settled turn (finished / paused) has been
-       through the wholesale ``TurnJournalRepository.record`` rewrite (delete-then-insert
-       renumbers the turn from 0) or is about to be, and a resumed turn inherits that
+       through the prefix ``TurnJournalRepository.record`` rewrite (live-band occupancy
+       ``[0, n)``; higher seqs stay) or is about to be, and a resumed turn inherits that
        prefix, so a cursor minted before the rewrite may now name a different fact —
        within the SAME turn, which is why matching turn ids cannot stand in for this.
     4. **``after_seq`` names a fact this turn actually stamped** (:func:`_row_is_stamped`)

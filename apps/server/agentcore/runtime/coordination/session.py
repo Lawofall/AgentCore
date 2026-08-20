@@ -86,6 +86,24 @@ DEFAULT_WORKER_TIMEOUT_S = 1200.0
 # before the CEO-facing TIMEOUT notification. Overridden by engine settings at arm time.
 DEFAULT_TIMEOUT_WARN_RATIO = 0.75
 
+_DURABLE_RUN_TERMINAL_KINDS = frozenset(
+    {"run_completed", "run_failed", "run_cancelled", "run_skipped"}
+)
+
+
+def _durable_terminal_run_ids(entries: list[dict[str, Any]] | None) -> set[str]:
+    """``run_id`` values that already have a durable terminal fact in ``entries``."""
+    ids: set[str] = set()
+    for entry in entries or []:
+        kind = str(entry.get("kind") or entry.get("type") or "")
+        if kind not in _DURABLE_RUN_TERMINAL_KINDS:
+            continue
+        rid = str((entry.get("payload") or {}).get("run_id") or "").strip()
+        if rid:
+            ids.add(rid)
+    return ids
+
+
 # Registry keyed by root-turn ``execution_id`` (captain + all workers share one id).
 # Module-level dict — not a ContextVar holding the session — because ``execute_tools``
 # runs each tool under ``asyncio.gather``, which copies the context: a session set
@@ -377,6 +395,10 @@ class CoordinationSession:
     # Host turn journal writer bound at arm time — DURABLE display facts keep
     # appending here after the arming turn's ContextVar is reset (pillar A).
     host_journal_writer: Any | None = field(default=None, repr=False)
+    # Same-turn fact log as the writer. Post-detach sink persist must keep this
+    # in sync so the sidecar finalize snapshot (taken after the drive settles)
+    # still contains run terminals that arrived after ContextVar teardown.
+    host_fact_log: Any | None = field(default=None, repr=False)
     host_turn_id: str = ""
     # Set by crash redrive (``recover_turn``) to the ORIGINAL turn's message_id:
     # this drive continues that turn, so its closing belongs there instead of a
@@ -624,8 +646,34 @@ class CoordinationSession:
         until it fills again."""
         self.attached_inject_visible_close = False
 
-    def check_terminal_settlement(self) -> None:
-        """终态对账：terminal 必须收敛到附着注入或收口 harvest（user_stop 豁免）。"""
+    def check_terminal_settlement(
+        self, journal_entries: list[dict[str, Any]] | None = None
+    ) -> None:
+        """终态对账：terminal 必须收敛到附着注入或收口 harvest（user_stop 豁免）。
+
+        When ``journal_entries`` is the host journal after detach, missing durable
+        run terminals fire even if inject/harvest already stamped ``settled_via`` —
+        that stamp cannot see frames lost after the arming-turn snapshot.
+        """
+        if journal_entries is not None and self.completed_run_ids:
+            have = _durable_terminal_run_ids(journal_entries)
+            missing = sorted(rid for rid in self.completed_run_ids if rid not in have)
+            if missing:
+                logger.error(
+                    "coordination.terminal_unsettled",
+                    execution_id=self.execution_id,
+                    conversation_id=self.conversation_id or "",
+                    completed=len(self.completed_run_ids),
+                    total=self.total_workers,
+                    turn_attached=self.turn_attached,
+                    harvest_scheduled=self.harvest_scheduled,
+                    all_completed_injected=self.all_completed_injected,
+                    missing_run_ids=missing,
+                    detail=(
+                        "终态对账失败：execution 已有完成 run，但宿主 journal 缺少对应终态帧。"
+                    ),
+                )
+                return
         if self.settled_via:
             return
         if self.user_stopped:
@@ -1805,14 +1853,35 @@ def bind_host_journal(
     *,
     writer: Any | None,
     turn_id: str | None = None,
+    fact_log: Any | None = None,
 ) -> None:
-    """Remember the arming turn's journal writer for post-detach DURABLE persistence."""
-    if writer is None:
+    """Remember the arming turn's journal writer + fact log for post-detach DURABLE persistence."""
+    if writer is not None:
+        session.host_journal_writer = writer
+        tid = (turn_id or getattr(writer, "turn_id", "") or "").strip()
+        if tid:
+            session.host_turn_id = tid
+    if fact_log is None:
+        from agentcore.runtime.facts import current_fact_log
+
+        fact_log = current_fact_log.get()
+    if fact_log is not None:
+        session.host_fact_log = fact_log
+
+
+def rebind_host_journal_writer(old: Any, new: Any) -> None:
+    """Point live sessions at ``new`` when they still hold sealed ``old``.
+
+    Pause ``seal()`` freezes the arming-turn writer; background execution
+    terminals must keep appending to the same ``turn_id`` via an unsealed
+    overflow writer. Sessions that still point at ``old`` would otherwise
+    skip the write (``sealed`` guards) or silent-drop in ``_enqueue``.
+    """
+    if old is None or new is None or old is new:
         return
-    session.host_journal_writer = writer
-    tid = (turn_id or getattr(writer, "turn_id", "") or "").strip()
-    if tid:
-        session.host_turn_id = tid
+    for session in _sessions.values():
+        if session.host_journal_writer is old:
+            session.host_journal_writer = new
 
 
 def emit_execution_detached(
@@ -1837,7 +1906,10 @@ def emit_execution_detached(
             sink.emit(event)
     else:
         writer = session.host_journal_writer
-        if writer is not None and not getattr(writer, "sealed", False):
+        if writer is not None:
+            writable = getattr(writer, "writable", None)
+            if callable(writable):
+                writer = writable()
             with contextlib.suppress(Exception):
                 writer.schedule_append(
                     {
@@ -2337,18 +2409,34 @@ async def await_live_detached_drive(conversation_id: str) -> bool:
     live drive so finally-block terminal frames are not dropped by an early
     sink close. Drive-task cancel/failure does not raise; caller cancellation does.
     """
-    session = active_coordination_for_conversation(conversation_id)
-    if session is None or not session.active:
+    # Registered (not only ``active``): harvest may have closed the session
+    # after the drive finished, but post-detach journal 对账 still needs the
+    # host_fact_log that remains on the registry object.
+    session = registered_coordination_for_conversation(conversation_id)
+    if session is None:
         return False
     if session.user_stopped or session.turn_attached:
         return False
     task = session.drive_task
-    if task is None or task.done():
+    if task is None:
         return False
     # ``asyncio.wait`` completes when the drive finishes (ok / error / cancel)
     # without re-raising the drive's CancelledError; our own cancellation still
     # propagates so turn cancel paths close the sink immediately.
-    await asyncio.wait({task})
+    # Already-done drives still flush + journal-terminal 对账: CEO persist can
+    # race the last workers, so this is the first place that sees post-detach
+    # host_fact_log (harvest's settled_via stamp cannot).
+    if not task.done():
+        await asyncio.wait({task})
+    writer = session.host_journal_writer
+    if writer is not None:
+        flush = getattr(writer, "flush", None)
+        if flush is not None:
+            with contextlib.suppress(Exception):
+                await flush()
+    log = session.host_fact_log
+    entries = log.entries() if log is not None and hasattr(log, "entries") else None
+    session.check_terminal_settlement(journal_entries=entries)
     return True
 
 

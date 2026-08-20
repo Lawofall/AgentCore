@@ -1,3 +1,4 @@
+import { turnVerdictHostContradiction } from "@agentcore/protocol-conformance/turnVerdict";
 import { describe, expect, it } from "vitest";
 import {
   LLM_RATE_LIMIT_MESSAGE,
@@ -12,6 +13,7 @@ import {
   arbitrateTurnOutcome,
   attestedWaitHint,
   isAttestedPauseContinue,
+  toConformanceTurnVerdict,
 } from "../turnOutcome";
 
 function measuredCase(
@@ -532,5 +534,54 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     expect(o.recovery.kind).toBe("configure");
     expect(o.recovery.label).toBe("接入自己的 Key");
     expect(o.showFooter).toBe(false);
+  });
+
+  it("conformance envelope keeps hasTeamStrip + supportPackHost", () => {
+    const o = arbitrateTurnOutcome({
+      content: "",
+      finishReason: "error",
+      messageError: { code: "LLM_ERROR", message: "模型调用失败，请重试。" },
+      hasTeamStrip: true,
+    });
+    const v = toConformanceTurnVerdict({ outcome: o, hasTeamStrip: true });
+    expect(v.hasTeamStrip).toBe(true);
+    expect(v.supportPackHost).toBe("strip");
+    expect(v).not.toHaveProperty("surface");
+  });
+
+  it("conformance envelope carries unproductive tool hint names", () => {
+    const o = arbitrateTurnOutcome({
+      content: "已写完大半",
+      finishReason: "unproductive",
+    });
+    const v = toConformanceTurnVerdict({
+      outcome: o,
+      hasTeamStrip: false,
+      failedToolHintNames: ["host_shell"],
+    });
+    expect(v.failedToolHintNames).toEqual(["host_shell"]);
+    expect(v.hasTeamStrip).toBe(false);
+    expect(v).not.toHaveProperty("surface");
+  });
+
+  it("rejects contradictory host combos on the envelope", () => {
+    expect(
+      turnVerdictHostContradiction({
+        hasTeamStrip: true,
+        supportPackHost: "bubble",
+      }),
+    ).toMatch(/互斥/);
+    expect(
+      turnVerdictHostContradiction({
+        hasTeamStrip: false,
+        supportPackHost: "strip",
+      }),
+    ).toMatch(/互斥/);
+    expect(
+      turnVerdictHostContradiction({
+        hasTeamStrip: true,
+        supportPackHost: "composer",
+      }),
+    ).toBeNull();
   });
 });

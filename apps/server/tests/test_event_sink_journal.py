@@ -401,7 +401,7 @@ async def test_emit_updates_in_memory_journal_when_writer_sealed(monkeypatch) ->
         def __init__(self, session: object) -> None:
             pass
 
-        async def append(self, *, turn_id, seq, conversation_id, trace_id, entry) -> int | None:
+        async def append(self, *, turn_id, seq, conversation_id, trace_id, entry, overflow=False) -> int | None:
             written.append(seq)
             return 0
 
@@ -446,6 +446,59 @@ async def test_emit_updates_in_memory_journal_when_writer_sealed(monkeypatch) ->
         assert len(written) == sealed_at
         assert writer.schedule_append({"kind": "x"}) is None
     finally:
+        current_journal_writer.reset(token)
+
+
+async def test_emit_run_completed_after_seal_persists_via_overflow(monkeypatch) -> None:
+    """Pause seal must not drop a later worker terminal; overflow writer still appends."""
+    from agentcore.runtime.facts import TurnFactLog, current_fact_log
+    from agentcore.runtime.journal.writer import TurnJournalWriter, current_journal_writer
+
+    written: list[dict] = []
+
+    class Repo:
+        def __init__(self, session: object) -> None:
+            pass
+
+        async def append(self, *, turn_id, seq, conversation_id, trace_id, entry, overflow=False) -> int | None:
+            written.append(dict(entry))
+            return len(written) - 1
+
+    class _Sess:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(
+        "agentcore.conversation.store.cloud.telemetry_session_factory", lambda: _Sess()
+    )
+    monkeypatch.setattr("agentcore.conversation.store.cloud.TurnJournalRepository", Repo)
+    monkeypatch.setattr(
+        "agentcore.runtime.audit.hooks.on_journal_fact_appended", lambda entry: None
+    )
+
+    writer = TurnJournalWriter(turn_id="m1", conversation_id="c1", trace_id="t1")
+    fact_log = TurnFactLog()
+    token = current_journal_writer.set(writer)
+    fl = current_fact_log.set(fact_log)
+    try:
+        sink = EventSink()
+        sink.emit(_plan())
+        await writer.flush()
+        await writer.seal()
+        sealed_kinds = [e.get("kind") for e in written]
+
+        sink.emit(run_completed("s1", "a1", output_summary="done", duration_ms=12))
+        await writer.flush()
+
+        kinds = [e.get("kind") for e in written]
+        assert "run_completed" in kinds
+        assert kinds[: len(sealed_kinds)] == sealed_kinds
+        assert "run_completed" in [e.get("kind") for e in fact_log.entries()]
+    finally:
+        current_fact_log.reset(fl)
         current_journal_writer.reset(token)
 
 

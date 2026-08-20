@@ -1,4 +1,5 @@
 import { MODEL_CONFIG_PATH } from "@/lib/errors";
+import { formatLocalMoment } from "@/lib/recoveryMoment";
 import {
   FAILED_STRIP_TITLE,
   INTERRUPTED_STRIP_TITLE,
@@ -11,12 +12,19 @@ import {
   resolveTurnOutcomeFromJournal,
   teamFailureProgressBit,
   teamStripFace,
+  toConformanceTurnVerdict,
   turnOutcomeShowsBubbleBanner,
   turnOutcomeShowsComposerHint,
   turnOwnsUserFacingOutlet,
+  turnVerdictFromProjected,
   wireTurnResultFromPayload,
 } from "@/lib/turnOutcome";
-import type { MessageEndPayload, SSEEvent } from "@agentcore/contract-types";
+import type {
+  MessageEndPayload,
+  ProcessStep,
+  SSEEvent,
+} from "@agentcore/contract-types";
+import type { ProjectedTurn } from "@agentcore/protocol-conformance/projectedTurn";
 import { describe, expect, it } from "vitest";
 
 function ev(type: SSEEvent["type"], payload: unknown): SSEEvent {
@@ -423,6 +431,78 @@ describe("resolveTurnOutcome · remaining terminals", () => {
     expect(out.notice).toBeNull();
     expect(out.surface).toBe("none");
     expect(out.recovery).toEqual({ kind: "none" });
+    const v = toConformanceTurnVerdict({
+      outcome: out,
+      hasTeamStrip: false,
+    });
+    expect(v.hasTeamStrip).toBe(false);
+    expect(v.supportPackHost).toBe("none");
+    expect(v).not.toHaveProperty("surface");
+    expect(v.failedToolHintNames).toEqual([]);
+  });
+
+  it("conformance envelope carries unproductive tool hint names", () => {
+    const out = resolveTurnOutcome({
+      finishReason: "unproductive",
+      content: "已写完大半",
+    });
+    const v = toConformanceTurnVerdict({
+      outcome: out,
+      hasTeamStrip: false,
+      failedToolHintNames: ["host_shell"],
+    });
+    expect(v.failedToolHintNames).toEqual(["host_shell"]);
+    expect(v.hasTeamStrip).toBe(false);
+    expect(v.supportPackHost).toBe("none");
+  });
+
+  it("turnVerdictFromProjected names failed tools on unproductive-with-body", () => {
+    const process: ProcessStep[] = [
+      { kind: "content", text: "已写完大半" },
+      {
+        kind: "tool",
+        id: "tc1",
+        tool_name: "host_shell",
+        arguments: { command: "do_work" },
+        result: "host_shell failed",
+        status: "error",
+      },
+    ];
+    const projected = {
+      status: "completed",
+      finishReason: "unproductive",
+      outcome: "ok",
+      error: null,
+      content: "已写完大半",
+      reasoning: "",
+      captainContext: [],
+      process,
+      citations: [],
+      evidenceLedger: [],
+      citedIds: [],
+      agents: [],
+      runs: [],
+      acts: [],
+      progress: { completed: 0, total: 0 },
+      interactions: [],
+      cost: null,
+      debate: null,
+      debateRounds: [],
+      debatePretrial: null,
+      crossExamEnabled: false,
+      debateOpening: null,
+      teamSynthesisPreview: null,
+      deliveryStatus: null,
+      turnWarning: null,
+      autoFolder: null,
+      teamNotes: [],
+      userInterjections: [],
+    } as ProjectedTurn;
+    const v = turnVerdictFromProjected([], projected);
+    expect(v.failedToolHintNames).toEqual(["host_shell"]);
+    expect(v.hasTeamStrip).toBe(false);
+    expect(v.supportPackHost).toBe("none");
+    expect(v).not.toHaveProperty("surface");
   });
 
   it("empty max_rounds is one notice, not a retry button", () => {
@@ -451,7 +531,7 @@ describe("resolveTurnOutcome · remaining terminals", () => {
     const out = resolveTurnOutcome({
       errorCode: "QUOTA_EXCEEDED",
       errorMessage:
-        "平台模型额度已用完，本回合无法继续。上游将于 8 月 15 日 00:00 恢复；或在「设置 · 服务商」接入自己的 API Key 立即继续。",
+        "平台模型额度已用完，本回合无法继续。请等待上游额度恢复，或接入自己的 API Key 立即继续。",
       finishReason: "error",
       retryable: true,
       content: "",
@@ -462,15 +542,17 @@ describe("resolveTurnOutcome · remaining terminals", () => {
       href: MODEL_CONFIG_PATH,
     });
     expect(out.recovery.kind).not.toBe("retry");
-    expect(out.notice).toContain("恢复");
+    expect(out.notice).toContain("请等待上游额度恢复");
   });
 
   it("localizes QUOTA_EXCEEDED reset moment from the journal error context", () => {
+    const server =
+      "平台模型额度已用完，本回合无法继续。请等待上游额度恢复，或接入自己的 API Key 立即继续。";
     const out = resolveTurnOutcomeFromJournal({
       events: [
         ev("error", {
           code: "QUOTA_EXCEEDED",
-          message: "平台模型额度已用完，本回合无法继续。",
+          message: server,
           context: {
             recovery_at: "2026-08-14T16:00:00Z",
             credential_source: "platform",
@@ -481,7 +563,10 @@ describe("resolveTurnOutcome · remaining terminals", () => {
       content: "",
     });
     expect(out.recovery.kind).toBe("configure");
-    expect(out.notice).toMatch(/将于 .+ 恢复/);
+    expect(out.notice).toBe(
+      `${server}额度将于 ${formatLocalMoment("2026-08-14T16:00:00Z")} 恢复。`,
+    );
+    expect(out.notice).not.toContain("上游将于");
     expect(out.notice).not.toContain("UTC");
   });
 });
@@ -499,18 +584,41 @@ describe("resolveTurnOutcome · team strip owns the verdict", () => {
     expect(out.notice).toBe("模型调用失败，请重试。");
     expect(turnOutcomeShowsBubbleBanner(out)).toBe(false);
     expect(turnOwnsUserFacingOutlet(out)).toBe(true);
+    const v = toConformanceTurnVerdict({ outcome: out, hasTeamStrip: true });
+    expect(v.hasTeamStrip).toBe(true);
+    expect(v.supportPackHost).toBe("strip");
+    expect(v).not.toHaveProperty("surface");
   });
 
-  it("empty interrupt + team graph still keeps send_next and the notice for 排查包", () => {
+  it("empty interrupt + team graph: composer owns the hint, strip is not the host", () => {
     const out = resolveTurnOutcome({
       finishReason: "interrupted",
       content: "",
       hasTeamGraph: true,
     });
-    expect(out.surface).toBe("strip");
+    expect(out.surface).toBe("composer");
+    expect(out.surface).not.toBe("strip");
     expect(out.recovery).toEqual({ kind: "send_next" });
     expect(out.notice).toMatch(/直接发送下一条/);
     expect(turnOutcomeShowsBubbleBanner(out)).toBe(false);
+    expect(turnOutcomeShowsComposerHint(out)).toBe(true);
+    const v = toConformanceTurnVerdict({ outcome: out, hasTeamStrip: true });
+    expect(v.hasTeamStrip).toBe(true);
+    expect(v.supportPackHost).toBe("composer");
+  });
+
+  it("empty interrupt infers team graph from run_plan when the flag is omitted", () => {
+    const out = resolveTurnOutcomeFromJournal({
+      events: [
+        ev("run_plan", { execution_id: "exec_int" }),
+        ev("run_started", { run_id: "r1", agent_id: "w1" }),
+        ev("message_end", { finish_reason: "interrupted" }),
+      ],
+      content: "",
+      finishReason: "interrupted",
+    });
+    expect(out.surface).toBe("composer");
+    expect(turnOutcomeShowsComposerHint(out)).toBe(true);
   });
 
   it("partial + team graph: strip owns 部分完成, not a second failure banner", () => {
@@ -557,7 +665,7 @@ describe("resolveTurnOutcome · team strip owns the verdict", () => {
     });
     expect(out.kind).toBe("partial");
     expect(out.surface).toBe("composer");
-    expect(out.surface).not.toBe("partial");
+    expect(out.surface).not.toBe("strip");
     expect(out.notice).toBe("上游限流，暂时无法继续本回合。请约 4 秒后再试。");
     expect(turnOutcomeShowsBubbleBanner(out)).toBe(false);
     expect(turnOutcomeShowsComposerHint(out)).toBe(true);

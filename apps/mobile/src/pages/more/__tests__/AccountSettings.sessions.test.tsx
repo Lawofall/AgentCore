@@ -46,6 +46,8 @@ vi.mock("@/api/account", () => ({
   uploadAvatar: vi.fn(),
   deleteAvatar: vi.fn(),
   deleteAccount: vi.fn(),
+  sendEmailCode: vi.fn(),
+  verifyEmail: vi.fn(),
 }));
 
 vi.mock("@/pages/more/Avatar", () => ({

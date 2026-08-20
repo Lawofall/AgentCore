@@ -306,16 +306,20 @@ def collect_manual_link_errors(body: str, registry: ManualRegistry) -> list[str]
 _PRODUCT_HELP_SKILL_NAMES = ("product_help", "product_help_map", "product_help_faq")
 
 
-def product_help_bodies() -> str:
-    """Concatenate all product_help* bodies that may carry manual deep-links."""
+def _skill_bodies(names: tuple[str, ...]) -> str:
     reg = build_system_skill_registry()
     parts: list[str] = []
-    for name in _PRODUCT_HELP_SKILL_NAMES:
+    for name in names:
         skill = reg.get(name)
         _require(skill is not None, f"{name} skill missing from system registry")
         assert skill is not None
         parts.append(skill.body)
     return "\n".join(parts)
+
+
+def product_help_bodies() -> str:
+    """Concatenate all product_help* bodies that may carry manual deep-links."""
+    return _skill_bodies(_PRODUCT_HELP_SKILL_NAMES)
 
 
 # --- tests -------------------------------------------------------------------
@@ -363,6 +367,71 @@ def test_intentional_dead_manual_links_fail_gate():
         "bare section 'faq'" in e and "collaboration" in e and "reference" in e
         for e in errors
     ), joined
+
+
+# Desktop product copy uses「设置 · {侧栏}」；mobile hub is 我的 + NavRow labels.
+# Cheap fork gate: each desktop page name must share a sentence with 手机,
+# and every「我的 → X」must be a real mobile nav label (don't invent names).
+# Bug triage is in scope too — its L3 names 反馈, which is desktop-only.
+_SURFACE_FORK_SKILL_NAMES = _PRODUCT_HELP_SKILL_NAMES + ("product_bug_triage",)
+_DESKTOP_SETTINGS_PAGES = ("设置 · 服务商", "设置 · 模型", "设置 · 用量", "设置 → 反馈")
+_MOBILE_MORE_PAGE = _REPO_ROOT / "apps" / "mobile" / "src" / "pages" / "MorePage.tsx"
+_MOBILE_TAB_BAR = _REPO_ROOT / "apps" / "mobile" / "src" / "components" / "TabBar.tsx"
+_MOBILE_APP = _REPO_ROOT / "apps" / "mobile" / "src" / "App.tsx"
+_NAV_ROW_LABEL = re.compile(
+    r"<NavRow\b[^>]*?\blabel=\"([^\"]+)\"",
+    flags=re.DOTALL,
+)
+_TAB_LABEL = re.compile(r'label:\s*"([^"]+)"')
+_MORE_ROUTE = re.compile(r'path="(/more[^"]*)"')
+_MOBILE_ARROW_PAGE = re.compile(r"我的 → ([^」/（]+)")
+
+
+def _sentence_units(body: str) -> list[str]:
+    units: list[str] = []
+    for para in re.split(r"\n- ", body):
+        units.extend(u.strip() for u in para.split("。") if u.strip())
+    return units
+
+
+def test_product_help_settings_page_names_fork_by_surface():
+    """Desktop settings page names must fork; mobile names must be real nav."""
+    more_src = _MOBILE_MORE_PAGE.read_text(encoding="utf-8")
+    tab_src = _MOBILE_TAB_BAR.read_text(encoding="utf-8")
+    app_src = _MOBILE_APP.read_text(encoding="utf-8")
+    nav_labels = frozenset(_NAV_ROW_LABEL.findall(more_src))
+    tab_labels = frozenset(_TAB_LABEL.findall(tab_src))
+    more_routes = frozenset(_MORE_ROUTE.findall(app_src))
+
+    _require("模型配置" in nav_labels, f"expected 模型配置 NavRow in {_MOBILE_MORE_PAGE.name}")
+    _require("用量" in nav_labels, f"expected 用量 NavRow in {_MOBILE_MORE_PAGE.name}")
+    _require("我的" in tab_labels, f"expected 我的 tab in {_MOBILE_TAB_BAR.name}")
+    _require("/more/model" in more_routes, "mobile /more/model route missing")
+    _require("/more/usage" in more_routes, "mobile /more/usage route missing")
+    _require(
+        "/more/providers" not in more_routes,
+        "mobile unexpectedly grew /more/providers; update product_help forks",
+    )
+
+    body = _skill_bodies(_SURFACE_FORK_SKILL_NAMES)
+    units = _sentence_units(body)
+    for name in _DESKTOP_SETTINGS_PAGES:
+        hits = [u for u in units if name in u]
+        _require(hits, f"{name!r} disappeared from product_help* (desktop name must stay)")
+        unforked = [u for u in hits if "手机" not in u]
+        assert not unforked, (
+            f"{name!r} appears without a 手机 fork in the same sentence:\n- "
+            + "\n- ".join(unforked)
+        )
+
+    claimed = [n.strip() for n in _MOBILE_ARROW_PAGE.findall(body)]
+    _require(claimed, "expected at least one「我的 → …」mobile path in product_help*")
+    invented = [n for n in claimed if n not in nav_labels]
+    assert not invented, (
+        "product_help* invented mobile page names not in MorePage NavRow labels: "
+        + ", ".join(invented)
+        + f" (have {sorted(nav_labels)})"
+    )
 
 
 def test_section_ids_parse_failure_message_is_clear():

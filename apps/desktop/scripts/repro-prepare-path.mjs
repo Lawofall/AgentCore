@@ -70,7 +70,7 @@ async function main() {
 
   try {
     await page.goto(new URL("index.webapp.html", base).href, { waitUntil: "load", timeout: 30000 });
-    const userBox = page.getByPlaceholder("用户名");
+    const userBox = page.getByPlaceholder("邮箱或用户名");
     const composer = page.getByPlaceholder(/输入消息/);
     await Promise.race([
       userBox.waitFor({ state: "visible", timeout: 20000 }).catch(() => {}),

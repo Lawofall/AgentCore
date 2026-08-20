@@ -62,6 +62,7 @@ describe("LoginPage MFA", () => {
         username: "root",
         displayName: "Root",
         email: null,
+        emailVerifiedAt: null,
         role: "admin",
         passwordMustChange: false,
       },
@@ -117,5 +118,33 @@ describe("LoginPage MFA", () => {
     expect(
       (screen.getByPlaceholderText("验证码（6 位）") as HTMLInputElement).value,
     ).toBe("");
+  });
+});
+
+describe("LoginPage credentials", () => {
+  beforeEach(() => {
+    useAuthStore.setState({
+      status: "unauthenticated",
+      user: null,
+      pendingMfaToken: null,
+      mfaSetupRequired: false,
+    });
+  });
+
+  it("accepts email or username and explains a short identifier", () => {
+    render(<LoginPage />);
+    expect(screen.getByPlaceholderText("邮箱或用户名")).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("邮箱或用户名"), {
+      target: { value: "ab" },
+    });
+    expect(screen.getByText("用户名至少 3 个字符")).toBeTruthy();
+  });
+
+  it("toggles password visibility", () => {
+    render(<LoginPage />);
+    const field = screen.getByPlaceholderText("密码") as HTMLInputElement;
+    expect(field.type).toBe("password");
+    fireEvent.click(screen.getByRole("button", { name: "显示密码" }));
+    expect(field.type).toBe("text");
   });
 });

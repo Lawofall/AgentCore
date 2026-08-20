@@ -68,12 +68,12 @@ skip_if:
 | 模型名 | `deepseek-v4-pro` / `deepseek-v4-flash`；旧名 `deepseek-chat` / `deepseek-reasoner` 已停用 |
 | 上下文 | 官方 **1M**（input+output 合计）；max output 384K。目录 `context_length` 与近顶压缩跟这条，不跟过期的 128K 记忆 |
 | base_url | `https://api.deepseek.com`（兼容 `/v1`） |
-| 思考开关 | `extra_body.thinking.type=enabled/disabled`，默认 enabled；AgentCore 只用此开关 |
+| 思考开关 | `extra_body.thinking.type=enabled/disabled`。官方省略 = 默认 enabled；**AgentCore 聊天/CEO/worker 显式发 enabled**，DeepSeek V4 同时发官方默认档 `reasoning_effort=high`（不暴露强度 UI）。OpenCode Go 省略 `thinking` 时思考 token=0；只发 `thinking.enabled` 仍可能不回 CoT |
 | 温度坑 | **思考模式下** `temperature`/`top_p`/penalty **静默忽略** |
 | 工具调用 | 有 tool call 的回合必须原样回传 `reasoning_content`，否则 400 |
 | 其它 | 不支持强制 `tool_choice=required`（probe 遇 400 回退）；无 `developer` role |
 
-**思考开关按角色**：CEO / worker / 单聊 = on；后台 one-shot（title/memory/compaction/file.rewrite）= disabled。无 per-agent 思考强度档。
+**思考开关按角色**：CEO / worker / 单聊 = 出站写 `thinking.type=enabled`（不省略）；后台 one-shot（title/memory/compaction/file.rewrite）= `disabled`。无 per-agent 思考强度档。
 
 ## 四·附、Moonshot / Kimi 易错约束（BYOK 常用）
 
@@ -117,6 +117,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | 平台代付 | ✅ `PLATFORM_*` 可指向 Zen **或** Go；**现网钉 Go + 付费 Flash**（见 §五·附）。换上游 / 改 `quota_*` 须改生产 `.env` 并重启 api |
 | 上下文 | 按 **SKU id**：付费 `deepseek-v4-flash` **1M**；仅 `deepseek-v4-flash-free` **200K**（Zen 网关 cap）。禁止按端点猜窗（Go 无 free 档也不把 Flash 当成 200K） |
 | 错误分类 | 一张按上游嵌套 `error.type` 的表（信封 `{"type":"error","error":{"type":…}}`），禁止扫 `error.message`。**`GoUsageLimitError`（429）= Go 订阅配额用尽**（等窗口或控制台 `Use balance`），不是余额不足；**`CreditsError`（401）**收窄为无支付方式 / 订阅未激活 / 余额空；`MonthlyLimitError` / `UserLimitError` = 工作区月限或成员限；`ModelError` = 模型不支持 / 禁用 / trial 结束；`AuthError` 才是 Key 废；`RegionError`（403）= 中国区托管 opt-in。BYOK 可带用户自己的工作区链接；**platform 叶绝不回显工作区 URL / id**。上游透传的 `403 This model is not available in your region` **不是** `RegionError`；顶层 `Router.Unavailable` 不在本表。未知 type 走现有兜底 |
+| 思考 | DeepSeek 叶与官方同形：聊天/CEO/worker **显式**发 `thinking.type=enabled` + `reasoning_effort=high`。Go 省略 `thinking` 时不推 CoT；只开 `thinking.type` 仍可能空思考（2026-08-19 dogfood）。入站兼容 `reasoning` / `reasoning_text` 别名。不按端点开特例方言。消费侧：同 chunk 先 reasoning 后 content；思考未停时正文不进时间线（防 Go 交错流把一句 CoT 拆成两段 Thought）。`thinking=False` 的后台 one-shot 不攒 |
 | 未做 | `zen/` / `opencode-go/` 前缀路由；为本网关开 Anthropic `/messages` / OpenAI `/responses` 协议分叉（触发条件：产品要上一个只说这两种协议的模型，而不是工具调用质量问题） |
 | 隐私 | Zen **BYOK** free 档限时且可能用于改进模型。**现网 platform 走 Go**：DeepSeek ZDR 写到 **2026-08-31 且按月续约**（见 §五·附），不得写成永久承诺，也不得沿用免费档措辞。中国区托管 opt-in 是另一维度，勿与 ZDR 混成一句 |
 
@@ -126,7 +127,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 
 **多模型 + 每模型凭据覆盖**（成本 §〇·六 F3）：`PLATFORM_MODELS` allowlist（非空时 `PLATFORM_MODEL` / 后台档须 ∈ 列表，否则启动 fail-fast）；`PLATFORM_MODEL_CREDENTIALS`（JSON `{model → {api_key?, base_url?, upstream_model?, id?}}`）给「一 key 一模型」中转绑独立凭据；可选 `upstream_model` 让目录 id 与上游 id 解耦（如 `glm-5.2-jiu` → 上游仍发 `glm-5.2`；计费 / 目录仍用目录 id）。单点 `platform_llm_credentials(model=…)` + 出站改写 `platform_wire_model`（`PlatformProvider`）。
 
-**平台额度账号池**（admin 可热更）：成员表 `platform_credentials`，每行是绑定的 `(api_key, base_url)` + 该号自己的订阅日。Key 走既有 `KeyEncryptor` / `ENCRYPTION_KEY`（与 BYOK 同主密钥），明文永不回前端。选钥：fill-first（打满一个再用下一个；冷却 / 月耗尽 / 401·403 封禁的号跳过）+ 同一 `conversation_id` 钉在同一号（该号耗尽才换，避免打散 prompt cache）。流式 **commit 前** 的 429 与 403 `RegionError` 换到下一个启用号；commit 后维持现状（半成品 + `LLM_ERROR`，不做续写拼接）。401（封号与坏 key 不可区分）摘除该号并告警，**不**拿其余号重试同一请求。403 `RegionError`（漏做中国区托管 opt-in）同样摘除并告警，但允许 commit 前换号；分类只认上游嵌套 `error.type`。全池冷却或封禁时诚实报错（既有「接入自己的 Key」CTA），**不**回落 env、不假装排队、不静默降级模型。**池为空或全禁用 → 回落现有 `PLATFORM_API_KEY` / `PLATFORM_BASE_URL`**。带自己 `api_key` 的 `PLATFORM_MODEL_CREDENTIALS` 覆盖仍优先于池。**运行态可见与解封**：冷却 / 月耗尽 / 封禁及 `recovery_at` / 触发的限流窗名只活在 `platform_pool_state`（Redis / 进程内存、不落库），但随 `GET /v1/admin/platform-credentials` 每行下发；`POST …/{id}/clear-runtime` 手动清标记让该号重新可调度并写审计——**封禁号复活的唯一正规入口**（此前只能靠 PATCH 字段间接触发清理）。月耗尽按 `recovery_at` 自愈，故后台只对冷却 / 封禁给解封动作。本轮不做 80% 阈值提前切（名义价 ↔ 上游美元尚未校准）。可用性 = 默认 env key **或**任一覆盖有 key **或**池中有启用成员。缺 curated 价卡的 allowlist id → 不上架。
+**平台额度账号池**（admin 可热更）：成员表 `platform_credentials`，每行是绑定的 `(api_key, base_url)` + 该号自己的订阅日。Key 走既有 `KeyEncryptor` / `ENCRYPTION_KEY`（与 BYOK 同主密钥），明文永不回前端。每成员可声明 **上游工具面上限**（`tool_surface_limits`：`max_tools` / `max_properties_total` / `max_properties_per_tool`，均可空；**未声明 = 不限**）。数字由运维按该号订阅档填写，代码不硬编码任何厂商帽子。装配期（平台叶把 `tools` 装进请求、发出 HTTP **之前**）用我方 OpenAI 形开场表测量（条数 + 顶层 `function.parameters.properties` 键数，**不**假装对齐上游嵌套算法）对照声明：超限则记 `llm.tool_surface.limit_exceeded`，并以我方诚实错误结束该次调用——**不会发给上游，也不会自动裁剪或换一档工具表**。选钥：fill-first（打满一个再用下一个；冷却 / 月耗尽 / 401·403 封禁的号跳过）+ 同一 `conversation_id` 钉在同一号（该号耗尽才换，避免打散 prompt cache）。流式 **commit 前** 的 429 与 403 `RegionError` 换到下一个启用号；commit 后维持现状（半成品 + `LLM_ERROR`，不做续写拼接）。401（封号与坏 key 不可区分）摘除该号并告警，**不**拿其余号重试同一请求。403 `RegionError`（漏做中国区托管 opt-in）同样摘除并告警，但允许 commit 前换号；分类只认上游嵌套 `error.type`。全池冷却或封禁时诚实报错（既有「接入自己的 Key」CTA），**不**回落 env、不假装排队、不静默降级模型。**池为空或全禁用 → 回落现有 `PLATFORM_API_KEY` / `PLATFORM_BASE_URL`**。带自己 `api_key` 的 `PLATFORM_MODEL_CREDENTIALS` 覆盖仍优先于池。**运行态可见与解封**：冷却 / 月耗尽 / 封禁及 `recovery_at` / 触发的限流窗名只活在 `platform_pool_state`（Redis / 进程内存、不落库），但随 `GET /v1/admin/platform-credentials` 每行下发；`POST …/{id}/clear-runtime` 手动清标记让该号重新可调度并写审计——**封禁号复活的唯一正规入口**（此前只能靠 PATCH 字段间接触发清理）。月耗尽按 `recovery_at` 自愈，故后台只对冷却 / 封禁给解封动作。本轮不做 80% 阈值提前切（名义价 ↔ 上游美元尚未校准）。可用性 = 默认 env key **或**任一覆盖有 key **或**池中有启用成员。缺 curated 价卡的 allowlist id → 不上架。
 
 平台代付每次调用在日志（`llm.call` / `llm.call_failed`）与 `cost_calls.platform_credential_id` 记下用的是哪把凭据：池成员 = 该行 UUID；env / 覆盖路径 = `PLATFORM_CREDENTIAL_ID` 或覆盖 `id`，否则 `(api_key, base_url)` 稳定哈希；非 key 明文 / 后四位。只进日志与台账，不进用户可见 SSE error context。BYOK 该列为空。
 

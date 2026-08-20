@@ -1,10 +1,11 @@
 """Local sidecar cold resume durables the post-resume journal to Postgres.
 
 Pause seals the outbox READY; resume unseals so live facts and complete
-finalize can rewrite the same file. ``persist_turn_journal`` wholesale-replaces
-via ``TurnJournalRepository.record`` (delete-then-insert) so a complete snapshot
-overwrites the pause prefix. Sidecar prewrite stays outbox-only; a separate
-resume-boundary writeback lands settlement in PG without blocking 开工.
+finalize can rewrite the same file. ``persist_turn_journal`` replaces the
+live-band prefix via ``TurnJournalRepository.record`` so a complete snapshot
+overwrites the pause occupancy ``[0, n)``. Higher seqs stay. Sidecar prewrite
+stays outbox-only; a separate resume-boundary writeback lands settlement in PG
+without blocking 开工.
 """
 
 from __future__ import annotations
@@ -146,6 +147,10 @@ async def test_persist_turn_journal_replaces_pause_prefix(monkeypatch) -> None:
         async def record(self, *, turn_id, conversation_id, trace_id, entries) -> None:
             del turn_id, conversation_id, trace_id
             recorded.append(list(entries))
+
+        async def load(self, turn_id) -> list:
+            del turn_id
+            return []
 
     class Session:
         async def rollback(self) -> None:

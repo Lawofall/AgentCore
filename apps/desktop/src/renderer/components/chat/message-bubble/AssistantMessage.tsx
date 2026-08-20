@@ -179,7 +179,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
   const errorAction =
     outcome.recovery.kind === "configure" && outcome.recovery.href
       ? {
-          label: outcome.recovery.label ?? "去设置",
+          label: outcome.recovery.label ?? "去服务商",
           href: outcome.recovery.href,
         }
       : null;

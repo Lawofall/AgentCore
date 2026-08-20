@@ -53,6 +53,7 @@ const user: LocalStoreUser = {
   username: "dev",
   displayName: "Dev",
   email: null,
+  emailVerifiedAt: null,
   role: "user",
   avatarUrl: null,
 };

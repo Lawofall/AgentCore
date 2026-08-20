@@ -84,7 +84,9 @@ def test_progressive_begin_journal_finalize(tmp_path):
     record = _drive(run())
     assert record["phase"] == PHASE_READY
     assert record["content"] == "Hello world"
-    assert record["journal"] == {"0": {"kind": "run_started", "payload": {}}}
+    assert record["journal"] == {
+        "0": {"kind": "run_started", "payload": {}, "ord": 0}
+    }
     assert record["ops"][0] == "begin_turn"
     assert "finalize" in record["ops"]
     body = to_record_turn_body(record)
@@ -289,7 +291,10 @@ def test_salvage_marks_ready(tmp_path):
 
 
 def test_to_record_turn_body_includes_sorted_journal(tmp_path):
-    """Crash salvage: runs=None but journal map must ride the write-back body."""
+    """Crash salvage: runs=None but journal map must ride the write-back body.
+
+    Order follows ``ord`` (write/emission order), stripped from the wire list.
+    """
     store = OutboxStore(tmp_path / "outbox")
     store.bind_turn(
         conversation_id="c1",
@@ -303,17 +308,17 @@ def test_to_record_turn_body_includes_sorted_journal(tmp_path):
         await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="e" * 32)
         await store.append_journal(
             turn_id="m1",
-            seq=2,
-            conversation_id="c1",
-            trace_id="e" * 32,
-            entry={"kind": "run_completed", "payload": {"id": "r1"}, "ts": None},
-        )
-        await store.append_journal(
-            turn_id="m1",
             seq=0,
             conversation_id="c1",
             trace_id="e" * 32,
             entry={"kind": "run_started", "payload": {"id": "r1"}, "ts": "t0"},
+        )
+        await store.append_journal(
+            turn_id="m1",
+            seq=2,
+            conversation_id="c1",
+            trace_id="e" * 32,
+            entry={"kind": "run_completed", "payload": {"id": "r1"}, "ts": None},
         )
         await store.salvage(
             journal=[],
@@ -891,7 +896,9 @@ def test_mutate_recovers_after_transient_read_failure(tmp_path, monkeypatch):
     _drive(run())
     assert calls["n"] == 2
     record = json.loads(path.read_text(encoding="utf-8"))
-    assert record["journal"] == {"0": {"kind": "run_started", "payload": {}}}
+    assert record["journal"] == {
+        "0": {"kind": "run_started", "payload": {}, "ord": 0}
+    }
     assert record["user_message"] == "hi"
 
 
@@ -1076,4 +1083,198 @@ def test_salvage_copies_harvest_origin_from_bind(tmp_path):
     assert record["origin"] == "execution_harvest"
     assert record["execution_id"] == "exec-1"
     assert record["harvest_kind"] == "success"
+
+
+def test_ready_outbox_still_appends_run_terminal(tmp_path):
+    """Pause READY must not drop a later worker terminal (writer overflow's store twin)."""
+    from agentcore.conversation.store.outbox import journal_entries_from_map
+
+    store = OutboxStore(tmp_path / "outbox")
+    store.bind_turn(
+        conversation_id="c1",
+        user_message_id="u1",
+        user_message="hi",
+        message_id="m1",
+        trace_id="r" * 32,
+    )
+
+    async def run() -> dict:
+        await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="r" * 32)
+        await store.append_journal(
+            turn_id="m1",
+            seq=0,
+            conversation_id="c1",
+            trace_id="r" * 32,
+            entry={"kind": "run_started", "payload": {"run_id": "w1"}},
+        )
+        await store.finalize(
+            mode="local",
+            conversation_id="c1",
+            user_message="hi",
+            user_message_id="u1",
+            assistant_content="paused",
+            message_id="m1",
+            trace_id="r" * 32,
+            finish_reason="paused",
+            journal_entries=[
+                {"kind": "run_started", "payload": {"run_id": "w1"}},
+            ],
+        )
+        skipped = await store.append_journal(
+            turn_id="m1",
+            seq=None,
+            conversation_id="c1",
+            trace_id="r" * 32,
+            entry={"kind": "team_preview_required", "payload": {"checkpoint_id": "cp1"}},
+        )
+        landed = await store.append_journal(
+            turn_id="m1",
+            seq=None,
+            conversation_id="c1",
+            trace_id="r" * 32,
+            entry={"kind": "run_completed", "payload": {"run_id": "w1"}},
+        )
+        record = json.loads((tmp_path / "outbox" / "u1.json").read_text(encoding="utf-8"))
+        return {"skipped": skipped, "landed": landed, "record": record}
+
+    result = _drive(run())
+    assert result["skipped"] is None
+    assert result["landed"] is not None
+    assert result["record"]["phase"] == PHASE_READY
+    kinds = [
+        e.get("kind")
+        for e in (journal_entries_from_map(result["record"].get("journal")) or [])
+    ]
+    assert "run_started" in kinds
+    assert "run_completed" in kinds
+    assert "team_preview_required" not in kinds
+
+
+def test_resume_finalize_keeps_ready_overflow_terminal(tmp_path):
+    """Second pause / resume rewrite must not drop overflow run_completed already on READY."""
+    from agentcore.conversation.store.outbox import journal_entries_from_map
+
+    store = OutboxStore(tmp_path / "outbox")
+    store.bind_turn(
+        conversation_id="c1",
+        user_message_id="u1",
+        user_message="hi",
+        message_id="m1",
+        trace_id="r" * 32,
+    )
+
+    async def run() -> list[str]:
+        await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="r" * 32)
+        await store.append_journal(
+            turn_id="m1",
+            seq=0,
+            conversation_id="c1",
+            trace_id="r" * 32,
+            entry={"kind": "run_started", "payload": {"run_id": "w1"}},
+        )
+        await store.finalize(
+            mode="local",
+            conversation_id="c1",
+            user_message="hi",
+            user_message_id="u1",
+            assistant_content="paused",
+            message_id="m1",
+            trace_id="r" * 32,
+            finish_reason="paused",
+            journal_entries=[
+                {"kind": "run_started", "payload": {"run_id": "w1"}},
+            ],
+        )
+        await store.append_journal(
+            turn_id="m1",
+            seq=None,
+            conversation_id="c1",
+            trace_id="r" * 32,
+            entry={"kind": "run_completed", "payload": {"run_id": "w1"}},
+        )
+        await store.reopen_for_resume(
+            turn_id="m1",
+            user_message_id="u1",
+            conversation_id="c1",
+            trace_id="r" * 32,
+        )
+        await store.finalize(
+            mode="local",
+            conversation_id="c1",
+            user_message="hi",
+            user_message_id="u1",
+            assistant_content="paused again",
+            message_id="m1",
+            trace_id="r" * 32,
+            finish_reason="paused",
+            journal_entries=[
+                {"kind": "run_started", "payload": {"run_id": "w1"}},
+                {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck-2"}},
+            ],
+        )
+        record = json.loads((tmp_path / "outbox" / "u1.json").read_text(encoding="utf-8"))
+        return [
+            str(e.get("kind") or "")
+            for e in (journal_entries_from_map(record.get("journal")) or [])
+        ]
+
+    kinds = _drive(run())
+    assert kinds[0] == "run_started"
+    assert "run_completed" in kinds
+    assert "team_preview_required" in kinds
+    # Emission order: seal prefix, overflow terminal, then the grown resume prefix.
+    assert kinds.index("run_completed") < kinds.index("team_preview_required")
+
+
+def test_finalize_keeps_late_unlisted_kind(tmp_path):
+    """Prefix rewrite must keep a late higher-seq fact that is not an overflow terminal."""
+    from agentcore.conversation.store.outbox import journal_entries_from_map
+
+    store = OutboxStore(tmp_path / "outbox")
+    store.bind_turn(
+        conversation_id="c1",
+        user_message_id="u1",
+        user_message="hi",
+        message_id="m1",
+        trace_id="r" * 32,
+    )
+
+    async def run() -> list[str]:
+        await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="r" * 32)
+        await store.append_journal(
+            turn_id="m1",
+            seq=0,
+            conversation_id="c1",
+            trace_id="r" * 32,
+            entry={"kind": "run_started", "payload": {"run_id": "w1"}},
+        )
+        await store.append_journal(
+            turn_id="m1",
+            seq=None,
+            conversation_id="c1",
+            trace_id="r" * 32,
+            entry={"kind": "note", "payload": {"content": "late-unrelated"}},
+        )
+        await store.finalize(
+            mode="local",
+            conversation_id="c1",
+            user_message="hi",
+            user_message_id="u1",
+            assistant_content="paused",
+            message_id="m1",
+            trace_id="r" * 32,
+            finish_reason="paused",
+            journal_entries=[
+                {"kind": "run_started", "payload": {"run_id": "w1"}},
+            ],
+        )
+        record = json.loads((tmp_path / "outbox" / "u1.json").read_text(encoding="utf-8"))
+        return [
+            str(e.get("kind") or "")
+            for e in (journal_entries_from_map(record.get("journal")) or [])
+        ]
+
+    kinds = _drive(run())
+    assert kinds[0] == "run_started"
+    assert "note" in kinds
 

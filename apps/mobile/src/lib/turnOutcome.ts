@@ -14,11 +14,17 @@
  * `outcome=null`), which keep surface none so ResumeCard / PauseCard own them.
  *
  * `partial` + structured `LLM_RATE_LIMIT` hangs the why on `surface=composer`
- * (ChatPage input hint). Team strip still paints 部分完成 战绩; it must not
- * host the why or the delivery summary. `kind=paused` stays on PausedContinueCard.
+ * (ChatPage input hint). Empty interrupt + team graph does the same — the
+ * 「已中断，发下一条即可」sentence lives next to the input, not on the strip.
+ * Team strip still paints 部分完成 战绩; it must not host the why or the
+ * delivery summary. `kind=paused` stays on PausedContinueCard.
  */
 import { errorActionForCode, resolveEmptyFailureNotice } from "@/lib/errors";
 import { withLocalRecoveryMoment } from "@/lib/recoveryMoment";
+import {
+  collectFailedToolNames,
+  shouldShowUnproductiveToolFailureHint,
+} from "@/lib/unproductiveToolFailureHint";
 import type {
   DeliveryStatusPayload,
   ErrorPayload,
@@ -26,7 +32,16 @@ import type {
   RunFailedPayload,
   SSEEvent,
 } from "@agentcore/contract-types";
-import type { TurnStatus } from "@agentcore/protocol-conformance";
+import type {
+  ProjectedTurn,
+  TurnStatus,
+} from "@agentcore/protocol-conformance/projectedTurn";
+import {
+  type ProjectedTurnVerdict,
+  type TurnSupportPackHost,
+  projectedHasDedicatedPauseUi,
+  projectedHasTeamGraph,
+} from "@agentcore/protocol-conformance/turnVerdict";
 
 export type TurnOutcomeKind = "ok" | "partial" | "paused" | "error";
 
@@ -41,12 +56,11 @@ export type TurnRecovery =
 
 export type TurnOutcomeSurface =
   | "none"
-  | "partial"
   | "error"
   | "paused"
   /** Team strip owns the verdict; bubble must not repeat the same failure sentence. */
   | "strip"
-  /** Input-area light hint (partial + rate-limit why). Not a banner / red card. */
+  /** Input-area light hint (empty interrupt / partial + rate-limit why). Not a banner / red card. */
   | "composer";
 
 export type TurnOutcome = {
@@ -83,6 +97,24 @@ function asWireKind(value: unknown): TurnOutcomeKind | null {
   return typeof value === "string" && WIRE_KINDS.has(value as TurnOutcomeKind)
     ? (value as TurnOutcomeKind)
     : null;
+}
+
+function eventsHaveTeamGraph(events: readonly SSEEvent[]): boolean {
+  return events.some((e) => e.type === "run_plan" || e.type === "run_started");
+}
+
+function resolveHasTeamGraph(input: TurnOutcomeInput): boolean {
+  if (typeof input.hasTeamGraph === "boolean") return input.hasTeamGraph;
+  return eventsHaveTeamGraph(input.events ?? []);
+}
+
+function supportPackHostFromSurface(
+  surface: TurnOutcomeSurface,
+): TurnSupportPackHost {
+  if (surface === "error") return "bubble";
+  if (surface === "composer") return "composer";
+  if (surface === "strip") return "strip";
+  return "none";
 }
 
 /** Server-authored result on `message_end` (`outcome`; older journals used result). */
@@ -288,6 +320,7 @@ export function resolveTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
   }
 
   const events = input.events ?? [];
+  const hasTeamGraph = resolveHasTeamGraph(input);
   const wire = input.wireResult ?? collectWireResult(events);
   const chrome = events.length ? collectChrome(events) : null;
   const finishReason = input.finishReason ?? chrome?.finishReason ?? null;
@@ -368,7 +401,7 @@ export function resolveTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
         kind,
         notice: maxNotice,
         reason: null,
-        surface: maxNotice ? (input.hasTeamGraph ? "strip" : "error") : "none",
+        surface: maxNotice ? (hasTeamGraph ? "strip" : "error") : "none",
         recovery: { kind: "none" },
         errorCode,
         retryable: retry.retryable,
@@ -433,7 +466,7 @@ export function resolveTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
       // 条用 kind 画「部分完成」；交付摘要不进用户面（呈现甲已撤）。
       notice: null,
       reason: null,
-      surface: input.hasTeamGraph ? "strip" : "none",
+      surface: hasTeamGraph ? "strip" : "none",
       recovery,
       errorCode,
       retryable: retry.retryable,
@@ -451,11 +484,20 @@ export function resolveTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
     ? withTransientWaitHint(rawNotice, retry.retryable, retry.retryAfter)
     : null;
 
+  let surface: TurnOutcomeSurface = "none";
+  if (notice) {
+    if (recovery.kind === "send_next" && hasTeamGraph) {
+      surface = "composer";
+    } else {
+      surface = hasTeamGraph ? "strip" : "error";
+    }
+  }
+
   return {
     kind: "error",
     notice,
     reason: null,
-    surface: notice ? (input.hasTeamGraph ? "strip" : "error") : "none",
+    surface,
     recovery: notice ? recovery : { kind: "none" },
     errorCode,
     retryable: retry.retryable,
@@ -543,10 +585,60 @@ export function teamStripFace(
 
 /** Bubble banner (not team strip, not CEO continue card, not composer hint). */
 export function turnOutcomeShowsBubbleBanner(outcome: TurnOutcome): boolean {
-  return outcome.surface === "error" || outcome.surface === "partial";
+  return outcome.surface === "error";
 }
 
 /** Input-area light hint. Judgment is `surface=composer` — leaves must not re-test rate-limit. */
 export function turnOutcomeShowsComposerHint(outcome: TurnOutcome): boolean {
   return outcome.surface === "composer";
+}
+
+/** Conformance envelope — judge encoding is ``hasTeamStrip`` + ``supportPackHost``. */
+export function toConformanceTurnVerdict(args: {
+  outcome: TurnOutcome;
+  hasTeamStrip: boolean;
+  failedToolHintNames?: readonly string[];
+}): ProjectedTurnVerdict {
+  return {
+    kind: args.outcome.kind,
+    hideEmptyBubble: args.outcome.hideEmptyBubble,
+    notice: args.outcome.notice,
+    hasTeamStrip: args.hasTeamStrip,
+    supportPackHost: supportPackHostFromSurface(args.outcome.surface),
+    failedToolHintNames: [...(args.failedToolHintNames ?? [])],
+  };
+}
+
+/** Fold → mobile turnOutcome snapshot for the shared conformance sidecar. */
+export function turnVerdictFromProjected(
+  events: readonly SSEEvent[],
+  projected: ProjectedTurn,
+): ProjectedTurnVerdict {
+  const outcome = resolveTurnOutcome({
+    events,
+    content: projected.content,
+    finishReason: projected.finishReason,
+    errorCode: projected.error?.code,
+    errorMessage: projected.error?.message,
+    deliveryState: projected.deliveryStatus?.state,
+    deliverySummary: projected.deliveryStatus?.summary,
+    runs: projected.runs,
+    projectedStatus: projected.status,
+    wireResult: projected.outcome,
+    hasTeamGraph: projectedHasTeamGraph(projected),
+    hasDedicatedPauseOrAskUi: projectedHasDedicatedPauseUi(projected),
+  });
+  const failed = collectFailedToolNames(projected.process);
+  const hintNames = shouldShowUnproductiveToolFailureHint({
+    finishReason: projected.finishReason,
+    content: projected.content,
+    failedToolNames: failed,
+  })
+    ? failed
+    : [];
+  return toConformanceTurnVerdict({
+    outcome,
+    hasTeamStrip: projectedHasTeamGraph(projected),
+    failedToolHintNames: hintNames,
+  });
 }

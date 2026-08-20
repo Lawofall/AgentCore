@@ -563,8 +563,9 @@ def test_work_discipline_skill_teaches_design_and_patch_tripwires():
     assert "小问题（路径拼写" not in body
     assert "按题自选" in body or "blocking" in body
     assert "边干边报" in body or "默认 false" in body
-    # 定稿漂移 A′：写 task 须含「已确认约束」
+    # 定稿漂移 A′：写 task 须含「已确认约束」；自拟默认不进该块
     assert "已确认约束" in body
+    assert "自拟默认" in body
     # 小步增量：用户偏好小步时首派更切片，勿一口吞绿场
     assert "小步" in body or "增量" in body
     assert "绿场" in body or "切片" in body
@@ -596,8 +597,19 @@ def test_product_help_skill_teaches_short_answers_and_manual_deeplinks():
     assert "SSE" in help_body  # ban list only
 
     assert "【入口地图】" in map_body
+    assert "【产品面地图·高频入口】" in map_body
+    assert "唯一对话入口" in map_body
+    assert "怎么用本产品" in map_body
+    assert "模型与偏好等" in map_body
+    assert "产物与「完整预览」" in map_body
+    assert "关键拍板与正反交锋入口" in map_body
     assert "#/toolbox/manual/" in map_body
     assert "手机" in map_body and "勿承诺" in map_body
+    assert "页名也按端写" in map_body
+    assert "我的 → 模型配置" in help_body
+    assert "我的 → 模型配置" in faq_body
+    assert "我的 → 用量" in faq_body
+    assert "手机无独立服务商页" in map_body
     assert "?s=workspace" in map_body or "workspace" in map_body
     # .md 阅读预览（文件面板）≠ HTML「完整预览」（右坞）
     assert "阅读预览" in map_body
@@ -1048,9 +1060,12 @@ def test_team_orchestration_skill_teaches_seed_notes_and_team_brief():
     assert 'coordination="wall"' in body or "coordination" in body
     assert "wall" in body and "none" in body
     assert "正交" in body or "互不依赖" in body
-    # 定稿漂移 A′：team_brief / task 固定「已确认约束」；约束优先于附件旧表
+    # 定稿漂移 A′：team_brief / task 固定「已确认约束」；约束优先于附件旧表；自拟默认不进该块
     assert "已确认约束" in body
     assert "约束块优先" in body or "优先" in body
+    assert "自拟的默认" in body
+    assert "冒充拍板" in body
+    assert "无已拍板项" in body
 
 
 def test_team_orchestration_skill_teaches_coordination_wall_vs_none():
@@ -1471,6 +1486,12 @@ def test_long_form_writing_skill_teaches_skeleton_fill():
     assert "max_rounds" in body
     assert "流水线已在执行" in body or "合并进行中" in body
     assert "SECTION:" in body or "骨架" in body
+    # 成品文件只装成品：从常驻核迁入（task 只写正文；元信息进回复/handoff）
+    assert "【成品文件只装成品】" in body
+    assert "起诉状" in body and "合同" in body
+    assert "使用前请核对" in body
+    assert "原样打印" in body
+    assert "提交出去" in body
     # MD→PDF：主交付 .md；要分享时 md_to_pdf；禁 HTML/reportlab 主路径
     assert "md_to_pdf" in body
     assert "HTML" in body

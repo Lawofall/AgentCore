@@ -2,6 +2,7 @@ import { AssistantContent } from "@/components/AssistantView";
 import { FileArtifactsCard } from "@/components/FileArtifactsCard";
 import { HangingQuestionBar } from "@/components/HangingQuestionBar";
 import { resolveFileArtifactsForCard } from "@/lib/fileArtifacts";
+import { firstCollabAtMs } from "@/lib/time";
 import { PREVIEW_FIXTURES } from "@/preview/fixtures";
 import {
   extractAsks,
@@ -123,6 +124,7 @@ export function PreviewPage() {
         workerToolPhases,
         evidenceLedger: debateEvidenceLedger,
         elapsedMs: turnElapsedMs(events),
+        startedAtMs: firstCollabAtMs(events),
         waitProgress,
         detached,
       }

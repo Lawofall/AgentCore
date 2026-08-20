@@ -217,9 +217,7 @@ class MessageRepository:
         from agentcore.core.assistant_content import prepare_assistant_content
         from agentcore.core.message_merge import MESSAGE_STATUS_INCOMPLETE
 
-        status_for_prep = (write_usage or {}).get("status") or (metadata or {}).get(
-            "status"
-        )
+        status_for_prep = (write_usage or {}).get("status") or (metadata or {}).get("status")
         write_content = prepare_assistant_content(
             write_content or "",
             salvage=status_for_prep == MESSAGE_STATUS_INCOMPLETE,
@@ -287,9 +285,7 @@ class MessageRepository:
         )
         await self._session.commit()
 
-    async def set_cost(
-        self, message_id: str, *, conversation_id: str, cost: dict
-    ) -> None:
+    async def set_cost(self, message_id: str, *, conversation_id: str, cost: dict) -> None:
         """Backfill the turn's cost snapshot onto an existing assistant row (P2 DERIVED).
 
         Same finalize-tail pattern as :meth:`set_followups`: the ledger write happens in the
@@ -301,6 +297,27 @@ class MessageRepository:
             update(Message)
             .where(Message.id == message_id, Message.conversation_id == conversation_id)
             .values(cost=cost)
+        )
+        await self._session.commit()
+
+    async def merge_usage(self, message_id: str, *, conversation_id: str, usage: dict) -> None:
+        """Merge keys onto an existing assistant ``usage`` JSON (finalize-tail).
+
+        Interrupt close writes incomplete chrome first, then stamps ledger token
+        totals so the bubble matches ``cost_events`` for the same ``message_id``.
+        Status-gate merge keeps ``incomplete`` / ``interrupt_reason``. A no-match
+        id is a no-op.
+        """
+        from agentcore.core.message_merge import merge_usage_status
+
+        existing = await self.get_by_id(message_id, conversation_id=conversation_id)
+        if existing is None:
+            return
+        merged = merge_usage_status(existing.usage, usage)
+        await self._session.execute(
+            update(Message)
+            .where(Message.id == message_id, Message.conversation_id == conversation_id)
+            .values(usage=strip_nul(merged))
         )
         await self._session.commit()
 
@@ -365,9 +382,7 @@ class MessageRepository:
     async def _touch_activity(self, conversation_id: str) -> None:
         from agentcore.db.repositories.conversations import ConversationRepository
 
-        await ConversationRepository(self._session).touch_activity(
-            conversation_id, commit=False
-        )
+        await ConversationRepository(self._session).touch_activity(conversation_id, commit=False)
 
     async def count_by_conversation(self, conversation_id: str) -> int:
         """Number of messages in a conversation (0 for a brand-new, unsent one).
@@ -398,9 +413,7 @@ class MessageRepository:
         )
         return {row[0]: row[1] for row in result.all()}
 
-    async def previews_for_conversations(
-        self, conversation_ids: Sequence[str]
-    ) -> dict[str, str]:
+    async def previews_for_conversations(self, conversation_ids: Sequence[str]) -> dict[str, str]:
         """Last visible assistant sentence per conversation (sidebar list preview).
 
         One windowed read for the whole list — same batch shape as
@@ -561,9 +574,7 @@ class MessageRepository:
             stmt = stmt.where(Message.created_at >= updated_after)
         if folder_id is not None:
             stmt = stmt.where(Conversation.folder_id == folder_id)
-        result = await self._session.execute(
-            stmt.order_by(Message.created_at.desc()).limit(limit)
-        )
+        result = await self._session.execute(stmt.order_by(Message.created_at.desc()).limit(limit))
         return [(row[0], row[1]) for row in result.all()]
 
     async def list_by_conversation(
@@ -777,9 +788,7 @@ class MessageRepository:
         )
         return result.scalar_one_or_none()
 
-    async def update_content(
-        self, message_id: str, content: str, *, commit: bool = True
-    ) -> None:
+    async def update_content(self, message_id: str, content: str, *, commit: bool = True) -> None:
         await self._session.execute(
             update(Message).where(Message.id == message_id).values(content=content)
         )
@@ -809,9 +818,7 @@ class MessageRepository:
         await delete_journal_after(
             self._session, conversation_id, after_created_at=after_created_at
         )
-        await delete_audit_after(
-            self._session, conversation_id, after_created_at=after_created_at
-        )
+        await delete_audit_after(self._session, conversation_id, after_created_at=after_created_at)
         dropped_ids = select(Message.id).where(
             Message.conversation_id == conversation_id,
             Message.created_at > after_created_at,

@@ -306,18 +306,27 @@ class TurnStreamStateRow(Base):
     text: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
 
 
+# Occupancy bands for ``turn_journal`` PK ``(turn_id, band, seq)``. Live is the
+# rewritable dense prefix; overflow is the post-seal second channel. db filters
+# by these literals — never by a runtime seq-split constant.
+JOURNAL_BAND_LIVE = "live"
+JOURNAL_BAND_OVERFLOW = "overflow"
+
+
 class TurnJournalRow(Base):
     """One fact of a turn's append-only execution journal (§8.3 Turn Journal · 唯一事实源).
 
     A turn's ordered execution facts (run/tool/interaction events for a multi-agent
     turn, or reasoning/tool 步 for a single-agent turn, plus a closing ``turn_end``)
-    are stored here — one row per fact, ordered by ``seq`` within a ``turn_id`` (==
-    the assistant ``message_id``). This REPLACES the old ``messages.runs`` JSON blob:
-    the journal is the single durable source of truth, and the assistant message's
-    replay payload (``MessageDetail.runs``) is PROJECTED from these rows on read
-    (see ``agentcore.runtime.journal``). A plain single-agent chat (nothing to
-    replay) writes no rows. Append-only per turn; a re-persist (resume reusing the
-    same id) replaces the turn's rows wholesale (``Journal.record``).
+    are stored here — one row per fact, keyed by ``(turn_id, band, seq)`` where
+    ``turn_id`` == the assistant ``message_id`` and ``band`` is ``live`` (rewritable
+    prefix occupancy) or ``overflow`` (post-seal terminals). This REPLACES the old
+    ``messages.runs`` JSON blob: the journal is the single durable source of truth,
+    and the assistant message's replay payload (``MessageDetail.runs``) is PROJECTED
+    from these rows on read (see ``agentcore.runtime.journal``). A plain single-agent
+    chat (nothing to replay) writes no rows. ``Journal.record`` replaces the live-band
+    prefix occupancy; overflow-band rows stay. Read order is emission order
+    (``created_at``, then band-local ``seq``), not live-then-overflow by seq.
 
     **Lifecycle** (no DB FK — app-level cascade, per repo convention): cleaned with
     its owning message/conversation on hard-delete (``MessageRepository.delete_by_id``
@@ -328,6 +337,10 @@ class TurnJournalRow(Base):
 
     __tablename__ = "turn_journal"
     __table_args__ = (
+        CheckConstraint(
+            "band in ('live', 'overflow')",
+            name="ck_turn_journal_band",
+        ),
         # A conversation's facts, e.g. for future cross-turn projections / sweeps.
         Index("ix_turn_journal_conversation", "conversation_id"),
     )
@@ -335,7 +348,11 @@ class TurnJournalRow(Base):
     # The owning turn == the assistant message id (the pipeline's minted id), so the
     # projected replay rejoins its message without a separate key.
     turn_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True)
-    # Monotonic position within the turn (emission order); composite PK with turn_id.
+    # Occupancy band: live prefix vs post-seal overflow. Composite PK with turn_id+seq.
+    band: Mapped[str] = mapped_column(
+        String(8), primary_key=True, server_default=text("'live'")
+    )
+    # Monotonic position within the band (occupancy); not a cross-band emission index.
     seq: Mapped[int] = mapped_column(Integer, primary_key=True)
     # The fact kind: an SSE event type (run_plan / tool_use_start / checkpoint_* …),
     # a single-agent process step (process_reasoning / process_tool), or turn_end.

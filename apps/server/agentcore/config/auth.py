@@ -83,6 +83,28 @@ class AuthSettings(BaseModel):
     # Public registration gate (开放注册). Default open; set REGISTRATION_OPEN=false
     # to emergency-close signups without reverting to invite codes.
     registration_open: bool = True
+    # Immediate-create POST /v1/auth/register. Default off, independent of DEBUG —
+    # flipping DEBUG for production triage must not reopen an unverified hatch.
+    # Integration tests and local instant-signup opt in explicitly.
+    legacy_register_enabled: bool = False
+    # Outbound SMTP. Unconfigured (empty host or from) keeps the console sink:
+    # DEBUG prints the body; non-DEBUG logs email.unconfigured and does not send.
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_address: str = ""
+    smtp_from_name: str = "AgentCore"
+    smtp_tls_mode: Literal["ssl", "starttls", "none"] = "ssl"
+    # When true, login refuses accounts whose email_verified_at is NULL.
+    # Default off: legacy rows stay usable. Flip only after a backfill.
+    require_email_verified: bool = False
+    email_code_ttl_seconds: int = 600
+    email_code_max_attempts: int = 5
+    # Send-code reputation limits (independent of AuthRateLimitMiddleware).
+    email_send_cooldown_seconds: int = 60
+    email_send_daily_max: int = 8
+    email_send_ip_hourly_max: int = 20
 
     # TOTP issuer shown in authenticator apps (admin MFA).
     mfa_issuer_name: str = "AgentCore Admin"
@@ -94,9 +116,9 @@ class AuthSettings(BaseModel):
     # multi-worker is refused at boot in non-DEBUG.
     rate_limit_backend: Literal["memory", "redis"] = "memory"
 
-    @field_validator("rate_limit_backend", mode="before")
+    @field_validator("rate_limit_backend", "smtp_tls_mode", mode="before")
     @classmethod
-    def _normalize_rate_limit_backend(cls, value: object) -> object:
+    def _normalize_lowercase_choice(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip().lower()
         return value

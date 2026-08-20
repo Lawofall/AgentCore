@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Local release gate — isomorphic with `.github/workflows/ci.yml`, plus desktop
- * gaps (typecheck + conformance) that CI historically omitted.
+ * Local release gate — isomorphic with `.github/workflows/ci.yml`, including
+ * desktop typecheck + conformance (CI frontend job already runs both).
  *
  *   pnpm release:gate                    # full run（发布验证必须全量）
  *   pnpm release:gate:lite               # 日常迭代：跳过 desktop shoot + smoke
@@ -342,6 +342,9 @@ async function runContractsSection(baseline) {
   regenContracts();
   run("story-packs check", "pnpm", ["gen:story-packs:check"]);
   run("legal md check", "pnpm", ["sync:legal:check"]);
+  run("doc section pointers", "node", [
+    "scripts/check-doc-section-pointers.mjs",
+  ]);
   await assertContractsInSync(baseline);
 }
 
@@ -530,6 +533,9 @@ async function main() {
     run("mobile lint", "pnpm", ["--filter", "agentcore-mobile", "lint"]);
     run("mobile typecheck", "pnpm", ["--filter", "agentcore-mobile", "typecheck"]);
     run("mobile conformance", "pnpm", ["--filter", "agentcore-mobile", "conformance"]);
+    // Shared protocol predicates (desktop + mobile). Same placement as ci.yml
+    // mobile job — keeps the extra seconds off the shoot-heavy desktop section.
+    run("fold-kit test", "pnpm", ["--filter", "@agentcore/protocol-fold-kit", "test"]);
     run("mobile test", "pnpm", ["--filter", "agentcore-mobile", "exec", "vitest", "run"]);
   }
 

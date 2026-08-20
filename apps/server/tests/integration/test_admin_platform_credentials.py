@@ -61,6 +61,11 @@ async def test_pool_crud_disable_and_env_fallback(
     assert row["enabled"] is True
     assert row["masked_key"] == "••••aaaa"
     assert "api_key" not in row
+    assert row["tool_surface_limits"] == {
+        "max_tools": None,
+        "max_properties_total": None,
+        "max_properties_per_tool": None,
+    }
     assert "sk-pool-secret" not in created.text
     cred_id = row["id"]
 
@@ -217,3 +222,95 @@ async def test_clear_runtime_unblocks_and_audits(client, make_admin):
     assert row["target_type"] == "platform_credential"
     assert row["detail"]["cleared_status"] == "blocked"
     assert row["actor_username"] == username
+
+
+async def test_tool_surface_limits_roundtrip_and_clear(client, make_admin, monkeypatch):
+    monkeypatch.setattr(settings, "platform_model_credentials", "")
+    username, password = await make_admin()
+    await login_admin(client, username, password)
+
+    created = await client.post(
+        "/v1/admin/platform-credentials",
+        json=_body(tool_surface_limits={"max_tools": 16, "max_properties_total": 40}),
+    )
+    assert created.status_code == 201, created.text
+    limits = created.json()["tool_surface_limits"]
+    assert limits["max_tools"] == 16
+    assert limits["max_properties_total"] == 40
+    assert limits["max_properties_per_tool"] is None
+    cred_id = created.json()["id"]
+
+    from agentcore.llm.platform_pool_scheduler import member_for_credentials
+    from agentcore.llm.resolve import platform_llm_credentials
+
+    picked = platform_llm_credentials()
+    assert picked is not None
+    member = member_for_credentials(picked.api_key, picked.base_url)
+    assert member is not None
+    assert member.tool_surface_limits.max_tools == 16
+    assert member.tool_surface_limits.max_properties_total == 40
+
+    unknown = await client.patch(
+        f"/v1/admin/platform-credentials/{cred_id}",
+        json={"tool_surface_limits": {"max_tokens": 8}},
+    )
+    assert unknown.status_code == 422
+
+    cleared = await client.patch(
+        f"/v1/admin/platform-credentials/{cred_id}",
+        json={"tool_surface_limits": None},
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["tool_surface_limits"] == {
+        "max_tools": None,
+        "max_properties_total": None,
+        "max_properties_per_tool": None,
+    }
+    picked = platform_llm_credentials()
+    assert picked is not None
+    member = member_for_credentials(picked.api_key, picked.base_url)
+    assert member is not None
+    assert member.tool_surface_limits.is_unrestricted()
+
+
+async def test_tool_surface_limits_migration_up_and_down(session_factory):
+    """Alembic add-column can drop and re-apply on a live Postgres schema."""
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+    from sqlalchemy import inspect
+
+    from agentcore.db.migrations.versions.c2f9a1e4b7d8_platform_cred_tool_surface_limits import (
+        downgrade,
+        upgrade,
+    )
+
+    def _run_upgrade(sync_conn) -> None:
+        ctx = MigrationContext.configure(sync_conn)
+        with Operations.context(ctx):
+            upgrade()
+
+    def _run_downgrade(sync_conn) -> None:
+        ctx = MigrationContext.configure(sync_conn)
+        with Operations.context(ctx):
+            downgrade()
+
+    def _col_names(sync_conn) -> set[str]:
+        return {c["name"] for c in inspect(sync_conn).get_columns("platform_credentials")}
+
+    async with session_factory() as session:
+        conn = await session.connection()
+        names = await conn.run_sync(_col_names)
+        assert "tool_surface_limits" in names  # create_all already applied ORM
+        await conn.run_sync(_run_downgrade)
+        names = await conn.run_sync(_col_names)
+        assert "tool_surface_limits" not in names
+        await conn.run_sync(_run_upgrade)
+        names = await conn.run_sync(_col_names)
+        assert "tool_surface_limits" in names
+        await conn.run_sync(_run_downgrade)
+        await conn.run_sync(_run_upgrade)
+        names = await conn.run_sync(_col_names)
+        assert "tool_surface_limits" in names
+        await session.commit()
+
+

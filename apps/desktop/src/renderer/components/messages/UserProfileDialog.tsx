@@ -1,5 +1,7 @@
-import { Button } from "@/components/ui";
+import { Button, IconButton } from "@/components/ui";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { copyText } from "@/lib/clipboard";
+import { notifySuccess } from "@/lib/toast";
 import {
   type UserProfile,
   acceptFriendRequest,
@@ -13,7 +15,7 @@ import {
   startDm,
 } from "@/services/messaging";
 import { useMessagingStore } from "@/stores/messaging";
-import { Loader2 } from "lucide-react";
+import { Copy, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PresenceAvatar } from "./PresenceAvatar";
 import { avatarInitial } from "./chatDisplay";
@@ -180,9 +182,20 @@ export function UserProfileDialog({
           )}
           <DialogTitle className="text-center">{name}</DialogTitle>
           {profile && (
-            <span className="text-xs text-muted-foreground">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
               @{profile.username}
               {profile.online ? " · 在线" : ""}
+              <IconButton
+                aria-label="复制用户名"
+                className="size-6"
+                onClick={() => {
+                  void copyText(profile.username).then((ok) => {
+                    if (ok) notifySuccess("已复制用户名");
+                  });
+                }}
+              >
+                <Copy size={12} />
+              </IconButton>
             </span>
           )}
         </div>

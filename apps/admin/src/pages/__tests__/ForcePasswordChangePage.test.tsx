@@ -33,6 +33,7 @@ const ADMIN = {
   username: "root",
   displayName: "Root",
   email: null,
+  emailVerifiedAt: null,
   role: "admin",
   passwordMustChange: false,
 };

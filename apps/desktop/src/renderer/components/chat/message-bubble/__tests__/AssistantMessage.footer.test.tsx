@@ -397,7 +397,7 @@ describe("AssistantMessage error card chrome", () => {
     const copyBtn = screen.getByRole("button", { name: "复制排查包" });
     expect(copyBtn.className).toContain("text-muted-foreground");
     expect(copyBtn.className).not.toContain("destructive");
-    expect(screen.queryByRole("button", { name: "去设置" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "去服务商" })).toBeNull();
   });
 
   it("有去配置：错误卡蓝底，动作钮 primary，复制排查包跟蓝档", () => {
@@ -406,16 +406,16 @@ describe("AssistantMessage error card chrome", () => {
         content: "",
         error: {
           code: "LLM_KEY_REQUIRED",
-          message: "请先在「设置 · 服务商」中填入你的 API Key，再发起对话。",
+          message: "请先接入自己的 API Key，再发起对话。",
         },
       }),
     );
     const errCard = screen
-      .getByText("请先在「设置 · 服务商」中填入你的 API Key，再发起对话。")
+      .getByText("请先接入自己的 API Key，再发起对话。")
       .closest("div");
     expect(errCard?.className).toContain("bg-primary/10");
     expect(errCard?.className).not.toContain("bg-muted/40");
-    const actionBtn = screen.getByRole("button", { name: "去设置" });
+    const actionBtn = screen.getByRole("button", { name: "去服务商" });
     expect(actionBtn.className).toContain("bg-primary");
     expect(actionBtn.className).not.toContain("bg-destructive");
     const copyBtn = screen.getByRole("button", { name: "复制排查包" });
@@ -423,7 +423,7 @@ describe("AssistantMessage error card chrome", () => {
     expect(copyBtn.className).not.toContain("destructive");
   });
 
-  it("credential_source=platform：接入自己的 Key，不是去设置", () => {
+  it("credential_source=platform：接入自己的 Key，不是去服务商", () => {
     renderBubble(
       settledMessage({
         content: "",
@@ -436,10 +436,10 @@ describe("AssistantMessage error card chrome", () => {
       }),
     );
     expect(screen.getByRole("button", { name: "接入自己的 Key" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "去设置" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "去服务商" })).toBeNull();
   });
 
-  it("credential_source=user：去设置", () => {
+  it("credential_source=user：去服务商", () => {
     renderBubble(
       settledMessage({
         content: "",
@@ -450,7 +450,7 @@ describe("AssistantMessage error card chrome", () => {
         },
       }),
     );
-    expect(screen.getByRole("button", { name: "去设置" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "去服务商" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "接入自己的 Key" })).toBeNull();
   });
 });

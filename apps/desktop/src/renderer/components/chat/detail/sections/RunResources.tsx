@@ -16,6 +16,10 @@ import {
   type RunNode,
   reasoningMeta,
 } from "@/stores/execution";
+import {
+  CACHE_BILLED_AS_MISS_LABEL,
+  cacheUsageDisplay,
+} from "@agentcore/protocol-fold-kit";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { MetricRow } from "./shared";
 
@@ -57,10 +61,7 @@ export function ResourceSection({
       : tokenTotal > 0 && byokHint
         ? `${formatCompact(tokenTotal)} tok · ${byokLabel}`
         : null;
-  const cacheRate =
-    usage && usage.input > 0
-      ? Math.round((usage.cache_hit / usage.input) * 100)
-      : 0;
+  const cache = usage ? cacheUsageDisplay(usage) : null;
 
   return (
     <section className="mb-4 last:mb-0">
@@ -150,8 +151,9 @@ export function ResourceSection({
                   value={formatCompact(usage.input)}
                 />
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  命中 {formatCompact(usage.cache_hit)} · 未命中{" "}
-                  {formatCompact(usage.cache_miss)} · 缓存率 {cacheRate}%
+                  {cache?.billedAsMiss
+                    ? `${CACHE_BILLED_AS_MISS_LABEL} ${formatCompact(cache.cacheMiss)}`
+                    : `命中 ${formatCompact(usage.cache_hit)} · 未命中 ${formatCompact(usage.cache_miss)} · 缓存率 ${cache?.hitRatePercent ?? 0}%`}
                 </p>
               </div>
               <div>

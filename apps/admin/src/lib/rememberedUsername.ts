@@ -1,5 +1,5 @@
 /**
- * Persist the last successful login username for the admin login form.
+ * Persist the last successful login identifier (email or username).
  * Password is never stored.
  */
 

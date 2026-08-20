@@ -5,6 +5,8 @@ export interface AuthUser {
   username: string;
   displayName: string;
   email: string | null;
+  /** ISO timestamp when the email was verified; null = unverified. */
+  emailVerifiedAt: string | null;
   role: string;
   passwordMustChange: boolean;
 }

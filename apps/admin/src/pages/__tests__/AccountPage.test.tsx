@@ -32,6 +32,7 @@ const SELF: AuthUser = {
   username: "admin",
   displayName: "管理员",
   email: null,
+  emailVerifiedAt: null,
   role: "admin",
   passwordMustChange: false,
 };
@@ -73,6 +74,44 @@ describe("AccountPage 个人资料", () => {
     render(<AccountPage />);
     fireEvent.submit(formOf(screen.getByLabelText("显示名")));
     expect(updateProfile).not.toHaveBeenCalled();
+  });
+
+  it("显示邮箱未验证态，不提供补验入口", () => {
+    render(<AccountPage />);
+    expect(screen.getByText("邮箱 · 未填写")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "发送验证码" })).toBeNull();
+  });
+
+  it("改邮箱后显示未验证，不自动发码", async () => {
+    vi.mocked(updateProfile).mockResolvedValue({
+      ...SELF,
+      email: "new@example.com",
+      emailVerifiedAt: null,
+    });
+    useAuthStore.setState({
+      status: "authenticated",
+      user: {
+        ...SELF,
+        email: "old@example.com",
+        emailVerifiedAt: "2026-08-19T00:00:00Z",
+      },
+    });
+    render(<AccountPage />);
+    expect(screen.getByText("邮箱 · 已验证")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("邮箱 · 已验证"), {
+      target: { value: "new@example.com" },
+    });
+    fireEvent.submit(formOf(screen.getByLabelText("显示名")));
+
+    await waitFor(() =>
+      expect(updateProfile).toHaveBeenCalledWith({
+        displayName: "管理员",
+        email: "new@example.com",
+      }),
+    );
+    expect(screen.getByText("邮箱 · 未验证")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "发送验证码" })).toBeNull();
   });
 });
 

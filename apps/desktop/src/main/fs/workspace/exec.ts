@@ -10,8 +10,10 @@ import type { StoredRoot } from "../roots";
 import { getRoot } from "../roots";
 import {
   decodePipeChunk,
+  isSpawnDeniedError,
   launcherMissingStderr,
   resolveBashLauncher,
+  spawnDeniedStderr,
   whichCommand,
 } from "./execCodec";
 import { opErr, opOk } from "./result";
@@ -248,11 +250,18 @@ export function runSubprocess(
         finish(timeoutResult(timedOut));
         return;
       }
+      // Spawn-time EACCES/EPERM: declare at this site (err.code, not message
+      // matching). A process that already has a pid is not a refused start.
+      const spawnDenied = child.pid == null && isSpawnDeniedError(err);
       finish(
         execResult({
           success: false,
           stdout,
-          stderr: stderr || `Failed to start process: ${err.message}`,
+          stderr:
+            stderr ||
+            (spawnDenied
+              ? spawnDeniedStderr(err.message)
+              : `Failed to start process: ${err.message}`),
           exit_code: -1,
           duration_ms: Date.now() - startedMs,
         }),

@@ -327,7 +327,9 @@ class SessionRegistry:
         idle = [cid for cid, s in self._stores.items() if s.is_idle(self._conversation_ttl)]
         for cid in idle:
             del self._stores[cid]
-            logger.info("roster.conversation_evicted", conversation_id=cid)
+            # Victim id is not canonical conversation_id: this runs in the caller's
+            # request context, and merge_contextvars would mix user_id / trace_id.
+            logger.info("roster.conversation_evicted", evicted_conversation_id=cid)
 
     def __len__(self) -> int:
         return len(self._stores)

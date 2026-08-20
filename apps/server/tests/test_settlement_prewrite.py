@@ -36,7 +36,9 @@ class _FakeStore:
         conversation_id: str,
         trace_id: str | None,
         entry: dict[str, Any],
+        overflow: bool = False,
     ) -> int | None:
+        del overflow
         async with self.lock:
             kind = str(entry.get("kind") or "")
             if kind in self.fail_kinds:

@@ -163,7 +163,7 @@ async function main() {
       //   • composer (输入消息)    → authenticated (existing cookie)
       //   • login form (用户名)    → unauthenticated (backend up, no cookie)
       //   • 服务暂时不可用 + 重试   → backend unreachable (the CI / no-backend state)
-      const userBox = page.getByPlaceholder("用户名");
+      const userBox = page.getByPlaceholder("邮箱或用户名");
       const composer = page.getByPlaceholder(/输入消息/);
       const outage = page.getByText("服务暂时不可用");
       await Promise.race([

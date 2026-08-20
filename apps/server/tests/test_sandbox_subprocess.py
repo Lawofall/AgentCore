@@ -10,6 +10,14 @@ from __future__ import annotations
 import asyncio
 import sys
 
+import pytest
+
+from agentcore.core.errors import SandboxError
+from agentcore.tools.sandbox.exec_env import (
+    EXEC_ENV_PROBE_FAIL_MARKER,
+    EXEC_ENV_SPAWN_DENIED_CODE,
+    exec_env_probe_failure_code,
+)
 from agentcore.tools.sandbox.protocol import ExecutionRequest
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 
@@ -190,3 +198,43 @@ def test_resolve_bash_prefers_git_bash(monkeypatch, tmp_path):
     monkeypatch.setenv("PATHEXT", ".EXE")
 
     assert sp.resolve_bash_launcher() == str(git_bash)
+
+
+def test_popen_permissionerror_returns_spawn_denied_tag(monkeypatch):
+    """Popen EACCES/EPERM is declared at spawn site — not raised as SandboxError."""
+    import agentcore.tools.sandbox.subprocess as sp
+
+    def boom(*_args, **_kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(sp.subprocess, "Popen", boom)
+
+    async def _run() -> None:
+        result = await SubprocessSandbox().execute(
+            ExecutionRequest(code="print(1)", language="python", timeout_seconds=5)
+        )
+        assert result.success is False
+        assert result.exit_code == -1
+        assert EXEC_ENV_PROBE_FAIL_MARKER in result.stderr
+        assert exec_env_probe_failure_code(result.stderr) == EXEC_ENV_SPAWN_DENIED_CODE
+        assert "Permission denied" in result.stderr
+
+    asyncio.run(_run())
+
+
+def test_popen_filenotfound_still_raises_sandbox_error(monkeypatch):
+    """Spawn-time ENOENT stays on the existing SandboxError path (not spawn-denied)."""
+    import agentcore.tools.sandbox.subprocess as sp
+
+    def boom(*_args, **_kwargs):
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(sp.subprocess, "Popen", boom)
+
+    async def _run() -> None:
+        with pytest.raises(SandboxError, match="代码执行环境启动失败"):
+            await SubprocessSandbox().execute(
+                ExecutionRequest(code="print(1)", language="python", timeout_seconds=5)
+            )
+
+    asyncio.run(_run())

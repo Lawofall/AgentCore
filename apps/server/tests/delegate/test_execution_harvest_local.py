@@ -645,3 +645,104 @@ async def test_local_harvest_fallback_persists_user_face_not_ceo_terminal(tmp_pa
     assert "终稿纪律" not in content
     assert "运行代码" in content
     assert "工程师" in content
+
+
+@pytest.mark.asyncio
+async def test_local_harvest_cancelled_salvages_interrupt_body(tmp_path):
+    """Cancelled harvest closing seals READY with the same compose as ordinary turns."""
+    import agentcore.conversation.execution_harvest as eh
+    from agentcore.runtime.turn.interrupt import INTERRUPTED_EMPTY_USER_VISIBLE
+
+    session = _session()
+    set_active_coordination(session)
+    _sidecar(tmp_path)
+
+    async def _pipeline(**_kwargs):
+        raise asyncio.CancelledError()
+
+    with (
+        patch.object(eh, "notify_user", AsyncMock()),
+        patch("agentcore.sidecar.server.run_chat_pipeline", new=_pipeline),
+    ):
+        await eh.run_harvest_closing_turn(
+            conversation_id="conv-local",
+            execution_id="exec-local",
+        )
+
+    records = list_outbox_records(tmp_path / "outbox")
+    assert len(records) == 1
+    record = records[0]
+    assert record["phase"] == "ready"
+    assert record["finish_reason"] == "cancelled"
+    assert record["content"] == INTERRUPTED_EMPTY_USER_VISIBLE
+    assert "已完成" not in record["content"]
+    assert "已交付" not in record["content"]
+    assert record["origin"] == "execution_harvest"
+    assert record["execution_id"] == "exec-local"
+    assert record["harvest_kind"] == "success"
+    body = to_record_turn_body(record)
+    assert body["content"] == INTERRUPTED_EMPTY_USER_VISIBLE
+    assert body["origin"] == "execution_harvest"
+
+
+@pytest.mark.asyncio
+async def test_local_harvest_user_stop_salvage_stays_silent(tmp_path):
+    """USER_STOP harvest salvage stays empty; origin stamp keeps leg 2 from filling."""
+    import agentcore.conversation.execution_harvest as eh
+    from agentcore.sidecar.server_pkg.cancel_mark import CANCEL_REASON_ATTR
+
+    session = _session()
+    set_active_coordination(session)
+    _sidecar(tmp_path)
+
+    async def _pipeline(**_kwargs):
+        task = asyncio.current_task()
+        assert task is not None
+        setattr(task, CANCEL_REASON_ATTR, "user_stop")
+        raise asyncio.CancelledError()
+
+    with (
+        patch.object(eh, "notify_user", AsyncMock()),
+        patch("agentcore.sidecar.server.run_chat_pipeline", new=_pipeline),
+    ):
+        await eh.run_harvest_closing_turn(
+            conversation_id="conv-local",
+            execution_id="exec-local",
+        )
+
+    records = list_outbox_records(tmp_path / "outbox")
+    assert len(records) == 1
+    record = records[0]
+    assert record["phase"] == "ready"
+    assert record["content"] == ""
+    assert record["origin"] == "execution_harvest"
+    assert record["finish_reason"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_local_harvest_cancelled_keeps_streamed_partial(tmp_path):
+    """Streamed captain text is kept; salvage must not replace it with the empty note."""
+    import agentcore.conversation.execution_harvest as eh
+    from agentcore.runtime.events import content_delta
+
+    session = _session()
+    set_active_coordination(session)
+    _sidecar(tmp_path)
+
+    async def _pipeline(**kwargs):
+        kwargs["sink"].emit(content_delta("半成品收口"))
+        raise asyncio.CancelledError()
+
+    with (
+        patch.object(eh, "notify_user", AsyncMock()),
+        patch("agentcore.sidecar.server.run_chat_pipeline", new=_pipeline),
+    ):
+        await eh.run_harvest_closing_turn(
+            conversation_id="conv-local",
+            execution_id="exec-local",
+        )
+
+    records = list_outbox_records(tmp_path / "outbox")
+    assert len(records) == 1
+    assert records[0]["content"] == "半成品收口"
+    assert records[0]["origin"] == "execution_harvest"

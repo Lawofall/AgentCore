@@ -38,17 +38,19 @@ class ProfileParams:
     max_tokens: int | None = None
     max_rounds: int = 16
     name: str = ""
-    # None = provider default (DeepSeek V4 → thinking on). False = force off for
-    # background one-shots (title / memory / …) — required so a 64-token title
-    # budget is not eaten by reasoning_content (平台LLM接入 · DeepSeek 易错).
+    # True = send thinking.type=enabled. False = force off for background
+    # one-shots (title / memory / …) so a tight max_tokens budget is not eaten
+    # by reasoning_content (平台LLM接入 · DeepSeek 易错). None = no profile
+    # opinion; the wire still sends enabled for thinking_type_switch models
+    # (do not rely on omit=on — OpenCode Go treats omit as off).
     thinking: bool | None = None
 
 
 PROFILES: dict[str, ProfileParams] = {
-    "chat": ProfileParams(temperature=0.7, max_rounds=16),
+    "chat": ProfileParams(temperature=0.7, max_rounds=16, thinking=True),
     # Single delegated-worker profile: one round budget (56) for every worker —
     # 力度差异由委派协作结构（拆分 / 复审 / replan）表达，不再有 per-worker 档位。
-    "agent": ProfileParams(temperature=0.7, max_rounds=56),
+    "agent": ProfileParams(temperature=0.7, max_rounds=56, thinking=True),
     "memory": ProfileParams(temperature=0.3, max_rounds=1, thinking=False),
     "compaction": ProfileParams(temperature=0.3, max_rounds=1, thinking=False),
     "file.rewrite": ProfileParams(temperature=0.4, max_rounds=1, thinking=False),

@@ -19,6 +19,7 @@ import {
   formatCostCaption,
   formatDuration,
 } from "@/lib/format";
+import { runningElapsedSec } from "@/lib/runningElapsed";
 import {
   buildSupportDiagnosticPack,
   formatSupportDiagnosticText,
@@ -62,7 +63,7 @@ import {
   Play,
   Square,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /** Props every lifecycle strip shares: projection + strip controls. */
 export interface StatusStripProps {
@@ -93,8 +94,10 @@ function canPaintTeamCompleted(execution: Execution): boolean {
 
 /**
  * Thin toolbar above the collaboration graph (前端UX设计.md §三 / 协作图 UX §三).
- * Lifecycle icon + n/m + completed duration/cost + fold / canvas / replay.
- * No talking titles; Stop lives on the composer, not here.
+ * Lifecycle icon + n/m + duration/cost + fold / canvas / replay.
+ * Running duration ticks from frames[0].t (ToolLine useRunningElapsed shape);
+ * completed still uses elapsedMs(frames) span. No talking titles; Stop lives
+ * on the composer, not here.
  *
  * Terminal faces follow the turn arbitrator (`showStripFailure` /
  * `showStripStopped` / `showStripIdle`), not `switch execution.status`.
@@ -280,6 +283,25 @@ function StripIconButton({
   );
 }
 
+/** Live wall-clock seconds since the first run frame (`frames[0].t`, epoch ms).
+ * Same shape as ToolLine: 1s ticker only forces a re-render; the value is
+ * recomputed from Date.now() each render so fold/remount does not reset.
+ * Do not use elapsedMs(frames) here — that span freezes while a long tool
+ * emits no frames (`: ping` is not a RunFrame). */
+function useRunningElapsed(
+  running: boolean,
+  startedAt: number | null | undefined,
+): number {
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+  if (!running || startedAt == null) return 0;
+  return runningElapsedSec(startedAt);
+}
+
 function StripControls({
   execution,
   expanded,
@@ -347,6 +369,9 @@ function RunningStrip({
     : synthesizing
       ? `${workers.completed}/${workers.total}`
       : `${completed}/${total}`;
+  const frames = useActiveExecField((rt) => rt.frames);
+  const elapsedSec = useRunningElapsed(true, frames[0]?.t);
+  const duration = elapsedSec > 0 ? formatDuration(elapsedSec * 1000) : "";
   const testId = stopping
     ? "status-strip-stopping"
     : pendingBatchBadge
@@ -390,7 +415,7 @@ function RunningStrip({
         ) : null}
         <span className="min-w-0 flex-1" />
         <span className="shrink-0 text-xs text-muted-foreground">
-          {progressLabel}
+          {`${progressLabel}${duration ? ` · 用时 ${duration}` : ""}`}
         </span>
         <StripControls
           execution={execution}

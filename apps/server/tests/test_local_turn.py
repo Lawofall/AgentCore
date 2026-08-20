@@ -1569,3 +1569,108 @@ async def test_record_local_turn_harvest_pk_race_still_settles(monkeypatch):
 
     assert result["assistant_message_id"] == "assistant-id"
     assert any(e[0] == "upsert" for e in events)
+
+
+async def test_record_local_turn_hardkill_harvest_empty_cancelled_gets_honesty(
+    monkeypatch,
+):
+    """b94eb9ad shape: harvest user prefix, no origin, empty cancelled → honesty note."""
+    from agentcore.runtime.turn.interrupt import INTERRUPTED_EMPTY_USER_VISIBLE
+
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    result = await record_local_turn(
+        conversation_id="c-harvest-hardkill",
+        user_id="u1",
+        user_message="【系统收口】",
+        assistant_content="",
+        user_message_id=_USER_MSG_ID,
+        message_id="m-harvest-hardkill",
+        rounds=0,
+        trace_id=_TRACE,
+        finish_reason=FinishReason.CANCELLED.value,
+    )
+
+    assert result["assistant_message_id"] == "assistant-id"
+    content = next(e for e in events if e[0] == "content")
+    assert content[2] == INTERRUPTED_EMPTY_USER_VISIBLE
+    usage = next(e for e in events if e[0] == "usage")
+    assert usage[2]["status"] == "incomplete"
+    assert usage[2]["incomplete"] is True
+    assert usage[2]["finish_reason"] == "cancelled"
+    assert usage[2]["rounds"] == 0
+    assert "interrupt_reason" not in usage[2]
+    user_usage = next(e for e in events if e[0] == "user_usage" and e[1] == "user")
+    assert user_usage[2] is None
+
+
+async def test_record_local_turn_harvest_origin_empty_cancelled_stays_empty(monkeypatch):
+    """Leg 1 mutex: live salvage already stamped origin — do not fill USER_STOP silence."""
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    await record_local_turn(
+        conversation_id="c-harvest-stop",
+        user_id="u1",
+        user_message="【系统收口】后台团队任务已全部完成。",
+        assistant_content="",
+        user_message_id=_USER_MSG_ID,
+        message_id="m-harvest-stop",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.CANCELLED.value,
+        origin="execution_harvest",
+        execution_id="exec-1",
+        harvest_kind="success",
+    )
+
+    content = next(e for e in events if e[0] == "content")
+    assert content[2] == ""
+
+
+async def test_record_local_turn_harvest_origin_keeps_salvage_sentence(monkeypatch):
+    """Leg 1 already composed — write-back must not append or replace the body."""
+    from agentcore.runtime.turn.interrupt import INTERRUPTED_EMPTY_USER_VISIBLE
+
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    await record_local_turn(
+        conversation_id="c-harvest-salvaged",
+        user_id="u1",
+        user_message="【系统收口】后台团队任务已全部完成。",
+        assistant_content=INTERRUPTED_EMPTY_USER_VISIBLE,
+        user_message_id=_USER_MSG_ID,
+        message_id="m-harvest-salvaged",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.CANCELLED.value,
+        origin="execution_harvest",
+        execution_id="exec-1",
+        harvest_kind="success",
+    )
+
+    content = next(e for e in events if e[0] == "content")
+    assert content[2] == INTERRUPTED_EMPTY_USER_VISIBLE
+
+
+async def test_record_local_turn_ordinary_empty_cancelled_stays_empty(monkeypatch):
+    """Ordinary startTurn empty cancelled stays empty (client synthesizes)."""
+    events: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="",
+        user_message_id=_USER_MSG_ID,
+        message_id="m-empty-cancel",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.CANCELLED.value,
+    )
+
+    content = next(e for e in events if e[0] == "content")
+    assert content[2] == ""
+    usage = next(e for e in events if e[0] == "usage")
+    assert usage[2]["status"] == "incomplete"
+    assert usage[2]["finish_reason"] == "cancelled"

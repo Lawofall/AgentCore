@@ -40,6 +40,9 @@ __all__ = [
     "inference_token_mint_limiter",
     "message_rate_limiter",
     "mfa_verify_rate_limiter",
+    "email_send_cooldown_limiter",
+    "email_send_daily_limiter",
+    "email_send_ip_limiter",
     "reset_rate_limit_state",
 ]
 
@@ -119,6 +122,21 @@ mfa_verify_rate_limiter = _build_sliding_rate_limiter(
     max_requests=settings.mfa_verify_rate_limit_max,
     window_seconds=settings.mfa_verify_rate_limit_window_seconds,
 )
+email_send_cooldown_limiter = _build_sliding_rate_limiter(
+    prefix="rl:email-cd",
+    max_requests=1,
+    window_seconds=settings.email_send_cooldown_seconds,
+)
+email_send_daily_limiter = _build_sliding_rate_limiter(
+    prefix="rl:email-day",
+    max_requests=settings.email_send_daily_max,
+    window_seconds=86400,
+)
+email_send_ip_limiter = _build_sliding_rate_limiter(
+    prefix="rl:email-ip",
+    max_requests=settings.email_send_ip_hourly_max,
+    window_seconds=3600,
+)
 
 
 def reset_rate_limit_state() -> None:
@@ -127,6 +145,9 @@ def reset_rate_limit_state() -> None:
     message_rate_limiter.reset()
     inference_token_mint_limiter.reset()
     mfa_verify_rate_limiter.reset()
+    email_send_cooldown_limiter.reset()
+    email_send_daily_limiter.reset()
+    email_send_ip_limiter.reset()
     from agentcore.conversation.inference_rate_limit import reset_inference_proxy_turn_claims
 
     reset_inference_proxy_turn_claims()

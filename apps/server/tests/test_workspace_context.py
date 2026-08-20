@@ -13,6 +13,7 @@ from agentcore.runtime.context.workspace_context import (
     resolve_channel_profile,
 )
 from agentcore.runtime.resolve.prompt import (
+    _ATTACHMENT_MATERIAL_HINT,
     _CEO_CORE_HINT,
     _DEFAULT_SYSTEM_PROMPT,
     assemble_ceo_core,
@@ -196,11 +197,13 @@ def test_cloud_scratch_facts():
     assert "仅新建会话" in out
     assert "ask_user" in out  # 本机整理仍走卡
     assert "勿引导用户去设置改模式" in out
-    # 定案 A：优化项目 ≠ 默认催开项目；附件收窄范围时先干活（后半句归核）。
+    # 定案 A：优化项目 ≠ 默认催开项目；附件收窄范围时先干活（后半句场面门，不进事实层）。
     assert "≠默认开文件夹卡" in out
     assert "开工前置" not in out
-    assert "【本轮材料收窄】" in hint
-    assert "不得把开文件夹/绑本地当开工前置" in hint
+    gated = _ATTACHMENT_MATERIAL_HINT
+    assert "【本轮材料收窄】" in gated
+    assert "不得把开文件夹/绑本地当开工前置" in gated
+    assert "【本轮材料收窄】" not in hint
     assert "不可改绑" not in out
     assert "严禁引导" not in out
     assert "本机草稿" not in out or "勿推销本机草稿" in out
@@ -920,6 +923,7 @@ def test_no_exec_engineering_keeps_local_remediation():
     assert "源数据文件下一步" not in fact
     assert "export_to_local" in fact
     assert "本机传统" in fact
+    assert "bind_local" in out
 
 
 def test_opaque_source_reads_backend_this_turn_materials():

@@ -22,7 +22,7 @@ _COLD_START_EXPLORE_HINT_EMPTY = (
 用户点名「先了解 / 探索 / 重新了解 / 刷新文件夹记忆」且无其它任务 → 强制开幕，可停在简短建档说明。\
 `<workspace_file_index>` 显示工作区为空 → 说明空仓并引导绑仓/列目录或立刻 `ask_user`；\
 禁止空转扫仓小队、禁止写假画像、禁止为确认空连续 `file_list`。\
-仓**非空**时本幕仍须轻探→`delegate`≥2 角建档，**不可跳过**。\
+仓**非空**时本幕仍须轻探→`delegate`≥2 角建档，**不可跳过**。与巩固侧「冷启动」无关。\
 调研 worker 只调查回报；仅你收尾写画像/导航/主题；禁止用 `remember` 把文件夹简报写成用户规则；\
 禁止写用户仓根 AGENTS.md/docs；探索 pending 期间 worker 写盘不得出 AgentCore/ 约定记忆与探索笔记。
 </cold_start_explore>"""
@@ -42,7 +42,7 @@ _COLD_START_EXPLORE_HINT_REBIND = (
 用户点名「重新了解 / 刷新文件夹记忆 / 先了解」→ 强制开幕（合并）。\
 空工作区不扫仓、不写假画像；禁止为确认空连续 `file_list`；禁止用 `remember` 写文件夹简报；\
 探索 pending 期间 worker 写盘不得出 AgentCore/ 约定记忆与探索笔记；\
-仓**非空**时本幕仍须轻探→`delegate`≥2 角建档，**不可跳过**。
+仓**非空**时本幕仍须轻探→`delegate`≥2 角建档，**不可跳过**。与巩固侧「冷启动」无关。
 </cold_start_explore>"""
 )
 
@@ -59,7 +59,7 @@ _COLD_START_EXPLORE_HINT_REFRESH = (
 禁止「已建档，需要我继续吗」收尾；禁止用 `remember` 写文件夹简报；\
 空工作区不扫仓、不写假画像、勿为确认空连续 `file_list`；探索 pending 期间 worker 写盘不得出 AgentCore/ 约定记忆与探索笔记；\
 勿写用户仓根 AGENTS.md/docs；厚背景资料写成按需主题条目（`update_folder_profile` 的 topics），不落盘；\
-仓**非空**时本幕仍须轻探→`delegate`≥2 角建档，**不可跳过**。
+仓**非空**时本幕仍须轻探→`delegate`≥2 角建档，**不可跳过**。与巩固侧「冷启动」无关。
 </cold_start_explore>"""
 )
 

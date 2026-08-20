@@ -888,6 +888,35 @@ async def _run_local_harvest_closing_turn(
                 execution_id=execution_id,
                 kind=kind,
             )
+        except asyncio.CancelledError:
+            # Symmetric with ordinary ``_run_turn``: compose via outbox.salvage
+            # before the OPEN row can be left for desktop salvageOpen (empty).
+            from agentcore.sidecar.server_pkg.turns import _salvage_interrupt_reason
+
+            journal = list(sink.execution_journal() or [])
+            content = sink.streamed_content() or ""
+            if outbox is not None:
+                await outbox.salvage(
+                    journal=journal,
+                    content=content,
+                    conversation_id=conversation_id,
+                    trace_id=trace_id,
+                    message_id=message_id,
+                    origin="execution_harvest",
+                    execution_id=execution_id,
+                    harvest_kind=kind,
+                    interrupt_reason=_salvage_interrupt_reason(),
+                )
+            sidecar._log_turn_cancelled(
+                turn_id=message_id,
+                conversation_id=conversation_id,
+                message_id=message_id,
+                trace_id=trace_id,
+                content_chars=len(content),
+                journal_entries=len(journal),
+                salvaged=outbox is not None,
+            )
+            raise
         finally:
             reset_user_message_origin(origin_token)
             sink.close(reason="sidecar_harvest_finally")
@@ -1097,7 +1126,7 @@ async def run_harvest_closing_turn(
                 user=user,
                 cost_repo=CostEventRepository(db),
                 byok_missing_message=(
-                    "系统收口需要可用的模型凭证，请先在「设置 · 服务商」中填入 API Key。"
+                    "系统收口需要可用的模型凭证，请先填入 API Key。"
                 ),
                 model_origin=selection.origin,
                 provider_id=selection.provider_id,

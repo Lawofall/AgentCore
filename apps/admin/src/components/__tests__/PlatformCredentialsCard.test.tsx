@@ -62,6 +62,7 @@ describe("PlatformCredentialsCard", () => {
     expect(screen.getByText("Go-A")).toBeTruthy();
     expect(screen.getByText(row.id)).toBeTruthy();
     expect(screen.getByText("启用")).toBeTruthy();
+    expect(screen.getByText("不限")).toBeTruthy();
   });
 
   it("disables a member without deleting it", async () => {
@@ -122,6 +123,37 @@ describe("PlatformCredentialsCard", () => {
     expect(await screen.findByText(/回落 env/)).toBeTruthy();
     fireEvent.click(screen.getByLabelText("新增账号"));
     expect(screen.getByText("新增平台账号")).toBeTruthy();
+    expect(screen.getByText(/工具条数上限/)).toBeTruthy();
     expect(createPlatformCredential).not.toHaveBeenCalled();
+  });
+
+  it("saves declared tool-surface caps on create", async () => {
+    vi.mocked(listPlatformCredentials).mockResolvedValue({
+      data: [],
+      fallback: "env",
+    });
+    vi.mocked(createPlatformCredential).mockResolvedValue({
+      ...row,
+      tool_surface_limits: { max_tools: 16 },
+    });
+    render(<PlatformCredentialsCard />);
+    fireEvent.click(await screen.findByLabelText("新增账号"));
+    fireEvent.change(screen.getByPlaceholderText("Go 号 2 · 8 月购"), {
+      target: { value: "Go-A" },
+    });
+    const keyInput = screen.getByLabelText("API Key");
+    fireEvent.change(keyInput, { target: { value: "sk-pool-secret-aaaa" } });
+    fireEvent.change(screen.getByLabelText(/工具条数上限/), {
+      target: { value: "16" },
+    });
+    fireEvent.click(screen.getByText("保存"));
+    await waitFor(() =>
+      expect(createPlatformCredential).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "Go-A",
+          tool_surface_limits: { max_tools: 16 },
+        }),
+      ),
+    );
   });
 });

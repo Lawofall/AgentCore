@@ -51,6 +51,85 @@ def _chunk_resets_idle_timer(chunk: LLMChunk) -> bool:
     return bool(chunk.empty_diagnosis or chunk.empty_raw_preview)
 
 
+class _LiveContentHold:
+    """Delay live ``content_delta`` only after CoT has started.
+
+    The process timeline treats any content token as closing a thought. Gateways
+    that leak ``delta.content`` mid-reasoning (OpenCode Go + DeepSeek V4) would
+    otherwise split one sentence into two Thought blocks. Reasoning is emitted
+    immediately. After ``note_reasoning`` (``_THINKING``), content is held until a
+    second content-only chunk confirms thinking paused, or until tool_calls /
+    finish / abort.
+
+    ``_IDLE`` (no reasoning yet) emits immediately: the recorded leak is content
+    *between* reasoning fragments, not content-before-any-CoT. Holding from idle
+    would withhold the first live ``content_delta`` / ``run_output_delta`` and
+    close the hot-redirect in-flight enqueue window.
+
+    ``thinking is False`` (title / memory / compaction / …) bypasses the hold.
+    None / True matches the outbound thinking switch (enabled).
+    """
+
+    __slots__ = ("_enabled", "_held", "_phase", "_emit", "_note_visible")
+
+    _IDLE = "idle"
+    _THINKING = "thinking"
+    _PENDING = "pending"
+    _STREAMING = "streaming"
+
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        emit: Callable[[str], None],
+        note_visible: Callable[[], None] | None,
+    ) -> None:
+        self._enabled = enabled
+        self._held: list[str] = []
+        self._phase = self._IDLE
+        self._emit = emit
+        self._note_visible = note_visible
+
+    def note_reasoning(self) -> None:
+        if self._enabled:
+            self._phase = self._THINKING
+
+    def offer_content(self, delta: str) -> None:
+        if not delta:
+            return
+        if not self._enabled:
+            self._emit_now(delta)
+            return
+        # Do not hold from ``_IDLE``: mid-CoT leak protection starts at ``_THINKING``.
+        if self._phase == self._THINKING:
+            self._held.append(delta)
+            self._phase = self._PENDING
+            return
+        if self._phase == self._PENDING:
+            self.flush()
+            self._emit_now(delta)
+            self._phase = self._STREAMING
+            return
+        self._emit_now(delta)
+
+    def flush(self) -> None:
+        if not self._held:
+            return
+        text = "".join(self._held)
+        self._held.clear()
+        if text:
+            self._emit_now(text)
+
+    def discard(self) -> None:
+        self._held.clear()
+        self._phase = self._IDLE
+
+    def _emit_now(self, text: str) -> None:
+        self._emit(text)
+        if self._note_visible is not None:
+            self._note_visible()
+
+
 @dataclass(frozen=True)
 class StreamRoundResult:
     """Outcome of one streamed LLM call (including post-commit abort salvage)."""
@@ -84,6 +163,10 @@ async def stream_llm_round(
     Pre-commit idle stall (no content / tool_call yet; reasoning does not commit)
     is retryable at this layer — aligned with the provider's pre-commit transparent
     retry philosophy. Post-commit stall salvages the partial via ``aborted``.
+
+    Same-chunk mixed deltas emit reasoning before content. After reasoning has
+    started, content is held from the live timeline while CoT may still resume
+    (see ``_LiveContentHold``); content that arrives before any reasoning is live.
     """
 
     idle = settings.engine_llm_stream_idle_timeout_seconds
@@ -113,11 +196,22 @@ async def stream_llm_round(
         and latency_probe.begin_captain_stream()
     )
 
+    def _note_content_visible() -> None:
+        if record_ttft and latency_probe is not None:
+            latency_probe.note_content_or_tool_chunk()
+
+    hold = _LiveContentHold(
+        enabled=request.thinking is not False,
+        emit=emit_content,
+        note_visible=_note_content_visible if record_ttft else None,
+    )
+
     def _clear_accumulators() -> None:
         content_parts.clear()
         reasoning_parts.clear()
         tc_accumulators.clear()
         tc_progress_at.clear()
+        hold.discard()
 
     def _reset_attempt_state() -> None:
         _clear_accumulators()
@@ -173,6 +267,7 @@ async def stream_llm_round(
 
                         if chunk.aborted:
                             aborted = True
+                            hold.flush()
                             break
 
                         if chunk.empty_diagnosis:
@@ -180,22 +275,24 @@ async def stream_llm_round(
                         if chunk.empty_raw_preview:
                             empty_raw_preview = chunk.empty_raw_preview
 
-                        if chunk.delta_content:
-                            content_parts.append(chunk.delta_content)
-                            emit_content(chunk.delta_content)
-                            if record_ttft and latency_probe is not None:
-                                latency_probe.note_content_or_tool_chunk()
-
+                        # Reasoning first: a mixed chunk must not open a content
+                        # step that splits the in-flight thought.
                         if chunk.delta_reasoning:
                             reasoning_parts.append(chunk.delta_reasoning)
                             emit_reasoning(chunk.delta_reasoning)
+                            hold.note_reasoning()
                             if record_ttft and latency_probe is not None:
                                 latency_probe.note_reasoning_chunk()
+
+                        if chunk.delta_content:
+                            content_parts.append(chunk.delta_content)
+                            hold.offer_content(chunk.delta_content)
 
                         if chunk.finish_reason:
                             finish_reason = chunk.finish_reason
 
                         if chunk.delta_tool_calls:
+                            hold.flush()
                             if record_ttft and latency_probe is not None:
                                 latency_probe.note_content_or_tool_chunk()
                             for tc_delta in chunk.delta_tool_calls:
@@ -225,6 +322,7 @@ async def stream_llm_round(
 
                         if chunk.usage:
                             usage = chunk.usage
+                hold.flush()
             except TimeoutError:
                 committed = bool(content_parts) or bool(tc_accumulators)
                 elapsed_ms = int((time.monotonic() - start) * 1000)
@@ -254,6 +352,7 @@ async def stream_llm_round(
                 )
                 if committed:
                     aborted = True
+                    hold.flush()
                     break
 
                 last_stall_error = LLMTimeoutError("模型流式响应停滞（长时间无输出），请稍后重试")

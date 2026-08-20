@@ -1,3 +1,8 @@
+import {
+  type TimedWireEvent,
+  isRunFrameEvent,
+} from "@agentcore/protocol-fold-kit";
+
 // Small date formatters for list rows + message timestamps (人际消息 / 对话列表).
 
 function pad(n: number): string {
@@ -27,6 +32,19 @@ export function formatMessageTime(iso: string): string {
   const md = `${d.getMonth() + 1}月${d.getDate()}日`;
   if (d.getFullYear() === now.getFullYear()) return `${md} ${tod}`;
   return `${d.getFullYear()}年${md} ${tod}`;
+}
+
+/** First collab-frame event timestamp (epoch ms). Live strip ticks from this
+ *  wall-clock anchor — `turnElapsedMs` span freezes while a long tool emits no frames. */
+export function firstCollabAtMs(
+  events: readonly TimedWireEvent[],
+): number | null {
+  for (const ev of events) {
+    if (!isRunFrameEvent(ev.type)) continue;
+    const t = ev.timestamp ? Date.parse(ev.timestamp) : Number.NaN;
+    if (!Number.isNaN(t)) return t;
+  }
+  return null;
 }
 
 /** 毫秒时长 → "45s" / "2m34s" / "1h2m"（对齐桌面 formatDuration）。 */

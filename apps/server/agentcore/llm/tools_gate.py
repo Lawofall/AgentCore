@@ -8,13 +8,14 @@ tools were offered, the probe said ``False``, and the model never returned tool_
 
 from __future__ import annotations
 
-# 换模型的入口是「设置 · 模型」（组合），不是存 key 的「服务商」页。
+# Copy does not name a client page: the same warning is sent to every client;
+# each routes via its own CTA.
 TOOLS_SOFT_GATE_WARNING = (
     "该模型可能不支持工具调用，委派/辩论可能失败。"
-    "可在「设置 · 模型」中更换支持工具调用的模型，或继续尝试。"
+    "可更换支持工具调用的模型，或继续尝试。"
 )
 
 TOOLS_UNAVAILABLE_RUNTIME_MESSAGE = (
     "当前模型不支持工具调用，无法完成委派或辩论。"
-    "请在「设置 · 模型」中更换支持工具调用的模型后重试。"
+    "请更换支持工具调用的模型后重试。"
 )

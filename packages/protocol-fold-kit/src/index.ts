@@ -9,6 +9,9 @@
  *
  * Allowed under cross-platform-frontend: protocol constants yes; shared fold
  * implementation no. Gate remains `pnpm conformance`.
+ *
+ * 协议文案层：空失败脸与降级 chip、挂问、导出 chrome、恢复时刻子句、
+ * 排查包 extras 成文（桌面/手机逐字同一份）。
  */
 
 export {
@@ -56,3 +59,55 @@ export {
   formatCollabSummary,
   type CollabCounts,
 } from "./teamGain";
+
+export {
+  HANGING_QUESTION_CAPTION,
+  HANGING_QUESTION_CTA,
+  HANGING_QUESTION_DEFAULT_HINT,
+  HANGING_QUESTION_DETACHED_HINT,
+  formatHangingDefault,
+  type HangingAssumptionCopy,
+} from "./hangingQuestion";
+
+export {
+  EMPTY_RESPONSE_CHIP_LABELS,
+  LLM_EMPTY_RESPONSE_MESSAGE,
+  LLM_ERROR_MESSAGE,
+  LLM_UNPRODUCTIVE_MESSAGE,
+  TURN_INTERRUPTED_EMPTY_MESSAGE,
+  degradedFinishChipLabel,
+  isEmptyResponseUserSurface,
+} from "./errorCopy";
+
+export {
+  recoveryMomentRecoveryClause,
+  recoveryMomentResetClause,
+} from "./recoveryMomentCopy";
+
+export {
+  MESSAGE_EXPORT_DELIVERABLE_HEADING,
+  MESSAGE_EXPORT_PROCESS_HEADING,
+  MESSAGE_EXPORT_REASONING_HEADING,
+  MESSAGE_EXPORT_STEP_CHROME,
+  MESSAGE_EXPORT_TOOL_STATUS_SUFFIX,
+  type MessageCopyMode,
+} from "./messageExportCopy";
+
+export {
+  SUPPORT_DIAGNOSTIC_PREVIEW_MAX,
+  formatSupportDiagnosticText,
+  sanitizeSupportDiagnosticPreview,
+  supportDiagnosticExtrasFromError,
+  type SupportDiagnosticErrorExtras,
+  type SupportDiagnosticIds,
+  type SupportErrorContext,
+} from "./supportDiagnosticExtras";
+
+export {
+  CACHE_BILLED_AS_MISS_LABEL,
+  cacheDisplayBilledAsMiss,
+  cacheUsageDisplay,
+  displayCacheMiss,
+  isOmittedCacheSplit,
+  type CacheSplitCounts,
+} from "./cacheUsageDisplay";

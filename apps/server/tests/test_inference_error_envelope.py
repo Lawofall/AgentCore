@@ -41,10 +41,10 @@ _VENDOR_BASE = "http://example.invalid/v1"
 # 「接入自己的 key」exit is the CTA, so it must survive the hop word for word.
 _QUOTA_MESSAGE = (
     "本月额度已用完（约 ¥12.00 / ¥12.00），额度重置后可继续；"
-    "测试需要可联系管理员提额，或接入自己的 key 继续（设置 · 服务商）。"
+    "测试需要可联系管理员提额，或接入自己的 key 继续。"
 )
-_KEY_MISSING_MESSAGE = "请先在「设置 · 服务商」中填入你的 API Key，再发起对话。"
-_KEY_INVALID_MESSAGE = "我的网关 API Key 无效或无权限，请在「设置 · 服务商」中更新后重试。"
+_KEY_MISSING_MESSAGE = "请先接入自己的 API Key，再发起对话。"
+_KEY_INVALID_MESSAGE = "我的网关 API Key 无效或无权限，请更新后重试。"
 
 
 def _envelope(code: str, message: str, context: dict | None = None) -> bytes:

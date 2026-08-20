@@ -400,6 +400,7 @@ async def test_coordination_start_echo_counts_and_seeds_completed():
     )
     assert started is not None
     out = started.output or ""
+    assert started.audience == "ceo"
     assert "队员已追加" in out
     assert "已追加 1 名" in out
     assert "图共 2 名" in out
@@ -433,6 +434,7 @@ async def test_fresh_coordination_echo_includes_total_and_zero_completed():
         ctx(),
     )
     assert "团队已启动" in result.output
+    assert result.audience == "ceo"
     assert "图共 2 名" in result.output
     assert "其中 0 名已完成" in result.output
     assert "人已派出" in result.output

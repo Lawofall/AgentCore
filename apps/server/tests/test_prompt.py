@@ -21,12 +21,14 @@ import re
 
 from agentcore.config import settings
 from agentcore.runtime.resolve.prompt import (
+    _ATTACHMENT_MATERIAL_HINT,
     _CEO_CORE_HINT,
     _CEO_VISUALIZATION_HINT,
     _DEFAULT_SYSTEM_PROMPT,
     CHAT_CITATION_HINT,
     assemble_ceo_core,
     assemble_system_prompt,
+    attachment_material_scene,
     compose_ceo_chat_prompt,
     compose_worker_base_prompt,
     derive_ceo_addon,
@@ -769,10 +771,40 @@ def test_core_teaches_confirmed_constraints_block_on_delegate():
     assert "意图分类" in hint  # 禁止自动抽
     assert "约束块优先" in hint or "优先" in hint
     assert "附件" in hint
+    # 自拟默认不得进「已确认约束」块冒充拍板（与终稿「假设≠用户确认」同口径）
+    assert "自拟的默认" in hint
+    assert "冒充拍板" in hint
+    assert "无已拍板项" in hint
     # 编排 skill 同口径
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "已确认约束" in skill
     assert "约束块优先" in skill or "优先" in skill
+    assert "自拟的默认" in skill
+    assert "冒充拍板" in skill
+    assert "无已拍板项" in skill
+
+
+def test_core_teaches_assumption_is_not_user_confirmation():
+    """终稿不得把模型自填假设写成「用户已确认」（阶梯 1；禁硬/软闸、禁扫原文、禁完成话术正则）。
+
+    生产窗失败侧 ask_user=0，却写「出发地北京已确认 / 按你确认的来」——规则须常驻 CEO 核，
+    不能只放 ask_user_* skill。空 continue 确认卡上 default 仍算确认（「按确认默认」）。
+    """
+    hint = _CEO_CORE_HINT
+    assert "假设≠用户确认" in hint
+    assert "按你确认的" in hint
+    assert "覆盖你确认的" in hint
+    assert "按确认默认" in hint  # 真确认路径保留
+    assert "一律阻塞提问" in hint  # 禁为凑确认而凡事先问
+    assert "周末旅行" in hint  # 生产窗锚（勿标「反例」——核禁正反例回胀）
+    # 不扫用户原文做意图分类；不顺手收紧完成话术
+    assert "意图分类" not in hint.split("【问还是派·中性】", 1)[1].split(
+        "【跨产品规则范式】", 1
+    )[0]
+    assert "队员已全部完成" not in hint
+    orch = _TEAM_ORCHESTRATION_ADVANCED
+    assert "自拟的默认" in orch and "冒充拍板" in orch
+    assert "无已拍板项" in orch
 
 
 def test_shared_base_teaches_howto_stale_path_honesty():
@@ -887,10 +919,14 @@ def test_core_worker_capability_follows_workspace_facts():
     assert "表格 → `.csv`" not in hint
     assert "源数据文件下一步" in hint
     assert "无法可靠解析的源数据文件" in hint
-    # 工程/代码无执行补救仍在核里（执行事实行未写明源数据文件时）。
+    assert "执行事实行" in hint
+    assert "禁止】另编" in hint
+    # 工程/代码无执行补救权威在执行事实行（test_workspace_context），核不复述。
     assert "export_to_local" in hint
-    assert "bind_local" in hint
-    assert "本机传统" in hint
+    # 成品文件只装成品：核只留路由短钩，全文在 long_form_writing
+    assert "【成品文件只装成品】" in hint
+    assert "使用前请核对" not in hint
+    assert "long_form_writing" in hint
 
 
 def test_core_teaches_delivery_honesty_when_no_execution():
@@ -1106,6 +1142,10 @@ def test_core_teaches_image_gen_egress_and_key_boundary():
     assert "<credential_hygiene>" in shared
     assert "API Key" in shared and "明文" in shared
     assert "环境变量占位" in shared
+    # 共享基座会进桌面/手机/web；说动作（已接入的凭据），不点名某一端的设置页。
+    assert "已接入" in shared and "凭据" in shared
+    assert "设置 · 服务商" not in shared
+    assert "设置 · 模型" not in shared
     # 案 47ae：跨会话进度摘要禁回显密码/token（扩既有 Key 族，非新硬闸）
     assert "跨窗续作" in shared and "handoff" in shared
     assert "密码" in shared and "原会话" in shared
@@ -1356,31 +1396,56 @@ def test_core_guides_out_of_workspace_absolute_paths():
 
 def test_core_teaches_narrowed_attachment_scope_must_start():
     # 定案 A：用户收窄为本轮附件/工作区已有产物时须先动手；与 open_local_project 正交。
+    # HOW 场面门（同构 cold_start）：常驻核不载全文，仅本回合有附件块 / [resident missing] 时注入。
     hint = _CEO_CORE_HINT
-    assert "本轮材料收窄" in hint
-    assert "先这些" in hint or "就这些" in hint
-    assert "缺口分析" in hint or "改一版" in hint
-    assert "禁止整轮" in hint and ("催" in hint or "完整源码" in hint)
-    assert "单点缺件" in hint or "局限" in hint
-    assert "open_local_project" in hint
-    assert "退役" in hint or "收窄本轮输入" in hint
-    assert "开工前置" in hint
+    assert "【本轮材料收窄】" not in hint
+    assert "【附件驻留·缺件】" not in hint
+    gated = _ATTACHMENT_MATERIAL_HINT
+    assert "本轮材料收窄" in gated
+    assert "先这些" in gated or "就这些" in gated
+    assert "缺口分析" in gated or "改一版" in gated
+    assert "禁止整轮" in gated and ("催" in gated or "完整源码" in gated)
+    assert "单点缺件" in gated or "局限" in gated
+    assert "open_local_project" in gated
+    assert "退役" in gated or "收窄本轮输入" in gated
+    assert "开工前置" in gated
     # 案 adsense-zip-resident-missing B + AI_NOISE 假空：只认结构化缺件，禁用 list 当 oracle。
-    assert "附件驻留·缺件" in hint
-    assert "[resident missing]" in hint
-    assert "重传" in hint
-    assert "解压" in hint or "整改" in hint
-    assert "ask_user" in hint
-    assert "file_list" in hint  # 须点名禁止，不是教用它验盘
-    assert "推断" in hint or "≠ 缺件" in hint or "浏览过滤" in hint
-    assert "[binary]" in hint and "≠ 缺件" in hint
+    assert "附件驻留·缺件" in gated
+    assert "[resident missing]" in gated
+    assert "重传" in gated
+    assert "解压" in gated or "整改" in gated
+    assert "ask_user" in gated
+    assert "file_list" in gated  # 须点名禁止，不是教用它验盘
+    assert "推断" in gated or "≠ 缺件" in gated or "浏览过滤" in gated
+    assert "[binary]" in gated and "≠ 缺件" in gated
     # 禁止旧契约：用 file_list/exists「证实」路径不在当缺件触发条件。
-    assert "file_list / exists 证实" not in hint
-    assert "exists 证实" not in hint
+    assert "file_list / exists 证实" not in gated
+    assert "exists 证实" not in gated
     mid = build_system_skill_registry().get("ask_user_midtask")
     assert mid is not None
     assert "先读材料" in mid.body or "收窄本轮" in mid.body
     assert "开工前置" in mid.body
+
+    names = {"consult", "delegate", "ask_user"}
+    without = compose_ceo_chat_prompt(
+        "BASE",
+        ceo_tool_names=names,
+        attachment_material=False,
+    )
+    with_flag = compose_ceo_chat_prompt(
+        "BASE",
+        ceo_tool_names=names,
+        attachment_material=True,
+    )
+    assert "<attachment_material>" not in without
+    assert "<attachment_material>" in with_flag
+    assert "【本轮材料收窄】" in with_flag
+    assert "【附件驻留·缺件】" in with_flag
+    assert attachment_material_scene("<attached_files>\nfoo\n</attached_files>") is True
+    assert attachment_material_scene("--- File: a.zip [resident missing] ---") is True
+    assert attachment_material_scene(None) is False
+    assert attachment_material_scene("") is False
+    assert attachment_material_scene("<agent_mentions/>") is False
 
 
 def test_core_points_to_consult_and_directory():
@@ -1478,12 +1543,13 @@ def test_ceo_core_platform_knowledge_two_way_routing():
     hint = _CEO_CORE_HINT
     assert "<platform_knowledge>" in hint and "</platform_knowledge>" in hint
     block = hint.split("<platform_knowledge>", 1)[1].split("</platform_knowledge>", 1)[0]
-    # 常驻产品面地图短：品类 + 高频入口 + 两分路由 + 规则载体对照短钩，勿膨胀整本手册
+    # 常驻产品面：品类 + 两分路由 + 规则载体对照短钩；高频入口在 product_help_map
     assert len(block.strip().splitlines()) <= 30
     assert "【品类】" in block
     assert "https://fashitianxia.xyz" in block
     assert "我的官网" in block
-    assert "【产品面地图·高频入口】" in block
+    assert "【产品面地图·高频入口】" not in block
+    assert "consult(product_help_map)" in block
     assert "【两分路由】" in block
     assert "机制" in block and "架构" in block and "记忆" in block and "能力边界" in block
     assert "系统提示" in block and "workspace_context" in block

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from agentcore.admin import AdminService
 from agentcore.auth import AuthService
+from agentcore.auth.email_service import EmailAuthService
 from agentcore.auth.mfa import AdminMfaService
 from agentcore.config import settings
 from agentcore.core.errors import (
@@ -34,12 +35,14 @@ from agentcore.db.repositories import (
     CostEventRepository,
     CredentialsRepository,
     DocumentRepository,
+    EmailChallengeRepository,
     FeedbackRepository,
     FolderRepository,
     FriendRepository,
     HandoffJobRepository,
     MemoryUpdateRepository,
     MessageRepository,
+    PendingRegistrationRepository,
     ProductNoticeRepository,
     PushDeviceRepository,
     RefreshTokenRepository,
@@ -331,6 +334,27 @@ def get_auth_service(
         credentials=CredentialsRepository(session),
         refresh_tokens=RefreshTokenRepository(session),
         mfa=mfa,
+        session=session,
+    )
+
+
+def get_email_sender():
+    from agentcore.mail import build_email_sender
+
+    return build_email_sender()
+
+
+def get_email_auth_service(
+    session: AsyncSession = Depends(get_db),
+    mailer=Depends(get_email_sender),
+) -> EmailAuthService:
+    return EmailAuthService(
+        users=UserRepository(session),
+        credentials=CredentialsRepository(session),
+        refresh_tokens=RefreshTokenRepository(session),
+        pending=PendingRegistrationRepository(session),
+        challenges=EmailChallengeRepository(session),
+        mailer=mailer,
         session=session,
     )
 

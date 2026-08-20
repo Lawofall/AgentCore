@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from agentcore.memory.account_prepare_cache import (
+    AccountPrepareSnapshot,
+    clear_account_rules_memory_cache,
+)
 from agentcore.runtime.coordination.session import (
     CoordinationSession,
     active_coordination,
@@ -16,7 +21,12 @@ from agentcore.runtime.coordination.session import (
     set_active_coordination,
 )
 from agentcore.runtime.events import EventSink, EventType, FinishReason
+from agentcore.sidecar.protocol import TURN_CANCELLED
 from agentcore.sidecar.server import SidecarServer
+from agentcore.sidecar.server_pkg.cancel_tombstone import (
+    cancel_tombstone_blocks,
+    mark_cancel_tombstone,
+)
 from agentcore.sidecar.server_pkg.turns import (
     _emit_cancel_end_if_cancelling,
     _emit_user_stop_message_end,
@@ -200,6 +210,157 @@ async def test_sidecar_cancel_resolves_conversation_from_turn_map():
             await turn_task
     release_turn_coordination("e-map")
     assert active_coordination("e-map") is None
+
+
+def test_cancel_tombstone_expires_and_evicts_oldest(monkeypatch: pytest.MonkeyPatch):
+    """Tombstones are bounded: expired entries drop; overflow evicts soonest-expiring."""
+    import time
+
+    from agentcore.sidecar.server_pkg import cancel_tombstone as ct
+
+    stones: dict[str, float] = {}
+    mark_cancel_tombstone(stones, "live")
+    assert cancel_tombstone_blocks(stones, "live") is True
+
+    stones["live"] = time.monotonic() - 1
+    assert cancel_tombstone_blocks(stones, "live") is False
+
+    monkeypatch.setattr(ct, "CANCEL_TOMBSTONE_MAX", 2)
+    mark_cancel_tombstone(stones, "a")
+    mark_cancel_tombstone(stones, "b")
+    mark_cancel_tombstone(stones, "c")
+    assert "a" not in stones
+    assert set(stones) == {"b", "c"}
+
+
+async def test_sidecar_cancel_unknown_turn_tombstone_refuses_start(tmp_path: Path):
+    """cancel before startTurn registers: tombstone → startTurn is TURN_CANCELLED."""
+    lines, write_line = _recorder()
+    server = SidecarServer(write_line)
+    server._initialized = True
+    server._root = tmp_path
+
+    await server.handle_line(
+        _req(
+            1,
+            "cancel",
+            {
+                "turnId": "turn-early",
+                "conversationId": "conv-early",
+                "reason": "user_stop",
+            },
+        )
+    )
+    replies = [m for m in lines if m.get("id") == 1]
+    assert replies and replies[0].get("result", {}).get("cancelled") is True
+    assert cancel_tombstone_blocks(server._cancel_tombstones, "turn-early")
+
+    await server.handle_line(
+        _req(
+            2,
+            "startTurn",
+            {
+                "turnId": "turn-early",
+                "conversationId": "conv-early",
+                "userMessage": "should not run",
+            },
+        )
+    )
+    err = next(m for m in lines if m.get("id") == 2 and "error" in m)
+    assert err["error"]["code"] == TURN_CANCELLED
+    assert err["error"]["message"] == "turn cancelled"
+    assert "turn-early" not in server._turns
+
+
+async def test_warm_account_rules_memory_does_not_block_cancel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """warmAccountRulesMemory must not hold the read loop while cloud HTTP hangs."""
+    clear_account_rules_memory_cache()
+    (tmp_path / "a.py").write_text("x=1\n", encoding="utf-8")
+    lines, write_line = _recorder()
+    server = SidecarServer(write_line)
+    hang = asyncio.Event()
+
+    async def _hang_warm(*_args: Any, **_kwargs: Any) -> AccountPrepareSnapshot:
+        await hang.wait()
+        return AccountPrepareSnapshot()
+
+    monkeypatch.setattr(
+        "agentcore.memory.account_prepare_cache.warm_account_rules_memory",
+        _hang_warm,
+    )
+
+    await server.handle_line(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "userId": "u1",
+                    "workspaceRoot": str(tmp_path),
+                    "approvalsEnabled": True,
+                },
+            }
+        )
+    )
+
+    turn_id = "turn-live"
+    conversation_id = "conv-live"
+
+    async def _hang() -> None:
+        await asyncio.Event().wait()
+
+    turn_task = asyncio.create_task(_hang())
+    server._register_turn(turn_id, turn_task, conversation_id=conversation_id)
+
+    warm_task = asyncio.create_task(
+        server.handle_line(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "warmAccountRulesMemory",
+                    "params": {
+                        "folderId": "f1",
+                        "accountAuth": {
+                            "baseUrl": "https://example.test/v1/account",
+                            "apiKey": "tok",
+                        },
+                    },
+                }
+            )
+        )
+    )
+    await asyncio.wait_for(warm_task, timeout=1.0)
+    # Scheduled fetch is still hanging; cancel must be serviced anyway.
+    assert not any(m.get("id") == 2 for m in lines)
+
+    await server.handle_line(
+        _req(
+            3,
+            "cancel",
+            {
+                "turnId": turn_id,
+                "conversationId": conversation_id,
+                "reason": "user_stop",
+            },
+        )
+    )
+    cancel_replies = [m for m in lines if m.get("id") == 3]
+    assert cancel_replies and cancel_replies[0].get("result", {}).get("cancelled") is True
+    await asyncio.sleep(0)
+    assert turn_task.cancelled() or turn_task.done()
+
+    hang.set()
+    pending = [t for t in list(server._pending_sends) if not t.done()]
+    if pending:
+        await asyncio.gather(*pending)
+    if not turn_task.done():
+        turn_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn_task
 
 
 async def _drain_until_message_end(sink: EventSink) -> dict:

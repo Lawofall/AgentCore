@@ -8,13 +8,14 @@ loop's out-param bag before the crash — the salvage path must read them.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from agentcore.llm.provider.protocol import TokenUsage
-from agentcore.runtime.events import FinishReason
+from agentcore.runtime.events import EventSink, EventType, FinishReason
 from agentcore.runtime.runs.executor.captain import _drive_captain_loop
 from agentcore.runtime.runs.types import RunKind, RunPhase, RunSpec
 from agentcore.tools.protocol import ToolContext
@@ -101,3 +102,63 @@ async def test_captain_crash_before_first_round_reports_zero(monkeypatch: Any) -
     assert state.phase is RunPhase.FAILED
     assert state.rounds == 0
     assert state.finish_override is None
+
+
+@pytest.mark.asyncio
+async def test_captain_mid_cancel_emits_run_cancelled(monkeypatch: Any) -> None:
+    """CEO 中途停止：run_started 之后必须有 run_cancelled（CancelledError 不能空穿）。"""
+
+    async def _hang(**_kwargs: Any):
+        await asyncio.sleep(30)
+        raise AssertionError("should have been cancelled")
+
+    monkeypatch.setattr(
+        "agentcore.runtime.runs.executor.captain.react_loop",
+        _hang,
+    )
+    monkeypatch.setattr(
+        "agentcore.runtime.browser.registry.default_browser_session_registry",
+        lambda: MagicMock(unbind_run=lambda _rid: 0),
+    )
+    sink = EventSink()
+    spec = _spec("captain-stop")
+    task = asyncio.create_task(
+        _drive_captain_loop(
+            spec=spec,
+            messages=[],
+            received_blocks=[],
+            llm=MagicMock(),
+            tools=MagicMock(),
+            sink=sink,
+            tool_ctx=_tool_ctx(spec.run_id),
+            profile=make_profile_params(),
+            turn_model="test-model",
+            citation_sink=[],
+            approval_gate=None,
+        )
+    )
+    for _ in range(200):
+        if any(
+            e.type is EventType.RUN_STARTED and e.payload.get("run_id") == "captain-stop"
+            for e in sink._history  # noqa: SLF001
+        ):
+            break
+        await asyncio.sleep(0.01)
+    else:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        pytest.fail("captain never emitted run_started")
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    cancelled = [
+        e
+        for e in sink._history  # noqa: SLF001
+        if e.type is EventType.RUN_CANCELLED and e.payload.get("run_id") == "captain-stop"
+    ]
+    assert len(cancelled) == 1
+    assert cancelled[0].payload.get("reason") == "stop"
+    assert not any(e.type is EventType.RUN_FAILED for e in sink._history)  # noqa: SLF001

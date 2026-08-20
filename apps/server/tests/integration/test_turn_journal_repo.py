@@ -287,7 +287,7 @@ async def test_find_latest_mlr_execution_namespaced_synthesizer(session_factory)
 
 async def test_record_replaces_turn_wholesale(session_factory):
     # A resume reuses the turn_id and re-records on completion: record must REPLACE the
-    # turn's rows (delete-then-insert), not append — so the window never doubles up.
+    # live-band prefix occupancy, not append — so the window never doubles up.
     turn_id, conv_id = str(uuid4()), str(uuid4())
     entries = _paused_journal()
 

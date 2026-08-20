@@ -9,7 +9,7 @@ hosts boot/refresh (opens a session). Plaintext never appears on the view.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TypedDict
 
@@ -22,7 +22,12 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.models.platform import PlatformCredential
 from agentcore.db.repositories.platform_credentials import PlatformCredentialRepository
 from agentcore.llm.credentials import require_http_header_safe_api_key
-from agentcore.llm.platform_pool import PlatformPoolMember, replace_platform_pool_snapshot
+from agentcore.llm.platform_pool import (
+    PlatformPoolMember,
+    ToolSurfaceLimits,
+    replace_platform_pool_snapshot,
+)
+from agentcore.llm.tool_surface import parse_tool_surface_limits, tool_surface_limits_as_dict
 from agentcore.security.keys import KeyEncryptor
 
 logger = get_logger(__name__)
@@ -62,6 +67,7 @@ def _member_from_row(
         base_url=row.base_url,
         subscription_day=int(row.subscription_day),
         enabled=bool(row.enabled),
+        tool_surface_limits=_limits_from_row(row),
     )
 
 
@@ -113,6 +119,7 @@ class PlatformCredentialView:
     masked_key: str | None
     created_at: datetime | None
     updated_at: datetime | None
+    tool_surface_limits: ToolSurfaceLimits = field(default_factory=ToolSurfaceLimits)
 
 
 def _mask_key(api_key: str) -> str:
@@ -131,6 +138,14 @@ def _mask_key_ciphertext(enc: KeyEncryptor | None, api_key_enc: bytes) -> str | 
     return _mask_key(plaintext)
 
 
+def _limits_from_row(row: PlatformCredential) -> ToolSurfaceLimits:
+    try:
+        return parse_tool_surface_limits(row.tool_surface_limits)
+    except ValidationError:
+        logger.warning("platform_pool.tool_surface_limits_invalid", credential_id=row.id)
+        return ToolSurfaceLimits()
+
+
 class _CredentialUpdate(TypedDict, total=False):
     """Partial kwargs for :meth:`PlatformCredentialRepository.update` (never ``commit``)."""
 
@@ -139,6 +154,7 @@ class _CredentialUpdate(TypedDict, total=False):
     base_url: str
     subscription_day: int
     enabled: bool
+    tool_surface_limits: dict
 
 
 class PlatformCredentialService:
@@ -169,6 +185,7 @@ class PlatformCredentialService:
             masked_key=_mask_key_ciphertext(enc, row.api_key_enc),
             created_at=row.created_at,
             updated_at=row.updated_at,
+            tool_surface_limits=_limits_from_row(row),
         )
 
     async def list_credentials(self) -> list[PlatformCredentialView]:
@@ -192,6 +209,7 @@ class PlatformCredentialService:
         base_url: str,
         subscription_day: int,
         enabled: bool = True,
+        tool_surface_limits: object | None = None,
     ) -> PlatformCredentialView:
         label_s = (label or "").strip()
         if not label_s:
@@ -203,6 +221,7 @@ class PlatformCredentialService:
             )
         if not 1 <= int(subscription_day) <= 31:
             raise ValidationError("订阅日须为 1–31")
+        limits = parse_tool_surface_limits(tool_surface_limits)
         safe_key = require_http_header_safe_api_key(api_key)
         enc = self._require_encryptor()
         row = await self._repo.create(
@@ -211,6 +230,7 @@ class PlatformCredentialService:
             base_url=base,
             subscription_day=int(subscription_day),
             enabled=enabled,
+            tool_surface_limits=tool_surface_limits_as_dict(limits),
         )
         await reload_platform_credential_pool(self._session)
         return self._view(row, enc=enc)
@@ -225,6 +245,7 @@ class PlatformCredentialService:
         base_url: str | None = None,
         subscription_day: int | None = None,
         enabled: bool | None = None,
+        tool_surface_limits: object | None = None,
     ) -> PlatformCredentialView:
         existing = await self._repo.get(credential_id)
         if existing is None:
@@ -254,6 +275,9 @@ class PlatformCredentialService:
             kwargs["subscription_day"] = day
         if "enabled" in fields_set and enabled is not None:
             kwargs["enabled"] = bool(enabled)
+        if "tool_surface_limits" in fields_set:
+            limits = parse_tool_surface_limits(tool_surface_limits)
+            kwargs["tool_surface_limits"] = tool_surface_limits_as_dict(limits)
 
         row = await self._repo.update(credential_id, **kwargs)
         assert row is not None

@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./fixtureKind": "./src/fixtureKind.ts",
     "./projectedTurn": "./src/projectedTurn.ts",
+    "./turnVerdict": "./src/turnVerdict.ts",
     "./fixtures/simulation-region-positions.json": "./fixtures/simulation-region-positions.json",
     "./fixtures/simulation-m1-tick.json": "./fixtures/simulation-m1-tick.json",
     "./fixtures/simulation/multi-agent-tick.json": "./fixtures/simulation/multi-agent-tick.json",

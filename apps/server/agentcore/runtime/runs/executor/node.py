@@ -38,6 +38,9 @@ from agentcore.runtime.runs.executor.retry import (
     should_skip_contract_retry_for_budget,
 )
 from agentcore.runtime.runs.executor.setup import prepare_agent_node
+from agentcore.runtime.runs.executor.started_run_close import (
+    emit_run_cancelled_if_unterminated,
+)
 from agentcore.runtime.runs.executor.terminal import (
     build_terminal_run_state,
     dispose_agent_node,
@@ -219,4 +222,7 @@ async def execute_agent_node(
             tool_ctx=tool_ctx,
         )
     finally:
+        emit_run_cancelled_if_unterminated(
+            env.sink, spec.run_id, agent_id, execution_id=env.execution_id
+        )
         await dispose_agent_node(spec, lead_subteam)

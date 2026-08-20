@@ -328,7 +328,7 @@ describe("rejoinLiveTurn · bounded GET attach, never resend", () => {
   });
 
   it("does not clear an unrelated banner on recovery", () => {
-    const other = "请先在「设置 · 服务商」中填入你的 API Key，再发起对话。";
+    const other = "请先接入自己的 API Key，再发起对话。";
     useConversationStore.getState().setError(other, null, CID, null);
     handleServerHealthRecovered();
     expect(getRuntime(CID).error).toBe(other);

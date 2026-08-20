@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -23,7 +24,10 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def get_by_username(self, username: str) -> User | None:
-        result = await self._session.execute(select(User).where(User.username == username))
+        lowered = username.strip().lower()
+        result = await self._session.execute(
+            select(User).where(func.lower(User.username) == lowered)
+        )
         return result.scalar_one_or_none()
 
     async def get_by_email(self, email: str) -> User | None:
@@ -49,14 +53,21 @@ class UserRepository:
     async def search(self, query: str, *, limit: int = 20) -> Sequence[User]:
         """People-search for the 消息 page (任意搜人).
 
-        Exact, case-insensitive username match only — no fuzzy prefix — so the
-        directory cannot be enumerated by scanning. Disabled (status != active)
-        accounts are excluded; discoverability (``user_directory_settings``) is
-        enforced one layer up in the service.
+        Exact match only — case-insensitive username or exact ``user_id`` — no fuzzy
+        prefix, so the directory cannot be enumerated by scanning. Disabled
+        (``status != active``) accounts are excluded; discoverability
+        (``user_directory_settings``) is enforced one layer up in the service.
         """
         q = query.strip()
         if not q:
             return []
+        try:
+            UUID(q)
+            by_id = await self.get_by_id(q)
+        except ValueError:
+            by_id = None
+        if by_id is not None and by_id.status == "active":
+            return [by_id]
         result = await self._session.execute(
             select(User)
             .where(func.lower(User.username) == q.lower(), User.status == "active")
@@ -185,6 +196,7 @@ class UserRepository:
         username: str,
         display_name: str | None = None,
         email: str | None = None,
+        email_verified_at: datetime | None = None,
         role: str = "user",
         status: str = "active",
         registration_ip: str | None = None,
@@ -195,6 +207,7 @@ class UserRepository:
             username=username,
             display_name=display_name or "",
             email=email,
+            email_verified_at=email_verified_at,
             role=role,
             status=status,
             registration_ip=registration_ip,
@@ -303,6 +316,10 @@ class UserRepository:
         *,
         display_name: str | object = _UNSET,
         email: str | None | object = _UNSET,
+        email_verified_at: datetime | None | object = _UNSET,
+        username: str | object = _UNSET,
+        username_changed_at: datetime | None | object = _UNSET,
+        commit: bool = True,
     ) -> User | None:
         """Patch a user's profile fields (个人资料编辑), returning the updated row.
 
@@ -316,11 +333,17 @@ class UserRepository:
             values["display_name"] = display_name
         if email is not _UNSET:
             values["email"] = email
+        if email_verified_at is not _UNSET:
+            values["email_verified_at"] = email_verified_at
+        if username is not _UNSET:
+            values["username"] = username
+        if username_changed_at is not _UNSET:
+            values["username_changed_at"] = username_changed_at
         if values:
             await self._session.execute(
                 update(User).where(User.user_id == user_id).values(**values)
             )
-            await self._session.commit()
+            await commit_or_flush(self._session, commit=commit)
         return await self.get_by_id(user_id)
 
     async def set_avatar(self, user_id: str, avatar_key: str | None) -> User | None:

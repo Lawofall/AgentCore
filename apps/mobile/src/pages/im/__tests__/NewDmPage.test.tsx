@@ -47,14 +47,14 @@ describe("NewDmPage", () => {
     expect(document.querySelector(".bar-title")?.textContent).toBe("找人");
     expect(screen.queryByText("← 返回")).toBeNull();
     expect(
-      await screen.findByText("输入用户名或显示名精确搜索，即可发起对话。"),
+      await screen.findByText("输入用户名或 ID 精确搜索，即可发起对话。"),
     ).toBeTruthy();
   });
 
   it("shows a hint when there is no query and the list is empty", async () => {
     render(<NewDmPage />);
     expect(
-      await screen.findByText("输入用户名或显示名精确搜索，即可发起对话。"),
+      await screen.findByText("输入用户名或 ID 精确搜索，即可发起对话。"),
     ).toBeTruthy();
   });
 
@@ -66,7 +66,7 @@ describe("NewDmPage", () => {
     expect(await screen.findByText("黑名单")).toBeTruthy();
     expect(screen.getByText("Bob")).toBeTruthy();
     expect(
-      screen.queryByText("输入用户名或显示名精确搜索，即可发起对话。"),
+      screen.queryByText("输入用户名或 ID 精确搜索，即可发起对话。"),
     ).toBeNull();
   });
 
@@ -101,7 +101,7 @@ describe("NewDmPage", () => {
       { id: "u2", username: "zoe", display_name: "Zoe" },
     ]);
     render(<NewDmPage />);
-    fireEvent.change(screen.getByPlaceholderText("按用户名或显示名精确搜索"), {
+    fireEvent.change(screen.getByPlaceholderText("按用户名或 ID 精确搜索"), {
       target: { value: "alice" },
     });
     await screen.findByText("Alice");

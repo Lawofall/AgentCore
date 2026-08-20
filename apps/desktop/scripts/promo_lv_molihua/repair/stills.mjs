@@ -141,7 +141,7 @@ async function main(onlyArg) {
       waitUntil: "load",
       timeout: 30_000,
     });
-    const userBox = page.getByPlaceholder("用户名");
+    const userBox = page.getByPlaceholder("邮箱或用户名");
     const composer = page.getByPlaceholder(/输入消息/);
     await Promise.race([
       userBox.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {}),

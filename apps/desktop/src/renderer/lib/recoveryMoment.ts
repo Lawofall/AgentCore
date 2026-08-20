@@ -1,3 +1,8 @@
+import {
+  recoveryMomentRecoveryClause,
+  recoveryMomentResetClause,
+} from "@agentcore/protocol-fold-kit";
+
 /**
  * 服务端下发的绝对恢复时刻（ISO8601 UTC）→ 用户本机时区的话。
  *
@@ -44,9 +49,9 @@ export function recoveryMomentClause(
   const recovery = formatLocalMoment(
     source.recovery_at ?? source.context?.recovery_at,
   );
-  if (recovery) return `额度将于 ${recovery} 恢复。`;
+  if (recovery) return recoveryMomentRecoveryClause(recovery);
   const reset = formatLocalMoment(source.reset_at ?? source.context?.reset_at);
-  if (reset) return `额度将于 ${reset} 重置。`;
+  if (reset) return recoveryMomentResetClause(reset);
   return null;
 }
 

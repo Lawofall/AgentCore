@@ -69,6 +69,7 @@ __all__ = [
     "RunCost",
     "WorkerResultAccumulator",
     "aggregate_cost",
+    "aggregate_usage_tokens",
     "arena_run_cost",
     "captain_run_cost_from_state",
     "member_run_cost",
@@ -89,6 +90,20 @@ def usage_metadata(usage: Mapping[str, int]) -> dict[str, int]:
     shape can never drift between them.
     """
     return {f"{key}_tokens": int(usage.get(key, 0)) for key in _USAGE_KEYS}
+
+
+def aggregate_usage_tokens(cost_runs: Sequence[dict]) -> dict[str, int]:
+    """Sum per-run ``tokens`` into the long-key block persisted on ``messages.usage``.
+
+    Same source as ``cost_events.tokens``. Interrupt close stamps this onto the
+    assistant row so the bubble matches the ledger for the same ``message_id``.
+    """
+    totals: dict[str, int] = {key: 0 for key in _USAGE_KEYS}
+    for row in cost_runs:
+        tokens = row.get("tokens") or {}
+        for key in _USAGE_KEYS:
+            totals[key] += int(tokens.get(key, 0) or 0)
+    return usage_metadata(totals)
 
 
 def member_run_cost(

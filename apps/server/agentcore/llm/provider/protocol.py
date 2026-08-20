@@ -115,6 +115,8 @@ class LLMMessage:
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str | None = None
     reasoning_content: str | None = None
+    # Tool-result audience (``ceo`` = orchestration; not sent to the LLM wire).
+    audience: str | None = None
 
 
 @dataclass
@@ -127,7 +129,8 @@ class LLMRequest:
     tool_choice: Literal["auto", "none", "required"] = "auto"
     stream: bool = True
     scenario: str = "chat"
-    # None = omit (provider default). False/True → DeepSeek V4 / Hy3 ``thinking.type``.
+    # None / True → thinking.type=enabled on thinking_type_switch models.
+    # False → disabled. Do not omit: some gateways treat omit as off.
     thinking: bool | None = None
     # Seconds of this call's wall clock that may be spent *asleep* waiting out a 429
     # (``llm.provider.call_budget.complete_within_budget`` derives it from the

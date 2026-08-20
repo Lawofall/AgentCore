@@ -33,6 +33,7 @@
 import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isTurnFixture } from "@agentcore/protocol-conformance/fixtureKind";
 import { chromium } from "playwright";
 import { createServer } from "vite";
 
@@ -66,19 +67,6 @@ function evenCuts(total, frames) {
     if (k > 0 && k < total) cuts.add(k);
   }
   return [...cuts].sort((a, b) => a - b);
-}
-
-/** Turn-fold vectors only — same contract as protocol-conformance harness isTurnFixture. */
-function isTurnFixture(raw) {
-  if (typeof raw !== "object" || raw === null) return false;
-  const projected = raw.projected;
-  return (
-    typeof raw.name === "string" &&
-    Array.isArray(raw.events) &&
-    typeof projected === "object" &&
-    projected !== null &&
-    "status" in projected
-  );
 }
 
 async function loadScenarios() {

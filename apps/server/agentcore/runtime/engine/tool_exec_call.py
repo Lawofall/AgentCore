@@ -32,7 +32,7 @@ from agentcore.runtime.loop_controller import (
 )
 from agentcore.runtime.tool_deadline import reset_tool_deadline, set_tool_deadline
 from agentcore.tools.file_products import LANDING_TOOLS, with_file_products_marker
-from agentcore.tools.protocol import ToolContext, ToolResult
+from agentcore.tools.protocol import TOOL_AUDIENCE_CEO, ToolContext, ToolResult
 from agentcore.tools.registry import ToolRegistry
 
 from .timeout import resolve_tool_timeout
@@ -624,6 +624,8 @@ async def run_one_tool(
             end_kwargs["failure"] = tool_failure_from_result(result)
         if result.metadata.get("partial_failure"):
             end_kwargs["partial_failure"] = True
+        if getattr(result, "audience", None) == TOOL_AUDIENCE_CEO:
+            end_kwargs["audience"] = TOOL_AUDIENCE_CEO
         sink.emit(
             tool_use_end(
                 tc.id,
@@ -670,7 +672,14 @@ async def run_one_tool(
     msg_content = with_file_products_marker(output, result.file_products)
     if not result.success:
         msg_content = with_tool_failed_marker(msg_content or "")
-    message = LLMMessage(role="tool", content=msg_content, tool_call_id=tc.id)
+    message = LLMMessage(
+        role="tool",
+        content=msg_content,
+        tool_call_id=tc.id,
+        audience=(
+            TOOL_AUDIENCE_CEO if getattr(result, "audience", None) == TOOL_AUDIENCE_CEO else None
+        ),
+    )
     policy_failure = bool(result.metadata.get("policy_failure"))
     # 参数契约拒绝 (tools/protocol.py): forward the tool's self-correctable-rejection
     # marker so the run-scoped circuit breaker skips it (loop_controller.record).

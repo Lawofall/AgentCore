@@ -123,6 +123,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='audit.degraded'),
     EventSpec(name='audit.permission_axes_change_failed'),
     EventSpec(name='audit.retention_swept'),
+    EventSpec(name='auth.email_code_sent'),
+    EventSpec(name='auth.email_verified'),
     EventSpec(
         name='auth.login_failed',
         description='敏感操作审计：登录失败（password/unknown/locked/mfa/role；无明文凭据）',
@@ -148,8 +150,11 @@ EVENTS: list[EventSpec] = [
             'user_id': FieldType('str'),
         },
     ),
+    EventSpec(name='auth.password_reset'),
+    EventSpec(name='auth.password_reset_requested'),
     EventSpec(name='auth.refresh_retention_swept'),
     EventSpec(name='auth.register'),
+    EventSpec(name='auth.register_code_sent'),
     EventSpec(name='auth.session_revoked'),
     EventSpec(name='auth.sessions_revoke_all'),
     EventSpec(name='auth.sessions_revoke_others'),
@@ -1156,6 +1161,14 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='dm.opened'),
     EventSpec(name='dm.user_blocked'),
     EventSpec(name='download_url.done'),
+    EventSpec(name='email.dev_outbound'),
+    EventSpec(name='email.send_failed'),
+    EventSpec(name='email.sent'),
+    EventSpec(name='email.unconfigured'),
+    EventSpec(
+        name='email.smtp_unconfigured_registration',
+        description='启动期：开放注册但 SMTP 未配，send-code 会 202 却不发信',
+    ),
     EventSpec(name='engine.audit_gate_hard_block'),
     EventSpec(name='engine.audit_gate_nudge'),
     EventSpec(name='engine.availability_status_nudge'),
@@ -1521,9 +1534,56 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='interaction.orphaned_journal'),
     EventSpec(name='interaction.orphaned_registry'),
     EventSpec(name='interaction.settlement_prewrite_failed'),
-    EventSpec(name='journal.append_failed'),
+    EventSpec(
+        name='journal.append_failed',
+        fields={
+            'critical': FieldType('bool'),
+            'error': FieldType('str'),
+            'kind': FieldType('str'),
+            'turn_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='journal.live_seq_near_overflow',
+        description='live-band seq 逼近或越过 overflow 段起点；只告警，不改分配',
+        fields={
+            'op': FieldType('str'),
+            'overflow_start': FieldType('int'),
+            'remaining': FieldType('int'),
+            'seq': FieldType('int'),
+            'turn_id': FieldType('str'),
+        },
+    ),
     EventSpec(name='journal.persist_failed'),
     EventSpec(name='journal.sealed_at_pause'),
+    EventSpec(
+        name='journal.sealed_drop',
+        description=(
+            'pause 封盘后 execution 终态帧无法写入（无 event loop / 仍封的 host）；不允许静默丢弃'
+        ),
+        fields={
+            'kind': FieldType('str'),
+            'reason': FieldType('str'),
+            'turn_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='journal.sealed_overflow',
+        description='pause 封盘后的 run_*/execution_* 终态转到未封 overflow writer',
+        fields={
+            'kind': FieldType('str'),
+            'turn_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='journal.sealed_skip',
+        description='pause 快照流在 seal 后被拒绝追加（trailing *_required 等，有意定格）',
+        fields={
+            'kind': FieldType('str'),
+            'reason': FieldType('str'),
+            'turn_id': FieldType('str'),
+        },
+    ),
     EventSpec(
         name='llm.call',
         description=(
@@ -1620,6 +1680,23 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='llm.sub2api_probe'),
     EventSpec(name='llm.sub2api_probe_failed'),
     EventSpec(name='llm.temperature_omitted_retry'),
+    EventSpec(
+        name='llm.tool_surface.limit_exceeded',
+        description=(
+            '平台凭据声明的上游工具面上限装不下当前装配的工具面；未发给上游、未自动裁剪。exceeded '
+            '为触发的维度名；max_* 为声明值（未声明的维度为 null）'
+        ),
+        fields={
+            'exceeded': FieldType('list'),
+            'max_properties_per_tool': FieldType('int'),
+            'max_properties_total': FieldType('int'),
+            'max_tools': FieldType('int'),
+            'platform_credential_id': FieldType('str'),
+            'properties_per_tool_max': FieldType('int'),
+            'properties_total': FieldType('int'),
+            'tool_count': FieldType('int'),
+        },
+    ),
     EventSpec(name='llm.turn_auth_dead'),
     EventSpec(name='llm.upstream_error'),
     EventSpec(name='llm_model_profile.created'),
@@ -1862,6 +1939,7 @@ EVENTS: list[EventSpec] = [
     ),
     EventSpec(name='platform_pool.reload_failed'),
     EventSpec(name='platform_pool.reloaded'),
+    EventSpec(name='platform_pool.tool_surface_limits_invalid'),
     EventSpec(name='presence.audience_failed'),
     EventSpec(name='presence.broadcast'),
     EventSpec(name='presence.broadcast_failed'),
@@ -2038,7 +2116,16 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='retention.sweep_purged'),
     EventSpec(name='retrieval_budget.rework_refill'),
     EventSpec(name='retrieval_budget.rework_refill_skipped'),
-    EventSpec(name='roster.conversation_evicted'),
+    EventSpec(
+        name='roster.conversation_evicted',
+        description=(
+            '空闲 TTL 清掉另一会话的进程内 roster；victim 记 evicted_conversation_id，不写 canonica'
+            'l conversation_id（本行发生在驱逐方请求的 contextvars 里）'
+        ),
+        fields={
+            'evicted_conversation_id': FieldType('str'),
+        },
+    ),
     EventSpec(name='roster.evict_persist_failed'),
     EventSpec(
         name='roster.session_evicted',
@@ -2095,7 +2182,16 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='search.weak_serp_retry_adopted'),
     EventSpec(name='search.weak_serp_retry_failed'),
     EventSpec(name='search.weak_serp_retry_still_weak'),
-    EventSpec(name='search_cache.conversation_evicted'),
+    EventSpec(
+        name='search_cache.conversation_evicted',
+        description=(
+            '空闲 TTL 清掉另一会话的检索缓存；victim 记 evicted_conversation_id，不写 canonical con'
+            'versation_id（本行发生在驱逐方请求的 contextvars 里）'
+        ),
+        fields={
+            'evicted_conversation_id': FieldType('str'),
+        },
+    ),
     EventSpec(name='searxng.canary_empty'),
     EventSpec(name='searxng.canary_failed'),
     EventSpec(name='searxng.canary_ok'),
@@ -2171,6 +2267,14 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='sidecar.outbox_read_failed'),
     EventSpec(name='sidecar.outbox_read_recovered'),
     EventSpec(name='sidecar.outbox_read_retry'),
+    EventSpec(
+        name='sidecar.outbox_ready_overflow',
+        description='outbox 已 READY 仍追加 execution 终态（pause 快照定格、终态不丢）',
+    ),
+    EventSpec(
+        name='sidecar.outbox_ready_skip',
+        description='outbox 已 READY，非 execution 终态的 journal append 被跳过',
+    ),
     EventSpec(name='sidecar.outbox_replace_recovered'),
     EventSpec(name='sidecar.outbox_replace_retry'),
     EventSpec(name='sidecar.outbox_salvage_missing_user_message_id'),
@@ -2463,7 +2567,16 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='turn_steer.stale_cleared'),
     EventSpec(name='turn_teardown.cancel_absorbed'),
     EventSpec(name='turn_teardown.step_failed'),
-    EventSpec(name='url_cache.conversation_evicted'),
+    EventSpec(
+        name='url_cache.conversation_evicted',
+        description=(
+            '空闲 TTL 清掉另一会话的 URL 缓存；victim 记 evicted_conversation_id，不写 canonical co'
+            'nversation_id（本行发生在驱逐方请求的 contextvars 里）'
+        ),
+        fields={
+            'evicted_conversation_id': FieldType('str'),
+        },
+    ),
     EventSpec(name='vision.reader_built'),
     EventSpec(name='vision.resolve_for_conversation_failed'),
     EventSpec(name='vision.retry'),

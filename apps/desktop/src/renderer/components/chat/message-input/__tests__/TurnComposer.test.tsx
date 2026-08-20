@@ -5,6 +5,7 @@
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -238,7 +239,7 @@ import {
   getActiveRuntime,
   useConversationStore,
 } from "@/stores/conversation";
-import { EMPTY_RUNTIME } from "@/stores/conversation/runtime";
+import { DRAFT_KEY, EMPTY_RUNTIME } from "@/stores/conversation/runtime";
 import { useServerHealthStore } from "@/stores/serverHealth";
 import { TurnComposer } from "../TurnComposer";
 
@@ -385,6 +386,57 @@ describe("TurnComposer variants", () => {
     expect(screen.queryByRole("button", { name: "排队发送" })).toBeNull();
     expect(screen.queryByRole("button", { name: "插队" })).toBeNull();
     expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
+  });
+
+  it("stopping: stop button shows 停止中… spinner and stays clickable", () => {
+    genMock.value = true;
+    useConversationStore.setState({
+      byId: {
+        [DRAFT_KEY]: { ...EMPTY_RUNTIME, turnPhase: "stopping" },
+      },
+    });
+    renderComposer("bar");
+    const stop = screen.getByRole("button", { name: "停止中…" });
+    expect((stop as HTMLButtonElement).disabled).toBe(false);
+    expect(stop.getAttribute("aria-busy")).toBe("true");
+    expect(stop.querySelector(".animate-spin")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "停止生成" })).toBeNull();
+  });
+
+  it("stopping + draft: 排队/插队 remain; stop button is 停止中…", async () => {
+    genMock.value = true;
+    useConversationStore.setState({
+      byId: {
+        [DRAFT_KEY]: { ...EMPTY_RUNTIME, turnPhase: "stopping" },
+      },
+    });
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue("__draft__", "下一句");
+    renderComposer("bar");
+    expect(screen.getByRole("button", { name: "排队发送" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "插队" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "停止中…" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "停止生成" })).toBeNull();
+  });
+
+  it("stop HTTP rollback: stopping UI returns to 停止生成", () => {
+    genMock.value = true;
+    useConversationStore.setState({
+      byId: {
+        [DRAFT_KEY]: { ...EMPTY_RUNTIME, turnPhase: "stopping" },
+      },
+    });
+    renderComposer("bar");
+    expect(screen.getByRole("button", { name: "停止中…" })).toBeTruthy();
+
+    act(() => {
+      useConversationStore.getState().setTurnPhase("streaming");
+    });
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "停止中…" })).toBeNull();
+    const stop = screen.getByRole("button", { name: "停止生成" });
+    expect(stop.getAttribute("aria-busy")).toBeNull();
+    expect(stop.querySelector(".animate-spin")).toBeNull();
   });
 
   it("generating + draft: 排队发送 + 插队 + 停止生成 coexist", async () => {

@@ -124,6 +124,8 @@ export interface ToolUseEndPayload {
   run_id?: string;
   /** Delegate batch finished with FAILED/SKIPPED nodes (tool meta ``partial_failure``). Absent when false / non-delegate. */
   partial_failure?: boolean;
+  /** CEO-only tool output (coordination host echo / orchestration). User-bubble writers refuse it. Absent for user-salvageable results (blocking delegate synthesis). */
+  audience?: "ceo";
 }
 
 /** One step in a turn's 思考·正文·工具·协作 inline timeline (统一团队时间线).
@@ -1593,8 +1595,16 @@ export interface ErrorContext {
   recovery_at?: string;
   /** 平台配额窗口翻篇的绝对时刻（ISO-8601 UTC）；同 recovery_at 由客户端本地化。 */
   reset_at?: string;
-  /** LLM_KEY_INVALID CTA 分流：user=去设置换 Key；platform=接入自己的 Key / 联系管理员。 */
+  /** LLM_KEY_INVALID CTA 分流：user=各端换 Key（桌面「去服务商」、手机「去配置」）；platform=接入自己的 Key / 联系管理员。 */
   credential_source?: string;
+  /** 上游 vendor 子码（message 方括号或 error.code），供排查包定位 tool schema 拒绝。 */
+  vendor_code?: string;
+  /** 本轮请求的模型 id。 */
+  model?: string;
+  /** 本轮 scenario / 推理 profile 名（chat / agent / …）。 */
+  profile?: string;
+  /** 本轮发给上游的 tools 条数。 */
+  tool_count?: number;
 }
 
 export interface ErrorPayload {

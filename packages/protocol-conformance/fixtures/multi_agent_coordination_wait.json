@@ -1,6 +1,6 @@
 {
   "name": "multi_agent_coordination_wait",
-  "description": "协调等待 UX：coordination_wait(waiting=true) EPHEMERAL → StatusStrip「等待团队成员完成」",
+  "description": "协调等待 UX：coordination_wait(waiting=true) EPHEMERAL → StatusStrip 只报 n/m（成员细节在协作图节点；无长文案 / 内联成员列表 / 「协调等待」徽标）",
   "events": [
     {
       "type": "message_start",

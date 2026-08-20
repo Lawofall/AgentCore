@@ -682,6 +682,7 @@ async def test_image_without_vision_reader_honest_unconfigured():
     assert "未配置识图" in out
     assert "vision 槽" in out or "VISION_*" in out
     assert "code_execute" not in out or "勿默认建议用 code_execute" in out
+    assert "已随本回合附件送达" in out and "无法读取图像内容" in out and "勿索要重发" in out
     # Must not fall back to the generic binary / delegate code_execute block.
     assert "[binary]" not in out
     assert "CEO has no code_execute" not in out

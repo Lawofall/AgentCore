@@ -12,6 +12,10 @@ export type GroupedConversationsResponse =
   Schemas["GroupedConversationsResponse"];
 export type LoginResponse = Schemas["LoginResponse"];
 export type UserResponse = Schemas["UserResponse"];
+
+export function emailCodeAccepted(): Schemas["EmailCodeAcceptedResponse"] {
+  return { status: "accepted", expires_in: 600 };
+}
 export type MessageListResponse = Schemas["MessageListResponse"];
 export type TurnRecoveryResponse = Schemas["TurnRecoveryResponse"];
 export type StatusResponse = Schemas["StatusResponse"];
@@ -24,6 +28,7 @@ export const MOCK_USER: UserResponse = {
   username: "dev",
   display_name: "E2E Dev",
   email: "dev@example.com",
+  email_verified_at: ISO,
   role: "user",
   created_at: ISO,
   password_must_change: false,
