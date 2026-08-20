@@ -500,7 +500,12 @@ describe("UsersPage", () => {
     });
     expect(box.value).toBe("alice");
     expect(document.activeElement).toBe(box);
-    expect(lastQuery()?.q).toBe("alice");
+    // The URL write and the refetch it triggers land in separate ticks, so the
+    // request lags the URL by an effect — asserting it synchronously here reads
+    // the previous keystroke's query whenever the suite runs under load.
+    await waitFor(() => expect(lastQuery()?.q).toBe("alice"), {
+      timeout: 2000,
+    });
   });
 
   it("清空筛选把 URL 收回裸 /users，连防抖窗口里的输入一起", async () => {
