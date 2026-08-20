@@ -246,6 +246,7 @@ async def test_claim_paused_turn_rewrites_loser_prewrite_to_winner_decision() ->
             return_value=[{"seq": 0, **loser}]
         )
         journal.record = AsyncMock()
+        journal.replace_live = AsyncMock()
 
         claimed = await persist_mod.claim_paused_turn(
             "msg-1", conversation_id="conv-1", decision="continue"
@@ -253,8 +254,9 @@ async def test_claim_paused_turn_rewrites_loser_prewrite_to_winner_decision() ->
 
     assert claimed is not None
     assert claimed.journal_entries[-1]["payload"]["decision"] == "continue"
-    journal.record.assert_awaited_once()
-    written = journal.record.await_args.kwargs["entries"]
+    journal.replace_live.assert_awaited_once()
+    journal.record.assert_not_awaited()
+    written = journal.replace_live.await_args.kwargs["entries"]
     assert len(written) == 1
     assert written[0]["payload"]["decision"] == "continue"
     assert written[0]["payload"]["note"] == "from-a"
@@ -305,6 +307,7 @@ async def test_claim_paused_turn_does_not_rewrite_already_matching_journal() -> 
             return_value=[{"seq": 0, **matching}]
         )
         journal.record = AsyncMock()
+        journal.replace_live = AsyncMock()
 
         claimed = await persist_mod.claim_paused_turn(
             "msg-1", conversation_id="conv-1", decision="continue"
@@ -313,6 +316,7 @@ async def test_claim_paused_turn_does_not_rewrite_already_matching_journal() -> 
     assert claimed is not None
     assert claimed.journal_entries == [matching]
     journal.record.assert_not_awaited()
+    journal.replace_live.assert_not_awaited()
 
 
 @pytest.mark.asyncio
