@@ -1,6 +1,6 @@
 import { fetchLatestReleaseArtifacts } from "../_lib/releaseArtifacts.mjs";
 
-const FALLBACK_VERSION = "0.9.7";
+const FALLBACK_VERSION = "0.9.8";
 /** 测试版 SSG/离线回退；空 = 无 CDN 时官网隐藏「下载测试版」入口。bump-version desktop 不同步此字段。 */
 const FALLBACK_BETA_VERSION = "";
 const CACHE_SECONDS = 300;
