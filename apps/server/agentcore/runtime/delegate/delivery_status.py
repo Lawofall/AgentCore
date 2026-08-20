@@ -87,7 +87,7 @@ REASON_FILES_NOT_LANDED = "files_not_landed"
 # No-exec worker shipped a table file while this turn had an opaque source
 # data file (attachment / workspace type signal — not body scan).
 REASON_NO_EXEC_TABLE = "no_exec_table"
-# Verify-shaped tool failure (browser_navigate / test_run / verify 形 code_execute·terminal).
+# Verify-shaped tool failure (browser navigate / test_run / verify 形 code_execute·terminal).
 REASON_VERIFY_FAILED = "verify_failed"
 # test_run verify-budget incomplete（进程已中止，非仍在跑）.
 REASON_VERIFY_BUDGET = "verify_budget"
@@ -1087,7 +1087,7 @@ def build_delivery_status(
             if not text:
                 continue
             raw_gaps.append(_annotate_gap(role, text, reason=reason, severity=severity))
-    # ①b 验证形工具失败（可用性诚实性 · 丙）——COMPLETED 但 browser_navigate /
+    # ①b 验证形工具失败（可用性诚实性 · 丙）——COMPLETED 但 browser navigate /
     # test_run / verify 形 code_execute·terminal 失败 → 不得仍为 delivered。
     for role, rows in collect_verify_failure_gaps(plan, results):
         for row in rows:

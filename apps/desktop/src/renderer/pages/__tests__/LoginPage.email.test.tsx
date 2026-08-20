@@ -105,7 +105,9 @@ describe("LoginPage · single-form register", () => {
       password: "password1",
       email: "alice@example.com",
     });
-    expect(screen.getByText("验证码 10 分钟内有效")).toBeTruthy();
+    expect(screen.getByText("已发送验证码，10 分钟内有效")).toBeTruthy();
+    expect(screen.queryByText("验证码 10 分钟内有效")).toBeNull();
+    expect(screen.queryByText(/已发送至/)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("验证码（6 位）"), {
       target: { value: "123456" },
@@ -167,7 +169,8 @@ describe("LoginPage · single-form register", () => {
     render(<LoginPage />);
     fillRegisterForm();
     await requestRegisterCode();
-    expect(screen.getByText("验证码 15 分钟内有效")).toBeTruthy();
+    expect(screen.getByText("已发送验证码，15 分钟内有效")).toBeTruthy();
+    expect(screen.queryByText("验证码 15 分钟内有效")).toBeNull();
   });
 
   it("stays on the same form when the code is wrong", async () => {
@@ -289,6 +292,8 @@ describe("LoginPage · forgot password", () => {
     fillForgotEmail();
     fireEvent.click(screen.getByRole("button", { name: "发送验证码" }));
     await screen.findByPlaceholderText("验证码（6 位）");
+    expect(screen.getByText("如果该邮箱已注册，你会收到验证码")).toBeTruthy();
+    expect(screen.queryByText(/已发送至/)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("验证码（6 位）"), {
       target: { value: "123456" },
@@ -456,10 +461,11 @@ describe("LoginPage · live field hints", () => {
     render(<LoginPage />);
     fillRegisterForm();
     await requestRegisterCode();
-    const sent = await screen.findByText(/验证码已发送至/);
+    const sent = await screen.findByText("已发送验证码，10 分钟内有效");
     expect(sent.closest("p")?.className).toMatch(/text-success/);
     expect(screen.getByText("成功：")).toBeTruthy();
-    expect(screen.getByText("验证码 10 分钟内有效")).toBeTruthy();
+    expect(screen.queryByText("验证码 10 分钟内有效")).toBeNull();
+    expect(screen.queryByText(/已发送至/)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("验证码（6 位）"), {
       target: { value: "000000" },

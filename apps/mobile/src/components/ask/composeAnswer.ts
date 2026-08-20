@@ -1,5 +1,5 @@
 /**
- * Compose picks +「其他」+ free note into ONE readable answer (答复模型 α).
+ * Compose picks + free note into ONE readable answer (答复模型 α).
  * Mobile-local; mirrors desktop AskUserFields.composeAnswer.
  */
 
@@ -12,8 +12,6 @@ export type ComposeQuestion = {
 export function composeAnswer(
   questions: ComposeQuestion[],
   answers: Record<string, string[]>,
-  otherOn: Record<string, boolean>,
-  otherText: Record<string, string>,
   note: string,
 ): string {
   const trimmed = note.trim();
@@ -21,10 +19,8 @@ export function composeAnswer(
   const lines: string[] = [];
   for (const q of questions) {
     const picked = (answers[q.id] ?? []).map((s) => s.trim()).filter(Boolean);
-    const custom = otherOn[q.id] ? (otherText[q.id] ?? "").trim() : "";
-    const values = custom ? [...picked, custom] : picked;
-    if (values.length) lines.push(`· ${q.prompt}：${values.join("、")}`);
-    else if (q.default) lines.push(`· ${q.prompt}：（按你的默认）`);
+    if (picked.length) lines.push(`· ${q.prompt}：${picked.join("、")}`);
+    else if (q.default && !trimmed) lines.push(`· ${q.prompt}：（按你的默认）`);
   }
   if (trimmed) lines.push(`· 补充：${trimmed}`);
   if (lines.length === 0) return trimmed;

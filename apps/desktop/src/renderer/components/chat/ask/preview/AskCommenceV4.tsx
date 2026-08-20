@@ -61,12 +61,8 @@ export function AskCommenceV4({ content }: { content: AskUserContent }) {
             index={i + 1}
             numbered={content.questions.length > 1}
             answer={answer.answers[q.id] ?? []}
-            otherOn={answer.otherOn[q.id] ?? false}
-            otherText={answer.otherText[q.id] ?? ""}
             disabled={busy}
             onToggle={(opt) => answer.toggleChoice(q, opt)}
-            onToggleOther={() => answer.toggleOther(q)}
-            onSetOther={(v) => answer.setOtherValue(q, v)}
           />
         ))}
         <CommenceNote answer={answer} disabled={busy} compact />

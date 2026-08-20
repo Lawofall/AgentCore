@@ -59,10 +59,7 @@ export {
   type SearchFieldSize,
   type SearchFieldVariant,
 } from "./search-field";
-export {
-  SearchTrigger,
-  TitleBarSearchTrigger,
-} from "./search-trigger";
+export { SearchTrigger } from "./search-trigger";
 export { PatternCardHeader } from "./pattern-card-header";
 export { SectionLabel } from "./section-label";
 export {

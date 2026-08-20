@@ -182,7 +182,7 @@ describe("AskUserCard intent variants", () => {
 
   it("collectAskSelected 扁平化多题 picks", () => {
     expect(
-      collectAskSelected(proposalContent, { q0: ["方案 A：快速原型"] }, {}, {}),
+      collectAskSelected(proposalContent, { q0: ["方案 A：快速原型"] }),
     ).toEqual(["方案 A：快速原型"]);
   });
 });

@@ -215,6 +215,21 @@ describe("PauseCard · approval", () => {
     ]);
   });
 
+  it("browser 按 action 出中文工具名，标题不是生词 browser", () => {
+    render(
+      <PauseCard
+        pending={approval({
+          toolName: "browser",
+          arguments: { action: "navigate", url: "https://example.com" },
+        })}
+        conversationId={CONV}
+      />,
+    );
+    expect(screen.getByText("Agent 请求执行 · 打开网页")).toBeTruthy();
+    expect(screen.getByText("https://example.com")).toBeTruthy();
+    expect(screen.queryByText("Agent 请求执行 · browser")).toBeNull();
+  });
+
   it("host 按 action 出中文工具名与审批摘要", () => {
     render(
       <PauseCard

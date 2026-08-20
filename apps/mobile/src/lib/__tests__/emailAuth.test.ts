@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  formatEmailCodeValidityHint,
+  formatEmailCodeSentNotice,
   isGeneratedHandle,
   isLikelyEmail,
   isSystemUsernameHandle,
@@ -36,11 +36,15 @@ describe("emailAuth helpers", () => {
     expect(usernameFieldError("alice")).toBeNull();
   });
 
-  it("normalizes register code TTL and formats the validity hint", () => {
+  it("normalizes register code TTL and formats the sent notice", () => {
     expect(normalizeEmailCodeExpiresIn(600)).toBe(600);
     expect(normalizeEmailCodeExpiresIn(undefined)).toBe(600);
     expect(normalizeEmailCodeExpiresIn(-1)).toBe(600);
-    expect(formatEmailCodeValidityHint(600)).toBe("验证码 10 分钟内有效");
-    expect(formatEmailCodeValidityHint(45)).toBe("验证码 45 秒内有效");
+    expect(formatEmailCodeSentNotice(600)).toBe("已发送验证码，10 分钟内有效");
+    expect(formatEmailCodeSentNotice(45)).toBe("已发送验证码，45 秒内有效");
+    expect(formatEmailCodeSentNotice(3600)).toBe("已发送验证码，1 小时内有效");
+    expect(formatEmailCodeSentNotice(600, true)).toBe(
+      "已重新发送验证码，10 分钟内有效",
+    );
   });
 });

@@ -62,15 +62,9 @@ _DESKTOP_ONLINE_ORDER = [
     "external_mount_readonly",
 ]
 
-# CEO+worker GRANTABLE：browser_*（builtin · browser_class · include_browser 闸；
-# screenshot 仍 worker-only，不在此列表）
+# CEO+worker GRANTABLE：单一 ``browser``（builtin · browser_class · include_browser 闸）
 _BROWSER_CEO_ORDER = [
-    "browser_navigate",
-    "browser_click",
-    "browser_type",
-    "browser_scroll",
-    "browser_snapshot",
-    "browser_console",
+    "browser",
 ]
 
 _WORKER_ONLY_ORDER = [
@@ -80,10 +74,6 @@ _WORKER_ONLY_ORDER = [
     "amend_note",
     "handoff",
     "desktop_notify",
-]
-
-_BROWSER_SCREENSHOT_ORDER = [
-    "browser_screenshot",
 ]
 
 # Privacy-gated worker tools (manual_wire): catalog-advertised, not in default
@@ -209,7 +199,6 @@ def test_tool_registry_ceo_includes_navigate_when_include_browser():
 def test_browser_tools_ceo_holds_interactive_screenshot_worker_only():
     from agentcore.tools.registration import (
         AUDIENCE_BOTH,
-        AUDIENCE_WORKER_ONLY,
         declared_tool_name,
         declared_tools,
         tool_registration,
@@ -224,9 +213,7 @@ def test_browser_tools_ceo_holds_interactive_screenshot_worker_only():
         assert reg.audience == AUDIENCE_BOTH, name
         assert reg.surface.value == "builtin", name
         assert reg.browser_class and reg.execution_class, name
-    shot = by_name["browser_screenshot"]
-    assert shot.audience == AUDIENCE_WORKER_ONLY
-    assert shot.surface.value == "worker_only"
+    assert "browser_screenshot" not in by_name
 
 
 def test_tool_registry_builtin_approvals_snapshot():
@@ -273,13 +260,7 @@ def test_tool_registry_grant_sets_snapshot():
             "test_run",
             "terminal",
             # L3 团队浏览器 (D11): execution_class → covered by a delegation grant.
-            "browser_navigate",
-            "browser_click",
-            "browser_type",
-            "browser_scroll",
-            "browser_snapshot",
-            "browser_console",
-            "browser_screenshot",
+            "browser",
         }
     )
     assert per_call_tool_names() == frozenset()
@@ -363,7 +344,7 @@ def test_tool_registry_declarations_cover_roster():
             schema = cls().schema if not reg.needs_location else cls(location=None).schema
             if schema.name in _ceo_grantable_exceptions:
                 assert schema.approval is ToolApproval.GRANTABLE, schema.name
-                if schema.name.startswith("browser_"):
+                if schema.name == "browser":
                     assert reg.browser_class, schema.name
                     assert reg.execution_class, schema.name
             else:

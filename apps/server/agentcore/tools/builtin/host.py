@@ -161,7 +161,8 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
             "enum": sorted(_ALLOWED_ACTIONS),
             "description": (
                 "status/os_log/shell：CEO+worker；"
-                "open_settings/set_audio/restart_service/install_package：仅 worker（CEO 须 delegate）。"
+                "open_settings/set_audio/restart_service/"
+                "install_package：仅 worker（CEO 须 delegate）。"
                 "审批见工具说明。"
             ),
         },
@@ -196,7 +197,8 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         "max_entries": {
             "type": "integer",
             "description": (
-                f"os_log 最多返回条数（默认 {_OS_LOG_ENTRIES_DEFAULT}，硬上限 {_OS_LOG_ENTRIES_MAX}）。"
+                f"os_log 最多返回条数（默认 {_OS_LOG_ENTRIES_DEFAULT}，"
+                f"硬上限 {_OS_LOG_ENTRIES_MAX}）。"
             ),
             "minimum": 1,
             "maximum": _OS_LOG_ENTRIES_MAX,
@@ -204,7 +206,8 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         "max_bytes": {
             "type": "integer",
             "description": (
-                f"os_log 摘要载荷字节硬上限（默认 {_OS_LOG_BYTES_DEFAULT}，硬上限 {_OS_LOG_BYTES_MAX}）。"
+                f"os_log 摘要载荷字节硬上限（默认 {_OS_LOG_BYTES_DEFAULT}，"
+                f"硬上限 {_OS_LOG_BYTES_MAX}）。"
             ),
             "minimum": 1024,
             "maximum": _OS_LOG_BYTES_MAX,

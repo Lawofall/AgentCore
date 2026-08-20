@@ -1,11 +1,10 @@
 import { BrandMark } from "@/components/brand/BrandMark";
 import { WindowControls } from "@/components/layout/WindowControls";
 import { WindowFrameMenu } from "@/components/layout/WindowFrameMenu";
-import { IconButton, TitleBarSearchTrigger } from "@/components/ui";
+import { IconButton } from "@/components/ui";
 import { isMac, macTitleBarInsetClass } from "@/lib/platform";
 import { clientReleaseChannel } from "@/lib/releaseChannel";
 import { SIDEBAR_COLLAPSED_WIDTH, useSidebarStore } from "@/stores/sidebar";
-import { useUIStore } from "@/stores/ui";
 import { PanelLeft, PanelLeftClose } from "lucide-react";
 
 // Shared frameless-window title-bar shell: fixed height, bottom border, sidebar
@@ -17,7 +16,6 @@ export function TitleBar() {
   const width = useSidebarStore((s) => s.width);
   const resizing = useSidebarStore((s) => s.resizing);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
-  const openSearch = useUIStore((s) => s.openSearch);
   const isBeta = clientReleaseChannel() === "beta";
 
   return (
@@ -54,11 +52,9 @@ export function TitleBar() {
       {/* Drag spacer */}
       <div className="flex-1" />
 
-      {/* Search trigger + window controls (Win/Linux; macOS uses traffic lights) */}
+      {/* Window controls (Win/Linux; macOS uses traffic lights) */}
       <div className="flex items-center [-webkit-app-region:no-drag]">
         <WindowFrameMenu />
-        <TitleBarSearchTrigger onClick={() => openSearch()} />
-
         <WindowControls />
       </div>
     </header>
@@ -70,7 +66,7 @@ export function TitleBar() {
  * outside AppShell and would otherwise have no title bar at all. On a frameless window
  * that leaves no way to drag or close the window until login succeeds — so this keeps
  * the drag region + min/max/close (macOS uses the native traffic lights in the inset),
- * while dropping the sidebar toggle and search (meaningless before auth).
+ * while dropping the sidebar toggle (search lives in the sidebar after auth).
  */
 export function MinimalTitleBar() {
   return (

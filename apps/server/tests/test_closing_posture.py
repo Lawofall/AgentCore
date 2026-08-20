@@ -697,8 +697,52 @@ def test_unresolved_write_ownership_downgrades_verdict_no_dinggao_hard_reject():
 # --- B1 收口对账 ---
 
 
+def test_b1_browser_success_latch_accepts_new_and_legacy_names():
+    from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
+    from agentcore.runtime.closing_posture import (
+        clear_b1_closing_latches,
+        note_browser_tool_success_from_messages,
+        turn_has_browser_tool_success,
+    )
+
+    clear_b1_closing_latches()
+    legacy = [
+        LLMMessage(
+            role="assistant",
+            tool_calls=[
+                ToolCall(
+                    id="n1",
+                    function=ToolCallFunction(name="browser_navigate", arguments="{}"),
+                )
+            ],
+        ),
+        LLMMessage(role="tool", content="opened", tool_call_id="n1"),
+    ]
+    note_browser_tool_success_from_messages(legacy)
+    assert turn_has_browser_tool_success()
+
+    clear_b1_closing_latches()
+    unified = [
+        LLMMessage(
+            role="assistant",
+            tool_calls=[
+                ToolCall(
+                    id="n2",
+                    function=ToolCallFunction(
+                        name="browser", arguments='{"action":"navigate"}'
+                    ),
+                )
+            ],
+        ),
+        LLMMessage(role="tool", content="opened", tool_call_id="n2"),
+    ]
+    note_browser_tool_success_from_messages(unified)
+    assert turn_has_browser_tool_success()
+    clear_b1_closing_latches()
+
+
 def test_b1_browser_claim_requires_tool_success():
-    """17cafc76：未装配/无 browser_* 成功时禁称已打开右坞."""
+    """17cafc76：未装配/无 browser 成功时禁称已打开右坞."""
     from agentcore.runtime.closing_posture import (
         claims_browser_open_or_login,
         clear_b1_closing_latches,

@@ -35,7 +35,7 @@ from agentcore.runtime.resolve.prompt import (
 )
 from agentcore.runtime.skills import _TEAM_ORCHESTRATION_ADVANCED, build_system_skill_registry
 
-_LOCAL_CEO_CORE = assemble_ceo_core({"terminal", "host", "browser_navigate"})
+_LOCAL_CEO_CORE = assemble_ceo_core({"terminal", "host", "browser"})
 
 
 def test_derive_ceo_addon_splits_shared_prefix_from_full_ceo_prompt():
@@ -298,7 +298,7 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "host_ping" not in host
     assert "wait_for" not in host
 
-    browser = assemble_ceo_core({"browser_navigate"})
+    browser = assemble_ceo_core({"browser"})
     assert "ask_user(browser_login=true)" in browser
     assert "wait_for" not in browser
 
@@ -316,7 +316,7 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "ask_user(browser_login=true)" not in ceo
     local = compose_ceo_chat_prompt(
         assemble_system_prompt(),
-        ceo_tool_names={"delegate", "terminal", "host", "browser_navigate"},
+        ceo_tool_names={"delegate", "terminal", "host", "browser"},
     )
     assert "wait_for" in local
     assert "通识长文当交付" in local
@@ -325,7 +325,7 @@ def test_capability_how_gated_on_ceo_tool_names():
     # Production assemble passes offered_names (deferred withheld) — HOW follows that set.
     deferred = compose_ceo_chat_prompt(
         assemble_system_prompt(),
-        ceo_tool_names={"delegate", "terminal", "host", "browser_navigate"},
+        ceo_tool_names={"delegate", "terminal", "host", "browser"},
         ceo_offered_names={"delegate"},
     )
     assert "wait_for" not in deferred
@@ -869,7 +869,7 @@ def test_core_teaches_execution_and_recall_routing():
     assert "意图梯度" in hint
     assert "跑起来" in hint and "报 URL" in hint
     assert "验证员" in hint
-    assert "browser_navigate" in hint
+    assert "consult(browser)" in hint
     assert "右坞打开" in hint or "帮我看页面" in hint
     assert "验收" in hint and ("截图" in hint or "screenshot" in hint)
     assert "delegate" in hint
@@ -943,7 +943,7 @@ def test_core_teaches_delivery_honesty_when_no_execution():
     assert "ask_user" in hint
     assert "test_run" in hint or "verify" in hint
     assert "意图梯度" in hint
-    assert "browser_navigate" in hint
+    assert "consult(browser)" in hint
     assert "验证员" in hint or "跑起来" in hint
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "未运行验证" in skill or "交付缺口" in skill
@@ -979,7 +979,7 @@ def test_core_teaches_delivery_path_by_workspace_type():
     assert "完整预览" in hint
     assert "右坞「浏览器」" in hint or "右坞" in hint
     assert "【右坞浏览器】" in hint
-    assert "browser_navigate" in hint
+    assert "consult(browser)" in hint
     assert "escalate" in hint
     assert "用浏览器打开" in hint
     assert "跑起来" in hint or "打开看一下" in hint  # 切断跑起来→必须 navigate

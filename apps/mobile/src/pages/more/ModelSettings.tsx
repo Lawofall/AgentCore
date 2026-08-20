@@ -567,10 +567,6 @@ function ProfilesSection({
         主模型必填；Worker / 后台可留空跟随；识图可留空不配置（高级 ·
         分槽覆盖）。改定义后下一回合生效。
       </p>
-      <p className="section-note">
-        多人协作（委派）对工具调用要求较高；若失败可换更稳的主模型，或改用手写{" "}
-        <code>tasks</code>。
-      </p>
 
       {visible.length === 0 ? (
         <p className="muted hint" data-testid="profiles-empty">

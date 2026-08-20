@@ -259,7 +259,7 @@ async def run_visual_critic(
     if screenshot is None:
         return VisualCriticResult(
             status="skipped",
-            reason="无 browser 截图能力（未装配 browser_screenshot / 截图端口）",
+            reason="无 browser 截图能力（未装配 browser / 截图端口）",
         )
 
     findings: list[VisualFinding] = []
@@ -458,14 +458,18 @@ def resolve_screenshot_port(
 
 
 def browser_tool_available(tools: Any) -> bool:
-    """True when ``browser_screenshot`` is offered to the worker."""
+    """True when ``browser`` is offered to the worker (screenshot is an action).
+
+    Dual-recognizes pre-merge ``browser_screenshot`` so old fixtures still match.
+    """
     get = getattr(tools, "get_optional", None)
     if callable(get):
-        return get("browser_screenshot") is not None
+        return get("browser") is not None or get("browser_screenshot") is not None
     names = getattr(tools, "list_all", None)
     if callable(names):
         try:
-            return any(getattr(s, "name", "") == "browser_screenshot" for s in names())
+            offered = {getattr(s, "name", "") for s in names()}
+            return "browser" in offered or "browser_screenshot" in offered
         except Exception:  # noqa: BLE001
             return False
     return False

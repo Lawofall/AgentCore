@@ -374,10 +374,10 @@ def test_browser_capability_override():
     assert "ask_user(browser_login=true)" not in out
     assert "browser_open" not in out
     hint = _CEO_CORE_HINT
-    assert "browser_navigate" in hint
+    assert "consult(browser)" in hint
     assert "无 browser_open，禁编造未列出的工具名" in hint
     assert "验收" in hint and "截图" in hint
-    how = assemble_ceo_core({"browser_navigate"})
+    how = assemble_ceo_core({"browser"})
     assert "ask_user(browser_login=true)" in how
     assert "escalate(browser_login=true)" not in how
     assert "接管" in how
@@ -401,8 +401,8 @@ def test_local_browser_guide_mentions_workspace_relative_path():
     assert "完整预览" in out or "workspace://" in out
     assert "file://" in out  # 明示不支持
     assert "console" in out  # 能力清单里的 browser_* 之一
-    # 「异常先取 JS 错误」是 HOW，随 browser_navigate 装配注入
-    assert "browser_console" in assemble_ceo_core({"browser_navigate"})
+    # 「异常先取 JS 错误」是 HOW，随 browser 装配注入
+    assert "browser(action=console)" in assemble_ceo_core({"browser"})
 
 
 def test_bridge_session_sandbox_browser_guide_no_relative_html(monkeypatch):
@@ -452,7 +452,7 @@ def test_browser_unassembled_guide_mentions_bind_or_gvisor():
     assert "假开页" in hint
     assert "用浏览器打开" in hint
     assert "ask_user(browser_login=true)" not in hint  # 登录接管随 browser 装配注入
-    how = assemble_ceo_core({"browser_navigate"})
+    how = assemble_ceo_core({"browser"})
     assert "ask_user(browser_login=true)" in how
     assert "escalate(browser_login=true)" not in how
     assert "已登录，继续" in how

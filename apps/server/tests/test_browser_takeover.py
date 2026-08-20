@@ -15,7 +15,7 @@ import pytest
 
 from agentcore.runtime.browser.registry import BrowserSessionRegistry, TakeoverMark
 from agentcore.runtime.browser.takeover import BrowserTakeoverService
-from agentcore.tools.builtin.browser import BrowserNavigateTool
+from agentcore.tools.builtin.browser import BrowserTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.browser.protocol import (
     BrowserCommand,
@@ -298,7 +298,7 @@ async def test_browser_tool_returns_user_in_control_during_takeover():
     reg.begin_takeover(
         "c1", TakeoverMark(record_id="rec1", user_id="u1", started_at=datetime.now(UTC))
     )
-    tool = BrowserNavigateTool(registry=reg)
+    tool = BrowserTool(registry=reg)
     ctx = ToolContext.create(
         execution_id="",
         run_id="r1",
@@ -308,7 +308,7 @@ async def test_browser_tool_returns_user_in_control_during_takeover():
         user_id="u1",
         conversation_id="c1",
     )
-    result = await tool.execute({"url": "https://example.com/"}, ctx)
+    result = await tool.execute({"action": "navigate", "url": "https://example.com/"}, ctx)
     assert result.success is False
     # Failures put the message in ``error`` only (avoid output+error double).
     assert "接管" in (result.error or result.output or "")

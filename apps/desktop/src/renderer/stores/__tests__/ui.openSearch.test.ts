@@ -13,7 +13,7 @@ beforeEach(() => {
 
 describe("useUIStore openSearch", () => {
   it("openSearch() with no args keeps searchInitialQuery as empty string (sidebar SearchTrigger)", () => {
-    // Sidebar / TitleBar call openSearch() bare — must not write undefined
+    // Sidebar SearchTrigger calls openSearch() bare — must not write undefined
     // (CommandPalette then does query.trim() and would crash).
     store().openSearch();
 

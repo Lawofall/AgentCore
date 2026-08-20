@@ -2,16 +2,16 @@
  * L3「团队浏览器」tab 的**存在性判定**（纯派生，指针非副本）——「本会话曾用过浏览器」。
  *
  * 右坞「浏览器」tab 走**条件常驻**（同「终端」tab 先例，见 `shouldShowTerminalTab`）：本会话
- * 出现过 `browser_*` 工具调用 → tab 常驻整个会话，而不是「有直播目标才出现、用完即消失」。
+ * 出现过 `browser` / 历史 `browser_*` 工具调用 → tab 常驻整个会话，而不是「有直播目标才出现、用完即消失」。
  * 动因是两个窗口原本相反——接管默认**仅无 turn 运行时**可做，而旧入口（活动卡「查看直播」）
  * 只在 turn `running` 时渲染：用户必须在跑的时候先点开 tab 才能在停下后接管，没提前点开就
  * 再无入口，而此时沙箱还活着（idle TTL）、页面状态还在，正是最该上手的时刻。
  *
  * 判定扫两处：① execution 投影的 `agent.toolCalls`（worker）；② assistant
  * `message.process` 里 `kind==="tool"` 且 `isBrowserTool(tool_name)`（CEO 可直调
- * `browser_navigate`，其余 browser_* 仍 worker-only）。只扫其一会漏亮右坞 tab。
+ * `browser`，历史回放仍认 `browser_*`）。只扫其一会漏亮右坞 tab。
  *
- * 本地模式：sidecar 在 DesktopBrowserBridge 健康时装配 `browser_*`
+ * 本地模式：sidecar 在 DesktopBrowserBridge 健康时装配 `browser`
  * （`browser_execution_enabled_for`：local + `AGENTCORE_BROWSER_BRIDGE_*` 探活）；
  * Bridge 未注入/不健康则不挂工具。
  */
@@ -20,9 +20,9 @@ import { assistantProjectionId } from "@/stores/conversation/runtime";
 import type { Message } from "@/stores/conversation/types";
 import { type ExecutionRuntime, projectRuntime } from "@/stores/execution";
 
-/** 是否 L3 团队浏览器工具（`browser_*` 六工具）。工具名判定单源，勿另写一份前缀比较。 */
+/** 是否 L3 团队浏览器工具。单源：精确名 `browser` + 历史 `browser_*` 回放。勿另写一份前缀比较。 */
 export function isBrowserTool(name: string): boolean {
-  return name.startsWith("browser_");
+  return name === "browser" || name.startsWith("browser_");
 }
 
 /**

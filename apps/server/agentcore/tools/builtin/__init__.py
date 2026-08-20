@@ -320,9 +320,9 @@ def build_ceo_tool_registry(
     **B2**: local ``terminal`` is also CEO-holdable (schema NEVER; ``start`` elevates
     at runtime like ``git`` write) for pure start/stop/list of workspace long-running
     processes — not a GRANTABLE schema exception.
-    **Browser**: navigate/click/type/scroll/snapshot (GRANTABLE · ``browser_class``),
+    **Browser**: single ``browser`` (GRANTABLE · ``browser_class``),
     gated by ``include_browser`` — same tier as host / terminal; screenshot
-    stays worker-only (visual验收).
+    is a worker-only action on the same tool.
     Orchestration primitives are wired separately in ``tools.ceo_toolset``.
     Host tools appear only when ``desktop_online`` ∧ ``host≠off``.
     ``terminal`` appears only when ``backend_location=="local"``.

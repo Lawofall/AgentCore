@@ -5,7 +5,8 @@ from __future__ import annotations
 _ASK_USER_KICKOFF = """\
 <ask_user_kickoff>
 通用短澄清（原「开场引导」skill 名保留）：**挡路拍板**——无答复则不能负责任推进、选错会返工时，\
-用 `ask_user` **短问**——可只带 `message`，或配少量 `questions` / `assumptions`；\
+用 `ask_user` **短问**——问句写 `questions[].prompt`；可只带 `message`（无题时当唯一题干），\
+或配少量 `questions` / `assumptions`；\
 可与检索、读文件、探路穿插，可连续多次。\
 **勿先** `consult(ask_user_kickoff)` 再问——本段供字段拿不准时查阅。
 
@@ -58,9 +59,9 @@ Word 真图形组织图盖不住 → 直接拒 + 荐 HTML / 文字·表格版 / 
 【禁止】硬闸、扫长文猜意图、复活 `format_options` / 提案墙。
 
 【字段】普通 `ask_user`（**不填** `card`，除非途中专用卡）：
-- `message`：说清缺口即可（勿长篇方案墙）。
+- `message`：必填。普通卡不展示为标题（无题时仍当唯一题干；可写批次原因但用户不一定看见）。勿长篇方案墙。
 - `assumptions`：可选，低影响可逆默认（只读陈列）。
-- `questions`：可选，最多 5；高杠杆才问；可预填 `default`；choice 可配 `recommended`\
+- `questions`：可选，最多 5；**问句写 `prompt`**；高杠杆才问；可预填 `default`；choice 可配 `recommended`\
 （`recommended` 至多一项；**禁止**把「（推荐）」写进 `label`，倾向只走字段）。\
 权衡写进 `label`，普通短问勿填 `detail`（`detail` 仅专用 card）。
 - 专用 `card`：`proposal_pick` / `risk_ack` / `organize_plan`（恰好 1 题）——见 ask_user_midtask。
@@ -77,13 +78,14 @@ _ASK_USER_MIDTASK = """\
 <ask_user_midtask>
 执行途中拍板：当你在执行中途遇到一个【自己无法独自定夺、且选错代价高】的关键岔路时，用 ask_user 暂停\
 并请用户拍板：典型如方案 A/B 抉择、执行不可逆操作（大量删除 / 覆盖）前确认、任务范围明显超出最初预期\
-需用户重新授权。把决策点写进 `message`（现状 + 为何需要 ta 定夺），用 `questions` 给出具体岔路选项\
-（通常一个问题即可，kind=choice + options；可同时多选才设 multiple=true，互斥的二选一/多选一保持单选）。\
+需用户重新授权。**问句写 `questions[].prompt`**（通常一题，kind=choice + options；\
+可同时多选才设 multiple=true，互斥的二选一/多选一保持单选）。\
+`message` 必填：普通卡不展示为标题（无题时仍当唯一题干；可写批次原因——现状 + 为何需拍板——但用户不一定看见）。\
 途中的关键岔路通常【不预填 default】——就是要 ta 来选；权衡写进选项 `label`（一行名），\
 勿填 `detail`。把你倾向的一项标 `recommended=true`（至多一项；**禁止**把\
 「（推荐）」写进 `label`——UI 会按字段画灰字「推荐」）：不替用户预选，却让 ta 一眼\
 看到你的专业倾向、快速拍板。用户「提交」会带上 ta 勾选的选项与可选补充，回到\
-你的循环；「取消」结束本回合。同样：发问的话只写进 `message`、正文在发问前留空（避免落库铺垫与恢复后\
+你的循环；「取消」结束本回合。同样：正文在发问前留空（避免落库铺垫与恢复后\
 的话粘连，详见 ask_user_kickoff / 通用短澄清）。
 
 【落盘前对齐】你已承诺落盘前对齐，或用户点名「确认后再存 / 先对齐再写」→ 阻塞短问，\

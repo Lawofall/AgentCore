@@ -202,12 +202,12 @@ def test_preamble_and_core_make_consult_discoverable():
     assert "consult(name)" in preamble
     assert "下一轮" in preamble
     assert "consult(terminal)" in _CEO_CORE_HINT
-    assert "consult(browser_navigate)" in _CEO_CORE_HINT
+    assert "consult(browser)" in _CEO_CORE_HINT
 
 
 def test_family_of_covers_browser_and_solo_tools():
-    browser = family_of("browser_navigate")
-    assert "browser_click" in browser and "browser_screenshot" in browser
+    browser = family_of("browser")
+    assert browser == frozenset({"browser"})
     assert family_of("terminal") == frozenset({"terminal"})
     assert family_of("host") == frozenset({"host"})
     assert family_of("desktop_notify") == frozenset({"desktop_notify"})
@@ -293,9 +293,9 @@ def _stuffed_worker() -> ToolRegistry:
 
 
 def test_stuffed_worker_opening_table_omits_on_demand_tools():
-    """Locks the opening FC win: 39 registered; consult 另 wire，不在此表."""
+    """Locks the opening FC win: 33 registered; consult 另 wire，不在此表."""
     registry = _stuffed_worker()
-    assert registry.count == 39
+    assert registry.count == 33
     offered = _def_names(registry)
     assert offered == _STUFFED_WORKER_RESIDENT
     chars = sum(
@@ -307,7 +307,7 @@ def test_stuffed_worker_opening_table_omits_on_demand_tools():
     assert chars <= 21920, f"队员开场工具表变胖：{chars}"
     deferred = set(registry.deferred_names)
     assert deferred <= ON_DEMAND_TOOL_NAMES
-    assert "terminal" in deferred and "browser_navigate" in deferred
+    assert "terminal" in deferred and "browser" in deferred
     assert "host" in deferred
     assert "md_to_docx" in deferred
     assert "write_section" in deferred
@@ -339,12 +339,12 @@ async def test_stuffed_worker_opening_table_omits_mcp_tools():
     registry = _stuffed_worker()
     opening_before = _def_names(registry)
     count_before = registry.count
-    assert count_before == 39
+    assert count_before == 33
     assert opening_before == _STUFFED_WORKER_RESIDENT
 
     registered = register_mcp_tools(registry, _playwright_mcp_result(tool_count=24))
     assert registered == 24
-    assert registry.count == 63
+    assert registry.count == 57
     offered = _def_names(registry)
     assert offered == opening_before
     mcp_names = {n for n in registry.names if n.startswith("mcp_")}

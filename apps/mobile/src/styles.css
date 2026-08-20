@@ -440,11 +440,6 @@ body {
   white-space: nowrap;
 }
 
-.auth-code-hint {
-  margin: 0;
-  font-size: 12px;
-}
-
 .auth-field-error {
   margin: -4px 0 0;
   font-size: 12px;

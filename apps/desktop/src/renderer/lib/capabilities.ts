@@ -14,7 +14,7 @@ export function isWebRuntime(): boolean {
 
 /** 是否是「生产 web 客户端」运行时（浏览器里跑真实鉴权，且非离线预览 #/preview）。用于给
  *  浏览器版单独裁剪只在 Electron/预览下才有意义的窗口外壳——顶栏（拖拽区/窗口控件）在浏览器里
- *  纯属多余高度，改由侧栏顶部承载品牌/折叠/搜索。离线预览仍保留顶栏。 */
+ *  纯属多余高度，改由侧栏顶部承载品牌/折叠。搜索假入口两端都在侧栏。离线预览仍保留顶栏。 */
 export function isWebClient(): boolean {
   return (
     isWebRuntime() &&

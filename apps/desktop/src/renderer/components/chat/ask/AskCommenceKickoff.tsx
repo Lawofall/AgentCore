@@ -62,7 +62,6 @@ export function AskCommenceKickoffBody({
   const [bindError, setBindError] = useState<string | null>(null);
   const [briefOpen, setBriefOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
-  const [noteOpen, setNoteOpen] = useState(false);
 
   const handleBindOption = async (q: AskQuestion, opt: AskOption) => {
     if (busy || bindBusyLabel) return;
@@ -224,13 +223,9 @@ export function AskCommenceKickoffBody({
             index={i + 1}
             numbered={content.questions.length > 1}
             answer={answer.answers[q.id] ?? []}
-            otherOn={answer.otherOn[q.id] ?? false}
-            otherText={answer.otherText[q.id] ?? ""}
             disabled={busy || !!bindBusyLabel}
             onToggle={(opt) => answer.toggleChoice(q, opt)}
             onSetText={(v) => answer.setText(q, v)}
-            onToggleOther={() => answer.toggleOther(q)}
-            onSetOther={(v) => answer.setOtherValue(q, v)}
             optionLayout="compact"
             conversationId={conversationId}
             bindBusyLabel={bindBusyLabel}
@@ -242,35 +237,7 @@ export function AskCommenceKickoffBody({
           <p className="text-xs text-muted-foreground">{bindError}</p>
         )}
 
-        {/* 恰好一题时「其他…」已覆盖自定义；多题才保留跨题附言，且默认折叠。 */}
-        {content.questions.length !== 1 && (
-          <div>
-            <button
-              type="button"
-              onClick={() => setNoteOpen((v) => !v)}
-              aria-expanded={noteOpen}
-              className="flex w-full items-center gap-1.5 text-left"
-            >
-              <ChevronRight
-                size={13}
-                className={`shrink-0 text-muted-foreground transition-transform ${
-                  noteOpen ? "rotate-90" : ""
-                }`}
-              />
-              <span className="text-xs text-muted-foreground">补充说明</span>
-              {!noteOpen && answer.note.trim() && (
-                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/70">
-                  {answer.note.trim()}
-                </span>
-              )}
-            </button>
-            {noteOpen && (
-              <div className="mt-1.5 pl-5">
-                <CommenceNote answer={answer} disabled={busy} compact />
-              </div>
-            )}
-          </div>
-        )}
+        <CommenceNote answer={answer} disabled={busy} compact />
       </div>
 
       {/* Footer — CTA + 预填提示同一行 */}

@@ -39,7 +39,7 @@ import {
 //
 // Mobile's own UI (cross-platform-frontend.mdc). ask_user intent 专用面：
 // organize_plan / daily_review 勾选墙；proposal_pick 行式单选；risk_ack 行式多选；
-// decision/kickoff = default 预选 + compose 答复模型 +「其他」逃逸；
+// decision/kickoff = default 预选 + compose 答复模型 + 常驻人话；
 // 本机目录 action 可点 → LocalPickerFailureCard（unavailable），禁灰掉无解释。
 // Delegate team_preview：写盘单向收紧 + 嘱咐（确认面不提供排除岗 / 人改模；
 // excluded_run_ids / model_overrides 契约可保留，本卡 continue 不附）。
@@ -535,7 +535,7 @@ function ResumeCardBody({
   const isProposalPick = intent === "proposal_pick";
   const isRiskAck = intent === "risk_ack";
   const isCheckboxWall = CHECKBOX_WALL.has(intent ?? "");
-  // decision / kickoff / bare ask_user — compose 答复模型 +「其他」逃逸
+  // decision / kickoff / bare ask_user — compose 答复模型 + 常驻人话
   const isDecisionAsk =
     isAskUser && !isCheckboxWall && !isProposalPick && !isRiskAck;
   const [answers, setAnswers] = useState<Record<string, string[]>>(() => {
@@ -545,8 +545,6 @@ function ResumeCardBody({
     }
     return seedDefaultAnswers(qs);
   });
-  const [otherOn, setOtherOn] = useState<Record<string, boolean>>({});
-  const [otherText, setOtherText] = useState<Record<string, string>>({});
   const [pickerFailure, setPickerFailure] = useState<{
     kind: LocalPickerFailureKind;
     message?: string;
@@ -614,21 +612,6 @@ function ResumeCardBody({
         [questionId]: picked.includes(value) ? [] : [value],
       };
     });
-    if (!multiple) {
-      setOtherOn((cur) =>
-        cur[questionId] ? { ...cur, [questionId]: false } : cur,
-      );
-    }
-  };
-
-  const toggleOther = (questionId: string, multiple: boolean) => {
-    setOtherOn((cur) => {
-      const turningOn = !cur[questionId];
-      if (turningOn && !multiple) {
-        setAnswers((a) => ({ ...a, [questionId]: [] }));
-      }
-      return { ...cur, [questionId]: turningOn };
-    });
   };
 
   const collectSelected = (decision: CheckpointDecision): string[] => {
@@ -678,7 +661,7 @@ function ResumeCardBody({
     if (!isDecisionAsk) return false;
     for (const q of questions) {
       const id = str(q, "id") ?? str(q, "prompt") ?? "";
-      if (!id || otherOn[id]) continue;
+      if (!id) continue;
       const options = Array.isArray(q.options) ? q.options : [];
       for (const label of answers[id] ?? []) {
         const opt = options.find(
@@ -726,8 +709,6 @@ function ResumeCardBody({
           default: str(q, "default"),
         })),
         answers,
-        otherOn,
-        otherText,
         note,
       );
     } else if (decision === "stop") {
@@ -862,7 +843,12 @@ function ResumeCardBody({
     }
     if (isProposalPick) return "选一条方案推进";
     if (isRiskAck) return "勾选本轮处理项";
-    const q = (paused.question ?? "").trim().replace(/\s+/g, " ");
+    const first = questions[0];
+    const firstPrompt = first
+      ? (str(first, "prompt") ?? "").trim().replace(/\s+/g, " ")
+      : "";
+    const q =
+      firstPrompt || (paused.question ?? "").trim().replace(/\s+/g, " ");
     if (q) return q.length <= 40 ? q : `${q.slice(0, 39)}…`;
     return "需要你拍板";
   })();
@@ -881,9 +867,11 @@ function ResumeCardBody({
       {!kickoffAdjusting && paused.user_message && (
         <div className="pause-context">{paused.user_message}</div>
       )}
-      {!showWorkers && paused.question && (
-        <div className="pause-question">{paused.question}</div>
-      )}
+      {!showWorkers &&
+        paused.question &&
+        !(isDecisionAsk && questions.length >= 1) && (
+          <div className="pause-question">{paused.question}</div>
+        )}
       {isAskUser && assumptions.length > 0 && (
         <div className="ask-assume">
           <div className="ask-assume-label">我先按这些默认推进</div>
@@ -902,6 +890,11 @@ function ResumeCardBody({
         questions.map((q) => {
           const id = str(q, "id") ?? str(q, "prompt") ?? "";
           const prompt = str(q, "prompt") ?? "";
+          const decisionStem =
+            prompt ||
+            (isDecisionAsk && questions.length === 1
+              ? (paused.question ?? "").trim()
+              : "");
           const kind = str(q, "kind");
           const def = str(q, "default");
           const multiple = Boolean(q.multiple);
@@ -1047,11 +1040,13 @@ function ResumeCardBody({
             );
           }
 
-          // decision / kickoff / bare ask — rows +「其他」+ text kind
+          // decision / kickoff / bare ask — rows + text kind
           if (kind === "text") {
             return (
               <div key={id} className="ask-question">
-                {prompt && <div className="ask-prompt">{prompt}</div>}
+                {decisionStem && (
+                  <div className="ask-prompt">{decisionStem}</div>
+                )}
                 <input
                   type="text"
                   className="ask-other-input"
@@ -1071,9 +1066,9 @@ function ResumeCardBody({
 
           return (
             <div key={id} className="ask-question">
-              {prompt && (
+              {decisionStem && (
                 <div className="ask-prompt">
-                  {prompt}
+                  {decisionStem}
                   {multiple && <span className="ask-prompt-hint">可多选</span>}
                 </div>
               )}
@@ -1129,48 +1124,7 @@ function ResumeCardBody({
                     </button>
                   );
                 })}
-                <button
-                  type="button"
-                  aria-pressed={!!otherOn[id]}
-                  className={
-                    otherOn[id]
-                      ? "ask-check-row ask-check-row-active"
-                      : "ask-check-row ask-check-row-muted"
-                  }
-                  onClick={() => {
-                    setPickerFailure(null);
-                    toggleOther(id, multiple);
-                  }}
-                >
-                  <span
-                    className={
-                      otherOn[id]
-                        ? "ask-check-box ask-check-box-on"
-                        : "ask-check-box"
-                    }
-                    aria-hidden
-                  />
-                  <span className="ask-check-text">
-                    <span className="ask-check-label">其他…</span>
-                  </span>
-                </button>
               </fieldset>
-              {otherOn[id] && (
-                <input
-                  type="text"
-                  className="ask-other-input"
-                  value={otherText[id] ?? ""}
-                  placeholder="填写你的答案"
-                  // biome-ignore lint/a11y/noAutofocus: 用户点开「其他」才渲染，聚焦刚展开字段是预期 UX。
-                  autoFocus
-                  onChange={(e) =>
-                    setOtherText((cur) => ({
-                      ...cur,
-                      [id]: e.target.value,
-                    }))
-                  }
-                />
-              )}
             </div>
           );
         })}
@@ -1363,9 +1317,7 @@ function ResumeCardBody({
           placeholder={
             isPlanReview
               ? "可选 · 调整时作为对下游的指示；取消时作为收尾备注"
-              : isDecisionAsk
-                ? "可选 · 补充说明"
-                : "可选 · 你的答复或补充，留空则按上面继续"
+              : "选项都不对，或有补充，写在这里"
           }
           onChange={(e) => setNote(e.target.value)}
         />

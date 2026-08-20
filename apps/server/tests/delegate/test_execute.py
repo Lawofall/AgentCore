@@ -191,7 +191,7 @@ def test_should_auto_light_delegate():
             {
                 "role": "浏览器操作员",
                 "task": "打开百度搜一下",
-                "tools": ["browser_navigate", "browser_snapshot", "browser_type", "browser_click"],
+                "tools": ["browser"],
             }
         ]
     )

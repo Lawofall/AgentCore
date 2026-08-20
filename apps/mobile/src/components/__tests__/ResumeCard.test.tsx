@@ -67,16 +67,113 @@ describe("ResumeCard · ask_user", () => {
     expect(screen.getByText("需要你拍板（已离线保留）")).toBeTruthy();
     expect(screen.getByText("做 A 还是 B？")).toBeTruthy();
     expect(screen.getByText("先做 A 还是 B? 两条路线各有取舍。")).toBeTruthy();
+    expect(document.querySelector(".pause-question")).toBeTruthy();
+    expect(document.querySelector(".pause-context")?.textContent).toBe(
+      "做 A 还是 B？",
+    );
     // ask_user has no 调整 (that is plan_review / team_preview steer).
     expect(screen.queryByText("调整")).toBeNull();
+  });
+
+  it("有题时 question 原文不当总标题、prompt 仍在", () => {
+    render(
+      <ResumeCard
+        paused={summary({
+          intent: "decision",
+          question: "总标题不要画出来",
+          questions: [
+            {
+              id: "q0",
+              prompt: "这一题的题干",
+              kind: "choice",
+              multiple: false,
+              options: [{ label: "方案 A" }, { label: "方案 B" }],
+            },
+          ],
+        })}
+        onResume={vi.fn()}
+      />,
+    );
+    expect(document.querySelector(".pause-question")).toBeNull();
+    expect(screen.queryByText("总标题不要画出来")).toBeNull();
+    expect(screen.getByText("这一题的题干")).toBeTruthy();
+    expect(document.querySelector(".ask-prompt")?.textContent).toContain(
+      "这一题的题干",
+    );
+    expect(document.querySelector(".pause-context")?.textContent).toBe(
+      "做 A 还是 B？",
+    );
+  });
+
+  it("单题 prompt 空则把 question 画在该题题干", () => {
+    render(
+      <ResumeCard
+        paused={summary({
+          intent: "decision",
+          question: "空 prompt 时的题干",
+          questions: [
+            {
+              id: "q0",
+              prompt: "",
+              kind: "choice",
+              multiple: false,
+              options: [{ label: "方案 A" }],
+            },
+          ],
+        })}
+        onResume={vi.fn()}
+      />,
+    );
+    expect(document.querySelector(".pause-question")).toBeNull();
+    expect(document.querySelector(".ask-prompt")?.textContent).toContain(
+      "空 prompt 时的题干",
+    );
+  });
+
+  it("latch 摘要优先第一题 prompt", () => {
+    render(
+      <ResumeCard
+        paused={summary({
+          intent: "decision",
+          question: "不要当 latch 摘要",
+          questions: [
+            {
+              id: "q0",
+              prompt: "第一题题干",
+              kind: "choice",
+              multiple: false,
+              options: [{ label: "方案 A" }],
+            },
+            {
+              id: "q1",
+              prompt: "第二题题干",
+              kind: "choice",
+              multiple: false,
+              options: [{ label: "方案 B" }],
+            },
+          ],
+        })}
+        onResume={vi.fn()}
+      />,
+    );
+    expect(document.querySelector(".pause-question")).toBeNull();
+    expect(screen.getByText("第一题题干")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("interaction-sheet-collapse"));
+    expect(screen.getByTestId("resume-card-latch").textContent).toContain(
+      "第一题题干",
+    );
+    expect(screen.queryByText("不要当 latch 摘要")).toBeNull();
   });
 
   it("提交 submits continue with the trimmed note", () => {
     const onResume = vi.fn();
     render(<ResumeCard paused={summary()} onResume={onResume} />);
-    fireEvent.change(screen.getByPlaceholderText(/可选/), {
-      target: { value: "  选 A  " },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText("选项都不对，或有补充，写在这里"),
+      {
+        target: { value: "  选 A  " },
+      },
+    );
     fireEvent.click(screen.getByText("提交"));
     expect(onResume).toHaveBeenCalledWith("continue", "选 A", []);
   });
@@ -150,6 +247,7 @@ describe("ResumeCard · ask_user", () => {
     expect(
       document.querySelector('[data-ask-intent="proposal_pick"]'),
     ).toBeTruthy();
+    expect(document.querySelector(".pause-question")).toBeTruthy();
     expect(screen.getAllByText("方案挑选 · 选一条推进").length).toBeGreaterThan(
       0,
     );
@@ -346,7 +444,7 @@ describe("ResumeCard · ask_user", () => {
     expect(screen.queryByText("模型发挥的副标题不要画")).toBeNull();
   });
 
-  it("decision default 预选 + compose 答复 +「其他」逃逸", () => {
+  it("decision default 预选 + compose 答复 + 常驻人话", () => {
     const onResume = vi.fn();
     render(
       <ResumeCard
@@ -367,7 +465,10 @@ describe("ResumeCard · ask_user", () => {
       />,
     );
     expect(document.querySelector('[data-ask-intent="decision"]')).toBeTruthy();
-    expect(screen.getByText("其他…")).toBeTruthy();
+    expect(screen.queryByText("其他…")).toBeNull();
+    expect(
+      screen.getByPlaceholderText("选项都不对，或有补充，写在这里"),
+    ).toBeTruthy();
     // Default preselected — one-click submit composes.
     fireEvent.click(screen.getByText("提交"));
     expect(onResume).toHaveBeenCalledWith(
@@ -420,6 +521,9 @@ describe("ResumeCard · ask_user", () => {
       screen.getByText(/确认后服务端直接写入记忆\/规则\/文档/),
     ).toBeTruthy();
     expect(screen.getByText("取消勾选即跳过")).toBeTruthy();
+    expect(
+      screen.getByPlaceholderText("选项都不对，或有补充，写在这里"),
+    ).toBeTruthy();
 
     // Seed all three; uncheck one.
     fireEvent.click(screen.getByText("主题：周报节奏"));

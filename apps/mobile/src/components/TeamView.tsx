@@ -1643,7 +1643,9 @@ function GenericRunToolRow({ call }: { call: RunToolCall }) {
         onClick={() => setOpen((o) => !o)}
       >
         <span className="tool-name">
-          <span className="tool-label">{toolLabel(call.toolName, call.arguments)}</span>
+          <span className="tool-label">
+            {toolLabel(call.toolName, call.arguments)}
+          </span>
           {detail && <span className="tool-detail">{detail}</span>}
         </span>
         <span className="tool-status">{status}</span>

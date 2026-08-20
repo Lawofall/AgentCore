@@ -10,7 +10,7 @@ import {
   MIN_PASSWORD_LENGTH,
   emailCodeError,
   emailFieldError,
-  formatEmailCodeValidityHint,
+  formatEmailCodeSentNotice,
   isLikelyEmail,
   loginIdentifierError,
   normalizeEmailCode,
@@ -145,9 +145,6 @@ export function LoginPage() {
   const [attempted, setAttempted] = useState(false);
   const [sendAttempted, setSendAttempted] = useState(false);
   const [registerCodeSent, setRegisterCodeSent] = useState(false);
-  const [registerCodeExpiresIn, setRegisterCodeExpiresIn] = useState<
-    number | null
-  >(null);
   const [forgotStep, setForgotStep] = useState<ForgotStep>("email");
   const resend = useResendCountdown();
 
@@ -224,7 +221,6 @@ export function LoginPage() {
     setAttempted(false);
     setSendAttempted(false);
     setRegisterCodeSent(false);
-    setRegisterCodeExpiresIn(null);
     setForgotStep("email");
     if (next === "register" && isLikelyEmail(identifier) && !email.trim()) {
       setEmail(identifier.trim());
@@ -262,7 +258,6 @@ export function LoginPage() {
   function invalidateRegisterCode() {
     setCode("");
     setRegisterCodeSent(false);
-    setRegisterCodeExpiresIn(null);
     setNotice(null);
     setError(null);
   }
@@ -280,12 +275,9 @@ export function LoginPage() {
         password,
       });
       setRegisterCodeSent(true);
-      setRegisterCodeExpiresIn(sent?.expiresIn ?? null);
       resend.start();
       setNoticeKind("success");
-      setNotice(
-        wasSent ? "验证码已重新发送" : `验证码已发送至 ${email.trim()}`,
-      );
+      setNotice(formatEmailCodeSentNotice(sent.expiresIn, wasSent));
     } catch (err) {
       setError(err instanceof Error ? err.message : "发送验证码失败，请重试");
     } finally {
@@ -484,11 +476,6 @@ export function LoginPage() {
               </button>
             </div>
             <FieldError>{registerCodeFieldErr}</FieldError>
-            {registerCodeSent && registerCodeExpiresIn != null && (
-              <p className="muted auth-code-hint">
-                {formatEmailCodeValidityHint(registerCodeExpiresIn)}
-              </p>
-            )}
             <input
               placeholder="昵称（选填）"
               value={nickname}
@@ -565,9 +552,7 @@ export function LoginPage() {
             noValidate
             onSubmit={onResetPassword}
           >
-            <AuthOutcome kind="success">
-              {notice ?? `验证码已发送至 ${email.trim()}`}
-            </AuthOutcome>
+            <AuthOutcome kind="success">{notice ?? "已发送验证码"}</AuthOutcome>
             <input
               placeholder="验证码（6 位）"
               inputMode="numeric"

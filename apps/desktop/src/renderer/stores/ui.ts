@@ -148,7 +148,7 @@ export const useUIStore = create<UIState>((set) => ({
   sidecarPreference: loadSidecarPreference(),
   sidecarEnabled: loadSidecarEnabled(),
 
-  // Default "" is required: Sidebar/TitleBar call openSearch() with no args.
+  // Default "" is required: Sidebar SearchTrigger calls openSearch() with no args.
   // Without it, searchInitialQuery becomes undefined and CommandPalette crashes
   // on query.trim() (regressed in 1ee81cee when the default was dropped).
   openSearch: (initialQuery, opts) =>

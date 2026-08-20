@@ -17,6 +17,7 @@ from agentcore.runtime.runs.website_visual_critic import (
     StubPageScreenshot,
     apply_visual_critic_to_verdict,
     assemble_preview_document,
+    browser_tool_available,
     build_critic_prompt,
     parse_critic_response,
     run_visual_critic,
@@ -43,6 +44,19 @@ class _FakeReader:
             usage=TokenUsage(input_tokens=10, output_tokens=5),
             model="stub-vl",
         )
+
+
+def test_browser_tool_available_accepts_new_and_legacy_names():
+    class _Reg:
+        def __init__(self, names: set[str]) -> None:
+            self._names = names
+
+        def get_optional(self, name: str):
+            return object() if name in self._names else None
+
+    assert browser_tool_available(_Reg({"browser"})) is True
+    assert browser_tool_available(_Reg({"browser_screenshot"})) is True
+    assert browser_tool_available(_Reg({"file_read"})) is False
 
 
 def test_build_website_qa_enables_visual_critic():

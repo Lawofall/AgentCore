@@ -124,6 +124,15 @@ export const TOOL_LABELS: Record<string, string> = {
   board_read: "Read board",
   desktop_notify: "Notify",
   external_mount_readonly: "Mount folder",
+  // L3 团队浏览器 — keep in sync with TOOL_META（单工具 `browser` + 历史七键）。
+  browser: "Browser",
+  browser_navigate: "Navigate",
+  browser_click: "Click",
+  browser_type: "Type",
+  browser_scroll: "Scroll",
+  browser_snapshot: "Snapshot",
+  browser_screenshot: "Screenshot",
+  browser_console: "Console",
   // 本机 Host（第三能力面）— keep in sync with TOOL_META.
   host: "Host",
   host_ping: "Host ping",

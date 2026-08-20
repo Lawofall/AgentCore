@@ -44,10 +44,13 @@ import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
  * Shared 结构化问答内核 — the choice/text question UI + answer-state + answer composition
  * reused by BOTH asking surfaces: the CEO's `ask_user` ({@link AskUserCard}) and a worker's
  * blocking `escalate` ({@link EscalationCard}). Extracted here because it is the drift-prone
- * core (the「其他」escape hatch, multi-select toggle, 答复模型 α composition); the two cards
- * only differ in their framing + footer (ask_user: 提交/取消; escalate: 提交/按假设继续), which
- * each owns. 设计: docs/03-AI核心/Agent协作模式.md（向用户发问）.
+ * core (listed options + persistent free-text note, multi-select toggle, 答复模型 α
+ * composition); the two cards only differ in their framing + footer (ask_user: 提交/取消;
+ * escalate: 提交/按假设继续), which each owns. 设计: docs/03-AI核心/Agent协作模式.md（向用户发问）.
  */
+
+/** 常驻人话框 — 选项 + 一句补充，前端不再注入「其他…」。 */
+export const ASK_NOTE_PLACEHOLDER = "选项都不对，或有补充，写在这里";
 
 /** The minimal ask content the shared fields render. A {@link CheckpointDisplay}
  * (live/replay), a paused-turn frame, and a worker escalation all satisfy it. */
@@ -62,11 +65,11 @@ export type AskTone =
 
 /**
  * The answer-state engine for a structured ask: per-question picks (choice → option(s),
- * text → typed value), the per-question「其他」escape hatch, the chosen style, and a free
- * note. Seeds each question from its `default` so a 想省事 user can one-click submit an
- * opening as-is. `compose(intent)` flattens it all into ONE readable answer (答复模型 α —
- * the only reader is the CEO / worker, an LLM). Shared so both cards manage answers
- * identically; each card decides what to do with `compose()` in its own footer.
+ * text → typed value) plus one persistent free-text note. Seeds each question from its
+ * `default` so a 想省事 user can one-click submit an opening as-is. `compose(intent)`
+ * flattens it all into ONE readable answer (答复模型 α — the only reader is the CEO /
+ * worker, an LLM). Shared so both cards manage answers identically; each card decides
+ * what to do with `compose()` in its own footer.
  */
 export function useAskAnswer(
   content: AskUserContent,
@@ -83,8 +86,6 @@ export function useAskAnswer(
     }
     return init;
   });
-  const [otherOn, setOtherOn] = useState<Record<string, boolean>>({});
-  const [otherText, setOtherText] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
 
   const toggleChoice = (q: AskQuestion, opt: string) => {
@@ -100,62 +101,34 @@ export function useAskAnswer(
       }
       return { ...cur, [q.id]: picked.includes(opt) ? [] : [opt] };
     });
-    // Single-select: picking a listed option deselects「其他」(mutually exclusive).
-    if (!q.multiple)
-      setOtherOn((cur) => (cur[q.id] ? { ...cur, [q.id]: false } : cur));
   };
 
   const setText = (q: AskQuestion, value: string) => {
     setAnswers((cur) => ({ ...cur, [q.id]: value ? [value] : [] }));
   };
 
-  // Toggle a choice question's「其他」field. Single-select: engaging it clears the
-  // listed picks (mutually exclusive); multi-select: it coexists with checked options.
-  const toggleOther = (q: AskQuestion) => {
-    const turningOn = !otherOn[q.id];
-    setOtherOn((cur) => ({ ...cur, [q.id]: turningOn }));
-    if (turningOn && !q.multiple) setAnswers((cur) => ({ ...cur, [q.id]: [] }));
-  };
-
-  const setOtherValue = (q: AskQuestion, value: string) => {
-    setOtherText((cur) => ({ ...cur, [q.id]: value }));
-  };
-
   // How many decisions already carry a value — surfaced on the opening CTA so a
   // 想省事 user sees the card is ready to ship as-is.
   const presetCount = content.questions.filter(
-    (q) =>
-      (answers[q.id] ?? []).length > 0 ||
-      (otherOn[q.id] && (otherText[q.id] ?? "").trim().length > 0),
+    (q) => (answers[q.id] ?? []).length > 0,
   ).length;
 
   const compose = (_intent: CheckpointIntent) =>
-    composeAnswer(content, answers, otherOn, otherText, note);
+    composeAnswer(content, answers, note);
 
   /** Compose with one question forced to `value` (bind_local_folder resolve path). */
   const composeWithAnswer = (
     _intent: CheckpointIntent,
     questionId: string,
     value: string,
-  ) =>
-    composeAnswer(
-      content,
-      { ...answers, [questionId]: [value] },
-      { ...otherOn, [questionId]: false },
-      otherText,
-      note,
-    );
+  ) => composeAnswer(content, { ...answers, [questionId]: [value] }, note);
 
   return {
     answers,
-    otherOn,
-    otherText,
     note,
     setNote,
     toggleChoice,
     setText,
-    toggleOther,
-    setOtherValue,
     presetCount,
     compose,
     composeWithAnswer,
@@ -345,16 +318,12 @@ export function AskQuestionFields({
           numbered={content.questions.length > 1}
           question={q}
           answer={answer.answers[q.id] ?? []}
-          otherOn={answer.otherOn[q.id] ?? false}
-          otherText={answer.otherText[q.id] ?? ""}
           disabled={disabled}
           tone={tone}
           conversationId={conversationId}
           bindBusyLabel={bindBusyLabel}
           onToggleChoice={(opt) => answer.toggleChoice(q, opt)}
           onSetText={(v) => answer.setText(q, v)}
-          onToggleOther={() => answer.toggleOther(q)}
-          onSetOther={(v) => answer.setOtherValue(q, v)}
           onBindOption={(opt) => void handleBindOption(q, opt)}
           onFolderUnavailable={(msg) => {
             setPickerFailure(null);
@@ -449,7 +418,7 @@ export function AskNoteField({
       onChange={(e) => answer.setNote(e.target.value)}
       disabled={disabled}
       rows={2}
-      placeholder={placeholder}
+      placeholder={placeholder || ASK_NOTE_PLACEHOLDER}
       className={`w-full border-border bg-card placeholder:text-muted-foreground/70 ${tone.focus}`}
     />
   );
@@ -463,16 +432,12 @@ function QuestionField({
   numbered,
   question,
   answer,
-  otherOn,
-  otherText,
   disabled,
   tone,
   conversationId,
   bindBusyLabel,
   onToggleChoice,
   onSetText,
-  onToggleOther,
-  onSetOther,
   onBindOption,
   onFolderUnavailable,
   onLocalFsUnavailable,
@@ -481,16 +446,12 @@ function QuestionField({
   numbered: boolean;
   question: AskQuestion;
   answer: string[];
-  otherOn: boolean;
-  otherText: string;
   disabled: boolean;
   tone: AskTone;
   conversationId?: string | null;
   bindBusyLabel?: string | null;
   onToggleChoice: (opt: string) => void;
   onSetText: (value: string) => void;
-  onToggleOther: () => void;
-  onSetOther: (value: string) => void;
   onBindOption?: (opt: AskOption) => void;
   /** 本机目录 action 不可履约时展示文案（Web 会附带打开下载页）；禁止 toggleChoice。 */
   onFolderUnavailable?: (message: string) => void;
@@ -615,30 +576,7 @@ function QuestionField({
                   </div>
                 );
               })}
-              {/* 「其他」逃生口：选项不合适时就地为这一题填自定义答案，而非塞进全局补充框。 */}
-              <Button
-                variant="ghost"
-                disabled={disabled}
-                onClick={onToggleOther}
-                className={`h-auto w-full justify-start rounded-lg border px-2.5 py-1.5 text-left text-xs font-normal disabled:opacity-40 ${
-                  otherOn ? tone.optActive : tone.optIdle
-                }`}
-              >
-                其他…
-              </Button>
             </div>
-            {otherOn && (
-              <input
-                type="text"
-                value={otherText}
-                onChange={(e) => onSetOther(e.target.value)}
-                disabled={disabled}
-                // biome-ignore lint/a11y/noAutofocus: 用户点开「其他」才渲染此框，聚焦到刚展开的字段是预期 UX（非页面加载时强夺焦点）。
-                autoFocus
-                placeholder="填写你的答案"
-                className={`w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none disabled:opacity-40 ${tone.focus}`}
-              />
-            )}
           </div>
         )}
       </div>
@@ -651,8 +589,6 @@ function QuestionField({
 export function composeAnswer(
   content: AskUserContent,
   answers: Record<string, string[]>,
-  otherOn: Record<string, boolean>,
-  otherText: Record<string, string>,
   note: string,
 ): string {
   const trimmed = note.trim();
@@ -662,11 +598,9 @@ export function composeAnswer(
   const lines: string[] = [];
   for (const q of content.questions) {
     const picked = (answers[q.id] ?? []).map((s) => s.trim()).filter(Boolean);
-    // 「其他」自定义值并入这一题的答案（多选时与已勾选项并列，单选时即为答案）。
-    const custom = otherOn[q.id] ? (otherText[q.id] ?? "").trim() : "";
-    const values = custom ? [...picked, custom] : picked;
-    if (values.length) lines.push(`· ${q.prompt}：${values.join("、")}`);
-    else if (q.default) lines.push(`· ${q.prompt}：（按你的默认）`);
+    if (picked.length) lines.push(`· ${q.prompt}：${picked.join("、")}`);
+    // 无勾选 + 有人话：不叠「按你的默认」；空提交仍按 default 走省事路径。
+    else if (q.default && !trimmed) lines.push(`· ${q.prompt}：（按你的默认）`);
   }
   if (trimmed) lines.push(`· 补充：${trimmed}`);
   if (lines.length === 0) return trimmed;

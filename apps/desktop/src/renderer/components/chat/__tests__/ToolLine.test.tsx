@@ -783,6 +783,40 @@ describe("ToolLineGroup · 混杂组浏览器 CTA", () => {
     });
   }
 
+  function unifiedBrowserStep(id: string, over?: Partial<ToolStep>): ToolStep {
+    return step({
+      id,
+      tool_name: "browser",
+      arguments: { action: "navigate", url: "https://example.com" },
+      result: "ok",
+      status: "success",
+      ...over,
+    });
+  }
+
+  it("shows a single group-header CTA for mixed unified-browser+other groups", () => {
+    render(
+      <ToolLineGroup
+        tools={[
+          unifiedBrowserStep("b1"),
+          step({
+            id: "c1",
+            tool_name: "code_execute",
+            arguments: { code: "1+1" },
+            result: "2",
+            status: "success",
+          }),
+        ]}
+        isStreaming={false}
+        conversationId="c1"
+      />,
+    );
+    const ctas = screen.getAllByText("打开浏览器");
+    expect(ctas).toHaveLength(1);
+    fireEvent.click(ctas[0]);
+    expect(showBrowser).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a single group-header CTA for mixed browser+other groups", () => {
     render(
       <ToolLineGroup
@@ -1138,13 +1172,75 @@ describe("ToolLine · ack 族成功无 peek", () => {
   });
 });
 
+describe("ToolLine · browser action 标签", () => {
+  it("认 browser + action，标签同构 host", () => {
+    render(
+      <ToolLine
+        step={step({
+          tool_name: "browser",
+          arguments: { action: "navigate", url: "https://example.com" },
+          result: "ok",
+          display: {
+            kind: "browser",
+            action: "navigate",
+            url: "https://example.com",
+            detail: "打开 https://example.com",
+          },
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Navigate")).toBeTruthy();
+    expect(screen.getByText(/打开 https:\/\/example.com/)).toBeTruthy();
+  });
+
+  it("running browser step uses args.action, not slice of browser", () => {
+    render(
+      <ToolLine
+        step={step({
+          tool_name: "browser",
+          arguments: { action: "click", ref: "e13" },
+          status: "running",
+          result: null,
+        })}
+      />,
+    );
+    expect(screen.getByText("Click")).toBeTruthy();
+    expect(screen.queryByText(/^R$/)).toBeNull();
+  });
+
+  it("历史 browser_* 键仍走 TOOL_META 纯展示", () => {
+    render(
+      <ToolLine
+        step={step({
+          tool_name: "browser_click",
+          arguments: { ref: "e13" },
+          result: "ok",
+          display: {
+            kind: "browser",
+            action: "click",
+            url: "https://example.com",
+            detail: "点击元素 e13",
+          },
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Click")).toBeTruthy();
+  });
+});
+
 describe("ToolLine · host action 标签", () => {
   it("认 host + action，标签同构 git subcommand", () => {
     render(
       <ToolLine
         step={step({
           tool_name: "host",
-          arguments: { action: "install_package", manager: "winget", package_id: "Git.Git" },
+          arguments: {
+            action: "install_package",
+            manager: "winget",
+            package_id: "Git.Git",
+          },
           result: '{"ok":true}',
           status: "success",
         })}
@@ -1202,13 +1298,28 @@ describe("toolDetail · title chip", () => {
     expect(toolDetail({ summary: "交叉验证完成，建议一周内表态" })).toBe("");
   });
 
+  it("browser 按 action 出细节", () => {
+    expect(
+      toolDetail({ action: "navigate", url: "https://example.com" }, "browser"),
+    ).toBe("https://example.com");
+    expect(toolDetail({ action: "click", ref: "e13" }, "browser")).toBe("e13");
+    expect(
+      toolDetail({ action: "type", ref: "e2", text: "hello" }, "browser"),
+    ).toBe("hello");
+  });
+
   it("host 按 action 出细节", () => {
     expect(
       toolDetail({ action: "shell", command: "Get-Process" }, "host"),
     ).toBe("Get-Process");
     expect(
       toolDetail(
-        { action: "install_package", manager: "brew", package_id: "cask", cask: true },
+        {
+          action: "install_package",
+          manager: "brew",
+          package_id: "cask",
+          cask: true,
+        },
         "host",
       ),
     ).toBe("brew cask (cask)");

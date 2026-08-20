@@ -1052,7 +1052,9 @@ function GenericToolStep({
   const head = (
     <>
       <span className="tool-name">
-        <span className="tool-label">{toolLabel(step.tool_name, step.arguments)}</span>
+        <span className="tool-label">
+          {toolLabel(step.tool_name, step.arguments)}
+        </span>
         {detail && <span className="tool-detail">{detail}</span>}
       </span>
       <span className="tool-status">{runningStatus}</span>

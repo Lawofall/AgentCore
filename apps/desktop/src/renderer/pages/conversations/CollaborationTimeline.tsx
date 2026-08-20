@@ -100,12 +100,7 @@ export function CollaborationTimelinePanel({
                     ),
                   )
                 }
-                onOpenFile={() =>
-                  navigate(
-                    "/files",
-                    filesFocusState(folderId),
-                  )
-                }
+                onOpenFile={() => navigate("/files", filesFocusState(folderId))}
               />
             ))}
           </ul>

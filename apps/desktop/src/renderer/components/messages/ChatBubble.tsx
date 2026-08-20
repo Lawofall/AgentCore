@@ -7,7 +7,10 @@ import {
 } from "@/components/ui/context-menu";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatMessageTimeOfDay } from "@/lib/format";
-import type { ImBubbleLayout } from "@/lib/imMessageLayout";
+import {
+  IM_BUBBLE_MAX_CLASS,
+  type ImBubbleLayout,
+} from "@/lib/imMessageLayout";
 import { notifyActionError } from "@/lib/toast";
 import {
   type ChatMessageDetail,
@@ -209,8 +212,8 @@ function MentionBody({
  * and own-bubble theming (primary background) would fight Markdown's fixed
  * foreground color.
  *
- * Width follows mainstream IM (WeChat / WhatsApp): shrink-wrap short messages,
- * cap at `min(75%, 24rem)` so wide threads don't paint full-row blue bars.
+ * Width follows mainstream IM (WhatsApp / Telegram): shrink-wrap short
+ * messages, cap at 75% of the session column (`IM_SESSION_COLUMN_CLASS`).
  * Long tokens use `overflow-wrap: anywhere` so URLs don't blow the cap.
  *
  * 富消息: image attachments render via {@link ChatImageGallery} (thumb grid +
@@ -447,7 +450,7 @@ export function ChatBubble({
   const content = (
     <div
       data-message-id={message.id}
-      className={`group flex w-fit max-w-[min(75%,24rem)] flex-col rounded-xl transition-colors ${
+      className={`group flex w-fit ${IM_BUBBLE_MAX_CLASS} flex-col rounded-xl transition-colors ${
         mine ? "ml-auto items-end" : "items-start"
       } ${layout.tightTop ? "-mt-1" : ""} ${
         highlighted ? "bg-primary/10 ring-1 ring-primary/30" : ""

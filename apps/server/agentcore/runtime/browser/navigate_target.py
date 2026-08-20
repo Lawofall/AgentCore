@@ -1,4 +1,4 @@
-"""Classify / rewrite ``browser_navigate`` URL targets.
+"""Classify / rewrite ``browser(action=navigate)`` URL targets.
 
 甲：桌面 Local Bridge —— 本会话工作区相对路径 → ``workspace://conv.{conv}/…``
 （desk host；与用户「完整预览」同源）；公网 http(s) / 已构 workspace:// 原样通过。

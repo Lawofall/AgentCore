@@ -114,10 +114,15 @@ function emailCodeValidityWindow(seconds: number): string {
   return `${round1(seconds / 3600)} 小时`;
 }
 
-/** Register code TTL hint — keep wording identical on desktop and mobile. */
-export function formatEmailCodeValidityHint(seconds: number): string {
-  const ttl = normalizeEmailCodeExpiresIn(seconds);
-  return `验证码 ${emailCodeValidityWindow(ttl)}内有效`;
+/** Combined send-code success line: prefix + existing TTL window (分/秒/时). */
+export function formatEmailCodeSentNotice(
+  seconds: number,
+  resent = false,
+): string {
+  const window = emailCodeValidityWindow(normalizeEmailCodeExpiresIn(seconds));
+  return resent
+    ? `已重新发送验证码，${window}内有效`
+    : `已发送验证码，${window}内有效`;
 }
 
 export function useResendCountdown(seconds = RESEND_COOLDOWN_SEC) {

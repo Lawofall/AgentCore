@@ -1,6 +1,6 @@
 """回合内 browser 大树投影：折叠旧 snapshot 的 elements / accessibility_tree。
 
-Within one ReAct turn, repeated ``browser_snapshot`` (and any ``browser_*`` result whose
+Within one ReAct turn, repeated ``browser(action=snapshot)`` (and any browser result whose
 ``untrusted_web_content`` carries an elements list or accessibility tree) re-pays those
 large trees every round. This module keeps only the most recent ``keep_recent`` results
 verbatim and strips the bulky tree fields from older ones — a PURE projection at
@@ -22,6 +22,7 @@ import json
 import re
 
 from agentcore.llm.provider.protocol import LLMMessage, llm_content_text
+from agentcore.runtime.browser.call_identity import is_browser_tool_name
 
 _TREE_KEYS = ("elements", "accessibility_tree")
 _REF_RE = re.compile(r"\[(e\d+)\]")
@@ -139,8 +140,9 @@ def project_omitted_browser_snapshots(
 ) -> list[LLMMessage]:
     """Keep the newest ``keep_recent`` browser tree results; omit trees on older ones.
 
-    Candidates: ``browser_*`` tool results whose output JSON contains ``elements`` or
-    ``accessibility_tree`` under ``untrusted_web_content`` (typically ``browser_snapshot``).
+    Candidates: browser tool results whose output JSON contains ``elements`` or
+    ``accessibility_tree`` under ``untrusted_web_content`` (typically snapshot).
+    Dual-recognizes live ``browser`` and pre-merge ``browser_*`` names.
 
     Each omitted stub gets ``ref_delta`` vs the chronologically next tree result
     (added/removed refs), so the model can compare without a second full tree.
@@ -160,7 +162,7 @@ def project_omitted_browser_snapshots(
         if info is None:
             continue
         name, _arguments = info
-        if not name.startswith("browser_"):
+        if not is_browser_tool_name(name):
             continue
         if not has_browser_tree_fields(llm_content_text(message.content)):
             continue

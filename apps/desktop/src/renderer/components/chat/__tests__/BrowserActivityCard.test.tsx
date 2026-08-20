@@ -96,7 +96,7 @@ function browserStep(
     kind: "tool",
     id,
     tool_name: over.tool ?? `browser_${over.action}`,
-    arguments: { url: over.url },
+    arguments: { url: over.url, action: over.action },
     result: "ok",
     display:
       over.withDisplay === false
@@ -127,6 +127,7 @@ function otherStep(id: string): ToolStep {
 
 describe("browser 聚合判定", () => {
   it("recognizes browser_* tool names", () => {
+    expect(isBrowserTool("browser")).toBe(true);
     expect(isBrowserTool("browser_navigate")).toBe(true);
     expect(isBrowserTool("browser_screenshot")).toBe(true);
     expect(isBrowserTool("file_write")).toBe(false);
@@ -144,6 +145,20 @@ describe("browser 聚合判定", () => {
     expect(isBrowserActivityGroup([nav])).toBe(false);
     // 混入非 browser 工具不聚合（走默认工具组 chevron）。
     expect(isBrowserActivityGroup([nav, otherStep("f1")])).toBe(false);
+  });
+
+  it("groups ≥2 unified browser(action=…) steps", () => {
+    const nav = browserStep("b1", {
+      action: "navigate",
+      url: "https://ex.com",
+      tool: "browser",
+    });
+    const click = browserStep("b2", {
+      action: "click",
+      url: "https://ex.com",
+      tool: "browser",
+    });
+    expect(isBrowserActivityGroup([nav, click])).toBe(true);
   });
 
   it("narrows only a well-formed browser display", () => {
@@ -257,6 +272,35 @@ describe("BrowserActivityCard · 卡渲染", () => {
     fireEvent.click(screen.getByText("浏览器 · 2 步"));
     // 无 display 的进行中步仍占一行（verb 由 tool_name 兜底）。
     expect(screen.getByText("Screenshot")).toBeTruthy();
+  });
+
+  it("live unified browser step takes verb from args.action, not slice(browser_)", () => {
+    const live = [
+      browserStep("b1", {
+        action: "navigate",
+        url: "https://example.com",
+        tool: "browser",
+        detail: "打开示例站",
+      }),
+      browserStep("b2", {
+        action: "screenshot",
+        url: "https://example.com",
+        tool: "browser",
+        withDisplay: false,
+        status: "running",
+      }),
+    ];
+    render(
+      <BrowserActivityCard
+        tools={live}
+        isStreaming={false}
+        conversationId="conv-1"
+      />,
+    );
+    fireEvent.click(screen.getByText("浏览器 · 2 步"));
+    expect(screen.getByText("Screenshot")).toBeTruthy();
+    expect(screen.queryByText("R")).toBeNull();
+    expect(screen.queryByText(/^browser$/i)).toBeNull();
   });
 });
 
@@ -392,6 +436,28 @@ describe("ToolLineGroup · browser 分派", () => {
         tools={[
           browserStep("b1", { action: "navigate", url: "https://ex.com" }),
           browserStep("b2", { action: "click", url: "https://ex.com" }),
+        ]}
+        isStreaming={false}
+        conversationId="conv-1"
+      />,
+    );
+    expect(screen.getByText("浏览器 · 2 步")).toBeTruthy();
+  });
+
+  it("routes ≥2 unified browser(action=…) steps to the activity card", () => {
+    render(
+      <ToolLineGroup
+        tools={[
+          browserStep("b1", {
+            action: "navigate",
+            url: "https://ex.com",
+            tool: "browser",
+          }),
+          browserStep("b2", {
+            action: "click",
+            url: "https://ex.com",
+            tool: "browser",
+          }),
         ]}
         isStreaming={false}
         conversationId="conv-1"

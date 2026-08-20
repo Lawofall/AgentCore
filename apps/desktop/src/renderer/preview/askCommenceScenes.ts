@@ -13,7 +13,7 @@ export const ASK_COMMENCE_SCENES: AskCommenceScene[] = [
     id: "ask-commence-v2",
     title: "Brief + Choose",
     intent:
-      "【已退役】题干与选项常驻（紧凑单行选项）；brief/起步计划/补充说明折叠；风格 pills 常驻一行。",
+      "【已退役】题干与选项常驻（紧凑单行选项）；brief/起步计划折叠；人话常驻。风格 pills 常驻一行。",
     paradigm: "Notion AI × Executive Summary",
   },
   {

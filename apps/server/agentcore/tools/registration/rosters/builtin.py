@@ -9,14 +9,7 @@ from __future__ import annotations
 
 def load_roster() -> tuple[type, ...]:
     from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
-    from agentcore.tools.builtin.browser import (
-        BrowserClickTool,
-        BrowserConsoleTool,
-        BrowserNavigateTool,
-        BrowserScrollTool,
-        BrowserSnapshotTool,
-        BrowserTypeTool,
-    )
+    from agentcore.tools.builtin.browser import BrowserTool
     from agentcore.tools.builtin.code_diagnostics import CodeDiagnosticsTool
     from agentcore.tools.builtin.code_execute import CodeExecuteTool
     from agentcore.tools.builtin.code_search import CodeSearchTool
@@ -72,13 +65,8 @@ def load_roster() -> tuple[type, ...]:
         CodeExecuteTool,
         # Long-running process face (CEO+worker · local_only · start 运行时升审批)
         TerminalTool,
-        # L3 团队浏览器：CEO+worker（screenshot 仍 worker-only，见 worker_only 册）
-        BrowserNavigateTool,
-        BrowserClickTool,
-        BrowserTypeTool,
-        BrowserScrollTool,
-        BrowserSnapshotTool,
-        BrowserConsoleTool,
+        # L3 团队浏览器：单一 ``browser``（GRANTABLE · action 政策表；screenshot 仅 worker）
+        BrowserTool,
         # Host 第三能力面：单一 ``host``（schema NEVER · action 政策表 · host_class）
         HostTool,
         # C1 silent read-only external mount (CEO+worker · desktop_online only)

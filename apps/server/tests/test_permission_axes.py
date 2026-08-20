@@ -207,7 +207,7 @@ def test_command_auto_skips_kickoff_and_local_exec_auto_pass():
     )
     assert (
         execution_tool_auto_passes(
-            _LocalBackend(), "browser_navigate", permission_axes=axes
+            _LocalBackend(), "browser", permission_axes=axes,
         )
         is True
     )
@@ -271,7 +271,7 @@ def test_less_interrupt_rules_semantics():
         "code_execute",
         "test_run",
         "terminal",
-        "browser_navigate",
+        "browser",
         "desktop_notify",
     ):
         assert (
@@ -288,7 +288,7 @@ def test_command_ask_no_execution_auto_pass():
     for tool in (
         "code_execute",
         "terminal",
-        "browser_navigate",
+        "browser",
         "desktop_notify",
     ):
         assert (

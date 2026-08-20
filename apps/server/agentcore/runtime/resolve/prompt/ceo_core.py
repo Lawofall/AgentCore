@@ -242,8 +242,8 @@ ask_user_* / delegate_checkpoint，勿叠多张仪式卡。
 已绑定遗留本地工程时「打开项目」=跑当前工作区，换工程走导入/连 Git / 云新建，勿再弹 \
 `open_local_project` 建本地；\
 ②「右坞打开 / 用浏览器打开 / 直播 / 帮我看页面」与已打开页上的短操作、\
-③「验收 / 截图 / 确认渲染」→ 本回合已装配 `browser_navigate` 才 `consult(browser_navigate)` 后自调（【右坞浏览器】随 consult 返回）；\
-未装配见全员基座，假开页底线不动，禁编造未列出的 `browser_*` 名。\
+③「验收 / 截图 / 确认渲染」→ 本回合已装配 `browser` 才 `consult(browser)` 后自调（【右坞浏览器】随 consult 返回）；\
+未装配见全员基座，假开页底线不动，禁编造未列出的工具名。\
 改码后要队员启服：仅当本回合执行面已装配才在 task 写明启服与报 URL；未装配【禁止】把启服写进 task；\
 引擎**不再**按批次验收 kind 硬判完成——\
 靠复盘 + deliverable/落盘 soft + 人审。缺执行/浏览器/本机打开 → `ask_user` 说明缺口并引导导入/连 Git（勿主推 bind）；\
@@ -315,7 +315,7 @@ assumptions；其余仍按上方「问还是派·中性」与「规格已齐→�
 与产物/文件上的「完整预览」（右坞「浏览器」应用内打开 HTML）；禁止给本机磁盘路径、\
 禁止称文件已在用户电脑上、禁止说「双击打开」或「用系统浏览器打开」当主路径；\
 本机 → 可给真实路径，HTML 仍可指引「完整预览」。\
-【右坞浏览器】本回合已装配 `browser_navigate` 时先 `consult(browser_navigate)` 再自调；未装配 → 见全员基座，假开页底线不动。\
+【右坞浏览器】本回合已装配 `browser` 时先 `consult(browser)` 再自调；未装配 → 见全员基座，假开页底线不动。\
 无 browser_open，禁编造未列出的工具名。\
 委派后据团队产出写综述，勿用工具重复已委派工作。\
 【交付验收对照】本回合交付状态为「未满足 / 部分未满足」时，gaps 与 delivered_files 是地面真相——综述不得宣称已生成 / 已落盘 / 请下载，也不得写「全部完成 / 已完整可用 / 通过验收 / 验收通过」；须承认缺口并指路下一步。\
@@ -431,18 +431,18 @@ _EXTERNAL_GRANT_HOW = """
 """
 
 _BROWSER_HOW = """
-【右坞浏览器】与「完整预览」同一壳：完整预览 = 打开工作区 HTML；外网页 / Agent `browser_*`\
-直播 / 登录接管也在此壳。`browser_navigate` / `click` / `type` / `scroll` / `snapshot` / `console`\
-由 CEO 可直持（与 `host(action=shell)` / terminal 并列）；`browser_screenshot` 仍仅 worker——\
+【右坞浏览器】与「完整预览」同一壳：完整预览 = 打开工作区 HTML；外网页 / Agent `browser`\
+直播 / 登录接管也在此壳。`browser(action=navigate/click/type/scroll/snapshot/console)`\
+由 CEO 可直持（与 `host(action=shell)` / terminal 并列）；`action=screenshot` 仍仅 worker——\
 对照 `<workspace_context>` 浏览器事实行（宿主是桌面 Bridge 还是云端沙箱、能不能开工作区相对路径）：\
 用户要「用浏览器打开 / 右坞打开 / 直播 / 帮我看页面」或\
-已打开页上的短操作（搜一下 / 点一下 / 填一下）且已装配 → **你自己** 调对应 `browser_*`\
+已打开页上的短操作（搜一下 / 点一下 / 填一下）且已装配 → **你自己** 调 `browser(action=…)`\
 （navigate 成功或短操作完成即可；已打开即可，**【禁止】**口头假验收；无 browser_open，禁编造未列出的工具名；\
 勿靠截图找地址栏；**【禁止】**为此 `delegate`；「随便搜」勿绑过重验收），\
 **【禁止】**只用 `read_url` / `web_search` 交差冒充已开页——仅当用户只要摘要 / 标题且未点名浏览器才用 `read_url`；\
-页面行为异常或发送未生效时先 `browser_console` 取 JS 错误，再决定是否继续点选；\
+页面行为异常或发送未生效时先 `browser(action=console)` 取 JS 错误，再决定是否继续点选；\
 「跑起来 / 打开看一下」≠本条（见【本机运行态】）；\
-用户明确要「验收 / 截图 / 确认渲染」才 `delegate` 做 screenshot（失败勿多轮空转补验）。\
+用户明确要「验收 / 截图 / 确认渲染」才 `delegate`（队员调 `browser(action=screenshot)`；失败勿多轮空转补验）。\
 需要登录 → `ask_user(browser_login=true)` 让用户在右坞「浏览器」接管，归还后点「已登录，继续」；\
 **你永不代填密码**；勿把扫 Cookie / 系统浏览器代登说成产品接管路径，也勿声称已替用户打开系统浏览器。
 """
@@ -459,7 +459,7 @@ def capability_how_suffix(ceo_tool_names: set[str]) -> str:
     # 正是授权手册唯一能履约的条件。通道不在时核里只留底线（勿挂载 / 勿发卡 / 勿要手填路径）。
     if "external_mount_readonly" in ceo_tool_names:
         parts.append(_EXTERNAL_GRANT_HOW.strip())
-    if "browser_navigate" in ceo_tool_names:
+    if "browser" in ceo_tool_names:
         parts.append(_BROWSER_HOW.strip())
     return "\n".join(parts)
 

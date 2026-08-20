@@ -4,6 +4,15 @@ import type { ChatMessageDetail } from "@/services/messaging";
 /** Same sender within this gap (ms) merges into one visual cluster. */
 export const IM_CLUSTER_GAP_MS = 5 * 60 * 1000;
 
+/**
+ * Desktop IM session column (messages + composer). 640px — distinct from the
+ * AI 对话页 reading column (`max-w-3xl` / 768px). Header stays full-pane.
+ */
+export const IM_SESSION_COLUMN_CLASS = "mx-auto w-full min-w-0 max-w-[40rem]";
+
+/** Bubble cap inside the session column (WhatsApp / Telegram). */
+export const IM_BUBBLE_MAX_CLASS = "max-w-[75%]";
+
 export type ImClusterPosition = "single" | "first" | "middle" | "last";
 
 export interface ImBubbleLayout {

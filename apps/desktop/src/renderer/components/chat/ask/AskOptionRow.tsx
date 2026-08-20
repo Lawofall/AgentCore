@@ -27,9 +27,9 @@ export type AskRow = {
   detail?: string;
   /** 行右侧灰色小字（如「推荐」）。彩色徽章已废弃，只走这里。 */
   hint?: string;
-  /** 取代左侧序号（「其他…」的笔、绑定文件夹的文件夹图标）。 */
+  /** 取代左侧序号（绑定文件夹的文件夹图标）。 */
   icon?: ReactNode;
-  /** 标签走占位色（「其他…」未启用时）。 */
+  /** 标签走占位色。 */
   muted?: boolean;
   selected: boolean;
   disabled?: boolean;

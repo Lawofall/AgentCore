@@ -934,11 +934,6 @@ function ProfileEditor({
               platformAvailable={platformAvailable}
             />
           )}
-          {/* 选主模型才用得上的取舍，放在决策点而不是分节抬头，列表页先见控件。 */}
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            多人协作（委派）对工具调用要求较高；失败可换更稳的主模型，或改用手写{" "}
-            <code className="text-xs">tasks</code>。
-          </p>
         </SettingField>
       </div>
 

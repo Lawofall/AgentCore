@@ -28,14 +28,8 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
     {
         # Host face — single ``host`` (action policy table).
         "host",
-        # Browser face — page drive; screenshot stays worker-only when assembled.
-        "browser_navigate",
-        "browser_click",
-        "browser_type",
-        "browser_scroll",
-        "browser_snapshot",
-        "browser_console",
-        "browser_screenshot",
+        # Browser face — single ``browser`` (action policy table).
+        "browser",
         # Long-running local processes.
         "terminal",
         # Desktop-only silent mount.
@@ -60,13 +54,7 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
 
 ON_DEMAND_SUMMARIES: dict[str, str] = {
     "host": "本机 Host（status/os_log/shell；面板/音频/服务/装包仅队员）",
-    "browser_navigate": "打开网页或工作区 HTML（短操作 CEO 自调，勿为此派工）",
-    "browser_click": "点击页面元素（须先 snapshot）",
-    "browser_type": "向页面输入（密码框硬拒）",
-    "browser_scroll": "滚动页面",
-    "browser_snapshot": "无障碍快照 + 元素 ref 表",
-    "browser_console": "页内 console / 未捕获异常",
-    "browser_screenshot": "截图验收（仅队员）",
+    "browser": "右坞浏览器（navigate/click/type/scroll/snapshot/console；screenshot 仅队员）",
     "terminal": "本机长驻进程启/停/读（dev server；禁改走 code_execute）",
     "external_mount_readonly": "静默只读挂载本机目录为 external/<别名>/",
     "md_to_docx": "工作区 .md 导出为同名 .docx",
@@ -83,17 +71,6 @@ ON_DEMAND_SUMMARIES: dict[str, str] = {
 
 # Consulting any member offers every assembled sibling in the same family.
 _FAMILIES: tuple[frozenset[str], ...] = (
-    frozenset(
-        {
-            "browser_navigate",
-            "browser_click",
-            "browser_type",
-            "browser_scroll",
-            "browser_snapshot",
-            "browser_console",
-            "browser_screenshot",
-        }
-    ),
     frozenset({"search_conversations", "read_conversation"}),
     frozenset({"md_to_docx", "md_to_pdf"}),
     frozenset({"create_folder", "delete_folder"}),
@@ -187,7 +164,7 @@ def _ceo_how_for(name: str) -> str:
         return _TERMINAL_RUNTIME_HOW.strip()
     if name == "host":
         return _HOST_HOW.strip()
-    if name.startswith("browser_"):
+    if name == "browser":
         return _BROWSER_HOW.strip()
     if name == "external_mount_readonly":
         return _EXTERNAL_GRANT_HOW.strip()

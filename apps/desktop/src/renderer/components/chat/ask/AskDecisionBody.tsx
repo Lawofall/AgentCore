@@ -38,13 +38,7 @@ import {
 } from "@/lib/registerLocalFolder";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { AskOption, AskQuestion } from "@/types/events";
-import {
-  ChevronRight,
-  FolderOpen,
-  FolderTree,
-  Loader2,
-  Pencil,
-} from "lucide-react";
+import { FolderOpen, FolderTree, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AskCardFooter, AskCardShell, AskSectionLabel } from "./AskCardShell";
@@ -87,8 +81,6 @@ export function AskDecisionBody({
   const [pickerFailure, setPickerFailure] = useState<PickerFailureState | null>(
     null,
   );
-  const [noteOpen, setNoteOpen] = useState(false);
-
   const canLocalFs = hasLocalFiles() && !!window.fsApi;
   const canBindAction = !!conversationId && !!onBindResolve && canLocalFs;
 
@@ -128,17 +120,18 @@ export function AskDecisionBody({
   };
 
   /**
-   * 「其他…」短允许表口头同意 → 同题 pending `grant_organize_folder`（hints 取自该选项）。
+   * 人话框短允许表口头同意 → 同题 pending `grant_organize_folder`（hints 取自该选项）。
+   * 仅当该题 listed 未勾选；已勾选 grant 仍走 {@link findPendingFolderOption}。
    * 禁对长文意图分类；未命中返回 null，Continue 走原 compose。
    */
   const findOralOrganizeGrant = (): {
     q: AskQuestion;
     opt: AskOption;
   } | null => {
+    if (!isOrganizeOralConsent(answer.note)) return null;
     for (const q of content.questions) {
       if (q.kind === "text") continue;
-      if (!answer.otherOn[q.id]) continue;
-      if (!isOrganizeOralConsent(answer.otherText[q.id] ?? "")) continue;
+      if ((answer.answers[q.id] ?? []).length > 0) continue;
       const opt = q.options.find((o) => o.action === "grant_organize_folder");
       if (opt) return { q, opt };
     }
@@ -282,7 +275,7 @@ export function AskDecisionBody({
    * 继续：普通选项 → 原 onContinue；选中 grant_* / bind_* / open_local_project /
    * register_local_project → 一键履约（对齐点选项行）。grant 无系统选文件夹；
    * 找不到则卡面失败、不提交口头授权。同 root 只读已挂仍须点允许走 organize 履约
-   *（禁止静默升写）。「其他…」命中整理短允许表 → 同真 grant（非纯文本冒充已授权）。
+   *（禁止静默升写）。人话框命中整理短允许表且 listed 未勾选 → 同真 grant（非纯文本冒充已授权）。
    * register 履约后 resume 本对话；open 开新会话不 resume。
    */
   const handleContinue = () => {
@@ -315,6 +308,9 @@ export function AskDecisionBody({
   const shellIcon = hasOrganizeGrantOption ? FolderTree : META.icon;
   const shellCta = organizePending ? ORGANIZE_CONFIRM_CTA : META.cta;
   const shellCtaIcon = organizePending ? FolderTree : META.ctaIcon;
+  const hasQuestions = content.questions.length > 0;
+  /** 无题：message 当唯一题干进壳标题。有题：不画总标题，题干在体内。 */
+  const shellTitle = hasQuestions ? undefined : content.question;
 
   const questionRows = (q: AskQuestion): AskRow[] => {
     const picked = answer.answers[q.id] ?? [];
@@ -365,15 +361,6 @@ export function AskDecisionBody({
         },
       };
     });
-    rows.push({
-      key: `${q.id}:__other__`,
-      label: "其他…",
-      icon: <Pencil size={12} />,
-      muted: !answer.otherOn[q.id],
-      selected: !!answer.otherOn[q.id],
-      disabled: busy || !!bindBusyLabel,
-      onSelect: () => answer.toggleOther(q),
-    });
     return rows;
   };
 
@@ -382,7 +369,7 @@ export function AskDecisionBody({
       variant="decision"
       icon={shellIcon}
       caption={shellCaption}
-      title={content.question}
+      title={shellTitle}
       extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
       footer={
         <AskCardFooter
@@ -414,48 +401,40 @@ export function AskDecisionBody({
           </div>
         )}
 
-        {content.questions.map((q) => (
-          <div key={q.id}>
-            <p className="px-2 text-xs font-medium leading-snug text-foreground">
-              {q.prompt}
-              {q.kind === "choice" && q.multiple && (
-                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                  可多选
-                </span>
-              )}
-            </p>
-            {q.kind === "text" ? (
-              <input
-                type="text"
-                value={(answer.answers[q.id] ?? [])[0] ?? ""}
-                onChange={(e) => answer.setText(q, e.target.value)}
-                disabled={busy}
-                placeholder={q.default || "填写你的答案"}
-                className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-foreground/25 focus:outline-none disabled:opacity-40"
-              />
-            ) : (
-              <>
+        {content.questions.map((q) => {
+          const stem =
+            content.questions.length === 1 && !q.prompt.trim()
+              ? content.question
+              : q.prompt;
+          return (
+            <div key={q.id}>
+              <p className="px-2 whitespace-pre-wrap text-sm font-semibold leading-snug text-foreground">
+                {stem}
+                {q.kind === "choice" && q.multiple && (
+                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                    可多选
+                  </span>
+                )}
+              </p>
+              {q.kind === "text" ? (
+                <input
+                  type="text"
+                  value={(answer.answers[q.id] ?? [])[0] ?? ""}
+                  onChange={(e) => answer.setText(q, e.target.value)}
+                  disabled={busy}
+                  placeholder={q.default || "填写你的答案"}
+                  className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-foreground/25 focus:outline-none disabled:opacity-40"
+                />
+              ) : (
                 <AskRowGroup
                   className="mt-1"
                   rows={questionRows(q)}
                   multiple={q.multiple}
                 />
-                {answer.otherOn[q.id] && (
-                  <input
-                    type="text"
-                    value={answer.otherText[q.id] ?? ""}
-                    onChange={(e) => answer.setOtherValue(q, e.target.value)}
-                    disabled={busy}
-                    // biome-ignore lint/a11y/noAutofocus: 用户点开「其他」才渲染此框，聚焦刚展开的字段是预期 UX。
-                    autoFocus
-                    placeholder="填写你的答案"
-                    className="mt-1.5 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-foreground/25 focus:outline-none disabled:opacity-40"
-                  />
-                )}
-              </>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
 
         {pickerFailure && (
           <div className="px-2">
@@ -470,32 +449,7 @@ export function AskDecisionBody({
         )}
 
         <div className="px-2">
-          <button
-            type="button"
-            onClick={() => setNoteOpen((v) => !v)}
-            aria-expanded={noteOpen}
-            className="flex w-full items-center gap-1.5 text-left"
-          >
-            <ChevronRight
-              size={13}
-              className={`shrink-0 text-muted-foreground transition-transform ${
-                noteOpen ? "rotate-90" : ""
-              }`}
-            />
-            <span className="shrink-0 text-xs text-muted-foreground">
-              补充说明
-            </span>
-            {!noteOpen && answer.note.trim() && (
-              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/70">
-                {answer.note.trim()}
-              </span>
-            )}
-          </button>
-          {noteOpen && (
-            <div className="mt-1.5 pl-5">
-              <CommenceNote answer={answer} disabled={busy} compact />
-            </div>
-          )}
+          <CommenceNote answer={answer} disabled={busy} compact />
         </div>
       </div>
     </AskCardShell>

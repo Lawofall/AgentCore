@@ -2,40 +2,6 @@
    styles.css. Co-located so this batch never touches the shared stylesheet. Light only. */
 
 /* --- Chat list rows --- */
-.im-display-hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 8px 8px 0;
-  padding: 10px 12px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--muted);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
-
-.im-display-hint p {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-}
-
-.im-display-hint-close {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  min-height: 32px;
-  padding: 0;
-  color: var(--muted);
-  background: transparent;
-  border: none;
-  box-shadow: none;
-}
-
 .im-row {
   display: flex;
   align-items: center;

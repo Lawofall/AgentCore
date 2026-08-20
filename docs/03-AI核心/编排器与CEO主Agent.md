@@ -34,7 +34,7 @@ CEO 是**管理者**（不是调查员）：主要持只读 / 检索工具，用
 | 开工前只读探路；团队跑完写简短概览 | 为简单对话支付规划税 |
 | 理解意图、拆任务、定角色与依赖（`depends_on`） | 复述各 worker 全文（细节由前端 run / 图视图展示） |
 
-工具结构分界：`approval=NEVER` → CEO 持有；`GRANTABLE` schema → 仅 worker——**GRANTABLE 例外**：① **`browser_navigate` / `click` / `type` / `scroll` / `snapshot`**（CEO+worker · `browser_class` · 有 Bridge/gVisor 才装配；captain 直调跳过审批；**`browser_screenshot` 仍仅 worker**）。另：**本地 `terminal`** 与 **`host`** 均为 schema `NEVER`、CEO 可持，运行时按 action 升审批（`terminal start` / `host` 的 GRANTABLE action 走 `host` 轴；worker-only action 拒并 `delegate`；禁 kickoff 静默授）——纯启服 / 短命令 / 本机观测，非改产物。动作表 → [工具 · Host](/docs/03-AI核心/工具与能力系统.md)。自研编排（否决 LangGraph / CrewAI 等）：编排是核心壁垒，须完全掌控。聊天优先 + 按需编排（否决「编排器唯一入口」——每条消息付编排税）。
+工具结构分界：`approval=NEVER` → CEO 持有；`GRANTABLE` schema → 仅 worker——**GRANTABLE 例外**：① **`browser(action=navigate|click|type|scroll|snapshot|console)`**（GRANTABLE · CEO+worker · `browser_class` · 有 Bridge/gVisor 才装配；captain 直调跳过审批；**`screenshot` 仍仅 worker**）。另：**本地 `terminal`** 与 **`host`** 均为 schema `NEVER`、CEO 可持，运行时按 action 升审批（`terminal start` / `host` 的 GRANTABLE action 走 `host` 轴；worker-only action 拒并 `delegate`；禁 kickoff 静默授）——纯启服 / 短命令 / 本机观测，非改产物。动作表 → [工具 · Host](/docs/03-AI核心/工具与能力系统.md)。自研编排（否决 LangGraph / CrewAI 等）：编排是核心壁垒，须完全掌控。聊天优先 + 按需编排（否决「编排器唯一入口」——每条消息付编排税）。
 
 **档位取舍**：档 2.5 = 结构取档 2（CEO 只读 + 窄例外；否决档 1 全能 CEO、档 3 纯编排 CEO）+ 路由按「活的规模与结构」细化。档 1 污染上下文、弱化团队心智；档 3 给高频轻量只读 / 纯启服加委派税。
 

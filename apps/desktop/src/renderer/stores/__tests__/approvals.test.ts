@@ -284,11 +284,47 @@ describe("isExecutionTool (工具审批 A+B · 主 CTA 偏向 turn grant)", () =
     expect(isExecutionTool("test_run")).toBe(true);
   });
 
+  it("covers exact browser and historical browser_* (screenshot 不单开例外)", () => {
+    expect(isExecutionTool("browser")).toBe(true);
+    expect(isExecutionTool("browser_navigate")).toBe(true);
+    expect(isExecutionTool("browser_screenshot")).toBe(true);
+    expect(isExecutionTool("browser_console")).toBe(true);
+  });
+
   it("excludes file-op tools", () => {
     expect(isExecutionTool("file_write")).toBe(false);
     expect(isExecutionTool("git")).toBe(false);
     for (const name of FILE_OP_TOOLS) {
       expect(isExecutionTool(name)).toBe(false);
     }
+  });
+});
+
+describe("autoApproveSiblings · browser 一次允许覆盖全部 action", () => {
+  it("approve_always on browser covers screenshot sibling (no screenshot exception)", () => {
+    const siblings = autoApproveSiblings(
+      [
+        card({
+          approvalId: "a1",
+          toolCallId: "a1",
+          toolName: "browser",
+          arguments: { action: "navigate", url: "https://example.com" },
+        }),
+        card({
+          approvalId: "a2",
+          toolCallId: "a2",
+          toolName: "browser",
+          arguments: { action: "screenshot" },
+        }),
+      ],
+      card({
+        approvalId: "a1",
+        toolCallId: "a1",
+        toolName: "browser",
+        arguments: { action: "navigate", url: "https://example.com" },
+      }),
+      "approve_always",
+    );
+    expect(siblings.map((s) => s.approvalId)).toEqual(["a2"]);
   });
 });

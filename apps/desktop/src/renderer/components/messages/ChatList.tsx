@@ -8,7 +8,6 @@ import {
 import { BookUser, SquarePen } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ChatListItem } from "./ChatListItem";
-import { DisplayNameHint } from "./DisplayNameHint";
 import { chatDisplayName } from "./chatDisplay";
 
 interface Props {
@@ -76,8 +75,6 @@ export function ChatList({
           </SimpleTooltip>
         </div>
       </div>
-
-      <DisplayNameHint />
 
       {chats.length > 0 && (
         <div className="px-3 pb-2">

@@ -1,6 +1,9 @@
 import { Button, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { buildImThreadItems } from "@/lib/imMessageLayout";
+import {
+  IM_SESSION_COLUMN_CLASS,
+  buildImThreadItems,
+} from "@/lib/imMessageLayout";
 import { notifyActionError, notifyInfo } from "@/lib/toast";
 import { useStickToBottom } from "@/lib/useStickToBottom";
 import type { ChatMessageDetail } from "@/services/messaging";
@@ -281,8 +284,10 @@ export function ChatThread({ chatId }: Props) {
       </div>
 
       {isRequest && (
-        <div className="mx-4 mt-3 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-          这是一条消息请求，回复即代表接受。
+        <div className={`${IM_SESSION_COLUMN_CLASS} px-4 pt-3`}>
+          <div className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            这是一条消息请求，回复即代表接受。
+          </div>
         </div>
       )}
 
@@ -291,7 +296,10 @@ export function ChatThread({ chatId }: Props) {
           {/* min-h (never h) so the empty placeholder can center against the
               viewport while this box still GROWS with the transcript — a pinned
               height would freeze the size ResizeObserver watches and kill stick-to-bottom. */}
-          <div ref={contentRef} className="flex min-h-full flex-col">
+          <div
+            ref={contentRef}
+            className={`${IM_SESSION_COLUMN_CLASS} flex min-h-full flex-col`}
+          >
             {hasMessages ? (
               <div className="flex flex-col gap-2 px-4 py-4">
                 {hasMoreOlder && (
@@ -400,13 +408,15 @@ export function ChatThread({ chatId }: Props) {
       </div>
 
       {!isOfficial && (
-        <ChatComposer
-          chatId={chatId}
-          replyTarget={replyTarget}
-          onClearReply={() => setReplyTarget(null)}
-          editTarget={editTarget}
-          onClearEdit={() => setEditTarget(null)}
-        />
+        <div className={IM_SESSION_COLUMN_CLASS}>
+          <ChatComposer
+            chatId={chatId}
+            replyTarget={replyTarget}
+            onClearReply={() => setReplyTarget(null)}
+            editTarget={editTarget}
+            onClearEdit={() => setEditTarget(null)}
+          />
+        </div>
       )}
 
       {showInfo && (

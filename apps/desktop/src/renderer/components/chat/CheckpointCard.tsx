@@ -46,22 +46,16 @@ export function CheckpointCard({
   return timelineIntentionalEmpty();
 }
 
-/** Flatten per-question picks (+「其他」自定义) into resume `selected`. */
+/** Flatten per-question listed picks into resume `selected`. */
 export function collectAskSelected(
   content: AskUserContent,
   answers: Record<string, string[]>,
-  otherOn: Record<string, boolean>,
-  otherText: Record<string, string>,
 ): string[] {
   const out: string[] = [];
   for (const q of content.questions) {
     for (const v of answers[q.id] ?? []) {
       const t = v.trim();
       if (t) out.push(t);
-    }
-    if (otherOn[q.id]) {
-      const custom = (otherText[q.id] ?? "").trim();
-      if (custom) out.push(custom);
     }
   }
   return out;
@@ -115,7 +109,7 @@ export function AskUserCard({
     setSubmitting(decision);
     const baseSelected =
       decision === "continue" && carriesSelected
-        ? collectAskSelected(content, ans.answers, ans.otherOn, ans.otherText)
+        ? collectAskSelected(content, ans.answers)
         : [];
     const selected = baseSelected;
     const composed =

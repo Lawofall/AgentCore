@@ -312,7 +312,9 @@ function hostPrimaryArg(args: Record<string, unknown>): string | null {
     const raw = args.facets;
     if (Array.isArray(raw)) {
       const facets = raw
-        .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+        .filter(
+          (f): f is string => typeof f === "string" && f.trim().length > 0,
+        )
         .map((f) => f.trim());
       if (facets.length > 0) return `status ${facets.join(", ")}`;
     }
@@ -326,6 +328,28 @@ function primaryArg(
   args: Record<string, unknown>,
 ): string | null {
   if (toolName === "git") return gitPrimaryArg(args);
+  if (toolName === "browser") {
+    const action = typeof args.action === "string" ? args.action.trim() : "";
+    const url = typeof args.url === "string" ? args.url.trim() : "";
+    const ref = typeof args.ref === "string" ? args.ref.trim() : "";
+    if (action === "navigate") {
+      return url ? `navigate ${truncateSnippet(url)}` : "navigate";
+    }
+    if (action === "click") return ref ? `click ${ref}` : "click";
+    if (action === "type") {
+      const text = typeof args.text === "string" ? args.text.trim() : "";
+      return text
+        ? `type ${truncateSnippet(text)}`
+        : ref
+          ? `type ${ref}`
+          : "type";
+    }
+    if (action === "scroll") {
+      const dy = args.dy;
+      return typeof dy === "number" ? `scroll ${dy}px` : "scroll";
+    }
+    return action || url || null;
+  }
   if (toolName === "host") return hostPrimaryArg(args);
   if (toolName === "host_package_install") {
     return hostPackageSnippet(args);

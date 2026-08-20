@@ -223,6 +223,7 @@ _TOOL_FACE: dict[str, str] = {
     "host": "本机 Host",
     "host_shell": "运行本机命令",
     "test_run": "运行测试",
+    "browser": "浏览网页",
     "browser_navigate": "浏览网页",
     "git": "版本管理",
     "md_to_docx": "导出 Word",
@@ -320,7 +321,12 @@ def _all_completed_terminal_output(session: CoordinationSession) -> str:
 
 def _tool_face(tool_name: str) -> str:
     name = (tool_name or "").strip()
-    return _TOOL_FACE.get(name) or "有一步操作"
+    mapped = _TOOL_FACE.get(name)
+    if mapped:
+        return mapped
+    from agentcore.runtime.browser.call_identity import browser_tool_face
+
+    return browser_tool_face(name) or "有一步操作"
 
 
 def _node_status_face(status: str) -> str:

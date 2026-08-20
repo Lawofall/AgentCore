@@ -578,15 +578,21 @@ def _tool_result_failed(content: str) -> bool:
     return "<!--agentcore:tool_failed-->" in (content or "")
 
 def _browser_navigate_failed_in_transcript(transcript: list[LLMMessage]) -> bool:
-    """True when any ``browser_navigate`` result carries the tool-failed trailer."""
+    """True when a navigate-shaped browser result carries the tool-failed trailer.
+
+    Dual-recognizes live ``browser`` + ``action=navigate`` and pre-merge
+    ``browser_navigate``.
+    """
     if not transcript:
         return False
+    from agentcore.runtime.browser.call_identity import is_browser_navigate_call
+
     calls = _tool_call_args_map(transcript)
     for msg in transcript:
         if msg.role != "tool" or not msg.tool_call_id:
             continue
-        name, _ = calls.get(msg.tool_call_id, ("", ""))
-        if name != "browser_navigate":
+        name, args_json = calls.get(msg.tool_call_id, ("", ""))
+        if not is_browser_navigate_call(name, args_json):
             continue
         if _tool_result_failed(llm_content_text(msg.content)):
             return True
@@ -671,7 +677,7 @@ def _verify_failure_rows(transcript: list[LLMMessage]) -> list[dict[str, str]]:
     if _browser_navigate_failed_in_transcript(transcript):
         out.append(
             {
-                "description": "浏览器验证失败（browser_navigate 未成功打开目标页）",
+                "description": "浏览器验证失败（未成功打开目标页）",
                 "reason": _VERIFY_FAILED_REASON,
             }
         )
@@ -711,7 +717,7 @@ def collect_verify_failure_gaps(
 ) -> list[tuple[str, list[dict[str, str]]]]:
     """Per-COMPLETED-worker verify-tool failure gaps (可用性诚实性 · 丙).
 
-    Scans worker transcripts for ``browser_navigate`` / ``test_run`` / verify-shaped
+    Scans worker transcripts for browser navigate / ``test_run`` / verify-shaped
     ``code_execute``·``terminal`` failures. Each hit becomes a blocking gap row with
     ``reason=verify_failed`` (or ``verify_budget`` for idle/disaster timeout incomplete)
     so ``build_delivery_status`` cannot stay ``delivered``.

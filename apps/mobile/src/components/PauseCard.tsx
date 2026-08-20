@@ -2,10 +2,6 @@ import {
   type ResolveInteractionBody,
   resolveInteraction,
 } from "@/api/interaction";
-import {
-  markLocalSettlement,
-  noteRemoteSettlementFromReceipt,
-} from "@/lib/remoteSettlement";
 // The interactive pause card — the actionable surface for a turn blocked on the user
 // (前端技术与架构 §七 · 交互式暂停放行). The conformance-checked fold computes
 // `interactions[]`; this turns an approval leaf into buttons that POST the decision to
@@ -16,6 +12,11 @@ import {
 // durable ResumeCard (the single cold resume path).
 //
 // This is mobile's own UI (cross-platform-frontend.mdc: zero shared business components).
+import { toolLabel } from "@/components/assistantLabels";
+import {
+  markLocalSettlement,
+  noteRemoteSettlementFromReceipt,
+} from "@/lib/remoteSettlement";
 import type { ApprovalDecision } from "@agentcore/contract-types";
 import type { ProjectedInteraction } from "@agentcore/protocol-conformance";
 import { type ReactNode, useState } from "react";
@@ -32,6 +33,7 @@ const TOOL_LABELS: Record<string, string> = {
   code_execute: "执行代码",
   delete_folder: "删除文件夹",
   host: "本机 Host",
+  browser: "浏览器",
 };
 
 /** 本轮内所有文件改动 — 对齐后端 ``approval_class_tool_names()``
@@ -91,11 +93,21 @@ function hostPrimaryArg(args: Record<string, unknown>): string | null {
   return action;
 }
 
+function browserPrimaryArg(args: Record<string, unknown>): string | null {
+  const url = typeof args.url === "string" ? args.url.trim() : "";
+  if (url) return url;
+  const ref = typeof args.ref === "string" ? args.ref.trim() : "";
+  if (ref) return ref;
+  const text = typeof args.text === "string" ? args.text.trim() : "";
+  return text || null;
+}
+
 function primaryArg(
   args: Record<string, unknown>,
   toolName?: string,
 ): string | null {
   if (toolName === "host") return hostPrimaryArg(args);
+  if (toolName === "browser") return browserPrimaryArg(args);
   // delete_folder 只带 folder_id；``folder_name`` 由后端按权威名册补，
   // 不是模型自报——一串 UUID 用户审不了。
   for (const key of ["folder_name", "path", "file_path", "command", "code"]) {
@@ -182,7 +194,10 @@ function ApprovalBody({
   onDecide: (decision: ApprovalDecision) => void;
 }) {
   const headline = primaryArg(pending.arguments, pending.toolName);
-  const label = TOOL_LABELS[pending.toolName] ?? pending.toolName;
+  const label =
+    pending.toolName === "browser" || pending.toolName.startsWith("browser_")
+      ? toolLabel(pending.toolName, pending.arguments)
+      : (TOOL_LABELS[pending.toolName] ?? pending.toolName);
   const circuitBreakerHint =
     typeof pending.arguments.circuit_breaker_hint === "string"
       ? pending.arguments.circuit_breaker_hint.trim()

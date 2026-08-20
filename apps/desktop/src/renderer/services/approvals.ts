@@ -58,23 +58,20 @@ export function isHostInstallPackageApproval(view: ApprovalView): boolean {
   if (view.toolName !== "host") return false;
   const action = view.arguments?.action;
   return (
-    typeof action === "string" && action.trim().toLowerCase() === "install_package"
+    typeof action === "string" &&
+    action.trim().toLowerCase() === "install_package"
   );
 }
 
 export const PER_CALL_TOOLS: ReadonlySet<string> = new Set();
 
-/** Align with backend ``execution_class_tool_names()`` (code / test / terminal + browser_*). */
+/** Align with backend ``execution_class_tool_names()`` (code / test / terminal + `browser`).
+ * 一次允许覆盖全部 action（含 screenshot），与 host 同构；旧 `browser_*` 仅历史卡。 */
 export const EXECUTION_TOOLS: ReadonlySet<string> = new Set([
   "code_execute",
   "test_run",
   "terminal",
-  "browser_navigate",
-  "browser_click",
-  "browser_type",
-  "browser_scroll",
-  "browser_snapshot",
-  "browser_screenshot",
+  "browser",
 ]);
 
 export function isExecutionTool(name: string): boolean {

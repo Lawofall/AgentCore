@@ -97,7 +97,7 @@ def _delivery_text_implies_verify_gap(text: str) -> bool:
         return True
     if "预算耗尽" in t or "验证未完成" in t:
         return True
-    return "browser_navigate 未成功" in t
+    return "未成功打开目标页" in t or "browser_navigate 未成功" in t
 
 
 def enforce_cloud_web_verify_honesty(content: str) -> str:

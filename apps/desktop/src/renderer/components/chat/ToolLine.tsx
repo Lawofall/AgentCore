@@ -111,6 +111,7 @@ const PEEK_SUPPRESSED = new Set([
   "desktop_notify",
   // 本机 Host：标题已自解释；正文是 untrusted JSON，勿 peek 刷屏。
   "host",
+  // 单工具 browser 的 peek 由 isBrowserTool 覆盖（精确名 + 历史 browser_*）。
   // 历史会话：旧 host_* 仍抑制 peek。
   "host_ping",
   "host_info",

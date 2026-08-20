@@ -343,7 +343,7 @@ tasks[] 上点名上一批队员的 run_id：让原作者接着干填 `continue_
 启动开发服务器不算验绿；纯 prose 交卷勿宣称已验。\
 ② 用户要【启服 / 打开看一下】→ 意图梯度：仅启服·看活且 CEO `terminal=已装配` → \
 CEO 自己 `terminal` 启服报 URL（**【禁止】**为此派验证员/browser）；\
-用户明确「右坞打开 / 浏览器打开」→ CEO 自己 `browser_*`；\
+用户明确「右坞打开 / 浏览器打开」→ CEO 自己 `browser(action=…)`；\
 明确要「验收/截图」才 `delegate` 做 screenshot。\
 ③ 纯写文件 → `deliverable.form=files` / `artifacts`（未落盘仅 soft）。\
 **Office/文档** → 须真目标后缀；【禁止】用脚本/说明冒充已可打开的 Office；\

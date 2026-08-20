@@ -99,9 +99,11 @@ beforeEach(() => {
 });
 
 describe("isBrowserTool", () => {
-  it("matches the browser_* family only", () => {
+  it("matches exact browser plus historical browser_* names", () => {
+    expect(isBrowserTool("browser")).toBe(true);
     expect(isBrowserTool("browser_navigate")).toBe(true);
     expect(isBrowserTool("browser_screenshot")).toBe(true);
+    expect(isBrowserTool("browser_console")).toBe(true);
     expect(isBrowserTool("read_url")).toBe(false);
     expect(isBrowserTool("web_search")).toBe(false);
   });
@@ -138,6 +140,16 @@ describe("conversationHasBrowserActivity", () => {
     ).toBe(true);
   });
 
+  it("is true once a worker called the unified browser tool", () => {
+    seedWorkerToolCall(MID, "browser");
+    expect(
+      conversationHasBrowserActivity(
+        [assistantMessage(MID)],
+        useExecutionStore.getState().byId,
+      ),
+    ).toBe(true);
+  });
+
   it("is true when CEO process has browser_navigate only", () => {
     expect(
       conversationHasBrowserActivity(
@@ -148,6 +160,26 @@ describe("conversationHasBrowserActivity", () => {
               id: "tc-ceo",
               tool_name: "browser_navigate",
               arguments: { url: "https://example.com" },
+              result: null,
+              status: "running",
+            },
+          ]),
+        ],
+        {},
+      ),
+    ).toBe(true);
+  });
+
+  it("is true when CEO process has unified browser only", () => {
+    expect(
+      conversationHasBrowserActivity(
+        [
+          assistantMessage(MID, [
+            {
+              kind: "tool",
+              id: "tc-ceo",
+              tool_name: "browser",
+              arguments: { action: "navigate", url: "https://example.com" },
               result: null,
               status: "running",
             },

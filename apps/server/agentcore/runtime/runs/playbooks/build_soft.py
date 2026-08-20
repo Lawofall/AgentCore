@@ -107,8 +107,8 @@ def repair_code(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
             "role": "诊断员",
             "task": (
                 f"短诊断【{problem}】。{target_hint}"
-                "运行时空白/挂载/渲染复现：先 browser 证据（browser_navigate + "
-                "browser_console + snapshot），再 ≤少数目标文件；无栈时可组件二分，"
+                "运行时空白/挂载/渲染复现：先 browser 证据（browser(action=navigate) + "
+                "browser(action=console) + snapshot），再 ≤少数目标文件；无栈时可组件二分，"
                 "勿空等用户 F12。"
                 "最多读少数相关文件 / grep；输出：可消费短文——根因一句话 + 拟改路径与改法"
                 "（勿空话一两句交差）；"
@@ -141,8 +141,9 @@ def repair_code(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
                 f"验证【{problem}】修补是否生效。约定验收：`{verify}`——"
                 "若约定是 CLI 命令 → 外环用 test_run（check=command，command 填该约定命令；或 "
                 "check=test/typecheck/build）跑通且 exit 0；"
-                "若约定是页面/UI 复现（白屏/挂载/渲染）→ 优先 browser_navigate + snapshot 取证"
-                "（需截图证据才 browser_screenshot）；"
+                "若约定是页面/UI 复现（白屏/挂载/渲染）→ "
+                "优先 browser(action=navigate) + snapshot 取证"
+                "（需截图证据才 browser(action=screenshot)）；"
                 "【禁止】用慢 typecheck / 全仓 tsc 冒充白屏修好；"
                 "【不要】把慢 build/全量 tsc 塞进 code_execute；"
                 "全量 typecheck/build/`tsc -b` 仅当约定本就是 CLI 验绿时"

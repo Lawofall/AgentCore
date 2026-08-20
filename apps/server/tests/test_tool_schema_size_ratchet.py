@@ -28,7 +28,11 @@ from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.resolve.ceo_surface import measure_openai_tool_chars
 from agentcore.tools.builtin.ask_user.tool import AskUserTool
-from agentcore.tools.builtin.browser import BROWSER_TOOL_CLASSES
+from agentcore.tools.builtin.browser import (
+    _MUTATION_VERIFY_TAIL,
+    BROWSER_TOOL_CLASSES,
+    BrowserTool,
+)
 from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_DESCRIPTION,
     DELEGATE_PARAMETERS,
@@ -40,15 +44,9 @@ from agentcore.tools.protocol import ToolSchema
 
 # 桌面 CEO 回合会同时挂上的那一份（ask_user 取桌面态——它比 web 态更胖）。
 _CAPS: dict[str, int] = {
-    "browser_navigate": 1010,
-    "browser_click": 870,
-    "browser_type": 1050,
-    "browser_scroll": 630,
-    "browser_snapshot": 590,
-    "browser_console": 560,
-    "browser_screenshot": 450,
+    "browser": 1750,
     "git": 2400,
-    "terminal": 1440,
+    "terminal": 1450,
     "delegate": 4770,
     "ask_user": 2750,
 }
@@ -159,17 +157,11 @@ def test_deleted_delegate_fields_have_no_negative_list():
 
 def test_shared_mutation_tail_does_not_repeat_per_tool_receipts():
     """四个 mutation 工具共用的尾巴不再逐个点名 typed / clicked——各自那行自己说。"""
-    from agentcore.tools.builtin.browser import (
-        _MUTATION_VERIFY_TAIL,
-        BrowserClickTool,
-        BrowserTypeTool,
-    )
-
     assert "typed.matched" not in _MUTATION_VERIFY_TAIL
     assert "clicked.was_disabled" not in _MUTATION_VERIFY_TAIL
-    # 验收口径本身不许丢：谁看哪个回执字段，留在各自工具描述里。
-    assert "typed.matched" in BrowserTypeTool().schema.description
-    assert "clicked.was_disabled" in BrowserClickTool().schema.description
+    desc = BrowserTool().schema.description
+    assert "typed.matched" in desc
+    assert "clicked.was_disabled" in desc
 
 
 def test_git_policy_matrix_lives_only_in_tool_description():

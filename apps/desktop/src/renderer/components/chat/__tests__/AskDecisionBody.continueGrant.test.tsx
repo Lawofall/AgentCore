@@ -4,8 +4,11 @@
  * 找不到 → 卡面失败文案（≠ cancelled 静默）。
  */
 import { AskDecisionBody } from "@/components/chat/ask/AskDecisionBody";
-import type { AskUserContent } from "@/components/chat/ask/AskUserFields";
-import { useAskAnswer } from "@/components/chat/ask/AskUserFields";
+import {
+  ASK_NOTE_PLACEHOLDER,
+  type AskUserContent,
+  useAskAnswer,
+} from "@/components/chat/ask/AskUserFields";
 import { hasLocalFiles } from "@/lib/capabilities";
 import {
   DESKTOP_DOWNLOAD_URL,
@@ -381,7 +384,16 @@ describe("AskDecisionBody organize confirm card", () => {
     expect(screen.getByText("将整理：桌面 › 咨询")).toBeTruthy();
   });
 
-  it("其他… short affirm fulfills organize grant (not bare compose)", async () => {
+  /** 预选 grant 行点下去会履约；先点「先不整理」再点一次清空 listed，才算未勾选。 */
+  function clearListedThenTypeNote(value: string) {
+    fireEvent.click(screen.getByRole("button", { name: /先不整理/ }));
+    fireEvent.click(screen.getByRole("button", { name: /先不整理/ }));
+    fireEvent.change(screen.getByPlaceholderText(ASK_NOTE_PLACEHOLDER), {
+      target: { value },
+    });
+  }
+
+  it("note short affirm fulfills organize grant when listed unchecked", async () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async (_answer: string) => {});
     pickAndGrantOrganizeFolder.mockResolvedValue({
@@ -399,10 +411,7 @@ describe("AskDecisionBody organize confirm card", () => {
         onBindResolve={onBindResolve}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /其他…/ }));
-    fireEvent.change(screen.getByPlaceholderText("填写你的答案"), {
-      target: { value: "可以" },
-    });
+    clearListedThenTypeNote("可以");
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
     await waitFor(() => {
@@ -419,7 +428,7 @@ describe("AskDecisionBody organize confirm card", () => {
     expect(composed).toContain("授权整理该目录");
   });
 
-  it("其他… ordinary text does not trigger organize grant", async () => {
+  it("note ordinary text does not trigger organize grant", async () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
 
@@ -430,10 +439,7 @@ describe("AskDecisionBody organize confirm card", () => {
         onBindResolve={onBindResolve}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /其他…/ }));
-    fireEvent.change(screen.getByPlaceholderText("填写你的答案"), {
-      target: { value: "先放一放，下周再说" },
-    });
+    clearListedThenTypeNote("先放一放，下周再说");
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
     expect(pickAndGrantOrganizeFolder).not.toHaveBeenCalled();
@@ -441,7 +447,7 @@ describe("AskDecisionBody organize confirm card", () => {
     expect(onBindResolve).not.toHaveBeenCalled();
   });
 
-  it("其他… short affirm failure stays on card via setBindError", async () => {
+  it("note short affirm failure stays on card via setBindError", async () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
     pickAndGrantOrganizeFolder.mockResolvedValue({
@@ -457,10 +463,7 @@ describe("AskDecisionBody organize confirm card", () => {
         onBindResolve={onBindResolve}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /其他…/ }));
-    fireEvent.change(screen.getByPlaceholderText("填写你的答案"), {
-      target: { value: "允许整理" },
-    });
+    clearListedThenTypeNote("允许整理");
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
     await waitFor(() => {
@@ -497,7 +500,7 @@ describe("AskDecisionBody organize confirm card", () => {
 describe("AskDecisionBody generic option one-line", () => {
   afterEach(cleanup);
 
-  it("does not paint model option second sentences; header stays", () => {
+  it("does not paint model option second sentences; message omitted when questions exist", () => {
     const content: AskUserContent = {
       question: "用哪种格式？\n背景说明应保留",
       assumptions: [],
@@ -516,13 +519,103 @@ describe("AskDecisionBody generic option one-line", () => {
       ],
     };
     render(<Harness content={content} />);
-    expect(screen.getByText(/用哪种格式？/)).toBeTruthy();
-    expect(screen.getByText(/背景说明应保留/)).toBeTruthy();
+    expect(screen.queryByText(/用哪种格式？/)).toBeNull();
+    expect(screen.queryByText(/背景说明应保留/)).toBeNull();
     expect(screen.getByText("选一种")).toBeTruthy();
     expect(screen.getByText("Markdown")).toBeTruthy();
     expect(screen.getByText("PDF")).toBeTruthy();
     expect(screen.queryByText("一周内可验证")).toBeNull();
     expect(screen.queryByText("方便打印")).toBeNull();
+  });
+});
+
+describe("AskDecisionBody question stems", () => {
+  afterEach(cleanup);
+
+  it("does not paint message as a banner title when questions exist", () => {
+    const content: AskUserContent = {
+      question: "总标题不要画",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "这一题",
+          kind: "choice",
+          options: [{ label: "A" }, { label: "B" }],
+          multiple: false,
+          default: "A",
+        },
+      ],
+    };
+    render(<Harness content={content} />);
+    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.queryByText("总标题不要画")).toBeNull();
+    expect(screen.getByText("这一题")).toBeTruthy();
+  });
+
+  it("paints message as the sole stem when there are no questions", () => {
+    render(
+      <Harness
+        content={{
+          question: "选 A 还是 B？",
+          assumptions: [],
+          questions: [],
+        }}
+      />,
+    );
+    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.getByText("选 A 还是 B？")).toBeTruthy();
+    expect(screen.getAllByText("选 A 还是 B？")).toHaveLength(1);
+  });
+
+  it("paints each question prompt and not the message title", () => {
+    const content: AskUserContent = {
+      question: "总标题不要画",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "第一题",
+          kind: "choice",
+          options: [{ label: "A1" }],
+          multiple: false,
+          default: "",
+        },
+        {
+          id: "q1",
+          prompt: "第二题",
+          kind: "choice",
+          options: [{ label: "B1" }],
+          multiple: false,
+          default: "",
+        },
+      ],
+    };
+    render(<Harness content={content} />);
+    expect(screen.queryByText("总标题不要画")).toBeNull();
+    expect(screen.getByText("第一题")).toBeTruthy();
+    expect(screen.getByText("第二题")).toBeTruthy();
+  });
+
+  it("falls back to message when the only question has an empty prompt", () => {
+    const content: AskUserContent = {
+      question: "用这句话当题干",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "",
+          kind: "choice",
+          options: [{ label: "A" }, { label: "B" }],
+          multiple: false,
+          default: "A",
+        },
+      ],
+    };
+    render(<Harness content={content} />);
+    expect(screen.getByText("用这句话当题干")).toBeTruthy();
+    expect(screen.getAllByText("用这句话当题干")).toHaveLength(1);
+    expect(screen.getByText("A")).toBeTruthy();
   });
 });
 

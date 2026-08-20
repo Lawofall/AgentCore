@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * IM bubble width: shrink-wrap + dual cap (industry IM), not stretch-to-75%.
+ * IM bubble width: shrink-wrap + 75% of the session column, not a 24rem rem cap.
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -49,12 +49,12 @@ function renderBubble(message: ChatMessageDetail, mine: boolean) {
 }
 
 describe("ChatBubble width", () => {
-  it("shrink-wraps with min(75%, 24rem) cap on the row (mine)", () => {
+  it("shrink-wraps with 75% cap on the row (mine)", () => {
     const { container } = renderBubble(baseMessage(), true);
     const row = container.querySelector("[data-message-id='m1']");
     expect(row?.className).toContain("w-fit");
-    expect(row?.className).toContain("max-w-[min(75%,24rem)]");
-    expect(row?.className).not.toMatch(/(?:^|\s)max-w-\[75%\](?:\s|$)/);
+    expect(row?.className).toContain("max-w-[75%]");
+    expect(row?.className).not.toContain("24rem");
   });
 
   it("shrink-wraps peer text bubble without flex-1 stretch", () => {
@@ -72,7 +72,7 @@ describe("ChatBubble width", () => {
     );
     const row = container.querySelector("[data-message-id='m1']");
     expect(row?.className).toContain("w-fit");
-    expect(row?.className).toContain("max-w-[min(75%,24rem)]");
+    expect(row?.className).toContain("max-w-[75%]");
     const textBubble = row?.querySelector(".whitespace-pre-wrap");
     expect(textBubble?.className).toContain("w-fit");
     expect(textBubble?.className).toContain("max-w-full");

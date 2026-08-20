@@ -64,8 +64,8 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  // 浏览器版没有桌面顶栏（AppShell 已隐藏），品牌 / 折叠按钮 / 搜索改由侧栏顶部承载。
-  // 桌面 & 离线预览下这里不渲染（它们仍有顶栏）。
+  // 浏览器版没有桌面顶栏（AppShell 已隐藏），品牌 / 折叠按钮改由侧栏顶部承载。
+  // 搜索假入口两端都在侧栏（桌面顶栏不再放）。桌面 & 离线预览仍用顶栏放品牌/折叠。
   const webClient = isWebClient();
 
   // 「对话」(route "/") 既是「新建对话」动作、又兼作对话区的区段指示：仅在「没有具体会话被
@@ -115,45 +115,40 @@ export function Sidebar() {
         />
       )}
 
-      {/* 浏览器版头部：品牌 + 折叠按钮 + 紧凑搜索（替代被隐藏的桌面顶栏）。折叠成图标条时
-          按钮仍在，展开时显示品牌，两种状态都够得着。 */}
+      {/* 浏览器无顶栏：品牌 + 折叠钮放侧栏顶。桌面品牌/折叠仍在 TitleBar。 */}
       {webClient && (
-        <>
-          <div className="space-y-2 px-2 pt-2">
-            <div
-              className={`flex items-center gap-1 ${collapsed ? "justify-center" : "px-1"}`}
-            >
-              {!collapsed && (
-                <span className="flex flex-1 items-center gap-1.5 text-sidebar-foreground">
-                  <BrandMark size="sm" />
-                  {import.meta.env.DEV && (
-                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                      DEV
-                    </span>
-                  )}
-                </span>
-              )}
-              <IconButton
-                tone="sidebar"
-                onClick={toggleCollapsed}
-                aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
-              >
-                {collapsed ? (
-                  <PanelLeft size={16} />
-                ) : (
-                  <PanelLeftClose size={16} />
+        <div className="px-2 pt-2">
+          <div
+            className={`flex items-center gap-1 ${collapsed ? "justify-center" : "px-1"}`}
+          >
+            {!collapsed && (
+              <span className="flex flex-1 items-center gap-1.5 text-sidebar-foreground">
+                <BrandMark size="sm" />
+                {import.meta.env.DEV && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                    DEV
+                  </span>
                 )}
-              </IconButton>
-            </div>
-
-            <SearchTrigger collapsed={collapsed} onClick={() => openSearch()} />
+              </span>
+            )}
+            <IconButton
+              tone="sidebar"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
+            >
+              {collapsed ? (
+                <PanelLeft size={16} />
+              ) : (
+                <PanelLeftClose size={16} />
+              )}
+            </IconButton>
           </div>
-          <div className="mx-3 mt-2 border-t border-sidebar-border" />
-        </>
+        </div>
       )}
 
-      {/* Navigation */}
+      {/* 搜索假入口与主导航同一栈（字段感靠浅底 + ⌘K，不是单独成块/分隔线）。 */}
       <nav className="space-y-0.5 px-2 pt-2 pb-2">
+        <SearchTrigger collapsed={collapsed} onClick={() => openSearch()} />
         {NAV_ITEMS.map((item) => {
           const active = isNavActive(item.route);
           const showBadge = item.route === "/messages" && unread > 0;

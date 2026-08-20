@@ -26,8 +26,8 @@ export const ORGANIZE_CONFIRM_CAPTION = "整理确认 · 允许后可写回";
 export const ORGANIZE_CONFIRM_CTA = "允许整理";
 
 /**
- * 「其他…」口头同意短允许表（精确匹配，非意图分类 / 不扫长文）。
- * 命中 → 与点「允许整理」同一次真 grant；未命中保持原 compose。
+ * 人话框口头同意短允许表（精确匹配，非意图分类 / 不扫长文）。
+ * 命中且该题 listed 未勾选 → 与点「允许整理」同一次真 grant；未命中保持原 compose。
  * → 双模式工作区 §六口头同意闭环
  */
 const ORGANIZE_ORAL_CONSENT = new Set([
@@ -50,7 +50,7 @@ function normalizeOralConsentText(raw: string): string {
     .trim();
 }
 
-/** True when「其他…」提交字面命中整理口头同意短允许表. */
+/** True when人话框提交字面命中整理口头同意短允许表. */
 export function isOrganizeOralConsent(text: string): boolean {
   const normalized = normalizeOralConsentText(text);
   if (!normalized) return false;

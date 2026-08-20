@@ -1303,6 +1303,31 @@ def _failed_verify_tsc_transcript():
     ]
 
 
+def _failed_browser_unified_transcript():
+    from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
+
+    return [
+        LLMMessage(
+            role="assistant",
+            tool_calls=[
+                ToolCall(
+                    id="nav2",
+                    type="function",
+                    function=ToolCallFunction(
+                        name="browser",
+                        arguments='{"action":"navigate","url":"https://example.com"}',
+                    ),
+                )
+            ],
+        ),
+        LLMMessage(
+            role="tool",
+            content="浏览器操作失败：连接超时\n<!--agentcore:tool_failed-->",
+            tool_call_id="nav2",
+        ),
+    ]
+
+
 def test_verify_failed_browser_navigate_depresses_delivered():
     """丙：COMPLETED + browser_navigate 失败 → verify_failed，不得 delivered。"""
     plan = _plan(RunSpec(run_id="w1", task="打开验收", role="质检"))
@@ -1319,7 +1344,26 @@ def test_verify_failed_browser_navigate_depresses_delivered():
     assert payload is not None
     assert payload["state"] == "partial"
     assert any(g.get("reason") == "verify_failed" for g in payload["gaps"])
-    assert any("browser_navigate" in g["description"] for g in payload["gaps"])
+    assert any("未成功打开目标页" in g["description"] for g in payload["gaps"])
+
+
+def test_verify_failed_browser_action_navigate_depresses_delivered():
+    """丙：COMPLETED + browser(action=navigate) 失败 → verify_failed。"""
+    plan = _plan(RunSpec(run_id="w1", task="打开验收", role="质检"))
+    results = {
+        "w1": RunState(
+            phase=RunPhase.COMPLETED,
+            content="已尝试打开",
+            files_touched=["site/index.html"],
+            file_acceptance=_accepted("site/index.html"),
+            transcript=_failed_browser_unified_transcript(),
+        )
+    }
+    payload = build_delivery_status(plan, results, execution_id="e-vf-nav-new")
+    assert payload is not None
+    assert payload["state"] == "partial"
+    assert any(g.get("reason") == "verify_failed" for g in payload["gaps"])
+    assert any("未成功打开目标页" in g["description"] for g in payload["gaps"])
 
 
 def test_verify_failed_test_run_depresses_delivered():

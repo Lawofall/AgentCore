@@ -220,7 +220,7 @@ describe("ModelSettings (profiles + providers)", () => {
     expect(screen.queryByText("模型 deepseek-v4-pro")).toBeNull();
     expect(screen.getAllByTestId("provider-card")).toHaveLength(2);
     expect(screen.getByTestId("profiles-section")).toBeTruthy();
-    expect(screen.getByText(/多人协作（委派）对工具调用要求较高/)).toBeTruthy();
+    expect(screen.queryByText(/多人协作（委派）对工具调用要求较高/)).toBeNull();
     expect(screen.getByText("GLM-5.2")).toBeTruthy();
     expect(screen.getByText("写作强档")).toBeTruthy();
     expect(screen.getByText("账号默认")).toBeTruthy();

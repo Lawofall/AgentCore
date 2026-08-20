@@ -256,7 +256,7 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
     verdict: "ported",
     surface: "ResumeCard",
     reason:
-      "协议折入 ResumeCard；ask intent 专用面已对等（decision/kickoff compose+其他；proposal_pick/risk_ack 行选；organize_plan/daily_review 勾选墙）；本机目录 action 手机不可能履约故禁用",
+      "协议折入 ResumeCard；ask intent 专用面已对等（decision/kickoff compose+常驻人话；proposal_pick/risk_ack 行选；organize_plan/daily_review 勾选墙）；本机目录 action 手机不可能履约故禁用",
   },
   checkpoint_resolved: {
     verdict: "simplified",
@@ -437,7 +437,7 @@ export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
     verdict: "ported",
     surface: "ResumeCard",
     reason:
-      "ask intent 专用面已对等进 ResumeCard（decision/kickoff compose+其他；proposal/risk 行选；organize/daily 勾选墙）；本机目录 action 手机禁用",
+      "ask intent 专用面已对等进 ResumeCard（decision/kickoff compose+常驻人话；proposal/risk 行选；organize/daily 勾选墙）；本机目录 action 手机禁用",
   },
   TeamPreviewCard: {
     verdict: "ported",
@@ -546,7 +546,7 @@ export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
   "ask/AskDecisionBody": {
     verdict: "ported",
     surface:
-      "ResumeCard · decision/kickoff（default 预选 + compose 答复 +「其他」逃逸；本机目录 action → LocalPickerFailureCard unavailable）",
+      "ResumeCard · decision/kickoff（default 预选 + compose 答复 + 常驻人话；本机目录 action → LocalPickerFailureCard unavailable）",
   },
   "ask/AskCommenceKickoff": {
     verdict: "internal",
@@ -576,7 +576,7 @@ export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
   "ask/AskUserFields": {
     verdict: "ported",
     surface:
-      "ResumeCard 内嵌 default 预选 +「其他」逃逸 + composeAnswer（答复模型 α）；无独立 AskUserFields 面",
+      "ResumeCard 内嵌 default 预选 + 常驻人话 + composeAnswer（答复模型 α）；无独立 AskUserFields 面",
   },
   "ask/LocalPickerFailureCard": {
     verdict: "ported",

@@ -93,8 +93,6 @@ describe("composeAnswer with bind_local_folder pick", () => {
           formatBindLocalFolderAnswer("绑定本机执行环境", "AgentCore-desktop"),
         ],
       },
-      {},
-      {},
       "",
     );
     expect(text).toContain("绑定本机执行环境（AgentCore-desktop）");
@@ -107,8 +105,6 @@ describe("composeAnswer with bind_local_folder pick", () => {
       {
         q0: [formatOpenLocalFolderAnswer("打开本机文件夹", "AgentCore")],
       },
-      {},
-      {},
       "",
     );
     expect(text).toContain(
@@ -122,14 +118,22 @@ describe("composeAnswer with bind_local_folder pick", () => {
       {
         q0: [formatRegisterLocalFolderAnswer("登记本机文件夹", "AgentCore")],
       },
-      {},
-      {},
       "",
     );
     expect(text).toContain(
       "登记本机文件夹（AgentCore · 已登记为本机文件夹，仍在本对话）",
     );
     expect(text).not.toContain("新会话");
+  });
+
+  it("empty picks + note does not stack 按你的默认", () => {
+    const withDefault: AskUserContent = {
+      ...content,
+      questions: [{ ...content.questions[0], default: "继续用云端" }],
+    };
+    const text = composeAnswer(withDefault, { q0: [] }, "我想自己定");
+    expect(text).toContain("· 补充：我想自己定");
+    expect(text).not.toContain("按你的默认");
   });
 });
 

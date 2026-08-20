@@ -31,9 +31,9 @@ describe("toolDetail · 标题参数", () => {
   });
 
   it("host 按 action 出细节，不把 action 当通用回落串", () => {
-    expect(toolDetail({ action: "shell", command: "Get-Process" }, "host")).toBe(
-      "Get-Process",
-    );
+    expect(
+      toolDetail({ action: "shell", command: "Get-Process" }, "host"),
+    ).toBe("Get-Process");
     expect(
       toolDetail(
         { action: "install_package", manager: "winget", package_id: "Git.Git" },
@@ -41,6 +41,14 @@ describe("toolDetail · 标题参数", () => {
       ),
     ).toBe("winget Git.Git");
     expect(toolDetail({ action: "status" }, "host")).toBe("");
+  });
+
+  it("browser 按 url / ref 出细节，不把 action 当标题", () => {
+    expect(
+      toolDetail({ action: "navigate", url: "https://example.com" }, "browser"),
+    ).toBe("https://example.com");
+    expect(toolDetail({ action: "click", ref: "e12" }, "browser")).toBe("e12");
+    expect(toolDetail({ action: "snapshot" }, "browser")).toBe("");
   });
 
   it("wait 的 reason 不进标题（仅记日志，不当作用户正文）", () => {
@@ -66,6 +74,16 @@ describe("toolLabel", () => {
       "Install package",
     );
     expect(toolLabel("host_shell")).toBe("Host shell");
+  });
+
+  it("browser 按 action 出中文标签；旧 browser_* 仅历史回放", () => {
+    expect(toolLabel("browser")).toBe("浏览器");
+    expect(toolLabel("browser", { action: "navigate" })).toBe("打开网页");
+    expect(toolLabel("browser", { action: "click" })).toBe("点击");
+    expect(toolLabel("browser", { action: "screenshot" })).toBe("截图");
+    expect(toolLabel("browser", { action: "zoom" })).toBe("浏览器 zoom");
+    expect(toolLabel("browser_navigate")).toBe("打开网页");
+    expect(toolLabel("browser_screenshot")).toBe("截图");
   });
 });
 

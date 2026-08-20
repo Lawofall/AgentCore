@@ -1,7 +1,9 @@
 // @vitest-environment node
 
 import {
+  IM_BUBBLE_MAX_CLASS,
   IM_CLUSTER_GAP_MS,
+  IM_SESSION_COLUMN_CLASS,
   buildImThreadItems,
   computeBubbleLayout,
 } from "@/lib/imMessageLayout";
@@ -133,5 +135,13 @@ describe("buildImThreadItems", () => {
     });
 
     vi.useRealTimers();
+  });
+});
+
+describe("IM session column", () => {
+  it("caps the desktop thread at 40rem, distinct from AI max-w-3xl", () => {
+    expect(IM_SESSION_COLUMN_CLASS).toContain("max-w-[40rem]");
+    expect(IM_SESSION_COLUMN_CLASS).not.toContain("max-w-3xl");
+    expect(IM_BUBBLE_MAX_CLASS).toBe("max-w-[75%]");
   });
 });

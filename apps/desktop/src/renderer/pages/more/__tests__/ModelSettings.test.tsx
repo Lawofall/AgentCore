@@ -221,7 +221,6 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     expect(screen.getByText("模型组合")).toBeTruthy();
     expect(screen.getByText(/主模型必填，其余槽位可留空/)).toBeTruthy();
-    // 选主模型才用得上的取舍已下沉到编辑器内的决策点，列表页先见控件。
     expect(screen.queryByText(/多人协作（委派）对工具调用要求较高/)).toBeNull();
     expect(screen.getByText("GLM-5.2")).toBeTruthy();
     expect(screen.getByText("办公")).toBeTruthy();

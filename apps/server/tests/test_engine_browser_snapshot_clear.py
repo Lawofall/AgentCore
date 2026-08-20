@@ -228,6 +228,37 @@ def test_omit_helper_preserves_small_fields():
     assert "elements" not in data["untrusted_web_content"]
 
 
+def test_unified_browser_name_folds_like_legacy_snapshot():
+    """Live ``browser`` + action=snapshot is a tree candidate; old name still works."""
+    msgs: list[LLMMessage] = [LLMMessage(role="user", content="go")]
+    msgs += [
+        LLMMessage(
+            role="assistant",
+            content=None,
+            tool_calls=[
+                ToolCall(
+                    id="s0",
+                    function=ToolCallFunction(
+                        name="browser", arguments='{"action":"snapshot"}'
+                    ),
+                )
+            ],
+        ),
+        LLMMessage(
+            role="tool",
+            content=_snapshot_payload(
+                elements="[e1] old", aria="- document v1", version=1
+            ),
+            tool_call_id="s0",
+        ),
+    ]
+    msgs += _snapshot_pair("s1", version=2, elements="[e2] new")
+    out = project_omitted_browser_snapshots(msgs, keep_recent=1)
+    old = json.loads(_tool_content(out, "s0"))
+    assert old["untrusted_web_content"].get("omitted") is True
+    assert "elements" not in old["untrusted_web_content"]
+
+
 def test_build_request_window_applies_projection():
     msgs: list[LLMMessage] = [LLMMessage(role="user", content="go")]
     msgs += _snapshot_pair("s0", version=1, elements="[e1] old")

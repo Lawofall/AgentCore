@@ -23,6 +23,7 @@ import {
 import { useState } from "react";
 import { BrowserLoginDecisionCard } from "./BrowserLoginDecisionCard";
 import {
+  ASK_NOTE_PLACEHOLDER,
   AskNoteField,
   AskQuestionFields,
   type AskUserContent,
@@ -363,7 +364,7 @@ function PendingEscalation({
               disabled={busy}
               placeholder={
                 hasStructured
-                  ? "可选 · 补充说明"
+                  ? ASK_NOTE_PLACEHOLDER
                   : "输入你的决定（留空则点「按假设继续」）"
               }
             />

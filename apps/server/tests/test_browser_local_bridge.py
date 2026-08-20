@@ -28,7 +28,7 @@ from agentcore.runtime.browser.local_session import (
     open_local_bridge_session,
 )
 from agentcore.runtime.browser.registry import BrowserSessionRegistry
-from agentcore.tools.builtin.browser import BrowserNavigateTool, BrowserSnapshotTool
+from agentcore.tools.builtin.browser import BrowserTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.browser.protocol import BrowserSessionError, BrowserSessionRequest
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -318,8 +318,8 @@ async def test_tool_navigate_via_fake_bridge_updates_registry(fake_bridge, tmp_p
         user_id="u1",
         conversation_id="c-local",
     )
-    tool = BrowserNavigateTool(registry=reg)
-    result = await tool.execute({"url": "https://example.com/"}, ctx)
+    tool = BrowserTool(registry=reg)
+    result = await tool.execute({"action": "navigate", "url": "https://example.com/"}, ctx)
     assert result.success, result.output
     infos = reg.list_by_conversation("c-local")
     assert len(infos) == 1
@@ -355,8 +355,8 @@ async def test_tool_host_unavailable_when_bridge_returns_503(fake_bridge, tmp_pa
         user_id="u1",
         conversation_id="c-local",
     )
-    tool = BrowserNavigateTool(registry=reg)
-    result = await tool.execute({"url": "https://example.com/"}, ctx)
+    tool = BrowserTool(registry=reg)
+    result = await tool.execute({"action": "navigate", "url": "https://example.com/"}, ctx)
     assert not result.success
     assert result.metadata and result.metadata.get("code") == "host_unavailable"
 
@@ -451,10 +451,12 @@ async def test_tool_mid_turn_401_maps_to_bridge_unauthorized(fake_bridge, tmp_pa
         user_id="u1",
         conversation_id="c-local",
     )
-    nav = await BrowserNavigateTool(registry=reg).execute({"url": "https://example.com/"}, ctx)
+    nav = await BrowserTool(registry=reg).execute(
+        {"action": "navigate", "url": "https://example.com/"}, ctx
+    )
     assert nav.success, nav.error
 
-    snap = await BrowserSnapshotTool(registry=reg).execute({}, ctx)
+    snap = await BrowserTool(registry=reg).execute({"action": "snapshot"}, ctx)
     assert not snap.success
     assert snap.metadata and snap.metadata.get("code") == BRIDGE_UNAUTHORIZED_CODE
     assert "host_unavailable" not in (snap.error or "")

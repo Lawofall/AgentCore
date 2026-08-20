@@ -62,6 +62,42 @@ describe("tool_use_end browser display → upsertServerSession", () => {
     expect(useBrowserSessionsStore.getState().activePageId).toBe(page?.id);
   });
 
+  it("upserts when tool_name is the unified browser", () => {
+    useBrowserSessionsStore.getState().ensureBlankPage(CID);
+
+    handleExecutionEvent(
+      {
+        type: "tool_use_end",
+        timestamp: "",
+        payload: {
+          tool_call_id: "tc-unified",
+          tool_name: "browser",
+          result: "{}",
+          status: "success",
+          display: {
+            kind: "browser",
+            action: "click",
+            url: "https://example.com/app",
+            title: "App",
+            session_id: "sess-unified",
+            host_kind: "sandbox",
+          },
+        },
+      },
+      { conversationId: CID, source: "server" },
+    );
+
+    const page = useBrowserSessionsStore
+      .getState()
+      .pages.find((p) => p.serverSessionId === "sess-unified");
+    expect(page).toMatchObject({
+      url: "https://example.com/app",
+      title: "App",
+      hostKind: "sandbox",
+      serverSessionId: "sess-unified",
+    });
+  });
+
   it("skips upsert when session_id missing", () => {
     handleExecutionEvent(
       {

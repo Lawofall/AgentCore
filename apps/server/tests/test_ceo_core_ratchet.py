@@ -58,7 +58,7 @@ _RESIDENT_CAP = 24330
 _GATED_MANUALS: tuple[tuple[str, str], ...] = (
     ("terminal", "wait_for"),
     ("host", "通识长文当交付"),
-    ("browser_navigate", "ask_user(browser_login=true)"),
+    ("browser", "ask_user(browser_login=true)"),
     ("external_mount_readonly", "【授权后发现】"),
     ("external_mount_readonly", "先写工作区"),
 )

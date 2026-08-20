@@ -18,23 +18,19 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ThinkingDots } from "./message-bubble/Thinking";
-import { TOOL_META } from "./message-bubble/constants";
+import { toolMeta } from "./message-bubble/constants";
 
 type ToolStep = Extract<ProcessStep, { kind: "tool" }>;
 
-/** A single browser step's action-verb chrome. Reuses the shared TOOL_META icon/label
- * (keyed `browser_<action>`) so the per-step verb and the tool row stay in sync; an
- * unknown (newer-backend) verb degrades to a Globe + a Title-cased label. */
+/** A single browser step's action-verb chrome. Reuses {@link toolMeta} (`browser` +
+ * `args.action`) so the per-step verb and the tool row stay in sync; an unknown
+ * (newer-backend) verb degrades to a Globe + a Title-cased label. */
 function browserActionMeta(action: string): {
   Icon: LucideIcon;
   label: string;
 } {
-  const known = TOOL_META[`browser_${action}`];
-  if (known) return known;
-  const label = action
-    ? action.charAt(0).toUpperCase() + action.slice(1)
-    : "Step";
-  return { Icon: Globe, label };
+  if (!action) return { Icon: Globe, label: "Step" };
+  return toolMeta("browser", { action });
 }
 
 /** True when a tool-group is ≥2 consecutive browser steps → render as one activity card
@@ -65,10 +61,25 @@ interface BrowserStepView {
   frame?: string;
 }
 
+/** Verb for a live (no-display) browser step: `display.action` / `args.action` first.
+ * Historical `browser_<action>` names fall back to the suffix; never `slice` the
+ * unified name `"browser"` (that would yield an empty verb, not an action). */
+function browserStepAction(t: ToolStep): string {
+  if (isBrowserDisplay(t.display)) return t.display.action;
+  const fromArgs =
+    typeof t.arguments.action === "string" ? t.arguments.action.trim() : "";
+  if (fromArgs) return fromArgs;
+  if (t.tool_name.startsWith("browser_")) {
+    return t.tool_name.slice("browser_".length);
+  }
+  return "";
+}
+
 /** Build the card's step models FROM each step's durable `display` (so a reload /
  * journal replay rebuilds the card verbatim). A step with no display yet (live, before
- * its tool_use_end) keeps a slot derived from the call — the verb from `browser_<action>`
- * and the url from the call arg — so the list doesn't jump when the display lands. */
+ * its tool_use_end) keeps a slot derived from the call — the verb from `display.action`
+ * / `args.action` (historical `browser_*` suffix as last resort) and the url from the
+ * call arg — so the list doesn't jump when the display lands. */
 function browserStepsFromTools(tools: ToolStep[]): BrowserStepView[] {
   return tools.map((t) => {
     if (isBrowserDisplay(t.display)) {
@@ -82,9 +93,7 @@ function browserStepsFromTools(tools: ToolStep[]): BrowserStepView[] {
         frame: t.display.frame,
       };
     }
-    const action = isBrowserTool(t.tool_name)
-      ? t.tool_name.slice("browser_".length)
-      : t.tool_name;
+    const action = browserStepAction(t);
     const url = typeof t.arguments.url === "string" ? t.arguments.url : "";
     return { id: t.id, action, status: t.status, url };
   });

@@ -87,12 +87,8 @@ export function AskCommenceV3({ content }: { content: AskUserContent }) {
                 index={step + 1}
                 numbered={false}
                 answer={answer.answers[q.id] ?? []}
-                otherOn={answer.otherOn[q.id] ?? false}
-                otherText={answer.otherText[q.id] ?? ""}
                 disabled={busy}
                 onToggle={(opt) => answer.toggleChoice(q, opt)}
-                onToggleOther={() => answer.toggleOther(q)}
-                onSetOther={(v) => answer.setOtherValue(q, v)}
                 optionLayout="card"
                 emphasizePrompt
                 optionSize="lg"

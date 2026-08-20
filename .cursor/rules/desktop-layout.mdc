@@ -16,8 +16,9 @@ alwaysApply: false
 | content | `max-w-4xl mx-auto` | 详情、表单 |
 | canvas | `max-w-[1200px] mx-auto` | 列表、文件管理 |
 | 对话页 | `max-w-3xl mx-auto` | 消息区 + 输入区（768px） |
+| IM 会话列 | `max-w-[40rem] mx-auto` | 消息页右栏：消息区 + 输入区（640px；≠ 对话页） |
 
-自有布局豁免：对话页、文件页、设置页、全屏页不走 content/canvas 梯度。
+自有布局豁免：对话页、文件页、设置页、全屏页、消息页两栏壳不走 content/canvas 梯度。消息页右栏内走 IM 会话列。
 
 ## 禁止
 

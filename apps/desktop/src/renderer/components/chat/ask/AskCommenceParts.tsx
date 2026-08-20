@@ -12,21 +12,17 @@ import {
 import { organizeConfirmDetail } from "@/lib/grantFolderHints";
 import type { AskAssumption, AskOption, AskQuestion } from "@/types/events";
 import { Check, FolderOpen, FolderTree, Loader2 } from "lucide-react";
-import type { AskTone } from "./AskUserFields";
+import { ASK_NOTE_PLACEHOLDER, type AskTone } from "./AskUserFields";
 
 /** Kickoff option selection uses primary so chosen cards read clearly vs idle. */
 export const COMMENCE_TONE = interactiveCheckpointTone.primary;
 
 export type AskAnswerState = {
   answers: Record<string, string[]>;
-  otherOn: Record<string, boolean>;
-  otherText: Record<string, string>;
   note: string;
   setNote: (v: string) => void;
   toggleChoice: (q: AskQuestion, opt: string) => void;
   setText: (q: AskQuestion, value: string) => void;
-  toggleOther: (q: AskQuestion) => void;
-  setOtherValue: (q: AskQuestion, value: string) => void;
   presetCount: number;
 };
 
@@ -87,7 +83,7 @@ export function CommenceNote({
   answer,
   disabled,
   compact = false,
-  placeholder = "有补充可以写在这里",
+  placeholder = ASK_NOTE_PLACEHOLDER,
   tone = COMMENCE_TONE,
 }: {
   answer: Pick<AskAnswerState, "note" | "setNote">;
@@ -264,13 +260,9 @@ export function ChoiceQuestion({
   index,
   numbered,
   answer,
-  otherOn,
-  otherText,
   disabled,
   onToggle,
   onSetText,
-  onToggleOther,
-  onSetOther,
   optionLayout = "row",
   emphasizePrompt = false,
   optionSize = "md",
@@ -285,13 +277,9 @@ export function ChoiceQuestion({
   index: number;
   numbered: boolean;
   answer: string[];
-  otherOn: boolean;
-  otherText: string;
   disabled: boolean;
   onToggle: (opt: string) => void;
   onSetText?: (v: string) => void;
-  onToggleOther: () => void;
-  onSetOther: (v: string) => void;
   optionLayout?: "row" | "card" | "compact";
   emphasizePrompt?: boolean;
   optionSize?: "md" | "lg";
@@ -431,31 +419,7 @@ export function ChoiceQuestion({
                   />
                 );
               })}
-              <Button
-                variant="ghost"
-                disabled={disabled}
-                onClick={onToggleOther}
-                className={`h-auto w-full justify-start text-left text-xs font-normal disabled:opacity-40 ${
-                  compact
-                    ? "rounded-lg border px-2.5 py-1.5"
-                    : "rounded-xl border px-3 py-2"
-                } ${otherOn ? tone.optActive : tone.optIdle}`}
-              >
-                其他…
-              </Button>
             </div>
-            {otherOn && (
-              <input
-                type="text"
-                value={otherText}
-                onChange={(e) => onSetOther(e.target.value)}
-                disabled={disabled}
-                // biome-ignore lint/a11y/noAutofocus: user opened「其他」— focus the new field.
-                autoFocus
-                placeholder="填写你的答案"
-                className={`w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none disabled:opacity-40 ${tone.focus}`}
-              />
-            )}
           </div>
         )}
       </div>

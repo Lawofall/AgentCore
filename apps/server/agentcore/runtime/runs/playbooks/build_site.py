@@ -117,7 +117,7 @@ def _website_qa_task(
         "【视觉 QA·P1c】运行时在 web_quality hard 通过后自动多视口截图 → "
         "独立 VisionReader critic（对照 DESIGN.md + anti-slop）；"
         "有 critical findings 时至多 2 轮定向修补（str_replace/file_append）；"
-        "无 browser_screenshot 或无 VisionReader 时产物明示『未目验』，"
+        "无 browser(action=screenshot) 或无 VisionReader 时产物明示『未目验』，"
         "【禁止】谎称视觉 QA 通过。"
         f"用 file_write 落盘 `{_BUILD_WEBSITE_QA}`："
         "通过项 / 缺陷 / 局限声明（含视觉是否目验）；只报告不重写整站"

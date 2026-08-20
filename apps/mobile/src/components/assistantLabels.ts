@@ -64,7 +64,15 @@ const TOOL_LABEL: Record<string, string> = {
   handoff: "Handoff",
   wait: "Wait",
   host: "Host",
-  // 历史会话回放：旧 host_* 键只供展示。
+  browser: "浏览器",
+  // 历史会话回放：旧 browser_* / host_* 键只供展示。
+  browser_navigate: "打开网页",
+  browser_click: "点击",
+  browser_type: "输入",
+  browser_scroll: "滚动",
+  browser_snapshot: "页面快照",
+  browser_console: "控制台",
+  browser_screenshot: "截图",
   host_ping: "Host ping",
   host_info: "Host info",
   host_audio_devices: "Audio devices",
@@ -90,6 +98,17 @@ const HOST_ACTION_LABEL: Record<string, string> = {
   install_package: "Install package",
 };
 
+/** 同构 `HOST_ACTION_LABEL`：单一 `browser(action=…)` 的中文上表。 */
+const BROWSER_ACTION_LABEL: Record<string, string> = {
+  navigate: "打开网页",
+  click: "点击",
+  type: "输入",
+  scroll: "滚动",
+  snapshot: "页面快照",
+  console: "控制台",
+  screenshot: "截图",
+};
+
 function hostActionOf(args?: Record<string, unknown>): string {
   return args && typeof args.action === "string" ? args.action.trim() : "";
 }
@@ -102,6 +121,11 @@ export const toolLabel = (
     const action = hostActionOf(args);
     if (action) return HOST_ACTION_LABEL[action] ?? `Host ${action}`;
     return "Host";
+  }
+  if (name === "browser") {
+    const action = hostActionOf(args);
+    if (action) return BROWSER_ACTION_LABEL[action] ?? `浏览器 ${action}`;
+    return "浏览器";
   }
   return TOOL_LABEL[name] ?? name;
 };
@@ -212,13 +236,24 @@ function hostToolDetail(args: Record<string, unknown>): string {
     const facets = args.facets;
     if (Array.isArray(facets)) {
       const names = facets
-        .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+        .filter(
+          (f): f is string => typeof f === "string" && f.trim().length > 0,
+        )
         .map((f) => f.trim());
       if (names.length > 0) return names.join(", ");
     }
     return "";
   }
   return action;
+}
+
+function browserToolDetail(args: Record<string, unknown>): string {
+  const url = typeof args.url === "string" ? args.url.trim() : "";
+  if (url) return url;
+  const ref = typeof args.ref === "string" ? args.ref.trim() : "";
+  if (ref) return ref;
+  const text = typeof args.text === "string" ? args.text.trim() : "";
+  return text;
 }
 
 export function toolDetail(
@@ -228,6 +263,7 @@ export function toolDetail(
   // WaitTool.reason 仅记日志；画进标题会变成「右边已完成、中间还说仍在跑」。
   if (toolName === "wait") return "";
   if (toolName === "host") return hostToolDetail(args);
+  if (toolName === "browser") return browserToolDetail(args);
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
     if (typeof v === "string" && v.trim()) return v.trim();

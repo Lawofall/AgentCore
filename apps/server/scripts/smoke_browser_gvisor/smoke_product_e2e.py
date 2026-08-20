@@ -2,7 +2,7 @@
 
 与 ``scripts/poc_browser_gvisor``（探路用的同形副本）不同，本脚本直接驱动**产品模块**：
 
-    tools/builtin/browser.py（六工具）
+    tools/builtin/browser.py（单一 browser + action）
       → runtime/browser/registry.py（BrowserSessionRegistry.acquire）
         → tools/sandbox/browser/gvisor_session.py（open_gvisor_browser_session）
           → netns.py（真 netns+veth）+ proxy.py（真 SSRF 过滤代理，复用 core/net.py）
@@ -34,6 +34,7 @@ import subprocess
 import time
 import traceback
 from pathlib import Path
+from unittest.mock import MagicMock
 
 # --- product modules under test (real, not PoC copies) -----------------------
 from agentcore.config import settings
@@ -43,14 +44,7 @@ from agentcore.runtime.browser.registry import (
     shutdown_browser_sessions,
 )
 from agentcore.runtime.events import EventType
-from agentcore.tools.builtin.browser import (
-    BrowserClickTool,
-    BrowserNavigateTool,
-    BrowserScreenshotTool,
-    BrowserScrollTool,
-    BrowserSnapshotTool,
-    BrowserTypeTool,
-)
+from agentcore.tools.builtin.browser import BrowserTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.browser import proxy as proxy_mod
 from agentcore.tools.sandbox.browser.protocol import BrowserCommand, BrowserSessionRequest
@@ -135,6 +129,7 @@ def _tool_ctx() -> ToolContext:
         backend=_OutBackend(WS_ROOT),
         user_id="smoke-user",
         conversation_id=CID,
+        escalation=MagicMock(),
     )
 
 
@@ -240,16 +235,11 @@ async def main() -> int:
         checks["a2_runsc_running"] = len(after_acquire["runsc_containers"]) >= 1
         print(f"[smoke] session acquired in {cold:.2f}s; host={after_acquire}", flush=True)
 
-        # === 断言 3：六工具真跑（navigate 公网 → snapshot(a11y 非空) → click/type/scroll → screenshot）===
-        nav_tool = BrowserNavigateTool(registry=registry)
-        snap_tool = BrowserSnapshotTool(registry=registry)
-        click_tool = BrowserClickTool(registry=registry)
-        type_tool = BrowserTypeTool(registry=registry)
-        scroll_tool = BrowserScrollTool(registry=registry)
-        shot_tool = BrowserScreenshotTool(registry=registry)
+        # === 断言 3：browser 真跑（navigate 公网 → snapshot(a11y 非空) → click/type/scroll → screenshot）===
+        tool = BrowserTool(registry=registry)
 
         # navigate 公网页面
-        res, data = await _tool(nav_tool, {"url": PUBLIC_URL}, ctx)
+        res, data = await _tool(tool, {"action": "navigate", "url": PUBLIC_URL}, ctx)
         metrics["navigate_public"] = {
             "success": res.success,
             "http_status": data.get("http_status"),
@@ -259,7 +249,7 @@ async def main() -> int:
         checks["a3_navigate_public"] = bool(res.success) and data.get("http_status") == 200
 
         # snapshot（a11y 树非空）on the public page
-        res, data = await _tool(snap_tool, {}, ctx)
+        res, data = await _tool(tool, {"action": "snapshot"}, ctx)
         uwc = data.get("untrusted_web_content") or {}
         elements = uwc.get("elements") or ""
         aria = uwc.get("accessibility_tree") or ""
@@ -272,15 +262,15 @@ async def main() -> int:
         checks["a3_snapshot_a11y_nonempty"] = bool(res.success and (elements or aria))
 
         # screenshot
-        res, data = await _tool(shot_tool, {}, ctx)
+        res, data = await _tool(tool, {"action": "screenshot"}, ctx)
         checks["a3_screenshot"] = bool(res.success and data.get("keyframe"))
 
         # navigate to the offline form (deterministic click/type/scroll)
-        res, _ = await _tool(nav_tool, {"url": FORM_URL}, ctx)
+        res, _ = await _tool(tool, {"action": "navigate", "url": FORM_URL}, ctx)
         checks["a3_navigate_form"] = bool(res.success)
 
         # snapshot → input(e?)/button(e?) refs + version
-        res, data = await _tool(snap_tool, {}, ctx)
+        res, data = await _tool(tool, {"action": "snapshot"}, ctx)
         elements = (data.get("untrusted_web_content") or {}).get("elements") or ""
         v_a = data.get("snapshot_version")
         input_ref = _find_ref(elements, "input")
@@ -289,26 +279,31 @@ async def main() -> int:
 
         # type into the input
         res, _ = await _tool(
-            type_tool,
-            {"ref": input_ref, "text": "smoke-typed-123", "snapshot_version": v_a},
+            tool,
+            {
+                "action": "type",
+                "ref": input_ref,
+                "text": "smoke-typed-123",
+                "snapshot_version": v_a,
+            },
             ctx,
         )
         checks["a3_type"] = bool(res.success)
 
         # re-snapshot (type bumped the driver version) then click the button
-        res, data = await _tool(snap_tool, {}, ctx)
+        res, data = await _tool(tool, {"action": "snapshot"}, ctx)
         v_b = data.get("snapshot_version")
         res, _ = await _tool(
-            click_tool, {"ref": button_ref, "snapshot_version": v_b}, ctx
+            tool, {"action": "click", "ref": button_ref, "snapshot_version": v_b}, ctx
         )
         checks["a3_click"] = bool(res.success)
 
         # scroll the tall page
-        res, _ = await _tool(scroll_tool, {"dy": 600}, ctx)
+        res, _ = await _tool(tool, {"action": "scroll", "dy": 600}, ctx)
         checks["a3_scroll"] = bool(res.success)
 
         # verify type + click actually took effect (snapshot substring)
-        res, data = await _tool(snap_tool, {}, ctx)
+        res, data = await _tool(tool, {"action": "snapshot"}, ctx)
         elements = (data.get("untrusted_web_content") or {}).get("elements") or ""
         checks["a3_type_effect"] = "smoke-typed-123" in elements
         checks["a3_click_effect"] = "BTN_CLICKED" in elements

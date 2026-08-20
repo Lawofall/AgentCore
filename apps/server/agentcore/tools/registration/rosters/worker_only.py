@@ -9,7 +9,6 @@ from __future__ import annotations
 
 def load_roster() -> tuple[type, ...]:
     from agentcore.tools.builtin.amend_note import AmendNoteTool
-    from agentcore.tools.builtin.browser import BrowserScreenshotTool
     from agentcore.tools.builtin.desktop_notify import DesktopNotifyTool
     from agentcore.tools.builtin.escalate import EscalateTool
     from agentcore.tools.builtin.handoff import HandoffTool
@@ -25,8 +24,6 @@ def load_roster() -> tuple[type, ...]:
         AmendNoteTool,
         HandoffTool,
         DesktopNotifyTool,
-        # L3 团队浏览器截图（worker-only · browser_class · GRANTABLE）
-        BrowserScreenshotTool,
         # privacy-gated worker log tools (manual_wire; not auto-registered)
         SearchConversationsTool,
         ReadConversationTool,

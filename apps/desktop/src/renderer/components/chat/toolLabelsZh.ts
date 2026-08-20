@@ -14,6 +14,7 @@ export const TOOL_LABELS_ZH: Record<string, string> = {
   code_execute: "执行代码",
   test_run: "运行测试",
   git: "Git 写入",
+  browser: "浏览器",
   host: "本机 Host",
   terminal: "终端",
   desktop_notify: "系统通知",

@@ -63,9 +63,7 @@ describe("FileWorkbench mount", () => {
       />,
     );
     expect(screen.queryByText("快速对话")).toBeNull();
-    expect(
-      screen.queryByText("快速对话产生文件后会出现在这里"),
-    ).toBeNull();
+    expect(screen.queryByText("快速对话产生文件后会出现在这里")).toBeNull();
     expect(screen.queryByText("一次快速对话")).toBeNull();
     expect(screen.getByText("还没有文件夹")).toBeTruthy();
   });

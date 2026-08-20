@@ -826,11 +826,11 @@ def test_repair_code_diagnose_patch_verify_shape():
     assert "禁止在本步改文件" in by_id["diagnose"]["task"]
     assert "str_replace" in by_id["patch"]["task"]
     # 白屏/UI 分流：诊断先 browser；验证 CLI vs UI；禁 typecheck 冒充白屏。
-    assert "browser_navigate" in by_id["diagnose"]["task"]
+    assert "browser(action=navigate)" in by_id["diagnose"]["task"]
     assert "snapshot" in by_id["diagnose"]["task"]
     assert "勿空等用户 F12" in by_id["diagnose"]["task"]
     assert "CLI" in by_id["verify"]["task"]
-    assert "browser_navigate" in by_id["verify"]["task"]
+    assert "browser(action=navigate)" in by_id["verify"]["task"]
     assert "冒充白屏" in by_id["verify"]["task"]
     assert "verify_policy=inner" not in by_id["verify"]["task"]
     assert "verify_policy" not in by_id["verify"]
@@ -963,7 +963,7 @@ def test_build_website_three_chain_default_sections():
     assert by_id["qa"]["deliverable"]["web_seam_scope"] == "site/"
     assert by_id["qa"]["deliverable"]["placeholder_hard_exempt"] is True
     assert "web_seam" in by_id["qa"]["task"]
-    assert "browser_screenshot" in by_id["qa"]["task"]
+    assert "browser(action=screenshot)" in by_id["qa"]["task"]
     assert "未目验" in by_id["qa"]["task"] or "谎称" in by_id["qa"]["task"]
     assert by_id["qa"]["timeout_ms"] == 300_000
     # 文案 / 受众嵌入任务书

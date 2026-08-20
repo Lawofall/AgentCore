@@ -1501,11 +1501,92 @@ async def test_write_allowlist_deny_no_handoff_as_write(name: str):
     assert attempts[0].policy_failure is True
 
 
+class _GrantableBrowser:
+    executed = False
+
+    @property
+    def schema(self) -> ToolSchema:
+        from agentcore.core.types import ToolApproval
+
+        return ToolSchema(
+            name="browser",
+            description="stub",
+            parameters={"type": "object", "properties": {}},
+            category=ToolCategory.EXECUTION,
+            approval=ToolApproval.GRANTABLE,
+        )
+
+    async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+        self.executed = True
+        return ToolResult(tool_call_id="", success=True, output="ok")
+
+
+class _GateThatMustNotPrompt:
+    permission_axes = None
+
+    def will_prompt(self, *args, **kwargs) -> bool:
+        raise AssertionError("captain browser must not prompt")
+
+    async def authorize(self, *args, **kwargs):
+        raise AssertionError("captain browser must not authorize")
+
+
 async def test_captain_browser_navigate_skips_approval_gate():
-    """CEO：captain 直调 browser_navigate 不弹审批。"""
+    """CEO：captain 直调 browser(action=navigate) 不弹审批。"""
+    tool = _GrantableBrowser()
+    reg = ToolRegistry()
+    reg.register(tool)
+    await execute_tools(
+        [_call("c1", "browser", '{"action":"navigate","url":"https://example.com"}')],
+        reg,
+        _ctx(),
+        EventSink(),
+        run_id="cap-run",
+        role="captain",
+        approval_gate=_GateThatMustNotPrompt(),  # type: ignore[arg-type]
+    )
+    assert tool.executed is True
+
+
+async def test_captain_browser_click_skips_approval_gate():
+    """CEO 短操作：captain 直调 browser(action=click) 亦不弹审批。"""
+    tool = _GrantableBrowser()
+    reg = ToolRegistry()
+    reg.register(tool)
+    await execute_tools(
+        [_call("c1", "browser", '{"action":"click","ref":"e1"}')],
+        reg,
+        _ctx(),
+        EventSink(),
+        run_id="cap-run",
+        role="captain",
+        approval_gate=_GateThatMustNotPrompt(),  # type: ignore[arg-type]
+    )
+    assert tool.executed is True
+
+
+async def test_captain_browser_screenshot_does_not_skip_approval_gate():
+    """captain + action=screenshot 不走短操作免审（force_breaker 同理仍拦）。"""
+    tool = _GrantableBrowser()
+    reg = ToolRegistry()
+    reg.register(tool)
+    await execute_tools(
+        [_call("c1", "browser", '{"action":"screenshot"}')],
+        reg,
+        _ctx(),
+        EventSink(),
+        run_id="cap-run",
+        role="captain",
+        approval_gate=None,
+    )
+    assert tool.executed is False
+
+
+async def test_captain_legacy_browser_navigate_does_not_skip_gate():
+    """执行层不转发旧名：captain 调 browser_navigate 不走 browser 免审。"""
     from agentcore.core.types import ToolApproval
 
-    class _GrantableNavigate:
+    class _LegacyNavigate:
         executed = False
 
         @property
@@ -1522,16 +1603,7 @@ async def test_captain_browser_navigate_skips_approval_gate():
             self.executed = True
             return ToolResult(tool_call_id="", success=True, output="opened")
 
-    class _GateThatMustNotPrompt:
-        permission_axes = None
-
-        def will_prompt(self, *args, **kwargs) -> bool:
-            raise AssertionError("captain browser_navigate must not prompt")
-
-        async def authorize(self, *args, **kwargs):
-            raise AssertionError("captain browser_navigate must not authorize")
-
-    tool = _GrantableNavigate()
+    tool = _LegacyNavigate()
     reg = ToolRegistry()
     reg.register(tool)
     await execute_tools(
@@ -1541,54 +1613,9 @@ async def test_captain_browser_navigate_skips_approval_gate():
         EventSink(),
         run_id="cap-run",
         role="captain",
-        approval_gate=_GateThatMustNotPrompt(),  # type: ignore[arg-type]
+        approval_gate=None,
     )
-    assert tool.executed is True
-
-
-async def test_captain_browser_click_skips_approval_gate():
-    """CEO 短操作：captain 直调 browser_click 亦不弹审批。"""
-    from agentcore.core.types import ToolApproval
-
-    class _GrantableClick:
-        executed = False
-
-        @property
-        def schema(self) -> ToolSchema:
-            return ToolSchema(
-                name="browser_click",
-                description="stub",
-                parameters={"type": "object", "properties": {}},
-                category=ToolCategory.EXECUTION,
-                approval=ToolApproval.GRANTABLE,
-            )
-
-        async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-            self.executed = True
-            return ToolResult(tool_call_id="", success=True, output="clicked")
-
-    class _GateThatMustNotPrompt:
-        permission_axes = None
-
-        def will_prompt(self, *args, **kwargs) -> bool:
-            raise AssertionError("captain browser_click must not prompt")
-
-        async def authorize(self, *args, **kwargs):
-            raise AssertionError("captain browser_click must not authorize")
-
-    tool = _GrantableClick()
-    reg = ToolRegistry()
-    reg.register(tool)
-    await execute_tools(
-        [_call("c1", "browser_click", '{"ref":"e1"}')],
-        reg,
-        _ctx(),
-        EventSink(),
-        run_id="cap-run",
-        role="captain",
-        approval_gate=_GateThatMustNotPrompt(),  # type: ignore[arg-type]
-    )
-    assert tool.executed is True
+    assert tool.executed is False
 
 
 def _drain_events(sink: EventSink) -> list:

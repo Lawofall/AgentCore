@@ -248,12 +248,7 @@ export function ConversationsPage() {
               {isFolderFilter && (
                 <button
                   type="button"
-                  onClick={() =>
-                    navigate(
-                      "/files",
-                      filesFocusState(selected),
-                    )
-                  }
+                  onClick={() => navigate("/files", filesFocusState(selected))}
                   className="ml-auto inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <FolderOpen size={12} className="shrink-0" />
@@ -571,9 +566,7 @@ function FolderFilterRow({
         <SimpleTooltip label="浏览文件">
           <IconButton
             aria-label="浏览此文件夹的文件"
-            onClick={() =>
-              navigate("/files", filesFocusState(folder.id))
-            }
+            onClick={() => navigate("/files", filesFocusState(folder.id))}
             className="size-6 shrink-0"
           >
             <FolderOpen size={13} />

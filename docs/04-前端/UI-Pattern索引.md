@@ -42,7 +42,7 @@ skip_if:
 
 | 词 | 入口 | 范围 |
 |---|---|---|
-| 搜索 | Cmd+K；TitleBar/侧栏假入口 | 跨对话/消息/文件夹+命令 |
+| 搜索 | Cmd+K；侧栏假入口 | 跨对话/消息/文件夹+命令 |
 | 筛选 | 页内 `SearchField` | 当前已加载项 |
 | 查找 | Cmd+F FindBar | 当前会话已加载消息 |
 
@@ -87,4 +87,4 @@ node scripts/check-ui-tokens.mjs --src apps/mobile/src
 
 ## 布局规格（细节权威 = desktop-layout）
 
-宽度：content `max-w-4xl` / canvas `max-w-[1200px]`；对话页阅读列 `max-w-3xl`。字号严格 4 级；圆角 3 级（8/12/pill）；按钮 sm/md。豁免：对话/文件/设置分栏、真全屏手册。
+宽度：content `max-w-4xl` / canvas `max-w-[1200px]`；对话页阅读列 `max-w-3xl`；IM 会话列 `max-w-[40rem]`（消息+输入，≠ 对话页）。字号严格 4 级；圆角 3 级（8/12/pill）；按钮 sm/md。豁免：对话/文件/设置/消息两栏壳、真全屏手册。

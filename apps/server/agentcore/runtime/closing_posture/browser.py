@@ -1,6 +1,6 @@
 """Browser assembly / tool-success latch + open-or-login claim detector.
 
-声称已开页 / 右坞直播 / 已登录——须对本回合 browser_* 成功对账（禁扫用户气泡意图）。
+声称已开页 / 右坞直播 / 已登录——须对本回合 browser 成功对账（禁扫用户气泡意图）。
 """
 
 from __future__ import annotations
@@ -9,19 +9,9 @@ import re
 from contextvars import ContextVar
 from typing import Any
 
-from .core import _positive_hits
+from agentcore.runtime.browser.call_identity import is_browser_tool_name
 
-_BROWSER_EVIDENCE_TOOLS = frozenset(
-    {
-        "browser_navigate",
-        "browser_click",
-        "browser_type",
-        "browser_scroll",
-        "browser_snapshot",
-        "browser_screenshot",
-        "browser_console",
-    }
-)
+from .core import _positive_hits
 
 _BROWSER_OPEN_OR_LOGIN_CLAIMS = re.compile(
     r"(?:"
@@ -43,7 +33,7 @@ _turn_browser_tool_success: ContextVar[bool] = ContextVar(
 
 
 def note_browser_assembled(assembled: bool) -> None:
-    """Stamp whether this turn's workspace_context assembled browser_* tools."""
+    """Stamp whether this turn's workspace_context assembled the browser tool."""
     _turn_browser_assembled.set(bool(assembled))
 
 
@@ -56,7 +46,7 @@ def turn_browser_assembled() -> bool:
 
 
 def note_browser_tool_success() -> None:
-    """Latch that a browser_* tool succeeded this turn (sticky until clear)."""
+    """Latch that a browser tool succeeded this turn (sticky until clear)."""
     _turn_browser_tool_success.set(True)
 
 
@@ -69,7 +59,7 @@ def turn_has_browser_tool_success() -> bool:
 
 
 def note_browser_tool_success_from_messages(messages: list[Any] | None) -> None:
-    """Scan transcript for successful browser_* tool results; sticky latch on hit.
+    """Scan transcript for successful browser tool results; sticky latch on hit.
 
     Truth = structured tool trailers / names — not free-text bubble heuristics.
     """
@@ -95,7 +85,7 @@ def note_browser_tool_success_from_messages(messages: list[Any] | None) -> None:
             continue
         tc_id = str(getattr(msg, "tool_call_id", None) or "")
         name = calls.get(tc_id, "")
-        if name not in _BROWSER_EVIDENCE_TOOLS:
+        if not is_browser_tool_name(name):
             continue
         content = getattr(msg, "content", None) or ""
         if "<!--agentcore:tool_failed-->" in content:
@@ -110,7 +100,7 @@ def claims_browser_open_or_login(content: str) -> bool:
 
 
 def _browser_claim_rework(content: str) -> str | None:
-    """声称已开浏览器/已登录须有 browser_* tool 成功；未装配同禁."""
+    """声称已开浏览器/已登录须有 browser tool 成功；未装配同禁."""
     text = content or ""
     if not text.strip() or not claims_browser_open_or_login(text):
         return None
@@ -119,11 +109,11 @@ def _browser_claim_rework(content: str) -> str | None:
     if turn_browser_assembled():
         return (
             "正文声称已打开浏览器/右坞页面或已登录成功，但本回合没有对应 "
-            "browser_* 工具成功结果——"
-            "请改为如实说明尚未成功开页/登录，或先调用 browser_navigate 等工具完成后再写；"
+            "browser 工具成功结果——"
+            "请改为如实说明尚未成功开页/登录，或先调用 browser(action=navigate) 等工具完成后再写；"
             "禁止口头假开浏览器。"
         )
     return (
-        "正文声称已打开浏览器/右坞或已登录，但本回合 browser=未装配且无 browser_* "
+        "正文声称已打开浏览器/右坞或已登录，但本回合 browser=未装配且无 browser "
         "成功证据——请先如实说明未装配与如何接通，禁止假装已打开或直播页面。"
     )

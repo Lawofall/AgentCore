@@ -158,7 +158,7 @@ def _assemble_ceo_toolset(
         desktop_online=desktop_online,
         permission_axes=permission_axes,
         backend_location=backend_location,
-        include_browser="browser_navigate" in worker_tools.names,
+        include_browser="browser" in worker_tools.names,
         # The worker roster already asked ``git_execution_enabled_for`` with the live
         # backend; reuse its verdict so CEO and workers never disagree on git.
         include_git="git" in worker_tools.names,

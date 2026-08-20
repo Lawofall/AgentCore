@@ -389,7 +389,7 @@ def build_workspace_context(
         egress_line = (
             "出站网络：云端 code_execute 默认无任意 HTTPS 出口（`--network=none`；"
             "装包白名单 egress 仅 test_run install，≠通用出网）；无原生生图工具；"
-            "browser_* 另计（隔离浏览器，≠ code_execute 出网）。"
+            "browser 另计（隔离浏览器，≠ code_execute 出网）。"
         )
 
     if desktop_online:
@@ -667,9 +667,9 @@ def build_workspace_context(
                 "本会话 HTML 相对路径**打不开**（该走产物「完整预览」）。"
             )
         browser_guide_line = (
-            "浏览器事实：本回合已装配 browser_*"
-            "（navigate/click/type/scroll/snapshot/console 由 CEO 可直持；screenshot 仅 worker；"
-            "右坞会直播）。" + path_capability
+            "浏览器事实：本回合已装配 browser"
+            "（action=navigate/click/type/scroll/snapshot/console 由 CEO 可直持；"
+            "screenshot 仅 worker；右坞会直播）。" + path_capability
         )
     else:
         if is_local:

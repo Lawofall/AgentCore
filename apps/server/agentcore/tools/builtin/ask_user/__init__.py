@@ -15,12 +15,15 @@ opening 引导 at negligible cost, so the runtime — not the model — owns「�
 若答案不要紧，不要发卡，在回复里写明假设即可。对比与决策见
 docs/03-AI核心/Agent协作模式.md（向用户发问）.
 
-The card's content is one adaptive shape (rich when opening, compact mid-task):
-``message`` (the only copy slot — framing, why this needs a decision, any background),
-optional ``assumptions`` (起步计划 — low-impact decisions the CEO made for
-the user, read-only chips), optional ``questions`` (the askable items, each pre-fillable
-with a ``default`` so a 想省事 user one-clicks through). A mid-task A/B is just
-``message`` + a one-item ``questions``.
+The card's content is one adaptive shape (rich when opening, compact mid-task).
+``message`` is still required (wire ``question`` / absorb / no-question fallback).
+On ordinary cards it is **not** shown as a title — the user-visible question goes in
+``questions[].prompt``; ``message`` may hold a batch reason the user may not see.
+With no ``questions``, ``message`` remains the only stem. Dedicated cards still use
+``message`` as the card title. Optional ``assumptions`` (起步计划 — low-impact
+decisions the CEO made for the user, read-only chips), optional ``questions``
+(each pre-fillable with a ``default`` so a 想省事 user one-clicks through).
+A mid-task A/B is one ``questions`` item plus required ``message``.
 
 A submit answer is ``ToolEffect.CONTINUE`` (the CEO resumes with the user's picks); a
 stop is also ``CONTINUE`` with a拒答 breadcrumb + soft guidance (wire ``decision=stop``,

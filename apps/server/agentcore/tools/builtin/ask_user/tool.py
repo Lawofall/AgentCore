@@ -116,12 +116,13 @@ class AskUserTool:
         }
         # Schema: short trigger. HOW → ask_user_kickoff / ask_user_midtask skills.
         questions_desc = (
-            "可选：要用户拍板的问题（最多 5）。关键岔路通常预填或省略 default。"
+            "可选：问句写 prompt（最多 5）。关键岔路通常预填或省略 default。"
             "choice 可配 recommended。detail 仅专用 card。"
         )
         tool_desc = (
             "向用户发问（唯一问用户原语）。暂停回合等人答复。"
             "登录拦截：browser_login=true。"
+            "问句写 questions[].prompt。"
             "挡路才问；能按默认推进则不当检查点，在回复里写明假设即可。"
             "HOW→consult(ask_user_kickoff / ask_user_midtask)。"
         )
@@ -178,7 +179,9 @@ class AskUserTool:
                 "properties": {
                     "message": {
                         "type": "string",
-                        "description": "必填。卡片顶部说明（问什么、为何需拍板）。",
+                        "description": (
+                            "必填。普通卡不当标题（无题时当唯一题干；批次原因未必看见）。"
+                        ),
                     },
                     "assumptions": {
                         "type": "array",
@@ -208,7 +211,7 @@ class AskUserTool:
                             "properties": {
                                 "prompt": {
                                     "type": "string",
-                                    "description": "问题正文。",
+                                    "description": "用户看见的问句。",
                                 },
                                 "kind": {
                                     "type": "string",

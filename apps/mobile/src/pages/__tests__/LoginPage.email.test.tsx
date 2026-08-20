@@ -180,7 +180,9 @@ describe("LoginPage · single-form register", () => {
     renderLogin();
     fillRegisterForm();
     await requestRegisterCode();
-    expect(screen.getByText("验证码 15 分钟内有效")).toBeTruthy();
+    expect(screen.getByText("已发送验证码，15 分钟内有效")).toBeTruthy();
+    expect(screen.queryByText("验证码 15 分钟内有效")).toBeNull();
+    expect(screen.queryByText(/已发送至/)).toBeNull();
   });
 
   it("stays on the same form when the code is wrong", async () => {
@@ -328,6 +330,8 @@ describe("LoginPage · forgot password", () => {
     fillForgotEmail();
     fireEvent.click(screen.getByRole("button", { name: "发送验证码" }));
     await screen.findByPlaceholderText("验证码（6 位）");
+    expect(screen.getByText("如果该邮箱已注册，你会收到验证码")).toBeTruthy();
+    expect(screen.queryByText(/已发送至/)).toBeNull();
 
     fireEvent.change(screen.getByPlaceholderText("验证码（6 位）"), {
       target: { value: "123456" },

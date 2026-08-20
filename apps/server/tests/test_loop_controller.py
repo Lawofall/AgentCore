@@ -340,22 +340,15 @@ def test_circuit_breaker_parse_only_write_tools_force_segmented_not_disable():
 
 
 def test_retire_tools_hard_disables_family_on_first_failure():
-    """Permanent capability fail (browser egress): one shot retires the whole family."""
+    """Permanent capability fail (browser egress): one shot retires the live name."""
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    family = (
-        "browser_navigate",
-        "browser_click",
-        "browser_type",
-        "browser_scroll",
-        "browser_snapshot",
-        "browser_screenshot",
-    )
-    steer = "browser_* 因沙箱出网能力不可用已全部停用"
+    family = ("browser",)
+    steer = "browser 因沙箱出网能力不可用已停用"
     c.record(
         [
             ToolAttempt(
                 "a",
-                "browser_navigate",
+                "browser",
                 success=False,
                 error_summary="egress_unavailable",
                 meta={
@@ -378,13 +371,38 @@ def test_retire_tools_hard_disables_family_on_first_failure():
         [
             ToolAttempt(
                 "b",
-                "browser_navigate",
+                "browser",
                 success=False,
                 meta={"retire_tools": list(family), "retire_message": steer},
             )
         ]
     )
     assert not c.tool_circuit_breaker()
+
+
+def test_retire_tools_still_honors_legacy_browser_family_names():
+    """Historical journal retire_tools lists still disable those names."""
+    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
+    family = (
+        "browser_navigate",
+        "browser_click",
+        "browser_screenshot",
+    )
+    c.record(
+        [
+            ToolAttempt(
+                "a",
+                "browser_navigate",
+                success=False,
+                meta={
+                    "retire_tools": list(family),
+                    "retire_message": "legacy family retire",
+                },
+            )
+        ]
+    )
+    cb = c.tool_circuit_breaker()
+    assert set(cb.disabled) == set(family)
 
 
 def test_workspace_channel_dead_disables_landing_tools():

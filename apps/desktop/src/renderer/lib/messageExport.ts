@@ -71,6 +71,14 @@ const TOOL_LABEL: Record<string, string> = {
   board_read: "Read board",
   desktop_notify: "Notify",
   external_mount_readonly: "Mount folder",
+  browser: "Browser",
+  browser_navigate: "Navigate",
+  browser_click: "Click",
+  browser_type: "Type",
+  browser_scroll: "Scroll",
+  browser_snapshot: "Snapshot",
+  browser_screenshot: "Screenshot",
+  browser_console: "Console",
   host: "Host",
   host_ping: "Host ping",
   host_info: "Host info",
@@ -104,6 +112,25 @@ function isInternalIdArg(key: string): boolean {
   return key === "id" || key.endsWith("_id");
 }
 
+function browserExportDetail(args: Record<string, unknown>): string {
+  const action = typeof args.action === "string" ? args.action.trim() : "";
+  if (action === "navigate") {
+    return typeof args.url === "string" ? args.url.trim() : action;
+  }
+  if (action === "click") {
+    return typeof args.ref === "string" ? args.ref.trim() : action;
+  }
+  if (action === "type") {
+    const text = typeof args.text === "string" ? args.text.trim() : "";
+    return text || action;
+  }
+  if (action === "scroll") {
+    return typeof args.dy === "number" ? `${args.dy}px` : action;
+  }
+  if (action) return action;
+  return typeof args.url === "string" ? args.url.trim() : "";
+}
+
 function hostExportDetail(args: Record<string, unknown>): string {
   const action = typeof args.action === "string" ? args.action.trim() : "";
   if (action === "shell") {
@@ -129,6 +156,10 @@ function hostExportDetail(args: Record<string, unknown>): string {
 function toolDetail(args: Record<string, unknown>, toolName?: string): string {
   // WaitTool.reason 仅记日志，复制稿同样不摆。
   if (toolName === "wait") return "";
+  if (toolName === "browser") {
+    const browser = browserExportDetail(args);
+    if (browser) return browser;
+  }
   if (toolName === "host") {
     const host = hostExportDetail(args);
     if (host) return host;
@@ -142,6 +173,18 @@ function toolDetail(args: Record<string, unknown>, toolName?: string): string {
     if (typeof v === "string" && v.trim()) return v.trim();
   }
   return "";
+}
+
+function browserExportLabel(args: Record<string, unknown>): string {
+  const action = typeof args.action === "string" ? args.action.trim() : "";
+  if (action === "navigate") return "Navigate";
+  if (action === "click") return "Click";
+  if (action === "type") return "Type";
+  if (action === "scroll") return "Scroll";
+  if (action === "snapshot") return "Snapshot";
+  if (action === "screenshot") return "Screenshot";
+  if (action === "console") return "Console";
+  return action ? action.charAt(0).toUpperCase() + action.slice(1) : "Browser";
 }
 
 function hostExportLabel(args: Record<string, unknown>): string {
@@ -158,9 +201,11 @@ function hostExportLabel(args: Record<string, unknown>): string {
 
 function formatToolLine(step: Extract<ProcessStep, { kind: "tool" }>): string {
   const label =
-    step.tool_name === "host"
-      ? hostExportLabel(step.arguments ?? {})
-      : (TOOL_LABEL[step.tool_name] ?? step.tool_name);
+    step.tool_name === "browser"
+      ? browserExportLabel(step.arguments ?? {})
+      : step.tool_name === "host"
+        ? hostExportLabel(step.arguments ?? {})
+        : (TOOL_LABEL[step.tool_name] ?? step.tool_name);
   const detail = toolDetail(step.arguments ?? {}, step.tool_name);
   const status =
     step.status === "error"

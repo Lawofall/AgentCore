@@ -1317,6 +1317,7 @@ def test_ask_user_skills_ordinary_choice_is_one_line():
     assert "`label` / `detail` / `message`" not in kickoff
     assert "权衡写进选项名" in kickoff or "权衡写进 `label`" in kickoff
     assert "勿填 `detail`" in kickoff
+    assert all("问句写" in b and "prompt" in b for b in (kickoff, midtask))
     assert "配一行 `detail`" not in midtask
     assert "`detail`=一行卖点与取舍" in midtask
     assert "`detail`=一行影响与修法建议" in midtask

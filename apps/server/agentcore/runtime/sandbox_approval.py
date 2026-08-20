@@ -123,7 +123,7 @@ def execution_tool_auto_passes(
     """True when the tool should skip the approval prompt via sandbox / command=auto.
 
     Covers the whole ``execution_class`` roster (``code_execute`` / ``test_run`` /
-    ``terminal`` / ``browser_*``) plus low-risk ``desktop_notify`` under
+    ``terminal`` / ``browser``) plus low-risk ``desktop_notify`` under
     ``command=auto``. Host / MCP never enter here.
 
     Cloud gVisor → auto-pass execution_class (sandbox isolation).

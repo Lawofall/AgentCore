@@ -285,16 +285,13 @@ async def _check_safety_and_approval_gates(
         or always_confirm
         or tool_call_requires_approval(name, tool_schema.approval, args)
     )
-    # CEO 短操作：captain 直调 browser_*（navigate/click/type/scroll/snapshot）
-    # 不弹审批（force_breaker 仍拦）；screenshot 仅 worker，不走本分支。
-    if (
-        needs_approval
-        and not force_breaker
-        and role == "captain"
-        and name.startswith("browser_")
-        and name != "browser_screenshot"
-    ):
-        needs_approval = False
+    # CEO 短操作：captain 直调 browser（除 screenshot）不弹审批；force_breaker 仍拦。
+    # 执行层不转发旧 browser_* 名。
+    if needs_approval and not force_breaker and role == "captain" and name == "browser":
+        from agentcore.tools.builtin.browser import browser_action_name
+
+        if browser_action_name(args if isinstance(args, dict) else None) != "screenshot":
+            needs_approval = False
     # Cloud *workers* historically ungated for server-sandbox tools (MCP/Host
     # still gated). ``file_write=ask`` overrides that ungate for the
     # file-mutation class so 谨慎 prompts reversible writes on cloud too.

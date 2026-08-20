@@ -27,7 +27,8 @@ export function AskCardShell({
   icon: LucideIcon;
   /** intent 标识行（{@link ASK_INTENT_META} 的 activeCaption），与图标同排。 */
   caption: string;
-  title: string;
+  /** 可选总标题；空则不画标题节点（通用澄清卡有题时把题干放在体内）。 */
+  title?: string;
   /** 可选副标题（organize/daily_review 的本地总览等）。 */
   subtitle?: string;
   /** 头部右上角插槽（帮助链接 / 分页器）。 */
@@ -51,9 +52,11 @@ export function AskCardShell({
           </p>
           {extra}
         </div>
-        <p className="mt-1.5 whitespace-pre-wrap text-sm font-semibold leading-snug text-foreground">
-          {title}
-        </p>
+        {title ? (
+          <p className="mt-1.5 whitespace-pre-wrap text-sm font-semibold leading-snug text-foreground">
+            {title}
+          </p>
+        ) : null}
         {subtitle && (
           <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
             {subtitle}

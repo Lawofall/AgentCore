@@ -4,7 +4,7 @@ import {
   MIN_PASSWORD_LENGTH,
   emailCodeError,
   emailFieldError,
-  formatEmailCodeValidityHint,
+  formatEmailCodeSentNotice,
   isLikelyEmail,
   loginIdentifierError,
   normalizeEmailCode,
@@ -110,9 +110,6 @@ export function LoginPage() {
   const [forgotStep, setForgotStep] = useState<ForgotStep>("email");
   const [sendAttempted, setSendAttempted] = useState(false);
   const [registerCodeSent, setRegisterCodeSent] = useState(false);
-  const [registerCodeExpiresIn, setRegisterCodeExpiresIn] = useState<
-    number | null
-  >(null);
   const registerIdentityTick = useRef(0);
   const resend = useResendCountdown();
 
@@ -183,7 +180,6 @@ export function LoginPage() {
     registerIdentityTick.current += 1;
     setCode("");
     setRegisterCodeSent(false);
-    setRegisterCodeExpiresIn(null);
     setNotice(null);
     setError(null);
   };
@@ -200,7 +196,6 @@ export function LoginPage() {
     setAttempted(false);
     setSendAttempted(false);
     setRegisterCodeSent(false);
-    setRegisterCodeExpiresIn(null);
     registerIdentityTick.current += 1;
     setForgotStep("email");
     if (next === "register" && isLikelyEmail(identifier) && !email.trim()) {
@@ -255,12 +250,9 @@ export function LoginPage() {
       });
       if (tick !== registerIdentityTick.current) return;
       setRegisterCodeSent(true);
-      setRegisterCodeExpiresIn(accepted?.expiresIn ?? null);
       setNoticeKind("success");
       resend.start();
-      setNotice(
-        wasSent ? "验证码已重新发送" : `验证码已发送至 ${email.trim()}`,
-      );
+      setNotice(formatEmailCodeSentNotice(accepted?.expiresIn ?? 0, wasSent));
     } catch (err) {
       if (tick !== registerIdentityTick.current) return;
       setError(errorMessage(err, "发送验证码失败，请重试"));
@@ -500,11 +492,6 @@ export function LoginPage() {
                 </Button>
               </div>
               <FieldError>{registerCodeFieldErr}</FieldError>
-              {registerCodeSent && registerCodeExpiresIn != null && (
-                <p className="text-xs text-muted-foreground">
-                  {formatEmailCodeValidityHint(registerCodeExpiresIn)}
-                </p>
-              )}
             </div>
             <div className="space-y-1">
               <input
@@ -595,11 +582,7 @@ export function LoginPage() {
 
         {mode === "forgot" && forgotStep === "reset" && (
           <form noValidate onSubmit={handleResetPassword} className="space-y-3">
-            {notice ? (
-              <AuthOutcome kind="success">{notice}</AuthOutcome>
-            ) : (
-              <AuthOutcome kind="success">{`验证码已发送至 ${email.trim()}`}</AuthOutcome>
-            )}
+            <AuthOutcome kind="success">{notice ?? "已发送验证码"}</AuthOutcome>
             <div className="space-y-1">
               <input
                 className={inputClass}

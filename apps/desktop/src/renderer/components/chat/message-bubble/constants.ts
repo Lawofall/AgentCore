@@ -89,14 +89,16 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   resolve_escalation: { Icon: Gavel, label: "Resolve escalate" },
   queue_user_message: { Icon: Inbox, label: "Queue message" },
   wait: { Icon: Clock, label: "Wait" },
-  // L3 团队浏览器（worker-only）：连续步聚合成「浏览器活动卡」（BrowserActivityCard），
-  // 单步走通用 ToolLine + ToolResultView 的 browser 分支。
+  // L3 团队浏览器（单工具 `browser`，按 action 展示；同构 host）
+  browser: { Icon: Globe, label: "Browser" },
+  // 历史会话回放：旧 browser_* 七键只供展示，不注册、不转发。
   browser_navigate: { Icon: Compass, label: "Navigate" },
   browser_click: { Icon: MousePointerClick, label: "Click" },
   browser_type: { Icon: Keyboard, label: "Type" },
   browser_scroll: { Icon: MoveVertical, label: "Scroll" },
   browser_snapshot: { Icon: ScanText, label: "Snapshot" },
   browser_screenshot: { Icon: Camera, label: "Screenshot" },
+  browser_console: { Icon: ScrollText, label: "Console" },
   // Worker / board channels that also render on the process timeline.
   post_note: { Icon: StickyNote, label: "Post note" },
   read_notes: { Icon: StickyNote, label: "Read notes" },
@@ -124,6 +126,23 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   host_package_install: { Icon: Package, label: "Install package" },
 };
 
+/** `browser` 的 action → 过程行标签 / 图标（对齐旧 browser_* chrome，便于对照历史会话）。 */
+const BROWSER_ACTION_META: Record<string, { Icon: LucideIcon; label: string }> =
+  {
+    navigate: { Icon: Compass, label: "Navigate" },
+    click: { Icon: MousePointerClick, label: "Click" },
+    type: { Icon: Keyboard, label: "Type" },
+    scroll: { Icon: MoveVertical, label: "Scroll" },
+    snapshot: { Icon: ScanText, label: "Snapshot" },
+    screenshot: { Icon: Camera, label: "Screenshot" },
+    console: { Icon: ScrollText, label: "Console" },
+  };
+
+function browserActionOf(args?: Record<string, unknown>): string {
+  const raw = args && typeof args.action === "string" ? args.action.trim() : "";
+  return raw;
+}
+
 /** `host` 的 action → 过程行标签 / 图标（对齐旧 host_* chrome，便于对照历史会话）。 */
 const HOST_ACTION_META: Record<string, { Icon: LucideIcon; label: string }> = {
   status: { Icon: Monitor, label: "Host status" },
@@ -150,6 +169,18 @@ export const toolMeta = (
   name: string,
   args?: Record<string, unknown>,
 ): { Icon: LucideIcon; label: string } => {
+  if (name === "browser") {
+    const action = browserActionOf(args);
+    if (action) {
+      return (
+        BROWSER_ACTION_META[action] ?? {
+          Icon: Globe,
+          label: action.charAt(0).toUpperCase() + action.slice(1),
+        }
+      );
+    }
+    return TOOL_META.browser ?? { Icon: Globe, label: "Browser" };
+  }
   if (name === "host") {
     const action = hostActionOf(args);
     if (action) {
@@ -252,13 +283,36 @@ function fileTransferDetail(args: Record<string, unknown>): string {
   return asTitleDetail(`${src} → ${dest}`);
 }
 
+/** `browser` 过程行 / 组摘要的 action 细节（同构 host 的 action 芯片）。 */
+export function browserToolDetail(args: Record<string, unknown>): string {
+  const action = browserActionOf(args);
+  if (action === "navigate") {
+    return asTitleDetail(typeof args.url === "string" ? args.url : "");
+  }
+  if (action === "click") {
+    return asTitleDetail(typeof args.ref === "string" ? args.ref : "");
+  }
+  if (action === "type") {
+    const text =
+      typeof args.text === "string" && args.text.trim() ? args.text.trim() : "";
+    if (text) return asTitleDetail(text);
+    return asTitleDetail(typeof args.ref === "string" ? args.ref : "");
+  }
+  if (action === "scroll") {
+    const dy = args.dy;
+    if (typeof dy === "number" && Number.isFinite(dy)) {
+      return asTitleDetail(`${dy}px`);
+    }
+    return asTitleDetail(typeof dy === "string" ? dy : "");
+  }
+  return asTitleDetail(typeof args.url === "string" ? args.url : "");
+}
+
 /** `host` 过程行 / 组摘要的 action 细节（同构 git 的 subcommand 芯片）。 */
 export function hostToolDetail(args: Record<string, unknown>): string {
   const action = hostActionOf(args);
   if (action === "shell") {
-    return asTitleDetail(
-      typeof args.command === "string" ? args.command : "",
-    );
+    return asTitleDetail(typeof args.command === "string" ? args.command : "");
   }
   if (action === "install_package") {
     const manager =
@@ -274,9 +328,7 @@ export function hostToolDetail(args: Record<string, unknown>): string {
     return asTitleDetail(pkg || manager || action);
   }
   if (action === "open_settings") {
-    return asTitleDetail(
-      typeof args.panel === "string" ? args.panel : action,
-    );
+    return asTitleDetail(typeof args.panel === "string" ? args.panel : action);
   }
   if (action === "set_audio") {
     const name =
@@ -301,7 +353,9 @@ export function hostToolDetail(args: Record<string, unknown>): string {
     const facets = args.facets;
     if (Array.isArray(facets)) {
       const names = facets
-        .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+        .filter(
+          (f): f is string => typeof f === "string" && f.trim().length > 0,
+        )
         .map((f) => f.trim());
       if (names.length > 0) return asTitleDetail(names.join(", "));
     }
@@ -314,6 +368,7 @@ export function toolDetail(
   args: Record<string, unknown>,
   toolName?: string,
 ): string {
+  if (toolName === "browser") return browserToolDetail(args);
   if (toolName === "host") return hostToolDetail(args);
   const transfer = fileTransferDetail(args);
   if (transfer) return transfer;
