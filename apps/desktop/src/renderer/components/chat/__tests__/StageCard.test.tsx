@@ -27,7 +27,7 @@ vi.mock("@/hooks/useConversations", () => ({
   bumpConversationCache: vi.fn(),
 }));
 vi.mock("@/stores/conversation", () => ({
-  getRuntime: () => ({ isGenerating: generating }),
+  getRuntime: () => ({ isGenerating: generating, messages: [] }),
   useConversationStore: {
     getState: () => ({
       clearError,

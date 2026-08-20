@@ -45,7 +45,7 @@ export function finalizeHonestStopAbort(conversationId: string): void {
 /** Cover finishReason so StatusStrip / hydrate see user-stop, not a dangling stream. */
 function stampHonestStopCancelled(conversationId: string): void {
   const store = useConversationStore.getState();
-  const tail = getRuntime(conversationId).messages.at(-1);
+  const tail = getRuntime(conversationId).messages?.at(-1);
   if (!tail || tail.role !== "assistant") return;
   // Empty interrupt / pause keep their own faces; do not rewrite to cancelled.
   if (tail.finishReason === "paused" || tail.finishReason === "interrupted") {
@@ -82,14 +82,14 @@ export function finalizeGeneratingForPausedConversation(
 
   const store = useConversationStore.getState();
   const rt = getRuntime(conversationId);
-  const last = rt.messages.at(-1);
+  const last = rt.messages?.at(-1);
   if (rt.isGenerating || last?.isStreaming) {
     store.finalizeLastMessage(conversationId);
   }
 
   // Stamp paused on the tail assistant (hydrate-equivalent close). Must update
   // the *target* conversation even when another chat is open.
-  const tail = getRuntime(conversationId).messages.at(-1);
+  const tail = getRuntime(conversationId).messages?.at(-1);
   if (
     !tail ||
     tail.role !== "assistant" ||
