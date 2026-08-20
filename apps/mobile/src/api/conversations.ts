@@ -342,6 +342,23 @@ export interface MessageWindow {
   memoryUpdates: MemoryUpdate[];
 }
 
+/** Reload finish: cancelled on usage/runs wins over incomplete → interrupted. */
+function hydrateFinishReason(
+  paused: boolean,
+  status: string | null | undefined,
+  runsFinish: string | null | undefined,
+  usageFinish: string | null | undefined,
+): string | null {
+  if (paused) return "paused";
+  if (runsFinish === "cancelled" || usageFinish === "cancelled") {
+    return "cancelled";
+  }
+  if (runsFinish) return runsFinish;
+  if (usageFinish) return usageFinish;
+  if (status === "incomplete") return "interrupted";
+  return null;
+}
+
 /** Map one OpenAPI MessageDetail row → mobile {@link MessageDetail} (incl. evidence_ledger). */
 export function toMessageDetail(row: Schemas["MessageDetail"]): MessageDetail {
   const runs = row.runs;
@@ -349,9 +366,15 @@ export function toMessageDetail(row: Schemas["MessageDetail"]): MessageDetail {
   // Cold-path pause latch: write keeps status=running + paused=true; hydrate as
   // paused (finish_reason=paused) so reopen does not paint forever-streaming chrome.
   const paused = Boolean(row.paused);
-  const finish = paused
-    ? "paused"
-    : (runs?.finish_reason ?? (status === "incomplete" ? "interrupted" : null));
+  const usageFinish = (
+    row.usage as { finish_reason?: string | null } | null | undefined
+  )?.finish_reason;
+  const finish = hydrateFinishReason(
+    paused,
+    status,
+    runs?.finish_reason,
+    usageFinish,
+  );
   return {
     id: row.id,
     role: row.role,
@@ -380,10 +403,10 @@ export function toMessageDetail(row: Schemas["MessageDetail"]): MessageDetail {
             process: null,
             error: null,
           }
-        : status === "incomplete"
+        : finish === "interrupted" || finish === "cancelled"
           ? {
               events: [],
-              finish_reason: "interrupted",
+              finish_reason: finish,
               process: null,
               error: null,
             }

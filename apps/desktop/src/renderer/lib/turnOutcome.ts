@@ -14,6 +14,7 @@ import {
   GENERIC_EMPTY_FAILURE_MESSAGE,
   LLM_RATE_LIMIT_MESSAGE,
   LLM_RATE_LIMIT_WHY,
+  TURN_CANCELLED_EMPTY_MESSAGE,
   TURN_INTERRUPTED_EMPTY_MESSAGE,
   errorActionForCode,
   isEmptyResponseUserSurface,
@@ -555,7 +556,8 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
     kind !== "partial" &&
     kind !== "ok" &&
     recovery.kind !== "send_next" &&
-    !hasTeamStrip;
+    !hasTeamStrip &&
+    !isCancelCode(face.code);
   const showSessionBanner = Boolean(
     sessionCopy &&
       !showBubbleBanner &&
@@ -563,7 +565,9 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
       !showStripFailure &&
       !showStripStopped &&
       !hideEmptyBubble &&
-      kind !== "partial",
+      kind !== "partial" &&
+      !isCancelCode(face?.code) &&
+      sessionCopy !== TURN_CANCELLED_EMPTY_MESSAGE,
   );
   const showFinishReasonChip = Boolean(
     chipMeta && !chipOwnedByBanner && !showBubbleBanner,
@@ -721,6 +725,17 @@ export function turnOutcomeForAssistant(
       ...executionPipesFromSlot(slot),
       ...extras,
     }),
+  );
+}
+
+/** Collaboration-graph StatusStrip exists for this assistant turn. */
+export function assistantHasTeamStrip(
+  message: Pick<Message, "process">,
+  slot?: Pick<ExecutionRuntime, "plan"> | null,
+): boolean {
+  return (
+    Boolean(slot?.plan) ||
+    (message.process ?? []).some((s) => s.kind === "team")
   );
 }
 

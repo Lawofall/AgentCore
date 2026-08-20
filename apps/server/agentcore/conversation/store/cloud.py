@@ -58,6 +58,7 @@ from agentcore.runtime.events import (
 )
 from agentcore.runtime.journal import (
     KIND_TURN_END,
+    ensure_cancelled_turn_end,
     journal_entries_from_display_runs,
     persist_turn_journal,
 )
@@ -462,11 +463,13 @@ class CloudStore:
                     message_id=message_id,
                     conversation_id=conversation_id,
                     trace_id=trace_id,
-                    entries=journal_entries_from_display_runs(
-                        {
-                            "events": journal,
-                            "finish_reason": FinishReason.CANCELLED.value,
-                        }
+                    entries=ensure_cancelled_turn_end(
+                        journal_entries_from_display_runs(
+                            {
+                                "events": journal,
+                                "finish_reason": FinishReason.CANCELLED.value,
+                            }
+                        )
                     ),
                     replace=False,
                 )
@@ -1362,6 +1365,11 @@ class CloudStore:
                         run_error,
                         finish_reason=finish_value,
                     )
+                if is_incomplete:
+                    # User stop: journal must close with turn_end(cancelled).
+                    # Progressive / pause snapshots omit it or close paused —
+                    # persist keep-tail must not leave that as the last word.
+                    durable = ensure_cancelled_turn_end(durable)
                 if durable is not None:
                     # Outbox writeback holds this turn's authoritative prefix
                     # (pause snapshot or resume complete rewrite). Replace the

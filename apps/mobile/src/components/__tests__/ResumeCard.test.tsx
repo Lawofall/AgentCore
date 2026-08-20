@@ -139,7 +139,10 @@ describe("ResumeCard · ask_user", () => {
               prompt: "选方案",
               kind: "choice",
               multiple: false,
-              options: [{ label: "方案 A" }, { label: "方案 B" }],
+              options: [
+                { label: "方案 A", detail: "走云端更稳" },
+                { label: "方案 B", detail: "走本机更快" },
+              ],
             },
           ],
         })}
@@ -152,6 +155,7 @@ describe("ResumeCard · ask_user", () => {
     expect(screen.getAllByText("方案挑选 · 选一条推进").length).toBeGreaterThan(
       0,
     );
+    expect(screen.getByText("走云端更稳")).toBeTruthy();
     fireEvent.click(screen.getByText("方案 A"));
     fireEvent.click(screen.getByText("采用此方案"));
     expect(onResume).toHaveBeenCalledWith("continue", "", ["方案 A"]);
@@ -212,6 +216,7 @@ describe("ResumeCard · ask_user", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText("取消勾选即剔除")).toBeTruthy();
     expect(screen.getByText("a → b")).toBeTruthy();
+    expect(screen.getByText("delete x")).toBeTruthy();
     // Uncheck second item — not keep-all.
     fireEvent.click(screen.getByText("删 x"));
     fireEvent.click(screen.getByRole("button", { name: /确认并整理/ }));
@@ -273,11 +278,74 @@ describe("ResumeCard · ask_user", () => {
     );
     expect(document.querySelector('[data-ask-intent="risk_ack"]')).toBeTruthy();
     expect(screen.getByText("密钥轮换")).toBeTruthy();
+    expect(screen.getByText("优先")).toBeTruthy();
     expect(screen.getByText("高")).toBeTruthy();
     expect(screen.getByText("低")).toBeTruthy();
     // Empty selection allowed.
     fireEvent.click(screen.getByText("确认并继续"));
     expect(onResume).toHaveBeenCalledWith("continue", "", []);
+  });
+
+  it("decision / kickoff / 裸 ask 选项第二句不画，只显示选项名", () => {
+    for (const intent of [undefined, "decision", "kickoff"] as const) {
+      cleanup();
+      render(
+        <ResumeCard
+          paused={summary({
+            ...(intent ? { intent } : {}),
+            questions: [
+              {
+                id: "q0",
+                prompt: "先做哪条",
+                kind: "choice",
+                multiple: false,
+                options: [
+                  { label: "方案 A", detail: "这条更稳但慢" },
+                  { label: "方案 B", detail: "快但不稳" },
+                ],
+              },
+            ],
+          })}
+          onResume={vi.fn()}
+        />,
+      );
+      expect(screen.getByText("方案 A")).toBeTruthy();
+      expect(screen.getByText("方案 B")).toBeTruthy();
+      expect(screen.queryByText("这条更稳但慢")).toBeNull();
+      expect(screen.queryByText("快但不稳")).toBeNull();
+      expect(document.querySelector(".ask-check-detail")).toBeNull();
+    }
+  });
+
+  it("decision 允许整理选项用结构化字段画将整理，不用模型副标题", () => {
+    render(
+      <ResumeCard
+        paused={summary({
+          intent: "decision",
+          questions: [
+            {
+              id: "q0",
+              prompt: "整理哪份",
+              kind: "choice",
+              multiple: false,
+              options: [
+                {
+                  label: "允许整理咨询文件夹",
+                  action: "grant_organize_folder",
+                  well_known: "desktop",
+                  target_name: "咨询",
+                  detail: "模型发挥的副标题不要画",
+                },
+              ],
+            },
+          ],
+        })}
+        onResume={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("允许整理咨询文件夹")).toBeTruthy();
+    expect(screen.getByText("将整理：桌面 › 咨询")).toBeTruthy();
+    expect(screen.queryByText("模型发挥的副标题不要画")).toBeNull();
   });
 
   it("decision default 预选 + compose 答复 +「其他」逃逸", () => {

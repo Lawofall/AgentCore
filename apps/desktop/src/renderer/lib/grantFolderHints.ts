@@ -126,7 +126,8 @@ export function previewOrganizeTargetLabel(input: {
 
 /**
  * Detail under `grant_organize_folder` option: always show「将整理：…」before allow.
- * Non-organize options pass `detail` through unchanged.
+ * Ordinary options return undefined — generic asks are one line; do not pass
+ * model `detail` through (that subtitle is dedicated-card only).
  */
 export function organizeConfirmDetail(opt: {
   action?: string;
@@ -135,12 +136,7 @@ export function organizeConfirmDetail(opt: {
   well_known?: string;
   target_name?: string;
 }): string | undefined {
-  if (opt.action !== "grant_organize_folder") return opt.detail;
+  if (opt.action !== "grant_organize_folder") return undefined;
   const label = previewOrganizeTargetLabel(opt);
-  const hint = label ? `将整理：${label}` : "将整理本机目录";
-  const extra = opt.detail?.trim();
-  if (extra && !extra.includes("将整理")) {
-    return `${hint} · ${extra}`;
-  }
-  return hint;
+  return label ? `将整理：${label}` : "将整理本机目录";
 }

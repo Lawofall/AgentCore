@@ -112,10 +112,11 @@ def coerce_list_arg(
 def option_label(opt: Any) -> str:
     """The canonical label of a choice option, tolerant of both shapes.
 
-    Options normalize to ``{label, detail?, recommended?}`` dicts, but a durable frame
-    persisted before that change (or a hand-built test) may still carry a bare string —
-    both the live tool and a resume read labels through here so an old paused turn still
-    settles. The label is the answer value (答复模型 α): no separate wire value exists.
+    Options normalize to ``{label, detail?, recommended?}`` dicts (``detail`` only for
+    dedicated cards), but a durable frame persisted before that change (or a hand-built
+    test) may still carry a bare string — both the live tool and a resume read labels
+    through here so an old paused turn still settles. The label is the answer value
+    (答复模型 α): no separate wire value exists.
     """
     if isinstance(opt, dict):
         return str(opt.get("label") or "").strip()
@@ -139,20 +140,24 @@ def normalize_options(
     raw: Any,
     *,
     max_options: int = _MAX_OPTIONS,
+    keep_detail: bool = False,
 ) -> list[dict[str, Any]]:
     """Cap choice options, accepting either bare strings or rich objects.
 
     Default cap is 6 (ordinary choice). ``card=risk_ack`` may raise the cap to 10.
-    A bare ``"Postgres"`` becomes ``{"label": "Postgres"}``; an object may add a one-line
-    ``detail`` (the trade-off shown under the label), ``recommended`` (the asker's
-    advised option — advisory only, never a pre-selection), and ``action`` (a desktop
-    client action such as ``open_local_project`` / ``register_local_project`` /
-    ``bind_local_folder`` — unknown values drop so a hallucinated action never reaches
-    the wire). For ``grant_*`` actions only,
+    A bare ``"Postgres"`` becomes ``{"label": "Postgres"}``; an object may add
+    ``recommended`` (the asker's advised option — advisory only, never a pre-selection)
+    and ``action`` (a desktop client action such as ``open_local_project`` /
+    ``register_local_project`` / ``bind_local_folder`` — unknown values drop so a
+    hallucinated action never reaches the wire). ``detail`` (the one-line trade-off
+    under the label) is kept only when ``keep_detail`` is true — dedicated cards
+    ``proposal_pick`` / ``risk_ack`` / ``organize_plan`` / ``daily_review``. Ordinary
+    short asks and escalate drop it even if the model filled it; put the trade-off
+    in ``label``. For ``grant_*`` actions only,
     ``well_known`` (``desktop`` / ``downloads`` / ``documents``), ``target_name``
     (basename fuzzy token; path separators rejected; truncated ≤120), and absolute
-    ``path`` (C1 mount transport; non-absolute dropped) pass through.
-    Empty-label entries drop, and only the FIRST
+    ``path`` (C1 mount transport; non-absolute dropped) pass through — dropping
+    ``detail`` must not strip these. Empty-label entries drop, and only the FIRST
     ``recommended`` survives (至多一个推荐项), so the card shows one clear「推荐」without
     a wall of badges. Labels that embed recommendation markup (e.g. ``（推荐）``) raise
     :class:`OptionLabelError` — no silent strip.
@@ -168,9 +173,10 @@ def normalize_options(
         assert_clean_option_label(label)
         opt: dict[str, Any] = {"label": label}
         if isinstance(it, dict):
-            detail = str(it.get("detail") or "").strip()
-            if detail:
-                opt["detail"] = detail[:_MAX_OPTION_DETAIL]
+            if keep_detail:
+                detail = str(it.get("detail") or "").strip()
+                if detail:
+                    opt["detail"] = detail[:_MAX_OPTION_DETAIL]
             if bool(it.get("recommended")) and not recommended_taken:
                 opt["recommended"] = True
                 recommended_taken = True
@@ -246,13 +252,15 @@ def normalize_questions(
     raw: Any,
     *,
     max_options: int = _MAX_OPTIONS,
+    keep_detail: bool = False,
 ) -> list[dict[str, Any]]:
     """Cap (≤5) + id the questions, normalizing kind/options/multiple/default.
 
     ``default`` is optional here (unlike the old kickoff): an opening question should
     pre-fill one, but a mid-task fork usually wants the user to actively choose, so it
-    is left empty when the CEO omits it. ``max_options`` forwards to
-    :func:`normalize_options` (raised for ``card=risk_ack``).
+    is left empty when the CEO omits it. ``max_options`` / ``keep_detail`` forward to
+    :func:`normalize_options` (cap raised for ``card=risk_ack``; ``keep_detail`` only
+    for the four dedicated cards).
     """
     items = coerce_list_arg(raw, field="questions")
     out: list[dict[str, Any]] = []
@@ -264,7 +272,9 @@ def normalize_questions(
             continue
         kind = "text" if str(it.get("kind") or "").strip() == "text" else "choice"
         if kind == "choice":
-            options = normalize_options(it.get("options"), max_options=max_options)
+            options = normalize_options(
+                it.get("options"), max_options=max_options, keep_detail=keep_detail
+            )
             multiple = bool(it.get("multiple") or False)
             default = str(it.get("default") or "").strip()
             # Models sometimes put a desktop action on the question. Promote only

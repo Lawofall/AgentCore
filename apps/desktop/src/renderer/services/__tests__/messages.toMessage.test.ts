@@ -420,4 +420,60 @@ describe("toMessage (reload hydrate)", () => {
     );
     expect(usePausedTurnStore.getState().pending).toHaveLength(0);
   });
+
+  it("maps status=incomplete to interrupted when usage/runs are not cancelled", () => {
+    const msg = toMessage(
+      row({
+        id: "m-incomplete",
+        role: "assistant",
+        content: "半截",
+        status: "incomplete",
+      }),
+    );
+    expect(msg.isStreaming).toBe(false);
+    expect(msg.finishReason).toBe("interrupted");
+  });
+
+  it("status=incomplete + runs.finish_reason=cancelled → cancelled, not interrupted", () => {
+    const msg = toMessage(
+      row({
+        id: "m-cancel-runs",
+        role: "assistant",
+        content: "半截",
+        status: "incomplete",
+        runs: {
+          events: [],
+          finish_reason: "cancelled",
+        },
+      }),
+    );
+    expect(msg.finishReason).toBe("cancelled");
+    expect(msg.finishReason).not.toBe("interrupted");
+    expect(msg.isStreaming).toBe(false);
+  });
+
+  it("status=incomplete + usage.finish_reason=cancelled → cancelled even if runs.finish_reason is null", () => {
+    const msg = toMessage(
+      row({
+        id: "m-cancel-usage",
+        role: "assistant",
+        content: "半截",
+        status: "incomplete",
+        runs: {
+          events: [],
+          finish_reason: null,
+        },
+        usage: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache_hit: 0,
+          cache_miss: 0,
+          finish_reason: "cancelled",
+        },
+      }),
+    );
+    expect(msg.finishReason).toBe("cancelled");
+    expect(msg.finishReason).not.toBe("interrupted");
+  });
 });

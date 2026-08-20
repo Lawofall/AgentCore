@@ -461,6 +461,15 @@ describe("AssistantMessage trusts turnOutcome flags", () => {
     );
     expect(screen.getByText("半成品答案")).toBeTruthy();
     expect(screen.queryByText("已停止")).toBeNull();
+    cleanup();
+    renderBubble(
+      settledMessage({
+        content: "半成品答案",
+        finishReason: "cancelled",
+        turnWarning: "已停止",
+      }),
+    );
+    expect(screen.queryByText("已停止")).toBeNull();
     expect(screen.getByTestId("assistant-footer")).toBeTruthy();
     cleanup();
     renderBubble(

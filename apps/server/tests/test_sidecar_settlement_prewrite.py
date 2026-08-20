@@ -223,7 +223,8 @@ async def test_sidecar_settlement_prewrite_seeds_hang_frame_on_empty_outbox(
 async def test_resume_cancel_salvage_keeps_pre_pause_process(tmp_path) -> None:
     """Cancel after prewrite: salvage journal projects runs.process with thinking steps."""
     from agentcore.conversation.turn_persistence import compose_salvage_journal
-    from agentcore.runtime.journal import runs_from_entries
+    from agentcore.runtime.journal import KIND_TURN_END, runs_from_entries
+    from agentcore.sidecar.server_pkg.turns import _ensure_cancelled_turn_end
 
     outbox = OutboxStore(tmp_path / "outbox")
     outbox.bind_turn(
@@ -251,7 +252,9 @@ async def test_resume_cancel_salvage_keeps_pre_pause_process(tmp_path) -> None:
             "ts": None,
         },
     ]
-    merged = compose_salvage_journal(live, susp.journal_entries)
+    merged = _ensure_cancelled_turn_end(
+        compose_salvage_journal(live, susp.journal_entries)
+    )
     await outbox.salvage(
         journal=merged,
         content="续跑半段",
@@ -267,8 +270,11 @@ async def test_resume_cancel_salvage_keeps_pre_pause_process(tmp_path) -> None:
     assert "process_reasoning" in kinds
     assert "run_started" in kinds
     assert kinds.index("process_reasoning") < kinds.index("run_started")
+    assert kinds[-1] == KIND_TURN_END
+    assert (entries[-1].get("payload") or {}).get("finish_reason") == "cancelled"
     runs = runs_from_entries(entries)
     assert runs is not None
+    assert runs.get("finish_reason") == "cancelled"
     process = runs.get("process") or []
     assert any(isinstance(s, dict) and s.get("kind") == "reasoning" for s in process)
     # Not team-only: process lane carries pre-resume thinking.

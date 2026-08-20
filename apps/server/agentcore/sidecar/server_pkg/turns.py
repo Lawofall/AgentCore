@@ -224,6 +224,31 @@ def _emit_cancel_end_if_cancelling(sink: EventSink) -> None:
     _emit_user_stop_message_end(sink)
 
 
+def _ensure_cancelled_turn_end(
+    journal: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Sidecar salvage closer: append ``turn_end(cancelled)`` when the journal lacks one.
+
+    Cloud persist already appends ``turn_end`` in the interrupt path; local outbox
+    salvage does not go through ``CloudStore.finalize``, so resume/startTurn cancel
+    must close the journal here.
+    """
+    entries = list(journal or [])
+    if any((e.get("kind") or e.get("type") or "") == KIND_TURN_END for e in entries):
+        return entries
+    seqs = [e.get("seq") for e in entries if isinstance(e.get("seq"), int)]
+    next_seq = (max(seqs) + 1) if seqs else len(entries)
+    entries.append(
+        {
+            "kind": KIND_TURN_END,
+            "payload": {"finish_reason": FinishReason.CANCELLED.value},
+            "ts": None,
+            "seq": next_seq,
+        }
+    )
+    return entries
+
+
 class TurnExecutionMixin:
     def _log_turn_cancelled(
         self,
@@ -513,7 +538,7 @@ class TurnExecutionMixin:
                 )
             )
         except asyncio.CancelledError:
-            journal = list(sink.execution_journal() or [])
+            journal = _ensure_cancelled_turn_end(list(sink.execution_journal() or []))
             content = sink.streamed_content() or ""
             if outbox is not None:
                 await outbox.salvage(
@@ -533,16 +558,16 @@ class TurnExecutionMixin:
                 journal_entries=len(journal),
                 salvaged=outbox is not None,
             )
+            # Reply first: a hung event pump must not delay TURN_CANCELLED.
+            self._send_soon(
+                protocol.make_error(request_id, protocol.TURN_CANCELLED, "turn cancelled")
+            )
             if pump is not None:
                 with contextlib.suppress(Exception):
                     await pump
             else:
                 with contextlib.suppress(Exception):
                     sink.close(reason="sidecar_turn_cancelled")
-            # Reply on an independent task: this one is unwinding from cancellation.
-            self._send_soon(
-                protocol.make_error(request_id, protocol.TURN_CANCELLED, "turn cancelled")
-            )
             raise
         except Exception as e:
             if outbox is not None:
@@ -923,9 +948,11 @@ class TurnExecutionMixin:
                 compose_salvage_journal,
             )
 
-            journal = compose_salvage_journal(
-                sink.execution_journal() or [],
-                suspension.journal_entries,
+            journal = _ensure_cancelled_turn_end(
+                compose_salvage_journal(
+                    sink.execution_journal() or [],
+                    suspension.journal_entries,
+                )
             )
             content = compose_salvage_content(
                 sink.streamed_content() or "",
@@ -949,8 +976,7 @@ class TurnExecutionMixin:
                 journal_entries=len(journal or []),
                 salvaged=outbox is not None,
             )
-            with contextlib.suppress(Exception):
-                await pump
+            # Reply first: a hung event pump must not delay TURN_CANCELLED.
             self._send_soon_to_request_ids(
                 reply_ids,
                 request_id,
@@ -958,6 +984,8 @@ class TurnExecutionMixin:
                     rid, protocol.TURN_CANCELLED, "turn cancelled"
                 ),
             )
+            with contextlib.suppress(Exception):
+                await pump
             raise
         except Exception as e:
             if not settlement_durable and self._paused_store is not None:

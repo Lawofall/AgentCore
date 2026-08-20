@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from agentcore.conversation.store import reset_conversation_store_for_tests
 from agentcore.memory.account_prepare_cache import (
     AccountPrepareSnapshot,
     clear_account_rules_memory_cache,
@@ -21,6 +23,8 @@ from agentcore.runtime.coordination.session import (
     set_active_coordination,
 )
 from agentcore.runtime.events import EventSink, EventType, FinishReason
+from agentcore.runtime.journal import KIND_TURN_END
+from agentcore.runtime.suspension import AskUserSuspension
 from agentcore.sidecar.protocol import TURN_CANCELLED
 from agentcore.sidecar.server import SidecarServer
 from agentcore.sidecar.server_pkg.cancel_tombstone import (
@@ -30,6 +34,7 @@ from agentcore.sidecar.server_pkg.cancel_tombstone import (
 from agentcore.sidecar.server_pkg.turns import (
     _emit_cancel_end_if_cancelling,
     _emit_user_stop_message_end,
+    _ensure_cancelled_turn_end,
 )
 
 
@@ -53,6 +58,57 @@ def _clear_coord():
     clear_active_coordination()
     yield
     clear_active_coordination()
+    reset_conversation_store_for_tests()
+
+
+def _pause_frame(message_id: str = "m1", conversation_id: str = "c1") -> AskUserSuspension:
+    susp = AskUserSuspension(
+        message_id=message_id,
+        conversation_id=conversation_id,
+        user_id="u1",
+        captain_run_id="r1",
+        checkpoint_id=f"cp-{message_id}",
+        tool_call_id="tc1",
+        base_system_prompt="sys",
+        user_message="原始问题",
+        transcript=[],
+        history=[],
+        question="要继续吗？",
+        context="背景",
+    )
+    susp.journal_entries = [
+        {"kind": "checkpoint_required", "payload": {"id": "cp"}, "ts": None},
+    ]
+    return susp
+
+
+async def _init_sidecar(server: SidecarServer, tmp_path: Path) -> None:
+    await server.handle_line(
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "userId": "u",
+                    "workspaceRoot": str(tmp_path),
+                    "dataDir": str(tmp_path / "data"),
+                    "approvalsEnabled": True,
+                    "inference": {
+                        "baseUrl": "http://test.local/v1/inference/v1",
+                        "apiKey": "test-inference-tok",
+                        "model": "test-model",
+                    },
+                },
+            }
+        )
+    )
+
+
+async def _await_pending_sends(server: SidecarServer) -> None:
+    pending = [t for t in list(server._pending_sends) if not t.done()]
+    if pending:
+        await asyncio.gather(*pending)
 
 
 async def test_sidecar_cancel_cascades_user_stop_not_detach():
@@ -539,3 +595,157 @@ async def test_interrupt_stash_cleared_when_live_delta_arrives():
     assert sink.streamed_content() == "新稿"
     assert sink.interrupt_salvage_content() == "新稿"
     assert sink._interrupt_content_stash is None
+
+
+def test_ensure_cancelled_turn_end_appends_when_missing():
+    out = _ensure_cancelled_turn_end(
+        [{"kind": "run_started", "payload": {"run_id": "w1"}, "seq": 0}]
+    )
+    assert [e.get("kind") for e in out] == ["run_started", KIND_TURN_END]
+    assert out[-1]["payload"]["finish_reason"] == FinishReason.CANCELLED.value
+    assert out[-1]["seq"] == 1
+
+
+def test_ensure_cancelled_turn_end_skips_when_present():
+    existing = [
+        {"kind": KIND_TURN_END, "payload": {"finish_reason": "end_turn"}, "seq": 0}
+    ]
+    out = _ensure_cancelled_turn_end(existing)
+    assert len(out) == 1
+    assert out[0]["payload"]["finish_reason"] == "end_turn"
+
+
+def _message_end_events(sent: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for msg in sent:
+        if msg.get("method") != "turn/event":
+            continue
+        event = (msg.get("params") or {}).get("event") or {}
+        if event.get("type") == "message_end":
+            events.append(event)
+    return events
+
+
+async def test_resume_user_stop_emits_message_end_cancelled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Resume cancel unwind must emit message_end(cancelled) before sink close."""
+    started = asyncio.Event()
+
+    async def fake_resume(**kwargs: Any) -> dict[str, Any]:
+        started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("resume pipeline must be cancelled")
+
+    monkeypatch.setattr("agentcore.sidecar.server.resume_chat_pipeline", fake_resume)
+
+    lines, write_line = _recorder()
+    server = SidecarServer(write_line)
+    await _init_sidecar(server, tmp_path)
+    assert server._paused_store is not None
+    await server._paused_store.save(_pause_frame())
+
+    await server.handle_line(
+        _req(
+            7,
+            "resume",
+            {
+                "messageId": "m1",
+                "conversationId": "c1",
+                "decision": "continue",
+                "userMessageId": "u1",
+                "traceId": "a" * 32,
+            },
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=2.0)
+    turn_task = server._turns["m1"]
+    await server.handle_line(
+        _req(
+            8,
+            "cancel",
+            {"turnId": "m1", "conversationId": "c1", "reason": "user_stop"},
+        )
+    )
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(turn_task, timeout=2.0)
+        await _await_pending_sends(server)
+
+        ends = _message_end_events(lines)
+        assert ends, "resume cancel must pump message_end(cancelled) to the renderer"
+        assert ends[-1]["payload"]["finish_reason"] == FinishReason.CANCELLED.value
+        err = next(m for m in lines if m.get("id") == 7 and "error" in m)
+        assert err["error"]["code"] == TURN_CANCELLED
+    finally:
+        if not turn_task.done():
+            turn_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, asyncio.TimeoutError):
+                await asyncio.wait_for(turn_task, timeout=2.0)
+
+
+async def test_resume_cancel_rpc_does_not_wait_for_hanging_pump(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TURN_CANCELLED must be scheduled even if the event pump never finishes."""
+    started = asyncio.Event()
+    pump_release = asyncio.Event()
+
+    async def fake_resume(**kwargs: Any) -> dict[str, Any]:
+        started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("resume pipeline must be cancelled")
+
+    async def hanging_pump(*_args: Any, **_kwargs: Any) -> None:
+        await pump_release.wait()
+
+    monkeypatch.setattr("agentcore.sidecar.server.resume_chat_pipeline", fake_resume)
+
+    lines, write_line = _recorder()
+    server = SidecarServer(write_line)
+    monkeypatch.setattr(server, "_pump", hanging_pump)
+    await _init_sidecar(server, tmp_path)
+    assert server._paused_store is not None
+    await server._paused_store.save(_pause_frame())
+
+    await server.handle_line(
+        _req(
+            7,
+            "resume",
+            {
+                "messageId": "m1",
+                "conversationId": "c1",
+                "decision": "continue",
+                "userMessageId": "u1",
+                "traceId": "a" * 32,
+            },
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=2.0)
+    turn_task = server._turns["m1"]
+    await server.handle_line(
+        _req(
+            8,
+            "cancel",
+            {"turnId": "m1", "conversationId": "c1", "reason": "user_stop"},
+        )
+    )
+
+    async def _cancelled_rpc() -> dict[str, Any]:
+        while True:
+            err = next((m for m in lines if m.get("id") == 7 and "error" in m), None)
+            if err is not None:
+                return err
+            await _await_pending_sends(server)
+            await asyncio.sleep(0)
+
+    try:
+        err = await asyncio.wait_for(_cancelled_rpc(), timeout=2.0)
+        assert err["error"]["code"] == TURN_CANCELLED
+        assert err["error"]["message"] == "turn cancelled"
+        assert not turn_task.done()
+    finally:
+        pump_release.set()
+        if not turn_task.done():
+            with contextlib.suppress(asyncio.CancelledError, asyncio.TimeoutError):
+                await asyncio.wait_for(turn_task, timeout=2.0)

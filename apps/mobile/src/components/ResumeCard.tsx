@@ -148,6 +148,31 @@ function organizeOptionDetail(o: Record<string, unknown>): string | undefined {
   return str(o, "detail") ?? undefined;
 }
 
+const WELL_KNOWN_LABEL: Record<string, string> = {
+  desktop: "桌面",
+  downloads: "下载",
+  documents: "文档",
+};
+
+/** Daily ask: never render model `detail`. Organize grant may show a structured 将整理 row. */
+function decisionOptionConfirmLine(
+  o: Record<string, unknown>,
+): string | undefined {
+  if (str(o, "action") !== "grant_organize_folder") return undefined;
+  const path = str(o, "path");
+  if (path) {
+    const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+    const base = parts[parts.length - 1];
+    return base ? `将整理：${base}` : "将整理本机目录";
+  }
+  const wellLabel = WELL_KNOWN_LABEL[str(o, "well_known") ?? ""];
+  const target = str(o, "target_name");
+  if (wellLabel && target) return `将整理：${wellLabel} › ${target}`;
+  if (wellLabel) return `将整理：${wellLabel}`;
+  if (target) return `将整理：${target}`;
+  return "将整理本机目录";
+}
+
 /** Seed every choice label (mirrors desktop useAskAnswer seedAllMultiple). */
 function seedAllMultipleAnswers(
   questions: Array<Record<string, unknown>>,
@@ -1059,7 +1084,7 @@ function ResumeCardBody({
                 {options.map((o) => {
                   const label = str(o, "label") ?? "";
                   if (!label) return null;
-                  const detail = str(o, "detail") ?? undefined;
+                  const confirmLine = decisionOptionConfirmLine(o);
                   const action = str(o, "action");
                   const folderAction = isDesktopFolderAction(action);
                   const recommended = Boolean(o.recommended);
@@ -1097,8 +1122,8 @@ function ResumeCardBody({
                       />
                       <span className="ask-check-text">
                         <span className="ask-check-label">{label}</span>
-                        {detail && (
-                          <span className="ask-check-detail">{detail}</span>
+                        {confirmLine && (
+                          <span className="ask-check-detail">{confirmLine}</span>
                         )}
                       </span>
                       {hint && <span className="ask-row-hint">{hint}</span>}

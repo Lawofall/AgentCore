@@ -128,11 +128,13 @@ export interface BackendMessage {
   usage?:
     | (UsageBreakdown & {
         error?: { code: string; message: string } | null;
+        /** Persist column may carry finish_reason; REST UsageBreakdown strips it. */
+        finish_reason?: string | null;
       })
     | null;
   /** Progressive assistant-row lifecycle (``usage.status``). Overlay / salvage
    * criterion — ``running`` hydrates as streaming partial; ``incomplete`` as
-   * interrupted. */
+   * interrupted unless usage/runs already cancelled. */
   status?: "running" | "complete" | "incomplete" | "failed" | null;
   /** Cold-path pause latch (``usage.paused``). Write keeps ``status=running``;
    * when true, hydrate as paused (not streaming) — finishReason=paused. */
@@ -207,6 +209,23 @@ function executionIdOf(events: SSEEvent[]): string | null {
   return id ?? null;
 }
 
+/** Reload finishReason: cancelled on usage/runs wins over incomplete → interrupted. */
+function hydrateFinishReason(
+  paused: boolean,
+  status: BackendMessage["status"],
+  runsFinish: string | null | undefined,
+  usageFinish: string | null | undefined,
+): string | undefined {
+  if (paused) return "paused";
+  if (runsFinish === "cancelled" || usageFinish === "cancelled") {
+    return "cancelled";
+  }
+  if (runsFinish) return runsFinish;
+  if (usageFinish) return usageFinish;
+  if (status === "incomplete") return "interrupted";
+  return undefined;
+}
+
 /** Map a persisted message row to the client's domain {@link Message}, rebuilding
  * its team graph / checkpoint projections from the journal so a reloaded turn
  * renders exactly like its live one did. */
@@ -265,12 +284,14 @@ export function toMessage(m: BackendMessage): Message {
   // P4: running → stream-style partial; incomplete / interrupted finish → interrupted chip.
   // Cold-path pause latch: write keeps status=running + paused=true; hydrate as paused
   // (not streaming) so reopen does not setGenerating / spinner forever.
+  // usage/runs already cancelled must not map incomplete → interrupted (user-stop).
   const status = m.status ?? null;
-  const finishReason = paused
-    ? "paused"
-    : (m.runs?.finish_reason ??
-      (status === "incomplete" ? "interrupted" : undefined) ??
-      undefined);
+  const finishReason = hydrateFinishReason(
+    paused,
+    status,
+    m.runs?.finish_reason,
+    m.usage?.finish_reason,
+  );
   const isStreaming = role === "assistant" && status === "running" && !paused;
   // Keep the journal whenever events exist — classic turns may have DURABLE
   // `user_interjection` (and delivery_status) without a `run_plan`. Previously

@@ -28,15 +28,40 @@ export function finalizeGeneratingIfNeeded(conversationId: string): void {
 
 /**
  * Honest-stop Abort 收口：RPC 可能先于 ``message_end`` reject。
- * ``stopping`` → ``stopped``，并清 ``isGenerating``，避免卡「停止中」直到刷新。
+ * ``stopping`` → ``stopped``，清 ``isGenerating``，并盖 ``finishReason=cancelled``
+ * （原先只清 ``isStreaming``，条会假「进行中」直到刷新）。
  * Shared by sendTurn / resume / regenerate / rejoin / stage-card（midFlight 除外：
  * Stop ≠ 取消排队）。
  */
 export function finalizeHonestStopAbort(conversationId: string): void {
-  if (getTurnPhase(conversationId) === "stopping") {
+  const wasStopping = getTurnPhase(conversationId) === "stopping";
+  if (wasStopping) {
     completeTurnPhase(conversationId, "stopped");
   }
   finalizeGeneratingIfNeeded(conversationId);
+  if (wasStopping) stampHonestStopCancelled(conversationId);
+}
+
+/** Cover finishReason so StatusStrip / hydrate see user-stop, not a dangling stream. */
+function stampHonestStopCancelled(conversationId: string): void {
+  const store = useConversationStore.getState();
+  const tail = getRuntime(conversationId).messages.at(-1);
+  if (!tail || tail.role !== "assistant") return;
+  // Empty interrupt / pause keep their own faces; do not rewrite to cancelled.
+  if (tail.finishReason === "paused" || tail.finishReason === "interrupted") {
+    return;
+  }
+  store.updateMessage(
+    tail.id,
+    {
+      isStreaming: false,
+      finishReason: "cancelled",
+      runs: tail.runs
+        ? { ...tail.runs, finishReason: "cancelled" }
+        : tail.runs,
+    },
+    conversationId,
+  );
 }
 
 /**

@@ -328,6 +328,31 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     expect(o.supportPackHost).toBe("none");
   });
 
+  it("user-stop never paints a warning banner (session copy / attested error)", () => {
+    const withSession = arbitrateTurnOutcome({
+      content: "半成品",
+      finishReason: "cancelled",
+      hasTeamStrip: true,
+      executionStatus: "cancelled",
+      conversationError: "已停止",
+      processLength: 2,
+    });
+    expect(withSession.kind).toBe("ok");
+    expect(withSession.showStripStopped).toBe(true);
+    expect(withSession.showBubbleBanner).toBe(false);
+    expect(withSession.showSessionBanner).toBe(false);
+
+    const attestedError = arbitrateTurnOutcome({
+      content: "半成品",
+      finishReason: "cancelled",
+      attestedKind: "error",
+      hasTeamStrip: false,
+      processLength: 1,
+    });
+    expect(attestedError.showBubbleBanner).toBe(false);
+    expect(attestedError.showSessionBanner).toBe(false);
+  });
+
   it("rate-limit on cancelled status follows kind, never 已停止", () => {
     const o = arbitrateTurnOutcome(
       measuredCase({

@@ -91,13 +91,24 @@ describe("organizeConfirmDetail", () => {
     ).toBe("将整理：桌面 › 咨询");
   });
 
-  it("passes through detail for non-organize options", () => {
+  it("does not pass through model detail for non-organize options", () => {
     expect(
       organizeConfirmDetail({
         action: "grant_readonly_folder",
         detail: "只读说明",
       }),
-    ).toBe("只读说明");
+    ).toBeUndefined();
+  });
+
+  it("ignores model detail on organize grant (structured line only)", () => {
+    expect(
+      organizeConfirmDetail({
+        action: "grant_organize_folder",
+        well_known: "desktop",
+        target_name: "咨询",
+        detail: "模型发挥的副标题",
+      }),
+    ).toBe("将整理：桌面 › 咨询");
   });
 });
 

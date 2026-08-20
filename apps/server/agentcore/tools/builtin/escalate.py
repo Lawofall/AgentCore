@@ -138,7 +138,10 @@ class EscalateTool:
                                 },
                                 "options": {
                                     "type": "array",
-                                    "description": "kind=choice 时的候选项（最多 6 个）。",
+                                    "description": (
+                                        "kind=choice 时的候选项（最多 6 个）。"
+                                        "权衡写进 label，一行即可。"
+                                    ),
                                     "items": {
                                         "type": "object",
                                         "properties": {
@@ -146,13 +149,7 @@ class EscalateTool:
                                                 "type": "string",
                                                 "description": (
                                                     "选项文字（即选它时回传的答案）。"
-                                                ),
-                                            },
-                                            "detail": {
-                                                "type": "string",
-                                                "description": (
-                                                    "可选：这一项的一行权衡 / 代价，"
-                                                    "帮看懂取舍。"
+                                                    "权衡写进此项，勿另写第二句。"
                                                 ),
                                             },
                                             "recommended": {
@@ -260,6 +257,7 @@ class EscalateTool:
         channel = context.escalation
         if blocking and channel is not None and channel.armed:
             try:
+                # escalate 无专用 card：与普通短问同口径，丢掉选项第二句。
                 questions = normalize_questions(arguments.get("questions"))
             except ListArgError as exc:
                 return ToolResult(

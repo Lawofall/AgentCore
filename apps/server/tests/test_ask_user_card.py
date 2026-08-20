@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from agentcore.core.types import ToolEffect
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.events import EventSink, EventType
@@ -226,3 +228,99 @@ async def test_proposal_pick_rejects_bad_shape():
     )
     assert res.success is False
     assert res.error and "proposal_pick" in res.error
+
+
+def _detailed_choice(*, n: int, multiple: bool, detail: str = "一行取舍"):
+    return [
+        {
+            "prompt": "选？",
+            "kind": "choice",
+            "multiple": multiple,
+            "options": [{"label": f"项 {i}", "detail": detail} for i in range(n)],
+        }
+    ]
+
+
+def _with_ask_transcript(*, message: str, card: str | None = None):
+    args: dict = {"message": message}
+    if card is not None:
+        args["card"] = card
+    return captain_transcript.set(
+        [
+            LLMMessage(role="user", content="hi"),
+            LLMMessage(
+                role="assistant",
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        id="ask",
+                        function=ToolCallFunction(
+                            name="ask_user",
+                            arguments=json.dumps(args),
+                        ),
+                    )
+                ],
+            ),
+        ]
+    )
+
+
+async def test_ordinary_ask_drops_option_detail_even_if_model_filled():
+    saved: list = []
+
+    async def _save(frame):
+        saved.append(frame)
+
+    tool = _tool(saver=_save)
+    token = _with_ask_transcript(message="选方向")
+    try:
+        res = await tool.execute(
+            {
+                "message": "选方向",
+                "questions": _detailed_choice(n=2, multiple=False, detail="不该出现"),
+            },
+            _ctx(),
+        )
+    finally:
+        captain_transcript.reset(token)
+    assert res.success is True
+    assert saved
+    required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
+    opts = required.payload["questions"][0]["options"]
+    assert [o["label"] for o in opts] == ["项 0", "项 1"]
+    assert all("detail" not in o for o in opts)
+
+
+@pytest.mark.parametrize(
+    "card,n,multiple",
+    [
+        ("proposal_pick", 2, False),
+        ("risk_ack", 2, True),
+        ("organize_plan", 1, True),
+        ("daily_review", 1, True),
+    ],
+)
+async def test_dedicated_card_keeps_option_detail(card, n, multiple):
+    saved: list = []
+
+    async def _save(frame):
+        saved.append(frame)
+
+    tool = _tool(saver=_save)
+    token = _with_ask_transcript(message="专用卡", card=card)
+    try:
+        res = await tool.execute(
+            {
+                "message": "专用卡",
+                "card": card,
+                "questions": _detailed_choice(n=n, multiple=multiple),
+            },
+            _ctx(),
+        )
+    finally:
+        captain_transcript.reset(token)
+    assert res.success is True, res.error
+    assert saved
+    required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
+    opts = required.payload["questions"][0]["options"]
+    assert all(o.get("detail") == "一行取舍" for o in opts)

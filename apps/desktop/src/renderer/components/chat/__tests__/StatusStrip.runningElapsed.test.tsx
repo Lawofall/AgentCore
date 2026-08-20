@@ -5,6 +5,7 @@
  */
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { conversationKeys } from "@/lib/queryKeys";
+import { useConversationStore } from "@/stores/conversation";
 import {
   type ExecutionPlan,
   ExecutionScopeContext,
@@ -46,7 +47,10 @@ function started(runId: string, agentId: string, t: number): RunFrame {
   };
 }
 
-function renderStrip(frames: RunFrame[]) {
+function renderStrip(
+  frames: RunFrame[],
+  status: "running" | "cancelled" = "running",
+) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
@@ -65,7 +69,7 @@ function renderStrip(frames: RunFrame[]) {
       <TooltipProvider>
         <ExecutionScopeContext.Provider value={MID}>
           <StatusStrip
-            execution={projectExecution(plan, frames, "running")}
+            execution={projectExecution(plan, frames, status)}
             expanded
             onToggle={() => {}}
             onMaximize={() => {}}
@@ -80,6 +84,7 @@ function renderStrip(frames: RunFrame[]) {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  useConversationStore.setState({ currentConversationId: null, byId: {} });
 });
 beforeEach(() => {
   useExecutionStore.setState({ byId: {} });
@@ -122,5 +127,29 @@ describe("StatusStrip · 运行态墙钟用时", () => {
     renderStrip([]);
     expect(screen.getByText("0/2")).toBeTruthy();
     expect(screen.queryByText(/用时/)).toBeNull();
+  });
+
+  it("stopping 冻住用时且不自增、不挂回放 Play", () => {
+    vi.useFakeTimers();
+    const now = 1_700_000_040_000;
+    vi.setSystemTime(now);
+    const cid = "conv-stopping-elapsed";
+    useConversationStore.setState({ currentConversationId: cid, byId: {} });
+    useConversationStore.getState().switchConversation(cid);
+    useConversationStore.getState().setTurnPhase("stopping", cid);
+    const frames: RunFrame[] = [
+      started("r1", "a1", now - 40_000),
+      started("r2", "a2", now - 38_000),
+    ];
+    renderStrip(frames, "running");
+    expect(screen.getByTestId("status-strip-stopping")).toBeTruthy();
+    expect(screen.getByText("停止中")).toBeTruthy();
+    expect(screen.getByText("0/2 · 用时 40s")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "回放协作过程" })).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    expect(screen.getByText("0/2 · 用时 40s")).toBeTruthy();
+    expect(screen.queryByText(/用时 42s/)).toBeNull();
   });
 });

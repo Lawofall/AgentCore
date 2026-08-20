@@ -32,6 +32,7 @@ def test_normalize_options_preserves_bind_local_folder_action():
     assert out[1]["action"] == "register_local_project"
     assert out[2]["action"] == "bind_local_folder"
     assert "action" not in out[3]
+    assert "detail" not in out[3]  # 普通短问丢掉第二句
     assert "action" not in out[4]  # unknown actions drop
     assert out[5]["action"] == "grant_readonly_folder"
     assert out[6]["action"] == "grant_organize_folder"
@@ -102,6 +103,44 @@ def test_normalize_options_passthrough_well_known_and_target_name():
     assert "target_name" not in out[5]
     assert out[6]["path"] == r"D:\新建文件夹\资料"
     assert "path" not in out[7]
+
+
+def test_normalize_options_drops_detail_by_default():
+    out = normalize_options(
+        [
+            {"label": "方案 A：先出契约", "detail": "慢但稳"},
+            {"label": "方案 B：先一条主路径", "detail": "快但窄"},
+        ]
+    )
+    assert [o["label"] for o in out] == ["方案 A：先出契约", "方案 B：先一条主路径"]
+    assert all("detail" not in o for o in out)
+
+
+def test_normalize_options_keeps_detail_when_flagged():
+    out = normalize_options(
+        [{"label": "方案甲", "detail": "一行取舍"}],
+        keep_detail=True,
+    )
+    assert out[0]["detail"] == "一行取舍"
+
+
+def test_normalize_options_drops_detail_but_keeps_grant_hints():
+    """通用卡「将整理：…」由前端合成；丢掉第二句不得误删 grant 字段。"""
+    out = normalize_options(
+        [
+            {
+                "label": "允许整理桌面",
+                "detail": "将整理：桌面上的咨询报告",
+                "action": "grant_organize_folder",
+                "well_known": "desktop",
+                "target_name": "咨询报告",
+            }
+        ]
+    )
+    assert "detail" not in out[0]
+    assert out[0]["action"] == "grant_organize_folder"
+    assert out[0]["well_known"] == "desktop"
+    assert out[0]["target_name"] == "咨询报告"
 
 
 def test_normalize_questions_passthrough_to_checkpoint_shape():
@@ -381,6 +420,8 @@ def test_ask_user_schema_forbids_recommendation_in_label_desc():
     ]["properties"]
     assert "禁止" in props["label"]["description"]
     assert "label" in props["recommended"]["description"]
+    assert "专用" in props["detail"]["description"]
+    assert "普通" in props["detail"]["description"]
 
 
 def test_ask_user_schema_advertises_action_only_when_flagged():

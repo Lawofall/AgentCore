@@ -332,6 +332,11 @@ describe("SidecarManager recovery / attach (D7)", () => {
       (c) => (c[1] as { event?: { type: string } }).event?.type,
     );
     expect(types).toContain("message_end");
+    const end = (wc.send as ReturnType<typeof vi.fn>).mock.calls
+      .map((c) => c[1] as { event?: { type?: string; payload?: unknown } })
+      .map((p) => p.event)
+      .find((e) => e?.type === "message_end");
+    expect(end?.payload).toEqual({ finish_reason: "end_turn" });
     expect(
       manager.attach(mockWc() as never, { conversationId: "c4" }).attached,
     ).toBe(false);
@@ -533,6 +538,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
       }),
     ).toThrow(/EPIPE/);
 
+    (wc.send as ReturnType<typeof vi.fn>).mockImplementation(() => {});
     t.settleTurn({ turnId: "turn-d2-real", ...TURN_RESULT });
     await turnP;
   });

@@ -339,6 +339,8 @@ def test_to_record_turn_body_includes_sorted_journal(tmp_path):
         {"kind": "run_completed", "payload": {"id": "r1"}, "ts": None},
     ]
     assert body["finish_reason"] == "cancelled"
+    # Sidecar emit / outbox journal stay progressive — PG finalize fills turn_end.
+    assert all(e.get("kind") != "turn_end" for e in body["journal"])
 
 
 def test_list_outbox_records(tmp_path):

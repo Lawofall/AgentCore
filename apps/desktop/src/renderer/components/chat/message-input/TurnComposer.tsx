@@ -16,7 +16,10 @@ import {
   supportDiagnosticExtrasFromError,
 } from "@/lib/supportDiagnostics";
 import { notifySuccess } from "@/lib/toast";
-import { turnOutcomeForAssistant } from "@/lib/turnOutcome";
+import {
+  assistantHasTeamStrip,
+  turnOutcomeForAssistant,
+} from "@/lib/turnOutcome";
 import {
   useBackgroundTasksStore,
   useHandoffArmed,
@@ -170,6 +173,7 @@ export function TurnComposer({
       ? turnOutcomeForAssistant(lastMessage, lastSlot, {
           hasPendingDecision: showPendingHint,
           conversationError: sessionError,
+          hasTeamStrip: assistantHasTeamStrip(lastMessage, lastSlot),
         })
       : null;
   const showComposerHint =

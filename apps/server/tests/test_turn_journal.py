@@ -13,8 +13,10 @@ assert it ``==`` the live transcript.
 
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.journal import (
+    ensure_cancelled_turn_end,
     entries_from_runs,
     journal_entries_from_display_runs,
+    last_turn_end_finish,
     runs_from_entries,
     window_from_journal,
 )
@@ -281,6 +283,38 @@ def test_cancelled_salvage_with_exec_facts_still_round_trips():
         {"kind": "turn_end", "payload": {"finish_reason": "cancelled"}, "ts": None},
     ]
     assert runs_from_entries(entries) == {"events": [], "finish_reason": "cancelled"}
+
+
+def test_ensure_cancelled_turn_end_appends_when_absent():
+    facts = [
+        {"kind": "run_started", "payload": {"id": "r1"}, "ts": "t0"},
+        {"kind": "run_completed", "payload": {"id": "r1"}, "ts": None},
+    ]
+    closed = ensure_cancelled_turn_end(facts)
+    assert last_turn_end_finish(closed) == "cancelled"
+    assert closed[:-1] == facts
+    assert runs_from_entries(closed)["finish_reason"] == "cancelled"
+    # Success-path helper must not be implied: raw facts stay without turn_end.
+    assert last_turn_end_finish(facts) is None
+
+
+def test_ensure_cancelled_turn_end_overrides_pause_snapshot():
+    snapshot = [
+        {"kind": "turn_paused", "payload": {"checkpoint_id": "cp"}, "ts": "t0"},
+        {"kind": "turn_end", "payload": {"finish_reason": "paused"}, "ts": None},
+    ]
+    closed = ensure_cancelled_turn_end(snapshot)
+    assert last_turn_end_finish(closed) == "cancelled"
+    assert closed[0] == snapshot[0]
+    assert runs_from_entries(closed)["finish_reason"] == "cancelled"
+
+
+def test_ensure_cancelled_turn_end_empty_journal_still_projects():
+    closed = ensure_cancelled_turn_end(None)
+    assert closed == [
+        {"kind": "turn_end", "payload": {"finish_reason": "cancelled"}, "ts": None}
+    ]
+    assert runs_from_entries(closed) == {"events": [], "finish_reason": "cancelled"}
 
 
 def test_execution_sourced_plain_chat_turn_projects_to_none():

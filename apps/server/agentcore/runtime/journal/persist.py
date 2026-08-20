@@ -6,11 +6,34 @@ from typing import TYPE_CHECKING, Any
 
 from agentcore.config import settings
 from agentcore.core.logging import get_logger
+from agentcore.runtime.journal.entries import KIND_TURN_END, last_turn_end_finish
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
+
+_CANCELLED = "cancelled"
+_PAUSED = "paused"
+
+
+def _cancelled_turn_end_entry() -> dict[str, Any]:
+    return {
+        "kind": KIND_TURN_END,
+        "payload": {"finish_reason": _CANCELLED},
+        "ts": None,
+    }
+
+
+async def _load_turn_end_finish(repo: Any, message_id: str) -> str | None:
+    """Best-effort last ``turn_end`` finish on disk. Missing ``load`` → ``None``."""
+    load = getattr(repo, "load", None)
+    if load is None:
+        return None
+    try:
+        return last_turn_end_finish(await load(message_id))
+    except Exception:  # noqa: BLE001 — persist must never break the turn
+        return None
 
 
 async def persist_turn_journal(
@@ -43,6 +66,11 @@ async def persist_turn_journal(
       because progressive append-on-emit already owns denser rows. Extra
       overflow-band rows beyond ``len(entries)`` are left in place.
 
+    User-stop ``turn_end(cancelled)`` is sticky: a later pause snapshot
+    (``replace=True`` keep-tail, or merge that drops the closer) must not leave
+    ``paused`` / missing as the last finish. Incoming ``end_turn`` / ``error``
+    still replace it — this is not a success-path ``turn_end`` inventor.
+
     A failure must NEVER break the turn: it rolls back only this write and logs
     — the reply is already committed and the worst case is a turn that won't
     replay its graph.
@@ -57,6 +85,10 @@ async def persist_turn_journal(
     from agentcore.db.repositories import TurnJournalRepository
 
     repo = TurnJournalRepository(session)
+    incoming_finish = last_turn_end_finish(entries)
+    existing_cancelled = False
+    if incoming_finish in (None, _PAUSED):
+        existing_cancelled = await _load_turn_end_finish(repo, message_id) == _CANCELLED
     try:
         if replace:
             await repo.record(
@@ -73,6 +105,19 @@ async def persist_turn_journal(
                     conversation_id=conversation_id,
                     trace_id=trace_id,
                     entry=entry,
+                )
+        # Keep-tail / merge-drop can leave a pause closer last, or drop the
+        # cancelled fact onto an occupied seq. Re-append so refresh/follow
+        # project cancelled — not still-running or interrupted.
+        if incoming_finish == _CANCELLED or existing_cancelled:
+            landed = await _load_turn_end_finish(repo, message_id)
+            if landed != _CANCELLED:
+                await repo.append(
+                    turn_id=message_id,
+                    seq=None,
+                    conversation_id=conversation_id,
+                    trace_id=trace_id,
+                    entry=_cancelled_turn_end_entry(),
                 )
     except Exception as e:  # noqa: BLE001 — journal persistence must never break the turn
         await session.rollback()

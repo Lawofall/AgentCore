@@ -35,7 +35,7 @@ import { logDesktop } from "../log-service";
 import { listMcpToolsValue } from "../mcp-service";
 import { listUnsyncedSummaries, sidecarDataDir } from "../outbox-writeback";
 import { SidecarEventBuffer } from "../sidecar-event-buffer";
-import { SidecarClient } from "./client";
+import { SidecarClient, SidecarRpcError } from "./client";
 import { buildExternalMounts } from "./externalMounts";
 import { readLocalPausedRecovery } from "./recovery";
 import {
@@ -176,8 +176,6 @@ interface ActiveTurn {
   /** resume 登记键 = assistant message_id；startTurn 亦可在 finalize 前未知。 */
   messageId?: string;
   buffer: SidecarEventBuffer;
-  /** 本回合是否曾被 attach 重绑过（合成终止事件的门闩）。 */
-  hasAttached: boolean;
   /** attach 零 await 段内为 true：只入缓冲、不转发（互斥不重不漏）。 */
   attaching: boolean;
   /**
@@ -203,6 +201,18 @@ export function isDestroyedWebContentsError(err: unknown): boolean {
 
 function isTurnEventTerminal(type: string): boolean {
   return type === "message_end" || type === "error";
+}
+
+/** Sidecar JSON-RPC `TURN_CANCELLED`（`protocol.TURN_CANCELLED` = -32001）。 */
+const SIDECAR_TURN_CANCELLED = -32001;
+
+function isSidecarTurnCancelled(err: unknown): boolean {
+  if (err instanceof SidecarRpcError && err.code === SIDECAR_TURN_CANCELLED) {
+    return true;
+  }
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const msg = raw.toLowerCase();
+  return msg.includes("turn cancelled") || msg.includes("turn_cancelled");
 }
 
 /** 流式/状态热路径：先查 isDestroyed，再 try/send，只吞销毁竞态。 */
@@ -403,7 +413,6 @@ export class SidecarManager {
       userMessageId: req.userMessageId,
       userMessage: req.userMessage,
       buffer: new SidecarEventBuffer(),
-      hasAttached: false,
       attaching: false,
     });
     this.rememberWindow(req.conversationId, wc, req.rootId, req.subpath ?? "");
@@ -450,7 +459,11 @@ export class SidecarManager {
       this.emitSyntheticTerminalIfNeeded(req.turnId, "message_end");
       return result as SidecarTurnResult;
     } catch (err) {
-      this.emitSyntheticTerminalIfNeeded(req.turnId, "error", err);
+      this.emitSyntheticTerminalIfNeeded(
+        req.turnId,
+        isSidecarTurnCancelled(err) ? "message_end" : "error",
+        err,
+      );
       throw err;
     } finally {
       this.turns.delete(req.turnId);
@@ -917,7 +930,6 @@ export class SidecarManager {
       userMessageId: req.userMessageId,
       messageId: req.messageId,
       buffer: new SidecarEventBuffer(),
-      hasAttached: false,
       attaching: false,
     });
     this.rememberWindow(req.conversationId, wc, req.rootId, req.subpath ?? "");
@@ -938,7 +950,11 @@ export class SidecarManager {
       this.emitSyntheticTerminalIfNeeded(req.messageId, "message_end");
       return result as SidecarTurnResult;
     } catch (err) {
-      this.emitSyntheticTerminalIfNeeded(req.messageId, "error", err);
+      this.emitSyntheticTerminalIfNeeded(
+        req.messageId,
+        isSidecarTurnCancelled(err) ? "message_end" : "error",
+        err,
+      );
       throw err;
     } finally {
       this.turns.delete(req.messageId);
@@ -1015,7 +1031,6 @@ export class SidecarManager {
     // --- zero-await section (do not await) ---
     live.turn.attaching = true;
     live.turn.wc = wc;
-    live.turn.hasAttached = true;
     this.rememberWindow(
       req.conversationId,
       wc,
@@ -1277,8 +1292,13 @@ export class SidecarManager {
    * Before `turns.delete`: if the window never saw a terminal event,
    * synthesize one so the bubble cannot hang on「生成中」(D4 收尾必达).
    *
-   * 用户回合：`hasAttached` 门闩（refresh attach 才需要合成）。
-   * ephemeral harvest：没有 attach 槽，无 terminal 也要合成。
+   * Live 用户回合：泵上已有 terminal 则跳过（禁双终态）。不得因从未
+   * attach 而跳过——用户停止时 sidecar 可能只回 TURN_CANCELLED、泵从未打出
+   * message_end。取消合成 `message_end(finish_reason=cancelled)`；成功收口
+   * 缺帧则 `end_turn`（禁止把正常结束打成停止）。不要空 payload，也不要把
+   * 取消打成 error（失败脸）。
+   *
+   * ephemeral harvest：没有 attach 槽，无 terminal 也要合成（进程退出走 error）。
    */
   private emitSyntheticTerminalIfNeeded(
     turnId: string,
@@ -1287,7 +1307,6 @@ export class SidecarManager {
   ): void {
     const turn = this.turns.get(turnId);
     if (!turn) return;
-    if (!turn.ephemeral && !turn.hasAttached) return;
     if (turn.buffer.hasTerminal()) return;
 
     const event = {
@@ -1304,7 +1323,11 @@ export class SidecarManager {
                     ? String(err)
                     : "本地回合异常结束",
             }
-          : {},
+          : {
+              finish_reason: isSidecarTurnCancelled(err)
+                ? "cancelled"
+                : "end_turn",
+            },
     };
     turn.buffer.record(event);
     safeWcSend(turn.wc, SIDECAR_CHANNELS.event, {
@@ -1441,7 +1464,6 @@ export class SidecarManager {
       kind: "start",
       traceId: live?.turn.traceId ?? "",
       buffer: new SidecarEventBuffer(),
-      hasAttached: false,
       attaching: false,
       ephemeral: true,
     };

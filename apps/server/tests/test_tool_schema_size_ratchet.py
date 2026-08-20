@@ -59,7 +59,7 @@ _ASK_USER_WEB_CAP = 1940
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
 _WORKER_CAPS: dict[str, int] = {
-    "escalate": 1730,
+    "escalate": 1690,
     "handoff": 1660,
     "file_write": 910,
     "file_append": 510,

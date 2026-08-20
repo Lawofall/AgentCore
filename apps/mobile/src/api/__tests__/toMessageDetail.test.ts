@@ -158,6 +158,39 @@ describe("toMessageDetail runs.error (cold-load failure)", () => {
       name: "季度复盘",
     });
   });
+
+  it("status=incomplete + runs.finish_reason=cancelled → cancelled, not interrupted", () => {
+    const m = toMessageDetail(
+      baseRow({
+        content: "半截",
+        status: "incomplete",
+        runs: {
+          events: [],
+          finish_reason: "cancelled",
+          process: null,
+        },
+      }),
+    );
+    expect(m.runs?.finish_reason).toBe("cancelled");
+  });
+
+  it("status=incomplete + usage.finish_reason=cancelled → cancelled even if runs is null", () => {
+    const m = toMessageDetail(
+      baseRow({
+        content: "半截",
+        status: "incomplete",
+        usage: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache_hit: 0,
+          cache_miss: 0,
+          finish_reason: "cancelled",
+        } as Row["usage"],
+      }),
+    );
+    expect(m.runs?.finish_reason).toBe("cancelled");
+  });
 });
 
 describe("cold-load empty failure → export", () => {

@@ -19,7 +19,13 @@ Subpackages:
 - ``team_batch`` — 本回合团队状态三态（journal 纯函数投影）
 """
 
-from .entries import KIND_TURN_END, entries_from_runs, journal_entries_from_display_runs
+from .entries import (
+    KIND_TURN_END,
+    ensure_cancelled_turn_end,
+    entries_from_runs,
+    journal_entries_from_display_runs,
+    last_turn_end_finish,
+)
 from .fold import (
     completed_from_journal,
     execution_id_from_journal,
@@ -34,9 +40,11 @@ __all__ = [
     "KIND_TURN_END",
     "clear_runs_cache",
     "completed_from_journal",
+    "ensure_cancelled_turn_end",
     "entries_from_runs",
     "execution_id_from_journal",
     "journal_entries_from_display_runs",
+    "last_turn_end_finish",
     "TurnJournalWriter",
     "current_journal_writer",
     "persist_turn_journal",

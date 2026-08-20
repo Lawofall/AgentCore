@@ -24,6 +24,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { buildCitationDisplayMap } from "@/lib/citationDisplayMap";
 import { copyText } from "@/lib/clipboard";
 import {
+  TURN_CANCELLED_EMPTY_MESSAGE,
   connectivityEscalationSuffix,
   degradedFinishChipLabel,
   formatAssistantErrorMessage,
@@ -43,6 +44,7 @@ import {
 } from "@/lib/supportDiagnostics";
 import { notifySuccess } from "@/lib/toast";
 import {
+  assistantHasTeamStrip,
   isAttestedPauseContinue,
   turnOutcomeForAssistant,
 } from "@/lib/turnOutcome";
@@ -156,9 +158,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
   const hasDedicatedPauseOrAskUi =
     checkpoints.length > 0 || planReviews.length > 0 || teamPreviews.length > 0;
   const execSlot = useExecutionStore((s) => s.byId[projectionId]);
-  const hasTeamStrip =
-    Boolean(execSlot?.plan) ||
-    (message.process ?? []).some((s) => s.kind === "team");
+  const hasTeamStrip = assistantHasTeamStrip(message, execSlot);
   const outcome = turnOutcomeForAssistant(message, execSlot, {
     hasDedicatedPauseOrAskUi,
     hasTeamStrip,
@@ -419,9 +419,10 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           )}
         />
       )}
-      {message.turnWarning && (
-        <TurnWarningBanner message={message.turnWarning} />
-      )}
+      {message.turnWarning &&
+        message.turnWarning !== TURN_CANCELLED_EMPTY_MESSAGE && (
+          <TurnWarningBanner message={message.turnWarning} />
+        )}
       {turnBody}
       {!message.isStreaming && (
         <UnproductiveToolFailureHint

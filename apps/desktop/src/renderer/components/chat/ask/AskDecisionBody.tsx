@@ -328,6 +328,7 @@ export function AskDecisionBody({
       return {
         key: opt.label,
         label: opt.label,
+        // 通用卡一行；整理授权只留结构化「将整理：…」（helper 不透传模型副标题）。
         detail: organizeConfirmDetail(opt),
         hint: opt.recommended && q.default !== opt.label ? "推荐" : undefined,
         icon: desktopFolder ? (

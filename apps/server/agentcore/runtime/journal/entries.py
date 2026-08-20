@@ -12,6 +12,55 @@ _PROCESS_PREFIX = "process_"
 # Per-worker-run process lane (对称 CEO ``process_``): kind carries the step kind;
 # ``payload.run_id`` scopes the step to its run node.
 _RUN_PROCESS_PREFIX = "run_process_"
+# User-stop close. String (not FinishReason) so this leaf stays import-light.
+_CANCELLED_FINISH = "cancelled"
+
+
+def last_turn_end_finish(entries: list[dict[str, Any]] | None) -> str | None:
+    """Last ``turn_end.finish_reason`` in emission order, or ``None``."""
+    if not entries:
+        return None
+    for entry in reversed(entries):
+        if (entry.get("kind") or "") != KIND_TURN_END:
+            continue
+        finish = (entry.get("payload") or {}).get("finish_reason")
+        return finish if isinstance(finish, str) and finish else None
+    return None
+
+
+def ensure_cancelled_turn_end(
+    entries: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """User-stop close: durable journal must carry ``turn_end(cancelled)``.
+
+    Progressive / pause-snapshot journals often omit ``turn_end`` or close with
+    ``turn_end(paused)``. Missing → append; any other close → stamp cancelled.
+    Callers invoke this only on cancelled write-back — it does not decide whether
+    the turn was a user stop, and must not be used to invent ``turn_end`` on
+    successful rounds.
+    """
+    base: list[dict[str, Any]] = [dict(e) for e in entries] if entries else []
+    turn_end_idx: int | None = None
+    for i in range(len(base) - 1, -1, -1):
+        if (base[i].get("kind") or "") == KIND_TURN_END:
+            turn_end_idx = i
+            break
+    if turn_end_idx is None:
+        base.append(
+            {
+                "kind": KIND_TURN_END,
+                "payload": {"finish_reason": _CANCELLED_FINISH},
+                "ts": None,
+            }
+        )
+        return base
+    entry = dict(base[turn_end_idx])
+    payload = dict(entry.get("payload") or {})
+    if payload.get("finish_reason") != _CANCELLED_FINISH:
+        payload["finish_reason"] = _CANCELLED_FINISH
+        entry["payload"] = payload
+        base[turn_end_idx] = entry
+    return base
 
 
 def entries_from_runs(runs: dict[str, Any] | None) -> list[dict[str, Any]]:

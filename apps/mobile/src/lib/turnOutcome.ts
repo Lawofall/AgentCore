@@ -20,6 +20,7 @@
  * delivery summary. `kind=paused` stays on PausedContinueCard.
  */
 import { errorActionForCode, resolveEmptyFailureNotice } from "@/lib/errors";
+import { STOPPED_LABEL } from "@/lib/stopLifecycle";
 import { withLocalRecoveryMoment } from "@/lib/recoveryMoment";
 import {
   collectFailedToolNames,
@@ -353,8 +354,8 @@ export function resolveTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
     kind = wire;
   } else if (
     finishReason === "cancelled" &&
-    !errorCode &&
-    !errorMessage?.trim()
+    errorCode !== "LLM_RATE_LIMIT" &&
+    errorCode !== "LLM_KEY_INVALID"
   ) {
     kind = "ok";
   } else if (bits.partial) {
@@ -480,9 +481,10 @@ export function resolveTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
     errorMessage,
     hasDedicatedPauseOrAskUi: input.hasDedicatedPauseOrAskUi,
   });
-  const notice = rawNotice
-    ? withTransientWaitHint(rawNotice, retry.retryable, retry.retryAfter)
-    : null;
+  const notice =
+    rawNotice && rawNotice !== STOPPED_LABEL
+      ? withTransientWaitHint(rawNotice, retry.retryable, retry.retryAfter)
+      : null;
 
   let surface: TurnOutcomeSurface = "none";
   if (notice) {

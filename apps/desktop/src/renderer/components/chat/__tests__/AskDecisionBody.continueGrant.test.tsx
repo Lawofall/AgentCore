@@ -472,6 +472,61 @@ describe("AskDecisionBody organize confirm card", () => {
     expect(onBindResolve).not.toHaveBeenCalled();
     expect(screen.getByText("找不到该目录")).toBeTruthy();
   });
+
+  it("shows structured 将整理 only — not the model option subtitle", () => {
+    const withModelDetail: AskUserContent = {
+      ...organizeContent,
+      questions: [
+        {
+          ...organizeContent.questions[0],
+          options: [
+            {
+              ...organizeContent.questions[0].options[0],
+              detail: "模型发挥的副标题，不要画出来",
+            },
+            organizeContent.questions[0].options[1],
+          ],
+        },
+      ],
+    };
+    render(<Harness content={withModelDetail} />);
+    expect(screen.getByText("将整理：桌面 › 咨询")).toBeTruthy();
+    expect(screen.queryByText(/模型发挥/)).toBeNull();
+    expect(screen.queryByText(/将整理：桌面 › 咨询 · /)).toBeNull();
+  });
+});
+
+describe("AskDecisionBody generic option one-line", () => {
+  afterEach(cleanup);
+
+  it("does not paint model option second sentences; header stays", () => {
+    const content: AskUserContent = {
+      question: "用哪种格式？",
+      context: "背景说明应保留",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "选一种",
+          kind: "choice",
+          options: [
+            { label: "Markdown", detail: "一周内可验证" },
+            { label: "PDF", detail: "方便打印" },
+          ],
+          multiple: false,
+          default: "Markdown",
+        },
+      ],
+    };
+    render(<Harness content={content} />);
+    expect(screen.getByText("用哪种格式？")).toBeTruthy();
+    expect(screen.getByText("背景说明应保留")).toBeTruthy();
+    expect(screen.getByText("选一种")).toBeTruthy();
+    expect(screen.getByText("Markdown")).toBeTruthy();
+    expect(screen.getByText("PDF")).toBeTruthy();
+    expect(screen.queryByText("一周内可验证")).toBeNull();
+    expect(screen.queryByText("方便打印")).toBeNull();
+  });
 });
 
 describe("AskDecisionBody Continue + grant on Web", () => {

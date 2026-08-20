@@ -1485,7 +1485,18 @@ async def test_finalize_local_persists_raw_journal_when_runs_missing(monkeypatch
     assert upserted["metadata"]["finish_reason"] == "cancelled"
     assert upserted["content"] == "partial"
     assert len(journal_calls) == 1
-    assert journal_calls[0]["entries"] == facts
+    persisted = journal_calls[0]["entries"]
+    assert persisted[:-1] == facts
+    assert persisted[-1] == {
+        "kind": "turn_end",
+        "payload": {"finish_reason": "cancelled"},
+        "ts": None,
+    }
+    from agentcore.runtime.journal import runs_from_entries
+
+    projected = runs_from_entries(persisted)
+    assert projected is not None
+    assert projected["finish_reason"] == "cancelled"
 
 
 async def test_finalize_local_does_not_mint_followups(monkeypatch):
@@ -1823,6 +1834,127 @@ async def test_persist_turn_journal_replace_keeps_unlisted_late_fact(monkeypatch
     assert kinds[:2] == ["run_plan", "team_preview_required"]
     assert "note" in kinds
     assert loaded[kinds.index("note")]["payload"]["content"] == "late-unrelated"
+
+
+async def test_persist_turn_journal_pause_snapshot_cannot_cover_cancelled(
+    monkeypatch,
+):
+    """A later pause prefix must not leave turn_end(paused)/missing as the close."""
+    from agentcore.runtime.journal import last_turn_end_finish, runs_from_entries
+    from agentcore.runtime.journal.persist import persist_turn_journal
+    from agentcore.runtime.journal.seq_space import replace_prefix_map
+
+    store: dict[str, dict[str, dict]] = {
+        "m1": {
+            "0": {"kind": "run_started", "payload": {"id": "r1"}},
+            "1": {"kind": "turn_end", "payload": {"finish_reason": "cancelled"}},
+        }
+    }
+    appended: list[dict] = []
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def record(self, *, turn_id, conversation_id, trace_id, entries) -> None:
+            del conversation_id, trace_id
+            store[turn_id] = replace_prefix_map(list(entries), store.get(turn_id, {}))
+
+        async def load(self, turn_id) -> list:
+            mapped = store.get(turn_id, {})
+            return [mapped[k] for k in sorted(mapped, key=lambda key: int(key))]
+
+        async def append(self, *, turn_id, seq, conversation_id, trace_id, entry) -> int:
+            del seq, conversation_id, trace_id
+            mapped = store.setdefault(turn_id, {})
+            next_seq = max((int(k) for k in mapped), default=-1) + 1
+            mapped[str(next_seq)] = entry
+            appended.append(entry)
+            return next_seq
+
+    class Session:
+        async def rollback(self):
+            pass
+
+    monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
+    monkeypatch.setattr("agentcore.config.settings.observability_span_export_enabled", False)
+
+    await persist_turn_journal(
+        Session(),  # type: ignore[arg-type]
+        message_id="m1",
+        conversation_id="c1",
+        trace_id="t",
+        entries=[
+            {"kind": "run_started", "payload": {"id": "r1"}},
+            {"kind": "turn_paused", "payload": {"checkpoint_id": "cp"}},
+        ],
+        replace=True,
+    )
+    loaded = await Repo(None).load("m1")
+    assert last_turn_end_finish(loaded) == "cancelled"
+    assert appended == [
+        {"kind": "turn_end", "payload": {"finish_reason": "cancelled"}, "ts": None}
+    ]
+    assert runs_from_entries(loaded)["finish_reason"] == "cancelled"
+
+
+async def test_persist_turn_journal_keeps_cancelled_past_kept_paused_tail(
+    monkeypatch,
+):
+    """Incoming cancelled closer must win over a kept-tail turn_end(paused)."""
+    from agentcore.runtime.journal import last_turn_end_finish, runs_from_entries
+    from agentcore.runtime.journal.persist import persist_turn_journal
+    from agentcore.runtime.journal.seq_space import replace_prefix_map
+
+    store: dict[str, dict[str, dict]] = {
+        "m1": {
+            "0": {"kind": "run_started", "payload": {"id": "r1"}},
+            "1": {"kind": "run_completed", "payload": {"id": "r1"}},
+            "2": {"kind": "turn_end", "payload": {"finish_reason": "paused"}},
+        }
+    }
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def record(self, *, turn_id, conversation_id, trace_id, entries) -> None:
+            del conversation_id, trace_id
+            store[turn_id] = replace_prefix_map(list(entries), store.get(turn_id, {}))
+
+        async def load(self, turn_id) -> list:
+            mapped = store.get(turn_id, {})
+            return [mapped[k] for k in sorted(mapped, key=lambda key: int(key))]
+
+        async def append(self, *, turn_id, seq, conversation_id, trace_id, entry) -> int:
+            del seq, conversation_id, trace_id
+            mapped = store.setdefault(turn_id, {})
+            next_seq = max((int(k) for k in mapped), default=-1) + 1
+            mapped[str(next_seq)] = entry
+            return next_seq
+
+    class Session:
+        async def rollback(self):
+            pass
+
+    monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
+    monkeypatch.setattr("agentcore.config.settings.observability_span_export_enabled", False)
+
+    # n=2 prefix rewrite keeps seq>=2 turn_end(paused) unless persist re-appends.
+    await persist_turn_journal(
+        Session(),  # type: ignore[arg-type]
+        message_id="m1",
+        conversation_id="c1",
+        trace_id="t",
+        entries=[
+            {"kind": "run_started", "payload": {"id": "r1"}},
+            {"kind": "turn_end", "payload": {"finish_reason": "cancelled"}},
+        ],
+        replace=True,
+    )
+    loaded = await Repo(None).load("m1")
+    assert last_turn_end_finish(loaded) == "cancelled"
+    assert runs_from_entries(loaded)["finish_reason"] == "cancelled"
 
 
 async def test_salvage_writes_incomplete_status(monkeypatch):

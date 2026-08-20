@@ -1308,6 +1308,20 @@ def test_ask_user_kickoff_skill_teaches_software_delivery_not_default_html():
     assert "lean" in body
 
 
+def test_ask_user_skills_ordinary_choice_is_one_line():
+    """普通短问权衡写进选项名；第二句仅专用 card。"""
+    kickoff = _body("ask_user_kickoff")
+    midtask = _body("ask_user_midtask")
+    assert "可配 `detail`" not in kickoff
+    assert "`message`/`detail`" not in kickoff
+    assert "`label` / `detail` / `message`" not in kickoff
+    assert "权衡写进选项名" in kickoff or "权衡写进 `label`" in kickoff
+    assert "勿填 `detail`" in kickoff
+    assert "配一行 `detail`" not in midtask
+    assert "`detail`=一行卖点与取舍" in midtask
+    assert "`detail`=一行影响与修法建议" in midtask
+
+
 def test_ask_user_midtask_skill_teaches_carrier_advisory_crossref():
     body = _body("ask_user_midtask")
     assert "载体" in body or "手段" in body

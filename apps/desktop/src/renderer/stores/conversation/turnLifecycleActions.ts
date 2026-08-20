@@ -108,6 +108,12 @@ export function createTurnLifecycleActions(
         get().setTurnPhase("stopping", conversationId);
       }
 
+      // stopping 不再适用 wait 心跳；清掉 stamp，避免条上冻着 n/m 假「进行中」。
+      const waitMid = lastAssistantProjectionId(activeRuntime(get()).messages);
+      if (waitMid) {
+        useExecutionStore.getState().setCoordinationWait(null, waitMid);
+      }
+
       // 诚实过渡：落盘已缓冲的 run_*，丢弃正文缓冲；保持 SSE 不断（不 abort），
       // 也不本地伪造 cancelled / finalize——等后端 message_end 定格。
       discardAllPendingChunks(key);

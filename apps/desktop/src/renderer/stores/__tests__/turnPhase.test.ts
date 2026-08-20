@@ -71,6 +71,36 @@ describe("turn stop lifecycle", () => {
     );
   });
 
+  it("进入 stopping 时清掉该回合 coordinationWait stamp", () => {
+    beginTurnPreflight(CID);
+    enterTurnStreaming(CID);
+    const mid = useConversationStore.getState().createAssistantMessage(CID);
+    if (!mid) throw new Error("expected assistant message id");
+    useExecutionStore.getState().startExecution(plan, mid);
+    useExecutionStore.getState().setCoordinationWait(
+      {
+        execution_id: plan.id,
+        waiting: true,
+        completed: 1,
+        total: 2,
+      },
+      mid,
+    );
+    expect(
+      execRuntime(useExecutionStore.getState(), mid).coordinationWait,
+    ).not.toBeNull();
+
+    useConversationStore.getState().stopGeneration();
+
+    expect(getTurnPhase(CID)).toBe("stopping");
+    expect(
+      execRuntime(useExecutionStore.getState(), mid).coordinationWait,
+    ).toBeNull();
+    expect(
+      execRuntime(useExecutionStore.getState(), mid).coordinationWaitStartedAt,
+    ).toBeNull();
+  });
+
   it("已 abort 的 signal → throwIfCannotOpenStream 阻断", () => {
     beginTurnPreflight(CID);
     const ac = new AbortController();

@@ -104,9 +104,7 @@ class AskUserTool:
             },
             "detail": {
                 "type": "string",
-                "description": (
-                    "可选：这个选项的一行权衡 / 代价，展示在选项下方，帮用户看懂「为什么选它」。"
-                ),
+                "description": "仅专用 card 填一行取舍/影响/操作说明。普通短问勿填。",
             },
             "recommended": {
                 "type": "boolean",
@@ -119,7 +117,7 @@ class AskUserTool:
         # Schema: short trigger. HOW → ask_user_kickoff / ask_user_midtask skills.
         questions_desc = (
             "可选：要用户拍板的问题（最多 5）。关键岔路通常预填或省略 default。"
-            "choice 可配 detail / recommended。"
+            "choice 可配 recommended。detail 仅专用 card。"
         )
         tool_desc = (
             "向用户发问（唯一问用户原语）。暂停回合等人答复。"
@@ -301,6 +299,7 @@ class AskUserTool:
             questions = normalize_questions(
                 arguments.get("questions"),
                 max_options=card_max_options(card),
+                keep_detail=card is not None,
             )
         except ListArgError as exc:
             logger.info(

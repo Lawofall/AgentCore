@@ -27,9 +27,11 @@ const MID = "msg-stopped-strip";
 type AssistantFace = {
   finishReason?: string | null;
   error?: { code: string; message: string } | null;
+  isStreaming?: boolean;
 };
 
 let assistantFace: AssistantFace = { finishReason: "cancelled" };
+let turnPhase: "idle" | "stopping" | "streaming" = "idle";
 
 vi.mock("@/stores/conversation", async () => {
   const actual = await vi.importActual<typeof import("@/stores/conversation")>(
@@ -38,7 +40,7 @@ vi.mock("@/stores/conversation", async () => {
   return {
     ...actual,
     useActiveGenerating: () => false,
-    useActiveTurnPhase: () => "idle",
+    useActiveTurnPhase: () => turnPhase,
     useConversationStore: (
       sel: (s: {
         currentConversationId: string;
@@ -72,7 +74,7 @@ vi.mock("@/stores/conversation", async () => {
                 content: "",
                 createdAt: "",
                 executionId: "exec-stopped",
-                isStreaming: false,
+                isStreaming: Boolean(assistantFace.isStreaming),
                 finishReason: assistantFace.finishReason,
                 error: assistantFace.error,
               },
@@ -146,6 +148,7 @@ function renderStrip(execution: ReturnType<typeof projectExecution>) {
 
 afterEach(() => {
   assistantFace = { finishReason: "cancelled" };
+  turnPhase = "idle";
   cleanup();
   useExecutionStore.setState({ byId: {} });
 });
@@ -166,6 +169,7 @@ describe("StatusStrip · user stop cancelled", () => {
     expect(screen.queryByText(/改动 \d+ 个文件/)).toBeNull();
     expect(screen.queryByRole("button", { name: "复制排查包" })).toBeNull();
     expect(screen.queryByTestId("status-strip-failed")).toBeNull();
+    expect(screen.getByRole("button", { name: "回放协作过程" })).toBeTruthy();
   });
 
   it("cancelled status + 限流脸 → 失败条, 不画已停止", () => {
@@ -348,5 +352,43 @@ describe("StatusStrip · user stop cancelled", () => {
     expect(screen.queryByRole("button", { name: "复制排查包" })).toBeNull();
     expect(container.querySelector(".animate-spin")).toBeNull();
     expect(screen.queryByLabelText("进行中")).toBeNull();
+  });
+
+  it("stopping：可见停止中、冻脸不挂回放 Play（图仍 running）", () => {
+    turnPhase = "stopping";
+    assistantFace = { isStreaming: true };
+    const startedOnly: RunFrame[] = [
+      {
+        t: 1,
+        kind: "run_started",
+        runId: "r1",
+        agentId: "w1",
+        parentRunId: null,
+        runKind: "agent",
+        continuesRunId: null,
+      },
+    ];
+    const exec = projectExecution(plan, startedOnly, "running");
+    const { container } = renderStrip(exec);
+
+    expect(screen.getByTestId("status-strip-stopping")).toBeTruthy();
+    expect(screen.getByText("停止中")).toBeTruthy();
+    expect(screen.queryByText("已停止")).toBeNull();
+    expect(screen.queryByRole("button", { name: "回放协作过程" })).toBeNull();
+    expect(container.querySelector(".animate-spin")).toBeTruthy();
+  });
+
+  it("工人全终态 + 图 cancelled、气泡尚无 finishReason → 已停止（不等 message_end）", () => {
+    turnPhase = "stopping";
+    assistantFace = { isStreaming: true };
+    const exec = projectExecution(plan, frames, "cancelled");
+    const { container } = renderStrip(exec);
+
+    expect(screen.getByText("已停止")).toBeTruthy();
+    expect(screen.queryByText("停止中")).toBeNull();
+    expect(screen.queryByTestId("status-strip-stopping")).toBeNull();
+    expect(container.querySelector(".animate-spin")).toBeNull();
+    expect(screen.queryByTestId("status-strip-failed")).toBeNull();
+    expect(screen.queryByTestId("status-strip-partial")).toBeNull();
   });
 });

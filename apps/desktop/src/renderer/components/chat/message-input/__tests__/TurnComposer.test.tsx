@@ -642,6 +642,20 @@ describe("TurnComposer variants", () => {
     expect(screen.queryByRole("button", { name: "复制排查包" })).toBeNull();
   });
 
+  it("team-graph user-stop does not paint 已停止 as a composer warning banner", () => {
+    seedLastAssistant(
+      {
+        finishReason: "cancelled",
+        content: "半成品导语",
+        process: [{ kind: "team", execution_id: "exec-1" }],
+      },
+      "已停止",
+    );
+    renderComposer();
+    expect(screen.queryByTestId("composer-send-error")).toBeNull();
+    expect(screen.queryByTestId("composer-empty-interrupted-hint")).toBeNull();
+  });
+
   it("session banner lights when the arbitrator has no other verdict", () => {
     seedLastAssistant(
       { finishReason: "end_turn", content: "已写出正文" },

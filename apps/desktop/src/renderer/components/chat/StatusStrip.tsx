@@ -63,7 +63,7 @@ import {
   Play,
   Square,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** Props every lifecycle strip shares: projection + strip controls. */
 export interface StatusStripProps {
@@ -104,6 +104,8 @@ function canPaintTeamCompleted(execution: Execution): boolean {
  * User-stop is not an error; rate-limit / partial must not paint「已停止」.
  * Empty interrupt (`send_next`) is idle chrome — verdict lives on the composer.
  * Partial + rate-limit keeps this scoreboard; why + 排查包 follow `showComposerHint`.
+ * stopping：可见「停止中」、冻住用时、不挂回放 Play。工人全终态且图已
+ * cancelled、仲裁未判 partial/error/限流 → 已停止，不等气泡 finishReason。
  *
  * Incremental kickoff (`paused` while first batch still running): keep the
  * running chrome and overlay a「新批次待确认」badge.
@@ -213,6 +215,16 @@ export function StatusStrip(props: StatusStripProps) {
   if (turnOutcome.showStripIdle) {
     return <IdleStrip {...props} />;
   }
+  // Graph already cancelled + workers terminal: paint「已停止」without
+  // waiting for bubble finishReason / message_end. kind!==ok keeps
+  // rate-limit / partial / error on their existing faces.
+  if (
+    props.execution.status === "cancelled" &&
+    workersAreTerminal(props.execution) &&
+    turnOutcome.kind === "ok"
+  ) {
+    return <CompletedStrip {...props} stopped />;
+  }
   if (
     canPaintTeamCompleted(props.execution) &&
     !isTeamSynthesizing(props.execution)
@@ -287,18 +299,28 @@ function StripIconButton({
  * Same shape as ToolLine: 1s ticker only forces a re-render; the value is
  * recomputed from Date.now() each render so fold/remount does not reset.
  * Do not use elapsedMs(frames) here — that span freezes while a long tool
- * emits no frames (`: ping` is not a RunFrame). */
+ * emits no frames (`: ping` is not a RunFrame).
+ * `running=false` freezes the last wall-clock value (stopping) instead of
+ * dropping the suffix or jumping to elapsedMs(frames). */
 function useRunningElapsed(
   running: boolean,
   startedAt: number | null | undefined,
 ): number {
   const [, force] = useState(0);
+  const frozenSec = useRef<number | null>(null);
   useEffect(() => {
     if (!running) return;
+    frozenSec.current = null;
     const id = setInterval(() => force((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [running]);
-  if (!running || startedAt == null) return 0;
+  if (startedAt == null) return 0;
+  if (!running) {
+    if (frozenSec.current == null) {
+      frozenSec.current = runningElapsedSec(startedAt);
+    }
+    return frozenSec.current;
+  }
   return runningElapsedSec(startedAt);
 }
 
@@ -308,9 +330,11 @@ function StripControls({
   onToggle,
   onMaximize,
   onReplay,
-}: StatusStripProps) {
+  hideReplay,
+}: StatusStripProps & { hideReplay?: boolean }) {
   const canReplay =
-    execution.status === "completed" || execution.status === "cancelled";
+    !hideReplay &&
+    (execution.status === "completed" || execution.status === "cancelled");
   const debate = isDebate(execution);
 
   return (
@@ -355,7 +379,7 @@ function RunningStrip({
   const coordinationWait = useActiveExecField((rt) => rt.coordinationWait);
   // Background (detached): follow live execution.progress, not a frozen wait stamp.
   // stopping/terminal drop coordination_wait, so the pre-detach stamp never moves.
-  const liveWait = backgroundBadge ? null : coordinationWait;
+  const liveWait = backgroundBadge || stopping ? null : coordinationWait;
   const synthesizing =
     !isDebate(execution) &&
     !liveWait &&
@@ -370,7 +394,7 @@ function RunningStrip({
       ? `${workers.completed}/${workers.total}`
       : `${completed}/${total}`;
   const frames = useActiveExecField((rt) => rt.frames);
-  const elapsedSec = useRunningElapsed(true, frames[0]?.t);
+  const elapsedSec = useRunningElapsed(!stopping, frames[0]?.t);
   const duration = elapsedSec > 0 ? formatDuration(elapsedSec * 1000) : "";
   const testId = stopping
     ? "status-strip-stopping"
@@ -392,6 +416,7 @@ function RunningStrip({
         >
           <Loader2 size={14} className="animate-spin text-primary" />
         </LifeIcon>
+        {stopping ? <span className="font-medium">停止中</span> : null}
         {isDebate(execution) && <DebateTag />}
         {pendingBatchBadge ? (
           <Badge
@@ -423,6 +448,7 @@ function RunningStrip({
           onToggle={onToggle}
           onMaximize={onMaximize}
           onReplay={onReplay}
+          hideReplay={stopping}
         />
       </div>
     </div>

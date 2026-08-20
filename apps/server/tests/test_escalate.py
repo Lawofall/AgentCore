@@ -183,6 +183,59 @@ def test_escalate_schema_stays_off_engine_internals():
         assert phrase not in blob, phrase
 
 
+def test_escalate_schema_options_are_one_line():
+    """escalate 无专用 card：schema 不再提供/鼓励选项第二句。"""
+    props = (
+        EscalateTool()
+        .schema.parameters["properties"]["questions"]["items"]["properties"]["options"]["items"][
+            "properties"
+        ]
+    )
+    assert "detail" not in props
+    blob = json.dumps(EscalateTool().schema.parameters, ensure_ascii=False)
+    assert "第二句" in blob or "权衡写进" in blob
+
+
+@pytest.mark.asyncio
+async def test_blocking_escalate_drops_option_detail():
+    seen: dict = {}
+
+    async def _request(q, a, questions, kind, awaiting="user", **kwargs):
+        seen["questions"] = questions
+        return EscalationOutcome(status="resolved", answer="方案A")
+
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="w1",
+        agent_id="a",
+        backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
+        user_id="u",
+        conversation_id="c1",
+        escalation=EscalationChannel(armed=True, request=_request),
+    )
+    result = await EscalateTool().execute(
+        {
+            "question": "该走哪个方案?",
+            "assumption": "暂按方案A继续",
+            "blocking": True,
+            "questions": [
+                {
+                    "prompt": "选一个方案",
+                    "options": [
+                        {"label": "方案A：先出契约", "detail": "慢但稳"},
+                        {"label": "方案B：先一条主路径", "detail": "快但窄"},
+                    ],
+                }
+            ],
+        },
+        ctx,
+    )
+    assert result.success is True
+    opts = seen["questions"][0]["options"]
+    assert [o["label"] for o in opts] == ["方案A：先出契约", "方案B：先一条主路径"]
+    assert all("detail" not in o for o in opts)
+
+
 @pytest.mark.asyncio
 async def test_blocking_channel_forwards_browser_login():
     seen: dict = {}

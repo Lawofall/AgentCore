@@ -41,6 +41,7 @@ from agentcore.conversation.store.merge import MESSAGE_STATUS_FAILED
 from agentcore.conversation.turn_stats import turn_worker_stats
 from agentcore.runtime.events import FinishReason
 from agentcore.runtime.facts import FactKind
+from agentcore.runtime.journal import runs_from_entries
 from agentcore.runtime.journal.team_batch import team_batch_from_entries
 from agentcore.runtime.runs.types import RunPhase
 
@@ -1213,11 +1214,86 @@ async def test_record_local_turn_cancelled_incomplete_persists_journal(monkeypat
     assert usage[2]["incomplete"] is True
     assert usage[2]["finish_reason"] == "cancelled"
     assert ("journal", "assistant-id") in events
-    assert journal_entries == [facts]
+    persisted = journal_entries[0]
+    assert persisted[:-1] == facts
+    assert persisted[-1] == {
+        "kind": "turn_end",
+        "payload": {"finish_reason": "cancelled"},
+        "ts": None,
+    }
+    projected = runs_from_entries(persisted)
+    assert projected is not None
+    assert projected["finish_reason"] == "cancelled"
     assert not any(e[0] == "title" for e in events)
     assert not any(e[0] == "followups" for e in events)
     assert consolidation == []
     assert result["title"] is None
+
+
+async def test_record_local_turn_cancelled_overrides_pause_snapshot(monkeypatch):
+    """Pause snapshot turn_end(paused) must not remain the close of a user stop."""
+    events: list = []
+    journal_entries: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    async def _capture_journal(_session, **kw):
+        events.append(("journal", kw.get("message_id")))
+        journal_entries.append(kw.get("entries"))
+
+    monkeypatch.setattr(cloud_mod, "persist_turn_journal", _capture_journal)
+
+    snapshot = [
+        {"kind": "turn_paused", "payload": {"checkpoint_id": "cp"}, "ts": "t0"},
+        {"kind": "turn_end", "payload": {"finish_reason": "paused"}, "ts": None},
+    ]
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="partial reply",
+        runs=None,
+        journal=snapshot,
+        user_message_id=_USER_MSG_ID,
+        message_id="m-pause-then-stop",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.CANCELLED.value,
+    )
+
+    persisted = journal_entries[0]
+    assert persisted[0] == snapshot[0]
+    assert persisted[-1]["payload"]["finish_reason"] == "cancelled"
+    assert runs_from_entries(persisted)["finish_reason"] == "cancelled"
+
+
+async def test_record_local_turn_cancelled_empty_still_persists_turn_end(monkeypatch):
+    """incomplete+cancelled with no journal/runs still lands turn_end for projection."""
+    events: list = []
+    journal_entries: list = []
+    _patch_persistence(monkeypatch, events, existing_title="已有标题")
+
+    async def _capture_journal(_session, **kw):
+        events.append(("journal", kw.get("message_id")))
+        journal_entries.append(kw.get("entries"))
+
+    monkeypatch.setattr(cloud_mod, "persist_turn_journal", _capture_journal)
+
+    await record_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="partial reply",
+        runs=None,
+        journal=None,
+        user_message_id=_USER_MSG_ID,
+        message_id="m-empty-journal-cancel",
+        trace_id=_TRACE,
+        finish_reason=FinishReason.CANCELLED.value,
+    )
+
+    assert journal_entries == [
+        [{"kind": "turn_end", "payload": {"finish_reason": "cancelled"}, "ts": None}]
+    ]
+    assert runs_from_entries(journal_entries[0])["finish_reason"] == "cancelled"
 
 
 async def test_record_local_turn_prefers_progressive_journal_over_runs(monkeypatch):

@@ -341,6 +341,19 @@ describe("resolveTurnOutcome · paused / cancelled / interrupted", () => {
     expect(out.surface).toBe("none");
   });
 
+  it("cancelled + 已停止 copy is still silent ok, not a warning banner", () => {
+    const out = resolveTurnOutcome({
+      finishReason: "cancelled",
+      errorMessage: "已停止",
+      content: "半成品",
+      hasTeamGraph: true,
+    });
+    expect(out.kind).toBe("ok");
+    expect(out.notice).toBeNull();
+    expect(out.surface).toBe("none");
+    expect(turnOutcomeShowsBubbleBanner(out)).toBe(false);
+  });
+
   it("interrupted without error payload is send_next, not retry", () => {
     const out = resolveTurnOutcome({
       finishReason: "interrupted",
