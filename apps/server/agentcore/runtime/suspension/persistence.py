@@ -445,7 +445,9 @@ async def claim_paused_turn(
     if aligned is not None:
         try:
             async with async_session_factory() as db:
-                await TurnJournalRepository(db).record(
+                # Align collapses duplicate ``*_resolved`` rows; prefix-only
+                # ``record()`` would leave the extra live seq in place.
+                await TurnJournalRepository(db).replace_live(
                     turn_id=message_id,
                     conversation_id=claimed["conversation_id"],
                     trace_id=claimed["trace_id"],

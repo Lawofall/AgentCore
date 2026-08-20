@@ -302,3 +302,69 @@ async def test_record_replaces_turn_wholesale(session_factory):
         loaded = await TurnJournalRepository(s).load(turn_id)
 
     assert loaded == entries  # replaced, not doubled
+
+
+async def test_replace_live_shrinks_occupancy_and_keeps_overflow(session_factory):
+    """Complete live-stream replace drops live seq >= n; overflow stays.
+
+    ``record()`` keep-tail would leave the collapsed-away live row. Claim
+    alignment needs occupancy to shrink to the snapshot length.
+    """
+    turn_id, conv_id = str(uuid4()), str(uuid4())
+    live = [
+        {"kind": "run_plan", "payload": {"execution_id": "e1"}, "ts": "t0"},
+        {
+            "kind": "plan_review_resolved",
+            "payload": {"checkpoint_id": "ck1", "decision": "continue"},
+            "ts": "t1",
+        },
+        {
+            "kind": "plan_review_resolved",
+            "payload": {"checkpoint_id": "ck1", "decision": "stop"},
+            "ts": "t2",
+        },
+    ]
+    overflow = {
+        "kind": "run_completed",
+        "payload": {"run_id": "w1"},
+        "ts": "t-overflow",
+    }
+    shrunk = live[:2]
+
+    async with session_factory() as s:
+        repo = TurnJournalRepository(s)
+        await repo.record(
+            turn_id=turn_id, conversation_id=conv_id, trace_id=None, entries=live
+        )
+        await repo.append(
+            turn_id=turn_id,
+            seq=None,
+            conversation_id=conv_id,
+            trace_id=None,
+            entry=overflow,
+            overflow=True,
+        )
+
+    async with session_factory() as s:
+        await TurnJournalRepository(s).record(
+            turn_id=turn_id, conversation_id=conv_id, trace_id=None, entries=shrunk
+        )
+    async with session_factory() as s:
+        kept = await TurnJournalRepository(s).load_after(turn_id, -1)
+    kept_live = [e for e in kept if e["band"] == "live"]
+    kept_overflow = [e for e in kept if e["band"] == "overflow"]
+    assert [e["seq"] for e in kept_live] == [0, 1, 2]
+    assert kept_live[2]["payload"]["decision"] == "stop"
+    assert kept_overflow[0]["payload"]["run_id"] == "w1"
+
+    async with session_factory() as s:
+        await TurnJournalRepository(s).replace_live(
+            turn_id=turn_id, conversation_id=conv_id, trace_id=None, entries=shrunk
+        )
+    async with session_factory() as s:
+        loaded = await TurnJournalRepository(s).load_after(turn_id, -1)
+    live = [e for e in loaded if e["band"] == "live"]
+    overflow_rows = [e for e in loaded if e["band"] == "overflow"]
+    assert [e["seq"] for e in live] == [0, 1]
+    assert live[1]["payload"]["decision"] == "continue"
+    assert overflow_rows[0]["payload"]["run_id"] == "w1"

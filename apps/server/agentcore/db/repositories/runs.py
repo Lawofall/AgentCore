@@ -658,8 +658,10 @@ class TurnJournalRepository:
     A turn's execution facts are stored append-only, keyed by
     ``(turn_id, band, seq)`` (``turn_id`` == the assistant ``message_id``).
     :meth:`record` replaces the live-band prefix occupancy ``[0, n)`` (idempotent
-    for a resume that reuses the id) and leaves the overflow band in place;
-    :meth:`load` returns emission order (``created_at``, then band-local ``seq``);
+    for a resume that reuses the id) and leaves the overflow band and live tail
+    in place; :meth:`replace_live` is the complete live-stream rewrite (occupancy
+    shrinks to ``n``, overflow stays). :meth:`load` returns emission order
+    (``created_at``, then band-local ``seq``);
     :meth:`load_map` batch-loads several turns for the read-time projection (no N+1
     when a history page renders). Entries are plain ``{kind, payload, ts}`` dicts —
     the ``runs``↔entries transform lives in ``runtime/journal.py`` (the engine
@@ -688,6 +690,47 @@ class TurnJournalRepository:
         Under the same advisory lock as :meth:`append` so a concurrent
         ``MAX+1`` cannot land in the deleted occupancy between delete and insert.
         """
+        await self._rewrite_live(
+            turn_id=turn_id,
+            conversation_id=conversation_id,
+            trace_id=trace_id,
+            entries=entries,
+            shrink_live=False,
+        )
+
+    async def replace_live(
+        self,
+        *,
+        turn_id: str,
+        conversation_id: str,
+        trace_id: str | None,
+        entries: Sequence[dict],
+    ) -> None:
+        """Replace the complete live stream with this snapshot; leave overflow.
+
+        Unlike :meth:`record` (prefix rewrite that keeps live ``seq >= n``), this
+        shrinks live occupancy to ``n``: extra ``band=live AND seq >= n`` rows
+        are deleted. An empty snapshot deletes the whole live band — same as
+        :meth:`record`. Claim alignment uses this after a collapse shortens the
+        list; resume / pause snapshots keep :meth:`record`'s keep-tail semantics.
+        """
+        await self._rewrite_live(
+            turn_id=turn_id,
+            conversation_id=conversation_id,
+            trace_id=trace_id,
+            entries=entries,
+            shrink_live=True,
+        )
+
+    async def _rewrite_live(
+        self,
+        *,
+        turn_id: str,
+        conversation_id: str,
+        trace_id: str | None,
+        entries: Sequence[dict],
+        shrink_live: bool,
+    ) -> None:
         from sqlalchemy import text
 
         await self._session.execute(
@@ -695,6 +738,9 @@ class TurnJournalRepository:
             {"tid": turn_id},
         )
         to_write = [entry for entry in entries if isinstance(entry, dict)]
+        # Empty snapshot always wipes the live band (overflow stays). That is
+        # already ``record()``'s contract; ``replace_live`` shares it so the two
+        # write paths do not fork on n=0.
         if not to_write:
             await self._session.execute(
                 delete(TurnJournalRow).where(
@@ -714,13 +760,13 @@ class TurnJournalRepository:
             )
         )
         created_by_seq = {row[0]: row[1] for row in existing.all()}
-        await self._session.execute(
-            delete(TurnJournalRow).where(
-                TurnJournalRow.turn_id == turn_id,
-                TurnJournalRow.band == JOURNAL_BAND_LIVE,
-                TurnJournalRow.seq < exclusive_end,
-            )
-        )
+        live_delete = [
+            TurnJournalRow.turn_id == turn_id,
+            TurnJournalRow.band == JOURNAL_BAND_LIVE,
+        ]
+        if not shrink_live:
+            live_delete.append(TurnJournalRow.seq < exclusive_end)
+        await self._session.execute(delete(TurnJournalRow).where(*live_delete))
         self._session.add_all(
             [
                 TurnJournalRow(
