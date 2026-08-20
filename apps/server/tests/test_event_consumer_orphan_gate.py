@@ -149,7 +149,10 @@ def _desktop_tsc_bin() -> Path:
     desktop = _repo_root() / "apps" / "desktop"
     bin_dir = desktop / "node_modules" / ".bin"
     tsc = bin_dir / ("tsc.cmd" if os.name == "nt" else "tsc")
-    assert tsc.is_file(), f"desktop tsc missing at {tsc}"
+    if not tsc.is_file():
+        pytest.skip(
+            "desktop tsc not installed — backend CI has no apps/desktop node_modules"
+        )
     return tsc
 
 
