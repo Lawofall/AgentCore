@@ -374,7 +374,7 @@ def build_workspace_context(
         reach_line = (
             "云端工作区文件在云端沙箱，不是用户本机磁盘；"
             "本机 Host（音响/系统信息/打开设置等）另计，以能力行 host= 为准——"
-            "host=已装配时可经桌面回填通道调用 host_*；"
+            "host=已装配时可经桌面回填通道调用 host；"
             + empty_tree_clause
         )
         artifact_line = (
@@ -549,7 +549,7 @@ def build_workspace_context(
             package_guide_line = (
                 "装包事实：package_install=已装配（本机执行环境；钉源 env，"
                 "不吃主机 registry_egress）——`test_run` check=install 可装项目依赖；"
-                "装本机软件另须 host=已装配 + host_package_install。"
+                "装本机软件另须 host=已装配 + host(action=install_package)。"
             )
         else:
             package_guide_line = (
@@ -639,10 +639,8 @@ def build_workspace_context(
     elif host_on:
         host_guide_line = (
             "本机 Host 事实：host=已装配（经桌面回填通道，非云进程直探本机）——"
-            "L1 结构化 host_info / host_audio_devices / host_os_log_summary 与 "
-            "host_shell（短时本机命令）可用；"
-            "L2/L3 动作（host_open_settings / host_audio_set_default / "
-            "host_package_install 等）仅 worker 持有。"
+            "CEO 可 host(action=status/os_log/shell)；"
+            "L2/L3（open_settings/set_audio/restart_service/install_package）仅 worker。"
         )
     else:
         host_guide_line = (

@@ -396,8 +396,10 @@ def _multi_agent_legal_war_room() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp1",
             conversation_id=_CONV,
-            question="是否采纳终稿并提交？（含 1 处 [待核验] 法条）",
-            context="原告红队已挖尽收敛，核验报告与答辩状初稿见工作区；终稿将标注法域 + 免责。",
+            question=(
+                "是否采纳终稿并提交？（含 1 处 [待核验] 法条）\n"
+                "原告红队已挖尽收敛，核验报告与答辩状初稿见工作区；终稿将标注法域 + 免责。"
+            ),
             intent="decision",
         ),
     ]

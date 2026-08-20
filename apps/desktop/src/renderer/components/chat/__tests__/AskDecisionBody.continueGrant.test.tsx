@@ -58,7 +58,6 @@ vi.mock("@/components/ManualHelpLink", () => ({
 
 const grantDefaultContent: AskUserContent = {
   question: "需要本机目录吗？",
-  context: "",
   assumptions: [],
   questions: [
     {
@@ -310,7 +309,6 @@ describe("AskDecisionBody organize confirm card", () => {
 
   const organizeContent: AskUserContent = {
     question: "要把桌面「咨询」整理成 pdf 吗？",
-    context: "",
     assumptions: [],
     questions: [
       {
@@ -501,8 +499,7 @@ describe("AskDecisionBody generic option one-line", () => {
 
   it("does not paint model option second sentences; header stays", () => {
     const content: AskUserContent = {
-      question: "用哪种格式？",
-      context: "背景说明应保留",
+      question: "用哪种格式？\n背景说明应保留",
       assumptions: [],
       questions: [
         {
@@ -519,8 +516,8 @@ describe("AskDecisionBody generic option one-line", () => {
       ],
     };
     render(<Harness content={content} />);
-    expect(screen.getByText("用哪种格式？")).toBeTruthy();
-    expect(screen.getByText("背景说明应保留")).toBeTruthy();
+    expect(screen.getByText(/用哪种格式？/)).toBeTruthy();
+    expect(screen.getByText(/背景说明应保留/)).toBeTruthy();
     expect(screen.getByText("选一种")).toBeTruthy();
     expect(screen.getByText("Markdown")).toBeTruthy();
     expect(screen.getByText("PDF")).toBeTruthy();

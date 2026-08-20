@@ -64,10 +64,10 @@ class EngineSettings(BaseModel):
     # ≥min_chars 的全文。journal / UI 仍全文。旧结果 → 稳定指针；file_read 另附
     # ≤1200 字结构摘要；清后重读不计同 path 上限。2 打堆叠税（工人长调查把多份读窗整段
     # 带进下一轮 LLM）；不拧单次安全顶、不把 file_read 塞回通用 4k 头尾裁
-    # （那伤单次读手感）。host_shell / terminal 走独立 exec 窗，不进本集合。
+    # （那伤单次读手感）。host / terminal 走独立 exec 窗，不进本集合。
     engine_tool_clear_keep_recent: int = 2
     engine_tool_clear_min_chars: int = 2000
-    # host_shell / terminal 当轮 stdout 独立投影窗（不进 investigation_tools，
+    # host / terminal 当轮 stdout 独立投影窗（不进 investigation_tools，
     # 以免改空转治理）。指针禁止教重跑。1 = 只留最近一条全文。code_execute /
     # test_run 不在此列（改码对照 / 验证诚实性）。
     engine_tool_clear_exec_keep_recent: int = 1

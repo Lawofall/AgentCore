@@ -171,7 +171,6 @@ describe("settleCloudRunningAssistant (stale recovery race)", () => {
       maxRounds: 0,
       thorough: true,
       question: "where?",
-      context: "",
       assumptions: [],
       questions: [],
       intent: "decision",

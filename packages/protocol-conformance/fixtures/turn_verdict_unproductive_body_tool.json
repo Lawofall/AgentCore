@@ -21,8 +21,9 @@
       "type": "tool_use_start",
       "payload": {
         "tool_call_id": "tc1",
-        "tool_name": "host_shell",
+        "tool_name": "host",
         "arguments": {
+          "action": "shell",
           "command": "do_work"
         }
       },
@@ -32,9 +33,9 @@
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "tc1",
-        "tool_name": "host_shell",
+        "tool_name": "host",
         "status": "error",
-        "result": "host_shell failed: CalledProcessError: exit 1",
+        "result": "host failed: CalledProcessError: exit 1",
         "failure": {
           "message": "命令执行失败",
           "code": "TOOL_ERROR"
@@ -82,11 +83,12 @@
       {
         "kind": "tool",
         "id": "tc1",
-        "tool_name": "host_shell",
+        "tool_name": "host",
         "arguments": {
+          "action": "shell",
           "command": "do_work"
         },
-        "result": "host_shell failed: CalledProcessError: exit 1",
+        "result": "host failed: CalledProcessError: exit 1",
         "status": "error",
         "failure": {
           "message": "命令执行失败",
@@ -127,7 +129,7 @@
   },
   "turnVerdict": {
     "failedToolHintNames": [
-      "host_shell"
+      "host"
     ]
   }
 }

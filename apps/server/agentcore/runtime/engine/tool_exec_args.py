@@ -38,8 +38,8 @@ TOOL_FAILED_MARKER = "<!--agentcore:tool_failed-->"
 # Aggregable tip length for ``tool.execute_end`` reason (status=error).
 _TOOL_ERROR_REASON_MAX = 200
 
-# terminal / host_shell 观测：命令可能含 token，先 redact 再 clip。
-_SHELL_OBSERVE_TOOLS = frozenset({"terminal", "host_shell"})
+# terminal / host(action=shell) 观测：命令可能含 token，先 redact 再 clip。
+_SHELL_OBSERVE_TOOLS = frozenset({"terminal", "host"})
 _SHELL_COMMAND_PREVIEW_MAX = 160
 _SHELL_CWD_PREVIEW_MAX = 80
 
@@ -84,7 +84,7 @@ def _short_tool_error_reason(text: str, *, limit: int = _TOOL_ERROR_REASON_MAX) 
 
 
 def _shell_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
-    """Facts for ``tool.execute_end`` on terminal / host_shell. No write-intent guess.
+    """Facts for ``tool.execute_end`` on terminal / host. No write-intent guess.
 
     CEO 可持这两条工具，落盘不进 ``file_products``；查询时靠 preview + subcommand
     由人判断是否写了工作区。命令可能含 token / key，故先 ``redact_secrets`` 再 clip。

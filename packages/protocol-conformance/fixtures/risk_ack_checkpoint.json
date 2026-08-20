@@ -22,8 +22,7 @@
       "payload": {
         "checkpoint_id": "cp_risk",
         "conversation_id": "conv_demo",
-        "question": "哪些风险要在本轮处理？",
-        "context": "未勾选的项将记入后续 backlog。",
+        "question": "哪些风险要在本轮处理？\n未勾选的项将记入后续 backlog。",
         "assumptions": [],
         "questions": [
           {
@@ -109,8 +108,7 @@
         "kind": "ask_user",
         "id": "cp_risk",
         "status": "pending",
-        "question": "哪些风险要在本轮处理？",
-        "context": "未勾选的项将记入后续 backlog。"
+        "question": "哪些风险要在本轮处理？\n未勾选的项将记入后续 backlog。"
       }
     ],
     "cost": {

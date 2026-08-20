@@ -87,8 +87,7 @@ def _pause_gate() -> SSEEvent:
     return checkpoint_required(
         checkpoint_id="cp-seal",
         conversation_id=_CONV,
-        question="后台还在跑，先停一下？",
-        context="队员已开工，封盘期间仍可能写完。",
+        question="后台还在跑，先停一下？\n队员已开工，封盘期间仍可能写完。",
         intent="kickoff",
     )
 

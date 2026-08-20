@@ -46,7 +46,7 @@ WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS: tuple[str, ...] = (
     "file_batch",
     "mkdir",
     "grep",
-    "host_ping",
+    "host",
     # Ambient listing rides the same local channel — retire with the file family
     # so post-dead index_files rejects are not leftover noise.
     "index_files",

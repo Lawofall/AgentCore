@@ -462,9 +462,9 @@ describe("resolveTurnOutcome · remaining terminals", () => {
     const v = toConformanceTurnVerdict({
       outcome: out,
       hasTeamStrip: false,
-      failedToolHintNames: ["host_shell"],
+      failedToolHintNames: ["host"],
     });
-    expect(v.failedToolHintNames).toEqual(["host_shell"]);
+    expect(v.failedToolHintNames).toEqual(["host"]);
     expect(v.hasTeamStrip).toBe(false);
     expect(v.supportPackHost).toBe("none");
   });
@@ -475,9 +475,9 @@ describe("resolveTurnOutcome · remaining terminals", () => {
       {
         kind: "tool",
         id: "tc1",
-        tool_name: "host_shell",
-        arguments: { command: "do_work" },
-        result: "host_shell failed",
+        tool_name: "host",
+        arguments: { action: "shell", command: "do_work" },
+        result: "host failed",
         status: "error",
       },
     ];
@@ -512,7 +512,7 @@ describe("resolveTurnOutcome · remaining terminals", () => {
       userInterjections: [],
     } as ProjectedTurn;
     const v = turnVerdictFromProjected([], projected);
-    expect(v.failedToolHintNames).toEqual(["host_shell"]);
+    expect(v.failedToolHintNames).toEqual(["host"]);
     expect(v.hasTeamStrip).toBe(false);
     expect(v.supportPackHost).toBe("none");
     expect(v).not.toHaveProperty("surface");

@@ -16,8 +16,8 @@ opening 引导 at negligible cost, so the runtime — not the model — owns「�
 docs/03-AI核心/Agent协作模式.md（向用户发问）.
 
 The card's content is one adaptive shape (rich when opening, compact mid-task):
-``message`` (the framing / opening line — always shown), optional ``context``
-background, optional ``assumptions`` (起步计划 — low-impact decisions the CEO made for
+``message`` (the only copy slot — framing, why this needs a decision, any background),
+optional ``assumptions`` (起步计划 — low-impact decisions the CEO made for
 the user, read-only chips), optional ``questions`` (the askable items, each pre-fillable
 with a ``default`` so a 想省事 user one-clicks through). A mid-task A/B is just
 ``message`` + a one-item ``questions``.

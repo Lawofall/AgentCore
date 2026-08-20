@@ -98,7 +98,6 @@ def _ask_frame(*, journal_entries: list[dict] | None = None) -> AskUserSuspensio
         user_message="task",
         transcript=[],
         question="澄清？",
-        context="",
         questions=[],
         journal_entries=list(journal_entries or []),
     )

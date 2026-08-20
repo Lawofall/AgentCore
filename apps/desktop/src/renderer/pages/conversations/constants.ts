@@ -70,23 +70,12 @@ export function isRealFolderFilter(
   return !isSyntheticFilter(selected) && folderIds.has(selected);
 }
 
-/** Navigation options for `/files` when jumping from a folder/project context. */
+/** Navigation options for `/files` when jumping from a folder context. */
 export function filesFocusState(
-  conversationId: string | null | undefined,
   folderId?: string | null,
 ): { state: { focusWsId: string } } | undefined {
-  if (folderId) return { state: { focusWsId: `folder:${folderId}` } };
-  if (!conversationId) return undefined;
-  return { state: { focusWsId: `conv:${conversationId}` } };
-}
-
-export function firstConversationInFolder(
-  conversations: Conversation[],
-  folderId: string,
-): Conversation | undefined {
-  return conversations
-    .filter((c) => c.folderId === folderId)
-    .sort(byPinnedThenRecency)[0];
+  if (!folderId) return undefined;
+  return { state: { focusWsId: `folder:${folderId}` } };
 }
 
 export function newChatFolderTarget(

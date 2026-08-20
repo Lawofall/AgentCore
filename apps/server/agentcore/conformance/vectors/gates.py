@@ -148,8 +148,7 @@ def _single_agent_checkpoint() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp1",
             conversation_id=_CONV,
-            question="先做 A 还是 B？",
-            context="两条路线各有取舍。",
+            question="先做 A 还是 B？\n两条路线各有取舍。",
             intent="kickoff",
         ),
     ]
@@ -199,8 +198,7 @@ def _proposal_pick_checkpoint() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp_pick",
             conversation_id=_CONV,
-            question="选哪条方案推进？",
-            context="三条路线成本与风险不同。",
+            question="选哪条方案推进？\n三条路线成本与风险不同。",
             questions=[
                 {
                     "id": "q0",
@@ -255,8 +253,7 @@ def _ask_user_shape_reject_then_pick() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp_pick",
             conversation_id=_CONV,
-            question="选哪条方案推进？",
-            context="三条路线成本与风险不同。",
+            question="选哪条方案推进？\n三条路线成本与风险不同。",
             questions=[
                 {
                     "id": "q0",
@@ -286,8 +283,7 @@ def _risk_ack_checkpoint() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp_risk",
             conversation_id=_CONV,
-            question="哪些风险要在本轮处理？",
-            context="未勾选的项将记入后续 backlog。",
+            question="哪些风险要在本轮处理？\n未勾选的项将记入后续 backlog。",
             questions=[
                 {
                     "id": "q0",
@@ -320,8 +316,7 @@ def _presentation_kickoff_format_options() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp_fmt",
             conversation_id=_CONV,
-            question="这份课件用哪种交付形态？",
-            context="演讲 / PPT 意图：缺信息靠短问，错了再改。",
+            question="这份课件用哪种交付形态？\n演讲 / PPT 意图：缺信息靠短问，错了再改。",
             intent="decision",
         ),
         checkpoint_resolved(
@@ -348,8 +343,8 @@ def _carrier_means_consult_smartart_boundary() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp_carrier_smartart",
             conversation_id=_CONV,
-            question="组织架构图用哪种可交形态？",
-            context=(
+            question=(
+                "组织架构图用哪种可交形态？\n"
                 "能力边界前置：图形 SmartArt 做不到；推荐更适合的载体，"
                 "仍可坚持 Word 文字版。"
             ),
@@ -396,8 +391,8 @@ def _carrier_means_consult_html_org_tree() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp_carrier_html_tree",
             conversation_id=_CONV,
-            question="组织树 HTML 用哪种呈现？",
-            context=(
+            question=(
+                "组织树 HTML 用哪种呈现？\n"
                 "次优载体短对齐：框架可保，呈现建议改；坚持原样静态 HTML 亦可。"
             ),
             questions=[
@@ -439,8 +434,7 @@ def _organize_plan_checkpoint() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp_org",
             conversation_id=_CONV,
-            question="按下列方案整理桌面？",
-            context="确认后按方案批量执行，不再二次弹审批。",
+            question="按下列方案整理桌面？\n确认后按方案批量执行，不再二次弹审批。",
             questions=[
                 {
                     "id": "q0",
@@ -1235,8 +1229,7 @@ def _execution_completed_gate_still_pending() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp-after-exec",
             conversation_id=_CONV,
-            question="按此方案推进吗？",
-            context="团队已交付方案。",
+            question="按此方案推进吗？\n团队已交付方案。",
             intent="decision",
         ),
         message_end(FinishReason.PAUSED, input_tokens=2200, output_tokens=180, cost=_COST),
@@ -1275,8 +1268,7 @@ def _decision_then_second_gate_then_kill() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp-second",
             conversation_id=_CONV,
-            question="调研结论你认吗？",
-            context="二次挂起",
+            question="调研结论你认吗？\n二次挂起",
             intent="decision",
         ),
         message_end(FinishReason.PAUSED, input_tokens=2200, output_tokens=180, cost=_COST),

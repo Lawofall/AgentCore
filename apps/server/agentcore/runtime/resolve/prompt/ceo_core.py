@@ -99,7 +99,7 @@ ask 确认，禁自拟）。卡上【无】default → **禁止** continue 后�
 **【问方法 ≠ 要结果】**用户问的是「怎么检测 / 怎么看 / 用什么命令」这类**方法**问题 → 先把方法答清\
 （命令、步骤、怎么判读），**不要**自己上手跑；用户说「帮我查 / 帮我修 / 看看我这台」且本回合已装配对应工具才动手。\
 拿不准按问方法处理，末尾一句「要我直接跑一下吗」即可。\
-**【三分日志·勿混称】**OS Host 事件 → `host_os_log_summary`（有界/脱敏；禁止 `host_shell` 倾倒 \
+**【三分日志·勿混称】**OS Host 事件 → `host(action=os_log)`（有界/脱敏；禁止 `host(action=shell)` 倾倒 \
 Get-WinEvent/journalctl 或扫任意 *\\logs）；\
 任务/沙箱/构建 stdout → `terminal` read / `code_execute` / `test_run`（云侧亦此主路径，无整机 Event Log）；\
 产品 AI 对话日志 → `search_conversations`。未装配对应工具时对照能力行，勿假装已查。\
@@ -107,7 +107,7 @@ Get-WinEvent/journalctl 或扫任意 *\\logs）；\
 禁止立刻盲探路径；「桌面/下载有个××文件」类**已知文件夹 + 可 grant 发现**\
 → 走区外 `grant_*`（见下【工作区外路径】），**不算**盲探、**禁止**为此先问文件名。\
 纯启服已装配 `terminal` 时自己做，**【禁止】**为此 `delegate` 验证员/browser。\
-本回合已装配 host_* 时先 `consult` 任一 host_*（【本机 Host】随 consult 返回）；未装配勿假装已查本机（见基座）。\
+本回合已装配 `host` 时先 `consult(host)`（【本机 Host】随 consult 返回）；未装配勿假装已查本机（见基座）。\
 **【能力未装配·禁派空跑】**能力行未装配时【禁止】把该能力的动作写进给队员的任务\
 （同一道装配闸，队员也没有，派了只会空跑）。怎么开工与勿声称已用见全员基座。
 ③ 派团队：要改环境或存成文件、成篇落盘、构建、决策、对既有材料审查；\
@@ -394,7 +394,7 @@ _TERMINAL_RUNTIME_HOW = """
 **【本机运行态】**能力行 `terminal=已装配` 且用户只要启/停/重启开发服务器、看进程是否活着、\
 或「跑起来 / 打开项目看一下」（未要求改代码、装依赖、修报错，也未点名右坞/浏览器打开）\
 → **你自己**用 `terminal` 启服并在收工报 URL（`start` 必须带 `wait_for`；\
-可用 `list`/`read`/`stop`）；**禁止**为此 `delegate` 验证员/browser，也**禁止**用 `host_shell` 启长驻\
+可用 `list`/`read`/`stop`）；**禁止**为此 `delegate` 验证员/browser，也**禁止**用 `host(action=shell)` 启长驻\
 （`npm/pnpm run dev`、vite、next 等会被硬拒）。启服失败：自己 `list`/`read` 诊断一轮；\
 仍缺依赖或要改文件 → 立刻 `delegate`，禁止连打 shell。
 """
@@ -402,11 +402,12 @@ _TERMINAL_RUNTIME_HOW = """
 _HOST_HOW = """
 **【本机 Host】**能力行 `host=已装配` 且用户要排查/修理/查看**这台电脑**（音响、声卡、磁盘、系统设置、本机短命令、本机 OS 事件日志等）\
 → **禁止**通识长文当交付、禁止标「自己答」后空转、禁止用通识 FAQ 冒充已查本机；\
-可先 L1 结构化（`host_info` / `host_audio_devices` / `host_os_log_summary` 等），\
-**也可直接** `host_shell`（短时本机命令，不必先 delegate）；结构化 host_* 仍作快捷路径；\
-需打开系统面板 / L3 动作（含装本机软件 host_package_install，winget/brew/apt 点名包 + 恒确认）\
-→ `delegate` worker（你不持 `host_open_settings` / `host_audio_set_default` / \
-`host_package_install` 等 L2/L3）；**禁止** `host_shell` 静默跑任意 exe 代替它们。
+通道是否可达看能力行 `host=`（已装配即可调，勿另探通道）；\
+你可直调 `host(action=status)`（有界快照：OS/磁盘/电源/网卡/音频/应用抽样，可选 facets）、\
+`host(action=os_log)`、`host(action=shell)`（短时本机命令，不必先 delegate）；\
+打开系统面板 / 切默认音频 / 重启白名单服务 / 装本机软件（winget/brew/apt 点名包 + 恒确认）\
+→ `delegate` worker（你不持 `open_settings` / `set_audio` / `restart_service` / `install_package`）；\
+**禁止** `host(action=shell)` 装包、倾倒日志或启长驻（改 `install_package` / `terminal`）。
 """
 
 _EXTERNAL_GRANT_HOW = """
@@ -424,7 +425,7 @@ _EXTERNAL_GRANT_HOW = """
 + 不同 well_known/target_name/path，让人选「是 A 还是 B」（仍非系统选文件夹）。\
 授权后交付：先写工作区，再 `file_copy` 到 `external/<别名>/…`（单向、不覆盖）。\
 **禁止**首轮文本题要文件名/绝对路径（也禁要用户手填绝对路径）、\
-**禁**用 `host_shell` / `code_execute` / `terminal` 探主机家目录找路径。挂载后在 `external/` \
+**禁**用 `host(action=shell)` / `code_execute` / `terminal` 探主机家目录找路径。挂载后在 `external/` \
 列目录匹配并干活，仅 0 命中或多个难分再短问。\
 【失败分型】对人区分「没找着」vs「定位到了但本机不让读」；引导补线索或处理系统权限后再说「继续」，不改走选文件夹。
 """
@@ -432,7 +433,7 @@ _EXTERNAL_GRANT_HOW = """
 _BROWSER_HOW = """
 【右坞浏览器】与「完整预览」同一壳：完整预览 = 打开工作区 HTML；外网页 / Agent `browser_*`\
 直播 / 登录接管也在此壳。`browser_navigate` / `click` / `type` / `scroll` / `snapshot` / `console`\
-由 CEO 可直持（与 host_shell/terminal 并列）；`browser_screenshot` 仍仅 worker——\
+由 CEO 可直持（与 `host(action=shell)` / terminal 并列）；`browser_screenshot` 仍仅 worker——\
 对照 `<workspace_context>` 浏览器事实行（宿主是桌面 Bridge 还是云端沙箱、能不能开工作区相对路径）：\
 用户要「用浏览器打开 / 右坞打开 / 直播 / 帮我看页面」或\
 已打开页上的短操作（搜一下 / 点一下 / 填一下）且已装配 → **你自己** 调对应 `browser_*`\
@@ -452,7 +453,7 @@ def capability_how_suffix(ceo_tool_names: set[str]) -> str:
     parts: list[str] = []
     if "terminal" in ceo_tool_names:
         parts.append(_TERMINAL_RUNTIME_HOW.strip())
-    if any(name.startswith("host_") for name in ceo_tool_names):
+    if "host" in ceo_tool_names:
         parts.append(_HOST_HOW.strip())
     # ``external_mount_readonly`` 是 ``desktop_online_class``——装配 ⇔ 桌面回填通道在线，
     # 正是授权手册唯一能履约的条件。通道不在时核里只留底线（勿挂载 / 勿发卡 / 勿要手填路径）。

@@ -119,7 +119,7 @@ def test_cloud_gvisor_on_chain_flips_end_to_end(tmp_path: Path, monkeypatch: pyt
     assert execution_tool_auto_passes(backend, "browser_navigate") is True
     # desktop_notify 不吃 gVisor AUTO_PASS（仅 command=auto）。
     assert execution_tool_auto_passes(backend, "desktop_notify") is False
-    assert execution_tool_auto_passes(backend, "host_shell") is False
+    assert execution_tool_auto_passes(backend, "host") is False
 
 
 def test_cloud_probe_failed_withholds_execution_chain(

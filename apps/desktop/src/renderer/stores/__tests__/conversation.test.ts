@@ -802,7 +802,6 @@ describe("ask_user cards (统一开场引导 + 途中拍板)", () => {
     checkpoint_id: id,
     conversation_id: "a",
     question: "我先按这个方案做这个落地页，对吗？",
-    context: "",
     assumptions: [{ id: "a0", label: "部署", value: "纯静态" }],
     questions: [
       {

@@ -46,7 +46,6 @@ import {
   TRASH_KEY,
   activeFilterName,
   filesFocusState,
-  firstConversationInFolder,
   isRealFolderFilter,
   newChatFolderTarget,
 } from "./constants";
@@ -87,11 +86,6 @@ export function ConversationsPage() {
   const activeName = activeFilterName(selected, folders);
   const isFolderFilter = isRealFolderFilter(selected, folderIds);
   const showFolderTag = selected === ALL_KEY || selected === ARCHIVED_KEY;
-  const folderFocusConvId = isFolderFilter
-    ? (list[0]?.id ??
-      firstConversationInFolder(conversations, selected)?.id ??
-      null)
-    : null;
 
   const groups = useMemo(() => groupConversationsByRecency(list), [list]);
 
@@ -155,10 +149,6 @@ export function ConversationsPage() {
                         key={f.id}
                         folder={f}
                         count={counts.perFolder.get(f.id) ?? 0}
-                        firstConvId={
-                          firstConversationInFolder(conversations, f.id)?.id ??
-                          null
-                        }
                         selected={selected === f.id}
                         flashing={flashId === f.id}
                         onSelect={() => setSelected(f.id)}
@@ -168,14 +158,6 @@ export function ConversationsPage() {
                 </div>
               )}
             </div>
-            <SurfaceRowButton
-              variant="settings"
-              onClick={() => navigate("/files")}
-              className="mt-2 shrink-0 justify-start gap-2 border border-dashed border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground"
-            >
-              <FolderOpen size={16} className="shrink-0" />
-              管理文件夹
-            </SurfaceRowButton>
           </aside>
 
           <section className="flex min-h-0 flex-1 flex-col">
@@ -269,7 +251,7 @@ export function ConversationsPage() {
                   onClick={() =>
                     navigate(
                       "/files",
-                      filesFocusState(folderFocusConvId, selected),
+                      filesFocusState(selected),
                     )
                   }
                   className="ml-auto inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -540,14 +522,12 @@ function FilterRow({
 function FolderFilterRow({
   folder,
   count,
-  firstConvId,
   selected,
   flashing,
   onSelect,
 }: {
   folder: FolderMeta;
   count: number;
-  firstConvId: string | null;
   selected: boolean;
   flashing: boolean;
   onSelect: () => void;
@@ -592,7 +572,7 @@ function FolderFilterRow({
           <IconButton
             aria-label="浏览此文件夹的文件"
             onClick={() =>
-              navigate("/files", filesFocusState(firstConvId, folder.id))
+              navigate("/files", filesFocusState(folder.id))
             }
             className="size-6 shrink-0"
           >

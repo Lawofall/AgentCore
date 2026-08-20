@@ -35,7 +35,7 @@ from agentcore.runtime.resolve.prompt import (
 )
 from agentcore.runtime.skills import _TEAM_ORCHESTRATION_ADVANCED, build_system_skill_registry
 
-_LOCAL_CEO_CORE = assemble_ceo_core({"terminal", "host_shell", "browser_navigate"})
+_LOCAL_CEO_CORE = assemble_ceo_core({"terminal", "host", "browser_navigate"})
 
 
 def test_derive_ceo_addon_splits_shared_prefix_from_full_ceo_prompt():
@@ -240,7 +240,7 @@ def test_visualization_block_rides_only_the_composed_ceo_prompt():
 
 def test_core_states_coordinator_tool_boundary():
     # 协调者 CEO: mainly read/retrieval; production/mutation → delegate. Narrow
-    # exceptions (host_shell · local terminal for pure start/stop/list / 跑起来) stay pinned.
+    # exceptions (host(action=shell) · local terminal for pure start/stop/list / 跑起来) stay pinned.
     hint = _CEO_CORE_HINT
     assert "只读" in hint
     assert "delegate" in hint
@@ -250,11 +250,16 @@ def test_core_states_coordinator_tool_boundary():
     assert "跑起来" in hint or "打开项目看一下" in hint
     assert "报 URL" in hint
     assert "验证员" in hint  # 禁止为此 delegate 验证员/browser
-    assert "禁止" in hint and "host_shell" in hint
+    assert "禁止" in hint and "host(action=shell)" in hint
     assert "terminal" in hint
     # OS 排查意图多解才先澄清；「桌面有个××」走 grant 发现，不算盲探、禁先问文件名。
     assert "本机 Host" in hint
-    assert "host_os_log_summary" in hint
+    assert "host(action=os_log)" in hint
+    assert "consult(host)" in hint
+    assert "host_os_log_summary" not in hint
+    assert "host_ping" not in hint
+    assert "host_info" not in hint
+    assert "host_shell" not in hint
     assert "三分日志" in hint
     assert "Get-WinEvent" in hint or "journalctl" in hint
     assert "澄清意图" in hint
@@ -280,8 +285,17 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "ask_user(browser_login=true)" not in term
     assert "通识长文当交付" not in term
 
-    host = assemble_ceo_core({"host_shell"})
+    host = assemble_ceo_core({"host"})
     assert "通识长文当交付" in host
+    assert "host(action=status)" in host
+    assert "host(action=os_log)" in host
+    assert "open_settings" in host and "install_package" in host
+    assert "set_audio" in host and "restart_service" in host
+    assert "勿另探通道" in host
+    assert "delegate" in host
+    assert "host_info" not in host
+    assert "host_package_install" not in host
+    assert "host_ping" not in host
     assert "wait_for" not in host
 
     browser = assemble_ceo_core({"browser_navigate"})
@@ -302,7 +316,7 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "ask_user(browser_login=true)" not in ceo
     local = compose_ceo_chat_prompt(
         assemble_system_prompt(),
-        ceo_tool_names={"delegate", "terminal", "host_shell", "browser_navigate"},
+        ceo_tool_names={"delegate", "terminal", "host", "browser_navigate"},
     )
     assert "wait_for" in local
     assert "通识长文当交付" in local
@@ -311,7 +325,7 @@ def test_capability_how_gated_on_ceo_tool_names():
     # Production assemble passes offered_names (deferred withheld) — HOW follows that set.
     deferred = compose_ceo_chat_prompt(
         assemble_system_prompt(),
-        ceo_tool_names={"delegate", "terminal", "host_shell", "browser_navigate"},
+        ceo_tool_names={"delegate", "terminal", "host", "browser_navigate"},
         ceo_offered_names={"delegate"},
     )
     assert "wait_for" not in deferred

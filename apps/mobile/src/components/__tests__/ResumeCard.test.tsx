@@ -48,8 +48,7 @@ function summary(over: Partial<PausedTurnSummary> = {}): PausedTurnSummary {
     kind: "ask_user",
     user_message: "做 A 还是 B？",
     user_message_id: "u1",
-    question: "先做 A 还是 B?",
-    context: "两条路线各有取舍。",
+    question: "先做 A 还是 B?\n两条路线各有取舍。",
     // 契约序列化必带（服务端带默认值恒输出；仅 team_preview 开工卡才有具体值）
     form: "",
     headline: "",
@@ -59,16 +58,15 @@ function summary(over: Partial<PausedTurnSummary> = {}): PausedTurnSummary {
     thorough: true,
     browser_login: false,
     ...over,
-  };
+  } as PausedTurnSummary;
 }
 
 describe("ResumeCard · ask_user", () => {
-  it("renders the offline headline, the original request, question + context", () => {
+  it("renders the offline headline, the original request, and question", () => {
     render(<ResumeCard paused={summary()} onResume={vi.fn()} />);
     expect(screen.getByText("需要你拍板（已离线保留）")).toBeTruthy();
     expect(screen.getByText("做 A 还是 B？")).toBeTruthy();
-    expect(screen.getByText("先做 A 还是 B?")).toBeTruthy();
-    expect(screen.getByText("两条路线各有取舍。")).toBeTruthy();
+    expect(screen.getByText("先做 A 还是 B? 两条路线各有取舍。")).toBeTruthy();
     // ask_user has no 调整 (that is plan_review / team_preview steer).
     expect(screen.queryByText("调整")).toBeNull();
   });
@@ -471,7 +469,6 @@ describe("ResumeCard · plan_review", () => {
       kind: "plan_review",
       checkpoint_id: "pr1",
       question: "",
-      context: "",
       steps: [{ role: "调研", output_summary: "方案就绪" }],
       pending: [{ role: "执行" }],
       ...over,
@@ -509,7 +506,6 @@ describe("ResumeCard · team_preview", () => {
       kind: "team_preview",
       checkpoint_id: "tp1",
       question: "",
-      context: "",
       workers: [
         {
           run_id: "r1",

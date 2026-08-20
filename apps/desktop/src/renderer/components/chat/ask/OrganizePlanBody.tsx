@@ -67,12 +67,7 @@ export function OrganizePlanBody({
   const overview = q ? summarizeOps(q.options) : "";
   const [noteOpen, setNoteOpen] = useState(false);
 
-  const subtitleParts = [
-    content.context.trim(),
-    overview ? `总览：${overview}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const subtitle = overview ? `总览：${overview}` : undefined;
 
   return (
     <AskCardShell
@@ -80,7 +75,7 @@ export function OrganizePlanBody({
       icon={META.icon}
       caption={caption ?? META.activeCaption}
       title={content.question}
-      subtitle={subtitleParts || undefined}
+      subtitle={subtitle}
       extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
       footer={
         <AskCardFooter

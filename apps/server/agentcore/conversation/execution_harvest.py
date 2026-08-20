@@ -220,6 +220,7 @@ _TOOL_FACE: dict[str, str] = {
     "write_section": "改写文件",
     "code_execute": "运行代码",
     "terminal": "运行命令",
+    "host": "本机 Host",
     "host_shell": "运行本机命令",
     "test_run": "运行测试",
     "browser_navigate": "浏览网页",

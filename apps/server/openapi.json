@@ -11530,7 +11530,7 @@
         "type": "object"
       },
       "PausedTurnSummary": {
-        "description": "A turn awaiting resume after a durable plan_review / ask_user / kickoff pause.\n\nSurfaced on conversation reopen so the client can re-render the right resume card\nby ``kind`` and offer the kind-appropriate actions → the resume endpoint\n(kickoff: continue[+嘱咐] / adjust / stop; plan_review: continue / adjust / stop).\n``message_id`` is both the pause key and the id the resumed assistant message will\nreuse, so an optimistic bubble reconciles cleanly.\n\nplan_review carries ``steps`` (the reviewed checkpoint nodes) + ``pending`` (the\ngated downstream); team_preview (开工卡) carries ``primitive`` (``delegate`` /\n``debate``) + ``workers`` / ``tools`` (delegate) or ``motion`` / ``sides`` /\n``max_rounds`` / ``thorough`` (debate); ask_user carries the unified card payload\n``question`` (the framing / opening line) + ``context`` + the optional opening\ncontent ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The\nunused set is empty for the other kinds.",
+        "description": "A turn awaiting resume after a durable plan_review / ask_user / kickoff pause.\n\nSurfaced on conversation reopen so the client can re-render the right resume card\nby ``kind`` and offer the kind-appropriate actions → the resume endpoint\n(kickoff: continue[+嘱咐] / adjust / stop; plan_review: continue / adjust / stop).\n``message_id`` is both the pause key and the id the resumed assistant message will\nreuse, so an optimistic bubble reconciles cleanly.\n\nplan_review carries ``steps`` (the reviewed checkpoint nodes) + ``pending`` (the\ngated downstream); team_preview (开工卡) carries ``primitive`` (``delegate`` /\n``debate``) + ``workers`` / ``tools`` (delegate) or ``motion`` / ``sides`` /\n``max_rounds`` / ``thorough`` (debate); ask_user carries the unified card payload\n``question`` (the framing / opening line) + the optional opening\ncontent ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The\nunused set is empty for the other kinds.",
         "properties": {
           "assumptions": {
             "items": {
@@ -11547,11 +11547,6 @@
           },
           "checkpoint_id": {
             "title": "Checkpoint Id",
-            "type": "string"
-          },
-          "context": {
-            "default": "",
-            "title": "Context",
             "type": "string"
           },
           "form": {

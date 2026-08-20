@@ -440,7 +440,6 @@ function pendingFrame(messageId: string, conversationId = "c1"): PendingResume {
     maxRounds: 0,
     thorough: true,
     question: "",
-    context: "",
     assumptions: [],
     questions: [],
     intent: "kickoff",

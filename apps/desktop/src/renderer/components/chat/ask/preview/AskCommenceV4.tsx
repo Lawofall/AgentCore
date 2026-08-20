@@ -17,7 +17,6 @@ import {
 export function AskCommenceV4({ content }: { content: AskUserContent }) {
   const answer = useCommencePreviewAnswer(content);
   const [busy, setBusy] = useState(false);
-  const [showContext, setShowContext] = useState(false);
   const noop = () => {
     setBusy(true);
     window.setTimeout(() => setBusy(false), 600);
@@ -45,18 +44,9 @@ export function AskCommenceV4({ content }: { content: AskUserContent }) {
             <p className="mt-0.5 text-sm font-medium text-foreground">
               将按「{summaryPicks || "默认方案"}」开做
             </p>
-            <button
-              type="button"
-              onClick={() => setShowContext((v) => !v)}
-              className="mt-0.5 text-left text-xs text-muted-foreground hover:text-foreground"
-            >
-              {showContext ? "收起说明" : content.question}
-            </button>
-            {showContext && content.context && (
-              <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">
-                {content.context}
-              </p>
-            )}
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {content.question}
+            </p>
           </div>
         </div>
         <PlanChips assumptions={content.assumptions} />

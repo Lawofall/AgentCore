@@ -402,7 +402,7 @@ consult `data_file_landing`：本回合完整交付是原件结构报告 + 待�
 出图进工作区」；允许拒接、引导桌面/本机有出口、或明确「只写本机脚本脚手架、平台不出图」。\
 **【URL→工作区文件】**要下载二进制/附件进工作区 → 结构化工具 `download_url`（url+相对 path）；\
 `read_url` 只做网页正文深读，不是下载体。\
-【禁止】教 `code_execute` / `terminal` / `host_shell` 当 wget/curl 主路径；\
+【禁止】教 `code_execute` / `terminal` / `host(action=shell)` 当 wget/curl 主路径；\
 【禁止】把落盘的安装包当已静默安装（本工具只落盘标明类型）。\
 **【第三方 Key · 不落盘】**【禁止】把对话里的 API Key 写入工作区明文（含 `env` / `.env`）\
 或让 tool 回显打出完整 Key；脚本用环境变量占位，用户本机自备。\

@@ -71,6 +71,7 @@ const TOOL_LABEL: Record<string, string> = {
   board_read: "Read board",
   desktop_notify: "Notify",
   external_mount_readonly: "Mount folder",
+  host: "Host",
   host_ping: "Host ping",
   host_info: "Host info",
   host_audio_devices: "Audio devices",
@@ -103,9 +104,35 @@ function isInternalIdArg(key: string): boolean {
   return key === "id" || key.endsWith("_id");
 }
 
+function hostExportDetail(args: Record<string, unknown>): string {
+  const action = typeof args.action === "string" ? args.action.trim() : "";
+  if (action === "shell") {
+    return typeof args.command === "string" ? args.command.trim() : action;
+  }
+  if (action === "install_package") {
+    const manager =
+      typeof args.manager === "string" && args.manager.trim()
+        ? args.manager.trim()
+        : "";
+    const pkg =
+      typeof args.package_id === "string" && args.package_id.trim()
+        ? args.package_id.trim()
+        : "";
+    const cask = args.cask === true ? " (cask)" : "";
+    if (manager && pkg) return `${manager} ${pkg}${cask}`;
+    return pkg || manager || action;
+  }
+  if (action) return action;
+  return "";
+}
+
 function toolDetail(args: Record<string, unknown>, toolName?: string): string {
   // WaitTool.reason 仅记日志，复制稿同样不摆。
   if (toolName === "wait") return "";
+  if (toolName === "host") {
+    const host = hostExportDetail(args);
+    if (host) return host;
+  }
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -117,8 +144,23 @@ function toolDetail(args: Record<string, unknown>, toolName?: string): string {
   return "";
 }
 
+function hostExportLabel(args: Record<string, unknown>): string {
+  const action = typeof args.action === "string" ? args.action.trim() : "";
+  if (action === "status") return "Host status";
+  if (action === "os_log") return "OS log summary";
+  if (action === "shell") return "Host shell";
+  if (action === "open_settings") return "Open settings";
+  if (action === "set_audio") return "Set default audio";
+  if (action === "restart_service") return "Restart service";
+  if (action === "install_package") return "Install package";
+  return action ? `Host ${action}` : "Host";
+}
+
 function formatToolLine(step: Extract<ProcessStep, { kind: "tool" }>): string {
-  const label = TOOL_LABEL[step.tool_name] ?? step.tool_name;
+  const label =
+    step.tool_name === "host"
+      ? hostExportLabel(step.arguments ?? {})
+      : (TOOL_LABEL[step.tool_name] ?? step.tool_name);
   const detail = toolDetail(step.arguments ?? {}, step.tool_name);
   const status =
     step.status === "error"

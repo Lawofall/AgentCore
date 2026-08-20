@@ -210,8 +210,7 @@ def test_ask_user_suspension_round_trips():
         user_message="帮我选",
         folder_id="F2",
         transcript=transcript,
-        question="按这个计划开做？",
-        context="两者代价不同",
+        question="按这个计划开做？\n两者代价不同",
         assumptions=[{"id": "a0", "label": "部署", "value": "纯静态"}],
         questions=[
             {
@@ -235,8 +234,8 @@ def test_ask_user_suspension_round_trips():
     assert restored.message_id == "m2"
     assert restored.tool_call_id == "call_ask_1"
     assert restored.folder_id == "F2"
-    assert restored.question == "按这个计划开做？"
-    assert restored.context == "两者代价不同"
+    assert restored.question == "按这个计划开做？\n两者代价不同"
+    assert "context" not in frame.to_json()
     assert restored.assumptions == [{"id": "a0", "label": "部署", "value": "纯静态"}]
     assert restored.questions[0]["prompt"] == "A 还是 B?"
     assert restored.questions[0]["options"] == [{"label": "A"}, {"label": "B"}]

@@ -126,7 +126,6 @@ export function entryToPausedSummary(
     user_message: opts?.userMessage ?? "",
     user_message_id: opts?.userMessageId ?? "",
     question: str(p.question),
-    context: str(p.context),
     form: str(p.form),
     headline: str(p.headline),
     motion: str(p.motion),
@@ -194,7 +193,6 @@ export function pausedSummaryToRequiredPayload(
   const payload: Record<string, unknown> = {
     checkpoint_id: paused.checkpoint_id,
     question: paused.question ?? "",
-    context: paused.context ?? "",
     form: paused.form ?? "",
     headline: paused.headline ?? "",
     motion: paused.motion ?? "",

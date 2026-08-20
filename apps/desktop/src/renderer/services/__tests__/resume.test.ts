@@ -67,7 +67,6 @@ const cpPayload = (
   checkpoint_id: "cp1",
   conversation_id: CID,
   question: "先做 A 还是 B?",
-  context: "两条路线各有取舍。",
   assumptions: [],
   questions: [],
   ...over,
@@ -137,7 +136,6 @@ describe("surfaceResumeFromLiveTurn", () => {
       checkpointId: "cp1",
       kind: "ask_user",
       question: "先做 A 还是 B?",
-      context: "两条路线各有取舍。",
       userMessage: "做 A 还是 B？",
       userMessageId: "u1",
     });
@@ -579,7 +577,6 @@ describe("resolveResumeMessageId", () => {
       maxRounds: 0,
       thorough: true,
       question: "先做 A 还是 B?",
-      context: "",
       assumptions: [],
       questions: [],
       intent: "decision",

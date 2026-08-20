@@ -249,7 +249,6 @@ export interface CheckpointRequiredPayload {
   checkpoint_id: string;
   conversation_id: string;
   question: string;
-  context: string;
   assumptions: AskAssumption[];
   questions: AskQuestion[];
   intent?: CheckpointIntent;

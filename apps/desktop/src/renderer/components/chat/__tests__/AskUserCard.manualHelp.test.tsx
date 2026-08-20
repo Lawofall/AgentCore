@@ -24,7 +24,6 @@ describe("AskUserCard manual help", () => {
           <AskUserCard
             content={{
               question: "选 A 还是 B？",
-              context: "",
               assumptions: [],
               questions: [],
             }}

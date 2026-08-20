@@ -54,7 +54,6 @@ vi.mock("@/components/ManualHelpLink", () => ({
 
 const openLocalContent: AskUserContent = {
   question: "在哪打开？",
-  context: "",
   assumptions: [],
   questions: [
     {

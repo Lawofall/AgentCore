@@ -6,9 +6,8 @@ import type { AskUserContent } from "@/components/chat/ask/AskUserFields";
  * {@link AskDecisionBody} (scene v5), not a kickoff ceremony shell.
  */
 export const ASK_COMMENCE_MOCK: AskUserContent = {
-  question: "按这版起步计划开做可以吗？有两处想先跟你对齐。",
-  context:
-    "需求能做，但方向还差两处对齐。\n先按可执行起步计划开做\n确认后立刻动手，途中可再改",
+  question:
+    "按这版起步计划开做可以吗？有两处想先跟你对齐。\n需求能做，但方向还差两处对齐。\n先按可执行起步计划开做\n确认后立刻动手，途中可再改",
   assumptions: [
     { id: "a0", label: "交付物", value: "响应式落地页（单页）+ 基础 SEO" },
     { id: "a1", label: "部署", value: "纯静态，托管到现有 CDN" },

@@ -229,12 +229,16 @@ def test_cloud_worker_skip_never_covers_always_confirm():
             is True
         ), sub
 
-    # 同桶的 host_package_install（本就是 host_class，这里是第二道）。
+    # 同桶的 host(action=install_package)（host_class，这里是第二道）。
     assert (
         cloud_worker_skips_per_call_gate(
             cloud,
-            "host_package_install",
-            arguments={"manager": "winget", "package": "git"},
+            "host",
+            arguments={
+                "action": "install_package",
+                "manager": "winget",
+                "package": "git",
+            },
             permission_axes=session,
             file_op_tools=file_ops,
         )

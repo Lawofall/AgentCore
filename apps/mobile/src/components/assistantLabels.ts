@@ -63,9 +63,48 @@ const TOOL_LABEL: Record<string, string> = {
   escalate: "Escalate",
   handoff: "Handoff",
   wait: "Wait",
+  host: "Host",
+  // 历史会话回放：旧 host_* 键只供展示。
+  host_ping: "Host ping",
+  host_info: "Host info",
+  host_audio_devices: "Audio devices",
+  host_storage: "Host storage",
+  host_power: "Host power",
+  host_network_summary: "Network summary",
+  host_apps: "Host apps",
+  host_os_log_summary: "OS log summary",
+  host_shell: "Host shell",
+  host_open_settings: "Open settings",
+  host_audio_set_default: "Set default audio",
+  host_service_restart: "Restart service",
+  host_package_install: "Install package",
 };
 
-export const toolLabel = (name: string): string => TOOL_LABEL[name] ?? name;
+const HOST_ACTION_LABEL: Record<string, string> = {
+  status: "Host status",
+  os_log: "OS log summary",
+  shell: "Host shell",
+  open_settings: "Open settings",
+  set_audio: "Set default audio",
+  restart_service: "Restart service",
+  install_package: "Install package",
+};
+
+function hostActionOf(args?: Record<string, unknown>): string {
+  return args && typeof args.action === "string" ? args.action.trim() : "";
+}
+
+export const toolLabel = (
+  name: string,
+  args?: Record<string, unknown>,
+): string => {
+  if (name === "host") {
+    const action = hostActionOf(args);
+    if (action) return HOST_ACTION_LABEL[action] ?? `Host ${action}`;
+    return "Host";
+  }
+  return TOOL_LABEL[name] ?? name;
+};
 
 /** 工具行右侧生命周期，与桌面勾/失败标同一语义；手机写汉字以免 Done 挤死窄行。 */
 export const TOOL_STATUS_LABEL = {
@@ -133,12 +172,62 @@ function isInternalIdArg(key: string): boolean {
   return key === "id" || key.endsWith("_id");
 }
 
+function hostToolDetail(args: Record<string, unknown>): string {
+  const action = hostActionOf(args);
+  if (action === "shell") {
+    return typeof args.command === "string" ? args.command.trim() : "";
+  }
+  if (action === "install_package") {
+    const manager =
+      typeof args.manager === "string" && args.manager.trim()
+        ? args.manager.trim()
+        : "";
+    const pkg =
+      typeof args.package_id === "string" && args.package_id.trim()
+        ? args.package_id.trim()
+        : "";
+    const cask = args.cask === true ? " (cask)" : "";
+    if (manager && pkg) return `${manager} ${pkg}${cask}`;
+    return pkg || manager || action;
+  }
+  if (action === "open_settings") {
+    return typeof args.panel === "string" ? args.panel.trim() : action;
+  }
+  if (action === "set_audio") {
+    const name =
+      typeof args.device_name === "string" && args.device_name.trim()
+        ? args.device_name.trim()
+        : typeof args.device_id === "string"
+          ? args.device_id.trim()
+          : "";
+    return name || action;
+  }
+  if (action === "restart_service") {
+    return typeof args.service === "string" ? args.service.trim() : action;
+  }
+  if (action === "os_log") {
+    return typeof args.source === "string" ? args.source.trim() : action;
+  }
+  if (action === "status") {
+    const facets = args.facets;
+    if (Array.isArray(facets)) {
+      const names = facets
+        .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+        .map((f) => f.trim());
+      if (names.length > 0) return names.join(", ");
+    }
+    return "";
+  }
+  return action;
+}
+
 export function toolDetail(
   args: Record<string, unknown>,
   toolName?: string,
 ): string {
   // WaitTool.reason 仅记日志；画进标题会变成「右边已完成、中间还说仍在跑」。
   if (toolName === "wait") return "";
+  if (toolName === "host") return hostToolDetail(args);
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
     if (typeof v === "string" && v.trim()) return v.trim();

@@ -69,8 +69,7 @@ def _suspension(
         user_message="原始问题",
         transcript=[],
         history=history or [],
-        question="要继续吗？",
-        context="背景",
+        question="要继续吗？\n背景",
     )
     # journal_entries is the 唯一权威载体 (P0-B Phase 3); the display ``journal`` resume seed is
     # a DERIVED property of it. Default to a single checkpoint_required fact so the round-trip's
@@ -98,7 +97,7 @@ def test_store_save_list_claim_round_trip(tmp_path):
 
     listed, first, second = asyncio.run(drive())
     assert [s.message_id for s in listed] == ["m1"]
-    assert listed[0].question == "要继续吗？"  # ask_user card content survives
+    assert listed[0].question == "要继续吗？\n背景"  # ask_user card content survives
     assert first is not None
     assert first.message_id == "m1"
     assert first.journal == [
@@ -542,7 +541,7 @@ def test_list_paused_returns_seeded_frames(tmp_path):
     assert len(data) == 1
     assert data[0]["message_id"] == "m1"
     assert data[0]["kind"] == "ask_user"
-    assert data[0]["question"] == "要继续吗？"
+    assert data[0]["question"] == "要继续吗？\n背景"
 
 
 def test_resume_claims_frame_and_drives_resume_pipeline(tmp_path, monkeypatch):

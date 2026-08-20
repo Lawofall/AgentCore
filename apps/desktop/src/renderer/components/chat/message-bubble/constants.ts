@@ -106,7 +106,9 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   board_read: { Icon: Presentation, label: "Read board" },
   desktop_notify: { Icon: Bell, label: "Notify" },
   external_mount_readonly: { Icon: Folder, label: "Mount folder" },
-  // 本机 Host（第三能力面 · 桌面回填）
+  // 本机 Host（第三能力面 · 单工具 `host`，按 action 展示；同构 git + subcommand）
+  host: { Icon: Monitor, label: "Host" },
+  // 历史会话回放：旧 host_* 键只供展示，不注册、不转发。
   host_ping: { Icon: Monitor, label: "Host ping" },
   host_info: { Icon: Monitor, label: "Host info" },
   host_audio_devices: { Icon: Volume2, label: "Audio devices" },
@@ -122,12 +124,46 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   host_package_install: { Icon: Package, label: "Install package" },
 };
 
-/** Tool-group collapse summaries reuse {@link TOOL_META} English labels (same chrome as ToolLine). */
-const toolSummaryLabel = (name: string): string =>
-  TOOL_META[name]?.label ?? name;
+/** `host` 的 action → 过程行标签 / 图标（对齐旧 host_* chrome，便于对照历史会话）。 */
+const HOST_ACTION_META: Record<string, { Icon: LucideIcon; label: string }> = {
+  status: { Icon: Monitor, label: "Host status" },
+  os_log: { Icon: ScrollText, label: "OS log summary" },
+  shell: { Icon: Terminal, label: "Host shell" },
+  open_settings: { Icon: Settings2, label: "Open settings" },
+  set_audio: { Icon: Volume2, label: "Set default audio" },
+  restart_service: { Icon: ListRestart, label: "Restart service" },
+  install_package: { Icon: Package, label: "Install package" },
+};
 
-export const toolMeta = (name: string): { Icon: LucideIcon; label: string } =>
-  TOOL_META[name] ?? { Icon: Wrench, label: name };
+function hostActionOf(args?: Record<string, unknown>): string {
+  const raw = args && typeof args.action === "string" ? args.action.trim() : "";
+  return raw;
+}
+
+/** Tool-group collapse summaries reuse {@link TOOL_META} English labels (same chrome as ToolLine). */
+const toolSummaryLabel = (
+  name: string,
+  args?: Record<string, unknown>,
+): string => toolMeta(name, args).label;
+
+export const toolMeta = (
+  name: string,
+  args?: Record<string, unknown>,
+): { Icon: LucideIcon; label: string } => {
+  if (name === "host") {
+    const action = hostActionOf(args);
+    if (action) {
+      return (
+        HOST_ACTION_META[action] ?? {
+          Icon: Monitor,
+          label: `Host ${action}`,
+        }
+      );
+    }
+    return TOOL_META.host ?? { Icon: Monitor, label: "Host" };
+  }
+  return TOOL_META[name] ?? { Icon: Wrench, label: name };
+};
 
 /** Tool execution phase → waiting-state chrome (network UX): a running tool's coarse phase
  * (from a `tool_use_progress` event) as user-facing text — a slow builtin fires these while its
@@ -216,7 +252,69 @@ function fileTransferDetail(args: Record<string, unknown>): string {
   return asTitleDetail(`${src} → ${dest}`);
 }
 
-export function toolDetail(args: Record<string, unknown>): string {
+/** `host` 过程行 / 组摘要的 action 细节（同构 git 的 subcommand 芯片）。 */
+export function hostToolDetail(args: Record<string, unknown>): string {
+  const action = hostActionOf(args);
+  if (action === "shell") {
+    return asTitleDetail(
+      typeof args.command === "string" ? args.command : "",
+    );
+  }
+  if (action === "install_package") {
+    const manager =
+      typeof args.manager === "string" && args.manager.trim()
+        ? args.manager.trim()
+        : "";
+    const pkg =
+      typeof args.package_id === "string" && args.package_id.trim()
+        ? args.package_id.trim()
+        : "";
+    const cask = args.cask === true ? " (cask)" : "";
+    if (manager && pkg) return asTitleDetail(`${manager} ${pkg}${cask}`);
+    return asTitleDetail(pkg || manager || action);
+  }
+  if (action === "open_settings") {
+    return asTitleDetail(
+      typeof args.panel === "string" ? args.panel : action,
+    );
+  }
+  if (action === "set_audio") {
+    const name =
+      typeof args.device_name === "string" && args.device_name.trim()
+        ? args.device_name.trim()
+        : typeof args.device_id === "string"
+          ? args.device_id.trim()
+          : "";
+    return asTitleDetail(name || action);
+  }
+  if (action === "restart_service") {
+    return asTitleDetail(
+      typeof args.service === "string" ? args.service : action,
+    );
+  }
+  if (action === "os_log") {
+    return asTitleDetail(
+      typeof args.source === "string" ? args.source : action,
+    );
+  }
+  if (action === "status") {
+    const facets = args.facets;
+    if (Array.isArray(facets)) {
+      const names = facets
+        .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+        .map((f) => f.trim());
+      if (names.length > 0) return asTitleDetail(names.join(", "));
+    }
+    return "";
+  }
+  return asTitleDetail(action);
+}
+
+export function toolDetail(
+  args: Record<string, unknown>,
+  toolName?: string,
+): string {
+  if (toolName === "host") return hostToolDetail(args);
   const transfer = fileTransferDetail(args);
   if (transfer) return transfer;
   for (const k of TOOL_DETAIL_KEYS) {
@@ -258,14 +356,16 @@ export function toolGroupSummary(
     return `Read page · ${n} source${n === 1 ? "" : "s"}`;
   }
   if (sameKind && tools.length <= 3) {
-    const label = toolSummaryLabel(tools[0].tool_name);
-    const names = tools.map((t) => baseName(toolDetail(t.arguments)));
+    const label = toolSummaryLabel(tools[0].tool_name, tools[0].arguments);
+    const names = tools.map((t) =>
+      baseName(toolDetail(t.arguments, t.tool_name)),
+    );
     if (names.every(Boolean)) return `${label} ${names.join(" · ")}`;
   }
   const order: string[] = [];
   const counts = new Map<string, number>();
   for (const t of tools) {
-    const label = toolSummaryLabel(t.tool_name);
+    const label = toolSummaryLabel(t.tool_name, t.arguments);
     if (!counts.has(label)) order.push(label);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }

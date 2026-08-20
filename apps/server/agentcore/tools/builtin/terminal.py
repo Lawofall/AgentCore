@@ -281,7 +281,7 @@ class TerminalTool:
             description=(
                 # 四个子命令各自做什么只写在 subcommand 参数里；这里只留路由与纪律。
                 "在用户本机启动/管理长时后台进程（dev server、watch、长脚本等）。"
-                "【凡永不退出的命令必须用本工具，禁止改走 code_execute / host_shell】"
+                "【凡永不退出的命令必须用本工具，禁止改走 code_execute / host(action=shell)】"
                 "典型：npm run dev / vite / next dev / uvicorn --reload。"
                 "会自行退出的短命令中，装包 / build / test 请用 test_run（worker）；"
                 "其它极短 CLI 可用 code_execute（worker）。"

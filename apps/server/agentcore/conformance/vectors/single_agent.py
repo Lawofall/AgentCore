@@ -636,8 +636,7 @@ def _reload_cursor_paused_ask() -> list[SSEEvent]:
         checkpoint_required(
             checkpoint_id="cp1",
             conversation_id=_CONV,
-            question="继续按 A 方案，还是换 B？",
-            context="两者成本相近，B 多花一天但更稳。",
+            question="继续按 A 方案，还是换 B？\n两者成本相近，B 多花一天但更稳。",
             intent="decision",
         ),
         # 收口事实回放：detached 回合的 message_end 发进了空气，attach 段按 turn_end 合成

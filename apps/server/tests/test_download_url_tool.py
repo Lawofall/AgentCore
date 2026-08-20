@@ -175,7 +175,7 @@ async def test_download_url_schema_points_off_shell_wget():
     assert schema.name == "download_url"
     assert "read_url" in schema.description
     assert "code_execute" in schema.description
-    assert "host_shell" in schema.description
+    assert "host(action=shell)" in schema.description
     assert schema.approval.value == "grantable"
 
 

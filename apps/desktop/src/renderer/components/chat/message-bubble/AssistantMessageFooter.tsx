@@ -29,7 +29,6 @@ import {
   getActiveRuntime,
   useConversationStore,
 } from "@/stores/conversation";
-import { turnDetailPath } from "@/stores/ui";
 import type { ContextBlockWire } from "@/types/events";
 import {
   CACHE_BILLED_AS_MISS_LABEL,
@@ -42,13 +41,11 @@ import {
   Fingerprint,
   Layers,
   Link2,
-  Maximize2,
   MoreHorizontal,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { MessageTime, RegenerateMessageAction } from "./MessageActions";
 import { useCopyAction } from "./useCopyAction";
 
@@ -175,7 +172,6 @@ function MessageMoreMenu({
 }) {
   const [contextOpen, setContextOpen] = useState(false);
   const conversationId = useConversationStore((s) => s.currentConversationId);
-  const navigate = useNavigate();
 
   // 「复制排查包」恒可用（对齐错误卡；行业常见：支持 ID 可复制，底层检视才 gated）。
   // 诊断模式只管运行详情里的裸 ID / 调度埋点等噪声，不挡报障出口。
@@ -201,15 +197,9 @@ function MessageMoreMenu({
   const hasMenu =
     !!conversationId ||
     captainContext.length > 0 ||
-    !!message.executionId ||
     hasSpendUsage ||
     !!diagnosticText ||
     !!finishLabel;
-
-  const openInCanvas = () => {
-    if (!conversationId || !message.executionId) return;
-    navigate(turnDetailPath(conversationId, serverMessageId));
-  };
 
   if (!hasMenu) return null;
 
@@ -241,17 +231,11 @@ function MessageMoreMenu({
               收到的上下文 · {captainContext.length} 段
             </DropdownMenuItem>
           )}
-          {message.executionId && conversationId && (
-            <DropdownMenuItem onSelect={openInCanvas}>
-              <Maximize2 size={14} className="shrink-0 text-muted-foreground" />
-              在画布查看此回合
-            </DropdownMenuItem>
-          )}
           {hasSpendUsage && usage && (
             <>
-              {(!!conversationId ||
-                captainContext.length > 0 ||
-                message.executionId) && <DropdownMenuSeparator />}
+              {(!!conversationId || captainContext.length > 0) && (
+                <DropdownMenuSeparator />
+              )}
               <DropdownMenuLabel>用量详情</DropdownMenuLabel>
               <UsageDetailPanel usage={usage} />
               {message.rounds != null && message.rounds > 1 && (

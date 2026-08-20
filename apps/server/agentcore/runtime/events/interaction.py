@@ -44,7 +44,6 @@ def checkpoint_required(
     checkpoint_id: str,
     conversation_id: str,
     question: str,
-    context: str = "",
     assumptions: list[dict[str, Any]] | None = None,
     questions: list[dict[str, Any]] | None = None,
     intent: AskCheckpointIntent | None = None,
@@ -54,7 +53,6 @@ def checkpoint_required(
         "checkpoint_id": checkpoint_id,
         "conversation_id": conversation_id,
         "question": question,
-        "context": context,
         "assumptions": assumptions or [],
         "questions": questions or [],
     }

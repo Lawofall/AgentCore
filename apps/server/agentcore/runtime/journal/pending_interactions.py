@@ -194,7 +194,6 @@ def project_interaction_leaf(rec: InteractionRecord) -> dict[str, Any]:
         return {
             **base,
             "question": p.get("question", ""),
-            "context": p.get("context", ""),
         }
     if rec.kind == "plan_review":
         run_ids = [s.get("run_id", "") for s in (p.get("steps") or [])]

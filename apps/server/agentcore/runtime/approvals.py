@@ -47,8 +47,8 @@ def tool_call_requires_approval(
 
     GRANTABLE tools always do — except a plan-bound ``file_batch`` whose ops are
     within a confirmed ``organize_plan`` (方案确认即批次授权，不再二次弹卡).
-    ``git`` / ``terminal`` are ``NEVER`` at schema level but mutating subcommands
-    are gated here on workers — same posture as ``file_write``.
+    ``git`` / ``terminal`` / ``host`` are ``NEVER`` at schema level but mutating
+    subcommands / Host GRANTABLE actions are gated here — same posture as ``file_write``.
     """
     if tool_name == "file_batch":
         plan_id = str(arguments.get("organize_plan_id") or "").strip()
@@ -79,6 +79,10 @@ def tool_call_requires_approval(
 
         subcommand = str(arguments.get("subcommand", "")).strip().lower()
         return subcommand in terminal_approval_subcommands()
+    if tool_name == "host":
+        from agentcore.tools.builtin.host import host_call_requires_approval
+
+        return host_call_requires_approval(arguments)
     return False
 
 
@@ -197,8 +201,10 @@ class ApprovalGate:
     # Three-axis session permission (能力授权 / 写文件 / 组团卡). ``command=ask``
     # refuses kickoff grants; ``file_write=session`` trusts reversible mutations;
     # ``command=auto`` auto-passes execution (see sandbox_approval).
-    # ``host`` axis is orthogonal: ask = per-call Host GRANTABLE (L2/L3/host_shell);
+    # ``host`` axis is orthogonal: ask = per-call Host GRANTABLE actions
+    # (shell / open_settings / set_audio / restart_service);
     # session = trust those via ``_session_host_trust_covers``.
+    # ``install_package`` is always-confirm and never covered.
     permission_axes: PermissionAxes = field(default_factory=lambda: DEFAULT_PERMISSION_AXES)
     _granted: set[str] = field(default_factory=set)
     # Tools the user (or timeout→deny) refused this turn — later calls skip the card.
@@ -306,7 +312,8 @@ class ApprovalGate:
         prompts. Callers pass ``force=False`` for ``sensitive.path_read_ask`` so
         APPROVE_ALWAYS may write a same-tool turn grant while still forcing the
         first card via the breaker entrance (read tools are not kickoff/session
-        covered). Structured ``git push`` / ``create_pr`` and ``host_package_install``
+        covered). Structured ``git push`` / ``create_pr`` and
+        ``host(action=install_package)``
         likewise always prompt (session / kickoff / turn grants do not cover them).
         """
         always_confirm = _requires_always_confirm(tool_name, arguments)
@@ -460,7 +467,7 @@ class ApprovalGate:
             if req.payload.get("tool_name") not in tool_names:
                 continue
             # Never sweep always-confirm calls (git push/create_pr ·
-            # host_package_install · delete_folder).
+            # host install_package · delete_folder).
             pending_args = req.payload.get("arguments")
             pending_tool = str(req.payload.get("tool_name") or "")
             if _requires_always_confirm(

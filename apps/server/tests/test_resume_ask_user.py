@@ -48,7 +48,6 @@ def _ask_frame(*, options: list[str] | None = None) -> AskUserSuspension:
         user_message="A 还是 B?",
         transcript=[],
         question="A 还是 B?",
-        context="",
         questions=[
             {
                 "id": "q0",
@@ -286,7 +285,6 @@ async def test_settle_organize_plan_continue_keeps_all_selected():
             user_message="整理桌面",
             transcript=[],
             question="保留哪些操作？",
-            context="",
             intent="organize_plan",
             questions=[
                 {

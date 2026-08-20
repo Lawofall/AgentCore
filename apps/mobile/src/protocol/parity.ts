@@ -747,7 +747,7 @@ export const DESKTOP_PAGE_PARITY: Record<string, ParityEntry> = {
   FilesPage: {
     verdict: "ported",
     surface:
-      "FilesPage（会话别名寻址）/ WorkspacesPage「我的文件」（文件夹 / 对话产物 / 共享空间）→ WorkspaceFilesPage；云工作区可写。本机仍只读并过滤。工作区新建/删除仍归桌面；草稿可点选已有云文件夹",
+      "FilesPage / WorkspacesPage「我的文件」（文件夹 / 共享空间）→ WorkspaceFilesPage；云工作区可写。本机仍只读并过滤。工作区新建/删除仍归桌面；草稿可点选已有云文件夹。不列裸聊 scratch",
   },
   MessagesPage: { verdict: "ported", surface: "MessagesPage（IM）+ im/*" },
   ServiceUnavailablePage: {

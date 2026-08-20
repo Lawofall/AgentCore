@@ -57,7 +57,7 @@ _RESIDENT_CAP = 24330
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 _GATED_MANUALS: tuple[tuple[str, str], ...] = (
     ("terminal", "wait_for"),
-    ("host_shell", "通识长文当交付"),
+    ("host", "通识长文当交付"),
     ("browser_navigate", "ask_user(browser_login=true)"),
     ("external_mount_readonly", "【授权后发现】"),
     ("external_mount_readonly", "先写工作区"),

@@ -110,6 +110,8 @@ const PEEK_SUPPRESSED = new Set([
   "amend_note",
   "desktop_notify",
   // 本机 Host：标题已自解释；正文是 untrusted JSON，勿 peek 刷屏。
+  "host",
+  // 历史会话：旧 host_* 仍抑制 peek。
   "host_ping",
   "host_info",
   "host_audio_devices",
@@ -306,14 +308,16 @@ export function ToolLine({
     turnKey ? `${turnKey}:tool:${step.id}` : null,
     false,
   );
-  const { Icon, label } = toolMeta(step.tool_name);
+  const { Icon, label } = toolMeta(step.tool_name, step.arguments);
   const targetRole = useRunTargetRole(step, turnKey);
   const browserTail =
     step.status === "success" && isBrowserDisplay(step.display)
       ? browserResultTail(step.display) || null
       : null;
   // display.detail 已进标题时不再 chip args.url / text，避免 Navigate 叠两遍 URL。
-  const detail = browserTail ? "" : targetRole || toolDetail(step.arguments);
+  const detail = browserTail
+    ? ""
+    : targetRole || toolDetail(step.arguments, step.tool_name);
   const data: ToolResultData = {
     toolName: step.tool_name,
     args: step.arguments,

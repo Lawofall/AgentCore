@@ -22,8 +22,7 @@
       "payload": {
         "checkpoint_id": "cp_carrier_smartart",
         "conversation_id": "conv_demo",
-        "question": "组织架构图用哪种可交形态？",
-        "context": "能力边界前置：图形 SmartArt 做不到；推荐更适合的载体，仍可坚持 Word 文字版。",
+        "question": "组织架构图用哪种可交形态？\n能力边界前置：图形 SmartArt 做不到；推荐更适合的载体，仍可坚持 Word 文字版。",
         "assumptions": [],
         "questions": [
           {
@@ -110,8 +109,7 @@
         "kind": "ask_user",
         "id": "cp_carrier_smartart",
         "status": "pending",
-        "question": "组织架构图用哪种可交形态？",
-        "context": "能力边界前置：图形 SmartArt 做不到；推荐更适合的载体，仍可坚持 Word 文字版。"
+        "question": "组织架构图用哪种可交形态？\n能力边界前置：图形 SmartArt 做不到；推荐更适合的载体，仍可坚持 Word 文字版。"
       }
     ],
     "cost": {

@@ -2407,7 +2407,6 @@ def test_build_tape_sanitizes_run_context_memory():
             {
                 "checkpoint_id": "cp-ask",
                 "question": "要继续吗？",
-                "context": "",
                 "assumptions": [],
                 "questions": [{"id": "q1", "prompt": "选一项"}],
                 "intent": "decision",

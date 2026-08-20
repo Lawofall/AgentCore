@@ -207,14 +207,13 @@ describe("coldResume · live Interaction authority", () => {
   });
 
   it("recovery paused shell fills when IX has no covering pending", () => {
-    const shell: PausedTurnSummary = {
+    const shell = {
       message_id: "m-shell",
       checkpoint_id: "cp-shell",
       kind: "plan_review",
       user_message: "",
       user_message_id: "",
       question: "",
-      context: "",
       form: "",
       headline: "",
       motion: "",
@@ -224,7 +223,7 @@ describe("coldResume · live Interaction authority", () => {
       browser_login: false,
       steps: [{ run_id: "r1", role: "研" }],
       pending: [],
-    };
+    } as PausedTurnSummary;
 
     const visible = selectVisibleColdResumes({
       conversationId: "conv-live",
@@ -300,14 +299,13 @@ describe("coldResume · live Interaction authority", () => {
     reopenColdPending("cp-gone");
     expect(getColdInteraction("cp-gone")?.status).toBe("orphaned");
 
-    const shell: PausedTurnSummary = {
+    const shell = {
       message_id: "m-gone",
       checkpoint_id: "cp-gone",
       kind: "ask_user",
       user_message: "",
       user_message_id: "",
       question: "放行？",
-      context: "",
       form: "",
       headline: "",
       motion: "",
@@ -317,7 +315,7 @@ describe("coldResume · live Interaction authority", () => {
       browser_login: false,
       steps: [],
       pending: [],
-    };
+    } as PausedTurnSummary;
     const visible = selectVisibleColdResumes({
       conversationId: "conv-live",
       byId: getColdInteractionSnapshot(),
@@ -344,14 +342,13 @@ describe("coldResume · live Interaction authority", () => {
     });
     markColdResolved({ kind: "team_preview", id: "cp-follow-tp" });
 
-    const askShell: PausedTurnSummary = {
+    const askShell = {
       message_id: "m-follow-ask",
       checkpoint_id: "cp-follow-ask",
       kind: "ask_user",
       user_message: "",
       user_message_id: "",
       question: "怎么推进？",
-      context: "",
       form: "",
       headline: "",
       motion: "",
@@ -361,7 +358,7 @@ describe("coldResume · live Interaction authority", () => {
       browser_login: false,
       steps: [],
       pending: [],
-    };
+    } as PausedTurnSummary;
     const tpShell: PausedTurnSummary = {
       ...askShell,
       message_id: "m-follow-tp",
@@ -472,14 +469,13 @@ describe("coldResume · live Interaction authority", () => {
       payload: { ...tpPayload("tp-latest"), headline: "最新开工卡" },
     });
 
-    const oldShell: PausedTurnSummary = {
+    const oldShell = {
       message_id: "m-server-tp",
       checkpoint_id: "tp-paused-old",
       kind: "team_preview",
       user_message: "",
       user_message_id: "",
       question: "",
-      context: "",
       form: "",
       headline: "旧开工卡 · 预计 1 人",
       motion: "",
@@ -489,7 +485,7 @@ describe("coldResume · live Interaction authority", () => {
       browser_login: false,
       steps: [],
       pending: [],
-    };
+    } as PausedTurnSummary;
 
     const visible = selectVisibleColdResumes({
       conversationId: "conv-live",

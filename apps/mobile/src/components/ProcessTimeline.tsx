@@ -362,7 +362,7 @@ function timelineNodeKeys(nodes: TimelineNode[]): string[] {
 function toolGroupSummary(tools: ToolStepData[]): string {
   const sameKind = tools.every((t) => t.tool_name === tools[0].tool_name);
   if (sameKind && tools.length <= 3) {
-    const label = toolLabel(tools[0].tool_name);
+    const label = toolLabel(tools[0].tool_name, tools[0].arguments);
     const names = tools.map((t) =>
       baseName(toolDetail(t.arguments, t.tool_name)),
     );
@@ -371,7 +371,7 @@ function toolGroupSummary(tools: ToolStepData[]): string {
   const order: string[] = [];
   const counts = new Map<string, number>();
   for (const t of tools) {
-    const label = toolLabel(t.tool_name);
+    const label = toolLabel(t.tool_name, t.arguments);
     if (!counts.has(label)) order.push(label);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
@@ -1052,7 +1052,7 @@ function GenericToolStep({
   const head = (
     <>
       <span className="tool-name">
-        <span className="tool-label">{toolLabel(step.tool_name)}</span>
+        <span className="tool-label">{toolLabel(step.tool_name, step.arguments)}</span>
         {detail && <span className="tool-detail">{detail}</span>}
       </span>
       <span className="tool-status">{runningStatus}</span>

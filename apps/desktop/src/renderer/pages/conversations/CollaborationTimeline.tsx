@@ -103,7 +103,7 @@ export function CollaborationTimelinePanel({
                 onOpenFile={() =>
                   navigate(
                     "/files",
-                    filesFocusState(it.conversation_id, folderId),
+                    filesFocusState(folderId),
                   )
                 }
               />
@@ -122,12 +122,12 @@ export function CollaborationTimelinePanel({
           <DossierGroup
             label={`${RESEARCH_DIR}/`}
             paths={research}
-            onOpen={() => navigate("/files", filesFocusState(null, folderId))}
+            onOpen={() => navigate("/files", filesFocusState(folderId))}
           />
           <DossierGroup
             label={`${DEBATE_DIR}/`}
             paths={debate}
-            onOpen={() => navigate("/files", filesFocusState(null, folderId))}
+            onOpen={() => navigate("/files", filesFocusState(folderId))}
           />
           {research.length === 0 &&
             debate.length === 0 &&

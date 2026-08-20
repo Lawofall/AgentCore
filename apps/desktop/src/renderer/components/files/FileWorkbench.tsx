@@ -15,10 +15,8 @@ import {
 import {
   LocalFoldersRailHeader,
   MyFilesRailHeader,
-  RailSectionHeader,
   SharedSpacesRailHeader,
 } from "@/components/files/fileWorkbench/RailHeaders";
-import { WorkspaceSection } from "@/components/files/fileWorkbench/WorkspaceSection";
 import { WorkspaceVersionsPanel } from "@/components/files/fileWorkbench/WorkspaceVersionsPanel";
 import {
   type Tab,
@@ -41,7 +39,7 @@ import { PendingSharedInvites } from "@/components/files/sharedSpaces/PendingSha
 import { SharedSpaceSection } from "@/components/files/sharedSpaces/SharedSpaceSection";
 import { SearchField } from "@/components/ui";
 import { WorkspaceTrashSection } from "@/components/workspace/TrashSection";
-import { getConversations, useConversations } from "@/hooks/useConversations";
+import { useConversations } from "@/hooks/useConversations";
 import { getFolders, useFolders } from "@/hooks/useFolders";
 import { useSharedSpaces } from "@/hooks/useSharedSpaces";
 import { hasLocalFiles } from "@/lib/capabilities";
@@ -54,7 +52,6 @@ import {
 } from "@/lib/folderTree";
 import { useReadOnlyOffline } from "@/lib/offlineMode";
 import { cn } from "@/lib/utils";
-import { bareConversationScratchSubpath } from "@/services/bareScratchPath";
 import { dedupeFoldersByLocalBinding } from "@/services/folders";
 import {
   type SharedSpaceSummary,
@@ -74,7 +71,6 @@ import {
   resolveWorkspaceSource,
 } from "@/services/sources/workspaceSource";
 import type { WorkspaceInfo } from "@/services/workspaces";
-import { useConversationStore } from "@/stores/conversation";
 import { useFoldersStore } from "@/stores/folders";
 import { FileText, FolderOpen, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -92,7 +88,7 @@ const MEMORY_WS = "__memory__";
 const RULES_WS = "__rules__";
 
 /**
- * The 文件 hub's **split** file UI (VSCode 式左树右详情). The left rail is four
+ * The 文件 hub's **split** file UI (VSCode 式左树右详情). The left rail is three
  * zones (双模式工作区 §5.4 — 界面上没有「项目」，容器只有文件夹):
  *
  * - **我的文件** — the cloud folder tree, nested for real by `rel_path`. A folder
@@ -102,7 +98,9 @@ const RULES_WS = "__rules__";
  *   would otherwise appear twice.
  * - **本机文件夹** — disk folders, most recently active first (VS Code 语义).
  * - **共享空间** — member-based cloud spaces, a parallel container (§八).
- * - **快速对话** — `conv:` scratch roots.
+ *
+ * `conv:` scratch is conversation-panel addressing, not a hub zone: 裸聊写盘
+ * 自动建桌，产物进「我的文件」。
  *
  * 段**默认折叠**（只露根标题），点标题展开/收起、展开态持久化（`expandedWs`）；折叠时不
  * 挂载 {@link FileTree}，故云端 eager 源的「整树递归拉取」推迟到展开时才发——文件夹一多时
@@ -115,9 +113,8 @@ const RULES_WS = "__rules__";
  * Rows come from the folder list rather than `/v1/workspaces`, so a folder just
  * created shows up before the workspace list refetches; a folder with no
  * workspace row yet falls back to {@link folderWorkspaceFallback}. Lifecycle
- * (new file·folder / upload / reveal in OS / open chat / clear cloud-scratch
- * artifacts / delete conversation or delete folder / rename) lives on each root's
- * **right-click menu** to keep the rail clean; the rail header is a **name + path
+ * (new file·folder / upload / reveal in OS / open chat / delete folder / rename)
+ * lives on each root's **right-click menu** to keep the rail clean; the rail header is a **name + path
  * filter** (real-time, case-insensitive substring over folder names and, for
  * expanded trees, file/folder names + relative paths; session-only, not persisted
  * — it's a search, not a preference). No content full-text search.
@@ -125,8 +122,8 @@ const RULES_WS = "__rules__";
  * The two container actions §5.4 leaves are the zone headers' own: 我的文件「+」
  * builds a cloud folder (nested via a row's「在此新建文件夹」), 本机文件夹「+」opens
  * one off the disk. Chats live on `/conversations`; the two cross-link — a root's
- * 「查看对话」jumps here→there, and「浏览文件」jumps there→here (via `focusWsId`,
- * which expands + highlights the target root).
+ * 「查看对话」jumps here→there, and「浏览文件」jumps there→here (via `focusWsId`
+ * = `folder:<id>` or `shared:<id>`, which expands + highlights the target root).
  */
 export function FileWorkbench({
   workspaces,
@@ -192,41 +189,17 @@ export function FileWorkbench({
   );
   const conversations = useConversations();
   const folders = useFolders();
-  const currentConversationId = useConversationStore(
-    (s) => s.currentConversationId,
-  );
   const openCreateFolder = useFoldersStore((s) => s.openCreateFolder);
 
-  /** Folder + bare scratch only — `shared:` rows come from {@link useSharedSpaces}.
-   * If the active bare chat already produced files but `/v1/workspaces` has not
-   * listed `conv:<id>` yet, synthesize a rail row so the tree is reachable.
-   * Do not invalidate `workspaceKeys.list` on open / first artifact — that
-   * rebuilds FileSource and spins the whole tree. */
-  const personalWorkspaces = useMemo(() => {
-    const base = workspaces.filter((w) => !w.wsId.startsWith("shared:"));
-    if (!currentConversationId) return base;
-    const wsId = `conv:${currentConversationId}`;
-    if (base.some((w) => w.wsId === wsId)) return base;
-    const conv =
-      conversations.find((c) => c.id === currentConversationId) ??
-      getConversations().find((c) => c.id === currentConversationId) ??
-      null;
-    if (!conv || conv.folderId) return base;
-    const rootId = conv.localRootId || conv.localContainerRootId || null;
-    const local = !!rootId;
-    const synthetic: WorkspaceInfo = {
-      wsId,
-      name: conv.title || "未命名对话",
-      location: local ? "local" : "cloud",
-      rootId,
-      subpath:
-        local && rootId && rootId === conv.localContainerRootId
-          ? bareConversationScratchSubpath(currentConversationId)
-          : "",
-      hasFiles: true,
-    };
-    return [synthetic, ...base];
-  }, [workspaces, currentConversationId, conversations]);
+  /** Folder workspaces only — `shared:` from {@link useSharedSpaces}; `conv:`
+   * scratch is conversation-panel addressing, not a hub zone. */
+  const personalWorkspaces = useMemo(
+    () =>
+      workspaces.filter(
+        (w) => !w.wsId.startsWith("shared:") && !w.wsId.startsWith("conv:"),
+      ),
+    [workspaces],
+  );
 
   /** Every rail row's workspace, folder rows included even when `/v1/workspaces`
    * has not caught up with a folder the user just created. */
@@ -457,14 +430,6 @@ export function FileWorkbench({
 
   const treeFilterQuery = filter.trim();
 
-  const scratches = useMemo(
-    () =>
-      personalWorkspaces.filter(
-        (w) => w.wsId.startsWith("conv:") && matchesFilter(w.name, w.wsId),
-      ),
-    [personalWorkspaces, matchesFilter],
-  );
-
   const railEmpty =
     folders.length === 0 &&
     personalWorkspaces.length === 0 &&
@@ -666,8 +631,7 @@ export function FileWorkbench({
             {filter.trim() &&
             cloudFolderNodes.length === 0 &&
             localFolders.length === 0 &&
-            visibleShared.length === 0 &&
-            scratches.length === 0 ? (
+            visibleShared.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">
                 没有匹配「{filter.trim()}」的文件夹或已展开树中的文件
               </p>
@@ -738,33 +702,6 @@ export function FileWorkbench({
                       />
                     );
                   })
-                )}
-
-                {(scratches.length > 0 || !filter.trim()) && (
-                  <RailSectionHeader label="快速对话" />
-                )}
-                {scratches.length === 0 && !filter.trim() ? (
-                  <p className="px-2 py-2 text-xs text-muted-foreground/70">
-                    快速对话产生文件后会出现在这里
-                  </p>
-                ) : (
-                  scratches.map((ws) => (
-                    <WorkspaceSection
-                      key={ws.wsId}
-                      ws={ws}
-                      source={sourceByWs.get(ws.wsId) ?? null}
-                      offlineCloud={offline && ws.location === "cloud"}
-                      activePath={
-                        activeTab?.wsId === ws.wsId ? activeTab.path : null
-                      }
-                      expanded={expandedWs.has(ws.wsId)}
-                      onToggle={() => toggleWs(ws.wsId)}
-                      onOpenFile={(path, name) => openFile(ws.wsId, path, name)}
-                      flashing={ws.wsId === flashWsId}
-                      filterQuery={treeFilterQuery}
-                      sortBy={sortBy}
-                    />
-                  ))
                 )}
               </>
             )}

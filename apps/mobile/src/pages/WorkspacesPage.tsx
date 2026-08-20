@@ -5,14 +5,13 @@ import { Brain, ChevronRight, Cloud, Folder } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-// 文件 tab home — 用户面「我的文件」。云端工作区按种类分组（文件夹 / 对话产物 /
-// 共享空间）；本机工作区不展示。工作区生命周期（新建 / 重命名 / 删除、绑定本机
-// 文件夹）仍是桌面的活，本列表没有管理动作。每次进入会重拉（tab remount），
-// 对话里刚产出的文件不用手动刷新。
+// 文件 tab home — 用户面「我的文件」。云端工作区按种类分组（文件夹 /
+// 共享空间）；不列裸聊 `conv:` scratch（写盘进自动建桌）。本机工作区不展示。
+// 工作区生命周期（新建 / 重命名 / 删除、绑定本机文件夹）仍是桌面的活，本列表
+// 没有管理动作。每次进入会重拉（tab remount），对话里刚产出的文件不用手动刷新。
 
 const CLOUD_GROUPS = [
   { kind: "folder" as const, title: "文件夹" },
-  { kind: "conv" as const, title: "对话产物" },
   { kind: "shared" as const, title: "共享空间" },
 ];
 
@@ -43,7 +42,10 @@ export function WorkspacesPage() {
     };
   }, [navigate]);
 
-  const clouds = items?.filter((w) => w.location === "cloud") ?? [];
+  const clouds =
+    items?.filter(
+      (w) => w.location === "cloud" && workspaceKind(w.wsId) !== "conv",
+    ) ?? [];
   const hasLocalOnly =
     items !== null &&
     clouds.length === 0 &&
@@ -82,8 +84,8 @@ export function WorkspacesPage() {
             </p>
             <p className="muted hint">
               {hasLocalOnly
-                ? "本地工作区请在桌面端查看。开始云端对话并产出文件后，会出现在这里。"
-                : "开始对话并产出文件后，工作区会出现在这里。"}
+                ? "本地工作区请在桌面端查看。云端产出的文件会以文件夹出现在这里。"
+                : "在对话里产出文件后，会以文件夹出现在这里。"}
             </p>
           </div>
         )}

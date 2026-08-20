@@ -331,6 +331,7 @@ async def test_loop_finalizes_ask_user_to_paused():
     assert any(e["type"] == "checkpoint_required" for e in runs["events"])
     cp = next(e for e in runs["events"] if e["type"] == "checkpoint_required")
     assert cp["payload"]["intent"] == "decision"
+    assert "context" not in cp["payload"]
 
 
 # --- the persist tail: PAUSED writes a snapshot assistant row -----------------------

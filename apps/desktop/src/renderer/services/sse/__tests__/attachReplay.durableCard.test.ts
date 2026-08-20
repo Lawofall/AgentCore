@@ -42,7 +42,6 @@ function replaySegment(turnId: string, opts: { stamp: boolean }): SSEEvent[] {
       checkpoint_id: "cp1",
       conversation_id: CID,
       question: "继续按 A 方案，还是换 B？",
-      context: "",
       assumptions: [],
       questions: [],
       intent: "decision",

@@ -6,6 +6,7 @@ describe("toolLabelZh", () => {
     expect(toolLabelZh("file_write")).toBe("写入文件");
     expect(toolLabelZh("code_execute")).toBe("执行代码");
     expect(toolLabelZh("git")).toBe("Git 写入");
+    expect(toolLabelZh("host")).toBe("本机 Host");
     expect(toolLabelZh("terminal")).toBe("终端");
     expect(toolLabelZh("desktop_notify")).toBe("系统通知");
     expect(toolLabelZh("external_mount_readonly")).toBe("挂载本机目录");

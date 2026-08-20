@@ -30,15 +30,15 @@ CEO 是**管理者**（不是调查员）：主要持只读 / 检索工具，用
 |---|---|
 | 与用户对话、来回澄清 | 持有写 / 改 / 删 / 移文件、Git 写入、跑代码等变更工具 |
 | 轻量 / 单点只读直答（一两处文件 / 一条事实） | 亲自串行跑成规模广度调查 |
-| 本地纯启服 / 重启 / 看长驻进程是否活着（`terminal`） | 用 `host_shell` 启长驻；改码 / 装依赖后仍假装自己动手 |
+| 本地纯启服 / 重启 / 看长驻进程是否活着（`terminal`） | 用 `host(action=shell)` 启长驻；改码 / 装依赖后仍假装自己动手 |
 | 开工前只读探路；团队跑完写简短概览 | 为简单对话支付规划税 |
 | 理解意图、拆任务、定角色与依赖（`depends_on`） | 复述各 worker 全文（细节由前端 run / 图视图展示） |
 
-工具结构分界：`approval=NEVER` → CEO 持有；`GRANTABLE` schema → 仅 worker——**GRANTABLE 例外**：① 本机 Host 的 `host_shell`（CEO+worker · `host` 轴授 · 禁 kickoff 静默授；L2/L3 仍仅 worker）；② **`browser_navigate` / `click` / `type` / `scroll` / `snapshot`**（CEO+worker · `browser_class` · 有 Bridge/gVisor 才装配；captain 直调跳过审批；**`browser_screenshot` 仍仅 worker**）。另：**本地 `terminal`** 亦 CEO 可持（schema `NEVER`，`start` 运行时升审批，与 `git` 写同姿）——纯启服 / 停 / 读，非改产物。自研编排（否决 LangGraph / CrewAI 等）：编排是核心壁垒，须完全掌控。聊天优先 + 按需编排（否决「编排器唯一入口」——每条消息付编排税）。
+工具结构分界：`approval=NEVER` → CEO 持有；`GRANTABLE` schema → 仅 worker——**GRANTABLE 例外**：① **`browser_navigate` / `click` / `type` / `scroll` / `snapshot`**（CEO+worker · `browser_class` · 有 Bridge/gVisor 才装配；captain 直调跳过审批；**`browser_screenshot` 仍仅 worker**）。另：**本地 `terminal`** 与 **`host`** 均为 schema `NEVER`、CEO 可持，运行时按 action 升审批（`terminal start` / `host` 的 GRANTABLE action 走 `host` 轴；worker-only action 拒并 `delegate`；禁 kickoff 静默授）——纯启服 / 短命令 / 本机观测，非改产物。动作表 → [工具 · Host](/docs/03-AI核心/工具与能力系统.md)。自研编排（否决 LangGraph / CrewAI 等）：编排是核心壁垒，须完全掌控。聊天优先 + 按需编排（否决「编排器唯一入口」——每条消息付编排税）。
 
 **档位取舍**：档 2.5 = 结构取档 2（CEO 只读 + 窄例外；否决档 1 全能 CEO、档 3 纯编排 CEO）+ 路由按「活的规模与结构」细化。档 1 污染上下文、弱化团队心智；档 3 给高频轻量只读 / 纯启服加委派税。
 
-**✅ 2026-08-18 复评：维持档 2.5，否决给 CEO 开有限写权。** 动机是压「小改动延迟」——用户只要改一行也得走完整派单。实测把动机否掉了（dogfood 付费 BYOK，**1 次**，非分布）：改一个标题端到端 **16.5s**，其中 5 次 `llm.call` 合计 15.0s，**管道固定开销仅 1.5s**；worker 冷开（`worker.prepare_phase`）总计 **16ms**，分段之和 12ms——冷开没有可压浪费，派单的贵全在**轮次结构**（多出 `delegate` / `handoff` / CEO 收口三跳 LLM）。CEO 直写最多省 6–8s，不足以换架构取舍：上下文污染是**复利**成本（文件内容进 CEO 上下文后，此后每回合都付），而收益一次性。同期查明真正白扔的时长在系统收口把同一结论重讲一遍（生产窗 61 次派单 21 次命中），已修 → [执行引擎 · 首回合 `attached_inject` 自己收口](/docs/03-AI核心/执行引擎架构设计.md)。**否决**通用 `file_write` / `file_move` 给 CEO（语义太宽，会被拿去干别的）；日后若仍要开，形态只能是语义封死的 CEO-only 窄口（与 `promote_product` 同族：只作用于已 accepted 产物、进 `file_products` 台账、可 diff 可回滚）。**另案**：CEO 持 `terminal` / `host_shell` 已能让字节落盘且**不进台账、不可 diff 回滚**——按阶梯先埋观测看真实流量是否发生，**禁止**直接提硬拦（→ `intercept-discipline`）。
+**✅ 2026-08-18 复评：维持档 2.5，否决给 CEO 开有限写权。** 动机是压「小改动延迟」——用户只要改一行也得走完整派单。实测把动机否掉了（dogfood 付费 BYOK，**1 次**，非分布）：改一个标题端到端 **16.5s**，其中 5 次 `llm.call` 合计 15.0s，**管道固定开销仅 1.5s**；worker 冷开（`worker.prepare_phase`）总计 **16ms**，分段之和 12ms——冷开没有可压浪费，派单的贵全在**轮次结构**（多出 `delegate` / `handoff` / CEO 收口三跳 LLM）。CEO 直写最多省 6–8s，不足以换架构取舍：上下文污染是**复利**成本（文件内容进 CEO 上下文后，此后每回合都付），而收益一次性。同期查明真正白扔的时长在系统收口把同一结论重讲一遍（生产窗 61 次派单 21 次命中），已修 → [执行引擎 · 首回合 `attached_inject` 自己收口](/docs/03-AI核心/执行引擎架构设计.md)。**否决**通用 `file_write` / `file_move` 给 CEO（语义太宽，会被拿去干别的）；日后若仍要开，形态只能是语义封死的 CEO-only 窄口（与 `promote_product` 同族：只作用于已 accepted 产物、进 `file_products` 台账、可 diff 可回滚）。**另案**：CEO 持 `terminal` / `host(action=shell)` 已能让字节落盘且**不进台账、不可 diff 回滚**——按阶梯先埋观测看真实流量是否发生，**禁止**直接提硬拦（→ `intercept-discipline`）。
 
 ## 路由 / 团队 / 认知分工
 
@@ -238,7 +238,7 @@ CEO 是**管理者**（不是调查员）：主要持只读 / 检索工具，用
 | 零写落盘声称扫词硬回炉（答完清气泡） | ✅ **已撤**（2026-08-09 定案 B；解释禁语误伤）→ 同上 |
 | 领域 kind 扩表 / 边删 kind 边加启发式完成硬闸 | **否决**；S3 接盘见上节 |
 | `validate_criteria_kind_fit` 扫 task 拟合硬闸 | ✅ **已随 S3 退役** |
-| `host_shell` fuse 改可批可跑（B）/ 仅改文案当终案（D） | **否决** → [安全 · 熔断方案 C](/docs/05-平台与运维/安全权限与治理.md) |
+| `host(action=shell)` fuse 改可批可跑（B）/ 仅改文案当终案（D） | **否决** → [安全 · 熔断方案 C](/docs/05-平台与运维/安全权限与治理.md) |
 | 扫角色名静默改写 deliverable | **已删**（见上节） |
 | 扫 role·task 自由文正则决定产物落 `research` 还是 `reviews` | ⏳ **净删除**（成品归位）：意图分类器形态，且误判对用户不可见；落点只认显式来源，其余进 `工作稿/` → [工作区 §四](/docs/02-架构/双模式工作区.md#四约定文档目录约定) |
 | 产物地位（成品 vs 过程材料）靠路径推断 / 派单预判 / worker 自判 | **否决**：只有收口时刻看得见用户原始请求 + 全部实际产出 → [术语表 · 成品归位](/docs/01-产品/术语表.md) |

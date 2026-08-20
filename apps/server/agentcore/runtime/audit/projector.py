@@ -16,8 +16,7 @@ _TASK_PREVIEW_CHARS = 200
 def _grantable_tool_names() -> frozenset[str]:
     """All GRANTABLE tools on the declaration roster (builtin + worker-only Host/L3…).
 
-    Builtin-only scan would miss ``host_open_settings`` / ``host_audio_set_default`` /
-    ``host_service_restart`` / ``host_shell`` / terminal / browser — those
+    Builtin-only scan would miss runtime-elevated ``host`` / terminal / browser — those
     still go through ApprovalGate and must land on ``agent_audit_events`` like file tools.
     """
     from agentcore.tools.registration import (
@@ -35,8 +34,8 @@ def _grantable_tool_names() -> frozenset[str]:
         schema = instantiate_declared(cls, location=None).schema
         if schema.approval is ToolApproval.GRANTABLE:
             names.add(schema.name)
-    # Keep legacy ``git`` even if a future roster flip marks it differently.
-    return frozenset(names | {"git"})
+    # Keep ``git`` / ``host`` even though schema is NEVER (runtime-elevated approval).
+    return frozenset(names | {"git", "host"})
 
 
 def task_preview_and_hash(task: str) -> tuple[str, str]:

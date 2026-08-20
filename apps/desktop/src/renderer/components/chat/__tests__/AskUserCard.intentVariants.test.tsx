@@ -17,8 +17,7 @@ vi.mock("@/lib/toast", () => ({
 afterEach(cleanup);
 
 const proposalContent: AskUserContent = {
-  question: "选哪条方案推进？",
-  context: "三条路线成本与风险不同。",
+  question: "选哪条方案推进？\n三条路线成本与风险不同。",
   assumptions: [],
   questions: [
     {
@@ -37,8 +36,7 @@ const proposalContent: AskUserContent = {
 };
 
 const riskContent: AskUserContent = {
-  question: "哪些风险要在本轮处理？",
-  context: "未勾选的项将记入后续 backlog。",
+  question: "哪些风险要在本轮处理？\n未勾选的项将记入后续 backlog。",
   assumptions: [],
   questions: [
     {
@@ -71,8 +69,7 @@ function renderCard(
 }
 
 const dailyReviewContent: AskUserContent = {
-  question: "确认要落盘的复盘提案？",
-  context: "来自今日对话摘要。",
+  question: "确认要落盘的复盘提案？\n来自今日对话摘要。",
   assumptions: [],
   questions: [
     {

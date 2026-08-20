@@ -255,23 +255,80 @@ function gitPrimaryArg(args: Record<string, unknown>): string | null {
   return sub;
 }
 
+function hostPackageSnippet(args: Record<string, unknown>): string | null {
+  const manager =
+    typeof args.manager === "string" && args.manager.trim()
+      ? args.manager.trim()
+      : "";
+  const pkg =
+    typeof args.package_id === "string" && args.package_id.trim()
+      ? args.package_id.trim()
+      : "";
+  const cask = args.cask === true ? " (cask)" : "";
+  if (manager && pkg) return `${manager} ${pkg}${cask}`;
+  return pkg || manager || null;
+}
+
+/** Readable headline for structured `host` tool (action + key args; 同构 git). */
+function hostPrimaryArg(args: Record<string, unknown>): string | null {
+  const action = typeof args.action === "string" ? args.action.trim() : "";
+  if (!action) return hostPackageSnippet(args);
+  if (action === "shell") {
+    const cmd = typeof args.command === "string" ? args.command.trim() : "";
+    return cmd ? `shell ${truncateSnippet(cmd)}` : "shell";
+  }
+  if (action === "install_package") {
+    const pkg = hostPackageSnippet(args);
+    return pkg ? `install_package ${pkg}` : "install_package";
+  }
+  if (action === "open_settings") {
+    const panel = typeof args.panel === "string" ? args.panel.trim() : "";
+    return panel ? `open_settings ${panel}` : "open_settings";
+  }
+  if (action === "set_audio") {
+    const name =
+      typeof args.device_name === "string" && args.device_name.trim()
+        ? args.device_name.trim()
+        : typeof args.device_id === "string" && args.device_id.trim()
+          ? args.device_id.trim()
+          : "";
+    return name ? `set_audio ${truncateSnippet(name)}` : "set_audio";
+  }
+  if (action === "restart_service") {
+    const service =
+      typeof args.service === "string" && args.service.trim()
+        ? args.service.trim()
+        : "";
+    return service ? `restart_service ${service}` : "restart_service";
+  }
+  if (action === "os_log") {
+    const source =
+      typeof args.source === "string" && args.source.trim()
+        ? args.source.trim()
+        : "";
+    return source ? `os_log ${source}` : "os_log";
+  }
+  if (action === "status") {
+    const raw = args.facets;
+    if (Array.isArray(raw)) {
+      const facets = raw
+        .filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+        .map((f) => f.trim());
+      if (facets.length > 0) return `status ${facets.join(", ")}`;
+    }
+    return "status";
+  }
+  return action;
+}
+
 function primaryArg(
   toolName: string,
   args: Record<string, unknown>,
 ): string | null {
   if (toolName === "git") return gitPrimaryArg(args);
+  if (toolName === "host") return hostPrimaryArg(args);
   if (toolName === "host_package_install") {
-    const manager =
-      typeof args.manager === "string" && args.manager.trim()
-        ? args.manager.trim()
-        : "";
-    const pkg =
-      typeof args.package_id === "string" && args.package_id.trim()
-        ? args.package_id.trim()
-        : "";
-    const cask = args.cask === true ? " (cask)" : "";
-    if (manager && pkg) return `${manager} ${pkg}${cask}`;
-    return pkg || manager || null;
+    return hostPackageSnippet(args);
   }
   if (toolName === "delete_folder") {
     // ``folder_name`` is resolved server-side from the roster (never model-supplied)

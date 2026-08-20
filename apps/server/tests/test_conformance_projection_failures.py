@@ -229,8 +229,7 @@ def test_checkpoint_resolved_reload_has_no_fake_pending(projected):
             "kind": "ask_user",
             "id": "cp1",
             "status": "resolved",
-            "question": "先做 A 还是 B？",
-            "context": "两条路线各有取舍。",
+            "question": "先做 A 还是 B？\n两条路线各有取舍。",
         }
     ]
     assert [s["kind"] for s in p["process"]] == ["content", "checkpoint", "content"]
@@ -530,13 +529,13 @@ def test_turn_verdict_team_host_has_a_team_error_face(projected):
 
 
 def test_turn_verdict_unproductive_body_tool_keeps_failed_tool(projected):
-    """Hand-derived: non-empty body + unproductive + host_shell status=error."""
+    """Hand-derived: non-empty body + unproductive + host status=error."""
     p = projected["turn_verdict_unproductive_body_tool"]
     assert (p["content"] or "").strip()
     assert p["finishReason"] == "unproductive"
     assert p["runs"] == []
     tools = [s for s in p["process"] if s.get("kind") == "tool"]
-    assert any(s.get("tool_name") == "host_shell" and s.get("status") == "error" for s in tools)
+    assert any(s.get("tool_name") == "host" and s.get("status") == "error" for s in tools)
 
 
 def test_turn_verdict_sidecar_is_exported():
@@ -556,4 +555,4 @@ def test_turn_verdict_sidecar_is_exported():
         "turn_verdict_unproductive_body_tool",
         body["projected"],
     )
-    assert body["turnVerdict"]["failedToolHintNames"] == ["host_shell"]
+    assert body["turnVerdict"]["failedToolHintNames"] == ["host"]

@@ -61,7 +61,11 @@ async def _apply_local_destructive_baseline_gate(
     if getattr(context.backend, "location", None) != "local":
         return existing
     name = (tool_name or "").strip()
-    if name not in {"terminal", "code_execute", "host_shell"}:
+    from agentcore.tools.builtin.host import host_call_is_shell
+
+    if name not in {"terminal", "code_execute"} and not (
+        name == "host" and host_call_is_shell(args)
+    ):
         return existing
     if name == "terminal":
         sub = str(args.get("subcommand") or "").strip().lower()
@@ -268,7 +272,7 @@ async def _check_safety_and_approval_gates(
     else:
         args_for_gate = args
 
-    # 恒确认 (git push / create_pr · host_package_install): the truth source lives
+    # 恒确认 (git push / create_pr · host install_package): the truth source lives
     # in ``runtime.always_confirm`` — above BOTH the gate and every pre-authorize
     # skip below — because it used to be private to ``ApprovalGate.authorize`` and
     # anything short-circuiting earlier silently published to the remote.

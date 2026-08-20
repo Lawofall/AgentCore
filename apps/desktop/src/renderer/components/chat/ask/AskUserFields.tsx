@@ -53,7 +53,6 @@ import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
  * (live/replay), a paused-turn frame, and a worker escalation all satisfy it. */
 export interface AskUserContent {
   question: string;
-  context: string;
   assumptions: AskAssumption[];
   questions: AskQuestion[];
 }

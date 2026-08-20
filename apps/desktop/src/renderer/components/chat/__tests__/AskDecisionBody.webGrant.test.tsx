@@ -24,7 +24,6 @@ vi.mock("@/components/ManualHelpLink", () => ({
 
 const grantContent: AskUserContent = {
   question: "需要本机目录吗？",
-  context: "",
   assumptions: [],
   questions: [
     {

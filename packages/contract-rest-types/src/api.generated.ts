@@ -11390,7 +11390,7 @@ export interface components {
          *     gated downstream); team_preview (开工卡) carries ``primitive`` (``delegate`` /
          *     ``debate``) + ``workers`` / ``tools`` (delegate) or ``motion`` / ``sides`` /
          *     ``max_rounds`` / ``thorough`` (debate); ask_user carries the unified card payload
-         *     ``question`` (the framing / opening line) + ``context`` + the optional opening
+         *     ``question`` (the framing / opening line) + the optional opening
          *     content ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The
          *     unused set is empty for the other kinds.
          */
@@ -11406,11 +11406,6 @@ export interface components {
             browser_login: boolean;
             /** Checkpoint Id */
             checkpoint_id: string;
-            /**
-             * Context
-             * @default
-             */
-            context: string;
             /**
              * Form
              * @default

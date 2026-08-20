@@ -61,12 +61,12 @@ def _turn_verdict_unproductive_body_tool() -> list[SSEEvent]:
     return [
         message_start("m1", conversation_id=_CONV),
         content_delta("已写完大半"),
-        tool_use_start("tc1", "host_shell", {"command": "do_work"}),
+        tool_use_start("tc1", "host", {"action": "shell", "command": "do_work"}),
         tool_use_end(
             "tc1",
-            "host_shell",
+            "host",
             success=False,
-            output="host_shell failed: CalledProcessError: exit 1",
+            output="host failed: CalledProcessError: exit 1",
             failure={"message": "命令执行失败", "code": "TOOL_ERROR"},
         ),
         message_end(

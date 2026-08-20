@@ -82,7 +82,7 @@ def cloud_worker_skips_per_call_gate(
 
     Local workers never skip via this helper (``worker_gate_applies``).
     Desktop-touch (MCP / Host) never skip. 恒确认 shapes (``git push`` /
-    ``create_pr`` / ``host_package_install``) never skip — the cloud sandbox
+    ``create_pr`` / ``host(action=install_package)``) never skip — the cloud sandbox
     isolates the server, not the remote being published to. File-mutation class
     under ``file_write=ask`` never skip (谨慎 must prompt reversible writes on
     cloud). Other server-sandbox tools on cloud stay historically ungated.

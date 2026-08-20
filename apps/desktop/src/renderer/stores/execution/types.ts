@@ -125,6 +125,7 @@ export const TOOL_LABELS: Record<string, string> = {
   desktop_notify: "Notify",
   external_mount_readonly: "Mount folder",
   // 本机 Host（第三能力面）— keep in sync with TOOL_META.
+  host: "Host",
   host_ping: "Host ping",
   host_info: "Host info",
   host_audio_devices: "Audio devices",

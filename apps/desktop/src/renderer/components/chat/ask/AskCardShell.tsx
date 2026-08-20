@@ -28,7 +28,7 @@ export function AskCardShell({
   /** intent 标识行（{@link ASK_INTENT_META} 的 activeCaption），与图标同排。 */
   caption: string;
   title: string;
-  /** 一行结论（context 的首行）。更长的要点请放进体里。 */
+  /** 可选副标题（organize/daily_review 的本地总览等）。 */
   subtitle?: string;
   /** 头部右上角插槽（帮助链接 / 分页器）。 */
   extra?: ReactNode;

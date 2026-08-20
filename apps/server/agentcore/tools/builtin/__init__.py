@@ -314,13 +314,14 @@ def build_ceo_tool_registry(
     """The CEO chat agent's DIRECT toolset: read / retrieval + Host + local terminal.
 
     Collects ``surface=builtin`` tools whose declared audience includes ``ceo``.
-    Historically aligned with ``approval=NEVER``; **P3 exception**: ``host_shell``
-    is GRANTABLE and CEO-holdable (Host face only — L2/L3 stay worker-only).
+    Historically aligned with ``approval=NEVER``; ``host`` stays NEVER at schema
+    (runtime elevation for GRANTABLE actions; CEO holds status/os_log/shell,
+    worker-only actions fail and require ``delegate``).
     **B2**: local ``terminal`` is also CEO-holdable (schema NEVER; ``start`` elevates
     at runtime like ``git`` write) for pure start/stop/list of workspace long-running
     processes — not a GRANTABLE schema exception.
     **Browser**: navigate/click/type/scroll/snapshot (GRANTABLE · ``browser_class``),
-    gated by ``include_browser`` — same tier as host_shell / terminal; screenshot
+    gated by ``include_browser`` — same tier as host / terminal; screenshot
     stays worker-only (visual验收).
     Orchestration primitives are wired separately in ``tools.ceo_toolset``.
     Host tools appear only when ``desktop_online`` ∧ ``host≠off``.

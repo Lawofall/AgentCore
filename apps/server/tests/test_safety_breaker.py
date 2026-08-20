@@ -356,7 +356,7 @@ def test_evaluate_nested_rmtree_not_top_tree():
 def test_host_shell_top_tree_forces_not_deny():
     """P2 top-tree is FORCE_APPROVAL; must not be confused with fuse⊆DENY families."""
     hit = evaluate_tool_call(
-        "host_shell", {"command": "rm -rf ./my-app"}
+        "host", {"action": "shell", "command": "rm -rf ./my-app"}
     )
     assert hit is not None
     assert hit.verdict is BreakerVerdict.FORCE_APPROVAL
@@ -368,7 +368,7 @@ def test_host_shell_top_tree_forces_not_deny():
     "tool_name,arguments",
     [
         ("terminal", {"subcommand": "start", "command": "git push --force origin main"}),
-        ("host_shell", {"command": "git push --force origin main"}),
+        ("host", {"action": "shell", "command": "git push --force origin main"}),
         ("code_execute", {"code": "os.system('git push --force origin main')"}),
         ("test_run", {"filter": "git push --force-with-lease origin master"}),
     ],
@@ -376,7 +376,7 @@ def test_host_shell_top_tree_forces_not_deny():
 def test_evaluate_shell_force_push_protected_denies(
     tool_name: str, arguments: dict[str, Any]
 ):
-    """terminal / code_execute / test_run / host_shell: force→main|master → DENY."""
+    """terminal / code_execute / test_run / host(action=shell): force→main|master → DENY."""
     hit = evaluate_tool_call(tool_name, arguments)
     assert hit is not None
     assert hit.verdict is BreakerVerdict.DENY
@@ -388,12 +388,15 @@ def test_evaluate_shell_force_push_protected_denies(
 def test_evaluate_host_shell_ordinary_push_passes():
     """Ordinary push is not fuse/breaker-denied — Host GRANTABLE axis still applies."""
     assert (
-        evaluate_tool_call("host_shell", {"command": "git push origin feature/foo"})
+        evaluate_tool_call(
+            "host", {"action": "shell", "command": "git push origin feature/foo"}
+        )
         is None
     )
     assert (
         evaluate_tool_call(
-            "host_shell", {"command": "git push --force origin feature/foo"}
+            "host",
+            {"action": "shell", "command": "git push --force origin feature/foo"},
         )
         is None
     )
@@ -417,10 +420,10 @@ _FUSE_SUBSET_DENY_SAMPLES: tuple[tuple[str, str], ...] = (
 
 @pytest.mark.parametrize("command,rule_id", _FUSE_SUBSET_DENY_SAMPLES)
 def test_host_shell_fuse_covered_destructive_denies(command: str, rule_id: str):
-    """方案 C: fuse-covered shapes on host_shell → DENY (no approve-then-fuse-fail)."""
+    """方案 C: fuse-covered shapes on host(action=shell) → DENY (no approve-then-fuse-fail)."""
     assert shell_fuse_blocks(command), f"sample must be fuse-covered: {command!r}"
     assert rule_id in fuse_aligned_deny_rule_ids()
-    hit = evaluate_tool_call("host_shell", {"command": command})
+    hit = evaluate_tool_call("host", {"action": "shell", "command": command})
     assert hit is not None
     assert hit.verdict is BreakerVerdict.DENY
     assert hit.rule_id == rule_id
@@ -438,16 +441,16 @@ _SILENT_INSTALL_SAMPLES: tuple[str, ...] = (
 
 @pytest.mark.parametrize("command", _SILENT_INSTALL_SAMPLES)
 def test_host_shell_silent_install_denies(command: str):
-    """桶4: silent arbitrary installer heuristics on host_shell → DENY."""
+    """桶4: silent arbitrary installer heuristics on host(action=shell) → DENY."""
     from agentcore.tools.builtin.host import shell_silent_install_blocks
 
     assert shell_silent_install_blocks(command), command
-    hit = evaluate_tool_call("host_shell", {"command": command})
+    hit = evaluate_tool_call("host", {"action": "shell", "command": command})
     assert hit is not None
     assert hit.verdict is BreakerVerdict.DENY
-    assert hit.rule_id == "host_shell.silent_install"
+    assert hit.rule_id == "host.silent_install"
     assert "并非完整拦截" in hit.reason
-    assert "host_package_install" in hit.reason
+    assert "install_package" in hit.reason
 
 
 @pytest.mark.parametrize("command,rule_id", _FUSE_SUBSET_DENY_SAMPLES)

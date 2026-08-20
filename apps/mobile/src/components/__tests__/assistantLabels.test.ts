@@ -30,6 +30,19 @@ describe("toolDetail · 标题参数", () => {
     );
   });
 
+  it("host 按 action 出细节，不把 action 当通用回落串", () => {
+    expect(toolDetail({ action: "shell", command: "Get-Process" }, "host")).toBe(
+      "Get-Process",
+    );
+    expect(
+      toolDetail(
+        { action: "install_package", manager: "winget", package_id: "Git.Git" },
+        "host",
+      ),
+    ).toBe("winget Git.Git");
+    expect(toolDetail({ action: "status" }, "host")).toBe("");
+  });
+
   it("wait 的 reason 不进标题（仅记日志，不当作用户正文）", () => {
     expect(
       toolDetail(
@@ -44,6 +57,15 @@ describe("toolDetail · 标题参数", () => {
 describe("toolLabel", () => {
   it("wait 展示名为 Wait（与桌面 TOOL_META 对齐）", () => {
     expect(toolLabel("wait")).toBe("Wait");
+  });
+
+  it("host 按 action 出标签（同构 git subcommand）；旧 host_* 仅历史回放", () => {
+    expect(toolLabel("host")).toBe("Host");
+    expect(toolLabel("host", { action: "shell" })).toBe("Host shell");
+    expect(toolLabel("host", { action: "install_package" })).toBe(
+      "Install package",
+    );
+    expect(toolLabel("host_shell")).toBe("Host shell");
   });
 });
 

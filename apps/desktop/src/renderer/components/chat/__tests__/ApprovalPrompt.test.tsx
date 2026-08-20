@@ -306,6 +306,43 @@ describe("ApprovalCard git headline", () => {
   });
 });
 
+describe("ApprovalCard host headline", () => {
+  it("shows shell + command for host action=shell", () => {
+    renderCard(
+      card({
+        toolName: "host",
+        arguments: { action: "shell", command: "Get-Process" },
+      }),
+    );
+    expect(screen.getByText("本机 Host")).toBeTruthy();
+    expect(screen.getByText("shell Get-Process")).toBeTruthy();
+  });
+
+  it("shows install_package manager + package_id", () => {
+    renderCard(
+      card({
+        toolName: "host",
+        arguments: {
+          action: "install_package",
+          manager: "winget",
+          package_id: "Git.Git",
+        },
+      }),
+    );
+    expect(screen.getByText("install_package winget Git.Git")).toBeTruthy();
+  });
+
+  it("falls back to action when no extra args", () => {
+    renderCard(
+      card({
+        toolName: "host",
+        arguments: { action: "status" },
+      }),
+    );
+    expect(screen.getByText("status")).toBeTruthy();
+  });
+});
+
 describe("ApprovalCard delete_folder headline", () => {
   it("names the folder instead of showing a bare UUID", () => {
     renderCard(

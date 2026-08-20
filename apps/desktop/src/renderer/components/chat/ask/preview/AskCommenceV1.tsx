@@ -34,11 +34,6 @@ export function AskCommenceV1({ content }: { content: AskUserContent }) {
         <p className="line-clamp-2 text-sm font-medium text-foreground">
           {content.question}
         </p>
-        {content.context && (
-          <p className="line-clamp-2 text-xs text-muted-foreground">
-            {content.context}
-          </p>
-        )}
 
         <PlanDetails
           assumptions={content.assumptions}

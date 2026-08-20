@@ -8,10 +8,10 @@ import { type ReactNode, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 /**
- * A rail zone title (我的文件 / 本机文件夹 / 共享空间 / 快速对话) plus its one
- * create action. §5.4 leaves exactly two ways to make a container — build a
- * folder in 我的文件, or open one off the local disk — so each zone owns the
- * action that belongs to it instead of one combined「新建」menu.
+ * A rail zone title (我的文件 / 本机文件夹 / 共享空间) plus its one create
+ * action. §5.4 leaves exactly two ways to make a container — build a folder
+ * in 我的文件, or open one off the local disk — so each zone owns the action
+ * that belongs to it instead of one combined「新建」menu.
  */
 export function RailSectionHeader({
   label,

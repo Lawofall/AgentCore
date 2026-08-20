@@ -140,8 +140,6 @@ export interface PendingResume {
   }>;
   /** ask_user: the framing / opening line (always shown). */
   question: string;
-  /** ask_user: optional supporting background for the question. */
-  context: string;
   /** ask_user: 起步计划 read-only chips (低影响决策，开场常见). */
   assumptions: AskAssumption[];
   /** ask_user: the askable items (途中岔路通常一个；开场可多个). */
@@ -459,7 +457,6 @@ function entryFromSummary(
       return modelCandidates.length > 0 ? { modelCandidates } : {};
     })(),
     question: s.question ?? "",
-    context: s.context ?? "",
     assumptions: toAssumptions(s.assumptions),
     questions: toQuestions(s.questions),
     intent: toIntent((s as { intent?: unknown }).intent),

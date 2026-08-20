@@ -215,6 +215,20 @@ describe("PauseCard · approval", () => {
     ]);
   });
 
+  it("host 按 action 出中文工具名与审批摘要", () => {
+    render(
+      <PauseCard
+        pending={approval({
+          toolName: "host",
+          arguments: { action: "shell", command: "Get-Process" },
+        })}
+        conversationId={CONV}
+      />,
+    );
+    expect(screen.getByText("Agent 请求执行 · 本机 Host")).toBeTruthy();
+    expect(screen.getByText("shell Get-Process")).toBeTruthy();
+  });
+
   it("surfaces an error and re-enables the card when the POST fails", async () => {
     mockResolve.mockRejectedValueOnce(new Error("放行失败 (500)"));
     render(<PauseCard pending={approval()} conversationId={CONV} />);

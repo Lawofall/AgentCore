@@ -31,6 +31,7 @@ const TOOL_LABELS: Record<string, string> = {
   file_move: "移动文件",
   code_execute: "执行代码",
   delete_folder: "删除文件夹",
+  host: "本机 Host",
 };
 
 /** 本轮内所有文件改动 — 对齐后端 ``approval_class_tool_names()``
@@ -47,7 +48,54 @@ export const FILE_OP_TOOLS: ReadonlySet<string> = new Set([
 /** Tools whose card omits「本轮都允许」— mirrors backend per_call_tool_names(). */
 const PER_CALL_TOOLS: ReadonlySet<string> = new Set();
 
-function primaryArg(args: Record<string, unknown>): string | null {
+function hostPrimaryArg(args: Record<string, unknown>): string | null {
+  const action = typeof args.action === "string" ? args.action.trim() : "";
+  if (!action) return null;
+  if (action === "shell") {
+    const cmd = typeof args.command === "string" ? args.command.trim() : "";
+    return cmd ? `shell ${cmd}` : "shell";
+  }
+  if (action === "install_package") {
+    const manager =
+      typeof args.manager === "string" && args.manager.trim()
+        ? args.manager.trim()
+        : "";
+    const pkg =
+      typeof args.package_id === "string" && args.package_id.trim()
+        ? args.package_id.trim()
+        : "";
+    const cask = args.cask === true ? " (cask)" : "";
+    if (manager && pkg) return `install_package ${manager} ${pkg}${cask}`;
+    return pkg || manager || "install_package";
+  }
+  if (action === "open_settings") {
+    const panel = typeof args.panel === "string" ? args.panel.trim() : "";
+    return panel ? `open_settings ${panel}` : "open_settings";
+  }
+  if (action === "set_audio") {
+    const name =
+      typeof args.device_name === "string" && args.device_name.trim()
+        ? args.device_name.trim()
+        : typeof args.device_id === "string" && args.device_id.trim()
+          ? args.device_id.trim()
+          : "";
+    return name ? `set_audio ${name}` : "set_audio";
+  }
+  if (action === "restart_service") {
+    const service =
+      typeof args.service === "string" && args.service.trim()
+        ? args.service.trim()
+        : "";
+    return service ? `restart_service ${service}` : "restart_service";
+  }
+  return action;
+}
+
+function primaryArg(
+  args: Record<string, unknown>,
+  toolName?: string,
+): string | null {
+  if (toolName === "host") return hostPrimaryArg(args);
   // delete_folder 只带 folder_id；``folder_name`` 由后端按权威名册补，
   // 不是模型自报——一串 UUID 用户审不了。
   for (const key of ["folder_name", "path", "file_path", "command", "code"]) {
@@ -133,7 +181,7 @@ function ApprovalBody({
   busy: boolean;
   onDecide: (decision: ApprovalDecision) => void;
 }) {
-  const headline = primaryArg(pending.arguments);
+  const headline = primaryArg(pending.arguments, pending.toolName);
   const label = TOOL_LABELS[pending.toolName] ?? pending.toolName;
   const circuitBreakerHint =
     typeof pending.arguments.circuit_breaker_hint === "string"

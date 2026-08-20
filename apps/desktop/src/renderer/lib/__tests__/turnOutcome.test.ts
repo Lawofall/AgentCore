@@ -582,9 +582,9 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     const v = toConformanceTurnVerdict({
       outcome: o,
       hasTeamStrip: false,
-      failedToolHintNames: ["host_shell"],
+      failedToolHintNames: ["host"],
     });
-    expect(v.failedToolHintNames).toEqual(["host_shell"]);
+    expect(v.failedToolHintNames).toEqual(["host"]);
     expect(v.hasTeamStrip).toBe(false);
     expect(v).not.toHaveProperty("surface");
   });

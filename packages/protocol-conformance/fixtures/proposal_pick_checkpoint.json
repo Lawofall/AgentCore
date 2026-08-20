@@ -22,8 +22,7 @@
       "payload": {
         "checkpoint_id": "cp_pick",
         "conversation_id": "conv_demo",
-        "question": "选哪条方案推进？",
-        "context": "三条路线成本与风险不同。",
+        "question": "选哪条方案推进？\n三条路线成本与风险不同。",
         "assumptions": [],
         "questions": [
           {
@@ -109,8 +108,7 @@
         "kind": "ask_user",
         "id": "cp_pick",
         "status": "pending",
-        "question": "选哪条方案推进？",
-        "context": "三条路线成本与风险不同。"
+        "question": "选哪条方案推进？\n三条路线成本与风险不同。"
       }
     ],
     "cost": {

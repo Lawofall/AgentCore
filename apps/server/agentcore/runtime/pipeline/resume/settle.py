@@ -172,7 +172,6 @@ def next_pending_ask_user_suspension(
         consulted_memory=dict(suspension.consulted_memory or {}),
         trace_id=suspension.trace_id,
         question=str(payload.get("question") or ""),
-        context=str(payload.get("context") or ""),
         assumptions=list(payload.get("assumptions") or []),
         questions=list(payload.get("questions") or []),
         intent=payload.get("intent") or "decision",

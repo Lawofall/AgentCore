@@ -87,7 +87,7 @@ def test_desktop_touch_tool_names_cover_mcp_and_host():
     from agentcore.runtime.sandbox_approval import is_desktop_touch_tool
 
     assert is_desktop_touch_tool("mcp_echo_ping")
-    assert is_desktop_touch_tool("host_shell")
+    assert is_desktop_touch_tool("host")
     assert not is_desktop_touch_tool("file_write")
     assert not is_desktop_touch_tool("web_search")
 

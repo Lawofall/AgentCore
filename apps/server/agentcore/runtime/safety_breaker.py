@@ -133,8 +133,8 @@ _DESTRUCTIVE_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
 )
 
-# host_shell fuse (tools.builtin.host) already hard-denies these families.
-# Breaker upgrades them to DENY on the host_shell path so approval cards do not
+# host(action=shell) fuse (tools.builtin.host) already hard-denies these families.
+# Breaker upgrades them to DENY on the host shell path so approval cards do not
 # promise a run that fuse will still refuse. git force is intentionally absent —
 # fuse does not scan git; shell text force→main|master is DENY via the scanner
 # itself (aligned with structured git), not via this fuse⊆DENY set.
@@ -148,19 +148,19 @@ FUSE_ALIGNED_DENY_RULE_IDS: frozenset[str] = frozenset(
 )
 
 # Shell/command text rules that hard-deny (not FORCE_APPROVAL). Distinct from
-# fuse⊆DENY: applies on terminal / code_execute / test_run / host_shell alike.
+# fuse⊆DENY: applies on terminal / code_execute / test_run / host(action=shell) alike.
 _TEXT_DENY_RULE_IDS: frozenset[str] = frozenset(
     {"destructive.git_force_push_protected"}
 )
 
 _HOST_SHELL_FUSE_DENY_REASON = (
-    "检测到疑似毁灭性命令，且与 host_shell 执行侧熔断重叠（启发式兜底，并非完整拦截）。"
-    "已硬拒，不可由权限模式或本轮放行放开；请缩小命令范围或改用结构化 host_*。"
+    "检测到疑似毁灭性命令，且与 host(action=shell) 执行侧熔断重叠（启发式兜底，并非完整拦截）。"
+    "已硬拒，不可由权限模式或本轮放行放开；请缩小命令范围或改用结构化 host action。"
 )
 
 
 def fuse_aligned_deny_rule_ids() -> frozenset[str]:
-    """Destructive rule ids that host_shell fuse covers → breaker DENY on host_shell."""
+    """Destructive rule ids that host shell fuse covers → breaker DENY on host+shell."""
     return FUSE_ALIGNED_DENY_RULE_IDS
 
 # ── Sensitive path heuristics (allow / ask / deny) ───────────────────────────
@@ -376,7 +376,11 @@ def command_text_for_tool(tool_name: str, arguments: dict[str, Any]) -> str:
 def _command_text_for_tool(tool_name: str, arguments: dict[str, Any]) -> str:
     if tool_name == "terminal":
         return str(arguments.get("command") or "")
-    if tool_name == "host_shell":
+    if tool_name == "host":
+        from agentcore.tools.builtin.host import host_call_is_shell
+
+        if not host_call_is_shell(arguments):
+            return ""
         # Same command field as terminal; scanned for force→main etc. (Host axis
         # still covers ordinary push). Fuse hard-denies stay in host.py / desktop.
         return str(arguments.get("command") or "")
@@ -564,35 +568,35 @@ def evaluate_tool_call(tool_name: str, arguments: dict[str, Any] | None) -> Brea
             if push_hit is not None:
                 return push_hit
 
-    # Destructive text on execution / terminal / host_shell surfaces.
-    # host_shell: fuse-aligned families → DENY (方案 C). git force→main|master
+    # Destructive text on execution / terminal / host(action=shell) surfaces.
+    # host shell: fuse-aligned families → DENY (方案 C). git force→main|master
     # text → DENY on all shell paths (scanner; fuse still does not scan git).
     # Ordinary push stays on the Host GRANTABLE axis. Other catastrophic shapes
     # stay FORCE_APPROVAL on terminal / code_execute / test_run.
     # P2 top-level workspace tree: FORCE_APPROVAL (whitelist cleanup skipped).
     # Do not stack a second card when fuse-aligned DENY already applies.
-    if name in {"terminal", "code_execute", "test_run", "host_shell"}:
+    from agentcore.tools.builtin.host import host_call_is_shell
+
+    is_host_shell = name == "host" and host_call_is_shell(args)
+    if name in {"terminal", "code_execute", "test_run"} or is_host_shell:
         if name == "terminal":
             sub = str(args.get("subcommand") or "").strip().lower()
             if sub and sub != "start":
                 return None
         command_text = _command_text_for_tool(name, args)
-        if name == "host_shell":
+        if is_host_shell:
             from agentcore.tools.builtin.host import shell_silent_install_blocks
 
             silent = shell_silent_install_blocks(command_text)
             if silent:
                 return BreakerHit(
                     verdict=BreakerVerdict.DENY,
-                    rule_id="host_shell.silent_install",
+                    rule_id="host.silent_install",
                     reason=silent,
                 )
         hit = scan_destructive_text(command_text)
         if hit is not None:
-            if (
-                name == "host_shell"
-                and hit.rule_id in FUSE_ALIGNED_DENY_RULE_IDS
-            ):
+            if is_host_shell and hit.rule_id in FUSE_ALIGNED_DENY_RULE_IDS:
                 return BreakerHit(
                     verdict=BreakerVerdict.DENY,
                     rule_id=hit.rule_id,

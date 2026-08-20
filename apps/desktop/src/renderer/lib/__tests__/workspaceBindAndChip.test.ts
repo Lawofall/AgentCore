@@ -67,7 +67,6 @@ describe("formatRegisterLocalFolderAnswer", () => {
 describe("composeAnswer with bind_local_folder pick", () => {
   const content: AskUserContent = {
     question: "需要本地目录吗？",
-    context: "",
     assumptions: [],
     questions: [
       {

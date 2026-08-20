@@ -28,7 +28,6 @@ function resume(conversationId: string, checkpointId: string): PendingResume {
     maxRounds: 0,
     thorough: true,
     question: "?",
-    context: "",
     assumptions: [],
     questions: [],
     intent: "decision",

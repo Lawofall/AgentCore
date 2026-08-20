@@ -93,7 +93,7 @@ function AutoFolderNoticeBody({
             <button
               type="button"
               onClick={() =>
-                navigate("/files", filesFocusState(null, notice.folderId))
+                navigate("/files", filesFocusState(notice.folderId))
               }
               className="inline-flex min-w-0 items-center gap-0.5 font-medium text-foreground hover:underline"
             >

@@ -89,9 +89,9 @@ def test_resolve_channel_profile_fail_closed_and_surfaces():
 
 
 def test_web_and_missing_header_ceo_registry_omits_host():
-    """Acceptance: web / missing header → no host_* on CEO registry (web-safe)."""
+    """Acceptance: web / missing header → no ``host`` on CEO registry (web-safe)."""
     web_names = {s.name for s in build_ceo_tool_registry(desktop_online=False).list_all()}
-    assert not any(n.startswith("host_") for n in web_names)
+    assert "host" not in web_names
 
     # Profile wiring: web / None → desktop_online False → same roster.
     assert resolve_channel_profile("web").desktop_online is False
@@ -102,7 +102,7 @@ def test_web_and_missing_header_ceo_registry_omits_host():
             desktop_online=resolve_channel_profile(None).desktop_online
         ).list_all()
     }
-    assert not any(n.startswith("host_") for n in missing)
+    assert "host" not in missing
 
     desktop_names = {
         s.name
@@ -110,7 +110,7 @@ def test_web_and_missing_header_ceo_registry_omits_host():
             desktop_online=resolve_channel_profile("desktop").desktop_online
         ).list_all()
     }
-    assert any(n.startswith("host_") for n in desktop_names)
+    assert "host" in desktop_names
 
 def test_cloud_scratch_facts():
     out = build_workspace_context(
@@ -228,11 +228,17 @@ def test_cloud_scratch_facts():
     assert "双击打开" in hint and "禁止给本机磁盘路径" in hint
     assert "浏览器事实" in out
     assert "browser=未装配" in out
-    assert "host_info" in out or "host_audio" in out or "本机 Host 事实" in out
+    assert "本机 Host 事实" in out
+    assert "host(action=status/os_log/shell)" in out
+    assert "install_package" in out
+    assert "host_info" not in out
+    assert "host_ping" not in out
+    assert "host_package_install" not in out
     # 三分日志只写一遍（核），事实层不再逐 host 分支复述
     assert "三分日志" not in out
     assert hint.count("【三分日志·勿混称】") == 1
-    assert "host_os_log_summary" in hint
+    assert "host(action=os_log)" in hint
+    assert "host_os_log_summary" not in hint
     # 案 20260803-image-gen-byok-egress-boundary A：云沙箱无任意 HTTPS 出口事实行
     assert "出站网络" in out
     assert "--network=none" in out
@@ -309,7 +315,7 @@ def test_cloud_host_off_capability():
         host_axis=HostAxis.OFF,
     )
     assert "host=未装配" in out
-    assert "host=off" in out or "本机协助" in out or "勿调用 host_*" in out
+    assert "host=off" in out or "本机协助" in out
 
 
 def test_no_desktop_host_unassembled():

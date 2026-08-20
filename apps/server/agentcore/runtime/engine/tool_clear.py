@@ -1,7 +1,7 @@
 """回合内工具结果清理 (clear_tool_uses): collapse OLD tool results in the LLM view.
 
 Within one ReAct run a long worker re-reads many files / pages and may also pile
-``host_shell`` / ``terminal`` stdout; every round re-sends those bodies. This module
+``host`` / ``terminal`` stdout; every round re-sends those bodies. This module
 collapses OLD results into a compact, stable pointer so the model still knows the
 call happened without carrying the full body.
 
@@ -10,7 +10,7 @@ put exec tools into ``investigation_tools`` — that set also drives idle-govern
 
 - Investigation (read-only, re-fetchable): pointer says use remaining
   verbatim; only invite a fresh call when that body is gone from context.
-- Exec output (``host_shell`` / ``terminal``): pointer forbids re-run-to-recover.
+- Exec output (``host`` / ``terminal``): pointer forbids re-run-to-recover.
   ``code_execute`` / ``test_run`` stay verbatim.
 
 Design — a PURE projection applied at request-assembly time only (``build_request``),
@@ -58,12 +58,13 @@ _HINT_KEYS = (
     "pattern",
     "process_id",
     "command",
+    "action",
     "subcommand",
 )
 _HINT_COMMAND_MAX = 80
 
 # Independent of ``investigation_tools`` (governance / 空转). Name allowlist only.
-EXEC_OUTPUT_CLEAR_TOOLS = frozenset({"host_shell", "terminal"})
+EXEC_OUTPUT_CLEAR_TOOLS = frozenset({"host", "terminal"})
 
 _CLEARED_PREFIX = "[已清理"
 
@@ -121,7 +122,7 @@ def cleared_placeholder(
     Deterministic in its inputs (no time / counters), so the same cleared result
     yields byte-identical bytes on every round — the prefix-cache invariant.
 
-    ``already_executed``: exec-family stdout (host_shell / terminal). The command
+    ``already_executed``: exec-family stdout (host / terminal). The command
     already ran; the pointer must not invite a re-issue just to recover text.
 
     ``file_read`` stubs are structured (path / content_cleared / reread=allowed)

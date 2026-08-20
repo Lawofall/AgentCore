@@ -307,7 +307,6 @@ function PendingEscalation({
   // `questions`; the free note doubles as the answer box for a plain free-text escalate.
   const content: AskUserContent = {
     question: escalation.question,
-    context: "",
     assumptions: [],
     questions: escalation.questions,
   };

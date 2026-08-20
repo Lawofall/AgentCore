@@ -85,10 +85,8 @@ import {
  * Folders (`folder:<id>`) may also render nested folder rows (`nested`) and a
  * `folderRail` (flat AgentCore entries) above the file tree.
  *
- * - `conv:<id>` **云** scratch：右键可打开/重命名/删除对话、清空本对话产物。
- * - `conv:<id>` **本地** scratch：无根级清空（树内单删 / 删对话）。
  * - `folder:<id>` 文件夹：右键可重命名 / 「删除文件夹」（与侧栏 {@link WorkspaceGroupHeader}
- *   同构）；无清空。
+ *   同构）。文件中枢不列 `conv:` scratch（裸聊写盘进自动建桌）。
  */
 export function WorkspaceSection({
   ws,

@@ -53,8 +53,8 @@ def test_inventory_harvests_files_commands_searches_and_redacts_secrets():
         _tool_entry("file_read", {"path": "apps/server/README.md"}),
         _tool_entry("file_write", {"path": "apps/server/foo.py", "content": "x"}),
         _tool_entry(
-            "host_shell",
-            {"command": "curl -H 'Authorization: Bearer sk-secretvalue123456' https://x"},
+            "host",
+            {"action": "shell", "command": "curl -H 'Authorization: Bearer sk-secretvalue123456' https://x"},
         ),
         _tool_entry(
             "grep",

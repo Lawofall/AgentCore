@@ -27,7 +27,7 @@ union (base :class:`TurnSuspension` + :class:`PlanReviewSuspension` /
 - **ask_user** — the CEO paused mid-loop on its ``ask_user`` checkpoint (the one
   asking primitive — opening 引导 or mid-task fork). Resume maps the user's answer
   to the ``ask_user`` tool result and continues the CEO loop (no plan tail). Carries
-  the card payload (message / context / assumptions / questions) so
+  the card payload (message / assumptions / questions) so
   resume can re-emit it.
 
 Every frame shares: the CEO ``transcript`` at the pause (system + history + user +
@@ -417,7 +417,7 @@ class AskUserSuspension(TurnSuspension):
     No plan tail: resume just maps the user's answer to the ``ask_user`` tool result
     and continues the CEO loop. Carries the unified card payload so resume re-emits the
     full prompt: ``question`` (the framing / opening line — the tool's ``message``),
-    ``context`` background, plus the rich opening content ``assumptions`` (起步计划
+    plus the rich opening content ``assumptions`` (起步计划
     chips) and ``questions`` (the askable items, each with kind/options/multiple/default).
     All but ``question`` are empty for a compact mid-task fork.
     """
@@ -425,7 +425,6 @@ class AskUserSuspension(TurnSuspension):
     kind: ClassVar[SuspensionKind] = SuspensionKind.ASK_USER
 
     question: str = ""
-    context: str = ""
     assumptions: list[dict[str, Any]] = field(default_factory=list)
     questions: list[dict[str, Any]] = field(default_factory=list)
     intent: AskCheckpointIntent = "decision"
@@ -463,7 +462,6 @@ _EMPTY_SUMMARY_EXTRAS: dict[str, Any] = {
     "max_rounds": 0,
     "thorough": True,
     "question": "",
-    "context": "",
     "assumptions": [],
     "questions": [],
     "intent": None,
@@ -604,7 +602,6 @@ def _ask_user_frame_extras(s: TurnSuspension) -> dict[str, Any]:
     assert isinstance(s, AskUserSuspension)
     extras: dict[str, Any] = {
         "question": s.question,
-        "context": s.context,
         "assumptions": list(s.assumptions),
         "questions": list(s.questions),
         "intent": s.intent,
@@ -617,7 +614,6 @@ def _ask_user_frame_extras(s: TurnSuspension) -> dict[str, Any]:
 def _ask_user_from_extras(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "question": data.get("question", "") or "",
-        "context": data.get("context", "") or "",
         "assumptions": list(data.get("assumptions") or []),
         "questions": list(data.get("questions") or []),
         "intent": data.get("intent") or "decision",
@@ -630,7 +626,6 @@ def _ask_user_summary_extras(s: TurnSuspension) -> dict[str, Any]:
     return {
         **_EMPTY_SUMMARY_EXTRAS,
         "question": s.question,
-        "context": s.context,
         "assumptions": list(s.assumptions),
         "questions": list(s.questions),
         "intent": s.intent,

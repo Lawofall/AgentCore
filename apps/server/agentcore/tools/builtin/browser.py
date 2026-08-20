@@ -2,7 +2,7 @@
 
 ``browser_navigate`` / ``browser_click`` / ``browser_type`` / ``browser_scroll`` /
 ``browser_snapshot`` / ``browser_console`` are CEO+worker (``surface=BUILTIN`` · ``AUDIENCE_BOTH`` ·
-``execution_class`` + ``browser_class`` + GRANTABLE) — same tier as ``host_shell`` /
+``execution_class`` + ``browser_class`` + GRANTABLE) — same tier as ``host(action=shell)`` /
 local ``terminal``. ``browser_screenshot`` stays worker-only (``_BROWSER_SCREENSHOT_REGISTRATION``)
 so visual验收仍走队员。Host: desktop Local Bridge or cloud gVisor.
 Each tool drives the conversation's long-lived Chromium via the

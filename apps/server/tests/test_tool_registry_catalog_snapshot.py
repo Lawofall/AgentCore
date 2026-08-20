@@ -52,21 +52,9 @@ _BUILTIN_ORDER = [
     "code_execute",
 ]
 
-# Host L1 tools are host_class — only appear when desktop_online=True (not default roster).
-_HOST_L1_ORDER = [
-    "host_ping",
-    "host_info",
-    "host_audio_devices",
-    "host_storage",
-    "host_power",
-    "host_network_summary",
-    "host_apps",
-    "host_os_log_summary",
-]
-
-# P3: CEO+worker GRANTABLE exception (builtin surface · host_class · 禁 kickoff).
-_HOST_SHELL_ORDER = [
-    "host_shell",
+# Host face is host_class — only appears when desktop_online=True (not default roster).
+_HOST_ORDER = [
+    "host",
 ]
 
 # C1: CEO+worker NEVER · desktop_online_class（仅 desktop_online 装配；目录仍常挂）
@@ -96,16 +84,6 @@ _WORKER_ONLY_ORDER = [
 
 _BROWSER_SCREENSHOT_ORDER = [
     "browser_screenshot",
-]
-
-_HOST_L2_ORDER = [
-    "host_open_settings",
-]
-
-_HOST_L3_ORDER = [
-    "host_audio_set_default",
-    "host_service_restart",
-    "host_package_install",
 ]
 
 # Privacy-gated worker tools (manual_wire): catalog-advertised, not in default
@@ -172,15 +150,7 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "download_url": (AVAILABLE_TO_WORKER,),
     "test_run": (AVAILABLE_TO_WORKER,),
     "code_execute": (AVAILABLE_TO_WORKER,),
-    "host_ping": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "host_info": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "host_audio_devices": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "host_storage": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "host_power": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "host_network_summary": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "host_apps": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "host_os_log_summary": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
-    "host_shell": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
+    "host": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "external_mount_readonly": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "escalate": (AVAILABLE_TO_WORKER,),
     "post_note": (AVAILABLE_TO_WORKER,),
@@ -188,10 +158,6 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "amend_note": (AVAILABLE_TO_WORKER,),
     "handoff": (AVAILABLE_TO_WORKER,),
     "desktop_notify": (AVAILABLE_TO_WORKER,),
-    "host_open_settings": (AVAILABLE_TO_WORKER,),
-    "host_audio_set_default": (AVAILABLE_TO_WORKER,),
-    "host_service_restart": (AVAILABLE_TO_WORKER,),
-    "host_package_install": (AVAILABLE_TO_WORKER,),
     "search_conversations": (AVAILABLE_TO_WORKER,),
     "read_conversation": (AVAILABLE_TO_WORKER,),
     # CEO orchestration (catalog advertise)
@@ -323,12 +289,9 @@ def test_tool_registry_worker_with_host_order():
     names = [s.name for s in build_worker_registry(desktop_online=True).list_all()]
     assert names == (
         _BUILTIN_ORDER
-        + _HOST_L1_ORDER
-        + _HOST_SHELL_ORDER
+        + _HOST_ORDER
         + _DESKTOP_ONLINE_ORDER
         + _WORKER_ONLY_ORDER
-        + _HOST_L2_ORDER
-        + _HOST_L3_ORDER
     )
 
 
@@ -337,12 +300,9 @@ def test_catalog_order_and_available_to_snapshot():
     names = [e.schema.name for e in catalog]
     assert names == (
         _BUILTIN_ORDER
-        + _HOST_L1_ORDER
-        + _HOST_SHELL_ORDER
+        + _HOST_ORDER
         + _DESKTOP_ONLINE_ORDER
         + _WORKER_ONLY_ORDER
-        + _HOST_L2_ORDER
-        + _HOST_L3_ORDER
         + _WORKER_GATED_ORDER
         + _CATALOG_ORCHESTRATION_ORDER
     )
@@ -361,7 +321,7 @@ def test_catalog_categories_present():
 
 def test_tool_registry_declarations_cover_roster():
     """Every declared class has ``registration``; CEO builtins stay NEVER-aligned
-    except Host P3 ``host_shell`` and browser interactive GRANTABLE exceptions.
+    except browser interactive GRANTABLE exceptions.
     """
     from agentcore.tools.registration import (
         AUDIENCE_CEO,
@@ -372,15 +332,30 @@ def test_tool_registry_declarations_cover_roster():
         tool_registration,
     )
 
-    # Explicit break of「CEO 永不持 GRANTABLE」— Host face + browser interactive.
-    _ceo_grantable_exceptions = frozenset(
-        {"host_shell", *_BROWSER_CEO_ORDER}
-    )
+    # Explicit break of「CEO 永不持 GRANTABLE」— browser interactive only.
+    _ceo_grantable_exceptions = frozenset(_BROWSER_CEO_ORDER)
 
     declared = declared_tools()
     assert declared, "DECLARED_TOOLS must not be empty"
     names = [declared_tool_name(cls) for cls in declared]
     assert len(names) == len(set(names)), f"duplicate declared names: {names}"
+    _retired_host_names = {
+        "host_ping",
+        "host_info",
+        "host_audio_devices",
+        "host_storage",
+        "host_power",
+        "host_network_summary",
+        "host_apps",
+        "host_os_log_summary",
+        "host_shell",
+        "host_open_settings",
+        "host_audio_set_default",
+        "host_service_restart",
+        "host_package_install",
+    }
+    assert not (_retired_host_names & set(names)), _retired_host_names & set(names)
+    assert "host" in names
 
     for cls in declared_tools(surface=ToolSurface.BUILTIN):
         reg = tool_registration(cls)
@@ -388,14 +363,14 @@ def test_tool_registry_declarations_cover_roster():
             schema = cls().schema if not reg.needs_location else cls(location=None).schema
             if schema.name in _ceo_grantable_exceptions:
                 assert schema.approval is ToolApproval.GRANTABLE, schema.name
-                if schema.name == "host_shell":
-                    assert reg.host_class, schema.name
-                    assert not reg.execution_class, schema.name
-                elif schema.name.startswith("browser_"):
+                if schema.name.startswith("browser_"):
                     assert reg.browser_class, schema.name
                     assert reg.execution_class, schema.name
             else:
                 assert schema.approval is ToolApproval.NEVER, schema.name
+                if schema.name == "host":
+                    assert reg.host_class, schema.name
+                    assert not reg.execution_class, schema.name
 
     # CEO orchestration wire gates (construction stays in prepare / ceo_surface / board).
     wire_by_name = {

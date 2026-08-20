@@ -106,7 +106,6 @@ function syncRecoveryFromEvents(
           user_message: "",
           user_message_id: "",
           question: "",
-          context: "",
           assumptions: [],
           questions: [],
           steps: [],

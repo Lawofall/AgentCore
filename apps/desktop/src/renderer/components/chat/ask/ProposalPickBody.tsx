@@ -41,7 +41,6 @@ export function ProposalPickBody({
       icon={META.icon}
       caption={caption ?? META.activeCaption}
       title={content.question}
-      subtitle={content.context || undefined}
       extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
       footer={
         <AskCardFooter

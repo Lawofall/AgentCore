@@ -47,7 +47,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("WorkspacesPage · 我的文件", () => {
-  it("三组标题只在有条目时出现", async () => {
+  it("三组标题只在有条目时出现；不列裸聊 scratch", async () => {
     listWorkspaces.mockResolvedValue([
       ws({ wsId: "folder:f1", name: "设计稿" }),
       ws({ wsId: "conv:c1", name: "一次快速对话" }),
@@ -56,14 +56,14 @@ describe("WorkspacesPage · 我的文件", () => {
     render(<WorkspacesPage />);
 
     expect(await screen.findByText("设计稿")).toBeTruthy();
-    expect(screen.getByText("一次快速对话")).toBeTruthy();
+    expect(screen.queryByText("一次快速对话")).toBeNull();
     expect(screen.getByText("我的文件")).toBeTruthy();
     expect(screen.getByText("全局设定")).toBeTruthy();
     expect(screen.getByText("会进模型的条目 · 常驻 / 按需")).toBeTruthy();
     expect(screen.queryByText("规则")).toBeNull();
 
     expect(screen.getByText("文件夹")).toBeTruthy();
-    expect(screen.getByText("对话产物")).toBeTruthy();
+    expect(screen.queryByText("对话产物")).toBeNull();
     expect(screen.queryByText("共享空间")).toBeNull();
   });
 
@@ -95,7 +95,7 @@ describe("WorkspacesPage · 我的文件", () => {
 
     expect(await screen.findByText("还没有工作区")).toBeTruthy();
     expect(
-      screen.getByText("开始对话并产出文件后，工作区会出现在这里。"),
+      screen.getByText("在对话里产出文件后，会以文件夹出现在这里。"),
     ).toBeTruthy();
     expect(screen.queryByText("还没有云端工作区")).toBeNull();
     expect(screen.queryByText("文件夹")).toBeNull();
@@ -117,7 +117,7 @@ describe("WorkspacesPage · 我的文件", () => {
     expect(await screen.findByText("还没有云端工作区")).toBeTruthy();
     expect(
       screen.getByText(
-        "本地工作区请在桌面端查看。开始云端对话并产出文件后，会出现在这里。",
+        "本地工作区请在桌面端查看。云端产出的文件会以文件夹出现在这里。",
       ),
     ).toBeTruthy();
     expect(screen.queryByText("本机仓库")).toBeNull();

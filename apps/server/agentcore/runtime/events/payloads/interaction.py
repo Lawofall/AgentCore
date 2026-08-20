@@ -109,7 +109,6 @@ class CheckpointRequiredPayload(WirePayload):
     checkpoint_id: str
     conversation_id: str
     question: str
-    context: str
     assumptions: list[AskAssumption]
     questions: list[AskQuestion]
     intent: AskCheckpointIntent | None = absent(ts_type="CheckpointIntent")

@@ -884,9 +884,6 @@ function ResumeCardBody({
       {!showWorkers && paused.question && (
         <div className="pause-question">{paused.question}</div>
       )}
-      {!showWorkers && paused.context && (
-        <div className="pause-context">{paused.context}</div>
-      )}
       {isAskUser && assumptions.length > 0 && (
         <div className="ask-assume">
           <div className="ask-assume-label">我先按这些默认推进</div>

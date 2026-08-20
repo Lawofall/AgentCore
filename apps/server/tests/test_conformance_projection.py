@@ -37,6 +37,14 @@ def projected() -> dict[str, dict]:
     return {fx["name"]: fx["projected"] for fx in build_fixtures()}
 
 
+def test_ask_user_interactions_have_no_context_key(projected):
+    """ask 文案只走 question；投影叶不得再带 context。"""
+    for name, p in projected.items():
+        for leaf in p.get("interactions") or []:
+            if leaf.get("kind") == "ask_user":
+                assert "context" not in leaf, name
+
+
 def test_single_agent_text(projected):
     p = projected["single_agent_text"]
     assert p["status"] == "completed"
@@ -292,7 +300,7 @@ def test_execution_completed_gate_still_pending_stays_paused(projected):
     assert pending[0]["kind"] == "ask_user"
     assert pending[0]["id"] == "cp-after-exec"
     assert pending[0]["status"] == "pending"
-    assert pending[0]["question"] == "按此方案推进吗？"
+    assert pending[0]["question"] == "按此方案推进吗？\n团队已交付方案。"
     assert p["content"] == "团队已交付，请确认是否按此方案推进。"
     assert [s["kind"] for s in p["process"]] == ["content", "team", "checkpoint"]
     assert p["process"][-1]["checkpoint_id"] == "cp-after-exec"
@@ -1214,8 +1222,7 @@ def test_resume_ask_user_absorb(projected):
             "kind": "ask_user",
             "id": "cp_absorb",
             "status": "resolved",
-            "question": "帮你分析一下选项：",
-            "context": "请确认后继续。",
+            "question": "帮你分析一下选项：\n请确认后继续。",
         }
     ]
     assert [s["kind"] for s in p["process"]] == ["checkpoint", "content"]
@@ -1248,14 +1255,14 @@ def test_carrier_means_consult_smartart_boundary(projected):
             "kind": "ask_user",
             "id": "cp_carrier_smartart",
             "status": "pending",
-            "question": "组织架构图用哪种可交形态？",
-            "context": (
+            "question": (
+                "组织架构图用哪种可交形态？\n"
                 "能力边界前置：图形 SmartArt 做不到；推荐更适合的载体，"
                 "仍可坚持 Word 文字版。"
             ),
         }
     ]
-    assert "SmartArt" in p["interactions"][0]["context"]
+    assert "SmartArt" in p["interactions"][0]["question"]
 
     events, event_type = _carrier_consult_events(name)
     deltas = [
@@ -1293,8 +1300,8 @@ def test_carrier_means_consult_html_org_tree(projected):
             "kind": "ask_user",
             "id": "cp_carrier_html_tree",
             "status": "pending",
-            "question": "组织树 HTML 用哪种呈现？",
-            "context": (
+            "question": (
+                "组织树 HTML 用哪种呈现？\n"
                 "次优载体短对齐：框架可保，呈现建议改；坚持原样静态 HTML 亦可。"
             ),
         }

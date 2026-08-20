@@ -220,7 +220,7 @@ def test_command_auto_skips_kickoff_and_local_exec_auto_pass():
     # Host / MCP never ride command=auto silent pass.
     assert (
         execution_tool_auto_passes(
-            _LocalBackend(), "host_shell", permission_axes=axes
+            _LocalBackend(), "host", permission_axes=axes
         )
         is False
     )

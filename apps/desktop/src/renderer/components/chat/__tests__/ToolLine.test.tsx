@@ -1029,6 +1029,13 @@ describe("ToolLine · ack 族成功无 peek", () => {
       detail: "out",
     },
     {
+      tool: "host",
+      label: "Host shell",
+      args: { action: "shell", command: "Get-Process" },
+      ack: '{"exit_code":0}',
+      detail: "Get-Process",
+    },
+    {
       tool: "host_storage",
       label: "Host storage",
       args: {},
@@ -1106,6 +1113,7 @@ describe("ToolLine · ack 族成功无 peek", () => {
 
   it.each([
     ["file_delete", "Delete file"],
+    ["host", "Host status"],
     ["host_storage", "Host storage"],
     ["post_note", "Post note"],
     ["desktop_notify", "Notify"],
@@ -1114,7 +1122,7 @@ describe("ToolLine · ack 族成功无 peek", () => {
       <ToolLine
         step={step({
           tool_name: tool,
-          arguments: {},
+          arguments: tool === "host" ? { action: "status" } : {},
           result: `${tool} boom: leaked internals`,
           status: "error",
           failure: {
@@ -1127,6 +1135,37 @@ describe("ToolLine · ack 族成功无 peek", () => {
     expect(screen.getByText(label)).toBeTruthy();
     expect(screen.getByText("操作失败，请稍后重试。")).toBeTruthy();
     expect(screen.queryByText(/leaked internals/)).toBeNull();
+  });
+});
+
+describe("ToolLine · host action 标签", () => {
+  it("认 host + action，标签同构 git subcommand", () => {
+    render(
+      <ToolLine
+        step={step({
+          tool_name: "host",
+          arguments: { action: "install_package", manager: "winget", package_id: "Git.Git" },
+          result: '{"ok":true}',
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Install package")).toBeTruthy();
+    expect(screen.getByText("winget Git.Git")).toBeTruthy();
+  });
+
+  it("历史 host_* 键仍走 TOOL_META 纯展示", () => {
+    render(
+      <ToolLine
+        step={step({
+          tool_name: "host_shell",
+          arguments: { command: "dir" },
+          result: '{"ok":true}',
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Host shell")).toBeTruthy();
   });
 });
 
@@ -1161,6 +1200,18 @@ describe("toolDetail · title chip", () => {
 
   it("does not chip handoff summary into toolDetail (ToolLine inlines peek instead)", () => {
     expect(toolDetail({ summary: "交叉验证完成，建议一周内表态" })).toBe("");
+  });
+
+  it("host 按 action 出细节", () => {
+    expect(
+      toolDetail({ action: "shell", command: "Get-Process" }, "host"),
+    ).toBe("Get-Process");
+    expect(
+      toolDetail(
+        { action: "install_package", manager: "brew", package_id: "cask", cask: true },
+        "host",
+      ),
+    ).toBe("brew cask (cask)");
   });
 
   it("chips file_move / file_copy source → destination, not a lone verb", () => {

@@ -84,7 +84,6 @@ function makePlanReview(over: Record<string, unknown> = {}) {
     maxRounds: 0,
     thorough: true,
     question: "",
-    context: "",
     assumptions: [],
     questions: [],
     intent: "decision",

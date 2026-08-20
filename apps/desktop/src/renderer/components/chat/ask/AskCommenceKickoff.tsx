@@ -57,7 +57,7 @@ export function AskCommenceKickoffBody({
   onBindResolve?: (composedAnswer: string) => void | Promise<void>;
 }) {
   const navigate = useNavigate();
-  const { lead, points } = splitBriefContext(content.context);
+  const { lead, points } = splitBriefContext(content.question);
   const [bindBusyLabel, setBindBusyLabel] = useState<string | null>(null);
   const [bindError, setBindError] = useState<string | null>(null);
   const [briefOpen, setBriefOpen] = useState(false);
@@ -170,7 +170,7 @@ export function AskCommenceKickoffBody({
       data-ask-commence-variant="v2"
       className="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      {/* Brief — 目标复述 2 行；点开全文 + context */}
+      {/* Brief — 目标复述 2 行；点开全文 */}
       <div className="shrink-0 space-y-2 border-b border-border bg-muted/10 px-4 py-3">
         <div className="flex items-center gap-1.5">
           <Rocket size={14} className="shrink-0 text-muted-foreground" />
@@ -192,13 +192,8 @@ export function AskCommenceKickoffBody({
                 briefOpen ? "whitespace-pre-wrap" : "line-clamp-2"
               }`}
             >
-              {content.question}
+              {lead || content.question}
             </p>
-            {briefOpen && lead && (
-              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                {lead}
-              </p>
-            )}
             {briefOpen && points.length > 0 && (
               <BriefPointList points={points} className="mt-1.5" />
             )}

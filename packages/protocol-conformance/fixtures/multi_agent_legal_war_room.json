@@ -731,8 +731,7 @@
       "payload": {
         "checkpoint_id": "cp1",
         "conversation_id": "conv_demo",
-        "question": "是否采纳终稿并提交？（含 1 处 [待核验] 法条）",
-        "context": "原告红队已挖尽收敛，核验报告与答辩状初稿见工作区；终稿将标注法域 + 免责。",
+        "question": "是否采纳终稿并提交？（含 1 处 [待核验] 法条）\n原告红队已挖尽收敛，核验报告与答辩状初稿见工作区；终稿将标注法域 + 免责。",
         "assumptions": [],
         "questions": [],
         "intent": "decision"
@@ -1184,8 +1183,7 @@
         "kind": "ask_user",
         "id": "cp1",
         "status": "pending",
-        "question": "是否采纳终稿并提交？（含 1 处 [待核验] 法条）",
-        "context": "原告红队已挖尽收敛，核验报告与答辩状初稿见工作区；终稿将标注法域 + 免责。"
+        "question": "是否采纳终稿并提交？（含 1 处 [待核验] 法条）\n原告红队已挖尽收敛，核验报告与答辩状初稿见工作区；终稿将标注法域 + 免责。"
       }
     ],
     "cost": null,

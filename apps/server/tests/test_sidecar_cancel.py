@@ -73,8 +73,7 @@ def _pause_frame(message_id: str = "m1", conversation_id: str = "c1") -> AskUser
         user_message="原始问题",
         transcript=[],
         history=[],
-        question="要继续吗？",
-        context="背景",
+        question="要继续吗？\n背景",
     )
     susp.journal_entries = [
         {"kind": "checkpoint_required", "payload": {"id": "cp"}, "ts": None},

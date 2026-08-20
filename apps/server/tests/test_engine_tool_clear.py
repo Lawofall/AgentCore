@@ -34,7 +34,7 @@ def test_production_keep_recent_default() -> None:
     """Investigation stacking tax vs independent exec window."""
     assert settings.engine_tool_clear_keep_recent == 2
     assert settings.engine_tool_clear_exec_keep_recent == 1
-    assert frozenset({"host_shell", "terminal"}) == EXEC_OUTPUT_CLEAR_TOOLS
+    assert frozenset({"host", "terminal"}) == EXEC_OUTPUT_CLEAR_TOOLS
 
 
 def _read_pair(call_id: str, path: str, result: str, *, tool: str = "file_read") -> list[LLMMessage]:
@@ -178,17 +178,17 @@ def test_grep_placeholder_keeps_refetch_invite():
 
 def test_exec_placeholder_forbids_rerun():
     ph = cleared_placeholder(
-        "host_shell",
-        json.dumps({"command": "Get-ChildItem"}),
+        "host",
+        json.dumps({"action": "shell", "command": "Get-ChildItem"}),
         4000,
         already_executed=True,
     )
-    assert "host_shell" in ph and "Get-ChildItem" in ph
+    assert "host" in ph and "Get-ChildItem" in ph
     assert "勿仅为回看而重跑" in ph
     assert "可重新调用该工具获取" not in ph
     assert ph == cleared_placeholder(
-        "host_shell",
-        json.dumps({"command": "Get-ChildItem"}),
+        "host",
+        json.dumps({"action": "shell", "command": "Get-ChildItem"}),
         4000,
         already_executed=True,
     )
@@ -197,7 +197,7 @@ def test_exec_placeholder_forbids_rerun():
 def test_exec_placeholder_truncates_long_command():
     long = "echo " + ("x" * 200)
     ph = cleared_placeholder(
-        "host_shell", json.dumps({"command": long}), 111, already_executed=True
+        "host", json.dumps({"action": "shell", "command": long}), 111, already_executed=True
     )
     assert long not in ph
     assert "…" in ph
@@ -487,14 +487,14 @@ def test_canonical_messages_untouched_by_projection():
     assert [m.content for m in msgs if m.role == "tool"] == originals
 
 
-# ── exec output family (host_shell / terminal) ──────────────────────────────
+# ── exec output family (host / terminal) ──────────────────────────────
 
 
 def test_exec_keeps_one_clears_old():
     msgs = [LLMMessage(role="user", content="go")]
     for i in range(4):
         msgs += _exec_pair(
-            f"h{i}", "host_shell", {"command": f"echo {i}"}, "X" * 200
+            f"h{i}", "host", {"action": "shell", "command": f"echo {i}"}, "X" * 200
         )
     out = project_cleared_window(
         msgs,
@@ -545,7 +545,7 @@ async def test_loop_clears_old_exec_in_request_window(monkeypatch):
     registry.register(_FakeReadTool())
     messages: list[LLMMessage] = [LLMMessage(role="user", content="go")]
     for i in range(4):
-        messages += _exec_pair(f"h{i}", "host_shell", {"command": f"dir {i}"}, "Y" * 200)
+        messages += _exec_pair(f"h{i}", "host", {"action": "shell", "command": f"dir {i}"}, "Y" * 200)
     await react_loop(
         messages=messages,
         llm=provider,

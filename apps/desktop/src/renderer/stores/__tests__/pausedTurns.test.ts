@@ -42,7 +42,6 @@ function liveResume(
     maxRounds: 0,
     thorough: true,
     question: "继续？",
-    context: "",
     assumptions: [],
     questions: [],
     intent: "decision",

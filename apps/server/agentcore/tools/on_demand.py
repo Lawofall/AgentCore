@@ -26,20 +26,8 @@ from collections.abc import Sequence
 
 ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        # Host face (L1–L3) — OS inspection / panels / controlled actions.
-        "host_ping",
-        "host_info",
-        "host_audio_devices",
-        "host_storage",
-        "host_power",
-        "host_network_summary",
-        "host_apps",
-        "host_os_log_summary",
-        "host_shell",
-        "host_open_settings",
-        "host_audio_set_default",
-        "host_service_restart",
-        "host_package_install",
+        # Host face — single ``host`` (action policy table).
+        "host",
         # Browser face — page drive; screenshot stays worker-only when assembled.
         "browser_navigate",
         "browser_click",
@@ -71,19 +59,7 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
 )
 
 ON_DEMAND_SUMMARIES: dict[str, str] = {
-    "host_ping": "探测本机 Host 通道是否可达（先 consult 再调 host_*）",
-    "host_info": "读取本机 OS / 架构 / 主机名摘要",
-    "host_audio_devices": "列出本机音频设备",
-    "host_storage": "本机磁盘用量摘要",
-    "host_power": "本机电量 / 电源状态",
-    "host_network_summary": "本机网络接口摘要",
-    "host_apps": "本机已装应用摘要",
-    "host_os_log_summary": "有界本机 OS 事件摘要（勿 host_shell 倾倒日志）",
-    "host_shell": "本机短命令（CEO 可直调；长驻进程改 terminal）",
-    "host_open_settings": "打开系统设置面板（worker · GRANTABLE）",
-    "host_audio_set_default": "切换默认音频设备（须先观测设备）",
-    "host_service_restart": "受控重启白名单系统服务",
-    "host_package_install": "本机装包（winget/brew/apt · 恒确认）",
+    "host": "本机 Host（status/os_log/shell；面板/音频/服务/装包仅队员）",
     "browser_navigate": "打开网页或工作区 HTML（短操作 CEO 自调，勿为此派工）",
     "browser_click": "点击页面元素（须先 snapshot）",
     "browser_type": "向页面输入（密码框硬拒）",
@@ -116,23 +92,6 @@ _FAMILIES: tuple[frozenset[str], ...] = (
             "browser_snapshot",
             "browser_console",
             "browser_screenshot",
-        }
-    ),
-    frozenset(
-        {
-            "host_ping",
-            "host_info",
-            "host_audio_devices",
-            "host_storage",
-            "host_power",
-            "host_network_summary",
-            "host_apps",
-            "host_os_log_summary",
-            "host_shell",
-            "host_open_settings",
-            "host_audio_set_default",
-            "host_service_restart",
-            "host_package_install",
         }
     ),
     frozenset({"search_conversations", "read_conversation"}),
@@ -226,7 +185,7 @@ def _ceo_how_for(name: str) -> str:
 
     if name == "terminal":
         return _TERMINAL_RUNTIME_HOW.strip()
-    if name.startswith("host_"):
+    if name == "host":
         return _HOST_HOW.strip()
     if name.startswith("browser_"):
         return _BROWSER_HOW.strip()

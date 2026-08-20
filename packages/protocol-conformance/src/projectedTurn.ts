@@ -334,7 +334,6 @@ export type ProjectedInteraction =
       id: string;
       status: InteractionStatus;
       question: string;
-      context: string;
     }
   | {
       kind: "plan_review";

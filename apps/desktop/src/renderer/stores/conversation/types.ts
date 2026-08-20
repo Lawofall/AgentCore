@@ -20,7 +20,6 @@ import type { TurnPhase } from "./turnPhase";
 export interface CheckpointDisplay {
   id: string;
   question: string;
-  context: string;
   assumptions: AskAssumption[];
   questions: AskQuestion[];
   intent: CheckpointIntent;

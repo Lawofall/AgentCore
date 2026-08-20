@@ -22,8 +22,7 @@
       "payload": {
         "checkpoint_id": "cp1",
         "conversation_id": "conv_demo",
-        "question": "先做 A 还是 B？",
-        "context": "两条路线各有取舍。",
+        "question": "先做 A 还是 B？\n两条路线各有取舍。",
         "assumptions": [],
         "questions": [],
         "intent": "kickoff"
@@ -108,8 +107,7 @@
         "kind": "ask_user",
         "id": "cp1",
         "status": "resolved",
-        "question": "先做 A 还是 B？",
-        "context": "两条路线各有取舍。"
+        "question": "先做 A 还是 B？\n两条路线各有取舍。"
       }
     ],
     "cost": {

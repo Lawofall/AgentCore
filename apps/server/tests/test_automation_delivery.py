@@ -209,7 +209,7 @@ def _ask_tool(*, conversation_id: str = "c-auto") -> AskUserTool:
 
 @pytest.mark.asyncio
 async def test_ask_user_whiteboard_continue_with_agentcore_context_ok():
-    """白板继续开发 + context 含 AgentCore：不因正文像自动化而拒 ask_user。"""
+    """白板继续开发 + message 含 AgentCore：不因正文像自动化而拒 ask_user。"""
     tool = _ask_tool(conversation_id="c-auto-wb")
     token = captain_transcript.set(
         [LLMMessage(role="user", content="继续完成白板的开发")]
@@ -217,8 +217,9 @@ async def test_ask_user_whiteboard_continue_with_agentcore_context_ok():
     try:
         res = await tool.execute(
             {
-                "message": "继续完成白板的开发",
-                "context": "工作区：AgentCore 桌面端协作白板模块",
+                "message": (
+                    "继续完成白板的开发\n工作区：AgentCore 桌面端协作白板模块"
+                ),
                 "assumptions": [{"label": "范围", "value": "沿用现有栈"}],
             },
             _ask_ctx(),

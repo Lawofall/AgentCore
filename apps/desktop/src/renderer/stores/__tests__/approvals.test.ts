@@ -199,6 +199,37 @@ describe("autoApproveSiblings (本轮内都允许 batch放行)", () => {
     expect(siblings.map((s) => s.approvalId)).toEqual(["a2"]);
   });
 
+  it("approve_always on host skips install_package siblings", () => {
+    const siblings = autoApproveSiblings(
+      [
+        card({
+          approvalId: "a1",
+          toolCallId: "a1",
+          toolName: "host",
+          arguments: { action: "shell", command: "Get-Process" },
+        }),
+        card({
+          approvalId: "a2",
+          toolCallId: "a2",
+          toolName: "host",
+          arguments: {
+            action: "install_package",
+            manager: "winget",
+            package_id: "Git.Git",
+          },
+        }),
+      ],
+      card({
+        approvalId: "a1",
+        toolCallId: "a1",
+        toolName: "host",
+        arguments: { action: "shell", command: "Get-Process" },
+      }),
+      "approve_always",
+    );
+    expect(siblings).toEqual([]);
+  });
+
   it("approve_always on git skips push siblings", () => {
     const siblings = autoApproveSiblings(
       [

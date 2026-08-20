@@ -22,8 +22,7 @@
       "payload": {
         "checkpoint_id": "cp_fmt",
         "conversation_id": "conv_demo",
-        "question": "这份课件用哪种交付形态？",
-        "context": "演讲 / PPT 意图：缺信息靠短问，错了再改。",
+        "question": "这份课件用哪种交付形态？\n演讲 / PPT 意图：缺信息靠短问，错了再改。",
         "assumptions": [],
         "questions": [],
         "intent": "decision"
@@ -108,8 +107,7 @@
         "kind": "ask_user",
         "id": "cp_fmt",
         "status": "resolved",
-        "question": "这份课件用哪种交付形态？",
-        "context": "演讲 / PPT 意图：缺信息靠短问，错了再改。"
+        "question": "这份课件用哪种交付形态？\n演讲 / PPT 意图：缺信息靠短问，错了再改。"
       }
     ],
     "cost": {

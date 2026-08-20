@@ -17,7 +17,9 @@ from agentcore.tools.builtin import build_builtin_registry
 from agentcore.tools.builtin.consult import ConsultTool
 from agentcore.tools.builtin.file_ops.mutate import WriteSectionTool
 from agentcore.tools.builtin.file_ops.read import FileReadTool
-from agentcore.tools.builtin.host import HostInfoTool, HostPingTool
+from agentcore.tools.builtin.host import HostTool
+from agentcore.tools.builtin.md_to_docx import MdToDocxTool
+from agentcore.tools.builtin.md_to_pdf import MdToPdfTool
 from agentcore.tools.builtin.terminal import TerminalTool
 from agentcore.tools.mcp.dynamic import McpDynamicTool
 from agentcore.tools.mcp.wire import McpDiscoverResult, McpToolSpec, register_mcp_tools
@@ -90,61 +92,69 @@ def test_resident_tools_are_not_on_the_roster():
 def test_openai_defs_omit_deferred_until_offer():
     reg = ToolRegistry()
     reg.register(FileReadTool())
-    reg.register(HostPingTool())
-    reg.register(HostInfoTool())
-    assert "host_ping" in reg.names
+    reg.register(MdToDocxTool())
+    reg.register(MdToPdfTool())
+    assert "md_to_docx" in reg.names
     assert "file_read" in reg.names
-    assert set(reg.deferred_names) == {"host_ping", "host_info"}
+    assert set(reg.deferred_names) == {"md_to_docx", "md_to_pdf"}
     assert _def_names(reg) == {"file_read"}
 
-    assert reg.offer("host_ping") is True
-    # Family promote: both assembled host_* siblings land together.
-    assert _def_names(reg) == {"file_read", "host_ping", "host_info"}
+    assert reg.offer("md_to_docx") is True
+    # Family promote: both assembled export siblings land together.
+    assert _def_names(reg) == {"file_read", "md_to_docx", "md_to_pdf"}
     assert not reg.deferred_names
-    assert reg.offer("host_ping") is False  # idempotent
+    assert reg.offer("md_to_docx") is False  # idempotent
 
 
 def test_execute_path_works_while_deferred():
     """Zero-loss: catalog + get still see the tool before consult promotes it."""
     reg = ToolRegistry()
-    ping = HostPingTool()
-    reg.register(ping)
-    assert "host_ping" not in _def_names(reg)
-    assert reg.get_optional("host_ping") is ping
-    assert any(s.name == "host_ping" for s in reg.list_all())
+    host = HostTool()
+    reg.register(host)
+    assert "host" not in _def_names(reg)
+    assert reg.get_optional("host") is host
+    assert any(s.name == "host" for s in reg.list_all())
 
 
 async def test_directory_lists_only_assembled_on_demand_tools():
     reg = ToolRegistry()
     reg.register(FileReadTool())
-    reg.register(HostPingTool())
+    reg.register(HostTool())
     src = ToolConsultSource(registry=reg)
     entries = await src.list_directory("u")
     names = [e.name for e in entries]
-    assert names == ["host_ping"]
+    assert names == ["host"]
     assert all(e.summary for e in entries)
     assert "file_read" not in names
-    # Unassembled family siblings do not appear (host_info never registered).
-    assert "host_info" not in names
 
 
 async def test_consult_offers_family_and_returns_schema():
     reg = ToolRegistry()
-    reg.register(HostPingTool())
-    reg.register(HostInfoTool())
+    reg.register(MdToDocxTool())
+    reg.register(MdToPdfTool())
     src = ToolConsultSource(registry=reg, audience="ceo")
-    body = await src.fetch_by_name("u", "host_ping")
+    body = await src.fetch_by_name("u", "md_to_docx")
     assert body is not None
-    assert "已启用工具 `host_ping`" in body
-    assert "host_info" in body
-    assert "【本机 Host】" in body  # CEO HOW rides consult, not the opening core
-    assert _def_names(reg) == {"host_ping", "host_info"}
+    assert "已启用工具 `md_to_docx`" in body
+    assert "md_to_pdf" in body
+    assert _def_names(reg) == {"md_to_docx", "md_to_pdf"}
+
+
+async def test_host_consult_returns_how():
+    reg = ToolRegistry()
+    reg.register(HostTool())
+    src = ToolConsultSource(registry=reg, audience="ceo")
+    body = await src.fetch_by_name("u", "host")
+    assert body is not None
+    assert "已启用工具 `host`" in body
+    assert "【本机 Host】" in body
+    assert _def_names(reg) == {"host"}
 
 
 async def test_consult_unknown_or_unassembled_is_miss():
     reg = ToolRegistry()
     src = ToolConsultSource(registry=reg)
-    assert await src.fetch_by_name("u", "host_ping") is None  # not assembled
+    assert await src.fetch_by_name("u", "host") is None  # not assembled
     assert await src.fetch_by_name("u", "file_read") is None  # resident, not on roster
 
 
@@ -152,9 +162,9 @@ async def test_consult_cache_does_not_skip_tool_offer():
     """Resume may restore a consult cache; tool consults must still call offer()."""
     token = consulted_memory_cache.set({})
     try:
-        remember_consult("host_ping", "STALE — must not skip offer")
+        remember_consult("host", "STALE — must not skip offer")
         reg = ToolRegistry()
-        reg.register(HostPingTool())
+        reg.register(HostTool())
         tool = ConsultTool(
             source=build_merged_consult_source(
                 skill_registry=None,
@@ -166,23 +176,23 @@ async def test_consult_cache_does_not_skip_tool_offer():
                 skill_audience="ceo",
             )
         )
-        result = await tool.execute({"name": "host_ping"}, _ctx())
+        result = await tool.execute({"name": "host"}, _ctx())
         assert result.success
         assert result.output != "STALE — must not skip offer"
-        assert "已启用工具 `host_ping`" in (result.output or "")
-        assert "host_ping" in _def_names(reg)
+        assert "已启用工具 `host`" in (result.output or "")
+        assert "host" in _def_names(reg)
     finally:
         consulted_memory_cache.reset(token)
 
 
 def test_clone_preserves_already_offered_tools():
     base = ToolRegistry()
-    base.register(HostPingTool())
+    base.register(HostTool())
     base.register(FileReadTool())
-    base.offer("host_ping")
+    base.offer("host")
     cloned = _registry_without(base, "file_read")
-    assert "host_ping" in cloned.names
-    assert "host_ping" in _def_names(cloned)
+    assert "host" in cloned.names
+    assert "host" in _def_names(cloned)
     assert "file_read" not in cloned.names
 
 
@@ -199,6 +209,7 @@ def test_family_of_covers_browser_and_solo_tools():
     browser = family_of("browser_navigate")
     assert "browser_click" in browser and "browser_screenshot" in browser
     assert family_of("terminal") == frozenset({"terminal"})
+    assert family_of("host") == frozenset({"host"})
     assert family_of("desktop_notify") == frozenset({"desktop_notify"})
     assert family_of("write_section") == frozenset({"write_section"})
     # Without a live registry the Server siblings are unknown — name stands alone.
@@ -282,9 +293,9 @@ def _stuffed_worker() -> ToolRegistry:
 
 
 def test_stuffed_worker_opening_table_omits_on_demand_tools():
-    """Locks the opening FC win: 51 registered; consult 另 wire，不在此表."""
+    """Locks the opening FC win: 39 registered; consult 另 wire，不在此表."""
     registry = _stuffed_worker()
-    assert registry.count == 51
+    assert registry.count == 39
     offered = _def_names(registry)
     assert offered == _STUFFED_WORKER_RESIDENT
     chars = sum(
@@ -297,6 +308,7 @@ def test_stuffed_worker_opening_table_omits_on_demand_tools():
     deferred = set(registry.deferred_names)
     assert deferred <= ON_DEMAND_TOOL_NAMES
     assert "terminal" in deferred and "browser_navigate" in deferred
+    assert "host" in deferred
     assert "md_to_docx" in deferred
     assert "write_section" in deferred
     assert "post_note" not in deferred
@@ -327,12 +339,12 @@ async def test_stuffed_worker_opening_table_omits_mcp_tools():
     registry = _stuffed_worker()
     opening_before = _def_names(registry)
     count_before = registry.count
-    assert count_before == 51
+    assert count_before == 39
     assert opening_before == _STUFFED_WORKER_RESIDENT
 
     registered = register_mcp_tools(registry, _playwright_mcp_result(tool_count=24))
     assert registered == 24
-    assert registry.count == 75
+    assert registry.count == 63
     offered = _def_names(registry)
     assert offered == opening_before
     mcp_names = {n for n in registry.names if n.startswith("mcp_")}

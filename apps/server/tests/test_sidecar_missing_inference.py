@@ -56,7 +56,6 @@ def _ask_user_frame(message_id: str, conversation_id: str) -> AskUserSuspension:
         transcript=[],
         history=[],
         question="继续？",
-        context="",
     )
     susp.journal_entries = [
         {"kind": "checkpoint_required", "payload": {"id": "cp"}, "ts": None}

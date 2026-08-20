@@ -52,6 +52,16 @@ export function isGitPushApproval(view: ApprovalView): boolean {
   return typeof sub === "string" && sub.trim().toLowerCase() === "push";
 }
 
+/** `host(action=install_package)` — 恒确认，对齐 git push；旧名仅历史卡。 */
+export function isHostInstallPackageApproval(view: ApprovalView): boolean {
+  if (view.toolName === "host_package_install") return true;
+  if (view.toolName !== "host") return false;
+  const action = view.arguments?.action;
+  return (
+    typeof action === "string" && action.trim().toLowerCase() === "install_package"
+  );
+}
+
 export const PER_CALL_TOOLS: ReadonlySet<string> = new Set();
 
 /** Align with backend ``execution_class_tool_names()`` (code / test / terminal + browser_*). */
@@ -92,8 +102,9 @@ export function autoApproveSiblings(
       p.conversationId === approval.conversationId &&
       !p.resolving &&
       inScope(p) &&
-      // Remote publish always needs its own confirm (align backend `_is_git_push`).
-      !isGitPushApproval(p),
+      // Remote publish / 本机装包 always needs its own confirm.
+      !isGitPushApproval(p) &&
+      !isHostInstallPackageApproval(p),
   );
 }
 

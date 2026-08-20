@@ -383,7 +383,6 @@ export function AskDecisionBody({
       icon={shellIcon}
       caption={shellCaption}
       title={content.question}
-      subtitle={content.context || undefined}
       extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
       footer={
         <AskCardFooter

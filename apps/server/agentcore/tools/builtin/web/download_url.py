@@ -150,7 +150,7 @@ class DownloadUrlTool:
                 "安装包（.exe/.msi/.dmg 等）允许落盘并标明类型，但本工具不执行、不静默安装。"
                 "需要网页正文深读时用 read_url，不要用本工具；"
                 "已有工作区 zip 解压用 archive_extract。"
-                "【禁止】用 code_execute / terminal / host_shell 当 wget/curl 主路径。"
+                "【禁止】用 code_execute / terminal / host(action=shell) 当 wget/curl 主路径。"
                 "参数：url + path（工作区相对路径，如 `uploads/data.csv`）。"
             ),
             parameters={

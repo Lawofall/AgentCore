@@ -75,8 +75,34 @@ def test_ask_user_schema_does_not_expose_blocking():
     )
     props = tool.schema.parameters["properties"]
     assert "blocking" not in props
+    assert "context" not in props
     blob = tool.schema.description + json.dumps(tool.schema.parameters, ensure_ascii=False)
     assert "blocking" not in blob
+    assert '"context"' not in json.dumps(tool.schema.parameters, ensure_ascii=False)
+
+
+async def test_ask_user_drops_extra_context_key():
+    saved: list = []
+
+    async def _save(frame):
+        saved.append(frame)
+
+    tool = _tool(saver=_save)
+    token = captain_transcript.set([LLMMessage(role="user", content="选")])
+    try:
+        res = await tool.execute(
+            {"message": "只问这一句", "context": "旧槽不该并进"},
+            _ctx(),
+        )
+    finally:
+        captain_transcript.reset(token)
+
+    assert res.success is True
+    assert saved[0].question == "只问这一句"
+    assert "context" not in saved[0].to_json()
+    required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
+    assert required.payload["question"] == "只问这一句"
+    assert "context" not in required.payload
 
 
 def test_parse_card_unknown():
@@ -167,6 +193,7 @@ async def test_proposal_pick_overrides_transcript_intent():
     assert saved[0].intent == "proposal_pick"
     required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
     assert required.payload["intent"] == "proposal_pick"
+    assert "context" not in required.payload
     assert required.payload["questions"][0]["multiple"] is False
     assert 2 <= len(required.payload["questions"][0]["options"]) <= 6
 

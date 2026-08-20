@@ -95,8 +95,7 @@
       "payload": {
         "checkpoint_id": "cp-after-exec",
         "conversation_id": "conv_demo",
-        "question": "按此方案推进吗？",
-        "context": "团队已交付方案。",
+        "question": "按此方案推进吗？\n团队已交付方案。",
         "assumptions": [],
         "questions": [],
         "intent": "decision"
@@ -227,8 +226,7 @@
         "kind": "ask_user",
         "id": "cp-after-exec",
         "status": "pending",
-        "question": "按此方案推进吗？",
-        "context": "团队已交付方案。"
+        "question": "按此方案推进吗？\n团队已交付方案。"
       }
     ],
     "cost": {

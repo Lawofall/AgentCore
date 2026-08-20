@@ -31,7 +31,7 @@ export type AskAnswerState = {
 };
 
 /**
- * Split context into a short lead + bullet lines for scannable briefs.
+ * Split a brief into a short lead + bullet lines.
  * First non-empty line = conclusion; remaining lines = points (strips leading •/-).
  */
 export function splitBriefContext(context: string): {

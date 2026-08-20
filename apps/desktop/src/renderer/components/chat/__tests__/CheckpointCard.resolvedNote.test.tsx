@@ -14,7 +14,6 @@ afterEach(cleanup);
 const resolvedKickoff: CheckpointDisplay = {
   id: "cp-1",
   question: "关于论文有几个方向想先跟你对齐",
-  context: "",
   assumptions: [],
   questions: [],
   intent: "kickoff",

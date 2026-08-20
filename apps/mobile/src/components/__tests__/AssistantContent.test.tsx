@@ -238,9 +238,9 @@ describe("AssistantContent", () => {
       {
         kind: "tool",
         id: "tc1",
-        tool_name: "host_shell",
-        arguments: { command: "do_work" },
-        result: "host_shell failed",
+        tool_name: "host",
+        arguments: { action: "shell", command: "do_work" },
+        result: "host failed",
         status: "error",
       },
     ];
@@ -253,7 +253,7 @@ describe("AssistantContent", () => {
     );
     expect(
       screen.getByTestId("unproductive-tool-failure-hint").textContent,
-    ).toBe("host_shell 未成功");
+    ).toBe("Host 未成功");
   });
 
   it("hides the failed-tool hint while streaming", () => {
@@ -261,8 +261,8 @@ describe("AssistantContent", () => {
       {
         kind: "tool",
         id: "tc1",
-        tool_name: "host_shell",
-        arguments: {},
+        tool_name: "host",
+        arguments: { action: "shell" },
         result: "failed",
         status: "error",
       },

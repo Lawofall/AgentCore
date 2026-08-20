@@ -191,8 +191,8 @@ def test_code_execute_description_routes_long_running_to_terminal():
     assert "WSL" in ce
 
     td = TerminalTool().schema.description
-    assert "禁止改走 code_execute" in td or "禁止改走 code_execute / host_shell" in td
-    assert "host_shell" in td
+    assert "禁止改走 code_execute" in td
+    assert "host(action=shell)" in td
     assert "wait_for" in td
     assert "code_execute" in td  # short commands still pointed there
     assert "CEO" in td
@@ -244,25 +244,29 @@ def test_ceo_registry_excludes_every_mutation_tool():
 def test_ceo_registry_holds_only_auto_run_tools():
     # The split is by approval level: the CEO keeps only NEVER tools (auto-run, no
     # consent), while every GRANTABLE (env-mutating) tool is delegated — **except**
-    # Host P3 ``host_shell`` / browser ``browser_navigate`` (gated; not in the
+    # Host P3 ``host`` / browser ``browser_navigate`` (gated; not in the
     # default no-desktop / no-browser set).
     schemas = build_ceo_tool_registry().list_all()
     assert schemas, "CEO must retain its read/retrieval tools"
     assert all(s.approval is ToolApproval.NEVER for s in schemas)
 
 
-def test_ceo_registry_host_shell_grantable_exception_when_desktop_online():
+def test_ceo_registry_host_when_desktop_online():
     schemas = {
         s.name: s for s in build_ceo_tool_registry(desktop_online=True).list_all()
     }
-    assert "host_shell" in schemas
-    assert schemas["host_shell"].approval is ToolApproval.GRANTABLE
-    # L2/L3 still withheld from CEO.
-    assert "host_open_settings" not in schemas
-    # All other CEO tools remain NEVER.
+    assert "host" in schemas
+    assert schemas["host"].approval is ToolApproval.NEVER
+    # Retired 13 names stay off the CEO roster.
+    for retired in (
+        "host_ping",
+        "host_shell",
+        "host_open_settings",
+        "host_package_install",
+    ):
+        assert retired not in schemas
+    # All CEO tools remain NEVER (browser GRANTABLE is a separate include_browser test).
     for name, schema in schemas.items():
-        if name == "host_shell":
-            continue
         assert schema.approval is ToolApproval.NEVER, name
 
 
@@ -283,7 +287,7 @@ def test_ceo_registry_browser_interactive_grantable_when_include_browser():
     # Screenshot stays worker-only.
     assert "browser_screenshot" not in schemas
     for name, schema in schemas.items():
-        if name.startswith("browser_") or name == "host_shell":
+        if name.startswith("browser_"):
             continue
         assert schema.approval is ToolApproval.NEVER, name
 

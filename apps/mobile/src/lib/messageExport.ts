@@ -19,7 +19,7 @@ import {
 export type { MessageCopyMode };
 
 function formatToolLine(step: Extract<ProcessStep, { kind: "tool" }>): string {
-  const label = toolLabel(step.tool_name);
+  const label = toolLabel(step.tool_name, step.arguments ?? {});
   const detail = toolDetail(step.arguments ?? {}, step.tool_name);
   const status =
     step.status === "error"

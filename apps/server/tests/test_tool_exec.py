@@ -1099,11 +1099,11 @@ def test_shell_observe_log_fields_records_facts_not_write_guess():
     }
     listed = _shell_observe_log_fields("terminal", {"subcommand": "list"})
     assert listed == {"subcommand": "list"}
-    host = _shell_observe_log_fields("host_shell", {"command": "Get-ChildItem"})
+    host = _shell_observe_log_fields("host", {"command": "Get-ChildItem"})
     assert host == {"command_preview": "Get-ChildItem"}
     secret_tail = "TOKEN=supersecret"
     long_cmd = "echo hello " + ("n" * 200) + " " + secret_tail
-    clipped = _shell_observe_log_fields("host_shell", {"command": long_cmd})
+    clipped = _shell_observe_log_fields("host", {"command": long_cmd})
     assert clipped["command_preview"] == clip_preview(long_cmd, _SHELL_COMMAND_PREVIEW_MAX)
     assert secret_tail not in clipped["command_preview"]
     assert set(clipped) <= _SHELL_OBSERVE_KEYS
@@ -1122,7 +1122,7 @@ def test_shell_observe_redacts_secret_shapes_clipping_would_keep():
     from agentcore.runtime.engine.tool_exec_args import _shell_observe_log_fields
 
     key_cmd = "OPENAI_API_KEY=sk-abcdefgh12345678 node run.js"
-    key_preview = _shell_observe_log_fields("host_shell", {"command": key_cmd})[
+    key_preview = _shell_observe_log_fields("host", {"command": key_cmd})[
         "command_preview"
     ]
     assert "sk-abcdefgh12345678" not in key_preview
@@ -1192,14 +1192,15 @@ async def test_execute_end_terminal_start_no_gate_still_records_preview():
     assert "is_write" not in end
 
 
-async def test_execute_end_host_shell_records_command_preview():
+async def test_execute_end_host_records_command_preview():
+    """无闸 host(action=shell) 升审批后拒执行，仍记 command_preview。"""
     reg = ToolRegistry()
-    # Stub NEVER：本测只锁 execute_end 字段；真 host_shell 仍是 GRANTABLE。
-    reg.register(_OkTool("host_shell"))
-    args = json.dumps({"command": "hostname"})
+    # Stub NEVER：schema NEVER，运行时按 action 升审批（与真 HostTool 同）。
+    reg.register(_OkTool("host"))
+    args = json.dumps({"action": "shell", "command": "hostname"})
     with capture_logs() as logs:
         await execute_tools(
-            [_call("c1", "host_shell", args)],
+            [_call("c1", "host", args)],
             reg,
             _ctx(),
             EventSink(),
@@ -1209,15 +1210,15 @@ async def test_execute_end_host_shell_records_command_preview():
     ends = [e for e in logs if e.get("event") == "tool.execute_end"]
     assert len(ends) == 1
     end = ends[0]
-    assert end["tool"] == "host_shell"
-    assert end["status"] == "ok"
+    assert end["tool"] == "host"
+    assert end["status"] == "grantable_no_gate"
     assert end["command_preview"] == "hostname"
     assert "subcommand" not in end
     assert "is_write" not in end
 
 
 async def test_execute_end_other_tool_omits_command_preview():
-    """command 参数只对 terminal/host_shell 进 execute_end，避免扩大命令泄漏面。"""
+    """command 参数只对 terminal/host 进 execute_end，避免扩大命令泄漏面。"""
     reg = ToolRegistry()
     reg.register(_OkTool("ok"))
     with capture_logs() as logs:

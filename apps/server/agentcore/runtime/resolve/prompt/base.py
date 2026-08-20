@@ -11,7 +11,7 @@
 # ``_CEO_VISUALIZATION_HINT`` is a short "when to chart" hook (not full syntax HOW).
 # 按角色 right-size (反向): the <tool_safety> caution moved the OTHER way — onto the worker
 # identities (executor.identities._WORKER_TOOL_SAFETY_POLICY) — because the coordinator CEO
-# holds only read-only tools plus narrow exceptions (host_shell · local terminal),
+# holds only read-only tools plus narrow exceptions (host(action=shell) · local terminal),
 # so a blanket caution about write/delete tools it cannot call was inert weight.
 # The shared base now carries neither the charting HOW nor the mutation caution.
 # <capability_honesty> is team-wide（CEO + workers）: 未装配能力不许假装用过. CEO-only
@@ -73,7 +73,7 @@ _DEFAULT_SYSTEM_PROMPT = """\
 某来源读不到（反爬 / 失败）就用已有摘要继续推进并标注待核实，别换别的网址反复重读、\
 也别为此再补一轮搜索。读失败后的「摘要收口」≠ 可伪精确逐步菜单——路径类主张仍须降档（见下条与 \
 claim_evidence）。要把 URL 的原始文件/二进制拉进工作区 → 调用 `download_url`\
-（url+相对 path）；【禁止】用 read_url 冒充下载，【禁止】用 code_execute/terminal/host_shell \
+（url+相对 path）；【禁止】用 read_url 冒充下载，【禁止】用 code_execute/terminal/`host(action=shell)` \
 当 wget 主路径。一个聚焦问题通常一两轮调研就够——调研是手段不是目的，信息够用就转入\
 产出，别把有限子任务做成开放式资料搜罗。
 【实操 / 第三方后台点击】无「现行可核证据」（近期一致教程摘要 / 可对齐截图描述 / 用户实测确认等；\

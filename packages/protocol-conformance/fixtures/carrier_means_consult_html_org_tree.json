@@ -22,8 +22,7 @@
       "payload": {
         "checkpoint_id": "cp_carrier_html_tree",
         "conversation_id": "conv_demo",
-        "question": "组织树 HTML 用哪种呈现？",
-        "context": "次优载体短对齐：框架可保，呈现建议改；坚持原样静态 HTML 亦可。",
+        "question": "组织树 HTML 用哪种呈现？\n次优载体短对齐：框架可保，呈现建议改；坚持原样静态 HTML 亦可。",
         "assumptions": [],
         "questions": [
           {
@@ -110,8 +109,7 @@
         "kind": "ask_user",
         "id": "cp_carrier_html_tree",
         "status": "pending",
-        "question": "组织树 HTML 用哪种呈现？",
-        "context": "次优载体短对齐：框架可保，呈现建议改；坚持原样静态 HTML 亦可。"
+        "question": "组织树 HTML 用哪种呈现？\n次优载体短对齐：框架可保，呈现建议改；坚持原样静态 HTML 亦可。"
       }
     ],
     "cost": {

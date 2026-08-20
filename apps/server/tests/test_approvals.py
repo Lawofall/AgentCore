@@ -1045,7 +1045,7 @@ async def test_delegation_grant_does_not_cover_git_push():
 
 
 async def test_session_host_trust_still_prompts_package_install():
-    """host_package_install is always-confirm — not covered by host=session."""
+    """host(action=install_package) is always-confirm — not covered by host=session."""
     from agentcore.core.types import (
         CommandAxis,
         FileWriteAxis,
@@ -1073,24 +1073,32 @@ async def test_session_host_trust_still_prompts_package_install():
         ),
     )
 
-    # Ordinary Host L3 is session-trusted under host=session.
-    assert "host_open_settings" in host_tools
+    # Ordinary Host GRANTABLE action is session-trusted under host=session.
+    assert "host" in host_tools
     assert not gate.will_prompt(
-        tool_name="host_open_settings", arguments={"panel": "sound"}
+        tool_name="host", arguments={"action": "open_settings", "panel": "sound"}
     )
     # Package install still prompts (恒确认).
     assert gate.will_prompt(
-        tool_name="host_package_install",
-        arguments={"manager": "winget", "package_id": "Microsoft.VisualStudioCode"},
+        tool_name="host",
+        arguments={
+            "action": "install_package",
+            "manager": "winget",
+            "package_id": "Microsoft.VisualStudioCode",
+        },
     )
 
     resolver = asyncio.create_task(
         _resolve_when_ready(reg, "pkg-1", ApprovalDecision.APPROVE, "conv-1")
     )
     decision = await gate.authorize(
-        tool_name="host_package_install",
+        tool_name="host",
         tool_call_id="pkg-1",
-        arguments={"manager": "winget", "package_id": "Microsoft.VisualStudioCode"},
+        arguments={
+            "action": "install_package",
+            "manager": "winget",
+            "package_id": "Microsoft.VisualStudioCode",
+        },
     )
     await resolver
     assert decision is ApprovalDecision.APPROVE
@@ -1115,16 +1123,16 @@ async def test_session_host_trust_still_prompts_package_install():
         _resolve_when_ready(reg2, "pkg-2", ApprovalDecision.APPROVE_ALWAYS, "conv-2")
     )
     d1 = await gate2.authorize(
-        tool_name="host_package_install",
+        tool_name="host",
         tool_call_id="pkg-2",
-        arguments={"manager": "brew", "package_id": "git"},
+        arguments={"action": "install_package", "manager": "brew", "package_id": "git"},
     )
     await resolver2
     assert d1 is ApprovalDecision.APPROVE
-    assert "host_package_install" not in gate2._granted
+    assert "host" not in gate2._granted
     assert gate2.will_prompt(
-        tool_name="host_package_install",
-        arguments={"manager": "brew", "package_id": "wget"},
+        tool_name="host",
+        arguments={"action": "install_package", "manager": "brew", "package_id": "wget"},
     )
 
 
@@ -1199,6 +1207,24 @@ def test_kickoff_tools_lists_execution_class_only():
     assert "mkdir" not in shown
     assert "file_write" not in shown
     assert "code_execute" in shown
+
+
+def test_host_actions_require_approval_like_git_writes():
+    """host schema is NEVER; GRANTABLE actions elevate at runtime."""
+    from agentcore.tools.builtin.host import HostTool
+
+    schema = HostTool().schema
+    assert schema.approval is ToolApproval.NEVER
+    assert not tool_call_requires_approval("host", schema.approval, {"action": "status"})
+    assert not tool_call_requires_approval("host", schema.approval, {"action": "os_log"})
+    assert tool_call_requires_approval(
+        "host", schema.approval, {"action": "shell", "command": "echo hi"}
+    )
+    assert tool_call_requires_approval(
+        "host",
+        schema.approval,
+        {"action": "install_package", "manager": "winget", "package_id": "git"},
+    )
 
 
 def test_terminal_start_requires_approval_like_git_writes():

@@ -119,7 +119,6 @@ export function foldInteractions(
           id,
           status: "pending",
           question: str(p.question),
-          context: str(p.context),
         });
         break;
       }

@@ -74,7 +74,6 @@ const loginTurn: PendingResume = {
   maxRounds: 0,
   thorough: true,
   question: "请在右坞完成登录",
-  context: "",
   assumptions: [],
   questions: [],
   intent: "decision",

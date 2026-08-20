@@ -160,8 +160,7 @@
       "payload": {
         "checkpoint_id": "cp-second",
         "conversation_id": "conv_demo",
-        "question": "调研结论你认吗？",
-        "context": "二次挂起",
+        "question": "调研结论你认吗？\n二次挂起",
         "assumptions": [],
         "questions": [],
         "intent": "decision"
@@ -347,8 +346,7 @@
         "kind": "ask_user",
         "id": "cp-second",
         "status": "pending",
-        "question": "调研结论你认吗？",
-        "context": "二次挂起"
+        "question": "调研结论你认吗？\n二次挂起"
       }
     ],
     "cost": {

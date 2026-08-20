@@ -29,7 +29,6 @@
         "checkpoint_id": "ck_ask",
         "conversation_id": "conv_golden",
         "question": "是否启动多视角深度调研？",
-        "context": "",
         "assumptions": [],
         "questions": [
           {

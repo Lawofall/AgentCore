@@ -180,10 +180,6 @@ class AskUserTool:
                         "type": "string",
                         "description": "必填。卡片顶部说明（问什么、为何需拍板）。",
                     },
-                    "context": {
-                        "type": "string",
-                        "description": "可选：背景补充。",
-                    },
                     "assumptions": {
                         "type": "array",
                         "description": (
@@ -293,7 +289,6 @@ class AskUserTool:
                 error=str(card_parsed) + CARD_RETRY_HINT,
             )
 
-        ctx_text = str(arguments.get("context") or "")
         try:
             assumptions = normalize_assumptions(arguments.get("assumptions"))
             questions = normalize_questions(
@@ -370,7 +365,6 @@ class AskUserTool:
             checkpoint_id=checkpoint_id,
             conversation_id=self.conversation_id,
             question=message,
-            context=ctx_text,
             assumptions=assumptions,
             questions=questions,
             intent=intent,
@@ -400,7 +394,6 @@ class AskUserTool:
                 checkpoint_id=checkpoint_id,
                 context=context,
                 message=message,
-                ctx_text=ctx_text,
                 assumptions=assumptions,
                 questions=questions,
                 required_event=required,

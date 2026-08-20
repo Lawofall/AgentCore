@@ -449,7 +449,7 @@ async def test_maybe_capture_uses_channel_capture_when_no_root():
 
 def test_evaluate_still_denies_host_shell_fuse_without_double_card():
     """fuse⊆DENY must remain a single DENY card (no top-tree overlay)."""
-    hit = evaluate_tool_call("host_shell", {"command": "rm -rf /"})
+    hit = evaluate_tool_call("host", {"action": "shell", "command": "rm -rf /"})
     assert hit is not None
     assert hit.verdict is BreakerVerdict.DENY
     assert hit.rule_id == "destructive.rm_root"

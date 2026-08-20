@@ -36,17 +36,7 @@ def load_roster() -> tuple[type, ...]:
     )
     from agentcore.tools.builtin.git_ops import GitTool
     from agentcore.tools.builtin.grep import GrepTool
-    from agentcore.tools.builtin.host import (
-        HostAppsTool,
-        HostAudioDevicesTool,
-        HostInfoTool,
-        HostNetworkSummaryTool,
-        HostOsLogSummaryTool,
-        HostPingTool,
-        HostPowerTool,
-        HostShellTool,
-        HostStorageTool,
-    )
+    from agentcore.tools.builtin.host import HostTool
     from agentcore.tools.builtin.md_to_docx import MdToDocxTool
     from agentcore.tools.builtin.md_to_pdf import MdToPdfTool
     from agentcore.tools.builtin.terminal import TerminalTool
@@ -89,16 +79,8 @@ def load_roster() -> tuple[type, ...]:
         BrowserScrollTool,
         BrowserSnapshotTool,
         BrowserConsoleTool,
-        # Host 第三能力面 P0–P3 (L1 NEVER · CEO+worker；P3 host_shell GRANTABLE 例外)
-        HostPingTool,
-        HostInfoTool,
-        HostAudioDevicesTool,
-        HostStorageTool,
-        HostPowerTool,
-        HostNetworkSummaryTool,
-        HostAppsTool,
-        HostOsLogSummaryTool,
-        HostShellTool,
+        # Host 第三能力面：单一 ``host``（schema NEVER · action 政策表 · host_class）
+        HostTool,
         # C1 silent read-only external mount (CEO+worker · desktop_online only)
         ExternalMountReadonlyTool,
     )

@@ -385,7 +385,6 @@ export function surfaceResumeFromAssistant(
       maxRounds: 0,
       thorough: true,
       question: cp.question,
-      context: cp.context,
       assumptions: cp.assumptions,
       questions: cp.questions,
       intent: cp.intent,
@@ -412,7 +411,6 @@ export function surfaceResumeFromAssistant(
         maxRounds: 0,
         thorough: true,
         question: "",
-        context: "",
         assumptions: [],
         questions: [],
         intent: "decision",
@@ -449,7 +447,6 @@ export function surfaceResumeFromAssistant(
             : {}),
           ...(tp.sameModelDebate ? { sameModelDebate: true } : {}),
           question: "",
-          context: "",
           assumptions: [],
           questions: [],
           // team_preview is the kickoff card — not a mid-turn decision ask.
