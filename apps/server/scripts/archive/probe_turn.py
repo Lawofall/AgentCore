@@ -118,7 +118,7 @@ def _format_event(t_ms: int, ev_type: str, payload: dict[str, Any], *, raw: bool
         return f"{head}  [run] {ev_type} agent={payload.get('agent_id', '?')}"
     if ev_type == "citations":
         return f"{head}  [cite] citations ({len(payload.get('citations') or [])})"
-    if ev_type in {"checkpoint_required", "question_posted", "plan_review_required"}:
+    if ev_type in {"checkpoint_required", "plan_review_required"}:
         return f"{head}  [PAUSE] {ev_type}"
     if ev_type == "message_end":
         return f"{head}  == message_end (finish={payload.get('finish_reason')})"

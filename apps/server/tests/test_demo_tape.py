@@ -307,7 +307,6 @@ def test_remint_interaction_ids_maps_all_interaction_keys_deterministically():
     events = [
         {"kind": "team_preview_required", "payload": {"checkpoint_id": "cp-1", "motion": "m"}},
         {"kind": "approval_required", "payload": {"approval_id": "ap-1"}},
-        {"kind": "question_posted", "payload": {"ask_id": "ask-1"}},
         {"kind": "run_escalation", "payload": {"escalation_id": "esc-1"}},
         {"kind": "interaction_orphaned", "payload": {"interaction_id": "cp-1"}},
         # Execution identities stay AS RECORDED (message-scoped + structured strings).
@@ -320,7 +319,6 @@ def test_remint_interaction_ids_maps_all_interaction_keys_deterministically():
     for kind, key, original in (
         ("team_preview_required", "checkpoint_id", "cp-1"),
         ("approval_required", "approval_id", "ap-1"),
-        ("question_posted", "ask_id", "ask-1"),
         ("run_escalation", "escalation_id", "esc-1"),
     ):
         minted = by_kind[kind][key]
@@ -334,14 +332,14 @@ def test_remint_interaction_ids_maps_all_interaction_keys_deterministically():
     )
     # Untouched events pass through unchanged (payload identity preserved).
     assert by_kind["run_started"]["run_id"] == "debate_x_r1_lv"
-    assert out[6]["payload"] is events[6]["payload"]
+    assert out[5]["payload"] is events[5]["payload"]
     # Non-payload fields survive on touched events.
     assert by_kind["team_preview_required"]["motion"] == "m"
     # A different turn mints different ids.
     assert replay_interaction_id("cp-1", message_id="m1") != replay_interaction_id(
         "cp-1", message_id="m2"
     )
-    assert {"checkpoint_id", "approval_id", "ask_id"}.issubset(INTERACTION_ID_KEYS)
+    assert {"checkpoint_id", "approval_id", "escalation_id"}.issubset(INTERACTION_ID_KEYS)
 
 
 # ── recording → tape builder ─────────────────────────────────────────────
@@ -868,11 +866,11 @@ def test_recorder_hydrates_legacy_kind_ts_segments_after_restart(monkeypatch, tm
         recorder.uninstall_recorder()
 
 
-def test_recorder_captures_post_turn_followups_after_terminal_message_end(
+def test_recorder_captures_post_turn_title_after_terminal_message_end(
     monkeypatch, tmp_path
 ):
-    """Terminal message_end flush+pops; followups_generated still lands on disk."""
-    from agentcore.runtime.events import followups_generated, message_end, message_start
+    """Terminal message_end flush+pops; persist-after-pipeline tail still lands on disk."""
+    from agentcore.runtime.events import message_end, message_start, title_generated
 
     recorder = _install_recorder_at(monkeypatch, tmp_path)
     try:
@@ -882,17 +880,14 @@ def test_recorder_captures_post_turn_followups_after_terminal_message_end(
         sink.emit(message_end(FinishReason.END_TURN))
         assert "msg-fu" not in recorder._recordings
 
-        chips = ["建议一", "建议二", "建议三"]
-        sink.emit(
-            followups_generated(chips, conversation_id="conv-fu", message_id="msg-fu")
-        )
+        sink.emit(title_generated("新标题", conversation_id="conv-fu"))
         assert "msg-fu" not in recorder._recordings
 
         doc = recorder.load_recording(recorder.recording_path("msg-fu"))
         assert len(doc["segments"]) == 2
         types = [e["type"] for s in doc["segments"] for e in s["events"]]
-        assert types[-1] == "followups_generated"
-        assert doc["segments"][-1]["events"][-1]["payload"]["followups"] == chips
+        assert types[-1] == "title_generated"
+        assert doc["segments"][-1]["events"][-1]["payload"]["title"] == "新标题"
     finally:
         recorder.uninstall_recorder()
 
@@ -957,7 +952,6 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
     from agentcore.demo_tape.binding import TapeBinding
     from agentcore.demo_tape.player import continue_tape_turn, play_tape_events
     from agentcore.runtime.events import (
-        followups_generated,
         message_end,
         message_start,
         team_preview_resolved,
@@ -1009,17 +1003,15 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
         resume_sink.emit(_ev("run_completed", {"run_id": "w1", "agent_id": "w1"}))
         resume_sink.emit(_ev("content_delta", {"delta": "最终汇总。"}))
         resume_sink.emit(message_end(FinishReason.END_TURN))
-        # Post-turn chips (persist_turn_result order) — must still be on the recording.
-        resume_sink.emit(
-            followups_generated(chips, conversation_id="src-conv", message_id="src-msg")
-        )
 
         recording = recorder.load_recording(recorder.recording_path("src-msg"))
     finally:
         recorder.uninstall_recorder()
 
     tape_doc = build_tape_from_recording(
-        recording, meta={"title": "闭环"}, user_prompt="搜索并辩论"
+        recording,
+        meta={"title": "闭环", "followups": chips},
+        user_prompt="搜索并辩论",
     )
     assert tape_doc["version"] == TAPE_FORMAT_VERSION
     assert tape_doc["meta"]["followups"] == chips
@@ -1084,7 +1076,7 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
     assert result2["content"] == "案情简介。\n\n最终汇总。"
     # Chips offline: player ignores meta.followups (no result attach / no emit).
     assert result2.get("followups") is None
-    assert EventType.FOLLOWUPS_GENERATED not in [e.type for e in sink2._history]
+    assert all(e.type.value != "followups_generated" for e in sink2._history)
     types2 = [e.type for e in sink2._history]
     assert types2.count(EventType.TEAM_PREVIEW_RESOLVED) == 1
     deltas = [
@@ -1156,7 +1148,7 @@ async def test_tape_followups_ignored_on_persist(monkeypatch, tmp_path: Path):
     )
     assert result["finish_reason"] is FinishReason.END_TURN
     assert result.get("followups") is None
-    assert EventType.FOLLOWUPS_GENERATED not in [e.type for e in sink._history]
+    assert all(e.type.value != "followups_generated" for e in sink._history)
 
     stored: list[tuple] = []
 
@@ -1226,12 +1218,10 @@ async def test_tape_followups_ignored_on_persist(monkeypatch, tmp_path: Path):
     )
 
     assert stored == []
-    fu_events = [e for e in persist_sink._history if e.type is EventType.FOLLOWUPS_GENERATED]
-    assert fu_events == []
-    unavailable = [
-        e for e in persist_sink._history if e.type is EventType.FOLLOWUPS_UNAVAILABLE
-    ]
-    assert unavailable == []
+    assert all(
+        e.type.value not in ("followups_generated", "followups_unavailable")
+        for e in persist_sink._history
+    )
 
 
 # ── player ───────────────────────────────────────────────────────────────

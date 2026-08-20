@@ -7,6 +7,7 @@ import { DecisionCard } from "@/components/ui";
 import { notifyError } from "@/lib/toast";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { CheckpointDisplay } from "@/stores/conversation";
+import { timelineIntentionalEmpty } from "@/stores/interactions/timelineCardSlot";
 import type { CheckpointIntent } from "@/types/events";
 import { useState } from "react";
 import { AskDecisionBody } from "./ask/AskDecisionBody";
@@ -28,8 +29,9 @@ import { RISK_SEVERITY_META, parseRiskLabel } from "./ask/parseRiskLabel";
  *
  * 挂起即收口 (②, Phase 3): an inline ask_user card is never live-interactive anymore — a
  * CEO checkpoint finalizes the turn (its in-process resolve Future is never parked), so
- * the actionable surface is always the durable resume card. Inline, pending renders nothing
- * (CEO message body stays visible); settled → resolved record card.
+ * the actionable surface is always the durable resume card. Inline, pending is
+ * {@link timelineIntentionalEmpty} (CEO message body stays visible); settled →
+ * resolved record card. Bag miss is handled upstream as {@link timelineMissingCard}.
  *
  * Resolved copy / icons come from the shared decision meta ({@link ASK_INTENT_META}).
  */
@@ -41,7 +43,7 @@ export function CheckpointCard({
   if (checkpoint.status === "resolved") {
     return <ResolvedCheckpoint checkpoint={checkpoint} />;
   }
-  return null;
+  return timelineIntentionalEmpty();
 }
 
 /** Flatten per-question picks (+「其他」自定义) into resume `selected`. */
@@ -228,7 +230,7 @@ function resolvedCollapsedSummary(checkpoint: CheckpointDisplay): string {
 function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
   const decision = checkpoint.decision ?? "timeout";
   if (isAskSilentResolvedDecision(decision)) {
-    return null;
+    return timelineIntentionalEmpty();
   }
   const resolved = askResolvedOutcome(checkpoint.intent, decision);
   const showRiskChips = checkpoint.intent === "risk_ack";

@@ -12,7 +12,6 @@ Attachment rendering lives beside this facade:
 
 from __future__ import annotations
 
-from agentcore.conversation.ask_reply import format_ask_reply_prompt
 from agentcore.conversation.mentions import format_agent_mention_prompt
 from agentcore.memory import (
     default_memory_store,  # noqa: F401 — monkeypatch seam (ceo_toolset imports it here)
@@ -63,18 +62,14 @@ def _build_agent_mention_context(
 def merge_attachment_and_mention_context(
     attachment_context: str | None,
     agent_mentions: list[dict] | None,
-    *,
-    ask_id: str | None = None,
 ) -> str | None:
-    """Join file attachment block with optional Agent soft-mention / ask-reply blocks.
+    """Join file attachment block with optional Agent soft-mention block.
 
-    Mentions and ask_id ride the same ATTACHMENT volatile tail (紧邻 / 并入) so CEO and
-    workers that already consume ``attachment_context`` stay in sync. Missing ask_id
-    keeps the turn byte-identical to an ordinary message.
+    Mentions ride the same ATTACHMENT volatile tail (紧邻 / 并入) so CEO and
+    workers that already consume ``attachment_context`` stay in sync.
     """
     mention = _build_agent_mention_context(agent_mentions)
-    reply = format_ask_reply_prompt(ask_id)
-    parts = [p for p in (attachment_context, mention, reply) if p]
+    parts = [p for p in (attachment_context, mention) if p]
     if not parts:
         return None
     return "\n\n".join(parts)

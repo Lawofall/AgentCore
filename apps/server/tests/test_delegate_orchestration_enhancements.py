@@ -1,4 +1,4 @@
-"""委派编排四项增强：CEO 评审前置 / 部分并行 / handoff 写参清理 / 记忆复用。"""
+"""委派编排三项增强：CEO 评审前置 / handoff 写参清理 / 记忆复用。"""
 
 from __future__ import annotations
 
@@ -10,10 +10,6 @@ from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFuncti
 from agentcore.memory.store import FileMemoryStore, topic_path
 from agentcore.runtime.context.consult_sources import MemoryConsultSource, MergedConsultSource
 from agentcore.runtime.delegate.ceo_review import deterministic_ceo_review, run_ceo_review
-from agentcore.runtime.delegate.parallelism import (
-    resolve_parallelism,
-    widen_post_checkpoint_deps,
-)
 from agentcore.runtime.engine.write_args_clear import (
     cleared_write_stub_rejection,
     landed_result_note,
@@ -28,7 +24,6 @@ from agentcore.runtime.memory_consult_cache import (
     remember_consult,
     seed_consult_cache_from_window,
 )
-from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
 from agentcore.tools.builtin.consult import ConsultTool
 from agentcore.tools.protocol import ToolContext
@@ -123,58 +118,7 @@ def test_plan_review_required_omits_ceo_review_when_absent():
     PlanReviewRequiredPayload.model_validate(event.payload)
 
 
-# ── 2. 部分并行 ──────────────────────────────────────────────────────────────
-
-
-def _linear_checkpoint_plan() -> RunPlan:
-    """architect(cp) → core → table → power → verifier"""
-    nodes = [
-        RunSpec(run_id="architect", agent_id="a", role="架构", task="规格", checkpoint_after=True),
-        RunSpec(run_id="core", agent_id="c", role="核心", task="引擎", depends_on=["architect"]),
-        RunSpec(run_id="table", agent_id="t", role="表格", task="视图", depends_on=["core"]),
-        RunSpec(run_id="power", agent_id="p", role="增强", task="能力", depends_on=["table"]),
-        RunSpec(run_id="verifier", agent_id="v", role="验收", task="验收", depends_on=["power"]),
-    ]
-    plan = RunPlan()
-    for n in nodes:
-        plan.add(n)
-    return plan
-
-
-def test_resolve_parallelism_defaults_conservative():
-    assert resolve_parallelism(None) == "conservative"
-    assert resolve_parallelism("balanced") == "balanced"
-    assert resolve_parallelism("aggressive") == "aggressive"
-    assert resolve_parallelism("nope") == "conservative"
-
-
-def test_widen_conservative_noop():
-    plan = _linear_checkpoint_plan()
-    assert widen_post_checkpoint_deps(plan, "conservative") == 0
-    assert plan.by_id("table").depends_on == ["core"]
-
-
-def test_widen_balanced_fans_middle():
-    plan = _linear_checkpoint_plan()
-    changed = widen_post_checkpoint_deps(plan, "balanced")
-    assert changed > 0
-    # C → A → {B,D} → last  ⇒ core stays on architect; table+power on core; verifier on both
-    assert plan.by_id("core").depends_on == ["architect"]
-    assert plan.by_id("table").depends_on == ["core"]
-    assert plan.by_id("power").depends_on == ["core"]
-    assert set(plan.by_id("verifier").depends_on) == {"table", "power"}
-
-
-def test_widen_aggressive_fans_from_checkpoint():
-    plan = _linear_checkpoint_plan()
-    widen_post_checkpoint_deps(plan, "aggressive")
-    assert plan.by_id("core").depends_on == ["architect"]
-    assert plan.by_id("table").depends_on == ["architect"]
-    assert plan.by_id("power").depends_on == ["architect"]
-    assert set(plan.by_id("verifier").depends_on) == {"core", "table", "power"}
-
-
-# ── 3. handoff 写参清理（原写工具名 + 参数只留 path，摘要归 tool result）──
+# ── 2. handoff 写参清理（原写工具名 + 参数只留 path，摘要归 tool result）──
 
 
 def test_projected_write_args_carry_nothing_worth_echoing():
@@ -643,7 +587,7 @@ def test_landed_status_echo_gets_one_strike_stop():
     assert "site/main.js" in stop
 
 
-# ── 4. 记忆复用 ──────────────────────────────────────────────────────────────
+# ── 3. 记忆复用 ──────────────────────────────────────────────────────────────
 
 
 async def test_consult_reuses_turn_cache(tmp_path):

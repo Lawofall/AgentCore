@@ -460,10 +460,6 @@ class UserInterjectionPayload(WirePayload):
     note: str | None = absent()
     attachments: list[UserInterjectionAttachment] | None = absent()
     agent_mentions: list[UserInterjectionAgentMention] | None = absent()
-    ask_id: str | None = absent(
-        "若本插话是在回答非阻塞提问，出站 question_posted.ask_id。"
-        "缺省=普通插话，照常消化；禁止塞进 agent_mentions。"
-    )
 
 
 class TurnQueuedPayload(WirePayload):

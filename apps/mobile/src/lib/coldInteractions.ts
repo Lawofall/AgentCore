@@ -1,19 +1,34 @@
 /**
- * Mobile cold-path Interaction store (ask_user / plan_review / team_preview).
+ * Mobile cold-path Interaction store (`pausesTurn && !hot`).
  *
  * Live paint authority for ResumeCard — mirrors desktop InteractionStore cold
  * semantics (upsertRequired tombstone / new-host replace / stamp rekey+bind)
  * without importing desktop (cross-platform-frontend.mdc).
  */
+import {
+  INTERACTION_KIND_WIRE,
+  USER_INTERACTION_KIND_VALUES,
+  type UserInteractionKind,
+} from "@agentcore/contract-types";
 import { useSyncExternalStore } from "react";
 
-export const COLD_RESUME_KINDS = [
-  "ask_user",
-  "plan_review",
-  "team_preview",
-] as const;
+/**
+ * Durable resume kinds: gate that is not an in-process Future (`pausesTurn && !hot`).
+ * The union is restated because generated flags are typed `boolean`, so TS cannot
+ * prove the subset; runtime membership is derived. Lock: coldInteractions.test.ts.
+ */
+export type ColdResumeKind = Extract<
+  UserInteractionKind,
+  "ask_user" | "plan_review" | "team_preview"
+>;
 
-export type ColdResumeKind = (typeof COLD_RESUME_KINDS)[number];
+function isDurableCold(kind: UserInteractionKind): kind is ColdResumeKind {
+  const wire = INTERACTION_KIND_WIRE[kind];
+  return wire.pausesTurn && !wire.hot;
+}
+
+export const COLD_RESUME_KINDS =
+  USER_INTERACTION_KIND_VALUES.filter(isDurableCold);
 
 export type ColdInteractionStatus =
   | "pending"
@@ -40,27 +55,19 @@ export interface ColdInteractionEntry {
   deferredBusyReason?: ColdDeferredBusyReason;
 }
 
+const COLD_RESUME_KIND_SET = new Set<string>(COLD_RESUME_KINDS);
+
 export function isColdResumeKind(kind: string): kind is ColdResumeKind {
-  return (COLD_RESUME_KINDS as readonly string[]).includes(kind);
+  return COLD_RESUME_KIND_SET.has(kind);
 }
 
-const REQUIRED_EVENT: Record<string, ColdResumeKind> = {
-  checkpoint_required: "ask_user",
-  plan_review_required: "plan_review",
-  team_preview_required: "team_preview",
-};
-
-const RESOLVED_EVENT: Record<string, ColdResumeKind> = {
-  checkpoint_resolved: "ask_user",
-  plan_review_resolved: "plan_review",
-  team_preview_resolved: "team_preview",
-};
-
-const ID_FIELD: Record<ColdResumeKind, string> = {
-  ask_user: "checkpoint_id",
-  plan_review: "checkpoint_id",
-  team_preview: "checkpoint_id",
-};
+const REQUIRED_EVENT: Partial<Record<string, ColdResumeKind>> = {};
+const RESOLVED_EVENT: Partial<Record<string, ColdResumeKind>> = {};
+for (const kind of COLD_RESUME_KINDS) {
+  const wire = INTERACTION_KIND_WIRE[kind];
+  REQUIRED_EVENT[wire.requiredEvent] = kind;
+  if (wire.resolvedEvent) RESOLVED_EVENT[wire.resolvedEvent] = kind;
+}
 
 export function kindFromColdRequiredEvent(
   eventType: string,
@@ -78,7 +85,7 @@ export function idFromColdRequiredPayload(
   kind: ColdResumeKind,
   payload: Record<string, unknown>,
 ): string | null {
-  const raw = payload[ID_FIELD[kind]];
+  const raw = payload[INTERACTION_KIND_WIRE[kind].idField];
   return typeof raw === "string" && raw.length > 0 ? raw : null;
 }
 

@@ -396,6 +396,22 @@ def test_memory_update_view_exposes_anchor_at():
     assert MemoryUpdateView(id="row-2", created_at=_T0).anchor_at is None
 
 
+def test_memory_update_view_closed_kind_and_action():
+    """kind / items[].action are persisted JSONB closed sets — unknown values fail read."""
+    from pydantic import ValidationError
+
+    from agentcore.api.schemas import MemoryUpdateItemView, MemoryUpdateView
+
+    MemoryUpdateView(id="row-q", created_at=_T0, kind="quota")
+    MemoryUpdateItemView(action="quota_denied", file="画像")
+    MemoryUpdateItemView(action="quota", file="")
+    MemoryUpdateItemView(action="add", file="偏好")
+    with pytest.raises(ValidationError):
+        MemoryUpdateView(id="row-x", created_at=_T0, kind="future_kind")
+    with pytest.raises(ValidationError):
+        MemoryUpdateItemView(action="upsert", file="画像")
+
+
 def test_episodic_timeout_ceiling_clears_observed_latency():
     """20s clipped every real memory pass (35–37s measured); keep real headroom."""
     from agentcore.memory.episodic import _EPISODIC_TIMEOUT_SECONDS

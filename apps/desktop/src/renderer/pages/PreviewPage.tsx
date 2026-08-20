@@ -1,6 +1,4 @@
 import { ChatView } from "@/components/chat/ChatView";
-import { ConversationCanvas } from "@/components/graph/ConversationCanvas";
-import { SidePanel } from "@/components/layout/SidePanel";
 import { ScenarioList } from "@/components/preview/ScenarioList";
 import { Button } from "@/components/ui";
 import { applyTheme } from "@/lib/theme";
@@ -13,7 +11,7 @@ import {
 } from "@/preview/replay";
 import { getRuntime, useConversationStore } from "@/stores/conversation";
 import { type TurnDetailView, turnDetailPath, useUIStore } from "@/stores/ui";
-import { MessageSquare, Moon, Network, Play, Radio, Sun } from "lucide-react";
+import { Moon, Play, Radio, Sun } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -55,16 +53,8 @@ export function PreviewPage() {
   // URL collapses back to the canonical terminal form the harness screenshots.
   const total = current?.events.length ?? 0;
 
-  // Render surface (`#/preview?s=…&view=canvas`): chat (default) replays into
-  // `ChatView`; canvas mounts the real canvas layout (`ConversationCanvas` +
-  // `SidePanel`) so the canvas-only chrome — the team graph and the 指挥台
-  // fixed tab in the side panel (前端UX设计.md §6.2) — is eyeball-able
-  // and shoot-gated too, not just the chat surface. URL-driven so the harness can
-  // deep-link it and a human can bookmark it.
-  const view = searchParams.get("view") === "canvas" ? "canvas" : "chat";
-
-  // Deep-link into a canvas 放大态 view (`#/preview?s=…&view=canvas&zoom=<view>`): after
-  // the fixture replays, request canvas focus on the team turn so a zoomed view that is
+  // Deep-link into a full-screen turn-detail view (`#/preview?s=…&zoom=<view>`):
+  // after the fixture replays, navigate to `turnDetailPath` so a zoomed view that is
   // otherwise only reachable by clicking (e.g. 对比) is deep-linkable + shoot-gatable.
   // `zoom=compare` (旧别名 `revisions`) → 统一「对比」view; any other truthy value → the
   // turn's default view.
@@ -73,7 +63,7 @@ export function PreviewPage() {
   // Render theme (`#/preview?s=…&theme=light|dark`): an ephemeral light/dark
   // override for the preview surface so a component can be eyeballed in both modes
   // without flipping (or persisting) the whole app's theme. URL-driven like
-  // `s` / `k` / `view` so it's deep-linkable and survives selection / scrubbing.
+  // `s` / `k` / `zoom` so it's deep-linkable and survives selection / scrubbing.
   // Absent → follow the app's real theme (`useApplyTheme` keeps owning it).
   const themeParam =
     searchParams.get("theme") === "dark"
@@ -84,12 +74,10 @@ export function PreviewPage() {
   const appIsDark = useIsDark();
   const isDark = themeParam ? themeParam === "dark" : appIsDark;
 
-  // Preserve the current view + theme across selection / scrubbing so flipping a
-  // scenario or dragging the frame slider doesn't kick canvas back to chat or drop
-  // the chosen preview theme.
+  // Preserve the current theme across selection / scrubbing so flipping a
+  // scenario or dragging the frame slider doesn't drop the chosen preview theme.
   const withChrome = (params: Record<string, string>) => {
     const next: Record<string, string> = { ...params };
-    if (view === "canvas") next.view = view;
     if (themeParam) next.theme = themeParam;
     return next;
   };
@@ -103,23 +91,13 @@ export function PreviewPage() {
     setSearchParams(withChrome({ s: name }), { replace: true });
   };
 
-  const setView = (next: "chat" | "canvas") => {
-    const params: Record<string, string> = {};
-    if (selected) params.s = selected;
-    if (frame !== null) params.k = String(frame);
-    if (next === "canvas") params.view = next;
-    if (themeParam) params.theme = themeParam;
-    setSearchParams(params, { replace: true });
-  };
-
   // Flip the preview surface light/dark via the URL. Ephemeral: it overrides the
   // root `.dark` class while previewing but never writes the persisted app theme,
-  // and preserves the current scenario / frame / view.
+  // and preserves the current scenario / frame.
   const setTheme = (next: "light" | "dark") => {
     const params: Record<string, string> = {};
     if (selected) params.s = selected;
     if (frame !== null) params.k = String(frame);
-    if (view === "canvas") params.view = view;
     params.theme = next;
     setSearchParams(params, { replace: true });
   };
@@ -196,7 +174,7 @@ export function PreviewPage() {
   // (`turnDetailPath`) — same as production 放大态, so SHOOT_ZOOM is no longer a no-op.
   // biome-ignore lint/correctness/useExhaustiveDependencies: frame is an intentional re-run key — re-focus after each replay frame lands.
   useEffect(() => {
-    if (view !== "canvas" || !zoom || !selected) return;
+    if (!zoom || !selected) return;
     const focusView: TurnDetailView | undefined =
       zoom === "compare" || zoom === "revisions"
         ? "compare"
@@ -216,7 +194,7 @@ export function PreviewPage() {
       }
     }, 120);
     return () => clearTimeout(t);
-  }, [view, zoom, selected, frame, navigate]);
+  }, [zoom, selected, frame, navigate]);
 
   // Apply the URL-selected preview theme by toggling the root `.dark` class (the
   // same mechanism as the app's `applyTheme`), so the replayed surface — and
@@ -294,40 +272,9 @@ export function PreviewPage() {
           )}
           {current && (
             <div className="flex shrink-0 items-center gap-1.5">
-              {/* Merged segmented control: 聊天⇄画布 (render surface) + 浅⇄深
-                  (ephemeral preview theme) share one divider-split container so the
-                  chrome reads as a single compact control. Both flip the SAME
-                  replayed slice — the canvas-only state (team graph + 指挥台) and
-                  either theme — without spinning up a real run or touching the
-                  app's persisted theme. */}
+              {/* Ephemeral 浅⇄深 preview theme. Flips the SAME replayed slice
+                  without spinning up a real run or touching the persisted app theme. */}
               <div className="mr-1 flex items-center gap-0.5 rounded-lg border border-border p-0.5">
-                <Button
-                  variant="ghost"
-                  onClick={() => setView("chat")}
-                  aria-pressed={view === "chat"}
-                  icon={<MessageSquare size={14} />}
-                  className={
-                    view === "chat"
-                      ? "bg-accent text-foreground hover:bg-accent"
-                      : undefined
-                  }
-                >
-                  聊天
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setView("canvas")}
-                  aria-pressed={view === "canvas"}
-                  icon={<Network size={14} />}
-                  className={
-                    view === "canvas"
-                      ? "bg-accent text-foreground hover:bg-accent"
-                      : undefined
-                  }
-                >
-                  画布
-                </Button>
-                <span className="mx-0.5 h-5 w-px shrink-0 bg-border" />
                 <Button
                   variant="ghost"
                   onClick={() => setTheme("light")}
@@ -370,19 +317,9 @@ export function PreviewPage() {
             </div>
           )}
         </div>
-        {view === "canvas" ? (
-          // Mirror ConversationPage's canvas layout: the canvas takes the main
-          // column and the unified SidePanel docks on the right (where the 指挥台
-          // is a fixed second tab; auto-surface = openPanel + badge, no tab steal).
-          <div className="relative flex min-h-0 flex-1">
-            <ConversationCanvas />
-            <SidePanel />
-          </div>
-        ) : (
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            <ChatView />
-          </div>
-        )}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <ChatView />
+        </div>
       </div>
     </div>
   );

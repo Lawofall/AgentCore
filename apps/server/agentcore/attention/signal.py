@@ -4,9 +4,6 @@ Two product shapes share this channel:
 
 - **Turn stopped**: a blocking card (approval / ask_user / plan_review / …). The
   AI cannot move without the person.
-- **Turn still running**: a non-blocking ``question_posted`` is pending. The team
-  keeps working, but the baseline is the user has left — classifying that as
-  progress-only never calls them back.
 
 Every other beat of a turn is either progress (they will see it when they look)
 or completion (nothing is waiting). So this module has two triggers — a card went
@@ -43,6 +40,7 @@ from typing import Any
 
 from agentcore.attention.scope import current_attention_scope
 from agentcore.core.logging import get_logger
+from agentcore.runtime.interaction import ATTENTION_KINDS, spec_for_kind
 
 logger = get_logger(__name__)
 
@@ -68,26 +66,24 @@ PUSH_NOT_REQUESTED = "not_requested"
 class AttentionKind(StrEnum):
     """Card kinds that wait on the human — the 「在等你」 signal.
 
-    Blocking kinds stop the turn. ``QUESTION_POSTED`` does not — the team keeps
-    working — but it still waits on the user, so it belongs here rather than on
-    the progress surface. Progress-only surfaces (``stage_card``, ``client_tool``)
-    stay absent.
-
-    ``DELEGATION_AUTHORIZATION`` currently has no live producer: the hot
-    ``request_delegation_authorization`` path is retired (see
-    ``runtime/delegate/drive_setup.py``) and capability auth rides the durable
-    开工卡 (``TEAM_PREVIEW``) instead. It stays in the taxonomy because the kind is
-    still journaled on historical turns, and because the shared hot-card gate
-    would carry it the day that path returns.
+    Membership is :data:`~agentcore.runtime.interaction.ATTENTION_KINDS` (spec
+    ``attention=True``). Blocking kinds stop the turn. Progress-only surfaces
+    (``stage_card``, ``client_tool``) stay absent.
     """
 
     APPROVAL = "approval"
     ESCALATION = "escalation"
-    DELEGATION_AUTHORIZATION = "delegation_authorization"
     ASK_USER = "ask_user"
     PLAN_REVIEW = "plan_review"
     TEAM_PREVIEW = "team_preview"
-    QUESTION_POSTED = "question_posted"
+
+
+if frozenset(k.value for k in AttentionKind) != ATTENTION_KINDS:
+    raise RuntimeError(
+        "AttentionKind members must equal INTERACTION_KIND_SPECS where attention=True; "
+        f"enum={sorted(k.value for k in AttentionKind)} "
+        f"spec={sorted(ATTENTION_KINDS)}"
+    )
 
 
 # Per-kind headline used when the card carries no question of its own. Also the
@@ -95,28 +91,24 @@ class AttentionKind(StrEnum):
 _KIND_HEADLINE: Mapping[AttentionKind, str] = {
     AttentionKind.APPROVAL: "AI 需要你的授权",
     AttentionKind.ESCALATION: "AI 需要你的决定",
-    AttentionKind.DELEGATION_AUTHORIZATION: "团队开工待你授权",
     AttentionKind.ASK_USER: "AI 需要你的回应",
     AttentionKind.PLAN_REVIEW: "AI 计划待你确认",
     AttentionKind.TEAM_PREVIEW: "团队开工待你确认",
-    # Non-blocking: the headline itself must carry「团队没停」. It is the push's
-    # title line, and the body is normally the question text — so a headline that
-    # only said「等你拍板」would read exactly like a blocking checkpoint, which is
-    # the one misread worse than not notifying at all. 「拍板」is reserved for the
-    # turn-freezing kinds above; this one asks for a reply, not a gate.
-    AttentionKind.QUESTION_POSTED: "团队还在跑，有问题等你",
 }
 
 _PUSH_FALLBACK_BODY = "AI 已停下来等你处理。"
-_QUESTION_POSTED_PUSH_FALLBACK = "团队还在跑，有个问题等你答复。"
 
 
 def attention_kind_of(raw: str) -> AttentionKind | None:
     """Map an interaction / suspension kind string to an 「在等你」 kind.
 
     ``None`` for anything that does not wait on the user (``client_tool``,
-    ``stage_card``) — the caller then emits nothing.
+    ``stage_card``) — the caller then emits nothing. Source of truth is
+    ``INTERACTION_KIND_SPECS.attention``, not a parallel enum table.
     """
+    spec = spec_for_kind(raw)
+    if spec is None or not spec.attention:
+        return None
     try:
         return AttentionKind(raw)
     except ValueError:
@@ -208,11 +200,7 @@ async def _push(
     from agentcore.push import PushNotification, notify_user
 
     headline = _KIND_HEADLINE[kind]
-    fallback = (
-        _QUESTION_POSTED_PUSH_FALLBACK
-        if kind is AttentionKind.QUESTION_POSTED
-        else _PUSH_FALLBACK_BODY
-    )
+    fallback = _PUSH_FALLBACK_BODY
     delivered = await notify_user(
         user_id,
         PushNotification(
@@ -439,49 +427,4 @@ def signal_hot_card_resolved(
             kind=kind,
             title=attention_title(kind, payload),
         )
-    )
-
-
-async def _conversation_owner(conversation_id: str) -> str:
-    """Owner of a live conversation; ``\"\"`` on miss / DB fault (signal degrades)."""
-    cid = (conversation_id or "").strip()
-    if not cid:
-        return ""
-    try:
-        from agentcore.db.base import async_session_factory
-        from agentcore.db.repositories import ConversationRepository
-
-        async with async_session_factory() as db:
-            conv = await ConversationRepository(db).get_by_id_unscoped(cid)
-            return conv.user_id if conv else ""
-    except Exception:  # noqa: BLE001 — a signal must never break settle / sweep
-        return ""
-
-
-async def signal_question_posted_resolved(
-    *,
-    conversation_id: str,
-    turn_id: str,
-    interaction_id: str,
-    payload: Mapping[str, Any] | None = None,
-) -> None:
-    """Clear the 「在等你」badge for a non-blocking question (HTTP settle / TTL).
-
-    Live posting uses :func:`signal_hot_card_required` (ambient turn scope). Settle
-    and the 7-day sweep run outside a turn, so the addressee is the conversation
-    owner when no scope is bound.
-    """
-    scope = current_attention_scope.get()
-    user_id = scope.user_id if scope is not None else ""
-    if not user_id:
-        user_id = await _conversation_owner(conversation_id)
-    if not user_id:
-        return
-    await signal_attention_resolved(
-        user_id=user_id,
-        conversation_id=conversation_id,
-        turn_id=turn_id or (scope.turn_id if scope is not None else ""),
-        interaction_id=interaction_id,
-        kind=AttentionKind.QUESTION_POSTED,
-        title=attention_title(AttentionKind.QUESTION_POSTED, payload),
     )

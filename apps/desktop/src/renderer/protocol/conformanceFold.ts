@@ -91,7 +91,7 @@ import { foldInteractions, hasGatePending } from "./foldInteractions";
 
 export type { ProjectedTurn };
 
-/** Registry-driven message-lane marker fold for `*_required` / question_posted. */
+/** Registry-driven message-lane marker fold for `*_required`. */
 function foldLaneFromInteractionEvent(
   lane: MessageLaneState,
   eventType: string,
@@ -393,9 +393,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       case "plan_review_required":
       case "team_preview_required":
       case "checkpoint_required":
-      case "question_posted":
       case "approval_required":
-      case "delegation_authorization_required":
       case "stage_card_required": {
         maybeRecordInteractionFrame(ev.type, ev, frames);
         messageLane = foldLaneFromInteractionEvent(
@@ -409,9 +407,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       case "team_preview_resolved":
       case "checkpoint_resolved":
       case "approval_resolved":
-      case "delegation_authorization_resolved":
-      case "stage_card_resolved":
-      case "question_resolved": {
+      case "stage_card_resolved": {
         maybeRecordInteractionFrame(ev.type, ev, frames);
         break;
       }
@@ -465,8 +461,6 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       // enumerated so assertNever stays exhaustive against @agentcore/contract-types.
       case "turn_saved":
       case "title_generated":
-      case "followups_generated":
-      case "followups_unavailable":
       case "board_op_required":
       case "board_read_required":
       case "desktop_notify_required":
@@ -513,13 +507,6 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       case "sim.tick_ended":
       case "sim.tick_frame":
       case "sim.world_event":
-      case "sim.show.affection_shift":
-      case "sim.show.departure":
-      case "sim.show.episode_gate":
-      case "sim.show.heart_pick":
-      case "sim.show.pair_formed":
-      case "sim.show.reveal":
-      case "sim.show.zero_vote_alert":
         break;
       case "turn_warning": {
         turnWarning = (ev.payload as TurnWarningPayload).message;

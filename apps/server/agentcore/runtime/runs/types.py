@@ -11,8 +11,7 @@ it moves through (:class:`RunPhase`). The plan that holds nodes lives in
 
 第一阶段范围：worker 以「内联角色」声明（无独立 Agent 实体），因此 ``RunSpec`` 直接携带
 角色/目标/工具等执行所需字段；``agent_id`` 在本阶段即等于 ``run_id``（事件与图
-节点标识沿用），``agent_name`` 取角色名做展示。RunPolicy 中的审计/契约/best-of-N 择优
-（``candidates``）等槽位先声明、暂不启用，留给阶段2。
+节点标识沿用），``agent_name`` 取角色名做展示。
 
 → 见设计: docs/03-AI核心/执行引擎架构设计.md §八（Run 模型）
 """
@@ -37,9 +36,8 @@ class RunKind(StrEnum):
     voice and may ``delegate``); every delegated worker / DAG step is an ``AGENT``
     child.
 
-    无独立 ARENA / debate kind：多轮辩论是带 stance/round 展示标记的普通 AGENT DAG，
-    best-of-N 择优是 ``RunPolicy.candidates`` 策略位——均守「形状是数据不是模式」，不另
-    立节点种类。
+    无独立 ARENA / debate kind：多轮辩论是带 stance/round 展示标记的普通 AGENT DAG——
+    守「形状是数据不是模式」，不另立节点种类。
     """
 
     CAPTAIN = "captain"  # the turn's root run: the CEO chat loop (owns the reply)
@@ -60,6 +58,7 @@ class RunPhase(StrEnum):
 
 # A run that reached one of these is done; the scheduler advances past it and the
 # wave it sits in is complete once all its nodes are terminal.
+# 查询入口（与 FinishReason / TurnOutcome / 关帧集合对照）→ runtime.terminal
 TERMINAL_PHASES = frozenset(
     {RunPhase.COMPLETED, RunPhase.FAILED, RunPhase.SKIPPED, RunPhase.CANCELLED}
 )
@@ -136,9 +135,9 @@ class Deliverable:
     # 调研类两阶段引用验收（块 2）：``two_phase`` = 广搜落盘为 draft（A，不跑成稿
     # 引用闸 / 不因 cite 重试）→ 同 worker 自动升级 B（deep_read 或无编号综述）后再跑
     # 现有引用闸；过 → accepted，不过 → rejected(citations_unverified)。
-    # ``immediate`` / None = 现状（每次合同检查都跑引用闸）。draft 仅内部态，不进
+    # 省略 / None = 现状（每次合同检查都跑引用闸）。draft 仅内部态，不进
     # ``delivery_status.artifacts`` / ``delivered_files``。
-    citation_mode: Literal["immediate", "two_phase"] | None = None
+    citation_mode: Literal["two_phase"] | None = None
     # ``code_audit`` 报告结构闸（L2b）：验配套 ``*.audit.json`` 字段语义
     # （未读全不得中+、高须触发路径等）。与成篇审计硬门正交。
     code_audit_gate: bool = False
@@ -151,10 +150,9 @@ RunContract = Deliverable
 class RunPolicy:
     """Node-level policy slots.
 
-    第一阶段实际生效的：``on_failure``（Wave 只读它做级联：skip/abort/degrade/
-    retry 的「失败后怎么对待下游」）；``max_retries`` / ``retry_delay_ms``
-    （契约返工预算；瞬时限流不整节点重跑）；``result_handling``
-    （执行器拼装下游上下文）。其余字段为阶段2声明位，当前不影响行为。
+    实际生效的：``on_failure``（Wave 只读它做级联：skip/abort/degrade/
+    retry 的「失败后怎么对待下游」——retry 不整节点重跑）；``timeout_s``；
+    ``result_handling``（执行器拼装下游上下文）。
     """
 
     # on_failure (Wave enacts cascade only; a transient does not remount):
@@ -164,23 +162,10 @@ class RunPolicy:
     #   abort   = stop scheduling further waves;
     #   degrade = record failed, let dependents proceed (they see the gap).
     on_failure: Literal["abort", "skip", "degrade", "retry"] = "retry"
-    max_retries: int = 1
-    retry_delay_ms: int = 2000
     timeout_s: int | None = None
     # Fidelity of this node's output when it feeds a dependent node (pass_through
     # / summarize). The executor reads this to size the upstream context block.
     result_handling: str = "pass_through"
-    # ── 阶段2 声明位（当前不生效） ──
-    concurrency_slot: str | None = None
-    shared_roots: bool = False
-    trust: str | None = None
-    autosave_artifact: bool = False
-    preflight: bool = True
-    audit: bool = False
-    # best-of-N 择优策略位（阶段2）：candidates>1 = 同一任务并行跑 N 个候选, 按
-    # selection_criteria 择优。是「策略」不是「节点种类」——无独立 ARENA kind。
-    candidates: int = 1
-    selection_criteria: str = ""
 
 
 @dataclass

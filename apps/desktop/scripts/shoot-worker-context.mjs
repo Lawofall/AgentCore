@@ -1,6 +1,6 @@
 // One-off verification: worker run-detail WorkerContextSection.
-// Preview chat view does NOT mount SidePanel — use view=canvas so showRunDetail
-// has a dock to render into.
+// Preview chat does not mount SidePanel — `?zoom=graph` navigates to the
+// turn-detail page (which does) so showRunDetail has a dock to render into.
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,17 +46,20 @@ async function boot() {
 async function openScenario(page, base, scenario) {
   const url = new URL("index.web.html", base);
   url.searchParams.set("shoot", String(Date.now()));
-  url.hash = `/preview?s=${encodeURIComponent(scenario)}&view=canvas`;
+  url.hash = `/preview?s=${encodeURIComponent(scenario)}&zoom=graph`;
   await page.goto(url.href, { waitUntil: "load", timeout: 30_000 });
   await page.waitForSelector(
     `[data-preview-scenario="${scenario}"][data-preview-frame="full"]`,
     { timeout: 15_000 },
   );
+  await page.waitForURL(/#\/conversations\/preview-.*\/turn\//, {
+    timeout: 10_000,
+  });
   await page.waitForTimeout(SETTLE_MS);
 }
 
 async function openWorkerAndExpandContext(page) {
-  // Canvas graph nodes carry aria-label like「研究员，已完成…」
+  // GraphView nodes carry aria-label like「研究员，已完成…」
   await page
     .getByRole("button", { name: /^研究员，/ })
     .first()

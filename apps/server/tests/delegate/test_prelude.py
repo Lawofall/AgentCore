@@ -40,6 +40,7 @@ def run(arguments: dict, **over):
         "conversation_id": "conv-1",
         "depth": 0,
         "sub_workers_spawned": 0,
+        "credential_source": "user",
     }
     kwargs.update(over)
     return resolve_delegate_prelude(arguments, **kwargs)
@@ -95,6 +96,18 @@ def test_turn_auth_dead_rejects(monkeypatch):
     assert spy.get("delegate.turn_auth_dead_rejected") == {}
 
 
+def test_turn_auth_dead_other_source_does_not_reject(monkeypatch):
+    spy = LogSpy()
+    monkeypatch.setattr(prelude_mod, "logger", spy)
+    token = bind_turn_auth_dead()
+    try:
+        mark_turn_auth_dead(LLMAuthError(provider_name="platform"))
+        accepted({"tasks": _ONE_TASK})
+    finally:
+        reset_turn_auth_dead(token)
+    assert "delegate.turn_auth_dead_rejected" not in [n for n, _ in spy.events]
+
+
 def test_empty_declaration_rejected_with_gate(monkeypatch):
     """既无 tasks 又无 playbook → 声明闸打回，日志带 gate 分类。"""
     spy = LogSpy()
@@ -134,11 +147,11 @@ def test_playbook_expand_errors_rejected(monkeypatch):
 
 
 def test_empty_tasks_rejected_and_clears_playbook_marks():
-    out = rejected({"tasks": [], "playbook_id": "none"})
-    assert "'tasks' 必须是非空数组" in (out.result.error or "")
+    out = rejected({"tasks": []})
+    assert "缺 tasks/playbook" in (out.result.error or "")
     assert out.result.contract_failure is True
-    # 手写臂已把 playbook 标记清空（force 不再走 flags——execute / replan 各自入口解析）。
-    assert out.flags == DelegateCallFlags(playbook=None, playbook_args=None)
+    # 声明闸 empty：flags 尚未写入（execute 仍会清掉上一轮 force）。
+    assert out.flags is None
 
 
 def test_sub_fanout_cap_rejected_at_depth(monkeypatch):
@@ -176,8 +189,6 @@ def test_handwritten_tasks_normalized():
     assert out.playbook_notes == []
     assert out.valid_tools == {s.name for s in tools.list_all()}
     assert out.flags == DelegateCallFlags(playbook=None, playbook_args=None)
-    assert out.presentation_format_warning is None
-    assert out.automation_delivery_warning is None
 
 
 def test_playbook_expands_tasks_and_carries_marks(monkeypatch):

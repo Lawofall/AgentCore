@@ -1,5 +1,6 @@
 import { Markdown } from "@/components/Markdown";
 import { Badge } from "@/components/ui/Badge";
+import { CLAMPED_PRE_CLASS } from "@/lib/clampPreview";
 import { cn } from "@/lib/utils";
 import type { ReplaySpan } from "@/services/adminObservability";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -68,10 +69,10 @@ export function CollapsibleBody({ content }: { content: string }) {
   }
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full">
       <div
         className={cn(
-          "relative",
+          "relative min-w-0",
           !expanded && "max-h-[11rem] overflow-hidden",
         )}
       >
@@ -147,12 +148,22 @@ export function SpanRow({ span }: { span: ReplaySpan }) {
         {open && hasDetail && (
           <div className="mt-1 space-y-1 pl-4">
             {span.args_preview && (
-              <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">
+              <pre
+                className={cn(
+                  CLAMPED_PRE_CLASS,
+                  "rounded bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground",
+                )}
+              >
                 {span.args_preview}
               </pre>
             )}
             {span.result_preview && (
-              <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/60 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+              <pre
+                className={cn(
+                  CLAMPED_PRE_CLASS,
+                  "rounded bg-muted/60 px-2 py-1 font-mono text-[11px] text-muted-foreground",
+                )}
+              >
                 → {span.result_preview}
               </pre>
             )}

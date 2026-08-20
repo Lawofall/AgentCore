@@ -10,8 +10,8 @@
  * Allowed under cross-platform-frontend: protocol constants yes; shared fold
  * implementation no. Gate remains `pnpm conformance`.
  *
- * 协议文案层：空失败脸与降级 chip、挂问、导出 chrome、恢复时刻子句、
- * 排查包 extras 成文（桌面/手机逐字同一份）。
+ * 协议文案层：空失败脸与降级 chip、导出 chrome、恢复时刻子句、
+ * 排查包 extras 成文、交互卡名（桌面/手机逐字同一份）。
  */
 
 export {
@@ -61,15 +61,6 @@ export {
 } from "./teamGain";
 
 export {
-  HANGING_QUESTION_CAPTION,
-  HANGING_QUESTION_CTA,
-  HANGING_QUESTION_DEFAULT_HINT,
-  HANGING_QUESTION_DETACHED_HINT,
-  formatHangingDefault,
-  type HangingAssumptionCopy,
-} from "./hangingQuestion";
-
-export {
   EMPTY_RESPONSE_CHIP_LABELS,
   LLM_EMPTY_RESPONSE_MESSAGE,
   LLM_ERROR_MESSAGE,
@@ -111,3 +102,9 @@ export {
   isOmittedCacheSplit,
   type CacheSplitCounts,
 } from "./cacheUsageDisplay";
+
+export {
+  INTERACTION_CARD_NAME,
+  INTERACTION_CARD_NAME_UNKNOWN,
+  interactionCardName,
+} from "./interactionCardName";

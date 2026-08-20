@@ -208,11 +208,11 @@ async def handle_tool_calls_round(
         # narration stays visible there (透明可见), only its persisted content
         # (messages.content, 旁路 conformance) is trimmed.
         from agentcore.runtime.coordination.session import (
-            active_coordination,
             attached_inject_closed_visibly,
+            resolve_coordination_session,
         )
 
-        coord = active_coordination(tool_context.execution_id)
+        coord = resolve_coordination_session(tool_context.execution_id)
         attached_inject_closing = (
             on_reset is None
             and coord is not None

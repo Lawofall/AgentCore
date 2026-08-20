@@ -1,11 +1,11 @@
 """Unified interaction primitive — the one suspend-resume bridge (§8.2 / §8.6).
 
-Hot-path kinds (approval / delegation_authorization / escalation / client_tool) share
+Hot-path kinds (approval / escalation / client_tool) share
 ONE in-process :class:`InteractionRegistry`: the engine task awaits an
 :class:`asyncio.Future`; a separate HTTP request (the unified resolve endpoint) settles
 it. Cold-path kinds (``ask_user`` / ``plan_review`` / ``team_preview``) do **not** await
 here — they finalize the turn onto a durable frame and continue via ``POST .../resume``.
-``stage_card`` / ``question_posted`` are journaled surfaces without a bridge Future.
+``stage_card`` is a journaled surface without a bridge Future.
 
 This is the §8.6 **ClientRequestBridge** port (Protocol in ``runtime/ports.py``):
 one pending registry → one ``list_pending`` → one resolve endpoint for hot-path kinds.
@@ -60,14 +60,6 @@ class InteractionKind(StrEnum):
     # Unlike the halting gates above, this does NOT pause the turn — siblings keep running
     # and a timeout degrades to the worker's stated assumption (设计: 06-规划/阻塞式求决策设计).
     ESCALATION = "escalation"
-    # 委派级授权 (delegation grant): the CEO's delegate call suspends before workers
-    # start so the user can grant medium-risk tools for the whole delegation in one
-    # click → result: DelegationAuthorizationDecision (grant_delegation / per_call / deny).
-    DELEGATION_AUTHORIZATION = "delegation_authorization"
-    # Non-blocking ask card (ask_user tool with blocking=false). Not awaited on the
-    # bridge Future — journal / InteractionStore still track it as a first-class kind
-    # so reload re-renders the card. Wire pair: ``question_posted`` / ``question_resolved``.
-    QUESTION_POSTED = "question_posted"
     # 阶段推进卡（批 B）：幕 1 收尾后耐久登记；resolve 起新回合开辩 / 回灌调研；
     # 不挂起幕 1，不占 bridge Future。用户绕过发消息 → orphaned。
     STAGE_CARD = "stage_card"
@@ -75,47 +67,155 @@ class InteractionKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class InteractionKindSpec:
-    """Wire metadata for one user-facing interaction kind.
+    """Complete declaration of one user-facing interaction form.
 
-    ``required_event`` / ``resolved_event`` / ``id_field`` must stay aligned with
-    ``EventType`` + payload models — journal fold, recovery, and frontend codegen
-    all read this table (no parallel hand-copied maps).
+    Wire triple (``required_event`` / ``resolved_event`` / ``id_field``) must stay
+    aligned with ``EventType`` + payload models. Behavior flags are the single
+    source for hot-path / gate / recovery / journal-surface / attention subsets —
+    consumers derive frozensets from this table instead of hand-copying kind names.
+    Dumped by ``scripts/dump_interaction_kinds.py`` (``pnpm gen:types``).
     """
 
     required_event: str
     resolved_event: str | None
     id_field: str
+    # In-process Future on :class:`InteractionRegistry` (resolve via HTTP while
+    # the engine task awaits). Not the same as ``pauses_turn``: escalation is hot
+    # but siblings keep running.
+    hot: bool
+    # Pending card pauses the host turn in ProjectedTurn (GATE). Cold-path kinds
+    # that persist to ``paused_turns`` are ``pauses_turn and not hot``.
+    pauses_turn: bool
+    # ``GET …/recovery`` pending subset: user can answer after reload / reconnect.
+    reconnect_answerable: bool
+    # ``required_event`` counts as a journal surface (reload must keep events).
+    journal_surface: bool
+    # Maps to the account-level 「在等你」 signal. Progress-only kinds stay false.
+    attention: bool
 
 
-# User-facing decision / ask kinds → SSE wire shape. ``CLIENT_TOOL`` excluded.
+# User-facing decision / ask kinds → wire shape + behavior. ``CLIENT_TOOL`` excluded
+# (bridge-only workspace / board ops; no user-facing card).
 INTERACTION_KIND_SPECS: Mapping[InteractionKind, InteractionKindSpec] = {
     InteractionKind.APPROVAL: InteractionKindSpec(
-        "approval_required", "approval_resolved", "approval_id"
-    ),
-    InteractionKind.DELEGATION_AUTHORIZATION: InteractionKindSpec(
-        "delegation_authorization_required",
-        "delegation_authorization_resolved",
-        "authorization_id",
+        "approval_required",
+        "approval_resolved",
+        "approval_id",
+        hot=True,
+        pauses_turn=True,
+        reconnect_answerable=True,
+        journal_surface=True,
+        attention=True,
     ),
     InteractionKind.ESCALATION: InteractionKindSpec(
-        "escalation_required", "escalation_resolved", "escalation_id"
+        "escalation_required",
+        "escalation_resolved",
+        "escalation_id",
+        hot=True,
+        pauses_turn=False,
+        reconnect_answerable=True,
+        journal_surface=True,
+        attention=True,
     ),
     InteractionKind.ASK_USER: InteractionKindSpec(
-        "checkpoint_required", "checkpoint_resolved", "checkpoint_id"
+        "checkpoint_required",
+        "checkpoint_resolved",
+        "checkpoint_id",
+        hot=False,
+        pauses_turn=True,
+        reconnect_answerable=False,
+        journal_surface=True,
+        attention=True,
     ),
     InteractionKind.PLAN_REVIEW: InteractionKindSpec(
-        "plan_review_required", "plan_review_resolved", "checkpoint_id"
+        "plan_review_required",
+        "plan_review_resolved",
+        "checkpoint_id",
+        hot=False,
+        pauses_turn=True,
+        reconnect_answerable=False,
+        journal_surface=True,
+        attention=True,
     ),
     InteractionKind.TEAM_PREVIEW: InteractionKindSpec(
-        "team_preview_required", "team_preview_resolved", "checkpoint_id"
-    ),
-    InteractionKind.QUESTION_POSTED: InteractionKindSpec(
-        "question_posted", "question_resolved", "ask_id"
+        "team_preview_required",
+        "team_preview_resolved",
+        "checkpoint_id",
+        hot=False,
+        pauses_turn=True,
+        reconnect_answerable=False,
+        journal_surface=True,
+        attention=True,
     ),
     InteractionKind.STAGE_CARD: InteractionKindSpec(
-        "stage_card_required", "stage_card_resolved", "stage_card_id"
+        "stage_card_required",
+        "stage_card_resolved",
+        "stage_card_id",
+        hot=False,
+        pauses_turn=False,
+        reconnect_answerable=True,
+        journal_surface=True,
+        attention=False,
     ),
 }
+
+
+def _kind_values(*, attr: str) -> frozenset[str]:
+    return frozenset(
+        kind.value for kind, spec in INTERACTION_KIND_SPECS.items() if getattr(spec, attr)
+    )
+
+
+HOT_KINDS: frozenset[str] = _kind_values(attr="hot")
+GATE_KINDS: frozenset[str] = _kind_values(attr="pauses_turn")
+RECOVERY_PENDING_KINDS: frozenset[str] = _kind_values(attr="reconnect_answerable")
+ATTENTION_KINDS: frozenset[str] = _kind_values(attr="attention")
+JOURNAL_SURFACE_EVENTS: frozenset[str] = frozenset(
+    spec.required_event for spec in INTERACTION_KIND_SPECS.values() if spec.journal_surface
+)
+# Cold-path kinds that persist to ``paused_turns`` (设计 §4.7). Derived: gate that
+# is not an in-process Future. :class:`~agentcore.runtime.suspension.SuspensionKind`
+# mirrors this set (ratchet in ``tests/test_suspension_kind_registry.py``).
+DURABLE_INTERACTION_KINDS: frozenset[InteractionKind] = frozenset(
+    kind
+    for kind, spec in INTERACTION_KIND_SPECS.items()
+    if spec.pauses_turn and not spec.hot
+)
+
+
+def spec_for_kind(kind: str | InteractionKind) -> InteractionKindSpec | None:
+    """Look up a user-facing spec; ``None`` for bridge-only / unknown strings."""
+    if isinstance(kind, InteractionKind):
+        return INTERACTION_KIND_SPECS.get(kind)
+    try:
+        return INTERACTION_KIND_SPECS.get(InteractionKind(kind))
+    except ValueError:
+        return None
+
+
+def is_user_answerable(kind: str, payload: dict[str, Any] | None) -> bool:
+    """False when this instance is CEO-arbitrated (``awaiting=ceo``), not a user card.
+
+    Kind-level flags still say escalation is hot / reconnect-answerable / attention;
+    the payload discriminator is the only instance filter (not a parallel kind set).
+    Unknown kinds are not user-answerable.
+    """
+    if spec_for_kind(kind) is None:
+        return False
+    return (payload or {}).get("awaiting") != "ceo"
+
+
+def is_hot_user_pending_kind(kind: str, payload: dict[str, Any] | None) -> bool:
+    """True for hot-path kinds awaiting the user (excludes ``awaiting=ceo``).
+
+    Also the gate for the AI attention signal (云对话多端同权 B2): a card the CEO
+    arbitrates has not stopped the turn on a human, so it must not reach the user's
+    firehose or their phone either.
+    """
+    spec = spec_for_kind(kind)
+    if spec is None or not spec.hot:
+        return False
+    return is_user_answerable(kind, payload)
 
 
 @dataclass
@@ -273,7 +373,6 @@ def _blocking_card_kind(
     attention package pulls in the messaging hub + push transport.
     """
     from agentcore.attention import attention_kind_of
-    from agentcore.runtime.interaction_orphan import is_hot_user_pending_kind
 
     if not is_hot_user_pending_kind(kind.value, payload):
         return None

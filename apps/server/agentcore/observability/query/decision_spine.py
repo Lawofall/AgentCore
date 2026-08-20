@@ -15,6 +15,11 @@ Token 口径（复盘必读）：
   （含 pause 前段 / team_preview 前）。
 - ``tail`` / ``turn_metrics`` tokens = 收口折账；``kind=resume`` 时通常只有 resume
   段 usage（不含 pause 前 captain），与 ``llm`` 合计可能不一致——属两口径，非漂移必修。
+
+执行面（保持可扫）：``execution`` 是折叠摘要——工具按名聚合、run 只取
+``obs.turn_spans`` 的 ``invoke_agent`` 行（失败优先、有上限）、prepare 分段一行。
+成功工具 / 逐条 ``llm.call`` 不进 ``decisions``；失败 ``llm.call_failed`` 与失败
+``tool.execute_end`` 一样上脊。
 """
 
 from __future__ import annotations
@@ -53,8 +58,17 @@ _ACTIVE_DECISION_EVENTS = frozenset(
         # Local solo cancel has no coordination.user_stop_* — these are the fingerprint.
         "sidecar.turn_cancel_requested",
         "sidecar.turn_cancelled",
+        # Execution-layer failures (rare; same "obvious failure only" bar as tools).
+        "llm.call_failed",
+        "llm.rate_limit_no_retry",
+        "chat.prepare_local_io_abort",
     }
 )
+
+# Folded execution summary caps — if these grow, the spine stops being scannable.
+_MAX_RUN_ROWS = 8
+_MAX_TOOL_GROUPS = 12
+_MAX_TOOL_LINE_GROUPS = 6
 
 # S3-retired: production no longer emits; still surface when reading pre-S3 JSONL.
 # Do not treat as current contract — see docs「委派验收事件（S3 后）」.
@@ -146,6 +160,20 @@ _DECISION_KEEP_KEYS = (
     "count",
     "codes",
     "tools",
+    "model",
+    "scenario",
+    "latency_ms",
+    "error_type",
+    "credential_source",
+    "provider_id",
+    "provider",
+    "phase",
+    "ms",
+    "detail",
+    "attempt",
+    "cooldown_sec",
+    "cooldown_source",
+    "ceiling_sec",
 )
 
 
@@ -230,6 +258,147 @@ def _iter_decisions(log_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _int_field(ev: dict[str, Any], key: str) -> int:
+    try:
+        return int(ev.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _scenario_slot(scenarios: dict[str, dict[str, Any]], name: str) -> dict[str, Any]:
+    slot = scenarios.get(name)
+    if slot is None:
+        slot = {
+            "scenario": name,
+            "calls": 0,
+            "failed": 0,
+            "latency_ms_max": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+        }
+        scenarios[name] = slot
+    return slot
+
+
+def _runs_from_obs(log_events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Fold ``obs.turn_spans`` to invoke_agent rows only (not the tool firehose)."""
+    for ev in reversed(log_events):
+        if ev.get("event") != "obs.turn_spans":
+            continue
+        items: list[dict[str, Any]] = []
+        for span in ev.get("spans") or []:
+            if not isinstance(span, dict) or span.get("operation") != "invoke_agent":
+                continue
+            raw_attrs = span.get("attributes")
+            attrs = raw_attrs if isinstance(raw_attrs, dict) else {}
+            items.append(
+                {
+                    "name": span.get("name"),
+                    "status": span.get("status"),
+                    "duration_ms": span.get("duration_ms"),
+                    "run_id": attrs.get("agentcore.run.id"),
+                    "kind": attrs.get("agentcore.run.kind"),
+                    "role": attrs.get("agentcore.run.role"),
+                }
+            )
+        items.sort(
+            key=lambda row: (
+                0 if row.get("status") == "error" else 1,
+                -(row.get("duration_ms") or 0),
+            )
+        )
+        shown = items[:_MAX_RUN_ROWS]
+        hidden = len(items) - len(shown)
+        block: dict[str, Any] = {
+            "source": "obs.turn_spans",
+            "span_count": ev.get("span_count"),
+            "truncated": bool(ev.get("truncated")),
+            "dropped": int(ev.get("dropped") or 0),
+            "items": shown,
+        }
+        if hidden:
+            block["hidden_runs"] = hidden
+        return block
+    return None
+
+
+def _execution_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compact execution map: grouped tools + run skeleton + prepare phases."""
+    tools: dict[str, dict[str, Any]] = {}
+    starts = 0
+    ends = 0
+    for ev in log_events:
+        event = ev.get("event")
+        if event == "tool.execute_start":
+            starts += 1
+            continue
+        if event != "tool.execute_end":
+            continue
+        ends += 1
+        name = str(ev.get("tool") or "?")
+        slot = tools.setdefault(
+            name, {"tool": name, "ok": 0, "error": 0, "ms_sum": 0, "ms_max": 0}
+        )
+        ms = _int_field(ev, "duration_ms")
+        slot["ms_sum"] += ms
+        if ms > slot["ms_max"]:
+            slot["ms_max"] = ms
+        if ev.get("status") == "error":
+            slot["error"] += 1
+        else:
+            slot["ok"] += 1
+
+    by_tool = sorted(
+        tools.values(),
+        key=lambda row: (-row["error"], -row["ms_sum"], row["tool"]),
+    )
+    other: dict[str, Any] | None = None
+    if len(by_tool) > _MAX_TOOL_GROUPS:
+        rest = by_tool[_MAX_TOOL_GROUPS:]
+        by_tool = by_tool[:_MAX_TOOL_GROUPS]
+        other = {
+            "tools": len(rest),
+            "ok": sum(row["ok"] for row in rest),
+            "error": sum(row["error"] for row in rest),
+            "ms_sum": sum(row["ms_sum"] for row in rest),
+        }
+
+    ok = sum(row["ok"] for row in tools.values())
+    error = sum(row["error"] for row in tools.values())
+    in_flight = max(0, starts - ends)
+
+    prepare_phases: list[dict[str, Any]] = []
+    for ev in log_events:
+        if ev.get("event") != "chat.prepare_phase":
+            continue
+        phase = ev.get("phase")
+        if not phase:
+            continue
+        prepare_phases.append({"phase": str(phase), "ms": _int_field(ev, "ms")})
+
+    execution: dict[str, Any] = {}
+    runs = _runs_from_obs(log_events)
+    if runs is not None:
+        execution["runs"] = runs
+    if tools or in_flight:
+        tool_block: dict[str, Any] = {
+            "calls": ok + error,
+            "ok": ok,
+            "error": error,
+            "in_flight": in_flight,
+            "by_tool": by_tool,
+        }
+        if other is not None:
+            tool_block["other"] = other
+        execution["tools"] = tool_block
+    if prepare_phases:
+        execution["prepare"] = {
+            "phases": prepare_phases,
+            "ms_sum": sum(row["ms"] for row in prepare_phases),
+        }
+    return execution
+
+
 def _llm_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
     calls = 0
     failed = 0
@@ -237,6 +406,8 @@ def _llm_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
     input_tokens = 0
     output_tokens = 0
     cost_nano = 0
+    scenarios: dict[str, dict[str, Any]] = {}
+    slowest: dict[str, Any] | None = None
     for ev in log_events:
         event = ev.get("event")
         if event == "llm.call":
@@ -244,15 +415,37 @@ def _llm_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
             model = ev.get("model")
             if model:
                 models[str(model)] = models.get(str(model), 0) + 1
-            input_tokens += int(ev.get("input_tokens") or 0)
-            output_tokens += int(ev.get("output_tokens") or 0)
-            cost_nano += int(ev.get("cost_nano") or 0)
+            inp = _int_field(ev, "input_tokens")
+            out_tok = _int_field(ev, "output_tokens")
+            input_tokens += inp
+            output_tokens += out_tok
+            cost_nano += _int_field(ev, "cost_nano")
+            scenario = str(ev.get("scenario") or "?")
+            slot = _scenario_slot(scenarios, scenario)
+            slot["calls"] += 1
+            slot["input_tokens"] += inp
+            slot["output_tokens"] += out_tok
+            latency = _int_field(ev, "latency_ms")
+            if latency > slot["latency_ms_max"]:
+                slot["latency_ms_max"] = latency
+            if latency > 0 and (
+                slowest is None or latency > int(slowest.get("latency_ms") or 0)
+            ):
+                slowest = {
+                    "timestamp": ev.get("timestamp", ""),
+                    "model": ev.get("model"),
+                    "scenario": scenario,
+                    "latency_ms": latency,
+                    "input_tokens": inp,
+                    "output_tokens": out_tok,
+                }
         elif event == "llm.call_failed":
             failed += 1
             model = ev.get("model")
             if model:
                 models[str(model)] = models.get(str(model), 0) + 1
-    return {
+            _scenario_slot(scenarios, str(ev.get("scenario") or "?"))["failed"] += 1
+    out: dict[str, Any] = {
         "calls": calls,
         "failed": failed,
         "models": [{"model": m, "calls": n} for m, n in sorted(models.items())],
@@ -262,6 +455,14 @@ def _llm_summary(log_events: list[dict[str, Any]]) -> dict[str, Any]:
         # 与 turn_metrics/tail 区分：此处为全 trace ``llm.call`` 合计（含 pause 前）。
         "token_scope": "full_trace",
     }
+    if scenarios:
+        out["by_scenario"] = sorted(
+            scenarios.values(),
+            key=lambda row: (-row["failed"], -row["calls"], row["scenario"]),
+        )
+    if slowest is not None and calls >= 2:
+        out["slowest"] = slowest
+    return out
 
 
 def _jsonl_collab_recompute(log_events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -526,7 +727,7 @@ def build_decision_spine(
         },
     }
 
-    return {
+    spine: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "trace_id": resolved_trace,
         "conversation_id": resolved_cid,
@@ -537,6 +738,82 @@ def build_decision_spine(
         "cost": _cost_block(cost_events, log_events),
         "health": health,
     }
+    execution = _execution_summary(log_events)
+    if execution:
+        spine["execution"] = execution
+    return spine
+
+
+def _format_ms(ms: int) -> str:
+    if ms >= 1000:
+        return f"{ms / 1000:.1f}s"
+    return f"{ms}ms"
+
+
+def _format_execution(execution: dict[str, Any]) -> list[str]:
+    """Human Exec block — grouped tools + capped run rows + one Prep line."""
+    if not execution:
+        return []
+    tools = execution.get("tools") or {}
+    runs = execution.get("runs") or {}
+    prepare = execution.get("prepare") or {}
+    lines: list[str] = []
+
+    bits: list[str] = []
+    if tools:
+        bits.append(
+            f"tools={tools.get('calls', 0)} ok={tools.get('ok', 0)} err={tools.get('error', 0)}"
+        )
+        if tools.get("in_flight"):
+            bits.append(f"in_flight={tools['in_flight']}")
+        groups: list[str] = []
+        for row in (tools.get("by_tool") or [])[:_MAX_TOOL_LINE_GROUPS]:
+            err = int(row.get("error") or 0)
+            ok_n = int(row.get("ok") or 0)
+            ms_s = _format_ms(int(row.get("ms_sum") or 0))
+            name = row.get("tool") or "?"
+            if err:
+                groups.append(f"{name} {ok_n}ok/{err}err {ms_s}")
+            else:
+                groups.append(f"{name} {ok_n}ok {ms_s}")
+        other = tools.get("other")
+        leftover = max(0, len(tools.get("by_tool") or []) - _MAX_TOOL_LINE_GROUPS)
+        extra_groups = leftover + int((other or {}).get("tools") or 0)
+        if extra_groups:
+            groups.append(f"+{extra_groups} tools")
+        if groups:
+            bits.append("[" + " · ".join(groups) + "]")
+    elif runs:
+        bits.append(f"runs source={runs.get('source')}")
+    if bits:
+        lines.append("  Exec  " + "  ".join(bits))
+    elif prepare:
+        lines.append("  Exec")
+
+    for row in runs.get("items") or []:
+        status = str(row.get("status") or "?")
+        icon = "[E]" if status == "error" else "   "
+        dur = f"  {row['duration_ms']}ms" if row.get("duration_ms") is not None else ""
+        extra = row.get("kind") or row.get("role") or ""
+        extra_s = f"  {extra}" if extra else ""
+        label = row.get("name") or row.get("run_id") or "?"
+        lines.append(f"        {icon} {label}  {status}{dur}{extra_s}")
+    hidden_bits: list[str] = []
+    if runs.get("hidden_runs"):
+        hidden_bits.append(f"+{runs['hidden_runs']} runs")
+    if runs.get("truncated"):
+        hidden_bits.append(f"spans truncated dropped={runs.get('dropped')}")
+    if hidden_bits:
+        lines.append("        " + "  ".join(hidden_bits))
+
+    if prepare:
+        phase_s = " ".join(
+            f"{p['phase']}={p['ms']}ms" for p in (prepare.get("phases") or [])
+        )
+        if len(phase_s) > 120:
+            phase_s = phase_s[:117] + "..."
+        lines.append(f"        Prep  {phase_s}  sum={prepare.get('ms_sum')}ms")
+    return lines
 
 
 def _format_cost_line(cost: dict[str, Any]) -> str:
@@ -631,6 +908,8 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
         hist = " (historical/S3)" if ev in _HISTORICAL_DECISION_EVENTS else ""
         lines.append(f"    {dts}  {icon} {ev}{hist}  {detail_s}".rstrip())
 
+    lines.extend(_format_execution(spine.get("execution") or {}))
+
     llm = spine.get("llm") or {}
     model_bits = ", ".join(
         f"{m['model']}×{m['calls']}" for m in (llm.get("models") or [])
@@ -642,6 +921,23 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
         + f"  tok_in={llm.get('input_tokens', 0)} tok_out={llm.get('output_tokens', 0)}"
         + f"  (scope={llm_scope})"
     )
+    by_sc = llm.get("by_scenario") or []
+    if len(by_sc) > 1:
+        sc_bits = []
+        for row in by_sc:
+            bit = f"{row.get('scenario')}×{row.get('calls', 0)}"
+            if row.get("failed"):
+                bit += f"/{row['failed']}fail"
+            sc_bits.append(bit)
+        lines.append("         scenario  " + "  ".join(sc_bits))
+    slowest = llm.get("slowest")
+    if slowest:
+        lines.append(
+            "         slowest  "
+            f"{slowest.get('model') or '?'}  {slowest.get('scenario')}"
+            f"  {slowest.get('latency_ms')}ms"
+            f"  in={slowest.get('input_tokens')} out={slowest.get('output_tokens')}"
+        )
 
     tail = spine.get("tail") or {}
     tail_bits = [

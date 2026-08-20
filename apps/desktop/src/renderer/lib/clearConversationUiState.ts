@@ -4,7 +4,6 @@
  * Import this (or call {@link clearConversationUiState} from here) before
  * deleting a conversation.
  */
-import "@/lib/canvasTurnView";
 import "@/stores/composer";
 import "@/stores/disclosure";
 import "@/stores/graph";

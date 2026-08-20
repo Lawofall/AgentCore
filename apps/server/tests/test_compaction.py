@@ -1440,6 +1440,7 @@ async def test_platform_day_reset_dates_the_wall_through_the_real_gate(monkeypat
     date survives the whole hop, not just the helper that reads it.
     """
     from agentcore.billing import gate as gate_mod
+    from agentcore.billing.gate import BackgroundGateResolve
     from agentcore.core.errors import (
         RETRY_AFTER_FROM_HEADER,
         LLMQuotaExceededError,
@@ -1468,11 +1469,13 @@ async def test_platform_day_reset_dates_the_wall_through_the_real_gate(monkeypat
         gate_mod,
         "resolve_and_gate_background",
         AsyncMock(
-            return_value=LLMCredentials(
-                api_key="sk-platform",
-                base_url="https://p.example/v1",
-                default_model="flash",
-                source="platform",
+            return_value=BackgroundGateResolve(
+                credentials=LLMCredentials(
+                    api_key="sk-platform",
+                    base_url="https://p.example/v1",
+                    default_model="flash",
+                    source="platform",
+                )
             )
         ),
     )

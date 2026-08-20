@@ -17,7 +17,6 @@ afterEach(cleanup);
 
 const emptyCards = {
   checkpoints: [] as never[],
-  nonBlockingAsks: [] as never[],
   planReviews: [] as never[],
   teamPreviews: [] as never[],
 };

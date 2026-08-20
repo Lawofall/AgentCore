@@ -4,8 +4,8 @@
 供 ``GET …/recovery``（热路 pending 子集）+ conformance oracle（ProjectedTurn.interactions）共用——
 **单一实现，不双写规则**。
 
-9 kind：approval / delegation_authorization / escalation /
-ask_user / plan_review / team_preview / question_posted / stage_card。
+7 user-facing kind：approval / escalation /
+ask_user / plan_review / team_preview / stage_card。
 
 ``awaiting=ceo`` 的 escalation 不进用户可答清单（由活着的 CEO 仲裁）。
 冷路（ask_user / plan_review / team_preview）的 frame 恢复仍走 ``paused_turns``；
@@ -17,7 +17,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from agentcore.runtime.interaction import INTERACTION_KIND_SPECS
+from agentcore.runtime.interaction import (
+    INTERACTION_KIND_SPECS,
+    RECOVERY_PENDING_KINDS,
+    is_user_answerable,
+)
 
 InteractionStatus = Literal["pending", "resolved", "orphaned"]
 
@@ -27,17 +31,6 @@ _KIND_SPEC: dict[str, tuple[str, str | None, str]] = {
     kind.value: (spec.required_event, spec.resolved_event, spec.id_field)
     for kind, spec in INTERACTION_KIND_SPECS.items()
 }
-
-_HOT_KINDS = frozenset(
-    {"approval", "delegation_authorization", "escalation"}
-)
-# recovery 可答清单：热路 + 跨回合耐久推进卡（幕1 已收尾、resolve 起新回合）
-_RECOVERY_PENDING_KINDS = _HOT_KINDS | frozenset({"stage_card"})
-
-# Gate kinds that pause the turn in ProjectedTurn (hot approval/delegation + cold path).
-GATE_KINDS = frozenset(
-    {"approval", "ask_user", "plan_review", "team_preview", "delegation_authorization"}
-)
 
 _REQUIRED_TO_KIND = {required: kind for kind, (required, _, _) in _KIND_SPEC.items()}
 _RESOLVED_TO_KIND = {
@@ -90,8 +83,7 @@ def fold_interactions(entries: list[dict[str, Any]]) -> list[InteractionRecord]:
     """Fold journal/SSE entries → full interaction list (insertion order of required).
 
     ``entries`` are ``{kind|type, payload}`` dicts.     Terminal status is pending until a
-    matching resolved/orphaned settles it. ``question_posted`` settles on
-    ``question_resolved`` (answered / discarded). ``awaiting=ceo`` escalations are
+    matching resolved/orphaned settles it. ``awaiting=ceo`` escalations are
     omitted entirely.
     """
     by_key: dict[tuple[str, str], _Open] = {}
@@ -117,7 +109,7 @@ def fold_interactions(entries: list[dict[str, Any]]) -> list[InteractionRecord]:
             iid = str(payload.get(id_field) or "")
             if not iid:
                 continue
-            if kind == "escalation" and payload.get("awaiting") == "ceo":
+            if not is_user_answerable(kind, payload):
                 continue
             key = (kind, iid)
             existing = by_key.get(key)
@@ -182,7 +174,7 @@ def fold_pending_interactions(
             payload=rec.payload,
         )
         for rec in fold_interactions(entries)
-        if rec.status == "pending" and rec.kind in _RECOVERY_PENDING_KINDS
+        if rec.status == "pending" and rec.kind in RECOVERY_PENDING_KINDS
     ]
 
 
@@ -248,14 +240,6 @@ def project_interaction_leaf(rec: InteractionRecord) -> dict[str, Any]:
             if projected_models:
                 leaf["modelOverrides"] = projected_models
         return leaf
-    if rec.kind == "delegation_authorization":
-        # Wire field is ``tools`` (not grantable_tools) — P3 drift fix.
-        return {
-            **base,
-            "executionId": p.get("execution_id", ""),
-            "workers": p.get("workers") or [],
-            "tools": p.get("tools") or [],
-        }
     if rec.kind == "escalation":
         esc: dict[str, Any] = {
             **base,
@@ -267,23 +251,6 @@ def project_interaction_leaf(rec: InteractionRecord) -> dict[str, Any]:
         if p.get("awaiting") in ("user", "ceo"):
             esc["awaiting"] = p["awaiting"]
         return esc
-    if rec.kind == "question_posted":
-        question_leaf: dict[str, Any] = {
-            **base,
-            "question": p.get("question", ""),
-            "context": p.get("context", ""),
-        }
-        resolution = rec.resolution or {}
-        settlement = resolution.get("status")
-        if rec.status == "resolved" and settlement in ("answered", "discarded"):
-            question_leaf["settlement"] = settlement
-            answer = resolution.get("answer")
-            if isinstance(answer, str) and answer:
-                question_leaf["answer"] = answer
-            note = resolution.get("note")
-            if isinstance(note, str) and note:
-                question_leaf["note"] = note
-        return question_leaf
     if rec.kind == "stage_card":
         return {
             **base,

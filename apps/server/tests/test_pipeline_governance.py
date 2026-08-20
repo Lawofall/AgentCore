@@ -28,7 +28,7 @@ from types import SimpleNamespace
 from agentcore.core.types import ToolCategory
 from agentcore.llm.provider.protocol import LLMChunk, ToolCallDelta
 from agentcore.runtime import pipeline
-from agentcore.runtime.events import EventSink, EventType, FinishReason, followups_generated
+from agentcore.runtime.events import EventSink, EventType, FinishReason, title_generated
 from agentcore.tools.protocol import ToolResult, ToolSchema
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -201,13 +201,13 @@ async def test_pipeline_leaves_sink_open_for_post_turn_tail(monkeypatch):
     assert sink._closed is False
 
     # The tail emit persist_turn_result does after the pipeline still lands on the sink.
-    sink.emit(followups_generated(["帮我把结论整理成一页纪要"], conversation_id="conv-1", message_id="m1"))
+    sink.emit(title_generated("帮我把结论整理成一页纪要", conversation_id="conv-1"))
     sink.close()  # the owner (here, the test) closes once the tail is emitted
     types = [e.type async for e in sink]
 
-    assert EventType.FOLLOWUPS_GENERATED in types
+    assert EventType.TITLE_GENERATED in types
     # …and it arrives AFTER message_end (a genuine post-turn tail, not mid-stream).
-    assert types.index(EventType.FOLLOWUPS_GENERATED) > types.index(EventType.MESSAGE_END)
+    assert types.index(EventType.TITLE_GENERATED) > types.index(EventType.MESSAGE_END)
 
 
 async def test_unproductive_early_stop_reaches_message_end_and_persisted_runs(

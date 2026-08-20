@@ -212,13 +212,6 @@ def test_parse_force_scopes_named_gates():
     assert not scopes.allows(GATE_SEAT_OVERLAP)
 
 
-def test_parse_force_scopes_legacy_bool_opens_nothing():
-    """一键全开退役：布尔 force 不再映射成四道闸全放行。"""
-    scopes = parse_force_scopes(True)
-    assert not any(scopes.allows(g) for g in FORCE_GATES)
-    assert bool(scopes) is False
-
-
 def test_parse_force_scopes_ignores_unknown_and_empty():
     assert not bool(parse_force_scopes(["all", "", "nope"]))
     assert not bool(parse_force_scopes(None))
@@ -277,7 +270,7 @@ async def test_delegate_force_scope_reset_per_call():
     assert force_allows(t, GATE_ISOMORPHIC)
 
     # 前奏硬拒（空 tasks）也必须先清掉上一次的 scope。
-    rejected = await t.execute({"tasks": [], "playbook_id": "none"}, ctx())
+    rejected = await t.execute({"tasks": []}, ctx())
     assert rejected.success is False
     assert not force_allows(t, GATE_ISOMORPHIC)
     clear_active_coordination()

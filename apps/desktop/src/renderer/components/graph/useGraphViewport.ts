@@ -31,7 +31,6 @@ export function useGraphViewport({
   const rfRef = useRef<ReactFlowInstance | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [colWidth, setColWidth] = useState(0);
-  const [colHeight, setColHeight] = useState(0);
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
   const [overflowing, setOverflowing] = useState(false);
   const viewportSettledRef = useRef(false);
@@ -68,17 +67,14 @@ export function useGraphViewport({
   }, []);
 
   useEffect(() => {
-    if (fitMode !== "width" && fitMode !== "contain") return;
+    if (fitMode !== "width") return;
     const el = containerRef.current;
     if (!el) return;
     setColWidth(el.clientWidth);
-    setColHeight(el.clientHeight);
     const ro = new ResizeObserver((entries) => {
       const rect = entries[0]?.contentRect;
       const w = rect?.width ?? 0;
       if (w > 0) setColWidth(w);
-      const h = rect?.height ?? 0;
-      if (h > 0) setColHeight(h);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -124,31 +120,6 @@ export function useGraphViewport({
     }
     onMeasure?.({ height: fit.height, overflowing: fit.overflowing });
   }, [fitMode, rfInstance, bbox, bboxKey, colWidth, layoutReady, onMeasure]);
-
-  useEffect(() => {
-    if (
-      fitMode !== "contain" ||
-      !rfInstance ||
-      !bbox ||
-      colWidth <= 0 ||
-      colHeight <= 0 ||
-      !layoutReady ||
-      !bboxKey
-    ) {
-      return;
-    }
-    const zoom = Math.min(1, colWidth / bbox.width, colHeight / bbox.height);
-    const renderedW = bbox.width * zoom;
-    const renderedH = bbox.height * zoom;
-    const x = Math.max(0, (colWidth - renderedW) / 2);
-    const y = Math.max(0, (colHeight - renderedH) / 2);
-    const animate = viewportSettledRef.current && !prefersReducedMotion();
-    rfInstance.setViewport(
-      { x, y, zoom },
-      animate ? { duration: 200 } : undefined,
-    );
-    viewportSettledRef.current = true;
-  }, [fitMode, rfInstance, bbox, bboxKey, colWidth, colHeight, layoutReady]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

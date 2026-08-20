@@ -60,13 +60,11 @@ import { CollapsibleUserText } from "@/components/CollapsibleUserText";
 import { ComposerMentionSheet } from "@/components/ComposerMentionSheet";
 import { ComposerMoreSheet } from "@/components/ComposerMoreSheet";
 import { ConversationDrawer } from "@/components/ConversationDrawer";
-import { DelegationAuthorizationCard } from "@/components/DelegationAuthorizationCard";
 import {
   type DraftFolder,
   DraftFolderChip,
 } from "@/components/DraftFolderChip";
 import { FileArtifactsCard } from "@/components/FileArtifactsCard";
-import { HangingQuestionBar } from "@/components/HangingQuestionBar";
 import { MemoryUpdateCard } from "@/components/MemoryUpdateCard";
 import { ModelPicker } from "@/components/ModelPicker";
 import { PauseCard } from "@/components/PauseCard";
@@ -139,10 +137,6 @@ import {
   readSegmentHead,
   turnMessageId,
 } from "@/lib/followTurns";
-import {
-  collectPendingHangingQuestions,
-  eventsHaveExecutionDetached,
-} from "@/lib/hangingQuestion";
 import { placeMemoryUpdates } from "@/lib/memoryAnchors";
 import {
   type MessageDelivery,
@@ -208,7 +202,6 @@ import { useVoiceInput } from "@/lib/useVoiceInput";
 import { inspectZeroOutputSendRollback } from "@/lib/zeroOutputSendRollback";
 import {
   type EscalationSlotEsc,
-  extractAsks,
   extractCoordinationWait,
   extractEscalationSlots,
   extractEvidenceLedger,
@@ -592,27 +585,6 @@ function recoveredApprovalPending(
   };
 }
 
-function recoveredDelegation(
-  a: PendingInteractionSummary,
-): Extract<ProjectedInteraction, { kind: "delegation_authorization" }> | null {
-  if (a.kind !== "delegation_authorization") return null;
-  const p = a.payload ?? {};
-  const workers = Array.isArray(p.workers)
-    ? (p.workers as Array<Record<string, unknown>>)
-    : [];
-  const tools = Array.isArray(p.tools)
-    ? p.tools.filter((t): t is string => typeof t === "string")
-    : [];
-  return {
-    kind: "delegation_authorization",
-    id: a.id,
-    status: "pending",
-    executionId: typeof p.execution_id === "string" ? p.execution_id : "",
-    workers,
-    tools,
-  };
-}
-
 function recoveredStageCard(
   a: PendingInteractionSummary,
 ): Extract<ProjectedInteraction, { kind: "stage_card" }> | null {
@@ -717,12 +689,11 @@ function extractTurnWarning(events: SSEEvent[]): string | null {
 /** Live / journal：``message_start.message_id``（客户端 turn.id 是本地 UUID，不能当云 messageId）。 */
 const extractMessageId = turnMessageId;
 
-/** 空泡失败红卡豁免：该回合已是 paused，或时间线已有 ask / checkpoint / ResumeCard 面。 */
+/** 空泡失败红卡豁免：该回合已是 paused，或时间线已有 checkpoint / ResumeCard 面。 */
 function dedicatedPauseOrAskUi(opts: {
   paused?: boolean | null;
   finishReason?: string | null;
   projectedStatus?: string | null;
-  askCount: number;
   process?: readonly { kind: string }[] | null;
 }): boolean {
   if (
@@ -732,10 +703,8 @@ function dedicatedPauseOrAskUi(opts: {
   ) {
     return true;
   }
-  if (opts.askCount > 0) return true;
   return (opts.process ?? []).some(
     (s) =>
-      s.kind === "ask" ||
       s.kind === "checkpoint" ||
       s.kind === "plan_review" ||
       s.kind === "team_preview",
@@ -807,8 +776,6 @@ function AssistantBubble({
       }),
     [p.deliveryStatus, p.process, turn.events],
   );
-  // 非阻塞提问卡内容：随时间线 `ask` 标记原位呈现（旁路读原始事件，不入 ProjectedTurn）。
-  const asks = useMemo(() => extractAsks(turn.events), [turn.events]);
   // 升级时间线槽（统一时间线二期）: escalation_id → card body（旁路；golden escalations 不加 id）。
   const escalationSlots = useMemo(
     () => extractEscalationSlots(turn.events),
@@ -889,7 +856,6 @@ function AssistantBubble({
   const pauseUi = dedicatedPauseOrAskUi({
     finishReason,
     projectedStatus: p.status,
-    askCount: asks.length,
     process: p.process,
   });
   const outcome = resolveTurnOutcomeFromJournal({
@@ -989,7 +955,6 @@ function AssistantBubble({
             team={team}
             debate={p.debate}
             debateRounds={p.debateRounds}
-            asks={asks}
             escalationSlots={escalationSlots}
             hotTraces={hotTraces}
             stageCardTraces={stageCardTraces}
@@ -1174,8 +1139,6 @@ function HistoryAssistant({
     foldedAutoFolder,
     m.runs?.auto_folder,
   );
-  // 非阻塞提问卡内容：仅多 Agent 历史持久化 runs.events（单聊为空 → 无卡，与桌面一致）。
-  const asks = useMemo(() => extractAsks(m.runs?.events ?? []), [m.runs]);
   const escalationSlots = useMemo(
     () => extractEscalationSlots(m.runs?.events ?? []),
     [m.runs],
@@ -1227,7 +1190,6 @@ function HistoryAssistant({
   const pauseUi = dedicatedPauseOrAskUi({
     paused: m.paused,
     finishReason,
-    askCount: asks.length,
     process,
   });
   const hasTeamGraph = shouldShowTeamGraph(team?.runs);
@@ -1308,7 +1270,6 @@ function HistoryAssistant({
             }
             debate={debate}
             debateRounds={debateRounds}
-            asks={asks}
             escalationSlots={escalationSlots}
             hotTraces={hotTraces}
             stageCardTraces={stageCardTraces}
@@ -2475,25 +2436,11 @@ export function ChatPage() {
     (i): i is Extract<ProjectedInteraction, { kind: "approval" }> =>
       i.kind === "approval",
   );
-  const liveDelegations = liveInteractions.filter(
-    (
-      i,
-    ): i is Extract<
-      ProjectedInteraction,
-      { kind: "delegation_authorization" }
-    > => i.kind === "delegation_authorization",
-  );
   const approvalCards =
     liveApprovals.length > 0
       ? liveApprovals
       : recoveredInteractions
           .map(recoveredApprovalPending)
-          .filter((x): x is NonNullable<typeof x> => x != null);
-  const delegationCards =
-    liveDelegations.length > 0
-      ? liveDelegations
-      : recoveredInteractions
-          .map(recoveredDelegation)
           .filter((x): x is NonNullable<typeof x> => x != null);
 
   // 阶段推进卡（批 B）：幕 1 收尾后耐久展示；live fold 优先，冷开走 recovery。
@@ -2569,28 +2516,12 @@ export function ChatPage() {
     });
   }, [conversationId, coldById, paused, coldHosts, history, turns]);
 
-  const hangingEventLists = useMemo(() => {
-    const live = turns.map((t) => t.events);
-    const hist = (history ?? []).map((m) => m.runs?.events ?? []);
-    return [...live, ...hist];
-  }, [turns, history]);
-  const hangingAsks = useMemo(
-    () => collectPendingHangingQuestions(hangingEventLists),
-    [hangingEventLists],
-  );
-  const hangingDetached = useMemo(
-    () => eventsHaveExecutionDetached(turns.flatMap((t) => t.events)),
-    [turns],
-  );
-
   // 摆出去的卡登记进 ref，供收口事件判归属（只给用户真看得见的卡立「已由另一端处理」）。
   visibleCardIdsRef.current = new Set<string>([
     ...approvalCards.map((c) => c.id),
-    ...delegationCards.map((c) => c.id),
     ...escalationCards.map((c) => c.id),
     ...stageCards.map((c) => c.id),
     ...visibleResumes.map((p) => p.checkpoint_id),
-    ...hangingAsks.map((a) => a.id),
   ]);
 
   // Cold actionable pending with stamp ⇒ unlock composer (desktop finalizeGenerating
@@ -2751,7 +2682,6 @@ export function ChatPage() {
       attachments: MessageAttachment[];
       agentMentions?: PendingAgentMention[];
       folder?: DraftFolder | null;
-      askId?: string;
       preserveComposer?: boolean;
     },
     deliveryOverride?: MessageDelivery,
@@ -2875,7 +2805,6 @@ export function ChatPage() {
         outgoingMentions.length > 0
           ? toOutgoingAgentMentions(outgoingMentions)
           : undefined,
-        override?.askId,
       );
       // SSE error 后 stream 常 resolve 不 throw：本发已落库 + 空失败 + Class B 码也要回滚。
       const zero = inspectZeroOutputSendRollback(collected);
@@ -2947,7 +2876,7 @@ export function ChatPage() {
   async function sendWhileBusy(
     text: string,
     delivery: MessageDelivery,
-    extras?: { askId?: string; preserveComposer?: boolean },
+    extras?: { preserveComposer?: boolean },
   ): Promise<false | "received" | "queued"> {
     if (!conversationId) return false;
     const preserve = extras?.preserveComposer === true;
@@ -3049,7 +2978,6 @@ export function ChatPage() {
         outgoingMentions.length > 0
           ? toOutgoingAgentMentions(outgoingMentions)
           : undefined,
-        extras?.askId,
       );
       if (result.kind === "blocked") {
         setError({ text: result.message ?? "请先处理待确认事项" });
@@ -3073,31 +3001,6 @@ export function ChatPage() {
       releaseLocalStream(ac);
       markStreamEnd();
     }
-  }
-
-  /** 带 `ask_id` 发出答复；`question_posted` 由服务端在回合提交成立后结算。 */
-  async function replyHangingQuestion(askId: string, text: string) {
-    if (!conversationId) throw new Error("缺少会话");
-    const trimmed = text.trim();
-    if (!trimmed) throw new Error("缺少答复");
-    if (turnInFlight) {
-      const kind = await sendWhileBusy(trimmed, "steer", {
-        askId,
-        preserveComposer: true,
-      });
-      if (kind === false) throw new Error("发送失败");
-      return;
-    }
-    const ok = await send(
-      {
-        text: trimmed,
-        attachments: [],
-        askId,
-        preserveComposer: true,
-      },
-      "steer",
-    );
-    if (!ok) throw new Error("发送失败");
   }
 
   // 诚实停止闭环：进入「停止中」可见态，POST /stop，保持 SSE 等后端终态（不本地 abort /
@@ -3759,20 +3662,6 @@ export function ChatPage() {
           />
         ) : null,
       )}
-      {delegationCards.map((pending) =>
-        conversationId ? (
-          <DelegationAuthorizationCard
-            key={pending.id}
-            pending={pending}
-            conversationId={conversationId}
-            onResolved={() =>
-              setRecoveredInteractions((prev) =>
-                prev.filter((a) => a.id !== pending.id),
-              )
-            }
-          />
-        ) : null,
-      )}
 
       {!busy &&
         conversationId &&
@@ -3808,14 +3697,6 @@ export function ChatPage() {
           onOpenLive={conversationId ? openBrowserLive : undefined}
         />
       ))}
-
-      {conversationId ? (
-        <HangingQuestionBar
-          asks={hangingAsks}
-          detached={hangingDetached}
-          onReply={replyHangingQuestion}
-        />
-      ) : null}
 
       {!busy &&
         conversationId &&

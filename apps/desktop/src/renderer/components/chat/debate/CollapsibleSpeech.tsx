@@ -46,7 +46,7 @@ export function CollapsibleSpeech({
 
   // 量「未夹层的内容高 vs 阈值」，而不是量当前渲染出来的高度差：展开态下容器本就没有夹层、
   // scrollHeight 恒等于 clientHeight，按渲染高判定必然得出「不溢出」——于是被 sceneKey 记住
-  // 展开态的气泡一旦重挂载（切对话回来 / 聊天⇄画布 / 编辑取消 / 重启），「收起」按钮就再也
+  // 展开态的气泡一旦重挂载（切对话回来 / 编辑取消 / 重启），「收起」按钮就再也
   // 长不出来，长文永久全展。判定与展开态解耦后，两态下测得同一个结论。
   // biome-ignore lint/correctness/useExhaustiveDependencies: contentKey is an intentional re-run key — re-measure overflow when the speech content changes.
   useLayoutEffect(() => {

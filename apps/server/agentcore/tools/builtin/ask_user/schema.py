@@ -25,7 +25,6 @@ _ALLOWED_OPTION_ACTIONS = frozenset(
     }
 )
 _MAX_ASSUMPTIONS = 10
-_MAX_UNLOCKS = 1000
 
 # Presentation metadata belongs in ``recommended``, not the answer-valued label.
 # Reject bracketed markers only — bare「推荐」in a product name (e.g. 推荐算法) stays valid.
@@ -241,11 +240,6 @@ def normalize_assumptions(raw: Any) -> list[dict[str, Any]]:
             continue
         out.append({"id": f"a{i}", "label": label, "value": str(it.get("value") or "").strip()})
     return out
-
-
-def normalize_unlocks(raw: Any) -> str:
-    """Unlock declaration for a non-blocking ask (答案回来解锁哪批活)."""
-    return str(raw or "").strip()[:_MAX_UNLOCKS]
 
 
 def normalize_questions(

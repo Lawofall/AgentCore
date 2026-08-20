@@ -2,7 +2,8 @@
 
 P1 product surface: a directory another session can open without knowing local
 jsonl rotation paths. Reuses ``query_trace`` / ``decision_spine``; does not
-reimplement spine logic.
+reimplement spine logic. Journal, if present, is allowlist-redacted
+(``journal.redacted.jsonl``) — never the raw ``turn_journal`` payload.
 """
 
 from __future__ import annotations
@@ -13,6 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from agentcore.observability.query.decision_spine import SCHEMA_VERSION as SPINE_SCHEMA
+from agentcore.observability.query.journal_redact import (
+    redact_journal_row,
+    summarize_redacted_journal,
+)
 from agentcore.observability.query.store import (
     ConversationStore,
     ExportConversationStore,
@@ -187,7 +192,9 @@ async def write_investigation_pack(
 
     Required: ``decision_spine.json``, ``timeline.jsonl``, ``meta.json``.
     Optional: ``messages.preview.json``, ``turn_metrics.json``,
+    ``journal.redacted.jsonl`` + ``journal.summary.json``,
     and with ``full=True`` ``messages.json`` (no LLM body dump).
+    Never writes raw ``turn_journal`` (user/LLM bodies).
     """
     if result.mode != "trace":
         raise ValueError("investigation pack requires a trace query result")
@@ -255,6 +262,21 @@ async def write_investigation_pack(
             )
             written.append("messages.json")
 
+    journal_rows: list[dict[str, Any]] = []
+    if store is not None and trace_id:
+        getter = getattr(store, "get_journal_by_trace", None)
+        if getter is not None:
+            raw_journal = await getter(str(trace_id))
+            journal_rows = [redact_journal_row(row) for row in raw_journal]
+    if journal_rows:
+        _write_jsonl(out_dir / "journal.redacted.jsonl", journal_rows)
+        written.append("journal.redacted.jsonl")
+        _write_json(
+            out_dir / "journal.summary.json",
+            summarize_redacted_journal(journal_rows),
+        )
+        written.append("journal.summary.json")
+
     meta: dict[str, Any] = {
         "schema_version": PACK_SCHEMA_VERSION,
         "decision_spine_schema": SPINE_SCHEMA,
@@ -264,6 +286,13 @@ async def write_investigation_pack(
         "traffic": traffic,
         "jsonl_gap": jsonl_gap,
         "full": full,
+        "journal": {
+            "mode": "redacted" if journal_rows else "absent",
+            "rows": len(journal_rows),
+            "note": (
+                "never ships raw turn_journal; allowlist-redacted kinds/ids/status only"
+            ),
+        },
         "environment": {
             "log_file": str(log_file) if log_file else None,
             "export_dir": str(export_dir) if export_dir else None,

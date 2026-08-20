@@ -54,7 +54,7 @@ from agentcore.api.dependencies import (
     get_memory_store,
     get_memory_update_repo,
 )
-from agentcore.api.schemas import MemoryUpdateItemView
+from agentcore.api.schemas import MemoryUpdateItemView, MemoryUpdateKind
 from agentcore.db.models.documents import MAX_DISPUTED_LINES
 from agentcore.db.repositories import DocumentRepository, MemoryUpdateRepository
 from agentcore.memory import (
@@ -189,7 +189,7 @@ class MemoryUpdateFeedItem(BaseModel):
 
     id: str
     conversation_id: str
-    kind: str = "semantic"
+    kind: MemoryUpdateKind = "semantic"
     summary: str | None = None
     items: list[MemoryUpdateItemView] = Field(default_factory=list)
     created_at: datetime

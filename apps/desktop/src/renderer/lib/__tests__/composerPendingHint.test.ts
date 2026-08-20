@@ -139,6 +139,21 @@ describe("composerPendingHint", () => {
     expect(conversationHasPendingDecision(CID)).toBe(true);
   });
 
+  it("hydratePending terminal stub is not a pending decision", () => {
+    useInteractionStore.getState().upsertRequired({
+      kind: "approval",
+      conversationId: CID,
+      messageId: "m1",
+      origin: "server",
+      payload: { approval_id: "a-stub", tool_name: "bash", arguments: {} },
+    });
+    expect(conversationHasPendingDecision(CID)).toBe(true);
+    useInteractionStore.getState().hydratePending(CID, [], {
+      confirmed: ["server"],
+    });
+    expect(conversationHasPendingDecision(CID)).toBe(false);
+  });
+
   it("session ack suppresses further confirms", () => {
     usePausedTurnStore.getState().addLiveResume({
       messageId: "m1",

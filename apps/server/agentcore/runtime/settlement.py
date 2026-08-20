@@ -15,21 +15,26 @@ import time
 from typing import Any
 
 from agentcore.runtime.events.types import EventType, SSEEvent
+from agentcore.runtime.interaction import INTERACTION_KIND_SPECS
 from agentcore.runtime.journal.pending_interactions import settlement_dedupe_key
 from agentcore.runtime.journal.writer import TurnJournalWriter, current_journal_writer
 
 # Settlement event kinds that participate in prewrite + dedupe.
+# Resolved events + reconnect-only required (stage_card is posted as a settlement
+# fact on a closed host turn) + the cross-kind orphan fact. Derived from
+# INTERACTION_KIND_SPECS so a new kind cannot silently miss the dedupe set.
 SETTLEMENT_EVENT_KINDS: frozenset[str] = frozenset(
     {
-        EventType.APPROVAL_RESOLVED.value,
-        EventType.DELEGATION_AUTHORIZATION_RESOLVED.value,
-        EventType.ESCALATION_RESOLVED.value,
-        EventType.CHECKPOINT_RESOLVED.value,
-        EventType.PLAN_REVIEW_RESOLVED.value,
-        EventType.TEAM_PREVIEW_RESOLVED.value,
-        EventType.STAGE_CARD_REQUIRED.value,
-        EventType.STAGE_CARD_RESOLVED.value,
-        EventType.QUESTION_RESOLVED.value,
+        *(
+            spec.resolved_event
+            for spec in INTERACTION_KIND_SPECS.values()
+            if spec.resolved_event is not None
+        ),
+        *(
+            spec.required_event
+            for spec in INTERACTION_KIND_SPECS.values()
+            if spec.reconnect_answerable and not spec.hot
+        ),
         EventType.INTERACTION_ORPHANED.value,
     }
 )

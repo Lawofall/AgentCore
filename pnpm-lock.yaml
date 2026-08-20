@@ -471,6 +471,10 @@ importers:
         version: link:../contract-types
 
   packages/protocol-fold-kit:
+    dependencies:
+      '@agentcore/contract-types':
+        specifier: workspace:*
+        version: link:../contract-types
     devDependencies:
       typescript:
         specifier: ^5.8.2

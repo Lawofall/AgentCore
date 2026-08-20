@@ -36,7 +36,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve as resolvePath } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   REPO_ROOT,
   loadDeployEnv,
@@ -322,6 +323,11 @@ function pruneAndroidDest(version) {
   });
 }
 
+const GH_FETCH_HEADERS = Object.freeze({
+  "User-Agent": "agentcore-sync-release-cdn",
+  Accept: "application/json",
+});
+
 async function fetchJson(url) {
   const res = await fetch(url, {
     headers: {
@@ -331,6 +337,73 @@ async function fetchJson(url) {
   });
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
   return res.json();
+}
+
+/** @typedef {"desktop" | "android"} ReleaseRail */
+
+/**
+ * GitHub tag for a version on each rail. Desktop = ``v<ver>``; Android =
+ * ``android-v<ver>`` (same split as release:win / release:android).
+ * @param {ReleaseRail} rail
+ * @param {string} version
+ */
+export function githubTagForRail(rail, version) {
+  const ver = String(version ?? "").trim();
+  if (rail === "android") return `android-v${ver}`;
+  return `v${ver}`;
+}
+
+/**
+ * @param {ReleaseRail} rail
+ * @param {string} version
+ * @param {string} reason
+ */
+export function skipDirectFeedWarning({ rail, version, tag, reason }) {
+  const why =
+    reason === "draft"
+      ? "is still a draft"
+      : reason === "not-found"
+        ? "was not found as a published release (drafts are hidden from the public API)"
+        : `could not be confirmed as published (${reason})`;
+  return (
+    `⚠ GitHub release ${tag} ${why} — uploaded ${rail} v${version} artifacts but skipped latest.json.\n` +
+    `  Publish the release, then run: pnpm sync:release-cdn --from-github`
+  );
+}
+
+/**
+ * Direct-path gate: only write latest.json when GitHub has a non-draft release
+ * for this version. 404 (typical for drafts on the public API), ``draft: true``,
+ * and fetch errors all skip the feed — they must not fail the CLI, or they
+ * would abort ``release:win`` / ``release:android``.
+ *
+ * @param {ReleaseRail} rail
+ * @param {string} version
+ * @param {{ fetchImpl?: typeof fetch }} [opts]
+ */
+export async function inspectGithubReleaseForFeed(
+  rail,
+  version,
+  { fetchImpl = fetch } = {},
+) {
+  const tag = githubTagForRail(rail, version);
+  const url = `https://api.github.com/repos/${RELEASES_REPO}/releases/tags/${encodeURIComponent(tag)}`;
+  try {
+    const res = await fetchImpl(url, { headers: GH_FETCH_HEADERS });
+    if (res.status === 404) {
+      return { tag, published: false, reason: "not-found" };
+    }
+    if (!res.ok) {
+      return { tag, published: false, reason: `http-${res.status}` };
+    }
+    const release = await res.json();
+    if (release?.draft) {
+      return { tag, published: false, reason: "draft", release };
+    }
+    return { tag, published: true, reason: "published", release };
+  } catch (error) {
+    return { tag, published: false, reason: "error", error };
+  }
 }
 
 async function downloadTo(url, dest) {
@@ -461,7 +534,7 @@ async function writeDesktopManifest(version, flags, channel) {
   return manifest;
 }
 
-async function syncAndroidFile(version, apkPath) {
+function uploadAndroidApk(version, apkPath) {
   if (!existsSync(apkPath)) {
     console.error(`APK not found: ${apkPath}`);
     process.exit(1);
@@ -473,14 +546,102 @@ async function syncAndroidFile(version, apkPath) {
   }
   const root = downloadsRoot();
   putRemoteFile(apkPath, `${root}/${DOWNLOADS_ANDROID_PREFIX}/${name}`);
+  return { name };
+}
+
+function writeAndroidManifest(version, name) {
   const manifest = buildAndroidLatestJson({ version, filename: name });
   const tmpDir = mkdtempSync(join(tmpdir(), "ac-cdn-"));
   const tmp = join(tmpDir, "latest.json");
   writeFileSync(tmp, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  const root = downloadsRoot();
   putRemoteFile(tmp, `${root}/${DOWNLOADS_ANDROID_PREFIX}/latest.json`);
   rmSync(tmpDir, { recursive: true, force: true });
   console.log(`✓ android latest.json → v${version} (${name})`);
   return manifest;
+}
+
+async function syncAndroidFile(version, apkPath) {
+  const { name } = uploadAndroidApk(version, apkPath);
+  return writeAndroidManifest(version, name);
+}
+
+/**
+ * Direct ``--desktop`` / ``--android`` path: always upload artifacts; write
+ * latest.json only when GitHub already has a non-draft release for this version.
+ *
+ * @param {{
+ *   rail: ReleaseRail,
+ *   version: string,
+ *   channel?: string,
+ *   desktopDir?: string,
+ *   androidPath?: string,
+ *   fetchImpl?: typeof fetch,
+ *   uploadDesktop?: typeof syncDesktopDir,
+ *   writeDesktopFeed?: typeof writeDesktopManifest,
+ *   uploadAndroid?: typeof uploadAndroidApk,
+ *   writeAndroidFeed?: typeof writeAndroidManifest,
+ *   pruneDesktop?: typeof pruneDesktopDests,
+ *   pruneAndroid?: typeof pruneAndroidDest,
+ *   warn?: (...args: unknown[]) => void,
+ * }} opts
+ */
+export async function runDirectRailSync({
+  rail,
+  version,
+  channel = DESKTOP_CHANNEL_DEFAULT,
+  desktopDir = "",
+  androidPath = "",
+  fetchImpl = fetch,
+  uploadDesktop = syncDesktopDir,
+  writeDesktopFeed = writeDesktopManifest,
+  uploadAndroid = uploadAndroidApk,
+  writeAndroidFeed = writeAndroidManifest,
+  pruneDesktop = pruneDesktopDests,
+  pruneAndroid = pruneAndroidDest,
+  warn = (...args) => console.warn(...args),
+}) {
+  const inspection = await inspectGithubReleaseForFeed(rail, version, {
+    fetchImpl,
+  });
+  const writeFeed = inspection.published;
+
+  if (rail === "desktop") {
+    const flags = uploadDesktop(version, desktopDir, channel);
+    if (writeFeed) {
+      await writeDesktopFeed(version, flags, channel);
+    } else {
+      warn(
+        skipDirectFeedWarning({
+          rail,
+          version,
+          tag: inspection.tag,
+          reason: inspection.reason,
+        }),
+      );
+    }
+    pruneDesktop(version, channel);
+    return { inspection, writeFeed, flags };
+  }
+
+  if (rail !== "android") {
+    throw new Error(`unknown rail: ${rail}`);
+  }
+  const uploaded = uploadAndroid(version, androidPath);
+  if (writeFeed) {
+    await writeAndroidFeed(version, uploaded.name);
+  } else {
+    warn(
+      skipDirectFeedWarning({
+        rail,
+        version,
+        tag: inspection.tag,
+        reason: inspection.reason,
+      }),
+    );
+  }
+  pruneAndroid(version);
+  return { inspection, writeFeed, uploaded };
 }
 
 /** @param {string} tag */
@@ -699,17 +860,12 @@ async function main() {
   }
 
   if (args.desktopDir) {
-    const flags = syncDesktopDir(
-      /** @type {string} */ (args.version),
-      /** @type {string} */ (args.desktopDir),
+    await runDirectRailSync({
+      rail: "desktop",
+      version: /** @type {string} */ (args.version),
       channel,
-    );
-    await writeDesktopManifest(
-      /** @type {string} */ (args.version),
-      flags,
-      channel,
-    );
-    pruneDesktopDests(/** @type {string} */ (args.version), channel);
+      desktopDir: /** @type {string} */ (args.desktopDir),
+    });
   }
   if (args.androidPath) {
     if (channel === "beta") {
@@ -717,16 +873,24 @@ async function main() {
         "⚠ --android ignores --channel (android rail unchanged); writing android/",
       );
     }
-    await syncAndroidFile(
-      /** @type {string} */ (args.version),
-      /** @type {string} */ (args.androidPath),
-    );
-    pruneAndroidDest(/** @type {string} */ (args.version));
+    await runDirectRailSync({
+      rail: "android",
+      version: /** @type {string} */ (args.version),
+      androidPath: /** @type {string} */ (args.androidPath),
+    });
   }
   console.log(`✓ CDN sync complete → ${cdnUrl("")}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+function isCliEntry() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  return import.meta.url === pathToFileURL(resolvePath(entry)).href;
+}
+
+if (isCliEntry()) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

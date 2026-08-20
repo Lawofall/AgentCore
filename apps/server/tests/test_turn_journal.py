@@ -380,7 +380,7 @@ def test_classic_steer_interjection_survives_the_surface_gate():
     # facts but no run_plan / approval / question. ``user_interjection`` is itself a
     # surface type, so the gate must NOT wipe the events — retiring
     # ``turn_steer_accepted`` was precisely about a user utterance surviving reload
-    # (对齐 question_posted 先例). Both frames of one interjection_id replay; the client
+    # (user_interjection 先例). Both frames of one interjection_id replay; the client
     # folds them to a single record (last status wins).
     entries = [
         {"kind": "turn_started", "payload": {"user_message": "写个方案"}, "ts": None},

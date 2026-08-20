@@ -1,5 +1,4 @@
 import { api } from "@/services/api";
-import type { ResolveDelegationAuthorizationBody } from "@/services/delegationAuth";
 import { getActiveSidecarTarget } from "@/services/sidecarRouting";
 import type { components } from "@/types/api.generated";
 
@@ -40,21 +39,17 @@ export type ResolveInteractionOutcome = "settled" | "already_processed";
  * 挂起即收口 (②, Phase 3): `ask_user` / `plan_review` are no longer settled here — a CEO
  * checkpoint finalizes the turn and is continued via the cold `POST .../resume` path
  * (services/turns.ts), so their resolve schemas are gone from the backend union.
- *
- * `question_posted` 收口走本端点（OpenAPI `ResolveQuestionPostedInteraction`）。
  */
 export type ResolveInteractionBody =
   | Schemas["ResolveApprovalInteraction"]
   | Schemas["ResolveClientToolInteraction"]
-  | Schemas["ResolveEscalationInteraction"]
-  | ResolveDelegationAuthorizationBody
-  | Schemas["ResolveQuestionPostedInteraction"];
+  | Schemas["ResolveEscalationInteraction"];
 
 /**
  * Settle a paused hot-path interaction over the transport that owns the awaiter.
  *
- * The single choke point for live resolve kinds (approval / client_tool / escalation /
- * delegation_authorization) — NOT ask_user / plan_review / team_preview (cold resume).
+ * The single choke point for live resolve kinds (approval / client_tool / escalation) —
+ * NOT ask_user / plan_review / team_preview (cold resume).
  *
  * - **`origin: "sidecar"`** → `window.sidecarApi.respond` (in-process sidecar registry).
  * - **`origin: "cloud"`** → POST the unified resolve endpoint (cloud InteractionRegistry,

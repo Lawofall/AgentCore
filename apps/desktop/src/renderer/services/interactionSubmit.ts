@@ -119,7 +119,7 @@ export interface ColdSubmitArgs {
 }
 
 /**
- * Unified submit path (方案 §3.2): kind → cold | hot | compose.
+ * Unified submit path (方案 §3.2): kind → cold | hot | stage.
  *
  * Hot: interactions.beginSubmit gates double-submit.
  * Cold: authority is InteractionStore cold pending (ResumePrompt paint + submit).
@@ -140,61 +140,9 @@ export async function submitInteraction(args: {
   conversationId: string;
   hotBody?: HotSubmitBody;
   cold?: ColdSubmitArgs;
-  /** question_posted: settlement answer (send with ask_id is a separate path). */
-  composeText?: string;
 }): Promise<SubmitInteractionResult> {
   const path = INTERACTION_SUBMIT_PATH[args.kind];
   const store = useInteractionStore.getState();
-
-  if (path === "compose") {
-    const text = (args.composeText ?? "").trim();
-    if (!text) {
-      throw new Error("缺少答复");
-    }
-    if (!store.beginSubmit(args.id)) return "busy";
-    try {
-      const receipt = await resolveInteraction(
-        args.conversationId,
-        args.id,
-        {
-          kind: "question_posted",
-          status: "answered",
-          answer: text,
-          note: "",
-        },
-        "cloud",
-      );
-      if (receipt === "already_processed") {
-        store.markSettledByReceipt({
-          kind: args.kind,
-          id: args.id,
-          conversationId: args.conversationId,
-        });
-        return "already_settled";
-      }
-      store.markResolved({
-        kind: args.kind,
-        id: args.id,
-        resolution: { status: "answered", answer: text, note: "" },
-      });
-      return "ok";
-    } catch (err) {
-      if (isInteractionOrphanedError(err)) {
-        store.markOrphaned(args.id);
-        return "orphaned";
-      }
-      if (err instanceof ApiError && err.status === 404) {
-        store.markSettledByReceipt({
-          kind: args.kind,
-          id: args.id,
-          conversationId: args.conversationId,
-        });
-        return "already_settled";
-      }
-      store.reopen(args.id);
-      throw err;
-    }
-  }
 
   if (path === "hot") {
     if (!store.beginSubmit(args.id)) return "busy";

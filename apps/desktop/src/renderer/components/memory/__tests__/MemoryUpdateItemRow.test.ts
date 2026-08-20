@@ -1,3 +1,4 @@
+import type { MemoryUpdateItem } from "@/stores/conversation";
 import { describe, expect, it, vi } from "vitest";
 import {
   canDisputeMemoryItem,
@@ -28,7 +29,7 @@ describe("memory scope labels", () => {
 });
 
 describe("canMoveMemoryItem", () => {
-  const base = {
+  const base: MemoryUpdateItem = {
     action: "add",
     file: "画像",
     section: "关于用户的事实",
@@ -72,7 +73,7 @@ describe("canMoveMemoryItem", () => {
 });
 
 describe("canDisputeMemoryItem", () => {
-  const base = {
+  const base: MemoryUpdateItem = {
     action: "add",
     file: "画像",
     section: "关于用户的事实",

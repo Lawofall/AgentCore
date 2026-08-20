@@ -175,9 +175,8 @@ describe("dispatchSSEEvent · *_resolved 收口帧", () => {
     runTurnToCompletion();
 
     send("content_delta", { delta: "迟到正文" });
-    send("question_posted", { ask_id: "q1", question: "顺带一问" });
 
-    for (const eventType of ["content_delta", "question_posted"]) {
+    for (const eventType of ["content_delta"]) {
       expect(logEventMock).toHaveBeenCalledWith(
         "warn",
         "sse.event_dropped",

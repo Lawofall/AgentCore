@@ -171,7 +171,6 @@ def _ceo_turn(**overrides: object) -> str:
         "prior_delivery_gaps": "",
         "prior_delegate_retry": "",
         "prior_futile_retries": "",
-        "pending_questions": "",
         "attachment_context": "",
         "registered_sources": "",
         "soft_cap": None,
@@ -190,22 +189,13 @@ def test_ceo_turn_renders_the_source_ledger_after_the_volatile_tail():
     assert out == "CEO\n<attachments/>\n<registered_sources/>"
 
 
-def test_ceo_turn_pending_questions_sit_on_the_volatile_tail_before_attachments():
-    out = _ceo_turn(
-        pending_questions="<pending_questions/>",
-        attachment_context="<attachments/>",
-    )
-    assert out == "CEO\n<pending_questions/>\n<attachments/>"
-
-
-def test_ceo_turn_prior_futile_retries_slot_between_retry_and_questions():
+def test_ceo_turn_prior_futile_retries_slot_between_retry_and_attachments():
     out = _ceo_turn(
         prior_delegate_retry="<prior_delegate_retry/>",
         prior_futile_retries="<prior_futile_retries/>",
-        pending_questions="<pending_questions/>",
     )
     assert out == (
-        "CEO\n<prior_delegate_retry/>\n<prior_futile_retries/>\n<pending_questions/>"
+        "CEO\n<prior_delegate_retry/>\n<prior_futile_retries/>"
     )
 
 

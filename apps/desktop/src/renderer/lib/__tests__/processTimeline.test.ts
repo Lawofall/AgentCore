@@ -1,4 +1,5 @@
 import {
+  PROCESS_STEP_KIND,
   REWORK_LABEL_DONE,
   REWORK_LABEL_IN_PROGRESS,
   type TimelineNode,
@@ -382,5 +383,13 @@ describe("reworkChipLabel", () => {
 
   it("shows done when settled even with empty body after rework", () => {
     expect(reworkChipLabel(false, false)).toBe(REWORK_LABEL_DONE);
+  });
+});
+
+describe("PROCESS_STEP_KIND", () => {
+  it("registers every current ProcessStep kind (compile-time Record; runtime mirror)", () => {
+    expect(PROCESS_STEP_KIND.reasoning).toBe(true);
+    expect(PROCESS_STEP_KIND.user_interjection).toBe(true);
+    expect(Object.keys(PROCESS_STEP_KIND).length).toBeGreaterThan(10);
   });
 });

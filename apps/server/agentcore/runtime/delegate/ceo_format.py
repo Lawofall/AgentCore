@@ -17,33 +17,6 @@ DelegateTool = Any
 logger = get_logger(__name__)
 
 
-def _audit_off_with_token_budget_gap(
-    plan: Any,
-    gaps_by_worker: list[tuple[str, list[dict[str, str]]]] | list[tuple[str, list[str]]],
-) -> bool:
-    """True when any node has ``policy.audit=False`` and a token_budget delivery gap."""
-    if not gaps_by_worker:
-        return False
-    has_token_budget = False
-    for _label, gaps in gaps_by_worker:
-        for gap in gaps:
-            reason = ""
-            if isinstance(gap, dict):
-                reason = str(gap.get("reason") or "").strip()
-            if reason == "token_budget":
-                has_token_budget = True
-                break
-        if has_token_budget:
-            break
-    if not has_token_budget:
-        return False
-    for node in getattr(plan, "nodes", []) or []:
-        policy = getattr(node, "policy", None)
-        if policy is not None and not bool(getattr(policy, "audit", False)):
-            return True
-    return False
-
-
 def _format_motion_card_block(role: str, card: dict[str, Any], *, run_id: str = "") -> str:
     """One worker's 命题卡 as a structured CEO-facing block."""
     form = str(card.get("form") or "debate")
@@ -654,8 +627,7 @@ def build_ceo_synthesis(
                 gaps[existing_roles[role]][1].extend(rows)
             else:
                 gaps.append((role, rows))
-    audit_off_token = _audit_off_with_token_budget_gap(plan, gaps)
-    gaps_block = format_worker_gaps_block(gaps, audit_off_with_token_budget=audit_off_token)
+    gaps_block = format_worker_gaps_block(gaps)
     if gaps_block:
         lines.append(gaps_block)
 

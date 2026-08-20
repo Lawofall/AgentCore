@@ -5,7 +5,7 @@ alwaysApply: false
 
 # 验证范围与窄化配方
 
-**全量很贵（本机实测）**：一次干净 `pnpm release:gate` **20–30+ min**，其中桌面 `shoot` 约 **10 min**（数百张图；张数 = turn 向量数 × 帧切数，随向量增长，**别写死具体张数**；CI 另按 `SHOOT_FRAMES=3` 跑，实测 15–16 min）、后端全量 pytest ~5 min、桌面全量 vitest 数分钟。反过来，单包 `pnpm --filter <包> typecheck` 只要**数秒**——别为它收窄，力气花错地方。
+**全量很贵（本机实测）**：一次干净 `pnpm release:gate` **15–25 min**，其中桌面 `shoot` 约 **4 min**（默认 4 个 Chromium worker；`SHOOT_WORKERS=1` 串行约 13 min。数百张图；张数 = turn 向量数 × 帧切数，随向量增长，**别写死具体张数**；CI `frontend-shoot` 同 `SHOOT_FRAMES=3` + `SHOOT_WORKERS=4`）、后端全量 pytest ~5 min、桌面全量 vitest 数分钟。反过来，单包 `pnpm --filter <包> typecheck` 只要**数秒**——别为它收窄，力气花错地方。
 
 **根上没有 `typecheck` / `lint` / 前端 `test` 脚本**（根 `package.json` 只有契约生成、发布门禁、依赖审计、后端 pytest、部署、小镇六类）。三档第 2 档的前端命令都挂在各 app 上，用 `--filter` 取；别在根上找。
 
@@ -23,7 +23,7 @@ alwaysApply: false
 
 ## release:gate 分段
 
-段序固定 `backend → contracts → desktop → mobile → admin`。`--only <段>` 只跑一段，`--from <段>` 从该段跑到底（互斥）；`release:gate:lite` 跳过 shoot + smoke，省约 10 min。
+段序固定 `backend → contracts → desktop → mobile → admin`。`--only <段>` 只跑一段，`--from <段>` 从该段跑到底（互斥）；`release:gate:lite` 跳过 shoot + smoke，省约 4 min。
 
 **非发布语境禁止裸跑全量 `pnpm release:gate`**——要跑就 `--only` 或 `:lite`。
 

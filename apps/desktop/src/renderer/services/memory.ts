@@ -2,7 +2,7 @@ import { api } from "@/services/api";
 import type { MemoryUpdateItem } from "@/stores/conversation";
 import type { components } from "@/types/api.generated";
 
-type MemoryUpdateItemView = components["schemas"]["MemoryUpdateItemView"];
+type MemoryUpdateFeedItemWire = components["schemas"]["MemoryUpdateFeedItem"];
 
 /**
  * Long-term AI memory REST client (`/v1/users/me/memory`).
@@ -100,18 +100,9 @@ export interface MemoryUpdateFeedEntry {
   conversationId: string;
   createdAt: string;
   /** `quota` = the always pool refused a write (审计 CTX-A2), not an applied change. */
-  kind: "episodic" | "semantic" | "quota";
+  kind: components["schemas"]["MemoryUpdateView"]["kind"];
   summary?: string | null;
   items: MemoryUpdateItem[];
-}
-
-interface MemoryUpdateFeedItemWire {
-  id: string;
-  conversation_id: string;
-  created_at: string;
-  kind?: string;
-  summary?: string | null;
-  items?: MemoryUpdateItemView[];
 }
 
 /**
@@ -131,12 +122,7 @@ export function listMemoryUpdates(
         id: u.id,
         conversationId: u.conversation_id,
         createdAt: u.created_at,
-        kind:
-          u.kind === "episodic"
-            ? "episodic"
-            : u.kind === "quota"
-              ? "quota"
-              : "semantic",
+        kind: u.kind,
         summary: u.summary ?? null,
         items: (u.items ?? []).map(
           (it): MemoryUpdateItem => ({

@@ -16,7 +16,10 @@ from typing import Any
 
 from agentcore.core.logging import get_logger
 from agentcore.runtime.events import interaction_orphaned
-from agentcore.runtime.interaction import InteractionKind, default_interaction_registry
+from agentcore.runtime.interaction import (
+    default_interaction_registry,
+    is_hot_user_pending_kind,
+)
 from agentcore.runtime.journal.pending_interactions import (
     PendingInteraction,
     fold_pending_interactions,
@@ -24,29 +27,6 @@ from agentcore.runtime.journal.pending_interactions import (
 from agentcore.runtime.settlement import prewrite_settlement, prewrite_settlement_direct
 
 logger = get_logger(__name__)
-
-HOT_ORPHAN_KINDS: frozenset[str] = frozenset(
-    {
-        InteractionKind.APPROVAL.value,
-        InteractionKind.DELEGATION_AUTHORIZATION.value,
-        InteractionKind.ESCALATION.value,
-    }
-)
-
-
-def is_hot_user_pending_kind(kind: str, payload: dict[str, Any] | None) -> bool:
-    """True for hot-path kinds awaiting the user (excludes ``awaiting=ceo``).
-
-    Also the gate for the AI attention signal (云对话多端同权 B2): a card the CEO
-    arbitrates has not stopped the turn on a human, so it must not reach the user's
-    firehose or their phone either.
-    """
-    if kind not in HOT_ORPHAN_KINDS:
-        return False
-    return not (
-        kind == InteractionKind.ESCALATION.value
-        and (payload or {}).get("awaiting") == "ceo"
-    )
 
 
 def _should_orphan_pending(pending: PendingInteraction) -> bool:

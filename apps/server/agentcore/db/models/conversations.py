@@ -304,11 +304,8 @@ class Message(Base):
     evidence_ledger: Mapped[list] = mapped_column(
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
-    # 回合级「下一步推荐」chips (下一步推荐, DERIVED 持久化): the post-turn World B narrow
-    # task's 2-4 quick-reply suggestions, minted alongside the title AFTER message_end and
-    # written back onto THIS assistant row. Persisted as the twin of Conversation.title
-    # (same finalize tail) so reopening a conversation replays the last turn's chips; live
-    # they ride the followups_generated event. Empty [] for user rows / turns none minted.
+    # 历史「下一步推荐」chips 列：live mint / ``followups_generated`` 已下线，新回合写空
+    # []；列保留给旧行回放。开辩入口走 stage_card。
     followups: Mapped[list] = mapped_column(
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
@@ -408,9 +405,10 @@ class MemoryUpdateRow(Base):
 
     Written when an episodic session summary is stored, a semantic consolidation lands, or
     the CEO ``remember`` tool writes an explicit fact — never silent. ``kind`` selects the
-    UI card: ``episodic`` (light tip + ``summary``) vs ``semantic`` (diff ``items``).
-    ``items`` is a list of ``{action, file, section, scope, content, target}`` for semantic
-    diffs (empty for episodic tips).
+    UI card: ``episodic`` (light tip + ``summary``), ``semantic`` (diff ``items``), or
+    ``quota`` (always-pool / billing skip). ``items`` is a list of
+    ``{action, file, section, scope, content, target}`` for semantic diffs and quota rows
+    (empty for episodic tips).
 
     **Lifecycle** (no DB FK — app-level cascade, per repo convention): dropped with its
     conversation on hard-delete (``ConversationRepository.hard_delete``). NOT tied to any
@@ -433,7 +431,7 @@ class MemoryUpdateRow(Base):
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
-    # "episodic" | "semantic" — card shape for the conversation-tail / feed.
+    # "episodic" | "semantic" | "quota" — card shape for the conversation-tail / feed.
     kind: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'semantic'"))
     # Episodic: ≤200-char session summary shown in the light tip. Semantic: usually null.
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)

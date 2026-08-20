@@ -25,7 +25,7 @@ from agentcore.runtime.facts import (
     normalize_cross_turn_retry,
 )
 
-# Align volume with ``<prior_delivery_gaps>`` / ``<pending_questions>``.
+# Align volume with ``<prior_delivery_gaps>``.
 _MAX_ITEMS = 12
 _MAX_LINE_CHARS = 80
 

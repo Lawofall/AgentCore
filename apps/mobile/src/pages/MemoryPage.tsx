@@ -27,6 +27,10 @@ import {
 // 取消: flat GLOBAL entries + always-pool meter +「最近更新」. Not a memory-only
 // half form. 偏好/画像 (incl. placeholders) keep the memory-files API; 主题/… keep
 // the topics API; everything else is documents. No 纠错通道, no folder scope.
+import {
+  MEMORY_UPDATE_ACTION_META,
+  visibleMemoryUpdateItems,
+} from "@/lib/memoryUpdateDisplay";
 import { ChevronLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -258,12 +262,6 @@ function AlwaysQuotaBlock({
   );
 }
 
-const ACTION_META: Record<string, { label: string; cls: string }> = {
-  add: { label: "新增", cls: "mem-add" },
-  update: { label: "更新", cls: "mem-update-on" },
-  remove: { label: "移除", cls: "mem-remove" },
-};
-
 function formatWhen(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -287,7 +285,17 @@ function RecentUpdates({
     setError(null);
     setUnavailable(false);
     listMemoryUpdates(30)
-      .then((rows) => setEntries(rows.filter((u) => u.items.length > 0)))
+      .then((rows) =>
+        setEntries(
+          rows.filter((u) => {
+            const visible = visibleMemoryUpdateItems(u.items);
+            return (
+              visible.length > 0 ||
+              (u.kind === "quota" && Boolean((u.summary ?? "").trim()))
+            );
+          }),
+        ),
+      )
       .catch((e) => {
         onAuthError(e);
         if (isFeatureUnavailable(e)) {
@@ -330,61 +338,69 @@ function RecentUpdates({
           </p>
         ) : (
           <div className="mem-updates">
-            {entries.map((entry) => (
-              <div key={entry.id} className="mem-update">
-                <div className="mem-update-head">
-                  <span className="mem-update-when mem-feed-when">
-                    {formatWhen(entry.createdAt)}
-                  </span>
-                  <button
-                    type="button"
-                    className="mem-update-link mem-feed-source"
-                    onClick={() => navigate(`/c/${entry.conversationId}`)}
-                  >
-                    查看来源对话
-                  </button>
-                </div>
-                <ul className="mem-update-list">
-                  {entry.items.map((it, i) => {
-                    const meta = ACTION_META[it.action] ?? {
-                      label: it.action,
-                      cls: "mem-update-other",
-                    };
-                    const leaf = it.section
-                      ? `${it.file} · ${it.section}`
-                      : it.file;
-                    const removed = it.action === "remove";
-                    return (
-                      <li
-                        key={`${it.action}:${it.file}:${it.section}:${i}`}
-                        className="mem-item"
-                      >
-                        <span className={`mem-action ${meta.cls}`}>
-                          {meta.label}
-                        </span>
-                        <div className="mem-item-body">
-                          <div className="mem-item-meta">
-                            <span className="mem-item-leaf">{leaf}</span>
-                            <span className="mem-item-scope">
-                              {it.scope === "project" ? "本文件夹" : "全局"}
+            {entries.map((entry) => {
+              const visibleItems = visibleMemoryUpdateItems(entry.items);
+              return (
+                <div key={entry.id} className="mem-update">
+                  <div className="mem-update-head">
+                    <span className="mem-update-when mem-feed-when">
+                      {formatWhen(entry.createdAt)}
+                    </span>
+                    {entry.kind === "quota" ? (
+                      <span className="mem-update-title">常驻已满</span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="mem-update-link mem-feed-source"
+                      onClick={() => navigate(`/c/${entry.conversationId}`)}
+                    >
+                      查看来源对话
+                    </button>
+                  </div>
+                  {entry.kind === "quota" && entry.summary ? (
+                    <p className="mem-item-text">{entry.summary}</p>
+                  ) : null}
+                  {visibleItems.length > 0 ? (
+                    <ul className="mem-update-list">
+                      {visibleItems.map((it, i) => {
+                        const meta = MEMORY_UPDATE_ACTION_META[it.action];
+                        const leaf = it.section
+                          ? `${it.file} · ${it.section}`
+                          : it.file;
+                        const removed = it.action === "remove";
+                        return (
+                          <li
+                            key={`${it.action}:${it.file}:${it.section}:${i}`}
+                            className="mem-item"
+                          >
+                            <span className={`mem-action ${meta.cls}`}>
+                              {meta.label}
                             </span>
-                          </div>
-                          {it.content && (
-                            <p
-                              className={`mem-item-text${
-                                removed ? " mem-item-removed" : ""
-                              }`}
-                            >
-                              {it.content}
-                            </p>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
+                            <div className="mem-item-body">
+                              <div className="mem-item-meta">
+                                <span className="mem-item-leaf">{leaf}</span>
+                                <span className="mem-item-scope">
+                                  {it.scope === "project" ? "本文件夹" : "全局"}
+                                </span>
+                              </div>
+                              {it.content && (
+                                <p
+                                  className={`mem-item-text${
+                                    removed ? " mem-item-removed" : ""
+                                  }`}
+                                >
+                                  {it.content}
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

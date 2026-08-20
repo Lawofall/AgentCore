@@ -12,7 +12,7 @@ import type { ElementType, SceneElement } from "@/whiteboard";
  * shared pump, so a `board_op_required` lands on this board's registered applier (the
  * open canvas) and draws — that is the whole point of the turn.
  *
- * Unlike the chat/canvas composer pipeline (`useComposerSend`) this targets the board's
+ * Unlike the chat composer pipeline (`useComposerSend`) this targets the board's
  * OWN conversation (not the active chat),
  * and deliberately doesn't seed the conversation store with an optimistic user bubble:
  * the canvas has no chat surface, the server persists the transcript authoritatively, and

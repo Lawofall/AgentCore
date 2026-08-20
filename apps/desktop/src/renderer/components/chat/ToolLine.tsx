@@ -104,6 +104,8 @@ const PEEK_SUPPRESSED = new Set([
   "resolve_escalation",
   "queue_user_message",
   "wait",
+  // grep 计数走标题 inlineMeta；未知结果形状不得再起一行贴正则/命中原文。
+  "grep",
   "post_note",
   "amend_note",
   "desktop_notify",
@@ -365,19 +367,19 @@ export function ToolLine({
             : writeDiagPeek;
   const inlineBody = successfulHandoff && peek ? peek : null;
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 max-w-full">
       <Button
         variant="ghost"
         onClick={() => hasBody && setOpen((v) => !v)}
-        className={`h-auto w-full justify-start gap-2 px-0 py-0 hover:bg-transparent ${
+        className={`h-auto min-w-0 w-full justify-start gap-2 overflow-hidden px-0 py-0 hover:bg-transparent ${
           hasBody ? "cursor-pointer" : "cursor-default"
         }`}
       >
-        <span className="flex w-full items-start gap-2 text-left">
+        <span className="flex min-w-0 w-full items-start gap-2 overflow-hidden text-left">
           <Icon size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1">
+          <span className="min-w-0 flex-1 overflow-hidden">
             <span
-              className={`flex min-w-0 items-center ${
+              className={`flex min-w-0 items-center overflow-hidden ${
                 nested
                   ? "text-sm text-foreground"
                   : "text-sm text-muted-foreground"
@@ -398,7 +400,7 @@ export function ToolLine({
               </span>
               {inlineMeta && (
                 <span
-                  className={`ml-1.5 max-w-[50%] shrink-0 truncate ${
+                  className={`ml-1.5 min-w-0 max-w-[40%] truncate ${
                     writeDiagPeek
                       ? "text-warning/80"
                       : "text-muted-foreground/70"
@@ -556,14 +558,14 @@ function DefaultToolLineGroup({
     conversationId != null && tools.some((t) => isBrowserTool(t.tool_name));
 
   return (
-    <div>
-      <div className="flex items-center gap-1.5">
+    <div className="min-w-0 max-w-full">
+      <div className="flex min-w-0 items-center gap-1.5">
         <Button
           variant="ghost"
           onClick={toggleExpanded}
-          className="h-auto min-w-0 flex-1 justify-start gap-2 px-0 py-0 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+          className="h-auto min-w-0 flex-1 justify-start gap-2 overflow-hidden px-0 py-0 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
         >
-          <span className="flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2 overflow-hidden">
             {running && <ThinkingDots />}
             <span className="min-w-0 truncate text-left">{summary}</span>
             {errorCount > 0 && (

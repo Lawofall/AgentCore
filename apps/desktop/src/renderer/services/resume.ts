@@ -4,12 +4,14 @@ import { finalizeGeneratingForPausedConversation } from "@/services/turns/helper
 import { getRuntime } from "@/stores/conversation";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import {
+  COLD_RESUME_KINDS,
   collectMessageJournalEvents,
   entryToCheckpoint,
   entryToColdResume,
   entryToPlanReview,
   entryToTeamPreview,
   isColdCheckpointSettled,
+  isColdResumeKind,
   settledColdIdsFromEvents,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -336,7 +338,7 @@ export function surfaceResumeFromAssistant(
 
   const ix = useInteractionStore.getState();
   const pending = ix
-    .listPending(conversationId, ["ask_user", "plan_review", "team_preview"])
+    .listPending(conversationId, COLD_RESUME_KINDS)
     .filter(
       (e) =>
         !e.messageId ||
@@ -544,7 +546,7 @@ registerColdJournalReader((conversationId) =>
  */
 export function selectVisibleColdResumes(args: {
   conversationId: string;
-  byId: Map<string, { status: string } & Partial<InteractionEntry>>;
+  byId: Map<string, InteractionEntry>;
   pausedPending: PendingResume[];
   messages: Array<{
     role: string;
@@ -569,19 +571,14 @@ export function selectVisibleColdResumes(args: {
   for (const entry of byId.values()) {
     if (entry.conversationId !== conversationId) continue;
     if (entry.status !== "pending" && entry.status !== "submitting") continue;
-    if (
-      entry.kind !== "ask_user" &&
-      entry.kind !== "plan_review" &&
-      entry.kind !== "team_preview"
-    ) {
+    if (!isColdResumeKind(entry.kind)) {
       continue;
     }
     if (!entry.id || !entry.payload) continue;
-    const full = entry as InteractionEntry;
     if (
       isColdCheckpointSettled({
-        checkpointId: full.id,
-        entry: full,
+        checkpointId: entry.id,
+        entry,
         journalSettledIds,
       })
     ) {
@@ -589,14 +586,14 @@ export function selectVisibleColdResumes(args: {
     }
     const resumeKey = resolveColdResumeKeyFromMessages(
       messages,
-      full.messageId,
+      entry.messageId,
     );
     if (!resumeKey) continue;
     const origin: ResumeOrigin =
-      full.origin ??
-      pausedForConv.find((p) => p.checkpointId === full.id)?.origin ??
+      entry.origin ??
+      pausedForConv.find((p) => p.checkpointId === entry.id)?.origin ??
       "server";
-    const turn = entryToColdResume(full, {
+    const turn = entryToColdResume(entry, {
       resumeMessageId: resumeKey,
       userMessage: priorUser?.content ?? "",
       userMessageId: priorUser?.id ?? "",
@@ -604,11 +601,11 @@ export function selectVisibleColdResumes(args: {
     });
     if (!turn) continue;
     out.push(
-      typeof full.surfacedSeq === "number"
-        ? { ...turn, surfacedSeq: full.surfacedSeq }
+      typeof entry.surfacedSeq === "number"
+        ? { ...turn, surfacedSeq: entry.surfacedSeq }
         : turn,
     );
-    covered.add(full.id);
+    covered.add(entry.id);
   }
 
   for (const p of pausedForConv) {
@@ -650,11 +647,7 @@ export function resolveResumeOrigin(
   resumeMessageId: string,
 ): ResumeOrigin {
   const ix = useInteractionStore.getState();
-  for (const e of ix.listPending(conversationId, [
-    "ask_user",
-    "plan_review",
-    "team_preview",
-  ])) {
+  for (const e of ix.listPending(conversationId, COLD_RESUME_KINDS)) {
     if (!e.origin) continue;
     if (
       !e.messageId ||

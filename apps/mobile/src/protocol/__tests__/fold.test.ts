@@ -1259,17 +1259,3 @@ describe("fold · CEO rate-limit pause", () => {
     expect(actual.runs[0]?.productLanded).toBe(true);
   });
 });
-
-describe("fold · non-blocking ask 三态", () => {
-  it.each([
-    "single_agent_non_blocking_ask",
-    "single_agent_non_blocking_ask_answered",
-    "single_agent_non_blocking_ask_discarded",
-  ])("%s aligns with golden", (name) => {
-    const fixture = loadFixtures().find((f) => f.name === name);
-    expect(fixture).toBeTruthy();
-    if (!fixture) return;
-    const actual = fold(fixture.events as SSEEvent[]);
-    expect(diffProjected(fixture.projected, actual)).toEqual([]);
-  });
-});

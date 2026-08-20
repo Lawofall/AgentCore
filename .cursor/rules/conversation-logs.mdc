@@ -31,7 +31,7 @@ uv run python scripts/log_stats.py --json
 uv run python scripts/log_patrol.py --export-dir ../../logs/prod-export --since 2d  # 巡检①
 ```
 
-有 ID → 优先 **decision_spine** / **排查包**（`--pack`）；全量 `--raw` 仅深挖需要时。包内必有 `decision_spine.json` + `timeline.jsonl` + `meta.json`（`schema_version`）；另一会话只读包即可复盘。`spine_events` = **turn_spine**，勿与产品面混称。
+有 ID → 优先 **decision_spine** / **排查包**（`--pack`）；全量 `--raw` 仅深挖需要时。包内必有 `decision_spine.json` + `timeline.jsonl` + `meta.json`（`schema_version`）；有 journal 时附 `journal.redacted.jsonl` + `journal.summary.json`（**永不**带原文）。另一会话只读包即可复盘。`spine_events` = **turn_spine**，勿与产品面混称。
 
 ## 最短路径（贴 ID / 排查包）
 
@@ -41,7 +41,7 @@ uv run python scripts/log_patrol.py --export-dir ../../logs/prod-export --since 
 
 Dogfood：出包后仓库根 `python evals/dogfood/fill_from_pack.py --pack <dir>` → [`evals/dogfood/README.md`](/evals/dogfood/README.md)。
 
-生产：本地无命中且像线上 → `pnpm sync:logs`（Node；`DEPLOY_SSH_*`；默认瘦身跳过 `turn_journal`，深挖加 `--full`）后 `--export-dir ../../logs/prod-export`（可再 `--pack`）。勿再用 `AGENTCORE_SSH` / `$AGENTCORE_HOME/logs`（已退役）。
+生产：本地无命中且像线上 → `pnpm sync:logs`（Node；`DEPLOY_SSH_*`；默认 **脱敏** `turn_journal`，不要整份原文；深挖本机才加 `--full`）后 `--export-dir ../../logs/prod-export`（可再 `--pack`）。勿再用 `AGENTCORE_SSH` / `$AGENTCORE_HOME/logs`（已退役）。
 
 ## 查询策略
 

@@ -4,7 +4,8 @@
 新回合 = 新 ``execution_id`` + 可选 ``prev_execution_id`` 图间链。
 
 与同回合二次 ``delegate``（协调 session merge / ``_last_graph_*`` 内存合入）正交。
-``continue_from_run_id``（唤回 worker 会话记忆）与本机制正交，互不改写。
+``continue_from_run_id`` / ``replaces_run_id`` 出现时引擎自动写 ``prev_execution_id``，
+仍不合入旧图。
 """
 
 from __future__ import annotations
@@ -230,9 +231,9 @@ _MAX_RECENT_GRAPH_TASK_CHARS = 80
 
 _RECENT_GRAPH_APPEND_NOTE = (
     "用户显式要求往这支团队继续加人 / 接着干时，delegate 可传 "
-    'append_to_execution_id="latest"（引擎自动解析到它）或直接传上述精确 id'
-    "（多图并存时以显式 id 优先）：跨回合会新开图并经 prev_execution_id 链到它；"
-    "同回合二次派发合入同一张图。新任务默认仍新建图。"
+    'append_to_execution_id="latest"（引擎自动解析到最近一张图），'
+    "或在 tasks[] 上填 continue_from_run_id / replaces_run_id："
+    "跨回合会新开一队、接续上一张图；同回合二次派发合入同一张图。新任务默认仍新建图。"
     "要动上面某个具体队员（含本图已收口后）：在 tasks[] 上填其 run_id——"
     "让原作者带现场接着干用 continue_from_run_id，接手 failed/skipped 缺口用 "
     "replaces_run_id。"
@@ -308,7 +309,7 @@ def render_recent_graph_context(
         return ""
     parts = [
         "<recent_team_graph>",
-        f"本对话最近一张协作图（团队执行）execution_id=`{eid}`。",
+        "本对话最近一张协作图（团队执行）。",
     ]
     facts = (worker_facts or "").strip()
     if facts:
@@ -327,7 +328,8 @@ async def build_recent_graph_context(
 
     Resolves the newest appendable execution, then loads its host journal for a
     compact worker roster (count / role / status / task brief). Missing journal
-    still yields the execution_id + append channel note so ``latest`` stays usable.
+    still yields the append channel note so ``latest`` stays usable. Does not
+    print the graph execution_id to the model.
     """
     execution_id = await resolve_latest_appendable_execution(
         conversation_id=conversation_id,

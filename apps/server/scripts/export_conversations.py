@@ -2,7 +2,9 @@
 
 Run from apps/server:
 
-    uv run python scripts/export_conversations.py [--days N] [--output DIR] [--skip-journal]
+    uv run python scripts/export_conversations.py [--days N] [--output DIR]
+    uv run python scripts/export_conversations.py --skip-journal
+    uv run python scripts/export_conversations.py --journal-redacted
 
 Default output:
   - If ``DATA_DIR`` is set (prod container): ``$DATA_DIR/export``
@@ -11,6 +13,9 @@ Default output:
 Column sets come from the live ORM tables intersected with an allowlist — never
 hardcode SELECT lists that drift from migrations (``tool_calls`` / ``finish_reason``
 left ``messages`` long ago). Works in monorepo and Docker (``/app/scripts/…``).
+``--journal-redacted`` writes structural journal rows only (no user/LLM bodies);
+``pnpm sync:logs`` uses that by default. ``--skip-journal`` writes an empty file.
+Raw journal is the no-flag default (local maintainer dump / ``sync:logs --full``).
 """
 
 from __future__ import annotations
@@ -122,6 +127,7 @@ _TURN_METRICS_KEEP = (
 _TURN_JOURNAL_KEEP = (
     "turn_id",
     "seq",
+    "band",
     "kind",
     "payload",
     "ts",
@@ -199,6 +205,7 @@ async def export_conversations(
     output_dir: Path,
     *,
     skip_journal: bool = False,
+    journal_redacted: bool = False,
 ) -> None:
     from sqlalchemy import select
 
@@ -291,9 +298,16 @@ async def export_conversations(
                     .where(TurnJournalRow.conversation_id.in_(conv_ids))
                     .order_by(TurnJournalRow.turn_id, TurnJournalRow.seq)
                 )
+                journal_rows = _mapping_rows(await conn.execute(tj_stmt))
+                if journal_redacted:
+                    from agentcore.observability.query.journal_redact import (
+                        redact_journal_row,
+                    )
+
+                    journal_rows = [redact_journal_row(row) for row in journal_rows]
                 tj_count = _write_jsonl(
                     output_dir / "turn_journal.jsonl",
-                    _mapping_rows(await conn.execute(tj_stmt)),
+                    journal_rows,
                 )
 
     await engine.dispose()
@@ -328,14 +342,22 @@ def main() -> None:
     parser.add_argument(
         "--skip-journal",
         action="store_true",
-        help="Write empty turn_journal.jsonl (skip DB read; for slim prod sync)",
+        help="Write empty turn_journal.jsonl (skip DB read)",
+    )
+    parser.add_argument(
+        "--journal-redacted",
+        action="store_true",
+        help="Export journal with user/LLM bodies stripped (default for pnpm sync:logs)",
     )
     args = parser.parse_args()
+    if args.skip_journal and args.journal_redacted:
+        parser.error("use only one of --skip-journal / --journal-redacted")
     asyncio.run(
         export_conversations(
             args.days,
             args.output.resolve(),
             skip_journal=args.skip_journal,
+            journal_redacted=args.journal_redacted,
         )
     )
 

@@ -22,14 +22,15 @@ import {
   idFromRequiredPayload,
   idFromResolvedPayload,
   isColdResumeKind,
+  isHotInteractionKind,
   kindFromRequiredEvent,
   kindFromResolvedEvent,
 } from "./types";
 
 interface InteractionState {
-  /** All interactions keyed by id (8 kinds). */
+  /** All interactions keyed by id (user-facing wire kinds). */
   byId: Map<string, InteractionEntry>;
-  /** Upsert from a `*_required` / question_posted SSE or recovery/journal hydrate. */
+  /** Upsert from a `*_required` SSE or recovery/journal hydrate. */
   upsertRequired: (input: {
     kind: InteractionKind;
     conversationId: string;
@@ -109,15 +110,18 @@ interface InteractionState {
   /** Sidecar / process death: flip hot pending cards to orphaned 灰态. */
   orphanConversation: (conversationId: string, hotOnly?: boolean) => void;
   /**
-   * Replace this conversation's recovery-authoritative **hot** pending set
-   * (approval / delegation_authorization / escalation / stage_card).
-   * Learns `setForConversation`: a snapshot may dispose only cards it
-   * could have seen (`surfacedSeq <= since`) whose origin it actually
-   * asked (`confirmed`). Cloud empty pending never disposes
-   * `origin=sidecar` / missing origin. Local sidecar-origin hot cards
-   * count as empty only when sidecar was asked and `!sidecarLive`.
-   * Cold kinds are never written from `pending_interactions` and never
-   * `Map.delete`'d here — see {@link settleUnseenCold}.
+   * Replace this conversation's recovery-authoritative pending set
+   * (`reconnectAnswerable` = `!isColdResumeKind`).
+   * Learns `setForConversation`: a snapshot may dispose only cards it could
+   * have seen (`surfacedSeq <= since`) whose origin it actually asked
+   * (`confirmed`). Cloud empty pending never disposes `origin=sidecar` /
+   * missing origin. Local sidecar-origin hot cards count as empty only when
+   * sidecar was asked and `!sidecarLive`. Unseen hot cards the snapshot may
+   * dispose are marked terminal in place (no `Map.delete`): `origin=server`
+   * → {@link markResolved} with `settledElsewhere` (他端已决);
+   * `origin=sidecar` → {@link markOrphaned} (帧消失). Cold kinds are never
+   * written from `pending_interactions` and never disposed here — see
+   * {@link settleUnseenCold}.
    */
   hydratePending: (
     conversationId: string,
@@ -162,7 +166,7 @@ interface InteractionState {
   listForConversation: (conversationId: string) => InteractionEntry[];
   listPending: (
     conversationId: string,
-    kinds?: InteractionKind[],
+    kinds?: readonly InteractionKind[],
   ) => InteractionEntry[];
 }
 
@@ -464,11 +468,6 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
   },
 
   orphanConversation: (conversationId, hotOnly = true) => {
-    const hot: InteractionKind[] = [
-      "approval",
-      "delegation_authorization",
-      "escalation",
-    ];
     set((state) => {
       let changed = false;
       const next = mapCopy(state.byId);
@@ -476,7 +475,7 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
         if (entry.conversationId !== conversationId) continue;
         if (entry.status !== "pending" && entry.status !== "submitting")
           continue;
-        if (hotOnly && !hot.includes(entry.kind)) continue;
+        if (hotOnly && !isHotInteractionKind(entry.kind)) continue;
         next.set(id, { ...entry, status: "orphaned" });
         changed = true;
       }
@@ -493,20 +492,40 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
       if (isColdResumeKind(e.kind)) continue;
       incoming.set(e.id, e);
     }
+    const toOrphan: InteractionEntry[] = [];
+    const toSettle: InteractionEntry[] = [];
+    for (const entry of get().byId.values()) {
+      if (entry.conversationId !== conversationId) continue;
+      if (entry.status !== "pending" && entry.status !== "submitting") {
+        continue;
+      }
+      if (isColdResumeKind(entry.kind)) {
+        continue;
+      }
+      if (incoming.has(entry.id)) continue;
+      if (!snapshotCanDisposeHot(entry, { since, confirmed, sidecarLive })) {
+        continue;
+      }
+      if (entry.origin === "sidecar") toOrphan.push(entry);
+      else toSettle.push(entry);
+    }
+    for (const entry of toOrphan) {
+      get().markOrphaned(entry.id, {
+        kind: entry.kind,
+        conversationId: entry.conversationId,
+        messageId: entry.messageId,
+      });
+    }
+    for (const entry of toSettle) {
+      get().markResolved({
+        kind: entry.kind,
+        id: entry.id,
+        settledElsewhere: true,
+      });
+    }
+    if (incoming.size === 0) return;
     set((state) => {
       const next = mapCopy(state.byId);
-      for (const [id, entry] of state.byId) {
-        if (entry.conversationId !== conversationId) continue;
-        if (entry.status !== "pending" && entry.status !== "submitting") {
-          continue;
-        }
-        if (isColdResumeKind(entry.kind)) continue;
-        if (incoming.has(id)) continue;
-        if (!snapshotCanDisposeHot(entry, { since, confirmed, sidecarLive })) {
-          continue;
-        }
-        next.delete(id);
-      }
       for (const e of incoming.values()) {
         next.set(e.id, {
           id: e.id,
@@ -643,9 +662,6 @@ function answeredByAPerson(
   kind: InteractionKind,
   payload: Record<string, unknown>,
 ): boolean {
-  if (kind === "question_posted") {
-    return payload.status === "answered";
-  }
   if (kind !== "escalation") return true;
   if (payload.status !== "resolved") return false; // assumed / timed_out = 运行时兜底
   return !payload.arbitrated_by; // CEO 裁决（含 via_user：人答的是 CEO 的问，不是这张卡）

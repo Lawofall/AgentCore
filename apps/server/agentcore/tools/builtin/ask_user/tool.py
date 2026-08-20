@@ -1,4 +1,4 @@
-"""AskUserTool: CEO asking primitive (blocking suspend + non-blocking surface)."""
+"""AskUserTool: CEO asking primitive (blocking suspend)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from agentcore.core.types import ToolApproval, ToolCategory, ToolEffect, new_id
 from agentcore.runtime.events import (
     EventSink,
     checkpoint_required,
-    question_posted,
 )
 from agentcore.tools.builtin.ask_user.card import (
     CARD_KINDS,
@@ -26,7 +25,6 @@ from agentcore.tools.builtin.ask_user.schema import (
     OptionLabelError,
     normalize_assumptions,
     normalize_questions,
-    normalize_unlocks,
 )
 from agentcore.tools.builtin.ask_user.suspend import persist_suspension
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -124,10 +122,9 @@ class AskUserTool:
             "choice 可配 detail / recommended。"
         )
         tool_desc = (
-            "向用户发问（唯一问用户原语）。默认 blocking 暂停回合；"
-            "blocking=false 非阻塞（须写 unlocks；后半等人）。"
-            "登录拦截：browser_login=true（强制阻塞）。"
-            "挡路才问；能按默认推进则不当检查点。"
+            "向用户发问（唯一问用户原语）。暂停回合等人答复。"
+            "登录拦截：browser_login=true。"
+            "挡路才问；能按默认推进则不当检查点，在回复里写明假设即可。"
             "HOW→consult(ask_user_kickoff / ask_user_midtask)。"
         )
         if self.advertise_bind_local_folder:
@@ -245,24 +242,10 @@ class AskUserTool:
                             "required": ["prompt"],
                         },
                     },
-                    "blocking": {
-                        "type": "boolean",
-                        "description": (
-                            "可选，默认 true。false=非阻塞（须在 assumptions/default 写明默认，"
-                            "且须写 unlocks）。"
-                        ),
-                    },
-                    "unlocks": {
-                        "type": "string",
-                        "description": (
-                            "非阻塞必填：这个答案回来后解锁哪批活。"
-                            "纯知会写正文，勿走本工具。"
-                        ),
-                    },
                     "browser_login": {
                         "type": "boolean",
                         "description": (
-                            "true=请用户在右坞登录（AI 不经手密码）；强制 blocking。"
+                            "true=请用户在右坞登录（AI 不经手密码）。"
                             "典型：password 框硬拒（code=password_blocked）。"
                         ),
                     },
@@ -270,7 +253,7 @@ class AskUserTool:
                         "type": "string",
                         "enum": ["proposal_pick", "risk_ack", "organize_plan", "daily_review"],
                         "description": (
-                            "可选卡型（须 blocking 且恰好 1 题）：proposal_pick 单选方案；"
+                            "可选卡型（恰好 1 题）：proposal_pick 单选方案；"
                             "risk_ack/organize_plan/daily_review 多选。"
                             "多问题勿用 card（普通 ask_user，questions≤5）。"
                         ),
@@ -355,17 +338,10 @@ class AskUserTool:
                         opt.pop("target_name", None)
                         opt.pop("path", None)
 
-        # 非阻塞发问 (Cursor 式): surface + proceed, never freeze the turn. Branch BEFORE
-        # any suspend / durable-frame machinery — it shares none of it.
-        # browser_login forces blocking (CEO dual of escalate browser_login).
         browser_login = bool(arguments.get("browser_login"))
-        blocking_arg = arguments.get("blocking")
-        blocking = True if blocking_arg is None else bool(blocking_arg)
-        if browser_login:
-            blocking = True
 
         if card is not None:
-            card_err = validate_card_shape(card, blocking=blocking, questions=questions)
+            card_err = validate_card_shape(card, questions=questions)
             if card_err:
                 # Observability for the recurring model fumble (e.g. kickoff-style
                 # multi-question asks tagged card=proposal_pick): count + shape details.
@@ -375,7 +351,6 @@ class AskUserTool:
                     card=card,
                     reason="shape",
                     questions=len(questions),
-                    blocking=blocking,
                 )
                 return ToolResult(
                     tool_call_id="",
@@ -383,12 +358,6 @@ class AskUserTool:
                     output="",
                     error=card_err + CARD_RETRY_HINT,
                 )
-
-        if not blocking:
-            unlocks = normalize_unlocks(arguments.get("unlocks"))
-            return self._post_nonblocking(
-                message, ctx_text, assumptions, questions, unlocks
-            )
 
         checkpoint_id = new_id()
         from agentcore.runtime.suspension import captain_transcript
@@ -412,9 +381,9 @@ class AskUserTool:
         # ⇒ 挂起即收口 (②); save failure ⇒ explicit error (no in-memory wait fallback).
         # CEO 协调模式 Phase 2: snapshot coordination state into the journal before
         # SUSPEND so resume can rebuild draft / completed / budget.
-        from agentcore.runtime.coordination.session import active_coordination
+        from agentcore.runtime.coordination.session import resolve_coordination_session
 
-        coord = active_coordination(context.execution_id)
+        coord = resolve_coordination_session(context.execution_id)
         if coord is not None:
             from agentcore.runtime.coordination.journal import record_coordination_snapshot
 
@@ -471,87 +440,4 @@ class AskUserTool:
             tool_call_id="",
             success=False,
             output="无法持久化检查点，回合已终止。请重试。",
-        )
-
-    def _post_nonblocking(
-        self,
-        message: str,
-        ctx_text: str,
-        assumptions: list[dict[str, Any]],
-        questions: list[dict[str, Any]],
-        unlocks: str,
-    ) -> ToolResult:
-        """非阻塞发问：抛出确认但不挂起——按默认做前半，或声明后半等人。
-
-        The counterpart to suspend+resume: rather than freezing the turn on the user's
-        answer, surface the question as a non-gating ``question_posted`` card (the client
-        renders chips that 回填 the composer; the answer rides an ordinary next-turn
-        message) and feed the CEO a ``CONTINUE``: keep the independent work going on the
-        stated default; do **not** dispatch the ``unlocks`` batch until the answer
-        returns. Guarded at this same checkpoint: a non-blocking ask MUST carry a
-        fallback (an assumption, or a question ``default``) **and** an ``unlocks``
-        declaration (which later work this answer unlocks) — without the former the user
-        can't trust the CEO to proceed; without the latter the answer cannot re-enter
-        the flow. Missing fallback steers to ``blocking=true``; missing ``unlocks``
-        steers to fill the field or write a notify in prose (not a card). No suspend /
-        frame / extra round, so it costs nothing the worker-side ``escalate`` doesn't.
-        """
-        has_fallback = bool(assumptions) or any(q.get("default") for q in questions)
-        if not has_fallback:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=(
-                    "非阻塞发问（blocking=false）必须写明你将先采用的默认：在 assumptions "
-                    "列出你的暂定决策，或给某个 question 填 default。否则用户无从判断能否放心"
-                    "不管。若你确实要等用户拍板再动，请改用 blocking=true。"
-                ),
-            )
-        if not unlocks:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=(
-                    "非阻塞发问（blocking=false）必须写 unlocks：这个答案回来后你要据此派哪批活。"
-                    "缺了它答案无法回到流程。纯知会不要走本工具，写进正文。"
-                ),
-            )
-        ask_id = new_id()
-        self.sink.emit(
-            question_posted(
-                ask_id=ask_id,
-                conversation_id=self.conversation_id,
-                question=message,
-                context=ctx_text,
-                assumptions=assumptions,
-                questions=questions,
-                unlocks=unlocks,
-            )
-        )
-        from agentcore.attention import AttentionKind, signal_hot_card_required
-
-        signal_hot_card_required(
-            interaction_id=ask_id,
-            kind=AttentionKind.QUESTION_POSTED,
-            conversation_id=self.conversation_id,
-            payload={"question": message},
-        )
-        logger.info(
-            "ask_user.nonblocking",
-            conversation_id=self.conversation_id,
-            questions=len(questions),
-            assumptions=len(assumptions),
-        )
-        return ToolResult(
-            tool_call_id="",
-            success=True,
-            output=(
-                "已（非阻塞）把这个确认抛给用户。不挂起本回合。"
-                "按你写明的默认，只继续 unlocks 影响不到的活；unlocks 那批先不派，答案回来再追加。"
-                "收口须明说「能做的做完了，后半等你」。"
-                "禁止偷偷按默认把依赖批做完，禁止把半程说成交付。"
-                "用户答复随后续消息到达。"
-            ),
         )

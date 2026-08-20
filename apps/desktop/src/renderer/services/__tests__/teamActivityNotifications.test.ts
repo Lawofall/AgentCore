@@ -333,22 +333,6 @@ describe("startTeamActivityNotifications", () => {
     expect(notifyInfoMock).not.toHaveBeenCalled();
   });
 
-  it("delegation_authorization 挂起弹等你授权团队开工", () => {
-    seedTitle(CID, "批量整理");
-    setGenerating(CID, true);
-    useInteractionStore.getState().upsertRequired({
-      kind: "delegation_authorization",
-      conversationId: CID,
-      messageId: "msg-auth",
-      payload: { authorization_id: "auth-1", tools: ["terminal"] },
-    });
-
-    expect(notifyInfoMock).toHaveBeenCalledWith(
-      "「批量整理」等你授权团队开工",
-      expect.any(Object),
-    );
-  });
-
   it("热阻塞卡与 firehose 同 id 仍只弹一次（新增两类也进同一张去重表）", () => {
     seedTitle(CID, "双通道升级");
     applyAiAttention({

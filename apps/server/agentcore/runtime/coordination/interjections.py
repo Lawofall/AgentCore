@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentcore.conversation.ask_reply import normalize_ask_id
 from agentcore.conversation.mentions import resolve_interjection_mentions
 from agentcore.core.logging import get_logger
 from agentcore.runtime.events import user_interjection
@@ -36,19 +35,6 @@ def _mention_meta(
     return resolve_interjection_mentions(payload, stashed)
 
 
-def _ask_id_of(
-    payload: dict[str, Any] | None = None,
-    stashed: dict[str, Any] | None = None,
-) -> str | None:
-    for src in (payload, stashed):
-        if not src:
-            continue
-        aid = normalize_ask_id(src.get("ask_id"))
-        if aid:
-            return aid
-    return None
-
-
 def emit_interjection_status(
     sink: Any | None,
     *,
@@ -59,7 +45,6 @@ def emit_interjection_status(
     note: str | None = None,
     attachments: list[dict[str, Any]] | None = None,
     agent_mentions: list[dict[str, Any]] | None = None,
-    ask_id: str | None = None,
 ) -> None:
     """Emit durable status update on the live turn sink (when available)."""
     if sink is None:
@@ -75,7 +60,6 @@ def emit_interjection_status(
             note=note,
             attachments=attachments,
             agent_mentions=agent_mentions,
-            ask_id=ask_id,
         )
     )
 
@@ -83,8 +67,8 @@ def emit_interjection_status(
 async def note_interjections_injected(session: Any, events: list[Any]) -> None:
     """Emit ``injected`` and mark ids as awaiting CEO disposition (图内 or queue).
 
-    Does not settle ``ask_id`` replies — that waits for host-turn commit.
-    Prompt assembly in ``inject.py`` must not settle (replayed every round).
+    Does not settle replies on inject — prompt assembly in ``inject.py`` must
+    not settle (replayed every round).
     """
     from agentcore.runtime.coordination.session import CoordinationEventKind
 
@@ -114,7 +98,6 @@ async def note_interjections_injected(session: Any, events: list[Any]) -> None:
             status="injected",
             attachments=att,
             agent_mentions=_mention_meta(payload, stashed),
-            ask_id=_ask_id_of(payload, stashed),
         )
 
 
@@ -159,7 +142,6 @@ def address_awaiting_interjections(
             note=note_text,
             attachments=_att_meta(stashed),
             agent_mentions=_mention_meta(stashed=stashed),
-            ask_id=_ask_id_of(stashed=stashed),
         )
         addressed.append(iid)
         logger.info(
@@ -242,7 +224,6 @@ def enqueue_interjection_to_fifo(
                 llm_credentials=stashed.get("llm_credentials"),
                 llm_supports_tools=stashed.get("llm_supports_tools"),
                 interjection_id=interjection_id,
-                ask_id=normalize_ask_id(stashed.get("ask_id")),
             ),
             on_live_sink=True,
         )
@@ -266,7 +247,6 @@ def enqueue_interjection_to_fifo(
         note=note,
         attachments=_att_meta(stashed),
         agent_mentions=_mention_meta(stashed=stashed),
-        ask_id=_ask_id_of(stashed=stashed),
     )
     logger.info(
         "coordination.user_interjection_queued",
@@ -307,7 +287,6 @@ def mark_interjection_failed(
         note=note,
         attachments=_att_meta(stashed),
         agent_mentions=_mention_meta(stashed=stashed),
-        ask_id=_ask_id_of(stashed=stashed),
     )
     logger.info(
         "coordination.user_interjection_failed",
@@ -338,7 +317,6 @@ def mark_interjection_addressed(
         note=note or "终局已回应",
         attachments=_att_meta(stashed),
         agent_mentions=_mention_meta(stashed=stashed),
-        ask_id=_ask_id_of(stashed=stashed),
     )
     logger.info(
         "coordination.user_interjection_addressed",

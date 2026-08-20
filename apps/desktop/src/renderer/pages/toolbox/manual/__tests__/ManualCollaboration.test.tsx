@@ -52,7 +52,8 @@ describe("ManualCollaboration", () => {
     expect(screen.getByText(/设为新会话默认/)).toBeTruthy();
     expect(screen.getByText("中途插手")).toBeTruthy();
     expect(screen.getByText("记忆与偏好")).toBeTruthy();
-    expect(sectionText("progress")).toMatch(/下一步指令在聊天里下达/);
+    expect(sectionText("progress")).toMatch(/唯一的常驻视图/);
+    expect(sectionText("progress")).toMatch(/拍板就在聊天里/);
     expect(screen.queryByText("设置 · 权限配方")).toBeNull();
     expect(screen.queryByText(/ask_user/)).toBeNull();
     expect(screen.queryByText(/plan_review/)).toBeNull();

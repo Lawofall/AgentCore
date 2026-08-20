@@ -56,7 +56,6 @@ def build_chat_system_prompt(
     prior_delivery_gaps: str,
     prior_delegate_retry: str,
     prior_futile_retries: str,
-    pending_questions: str,
     attachment_context: str,
     registered_sources: str,
     soft_cap: int | None,
@@ -87,7 +86,6 @@ def build_chat_system_prompt(
         .add("prior_delivery_gaps", prior_delivery_gaps, SectionOrder.PRIOR_DELIVERY_GAPS)
         .add("prior_delegate_retry", prior_delegate_retry, SectionOrder.PRIOR_DELEGATE_RETRY)
         .add("prior_futile_retries", prior_futile_retries, SectionOrder.PRIOR_FUTILE_RETRIES)
-        .add("pending_questions", pending_questions, SectionOrder.PENDING_QUESTIONS)
         .add("attachment_context", attachment_context, SectionOrder.ATTACHMENT)
         .add("registered_sources", registered_sources, SectionOrder.REGISTERED_SOURCES)
         .observe(scope="ceo_turn", soft_cap=soft_cap)
@@ -401,17 +399,6 @@ async def assemble_ceo_turn(
         conversation_id=conversation_id,
         exclude_message_id=message_id,
     )
-    # Sticky pending non-blocking questions: fold pending across this conversation's
-    # journals (not prior-turn one-shot — that re-injects every historical post).
-    from agentcore.conversation.pending_questions import build_pending_questions_hint
-
-    pending_questions = await _timed_phase(
-        "pending_questions",
-        build_pending_questions_hint(
-            conversation_id=conversation_id,
-            exclude_message_id=message_id,
-        ),
-    )
     # 可用性诚实性 · 甲：偏窄短问 → 复用最近 delivery_status 发卡到本回合答复面。
     from agentcore.runtime.delegate.delivery_status import (
         maybe_reinject_recent_delivery_for_availability_ask,
@@ -434,7 +421,6 @@ async def assemble_ceo_turn(
         prior_delivery_gaps=prior_delivery_gaps,
         prior_delegate_retry=prior_delegate_retry,
         prior_futile_retries=prior_futile_retries,
-        pending_questions=pending_questions,
         attachment_context=prepared.attachment_context,
         registered_sources=format_registered_sources_prompt(evidence_ledger),
         soft_cap=settings.prompt_budget_char_soft_cap,

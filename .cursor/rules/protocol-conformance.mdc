@@ -23,6 +23,7 @@ alwaysApply: false
 ## 何时必跑 / 必更新
 
 - 动任一端协议 fold → **必跑** `pnpm conformance`。
+- **给已有事件 payload 加可选字段** → 字段消费棘轮必须绿（叶名在 desktop/mobile/admin/town/fold-kit 生产代码有读点，或基线分组豁免）。独立于事件名孤儿闸。判据是叶名零命中，不是 AST `(事件,字段)`；解构 / `idField` / 整包再读 / C# `JsonProperty` / 重命名拷贝都算读。禁止靠删契约字段过闸。`uv run python scripts/check_event_field_consumers.py`（`release:gate` backend）。
 - **新增向量** → 后端哨兵 `apps/server/tests/test_conformance_projection*.py` 有覆盖棘轮（未写手验断言的向量数只降不升），加向量会让它红：高危面（失败/中止/挂起态、无正文的空泡脸、生命周期不留幽灵卡）补一条**手工推导**的断言（禁抄 golden——抄了就和 oracle 同错），其余面显式抬基线数字。
 - 后端改事件契约 / 投影 → 重导向量 + golden（单一源），两端对齐到红转绿。
 - 发现协议 bug → **先加一条复现向量**（棘轮），再修。向量**两来源**：手写 builder（`agentcore/conformance/vectors/`）或从真实回合录制裁切（`agentcore/conformance/recording_cut.py`，产物 `recorded_*` 前缀）→ 见 [`前端技术与架构.md` §十 SSE 与协议一致性](/docs/04-前端/前端技术与架构.md)。

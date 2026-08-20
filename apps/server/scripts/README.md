@@ -11,8 +11,8 @@
 ## 常驻（勿随意挪走）
 
 - **契约 / 生成**：`dump_*.py`、`gen_*.py`、`validate_sse_contract.py`、`mlr_golden_rings_check.py`
-- **日志 / 注册表**：`log_timeline.py`、`log_stats.py`、`log_patrol.py`、`sync_log_event_registry.py`
-- **门禁 / 校验**：`check_schema_gate.py`、`check_workspace_ignore_parity.py`、`verify_gvisor_sandbox.py`
+- **日志 / 注册表**：`log_timeline.py`、`log_stats.py`、`log_patrol.py`、`sync_log_event_registry.py`（`--check` 只读对账，挂 `release:gate`）
+- **门禁 / 校验**：`check_schema_gate.py`、`check_workspace_ignore_parity.py`、`check_event_consumer_orphans.py`、`check_event_field_consumers.py`、`verify_gvisor_sandbox.py`
 - **运维 / 开发**：`create_admin.py`、`seed_dev_user.py`、`set_quota.py`、`set_dev_llm_key.py`、`export_conversations.py`、`cleanup_test_conversations.py`、`backfill_memory.py`、`migrate_memory_pipeline.py`、`backfill_auto_desk_scratch.py`、`sync_community_prices.py`、`fetch_*.py`、`start-dev-server.ps1`
 - **演示带**：`demo_tape_*.py`
 

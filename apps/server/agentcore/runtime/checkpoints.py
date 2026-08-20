@@ -43,9 +43,6 @@ class CheckpointDecision(StrEnum):
     plan_review still steers then continues. ask_user rejects ``ADJUST``.
     ``RESEARCH_FIRST`` is debate kickoff only: 不开赛，回灌固定文案令 CEO 立即挂
     ``multi_lens_research``（与 STOP 同构的恢复分支；非辩论开工卡须拒绝/降级）。
-
-    Note: ``DelegationAuthorizationDecision.per_call`` is a different dialect
-    (委派授权卡) — not part of this enum.
     """
 
     CONTINUE = "continue"  # proceed (kickoff: grant + start; note → steer)

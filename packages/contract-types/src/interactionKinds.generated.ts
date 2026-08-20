@@ -7,10 +7,8 @@ export type InteractionKind =
   | "approval"
   | "ask_user"
   | "client_tool"
-  | "delegation_authorization"
   | "escalation"
   | "plan_review"
-  | "question_posted"
   | "stage_card"
   | "team_preview";
 
@@ -18,10 +16,8 @@ export const INTERACTION_KIND_VALUES = [
   "approval",
   "ask_user",
   "client_tool",
-  "delegation_authorization",
   "escalation",
   "plan_review",
-  "question_posted",
   "stage_card",
   "team_preview",
 ] as const;
@@ -30,20 +26,16 @@ export const INTERACTION_KIND_VALUES = [
 export type UserInteractionKind =
   | "approval"
   | "ask_user"
-  | "delegation_authorization"
   | "escalation"
   | "plan_review"
-  | "question_posted"
   | "stage_card"
   | "team_preview";
 
 export const USER_INTERACTION_KIND_VALUES = [
   "approval",
   "ask_user",
-  "delegation_authorization",
   "escalation",
   "plan_review",
-  "question_posted",
   "stage_card",
   "team_preview",
 ] as const;
@@ -52,48 +44,73 @@ export type InteractionKindWire = {
   readonly requiredEvent: string;
   readonly resolvedEvent: string | null;
   readonly idField: string;
+  readonly hot: boolean;
+  readonly pausesTurn: boolean;
+  readonly reconnectAnswerable: boolean;
+  readonly journalSurface: boolean;
+  readonly attention: boolean;
 };
 
-/** kind → SSE required/resolved event names + payload id field. */
+/** kind → SSE wire + behavior flags (hot / gate / recovery / journal / attention). */
 export const INTERACTION_KIND_WIRE: Readonly<Record<UserInteractionKind, InteractionKindWire>> = {
   "approval": {
     requiredEvent: "approval_required",
     resolvedEvent: "approval_resolved",
     idField: "approval_id",
+    hot: true,
+    pausesTurn: true,
+    reconnectAnswerable: true,
+    journalSurface: true,
+    attention: true,
   },
   "ask_user": {
     requiredEvent: "checkpoint_required",
     resolvedEvent: "checkpoint_resolved",
     idField: "checkpoint_id",
-  },
-  "delegation_authorization": {
-    requiredEvent: "delegation_authorization_required",
-    resolvedEvent: "delegation_authorization_resolved",
-    idField: "authorization_id",
+    hot: false,
+    pausesTurn: true,
+    reconnectAnswerable: false,
+    journalSurface: true,
+    attention: true,
   },
   "escalation": {
     requiredEvent: "escalation_required",
     resolvedEvent: "escalation_resolved",
     idField: "escalation_id",
+    hot: true,
+    pausesTurn: false,
+    reconnectAnswerable: true,
+    journalSurface: true,
+    attention: true,
   },
   "plan_review": {
     requiredEvent: "plan_review_required",
     resolvedEvent: "plan_review_resolved",
     idField: "checkpoint_id",
-  },
-  "question_posted": {
-    requiredEvent: "question_posted",
-    resolvedEvent: "question_resolved",
-    idField: "ask_id",
+    hot: false,
+    pausesTurn: true,
+    reconnectAnswerable: false,
+    journalSurface: true,
+    attention: true,
   },
   "stage_card": {
     requiredEvent: "stage_card_required",
     resolvedEvent: "stage_card_resolved",
     idField: "stage_card_id",
+    hot: false,
+    pausesTurn: false,
+    reconnectAnswerable: true,
+    journalSurface: true,
+    attention: false,
   },
   "team_preview": {
     requiredEvent: "team_preview_required",
     resolvedEvent: "team_preview_resolved",
     idField: "checkpoint_id",
+    hot: false,
+    pausesTurn: true,
+    reconnectAnswerable: false,
+    journalSurface: true,
+    attention: true,
   },
 };

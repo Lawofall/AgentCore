@@ -282,7 +282,7 @@ def nested_turn_envelope_scope(*, depth: int) -> Iterator[NestedTurnEnvelope | N
         release_nested_envelope(env)
 
 
-def resolve_wave_budget_hooks() -> tuple[
+def resolve_wave_budget_hooks(*, credential_source: str) -> tuple[
     Callable[[], bool],
     Callable[[], bool] | None,
 ]:
@@ -291,44 +291,47 @@ def resolve_wave_budget_hooks() -> tuple[
     Nested envelope active → stop on envelope only; parent delivery reserve off.
     Otherwise → parent hard ceiling + delivery reserve (depth-0 path).
 
-    Turn API-key auth death ORs into ``should_stop`` (same latch as call_fence) so
-    unstarted workers are not admitted after the first confirmed ``LLMAuthError``.
+    This drive's LLM payer (``credential_source``) ORs into ``should_stop`` so
+    unstarted workers are not admitted after that payer's confirmed death.
+    A different payer dying (e.g. platform chrome) does not stop this wave.
     """
     from agentcore.llm.turn_auth_dead import is_turn_auth_dead
 
     if _nested_envelope.get() is not None:
 
         def _nested_stop() -> bool:
-            return is_nested_envelope_hit() or is_turn_auth_dead()
+            return is_nested_envelope_hit() or is_turn_auth_dead(credential_source)
 
         return _nested_stop, None
 
     def _parent_stop() -> bool:
-        return is_turn_token_ceiling_hit() or is_turn_auth_dead()
+        return is_turn_token_ceiling_hit() or is_turn_auth_dead(credential_source)
 
     return _parent_stop, is_turn_token_delivery_reserve_hit
 
 
-def should_materialise_turn_token_budget_skips() -> bool:
+def should_materialise_turn_token_budget_skips(*, credential_source: str) -> bool:
     """Whether un-run tails should be materialised as SKIPPED after a wave."""
     from agentcore.llm.turn_auth_dead import is_turn_auth_dead
 
-    if is_turn_auth_dead():
+    if is_turn_auth_dead(credential_source):
         return True
     if _nested_envelope.get() is not None:
         return is_nested_envelope_hit()
     return is_turn_token_ceiling_hit()
 
 
-def budget_skip_warning_for_active_scope() -> str:
+def budget_skip_warning_for_active_scope(*, credential_source: str) -> str:
     from agentcore.llm.turn_auth_dead import (
         TURN_AUTH_DEAD_REJECT_MESSAGE,
         is_turn_auth_dead,
         turn_auth_dead_reject_message,
     )
 
-    if is_turn_auth_dead():
-        return turn_auth_dead_reject_message() or TURN_AUTH_DEAD_REJECT_MESSAGE
+    if is_turn_auth_dead(credential_source):
+        return turn_auth_dead_reject_message(credential_source) or (
+            TURN_AUTH_DEAD_REJECT_MESSAGE
+        )
     if _nested_envelope.get() is not None:
         return TURN_TOKEN_NESTED_ENVELOPE_WARNING
     return TURN_TOKEN_CEILING_WARNING

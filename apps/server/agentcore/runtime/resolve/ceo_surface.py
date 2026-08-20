@@ -110,18 +110,19 @@ def _owns_coordination(delegate: Any) -> bool:
 def resync_coordination_binding(chat_tools: ToolRegistry) -> bool:
     """Re-point the turn ContextVar at the execution ``delegate`` actually coordinated.
 
-    ``current_execution_id`` is bound once at turn entry (``pipeline/prepare``) and
-    mirrors ``base_tool_context.execution_id``. Merging into a still-live graph
-    (``append_to_execution_id`` resolving to a hot execution) re-binds both onto that
-    host from inside the delegate tool's ``asyncio.gather`` child, where the ContextVar
-    write stays in the child copy while the shared tool context keeps the truth.
-    Without re-reading it, the captain's ``active_coordination()`` lookups miss the
-    host session: it neither blocks on team events nor gets the coordination tool
-    surface, and closes the turn on prose while the team is still running.
+    ``current_execution_id`` is bound at turn entry (``pipeline/prepare``). Cross-turn
+    adopt leaves it on the previous live graph for wait / cancel / interjection, while
+    ``base_tool_context.execution_id`` stays this turn's mint for dispatch. Same-turn
+    merge re-binds the shared tool context onto the host from inside the delegate
+    tool's ``asyncio.gather`` child, where the ContextVar write stays in the child
+    copy. Without re-reading a *live* host, the captain's ``active_coordination()``
+    lookups miss the session: it neither blocks on team events nor gets the
+    coordination tool surface.
 
-    Cross-turn append into a *finished* graph no longer takes this path — it mints a
-    new execution and records ``prev_execution_id`` instead — but the hot-graph merge
-    still rebinds, so this stays load-bearing.
+    Only follow the tool-context eid when that id already has an active session —
+    otherwise a this-turn mint with no graph yet would clobber the adopted live
+    binding. After this turn starts its own graph, ``set_active_coordination``
+    registers the mint and this follows it.
 
     Returns True when the binding moved.
     """
@@ -134,10 +135,16 @@ def resync_coordination_binding(chat_tools: ToolRegistry) -> bool:
     if not bound:
         return False
 
-    from agentcore.runtime.coordination.session import current_execution_id
+    from agentcore.runtime.coordination.session import (
+        active_coordination,
+        current_execution_id,
+    )
 
     previous = (current_execution_id.get() or "").strip()
     if previous == bound:
+        return False
+    host = active_coordination(bound)
+    if host is None or not host.active:
         return False
     current_execution_id.set(bound)
     logger.info(

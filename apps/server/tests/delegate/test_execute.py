@@ -748,7 +748,7 @@ async def test_playbook_xor_and_hoist_conflict_skip_circuit_breaker():
     t = tool(Provider([]))
     xor = await t.execute(
         {
-            "playbook_id": "build_feature",
+            "playbook": "build_feature",
             "playbook_args": {"feature": "CLI"},
             "tasks": [
                 {"role": "实现", "task": "写 CLI"},
@@ -762,7 +762,6 @@ async def test_playbook_xor_and_hoist_conflict_skip_circuit_breaker():
 
     hoist = await t.execute(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "简单双任务流水线",
             "tasks": [
                 {

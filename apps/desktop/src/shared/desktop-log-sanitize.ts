@@ -40,6 +40,9 @@ const FIELD_ALLOW = new Set([
   "outcome",
   "delay_ms",
   "duration_ms",
+  "idle_timeout_ms",
+  "event_type",
+  "turn_phase",
 ]);
 
 const SECRET_KEY =
@@ -47,13 +50,29 @@ const SECRET_KEY =
 
 const JWT_LIKE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 
+/** Envelope copied onto every jsonl row — say once on the 排查包 section. */
+const ENVELOPE_KEYS = ["build", "version", "conversation_id"] as const;
+
+/** Fold metadata — ignored when matching consecutive duplicates. */
+const FOLD_IGNORE_KEYS = new Set(["timestamp", "count", "first", "last"]);
+
 /**
- * Soft cap after the 64KB file tail. 80 was too tight: a reconnect storm
- * plus follow/sse noise could push ``server_health.*`` (no conversation_id)
- * out of the pack. Ambient events are never dropped to make room for scoped
- * ones (see {@link trimDesktopLogExcerpt}).
+ * Soft cap after the 64KB file tail. Identical events (same fields except
+ * timestamp) roll up first, so a reconnect storm is one counted line instead
+ * of filling the window. Ambient ``server_health.*`` is still never dropped
+ * to make room for scoped events (see {@link trimDesktopLogExcerpt}).
  */
 export const DESKTOP_LOG_EXCERPT_MAX_EVENTS = 400;
+
+export type DesktopLogPrimitive = string | number | boolean | null;
+export type SanitizedDesktopLogRecord = Record<string, DesktopLogPrimitive>;
+
+export type DesktopLogExcerptHeader = {
+  build?: string;
+  version?: string;
+  conversation_id?: string;
+  level?: string;
+};
 
 export function isAllowedDesktopLogEvent(event: string): boolean {
   if (EVENT_ALLOW_EXACT.has(event)) return true;
@@ -86,6 +105,15 @@ export function isRelevantDesktopLogRecord(
   if (typeof cid !== "string" || !cid) return true;
   const want = conversationId?.trim() || "";
   return !want || cid === want;
+}
+
+function isAmbientRecord(record: SanitizedDesktopLogRecord): boolean {
+  const event = record.event;
+  return (
+    (typeof event === "string" && isAmbientDesktopLogEvent(event)) ||
+    typeof record.conversation_id !== "string" ||
+    !record.conversation_id
+  );
 }
 
 function trimDesktopLogExcerpt(
@@ -132,8 +160,8 @@ function isAllowedPrimitive(
 
 function pickAllowedFields(
   record: Record<string, unknown>,
-): Record<string, string | number | boolean | null> {
-  const out: Record<string, string | number | boolean | null> = {};
+): SanitizedDesktopLogRecord {
+  const out: SanitizedDesktopLogRecord = {};
   for (const [key, value] of Object.entries(record)) {
     if (!FIELD_ALLOW.has(key)) continue;
     if (SECRET_KEY.test(key) && key !== "reason") continue;
@@ -143,12 +171,168 @@ function pickAllowedFields(
   return out;
 }
 
+function collapseKey(record: SanitizedDesktopLogRecord): string {
+  const pairs: Array<[string, DesktopLogPrimitive]> = [];
+  for (const key of Object.keys(record).sort()) {
+    if (FOLD_IGNORE_KEYS.has(key)) continue;
+    const value = record[key];
+    if (value === undefined) continue;
+    pairs.push([key, value]);
+  }
+  return JSON.stringify(pairs);
+}
+
+function occurrenceCount(record: SanitizedDesktopLogRecord): number {
+  return typeof record.count === "number" && record.count >= 1
+    ? record.count
+    : 1;
+}
+
+function firstTimestamp(record: SanitizedDesktopLogRecord): string | undefined {
+  if (typeof record.first === "string" && record.first) return record.first;
+  if (typeof record.timestamp === "string" && record.timestamp) {
+    return record.timestamp;
+  }
+  return undefined;
+}
+
+function lastTimestamp(record: SanitizedDesktopLogRecord): string | undefined {
+  if (typeof record.last === "string" && record.last) return record.last;
+  if (typeof record.timestamp === "string" && record.timestamp) {
+    return record.timestamp;
+  }
+  return undefined;
+}
+
+function stripFoldMeta(
+  record: SanitizedDesktopLogRecord,
+): SanitizedDesktopLogRecord {
+  const out: SanitizedDesktopLogRecord = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (FOLD_IGNORE_KEYS.has(key)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+function collapsedRecord(
+  base: SanitizedDesktopLogRecord,
+  count: number,
+  first: string | undefined,
+  last: string | undefined,
+): SanitizedDesktopLogRecord {
+  const out = stripFoldMeta(base);
+  out.count = count;
+  if (first) out.first = first;
+  if (last) out.last = last;
+  return out;
+}
+
+/** warn / error anchor the timeline — they stay verbatim, in place, unrolled. */
+function isFoldableRecord(record: SanitizedDesktopLogRecord): boolean {
+  return record.level !== "warn" && record.level !== "error";
+}
+
+/**
+ * Roll rows that share an event and every field except timestamp up into their
+ * first occurrence, carrying ``count`` / ``first`` / ``last``.
+ *
+ * Adjacency is deliberately not required: yielding the stream to a local turn
+ * alternates ``follow_closed`` / ``follow_open``, so folding only neighbours
+ * would leave every pair intact and shrink nothing.
+ */
+export function foldDesktopLogRecords(
+  records: readonly SanitizedDesktopLogRecord[],
+): SanitizedDesktopLogRecord[] {
+  const out: SanitizedDesktopLogRecord[] = [];
+  const anchorAt = new Map<string, number>();
+  for (const rec of records) {
+    if (!isFoldableRecord(rec)) {
+      out.push({ ...rec });
+      continue;
+    }
+    const key = collapseKey(rec);
+    const at = anchorAt.get(key);
+    if (at === undefined) {
+      anchorAt.set(key, out.length);
+      out.push({ ...rec });
+      continue;
+    }
+    const prev = out[at];
+    if (prev === undefined) continue;
+    out[at] = collapsedRecord(
+      prev,
+      occurrenceCount(prev) + occurrenceCount(rec),
+      firstTimestamp(prev) ?? firstTimestamp(rec),
+      lastTimestamp(rec) ?? lastTimestamp(prev),
+    );
+  }
+  return out;
+}
+
+/**
+ * Lift repeated envelope fields onto a section header. ``level: info`` is the
+ * omitted default; warn / error stay on the line so they remain scannable.
+ *
+ * Hoisting ``conversation_id`` would otherwise make an ambient row (no
+ * conversation of its own) read as if it belonged to the header's conversation,
+ * so those rows get an explicit ``scope: "app"`` instead.
+ */
+export function hoistDesktopLogEnvelope(
+  records: readonly SanitizedDesktopLogRecord[],
+): {
+  header: DesktopLogExcerptHeader;
+  records: SanitizedDesktopLogRecord[];
+} {
+  const header: DesktopLogExcerptHeader = {};
+  for (const key of ENVELOPE_KEYS) {
+    const values = new Set<string>();
+    for (const rec of records) {
+      const value = rec[key];
+      if (typeof value === "string" && value) values.add(value);
+    }
+    if (values.size === 1) header[key] = [...values][0];
+  }
+
+  let strippedInfo = false;
+  const cidHoisted = header.conversation_id !== undefined;
+  const next = records.map((rec) => {
+    const out: SanitizedDesktopLogRecord = { ...rec };
+    for (const key of ENVELOPE_KEYS) {
+      const hoisted = header[key];
+      if (hoisted !== undefined && out[key] === hoisted) delete out[key];
+    }
+    const scoped =
+      typeof rec.conversation_id === "string" && rec.conversation_id !== "";
+    if (cidHoisted && !scoped) out.scope = "app";
+    if (out.level === "info") {
+      strippedInfo = true;
+      const { level: _info, ...rest } = out;
+      return rest;
+    }
+    return out;
+  });
+  if (strippedInfo) header.level = "info";
+  return { header, records: next };
+}
+
+export function formatDesktopLogExcerptHeader(
+  header: DesktopLogExcerptHeader,
+): string[] {
+  const lines: string[] = [];
+  for (const key of ["build", "version", "conversation_id", "level"] as const) {
+    const value = header[key];
+    if (value) lines.push(`${key}: ${value}`);
+  }
+  return lines;
+}
+
 /**
  * One JSONL line → allowlisted record, or ``null`` if it is not diagnostic.
  */
 export function sanitizeDesktopLogRecord(
   raw: unknown,
-): Record<string, string | number | boolean | null> | null {
+): SanitizedDesktopLogRecord | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const rec = raw as Record<string, unknown>;
   const event = typeof rec.event === "string" ? rec.event : "";
@@ -179,7 +363,7 @@ export function sanitizeDesktopLogLines(
   const conversationId = opts?.conversationId?.trim() || "";
   const maxEvents = opts?.maxEvents ?? DESKTOP_LOG_EXCERPT_MAX_EVENTS;
   const lines = dropPartialJsonlPrefix(text).split("\n");
-  const kept: Array<{ line: string; ambient: boolean }> = [];
+  const kept: SanitizedDesktopLogRecord[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -192,15 +376,14 @@ export function sanitizeDesktopLogLines(
     const sanitized = sanitizeDesktopLogRecord(parsed);
     if (!sanitized) continue;
     if (!isRelevantDesktopLogRecord(sanitized, conversationId)) continue;
-    const event = sanitized.event;
-    kept.push({
-      line: JSON.stringify(sanitized),
-      ambient:
-        typeof event === "string" &&
-        (isAmbientDesktopLogEvent(event) ||
-          typeof sanitized.conversation_id !== "string" ||
-          !sanitized.conversation_id),
-    });
+    kept.push(sanitized);
   }
-  return trimDesktopLogExcerpt(kept, maxEvents);
+  const folded = foldDesktopLogRecords(kept);
+  return trimDesktopLogExcerpt(
+    folded.map((record) => ({
+      line: JSON.stringify(record),
+      ambient: isAmbientRecord(record),
+    })),
+    maxEvents,
+  );
 }

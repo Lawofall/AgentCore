@@ -165,10 +165,10 @@ describe("toolResultPeek", () => {
     ).toBe("交叉验证完成，建议一周内表态");
   });
 
-  it("falls back to the first non-empty result line", () => {
+  it("does not paste a raw grep hit line onto the collapsed title", () => {
     expect(
       toolResultPeek(data({ toolName: "grep", result: "match line\nmore" })),
-    ).toBe("match line");
+    ).toBe("");
   });
 
   it("compacts grep hit / files_only / empty summaries for the title row", () => {
@@ -186,6 +186,15 @@ describe("toolResultPeek", () => {
         data({ toolName: "grep", result: "3 个文件匹配 /foo/\na.ts: 2" }),
       ),
     ).toBe("3 个文件");
+    expect(
+      toolResultPeek(
+        data({
+          toolName: "grep",
+          result:
+            "2 处匹配，分布在 1 个文件中（/<(article|Collapsible|collapsed|折叠)/）\nsrc/a.ts:1: x",
+        }),
+      ),
+    ).toBe("2 处匹配 · 1 个文件");
     expect(
       toolResultPeek(
         data({

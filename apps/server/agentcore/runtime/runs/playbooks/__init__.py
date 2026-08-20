@@ -236,7 +236,7 @@ def playbook_args_schema_description() -> str:
             cues.append(f"{p.name}→{'/'.join(req)}")
     required_cues = "；".join(cues)
     return (
-        "具名 playbook 快捷槽位对象（与 playbook/playbook_id 联用；默认手写 tasks 时勿传）。"
+        "具名 playbook 快捷槽位对象（与 playbook 联用；默认手写 tasks 时勿传）。"
         "建站必填 topic（简述；亦接受 purpose/brief/description；不接受旧键 site）、"
         "绿场必填 app——勿空对象。"
         f"必填槽：{required_cues}。"

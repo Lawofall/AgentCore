@@ -172,8 +172,9 @@ export function handleExecutionEvent(
     // conversation-store gate); journaled, so it replays on reload.
     case "plan_revised":
     case "run_escalation":
-    // Worker 内部路由 Phase 1：Escalation Gate — 诊断帧；Phase 1 无独立 UI，
-    // 仍走 frame 路径以便 journal 重放时不丢事件。
+    // Worker 内部路由 Phase 1：Escalation Gate — 实时诊断信号，Phase 1 无独立 UI。
+    // 列在这里只为认领事件、不记 unhandled；下面两步对它都是空转（frameFromEvent
+    // 无此 case，处置为 DERIVED 不进 journal）。耐久升级走 run_escalation / escalate。
     case "run_escalation_gate":
     // 阻塞式求决策: a worker SUSPENDED on a blocking escalate (escalation_required) then settled
     // (escalation_resolved). Both fold onto the run's escalations via the same frame path

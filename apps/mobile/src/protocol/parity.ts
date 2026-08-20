@@ -72,12 +72,12 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
   run_plan: {
     verdict: "ported",
     surface:
-      "TeamView · 本回合完整协作图；可选 prev_execution_id → ProcessTimeline「续自上一张图」文案行",
+      "TeamView · 本回合完整协作图；可选 prev_execution_id → ProcessTimeline「新开一队、接着上一张继续」文案行",
   },
   graph_append: {
     verdict: "ported",
     surface:
-      "AssistantView · 旧 journal 跨回合同图追加锚点（fold → process.graph_append）；新路径用 run_plan.prev_execution_id + 本回合 TeamView",
+      "AssistantView · 旧 journal 跨回合锚点（fold → process.graph_append）；新路径用 run_plan.prev_execution_id + 本回合 TeamView",
   },
   coordination_wait: {
     verdict: "ported",
@@ -252,15 +252,6 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
     reason:
       "定案 A：不可操作交互静默消失；store/fold 仍记 orphaned，UI 不渲染灰态卡",
   },
-  delegation_authorization_required: {
-    verdict: "ported",
-    surface: "DelegationAuthorizationCard",
-  },
-  delegation_authorization_resolved: {
-    verdict: "ported",
-    surface:
-      "DelegationAuthorizationCard 撤卡；另一端点掉的 → RemoteSettledCards「已由另一端处理」",
-  },
   checkpoint_required: {
     verdict: "ported",
     surface: "ResumeCard",
@@ -287,27 +278,6 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
   stage_card_resolved: {
     verdict: "ported",
     surface: "StageCard；另一端推进的 → RemoteSettledCards「已由另一端处理」",
-  },
-
-  // —— 非阻塞提问 (①) ——
-  question_posted: {
-    verdict: "ported",
-    surface: "HangingQuestionBar（pending）／NonBlockingAskCard（resolved）",
-  },
-  question_resolved: {
-    verdict: "ported",
-    surface:
-      "NonBlockingAskCard 已答 / 已作废；另一端已答 → RemoteSettledCards「已由另一端处理」",
-  },
-
-  // —— 跟进推荐（手机有意下线 CEO→用户 chips；事件仍 fold no-op / stopLifecycle 放行）——
-  followups_generated: {
-    verdict: "simplified",
-    reason: "手机有意下线「下一步」chips；事件忽略不展示",
-  },
-  followups_unavailable: {
-    verdict: "simplified",
-    reason: "手机有意下线「下一步」chips；不可用标记不再展示",
   },
 
   // —— 收尾 / 错误 ——
@@ -445,34 +415,6 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
     verdict: "impossible",
     reason: "同上 · 世界事件",
   },
-  "sim.show.affection_shift": {
-    verdict: "impossible",
-    reason: "AI 恋综观测仅桌面/Unity 客户端，手机无模拟面 (fold no-op)",
-  },
-  "sim.show.departure": {
-    verdict: "impossible",
-    reason: "同上 · 零票离场",
-  },
-  "sim.show.episode_gate": {
-    verdict: "impossible",
-    reason: "同上 · 期节点门",
-  },
-  "sim.show.heart_pick": {
-    verdict: "impossible",
-    reason: "同上 · 心动投票",
-  },
-  "sim.show.pair_formed": {
-    verdict: "impossible",
-    reason: "同上 · 互选配对",
-  },
-  "sim.show.reveal": {
-    verdict: "impossible",
-    reason: "同上 · 公布环节",
-  },
-  "sim.show.zero_vote_alert": {
-    verdict: "impossible",
-    reason: "同上 · 零票预警",
-  },
 };
 
 /** 锚 B · 桌面交互面（apps/desktop/.../components/chat 顶层 .tsx + `ask/` 子树）→ 手机对等裁决。
@@ -481,10 +423,6 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
  *  infra / 渲染叶子记 `internal`（仍要求一句 reason，强制是有意分类而非遗漏）。 */
 export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
   // —— 互动卡：已上手机 ——
-  NonBlockingAskCard: {
-    verdict: "ported",
-    surface: "NonBlockingAskCard（resolved）／HangingQuestionBar（pending）",
-  },
   EscalationCard: {
     verdict: "ported",
     surface: "AssistantView · EscalationAnswer (②)",
@@ -529,12 +467,6 @@ export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
     surface: "ResumeCard",
     reason:
       "桌面 ResumePrompt 复用 CheckpointCard；手机 ResumeCard 已承接全 ask intent 专用面（本机目录 action 除外）",
-  },
-  HangingQuestionBar: {
-    verdict: "ported",
-    surface: "HangingQuestionBar",
-    reason:
-      "非阻塞悬题可操作面在底栏（有事等你，团队照跑）；与 ResumeCard「需要你拍板」一眼可分；pending 不进过程线",
   },
   PausedContinueSurface: {
     verdict: "ported",
@@ -607,7 +539,7 @@ export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
   GraphAppendAnchor: {
     verdict: "simplified",
     reason:
-      "桌面可滚回宿主图；手机仅「续自上一张图」文案行（旧 graph_append / 新 prev_execution_id）；新回合自带完整 TeamView，无跨气泡跳转",
+      "桌面可滚回宿主图；手机仅「新开一队、接着上一张继续」文案行（旧 graph_append / 新 prev_execution_id）；新回合自带完整 TeamView，无跨气泡跳转",
   },
 
   // —— 提问 intent 专用卡（ask/；桌面 CheckpointCard 分支出；手机 ResumeCard 承接）——
@@ -754,10 +686,6 @@ export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
   RunConfirmPrompt: {
     verdict: "impossible",
     reason: "用户直触 bash 的本地运行确认卡（fsApi 本会话放行），手机无本地侧",
-  },
-  DelegationAuthorizationCard: {
-    verdict: "ported",
-    surface: "DelegationAuthorizationCard",
   },
 
   // —— infra / 渲染叶子（非交互-对等面）——

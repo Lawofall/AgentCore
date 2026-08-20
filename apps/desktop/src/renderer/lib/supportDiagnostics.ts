@@ -2,7 +2,13 @@ import {
   type SupportDiagnosticIds,
   formatSupportDiagnosticText,
 } from "@agentcore/protocol-fold-kit";
-import { isRelevantDesktopLogRecord } from "@shared/desktop-log-sanitize";
+import {
+  type SanitizedDesktopLogRecord,
+  foldDesktopLogRecords,
+  formatDesktopLogExcerptHeader,
+  hoistDesktopLogEnvelope,
+  isRelevantDesktopLogRecord,
+} from "@shared/desktop-log-sanitize";
 
 export {
   formatSupportDiagnosticText,
@@ -25,16 +31,43 @@ export function precedingUserMessageId(
 
 const DESKTOP_LOG_SECTION = "--- desktop.jsonl ---";
 
+function parseSanitizedDesktopLogLines(
+  lines: readonly string[],
+): SanitizedDesktopLogRecord[] {
+  const records: SanitizedDesktopLogRecord[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        records.push(parsed as SanitizedDesktopLogRecord);
+      }
+    } catch {}
+  }
+  return records;
+}
+
 /**
  * Append a sanitized ``desktop.jsonl`` excerpt so connectivity events can leave
  * the user's machine with the 排查包. Missing preload / empty tail → base pack.
+ *
+ * Duplicate events are rolled up into a counted row, and envelope fields that
+ * repeat on every row (``build`` / ``version`` / ``conversation_id`` /
+ * ``level: info``) are stated once under the section marker.
  */
 export function appendSanitizedDesktopLogExcerpt(
   pack: string,
   lines: readonly string[],
 ): string {
   if (!pack || lines.length === 0) return pack;
-  return `${pack}\n\n${DESKTOP_LOG_SECTION}\n${lines.join("\n")}`;
+  const records = parseSanitizedDesktopLogLines(lines);
+  if (records.length === 0) return pack;
+  const folded = foldDesktopLogRecords(records);
+  const { header, records: body } = hoistDesktopLogEnvelope(folded);
+  const headerLines = formatDesktopLogExcerptHeader(header);
+  const jsonl = body.map((record) => JSON.stringify(record));
+  return [pack, "", DESKTOP_LOG_SECTION, ...headerLines, ...jsonl].join("\n");
 }
 
 /**

@@ -37,6 +37,8 @@ class ConversationStore(Protocol):
 
     async def get_cost_by_trace(self, trace_id: str) -> dict[str, Any] | None: ...
 
+    async def get_journal_by_trace(self, trace_id: str) -> list[dict[str, Any]]: ...
+
     async def aclose(self) -> None: ...
 
 
@@ -157,6 +159,32 @@ def _aggregate_cost_rows(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     }
 
 
+_JOURNAL_KEYS = (
+    "turn_id",
+    "seq",
+    "band",
+    "kind",
+    "payload",
+    "ts",
+    "conversation_id",
+    "trace_id",
+    "created_at",
+)
+
+
+def _project_journal_row(row: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in _JOURNAL_KEYS:
+        if key not in row:
+            continue
+        val = row[key]
+        if key == "created_at" and val is not None:
+            out[key] = str(val)
+        else:
+            out[key] = val
+    return out
+
+
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -263,6 +291,21 @@ class ExportConversationStore:
             if str(row.get("trace_id") or "") == trace_id
         ]
         return _aggregate_cost_rows(rows)
+
+    async def get_journal_by_trace(self, trace_id: str) -> list[dict[str, Any]]:
+        rows = [
+            _project_journal_row(row)
+            for row in _read_jsonl(self.export_dir / "turn_journal.jsonl")
+            if str(row.get("trace_id") or "") == trace_id
+        ]
+        rows.sort(
+            key=lambda r: (
+                str(r.get("created_at") or ""),
+                str(r.get("ts") or ""),
+                int(r.get("seq") or 0),
+            )
+        )
+        return rows
 
     async def aclose(self) -> None:
         return None
@@ -415,6 +458,23 @@ class PostgresConversationStore:
                 )
             ).mappings().all()
         return _aggregate_cost_rows([dict(r) for r in rows])
+
+    async def get_journal_by_trace(self, trace_id: str) -> list[dict[str, Any]]:
+        from sqlalchemy import text
+
+        cols = ", ".join(_JOURNAL_KEYS)
+        async with self._engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        f"SELECT {cols} FROM turn_journal "
+                        "WHERE trace_id = :tid "
+                        "ORDER BY created_at ASC, seq ASC"
+                    ),
+                    {"tid": trace_id},
+                )
+            ).mappings().all()
+        return [_project_journal_row(dict(r)) for r in rows]
 
     async def aclose(self) -> None:
         await self._engine.dispose()

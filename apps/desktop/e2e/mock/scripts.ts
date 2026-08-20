@@ -29,7 +29,6 @@ const HOT_REQUIRED = new Set([
   "approval_required",
   "client_tool_required",
   "escalation_required",
-  "delegation_authorization_required",
 ]);
 
 const COLD_REQUIRED = new Set([

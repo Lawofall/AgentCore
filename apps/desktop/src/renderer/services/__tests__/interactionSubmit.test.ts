@@ -83,58 +83,6 @@ describe("submitInteraction path table", () => {
     expect(store().get("a1")?.status).toBe("resolved");
   });
 
-  it("compose path: question_posted POSTs resolveInteraction (cloud) without filling composer", async () => {
-    store().upsertRequired({
-      kind: "question_posted",
-      conversationId: "c1",
-      messageId: "m1",
-      payload: { ask_id: "q1", question: "要 PDF 吗？" },
-    });
-    const result = await submitInteraction({
-      id: "q1",
-      kind: "question_posted",
-      conversationId: "c1",
-      composeText: "也要 PDF。",
-    });
-    expect(result).toBe("ok");
-    expect(resolveMock).toHaveBeenCalledWith(
-      "c1",
-      "q1",
-      {
-        kind: "question_posted",
-        status: "answered",
-        answer: "也要 PDF。",
-        note: "",
-      },
-      "cloud",
-    );
-    expect(fillMock).not.toHaveBeenCalled();
-    expect(store().get("q1")?.status).toBe("resolved");
-    expect(store().get("q1")?.resolution).toMatchObject({
-      status: "answered",
-      answer: "也要 PDF。",
-    });
-  });
-
-  it("compose path: already_processed → already_settled", async () => {
-    store().upsertRequired({
-      kind: "question_posted",
-      conversationId: "c1",
-      messageId: "m1",
-      payload: { ask_id: "q1", question: "要 PDF 吗？" },
-    });
-    resolveMock.mockResolvedValue("already_processed");
-    const result = await submitInteraction({
-      id: "q1",
-      kind: "question_posted",
-      conversationId: "c1",
-      composeText: "迟到的答复",
-    });
-    expect(result).toBe("already_settled");
-    expect(fillMock).not.toHaveBeenCalled();
-    expect(store().get("q1")?.status).toBe("resolved");
-  });
-
   it("cold path: ask_user → runResume", async () => {
     store().upsertRequired({
       kind: "ask_user",

@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from agentcore.runtime.approvals import ApprovalDecision, DelegationAuthorizationDecision
+from agentcore.runtime.approvals import ApprovalDecision
 from agentcore.runtime.checkpoints import AskCheckpointIntent, CheckpointDecision
 from agentcore.runtime.debate.types import DebateForm
 from agentcore.runtime.events.payloads._base import WirePayload, absent
@@ -30,30 +30,6 @@ class ApprovalResolvedPayload(WirePayload):
     approval_id: str
     tool_call_id: str
     decision: ApprovalDecision
-
-
-class DelegationAuthorizationWorker(WirePayload):
-    """One worker row on the delegation authorization card (role + task preview)."""
-
-    role: str
-    task: str
-
-
-class DelegationAuthorizationRequiredPayload(WirePayload):
-    """A delegate batch paused awaiting the user's delegation-level tool authorization
-    (委派级授权). Medium-risk tools in `tools` are the grant scope."""
-
-    authorization_id: str
-    conversation_id: str
-    execution_id: str
-    workers: list[DelegationAuthorizationWorker]
-    tools: list[str]
-
-
-class DelegationAuthorizationResolvedPayload(WirePayload):
-    authorization_id: str
-    execution_id: str
-    decision: DelegationAuthorizationDecision
 
 
 class AskAssumption(WirePayload):
@@ -148,35 +124,6 @@ class CheckpointResolvedPayload(WirePayload):
     decision: CheckpointDecision
     note: str
     selected: list[str] | None = absent()
-
-
-class QuestionPostedPayload(WirePayload):
-    """A non-blocking ask the CEO posted (ask_user blocking=false): it already has a
-    default and KEPT WORKING — no suspend. Settlement is ``question_resolved``."""
-
-    ask_id: str
-    conversation_id: str
-    question: str
-    context: str
-    assumptions: list[AskAssumption]
-    questions: list[AskQuestion]
-    unlocks: str | None = absent(
-        "这个答案回来后解锁哪批活。新非阻塞提问必填；旧事件缺字段。"
-    )
-
-
-class QuestionResolvedPayload(WirePayload):
-    """Journal fact that folds a ``question_posted`` into 已答 / 已作废.
-
-    ``answered`` = the user submitted a reply (``answer`` is the text).
-    ``discarded`` = CEO closed it without waiting (``note`` is the required 人话).
-    Both are visible settlements — not a silent chip the CEO can ignore.
-    """
-
-    ask_id: str
-    status: Literal["answered", "discarded"]
-    answer: str
-    note: str
 
 
 class PlanReviewStep(WirePayload):
@@ -454,7 +401,6 @@ class InteractionOrphanedPayload(WirePayload):
     interaction_id: str
     kind: Literal[
         "approval",
-        "delegation_authorization",
         "escalation",
         "debate_round",
         "stage_card",

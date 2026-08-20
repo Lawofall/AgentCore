@@ -761,7 +761,7 @@ function buildActs(
 
 // ── Backward-compatible band wrappers (single source: scene + geometry) ──────
 // These preserve the pre-R1 call sites (tests / product-manual embed). Live
-// hosts (GraphView / useCanvasFlow) build the scene once and call
+// hosts (GraphView on InlineTeamGraph / TurnDetailPage) build the scene once and call
 // {@link projectSceneBands} directly instead of rebuilding it here.
 
 /**

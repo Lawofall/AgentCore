@@ -52,7 +52,6 @@ vi.mock("@/stores/interactions", async (importOriginal) => {
     ...actual,
     useMessageInteractionCards: () => ({
       checkpoints: cardsMock.checkpoints,
-      nonBlockingAsks: [],
       planReviews: [],
       teamPreviews: [],
     }),

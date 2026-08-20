@@ -60,6 +60,7 @@ from agentcore.db.repositories import (
     BoardRepository,
     ConversationRepository,
     CostEventRepository,
+    MessageRepository,
     UserRepository,
 )
 from agentcore.llm.resolve import (
@@ -85,6 +86,64 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 HarvestKind = Literal["success", "failure", "cancelled"]
+
+
+def _coordination_parent_trace_id(
+    session: CoordinationSession,
+    *,
+    recovered_turn_id: str | None = None,
+) -> str | None:
+    """Sync resolve of the coordination host turn's trace (writer or log context)."""
+    from agentcore.core.log_context import get_log_value
+
+    host_turn_id = (recovered_turn_id or session.host_turn_id or "").strip()
+    writer = session.host_journal_writer
+    if writer is not None:
+        writer_tid = (getattr(writer, "turn_id", "") or "").strip()
+        if not host_turn_id or writer_tid == host_turn_id or not writer_tid:
+            wt = getattr(writer, "trace_id", None)
+            if wt and str(wt).strip():
+                return str(wt).strip()
+    ctx = get_log_value("trace_id")
+    return ctx or None
+
+
+async def _resolve_harvest_trace_id(
+    session: CoordinationSession,
+    conversation_id: str,
+    *,
+    recovered_turn_id: str | None = None,
+    db: Any | None = None,
+) -> str:
+    """Continue the arming turn's trace for harvest (same user interaction)."""
+    from agentcore.core.log_context import get_log_value, new_trace_id
+
+    parent = _coordination_parent_trace_id(
+        session, recovered_turn_id=recovered_turn_id
+    )
+    if parent:
+        return parent
+
+    host_turn_id = (recovered_turn_id or session.host_turn_id or "").strip()
+    if host_turn_id and db is not None:
+        try:
+            row = await MessageRepository(db).get_by_id(
+                host_turn_id, conversation_id=conversation_id
+            )
+            if row and row.trace_id:
+                tid = str(row.trace_id).strip()
+                if tid:
+                    return tid
+        except (TypeError, AttributeError):
+            # Broken / mocked session in unit tests — fall through to context / mint.
+            pass
+
+    ctx = get_log_value("trace_id")
+    if ctx:
+        return ctx
+
+    return new_trace_id()
+
 
 # Prompt copy only. Persisted ``harvest_kind`` stays success/failure/cancelled
 # (soft_stop still classifies as cancelled); wording is picked separately.
@@ -604,7 +663,7 @@ async def _run_local_harvest_closing_turn(
     import asyncio
 
     from agentcore.account.credentials import account_credentials_scope
-    from agentcore.core.log_context import log_context, new_trace_id
+    from agentcore.core.log_context import log_context
     from agentcore.core.types import new_id
     from agentcore.folders.credentials import folders_credentials_scope
     from agentcore.runtime.delegate.post_close_gate import (
@@ -654,7 +713,7 @@ async def _run_local_harvest_closing_turn(
 
     user_message_id = new_id()
     message_id = new_id()
-    trace_id = new_trace_id()
+    trace_id = await _resolve_harvest_trace_id(session, conversation_id)
     turn_creds = sidecar._creds_for(conversation_id, trace_id, message_id)
     outbox = sidecar._outbox_store
     if outbox is None:
@@ -1234,6 +1293,12 @@ async def run_harvest_closing_turn(
         # it from the window tail. Nothing was appended on the continuation path.
         if not recovered_turn_id:
             history = history[:-1] if history else []
+        parent_trace_id = await _resolve_harvest_trace_id(
+            session,
+            conversation_id,
+            recovered_turn_id=recovered_turn_id or None,
+            db=db,
+        )
 
     sink = EventSink()
     backend = await build_turn_backend(
@@ -1245,6 +1310,7 @@ async def run_harvest_closing_turn(
     )
 
     async def _run() -> None:
+        from agentcore.core.log_context import log_context
         from agentcore.runtime.delegate.post_close_gate import (
             EXECUTION_HARVEST_ORIGIN,
             bind_user_message_origin,
@@ -1255,79 +1321,84 @@ async def run_harvest_closing_turn(
         adopt_active_execution(conversation_id, event_sink=sink, reopen_harvest=True)
         origin_token = bind_user_message_origin(EXECUTION_HARVEST_ORIGIN)
         try:
-            try:
-                result = await run_and_persist(
-                    conversation_id=conversation_id,
-                    user_message=user_text,
-                    user_id=user_id,
-                    folder_id=folder_id,
-                    sink=sink,
-                    history=history,
-                    attachments=None,
-                    backend=backend,
-                    llm_credentials=llm_credentials,
-                    profile_set=profile_set,
-                    memory_enabled=memory_enabled,
-                    conversation_history_access=conversation_history_access,
-                    permission_axes=permission_axes,
-                    board_id=board_id,
-                    llm_supports_tools=None,
-                    x_client_platform=None,
-                    continue_message_id=recovered_turn_id or None,
-                    inherited_journal_entries=inherited_entries,
-                )
-            except Exception as e:
-                if not _exc_is_channel_dead(e):
-                    raise
-                session.workspace_channel_dead = True
-                logger.warning(
-                    "coordination.harvest_channel_dead_after_turn",
-                    conversation_id=conversation_id,
-                    execution_id=execution_id,
-                    error=str(e),
-                    via="exception",
-                )
-                async with async_session_factory() as fb_db:
-                    with contextlib.suppress(Exception):
-                        await persist_harvest_fallback(
-                            db=fb_db,
-                            conversation_id=conversation_id,
-                            execution_id=execution_id,
-                            user_id=user_id,
-                            session=session,
-                            kind=kind,
-                            error_message=str(e) or CHANNEL_DEAD_PREPARE_ABORT,
-                            target_message_id=recovered_turn_id or None,
-                        )
-                return
-            if _result_is_channel_dead_abort(result):
-                session.workspace_channel_dead = True
-                err_text = ""
-                raw_err = result.get("error") if isinstance(result, dict) else None
-                if isinstance(raw_err, dict):
-                    err_text = str(raw_err.get("message") or raw_err.get("detail") or "")
-                elif raw_err is not None:
-                    err_text = str(raw_err)
-                logger.warning(
-                    "coordination.harvest_channel_dead_after_turn",
-                    conversation_id=conversation_id,
-                    execution_id=execution_id,
-                    error=err_text or CHANNEL_DEAD_PREPARE_ABORT,
-                    via="salvaged_result",
-                )
-                async with async_session_factory() as fb_db:
-                    with contextlib.suppress(Exception):
-                        await persist_harvest_fallback(
-                            db=fb_db,
-                            conversation_id=conversation_id,
-                            execution_id=execution_id,
-                            user_id=user_id,
-                            session=session,
-                            kind=kind,
-                            error_message=err_text or CHANNEL_DEAD_PREPARE_ABORT,
-                            target_message_id=recovered_turn_id or None,
-                        )
-                return
+            with log_context(
+                trace_id=parent_trace_id,
+                conversation_id=conversation_id,
+                user_id=user_id,
+            ):
+                try:
+                    result = await run_and_persist(
+                        conversation_id=conversation_id,
+                        user_message=user_text,
+                        user_id=user_id,
+                        folder_id=folder_id,
+                        sink=sink,
+                        history=history,
+                        attachments=None,
+                        backend=backend,
+                        llm_credentials=llm_credentials,
+                        profile_set=profile_set,
+                        memory_enabled=memory_enabled,
+                        conversation_history_access=conversation_history_access,
+                        permission_axes=permission_axes,
+                        board_id=board_id,
+                        llm_supports_tools=None,
+                        x_client_platform=None,
+                        continue_message_id=recovered_turn_id or None,
+                        inherited_journal_entries=inherited_entries,
+                    )
+                except Exception as e:
+                    if not _exc_is_channel_dead(e):
+                        raise
+                    session.workspace_channel_dead = True
+                    logger.warning(
+                        "coordination.harvest_channel_dead_after_turn",
+                        conversation_id=conversation_id,
+                        execution_id=execution_id,
+                        error=str(e),
+                        via="exception",
+                    )
+                    async with async_session_factory() as fb_db:
+                        with contextlib.suppress(Exception):
+                            await persist_harvest_fallback(
+                                db=fb_db,
+                                conversation_id=conversation_id,
+                                execution_id=execution_id,
+                                user_id=user_id,
+                                session=session,
+                                kind=kind,
+                                error_message=str(e) or CHANNEL_DEAD_PREPARE_ABORT,
+                                target_message_id=recovered_turn_id or None,
+                            )
+                    return
+                if _result_is_channel_dead_abort(result):
+                    session.workspace_channel_dead = True
+                    err_text = ""
+                    raw_err = result.get("error") if isinstance(result, dict) else None
+                    if isinstance(raw_err, dict):
+                        err_text = str(raw_err.get("message") or raw_err.get("detail") or "")
+                    elif raw_err is not None:
+                        err_text = str(raw_err)
+                    logger.warning(
+                        "coordination.harvest_channel_dead_after_turn",
+                        conversation_id=conversation_id,
+                        execution_id=execution_id,
+                        error=err_text or CHANNEL_DEAD_PREPARE_ABORT,
+                        via="salvaged_result",
+                    )
+                    async with async_session_factory() as fb_db:
+                        with contextlib.suppress(Exception):
+                            await persist_harvest_fallback(
+                                db=fb_db,
+                                conversation_id=conversation_id,
+                                execution_id=execution_id,
+                                user_id=user_id,
+                                session=session,
+                                kind=kind,
+                                error_message=err_text or CHANNEL_DEAD_PREPARE_ABORT,
+                                target_message_id=recovered_turn_id or None,
+                            )
+                    return
         finally:
             reset_user_message_origin(origin_token)
         await _notify_harvest_complete(

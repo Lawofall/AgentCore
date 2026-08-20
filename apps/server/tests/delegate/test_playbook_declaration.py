@@ -13,12 +13,10 @@ def test_declaration_reject_gate_helpers():
     assert declaration_reject_gate("未知 playbook『x』") == "unknown"
     from agentcore.runtime.delegate.playbook_declaration import (
         HANDWRITTEN_PLAYBOOK_ARGS_MSG,
-        PLAYBOOK_ID_CONFLICT_MSG,
         PLAYBOOK_TASKS_XOR_MSG,
     )
 
     assert declaration_reject_gate(PLAYBOOK_TASKS_XOR_MSG) == "xor"
-    assert declaration_reject_gate(PLAYBOOK_ID_CONFLICT_MSG) == "xor"
     assert declaration_reject_gate(HANDWRITTEN_PLAYBOOK_ARGS_MSG) == "xor"
     # try_* is None for non-declaration errors (normalize must not bucket as unknown).
     assert try_declaration_reject_gate("缺少必填参数：query") is None
@@ -44,16 +42,6 @@ def test_resolve_playbook_xor_tasks_rejected():
     assert "调查批" in PLAYBOOK_TASKS_XOR_MSG
 
 
-def test_resolve_playbook_id_conflict_rejected():
-    from agentcore.runtime.delegate.playbook_declaration import PLAYBOOK_ID_CONFLICT_MSG
-
-    name, reason, err = resolve_playbook_declaration(
-        {"playbook": "build_app", "playbook_id": "research_report"}
-    )
-    assert name is None and reason is None
-    assert err == PLAYBOOK_ID_CONFLICT_MSG
-
-
 def test_resolve_handwritten_with_playbook_args_rejected():
     from agentcore.runtime.delegate.playbook_declaration import (
         HANDWRITTEN_PLAYBOOK_ARGS_MSG,
@@ -61,7 +49,6 @@ def test_resolve_handwritten_with_playbook_args_rejected():
 
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_args": {"topic": "should not appear"},
             "tasks": [{"role": "a", "task": "写报告"}],
         }
@@ -81,10 +68,9 @@ def test_resolve_handwritten_without_playbook_ok():
 
 
 def test_resolve_none_without_reason_ok():
-    """显式 none 也不再强制理由（自由组队）。"""
+    """省略 playbook + 手写 tasks → 过（与显式 none 同义）。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "tasks": [{"role": "a", "task": "b"}],
         }
     )
@@ -96,7 +82,6 @@ def test_resolve_none_without_reason_ok():
 def test_resolve_none_with_legacy_reason_ignored():
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "机械单步改一句文案",
             "tasks": [{"role": "a", "task": "b"}],
         }
@@ -144,7 +129,6 @@ def test_website_intent_none_allowed():
     """建站意图 + none → 放行（不再硬拒；软引导靠 skill/schema）。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "build_website 未在目录确认，手写内容+前端两阶段构建官网",
             "tasks": [
                 {"role": "内容策略师", "task": "撰写官网文案"},
@@ -177,7 +161,6 @@ def test_website_intent_none_from_user_message_alone_allowed():
     """User turn clearly asks to build a site → vague none still allowed."""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "自定义拆法",
             "tasks": [{"role": "工程师", "task": "按要求交付"}],
         },
@@ -205,7 +188,6 @@ def test_toolshed_intent_none_allowed():
     """控制台意图 + none → 放行（不再硬拒）。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "手写内容+前端两阶段构建控制台",
             "tasks": [
                 {"role": "内容", "task": "撰写控制台文案"},
@@ -312,7 +294,6 @@ def test_automation_runnable_allows_toolshed_shaped_none():
     )
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "tasks": [
                 {"role": "工程师", "task": "搭运营控制台自动化流水线"},
             ],
@@ -328,7 +309,6 @@ def test_non_website_none_still_ok():
     """明显非建站 + none → 仍可。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "机械单步改一句配置",
             "tasks": [{"role": "工程师", "task": "把超时改成 30s"}],
         },
@@ -367,7 +347,6 @@ def test_website_followup_audit_none_ok():
     """审计/修复帧 + none → 放行。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "质量敏感成品独立审计，1 名审计员覆盖前端+文案",
             "tasks": [
                 {
@@ -401,7 +380,6 @@ def test_website_continuation_none_allowed():
     """用户「继续完成官网…」+ 建站形 hand-write → 放行（不再硬拒）。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "手写补完",
             "tasks": [
                 {"role": "前端", "task": "补全分区 HTML CSS 落地页"}
@@ -416,7 +394,6 @@ def test_website_continuation_none_allowed():
 def test_generic_project_continue_none_ok():
     """「讨论继续完成项目的开发」+ 手写前后端 → 声明闸通过。"""
     args = {
-        "playbook_id": "none",
         "playbook_none_reason": "继续法庭迷局游戏开发",
         "tasks": [
             {
@@ -457,7 +434,6 @@ async def test_execute_allows_website_none_bypass():
     t._user_message = "请帮我搭建一个营销落地页"
     result = await t.execute(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "手写两阶段即可",
             "tasks": [
                 {"role": "文案", "task": "写落地页文案"},
@@ -483,7 +459,6 @@ def test_software_intent_none_thin_html_allowed():
     """软件意图 + none + 单前端单 HTML → 放行（不再硬拒）。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "单 HTML 即可交付基础版",
             "tasks": [
                 {
@@ -502,7 +477,6 @@ def test_software_greenfield_none_allowed():
     """绿场 SPA / 数据看板 + none → 放行（推荐 build_app，不再硬拒）。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "手写前后端两节点",
             "tasks": [
                 {"role": "前端", "task": "搭 Vite 脚手架"},
@@ -519,7 +493,6 @@ def test_software_greenfield_audit_readonly_none_ok():
     """全面审计不改代码 + none → 放行。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "多角度并行只读审计，不走 build_app",
             "tasks": [
                 {
@@ -546,7 +519,6 @@ def test_software_greenfield_vue_spa_from_scratch_none_allowed():
     """从0到1做 Vue SPA + none → 放行。"""
     name, reason, err = resolve_playbook_declaration(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "手写单 worker",
             "tasks": [{"role": "前端", "task": "从零搭 Vue SPA"}],
         },
@@ -621,7 +593,6 @@ async def test_execute_allows_software_thin_html_none():
     t._user_message = "帮我做一个思维导图软件"
     result = await t.execute(
         {
-            "playbook_id": "none",
             "playbook_none_reason": "单 HTML 基础版就够",
             "tasks": [
                 {"role": "前端工程师", "task": "实现 mindmap.html"},

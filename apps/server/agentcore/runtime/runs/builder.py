@@ -28,7 +28,6 @@ from agentcore.core.types import new_id
 from agentcore.runtime.runs.constants import (
     DEFAULT_ON_FAILURE,
     MAX_DELEGATION_TASKS,
-    MAX_RUN_RETRIES,
     MAX_TASK_ROUNDS,
     VALID_ON_FAILURE,
 )
@@ -41,7 +40,6 @@ from agentcore.runtime.runs.types import Deliverable, RunKind, RunOrigin, RunPol
 _VALID_STANCES = frozenset({"pro", "con"})
 _VALID_OUTPUT_FORMATS = frozenset({"text", "json"})
 # DAG 节点可显式声明 timeout_ms；缺省不填 → ``apply_worker_budgets`` 填统一 backstop。
-_DEFAULT_RETRY_DELAY_MS = 2_000
 # Per-sibling excerpt caps in a fan-out awareness summary: a scope line (任务),
 # kept tight so a wide fan-out's awareness block stays scannable and can't blow
 # up a worker's context.
@@ -343,9 +341,6 @@ def build_run_plan(
         apply_directed_search_tools(plan, valid_tools=valid_tools)
         apply_verify_policies(plan)
         apply_worker_budgets(plan)
-        from agentcore.runtime.runs.worker_budget import apply_light_round_budgets
-
-        apply_light_round_budgets(plan, complexity_hint=complexity_hint)
         from agentcore.runtime.runs.artifact_dir import apply_artifact_dir_to_plan
 
         apply_artifact_dir_to_plan(plan)
@@ -989,7 +984,7 @@ def _explicit_timeout_s(item: dict[str, Any]) -> int | None:
 
 def _dag_policy(item: dict[str, Any]) -> RunPolicy:
     """Map a DAG node's declarative knobs onto a RunPolicy (the WaveScheduler
-    reads on_failure / retries; result_handling feeds the dep-context size).
+    reads on_failure; result_handling feeds the dep-context size).
 
     ``timeout_ms`` is CEO-explicit only: omit → ``None``, filled later by
     :func:`~agentcore.runtime.runs.worker_budget.apply_worker_budgets`.
@@ -998,8 +993,6 @@ def _dag_policy(item: dict[str, Any]) -> RunPolicy:
     on_failure = raw_on_failure if raw_on_failure in VALID_ON_FAILURE else DEFAULT_ON_FAILURE
     return RunPolicy(
         on_failure=on_failure,  # type: ignore[arg-type]
-        max_retries=min(item.get("max_retries", 1), MAX_RUN_RETRIES),
-        retry_delay_ms=item.get("retry_delay_ms", _DEFAULT_RETRY_DELAY_MS),
         timeout_s=_explicit_timeout_s(item),
         result_handling=item.get("result_handling") or "pass_through",
     )
@@ -1081,11 +1074,7 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
     visual_critic = bool(raw.get("visual_critic", False))
     must_contain_soft = bool(raw.get("must_contain_soft", False))
     citation_mode_raw = raw.get("citation_mode")
-    citation_mode = (
-        citation_mode_raw
-        if citation_mode_raw in ("immediate", "two_phase")
-        else None
-    )
+    citation_mode = citation_mode_raw if citation_mode_raw == "two_phase" else None
     return Deliverable(
         output_format=output_format,
         required_sections=required_sections,

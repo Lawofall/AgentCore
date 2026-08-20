@@ -21,6 +21,7 @@ import {
 import { useAuthStore } from "@/stores/auth";
 import { useConversationStore } from "@/stores/conversation";
 import { useMessagingStore } from "@/stores/messaging";
+import type { components } from "@/types/api.generated";
 
 /**
  * Per-user realtime firehose client for the 消息 page (消息IM.md §四).
@@ -101,24 +102,9 @@ interface ChatChangedEvent {
 interface MemoryUpdatedEvent {
   type: "memory_updated";
   conversation_id: string;
-  kind?: "episodic" | "semantic" | "quota";
-  update?: {
-    id: string;
-    created_at: string;
-    /** 本次固化窗口最后一条消息的时刻（episodic 才有）——时间线锚点，见 `MemoryUpdate.anchorAt`。 */
-    anchor_at?: string | null;
-    kind?: "episodic" | "semantic" | "quota";
-    summary?: string | null;
-    items?: {
-      action: string;
-      file: string;
-      section: string;
-      scope: string;
-      content: string;
-      target: string;
-      /** folder_id when scope is project (深链 / 搬层). */
-      project_id?: string | null;
-    }[];
+  kind?: components["schemas"]["MemoryUpdateView"]["kind"];
+  update?: components["schemas"]["MemoryUpdateView"] & {
+    conversation_id?: string;
   };
 }
 

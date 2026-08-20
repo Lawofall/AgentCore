@@ -171,7 +171,6 @@ export async function streamMessage(
   attachments?: MessageAttachment[],
   delivery: "steer" | "queue" = "steer",
   agentMentions?: { agent_id: string; role: string }[],
-  askId?: string | null,
 ): Promise<void> {
   const path = `/v1/conversations/${conversationId}/messages`;
   const payload: Record<string, unknown> = { content, delivery };
@@ -179,7 +178,6 @@ export async function streamMessage(
   if (agentMentions && agentMentions.length > 0) {
     payload.agent_mentions = agentMentions;
   }
-  if (askId) payload.ask_id = askId;
   const response = await sseFetch(() =>
     fetch(apiUrl(path), {
       method: "POST",

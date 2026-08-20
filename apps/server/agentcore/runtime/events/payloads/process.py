@@ -76,11 +76,6 @@ class ProcessCheckpointStep(WirePayload):
     checkpoint_id: str
 
 
-class ProcessAskStep(WirePayload):
-    kind: Literal["ask"]
-    ask_id: str
-
-
 class ProcessPlanReviewStep(WirePayload):
     kind: Literal["plan_review"]
     checkpoint_id: str
@@ -108,13 +103,6 @@ class ProcessApprovalStep(WirePayload):
     approval_id: str
 
 
-class ProcessDelegationAuthorizationStep(WirePayload):
-    """委派级授权痕迹落点 (统一时间线二期 D3): 同 approval，resolved 门控轻状态行。"""
-
-    kind: Literal["delegation_authorization"]
-    authorization_id: str
-
-
 class ProcessStageCardStep(WirePayload):
     """阶段推进卡时间线落点：required 时刻落锚；行渲染由 resolved/orphaned 门控
    （pending 操作面在 Dock；历史回看显「已开辩 / 已失效」轻痕迹）。"""
@@ -140,12 +128,13 @@ PROCESS_STEP_MEMBERS: tuple[type[WirePayload], ...] = (
     ProcessTeamStep,
     ProcessGraphAppendStep,
     ProcessCheckpointStep,
-    ProcessAskStep,
     ProcessPlanReviewStep,
     ProcessTeamPreviewStep,
     ProcessEscalationStep,
     ProcessApprovalStep,
-    ProcessDelegationAuthorizationStep,
     ProcessStageCardStep,
     ProcessUserInterjectionStep,
 )
+
+# Retired process-step discriminants that may still sit on historical process[] rows.
+RETIRED_PROCESS_STEP_KINDS: frozenset[str] = frozenset({"ask"})

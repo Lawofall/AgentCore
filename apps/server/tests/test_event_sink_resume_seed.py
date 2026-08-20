@@ -22,7 +22,6 @@ from agentcore.runtime.events import (
 from agentcore.runtime.events.interaction import (
     checkpoint_required,
     plan_review_required,
-    question_posted,
 )
 from agentcore.runtime.events.sink import synthesize_required_marker
 
@@ -212,15 +211,12 @@ def test_live_team_preview_insert_order_matches_helper():
     assert kinds == ["team_preview", "team"]
 
 
-def test_synthesize_ask_and_plan_review_append():
+def test_synthesize_plan_review_append():
     steps: list[dict] = [{"kind": "content", "text": "x"}]
-    assert synthesize_required_marker(
-        steps, EventType.QUESTION_POSTED, {"ask_id": "ask-1"}
-    )
     assert synthesize_required_marker(
         steps, EventType.PLAN_REVIEW_REQUIRED, {"checkpoint_id": "pr-1"}
     )
-    assert [s["kind"] for s in steps] == ["content", "ask", "plan_review"]
+    assert [s["kind"] for s in steps] == ["content", "plan_review"]
 
 
 def test_content_reset_reinjection_history_and_sse_skip_process_and_checkpointer():
@@ -313,20 +309,6 @@ def test_seeded_structural_gate_still_none_for_pure_prose():
     sink.seed_process([{"kind": "reasoning", "text": "t"}, {"kind": "content", "text": "c"}])
     assert sink.process_timeline() is None
     assert len(sink.raw_process()) == 2
-
-
-def test_question_posted_factory_still_lands_ask_marker():
-    sink = EventSink()
-    sink.emit(
-        question_posted(
-            ask_id="ask-9",
-            conversation_id="c1",
-            question="双语?",
-        )
-    )
-    tl = sink.process_timeline()
-    assert tl is not None
-    assert tl == [{"kind": "ask", "ask_id": "ask-9"}]
 
 
 def test_plan_review_required_lands_marker():

@@ -235,7 +235,6 @@ _RUNTIME_OVERSIZE_EXEMPT: frozenset[str] = frozenset(
         "delegate/delivery_status.py",
         "engine/governance.py",
         "engine/loop.py",
-        "events/sink.py",
         "runs/builder.py",
         "runs/contract.py",
         "runs/executor/context.py",

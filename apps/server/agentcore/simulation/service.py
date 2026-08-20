@@ -10,6 +10,7 @@ from agentcore.core.errors import ValidationError
 from agentcore.core.logging import get_logger
 from agentcore.db.repositories.simulation import SimulationRepository
 from agentcore.runtime.events import EventSink, EventType, SSEEvent
+from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES
 from agentcore.simulation.agents.activation import (
     ActivationContext,
     AgentActivationStrategy,
@@ -561,6 +562,8 @@ class SimulationService:
                 if row.tick_number != tick_number:
                     continue
                 event_type = _replay_event_type(row.event_type)
+                if event_type is None:
+                    continue
                 replay.append(SSEEvent(type=event_type, payload=row.payload))
             snap_raw = snapshots.get(tick_number)
             if snap_raw:
@@ -691,9 +694,17 @@ def simulation_enabled() -> bool:
 
 
 _INTERACTION_EVENT_TYPES = frozenset({"conversation", "trade", "vote"})
+_RETIRED_SIM_SHOW_PREFIX = "sim.show."
 
 
-def _replay_event_type(raw: str) -> EventType:
+def _replay_event_type(raw: str) -> EventType | None:
+    """Map a persisted sim_event.event_type onto a live SSE EventType.
+
+    Retired ``sim.show.*`` overlay names and retired interaction event names may
+    still sit on historical rows; skip them. Unknown names still raise.
+    """
+    if raw.startswith(_RETIRED_SIM_SHOW_PREFIX) or raw in RETIRED_EVENT_TYPE_VALUES:
+        return None
     if raw in _INTERACTION_EVENT_TYPES:
         return EventType.SIM_INTERACTION
     for event_type in EventType:

@@ -26,10 +26,10 @@ describe("GraphAppendAnchor", () => {
     cleanup();
   });
 
-  it("renders 续自 copy and focuses the previous graph by hostMessageId", () => {
+  it("renders 新开一队 copy and focuses the previous graph by hostMessageId", () => {
     render(<GraphAppendAnchor hostMessageId="m1" />);
     expect(screen.getByTestId("graph-append-anchor").textContent).toContain(
-      "↑ 续自上一张协作图",
+      "新开一队、接着上一张继续",
     );
     fireEvent.click(screen.getByTestId("graph-append-anchor"));
     expect(useConversationStore.getState().byId[CID].messageFocus?.id).toBe(
@@ -40,7 +40,7 @@ describe("GraphAppendAnchor", () => {
   it("navigates by prevExecutionId to the prior graph bubble", () => {
     render(<GraphAppendAnchor prevExecutionId="exec1" />);
     expect(screen.getByTestId("graph-append-anchor").textContent).toContain(
-      "↑ 续自上一张协作图",
+      "新开一队、接着上一张继续",
     );
     fireEvent.click(screen.getByTestId("graph-append-anchor"));
     expect(useConversationStore.getState().byId[CID].messageFocus?.id).toBe(
@@ -48,10 +48,13 @@ describe("GraphAppendAnchor", () => {
     );
   });
 
-  it("uses debate-act copy when continuing a debate graph", () => {
+  it("uses the same 新开一队 copy for a debate graph", () => {
     render(<GraphAppendAnchor prevExecutionId="exec1" actKind="debate" />);
     expect(screen.getByTestId("graph-append-anchor").textContent).toContain(
-      "↑ 续自上一场辩论图",
+      "新开一队、接着上一张继续",
+    );
+    expect(screen.getByTestId("graph-append-anchor").textContent).not.toContain(
+      "追加",
     );
   });
 
@@ -66,5 +69,28 @@ describe("GraphAppendAnchor", () => {
     expect(screen.getByTestId("graph-append-anchor").textContent).toContain(
       "经推进卡授权",
     );
+  });
+
+  it("explains when the prior graph is outside the loaded window", () => {
+    useConversationStore.getState().prependMessages([], true, CID);
+    render(<GraphAppendAnchor prevExecutionId="exec-older" />);
+    const anchor = screen.getByTestId("graph-append-anchor");
+    expect(anchor.getAttribute("data-unavailable")).toBe("true");
+    expect(anchor.tagName).not.toBe("BUTTON");
+    expect(anchor.textContent).toContain("新开一队、接着上一张继续");
+    expect(anchor.textContent).toContain(
+      "上一张图不在当前消息窗，往上翻可查看",
+    );
+    fireEvent.click(anchor);
+    expect(useConversationStore.getState().byId[CID].messageFocus).toBeNull();
+  });
+
+  it("explains when the prior graph is not in this conversation", () => {
+    render(<GraphAppendAnchor hostMessageId="missing-host" />);
+    const anchor = screen.getByTestId("graph-append-anchor");
+    expect(anchor.getAttribute("data-unavailable")).toBe("true");
+    expect(anchor.textContent).toContain("上一张图不在当前对话");
+    fireEvent.click(anchor);
+    expect(useConversationStore.getState().byId[CID].messageFocus).toBeNull();
   });
 });

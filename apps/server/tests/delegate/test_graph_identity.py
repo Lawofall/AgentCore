@@ -67,10 +67,18 @@ async def _empty_journal(_host_message_id: str):
     return []
 
 
-def _bind_sessions(monkeypatch, mapping: dict[str, object]):
+def _bind_sessions(monkeypatch, mapping: dict[str, object], *, default: object | None = None):
+    def lookup(eid=None):
+        key = (eid or "").strip()
+        if not key:
+            if default is not None:
+                return default
+            return mapping.get("")
+        return mapping.get(key)
+
     monkeypatch.setattr(
         "agentcore.runtime.coordination.session.active_coordination",
-        lambda eid=None: mapping.get((eid or "").strip() or ""),
+        lookup,
     )
 
 
@@ -101,13 +109,17 @@ async def test_missing_cross_turn_host_rejects(monkeypatch):
 
     monkeypatch.setattr(gi_mod.graph_append, "resolve_host_message_id", miss)
     out = await rejected({"append_to_execution_id": "missing-eid"})
-    assert "找不到" in (out.error or "")
+    err = out.error or ""
+    assert "找不到" in err
+    assert 'append_to_execution_id 填成 `"latest"`' in err
+    assert "不要填图 id" in err
+    assert "请确认 id 来自本对话" not in err
     assert out.contract_failure is True
 
 
 async def test_live_host_without_plan_snapshot_rejects(monkeypatch):
-    """热图仍活着但没有可合并的计划快照 → 拒绝合入，不静默新建。"""
-    _bind_sessions(monkeypatch, {"e-host": _session("e-host", host_turn_id="m-other")})
+    """同回合热图仍活着但没有可合并的计划快照 → 拒绝合入，不静默新建。"""
+    _bind_sessions(monkeypatch, {"e-host": _session("e-host", host_turn_id="m-now")})
     out = await rejected({"append_to_execution_id": "e-host"})
     assert "缺少可合并的计划快照" in (out.error or "")
     assert out.contract_failure is True
@@ -118,7 +130,7 @@ async def test_topology_locked_host_rejects_append(monkeypatch):
     plan.topology_lock = True
     _bind_sessions(
         monkeypatch,
-        {"e-host": _session("e-host", live_plan=plan, host_turn_id="m-other")},
+        {"e-host": _session("e-host", live_plan=plan, host_turn_id="m-now")},
     )
     out = await rejected({"append_to_execution_id": "e-host"})
     assert "工作流拓扑锁" in (out.error or "")
@@ -261,37 +273,102 @@ async def test_first_call_never_auto_merges_across_turns():
     assert out == GraphIdentity()
 
 
-async def test_adopted_live_session_merges_on_first_call(monkeypatch):
-    """adopt 中途续聊：本回合已绑宿主 eid，首派也合入热图。"""
+async def test_cross_turn_live_append_becomes_prev_chain(monkeypatch):
+    """跨回合上一张仍在跑：显式 append 也只链 prev，不合入热图。"""
+    spy = LogSpy()
+    monkeypatch.setattr(gi_mod, "logger", spy)
     plan = _plan()
-    _bind_sessions(
-        monkeypatch,
-        {"e-ctx": _session("e-ctx", live_plan=plan, host_turn_id="m-earlier")},
+    live = _session("exec-old", live_plan=plan, host_turn_id="m-earlier")
+    _bind_sessions(monkeypatch, {"exec-old": live}, default=live)
+
+    async def found(*, conversation_id: str, execution_id: str):
+        assert execution_id == "exec-old"
+        return "m-host"
+
+    monkeypatch.setattr(gi_mod.graph_append, "resolve_host_message_id", found)
+    out = await identity(
+        {"append_to_execution_id": "exec-old"},
+        context_execution_id="e-new",
     )
-    out = await identity({}, calls=0)
-    assert out.host_plan_for_append is plan
+    assert out.prev_execution_id == "exec-old"
+    assert out.append_to is None
+    assert out.host_plan_for_append is None
+    assert spy.get("delegate.graph_prev")["prev_execution_id"] == "exec-old"
+
+
+async def test_adopted_live_session_does_not_merge_on_first_call(monkeypatch):
+    """adopt 热图仍在跑：本回合首派新开并链 prev，不合入旧图。"""
+    spy = LogSpy()
+    monkeypatch.setattr(gi_mod, "logger", spy)
+    plan = _plan()
+    live = _session("e-old", live_plan=plan, host_turn_id="m-earlier")
+    _bind_sessions(monkeypatch, {"e-old": live}, default=live)
+    out = await identity({}, calls=0, context_execution_id="e-new")
+    assert out.prev_execution_id == "e-old"
+    assert out.append_to is None
+    assert out.host_plan_for_append is None
+    assert spy.get("delegate.graph_prev")["via"] == "turn_boundary"
+
+
+async def test_continue_from_run_id_auto_prev(monkeypatch):
+    """点名续派人时自动写 prev，不必模型点名图。"""
+    spy = LogSpy()
+    monkeypatch.setattr(gi_mod, "logger", spy)
+
+    async def latest(*, conversation_id: str, prefer_message_id: str | None):
+        assert conversation_id == "conv-1"
+        return "exec-prior"
+
+    monkeypatch.setattr(
+        gi_mod.graph_append, "resolve_latest_appendable_execution", latest
+    )
+    out = await identity(
+        {
+            "tasks": [
+                {
+                    "role": "撰写员",
+                    "task": "接着写",
+                    "continue_from_run_id": "r1",
+                }
+            ]
+        },
+        context_execution_id="e-new",
+    )
+    assert out.prev_execution_id == "exec-prior"
+    assert out.append_to is None
+    assert spy.get("delegate.graph_prev")["via"] == "continue_from_run"
+
+
+async def test_replaces_run_id_auto_prev(monkeypatch):
+    async def latest(**_k):
+        return "exec-prior"
+
+    monkeypatch.setattr(
+        gi_mod.graph_append, "resolve_latest_appendable_execution", latest
+    )
+    out = await identity(
+        {
+            "tasks": [
+                {"role": "补位", "task": "补缺口", "replaces_run_id": "r-fail"}
+            ]
+        },
+        context_execution_id="e-new",
+    )
+    assert out.prev_execution_id == "exec-prior"
     assert out.append_to is None
 
 
-async def test_live_host_captain_comes_from_host_journal(monkeypatch):
+async def test_same_turn_live_host_merges_plan(monkeypatch):
+    """同回合热图：合入本回合图，不写 prev。"""
     plan = _plan()
     _bind_sessions(
         monkeypatch,
-        {"e-host": _session("e-host", live_plan=plan, host_turn_id="m-other")},
+        {"e-host": _session("e-host", live_plan=plan, host_turn_id="m-now")},
     )
-
-    async def journal(host_message_id: str):
-        assert host_message_id == "m-other"
-        return [
-            {
-                "kind": "run_plan",
-                "payload": {"runs": [{"id": "host-cap", "kind": "captain"}]},
-            }
-        ]
-
-    monkeypatch.setattr(gi_mod.graph_append, "load_host_journal_entries", journal)
-    out = await identity({"append_to_execution_id": "e-host"})
-    assert out.append_to == "e-host"
+    out = await identity(
+        {"append_to_execution_id": "e-host"},
+        context_execution_id="e-host",
+    )
     assert out.host_plan_for_append is plan
-    assert out.host_captain_run_id == "host-cap"
     assert out.prev_execution_id is None
+    assert out.append_to is None

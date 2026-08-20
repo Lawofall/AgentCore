@@ -572,8 +572,6 @@ export interface StreamConversationOptions {
   agentMentions?: OutgoingAgentMention[];
   /** 必填分流（缺 → 服务端 422）。空闲开跑客户端仍带 ``steer``。 */
   delivery: "steer" | "queue";
-  /** 答非阻塞提问时与出站 ``question_posted.ask_id`` 对上。缺省 = 普通消息。 */
-  askId?: string | null;
   signal?: AbortSignal;
   /** 本发泵到 `turn_saved` 时置 `committed`。Class B 回滚读这个事实，不嗅消息 id。 */
   turnCommit?: TurnCommitReport;
@@ -589,7 +587,6 @@ export async function streamConversation({
   attachments,
   agentMentions,
   delivery,
-  askId,
   signal,
   turnCommit,
 }: StreamConversationOptions): Promise<void> {
@@ -598,7 +595,6 @@ export async function streamConversation({
   if (agentMentions && agentMentions.length > 0) {
     payload.agent_mentions = agentMentions;
   }
-  if (askId) payload.ask_id = askId;
   await runMessageStream(
     `/v1/conversations/${conversationId}/messages`,
     JSON.stringify(payload),

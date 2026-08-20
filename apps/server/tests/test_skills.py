@@ -468,7 +468,9 @@ def test_team_orchestration_skill_teaches_shape_vocabulary():
     assert "假两段" in body
     assert "同一 task" in body
     assert "桌面壳" in body or "多进程" in body
-    assert "playbook=none" in body
+    assert "省略 playbook" in body
+    assert "playbook=none" not in body
+    assert "playbook_id" not in body
     assert "根委派切片诚实" in body or "嵌套扇出" in body
     # 三路/多路调研缺主体：硬 ask + 预填 default；continue=确认默认；禁静默自拟
     assert "缺主体" in body
@@ -846,9 +848,8 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     # 对用户用人话；字段名只留工具通道
     assert "重新安排人补上" in body or "谁没交齐" in body
     assert "勿复述字段名" in body or "工具通道用语" in body
-    # 派完可见面：只留「人已派出」；禁与 host / COORDINATION_PERIOD_HINT 打架的「谁在后台」。
+    # 派完可见面：只留「人已派出」；禁把「还在等队员」写成终稿（非阻塞提问已撤）。
     assert "人已派出" in body
-    assert "后半等你" in body  # 非阻塞问收口与「还在等队员」切分
     assert "还在等" in body and "你不用管" in body
     assert "可静默" in body
     assert "谁还在跑" in body
@@ -859,11 +860,12 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     assert "再调" in body and "delegate" in body
     assert "同构" in body
     assert "不必" in body or "不是" in body  # 否定「必须等全队完成」
-    # 新回合新图：系统记续自；禁教跨回合合旧图 / latest；同回合合图仍在。
+    # 新回合新图：跨回合新开一队接续（latest 不含图 id）；同回合合图仍在。
     assert "【新回合新图】" in body
     assert "【跨回合延续】" not in body
-    assert 'append_to_execution_id="latest"' not in body
-    assert "append_to_execution_id" in body  # 禁令点名勿传
+    assert "新开一队、接续上一张图" in body
+    assert "不要填图 id" in body
+    assert "append_to_execution_id" in body
     assert "已往上方协作图追加" not in body
     assert "同回合再调" in body or "并入当前活跃图" in body
 
@@ -1011,6 +1013,7 @@ def test_build_app_skill_teaches_admission_and_agent_diversion():
 def test_team_orchestration_skill_teaches_sections_not_deleted_deliverable_keys():
     # 定案：已删 name/must_contain/min_length/requires_files；主题约束进 task /
     # required_sections / team_brief；写盘用 form=files 和/或 artifacts。
+    # 已删字段不留负面清单（与 schema 棘轮同向）。
     body = _body("team_orchestration_advanced")
     assert "required_sections" in body
     assert "验收点" in body or "验收项" in body
@@ -1018,16 +1021,16 @@ def test_team_orchestration_skill_teaches_sections_not_deleted_deliverable_keys(
     assert "form=files" in body or "form\": \"files\"" in body or '"form": "files"' in body
     assert "artifacts" in body
     assert "team_brief" in body
-    # 教「勿填」已删键，勿再教填 must_contain / name / min_length / requires_files
-    assert "已删" in body or "勿】再填" in body or "勿】填已删" in body
-    assert "must_contain" in body  # 仅出现在「勿填」语境
+    assert "must_contain" not in body
     assert "细则清单进 `deliverable.must_contain`" not in body
     assert "细则清单进 deliverable.must_contain" not in body
     assert '"name": "审查意见' not in body
-    assert "deliverable.name" in body  # 勿填语境
+    assert "deliverable.name" not in body
+    assert "requires_files" not in body
+    assert "min_length" not in body
+    assert "task.objective" not in body
     assert "Stanford" not in body and "McKinsey" not in body
     assert "取证路径" in body or "机构名" in body
-    assert "objective" in body  # 勿填 task.objective
 
 
 def test_team_orchestration_skill_teaches_parallel_review_notewall():
@@ -1325,19 +1328,17 @@ def test_build_website_skill_teaches_delivery_intensity():
     assert "禁静默满编" in body or "静默满编" in body
 
 
-def test_ask_user_midtask_skill_teaches_fork_annotate_and_nonblocking():
-    # 途中拍板 split: the mid-task fork + 何时不打断 (proceed-and-annotate) + the
-    # non-blocking ask + debate closing handed to the user. Gated on ask_user; the
-    # checkpoint mechanism is now its own skill, not part of midtask.
+def test_ask_user_midtask_skill_teaches_fork_and_annotate():
+    # 途中拍板 split: the mid-task fork + 何时不打断 (proceed-and-annotate) +
+    # debate closing handed to the user. Gated on ask_user; the checkpoint
+    # mechanism is now its own skill, not part of midtask.
     skill = build_system_skill_registry().get("ask_user_midtask")
     assert skill.requires_tools == ("ask_user",)
     body = skill.body
     assert "采纳正方" in body  # debate closing handed to the user
     assert "假设" in body and "若不符请指正" in body  # proceed-and-annotate
-    assert "blocking=false" in body  # the non-blocking ask
-    assert "unlocks" in body
-    assert "后半等人" in body or "后半等你" in body
-    assert "【非阻塞问·压单】" in body  # 权威在常驻核，skill 只对齐、不另造说法
+    assert "blocking=false" not in body
+    assert "unlocks" not in body
     assert "立刻按默认继续把回合做完" not in body
     assert "绝不等待" not in body
     assert "checkpoint_after" not in body
@@ -1390,7 +1391,7 @@ def test_ask_user_midtask_skill_teaches_fork_annotate_and_nonblocking():
     # 案 79789150：承诺落盘前对齐 / 用户点名确认后再存 → 阻塞短问 + default
     assert "落盘前对齐" in body
     assert "按当前设计落盘" in body
-    assert "blocking=true" in body or "阻塞短问" in body
+    assert "阻塞短问" in body
     assert "扫全文猜意图" in body
     # 午后巡 e670：标完成前先报真实断点
     assert "收尾·先报断点" in body

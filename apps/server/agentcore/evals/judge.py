@@ -25,8 +25,8 @@ milestone 裁判的用户提示追加【系统实测检索来源】清单——�
 
 判定本身仍走 ``provider.complete``；单测注入返回固定 JSON 的假 provider，零成本验证解析 /
 位置对调合议 / 容错（见 tests/test_evals_comparison.py），真模型留给 nightly。裁判可信工程
-（gold-set + Cohen's kappa 校准、kappa>门 才准上 baseline 门）已落在 ``calibration.py``
-（重设计 §五）；本裁判须先过那里的校准门，其 pass_rate 才可信地用于 baseline 回归门。
+（gold-set + Cohen's kappa 校准）已落在 ``calibration.py``
+（重设计 §五）；本裁判须先过那里的校准，其 pass_rate 才值得拿去和基线对照。
 """
 
 from __future__ import annotations

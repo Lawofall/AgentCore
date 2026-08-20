@@ -19,12 +19,10 @@ export type { NodeSizeMap };
  * 宽度决定，因此加大同层间距不缩小卡片，纯换同列卡片间呼吸感（40→56 治密集
  * 并行波次的贴脸感）；层间距（横向）勿动——加宽会压低 zoom、卡片反而更小。 */
 export const NODE_SPACING_EMBED = 56;
-/** 全屏 / 画布放大态：可自由缩放无字号代价，再松一档。 */
+/** 全屏放大态：可自由缩放无字号代价，再松一档。 */
 export const NODE_SPACING_COMFORT = 64;
 
-export function nodeSpacingForFitMode(
-  fitMode: "width" | "contain" | "view",
-): number {
+export function nodeSpacingForFitMode(fitMode: "width" | "view"): number {
   return fitMode === "width" ? NODE_SPACING_EMBED : NODE_SPACING_COMFORT;
 }
 

@@ -49,13 +49,13 @@ _CAPS: dict[str, int] = {
     "browser_screenshot": 450,
     "git": 2400,
     "terminal": 1440,
-    "delegate": 4970,
-    "ask_user": 3020,
+    "delegate": 4770,
+    "ask_user": 2750,
 }
 _TOTAL_CAP = sum(_CAPS.values())
 
 # 非桌面（web）态 ask_user：桌面独有的 action / well_known 等选项不装配。
-_ASK_USER_WEB_CAP = 2200
+_ASK_USER_WEB_CAP = 1940
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
 _WORKER_CAPS: dict[str, int] = {
@@ -148,6 +148,8 @@ def test_deleted_delegate_fields_have_no_negative_list():
         "objective",
         "playbook_none_reason",
         "finalize",
+        "playbook_id",
+        "parallelism",
     )
     blob = DELEGATE_DESCRIPTION + json.dumps(DELEGATE_PARAMETERS, ensure_ascii=False)
     for field in retired:

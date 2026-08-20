@@ -7,6 +7,7 @@ from typing import Any
 
 from agentcore.runtime.events.disposition import DURABLE_EVENT_TYPES
 from agentcore.runtime.events.types import EventType
+from agentcore.runtime.interaction import JOURNAL_SURFACE_EVENTS
 
 # 落 journal 的事件 = 处置表里所有 DURABLE（单一源见 events/disposition.py）。历史上这里手
 # 维护第二份清单，与处置表两处易漂移、新增事件易静默遗漏；现直接复用派生集——新增 DURABLE
@@ -15,26 +16,20 @@ from agentcore.runtime.events.types import EventType
 _JOURNAL_EVENT_TYPES = DURABLE_EVENT_TYPES
 
 # Surface = 「客户端可见 journal 非空」的门槛事件。无 surface → execution_journal /
-# runs_from_entries 对外清空 events（DURABLE 仍落 fact log）。对齐 question_posted
-# 先例：单聊仅有热审批 / 委派授权 / 升级时也必须能过 gate，否则 reload 丢痕迹（D5）。
-# user_interjection 同理：经典单聊 steer 只有插话、没有图/卡，被 gate 清掉就等于
-# 刷新即丢——而退役 turn_steer_accepted、改用 DURABLE 插话的全部意义就是让这条
-# 用户发言在历史里回得来。
-_JOURNAL_SURFACE_TYPES = frozenset(
+# runs_from_entries 对外清空 events（DURABLE 仍落 fact log）。
+#
+# 交互 required 事件从 INTERACTION_KIND_SPECS.journal_surface 派生（单一源；手维护
+# 第二份清单易静默遗漏 — 曾经漏掉 stage_card_required）。非交互门槛事件（图 / 插话 /
+# 升级闸）不是 InteractionKind，留在下面这张小表。
+_NON_INTERACTION_JOURNAL_SURFACES = frozenset(
     {
         EventType.RUN_PLAN.value,
         EventType.GRAPH_APPEND.value,
-        EventType.CHECKPOINT_REQUIRED.value,
-        EventType.QUESTION_POSTED.value,
-        EventType.PLAN_REVIEW_REQUIRED.value,
-        EventType.TEAM_PREVIEW_REQUIRED.value,
-        EventType.APPROVAL_REQUIRED.value,
-        EventType.DELEGATION_AUTHORIZATION_REQUIRED.value,
-        EventType.ESCALATION_REQUIRED.value,
         EventType.RUN_ESCALATION.value,
         EventType.USER_INTERJECTION.value,
     }
 )
+_JOURNAL_SURFACE_TYPES = _NON_INTERACTION_JOURNAL_SURFACES | JOURNAL_SURFACE_EVENTS
 
 _PROCESS_RESULT_CAP = 8000
 

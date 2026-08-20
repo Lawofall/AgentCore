@@ -34,6 +34,10 @@ import type {
   UsageBreakdown,
   WorkerRunPhase,
 } from "@agentcore/contract-types";
+import {
+  INTERACTION_KIND_WIRE,
+  USER_INTERACTION_KIND_VALUES,
+} from "@agentcore/contract-types";
 
 export type {
   ContextBlockWire,
@@ -300,19 +304,22 @@ export interface ProjectedUserInterjection {
 /** Interaction lifecycle status in the projected turn (提问确认统一重构 P3). */
 export type InteractionStatus = "pending" | "resolved" | "orphaned";
 
-/** Kinds that pause the turn when status=pending (gate surface). */
-export const GATE_INTERACTION_KINDS = [
-  "approval",
-  "ask_user",
-  "plan_review",
-  "team_preview",
-  "delegation_authorization",
-] as const;
+/**
+ * Kinds that pause the turn when status=pending (gate surface).
+ *
+ * Derived from the spec's `pausesTurn` so a new gating kind cannot land here
+ * while mobile (which already derives) picks it up — that split is exactly the
+ * desktop/mobile gate divergence this judge exists to catch.
+ */
+export const GATE_INTERACTION_KINDS = USER_INTERACTION_KIND_VALUES.filter(
+  (kind) => INTERACTION_KIND_WIRE[kind].pausesTurn,
+);
 
 /** One user-facing interaction across its lifecycle — replaces the old single-slot
- * `pendingInteraction`. All 8 kinds appear; status tracks pending|resolved|orphaned so
- * reload after settle never re-renders a false pending card. Multi-approval concurrency
- * is first-class (array, not last-write-wins). */
+ * `pendingInteraction`. All 7 kinds appear (`client_tool` is fulfill-channel-only, not
+ * in this union); status tracks pending|resolved|orphaned so reload after settle never
+ * re-renders a false pending card. Multi-approval concurrency is first-class (array, not
+ * last-write-wins). */
 export type ProjectedInteraction =
   | {
       kind: "approval";
@@ -354,15 +361,6 @@ export type ProjectedInteraction =
       >;
     }
   | {
-      kind: "delegation_authorization";
-      id: string;
-      status: InteractionStatus;
-      executionId: string;
-      workers: Array<Record<string, unknown>>;
-      /** Wire field `tools` (not grantable_tools). */
-      tools: string[];
-    }
-  | {
       kind: "escalation";
       id: string;
       status: InteractionStatus;
@@ -371,16 +369,6 @@ export type ProjectedInteraction =
       question: string;
       assumption: string;
       awaiting?: "user" | "ceo";
-    }
-  | {
-      kind: "question_posted";
-      id: string;
-      status: InteractionStatus;
-      question: string;
-      context: string;
-      settlement?: "answered" | "discarded";
-      answer?: string;
-      note?: string;
     }
   | {
       kind: "stage_card";
@@ -477,7 +465,7 @@ export interface ProjectedTurn {
   /** Derived from run states (terminal-completed over total), cumulative across
    * multi-batch delegates — never the per-batch run_progress counters. */
   progress: { completed: number; total: number };
-  /** Full interaction inventory (8 kinds × pending|resolved|orphaned). Replaces the
+  /** Full interaction inventory (7 kinds × pending|resolved|orphaned). Replaces the
    * legacy single-slot `pendingInteraction` (P3 breaking). */
   interactions: ProjectedInteraction[];
   /** Turn total from message_end.cost (回合总账); null until the turn ends or when no

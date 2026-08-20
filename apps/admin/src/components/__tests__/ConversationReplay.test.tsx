@@ -266,6 +266,39 @@ describe("ConversationReplay layout", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
+  it("顶栏收成薄会话条：元数据与 KPI 同行，pills 横滑，运维条挂在条下", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(replay(MESSAGES));
+
+    const { container } = renderReplay();
+    await screen.findByText("一次多 Agent 会话");
+
+    const page = container.firstElementChild as HTMLElement;
+    expect(page.className).toMatch(/\bpx-4\b/);
+    expect(page.className).toMatch(/\bpy-3\b/);
+
+    const header = container.querySelector("header");
+    expect(header).toBeTruthy();
+    expect(header!.className).not.toMatch(/\bmb-6\b/);
+    expect(header!.className).not.toMatch(/\bgap-4\b/);
+
+    expect(screen.getByRole("button", { name: "返回" })).toBeTruthy();
+    expect(screen.getByTitle("c1（点击复制）")).toBeTruthy();
+    expect(screen.getByText("错误")).toBeTruthy();
+    expect(screen.getByText("成本")).toBeTruthy();
+    expect(screen.getByText("多 Agent")).toBeTruthy();
+
+    const pill = screen.getByRole("button", { name: /#1/ });
+    expect(pill.textContent).toMatch(/#1/);
+    expect(pill.parentElement?.className).toMatch(/overflow-x-auto/);
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    fireEvent.click(screen.getByText("CEO 汇总"));
+    const ops = screen.getByLabelText("运维信号");
+    expect(header!.contains(ops)).toBe(true);
+    expect(screen.getByRole("button", { name: "打开队员面板" })).toBeTruthy();
+  });
+
   it("moves execution_harvest to the ops bar, not the user column", async () => {
     vi.mocked(fetchConversationReplay).mockResolvedValue(
       replay([
@@ -549,8 +582,11 @@ describe("ConversationReplay 按需终态", () => {
     await waitFor(() =>
       expect(fetchReplayTurnFinalState).toHaveBeenCalledWith("c1", "a1"),
     );
-    expect(await screen.findByText("web_search")).toBeTruthy();
-    expect(screen.getByText("finish end_turn")).toBeTruthy();
+    expect(await screen.findByText("使用 1 个工具")).toBeTruthy();
+    expect(screen.queryByText("web_search")).toBeNull();
+    expect(screen.queryByText("finish end_turn")).toBeNull();
+    fireEvent.click(screen.getByText("使用 1 个工具"));
+    expect(screen.getByText("web_search")).toBeTruthy();
   });
 
   it("hydrates the URL-anchored turn on first paint", async () => {
@@ -572,7 +608,9 @@ describe("ConversationReplay 按需终态", () => {
     await waitFor(() =>
       expect(fetchReplayTurnFinalState).toHaveBeenCalledWith("c1", "a2"),
     );
-    expect(await screen.findByText("read_file")).toBeTruthy();
+    expect(await screen.findByText("使用 1 个工具")).toBeTruthy();
+    fireEvent.click(screen.getByText("使用 1 个工具"));
+    expect(screen.getByText("read_file")).toBeTruthy();
   });
 
   it("retries a failed final-state fetch without reloading the thread", async () => {
@@ -605,7 +643,9 @@ describe("ConversationReplay 按需终态", () => {
     expect(fetchConversationReplay).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "重试加载终态" }));
-    expect(await screen.findByText("web_search")).toBeTruthy();
+    expect(await screen.findByText("使用 1 个工具")).toBeTruthy();
+    fireEvent.click(screen.getByText("使用 1 个工具"));
+    expect(screen.getByText("web_search")).toBeTruthy();
     expect(fetchConversationReplay).toHaveBeenCalledTimes(1);
   });
 });

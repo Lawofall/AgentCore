@@ -35,8 +35,9 @@ def moderator_plan_event(
 ):
     """声明主持人节点（CEO 之下、辩手之上的编排角色）。
 
-    独立辩论 / 新图+prev 第二幕：主持人 ``parent_run_id`` 引用本回合 CEO captain。
-    幕间因果经 ``act.anchor_run_id`` + ``prev_execution_id``（不再 divert 宿主图）。
+    独立辩论 / 跨回合新图+prev / 同回合加一幕：主持人 ``parent_run_id`` 引用本回合
+    CEO captain。幕间因果经 ``act.anchor_run_id``；跨回合另带 ``prev_execution_id``
+    （同回合复用宿主 eid，不写 prev，不再 divert 宿主图）。
     """
     label = FORM_LABELS.get(config.form, "辩论")
     parent = getattr(tool, "_debate_graph_parent_run_id", None) or tool._captain_run_id

@@ -194,8 +194,8 @@ export function useComposerSend({
 }) {
   const addMessage = useConversationStore((s) => s.addMessage);
   const navigate = useNavigate();
-  // 门闩 + 按钮 in-flight 态存在 store 里、与草稿同键：组件重挂载（聊天 ⇄ 画布、居中
-  // 草稿 → 底栏、路由重建）不再把闸归零，也不再丢「在发」的视觉态。
+  // 门闩 + 按钮 in-flight 态存在 store 里、与草稿同键：组件重挂载（切对话回来、居中
+  // 草稿 → 底栏、路由重建、刷新 / 重启）不再把闸归零，也不再丢「在发」的视觉态。
   const activeConversationId = useConversationStore(
     (s) => s.currentConversationId,
   );

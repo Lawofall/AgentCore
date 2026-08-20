@@ -32,10 +32,7 @@ import {
 } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
 import { useFoldersStore } from "@/stores/folders";
-import {
-  usePendingApprovals,
-  usePendingDelegations,
-} from "@/stores/interactions";
+import { usePendingApprovals } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useServerHealthStore } from "@/stores/serverHealth";
 import {
@@ -106,9 +103,9 @@ export type TurnComposerVariant = "card" | "bar";
  * 离线态靠 {@link ComposerConnectionNotice} 与发送硬禁，不再用安静连接绿点。
  *
  * Draft state (text + attachments) lives in {@link useComposerDraftStore} keyed by
- * conversation, NOT in component state — switching 聊天 ⇄ 画布 unmounts the composer
- * but keeps the half-typed order, and 回填 (ask card / run-detail / debate) lands in
- * the draft even if the composer is briefly unmounted. The textarea stays typable
+ * conversation, NOT in component state — remounts (切对话回来、居中草稿 → 底栏、
+ * 刷新 / 重启) keep the half-typed order, and 回填 (ask card / run-detail / debate)
+ * lands in the draft even if the composer is briefly unmounted. The textarea stays typable
  * while a turn is generating (queue up the next order); only sending is gated, with
  * 停止 in the send slot.
  *
@@ -154,7 +151,6 @@ export function TurnComposer({
       : false,
   );
   const pendingApprovals = usePendingApprovals(conversationId);
-  const pendingDelegations = usePendingDelegations(conversationId);
   const lastMessage = useConversationStore((s) => {
     const id = s.currentConversationId;
     if (!id) return null;
@@ -163,9 +159,7 @@ export function TurnComposer({
   const showPendingHint =
     !!conversationId &&
     !isGenerating &&
-    (hasPausedDecision ||
-      pendingApprovals.length > 0 ||
-      pendingDelegations.length > 0);
+    (hasPausedDecision || pendingApprovals.length > 0);
   const lastSlot = useExecutionStore((s) => {
     if (!lastMessage || lastMessage.role !== "assistant") return undefined;
     return s.byId[assistantProjectionId(lastMessage)];

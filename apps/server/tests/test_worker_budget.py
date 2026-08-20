@@ -11,7 +11,6 @@ from agentcore.runtime.runs.worker_budget import (
     ensure_directed_search_tools,
     is_deep_deliverable,
     is_directed_search_role,
-    is_research_root,
 )
 
 
@@ -119,18 +118,6 @@ def test_explicit_timeout_ms_wins_over_backstop():
     assert node.policy.timeout_s == 90  # CEO 显式优先
 
 
-def test_is_research_root_predicate():
-    """共享结构谓词（不再驱动检索默认分档）：逐条件核对。"""
-    assert is_research_root("standard", None, has_upstream=False, retrieval_budget=10)
-    assert is_research_root("standard", None, has_upstream=False, retrieval_budget=None)
-    assert not is_research_root("light", None, has_upstream=False, retrieval_budget=10)
-    assert not is_research_root("standard", None, has_upstream=True, retrieval_budget=10)
-    assert not is_research_root("standard", None, has_upstream=False, retrieval_budget=0)
-    assert not is_research_root(
-        "standard", Deliverable(form="files"), has_upstream=False, retrieval_budget=10
-    )
-
-
 def test_deep_deliverable_signals():
     assert is_deep_deliverable(Deliverable(form="files"))
     assert is_deep_deliverable(Deliverable(artifacts=["report.md"]))
@@ -139,39 +126,13 @@ def test_deep_deliverable_signals():
     assert not is_deep_deliverable(None)
 
 
-def test_blocks_light_complexity_never():
-    from agentcore.runtime.runs.worker_budget import blocks_light_complexity
-
-    assert not blocks_light_complexity(Deliverable(form="files", artifacts=["a.py"]))
-    assert not blocks_light_complexity(Deliverable(form="prose"))
-    assert not blocks_light_complexity(Deliverable())
-    assert not blocks_light_complexity(None)
-
-
-def test_apply_light_round_budgets_is_noop():
-    """Retired: light no longer stamps short max_rounds (CEO / repair_code still may)."""
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.runs.types import RunSpec
-    from agentcore.runtime.runs.worker_budget import apply_light_round_budgets
-
-    plan = RunPlan()
-    plan.add(RunSpec(run_id="a", agent_id="a", agent_name="x", task="t", role="工程师"))
-    apply_light_round_budgets(plan, complexity_hint="standard")
-    assert plan.nodes[0].max_rounds is None
-    apply_light_round_budgets(plan, complexity_hint="light")
-    assert plan.nodes[0].max_rounds is None
-
-
 def test_factory_closes_files_delivery_idle_keeps_recon():
     """交文件空转已关：files/report factory 不注入；recon 仍 nudge；prose 全关。"""
     from agentcore.runtime.engine.governance import create_loop_controller
-    from agentcore.runtime.runs.worker_budget import (
-        LIGHT_REPAIR_MAX_ROUNDS,
-        is_short_write_posture,
-    )
+    from agentcore.runtime.runs.worker_budget import is_short_write_posture
 
     assert not is_short_write_posture(max_rounds=None)
-    assert is_short_write_posture(max_rounds=LIGHT_REPAIR_MAX_ROUNDS)
+    assert is_short_write_posture(max_rounds=6)
     assert is_short_write_posture(max_rounds=4)
 
     standard = create_loop_controller(

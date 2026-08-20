@@ -1,5 +1,7 @@
 """Turn-level result quality: ``ok | partial | paused | error``.
 
+查询入口（与 RunPhase / FinishReason / 关帧集合对照）→ ``runtime.terminal``。
+
 ``finish_reason`` answers how the loop ended; this answers what the turn produced.
 Partial is aggregated from batch/node signals already on the wire — no new
 heuristics. ``paused`` is produced only when the wire sets it explicitly

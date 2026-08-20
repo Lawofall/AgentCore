@@ -1,6 +1,6 @@
 {
   "name": "multi_agent_two_act_lv",
-  "description": "批R2·幕级 LOD 验收：LV 案量级两幕（幕1 MLR 含法律子队 + 幕2 辩论新图+prev 含证人/补派两轮），约 18 节点，供三宿主协作图幕摘要卡链 + 聚焦幕验单屏可读",
+  "description": "批R2·幕级 LOD 验收：LV 案量级两幕（幕1 MLR 含法律子队 + 幕2 辩论新图+prev 含证人/补派两轮），约 18 节点，供内嵌 + 全屏协作图幕摘要卡链 + 聚焦幕验单屏可读",
   "events": [
     {
       "type": "message_start",

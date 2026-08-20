@@ -11,7 +11,7 @@
 抬 files——只认 playbook / 已声明的 ``form=files``·``reviews/`` artifacts。
 
 调研两阶段引用（块 2）：**只认** ``citation_mode=="two_phase"``（playbook / CEO 盖戳）
-→ A 检索草案不跑成稿引用闸 → 同 worker 自动升级 B 后再验；``immediate`` / 未声明退出；
+→ A 检索草案不跑成稿引用闸 → 同 worker 自动升级 B 后再验；未声明退出；
 draft 不进 ``file_acceptance`` / artifacts 主清单。路径入口（声明或落盘在
 ``research/`` · ``reviews/`` 下即算调研类）已撤——那个落点由扫 role·task 的正则填出，
 是隔一层的自由文推断；即兴委派要成稿级引用验收须自报 ``citation_mode``。
@@ -293,8 +293,8 @@ def research_report_main_artifact(output_path: str | None = None) -> str:
 def is_two_phase_citation_deliverable(deliverable: Any) -> bool:
     """True when deliverable explicitly opts into A(draft)→B(cite-tier) acceptance.
 
-    只认显式 ``citation_mode=="two_phase"``（playbook / CEO 盖戳）；``immediate``
-    与未声明一律否。**无路径入口**：原「声明的 ``artifacts`` / ``artifact_dir`` 或
+    只认显式 ``citation_mode=="two_phase"``（playbook / CEO 盖戳）；未声明一律否。
+    **无路径入口**：原「声明的 ``artifacts`` / ``artifact_dir`` 或
     已落盘路径在 ``research/`` · ``reviews/`` 下即算调研类」已撤——那个落点是扫
     role·task 的正则填出来的，等于隔一层的自由文推断。``playbooks/research.py``
     逐处盖戳，即兴委派要成稿级引用验收须自报 ``citation_mode``。

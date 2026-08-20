@@ -4,7 +4,6 @@ import {
   type InterjectionItem,
 } from "@/components/InterjectionBubbles";
 import { Markdown } from "@/components/Markdown";
-import { NonBlockingAskCard } from "@/components/NonBlockingAskCard";
 import {
   EscalationAnswer,
   TeamView,
@@ -19,6 +18,12 @@ import {
 } from "@/components/assistantLabels";
 import { isSuccessfulHandoff } from "@/components/handoffBrief";
 import {
+  type TimelineSlotLookup,
+  classifyTimelineInteractionCard,
+  timelineEmptyNode,
+  timelineIntentionalEmpty,
+} from "@/components/timelineCardSlot";
+import {
   codeDiagnosticsSummary,
   extractCodeDiagnostics,
 } from "@/lib/codeDiagnostics";
@@ -29,7 +34,6 @@ import { isVerifyBudgetExceeded } from "@/lib/verifyBudget";
 import type {
   EscalationSlot,
   HotDecisionTrace,
-  NonBlockingAsk,
   RunToolCall,
   StageCardTrace,
 } from "@/protocol/fold";
@@ -53,25 +57,21 @@ import "@/components/ProcessTimeline.css";
 
 type ToolStepData = Extract<ProcessStep, { kind: "tool" }>;
 
-/** 跨回合续接锚点文案：新契约「续自上一张图」；旧 journal `graph_append` 仍带追加人数。
- * 手机无跨气泡跳转，仅文案行。 */
+/** 跨回合续接锚点文案：新开一队、接着上一张继续（不是往旧图里加人）。
+ * 手机无跨气泡跳转，仅文案行。`addedCount` 仍由旧 journal 传入，不再写入文案。 */
 export function graphAppendAnchorLabel(
-  addedCount: number,
-  actKind?: string | null,
+  _addedCount: number,
+  _actKind?: string | null,
   authorizedBy?: string | null,
 ): string {
-  const n = Math.max(0, addedCount | 0);
-  const base =
-    actKind === "debate"
-      ? `续自上一张图 · 已开辩论幕 · 追加 ${n} 名成员`
-      : `续自上一张图 · 追加 ${n} 名成员`;
+  const base = "新开一队、接着上一张继续";
   const auth = actAuthorizedByLabel(authorizedBy);
   return auth ? `${base} · ${auth}` : base;
 }
 
 /** 新契约：`prev_execution_id` 链上文案（本回合已有完整 TeamView）。 */
 export function prevGraphAnchorLabel(): string {
-  return "续自上一张图";
+  return "新开一队、接着上一张继续";
 }
 
 /**
@@ -296,6 +296,7 @@ function groupToolRuns(steps: ProcessStep[]): TimelineNode[] {
     run = [];
   };
   for (const s of steps) {
+    if ((s as { kind: string }).kind === "ask") continue;
     if (s.kind === "tool") run.push(s);
     else {
       flush();
@@ -306,9 +307,22 @@ function groupToolRuns(steps: ProcessStep[]): TimelineNode[] {
   return nodes;
 }
 
+/**
+ * 锚 A · ProcessStep kind（编译期响）：漏处理一个 kind，`never` 形参收不下，tsc 失败。
+ * 运行期不抛（渲染路径上抛出会白屏）；与 fold `noteUnhandledEvent` 同款。
+ */
+function noteUnhandledProcessStep(x: never): string {
+  return `unknown-${String(x)}`;
+}
+
 /** Stable render keys（对称桌面 timelineNodeKeys）：中段 insert 不位移后续行。 */
 function timelineNodeKeys(nodes: TimelineNode[]): string[] {
   const ordinals = new Map<string, number>();
+  const ordinalKey = (kind: "reasoning" | "content" | "rework") => {
+    const n = (ordinals.get(kind) ?? 0) + 1;
+    ordinals.set(kind, n);
+    return `${kind}-${n}`;
+  };
   return nodes.map((node) => {
     switch (node.kind) {
       case "team":
@@ -319,16 +333,12 @@ function timelineNodeKeys(nodes: TimelineNode[]): string[] {
         return `tp-${node.checkpoint_id}`;
       case "checkpoint":
         return `cp-${node.checkpoint_id}`;
-      case "ask":
-        return `ask-${node.ask_id}`;
       case "plan_review":
         return `pr-${node.checkpoint_id}`;
       case "escalation":
         return `esc-${node.escalation_id}`;
       case "approval":
         return `appr-${node.approval_id}`;
-      case "delegation_authorization":
-        return `dauth-${node.authorization_id}`;
       case "stage_card":
         return `sc-${node.stage_card_id}`;
       case "user_interjection":
@@ -337,11 +347,12 @@ function timelineNodeKeys(nodes: TimelineNode[]): string[] {
         return `tool-${node.step.id}`;
       case "tool-group":
         return `tgrp-${node.tools[0]?.id ?? "empty"}`;
-      default: {
-        const n = (ordinals.get(node.kind) ?? 0) + 1;
-        ordinals.set(node.kind, n);
-        return `${node.kind}-${n}`;
-      }
+      case "reasoning":
+      case "content":
+      case "rework":
+        return ordinalKey(node.kind);
+      default:
+        return noteUnhandledProcessStep(node);
     }
   });
 }
@@ -375,7 +386,6 @@ function isProcessNode(node: TimelineNode): boolean {
     node.kind === "tool" ||
     node.kind === "tool-group" ||
     node.kind === "approval" ||
-    node.kind === "delegation_authorization" ||
     node.kind === "stage_card"
   );
 }
@@ -492,7 +502,6 @@ export function ProcessTimeline({
   messageId: _messageId,
   fallbackContent,
   team,
-  asks,
   escalationSlots,
   hotTraces,
   stageCardTraces,
@@ -503,7 +512,6 @@ export function ProcessTimeline({
   prevExecutionIds,
   userInterjections,
   turnClosed = false,
-  onFill,
   onOpenBrowserLive,
   kickoffReleased = false,
 }: {
@@ -518,7 +526,6 @@ export function ProcessTimeline({
   /** Scalar content when process has no `content` step yet (slot before team). */
   fallbackContent?: string;
   team?: TeamProjection;
-  asks?: NonBlockingAsk[];
   escalationSlots?: Map<string, EscalationSlot>;
   hotTraces?: Map<string, HotDecisionTrace>;
   stageCardTraces?: Map<string, StageCardTrace>;
@@ -535,7 +542,6 @@ export function ProcessTimeline({
   turnClosed?: boolean;
   /** 开工卡已授权 continue：pending 编制也出图. */
   kickoffReleased?: boolean;
-  onFill?: (text: string) => void;
   onOpenBrowserLive?: (opts?: { runId?: string }) => void;
 }) {
   const nodes = groupToolRuns(steps);
@@ -568,6 +574,14 @@ export function ProcessTimeline({
   );
   const showThinkingTail =
     isStreaming && !timelineTailHasLiveCue(last, { teamGraphVisible });
+
+  const slotLookup: TimelineSlotLookup = {
+    escalationSlots,
+    hotTraces,
+    stageCardTraces,
+    teamPreviewTraces,
+    userInterjections,
+  };
 
   const renderFallback = (key: string) => (
     <div key={key} className="process-narration">
@@ -603,7 +617,7 @@ export function ProcessTimeline({
     }
     if (node.kind === "team") {
       if (!team || !shouldShowTeamGraph(team.runs, kickoffReleased))
-        return null;
+        return timelineIntentionalEmpty();
       const hasPrev = Boolean(prevExecutionIds?.get(node.execution_id));
       return (
         <Fragment key={nodeKey}>
@@ -623,57 +637,97 @@ export function ProcessTimeline({
         </div>
       );
     }
-    if (node.kind === "ask") {
-      const ask = asks?.find((a) => a.id === node.ask_id);
-      return ask ? (
-        <NonBlockingAskCard key={ask.id} ask={ask} onFill={onFill} />
-      ) : null;
-    }
     if (node.kind === "user_interjection") {
+      const cardSlot = classifyTimelineInteractionCard(
+        "user_interjection",
+        node,
+        slotLookup,
+      );
+      const empty = timelineEmptyNode(nodeKey, cardSlot);
+      if (empty !== undefined) return empty;
       const item = userInterjections?.find(
         (u) => u.interjectionId === node.interjection_id,
       );
-      return item ? (
+      if (!item) {
+        return (
+          timelineEmptyNode(nodeKey, {
+            kind: "missing",
+            processKind: "user_interjection",
+            id: node.interjection_id,
+          }) ?? null
+        );
+      }
+      return (
         <InterjectionBubbles
           key={nodeKey}
           items={[item]}
           turnClosed={turnClosed}
         />
-      ) : null;
+      );
     }
     if (node.kind === "escalation") {
-      const slot = escalationSlots?.get(node.escalation_id);
-      if (!slot) return null;
+      const cardSlot = classifyTimelineInteractionCard(
+        "escalation",
+        node,
+        slotLookup,
+      );
+      const empty = timelineEmptyNode(nodeKey, cardSlot);
+      if (empty !== undefined) return empty;
+      const escSlot = escalationSlots?.get(node.escalation_id);
+      if (!escSlot) {
+        return (
+          timelineEmptyNode(nodeKey, {
+            kind: "missing",
+            processKind: "escalation",
+            id: node.escalation_id,
+          }) ?? null
+        );
+      }
       const liveEsc =
-        slot.esc.status === "pending" &&
+        escSlot.esc.status === "pending" &&
         team?.escalationsInteractive &&
         team.conversationId
-          ? slot.id
+          ? escSlot.id
           : undefined;
       if (liveEsc && team?.conversationId) {
         return (
           <EscalationAnswer
-            key={slot.id}
-            esc={slot.esc}
+            key={escSlot.id}
+            esc={escSlot.esc}
             escalationId={liveEsc}
             conversationId={team.conversationId}
-            runId={slot.runId}
+            runId={escSlot.runId}
             onOpenLive={onOpenBrowserLive}
           />
         );
       }
-      const detail = escalationDetail(slot.esc);
+      const detail = escalationDetail(escSlot.esc);
       return (
-        <div key={slot.id} className="run-escalation">
-          <span className="run-escalation-q">↑ {slot.esc.question}</span>
+        <div key={escSlot.id} className="run-escalation">
+          <span className="run-escalation-q">↑ {escSlot.esc.question}</span>
           {detail && <span className="run-escalation-a">{detail}</span>}
         </div>
       );
     }
-    // 热审批 / 委派授权痕迹 (D3): resolved 后轻行；pending 不显（操作面在 Sheet/PauseCard）。
+    // 热审批 / 委派授权痕迹 (D3): resolved 后轻行；pending 有意为空（操作面在 Sheet/PauseCard）。
     if (node.kind === "approval") {
+      const cardSlot = classifyTimelineInteractionCard(
+        "approval",
+        node,
+        slotLookup,
+      );
+      const empty = timelineEmptyNode(nodeKey, cardSlot);
+      if (empty !== undefined) return empty;
       const t = hotTraces?.get(node.approval_id);
-      if (!t?.resolved) return null;
+      if (!t?.resolved) {
+        return (
+          timelineEmptyNode(nodeKey, {
+            kind: "missing",
+            processKind: "approval",
+            id: node.approval_id,
+          }) ?? null
+        );
+      }
       const tool = t.toolName ? toolLabel(t.toolName) : "工具";
       return (
         <div key={nodeKey} className="hot-trace">
@@ -681,18 +735,24 @@ export function ProcessTimeline({
         </div>
       );
     }
-    if (node.kind === "delegation_authorization") {
-      const t = hotTraces?.get(node.authorization_id);
-      if (!t?.resolved) return null;
-      return (
-        <div key={nodeKey} className="hot-trace">
-          ✓ {t.denied ? "已拒绝委派授权" : "已授权开工"}
-        </div>
-      );
-    }
     if (node.kind === "stage_card") {
+      const cardSlot = classifyTimelineInteractionCard(
+        "stage_card",
+        node,
+        slotLookup,
+      );
+      const empty = timelineEmptyNode(nodeKey, cardSlot);
+      if (empty !== undefined) return empty;
       const t = stageCardTraces?.get(node.stage_card_id);
-      if (!t || t.outcome === "pending") return null;
+      if (!t) {
+        return (
+          timelineEmptyNode(nodeKey, {
+            kind: "missing",
+            processKind: "stage_card",
+            id: node.stage_card_id,
+          }) ?? null
+        );
+      }
       const label =
         t.outcome === "orphaned"
           ? "推进卡 · 已失效"
@@ -706,15 +766,32 @@ export function ProcessTimeline({
         </div>
       );
     }
-    // checkpoint·plan_review：手机阻塞交互走 Sheet，时间线 no-op。
-    // team_preview pending 仍 no-op；resolved 画「已调整 · 已交回修订」等痕迹。
+    // checkpoint·plan_review：手机阻塞交互走 Sheet，时间线有意为空（不是丢卡）。
+    // team_preview pending 仍有意为空；resolved 画「已调整 · 已交回修订」等痕迹。
     if (node.kind === "checkpoint" || node.kind === "plan_review") {
-      return null;
+      return timelineIntentionalEmpty();
     }
     if (node.kind === "team_preview") {
+      const cardSlot = classifyTimelineInteractionCard(
+        "team_preview",
+        node,
+        slotLookup,
+      );
+      const empty = timelineEmptyNode(nodeKey, cardSlot);
+      if (empty !== undefined) return empty;
       const t = teamPreviewTraces?.get(node.checkpoint_id);
-      if (!t || t.status === "pending") return null;
-      if (t.decision === "continue" && kickoffReleased) return null;
+      if (!t) {
+        return (
+          timelineEmptyNode(nodeKey, {
+            kind: "missing",
+            processKind: "team_preview",
+            id: node.checkpoint_id,
+          }) ?? null
+        );
+      }
+      if (t.decision === "continue" && kickoffReleased) {
+        return timelineIntentionalEmpty();
+      }
       return (
         <div
           key={nodeKey}

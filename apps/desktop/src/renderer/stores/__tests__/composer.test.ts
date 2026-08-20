@@ -6,7 +6,6 @@ import {
   useComposerDraftStore,
 } from "@/stores/composer";
 import { useConversationStore } from "@/stores/conversation";
-import { useUIStore } from "@/stores/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -52,8 +51,6 @@ beforeEach(() => {
     dockFlipToken: 0,
   });
   useConversationStore.setState({ currentConversationId: null });
-  uiSet("conversation-views", undefined);
-  useUIStore.setState({ conversationViews: {} });
 });
 
 afterEach(() => {
@@ -106,30 +103,6 @@ describe("composer draft store", () => {
     expect(
       useComposerDraftStore.getState().drafts[draftKeyFor(null)]?.value,
     ).toBe("草稿聊天");
-  });
-
-  it("fill switches canvas view back to chat; already-chat / no id do not switch", () => {
-    useConversationStore.setState({ currentConversationId: "c9" });
-    useUIStore.getState().setConversationView("c9", "canvas");
-    expect(useUIStore.getState().conversationViews.c9).toBe("canvas");
-
-    useComposerDraftStore.getState().fill("从画布回填");
-    expect(useUIStore.getState().conversationViews.c9).toBeUndefined();
-    expect(useComposerDraftStore.getState().drafts.c9?.value).toBe(
-      "从画布回填",
-    );
-
-    // Already on chat — fill must not flip the view map.
-    useComposerDraftStore.getState().fill("再填一行");
-    expect(useUIStore.getState().conversationViews.c9).toBeUndefined();
-    expect(useUIStore.getState().conversationViews).toEqual({});
-
-    // No conversation id — do not switch even if another conv is on canvas.
-    useUIStore.getState().setConversationView("other", "canvas");
-    useConversationStore.setState({ currentConversationId: null });
-    useComposerDraftStore.getState().fill("草稿聊天");
-    expect(useUIStore.getState().conversationViews.other).toBe("canvas");
-    expect(useUIStore.getState().conversationViews.c9).toBeUndefined();
   });
 
   it("persists draft TEXT + attachment metadata and restores both on reload", () => {

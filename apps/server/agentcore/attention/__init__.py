@@ -25,7 +25,6 @@ from agentcore.attention.signal import (
     signal_attention_resolved,
     signal_hot_card_required,
     signal_hot_card_resolved,
-    signal_question_posted_resolved,
 )
 
 __all__ = [
@@ -43,5 +42,4 @@ __all__ = [
     "signal_attention_resolved",
     "signal_hot_card_required",
     "signal_hot_card_resolved",
-    "signal_question_posted_resolved",
 ]

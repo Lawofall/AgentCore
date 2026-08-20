@@ -1,10 +1,9 @@
-import { registerConversationUiClearer, uiGet, uiSet } from "@/lib/uiStorage";
+import { uiGet, uiSet } from "@/lib/uiStorage";
 import { create } from "zustand";
 
 const DIAGNOSTIC_MODE_KEY = "diagnostic-mode";
 const THEME_KEY = "theme";
 const SIDECAR_KEY = "sidecar-enabled";
-const CONVERSATION_VIEWS_KEY = "conversation-views";
 
 type Theme = "light" | "dark" | "system";
 
@@ -15,25 +14,6 @@ function loadDiagnosticMode(): boolean {
 
 function persistDiagnosticMode(v: boolean): void {
   uiSet(DIAGNOSTIC_MODE_KEY, v);
-}
-
-// 每对话的视图偏好（聊天 ⇄ 画布，前端UX设计.md §六）。只存「切到画布」的对话——聊天是
-// 默认、不落键，故这张表恒收敛在用户偏好画布的那批对话上（守原「不无限增长」约束）。
-function loadConversationViews(): Record<string, "chat" | "canvas"> {
-  const parsed = uiGet<Record<string, unknown>>(CONVERSATION_VIEWS_KEY);
-  if (!parsed || typeof parsed !== "object") return {};
-  const out: Record<string, "chat" | "canvas"> = {};
-  for (const [id, mode] of Object.entries(parsed)) {
-    if (mode === "canvas") out[id] = "canvas";
-  }
-  return out;
-}
-
-function persistConversationViews(
-  views: Record<string, "chat" | "canvas">,
-): void {
-  if (Object.keys(views).length === 0) uiSet(CONVERSATION_VIEWS_KEY, undefined);
-  else uiSet(CONVERSATION_VIEWS_KEY, views);
 }
 
 // Theme is persisted so the choice survives a reload; it is *applied* to the DOM
@@ -118,11 +98,6 @@ interface UIState {
    * noise kept off the 大众 path. 「复制排查包」(错误卡 / 气泡更多) 不依赖本开关。
    * Persisted via uiStorage (`agentcore:diagnostic-mode`). */
   diagnosticMode: boolean;
-  /** 每对话的视图模式（聊天 ⇄ 画布双视图，前端UX设计.md §六）。默认聊天（`"chat"`），
-   * 用户可在对话顶栏切到画布（`"canvas"`）。画布已毕业（无实验开关），入口恒显示。
-   * **持久化**到 `agentcore:conversation-views`，但只落「切到画布」的对话（切回聊天
-   * 即删键）→ 表恒收敛、不无限增长；未表态 / 草稿（无 id）恒为聊天。 */
-  conversationViews: Record<string, "chat" | "canvas">;
   /** 本机执行偏好折成的展示布尔（= `resolveSidecarEnabled`；unset→`SIDECAR_DEFAULT_ENABLED`）。
    * **不是**新开回合路由挡板——路由看 {@link sidecarPreference} 是否显式 `off`（强制关）。
    * 设置面应用 `preference !== "off"` 表示「允许」，以免 unset 显示关却仍默认同侧。 */
@@ -138,10 +113,6 @@ interface UIState {
   setTheme: (theme: UIState["theme"]) => void;
   setDiagnosticMode: (v: boolean) => void;
   toggleDiagnosticMode: () => void;
-  setConversationView: (
-    conversationId: string,
-    mode: "chat" | "canvas",
-  ) => void;
   setSidecarEnabled: (v: boolean) => void;
 }
 
@@ -174,7 +145,6 @@ export const useUIStore = create<UIState>((set) => ({
   searchInitialBookmarks: false,
   theme: loadTheme(),
   diagnosticMode: loadDiagnosticMode(),
-  conversationViews: loadConversationViews(),
   sidecarPreference: loadSidecarPreference(),
   sidecarEnabled: loadSidecarEnabled(),
 
@@ -208,28 +178,9 @@ export const useUIStore = create<UIState>((set) => ({
       persistDiagnosticMode(diagnosticMode);
       return { diagnosticMode };
     }),
-  setConversationView: (conversationId, mode) =>
-    set((s) => {
-      const conversationViews = { ...s.conversationViews };
-      // Chat is the default → store only canvas overrides so the persisted map
-      // stays bounded (switching back to chat drops the key).
-      if (mode === "canvas") conversationViews[conversationId] = "canvas";
-      else delete conversationViews[conversationId];
-      persistConversationViews(conversationViews);
-      return { conversationViews };
-    }),
   setSidecarEnabled: (sidecarEnabled) => {
     const sidecarPreference: SidecarPreference = sidecarEnabled ? "on" : "off";
     persistSidecarPreference(sidecarPreference);
     set({ sidecarEnabled, sidecarPreference });
   },
 }));
-
-registerConversationUiClearer((conversationId) => {
-  const views = useUIStore.getState().conversationViews;
-  if (!(conversationId in views)) return;
-  const conversationViews = { ...views };
-  delete conversationViews[conversationId];
-  persistConversationViews(conversationViews);
-  useUIStore.setState({ conversationViews });
-});

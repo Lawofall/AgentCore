@@ -237,7 +237,9 @@ def test_resync_binding_follows_hot_graph_merge():
     的队员甩成 detached」），回绑后协调四件套装上。
 
     跨回合 append 进【已收口】的图现在改走「新图 + prev_execution_id」不再改绑；
-    但 append_to 解析到【仍在跑】的图仍走 tool.py 的热图合入改绑，本钉照旧有效。
+    同回合合入热图仍走 tool.py 的改绑，本钉照旧有效。跨回合 live 图的 adopt 绑定
+    不得被尚无 session 的本回合 mint 冲掉——见
+    ``test_resync_binding_preserves_adopted_live_when_mint_has_no_session``。
     """
     from agentcore.runtime.resolve.ceo_surface import resync_coordination_binding
 
@@ -264,6 +266,31 @@ def test_resync_binding_follows_hot_graph_merge():
         assert coordination_surface_active() is True
         assert promote_coordination_surface_if_needed(reg) is True
         assert set(reg.names) >= COORDINATION_GATED_TOOLS
+    finally:
+        clear_active_coordination()
+        current_execution_id.reset(token)
+
+
+def test_resync_binding_preserves_adopted_live_when_mint_has_no_session():
+    """跨回合 adopt：本回合 mint 尚无图时，resync 不得把 ContextVar 从 live 改回 mint。"""
+    from agentcore.runtime.resolve.ceo_surface import resync_coordination_binding
+
+    minted, live = "exec-minted-this-turn", "exec-live-adopted"
+    token = current_execution_id.set(minted)
+    try:
+        _activate_coordination(live)
+        current_execution_id.set(live)
+        assert current_execution_id.get() == live
+
+        reg = ToolRegistry()
+        delegate = _fake_delegate()
+        delegate._base_tool_context = SimpleNamespace(execution_id=minted)
+        reg.register(delegate)
+
+        assert coordination_surface_active() is True
+        assert resync_coordination_binding(reg) is False
+        assert current_execution_id.get() == live
+        assert coordination_surface_active() is True
     finally:
         clear_active_coordination()
         current_execution_id.reset(token)

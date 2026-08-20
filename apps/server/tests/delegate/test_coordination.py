@@ -464,6 +464,30 @@ async def test_wait_tool_is_clean_noop_during_coordination():
     clear_active_coordination()
 
 
+async def test_wait_tool_finds_adopted_live_when_context_is_mint():
+    """跨回合 adopt：context.execution_id 是本回合 mint，wait 仍能找到旧 live 图。"""
+    clear_active_coordination()
+    from agentcore.runtime.coordination.session import (
+        current_execution_id,
+        set_active_coordination,
+    )
+    from agentcore.runtime.coordination.tools import WaitTool
+
+    session = CoordinationSession(execution_id="e-live", total_workers=2)
+    set_active_coordination(session)
+    token = current_execution_id.set("e-live")
+    try:
+        mint_ctx = ctx()
+        mint_ctx.execution_id = "e-mint"
+        result = await WaitTool().execute({}, mint_ctx)
+        assert result.success is True
+        assert result.error is None
+        assert "等待" in (result.output or "")
+    finally:
+        current_execution_id.reset(token)
+        clear_active_coordination()
+
+
 async def test_wait_tool_rejects_when_hot_user_pending(monkeypatch):
     """有 pending 热审批时禁止 CEO 空 wait。"""
     clear_active_coordination()

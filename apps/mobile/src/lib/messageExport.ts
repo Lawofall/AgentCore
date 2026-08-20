@@ -59,9 +59,6 @@ export function formatProcessExport(
       case "checkpoint":
         lines.push(MESSAGE_EXPORT_STEP_CHROME.checkpoint);
         break;
-      case "ask":
-        lines.push(MESSAGE_EXPORT_STEP_CHROME.ask);
-        break;
       case "plan_review":
         lines.push(MESSAGE_EXPORT_STEP_CHROME.plan_review);
         break;

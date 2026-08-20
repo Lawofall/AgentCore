@@ -13,6 +13,15 @@ afterEach(() => {
 });
 
 describe("Markdown", () => {
+  it("caps the body so an unbreakable token cannot blow the replay column", () => {
+    const { container } = render(
+      <Markdown content={"1000+500+50+".repeat(40)} />,
+    );
+    const body = container.querySelector(".markdown-body");
+    expect(body?.className).toContain("min-w-0");
+    expect(body?.className).toContain("max-w-full");
+  });
+
   it("tokenizes a fenced code block with highlight.js classes", () => {
     render(
       <Markdown content={"```python\ndef greet():\n    return 'hi'\n```"} />,

@@ -152,7 +152,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         name="ask_user_midtask",
         summary=(
             "执行途中遇到高代价岔路用 ask_user 暂停拍板；含「何时不打断（合理默认 + 标注一句）」、"
-            "非阻塞发问 blocking=false、途中载体/手段顾问短对齐、辩论收尾交用户取舍"
+            "途中载体/手段顾问短对齐、辩论收尾交用户取舍"
         ),
         body=_ASK_USER_MIDTASK,
         requires_tools=("ask_user",),

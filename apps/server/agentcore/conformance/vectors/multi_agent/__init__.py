@@ -23,7 +23,10 @@ from .batch4_hardening import (
 )
 from .browser import _multi_agent_browser_login_pending, _multi_agent_browser_session
 from .context import _multi_agent_captain_context, _multi_agent_received_context
-from .cross_turn_append import _multi_agent_cross_turn_append
+from .cross_turn_append import (
+    _multi_agent_cross_turn_append,
+    _multi_agent_cross_turn_live_prev,
+)
 from .delegate import (
     _multi_agent_delegate,
     _multi_agent_worker_deliverable_reset,
@@ -81,6 +84,7 @@ from .run_control import (
     _multi_agent_run_user_stop_worker,
 )
 from .run_phase import _multi_agent_run_phase
+from .same_turn_mlr_debate import _multi_agent_same_turn_mlr_debate
 from .stage_card import (
     _multi_agent_stage_card_orphaned,
     _multi_agent_stage_card_start_debate,
@@ -175,6 +179,11 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         "追加批收口；进度分母只含本图；不再 graph_append / host_message_id divert",
         _multi_agent_cross_turn_append,
     ),
+    "multi_agent_cross_turn_live_prev": (
+        "跨回合上一张仍在后台跑：m1 execution_detached 后 r1 未完成 → m2 新 execution_id "
+        "+ prev_execution_id=exec1；新人只在新图，投影 runs 不含 r1",
+        _multi_agent_cross_turn_live_prev,
+    ),
     "multi_agent_multi_lens_research": (
         "多 Agent·多视角深度调研幕1：team_preview(delegate) → 4 透镜并行流式 → "
         "汇总分析师 debrief.motion_card → CEO 呈报建议开辩（开辩入口 stage_card）",
@@ -185,6 +194,10 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         "（act-2/anchor=synthesizer；authorized_by=preview；不再 divert）",
         _multi_agent_mlr_debate_acts,
     ),
+    "multi_agent_same_turn_mlr_debate": (
+        "同回合两幕同一张图：一条消息先 MLR 再 debate，单 execution_id、acts 两幕、无 prev",
+        _multi_agent_same_turn_mlr_debate,
+    ),
     "multi_agent_mlr_debate_witness": (
         "批D1·证人模式：幕1 MLR + 幕2 辩论新图+prev；证人席位 + witness_exam 答问进台账"
         "（答问 run 挂辩论幕席位下，continues=席位根）",
@@ -192,7 +205,7 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     ),
     "multi_agent_two_act_lv": (
         "批R2·幕级 LOD 验收：LV 案量级两幕（幕1 MLR 含法律子队 + 幕2 辩论新图+prev 含证人/补派两轮），"
-        "约 18 节点，供三宿主协作图幕摘要卡链 + 聚焦幕验单屏可读",
+        "约 18 节点，供内嵌 + 全屏协作图幕摘要卡链 + 聚焦幕验单屏可读",
         _multi_agent_two_act_lv,
     ),
     "multi_agent_stage_card_start_debate": (

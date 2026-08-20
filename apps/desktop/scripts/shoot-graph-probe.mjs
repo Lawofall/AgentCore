@@ -1,7 +1,7 @@
 // Graph viewport probe for offline AI preview (#/preview).
 //
 // Companion to shoot.mjs: boots the same offline web entry (vite.web.config.ts),
-// then measures React Flow viewport metrics across chat-inline / canvas /
+// then measures React Flow viewport metrics across chat-inline /
 // fullscreen-graph surfaces (emptyTopRatio, fullyInside, clipped counts,
 // viewport transform) and writes screenshots + a JSON report. Use after
 // collaboration-graph viewport fixes as a regression harness — measurement
@@ -277,25 +277,7 @@ async function main() {
     }
   }
 
-  // 2) Canvas
-  {
-    const url = new URL("index.web.html", base);
-    url.hash = `/preview?s=${SCENARIO}&view=canvas`;
-    console.log("CANVAS", url.href);
-    await page.goto(url.href, { waitUntil: "load", timeout: 30_000 });
-    await waitPreview(page, SCENARIO);
-    await page.waitForTimeout(1500);
-    report.surfaces.canvas = await probeGraph(page, "canvas");
-    report.surfaces.canvas.screenshot = await shot(page, "02-canvas.png");
-    const rf = page.locator(".react-flow").first();
-    if (await rf.count()) {
-      await rf.screenshot({
-        path: resolve(outDir, `${OUT_PREFIX}02b-canvas-reactflow.png`),
-      });
-    }
-  }
-
-  // 3) Fullscreen graph
+  // 2) Fullscreen graph
   {
     const url = new URL("index.web.html", base);
     url.hash = `/preview?s=${SCENARIO}`;
@@ -314,7 +296,7 @@ async function main() {
     report.surfaces.fullscreen = await probeGraph(page, "fullscreen-graph");
     report.surfaces.fullscreen.screenshot = await shot(
       page,
-      "03-fullscreen-graph.png",
+      "02-fullscreen-graph.png",
     );
   }
 
@@ -358,7 +340,6 @@ async function main() {
 
   report.classification = {
     chat: classify(report.surfaces.chat),
-    canvas: classify(report.surfaces.canvas),
     fullscreen: classify(report.surfaces.fullscreen),
     midframes: report.midframes,
   };

@@ -248,6 +248,76 @@ describe("appendSanitizedDesktopLogExcerpt", () => {
       ),
     );
   });
+
+  it("folds a follow_open run and hoists envelope fields to the section head", () => {
+    const lines = [
+      ...Array.from({ length: 18 }, (_, i) =>
+        JSON.stringify({
+          timestamp: `2026-08-20T00:00:00.${String(i).padStart(3, "0")}Z`,
+          level: "info",
+          event: "conversation.follow_open",
+          build: "dev",
+          version: "0.9.6",
+          conversation_id: "conv-1",
+        }),
+      ),
+      ...Array.from({ length: 4 }, (_, i) =>
+        JSON.stringify({
+          timestamp: `2026-08-20T00:00:01.${String(i).padStart(3, "0")}Z`,
+          level: "info",
+          event: "conversation.follow_closed",
+          build: "dev",
+          version: "0.9.6",
+          conversation_id: "conv-1",
+          reason: "window_closed",
+        }),
+      ),
+      JSON.stringify({
+        timestamp: "2026-08-20T00:00:02.000Z",
+        level: "warn",
+        event: "sse.event_dropped",
+        build: "dev",
+        version: "0.9.6",
+        conversation_id: "conv-1",
+        event_type: "content_delta",
+        turn_phase: "stopping",
+        reason: "turn_phase_gate",
+      }),
+    ];
+    const pack = appendSanitizedDesktopLogExcerpt("pack", lines);
+    const section = pack.split("--- desktop.jsonl ---\n")[1] ?? "";
+    const sectionLines = section.split("\n");
+    expect(sectionLines.slice(0, 4)).toEqual([
+      "build: dev",
+      "version: 0.9.6",
+      "conversation_id: conv-1",
+      "level: info",
+    ]);
+    const jsonl = sectionLines.slice(4).map((line) => JSON.parse(line));
+    expect(jsonl).toEqual([
+      {
+        event: "conversation.follow_open",
+        count: 18,
+        first: "2026-08-20T00:00:00.000Z",
+        last: "2026-08-20T00:00:00.017Z",
+      },
+      {
+        event: "conversation.follow_closed",
+        reason: "window_closed",
+        count: 4,
+        first: "2026-08-20T00:00:01.000Z",
+        last: "2026-08-20T00:00:01.003Z",
+      },
+      {
+        timestamp: "2026-08-20T00:00:02.000Z",
+        level: "warn",
+        event: "sse.event_dropped",
+        event_type: "content_delta",
+        turn_phase: "stopping",
+        reason: "turn_phase_gate",
+      },
+    ]);
+  });
 });
 
 describe("buildSupportDiagnosticPack", () => {
@@ -292,8 +362,13 @@ describe("buildSupportDiagnosticPack", () => {
       messageId: "m1",
     });
     expect(pack).toContain("server_health.offline");
-    expect(pack).toContain('"conversation_id":"conv-1"');
+    expect(pack).toContain("sse.idle_stall");
+    expect(pack).toContain("conversation_id: conv-1");
     expect(pack).not.toContain("other-chat");
+    const section = pack.split("--- desktop.jsonl ---\n")[1] ?? "";
+    expect(section).toContain("conversation_id: conv-1");
+    expect(section).not.toMatch(/"conversation_id"/);
+    expect(section).not.toMatch(/"level":"info"/);
   });
 
   it("appends sanitized tail lines from logApi.readTail", async () => {

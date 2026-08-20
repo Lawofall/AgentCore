@@ -20,10 +20,6 @@ from agentcore.conversation.common import (
 from agentcore.conversation.compaction import maybe_compact_near_ceiling
 from agentcore.conversation.history import load_chat_context
 from agentcore.conversation.mentions import to_stored_agent_mentions
-from agentcore.conversation.question_resolve import (
-    is_abort_finish_reason,
-    note_ask_replies_for_committed_send,
-)
 from agentcore.conversation.turn_backend import build_turn_backend
 from agentcore.conversation.turn_persistence import (
     close_user_stop_turn,
@@ -119,7 +115,6 @@ async def stream_chat(
     llm_supports_tools: bool | None = None,
     x_client_platform: str | None = None,
     agent_mentions: list[dict] | None = None,
-    ask_id: str | None = None,
 ) -> None:
     """Main entry: persist user message, run pipeline, persist assistant reply."""
     backend = None
@@ -186,6 +181,8 @@ async def stream_chat(
 
         sink.emit(turn_saved(user_message_id=user_msg.id))
 
+        # One trace_id for the whole send turn (pipeline + parallel early title).
+        turn_trace_id = new_trace_id()
         # Cloud early title: fire-and-forget in parallel with the turn (user message
         # only). Skip when the conversation already has a title (manual rename).
         if not (conv.title and str(conv.title).strip()):
@@ -194,52 +191,44 @@ async def stream_chat(
                 user_id=user_id,
                 user_message=user_message,
                 sink=sink,
+                trace_id=turn_trace_id,
             )
 
-        turn_result = await run_and_persist(
+        with log_context(
+            trace_id=turn_trace_id,
             conversation_id=conversation_id,
-            user_message=user_message,
             user_id=user_id,
-            folder_id=folder_id,
-            sink=sink,
-            history=history[:-1],
-            attachments=resident_attachments,
-            backend=backend,
-            llm_credentials=llm_credentials,
-            profile_set=profile_set,
-            memory_enabled=memory_enabled,
-            conversation_history_access=conversation_history_access,
-            permission_axes=permission_axes,
-            board_id=board_id,
-            llm_supports_tools=llm_supports_tools,
-            x_client_platform=x_client_platform,
-            agent_mentions=agent_mentions,
-            ask_id=ask_id,
-        )
-        rolled_back = await maybe_delete_zero_output_send(
-            conversation_id=conversation_id,
-            user_message_id=user_msg.id,
-            result=turn_result,
-            user_created_this_send=True,
-        )
-        finish = turn_result.get("finish_reason") if isinstance(turn_result, dict) else None
-        if (
-            turn_result is not None
-            and not rolled_back
-            and not is_abort_finish_reason(finish)
         ):
-            await note_ask_replies_for_committed_send(
+            turn_result = await run_and_persist(
                 conversation_id=conversation_id,
+                user_message=user_message,
+                user_id=user_id,
+                folder_id=folder_id,
                 sink=sink,
-                ask_id=ask_id,
-                answer=user_message,
-                has_attachments=bool(resident_attachments),
+                history=history[:-1],
+                attachments=resident_attachments,
+                backend=backend,
+                llm_credentials=llm_credentials,
+                profile_set=profile_set,
+                memory_enabled=memory_enabled,
+                conversation_history_access=conversation_history_access,
+                permission_axes=permission_axes,
+                board_id=board_id,
+                llm_supports_tools=llm_supports_tools,
+                x_client_platform=x_client_platform,
+                agent_mentions=agent_mentions,
             )
-        # Pillar D1: delay sink.close while a detached coordination drive is live
-        # (symmetric with sidecar _run_turn). Exception / cancel skip this.
-        from agentcore.runtime.coordination import await_live_detached_drive
+            await maybe_delete_zero_output_send(
+                conversation_id=conversation_id,
+                user_message_id=user_msg.id,
+                result=turn_result,
+                user_created_this_send=True,
+            )
+            # Pillar D1: delay sink.close while a detached coordination drive is live
+            # (symmetric with sidecar _run_turn). Exception / cancel skip this.
+            from agentcore.runtime.coordination import await_live_detached_drive
 
-        await await_live_detached_drive(conversation_id)
+            await await_live_detached_drive(conversation_id)
 
     except Exception as e:
         logger.error("chat.stream_error", error=str(e), exc_info=True)

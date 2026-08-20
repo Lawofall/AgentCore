@@ -6,20 +6,8 @@ import {
   type ChatTurnInput,
   resolveChatTurn,
 } from "@/components/chat/chatTurn";
-import { Markdown } from "@/components/Markdown";
-import { Badge } from "@/components/ui/Badge";
+import { CollapsibleBody } from "@/components/conversation-replay/shared";
 import { cn } from "@/lib/utils";
-
-const STATUS_TONE: Record<
-  string,
-  "neutral" | "primary" | "success" | "warning" | "destructive"
-> = {
-  running: "primary",
-  paused: "warning",
-  completed: "success",
-  failed: "destructive",
-  cancelled: "warning",
-};
 
 /**
  * Admin AI-chat final-state shell. Eats a replay assistant row's combination:
@@ -41,22 +29,16 @@ export function ChatView({
 }) {
   const turn = resolveChatTurn({ content, runsPayload, projected });
   const hasReasoningStep = turn.process.some((s) => s.kind === "reasoning");
+  const fallbackReasoning =
+    !hasReasoningStep && turn.reasoning.trim() ? turn.reasoning : "";
+  const body = turn.content.trim();
+  const processHasContent = turn.process.some((s) => s.kind === "content");
 
   return (
     <div
       aria-label="对话终态"
       className={cn("flex flex-col gap-4", className)}
     >
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        {turn.status && (
-          <Badge tone={STATUS_TONE[turn.status] ?? "neutral"}>
-            {turn.status}
-          </Badge>
-        )}
-        {turn.outcome && <span>outcome {turn.outcome}</span>}
-        {turn.finishReason && <span>finish {turn.finishReason}</span>}
-      </div>
-
       {turn.turnWarning && (
         <p className="rounded-lg bg-muted px-3 py-2 text-sm text-foreground">
           {turn.turnWarning}
@@ -69,28 +51,21 @@ export function ChatView({
         </p>
       )}
 
-      <article className="max-w-[min(100%,48rem)] space-y-3">
-        <div className="text-sm font-medium text-foreground">助手</div>
-        {!hasReasoningStep && turn.reasoning && (
-          <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
-            <div className="mb-1 text-xs font-medium text-muted-foreground">
-              思考
-            </div>
-            <p className="whitespace-pre-wrap text-sm text-foreground">
-              {turn.reasoning}
-            </p>
-          </div>
-        )}
-        <ProcessLane steps={turn.process} />
+      <article className="min-w-0 w-full max-w-[min(100%,48rem)] space-y-3">
+        <ProcessLane
+          steps={turn.process}
+          fallbackReasoning={fallbackReasoning}
+          hideContentSteps={Boolean(body)}
+        />
         <TeamLane
           runs={turn.runs}
           progress={turn.progress}
           selectedRunId={selectedRunId}
           onSelectRun={onSelectRun}
         />
-        {turn.content ? (
-          <Markdown content={turn.content} />
-        ) : (
+        {body ? (
+          <CollapsibleBody content={turn.content} />
+        ) : processHasContent ? null : (
           <p className="text-muted-foreground text-sm italic">（无正文）</p>
         )}
         <SourceCards citations={turn.citations} />

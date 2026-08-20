@@ -47,27 +47,53 @@ def _write(reports: Path, name: str, payload: dict) -> None:
 def _full_green(reports: Path) -> None:
     """八个步骤全部出数、全部通过的报告集。"""
     ok_ratchet = {
+        "schema": "observe.v1",
         "available": True,
-        "baseline_pass_rate": 0.95,
+        "gate": False,
+        "signature": "unchanged",
+        "can_separate_variance": True,
         "pass_rate": 1.0,
-        "tolerance": 0.05,
-        "regressed": False,
+        "baseline_pass_rate": 0.95,
+        "delta_pass_rate": 0.05,
+        "detail": (
+            "相对基线：1.0000 vs 0.9500（Δ +0.0500）· 无翻转 · 可看翻转方向（非门禁）"
+        ),
+        "reading": "共享 10 例无一翻转。只能说明今夜没看见用例级变化。",
+        "paired": {
+            "worse": [],
+            "better": [],
+            "same": 10,
+            "shared_cases": 10,
+            "added": [],
+            "removed": [],
+        },
     }
     _write(reports, "functional.json", _suite_report(ratchet=ok_ratchet))
     _write(reports, "mast.json", _suite_report(ratchet=ok_ratchet))
-    _write(reports, "routing.json", {"routing": {"accuracy": 0.9, "total": 10}})
-    _write(reports, "style.json", {"total": 12, "clean_rate": 0.92})
+    _write(
+        reports,
+        "routing.json",
+        {"routing": {"accuracy": 0.9, "total": 10}, "ratchet": ok_ratchet},
+    )
+    _write(
+        reports,
+        "style.json",
+        {"total": 12, "clean_rate": 0.92, "offenders": [], "ratchet": ok_ratchet},
+    )
     _write(
         reports,
         "comparison.json",
-        {"summary": {"total_cases": 4, "by_archetype": {"simple": {"avg_win_rate": 0.6}}}},
+        {
+            "summary": {"total_cases": 4, "by_archetype": {"simple": {"avg_win_rate": 0.6}}},
+            "ratchet": ok_ratchet,
+        },
     )
     _write(
         reports,
         "calibration.json",
         {"n": 34, "cohens_kappa": 0.72, "kappa_gate": 0.6, "mean_bias": 0.3, "trustworthy": True},
     )
-    _write(reports, "probe.json", _suite_report())
+    _write(reports, "probe.json", _suite_report(ratchet=ok_ratchet))
     _write(reports, "probe_code.json", {"summary": {"total": 8, "passed": 8, "pass_rate": 1.0}})
 
 
@@ -81,7 +107,7 @@ def test_no_key_summary_says_not_covered(tmp_path: Path):
     assert "AI 行为面：本次未覆盖" in md
     assert "EVAL_DEEPSEEK_API_KEY" in md
     # 每个真跑步骤都必须逐条写明未执行，不许静默略过。
-    assert md.count("| 未执行 | 本次未考 |") == len(STEPS)
+    assert md.count("| 未执行 | 本次未考 | n/a |") == len(STEPS)
     for spec in STEPS:
         assert spec.title in md
     assert annotation.startswith("::warning::")
@@ -114,9 +140,17 @@ def test_all_green_summary_shows_what_was_covered(tmp_path: Path):
     assert "准确率 90%" in md
     assert "干净率 92%" in md
     assert "Cohen's kappa 0.720（门 0.60）→ 裁判可信" in md
+    # 水位列在：没峰值文件时本次仍要写得出，峰值侧安静降级成 n/a。
+    assert "本次 vs 历史峰值" in md
+    assert "1.0000 vs n/a" in md
+    assert "0.9000 vs n/a" in md
+    assert "0.9200 vs n/a" in md
     # 棘轮判定 + MAST 分组明细。
-    assert "棘轮：1.0000 vs 基线 0.9500（容差 0.05）→ 未回归" in md
+    assert "相对基线：1.0000 vs 0.9500" in md
+    assert "非门禁" in md
     assert "FC1 3/4（75%）" in md
+    # 四个新接线的 suite 也带了观测段，不能再喊「未接」。
+    assert "相对基线：未接（应有而无）" not in md
     # 软门禁语义仍要写明：绿灯不等于没回归。
     assert "软门禁" in md
 
@@ -130,11 +164,31 @@ def test_ratchet_regression_is_spelled_out(tmp_path: Path):
         _suite_report(
             pass_rate=0.7,
             ratchet={
+                "schema": "observe.v1",
                 "available": True,
-                "baseline_pass_rate": 0.95,
+                "gate": False,
+                "signature": "directional_drop",
+                "can_separate_variance": True,
                 "pass_rate": 0.7,
-                "tolerance": 0.05,
-                "regressed": True,
+                "baseline_pass_rate": 0.95,
+                "delta_pass_rate": -0.25,
+                "detail": (
+                    "相对基线：0.7000 vs 0.9500（Δ -0.2500）· "
+                    "单方向变差 3 例 · 可看翻转方向（非门禁）"
+                ),
+                "reading": "3 例变差、0 例变好。这不是对称抖动的样子。",
+                "paired": {
+                    "worse": [
+                        {"case_id": "c1", "baseline": "1/1", "current": "0/1"},
+                        {"case_id": "c2", "baseline": "1/1", "current": "0/1"},
+                        {"case_id": "c3", "baseline": "1/1", "current": "0/1"},
+                    ],
+                    "better": [],
+                    "same": 7,
+                    "shared_cases": 10,
+                    "added": [],
+                    "removed": [],
+                },
             },
         ),
     )
@@ -143,7 +197,9 @@ def test_ratchet_regression_is_spelled_out(tmp_path: Path):
     rows = load_rows(reports, _steps(**outcomes))
     md, annotation = render(rows, suite="core", key_present=True)
 
-    assert "→ 回归" in md
+    assert "单方向变差" in md
+    assert "变差 `c1`" in md
+    assert "非门禁" in md
     assert "已跑·未通过" in md
     # 全部出了数 = 考过了；考过了不等于过了，标题得把两件事分开说。
     assert "已覆盖，1 项未通过" in md
@@ -151,13 +207,13 @@ def test_ratchet_regression_is_spelled_out(tmp_path: Path):
 
 
 def test_missing_ratchet_block_is_flagged(tmp_path: Path):
-    """棘轮没接上（报告里没有 ratchet 段）要喊出来，不能默默当没这道门。"""
+    """相对基线没接上（报告里没有 ratchet 段）要喊出来，不能默默当没这道对比。"""
     reports = tmp_path / "eval-reports"
     _full_green(reports)
     _write(reports, "functional.json", _suite_report())
     rows = load_rows(reports, _steps(**{sid: "success" for sid in _ALL_IDS}))
     md, _ = render(rows, suite="core", key_present=True)
-    assert "棘轮：未接（应有而无）" in md
+    assert "相对基线：未接（应有而无）" in md
 
 
 def test_first_run_without_baseline_is_explicit(tmp_path: Path):
@@ -170,7 +226,7 @@ def test_first_run_without_baseline_is_explicit(tmp_path: Path):
     )
     rows = load_rows(reports, _steps(**{sid: "success" for sid in _ALL_IDS}))
     md, _ = render(rows, suite="core", key_present=True)
-    assert "棘轮：无基线可比" in md
+    assert "相对基线：无基线可比" in md
 
 
 # --- 有 key 但降级：跑挂 / 未通过 / 缺报告都要写出来 -------------------------
@@ -193,7 +249,7 @@ def test_degraded_run_reports_each_failure_mode(tmp_path: Path):
     assert "部分覆盖（6/8 项出数）" in md
     assert "跑挂·未出数" in md
     assert "步骤未产出报告 JSON" in md
-    assert "MAST 失败标签套件（含棘轮回归门）" in md
+    assert "MAST 失败标签套件（含相对基线观测）" in md
     assert "裁判校准未执行" in md
     assert annotation.startswith("::warning::")
 
@@ -242,7 +298,18 @@ def test_main_appends_markdown_and_never_reds(tmp_path: Path, monkeypatch, capsy
     monkeypatch.setenv("EVAL_KEY_PRESENT", "true")
     monkeypatch.setenv("EVAL_STEPS_JSON", json.dumps(_steps(**dict.fromkeys(_ALL_IDS, "success"))))
 
-    code = main(["--reports-dir", str(reports), "--out", str(out), "--suite", "core"])
+    code = main(
+        [
+            "--reports-dir",
+            str(reports),
+            "--out-dir",
+            str(tmp_path / "eval-out"),
+            "--out",
+            str(out),
+            "--suite",
+            "core",
+        ]
+    )
 
     assert code == 0
     text = out.read_text(encoding="utf-8")
@@ -254,7 +321,16 @@ def test_main_appends_markdown_and_never_reds(tmp_path: Path, monkeypatch, capsy
 def test_main_survives_broken_steps_json(tmp_path: Path, monkeypatch, capsys):
     monkeypatch.setenv("EVAL_KEY_PRESENT", "false")
     monkeypatch.setenv("EVAL_STEPS_JSON", "not-json")
-    code = main(["--reports-dir", str(tmp_path / "nope"), "--suite", "core"])
+    code = main(
+        [
+            "--reports-dir",
+            str(tmp_path / "nope"),
+            "--out-dir",
+            str(tmp_path / "eval-out"),
+            "--suite",
+            "core",
+        ]
+    )
     assert code == 0
     assert "本次未覆盖" in capsys.readouterr().out
 
@@ -265,8 +341,184 @@ def test_main_no_key_path_names_the_missing_secret(tmp_path: Path, monkeypatch, 
     steps["key"] = {"outcome": "success", "outputs": {"present": "false"}}
     monkeypatch.setenv("EVAL_KEY_PRESENT", "false")
     monkeypatch.setenv("EVAL_STEPS_JSON", json.dumps(steps))
-    code = main(["--reports-dir", str(tmp_path / "nope"), "--suite", "core"])
+    code = main(
+        [
+            "--reports-dir",
+            str(tmp_path / "nope"),
+            "--out-dir",
+            str(tmp_path / "eval-out"),
+            "--suite",
+            "core",
+        ]
+    )
     assert code == 0
     out = capsys.readouterr().out
     assert "AI 行为面：本次未覆盖" in out
     assert "EVAL_DEEPSEEK_API_KEY" in out
+
+
+# --- 水位：本次 vs 只升历史峰值（只展示，不改红绿） ---------------------------
+
+
+def _write_peak(out_dir: Path, name: str, payload: dict) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / name).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def test_highwater_column_shows_current_vs_peak(tmp_path: Path):
+    """峰值在：每个接线套件并排本次 vs 历史峰值；校准 / 代码探针没有峰值接线 → n/a。"""
+    reports = tmp_path / "eval-reports"
+    out = tmp_path / "eval-out"
+    _full_green(reports)
+    _write_peak(out, "core-baseline.json", _suite_report(pass_rate=0.99))
+    _write_peak(out, "mast-baseline.json", _suite_report(pass_rate=0.95))
+    _write_peak(out, "routing-baseline.json", {"routing": {"accuracy": 0.97, "confusion": {}}})
+    _write_peak(out, "style-baseline.json", {"clean_rate": 0.99, "offenders": []})
+    _write_peak(
+        out,
+        "comparison-baseline.json",
+        {"summary": {"by_archetype": {"simple": {"avg_win_rate": 0.8}}, "total_cases": 4}},
+    )
+    _write_peak(out, "probe-baseline.json", _suite_report(pass_rate=1.0))
+
+    rows = load_rows(reports, _steps(**{sid: "success" for sid in _ALL_IDS}))
+    md, annotation = render(rows, suite="core", key_present=True, out_dir=out)
+
+    assert "1.0000 vs 0.9900" in md  # functional
+    assert "1.0000 vs 0.9500" in md  # mast
+    assert "1.0000 vs 1.0000" in md  # probe（本次打平峰值）
+    assert "0.9000 vs 0.9700" in md  # routing 走 accuracy，不是内层 pass_rate
+    assert "0.9200 vs 0.9900" in md  # style 走 clean_rate
+    assert "0.6000 vs 0.8000" in md  # comparison 走 by_archetype 均胜率
+    cal_row = next(line for line in md.splitlines() if line.startswith("| 裁判校准"))
+    assert cal_row.endswith("| n/a |")
+    code_row = next(line for line in md.splitlines() if "挖坑探针·代码必须真跑" in line)
+    assert code_row.endswith("| n/a |")
+    assert annotation.startswith("::notice::")
+    assert "不据此改红绿" in md
+
+
+def test_highwater_missing_peak_is_na_and_summary_still_writes(tmp_path: Path):
+    reports = tmp_path / "eval-reports"
+    _full_green(reports)
+    rows = load_rows(reports, _steps(**{sid: "success" for sid in _ALL_IDS}))
+    md, annotation = render(
+        rows, suite="core", key_present=True, out_dir=tmp_path / "eval-out-missing"
+    )
+
+    assert "AI 行为面：已覆盖，全部通过" in md
+    assert "1.0000 vs n/a" in md
+    assert "0.9000 vs n/a" in md
+    assert annotation.startswith("::notice::")
+
+
+def test_highwater_corrupt_peak_is_na_and_summary_still_writes(tmp_path: Path):
+    reports = tmp_path / "eval-reports"
+    out = tmp_path / "eval-out"
+    _full_green(reports)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "core-baseline.json").write_text("{not json", encoding="utf-8")
+    (out / "routing-baseline.json").write_text("[]", encoding="utf-8")
+
+    rows = load_rows(reports, _steps(**{sid: "success" for sid in _ALL_IDS}))
+    md, annotation = render(rows, suite="core", key_present=True, out_dir=out)
+
+    assert "AI 行为面：已覆盖，全部通过" in md
+    assert "1.0000 vs n/a" in md  # functional 峰值损坏
+    assert "0.9000 vs n/a" in md  # routing 顶层不是对象
+    assert annotation.startswith("::notice::")
+
+
+def test_highwater_gap_does_not_warn_or_recompute_regression(tmp_path: Path):
+    """本次低于峰值只露出两个数字；不得另起警告，也不得当退化判据。"""
+    reports = tmp_path / "eval-reports"
+    out = tmp_path / "eval-out"
+    _full_green(reports)
+    _write(
+        reports,
+        "functional.json",
+        _suite_report(
+            pass_rate=0.7,
+            ratchet={
+                "schema": "observe.v1",
+                "available": True,
+                "gate": False,
+                "signature": "unchanged",
+                "can_separate_variance": True,
+                "detail": "相对基线：0.7000 vs 0.7000（Δ +0.0000）· 无翻转 · 可看翻转方向（非门禁）",
+                "reading": "共享 10 例无一翻转。",
+                "paired": {
+                    "worse": [],
+                    "better": [],
+                    "same": 10,
+                    "shared_cases": 10,
+                    "added": [],
+                    "removed": [],
+                },
+            },
+        ),
+    )
+    _write_peak(out, "core-baseline.json", _suite_report(pass_rate=0.99))
+
+    rows = load_rows(reports, _steps(**{sid: "success" for sid in _ALL_IDS}))
+    md, annotation = render(rows, suite="core", key_present=True, out_dir=out)
+
+    assert "0.7000 vs 0.9900" in md
+    assert "单方向变差" not in md
+    assert annotation.startswith("::notice::")
+    assert "掉超过" not in md
+
+
+def test_highwater_uses_snapshot_rate_kind_order(tmp_path: Path):
+    """routing 报告里的内层 pass_rate 不得盖过 accuracy——与 snapshot_rate 同一识别顺序。"""
+    reports = tmp_path / "eval-reports"
+    out = tmp_path / "eval-out"
+    _full_green(reports)
+    _write(
+        reports,
+        "routing.json",
+        {
+            "report": {"summary": {"pass_rate": 0.1}},
+            "routing": {"accuracy": 0.9, "confusion": {}, "total": 10},
+        },
+    )
+    _write_peak(
+        out,
+        "routing-baseline.json",
+        {"report": {"summary": {"pass_rate": 0.2}}, "routing": {"accuracy": 0.95, "confusion": {}}},
+    )
+    rows = load_rows(reports, _steps(**{sid: "success" for sid in _ALL_IDS}))
+    md, _ = render(rows, suite="core", key_present=True, out_dir=out)
+    assert "0.9000 vs 0.9500" in md
+    assert "0.1000 vs" not in md
+    assert "0.2000" not in md
+
+
+def test_main_corrupt_peak_still_exits_zero(tmp_path: Path, monkeypatch, capsys):
+    reports = tmp_path / "eval-reports"
+    out_dir = tmp_path / "eval-out"
+    _full_green(reports)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "core-baseline.json").write_text("{not json", encoding="utf-8")
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("EVAL_KEY_PRESENT", "true")
+    monkeypatch.setenv("EVAL_STEPS_JSON", json.dumps(_steps(**dict.fromkeys(_ALL_IDS, "success"))))
+
+    code = main(
+        [
+            "--reports-dir",
+            str(reports),
+            "--out-dir",
+            str(out_dir),
+            "--out",
+            str(summary),
+            "--suite",
+            "core",
+        ]
+    )
+
+    assert code == 0
+    text = summary.read_text(encoding="utf-8")
+    assert "AI 行为面：已覆盖，全部通过" in text
+    assert "1.0000 vs n/a" in text
+    assert "::notice::" in capsys.readouterr().out

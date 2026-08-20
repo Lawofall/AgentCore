@@ -31,15 +31,6 @@ class EventType(StrEnum):
     MESSAGE_END = "message_end"
     ERROR = "error"
     TITLE_GENERATED = "title_generated"
-    # CEO→用户「下一步推荐」(下一步推荐): 2-4 个可点选的快捷追问，回合收尾后由一次 World B
-    # 窄任务生成、附到刚完成的助手消息下。与 title_generated 同属「回合后元信息」——不进
-    # 判定态（ProjectedTurn），三端 fold 一律 no-op。持久化上是 DERIVED（处置见
-    # events/disposition.py）：与孪生 title 一致回写 Message.followups 列，reload 重现 chips
-    # （非 journal allow-list、故不进 turn_journal）。
-    FOLLOWUPS_GENERATED = "followups_generated"
-    # Soft empty state when followups mint failed (quota/auth/upstream/timeout) and there
-    # are no chips — transport-only chrome; folds no-op; EPHEMERAL (reload loses soft hint).
-    FOLLOWUPS_UNAVAILABLE = "followups_unavailable"
     TURN_SAVED = "turn_saved"
     CITATIONS = "citations"
     # 引用即出处：独立 turn 级台账通道（对称辩论 O1；不占 citations_event）。
@@ -47,14 +38,8 @@ class EventType(StrEnum):
     EVIDENCE_LEDGER = "evidence_ledger"
     APPROVAL_REQUIRED = "approval_required"
     APPROVAL_RESOLVED = "approval_resolved"
-    # 委派级授权: suspend before workers start — user grants medium-risk tools for
-    # the whole delegation (grant_delegation) or keeps per-call approval (per_call).
-    DELEGATION_AUTHORIZATION_REQUIRED = "delegation_authorization_required"
-    DELEGATION_AUTHORIZATION_RESOLVED = "delegation_authorization_resolved"
     CHECKPOINT_REQUIRED = "checkpoint_required"
     CHECKPOINT_RESOLVED = "checkpoint_resolved"
-    QUESTION_POSTED = "question_posted"
-    QUESTION_RESOLVED = "question_resolved"
     PLAN_REVIEW_REQUIRED = "plan_review_required"
     PLAN_REVIEW_RESOLVED = "plan_review_resolved"
     # 团队预审薄预览: first-wave gate before workers start (≠ 波间 plan_review).
@@ -206,17 +191,23 @@ class EventType(StrEnum):
     # turn journal. Both EPHEMERAL (disposition.py) — base64 jpeg frames + status never persist.
     BROWSER_LIVE_FRAME = "browser_live_frame"
     BROWSER_LIVE_STATUS = "browser_live_status"
-    # AI 恋综 / 节目模式 overlays（录播生产 → AgentTown 节目壳）
-    SIM_SHOW_HEART_PICK = "sim.show.heart_pick"
-    SIM_SHOW_PAIR_FORMED = "sim.show.pair_formed"
-    SIM_SHOW_AFFECTION_SHIFT = "sim.show.affection_shift"
-    SIM_SHOW_ZERO_VOTE_ALERT = "sim.show.zero_vote_alert"
-    SIM_SHOW_DEPARTURE = "sim.show.departure"
-    SIM_SHOW_REVEAL = "sim.show.reveal"
-    SIM_SHOW_EPISODE_GATE = "sim.show.episode_gate"
+
+
+# Retired wire names that may still sit on historical journal / recording rows.
+# Skip on replay/cut; unknown other names still raise.
+RETIRED_EVENT_TYPE_VALUES: frozenset[str] = frozenset(
+    {
+        "question_posted",
+        "question_resolved",
+        "delegation_authorization_required",
+        "delegation_authorization_resolved",
+    }
+)
 
 
 class FinishReason(StrEnum):
+    """How ``message_end`` closed the stream. 查询入口 → ``runtime.terminal``."""
+
     END_TURN = "end_turn"
     MAX_ROUNDS = "max_rounds"
     DEGRADED = "degraded"

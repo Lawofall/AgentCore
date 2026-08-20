@@ -1,7 +1,6 @@
 import type {
   CheckpointRequiredPayload,
   PlanReviewRequiredPayload,
-  QuestionPostedPayload,
 } from "@/types/events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,7 +21,6 @@ import {
 import { execRuntime, useExecutionStore } from "../execution";
 import {
   entryToCheckpoint,
-  entryToNonBlockingAsk,
   entryToPlanReview,
   useInteractionStore,
 } from "../interactions";
@@ -240,24 +238,6 @@ describe("conversation store", () => {
         store().addMessage({ ...userMsg, id: `m-${id}`, content: id });
       }
       expect(store().byId.busy?.isGenerating).toBe(true);
-    });
-
-    it("does not pin LRU on pending question_posted", () => {
-      store().switchConversation("ask-busy");
-      store().addMessage({ ...userMsg, id: "m-ask", content: "q" });
-      ix().upsertRequired({
-        kind: "question_posted",
-        conversationId: "ask-busy",
-        messageId: "m-ask",
-        payload: { ask_id: "n1", question: "要 PDF 吗？" },
-      });
-      expect(ix().listPending("ask-busy")).toHaveLength(1);
-      for (let i = 0; i < CONVERSATION_SLICE_LRU_LIMIT + 1; i++) {
-        const id = `idle-ask-${i}`;
-        store().switchConversation(id);
-        store().addMessage({ ...userMsg, id: `m-${id}`, content: id });
-      }
-      expect(store().byId["ask-busy"]).toBeUndefined();
     });
   });
 
@@ -913,82 +893,6 @@ describe("ask_user cards (统一开场引导 + 途中拍板)", () => {
         decision: "continue",
         note: "就按这个开做",
       });
-    });
-  });
-});
-
-// 非阻塞发问 (ask_user blocking=false, Cursor 式): a non-gating card lives on the
-// assistant message that posted it — set live via InteractionStore; journal reload
-// hydrates through hydrateInteractionsFromJournal (see interactions.test.ts).
-// Unlike a checkpoint it has no status/decision (never pending) and no settle —
-// the user's answer rides a next-turn message; the card's chips just 回填 the composer.
-describe("non-blocking ask cards (ask_user blocking=false)", () => {
-  const postedPayload = (id: string): QuestionPostedPayload => ({
-    ask_id: id,
-    conversation_id: "a",
-    question: "我先按响应式单页做，可以吗？",
-    context: "",
-    assumptions: [{ id: "a0", label: "部署", value: "纯静态" }],
-    questions: [
-      {
-        id: "q0",
-        prompt: "要不要双语？",
-        kind: "choice",
-        options: [{ label: "要" }, { label: "不要" }],
-        multiple: false,
-        default: "不要",
-      },
-    ],
-  });
-
-  describe("InteractionStore question_posted + process stamp (live)", () => {
-    it("upserts a card and stamps the process marker", () => {
-      store().switchConversation("a");
-      store().createAssistantMessage();
-      const mid = rt().messages[0].id;
-      const p = postedPayload("n1");
-      ix().upsertRequired({
-        kind: "question_posted",
-        conversationId: "a",
-        messageId: mid,
-        payload: p as unknown as Record<string, unknown>,
-      });
-      store().stampAskMarker("n1", "a");
-      expect(entryToNonBlockingAsk(mustGet("n1"))).toMatchObject({
-        id: "n1",
-        assumptions: [{ id: "a0", label: "部署", value: "纯静态" }],
-      });
-      expect(rt().messages[0].process?.some((s) => s.kind === "ask")).toBe(
-        true,
-      );
-    });
-
-    it("dedupes a re-delivered event", () => {
-      store().switchConversation("a");
-      store().createAssistantMessage();
-      const mid = rt().messages[0].id;
-      const p = postedPayload("n1");
-      ix().upsertRequired({
-        kind: "question_posted",
-        conversationId: "a",
-        messageId: mid,
-        payload: p as unknown as Record<string, unknown>,
-      });
-      ix().upsertRequired({
-        kind: "question_posted",
-        conversationId: "a",
-        messageId: mid,
-        payload: p as unknown as Record<string, unknown>,
-      });
-      expect(
-        [...ix().byId.values()].filter((e) => e.kind === "question_posted"),
-      ).toHaveLength(1);
-    });
-
-    it("stamp is a no-op when there is no assistant message yet", () => {
-      store().switchConversation("a");
-      store().stampAskMarker("n1", "a");
-      expect(rt().messages).toHaveLength(0);
     });
   });
 });

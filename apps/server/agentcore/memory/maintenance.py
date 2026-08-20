@@ -51,7 +51,7 @@ class MemoryUpdateItem:
     backfill, so the UI translates ``project`` → 「本文件夹」on the read side instead.
     """
 
-    action: str  # "add" | "update" | "remove"
+    action: str  # "add" | "update" | "remove" | "quota" | "quota_denied" | "quota_holder"
     file: str  # friendly label: 偏好 / 画像 / 主题·<slug>
     section: str  # core section name; "" for a topic note's default bucket
     scope: str  # "global" | "project"

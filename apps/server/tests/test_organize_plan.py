@@ -40,8 +40,8 @@ def test_parse_organize_plan_card():
             "options": [{"label": "a → b", "op": "move", "source": "a", "destination": "b"}],
         }
     ]
-    assert validate_card_shape("organize_plan", blocking=True, questions=q) is None
-    assert validate_card_shape("organize_plan", blocking=True, questions=[])
+    assert validate_card_shape("organize_plan", questions=q) is None
+    assert validate_card_shape("organize_plan", questions=[])
 
 
 def test_option_to_organize_op():

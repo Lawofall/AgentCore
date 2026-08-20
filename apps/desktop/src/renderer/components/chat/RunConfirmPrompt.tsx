@@ -13,7 +13,7 @@ function clip(s: string): string {
 
 /**
  * 用户直触 bash 的聊天内确认卡（取消 | 运行 | 本会话都允许）。
- * 布局对齐 {@link ApprovalPrompt}；挂在 ChatView / CanvasDecisionPanel 底部。
+ * 布局对齐 {@link ApprovalPrompt}；挂在 ChatView 决策区底部。
  */
 export function RunConfirmPrompt() {
   const pending = useRunConfirmStore((s) => s.pending);

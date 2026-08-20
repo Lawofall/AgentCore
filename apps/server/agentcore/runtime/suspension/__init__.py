@@ -58,7 +58,12 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from agentcore.runtime.checkpoints import AskCheckpointIntent
-from agentcore.runtime.interaction import InteractionKind
+from agentcore.runtime.interaction import (
+    DURABLE_INTERACTION_KINDS as DURABLE_INTERACTION_KINDS,
+)
+from agentcore.runtime.interaction import (
+    InteractionKind,
+)
 
 # NOTE: serialize helpers are imported lazily inside from_json codecs so this
 # module stays import-light (stdlib + interaction at import time). The captain
@@ -110,17 +115,10 @@ turn_citations: ContextVar[list[dict[str, Any]] | None] = ContextVar("turn_citat
 turn_evidence_ledger: ContextVar[Any | None] = ContextVar("turn_evidence_ledger", default=None)
 
 
-# InteractionKind members that persist to ``paused_turns`` (设计 §4.7). Single source
-# for the durable set — :class:`SuspensionKind` values are taken from these members
-# (not hand-copied strings). Approval / client_tool / escalation / debate_round /
-# delegation_authorization stay in-memory only.
-DURABLE_INTERACTION_KINDS: frozenset[InteractionKind] = frozenset(
-    {
-        InteractionKind.PLAN_REVIEW,
-        InteractionKind.ASK_USER,
-        InteractionKind.TEAM_PREVIEW,
-    }
-)
+# InteractionKind members that persist to ``paused_turns`` (设计 §4.7). Derived
+# from INTERACTION_KIND_SPECS (``pauses_turn and not hot``) — see
+# :data:`agentcore.runtime.interaction.DURABLE_INTERACTION_KINDS`. :class:`SuspensionKind`
+# values are taken from these members (not hand-copied strings).
 
 
 class SuspensionKind(StrEnum):
@@ -446,8 +444,9 @@ def _revision_from_frame(raw: Any) -> int:
 
 # ---------------------------------------------------------------------------
 # Per-kind codec registry (S2) — single site for frame extras + wire summary.
-# Adding an Interaction durable kind: extend DURABLE_INTERACTION_KINDS + SuspensionKind,
-# subclass, register codec.
+# Adding an Interaction durable kind: set ``pauses_turn and not hot`` on the spec,
+# extend SuspensionKind, subclass, register codec.
+
 # ---------------------------------------------------------------------------
 
 # Shared empty slots for the resume-card wire shape (unused keys stay empty for

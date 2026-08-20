@@ -3,12 +3,11 @@ import {
   type InteractionEntry,
   applyInteractionWireEvent,
   entryToCheckpoint,
-  entryToNonBlockingAsk,
   entryToPlanReview,
   hydrateInteractionsFromJournal,
   isAwaitingUserEntry,
+  isHotGateInteractionKind,
   messageCheckpoints,
-  messageNonBlockingAsks,
   messagePlanReviews,
   noteColdServerSettled,
   useInteractionStore,
@@ -246,23 +245,25 @@ describe("InteractionStore", () => {
       "c1",
       [
         {
-          kind: "delegation_authorization",
+          kind: "escalation",
           id: "d1",
           messageId: "m9",
           origin: "server",
           payload: {
-            authorization_id: "d1",
-            execution_id: "ex1",
-            workers: [],
-            tools: ["file_write"],
+            escalation_id: "d1",
+            run_id: "r1",
+            agent_id: "a1",
+            question: "q?",
+            assumption: "assume",
           },
         },
       ],
       { confirmed: ["server"] },
     );
-    expect(store().get("old")).toBeUndefined();
+    expect(store().get("old")?.status).toBe("resolved");
+    expect(store().get("old")?.settledElsewhere).toBe(true);
     expect(store().get("d1")?.status).toBe("pending");
-    expect(store().get("d1")?.kind).toBe("delegation_authorization");
+    expect(store().get("d1")?.kind).toBe("escalation");
   });
 
   it("empty hydratePending does not dispose sidecar / missing origin", () => {
@@ -292,7 +293,7 @@ describe("InteractionStore", () => {
     expect(store().get("a-none")?.status).toBe("pending");
   });
 
-  it("empty hydratePending drops confirmed server-origin hot cards", () => {
+  it("empty hydratePending settles confirmed server-origin hot cards", () => {
     store().upsertRequired({
       kind: "approval",
       conversationId: "c1",
@@ -301,7 +302,8 @@ describe("InteractionStore", () => {
       payload: { approval_id: "a1", tool_name: "file_write", arguments: {} },
     });
     store().hydratePending("c1", [], { confirmed: ["server"] });
-    expect(store().get("a1")).toBeUndefined();
+    expect(store().get("a1")?.status).toBe("resolved");
+    expect(store().get("a1")?.settledElsewhere).toBe(true);
     expect(store().listPending("c1")).toHaveLength(0);
   });
 
@@ -335,7 +337,7 @@ describe("InteractionStore", () => {
       confirmed: ["sidecar", "server"],
       sidecarLive: false,
     });
-    expect(store().get("a-side")).toBeUndefined();
+    expect(store().get("a-side")?.status).toBe("orphaned");
   });
 
   it("empty hydratePending never Map.delete cold kinds", () => {
@@ -367,7 +369,7 @@ describe("InteractionStore", () => {
     store().hydratePending("c1", [], { confirmed: ["server"] });
     expect(store().get("cp1")?.status).toBe("pending");
     expect(store().get("tp1")?.status).toBe("pending");
-    expect(store().get("a1")).toBeUndefined();
+    expect(store().get("a1")?.status).toBe("resolved");
   });
 
   it("non-empty hydratePending replaces confirmed server-origin even while sidecar live", () => {
@@ -391,8 +393,53 @@ describe("InteractionStore", () => {
       ],
       { confirmed: ["server"], sidecarLive: true },
     );
-    expect(store().get("old")).toBeUndefined();
+    expect(store().get("old")?.status).toBe("resolved");
+    expect(store().get("old")?.settledElsewhere).toBe(true);
     expect(store().get("new")?.status).toBe("pending");
+  });
+
+  it("empty hydratePending leaves terminal stubs that are not pending", () => {
+    store().upsertRequired({
+      kind: "approval",
+      conversationId: "c1",
+      messageId: "m1",
+      origin: "server",
+      payload: { approval_id: "a1", tool_name: "x", arguments: {} },
+    });
+    store().upsertRequired({
+      kind: "escalation",
+      conversationId: "c1",
+      messageId: "m1",
+      origin: "server",
+      payload: { escalation_id: "e1", question: "q", assumption: "a" },
+    });
+    store().upsertRequired({
+      kind: "stage_card",
+      conversationId: "c1",
+      messageId: "m1",
+      origin: "server",
+      payload: {
+        stage_card_id: "sc1",
+        motion: "是否开辩",
+        sides: [],
+        form: "debate",
+      },
+    });
+    store().hydratePending("c1", [], { confirmed: ["server"] });
+    for (const id of ["a1", "e1", "sc1"] as const) {
+      const entry = store().get(id);
+      expect(entry?.status).toBe("resolved");
+      expect(entry?.settledElsewhere).toBe(true);
+      expect(entry && isAwaitingUserEntry(entry)).toBe(false);
+    }
+    expect(store().listPending("c1")).toHaveLength(0);
+    const hotGatePending = [...store().byId.values()].filter(
+      (e) =>
+        e.conversationId === "c1" &&
+        (e.status === "pending" || e.status === "submitting") &&
+        isHotGateInteractionKind(e.kind),
+    );
+    expect(hotGatePending).toHaveLength(0);
   });
 
   it("settleUnseenCold marks terminal in place (no Map.delete)", () => {
@@ -526,9 +573,7 @@ describe("isAwaitingUserEntry (侧栏「等你」灯判定)", () => {
     expect(
       isAwaitingUserEntry(entry({ kind: "approval", status: "submitting" })),
     ).toBe(true);
-    expect(
-      isAwaitingUserEntry(entry({ kind: "delegation_authorization" })),
-    ).toBe(true);
+    expect(isAwaitingUserEntry(entry({ kind: "escalation" }))).toBe(true);
     expect(
       isAwaitingUserEntry(
         entry({ kind: "escalation", payload: { awaiting: "user" } }),
@@ -550,11 +595,10 @@ describe("isAwaitingUserEntry (侧栏「等你」灯判定)", () => {
     expect(isAwaitingUserEntry(entry({ status: "orphaned" }))).toBe(false);
   });
 
-  it("excludes cold kinds (pausedTurns 帧是权威) and non-blocking asks", () => {
+  it("excludes cold kinds (pausedTurns 帧是权威)", () => {
     expect(isAwaitingUserEntry(entry({ kind: "ask_user" }))).toBe(false);
     expect(isAwaitingUserEntry(entry({ kind: "plan_review" }))).toBe(false);
     expect(isAwaitingUserEntry(entry({ kind: "team_preview" }))).toBe(false);
-    expect(isAwaitingUserEntry(entry({ kind: "question_posted" }))).toBe(false);
   });
 });
 
@@ -750,107 +794,6 @@ describe("hydrateInteractionsFromJournal (history replay)", () => {
     it("is empty when the journal has no checkpoint", () => {
       hydrateInteractionsFromJournal("a", "m1", []);
       expect(messageCheckpoints("a", "m1")).toEqual([]);
-    });
-  });
-
-  describe("question_posted", () => {
-    const postedPayload = {
-      ask_id: "n1",
-      question: "我先按响应式单页做，可以吗？",
-      assumptions: [{ id: "a0", label: "部署", value: "纯静态" }],
-      questions: [
-        {
-          id: "q0",
-          prompt: "要不要双语？",
-          kind: "choice",
-          options: [{ label: "要" }, { label: "不要" }],
-          multiple: false,
-          default: "不要",
-        },
-      ],
-    };
-
-    it("folds a question_posted event into one card (rich fields)", () => {
-      hydrateInteractionsFromJournal("a", "m1", [
-        { type: "question_posted", payload: postedPayload },
-      ]);
-      const cards = messageNonBlockingAsks("a", "m1");
-      expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({
-        id: "n1",
-        question: "我先按响应式单页做，可以吗？",
-        assumptions: [{ id: "a0", label: "部署", value: "纯静态" }],
-      });
-      expect(cards[0].questions[0].default).toBe("不要");
-      const askEntry = store().get("n1");
-      expect(askEntry).toBeDefined();
-      if (!askEntry) return;
-      expect(entryToNonBlockingAsk(askEntry).id).toBe("n1");
-    });
-
-    it("dedupes a re-delivered event and preserves post order", () => {
-      hydrateInteractionsFromJournal("a", "m1", [
-        { type: "question_posted", payload: postedPayload },
-        {
-          type: "question_posted",
-          payload: { ...postedPayload, ask_id: "n2", question: "q2" },
-        },
-        { type: "question_posted", payload: postedPayload },
-      ]);
-      expect(messageNonBlockingAsks("a", "m1").map((c) => c.id)).toEqual([
-        "n1",
-        "n2",
-      ]);
-    });
-
-    it("is empty when the journal has no non-blocking ask", () => {
-      hydrateInteractionsFromJournal("a", "m1", []);
-      expect(messageNonBlockingAsks("a", "m1")).toEqual([]);
-    });
-
-    it("folds question_resolved into answered settlement", () => {
-      hydrateInteractionsFromJournal("a", "m1", [
-        { type: "question_posted", payload: postedPayload },
-        {
-          type: "question_resolved",
-          payload: {
-            ask_id: "n1",
-            status: "answered",
-            answer: "也要 PDF。",
-            note: "",
-          },
-        },
-      ]);
-      const askEntry = store().get("n1");
-      expect(askEntry?.status).toBe("resolved");
-      if (!askEntry) throw new Error("expected ask n1");
-      expect(entryToNonBlockingAsk(askEntry)).toMatchObject({
-        status: "resolved",
-        settlement: "answered",
-        answer: "也要 PDF。",
-      });
-    });
-
-    it("folds question_resolved discarded as CEO settlement (not a person)", () => {
-      hydrateInteractionsFromJournal("a", "m1", [
-        { type: "question_posted", payload: postedPayload },
-        {
-          type: "question_resolved",
-          payload: {
-            ask_id: "n1",
-            status: "discarded",
-            answer: "",
-            note: "按默认继续，后半等你。",
-          },
-        },
-      ]);
-      const discarded = store().get("n1");
-      if (!discarded) throw new Error("expected ask n1");
-      expect(entryToNonBlockingAsk(discarded)).toMatchObject({
-        status: "resolved",
-        settlement: "discarded",
-        note: "按默认继续，后半等你。",
-      });
     });
   });
 });

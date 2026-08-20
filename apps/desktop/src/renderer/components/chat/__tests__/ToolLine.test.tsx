@@ -337,6 +337,31 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(screen.getByText("Grep code")).toBeTruthy();
     expect(screen.getByText("include_usage|stream_options")).toBeTruthy();
     expect(screen.getByText(/1 处匹配 · 1 个文件/)).toBeTruthy();
+    expect(screen.getByText(/1 处匹配 · 1 个文件/).className).toMatch(
+      /max-w-\[40%\]/,
+    );
+    expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("keeps a long grep pattern from overflowing the title row", () => {
+    const pattern =
+      "<(article|ProcessLane|TeamLane|SourceCards|InteractionLane|Collapsible|collapsed|折叠|展开|useState|open|sumr)";
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "grep",
+          arguments: { pattern },
+          result: `${pattern}\nsrc/ChatView.tsx:54: hit`,
+          status: "success",
+        })}
+      />,
+    );
+    const btn = container.querySelector("button");
+    expect(btn?.className).toMatch(/min-w-0/);
+    expect(btn?.className).toMatch(/overflow-hidden/);
+    expect(screen.getByText("Grep code")).toBeTruthy();
+    // Unknown grep shape must not re-attach the pattern tail as inlineMeta.
+    expect(screen.queryByText(/折叠/)).toBeNull();
     expect(collapsedSubline(container)).toBeNull();
   });
 

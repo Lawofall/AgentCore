@@ -15,11 +15,13 @@ Thin CLI over ``agentcore.observability.query``. Run from apps/server:
 Default output is ``decision_spine`` (human + ``--json`` isomorphic). Pass
 ``--raw`` for the full ``log_events`` firehose. ``--pack`` writes an investigation
 pack (decision_spine.json + timeline.jsonl + meta.json; optional previews /
-turn_metrics; ``--full`` adds messages.json without LLM bodies). Exact-ID queries
+turn_metrics; redacted journal when the store has rows; ``--full`` adds
+messages.json without LLM bodies — never raw turn_journal). Exact-ID queries
 always include synthetic ``traffic=eval|test`` lines. Message bodies live in
 Postgres; turn traces live in logs/dev.jsonl (+ rotation backups) or
 ``--export-dir`` (``events.jsonl`` + joinable ``turn_metrics.jsonl`` /
-``cost_events.jsonl``). See .cursor/rules/conversation-logs.mdc.
+``cost_events.jsonl``; journal is redacted by default after ``pnpm sync:logs``).
+See .cursor/rules/conversation-logs.mdc.
 """
 
 from __future__ import annotations

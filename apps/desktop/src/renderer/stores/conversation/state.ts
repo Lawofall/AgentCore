@@ -168,7 +168,6 @@ export interface ConversationState {
     checkpointId: string,
     conversationId?: string | null,
   ) => void;
-  stampAskMarker: (askId: string, conversationId?: string | null) => void;
   stampUserInterjectionMarker: (
     interjectionId: string,
     conversationId?: string | null,

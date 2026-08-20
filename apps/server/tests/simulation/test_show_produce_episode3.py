@@ -32,17 +32,9 @@ def test_produce_episode3_shape_matches_fixture(tmp_path: Path):
     assert len(manifest["reveal"]["steps"]) == 6
 
     run = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
-    types = {e["type"] for e in run["events"]}
-    assert "sim.show.episode_gate" in types
-    assert "sim.show.heart_pick" in types
-    assert "sim.show.reveal" in types
-    assert "sim.show.zero_vote_alert" in types
-
-    # 陆野零票（ep3 剧本）
-    zero_payloads = [
-        e["payload"] for e in run["events"] if e["type"] == "sim.show.zero_vote_alert"
-    ]
-    assert any(p["agent_id"] == "luye" for p in zero_payloads)
+    assert run["events"] == []
+    # 陆野零票（ep3 剧本）走赛制状态 / 清单，不再发 sim.show.* 事件。
+    assert produced.season.zero_vote_streak.get("luye", 0) >= 1
 
 
 def test_produce_same_seed_reproducible():

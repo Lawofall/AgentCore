@@ -52,13 +52,6 @@ describe("settlementFromResolvedEvent · 契约表反查", () => {
         status: "resolved",
       }),
     ).toEqual({ kind: "escalation", interactionId: "esc-1" });
-    expect(
-      settlementFromResolvedEvent("question_resolved", {
-        ask_id: "n1",
-        status: "answered",
-        answer: "也要 PDF。",
-      }),
-    ).toEqual({ kind: "question_posted", interactionId: "n1" });
   });
 
   it("非收口事件 / 缺 id → null（`*_required` 与正文帧一律不算）", () => {
@@ -110,22 +103,6 @@ describe("answeredByAPerson · 无人参与的收口", () => {
     expect(answeredByAPerson("escalation", {})).toBe(false);
   });
 
-  it("question_posted：已答算人；已作废是 CEO 故障态不算另一端的人", () => {
-    expect(answeredByAPerson("question_posted", { status: "answered" })).toBe(
-      true,
-    );
-    expect(answeredByAPerson("question_posted", { status: "discarded" })).toBe(
-      false,
-    );
-    expect(
-      settlementFromResolvedEvent("question_resolved", {
-        ask_id: "n1",
-        status: "discarded",
-        note: "后半等你",
-      }),
-    ).toBeNull();
-  });
-
   it("仲裁通道不算这张卡被人拍了（含 via_user：人答的是主管的问，不是这张卡）", () => {
     for (const arbitrated_by of ["ceo", "user"]) {
       expect(
@@ -144,7 +121,6 @@ describe("answeredByAPerson · 无人参与的收口", () => {
   it("其余 kind 的收口今天只有「人答了」一个生产者 → 不设这道闸", () => {
     for (const kind of [
       "approval",
-      "delegation_authorization",
       "ask_user",
       "plan_review",
       "team_preview",
@@ -163,7 +139,6 @@ describe("receiptProvesAPerson · REST 回执证不了升级卡", () => {
 
   it("其余 kind 的回执可信", () => {
     expect(receiptProvesAPerson("approval")).toBe(true);
-    expect(receiptProvesAPerson("delegation_authorization")).toBe(true);
     expect(receiptProvesAPerson("ask_user")).toBe(true);
     expect(receiptProvesAPerson("stage_card")).toBe(true);
   });
@@ -266,7 +241,10 @@ describe("interactionLabel", () => {
   it("各 kind 有自己的卡面名，未知 kind 有兜底", () => {
     expect(interactionLabel("approval")).toBe("工具审批");
     expect(interactionLabel("plan_review")).toBe("计划复核");
-    expect(interactionLabel("team_preview")).toBe("团队开工确认");
-    expect(interactionLabel("what_is_this")).toBe("待办");
+    expect(interactionLabel("team_preview")).toBe("开工确认");
+    expect(interactionLabel("ask_user")).toBe("提问确认");
+    expect(interactionLabel("escalation")).toBe("拍板请求");
+    expect(interactionLabel("stage_card")).toBe("推进卡");
+    expect(interactionLabel("what_is_this")).toBe("确认");
   });
 });

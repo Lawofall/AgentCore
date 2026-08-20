@@ -55,7 +55,7 @@ def _patch_gate_and_repo(monkeypatch, *, update_status: AsyncMock):
 
 @pytest.mark.asyncio
 async def test_mark_on_non_retryable_config_failure(monkeypatch):
-    from agentcore.billing.gate import run_background_llm
+    from agentcore.billing.gate import BackgroundGateResolve, run_background_llm
 
     byok = LLMCredentials(
         api_key="sk-user",
@@ -68,7 +68,7 @@ async def test_mark_on_non_retryable_config_failure(monkeypatch):
     _patch_gate_and_repo(monkeypatch, update_status=update_status)
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background",
-        AsyncMock(return_value=byok),
+        AsyncMock(return_value=BackgroundGateResolve(credentials=byok)),
     )
 
     async def _runner(_creds: LLMCredentials) -> str:
@@ -82,7 +82,7 @@ async def test_mark_on_non_retryable_config_failure(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_mark_on_timeout(monkeypatch):
-    from agentcore.billing.gate import run_background_llm
+    from agentcore.billing.gate import BackgroundGateResolve, run_background_llm
 
     byok = LLMCredentials(
         api_key="sk-user",
@@ -95,7 +95,7 @@ async def test_no_mark_on_timeout(monkeypatch):
     _patch_gate_and_repo(monkeypatch, update_status=update_status)
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background",
-        AsyncMock(return_value=byok),
+        AsyncMock(return_value=BackgroundGateResolve(credentials=byok)),
     )
 
     async def _runner(_creds: LLMCredentials) -> str:
@@ -109,7 +109,7 @@ async def test_no_mark_on_timeout(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_mark_on_platform_credentials(monkeypatch):
-    from agentcore.billing.gate import run_background_llm
+    from agentcore.billing.gate import BackgroundGateResolve, run_background_llm
 
     platform = LLMCredentials(
         api_key="sk-platform",
@@ -121,7 +121,7 @@ async def test_no_mark_on_platform_credentials(monkeypatch):
     _patch_gate_and_repo(monkeypatch, update_status=update_status)
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background",
-        AsyncMock(return_value=platform),
+        AsyncMock(return_value=BackgroundGateResolve(credentials=platform)),
     )
 
     async def _runner(_creds: LLMCredentials) -> str:

@@ -40,7 +40,7 @@ async function main() {
 
   async function runAB(everyN) {
     const url = new URL("index.web.html", base);
-    url.hash = "/preview?s=multi_agent_debate_multibeat&view=canvas";
+    url.hash = "/preview?s=multi_agent_debate_multibeat";
     await page.goto(url.href, { waitUntil: "load", timeout: 60_000 });
     await page.waitForSelector(
       '[data-preview-scenario="multi_agent_debate_multibeat"][data-preview-frame="full"]',

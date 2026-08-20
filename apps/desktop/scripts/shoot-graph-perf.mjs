@@ -22,7 +22,6 @@ const desktopDir = resolve(here, "..");
 const outDir = resolve(desktopDir, "shoot-out-graph-perf");
 const SCENARIO = process.argv[2] || "multi_agent_debate_multibeat";
 const FRAME_ARG = process.argv[3] || "22";
-const VIEW = process.argv[4] || "chat"; // chat | canvas
 const STRESS_MS = 3000;
 const BASELINE_MS = 1500;
 
@@ -114,9 +113,8 @@ async function main() {
     FRAME_ARG === "full"
       ? `/preview?s=${SCENARIO}`
       : `/preview?s=${SCENARIO}&k=${FRAME_ARG}`;
-  const viewSuffix = VIEW === "canvas" ? "&view=canvas" : "";
   const url = new URL("index.web.html", base);
-  url.hash = `${frameHash}${viewSuffix}`;
+  url.hash = frameHash;
   console.log("GOTO", url.href);
   await page.goto(url.href, { waitUntil: "load", timeout: 60_000 });
   await waitPreview(

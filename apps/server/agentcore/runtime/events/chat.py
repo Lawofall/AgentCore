@@ -283,40 +283,6 @@ def title_generated(title: str, *, conversation_id: str) -> SSEEvent:
     )
 
 
-def followups_generated(
-    followups: list[str], *, conversation_id: str, message_id: str
-) -> SSEEvent:
-    """CEO→用户「下一步推荐」(下一步推荐): quick-reply chips for the just-finished turn.
-
-    Attached client-side to the assistant row identified by ``message_id`` (same id as
-    ``set_followups``). Emitted only when there is at least one suggestion (a no-op
-    event carries no UX), after ``message_end``. Missing ``message_id`` is a caller bug —
-    clients no-op rather than falling back to「last assistant」.
-    """
-    return SSEEvent(
-        type=EventType.FOLLOWUPS_GENERATED,
-        payload={
-            "conversation_id": conversation_id,
-            "message_id": message_id,
-            "followups": followups,
-        },
-    )
-
-
-def followups_unavailable(
-    *, conversation_id: str, message_id: str, reason: str
-) -> SSEEvent:
-    """Soft hint that followups mint failed — not a turn-blocking error."""
-    return SSEEvent(
-        type=EventType.FOLLOWUPS_UNAVAILABLE,
-        payload={
-            "conversation_id": conversation_id,
-            "message_id": message_id,
-            "reason": reason,
-        },
-    )
-
-
 def turn_saved(*, user_message_id: str) -> SSEEvent:
     return SSEEvent(
         type=EventType.TURN_SAVED,

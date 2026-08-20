@@ -139,43 +139,6 @@ def test_merge_paused_then_registry_dedupes_by_interaction_id(monkeypatch):
     assert merged[0]["title"] == "用哪套方案？"
 
 
-def test_merge_includes_pending_questions_from_journal_fold(monkeypatch):
-    monkeypatch.setattr(
-        "agentcore.attention.snapshot.entries_from_registry_hot_cards",
-        lambda user_id: [],
-    )
-    extra = [
-        {
-            "conversation_id": "c-q",
-            "turn_id": "turn-q",
-            "interaction_id": "ask-1",
-            "kind": "question_posted",
-            "title": "要不要双语？",
-        }
-    ]
-    merged = merge_attention_entries([], user_id="u1", extra=extra)
-    assert merged == extra
-
-
-def test_merge_question_does_not_override_existing_interaction_id(monkeypatch):
-    monkeypatch.setattr(
-        "agentcore.attention.snapshot.entries_from_registry_hot_cards",
-        lambda user_id: [],
-    )
-    extra = [
-        {
-            "conversation_id": "c-q",
-            "turn_id": "turn-q",
-            "interaction_id": "ck-1",
-            "kind": "question_posted",
-            "title": "不应覆盖冷帧",
-        }
-    ]
-    merged = merge_attention_entries([_row()], user_id="u1", extra=extra)
-    assert [e["interaction_id"] for e in merged] == ["ck-1"]
-    assert merged[0]["kind"] == "ask_user"
-
-
 async def test_registry_hot_cards_only_for_this_users_live_runs(monkeypatch):
     registry = InteractionRegistry()
     monkeypatch.setattr(

@@ -6,9 +6,7 @@ const KIND_LABEL: Record<string, string> = {
   ask_user: "提问",
   plan_review: "计划复核",
   team_preview: "开工卡",
-  delegation_authorization: "委派授权",
   escalation: "升级",
-  question_posted: "提问",
   stage_card: "推进卡",
 };
 
@@ -32,13 +30,13 @@ export function InteractionLane({
 }) {
   if (interactions.length === 0) return null;
   return (
-    <ul aria-label="交互" className="flex flex-wrap gap-2">
+    <ul aria-label="交互" className="flex min-w-0 flex-wrap gap-2">
       {interactions.map((i, index) => (
         <li
           key={i.id || `${i.kind}-${index}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1 text-xs"
+          className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1 text-xs"
         >
-          <span className="font-medium text-foreground">
+          <span className="min-w-0 truncate font-medium text-foreground">
             {KIND_LABEL[i.kind] ?? i.kind}
           </span>
           {i.status && (

@@ -1,10 +1,10 @@
 """Re-emit still-open hot-path ``*_required`` frames on SSE attach / recovery.
 
-APPROVAL / DELEGATION_AUTHORIZATION / user-facing ESCALATION are journaled
-(DURABLE), but attach historically only re-hung EPHEMERAL CLIENT_TOOL. After a
-refresh, a journal recovery race or empty live queue can leave the UI without an
-answerable card while the in-process :class:`InteractionRegistry` still holds
-open Futures. Replaying ``list_pending`` hot kinds closes that gap.
+APPROVAL / user-facing ESCALATION are journaled (DURABLE), but attach historically
+only re-hung EPHEMERAL CLIENT_TOOL. After a refresh, a journal recovery race or
+empty live queue can leave the UI without an answerable card while the in-process
+:class:`InteractionRegistry` still holds open Futures. Replaying ``list_pending``
+hot kinds closes that gap.
 
 Done / cancelled / discarded entries are absent from ``list_pending`` and are
 not re-sent. ``awaiting=ceo`` escalations stay CEO-only (not user-answerable).
@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from agentcore.runtime.events.interaction import (
     approval_required,
-    delegation_authorization_required,
     escalation_required,
 )
 from agentcore.runtime.events.types import SSEEvent
@@ -26,7 +25,6 @@ from agentcore.runtime.journal.pending_interactions import PendingInteraction
 _HOT_REATTACH_KINDS = frozenset(
     {
         InteractionKind.APPROVAL,
-        InteractionKind.DELEGATION_AUTHORIZATION,
         InteractionKind.ESCALATION,
     }
 )
@@ -50,17 +48,6 @@ def build_hot_interaction_required(req: InteractionRequest) -> SSEEvent | None:
             tool_call_id=tool_call_id,
             tool_name=str(payload.get("tool_name") or ""),
             arguments=dict(arguments) if isinstance(arguments, dict) else {},
-        )
-
-    if req.kind is InteractionKind.DELEGATION_AUTHORIZATION:
-        workers = payload.get("workers")
-        tools = payload.get("tools")
-        return delegation_authorization_required(
-            authorization_id=req.id,
-            conversation_id=req.conversation_id,
-            execution_id=str(payload.get("execution_id") or ""),
-            workers=list(workers) if isinstance(workers, list) else [],
-            tools=[str(t) for t in tools] if isinstance(tools, list) else [],
         )
 
     # ESCALATION — skip CEO-arbitration cards (not user-answerable).

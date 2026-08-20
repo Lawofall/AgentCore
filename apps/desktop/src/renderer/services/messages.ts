@@ -179,17 +179,11 @@ export interface MessageWindow {
 /** Map a persisted `memory_updates` row (REST `MemoryUpdateView`) to the client's
  * domain {@link MemoryUpdate} for the conversation-tail card. */
 export function toMemoryUpdate(m: Schemas["MemoryUpdateView"]): MemoryUpdate {
-  const kind =
-    m.kind === "episodic"
-      ? "episodic"
-      : m.kind === "quota"
-        ? "quota"
-        : "semantic";
   return {
     id: m.id,
     createdAt: m.created_at,
     anchorAt: m.anchor_at ?? null,
-    kind,
+    kind: m.kind,
     summary: m.summary ?? null,
     items: (m.items ?? []).map((it) => ({
       action: it.action,

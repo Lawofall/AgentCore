@@ -260,8 +260,8 @@ export function toolResultPeek(d: ToolResultData): string {
   return clampLine(line);
 }
 
-/** Collapsed grep meta — pattern already lives in the ToolLine title, so drop it
- * from the count line. Unknown shapes fall back to the first result line. */
+/** Collapsed grep meta — pattern already lives in the ToolLine title.
+ * Unknown shapes stay empty; expand the row to read hits. */
 function grepCollapsedPeek(result: string | null): string {
   const line =
     (result ?? "")
@@ -274,7 +274,9 @@ function grepCollapsedPeek(result: string | null): string {
   const files = line.match(/^(\d+) 个文件匹配/);
   if (files) return `${files[1]} 个文件`;
   if (line.startsWith("本次 grep 未匹配")) return "未匹配";
-  return clampLine(line);
+  // Pattern already lives in the ToolLine title. Unknown shapes (raw hits,
+  // head-tail chops) must not paste another 140 chars of regex onto the row.
+  return "";
 }
 
 function clampLine(line: string): string {

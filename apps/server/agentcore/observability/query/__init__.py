@@ -16,6 +16,11 @@ from agentcore.observability.query.failure_families import (
     registry_digest,
     resolve_family_key,
 )
+from agentcore.observability.query.journal_redact import (
+    JOURNAL_REDACT_SCHEMA,
+    redact_journal_row,
+    summarize_redacted_journal,
+)
 from agentcore.observability.query.jsonl import (
     JsonlLogSource,
     LogEventSource,
@@ -70,6 +75,7 @@ __all__ = [
     "ExportConversationStore",
     "FAILURE_FAMILIES",
     "FailureFamily",
+    "JOURNAL_REDACT_SCHEMA",
     "JsonlLogSource",
     "LogEventSource",
     "PACK_SCHEMA_VERSION",
@@ -101,12 +107,14 @@ __all__ = [
     "query_conversation_timeline",
     "query_recent",
     "query_trace",
+    "redact_journal_row",
     "registry_digest",
     "required_pack_files",
     "resolve_database_url",
     "resolve_family_key",
     "scan_patrol",
     "stream_health_summary",
+    "summarize_redacted_journal",
     "write_investigation_pack",
     "write_snapshot",
 ]

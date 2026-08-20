@@ -65,11 +65,6 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     EventType.TOOL_USE_END: (Disposition.DURABLE, "工具调用结束（结果）——重放工具结果"),
     EventType.CHECKPOINT_REQUIRED: (Disposition.DURABLE, "检查点挂起（耐久帧）——reload 重现待裁决卡"),
     EventType.CHECKPOINT_RESOLVED: (Disposition.DURABLE, "检查点已裁决——重放裁决结果"),
-    EventType.QUESTION_POSTED: (Disposition.DURABLE, "非阻断/阻断提问（耐久帧）——reload 重现提问"),
-    EventType.QUESTION_RESOLVED: (
-        Disposition.DURABLE,
-        "非阻塞提问已答/已作废——reload 重放三态（悬着/已答/已作废）",
-    ),
     EventType.PLAN_REVIEW_REQUIRED: (Disposition.DURABLE, "计划复核挂起（耐久帧）——reload 重现复核卡"),
     EventType.PLAN_REVIEW_RESOLVED: (Disposition.DURABLE, "计划复核已裁决——重放裁决"),
     EventType.TEAM_PREVIEW_REQUIRED: (
@@ -92,14 +87,6 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     EventType.APPROVAL_RESOLVED: (
         Disposition.DURABLE,
         "审批门裁决——reload 重放已答态（提问确认交互统一 P1）",
-    ),
-    EventType.DELEGATION_AUTHORIZATION_REQUIRED: (
-        Disposition.DURABLE,
-        "委派级授权挂起——reload 重现待答卡（提问确认交互统一 P1）",
-    ),
-    EventType.DELEGATION_AUTHORIZATION_RESOLVED: (
-        Disposition.DURABLE,
-        "委派级授权裁决——reload 重放已答态（提问确认交互统一 P1）",
     ),
     EventType.INTERACTION_ORPHANED: (
         Disposition.DURABLE,
@@ -193,14 +180,6 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
         "回合错误——落 journal turn_end + usage.status=failed（不完整回合持久化）",
     ),
     EventType.TITLE_GENERATED: (Disposition.DERIVED, "回合后标题——回写 Conversation.title 列"),
-    EventType.FOLLOWUPS_GENERATED: (
-        Disposition.DERIVED,
-        "回合后「下一步」chips——回写 Message.followups 列（与同胞 title 一致，reload 重现）",
-    ),
-    EventType.FOLLOWUPS_UNAVAILABLE: (
-        Disposition.EPHEMERAL,
-        "下一步 mint 失败软空态——仅 live 轻提示；reload 不重放",
-    ),
     EventType.RUN_OUTPUT_DELTA: (Disposition.DERIVED, "worker 正文流——由 message_final 事实合成重放"),
     EventType.RUN_REASONING_DELTA: (Disposition.DERIVED, "worker 思考流——由 message_final 事实合成重放"),
     EventType.RUN_ESCALATION: (
@@ -297,34 +276,6 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     EventType.BROWSER_LIVE_STATUS: (
         Disposition.EPHEMERAL,
         "团队浏览器直播状态（started/no_session/session_closed）——D13 旁路 SSE，永不落 journal",
-    ),
-    EventType.SIM_SHOW_HEART_PICK: (
-        Disposition.EPHEMERAL,
-        "恋综心动选票——持久化走 sim_event，不进 turn_journal",
-    ),
-    EventType.SIM_SHOW_PAIR_FORMED: (
-        Disposition.EPHEMERAL,
-        "恋综互选配对——持久化走 sim_event，不进 turn_journal",
-    ),
-    EventType.SIM_SHOW_AFFECTION_SHIFT: (
-        Disposition.EPHEMERAL,
-        "恋综移情标记——持久化走 sim_event，不进 turn_journal",
-    ),
-    EventType.SIM_SHOW_ZERO_VOTE_ALERT: (
-        Disposition.EPHEMERAL,
-        "恋综零票告急——持久化走 sim_event，不进 turn_journal",
-    ),
-    EventType.SIM_SHOW_DEPARTURE: (
-        Disposition.EPHEMERAL,
-        "恋综角色离场——持久化走 sim_event，不进 turn_journal",
-    ),
-    EventType.SIM_SHOW_REVEAL: (
-        Disposition.EPHEMERAL,
-        "恋综心动揭晓——持久化走 sim_event，不进 turn_journal",
-    ),
-    EventType.SIM_SHOW_EPISODE_GATE: (
-        Disposition.EPHEMERAL,
-        "恋综期分段门闸——持久化走 sim_event，不进 turn_journal",
     ),
 }
 

@@ -20,7 +20,7 @@
 子目录如 ``AI开发/``，不限于约定 stage 目录），案卷核对目录由这些路径推导；
 业务向 ``artifacts``（``src/`` · ``site/`` 等）自带落点，不套约定文档目录。
 
-不做：``file_write`` 启发式改写、根目录搬迁、``playbook=none`` 特例。
+不做：``file_write`` 启发式改写、根目录搬迁、省略 playbook 手写特例。
 """
 
 from __future__ import annotations

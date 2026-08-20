@@ -2,8 +2,8 @@
 /**
  * Sync production AI logs to local for analysis.
  *
- *   pnpm sync:logs                 # events + slim DB export (no turn_journal)
- *   pnpm sync:logs --full          # include turn_journal (large)
+ *   pnpm sync:logs                 # events + slim DB export (redacted turn_journal)
+ *   pnpm sync:logs --full          # include raw turn_journal (local deep dig only)
  *   pnpm sync:logs --events-only
  *   pnpm sync:logs --export-only
  *   pnpm sync:logs --days 3        # DB export window (default 7)
@@ -79,8 +79,8 @@ for (let i = 0; i < args.length; i++) {
 Pull production structured logs into logs/prod-export/ using
 deploy/.env.deploy.local (DEPLOY_SSH_*).
 
-  (default)       Slim DB export: skip turn_journal (fast daily pull)
-  --full          Include turn_journal (large; for deep dig / --raw)
+  (default)       Slim DB export: redacted turn_journal (no user/LLM bodies)
+  --full          Include raw turn_journal (large; local deep dig, not for packs)
   --events-only   Only sync LOG_FILE JSONL (+ rotation backups)
   --export-only   Only run DB export inside the api container + pull
   --days N        DB export window (default 7)
@@ -249,11 +249,11 @@ function syncDbExport() {
   }
   // Ship the local script so path fixes apply before the next image deploy
   // (image copy historically assumed monorepo parents[3] → IndexError in Docker).
-  const skipJournalFlag = fullExport ? "" : " --skip-journal";
+  const journalFlag = fullExport ? "" : " --journal-redacted";
   console.log(
     fullExport
-      ? "→ upload export script + run inside api container (full, incl. journal)"
-      : "→ upload export script + run inside api container (slim, skip journal)",
+      ? "→ upload export script + run inside api container (full, raw journal)"
+      : "→ upload export script + run inside api container (slim, redacted journal)",
   );
   scp(LOCAL_EXPORT_SCRIPT, REMOTE_EXPORT_SCRIPT);
   const hostExport = discoverHostDataExportDir();
@@ -262,7 +262,7 @@ function syncDbExport() {
 CONTAINER="${CONTAINER}"
 docker cp ${REMOTE_EXPORT_SCRIPT} "$CONTAINER":/tmp/export_conversations.py
 docker exec -u root "$CONTAINER" chown app:app /tmp/export_conversations.py || true
-docker exec "$CONTAINER" python /tmp/export_conversations.py --days ${days} --output /data/export${skipJournalFlag}
+docker exec "$CONTAINER" python /tmp/export_conversations.py --days ${days} --output /data/export${journalFlag}
 rm -f ${REMOTE_EXPORT_SCRIPT}
 mkdir -p "${hostExport}"
 cd "${hostExport}"

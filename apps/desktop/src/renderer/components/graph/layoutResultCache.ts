@@ -10,7 +10,7 @@ import type { GraphEdge, GraphLayout } from "@/stores/graph";
 import type { ActCardLayout } from "./actLod";
 import type { GraphFitMode } from "./useGraphViewport";
 
-/** Enough for ~5 warm conversations × a few expanded canvas turns; not unbounded. */
+/** Enough for ~5 warm conversations × a few expanded turns; not unbounded. */
 export const GRAPH_LAYOUT_CACHE_LIMIT = 16;
 
 export interface CachedLayoutResult {

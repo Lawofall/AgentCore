@@ -94,16 +94,6 @@ def rpc_agent_mentions(params: dict[str, Any]) -> list[dict[str, Any]]:
     return to_stored_agent_mentions(raw if isinstance(raw, list) else None)
 
 
-def rpc_ask_id(params: dict[str, Any]) -> str | None:
-    """startTurn ``askId`` / ``ask_id`` → inbound return-path slot (or None)."""
-    from agentcore.conversation.ask_reply import normalize_ask_id
-
-    raw = params.get("askId")
-    if raw is None:
-        raw = params.get("ask_id")
-    return normalize_ask_id(raw)
-
-
 def resolve_rpc_folder_binding(
     params: dict[str, Any],
 ) -> tuple[bool, str | None, str]:
@@ -185,42 +175,6 @@ def _finish_str(result: dict[str, Any]) -> str | None:
     if finish is None:
         return None
     return finish.value if hasattr(finish, "value") else str(finish)
-
-
-async def _settle_ask_replies_if_committed(
-    *,
-    conversation_id: str,
-    result: dict[str, Any] | None,
-    sink: EventSink,
-    user_message: str,
-    ask_id: str | None = None,
-    user_created_this_send: bool = True,
-) -> None:
-    """Settle hanging asks after this sidecar send stuck (before sink.close)."""
-    from agentcore.conversation.question_resolve import (
-        is_abort_finish_reason,
-        note_ask_replies_for_committed_send,
-    )
-    from agentcore.conversation.zero_output_rollback import (
-        should_delete_zero_output_send_result,
-    )
-
-    if result is None:
-        return
-    if should_delete_zero_output_send_result(
-        result, user_created_this_send=user_created_this_send
-    ):
-        return
-    if is_abort_finish_reason(_finish_str(result)):
-        return
-    journal = result.get("journal_entries")
-    await note_ask_replies_for_committed_send(
-        conversation_id=conversation_id,
-        sink=sink,
-        ask_id=ask_id,
-        answer=user_message,
-        journal=journal if isinstance(journal, list) else None,
-    )
 
 
 def _inference_search_creds(creds: Any):
@@ -334,7 +288,6 @@ class TurnExecutionMixin:
             return
         self.stamp_turn_history(conversation_id, history)
         agent_mentions = rpc_agent_mentions(params)
-        ask_id = rpc_ask_id(params)
         # The desktop mints one trace_id per local turn and threads it here + into the
         # write-back, so this turn's proxied LLM calls and its persisted reply share it.
         trace_id = str(params.get("traceId") or "")
@@ -399,13 +352,6 @@ class TurnExecutionMixin:
                     )
                     sink.emit(message_end(FinishReason.ERROR))
                 finally:
-                    await _settle_ask_replies_if_committed(
-                        conversation_id=conversation_id,
-                        result=result,
-                        sink=sink,
-                        user_message=user_message,
-                        ask_id=ask_id,
-                    )
                     sink.close(reason="sidecar_missing_inference")
                 await pump
                 if outbox is not None:
@@ -525,7 +471,6 @@ class TurnExecutionMixin:
                             message_id=message_id,
                             x_client_platform="desktop",
                             agent_mentions=agent_mentions or None,
-                            ask_id=ask_id,
                         )
                         # Pillar D1: keep sink open while a detached background drive is
                         # still live so run_completed / execution_completed reach the UI
@@ -538,13 +483,6 @@ class TurnExecutionMixin:
 
                         await await_live_detached_drive(conversation_id)
                         refresh_result_journal_from_host(result, sink=sink)
-                        await _settle_ask_replies_if_committed(
-                            conversation_id=conversation_id,
-                            result=result,
-                            sink=sink,
-                            user_message=user_message,
-                            ask_id=ask_id,
-                        )
             finally:
                 # Cancel path: emit confirmation *before* close so the pump still
                 # delivers ``message_end(cancelled)`` (TURN_CANCELLED alone is not enough).
@@ -947,13 +885,6 @@ class TurnExecutionMixin:
 
                         await await_live_detached_drive(conversation_id)
                         refresh_result_journal_from_host(result, sink=sink)
-                        await _settle_ask_replies_if_committed(
-                            conversation_id=conversation_id,
-                            result=result,
-                            sink=sink,
-                            user_message=user_message,
-                            user_created_this_send=False,
-                        )
             finally:
                 _emit_cancel_end_if_cancelling(sink)
                 # The pipeline no longer closes the sink (its owner does); the sidecar owns

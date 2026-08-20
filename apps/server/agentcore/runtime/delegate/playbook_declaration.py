@@ -3,7 +3,7 @@
 默认主路：手写顶层 ``tasks``（可省略 playbook）。
 具名 playbook = 固化流水线快捷进阶（建站 / 工具台 / 绿场等）；与 tasks XOR。
 建站快捷：``build_website``（工具台气质用 ``style=toolshed``）；绿场快捷：``build_app``
-（软引导见 skill / schema）；``none`` / 手写不再因意图硬拒。
+（软引导见 skill / schema）；省略 playbook / 手写不再因意图硬拒。
 
 场面账（automation delivery / website style / presentation format）已拆除：
 具名 playbook 不再因交付形态记账硬拒。
@@ -15,8 +15,6 @@ from typing import Any, Literal
 
 from agentcore.runtime.runs.playbooks import PLAYBOOKS, available_playbooks
 
-_PLAYBOOK_NONE = "none"
-
 DeclarationRejectGate = Literal[
     "empty",
     "unknown",
@@ -25,19 +23,14 @@ DeclarationRejectGate = Literal[
 
 PLAYBOOK_TASKS_XOR_MSG = (
     "playbook 与 tasks 二选一，不可同时传。"
-    "默认手写 tasks：去掉具名 playbook/playbook_id，只传 tasks；"
+    "默认手写 tasks：去掉具名 playbook，只传 tasks；"
     "快捷固化流水线：只传 playbook（+playbook_args 槽位），不要传 tasks。"
     "已有调查批要按结论修码：去掉 playbook，手写 tasks 并设 continue_from_run_id。"
 )
 
-PLAYBOOK_ID_CONFLICT_MSG = (
-    "playbook 与 playbook_id 指向不同形状，不可同传冲突值；"
-    "只保留一个具名字段（或手写 tasks 时去掉两者）。"
-)
-
 HANDWRITTEN_PLAYBOOK_ARGS_MSG = (
     "手写 tasks 时勿传 playbook_args；"
-    "playbook_args 仅配合具名 playbook/playbook_id 使用。"
+    "playbook_args 仅配合具名 playbook 使用。"
 )
 
 # 弱模型可抄的顶层 tasks 三件套（role/task + 可选 deliverable）；schema 与 empty 拒收共用。
@@ -49,7 +42,7 @@ _EMPTY_DELEGATE_MSG = (
     "delegate 缺 tasks/playbook：默认顶层放非空 `tasks`，"
     f"可抄：{HANDWRITTEN_TASKS_SKELETON}"
     "（deliverable 可选）；"
-    "固化流水线时次选具名 `playbook`/`playbook_id`（+ playbook_args）。"
+    "固化流水线时次选具名 `playbook`（+ playbook_args）。"
 )
 
 
@@ -64,10 +57,9 @@ def try_declaration_reject_gate(error: str | None) -> DeclarationRejectGate | No
         return None
     if error in (
         PLAYBOOK_TASKS_XOR_MSG,
-        PLAYBOOK_ID_CONFLICT_MSG,
         HANDWRITTEN_PLAYBOOK_ARGS_MSG,
     ) or error.startswith(
-        ("playbook 与 tasks 二选一", "playbook 与 playbook_id 指向不同", "手写 tasks 时勿传")
+        ("playbook 与 tasks 二选一", "手写 tasks 时勿传")
     ):
         return "xor"
     if error == _EMPTY_DELEGATE_MSG or error.startswith(
@@ -104,28 +96,10 @@ def resolve_playbook_declaration(
     _ = user_message  # call-site compat; soft guidance only (no intent hard-lock)
     _ = automation_delivery  # scene ledger removed; kw kept for call-site compat
     legacy = arguments.get("playbook")
-    playbook_id = arguments.get("playbook_id")
 
-    # Prefer explicit playbook / playbook_id naming a registry entry.
+    # Named playbook: non-empty ``playbook`` naming a registry entry.
     legacy_s = legacy.strip() if isinstance(legacy, str) and legacy.strip() else ""
-    pid_s = (
-        playbook_id.strip()
-        if isinstance(playbook_id, str) and playbook_id.strip()
-        else ""
-    )
-    if (
-        legacy_s
-        and pid_s
-        and pid_s.casefold() != _PLAYBOOK_NONE
-        and legacy_s != pid_s
-    ):
-        return None, None, PLAYBOOK_ID_CONFLICT_MSG
-
-    named: str | None = None
-    if legacy_s:
-        named = legacy_s
-    elif pid_s and pid_s.casefold() != _PLAYBOOK_NONE:
-        named = pid_s
+    named: str | None = legacy_s or None
 
     tasks = arguments.get("tasks")
     has_tasks = isinstance(tasks, list) and bool(tasks)
@@ -144,10 +118,8 @@ def resolve_playbook_declaration(
         # 具名 build_app / build_website 等直接放行。
         return named, None, None
 
-    explicit_none = pid_s.casefold() == _PLAYBOOK_NONE
-
-    # Hand-written path: explicit none and/or tasks.
-    if explicit_none or has_tasks:
+    # Hand-written path: omit playbook, pass non-empty tasks.
+    if has_tasks:
         if arguments.get("playbook_args"):
             return None, None, HANDWRITTEN_PLAYBOOK_ARGS_MSG
         return None, None, None

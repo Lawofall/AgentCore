@@ -121,14 +121,11 @@ class DelegateBatchRequest:
     tasks_raw: list[Any]
     playbook_notes: list[str]
     valid_tools: set[str]
-    # CEO 可传任意值；下游按需 isinstance 收窄（build_run_plan / resolve_parallelism）。
+    # CEO 可传任意值；下游按需 isinstance 收窄（build_run_plan）。
     complexity_hint: Any
     consumer_deps_warn: str | None
     design_impl_warn: str | None
     root_slice_warn: str | None
-    # 场面账（format / delivery）已拆除，两条恒 None；保留槽位对齐委派结果尾部的软告警。
-    presentation_format_warning: str | None
-    automation_delivery_warning: str | None
 
     @property
     def playbook(self) -> str | None:
@@ -144,6 +141,7 @@ def resolve_delegate_prelude(
     conversation_id: str | None,
     depth: int,
     sub_workers_spawned: int,
+    credential_source: str,
 ) -> DelegateBatchRequest | DelegatePreludeReject:
     """校验并规范化一次 `delegate` 调用（零 await；6 道硬拒 + 3 条软告警）。"""
     # Turn 级硬顶：禁新派（在飞不 cancel）；与 per-worker ceiling 正交。
@@ -164,9 +162,9 @@ def resolve_delegate_prelude(
             )
         )
 
-    # 甲+乙：本回合 API Key 已鉴权死后禁再 delegate 烧调用。
-    if is_turn_auth_dead():
-        msg = turn_auth_dead_reject_message()
+    # 甲+乙：本回合该付款方 API Key 已鉴权死后禁再 delegate 烧同源调用。
+    if is_turn_auth_dead(credential_source):
+        msg = turn_auth_dead_reject_message(credential_source)
         logger.info("delegate.turn_auth_dead_rejected")
         return DelegatePreludeReject(
             ToolResult(
@@ -178,8 +176,7 @@ def resolve_delegate_prelude(
             )
         )
 
-    # Playbook 声明闸：结构校验；建站/绿场 none 不硬拒。场面账（style/format/delivery）已拆除。
-    automation_delivery_warning: str | None = None
+    # Playbook 声明闸：结构校验；建站/绿场 none 不硬拒。
     declared_playbook, _none_reason, decl_error = resolve_playbook_declaration(
         arguments,
         user_message=user_message or "",
@@ -188,7 +185,7 @@ def resolve_delegate_prelude(
         gate = declaration_reject_gate(decl_error)
         logger.info(
             "delegate.playbook_declaration_rejected",
-            playbook_id=arguments.get("playbook_id") or arguments.get("playbook"),
+            playbook_id=arguments.get("playbook"),
             has_tasks=bool(arguments.get("tasks")),
             gate=gate,
         )
@@ -218,7 +215,7 @@ def resolve_delegate_prelude(
                     success=False,
                     output="",
                     error=PLAYBOOK_TASKS_XOR_MSG,
-                    # 契约自纠拒绝——勿进熔断（CEO 连试换 none/去掉 tasks 会误禁用）。
+                    # 契约自纠拒绝——勿进熔断（CEO 去掉 playbook 或去掉 tasks 会误禁用）。
                     contract_failure=True,
                 )
             )
@@ -272,9 +269,6 @@ def resolve_delegate_prelude(
                 DelegateCallFlags(playbook=None, playbook_args=None),
             )
         tasks_raw = raw_tasks
-
-    # 演讲/PPT 场面账已拆除：不再因 format ledger 硬拒 pptx→md。
-    presentation_format_warning: str | None = None
 
     valid_tools = {s.name for s in tools.list_all()}
     complexity_hint = arguments.get("complexity_hint", "standard")
@@ -355,6 +349,4 @@ def resolve_delegate_prelude(
         consumer_deps_warn=consumer_deps_warn,
         design_impl_warn=design_impl_warn,
         root_slice_warn=root_slice_warn,
-        presentation_format_warning=presentation_format_warning,
-        automation_delivery_warning=automation_delivery_warning,
     )

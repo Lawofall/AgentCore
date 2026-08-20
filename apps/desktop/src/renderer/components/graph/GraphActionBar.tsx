@@ -3,14 +3,14 @@
  *
  * 聚合本回合全部待拍板（{@link GraphPendingDecision}），一处可达：点「待你拍板 N」
  * 展开清单，逐条点击定位到对应节点（折叠幕内先聚焦该幕）。**只导航、不建卡**——
- * 真正的拍板卡仍在聊天流 / 画布指挥台既有面（不与其重复）。**仅同时 ≥2 项待决
+ * 真正的拍板卡仍在聊天流既有面（不与其重复）。**仅同时 ≥2 项待决
  * 才渲染**（方案 C「一个焦点 + 一个入口」：单项由 ResumePrompt / 决策区独占表达，
  * 胶囊只在需要「逐条定位」时出现；无待拍板同样不渲染）。挂各宿主既有图头
  * chrome：绝对定位在图区左上。
  */
 
 import { cn } from "@/lib/utils";
-import { ChevronDown, Gavel, Pause, ShieldAlert, Wrench } from "lucide-react";
+import { ChevronDown, Gavel, Pause, Wrench } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type {
   GraphPendingDecision,
@@ -19,8 +19,6 @@ import type {
 
 function KindIcon({ kind }: { kind: GraphPendingKind }) {
   if (kind === "checkpoint") return <Pause size={13} className="shrink-0" />;
-  if (kind === "delegation_authorization")
-    return <ShieldAlert size={13} className="shrink-0" />;
   if (kind === "approval") return <Wrench size={13} className="shrink-0" />;
   return <Gavel size={13} className="shrink-0" />;
 }

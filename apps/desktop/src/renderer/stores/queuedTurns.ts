@@ -22,8 +22,6 @@ export interface QueuedTurnEntry {
   attachments?: OutgoingAttachment[];
   /** 排队 ``@`` 点名；真源是服务端 ``QueuedTurnItem.agent_mentions``。 */
   agentMentions?: OutgoingAgentMention[];
-  /** 答非阻塞提问时与出站 ``question_posted.ask_id`` 对上。 */
-  askId?: string;
   position: number;
   queueDepth: number;
   degradedFrom?: "steer";

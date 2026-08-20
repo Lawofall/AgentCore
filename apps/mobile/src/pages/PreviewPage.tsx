@@ -1,11 +1,9 @@
 import { AssistantContent } from "@/components/AssistantView";
 import { FileArtifactsCard } from "@/components/FileArtifactsCard";
-import { HangingQuestionBar } from "@/components/HangingQuestionBar";
 import { resolveFileArtifactsForCard } from "@/lib/fileArtifacts";
 import { firstCollabAtMs } from "@/lib/time";
 import { PREVIEW_FIXTURES } from "@/preview/fixtures";
 import {
-  extractAsks,
   extractCoordinationWait,
   extractEscalationSlots,
   extractEvidenceLedger,
@@ -56,7 +54,6 @@ export function PreviewPage() {
   );
 
   const projected = useMemo(() => fold(events), [events]);
-  const asks = useMemo(() => extractAsks(events), [events]);
   const escalationSlots = useMemo(
     () => extractEscalationSlots(events),
     [events],
@@ -203,7 +200,6 @@ export function PreviewPage() {
             team={team}
             debate={projected.debate}
             debateRounds={projected.debateRounds}
-            asks={asks}
             escalationSlots={escalationSlots}
             hotTraces={hotTraces}
             stageCardTraces={stageCardTraces}
@@ -221,10 +217,6 @@ export function PreviewPage() {
           )}
         </div>
       </div>
-      <HangingQuestionBar
-        asks={asks.filter((a) => a.status === "pending")}
-        readOnly
-      />
     </div>
   );
 }

@@ -3,10 +3,8 @@ import {
   ConversationHydrateOverlay,
   type ConversationHydratePhase,
 } from "@/components/chat/ConversationHydrateOverlay";
-import { ConversationCanvas } from "@/components/graph/ConversationCanvas";
 import { SidePanel } from "@/components/layout/SidePanel";
 import { SidePanelToggle } from "@/components/layout/SidePanelToggle";
-import { Button } from "@/components/ui";
 import { logEvent } from "@/lib/log";
 import {
   decideWarmOpenAction,
@@ -37,8 +35,6 @@ import {
   dismissFocusedFloat,
   useSidePanelStore,
 } from "@/stores/sidePanel";
-import { useUIStore } from "@/stores/ui";
-import { MessageSquare, Network } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -383,55 +379,18 @@ export function ConversationPage() {
     if (!id) useSidePanelStore.getState().closePanel();
   }, [id]);
 
-  // 聊天 ⇄ 画布双视图（前端UX设计.md §六）。默认聊天；用户在顶栏切到画布（按对话记忆、
-  // 持久化）。画布已毕业、入口恒显示；草稿（无 id）恒为聊天。
-  // 右坞：打开后头栏 PanelRight 关闭；关闭时主区右上浮层打开（有会话时 Ctrl/Cmd+I；草稿不可用）。
+  // 对话页恒聊天。右坞：打开后头栏 PanelRight 关闭；关闭时主区右上浮层打开
+  // （有会话时 Ctrl/Cmd+I；草稿不可用）。
   const panelOpen = useSidePanelStore((s) => s.open);
-  const conversationView = useUIStore((s) =>
-    id ? (s.conversationViews[id] ?? "chat") : "chat",
-  );
-  const setConversationView = useUIStore((s) => s.setConversationView);
-  const canvasMode = !!id && conversationView === "canvas";
 
   return (
     <>
-      {canvasMode ? <ConversationCanvas /> : <ChatView />}
+      <ChatView />
       {id && (
         <ConversationHydrateOverlay
           phase={hydratePhase}
           onRetry={() => setHydrateRetry((n) => n + 1)}
         />
-      )}
-      {/* 视图切换段控件（聊天 ⇄ 画布），置于左上。 */}
-      {id && (
-        <div className="absolute left-3 top-2 z-20 flex items-center gap-0.5 rounded-lg border border-border bg-card/80 p-0.5 backdrop-blur">
-          <Button
-            variant="ghost"
-            onClick={() => setConversationView(id, "chat")}
-            aria-pressed={!canvasMode}
-            icon={<MessageSquare size={14} />}
-            className={
-              !canvasMode
-                ? "bg-accent text-foreground hover:bg-accent"
-                : undefined
-            }
-          >
-            聊天
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => setConversationView(id, "canvas")}
-            aria-pressed={canvasMode}
-            icon={<Network size={14} />}
-            className={
-              canvasMode
-                ? "bg-accent text-foreground hover:bg-accent"
-                : undefined
-            }
-          >
-            画布
-          </Button>
-        </div>
       )}
       {id && !panelOpen && (
         <div className="absolute right-3 top-2 z-20">

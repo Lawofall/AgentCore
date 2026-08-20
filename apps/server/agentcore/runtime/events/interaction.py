@@ -28,42 +28,6 @@ def approval_required(
     )
 
 
-def delegation_authorization_required(
-    *,
-    authorization_id: str,
-    conversation_id: str,
-    execution_id: str,
-    workers: list[dict[str, str]],
-    tools: list[str],
-) -> SSEEvent:
-    return SSEEvent(
-        type=EventType.DELEGATION_AUTHORIZATION_REQUIRED,
-        payload={
-            "authorization_id": authorization_id,
-            "conversation_id": conversation_id,
-            "execution_id": execution_id,
-            "workers": workers,
-            "tools": tools,
-        },
-    )
-
-
-def delegation_authorization_resolved(
-    *,
-    authorization_id: str,
-    execution_id: str,
-    decision: str,
-) -> SSEEvent:
-    return SSEEvent(
-        type=EventType.DELEGATION_AUTHORIZATION_RESOLVED,
-        payload={
-            "authorization_id": authorization_id,
-            "execution_id": execution_id,
-            "decision": decision,
-        },
-    )
-
-
 def approval_resolved(*, approval_id: str, tool_call_id: str, decision: str) -> SSEEvent:
     return SSEEvent(
         type=EventType.APPROVAL_RESOLVED,
@@ -99,54 +63,6 @@ def checkpoint_required(
     if browser_login is True:
         payload["browser_login"] = True
     return SSEEvent(type=EventType.CHECKPOINT_REQUIRED, payload=payload)
-
-
-def question_posted(
-    *,
-    ask_id: str,
-    conversation_id: str,
-    question: str,
-    context: str = "",
-    assumptions: list[dict[str, Any]] | None = None,
-    questions: list[dict[str, Any]] | None = None,
-    unlocks: str = "",
-) -> SSEEvent:
-    payload: dict[str, Any] = {
-        "ask_id": ask_id,
-        "conversation_id": conversation_id,
-        "question": question,
-        "context": context,
-        "assumptions": assumptions or [],
-        "questions": questions or [],
-    }
-    text = str(unlocks or "").strip()
-    if text:
-        payload["unlocks"] = text
-    return SSEEvent(
-        type=EventType.QUESTION_POSTED,
-        payload=payload,
-    )
-
-
-def question_resolved(
-    *,
-    ask_id: str,
-    status: str,
-    answer: str = "",
-    note: str = "",
-) -> SSEEvent:
-    """Settle a non-blocking question: ``answered`` (user) or ``discarded`` (CEO)."""
-    if status not in ("answered", "discarded"):
-        status = "discarded"
-    return SSEEvent(
-        type=EventType.QUESTION_RESOLVED,
-        payload={
-            "ask_id": ask_id,
-            "status": status,
-            "answer": answer or "",
-            "note": note or "",
-        },
-    )
 
 
 def checkpoint_resolved(

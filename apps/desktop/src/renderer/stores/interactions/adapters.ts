@@ -2,7 +2,6 @@ import { toCeoReview } from "@/lib/ceoReview";
 import { parseCheckpointIntent } from "@/lib/checkpointIntent";
 import type {
   CheckpointDisplay,
-  NonBlockingAskDisplay,
   PlanReviewDisplay,
   TeamPreviewDisplay,
 } from "@/stores/conversation/types";
@@ -18,7 +17,6 @@ import { mapEntryResolution } from "./mapResolution";
 import { useInteractionStore } from "./store";
 import {
   COLD_RESUME_KINDS,
-  type ColdResumeKind,
   type InteractionEntry,
   isColdResumeKind,
 } from "./types";
@@ -100,16 +98,6 @@ export interface ApprovalView {
   resolving: boolean;
 }
 
-/** View-model for a pending delegation-authorization card. */
-export interface DelegationAuthView {
-  authorizationId: string;
-  conversationId: string;
-  executionId: string;
-  workers: Array<{ role: string; task: string }>;
-  tools: string[];
-  resolving: boolean;
-}
-
 export function entryToCheckpoint(e: InteractionEntry): CheckpointDisplay {
   const p = e.payload;
   const settlement = mapEntryResolution(e);
@@ -126,26 +114,6 @@ export function entryToCheckpoint(e: InteractionEntry): CheckpointDisplay {
         ? arr<string>(e.resolution?.selected)
         : [],
     ...(p.browser_login === true ? { browserLogin: true as const } : {}),
-  };
-}
-
-export function entryToNonBlockingAsk(
-  e: InteractionEntry,
-): NonBlockingAskDisplay {
-  const p = e.payload;
-  const r = e.resolution ?? {};
-  const settlement =
-    r.status === "answered" || r.status === "discarded" ? r.status : undefined;
-  return {
-    id: e.id,
-    question: str(p.question),
-    context: str(p.context),
-    assumptions: arr<AskAssumption>(p.assumptions),
-    questions: arr<AskQuestion>(p.questions),
-    status: e.status === "resolved" ? "resolved" : "pending",
-    ...(settlement ? { settlement } : {}),
-    ...(typeof r.answer === "string" && r.answer ? { answer: r.answer } : {}),
-    ...(typeof r.note === "string" && r.note ? { note: r.note } : {}),
   };
 }
 
@@ -327,18 +295,6 @@ export function entryToApproval(e: InteractionEntry): ApprovalView {
   };
 }
 
-export function entryToDelegationAuth(e: InteractionEntry): DelegationAuthView {
-  const p = e.payload;
-  return {
-    authorizationId: e.id,
-    conversationId: e.conversationId,
-    executionId: str(p.execution_id),
-    workers: arr<{ role: string; task: string }>(p.workers),
-    tools: arr<string>(p.tools),
-    resolving: e.status === "submitting",
-  };
-}
-
 function matchesMessage(
   e: InteractionEntry,
   conversationId: string,
@@ -369,15 +325,6 @@ export function messageCheckpoints(
 ): CheckpointDisplay[] {
   return listMessageEntries(conversationId, messageId, ["ask_user"]).map(
     entryToCheckpoint,
-  );
-}
-
-export function messageNonBlockingAsks(
-  conversationId: string,
-  messageId: string,
-): NonBlockingAskDisplay[] {
-  return listMessageEntries(conversationId, messageId, ["question_posted"]).map(
-    entryToNonBlockingAsk,
   );
 }
 
@@ -419,17 +366,17 @@ export function teamPreviewsExact(
   return out;
 }
 
-/** Whether a tool is covered by an active grant_delegation for this conversation. */
+/** Whether a tool was granted on the team kickoff card for this conversation. */
 export function isToolGranted(
   conversationId: string,
   toolName: string,
 ): boolean {
   for (const e of useInteractionStore.getState().byId.values()) {
     if (e.conversationId !== conversationId) continue;
-    if (e.kind !== "delegation_authorization") continue;
+    if (e.kind !== "team_preview") continue;
     if (e.status !== "resolved") continue;
-    const decision = e.resolution?.decision;
-    if (decision !== "grant_delegation") continue;
+    const decision = str(e.resolution?.decision);
+    if (decision !== "continue") continue;
     const tools = arr<string>(e.payload.tools);
     if (tools.includes(toolName)) return true;
   }
@@ -450,12 +397,11 @@ export function entryToColdResume(
   },
 ): PendingResume | null {
   if (!isColdResumeKind(e.kind)) return null;
-  const kind: ColdResumeKind = e.kind;
+  const kind = e.kind;
   const base = {
     messageId: opts.resumeMessageId,
     conversationId: e.conversationId,
     checkpointId: e.id,
-    kind,
     userMessage: opts.userMessage,
     userMessageId: opts.userMessageId,
     origin: opts.origin,
@@ -465,6 +411,7 @@ export function entryToColdResume(
     const cp = entryToCheckpoint(e);
     return {
       ...base,
+      kind,
       steps: [],
       pending: [],
       workers: [],
@@ -488,6 +435,7 @@ export function entryToColdResume(
     const pr = entryToPlanReview(e);
     return {
       ...base,
+      kind,
       steps: pr.steps,
       pending: pr.pending,
       ceoReview: pr.ceoReview,
@@ -507,9 +455,12 @@ export function entryToColdResume(
     };
   }
 
+  if (kind !== "team_preview") return null;
+
   const tp = entryToTeamPreview(e);
   return {
     ...base,
+    kind,
     steps: [],
     pending: [],
     workers: tp.workers,
@@ -546,16 +497,5 @@ export function listColdPendingEntries(
 ): InteractionEntry[] {
   return useInteractionStore
     .getState()
-    .listPending(conversationId, [...COLD_RESUME_KINDS]);
-}
-
-/** Pending non-blocking questions for the bottom-bar hanging face. No cap. */
-export function listPendingHangingQuestions(
-  conversationId: string,
-): NonBlockingAskDisplay[] {
-  return useInteractionStore
-    .getState()
-    .listPending(conversationId, ["question_posted"])
-    .map(entryToNonBlockingAsk)
-    .filter((ask) => ask.status === "pending");
+    .listPending(conversationId, COLD_RESUME_KINDS);
 }

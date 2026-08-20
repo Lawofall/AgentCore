@@ -76,21 +76,4 @@ describe("streamMessage payload", () => {
     expect(body).toEqual({ content: "hi", delivery: "steer" });
     expect(body.agent_mentions).toBeUndefined();
   });
-
-  it("includes ask_id when answering a hanging question", async () => {
-    await streamMessage(
-      "c1",
-      "也要 PDF。",
-      () => {},
-      undefined,
-      undefined,
-      "steer",
-      undefined,
-      "ask1",
-    );
-    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as {
-      ask_id?: string;
-    };
-    expect(body.ask_id).toBe("ask1");
-  });
 });

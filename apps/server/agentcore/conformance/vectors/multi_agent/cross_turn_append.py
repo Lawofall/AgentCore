@@ -12,6 +12,7 @@ from agentcore.runtime.events import (
     FinishReason,
     SSEEvent,
     content_delta,
+    execution_detached,
     message_end,
     message_start,
     run_completed,
@@ -170,4 +171,83 @@ def _multi_agent_cross_turn_append() -> list[SSEEvent]:
         ),
         content_delta(" 已新开撰写队，接续上一张图。"),
         message_end(FinishReason.END_TURN, input_tokens=2000, output_tokens=400, cost=_COST),
+    ]
+
+
+def _multi_agent_cross_turn_live_prev() -> list[SSEEvent]:
+    """上一轮后台仍在跑 + 新回合再派人：新人进新图，不进旧图。"""
+    batch1_agents = [
+        _captain_agent(_CAPTAIN_1),
+        {"id": "w1", "role": "研究员", "thinking": True},
+    ]
+    batch1_runs = [
+        _captain_run(_CAPTAIN_1),
+        _worker_run("r1", "w1", "调研素材", parent=_CAPTAIN_1),
+    ]
+    batch2_agents = [
+        _captain_agent(_CAPTAIN_2),
+        {"id": "w3", "role": "撰写员", "thinking": True},
+    ]
+    batch2_runs = [
+        _captain_run(_CAPTAIN_2),
+        _worker_run("r3", "w3", "撰写文稿", parent=_CAPTAIN_2),
+    ]
+    return [
+        message_start("m1", conversation_id=_CONV),
+        content_delta("先组队调研，我先收口。"),
+        tool_use_start("dc1", "delegate", {"tasks": [{"role": "研究员"}]}),
+        run_plan(
+            execution_id="exec1",
+            plan_type="multi_agent",
+            task_summary="调研素材",
+            agents=batch1_agents,
+            runs=batch1_runs,
+        ),
+        run_started("r1", "w1", parent_run_id=_CAPTAIN_1),
+        execution_detached(
+            execution_id="exec1",
+            conversation_id=_CONV,
+            completed=0,
+            total=1,
+            reason="turn_released",
+            host_turn_id="m1",
+        ),
+        tool_use_end("dc1", "delegate", success=True, output="团队已启动"),
+        content_delta(" 人已派出。"),
+        message_end(FinishReason.END_TURN, input_tokens=2000, output_tokens=400, cost=_COST),
+        message_start("m2", conversation_id=_CONV),
+        content_delta("再加一位撰写员。"),
+        tool_use_start(
+            "dc2",
+            "delegate",
+            {"tasks": [{"role": "撰写员", "task": "撰写文稿"}]},
+        ),
+        run_plan(
+            execution_id="exec2",
+            plan_type="multi_agent",
+            task_summary="撰写文稿",
+            agents=batch2_agents,
+            runs=batch2_runs,
+            prev_execution_id="exec1",
+        ),
+        run_started("r3", "w3", parent_run_id=_CAPTAIN_2),
+        run_output_delta("r3", "w3", "成稿"),
+        run_completed(
+            "r3",
+            "w3",
+            output_summary="撰写完成",
+            duration_ms=1000,
+            role="member",
+            model="deepseek-v4-flash",
+            usage=_USAGE,
+            cost=_COST,
+        ),
+        tool_use_end(
+            "dc2",
+            "delegate",
+            success=True,
+            output="【协作图·续接】本回合新开一队、接续上一张图。",
+        ),
+        content_delta(" 已新开一队，接续上一张图。"),
+        message_end(FinishReason.END_TURN, input_tokens=1800, output_tokens=350, cost=_COST),
     ]

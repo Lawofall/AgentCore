@@ -216,6 +216,7 @@ class DebateTool:
         skip_kickoff: bool = False,
     ) -> ToolResult:
         from agentcore.llm.turn_auth_dead import (
+            credential_source_from_llm,
             is_turn_auth_dead,
             turn_auth_dead_reject_message,
         )
@@ -233,6 +234,7 @@ class DebateTool:
         )
 
         self._pending_pause = False
+        payer = credential_source_from_llm(self._llm)
         # Turn 级硬顶：禁新开辩（与 delegate 同闸）。
         if is_turn_token_ceiling_hit():
             msg = turn_token_ceiling_reject_message()
@@ -243,9 +245,9 @@ class DebateTool:
             )
             return err(msg)
 
-        if is_turn_auth_dead():
+        if is_turn_auth_dead(payer):
             logger.info("debate.turn_auth_dead_rejected")
-            return err(turn_auth_dead_reject_message())
+            return err(turn_auth_dead_reject_message(payer))
 
         # 本回合调了 debate（含闸失败）→ 收尾不 orphan pending 推进卡。
         # 开辩失败 / STOP 会 clear；仅真正开跑成功才保持 keep + finalize resolve。
@@ -645,11 +647,12 @@ class DebateTool:
         return None
 
     async def _resolve_host_attach(self, config: DebateConfig):
-        """开工决议后：尝试把辩论新幕链到幕 1 MLR（prev）；失败则保持独立图。
+        """开工决议后：尝试把辩论新幕链到幕 1 MLR；失败则保持独立图。
 
         推进卡路径优先用卡上直传三元组（host_execution_id / synthesizer_run_id /
         host_message_id），找不到再回落 resolve_debate_host_attach。
-        命中后本回合 mint 新 execution_id + prev_execution_id（不 divert 宿主）。
+        命中后由 mint 点按 ``same_turn`` 决定：同回合复用宿主 execution 加一幕；
+        跨回合 mint 新图 + prev_execution_id（不 divert 宿主）。
         """
         from agentcore.runtime.debate.constants import FORM_LABELS
         from agentcore.runtime.debate.research_dossier import workspace_has_research_artifacts
@@ -683,8 +686,8 @@ class DebateTool:
         self._debate_act_title = f"{label}对抗"
         self._debate_anchor_run_id = attach.anchor_run_id
         self._debate_host_message_id = attach.host_message_id
-        self._debate_prev_execution_id = attach.execution_id
-        # 新图：parent 用本回合 captain；幕因果靠 act.anchor + prev。
+        # prev / execution_id 由 mint 点按 same_turn 写入；此处只钉幕元数据。
+        # parent 用本回合 captain；幕因果靠 act.anchor（跨回合另加 prev）。
         self._debate_graph_parent_run_id = None
         return attach
 
@@ -741,11 +744,13 @@ class DebateTool:
                 logger.exception("debate.research_dossier_probe_failed")
                 config.research_dossier_index = ""
 
-        # 批 A2：决议机制命中宿主 → 本回合新图 + prev；找不到则独立成图。
+        # 批 A2：命中宿主 → 同回合复用 eid 加一幕；跨回合新图 + prev；找不到则独立成图。
+        from agentcore.runtime.kickoff.debate_host import host_graph_binding
+
         host_attach = await self._resolve_host_attach(config)
         if host_attach is not None:
-            # Mint 新图；prev = 宿主 MLR execution（不复用、不 divert）。
-            execution_id = new_id()
+            execution_id, prev = host_graph_binding(host_attach, mint_id=new_id)
+            self._debate_prev_execution_id = prev
             self._base_tool_context.execution_id = execution_id
         else:
             execution_id = self._base_tool_context.execution_id or new_id()

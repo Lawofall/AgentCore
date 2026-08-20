@@ -214,8 +214,8 @@ def test_schema_exposes_form_enum():
     playbook_desc = DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
     assert "不要传 tasks" in playbook_desc
     assert "非默认" in playbook_desc or "进阶" in playbook_desc or "快捷" in playbook_desc
-    playbook_id_desc = DELEGATE_PARAMETERS["properties"]["playbook_id"]["description"]
-    assert "非默认" in playbook_id_desc or "进阶" in playbook_id_desc or "快捷" in playbook_id_desc
+    assert "playbook_id" not in DELEGATE_PARAMETERS["properties"]
+    assert "parallelism" not in DELEGATE_PARAMETERS["properties"]
     pa = DELEGATE_PARAMETERS["properties"]["playbook_args"]["description"]
     assert "build_website" in pa and "topic" in pa
     assert "建站必填 topic" in pa
@@ -261,6 +261,9 @@ def test_schema_exposes_form_enum():
     assert "name" not in props
     assert "objective" not in props_task
     assert "playbook_none_reason" not in DELEGATE_PARAMETERS["properties"]
+    cite = props["citation_mode"]
+    assert cite.get("enum") == ["two_phase"]
+    assert "immediate" not in cite.get("enum", [])
 
 def test_schema_depends_on_teaches_when_to_declare_dependency():
     # 工具面瘦身：【何时填】长引导（生产者→消费者 + 正反例）已迁入 CEO core
@@ -272,10 +275,12 @@ def test_schema_depends_on_teaches_when_to_declare_dependency():
     assert "本批 id" in deps and "del_*" in deps
     assert "角色名" in deps or "role" in deps
     assert "生产者→消费者" in deps  # 短指针，细节在 core
-    assert "append_to_execution_id" in deps  # 跨回合合图通道
+    assert "新开一队" in deps
+    assert "append_to_execution_id" not in deps
     # 顶层工具描述仍钉判断线索（勿默认全平铺）。
     assert "生产者→消费者" in DELEGATE_DESCRIPTION
     assert "平铺并行" in DELEGATE_DESCRIPTION
+    assert "新开一队、接续上一张图" in DELEGATE_DESCRIPTION
 
 async def test_prose_worker_still_offered_write_tools():
     """真纯丙·H2：form=prose 仍装配写盘工具；identity 仍提示正文交付。"""

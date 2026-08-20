@@ -140,12 +140,10 @@ export type ProcessStep =
   | { kind: "team"; execution_id: string }
   | { kind: "graph_append"; execution_id: string; host_message_id: string; added_count: number }
   | { kind: "checkpoint"; checkpoint_id: string }
-  | { kind: "ask"; ask_id: string }
   | { kind: "plan_review"; checkpoint_id: string }
   | { kind: "team_preview"; checkpoint_id: string }
   | { kind: "escalation"; escalation_id: string }
   | { kind: "approval"; approval_id: string }
-  | { kind: "delegation_authorization"; authorization_id: string }
   | { kind: "stage_card"; stage_card_id: string }
   | { kind: "user_interjection"; interjection_id: string };
 
@@ -170,35 +168,6 @@ export interface ApprovalResolvedPayload {
   approval_id: string;
   tool_call_id: string;
   decision: ApprovalDecision;
-}
-
-/** The user's settlement of a delegation-level authorization gate (委派级授权). */
-export type DelegationAuthorizationDecision =
-  | "grant_delegation"
-  | "per_call"
-  | "deny"
-  | "orphaned";
-
-/** One worker row on the delegation authorization card (role + task preview). */
-export interface DelegationAuthorizationWorker {
-  role: string;
-  task: string;
-}
-
-/** A delegate batch paused awaiting the user's delegation-level tool authorization
- * (委派级授权). Medium-risk tools in `tools` are the grant scope. */
-export interface DelegationAuthorizationRequiredPayload {
-  authorization_id: string;
-  conversation_id: string;
-  execution_id: string;
-  workers: DelegationAuthorizationWorker[];
-  tools: string[];
-}
-
-export interface DelegationAuthorizationResolvedPayload {
-  authorization_id: string;
-  execution_id: string;
-  decision: DelegationAuthorizationDecision;
 }
 
 /** The user's settlement of a checkpoint the CEO raised (ask_user). */
@@ -293,31 +262,6 @@ export interface CheckpointResolvedPayload {
   decision: CheckpointDecision;
   note: string;
   selected?: string[];
-}
-
-/** A non-blocking ask the CEO posted (ask_user blocking=false): it already has a
- * default and KEPT WORKING — no suspend. Settlement is ``question_resolved``. */
-export interface QuestionPostedPayload {
-  ask_id: string;
-  conversation_id: string;
-  question: string;
-  context: string;
-  assumptions: AskAssumption[];
-  questions: AskQuestion[];
-  /** 这个答案回来后解锁哪批活。新非阻塞提问必填；旧事件缺字段。 */
-  unlocks?: string;
-}
-
-/** Journal fact that folds a ``question_posted`` into 已答 / 已作废.
- * 
- * ``answered`` = the user submitted a reply (``answer`` is the text).
- * ``discarded`` = CEO closed it without waiting (``note`` is the required 人话).
- * Both are visible settlements — not a silent chip the CEO can ignore. */
-export interface QuestionResolvedPayload {
-  ask_id: string;
-  status: "answered" | "discarded";
-  answer: string;
-  note: string;
 }
 
 export interface PlanReviewStep {
@@ -747,7 +691,7 @@ export interface EscalationResolvedPayload {
 /** pending 交互失效（假卡消灭）。含热路 kind + 推进卡 stage_card。 */
 export interface InteractionOrphanedPayload {
   interaction_id: string;
-  kind: "approval" | "delegation_authorization" | "escalation" | "debate_round" | "stage_card";
+  kind: "approval" | "escalation" | "debate_round" | "stage_card";
   /** 可选失效原因（如 stage_card superseded）；缺省不传，旧客户端忽略。 */
   reason?: string;
 }
@@ -959,8 +903,6 @@ export interface UserInterjectionPayload {
   note?: string;
   attachments?: UserInterjectionAttachment[];
   agent_mentions?: UserInterjectionAgentMention[];
-  /** 若本插话是在回答非阻塞提问，出站 question_posted.ask_id。缺省=普通插话，照常消化；禁止塞进 agent_mentions。 */
-  ask_id?: string;
 }
 
 /** FIFO queue ack on the send SSE while another turn is in-flight (D9 · 发送即有流).
@@ -1774,73 +1716,6 @@ export interface SimWorldEventPayload {
   modifiers: WorldModifiersWire;
 }
 
-/** 恋综心动选票（密封或已揭晓） on `sim.show.heart_pick`. */
-export interface SimShowHeartPickPayload {
-  run_id: string;
-  tick: number;
-  from_agent_id: string;
-  to_agent_id: string;
-  public: boolean;
-  meta?: Record<string, unknown> | null;
-}
-
-/** 恋综互选配对 on `sim.show.pair_formed`. */
-export interface SimShowPairFormedPayload {
-  run_id: string;
-  tick: number;
-  agent_a_id: string;
-  agent_b_id: string;
-  meta?: Record<string, unknown> | null;
-}
-
-/** 恋综移情标记 on `sim.show.affection_shift`. */
-export interface SimShowAffectionShiftPayload {
-  run_id: string;
-  tick: number;
-  from_agent_id: string;
-  to_agent_id: string;
-  kind?: string | null;
-  note?: string | null;
-  meta?: Record<string, unknown> | null;
-}
-
-/** 恋综零票告急 on `sim.show.zero_vote_alert`. */
-export interface SimShowZeroVoteAlertPayload {
-  run_id: string;
-  tick: number;
-  agent_id: string;
-  streak?: number | null;
-  meta?: Record<string, unknown> | null;
-}
-
-/** 恋综角色离场 on `sim.show.departure`. */
-export interface SimShowDeparturePayload {
-  run_id: string;
-  tick: number;
-  agent_id: string;
-  reason?: string | null;
-  meta?: Record<string, unknown> | null;
-}
-
-/** 恋综心动揭晓一步 on `sim.show.reveal`. */
-export interface SimShowRevealPayload {
-  run_id: string;
-  tick: number;
-  who_agent_id: string;
-  pick_agent_id: string;
-  note?: string | null;
-  meta?: Record<string, unknown> | null;
-}
-
-/** 恋综期分段 / 仪式门 on `sim.show.episode_gate`. */
-export interface SimShowEpisodeGatePayload {
-  run_id: string;
-  tick: number;
-  gate: string;
-  phase?: string | null;
-  meta?: Record<string, unknown> | null;
-}
-
 /** 团队浏览器直播通道状态（`browser_live_status`）：`started` 有会话且开播；
  * `no_session` 附着但无直播会话；`session_closed` 观看中的会话被回收/关闭。 */
 export type BrowserLiveState = "started" | "no_session" | "session_closed";
@@ -1860,25 +1735,6 @@ export interface BrowserLiveFramePayload {
  * or max-lifetime). */
 export interface BrowserLiveStatusPayload {
   state: BrowserLiveState;
-}
-
-/** CEO→用户「下一步推荐」: 2-4 quick-reply chips for the just-finished turn, emitted
- * after `message_end`. Persisted on `Message.followups` (DERIVED), no-op in folds.
- * `message_id` is the assistant row the chips belong to (same id as `set_followups`). */
-export interface FollowupsGeneratedPayload {
-  conversation_id: string;
-  message_id: string;
-  followups: string[];
-}
-
-/** Soft empty state when followups could not be minted (not a turn error).
- * 
- * Emitted only on failure paths with zero chips — legitimate empty model output does
- * not emit this. EPHEMERAL / fold no-op; clients show a quiet hint above the composer. */
-export interface FollowupsUnavailablePayload {
-  conversation_id: string;
-  message_id: string;
-  reason: string;
 }
 
 export interface TurnSavedPayload {
@@ -2056,12 +1912,8 @@ export type SSEPayloadMap = {
   tool_use_end: ToolUseEndPayload;
   approval_required: ApprovalRequiredPayload;
   approval_resolved: ApprovalResolvedPayload;
-  delegation_authorization_required: DelegationAuthorizationRequiredPayload;
-  delegation_authorization_resolved: DelegationAuthorizationResolvedPayload;
   checkpoint_required: CheckpointRequiredPayload;
   checkpoint_resolved: CheckpointResolvedPayload;
-  question_posted: QuestionPostedPayload;
-  question_resolved: QuestionResolvedPayload;
   plan_review_required: PlanReviewRequiredPayload;
   plan_review_resolved: PlanReviewResolvedPayload;
   team_preview_required: TeamPreviewRequiredPayload;
@@ -2119,17 +1971,8 @@ export type SSEPayloadMap = {
   "sim.agent_state": SimAgentStatePayload;
   "sim.interaction": SimInteractionPayload;
   "sim.world_event": SimWorldEventPayload;
-  "sim.show.heart_pick": SimShowHeartPickPayload;
-  "sim.show.pair_formed": SimShowPairFormedPayload;
-  "sim.show.affection_shift": SimShowAffectionShiftPayload;
-  "sim.show.zero_vote_alert": SimShowZeroVoteAlertPayload;
-  "sim.show.departure": SimShowDeparturePayload;
-  "sim.show.reveal": SimShowRevealPayload;
-  "sim.show.episode_gate": SimShowEpisodeGatePayload;
   browser_live_frame: BrowserLiveFramePayload;
   browser_live_status: BrowserLiveStatusPayload;
-  followups_generated: FollowupsGeneratedPayload;
-  followups_unavailable: FollowupsUnavailablePayload;
   turn_saved: TurnSavedPayload;
   citations: CitationsPayload;
   evidence_ledger: EvidenceLedgerPayload;

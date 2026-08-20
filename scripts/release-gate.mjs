@@ -19,7 +19,7 @@
  * On Windows, RELEASE_GATE_SERIAL defaults to 1 (avoid gen-types write races);
  * set RELEASE_GATE_SERIAL=0 to opt into contracts∥desktop parallel.
  *
- * Lite skips the ~10min desktop screenshot matrix + webapp smoke (port-fragile);
+ * Lite skips the desktop screenshot matrix (~4min with 4 workers) + webapp smoke (port-fragile);
  * lint / typecheck / vitest / conformance stay. Full gate still runs shoot with
  * SHOOT_FRAMES=3 and smoke:webapp:ci. Before smoke, freeListenPorts clears
  * leftover AgentCore vite on SMOKE_PORT (default 5174) to reduce port flakes.
@@ -348,18 +348,76 @@ async function runContractsSection(baseline) {
   await assertContractsInSync(baseline);
 }
 
-function runDesktopSection({ lite = false } = {}) {
+/** Spawn a gate step without blocking siblings; used for independent desktop checks. */
+function runAsync(label, cmd, args, opts = {}) {
+  return new Promise((resolve, reject) => {
+    console.log(`\n→ ${label}`);
+    const child = spawn(cmd, args, {
+      cwd: opts.cwd ?? ROOT,
+      stdio: "inherit",
+      env: { ...process.env, ...opts.env },
+      shell: process.platform === "win32",
+    });
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else {
+        reject(
+          new Error(`release:gate FAILED — ${label} (code=${code}, signal=${signal})`),
+        );
+      }
+    });
+  });
+}
+
+async function runParallel(jobs) {
+  console.log(`\n↗ parallel: ${jobs.map((j) => j.label).join(" ∥ ")}`);
+  const results = await Promise.allSettled(
+    jobs.map((j) => runAsync(j.label, j.cmd, j.args, j.opts)),
+  );
+  const failed = [];
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].status === "rejected") {
+      failed.push(jobs[i].label);
+      console.error(results[i].reason);
+    }
+  }
+  if (failed.length) {
+    console.error(`\n✗ release:gate FAILED — ${failed.join(", ")}`);
+    process.exit(1);
+  }
+}
+
+async function runDesktopSection({ lite = false } = {}) {
   section("desktop");
+  // Lint first so biome output is not interleaved; it is ~1s. On non-Windows,
+  // tsc / vitest / conformance overlap; Win serializes to avoid tinypool IPC death.
   run("desktop lint", "pnpm", ["--filter", "agentcore-desktop", "lint"]);
-  run("desktop typecheck", "pnpm", ["--filter", "agentcore-desktop", "typecheck"]);
-  run("desktop test", "pnpm", [
-    "--filter",
-    "agentcore-desktop",
-    "exec",
-    "vitest",
-    "run",
-  ]);
-  run("desktop conformance", "pnpm", ["--filter", "agentcore-desktop", "conformance"]);
+  const desktopJobs = [
+    {
+      label: "desktop typecheck",
+      cmd: "pnpm",
+      args: ["--filter", "agentcore-desktop", "typecheck"],
+    },
+    {
+      label: "desktop test",
+      cmd: "pnpm",
+      args: ["--filter", "agentcore-desktop", "exec", "vitest", "run"],
+    },
+    {
+      label: "desktop conformance",
+      cmd: "pnpm",
+      args: ["--filter", "agentcore-desktop", "conformance"],
+    },
+  ];
+  // Win: two vitest pools in one checkout tear down tinypool (ERR_IPC_CHANNEL_CLOSED).
+  if (process.platform === "win32") {
+    for (const job of desktopJobs) {
+      run(job.label, job.cmd, job.args);
+    }
+  } else {
+    await runParallel(desktopJobs);
+  }
   if (lite) {
     console.log(
       "\n⏭ desktop shoot + smoke:webapp:ci skipped (--lite / RELEASE_GATE_LITE=1)",
@@ -469,6 +527,25 @@ async function main() {
       ["run", "python", "scripts/check_workspace_ignore_parity.py"],
       { cwd: SERVER },
     );
+    // Logger emit sites ↔ observability/catalog.py. Read-only: never rewrite.
+    run(
+      "log event catalog",
+      "uv",
+      ["run", "python", "scripts/sync_log_event_registry.py", "--check"],
+      { cwd: SERVER },
+    );
+    run(
+      "event consumer orphans",
+      "uv",
+      ["run", "python", "scripts/check_event_consumer_orphans.py"],
+      { cwd: SERVER },
+    );
+    run(
+      "event field consumers",
+      "uv",
+      ["run", "python", "scripts/check_event_field_consumers.py"],
+      { cwd: SERVER },
+    );
     // `-n auto` (pytest-xdist): wall-clock cut for ~5k unit tests; integration
     // stays serial/excluded here (shared DB). Override with PYTEST_XDIST_N=0 to
     // force single-process when hunting order flakes.
@@ -525,7 +602,7 @@ async function main() {
     ]);
   } else {
     if (doContracts) await runContractsSection(contractBaseline);
-    if (doDesktop) runDesktopSection({ lite: filter.lite });
+    if (doDesktop) await runDesktopSection({ lite: filter.lite });
   }
 
   if (sectionEnabled("mobile", filter)) {

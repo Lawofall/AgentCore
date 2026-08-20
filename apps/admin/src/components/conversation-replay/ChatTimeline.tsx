@@ -73,7 +73,7 @@ export function ChatTimeline({
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 overflow-y-auto pr-0.5",
+        "flex min-w-0 flex-col gap-4 overflow-y-auto pr-0.5",
         className,
       )}
     >
@@ -88,7 +88,7 @@ export function ChatTimeline({
       {visible.map((m) => (
         <div
           key={m.id}
-          className="shrink-0"
+          className="w-full min-w-0 shrink-0"
           ref={(node) => {
             if (node) refs.current.set(m.id, node);
             else refs.current.delete(m.id);
@@ -143,14 +143,14 @@ function UserTurn({
       onClick={onSelect}
       onKeyDown={(e) => activateOnSelfKey(e, onSelect)}
       className={cn(
-        "flex justify-end outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl",
+        "flex min-w-0 w-full justify-end outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl",
         selected && "ring-1 ring-primary/30",
         anchored && !selected && "ring-1 ring-primary/20",
       )}
     >
       <div
         className={cn(
-          "max-w-[min(100%,36rem)] rounded-xl rounded-br-none border px-4 py-2.5",
+          "min-w-0 max-w-[min(100%,36rem)] rounded-xl rounded-br-none border px-4 py-2.5",
           selected
             ? "border-primary/40 bg-primary/10"
             : "border-border/60 bg-muted/50",
@@ -203,7 +203,7 @@ function AssistantTurn({
       onClick={onSelect}
       onKeyDown={(e) => activateOnSelfKey(e, onSelect)}
       className={cn(
-        "max-w-[min(100%,48rem)] rounded-xl px-1 py-1 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        "min-w-0 w-full max-w-[min(100%,48rem)] rounded-xl px-1 py-1 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
         selected && "ring-1 ring-primary/25",
         anchored && !selected && "ring-1 ring-primary/15",
       )}

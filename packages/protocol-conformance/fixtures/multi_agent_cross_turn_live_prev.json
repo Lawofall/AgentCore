@@ -1,0 +1,453 @@
+{
+  "name": "multi_agent_cross_turn_live_prev",
+  "description": "跨回合上一张仍在后台跑：m1 execution_detached 后 r1 未完成 → m2 新 execution_id + prev_execution_id=exec1；新人只在新图，投影 runs 不含 r1",
+  "events": [
+    {
+      "type": "message_start",
+      "payload": {
+        "message_id": "m1",
+        "conversation_id": "conv_demo"
+      },
+      "timestamp": "2026-01-01T00:00:00.001Z"
+    },
+    {
+      "type": "content_delta",
+      "payload": {
+        "delta": "先组队调研，我先收口。"
+      },
+      "timestamp": "2026-01-01T00:00:00.002Z"
+    },
+    {
+      "type": "tool_use_start",
+      "payload": {
+        "tool_call_id": "dc1",
+        "tool_name": "delegate",
+        "arguments": {
+          "tasks": [
+            {
+              "role": "研究员"
+            }
+          ]
+        }
+      },
+      "timestamp": "2026-01-01T00:00:00.003Z"
+    },
+    {
+      "type": "run_plan",
+      "payload": {
+        "execution_id": "exec1",
+        "plan_type": "multi_agent",
+        "task_summary": "调研素材",
+        "agents": [
+          {
+            "id": "c1",
+            "role": "CEO",
+            "thinking": true
+          },
+          {
+            "id": "w1",
+            "role": "研究员",
+            "thinking": true
+          }
+        ],
+        "runs": [
+          {
+            "id": "c1",
+            "agent_id": "c1",
+            "task": "",
+            "depends_on": [],
+            "parent_run_id": null,
+            "kind": "captain"
+          },
+          {
+            "id": "r1",
+            "agent_id": "w1",
+            "task": "调研素材",
+            "depends_on": [],
+            "parent_run_id": "c1"
+          }
+        ]
+      },
+      "timestamp": "2026-01-01T00:00:00.004Z"
+    },
+    {
+      "type": "run_started",
+      "payload": {
+        "run_id": "r1",
+        "agent_id": "w1",
+        "parent_run_id": "c1",
+        "kind": "agent"
+      },
+      "timestamp": "2026-01-01T00:00:00.005Z"
+    },
+    {
+      "type": "execution_detached",
+      "payload": {
+        "execution_id": "exec1",
+        "conversation_id": "conv_demo",
+        "completed": 0,
+        "total": 1,
+        "reason": "turn_released",
+        "host_turn_id": "m1"
+      },
+      "timestamp": "2026-01-01T00:00:00.006Z"
+    },
+    {
+      "type": "tool_use_end",
+      "payload": {
+        "tool_call_id": "dc1",
+        "tool_name": "delegate",
+        "status": "success",
+        "result": "团队已启动"
+      },
+      "timestamp": "2026-01-01T00:00:00.007Z"
+    },
+    {
+      "type": "content_delta",
+      "payload": {
+        "delta": " 人已派出。"
+      },
+      "timestamp": "2026-01-01T00:00:00.008Z"
+    },
+    {
+      "type": "message_end",
+      "payload": {
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 2000,
+          "output_tokens": 400,
+          "reasoning_tokens": 0,
+          "cache_hit_tokens": 0,
+          "cache_miss_tokens": 0
+        },
+        "cost": {
+          "input": 240000,
+          "cached": 64000,
+          "output": 120000,
+          "total": 360000,
+          "currency": "CNY",
+          "pricing_source": "curated"
+        },
+        "rounds": 0
+      },
+      "timestamp": "2026-01-01T00:00:00.009Z"
+    },
+    {
+      "type": "message_start",
+      "payload": {
+        "message_id": "m2",
+        "conversation_id": "conv_demo"
+      },
+      "timestamp": "2026-01-01T00:00:00.010Z"
+    },
+    {
+      "type": "content_delta",
+      "payload": {
+        "delta": "再加一位撰写员。"
+      },
+      "timestamp": "2026-01-01T00:00:00.011Z"
+    },
+    {
+      "type": "tool_use_start",
+      "payload": {
+        "tool_call_id": "dc2",
+        "tool_name": "delegate",
+        "arguments": {
+          "tasks": [
+            {
+              "role": "撰写员",
+              "task": "撰写文稿"
+            }
+          ]
+        }
+      },
+      "timestamp": "2026-01-01T00:00:00.012Z"
+    },
+    {
+      "type": "run_plan",
+      "payload": {
+        "execution_id": "exec2",
+        "plan_type": "multi_agent",
+        "task_summary": "撰写文稿",
+        "agents": [
+          {
+            "id": "c2",
+            "role": "CEO",
+            "thinking": true
+          },
+          {
+            "id": "w3",
+            "role": "撰写员",
+            "thinking": true
+          }
+        ],
+        "runs": [
+          {
+            "id": "c2",
+            "agent_id": "c2",
+            "task": "",
+            "depends_on": [],
+            "parent_run_id": null,
+            "kind": "captain"
+          },
+          {
+            "id": "r3",
+            "agent_id": "w3",
+            "task": "撰写文稿",
+            "depends_on": [],
+            "parent_run_id": "c2"
+          }
+        ],
+        "prev_execution_id": "exec1"
+      },
+      "timestamp": "2026-01-01T00:00:00.013Z"
+    },
+    {
+      "type": "run_started",
+      "payload": {
+        "run_id": "r3",
+        "agent_id": "w3",
+        "parent_run_id": "c2",
+        "kind": "agent"
+      },
+      "timestamp": "2026-01-01T00:00:00.014Z"
+    },
+    {
+      "type": "run_output_delta",
+      "payload": {
+        "run_id": "r3",
+        "agent_id": "w3",
+        "delta": "成稿"
+      },
+      "timestamp": "2026-01-01T00:00:00.015Z"
+    },
+    {
+      "type": "run_completed",
+      "payload": {
+        "run_id": "r3",
+        "agent_id": "w3",
+        "output_summary": "撰写完成",
+        "duration_ms": 1000,
+        "role": "member",
+        "model": "deepseek-v4-flash",
+        "usage": {
+          "input": 1200,
+          "output": 300,
+          "reasoning": 120,
+          "cache_hit": 800,
+          "cache_miss": 400
+        },
+        "cost": {
+          "input": 240000,
+          "cached": 64000,
+          "output": 120000,
+          "total": 360000,
+          "currency": "CNY",
+          "pricing_source": "curated"
+        }
+      },
+      "timestamp": "2026-01-01T00:00:01.014Z"
+    },
+    {
+      "type": "tool_use_end",
+      "payload": {
+        "tool_call_id": "dc2",
+        "tool_name": "delegate",
+        "status": "success",
+        "result": "【协作图·续接】本回合新开一队、接续上一张图。"
+      },
+      "timestamp": "2026-01-01T00:00:01.015Z"
+    },
+    {
+      "type": "content_delta",
+      "payload": {
+        "delta": " 已新开一队，接续上一张图。"
+      },
+      "timestamp": "2026-01-01T00:00:01.016Z"
+    },
+    {
+      "type": "message_end",
+      "payload": {
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 1800,
+          "output_tokens": 350,
+          "reasoning_tokens": 0,
+          "cache_hit_tokens": 0,
+          "cache_miss_tokens": 0
+        },
+        "cost": {
+          "input": 240000,
+          "cached": 64000,
+          "output": 120000,
+          "total": 360000,
+          "currency": "CNY",
+          "pricing_source": "curated"
+        },
+        "rounds": 0
+      },
+      "timestamp": "2026-01-01T00:00:01.017Z"
+    }
+  ],
+  "projected": {
+    "status": "completed",
+    "finishReason": "end_turn",
+    "outcome": "ok",
+    "error": null,
+    "content": "再加一位撰写员。 已新开一队，接续上一张图。",
+    "reasoning": "",
+    "captainContext": [],
+    "process": [
+      {
+        "kind": "content",
+        "text": "再加一位撰写员。"
+      },
+      {
+        "kind": "team",
+        "execution_id": "exec2"
+      },
+      {
+        "kind": "content",
+        "text": " 已新开一队，接续上一张图。"
+      }
+    ],
+    "citations": [],
+    "evidenceLedger": [],
+    "citedIds": [],
+    "agents": [
+      {
+        "id": "c2",
+        "role": "CEO",
+        "thinking": true,
+        "status": "idle",
+        "currentRunId": null,
+        "output": "",
+        "reasoning": "",
+        "toolProgress": null
+      },
+      {
+        "id": "w3",
+        "role": "撰写员",
+        "thinking": true,
+        "status": "completed",
+        "currentRunId": null,
+        "output": "成稿",
+        "reasoning": "",
+        "toolProgress": null
+      }
+    ],
+    "runs": [
+      {
+        "id": "c2",
+        "agentId": "c2",
+        "task": "",
+        "status": "skipped",
+        "dependsOn": [],
+        "outputSummary": null,
+        "debrief": null,
+        "durationMs": null,
+        "error": null,
+        "failureKind": null,
+        "productLanded": null,
+        "parentRunId": null,
+        "kind": "captain",
+        "role": null,
+        "model": null,
+        "usage": null,
+        "cost": null,
+        "stance": null,
+        "group": null,
+        "round": 0,
+        "continuesRunId": null,
+        "revised": null,
+        "replacesRunId": null,
+        "actId": "act-1",
+        "checkpoint": null,
+        "receivedContext": [],
+        "escalations": [],
+        "process": []
+      },
+      {
+        "id": "r3",
+        "agentId": "w3",
+        "task": "撰写文稿",
+        "status": "completed",
+        "dependsOn": [],
+        "outputSummary": "撰写完成",
+        "debrief": null,
+        "durationMs": 1000,
+        "error": null,
+        "failureKind": null,
+        "productLanded": null,
+        "parentRunId": "c2",
+        "kind": "agent",
+        "role": "member",
+        "model": "deepseek-v4-flash",
+        "usage": {
+          "input": 1200,
+          "output": 300,
+          "reasoning": 120,
+          "cache_hit": 800,
+          "cache_miss": 400
+        },
+        "cost": {
+          "input": 240000,
+          "cached": 64000,
+          "output": 120000,
+          "total": 360000,
+          "currency": "CNY",
+          "pricing_source": "curated"
+        },
+        "stance": null,
+        "group": null,
+        "round": 0,
+        "continuesRunId": null,
+        "revised": null,
+        "replacesRunId": null,
+        "actId": "act-1",
+        "checkpoint": null,
+        "receivedContext": [],
+        "escalations": [],
+        "process": [
+          {
+            "kind": "content",
+            "text": "成稿"
+          }
+        ]
+      }
+    ],
+    "acts": [
+      {
+        "actId": "act-1",
+        "kind": "multi_agent",
+        "title": null,
+        "anchorRunId": null,
+        "authorizedBy": null
+      }
+    ],
+    "progress": {
+      "completed": 1,
+      "total": 2
+    },
+    "interactions": [],
+    "cost": {
+      "input": 240000,
+      "cached": 64000,
+      "output": 120000,
+      "total": 360000,
+      "currency": "CNY",
+      "pricing_source": "curated"
+    },
+    "debate": null,
+    "debateRounds": [],
+    "debatePretrial": null,
+    "crossExamEnabled": false,
+    "debateOpening": null,
+    "teamSynthesisPreview": null,
+    "deliveryStatus": null,
+    "turnWarning": null,
+    "autoFolder": null,
+    "teamNotes": [],
+    "userInterjections": []
+  }
+}

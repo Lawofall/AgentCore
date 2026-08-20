@@ -96,7 +96,6 @@ async def prepare_fresh_turn(
     x_client_platform: str | None,
     profiles: TurnProfiles | None = None,
     agent_mentions: list[dict] | None = None,
-    ask_id: str | None = None,
     folder_binding_injected: bool = False,
     folder_local_root_id: str | None = None,
     folder_local_subpath: str | None = None,
@@ -245,7 +244,7 @@ async def prepare_fresh_turn(
         ),
     )
     attachment_context = merge_attachment_and_mention_context(
-        attachment_context, agent_mentions, ask_id=ask_id
+        attachment_context, agent_mentions
     )
     # Workers hold no CEO hints; their base is the shared base + the same
     # ``<按需目录>`` (name＋摘要) + workspace facts (after the directory, same
@@ -381,13 +380,13 @@ async def prepare_fresh_turn(
 
     # Pillar B: if a background execution is already live for this conversation,
     # adopt it so the CEO wait path / interjection routing share one registry key.
+    # Do NOT overwrite this turn's minted ``base_tool_context.execution_id`` —
+    # dispatch lands on that mint (一回合一张协作图). Observation stays on the
+    # adopted live graph via ``current_execution_id`` (set inside adopt).
     from agentcore.runtime.coordination.session import adopt_active_execution
 
     adopted = adopt_active_execution(conversation_id, event_sink=sink)
     if adopted is not None:
-        bound_execution_id = adopted.execution_id
-        base_tool_context.execution_id = adopted.execution_id
-        current_execution_id.set(adopted.execution_id)
         # Harvest / reattach: re-stamp write-ownership honesty from the live ledger.
         from agentcore.runtime.closing_posture import (
             apply_write_ownership_honesty_for_session,

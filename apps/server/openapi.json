@@ -4518,7 +4518,7 @@
         "type": "object"
       },
       "CheckpointDecision": {
-        "description": "How the user (or a timeout / orphan) settled a checkpoint the CEO raised.\n\n``CONTINUE`` / ``ADJUST`` / ``STOP`` are shared by ask_user / plan_review /\nteam_preview (开工卡). On the kickoff card, ``CONTINUE`` means grant + start\n(non-empty ``note`` steers all unrun workers — 嘱咐, **not** a substitute\nfor ``ADJUST``). ``ADJUST`` on team_preview does **not** grant or start:\nuser ``note`` (required, non-empty on resume) is fed back so the CEO\nrevises and resubmits through the kickoff gate (可多轮). ``ADJUST`` on\nplan_review still steers then continues. ask_user rejects ``ADJUST``.\n``RESEARCH_FIRST`` is debate kickoff only: 不开赛，回灌固定文案令 CEO 立即挂\n``multi_lens_research``（与 STOP 同构的恢复分支；非辩论开工卡须拒绝/降级）。\n\nNote: ``DelegationAuthorizationDecision.per_call`` is a different dialect\n(委派授权卡) — not part of this enum.",
+        "description": "How the user (or a timeout / orphan) settled a checkpoint the CEO raised.\n\n``CONTINUE`` / ``ADJUST`` / ``STOP`` are shared by ask_user / plan_review /\nteam_preview (开工卡). On the kickoff card, ``CONTINUE`` means grant + start\n(non-empty ``note`` steers all unrun workers — 嘱咐, **not** a substitute\nfor ``ADJUST``). ``ADJUST`` on team_preview does **not** grant or start:\nuser ``note`` (required, non-empty on resume) is fed back so the CEO\nrevises and resubmits through the kickoff gate (可多轮). ``ADJUST`` on\nplan_review still steers then continues. ask_user rejects ``ADJUST``.\n``RESEARCH_FIRST`` is debate kickoff only: 不开赛，回灌固定文案令 CEO 立即挂\n``multi_lens_research``（与 STOP 同构的恢复分支；非辩论开工卡须拒绝/降级）。",
         "enum": [
           "continue",
           "adjust",
@@ -6312,17 +6312,6 @@
         ],
         "title": "DailyTurns",
         "type": "object"
-      },
-      "DelegationAuthorizationDecision": {
-        "description": "Settlement dialect for per-delegation tool authorization choices.",
-        "enum": [
-          "grant_delegation",
-          "per_call",
-          "deny",
-          "orphaned"
-        ],
-        "title": "DelegationAuthorizationDecision",
-        "type": "string"
       },
       "DeleteAccountRequest": {
         "description": "Self-service account deletion (注销账户): the password re-confirms a\ndestructive, irreversible action before the account is soft-deleted + anonymized.",
@@ -10048,6 +10037,11 @@
           },
           "kind": {
             "default": "semantic",
+            "enum": [
+              "episodic",
+              "semantic",
+              "quota"
+            ],
             "title": "Kind",
             "type": "string"
           },
@@ -10072,9 +10066,17 @@
         "type": "object"
       },
       "MemoryUpdateItemView": {
-        "description": "One applied memory change in a 记忆已更新 card (Agent记忆与知识系统 §1.6).\n\n``file`` is a friendly label (偏好 / 画像 / 主题·<slug>); ``scope`` is ``global`` or\n``project`` (the conversation's project layer); ``content`` is the bullet text for an\nadd/update or the matched text for a remove. ``target`` is the synthetic memory-leaf\npath the card deep-links to (desktop ``memorySource`` scheme; \"\" = no leaf).\n``project_id`` is the folder id when scope is project (最近更新 deep-link). Shape\nmirrors ``memory/maintenance.py`` ``MemoryUpdateItem`` (the stored\n``memory_updates.items`` JSONB).",
+        "description": "One applied memory change in a 记忆已更新 card (Agent记忆与知识系统 §1.6).\n\n``file`` is a friendly label (偏好 / 画像 / 主题·<slug>); ``scope`` is ``global`` or\n``project`` (the conversation's project layer); ``content`` is the bullet text for an\nadd/update or the matched text for a remove. ``target`` is the synthetic memory-leaf\npath the card deep-links to (desktop ``memorySource`` scheme; \"\" = no leaf).\n``project_id`` is the folder id when scope is project (最近更新 deep-link). Shape\nmirrors ``memory/maintenance.py`` ``MemoryUpdateItem`` (the stored\n``memory_updates.items`` JSONB). ``action`` is the closed ``MemoryUpdateAction`` set.",
         "properties": {
           "action": {
+            "enum": [
+              "add",
+              "update",
+              "remove",
+              "quota",
+              "quota_denied",
+              "quota_holder"
+            ],
             "title": "Action",
             "type": "string"
           },
@@ -10122,7 +10124,7 @@
         "type": "object"
       },
       "MemoryUpdateView": {
-        "description": "One memory-write notice for the conversation-tail card (two-layer memory).\n\nProjected from a ``memory_updates`` row. ``kind`` selects the UI:\n- ``episodic``: light tip; ``summary`` is the ≤200-char session digest; ``items`` empty.\n- ``semantic``: diff card; ``items`` lists add/update/remove bullets.\n\nReturned only with the LATEST messages window, and pushed live on the per-user firehose.\n\n``anchor_at`` is the last consolidated message's ``created_at`` — the thread position\nthe card describes, which ``created_at`` (when the debounced pass happened to run) does\nnot give. Null on older rows and on writes with no message window.",
+        "description": "One memory-write notice for the conversation-tail card (two-layer memory).\n\nProjected from a ``memory_updates`` row. ``kind`` is the closed ``MemoryUpdateKind``\nset and selects the UI:\n- ``episodic``: light tip; ``summary`` is the ≤200-char session digest; ``items`` empty.\n- ``semantic``: diff card; ``items`` lists add/update/remove bullets.\n- ``quota``: always-pool / billing skip; ``summary`` says why; ``items`` name the\n  fingerprint row (``quota``) plus denied / holder rows.\n\nReturned only with the LATEST messages window, and pushed live on the per-user firehose.\n\n``anchor_at`` is the last consolidated message's ``created_at`` — the thread position\nthe card describes, which ``created_at`` (when the debounced pass happened to run) does\nnot give. Null on older rows and on writes with no message window.",
         "properties": {
           "anchor_at": {
             "anyOf": [
@@ -10154,6 +10156,11 @@
           },
           "kind": {
             "default": "semantic",
+            "enum": [
+              "episodic",
+              "semantic",
+              "quota"
+            ],
             "title": "Kind",
             "type": "string"
           },
@@ -11708,7 +11715,7 @@
         "type": "object"
       },
       "PendingInteractionSummary": {
-        "description": "One interaction still awaiting user settlement (journal fold).\n\nSurfaced on conversation reopen via ``GET .../recovery``. ``payload`` is the\noriginal ``*_required`` wire payload verbatim. Cold-path pauses stay in ``paused``.\nIncludes hot-path (approval / delegation / escalation) and durable ``stage_card``.",
+        "description": "One interaction still awaiting user settlement (journal fold).\n\nSurfaced on conversation reopen via ``GET .../recovery``. ``payload`` is the\noriginal ``*_required`` wire payload verbatim. Cold-path pauses stay in ``paused``.\nIncludes hot-path (approval / escalation) and durable ``stage_card``.",
         "properties": {
           "id": {
             "title": "Id",
@@ -11717,7 +11724,6 @@
           "kind": {
             "enum": [
               "approval",
-              "delegation_authorization",
               "escalation",
               "stage_card"
             ],
@@ -12011,7 +12017,7 @@
         "type": "object"
       },
       "QueuedTurnItem": {
-        "description": "One process-local FIFO queued turn (权威内容源；EPHEMERAL 事件只作变了信号).\n\n``interjection_id`` is set when the entry was promoted from a user interjection\n(协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.\n``position`` is 1-based FIFO index.\n``attachments`` / ``agent_mentions`` are the same fields drain forwards to\n``stream_chat`` (optional additive — old clients ignore).\n``ask_id`` is the non-blocking question return-path slot (must survive\nsteer leftover / 协调升队 degraded enqueue).",
+        "description": "One process-local FIFO queued turn (权威内容源；EPHEMERAL 事件只作变了信号).\n\n``interjection_id`` is set when the entry was promoted from a user interjection\n(协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.\n``position`` is 1-based FIFO index.\n``attachments`` / ``agent_mentions`` are the same fields drain forwards to\n``stream_chat`` (optional additive — old clients ignore).",
         "properties": {
           "agent_mentions": {
             "items": {
@@ -12020,19 +12026,6 @@
             "maxItems": 10,
             "title": "Agent Mentions",
             "type": "array"
-          },
-          "ask_id": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "可选。答非阻塞提问时与出站 question_posted.ask_id 对上。",
-            "title": "Ask Id"
           },
           "attachments": {
             "items": {
@@ -13072,25 +13065,6 @@
         "title": "ResolveClientToolInteraction",
         "type": "object"
       },
-      "ResolveDelegationAuthorizationInteraction": {
-        "description": "Settle a paused per-delegation authorization (``delegation_authorization``).\n\nRaised before workers start so the user can grant medium-risk tools for the\nwhole delegation in one click. ``grant_delegation`` whitelists code_execute +\nfile-mutation tools for this delegation; ``per_call`` keeps per-call approval;\n``deny`` refuses to start workers.",
-        "properties": {
-          "decision": {
-            "$ref": "#/components/schemas/DelegationAuthorizationDecision"
-          },
-          "kind": {
-            "const": "delegation_authorization",
-            "default": "delegation_authorization",
-            "title": "Kind",
-            "type": "string"
-          }
-        },
-        "required": [
-          "decision"
-        ],
-        "title": "ResolveDelegationAuthorizationInteraction",
-        "type": "object"
-      },
       "ResolveEscalationInteraction": {
         "description": "Settle a worker's blocking escalate (``escalation`` interaction, 阻塞式求决策 §4.5).\n\nRaised when a delegated worker hit a「只有用户能定、且猜错就作废」fork and suspended\nitself. Classic (non-coordination) path asks the user; coordination path awaits CEO\n``resolve_escalation`` (Invariant B: available iff a coordination session is active —\nclassic blocking has no free CEO inside ``delegate``). The user either answers\n(``answer``) or chooses 按假设继续 (``use_assumption`` true → wire status ``assumed``).\nWrite-lock conflicts may set ``transfer_ownership`` to path-handoff to the escalator.\nA wall-clock miss is ``timed_out``. A late resolve falls through as 404.",
         "properties": {
@@ -13118,42 +13092,6 @@
           }
         },
         "title": "ResolveEscalationInteraction",
-        "type": "object"
-      },
-      "ResolveQuestionPostedInteraction": {
-        "description": "Settle a non-blocking ``question_posted`` (journal fold 三态).\n\n``answered``：用户提交答复（``answer`` 必填）。``discarded``：CEO 作废（``note`` 必填人话）。\n两者都是可见收口，不是客户端本地标记。",
-        "properties": {
-          "answer": {
-            "default": "",
-            "maxLength": 4000,
-            "title": "Answer",
-            "type": "string"
-          },
-          "kind": {
-            "const": "question_posted",
-            "default": "question_posted",
-            "title": "Kind",
-            "type": "string"
-          },
-          "note": {
-            "default": "",
-            "maxLength": 4000,
-            "title": "Note",
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "answered",
-              "discarded"
-            ],
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "ResolveQuestionPostedInteraction",
         "type": "object"
       },
       "ResolveStageCardInteraction": {
@@ -13851,19 +13789,6 @@
             "maxItems": 10,
             "title": "Agent Mentions",
             "type": "array"
-          },
-          "ask_id": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "可选。若本条是在回答非阻塞提问，填出站 question_posted.ask_id。缺省/空=普通消息，照常消化。禁止塞进 agent_mentions。",
-            "title": "Ask Id"
           },
           "attachments": {
             "items": {
@@ -16597,7 +16522,7 @@
         "type": "object"
       },
       "TurnRecoveryResponse": {
-        "description": "One-shot recovery snapshot for a conversation reopen (recovery 统一, 对称 §8.2).\n\nReopen needs to know, from ONE owner-gated point-in-time read, how to recover the\nconversation's latest turn:\n\n- ``live_running``: a detached in-flight run is still alive to 续看 (实时重连续看\n  C1 · slice 1b) — the client attaches (``GET .../stream``) to replay + tail it.\n- ``paused``: turns that durably paused at a plan_review / ask_user checkpoint and\n  lost their live stream (结构化挂起 2b) — each renders a resume card.\n- ``pending_interactions``: hot-path interactions still awaiting settlement\n  (journal fold: approval / delegation_authorization / escalation).\n  Cold-path stays in ``paused``.",
+        "description": "One-shot recovery snapshot for a conversation reopen (recovery 统一, 对称 §8.2).\n\nReopen needs to know, from ONE owner-gated point-in-time read, how to recover the\nconversation's latest turn:\n\n- ``live_running``: a detached in-flight run is still alive to 续看 (实时重连续看\n  C1 · slice 1b) — the client attaches (``GET .../stream``) to replay + tail it.\n- ``paused``: turns that durably paused at a plan_review / ask_user checkpoint and\n  lost their live stream (结构化挂起 2b) — each renders a resume card.\n- ``pending_interactions``: hot-path interactions still awaiting settlement\n  (journal fold: approval / escalation / stage_card).\n  Cold-path stays in ``paused``.",
         "properties": {
           "live_running": {
             "default": false,
@@ -27696,7 +27621,7 @@
     },
     "/v1/conversations/{conversation_id}/interactions/{interaction_id}": {
       "post": {
-        "description": "Settle any paused hot-path interaction over the unified bridge (§8.2).\n\n``stage_card``：跨回合耐久卡 → 校验后起新回合 SSE（机制直起辩论或回灌调研）。\n``question_posted``：非阻塞提问收口 → journal ``question_resolved`` + 多端 signal，不起新回合。\n其它 kind（approval / delegation / client_tool / escalation）：Settlement 预写 (D8)\n后 settle Future；journal 有 required、无 Future → 410。\nCold-path ``ask_user`` / ``plan_review`` / ``team_preview`` 不在此 endpoint。",
+        "description": "Settle any paused hot-path interaction over the unified bridge (§8.2).\n\n``stage_card``：跨回合耐久卡 → 校验后起新回合 SSE（机制直起辩论或回灌调研）。\n其它 kind（approval / delegation / client_tool / escalation）：Settlement 预写 (D8)\n后 settle Future；journal 有 required、无 Future → 410。\nCold-path ``ask_user`` / ``plan_review`` / ``team_preview`` 不在此 endpoint。",
         "operationId": "resolve_interaction_v1_conversations__conversation_id__interactions__interaction_id__post",
         "parameters": [
           {
@@ -27774,9 +27699,7 @@
                   "mapping": {
                     "approval": "#/components/schemas/ResolveApprovalInteraction",
                     "client_tool": "#/components/schemas/ResolveClientToolInteraction",
-                    "delegation_authorization": "#/components/schemas/ResolveDelegationAuthorizationInteraction",
                     "escalation": "#/components/schemas/ResolveEscalationInteraction",
-                    "question_posted": "#/components/schemas/ResolveQuestionPostedInteraction",
                     "stage_card": "#/components/schemas/ResolveStageCardInteraction"
                   },
                   "propertyName": "kind"
@@ -27786,9 +27709,6 @@
                     "$ref": "#/components/schemas/ResolveApprovalInteraction"
                   },
                   {
-                    "$ref": "#/components/schemas/ResolveDelegationAuthorizationInteraction"
-                  },
-                  {
                     "$ref": "#/components/schemas/ResolveClientToolInteraction"
                   },
                   {
@@ -27796,9 +27716,6 @@
                   },
                   {
                     "$ref": "#/components/schemas/ResolveStageCardInteraction"
-                  },
-                  {
-                    "$ref": "#/components/schemas/ResolveQuestionPostedInteraction"
                   }
                 ],
                 "title": "Body"

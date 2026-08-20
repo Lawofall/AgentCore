@@ -63,7 +63,7 @@ def restamp_workspace_facts(prompt: str, facts: str) -> str:
     if not facts:
         return stripped
     insert_at = -1
-    for marker in ("<attached_files>", "<agent_mentions>", "<ask_reply"):
+    for marker in ("<attached_files>", "<agent_mentions>"):
         idx = stripped.find(marker)
         if idx >= 0 and (insert_at < 0 or idx < insert_at):
             insert_at = idx

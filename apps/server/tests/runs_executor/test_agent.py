@@ -207,7 +207,6 @@ async def test_run_started_carries_parent_and_kind_slots():
 
 async def test_executor_failure_emits_run_failed_and_state():
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
-    plan.nodes[0].policy.retry_delay_ms = 0
     sink = EventSink()
 
     class _Boom:
@@ -347,7 +346,6 @@ async def test_headerless_rate_limit_emits_one_run_failed_no_rerun():
     from agentcore.core.errors import RETRY_AFTER_FROM_BACKOFF, upstream_rate_limit_error
 
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
-    plan.nodes[0].policy.retry_delay_ms = 0
     sink = EventSink()
 
     class _HeaderlessLimit:
@@ -385,7 +383,6 @@ async def test_transient_exhausted_emits_one_run_failed_with_signal():
     from agentcore.core.errors import LLMRateLimitError
 
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
-    plan.nodes[0].policy.retry_delay_ms = 0
     sink = EventSink()
 
     class _AlwaysLimit:
@@ -420,7 +417,6 @@ async def test_leaf_exhausted_rate_limit_stays_transient_on_wire():
     from agentcore.core.errors import LLMRateLimitError, mark_llm_leaf_exhausted
 
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
-    plan.nodes[0].policy.retry_delay_ms = 0
     sink = EventSink()
 
     class _LeafExhausted:
@@ -454,8 +450,6 @@ async def test_worker_hard_failure_bills_completed_rounds():
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
     reg = ToolRegistry()
     reg.register(_GrantableTool("noop"))  # un-gated here → the metered round runs
-    # Isolate from in-node infra continue so we assert the first FAILED state's transcript.
-    plan.nodes[0].policy.max_retries = 0
     executor = build_agent_executor(
         plan=plan,
         llm=_MeteredRoundThenBoom(),
@@ -530,8 +524,6 @@ async def test_failed_worker_run_final_fact_reseeds_from_journal():
     # the billed pre-crash usage — not only COMPLETED nodes. Drives the REAL executor under
     # a bound fact log so the recording site + the projector are exercised together.
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
-    # Isolate executor billing/journal from the in-node infra continue.
-    plan.nodes[0].policy.max_retries = 0
     reg = ToolRegistry()
     reg.register(_GrantableTool("noop"))  # un-gated → the metered round runs before the boom
     executor = build_agent_executor(

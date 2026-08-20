@@ -1,5 +1,5 @@
 """Interaction resolution: settle a paused approval / escalation / delegation /
-stage_card / question_posted."""
+stage_card."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agentcore.api.dependencies import AuthUser, get_conversation_repo, get_db
 from agentcore.api.schemas import (
     ResolveInteractionRequest,
-    ResolveQuestionPostedInteraction,
     ResolveStageCardInteraction,
     StatusResponse,
     interaction_result_from_body,
@@ -26,10 +25,9 @@ from agentcore.db.repositories import ConversationRepository, TurnJournalReposit
 from agentcore.runtime.events import (
     EventSink,
     approval_resolved,
-    delegation_authorization_resolved,
     escalation_resolved,
 )
-from agentcore.runtime.interaction import InteractionKind, default_interaction_registry
+from agentcore.runtime.interaction import HOT_KINDS, InteractionKind, default_interaction_registry
 from agentcore.runtime.interaction_orphan import emit_orphan_fact
 from agentcore.runtime.journal.pending_interactions import fold_pending_interactions
 from agentcore.runtime.settlement import already_settled_in_writer, prewrite_settlement
@@ -44,14 +42,6 @@ from ._helpers import (
 logger = get_logger(__name__)
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
-_HOT_KINDS = frozenset(
-    {
-        InteractionKind.APPROVAL.value,
-        InteractionKind.DELEGATION_AUTHORIZATION.value,
-        InteractionKind.ESCALATION.value,
-    }
-)
-
 
 def _settlement_event_for_resolve(
     body: ResolveInteractionRequest,
@@ -64,14 +54,6 @@ def _settlement_event_for_resolve(
         return approval_resolved(
             approval_id=interaction_id,
             tool_call_id=str(payload.get("tool_call_id") or interaction_id),
-            decision=body.decision.value
-            if hasattr(body.decision, "value")
-            else str(body.decision),
-        )
-    if body.kind == InteractionKind.DELEGATION_AUTHORIZATION.value:
-        return delegation_authorization_resolved(
-            authorization_id=interaction_id,
-            execution_id=str(payload.get("execution_id") or ""),
             decision=body.decision.value
             if hasattr(body.decision, "value")
             else str(body.decision),
@@ -233,35 +215,6 @@ async def _resolve_stage_card(
     return sse_response(sink, detach_on_disconnect=True)
 
 
-async def _resolve_question_posted(
-    *,
-    conversation_id: str,
-    interaction_id: str,
-    body: ResolveQuestionPostedInteraction,
-):
-    """Journal ``question_resolved`` + hub signal. Does not start a new turn SSE."""
-    from agentcore.conversation.question_resolve import settle_question_posted
-
-    try:
-        outcome = await settle_question_posted(
-            conversation_id=conversation_id,
-            ask_id=interaction_id,
-            status=body.status,
-            answer=body.answer,
-            note=body.note,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "invalid_settlement", "message": str(exc)},
-        ) from exc
-    if outcome == "not_found":
-        raise NotFoundError("提问不存在或已处理")
-    if outcome == "already_processed":
-        return StatusResponse(status="already_processed")
-    return StatusResponse()
-
-
 @router.post("/{conversation_id}/interactions/{interaction_id}")
 async def resolve_interaction(
     conversation_id: str,
@@ -275,7 +228,6 @@ async def resolve_interaction(
     """Settle any paused hot-path interaction over the unified bridge (§8.2).
 
     ``stage_card``：跨回合耐久卡 → 校验后起新回合 SSE（机制直起辩论或回灌调研）。
-    ``question_posted``：非阻塞提问收口 → journal ``question_resolved`` + 多端 signal，不起新回合。
     其它 kind（approval / delegation / client_tool / escalation）：Settlement 预写 (D8)
     后 settle Future；journal 有 required、无 Future → 410。
     Cold-path ``ask_user`` / ``plan_review`` / ``team_preview`` 不在此 endpoint。
@@ -290,13 +242,6 @@ async def resolve_interaction(
             user=user,
             session=session,
             x_client_platform=x_client_platform,
-        )
-
-    if isinstance(body, ResolveQuestionPostedInteraction):
-        return await _resolve_question_posted(
-            conversation_id=conversation_id,
-            interaction_id=interaction_id,
-            body=body,
         )
 
     result = interaction_result_from_body(body)
@@ -335,7 +280,7 @@ async def resolve_interaction(
             return StatusResponse(status="already_processed")
         return StatusResponse()
 
-    if body.kind in _HOT_KINDS:
+    if body.kind in HOT_KINDS:
         turn_id, _payload = await _journal_pending_for_id(
             conversation_id, interaction_id, body.kind
         )

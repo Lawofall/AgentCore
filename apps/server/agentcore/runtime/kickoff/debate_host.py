@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -40,13 +40,31 @@ def is_mlr_synthesizer_id(run_id: str | None, agent_id: str | None = None) -> bo
 
 @dataclass(frozen=True, slots=True)
 class DebateHostAttach:
-    """Resolved prior MLR graph for chaining a debate act via ``prev_execution_id``."""
+    """Resolved MLR host for a debate act.
+
+    ``same_turn``: host is this assistant message → grow that graph (new act, no prev).
+    Otherwise: new graph chained with ``prev_execution_id``.
+    """
 
     execution_id: str
     host_message_id: str
     anchor_run_id: str
     act_id: str
     same_turn: bool
+
+
+def host_graph_binding(
+    attach: DebateHostAttach, *, mint_id: Callable[[], str]
+) -> tuple[str, str | None]:
+    """Return ``(execution_id, prev_execution_id)`` for a resolved host.
+
+    Same-turn: reuse the host graph and add a debate act (no prev). Cross-turn:
+    mint a new graph chained with ``prev_execution_id``. ``mint_id`` is called
+    only on the cross-turn path.
+    """
+    if attach.same_turn:
+        return attach.execution_id, None
+    return mint_id(), attach.execution_id
 
 
 def research_chain_evidence(

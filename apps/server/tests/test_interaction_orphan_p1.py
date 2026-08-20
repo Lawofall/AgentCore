@@ -199,16 +199,6 @@ def test_fold_three_hot_kinds_all_pending() -> None:
             },
         },
         {
-            "kind": "delegation_authorization_required",
-            "payload": {
-                "authorization_id": "d",
-                "conversation_id": "c",
-                "execution_id": "e",
-                "workers": [],
-                "tools": [],
-            },
-        },
-        {
             "kind": "escalation_required",
             "payload": {
                 "escalation_id": "e",
@@ -222,6 +212,5 @@ def test_fold_three_hot_kinds_all_pending() -> None:
     pending = fold_pending_interactions(entries)
     assert {p.kind for p in pending} == {
         "approval",
-        "delegation_authorization",
         "escalation",
     }

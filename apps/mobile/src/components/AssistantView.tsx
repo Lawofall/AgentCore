@@ -25,7 +25,6 @@ import type { SupportDiagnosticIds } from "@/lib/supportDiagnostics";
 import type {
   EscalationSlot,
   HotDecisionTrace,
-  NonBlockingAsk,
   StageCardTrace,
 } from "@/protocol/fold";
 import type { TeamPreviewTrace } from "@/protocol/teamPreviewTraces";
@@ -81,7 +80,6 @@ export function AssistantContent({
   team,
   debate,
   debateRounds,
-  asks,
   escalationSlots,
   hotTraces,
   stageCardTraces,
@@ -126,10 +124,6 @@ export function AssistantContent({
   /** 辩论进行中的逐轮叙事 (fold 的 `debateRounds`)：`debate` 收场产物未到时实时叠出主持人逐
    *  轮焦点 / 小结 / 裁判；收场后让位给 {@link DebateView} 的全量双产物。 */
   debateRounds?: DebateNarrativeRound[];
-  /** 非阻塞提问 (ask_user blocking=false): transport-only card content keyed by ask_id,
-   *  read off raw events via {@link extractAsks} (NOT the ProjectedTurn). The timeline's
-   *  `ask` marker resolves to its card here; empty/absent → the marker no-ops. */
-  asks?: NonBlockingAsk[];
   /** 升级时间线槽 (统一时间线二期): escalation_id → card body (extractEscalationSlots). */
   escalationSlots?: Map<string, EscalationSlot>;
   /** 热审批/委派授权痕迹 (D3): id → resolved 轻行内容 (extractHotDecisionTraces). */
@@ -244,7 +238,6 @@ export function AssistantContent({
           messageId={messageId}
           fallbackContent={content}
           team={hasTeam ? team : undefined}
-          asks={asks}
           escalationSlots={escalationSlots}
           hotTraces={hotTraces}
           stageCardTraces={stageCardTraces}
@@ -256,7 +249,6 @@ export function AssistantContent({
           userInterjections={userInterjections}
           turnClosed={turnClosed}
           kickoffReleased={kickoffReleased}
-          onFill={onFill}
           onOpenBrowserLive={onOpenBrowserLive}
         />
       ) : (

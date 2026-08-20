@@ -38,9 +38,6 @@ const loadCachedConversation = vi.fn<
 >(async () => null);
 
 vi.mock("@/components/chat/ChatView", () => ({ ChatView: () => null }));
-vi.mock("@/components/graph/ConversationCanvas", () => ({
-  ConversationCanvas: () => null,
-}));
 vi.mock("@/components/layout/SidePanel", () => ({ SidePanel: () => null }));
 vi.mock("@/components/layout/SidePanelToggle", () => ({
   SidePanelToggle: () => null,

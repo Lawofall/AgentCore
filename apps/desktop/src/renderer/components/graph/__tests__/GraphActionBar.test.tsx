@@ -14,12 +14,12 @@ const DECISIONS: GraphPendingDecision[] = [
     detail: "待你拍板（缺输入）",
   },
   {
-    id: "auth:auth1",
-    kind: "delegation_authorization",
-    runId: "r0",
-    actId: "act-1",
-    title: "团队授权",
-    detail: "放行开工",
+    id: "appr:a1",
+    kind: "approval",
+    runId: "cap",
+    actId: null,
+    title: "工具审批",
+    detail: "待放行",
   },
 ];
 
@@ -55,7 +55,7 @@ describe("GraphActionBar", () => {
     );
     expect(screen.getByRole("menu")).toBeTruthy();
     expect(screen.getByText("调研")).toBeTruthy();
-    expect(screen.getByText("团队授权")).toBeTruthy();
+    expect(screen.getByText("工具审批")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("menuitem", { name: /调研/ }));
     expect(onLocate).toHaveBeenCalledTimes(1);

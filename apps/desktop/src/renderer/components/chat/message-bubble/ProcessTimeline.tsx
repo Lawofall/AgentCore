@@ -20,7 +20,6 @@ import {
 } from "@/lib/processTimeline";
 import type {
   CheckpointDisplay,
-  NonBlockingAskDisplay,
   PlanReviewDisplay,
   TeamPreviewDisplay,
 } from "@/stores/conversation";
@@ -44,7 +43,6 @@ function isProcessNode(node: TimelineNode): boolean {
     node.kind === "tool" ||
     node.kind === "tool-group" ||
     node.kind === "approval" ||
-    node.kind === "delegation_authorization" ||
     node.kind === "stage_card"
   );
 }
@@ -228,7 +226,6 @@ export function ProcessTimeline({
   journal,
   conversationId,
   checkpoints,
-  nonBlockingAsks,
   planReviews,
   teamPreviews,
   /** When false, never collapse reasoning/tool rows into a summary (run-detail panel).
@@ -247,7 +244,6 @@ export function ProcessTimeline({
   journal?: ExecutionJournal;
   conversationId: string | null;
   checkpoints: CheckpointDisplay[];
-  nonBlockingAsks: NonBlockingAskDisplay[];
   planReviews: PlanReviewDisplay[];
   teamPreviews: TeamPreviewDisplay[];
   collapseProcessSteps?: boolean;
@@ -364,12 +360,10 @@ export function ProcessTimeline({
     }
     if (
       node.kind === "checkpoint" ||
-      node.kind === "ask" ||
       node.kind === "plan_review" ||
       node.kind === "team_preview" ||
       node.kind === "escalation" ||
       node.kind === "approval" ||
-      node.kind === "delegation_authorization" ||
       node.kind === "stage_card"
     ) {
       const card = renderTimelineInteractionCard(
@@ -377,7 +371,6 @@ export function ProcessTimeline({
         node,
         {
           checkpoints,
-          nonBlockingAsks,
           planReviews,
           teamPreviews,
         },

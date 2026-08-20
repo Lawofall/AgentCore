@@ -640,7 +640,6 @@ def user_interjection(
     note: str | None = None,
     attachments: list[dict[str, Any]] | None = None,
     agent_mentions: list[dict[str, Any]] | None = None,
-    ask_id: str | None = None,
 ) -> SSEEvent:
     """运行中用户插话（经典 steer + 协调插话共用契约）。
 
@@ -649,10 +648,7 @@ def user_interjection(
     （同 ``interjection_id`` 保最新）。经典无 ``addressed``（``injected`` 即终态）。
     DURABLE——落 journal，刷新可回看。``attachments`` 为名字 + 路径 + 二进制标记。
     ``agent_mentions`` 为软点名芯片（``{agent_id, role}``）；空则不上 wire。
-    ``ask_id`` 为非阻塞提问回程标识（与出站 ``question_posted.ask_id`` 对上）；
-    空则不上 wire，按普通插话消化——禁止塞进 ``agent_mentions``。
     """
-    from agentcore.conversation.ask_reply import normalize_ask_id
     from agentcore.conversation.mentions import wire_agent_mentions
 
     payload: dict[str, Any] = {
@@ -668,9 +664,6 @@ def user_interjection(
     mentions = wire_agent_mentions(agent_mentions)
     if mentions:
         payload["agent_mentions"] = mentions
-    aid = normalize_ask_id(ask_id)
-    if aid:
-        payload["ask_id"] = aid
     return SSEEvent(type=EventType.USER_INTERJECTION, payload=payload)
 
 

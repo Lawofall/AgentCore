@@ -122,7 +122,8 @@ def test_partial_with_blocking_gaps_injects():
     assert "<prior_delivery_gaps>" in text
     assert "</prior_delivery_gaps>" in text
     assert "state=partial" in text
-    assert "execution_id=exec-abc" in text
+    assert "execution_id=" not in text
+    assert "exec-abc" not in text
     assert "docs/out.md" in text
     assert "role=验证员" in text
     assert "测试未绿" in text
@@ -217,4 +218,5 @@ async def test_build_hint_injects_once_only_on_fingerprint(monkeypatch):
     )
     assert "<prior_delivery_gaps>" in text
     assert text.count("<prior_delivery_gaps>") == 1
-    assert "execution_id=e1" in text
+    assert "execution_id=" not in text
+    assert "e1" not in text

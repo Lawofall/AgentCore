@@ -7,8 +7,9 @@
 本包不被服务代码引用，纯离线工具。
 
 P0–P1（均已落地）：types + harness + 确定性 Check + seed_lint + runner + report + CLI +
-LLMJudge（语义打分）+ milestone 覆盖裁判 + 成对裁判（团队 vs 单体）+ baseline 回归门禁 +
-kappa 校准回路 + MAST 标签聚合 + CI nightly（evals-nightly.yml）。
+LLMJudge（语义打分）+ milestone 覆盖裁判 + 成对裁判（团队 vs 单体）+ 相对基线观测
+（``observe.py``，翻转方向区分方差/单方向变差，不当硬门）+ kappa 校准回路 + MAST 标签聚合
++ CI nightly（evals-nightly.yml）。
 裁判被评口径 = ``judged_text``（聊天 ``content`` + 终版 ``artifacts``，末次 file_write）；
 多评委可选 ``EnsemblePairwiseJudge``（``EVAL_JUDGE_ENSEMBLE``）。
 P2+（待落，皆非代码缺口）：L2/L3 真模型出数（需 EVAL_DEEPSEEK_API_KEY + 预算）+

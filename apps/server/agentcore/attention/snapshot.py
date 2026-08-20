@@ -1,21 +1,20 @@
 """Account-level attention snapshot for GET /v1/fulfill connect seed.
 
 Authority is ``paused_turns`` for this user plus this process's registry hot
-cards plus still-pending ``question_posted`` rows folded from journals (those
-cards never live on ``paused_turns``). No N-conversation recovery scan, no
-conversations mapper, no FCM.
+cards. No N-conversation recovery scan, no conversations mapper, no FCM.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
 from typing import Any
 
-from agentcore.attention.signal import AttentionKind, attention_kind_of, attention_title
+from agentcore.attention.signal import attention_kind_of, attention_title
 from agentcore.db.models import PausedTurnRow
-from agentcore.runtime.interaction import default_interaction_registry
-from agentcore.runtime.interaction_orphan import is_hot_user_pending_kind
+from agentcore.runtime.interaction import (
+    default_interaction_registry,
+    is_hot_user_pending_kind,
+)
 from agentcore.runtime.turn.runs import turn_runs
 
 
@@ -80,45 +79,6 @@ def entries_from_registry_hot_cards(user_id: str) -> list[dict[str, Any]]:
             interaction_id=req.id,
             kind=kind.value,
             title=attention_title(kind, req.payload),
-        )
-        if entry is not None:
-            out.append(entry)
-    return out
-
-
-async def entries_from_pending_questions(
-    session: Any,
-    user_id: str,
-    *,
-    since: datetime | None = None,
-) -> list[dict[str, Any]]:
-    """Still-pending ``question_posted`` cards for this user (journal fold).
-
-    ``paused_turns`` never holds these — they live on closed-turn journals.
-    Fold is the pending/resolved/discarded authority; this only maps pending
-    rows onto the same snapshot shape as a blocking card.
-    """
-    if not user_id:
-        return []
-    from agentcore.conversation.pending_questions import collect_pending_questions
-    from agentcore.db.repositories import TurnJournalRepository
-
-    repo = TurnJournalRepository(session)
-    hosts = await repo.list_question_posted_hosts(user_id=user_id, posted_after=since)
-    if not hosts:
-        return []
-    turn_ids = [turn_id for _cid, turn_id in hosts]
-    journals = await repo.load_map(turn_ids)
-    items = collect_pending_questions(journals, turn_ids)
-    host_cid = {turn_id: cid for cid, turn_id in hosts}
-    out: list[dict[str, Any]] = []
-    for turn_id, rec in items:
-        entry = attention_entry(
-            conversation_id=host_cid.get(turn_id, ""),
-            turn_id=turn_id,
-            interaction_id=rec.id,
-            kind=AttentionKind.QUESTION_POSTED.value,
-            title=attention_title(AttentionKind.QUESTION_POSTED, rec.payload),
         )
         if entry is not None:
             out.append(entry)

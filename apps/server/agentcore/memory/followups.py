@@ -26,12 +26,13 @@ def select_motion_card_from_journal(
     """
     if not entries:
         return None
+    from agentcore.runtime.terminal import RUN_PRODUCT_EVENT_TYPES
     from agentcore.tools.builtin.motion_card import parse_motion_card
 
     chosen: dict[str, Any] | None = None
     for entry in entries:
         kind = str(entry.get("kind") or entry.get("type") or "")
-        if kind not in ("run_completed", "run_failed"):
+        if kind not in RUN_PRODUCT_EVENT_TYPES:
             continue
         payload = entry.get("payload")
         if not isinstance(payload, Mapping):

@@ -9,7 +9,7 @@
 产出类用例测 ASK 触发率；对照组（需求已全→委派 / 问答→直答）守住不过度发问。
 
 为何能跑：ask_user 默认装配（checkpoint_gate_enabled 默认 True、交互回合 approvals_enabled
-默认 True）；事件流里 checkpoint_required/question_posted=发问、run_plan=委派、
+默认 True）；事件流里 checkpoint_required=发问、run_plan=委派、
 content_delta=直答，足以判别首个决策。
 
 清理（绕开上一版的坑）：取消 stream_chat 任务会污染 asyncpg 连接池，紧接着复用会失败。
@@ -104,7 +104,6 @@ class RecordingSink(EventSink):
         self.events.append((event.type.value, event.payload))
         if event.type in (
             EventType.CHECKPOINT_REQUIRED,
-            EventType.QUESTION_POSTED,
             EventType.RUN_PLAN,
             EventType.MESSAGE_END,
         ):
@@ -126,7 +125,7 @@ class Obs:
 def classify(events: list[tuple[str, dict]]) -> Obs:
     tools = [p.get("tool_name") for t, p in events if t == "tool_use_start"]
     investigation = [n for n in tools if n in INVESTIGATION]
-    ask = next((p for t, p in events if t in ("checkpoint_required", "question_posted")), None)
+    ask = next((p for t, p in events if t == "checkpoint_required"), None)
     delegated = "run_plan" in {t for t, _ in events} or "delegate" in tools
     answered = any(t == "content_delta" and (p.get("delta") or "").strip() for t, p in events)
 

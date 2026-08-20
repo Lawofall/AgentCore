@@ -7,6 +7,7 @@
 // 不可变：每个 append* 返回新 process 数组；resolveToolStep 在无匹配时返回原引用，便于
 // store 做 no-op 短路。
 
+import { assertNever } from "@/lib/assertNever";
 import type {
   ProcessStep,
   ToolPhase,
@@ -23,6 +24,29 @@ export {
   isMarkerStandinTool,
   isOrchestrationTool,
 } from "@agentcore/protocol-fold-kit";
+
+/**
+ * 锚 A · ProcessStep kind（编译期响）：{@link PROCESS_STEP_KIND} 是
+ * `Record<ProcessStep["kind"], true>`。ProcessStep 是契约单一源穷尽联合
+ * (events.generated.ts)。做成 Record → 契约加新 kind、`pnpm gen:types` 后缺键即
+ * `tsc` 失败，直到登记。与 {@link timelineNodeKeys} 的 `assertNever` 同款棘轮
+ * （样板：mobile `EVENT_PARITY` + 两端 fold）。
+ */
+export const PROCESS_STEP_KIND: Record<ProcessStep["kind"], true> = {
+  reasoning: true,
+  content: true,
+  rework: true,
+  tool: true,
+  team: true,
+  graph_append: true,
+  checkpoint: true,
+  plan_review: true,
+  team_preview: true,
+  escalation: true,
+  approval: true,
+  stage_card: true,
+  user_interjection: true,
+};
 
 /**
  * Fold one reasoning delta into the timeline: extend the trailing reasoning step
@@ -380,17 +404,6 @@ export function appendCheckpointStep(
   ];
 }
 
-/** Drop an `ask` marker (non-blocking question) at its chronological spot; the card body
- * folds separately, keyed by `askId`. No-op (same ref) if already present. */
-export function appendAskStep(
-  process: ProcessStep[] | undefined,
-  askId: string,
-): ProcessStep[] {
-  if (!askId) return process ?? [];
-  if (hasMarker(process, "ask", "ask_id", askId)) return process ?? [];
-  return [...(process ?? []), { kind: "ask", ask_id: askId }];
-}
-
 /** Drop a `user_interjection` marker (mid-turn steer / 协调插话) at its chronological
  * spot. Zero-width positional only — body + 五态 live in
  * `execution.userInterjections` keyed by `interjectionId`. First appearance of an id
@@ -476,36 +489,6 @@ export function appendApprovalStep(
   if (hasMarker(process, "approval", "approval_id", approvalId))
     return process ?? [];
   return [...(process ?? []), { kind: "approval", approval_id: approvalId }];
-}
-
-/** Drop a `delegation_authorization` marker (委派授权痕迹锚点). 产品修正：与
- * team_preview 同锚定 —— 「放行开工」族（授权 → 团队干活），insert before the last
- * `team` marker when one exists; else append. Mirrors backend `EventSink`. */
-export function appendDelegationAuthorizationStep(
-  process: ProcessStep[] | undefined,
-  authorizationId: string,
-): ProcessStep[] {
-  if (!authorizationId) return process ?? [];
-  if (
-    hasMarker(
-      process,
-      "delegation_authorization",
-      "authorization_id",
-      authorizationId,
-    )
-  )
-    return process ?? [];
-  const steps = process ?? [];
-  const marker: ProcessStep = {
-    kind: "delegation_authorization",
-    authorization_id: authorizationId,
-  };
-  for (let i = steps.length - 1; i >= 0; i--) {
-    if (steps[i].kind === "team") {
-      return [...steps.slice(0, i), marker, ...steps.slice(i)];
-    }
-  }
-  return [...steps, marker];
 }
 
 /** Drop a `stage_card` marker (阶段推进卡痕迹锚点；行渲染由 resolved/orphaned 门控). */
@@ -635,6 +618,11 @@ export function omitCoordinationIdleSteps(
  */
 export function timelineNodeKeys(nodes: TimelineNode[]): string[] {
   const ordinals = new Map<string, number>();
+  const ordinalKey = (kind: "reasoning" | "content" | "rework") => {
+    const n = (ordinals.get(kind) ?? 0) + 1;
+    ordinals.set(kind, n);
+    return `${kind}-${n}`;
+  };
   return nodes.map((node) => {
     switch (node.kind) {
       case "team":
@@ -645,8 +633,6 @@ export function timelineNodeKeys(nodes: TimelineNode[]): string[] {
         return `tp-${node.checkpoint_id}`;
       case "checkpoint":
         return `cp-${node.checkpoint_id}`;
-      case "ask":
-        return `ask-${node.ask_id}`;
       case "user_interjection":
         return `inj-${node.interjection_id}`;
       case "plan_review":
@@ -655,8 +641,6 @@ export function timelineNodeKeys(nodes: TimelineNode[]): string[] {
         return `esc-${node.escalation_id}`;
       case "approval":
         return `appr-${node.approval_id}`;
-      case "delegation_authorization":
-        return `dauth-${node.authorization_id}`;
       case "stage_card":
         return `sc-${node.stage_card_id}`;
       case "tool":
@@ -665,11 +649,12 @@ export function timelineNodeKeys(nodes: TimelineNode[]): string[] {
         // A group only ever GROWS by appending adjacent tools; its first tool is
         // its stable identity.
         return `tgrp-${node.tools[0]?.id ?? "empty"}`;
-      default: {
-        const n = (ordinals.get(node.kind) ?? 0) + 1;
-        ordinals.set(node.kind, n);
-        return `${node.kind}-${n}`;
-      }
+      case "reasoning":
+      case "content":
+      case "rework":
+        return ordinalKey(node.kind);
+      default:
+        return assertNever(node);
     }
   });
 }
@@ -700,6 +685,8 @@ export function groupToolRuns(process: ProcessStep[]): TimelineNode[] {
     run = [];
   };
   for (const step of process) {
+    // Old journals may still carry retired `{kind:"ask"}` markers.
+    if ((step as { kind: string }).kind === "ask") continue;
     if (step.kind === "tool") {
       run.push(step);
     } else {

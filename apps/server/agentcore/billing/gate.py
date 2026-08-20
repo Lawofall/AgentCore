@@ -78,6 +78,14 @@ _PLATFORM_UNAVAILABLE_MESSAGE = (
 
 
 @dataclass(frozen=True)
+class BackgroundGateResolve:
+    """Result of ``resolve_and_gate_background`` — credentials or why admission skipped."""
+
+    credentials: LLMCredentials | None = None
+    quota_skipped_at_admission: bool = False
+
+
+@dataclass(frozen=True)
 class BackgroundLlmResult[T]:
     """Successful background chrome LLM call: payload + credentials that worked."""
 
@@ -256,11 +264,11 @@ async def resolve_and_gate_background(
     user_id: str,
     *,
     purpose: ModelPurpose = "title",
-) -> LLMCredentials | None:
+) -> BackgroundGateResolve:
     """Resolve background credentials (own-key slot, else platform-first) and gate spend.
 
-    Returns credentials to pass to ``build_provider``, or ``None`` when the caller
-    should skip the LLM (no usable key, or platform quota exhausted). Never raises
+    Returns credentials to pass to ``build_provider``, or a skip with
+    ``quota_skipped_at_admission`` when platform quota blocked admission. Never raises
     quota errors — background paths are best-effort product chrome.
 
     When ``source=platform``, ``enforce_quota`` always runs (even if the account
@@ -273,19 +281,22 @@ async def resolve_and_gate_background(
     """
     cfg = await resolve_model_config(session, user_id, purpose)
     if cfg is None:
-        return None
+        return BackgroundGateResolve()
 
     # Dormant / credentials gated off: same as main chat — BYOK or skip.
     if cfg.source == "platform" and not platform_catalog_visible():
-        return await resolve_and_gate_background_user_fallback(session, user_id, purpose=purpose)
+        fallback = await resolve_and_gate_background_user_fallback(
+            session, user_id, purpose=purpose
+        )
+        return BackgroundGateResolve(credentials=fallback)
 
     creds = _creds_from_cfg(cfg)
     if cfg.source != "platform":
-        return creds
+        return BackgroundGateResolve(credentials=creds)
 
     user = await UserRepository(session).get_by_id(user_id)
     if user is None:
-        return None
+        return BackgroundGateResolve()
 
     try:
         await enforce_quota(
@@ -300,8 +311,8 @@ async def resolve_and_gate_background(
             purpose=purpose,
             error=str(e),
         )
-        return None
-    return creds
+        return BackgroundGateResolve(quota_skipped_at_admission=True)
+    return BackgroundGateResolve(credentials=creds)
 
 
 async def resolve_and_gate_background_user_fallback(
@@ -351,13 +362,24 @@ async def run_background_llm[T](
     No process-local auth circuit breaker — each call re-resolves. Call sites must
     re-raise ``LLMAuthError`` from their generators so this entry can see it.
 
-    Turn-scoped exception: when the user-turn auth-dead latch is set
-    (``llm.turn_auth_dead``), skip immediately — that is per-turn short-circuit,
-    not a process TTL cache.
+    Turn-scoped exception: when **this call's** payer is latched dead
+    (``llm.turn_auth_dead``), skip immediately — that is per-turn short-circuit
+    for that ``credential_source`` only, not a process TTL cache. Checked after
+    resolve so the skip uses the actual source (platform-first chrome vs an
+    own-key background slot), not an assumed payer. Does not widen
+    platform→BYOK fallback: a dead platform resolve still returns here instead
+    of taking the auth-fallback path.
     """
     from agentcore.llm.turn_auth_dead import is_turn_auth_dead
 
-    if is_turn_auth_dead():
+    async with async_session_factory() as session:
+        resolved = await resolve_and_gate_background(session, user_id, purpose=purpose)
+    if resolved.credentials is None:
+        if resolved.quota_skipped_at_admission:
+            return BackgroundLlmSkip(reason=BackgroundSkipReason.QUOTA_EXCEEDED)
+        return BackgroundLlmSkip(reason=BackgroundSkipReason.NO_CREDENTIALS)
+
+    if is_turn_auth_dead(resolved.credentials.source):
         logger.info(
             "billing.background_skip_turn_auth_dead",
             user_id=user_id,
@@ -365,14 +387,9 @@ async def run_background_llm[T](
         )
         return BackgroundLlmSkip(reason=BackgroundSkipReason.TURN_AUTH_DEAD)
 
-    async with async_session_factory() as session:
-        primary = await resolve_and_gate_background(session, user_id, purpose=purpose)
-    if primary is None:
-        return BackgroundLlmSkip(reason=BackgroundSkipReason.NO_CREDENTIALS)
-
     try:
-        value = await runner(primary)
-        return BackgroundLlmResult(value=value, credentials=primary)
+        value = await runner(resolved.credentials)
+        return BackgroundLlmResult(value=value, credentials=resolved.credentials)
     except LLMQuotaExceededError as e:
         # Quota ran out between resolve and call (per-call gate, billing.call_quota),
         # or upstream answered a cooldown too long for this call to sit out.
@@ -389,14 +406,14 @@ async def run_background_llm[T](
         )
     except LLMAuthError as e:
         await maybe_mark_byok_provider_error(
-            user_id=user_id, purpose=purpose, credentials=primary, exc=e
+            user_id=user_id, purpose=purpose, credentials=resolved.credentials, exc=e
         )
-        if primary.source != "platform":
+        if resolved.credentials.source != "platform":
             # Already on user BYOK — do not bounce back to platform.
             return BackgroundLlmSkip(reason=BackgroundSkipReason.AUTH_REJECTED)
     except Exception as e:
         await maybe_mark_byok_provider_error(
-            user_id=user_id, purpose=purpose, credentials=primary, exc=e
+            user_id=user_id, purpose=purpose, credentials=resolved.credentials, exc=e
         )
         raise
 
@@ -411,6 +428,14 @@ async def run_background_llm[T](
         )
     if fallback is None:
         return BackgroundLlmSkip(reason=BackgroundSkipReason.AUTH_REJECTED)
+
+    if is_turn_auth_dead(fallback.source):
+        logger.info(
+            "billing.background_skip_turn_auth_dead",
+            user_id=user_id,
+            purpose=purpose,
+        )
+        return BackgroundLlmSkip(reason=BackgroundSkipReason.TURN_AUTH_DEAD)
 
     try:
         value = await runner(fallback)

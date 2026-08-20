@@ -8,12 +8,22 @@ from typing import Any
 
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
-from agentcore.runtime.coordination.session import active_coordination
+from agentcore.runtime.coordination.session import resolve_coordination_session
 from agentcore.runtime.events import team_synthesis_preview
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 
 logger = get_logger(__name__)
+
+
+def _session_for_control(context: ToolContext):
+    """Wait / cancel / synthesis look up the observation graph.
+
+    Cross-turn adopt leaves ``context.execution_id`` as this turn's mint (dispatch)
+    while ``current_execution_id`` stays on the previous live graph. Fall back so
+    CEO wait still finds that graph before this turn starts its own.
+    """
+    return resolve_coordination_session(context.execution_id)
 
 
 def _transfer_ownership_for_escalation(
@@ -95,7 +105,7 @@ class WaitTool:
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        session = active_coordination(context.execution_id)
+        session = _session_for_control(context)
         if session is None or not session.active:
             return ToolResult(
                 tool_call_id="",
@@ -174,7 +184,7 @@ class UpdateSynthesisTool:
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        session = active_coordination(context.execution_id)
+        session = _session_for_control(context)
         if session is None:
             return ToolResult(
                 tool_call_id="",
@@ -302,7 +312,7 @@ class CancelWorkerTool:
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        session = active_coordination(context.execution_id)
+        session = _session_for_control(context)
         if session is None or not session.active:
             return ToolResult(
                 tool_call_id="",
@@ -498,7 +508,7 @@ class ResolveEscalationTool:
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
-        session = active_coordination(context.execution_id)
+        session = _session_for_control(context)
         if session is None:
             return ToolResult(
                 tool_call_id="",
@@ -676,7 +686,7 @@ class QueueUserMessageTool:
             mark_interjection_failed,
         )
 
-        session = active_coordination(context.execution_id)
+        session = _session_for_control(context)
         iid = str(arguments.get("interjection_id") or "").strip()
         if not iid:
             return ToolResult(

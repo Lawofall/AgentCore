@@ -550,11 +550,33 @@ def test_plan_json_ignores_legacy_finalize_key():
 def test_spec_from_json_tolerates_unknown_and_missing_keys():
     # A row written by a different build (extra key) / missing an optional must still
     # load — _filtered drops unknowns, dataclass defaults fill the gaps.
-    raw = {"run_id": "r1", "task": "t", "surprise_field": 1, "policy": {"ghost": 2}}
+    # Old snapshots still carry deleted RunPolicy slots; they must not TypeError.
+    raw = {
+        "run_id": "r1",
+        "task": "t",
+        "surprise_field": 1,
+        "policy": {
+            "ghost": 2,
+            "concurrency_slot": "cpu",
+            "shared_roots": True,
+            "trust": "high",
+            "autosave_artifact": True,
+            "preflight": False,
+            "candidates": 3,
+            "selection_criteria": "score",
+            "max_retries": 2,
+            "retry_delay_ms": 0,
+            "audit": True,
+            "on_failure": "skip",
+        },
+    }
     spec = spec_from_json(raw)
     assert spec.run_id == "r1"
     assert spec.task == "t"
     assert isinstance(spec.policy, RunPolicy)
+    assert spec.policy.on_failure == "skip"
+    assert not hasattr(spec.policy, "max_retries")
+    assert not hasattr(spec.policy, "audit")
 
 
 def test_session_row_round_trip():

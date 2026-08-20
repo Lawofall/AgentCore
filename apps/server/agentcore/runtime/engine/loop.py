@@ -1,8 +1,13 @@
-"""ReAct main loop: turn control, LLM rounds, tool execution, governance."""
+"""ReAct main loop: turn control, LLM rounds, tool execution.
+
+Wind-down / delivery-idle / timeout-grace live in ``loop_wind_down``; captain
+live-mirror (G4) in ``loop_mirror``; structured-reply salvage in ``loop_salvage``.
+Public import path stays this module (``react_loop``, ``ReactLoopOut``,
+``CaptainLoopMirror``, ``current_captain_loop``, ``sync_captain_loop_mirror``).
+"""
 
 import time
 from collections.abc import Callable, Mapping
-from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,12 +23,8 @@ from agentcore.runtime.events import (
     content_delta,
     content_reset,
     reasoning_delta,
-    tool_use_end,
-    tool_use_start,
 )
 from agentcore.runtime.evidence_ledger import EvidenceLedgerCore
-from agentcore.runtime.loop_controller import LoopController
-from agentcore.runtime.turn.outcome import salvage_captain_delegate_reply
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
 
@@ -42,6 +43,13 @@ from .governance import (
     maybe_inject_turn_token_budget_gate,
     resolve_openai_tool_defs,
 )
+from .loop_mirror import (
+    CaptainLoopMirror,
+    current_captain_loop,
+    sync_captain_loop_mirror,
+)
+from .loop_salvage import maybe_salvage_captain_reply
+from .loop_wind_down import LoopWindDown
 from .outcome import RoundOutcome
 from .round import (
     LlmRoundFailure,
@@ -52,53 +60,10 @@ from .round import (
 )
 from .segments import join_segments
 from .soft_gates import maybe_soft_gate_no_tool_return
-from .tool_failure_face import tool_failure_fields
 from .tool_protocol_sanitize import prepare_assistant_content
 from .tool_round import handle_tool_calls_round
 
 logger = get_logger(__name__)
-
-
-def _maybe_salvage_captain_reply(
-    *,
-    final_content: str,
-    messages: list[LLMMessage],
-    role: str,
-) -> str:
-    salvaged = salvage_captain_delegate_reply(
-        final_content=final_content, messages=messages, role=role
-    )
-    if not salvaged:
-        return final_content
-    logger.info(
-        "engine.structured_reply_salvaged",
-        chars=len(salvaged),
-        source="delegate",
-    )
-    return salvaged
-
-
-@dataclass
-class CaptainLoopMirror:
-    """Live captain-loop mirror for suspension capture (G4 turn_paused).
-
-    Published only while ``react_loop(..., role="captain")`` is running. Holds a
-    reference to the run's :class:`LoopController` plus the two content
-    accumulators a suspending face needs (ask_user folded → ``content_before_round``;
-    ask_user with its own ``message`` / delegate / team_preview / plan_review →
-    ``final_content``). ``ask_user_content_folded`` is set by the tool-round
-    prepare so pause capture matches the absorb decision.
-    """
-
-    controller: LoopController
-    content_before_round: str = ""
-    final_content: str = ""
-    ask_user_content_folded: bool = False
-
-
-current_captain_loop: ContextVar[CaptainLoopMirror | None] = ContextVar(
-    "current_captain_loop", default=None
-)
 
 
 @dataclass
@@ -120,24 +85,6 @@ class ReactLoopOut:
     cutoff_reasons: list[str] | None = None
     tool_failures: list[dict[str, Any]] | None = None
     controller_seed_out: list[dict[str, Any]] | None = None
-
-
-def sync_captain_loop_mirror(
-    *,
-    content_before_round: str | None = None,
-    final_content: str | None = None,
-    ask_user_content_folded: bool | None = None,
-) -> None:
-    """Update the published captain mirror in place (no-op when unset / non-captain)."""
-    mirror = current_captain_loop.get()
-    if mirror is None:
-        return
-    if content_before_round is not None:
-        mirror.content_before_round = content_before_round
-    if final_content is not None:
-        mirror.final_content = final_content
-    if ask_user_content_folded is not None:
-        mirror.ask_user_content_folded = ask_user_content_folded
 
 
 async def react_loop(
@@ -315,37 +262,10 @@ async def react_loop(
         if is_read_url_retired(run_id):
             disabled_tools.add("read_url")
             disabled_tools.add("web_search")
-    # B·收尾窗口：预算软顶 / 超时预警后收窄到落盘+诊断+handoff（不改硬顶语义）。
-    wind_down_active = False
-    wind_down_reason = ""
-    wind_down_effective_allowed: list[str] | None = None
-    wind_down_whitelist: frozenset[str] | None = None
-    wind_down_breach_count = 0
-    wind_down_breach_pending_nudge = False
-    wind_down_breach_nudge_text = ""
-    # delivery_idle 工具收窄（factory 对交文件已关；显式构造仍可能走此路径）。
-    # 与 token/timeout wind_down 解耦。
-    delivery_idle_narrow_active = False
     # 检索预算临界（剩 ≤2）一次性 reflection，缓解同轮 fan-out 超订。
     retrieval_critical_warned = False
     # 上次埋点过的分工具用量 (web_search, read_url)：只在变化时记一行。
     retrieval_spend_logged: tuple[int, int] | None = None
-    # Mutable allowlist: light-repair / delivery-idle / wind_down may narrow it.
-    live_allowed: list[str] | None = (
-        list(allowed_tool_names) if allowed_tool_names is not None else None
-    )
-
-    def _effective_allowed() -> list[str] | None:
-        if wind_down_effective_allowed is not None:
-            return wind_down_effective_allowed
-        return live_allowed
-
-    controller: LoopController | None = None
-
-    def _resolve_tool_defs() -> list[dict[str, Any]] | None:
-        return resolve_openai_tool_defs(tools, _effective_allowed(), disabled_tools)
-
-    tool_defs = _resolve_tool_defs()
 
     _emit_content_raw = on_content or (lambda delta: sink.emit(content_delta(delta)))
     _emit_reset_raw = on_reset or (lambda reason: sink.emit(content_reset(reason)))
@@ -374,7 +294,6 @@ async def react_loop(
     final_content = ""
     final_reasoning = ""
 
-    profile = profile or get_profile("chat")
     base_model = turn_model
     if base_model is None:
         from agentcore.config import settings
@@ -397,6 +316,34 @@ async def react_loop(
         form_prose=form_prose,
         product_landing_artifacts=product_landing_artifacts,
     )
+
+    wind_down = LoopWindDown(
+        role=role,
+        run_id=run_id,
+        agent_id=agent_id,
+        tools=tools,
+        sink=sink,
+        messages=messages,
+        token_budget=token_budget,
+        files_expected=files_expected,
+        live_allowed=(list(allowed_tool_names) if allowed_tool_names is not None else None),
+        controller=controller,
+        refresh_tool_defs=lambda: None,
+    )
+
+    def _effective_allowed() -> list[str] | None:
+        return wind_down.effective_allowed()
+
+    def _resolve_tool_defs() -> list[dict[str, Any]] | None:
+        return resolve_openai_tool_defs(tools, _effective_allowed(), disabled_tools)
+
+    tool_defs: list[dict[str, Any]] | None = _resolve_tool_defs()
+
+    def _refresh_tool_defs() -> None:
+        nonlocal tool_defs
+        tool_defs = _resolve_tool_defs()
+
+    wind_down.refresh_tool_defs = _refresh_tool_defs
 
     def _maybe_retire_workspace_channel_dead() -> None:
         """Session/backend sticky-dead → strip file family from offered tools."""
@@ -506,213 +453,11 @@ async def react_loop(
 
             begin_accepting(steer_cid, execution_id=tool_context.execution_id)
 
-    def _enter_wind_down(reason: str, instruction: str | None = None) -> None:
-        nonlocal wind_down_active, wind_down_reason, wind_down_effective_allowed
-        nonlocal wind_down_whitelist, tool_defs
-        if wind_down_active or role != "worker":
-            return
-        from agentcore.runtime.runs.cutoff import (
-            narrow_tools_for_wind_down,
-            wind_down_allowed_tools,
-            wind_down_instruction_timeout,
-            wind_down_instruction_token,
-            worker_keeps_file_read_in_wind_down,
-            worker_keeps_notes_in_wind_down,
-        )
-
-        wind_down_active = True
-        wind_down_reason = reason
-        available = set(tools.names)
-        keep_file_read = worker_keeps_file_read_in_wind_down(
-            available=available, allowed=live_allowed
-        )
-        keep_notes = worker_keeps_notes_in_wind_down(
-            available=available, allowed=live_allowed
-        )
-        wind_down_whitelist = wind_down_allowed_tools(
-            keep_file_read=keep_file_read, keep_notes=keep_notes
-        )
-        narrowed = narrow_tools_for_wind_down(
-            available,
-            allowed=live_allowed,
-            keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
-        )
-        wind_down_effective_allowed = narrowed
-        tool_defs = _resolve_tool_defs()
-        if instruction is None:
-            if reason == "token_budget":
-                instruction = wind_down_instruction_token(keep_notes=keep_notes)
-            elif reason == "worker_timeout":
-                instruction = wind_down_instruction_timeout(keep_notes=keep_notes)
-            else:
-                # retrieval_budget / other: keep caller-supplied or build a short default.
-                notes = "、便签（可贴/读/改）" if keep_notes else ""
-                instruction = (
-                    "[系统提示] 检索预算已用尽。本轮起进入收尾窗口：仅允许落盘"
-                    f"{notes}与 handoff，请基于已有证据交卷；禁止继续 web_search / read_url。"
-                )
-        messages.append(LLMMessage(role="user", content=instruction))
-        from agentcore.runtime.tool_failures import sync_tool_failure_constraint_in_system
-
-        sync_tool_failure_constraint_in_system(
-            messages, controller.outstanding_tool_failures()
-        )
-        from agentcore.config import settings as _settings
-
-        logger.info(
-            "engine.wind_down_enter",
-            reason=reason,
-            run_id=run_id,
-            role=role,
-            tokens=total_usage.total_tokens,
-            token_budget=token_budget,
-            wind_down_reserve=(
-                int(_settings.engine_worker_token_wind_down_reserve or 0)
-                if reason == "token_budget"
-                else None
-            ),
-            allowed_tools=narrowed,
-            keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
-        )
-        from agentcore.runtime.runs.run_phase_emit import emit_run_phase
-
-        emit_run_phase(sink, run_id, agent_id, "winding_down")
-
-    def _apply_delivery_idle_narrow() -> None:
-        """Narrow to write/诊断/handoff/必要读 after delivery-idle ladder.
-
-        Factory never arms files-expected delivery_idle; this path remains for
-        explicit LoopController construction (recon does not set narrow).
-        May reuse :func:`narrow_tools_for_wind_down`. Does **not** emit
-        ``engine.wind_down_enter`` / winding_down phase (budget wind_down stays
-        independent). If budget wind_down already active, surface is already
-        narrowed — no-op on allowlist. Collaboration keeps note tools.
-        """
-        nonlocal delivery_idle_narrow_active, live_allowed, tool_defs
-        if delivery_idle_narrow_active or role != "worker":
-            return
-        # Defense: report posts must never strip search even if a pending latch leaked.
-        if controller is not None and controller.delivery_idle_report:
-            return
-        delivery_idle_narrow_active = True
-        if wind_down_active:
-            return
-        from agentcore.runtime.runs.cutoff import (
-            narrow_tools_for_wind_down,
-            worker_keeps_file_read_in_wind_down,
-            worker_keeps_notes_in_wind_down,
-        )
-
-        available = set(tools.names)
-        keep_file_read = worker_keeps_file_read_in_wind_down(
-            available=available, allowed=live_allowed
-        )
-        keep_notes = worker_keeps_notes_in_wind_down(
-            available=available, allowed=live_allowed
-        )
-        narrowed = narrow_tools_for_wind_down(
-            available,
-            allowed=live_allowed,
-            keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
-        )
-        live_allowed = narrowed
-        tool_defs = _resolve_tool_defs()
-        logger.info(
-            "engine.delivery_idle_narrow_apply",
-            run_id=run_id,
-            role=role,
-            allowed_tools=narrowed,
-            keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
-        )
-
-    def _consume_timeout_wind_down_pending() -> bool:
-        """Consume timeout wind-down from hard-timeout guard and/or coordination session.
-
-        Independent of token wind-down: a timeout pending must not be swallowed
-        when the token soft-top already narrowed tools.
-        """
-        if role != "worker" or not run_id:
-            return False
-        from agentcore.runtime.runs.timeout_hard import get_hard_timeout
-
-        guard = get_hard_timeout(run_id)
-        if guard is not None and guard.consume_wind_down():
-            # Keep coordination session mirrors in sync when present.
-            from agentcore.runtime.coordination.session import active_coordination
-
-            session = active_coordination()
-            if session is not None:
-                session._timeout_wind_down_pending.discard(run_id)
-                session._timeout_wind_down_entered.add(run_id)
-            return True
-        from agentcore.runtime.coordination.session import active_coordination
-
-        session = active_coordination()
-        return bool(session is not None and session.consume_timeout_wind_down(run_id))
-
-    def _maybe_arm_wind_down() -> None:
-        """Budget soft-top or timeout warn → wind-down (handoff/persist).
-
-        Token and timeout reasons are independent: timeout pending is consumed
-        even when token wind-down is already active (marks entered for stamp).
-        """
-        if role != "worker":
-            return
-        from agentcore.config import settings
-        from agentcore.runtime.runs.cutoff import should_enter_token_wind_down
-
-        reserve = int(settings.engine_worker_token_wind_down_reserve or 0)
-        if not wind_down_active and should_enter_token_wind_down(
-            total_usage.total_tokens, token_budget, reserve
-        ):
-            _enter_wind_down("token_budget")
-        timeout_pending = _consume_timeout_wind_down_pending()
-        if timeout_pending and not wind_down_active:
-            _enter_wind_down("worker_timeout")
-
-    def _enforce_hard_timeout_entry() -> str | None:
-        """Round-boundary hard-timeout gate. Returns break reason or None.
-
-        TIMEOUT → grant one grace wind-down round; after grace → force cancel
-        (reuse cancel channel). No mid-stream preemption.
-        """
-        if role != "worker" or not run_id:
-            return None
-        from agentcore.runtime.runs.timeout_hard import (
-            HardTimeoutPhase,
-            get_hard_timeout,
-        )
-
-        guard = get_hard_timeout(run_id)
-        if guard is None:
-            return None
-        if guard.allows_grace_round():
-            guard.begin_grace_round()
-            if not wind_down_active:
-                _enter_wind_down("worker_timeout")
-            return None
-        if guard.blocks_new_work():
-            guard.request_force_cancel(reason="post_grace")
-            logger.warning(
-                "engine.timeout_force_cancel",
-                run_id=run_id,
-                phase=guard.phase.value,
-            )
-            return "worker_timeout"
-        if guard.phase is HardTimeoutPhase.GRACE and not wind_down_active:
-            # About to run the granted grace round — ensure tools are narrowed.
-            _enter_wind_down("worker_timeout")
-        return None
-
     try:
         for round_idx in range(profile.max_rounds):
             # Hard-timeout entry check BEFORE arming wind-down / LLM: after TIMEOUT
             # grant one grace round; after grace force-cancel (no new LLM/tool).
-            hard_break = _enforce_hard_timeout_entry()
+            hard_break = wind_down.enforce_hard_timeout_entry(tokens=total_usage.total_tokens)
             if hard_break is not None:
                 import asyncio
 
@@ -726,9 +471,9 @@ async def react_loop(
             # break，会整轮跳过 wind_down，随后 force_finalize 禁写 → worker 把
             # file_write 糊成正文 DSML。先武装收尾窗；若本轮刚进入，即使已过硬顶也
             # 先跑这一轮落盘/handoff，下一轮再撞硬顶 finalize。
-            already_winding = wind_down_active
-            _maybe_arm_wind_down()
-            just_armed_wind_down = wind_down_active and not already_winding
+            already_winding = wind_down.wind_down_active
+            wind_down.maybe_arm_wind_down(tokens=total_usage.total_tokens)
+            just_armed_wind_down = wind_down.wind_down_active and not already_winding
             # Loose token backstop (Worker 硬顶): stop BEFORE starting a round once the run's
             # cumulative input+output tokens reach the ceiling, so a runaway overshoots by at
             # most one round instead of grinding on (根因: 之前没人比对这个累计数). ``total_usage``
@@ -911,7 +656,7 @@ async def react_loop(
                     error_message=round_result.error_message,
                     error_context=round_result.error_context,
                 )
-                final_content = _maybe_salvage_captain_reply(
+                final_content = maybe_salvage_captain_reply(
                     final_content=final_content, messages=messages, role=role
                 )
                 directive: LoopDirective = decide_llm_failure(
@@ -942,7 +687,7 @@ async def react_loop(
                     error_code=ErrorCode.LLM_ERROR,
                     error_message="模型响应中断，已保留已生成内容，可继续。",
                 )
-                final_content = _maybe_salvage_captain_reply(
+                final_content = maybe_salvage_captain_reply(
                     final_content=final_content, messages=messages, role=role
                 )
                 directive = decide_llm_failure(
@@ -980,11 +725,7 @@ async def react_loop(
                 # 终稿阶段的空响应仍按原梯子降级收口。
                 # length+空正文：不再豁免（截断不会因 Continue 变好，避免再挂墙钟）。
                 counts_as_empty = outcome.is_empty
-                if (
-                    counts_as_empty
-                    and role == "captain"
-                    and outcome.finish_reason != "length"
-                ):
+                if counts_as_empty and role == "captain" and outcome.finish_reason != "length":
                     from agentcore.runtime.coordination.session import active_coordination
 
                     coord_session = active_coordination()
@@ -1041,206 +782,11 @@ async def react_loop(
                 else:
                     # Wind-down breach: non-whitelist tool → nudge+handoff-only, or
                     # local synth close (2nd breach / already at hard ceiling).
-                    skip_tool_exec = False
-                    wind_down_breach_pending_nudge = False
-                    wind_down_breach_nudge_text = ""
-                    if wind_down_active and role == "worker":
-                        from agentcore.runtime.engine.directive import Continue, Return
-                        from agentcore.runtime.runs.cutoff import (
-                            WIND_DOWN_ALLOWED_TOOLS,
-                            narrow_tools_for_wind_down_breach,
-                            should_force_local_after_wind_down_breach,
-                            wind_down_breach_nudge,
-                            wind_down_breach_tool_names,
-                            worker_keeps_file_read_in_wind_down,
-                            worker_keeps_notes_in_wind_down,
-                        )
-
-                        effective_whitelist = wind_down_whitelist or WIND_DOWN_ALLOWED_TOOLS
-                        breached = wind_down_breach_tool_names(
-                            [
-                                (tc.function.name or "")
-                                for tc in (outcome.tool_calls or [])
-                            ],
-                            allowed=effective_whitelist,
-                        )
-                        if breached:
-                            force_local = should_force_local_after_wind_down_breach(
-                                prior_breaches=wind_down_breach_count,
-                                tokens=total_usage.total_tokens,
-                                token_budget=token_budget,
-                                wind_down_reason=wind_down_reason,
-                            )
-                            # Pending landing obligation → keep write tools; only strip retrieval.
-                            keep_landing = (
-                                files_expected
-                                and controller is not None
-                                and not controller.landing_succeeded
-                            )
-                            keep_file_read = keep_landing and worker_keeps_file_read_in_wind_down(
-                                available=set(tools.names),
-                                allowed=list(effective_whitelist),
-                            )
-                            keep_notes = keep_landing and worker_keeps_notes_in_wind_down(
-                                available=set(tools.names),
-                                allowed=list(effective_whitelist),
-                            )
-                            logger.warning(
-                                "engine.wind_down_breach",
-                                run_id=run_id,
-                                breached_tools=breached,
-                                prior_breaches=wind_down_breach_count,
-                                force_local=force_local,
-                                keep_landing=keep_landing,
-                                keep_notes=keep_notes,
-                                tokens=total_usage.total_tokens,
-                                token_budget=token_budget,
-                            )
-                            wind_down_breach_count += 1
-
-                            def _journal_wind_down_deny(
-                                tc: Any,
-                                name: str,
-                                *,
-                                _keep_landing: bool = keep_landing,
-                            ) -> None:
-                                """Emit durable tool_use_start/end so wind_down 拒执行
-                                is journal-queryable."""
-                                import json as _json
-
-                                raw_args = ""
-                                try:
-                                    raw_args = tc.function.arguments or ""
-                                except Exception:  # noqa: BLE001
-                                    raw_args = ""
-                                try:
-                                    args = _json.loads(raw_args) if raw_args else {}
-                                    if not isinstance(args, dict):
-                                        args = {}
-                                except Exception:  # noqa: BLE001
-                                    args = {}
-                                deny = (
-                                    f"工具 '{name}' 不在收尾窗口白名单，未执行。"
-                                    + (
-                                        "请落盘后调用 handoff 交卷。"
-                                        if _keep_landing
-                                        else "请立即调用 handoff 交卷。"
-                                    )
-                                )
-                                sink.emit(
-                                    tool_use_start(
-                                        tc.id, name, args, run_id=run_id or ""
-                                    )
-                                )
-                                # 收尾窗口 / 白名单 / 落盘 / handoff are all engine words
-                                # aimed at the model — ``deny`` stays on ``result`` and
-                                # the user face is curated by code only.
-                                sink.emit(
-                                    tool_use_end(
-                                        tc.id,
-                                        name,
-                                        success=False,
-                                        output=deny,
-                                        failure=tool_failure_fields(
-                                            code="wind_down_deny"
-                                        ),
-                                        run_id=run_id or "",
-                                    )
-                                )
-
-                            if force_local:
-                                # Still journal denied calls before local-synth close.
-                                for tc in outcome.tool_calls or []:
-                                    name = tc.function.name or ""
-                                    if name and name not in effective_whitelist:
-                                        _journal_wind_down_deny(tc, name)
-                                directive = Return()
-                                outcome = RoundOutcome(
-                                    content=outcome.content,
-                                    reasoning=outcome.reasoning,
-                                    usage=outcome.usage,
-                                )
-                                skip_tool_exec = True
-                            else:
-                                kept = [
-                                    tc
-                                    for tc in (outcome.tool_calls or [])
-                                    if (tc.function.name or "") in effective_whitelist
-                                ]
-                                denied = [
-                                    tc
-                                    for tc in (outcome.tool_calls or [])
-                                    if (tc.function.name or "") not in effective_whitelist
-                                ]
-                                for tc in denied:
-                                    _journal_wind_down_deny(tc, tc.function.name or "")
-                                wind_down_effective_allowed = (
-                                    narrow_tools_for_wind_down_breach(
-                                        set(tools.names),
-                                        keep_landing=keep_landing,
-                                        keep_file_read=keep_file_read,
-                                        keep_notes=keep_notes,
-                                        allowed=list(effective_whitelist),
-                                    )
-                                )
-                                breach_nudge = wind_down_breach_nudge(
-                                    keep_landing=keep_landing,
-                                    keep_notes=keep_notes,
-                                )
-                                tool_defs = _resolve_tool_defs()
-                                if not kept:
-                                    messages.append(
-                                        LLMMessage(
-                                            role="assistant",
-                                            content=outcome.content or None,
-                                            tool_calls=outcome.tool_calls or None,
-                                            reasoning_content=outcome.reasoning
-                                            or None,
-                                        )
-                                    )
-                                    for tc in outcome.tool_calls or []:
-                                        name = tc.function.name or ""
-                                        deny = (
-                                            f"工具 '{name}' 不在收尾窗口白名单，未执行。"
-                                            + (
-                                                "请落盘后调用 handoff 交卷。"
-                                                if keep_landing
-                                                else "请立即调用 handoff 交卷。"
-                                            )
-                                        )
-                                        messages.append(
-                                            LLMMessage(
-                                                role="tool",
-                                                content=deny,
-                                                tool_call_id=tc.id,
-                                            )
-                                        )
-                                    messages.append(
-                                        LLMMessage(
-                                            role="user", content=breach_nudge
-                                        )
-                                    )
-                                    outcome = RoundOutcome(
-                                        content=outcome.content,
-                                        reasoning=outcome.reasoning,
-                                        usage=outcome.usage,
-                                    )
-                                    directive = Continue()
-                                    skip_tool_exec = True
-                                else:
-                                    outcome = RoundOutcome(
-                                        content=outcome.content,
-                                        reasoning=outcome.reasoning,
-                                        usage=outcome.usage,
-                                        tool_calls=kept,
-                                    )
-                                    # Nudge after tools if the round continues (below).
-                                    skip_tool_exec = False
-                                    # Mark so post-tool path can inject nudge once.
-                                    wind_down_breach_pending_nudge = True
-                                    # Stash nudge text for the post-tool inject path.
-                                    wind_down_breach_nudge_text = breach_nudge
-
+                    breach = wind_down.apply_tool_breach(outcome, tokens=total_usage.total_tokens)
+                    outcome = breach.outcome
+                    skip_tool_exec = breach.skip_tool_exec
+                    if breach.directive is not None:
+                        directive = breach.directive
                     if not skip_tool_exec:
                         _stamp_coord_busy("tool")
                         try:
@@ -1290,25 +836,8 @@ async def react_loop(
                             and controller is not None
                             and controller.take_delivery_idle_narrow_apply()
                         ):
-                            _apply_delivery_idle_narrow()
-                        if wind_down_breach_pending_nudge:
-                            from agentcore.runtime.engine.directive import Continue
-                            from agentcore.runtime.runs.cutoff import (
-                                WIND_DOWN_BREACH_NUDGE,
-                            )
-
-                            if isinstance(directive, Continue):
-                                messages.append(
-                                    LLMMessage(
-                                        role="user",
-                                        content=(
-                                            wind_down_breach_nudge_text
-                                            or WIND_DOWN_BREACH_NUDGE
-                                        ),
-                                    )
-                                )
-                            wind_down_breach_pending_nudge = False
-                            wind_down_breach_nudge_text = ""
+                            wind_down.apply_delivery_idle_narrow()
+                        wind_down.inject_pending_breach_nudge(directive)
 
             applied = await apply_loop_directive(
                 directive=directive,
@@ -1366,7 +895,7 @@ async def react_loop(
                 and controller is not None
                 and controller.take_delivery_idle_narrow_apply()
             ):
-                _apply_delivery_idle_narrow()
+                wind_down.apply_delivery_idle_narrow()
             # Close the post-TIMEOUT grace round so the next entry force-cancels.
             if role == "worker" and run_id:
                 from agentcore.runtime.runs.timeout_hard import (
@@ -1383,19 +912,19 @@ async def react_loop(
             rb = getattr(tool_context, "retrieval_budget", None)
             if (
                 role == "worker"
-                and not wind_down_active
+                and not wind_down.wind_down_active
                 and rb is not None
                 and rb.limit > 0
                 and rb.remaining <= 0
             ):
-                _enter_wind_down("retrieval_budget")
+                wind_down.enter_wind_down("retrieval_budget", tokens=total_usage.total_tokens)
                 logger.info(
                     "engine.retrieval_budget_wind_down",
                     run_id=run_id,
                     limit=rb.limit,
                     used=rb.used,
                 )
-            if role == "worker" and rb is not None and wind_down_active:
+            if role == "worker" and rb is not None and wind_down.wind_down_active:
                 # 收尾窗口已禁检索：上一轮那条余额播报会跟「禁止再检索」自相矛盾。
                 from agentcore.runtime.runs.retrieval_budget import (
                     drop_retrieval_budget_awareness,
@@ -1496,9 +1025,7 @@ async def react_loop(
                 searches=rb_exit.searches_used,
                 reads=rb_exit.reads_used,
                 remaining=rb_exit.remaining,
-                critical=is_retrieval_budget_critical(
-                    rb_exit.remaining, limit=rb_exit.limit
-                ),
+                critical=is_retrieval_budget_critical(rb_exit.remaining, limit=rb_exit.limit),
                 final=True,
             )
         if steer_cid:
@@ -1513,9 +1040,7 @@ async def react_loop(
             if leftovers:
                 # Stop = silent: unread classic steers must not become a new turn.
                 # User-initiated FIFO is untouched (Stop ≠ 取消排队).
-                if turn_runs.is_user_stop(steer_cid) or turn_runs.is_superseded(
-                    steer_cid
-                ):
+                if turn_runs.is_user_stop(steer_cid) or turn_runs.is_superseded(steer_cid):
                     discard_leftovers_on_user_stop(leftovers)
                 else:
                     promote_leftovers_to_queue(leftovers)

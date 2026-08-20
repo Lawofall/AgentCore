@@ -5,14 +5,13 @@ import { create } from "zustand";
 
 /**
  * 对话页「折叠/展开」偏好的持久化（AI 页交互状态持久化）—— 统一原语，取代散落各组件的
- * 一次性 `useState`（那类是**会话内存态**，一离开该组件即丢：切对话、聊天⇄画布、刷新/重启、
+ * 一次性 `useState`（那类是**会话内存态**，一离开该组件即丢：切对话、刷新/重启、
  * 重开运行详情面板都会把用户手动展开/收起的选择清回默认）。
  *
- * 设计对齐仓内既有、已验证的两处持久化：`components/files/fileTreeExpanded.ts`（按树 id 存展开集）
- * 与 `stores/ui.ts` 的 `conversationViews`（每对话视图偏好、**只落偏离默认的项**，故表恒收敛不膨胀）。
- * 这里同样**只存「偏离默认」的项**——一旦某条被切回其默认值即删键——所以这张 map 收敛在用户真正
- * 动过的少数折叠上，不随历史回合无限增长。删除对话时经 {@link clearConversationUiState} /
- * {@link clearDisclosureForConversation} 连带清理。
+ * 与仓内既有、已验证的 `components/files/fileTreeExpanded.ts`（按树 id 存展开集）
+ * 对齐：**只存「偏离默认」的项**——一旦某条被切回其默认值即删键——所以这张 map
+ * 收敛在用户真正动过的少数折叠上，不随历史回合无限增长。删除对话时经
+ * {@link clearConversationUiState} / {@link clearDisclosureForConversation} 连带清理。
  *
  * **键的作用域**：有效键 = `${当前对话 id}::${调用方给的稳定 key}`。对话 id 由 hook 内部读，故调用方
  * 只需给「回合/运行 + 元素」这段稳定标识（messageId / runId / step.id / 轮号 / sideKey / 通道+序号…）。
@@ -41,7 +40,7 @@ function persist(map: Record<string, boolean>): void {
 }
 
 interface DisclosureState {
-  /** 只含「偏离默认」的项：value === 该项默认值时即删键，故表恒收敛（同 conversationViews）。 */
+  /** 只含「偏离默认」的项：value === 该项默认值时即删键，故表恒收敛。 */
   map: Record<string, boolean>;
   /** 写入一个折叠状态；`def` 为该项默认值——等于默认即删键（收敛不膨胀），否则记下偏离值。 */
   setKey: (fullKey: string, value: boolean, def: boolean) => void;

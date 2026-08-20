@@ -60,8 +60,6 @@ export interface SendTurnSpec {
   optimisticUserId: string;
   /** 必填分流；空闲开跑传 ``steer``。 */
   delivery?: "steer" | "queue";
-  /** 答非阻塞提问时与出站 ``question_posted.ask_id`` 对上。缺省 = 普通消息。 */
-  askId?: string | null;
 }
 
 function setExecutionVia(
@@ -170,7 +168,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
     agentMentions = [],
     optimisticUserId,
     delivery = "steer",
-    askId,
   } = spec;
   const store = useConversationStore.getState();
   // A new send takes the stream — stop GET-attach retries so we never race a
@@ -274,7 +271,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           content,
           optimisticUserId,
           agentMentions,
-          askId,
           signal: ac.signal,
           turnCommit,
         });
@@ -310,7 +306,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           attachments,
           agentMentions,
           delivery,
-          askId,
           signal: ac.signal,
           turnCommit,
         });
@@ -349,7 +344,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
         attachments,
         agentMentions,
         delivery,
-        askId,
         signal: ac.signal,
         turnCommit,
       });

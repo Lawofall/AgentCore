@@ -88,11 +88,9 @@ def test_waiting_kinds_map_to_an_attention_kind():
     for waiting in (
         "approval",
         "escalation",
-        "delegation_authorization",
         "ask_user",
         "plan_review",
         "team_preview",
-        "question_posted",
     ):
         assert attention_kind_of(waiting) is AttentionKind(waiting)
 
@@ -126,7 +124,6 @@ def test_title_prefers_what_the_card_asks():
 def test_title_falls_back_per_kind_and_stays_bounded():
     assert attention_title(AttentionKind.PLAN_REVIEW, {}) == "AI 计划待你确认"
     assert attention_title(AttentionKind.APPROVAL, None) == "AI 需要你的授权"
-    assert attention_title(AttentionKind.QUESTION_POSTED, {}) == "团队还在跑，有问题等你"
 
     long_question = "问" * 500
     title = attention_title(AttentionKind.ASK_USER, {"question": long_question})
@@ -176,34 +173,6 @@ async def test_resolved_publishes_and_never_pushes(hub: ChatHub, pushes):
     (event,) = _drain(sub)
     assert event["state"] == "resolved"
     assert set(event) == ATTENTION_KEYS
-    assert pushes == []
-
-
-async def test_question_posted_is_waiting_not_progress(hub: ChatHub, pushes):
-    """Non-blocking pending questions ride the 「在等你」channel, distinct from a stop."""
-    sub = hub.subscribe("u1", device_id="d1", platform="desktop")
-
-    await signal_attention_required(
-        user_id="u1",
-        conversation_id="conv-1",
-        turn_id="turn-1",
-        interaction_id="ask-1",
-        kind=AttentionKind.QUESTION_POSTED,
-        title="要不要双语？",
-        push=False,
-    )
-
-    assert _drain(sub) == [
-        {
-            "type": ATTENTION_EVENT_TYPE,
-            "state": "required",
-            "conversation_id": "conv-1",
-            "turn_id": "turn-1",
-            "interaction_id": "ask-1",
-            "kind": "question_posted",
-            "title": "要不要双语？",
-        }
-    ]
     assert pushes == []
 
 
@@ -267,31 +236,6 @@ async def test_push_fires_when_nothing_is_listening(hub: ChatHub, pushes):
         "interaction_id": "appr-1",
         "kind": "approval",
     }
-
-
-async def test_question_posted_push_says_the_team_kept_running(hub: ChatHub, pushes):
-    """The headline itself must carry「团队没停」——the body is normally the question.
-
-    Body only degrades to a generic line when the card carries no question of its
-    own, so a headline that read like a freezing checkpoint would leave the normal
-    push with nothing saying the team kept going.「不用急的题显示成卡住了」比不通知
-    更糟，而推送正是把离开的人叫回来的那一面。``拍板`` stays reserved for the kinds
-    that really do freeze the turn.
-    """
-    await signal_attention_required(
-        user_id="u1",
-        conversation_id="conv-1",
-        turn_id="turn-1",
-        interaction_id="q-1",
-        kind=AttentionKind.QUESTION_POSTED,
-        title="配色要跟旧版保持一致吗？",
-        push=True,
-    )
-
-    (_user_id, notification) = pushes[0]
-    assert notification.body == "配色要跟旧版保持一致吗？"
-    assert "还在跑" in notification.title
-    assert "拍板" not in notification.title
 
 
 async def test_open_desktop_does_not_swallow_the_push(hub: ChatHub, pushes):

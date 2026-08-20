@@ -6,7 +6,7 @@ import { create } from "zustand";
  * Ephemeral send-refusal copy on the composer card (not the textarea, not
  * persisted). Survives first-send teardown back to ``__draft__`` after the
  * conversation slice is gone. Conversation-scoped ``setError`` still feeds
- * canvas {@link import("@/components/chat/RetryBanner").RetryBanner}.
+ * {@link import("@/components/chat/RetryBanner").RetryBanner}.
  */
 export type ComposerSendError = {
   message: string;

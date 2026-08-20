@@ -1,7 +1,6 @@
 import type { Execution, RunNode } from "@/stores/execution";
 import { describe, expect, it } from "vitest";
 import {
-  type PendingInteractionRef,
   collectGraphPendingDecisions,
   graphPendingDecisionsLiveSig,
 } from "../pendingDecisions";
@@ -151,27 +150,6 @@ describe("collectGraphPendingDecisions", () => {
     expect(out.map((d) => d.runId)).toEqual(["r1"]);
   });
 
-  it("anchors delegation authorization to the first worker run", () => {
-    const exec = execution(
-      [run({ id: "r1", status: "pending", actId: "act-1" })],
-      [{ id: "r1", role: "调研" }],
-    );
-    const interactions: PendingInteractionRef[] = [
-      { kind: "delegation_authorization", id: "auth1" },
-    ];
-    const out = collectGraphPendingDecisions(exec, interactions);
-    expect(out).toEqual([
-      {
-        id: "auth:auth1",
-        kind: "delegation_authorization",
-        runId: "r1",
-        actId: "act-1",
-        title: "团队授权",
-        detail: "放行开工",
-      },
-    ]);
-  });
-
   it("anchors tool approval to the captain (or null when absent)", () => {
     const withCaptain = execution(
       [run({ id: "cap", kind: "captain" }), run({ id: "r1" })],
@@ -183,7 +161,7 @@ describe("collectGraphPendingDecisions", () => {
       ]),
     ).toEqual([
       {
-        id: "appr:tc1",
+        id: "approval:tc1",
         kind: "approval",
         runId: "cap",
         actId: null,
@@ -215,11 +193,27 @@ describe("collectGraphPendingDecisions", () => {
       [{ id: "r1", role: "调研" }],
     );
     const out = collectGraphPendingDecisions(exec, [
-      { kind: "delegation_authorization", id: "auth1" },
+      { kind: "approval", id: "tc1" },
     ]);
-    expect(out.map((d) => d.kind)).toEqual([
-      "escalation",
-      "delegation_authorization",
+    expect(out.map((d) => d.kind)).toEqual(["escalation", "approval"]);
+  });
+
+  it("does not stamp a second hot-gate kind with the approval title", () => {
+    const exec = execution(
+      [run({ id: "cap", kind: "captain" }), run({ id: "r1" })],
+      [],
+    );
+    const out = collectGraphPendingDecisions(exec, [
+      { kind: "approval", id: "a1" },
+      { kind: "synthetic_hot_gate", id: "b1" },
+    ]);
+    const titles = out.map((d) => d.title);
+    expect(titles).toEqual(["工具审批", "synthetic_hot_gate"]);
+    expect(new Set(titles).size).toBe(2);
+    expect(out[1]?.kind).not.toBe("approval");
+    expect(out.map((d) => d.id)).toEqual([
+      "approval:a1",
+      "synthetic_hot_gate:b1",
     ]);
   });
 });

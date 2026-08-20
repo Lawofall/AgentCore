@@ -104,19 +104,6 @@ class DelegationGrant:
     execution_id: str
 
 
-# Settlement dialect for the 委派授权卡 (delegation_authorization interaction).
-# Distinct from CheckpointDecision (开工卡 / ask_user / plan_review).
-# Hot-path ``request_delegation_authorization`` was retired; card still settles
-# grant_delegation / per_call / deny.
-class DelegationAuthorizationDecision(StrEnum):
-    """Settlement dialect for per-delegation tool authorization choices."""
-
-    GRANT_DELEGATION = "grant_delegation"
-    PER_CALL = "per_call"
-    DENY = "deny"
-    ORPHANED = "orphaned"
-
-
 def _preview_value_max(tool_name: str, key: str) -> int:
     if tool_name == "code_execute" and key == "code":
         return _PREVIEW_CODE_EXECUTE_CODE_MAX

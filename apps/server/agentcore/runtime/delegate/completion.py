@@ -844,8 +844,6 @@ def _worker_gaps_have_hard(
 
 def format_worker_gaps_block(
     gaps_by_worker: list[tuple[str, list[dict[str, str]]]] | list[tuple[str, list[str]]],
-    *,
-    audit_off_with_token_budget: bool = False,
 ) -> str:
     """CEO-facing「契约缺口」section, or "" when nobody has residual gaps.
 
@@ -856,8 +854,7 @@ def format_worker_gaps_block(
 
     Soft-only gaps (``_SOFT_GAP_REASONS``) ban completeness assertions but do **not**
     force「部分交付 / 尚未齐备」. Any hard gap keeps the partial-delivery closing
-    copy unchanged. ``audit_off_with_token_budget`` injects a sampling-check tip
-    when policy.audit is off and a token_budget gap is present.
+    copy unchanged.
     """
     from agentcore.runtime.runs.cutoff import CUTOFF_REASONS
 
@@ -891,11 +888,6 @@ def format_worker_gaps_block(
         lines.append(
             "结构化交付缺口已由系统对账卡呈现，概览正文不必逐条复述掐断原因；"
             "可建议续派、绑定本机执行环境或 continue_from_run_id。"
-        )
-    if audit_off_with_token_budget:
-        lines.append(
-            "**【建议抽检】**本批未开 audit，且存在 token_budget 掐断缺口："
-            "请在终稿提示用户抽检关键落盘文件 / 续派补齐，勿宣称已充分审计。"
         )
     return "\n".join(lines) + "\n"
 

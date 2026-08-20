@@ -129,18 +129,37 @@ export function writeMemoryTopic(
   );
 }
 
+type MemoryUpdateFeedItem = Schemas["MemoryUpdateFeedItem"];
+
 /**
  * One offline-consolidation pass in the cross-conversation「最近更新」feed (§1.6).
  * CamelCase client projection of OpenAPI `MemoryUpdateFeedItem` (M17 exemption:
  * OpenAPI has no camelCase feed-entry schema).
+ *
+ *  `kind` is the generated wire type (not a narrower local union). Pass it through
+ *  unchanged so a new value cannot be silently rewritten to `"semantic"`.
  */
 export interface MemoryUpdateFeedEntry {
-  id: string;
+  id: MemoryUpdateFeedItem["id"];
   conversationId: string;
   createdAt: string;
-  kind: "episodic" | "semantic";
-  summary?: string | null;
+  kind: MemoryUpdateFeedItem["kind"];
+  summary?: MemoryUpdateFeedItem["summary"];
   items: MemoryUpdateItem[];
+}
+
+/** Map one OpenAPI `MemoryUpdateFeedItem` → mobile {@link MemoryUpdateFeedEntry}. */
+export function toMemoryUpdateFeedEntry(
+  u: MemoryUpdateFeedItem,
+): MemoryUpdateFeedEntry {
+  return {
+    id: u.id,
+    conversationId: u.conversation_id,
+    createdAt: u.created_at,
+    kind: u.kind,
+    summary: u.summary ?? null,
+    items: u.items ?? [],
+  };
 }
 
 /**
@@ -155,12 +174,5 @@ export async function listMemoryUpdates(
     `/v1/users/me/memory/updates?limit=${limit}`,
     "加载记忆更新失败",
   );
-  return (data.updates ?? []).map((u) => ({
-    id: u.id,
-    conversationId: u.conversation_id,
-    createdAt: u.created_at,
-    kind: u.kind === "episodic" ? "episodic" : "semantic",
-    summary: u.summary ?? null,
-    items: u.items ?? [],
-  }));
+  return (data.updates ?? []).map(toMemoryUpdateFeedEntry);
 }

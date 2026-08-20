@@ -24,7 +24,6 @@ def _spec(
     deps: tuple[str, ...] = (),
     *,
     on_failure: str = "degrade",
-    max_retries: int = 0,
     checkpoint_after: bool = False,
     bind_after_deps: bool = False,
 ) -> RunSpec:
@@ -36,7 +35,7 @@ def _spec(
         depends_on=list(deps),
         checkpoint_after=checkpoint_after,
         bind_after_deps=bind_after_deps,
-        policy=RunPolicy(on_failure=on_failure, max_retries=max_retries),
+        policy=RunPolicy(on_failure=on_failure),
     )
 
 
@@ -125,7 +124,7 @@ async def test_degrade_lets_dependents_proceed():
 async def test_retry_failure_cascades_skip_like_skip_policy():
     """Default retry (after infra retries) must not feed dependents a failed product."""
     plan = RunPlan()
-    plan.add(_spec("a", on_failure="retry", max_retries=0))
+    plan.add(_spec("a", on_failure="retry"))
     plan.add(_spec("synth", ("a",)))
 
     async def ex(spec: RunSpec, _completed) -> RunState:
@@ -146,7 +145,7 @@ async def test_multi_upstream_partial_failure_runs_synth():
     """Lenient fan-in: ≥1 upstream COMPLETED → synth runs (not cascade-skip)."""
     plan = RunPlan()
     for rid in ("legal", "business", "pr", "culture"):
-        plan.add(_spec(rid, on_failure="retry", max_retries=0))
+        plan.add(_spec(rid, on_failure="retry"))
     plan.add(_spec("synth", ("legal", "business", "pr", "culture")))
 
     async def ex(spec: RunSpec, completed) -> RunState:
@@ -179,7 +178,7 @@ async def test_multi_upstream_require_upstream_still_cascade_skips():
     """require_upstream=True restores strict cascade-skip on any retry-failure."""
     plan = RunPlan()
     for rid in ("legal", "business", "pr", "culture"):
-        plan.add(_spec(rid, on_failure="retry", max_retries=0))
+        plan.add(_spec(rid, on_failure="retry"))
     plan.add(
         RunSpec(
             run_id="synth",
@@ -286,7 +285,7 @@ async def test_multi_upstream_cancel_require_upstream_cascade_skips():
 async def test_merge_without_replaces_keeps_cascade_skip():
     """Secondary delegate without replaces_run_id must not revive a cascade-skipped synth."""
     plan = RunPlan()
-    plan.add(_spec("pr", on_failure="retry", max_retries=0))
+    plan.add(_spec("pr", on_failure="retry"))
     plan.add(_spec("synth", ("pr",)))
 
     async def ex(spec: RunSpec, _completed) -> RunState:
@@ -300,7 +299,7 @@ async def test_merge_without_replaces_keeps_cascade_skip():
         if "pr" not in completed or plan.by_id("pr_solo") is not None:
             return
         if completed["pr"].phase is RunPhase.FAILED:
-            plan.add(_spec("pr_solo", on_failure="retry", max_retries=0))
+            plan.add(_spec("pr_solo", on_failure="retry"))
 
     skipped: list[tuple[str, str, str]] = []
     res = await WaveScheduler().run(
@@ -316,7 +315,7 @@ async def test_merge_without_replaces_keeps_cascade_skip():
 async def test_replaces_mid_run_revives_cascade_skipped_dependent():
     """Failed upstream + replaces_run_id rewrite → skipped synth waits on replacement."""
     plan = RunPlan()
-    plan.add(_spec("pr", on_failure="retry", max_retries=0))
+    plan.add(_spec("pr", on_failure="retry"))
     plan.add(_spec("synth", ("pr",)))
     replaced = {"done": False}
     seen_deps: dict[str, set[str]] = {}
@@ -345,7 +344,7 @@ async def test_replaces_mid_run_revives_cascade_skipped_dependent():
                 role="pr_b",
                 depends_on=[],
                 replaces_run_id="pr",
-                policy=RunPolicy(on_failure="retry", max_retries=0),
+                policy=RunPolicy(on_failure="retry"),
             )
         )
         replaced["done"] = True
@@ -363,7 +362,7 @@ async def test_replaces_mid_run_revives_cascade_skipped_dependent():
 async def test_retry_then_succeeds():
     """Wave dispatches once: a terminal FAILED is not remounted."""
     plan = RunPlan()
-    plan.add(_spec("a", on_failure="retry", max_retries=2))
+    plan.add(_spec("a", on_failure="retry"))
     calls = {"n": 0}
 
     async def ex(_spec: RunSpec, _completed) -> RunState:
@@ -383,7 +382,7 @@ async def test_retry_then_succeeds():
 async def test_retryable_failure_does_not_rerun_node():
     """Transient FAILED must not remount the worker (no second executor hop)."""
     plan = RunPlan()
-    plan.add(_spec("a", on_failure="retry", max_retries=2))
+    plan.add(_spec("a", on_failure="retry"))
     calls = {"n": 0}
 
     async def ex(_spec: RunSpec, _completed) -> RunState:
@@ -400,8 +399,7 @@ async def test_retry_merges_billing_including_string_annotations():
     summed into the returned state, while string annotations (currency / pricing_source /
     credential_source) must pass through untouched — regression for the int() crash."""
     plan = RunPlan()
-    plan.add(_spec("a", on_failure="retry", max_retries=1))
-    plan.nodes[0].policy.retry_delay_ms = 0
+    plan.add(_spec("a", on_failure="retry"))
     calls = {"n": 0}
 
     async def ex(_spec: RunSpec, _completed) -> RunState:
@@ -436,7 +434,7 @@ async def test_deterministic_failure_skips_retry():
     """确定性失败区分 (BL-6): a FAILED state flagged ``error_retryable=False`` (prompt 超长 /
     鉴权 / 余额) is NOT re-run even under ``on_failure="retry"`` — re-running just re-fails."""
     plan = RunPlan()
-    plan.add(_spec("a", on_failure="retry", max_retries=3))
+    plan.add(_spec("a", on_failure="retry"))
     calls = {"n": 0}
 
     async def ex(_spec: RunSpec, _completed) -> RunState:
@@ -452,8 +450,7 @@ async def test_deterministic_failure_skips_retry():
 async def test_retryable_failure_still_exhausts_retries():
     """Wave no longer 整跑s a transient FAILED — continue budget lives in the executor."""
     plan = RunPlan()
-    plan.add(_spec("a", on_failure="retry", max_retries=2))
-    plan.nodes[0].policy.retry_delay_ms = 0
+    plan.add(_spec("a", on_failure="retry"))
     calls = {"n": 0}
 
     async def ex(_spec: RunSpec, _completed) -> RunState:
@@ -470,8 +467,7 @@ async def test_retry_hot_continues_prior_transcript():
     from agentcore.llm.provider.protocol import LLMMessage
 
     plan = RunPlan()
-    plan.add(_spec("a", on_failure="retry", max_retries=1))
-    plan.nodes[0].policy.retry_delay_ms = 0
+    plan.add(_spec("a", on_failure="retry"))
     prior = [
         LLMMessage(role="system", content="SYS"),
         LLMMessage(role="user", content="做A"),
@@ -497,8 +493,7 @@ async def test_retry_hot_continues_prior_transcript():
 async def test_retry_without_transcript_stays_cold():
     """FAILED with empty transcript → retry still cold (no site to seed)."""
     plan = RunPlan()
-    plan.add(_spec("a", on_failure="retry", max_retries=1))
-    plan.nodes[0].policy.retry_delay_ms = 0
+    plan.add(_spec("a", on_failure="retry"))
     seeded_self = []
 
     async def ex(spec: RunSpec, completed) -> RunState:

@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
+import { CLAMPED_PRE_CLASS } from "@/lib/clampPreview";
 import { cn } from "@/lib/utils";
 import type { ReplaySpan } from "@/services/adminObservability";
 import { Check, ChevronDown, ChevronRight, Wrench, X } from "lucide-react";
@@ -58,12 +59,22 @@ export function ToolLine({
       {open && hasBody && (
         <div className="mt-1 space-y-1.5 border-border border-l pl-3 ml-1.5">
           {span.args_preview && (
-            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-muted px-2.5 py-1.5 font-mono text-xs text-muted-foreground">
+            <pre
+              className={cn(
+                CLAMPED_PRE_CLASS,
+                "rounded-lg bg-muted px-2.5 py-1.5 font-mono text-xs text-muted-foreground",
+              )}
+            >
               {span.args_preview}
             </pre>
           )}
           {span.result_preview && (
-            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-muted/60 px-2.5 py-1.5 font-mono text-xs text-muted-foreground">
+            <pre
+              className={cn(
+                CLAMPED_PRE_CLASS,
+                "rounded-lg bg-muted/60 px-2.5 py-1.5 font-mono text-xs text-muted-foreground",
+              )}
+            >
               → {span.result_preview}
             </pre>
           )}

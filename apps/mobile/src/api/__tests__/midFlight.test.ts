@@ -341,36 +341,6 @@ describe("sendMidFlightMessage", () => {
     ]);
   });
 
-  it("includes ask_id when answering a hanging question", async () => {
-    fetchMock.mockResolvedValue(
-      new Response(new ReadableStream({ start: (c) => c.close() }), {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-      }),
-    );
-    await sendMidFlightMessage(
-      "c1",
-      "也要 PDF。",
-      {
-        onLiveEvent: () => {},
-        onQueued: () => {},
-        beginTurn2: () => {},
-        onTurn2Event: () => {},
-        isPrimaryIdle: () => true,
-        waitPrimaryIdle: async () => {},
-      },
-      undefined,
-      undefined,
-      "steer",
-      undefined,
-      "ask1",
-    );
-    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as {
-      ask_id?: string;
-    };
-    expect(body.ask_id).toBe("ask1");
-  });
-
   it("HTTP 202 → error（退役受理）", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ queue_id: "q" }), { status: 202 }),

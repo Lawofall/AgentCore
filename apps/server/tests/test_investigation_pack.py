@@ -119,6 +119,8 @@ async def test_write_investigation_pack_required_files(tmp_path: Path) -> None:
     assert loaded_meta["schema_version"] == PACK_SCHEMA_VERSION
     assert loaded_meta["exported_at"]
     assert "messages.json" not in loaded_meta["files"]
+    assert loaded_meta["journal"]["mode"] == "absent"
+    assert not (out / "turn_journal.jsonl").exists()
 
 
 @pytest.mark.asyncio
@@ -213,6 +215,79 @@ async def test_write_investigation_pack_optional_and_full(tmp_path: Path) -> Non
     full = json.loads((out / "messages.json").read_text(encoding="utf-8"))
     assert full["messages"][0]["content"] == "full reply body for pack"
     assert "reasoning_content" not in full["messages"][0]
+
+
+@pytest.mark.asyncio
+async def test_pack_journal_is_always_redacted_even_with_full(tmp_path: Path) -> None:
+    tid = "d" * 32
+    export = tmp_path / "export"
+    export.mkdir()
+    secret = "USER_SAID_THIS_IN_THE_PROMPT"
+    (export / "turn_journal.jsonl").write_text(
+        json.dumps(
+            {
+                "turn_id": "msg1",
+                "seq": 0,
+                "band": "live",
+                "kind": "turn_started",
+                "trace_id": tid,
+                "conversation_id": "conv-pack",
+                "payload": {
+                    "system_prompt": secret,
+                    "user_message": secret,
+                    "model_profile": "chat",
+                    "history_len": 1,
+                },
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "turn_id": "msg1",
+                "seq": 1,
+                "kind": "llm_call",
+                "trace_id": tid,
+                "conversation_id": "conv-pack",
+                "payload": {
+                    "run_id": "cap",
+                    "content": secret,
+                    "usage": {"input": 3, "output": 4},
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (export / "conversations.jsonl").write_text(
+        json.dumps({"id": "conv-pack", "title": "t", "agent_id": "ceo"}) + "\n",
+        encoding="utf-8",
+    )
+    store = ExportConversationStore(export)
+    result = TimelineQueryResult(
+        mode="trace",
+        trace_id=tid,
+        log_events=_events(tid),
+        decision_spine=_spine(tid),
+        meta={"conversation_id": "conv-pack"},
+    )
+    out = tmp_path / "pack-journal"
+    meta = await write_investigation_pack(
+        result, out_dir=out, store=store, full=True, export_dir=export
+    )
+    assert "journal.redacted.jsonl" in meta["files"]
+    assert "journal.summary.json" in meta["files"]
+    assert meta["journal"]["mode"] == "redacted"
+    assert meta["journal"]["rows"] == 2
+    assert not (out / "turn_journal.jsonl").exists()
+    blob = (out / "journal.redacted.jsonl").read_text(encoding="utf-8")
+    assert secret not in blob
+    rows = [json.loads(line) for line in blob.splitlines() if line]
+    assert rows[0]["payload"]["model_profile"] == "chat"
+    assert "user_message" not in rows[0]["payload"]
+    assert rows[1]["payload"]["usage"]["input"] == 3
+    summary = json.loads((out / "journal.summary.json").read_text(encoding="utf-8"))
+    assert summary["llm_facts"] == 1
+    assert secret not in json.dumps(summary)
 
 
 def test_sanitize_drops_llm_body() -> None:

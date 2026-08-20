@@ -6,18 +6,22 @@
     python -m agentcore.evals --layer 1        # 仅 L0 确定性 Check（无裁判，便宜）
     python -m agentcore.evals --out report.json
     python -m agentcore.evals --lint-only      # 只静态校验用例（零 LLM，per-PR 硬门禁）
-    python -m agentcore.evals --update-baseline   # 落 baseline（回归门基准）后退出
-    python -m agentcore.evals --baseline eval-out/core-baseline.json  # 跑回归门（跌破即非 0）
+    python -m agentcore.evals --update-baseline   # 落 baseline（下次对比用）后退出
+    python -m agentcore.evals --baseline eval-out/core-baseline.json  # 相对基线观测（不卡门禁）
+    python -m agentcore.evals --diff-reports current.json baseline.json  # 零 LLM，对比两份已有报告
     python -m agentcore.evals --compare        # 对比评估：团队 vs 单体（成对裁判，诊断）
     python -m agentcore.evals --calibrate      # 裁判校准：gold-set 算判↔人 kappa（kappa<门 即非 0）
+    python -m agentcore.evals --playbook-routing  # playbook 路由回归（报告型，真跑 LLM，不卡门禁）
 
-``--baseline`` 与 ``--out`` 同给时，回归门判定一并写进报告 JSON 的 ``ratchet`` 段——夜跑摘要
-据此渲染，不在 CI 里拿 jq 重算一遍门禁。
+``--baseline`` 与 ``--out`` 同给时，相对基线观测写进报告 JSON 的 ``ratchet`` 段——夜跑摘要
+据此渲染。这是观测不是门禁：不因「看起来像退化」改退出码（真跑步骤的
+``continue-on-error`` 仍是唯一软失败语义）。真 LLM 有方差，报告用共享用例翻转方向
+区分抖动 vs 单方向变差；做不到就明说，不用固定容差假装能吸收方差。
 
 真跑（非 ``--lint-only``）会调真实 DeepSeek，需 ``EVAL_DEEPSEEK_API_KEY``。L1 绝对分裁判默认
 固定 Pro 档（Pro 评 Flash，压同家族自偏好），可经 ``EVAL_JUDGE_MODEL`` 覆盖模型。
-退出码：全过/未回归/裁判可信=0；用例未过、跌破 baseline 或 kappa<门=1；
-配置/加载错误=2——便于挂 CI。
+退出码：全过/裁判可信=0；用例未过或 kappa<门=1；配置/加载错误=2。
+相对基线观测与 ``--playbook-routing`` 都不改退出码。
 """
 
 from __future__ import annotations
@@ -80,7 +84,8 @@ from agentcore.evals.deliverable_form import (
     lint_samples as lint_deliverable_form_samples,
 )
 from agentcore.evals.judge import build_default_judge, build_default_milestone_judge
-from agentcore.evals.report import baseline_regression, format_report, report_to_dict
+from agentcore.evals.observe import format_observe, observe_report
+from agentcore.evals.report import format_report, report_to_dict
 from agentcore.evals.routing import (
     format_routing_report,
     routing_metrics,
@@ -99,6 +104,47 @@ _DEFAULT_EVAL_OUT = Path(__file__).resolve().parents[2] / "eval-out"
 
 # gold-set 默认读包内 evals/cases/gold/labels.json（人工标注数据，随用例同放）。
 _DEFAULT_GOLD_SET = Path(__file__).resolve().parent / "cases" / "gold" / "labels.json"
+
+
+def _warn_ignored_tolerance(args: argparse.Namespace) -> None:
+    if args.regression_tolerance is not None:
+        print(
+            "[observe] --regression-tolerance 已忽略："
+            "不再用固定容差假装能吸收真模型方差。看报告里的翻转方向。",
+            file=sys.stderr,
+        )
+
+
+def _attach_observe(payload: dict, args: argparse.Namespace) -> dict:
+    """把相对基线观测写进 payload['ratchet']（键名留给夜跑 jq del，语义是观测不是门）。"""
+    if not args.baseline or args.update_baseline:
+        return payload
+    bpath = Path(args.baseline)
+    if bpath.is_file():
+        baseline = json.loads(bpath.read_text(encoding="utf-8"))
+        if not isinstance(baseline, dict):
+            baseline = None
+    else:
+        baseline = None
+    payload["ratchet"] = observe_report(payload, baseline, baseline_path=str(bpath))
+    print(format_observe(payload["ratchet"]))
+    return payload
+
+
+def _run_diff_reports(args: argparse.Namespace) -> int:
+    current_path, baseline_path = (Path(p) for p in args.diff_reports)
+    current = json.loads(current_path.read_text(encoding="utf-8"))
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    if not isinstance(current, dict) or not isinstance(baseline, dict):
+        raise EvalConfigError("--diff-reports 的两份文件顶层都必须是 JSON 对象")
+    obs = observe_report(current, baseline, baseline_path=str(baseline_path))
+    print(format_observe(obs))
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(obs, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"\n[report] 已写出观测 JSON -> {out}")
+    return 0  # 观测永不改退出码
 
 
 def _default_baseline_path(suite: str) -> Path:
@@ -129,7 +175,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--baseline",
         default=None,
-        help="baseline JSON 路径：存在则跑回归门（跌破即非 0）；配 --update-baseline 则写入",
+        help="baseline JSON 路径：存在则做相对基线观测（不卡门禁）；配 --update-baseline 则写入",
     )
     p.add_argument(
         "--update-baseline",
@@ -137,10 +183,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="把报告写为 baseline 后退出（缺省 eval-out/<suite>-baseline.json）",
     )
     p.add_argument(
+        "--diff-reports",
+        nargs=2,
+        metavar=("CURRENT", "BASELINE"),
+        default=None,
+        help="零 LLM：对比两份已有报告 JSON，打印相对基线观测（不跑模型、不改退出码）",
+    )
+    p.add_argument(
         "--regression-tolerance",
         type=float,
-        default=0.05,
-        help="回归门容差：当前 pass_rate < baseline-容差 才判回归（吸收真模型非确定性，默认 0.05）",
+        default=None,
+        help="已弃用、忽略：不再用固定容差假装能吸收真模型方差",
     )
     p.add_argument(
         "--lint-only",
@@ -179,7 +232,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--calibrate",
         action="store_true",
-        help="裁判校准：人工 gold-set 过生产裁判，算判↔人 kappa（kappa>=门 才准上 baseline 门）",
+        help="裁判校准：人工 gold-set 过生产裁判，算判↔人 kappa（kappa>=门 才算裁判可信）",
     )
     p.add_argument(
         "--debate-converge",
@@ -195,6 +248,25 @@ def _build_parser() -> argparse.ArgumentParser:
         "--deliverable-form",
         action="store_true",
         help="交付形态 form=prose|files：直连 complete 量 CEO 看/用分流与落盘指示",
+    )
+    p.add_argument(
+        "--playbook-routing",
+        action="store_true",
+        help=(
+            "playbook 路由回归（报告型，不卡门禁）：口语为主 + 教科书对照，"
+            "真跑 LLM，多采样记分布，对比上次基线落点"
+        ),
+    )
+    p.add_argument(
+        "--keys",
+        default=None,
+        help="只跑指定场景 key（逗号分隔）；--playbook-routing 用",
+    )
+    p.add_argument(
+        "--retries",
+        type=int,
+        default=0,
+        help="playbook-routing：单样本 ERROR 时额外重试次数（默认 0，各次结果都记）",
     )
     p.add_argument(
         "--gold-set",
@@ -225,12 +297,11 @@ async def _run_comparison(args: argparse.Namespace) -> int:
     report = await run_comparison_suite(cases, judge=judge, layer=2)
     print(format_comparison_report(report))
 
+    payload = comparison_report_to_dict(report)
+    _attach_observe(payload, args)
     if args.out:
         out = Path(args.out)
-        out.write_text(
-            json.dumps(comparison_report_to_dict(report), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n[report] 已写出 JSON -> {out}")
     return 0  # 对比为软门禁（信息性），不以胜率卡退出码
 
@@ -255,16 +326,11 @@ async def _run_routing(args: argparse.Namespace) -> int:
     metrics = routing_metrics(report.cases)
     print("\n" + format_routing_report(metrics))
 
+    payload = {"report": report_to_dict(report), "routing": routing_metrics_to_dict(metrics)}
+    _attach_observe(payload, args)
     if args.out:
         out = Path(args.out)
-        out.write_text(
-            json.dumps(
-                {"report": report_to_dict(report), "routing": routing_metrics_to_dict(metrics)},
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n[report] 已写出 JSON -> {out}")
 
     return 0 if report.passed == report.total else 1
@@ -288,12 +354,11 @@ async def _run_style(args: argparse.Namespace) -> int:
     metrics = style_metrics(report.cases)
     print(format_style_report(metrics))
 
+    payload = style_metrics_to_dict(metrics)
+    _attach_observe(payload, args)
     if args.out:
         out = Path(args.out)
-        out.write_text(
-            json.dumps(style_metrics_to_dict(metrics), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n[report] 已写出 JSON -> {out}")
     return 0  # 风格为软门禁（信息性），不以违规率卡退出码
 
@@ -301,7 +366,7 @@ async def _run_style(args: argparse.Namespace) -> int:
 async def _run_calibration(args: argparse.Namespace) -> int:
     """裁判校准分支：gold-set 过生产裁判 → 判↔人一致度 → kappa 门判可信（重设计 §五）。
 
-    退出码：``kappa>=门``（裁判可信）=0；低于门=1（别拿这把没校准的尺子去卡 baseline 门）；
+    退出码：``kappa>=门``（裁判可信）=0；低于门=1（别拿这把没校准的尺子去读相对基线观测）；
     gold-set 结构错误经 :class:`EvalConfigError` → 2。``--lint-only`` 零 LLM 只校验 gold-set 结构。
     """
     path = Path(args.gold_set) if args.gold_set else _DEFAULT_GOLD_SET
@@ -413,7 +478,72 @@ async def _run_deliverable_form(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _run_playbook_routing(args: argparse.Namespace) -> int:
+    """Playbook 路由回归：真跑 LLM，报告型（退出码不跟落点走）。"""
+    from datetime import UTC, datetime
+
+    from agentcore.evals.playbook_routing import (
+        DEFAULT_ROUNDS,
+        DEFAULT_SAMPLES,
+        SCENARIOS,
+        PlaybookRoutingRunConfig,
+        format_playbook_routing_report,
+        lint_scenarios,
+        slim_baseline,
+    )
+    from agentcore.evals.playbook_routing_loop import run_playbook_routing
+
+    lint_scenarios(SCENARIOS)
+    if args.lint_only:
+        print(f"[lint] OK — {len(SCENARIOS)} 个 playbook 路由场景结构合法（报告型，不卡门禁）")
+        return 0
+
+    samples = args.samples if args.samples is not None else DEFAULT_SAMPLES
+    cfg = PlaybookRoutingRunConfig(
+        samples=samples,
+        rounds=DEFAULT_ROUNDS,
+        retries=int(args.retries or 0),
+        mode=args.mode or "economy",
+        quiet=False,
+    )
+    if args.baseline:
+        baseline_path = Path(args.baseline)
+    else:
+        baseline_path = _DEFAULT_EVAL_OUT / "playbook-routing-baseline.json"
+    previous = None
+    if baseline_path.is_file():
+        previous = json.loads(baseline_path.read_text(encoding="utf-8"))
+
+    report = await run_playbook_routing(
+        config=cfg,
+        previous_baseline=previous,
+        keys=args.keys,
+    )
+    print(format_playbook_routing_report(report))
+
+    ts = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    out = Path(args.out) if args.out else _DEFAULT_EVAL_OUT / f"playbook-routing-{ts}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n[report] 已写出 JSON -> {out}")
+
+    if args.update_baseline:
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        baseline_path.write_text(
+            json.dumps(slim_baseline(report), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"[baseline] 已更新落点指纹 -> {baseline_path}")
+
+    return 0  # 观测报告，不以落点卡门禁
+
+
 async def _run(args: argparse.Namespace) -> int:
+    _warn_ignored_tolerance(args)
+    if args.diff_reports:
+        return _run_diff_reports(args)
+    if args.playbook_routing:
+        return await _run_playbook_routing(args)
     if args.deliverable_form:
         return await _run_deliverable_form(args)
     if args.debate_speech_format:
@@ -470,37 +600,8 @@ async def _run(args: argparse.Namespace) -> int:
 
     payload = report_to_dict(report)
     exit_code = 0 if report.passed == report.total else 1
-
-    # baseline：--update-baseline 写盘后退出；否则给定 --baseline 且文件存在则跑回归门。
-    # 判定同时写进 payload["ratchet"]，供夜跑摘要直接读结论——否则 CI 只能拿 jq 再实现一遍
-    # 同一条比较（同一门禁两处实现，迟早漂）。
-    if args.baseline and not args.update_baseline:
-        bpath = Path(args.baseline)
-        if bpath.is_file():
-            baseline = json.loads(bpath.read_text(encoding="utf-8"))
-            regressed, detail = baseline_regression(report, baseline, args.regression_tolerance)
-            print(f"[baseline] {detail}")
-            base_rate = float(baseline.get("summary", {}).get("pass_rate", 0.0))
-            payload["ratchet"] = {
-                "available": True,
-                "baseline_path": str(bpath),
-                "baseline_pass_rate": round(base_rate, 4),
-                "pass_rate": round(report.pass_rate, 4),
-                "tolerance": args.regression_tolerance,
-                "regressed": regressed,
-                "detail": detail,
-            }
-            if regressed:
-                exit_code = 1
-        else:
-            detail = f"未找到 {bpath}（跳过回归门；首跑用 --update-baseline 落基线）"
-            print(f"[baseline] {detail}")
-            payload["ratchet"] = {
-                "available": False,
-                "baseline_path": str(bpath),
-                "pass_rate": round(report.pass_rate, 4),
-                "detail": detail,
-            }
+    # 相对基线观测写进 ratchet 段供摘要渲染；不因观测改退出码。
+    _attach_observe(payload, args)
 
     if args.out:
         out = Path(args.out)

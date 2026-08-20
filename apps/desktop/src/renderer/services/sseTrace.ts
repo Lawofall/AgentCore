@@ -157,7 +157,6 @@ function milestone(event: SSEEvent): string {
     case "citations":
       return `[cite] ×${len(p.citations)}`;
     case "checkpoint_required":
-    case "question_posted":
     case "plan_review_required":
     case "team_preview_required":
       return `[PAUSE] ${event.type}`;

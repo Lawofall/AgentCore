@@ -14,8 +14,6 @@ import { mergeEvidenceLedger } from "@/lib/evidenceLedger";
 import type {
   ApprovalRequiredPayload,
   ApprovalResolvedPayload,
-  AskAssumption,
-  AskQuestion,
   AutoFolderCreatedPayload,
   CheckpointRequiredPayload,
   CitationsPayload,
@@ -31,8 +29,6 @@ import type {
   DebateResultPayload,
   DebateRoundPayload,
   DebateRoundStartedPayload,
-  DelegationAuthorizationRequiredPayload,
-  DelegationAuthorizationResolvedPayload,
   DeliveryStatusPayload,
   EscalationRequiredPayload,
   EscalationResolvedPayload,
@@ -44,7 +40,6 @@ import type {
   PlanReviewRequiredPayload,
   PlanReviewResolvedPayload,
   PlanRevisedPayload,
-  QuestionPostedPayload,
   ReasoningDeltaPayload,
   RunCancelledPayload,
   RunCompletedPayload,
@@ -213,13 +208,6 @@ function pushCheckpointMarker(process: ProcessStep[], id: string): void {
   process.push({ kind: "checkpoint", checkpoint_id: id });
 }
 
-/** Drop an `ask` marker (non-blocking question) at its chronological slot. */
-function pushAskMarker(process: ProcessStep[], id: string): void {
-  if (!id) return;
-  if (process.some((s) => s.kind === "ask" && s.ask_id === id)) return;
-  process.push({ kind: "ask", ask_id: id });
-}
-
 /** Drop a `plan_review` marker (plan-review gate) at its chronological slot. */
 function pushPlanReviewMarker(process: ProcessStep[], id: string): void {
   if (!id) return;
@@ -281,33 +269,6 @@ function pushUserInterjectionMarker(process: ProcessStep[], id: string): void {
   )
     return;
   process.push({ kind: "user_interjection", interjection_id: id });
-}
-
-/** Drop a `delegation_authorization` marker (委派授权痕迹锚点). 产品修正：与
- * team_preview 同锚定（「放行开工」族，授权 → 团队干活）—— insert before the last
- * `team` marker when one exists; else append. Mirrors the backend oracle. */
-function pushDelegationAuthorizationMarker(
-  process: ProcessStep[],
-  id: string,
-): void {
-  if (!id) return;
-  if (
-    process.some(
-      (s) => s.kind === "delegation_authorization" && s.authorization_id === id,
-    )
-  )
-    return;
-  const marker = {
-    kind: "delegation_authorization" as const,
-    authorization_id: id,
-  };
-  for (let i = process.length - 1; i >= 0; i--) {
-    if (process[i].kind === "team") {
-      process.splice(i, 0, marker);
-      return;
-    }
-  }
-  process.push(marker);
 }
 
 /** Fold one 逐轮叙事 update (`debate_round_started` → focus only, verdict null;
@@ -542,8 +503,6 @@ export function fold(events: SSEEvent[]): ProjectedTurn {
   let debatePretrial: DebatePretrialProjection | null = null;
   let teamSynthesisPreview: TeamSynthesisPreviewPayload | null = null;
   let deliveryStatus: DeliveryStatusPayload | null = null;
-  /** journal 内最后一条 `execution_completed.status`（若有）→ 投影到 turn/execution 终态。 */
-  let fromExecutionCompleted: TurnStatus | null = null;
   let turnWarning: string | null = null;
   let autoFolder: ProjectedTurn["autoFolder"] = null;
   // 团队便签墙 (§2.2 通): notes broadcast to siblings this turn, in post order (deduped by noteId).
@@ -1116,13 +1075,6 @@ export function fold(events: SSEEvent[]): ProjectedTurn {
       }
       case "approval_resolved":
         break;
-      case "delegation_authorization_required": {
-        const p = ev.payload as DelegationAuthorizationRequiredPayload;
-        pushDelegationAuthorizationMarker(process, p.authorization_id);
-        break;
-      }
-      case "delegation_authorization_resolved":
-        break;
       case "checkpoint_required": {
         const p = ev.payload as CheckpointRequiredPayload;
         // Positional marker only. Absorb is content_reset(reason=ask_user) when
@@ -1166,15 +1118,6 @@ export function fold(events: SSEEvent[]): ProjectedTurn {
         break;
       }
       case "stage_card_resolved":
-        break;
-      case "question_posted": {
-        // 非阻塞提问 (ask_user blocking=false): drop an `ask` marker at its chronological
-        // slot; the turn does NOT pause. Mirrors the backend oracle.
-        const p = ev.payload as QuestionPostedPayload;
-        pushAskMarker(process, p.ask_id);
-        break;
-      }
-      case "question_resolved":
         break;
       case "error": {
         sawError = true;
@@ -1224,8 +1167,6 @@ export function fold(events: SSEEvent[]): ProjectedTurn {
       // enumerated so assertNever stays exhaustive against @agentcore/contract-types.
       case "turn_saved":
       case "title_generated":
-      case "followups_generated":
-      case "followups_unavailable":
       case "board_op_required":
       case "board_read_required":
       case "desktop_notify_required":
@@ -1259,17 +1200,11 @@ export function fold(events: SSEEvent[]): ProjectedTurn {
       case "workspace_snapshot_done":
       case "workspace_snapshot_failed":
       case "execution_detached":
+      case "execution_completed":
+        // DURABLE：execution 终态不改 TurnStatus（对齐桌面 conformanceFold /
+        // 后端 oracle：finishReason → error → gate pending → running）。
+        // 协作图节点由 run_* 帧投影；live 路径 harvest 刷新在 ChatPage。
         break;
-      case "execution_completed": {
-        // 对齐桌面：payload.status 投影到终态（缺省 completed）。
-        const raw = (ev.payload as { status?: string }).status;
-        if (raw === "cancelled" || raw === "failed" || raw === "completed") {
-          fromExecutionCompleted = raw;
-        } else if (raw == null) {
-          fromExecutionCompleted = "completed";
-        }
-        break;
-      }
       case "sim.agent_action":
       case "sim.agent_state":
       case "sim.interaction":
@@ -1277,13 +1212,6 @@ export function fold(events: SSEEvent[]): ProjectedTurn {
       case "sim.tick_ended":
       case "sim.tick_frame":
       case "sim.world_event":
-      case "sim.show.affection_shift":
-      case "sim.show.departure":
-      case "sim.show.episode_gate":
-      case "sim.show.heart_pick":
-      case "sim.show.pair_formed":
-      case "sim.show.reveal":
-      case "sim.show.zero_vote_alert":
         break;
       case "turn_warning": {
         turnWarning = (ev.payload as TurnWarningPayload).message;
@@ -1370,9 +1298,7 @@ export function fold(events: SSEEvent[]): ProjectedTurn {
 
   const interactions = foldInteractions(events);
   let status: TurnStatus;
-  if (fromExecutionCompleted != null) {
-    status = fromExecutionCompleted;
-  } else if (finishReason != null) {
+  if (finishReason != null) {
     status = FINISH_TO_STATUS[finishReason] ?? "completed";
   } else if (sawError) {
     status = "failed";
@@ -1629,7 +1555,7 @@ export function extractEvidenceLedger(
 /**
  * 工具执行阶段进度 (联网搜索前端展示优化): the LATEST coarse phase per still-running tool call,
  * pulled straight off a live turn's raw SSE events — a transport-only sibling of {@link fold}
- * (twin of {@link extractAsks}), deliberately kept OUT of the
+ * (twin of live tool-phase extract), deliberately kept OUT of the
  * normalized {@link ProjectedTurn} (so the conformance golden stays phase-less, exactly like the
  * `tool_use_progress` no-op inside the fold). Keyed by `tool_call_id`; an entry is CLEARED on the
  * matching `tool_use_end` so a finished tool shows no stale phase. web_search fires querying /
@@ -1637,7 +1563,7 @@ export function extractEvidenceLedger(
  *
  * Only a LIVE turn carries these events (they are never journaled), so history replay yields an
  * empty map and tool rows fall back to their plain running/done status — the same live-only
- * semantics as the asks sibling.
+ * semantics as other live-only siblings.
  */
 export function extractToolPhases(events: SSEEvent[]): Map<string, ToolPhase> {
   const phases = new Map<string, ToolPhase>();
@@ -1676,72 +1602,11 @@ export function extractWorkerToolPhases(
   return phases;
 }
 
-/** 非阻塞提问 (ask_user blocking=false) 的卡片内容：question + 可选 选项/默认/风格。 The
- *  conformance fold only drops a positional `ask` MARKER (`{kind:"ask", ask_id}`) in the
- *  timeline — the question text/options are transport-only and excluded from the golden
- *  (same as the desktop oracle). This carries that content so the chat can render the card
- *  AT the marker; it is read straight off the raw events, NOT the ProjectedTurn. */
-export interface NonBlockingAsk {
-  id: string;
-  question: string;
-  context: string;
-  assumptions: AskAssumption[];
-  questions: AskQuestion[];
-  status: "pending" | "resolved" | "orphaned";
-  settlement?: "answered" | "discarded";
-  answer?: string;
-  note?: string;
-}
-
-/**
- * 非阻塞提问 (CEO→用户, blocking=false): pull a turn's `question_posted` cards off its raw SSE
- * events — a transport-only sibling of {@link fold},
- * keyed/ordered by `ask_id`. Mirrors the desktop `nonBlockingAsksFromEvents` projection.
- *
- * Only LIVE turns and MULTI-agent history carry these events (a single-agent turn persists
- * an empty `runs.events`, so its reload keeps just the bare `ask` marker — no card, exactly
- * like desktop). De-duped by `ask_id`, preserving first-seen order; empty when none.
- */
-export function extractAsks(events: SSEEvent[]): NonBlockingAsk[] {
-  const byId = new Map<string, NonBlockingAsk>();
-  const order: string[] = [];
-  for (const ev of events) {
-    if (ev.type !== "question_posted") continue;
-    const p = ev.payload as QuestionPostedPayload;
-    if (byId.has(p.ask_id)) continue;
-    order.push(p.ask_id);
-    byId.set(p.ask_id, {
-      id: p.ask_id,
-      question: p.question,
-      context: p.context,
-      assumptions: p.assumptions ?? [],
-      questions: p.questions ?? [],
-      status: "pending",
-    });
-  }
-  for (const rec of foldInteractions(events)) {
-    if (rec.kind !== "question_posted") continue;
-    const existing = byId.get(rec.id);
-    if (!existing) continue;
-    if (rec.status === "resolved") {
-      existing.status = "resolved";
-      if (rec.settlement === "answered" || rec.settlement === "discarded") {
-        existing.settlement = rec.settlement;
-      }
-      if (rec.answer) existing.answer = rec.answer;
-      if (rec.note) existing.note = rec.note;
-    } else if (rec.status === "orphaned") {
-      existing.status = "orphaned";
-    }
-  }
-  return order.map((id) => byId.get(id) as NonBlockingAsk);
-}
-
-/** 热审批 / 委派授权痕迹 (统一时间线二期 D3): resolved 后在其 required 时刻的标记槽
+/** 热审批痕迹 (统一时间线二期 D3): resolved 后在其 required 时刻的标记槽
  * 显一条轻状态行；pending 期间标记在、行不显（操作面在 PauseCard）。Transport-only
- * sibling of {@link fold}, keyed by approval_id / authorization_id. */
+ * sibling of {@link fold}, keyed by approval_id. */
 export interface HotDecisionTrace {
-  kind: "approval" | "delegation_authorization";
+  kind: "approval";
   /** 已裁决才渲染行（D3 resolved 门控）。 */
   resolved: boolean;
   /** deny → 「已拒绝」形态。 */
@@ -1767,21 +1632,6 @@ export function extractHotDecisionTraces(
     } else if (ev.type === "approval_resolved") {
       const p = ev.payload as ApprovalResolvedPayload;
       const t = byId.get(p.approval_id);
-      if (t) {
-        t.resolved = true;
-        t.denied = p.decision === "deny";
-      }
-    } else if (ev.type === "delegation_authorization_required") {
-      const p = ev.payload as DelegationAuthorizationRequiredPayload;
-      if (!p.authorization_id) continue;
-      byId.set(p.authorization_id, {
-        kind: "delegation_authorization",
-        resolved: false,
-        denied: false,
-      });
-    } else if (ev.type === "delegation_authorization_resolved") {
-      const p = ev.payload as DelegationAuthorizationResolvedPayload;
-      const t = byId.get(p.authorization_id);
       if (t) {
         t.resolved = true;
         t.denied = p.decision === "deny";
@@ -1937,14 +1787,14 @@ export interface RunToolCall {
 
 /**
  * 队员工具明细 (RunDetail · 工具调用): the run-scoped tool calls each delegated worker made, pulled
- * straight off a turn's raw SSE events — a transport-only sibling of {@link fold} (twin of
- * {@link extractAsks}), keyed by `run_id`, calls in fire order.
+ * straight off a turn's raw SSE events — a transport-only sibling of {@link fold},
+ * keyed by `run_id`, calls in fire order.
  *
  * The conformance {@link ProjectedTurn} folds a WORKER's run-scoped tool calls to NOTHING: they
  * belong to the worker's node, not the CEO's inline timeline (统一团队时间线 = the CEO's OWN steps),
  * and the golden carries no per-run tool IO — so the fold {@link fold} skips a `run_id`-tagged
  * `tool_use_*` (leaving only the coarse {@link ProjectedAgent.toolProgress}). The run-detail panel
- * reads the full call list from HERE instead, exactly like the asks side channel.
+ * reads the full call list from HERE instead.
  *
  * Escalation submit ids come from {@link ProjectedTurn.interactions} (kind=escalation,
  * status=pending) — not a parallel extract map (P3).

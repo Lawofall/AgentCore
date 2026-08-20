@@ -4,6 +4,15 @@
   gap: 8px;
 }
 
+/* 开发态：时间线有标记但实体缺失。生产不渲染（见 timelineCardSlot）。 */
+.timeline-missing-card {
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
 /* 热审批 / 委派授权痕迹 (统一时间线二期 D3): resolved 后 required 时刻槽的轻状态行。 */
 .hot-trace {
   font-size: 12px;
@@ -16,7 +25,7 @@
   color: var(--fg);
 }
 
-/* 跨回合续接锚点：新契约「续自上一张图」/ 旧 journal graph_append（手机无跳转）。 */
+/* 跨回合续接锚点：新开一队、接着上一张继续 / 旧 journal graph_append（手机无跳转）。 */
 .graph-append-anchor {
   font-size: 12px;
   color: var(--muted);

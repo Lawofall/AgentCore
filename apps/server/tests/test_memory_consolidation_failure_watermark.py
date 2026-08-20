@@ -19,6 +19,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.exc import TimeoutError as SATimeoutError
@@ -510,6 +511,51 @@ def test_shared_cooldown_expires_lazily(monkeypatch):
     consolidation._shared_failure_streak = 3
     assert not consolidation._in_shared_failure_cooldown()
     assert consolidation._shared_failure_cooldown_until == 0.0
+
+
+@pytest.mark.asyncio
+async def test_quota_skip_pushes_billing_quota_card_once(monkeypatch):
+    """Platform quota skip must surface in-thread, not only in logs."""
+    state = _wire_skipping_consolidate(
+        monkeypatch, skip=BackgroundLlmSkip(reason=BackgroundSkipReason.QUOTA_EXCEEDED)
+    )
+    published: list[dict] = []
+
+    async def _notify(user_id, conversation_id, *, anchor_at=None):
+        published.append(
+            {
+                "user_id": user_id,
+                "conversation_id": conversation_id,
+                "anchor_at": anchor_at,
+            }
+        )
+
+    monkeypatch.setattr(consolidation, "notify_billing_quota_skip", _notify)
+
+    await consolidation.consolidate_conversation("c-fail")
+    await consolidation.consolidate_conversation("c-fail")
+
+    assert len(published) == 1
+    assert published[0]["conversation_id"] == "c-fail"
+    assert published[0]["anchor_at"] == state["latest"]
+
+
+@pytest.mark.asyncio
+async def test_no_credentials_skip_does_not_push_billing_quota_card(monkeypatch):
+    state = _wire_skipping_consolidate(
+        monkeypatch, skip=BackgroundLlmSkip(reason=BackgroundSkipReason.NO_CREDENTIALS)
+    )
+    published: list[dict] = []
+    monkeypatch.setattr(
+        consolidation,
+        "notify_billing_quota_skip",
+        AsyncMock(side_effect=lambda *a, **k: published.append(1)),
+    )
+
+    await consolidation.consolidate_conversation("c-fail")
+
+    assert published == []
+    assert state["synced_at"] is None
 
 
 @pytest.mark.asyncio

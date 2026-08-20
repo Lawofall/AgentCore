@@ -374,18 +374,9 @@ async def test_local_finalize_and_writeback_leave_no_zero_output_turn(
     assert kept[0]["phase"] == PHASE_READY
 
     finalize = AsyncMock(side_effect=AssertionError("write-back must not persist"))
-    settle_calls: list[dict] = []
-
-    async def _settle(**kwargs):
-        settle_calls.append(kwargs)
-        return "settled"
-
     monkeypatch.setattr(
         "agentcore.conversation.local_turn.get_cloud_store",
         lambda: SimpleNamespace(finalize=finalize),
-    )
-    monkeypatch.setattr(
-        "agentcore.conversation.question_resolve.settle_question_posted", _settle
     )
     recorded = await record_local_turn(
         conversation_id="c1",
@@ -404,4 +395,3 @@ async def test_local_finalize_and_writeback_leave_no_zero_output_turn(
     assert recorded["noop"] is True
     assert recorded["assistant_message_id"] is None
     finalize.assert_not_called()
-    assert settle_calls == []

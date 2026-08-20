@@ -161,6 +161,8 @@ body {
 
 /* Compact Markdown for conversation replay (MessageBlock). Semantic tokens only. */
 .markdown-body {
+  min-width: 0;
+  max-width: 100%;
   color: var(--foreground);
   font-size: 0.9375rem;
   line-height: 1.65;
@@ -259,11 +261,15 @@ body {
 }
 
 .markdown-body pre {
-  overflow-x: auto;
+  max-width: 100%;
+  max-height: 16rem;
+  overflow: auto;
   padding: 0.65em 0.75em;
   border-radius: 0.5rem;
   border: 1px solid var(--border);
   background: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .markdown-body pre code {

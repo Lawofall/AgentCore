@@ -64,7 +64,7 @@ _HANDOFF_BARE_KEY_RE = re.compile(
 # Delegate payload carriers — used to decide whether a nested wrapper is the
 # sole top-level payload key (narrow unwrap; do not guess other fields).
 _DELEGATE_WRAPPER_KEYS = frozenset({"arguments", "parameters", "input"})
-_DELEGATE_PAYLOAD_KEYS = frozenset({"tasks", "playbook", "playbook_id"}) | _DELEGATE_WRAPPER_KEYS
+_DELEGATE_PAYLOAD_KEYS = frozenset({"tasks", "playbook"}) | _DELEGATE_WRAPPER_KEYS
 
 # Hybrid leak: ``<parameter name="role":`` (XML open tag broken into JSON key colon).
 _PARAMETER_NAME_COLON_RE = re.compile(
@@ -130,10 +130,9 @@ def _delegate_payload_keys_present(args: dict[str, Any]) -> set[str]:
     tasks = args.get("tasks")
     if isinstance(tasks, list) and bool(tasks):
         present.add("tasks")
-    for key in ("playbook", "playbook_id"):
-        value = args.get(key)
-        if isinstance(value, str) and value.strip():
-            present.add(key)
+    playbook = args.get("playbook")
+    if isinstance(playbook, str) and playbook.strip():
+        present.add("playbook")
     for key in _DELEGATE_WRAPPER_KEYS:
         if key not in args:
             continue
@@ -147,21 +146,18 @@ def _inner_has_delegate_payload(inner: dict[str, Any]) -> bool:
     tasks = inner.get("tasks")
     if isinstance(tasks, list) and bool(tasks):
         return True
-    for key in ("playbook", "playbook_id"):
-        value = inner.get(key)
-        if isinstance(value, str) and value.strip():
-            return True
-    return False
+    playbook = inner.get("playbook")
+    return isinstance(playbook, str) and bool(playbook.strip())
 
 
 def unwrap_nested_delegate_arguments(args: Any) -> dict[str, Any] | None:
     """Narrow unwrap of double-wrapped delegate payload.
 
     Only when the top-level dict's sole meaningful payload key (among
-    ``tasks`` / ``playbook`` / ``playbook_id`` / ``arguments`` / ``parameters`` /
+    ``tasks`` / ``playbook`` / ``arguments`` / ``parameters`` /
     ``input``) is exactly one wrapper among ``arguments`` / ``parameters`` /
     ``input``, and that value is a JSON object string or dict whose inner body
-    carries non-empty ``tasks`` or a named ``playbook`` / ``playbook_id``.
+    carries non-empty ``tasks`` or a named ``playbook``.
     Returns the inner dict to use as replacement, or ``None`` when the shape
     does not match (including real top-level ``tasks`` plus an unrelated wrapper).
     """

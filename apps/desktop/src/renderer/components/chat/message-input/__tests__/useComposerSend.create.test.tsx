@@ -262,7 +262,7 @@ describe("useComposerSend 草稿首发建会话", () => {
     await act(async () => {
       sending = first.result.current.send.handleSend();
     });
-    // 聊天 ⇄ 画布切换 / 路由重建：composer 换了一个实例，闸不能跟着归零。
+    // 切对话回来 / 路由重建：composer 换了一个实例，闸不能跟着归零。
     first.unmount();
     const second = renderHook(() => useSendHarness());
     expect(second.result.current.send.isSending).toBe(true);

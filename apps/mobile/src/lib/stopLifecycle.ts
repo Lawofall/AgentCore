@@ -26,8 +26,6 @@ export function allowsEventWhileStopping(eventType: string): boolean {
     eventType === "error" ||
     eventType === "turn_saved" ||
     eventType === "title_generated" ||
-    eventType === "followups_generated" ||
-    eventType === "followups_unavailable" ||
     eventType === "workspace_snapshot_done" ||
     eventType === "workspace_snapshot_failed" ||
     eventType === "citations" ||

@@ -16,12 +16,11 @@ from agentcore.runtime.events import (
     checkpoint_resolved,
     content_delta,
     debate_round_started,
+    execution_completed,
     message_end,
     message_start,
     plan_review_required,
     plan_review_resolved,
-    question_posted,
-    question_resolved,
     reasoning_delta,
     run_completed,
     run_output_delta,
@@ -190,66 +189,6 @@ def _plan_review_finalized() -> list[SSEEvent]:
         *_plan_review_paused(),
         message_end(FinishReason.PAUSED, input_tokens=3000, output_tokens=400, cost=_COST),
     ]
-
-def _single_agent_non_blocking_ask() -> list[SSEEvent]:
-    """单聊·非阻塞发问 (ask_user blocking=false)：CEO 抛出一个已有默认值的问题但**继续干**，不
-    挂起、不结算。时间线**原位**落一个 `ask` 标记（卡片正文另路 fold，按 ask_id 取回），回合
-    照常 end_turn 收尾。验「非阻塞发问插在它真实发生的正文之间，而非堆到底部」。"""
-    return [
-        message_start("m1", conversation_id=_CONV),
-        content_delta("我先按常见默认推进。"),
-        question_posted(
-            ask_id="ask1",
-            conversation_id=_CONV,
-            question="需要同时导出 PDF 吗？",
-            context="默认仅 Markdown。",
-        ),
-        content_delta(" 已完成初稿。"),
-        message_end(FinishReason.END_TURN, input_tokens=1000, output_tokens=200, cost=_COST),
-    ]
-
-
-def _single_agent_non_blocking_ask_answered() -> list[SSEEvent]:
-    """悬着 → 已答：用户提交答复后 ``question_resolved(answered)`` 收口，三态对人可见。"""
-    return [
-        message_start("m1", conversation_id=_CONV),
-        content_delta("我先按常见默认推进。"),
-        question_posted(
-            ask_id="ask1",
-            conversation_id=_CONV,
-            question="需要同时导出 PDF 吗？",
-            context="默认仅 Markdown。",
-        ),
-        content_delta(" 已完成初稿。"),
-        question_resolved(
-            ask_id="ask1",
-            status="answered",
-            answer="也要 PDF。",
-        ),
-        message_end(FinishReason.END_TURN, input_tokens=1000, output_tokens=200, cost=_COST),
-    ]
-
-
-def _single_agent_non_blocking_ask_discarded() -> list[SSEEvent]:
-    """悬着 → 已作废：CEO 收口声明（故障态）须带人话 ``note``，不得静默消失。"""
-    return [
-        message_start("m1", conversation_id=_CONV),
-        content_delta("我先按常见默认推进。"),
-        question_posted(
-            ask_id="ask1",
-            conversation_id=_CONV,
-            question="需要同时导出 PDF 吗？",
-            context="默认仅 Markdown。",
-        ),
-        content_delta(" 已完成初稿。"),
-        question_resolved(
-            ask_id="ask1",
-            status="discarded",
-            note="按默认只出 Markdown，后半等你回来再决定要不要 PDF。",
-        ),
-        message_end(FinishReason.END_TURN, input_tokens=1000, output_tokens=200, cost=_COST),
-    ]
-
 
 def _proposal_pick_checkpoint() -> list[SSEEvent]:
     """单聊·方案挑选卡 (ask_user card=proposal_pick)：阻塞挂起，intent=proposal_pick，
@@ -1254,6 +1193,56 @@ def _team_preview_model_override_continue() -> list[SSEEvent]:
     ]
 
 
+def _execution_completed_gate_still_pending() -> list[SSEEvent]:
+    """执行完成 + 门禁仍挂起：队员已齐、``execution_completed(status=completed)`` 已落，
+    但 CEO 仍以 ``checkpoint_required`` 阻塞，并以 ``message_end(paused)`` 收口。
+
+    钉死 TurnStatus 判定序（桌面 / oracle）：finishReason → error → gate pending →
+    running。``execution_completed`` 只校正协作图节点，不得把回合判成 completed
+    （手机 fold 曾把该帧放在优先级最高位，挂起卡被吞成已完成）。
+    """
+    agents = [{"id": "w1", "role": "调研", "thinking": True}]
+    plan_runs = [{"id": "r1", "agent_id": "w1", "task": "出方案", "depends_on": []}]
+    return [
+        message_start("m1", conversation_id=_CONV),
+        content_delta("团队已交付，请确认是否按此方案推进。"),
+        run_plan(
+            execution_id="exec1",
+            plan_type="multi_agent",
+            task_summary="出方案",
+            agents=agents,
+            runs=plan_runs,
+        ),
+        run_started("r1", "w1"),
+        run_completed(
+            "r1",
+            "w1",
+            output_summary="方案就绪",
+            duration_ms=900,
+            role="member",
+            model="deepseek-v4-flash",
+            usage=_USAGE,
+            cost=_COST,
+        ),
+        execution_completed(
+            execution_id="exec1",
+            conversation_id=_CONV,
+            completed=1,
+            total=1,
+            status="completed",
+            host_turn_id="m1",
+        ),
+        checkpoint_required(
+            checkpoint_id="cp-after-exec",
+            conversation_id=_CONV,
+            question="按此方案推进吗？",
+            context="团队已交付方案。",
+            intent="decision",
+        ),
+        message_end(FinishReason.PAUSED, input_tokens=2200, output_tokens=180, cost=_COST),
+    ]
+
+
 def _decision_then_kill() -> list[SSEEvent]:
     """决策后杀进程：settlement 已落、无终态 → fold 无 pending gate，status=running。
 
@@ -1326,6 +1315,10 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         "开工卡人盖模型：continue + model_overrides → resolved 投影 modelOverrides",
         _team_preview_model_override_continue,
     ),
+    "execution_completed_gate_still_pending": (
+        "冲突：execution_completed(completed) + 门禁仍挂起 → status=paused（不得判成已完成）",
+        _execution_completed_gate_still_pending,
+    ),
     "decision_then_kill": (
         "恢复收口：决策后杀进程 → fold 无待授权、status=running（已决策·执行中断 / 救火继续）",
         _decision_then_kill,
@@ -1358,15 +1351,6 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     "single_agent_checkpoint": ("单聊：检查点 ask_user(blocking) 在时间线原位落 checkpoint 标记 + 暂停", _single_agent_checkpoint),
     "single_agent_checkpoint_finalized": ("单聊：检查点收口即终止（②，checkpoint_required→message_end(paused)，单一冷路 resume）", _single_agent_checkpoint_finalized),
     "single_agent_checkpoint_resolved": ("单聊：检查点 ask_user(blocking) 经 resume 续跑（checkpoint_resolved 清挂起→跑到 end_turn）", _single_agent_checkpoint_resolved),
-    "single_agent_non_blocking_ask": ("单聊：非阻塞发问 question_posted 在时间线原位落 ask 标记、回合照常收尾", _single_agent_non_blocking_ask),
-    "single_agent_non_blocking_ask_answered": (
-        "单聊：非阻塞发问已答（question_resolved answered）——刷新后三态可见",
-        _single_agent_non_blocking_ask_answered,
-    ),
-    "single_agent_non_blocking_ask_discarded": (
-        "单聊：非阻塞发问已作废（question_resolved discarded + CEO note）——故障态对人可见",
-        _single_agent_non_blocking_ask_discarded,
-    ),
     "proposal_pick_checkpoint": ("单聊：方案挑选卡 ask_user(card=proposal_pick) 挂起（intent=proposal_pick）", _proposal_pick_checkpoint),
     "ask_user_shape_reject_then_pick": (
         "单聊：方案挑选卡误塞多题被结构校验拒绝→自纠正改对（校验失败不落工具步、不外泄红错）",

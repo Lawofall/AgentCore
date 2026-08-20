@@ -3,10 +3,6 @@ import { RunDetailScroll } from "@/components/chat/detail/RunDetailScroll";
 import { FileDetail } from "@/components/files/FileDetail";
 import { FileTypeIcon } from "@/components/files/FileTypeIcon";
 import { EmptyHint } from "@/components/files/parts";
-import {
-  CommandPanelBody,
-  useCommandRegion,
-} from "@/components/graph/CanvasDecisionPanel";
 import { closeOsFloatWindowsForTabs } from "@/components/layout/DesktopFloatWindowBridge";
 import { KillPtyConfirmDialog } from "@/components/terminal/KillPtyConfirmDialog";
 import {
@@ -50,7 +46,6 @@ import {
 } from "@/stores/execution";
 import {
   CHANGES_TAB_ID,
-  COMMAND_TAB_ID,
   type DetailTab,
   TEAM_BROWSER_TAB_ID,
   TEAM_TERMINAL_TAB_ID,
@@ -68,7 +63,6 @@ import {
   Diff,
   FileText,
   FolderOpen,
-  Gavel,
   MessageSquare,
   PanelRight,
   PictureInPicture2,
@@ -115,7 +109,7 @@ function isDetailTabLive(
 
 /**
  * The conversation's single right-docked surface (前端UX设计.md §十 · 方案 B):
- * `[工作区*] [改动?] | 内容 tabs | [+]`，画布态另出条件「指挥台」。
+ * `[工作区*] [改动?] | 内容 tabs | [+]`.
  * 「工作区」常驻固定 tab：不可关、可 detach。「改动」按 §十 P0c 条件出现（有货才审）。
  */
 export function SidePanel() {
@@ -175,10 +169,6 @@ export function SidePanel() {
       .map((t) => t.id)
       .join("\u0001"),
   );
-  // 图上指挥 (前端UX设计.md §6.2): fixed 指挥台 tab + auto-surface (openPanel + badge,
-  // never steals active tab). Hook runs before the `open` early-return so its effect
-  // can reveal the panel even while closed. Inert in chat mode (`active` is false).
-  const command = useCommandRegion();
   // 后台进程终端：活动出现时自动补一个 Terminal 内容 tab（不偷焦点），替代旧条件固定 tab。
   const terminal = useTerminalRegion();
   // 浏览器：活动出现时自动补一个 Browser 内容 tab（不偷焦点）。
@@ -195,9 +185,7 @@ export function SidePanel() {
   );
   const { getItemProps } = useSortableTabIds(visibleTabIds, reorderContentTabs);
   const activeTab =
-    activeTabId === WORKSPACE_TAB_ID ||
-    activeTabId === CHANGES_TAB_ID ||
-    activeTabId === COMMAND_TAB_ID
+    activeTabId === WORKSPACE_TAB_ID || activeTabId === CHANGES_TAB_ID
       ? null
       : (visibleTabs.find((t) => t.id === activeTabId) ?? null);
   const workspaceInDock = !floatingIds.has(WORKSPACE_TAB_ID);
@@ -211,14 +199,6 @@ export function SidePanel() {
   const changesInDock = changesPin && !floatingIds.has(CHANGES_TAB_ID);
   const workspaceActive = workspaceInDock && activeTabId === WORKSPACE_TAB_ID;
   const changesActive = changesInDock && activeTabId === CHANGES_TAB_ID;
-  const commandActive = command.show && activeTabId === COMMAND_TAB_ID;
-
-  // Leaving canvas while on 指挥台: fall back to 工作区 (the tab disappears).
-  useEffect(() => {
-    if (!command.show && activeTabId === COMMAND_TAB_ID) {
-      setActiveTab(WORKSPACE_TAB_ID);
-    }
-  }, [command.show, activeTabId, setActiveTab]);
 
   // 切对话：清深链聚焦 + 清浮窗 + 清对话作用域内容 tab；桌面须先/并关对应真窗。
   // 新会话撑不起改动且仍停在改动 tab → 回工作区。bounce 只跟切对话走（同会话
@@ -468,13 +448,6 @@ export function SidePanel() {
               label="改动"
             />
           )}
-          {command.show && (
-            <CommandTab
-              active={commandActive}
-              badge={command.badge}
-              onClick={() => setActiveTab(COMMAND_TAB_ID)}
-            />
-          )}
           <div className="mx-0.5 h-4 w-px shrink-0 bg-border" aria-hidden />
           {visibleTabs.map((tab) => (
             <SortableTab key={tab.id} id={tab.id} getItemProps={getItemProps}>
@@ -528,15 +501,6 @@ export function SidePanel() {
         {changesMounted && changesInDock && (
           <div className={`absolute inset-0 ${changesActive ? "" : "hidden"}`}>
             <ConversationChangesPanel />
-          </div>
-        )}
-        {command.show && (
-          <div className={`absolute inset-0 ${commandActive ? "" : "hidden"}`}>
-            <CommandPanelBody
-              message={command.message}
-              conversationId={command.conversationId}
-              interactive={command.interactive}
-            />
           </div>
         )}
         {terminalTabs.map((tab) => (
@@ -727,37 +691,6 @@ function FixedTab({
         </SimpleTooltip>
       )}
     </div>
-  );
-}
-
-/** Fixed 指挥台 tab (canvas mode only): badge when actionable work awaits. */
-function CommandTab({
-  active,
-  badge,
-  onClick,
-}: {
-  active: boolean;
-  badge: number;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      onClick={onClick}
-      className={`relative shrink-0 gap-1.5 px-2.5 py-1 text-sm font-medium ${
-        active
-          ? "bg-accent text-foreground"
-          : "text-muted-foreground hover:bg-accent/50"
-      }`}
-      icon={<Gavel size={14} />}
-    >
-      指挥台
-      {!active && badge > 0 && (
-        <span className="ml-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-xs font-medium text-primary">
-          {badge > 9 ? "9+" : badge}
-        </span>
-      )}
-    </Button>
   );
 }
 

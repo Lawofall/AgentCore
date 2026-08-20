@@ -40,14 +40,7 @@ def _try_parse_args(tc: ToolCall) -> tuple[dict[str, Any], str | None] | None:
 
 
 def is_blocking_ask_user(tc: ToolCall) -> bool:
-    if tc.function.name != "ask_user":
-        return False
-    parsed = _try_parse_args(tc)
-    if parsed is None:
-        return True
-    args, _repaired = parsed
-    blocking_arg = args.get("blocking")
-    return True if blocking_arg is None else bool(blocking_arg)
+    return tc.function.name == "ask_user"
 
 
 def _patch_tool_call_args(tc: ToolCall, args: dict[str, Any]) -> ToolCall:
@@ -90,10 +83,6 @@ def prepare_blocking_ask_user_tool_calls(
         args, repaired = parsed
         if repaired is not None:
             tc = _with_repaired_args(tc, repaired)
-        blocking_arg = args.get("blocking")
-        if blocking_arg is not None and not bool(blocking_arg):
-            patched.append(tc)
-            continue
         if str(args.get("message") or "").strip() or not content:
             patched.append(tc)
             continue

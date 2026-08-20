@@ -5,9 +5,7 @@ from __future__ import annotations
 import pytest
 
 from agentcore.runtime.journal.pending_interactions import (
-    fold_interactions,
     fold_pending_interactions,
-    project_interaction_leaf,
 )
 
 
@@ -50,18 +48,18 @@ def test_fold_pending_opens_on_required_closes_on_resolved() -> None:
 def test_fold_pending_orphaned_closes() -> None:
     entries = [
         {
-            "kind": "delegation_authorization_required",
+            "kind": "approval_required",
             "payload": {
-                "authorization_id": "d1",
+                "approval_id": "d1",
                 "conversation_id": "c",
-                "execution_id": "ex",
-                "workers": [],
-                "tools": [],
+                "tool_call_id": "tc1",
+                "tool_name": "code_execute",
+                "arguments": {},
             },
         },
         {
             "kind": "interaction_orphaned",
-            "payload": {"interaction_id": "d1", "kind": "delegation_authorization"},
+            "payload": {"interaction_id": "d1", "kind": "approval"},
         },
     ]
     assert fold_pending_interactions(entries) == []
@@ -82,80 +80,6 @@ def test_fold_pending_skips_awaiting_ceo() -> None:
         },
     ]
     assert fold_pending_interactions(entries) == []
-
-
-def _posted_entry(ask_id: str = "ask1") -> dict:
-    return {
-        "kind": "question_posted",
-        "payload": {
-            "ask_id": ask_id,
-            "conversation_id": "c",
-            "question": "要 PDF 吗？",
-            "context": "默认 Markdown。",
-        },
-    }
-
-
-def test_question_posted_fold_stays_pending_without_resolved() -> None:
-    recs = fold_interactions([_posted_entry()])
-    assert len(recs) == 1
-    assert recs[0].kind == "question_posted"
-    assert recs[0].status == "pending"
-    leaf = project_interaction_leaf(recs[0])
-    assert leaf == {
-        "kind": "question_posted",
-        "id": "ask1",
-        "status": "pending",
-        "question": "要 PDF 吗？",
-        "context": "默认 Markdown。",
-    }
-    assert "settlement" not in leaf
-    assert fold_pending_interactions([_posted_entry()]) == []
-
-
-def test_question_posted_fold_answered() -> None:
-    recs = fold_interactions(
-        [
-            _posted_entry(),
-            {
-                "kind": "question_resolved",
-                "payload": {
-                    "ask_id": "ask1",
-                    "status": "answered",
-                    "answer": "也要 PDF。",
-                    "note": "",
-                },
-            },
-        ]
-    )
-    assert recs[0].status == "resolved"
-    leaf = project_interaction_leaf(recs[0])
-    assert leaf["status"] == "resolved"
-    assert leaf["settlement"] == "answered"
-    assert leaf["answer"] == "也要 PDF。"
-    assert "note" not in leaf
-
-
-def test_question_posted_fold_discarded() -> None:
-    recs = fold_interactions(
-        [
-            _posted_entry(),
-            {
-                "kind": "question_resolved",
-                "payload": {
-                    "ask_id": "ask1",
-                    "status": "discarded",
-                    "answer": "",
-                    "note": "按默认继续，后半等你。",
-                },
-            },
-        ]
-    )
-    assert recs[0].status == "resolved"
-    leaf = project_interaction_leaf(recs[0])
-    assert leaf["settlement"] == "discarded"
-    assert leaf["note"] == "按默认继续，后半等你。"
-    assert "answer" not in leaf
 
 
 @pytest.mark.asyncio

@@ -627,7 +627,7 @@ export const GraphView = memo(function GraphView({
                 />
               )}
 
-              {/* 图头行动条：三宿主同挂，非交互内联态也显（导航不依赖 pan/zoom）。 */}
+              {/* 图头行动条：内嵌 / 全屏两宿主同挂，非交互内联态也显（导航不依赖 pan/zoom）。 */}
               {layoutReady && !layoutError && (
                 <GraphActionBar
                   decisions={pendingDecisions}

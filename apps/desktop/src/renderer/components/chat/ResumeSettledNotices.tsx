@@ -17,10 +17,12 @@ import {
   resumeSettledTurnCopy,
 } from "@/lib/resumeSettled";
 import { useConversationStore } from "@/stores/conversation";
-import { useInteractionStore } from "@/stores/interactions";
+import {
+  INTERACTION_CARD_NAME,
+  useInteractionStore,
+} from "@/stores/interactions";
 import { Info } from "lucide-react";
 import { useEffect, useState } from "react";
-import { INTERACTION_CARD_NAME } from "./SettledElsewhereNotices";
 
 /** 收口条停留时长——与「已由另一端处理」同款，够看见又不常驻决策区。 */
 const NOTICE_TTL_MS = 8_000;

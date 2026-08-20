@@ -57,7 +57,7 @@ function parseView(raw: string | null): TurnDetailView | null {
 
 /**
  * Full-screen turn detail — graph / debate / compare for one turn.
- * Pure deep-read / replay surface (前端UX设计.md §六); no conversation-level
+ * Pure deep-read / replay surface (协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大); no conversation-level
  * composer. Live turns only expose a top-bar Stop for the turn being viewed.
  */
 export function TurnDetailPage() {
@@ -251,7 +251,7 @@ export function TurnDetailPage() {
   const hasTurnMessage = !!turnMessage;
 
   // Project the scoped turn's journal into execution store (cold deep-link /
-  // refresh) — same gate as useCanvasTurns / InlineTeamGraph: journal identity
+  // refresh) — same gate as InlineTeamGraph: journal identity
   // (m.runs / events.length), not every turnMessage tick. Store applies
   // journalIsNewerThan (catch up after half-court; never roll live back).
   useEffect(() => {

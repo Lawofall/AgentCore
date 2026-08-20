@@ -9,7 +9,6 @@ import {
 } from "./helpers";
 import {
   CHANGES_TAB_ID,
-  COMMAND_TAB_ID,
   type DetailTab,
   type SidePanelGet,
   type SidePanelSet,
@@ -213,7 +212,6 @@ export function createTabsActions(
         const activeStillThere =
           s.activeTabId === WORKSPACE_TAB_ID ||
           s.activeTabId === CHANGES_TAB_ID ||
-          s.activeTabId === COMMAND_TAB_ID ||
           tabs.some((t) => t.id === s.activeTabId);
         const activeTabId = activeStillThere
           ? s.activeTabId

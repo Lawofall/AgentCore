@@ -19,12 +19,6 @@ class CheckpointSettings(BaseModel):
     turn_stream_state_sweep_interval_seconds: int = 6 * 3600
     turn_stream_state_sweep_batch_limit: int = 200
 
-    # Non-blocking question hard cap (same 7-day window as paused frames, own
-    # journal sweep — paused_turns never holds these cards).
-    question_posted_retention_days: int = 7
-    question_posted_sweep_interval_seconds: int = 6 * 3600
-    question_posted_sweep_batch_limit: int = 200
-
     # Durable RUNNING lease (crash recover): Postgres ownership + heartbeat; sweeper
     # redrives expired leases via recover_turn. Backend swappable for Redis later.
     turn_lease_enabled: bool = True

@@ -250,7 +250,6 @@ describe("ensureTimelineMarkersFromJournal", () => {
     { type: "run_plan", payload: { execution_id: "exec1" } },
     { type: "team_preview_required", payload: { checkpoint_id: "tp1" } },
     { type: "checkpoint_required", payload: { checkpoint_id: "cp1" } },
-    { type: "question_posted", payload: { ask_id: "ask1" } },
     { type: "plan_review_required", payload: { checkpoint_id: "pr1" } },
   ];
 
@@ -265,7 +264,6 @@ describe("ensureTimelineMarkersFromJournal", () => {
       { kind: "team_preview", checkpoint_id: "tp1" },
       { kind: "team", execution_id: "exec1" },
       { kind: "checkpoint", checkpoint_id: "cp1" },
-      { kind: "ask", ask_id: "ask1" },
       { kind: "plan_review", checkpoint_id: "pr1" },
     ]);
   });
@@ -276,7 +274,6 @@ describe("ensureTimelineMarkersFromJournal", () => {
       { kind: "team_preview", checkpoint_id: "tp1" },
       { kind: "team", execution_id: "exec1" },
       { kind: "checkpoint", checkpoint_id: "cp1" },
-      { kind: "ask", ask_id: "ask1" },
       { kind: "plan_review", checkpoint_id: "pr1" },
       { kind: "content", text: "收尾。" },
     ] as const;

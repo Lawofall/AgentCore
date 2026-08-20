@@ -193,7 +193,7 @@ async def test_delegate_execute_rejects_when_ceiling_hit(monkeypatch):
         )
         tool._tools.list_all = MagicMock(return_value=[])
         result = await tool.execute(
-            {"playbook_id": "none", "playbook_none_reason": "x" * 20, "tasks": []},
+            {"playbook_none_reason": "x" * 20, "tasks": []},
             MagicMock(),
         )
         assert result.success is False
@@ -645,7 +645,7 @@ def test_nested_envelope_isolates_from_parent_ceiling(monkeypatch):
         assert env.baseline == 100
         nest_tok = bind_nested_envelope(env)
         try:
-            should_stop, priority = resolve_wave_budget_hooks()
+            should_stop, priority = resolve_wave_budget_hooks(credential_source="user")
             assert priority is None  # nested disables parent reserve
             # Composed stop (= nested envelope OR turn auth-dead); identity may wrap.
             assert should_stop() is is_nested_envelope_hit()
@@ -778,7 +778,7 @@ async def test_nested_wave_ignores_parent_ceiling_until_envelope(monkeypatch):
                     assert not is_nested_envelope_hit()
                 return RunState(phase=RunPhase.COMPLETED, content="ok")
 
-            should_stop, priority = resolve_wave_budget_hooks()
+            should_stop, priority = resolve_wave_budget_hooks(credential_source="user")
             # Nested hooks must NOT use parent ceiling — even if parent is "hit".
             assert priority is None
             assert should_stop() is is_nested_envelope_hit()
@@ -833,7 +833,7 @@ async def test_nested_disables_parent_priority_reserve_cut(monkeypatch):
             # Enter parent reserve window (spent ≥ 600) without hitting nested envelope.
             record_turn_tokens(150)
             assert is_turn_token_delivery_reserve_hit()
-            should_stop, priority = resolve_wave_budget_hooks()
+            should_stop, priority = resolve_wave_budget_hooks(credential_source="user")
             assert priority is None
 
             plan = RunPlan()

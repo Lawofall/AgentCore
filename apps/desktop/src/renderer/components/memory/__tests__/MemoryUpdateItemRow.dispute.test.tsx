@@ -1,3 +1,4 @@
+import type { MemoryUpdateItem } from "@/stores/conversation";
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +29,7 @@ vi.mock("@/hooks/useFolders", () => ({
   getFolders: () => [{ id: "F1", name: "AgentCore" }],
 }));
 
-const globalItem = {
+const globalItem: MemoryUpdateItem = {
   action: "add",
   file: "画像",
   section: "关于用户的事实",

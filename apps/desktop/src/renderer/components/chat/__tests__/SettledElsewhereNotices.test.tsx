@@ -5,6 +5,7 @@
 import { SettledElsewhereNotices } from "@/components/chat/SettledElsewhereNotices";
 import { useConversationStore } from "@/stores/conversation";
 import {
+  INTERACTION_CARD_NAME,
   applyInteractionWireEvent,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -103,5 +104,49 @@ describe("SettledElsewhereNotices", () => {
     });
 
     expect(screen.queryByTestId("settled-elsewhere")).toBeNull();
+  });
+
+  it("空快照留桩：三个 kind 出「已由另一端处理」，卡名走 INTERACTION_CARD_NAME", () => {
+    render(<SettledElsewhereNotices />);
+    act(() => {
+      useInteractionStore.getState().upsertRequired({
+        kind: "approval",
+        conversationId: CID,
+        messageId: MID,
+        origin: "server",
+        payload: { approval_id: "a-h", tool_name: "", arguments: {} },
+      });
+      useInteractionStore.getState().upsertRequired({
+        kind: "escalation",
+        conversationId: CID,
+        messageId: MID,
+        origin: "server",
+        payload: {
+          escalation_id: "e-h",
+          question: "q",
+          assumption: "a",
+        },
+      });
+      useInteractionStore.getState().upsertRequired({
+        kind: "stage_card",
+        conversationId: CID,
+        messageId: MID,
+        origin: "server",
+        payload: {
+          stage_card_id: "sc-h",
+          motion: "是否开辩",
+          sides: [],
+          form: "debate",
+        },
+      });
+      useInteractionStore.getState().hydratePending(CID, [], {
+        confirmed: ["server"],
+      });
+    });
+
+    expect(screen.getAllByText("已由另一端处理")).toHaveLength(3);
+    expect(screen.getByText(INTERACTION_CARD_NAME.approval)).toBeTruthy();
+    expect(screen.getByText(INTERACTION_CARD_NAME.escalation)).toBeTruthy();
+    expect(screen.getByText(INTERACTION_CARD_NAME.stage_card)).toBeTruthy();
   });
 });

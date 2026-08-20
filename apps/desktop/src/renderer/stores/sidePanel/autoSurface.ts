@@ -1,17 +1,4 @@
-import { useCommandPanelStore } from "../commandPanel";
-import { useConversationStore } from "../conversation";
 import type { SidePanelGet, SidePanelSet, SidePanelState } from "./types";
-
-/** Record dismiss for whichever auto-surface context is currently active. */
-export function recordActiveContextDismiss(
-  get: () => Pick<SidePanelState, "dismissAutoSurface">,
-): void {
-  const commandActive = useCommandPanelStore.getState().active;
-  const conversationId = useConversationStore.getState().currentConversationId;
-  if (commandActive && conversationId) {
-    get().dismissAutoSurface(`command:${conversationId}`);
-  }
-}
 
 type AutoSurfaceActions = Pick<
   SidePanelState,

@@ -71,7 +71,10 @@ def prior_turn_has_blocking_delivery_gaps(
 def render_prior_delivery_gaps(payload: dict[str, Any]) -> str:
     """Format the soft ``<prior_delivery_gaps>`` block from a delivery_status payload."""
     state = str(payload.get("state") or "").strip()
-    execution_id = str(payload.get("execution_id") or "").strip()
+    # 不打印 payload.execution_id：CEO 可见提示里出现真实图 id，且参数名正好是
+    # append_to_execution_id，模型会把账本上的 UUID 填进去。补缺口用
+    # continue_from_run_id，接续图填 "latest"；与 <recent_team_graph> 故意不打印图
+    # id 同一产品意图。
     raw_files = payload.get("delivered_files") or []
     files: list[str] = []
     if isinstance(raw_files, list):
@@ -102,7 +105,6 @@ def render_prior_delivery_gaps(payload: dict[str, Any]) -> str:
         "若短确认只补缺口：只续跑下列未闭合项；可优先同人 `continue_from_run_id`。"
         "【禁止】整锅重派或重写路径已核文件。\n"
         f"state={state}\n"
-        f"execution_id={execution_id or '—'}\n"
         f"accepted/delivered_files: {file_line}\n"
         "blocking gaps:\n"
         f"{gaps_body}\n"

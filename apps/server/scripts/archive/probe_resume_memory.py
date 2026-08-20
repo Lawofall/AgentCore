@@ -60,7 +60,7 @@ GLOBAL_BODY = (
     "- 标记：本条来自【全局】记忆，PROBE_GLOBAL_MARKER_3Z\n"
 )
 
-PAUSE_EVENTS = {"checkpoint_required", "question_posted", "plan_review_required"}
+PAUSE_EVENTS = {"checkpoint_required", "plan_review_required"}
 
 
 def _user_id_from_jwt(token: str) -> str:

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from agentcore.core.logging import get_logger
 from agentcore.runtime.events.types import EventType, SSEEvent
+from agentcore.runtime.terminal import RUN_STREAM_FLUSH_EVENT_TYPES
 
 logger = get_logger(__name__)
 
@@ -122,7 +123,7 @@ class StreamCheckpointer:
         if t == EventType.TOOL_USE_START:
             self.flush_now()
             return
-        if t in (EventType.RUN_COMPLETED, EventType.RUN_FAILED, EventType.RUN_CANCELLED):
+        if t in RUN_STREAM_FLUSH_EVENT_TYPES:
             self.flush_now()
             return
 

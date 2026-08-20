@@ -20,7 +20,6 @@ def test_parse_daily_review_card():
 def test_daily_review_card_shape_ok():
     err = validate_card_shape(
         "daily_review",
-        blocking=True,
         questions=[
             {
                 "kind": "choice",
@@ -42,7 +41,6 @@ def test_daily_review_card_shape_ok():
 def test_daily_review_card_requires_multiple():
     err = validate_card_shape(
         "daily_review",
-        blocking=True,
         questions=[
             {
                 "kind": "choice",

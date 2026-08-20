@@ -15,6 +15,19 @@ import {
 } from "./graphLive";
 import { useTerminalFlash } from "./useTerminalFlash";
 
+/** 发起节点预览：去掉「N 个 worker：」人数前缀。
+ * 图头 n/m 分母含 CEO 汇总，预览再报 worker 人数会读成口径打架。 */
+export function initiatorNodePreview(
+  taskSummary: string | null | undefined,
+): string {
+  const raw = (taskSummary ?? "").trim();
+  if (!raw) return "";
+  const withRoles = raw.match(/^\d+\s*个\s*workers?\s*[：:]\s*(.*)$/i);
+  if (withRoles) return (withRoles[1] ?? "").trim();
+  if (/^\d+\s*个\s*workers?$/i.test(raw)) return "";
+  return raw;
+}
+
 /** Which bookend this node is: the synthetic user-input source, or the CEO
  * captain root 汇聚点 (the turn's reply engine, drawn as the team's climax). */
 export type EndpointVariant = "input" | "captain";
@@ -103,7 +116,7 @@ export function EndpointNode({ data, id }: NodeProps) {
   const horizontal = shell.handleDirection === "horizontal";
   const interactive = !!onActivate;
   const highlighted = focused;
-  const preview = previewText;
+  const preview = isInput ? initiatorNodePreview(previewText) : previewText;
   const flashing = useTerminalFlash(status) && !isInput;
   const flashColor =
     status === "failed" ? "var(--destructive)" : "var(--success)";

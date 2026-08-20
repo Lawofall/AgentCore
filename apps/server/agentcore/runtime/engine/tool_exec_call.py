@@ -187,14 +187,8 @@ async def run_one_tool(
                     has_tasks=isinstance(unwrapped.get("tasks"), list)
                     and bool(unwrapped.get("tasks")),
                     has_playbook=bool(
-                        (
-                            isinstance(unwrapped.get("playbook"), str)
-                            and str(unwrapped.get("playbook") or "").strip()
-                        )
-                        or (
-                            isinstance(unwrapped.get("playbook_id"), str)
-                            and str(unwrapped.get("playbook_id") or "").strip()
-                        )
+                        isinstance(unwrapped.get("playbook"), str)
+                        and str(unwrapped.get("playbook") or "").strip()
                     ),
                 )
                 args = unwrapped

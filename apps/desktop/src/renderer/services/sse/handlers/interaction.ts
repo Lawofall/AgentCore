@@ -66,9 +66,6 @@ function stampByProcessKind(
     case "checkpoint":
       store.stampCheckpointMarker(id, conversationId);
       break;
-    case "ask":
-      store.stampAskMarker(id, conversationId);
-      break;
     case "plan_review":
       store.stampPlanReviewMarker(id, conversationId);
       break;

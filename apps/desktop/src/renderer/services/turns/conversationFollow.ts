@@ -53,6 +53,11 @@ type FollowSlot = {
   suspended: boolean;
   attempts: number;
   ac: AbortController | null;
+  /**
+   * 当前这条 SSE 已经打过 ``follow_open``。让位 abort 时据此成对打
+   * ``follow_closed``；没建连不打，避免排查包里凭空多一条关闭。
+   */
+  opened: boolean;
   unsubBusy: () => void;
   /** 唤醒当前的等待（退避 sleep / 让位挂起）。 */
   wake: (() => void) | null;
@@ -61,11 +66,21 @@ type FollowSlot = {
 const slots = new Map<string, FollowSlot>();
 
 /** 本端自有连接一开就 abort 掉订阅；帧的丢弃另由 ``slot.suspended`` 同步兜住
- * （abort 只让读循环报错，已解码进微任务的那一片仍会回调）。 */
+ * （abort 只让读循环报错，已解码进微任务的那一片仍会回调）。
+ * 已 ``follow_open`` 的连接在此成对打 ``follow_closed``（``local_stream_handoff``），
+ * 不拆 slot——让位是挂起，闲下来由本循环自己连回。 */
 function onLocalStreamBusy(slot: FollowSlot, busy: boolean): void {
   slot.suspended = busy;
   if (busy) {
+    const hadOpen = slot.opened && slot.ac !== null;
     slot.ac?.abort();
+    if (hadOpen) {
+      slot.opened = false;
+      logEvent("info", "conversation.follow_closed", {
+        conversation_id: slot.conversationId,
+        reason: "local_stream_handoff",
+      });
+    }
     return;
   }
   slot.wake?.();
@@ -323,12 +338,14 @@ async function runFollowConnection(
     logEvent("info", "conversation.follow_open", {
       conversation_id: conversationId,
     });
+    slot.opened = true;
     await pumpFollowBody(slot, response);
     return "ok";
   } catch {
     return "retry"; // abort（让位 / 关闭）与传输失败同路：外层按状态决定
   } finally {
     if (slot.ac === ac) slot.ac = null;
+    slot.opened = false;
   }
 }
 
@@ -360,6 +377,7 @@ function startSlot(conversationId: string): void {
     suspended: hasLocalConversationStream(conversationId),
     attempts: 0,
     ac: null,
+    opened: false,
     unsubBusy: () => {},
     wake: null,
   };

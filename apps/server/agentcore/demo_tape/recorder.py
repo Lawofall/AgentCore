@@ -29,9 +29,10 @@ Shapes
 The recording is flushed on every ``message_end`` (pause AND terminal), so a paused
 turn is already on disk before resume; a resume after a server restart hydrates the
 flushed segments and appends. Terminal ``message_end`` still flush+pops the in-memory
-recording (and drops the sink→segment binding); post-turn ``followups_generated``
-(emitted by persist after ``message_end``) re-hydrates from disk, appends a new
-segment, and flushes again so the chips land in ``demos/recordings/``. Purely
+recording (and drops the sink→segment binding); a persist-after-pipeline tail
+(``title_generated`` / workspace snapshot, emitted after ``message_end``)
+re-hydrates from disk, appends a new segment, and flushes again so the tail
+lands in ``demos/recordings/``. Purely
 observational: a tap failure never reaches the turn (the sink guards the call).
 Recordings never carry a ``projected`` oracle.
 """
@@ -193,11 +194,15 @@ def _tap(sink: EventSink, event: SSEEvent) -> None:
         finish = str((event.payload or {}).get("finish_reason") or "")
         if finish != "paused":  # terminal → flush+pop; post-turn may re-hydrate
             _recordings.pop(message_id, None)
-            # Drop sink→segment so followups_generated opens a fresh segment on the
-            # re-hydrated recording (otherwise events would append to an orphaned
-            # segment no longer listed on the new _Recording).
+            # Drop sink→segment so a persist-after-pipeline tail opens a fresh
+            # segment on the re-hydrated recording (otherwise events would append
+            # to an orphaned segment no longer listed on the new _Recording).
             _segments.pop(sink, None)
-    elif event.type is EventType.FOLLOWUPS_GENERATED:
+    elif event.type in (
+        EventType.TITLE_GENERATED,
+        EventType.WORKSPACE_SNAPSHOT_DONE,
+        EventType.WORKSPACE_SNAPSHOT_FAILED,
+    ):
         # Post-turn tail after terminal message_end (re-hydrated recording).
         _flush(recording)
         _recordings.pop(message_id, None)

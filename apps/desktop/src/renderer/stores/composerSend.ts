@@ -4,7 +4,7 @@ import { create } from "zustand";
  * 发送门闩（跨组件重挂载）。
  *
  * 门闩曾经是 `useComposerSend` 里的组件实例级 `useRef`，组件重挂载或换一个 composer
- * 实例（聊天 ⇄ 画布、居中草稿 → 底栏）就归零——线上 7 天 8 起「一次发送建出两条内容
+ * 实例（切对话回来、居中草稿 → 底栏、刷新 / 重启）就归零——线上 7 天 8 起「一次发送建出两条内容
  * 相同的会话、各自跑完整轮双倍计费」正由此而来。相位与草稿同键
  * （{@link import("@/stores/composer").draftKeyFor}），存在 store 里，任何一个
  * composer 皮肤重新挂上来都看得见在途的那次发送。

@@ -20,7 +20,7 @@ import pytest
 
 from agentcore.conformance.export import build_fixtures
 from agentcore.conformance.vectors import VECTORS
-from agentcore.runtime.journal.pending_interactions import GATE_KINDS
+from agentcore.runtime.interaction import GATE_KINDS
 
 
 def _pending_gates(p: dict) -> list[dict]:
@@ -257,6 +257,49 @@ def test_plan_review_resolved_runs_downstream(projected):
     assert _pending_gates(p) == []
     assert p["runs"][0]["checkpoint"] == {"status": "resolved", "decision": "continue"}
     assert p["progress"] == {"completed": 2, "total": 2}
+
+
+def test_execution_completed_gate_still_pending_stays_paused(projected):
+    # Conflict: journal has execution_completed(status=completed) AND a still-pending
+    # ask_user gate, then message_end(paused). TurnStatus follows finishReason → gate,
+    # never the execution frame. Hand-derived from the vector events (not the golden) so
+    # a correlated "execution_completed ⇒ completed" bug in oracle + fold cannot pass.
+    from agentcore.runtime.events.types import EventType
+
+    _description, builder = VECTORS["execution_completed_gate_still_pending"]
+    events = list(builder())
+    types = [e.type for e in events]
+    assert EventType.EXECUTION_COMPLETED in types
+    assert EventType.CHECKPOINT_REQUIRED in types
+    assert EventType.MESSAGE_END in types
+    done = next(e for e in events if e.type == EventType.EXECUTION_COMPLETED)
+    assert done.payload.get("status") == "completed"
+    end = next(e for e in events if e.type == EventType.MESSAGE_END)
+    assert end.payload.get("finish_reason") == "paused"
+    gate = next(e for e in events if e.type == EventType.CHECKPOINT_REQUIRED)
+    assert gate.payload.get("checkpoint_id") == "cp-after-exec"
+    # Order is the conflict: execution already "completed", then the gate, then paused end.
+    assert types.index(EventType.EXECUTION_COMPLETED) < types.index(
+        EventType.CHECKPOINT_REQUIRED
+    )
+
+    p = projected["execution_completed_gate_still_pending"]
+    assert p["status"] == "paused"
+    assert p["finishReason"] == "paused"
+    assert p["outcome"] is None
+    pending = _pending_gates(p)
+    assert len(pending) == 1
+    assert pending[0]["kind"] == "ask_user"
+    assert pending[0]["id"] == "cp-after-exec"
+    assert pending[0]["status"] == "pending"
+    assert pending[0]["question"] == "按此方案推进吗？"
+    assert p["content"] == "团队已交付，请确认是否按此方案推进。"
+    assert [s["kind"] for s in p["process"]] == ["content", "team", "checkpoint"]
+    assert p["process"][-1]["checkpoint_id"] == "cp-after-exec"
+    assert len(p["runs"]) == 1
+    assert p["runs"][0]["id"] == "r1"
+    assert p["runs"][0]["status"] == "completed"
+    assert p["progress"] == {"completed": 1, "total": 1}
 
 
 def test_single_agent_checkpoint_finalized_stays_paused(projected):
@@ -1314,39 +1357,94 @@ def test_multi_agent_export_docx_artifacts(projected):
     assert "derived_from" not in by_path[md]
 
 
-def test_single_agent_non_blocking_ask_pending(projected):
-    """悬着：question_posted 无收口帧，interactions 仍 pending；时间线有 ask 标记。"""
-    p = projected["single_agent_non_blocking_ask"]
-    assert p["status"] == "completed"
-    asks = [i for i in p["interactions"] if i["kind"] == "question_posted"]
-    assert len(asks) == 1
-    assert asks[0]["id"] == "ask1"
-    assert asks[0]["status"] == "pending"
-    assert "settlement" not in asks[0]
-    assert {"kind": "ask", "ask_id": "ask1"} in p["process"]
+def test_multi_agent_cross_turn_live_prev_new_graph_excludes_old_runs(projected):
+    """上一轮后台仍在跑时新回合再派人：新人进新图、不进旧图（从向量事件手推，不抄 golden）。"""
+    from agentcore.runtime.events.types import EventType
+
+    _description, builder = VECTORS["multi_agent_cross_turn_live_prev"]
+    events = list(builder())
+    plans = [e for e in events if e.type == EventType.RUN_PLAN]
+    assert len(plans) == 2
+    exec1 = plans[0].payload["execution_id"]
+    exec2 = plans[1].payload["execution_id"]
+    assert exec1 != exec2
+    assert plans[1].payload.get("prev_execution_id") == exec1
+    old_ids = {str(r.get("id")) for r in plans[0].payload.get("runs") or []}
+    new_ids = {str(r.get("id")) for r in plans[1].payload.get("runs") or []}
+    assert "r1" in old_ids
+    assert "r1" not in new_ids
+    assert not any(e.type == EventType.GRAPH_APPEND for e in events)
+    assert any(
+        e.type == EventType.RUN_STARTED and e.payload.get("run_id") == "r1"
+        for e in events
+    )
+    assert not any(
+        e.type == EventType.RUN_COMPLETED and e.payload.get("run_id") == "r1"
+        for e in events
+    )
+    assert any(e.type == EventType.EXECUTION_DETACHED for e in events)
+
+    p = projected["multi_agent_cross_turn_live_prev"]
+    proj_ids = {r["id"] for r in p["runs"]}
+    assert "r1" not in proj_ids
+    assert proj_ids == new_ids
+    assert p["progress"]["total"] == len(new_ids)
+    completed_ids = {
+        e.payload.get("run_id")
+        for e in events
+        if e.type == EventType.RUN_COMPLETED
+    }
+    assert p["progress"]["completed"] == len(completed_ids & proj_ids)
+    team_eids = [s["execution_id"] for s in p["process"] if s.get("kind") == "team"]
+    assert team_eids == [exec2]
 
 
-def test_single_agent_non_blocking_ask_answered(projected):
-    """已答：fold resolved + settlement answered，答复对人可见。"""
-    p = projected["single_agent_non_blocking_ask_answered"]
-    assert p["status"] == "completed"
-    ask = next(i for i in p["interactions"] if i["kind"] == "question_posted")
-    assert ask["status"] == "resolved"
-    assert ask["settlement"] == "answered"
-    assert ask["answer"] == "也要 PDF。"
-    assert "note" not in ask
-    assert {"kind": "ask", "ask_id": "ask1"} in p["process"]
+def test_multi_agent_same_turn_mlr_debate_single_execution(projected):
+    """同一条消息两幕共用一个 execution_id（从向量事件手推，不抄 golden）。"""
+    from agentcore.runtime.events.types import EventType
 
+    _description, builder = VECTORS["multi_agent_same_turn_mlr_debate"]
+    events = list(builder())
+    message_ids = [
+        e.payload.get("message_id")
+        for e in events
+        if e.type == EventType.MESSAGE_START
+    ]
+    assert message_ids == ["m1"]
+    plans = [e for e in events if e.type == EventType.RUN_PLAN]
+    assert len(plans) >= 2
+    eids = {str(e.payload.get("execution_id") or "") for e in plans}
+    assert len(eids) == 1
+    eid = next(iter(eids))
+    assert eid
+    assert all(not e.payload.get("prev_execution_id") for e in plans)
+    act_ids = []
+    for plan in plans:
+        act = plan.payload.get("act") or {}
+        aid = str(act.get("act_id") or "")
+        if aid and aid not in act_ids:
+            act_ids.append(aid)
+    assert act_ids == ["act-1", "act-2"]
+    kinds = {
+        str((e.payload.get("act") or {}).get("kind") or "")
+        for e in plans
+        if (e.payload.get("act") or {}).get("act_id")
+    }
+    assert kinds == {"multi_agent", "debate"}
 
-def test_single_agent_non_blocking_ask_discarded(projected):
-    """已作废：fold resolved + discarded，CEO note 必须留下。"""
-    p = projected["single_agent_non_blocking_ask_discarded"]
-    assert p["status"] == "completed"
-    ask = next(i for i in p["interactions"] if i["kind"] == "question_posted")
-    assert ask["status"] == "resolved"
-    assert ask["settlement"] == "discarded"
-    assert ask["note"]
-    assert "answer" not in ask
+    p = projected["multi_agent_same_turn_mlr_debate"]
+    acts = p["acts"]
+    assert [a["actId"] for a in acts] == ["act-1", "act-2"]
+    assert acts[0]["kind"] == "multi_agent"
+    assert acts[1]["kind"] == "debate"
+    assert acts[1]["anchorRunId"] == "synthesizer"
+    run_by_id = {r["id"]: r for r in p["runs"]}
+    assert run_by_id["synthesizer"]["actId"] == "act-1"
+    assert run_by_id["debate_mod_same"]["actId"] == "act-2"
+    assert run_by_id["debate_mod_same_r1_pro"]["actId"] == "act-2"
+    assert run_by_id["debate_mod_same_r1_con"]["actId"] == "act-2"
+    team_eids = [s["execution_id"] for s in p["process"] if s.get("kind") == "team"]
+    assert team_eids == [eid]
 
 
 # Vectors with no hand-verified assertion in any sentinel module. Ratchet: only down.

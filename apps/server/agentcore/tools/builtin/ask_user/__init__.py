@@ -7,21 +7,13 @@ the CEO is **opening** a producible-but-underspecified request (做网站 / 文�
 hitting a **mid-execution** high-cost fork (A vs B / an irreversible step), it asks the
 SAME way and through the SAME mechanism.
 
-Two modes, one primitive — the model picks via ``blocking``. DEFAULT (``blocking`` true):
-suspend + resume — the card surfaces, the turn finalizes onto a durable frame
-(``ToolEffect.SUSPEND``), and the user's answer returns via the cold ``POST .../resume``
-path into the CEO's ReAct loop as this tool's result. 挂起+恢复 is the general case
-(it preserves any in-flight context — delegate results, read files) and subsumes the
+The turn pauses until the user answers: the card surfaces, the turn finalizes onto a
+durable frame (``ToolEffect.SUSPEND``), and the answer returns via the cold
+``POST .../resume`` path into the CEO's ReAct loop as this tool's result. 挂起+恢复
+preserves any in-flight context — delegate results, read files — and subsumes the
 opening 引导 at negligible cost, so the runtime — not the model — owns「该结束还是该挂起」.
-NON-BLOCKING (``blocking`` false, Cursor 式): for a low-stakes
-fork the CEO already has a sensible default for, it surfaces the question, returns a
-``CONTINUE`` immediately (no suspend, no durable frame, no extra round) and keeps working
-on its stated default; the user's answer, if any, rides an ordinary next-turn message.
-Requires a stated fallback (an ``assumptions`` entry or a question ``default``) — without
-one「非阻塞」would silently guess, so it degrades to an error steering the CEO to block.
-The model decides WHETHER to ask (restraint) and, when it does, whether the fork is worth
-freezing the turn (block) or can ride a default (non-block). 对比与决策见
-docs/03-AI核心/Agent协作模式.md（向用户发问 / 阻塞与非阻塞）.
+若答案不要紧，不要发卡，在回复里写明假设即可。对比与决策见
+docs/03-AI核心/Agent协作模式.md（向用户发问）.
 
 The card's content is one adaptive shape (rich when opening, compact mid-task):
 ``message`` (the framing / opening line — always shown), optional ``context``

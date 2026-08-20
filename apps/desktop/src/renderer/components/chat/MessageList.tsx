@@ -61,7 +61,7 @@ export function MessageList() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6">
       {items.map((it) =>
         it.kind === "message" ? (
           <MessageBubble key={it.key} message={it.msg} />

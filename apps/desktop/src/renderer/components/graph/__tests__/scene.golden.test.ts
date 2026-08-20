@@ -337,7 +337,7 @@ describe("buildGraphScene · golden", () => {
   });
 
   it("nested sub-team → nested compounds + nodeGroup attribution", () => {
-    // Nested units expand by default on canvas + chat embed; pass the same set
+    // Nested units expand by default on 全屏 + chat embed; pass the same set
     // here to exercise nested compound boxes in the golden.
     const scene = buildGraphScene(nestedSubteamExec(), {
       inputId: INPUT_ID,

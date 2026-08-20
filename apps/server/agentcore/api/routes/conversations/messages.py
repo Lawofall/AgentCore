@@ -382,7 +382,6 @@ async def send_message(
     _hot = frozenset(
         {
             InteractionKind.APPROVAL,
-            InteractionKind.DELEGATION_AUTHORIZATION,
             InteractionKind.ESCALATION,
         }
     )
@@ -408,9 +407,6 @@ async def send_message(
     # 批 B 失效修订：发消息不再立即 orphan；回合收尾若未调 debate / 未起 MLR 才落事实。
 
     needs_tools = body.requires_tools
-    from agentcore.conversation.ask_reply import normalize_ask_id
-
-    reply_ask_id = normalize_ask_id(body.ask_id)
     preflight = await _preflight_owned_chat_turn(
         conversation_id, user, session, needs_tools=needs_tools
     )
@@ -460,7 +456,6 @@ async def send_message(
                     "conversation_id": conversation_id,
                     "attachments": attachments,
                     "agent_mentions": raw_agent_mentions,
-                    "ask_id": reply_ask_id,
                     "requires_tools": needs_tools,
                     "x_client_platform": x_client_platform,
                     "origin_device_id": current_origin_device(),
@@ -476,7 +471,6 @@ async def send_message(
                         "content": body.content,
                         **({"attachments": att_meta} if att_meta else {}),
                         **({"agent_mentions": raw_agent_mentions} if raw_agent_mentions else {}),
-                        **({"ask_id": reply_ask_id} if reply_ask_id else {}),
                     },
                 )
             )
@@ -493,7 +487,6 @@ async def send_message(
                         status="received",
                         attachments=att_meta or None,
                         agent_mentions=raw_agent_mentions or None,
-                        ask_id=reply_ask_id,
                     )
                 )
                 # Sender's POST: short SSE confirm — history/SSE only, do NOT re-journal
@@ -507,7 +500,6 @@ async def send_message(
                         status="received",
                         attachments=att_meta or None,
                         agent_mentions=raw_agent_mentions or None,
-                        ask_id=reply_ask_id,
                     )
                 )
                 confirm.close(reason="interjection_confirm")
@@ -528,7 +520,6 @@ async def send_message(
                 origin_device_id=current_origin_device(),
                 llm_credentials=preflight.credentials,
                 llm_supports_tools=preflight.supports_tools,
-                ask_id=reply_ask_id,
             )
             if parked is not None:
                 att_meta = interjection_attachment_meta(parked.attachments)
@@ -541,7 +532,6 @@ async def send_message(
                         status="received",
                         attachments=att_meta or None,
                         agent_mentions=raw_agent_mentions or None,
-                        ask_id=reply_ask_id,
                     )
                 )
                 # Sender's POST: short SSE confirm — history/SSE only, do NOT re-journal
@@ -555,7 +545,6 @@ async def send_message(
                         status="received",
                         attachments=att_meta or None,
                         agent_mentions=raw_agent_mentions or None,
-                        ask_id=reply_ask_id,
                     )
                 )
                 confirm.close(reason="steer_confirm")
@@ -579,7 +568,6 @@ async def send_message(
                 llm_credentials=preflight.credentials,
                 llm_supports_tools=preflight.supports_tools,
                 started=started,
-                ask_id=reply_ask_id,
             ),
         )
         return sse_queued_response(
@@ -602,7 +590,6 @@ async def send_message(
             sink=sink,
             attachments=[a.model_dump() for a in body.attachments],
             agent_mentions=[m.model_dump() for m in body.agent_mentions],
-            ask_id=reply_ask_id,
             llm_credentials=preflight.credentials,
             llm_supports_tools=preflight.supports_tools,
             x_client_platform=x_client_platform,
@@ -644,7 +631,6 @@ async def list_queued_turns(
                 interjection_id=item.interjection_id,
                 attachments=[MessageAttachment.model_validate(a) for a in item.attachments],
                 agent_mentions=[AgentMention.model_validate(m) for m in item.agent_mentions],
-                ask_id=item.ask_id,
             )
             for idx, item in enumerate(pending, start=1)
         ]

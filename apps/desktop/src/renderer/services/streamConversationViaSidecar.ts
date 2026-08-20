@@ -93,8 +93,6 @@ export interface StreamViaSidecarOptions {
   turnCommit?: TurnCommitReport;
   /** Soft @Agent chips — prompt hint only; forwarded to startTurn. Empty / omit = none. */
   agentMentions?: OutgoingAgentMention[];
-  /** 答非阻塞提问时与出站 ``question_posted.ask_id`` 对上。缺省 = 普通消息。 */
-  askId?: string | null;
   signal?: AbortSignal;
 }
 
@@ -251,7 +249,6 @@ export async function streamConversationViaSidecar({
   history: historyArg,
   optimisticUserId,
   agentMentions,
-  askId,
   signal,
   turnCommit,
 }: StreamViaSidecarOptions): Promise<SidecarTurnResult> {
@@ -319,7 +316,6 @@ export async function streamConversationViaSidecar({
         userMessageId: optimisticUserId,
         history,
         ...(agentMentions && agentMentions.length > 0 ? { agentMentions } : {}),
-        ...(askId ? { askId } : {}),
         inference,
         foldersAuth,
         accountAuth,

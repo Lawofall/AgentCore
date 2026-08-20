@@ -91,11 +91,11 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "干到哪了、谁在忙、有没有卡住——聊天和画布同源，随时能看见。",
+          text: "干到哪了、谁在忙、有没有卡住——聊天里随时能看见，想看大图再放大。",
         },
         {
           type: "paragraph",
-          text: "聊天 ⇄ 画布",
+          text: "聊天里看，放大了细看",
           emphasis: true,
         },
         {
@@ -103,15 +103,15 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "聊天视图",
-              desc: "默认视图：流式输出 + 内嵌协作图；点「在画布打开」一键切换。",
+              desc: "唯一的常驻视图：流式输出 + 内嵌协作图 + 状态条，编制与进度一眼可见。",
             },
             {
-              title: "画布视图",
-              desc: "按对话切换的第二视图：聚焦回合展开完整协作图，其余回合塌成摘要。下一步指令在聊天里下达。",
+              title: "在画布打开",
+              desc: "把这一回合放大成全屏：完整协作图、辩论过程、多次接续的对比都在这儿看。看完返回，聊天不受影响。",
             },
             {
-              title: "指挥台",
-              desc: "画布侧面板顶部常驻区——检查点、审批、续跑、救火就地拍板，不用切回聊天。",
+              title: "拍板就在聊天里",
+              desc: "检查点、审批、续跑、救火都就地出现在时间线上，不用切到别处。",
             },
           ],
         },

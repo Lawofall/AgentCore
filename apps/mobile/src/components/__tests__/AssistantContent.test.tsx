@@ -136,16 +136,16 @@ function makeRun(p: Partial<ProjectedRun> & { id: string }): ProjectedRun {
 }
 
 describe("graphAppendAnchorLabel", () => {
-  it("续自口径：开辩论幕与同幕补派文案区分", () => {
+  it("统一为新开一队、接着上一张继续，不再报追加人数", () => {
     expect(graphAppendAnchorLabel(2, "debate")).toBe(
-      "续自上一张图 · 已开辩论幕 · 追加 2 名成员",
+      "新开一队、接着上一张继续",
     );
     expect(graphAppendAnchorLabel(2, "debate", "auto")).toBe(
-      "续自上一张图 · 已开辩论幕 · 追加 2 名成员 · 自动开辩",
+      "新开一队、接着上一张继续 · 自动开辩",
     );
-    expect(graphAppendAnchorLabel(2)).toBe("续自上一张图 · 追加 2 名成员");
+    expect(graphAppendAnchorLabel(2)).toBe("新开一队、接着上一张继续");
     expect(graphAppendAnchorLabel(1, "multi_agent")).toBe(
-      "续自上一张图 · 追加 1 名成员",
+      "新开一队、接着上一张继续",
     );
   });
 });

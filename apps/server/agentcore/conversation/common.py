@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.billing.gate import BackgroundLlmResult, run_background_llm
 from agentcore.core.errors import LLMAuthError
-from agentcore.core.log_context import log_context
+from agentcore.core.log_context import get_log_value, log_context
 from agentcore.core.logging import get_logger
 from agentcore.core.text import clip_preview
 from agentcore.db.base import async_session_factory
@@ -447,6 +447,7 @@ def schedule_title_generation(
     user_id: str,
     user_message: str,
     sink: EventSink,
+    trace_id: str | None = None,
 ) -> None:
     """Fire-and-forget early title mint for a cloud SSE turn (sync schedule only).
 
@@ -456,12 +457,14 @@ def schedule_title_generation(
     if conversation_id in _title_inflight:
         return
     _title_inflight.add(conversation_id)
-    # Scheduled BEFORE the turn's log_context binds (parallel with the pipeline),
-    # so the task inherits no correlation keys — its llm.call (scenario=title)
-    # logged fully bare (verified in dev.jsonl). Bind the conversation handle at
-    # creation; contextvars are copied into the task. Deliberately no trace_id:
-    # the mint is conversation-level, not part of one turn's trace.
-    with log_context(conversation_id=conversation_id, user_id=user_id):
+    # Same-turn correlation: inherit caller-bound trace_id or an explicit mint from
+    # stream_chat so title llm.call shares the turn's trace (contextvars copy into the task).
+    bound_trace = trace_id or get_log_value("trace_id")
+    with log_context(
+        conversation_id=conversation_id,
+        user_id=user_id,
+        trace_id=bound_trace,
+    ):
         task = asyncio.ensure_future(
             _mint_title_background(
                 conversation_id=conversation_id,

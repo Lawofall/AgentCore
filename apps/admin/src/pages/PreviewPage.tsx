@@ -48,9 +48,9 @@ export function PreviewPage({
         </p>
       )}
       {current ? (
-        <div className="flex flex-col gap-4">
-          <div className="flex justify-end">
-            <div className="max-w-[min(100%,36rem)] rounded-xl rounded-br-none border border-border/60 bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex min-w-0 justify-end">
+            <div className="min-w-0 max-w-[min(100%,36rem)] rounded-xl rounded-br-none border border-border/60 bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
               （预览向量 · 用户消息占位）
             </div>
           </div>

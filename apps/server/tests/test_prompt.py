@@ -390,6 +390,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "面向用户·大白话" in hint
     assert "内部机制名词" in hint or "内部术语" in hint
     assert "内部工具" in hint or "内部工具名" in hint
+    assert "execution_id" in hint and "run_id" in hint and "prev_execution_id" in hint
     assert "给模型看的通道" in hint
     assert "审计报告没写完整" in hint or "重新安排人补上" in hint
     assert "短文" in hint and "存文件" in hint
@@ -444,7 +445,9 @@ def test_core_teaches_split_criterion_over_count():
     assert "MVP" in hint or "契约" in hint
     assert "规格已齐 ≠ 全量" in hint or "规格已齐≠全量" in hint
     assert "结构槽" in hint or "playbook_args" in hint
-    assert "playbook=none" in hint
+    assert "省略 playbook" in hint
+    assert "playbook=none" not in hint
+    assert "playbook_id" not in hint
     # 桌面壳 / 多屏 / 完整可玩 / 交付档对照表：HOW 在 skill（本函数后段已钉 skill）
     # 交付档 → intensity：核留结构槽指针；对照表在 kickoff / build_*
     assert "intensity" in hint
@@ -558,30 +561,21 @@ def test_core_teaches_split_criterion_over_count():
     assert "假两段" in skill
     assert "同一 task" in skill
     assert "桌面壳" in skill or "多进程" in skill
-    assert "playbook=none" in skill
+    assert "省略 playbook" in skill
+    assert "playbook=none" not in skill
+    assert "playbook_id" not in skill
     assert "可跑闭环" in skill or "核心运行时" in skill
     assert "根委派切片诚实" in skill or "嵌套扇出" in skill
     assert "人已派出" in skill
     assert "谁在后台、完成后会再汇报" not in skill
 
 
-def test_core_teaches_nonblocking_hold_and_say():
-    """编排姿态（非阻塞问·压单）：常驻核短钩；禁止升成拒 delegate。"""
+def test_core_teaches_write_assumptions_instead_of_a_card():
+    """答案不要紧 → 正文写假设、不要发卡；挡路才 ask_user。"""
     hint = _CEO_CORE_HINT
-    assert "【非阻塞问·压单】" in hint
-    assert "unlocks" in hint
-    assert "后半等你" in hint
-    assert "能做的做完了" in hint
-    assert "答案影响不到" in hint
-    assert "偷偷按默认" in hint
-    assert "半程说成交付" in hint
-    assert "接得上这张图" in hint or "勿假装已挂上" in hint
-    # 语义扩展：按默认继续 *或* 声明后半等人，两种都要写明默认。
-    assert "声明后半等人" in hint
-    # 与【派完·可见面】切分：等人答 ≠ 等队员。
-    assert "不是等队员" in hint
-    assert "抛了非阻塞问须另说" in hint
-    # 只写提示词：不得把姿态写成未答则拒 delegate。
+    assert "若答案不要紧，在回复里写明假设，不要发卡" in hint
+    assert "unlocks" not in hint
+    assert "【非阻塞问·压单】" not in hint
     assert "未答则拒" not in hint
     assert "拒 `delegate`" not in hint
     assert "拒 delegate" not in hint
@@ -679,18 +673,18 @@ def test_core_teaches_coordination_budget_awareness():
 
 
 def test_core_teaches_new_turn_new_graph_not_cross_turn_append():
-    # 跨回合【合进旧图】已废除，但「接着上一支团队干」仍靠模型显式传 append_to：
-    # 引擎把它翻成「新开一张图 + prev_execution_id 链回去」。core 只留指针，HOW 在 skill。
+    # 跨回合【合进旧图】已废除；接着上一支团队干 = 新开一队、接续上一张图。
+    # core 只留指针 + 禁把内部 ID 写给用户，HOW 在 skill。
     hint = _CEO_CORE_HINT
     assert "同回合" in hint and "合图" in hint
+    assert "新开一队" in hint and "接续上一张图" in hint
     assert "team_orchestration_advanced" in hint
     assert 'append_to_execution_id="latest"' not in hint
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "【新回合新图】" in skill
     assert "【跨回合延续】" not in skill
     assert "append_to_execution_id" in skill
-    assert "prev_execution_id" in skill
-    # 续接口径：新图 + 链回，不得再教「合进旧图 / 追加到上方那张」
+    assert "新开一队、接续上一张图" in skill
     assert "只计本图" in skill
     assert "已往上方协作图追加" not in skill
     assert "recent_team_graph" not in skill
@@ -1081,6 +1075,9 @@ def test_core_teaches_required_sections_same_literal():
     assert "同字面" in hint or "同一套原文" in hint
     assert "近义" in hint
     assert "裸报错" in hint or "藏契约" in hint
+    assert "must_contain" not in hint
+    assert "deliverable.name" not in hint
+    assert "requires_files" not in hint
     orch = _TEAM_ORCHESTRATION_ADVANCED
     assert "同字面" in orch or "同一套原文" in orch
     assert "裸报错" in orch or "藏起契约" in orch or "藏契约" in orch
@@ -1097,11 +1094,11 @@ def test_core_teaches_short_edit_not_m2a_kickoff_template():
 
 
 def test_core_teaches_explicit_confirm_before_disk_write():
-    """案 79789150：明示确认后再落盘 → ask_user(blocking)+default；禁扫全文猜意图。"""
+    """案 79789150：明示确认后再落盘 → ask_user + default；禁扫全文猜意图。"""
     hint = _CEO_CORE_HINT
     assert "明示确认后再落盘" in hint
     assert "确认后再落盘" in hint or "先对齐再写" in hint
-    assert "ask_user" in hint and "blocking" in hint
+    assert "ask_user" in hint
     assert "default" in hint
     assert "扫全文猜意图" in hint
 

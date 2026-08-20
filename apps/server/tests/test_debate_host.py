@@ -11,6 +11,7 @@ import pytest
 from agentcore.runtime.debate.events import debate_act_payload, moderator_plan_event
 from agentcore.runtime.kickoff.debate_host import (
     DebateHostAttach,
+    host_graph_binding,
     is_mlr_synthesizer_id,
     next_act_id,
     research_chain_evidence,
@@ -172,6 +173,80 @@ async def test_resolve_debate_host_attach_success(monkeypatch):
         act_id="act-2",
         same_turn=False,
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_debate_host_attach_same_turn(monkeypatch):
+    host_entries = [
+        {
+            "kind": "run_plan",
+            "payload": {
+                "plan_type": "multi_agent",
+                "execution_id": "exec1",
+                "act": {"act_id": "act-1", "kind": "multi_agent"},
+                "runs": [{"id": "synthesizer", "agent_id": "synthesizer"}],
+            },
+        },
+        {"kind": "run_completed", "payload": {"run_id": "synthesizer"}},
+    ]
+
+    monkeypatch.setattr(
+        "agentcore.runtime.delegate.graph_append.resolve_latest_mlr_execution",
+        AsyncMock(return_value="exec1"),
+    )
+    monkeypatch.setattr(
+        "agentcore.runtime.delegate.graph_append.resolve_host_message_id",
+        AsyncMock(return_value="m1"),
+    )
+    monkeypatch.setattr(
+        "agentcore.runtime.delegate.graph_append.load_host_journal_entries",
+        AsyncMock(return_value=host_entries),
+    )
+    got = await resolve_debate_host_attach(
+        conversation_id="c1",
+        append_message_id="m1",
+        has_research_artifacts=True,
+    )
+    assert got == DebateHostAttach(
+        execution_id="exec1",
+        host_message_id="m1",
+        anchor_run_id="synthesizer",
+        act_id="act-2",
+        same_turn=True,
+    )
+
+
+def test_host_graph_binding_same_turn_reuses_without_mint():
+    attach = DebateHostAttach(
+        execution_id="exec_host",
+        host_message_id="m1",
+        anchor_run_id="synthesizer",
+        act_id="act-2",
+        same_turn=True,
+    )
+    minted: list[str] = []
+
+    def _mint() -> str:
+        minted.append("x")
+        return "NEW"
+
+    eid, prev = host_graph_binding(attach, mint_id=_mint)
+    assert eid == "exec_host"
+    assert prev is None
+    assert minted == []
+
+
+def test_host_graph_binding_cross_turn_mints_prev():
+    attach = DebateHostAttach(
+        execution_id="exec_host",
+        host_message_id="m1",
+        anchor_run_id="synthesizer",
+        act_id="act-2",
+        same_turn=False,
+    )
+    eid, prev = host_graph_binding(attach, mint_id=lambda: "exec_new")
+    assert eid == "exec_new"
+    assert prev == "exec_host"
 
 
 @pytest.mark.asyncio
@@ -345,7 +420,149 @@ def test_moderator_plan_event_host_act_2():
     assert ev.payload["runs"][0]["parent_run_id"] == "cap"
 
 
-def test_debate_act_payload_defaults():
+def test_moderator_plan_event_same_turn_omits_prev():
+    from agentcore.runtime.debate.types import DebateForm
+
+    tool = SimpleNamespace(
+        _captain_run_id="cap",
+        _debate_act_id="act-2",
+        _debate_act_title="正反辩论对抗",
+        _debate_anchor_run_id="synthesizer",
+        _debate_host_message_id="m1",
+        _debate_prev_execution_id=None,
+        _debate_graph_parent_run_id=None,
+        _debate_authorized_by="preview",
+    )
+    cfg = SimpleNamespace(form=DebateForm.DEBATE, motion="命题")
+    ev = moderator_plan_event(tool, "exec_host", "mod-1", cfg)  # type: ignore[arg-type]
+    assert ev.payload["execution_id"] == "exec_host"
+    assert "prev_execution_id" not in ev.payload
+    assert ev.payload["act"]["act_id"] == "act-2"
+    assert ev.payload["act"]["anchor_run_id"] == "synthesizer"
+    assert ev.payload["runs"][0]["parent_run_id"] == "cap"
+
+
+def _debate_tool_for_host_bind():
+    import tempfile
+    from pathlib import Path
+
+    from agentcore.runtime.events import EventSink
+    from agentcore.tools.builtin.debate.tool import DebateTool
+    from agentcore.tools.protocol import ToolContext
+    from agentcore.tools.registry import ToolRegistry
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+    from agentcore.workspace.server import ServerWorkspace
+    from tests.delegate.conftest import Provider
+
+    backend = ServerWorkspace(
+        root=Path(tempfile.mkdtemp(prefix="debate_host_ws_")),
+        sandbox=SubprocessSandbox(),
+    )
+    ctx = ToolContext.create(
+        execution_id="e-context",
+        run_id="captain",
+        agent_id="CEO",
+        backend=backend,
+        user_id="u",
+        conversation_id="c1",
+    )
+    return DebateTool(
+        llm=Provider([]),
+        sink=EventSink(),
+        system_prompt="sys",
+        user_message="开辩",
+        tools=ToolRegistry(),
+        base_tool_context=ctx,
+        conversation_id="c1",
+        message_id="m1",
+        captain_run_id="captain",
+        approval_gate=None,
+    )
+
+
+def _host_attach(*, same_turn: bool) -> DebateHostAttach:
+    return DebateHostAttach(
+        execution_id="exec_host",
+        host_message_id="m1",
+        anchor_run_id="synthesizer",
+        act_id="act-2",
+        same_turn=same_turn,
+    )
+
+
+async def _first_plan_after_attach(monkeypatch, *, same_turn: bool):
+    from agentcore.llm.provider.protocol import TokenUsage
+    from agentcore.runtime.costing import usage_metadata
+    from agentcore.runtime.debate import DebateConfig, DebateForm, DebateSide, RoundPolicy
+    from agentcore.runtime.events.types import EventType
+    from agentcore.tools.builtin.debate import tool as debate_tool_mod
+
+    attach = _host_attach(same_turn=same_turn)
+
+    async def _from_card(*_a, **_k):
+        return attach
+
+    class _FakeModerator:
+        usage = TokenUsage()
+        llm_rounds = 0
+
+        def __init__(self, **_kw):
+            pass
+
+        async def _complete_json(self, *_a, **_k):
+            return {}
+
+        async def run(self, *_a, **_k):
+            raise RuntimeError("stop after plan")
+
+    async def _skip_pretrial(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(
+        "agentcore.runtime.kickoff.stage_card.resolve_host_attach_from_card",
+        _from_card,
+    )
+    monkeypatch.setattr(debate_tool_mod, "Moderator", _FakeModerator)
+    monkeypatch.setattr(
+        "agentcore.runtime.debate.pretrial.run_pretrial_phase",
+        _skip_pretrial,
+    )
+
+    tool = _debate_tool_for_host_bind()
+    config = DebateConfig(
+        motion="命题",
+        form=DebateForm.DEBATE,
+        sides=[
+            DebateSide(key="pro", name="正方", stance="a"),
+            DebateSide(key="con", name="反方", stance="b"),
+        ],
+        policy=RoundPolicy.for_form(DebateForm.DEBATE, thorough=False),
+        moderator_run_id="debate_mod_test",
+    )
+    await tool._run_moderator(config, usage_metadata(tool._acc.usage))
+    plans = [e for e in tool._sink._history if e.type == EventType.RUN_PLAN]  # noqa: SLF001
+    assert plans, "moderator_plan_event must emit before moderator.run"
+    return tool, plans[0]
+
+
+@pytest.mark.asyncio
+async def test_run_moderator_same_turn_reuses_host_eid(monkeypatch):
+    tool, plan = await _first_plan_after_attach(monkeypatch, same_turn=True)
+    assert plan.payload["execution_id"] == "exec_host"
+    assert "prev_execution_id" not in plan.payload
+    assert tool._base_tool_context.execution_id == "exec_host"
+    assert tool._debate_prev_execution_id is None
+    assert plan.payload["act"]["act_id"] == "act-2"
+
+
+@pytest.mark.asyncio
+async def test_run_moderator_cross_turn_mints_prev(monkeypatch):
+    tool, plan = await _first_plan_after_attach(monkeypatch, same_turn=False)
+    assert plan.payload["execution_id"] != "exec_host"
+    assert plan.payload["execution_id"] != "e-context"
+    assert plan.payload.get("prev_execution_id") == "exec_host"
+    assert tool._debate_prev_execution_id == "exec_host"
+    assert plan.payload["act"]["act_id"] == "act-2"
     tool = SimpleNamespace()
     assert debate_act_payload(tool) == {"act_id": "act-1", "kind": "debate"}
 

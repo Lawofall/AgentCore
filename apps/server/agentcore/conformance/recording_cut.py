@@ -54,6 +54,7 @@ from agentcore.demo_tape.sanitize import sanitize_and_scan_events
 from agentcore.demo_tape.schema import normalize_tape_event
 from agentcore.runtime.events import EventType
 from agentcore.runtime.events.disposition import EVENT_DISPOSITION, Disposition
+from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES
 
 # Cut fixtures own this name prefix; conformance.export's sweep skips it (and the
 # hand-authored VECTORS must never use it — pinned by tests/test_recording_cut.py).
@@ -93,6 +94,13 @@ _KEEP_EPHEMERAL_VALUES = frozenset(event.value for event in CUT_KEEP_EPHEMERAL)
 def _keep(event_type_value: str) -> bool:
     disposition = _DISPOSITION_BY_VALUE.get(event_type_value)
     if disposition is None:
+        # Retired names may still appear on old recordings; drop them
+        # rather than treating version skew as a hard cut failure.
+        if (
+            event_type_value.startswith("sim.show.")
+            or event_type_value in RETIRED_EVENT_TYPE_VALUES
+        ):
+            return False
         raise ValueError(
             f"recording event type {event_type_value!r} is not a known EventType — "
             "recording/code version skew; refusing to cut silently"

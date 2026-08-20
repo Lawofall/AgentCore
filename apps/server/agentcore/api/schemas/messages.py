@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agentcore.api.schemas.usage import CostBreakdown, UsageBreakdown
 from agentcore.llm.pricing import project_cache_miss_tokens
-from agentcore.runtime.approvals import ApprovalDecision, DelegationAuthorizationDecision
+from agentcore.runtime.approvals import ApprovalDecision
 from agentcore.runtime.checkpoints import AskCheckpointIntent, CheckpointDecision
 from agentcore.runtime.suspension import SuspensionKind
 
@@ -99,31 +99,11 @@ class SendMessageRequest(BaseModel):
     # Soft Agent @-mentions on the conversation page (软提示，非强制派单). Not IM mentions;
     # not MessageAttachment.kind. Empty → no prompt injection.
     agent_mentions: list[AgentMention] = Field(default_factory=list, max_length=10)
-    # Optional return-path slot: when this message answers a non-blocking
-    # ``question_posted``, the outbound ``ask_id``. Blank / absent = ordinary
-    # message (still digested). Not an Agent mention.
-    ask_id: str | None = Field(
-        None,
-        max_length=64,
-        description=(
-            "可选。若本条是在回答非阻塞提问，填出站 question_posted.ask_id。"
-            "缺省/空=普通消息，照常消化。禁止塞进 agent_mentions。"
-        ),
-    )
     # Soft gate: set when this turn is expected to call orchestration tools (delegate/debate).
     # Triggers a preflight warning (not a block) when probe recorded supports_tools=false.
     # Locality is conversation/project state (birth-time bind), not a per-turn field —
     # auto-promote is vetoed (双模式工作区).
     requires_tools: bool = False
-
-    @field_validator("ask_id", mode="before")
-    @classmethod
-    def _blank_ask_id(cls, v: object) -> object:
-        if v is None:
-            return None
-        if isinstance(v, str) and not v.strip():
-            return None
-        return v.strip() if isinstance(v, str) else v
 
     @model_validator(mode="after")
     def _require_content_or_attachments(self) -> "SendMessageRequest":
@@ -159,7 +139,7 @@ class SetMessageFeedbackRequest(BaseModel):
 # --- Interaction resolve (§8.2 unified suspend-resume bridge) ---
 # One ``POST /conversations/{id}/interactions/{interaction_id}`` settles hot-path
 # interactions; the body is discriminated on ``kind`` (approval /
-# delegation_authorization / client_tool / escalation / stage_card). Cold-path
+# client_tool / escalation / stage_card). Cold-path
 # ``ask_user`` / ``plan_review`` / ``team_preview`` are NOT in this union — they
 # finalize the turn and continue via ``POST .../resume``.
 
@@ -193,19 +173,6 @@ class WorkspaceOpError(BaseModel):
     detail: str = Field("", max_length=2000)
     count: int | None = None
     reason: str | None = Field(None, max_length=64)
-
-
-class ResolveDelegationAuthorizationInteraction(BaseModel):
-    """Settle a paused per-delegation authorization (``delegation_authorization``).
-
-    Raised before workers start so the user can grant medium-risk tools for the
-    whole delegation in one click. ``grant_delegation`` whitelists code_execute +
-    file-mutation tools for this delegation; ``per_call`` keeps per-call approval;
-    ``deny`` refuses to start workers.
-    """
-
-    kind: Literal["delegation_authorization"] = "delegation_authorization"
-    decision: DelegationAuthorizationDecision
 
 
 class ResolveClientToolInteraction(BaseModel):
@@ -254,35 +221,12 @@ class ResolveStageCardInteraction(BaseModel):
     motion_override: str | None = Field(None, max_length=2000)
 
 
-class ResolveQuestionPostedInteraction(BaseModel):
-    """Settle a non-blocking ``question_posted`` (journal fold 三态).
-
-    ``answered``：用户提交答复（``answer`` 必填）。``discarded``：CEO 作废（``note`` 必填人话）。
-    两者都是可见收口，不是客户端本地标记。
-    """
-
-    kind: Literal["question_posted"] = "question_posted"
-    status: Literal["answered", "discarded"]
-    answer: str = Field("", max_length=4000)
-    note: str = Field("", max_length=4000)
-
-    @model_validator(mode="after")
-    def _require_visible_settlement(self) -> "ResolveQuestionPostedInteraction":
-        if self.status == "answered" and not self.answer.strip():
-            raise ValueError("answered 须有非空 answer")
-        if self.status == "discarded" and not self.note.strip():
-            raise ValueError("discarded 须有非空 note")
-        return self
-
-
 # Discriminated union body for the unified resolve endpoint.
 ResolveInteractionRequest = (
     ResolveApprovalInteraction
-    | ResolveDelegationAuthorizationInteraction
     | ResolveClientToolInteraction
     | ResolveEscalationInteraction
     | ResolveStageCardInteraction
-    | ResolveQuestionPostedInteraction
 )
 
 
@@ -304,8 +248,6 @@ def interaction_result_from_body(body: ResolveInteractionRequest) -> Any:
     """
     if isinstance(body, ResolveApprovalInteraction):
         return body.decision
-    if isinstance(body, ResolveDelegationAuthorizationInteraction):
-        return body.decision
     if isinstance(body, ResolveClientToolInteraction):
         return {
             "ok": body.ok,
@@ -325,12 +267,6 @@ def interaction_result_from_body(body: ResolveInteractionRequest) -> Any:
             "decision": body.decision,
             "note": body.note,
             "motion_override": body.motion_override,
-        }
-    if isinstance(body, ResolveQuestionPostedInteraction):
-        return {
-            "status": body.status,
-            "answer": body.answer,
-            "note": body.note,
         }
 
     raise ValueError(f"unknown interaction kind: {getattr(body, 'kind', None)!r}")
@@ -545,12 +481,11 @@ class PendingInteractionSummary(BaseModel):
 
     Surfaced on conversation reopen via ``GET .../recovery``. ``payload`` is the
     original ``*_required`` wire payload verbatim. Cold-path pauses stay in ``paused``.
-    Includes hot-path (approval / delegation / escalation) and durable ``stage_card``.
+    Includes hot-path (approval / escalation) and durable ``stage_card``.
     """
 
     kind: Literal[
         "approval",
-        "delegation_authorization",
         "escalation",
         "stage_card",
     ]
@@ -621,7 +556,7 @@ class TurnRecoveryResponse(BaseModel):
     - ``paused``: turns that durably paused at a plan_review / ask_user checkpoint and
       lost their live stream (结构化挂起 2b) — each renders a resume card.
     - ``pending_interactions``: hot-path interactions still awaiting settlement
-      (journal fold: approval / delegation_authorization / escalation).
+      (journal fold: approval / escalation / stage_card).
       Cold-path stays in ``paused``.
     """
 
@@ -930,6 +865,24 @@ class MessageDetail(BaseModel):
         return v
 
 
+# Closed sets for persisted ``memory_updates`` JSONB (kind + items[].action).
+# Removing / renaming a member is a backfill — do not drop a historical value to
+# tidy the type. Write-site inventory: consolidation.py (episodic / semantic +
+# add/update/remove via MemoryAction), always_quota.py + billing_quota_card.py
+# (kind=quota; action quota / quota_denied / quota_holder).
+# Production value-domain check (pre-deploy, human): Agent记忆与知识系统.md
+# 「memory_updates 闭集 · 上线前生产库查询」.
+MemoryUpdateKind = Literal["episodic", "semantic", "quota"]
+MemoryUpdateAction = Literal[
+    "add",
+    "update",
+    "remove",
+    "quota",
+    "quota_denied",
+    "quota_holder",
+]
+
+
 class MemoryUpdateItemView(BaseModel):
     """One applied memory change in a 记忆已更新 card (Agent记忆与知识系统 §1.6).
 
@@ -939,9 +892,10 @@ class MemoryUpdateItemView(BaseModel):
     path the card deep-links to (desktop ``memorySource`` scheme; "" = no leaf).
     ``project_id`` is the folder id when scope is project (最近更新 deep-link). Shape
     mirrors ``memory/maintenance.py`` ``MemoryUpdateItem`` (the stored
-    ``memory_updates.items`` JSONB)."""
+    ``memory_updates.items`` JSONB). ``action`` is the closed ``MemoryUpdateAction`` set.
+    """
 
-    action: str
+    action: MemoryUpdateAction
     file: str
     section: str = ""
     scope: str = "global"
@@ -953,9 +907,12 @@ class MemoryUpdateItemView(BaseModel):
 class MemoryUpdateView(BaseModel):
     """One memory-write notice for the conversation-tail card (two-layer memory).
 
-    Projected from a ``memory_updates`` row. ``kind`` selects the UI:
+    Projected from a ``memory_updates`` row. ``kind`` is the closed ``MemoryUpdateKind``
+    set and selects the UI:
     - ``episodic``: light tip; ``summary`` is the ≤200-char session digest; ``items`` empty.
     - ``semantic``: diff card; ``items`` lists add/update/remove bullets.
+    - ``quota``: always-pool / billing skip; ``summary`` says why; ``items`` name the
+      fingerprint row (``quota``) plus denied / holder rows.
 
     Returned only with the LATEST messages window, and pushed live on the per-user firehose.
 
@@ -965,7 +922,7 @@ class MemoryUpdateView(BaseModel):
     """
 
     id: str
-    kind: str = "semantic"
+    kind: MemoryUpdateKind = "semantic"
     summary: str | None = None
     items: list[MemoryUpdateItemView] = Field(default_factory=list)
     anchor_at: datetime | None = None
@@ -1235,28 +1192,14 @@ class QueuedTurnItem(BaseModel):
     ``position`` is 1-based FIFO index.
     ``attachments`` / ``agent_mentions`` are the same fields drain forwards to
     ``stream_chat`` (optional additive — old clients ignore).
-    ``ask_id`` is the non-blocking question return-path slot (must survive
-    steer leftover / 协调升队 degraded enqueue).
     """
 
     queue_id: str
     content: str
     position: int = Field(..., ge=1)
     interjection_id: str | None = None
-    ask_id: str | None = Field(
-        None,
-        max_length=64,
-        description="可选。答非阻塞提问时与出站 question_posted.ask_id 对上。",
-    )
     attachments: list[MessageAttachment] = Field(default_factory=list)
     agent_mentions: list[AgentMention] = Field(default_factory=list, max_length=10)
-
-    @field_validator("ask_id", mode="before")
-    @classmethod
-    def _queued_ask_id(cls, v: object) -> object:
-        from agentcore.conversation.ask_reply import normalize_ask_id
-
-        return normalize_ask_id(v)
 
     @field_validator("agent_mentions", mode="before")
     @classmethod

@@ -113,3 +113,38 @@ async def test_export_store_cost_surfaces_byok_estimate(tmp_path: Path) -> None:
     assert cost["billing"] == "BYOK"
     assert cost["estimated_currency"] == "USD"
     assert cost["runs"] == 2
+
+
+@pytest.mark.asyncio
+async def test_export_store_loads_journal_by_trace(tmp_path: Path) -> None:
+    tid = "e" * 32
+    (tmp_path / "turn_journal.jsonl").write_text(
+        json.dumps(
+            {
+                "turn_id": "m1",
+                "seq": 0,
+                "kind": "turn_started",
+                "trace_id": tid,
+                "payload": {"model_profile": "chat"},
+                "created_at": "2026-08-20T10:00:00Z",
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "turn_id": "m1",
+                "seq": 1,
+                "kind": "llm_call",
+                "trace_id": "f" * 32,
+                "payload": {"run_id": "other"},
+                "created_at": "2026-08-20T10:00:01Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    store = ExportConversationStore(tmp_path)
+    rows = await store.get_journal_by_trace(tid)
+    assert len(rows) == 1
+    assert rows[0]["kind"] == "turn_started"
+    assert await store.get_journal_by_trace("missing") == []

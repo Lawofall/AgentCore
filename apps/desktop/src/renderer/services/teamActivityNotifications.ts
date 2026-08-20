@@ -20,6 +20,7 @@ import { DRAFT_KEY, useConversationStore } from "@/stores/conversation";
 import {
   type InteractionEntry,
   isAwaitingUserEntry,
+  isStageInteractionKind,
   useInteractionStore,
 } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
@@ -35,7 +36,7 @@ import { usePausedTurnStore } from "@/stores/pausedTurns";
  * isGenerating↓。挂起收口（pausedTurns 仍在）也不是「已完成」，感知统一走 pausedTurns
  * 订阅（team_preview → 等待确认后开工；ask_user / plan_review → 等待确认后继续）。
  *
- * 热阻塞卡（approval / escalation / delegation_authorization）走 InteractionStore 订阅，
+ * 热阻塞卡（approval / escalation）走 InteractionStore 订阅，
  * 判定直接复用侧栏「等你」灯的 {@link isAwaitingUserEntry}（含 CEO 仲裁中的升级卡不打扰）
  * ——挂起时回合仍在 streaming，「已完成」通道不会触发，后端也默认无限期等，这里不提醒
  * 就只剩侧栏一颗小圆点。
@@ -87,7 +88,6 @@ const HOT_BLOCKING_HEADLINE: Partial<Record<InteractionEntry["kind"], string>> =
   {
     approval: "需要审批",
     escalation: "需要你的决定",
-    delegation_authorization: "等你授权团队开工",
   };
 
 function notifyHotBlocking(entry: InteractionEntry): void {
@@ -168,11 +168,11 @@ function notifyAttention(entry: AiAttentionEntry): void {
 /**
  * 这张卡该不该由交互通道提醒——订阅端与去重表 seed 共用同一判定，避免两边漏配。
  *
- * 热阻塞三类走「等你」语义（{@link isAwaitingUserEntry}）；stage_card 不阻塞执行，
+ * 热阻塞卡走「等你」语义（{@link isAwaitingUserEntry}）；stage_card 不阻塞执行，
  * 单列一支。其余（冷挂起 / 非阻塞提问）另有通道。
  */
 function isNotifiableInteraction(e: InteractionEntry): boolean {
-  if (e.kind === "stage_card") {
+  if (isStageInteractionKind(e.kind)) {
     return e.status === "pending" || e.status === "submitting";
   }
   return isAwaitingUserEntry(e);
@@ -224,7 +224,7 @@ function conversationHasPendingStageCard(conversationId: string): boolean {
   for (const e of useInteractionStore.getState().byId.values()) {
     if (
       e.conversationId === conversationId &&
-      e.kind === "stage_card" &&
+      isStageInteractionKind(e.kind) &&
       (e.status === "pending" || e.status === "submitting")
     ) {
       return true;
@@ -294,7 +294,7 @@ export function startTeamActivityNotifications(): () => void {
     for (const e of state.byId.values()) {
       if (!isNotifiableInteraction(e)) continue;
       if (!claim(e.id)) continue;
-      if (e.kind === "stage_card") {
+      if (isStageInteractionKind(e.kind)) {
         notifyStageAdvance(e.conversationId);
       } else {
         notifyHotBlocking(e);

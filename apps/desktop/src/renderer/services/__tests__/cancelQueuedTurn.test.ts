@@ -191,7 +191,6 @@ describe("steerQueuedTurn", () => {
       undefined,
       "steer",
       undefined,
-      undefined,
     );
     expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
   });
@@ -235,7 +234,6 @@ describe("steerQueuedTurn", () => {
       ],
       "steer",
       SNAPSHOT_MENTIONS,
-      undefined,
     );
     expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
   });
@@ -283,44 +281,7 @@ describe("steerQueuedTurn", () => {
       ],
       "steer",
       SNAPSHOT_MENTIONS,
-      undefined,
     );
-  });
-
-  it("排队时带 askId → 取消插队重发后仍带上", async () => {
-    useConversationStore.getState().switchConversation(CID);
-    cloudCb?.({
-      type: "turn_queue_snapshot",
-      payload: {
-        conversation_id: CID,
-        items: [
-          {
-            queue_id: "q1",
-            content: "也要 PDF。",
-            position: 1,
-            ask_id: "ask1",
-          },
-        ],
-      },
-    });
-    post.mockResolvedValueOnce({});
-    sendMidFlight.mockResolvedValueOnce({
-      kind: "received",
-      interjectionId: "ij1",
-    });
-
-    await steerQueuedTurn(CID, "q1");
-
-    expect(sendMidFlight).toHaveBeenCalledTimes(1);
-    expect(sendMidFlight).toHaveBeenCalledWith(
-      CID,
-      "也要 PDF。",
-      undefined,
-      "steer",
-      undefined,
-      "ask1",
-    );
-    expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
   });
 
   it("404（已出队/竞态）→ 只清条、不重发", async () => {

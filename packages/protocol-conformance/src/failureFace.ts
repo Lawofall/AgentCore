@@ -6,12 +6,10 @@ import type { ProjectedTurn } from "./projectedTurn";
 
 /** Interaction kinds that already own a dedicated pause / ask UI surface. */
 const DEDICATED_PAUSE_ASK_KINDS = new Set([
-  "ask",
   "checkpoint",
   "plan_review",
   "team_preview",
   "approval",
-  "delegation_authorization",
   "stage_card",
 ]);
 

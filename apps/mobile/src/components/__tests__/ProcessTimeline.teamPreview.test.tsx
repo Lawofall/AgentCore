@@ -31,6 +31,7 @@ describe("ProcessTimeline · team_preview traces", () => {
       />,
     );
     expect(screen.queryByTestId("team-preview-trace")).toBeNull();
+    expect(screen.queryByTestId("timeline-missing-card")).toBeNull();
     expect(container.textContent).not.toContain("已调整");
   });
 

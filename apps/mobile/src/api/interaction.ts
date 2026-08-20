@@ -10,15 +10,11 @@ type Schemas = components["schemas"];
 /** Settle a paused interaction — discriminated on `kind` (OpenAPI union).
  *
  * 挂起即收口 (②): `ask_user` / `plan_review` / `team_preview` settle via cold resume.
- * Hot path: approval / escalation / delegation_authorization / debate_round.
- * `question_posted` journal settle is server-side after the reply turn is ingested;
- * clients send with `ask_id` and do not POST this kind.
+ * Hot path: approval / escalation / debate_round.
  */
 export type ResolveInteractionBody =
   | Schemas["ResolveApprovalInteraction"]
-  | Schemas["ResolveEscalationInteraction"]
-  | Schemas["ResolveDelegationAuthorizationInteraction"]
-  | Schemas["ResolveQuestionPostedInteraction"];
+  | Schemas["ResolveEscalationInteraction"];
 
 /**
  * 收口结果。`already_processed` = 这张卡在服务端已经结掉了——多端同权下先到先得，

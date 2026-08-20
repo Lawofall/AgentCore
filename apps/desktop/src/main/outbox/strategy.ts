@@ -242,7 +242,6 @@ export function normalizeToolFailureCode(
   // Mirror server try_declaration_reject_gate prefixes / templates.
   if (
     raw.startsWith("playbook 与 tasks 二选一") ||
-    raw.startsWith("playbook 与 playbook_id 指向不同") ||
     raw.startsWith("手写 tasks 时勿传")
   ) {
     return "declaration_xor";

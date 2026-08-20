@@ -83,7 +83,7 @@ describe("layoutResultCache LRU", () => {
 
   it("layoutCacheKey distinguishes fitMode and layoutKind", () => {
     const a = layoutCacheKey("struct", "tree", "view");
-    const b = layoutCacheKey("struct", "tree", "contain");
+    const b = layoutCacheKey("struct", "tree", "width");
     const c = layoutCacheKey("struct", "leftright", "view");
     expect(a).not.toBe(b);
     expect(a).not.toBe(c);
@@ -159,16 +159,16 @@ describe("useGraphLayout · layout result cache", () => {
     const execution = exec(["w1"]);
 
     const { result, rerender } = renderHook(
-      ({ fit }: { fit: "view" | "contain" }) =>
+      ({ fit }: { fit: "view" | "width" }) =>
         useGraphLayout(execution, "tree", fit, emptyExpand),
-      { initialProps: { fit: "view" as "view" | "contain" } },
+      { initialProps: { fit: "view" as "view" | "width" } },
     );
     await waitFor(() => expect(result.current.layoutReady).toBe(true));
     const afterView = computeLayout.mock.calls.length;
     expect(afterView).toBeGreaterThanOrEqual(1);
 
     await act(async () => {
-      rerender({ fit: "contain" });
+      rerender({ fit: "width" });
     });
     await waitFor(() =>
       expect(computeLayout.mock.calls.length).toBeGreaterThan(afterView),

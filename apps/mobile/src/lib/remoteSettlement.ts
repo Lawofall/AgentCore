@@ -15,6 +15,7 @@ import {
   INTERACTION_KIND_WIRE,
   type UserInteractionKind,
 } from "@agentcore/contract-types";
+import { interactionCardName } from "@agentcore/protocol-fold-kit";
 import { useSyncExternalStore } from "react";
 
 /** 收口文案（验收 5 的可见判据）。 */
@@ -27,18 +28,6 @@ export interface RemoteSettlement {
   /** 卡的种类——提示条标题由它取（{@link interactionLabel}），也是 REST 回执那道闸的判据。 */
   kind: string;
 }
-
-/** 卡面名——与各卡自己的标题同口径，用户认得出说的是哪张。 */
-const KIND_LABELS: Record<UserInteractionKind, string> = {
-  approval: "工具审批",
-  ask_user: "待你确认",
-  delegation_authorization: "团队开工授权",
-  escalation: "待你拍板",
-  plan_review: "计划复核",
-  question_posted: "提问",
-  stage_card: "阶段推进",
-  team_preview: "团队开工确认",
-};
 
 /** 收口事件名 → kind + id 字段（契约表反查；后端新增 kind 自动跟上）。 */
 const BY_RESOLVED_EVENT = new Map<
@@ -55,7 +44,7 @@ for (const [kind, wire] of Object.entries(INTERACTION_KIND_WIRE)) {
 }
 
 export function interactionLabel(kind: string): string {
-  return KIND_LABELS[kind as UserInteractionKind] ?? "待办";
+  return interactionCardName(kind);
 }
 
 /**
@@ -72,9 +61,6 @@ export function answeredByAPerson(
   kind: string,
   payload: Record<string, unknown> | undefined,
 ): boolean {
-  if (kind === "question_posted") {
-    return payload?.status === "answered";
-  }
   if (kind !== "escalation") return true;
   // resolved 之外（assumed / timed_out / orphaned）都是运行时兜底，没有人参与。
   if (payload?.status !== "resolved") return false;

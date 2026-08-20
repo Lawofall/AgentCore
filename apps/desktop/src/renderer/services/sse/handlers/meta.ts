@@ -23,11 +23,6 @@ export function handleMetaEvent(
       });
       return true;
     }
-    // Feature retired: ignore live/historical chips events (must return true so
-    // dispatchSSEEvent's assertNever does not trip on known contract types).
-    case "followups_generated":
-    case "followups_unavailable":
-      return true;
     case "turn_saved": {
       const payload = event.payload as TurnSavedPayload;
       useConversationStore

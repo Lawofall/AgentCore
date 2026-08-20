@@ -29,13 +29,13 @@ const NOTE_STATUS_META: Record<string, { label: string; className: string }> = {
 export interface TeamNotesPanelProps {
   notes: TeamNote[];
   /**
-   * Canvas compact wall: tighter padding. Chat / canvas both use the collapsible
-   * header when controlled or when `defaultExpanded` / `disclosureKey` is set.
+   * Tighter padding. Collapsible header when controlled or when
+   * `defaultExpanded` / `disclosureKey` is set.
    */
   compact?: boolean;
   /**
-   * Uncontrolled collapse seed (legacy canvas remount path). Prefer
-   * `disclosureKey` + `live` for stream-aware persistence.
+   * Uncontrolled collapse seed. Prefer `disclosureKey` + `live` for
+   * stream-aware persistence.
    */
   defaultExpanded?: boolean;
   /**
@@ -66,9 +66,8 @@ export interface TeamNotesPanelProps {
  * shown with its author (谁贴的) and kind (我定了 / 提个醒), in post order. Renders nothing for a
  * turn that posted no notes (the common case), so it is pure addition over today's behaviour.
  *
- * Canvas reuses the same rows / labels (`compact` + stream-aware `disclosureKey`/`live`) under the
- * focused turn DAG; chat lifts open state via `expanded` / `onExpandedChange`. Collapsed summaries
- * only show a 「便签 N」chip (see TurnSummaryNode).
+ * Chat lifts open state via `expanded` / `onExpandedChange`. The compact /
+ * stream-aware `disclosureKey` path remains for uncontrolled hosts.
  */
 export function TeamNotesPanel({
   notes,
@@ -83,7 +82,7 @@ export function TeamNotesPanel({
   const collapsible =
     controlled || defaultExpanded !== undefined || disclosureKey != null;
 
-  // Uncontrolled stream-aware path (canvas TurnGroupNode). Hooks must stay unconditional.
+  // Uncontrolled stream-aware path. Hooks must stay unconditional.
   const [streamExpanded, toggleStream] = useStreamAwareDisclosure(
     controlled ? null : (disclosureKey ?? null),
     live,

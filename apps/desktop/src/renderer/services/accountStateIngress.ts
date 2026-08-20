@@ -141,10 +141,6 @@ function mapQueueItems(
       degradedFrom: prev?.degradedFrom,
       attachments: mapQueuedAttachments(item.attachments),
       agentMentions: mapQueuedMentions(item.agent_mentions),
-      askId:
-        typeof item.ask_id === "string" && item.ask_id.trim()
-          ? item.ask_id.trim()
-          : undefined,
     });
   }
   return next;

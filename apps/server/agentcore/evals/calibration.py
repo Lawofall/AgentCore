@@ -1,16 +1,16 @@
 """裁判校准回路（后端架构.md §五：裁判是测量仪器，先校准再用）.
 
-新评测体系把 ``LLMJudge`` 的 pass_rate 扶正为 baseline 回归门的门禁信号。但**未校准的裁判 =
-没刻度的尺子**：拿它卡门等于在没刻度的尺子上做决策（行业头号 pitfall）。本模块吃一批人工标注
+新评测体系把 ``LLMJudge`` 的 pass_rate 当作相对基线观测的主数字。但**未校准的裁判 =
+没刻度的尺子**：拿没刻度的尺子对照基线只会误导（行业头号 pitfall）。本模块吃一批人工标注
 的 gold-set（任务 + rubric + **一份具体答案** + **人工分**），用生产裁判过一遍，算**判↔人一致度**：
 
-- **Cohen's kappa（pass/fail 二分）** —— 门禁主指标：直接对应 baseline 门吃的 pass_rate；
+- **Cohen's kappa（pass/fail 二分）** —— 主指标：直接对应观测对照吃的 pass_rate；
 - **二次加权 kappa（序数 1–5）** —— 差 1 分 vs 差 4 分按平方罚，更贴合 1–5 档；
 - **Spearman 秩相关** —— 单调一致度；
 - **平均偏置 / 分歧样本** —— 供「读分歧找模式（偏宽松？偏自信？）→ 改 rubric/prompt → 重跑」。
 
-刻意**不用 exact-match 原始一致率**作门禁（会高估 33–41pp，重设计 §五）；``kappa>0.6`` 才算
-裁判可信、才准拿它的 pass_rate 上 baseline 门。
+刻意**不用 exact-match 原始一致率**作校准结论（会高估 33–41pp，重设计 §五）；``kappa>0.6`` 才算
+裁判可信、才值得拿它的 pass_rate 去对照基线（对照本身仍是观测，不是合并门禁）。
 
 纯统计为独立纯函数（无 numpy/scipy 依赖），可零 LLM 单测；``calibrate`` 复用生产 ``Judge``
 路径（单测注入假裁判，真模型留给手动/夜跑校准）。本模块只 import ``types``（纯类型），不拖
@@ -246,7 +246,7 @@ class CalibrationMetrics:
 
     @property
     def cohens_kappa(self) -> float:
-        """二分 pass/fail 的无加权 kappa —— **门禁主指标**（对应 baseline 门吃的 pass_rate）。"""
+        """二分 pass/fail 的无加权 kappa —— L1 裁判可信度主指标（相对基线观测也靠这把尺）。"""
         if not self.per_label:
             return 0.0
         a = [1 if x.human_pass else 0 for x in self.per_label]
@@ -297,7 +297,7 @@ class CalibrationMetrics:
 
     @property
     def trustworthy(self) -> bool:
-        """Cohen's kappa >= 门 才算裁判可信、才准拿它的 pass_rate 上 baseline 回归门。"""
+        """Cohen's kappa >= 门 才算裁判可信、才值得拿它的 pass_rate 对照基线。"""
         return self.cohens_kappa >= self.kappa_gate
 
 

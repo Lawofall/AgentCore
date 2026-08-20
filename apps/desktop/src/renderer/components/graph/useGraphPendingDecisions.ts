@@ -1,13 +1,16 @@
 /**
  * 图头行动条数据 hook（批 R3）：把一个回合的待拍板（node 级升级/检查点 + execution
- * 级审批/授权）聚合成 {@link GraphPendingDecision}[]。三宿主（内联/画布/全屏）共用。
+ * 级热闸）聚合成 {@link GraphPendingDecision}[]。内嵌 / 全屏两宿主共用。
  *
  * 自订 execution@playhead 的 pending Live sig——勿吃父树 Document epoch 快照，
  * 否则 escalate/checkpoint 变了行动条会冻住（节点 face 已 per-run 更新）。
  */
 
 import { projectRuntime, useExecutionStore } from "@/stores/execution";
-import { useInteractionStore } from "@/stores/interactions";
+import {
+  isHotGateInteractionKind,
+  useInteractionStore,
+} from "@/stores/interactions";
 import { useMemo } from "react";
 import {
   type GraphPendingDecision,
@@ -35,7 +38,9 @@ export function useGraphPendingDecisions(
       // 宽松按回合匹配：交互缺 messageId（会话级）时也纳入（与 matchesMessage 一致）。
       if (messageId && e.messageId && e.messageId !== messageId) continue;
       if (e.status !== "pending" && e.status !== "submitting") continue;
-      if (e.kind === "approval" || e.kind === "delegation_authorization") {
+      // Store slice = hot ∧ pausesTurn (today: approval). Not attention /
+      // not all hot — node escalate/checkpoint come from execution, not here.
+      if (isHotGateInteractionKind(e.kind)) {
         out.push({ kind: e.kind, id: e.id });
       }
     }

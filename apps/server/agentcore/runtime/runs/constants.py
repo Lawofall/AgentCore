@@ -38,9 +38,6 @@ MAX_DELEGATION_DEPTH = 3
 # in one turn (depth-1/2 leads; CEO uses MAX_DELEGATION_TASKS instead).
 MAX_WORKER_SUBDELEGATIONS = 4
 
-# Hard ceiling on per-node retries regardless of what a task declares.
-MAX_RUN_RETRIES = 3
-
 # Contract-gate retries are SEPARATE from infra: a transient 429 does not
 # remount the node. The former re-runs on *content* not meeting its contract,
 # re-prompting with the specific shortfalls. Default 1 (one correction chance),

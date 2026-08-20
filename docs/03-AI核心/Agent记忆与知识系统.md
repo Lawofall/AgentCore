@@ -98,6 +98,49 @@ description: 一行摘要    # 可空；空不是错误
 
 **治理靠可见性**：AI 每次写条目仍推记忆卡片（`memory_updates`）供查看撤销——这是取代「权威分档」的机制。AI 无法自我提权，因为已无权威可提。卡片有两类：`semantic` / `episodic` 讲**写进去了什么**，`quota` 讲**什么没写进去、谁占着池子**；两类共用同一套行组件（`MemoryUpdateItemRow`），故对话内卡片与文件页「最近更新」永远同一读法。可见性也是纠错通道的前提——用户先在卡片里看见 AI 记了什么，才谈得上说哪条不对。
 
+**`memory_updates` 闭集 · 上线前生产库查询**：读接口 `kind` / `items[].action` 是闭集（`MemoryUpdateKind` / `MemoryUpdateAction`），未知值硬失败。写侧只有 consolidation（`episodic` / `semantic` + `add`/`update`/`remove`）和 always-quota / billing skip（`kind=quota`；`quota` / `quota_denied` / `quota_holder`）。`logs/prod-export` 不含这张表的载荷，本地库也几乎没有 `quota` 行——**不能拿本地 25 行当生产值域证明**。发含闭集收紧的后端之前，在生产机用与 `deploy/scripts/backup.sh` 同一套 compose 跑：
+
+```bash
+# 生产机；DEPLOY_DIR 默认 $AGENTCORE_HOME/repo/deploy
+dc() { docker compose -p "${COMPOSE_PROJECT:-agentcore}" \
+  -f "$DEPLOY_DIR/docker-compose.server.yml" \
+  -f "$DEPLOY_DIR/docker-compose.app.yml" \
+  --env-file "$DEPLOY_DIR/config/production.env" "$@"; }
+dc exec -T postgres psql -U "${PG_USER:-agentcore}" -d "${PG_DB:-agentcore}"
+```
+
+```sql
+-- kind 实际值域（期望仅 episodic / semantic / quota）
+SELECT kind, count(*) AS n
+FROM memory_updates
+GROUP BY kind
+ORDER BY n DESC;
+
+-- items[].action 实际值域（期望仅 add / update / remove / quota / quota_denied / quota_holder）
+-- 空 items（episodic 卡）会得到 action NULL，属正常
+SELECT item->>'action' AS action, count(*) AS n
+FROM memory_updates
+LEFT JOIN LATERAL jsonb_array_elements(COALESCE(items, '[]'::jsonb)) AS item ON true
+GROUP BY 1
+ORDER BY n DESC NULLS LAST;
+
+-- 枚举外：两行都应 0 行。非空 → 停、人工决定 backfill，不得把读侧放宽成 warning
+SELECT kind, count(*) AS n
+FROM memory_updates
+WHERE kind NOT IN ('episodic', 'semantic', 'quota')
+GROUP BY 1;
+
+SELECT item->>'action' AS action, count(*) AS n
+FROM memory_updates,
+     LATERAL jsonb_array_elements(COALESCE(items, '[]'::jsonb)) AS item
+WHERE COALESCE(item->>'action', '') NOT IN (
+  'add', 'update', 'remove', 'quota', 'quota_denied', 'quota_holder'
+)
+GROUP BY 1;
+```
+
+本地对照：`docker compose -f deploy/docker-compose.dev.yml exec -T postgres psql -U agentcore -d agentcore`（同一 SQL）。本地绿 **不能**替代生产查询。
+
 **「画像 / 偏好默认常驻」不需要运行时守卫**：生效档是条目自身的属性，而 AI 巩固的主要动作是**把新事实归并进已有条目**——**归并不改目标的生效档**。故画像那条只要迁移时是常驻，之后就一直是常驻，除非用户自己改；没有路径能让它悄悄滑成按需。真正要判生效档的只有**新建**条目那一刻，且判错的代价是「新事实进错了地方」而非「核心画像失效」（旧条目仍在、仍常驻），这个量级交提示词判据即可（关于用户本人是谁 / 怎么工作的事实 → 常驻；某领域厚知识 → 按需），符合 `intercept-discipline` 阶梯 1，不上闸。于是「必须守住」只落成两件事：**迁移的一次性正确性**（`偏好.md` / `画像.md` / `导航.md` → 常驻，`主题/*.md` → 按需，映射确定且可测）与**归并不改生效档**这条属性。否决表「偏好/画像改 on_demand」仍成立。
 
 **分四步**（前后依赖，按风险面分层）：

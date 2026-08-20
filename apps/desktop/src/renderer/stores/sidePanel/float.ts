@@ -7,7 +7,6 @@ import {
 } from "./helpers";
 import {
   CHANGES_TAB_ID,
-  COMMAND_TAB_ID,
   DEFAULT_FLOAT_HEIGHT,
   DEFAULT_FLOAT_WIDTH,
   type DetailTab,
@@ -23,7 +22,7 @@ import {
 } from "./types";
 
 export function isFloatableKind(
-  kind: DetailTab["kind"] | "workspace" | "changes" | "command",
+  kind: DetailTab["kind"] | "workspace" | "changes",
 ): kind is FloatableTabKind {
   return (
     kind === "run" ||
@@ -39,7 +38,6 @@ export function canFloatTabId(
   tabs: readonly DetailTab[],
 ): boolean {
   if (tabId === WORKSPACE_TAB_ID || tabId === CHANGES_TAB_ID) return true;
-  if (tabId === COMMAND_TAB_ID) return false;
   const tab = tabs.find((t) => t.id === tabId);
   return tab != null && isFloatableKind(tab.kind);
 }
@@ -167,7 +165,6 @@ export function createFloatActions(
           floatingIds.has(activeTabId) ||
           (activeTabId !== WORKSPACE_TAB_ID &&
             activeTabId !== CHANGES_TAB_ID &&
-            activeTabId !== COMMAND_TAB_ID &&
             !tabs.some((t) => t.id === activeTabId));
         if (activeGone) {
           activeTabId = tabs[tabs.length - 1]?.id ?? homeTabAfterDetailClose();

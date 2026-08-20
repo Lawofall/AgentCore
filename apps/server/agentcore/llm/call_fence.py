@@ -170,13 +170,19 @@ class ObservingLLMProvider:
         creds = platform_llm_credentials(model=request.model)
         bind_platform_credential_id(creds.platform_credential_id if creds is not None else None)
 
+    def _latch_credential_source(self) -> str:
+        """Payer of this leaf (``platform`` name → platform; everything else → user)."""
+        from agentcore.llm.turn_auth_dead import credential_source_from_provider_name
+
+        return credential_source_from_provider_name(self._provider_name())
+
     async def complete(self, request: LLMRequest) -> LLMResponse:
         from agentcore.llm.turn_auth_dead import mark_turn_auth_dead, raise_if_turn_auth_dead
 
         self._sync_platform_credential_context(request)
         start = time.monotonic()
         try:
-            raise_if_turn_auth_dead()
+            raise_if_turn_auth_dead(self._latch_credential_source())
             await self._refuse_if_quota_spent(request)
             response = await self._inner.complete(request)
         except Exception as e:
@@ -226,7 +232,7 @@ class ObservingLLMProvider:
         aborted = False
         outcome = "open"
         try:
-            raise_if_turn_auth_dead()
+            raise_if_turn_auth_dead(self._latch_credential_source())
             await self._refuse_if_quota_spent(request)
             async for chunk in self._inner.stream(request):
                 if chunk.aborted:

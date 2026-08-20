@@ -1,33 +1,125 @@
 /**
  * Single registration table for user-facing decision / ask interactions.
  *
- * Wire shape (required/resolved event + id field) comes from codegen
- * (`INTERACTION_KIND_WIRE`). This module adds desktop-only metadata:
- * submit path, timeline marker, SSE side-effects. Card components / cold
- * resume renderers live in `registryUi.tsx` to keep this file React-free.
+ * Wire shape (required/resolved event + id field) and behavior flags come from
+ * codegen (`INTERACTION_KIND_WIRE`). Kind groupings (hot / cold-resume / hot-gate
+ * / stage) and submit path are derived from those flags — do not
+ * hand-copy kind names. This module adds desktop-only metadata: timeline
+ * marker, SSE side-effects. Card titles live in protocol-fold-kit
+ * (`INTERACTION_CARD_NAME`). Card components / cold resume renderers live
+ * in `registryUi.tsx` to keep this file React-free.
  *
- * Adding a new decision card = one row here (+ UI binding) instead of
- * parallel switches across types / store maps / SSE / fold / timeline.
+ * Adding a new decision card = kit card title + one row here (+ UI binding)
+ * instead of parallel switches across types / store maps / SSE / fold /
+ * timeline.
  */
 
 import {
   INTERACTION_KIND_WIRE,
+  USER_INTERACTION_KIND_VALUES,
   type UserInteractionKind,
 } from "@agentcore/contract-types";
+import { INTERACTION_CARD_NAME } from "@agentcore/protocol-fold-kit";
+
+export { INTERACTION_CARD_NAME };
 
 export type InteractionKind = UserInteractionKind;
 
-export type InteractionSubmitPath = "cold" | "hot" | "compose" | "stage";
+/**
+ * Desktop transport for resolving a card. Derived from wire flags:
+ * hot → "hot"; pausesTurn && !hot → "cold";
+ * reconnectAnswerable && !hot && !pausesTurn → "stage"; otherwise throw
+ * (no leftover compose path).
+ */
+export type InteractionSubmitPath = "cold" | "hot" | "stage";
+
+export function submitPathOf(kind: InteractionKind): InteractionSubmitPath {
+  const w = INTERACTION_KIND_WIRE[kind];
+  if (w.hot) return "hot";
+  if (w.pausesTurn) return "cold";
+  if (w.reconnectAnswerable) return "stage";
+  throw new Error(`no submit path for interaction kind ${kind}`);
+}
+
+function kindsWhere(
+  pred: (kind: InteractionKind) => boolean,
+): InteractionKind[] {
+  return USER_INTERACTION_KIND_VALUES.filter(pred);
+}
+
+/** In-process Future kinds (`hot`). */
+export const HOT_INTERACTION_KINDS = kindsWhere(
+  (kind) => INTERACTION_KIND_WIRE[kind].hot,
+);
+
+/** Cold-path kinds that persist to paused_turns (`pausesTurn && !hot`). */
+export const COLD_RESUME_KINDS = kindsWhere((kind) => {
+  const w = INTERACTION_KIND_WIRE[kind];
+  return w.pausesTurn && !w.hot;
+});
+
+export type ColdResumeKind = (typeof COLD_RESUME_KINDS)[number];
+
+/** Live turn blocked on the user (`hot && pausesTurn`). Today: approval. */
+export const HOT_GATE_INTERACTION_KINDS = kindsWhere((kind) => {
+  const w = INTERACTION_KIND_WIRE[kind];
+  return w.hot && w.pausesTurn;
+});
+
+export type HotGateInteractionKind =
+  (typeof HOT_GATE_INTERACTION_KINDS)[number];
+
+/** Cross-turn durable card (`reconnectAnswerable && !hot && !pausesTurn`). */
+export const STAGE_INTERACTION_KINDS = kindsWhere((kind) => {
+  const w = INTERACTION_KIND_WIRE[kind];
+  return w.reconnectAnswerable && !w.hot && !w.pausesTurn;
+});
+
+export type StageInteractionKind = (typeof STAGE_INTERACTION_KINDS)[number];
+
+const HOT_KIND_SET = new Set<string>(HOT_INTERACTION_KINDS);
+const COLD_RESUME_KIND_SET = new Set<string>(COLD_RESUME_KINDS);
+const HOT_GATE_KIND_SET = new Set<string>(HOT_GATE_INTERACTION_KINDS);
+const STAGE_KIND_SET = new Set<string>(STAGE_INTERACTION_KINDS);
+
+export function isHotInteractionKind(
+  kind: string,
+): kind is (typeof HOT_INTERACTION_KINDS)[number] {
+  return HOT_KIND_SET.has(kind);
+}
+
+export function isColdResumeKind(kind: string): kind is ColdResumeKind {
+  return COLD_RESUME_KIND_SET.has(kind);
+}
+
+export function isHotGateInteractionKind(
+  kind: string,
+): kind is HotGateInteractionKind {
+  return HOT_GATE_KIND_SET.has(kind);
+}
+
+/**
+ * Title for a hot-gate chip. Known kinds read {@link INTERACTION_CARD_NAME};
+ * unknown keys keep their own id (never inherit another member's title).
+ */
+export function hotGateKindTitle(kind: string): string {
+  if (isHotGateInteractionKind(kind)) return INTERACTION_CARD_NAME[kind];
+  return kind;
+}
+
+export function isStageInteractionKind(
+  kind: string,
+): kind is StageInteractionKind {
+  return STAGE_KIND_SET.has(kind);
+}
 
 /** Process-step discriminant stamped into the CEO message lane. */
 export type TimelineProcessKind =
   | "checkpoint"
-  | "ask"
   | "plan_review"
   | "team_preview"
   | "escalation"
   | "approval"
-  | "delegation_authorization"
   | "stage_card";
 
 export interface TimelineMarkerDef {
@@ -35,10 +127,8 @@ export interface TimelineMarkerDef {
   /** Id field on the ProcessStep wire shape. */
   stepIdField:
     | "checkpoint_id"
-    | "ask_id"
     | "escalation_id"
     | "approval_id"
-    | "authorization_id"
     | "stage_card_id";
   /** Insert before the last `team` marker (team_preview product order). */
   insertBeforeTeam?: boolean;
@@ -63,7 +153,6 @@ export type InteractionSseVia = "interaction" | "execution";
 
 export interface InteractionKindDef {
   kind: InteractionKind;
-  submitPath: InteractionSubmitPath;
   timeline?: TimelineMarkerDef;
   sseVia?: InteractionSseVia;
   sseRequired?: InteractionSseRequiredEffects;
@@ -74,7 +163,6 @@ export interface InteractionKindDef {
 export const INTERACTION_REGISTRY: readonly InteractionKindDef[] = [
   {
     kind: "approval",
-    submitPath: "hot",
     timeline: {
       processKind: "approval",
       stepIdField: "approval_id",
@@ -84,19 +172,7 @@ export const INTERACTION_REGISTRY: readonly InteractionKindDef[] = [
     sseRequired: { flushBuffers: true },
   },
   {
-    kind: "delegation_authorization",
-    submitPath: "hot",
-    timeline: {
-      processKind: "delegation_authorization",
-      stepIdField: "authorization_id",
-      // 产品修正：「放行开工」族与开工卡同锚定 —— 排协作图之前（授权 → 团队干活）。
-      insertBeforeTeam: true,
-    },
-    sseRequired: { flushBuffers: true },
-  },
-  {
     kind: "escalation",
-    submitPath: "hot",
     sseVia: "execution",
     timeline: {
       processKind: "escalation",
@@ -105,7 +181,6 @@ export const INTERACTION_REGISTRY: readonly InteractionKindDef[] = [
   },
   {
     kind: "ask_user",
-    submitPath: "cold",
     timeline: {
       processKind: "checkpoint",
       stepIdField: "checkpoint_id",
@@ -115,7 +190,6 @@ export const INTERACTION_REGISTRY: readonly InteractionKindDef[] = [
   },
   {
     kind: "plan_review",
-    submitPath: "cold",
     timeline: {
       processKind: "plan_review",
       stepIdField: "checkpoint_id",
@@ -129,7 +203,6 @@ export const INTERACTION_REGISTRY: readonly InteractionKindDef[] = [
   },
   {
     kind: "team_preview",
-    submitPath: "cold",
     timeline: {
       processKind: "team_preview",
       stepIdField: "checkpoint_id",
@@ -139,25 +212,15 @@ export const INTERACTION_REGISTRY: readonly InteractionKindDef[] = [
     sseResolved: { removePausedTurn: true },
   },
   {
-    kind: "question_posted",
-    submitPath: "compose",
-    timeline: {
-      processKind: "ask",
-      stepIdField: "ask_id",
-    },
-    sseRequired: { flushBuffers: true },
-  },
-  {
     kind: "stage_card",
     // 跨回合耐久卡：resolve 起新回合 SSE（非 cold resume / 非 hot Future）。
-    submitPath: "stage",
     timeline: {
       processKind: "stage_card",
       stepIdField: "stage_card_id",
     },
     sseRequired: { flushBuffers: true },
   },
-] as const;
+];
 
 // ── Derived indexes (no parallel hand maps) ─────────────────────────────
 
@@ -176,7 +239,7 @@ export const INTERACTION_SUBMIT_PATH: Record<
   InteractionKind,
   InteractionSubmitPath
 > = Object.fromEntries(
-  INTERACTION_REGISTRY.map((d) => [d.kind, d.submitPath]),
+  USER_INTERACTION_KIND_VALUES.map((kind) => [kind, submitPathOf(kind)]),
 ) as Record<InteractionKind, InteractionSubmitPath>;
 
 export const INTERACTION_ID_FIELD: Record<InteractionKind, string> =

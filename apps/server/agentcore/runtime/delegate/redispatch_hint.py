@@ -30,7 +30,7 @@ _REDISPATCH_HINT = (
     "本提示一次性、可忽略，不挡原请求。\n"
     "若用户仍要团队推进：【必须】立刻再发一次顶层非空 `tasks` 的 `delegate`"
     f"（可抄短骨架：{HANDWRITTEN_TASKS_SKELETON}）；"
-    "固化流水线时次选具名 `playbook`/`playbook_id`。"
+    "固化流水线时次选具名 `playbook`。"
     "【禁止】只复盘参数错误或只道歉收口。\n"
     "</prior_delegate_retry>"
 )

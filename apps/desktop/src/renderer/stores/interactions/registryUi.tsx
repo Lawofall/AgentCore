@@ -8,35 +8,26 @@ import { CheckpointCard } from "@/components/chat/CheckpointCard";
 import { EscalationCard } from "@/components/chat/EscalationCard";
 import {
   ApprovalTrace,
-  DelegationAuthorizationTrace,
   StageCardTrace,
 } from "@/components/chat/HotDecisionTrace";
-import { NonBlockingAskCard } from "@/components/chat/NonBlockingAskCard";
 import { TeamPreviewCard } from "@/components/chat/TeamPreviewCard";
-import type {
-  CheckpointDisplay,
-  NonBlockingAskDisplay,
-  PlanReviewDisplay,
-  TeamPreviewDisplay,
-} from "@/stores/conversation";
 import { type RunEscalation, useMessageExecution } from "@/stores/execution";
 import { useInteractionStore } from "@/stores/interactions";
 import type { ReactNode } from "react";
 import type { TimelineProcessKind } from "./registry";
+import {
+  type TimelineCardBags,
+  classifyTimelineInteractionCard,
+  timelineIntentionalEmpty,
+  timelineMissingCard,
+} from "./timelineCardSlot";
 
-export type TimelineCardBags = {
-  checkpoints: CheckpointDisplay[];
-  nonBlockingAsks: NonBlockingAskDisplay[];
-  planReviews: PlanReviewDisplay[];
-  teamPreviews: TeamPreviewDisplay[];
-};
+export type { TimelineCardBags } from "./timelineCardSlot";
 
 type TimelineNodeId = {
   checkpoint_id?: string;
-  ask_id?: string;
   escalation_id?: string;
   approval_id?: string;
-  authorization_id?: string;
   stage_card_id?: string;
 };
 
@@ -47,8 +38,11 @@ export type TimelineRenderCtx = {
 };
 
 /**
- * Render the inline decision card / 痕迹 for a timeline process marker, or null
- * when the matching display model is not yet hydrated (or pending 热审批痕迹).
+ * Render the inline decision card / 痕迹 for a timeline process marker.
+ *
+ * Two empty paths (do not collapse them back to a bare `null`):
+ * - {@link timelineIntentionalEmpty}: 设计上不画（`plan_review` 只在 ResumePrompt）。
+ * - {@link timelineMissingCard}: 有标记但袋子/store 里没有实体；dev 占位，prod 仍空白。
  */
 export function renderTimelineInteractionCard(
   processKind: TimelineProcessKind,
@@ -56,31 +50,48 @@ export function renderTimelineInteractionCard(
   bags: TimelineCardBags,
   ctx?: TimelineRenderCtx,
 ): ReactNode {
+  const slot = classifyTimelineInteractionCard(processKind, node, bags, ctx);
+  if (slot.kind === "intentionalEmpty") return timelineIntentionalEmpty();
+  if (slot.kind === "missing") return timelineMissingCard(slot);
+
   switch (processKind) {
     case "checkpoint": {
       const cp = bags.checkpoints.find((c) => c.id === node.checkpoint_id);
-      return cp ? <CheckpointCard key={cp.id} checkpoint={cp} /> : null;
+      if (!cp) {
+        return timelineMissingCard({
+          kind: "missing",
+          processKind,
+          id: node.checkpoint_id,
+        });
+      }
+      return <CheckpointCard key={cp.id} checkpoint={cp} />;
     }
-    case "ask": {
-      const ask = bags.nonBlockingAsks.find((a) => a.id === node.ask_id);
-      return ask ? <NonBlockingAskCard key={ask.id} ask={ask} /> : null;
-    }
-    case "plan_review":
-      // pending / resolved 都不占时间线；可操作面只在 ResumePrompt。
-      return null;
     case "team_preview": {
       const tp = bags.teamPreviews.find((p) => p.id === node.checkpoint_id);
-      return tp ? (
+      if (!tp) {
+        return timelineMissingCard({
+          kind: "missing",
+          processKind,
+          id: node.checkpoint_id,
+        });
+      }
+      return (
         <TeamPreviewCard
           key={tp.id}
           preview={tp}
           messageId={ctx?.messageId}
           bubblePreviews={bags.teamPreviews}
         />
-      ) : null;
+      );
     }
     case "escalation": {
-      if (!ctx?.messageId || !node.escalation_id) return null;
+      if (!ctx?.messageId || !node.escalation_id) {
+        return timelineMissingCard({
+          kind: "missing",
+          processKind,
+          id: node.escalation_id,
+        });
+      }
       return (
         <EscalationTimelineSlot
           key={node.escalation_id}
@@ -92,7 +103,13 @@ export function renderTimelineInteractionCard(
       );
     }
     case "approval": {
-      if (!node.approval_id) return null;
+      if (!node.approval_id) {
+        return timelineMissingCard({
+          kind: "missing",
+          processKind,
+          id: node.approval_id,
+        });
+      }
       return (
         <ApprovalTrace
           key={node.approval_id}
@@ -101,23 +118,24 @@ export function renderTimelineInteractionCard(
         />
       );
     }
-    case "delegation_authorization": {
-      if (!node.authorization_id) return null;
-      return (
-        <DelegationAuthorizationTrace
-          key={node.authorization_id}
-          authorizationId={node.authorization_id}
-        />
-      );
-    }
     case "stage_card": {
-      if (!node.stage_card_id) return null;
+      if (!node.stage_card_id) {
+        return timelineMissingCard({
+          kind: "missing",
+          processKind,
+          id: node.stage_card_id,
+        });
+      }
       return (
         <StageCardTrace
           key={node.stage_card_id}
           stageCardId={node.stage_card_id}
         />
       );
+    }
+    default: {
+      processKind satisfies "plan_review";
+      return timelineIntentionalEmpty();
     }
   }
 }
@@ -139,10 +157,16 @@ function EscalationTimelineSlot({
     const e = s.byId.get(escalationId);
     return e?.kind === "escalation" && e.status === "orphaned";
   });
-  // Orphaned: silent dismiss (no tombstone card).
-  if (orphaned) return null;
+  // Orphaned: silent dismiss (no tombstone card) — 有意为空.
+  if (orphaned) return timelineIntentionalEmpty();
 
-  if (!execution) return null;
+  if (!execution) {
+    return timelineMissingCard({
+      kind: "missing",
+      processKind: "escalation",
+      id: escalationId,
+    });
+  }
 
   let found: { esc: RunEscalation; role: string } | null = null;
   for (const run of execution.runs) {
@@ -154,7 +178,13 @@ function EscalationTimelineSlot({
       break;
     }
   }
-  if (!found) return null;
+  if (!found) {
+    return timelineMissingCard({
+      kind: "missing",
+      processKind: "escalation",
+      id: escalationId,
+    });
+  }
 
   return (
     <EscalationCard

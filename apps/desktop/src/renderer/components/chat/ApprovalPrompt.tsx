@@ -324,7 +324,7 @@ function countToolApprovals(conversationId: string, toolName: string): number {
 }
 
 /**
- * Pending tool-approval surface — composer-dock strip (Chat / 画布指挥台同实例).
+ * Pending tool-approval surface — composer-dock strip（ChatView 决策区 / 底栏一体）.
  * Visually fuses with MessageInput when ``attached`` (Chat bottom bar).
  */
 export function ApprovalPrompt({

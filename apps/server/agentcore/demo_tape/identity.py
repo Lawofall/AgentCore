@@ -32,7 +32,6 @@ INTERACTION_ID_KEYS = frozenset(
     {
         "checkpoint_id",
         "approval_id",
-        "ask_id",
         "escalation_id",
         "authorization_id",
         "interaction_id",

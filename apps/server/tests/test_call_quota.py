@@ -366,12 +366,13 @@ async def test_background_chrome_degrades_instead_of_raising(monkeypatch):
     it comes back as a skip that names the quota as the cause.
     """
     from agentcore.billing import gate as gate_mod
+    from agentcore.billing.gate import BackgroundGateResolve
     from agentcore.llm.credentials import LLMCredentials
 
     platform = LLMCredentials(api_key="k", base_url="https://u", source="platform")
 
     async def _resolve(*_args, **_kwargs):
-        return platform
+        return BackgroundGateResolve(credentials=platform)
 
     async def _runner(_creds):
         raise LLMQuotaExceededError()

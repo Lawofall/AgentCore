@@ -47,7 +47,11 @@ def _materialise_turn_token_budget_skips(
     can append B3 shell gaps (missing critical files / residual ``{{…}}``).
     """
     from agentcore.core.logging import get_logger
-    from agentcore.llm.turn_auth_dead import REASON_TURN_AUTH_DEAD, is_turn_auth_dead
+    from agentcore.llm.turn_auth_dead import (
+        REASON_TURN_AUTH_DEAD,
+        credential_source_from_llm,
+        is_turn_auth_dead,
+    )
     from agentcore.runtime.turn.token_budget import (
         REASON_TURN_TOKEN_BUDGET,
         budget_skip_warning_for_active_scope,
@@ -59,9 +63,10 @@ def _materialise_turn_token_budget_skips(
     )
 
     logger = get_logger(__name__)
-    warning = budget_skip_warning_for_active_scope()
+    payer = credential_source_from_llm(getattr(tool, "_llm", None))
+    warning = budget_skip_warning_for_active_scope(credential_source=payer)
     skip_reason = (
-        REASON_TURN_AUTH_DEAD if is_turn_auth_dead() else REASON_TURN_TOKEN_BUDGET
+        REASON_TURN_AUTH_DEAD if is_turn_auth_dead(payer) else REASON_TURN_TOKEN_BUDGET
     )
     skipped_ids: list[str] = []
     page_qa_ids: list[str] = []
@@ -164,6 +169,7 @@ async def drive(
     call_idx = call_idx if call_idx is not None else tool._calls
 
     from agentcore.llm.turn_auth_dead import (
+        credential_source_from_llm,
         is_turn_auth_dead,
         turn_auth_dead_reject_message,
     )
@@ -177,6 +183,7 @@ async def drive(
     )
 
     depth = int(getattr(tool, "_depth", 0) or 0)
+    payer = credential_source_from_llm(getattr(tool, "_llm", None))
 
     # Nested lead: pause the parent's hard-timeout for the whole drive, including
     # turn-ceiling early finalize/reject (those paths still await work on the
@@ -232,7 +239,7 @@ async def drive(
                 contract_failure=True,
             )
 
-        if is_turn_auth_dead():
+        if is_turn_auth_dead(payer):
             from agentcore.core.logging import get_logger
 
             get_logger(__name__).info(
@@ -260,7 +267,7 @@ async def drive(
                 tool_call_id="",
                 success=False,
                 output="",
-                error=turn_auth_dead_reject_message(),
+                error=turn_auth_dead_reject_message(payer),
                 contract_failure=True,
             )
 
@@ -315,10 +322,13 @@ async def _drive_body(
     session: Any,
 ) -> ToolResult:
     """Inner drive after budget admission / nested envelope bind."""
+    from agentcore.llm.turn_auth_dead import credential_source_from_llm
     from agentcore.runtime.turn.token_budget import (
         resolve_wave_budget_hooks,
         should_materialise_turn_token_budget_skips,
     )
+
+    payer = credential_source_from_llm(getattr(tool, "_llm", None))
 
     # 团队预审：必须在 coordinate fork 之前（CEO 主路径）。挂起 → SUSPEND 收口；
     # 用户开做/调整后续跑再臂后台。后台 drive_coordinated 带 session，跳过本闸。
@@ -628,7 +638,9 @@ async def _drive_body(
     def _on_skipped(rid: str, aid: str, reason: str) -> None:
         tool._sink.emit(run_skipped(rid, aid, reason=reason))
 
-    should_stop, priority_reserve_hit = resolve_wave_budget_hooks()
+    should_stop, priority_reserve_hit = resolve_wave_budget_hooks(
+        credential_source=payer,
+    )
     # 嵌套满额：depth≥1 子团不继承父层 12//N 切开份额，按满额并行派发（单 lead 仍受
     # MAX_WORKER_SUBDELEGATIONS=4；depth≤2）。根 depth0 保持分而不乘。
     from agentcore.runtime.runs.concurrency import (
@@ -661,7 +673,7 @@ async def _drive_body(
         )
 
         # soft should_stop 默认把未跑尾留给 resume；turn 顶 / 信封是硬停，物化为 SKIPPED。
-        if should_materialise_turn_token_budget_skips():
+        if should_materialise_turn_token_budget_skips(credential_source=payer):
             _materialise_turn_token_budget_skips(tool, plan, results)
             await _attach_light_website_gaps(tool, results)
 

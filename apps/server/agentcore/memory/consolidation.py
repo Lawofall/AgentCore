@@ -54,6 +54,7 @@ from agentcore.memory.action_inventory import (
     inventory_from_journal_entries,
     merge_inventories,
 )
+from agentcore.memory.billing_quota_card import notify_billing_quota_skip
 from agentcore.memory.episode_store import EpisodeStore, default_episode_store
 from agentcore.memory.episodic import (
     LLMEpisodicSummarizer,
@@ -699,6 +700,12 @@ async def consolidate_conversation(
                     # every 300s, each time for another call upstream has already
                     # refused. Only a cooldown stops that.
                     _mark_skip_cooldown(conversation_id, skip=bg)
+                    if bg.reason == BackgroundSkipReason.QUOTA_EXCEEDED:
+                        await notify_billing_quota_skip(
+                            user_id,
+                            conversation_id,
+                            anchor_at=latest,
+                        )
                     return False
                 credentials = bg.credentials
                 digest = bg.value

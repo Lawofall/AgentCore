@@ -12,16 +12,19 @@ import {
 } from "@/components/chat/teamPreview";
 import type { TeamPreviewDisplay } from "@/stores/conversation";
 import { useMessageExecution } from "@/stores/execution";
+import { timelineIntentionalEmpty } from "@/stores/interactions/timelineCardSlot";
 
 /**
  * Inline team_preview card — thin preflight before fan-out / moderator start.
  * Actionable surface is the durable ResumePrompt (挂起即收口). pending 对齐
- * ask_user：时间线不画标记，分工表 / 辩题立场只在拍板卡。resolved 留可折叠结论文。
+ * ask_user：{@link timelineIntentionalEmpty}（分工表 / 辩题立场只在拍板卡）。
+ * resolved 留可折叠结论文. Bag miss is upstream {@link timelineMissingCard}.
  *
  * Branches on ``primitive``: delegate = 队员分工表; debate = 辩题 / 立场 / 轮次预算.
  *
- * Resolved continue + 编制已在 store：图立刻接管，本卡返回 null
- * （see {@link shouldHostPreviewInGraph}）— 图已出现则不画废卡.
+ * Resolved continue + 编制已在 store：图立刻接管，本卡返回
+ * {@link timelineIntentionalEmpty}（see {@link shouldHostPreviewInGraph}）—
+ * 图已出现则不画废卡.
  * 同泡仍有 pending 开工卡时 leftover go 不藏（与出图同一套闸）.
  * 取消 / 调整回灌 / 超时 / 尚未铺节点时仍留一行结论文.
  *
@@ -40,12 +43,12 @@ export function TeamPreviewCard({
 }) {
   const execution = useMessageExecution(messageId ?? null);
   if (shouldHostPreviewInGraph(preview, execution?.runs, bubblePreviews)) {
-    return null;
+    return timelineIntentionalEmpty();
   }
   if (preview.status === "resolved") {
     return <ResolvedTeamPreview preview={preview} />;
   }
-  return null;
+  return timelineIntentionalEmpty();
 }
 
 function isDebate(preview: TeamPreviewDisplay): boolean {

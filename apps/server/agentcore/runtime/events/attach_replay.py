@@ -49,9 +49,9 @@ from agentcore.runtime.events.types import EventType, FinishReason, SSEEvent
 from agentcore.runtime.facts import EXECUTION_ONLY_KINDS, FactKind
 from agentcore.runtime.journal.entries import _PROCESS_PREFIX, _RUN_PROCESS_PREFIX, KIND_TURN_END
 from agentcore.runtime.runs.types import RunKind
+from agentcore.runtime.terminal import RUN_PRODUCT_EVENT_TYPES
 
 _DURABLE_KIND_VALUES = frozenset(t.value for t in DURABLE_EVENT_TYPES)
-_RUN_TERMINAL = frozenset({EventType.RUN_COMPLETED.value, EventType.RUN_FAILED.value})
 
 # process_* / run_process_* kinds that mirror DURABLE tool / marker events — attach
 # skips them and lets the DURABLE event rebuild the step via client fold.
@@ -60,12 +60,10 @@ _PROCESS_STRUCTURAL_SUFFIXES = frozenset(
         "tool",
         "team",
         "checkpoint",
-        "ask",
         "plan_review",
         "team_preview",
         "escalation",
         "approval",
-        "delegation_authorization",
         "user_interjection",
     }
 )
@@ -207,7 +205,7 @@ def journal_rows_to_sse(rows: list[dict[str, Any]]) -> list[SSEEvent]:
         if kind not in _DURABLE_KIND_VALUES:
             continue
 
-        if kind in _RUN_TERMINAL:
+        if kind in RUN_PRODUCT_EVENT_TYPES:
             run_id = payload.get("run_id")
             final = final_outputs.get(str(run_id)) if run_id else None
             agent_id = None
@@ -280,7 +278,6 @@ def journal_is_structured(rows: list[dict[str, Any]]) -> bool:
             EventType.RUN_PLAN.value,
             EventType.RUN_STARTED.value,
             EventType.CHECKPOINT_REQUIRED.value,
-            EventType.QUESTION_POSTED.value,
             EventType.PLAN_REVIEW_REQUIRED.value,
             EventType.TEAM_PREVIEW_REQUIRED.value,
         ):

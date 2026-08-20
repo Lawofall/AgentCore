@@ -443,4 +443,4 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     )
     assert len(adv_blob) < 3600, f"desktop ask_user schema too fat: {len(adv_blob)}"
     assert len(plain_blob) < len(adv_blob)
-    assert abs(len(plain_blob) - 2111) < 80  # non-desktop path must not inflate
+    assert abs(len(plain_blob) - 1845) < 80  # non-desktop path must not inflate

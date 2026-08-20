@@ -41,8 +41,8 @@ from typing import Any
 
 from agentcore.runtime.events.journal_config import cap_process_result
 from agentcore.runtime.events.sink import MARKER_STANDIN_TOOLS
+from agentcore.runtime.interaction import GATE_KINDS
 from agentcore.runtime.journal.pending_interactions import (
-    GATE_KINDS,
     fold_interactions,
     project_interaction_leaf,
 )
@@ -913,23 +913,6 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
         elif etype == "approval_resolved":
             pass
 
-        elif etype == "delegation_authorization_required":
-            # 统一时间线二期 D3 + 产品修正：「放行开工」族叙事（授权 → 团队干活）——
-            # 与 team_preview 同锚定，插到最后一个 team 标记之前（无 team 则 append）。
-            # Marker at required; light row when resolved. Mirrors EventSink.
-            aid = p.get("authorization_id") or ""
-            if aid and not has_marker("delegation_authorization", "authorization_id", aid):
-                marker = {"kind": "delegation_authorization", "authorization_id": aid}
-                for i in range(len(process) - 1, -1, -1):
-                    if process[i].get("kind") == "team":
-                        process.insert(i, marker)
-                        break
-                else:
-                    process.append(marker)
-
-        elif etype == "delegation_authorization_resolved":
-            pass
-
         elif etype == "checkpoint_required":
             cid = p.get("checkpoint_id", "")
             # 检查点时间线落点: positional marker so the card replays at its real spot
@@ -978,16 +961,6 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                     process.append(marker)
 
         elif etype == "team_preview_resolved":
-            pass
-
-        elif etype == "question_posted":
-            # 非阻塞发问时间线落点: the CEO surfaced a question and kept working (no gate) —
-            # positional marker only; interactions[] carries the card body by ask_id.
-            aid = p.get("ask_id", "")
-            if aid and not has_marker("ask", "ask_id", aid):
-                process.append({"kind": "ask", "ask_id": aid})
-
-        elif etype == "question_resolved":
             pass
 
         elif etype == "stage_card_required":

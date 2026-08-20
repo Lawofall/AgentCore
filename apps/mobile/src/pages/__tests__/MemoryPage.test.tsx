@@ -57,7 +57,7 @@ import {
   getDocument,
   listScopeEntries,
 } from "@/api/documents";
-import { getMemoryFile, getMemoryTopic } from "@/api/memory";
+import { getMemoryFile, getMemoryTopic, listMemoryUpdates } from "@/api/memory";
 import { MemoryPage } from "@/pages/MemoryPage";
 
 const entry = (over: Record<string, unknown> = {}) => ({
@@ -78,6 +78,7 @@ const entry = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(listMemoryUpdates).mockResolvedValue([]);
   vi.mocked(listScopeEntries).mockResolvedValue([]);
   vi.mocked(getAlwaysQuota).mockResolvedValue({
     usedChars: 4200,
@@ -252,5 +253,49 @@ describe("MemoryPage", () => {
     });
     expect(getDocument).not.toHaveBeenCalled();
     expect(await screen.findByDisplayValue("部署笔记")).toBeTruthy();
+  });
+
+  it("renders a quota feed card without exposing the fingerprint row", async () => {
+    vi.mocked(listMemoryUpdates).mockResolvedValue([
+      {
+        id: "q1",
+        conversationId: "c1",
+        createdAt: "2026-07-19T12:00:00Z",
+        kind: "quota",
+        summary: "常驻条目已满（120/80 字符）：以下 1 条没能写进常驻。",
+        items: [
+          {
+            action: "quota",
+            file: "",
+            section: "",
+            scope: "global",
+            content: "fp-hash-must-not-render",
+            target: "",
+          },
+          {
+            action: "quota_denied",
+            file: "画像",
+            section: "",
+            scope: "global",
+            content: "这次的更新没能写入常驻（40 字符）",
+            target: "global/profile",
+          },
+          {
+            action: "quota_holder",
+            file: "占坑规则.md",
+            section: "",
+            scope: "global",
+            content: "占用 100 字符",
+            target: "",
+          },
+        ],
+      },
+    ]);
+    render(<MemoryPage />);
+    expect(await screen.findByText("常驻已满")).toBeTruthy();
+    expect(screen.getByText(/常驻条目已满（120\/80 字符）/)).toBeTruthy();
+    expect(screen.queryByText("fp-hash-must-not-render")).toBeNull();
+    expect(screen.getByText("未写入")).toBeTruthy();
+    expect(screen.getByText("占用")).toBeTruthy();
   });
 });

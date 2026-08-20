@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agentcore.conversation.ask_reply import format_ask_reply_prompt, normalize_ask_id
 from agentcore.conversation.mentions import (
     format_agent_mention_prompt,
     resolve_interjection_mentions,
@@ -322,7 +321,7 @@ def _format_one(session: CoordinationSession, ev: CoordinationEvent) -> str:
             detail = f" 已完成摘要：{brief}" if brief.strip() else ""
             return (
                 f"- boundary_yield（checkpoint）：这些节点要求用户把关，"
-                "必须立即用 ask_user（blocking）把关键内容交用户拍板，"
+                "必须立即用 ask_user 把关键内容交用户拍板，"
                 f"不得自行替用户决定。{detail}"
             )
         return (
@@ -347,14 +346,6 @@ def _format_one(session: CoordinationSession, ev: CoordinationEvent) -> str:
         mention = format_agent_mention_prompt(_interjection_mentions(session, p))
         if mention:
             lines.extend(mention.splitlines())
-        aid = normalize_ask_id(p.get("ask_id"))
-        if not aid:
-            iid_key = str(p.get("interjection_id") or "").strip()
-            stashed = session.get_interjection(iid_key) if iid_key else None
-            aid = normalize_ask_id((stashed or {}).get("ask_id"))
-        reply = format_ask_reply_prompt(aid)
-        if reply:
-            lines.extend(reply.splitlines())
         lines.append(
             "  【先回用户】须先用可见正文响应该句（哪怕极短「收到，仍按原计划」），"
             "再谈团队；禁止把旧进度旁白当成对插话的答复。"

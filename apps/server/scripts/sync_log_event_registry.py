@@ -4,12 +4,18 @@ Also pair with ``gen_log_event_docs.py`` to refresh the markdown event table::
 
     uv run python scripts/sync_log_event_registry.py
     uv run python scripts/gen_log_event_docs.py
+
+Read-only drift check (release gate / CI — never rewrites catalog.py)::
+
+    uv run python scripts/sync_log_event_registry.py --check
 """
 
 from __future__ import annotations
 
+import argparse
 import ast
 import re
+import sys
 import unicodedata
 from pathlib import Path
 
@@ -194,33 +200,6 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "request_id": "str",
         "user": "str",
         "conversation_id": "str",
-    },
-    "pending_questions.load_failed": {
-        "conversation_id": "str",
-        "error": "str",
-    },
-    "question_posted.settled": {
-        "conversation_id": "str",
-        "ask_id": "str",
-        "status": "str",
-        "turn_id": "str",
-    },
-    "question_posted.retention_swept": {
-        "settled": "int",
-    },
-    "question_posted.retention_failed": {
-        "error": "str",
-    },
-    "question_posted.retention_settle_failed": {
-        "conversation_id": "str",
-        "turn_id": "str",
-        "ask_id": "str",
-        "error": "str",
-    },
-    "question_posted.ingest_settle_failed": {
-        "conversation_id": "str",
-        "ask_id": "str",
-        "error": "str",
     },
     "stream_state.retention_swept": {
         "deleted": "int",
@@ -825,12 +804,6 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
 # S3-retired names: no emit site, kept so old JSONL still validates against the registry.
 # Descriptions must say 历史兼容 — do not present as current contract.
 HISTORICAL_COMPAT: dict[str, str] = {
-    "delegate.completion_criteria_hoisted": (
-        "历史兼容（S3 前）：criteria hoist；现行不发"
-    ),
-    "delegate.completion_criteria_unmet": (
-        "历史兼容（S3 前）：按 kind 硬判未满足；现行不发"
-    ),
 }
 
 KEY_DESC: dict[str, str] = {
@@ -907,9 +880,6 @@ KEY_DESC: dict[str, str] = {
     ),
     "delegate.completed": "委派批次完成（escalations/scope）",
     "delegate.yielded": "委派中途让出（replan 边界）",
-    "delegate.completion_criteria_ignored": (
-        "S3：CEO 误传已删 completion_criteria 时打点（忽略字段，非硬闸）"
-    ),
     "delegate.run_redirect_hot": "redirect 热修续派（revise 重算桶，与 continuation_ok 同义）",
     "delegate.delivery_status_empty": (
         "交付卡判定无物质不发（delivered/gaps/rejected 计数；巡检可证静默原因）"
@@ -1078,15 +1048,9 @@ KEY_DESC: dict[str, str] = {
     "account.rules_memory_cache_seed": "账户 rules/memory 快照写入进程缓存（非回合暖）",
     "account.rules_memory_warm_failed": "warm 拉取 rules/memory 部分失败（degraded seed）",
     "attention.signalled": (
-        "「在等你」信号已发（阻塞卡或未答的非阻塞提问）；push_outcome = delivered / "
+        "「在等你」信号已发（阻塞卡）；push_outcome = delivered / "
         "undelivered / skipped_mobile_online / not_requested，pushed 只在真有设备收下时为 true"
     ),
-    "pending_questions.load_failed": "CEO 易变尾悬题清单读 journal 失败（本回合不注入该段）",
-    "question_posted.settled": "非阻塞提问已答或已作废（journal question_resolved）",
-    "question_posted.retention_swept": "悬题 7 天硬上限扫表作废的张数（自有 journal 路径，不碰 paused_turns）",
-    "question_posted.retention_failed": "悬题 7 天硬上限扫表整轮失败",
-    "question_posted.retention_settle_failed": "悬题硬上限作废单张失败（其余继续）",
-    "question_posted.ingest_settle_failed": "发送提交事实成立后关悬题 journal 失败（不让回合失败）",
     "stream_state.retention_swept": "流式在飞快照超保留期扫表删除的行数（对齐 paused_turns 7 天）",
     "stream_state.retention_failed": "流式在飞快照 TTL 扫表整轮失败",
     "push.fcm_configured": "FCM sender 装配成功；project_id 须与真机注册的 Firebase 项目一致",
@@ -1209,7 +1173,7 @@ def _format_spec(name: str) -> list[str]:
     return out
 
 
-def write_catalog(events: list[str]) -> None:
+def render_catalog(events: list[str]) -> str:
     lines = [
         '"""Auto-maintained event catalog for product AI logs.',
         "",
@@ -1233,28 +1197,132 @@ def write_catalog(events: list[str]) -> None:
         lines.extend(_format_spec(name))
     lines.append("]")
     lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def write_catalog(events: list[str]) -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    OUT.write_text(render_catalog(events), encoding="utf-8")
 
 
-def main() -> None:
-    scanned = scan_events()
+_CATALOG_NAME_RE = re.compile(r"\bname=(['\"])([^'\"]+)\1")
+
+
+def catalog_names_from_text(text: str) -> list[str]:
+    return [m.group(2) for m in _CATALOG_NAME_RE.finditer(text)]
+
+
+def planned_catalog(scanned: set[str]) -> tuple[list[str], list[str]]:
+    """Return (sorted catalog names, dead enrichment names)."""
     events = sorted(scanned | set(HISTORICAL_COMPAT))
-    # Guard against dead names lingering in the enrichment maps (an event name
-    # with no emit site never enters the catalog, so its enrichment is a zombie).
-    # HISTORICAL_COMPAT names are intentionally emit-less — exclude from dead check.
     known = scanned | set(HISTORICAL_COMPAT)
     dead = sorted((set(KEY_FIELDS) | set(KEY_DESC)) - known)
-    for name in dead:
-        print(f"WARNING: enrichment for {name!r} has no emit site (dead name?)")
-    # Merge historical descriptions into KEY_DESC for catalog emit.
+    return events, dead
+
+
+def apply_historical_descriptions() -> None:
     for name, desc in HISTORICAL_COMPAT.items():
         KEY_DESC.setdefault(name, desc)
+
+
+def check_catalog() -> int:
+    """Compare emit sites to catalog.py without rewriting it."""
+    scanned = scan_events()
+    events, dead = planned_catalog(scanned)
+    apply_historical_descriptions()
+    expected = render_catalog(events)
+    actual = OUT.read_text(encoding="utf-8") if OUT.is_file() else ""
+    expected_names = events
+    actual_names = catalog_names_from_text(actual)
+    missing = sorted(set(expected_names) - set(actual_names))
+    extra = sorted(set(actual_names) - set(expected_names))
+    text_differs = expected != actual
+
+    if not missing and not extra and not text_differs and not dead:
+        print(
+            f"✓ log event catalog matches emit sites "
+            f"({len(events)} events; {len(HISTORICAL_COMPAT)} historical-compat)"
+        )
+        return 0
+
+    print("✗ log event catalog drift — catalog.py does not match logger.* emit sites:")
+    if missing:
+        print(f"  missing from catalog ({len(missing)}; emitted in code):")
+        for name in missing:
+            print(f"    + {name}")
+    if extra:
+        print(
+            f"  extra in catalog ({len(extra)}; no emit site, not HISTORICAL_COMPAT):"
+        )
+        for name in extra:
+            print(f"    - {name}")
+    if text_differs and not missing and not extra:
+        print(
+            "  catalog.py text differs from the sync renderer "
+            "(order / wrapping / descriptions); names match"
+        )
+        if actual_names != expected_names:
+            print("  name order drift (disk → renderer):")
+            shown = 0
+            for disk_name, want_name in zip(actual_names, expected_names, strict=False):
+                if disk_name == want_name:
+                    continue
+                print(f"    {disk_name!r} → {want_name!r}")
+                shown += 1
+                if shown >= 8:
+                    break
+        disk_specs = {
+            name: "\n".join(_format_spec(name)) for name in expected_names
+        }
+        actual_text = actual
+        spec_drift = [
+            name
+            for name in expected_names
+            if disk_specs[name] not in actual_text
+        ]
+        if spec_drift:
+            print(f"  EventSpec body drift ({len(spec_drift)}):")
+            for name in spec_drift[:8]:
+                print(f"    ~ {name}")
+    if not OUT.is_file():
+        print(f"  catalog missing: {OUT}")
+    for name in dead:
+        print(f"  WARNING: enrichment for {name!r} has no emit site (dead name?)")
+    print("  Fix: uv run python scripts/sync_log_event_registry.py")
+    print("  Gate mode is --check only; it never rewrites catalog.py.")
+    return 1
+
+
+def write_catalog_from_scan() -> int:
+    scanned = scan_events()
+    events, dead = planned_catalog(scanned)
+    for name in dead:
+        print(f"WARNING: enrichment for {name!r} has no emit site (dead name?)")
+    apply_historical_descriptions()
     write_catalog(events)
-    print(f"wrote {OUT} ({len(events)} events; {len(HISTORICAL_COMPAT)} historical-compat)")
-    if dead:
-        raise SystemExit(1)
+    print(
+        f"wrote {OUT} ({len(events)} events; {len(HISTORICAL_COMPAT)} historical-compat)"
+    )
+    return 1 if dead else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Scan logger.* call sites and regenerate observability/catalog.py, "
+            "or --check that the committed catalog matches emit sites (read-only)."
+        )
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Fail on drift; never write catalog.py (release gate / CI)",
+    )
+    args = parser.parse_args(argv)
+    if args.check:
+        return check_catalog()
+    return write_catalog_from_scan()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

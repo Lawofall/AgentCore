@@ -1,5 +1,6 @@
 import type { ErrorAction } from "@/lib/errors";
 import type { ExecutionJournal } from "@/stores/execution";
+import type { components } from "@/types/api.generated";
 import type {
   AskAssumption,
   AskQuestion,
@@ -29,19 +30,6 @@ export interface CheckpointDisplay {
   selected: string[];
   /** Wire `browser_login` — CEO login gate; resume card mirrors escalate login UX. */
   browserLogin?: boolean;
-}
-
-export interface NonBlockingAskDisplay {
-  id: string;
-  question: string;
-  context: string;
-  assumptions: AskAssumption[];
-  questions: AskQuestion[];
-  status: "pending" | "resolved";
-  /** Fold 三态里的已答 / 已作废；pending 时 absent。 */
-  settlement?: "answered" | "discarded";
-  answer?: string;
-  note?: string;
 }
 
 export interface PlanReviewDisplay {
@@ -229,7 +217,7 @@ export interface AgentMentionMeta {
  * `"project"`; `content` is the bullet (add/update) or matched text (remove); `target`
  * is the synthetic memory-leaf path the card deep-links to (`""` = no leaf). */
 export interface MemoryUpdateItem {
-  action: string;
+  action: components["schemas"]["MemoryUpdateItemView"]["action"];
   file: string;
   section: string;
   scope: string;
@@ -255,7 +243,7 @@ export interface MemoryUpdate {
    * {@link import("@/components/chat/messageTimeline").memoryAnchorTime}。
    */
   anchorAt?: string | null;
-  kind: "episodic" | "semantic" | "quota";
+  kind: components["schemas"]["MemoryUpdateView"]["kind"];
   summary?: string | null;
   items: MemoryUpdateItem[];
 }

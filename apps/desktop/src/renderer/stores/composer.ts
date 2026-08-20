@@ -4,20 +4,19 @@ import type {
 } from "@/components/chat/message-input/composerAttachments";
 import { registerConversationUiClearer, uiGet, uiSet } from "@/lib/uiStorage";
 import { useConversationStore } from "@/stores/conversation";
-import { useUIStore } from "@/stores/ui";
 import type { SetStateAction } from "react";
 import { create } from "zustand";
 
 /**
  * Per-conversation drafts for the unified turn composer (`TurnComposer` in chat
- * `MessageInput`). Canvas is look-only — orders stay in chat.
+ * `MessageInput`).
  *
  * Keying the draft (text + pending attachments) by conversation moves it OUT of
  * component state, which buys the two things the old local-state design couldn't do:
- * switching 聊天 ⇄ 画布 (which unmounts the composer) keeps the half-typed order, and
- * the 回填 channel below lands in a real draft even if the composer is briefly
- * unmounted. Entries self-delete once both text and attachments are empty, so the
- * map stays bounded to conversations with a live draft.
+ * switching conversations keeps the half-typed order, and the 回填 channel below
+ * lands in a real draft even if the composer is briefly unmounted. Entries
+ * self-delete once both text and attachments are empty, so the map stays bounded
+ * to conversations with a live draft.
  *
  * Persistence: draft TEXT + attachment *metadata* survive an app restart
  * (`uiStorage`, debounced + flushed on unload, capped to the {@link PERSIST_LIMIT}
@@ -28,10 +27,8 @@ import { create } from "zustand";
  * 回填 channel: ask card / run-detail / debate drop text into the ACTIVE conversation's
  * draft via {@link fill}. `append` (the default) adds the text as a new line after any
  * existing draft so a user can stack answers to several questions; `replace` overwrites.
- * If that conversation is on the canvas, fill switches it back to chat (already-chat /
- * no id: no switch). `fillToken` is a monotonic focus hint — the mounted composer
- * refocuses its textarea when it changes (the draft text itself arrives through the
- * store subscription).
+ * `fillToken` is a monotonic focus hint — the mounted composer refocuses its textarea
+ * when it changes (the draft text itself arrives through the store subscription).
  */
 export interface ComposerDraft {
   value: string;
@@ -247,8 +244,6 @@ interface ComposerDraftState {
   ) => void;
   /**
    * 回填 the active conversation's draft with `text` (default: append as a new line).
-   * If that conversation is on the canvas, switch back to chat so the user can send.
-   * Already-chat / no conversation id: do not switch.
    */
   fill: (text: string, mode?: "append" | "replace") => void;
   /** Arm the one-shot center→bottom dock-flip for the imminent first-send promote. */
@@ -309,12 +304,6 @@ export const useComposerDraftStore = create<ComposerDraftState>((set) => ({
         fillToken: s.fillToken + 1,
       };
     });
-    if (
-      conversationId &&
-      useUIStore.getState().conversationViews[conversationId] === "canvas"
-    ) {
-      useUIStore.getState().setConversationView(conversationId, "chat");
-    }
   },
   armDockFlip: () => set((s) => ({ dockFlipToken: s.dockFlipToken + 1 })),
 }));

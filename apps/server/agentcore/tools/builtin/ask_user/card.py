@@ -62,16 +62,9 @@ def card_max_options(card: AskUserCard | None) -> int:
 def validate_card_shape(
     card: AskUserCard,
     *,
-    blocking: bool,
     questions: list[dict[str, Any]],
 ) -> str | None:
     """Return a model-facing error when ``card`` + questions are non-compliant; else None."""
-    if not blocking:
-        return (
-            f"card={card} 仅支持阻塞发问（blocking=true 或缺省）。"
-            "非阻塞路径（blocking=false）请去掉 card，或改用 blocking=true。"
-        )
-
     if len(questions) != 1:
         if card == "proposal_pick":
             return (

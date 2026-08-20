@@ -5,7 +5,7 @@ export type ConversationHydratePhase = "loading" | "ready" | "error";
 
 /**
  * Full-pane honest shell for persisted-conversation hydrate (诚实壳层 A).
- * Covers chat/canvas so a cold load never looks like an empty draft you can send into,
+ * Covers the conversation pane so a cold load never looks like an empty draft you can send into,
  * and a failed fetch without offline cache never looks like a blank conversation.
  */
 export function ConversationHydrateOverlay({

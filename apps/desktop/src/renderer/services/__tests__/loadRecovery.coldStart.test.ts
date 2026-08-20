@@ -356,7 +356,7 @@ describe("loadRecovery cold start (no React Query / no resolveSidecarRoot)", () 
     );
   });
 
-  it("empty recovery pending clears confirmed server-origin hot cards", async () => {
+  it("empty recovery pending settles confirmed server-origin hot cards", async () => {
     useInteractionStore.getState().upsertRequired({
       kind: "approval",
       conversationId: CID,
@@ -378,7 +378,9 @@ describe("loadRecovery cold start (no React Query / no resolveSidecarRoot)", () 
     vi.stubGlobal("window", { __WEB__: true });
 
     await loadRecovery(CID);
-    expect(useInteractionStore.getState().get("a-done")).toBeUndefined();
+    const done = useInteractionStore.getState().get("a-done");
+    expect(done?.status).toBe("resolved");
+    expect(done?.settledElsewhere).toBe(true);
   });
 
   it("sidecar live + empty cloud pending keeps local approval cards", async () => {
@@ -488,7 +490,7 @@ describe("loadRecovery cold start (no React Query / no resolveSidecarRoot)", () 
     );
   });
 
-  it("neither engine live drops hot approval cards", async () => {
+  it("neither engine live orphans hot approval cards", async () => {
     useInteractionStore.getState().upsertRequired({
       kind: "approval",
       conversationId: CID,
@@ -518,7 +520,9 @@ describe("loadRecovery cold start (no React Query / no resolveSidecarRoot)", () 
     });
 
     await loadRecovery(CID);
-    expect(useInteractionStore.getState().get("a-stale")).toBeUndefined();
+    expect(useInteractionStore.getState().get("a-stale")?.status).toBe(
+      "orphaned",
+    );
   });
 
   it("在飞的空快照不清它发起后才浮现的 live 卡（pause 抢跑竞态）", async () => {

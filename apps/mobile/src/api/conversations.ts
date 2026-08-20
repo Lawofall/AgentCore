@@ -299,22 +299,39 @@ export async function listConversationsGrouped(): Promise<GroupedConversations> 
 /** One applied memory change in a 记忆已更新 card (Agent记忆与知识系统 §1.6). */
 export type MemoryUpdateItem = Schemas["MemoryUpdateItemView"];
 
+type MemoryUpdateView = Schemas["MemoryUpdateView"];
+
 /**
  * One offline-consolidation pass — what the AI remembered FROM this conversation (写也可见,
  *  §1.6). CamelCase client projection of OpenAPI `MemoryUpdateView` (M17 exemption:
  *  OpenAPI has no camelCase conversation-tail schema). Returned ONLY with the latest
  *  messages window. Mobile has no per-user firehose; ChatPage polls after message_end.
+ *
+ *  `kind` is the generated wire type (not a narrower local union). Pass it through
+ *  unchanged so a new value cannot be silently rewritten to `"semantic"`.
  */
 export interface MemoryUpdate {
-  id: string;
+  id: MemoryUpdateView["id"];
   createdAt: string;
   /** 本次固化窗口最后一条消息的 created_at = 这张卡描述的线程位置（`createdAt` 只是固化
    *  跑起来的时刻，比它总结的那一轮晚）。语义 / 配额卡与旧数据为 null → 锚定退回
    *  `createdAt`（lib/memoryAnchors）。 */
-  anchorAt?: string | null;
-  kind: "episodic" | "semantic";
-  summary?: string | null;
+  anchorAt?: MemoryUpdateView["anchor_at"];
+  kind: MemoryUpdateView["kind"];
+  summary?: MemoryUpdateView["summary"];
   items: MemoryUpdateItem[];
+}
+
+/** Map one OpenAPI `MemoryUpdateView` → mobile {@link MemoryUpdate}. */
+export function toMemoryUpdate(u: MemoryUpdateView): MemoryUpdate {
+  return {
+    id: u.id,
+    createdAt: u.created_at,
+    anchorAt: u.anchor_at ?? null,
+    kind: u.kind,
+    summary: u.summary ?? null,
+    items: u.items ?? [],
+  };
 }
 
 /** A window of messages plus whether older ones exist (drives 加载更早). `memoryUpdates` is
@@ -415,13 +432,6 @@ export async function getMessages(
     messages: data.data.map(toMessageDetail),
     hasMoreBefore: data.has_more_before,
     // Backend returns these only on the latest window; older/around pages send none.
-    memoryUpdates: (data.memory_updates ?? []).map((u) => ({
-      id: u.id,
-      createdAt: u.created_at,
-      anchorAt: u.anchor_at ?? null,
-      kind: u.kind === "episodic" ? "episodic" : "semantic",
-      summary: u.summary ?? null,
-      items: u.items ?? [],
-    })),
+    memoryUpdates: (data.memory_updates ?? []).map(toMemoryUpdate),
   };
 }

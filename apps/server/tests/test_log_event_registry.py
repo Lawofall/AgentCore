@@ -157,3 +157,49 @@ def test_duplicate_registration_rejected():
         MapEventRegistry(
             [EventSpec(name="chat.turn_start"), EventSpec(name="chat.turn_start")]
         )
+
+
+def _load_sync_log_event_registry():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "sync_log_event_registry.py"
+    spec = importlib.util.spec_from_file_location("sync_log_event_registry", path)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_catalog_check_does_not_rewrite():
+    mod = _load_sync_log_event_registry()
+    before = mod.OUT.read_bytes()
+    mtime = mod.OUT.stat().st_mtime_ns
+    rc = mod.main(["--check"])
+    assert isinstance(rc, int)
+    assert mod.OUT.read_bytes() == before
+    assert mod.OUT.stat().st_mtime_ns == mtime
+
+
+def test_catalog_check_flags_missing_emit_name(monkeypatch, capsys):
+    mod = _load_sync_log_event_registry()
+    real_scan = mod.scan_events
+    probe = "__catalog_check_probe__.missing"
+
+    monkeypatch.setattr(mod, "scan_events", lambda: real_scan() | {probe})
+    rc = mod.main(["--check"])
+    captured = capsys.readouterr().out
+    assert rc == 1
+    assert probe in captured
+    assert "never rewrites catalog.py" in captured
+    assert probe not in mod.catalog_names_from_text(mod.OUT.read_text(encoding="utf-8"))
+
+
+def test_catalog_emit_names_match_registry():
+    """Emit-site names ∪ HISTORICAL_COMPAT must equal catalog names (order/text may drift)."""
+    mod = _load_sync_log_event_registry()
+    scanned = mod.scan_events()
+    events, dead = mod.planned_catalog(scanned)
+    actual = set(mod.catalog_names_from_text(mod.OUT.read_text(encoding="utf-8")))
+    assert set(events) == actual
+    assert dead == []

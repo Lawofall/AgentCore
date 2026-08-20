@@ -17,11 +17,9 @@ import { useNavigate } from "react-router-dom";
 /**
  * Banner for a failed turn (send / regenerate transport error). Chat surfaces
  * the same copy on {@link import("./message-input/TurnComposer").TurnComposer}
- * (empty-state first-send included). This banner stays on the canvas 指挥台
- * ({@link import("../graph/CanvasDecisionPanel")}, 前端UX设计.md §6.2) — ChatView
- * is unmounted there. Displays the error copy; the optional action routes the
- * user to fix the cause (e.g. "去配置" → model config for a missing BYOK key);
- * dismissing only hides the banner.
+ * (empty-state first-send included). Displays the error copy; the optional
+ * action routes the user to fix the cause (e.g. "去配置" → model config for a
+ * missing BYOK key); dismissing only hides the banner.
  *
  * Tone: config remedy (去配置) = blue `primary`; quiet reconnect / finished
  * copy uses Info on {@link noticeChipNeutral}; confirmed-bad reconnect and

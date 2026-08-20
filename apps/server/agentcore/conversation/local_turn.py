@@ -129,16 +129,4 @@ async def record_local_turn(
             agent_mentions=agent_mentions,
         )
         assert result is not None
-        if user_created_this_send:
-            from agentcore.conversation.question_resolve import (
-                is_abort_finish_reason,
-                note_ask_replies_for_committed_send,
-            )
-
-            if not is_abort_finish_reason(finish_reason):
-                await note_ask_replies_for_committed_send(
-                    conversation_id=conversation_id,
-                    answer=user_message,
-                    journal=journal,
-                )
         return result

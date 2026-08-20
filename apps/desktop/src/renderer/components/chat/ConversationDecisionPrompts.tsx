@@ -1,14 +1,12 @@
 /**
- * Conversation-level decision prompts shared by chat and canvas 指挥台.
- * Unified DecisionCard shell; mounts above the composer in ChatView and in
- * CanvasDecisionPanel — mutually exclusive (canvasMode toggle), one live instance.
+ * Conversation-level decision prompts. Unified DecisionCard shell; single mount
+ * in ChatView above the composer. Full-screen turn detail is look-only and has
+ * no command bar (协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大).
  *
  * Chat may omit ApprovalPrompt here and remount it flush above MessageInput
- * (composer 一体态); canvas keeps the default stack in CommandRegion.
+ * (composer 一体态).
  */
 import { ApprovalPrompt } from "./ApprovalPrompt";
-import { DelegationAuthorizationPrompt } from "./DelegationAuthorizationCard";
-import { HangingQuestionBar } from "./HangingQuestionBar";
 import { ResumePrompt } from "./ResumePrompt";
 import { ResumeSettledNotices } from "./ResumeSettledNotices";
 import { RunConfirmPrompt } from "./RunConfirmPrompt";
@@ -32,8 +30,6 @@ export function ConversationDecisionPrompts({
           中性/信息态，不是故障。 */}
       <ResumeSettledNotices />
       <ResumePrompt />
-      <HangingQuestionBar />
-      <DelegationAuthorizationPrompt />
       {!omitApproval && <ApprovalPrompt />}
       <RunConfirmPrompt />
     </>

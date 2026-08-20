@@ -14,8 +14,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from agentcore.runtime.terminal import RUN_CLOSE_EVENT_TYPES
+
 _CAPTAIN = "captain"
-_TERMINAL = frozenset({"run_completed", "run_failed", "run_cancelled", "run_skipped"})
 _STARTED = "run_started"
 _PLAN = "run_plan"
 _APPEND = "graph_append"
@@ -104,7 +105,7 @@ def team_batch_from_entries(entries: Iterable[Any] | None) -> dict[str, Any]:
             continue
         if kind == _STARTED:
             started.add(rid)
-        elif kind in _TERMINAL:
+        elif kind in RUN_CLOSE_EVENT_TYPES:
             terminal.add(rid)
 
     n = len(worker_ids)

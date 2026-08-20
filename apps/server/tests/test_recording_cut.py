@@ -153,6 +153,45 @@ def test_unknown_event_type_raises():
         durable_face([{"type": "made_up_event", "payload": {}}])
 
 
+def test_retired_sim_show_event_types_are_dropped():
+    face = durable_face(
+        [
+            {"type": "sim.show.heart_pick", "payload": {"run_id": "r", "tick": 0}},
+            {"type": "message_start", "payload": {"message_id": "m"}},
+        ]
+    )
+    assert [ev["type"] for ev in face] == ["message_start"]
+
+
+def test_retired_question_posted_event_types_are_dropped():
+    from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES
+
+    face = durable_face(
+        [
+            {"type": "question_posted", "payload": {"ask_id": "a"}},
+            {"type": "question_resolved", "payload": {"ask_id": "a", "status": "answered"}},
+            {
+                "type": "delegation_authorization_required",
+                "payload": {"authorization_id": "d"},
+            },
+            {
+                "type": "delegation_authorization_resolved",
+                "payload": {"authorization_id": "d", "status": "granted"},
+            },
+            {"type": "message_start", "payload": {"message_id": "m"}},
+        ]
+    )
+    assert [ev["type"] for ev in face] == ["message_start"]
+    assert frozenset(
+        {
+            "question_posted",
+            "question_resolved",
+            "delegation_authorization_required",
+            "delegation_authorization_resolved",
+        }
+    ) == RETIRED_EVENT_TYPE_VALUES
+
+
 # ---------------------------------------------------------------------------
 # 时间戳稳定化 + 字节幂等
 # ---------------------------------------------------------------------------

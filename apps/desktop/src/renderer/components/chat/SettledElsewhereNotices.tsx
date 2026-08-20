@@ -9,6 +9,10 @@
  * 带上 `settledElsewhere`（store 侧已排除重放段与 journal 水合）。因此重连整段重放不会
  * 闪出一堆旧收口，切走再切回也不会把别人的会话带过来。
  *
+ * 重连快照水合（`hydratePending`）是第三个写 `settledElsewhere` 的地方：暂停前就已亮出、
+ * 来源也确实问过的卡不在快照里，会就地留桩终态——那张卡真是在另一端结掉的，这里正该出一条
+ * 收口。冷启动的新标签页 prev 不是 pending，不会替旧会话补喊。
+ *
  * 「pending」这道闸还顺带分掉了另一种情形：用户自己点下去、回执才说「已经结了」
  * （`settledByReceipt`）——那一下已经当场给过提示，随后到的收口帧只该去时间线补一句归属，
  * 不必在决策区再说一遍。
@@ -17,6 +21,7 @@ import { DecisionCard, DecisionCardIcon } from "@/components/ui";
 import { useConversationStore } from "@/stores/conversation";
 import { toolLabel } from "@/stores/execution/types";
 import {
+  INTERACTION_CARD_NAME,
   type InteractionEntry,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -27,18 +32,6 @@ import { useEffect, useState } from "react";
 const NOTICE_TTL_MS = 8_000;
 
 type SettledNotice = { id: string; label: string };
-
-/** 卡名（用产品既有称呼，不另造词）。 */
-export const INTERACTION_CARD_NAME: Record<InteractionEntry["kind"], string> = {
-  approval: "工具审批",
-  delegation_authorization: "委派授权",
-  escalation: "拍板请求",
-  ask_user: "提问确认",
-  plan_review: "计划复核",
-  team_preview: "开工确认",
-  question_posted: "提问",
-  stage_card: "推进卡",
-};
 
 export function settledElsewhereLabel(entry: InteractionEntry): string {
   const name = INTERACTION_CARD_NAME[entry.kind] ?? "确认";

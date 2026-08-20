@@ -1,8 +1,8 @@
-"""L1 绝对分裁判 + 诊断 Check 不计入判定 + baseline 回归门 单测（后端架构.md §五）.
+"""L1 绝对分裁判 + 诊断 Check 不计入判定（后端架构.md §五）.
 
 零真实 LLM：注入返回固定 JSON 的假 provider 验证 :class:`LLMJudge` 解析/阈值/多采样/容错；
-用合成 ``TurnOutcome`` 验证诊断 Check 落 ``gating=False`` 不影响 ``CaseReport.passed``；纯函数
-验证回归门。真模型留给 nightly。
+用合成 ``TurnOutcome`` 验证诊断 Check 落 ``gating=False`` 不影响 ``CaseReport.passed``。
+相对基线观测见 ``test_evals_observe.py``。真模型留给 nightly。
 
 verbosity 分流：:func:`resolve_verbosity_policy` + 绝对分/成对裁判系统提示按 concise/coverage
 分支（负样本打冗长；正样本不以更短为胜负主轴）。
@@ -16,7 +16,7 @@ from agentcore.evals.judge import (
     LLMPairwiseJudge,
     resolve_verbosity_policy,
 )
-from agentcore.evals.report import baseline_regression, report_to_dict
+from agentcore.evals.report import report_to_dict
 from agentcore.evals.runner import apply_checks, run_suite
 from agentcore.evals.types import CaseReport, EvalCase, EvalReport, TurnOutcome
 from agentcore.llm.provider.protocol import LLMResponse
@@ -352,35 +352,3 @@ def test_report_serializes_gating_flag():
     ck = data["cases"][0]["checks"][0]
     assert ck["name"] == "Delegated"
     assert ck["gating"] is False
-
-
-# --- baseline 回归门 ---------------------------------------------------------
-
-
-def _report_with_rate(passed: int, total: int) -> EvalReport:
-    case = _case(checks=[{"name": "FinishReason"}])
-    cases = []
-    for i in range(total):
-        oc = _outcome() if i < passed else _outcome(finish_reason="error", error="x")
-        cases.append(
-            CaseReport(case_id=f"c{i}", category="qa", outcome=oc, checks=apply_checks(case, oc))
-        )
-    return EvalReport(cases=cases)
-
-
-def test_baseline_regression_flags_drop_beyond_tolerance():
-    rep = _report_with_rate(7, 10)  # 0.7
-    regressed, _ = baseline_regression(rep, {"summary": {"pass_rate": 0.9}}, 0.05)
-    assert regressed is True
-
-
-def test_baseline_regression_within_tolerance_ok():
-    rep = _report_with_rate(9, 10)  # 0.9
-    regressed, _ = baseline_regression(rep, {"summary": {"pass_rate": 0.92}}, 0.05)
-    assert regressed is False  # 0.9 >= 0.92 - 0.05
-
-
-def test_baseline_regression_improvement_ok():
-    rep = _report_with_rate(10, 10)  # 1.0
-    regressed, _ = baseline_regression(rep, {"summary": {"pass_rate": 0.7}}, 0.05)
-    assert regressed is False

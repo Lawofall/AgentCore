@@ -40,8 +40,6 @@ REASON_TO_WARNING: dict[str, str] = {
 
 # 预算收尾窗口：累计 token ≥ ceiling − reserve 时进入落盘/handoff-only（默认 30k）
 DEFAULT_TOKEN_WIND_DOWN_RESERVE = 30_000
-# 超时先警告再通知：在 threshold × ratio 处注入「限一轮内交接」（默认 75%）
-DEFAULT_TIMEOUT_WARN_RATIO = 0.75
 
 # 收尾窗口允许的工具（落盘 + 内环诊断 + handoff；调查/执行类一律剔除）
 # file_read 不在此基础集：仅交付类（form=files / 非空 artifacts，工具面仍含

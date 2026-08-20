@@ -19,10 +19,8 @@ import type {
 } from "@/types/events";
 import {
   appendApprovalStep,
-  appendAskStep,
   appendCheckpointStep,
   appendContentStep,
-  appendDelegationAuthorizationStep,
   appendEscalationStep,
   appendGraphAppendStep,
   appendPlanReviewStep,
@@ -226,8 +224,6 @@ function appendMarkerStep(
   switch (marker.processKind) {
     case "checkpoint":
       return appendCheckpointStep(process, id);
-    case "ask":
-      return appendAskStep(process, id);
     case "plan_review":
       return appendPlanReviewStep(process, id);
     case "team_preview":
@@ -236,8 +232,6 @@ function appendMarkerStep(
       return appendEscalationStep(process, id);
     case "approval":
       return appendApprovalStep(process, id);
-    case "delegation_authorization":
-      return appendDelegationAuthorizationStep(process, id);
     case "stage_card":
       return appendStageCardStep(process, id);
   }
@@ -264,18 +258,6 @@ export function foldCheckpointMarker(
     state,
     requiredTimeline("ask_user"),
     checkpointId,
-  );
-}
-
-/** Fold a `question_posted` into the timeline as a positional `ask` marker. */
-export function foldAskMarker(
-  state: MessageLaneState,
-  askId: string,
-): MessageLaneState {
-  return foldInteractionTimelineMarker(
-    state,
-    requiredTimeline("question_posted"),
-    askId,
   );
 }
 
@@ -325,9 +307,7 @@ function isSettledProcessStep(step: ProcessStep): boolean {
 
 /** Markers whose product order sits before `team` (insertBeforeTeam). */
 function isBeforeTeamMarker(step: ProcessStep): boolean {
-  return (
-    step.kind === "team_preview" || step.kind === "delegation_authorization"
-  );
+  return step.kind === "team_preview";
 }
 
 /**
@@ -399,8 +379,8 @@ function foldSettledPrefix(
  * the journal slice has no settled events but process already carries content
  * (minimal test / truncated events), falls back to append — same as legacy.
  *
- * `advancePastBeforeTeam`: after the settled prefix, skip `team_preview` /
- * `delegation_authorization` so product order stays 开工卡 → 协作图.
+ * `advancePastBeforeTeam`: after the settled prefix, skip `team_preview`
+ * so product order stays 开工卡 → 协作图.
  */
 function journalMarkerInsertIndex(
   process: ProcessStep[],

@@ -18,7 +18,7 @@ import { layoutDagre } from "@/whiteboard/layoutDagre";
 /**
  * Offline preview scene vectors for the self-built whiteboard canvas (AI协作白板.md §六).
  *
- * The chat/canvas preview (`#/preview`) replays backend SSE golden vectors; the whiteboard is a
+ * The chat preview (`#/preview`) replays backend SSE golden vectors; the whiteboard is a
  * separate canvas surface whose "vector" is a SCENE (a list of {@link SceneElement}) rendered by
  * the real {@link WhiteboardCanvas}. Each scene here is either authored directly or DERIVED from
  * the real M3 projectors (`buildProgressOverlay` / `buildCrystallizedElements`) and the dagre

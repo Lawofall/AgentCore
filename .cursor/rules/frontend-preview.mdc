@@ -1,5 +1,5 @@
 ---
-description: 改桌面前端组件/样式/布局后想自检渲染效果、或想离线查看某个 AI 态（辩论/派单/升级/审批/计划复核/工具/引用…）时读——#/preview 离线回放 conformance 向量、帧滑块逐帧看流式中间态、pnpm dev:web 纯浏览器跑渲染层、pnpm shoot 无头截图自检、协作图三入口视口探针 shoot:graph-probe、CI 渲染冒烟门禁。别再靠跑真实 AI 看前端效果。改 AI 小镇 3D（apps/town Unity）自检见文末——用 Offline Demo + pnpm town:shoot:webgl，别问用户能否跑 Unity。
+description: 改桌面前端组件/样式/布局后想自检渲染效果、或想离线查看某个 AI 态（辩论/派单/升级/审批/计划复核/工具/引用…）时读——#/preview 离线回放 conformance 向量、帧滑块逐帧看流式中间态、pnpm dev:web 纯浏览器跑渲染层、pnpm shoot 无头截图自检、协作图两入口视口探针 shoot:graph-probe、CI 渲染冒烟门禁。别再靠跑真实 AI 看前端效果。改 AI 小镇 3D（apps/town Unity）自检见文末——用 Offline Demo + pnpm town:shoot:webgl，别问用户能否跑 Unity。
 alwaysApply: false
 ---
 
@@ -16,12 +16,12 @@ alwaysApply: false
 | 人·应用内 | 命令面板（`Ctrl/Cmd+K`）搜「前端预览」→ `#/preview`；深链单场景 `#/preview?s=<场景名>`；工具栏帧滑块拖动看流式中间态（深链 `?k=<n>`） |
 | 人·纯浏览器 | `pnpm -C apps/desktop dev:web` → 开 `http://localhost:5199/index.web.html#/preview` |
 | AI·截图自检 | `pnpm -C apps/desktop shoot [场景名过滤]` → 逐场景出图到 `shoot-out/<name>.png`，`SHOOT_FRAMES=N` 连中间帧，**读图核对**。同族独立预览：首启体验 `#/preview/onboarding` + `shoot:onboarding`（草稿空态两态 + composer 生成中插话态，平台代付无接入门；非 conformance 向量、纯 UI 场景）；产品手册 `shoot:manual`（四章代表场景，含机制真图与辩论室/拍板卡嵌入预览；改手册内容源 `pages/toolbox/manual/content/` 或手册渲染器后必跑） |
-| AI·协作图视口探针 | `pnpm -C apps/desktop shoot:graph-probe -- <场景名> [输出前缀]` → 对聊天内联/画布/全屏三入口量 emptyTopRatio · fullyInside · 裁切数并出截图/JSON 到 `shoot-out-graph-probe/`；**改图宿主/布局/fit/视口后必跑**（辩论场景 `multi_agent_debate`、`multi_agent_debate_multibeat`） |
+| AI·协作图视口探针 | `pnpm -C apps/desktop shoot:graph-probe -- <场景名> [输出前缀]` → 对聊天内联 / 全屏两入口量 emptyTopRatio · fullyInside · 裁切数并出截图/JSON 到 `shoot-out-graph-probe/`；**改图宿主/布局/fit/视口后必跑**（辩论场景 `multi_agent_debate`、`multi_agent_debate_multibeat`） |
 | AI·协作图掉帧探针 | 离线：`shoot:graph-perf`（`#/preview`，≤9 节点、不触发 ELK）。**真实掉帧**用 `shoot:graph-perf-live`：先 `electron-vite dev --remoteDebuggingPort=9222`，再 CDP 连运行中应用；报告 `shoot-out-graph-perf/live-*.json`（实测刷新率；遮挡 1Hz 限流秒剔除）。**长任务里跑了什么**用 `shoot:graph-perf-trace`（同 CDP；Chrome trace 拆 Layout/Style/Paint/GC/JS 并点名函数；相位表证伪「不动也卡」；不依赖 `__graphPerf`，可测生产构建）→ `trace-*.json`。不入 CI |
 
 ## 纪律
 
-- 改桌面组件/样式/布局 → `pnpm shoot <场景名过滤>` → 读 `shoot-out/*.png` 自检，形成「改→截→看→迭代」紧回路。**默认带场景过滤**：无过滤的全量（数百张，随向量数增长）约 10 分钟，只在发布门禁跑（→ `verify-scope.mdc`）。
+- 改桌面组件/样式/布局 → `pnpm shoot <场景名过滤>` → 读 `shoot-out/*.png` 自检，形成「改→截→看→迭代」紧回路。**默认带场景过滤**：无过滤的全量（数百张，随向量数增长）约 4 分钟（4 worker），只在发布门禁跑（→ `verify-scope.mdc`）。
 - 改交互相关代码（发消息 / 审批卡 / 开工·checkpoint resume / 协作图入口 / AuthGate·会话切换等用户操作链路）→ `pnpm -C apps/desktop e2e`（mock 后端 + webapp 壳 + Playwright；失败留 `e2e-results/` 截图与 trace）。与「改渲染 → `pnpm shoot`」并列，别靠跑真实 AI / 活后端验点击行为。
 - **`pnpm shoot` 是渲染冒烟门禁**（`ci.yml` frontend job **在跑**；近期风险是 CI 红如 Lint，早失败则 shoot 等后续 skipped）：任一场景渲染崩（未捕获报错 / `#/preview` 挂不上）即红。**发布前本地必跑** `pnpm shoot` / `release:gate`。
 - **滚动条占位类 bug（内容被切一截 / 行「上浮」留白）测不出**：`pnpm shoot` 与任何 headless Chromium 用 overlay 滚动条、不占位，必假绿。症状对得上就改用 `chromium.launch({ headless: false })`（或真实 Electron）复现——全局 `globals.css` 给每个滚动容器留 10px 槽，固定高的 chrome 行（tab 条）会被切。

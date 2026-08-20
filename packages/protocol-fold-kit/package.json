@@ -12,6 +12,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@agentcore/contract-types": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.8.2",
     "vitest": "^3.2.6"

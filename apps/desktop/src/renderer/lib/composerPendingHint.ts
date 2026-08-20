@@ -1,5 +1,8 @@
 import { listVisibleColdResumes } from "@/services/resume";
-import { useInteractionStore } from "@/stores/interactions";
+import {
+  isHotGateInteractionKind,
+  useInteractionStore,
+} from "@/stores/interactions";
 
 /** Persistent composer hint while a decision card is waiting (弱提示 · 不强拦). */
 export const COMPOSER_PENDING_HINT =
@@ -12,7 +15,7 @@ export const COMPOSER_PENDING_SEND_CONFIRM =
 /** Conversations where the user already confirmed「仍要发送」this session. */
 const sendDespitePendingAcks = new Set<string>();
 
-/** True when the conversation has a resume / approval / delegation card awaiting the user. */
+/** True when the conversation has a gate card awaiting the user (hot-gate or visible cold resume). */
 export function conversationHasPendingDecision(
   conversationId: string,
 ): boolean {
@@ -20,7 +23,7 @@ export function conversationHasPendingDecision(
   for (const e of byId.values()) {
     if (e.conversationId !== conversationId) continue;
     if (e.status !== "pending" && e.status !== "submitting") continue;
-    if (e.kind === "approval" || e.kind === "delegation_authorization") {
+    if (isHotGateInteractionKind(e.kind)) {
       return true;
     }
   }

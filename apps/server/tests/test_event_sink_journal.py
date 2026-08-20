@@ -12,7 +12,6 @@ from agentcore.runtime.events import (
     content_delta,
     message_end,
     message_start,
-    question_posted,
     reasoning_delta,
     run_completed,
     run_plan,
@@ -80,35 +79,6 @@ def test_no_plan_means_no_runs_payload():
     assert sink.execution_journal() is None
 
 
-def test_nonblocking_ask_alone_is_a_journal_surface():
-    # A turn that never delegated / never raised a checkpoint but DID post a
-    # non-blocking ask still persists its journal — the card must replay on reload
-    # (question_posted is a surface type). It is journaled like a checkpoint.
-    sink = EventSink()
-    sink.emit(content_delta("我先按默认开做"))
-    sink.emit(
-        question_posted(
-            ask_id="ask-1",
-            conversation_id="c1",
-            question="要不要双语?",
-            questions=[
-                {
-                    "id": "q0",
-                    "prompt": "要不要双语?",
-                    "kind": "choice",
-                    "options": ["要", "不要"],
-                    "multiple": False,
-                    "default": "不要",
-                }
-            ],
-        )
-    )
-    journal = sink.execution_journal()
-    assert journal is not None
-    assert [e["type"] for e in journal] == [EventType.QUESTION_POSTED.value]
-    assert journal[0]["payload"]["ask_id"] == "ask-1"
-
-
 def test_approval_alone_is_a_journal_surface():
     # 统一时间线二期 D5: 单聊热审批无 run_plan 时仍须过 journal surface gate，
     # 否则 reload 后 approval_required 从客户端 events 消失、痕迹无法补标记。
@@ -132,6 +102,30 @@ def test_approval_alone_is_a_journal_surface():
     process = sink.process_timeline()
     assert process is not None
     assert {"kind": "approval", "approval_id": "appr-1"} in process
+
+
+def test_stage_card_alone_is_a_journal_surface():
+    # Derived from INTERACTION_KIND_SPECS.journal_surface — stage_card_required used
+    # to be missing from the hand-copied surface set, so a host turn that only
+    # posted the card would vanish from reload events.
+    from agentcore.runtime.events import stage_card_required
+
+    sink = EventSink()
+    sink.emit(content_delta("调研收束，是否开辩？"))
+    sink.emit(
+        stage_card_required(
+            stage_card_id="sc-1",
+            conversation_id="c1",
+            motion="要不要开一场辩论",
+            sides=[{"id": "pro", "label": "正方"}],
+            form="debate",
+            rationale="事实已齐",
+        )
+    )
+    journal = sink.execution_journal()
+    assert journal is not None
+    assert [e["type"] for e in journal] == [EventType.STAGE_CARD_REQUIRED.value]
+    assert journal[0]["payload"]["stage_card_id"] == "sc-1"
 
 
 def test_durable_events_after_close_still_journal_display():

@@ -84,7 +84,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='archive_extract.done'),
     EventSpec(name='ask_user.card_rejected'),
     EventSpec(name='ask_user.list_arg_rejected'),
-    EventSpec(name='ask_user.nonblocking'),
     EventSpec(name='ask_user.option_label_rejected'),
     EventSpec(name='attach.cursor_replay'),
     EventSpec(name='attachment.binary_missing_workspace_path'),
@@ -108,8 +107,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='attention.signalled',
         description=(
-            '「在等你」信号已发（阻塞卡或未答的非阻塞提问）；push_outcome = delivered / undelivered'
-            ' / skipped_mobile_online / not_requested，pushed 只在真有设备收下时为 true'
+            '「在等你」信号已发（阻塞卡）；push_outcome = delivered / undelivered / skipped_mobile_'
+            'online / not_requested，pushed 只在真有设备收下时为 true'
         ),
         fields={
             'conversation_id': FieldType('str'),
@@ -874,18 +873,6 @@ EVENTS: list[EventSpec] = [
             'scope_ratio': FieldType('float'),
         },
     ),
-    EventSpec(
-        name='delegate.completion_criteria_hoisted',
-        description='历史兼容（S3 前）：criteria hoist；现行不发',
-    ),
-    EventSpec(
-        name='delegate.completion_criteria_ignored',
-        description='S3：CEO 误传已删 completion_criteria 时打点（忽略字段，非硬闸）',
-    ),
-    EventSpec(
-        name='delegate.completion_criteria_unmet',
-        description='历史兼容（S3 前）：按 kind 硬判未满足；现行不发',
-    ),
     EventSpec(name='delegate.complexity_hint_ignored'),
     EventSpec(name='delegate.complexity_hint_inferred'),
     EventSpec(name='delegate.consumer_deps_soft_warn'),
@@ -948,7 +935,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.delivery_status_failed'),
     EventSpec(name='delegate.design_impl_same_grant_soft_warn'),
     EventSpec(name='delegate.folder_display_name_failed'),
-    EventSpec(name='delegate.force_legacy_bool_ignored'),
     EventSpec(name='delegate.force_unknown_gate'),
     EventSpec(name='delegate.force_unparsable'),
     EventSpec(name='delegate.graph_append_latest'),
@@ -959,7 +945,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.mlr_preauth_skip_team_preview'),
     EventSpec(name='delegate.nested_code_audit_discipline'),
     EventSpec(name='delegate.nested_turn_token_envelope'),
-    EventSpec(name='delegate.parallelism_widened'),
     EventSpec(name='delegate.partial_failure_stashed'),
     EventSpec(name='delegate.paused'),
     EventSpec(name='delegate.plan_only'),
@@ -1164,11 +1149,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='email.dev_outbound'),
     EventSpec(name='email.send_failed'),
     EventSpec(name='email.sent'),
+    EventSpec(name='email.smtp_unconfigured_registration'),
     EventSpec(name='email.unconfigured'),
-    EventSpec(
-        name='email.smtp_unconfigured_registration',
-        description='启动期：开放注册但 SMTP 未配，send-code 会 202 却不发信',
-    ),
     EventSpec(name='engine.audit_gate_hard_block'),
     EventSpec(name='engine.audit_gate_nudge'),
     EventSpec(name='engine.availability_status_nudge'),
@@ -1397,7 +1379,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='friend.request_created'),
     EventSpec(name='friend.request_rejected'),
     EventSpec(name='fulfill.attention_pushed'),
-    EventSpec(name='fulfill.attention_questions_seed_failed'),
     EventSpec(name='fulfill.attention_seed_failed'),
     EventSpec(name='fulfill.attention_snapshot_pushed'),
     EventSpec(name='fulfill.delivered'),
@@ -1732,6 +1713,9 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='memory.always_quota_card_suppressed'),
     EventSpec(name='memory.backfill_skip_has_memory'),
     EventSpec(name='memory.backfill_user_failed'),
+    EventSpec(name='memory.billing_quota_card'),
+    EventSpec(name='memory.billing_quota_card_failed'),
+    EventSpec(name='memory.billing_quota_card_suppressed'),
     EventSpec(name='memory.consolidated'),
     EventSpec(name='memory.consolidation_backoff'),
     EventSpec(name='memory.consolidation_deferred_open_turn'),
@@ -1857,14 +1841,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='package.egress_proxy_started'),
     EventSpec(name='package.egress_proxy_stopped'),
     EventSpec(name='package.netns_setup'),
-    EventSpec(
-        name='pending_questions.load_failed',
-        description='CEO 易变尾悬题清单读 journal 失败（本回合不注入该段）',
-        fields={
-            'conversation_id': FieldType('str'),
-            'error': FieldType('str'),
-        },
-    ),
     EventSpec(name='pipeline.continue_initial_seq_fallback'),
     EventSpec(name='pipeline.continue_start'),
     EventSpec(
@@ -2006,49 +1982,6 @@ EVENTS: list[EventSpec] = [
         fields={
             'reason': FieldType('str'),
             'user_id': FieldType('str'),
-        },
-    ),
-    EventSpec(
-        name='question_posted.ingest_settle_failed',
-        description='发送提交事实成立后关悬题 journal 失败（不让回合失败）',
-        fields={
-            'ask_id': FieldType('str'),
-            'conversation_id': FieldType('str'),
-            'error': FieldType('str'),
-        },
-    ),
-    EventSpec(
-        name='question_posted.retention_failed',
-        description='悬题 7 天硬上限扫表整轮失败',
-        fields={
-            'error': FieldType('str'),
-        },
-    ),
-    EventSpec(
-        name='question_posted.retention_settle_failed',
-        description='悬题硬上限作废单张失败（其余继续）',
-        fields={
-            'ask_id': FieldType('str'),
-            'conversation_id': FieldType('str'),
-            'error': FieldType('str'),
-            'turn_id': FieldType('str'),
-        },
-    ),
-    EventSpec(
-        name='question_posted.retention_swept',
-        description='悬题 7 天硬上限扫表作废的张数（自有 journal 路径，不碰 paused_turns）',
-        fields={
-            'settled': FieldType('int'),
-        },
-    ),
-    EventSpec(
-        name='question_posted.settled',
-        description='非阻塞提问已答或已作废（journal question_resolved）',
-        fields={
-            'ask_id': FieldType('str'),
-            'conversation_id': FieldType('str'),
-            'status': FieldType('str'),
-            'turn_id': FieldType('str'),
         },
     ),
     EventSpec(

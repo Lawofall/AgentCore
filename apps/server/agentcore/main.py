@@ -50,7 +50,6 @@ from agentcore.api.routes import (
 from agentcore.auth.retention import refresh_token_retention_loop
 from agentcore.config import settings
 from agentcore.conversation.compaction import shutdown_compaction
-from agentcore.conversation.question_retention import question_posted_retention_loop
 from agentcore.core.errors import AgentCoreError, wire_moments
 from agentcore.core.logging import get_logger, setup_logging
 from agentcore.db.migration_check import check_migrations
@@ -395,10 +394,6 @@ async def lifespan(app: FastAPI):
     # path; this only catches the disconnected remainder. days<=0 disables.
     stream_state_retention_task = asyncio.create_task(stream_state_retention_loop())
 
-    # Non-blocking question 7-day hard cap: own journal sweep (paused_turns never
-    # holds these cards — 定案 §二·③).
-    question_posted_retention_task = asyncio.create_task(question_posted_retention_loop())
-
     # Standing tasks / 定时自动化 L1: poll next_run_at + lease, spawn cloud runs.
     standing_task_scheduler_task: asyncio.Task | None = None
     if settings.standing_task_scheduler_enabled:
@@ -516,9 +511,6 @@ async def lifespan(app: FastAPI):
             stream_state_retention_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await stream_state_retention_task
-            question_posted_retention_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await question_posted_retention_task
             pool_refresh_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await pool_refresh_task

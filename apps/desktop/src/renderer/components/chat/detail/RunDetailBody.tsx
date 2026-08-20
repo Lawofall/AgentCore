@@ -368,7 +368,6 @@ export function RunDetailBody({
             messageId={`${messageId}:${runId}`}
             conversationId={conversationId}
             checkpoints={[]}
-            nonBlockingAsks={[]}
             planReviews={[]}
             teamPreviews={[]}
             collapseProcessSteps={false}

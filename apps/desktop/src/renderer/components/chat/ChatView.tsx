@@ -133,7 +133,7 @@ export function ChatView() {
           {hasMessages && (
             <div
               ref={contentRef}
-              className="mx-auto w-full max-w-3xl space-y-4 px-6 pb-4 pt-10"
+              className="mx-auto min-w-0 w-full max-w-3xl space-y-4 px-6 pb-4 pt-10"
             >
               {/* Headerless chat view: the top padding keeps the first message
                   clear of the floating side-panel toggle (top-right of the pane,
@@ -187,13 +187,15 @@ export function ChatView() {
         className={
           centerComposer
             ? "absolute inset-0 z-10 flex items-center justify-center overflow-y-auto py-10"
-            : "mx-auto w-full max-w-3xl"
+            : "mx-auto min-w-0 w-full max-w-3xl"
         }
         data-composer-dock={centerComposer ? "center" : "bottom"}
       >
         <div
           className={
-            centerComposer ? "relative mx-auto w-full max-w-3xl" : undefined
+            centerComposer
+              ? "relative mx-auto min-w-0 w-full max-w-3xl"
+              : undefined
           }
         >
           {centerComposer && (

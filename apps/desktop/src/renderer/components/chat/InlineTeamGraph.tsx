@@ -163,9 +163,9 @@ export function InlineTeamGraph({
     <ExecutionScopeContext.Provider value={messageId}>
       <ContextualTip tipId="inline_team_graph" placement="top" active>
         <div className="animate-task-card-enter mb-3 overflow-hidden rounded-xl border border-border bg-card">
-          {/* 辩论全过程 / 版本对比等「过程产物」不再内联聊天——它们归画布放大态（统一辩论室 /
+          {/* 辩论全过程 / 版本对比等「过程产物」不再内联聊天——它们归全屏放大态（统一辩论室 /
               统一「对比」视图），聊天正文状态条只留战绩 + 入口 CTA
-              （前端UX设计.md §4.1/§4.2/§6.4）。 */}
+              （协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大）。 */}
           {execution.prevExecutionId ? (
             <div className="border-b border-border/60 px-3 py-2">
               <GraphAppendAnchor

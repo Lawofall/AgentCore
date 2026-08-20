@@ -37,8 +37,9 @@ class MemoryUpdateRepository:
     ) -> MemoryUpdateRow:
         """Persist one memory-write notice and return the stored row (with id/created_at).
 
-        ``kind`` is ``episodic`` (session summary tip) or ``semantic`` (diff card / explicit
-        remember). Records ONLY real writes — callers never invent empty notices. Commits
+        ``kind`` is ``episodic`` (session summary tip), ``semantic`` (diff card / explicit
+        remember), or ``quota`` (always-pool / billing skip). Records ONLY real writes —
+        callers never invent empty notices. Commits
         its own unit of work (offline pass / tool path, not a request transaction).
 
         ``anchor_at`` is the last consolidated message's ``created_at`` — where the card

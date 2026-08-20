@@ -1,7 +1,6 @@
 import { detachLocalBrowserHost } from "@/lib/detachLocalBrowserHost";
 import { uiGet, uiSet } from "@/lib/uiStorage";
 import { useConversationStore } from "../conversation";
-import { recordActiveContextDismiss } from "./autoSurface";
 import { browserStillInDock } from "./helpers";
 import {
   DEFAULT_WIDTH,
@@ -72,7 +71,6 @@ export function createChromeActions(
         void detachLocalBrowserHost();
       }
       persistOpen(false);
-      recordActiveContextDismiss(get);
       set({ open: false });
     },
 
@@ -85,7 +83,6 @@ export function createChromeActions(
         void detachLocalBrowserHost();
       }
       persistOpen(next);
-      if (!next) recordActiveContextDismiss(get);
       set({ open: next, pendingBadge: next ? 0 : get().pendingBadge });
     },
 

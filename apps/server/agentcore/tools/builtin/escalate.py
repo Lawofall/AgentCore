@@ -211,9 +211,9 @@ class EscalateTool:
         kind = str(arguments.get("kind") or "normal").strip().lower()
         if kind not in ("normal", "scope", "dep"):
             kind = "normal"
-        # blocking=true 须带 assumption: dual of ask_user(blocking=false) requiring a
-        # fallback — used when the user/CEO explicitly「按假设继续」, when the call degrades
-        # to non-blocking (unarmed / concurrency cap), or when ops configured a timeout.
+        # blocking=true 须带 assumption: fallback used when the user/CEO explicitly
+        # 「按假设继续」, when the call degrades to non-blocking (unarmed / concurrency
+        # cap), or when ops configured a timeout.
         # Without it those paths would have nowhere to land — reject rather than guess.
         if blocking and not assumption:
             return ToolResult(

@@ -1,6 +1,5 @@
 import { syncConversationListPreview } from "@/hooks/useConversations";
 import {
-  foldAskMarker,
   foldCheckpointMarker,
   foldCitations,
   foldContentDelta,
@@ -50,7 +49,6 @@ type StreamProjectionActions = Pick<
   | "attachTurnMetaToLastMessage"
   | "attachErrorToLastMessage"
   | "stampCheckpointMarker"
-  | "stampAskMarker"
   | "stampUserInterjectionMarker"
   | "stampPlanReviewMarker"
   | "stampTeamPreviewMarker"
@@ -414,17 +412,6 @@ export function createStreamProjectionActions(
           content: lane.content,
           process: lane.process,
         };
-        return { messages };
-      }),
-
-    stampAskMarker: (askId, conversationId) =>
-      patchConversation(conversationId, (rt) => {
-        const messages = [...rt.messages];
-        const idx = lastAssistantIndex(messages);
-        if (idx === -1) return null;
-        const msg = messages[idx];
-        const lane = foldAskMarker(messageLaneFromMessage(msg), askId);
-        messages[idx] = { ...msg, process: lane.process };
         return { messages };
       }),
 

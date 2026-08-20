@@ -64,14 +64,12 @@ export async function sendMidFlightMessage(
   attachments: OutgoingAttachment[] | undefined,
   delivery: MessageDelivery,
   agentMentions?: OutgoingAgentMention[],
-  askId?: string | null,
 ): Promise<MidFlightSendResult> {
   const body: Record<string, unknown> = { content, delivery };
   if (attachments && attachments.length > 0) body.attachments = attachments;
   if (agentMentions && agentMentions.length > 0) {
     body.agent_mentions = agentMentions;
   }
-  if (askId) body.ask_id = askId;
 
   const ac = new AbortController();
   let abortRegistered = false;
@@ -337,7 +335,6 @@ export async function sendMidFlightMessage(
                 agentMentions && agentMentions.length > 0
                   ? agentMentions.map((a) => ({ ...a }))
                   : undefined,
-              askId: askId || undefined,
               position,
               queueDepth,
               degradedFrom: p.degraded_from === "steer" ? "steer" : undefined,

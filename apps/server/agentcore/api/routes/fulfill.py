@@ -119,37 +119,22 @@ async def _running_conversation_ids_for_seed(
 async def _attention_entries_for_seed(
     session: AsyncSession, user_id: str
 ) -> list[dict] | None:
-    """paused_turns for this user, unioned with this process's registry hot cards
-    and still-pending ``question_posted`` rows (journal fold; not paused_turns).
+    """paused_turns for this user, unioned with this process's registry hot cards.
 
     One user-scoped paused query — not an N-conversation recovery scan. Registry
-    covers in-process cards that have not been persisted yet. Pending questions
-    are a second user-scoped journal host scan. ``None`` means the paused query
-    failed — do not send a replace snapshot (an empty ``entries: []`` would
-    extinguish every waiting light). A successful empty list is the real
-    「none waiting」and *is* sent. A failed question scan omits those entries
-    rather than skipping the whole snapshot.
+    covers in-process cards that have not been persisted yet. ``None`` means the
+    paused query failed — do not send a replace snapshot (an empty ``entries: []``
+    would extinguish every waiting light). A successful empty list is the real
+    「none waiting」and *is* sent.
     """
-    from datetime import UTC, datetime, timedelta
-
-    from agentcore.attention.snapshot import (
-        entries_from_pending_questions,
-        merge_attention_entries,
-    )
-    from agentcore.config import settings
+    from agentcore.attention.snapshot import merge_attention_entries
 
     try:
         rows = await PausedTurnRepository(session).list_pending_for_user(user_id)
     except Exception:  # noqa: BLE001 — connect must still open
         logger.exception("fulfill.attention_seed_failed", user=user_id)
         return None
-    extra: list[dict] = []
-    try:
-        since = datetime.now(UTC) - timedelta(days=settings.question_posted_retention_days)
-        extra = await entries_from_pending_questions(session, user_id, since=since)
-    except Exception:  # noqa: BLE001 — keep paused/hot lights
-        logger.exception("fulfill.attention_questions_seed_failed", user=user_id)
-    return merge_attention_entries(rows, user_id=user_id, extra=extra)
+    return merge_attention_entries(rows, user_id=user_id)
 
 
 def _format_event(event: dict) -> str:

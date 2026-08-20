@@ -1,3 +1,4 @@
+import type { MemoryUpdate } from "@/stores/conversation";
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -54,10 +55,10 @@ vi.mock("@/stores/conversation", async () => {
   };
 });
 
-const update = {
+const update: MemoryUpdate = {
   id: "s1",
   createdAt: "2026-08-13T12:00:00Z",
-  kind: "semantic" as const,
+  kind: "semantic",
   items: [
     {
       action: "add",

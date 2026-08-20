@@ -2361,7 +2361,6 @@ export interface paths {
          * @description Settle any paused hot-path interaction over the unified bridge (§8.2).
          *
          *     ``stage_card``：跨回合耐久卡 → 校验后起新回合 SSE（机制直起辩论或回灌调研）。
-         *     ``question_posted``：非阻塞提问收口 → journal ``question_resolved`` + 多端 signal，不起新回合。
          *     其它 kind（approval / delegation / client_tool / escalation）：Settlement 预写 (D8)
          *     后 settle Future；journal 有 required、无 Future → 410。
          *     Cold-path ``ask_user`` / ``plan_review`` / ``team_preview`` 不在此 endpoint。
@@ -8351,9 +8350,6 @@ export interface components {
          *     plan_review still steers then continues. ask_user rejects ``ADJUST``.
          *     ``RESEARCH_FIRST`` is debate kickoff only: 不开赛，回灌固定文案令 CEO 立即挂
          *     ``multi_lens_research``（与 STOP 同构的恢复分支；非辩论开工卡须拒绝/降级）。
-         *
-         *     Note: ``DelegationAuthorizationDecision.per_call`` is a different dialect
-         *     (委派授权卡) — not part of this enum.
          * @enum {string}
          */
         CheckpointDecision: "continue" | "adjust" | "stop" | "research_first" | "timeout" | "orphaned";
@@ -9107,12 +9103,6 @@ export interface components {
             /** Turns */
             turns: number;
         };
-        /**
-         * DelegationAuthorizationDecision
-         * @description Settlement dialect for per-delegation tool authorization choices.
-         * @enum {string}
-         */
-        DelegationAuthorizationDecision: "grant_delegation" | "per_call" | "deny" | "orphaned";
         /**
          * DeleteAccountRequest
          * @description Self-service account deletion (注销账户): the password re-confirms a
@@ -10762,8 +10752,9 @@ export interface components {
             /**
              * Kind
              * @default semantic
+             * @enum {string}
              */
-            kind: string;
+            kind: "episodic" | "semantic" | "quota";
             /** Summary */
             summary?: string | null;
         };
@@ -10777,11 +10768,14 @@ export interface components {
          *     path the card deep-links to (desktop ``memorySource`` scheme; "" = no leaf).
          *     ``project_id`` is the folder id when scope is project (最近更新 deep-link). Shape
          *     mirrors ``memory/maintenance.py`` ``MemoryUpdateItem`` (the stored
-         *     ``memory_updates.items`` JSONB).
+         *     ``memory_updates.items`` JSONB). ``action`` is the closed ``MemoryUpdateAction`` set.
          */
         MemoryUpdateItemView: {
-            /** Action */
-            action: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "add" | "update" | "remove" | "quota" | "quota_denied" | "quota_holder";
             /**
              * Content
              * @default
@@ -10811,9 +10805,12 @@ export interface components {
          * MemoryUpdateView
          * @description One memory-write notice for the conversation-tail card (two-layer memory).
          *
-         *     Projected from a ``memory_updates`` row. ``kind`` selects the UI:
+         *     Projected from a ``memory_updates`` row. ``kind`` is the closed ``MemoryUpdateKind``
+         *     set and selects the UI:
          *     - ``episodic``: light tip; ``summary`` is the ≤200-char session digest; ``items`` empty.
          *     - ``semantic``: diff card; ``items`` lists add/update/remove bullets.
+         *     - ``quota``: always-pool / billing skip; ``summary`` says why; ``items`` name the
+         *       fingerprint row (``quota``) plus denied / holder rows.
          *
          *     Returned only with the LATEST messages window, and pushed live on the per-user firehose.
          *
@@ -10836,8 +10833,9 @@ export interface components {
             /**
              * Kind
              * @default semantic
+             * @enum {string}
              */
-            kind: string;
+            kind: "episodic" | "semantic" | "quota";
             /** Summary */
             summary?: string | null;
         };
@@ -11498,7 +11496,7 @@ export interface components {
          *
          *     Surfaced on conversation reopen via ``GET .../recovery``. ``payload`` is the
          *     original ``*_required`` wire payload verbatim. Cold-path pauses stay in ``paused``.
-         *     Includes hot-path (approval / delegation / escalation) and durable ``stage_card``.
+         *     Includes hot-path (approval / escalation) and durable ``stage_card``.
          */
         PendingInteractionSummary: {
             /** Id */
@@ -11507,7 +11505,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "approval" | "delegation_authorization" | "escalation" | "stage_card";
+            kind: "approval" | "escalation" | "stage_card";
             /** Message Id */
             message_id: string;
             /** Payload */
@@ -11641,17 +11639,10 @@ export interface components {
          *     ``position`` is 1-based FIFO index.
          *     ``attachments`` / ``agent_mentions`` are the same fields drain forwards to
          *     ``stream_chat`` (optional additive — old clients ignore).
-         *     ``ask_id`` is the non-blocking question return-path slot (must survive
-         *     steer leftover / 协调升队 degraded enqueue).
          */
         QueuedTurnItem: {
             /** Agent Mentions */
             agent_mentions?: components["schemas"]["AgentMention"][];
-            /**
-             * Ask Id
-             * @description 可选。答非阻塞提问时与出站 question_posted.ask_id 对上。
-             */
-            ask_id?: string | null;
             /** Attachments */
             attachments?: components["schemas"]["MessageAttachment"][];
             /** Content */
@@ -12090,23 +12081,6 @@ export interface components {
             value?: unknown | null;
         };
         /**
-         * ResolveDelegationAuthorizationInteraction
-         * @description Settle a paused per-delegation authorization (``delegation_authorization``).
-         *
-         *     Raised before workers start so the user can grant medium-risk tools for the
-         *     whole delegation in one click. ``grant_delegation`` whitelists code_execute +
-         *     file-mutation tools for this delegation; ``per_call`` keeps per-call approval;
-         *     ``deny`` refuses to start workers.
-         */
-        ResolveDelegationAuthorizationInteraction: {
-            decision: components["schemas"]["DelegationAuthorizationDecision"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "delegation_authorization";
-        };
-        /**
          * ResolveEscalationInteraction
          * @description Settle a worker's blocking escalate (``escalation`` interaction, 阻塞式求决策 §4.5).
          *
@@ -12139,35 +12113,6 @@ export interface components {
              * @default false
              */
             use_assumption: boolean;
-        };
-        /**
-         * ResolveQuestionPostedInteraction
-         * @description Settle a non-blocking ``question_posted`` (journal fold 三态).
-         *
-         *     ``answered``：用户提交答复（``answer`` 必填）。``discarded``：CEO 作废（``note`` 必填人话）。
-         *     两者都是可见收口，不是客户端本地标记。
-         */
-        ResolveQuestionPostedInteraction: {
-            /**
-             * Answer
-             * @default
-             */
-            answer: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "question_posted";
-            /**
-             * Note
-             * @default
-             */
-            note: string;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "answered" | "discarded";
         };
         /**
          * ResolveStageCardInteraction
@@ -12502,11 +12447,6 @@ export interface components {
         SendMessageRequest: {
             /** Agent Mentions */
             agent_mentions?: components["schemas"]["AgentMention"][];
-            /**
-             * Ask Id
-             * @description 可选。若本条是在回答非阻塞提问，填出站 question_posted.ask_id。缺省/空=普通消息，照常消化。禁止塞进 agent_mentions。
-             */
-            ask_id?: string | null;
             /** Attachments */
             attachments?: components["schemas"]["MessageAttachment"][];
             /** Content */
@@ -13779,7 +13719,7 @@ export interface components {
          *     - ``paused``: turns that durably paused at a plan_review / ask_user checkpoint and
          *       lost their live stream (结构化挂起 2b) — each renders a resume card.
          *     - ``pending_interactions``: hot-path interactions still awaiting settlement
-         *       (journal fold: approval / delegation_authorization / escalation).
+         *       (journal fold: approval / escalation / stage_card).
          *       Cold-path stays in ``paused``.
          */
         TurnRecoveryResponse: {
@@ -18845,7 +18785,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ResolveApprovalInteraction"] | components["schemas"]["ResolveDelegationAuthorizationInteraction"] | components["schemas"]["ResolveClientToolInteraction"] | components["schemas"]["ResolveEscalationInteraction"] | components["schemas"]["ResolveStageCardInteraction"] | components["schemas"]["ResolveQuestionPostedInteraction"];
+                "application/json": components["schemas"]["ResolveApprovalInteraction"] | components["schemas"]["ResolveClientToolInteraction"] | components["schemas"]["ResolveEscalationInteraction"] | components["schemas"]["ResolveStageCardInteraction"];
             };
         };
         responses: {

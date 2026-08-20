@@ -83,8 +83,6 @@ class SectionOrder(IntEnum):
     # Cross-turn one-shot when the prior other turn has tool_call.cross_turn_retry=futile
     # (history drops tool I/O; prompt information only — not a gate).
     PRIOR_FUTILE_RETRIES = 862
-    # Sticky pending non-blocking questions (fold pending, not prior-turn one-shot).
-    PENDING_QUESTIONS = 865
     ATTACHMENT = 900
     # 已登记来源台账 (#rN): hydrated from the whole conversation's assistant rows, so it
     # grows monotonically with the chat — the most volatile section there is, and the one

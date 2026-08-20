@@ -30,6 +30,7 @@ from agentcore.runtime.runs import (
 )
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.sessions import SessionStore
+from agentcore.runtime.terminal import RUN_CLOSE_EVENT_TYPES
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -353,16 +354,6 @@ async def test_continue_run_failure_returns_failed_state():
     assert EventType.RUN_FAILED in [e.type async for e in sink]
 
 
-_RUN_TERMINALS = frozenset(
-    {
-        EventType.RUN_COMPLETED,
-        EventType.RUN_FAILED,
-        EventType.RUN_CANCELLED,
-        EventType.RUN_SKIPPED,
-    }
-)
-
-
 async def test_continue_run_mid_cancel_emits_terminal_frame():
     """中途取消续写：``run_started`` 之后必有终态帧（CancelledError 不再穿过去留洞）。"""
     session = _session_with_reasoning()
@@ -414,7 +405,7 @@ async def test_continue_run_mid_cancel_emits_terminal_frame():
     terminals = [
         e
         for e in events
-        if e.type in _RUN_TERMINALS and e.payload.get("run_id") == "t_1_rev1"
+        if e.type in RUN_CLOSE_EVENT_TYPES and e.payload.get("run_id") == "t_1_rev1"
     ]
     assert len(terminals) == 1
     assert terminals[0].type is EventType.RUN_CANCELLED

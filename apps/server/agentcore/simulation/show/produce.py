@@ -1,4 +1,4 @@
-"""离线录播生产：固定种子跑出一期 run 事件 + EpisodeManifest。"""
+"""离线录播生产：固定种子跑出一期 run + EpisodeManifest。"""
 
 from __future__ import annotations
 
@@ -7,15 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from agentcore.runtime.events.payloads.show import (
-    SimShowAffectionShiftPayload,
-    SimShowDeparturePayload,
-    SimShowEpisodeGatePayload,
-    SimShowHeartPickPayload,
-    SimShowPairFormedPayload,
-    SimShowRevealPayload,
-    SimShowZeroVoteAlertPayload,
-)
 from agentcore.simulation.scenarios.show.cast import (
     JIANGYU,
     LUYE,
@@ -113,11 +104,6 @@ class ProducedEpisode:
         )
 
 
-def _emit(events: list[dict[str, Any]], event_type: str, payload: Any) -> None:
-    dump = payload.model_dump(mode="json", exclude_none=True)
-    events.append({"type": event_type, "payload": dump})
-
-
 def _run_prior_episodes(season: ShowSeasonState, *, through: int) -> None:
     """Fast-forward ceremonies for episodes 1..through-1 so streaks/pairs are consistent."""
     for ep in range(1, through):
@@ -178,22 +164,11 @@ def produce_episode(
 
     world = seed_show_world()
 
-    # Emit episode_gate at each phase start; place agents.
     for gate, (start, _end) in plan.gates.items():
         if gate == "day":
             apply_day_positions(world, plan)
         elif gate in ("night", "ceremony", "reveal", "quiz", "epilogue"):
             apply_night_positions(world, plan)
-        _emit(
-            events,
-            "sim.show.episode_gate",
-            SimShowEpisodeGatePayload(
-                run_id=rid,
-                tick=start,
-                gate=gate,
-                phase=gate,
-            ),
-        )
         ticks[start] = world.snapshot().model_dump(mode="json")
 
     # Scripted ballot for ep3; otherwise first allowed target.
@@ -205,20 +180,7 @@ def produce_episode(
             for voter, targets in plan.allowed_picks.items()
             if targets
         }
-    sealed = apply_scripted_picks(season, picks, episode_no=episode_no)
-    ceremony_tick = plan.gates["ceremony"][0]
-    for pick in sealed:
-        _emit(
-            events,
-            "sim.show.heart_pick",
-            SimShowHeartPickPayload(
-                run_id=rid,
-                tick=ceremony_tick,
-                from_agent_id=pick.from_agent_id,
-                to_agent_id=pick.to_agent_id,
-                public=False,
-            ),
-        )
+    apply_scripted_picks(season, picks, episode_no=episode_no)
 
     record = resolve_ceremony(
         season,
@@ -228,95 +190,6 @@ def produce_episode(
         tick_start=plan.tick_start,
         tick_end=plan.tick_end,
     )
-
-    reveal_tick = plan.gates["reveal"][0]
-    for i, pick in enumerate(record.picks):
-        tick = reveal_tick + i
-        _emit(
-            events,
-            "sim.show.reveal",
-            SimShowRevealPayload(
-                run_id=rid,
-                tick=tick,
-                who_agent_id=pick.from_agent_id,
-                pick_agent_id=pick.to_agent_id,
-            ),
-        )
-        _emit(
-            events,
-            "sim.show.heart_pick",
-            SimShowHeartPickPayload(
-                run_id=rid,
-                tick=tick,
-                from_agent_id=pick.from_agent_id,
-                to_agent_id=pick.to_agent_id,
-                public=True,
-            ),
-        )
-
-    for bond in record.pairs_formed:
-        _emit(
-            events,
-            "sim.show.pair_formed",
-            SimShowPairFormedPayload(
-                run_id=rid,
-                tick=reveal_tick,
-                agent_a_id=bond.agent_a_id,
-                agent_b_id=bond.agent_b_id,
-            ),
-        )
-
-    # Affection shifts already marked on bonds during resolve.
-    for bond in season.pairs:
-        if bond.affection_shift_episode == episode_no:
-            from_id = bond.agent_a_id
-            # Find who they actually picked.
-            pick_to = next(
-                (p.to_agent_id for p in record.picks if p.from_agent_id == from_id),
-                bond.agent_b_id,
-            )
-            if pick_to == bond.agent_b_id:
-                from_id = bond.agent_b_id
-                pick_to = next(
-                    (p.to_agent_id for p in record.picks if p.from_agent_id == from_id),
-                    bond.agent_a_id,
-                )
-            _emit(
-                events,
-                "sim.show.affection_shift",
-                SimShowAffectionShiftPayload(
-                    run_id=rid,
-                    tick=reveal_tick,
-                    from_agent_id=from_id,
-                    to_agent_id=pick_to,
-                    kind="移情",
-                ),
-            )
-
-    for aid in record.zero_vote_agents:
-        streak = season.zero_vote_streak.get(aid, 1)
-        _emit(
-            events,
-            "sim.show.zero_vote_alert",
-            SimShowZeroVoteAlertPayload(
-                run_id=rid,
-                tick=reveal_tick,
-                agent_id=aid,
-                streak=streak,
-            ),
-        )
-
-    for aid in record.departed:
-        _emit(
-            events,
-            "sim.show.departure",
-            SimShowDeparturePayload(
-                run_id=rid,
-                tick=reveal_tick,
-                agent_id=aid,
-                reason="连续两期零票",
-            ),
-        )
 
     ticks[plan.tick_end] = world.snapshot().model_dump(mode="json")
 

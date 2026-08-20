@@ -4,37 +4,32 @@ import type { ResumeOrigin } from "@/stores/pausedTurns";
 import type { InteractionStatus } from "@/types/interactionExt";
 import {
   INTERACTION_ID_FIELD,
-  INTERACTION_SUBMIT_PATH,
   type InteractionKind,
-  type InteractionSubmitPath,
-  kindFromRequiredEvent,
-  kindFromResolvedEvent,
+  isHotInteractionKind,
 } from "./registry";
 
 // Re-export registry surface so existing `@/stores/interactions` imports keep working.
 export {
+  COLD_RESUME_KINDS,
+  HOT_GATE_INTERACTION_KINDS,
+  HOT_INTERACTION_KINDS,
+  INTERACTION_CARD_NAME,
   INTERACTION_ID_FIELD,
   INTERACTION_SUBMIT_PATH,
+  STAGE_INTERACTION_KINDS,
+  hotGateKindTitle,
+  isColdResumeKind,
+  isHotGateInteractionKind,
+  isHotInteractionKind,
+  isStageInteractionKind,
   kindFromRequiredEvent,
   kindFromResolvedEvent,
+  type ColdResumeKind,
+  type HotGateInteractionKind,
   type InteractionKind,
   type InteractionSubmitPath,
-};
-
-/** Cold-path kinds that paint the durable ResumePrompt card. */
-export const COLD_RESUME_KINDS = [
-  "ask_user",
-  "plan_review",
-  "team_preview",
-] as const satisfies readonly InteractionKind[];
-
-export type ColdResumeKind = (typeof COLD_RESUME_KINDS)[number];
-
-export function isColdResumeKind(
-  kind: InteractionKind,
-): kind is ColdResumeKind {
-  return (COLD_RESUME_KINDS as readonly string[]).includes(kind);
-}
+  type StageInteractionKind,
+} from "./registry";
 
 /** One user-facing interaction card in the unified store (方案 §3.2). */
 export interface InteractionEntry {
@@ -43,7 +38,7 @@ export interface InteractionEntry {
   status: InteractionStatus;
   conversationId: string;
   messageId: string;
-  /** Original `*_required` (or question_posted) wire payload. */
+  /** Original `*_required` wire payload. */
   payload: Record<string, unknown>;
   /** Settlement payload when status is resolved (kind-specific). */
   resolution?: Record<string, unknown>;
@@ -107,17 +102,17 @@ export interface InteractionEntry {
 /**
  * 「等你」判定（侧栏灯 / 全局提醒共用语义）：这条交互是否正把执行阻塞在用户身上。
  *
- * - 热阻塞 kind（approval / delegation_authorization / escalation）pending 或
- *   submitting 时为真——live turn 挂在卡上等答复。
+ * - 热阻塞 kind（`INTERACTION_KIND_WIRE.hot`）pending 或 submitting 时为真——
+ *   live turn 挂在卡上等答复。
  * - escalation 例外：`awaiting === "ceo"` 由 CEO 仲裁，用户无需行动 → 不算。
- * - 冷 kind（ask_user / plan_review / team_preview）恒为假：可操作权威是
- *   InteractionStore cold pending（ResumePrompt）；侧栏灯由调用方另订 pausedTurns
- *   recovery 壳或 cold pending，不经本函数。
- * - question_posted（非阻塞提问）团队没停 → 不算。
+ * - 冷 kind（`pausesTurn && !hot`）恒为假：可操作权威是 InteractionStore cold
+ *   pending（ResumePrompt）；侧栏灯由调用方另订 pausedTurns recovery 壳或 cold
+ *   pending，不经本函数。
+ * - stage（`stage_card`）团队没停 → 不算。
  */
 export function isAwaitingUserEntry(entry: InteractionEntry): boolean {
   if (entry.status !== "pending" && entry.status !== "submitting") return false;
-  if (INTERACTION_SUBMIT_PATH[entry.kind] !== "hot") return false;
+  if (!isHotInteractionKind(entry.kind)) return false;
   if (entry.kind === "escalation" && entry.payload.awaiting === "ceo") {
     return false;
   }

@@ -28,7 +28,7 @@ AgentCore：面向大众的 **Multi-Agent AI 工作台**——真正的 Agent �
 
 在仓库根 `pnpm install`；后端见本地开发（`uv sync`、Compose、Alembic）。
 
-**验证分三档，默认走最低档**——全量很贵：一次干净 `release:gate` 约 20–30 min，其中桌面截图独占 ~10 min，后端全量 pytest ~5 min。
+**验证分三档，默认走最低档**——全量很贵：一次干净 `release:gate` 约 15–25 min，其中桌面截图独占 ~4 min（4 worker），后端全量 pytest ~5 min。
 
 1. **改完即验（默认）**——只跑点名的测试文件 / 用例：`uv run pytest tests/x.py::test_y`、`pnpm --filter agentcore-desktop exec vitest run <文件>`
 2. **交付收尾**——只跑改动**所涉包**：`pnpm test:server:unit`、`pnpm --filter <包> test -- --run`、`pnpm --filter <包> typecheck`；不碰没改的包

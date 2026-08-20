@@ -87,30 +87,6 @@ export function foldInteractions(
         if (id) settle(map, "approval", id, "resolved");
         break;
       }
-      case "delegation_authorization_required": {
-        const id = str(p.authorization_id);
-        if (!id) break;
-        const workers = Array.isArray(p.workers)
-          ? (p.workers as Array<Record<string, unknown>>)
-          : [];
-        const tools = Array.isArray(p.tools)
-          ? p.tools.filter((t): t is string => typeof t === "string")
-          : [];
-        upsert(map, order, {
-          kind: "delegation_authorization",
-          id,
-          status: "pending",
-          executionId: str(p.execution_id),
-          workers,
-          tools,
-        });
-        break;
-      }
-      case "delegation_authorization_resolved": {
-        const id = str(p.authorization_id);
-        if (id) settle(map, "delegation_authorization", id, "resolved");
-        break;
-      }
       case "escalation_required": {
         if (p.awaiting === "ceo") break;
         const id = str(p.escalation_id);
@@ -236,44 +212,6 @@ export function foldInteractions(
           ...(excluded.length ? { excludedRunIds: excluded } : {}),
           ...(overrides.length ? { writeCapabilityOverrides: overrides } : {}),
           ...(Object.keys(modelOverrides).length ? { modelOverrides } : {}),
-        };
-        break;
-      }
-      case "question_posted": {
-        const id = str(p.ask_id);
-        if (!id) break;
-        upsert(map, order, {
-          kind: "question_posted",
-          id,
-          status: "pending",
-          question: str(p.question),
-          context: str(p.context),
-        });
-        break;
-      }
-      case "question_resolved": {
-        const id = str(p.ask_id);
-        if (!id) break;
-        const prev = map.get(keyOf("question_posted", id));
-        if (
-          !prev ||
-          prev.leaf.status !== "pending" ||
-          prev.leaf.kind !== "question_posted"
-        ) {
-          break;
-        }
-        const settlement =
-          p.status === "answered" || p.status === "discarded"
-            ? p.status
-            : undefined;
-        const answer = str(p.answer);
-        const note = str(p.note);
-        prev.leaf = {
-          ...prev.leaf,
-          status: "resolved",
-          ...(settlement ? { settlement } : {}),
-          ...(answer ? { answer } : {}),
-          ...(note ? { note } : {}),
         };
         break;
       }

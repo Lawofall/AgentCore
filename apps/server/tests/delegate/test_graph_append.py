@@ -181,6 +181,7 @@ async def test_delegate_cross_turn_append_mints_prev_chain(monkeypatch):
     assert payload.get("prev_execution_id") == "exec-old"
     assert payload.get("execution_id") != "exec-old"
     assert "host_message_id" not in payload
+    assert "exec-old" not in (result.output or "")
     assert not any(
         getattr(e.type, "value", e.type) == "graph_append" for e in emitted
     )
@@ -239,6 +240,7 @@ def test_format_recent_graph_worker_facts_includes_status():
     }
     facts = format_recent_graph_worker_facts(plan, completed)
     assert "workers=2：" in facts
+    assert "run_id=w1" in facts
     assert "role=调研员; status=cancelled; task=搜集竞品资料" in facts
     assert "role=撰写员; status=completed; task=写大纲" in facts
 
@@ -252,13 +254,15 @@ def test_format_recent_graph_worker_facts_missing_seed_is_running():
 def test_render_recent_graph_context_keeps_append_channel():
     block = render_recent_graph_context(
         execution_id="exec-1",
-        worker_facts="workers=1：\n- role=A; status=cancelled; task=x",
+        worker_facts="workers=1：\n- run_id=w1; role=A; status=cancelled; task=x",
     )
     assert "<recent_team_graph>" in block
-    assert "exec-1" in block
+    assert "exec-1" not in block
+    assert "run_id=w1" in block
     assert "status=cancelled" in block
     assert 'append_to_execution_id="latest"' in block
-    assert "prev_execution_id" in block
+    assert "新开一队、接续上一张图" in block
+    assert "prev_execution_id" not in block
 
 
 @pytest.mark.asyncio
@@ -278,9 +282,10 @@ async def test_build_recent_graph_context_mentions_prev(monkeypatch):
         fake_host,
     )
     note = await build_recent_graph_context(conversation_id="c1")
-    assert "exec-recent" in note
-    assert "prev_execution_id" in note
+    assert "exec-recent" not in note
+    assert "新开一队、接续上一张图" in note
     assert 'append_to_execution_id="latest"' in note
+    assert "prev_execution_id" not in note
 
 
 @pytest.mark.asyncio
@@ -317,11 +322,61 @@ async def test_build_recent_graph_context_includes_worker_status_facts(monkeypat
         fake_plan_completed,
     )
     note = await build_recent_graph_context(conversation_id="c1")
-    assert "exec-cancelled" in note
+    assert "exec-cancelled" not in note
     assert "workers=1：" in note
+    assert "run_id=del_1" in note
     assert "role=研究员; status=cancelled; task=查资料" in note
     assert 'append_to_execution_id="latest"' in note
-    assert "prev_execution_id" in note
+    assert "新开一队、接续上一张图" in note
+
+
+@pytest.mark.asyncio
+async def test_delegate_new_turn_live_prev_does_not_reuse_eid(monkeypatch):
+    """上一张仍在跑：本回合 mint 新 eid + prev，不把新人并进旧图。"""
+    from agentcore.runtime.coordination.session import (
+        CoordinationSession,
+        clear_active_coordination,
+        current_execution_id,
+        set_active_coordination,
+    )
+
+    clear_active_coordination()
+    live = CoordinationSession(
+        execution_id="exec-old",
+        total_workers=1,
+        conversation_id="conv-1",
+        host_turn_id="m1",
+    )
+    set_active_coordination(live)
+    token = current_execution_id.set("exec-old")
+    try:
+        t = tool(Provider([]))
+        t._base_tool_context.execution_id = "exec-new"
+        t._message_id = "m2"
+        t._conversation_id = "conv-1"
+        t._captain_run_id = "cap-2"
+        emitted: list[Any] = []
+        t._sink.emit = lambda ev: emitted.append(ev)  # type: ignore[method-assign]
+        monkeypatch.setattr("agentcore.runtime.plan_only.is_plan_only", lambda: True)
+
+        result = await t.execute(
+            {
+                "tasks": [{"role": "撰写员", "task": "写"}],
+                "coordinate": False,
+            },
+            ctx(),
+        )
+        assert result.success
+        plans = [e for e in emitted if getattr(e.type, "value", e.type) == "run_plan"]
+        assert len(plans) == 1
+        payload = plans[0].payload
+        assert payload.get("execution_id") == "exec-new"
+        assert payload.get("prev_execution_id") == "exec-old"
+        assert "exec-old" not in (result.output or "")
+        assert "exec-new" not in (result.output or "")
+    finally:
+        current_execution_id.reset(token)
+        clear_active_coordination()
 
 
 @pytest.mark.asyncio

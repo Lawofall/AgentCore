@@ -11,7 +11,7 @@ import { RevisionOverview } from "./RevisionOverview";
 import { type ResolvedCell, revisionCells } from "./cells";
 
 /**
- * 「对比」透镜（前端UX设计.md §6.4/§6.5）—— **定向唤回修订**的版本对比：一层**版本轨纵览**
+ * 「对比」透镜（协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大）—— **定向唤回修订**的版本对比：一层**版本轨纵览**
  * （{@link RevisionOverview}：每条被改 worker 链的 `v1…vN` 胶片轨 + 聚焦精读）+ 一层**内容自适应
  * 精读**（点任意两格 → 同一个 {@link ComparePane}：读作编辑给真·文本 diff、否则 2-up 渲染）。二者共享
  * 格子外壳、pick-two 选择、对比面。

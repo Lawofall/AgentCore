@@ -1824,13 +1824,12 @@ def test_two_phase_predicate_and_playbook_stamp():
     assert not is_two_phase_citation_deliverable(
         Deliverable(form="files", artifact_dir=RESEARCH_PREFIX)
     )
-    # 显式盖戳仍进；immediate 仍退出
+    # 显式盖戳仍进；省略退出
     assert is_two_phase_citation_deliverable(
         Deliverable(citation_mode="two_phase", form="files", artifacts=[research_path])
     )
     assert not is_two_phase_citation_deliverable(
         Deliverable(
-            citation_mode="immediate",
             form="files",
             artifacts=[research_path],
         )

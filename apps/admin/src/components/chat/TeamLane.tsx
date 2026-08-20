@@ -57,7 +57,7 @@ export function TeamLane({
   const total = progress.total || runs.length;
 
   return (
-    <section aria-label="团队" className="space-y-2">
+    <section aria-label="团队" className="min-w-0 max-w-full space-y-2">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Users size={14} className="text-primary" />
         <span className="font-medium text-foreground">协作图</span>
@@ -98,28 +98,26 @@ function TeamNode({
   const active = selectedRunId === run.id;
   const body = (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium text-foreground">
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className="min-w-0 truncate font-medium text-foreground"
+          title={run.role || run.agentId || run.id}
+        >
           {run.role || run.agentId || run.id}
         </span>
-        <Badge tone={STATUS_TONE[run.status] ?? "neutral"}>{run.status}</Badge>
+        <Badge className="shrink-0" tone={STATUS_TONE[run.status] ?? "neutral"}>
+          {run.status}
+        </Badge>
         {run.kind !== "agent" && (
-          <span className="text-muted-foreground text-xs">{run.kind}</span>
+          <span className="shrink-0 text-muted-foreground text-xs">
+            {run.kind}
+          </span>
         )}
       </div>
       {run.task && (
-        <p className="mt-1 text-muted-foreground text-xs">{run.task}</p>
-      )}
-      {run.outputSummary && (
-        <p className="mt-1 text-foreground text-xs">{run.outputSummary}</p>
-      )}
-      {run.debriefSummary && (
-        <p className="mt-1 text-muted-foreground text-xs">
-          {run.debriefSummary}
+        <p className="mt-1 truncate text-muted-foreground text-xs" title={run.task}>
+          {run.task}
         </p>
-      )}
-      {run.error && (
-        <p className="mt-1 text-destructive text-xs">{run.error}</p>
       )}
     </>
   );
@@ -133,7 +131,7 @@ function TeamNode({
             onSelectRun(run.id);
           }}
           className={cn(
-            "w-full rounded-lg border px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "min-w-0 w-full rounded-lg border px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
             active
               ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
               : "border-border bg-muted/30 hover:bg-muted/50",
@@ -144,7 +142,7 @@ function TeamNode({
         </button>
       ) : (
         <div
-          className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm"
+          className="min-w-0 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm"
           style={{ marginLeft: depth * 14 }}
         >
           {body}

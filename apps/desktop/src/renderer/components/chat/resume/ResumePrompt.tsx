@@ -7,7 +7,7 @@ import { AskUserResumeCard } from "./AskUserResumeCard";
 import { PlanReviewResumeCard } from "./PlanReviewResumeCard";
 import { TeamPreviewResumeCard } from "./TeamPreviewResumeCard";
 
-/** Cold-path pending cards only (`ask_user` / `plan_review` / `team_preview`). */
+/** Cold-path pending cards only (`pausesTurn && !hot` / COLD_RESUME_KINDS). */
 export function ResumePrompt() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
   // Live authority = InteractionStore cold pending; pausedTurns = recovery shell.
@@ -39,12 +39,12 @@ export function ResumePrompt() {
 }
 
 function ResumeCard({ turn }: { turn: PendingResume }) {
-  // Cold-path Interaction kinds (`submitPath: "cold"` in INTERACTION_REGISTRY).
+  // Cold-path Interaction kinds (`submitPathOf` → "cold" / COLD_RESUME_KINDS).
   const Card = COLD_RESUME_CARDS[turn.kind];
   return <Card turn={turn} />;
 }
 
-/** Cold-path resume cards — keyed by registry `submitPath: "cold"` kinds. */
+/** Cold-path resume cards — one component per `COLD_RESUME_KINDS` member (UI, not a flag bag). */
 const COLD_RESUME_CARDS: Record<
   "ask_user" | "plan_review" | "team_preview",
   ComponentType<{ turn: PendingResume }>

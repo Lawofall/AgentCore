@@ -77,7 +77,6 @@ async def run_and_persist(
     llm_supports_tools: bool | None = None,
     x_client_platform: str | None = None,
     agent_mentions: list[dict] | None = None,
-    ask_id: str | None = None,
     continue_message_id: str | None = None,
     inherited_journal_entries: list[dict] | None = None,
 ) -> dict | None:
@@ -103,7 +102,7 @@ async def run_and_persist(
     # (journal/audit turn_id ≡ message_id). Log context key is attempt_id; turn_metrics
     # still stores the value under its DB column ``turn_id``.
     attempt_id = new_id()
-    trace_id = new_trace_id()
+    trace_id = get_log_value("trace_id") or new_trace_id()
     started = time.monotonic()
     # Phase-0 latency probe: anchor = user-message handling start (monotonic).
     latency_probe, latency_token = bind_turn_latency(started)
@@ -293,7 +292,6 @@ async def run_and_persist(
                             message_id=message_id,
                             x_client_platform=x_client_platform,
                             agent_mentions=agent_mentions,
-                            ask_id=ask_id,
                             inherited_journal_entries=inherited_journal_entries,
                         )
                     except asyncio.CancelledError:

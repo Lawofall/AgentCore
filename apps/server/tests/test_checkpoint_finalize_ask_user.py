@@ -159,7 +159,7 @@ async def test_finalize_returns_suspend_and_skips_the_wait():
     assert any(e.type is EventType.CHECKPOINT_REQUIRED for e in _drain(sink))
 
 
-async def test_ask_user_browser_login_forces_blocking_and_wire_flag():
+async def test_ask_user_browser_login_wire_flag():
     """CEO ask_user(browser_login=true) → checkpoint_required.browser_login + frame flag."""
     frames: list = []
 
@@ -177,7 +177,6 @@ async def test_ask_user_browser_login_forces_blocking_and_wire_flag():
             {
                 "message": "请在右坞浏览器完成登录后继续",
                 "browser_login": True,
-                "blocking": False,  # promoted to blocking
             },
             _ctx(),
         )

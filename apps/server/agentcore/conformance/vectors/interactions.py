@@ -1,7 +1,7 @@
 """Conformance vectors — interaction lifecycle (提问确认统一重构 P3).
 
-Covers ratchet scenarios: delegation_authorization / resolved-reload /
-orphaned / approval sibling sweep. Also lifts P1 DURABLE_VECTOR_WAIVERS.
+Covers ratchet scenarios: resolved-reload / orphaned / approval sibling sweep.
+Also lifts P1 DURABLE_VECTOR_WAIVERS.
 
 Debate ambient steer is fire-and-forget (no blocking interaction / no
 ``debate_round_decision_*`` events) — covered by moderator unit tests +
@@ -20,57 +20,12 @@ from agentcore.runtime.events import (
     checkpoint_required,
     checkpoint_resolved,
     content_delta,
-    delegation_authorization_required,
-    delegation_authorization_resolved,
     interaction_orphaned,
     message_end,
     message_start,
-    run_plan,
 )
 
 from ._common import _CONV, _COST
-
-
-def _delegation_authorization_paused() -> list[SSEEvent]:
-    """委派授权挂起：delegation_authorization_required → interactions[] pending。"""
-    return [
-        message_start("m1", conversation_id=_CONV),
-        content_delta("我来安排团队，先请你授权工具。"),
-        run_plan(
-            execution_id="exec1",
-            plan_type="multi_agent",
-            task_summary="构建 X",
-            agents=[
-                {
-                    "id": "w1",
-                    "role": "调研",
-                    "thinking": True,
-                }
-            ],
-            runs=[{"id": "r1", "agent_id": "w1", "task": "调研", "depends_on": []}],
-        ),
-        delegation_authorization_required(
-            authorization_id="auth1",
-            conversation_id=_CONV,
-            execution_id="exec1",
-            workers=[{"role": "调研", "task": "调研"}],
-            tools=["file_write", "code_execute"],
-        ),
-    ]
-
-
-def _delegation_authorization_resolved() -> list[SSEEvent]:
-    """委派授权放行后继续。"""
-    return [
-        *_delegation_authorization_paused(),
-        delegation_authorization_resolved(
-            authorization_id="auth1",
-            execution_id="exec1",
-            decision="grant_delegation",
-        ),
-        content_delta(" 已获授权，开工。"),
-        message_end(FinishReason.END_TURN, input_tokens=900, output_tokens=80, cost=_COST),
-    ]
 
 
 def _checkpoint_resolved_reload() -> list[SSEEvent]:
@@ -147,14 +102,6 @@ def _approval_sibling_sweep() -> list[SSEEvent]:
 
 
 VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
-    "delegation_authorization_paused": (
-        "委派授权：delegation_authorization_required → interactions[] pending（P3）",
-        _delegation_authorization_paused,
-    ),
-    "delegation_authorization_resolved": (
-        "委派授权：放行后继续到 end_turn（P3）",
-        _delegation_authorization_resolved,
-    ),
     "checkpoint_resolved_reload": (
         "检查点：required+resolved 重载呈已答态，无假 pending（P3 / 不变量 4）",
         _checkpoint_resolved_reload,

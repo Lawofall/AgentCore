@@ -16,12 +16,10 @@ vi.mock("@/lib/detachLocalBrowserHost", () => ({
 
 import { listBrowserSessions } from "@/services/browserSessions";
 import { useBrowserSessionsStore } from "../browserSessions";
-import { useCommandPanelStore } from "../commandPanel";
 import { useConversationStore } from "../conversation";
 import { type ExecutionPlan, useExecutionStore } from "../execution";
 import {
   CHANGES_TAB_ID,
-  COMMAND_TAB_ID,
   type DetailTab,
   SIDE_PANEL_DEFAULT_WIDTH,
   SIDE_PANEL_MAX_FLOATS,
@@ -83,10 +81,6 @@ beforeEach(() => {
     pendingBadge: 0,
   });
   useExecutionStore.setState({ byId: {} });
-  useCommandPanelStore.setState({
-    active: false,
-    focusedMessageId: null,
-  });
   useConversationStore.setState({ currentConversationId: "conv-test" });
   useBrowserSessionsStore.setState({ pages: [], activePageId: null });
   listMock.mockReset();
@@ -319,8 +313,8 @@ describe("togglePanel", () => {
 
 describe("openPanel", () => {
   it("reveals the panel without changing the active tab", () => {
-    // The 指挥台 auto-surface (前端UX设计.md §6.2) opens the dock on a new decision but
-    // must not yank the user off a run-detail tab they're reading (子决策 A).
+    // openPanel reveals the dock without yanking the user off a run-detail tab
+    // they're reading.
     panel().openTab(runDetail("run-1"));
     panel().togglePanel(); // close it, keeping run-1 active
     expect(panel().open).toBe(false);
@@ -824,14 +818,6 @@ describe("showBrowser（浏览器壳 · 可关内容 tab）", () => {
 });
 
 describe("auto-surface dismiss + pending badge", () => {
-  it("records command context on closePanel when canvas command tab is active", () => {
-    useConversationStore.setState({ currentConversationId: "conv-1" });
-    useCommandPanelStore.setState({ active: true, focusedMessageId: MID });
-    panel().openPanel();
-    panel().closePanel();
-    expect(panel().isAutoSurfaceDismissed("command:conv-1")).toBe(true);
-  });
-
   it("clearAutoSurfaceDismiss removes a context", () => {
     panel().dismissAutoSurface("debate:msg-1");
     expect(panel().isAutoSurfaceDismissed("debate:msg-1")).toBe(true);
@@ -933,14 +919,12 @@ describe("应用内浮窗（§十 · Move / float·dock / 上限 8）", () => {
     expect(panel().focusSurface).toEqual({ type: "dock" });
   });
 
-  it("rejects float for terminal / browser / command / content / simple-turn", () => {
+  it("rejects float for terminal / browser / content / simple-turn", () => {
     panel().openTerminalTab();
     expect(panel().floatTab(TEAM_TERMINAL_TAB_ID)).toBe(false);
 
     panel().showBrowser();
     expect(panel().floatTab(TEAM_BROWSER_TAB_ID)).toBe(false);
-
-    expect(panel().floatTab(COMMAND_TAB_ID)).toBe(false);
 
     panel().showContentDetail(MID, "answer-msg", "最终回答", "answer");
     expect(panel().floatTab(contentDetailTabId(MID, "answer-msg"))).toBe(false);

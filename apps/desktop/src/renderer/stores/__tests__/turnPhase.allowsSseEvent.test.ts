@@ -96,16 +96,6 @@ describe("allowsSseEvent — interaction *_required on stopping/terminal", () =>
     },
   );
 
-  it("does not treat question_posted as a free-for-all required event", () => {
-    // question_posted is in INTERACTION_KIND_WIRE but is not `*_required`.
-    expect(allowsSseEvent("completed", "question_posted")).toBe(false);
-  });
-
-  it("allows question_resolved in terminal so multi-end settlement is not dropped", () => {
-    expect(allowsSseEvent("completed", "question_resolved")).toBe(true);
-    expect(allowsSseEvent("stopping", "question_resolved")).toBe(true);
-  });
-
   it("keeps workspace_op_required gated on conversation SSE allowlist", () => {
     // Cloud CLIENT_TOOL rides the device fulfill stream (no turnPhase). Sidecar
     // fulfills before the gate in dispatchSSEEvent. Allowlist still excludes these

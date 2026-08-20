@@ -1,7 +1,7 @@
 /**
  * 协作图「模式能力表」——按幕 kind / 图级 planType 声明图上具备哪些能力。
  *
- * 禁止在 GraphView / useCanvasFlow / InlineTeamGraph / RunDetailBody 等处再散落
+ * 禁止在 GraphView / InlineTeamGraph / RunDetailBody 等处再散落
  * `planType === "multi_agent"` / `kind === "debate"` 之类等值判断；一律查本表。
  * 辩论回合与 multi_agent 共享审计注入（修历史漏判 bug），其余能力按行差异化。
  *
@@ -21,7 +21,7 @@ export type { ActKind };
 export type RevisionBadgeStyle = "none" | "hotfix" | "debate";
 
 export interface PlanGraphCapabilities {
-  /** 聊天内联 / 画布是否渲染团队协作图（单 Agent 为 false）。 */
+  /** 聊天内嵌 / 全屏是否渲染团队协作图（单 Agent 为 false）。 */
   showsTeamGraph: boolean;
   /** 拉取 turn audit 并在图上画 inject 叠加（审计数据流）。 */
   auditInject: boolean;
@@ -165,7 +165,7 @@ function orCaps(
 }
 
 /**
- * 图级能力 = 各幕并集（聊天内联 / 画布 / 全屏取 auditInject·showsTeamGraph 等）。
+ * 图级能力 = 各幕并集（聊天内嵌 / 全屏取 auditInject·showsTeamGraph 等）。
  * 无 acts 时回落 {@link planCapabilities}(planType)。
  */
 export function executionGraphCapabilities(

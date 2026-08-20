@@ -279,7 +279,7 @@ function WorkerPanel({
           <div className="mb-0.5 text-muted-foreground text-xs font-medium">
             任务
           </div>
-          <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+          <p className="max-h-32 max-w-full overflow-auto text-sm text-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
             {run.task}
           </p>
         </div>

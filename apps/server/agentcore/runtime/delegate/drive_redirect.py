@@ -371,9 +371,14 @@ class RedirectController:
                 feedback_preview=redir.feedback[:120],
             )
         if post_wave_cold:
+            from agentcore.llm.turn_auth_dead import credential_source_from_llm
             from agentcore.runtime.turn.token_budget import resolve_wave_budget_hooks
 
-            should_stop, priority_reserve_hit = resolve_wave_budget_hooks()
+            should_stop, priority_reserve_hit = resolve_wave_budget_hooks(
+                credential_source=credential_source_from_llm(
+                    getattr(self.tool, "_llm", None)
+                ),
+            )
             more = await WaveScheduler(max_parallel).run(
                 self.plan,
                 executor,

@@ -295,9 +295,9 @@ async def test_resolve_and_gate_background_platform_enforces_quota(monkeypatch):
         patch("agentcore.billing.gate.enforce_quota", AsyncMock()) as enforce,
     ):
         result = await resolve_and_gate_background(MagicMock(), "u1", purpose="title")
-    assert result is not None
-    assert result.source == "platform"
-    assert result.api_key == "sk-platform"
+    assert result.credentials is not None
+    assert result.credentials.source == "platform"
+    assert result.credentials.api_key == "sk-platform"
     enforce.assert_awaited_once()
 
 
@@ -331,7 +331,26 @@ async def test_resolve_and_gate_background_quota_exceeded_returns_none(monkeypat
         ),
     ):
         result = await resolve_and_gate_background(MagicMock(), "u1", purpose="memory")
-    assert result is None
+    assert result.credentials is None
+    assert result.quota_skipped_at_admission is True
+
+
+@pytest.mark.asyncio
+async def test_run_background_llm_admission_quota_skip_is_quota_exceeded(monkeypatch):
+    from agentcore.billing.gate import (
+        BackgroundGateResolve,
+        BackgroundLlmSkip,
+        BackgroundSkipReason,
+        run_background_llm,
+    )
+
+    async def _resolve(*_args, **_kwargs):
+        return BackgroundGateResolve(quota_skipped_at_admission=True)
+
+    monkeypatch.setattr("agentcore.billing.gate.resolve_and_gate_background", _resolve)
+
+    outcome = await run_background_llm("u1", purpose="memory", runner=AsyncMock())
+    assert outcome == BackgroundLlmSkip(reason=BackgroundSkipReason.QUOTA_EXCEEDED)
 
 
 @pytest.mark.asyncio
@@ -355,15 +374,19 @@ async def test_resolve_and_gate_background_byok_fallback_skips_quota(monkeypatch
         patch("agentcore.billing.gate.enforce_quota", AsyncMock()) as enforce,
     ):
         result = await resolve_and_gate_background(MagicMock(), "u1", purpose="title")
-    assert result is not None
-    assert result.source == "user"
-    assert result.api_key == "sk-user"
+    assert result.credentials is not None
+    assert result.credentials.source == "user"
+    assert result.credentials.api_key == "sk-user"
     enforce.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_run_background_llm_platform_auth_falls_back_to_byok(monkeypatch):
-    from agentcore.billing.gate import BackgroundLlmResult, run_background_llm
+    from agentcore.billing.gate import (
+        BackgroundGateResolve,
+        BackgroundLlmResult,
+        run_background_llm,
+    )
     from agentcore.core.errors import LLMAuthError
     from agentcore.llm.credentials import LLMCredentials
 
@@ -398,7 +421,7 @@ async def test_run_background_llm_platform_auth_falls_back_to_byok(monkeypatch):
     monkeypatch.setattr("agentcore.billing.gate.async_session_factory", lambda: _CM())
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background",
-        AsyncMock(return_value=platform),
+        AsyncMock(return_value=BackgroundGateResolve(credentials=platform)),
     )
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background_user_fallback",
@@ -414,7 +437,12 @@ async def test_run_background_llm_platform_auth_falls_back_to_byok(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_background_llm_no_byok_after_platform_auth_skips(monkeypatch):
-    from agentcore.billing.gate import BackgroundLlmSkip, BackgroundSkipReason, run_background_llm
+    from agentcore.billing.gate import (
+        BackgroundGateResolve,
+        BackgroundLlmSkip,
+        BackgroundSkipReason,
+        run_background_llm,
+    )
     from agentcore.core.errors import LLMAuthError
     from agentcore.llm.credentials import LLMCredentials
 
@@ -438,7 +466,7 @@ async def test_run_background_llm_no_byok_after_platform_auth_skips(monkeypatch)
     monkeypatch.setattr("agentcore.billing.gate.async_session_factory", lambda: _CM())
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background",
-        AsyncMock(return_value=platform),
+        AsyncMock(return_value=BackgroundGateResolve(credentials=platform)),
     )
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background_user_fallback",
@@ -451,7 +479,12 @@ async def test_run_background_llm_no_byok_after_platform_auth_skips(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_run_background_llm_byok_auth_does_not_retry_platform(monkeypatch):
-    from agentcore.billing.gate import BackgroundLlmSkip, BackgroundSkipReason, run_background_llm
+    from agentcore.billing.gate import (
+        BackgroundGateResolve,
+        BackgroundLlmSkip,
+        BackgroundSkipReason,
+        run_background_llm,
+    )
     from agentcore.core.errors import LLMAuthError
     from agentcore.llm.credentials import LLMCredentials
 
@@ -479,7 +512,7 @@ async def test_run_background_llm_byok_auth_does_not_retry_platform(monkeypatch)
     monkeypatch.setattr("agentcore.billing.gate.async_session_factory", lambda: _CM())
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background",
-        AsyncMock(return_value=byok),
+        AsyncMock(return_value=BackgroundGateResolve(credentials=byok)),
     )
     monkeypatch.setattr(
         "agentcore.billing.gate.resolve_and_gate_background_user_fallback",
@@ -569,7 +602,7 @@ async def test_resolve_and_gate_background_dormant_falls_to_byok(monkeypatch):
         patch("agentcore.billing.gate.enforce_quota", AsyncMock()) as enforce,
     ):
         result = await resolve_and_gate_background(MagicMock(), "u1", purpose="title")
-    assert result is byok
+    assert result.credentials is byok
     fallback.assert_awaited_once()
     enforce.assert_not_awaited()
 

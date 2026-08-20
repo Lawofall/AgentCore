@@ -247,7 +247,7 @@ def _strategy_for_args_parse(tool_name: str, parse_class: ArgsParseClass) -> str
     if tool_name in _ORCH_PARSE_TOOLS:
         if tool_name == "delegate":
             return (
-                "【策略】payload 顶层直接放字段（delegate：`tasks` 或 `playbook`/`playbook_id`），"
+                "【策略】payload 顶层直接放字段（delegate：`tasks` 或 `playbook`），"
                 "禁止再包一层 `arguments` 字符串；参数须为单一合法 JSON 对象，"
                 "禁止混入 XML/<parameter>/<object> 等协议标签；"
                 "按工具 schema 重发精简参数，勿把整篇正文塞进 task 字段"

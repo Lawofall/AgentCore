@@ -39,7 +39,7 @@ import { useState } from "react";
  */
 
 const ACTION_META: Record<
-  string,
+  MemoryUpdateItem["action"],
   { label: string; tone: "success" | "primary" | "muted" }
 > = {
   add: { label: "新增", tone: "success" },
@@ -47,6 +47,7 @@ const ACTION_META: Record<
   remove: { label: "移除", tone: "muted" },
   // Always-pool quota rows (审计 CTX-A2): what could NOT be written, and which entries
   // are currently holding the pool. Nothing was evicted — these name the trade-off.
+  quota: { label: "配额", tone: "muted" },
   quota_denied: { label: "未写入", tone: "muted" },
   quota_holder: { label: "占用", tone: "muted" },
 };
@@ -180,10 +181,7 @@ export function MemoryUpdateItemRow({
   onMemoryChanged?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const meta = ACTION_META[item.action] ?? {
-    label: item.action,
-    tone: "muted" as const,
-  };
+  const meta = ACTION_META[item.action];
   const leafLabel = item.section ? `${item.file} · ${item.section}` : item.file;
   const removed = item.action === "remove";
   const dimmed = removed || item.action === "quota_denied";

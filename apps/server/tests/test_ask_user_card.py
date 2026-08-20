@@ -65,6 +65,18 @@ def _risk_questions(*, n: int = 3, multiple: bool = True, kind: str = "choice"):
     ]
 
 
+def test_ask_user_schema_does_not_expose_blocking():
+    tool = AskUserTool(
+        sink=EventSink(),
+        conversation_id="c1",
+        timeout_seconds=30.0,
+    )
+    props = tool.schema.parameters["properties"]
+    assert "blocking" not in props
+    blob = tool.schema.description + json.dumps(tool.schema.parameters, ensure_ascii=False)
+    assert "blocking" not in blob
+
+
 def test_parse_card_unknown():
     err = parse_card("foo")
     assert isinstance(err, str) and "proposal_pick" in err
@@ -81,14 +93,13 @@ def test_validate_proposal_pick_matrix():
             "default": "",
         }
     ]
-    assert validate_card_shape("proposal_pick", blocking=True, questions=ok_q) is None
-    assert validate_card_shape("proposal_pick", blocking=False, questions=ok_q)
-    assert validate_card_shape("proposal_pick", blocking=True, questions=[])
+    assert validate_card_shape("proposal_pick", questions=ok_q) is None
+    assert validate_card_shape("proposal_pick", questions=[])
     bad_multi = [{**ok_q[0], "multiple": True}]
-    err_multi = validate_card_shape("proposal_pick", blocking=True, questions=bad_multi) or ""
+    err_multi = validate_card_shape("proposal_pick", questions=bad_multi) or ""
     assert "multiple=false" in err_multi
     one_opt = [{**ok_q[0], "options": [{"label": "A"}]}]
-    err_opts = validate_card_shape("proposal_pick", blocking=True, questions=one_opt) or ""
+    err_opts = validate_card_shape("proposal_pick", questions=one_opt) or ""
     assert "2" in err_opts and "6" in err_opts
 
 
@@ -103,30 +114,13 @@ def test_validate_risk_ack_matrix():
             "default": "",
         }
     ]
-    assert validate_card_shape("risk_ack", blocking=True, questions=ok_q) is None
-    assert validate_card_shape("risk_ack", blocking=False, questions=ok_q)
+    assert validate_card_shape("risk_ack", questions=ok_q) is None
     single = [{**ok_q[0], "multiple": False}]
-    err_single = validate_card_shape("risk_ack", blocking=True, questions=single) or ""
+    err_single = validate_card_shape("risk_ack", questions=single) or ""
     assert "multiple=true" in err_single
     too_many = [{**ok_q[0], "options": [{"label": f"r{i}"} for i in range(11)]}]
-    err_many = validate_card_shape("risk_ack", blocking=True, questions=too_many) or ""
+    err_many = validate_card_shape("risk_ack", questions=too_many) or ""
     assert "1" in err_many and "10" in err_many
-
-
-async def test_nonblocking_with_card_rejected():
-    tool = _tool()
-    res = await tool.execute(
-        {
-            "message": "挑一个",
-            "card": "proposal_pick",
-            "blocking": False,
-            "questions": _proposal_questions(),
-            "assumptions": [{"label": "默认", "value": "A"}],
-        },
-        _ctx(),
-    )
-    assert res.success is False
-    assert res.error and "blocking" in res.error
 
 
 async def test_proposal_pick_overrides_transcript_intent():

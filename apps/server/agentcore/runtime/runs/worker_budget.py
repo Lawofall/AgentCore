@@ -4,9 +4,8 @@
 **不做**按任务规格的四档启发式分档。CEO 显式 ``timeout_ms`` / 预置 ``token_ceiling``
 恒优先（已写入则不动）。
 
-共享谓词（``is_research_root`` / ``is_deep_deliverable`` 等）仍供定向检索工具面、
-delegate 复杂度改写等复用——与本模块的统一 token/超时 backstop 回填正交。
-检索预算已改为统一单值默认，不再经 ``is_research_root`` 分档。
+共享谓词（``is_deep_deliverable`` / ``is_directed_search_role`` 等）仍供定向检索
+工具面、verify_policy 打标等复用——与本模块的统一 token/超时 backstop 回填正交。
 """
 
 from __future__ import annotations
@@ -20,35 +19,26 @@ if TYPE_CHECKING:
 __all__ = [
     "DIRECTED_SEARCH_DISCIPLINE",
     "DIRECTED_SEARCH_TOOL_NAMES",
-    "LIGHT_REPAIR_MAX_ROUNDS",
     "VERIFY_POLICY_INNER",
     "VERIFY_POLICY_OUTER",
     "VERIFY_INNER_DISCIPLINE",
     "WORKER_TIMEOUT_BACKSTOP_S",
     "apply_directed_search_tools",
     "apply_directed_search_tools_to_specs",
-    "apply_light_round_budgets",
     "apply_verify_policies",
     "apply_verify_policies_to_specs",
     "apply_worker_budgets",
     "apply_worker_budgets_to_specs",
-    "blocks_light_complexity",
     "ensure_directed_search_tools",
     "is_deep_deliverable",
     "is_directed_search_role",
     "is_outer_verify_role",
-    "is_research_root",
     "is_short_write_posture",
     "should_tighten_verify_exec_thrash",
 ]
 
 # 统一墙钟 backstop；CEO 显式 timeout_ms 恒优先。
 WORKER_TIMEOUT_BACKSTOP_S = 1200
-
-# Short ReAct ceiling constant (repair_code playbook / CEO explicit caps).
-# ``complexity_hint=light`` no longer stamps this — see :func:`apply_light_round_budgets`.
-# Distinct from contract ``light_repair`` (format-only pass inside executor.node).
-LIGHT_REPAIR_MAX_ROUNDS = 6
 
 # 审查 / 调查类 worker：定向检索工具（复用现有 grep / code_search，不新造）。
 # 真纯丙后执行层忽略 tasks[].tools 收窄；本集合仍供审查角色提示纪律与兼容补回。
@@ -107,31 +97,6 @@ def is_deep_deliverable(deliverable: Deliverable | None) -> bool:
     if deliverable.form == "files":
         return True
     return bool(deliverable.artifacts)
-
-
-def blocks_light_complexity(deliverable: Deliverable | None) -> bool:
-    """True when deliverable must not keep ``complexity_hint=light``.
-
-    Retired: long-form used to block light via word-count; that signal is gone.
-    File landing (``form=files`` / ``artifacts``) does **not** block light —
-    repair / single-file runtime fixes may stay light. Always ``False``.
-    """
-    _ = deliverable
-    return False
-
-
-def apply_light_round_budgets(
-    plan: RunPlan,
-    *,
-    complexity_hint: str,
-) -> None:
-    """Retired no-op: ``complexity_hint=light`` no longer stamps short ``max_rounds``.
-
-    Kept (and still called from builder) to avoid a large call-site move. Short
-    round caps remain via CEO explicit ``max_rounds`` and ``repair_code`` playbook
-    builders — not via light posture.
-    """
-    _ = (plan, complexity_hint)
 
 
 def is_short_write_posture(*, max_rounds: int | None) -> bool:
@@ -250,30 +215,6 @@ def apply_directed_search_tools_to_specs(
         spec.tools = ensure_directed_search_tools(
             spec.tools, role=spec.role, valid_tools=valid_tools
         )
-
-
-def is_research_root(
-    complexity_hint: str,
-    deliverable: Deliverable | None,
-    *,
-    has_upstream: bool,
-    retrieval_budget: int | None,
-) -> bool:
-    """True when a dispatch is a research-wave root (结构谓词，供别用).
-
-    调研波 root 判据：无上游依赖（``has_upstream`` 为 False）+ 检索预算非显式 0 +
-    ``complexity_hint`` ≠ light。落盘深研（:func:`is_deep_deliverable`）排除。
-
-    **不再**参与检索预算默认分档（检索已统一为单值 + 硬例外）。
-    ``retrieval_budget`` 取解析后值：显式 0 → 判非研究 root；``None`` 视作未显式关 0。
-    """
-    if complexity_hint == "light":
-        return False
-    if has_upstream:
-        return False
-    if retrieval_budget == 0:
-        return False
-    return not is_deep_deliverable(deliverable)
 
 
 def apply_worker_budgets(

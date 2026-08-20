@@ -1,9 +1,18 @@
+import {
+  INTERACTION_KIND_WIRE,
+  USER_INTERACTION_KIND_VALUES,
+} from "@agentcore/contract-types";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  COLD_RESUME_KINDS,
   applyColdInteractionWireEvent,
   bindEmptyColdMessageId,
   clearColdInteractions,
   getColdInteraction,
+  idFromColdRequiredPayload,
+  isColdResumeKind,
+  kindFromColdRequiredEvent,
+  kindFromColdResolvedEvent,
   listColdPending,
   markColdDeferred,
   markColdResolved,
@@ -15,6 +24,53 @@ import {
 
 beforeEach(() => {
   clearColdInteractions();
+});
+
+describe("COLD_RESUME_KINDS · pausesTurn && !hot", () => {
+  it("membership matches the generated flags (current: ask_user / plan_review / team_preview)", () => {
+    expect(COLD_RESUME_KINDS).toEqual([
+      "ask_user",
+      "plan_review",
+      "team_preview",
+    ]);
+    for (const kind of USER_INTERACTION_KIND_VALUES) {
+      const wire = INTERACTION_KIND_WIRE[kind];
+      expect(isColdResumeKind(kind)).toBe(wire.pausesTurn && !wire.hot);
+    }
+  });
+
+  it("required / resolved events and idField come from INTERACTION_KIND_WIRE", () => {
+    expect(kindFromColdRequiredEvent("checkpoint_required")).toBe("ask_user");
+    expect(kindFromColdRequiredEvent("plan_review_required")).toBe(
+      "plan_review",
+    );
+    expect(kindFromColdRequiredEvent("team_preview_required")).toBe(
+      "team_preview",
+    );
+    expect(kindFromColdRequiredEvent("approval_required")).toBeNull();
+    expect(kindFromColdRequiredEvent("escalation_required")).toBeNull();
+    expect(kindFromColdRequiredEvent("stage_card_required")).toBeNull();
+
+    expect(kindFromColdResolvedEvent("checkpoint_resolved")).toBe("ask_user");
+    expect(kindFromColdResolvedEvent("plan_review_resolved")).toBe(
+      "plan_review",
+    );
+    expect(kindFromColdResolvedEvent("team_preview_resolved")).toBe(
+      "team_preview",
+    );
+    expect(kindFromColdResolvedEvent("approval_resolved")).toBeNull();
+    expect(kindFromColdResolvedEvent("escalation_resolved")).toBeNull();
+
+    expect(
+      idFromColdRequiredPayload("ask_user", { checkpoint_id: "cp-1" }),
+    ).toBe("cp-1");
+    expect(
+      idFromColdRequiredPayload("plan_review", { checkpoint_id: "pr-1" }),
+    ).toBe("pr-1");
+    expect(
+      idFromColdRequiredPayload("ask_user", { approval_id: "a1" }),
+    ).toBeNull();
+  });
 });
 
 describe("coldInteractions · upsertRequired tombstones", () => {

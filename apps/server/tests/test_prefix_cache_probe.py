@@ -738,7 +738,6 @@ def test_a_growing_source_ledger_is_attributable_to_its_own_section():
             prior_delivery_gaps="",
             prior_delegate_retry="",
             prior_futile_retries="",
-            pending_questions="",
             attachment_context="",
             registered_sources=sources,
             soft_cap=None,

@@ -3,7 +3,7 @@ import { ChatTimeline } from "@/components/conversation-replay/ChatTimeline";
 import { InspectorPanel } from "@/components/conversation-replay/InspectorPanel";
 import { TurnOpsBar } from "@/components/conversation-replay/TurnOpsBar";
 import { Badge } from "@/components/ui/Badge";
-import { Page, PageHeader } from "@/components/ui/Page";
+import { Page } from "@/components/ui/Page";
 import { ErrorState, TableSkeleton } from "@/components/ui/States";
 import { isExecutionHarvestMessage } from "@/lib/executionHarvest";
 import { cn, fmtCny, fmtInt, fmtTime, nanoToYuan } from "@/lib/utils";
@@ -346,15 +346,104 @@ export function ConversationReplay({
   const dockMessage = dockOpen ? selected : null;
 
   return (
-    <Page className="flex h-full min-h-0 flex-col">
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-3 inline-flex shrink-0 items-center gap-1.5 self-start rounded text-muted-foreground text-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ArrowLeft size={16} />
-        {backLabel}
-      </button>
+    <Page className="flex h-full min-h-0 flex-col px-4 py-3 lg:px-6">
+      {/*
+        Session strip, not PageHeader: that component's mb-6 / gap-4 stack is
+        title + actions + filters as three layers. The back control stays
+        mounted across load so a click cannot land on a just-unmounted node.
+      */}
+      <header className="mb-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <ReplayBackButton onBack={onBack} backLabel={backLabel} />
+          {!loading && !error && data && (
+            <>
+              <h1 className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold text-foreground">
+                <span>{data.conversation.title || "未命名会话"}</span>
+                {data.conversation.deleted_at ? (
+                  <Badge tone="neutral">会话已删</Badge>
+                ) : null}
+              </h1>
+              <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-muted-foreground text-xs">
+                <span>
+                  {data.conversation.display_name ||
+                    data.conversation.username ||
+                    "未知用户"}
+                  {data.conversation.username && (
+                    <span> @{data.conversation.username}</span>
+                  )}
+                </span>
+                <span aria-hidden>·</span>
+                <span className="tabular-nums">
+                  {fmtTime(data.conversation.created_at)}
+                </span>
+                <span aria-hidden>·</span>
+                <CopyableId
+                  value={data.conversation.id}
+                  label="conversation_id"
+                  display={data.conversation.id.slice(0, 8)}
+                />
+                {data.conversation.model_profile_name && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span
+                      title={
+                        data.conversation.model_profile_id
+                          ? `profile ${data.conversation.model_profile_id}`
+                          : undefined
+                      }
+                    >
+                      {data.conversation.model_profile_name}
+                      {data.conversation.model_profile_id && (
+                        <span className="ml-1 font-mono text-xs">
+                          {data.conversation.model_profile_id.slice(0, 8)}
+                        </span>
+                      )}
+                    </span>
+                  </>
+                )}
+              </span>
+              <div className="flex flex-wrap items-center gap-1 text-xs">
+                <KpiChip label="回合" value={fmtInt(data.turns)} />
+                <KpiChip
+                  label="错误"
+                  value={fmtInt(data.errors)}
+                  tone={data.errors > 0 ? "destructive" : undefined}
+                />
+                <KpiChip
+                  label="成本"
+                  value={fmtCny(nanoToYuan(data.cost_total))}
+                />
+                {multiAgentTurns > 0 && (
+                  <KpiChip
+                    label="多 Agent"
+                    value={`${multiAgentTurns} 回合`}
+                    tone="primary"
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </div>
+        {!loading && !error && data && (
+          <>
+            <TurnPills
+              turns={assistantTurns}
+              selectedId={selectedId}
+              onSelect={selectTurn}
+              anchorTrace={anchorTrace}
+            />
+            <TurnOpsBar
+              selected={selected}
+              harvests={harvests}
+              onSelectHarvest={(id) => {
+                selectTurn(id);
+                setDockOpen(true);
+              }}
+              onOpenDock={() => setDockOpen(true)}
+            />
+          </>
+        )}
+      </header>
 
       {loading && <TableSkeleton rows={6} columns={1} />}
 
@@ -364,104 +453,6 @@ export function ConversationReplay({
 
       {!loading && !error && data && (
         <>
-          {/* Fixed block: the panes below take whatever height is left over. */}
-          <div className="shrink-0">
-            <PageHeader
-              title={
-                <span className="inline-flex items-center gap-2">
-                  {data.conversation.title || "未命名会话"}
-                  {data.conversation.deleted_at ? (
-                    <Badge tone="neutral">会话已删</Badge>
-                  ) : null}
-                </span>
-              }
-              description={
-                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span>
-                    {data.conversation.display_name ||
-                      data.conversation.username ||
-                      "未知用户"}
-                    {data.conversation.username && (
-                      <span> @{data.conversation.username}</span>
-                    )}
-                  </span>
-                  <span aria-hidden>·</span>
-                  <span className="tabular-nums">
-                    {fmtTime(data.conversation.created_at)}
-                  </span>
-                  <span aria-hidden>·</span>
-                  <CopyableId
-                    value={data.conversation.id}
-                    label="conversation_id"
-                    display={data.conversation.id.slice(0, 8)}
-                  />
-                  {data.conversation.model_profile_name && (
-                    <>
-                      <span aria-hidden>·</span>
-                      <span
-                        title={
-                          data.conversation.model_profile_id
-                            ? `profile ${data.conversation.model_profile_id}`
-                            : undefined
-                        }
-                      >
-                        {data.conversation.model_profile_name}
-                        {/* Mono + smaller carries "secondary" on its own; the
-                            opacity that used to sit on this id dimmed the header's
-                            already-muted text to 2.8:1. */}
-                        {data.conversation.model_profile_id && (
-                          <span className="ml-1 font-mono text-xs">
-                            {data.conversation.model_profile_id.slice(0, 8)}
-                          </span>
-                        )}
-                      </span>
-                    </>
-                  )}
-                </span>
-              }
-              actions={
-                <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                  <KpiChip label="回合" value={fmtInt(data.turns)} />
-                  <KpiChip
-                    label="错误"
-                    value={fmtInt(data.errors)}
-                    tone={data.errors > 0 ? "destructive" : undefined}
-                  />
-                  <KpiChip
-                    label="成本"
-                    value={fmtCny(nanoToYuan(data.cost_total))}
-                  />
-                  {multiAgentTurns > 0 && (
-                    <KpiChip
-                      label="多 Agent"
-                      value={`${multiAgentTurns} 回合`}
-                      tone="primary"
-                    />
-                  )}
-                </div>
-              }
-              filters={
-                <div className="flex w-full min-w-0 flex-col gap-2">
-                  <TurnPills
-                    turns={assistantTurns}
-                    selectedId={selectedId}
-                    onSelect={selectTurn}
-                    anchorTrace={anchorTrace}
-                  />
-                  <TurnOpsBar
-                    selected={selected}
-                    harvests={harvests}
-                    onSelectHarvest={(id) => {
-                      selectTurn(id);
-                      setDockOpen(true);
-                    }}
-                    onOpenDock={() => setDockOpen(true)}
-                  />
-                </div>
-              }
-            />
-          </div>
-
           {/*
             One timeline and one dock, laid out by the shell's height rather than by a
             `calc(100vh - …)` guess: the row fills whatever the scroll container gives
@@ -543,6 +534,25 @@ function precedingHarvest(
   return isExecutionHarvestMessage(prev) ? prev : null;
 }
 
+function ReplayBackButton({
+  onBack,
+  backLabel,
+}: {
+  onBack: () => void;
+  backLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      className="inline-flex shrink-0 items-center gap-1 rounded text-muted-foreground text-xs outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ArrowLeft size={14} aria-hidden />
+      {backLabel}
+    </button>
+  );
+}
+
 function KpiChip({
   label,
   value,
@@ -555,7 +565,7 @@ function KpiChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 tabular-nums",
+        "inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 tabular-nums",
         tone === "destructive" && "border-destructive/30 text-destructive",
         tone === "primary" && "border-primary/30 text-primary",
       )}
@@ -582,11 +592,13 @@ function TurnPills({
   anchorTrace?: string;
 }) {
   if (turns.length === 0) {
-    return <p className="text-muted-foreground text-xs">暂无助手回合</p>;
+    return (
+      <p className="mt-1.5 text-muted-foreground text-xs">暂无助手回合</p>
+    );
   }
 
   return (
-    <div className="flex w-full min-w-0 items-center gap-1.5 overflow-x-auto pb-1">
+    <div className="mt-1.5 flex w-full min-w-0 items-center gap-1.5 overflow-x-auto pb-1">
       <span className="shrink-0 text-muted-foreground text-xs font-medium">
         回合
       </span>

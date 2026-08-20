@@ -205,20 +205,3 @@ def format_report(report: EvalReport) -> str:
             lines.append(f"  shape@{case_id}: {score:.2f}")
     lines.append("=" * 64)
     return "\n".join(lines)
-
-
-def baseline_regression(report: EvalReport, baseline: dict, tolerance: float) -> tuple[bool, str]:
-    """对比当前报告与 baseline 的**总通过率**；跌破 ``baseline - tolerance`` 判回归（评测体系
-    重设计 §七：L1 跌破 baseline 超阈 → 红）。
-
-    返回 ``(是否回归, 人读说明)``。``tolerance`` 吸收真模型非确定性（思考模型不吃 temperature，
-    单次跑天然抖动）——只有显著掉档才算回归，避免噪声把门弄红。baseline 缺 ``pass_rate`` 视为 0。
-    """
-    base_rate = float(baseline.get("summary", {}).get("pass_rate", 0.0))
-    cur = report.pass_rate
-    regressed = cur < base_rate - tolerance
-    detail = (
-        f"pass_rate {cur:.4f} vs baseline {base_rate:.4f}"
-        f"（容差 {tolerance:.2f}）→ {'回归' if regressed else 'OK'}"
-    )
-    return regressed, detail

@@ -35,7 +35,7 @@ TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
         },
         "citation_mode": {
             "type": "string",
-            "enum": ["immediate", "two_phase"],
+            "enum": ["two_phase"],
             "description": "two_phase=A 草案不跑成稿闸、同 worker 升 B 再验。省略=非两阶段。",
         },
         "strict": {
@@ -53,6 +53,7 @@ DELEGATE_DESCRIPTION = (
     "【看】→deliverable.form=prose；【用】→files。"
     "多任务先判生产者→消费者；互不依赖才平铺并行。"
     "≥1 worker 默认协调（立即返回、可同回合追加同一张图；含单 worker）。"
+    "跨回合再派人＝新开一队、接续上一张图（append_to_execution_id 只填 latest）。"
     "动【同一支团队】（含批次已收口后补跑/接着干）＝ tasks[] 上填 "
     "continue_from_run_id（续派，不限条数）/ replaces_run_id（补缺口），不是冷派整团。"
     "playbook 与 tasks 二选一：禁止二者同时有内容（反例：既填 code_audit 又传 tasks）。"
@@ -68,8 +69,7 @@ DELEGATE_PARAMETERS = {
             "description": (
                 f"默认主路（≤{MAX_DELEGATION_TASKS}）。"
                 f"顶层非空数组可抄：{HANDWRITTEN_TASKS_SKELETON}（deliverable 可选）。"
-                "手写此数组时勿填 playbook/playbook_id（或 playbook_id=\"none\"）；"
-                "与具名 playbook 互斥。"
+                "手写此数组时勿填 playbook；与具名 playbook 互斥。"
             ),
             "items": {
                 "type": "object",
@@ -92,7 +92,7 @@ DELEGATE_PARAMETERS = {
                         "items": {"type": "string"},
                         "description": (
                             "生产者→消费者（本批 id / 角色名；勿手抄 del_*）。"
-                            "跨回合须 append_to_execution_id。"
+                            "跨回合是新开一队，不是 depends_on 连旧图。"
                         ),
                     },
                     "result_handling": {
@@ -136,7 +136,7 @@ DELEGATE_PARAMETERS = {
         "append_to_execution_id": {
             "type": "string",
             "description": (
-                '跨回合追加："latest" 或 execution_id；'
+                '跨回合接续上一张图：只填 "latest"（引擎解析）；'
                 "同回合再调一般不必传。"
             ),
         },
@@ -157,12 +157,6 @@ DELEGATE_PARAMETERS = {
             "type": "string",
             "enum": sorted(PLAYBOOKS),
             "description": "固化流水线名（非默认）；填了就不要传 tasks。建站→build_website；绿场→build_app。",
-        },
-        "playbook_id": {
-            "type": "string",
-            "description": (
-                '快捷进阶名，或 "none"（手写 tasks 时用 none/省略）。与 playbook 同义优先。'
-            ),
         },
         "playbook_args": {
             "type": "object",
@@ -197,10 +191,6 @@ DELEGATE_PARAMETERS = {
         "complexity_hint": {
             "type": "string",
             "enum": ["light", "standard"],
-        },
-        "parallelism": {
-            "type": "string",
-            "enum": ["conservative", "balanced", "aggressive"],
         },
     },
 }

@@ -47,6 +47,9 @@ jobs:
       - name: Type check
         run: uv run mypy
 
+      - name: Log event catalog (emit sites ↔ catalog.py)
+        run: uv run python scripts/sync_log_event_registry.py --check
+
       - name: Schema gate (migration head ↔ ORM)
         env:
           DATABASE_URL: postgresql+asyncpg://agentcore:agentcore@localhost:5432/agentcore
@@ -162,8 +165,8 @@ jobs:
         run: pnpm --filter agentcore-desktop test -- --run
 
   # No `needs` on this job: sharing install via a setup job would serialize
-  # lint/test (~6 min) in front of shoot (~16 min) and lengthen wall clock.
-  # Shoot stays on the PR trigger face (see frontend-preview.mdc).
+  # lint/test (~6 min) in front of shoot (~4 min + Playwright install) and
+  # lengthen wall clock. Shoot stays on the PR trigger face (see frontend-preview.mdc).
   frontend-shoot:
     name: Frontend (preview shoot + web smoke)
     runs-on: ubuntu-latest
@@ -209,6 +212,8 @@ jobs:
         # run started-not-completed…), not just the terminal state.
         env:
           SHOOT_FRAMES: "3"
+          # ubuntu-latest is 4 vCPU; shoot.mjs default is already min(4, CPUs).
+          SHOOT_WORKERS: "4"
         run: pnpm --filter agentcore-desktop shoot
 
       - name: Upload preview shots on failure

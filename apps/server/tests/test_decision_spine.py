@@ -458,3 +458,211 @@ def test_local_turn_recorded_does_not_mask_cloud_turn_close() -> None:
     assert spine["head"]["source"] == "chat.turn_start"
     assert spine["tail"]["event"] == "chat.turn_complete"
     assert spine["tail"]["rounds"] == 2
+
+
+def test_execution_groups_tools_and_keeps_failures_on_decisions() -> None:
+    tid = "g" * 32
+    events = [
+        {
+            "type": "log",
+            "event": "chat.turn_start",
+            "timestamp": "2026-08-20T10:00:00Z",
+            "trace_id": tid,
+            "preview": "run tools",
+        },
+        *[
+            {
+                "type": "log",
+                "event": "tool.execute_end",
+                "timestamp": f"2026-08-20T10:00:{i:02d}Z",
+                "trace_id": tid,
+                "tool": "read_file",
+                "status": "ok",
+                "duration_ms": 10,
+            }
+            for i in range(1, 21)
+        ],
+        {
+            "type": "log",
+            "event": "tool.execute_end",
+            "timestamp": "2026-08-20T10:00:21Z",
+            "trace_id": tid,
+            "tool": "web_search",
+            "status": "error",
+            "reason": "timeout",
+            "duration_ms": 2100,
+        },
+        {
+            "type": "log",
+            "event": "chat.turn_complete",
+            "timestamp": "2026-08-20T10:00:22Z",
+            "trace_id": tid,
+            "finish_reason": "stop",
+        },
+    ]
+    spine = build_decision_spine(events, trace_id=tid)
+    decision_events = [d["event"] for d in spine["decisions"]]
+    assert decision_events.count("tool.execute_end") == 1
+    assert spine["execution"]["tools"]["calls"] == 21
+    assert spine["execution"]["tools"]["ok"] == 20
+    assert spine["execution"]["tools"]["error"] == 1
+    by_name = {row["tool"]: row for row in spine["execution"]["tools"]["by_tool"]}
+    assert by_name["read_file"]["ok"] == 20
+    assert by_name["web_search"]["error"] == 1
+    text = format_decision_spine(spine)
+    assert "Exec  tools=21 ok=20 err=1" in text
+    assert text.count("tool.execute_end") == 1
+    assert len(text.splitlines()) < 40
+
+
+def test_llm_call_failed_and_prepare_surface_without_listing_every_call() -> None:
+    tid = "h" * 32
+    events = [
+        {
+            "type": "log",
+            "event": "chat.turn_start",
+            "timestamp": "2026-08-20T11:00:00Z",
+            "trace_id": tid,
+            "preview": "llm fail",
+        },
+        {
+            "type": "log",
+            "event": "chat.prepare_phase",
+            "timestamp": "2026-08-20T11:00:01Z",
+            "trace_id": tid,
+            "phase": "rules",
+            "ms": 12,
+        },
+        {
+            "type": "log",
+            "event": "chat.prepare_phase",
+            "timestamp": "2026-08-20T11:00:02Z",
+            "trace_id": tid,
+            "phase": "assemble",
+            "ms": 80,
+        },
+        {
+            "type": "log",
+            "event": "llm.call",
+            "timestamp": "2026-08-20T11:00:03Z",
+            "trace_id": tid,
+            "model": "demo",
+            "scenario": "chat",
+            "latency_ms": 100,
+            "input_tokens": 10,
+            "output_tokens": 5,
+        },
+        {
+            "type": "log",
+            "event": "llm.call",
+            "timestamp": "2026-08-20T11:00:04Z",
+            "trace_id": tid,
+            "model": "demo",
+            "scenario": "agent",
+            "latency_ms": 8000,
+            "input_tokens": 40,
+            "output_tokens": 20,
+        },
+        {
+            "type": "log",
+            "event": "llm.call_failed",
+            "timestamp": "2026-08-20T11:00:05Z",
+            "trace_id": tid,
+            "level": "error",
+            "model": "demo",
+            "scenario": "chat",
+            "error": "429 rate limit",
+            "latency_ms": 50,
+        },
+        {
+            "type": "log",
+            "event": "chat.turn_complete",
+            "timestamp": "2026-08-20T11:00:06Z",
+            "trace_id": tid,
+            "finish_reason": "error",
+        },
+    ]
+    spine = build_decision_spine(events, trace_id=tid)
+    assert "llm.call_failed" in {d["event"] for d in spine["decisions"]}
+    assert spine["llm"]["calls"] == 2
+    assert spine["llm"]["failed"] == 1
+    assert spine["llm"]["slowest"]["latency_ms"] == 8000
+    assert spine["llm"]["slowest"]["scenario"] == "agent"
+    scenarios = {row["scenario"]: row for row in spine["llm"]["by_scenario"]}
+    assert scenarios["chat"]["failed"] == 1
+    assert spine["execution"]["prepare"]["ms_sum"] == 92
+    text = format_decision_spine(spine)
+    assert "llm.call_failed" in text
+    assert "Prep  rules=12ms assemble=80ms" in text
+    assert "slowest" in text
+    assert "scenario" in text
+
+
+def test_obs_turn_spans_runs_fold_without_tool_children() -> None:
+    tid = "i" * 32
+    events = [
+        {
+            "type": "log",
+            "event": "chat.turn_start",
+            "timestamp": "2026-08-20T12:00:00Z",
+            "trace_id": tid,
+            "preview": "spans",
+        },
+        {
+            "type": "log",
+            "event": "obs.turn_spans",
+            "timestamp": "2026-08-20T12:00:10Z",
+            "trace_id": tid,
+            "span_count": 4,
+            "truncated": False,
+            "dropped": 0,
+            "spans": [
+                {"span_id": "turn", "operation": "chat", "status": "ok"},
+                {
+                    "span_id": "run:cap",
+                    "operation": "invoke_agent",
+                    "name": "invoke_agent captain",
+                    "status": "ok",
+                    "duration_ms": 1200,
+                    "attributes": {
+                        "agentcore.run.id": "cap",
+                        "agentcore.run.kind": "captain",
+                    },
+                },
+                {
+                    "span_id": "run:w1",
+                    "operation": "invoke_agent",
+                    "name": "invoke_agent writer",
+                    "status": "error",
+                    "duration_ms": 9000,
+                    "attributes": {
+                        "agentcore.run.id": "w1",
+                        "agentcore.run.kind": "agent",
+                        "agentcore.run.role": "writer",
+                    },
+                },
+                {
+                    "span_id": "tool:t1",
+                    "operation": "execute_tool",
+                    "name": "execute_tool web_search",
+                    "status": "ok",
+                    "duration_ms": 400,
+                },
+            ],
+        },
+        {
+            "type": "log",
+            "event": "chat.turn_complete",
+            "timestamp": "2026-08-20T12:00:11Z",
+            "trace_id": tid,
+            "finish_reason": "stop",
+        },
+    ]
+    spine = build_decision_spine(events, trace_id=tid)
+    runs = spine["execution"]["runs"]
+    assert runs["source"] == "obs.turn_spans"
+    assert [row["run_id"] for row in runs["items"]] == ["w1", "cap"]  # error first
+    assert all(row.get("name", "").startswith("invoke_agent") for row in runs["items"])
+    text = format_decision_spine(spine)
+    assert "invoke_agent writer" in text
+    assert "execute_tool web_search" not in text

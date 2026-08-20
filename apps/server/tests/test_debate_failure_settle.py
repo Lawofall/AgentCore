@@ -19,6 +19,7 @@ import pytest
 
 from agentcore.llm.provider.protocol import LLMChunk, LLMResponse, TokenUsage
 from agentcore.runtime.events import EventSink, EventType
+from agentcore.runtime.terminal import RUN_CLOSE_EVENT_TYPES
 from agentcore.tools.builtin.debate import DebateTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
@@ -166,18 +167,8 @@ def _terminal_frames(events: list, run_id: str) -> list:
     ]
 
 
-_ALL_RUN_TERMINALS = frozenset(
-    {
-        EventType.RUN_COMPLETED,
-        EventType.RUN_FAILED,
-        EventType.RUN_CANCELLED,
-        EventType.RUN_SKIPPED,
-    }
-)
-
-
 def _assert_started_runs_have_terminal(events: list) -> None:
-    """每个 ``run_started`` 的 run_id 之后必有 completed|failed|cancelled|skipped 之一。"""
+    """每个 ``run_started`` 的 run_id 之后必有 occupancy 关帧之一。"""
     started: set[str] = set()
     closed: set[str] = set()
     for e in events:
@@ -186,7 +177,7 @@ def _assert_started_runs_have_terminal(events: list) -> None:
             continue
         if e.type is EventType.RUN_STARTED:
             started.add(rid)
-        elif e.type in _ALL_RUN_TERMINALS:
+        elif e.type in RUN_CLOSE_EVENT_TYPES:
             closed.add(rid)
     missing = sorted(started - closed)
     assert not missing, f"run_started 之后无终态帧: {missing}"
@@ -412,7 +403,7 @@ async def test_later_round_cancel_closes_started_continue_runs(tmp_path):
         terms = [
             e
             for e in events
-            if e.type in _ALL_RUN_TERMINALS and e.payload.get("run_id") == rid
+            if e.type in RUN_CLOSE_EVENT_TYPES and e.payload.get("run_id") == rid
         ]
         assert terms, f"{rid} started without terminal"
         assert terms[0].type is EventType.RUN_CANCELLED

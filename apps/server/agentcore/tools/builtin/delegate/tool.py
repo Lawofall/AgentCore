@@ -321,6 +321,7 @@ class DelegateTool:
         self._active_playbook_args = flags.playbook_args
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+        from agentcore.llm.turn_auth_dead import credential_source_from_llm
         from agentcore.runtime.delegate.force_scopes import parse_force_scopes
         from agentcore.runtime.runs import build_run_plan
 
@@ -335,6 +336,7 @@ class DelegateTool:
             conversation_id=self._conversation_id,
             depth=self._depth,
             sub_workers_spawned=self._sub_workers_spawned,
+            credential_source=credential_source_from_llm(self._llm),
         )
         self._apply_call_flags(prelude.flags)
         if isinstance(prelude, DelegatePreludeReject):
@@ -347,8 +349,6 @@ class DelegateTool:
         consumer_deps_warn = prelude.consumer_deps_warn
         design_impl_warn = prelude.design_impl_warn
         root_slice_warn = prelude.root_slice_warn
-        presentation_format_warning = prelude.presentation_format_warning
-        automation_delivery_warning = prelude.automation_delivery_warning
 
         # §4.2b·2b / 改法④A：无出生且写盘缺目标 → 先静默建云桌，再闸。
         # 裸聊同回合唯一 create/resolve / auto 可经 turn_target_desk 继承缺省目标。
@@ -508,19 +508,6 @@ class DelegateTool:
             wv = getattr(self, "_workflow_version", None)
             if isinstance(wv, int):
                 plan.workflow_version = wv
-        # 部分并行：检查点波后线性链可按 parallelism 放宽（默认 conservative 不改图）。
-        from agentcore.runtime.delegate.parallelism import (
-            resolve_parallelism,
-            widen_post_checkpoint_deps,
-        )
-
-        parallelism = resolve_parallelism(
-            arguments.get("parallelism"),
-            complexity_hint=complexity_hint if isinstance(complexity_hint, str) else "standard",
-            node_count=len(plan.nodes),
-            has_checkpoint=any(n.checkpoint_after for n in plan.nodes),
-        )
-        widen_post_checkpoint_deps(plan, parallelism)
         from agentcore.runtime.delegate.continuation import apply_continuation_tool_merges
         from agentcore.runtime.runs.research_quality import (
             batch_declares_review_files,
@@ -539,13 +526,6 @@ class DelegateTool:
             validate_cold_start_explore_deliverables,
             validate_repair_how_fixed,
         )
-
-        # S3: completion_criteria kind 已删；忽略 CEO 误传的遗留字段。
-        if "completion_criteria" in arguments:
-            logger.info(
-                "delegate.completion_criteria_ignored",
-                reason="s3_kind_retired",
-            )
 
         playbook_name_early = (
             playbook.strip() if isinstance(playbook, str) and playbook.strip() else None
@@ -832,10 +812,6 @@ class DelegateTool:
             tails: list[str] = []
             if capability_warning:
                 tails.append(capability_warning)
-            if presentation_format_warning:
-                tails.append(presentation_format_warning)
-            if automation_delivery_warning:
-                tails.append(automation_delivery_warning)
             if playbook_notes:
                 tails.extend(playbook_notes)
             if latest_miss_degraded_note:
@@ -848,23 +824,21 @@ class DelegateTool:
                 tails.append(root_slice_warn)
             if prev_execution_id:
                 tails.append(
-                    f"【协作图·续接】本回合新开团队执行 execution_id=`{execution_id}`，"
-                    f"经 prev_execution_id 链到上一张图 `{prev_execution_id}`；"
+                    "【协作图·续接】本回合新开一队、接续上一张图；"
                     "进度与节点仅计本图，不混入上一张已完成节点。"
                     "向用户汇报请用「新开一队、接续上一张图」口径；不要说成同图追加。"
                 )
             elif append_to:
                 tails.append(
                     f"【同回合合入】已往本回合协作图追加 "
-                    f"{len(added_nodes_for_anchor)} 名成员（execution_id=`{append_to}`）。"
+                    f"{len(added_nodes_for_anchor)} 名成员。"
                 )
             elif self._depth == 0:
-                # 回显本图 execution_id（跨回合续接的显式指定通道；latest 解析为主路径）。
-                # 仅根协调者——嵌套 lead 不能跨回合追加，回显只会误导。
+                # 跨回合接续：latest 解析为主路径（不含图 id）。仅根协调者。
                 tails.append(
-                    f"【协作图】本次团队执行 execution_id=`{execution_id}`"
-                    '（跨回合往这张图续接：delegate 传 append_to_execution_id="latest" '
-                    "或此精确 id → 新开图并链 prev；未命中可追加图时引擎自动新建并写明）。"
+                    "【协作图】本次已开本回合团队。"
+                    '跨回合接续上一张图：delegate 传 append_to_execution_id="latest" '
+                    "→ 新开一队并链回；未命中可接续图时引擎自动新建并写明。"
                 )
             result.output = f"{result.output}\n\n" + "\n\n".join(tails)
         if result.success and execution_id:

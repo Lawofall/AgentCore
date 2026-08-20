@@ -36,12 +36,10 @@ _TRACE_TRAILING_BRACE_ARGS = (
 )
 
 
-def _ask_user_call(*, message: str = "", blocking: bool | None = None) -> ToolCall:
+def _ask_user_call(*, message: str = "") -> ToolCall:
     args: dict = {}
     if message:
         args["message"] = message
-    if blocking is not None:
-        args["blocking"] = blocking
     return ToolCall(
         id="call_ask",
         function=ToolCallFunction(name="ask_user", arguments=json.dumps(args)),
@@ -131,16 +129,6 @@ def test_prepare_leaves_explicit_message():
     )
     args = json.loads(calls[0].function.arguments)
     assert args["message"] == "卡片文案"
-    assert folded is False
-
-
-def test_prepare_skips_non_blocking():
-    calls, folded = prepare_blocking_ask_user_tool_calls(
-        [_ask_user_call(blocking=False)],
-        "继续推进",
-    )
-    args = json.loads(calls[0].function.arguments)
-    assert "message" not in args
     assert folded is False
 
 

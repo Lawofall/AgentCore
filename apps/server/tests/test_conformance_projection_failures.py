@@ -19,7 +19,7 @@ import pytest
 
 from agentcore.conformance.export import build_fixtures
 from agentcore.conformance.vectors import VECTORS
-from agentcore.runtime.journal.pending_interactions import GATE_KINDS
+from agentcore.runtime.interaction import GATE_KINDS
 from agentcore.workspace.limits import CHANNEL_DEAD_PREPARE_ABORT
 
 
@@ -210,44 +210,6 @@ def test_approval_sibling_sweep_settles_every_card(projected):
         "content",
     ]
     assert p["content"] == "需要写几个文件。 三个文件都写好了。"
-
-
-def test_delegation_authorization_paused(projected):
-    """委派授权是 halting gate: the plan is already folded (team marker + node) but the
-    turn parks with the authorization pending and NOTHING started — progress 0/1. The
-    tool list is the whole point of the card, so it rides verbatim."""
-    p = projected["delegation_authorization_paused"]
-    assert p["status"] == "paused"
-    assert p["finishReason"] is None
-    assert p["interactions"] == [
-        {
-            "kind": "delegation_authorization",
-            "id": "auth1",
-            "status": "pending",
-            "executionId": "exec1",
-            "workers": [{"role": "调研", "task": "调研"}],
-            "tools": ["file_write", "code_execute"],
-        }
-    ]
-    assert _pending_gates(p) == p["interactions"]
-    assert [s["kind"] for s in p["process"]] == [
-        "content",
-        "delegation_authorization",
-        "team",
-    ]
-    assert p["progress"] == {"completed": 0, "total": 1}
-
-
-def test_delegation_authorization_resolved_clears_pending(projected):
-    """放行后：同一张卡翻 resolved（不是第二张卡、不是消失），回合正常收口。"""
-    p = projected["delegation_authorization_resolved"]
-    parked = projected["delegation_authorization_paused"]
-    assert p["status"] == "completed"
-    assert p["finishReason"] == "end_turn"
-    assert _pending_gates(p) == []
-    assert len(p["interactions"]) == 1
-    assert p["interactions"][0] == {**parked["interactions"][0], "status": "resolved"}
-    assert p["content"] == "我来安排团队，先请你授权工具。 已获授权，开工。"
 
 
 def test_checkpoint_resolved_reload_has_no_fake_pending(projected):

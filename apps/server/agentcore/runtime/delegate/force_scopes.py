@@ -57,15 +57,11 @@ EMPTY_FORCE_SCOPES = ForceScopes()
 def parse_force_scopes(raw: Any) -> ForceScopes:
     """解析 ``delegate`` / ``replan`` 的 ``force`` 入参为闸集合。
 
-    只认闸名数组。历史布尔 ``force=true``（以及 ``"all"`` 等泛化写法）**不再**
-    映射成全开——那正是本次要退役的一键全开；解析成空集并记一条 info，具体哪道闸
-    拒绝时由该闸自己报出它的 scope 名。未知闸名忽略。
+    只认闸名数组（及单个闸名字符串）。其它类型（含历史布尔 ``force=true`` /
+    ``"all"`` 等泛化写法）走不可解析 → 空集；具体哪道闸拒绝时由该闸自己报出
+    它的 scope 名。未知闸名忽略。
     """
     if raw is None:
-        return EMPTY_FORCE_SCOPES
-    if isinstance(raw, bool):
-        if raw:
-            logger.info("delegate.force_legacy_bool_ignored", gates=list(FORCE_GATES))
         return EMPTY_FORCE_SCOPES
     if isinstance(raw, str):
         items: list[Any] = [raw]

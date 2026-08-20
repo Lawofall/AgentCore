@@ -262,7 +262,7 @@ async def test_key_invalid_latches_the_turn_so_the_fan_out_stops():
         with pytest.raises(LLMAuthError) as first:
             await observed.complete(_req())
         assert first.value.code == "LLM_KEY_INVALID"
-        assert is_turn_auth_dead() is True
+        assert is_turn_auth_dead("user") is True
 
         with pytest.raises(LLMAuthError) as sibling:
             await observed.complete(_req())

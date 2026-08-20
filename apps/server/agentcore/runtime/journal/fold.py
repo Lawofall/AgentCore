@@ -5,8 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from agentcore.runtime.events import _JOURNAL_SURFACE_TYPES, EventType, FinishReason
+from agentcore.runtime.events.payloads.process import RETIRED_PROCESS_STEP_KINDS
+from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES
 from agentcore.runtime.facts import EXECUTION_ONLY_KINDS, FactKind, pre_pause_from_journal
 from agentcore.runtime.runs.types import RunKind
+from agentcore.runtime.terminal import RUN_PRODUCT_EVENT_TYPES
 
 from .entries import _PROCESS_PREFIX, _RUN_PROCESS_PREFIX, KIND_TURN_END
 
@@ -15,16 +18,13 @@ if TYPE_CHECKING:
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunState
 
-# A run node's terminal display event: the deltas-退场 synthesis splices the run's full
-# output/thinking right before it. Both COMPLETED and FAILED qualify — a failed worker
-# can still have produced (partial) output worth showing on reload.
-_RUN_TERMINAL_TYPES = frozenset({EventType.RUN_COMPLETED.value, EventType.RUN_FAILED.value})
-
+# Product-bearing close frames (completed / failed). Occupancy also includes
+# cancelled / skipped — those live on RUN_CLOSE_EVENT_TYPES, not here.
 
 # ``before_last_team`` process markers (开工卡 / 委派授权): product narrative is
 # 放行 → 协作图. ``run_plan`` may journal ``process_team`` first; fold still inserts
 # these ahead of the last ``team`` so reload order matches live EventSink.
-_BEFORE_LAST_TEAM_PROCESS_KINDS = frozenset({"team_preview", "delegation_authorization"})
+_BEFORE_LAST_TEAM_PROCESS_KINDS = frozenset({"team_preview"})
 
 
 def _upsert_tool_step(steps: list[dict[str, Any]], step: dict[str, Any]) -> None:
@@ -51,6 +51,8 @@ def _has_team_marker(steps: list[dict[str, Any]], execution_id: str) -> bool:
 def _append_process_step(steps: list[dict[str, Any]], step: dict[str, Any]) -> None:
     """Append a non-tool process step, applying ``before_last_team`` when needed."""
     kind = step.get("kind")
+    if kind in RETIRED_PROCESS_STEP_KINDS:
+        return
     if kind == "team":
         eid = step.get("execution_id") or ""
         if eid and _has_team_marker(steps, eid):
@@ -136,7 +138,7 @@ def _splice_synthetic_deltas(
     """
     out: list[dict[str, Any]] = []
     for ev in events:
-        if ev.get("type") in _RUN_TERMINAL_TYPES:
+        if ev.get("type") in RUN_PRODUCT_EVENT_TYPES:
             run_id = (ev.get("payload") or {}).get("run_id")
             agent_id = agent_run_ids.get(run_id) if run_id else None
             final = final_outputs.get(run_id) if run_id else None
@@ -249,6 +251,8 @@ def runs_from_entries(entries: list[dict[str, Any]] | None) -> dict[str, Any] | 
         elif kind in EXECUTION_ONLY_KINDS:
             # Execution-level facts carry engine-rebuild state, not client-foldable
             # display events — skip them so they never leak into runs.events.
+            continue
+        elif kind in RETIRED_EVENT_TYPE_VALUES:
             continue
         elif kind.startswith(_PROCESS_PREFIX):
             suffix = kind[len(_PROCESS_PREFIX) :]

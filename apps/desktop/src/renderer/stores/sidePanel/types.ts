@@ -4,12 +4,11 @@
  *
  *  - 「工作区」(first)：不可销毁、可 detach 为应用内浮窗；
  *  - 「改动」(second)：§十 P0c 条件固定（有货才审），出现后不可关、可 detach；
- *  - in canvas mode only: fixed, non-closable 「指挥台」(条件固定，不进 `+`；不可 float)；
  *  - closable content tabs (≤12, 固定不计): File 多实例、Terminal / Browser 各一壳
  *   （壳内各自管会话/页签）、run / endpoint / simple-turn 详情。
  *
  * 应用内浮窗（§十 · 方案 B）：Move 不 Copy；可 float = run / workspace / file / changes；
- * 不可 = terminal / browser / command；content / simple-turn 永不 float。统一上限 8。
+ * 不可 = terminal / browser；content / simple-turn 永不 float。统一上限 8。
  *
  * Content tabs store references only; bodies keep-alive while the tab exists.
  * `open` / `width` are persisted; content tabs + floats are session-level.
@@ -72,9 +71,6 @@ export const WORKSPACE_TAB_ID = "workspace";
  */
 export const CHANGES_TAB_ID = "changes";
 
-/** Reserved id of the fixed 「指挥台」 tab (canvas mode only; never closes; 不进 `+`; 不可 float). */
-export const COMMAND_TAB_ID = "command";
-
 /**
  * Stable content-tab id for the 右坞浏览器壳（顶栏可关内容 tab；`+` / 活动卡共用）。
  * 产物 HTML 完整预览亦走本 tab（`openWorkspaceHtmlInBrowser`）；旧平行「预览」tab 已拆除（M3b）。
@@ -122,9 +118,9 @@ export type EndpointKind = "prompt" | "answer";
 
 /**
  * A content tab — the turn's endpoint chat bubble (the user's prompt or the CEO's
- * final answer) surfaced in the docked panel. The canvas (放大态 / 聚焦节点) has no
+ * final answer) surfaced in the docked panel. The 全屏放大态 has no
  * chat column alongside, so an endpoint reads here — like a worker drill — instead
- * of a foot drawer (前端UX设计.md §五/§六). Endpoints are bubbles, not runs, so they
+ * of a foot drawer (协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大). Endpoints are bubbles, not runs, so they
  * ride this kind rather than RunDetailBody. Scoped by the turn (`messageId`) so it
  * lights that graph's endpoint node; `contentMessageId` is the bubble rendered.
  */
@@ -145,9 +141,9 @@ export interface ContentDetailTab {
 
 /**
  * A simple-turn Q&A tab — the whole CEO-only exchange (user prompt + assistant
- * answer) from a canvas `SimpleTurn` light card. Pure dialogue has no execution
+ * answer) for a no-execution turn. Pure dialogue has no execution
  * plan, so it must not ride `content` (whose live check requires a plan) or
- * `run` (前端UX设计.md §6.1 / §十).
+ * `run` (前端UX设计.md §十 详情面板（右坞）).
  */
 export interface SimpleTurnDetailTab {
   /** Discriminator: full Q&A for a no-execution turn. */
@@ -268,10 +264,10 @@ export interface SidePanelState {
   open: boolean;
   /** Docked width in px, clamped to [280, 动态上限] (persisted)；上限见 sidePanelMaxWidth()。 */
   width: number;
-  /** Open content tabs (session-level; 固定 工作区 / 改动 / 条件「指挥台」不在此数组). */
+  /** Open content tabs (session-level; 固定 工作区 / 改动 不在此数组). */
   tabs: DetailTab[];
   /**
-   * Active dock tab: `WORKSPACE_TAB_ID` / `CHANGES_TAB_ID` / `COMMAND_TAB_ID`
+   * Active dock tab: `WORKSPACE_TAB_ID` / `CHANGES_TAB_ID`
    * or a content tab id. Defaults to the workspace home. Floating tabs are not
    * the dock active surface (see {@link focusSurface}).
    */
@@ -332,7 +328,7 @@ export interface SidePanelState {
   showRunDetail: (messageId: string, runId: string, title?: string) => void;
   /**
    * Pin an endpoint chat bubble (the turn's prompt / final answer) and reveal it.
-   * The canvas surfaces an endpoint here (no chat column alongside); the inline
+   * The 全屏放大态 surfaces an endpoint here (no chat column alongside); the inline
    * graph lights the matching endpoint node while its content tab is active.
    */
   showContentDetail: (
@@ -342,8 +338,8 @@ export interface SidePanelState {
     endpoint: EndpointKind,
   ) => void;
   /**
-   * Pin a simple-turn Q&A (user prompt + assistant answer) and reveal it. Used by
-   * canvas `SimpleTurn` light cards — no execution, so not a run/content tab.
+   * Pin a simple-turn Q&A (user prompt + assistant answer) and reveal it. Used for
+   * no-execution turns — not a run/content tab.
    */
   showSimpleTurnDetail: (
     messageId: string,
@@ -353,21 +349,21 @@ export interface SidePanelState {
   ) => void;
   /**
    * Drop every reading-context tab (endpoint content + simple-turn Q&A), keeping
-   * run / terminal / file / browser tabs. The canvas calls this when leaving its
-   * reading context (放大态 exit / canvas→chat).
+   * run / terminal / file / browser tabs. TurnDetailPage calls this on unmount
+   * (放大态 exit).
    */
   closeContentTabs: () => void;
   /**
    * 切对话：卸对话作用域内容 tab（run / endpoint content / simple-turn / file），
-   * 保留 terminal / browser 壳；固定 工作区 / 改动 / 指挥台 不在 `tabs` 内故不受影响。
+   * 保留 terminal / browser 壳；固定 工作区 / 改动 不在 `tabs` 内故不受影响。
    * 不改 `open` / `width`；浮窗壳由 {@link clearFloats} 负责，本 API 仅顺带摘掉
    * 已卸 tab 对应的 float 条目（可与 clearFloats 同 effect 先后调用）。
    */
   closeConversationScopedTabs: () => void;
   /**
-   * Reveal the panel WITHOUT touching the active tab — used by the 指挥台 tab's
-   * auto-surface (前端UX设计.md §6.2) so a newly-arrived decision opens the dock while
-   * a run/workspace tab the user is reading stays put (only the 指挥台 tab badge updates).
+   * Reveal the panel WITHOUT touching the active tab — so a newly-arrived
+   * decision can open the dock while a run/workspace tab the user is reading
+   * stays put.
    */
   openPanel: () => void;
   /** Reveal the panel on the 工作区 home tab (the chat toggle / Ctrl+J). */
