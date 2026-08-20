@@ -105,6 +105,8 @@ apps/server/tmp/
 /tmp_*
 /_tmp_*
 /.tmp_*
+# Log-patrol scratch at repo root (often carries conversation bodies)
+/.cursor-tmp-*
 # Local scratch dump dir at repo root only (leading slash; not apps/**/.tmp)
 /.tmp/
 apps/server/_tmp_*

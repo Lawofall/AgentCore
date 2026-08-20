@@ -25,6 +25,13 @@ def _cancelled_turn_end_entry() -> dict[str, Any]:
     }
 
 
+def _last_turn_end_entry(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for entry in reversed(entries):
+        if (entry.get("kind") or "") == KIND_TURN_END:
+            return entry
+    return None
+
+
 async def _load_turn_end_finish(repo: Any, message_id: str) -> str | None:
     """Best-effort last ``turn_end`` finish on disk. Missing ``load`` → ``None``."""
     load = getattr(repo, "load", None)
@@ -34,6 +41,68 @@ async def _load_turn_end_finish(repo: Any, message_id: str) -> str | None:
         return last_turn_end_finish(await load(message_id))
     except Exception:  # noqa: BLE001 — persist must never break the turn
         return None
+
+
+async def _load_live_max_seq(repo: Any, message_id: str) -> int | None:
+    """Highest live-band seq, or ``None`` when empty / repo has no ``max_seq``."""
+    max_seq = getattr(repo, "max_seq", None)
+    if max_seq is None:
+        return None
+    try:
+        return await max_seq(message_id)
+    except Exception:  # noqa: BLE001 — persist must never break the turn
+        return None
+
+
+async def _merge_live_band(
+    repo: Any,
+    *,
+    message_id: str,
+    conversation_id: str,
+    trace_id: str | None,
+    entries: list[dict[str, Any]],
+) -> None:
+    """Insert-if-absent inside occupied live seqs; extend the band only for a closer.
+
+    Append-on-emit already owns live seqs. Re-enumerating ``fact_log`` as ``0..n``
+    after a pause snapshot that also carries overflow-band rows shifts the index
+    past ``max_seq`` and inserts a duplicate trailing ``process_content``.
+    """
+    live_max = await _load_live_max_seq(repo, message_id)
+    if live_max is None:
+        for seq, entry in enumerate(entries):
+            await repo.append(
+                turn_id=message_id,
+                seq=seq,
+                conversation_id=conversation_id,
+                trace_id=trace_id,
+                entry=entry,
+            )
+        return
+    for seq, entry in enumerate(entries):
+        if seq > live_max:
+            break
+        await repo.append(
+            turn_id=message_id,
+            seq=seq,
+            conversation_id=conversation_id,
+            trace_id=trace_id,
+            entry=entry,
+        )
+    closer = _last_turn_end_entry(entries)
+    if closer is None:
+        return
+    incoming_finish = last_turn_end_finish([closer])
+    landed = await _load_turn_end_finish(repo, message_id)
+    if landed in (incoming_finish, _CANCELLED):
+        return
+    await repo.append(
+        turn_id=message_id,
+        seq=None,
+        conversation_id=conversation_id,
+        trace_id=trace_id,
+        entry=closer,
+    )
 
 
 async def persist_turn_journal(
@@ -61,10 +130,15 @@ async def persist_turn_journal(
       only the live-band occupancy ``[0, n)`` this snapshot occupies so a resume
       reusing ``turn_id`` overwrites the pause prefix. Overflow-band rows stay;
       they are not copied back by kind.
-    * ``replace=False`` (default): merge via seq ``append`` (insert-if-absent).
-      Salvage / cloud live may hold a sparser display view; occupied seqs stay
-      because progressive append-on-emit already owns denser rows. Extra
-      overflow-band rows beyond ``len(entries)`` are left in place.
+    * ``replace=False`` (default): merge via seq ``append`` (insert-if-absent)
+      **inside the live band already occupied**. Salvage / sparse display views
+      may fill holes; occupied seqs stay because append-on-emit already owns
+      them. The list index must not extend the live band — ``fact_log``
+      inherited overflow / phantom rows are longer than ``max_seq+1`` and
+      would insert a duplicate trailing ``process_content``. A missing (or
+      more-final) ``turn_end`` is appended with ``seq=None`` (MAX+1). Extra
+      overflow-band rows stay. Empty live band still writes ``0..n`` from
+      the list (first persist / tests).
 
     User-stop ``turn_end(cancelled)`` is sticky: a later pause snapshot
     (``replace=True`` keep-tail, or merge that drops the closer) must not leave
@@ -98,14 +172,13 @@ async def persist_turn_journal(
                 entries=entries,
             )
         else:
-            for seq, entry in enumerate(entries):
-                await repo.append(
-                    turn_id=message_id,
-                    seq=seq,
-                    conversation_id=conversation_id,
-                    trace_id=trace_id,
-                    entry=entry,
-                )
+            await _merge_live_band(
+                repo,
+                message_id=message_id,
+                conversation_id=conversation_id,
+                trace_id=trace_id,
+                entries=entries,
+            )
         # Keep-tail / merge-drop can leave a pause closer last, or drop the
         # cancelled fact onto an occupied seq. Re-append so refresh/follow
         # project cancelled — not still-running or interrupted.

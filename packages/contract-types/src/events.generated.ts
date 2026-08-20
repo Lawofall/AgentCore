@@ -766,7 +766,7 @@ export type DeliveryState =
  * ``unverified_note`` (soft 示例/虚构自注；不单独把 state 打成 notes) /
  * ``files_not_landed`` (零落盘 soft tip：per-worker「本队员本波未交卷」/
  * 批次「本批未见落盘」；甲⁺ 起不挡收工) /
- * ``verify_failed`` (验证形工具失败：browser_navigate / test_run /
+ * ``verify_failed`` (验证形工具失败：browser navigate / test_run /
  * verify 形 code_execute·terminal).
  * Absent for ordinary contract / criteria prose gaps that have not been projected.
  * Clients may badge known codes and ignore unknown ones (forward-compatible).

@@ -1675,6 +1675,135 @@ async def test_persist_turn_journal_merges_by_seq_by_default(monkeypatch):
     assert appended == [0, 1, 2]
 
 
+async def test_persist_turn_journal_resume_overflow_does_not_duplicate_process_content(
+    monkeypatch,
+):
+    """ask_user pause→resume: inherited [*live, *overflow] must not extend live seq.
+
+    Live writer already flushed one ``process_content`` at max_seq. Old merge used
+    fact_log index as seq; the overflow row shifted the same text onto an empty
+    slot (cid 36d4e5b9 / seq 21+22).
+    """
+    from agentcore.runtime.journal import last_turn_end_finish
+    from agentcore.runtime.journal.persist import persist_turn_journal
+
+    reply = "一批候选问题（合成夹具，非用户原文）。"
+    store: dict[str, dict] = {
+        str(i): {"kind": f"pre_{i}", "payload": {}} for i in range(21)
+    }
+    store["21"] = {
+        "kind": "process_content",
+        "payload": {"kind": "content", "text": reply},
+    }
+    appended_beyond: list[tuple[int | None, str]] = []
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def max_seq(self, turn_id: str) -> int | None:
+            del turn_id
+            return max(int(k) for k in store)
+
+        async def load(self, turn_id: str) -> list:
+            del turn_id
+            return [store[k] for k in sorted(store, key=int)]
+
+        async def append(self, *, turn_id, seq, conversation_id, trace_id, entry) -> int:
+            del conversation_id, trace_id
+            if seq is not None and seq <= 21:
+                return seq
+            next_seq = max(int(k) for k in store) + 1
+            store[str(next_seq)] = entry
+            appended_beyond.append((seq, str(entry.get("kind") or "")))
+            return next_seq
+
+    class Session:
+        async def rollback(self):
+            pass
+
+    monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
+    monkeypatch.setattr("agentcore.config.settings.observability_span_export_enabled", False)
+
+    # 13 inherited (12 live + overflow) + 9 resume facts → process_content at
+    # index 22, past live max 21 — the old enumerate insert slot.
+    inherited = [{"kind": f"pre_{i}", "payload": {}} for i in range(12)]
+    inherited.append({"kind": "run_completed", "payload": {"overflow": True}})
+    resume_facts = [{"kind": f"resume_{i}", "payload": {}} for i in range(9)]
+    resume_facts.append(
+        {"kind": "process_content", "payload": {"kind": "content", "text": reply}}
+    )
+    resume_facts.append({"kind": "turn_end", "payload": {"finish_reason": "end_turn"}})
+    await persist_turn_journal(
+        Session(),  # type: ignore[arg-type]
+        message_id="m1",
+        conversation_id="c1",
+        trace_id="t",
+        entries=inherited + resume_facts,
+    )
+    pcs = [
+        e
+        for e in store.values()
+        if e.get("kind") == "process_content"
+        and (e.get("payload") or {}).get("text") == reply
+    ]
+    assert len(pcs) == 1
+    assert last_turn_end_finish(list(store.values())) == "end_turn"
+    assert appended_beyond == [(None, "turn_end")]
+
+
+async def test_persist_turn_journal_end_turn_supersedes_paused_closer(monkeypatch):
+    """Resume complete must append end_turn even when pause left turn_end(paused)."""
+    from agentcore.runtime.journal import last_turn_end_finish
+    from agentcore.runtime.journal.persist import persist_turn_journal
+
+    store: dict[str, dict] = {
+        "0": {"kind": "run_started", "payload": {}},
+        "1": {"kind": "turn_end", "payload": {"finish_reason": "paused"}},
+    }
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def max_seq(self, turn_id: str) -> int | None:
+            del turn_id
+            return max(int(k) for k in store)
+
+        async def load(self, turn_id: str) -> list:
+            del turn_id
+            return [store[k] for k in sorted(store, key=int)]
+
+        async def append(self, *, turn_id, seq, conversation_id, trace_id, entry) -> int:
+            del conversation_id, trace_id
+            if seq is not None and str(seq) in store:
+                return seq
+            next_seq = max(int(k) for k in store) + 1
+            store[str(next_seq)] = entry
+            return next_seq
+
+    class Session:
+        async def rollback(self):
+            pass
+
+    monkeypatch.setattr("agentcore.db.repositories.TurnJournalRepository", Repo)
+    monkeypatch.setattr("agentcore.config.settings.observability_span_export_enabled", False)
+
+    await persist_turn_journal(
+        Session(),  # type: ignore[arg-type]
+        message_id="m1",
+        conversation_id="c1",
+        trace_id="t",
+        entries=[
+            {"kind": "run_started", "payload": {}},
+            {"kind": "process_content", "payload": {"kind": "content", "text": "续写"}},
+            {"kind": "turn_end", "payload": {"finish_reason": "end_turn"}},
+        ],
+    )
+    assert last_turn_end_finish([store[k] for k in sorted(store, key=int)]) == "end_turn"
+    assert sum(1 for e in store.values() if e.get("kind") == "process_content") == 0
+
+
 async def test_persist_turn_journal_replaces_via_record(monkeypatch):
     """``replace=True`` rewrites the live-band prefix via record() (resume / outbox)."""
     from agentcore.runtime.journal.persist import persist_turn_journal
