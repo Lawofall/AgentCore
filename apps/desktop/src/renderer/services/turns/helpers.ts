@@ -56,9 +56,7 @@ function stampHonestStopCancelled(conversationId: string): void {
     {
       isStreaming: false,
       finishReason: "cancelled",
-      runs: tail.runs
-        ? { ...tail.runs, finishReason: "cancelled" }
-        : tail.runs,
+      runs: tail.runs ? { ...tail.runs, finishReason: "cancelled" } : tail.runs,
     },
     conversationId,
   );

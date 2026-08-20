@@ -69,9 +69,9 @@ describe("finalizeHonestStopAbort", () => {
 
     finalizeHonestStopAbort(CID);
 
-    expect(getRuntime(CID).messages.find((m) => m.id === mid)?.finishReason).toBe(
-      "interrupted",
-    );
+    expect(
+      getRuntime(CID).messages.find((m) => m.id === mid)?.finishReason,
+    ).toBe("interrupted");
   });
 });
 
