@@ -1123,7 +1123,9 @@ function ResumeCardBody({
                       <span className="ask-check-text">
                         <span className="ask-check-label">{label}</span>
                         {confirmLine && (
-                          <span className="ask-check-detail">{confirmLine}</span>
+                          <span className="ask-check-detail">
+                            {confirmLine}
+                          </span>
                         )}
                       </span>
                       {hint && <span className="ask-row-hint">{hint}</span>}

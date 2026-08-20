@@ -20,8 +20,8 @@
  * delivery summary. `kind=paused` stays on PausedContinueCard.
  */
 import { errorActionForCode, resolveEmptyFailureNotice } from "@/lib/errors";
-import { STOPPED_LABEL } from "@/lib/stopLifecycle";
 import { withLocalRecoveryMoment } from "@/lib/recoveryMoment";
+import { STOPPED_LABEL } from "@/lib/stopLifecycle";
 import {
   collectFailedToolNames,
   shouldShowUnproductiveToolFailureHint,
