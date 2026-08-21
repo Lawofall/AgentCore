@@ -96,6 +96,7 @@ describe("WorkspaceModeMenu · cloud desk §7.6 exits", () => {
     render(<WorkspaceModeMenu state={cloudState()} conversationId="c-cloud" />);
 
     expect(screen.getByText("合回到本机")).toBeTruthy();
+    expect(screen.queryByText(/不可改绑/)).toBeNull();
     expect(screen.queryByText("导出 ZIP")).toBeNull();
     expect(screen.queryByText("导出到本机文件夹")).toBeNull();
     expect(screen.queryByText("登记合回落点")).toBeNull();

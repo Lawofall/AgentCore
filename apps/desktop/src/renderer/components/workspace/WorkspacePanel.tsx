@@ -5,8 +5,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { getConversations } from "@/hooks/useConversations";
 import { useConversationFileSource } from "@/hooks/useConversationFileSource";
+import { getConversations } from "@/hooks/useConversations";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
 import { hasLocalFiles } from "@/lib/capabilities";
 import {

@@ -713,9 +713,7 @@ describe("FileArtifactsCard — 合回产物", () => {
     renderCard(
       <FileArtifactsCard
         conversationId="c1"
-        artifacts={[
-          { path: "out/a.md", name: "a.md", acceptance: "accepted" },
-        ]}
+        artifacts={[{ path: "out/a.md", name: "a.md", acceptance: "accepted" }]}
       />,
     );
     expect(screen.queryByRole("button", { name: "合回产物" })).toBeNull();

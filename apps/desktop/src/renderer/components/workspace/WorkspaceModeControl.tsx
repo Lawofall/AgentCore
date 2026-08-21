@@ -374,38 +374,27 @@ export function WorkspaceModeMenu({
               disabled={anyBusy}
             />
           </>
-        ) : desktop ? (
+        ) : desktop && conversationId ? (
           <>
             {/* §7.6 云桌→本机：芯片只留 Diff 合回；首次询问落点，已登记可更换。 */}
-            {conversationId ? (
-              <>
-                <ModeAction
-                  icon={<FolderInput size={14} />}
-                  label="合回到本机"
-                  hint={mergeHint}
-                  onClick={onMergeBack}
-                  disabled={anyBusy}
-                />
-                {landing && !landing.missing ? (
-                  <ModeAction
-                    icon={<MapPin size={14} />}
-                    label="更换合回落点"
-                    hint={`当前 · ${landing.rootName ?? "已登记目录"}`}
-                    onClick={onRegisterLanding}
-                    disabled={anyBusy}
-                  />
-                ) : null}
-              </>
+            <ModeAction
+              icon={<FolderInput size={14} />}
+              label="合回到本机"
+              hint={mergeHint}
+              onClick={onMergeBack}
+              disabled={anyBusy}
+            />
+            {landing && !landing.missing ? (
+              <ModeAction
+                icon={<MapPin size={14} />}
+                label="更换合回落点"
+                hint={`当前 · ${landing.rootName ?? "已登记目录"}`}
+                onClick={onRegisterLanding}
+                disabled={anyBusy}
+              />
             ) : null}
-            <p className="px-2.5 py-1.5 text-xs text-muted-foreground">
-              本会话工作区在创建时已确定，不可改绑。
-            </p>
           </>
-        ) : (
-          <p className="px-2.5 py-1.5 text-xs text-muted-foreground">
-            工作区在创建时已确定，会话期间不可改绑。
-          </p>
-        )}
+        ) : null}
 
         {exitBusy ? (
           <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground">

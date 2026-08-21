@@ -86,7 +86,9 @@ export function FileBrowser({
                   <UploadMenu
                     uploading={chrome.uploading}
                     onUploadFiles={() => treeRef.current?.triggerUpload()}
-                    onUploadFolder={() => treeRef.current?.triggerUploadFolder()}
+                    onUploadFolder={() =>
+                      treeRef.current?.triggerUploadFolder()
+                    }
                   />
                 ) : null}
                 {onCloneGit ? (

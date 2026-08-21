@@ -128,9 +128,7 @@ function historyAssistant(events: SSEEvent[]) {
   };
 }
 
-function folderCreatedEvents(
-  extra: SSEEvent[] = [],
-): SSEEvent[] {
+function folderCreatedEvents(extra: SSEEvent[] = []): SSEEvent[] {
   return [
     ev("message_start", {
       message_id: "m-asst",
