@@ -1,10 +1,11 @@
 import { EmptyHint, IconButton } from "@/components/files/parts";
-import { Button } from "@/components/ui";
+import { Button, IconButton as UiIconButton } from "@/components/ui";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useConversationFileSource } from "@/hooks/useConversationFileSource";
 import { getConversations } from "@/hooks/useConversations";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
@@ -224,16 +225,18 @@ function WorkspaceExportMenu({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <IconButton
-          title="导出"
-          disabled={exporting}
-          aria-label="导出"
-          aria-expanded={open}
-        >
-          {icon}
-        </IconButton>
-      </PopoverTrigger>
+      <SimpleTooltip label="导出">
+        <PopoverTrigger asChild>
+          <UiIconButton
+            disabled={exporting}
+            aria-label="导出"
+            aria-expanded={open}
+            aria-haspopup="menu"
+          >
+            {icon}
+          </UiIconButton>
+        </PopoverTrigger>
+      </SimpleTooltip>
       <PopoverContent align="end" className="w-56 p-1.5">
         <Button
           variant="ghost"
