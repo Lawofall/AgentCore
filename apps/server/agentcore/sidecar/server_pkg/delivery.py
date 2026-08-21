@@ -23,6 +23,19 @@ from agentcore.sidecar.server_pkg.turns import parse_client_turn_ids, rpc_agent_
 
 
 class DeliveryMixin:
+    """Composed into ``SidecarServer``; attributes live on the composed class."""
+
+    _initialized: bool
+    _root: object | None
+    _user_id: str
+    _fifo_desktop_start: dict[str, asyncio.Future[None]]
+
+    async def _send(self, message: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    async def _reply(self, request_id: Any, result: Any) -> None:
+        raise NotImplementedError
+
     def _install_local_queue_starter(self) -> None:
         """FIFO drain uses this process's pipeline+outbox, not cloud ``stream_chat``."""
         set_queue_starter(self._start_queued_sidecar_turn)
@@ -94,11 +107,13 @@ class DeliveryMixin:
             )
             return
         try:
-            body = SendMessageRequest(
-                content=str(params.get("content") or ""),
-                delivery=params.get("delivery"),
-                attachments=_rpc_attachment_dicts(params),
-                agent_mentions=rpc_agent_mentions(params),
+            body = SendMessageRequest.model_validate(
+                {
+                    "content": str(params.get("content") or ""),
+                    "delivery": params.get("delivery"),
+                    "attachments": _rpc_attachment_dicts(params),
+                    "agent_mentions": rpc_agent_mentions(params),
+                }
             )
         except ValidationError as e:
             await self._send(

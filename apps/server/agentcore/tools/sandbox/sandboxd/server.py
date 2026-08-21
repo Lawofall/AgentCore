@@ -70,7 +70,10 @@ def lookup_user_uid(name: str) -> int | None:
     try:
         import pwd
 
-        return int(pwd.getpwnam(name).pw_uid)
+        getpwnam = getattr(pwd, "getpwnam", None)
+        if getpwnam is None:
+            return None
+        return int(getpwnam(name).pw_uid)
     except (ImportError, KeyError, AttributeError):
         return None
 
@@ -227,7 +230,10 @@ class SandboxdServer:
         try:
             import grp
 
-            gid = grp.getgrnam(self._app_user).gr_gid
+            getgrnam = getattr(grp, "getgrnam", None)
+            if getgrnam is None:
+                raise AttributeError("grp.getgrnam")
+            gid = getgrnam(self._app_user).gr_gid
             chown = getattr(os, "chown", None)
             if chown is not None:
                 chown(self.socket_path, self._self_uid, gid)
@@ -276,7 +282,8 @@ class SandboxdServer:
                 return
             req_id = msg.get("id")
             method = msg.get("method")
-            params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+            raw_params = msg.get("params")
+            params: dict[str, Any] = raw_params if isinstance(raw_params, dict) else {}
             try:
                 keep_open = await self._dispatch(method, params, req_id, reader, writer)
             except RpcDeniedError as exc:

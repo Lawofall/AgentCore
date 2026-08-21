@@ -886,6 +886,10 @@ export const DESKTOP_PAGE_PARITY: Record<string, ParityEntry> = {
     verdict: "simplified",
     reason: "产品手册内嵌预览，手册保持不做（本轮决策）",
   },
+  "toolbox/manual/embeds/ManualDemoRetryBar": {
+    verdict: "simplified",
+    reason: "产品手册内嵌预览，手册保持不做（本轮决策）",
+  },
   "toolbox/manual/embeds/ManualDebateFinalePreview": {
     verdict: "simplified",
     reason: "产品手册内嵌预览，手册保持不做（本轮决策）",
