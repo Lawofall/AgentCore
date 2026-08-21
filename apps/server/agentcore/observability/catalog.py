@@ -1812,6 +1812,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='memory.on_demand_rules_load_failed'),
     EventSpec(name='memory.project_scopes_failed'),
     EventSpec(name='memory.remember_failed'),
+    EventSpec(name='memory.remember_rewarm_failed'),
     EventSpec(name='memory.remember_written'),
     EventSpec(name='memory.save_failed'),
     EventSpec(name='memory.save_skipped_prepare_cache_only'),
