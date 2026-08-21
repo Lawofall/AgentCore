@@ -18,7 +18,8 @@
       "payload": {
         "queue_id": "q-degraded",
         "conversation_id": "conv_demo",
-        "remaining_depth": 0
+        "remaining_depth": 0,
+        "content": "next"
       },
       "timestamp": "2026-01-01T00:00:00.002Z"
     },

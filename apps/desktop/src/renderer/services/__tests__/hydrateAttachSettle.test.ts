@@ -373,6 +373,25 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
     expect(settleCloudRunningAssistant).toHaveBeenCalledTimes(1);
   });
 
+  it("hydrate overlay generating + sidecarLive still attaches", async () => {
+    seedMessages({ role: "assistant", status: "running" });
+    useConversationStore.getState().setGenerating(true, CID);
+    expect(getRuntime(CID).abort).toBeNull();
+    expect(hasLocalConversationStream(CID)).toBe(false);
+
+    const branch = await runHydrateAttachSettle(CID, {
+      sidecarLive: true,
+      cloudLive: false,
+      cloudKnown: true,
+      pausedCount: 0,
+      unsynced: [],
+    });
+
+    expect(branch).toBe("local");
+    expect(attachSidecarTurn).toHaveBeenCalledTimes(1);
+    expect(attachSidecarTurn).toHaveBeenCalledWith(CID);
+  });
+
   it("打开对话不清 ai_attention 灯", async () => {
     useAiAttentionStore.setState({
       entries: [

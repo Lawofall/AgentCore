@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 from typing import Any
 
 from agentcore.conversation.common import preview
@@ -21,6 +22,22 @@ from agentcore.sidecar import protocol
 from agentcore.sidecar.server_pkg.result import trim_result
 
 logger = get_logger(__name__)
+
+_TRACE_HEX32 = re.compile(r"^[0-9a-fA-F]{32}$")
+
+
+def parse_client_turn_ids(params: dict[str, Any]) -> tuple[str, str, str] | None:
+    """Desktop-minted ``(user_message_id, message_id, trace_id)``.
+
+    ``trace_id`` must be 32-hex (``uuid4().hex``). Hyphenated UUIDs and
+    ``new_id()`` leftovers are rejected — sidecar must not mint these.
+    """
+    umid = str(params.get("userMessageId") or "").strip()
+    message_id = str(params.get("messageId") or "").strip()
+    trace_id = str(params.get("traceId") or "").strip()
+    if not umid or not message_id or not _TRACE_HEX32.fullmatch(trace_id):
+        return None
+    return umid, message_id, trace_id
 
 
 def resolve_resume_user_message_id(
@@ -92,6 +109,28 @@ def rpc_agent_mentions(params: dict[str, Any]) -> list[dict[str, Any]]:
     if raw is None:
         raw = params.get("agent_mentions")
     return to_stored_agent_mentions(raw if isinstance(raw, list) else None)
+
+
+def rpc_attachments(params: dict[str, Any]) -> list[dict[str, Any]]:
+    """startTurn / deliver-drain ``attachments`` → dicts (desktop already settled paths)."""
+    raw = params.get("attachments")
+    if not isinstance(raw, list):
+        return []
+    return [dict(item) for item in raw if isinstance(item, dict)]
+
+
+def register_current_turn_run(
+    *, conversation_id: str, sink: EventSink, user_id: str
+) -> None:
+    """Occupy ``turn_runs`` with the running sidecar task (same slot as cloud in-flight)."""
+    task = asyncio.current_task()
+    if task is None or not conversation_id:
+        return
+    from agentcore.runtime.turn.runs import turn_runs
+
+    turn_runs.register(
+        conversation_id=conversation_id, task=task, sink=sink, user_id=user_id
+    )
 
 
 def resolve_rpc_folder_binding(
@@ -282,6 +321,26 @@ class TurnExecutionMixin:
         assert self._root is not None  # guarded by _on_start_turn
         conversation_id = str(params.get("conversationId") or turn_id)
         user_message = str(params.get("userMessage") or "")
+        parsed_ids = parse_client_turn_ids(params)
+        if parsed_ids is None:
+            try:
+                await self._reply_error(
+                    request_id,
+                    protocol.INVALID_PARAMS,
+                    "startTurn requires userMessageId, messageId, and 32-hex traceId",
+                )
+            finally:
+                self._unregister_turn(turn_id)
+            return
+        user_message_id, message_id, trace_id = parsed_ids
+        self._resolve_fifo_desktop_start(message_id)
+        if str(params.get("queueId") or "").strip():
+            self._mark_queue_turn(
+                turn_id,
+                user_message_id=user_message_id,
+                message_id=message_id,
+                trace_id=trace_id,
+            )
         from agentcore.sidecar.chat_history import (
             ChatContextUnavailableError,
             resolve_sidecar_turn_history,
@@ -305,26 +364,38 @@ class TurnExecutionMixin:
                 error=exc.message,
             )
             try:
-                await self._send(
-                    protocol.make_error(request_id, protocol.INTERNAL_ERROR, exc.message)
+                await self._reply_error(
+                    request_id, protocol.INTERNAL_ERROR, exc.message
                 )
             finally:
                 self._unregister_turn(turn_id)
             return
         self.stamp_turn_history(conversation_id, history)
         agent_mentions = rpc_agent_mentions(params)
-        # The desktop mints one trace_id per local turn and threads it here + into the
-        # write-back, so this turn's proxied LLM calls and its persisted reply share it.
-        trace_id = str(params.get("traceId") or "")
-        # Optimistic user bubble id — outbox idempotency anchor (as-built: 双模式工作区 §10.3).
-        user_message_id = str(params.get("userMessageId") or "").strip() or new_id()
-        # mint assistant message_id up front (cloud turn_runner posture) so begin_turn /
-        # content checkpoints / journal share one id before the pipeline runs.
-        message_id = new_id()
+        attachments = rpc_attachments(params)
+        queue_id = str(params.get("queueId") or "").strip()
+        # Desktop mints the triple; sidecar must not new_id() assistant / trace.
 
         turn_creds = self._creds_for(conversation_id, trace_id, message_id)
 
         sink = EventSink()
+        register_current_turn_run(
+            conversation_id=conversation_id, sink=sink, user_id=self._user_id
+        )
+        if queue_id:
+            from agentcore.runtime.events import turn_queue_started
+            from agentcore.runtime.turn.queue import turn_queue
+
+            sink.emit(
+                turn_queue_started(
+                    queue_id=queue_id,
+                    conversation_id=conversation_id,
+                    remaining_depth=turn_queue.depth(conversation_id),
+                    content=user_message,
+                    attachments=attachments or None,
+                    agent_mentions=agent_mentions or None,
+                )
+            )
         backend = self._make_backend(external_mounts=params.get("externalMounts"))
         saver, deleter = self._suspension_hooks()
         session_saver, session_loader = self._session_hooks(conversation_id)
@@ -350,6 +421,7 @@ class TurnExecutionMixin:
         # folder_id / baseline / pipeline sit inside try so begin_turn OPEN cannot
         # stick forever when DB is down on the legacy fallback path (方案一 · 诚实失败).
         pump: asyncio.Task[None] | None = None
+        result: dict[str, Any] | None = None
         try:
             # No inference JWT (probe-spawned sidecar / mint omitted) → fail before
             # prepare/build_turn_router with structured INFERENCE_TOKEN_EXPIRED so
@@ -389,15 +461,13 @@ class TurnExecutionMixin:
                         result=result,
                         user_created_this_send=True,
                     )
-                await self._send(
-                    protocol.make_result(
-                        request_id,
-                        trim_result(
-                            turn_id,
-                            result,
-                            model=resolve_turn_model(None),
-                        ),
-                    )
+                await self._reply(
+                    request_id,
+                    trim_result(
+                        turn_id,
+                        result,
+                        model=resolve_turn_model(None),
+                    ),
                 )
                 return
 
@@ -496,6 +566,7 @@ class TurnExecutionMixin:
                             message_id=message_id,
                             x_client_platform="desktop",
                             agent_mentions=agent_mentions or None,
+                            attachments=attachments or None,
                         )
                         # Pillar D1: keep sink open while a detached background drive is
                         # still live so run_completed / execution_completed reach the UI
@@ -517,6 +588,7 @@ class TurnExecutionMixin:
                 # await the None sentinel forever.
                 sink.close(reason="sidecar_turn_finally")
             await pump  # sink closed above → all events flushed
+            assert result is not None
             # finalize / READY only after close AND after any detached drive settled
             # (await above), so post-detach DURABLE journal appends are not dropped
             # by the outbox READY gate.
@@ -531,11 +603,9 @@ class TurnExecutionMixin:
                     user_created_this_send=True,
                 )
             # Surface the model this turn actually ran on (cloud-proxy / account model).
-            await self._send(
-                protocol.make_result(
-                    request_id,
-                    trim_result(turn_id, result, model=resolve_turn_model(turn_creds)),
-                )
+            await self._reply(
+                request_id,
+                trim_result(turn_id, result, model=resolve_turn_model(turn_creds)),
             )
         except asyncio.CancelledError:
             journal = _ensure_cancelled_turn_end(list(sink.execution_journal() or []))
@@ -559,8 +629,8 @@ class TurnExecutionMixin:
                 salvaged=outbox is not None,
             )
             # Reply first: a hung event pump must not delay TURN_CANCELLED.
-            self._send_soon(
-                protocol.make_error(request_id, protocol.TURN_CANCELLED, "turn cancelled")
+            self._reply_error_soon(
+                request_id, protocol.TURN_CANCELLED, "turn cancelled"
             )
             if pump is not None:
                 with contextlib.suppress(Exception):
@@ -586,8 +656,14 @@ class TurnExecutionMixin:
                 with contextlib.suppress(Exception):
                     sink.close(reason="sidecar_turn_failed")
             logger.error("sidecar.turn_failed", turn_id=turn_id, error=str(e), exc_info=True)
-            await self._send(protocol.make_error(request_id, protocol.INTERNAL_ERROR, str(e)))
+            await self._reply_error(request_id, protocol.INTERNAL_ERROR, str(e))
         finally:
+            closed = ""
+            if result is not None:
+                closed = str(result.get("content") or "")
+            if not closed:
+                closed = sink.streamed_content() or ""
+            self._stamp_closed_turn(conversation_id, user_message, closed)
             if outbox is not None:
                 outbox.clear_turn(message_id)
             self._unregister_turn(turn_id)
@@ -660,32 +736,12 @@ class TurnExecutionMixin:
         message_id: str,
         trace_id: str,
     ) -> None:
-        """Best-effort PG replace of the current outbox journal. Must not raise.
+        """No-op: resume journal rides desktop OPEN checkpoint POST.
 
-        Symmetric with pause ``_outbox_finalize`` → local-turns persist: after
-        settlement is durable, land hang-frame + ``*_resolved`` so a hard refresh
-        does not keep the pause hang-frame. Failure must not block 开工.
+        Do not expand ``persist_sidecar_journal_best_effort`` as the live path.
+        Harvest / READY still settle via final local-turns drain.
         """
-        from agentcore.conversation.store.outbox import journal_entries_from_map
-        from agentcore.runtime.journal.persist import persist_sidecar_journal_best_effort
-
-        try:
-            record = outbox.find_record_by_message_id(message_id)
-            entries = (
-                journal_entries_from_map(record.get("journal")) if record else None
-            )
-            await persist_sidecar_journal_best_effort(
-                message_id=message_id,
-                conversation_id=conversation_id,
-                trace_id=trace_id,
-                entries=entries,
-            )
-        except Exception as e:  # noqa: BLE001 — resume start must not wait on PG
-            logger.warning(
-                "journal.persist_failed",
-                message_id=message_id,
-                error=str(e),
-            )
+        del outbox, conversation_id, message_id, trace_id
 
     async def _run_resume(
         self,
@@ -763,6 +819,9 @@ class TurnExecutionMixin:
             return
 
         sink = EventSink()
+        register_current_turn_run(
+            conversation_id=conversation_id, sink=sink, user_id=self._user_id
+        )
         backend = self._make_backend(external_mounts=external_mounts)
         saver, deleter = self._suspension_hooks()
         session_saver, session_loader = self._session_hooks(conversation_id)
@@ -856,6 +915,7 @@ class TurnExecutionMixin:
         pump = asyncio.create_task(
             self._pump(turn_id, sink, conversation_id=conversation_id)
         )
+        result: dict[str, Any] | None = None
         try:
             try:
                 # Bind this continuation's trace_id (same rationale as _run_turn) so the
@@ -917,6 +977,7 @@ class TurnExecutionMixin:
                 # await the None sentinel forever.
                 sink.close(reason="sidecar_resume_finally")
             await pump  # sink closed above → all events flushed
+            assert result is not None
             # finalize / READY only after close AND after any detached drive settled.
             if outbox is not None:
                 await self._outbox_finalize(
@@ -1025,6 +1086,12 @@ class TurnExecutionMixin:
             if not settlement_durable and self._paused_store is not None:
                 await self._paused_store.confirm_claim(turn_id)
         finally:
+            closed = ""
+            if result is not None:
+                closed = str(result.get("content") or "")
+            if not closed:
+                closed = sink.streamed_content() or ""
+            self._stamp_closed_turn(conversation_id, user_message, closed)
             if outbox is not None:
                 outbox.clear_turn(turn_id)
             self._unregister_turn(turn_id)
@@ -1041,23 +1108,27 @@ class TurnExecutionMixin:
         ``conversationId`` rides with ``turnId`` so harvest (no desktop-minted
         startTurn slot) can still address the live conversation. Desktop may
         ignore the extra field on user-started turns.
+
+        FIFO drain marks the turn in ``_queue_turns``; those notifications carry
+        ``origin=queue`` plus the client id triple so desktop registers a live
+        user turn (not harvest ephemeral).
         """
         cid = (conversation_id or self._turn_conversations.get(turn_id) or "").strip()
+        queue_meta = self._queue_turns.get(turn_id)
         while True:
             event = await sink.get()
             if event is None:
                 return
-            await self._send(
-                protocol.make_notification(
-                    "turn/event",
-                    {
-                        "turnId": turn_id,
-                        "conversationId": cid,
-                        "event": {
-                            "type": event.type.value,
-                            "timestamp": event.timestamp,
-                            "payload": event.payload,
-                        },
-                    },
-                )
-            )
+            params: dict[str, Any] = {
+                "turnId": turn_id,
+                "conversationId": cid,
+                "event": {
+                    "type": event.type.value,
+                    "timestamp": event.timestamp,
+                    "payload": event.payload,
+                },
+            }
+            if queue_meta:
+                params["origin"] = "queue"
+                params.update(queue_meta)
+            await self._send(protocol.make_notification("turn/event", params))

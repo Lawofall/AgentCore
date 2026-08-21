@@ -29,6 +29,11 @@ vi.mock("../log-service", () => ({
   logDesktop: vi.fn(),
 }));
 
+vi.mock("../outbox/projection", () => ({
+  occupyLocalTurnBegin: vi.fn(async () => true),
+  abortLocalTurnPlaceholder: vi.fn(async () => undefined),
+}));
+
 import { rmSync } from "node:fs";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
@@ -70,7 +75,9 @@ function harvestTransport() {
               result:
                 msg.method === "initialize"
                   ? { ok: true }
-                  : { turnId: "t1", ...TURN_RESULT },
+                  : msg.method === "listQueuedTurns"
+                    ? { items: [] }
+                    : { turnId: "t1", ...TURN_RESULT },
             }),
           );
         });
@@ -91,6 +98,7 @@ function harvestTransport() {
     turnId: string,
     event: Record<string, unknown>,
     conversationId?: string,
+    extra?: Record<string, unknown>,
   ) {
     lineCb?.(
       JSON.stringify({
@@ -99,6 +107,7 @@ function harvestTransport() {
         params: {
           turnId,
           ...(conversationId ? { conversationId } : {}),
+          ...extra,
           event,
         },
       }),
@@ -168,6 +177,16 @@ function hangingTransport() {
                 jsonrpc: "2.0",
                 id: msg.id,
                 result: { ok: true },
+              }),
+            );
+          });
+        } else if (msg.method === "listQueuedTurns") {
+          Promise.resolve().then(() => {
+            lineCb?.(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: msg.id,
+                result: { items: [] },
               }),
             );
           });
@@ -242,6 +261,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user",
         traceId: "a".repeat(32),
         userMessageId: "u1",
+        messageId: "m-asst",
         userMessage: "hello",
       },
       "/tmp/ws",
@@ -285,6 +305,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user",
         traceId: "b".repeat(32),
         userMessageId: "u2",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -312,6 +333,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user",
         traceId: "c".repeat(32),
         userMessageId: "u3",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -357,6 +379,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user",
         traceId: "d".repeat(32),
         userMessageId: "u4",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -389,6 +412,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user",
         traceId: "e".repeat(32),
         userMessageId: "u5",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -435,6 +459,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user",
         traceId: "f".repeat(32),
         userMessageId: "u6",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -454,6 +479,45 @@ describe("SidecarManager harvest orphan turn/event", () => {
     ).toBe(false);
   });
 
+  it("attach treats FIFO origin=queue as a live user turn", async () => {
+    const t = harvestTransport();
+    const manager = new SidecarManager(() => t.transport);
+    const wc = mockWc();
+    await manager.startTurn(
+      wc as never,
+      {
+        conversationId: "c-fifo",
+        rootId: "r1",
+        turnId: "turn-host",
+        traceId: "a".repeat(32),
+        userMessageId: "u-host",
+        messageId: "m-host",
+        userMessage: "q",
+      },
+      "/tmp/ws",
+    );
+    t.notify(
+      "turn-fifo",
+      {
+        type: "turn_queue_started",
+        timestamp: "t0",
+        payload: { queue_id: "q1", content: "下一句" },
+      },
+      "c-fifo",
+      {
+        origin: "queue",
+        userMessageId: "u-fifo",
+        messageId: "m-fifo",
+        traceId: "b".repeat(32),
+      },
+    );
+    const attached = manager.attach(mockWc() as never, {
+      conversationId: "c-fifo",
+    });
+    expect(attached.attached).toBe(true);
+    expect(attached.turnId).toBe("turn-fifo");
+  });
+
   it("synthesizes D4 error for ephemeral harvest when sidecar exits (no hasAttached)", async () => {
     const t = harvestTransport();
     const manager = new SidecarManager(() => t.transport);
@@ -466,6 +530,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user",
         traceId: "g".repeat(32),
         userMessageId: "u7",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -503,6 +568,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user",
         traceId: "h".repeat(32),
         userMessageId: "u8",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -526,6 +592,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-user-2",
         traceId: "i".repeat(32),
         userMessageId: "u9",
+        messageId: "m-asst",
         userMessage: "next",
       },
       "/tmp/ws",
@@ -547,6 +614,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-live",
         traceId: "j".repeat(32),
         userMessageId: "u10",
+        messageId: "m-asst",
         userMessage: "stop me",
       },
       "/tmp/ws",
@@ -571,6 +639,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-dup",
         traceId: "k".repeat(32),
         userMessageId: "u11",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -603,6 +672,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-cancel",
         traceId: "l".repeat(32),
         userMessageId: "u12",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -665,6 +735,7 @@ describe("SidecarManager harvest orphan turn/event", () => {
         turnId: "turn-fail",
         traceId: "n".repeat(32),
         userMessageId: "u14",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",

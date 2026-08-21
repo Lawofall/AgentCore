@@ -6,6 +6,8 @@ import type { UserInterjectionStatus } from "@/stores/execution";
  * `turnTerminal`：纯前端派生态——回合已收口而协议 status 仍为 `received` 时，
  * 不得再写「等待读取」；不新增协议 status 枚举。
  * `dequeued`：同为派生态——排队项已出队开跑后，「将在下一条回复处理」的未来时已过期。
+ * `addressed` 文案仍映射（协议态），但 {@link showInterjectionStatusChrome} 为 false：
+ * 结果已在图/回复里，徽章与图内 note 不画。
  */
 export function interjectionStatusLabel(
   status: UserInterjectionStatus | string | null | undefined,
@@ -55,6 +57,16 @@ export function isInterjectionTurnTerminal(
     return messageIsStreaming !== true;
   }
   return true;
+}
+
+/**
+ * `addressed` 不画徽章 / note。协议仍发该态（清 pending、避免升格排队）；
+ * 图内处置结果已在协作图与助手回复里，再贴收据无增量。
+ */
+export function showInterjectionStatusChrome(
+  status: UserInterjectionStatus | string | null | undefined,
+): boolean {
+  return status !== "addressed";
 }
 
 export type InterjectionStatusTone =

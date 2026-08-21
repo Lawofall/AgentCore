@@ -1,46 +1,95 @@
+import { getConversations } from "@/hooks/useConversations";
 import { ApiError, api } from "@/services/api";
-import { useConversationStore } from "@/stores/conversation";
 import {
-  type QueuedTurnEntry,
-  useQueuedTurnsStore,
-} from "@/stores/queuedTurns";
+  getActiveSidecarTarget,
+  getLastSidecarTarget,
+  resolveConversationLocalTarget,
+} from "@/services/sidecarRouting";
+import { ignoresCloudTurnActivity } from "@/stores/aiTurnActivity";
+import { useConversationStore } from "@/stores/conversation";
+import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import { sendMidFlightMessage } from "./midFlight";
+import { clearQueuedTurnLocally } from "./queuedTurnLocal";
 
-/** cancel HTTP 结果：成功才可 steer 重发；404 仅清条。 */
+export {
+  clearQueuedTurnLocally,
+  insertQueuedTurnUserBubble,
+} from "./queuedTurnLocal";
+
+/** cancel HTTP / sidecar RPC 结果：成功才可 steer 重发；404 仅清条。 */
 export type CancelQueuedTurnOutcome = "cancelled" | "already_gone";
 
-/**
- * 本地清排队条（幂等）。有关联 messageId 时顺带删泡；无泡则只清条。
- * HTTP 取消成功 / 404、以及 SSE ``turn_queue_cancelled`` 共用。
- */
-export function clearQueuedTurnLocally(
+function keepsLocalQueue(conversationId: string): boolean {
+  const via =
+    useConversationStore.getState().byId[conversationId]?.executionVia ?? null;
+  const localContainerRootId =
+    getConversations().find((c) => c.id === conversationId)
+      ?.localContainerRootId ?? null;
+  return ignoresCloudTurnActivity(via, localContainerRootId);
+}
+
+function routesQueuedTurnToSidecar(conversationId: string): boolean {
+  return (
+    getActiveSidecarTarget(conversationId) != null ||
+    keepsLocalQueue(conversationId)
+  );
+}
+
+async function resolveSidecarQueueTarget(
   conversationId: string,
-  queueId: string,
-): QueuedTurnEntry | null {
-  const removed = useQueuedTurnsStore
-    .getState()
-    .remove(conversationId, queueId);
-  if (removed?.messageId) {
-    useConversationStore
-      .getState()
-      .removeMessage(removed.messageId, conversationId);
+): Promise<{ rootId: string; subpath: string } | null> {
+  const live = getActiveSidecarTarget(conversationId);
+  if (live) return live;
+  const last = getLastSidecarTarget(conversationId);
+  if (last) return last;
+  try {
+    return await resolveConversationLocalTarget(conversationId);
+  } catch {
+    return null;
   }
-  return removed;
+}
+
+function isSidecarQueueNotFound(err: unknown): boolean {
+  if (err instanceof ApiError && err.status === 404) return true;
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  return /not_found|404|排队项不存在/i.test(raw);
 }
 
 /**
- * 按项取消 FIFO 排队（``POST …/queued-turns/{queue_id}/cancel``）。
- * 成功或 404（已不在队）→ 立刻本地清条，不依赖 live ``turn_queue_cancelled``
- * （Stop 后常无该事件）。SSE 仍作多端同步（幂等清）。
- * Stop ≠ 取消排队。取消入口仅 QueuedTurnsBar。
+ * 按项取消 FIFO 排队。sidecar live（或本机队）走 RPC；否则
+ * ``POST …/queued-turns/{queue_id}/cancel``。
+ * 成功或 404 / ``not_found``（已不在队）→ 立刻本地清条。
  *
- * @returns ``cancelled`` = 服务端确认取消（可 steer 重发）；
- *          ``already_gone`` = 404 竞态/已出队（只清条、勿重发）。
+ * @returns ``cancelled`` = 确认取消（可 steer 重发）；
+ *          ``already_gone`` = 竞态/已出队（只清条、勿重发）。
  */
 export async function cancelQueuedTurn(
   conversationId: string,
   queueId: string,
 ): Promise<CancelQueuedTurnOutcome> {
+  if (routesQueuedTurnToSidecar(conversationId)) {
+    const target = await resolveSidecarQueueTarget(conversationId);
+    if (!target) {
+      throw new Error("本地引擎未运行，无法取消排队");
+    }
+    try {
+      const ack = await window.sidecarApi.cancelQueuedTurn({
+        rootId: target.rootId,
+        subpath: target.subpath,
+        conversationId,
+        queueId,
+      });
+      clearQueuedTurnLocally(conversationId, queueId);
+      return ack.status === "not_found" ? "already_gone" : "cancelled";
+    } catch (err) {
+      if (isSidecarQueueNotFound(err)) {
+        clearQueuedTurnLocally(conversationId, queueId);
+        return "already_gone";
+      }
+      throw err;
+    }
+  }
+
   try {
     await api.post(
       `/v1/conversations/${conversationId}/queued-turns/${queueId}/cancel`,

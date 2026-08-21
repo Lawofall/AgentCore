@@ -13,4 +13,10 @@ export interface DispatchContext {
    * 这个唯一的重放漏斗设置。
    */
   replay?: boolean;
+  /**
+   * follow catch-up 已成功拉齐消息窗（REST 已含用户行）时，折 ``turn_queue_started``
+   * 只清条不插泡，避免与窗口双泡。仅 ``foldCatchUpSegment`` 在 ``loadLatestWindow``
+   * 成功后置位；不扩大 REST 补窗范围。
+   */
+  skipQueuedTurnUserBubble?: boolean;
 }

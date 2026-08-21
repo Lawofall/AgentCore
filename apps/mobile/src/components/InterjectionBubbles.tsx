@@ -3,6 +3,7 @@ import { UserBubbleChips } from "@/components/UserBubbleChips";
 import {
   interjectionStatusLabel,
   interjectionStatusTone,
+  showInterjectionStatusChrome,
 } from "@/lib/interjectionStatus";
 
 export type InterjectionItem = {
@@ -19,6 +20,7 @@ export type InterjectionItem = {
  * 主渲染落点在 ProcessTimeline 的 `user_interjection` marker 槽（按 id 查本组件）；
  * 旧 journal 无 marker 时由 AssistantContent 尾部回退挂载。
  * `queued`：不出用户泡（出队会补真实用户泡），改一行低权重注记；其余四态维持气泡。
+ * `addressed` 只留用户泡：徽章与服务端 note 不画（结果已在图/回复）。
  * `turnClosed`：回合已收口时 `received` 派生态「未被主 Agent 读取」（不改协议枚举）。
  */
 export function InterjectionBubbles({
@@ -32,6 +34,7 @@ export function InterjectionBubbles({
   return (
     <div className="interjection-timeline" data-testid="interjection-timeline">
       {items.map((item) => {
+        const showChrome = showInterjectionStatusChrome(item.status);
         const tone = interjectionStatusTone(item.status);
         const label = interjectionStatusLabel(item.status, { turnClosed });
 
@@ -85,13 +88,15 @@ export function InterjectionBubbles({
                 {item.content}
               </CollapsibleUserText>
             </div>
-            <div
-              className={`interjection-status tone-${tone}`}
-              data-testid={`interjection-status-${item.interjectionId}`}
-            >
-              {label}
-            </div>
-            {item.note ? (
+            {showChrome ? (
+              <div
+                className={`interjection-status tone-${tone}`}
+                data-testid={`interjection-status-${item.interjectionId}`}
+              >
+                {label}
+              </div>
+            ) : null}
+            {showChrome && item.note ? (
               <div className="interjection-note">{item.note}</div>
             ) : null}
           </div>

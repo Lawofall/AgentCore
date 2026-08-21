@@ -141,7 +141,7 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     ),
     EventType.TURN_QUEUE_STARTED: (
         Disposition.EPHEMERAL,
-        "同对话 FIFO 出队开跑 ack——新回合 sink 首帧；清 queue_id 轻态，reload 无需重放",
+        "时间线用户泡入场（正文在帧上）；reload 靠 REST",
     ),
     EventType.TURN_QUEUE_CANCELLED: (
         Disposition.EPHEMERAL,

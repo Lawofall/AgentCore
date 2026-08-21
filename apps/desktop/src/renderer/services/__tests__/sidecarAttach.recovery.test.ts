@@ -30,6 +30,7 @@ import {
   attachSidecarTurn,
   resetSidecarAttachInFlightForTests,
 } from "../turns/sidecarAttach";
+import { resetStreamOwnershipForTests } from "../turns/streamOwnership";
 
 const CID = "conv-sidecar-recover";
 const dispatchMock = vi.mocked(dispatchSSEEvent);
@@ -48,6 +49,7 @@ beforeEach(() => {
   clearActiveSidecarTurn(CID);
   resetSidecarEventPumpForTests();
   resetSidecarAttachInFlightForTests();
+  resetStreamOwnershipForTests();
   dispatchMock.mockClear();
   onEventCb = null;
   onEventCalls = 0;
@@ -262,15 +264,15 @@ describe("attachSidecarTurn (D4)", () => {
     );
   });
 
-  it("skips when already generating (same-session guard)", async () => {
+  it("overlay isGenerating still attaches (cold hydrate chrome is not a pump)", async () => {
     const store = useConversationStore.getState();
     store.switchConversation(CID);
     store.setGenerating(true, CID);
-    const attach = vi.fn();
-    stubSidecarApi({ attach });
+    const attachMock = vi.fn(async () => attachLiveResponse());
+    stubSidecarApi({ attach: attachMock });
     expect(await attachSidecarTurn(CID)).toBe(true);
-    expect(attach).not.toHaveBeenCalled();
-    expect(onEventCalls).toBe(0);
+    expect(attachMock).toHaveBeenCalledWith({ conversationId: CID });
+    expect(onEventCalls).toBe(1);
   });
 
   it("explicit AbortSignal detaches viewer without cancelling the engine (C1)", async () => {
@@ -496,19 +498,50 @@ describe("attachSidecarTurn (D4)", () => {
     expect(deltas[0][0].payload).toEqual({ delta: "tok" });
   });
 
-  it("start still generating → attach skips (no second pump)", async () => {
+  it("overlay generating still claims active sidecar target for stop/steer", async () => {
     const store = useConversationStore.getState();
     store.switchConversation(CID);
-    // Simulate runSidecarTurn already owning the session.
     store.setGenerating(true, CID);
-    setActiveSidecarTurn(CID, "root-1", "", "turn-start");
+    // Stale chrome from cold GET running — not a live startTurn pump.
+    setActiveSidecarTurn(CID, "root-stale", "", "turn-stale");
 
-    const attach = vi.fn();
-    stubSidecarApi({ attach });
-    expect(await attachSidecarTurn(CID)).toBe(true);
-    expect(attach).not.toHaveBeenCalled();
-    expect(onEventCalls).toBe(0);
-    expect(dispatchMock).not.toHaveBeenCalled();
+    let resolveAttach!: (v: ReturnType<typeof attachLiveResponse>) => void;
+    const attachGate = new Promise<ReturnType<typeof attachLiveResponse>>(
+      (resolve) => {
+        resolveAttach = resolve;
+      },
+    );
+    const attachMock = vi.fn(() => attachGate);
+    stubSidecarApi({ attach: attachMock });
+
+    const p = attachSidecarTurn(CID);
+    await vi.waitFor(() => expect(attachMock).toHaveBeenCalled());
+    resolveAttach(
+      attachLiveResponse({
+        events: [
+          {
+            type: "message_start",
+            timestamp: "t0",
+            payload: { message_id: "a-live" },
+          },
+        ],
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(getActiveSidecarTarget(CID)?.turnId).toBe("turn-live"),
+    );
+
+    onEventCb?.({
+      conversationId: CID,
+      turnId: "turn-live",
+      event: {
+        type: "message_end",
+        timestamp: "t-end",
+        payload: { finish_reason: "stop" },
+      },
+    });
+    await expect(p).resolves.toBe(true);
+    expect(getActiveSidecarTarget(CID)).toBeNull();
   });
 });
 

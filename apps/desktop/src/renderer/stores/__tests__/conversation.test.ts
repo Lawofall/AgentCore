@@ -19,6 +19,7 @@ import {
   useConversationStore,
 } from "../conversation";
 import { execRuntime, useExecutionStore } from "../execution";
+import { useQueuedTurnsStore } from "../queuedTurns";
 import {
   entryToCheckpoint,
   entryToPlanReview,
@@ -893,5 +894,22 @@ describe("ask_user cards (统一开场引导 + 途中拍板)", () => {
         note: "就按这个开做",
       });
     });
+  });
+
+  it("setGenerating(false) holds while this conversation still has a local queue", () => {
+    store().switchConversation("conv-queue-hold");
+    store().setGenerating(true, "conv-queue-hold");
+    useQueuedTurnsStore.getState().upsert({
+      queueId: "q1",
+      conversationId: "conv-queue-hold",
+      content: "下一句",
+      position: 1,
+      queueDepth: 1,
+    });
+    store().setGenerating(false, "conv-queue-hold");
+    expect(getRuntime("conv-queue-hold").isGenerating).toBe(true);
+    useQueuedTurnsStore.setState({ byConversation: {} });
+    store().setGenerating(false, "conv-queue-hold");
+    expect(getRuntime("conv-queue-hold").isGenerating).toBe(false);
   });
 });

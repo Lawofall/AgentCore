@@ -2,11 +2,15 @@ import {
   SIDECAR_CHANNELS,
   type SidecarAttachRequest,
   type SidecarAttachResponse,
+  type SidecarCancelQueuedTurnRequest,
   type SidecarCancelRequest,
   type SidecarCreateWorkspaceVersionRequest,
   type SidecarDebateSteerRequest,
+  type SidecarDeliverMessageRequest,
   type SidecarListBrowserSessionsRequest,
   type SidecarListBrowserSessionsResult,
+  type SidecarListQueuedTurnsRequest,
+  type SidecarListQueuedTurnsResult,
   type SidecarProbeRequest,
   type SidecarRecoveryRequest,
   type SidecarRecoveryResponse,
@@ -21,6 +25,7 @@ import {
   type SidecarTurnFilesDiffResult,
   type SidecarTurnResult,
   type SidecarWarmAccountRulesMemoryRequest,
+  type SidecarRefreshLiveAccountRulesMemoryRequest,
   type SidecarWarmCodeIndexRequest,
   type SidecarWarmMcpDiscoverRequest,
   type SidecarWorkspaceVersionResult,
@@ -83,6 +88,7 @@ export function registerSidecarIpc(): void {
           "traceId",
           "userMessage",
           "userMessageId",
+          "messageId",
         ],
         ["subpath", "userId"],
         ["folderId", "localRootId", "localSubpath"],
@@ -151,6 +157,56 @@ export function registerSidecarIpc(): void {
         ["subpath", "focus", "ask", "askTarget"],
       );
       return manager.debateSteer(req);
+    },
+  );
+
+  ipcMain.handle(
+    SIDECAR_CHANNELS.deliverMessage,
+    (_e, req: SidecarDeliverMessageRequest) => {
+      assertSidecarShape(
+        SIDECAR_CHANNELS.deliverMessage,
+        req,
+        [
+          "rootId",
+          "conversationId",
+          "content",
+          "delivery",
+          "userMessageId",
+          "messageId",
+          "traceId",
+        ],
+        ["subpath"],
+      );
+      return manager.deliverMessage(req);
+    },
+  );
+
+  ipcMain.handle(
+    SIDECAR_CHANNELS.cancelQueuedTurn,
+    (_e, req: SidecarCancelQueuedTurnRequest) => {
+      assertSidecarShape(
+        SIDECAR_CHANNELS.cancelQueuedTurn,
+        req,
+        ["rootId", "conversationId", "queueId"],
+        ["subpath"],
+      );
+      return manager.cancelQueuedTurn(req);
+    },
+  );
+
+  ipcMain.handle(
+    SIDECAR_CHANNELS.listQueuedTurns,
+    (
+      _e,
+      req: SidecarListQueuedTurnsRequest,
+    ): Promise<SidecarListQueuedTurnsResult> => {
+      assertSidecarShape(
+        SIDECAR_CHANNELS.listQueuedTurns,
+        req,
+        ["rootId", "conversationId"],
+        ["subpath"],
+      );
+      return manager.listQueuedTurns(req);
     },
   );
 
@@ -264,6 +320,26 @@ export function registerSidecarIpc(): void {
           userId: req.userId,
         },
       );
+    },
+  );
+
+  ipcMain.handle(
+    SIDECAR_CHANNELS.refreshLiveAccountRulesMemory,
+    async (
+      _e,
+      req: SidecarRefreshLiveAccountRulesMemoryRequest,
+    ): Promise<void> => {
+      const payload = req ?? {};
+      assertSidecarShape(
+        SIDECAR_CHANNELS.refreshLiveAccountRulesMemory,
+        payload,
+        [],
+        ["userId"],
+      );
+      await manager.refreshLiveAccountRulesMemory({
+        accountAuth: payload.accountAuth,
+        userId: payload.userId,
+      });
     },
   );
 

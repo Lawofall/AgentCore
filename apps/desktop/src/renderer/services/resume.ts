@@ -24,8 +24,13 @@ import {
   beginPausedSnapshot,
   usePausedTurnStore,
 } from "@/stores/pausedTurns";
+import {
+  type QueuedTurnEntry,
+  useQueuedTurnsStore,
+} from "@/stores/queuedTurns";
 import type { components } from "@/types/api.generated";
 import type {
+  SidecarQueuedTurnItem,
   SidecarRunsPayload,
   SidecarUnsyncedTurnSummary,
 } from "@shared/sidecar-contract";
@@ -58,6 +63,57 @@ export interface ConversationRecovery {
   pausedRuns?: Record<string, SidecarRunsPayload>;
   /** Sidecar-only: live turn key when `sidecarLive`. */
   turnId?: string;
+}
+
+function hydrateSidecarQueuedTurns(
+  conversationId: string,
+  items: SidecarQueuedTurnItem[],
+): void {
+  const prevById = new Map(
+    useQueuedTurnsStore
+      .getState()
+      .list(conversationId)
+      .map((e) => [e.queueId, e]),
+  );
+  const depth = items.length;
+  const next: QueuedTurnEntry[] = items
+    .filter((item) => item.queueId)
+    .map((item, idx) => {
+      const prev = prevById.get(item.queueId);
+      return {
+        queueId: item.queueId,
+        conversationId,
+        content: item.content ?? "",
+        position: item.position >= 1 ? item.position : idx + 1,
+        queueDepth:
+          item.queueDepth && item.queueDepth >= 1 ? item.queueDepth : depth,
+        interjectionId: item.interjectionId,
+        degradedFrom:
+          item.degradedFrom === "steer" ? "steer" : prev?.degradedFrom,
+        messageId: prev?.messageId,
+        attachments: item.attachments?.length
+          ? item.attachments.map((a) => ({
+              name: a.name,
+              path: a.path,
+              text: a.text ?? "",
+              truncated: a.truncated === true,
+              ...(a.kind ? { kind: a.kind } : {}),
+              ...(a.conversation_id
+                ? { conversation_id: a.conversation_id }
+                : {}),
+              ...(a.binary ? { binary: true } : {}),
+              ...(a.workspace_path ? { workspace_path: a.workspace_path } : {}),
+            }))
+          : undefined,
+        agentMentions: item.agentMentions?.length
+          ? item.agentMentions.map((m) => ({
+              agent_id: m.agent_id,
+              role: m.role,
+            }))
+          : undefined,
+      };
+    });
+  useQueuedTurnsStore.getState().replaceConversation(conversationId, next);
 }
 
 /** Local hydrate path when main-process facts say so (D6 二次修订). */
@@ -224,6 +280,9 @@ export async function loadRecovery(
       unsynced = recovery.unsynced ?? [];
       sidecarPaused = (recovery.paused ?? []) as unknown as PausedTurnSummary[];
       pausedRuns = recovery.pausedRuns ?? {};
+      if (recovery.queuedTurns !== undefined) {
+        hydrateSidecarQueuedTurns(conversationId, recovery.queuedTurns);
+      }
     })
     .catch(() => {
       /* local failure must not block cloud */

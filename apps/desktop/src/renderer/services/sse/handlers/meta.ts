@@ -1,4 +1,5 @@
 import { patchConversationCache } from "@/hooks/useConversations";
+import { bindQueuedTurnUserId } from "@/services/turns/queuedTurnLocal";
 import { useConversationStore } from "@/stores/conversation";
 import type {
   CitationsPayload,
@@ -25,9 +26,13 @@ export function handleMetaEvent(
     }
     case "turn_saved": {
       const payload = event.payload as TurnSavedPayload;
-      useConversationStore
-        .getState()
-        .reconcileLastTurn(payload.user_message_id, conversationId);
+      // 排队入场泡尚未绑服务端 id → 只改那条。否则空闲发送仍对最后一条 user 对账。
+      // 禁止无条件扫最后一条 user（会改掉上一轮「你有什么功能」）。
+      if (!bindQueuedTurnUserId(conversationId, payload.user_message_id)) {
+        useConversationStore
+          .getState()
+          .reconcileLastTurn(payload.user_message_id, conversationId);
+      }
       return true;
     }
     case "citations": {

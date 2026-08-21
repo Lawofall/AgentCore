@@ -1,6 +1,7 @@
 import {
   interjectionStatusLabel,
   interjectionStatusTone,
+  showInterjectionStatusChrome,
 } from "@/lib/interjectionStatus";
 import { describe, expect, it } from "vitest";
 
@@ -13,6 +14,14 @@ describe("interjectionStatusLabel", () => {
     expect(interjectionStatusLabel("addressed")).toBe("已纳入本回合合成");
     expect(interjectionStatusLabel("queued")).toBe("将在下一条回复处理");
     expect(interjectionStatusLabel("failed")).toBe("未被处理");
+  });
+
+  it("hides status chrome only for addressed", () => {
+    expect(showInterjectionStatusChrome("addressed")).toBe(false);
+    expect(showInterjectionStatusChrome("received")).toBe(true);
+    expect(showInterjectionStatusChrome("injected")).toBe(true);
+    expect(showInterjectionStatusChrome("queued")).toBe(true);
+    expect(showInterjectionStatusChrome("failed")).toBe(true);
   });
 
   it("turnClosed + received → 未被主 Agent 读取", () => {

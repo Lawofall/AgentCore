@@ -271,6 +271,33 @@ describe("InterjectionTimeline", () => {
     }
   });
 
+  it("hides addressed badge and in-graph note, keeps the user bubble", () => {
+    seedStreamingAssistant();
+    useExecutionStore.setState({
+      byId: {
+        m1: {
+          userInterjections: [
+            {
+              interjectionId: "ij-addr",
+              executionId: "e1",
+              content: "停止",
+              status: "addressed",
+              note: "已在本回合停掉对应成员",
+            },
+          ],
+        },
+      },
+    } as never);
+
+    render(<InterjectionTimeline messageId="m1" interjectionId="ij-addr" />);
+    expect(screen.getByTestId("interjection-bubble-ij-addr")).toBeTruthy();
+    expect(screen.getByText("停止")).toBeTruthy();
+    expect(screen.queryByTestId("interjection-status-ij-addr")).toBeNull();
+    expect(screen.queryByTestId("interjection-server-note")).toBeNull();
+    expect(screen.queryByText("已纳入本回合合成")).toBeNull();
+    expect(screen.queryByText("已在本回合停掉对应成员")).toBeNull();
+  });
+
   it("renders @ role chips matching history user bubbles", () => {
     seedStreamingAssistant();
     useExecutionStore.setState({

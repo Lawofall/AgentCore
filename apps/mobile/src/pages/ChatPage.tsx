@@ -140,6 +140,10 @@ import {
 } from "@/lib/messageDelivery";
 import { currencySymbol } from "@/lib/money";
 import {
+  type QueuedUserBubbleFields,
+  parseTurnQueueStartedUser,
+} from "@/lib/queuedTurnBubble";
+import {
   type QueuedTurnEntry,
   listQueuedTurns,
   removeQueuedTurn,
@@ -1469,6 +1473,8 @@ export function ChatPage() {
   const midFlightControllersRef = useRef(new Set<AbortController>());
   /** queue_id → mid-flight AC（取消成功后再 abort，避免失败留下断连坏态）。 */
   const midFlightByQueueRef = useRef(new Map<string, AbortController>());
+  /** queue_id → live turn id（beginTurn2 与 started 共用，勿双泡）。 */
+  const queuedTurnByQueueRef = useRef(new Map<string, string>());
   /**
    * 排队条对账（GET 权威）。ref 避免 appendEventToTurn / reconnect 闭包陈旧。
    * 本地有项而服务端已无 → 一次轻提示再清。
@@ -1636,6 +1642,46 @@ export function ChatPage() {
     });
   };
 
+  /**
+   * 出队开跑：按 queue_id 幂等插入主时间线用户泡（started 读帧正文；beginTurn2 读发送闭包）。
+   * 已有 userText 则不改，避免双泡。
+   */
+  const bindQueuedUserTurn = (
+    queueId: string,
+    fallbackTurnId: string | null,
+    bubble: QueuedUserBubbleFields | null,
+  ): string => {
+    const claimed = queuedTurnByQueueRef.current.get(queueId);
+    const id = claimed ?? fallbackTurnId ?? crypto.randomUUID();
+    if (!claimed) queuedTurnByQueueRef.current.set(queueId, id);
+    if (!bubble) return id;
+    setTurns((t) => {
+      const idx = t.findIndex((x) => x.id === id);
+      if (idx >= 0) {
+        if (t[idx].userText != null) return t;
+        const next = t.slice();
+        next[idx] = {
+          ...t[idx],
+          userText: bubble.userText,
+          attachments: bubble.attachments ?? t[idx].attachments,
+          agentMentions: bubble.agentMentions ?? t[idx].agentMentions,
+        };
+        return next;
+      }
+      return [
+        ...t,
+        {
+          id,
+          userText: bubble.userText,
+          events: [],
+          attachments: bubble.attachments,
+          agentMentions: bubble.agentMentions,
+        },
+      ];
+    });
+    return id;
+  };
+
   // Append an event to a specific turn (主路 / mid-flight 续流各写各的；勿依赖「最后一项」).
   // Lazily opens a userText-less turn when none exists yet (reattach on reopen).
   const appendEventToTurn = (turnId: string | null, event: SSEEvent) => {
@@ -1697,13 +1743,23 @@ export function ChatPage() {
       reconcileQueuedRef.current(conversationId);
       return;
     }
-    // EPHEMERAL：出队开跑（sink 首帧，先于 message_start）→ 清条；用户泡由 beginTurn2 插入。
-    // 否决靠 message_start 猜出队。
+    // EPHEMERAL：出队开跑（sink 首帧，先于 message_start）→ 清条 + 凭帧正文幂等插用户泡。
+    // 与 beginTurn2 共用 queue_id；否决靠 message_start 猜出队，否决为此 GET 消息窗补用户行。
     if (event.type === "turn_queue_started" && conversationId) {
-      const p = event.payload as TurnQueueStartedPayload;
-      removeQueuedTurn(conversationId, p.queue_id);
-      // 已开跑：不再可按项取消；勿 abort（同连接续流 turn2）。
-      midFlightByQueueRef.current.delete(p.queue_id);
+      const parsed = parseTurnQueueStartedUser(event.payload);
+      const typed = event.payload as TurnQueueStartedPayload;
+      const queueId = parsed?.queueId || typed.queue_id;
+      if (queueId) {
+        removeQueuedTurn(conversationId, queueId);
+        // 已开跑：不再可按项取消；勿 abort（同连接续流 turn2）。
+        midFlightByQueueRef.current.delete(queueId);
+        const boundId = bindQueuedUserTurn(
+          queueId,
+          turnId,
+          parsed?.bubble ?? null,
+        );
+        setActiveTurn(boundId);
+      }
       // 出队同样挪动余下各项的序号 → 拉一次权威快照（禁轮询）。
       reconcileQueuedRef.current(conversationId);
       return;
@@ -1956,6 +2012,7 @@ export function ChatPage() {
     }
     setHistory(null);
     setTurns([]);
+    queuedTurnByQueueRef.current.clear();
     pendingEmptyRollback = null;
     setError(null);
     setQueueDroppedHint(null);
@@ -2137,6 +2194,7 @@ export function ChatPage() {
       for (const ac of midFlightControllersRef.current) ac.abort();
       midFlightControllersRef.current.clear();
       midFlightByQueueRef.current.clear();
+      queuedTurnByQueueRef.current.clear();
       clearStopping();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2204,6 +2262,13 @@ export function ChatPage() {
     () => {},
   );
   routeFollowEventRef.current = (cid, event) => {
+    // 出队是新回合 sink 首帧。游标已落在上一回合时不能当续帧（否则会盖错泡 / 拆成两段）。
+    if (
+      event.type === "turn_queue_started" &&
+      followTurnRef.current?.messageId
+    ) {
+      followTurnRef.current = null;
+    }
     const plan = planFollowSegment({
       cursor: followTurnRef.current,
       head: readSegmentHead(event),
@@ -2227,7 +2292,10 @@ export function ChatPage() {
       // 服务端明令：这一段是本回合的全量重放，先清掉已折的帧再整段重折。
       setTurns((t) => clearLiveTurnEvents(t, turnId));
     } else if (plan.action === "open") {
-      openFollowedTurn(cid, turnId, { reloadTranscript: !expected });
+      // started 凭帧正文插泡，勿 GET 消息窗补用户行（fulfill 空快照同理 no-op）。
+      openFollowedTurn(cid, turnId, {
+        reloadTranscript: !expected && event.type !== "turn_queue_started",
+      });
     }
     if (plan.action !== "continue") {
       setActiveTurn(turnId);
@@ -2922,8 +2990,31 @@ export function ChatPage() {
           },
           beginTurn2: () => {
             // 出队开跑：插入主时间线用户泡，并接管 abort 槽。
-            // 条由 turn_queue_started（sink 首帧）清，勿在此猜出队。
-            if (!queuedTurnId) {
+            // 与 turn_queue_started 共用 queue_id 幂等；条由 started 清，勿在此猜出队。
+            const localBubble: QueuedUserBubbleFields = {
+              userText: text,
+              attachments:
+                wireAttachments.length > 0
+                  ? wireAttachments.map((a) => ({
+                      name: a.name,
+                      truncated: a.truncated,
+                    }))
+                  : undefined,
+              agentMentions:
+                outgoingMentions.length > 0
+                  ? outgoingMentions.map((a) => ({
+                      agentId: a.agentId,
+                      role: a.role,
+                    }))
+                  : undefined,
+            };
+            if (trackedQueueId) {
+              queuedTurnId = bindQueuedUserTurn(
+                trackedQueueId,
+                queuedTurnId,
+                localBubble,
+              );
+            } else if (!queuedTurnId) {
               const turnId = crypto.randomUUID();
               queuedTurnId = turnId;
               setTurns((t) => [
@@ -2932,14 +3023,8 @@ export function ChatPage() {
                   id: turnId,
                   userText: text,
                   events: [],
-                  attachments: wireAttachments.map((a) => ({
-                    name: a.name,
-                    truncated: a.truncated,
-                  })),
-                  agentMentions: outgoingMentions.map((a) => ({
-                    agentId: a.agentId,
-                    role: a.role,
-                  })),
+                  attachments: localBubble.attachments,
+                  agentMentions: localBubble.agentMentions,
                 },
               ]);
             }

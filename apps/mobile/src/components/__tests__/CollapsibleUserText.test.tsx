@@ -186,6 +186,26 @@ describe("InterjectionBubbles · 用户气泡折叠", () => {
     expect(screen.getByText("主 Agent 已看到")).toBeTruthy();
   });
 
+  it("addressed 只留用户泡，不画徽章与 note", () => {
+    render(
+      <InterjectionBubbles
+        items={[
+          {
+            interjectionId: "ij-addr",
+            content: "停止",
+            status: "addressed",
+            note: "已在本回合停掉对应成员",
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("interjection-bubble-ij-addr")).toBeTruthy();
+    expect(screen.getByText("停止")).toBeTruthy();
+    expect(screen.queryByTestId("interjection-status-ij-addr")).toBeNull();
+    expect(screen.queryByText("已纳入本回合合成")).toBeNull();
+    expect(screen.queryByText("已在本回合停掉对应成员")).toBeNull();
+  });
+
   it("插话气泡渲染点名芯片，不暗示已派单", () => {
     render(
       <InterjectionBubbles

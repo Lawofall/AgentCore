@@ -25,6 +25,12 @@ from agentcore.sidecar import protocol
 from agentcore.sidecar.paused_store import LocalPausedTurnStore
 from agentcore.sidecar.server import SidecarServer
 
+_CLIENT_TURN_IDS = {
+    "userMessageId": "11111111-1111-4111-8111-111111111111",
+    "messageId": "22222222-2222-4222-8222-222222222222",
+    "traceId": "a" * 32,
+}
+
 
 @pytest.fixture(autouse=True)
 def _reset_conversation_store():
@@ -451,6 +457,7 @@ def test_start_turn_wires_local_suspension_hooks(tmp_path, monkeypatch):
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "改个文件",
+                        **_CLIENT_TURN_IDS,
                     },
                 }
             )
@@ -503,6 +510,7 @@ def test_start_turn_without_data_dir_leaves_session_hooks_none(tmp_path, monkeyp
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "hi",

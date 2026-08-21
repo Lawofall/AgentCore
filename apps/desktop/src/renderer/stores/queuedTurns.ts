@@ -135,4 +135,13 @@ export function useQueuedTurns(
   );
 }
 
+export function conversationHasQueuedTurns(
+  conversationId: string | null | undefined,
+): boolean {
+  return Boolean(
+    conversationId &&
+      useQueuedTurnsStore.getState().list(conversationId).length > 0,
+  );
+}
+
 const EMPTY: QueuedTurnEntry[] = [];

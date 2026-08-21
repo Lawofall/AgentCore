@@ -9,6 +9,7 @@ import { traceTurnEnd } from "@/services/sseTrace";
 import { clearQueuedTurnLocally } from "@/services/turns/cancelQueuedTurn";
 import { settleConsumedResume } from "@/services/turns/consumedResume";
 import { notifySteerDegradedToQueue } from "@/services/turns/queuedNotify";
+import { insertQueuedTurnUserBubble } from "@/services/turns/queuedTurnLocal";
 import {
   completeTurnPhase,
   getRuntime,
@@ -78,9 +79,12 @@ export function handleMessageStreamEvent(
     }
     case "turn_queue_started": {
       // EPHEMERAL：FIFO 出队开跑（新回合 sink 首帧，先于 message_start）。
-      // 按 queue_id 清 QueuedTurnsBar；用户泡由 midFlight 在本帧前补插。
-      // 剩下几条的序号由随后到达的整队快照重排。
+      // 从帧 payload 插用户泡（不从条抄；空快照可已清条）。follow catch-up 已拉齐
+      // REST 窗则只清条（``skipQueuedTurnUserBubble``），避免与窗口用户行双泡。
       const p = event.payload as TurnQueueStartedPayload;
+      if (!ctx.skipQueuedTurnUserBubble) {
+        insertQueuedTurnUserBubble(conversationId, event.payload);
+      }
       useQueuedTurnsStore.getState().remove(conversationId, p.queue_id);
       return true;
     }

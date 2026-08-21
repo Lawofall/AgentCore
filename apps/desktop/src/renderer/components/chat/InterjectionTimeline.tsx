@@ -7,6 +7,7 @@ import {
   interjectionStatusLabel,
   interjectionStatusTone,
   isInterjectionTurnTerminal,
+  showInterjectionStatusChrome,
 } from "@/components/chat/interjectionStatus";
 import { AgentMentionChip } from "@/components/chat/message-bubble/AgentMentionChip";
 import {
@@ -25,6 +26,7 @@ import { useExecutionStore } from "@/stores/execution";
  * 才折叠成一行低权重锚点，避免双泡。匹配不上则保持完整气泡。
  * DURABLE：数据来自 execution.userInterjections（live SSE / journal hydrate），
  * 刷新/历史回看仍在；不伪造 Message 行。
+ * `addressed` 只留用户泡：徽章与服务端 note 不画（结果已在图/回复）。
  */
 export function InterjectionTimeline({
   messageId,
@@ -127,6 +129,7 @@ function InterjectionUserBubble({
   turnTerminal: boolean;
 }) {
   const tone = interjectionStatusTone(item.status);
+  const showChrome = showInterjectionStatusChrome(item.status);
   const atts = item.attachments ?? [];
   const mentions = item.agentMentions ?? [];
   return (
@@ -160,13 +163,17 @@ function InterjectionUserBubble({
           <p className="whitespace-pre-wrap break-words">{item.content}</p>
         </CollapsibleSpeech>
       </div>
-      <span
-        className={`inline-flex max-w-[80%] rounded-full border px-1.5 py-0.5 text-xs ${INTERJECTION_TONE_CLASS[tone]}`}
-        data-testid={`interjection-status-${item.interjectionId}`}
-      >
-        {interjectionStatusLabel(item.status, { turnTerminal })}
-      </span>
-      {item.note ? <InterjectionServerNote note={item.note} /> : null}
+      {showChrome ? (
+        <span
+          className={`inline-flex max-w-[80%] rounded-full border px-1.5 py-0.5 text-xs ${INTERJECTION_TONE_CLASS[tone]}`}
+          data-testid={`interjection-status-${item.interjectionId}`}
+        >
+          {interjectionStatusLabel(item.status, { turnTerminal })}
+        </span>
+      ) : null}
+      {showChrome && item.note ? (
+        <InterjectionServerNote note={item.note} />
+      ) : null}
     </div>
   );
 }

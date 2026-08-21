@@ -206,8 +206,17 @@ def enqueue_interjection_to_fifo(
     if not content or not conversation_id:
         return False, "插话缺少 content / conversation_id，无法转入排队。", None
 
-    from agentcore.runtime.turn.queue import new_queued_turn, turn_queue
+    from agentcore.runtime.turn.queue import (
+        new_queued_turn,
+        resolve_client_turn_ids,
+        turn_queue,
+    )
 
+    user_message_id, message_id, trace_id = resolve_client_turn_ids(
+        user_message_id=stashed.get("user_message_id"),
+        message_id=stashed.get("message_id"),
+        trace_id=stashed.get("trace_id"),
+    )
     try:
         status = turn_queue.enqueue_and_ensure_drain(
             conversation_id,
@@ -224,6 +233,9 @@ def enqueue_interjection_to_fifo(
                 llm_credentials=stashed.get("llm_credentials"),
                 llm_supports_tools=stashed.get("llm_supports_tools"),
                 interjection_id=interjection_id,
+                user_message_id=user_message_id,
+                message_id=message_id,
+                trace_id=trace_id,
             ),
             on_live_sink=True,
         )

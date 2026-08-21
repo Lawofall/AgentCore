@@ -37,3 +37,15 @@ export {
   stopOutboxPolling,
   registerOutboxIpc,
 } from "./drain";
+
+export {
+  occupyLocalTurnBegin,
+  abortLocalTurnPlaceholder,
+  checkpointOpenRecord,
+  markLocalTurnSettled,
+  noteOccupiedLocalTurn,
+  resetLocalTurnProjectionForTests,
+  startOutboxProjectionWatch,
+  stopOutboxProjectionWatch,
+  withUmidLock,
+} from "./projection";

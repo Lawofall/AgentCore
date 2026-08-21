@@ -34,6 +34,10 @@ vi.mock("../auth-client", () => ({
   refreshAccessToken: vi.fn(async () => "renewed" as const),
 }));
 
+vi.mock("../log-service", () => ({
+  logDesktop: vi.fn(),
+}));
+
 import {
   EMPTY_USER_MESSAGE_PLACEHOLDER,
   computeBackoffDelayMs,
@@ -44,7 +48,9 @@ import {
   isPermanentHttpFailure,
   isSafeOutboxId,
   normalizeToolFailureCode,
+  noteOccupiedLocalTurn,
   outboxDir,
+  resetLocalTurnProjectionForTests,
   shouldDeleteOutboxAfterAck,
   toRecordTurnBody,
   toolFailuresFromJournal,
@@ -94,6 +100,7 @@ describe("drainOutbox", () => {
     rmSync(dir(), { recursive: true, force: true });
     rmSync(deadLetterDir(), { recursive: true, force: true });
     h.bearerPostJson.mockReset();
+    resetLocalTurnProjectionForTests();
   });
 
   it("POSTs ready records and deletes on ack (at-least-once)", async () => {
@@ -310,12 +317,43 @@ describe("drainOutbox", () => {
     expect(h.bearerPostJson).toHaveBeenCalledOnce();
   });
 
-  it("skips open records during regular drain (no mid-turn salvage)", async () => {
-    writeReady("u3", { phase: "open", content: "partial" });
+  it("open records POST journal/segments, never local-turns", async () => {
+    writeReady("u3", {
+      phase: "open",
+      content: "partial",
+      journal: {
+        "0": { kind: "run_started", payload: { id: "r1" }, ts: "t0" },
+      },
+      stream_segments: {
+        "captain:content": { text: "partial", generation: 0 },
+      },
+    });
+    h.bearerPostJson.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
     const status = await drainOutbox();
-    expect(h.bearerPostJson).not.toHaveBeenCalled();
+    const paths = h.bearerPostJson.mock.calls.map((c) => String(c[0]));
+    expect(paths).not.toContain("/v1/conversations/c1/local-turns/begin");
+    expect(paths).toContain("/v1/conversations/c1/local-turns/journal");
+    expect(paths).toContain("/v1/conversations/c1/local-turns/stream-segments");
+    expect(paths).not.toContain("/v1/conversations/c1/local-turns");
+    const journalBody = h.bearerPostJson.mock.calls.find((c) =>
+      String(c[0]).endsWith("/journal"),
+    )?.[1] as { replace?: boolean };
+    expect(journalBody.replace).toBe(false);
     expect(status.pending).toHaveLength(1);
     expect(status.pending[0]?.phase).toBe("open");
+  });
+
+  it("missing occupied file does not abort on drain (startTurn owns occupy)", async () => {
+    noteOccupiedLocalTurn("u-gone", {
+      conversationId: "c1",
+      messageId: "m1",
+    });
+    await drainOutbox();
+    expect(h.bearerPostJson).not.toHaveBeenCalled();
   });
 
   it("ready + non-empty user_message POSTs original text (C2 no mis-fire)", async () => {
@@ -920,7 +958,7 @@ describe("drainOutbox", () => {
     expect(body.finish_reason).toBe("cancelled");
   });
 
-  it("regular drain still skips open rows that only have stream_segments", async () => {
+  it("regular drain POSTs stream-segments for open rows, not local-turns", async () => {
     writeReady("u-open-segs", {
       phase: "open",
       content: "",
@@ -931,8 +969,15 @@ describe("drainOutbox", () => {
         },
       },
     });
+    h.bearerPostJson.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
     const status = await drainOutbox();
-    expect(h.bearerPostJson).not.toHaveBeenCalled();
+    const paths = h.bearerPostJson.mock.calls.map((c) => String(c[0]));
+    expect(paths).toContain("/v1/conversations/c1/local-turns/stream-segments");
+    expect(paths).not.toContain("/v1/conversations/c1/local-turns");
     expect(status.pending).toHaveLength(1);
     expect(status.pending[0]?.phase).toBe("open");
   });
@@ -953,7 +998,10 @@ describe("drainOutbox", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       await recoverLocalPersistence();
-      expect(h.bearerPostJson).not.toHaveBeenCalled();
+      expect(h.bearerPostJson).toHaveBeenCalledWith(
+        "/v1/conversations/c1/local-turns/abort",
+        { user_message_id: "u-empty-shell", message_id: "m1" },
+      );
       expect(existsSync(join(dir(), "u-empty-shell.json"))).toBe(false);
       expect(
         warnSpy.mock.calls.some(

@@ -85,6 +85,7 @@ def test_start_turn_rejects_without_inference_credentials(tmp_path, monkeypatch)
                         "conversationId": "c-missing",
                         "userMessage": "hi",
                         "userMessageId": "u-missing",
+                        "messageId": "22222222-2222-4222-8222-222222222222",
                         "traceId": "a" * 32,
                     },
                 }
@@ -207,6 +208,9 @@ def test_start_turn_clears_inference_when_explicit_null(tmp_path, monkeypatch):
                         "conversationId": "c-clear",
                         "userMessage": "hi",
                         "inference": None,
+                        "userMessageId": "u-clear",
+                        "messageId": "22222222-2222-4222-8222-222222222222",
+                        "traceId": "a" * 32,
                     },
                 }
             )

@@ -8,6 +8,7 @@ import {
   useExecutionStore,
 } from "@/stores/execution";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
+import { conversationHasQueuedTurns } from "@/stores/queuedTurns";
 import { createPatchConversation } from "./patchConversation";
 import {
   DRAFT_KEY,
@@ -64,7 +65,11 @@ export function createTurnLifecycleActions(
 
   return {
     setGenerating: (v, conversationId) =>
-      patchConversation(conversationId, () => ({ isGenerating: v })),
+      patchConversation(conversationId, () => {
+        const id = conversationId ?? get().currentConversationId;
+        if (!v && conversationHasQueuedTurns(id)) return { isGenerating: true };
+        return { isGenerating: v };
+      }),
 
     setAbort: (a, conversationId) =>
       patchConversation(conversationId, () => ({ abort: a })),

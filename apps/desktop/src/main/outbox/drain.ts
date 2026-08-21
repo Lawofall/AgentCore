@@ -11,6 +11,14 @@ import {
 import { BrowserWindow, app, ipcMain } from "electron";
 import { bearerPostJson, refreshAccessToken } from "../auth-client";
 import {
+  abortLocalTurnPlaceholder,
+  checkpointOpenRecord,
+  markLocalTurnSettled,
+  startOutboxProjectionWatch,
+  stopOutboxProjectionWatch,
+  withUmidLock,
+} from "./projection";
+import {
   EMPTY_USER_MESSAGE_PLACEHOLDER,
   type OutboxRecord,
   PHASE_OPEN,
@@ -21,6 +29,7 @@ import {
   fillFromCaptainStreamSegments,
   isPermanentHttpFailure,
   isSafeOutboxId,
+  readOutboxRecord,
   readOutboxRecords,
   recordHasProcessState,
   shouldDeleteOutboxAfterAck,
@@ -55,6 +64,181 @@ async function recordTransientFailure(record: OutboxRecord): Promise<void> {
 /** Recent successful writebacks — fills synthetic flushTurn ack when the file is already gone. */
 const recentSyncedConversation = new Map<string, string>();
 
+async function processOneOutboxRecord(
+  record: OutboxRecord,
+  opts: { salvageOpen: boolean; bypassBackoff: boolean },
+): Promise<OutboxSyncedPayload | null> {
+  const salvageOpen = opts.salvageOpen;
+  const bypassBackoff = opts.bypassBackoff;
+  if (salvageOpen && record.phase === PHASE_OPEN) {
+    const hasText = fillFromCaptainStreamSegments(record);
+    const salvageable = hasText || recordHasProcessState(record);
+    if (salvageable) {
+      record.phase = PHASE_READY;
+      record.finish_reason = record.finish_reason || "cancelled";
+      try {
+        await writeRecord(record);
+      } catch (err) {
+        console.error("[outbox] salvage promote failed", err);
+        return null;
+      }
+    } else {
+      const um = (record.user_message || "").trim();
+      const hasUm = !!um && um !== EMPTY_USER_MESSAGE_PLACEHOLDER;
+      const hasTrace = (record.trace_id || "").trim().length === 32;
+      if (!hasUm || !hasTrace) {
+        console.warn("[outbox] discard empty open shell", record.user_message_id, {
+          hasUm,
+          hasTrace,
+        });
+        await abortLocalTurnPlaceholder({
+          conversationId: record.conversation_id,
+          userMessageId: record.user_message_id,
+          messageId: (record.message_id || "").trim(),
+        });
+        await deleteRecord(record.user_message_id);
+        return null;
+      }
+      record.phase = PHASE_READY;
+      record.finish_reason = record.finish_reason || "cancelled";
+      try {
+        await writeRecord(record);
+      } catch (err) {
+        console.error("[outbox] empty-shell promote failed", err);
+        return null;
+      }
+    }
+  }
+  if (record.phase === PHASE_OPEN) {
+    await checkpointOpenRecord(record);
+    return null;
+  }
+  if (record.phase !== PHASE_READY) return null;
+  if (
+    !(record.user_message || "").trim() ||
+    (record.user_message || "").trim() === EMPTY_USER_MESSAGE_PLACEHOLDER
+  ) {
+    if (fillEmptyUserMessageForWriteback(record)) {
+      console.warn(
+        "[outbox] empty user_message → writeback without user bubble",
+        record.user_message_id,
+        record.message_id ?? null,
+        {
+          hasJournal: !!(
+            record.journal &&
+            typeof record.journal === "object" &&
+            Object.keys(record.journal).length > 0
+          ),
+          hasRuns: !!(
+            record.runs &&
+            typeof record.runs === "object" &&
+            Object.keys(record.runs as object).length > 0
+          ),
+        },
+      );
+      try {
+        await writeRecord(record);
+      } catch (err) {
+        console.error(
+          "[outbox] empty user_message normalize persist failed",
+          record.user_message_id,
+          err,
+        );
+      }
+    } else {
+      console.error(
+        "[outbox] skip empty user_message (not postable) → dead-letter",
+        record.user_message_id,
+        record.message_id ?? null,
+      );
+      await moveToDeadLetter(record, 0);
+      return null;
+    }
+  }
+  if (!(record.trace_id || "").trim() || (record.trace_id || "").length !== 32) {
+    console.warn(
+      "[outbox] skip invalid trace_id",
+      record.user_message_id,
+      record.trace_id ?? null,
+    );
+    return null;
+  }
+  if (
+    !bypassBackoff &&
+    typeof record.next_attempt_at === "number" &&
+    record.next_attempt_at > Date.now()
+  ) {
+    return null;
+  }
+
+  fillFromCaptainStreamSegments(record);
+
+  if (
+    !isSafeOutboxId(record.user_message_id) ||
+    !isSafeOutboxId(record.conversation_id)
+  ) {
+    console.error(
+      "[outbox] skipping unsafe id",
+      record.user_message_id,
+      record.conversation_id,
+    );
+    return null;
+  }
+
+  const path = `/v1/conversations/${encodeURIComponent(record.conversation_id)}/local-turns`;
+  let result: { ok: boolean; status: number; body: unknown };
+  try {
+    result = await bearerPostJson(path, toRecordTurnBody(record));
+  } catch (err) {
+    console.error("[outbox] writeback network error", record.user_message_id, err);
+    await recordTransientFailure(record);
+    return null;
+  }
+  if (!result.ok) {
+    console.error(
+      "[outbox] writeback failed",
+      record.user_message_id,
+      result.status,
+      result.body,
+    );
+    if (isPermanentHttpFailure(result.status)) {
+      await moveToDeadLetter(record, result.status);
+    } else {
+      await recordTransientFailure(record);
+    }
+    return null;
+  }
+  const body = result.body as {
+    user_message_id?: string;
+    assistant_message_id?: string | null;
+    title?: string | null;
+    noop?: boolean | null;
+  };
+  if (!shouldDeleteOutboxAfterAck(body, record)) {
+    console.error(
+      "[outbox] false ack (null assistant + process) → dead-letter",
+      record.user_message_id,
+      body,
+    );
+    await moveToDeadLetter(record, result.status || 200);
+    return null;
+  }
+  const payload: OutboxSyncedPayload = {
+    conversationId: record.conversation_id,
+    userMessageId: record.user_message_id,
+    cloudUserMessageId: body.user_message_id || record.user_message_id,
+    assistantMessageId: body.assistant_message_id ?? null,
+    title: body.title ?? null,
+    ...(record.origin ? { origin: record.origin } : {}),
+    ...(record.harvest_kind ? { harvestKind: record.harvest_kind } : {}),
+  };
+  markLocalTurnSettled(record.user_message_id);
+  await deleteRecord(record.user_message_id);
+  recentSyncedConversation.set(record.user_message_id, record.conversation_id);
+  pushSynced(payload);
+  return payload;
+}
+
 let drainInFlight: Promise<{
   status: OutboxStatusSnapshot;
   synced: OutboxSyncedPayload[];
@@ -88,190 +272,16 @@ async function drainOutboxDetailed(opts?: {
   drainInFlight = (async () => {
     const synced: OutboxSyncedPayload[] = [];
     const records = await readOutboxRecords();
-    for (const record of records) {
-      // App-restart salvage only: open + salvageable body → treat as ready incomplete.
-      // Body may come from content, or (D6 hard-kill) captain stream_segments when
-      // content was never checkpointed. Regular polling must NOT promote open rows.
-      if (salvageOpen && record.phase === PHASE_OPEN) {
-        // Abandoned open rows (incl. post-settlement user stop / hard kill):
-        // promote → ready cancelled when there is text or process journal.
-        const hasText = fillFromCaptainStreamSegments(record);
-        const salvageable = hasText || recordHasProcessState(record);
-        if (salvageable) {
-          record.phase = PHASE_READY;
-          // Align with CloudStore.salvage / OutboxStore.salvage: cancelled + incomplete.
-          record.finish_reason = record.finish_reason || "cancelled";
-          try {
-            await writeRecord(record);
-          } catch (err) {
-            console.error("[outbox] salvage promote failed", err);
-            continue;
-          }
-        } else {
-          // Begin-only / hard-kill empty shell: no body to salvage.
-          // Drop when not writeback-able; else seal cancelled so user_message can settle
-          // (avoids permanent phase=open ghosts on every recovery hydrate).
-          const um = (record.user_message || "").trim();
-          const hasUm = !!um && um !== EMPTY_USER_MESSAGE_PLACEHOLDER;
-          const hasTrace = (record.trace_id || "").trim().length === 32;
-          if (!hasUm || !hasTrace) {
-            console.warn(
-              "[outbox] discard empty open shell",
-              record.user_message_id,
-              { hasUm, hasTrace },
-            );
-            await deleteRecord(record.user_message_id);
-            continue;
-          }
-          record.phase = PHASE_READY;
-          record.finish_reason = record.finish_reason || "cancelled";
-          try {
-            await writeRecord(record);
-          } catch (err) {
-            console.error("[outbox] empty-shell promote failed", err);
-            continue;
-          }
-        }
-      }
-      if (record.phase !== PHASE_READY) continue;
-      if (
-        !(record.user_message || "").trim() ||
-        (record.user_message || "").trim() === EMPTY_USER_MESSAGE_PLACEHOLDER
-      ) {
-        // C2: empty / legacy-placeholder um + process (journal/…) must POST so
-        // assistant/journal can settle — server skips inserting a user bubble.
-        if (fillEmptyUserMessageForWriteback(record)) {
-          console.warn(
-            "[outbox] empty user_message → writeback without user bubble",
-            record.user_message_id,
-            record.message_id ?? null,
-            {
-              hasJournal: !!(
-                record.journal &&
-                typeof record.journal === "object" &&
-                Object.keys(record.journal).length > 0
-              ),
-              hasRuns: !!(
-                record.runs &&
-                typeof record.runs === "object" &&
-                Object.keys(record.runs as object).length > 0
-              ),
-            },
-          );
-          try {
-            await writeRecord(record);
-          } catch (err) {
-            console.error(
-              "[outbox] empty user_message normalize persist failed",
-              record.user_message_id,
-              err,
-            );
-            // Still attempt POST with in-memory empty um.
-          }
-        } else {
-          console.error(
-            "[outbox] skip empty user_message (not postable) → dead-letter",
-            record.user_message_id,
-            record.message_id ?? null,
-          );
-          await moveToDeadLetter(record, 0);
-          continue;
-        }
-      }
-      if (
-        !(record.trace_id || "").trim() ||
-        (record.trace_id || "").length !== 32
-      ) {
-        console.warn(
-          "[outbox] skip invalid trace_id",
-          record.user_message_id,
-          record.trace_id ?? null,
-        );
-        continue;
-      }
-      if (
-        !bypassBackoff &&
-        typeof record.next_attempt_at === "number" &&
-        record.next_attempt_at > Date.now()
-      ) {
-        continue;
-      }
-
-      // Align with salvage / unsynced projection: promote captain segments before POST.
-      fillFromCaptainStreamSegments(record);
-
-      // Defense in depth: readOutboxRecords already filters; keep URL/path safe.
-      if (
-        !isSafeOutboxId(record.user_message_id) ||
-        !isSafeOutboxId(record.conversation_id)
-      ) {
-        console.error(
-          "[outbox] skipping unsafe id",
-          record.user_message_id,
-          record.conversation_id,
-        );
-        continue;
-      }
-
-      const path = `/v1/conversations/${encodeURIComponent(record.conversation_id)}/local-turns`;
-      let result: { ok: boolean; status: number; body: unknown };
-      try {
-        result = await bearerPostJson(path, toRecordTurnBody(record));
-      } catch (err) {
-        console.error(
-          "[outbox] writeback network error",
-          record.user_message_id,
-          err,
-        );
-        await recordTransientFailure(record);
-        continue;
-      }
-      if (!result.ok) {
-        console.error(
-          "[outbox] writeback failed",
-          record.user_message_id,
-          result.status,
-          result.body,
-        );
-        if (isPermanentHttpFailure(result.status)) {
-          await moveToDeadLetter(record, result.status);
-        } else {
-          await recordTransientFailure(record);
-        }
-        continue;
-      }
-      const body = result.body as {
-        user_message_id?: string;
-        assistant_message_id?: string | null;
-        title?: string | null;
-        noop?: boolean | null;
-      };
-      if (!shouldDeleteOutboxAfterAck(body, record)) {
-        // False ack: process state present but assistant never landed — keep recoverable.
-        console.error(
-          "[outbox] false ack (null assistant + process) → dead-letter",
-          record.user_message_id,
-          body,
-        );
-        await moveToDeadLetter(record, result.status || 200);
-        continue;
-      }
-      const payload: OutboxSyncedPayload = {
-        conversationId: record.conversation_id,
-        userMessageId: record.user_message_id,
-        cloudUserMessageId: body.user_message_id || record.user_message_id,
-        assistantMessageId: body.assistant_message_id ?? null,
-        title: body.title ?? null,
-        ...(record.origin ? { origin: record.origin } : {}),
-        ...(record.harvest_kind ? { harvestKind: record.harvest_kind } : {}),
-      };
-      await deleteRecord(record.user_message_id);
-      recentSyncedConversation.set(
-        record.user_message_id,
-        record.conversation_id,
-      );
-      pushSynced(payload);
-      synced.push(payload);
+    for (const initial of records) {
+      await withUmidLock(initial.user_message_id, async () => {
+        const record =
+          (await readOutboxRecord(initial.user_message_id)) ?? initial;
+        const payload = await processOneOutboxRecord(record, {
+          salvageOpen,
+          bypassBackoff,
+        });
+        if (payload) synced.push(payload);
+      });
     }
     return { status: await statusSnapshot(), synced };
   })().finally(() => {
@@ -380,8 +390,10 @@ export function registerOutboxIpc(): void {
 
   void recoverLocalPersistence();
   startOutboxPolling();
+  startOutboxProjectionWatch();
 
   app.on("before-quit", () => {
+    stopOutboxProjectionWatch();
     stopOutboxPolling();
     void drainOutbox();
   });

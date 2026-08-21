@@ -109,6 +109,11 @@ const sidecarApi: SidecarApi = {
   runRedirect: async () => UNREACHABLE_INTERVENE_ACK,
   runStop: async () => UNREACHABLE_INTERVENE_ACK,
   debateSteer: async () => ({ accepted: false }),
+  deliverMessage: async () => {
+    throw new Error("sidecar unavailable in web preview");
+  },
+  cancelQueuedTurn: async () => ({ status: "not_found" as const }),
+  listQueuedTurns: async () => ({ items: [] }),
   resume: async () => {
     throw new Error("sidecar unavailable in web preview");
   },
@@ -116,6 +121,7 @@ const sidecarApi: SidecarApi = {
   warmCodeIndex: async () => {},
   warmMcpDiscover: async () => {},
   warmAccountRulesMemory: async () => {},
+  refreshLiveAccountRulesMemory: async () => {},
   recovery: async () => ({
     liveRunning: false,
     unsynced: [],

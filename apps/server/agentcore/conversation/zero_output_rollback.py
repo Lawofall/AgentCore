@@ -260,15 +260,11 @@ async def maybe_delete_zero_output_send(
     if not assistant_id or not user_id:
         return False
     try:
-        async with async_session_factory() as session:
-            repo = MessageRepository(session)
-            await repo.delete_by_id(
-                assistant_id, conversation_id=conversation_id, commit=False
-            )
-            await repo.delete_by_id(
-                user_id, conversation_id=conversation_id, commit=False
-            )
-            await session.commit()
+        await delete_assistant_and_paired_user(
+            conversation_id=conversation_id,
+            assistant_message_id=assistant_id,
+            user_message_id=user_id,
+        )
     except Exception:
         logger.exception(
             "chat.zero_output_send_delete_failed",
@@ -285,3 +281,26 @@ async def maybe_delete_zero_output_send(
         error_code=error_code_from_turn_result(result),
     )
     return True
+
+
+async def delete_assistant_and_paired_user(
+    *,
+    conversation_id: str,
+    assistant_message_id: str,
+    user_message_id: str,
+) -> None:
+    """Hard-delete assistant then user in one transaction.
+
+    Both rows stay if either delete fails. Leaves ``cost_events``. No Class B
+    predicate — callers decide whether the pair should go (zero-output send vs
+    explicit local-turn abort of a still-running placeholder).
+    """
+    async with async_session_factory() as session:
+        repo = MessageRepository(session)
+        await repo.delete_by_id(
+            assistant_message_id, conversation_id=conversation_id, commit=False
+        )
+        await repo.delete_by_id(
+            user_message_id, conversation_id=conversation_id, commit=False
+        )
+        await session.commit()

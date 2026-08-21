@@ -94,6 +94,7 @@ class HandlerMixin:
         # Silent background index warm (Cursor-style): schedule once after root is
         # bound; coalesce with later warmCodeIndex / write kicks. Never awaits ensure.
         self._schedule_code_index_warm()
+        self._install_local_queue_starter()
         await self._reply(
             request_id,
             {
@@ -114,6 +115,9 @@ class HandlerMixin:
                     "warmMcpDiscover": True,
                     # Non-turn warm: parallel account HTTP → seed prepare rules/memory cache.
                     "warmAccountRulesMemory": True,
+                    "deliverMessage": True,
+                    "cancelQueuedTurn": True,
+                    "listQueuedTurns": True,
                 },
             },
         )
@@ -591,6 +595,11 @@ class HandlerMixin:
                 ),
                 turn_id,
             )
+            mid = str(params.get("messageId") or "").strip()
+            if mid:
+                self._resolve_fifo_desktop_start(
+                    mid, RuntimeError("startTurn slot occupied")
+                )
             await self._reject_turn_already_running(
                 request_id,
                 op="startTurn",
@@ -603,6 +612,23 @@ class HandlerMixin:
         # them — historically this silently became a normal AI reply. When replay
         # is armed, refuse so the operator gets an explicit error instead.
         if await self._reject_if_tape_bound_local(request_id, conversation_id):
+            return
+
+        from agentcore.sidecar.server_pkg.turns import parse_client_turn_ids
+
+        if parse_client_turn_ids(params) is None:
+            mid = str(params.get("messageId") or "").strip()
+            if mid:
+                self._resolve_fifo_desktop_start(
+                    mid, RuntimeError("startTurn missing client ids")
+                )
+            await self._send(
+                protocol.make_error(
+                    request_id,
+                    protocol.INVALID_PARAMS,
+                    "startTurn requires userMessageId, messageId, and 32-hex traceId",
+                )
+            )
             return
 
         # Adopt this turn's cloud-proxy token before it runs (refreshes a rotated TTL).
@@ -1226,7 +1252,10 @@ class HandlerMixin:
             from agentcore.runtime.events.client_tool_reattach import (
                 cancel_pending_client_tools,
             )
+            from agentcore.runtime.turn.runs import turn_runs
 
+            # Occupy the same stop flag as cloud POST /stop before cancelling the task.
+            turn_runs.mark_user_stop(conversation_id)
             cascaded = cancel_coordination_on_user_stop(conversation_id)
             # Before ``task.cancel()``: unwinding discards the registry entries, so
             # an op already dispatched to the desktop (host_shell…) would keep

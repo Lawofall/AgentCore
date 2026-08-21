@@ -19,6 +19,7 @@ import {
 import { useExecutionStore } from "@/stores/execution";
 import { useInteractionStore } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
+import { conversationHasQueuedTurns } from "@/stores/queuedTurns";
 import { createPatchConversation } from "./patchConversation";
 import type {
   ConversationGet,
@@ -496,9 +497,10 @@ export function createStreamProjectionActions(
             composingTool: null,
           };
         }
+        const id = conversationId ?? get().currentConversationId;
         return {
           messages,
-          isGenerating: false,
+          isGenerating: conversationHasQueuedTurns(id),
           waitingForWorkspaceLock: false,
         };
       });

@@ -189,6 +189,7 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
         "traceId",
         "userMessage",
         "userMessageId",
+        "messageId",
       ] as const;
       const startTurnOptionalStrings = ["subpath"] as const;
       const startTurnNullableIds = [
@@ -206,6 +207,7 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
             traceId: "a".repeat(32),
             userMessage: "hi",
             userMessageId: "u",
+            messageId: "m",
             subpath: "scratch",
             folderId: null,
             localRootId: null,

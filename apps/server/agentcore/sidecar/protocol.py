@@ -46,6 +46,12 @@ PAUSED_TURN_NOT_FOUND = -32003
 # Resume failed after claim but the frame was rolled back — the desktop keeps the
 # resume card and may retry (non-destructive claim).
 RESUME_RETRYABLE = -32004
+# ``deliverMessage`` while this sidecar has no occupying live turn.
+NO_LIVE_TURN = -32005
+# Hot pending (approval / escalation) — same condition as HTTP 409.
+PENDING_INTERACTIONS = -32006
+# ``cancelQueuedTurn``: unknown or already started.
+QUEUED_TURN_NOT_FOUND = -32007
 
 
 class ProtocolError(ValueError):

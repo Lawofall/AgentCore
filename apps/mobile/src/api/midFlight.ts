@@ -5,7 +5,8 @@
  * 缓冲后续帧直至主路空闲，再续流 turn2——对齐桌面 midFlight / 发送即有流。
  * 经典降级可双发 `user_interjection(queued)` + `turn_queued.degraded_from=steer`。
  * 出队开跑首帧为 EPHEMERAL `turn_queue_started`（先于 `message_start`）；
- * live UI：插主时间线用户泡并清 queuedTurns 轻态；否决靠 `message_start` 猜出队。
+ * live UI：ChatPage 凭帧 content 插主时间线用户泡并清 queuedTurns 轻态（与 beginTurn2
+ * 共用 queue_id 幂等）；否决靠 `message_start` 猜出队。
  * ``delivery`` 必填（缺 → 422）。
  */
 import { apiUrl, authHeader, fetchWithAuthRefresh } from "@/api/client";
@@ -48,7 +49,7 @@ export type MidFlightHooks = {
   }) => void;
   /**
    * 主路空闲后开跑 turn2（只调一次）。
-   * 此处插入主时间线用户泡（或由紧随其后的 ``turn_queue_started`` 路径补插）。
+   * 可插主时间线用户泡；与紧随其后的 ``turn_queue_started`` 路径共用 queue_id 幂等。
    */
   beginTurn2: () => void;
   /** turn2 开跑后的事件（含缓冲回放）。 */

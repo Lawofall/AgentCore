@@ -8,6 +8,7 @@
  */
 import { useInteractionStore } from "@/stores/interactions";
 import { type PendingResume, usePausedTurnStore } from "@/stores/pausedTurns";
+import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import type { SidecarUnsyncedTurnSummary } from "@shared/sidecar-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -90,6 +91,7 @@ function unsyncedSummary(
 beforeEach(() => {
   usePausedTurnStore.getState().clear();
   useInteractionStore.getState().clear();
+  useQueuedTurnsStore.setState({ byConversation: {} });
   apiGet.mockReset();
   vi.unstubAllGlobals();
 });
@@ -120,6 +122,71 @@ describe("loadRecovery cold start (no React Query / no resolveSidecarRoot)", () 
     expect(r.cloudKnown).toBe(true);
     expect(r.turnId).toBe("turn-1");
     expect(shouldHydrateLocalRecovery(r)).toBe(true);
+  });
+
+  it("hydrate writes sidecar queuedTurns via replaceConversation", async () => {
+    const recoveryIpc = vi.fn(async () => ({
+      liveRunning: true,
+      turnId: "turn-1",
+      unsynced: [],
+      paused: [],
+      queuedTurns: [{ queueId: "q-local", content: "排队句", position: 1 }],
+    }));
+    apiGet.mockResolvedValue({
+      live_running: false,
+      paused: [],
+      pending_interactions: [],
+    });
+    useQueuedTurnsStore.getState().upsert({
+      queueId: "q-stale",
+      conversationId: CID,
+      content: "旧条",
+      position: 1,
+      queueDepth: 1,
+    });
+
+    vi.stubGlobal("window", {
+      __WEB__: false,
+      sidecarApi: { recovery: recoveryIpc },
+    });
+
+    await loadRecovery(CID);
+    const list = useQueuedTurnsStore.getState().list(CID);
+    expect(list.map((e) => e.queueId)).toEqual(["q-local"]);
+    expect(list[0]?.content).toBe("排队句");
+  });
+
+  it("omitted queuedTurns does not wipe kept local queue", async () => {
+    const recoveryIpc = vi.fn(async () => ({
+      liveRunning: false,
+      unsynced: [],
+      paused: [],
+    }));
+    apiGet.mockResolvedValue({
+      live_running: false,
+      paused: [],
+      pending_interactions: [],
+    });
+    useQueuedTurnsStore.getState().upsert({
+      queueId: "q-keep",
+      conversationId: CID,
+      content: "本机队",
+      position: 1,
+      queueDepth: 1,
+    });
+
+    vi.stubGlobal("window", {
+      __WEB__: false,
+      sidecarApi: { recovery: recoveryIpc },
+    });
+
+    await loadRecovery(CID);
+    expect(
+      useQueuedTurnsStore
+        .getState()
+        .list(CID)
+        .map((e) => e.queueId),
+    ).toEqual(["q-keep"]);
   });
 
   it("takes local hydrate path for unsynced-only (no live turn)", async () => {

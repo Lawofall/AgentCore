@@ -183,6 +183,8 @@ TS_EXPORTS: tuple[TsExport, ...] = (
     TsInterface(run.UserInterjectionAgentMention),
     TsInterface(run.UserInterjectionPayload),
     TsInterface(run.TurnQueuedPayload),
+    TsInterface(run.MessageAttachment),
+    TsInterface(run.AgentMention),
     TsInterface(run.TurnQueueStartedPayload),
     TsInterface(run.TurnQueueCancelledPayload),
     TsInterface(run.ResumeDeferredPayload),

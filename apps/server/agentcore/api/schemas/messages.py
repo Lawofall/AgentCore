@@ -1173,6 +1173,90 @@ class RecordTurnResponse(BaseModel):
     noop: bool = False
 
 
+def _require_message_uuid(value: str) -> str:
+    from agentcore.core.types import is_uuid_id
+
+    if not is_uuid_id(value):
+        raise ValueError("must be a UUID")
+    return value
+
+
+class BeginLocalTurnRequest(BaseModel):
+    """Open a local-turn projection: pin the user row and a running assistant.
+
+    Does not start a cloud SSE turn, mint a title, or compact. Same
+    ``user_message_id`` / ``message_id`` retry is success.
+    """
+
+    user_message: str = Field("", max_length=32000)
+    user_message_id: str = Field(..., min_length=1, max_length=64)
+    message_id: str = Field(..., min_length=1, max_length=64)
+    trace_id: str = Field(..., min_length=32, max_length=32)
+    agent_mentions: list[AgentMention] = Field(default_factory=list, max_length=10)
+
+    @field_validator("user_message_id", "message_id")
+    @classmethod
+    def _uuid_ids(cls, value: str) -> str:
+        return _require_message_uuid(value)
+
+
+class BeginLocalTurnResponse(BaseModel):
+    user_message_id: str
+    assistant_message_id: str
+
+
+class LocalTurnJournalFact(BaseModel):
+    seq: int = Field(..., ge=0)
+    entry: dict[str, Any]
+
+
+class LocalTurnJournalRequest(BaseModel):
+    """Append-on-emit journal facts. ``seq`` is required; merge duplicate is success."""
+
+    message_id: str = Field(..., min_length=1, max_length=64)
+    trace_id: str | None = Field(None, min_length=32, max_length=32)
+    entries: list[LocalTurnJournalFact] = Field(default_factory=list, max_length=2000)
+
+    @field_validator("message_id")
+    @classmethod
+    def _uuid_message_id(cls, value: str) -> str:
+        return _require_message_uuid(value)
+
+
+class LocalTurnStreamSegment(BaseModel):
+    channel: str = Field(..., min_length=1, max_length=128)
+    text: str = Field("", max_length=500_000)
+    generation: int = Field(..., ge=0)
+
+
+class LocalTurnStreamSegmentsRequest(BaseModel):
+    """UPSERT ``turn_stream_state`` snapshots. Does not rewrite ``messages.content``."""
+
+    message_id: str = Field(..., min_length=1, max_length=64)
+    segments: list[LocalTurnStreamSegment] = Field(default_factory=list, max_length=64)
+
+    @field_validator("message_id")
+    @classmethod
+    def _uuid_message_id(cls, value: str) -> str:
+        return _require_message_uuid(value)
+
+
+class AbortLocalTurnRequest(BaseModel):
+    """Drop a still-running placeholder pair (startup failure). Settled = no-op."""
+
+    user_message_id: str = Field(..., min_length=1, max_length=64)
+    message_id: str = Field(..., min_length=1, max_length=64)
+
+    @field_validator("user_message_id", "message_id")
+    @classmethod
+    def _uuid_ids(cls, value: str) -> str:
+        return _require_message_uuid(value)
+
+
+class AbortLocalTurnResponse(BaseModel):
+    aborted: bool
+
+
 class StopTurnResponse(BaseModel):
     """Outcome of an explicit 停止 (执行与请求解耦 C1 · slice 1a).
 
@@ -1184,8 +1268,11 @@ class StopTurnResponse(BaseModel):
 
 
 class QueuedTurnItem(BaseModel):
-    """One process-local FIFO queued turn (权威内容源；EPHEMERAL 事件只作变了信号).
+    """One process-local FIFO queued turn (排队条权威内容源；GET / 快照).
 
+    ``turn_queued`` / ``turn_queue_cancelled`` remain change signals only.
+    ``turn_queue_started`` is the timeline user-bubble entrance (content on the
+    frame), not a change-only ping.
     ``interjection_id`` is set when the entry was promoted from a user interjection
     (协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.
     ``position`` is 1-based FIFO index.

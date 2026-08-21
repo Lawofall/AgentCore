@@ -255,6 +255,8 @@ export async function streamConversationViaSidecar({
   const turnId = newTurnId();
   // 本回合 trace_id：贯穿云代理推理调用 + 回写落库，使推理日志↔气泡同 trace（打通气泡↔日志）。
   const traceId = newTraceId();
+  // 助手行 id：与 userMessageId 同级，桌面铸造；sidecar 不得再 new_id()。
+  const messageId = crypto.randomUUID();
   // 云推理 / folders / account 窄票：TTL+skew 内复用，临近过期才 mint；三张并行。
   // 推理票：开跑前无票 → force remint 一次 → 仍无则 INFERENCE_TOKEN_EXPIRED、不发 RPC
   // （引擎硬拒空凭据；无本机平台模型回退）。folders / account 缺票仍可下发，工具侧诚实失败。
@@ -314,6 +316,7 @@ export async function streamConversationViaSidecar({
         userId: useAuthStore.getState().user?.id ?? "local",
         userMessage: content,
         userMessageId: optimisticUserId,
+        messageId,
         history,
         ...(agentMentions && agentMentions.length > 0 ? { agentMentions } : {}),
         inference,

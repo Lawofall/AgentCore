@@ -606,14 +606,13 @@ def delivery_status(
     handoff gaps (含 degraded 交接、artifacts 对账缺口、soft overlay notes),
     and derived user actions (如云端无执行环境 → ``bind_local_folder``). ``state`` ∈
     delivered / partial / blocked / notes（软自注 unverified_note 不单独 → notes；
-    path_mismatch 为 blocking 失配，不得 delivered）.
+    path_mismatch 为声明未落盘的 blocking gap，不得 delivered；未声明落盘不进 artifacts）.
     ``artifacts`` = path acceptance rows；``delivered_files`` = accepted only.
     ``gaps`` items are ``{role, description}`` plus optional ``reason`` /
     ``severity`` / ``paths``；``actions`` 已知 kind 含 ``bind_local_folder`` /
     ``website_verify`` / ``continue_skipped_runs``（已撤 ``continue_writing``）.
-    ``promoted`` = 这张卡上 ``promote_product`` 的 ``{from, to}`` 归位行；CEO 归位后按同
-    ``execution_id`` 重发本事件（路径已改写为 ``to``；跨回合再归位时旧行保留）。零归位
-    是合法状态，此时整条 key 不上 wire（客户端按缺省空数组读），既不报错也不拦收口。
+    ``promoted`` = 历史 ``{from, to}`` 归位行（``promote_product`` 已撤销，新回合不再写入）。
+    零归位是合法状态，此时整条 key 不上 wire（客户端按缺省空数组读）。
     DURABLE：落 journal；folds 同 ``execution_id`` 保最新。
     Must NOT ride ``content_delta``（终稿正文与交付对账分离）。
     """
@@ -696,16 +695,29 @@ def turn_queue_started(
     queue_id: str,
     conversation_id: str,
     remaining_depth: int,
+    content: str,
+    attachments: list[dict[str, Any]] | None = None,
+    agent_mentions: list[dict[str, Any]] | None = None,
 ) -> SSEEvent:
-    """同对话 FIFO 出队开跑 ack——新回合 sink 首帧（先于 ``message_start``）。"""
-    return SSEEvent(
-        type=EventType.TURN_QUEUE_STARTED,
-        payload={
-            "queue_id": queue_id,
-            "conversation_id": conversation_id,
-            "remaining_depth": remaining_depth,
-        },
-    )
+    """同对话 FIFO 出队开跑——新回合 sink 首帧（先于 ``message_start``）。
+
+    自描述时间线入场（正文在帧上）。``attachments`` / ``agent_mentions`` 空则不上 wire。
+    EPHEMERAL——不落 journal；reload 靠 REST。
+    """
+    from agentcore.conversation.mentions import wire_agent_mentions
+
+    payload: dict[str, Any] = {
+        "queue_id": queue_id,
+        "conversation_id": conversation_id,
+        "remaining_depth": remaining_depth,
+        "content": content,
+    }
+    if attachments:
+        payload["attachments"] = attachments
+    mentions = wire_agent_mentions(agent_mentions)
+    if mentions:
+        payload["agent_mentions"] = mentions
+    return SSEEvent(type=EventType.TURN_QUEUE_STARTED, payload=payload)
 
 
 def turn_queue_cancelled(*, queue_id: str, conversation_id: str) -> SSEEvent:

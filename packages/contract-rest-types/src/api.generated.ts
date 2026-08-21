@@ -2405,6 +2405,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/local-turns/abort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abort Local Turn Endpoint
+         * @description Delete a still-running assistant + paired user (startup failure). Settled = no-op.
+         */
+        post: operations["abort_local_turn_endpoint_v1_conversations__conversation_id__local_turns_abort_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/local-turns/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Begin Local Turn Endpoint
+         * @description Pin the user row + a running assistant placeholder (投影同寿命).
+         *
+         *     Same request is idempotent on ``user_message_id`` and assistant ``message_id``.
+         *     Does not start a cloud SSE turn, mint a title, compact, or go through
+         *     ``POST /messages``. Owner Bearer, same as ``POST …/local-turns``.
+         */
+        post: operations["begin_local_turn_endpoint_v1_conversations__conversation_id__local_turns_begin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/local-turns/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append Local Turn Journal Endpoint
+         * @description Append journal facts with required ``seq`` (replace=False). Failures are 4xx/5xx.
+         */
+        post: operations["append_local_turn_journal_endpoint_v1_conversations__conversation_id__local_turns_journal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/local-turns/stream-segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upsert Local Turn Stream Segments Endpoint
+         * @description UPSERT in-flight stream snapshots. Does not rewrite ``messages.content``.
+         */
+        post: operations["upsert_local_turn_stream_segments_endpoint_v1_conversations__conversation_id__local_turns_stream_segments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/messages": {
         parameters: {
             query?: never;
@@ -2732,12 +2816,12 @@ export interface paths {
         };
         /**
          * List Queued Turns
-         * @description List the conversation's process-local FIFO queued turns (权威内容源).
+         * @description List the conversation's process-local FIFO queued turns (条权威仍是 GET / 快照).
          *
          *     Owner-gated like send / cancel. Returns the current in-memory snapshot in FIFO
-         *     order (``position`` 1-based). EPHEMERAL ``turn_queued`` / ``turn_queue_started`` /
-         *     ``turn_queue_cancelled`` remain change signals only — clients should refresh from
-         *     this endpoint. Restart empties the queue (no durable queue).
+         *     order (``position`` 1-based). EPHEMERAL ``turn_queued`` / ``turn_queue_cancelled``
+         *     remain change signals only; ``turn_queue_started`` is the timeline entrance
+         *     frame (content on the frame). Restart empties the queue (no durable queue).
          */
         get: operations["list_queued_turns_v1_conversations__conversation_id__queued_turns_get"];
         put?: never;
@@ -6433,6 +6517,21 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AbortLocalTurnRequest
+         * @description Drop a still-running placeholder pair (startup failure). Settled = no-op.
+         */
+        AbortLocalTurnRequest: {
+            /** Message Id */
+            message_id: string;
+            /** User Message Id */
+            user_message_id: string;
+        };
+        /** AbortLocalTurnResponse */
+        AbortLocalTurnResponse: {
+            /** Aborted */
+            aborted: boolean;
+        };
+        /**
          * AcceptRunOutcomeRequest
          * @description User explicitly accepts a run's terminal outcome that could not be auto-recovered
          *     (跑一半改方向 Step 4 · 忽略路径收口).
@@ -7672,6 +7771,35 @@ export interface components {
         AutonomyView: {
             /** @default less_interrupt */
             policy: components["schemas"]["AutonomyPolicy"];
+        };
+        /**
+         * BeginLocalTurnRequest
+         * @description Open a local-turn projection: pin the user row and a running assistant.
+         *
+         *     Does not start a cloud SSE turn, mint a title, or compact. Same
+         *     ``user_message_id`` / ``message_id`` retry is success.
+         */
+        BeginLocalTurnRequest: {
+            /** Agent Mentions */
+            agent_mentions?: components["schemas"]["AgentMention"][];
+            /** Message Id */
+            message_id: string;
+            /** Trace Id */
+            trace_id: string;
+            /**
+             * User Message
+             * @default
+             */
+            user_message: string;
+            /** User Message Id */
+            user_message_id: string;
+        };
+        /** BeginLocalTurnResponse */
+        BeginLocalTurnResponse: {
+            /** Assistant Message Id */
+            assistant_message_id: string;
+            /** User Message Id */
+            user_message_id: string;
         };
         /**
          * BetaGroupModerator
@@ -10422,6 +10550,49 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** LocalTurnJournalFact */
+        LocalTurnJournalFact: {
+            /** Entry */
+            entry: {
+                [key: string]: unknown;
+            };
+            /** Seq */
+            seq: number;
+        };
+        /**
+         * LocalTurnJournalRequest
+         * @description Append-on-emit journal facts. ``seq`` is required; merge duplicate is success.
+         */
+        LocalTurnJournalRequest: {
+            /** Entries */
+            entries?: components["schemas"]["LocalTurnJournalFact"][];
+            /** Message Id */
+            message_id: string;
+            /** Trace Id */
+            trace_id?: string | null;
+        };
+        /** LocalTurnStreamSegment */
+        LocalTurnStreamSegment: {
+            /** Channel */
+            channel: string;
+            /** Generation */
+            generation: number;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /**
+         * LocalTurnStreamSegmentsRequest
+         * @description UPSERT ``turn_stream_state`` snapshots. Does not rewrite ``messages.content``.
+         */
+        LocalTurnStreamSegmentsRequest: {
+            /** Message Id */
+            message_id: string;
+            /** Segments */
+            segments?: components["schemas"]["LocalTurnStreamSegment"][];
+        };
         /**
          * LocalTurnToolFailure
          * @description One failed tool call summary for local-turn write-back observability.
@@ -11627,8 +11798,11 @@ export interface components {
         };
         /**
          * QueuedTurnItem
-         * @description One process-local FIFO queued turn (权威内容源；EPHEMERAL 事件只作变了信号).
+         * @description One process-local FIFO queued turn (排队条权威内容源；GET / 快照).
          *
+         *     ``turn_queued`` / ``turn_queue_cancelled`` remain change signals only.
+         *     ``turn_queue_started`` is the timeline user-bubble entrance (content on the
+         *     frame), not a change-only ping.
          *     ``interjection_id`` is set when the entry was promoted from a user interjection
          *     (协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.
          *     ``position`` is 1-based FIFO index.
@@ -18830,6 +19004,162 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    abort_local_turn_endpoint_v1_conversations__conversation_id__local_turns_abort_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AbortLocalTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AbortLocalTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    begin_local_turn_endpoint_v1_conversations__conversation_id__local_turns_begin_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BeginLocalTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BeginLocalTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    append_local_turn_journal_endpoint_v1_conversations__conversation_id__local_turns_journal_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalTurnJournalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_local_turn_stream_segments_endpoint_v1_conversations__conversation_id__local_turns_stream_segments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalTurnStreamSegmentsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
                 };
             };
             /** @description Validation Error */

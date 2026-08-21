@@ -23,6 +23,11 @@ vi.mock("../log-service", () => ({
   logDesktop: vi.fn(),
 }));
 
+vi.mock("../outbox/projection", () => ({
+  occupyLocalTurnBegin: vi.fn(async () => true),
+  abortLocalTurnPlaceholder: vi.fn(async () => undefined),
+}));
+
 vi.mock("../mcp-service", () => ({
   listMcpToolsValue: h.listMcpToolsValue,
 }));
@@ -160,6 +165,7 @@ describe("SidecarManager warmMcpDiscover", () => {
         turnId: "turn-await",
         traceId: "a".repeat(32),
         userMessageId: "u1",
+        messageId: "m-asst",
         userMessage: "hi",
         userId: ACCOUNT_USER,
       },

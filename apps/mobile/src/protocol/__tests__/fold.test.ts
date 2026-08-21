@@ -892,6 +892,8 @@ describe("extractTurnQueued", () => {
         queue_id: "q1",
         conversation_id: "c1",
         remaining_depth: 0,
+        // live 入场不在 fold：帧正文由 ChatPage 插泡，fold 仍忽略 content。
+        content: "queued text stays out of fold",
       }),
       ev("message_start", { message_id: "m1", conversation_id: "c1" }),
       ev("content_delta", { delta: "ok" }),

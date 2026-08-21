@@ -210,7 +210,7 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
   turn_queue_started: {
     verdict: "ported",
     surface:
-      "ChatPage · 出队开跑：插主时间线用户泡 + 按 queue_id 清 queuedTurns 条，再 GET 对账余下项序号（fold no-op）",
+      "ChatPage · 出队开跑：放宽读 payload content（及附件/点名）按 queue_id 幂等插主时间线用户泡 + 清条，再 GET 对账余下项序号；与 beginTurn2 共用 queue_id 勿双泡（fold no-op）",
   },
   turn_queue_cancelled: {
     verdict: "ported",

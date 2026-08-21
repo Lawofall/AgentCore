@@ -98,7 +98,8 @@ interface ChatChangedEvent {
 /** 记忆更新对话内可见 (§1.6): one offline-consolidation pass that changed a memory
  * file. `update` (the conversation-tail card payload) is present whenever the pass
  * recorded a row; its shape mirrors the REST `MemoryUpdateView` so {@link toMemoryUpdate}
- * maps it. Absent on older/edge passes — then we fall back to the heads-up toast. */
+ * maps it. Absent on older/edge passes — semantic / quota still fall back to a
+ * heads-up toast; episodic never toasts. */
 interface MemoryUpdatedEvent {
   type: "memory_updated";
   conversation_id: string;
@@ -106,6 +107,23 @@ interface MemoryUpdatedEvent {
   update?: components["schemas"]["MemoryUpdateView"] & {
     conversation_id?: string;
   };
+}
+
+type MemoryUpdateKind = components["schemas"]["MemoryUpdateView"]["kind"];
+
+/** Cross-conversation heads-up for `memory_updated`. `null` = no toast: the inline
+ * card (if this conversation is open) and the 记忆动态 feed already cover it.
+ * Episodic session digests never toast — one-line "记下了本场摘要" is noise. */
+export function memoryUpdatedToastCopy(
+  kind: MemoryUpdateKind,
+  cardShown: boolean,
+): string | null {
+  if (cardShown || kind === "episodic") return null;
+  if (kind === "quota") {
+    // Never claim a write that was refused (审计 CTX-A2).
+    return "常驻条目已满，有内容没能记下";
+  }
+  return "AI 刚刚更新了你的记忆";
 }
 
 /** Re-sync state that may have changed while disconnected. */
@@ -152,25 +170,13 @@ function handleFrame(frame: string): void {
       }
       // 记忆动态 feed live-refresh: mark the cross-conversation「最近更新」query stale so an
       // OPEN MemoryUpdatesView refetches at once (a closed one just refetches on next open —
-      // free). Without this, focus-refetch being off leaves the feed showing only the toast
-      // until the user reopens the tab. Fires on every pass, card shown or not.
+      // free). Episodic has no toast, so without this an open feed stays silently stale.
       void queryClient.invalidateQueries({ queryKey: ["memory-updates"] });
-      // When the user is looking at that very conversation the inline card IS the signal,
-      // so skip the toast; otherwise a heads-up. Copy must match the card: episodic ≠
-      // long-term memory file write (Agent记忆与知识系统 §三).
       const cardShown =
         !!(e.update && e.conversation_id) &&
         conv.currentConversationId === e.conversation_id;
-      if (!cardShown) {
-        notifyInfo(
-          kind === "episodic"
-            ? "AI 刚刚记下了本场摘要"
-            : kind === "quota"
-              ? // Never claim a write that was refused (审计 CTX-A2).
-                "常驻条目已满，有内容没能记下"
-              : "AI 刚刚更新了你的记忆",
-        );
-      }
+      const toastCopy = memoryUpdatedToastCopy(kind, cardShown);
+      if (toastCopy) notifyInfo(toastCopy);
     } else if (event.type === "shared_space_invite") {
       const e = event as SharedSpaceInviteEvent;
       invalidateAllSharedSpaces();

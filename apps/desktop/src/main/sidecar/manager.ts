@@ -3,13 +3,20 @@ import {
   type SidecarAccountAuth,
   type SidecarAttachRequest,
   type SidecarAttachResponse,
+  type SidecarCancelQueuedTurnAck,
+  type SidecarCancelQueuedTurnRequest,
   type SidecarCancelRequest,
   type SidecarCreateWorkspaceVersionRequest,
   type SidecarDebateSteerRequest,
+  type SidecarDeliverMessageAck,
+  type SidecarDeliverMessageRequest,
   type SidecarInference,
   type SidecarInterveneAck,
   type SidecarListBrowserSessionsRequest,
   type SidecarListBrowserSessionsResult,
+  type SidecarListQueuedTurnsRequest,
+  type SidecarListQueuedTurnsResult,
+  type SidecarQueuedTurnItem,
   type SidecarRecoveryRequest,
   type SidecarRecoveryResponse,
   type SidecarRespondRequest,
@@ -18,6 +25,8 @@ import {
   type SidecarResumeRequest,
   type SidecarRunRedirectRequest,
   type SidecarRunStopRequest,
+  SIDECAR_QUEUE_NEED_START,
+  type SidecarQueuedAttachment,
   type SidecarStartTurnRequest,
   type SidecarStatusPush,
   type SidecarTurnFilesDiffRequest,
@@ -28,11 +37,16 @@ import {
   type SidecarWorkspaceVersionResult,
   buildSidecarResumeRpcParams,
 } from "@shared/sidecar-contract";
+import { randomUUID } from "node:crypto";
 import { BrowserWindow, type WebContents } from "electron";
 import { getDesktopBrowserBridgeCredentials } from "../browser";
 import { listSessionRoots } from "../fs/roots";
 import { logDesktop } from "../log-service";
 import { listMcpToolsValue } from "../mcp-service";
+import {
+  abortLocalTurnPlaceholder,
+  occupyLocalTurnBegin,
+} from "../outbox/projection";
 import { listUnsyncedSummaries, sidecarDataDir } from "../outbox-writeback";
 import { SidecarEventBuffer } from "../sidecar-event-buffer";
 import { SidecarClient, SidecarRpcError } from "./client";
@@ -94,6 +108,17 @@ function accountWarmKey(
   folderId: string | null | undefined,
 ): string {
   return `${userId}\u0000${folderId?.trim() ?? ""}`;
+}
+
+function folderIdFromAccountWarmKey(key: string): string | null {
+  const i = key.indexOf("\u0000");
+  const folder = i < 0 ? "" : key.slice(i + 1);
+  return folder === "" ? null : folder;
+}
+
+function rootIdFromEntryKey(key: string): string {
+  const i = key.indexOf("::");
+  return i < 0 ? key : key.slice(0, i);
 }
 
 /**
@@ -173,7 +198,7 @@ interface ActiveTurn {
   /** startTurn：用户行 id；resume：挂起时落库的 user 行 id（可缺省）。 */
   userMessageId?: string;
   userMessage?: string;
-  /** resume 登记键 = assistant message_id；startTurn 亦可在 finalize 前未知。 */
+  /** resume 登记键 = assistant message_id；startTurn 由桌面铸造后写入。 */
   messageId?: string;
   buffer: SidecarEventBuffer;
   /** attach 零 await 段内为 true：只入缓冲、不转发（互斥不重不漏）。 */
@@ -213,6 +238,119 @@ function isSidecarTurnCancelled(err: unknown): boolean {
   const raw = err instanceof Error ? err.message : String(err ?? "");
   const msg = raw.toLowerCase();
   return msg.includes("turn cancelled") || msg.includes("turn_cancelled");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function strField(
+  row: Record<string, unknown>,
+  camel: string,
+  snake: string,
+): string {
+  const a = row[camel];
+  const b = row[snake];
+  if (typeof a === "string" && a.trim()) return a.trim();
+  if (typeof b === "string" && b.trim()) return b.trim();
+  return "";
+}
+
+function isQueuedTurnNotFound(err: unknown): boolean {
+  if (err instanceof SidecarRpcError) {
+    if (err.code === -32007) return true;
+    const msg = err.message.toLowerCase();
+    if (msg.includes("not_found") || msg.includes("404")) return true;
+    if (err.code === 404) return true;
+  }
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  return /not_found|404|排队项不存在/i.test(raw);
+}
+
+function parseDeliverMessageAck(reply: unknown): SidecarDeliverMessageAck {
+  if (!isRecord(reply)) {
+    throw new Error("本地引擎回执无效");
+  }
+  const status = String(reply.status ?? reply.kind ?? "").trim();
+  if (status === "received") {
+    const interjectionId = strField(reply, "interjectionId", "interjection_id");
+    if (!interjectionId) throw new Error("本地引擎回执缺少 interjectionId");
+    return { status: "received", interjectionId };
+  }
+  if (status === "queued") {
+    const queueId = strField(reply, "queueId", "queue_id");
+    if (!queueId) throw new Error("本地引擎回执缺少 queueId");
+    const position =
+      typeof reply.position === "number" && reply.position >= 1
+        ? reply.position
+        : 1;
+    const queueDepthRaw = reply.queueDepth ?? reply.queue_depth;
+    const queueDepth =
+      typeof queueDepthRaw === "number" && queueDepthRaw >= 1
+        ? queueDepthRaw
+        : 1;
+    const degraded = reply.degradedFrom ?? reply.degraded_from;
+    return {
+      status: "queued",
+      queueId,
+      position,
+      queueDepth,
+      ...(degraded === "steer" ? { degradedFrom: "steer" as const } : {}),
+    };
+  }
+  if (status === "blocked") {
+    return {
+      status: "blocked",
+      ...(typeof reply.code === "string" && reply.code
+        ? { code: reply.code }
+        : {}),
+    };
+  }
+  throw new Error("本地引擎回执无法识别");
+}
+
+function parseCancelQueuedTurnAck(reply: unknown): SidecarCancelQueuedTurnAck {
+  if (isRecord(reply) && reply.ok === true) {
+    return { status: "cancelled" };
+  }
+  throw new Error("本地引擎取消回执无效");
+}
+
+function parseQueuedTurnItems(reply: unknown): SidecarQueuedTurnItem[] {
+  const rawItems = Array.isArray(reply)
+    ? reply
+    : isRecord(reply) && Array.isArray(reply.items)
+      ? reply.items
+      : null;
+  if (!rawItems) return [];
+  const items: SidecarQueuedTurnItem[] = [];
+  for (const raw of rawItems) {
+    if (!isRecord(raw)) continue;
+    const queueId = strField(raw, "queueId", "queue_id");
+    if (!queueId) continue;
+    const position =
+      typeof raw.position === "number" && raw.position >= 1
+        ? raw.position
+        : items.length + 1;
+    const interjectionId = strField(raw, "interjectionId", "interjection_id");
+    const degraded = raw.degradedFrom ?? raw.degraded_from;
+    const attachments = raw.attachments;
+    const mentions = raw.agentMentions ?? raw.agent_mentions;
+    items.push({
+      queueId,
+      content: typeof raw.content === "string" ? raw.content : "",
+      position,
+      ...(interjectionId ? { interjectionId } : {}),
+      ...(degraded === "steer" ? { degradedFrom: "steer" as const } : {}),
+      ...(Array.isArray(attachments)
+        ? { attachments: attachments as SidecarQueuedTurnItem["attachments"] }
+        : {}),
+      ...(Array.isArray(mentions)
+        ? { agentMentions: mentions as SidecarQueuedTurnItem["agentMentions"] }
+        : {}),
+    });
+  }
+  return items;
 }
 
 /** 流式/状态热路径：先查 isDestroyed，再 try/send，只吞销毁竞态。 */
@@ -403,20 +541,34 @@ export class SidecarManager {
     });
 
     this.dropEphemeralTurns(req.conversationId);
-    this.turns.set(req.turnId, {
-      wc,
-      conversationId: req.conversationId,
-      rootId: req.rootId,
-      subpath: req.subpath ?? "",
-      kind: "start",
-      traceId: req.traceId,
-      userMessageId: req.userMessageId,
-      userMessage: req.userMessage,
-      buffer: new SidecarEventBuffer(),
-      attaching: false,
-    });
-    this.rememberWindow(req.conversationId, wc, req.rootId, req.subpath ?? "");
+    const messageId = req.messageId.trim();
+    let occupied = false;
     try {
+      occupied = await occupyLocalTurnBegin({
+        conversationId: req.conversationId,
+        userMessage: req.userMessage,
+        userMessageId: req.userMessageId,
+        messageId,
+        traceId: req.traceId,
+        agentMentions: req.agentMentions,
+      });
+      if (!occupied) {
+        throw new Error("云端占位失败，本地回合未启动");
+      }
+      this.turns.set(req.turnId, {
+        wc,
+        conversationId: req.conversationId,
+        rootId: req.rootId,
+        subpath: req.subpath ?? "",
+        kind: "start",
+        traceId: req.traceId,
+        userMessageId: req.userMessageId,
+        userMessage: req.userMessage,
+        messageId,
+        buffer: new SidecarEventBuffer(),
+        attaching: false,
+      });
+      this.rememberWindow(req.conversationId, wc, req.rootId, req.subpath ?? "");
       const externalMounts = buildExternalMounts(
         listSessionRoots(req.conversationId),
       );
@@ -427,11 +579,16 @@ export class SidecarManager {
         userMessage: req.userMessage,
         // Outbox idempotency anchor (as-built: 双模式工作区 §10.3).
         userMessageId: req.userMessageId,
+        messageId,
         // Omit when renderer did not confirm a window — ``[]`` would look like
         // a new chat and skip / empty-run instead of letting sidecar fetch.
         ...(req.history !== undefined ? { history: req.history } : {}),
         ...(req.agentMentions && req.agentMentions.length > 0
           ? { agentMentions: req.agentMentions }
+          : {}),
+        ...(req.queueId ? { queueId: req.queueId } : {}),
+        ...(req.attachments && req.attachments.length > 0
+          ? { attachments: req.attachments }
           : {}),
         // Per-turn account id (long-lived sidecar may have initialized as "local").
         ...(req.userId?.trim() ? { userId: req.userId.trim() } : {}),
@@ -459,11 +616,20 @@ export class SidecarManager {
       this.emitSyntheticTerminalIfNeeded(req.turnId, "message_end");
       return result as SidecarTurnResult;
     } catch (err) {
-      this.emitSyntheticTerminalIfNeeded(
-        req.turnId,
-        isSidecarTurnCancelled(err) ? "message_end" : "error",
-        err,
-      );
+      if (occupied) {
+        await abortLocalTurnPlaceholder({
+          conversationId: req.conversationId,
+          userMessageId: req.userMessageId,
+          messageId,
+        });
+      }
+      if (this.turns.has(req.turnId)) {
+        this.emitSyntheticTerminalIfNeeded(
+          req.turnId,
+          isSidecarTurnCancelled(err) ? "message_end" : "error",
+          err,
+        );
+      }
       throw err;
     } finally {
       this.turns.delete(req.turnId);
@@ -546,6 +712,8 @@ export class SidecarManager {
       folderId?: string | null;
       accountAuth?: SidecarAccountAuth;
       userId?: string;
+      /** 文件页写后：忽略 TTL，重新拉取。打开/回合续暖保持 skip-if-fresh。 */
+      force?: boolean;
     } = {},
   ): Promise<void> {
     const entry = this.ensure(
@@ -557,6 +725,48 @@ export class SidecarManager {
     );
     await entry.ready;
     await this.maybeKickAccountRulesMemoryWarm(entry, rootId, opts);
+  }
+
+  /**
+   * 本机文件页 / 记忆写成功后：对**已经在跑**的 sidecar 强制重暖 rules/memory 快照。
+   * 不 spawn、不碰没起过的根。TTL 窗口内也重拉——写刚进云，skip-if-fresh 会把新正文丢掉。
+   */
+  async refreshLiveAccountRulesMemory(opts: {
+    accountAuth?: SidecarAccountAuth;
+    userId?: string;
+  }): Promise<void> {
+    if (!opts.accountAuth) return;
+    const jobs: Promise<void>[] = [];
+    for (const [key, entry] of [...this.entries]) {
+      try {
+        await entry.ready;
+      } catch {
+        continue;
+      }
+      const rootId = rootIdFromEntryKey(key);
+      const userId = opts.userId?.trim() || entry.userId;
+      const folderIds = new Set<string | null>();
+      if (entry.warmLease) {
+        folderIds.add(entry.warmLease.folderId ?? null);
+      }
+      for (const warmKey of [
+        ...entry.accountRulesMemoryFreshUntil.keys(),
+        ...entry.accountRulesMemoryWarmInflight.keys(),
+      ]) {
+        folderIds.add(folderIdFromAccountWarmKey(warmKey));
+      }
+      if (folderIds.size === 0) folderIds.add(null);
+      for (const folderId of folderIds) {
+        const work = this.maybeKickAccountRulesMemoryWarm(entry, rootId, {
+          folderId,
+          accountAuth: opts.accountAuth,
+          userId,
+          force: true,
+        });
+        if (work) jobs.push(work);
+      }
+    }
+    await Promise.all(jobs);
   }
 
   /**
@@ -574,6 +784,7 @@ export class SidecarManager {
       folderId?: string | null;
       accountAuth?: SidecarAccountAuth;
       userId?: string;
+      force?: boolean;
     },
   ): Promise<void> | undefined {
     const userId = opts.userId?.trim();
@@ -581,8 +792,11 @@ export class SidecarManager {
     if (userId) entry.userId = userId;
     const key = accountWarmKey(entry.userId, opts.folderId);
     const inflight = entry.accountRulesMemoryWarmInflight.get(key);
-    if (inflight) return inflight;
-    if ((entry.accountRulesMemoryFreshUntil.get(key) ?? 0) > Date.now()) {
+    if (inflight && !opts.force) return inflight;
+    if (
+      !opts.force &&
+      (entry.accountRulesMemoryFreshUntil.get(key) ?? 0) > Date.now()
+    ) {
       return undefined;
     }
     if (!opts.accountAuth) {
@@ -593,7 +807,29 @@ export class SidecarManager {
       });
       return undefined;
     }
-    const work = (async () => {
+    if (inflight && opts.force) {
+      let joined!: Promise<void>;
+      joined = inflight
+        .catch(() => undefined)
+        .then(() => {
+          entry.accountRulesMemoryFreshUntil.delete(key);
+          if (entry.accountRulesMemoryWarmInflight.get(key) === joined) {
+            entry.accountRulesMemoryWarmInflight.delete(key);
+          }
+          return this.maybeKickAccountRulesMemoryWarm(entry, rootId, {
+            folderId: opts.folderId,
+            accountAuth: opts.accountAuth,
+            userId: opts.userId,
+            force: true,
+          });
+        })
+        .then(() => undefined);
+      entry.accountRulesMemoryWarmInflight.set(key, joined);
+      this.trackWarm(entry, joined);
+      return joined;
+    }
+    let work!: Promise<void>;
+    work = (async () => {
       let freshMs = ACCOUNT_WARM_RETRY_BACKOFF_MS;
       try {
         const reply = await entry.client.request("warmAccountRulesMemory", {
@@ -611,7 +847,9 @@ export class SidecarManager {
         });
       } finally {
         entry.accountRulesMemoryFreshUntil.set(key, Date.now() + freshMs);
-        entry.accountRulesMemoryWarmInflight.delete(key);
+        if (entry.accountRulesMemoryWarmInflight.get(key) === work) {
+          entry.accountRulesMemoryWarmInflight.delete(key);
+        }
       }
     })();
     entry.accountRulesMemoryWarmInflight.set(key, work);
@@ -987,6 +1225,19 @@ export class SidecarManager {
           return true;
         })
       : unsynced;
+    let queuedTurns: SidecarQueuedTurnItem[] | undefined;
+    const process = this.findSidecarProcess(req.conversationId);
+    if (process) {
+      try {
+        queuedTurns = parseQueuedTurnItems(
+          await process.client.request("listQueuedTurns", {
+            conversationId: req.conversationId,
+          }),
+        );
+      } catch {
+        // 问不到本机队 ≠ 空队：omit，hydrate 不得冲掉已 keep 的条。
+      }
+    }
     logDesktop({
       level: "info",
       event: "sidecar.recovery",
@@ -996,6 +1247,7 @@ export class SidecarManager {
         unsynced_count: filtered.length,
         paused_count: paused.length,
         paused_runs_count: Object.keys(pausedRuns).length,
+        queued_turns_count: queuedTurns?.length ?? null,
       },
     });
     return {
@@ -1004,6 +1256,7 @@ export class SidecarManager {
       unsynced: filtered,
       paused,
       ...(Object.keys(pausedRuns).length > 0 ? { pausedRuns } : {}),
+      ...(queuedTurns !== undefined ? { queuedTurns } : {}),
     };
   }
 
@@ -1154,6 +1407,71 @@ export class SidecarManager {
     }
   }
 
+  /**
+   * 本机 live 插话 / 排队。无 sidecar 进程或 RPC 失败须上抛——不得收成 received/queued。
+   */
+  async deliverMessage(
+    req: SidecarDeliverMessageRequest,
+  ): Promise<SidecarDeliverMessageAck> {
+    const entry = this.entries.get(entryKey(req.rootId, req.subpath));
+    if (!entry) {
+      throw new Error("本地引擎未运行，无法发送");
+    }
+    try {
+      const reply = await entry.client.request("deliverMessage", {
+        conversationId: req.conversationId,
+        content: req.content,
+        delivery: req.delivery,
+        userMessageId: req.userMessageId,
+        messageId: req.messageId,
+        traceId: req.traceId,
+        ...(req.attachments && req.attachments.length > 0
+          ? { attachments: req.attachments }
+          : {}),
+        ...(req.agentMentions && req.agentMentions.length > 0
+          ? { agentMentions: req.agentMentions }
+          : {}),
+      });
+      return parseDeliverMessageAck(reply);
+    } catch (err) {
+      // JSON-RPC error −32006 = HTTP 409 pending；收成 blocked ack，勿当发送失败。
+      if (err instanceof SidecarRpcError && err.code === -32006) {
+        return { status: "blocked", code: "pending_interactions_awaiting" };
+      }
+      throw err;
+    }
+  }
+
+  /** 取消本机 FIFO 排队。无进程 / 已不在队 → ``not_found``（同云 404）。 */
+  async cancelQueuedTurn(
+    req: SidecarCancelQueuedTurnRequest,
+  ): Promise<SidecarCancelQueuedTurnAck> {
+    const entry = this.entries.get(entryKey(req.rootId, req.subpath));
+    if (!entry) return { status: "not_found" };
+    try {
+      const reply = await entry.client.request("cancelQueuedTurn", {
+        conversationId: req.conversationId,
+        queueId: req.queueId,
+      });
+      return parseCancelQueuedTurnAck(reply);
+    } catch (err) {
+      if (isQueuedTurnNotFound(err)) return { status: "not_found" };
+      throw err;
+    }
+  }
+
+  /** 列出本机 FIFO 排队。无进程 → 空表（不 spawn）。 */
+  async listQueuedTurns(
+    req: SidecarListQueuedTurnsRequest,
+  ): Promise<SidecarListQueuedTurnsResult> {
+    const entry = this.entries.get(entryKey(req.rootId, req.subpath));
+    if (!entry) return { items: [] };
+    const reply = await entry.client.request("listQueuedTurns", {
+      conversationId: req.conversationId,
+    });
+    return { items: parseQueuedTurnItems(reply) };
+  }
+
   /** 结算一个被挂起的交互（审批 / ask_user / 本地工具）。 */
   async respond(req: SidecarRespondRequest): Promise<{ resolved: boolean }> {
     const entry = this.entries.get(entryKey(req.rootId, req.subpath));
@@ -1182,12 +1500,88 @@ export class SidecarManager {
     this.lastWindowByCid.clear();
   }
 
+  /**
+   * FIFO 出队：与点发送同一条 startTurn（先占位再开跑）。
+   * 无窗口 / 无进程 / 占位失败 → 不发 RPC，sidecar 超时后诚实 start_failed。
+   */
+  private async startQueuedTurnFromSidecar(
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    const conversationId = String(params.conversationId ?? "").trim();
+    const userMessageId = String(params.userMessageId ?? "").trim();
+    const messageId = String(params.messageId ?? "").trim();
+    const traceId = String(params.traceId ?? "").trim();
+    const userMessage = String(params.userMessage ?? "");
+    const queueId = String(params.queueId ?? "").trim();
+    if (!conversationId || !userMessageId || !messageId || !traceId) {
+      logDesktop({
+        level: "error",
+        event: "sidecar.queue_need_start_invalid",
+        fields: { conversation_id: conversationId },
+      });
+      return;
+    }
+    const resolved = this.resolveConversationWindow(conversationId);
+    if (
+      !resolved ||
+      !this.entries.get(entryKey(resolved.rootId, resolved.subpath))
+    ) {
+      logDesktop({
+        level: "warn",
+        event: "sidecar.queue_need_start_unrouted",
+        fields: { conversation_id: conversationId, queue_id: queueId },
+      });
+      return;
+    }
+    const mentions = Array.isArray(params.agentMentions)
+      ? (params.agentMentions as SidecarStartTurnRequest["agentMentions"])
+      : undefined;
+    const attachments = Array.isArray(params.attachments)
+      ? (params.attachments as SidecarQueuedAttachment[])
+      : undefined;
+    try {
+      await this.startTurn(
+        resolved.wc,
+        {
+          conversationId,
+          rootId: resolved.rootId,
+          subpath: resolved.subpath,
+          turnId: randomUUID(),
+          traceId,
+          userMessageId,
+          messageId,
+          userMessage,
+          ...(queueId ? { queueId } : {}),
+          ...(mentions && mentions.length > 0
+            ? { agentMentions: mentions }
+            : {}),
+          ...(attachments && attachments.length > 0 ? { attachments } : {}),
+        },
+        ".",
+      );
+    } catch (err) {
+      logDesktop({
+        level: "error",
+        event: "sidecar.queue_need_start_failed",
+        fields: {
+          conversation_id: conversationId,
+          queue_id: queueId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
+  }
+
   private onNotification(
     method: string,
     params: Record<string, unknown>,
   ): void {
     if (method === SIDECAR_FULFILL_NOTIFICATION) {
       this.onFulfillFrame(params);
+      return;
+    }
+    if (method === SIDECAR_QUEUE_NEED_START) {
+      void this.startQueuedTurnFromSidecar(params);
       return;
     }
     if (method !== "turn/event") return;
@@ -1349,6 +1743,30 @@ export class SidecarManager {
     return null;
   }
 
+  /** 本会话对应的 sidecar 进程（不 spawn）：活回合 → 记住的窗 → 任意同 cid 登记。 */
+  private findSidecarProcess(conversationId: string): SidecarEntry | null {
+    const live = this.findLiveTurn(conversationId);
+    if (live) {
+      const hit = this.entries.get(
+        entryKey(live.turn.rootId, live.turn.subpath),
+      );
+      if (hit) return hit;
+    }
+    const remembered = this.lastWindowByCid.get(conversationId);
+    if (remembered) {
+      const hit = this.entries.get(
+        entryKey(remembered.rootId, remembered.subpath),
+      );
+      if (hit) return hit;
+    }
+    for (const turn of this.turns.values()) {
+      if (turn.conversationId !== conversationId) continue;
+      const hit = this.entries.get(entryKey(turn.rootId, turn.subpath));
+      if (hit) return hit;
+    }
+    return null;
+  }
+
   /** 履约帧：用户活回合优先，否则打到 ephemeral harvest。 */
   private findFulfillTurn(
     conversationId: string,
@@ -1428,7 +1846,9 @@ export class SidecarManager {
   }
 
   /**
-   * 未知 turnId 的自发 `turn/event`（harvest）：用 cid 找回窗口、登记临时 turn、转发。
+   * 未知 turnId 的自发 `turn/event`：用 cid 找回窗口、登记、转发。
+   * ``origin=queue`` = 本机 FIFO 出队的用户回合（进 findLiveTurn / attach）。
+   * 其它 = harvest 临时回合（跳过 findLiveTurn）。
    * 禁止因「不在 this.turns」丢弃。找不到该会话最近窗口才放弃。
    */
   private adoptOrphanTurn(
@@ -1456,16 +1876,27 @@ export class SidecarManager {
     const { wc, rootId, subpath } = resolved;
     this.rememberWindow(conversationId, wc, rootId, subpath);
 
+    const queued = String(params.origin ?? "").trim() === "queue";
+    const traceId = queued
+      ? String(params.traceId ?? "").trim()
+      : (live?.turn.traceId ?? "");
+    const userMessageId = queued
+      ? String(params.userMessageId ?? "").trim()
+      : "";
+    const messageId = queued ? String(params.messageId ?? "").trim() : "";
+
     const adopted: ActiveTurn = {
       wc,
       conversationId,
       rootId,
       subpath,
       kind: "start",
-      traceId: live?.turn.traceId ?? "",
+      traceId,
+      ...(userMessageId ? { userMessageId } : {}),
+      ...(messageId ? { messageId } : {}),
       buffer: new SidecarEventBuffer(),
       attaching: false,
-      ephemeral: true,
+      ephemeral: !queued,
     };
     this.turns.set(turnId, adopted);
     logDesktop({

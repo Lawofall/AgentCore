@@ -4,6 +4,7 @@ import {
   interjectionStatusLabel,
   interjectionStatusTone,
   isInterjectionTurnTerminal,
+  showInterjectionStatusChrome,
 } from "../interjectionStatus";
 
 describe("interjectionStatusLabel", () => {
@@ -15,6 +16,14 @@ describe("interjectionStatusLabel", () => {
     expect(interjectionStatusLabel("queued")).toBe("将在下一条回复处理");
     expect(interjectionStatusLabel("failed")).toBe("未被处理");
     expect(interjectionStatusLabel("addressed")).toBe("已纳入本回合合成");
+  });
+
+  it("hides status chrome only for addressed", () => {
+    expect(showInterjectionStatusChrome("addressed")).toBe(false);
+    expect(showInterjectionStatusChrome("received")).toBe(true);
+    expect(showInterjectionStatusChrome("injected")).toBe(true);
+    expect(showInterjectionStatusChrome("queued")).toBe(true);
+    expect(showInterjectionStatusChrome("failed")).toBe(true);
   });
 
   it("renders unread copy when turn is terminal and status stays received", () => {

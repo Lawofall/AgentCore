@@ -65,6 +65,7 @@ def _single_agent_queued_then_run() -> list[SSEEvent]:
             queue_id="q1",
             conversation_id=_CONV,
             remaining_depth=0,
+            content="next",
         ),
         *_single_agent_text(),
     ]
@@ -90,6 +91,7 @@ def _single_agent_queued_degraded_from_steer() -> list[SSEEvent]:
             queue_id="q-degraded",
             conversation_id=_CONV,
             remaining_depth=0,
+            content="next",
         ),
         *_single_agent_text(),
     ]

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { parseTurnQueueStartedUser } from "../queuedTurnBubble";
 import {
   __resetQueuedTurnsForTests,
   applyQueuedTurnsSnapshot,
@@ -306,5 +307,41 @@ describe("reconcileQueuedTurns", () => {
     const firstResult = await first;
     expect(firstResult.superseded).toBe(true);
     expect(listQueuedTurns("c1").map((e) => e.queueId)).toEqual(["fresh"]);
+  });
+});
+
+describe("parseTurnQueueStartedUser", () => {
+  it("放宽读 content / 附件 / 点名", () => {
+    expect(
+      parseTurnQueueStartedUser({
+        queue_id: "q1",
+        conversation_id: "c1",
+        remaining_depth: 0,
+        content: "出队正文",
+        attachments: [{ name: "a.txt", truncated: true }],
+        agent_mentions: [{ agent_id: "w1", role: "研究员" }],
+      }),
+    ).toEqual({
+      queueId: "q1",
+      bubble: {
+        userText: "出队正文",
+        attachments: [{ name: "a.txt", truncated: true }],
+        agentMentions: [{ agentId: "w1", role: "研究员" }],
+      },
+    });
+  });
+
+  it("无正文无芯片 → bubble null（仍能凭 queue_id 清条）", () => {
+    expect(
+      parseTurnQueueStartedUser({
+        queue_id: "q-empty",
+        conversation_id: "c1",
+        remaining_depth: 0,
+      }),
+    ).toEqual({ queueId: "q-empty", bubble: null });
+  });
+
+  it("缺 queue_id → null", () => {
+    expect(parseTurnQueueStartedUser({ content: "x" })).toBeNull();
   });
 });

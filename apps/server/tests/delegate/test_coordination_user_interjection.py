@@ -253,6 +253,12 @@ async def test_queue_user_message_enqueues_and_emits_queued():
         assert result.success is True
         assert turn_queue.depth("conv-inj") == 1
         assert session.get_interjection("inj-1") is None
+        queued = turn_queue.list_pending("conv-inj")
+        assert queued
+        assert queued[0].user_message_id
+        assert queued[0].message_id
+        assert queued[0].trace_id
+        assert len(queued[0].trace_id) == 32
 
         hist = list(sink._history)
         types = [e.type.value for e in hist]

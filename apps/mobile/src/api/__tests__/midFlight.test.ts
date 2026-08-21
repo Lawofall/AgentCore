@@ -51,6 +51,7 @@ describe("sendMidFlightMessage", () => {
             queue_id: "q1",
             conversation_id: "c1",
             remaining_depth: 1,
+            content: "第二问",
           }),
           ev("message_start", { message_id: "m2" }),
           ev("message_end", { finish_reason: "end_turn" }),
@@ -124,6 +125,7 @@ describe("sendMidFlightMessage", () => {
             queue_id: "q-start",
             conversation_id: "c1",
             remaining_depth: 0,
+            content: "第二问",
           }),
         ]),
         {

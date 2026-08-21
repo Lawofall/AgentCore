@@ -312,7 +312,7 @@ class DeliveryGap(WirePayload):
 
     Optional ``reason`` is a machine-readable cutoff / shortfall code when the gap
     comes from a structured engine signal — known:
-    ``token_budget`` / ``worker_timeout`` / ``degraded_handoff`` /
+    ``token_budget`` / ``worker_timeout`` / ``max_rounds`` / ``degraded_handoff`` /
     ``unverified_note`` (soft 示例/虚构自注；不单独把 state 打成 notes) /
     ``files_not_landed`` (零落盘 soft tip：per-worker「本队员本波未交卷」/
     批次「本批未见落盘」；甲⁺ 起不挡收工) /
@@ -362,8 +362,9 @@ class DeliveryArtifact(WirePayload):
     """One path-level acceptance row on ``delivery_status`` (主清单数据源).
 
     ``status=accepted`` → counts toward ``delivered_files`` / CEO「已交付」;
-    ``rejected`` carries ``reason`` (e.g. ``citations_unverified``) and optional
-    ``detail`` for the file checklist. Draft is out of scope for block 1.
+    ``rejected`` carries ``reason`` (e.g. ``citations_unverified`` / ``run_failed``)
+    and optional ``detail`` for the file checklist. Undeclared extras are omitted
+    (not rejected). Draft is out of scope for block 1.
     ``workspace_id``: landing desk when the plan node set ``target_folder_id``
     (``folder:{id}``); omit → client falls back to the session birth desk.
 
@@ -387,17 +388,10 @@ class DeliveryArtifact(WirePayload):
 
 
 class DeliveryPromotion(WirePayload):
-    """One 成品归位 move on ``delivery_status.promoted``（AI 工作间 → 用户工作区）.
+    """Historical ``delivery_status.promoted`` row（AI 工作间 → 用户工作区）.
 
-    归位是**移动**不是标记（标记离开产品 UI 那刻即失效：ZIP 里没有、合回本机也没有），
-    so ``from`` no longer exists on disk and ``to`` is where the product lives now.
-    The same payload's ``delivered_files`` / ``artifacts[].path`` are rewritten to
-    ``to`` — this row is the only remaining link back to the old path (审计按旧路径
-    回查时的唯一线索).
-
-    位置态，与 ``status=accepted``（质量态）正交：只有 accepted 的产物可归位，但归位
-    本身不改验收结论。**空数组是合法状态**（字段缺省即空）——多幕协作的中间幕本就
-    零归位，不得据此报错或拦收口。
+    ``promote_product`` 已撤销；本结构只兼容旧事件。``from`` 是当时的旧路径，``to``
+    是搬走后的位置。空数组是合法状态（字段缺省即空）。
     """
 
     from_path: str = Field(alias="from", description="AI 工作间旧路径（已不存在）")
@@ -407,17 +401,17 @@ class DeliveryPromotion(WirePayload):
 class DeliveryStatusPayload(WirePayload):
     """交付状态（能力闸门与交付诚实性）: the structured delivery reconciliation a
     delegate batch emits at wrap-up — 已交付文件 / 缺口 / 待用户操作 — so the client
-    renders an honest delivery card instead of mining the CEO's prose. Folds keep the
-    LATEST per ``execution_id`` (reflects the most recent batch's reconciliation).
+    renders an honest delivery card instead of mining the CEO's prose.     Folds keep the LATEST per ``execution_id`` (the event already unions
+    declared-and-landed paths across hops of that execution).
     ``state``: delivered = 无 blocking 缺口且有落盘产物; partial = 有产物也有
     blocking 缺口; blocked = 有 blocking 缺口且无落盘产物;
     notes = 仍有 soft 提醒且非「仅 unverified_note」（轻提醒，非「部分未满足」）；
-    声明路径失配为 path_mismatch blocking，不得 delivered。
-    ``artifacts``: path-level acceptance (accepted+rejected); ``delivered_files``
-    remains accepted-only for older clients.
-    ``promoted``: 这张对账卡上已 ``promote_product`` 归位的成品（``{from, to}``）。CEO 在
-    收口前调用后本事件按同 ``execution_id`` 重发，路径已改写为 ``to``；跨回合再归位时
-    旧行保留（旧路径的回查线索）。无归位时字段缺省（= 空数组，合法状态）。"""
+    声明路径未落盘为 path_mismatch blocking gap，不得 delivered；未声明落盘不进
+    ``artifacts``。
+    ``artifacts``: path-level acceptance (accepted+rejected) for declared landings;
+    ``delivered_files`` remains accepted-only for older clients.
+    ``promoted``: 历史 ``{from, to}`` 归位行（``promote_product`` 已撤销；新回合不再写入）。
+    旧卡 journal 重放仍带此字段；无归位时缺省（= 空数组）。"""
 
     execution_id: str
     state: DeliveryState
@@ -478,17 +472,46 @@ class TurnQueuedPayload(WirePayload):
     degraded_from: Literal["steer"] | None = absent()
 
 
+class MessageAttachment(WirePayload):
+    """Same fields as REST ``QueuedTurnItem`` / send-turn ``MessageAttachment``.
+
+    Nested on ``turn_queue_started`` so the timeline entrance frame is self-describing
+    (not the thinner ``UserInterjectionAttachment``).
+    """
+
+    name: str
+    path: str
+    text: str = ""
+    truncated: bool = False
+    kind: Literal["file", "dir", "conversation"] = "file"
+    conversation_id: str | None = None
+    binary: bool = False
+    workspace_path: str | None = None
+
+
+class AgentMention(WirePayload):
+    """Same fields as REST ``QueuedTurnItem.agent_mentions`` / ``AgentMention``."""
+
+    agent_id: str
+    role: str
+
+
 class TurnQueueStartedPayload(WirePayload):
-    """FIFO dequeue → turn starting (D9 · 发送即有流). EPHEMERAL — clear queue-id light UI.
+    """FIFO dequeue → timeline user-bubble entrance (D9 · 发送即有流).
 
     Emitted as the **first frame** of the drained turn's EventSink (after ``pop_next``,
-    before ``stream_chat`` / ``message_start``). ``remaining_depth`` is the queue length
-    after this item left the FIFO.
+    before ``stream_chat`` / ``message_start``). ``content`` is the queued user text
+    (on the frame — not persist-first). Empty ``attachments`` / ``agent_mentions`` are
+    absent. ``remaining_depth`` is the queue length after this item left the FIFO.
+    EPHEMERAL — reload 靠 REST; 不落 journal.
     """
 
     queue_id: str
     conversation_id: str
     remaining_depth: int
+    content: str
+    attachments: list[MessageAttachment] | None = absent()
+    agent_mentions: list[AgentMention] | None = absent()
 
 
 class TurnQueueCancelledPayload(WirePayload):

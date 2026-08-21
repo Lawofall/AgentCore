@@ -22,7 +22,13 @@ from agentcore.api.dependencies import (
     get_turn_journal_repo,
 )
 from agentcore.api.schemas import (
+    AbortLocalTurnRequest,
+    AbortLocalTurnResponse,
     AgentMention,
+    BeginLocalTurnRequest,
+    BeginLocalTurnResponse,
+    LocalTurnJournalRequest,
+    LocalTurnStreamSegmentsRequest,
     MemoryUpdateView,
     MessageAttachment,
     MessageDetail,
@@ -47,7 +53,14 @@ from agentcore.api.sse import (
     sse_response,
 )
 from agentcore.conversation.rate_limit import enforce_user_message_rate_limit
-from agentcore.conversation.service import record_local_turn, stream_chat
+from agentcore.conversation.service import (
+    abort_local_turn,
+    append_local_turn_journal,
+    begin_local_turn,
+    record_local_turn,
+    stream_chat,
+    upsert_local_turn_stream_segments,
+)
 from agentcore.conversation.store import get_conversation_store
 from agentcore.conversation.store.overlay import (
     overlay_message_fields,
@@ -377,32 +390,24 @@ async def send_message(
     await enforce_user_message_rate_limit(user.user_id)
 
     # 提问确认交互统一 D9：热路挂起中同对话发新消息 → 409（regenerate/retry 不拦）
-    from agentcore.runtime.interaction import InteractionKind, default_interaction_registry
-
-    _hot = frozenset(
-        {
-            InteractionKind.APPROVAL,
-            InteractionKind.ESCALATION,
-        }
+    from agentcore.runtime.turn.delivery import (
+        DeliveryBlockedError,
+        deliver_in_flight,
+        raise_if_delivery_blocked,
     )
-    hot_pending = [
-        r
-        for r in default_interaction_registry().list_pending(conversation_id)
-        if r.kind in _hot
-        and not (
-            r.kind is InteractionKind.ESCALATION and (r.payload or {}).get("awaiting") == "ceo"
-        )
-    ]
-    if hot_pending:
+
+    try:
+        raise_if_delivery_blocked(conversation_id)
+    except DeliveryBlockedError as blocked:
         from fastapi import HTTPException
 
         raise HTTPException(
             status_code=409,
             detail={
-                "code": "pending_interactions_awaiting",
-                "pending_kinds": sorted({r.kind.value for r in hot_pending}),
+                "code": blocked.code,
+                "pending_kinds": blocked.pending_kinds,
             },
-        )
+        ) from blocked
 
     # 批 B 失效修订：发消息不再立即 orphan；回合收尾若未调 debate / 未起 MLR 才落事实。
 
@@ -412,172 +417,53 @@ async def send_message(
     )
     await release_request_db_before_sse(session)
 
-    # In-flight turn → delivery 分流（steer 插话 / queue 强制 FIFO / classic steer 步注入）。
+    # In-flight turn → process-local delivery kernel (sidecar RPC shares this).
+    # Idle open-turn stays below (HTTP ``stream_chat`` only).
     existing = turn_runs.get(conversation_id)
     if existing is not None and not existing.task.done():
-        from agentcore.core.types import new_id
-        from agentcore.runtime.coordination.session import (
-            CoordinationEvent,
-            CoordinationEventKind,
-            active_coordination_for_conversation,
-        )
         from agentcore.runtime.events import user_interjection
-        from agentcore.runtime.turn.queue import new_queued_turn, turn_queue
-        from agentcore.runtime.turn.steer import (
-            try_enqueue as try_enqueue_steer,
-        )
-        from agentcore.workspace.attachments import interjection_attachment_meta
 
-        coord = active_coordination_for_conversation(conversation_id)
-        coord_active = coord is not None and coord.active
-        # 协调 + steer → 插话；queue 强制绕过；经典 + steer → 步边界注入（失败回落 queue）。
-        try_interject = body.delivery == "steer" and coord_active
-        degraded_from: str | None = None
-
-        if try_interject:
-            assert coord is not None
-            interjection_id = new_id()
-            raw_attachments = [a.model_dump() for a in body.attachments]
-            raw_agent_mentions = [m.model_dump() for m in body.agent_mentions]
-            # Delivered path: persist now so CEO / queue_user_message see workspace_path.
-            # Stash keeps inline text; a later drain re-pass is idempotent (path set → skip write).
-            attachments = await _persist_delivered_interjection_attachments(
-                conversation_id=conversation_id,
-                user_id=user.user_id,
-                attachments=raw_attachments,
-                sink=existing.sink,
-            )
-            att_meta = interjection_attachment_meta(attachments)
-            coord.stash_interjection(
-                interjection_id,
-                {
-                    "content": body.content,
-                    "user_id": user.user_id,
-                    "conversation_id": conversation_id,
-                    "attachments": attachments,
-                    "agent_mentions": raw_agent_mentions,
-                    "requires_tools": needs_tools,
-                    "x_client_platform": x_client_platform,
-                    "origin_device_id": current_origin_device(),
-                    "llm_credentials": preflight.credentials,
-                    "llm_supports_tools": preflight.supports_tools,
-                },
-            )
-            posted = coord.post(
-                CoordinationEvent(
-                    kind=CoordinationEventKind.USER_INTERJECTION,
-                    payload={
-                        "interjection_id": interjection_id,
-                        "content": body.content,
-                        **({"attachments": att_meta} if att_meta else {}),
-                        **({"agent_mentions": raw_agent_mentions} if raw_agent_mentions else {}),
-                    },
-                )
-            )
-            if not posted:
-                # Session closing between lookup and post — fall through to queue.
-                coord.take_interjection(interjection_id)
-            else:
-                # Live turn observers: durable once on the in-flight sink.
-                existing.sink.emit(
-                    user_interjection(
-                        interjection_id=interjection_id,
-                        execution_id=coord.execution_id,
-                        content=body.content,
-                        status="received",
-                        attachments=att_meta or None,
-                        agent_mentions=raw_agent_mentions or None,
-                    )
-                )
-                # Sender's POST: short SSE confirm — history/SSE only, do NOT re-journal
-                # (same interjection_id must not double-write the host journal).
-                confirm = EventSink()
-                confirm.emit_sse_only(
-                    user_interjection(
-                        interjection_id=interjection_id,
-                        execution_id=coord.execution_id,
-                        content=body.content,
-                        status="received",
-                        attachments=att_meta or None,
-                        agent_mentions=raw_agent_mentions or None,
-                    )
-                )
-                confirm.close(reason="interjection_confirm")
-                return sse_response(confirm, detach_on_disconnect=True)
-
-        elif body.delivery == "steer":
-            # 经典 in-flight + steer → 挂到 live turn pending；无 accepting 窗口 → 回落 queue。
-            raw_attachments = [a.model_dump() for a in body.attachments]
-            raw_agent_mentions = [m.model_dump() for m in body.agent_mentions]
-            parked = try_enqueue_steer(
-                conversation_id=conversation_id,
-                content=body.content,
-                user_id=user.user_id,
-                attachments=raw_attachments,
-                agent_mentions=raw_agent_mentions,
-                requires_tools=needs_tools,
-                x_client_platform=x_client_platform,
-                origin_device_id=current_origin_device(),
-                llm_credentials=preflight.credentials,
-                llm_supports_tools=preflight.supports_tools,
-            )
-            if parked is not None:
-                att_meta = interjection_attachment_meta(parked.attachments)
-                # Live turn observers: durable once on the in-flight sink.
-                existing.sink.emit(
-                    user_interjection(
-                        interjection_id=parked.interjection_id,
-                        execution_id=parked.execution_id,
-                        content=body.content,
-                        status="received",
-                        attachments=att_meta or None,
-                        agent_mentions=raw_agent_mentions or None,
-                    )
-                )
-                # Sender's POST: short SSE confirm — history/SSE only, do NOT re-journal
-                # (same interjection_id must not double-write the host journal).
-                confirm = EventSink()
-                confirm.emit_sse_only(
-                    user_interjection(
-                        interjection_id=parked.interjection_id,
-                        execution_id=parked.execution_id,
-                        content=body.content,
-                        status="received",
-                        attachments=att_meta or None,
-                        agent_mentions=raw_agent_mentions or None,
-                    )
-                )
-                confirm.close(reason="steer_confirm")
-                return sse_response(confirm, detach_on_disconnect=True)
-            degraded_from = "steer"
-
-        started: asyncio.Future = asyncio.get_running_loop().create_future()
-        # enqueue_and_ensure_drain（非裸 enqueue）：协调 fall-through 前的附件落盘 await
-        # 期间宿主回合可能已结束——彼时队列还空，done-callback 的 schedule_drain 已 no-op；
-        # 入队后重查槽位补 arm，否则该项永久搁浅、本连接卡死在 await started。
-        status = turn_queue.enqueue_and_ensure_drain(
-            conversation_id,
-            new_queued_turn(
-                content=body.content,
-                user_id=user.user_id,
-                attachments=[a.model_dump() for a in body.attachments],
-                agent_mentions=[m.model_dump() for m in body.agent_mentions],
-                requires_tools=needs_tools,
-                x_client_platform=x_client_platform,
-                origin_device_id=current_origin_device(),
-                llm_credentials=preflight.credentials,
-                llm_supports_tools=preflight.supports_tools,
-                started=started,
-            ),
-        )
-        return sse_queued_response(
+        delivered = await deliver_in_flight(
             conversation_id=conversation_id,
-            queue_id=status.queue_id,
-            position=status.position,
-            queue_depth=status.queue_depth,
-            started=started,
-            degraded_from=degraded_from,
+            content=body.content,
+            delivery=body.delivery,
+            user_id=user.user_id,
+            attachments=[a.model_dump() for a in body.attachments],
+            agent_mentions=[m.model_dump() for m in body.agent_mentions],
+            requires_tools=needs_tools,
+            x_client_platform=x_client_platform,
+            origin_device_id=current_origin_device(),
+            llm_credentials=preflight.credentials,
+            llm_supports_tools=preflight.supports_tools,
+            persist_attachments_fn=_persist_delivered_interjection_attachments,
+            wait_for_start=True,
         )
+        if delivered is not None and delivered.status == "received":
+            # Sender's POST: short SSE confirm — history/SSE only, do NOT re-journal
+            # (live sink already emitted once; same interjection_id must not double-write).
+            confirm = EventSink()
+            confirm.emit_sse_only(
+                user_interjection(
+                    interjection_id=delivered.interjection_id or "",
+                    execution_id=delivered.execution_id or "",
+                    content=body.content,
+                    status="received",
+                    attachments=delivered.attachments_meta or None,
+                    agent_mentions=delivered.agent_mentions or None,
+                )
+            )
+            confirm.close(reason=delivered.confirm_reason)
+            return sse_response(confirm, detach_on_disconnect=True)
+        if delivered is not None:
+            assert delivered.started is not None
+            return sse_queued_response(
+                conversation_id=conversation_id,
+                queue_id=delivered.queue_id or "",
+                position=delivered.position or 1,
+                queue_depth=delivered.queue_depth or 1,
+                started=delivered.started,
+                degraded_from=delivered.degraded_from,
+            )
 
     sink = EventSink()
     emit_preflight_warnings(sink, preflight)
@@ -611,17 +497,17 @@ async def list_queued_turns(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
 ):
-    """List the conversation's process-local FIFO queued turns (权威内容源).
+    """List the conversation's process-local FIFO queued turns (条权威仍是 GET / 快照).
 
     Owner-gated like send / cancel. Returns the current in-memory snapshot in FIFO
-    order (``position`` 1-based). EPHEMERAL ``turn_queued`` / ``turn_queue_started`` /
-    ``turn_queue_cancelled`` remain change signals only — clients should refresh from
-    this endpoint. Restart empties the queue (no durable queue).
+    order (``position`` 1-based). EPHEMERAL ``turn_queued`` / ``turn_queue_cancelled``
+    remain change signals only; ``turn_queue_started`` is the timeline entrance
+    frame (content on the frame). Restart empties the queue (no durable queue).
     """
     await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
-    from agentcore.runtime.turn.queue import turn_queue
+    from agentcore.runtime.turn.delivery import list_queued_items
 
-    pending = turn_queue.list_pending(conversation_id)
+    pending = list_queued_items(conversation_id)
     return QueuedTurnListResponse(
         items=[
             QueuedTurnItem(
@@ -659,21 +545,11 @@ async def cancel_queued_turn(
     now cancelling in that window told the other端 nothing.
     """
     await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
-    from agentcore.runtime.events import publish_conversation_signal, turn_queue_cancelled
-    from agentcore.runtime.turn.queue import turn_queue
+    from agentcore.runtime.turn.delivery import cancel_queued_item
 
-    item = turn_queue.cancel(conversation_id, queue_id)
+    item = cancel_queued_item(conversation_id, queue_id)
     if item is None:
         raise NotFoundError("排队项不存在或已开始")
-    fut = item.started
-    if fut is not None and not fut.done():
-        fut.cancel()
-    event = turn_queue_cancelled(queue_id=queue_id, conversation_id=conversation_id)
-    run = turn_runs.get(conversation_id)
-    live_sink = run.sink if run is not None and not run.task.done() else None
-    if live_sink is not None:
-        live_sink.emit(event)
-    publish_conversation_signal(conversation_id, event, already_on_sink=live_sink)
     return StatusResponse()
 
 
@@ -861,3 +737,87 @@ async def record_local_turn_endpoint(
         agent_mentions=[m.model_dump() for m in body.agent_mentions] or None,
     )
     return RecordTurnResponse(**result)
+
+
+@router.post("/{conversation_id}/local-turns/begin", response_model=BeginLocalTurnResponse)
+async def begin_local_turn_endpoint(
+    conversation_id: str,
+    body: BeginLocalTurnRequest,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+):
+    """Pin the user row + a running assistant placeholder (投影同寿命).
+
+    Same request is idempotent on ``user_message_id`` and assistant ``message_id``.
+    Does not start a cloud SSE turn, mint a title, compact, or go through
+    ``POST /messages``. Owner Bearer, same as ``POST …/local-turns``.
+    """
+    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    result = await begin_local_turn(
+        conversation_id=conversation_id,
+        user_id=user.user_id,
+        user_message=body.user_message,
+        user_message_id=body.user_message_id,
+        message_id=body.message_id,
+        trace_id=body.trace_id,
+        agent_mentions=[m.model_dump() for m in body.agent_mentions] or None,
+    )
+    return BeginLocalTurnResponse(**result)
+
+
+@router.post("/{conversation_id}/local-turns/journal", response_model=StatusResponse)
+async def append_local_turn_journal_endpoint(
+    conversation_id: str,
+    body: LocalTurnJournalRequest,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+):
+    """Append journal facts with required ``seq`` (replace=False). Failures are 4xx/5xx."""
+    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await append_local_turn_journal(
+        conversation_id=conversation_id,
+        user_id=user.user_id,
+        message_id=body.message_id,
+        trace_id=body.trace_id,
+        entries=[(fact.seq, fact.entry) for fact in body.entries],
+    )
+    return StatusResponse()
+
+
+@router.post(
+    "/{conversation_id}/local-turns/stream-segments",
+    response_model=StatusResponse,
+)
+async def upsert_local_turn_stream_segments_endpoint(
+    conversation_id: str,
+    body: LocalTurnStreamSegmentsRequest,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+):
+    """UPSERT in-flight stream snapshots. Does not rewrite ``messages.content``."""
+    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    await upsert_local_turn_stream_segments(
+        conversation_id=conversation_id,
+        user_id=user.user_id,
+        message_id=body.message_id,
+        segments=[(s.channel, s.text, s.generation) for s in body.segments],
+    )
+    return StatusResponse()
+
+
+@router.post("/{conversation_id}/local-turns/abort", response_model=AbortLocalTurnResponse)
+async def abort_local_turn_endpoint(
+    conversation_id: str,
+    body: AbortLocalTurnRequest,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+):
+    """Delete a still-running assistant + paired user (startup failure). Settled = no-op."""
+    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    result = await abort_local_turn(
+        conversation_id=conversation_id,
+        user_id=user.user_id,
+        user_message_id=body.user_message_id,
+        message_id=body.message_id,
+    )
+    return AbortLocalTurnResponse(**result)

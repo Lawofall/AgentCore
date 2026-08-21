@@ -21,6 +21,11 @@ vi.mock("../log-service", () => ({
   logDesktop: vi.fn(),
 }));
 
+vi.mock("../outbox/projection", () => ({
+  occupyLocalTurnBegin: vi.fn(async () => true),
+  abortLocalTurnPlaceholder: vi.fn(async () => undefined),
+}));
+
 import { rmSync } from "node:fs";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";

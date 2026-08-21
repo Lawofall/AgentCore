@@ -21,10 +21,14 @@ import { getRuntime, useConversationStore } from "@/stores/conversation";
 import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import type {
   SSEEvent,
-  TurnQueueStartedPayload,
   TurnQueuedPayload,
   UserInterjectionPayload,
 } from "@/types/events";
+import {
+  type ActiveSidecarTurn,
+  getActiveSidecarTarget,
+  getLastSidecarTarget,
+} from "../sidecarRouting";
 import {
   beginLocalConversationStream,
   claimPrimaryStream,
@@ -41,6 +45,111 @@ export type MidFlightSendResult =
   | { kind: "error" };
 
 type DeliverMode = "open" | "buffering" | "live" | "aborted";
+
+function upsertQueuedAck(
+  conversationId: string,
+  content: string,
+  attachments: OutgoingAttachment[] | undefined,
+  agentMentions: OutgoingAgentMention[] | undefined,
+  ack: {
+    queueId: string;
+    position: number;
+    queueDepth: number;
+    degradedFrom?: "steer";
+    /** 用户气泡 id（取消删泡）；不是助手行 id。 */
+    messageId?: string;
+  },
+): MidFlightSendResult {
+  useQueuedTurnsStore.getState().upsert({
+    queueId: ack.queueId,
+    conversationId,
+    content,
+    attachments:
+      attachments && attachments.length > 0
+        ? attachments.map((a) => ({ ...a }))
+        : undefined,
+    agentMentions:
+      agentMentions && agentMentions.length > 0
+        ? agentMentions.map((a) => ({ ...a }))
+        : undefined,
+    position: ack.position,
+    queueDepth: ack.queueDepth,
+    degradedFrom: ack.degradedFrom,
+    ...(ack.messageId ? { messageId: ack.messageId } : {}),
+  });
+  return {
+    kind: "queued",
+    position: ack.position,
+    queueDepth: ack.queueDepth,
+    queueId: ack.queueId,
+  };
+}
+
+/**
+ * 本会话 sidecar live：走 RPC，禁止 POST 云 ``/messages``；事件仍走现有 turn/event 泵。
+ * 无进程 / RPC 失败 → error，不得当成发送成功、不得回落云。
+ */
+async function deliverViaSidecar(
+  conversationId: string,
+  target: ActiveSidecarTurn,
+  content: string,
+  attachments: OutgoingAttachment[] | undefined,
+  delivery: MessageDelivery,
+  agentMentions: OutgoingAgentMention[] | undefined,
+): Promise<MidFlightSendResult> {
+  try {
+    const userMessageId = crypto.randomUUID();
+    const messageId = crypto.randomUUID();
+    const traceId = crypto.randomUUID().replace(/-/g, "");
+    const ack = await window.sidecarApi.deliverMessage({
+      rootId: target.rootId,
+      subpath: target.subpath,
+      conversationId,
+      content,
+      delivery,
+      userMessageId,
+      messageId,
+      traceId,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      ...(agentMentions && agentMentions.length > 0 ? { agentMentions } : {}),
+    });
+    if (ack.status === "received") {
+      return { kind: "received", interjectionId: ack.interjectionId };
+    }
+    if (ack.status === "queued") {
+      return upsertQueuedAck(
+        conversationId,
+        content,
+        attachments,
+        agentMentions,
+        {
+          queueId: ack.queueId,
+          position: ack.position,
+          queueDepth: ack.queueDepth,
+          degradedFrom: ack.degradedFrom,
+          messageId: userMessageId,
+        },
+      );
+    }
+    notifyError(new Error("请先处理待确认事项"), "请先处理待确认事项");
+    return { kind: "blocked", code: ack.code };
+  } catch (err) {
+    notifyError(err, "发送失败");
+    return { kind: "error" };
+  }
+}
+
+/** 本机引擎仍占着这通对话：活回合，或队还没排完（上一回合刚收口、FIFO 尚未 claim）。 */
+function resolveSidecarInFlightTarget(
+  conversationId: string,
+): ActiveSidecarTurn | { rootId: string; subpath: string } | null {
+  const live = getActiveSidecarTarget(conversationId);
+  if (live) return live;
+  if (useQueuedTurnsStore.getState().list(conversationId).length === 0) {
+    return null;
+  }
+  return getLastSidecarTarget(conversationId);
+}
 
 /**
  * POST a user message while a turn is already streaming（发送即有流）.
@@ -65,6 +174,18 @@ export async function sendMidFlightMessage(
   delivery: MessageDelivery,
   agentMentions?: OutgoingAgentMention[],
 ): Promise<MidFlightSendResult> {
+  const sidecarTarget = resolveSidecarInFlightTarget(conversationId);
+  if (sidecarTarget) {
+    return deliverViaSidecar(
+      conversationId,
+      sidecarTarget,
+      content,
+      attachments,
+      delivery,
+      agentMentions,
+    );
+  }
+
   const body: Record<string, unknown> = { content, delivery };
   if (attachments && attachments.length > 0) body.attachments = attachments;
   if (agentMentions && agentMentions.length > 0) {
@@ -74,8 +195,6 @@ export async function sendMidFlightMessage(
   const ac = new AbortController();
   let abortRegistered = false;
   let result: MidFlightSendResult = { kind: "error" };
-  let userMessageId: string | null = null;
-  let trackedQueueId: string | null = null;
   /** 闭包内可变；对象字段避免 TS 把字面量 mode 收窄成永 false。 */
   const gate = { mode: "open" as DeliverMode };
   const buffer: SSEEvent[] = [];
@@ -94,63 +213,8 @@ export async function sendMidFlightMessage(
     abortRegistered = true;
   };
 
-  /** 出队开跑时再进主时间线（排队期不插用户泡）。 */
-  const insertUserBubbleOnStart = (): void => {
-    if (userMessageId) return;
-    const id = crypto.randomUUID();
-    userMessageId = id;
-    useConversationStore.getState().addMessage(
-      {
-        id,
-        role: "user",
-        content,
-        createdAt: new Date().toISOString(),
-        executionId: null,
-        isStreaming: false,
-        attachments:
-          attachments && attachments.length > 0
-            ? attachments.map((a, i) => ({
-                id: `mf-att-${i}`,
-                name: a.name,
-                path: a.path,
-                truncated: a.truncated,
-                kind: a.kind,
-                conversationId: a.conversation_id,
-                workspacePath: a.workspace_path,
-              }))
-            : undefined,
-        agentMentions:
-          agentMentions && agentMentions.length > 0
-            ? agentMentions.map((a) => ({
-                agentId: a.agent_id,
-                role: a.role,
-              }))
-            : undefined,
-      },
-      conversationId,
-    );
-    if (trackedQueueId) {
-      const prev = useQueuedTurnsStore
-        .getState()
-        .list(conversationId)
-        .find((e) => e.queueId === trackedQueueId);
-      if (prev) {
-        useQueuedTurnsStore.getState().upsert({ ...prev, messageId: id });
-      }
-    }
-  };
-
+  /** 出队插泡由 messageStream 读 ``turn_queue_started`` 帧；此处只折。 */
   const dispatchOne = (event: SSEEvent): void => {
-    if (event.type === "turn_queue_started" && result.kind === "queued") {
-      const p = event.payload as TurnQueueStartedPayload;
-      // 轻态主清在 messageStream；此处补插用户泡再交 dispatch 清条。
-      if (!userMessageId && p.queue_id === result.queueId) {
-        insertUserBubbleOnStart();
-      }
-      if (trackedQueueId === p.queue_id) {
-        trackedQueueId = null;
-      }
-    }
     dispatchSSEEvent(event, { conversationId, source: "server" });
   };
 
@@ -319,26 +383,18 @@ export async function sendMidFlightMessage(
             const position = p.position ?? 1;
             const queueDepth = p.queue_depth ?? 1;
             const queueId = p.queue_id;
-            result = { kind: "queued", position, queueDepth, queueId };
-            trackedQueueId = queueId;
-            // 仅 QueuedTurnsBar；出队开跑再插用户泡。
-            useQueuedTurnsStore.getState().upsert({
-              queueId,
+            result = upsertQueuedAck(
               conversationId,
               content,
-              // 云快照只有正文：本机留下已收口附件 / 点名，立刻插队才能原样重发。
-              attachments:
-                attachments && attachments.length > 0
-                  ? attachments.map((a) => ({ ...a }))
-                  : undefined,
-              agentMentions:
-                agentMentions && agentMentions.length > 0
-                  ? agentMentions.map((a) => ({ ...a }))
-                  : undefined,
-              position,
-              queueDepth,
-              degradedFrom: p.degraded_from === "steer" ? "steer" : undefined,
-            });
+              attachments,
+              agentMentions,
+              {
+                queueId,
+                position,
+                queueDepth,
+                degradedFrom: p.degraded_from === "steer" ? "steer" : undefined,
+              },
+            );
             registerAbort();
             // toast / degraded 由 dispatch → messageStream 呈现。
             dispatchSSEEvent(event, { conversationId, source: "server" });

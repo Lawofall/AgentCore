@@ -523,7 +523,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
         break;
       }
       case "delivery_status": {
-        // 交付状态：同 execution_id 保最新（后写覆盖），镜像 oracle。
+        // 交付状态：同 execution_id 保最新（后写覆盖）；载荷 artifacts 已是各波并集。
         deliveryStatus = ev.payload as DeliveryStatusPayload;
         break;
       }

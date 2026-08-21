@@ -183,19 +183,23 @@ async function foldCatchUpSegment(
 ): Promise<void> {
   const conversationId = slot.conversationId;
   const start = segmentStart(segment);
+  let skipQueuedTurnUserBubble = false;
   if (needsWindowBackfill(conversationId, start?.message_id)) {
     // 别处开的回合：先把消息窗拉齐，用户那条提问只在 REST 里。
     // 不传页级 AbortSignal：补窗属于这条订阅，切走停的是订阅本身。
     try {
-      await loadLatestWindow(conversationId, { softRefresh: true });
+      skipQueuedTurnUserBubble =
+        (await loadLatestWindow(conversationId, { softRefresh: true })) ===
+        true;
     } catch {
-      /* best-effort：窗口没拉到也照样跟播，只是缺那条用户气泡 */
+      /* best-effort：窗口没拉到也照样跟播；started 帧带 content 时可补插 */
     }
     // 拉窗口期间本端自有连接开张 → 整段交给它重放（同一段首指令），这里折了只会闪一下。
     if (slot.stopped || slot.suspended) return;
   }
   // 清不清由段首说了算——与回合级 attach 同一份判断，两条路不得各自解读。
-  foldAttachSegment(conversationId, segment);
+  // 补窗成功 → 折 started 只清条不插泡（REST 已有用户行）。
+  foldAttachSegment(conversationId, segment, { skipQueuedTurnUserBubble });
 }
 
 type ConnectionOutcome = "ok" | "retry" | "stop";

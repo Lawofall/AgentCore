@@ -23,6 +23,7 @@ from agentcore.sidecar import protocol
 from agentcore.sidecar.fulfill_bridge import SidecarFulfillBridge
 from agentcore.sidecar.paused_store import LocalPausedTurnStore
 from agentcore.sidecar.run_session_store import LocalRunSessionStore
+from agentcore.sidecar.server_pkg.delivery import DeliveryMixin
 from agentcore.sidecar.server_pkg.handlers import HandlerMixin
 from agentcore.sidecar.server_pkg.turns import TurnExecutionMixin
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -65,7 +66,7 @@ class SidecarResumeDeferredWaiter:
     reply_ids: list[Any] = field(default_factory=list)
 
 
-class SidecarServer(HandlerMixin, TurnExecutionMixin):
+class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
     """Routes inbound JSON-RPC lines to the engine and streams events back out."""
 
     def __init__(self, write_line: Callable[[str], Awaitable[None]]) -> None:
@@ -104,6 +105,10 @@ class SidecarServer(HandlerMixin, TurnExecutionMixin):
         # turn_id → conversation_id (cancel cascades coordination without FE always
         # repeating conversationId; cleared with ``_turns``).
         self._turn_conversations: dict[str, str] = {}
+        # FIFO-started user turns: envelope ``origin=queue`` + client ids for desktop.
+        self._queue_turns: dict[str, dict[str, str]] = {}
+        # message_id → drain waiter. Desktop ``startTurn`` (occupy first) unblocks.
+        self._fifo_desktop_start: dict[str, asyncio.Future[None]] = {}
         # turn_id → monotonic deadline. Cancel of an unknown turnId (desktop is
         # still awaiting in-flight warm before startTurn RPC) so startTurn refuses.
         self._cancel_tombstones: dict[str, float] = {}
@@ -128,10 +133,36 @@ class SidecarServer(HandlerMixin, TurnExecutionMixin):
         if cid:
             self._turn_conversations[turn_id] = cid
 
+    def _mark_queue_turn(
+        self,
+        turn_id: str,
+        *,
+        user_message_id: str,
+        message_id: str,
+        trace_id: str,
+    ) -> None:
+        self._queue_turns[turn_id] = {
+            "userMessageId": user_message_id,
+            "messageId": message_id,
+            "traceId": trace_id,
+        }
+
+    def _resolve_fifo_desktop_start(
+        self, message_id: str, exc: BaseException | None = None
+    ) -> None:
+        fut = self._fifo_desktop_start.pop(message_id, None)
+        if fut is None or fut.done():
+            return
+        if exc is None:
+            fut.set_result(None)
+        else:
+            fut.set_exception(exc)
+
     def _unregister_turn(self, turn_id: str) -> None:
         cid = self._turn_conversations.get(turn_id, "")
         self._turns.pop(turn_id, None)
         self._turn_conversations.pop(turn_id, None)
+        self._queue_turns.pop(turn_id, None)
         if cid:
             self._wake_resume_deferred_if_idle(cid)
 
@@ -227,6 +258,24 @@ class SidecarServer(HandlerMixin, TurnExecutionMixin):
         if not cid:
             return []
         return list(self._turn_history.get(cid) or [])
+
+    def _stamp_closed_turn(
+        self, conversation_id: str, user_message: str, assistant_content: str
+    ) -> None:
+        """Append the just-closed turn onto the process stamp window (queue drain history)."""
+        prior = self.stamped_history(conversation_id)
+        rows = list(prior) if prior is not None else []
+        if user_message:
+            last = rows[-1] if rows else None
+            if not (
+                isinstance(last, dict)
+                and last.get("role") == "user"
+                and last.get("content") == user_message
+            ):
+                rows.append({"role": "user", "content": user_message})
+        if assistant_content:
+            rows.append({"role": "assistant", "content": assistant_content})
+        self.stamp_turn_history(conversation_id, rows)
 
     def stamped_history(self, conversation_id: str) -> list[Any] | None:
         """Prior-turn window if startTurn/resume stamped one; ``None`` if never set."""
@@ -363,6 +412,12 @@ class SidecarServer(HandlerMixin, TurnExecutionMixin):
             await self._on_list_paused(request_id, params)
         elif method == "cancel":
             await self._on_cancel(request_id, params)
+        elif method == "deliverMessage":
+            await self._on_deliver_message(request_id, params)
+        elif method == "cancelQueuedTurn":
+            await self._on_cancel_queued_turn(request_id, params)
+        elif method == "listQueuedTurns":
+            await self._on_list_queued_turns(request_id, params)
         elif method == "runRedirect":
             await self._on_run_redirect(request_id, params)
         elif method == "runStop":
@@ -393,6 +448,9 @@ class SidecarServer(HandlerMixin, TurnExecutionMixin):
             live = any(not t.done() for t in self._turns.values())
             if get_active_sidecar() is self and not live:
                 set_active_sidecar(None)
+                from agentcore.runtime.turn.queue import reset_queue_starter
+
+                reset_queue_starter()
             elif live:
                 logger.info(
                     "sidecar.shutdown_kept_active",
@@ -607,6 +665,21 @@ class SidecarServer(HandlerMixin, TurnExecutionMixin):
         if request_id is not None:
             await self._send(protocol.make_result(request_id, result))
 
+    async def _reply_error(
+        self, request_id: Any, code: int, message: str, *, data: Any = None
+    ) -> None:
+        """Send an error response, unless there is no RPC waiter (queue drain)."""
+        if request_id is None:
+            return
+        await self._send(protocol.make_error(request_id, code, message, data=data))
+
+    def _reply_error_soon(
+        self, request_id: Any, code: int, message: str, *, data: Any = None
+    ) -> None:
+        if request_id is None:
+            return
+        self._send_soon(protocol.make_error(request_id, code, message, data=data))
+
 
 def get_active_sidecar() -> SidecarServer | None:
     """Process-wide sidecar (harvest / host read folder scope + ``_creds_for``)."""
@@ -631,3 +704,6 @@ def reset_active_sidecar_for_tests() -> None:
     global _active_sidecar, _sidecar_process
     _active_sidecar = None
     _sidecar_process = False
+    from agentcore.runtime.turn.queue import reset_queue_starter
+
+    reset_queue_starter()

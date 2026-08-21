@@ -131,6 +131,9 @@ def test_start_turn_refreshes_user_id_per_turn(tmp_path, monkeypatch):
                         "turnId": turn_id,
                         "conversationId": "c1",
                         "userMessage": "hi",
+                        "userMessageId": "11111111-1111-4111-8111-111111111111",
+                        "messageId": "22222222-2222-4222-8222-222222222222",
+                        "traceId": "a" * 32,
                         **extra,
                     },
                 }

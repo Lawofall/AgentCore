@@ -355,8 +355,9 @@ class CloudStore:
 
         Before inserting the new placeholder, settles earlier non-paused RUNNING
         assistants in this conversation (dead registry / no-lease zombies) via
-        ``close_turn_interrupted``. Failures on the new placeholder propagate: a
-        turn must not run SSE / pipeline without a durable assistant row.
+        ``close_turn_interrupted``. Same conversation + same assistant id is
+        idempotent (retry after a committed insert). Other conflicts still raise:
+        a turn must not run SSE / pipeline without a durable assistant row.
         """
         from agentcore.runtime.turn.interrupt import settle_prior_running_assistants
 
@@ -371,6 +372,25 @@ class CloudStore:
                     message_id=message_id,
                     trace_id=trace_id,
                 )
+        except IntegrityError:
+            async with async_session_factory() as session:
+                existing = await MessageRepository(session).get_by_id(
+                    message_id, conversation_id=conversation_id
+                )
+            if existing is not None and getattr(existing, "role", None) == "assistant":
+                logger.info(
+                    "chat.assistant_placeholder_idempotent",
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                )
+                return
+            logger.error(
+                "chat.assistant_placeholder_failed",
+                conversation_id=conversation_id,
+                message_id=message_id,
+                error="placeholder id conflict",
+            )
+            raise
         except Exception as e:
             logger.error(
                 "chat.assistant_placeholder_failed",

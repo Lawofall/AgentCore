@@ -2,6 +2,7 @@ import { notifyInfo } from "@/lib/toast";
 import { dispatchSSEEvent, flushPendingContent } from "@/services/sse/dispatch";
 import { handleMessageStreamEvent } from "@/services/sse/handlers/messageStream";
 import { sendMidFlightMessage } from "@/services/turns/midFlight";
+import { resetQueuedTurnLocalForTests } from "@/services/turns/queuedTurnLocal";
 import {
   claimPrimaryStream,
   releasePrimaryStream,
@@ -62,6 +63,7 @@ function ev(
 beforeEach(() => {
   vi.clearAllMocks();
   resetStreamOwnershipForTests();
+  resetQueuedTurnLocalForTests();
   useConversationStore.setState({ currentConversationId: null, byId: {} });
   useQueuedTurnsStore.setState({ byConversation: {} });
   useConversationStore.getState().switchConversation(CID);
@@ -147,6 +149,7 @@ describe("midFlight · 主路门 + store 断言", () => {
         queue_id: "q1",
         conversation_id: CID,
         remaining_depth: 0,
+        content: "第二问",
       }),
     );
     sse.push(ev("message_start", { message_id: "srv-turn2" }));
@@ -219,6 +222,81 @@ describe("midFlight · 主路门 + store 断言", () => {
           ?.content,
       ).toContain("turn2");
     });
+  });
+
+  it("缓冲期空快照清条后 flush 仍插泡", async () => {
+    const turn1Token = claimPrimaryStream(CID);
+    const conv = useConversationStore.getState();
+    conv.addMessage(
+      {
+        id: "u1",
+        role: "user",
+        content: "第一问",
+        createdAt: "",
+        executionId: null,
+        isStreaming: false,
+      },
+      CID,
+    );
+    conv.createAssistantMessage(CID);
+    conv.appendToLastMessage("turn1-正文", CID);
+    conv.setServerMessageIdOnLastMessage("srv-turn1", CID);
+
+    const sse = controllableSse();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(sse.response)),
+    );
+
+    const pending = sendMidFlightMessage(CID, "出队正文", undefined, "queue");
+    await vi.waitFor(() => {
+      expect(vi.mocked(fetch)).toHaveBeenCalled();
+    });
+    sse.push(
+      ev("turn_queued", {
+        queue_id: "q-snap",
+        position: 1,
+        queue_depth: 1,
+        conversation_id: CID,
+      }),
+    );
+    await expect(pending).resolves.toMatchObject({
+      kind: "queued",
+      queueId: "q-snap",
+    });
+
+    sse.push(
+      ev("turn_queue_started", {
+        queue_id: "q-snap",
+        conversation_id: CID,
+        remaining_depth: 0,
+        content: "出队正文",
+      }),
+    );
+    sse.push(ev("message_start", { message_id: "srv-turn2" }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(useQueuedTurnsStore.getState().list(CID)).toHaveLength(1);
+    useQueuedTurnsStore.getState().replaceConversation(CID, []);
+    expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
+    expect(
+      getRuntime(CID).messages.some(
+        (m) => m.role === "user" && m.content === "出队正文",
+      ),
+    ).toBe(false);
+
+    handleMessageStreamEvent(
+      ev("message_end", { finish_reason: "end_turn" }),
+      { conversationId: CID, source: "server" },
+    );
+    releasePrimaryStream(CID, turn1Token);
+    await vi.waitFor(() => {
+      expect(
+        getRuntime(CID).messages.some(
+          (m) => m.role === "user" && m.content === "出队正文",
+        ),
+      ).toBe(true);
+    });
+    sse.close();
   });
 
   it("排队等待中 Abort：丢缓冲；保留排队条、无用户泡（Stop≠取消）", async () => {

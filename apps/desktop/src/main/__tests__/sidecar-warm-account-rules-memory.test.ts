@@ -25,6 +25,11 @@ vi.mock("../log-service", () => ({
   logDesktop: vi.fn(),
 }));
 
+vi.mock("../outbox/projection", () => ({
+  occupyLocalTurnBegin: vi.fn(async () => true),
+  abortLocalTurnPlaceholder: vi.fn(async () => undefined),
+}));
+
 import { rmSync } from "node:fs";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
@@ -126,6 +131,7 @@ function startTurnReq(
     turnId: overrides.turnId ?? "turn-1",
     traceId: "a".repeat(32),
     userMessageId: overrides.userMessageId ?? "u1",
+    messageId: "m-asst",
     userMessage: "hello",
     folderId: overrides.folderId ?? "folder-1",
     accountAuth: overrides.accountAuth,
@@ -422,6 +428,39 @@ describe("SidecarManager warmAccountRulesMemory", () => {
     expect(
       t.sent.filter((m) => m.method === "warmAccountRulesMemory").length,
     ).toBe(1);
+  });
+
+  it("force warm / refreshLive re-kicks while the TTL window is still fresh", async () => {
+    const t = capturingTransport();
+    const manager = new SidecarManager(() => t.transport);
+
+    await manager.warmAccountRulesMemory("r-open", "", "/tmp/ws-open-force", {
+      folderId: "folder-1",
+      accountAuth,
+      userId: "user-open",
+    });
+    expect(warmCount(t)).toBe(1);
+
+    await manager.warmAccountRulesMemory("r-open", "", "/tmp/ws-open-force", {
+      folderId: "folder-1",
+      accountAuth,
+      userId: "user-open",
+    });
+    expect(warmCount(t)).toBe(1);
+
+    await manager.warmAccountRulesMemory("r-open", "", "/tmp/ws-open-force", {
+      folderId: "folder-1",
+      accountAuth,
+      userId: "user-open",
+      force: true,
+    });
+    expect(warmCount(t)).toBe(2);
+
+    await manager.refreshLiveAccountRulesMemory({
+      accountAuth,
+      userId: "user-open",
+    });
+    expect(warmCount(t)).toBe(3);
   });
 
   it("startTurn awaits in-flight account warm before startTurn RPC", async () => {

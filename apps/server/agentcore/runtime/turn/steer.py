@@ -56,6 +56,10 @@ class PendingTurnSteer:
     origin_device_id: str | None = None
     llm_credentials: Any = None
     llm_supports_tools: bool | None = None
+    # Sidecar FIFO identity; unused on cloud HTTP.
+    user_message_id: str | None = None
+    message_id: str | None = None
+    trace_id: str | None = None
 
 
 _pending: dict[str, list[PendingTurnSteer]] = {}
@@ -177,6 +181,9 @@ def try_enqueue(
     origin_device_id: str | None = None,
     llm_credentials: Any = None,
     llm_supports_tools: bool | None = None,
+    user_message_id: str | None = None,
+    message_id: str | None = None,
+    trace_id: str | None = None,
 ) -> PendingTurnSteer | None:
     """Park a classic steer if the captain loop is accepting; else ``None`` (→ FIFO)."""
     cid = conversation_id.strip()
@@ -195,6 +202,9 @@ def try_enqueue(
         origin_device_id=origin_device_id,
         llm_credentials=llm_credentials,
         llm_supports_tools=llm_supports_tools,
+        user_message_id=user_message_id,
+        message_id=message_id,
+        trace_id=trace_id,
     )
     bucket = _pending.setdefault(cid, [])
     bucket.append(item)
@@ -416,6 +426,9 @@ def promote_leftovers_to_queue(leftovers: list[PendingTurnSteer]) -> int:
                     llm_credentials=item.llm_credentials,
                     llm_supports_tools=item.llm_supports_tools,
                     interjection_id=item.interjection_id,
+                    user_message_id=item.user_message_id,
+                    message_id=item.message_id,
+                    trace_id=item.trace_id,
                 ),
                 # 双发次序是契约：queued 状态先行，degraded turn_queued 随后由
                 # ``_emit_degraded_turn_queued`` 发出（含对话级信号）。

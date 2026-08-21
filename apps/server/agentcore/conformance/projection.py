@@ -1002,7 +1002,7 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
             team_synthesis_preview = p
 
         elif etype == "delivery_status":
-            # 交付状态：同 execution_id 保最新（后写覆盖，反映最近一批委派的对账）。
+            # 交付状态：同 execution_id 保最新（后写覆盖；artifacts 已是各波声明且落盘并集）。
             delivery_status = p
 
         elif etype == "user_interjection":

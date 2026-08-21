@@ -33,6 +33,11 @@ export function isSafeOutboxId(value: string): boolean {
   return !value.includes("/") && !value.includes("\\") && !value.includes("\0");
 }
 
+/** Desktop-minted local-turn trace: 32 hex, same as server `new_trace_id`. */
+export function isHex32TraceId(value: string): boolean {
+  return typeof value === "string" && /^[0-9a-f]{32}$/i.test(value);
+}
+
 let tmpSeq = 0;
 
 /** Unique temp path — a shared `*.json.tmp` lets a concurrent writer steal our rename. */
@@ -150,6 +155,43 @@ function isNumericJournalKey(key: string): boolean {
   if (!key) return false;
   const n = Number(key);
   return Number.isFinite(n) && String(n) === key;
+}
+
+/**
+ * Mid-turn journal POST: keep the outbox map's numeric keys as explicit ``seq``.
+ * ``ord`` is a disk-only twin of Postgres ``created_at`` — strip it from the entry.
+ */
+export function journalEntriesWithExplicitSeq(
+  journal: Record<string, unknown> | undefined,
+): Array<{ seq: number; entry: unknown }> {
+  if (!journal || typeof journal !== "object") return [];
+  const rows: Array<{ seq: number; entry: unknown }> = [];
+  for (const key of Object.keys(journal)) {
+    if (!isNumericJournalKey(key)) continue;
+    const seq = Number(key);
+    if (!Number.isFinite(seq)) continue;
+    rows.push({ seq, entry: stripEntryOrd(journal[key]) });
+  }
+  rows.sort((a, b) => a.seq - b.seq);
+  return rows;
+}
+
+/** ``upsert_stream_segments`` wire: channel / text / generation. */
+export function streamSegmentsForPost(
+  segs: OutboxRecord["stream_segments"],
+): Array<{ channel: string; text: string; generation: number }> {
+  if (!segs || typeof segs !== "object") return [];
+  const rows: Array<{ channel: string; text: string; generation: number }> = [];
+  for (const [channel, raw] of Object.entries(segs)) {
+    if (!raw || typeof raw !== "object") continue;
+    const text = String(raw.text || "");
+    const generation =
+      typeof raw.generation === "number" && Number.isFinite(raw.generation)
+        ? raw.generation
+        : 0;
+    rows.push({ channel, text, generation });
+  }
+  return rows;
 }
 
 export function journalEntriesFromMap(
@@ -529,6 +571,27 @@ export function toRecordTurnBody(
     : [];
   if (mentions.length > 0) body.agent_mentions = mentions;
   return body;
+}
+
+export async function readOutboxRecord(
+  userMessageId: string,
+): Promise<OutboxRecord | null> {
+  if (!isSafeOutboxId(userMessageId)) return null;
+  try {
+    const raw = await readFile(join(outboxDir(), `${userMessageId}.json`), "utf-8");
+    const data = JSON.parse(raw) as OutboxRecord;
+    if (
+      !data?.user_message_id ||
+      !data.conversation_id ||
+      !isSafeOutboxId(data.user_message_id) ||
+      !isSafeOutboxId(data.conversation_id)
+    ) {
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export async function readOutboxRecords(): Promise<OutboxRecord[]> {

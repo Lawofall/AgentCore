@@ -39,4 +39,13 @@ export {
   startOutboxPolling,
   stopOutboxPolling,
   registerOutboxIpc,
+  occupyLocalTurnBegin,
+  abortLocalTurnPlaceholder,
+  checkpointOpenRecord,
+  markLocalTurnSettled,
+  noteOccupiedLocalTurn,
+  resetLocalTurnProjectionForTests,
+  startOutboxProjectionWatch,
+  stopOutboxProjectionWatch,
+  withUmidLock,
 } from "./outbox";

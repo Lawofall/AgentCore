@@ -266,6 +266,12 @@ const sidecarApi: SidecarApi = {
   runRedirect: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.runRedirect, req),
   runStop: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.runStop, req),
   debateSteer: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.debateSteer, req),
+  deliverMessage: (req) =>
+    ipcRenderer.invoke(SIDECAR_CHANNELS.deliverMessage, req),
+  cancelQueuedTurn: (req) =>
+    ipcRenderer.invoke(SIDECAR_CHANNELS.cancelQueuedTurn, req),
+  listQueuedTurns: (req) =>
+    ipcRenderer.invoke(SIDECAR_CHANNELS.listQueuedTurns, req),
   resume: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.resume, req),
   probe: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.probe, req),
   warmCodeIndex: (req) =>
@@ -274,6 +280,8 @@ const sidecarApi: SidecarApi = {
     ipcRenderer.invoke(SIDECAR_CHANNELS.warmMcpDiscover, req),
   warmAccountRulesMemory: (req) =>
     ipcRenderer.invoke(SIDECAR_CHANNELS.warmAccountRulesMemory, req),
+  refreshLiveAccountRulesMemory: (req) =>
+    ipcRenderer.invoke(SIDECAR_CHANNELS.refreshLiveAccountRulesMemory, req),
   recovery: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.recovery, req),
   attach: (req) => ipcRenderer.invoke(SIDECAR_CHANNELS.attach, req),
   turnFilesDiff: (req) =>

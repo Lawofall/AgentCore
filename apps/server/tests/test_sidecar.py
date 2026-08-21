@@ -101,6 +101,12 @@ _FAKE_INFERENCE = {
     "model": "test-model",
 }
 
+_CLIENT_TURN_IDS = {
+    "userMessageId": "11111111-1111-4111-8111-111111111111",
+    "messageId": "22222222-2222-4222-8222-222222222222",
+    "traceId": "a" * 32,
+}
+
 
 def _response(sent: list[dict[str, Any]], request_id: Any) -> dict[str, Any]:
     return next(m for m in sent if m.get("id") == request_id)
@@ -248,6 +254,7 @@ def test_sidecar_runs_a_turn_on_the_local_dir(tmp_path, monkeypatch):
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "列出本地文件",
@@ -438,6 +445,7 @@ def test_sidecar_binds_local_backend_with_approvals(tmp_path, monkeypatch):
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "改个文件",
@@ -527,6 +535,7 @@ def test_sidecar_start_turn_passes_conversation_folder_id(tmp_path, monkeypatch)
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "项目里查记忆",
@@ -681,6 +690,7 @@ def test_sidecar_start_turn_local_binding_reaches_pipeline(tmp_path, monkeypatch
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t-bind",
                         "conversationId": "c-bind",
                         "userMessage": "hello",
@@ -755,6 +765,7 @@ def test_sidecar_start_turn_forwards_agent_mentions(tmp_path, monkeypatch):
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t-mention",
                         "conversationId": "c-mention",
                         "userMessage": "让研究员看一下",
@@ -824,6 +835,7 @@ def test_sidecar_start_turn_folder_id_param_skips_db(tmp_path, monkeypatch):
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "项目里查记忆",
@@ -887,6 +899,7 @@ def test_sidecar_start_turn_explicit_null_folder_id_skips_db(tmp_path, monkeypat
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "裸聊",
@@ -948,6 +961,7 @@ def test_sidecar_start_turn_absent_folder_id_still_loads_db(tmp_path, monkeypatc
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "旧桌面无 folderId",
@@ -1077,6 +1091,7 @@ def test_sidecar_start_turn_db_unavailable_seals_outbox(tmp_path, monkeypatch):
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "查项目记忆",
@@ -1144,6 +1159,7 @@ def test_sidecar_start_turn_passes_desktop_client_platform(tmp_path, monkeypatch
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t1",
                         "conversationId": "c1",
                         "userMessage": "能用本地 MCP 吗",
@@ -1184,6 +1200,7 @@ def test_sidecar_threads_permission_axes_per_turn(tmp_path, monkeypatch):
                     "id": turn_id,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": turn_id,
                         "conversationId": "c1",
                         "userMessage": "跑点代码",
@@ -1301,7 +1318,12 @@ def test_start_turn_result_reports_cloud_proxy_model(tmp_path, monkeypatch):
                     "jsonrpc": "2.0",
                     "id": 2,
                     "method": "startTurn",
-                    "params": {"turnId": "t1", "conversationId": "c1", "userMessage": "hi"},
+                    "params": {
+                        **_CLIENT_TURN_IDS,
+                        "turnId": "t1",
+                        "conversationId": "c1",
+                        "userMessage": "hi",
+                    },
                 }
             )
         )
@@ -1346,6 +1368,7 @@ def test_start_turn_rejects_conversation_slot_busy(tmp_path, monkeypatch):
                     "id": 2,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t-live",
                         "conversationId": "c1",
                         "userMessage": "first",
@@ -1361,6 +1384,7 @@ def test_start_turn_rejects_conversation_slot_busy(tmp_path, monkeypatch):
                     "id": 3,
                     "method": "startTurn",
                     "params": {
+                        **_CLIENT_TURN_IDS,
                         "turnId": "t-second",
                         "conversationId": "c1",
                         "userMessage": "second",

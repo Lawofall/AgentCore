@@ -88,6 +88,12 @@ function registerWindowChromeIpc(): void {
 
 installProcessSafetyNet();
 
+// Overlay scrollbars must be enabled before `ready`. They auto-hide per pane and
+// paint over content (Win11 / macOS). Fluent overlay is folded into this flag.
+// The renderer must not set `::-webkit-scrollbar { width }` — that forces
+// Blink's classic gutter bars.
+app.commandLine.appendSwitch("enable-features", "OverlayScrollbar");
+
 // Production renderer is served from a custom app:// scheme instead of file://,
 // so it gets a real, stable origin (app://agentcore). That origin is what makes
 // credentialed cross-origin calls to the cloud API governable by CORS + cookies

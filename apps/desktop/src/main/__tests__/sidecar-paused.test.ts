@@ -22,6 +22,11 @@ vi.mock("../log-service", () => ({
   logDesktop: vi.fn(),
 }));
 
+vi.mock("../outbox/projection", () => ({
+  occupyLocalTurnBegin: vi.fn(async () => true),
+  abortLocalTurnPlaceholder: vi.fn(async () => undefined),
+}));
+
 import { SidecarManager } from "../sidecar/manager";
 
 const pausedDir = join(h.dir, "sidecar", "paused");

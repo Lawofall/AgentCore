@@ -156,7 +156,7 @@ export async function pumpSseBody(
   if (!reader) return;
 
   // 缺省 = 唯一 dispatch 通道（live / reload / reconnect）；调用方可注入 onEvent
-  //（如 midFlight 在 turn_queue_started 时补插用户泡、缓冲至主路空闲再 fold）。
+  //（如 midFlight 缓冲至主路空闲再 fold；出队插泡由 messageStream 读 started 帧）。
   const deliver =
     onEvent ??
     ((event: SSEEvent) =>
@@ -271,6 +271,7 @@ export async function pumpSseBody(
 export function foldAttachSegment(
   conversationId: string,
   segment: SSEEvent[],
+  extras?: { skipQueuedTurnUserBubble?: boolean },
 ): void {
   const head = segment.find((e) => e.type === "message_start");
   const fullReplay =
@@ -296,6 +297,7 @@ export function foldAttachSegment(
         conversationId,
         source: "server",
         replay: true,
+        skipQueuedTurnUserBubble: extras?.skipQueuedTurnUserBubble,
       });
     }
     flushPendingContent(conversationId);

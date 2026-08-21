@@ -1,16 +1,22 @@
-"""Sidecar local-turn write-back — ``CloudStore.finalize(mode="local")``."""
+"""Sidecar local-turn write-back — finalize snapshot + progressive cloud projection."""
 
 from collections.abc import Sequence
 from typing import Any
 
-from agentcore.conversation.store import get_cloud_store
+from sqlalchemy.exc import IntegrityError
+
+from agentcore.conversation.mentions import to_stored_agent_mentions
+from agentcore.conversation.store import MESSAGE_STATUS_RUNNING, get_cloud_store
 from agentcore.conversation.zero_output_rollback import (
+    delete_assistant_and_paired_user,
     error_code_from_turn_result,
     result_from_local_turn_writeback,
     should_delete_zero_output_send_result,
 )
 from agentcore.core.log_context import log_context
 from agentcore.core.logging import get_logger
+from agentcore.db.base import async_session_factory
+from agentcore.db.repositories import MessageRepository
 from agentcore.llm.resolve import LLMCredentials
 
 logger = get_logger(__name__)
@@ -130,3 +136,158 @@ async def record_local_turn(
         )
         assert result is not None
         return result
+
+
+async def _insert_user_idempotent(
+    *,
+    conversation_id: str,
+    user_message: str,
+    user_message_id: str,
+    agent_mentions: list[dict] | None,
+) -> None:
+    """Pin a user row to ``user_message_id``; same conversation + id is success."""
+    stored_mentions = to_stored_agent_mentions(agent_mentions)
+    try:
+        async with async_session_factory() as session:
+            await MessageRepository(session).create(
+                conversation_id=conversation_id,
+                role="user",
+                content=user_message,
+                message_id=user_message_id,
+                agent_mentions=stored_mentions or None,
+            )
+    except IntegrityError:
+        async with async_session_factory() as session:
+            existing = await MessageRepository(session).get_by_id(
+                user_message_id, conversation_id=conversation_id
+            )
+        if existing is not None and getattr(existing, "role", None) == "user":
+            logger.info(
+                "chat.local_turn_user_idempotent",
+                conversation_id=conversation_id,
+                user_message_id=user_message_id,
+            )
+            return
+        raise
+
+
+async def begin_local_turn(
+    *,
+    conversation_id: str,
+    user_id: str,
+    user_message: str,
+    user_message_id: str,
+    message_id: str,
+    trace_id: str,
+    agent_mentions: list[dict] | None = None,
+) -> dict[str, str]:
+    """Idempotent user row + running assistant placeholder. No cloud turn / title."""
+    with log_context(trace_id=trace_id, conversation_id=conversation_id, user_id=user_id):
+        await _insert_user_idempotent(
+            conversation_id=conversation_id,
+            user_message=user_message,
+            user_message_id=user_message_id,
+            agent_mentions=agent_mentions,
+        )
+        await get_cloud_store().begin_turn(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            trace_id=trace_id,
+        )
+        logger.info(
+            "chat.local_turn_begin",
+            conversation_id=conversation_id,
+            message_id=message_id,
+            user_message_id=user_message_id,
+        )
+        return {
+            "user_message_id": user_message_id,
+            "assistant_message_id": message_id,
+        }
+
+
+async def append_local_turn_journal(
+    *,
+    conversation_id: str,
+    user_id: str,
+    message_id: str,
+    entries: Sequence[tuple[int, dict[str, Any]]],
+    trace_id: str | None = None,
+) -> None:
+    """Append-on-emit journal facts (``seq`` required). Failures do not settle."""
+    store = get_cloud_store()
+    with log_context(trace_id=trace_id, conversation_id=conversation_id, user_id=user_id):
+        for seq, entry in entries:
+            await store.append_journal(
+                turn_id=message_id,
+                seq=seq,
+                conversation_id=conversation_id,
+                trace_id=trace_id,
+                entry=entry,
+            )
+
+
+async def upsert_local_turn_stream_segments(
+    *,
+    conversation_id: str,
+    user_id: str,
+    message_id: str,
+    segments: Sequence[tuple[str, str, int]],
+) -> None:
+    """UPSERT in-flight channel snapshots. Does not touch ``messages.content``."""
+    with log_context(conversation_id=conversation_id, user_id=user_id):
+        await get_cloud_store().upsert_stream_segments(
+            turn_id=message_id,
+            segments=segments,
+        )
+
+
+def _assistant_is_in_flight(usage: Any) -> bool:
+    if not isinstance(usage, dict):
+        return False
+    if usage.get("paused"):
+        return False
+    return usage.get("status") == MESSAGE_STATUS_RUNNING
+
+
+async def abort_local_turn(
+    *,
+    conversation_id: str,
+    user_id: str,
+    user_message_id: str,
+    message_id: str,
+) -> dict[str, bool]:
+    """Delete a still-running assistant + paired user. Settled rows are a no-op."""
+    with log_context(conversation_id=conversation_id, user_id=user_id):
+        async with async_session_factory() as session:
+            assistant = await MessageRepository(session).get_by_id(
+                message_id, conversation_id=conversation_id
+            )
+        if assistant is None or getattr(assistant, "role", None) != "assistant":
+            logger.info(
+                "chat.local_turn_abort_noop",
+                conversation_id=conversation_id,
+                message_id=message_id,
+                reason="missing",
+            )
+            return {"aborted": False}
+        if not _assistant_is_in_flight(getattr(assistant, "usage", None)):
+            logger.info(
+                "chat.local_turn_abort_noop",
+                conversation_id=conversation_id,
+                message_id=message_id,
+                reason="settled",
+            )
+            return {"aborted": False}
+        await delete_assistant_and_paired_user(
+            conversation_id=conversation_id,
+            assistant_message_id=message_id,
+            user_message_id=user_message_id,
+        )
+        logger.info(
+            "chat.local_turn_aborted",
+            conversation_id=conversation_id,
+            message_id=message_id,
+            user_message_id=user_message_id,
+        )
+        return {"aborted": True}

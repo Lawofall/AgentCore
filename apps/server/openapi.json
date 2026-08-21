@@ -1,6 +1,42 @@
 {
   "components": {
     "schemas": {
+      "AbortLocalTurnRequest": {
+        "description": "Drop a still-running placeholder pair (startup failure). Settled = no-op.",
+        "properties": {
+          "message_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          },
+          "user_message_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_message_id",
+          "message_id"
+        ],
+        "title": "AbortLocalTurnRequest",
+        "type": "object"
+      },
+      "AbortLocalTurnResponse": {
+        "properties": {
+          "aborted": {
+            "title": "Aborted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "aborted"
+        ],
+        "title": "AbortLocalTurnResponse",
+        "type": "object"
+      },
       "AcceptRunOutcomeRequest": {
         "description": "User explicitly accepts a run's terminal outcome that could not be auto-recovered\n(跑一半改方向 Step 4 · 忽略路径收口).\n\nTriggers surfaced from the audit trail / status strip: a ``deterministic_failure``\n(non-retryable upstream failure — 重试徒劳), a ``redirect_ignored`` (「立即改此人」steer\nthat arrived too late), or ``recovery_ignored`` (status-strip「忽略」救火 abandon).\nRecording the acceptance (后端记录) replaces the old frontend-only ``clearExecution`` so\nthe delegated-turn audit trail carries「用户主动接受此结果」. Idempotent per (turn, run).",
         "properties": {
@@ -2968,6 +3004,68 @@
           }
         },
         "title": "AutonomyView",
+        "type": "object"
+      },
+      "BeginLocalTurnRequest": {
+        "description": "Open a local-turn projection: pin the user row and a running assistant.\n\nDoes not start a cloud SSE turn, mint a title, or compact. Same\n``user_message_id`` / ``message_id`` retry is success.",
+        "properties": {
+          "agent_mentions": {
+            "items": {
+              "$ref": "#/components/schemas/AgentMention"
+            },
+            "maxItems": 10,
+            "title": "Agent Mentions",
+            "type": "array"
+          },
+          "message_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          },
+          "trace_id": {
+            "maxLength": 32,
+            "minLength": 32,
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "user_message": {
+            "default": "",
+            "maxLength": 32000,
+            "title": "User Message",
+            "type": "string"
+          },
+          "user_message_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "User Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_message_id",
+          "message_id",
+          "trace_id"
+        ],
+        "title": "BeginLocalTurnRequest",
+        "type": "object"
+      },
+      "BeginLocalTurnResponse": {
+        "properties": {
+          "assistant_message_id": {
+            "title": "Assistant Message Id",
+            "type": "string"
+          },
+          "user_message_id": {
+            "title": "User Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_message_id",
+          "assistant_message_id"
+        ],
+        "title": "BeginLocalTurnResponse",
         "type": "object"
       },
       "BetaGroupModerator": {
@@ -9416,6 +9514,114 @@
         "title": "LlmWindowToolCallFunction",
         "type": "object"
       },
+      "LocalTurnJournalFact": {
+        "properties": {
+          "entry": {
+            "additionalProperties": true,
+            "title": "Entry",
+            "type": "object"
+          },
+          "seq": {
+            "minimum": 0.0,
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "entry"
+        ],
+        "title": "LocalTurnJournalFact",
+        "type": "object"
+      },
+      "LocalTurnJournalRequest": {
+        "description": "Append-on-emit journal facts. ``seq`` is required; merge duplicate is success.",
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/LocalTurnJournalFact"
+            },
+            "maxItems": 2000,
+            "title": "Entries",
+            "type": "array"
+          },
+          "message_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "title": "LocalTurnJournalRequest",
+        "type": "object"
+      },
+      "LocalTurnStreamSegment": {
+        "properties": {
+          "channel": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Channel",
+            "type": "string"
+          },
+          "generation": {
+            "minimum": 0.0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 500000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "generation"
+        ],
+        "title": "LocalTurnStreamSegment",
+        "type": "object"
+      },
+      "LocalTurnStreamSegmentsRequest": {
+        "description": "UPSERT ``turn_stream_state`` snapshots. Does not rewrite ``messages.content``.",
+        "properties": {
+          "message_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/LocalTurnStreamSegment"
+            },
+            "maxItems": 64,
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "title": "LocalTurnStreamSegmentsRequest",
+        "type": "object"
+      },
       "LocalTurnToolFailure": {
         "description": "One failed tool call summary for local-turn write-back observability.\n\nOptional on ``RecordTurnRequest`` — old clients omit the list. Server logs a\ncount/codes rollup; does not persist into the messages table.",
         "properties": {
@@ -12012,7 +12218,7 @@
         "type": "object"
       },
       "QueuedTurnItem": {
-        "description": "One process-local FIFO queued turn (权威内容源；EPHEMERAL 事件只作变了信号).\n\n``interjection_id`` is set when the entry was promoted from a user interjection\n(协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.\n``position`` is 1-based FIFO index.\n``attachments`` / ``agent_mentions`` are the same fields drain forwards to\n``stream_chat`` (optional additive — old clients ignore).",
+        "description": "One process-local FIFO queued turn (排队条权威内容源；GET / 快照).\n\n``turn_queued`` / ``turn_queue_cancelled`` remain change signals only.\n``turn_queue_started`` is the timeline user-bubble entrance (content on the\nframe), not a change-only ping.\n``interjection_id`` is set when the entry was promoted from a user interjection\n(协调升队 / 经典 steer leftover); omitted / null for plain ``delivery=queue``.\n``position`` is 1-based FIFO index.\n``attachments`` / ``agent_mentions`` are the same fields drain forwards to\n``stream_chat`` (optional additive — old clients ignore).",
         "properties": {
           "agent_mentions": {
             "items": {
@@ -27830,6 +28036,346 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/local-turns/abort": {
+      "post": {
+        "description": "Delete a still-running assistant + paired user (startup failure). Settled = no-op.",
+        "operationId": "abort_local_turn_endpoint_v1_conversations__conversation_id__local_turns_abort_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AbortLocalTurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AbortLocalTurnResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Abort Local Turn Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/local-turns/begin": {
+      "post": {
+        "description": "Pin the user row + a running assistant placeholder (投影同寿命).\n\nSame request is idempotent on ``user_message_id`` and assistant ``message_id``.\nDoes not start a cloud SSE turn, mint a title, compact, or go through\n``POST /messages``. Owner Bearer, same as ``POST …/local-turns``.",
+        "operationId": "begin_local_turn_endpoint_v1_conversations__conversation_id__local_turns_begin_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeginLocalTurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BeginLocalTurnResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Begin Local Turn Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/local-turns/journal": {
+      "post": {
+        "description": "Append journal facts with required ``seq`` (replace=False). Failures are 4xx/5xx.",
+        "operationId": "append_local_turn_journal_endpoint_v1_conversations__conversation_id__local_turns_journal_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalTurnJournalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Append Local Turn Journal Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/local-turns/stream-segments": {
+      "post": {
+        "description": "UPSERT in-flight stream snapshots. Does not rewrite ``messages.content``.",
+        "operationId": "upsert_local_turn_stream_segments_endpoint_v1_conversations__conversation_id__local_turns_stream_segments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalTurnStreamSegmentsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert Local Turn Stream Segments Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/messages": {
       "get": {
         "description": "A window of a conversation's messages (cursor-windowed, chronological).\n\nFour mutually-exclusive modes (checked in this order):\n\n- ``around={message_id}``: a window centered on a message — the search-hit jump\n  (load-around B). 404 if the message isn't in this conversation.\n- ``before={iso}``: the page strictly older than the cursor (scroll up).\n- ``after={iso}``: the page strictly newer than the cursor (scroll down).\n- none: the latest window (conversation open).\n\n``has_more_before`` / ``has_more_after`` drive infinite scroll; a one-sided\nquery computes only the flag for the direction it moves in (an ``around`` window\ncomputes both). ``total`` is the conversation's full message count.",
@@ -28983,7 +29529,7 @@
     },
     "/v1/conversations/{conversation_id}/queued-turns": {
       "get": {
-        "description": "List the conversation's process-local FIFO queued turns (权威内容源).\n\nOwner-gated like send / cancel. Returns the current in-memory snapshot in FIFO\norder (``position`` 1-based). EPHEMERAL ``turn_queued`` / ``turn_queue_started`` /\n``turn_queue_cancelled`` remain change signals only — clients should refresh from\nthis endpoint. Restart empties the queue (no durable queue).",
+        "description": "List the conversation's process-local FIFO queued turns (条权威仍是 GET / 快照).\n\nOwner-gated like send / cancel. Returns the current in-memory snapshot in FIFO\norder (``position`` 1-based). EPHEMERAL ``turn_queued`` / ``turn_queue_cancelled``\nremain change signals only; ``turn_queue_started`` is the timeline entrance\nframe (content on the frame). Restart empties the queue (no durable queue).",
         "operationId": "list_queued_turns_v1_conversations__conversation_id__queued_turns_get",
         "parameters": [
           {

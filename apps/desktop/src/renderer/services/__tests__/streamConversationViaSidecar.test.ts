@@ -270,6 +270,15 @@ describe("streamConversationViaSidecar", () => {
     expect(resolveSidecarInferenceMock).toHaveBeenCalledWith({
       conversationId: "c1",
     });
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessageId: "u-opt",
+        messageId: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        ),
+        traceId: expect.stringMatching(/^[0-9a-f]{32}$/i),
+      }),
+    );
   });
 
   it("remints inference with force + conversationId when pre-event token fails", async () => {

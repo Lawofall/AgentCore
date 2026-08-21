@@ -34,14 +34,34 @@ positions already renumbered. The queue itself stays in-process.
 from __future__ import annotations
 
 import asyncio
+import re
 from collections import defaultdict, deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import uuid4
 
 from agentcore.core.logging import get_logger
 from agentcore.core.types import new_id
 
+_TRACE_HEX32 = re.compile(r"^[0-9a-fA-F]{32}$")
+
 logger = get_logger(__name__)
+
+QueueStarter = Callable[[str, "QueuedTurn"], Awaitable[None]]
+# Sidecar installs a local pipeline+outbox starter. Default remains cloud ``stream_chat``.
+_queue_starter: QueueStarter | None = None
+
+
+def set_queue_starter(starter: QueueStarter | None) -> None:
+    """Install the FIFO drain starter for this process (sidecar live → local pipeline)."""
+    global _queue_starter
+    _queue_starter = starter
+
+
+def reset_queue_starter() -> None:
+    """Restore the cloud ``stream_chat`` drain (tests / sidecar shutdown)."""
+    set_queue_starter(None)
 
 
 @dataclass(slots=True)
@@ -69,6 +89,10 @@ class QueuedTurn:
     # so the waiting connection can continue on the same stream. None → no waiter
     # (tests / detached-only start) → sink starts detached as before.
     started: asyncio.Future[Any] | None = field(default=None, repr=False)
+    # Desktop-minted identity for sidecar FIFO drain (cloud HTTP leaves these None).
+    user_message_id: str | None = None
+    message_id: str | None = None
+    trace_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,7 +395,8 @@ class TurnQueue:
             remaining=self.depth(conversation_id),
         )
         try:
-            await _start_queued_turn(conversation_id, item)
+            starter = _queue_starter or _start_queued_turn
+            await starter(conversation_id, item)
         except Exception:  # noqa: BLE001 — never strand the rest of the queue
             logger.exception(
                 "turn_queue.start_failed",
@@ -391,7 +416,8 @@ def _waiter_still_alive(item: QueuedTurn) -> bool:
 async def _start_queued_turn(conversation_id: str, item: QueuedTurn) -> None:
     """Spawn the turn; hand the sink to a waiting SSE if still connected.
 
-    Emits ``turn_queue_started`` as the new sink's first frame (before ``stream_chat``).
+    Emits ``turn_queue_started`` as the new sink's first frame (before ``stream_chat``),
+    carrying the queued item's ``content`` (and attachments / mentions when present).
     """
     import asyncio
 
@@ -408,6 +434,9 @@ async def _start_queued_turn(conversation_id: str, item: QueuedTurn) -> None:
             queue_id=item.queue_id,
             conversation_id=conversation_id,
             remaining_depth=remaining_depth,
+            content=item.content,
+            attachments=item.attachments or None,
+            agent_mentions=item.agent_mentions or None,
         )
     )
     if _waiter_still_alive(item):
@@ -456,6 +485,9 @@ def new_queued_turn(
     llm_supports_tools: bool | None = None,
     interjection_id: str | None = None,
     started: asyncio.Future[Any] | None = None,
+    user_message_id: str | None = None,
+    message_id: str | None = None,
+    trace_id: str | None = None,
 ) -> QueuedTurn:
     return QueuedTurn(
         queue_id=new_id(),
@@ -470,7 +502,29 @@ def new_queued_turn(
         llm_supports_tools=llm_supports_tools,
         interjection_id=interjection_id,
         started=started,
+        user_message_id=user_message_id,
+        message_id=message_id,
+        trace_id=trace_id,
     )
+
+
+def resolve_client_turn_ids(
+    *,
+    user_message_id: str | None = None,
+    message_id: str | None = None,
+    trace_id: str | None = None,
+) -> tuple[str, str, str]:
+    """Keep desktop-minted ids; fill only missing legs so sidecar FIFO can start.
+
+    ``trace_id`` must be 32-hex (``uuid4().hex``). Hyphenated leftovers are
+    replaced, not coerced — same rule as ``parse_client_turn_ids``.
+    """
+    umid = (user_message_id or "").strip() or str(uuid4())
+    mid = (message_id or "").strip() or str(uuid4())
+    tid = (trace_id or "").strip()
+    if not _TRACE_HEX32.fullmatch(tid):
+        tid = uuid4().hex
+    return umid, mid, tid
 
 
 # Module-level singleton (single-worker posture, as turn_runs).

@@ -23,6 +23,11 @@ vi.mock("../log-service", () => ({
   logDesktop: vi.fn(),
 }));
 
+vi.mock("../outbox/projection", () => ({
+  occupyLocalTurnBegin: vi.fn(async () => true),
+  abortLocalTurnPlaceholder: vi.fn(async () => undefined),
+}));
+
 vi.mock("../mcp-service", () => ({
   listMcpToolsValue: h.listMcpToolsValue,
 }));
@@ -126,6 +131,7 @@ describe("SidecarManager execution warm keepalive", () => {
         turnId: "turn-keep",
         traceId: "a".repeat(32),
         userMessageId: "u-keep",
+        messageId: "m-asst",
         userMessage: "long task",
         folderId: "folder-keep",
         accountAuth,

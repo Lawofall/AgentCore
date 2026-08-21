@@ -21,6 +21,11 @@ vi.mock("../log-service", () => ({
   logDesktop: vi.fn(),
 }));
 
+vi.mock("../outbox/projection", () => ({
+  occupyLocalTurnBegin: vi.fn(async () => true),
+  abortLocalTurnPlaceholder: vi.fn(async () => undefined),
+}));
+
 import { rmSync } from "node:fs";
 import { SidecarManager } from "../sidecar/manager";
 import type { Transport } from "../sidecar/transport";
@@ -95,6 +100,7 @@ describe("SidecarManager userId passthrough", () => {
         traceId: "a".repeat(32),
         userId: "acct-uuid-99",
         userMessageId: "u1",
+        messageId: "m-asst",
         userMessage: "hello",
       },
       "/tmp/ws",
@@ -119,6 +125,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-2",
         traceId: "b".repeat(32),
         userMessageId: "u2",
+        messageId: "m-asst",
         userMessage: "hello",
       },
       "/tmp/ws",
@@ -141,6 +148,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-3",
         traceId: "c".repeat(32),
         userMessageId: "u3",
+        messageId: "m-asst",
         userMessage: "hello",
         folderId: "fold-abc",
       },
@@ -159,6 +167,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-4",
         traceId: "d".repeat(32),
         userMessageId: "u4",
+        messageId: "m-asst",
         userMessage: "hello",
         folderId: null,
       },
@@ -181,6 +190,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-5",
         traceId: "e".repeat(32),
         userMessageId: "u5",
+        messageId: "m-asst",
         userMessage: "hello",
         folderId: "fold-local",
         localRootId: "r5",
@@ -205,6 +215,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-6",
         traceId: "f".repeat(32),
         userMessageId: "u6",
+        messageId: "m-asst",
         userMessage: "hello",
         folderId: null,
       },
@@ -229,6 +240,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-folders",
         traceId: "1".repeat(32),
         userMessageId: "u-folders",
+        messageId: "m-asst",
         userMessage: "hello",
         foldersAuth: {
           baseUrl: "https://api.test.example",
@@ -257,6 +269,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-no-folders",
         traceId: "2".repeat(32),
         userMessageId: "u-no-folders",
+        messageId: "m-asst",
         userMessage: "hello",
       },
       "/tmp/ws",
@@ -278,6 +291,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-account",
         traceId: "a".repeat(32),
         userMessageId: "u-account",
+        messageId: "m-asst",
         userMessage: "hello",
         accountAuth: {
           baseUrl: "https://api.test.example/v1/account",
@@ -306,6 +320,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-no-history",
         traceId: "c".repeat(32),
         userMessageId: "u-no-history",
+        messageId: "m-asst",
         userMessage: "hello",
       },
       "/tmp/ws",
@@ -326,6 +341,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-empty-history",
         traceId: "d".repeat(32),
         userMessageId: "u-empty-history",
+        messageId: "m-asst",
         userMessage: "hello",
         history: [],
       },
@@ -344,6 +360,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-rows-history",
         traceId: "e".repeat(32),
         userMessageId: "u-rows-history",
+        messageId: "m-asst",
         userMessage: "hello",
         history: [{ role: "user", content: "先前问" }],
       },
@@ -367,6 +384,7 @@ describe("SidecarManager userId passthrough", () => {
         turnId: "turn-no-account",
         traceId: "b".repeat(32),
         userMessageId: "u-no-account",
+        messageId: "m-asst",
         userMessage: "hello",
       },
       "/tmp/ws",

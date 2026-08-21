@@ -82,10 +82,47 @@ def test_turn_queue_started_payload():
         queue_id="q1",
         conversation_id="c1",
         remaining_depth=2,
+        content="next",
     )
     assert ev.type is EventType.TURN_QUEUE_STARTED
     assert ev.payload["remaining_depth"] == 2
+    assert ev.payload["content"] == "next"
+    assert "attachments" not in ev.payload
+    assert "agent_mentions" not in ev.payload
     TurnQueueStartedPayload.model_validate(ev.payload)
+
+    empty_lists = turn_queue_started(
+        queue_id="q1",
+        conversation_id="c1",
+        remaining_depth=0,
+        content="next",
+        attachments=[],
+        agent_mentions=[],
+    )
+    assert "attachments" not in empty_lists.payload
+    assert "agent_mentions" not in empty_lists.payload
+
+    att = {
+        "name": "note.md",
+        "path": "note.md",
+        "text": "",
+        "truncated": False,
+        "kind": "file",
+        "conversation_id": None,
+        "binary": False,
+        "workspace_path": "attachments/note.md",
+    }
+    full = turn_queue_started(
+        queue_id="q1",
+        conversation_id="c1",
+        remaining_depth=0,
+        content="with file",
+        attachments=[att],
+        agent_mentions=[{"agent_id": "a1", "role": "研究员"}],
+    )
+    assert full.payload["attachments"] == [att]
+    assert full.payload["agent_mentions"] == [{"agent_id": "a1", "role": "研究员"}]
+    TurnQueueStartedPayload.model_validate(full.payload)
 
 
 def test_user_interjection_received_payload():

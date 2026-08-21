@@ -11,12 +11,33 @@ from agentcore.fulfill.user_signal import (
     queue_account_snapshot_frame,
 )
 from agentcore.runtime.events import EventSink
-from agentcore.runtime.turn.queue import QueuedTurn, TurnQueue, new_queued_turn, turn_queue
+from agentcore.runtime.turn.queue import (
+    QueuedTurn,
+    TurnQueue,
+    new_queued_turn,
+    resolve_client_turn_ids,
+    turn_queue,
+)
 from agentcore.runtime.turn.runs import TurnRunRegistry, turn_runs
 
 
 async def _never() -> None:
     await asyncio.Future()
+
+
+def test_resolve_client_turn_ids_keeps_desktop_and_fills_missing():
+    kept = resolve_client_turn_ids(
+        user_message_id="u1",
+        message_id="m1",
+        trace_id="a" * 32,
+    )
+    assert kept == ("u1", "m1", "a" * 32)
+    minted = resolve_client_turn_ids()
+    assert minted[0] and minted[1]
+    assert len(minted[2]) == 32
+    hyphen = resolve_client_turn_ids(trace_id="not-hex")
+    assert hyphen[2] != "not-hex"
+    assert len(hyphen[2]) == 32
 
 
 def test_enqueue_reports_visible_position_and_depth():
@@ -196,6 +217,7 @@ async def test_start_queued_turn_emits_started_before_stream(monkeypatch):
         assert types[0] is EventType.TURN_QUEUE_STARTED
         assert sink._history[0].payload["queue_id"] == "q-started"  # noqa: SLF001
         assert sink._history[0].payload["remaining_depth"] == 1  # noqa: SLF001
+        assert sink._history[0].payload["content"] == "next"  # noqa: SLF001
         sink.close()
         done.set()
 

@@ -4,12 +4,18 @@ import {
 } from "@/services/accountStateIngress";
 import { ApiError, api } from "@/services/api";
 import {
+  clearActiveSidecarTurn,
+  resetSidecarRoutingForTests,
+  setActiveSidecarTurn,
+} from "@/services/sidecarRouting";
+import {
   cancelQueuedTurn,
   clearQueuedTurnLocally,
   steerQueuedTurn,
 } from "@/services/turns/cancelQueuedTurn";
 import { sendMidFlightMessage } from "@/services/turns/midFlight";
 import { useConversationStore } from "@/stores/conversation";
+import { EMPTY_RUNTIME } from "@/stores/conversation/runtime";
 import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -91,6 +97,7 @@ const SNAPSHOT_MENTIONS = [{ agent_id: "agent-research", role: "研究员" }];
 beforeEach(() => {
   post.mockReset();
   sendMidFlight.mockReset();
+  resetSidecarRoutingForTests();
   useConversationStore.setState({ currentConversationId: null, byId: {} });
   useQueuedTurnsStore.setState({ byConversation: {} });
   resetAccountStateIngressForTests();
@@ -100,7 +107,9 @@ beforeEach(() => {
 
 afterEach(() => {
   resetAccountStateIngressForTests();
+  resetSidecarRoutingForTests();
   useQueuedTurnsStore.setState({ byConversation: {} });
+  vi.unstubAllGlobals();
 });
 
 describe("clearQueuedTurnLocally", () => {
@@ -166,6 +175,65 @@ describe("cancelQueuedTurn", () => {
       {},
     );
     expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
+  });
+
+  it("sidecar live 走 RPC，不 POST 云 cancel", async () => {
+    seedQueuedBarOnly();
+    setActiveSidecarTurn(CID, "root-1", "sub");
+    const cancelRpc = vi.fn().mockResolvedValue({ status: "cancelled" });
+    vi.stubGlobal("window", { sidecarApi: { cancelQueuedTurn: cancelRpc } });
+
+    await expect(cancelQueuedTurn(CID, "q1")).resolves.toBe("cancelled");
+    expect(cancelRpc).toHaveBeenCalledWith({
+      rootId: "root-1",
+      subpath: "sub",
+      conversationId: CID,
+      queueId: "q1",
+    });
+    expect(post).not.toHaveBeenCalled();
+    expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
+  });
+
+  it("sidecar RPC not_found → already_gone，仍清条", async () => {
+    seedQueuedBarOnly();
+    setActiveSidecarTurn(CID, "root-1", "");
+    const cancelRpc = vi.fn().mockResolvedValue({ status: "not_found" });
+    vi.stubGlobal("window", { sidecarApi: { cancelQueuedTurn: cancelRpc } });
+
+    await expect(cancelQueuedTurn(CID, "q1")).resolves.toBe("already_gone");
+    expect(post).not.toHaveBeenCalled();
+    expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
+  });
+
+  it("executionVia=sidecar 无 live 仍走 RPC（last target）", async () => {
+    seedQueuedBarOnly();
+    setActiveSidecarTurn(CID, "root-1", "");
+    clearActiveSidecarTurn(CID);
+    useConversationStore.setState((s) => ({
+      byId: {
+        ...s.byId,
+        [CID]: {
+          ...(s.byId[CID] ?? EMPTY_RUNTIME),
+          executionVia: "sidecar",
+        },
+      },
+    }));
+    const cancelRpc = vi.fn().mockResolvedValue({ status: "cancelled" });
+    vi.stubGlobal("window", { sidecarApi: { cancelQueuedTurn: cancelRpc } });
+
+    await expect(cancelQueuedTurn(CID, "q1")).resolves.toBe("cancelled");
+    expect(cancelRpc).toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("无 sidecar live 且非本机队 → 仍走云 POST", async () => {
+    seedQueuedBarOnly();
+    const cancelRpc = vi.fn();
+    vi.stubGlobal("window", { sidecarApi: { cancelQueuedTurn: cancelRpc } });
+    post.mockResolvedValueOnce({});
+    await expect(cancelQueuedTurn(CID, "q1")).resolves.toBe("cancelled");
+    expect(cancelRpc).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalled();
   });
 });
 

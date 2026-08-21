@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from agentcore.conversation.store import CloudStore, get_cloud_store
 from agentcore.conversation.store import cloud as cloud_mod
@@ -289,6 +290,82 @@ async def test_begin_turn_propagates_placeholder_failure(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="db down"):
+        await CloudStore().begin_turn(conversation_id="c1", message_id="m1", trace_id="t" * 32)
+
+
+async def test_begin_turn_same_assistant_id_is_idempotent(monkeypatch):
+    creates = 0
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def create_assistant_placeholder(self, **kw):
+            nonlocal creates
+            creates += 1
+            if creates > 1:
+                raise IntegrityError("INSERT", {}, Exception("messages_pkey"))
+            return SimpleNamespace(id=kw["message_id"])
+
+        async def get_by_id(self, message_id, *, conversation_id):
+            return SimpleNamespace(
+                id=message_id,
+                conversation_id=conversation_id,
+                role="assistant",
+                usage={"status": "running"},
+            )
+
+    class CM:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *_a):
+            return False
+
+    monkeypatch.setattr(cloud_mod, "async_session_factory", lambda: CM())
+    monkeypatch.setattr(cloud_mod, "MessageRepository", Repo)
+    monkeypatch.setattr(
+        "agentcore.runtime.turn.interrupt.settle_prior_running_assistants",
+        AsyncMock(return_value=0),
+    )
+
+    store = CloudStore()
+    await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="t" * 32)
+    await store.begin_turn(conversation_id="c1", message_id="m1", trace_id="t" * 32)
+    assert creates == 2
+
+
+async def test_begin_turn_id_conflict_with_user_row_still_raises(monkeypatch):
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def create_assistant_placeholder(self, **_kw):
+            raise IntegrityError("INSERT", {}, Exception("messages_pkey"))
+
+        async def get_by_id(self, message_id, *, conversation_id):
+            return SimpleNamespace(
+                id=message_id,
+                conversation_id=conversation_id,
+                role="user",
+                usage=None,
+            )
+
+    class CM:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *_a):
+            return False
+
+    monkeypatch.setattr(cloud_mod, "async_session_factory", lambda: CM())
+    monkeypatch.setattr(cloud_mod, "MessageRepository", Repo)
+    monkeypatch.setattr(
+        "agentcore.runtime.turn.interrupt.settle_prior_running_assistants",
+        AsyncMock(return_value=0),
+    )
+
+    with pytest.raises(IntegrityError):
         await CloudStore().begin_turn(conversation_id="c1", message_id="m1", trace_id="t" * 32)
 
 

@@ -833,17 +833,10 @@ export interface DeliveryArtifact {
   derived_from?: string;
 }
 
-/** One 成品归位 move on ``delivery_status.promoted``（AI 工作间 → 用户工作区）.
+/** Historical ``delivery_status.promoted`` row（AI 工作间 → 用户工作区）.
  * 
- * 归位是**移动**不是标记（标记离开产品 UI 那刻即失效：ZIP 里没有、合回本机也没有），
- * so ``from`` no longer exists on disk and ``to`` is where the product lives now.
- * The same payload's ``delivered_files`` / ``artifacts[].path`` are rewritten to
- * ``to`` — this row is the only remaining link back to the old path (审计按旧路径
- * 回查时的唯一线索).
- * 
- * 位置态，与 ``status=accepted``（质量态）正交：只有 accepted 的产物可归位，但归位
- * 本身不改验收结论。**空数组是合法状态**（字段缺省即空）——多幕协作的中间幕本就
- * 零归位，不得据此报错或拦收口。 */
+ * ``promote_product`` 已撤销；本结构只兼容旧事件。``from`` 是当时的旧路径，``to``
+ * 是搬走后的位置。空数组是合法状态（字段缺省即空）。 */
 export interface DeliveryPromotion {
   /** AI 工作间旧路径（已不存在） */
   from: string;
@@ -861,9 +854,8 @@ export interface DeliveryPromotion {
  * 声明路径失配为 path_mismatch blocking，不得 delivered。
  * ``artifacts``: path-level acceptance (accepted+rejected); ``delivered_files``
  * remains accepted-only for older clients.
- * ``promoted``: 这张对账卡上已 ``promote_product`` 归位的成品（``{from, to}``）。CEO 在
- * 收口前调用后本事件按同 ``execution_id`` 重发，路径已改写为 ``to``；跨回合再归位时
- * 旧行保留（旧路径的回查线索）。无归位时字段缺省（= 空数组，合法状态）。 */
+ * ``promoted``: 历史 ``{from, to}`` 归位行（``promote_product`` 已撤销；新回合不再写入）。
+ * 旧卡 journal 重放仍带此字段；无归位时缺省（= 空数组）。 */
 export interface DeliveryStatusPayload {
   execution_id: string;
   state: DeliveryState;
@@ -918,15 +910,41 @@ export interface TurnQueuedPayload {
   degraded_from?: "steer";
 }
 
-/** FIFO dequeue → turn starting (D9 · 发送即有流). EPHEMERAL — clear queue-id light UI.
+/** Same fields as REST ``QueuedTurnItem`` / send-turn ``MessageAttachment``.
+ * 
+ * Nested on ``turn_queue_started`` so the timeline entrance frame is self-describing
+ * (not the thinner ``UserInterjectionAttachment``). */
+export interface MessageAttachment {
+  name: string;
+  path: string;
+  text?: string;
+  truncated?: boolean;
+  kind?: "file" | "dir" | "conversation";
+  conversation_id?: string | null;
+  binary?: boolean;
+  workspace_path?: string | null;
+}
+
+/** Same fields as REST ``QueuedTurnItem.agent_mentions`` / ``AgentMention``. */
+export interface AgentMention {
+  agent_id: string;
+  role: string;
+}
+
+/** FIFO dequeue → timeline user-bubble entrance (D9 · 发送即有流).
  * 
  * Emitted as the **first frame** of the drained turn's EventSink (after ``pop_next``,
- * before ``stream_chat`` / ``message_start``). ``remaining_depth`` is the queue length
- * after this item left the FIFO. */
+ * before ``stream_chat`` / ``message_start``). ``content`` is the queued user text
+ * (on the frame — not persist-first). Empty ``attachments`` / ``agent_mentions`` are
+ * absent. ``remaining_depth`` is the queue length after this item left the FIFO.
+ * EPHEMERAL — reload 靠 REST; 不落 journal. */
 export interface TurnQueueStartedPayload {
   queue_id: string;
   conversation_id: string;
   remaining_depth: number;
+  content: string;
+  attachments?: MessageAttachment[];
+  agent_mentions?: AgentMention[];
 }
 
 /** Per-item queue cancel ack (同对话再发 · drain 前取消). EPHEMERAL — multi-client UI clear. */

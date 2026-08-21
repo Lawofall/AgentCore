@@ -19,6 +19,11 @@ vi.mock("../log-service", () => ({
   logDesktop: vi.fn(),
 }));
 
+vi.mock("../outbox/projection", () => ({
+  occupyLocalTurnBegin: vi.fn(async () => true),
+  abortLocalTurnPlaceholder: vi.fn(async () => undefined),
+}));
+
 import {
   SidecarManager,
   isDestroyedWebContentsError,
@@ -26,9 +31,13 @@ import {
 import type { Transport } from "../sidecar/transport";
 
 /** Fake stdio transport: complete initialize, hang startTurn/resume, inject notifications. */
-function hangingTransport() {
+function hangingTransport(
+  opts: { queuedTurns?: Array<Record<string, unknown>> } = {},
+) {
   let lineCb: ((line: string) => void) | null = null;
   const pending = new Map<number, string>();
+  const queuedTurns = opts.queuedTurns ?? [];
+  const sentMethods: string[] = [];
   const transport: Transport = {
     send: (line) => {
       const msg = JSON.parse(line) as {
@@ -37,6 +46,7 @@ function hangingTransport() {
       };
       if (typeof msg.id === "number" && msg.method) {
         pending.set(msg.id, msg.method);
+        sentMethods.push(msg.method);
         if (msg.method === "initialize") {
           Promise.resolve().then(() => {
             lineCb?.(
@@ -44,6 +54,16 @@ function hangingTransport() {
                 jsonrpc: "2.0",
                 id: msg.id,
                 result: { ok: true },
+              }),
+            );
+          });
+        } else if (msg.method === "listQueuedTurns") {
+          Promise.resolve().then(() => {
+            lineCb?.(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: msg.id,
+                result: { items: queuedTurns },
               }),
             );
           });
@@ -76,7 +96,7 @@ function hangingTransport() {
     }
   }
 
-  return { transport, notify, settleTurn };
+  return { transport, notify, settleTurn, sentMethods };
 }
 
 function mockWc(destroyed = false) {
@@ -141,6 +161,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         turnId: "turn-1",
         traceId: "a".repeat(32),
         userMessageId: "u1",
+        messageId: "m-asst",
         userMessage: "hello",
       },
       "/tmp/ws",
@@ -186,6 +207,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         turnId: "turn-2",
         traceId: "b".repeat(32),
         userMessageId: "u2",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -262,6 +284,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         turnId: "turn-3",
         traceId: "c".repeat(32),
         userMessageId: "u3",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -307,6 +330,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         turnId: "turn-4",
         traceId: "d".repeat(32),
         userMessageId: "u4",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -445,6 +469,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         turnId: "turn-d2",
         traceId: "f".repeat(32),
         userMessageId: "u-d2",
+        messageId: "m-asst",
         userMessage: "hello",
       },
       "/tmp/ws",
@@ -484,6 +509,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         turnId: "turn-d2-synth",
         traceId: "1".repeat(32),
         userMessageId: "u-d2-synth",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -524,6 +550,7 @@ describe("SidecarManager recovery / attach (D7)", () => {
         turnId: "turn-d2-real",
         traceId: "2".repeat(32),
         userMessageId: "u-d2-real",
+        messageId: "m-asst",
         userMessage: "q",
       },
       "/tmp/ws",
@@ -565,5 +592,42 @@ describe("isDestroyedWebContentsError (D2)", () => {
     expect(isDestroyedWebContentsError(new Error("channel closed"))).toBe(
       false,
     );
+  });
+
+  it("recovery merges listQueuedTurns when sidecar process is live", async () => {
+    const t = hangingTransport({
+      queuedTurns: [{ queueId: "q1", content: "下一句", position: 1 }],
+    });
+    const manager = new SidecarManager(() => t.transport);
+    const turnP = manager.startTurn(
+      mockWc() as never,
+      {
+        conversationId: "c-queue",
+        rootId: "r1",
+        turnId: "turn-q",
+        traceId: "f".repeat(32),
+        userMessageId: "u-q",
+        messageId: "m-asst",
+        userMessage: "hello",
+      },
+      "/tmp/ws",
+    );
+    await waitLive(manager, "c-queue");
+    const recovery = await manager.recovery({ conversationId: "c-queue" });
+    expect(t.sentMethods).toContain("listQueuedTurns");
+    expect(recovery.queuedTurns).toEqual([
+      { queueId: "q1", content: "下一句", position: 1 },
+    ]);
+    t.settleTurn({ turnId: "turn-q", ...TURN_RESULT });
+    await turnP;
+  });
+
+  it("recovery omits queuedTurns when no sidecar process", async () => {
+    const manager = new SidecarManager(() => {
+      throw new Error("must not spawn");
+    });
+    const recovery = await manager.recovery({ conversationId: "c-none" });
+    expect(recovery.queuedTurns).toBeUndefined();
+    expect(recovery.liveRunning).toBe(false);
   });
 });

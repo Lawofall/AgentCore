@@ -105,6 +105,11 @@ export interface SidecarStartTurnRequest {
    * 主进程回写器据此组 `RecordTurnRequest.user_message_id`，与云端 finalize 去重对齐。
    */
   userMessageId: string;
+  /**
+   * 本轮助手行 id（干净 UUID，与 `userMessageId` 同级，桌面铸造）。
+   * sidecar 禁止再 `new_id()` 铸助手 id；`turnId` 仍是 `t_…` 取消键。
+   */
+  messageId: string;
   /** 用户本轮消息正文。 */
   userMessage: string;
   /**
@@ -160,7 +165,16 @@ export interface SidecarStartTurnRequest {
    * `folder.localSubpath ?? ""`；无绑定 → `null`。进 RPC；勿与寻址用 `subpath` 混淆。
    */
   localSubpath?: string | null;
+  /**
+   * 本机 FIFO 出队：带上 queueId 时 sidecar 首帧发 ``turn_queue_started``。
+   * 桌面 ``queue/needStart`` 通知后走同一条 startTurn（先占位再开跑）。
+   */
+  queueId?: string;
+  attachments?: SidecarQueuedAttachment[];
 }
+
+/** sidecar → 桌面：FIFO 已出队，请按用户回合 ``startTurn``（先占位）。 */
+export const SIDECAR_QUEUE_NEED_START = "queue/needStart";
 
 /** 一条历史消息（与引擎 `run_chat_pipeline` 的 history 形状对齐）。 */
 export interface SidecarHistoryEntry {
@@ -578,6 +592,17 @@ export interface SidecarWarmAccountRulesMemoryResult {
 }
 
 /**
+ * 文件页写成功后：对已经在跑的 sidecar 强制重暖 rules/memory 快照。
+ * 不 spawn 新进程。无活 sidecar / 无票则空操作。
+ */
+export interface SidecarRefreshLiveAccountRulesMemoryRequest {
+  /** account 窄票；缺省则主进程跳过。 */
+  accountAuth?: SidecarAccountAuth;
+  /** 登录账号 id；与 startTurn.userId 同形。 */
+  userId?: string;
+}
+
+/**
  * 主进程 → renderer 的回合事件推送。`event` 与服务端 SSE 的事件同形状
  * （`@/types/events` 的 `SSEEvent`），故 renderer 可把它**原样**喂给同一个
  * `dispatchSSEEvent`——云 / 本地两条链路共用一套事件处理，零额外分支。
@@ -700,6 +725,95 @@ export interface SidecarDebateSteerRequest {
   askTarget?: string;
 }
 
+/**
+ * 本机 live 插话 / 排队（对偶 ``debateSteer``：走 sidecar RPC，禁止 POST 云
+ * ``/v1/conversations/.../messages``）。
+ */
+export interface SidecarDeliverMessageRequest {
+  rootId: string;
+  subpath?: string;
+  conversationId: string;
+  content: string;
+  delivery: "steer" | "queue";
+  /**
+   * 排队出队开跑用的用户气泡 id（干净 UUID）。插队 received 仍下发；占用中不得 begin。
+   */
+  userMessageId: string;
+  /**
+   * 排队出队开跑用的助手行 id（干净 UUID，桌面铸造）。与 QueuedTurnsBar 的
+   * `messageId`（用户泡）不是同一个字段。
+   */
+  messageId: string;
+  /** 32-hex；禁止 sidecar `new_id()` 当 trace。 */
+  traceId: string;
+  attachments?: SidecarQueuedAttachment[];
+  agentMentions?: SidecarAgentMention[];
+}
+
+/** 排队附件：与 REST ``MessageAttachment`` / 桌面 ``OutgoingAttachment`` 同形。 */
+export interface SidecarQueuedAttachment {
+  name: string;
+  path: string;
+  text?: string;
+  truncated?: boolean;
+  kind?: "file" | "dir" | "conversation";
+  conversation_id?: string;
+  binary?: boolean;
+  workspace_path?: string;
+}
+
+/**
+ * ``deliverMessage`` 回执。失败（无进程 / RPC 抛错）不得收成 received/queued。
+ * 事件仍走现有 ``turn/event`` 泵。
+ */
+export type SidecarDeliverMessageAck =
+  | { status: "received"; interjectionId: string }
+  | {
+      status: "queued";
+      queueId: string;
+      position: number;
+      queueDepth: number;
+      degradedFrom?: "steer";
+    }
+  | { status: "blocked"; code?: string };
+
+/** 按项取消本机 FIFO 排队。 */
+export interface SidecarCancelQueuedTurnRequest {
+  rootId: string;
+  subpath?: string;
+  conversationId: string;
+  queueId: string;
+}
+
+/**
+ * 取消回执。``not_found`` = 已不在队（同云 404 → already_gone）。
+ */
+export type SidecarCancelQueuedTurnAck =
+  | { status: "cancelled" }
+  | { status: "not_found" };
+
+/** 列出本机 FIFO 排队（recovery hydrate / 对账）。 */
+export interface SidecarListQueuedTurnsRequest {
+  rootId: string;
+  subpath?: string;
+  conversationId: string;
+}
+
+export interface SidecarQueuedTurnItem {
+  queueId: string;
+  content: string;
+  position: number;
+  queueDepth?: number;
+  interjectionId?: string;
+  degradedFrom?: "steer";
+  attachments?: SidecarQueuedAttachment[];
+  agentMentions?: SidecarAgentMention[];
+}
+
+export interface SidecarListQueuedTurnsResult {
+  items: SidecarQueuedTurnItem[];
+}
+
 /** 本机 outbox 未同步回合的投影自足摘要（recovery → renderer D5，不透传 journal）。 */
 export interface SidecarUnsyncedTurnSummary {
   user_message_id: string;
@@ -739,6 +853,11 @@ export interface SidecarRecoveryResponse {
    * 与 ``paused[]`` summary 分离：summary 只喂开工卡 store，runs 走 hydrate。
    */
   pausedRuns?: Record<string, SidecarRunsPayload>;
+  /**
+   * 本机 FIFO 排队（sidecar 进程在且 ``listQueuedTurns`` 成功时带上，含空表）。
+   * 缺省 = 未问到（无进程 / RPC 失败）——hydrate 不得当成空队冲掉本机条。
+   */
+  queuedTurns?: SidecarQueuedTurnItem[];
 }
 
 /** 重绑本窗口并取回缓冲事件快照（零 await 段在主进程 handler 内）。 */
@@ -775,11 +894,15 @@ export const SIDECAR_CHANNELS = {
   runRedirect: "sidecar:runRedirect",
   runStop: "sidecar:runStop",
   debateSteer: "sidecar:debateSteer",
+  deliverMessage: "sidecar:deliverMessage",
+  cancelQueuedTurn: "sidecar:cancelQueuedTurn",
+  listQueuedTurns: "sidecar:listQueuedTurns",
   resume: "sidecar:resume",
   probe: "sidecar:probe",
   warmCodeIndex: "sidecar:warmCodeIndex",
   warmMcpDiscover: "sidecar:warmMcpDiscover",
   warmAccountRulesMemory: "sidecar:warmAccountRulesMemory",
+  refreshLiveAccountRulesMemory: "sidecar:refreshLiveAccountRulesMemory",
   recovery: "sidecar:recovery",
   attach: "sidecar:attach",
   turnFilesDiff: "sidecar:turnFilesDiff",
@@ -807,6 +930,21 @@ export interface SidecarApi {
   runStop(req: SidecarRunStopRequest): Promise<SidecarInterveneAck>;
   /** `accepted=false` = 引擎未收（掌舵窗口已关 / sidecar 不可达）；调用方须如实回执。 */
   debateSteer(req: SidecarDebateSteerRequest): Promise<{ accepted: boolean }>;
+  /**
+   * 本机 live 插话 / 排队。回执 received/queued/blocked；无进程或 RPC 失败须 reject，
+   * 调用方不得当成发送成功、禁止回落云 POST。
+   */
+  deliverMessage(
+    req: SidecarDeliverMessageRequest,
+  ): Promise<SidecarDeliverMessageAck>;
+  /** 取消本机 FIFO 排队项。``not_found`` = 已不在队。 */
+  cancelQueuedTurn(
+    req: SidecarCancelQueuedTurnRequest,
+  ): Promise<SidecarCancelQueuedTurnAck>;
+  /** 列出本机 FIFO 排队快照。无进程 → ``items: []``。 */
+  listQueuedTurns(
+    req: SidecarListQueuedTurnsRequest,
+  ): Promise<SidecarListQueuedTurnsResult>;
   /** 续跑一个持久挂起的本地回合；Promise 在续跑结束时 resolve（同 `startTurn` 携最终结果，
    * 过程事件经 `onEvent` 推来）。 */
   resume(req: SidecarResumeRequest): Promise<SidecarTurnResult>;
@@ -831,6 +969,13 @@ export interface SidecarApi {
    */
   warmAccountRulesMemory(
     req: SidecarWarmAccountRulesMemoryRequest,
+  ): Promise<void>;
+  /**
+   * 文件页写入成功后强制刷新活 sidecar 的 rules/memory 快照（忽略 TTL）。
+   * 不 spawn；失败可忽略。
+   */
+  refreshLiveAccountRulesMemory(
+    req: SidecarRefreshLiveAccountRulesMemoryRequest,
   ): Promise<void>;
   /** 查询本地恢复面（活回合 + 未同步 outbox + 挂起帧）；零 spawn。 */
   recovery(req: SidecarRecoveryRequest): Promise<SidecarRecoveryResponse>;
