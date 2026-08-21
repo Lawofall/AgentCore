@@ -1,6 +1,6 @@
 {
   "name": "agentcore-mobile",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "private": true,
   "type": "module",
   "description": "AgentCore Mobile - 手机端 web 客户端 (桌面端减能力层; 前端技术与架构 §七)",
