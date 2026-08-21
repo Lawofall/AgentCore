@@ -74,4 +74,27 @@ describe("SidePanelSurfaceBody — 文件 tab 的未知期", () => {
       "local:root-1",
     );
   });
+
+  it("memory 通道用设定源，不走工作区盘", () => {
+    useFileTabSourceState.mockReturnValue({
+      source: { id: "workspace:cloud" } as FileSource,
+      pending: false,
+    });
+    const memoryTab: DetailTab = {
+      id: "file:memory:project/f1/profile",
+      kind: "file",
+      title: "画像.md",
+      path: "project/f1/profile",
+      name: "画像.md",
+      channel: "memory",
+    };
+    useSidePanelStore.setState({
+      tabs: [memoryTab],
+      activeTabId: memoryTab.id,
+    });
+    render(<SidePanelSurfaceBody tabId={memoryTab.id} />);
+    expect(screen.getByTestId("file-detail").getAttribute("data-source")).toBe(
+      "memory",
+    );
+  });
 });

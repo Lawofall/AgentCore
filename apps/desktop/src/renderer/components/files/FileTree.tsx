@@ -48,6 +48,7 @@ import type {
   FileTreeChromeState,
   FileTreeHandle,
 } from "./fileTreeTypes";
+import { watchDirsForExpanded, withVirtualAgentCore } from "./fileTreeWorkroom";
 import { Centered, EmptyHint, InlineError, TruncatedNotice } from "./parts";
 import { useFileTreeBatch } from "./useFileTreeBatch";
 import { useFileTreeData } from "./useFileTreeData";
@@ -103,6 +104,15 @@ interface FileTreeProps {
    * 兄弟排序依据（默认按名称）。只重排已在内存里的层，不会重新拉取。
    */
   sortBy?: FileSortBy;
+  /**
+   * Bound-folder entries, rendered inside the expanded ``.agentcore`` row.
+   * When set and the disk dir is missing, a virtual ``AgentCore`` row is prepended
+   * so the entries still have a drawer.
+   */
+  renderWorkroomLead?: (indent: number) => React.ReactNode;
+  /** Deep-link: expand these dirs once (``AgentCore`` for memory cards). */
+  forceExpandPaths?: readonly string[];
+  onForceExpandApplied?: () => void;
 }
 
 export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
@@ -120,6 +130,9 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
       filterQuery = "",
       hideRootDirs,
       sortBy = "name",
+      renderWorkroomLead,
+      forceExpandPaths,
+      onForceExpandApplied,
     },
     ref,
   ) {
@@ -127,11 +140,18 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
     const [expanded, setExpanded] = useState<Set<string>>(() =>
       loadExpanded(source.id),
     );
+    // Render / filter / keyboard-select-all share this view (virtual ``.agentcore``
+    // + hideRootDirs). data.childrenOf stays the disk map for truncated counts.
+    const childrenOf = withVirtualAgentCore(data.childrenOf, {
+      injectVirtual: Boolean(renderWorkroomLead),
+      hideRootDirs,
+      sortBy,
+    });
     const filterActive = filterQuery.trim().length > 0;
     // childrenOf reads live refs; this component re-renders on data bumps, so
     // recompute each render (no stale memo over unloaded dirs).
     const filterResult = filterActive
-      ? computeFileTreeFilter(data.childrenOf, filterQuery)
+      ? computeFileTreeFilter(childrenOf, filterQuery)
       : null;
     const filterVisible = filterResult?.visible ?? null;
     const forceExpandKey = filterResult
@@ -157,10 +177,9 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 
     // 选区（复制/剪切/删除的作用对象）与批量动作。可见行顺序即渲染顺序，Shift 连选据此取区间。
     const visibleRows = flattenVisibleRows({
-      childrenOf: data.childrenOf,
+      childrenOf,
       expanded: effectiveExpanded,
       filterVisible,
-      hideRootDirs,
     });
     const batch = useFileTreeBatch({
       source,
@@ -204,7 +223,9 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
     const runSilentRefresh = useCallback(async () => {
       const tree = dataRef.current;
       const src = sourceRef.current;
-      const dirs = src.listTree ? [""] : ["", ...expandedRef.current];
+      const dirs = src.listTree
+        ? [""]
+        : watchDirsForExpanded(expandedRef.current);
       const wasEmpty = dirs.filter(
         (dir) => (tree.childrenOf(dir)?.length ?? 0) === 0,
       );
@@ -244,7 +265,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
     useEffect(() => {
       const watch = sourceRef.current.watch;
       if (!watch || !sourceRef.current.caps.watch) return;
-      const offs = ["", ...effectiveExpanded].map((dir) =>
+      const offs = watchDirsForExpanded(effectiveExpanded).map((dir) =>
         watch(dir, () => scheduleSilentRefresh()),
       );
       return () => {
@@ -291,6 +312,28 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
       },
       [data, source.id],
     );
+
+    const workroomExpandKey = (forceExpandPaths ?? []).join("\0");
+    const revealAppliedRef = useRef(false);
+    useEffect(() => {
+      if (!workroomExpandKey) {
+        revealAppliedRef.current = false;
+        return;
+      }
+      if (revealAppliedRef.current) return;
+      revealAppliedRef.current = true;
+      const paths = workroomExpandKey.split("\0").filter(Boolean);
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        for (const p of paths) {
+          next.add(p);
+          data.ensureDir(p);
+        }
+        saveExpanded(source.id, next);
+        return next;
+      });
+      onForceExpandApplied?.();
+    }, [workroomExpandKey, data, source.id, onForceExpandApplied]);
 
     const collapseAll = useCallback(() => {
       saveExpanded(source.id, new Set());
@@ -595,14 +638,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 
     const rootStatus = data.statusOf("");
     const loadedRootChildren = data.childrenOf("");
-    // Child folders own their own rail row; hiding them here is what keeps a
-    // nested folder from also showing up as a plain directory of its parent.
-    const rootChildren =
-      loadedRootChildren && hideRootDirs?.length
-        ? loadedRootChildren.filter(
-            (n) => !(n.isDir && hideRootDirs.includes(n.name)),
-          )
-        : loadedRootChildren;
+    const rootChildren = childrenOf("");
     const visibleRootChildren = filterVisible
       ? (rootChildren ?? []).filter((n) => filterVisible.has(n.path))
       : (rootChildren ?? []);
@@ -809,6 +845,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
               onUpload={drop.onUpload}
               onDropTarget={setDropTarget}
               onReloadDir={(dir) => data.reload(dir)}
+              renderWorkroomLead={renderWorkroomLead}
             />
           ))}
           {data.truncatedOf("") && (

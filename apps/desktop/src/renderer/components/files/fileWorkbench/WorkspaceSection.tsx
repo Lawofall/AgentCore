@@ -82,8 +82,8 @@ import {
 /**
  * One workspace root = a **collapsible section**: a header (chevron + name +
  * create buttons) with its file tree shown beneath **only when expanded**.
- * Folders (`folder:<id>`) may also render nested folder rows (`nested`) and a
- * `folderRail` (flat AgentCore entries) above the file tree.
+ * Folders (`folder:<id>`) may also render nested folder rows (`nested`) and
+ * folder-scope entries inside the tree's ``.agentcore`` row (`renderWorkroomLead`).
  *
  * - `folder:<id>` 文件夹：右键可重命名 / 「删除文件夹」（与侧栏 {@link WorkspaceGroupHeader}
  *   同构）。文件中枢不列 `conv:` scratch（裸聊写盘进自动建桌）。
@@ -96,7 +96,9 @@ export function WorkspaceSection({
   onToggle,
   onOpenFile,
   flashing,
-  folderRail,
+  renderWorkroomLead,
+  forceExpandWorkroom = false,
+  onWorkroomRevealApplied,
   nested,
   depth = 0,
   hideRootDirs,
@@ -113,8 +115,10 @@ export function WorkspaceSection({
   onToggle: () => void;
   onOpenFile: (path: string, name: string) => void;
   flashing: boolean;
-  /** Folder-only rail children (记忆 → 规则), rendered above the file tree when expanded. */
-  folderRail?: ReactNode;
+  /** Folder-scope entries, rendered inside the expanded ``.agentcore`` row. */
+  renderWorkroomLead?: (indent: number) => ReactNode;
+  forceExpandWorkroom?: boolean;
+  onWorkroomRevealApplied?: () => void;
   /** Nested folder rows (我的文件 tree), rendered directly under the header. */
   nested?: ReactNode;
   /** Nesting level inside 我的文件 — indents the header and its tree. */
@@ -505,6 +509,9 @@ export function WorkspaceSection({
       filterQuery={filterQuery}
       sortBy={sortBy}
       hideRootDirs={hideRootDirs}
+      renderWorkroomLead={renderWorkroomLead}
+      forceExpandPaths={forceExpandWorkroom ? ["AgentCore"] : undefined}
+      onForceExpandApplied={onWorkroomRevealApplied}
       onOpenFile={onOpenFile}
       emptyText="还没有文件——对话里 AI 产出的文件会落在这里"
     />
@@ -652,7 +659,6 @@ export function WorkspaceSection({
       {expanded && (
         <>
           {nested}
-          {folderRail}
           {tree}
         </>
       )}

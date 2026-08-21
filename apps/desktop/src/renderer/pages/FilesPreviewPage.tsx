@@ -1,6 +1,8 @@
 import { FileTree } from "@/components/files/FileTree";
 import { AgentCoreSection } from "@/components/files/fileWorkbench/AgentCoreSection";
+import { EntriesSection } from "@/components/files/fileWorkbench/EntriesSection";
 import { queryClient } from "@/lib/queryClient";
+import { AGENTCORE_ROOT } from "@/lib/stageDirs";
 import {
   FILES_PREVIEW_PROJECT_FOLDER_ID,
   FILES_PREVIEW_SCENES,
@@ -103,23 +105,25 @@ export function FilesPreviewPage() {
           <div className="px-2 pb-1 text-xs font-medium text-muted-foreground">
             示例文件夹
           </div>
-          <AgentCoreSection
-            scope={{ kind: "folder", folderId: PROJECT_FOLDER_ID }}
-            memoryActivePath={null}
-            documentActivePath={null}
-            onOpenEntry={() => undefined}
-            onEntryDeleted={() => undefined}
-            onEntryRenamed={() => undefined}
-            indent={14}
-            forceOpen
-          />
-          {/* 文件夹自己的盘上文件——与上面的条目区同屏，好核对两者已不同名。 */}
+          {/* 与生产同一挂法：全局设定钉顶；文件夹条目进树的 ``.agentcore`` 抽屉。 */}
           <FileTree
             source={filesPreviewSource}
             chrome={false}
             indent={14}
             activePath={null}
             onOpenFile={() => undefined}
+            forceExpandPaths={[AGENTCORE_ROOT]}
+            renderWorkroomLead={(indent) => (
+              <EntriesSection
+                scope={{ kind: "folder", folderId: PROJECT_FOLDER_ID }}
+                memoryActivePath={null}
+                documentActivePath={null}
+                onOpen={() => undefined}
+                onDeleted={() => undefined}
+                onRenamed={() => undefined}
+                indent={indent}
+              />
+            )}
           />
         </div>
       </div>

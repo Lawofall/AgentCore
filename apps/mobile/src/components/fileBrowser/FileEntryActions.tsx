@@ -2,12 +2,18 @@ import type { FileNode } from "@/api/workspace";
 import { Modal } from "@/components/Modal";
 import type { FileBrowserOps } from "@/components/fileBrowser/ops";
 import {
-  baseName,
   entryNameError,
   joinPath,
   moveTargetError,
   parentDir,
 } from "@/components/fileBrowser/paths";
+import {
+  canonicalBrowseDir,
+  displayDirName,
+  presentDirLabel,
+  presentPathLabel,
+  workroomChildren,
+} from "@/lib/stageDirs";
 // 一个条目的管理动作：重命名 / 移动 / 删除（云工作区可写）。
 //
 // 一个 sheet 起头，按选择进到各自的对话框——手机屏放不下常驻的行内按钮，长按也没有可见
@@ -92,7 +98,7 @@ export function FileEntryActions({
           const dst = joinPath(dir, entry.name);
           void run(() => ops.move(entry.path, dst), {
             from: entry.path,
-            message: `已移动到「${dir || "根目录"}」`,
+            message: `已移动到「${presentDirLabel(dir)}」`,
           });
         }}
       />
@@ -249,8 +255,8 @@ function MoveTargetPicker({
   onClose: () => void;
   onPick: (dir: string) => void;
 }) {
-  const [dir, setDir] = useState(parentDir(entry.path));
-  const folders = (tree.get(dir) ?? []).filter(
+  const [dir, setDir] = useState(canonicalBrowseDir(parentDir(entry.path)));
+  const folders = workroomChildren(tree, dir).filter(
     (n) => n.isDir && n.path !== entry.path,
   );
   const blocked = moveTargetError(entry, dir);
@@ -262,7 +268,9 @@ function MoveTargetPicker({
           type="button"
           className="link"
           disabled={busy}
-          onClick={() => (dir === "" ? onClose() : setDir(parentDir(dir)))}
+          onClick={() =>
+            dir === "" ? onClose() : setDir(canonicalBrowseDir(parentDir(dir)))
+          }
         >
           {dir === "" ? "取消" : "← 上一级"}
         </button>
@@ -271,7 +279,7 @@ function MoveTargetPicker({
       </header>
 
       <div className="move-picker-crumb muted">
-        目标：{dir === "" ? "根目录" : dir}
+        目标：{presentPathLabel(dir)}
       </div>
 
       <div className="list file-list">
@@ -283,15 +291,17 @@ function MoveTargetPicker({
               key={f.path}
               type="button"
               className="file-row"
-              aria-label={`进入文件夹 ${f.name}`}
+              aria-label={`进入文件夹 ${displayDirName(f.path, f.name)}`}
               disabled={busy}
-              onClick={() => setDir(f.path)}
+              onClick={() => setDir(canonicalBrowseDir(f.path))}
             >
               <span className="file-icon" aria-hidden>
                 <Folder size={16} />
               </span>
               <span className="file-row-main">
-                <span className="file-name">{f.name}</span>
+                <span className="file-name">
+                  {displayDirName(f.path, f.name)}
+                </span>
               </span>
               <span className="file-chevron" aria-hidden>
                 <ChevronRight size={18} />
@@ -310,9 +320,7 @@ function MoveTargetPicker({
           disabled={busy || !!blocked}
           onClick={() => onPick(dir)}
         >
-          {busy
-            ? "移动中…"
-            : `移动到「${dir === "" ? "根目录" : baseName(dir)}」`}
+          {busy ? "移动中…" : `移动到「${presentDirLabel(dir)}」`}
         </button>
       </div>
     </Modal>

@@ -1,4 +1,4 @@
-"""成品归位（``promote_product``）：CEO 把路径已核成品从 AI 工作间移进用户工作区。
+"""成品归位（``promote_product``）：CEO 把路径已核成品从 ``.agentcore`` 移进用户工作区。
 
 Hermetic：真 ``ServerWorkspace`` 落在 ``tmp_path``，断言磁盘真实结果——归位是**移动**
 不是标记，所以每个用例都查「旧路径没了 / 新路径在」，而不是只看回执文本。
@@ -159,7 +159,9 @@ async def test_paths_outside_the_ai_workspace_are_skipped(tmp_path: Path):
 
     assert result.success is True
     assert (tmp_path / "已在工作区.md").exists()
-    assert "AI 工作间" in result.output
+    assert ".agentcore" in result.output
+    assert "AgentCore/文档/" in result.output
+    assert "AI 工作间" not in result.output
 
 
 async def test_without_delivery_reconciliation_it_stops_and_reports(
@@ -190,6 +192,8 @@ async def test_dest_inside_agentcore_is_rejected(tmp_path: Path):
 
     assert result.success is False
     assert result.contract_failure is True
+    assert ".agentcore" in (result.error or "")
+    assert "AI 工作间" not in (result.error or "")
     assert (tmp_path / DRAFT).exists()
 
 
@@ -415,7 +419,9 @@ async def test_second_promotion_reads_the_rewritten_card_and_keeps_prior_rows(
     # 已在工作区的那份原地不动（不吃自己的尾巴），只搬还在工作间的。
     assert (tmp_path / "课程讲稿.md").exists()
     assert (tmp_path / "预算表.md").exists()
-    assert "AI 工作间" in result.output
+    assert ".agentcore" in result.output
+    assert "AgentCore/文档/" in result.output
+    assert "AI 工作间" not in result.output
     # 上一轮的 {from,to} 是旧路径唯一的回查线索，重发时必须还在。
     assert published[0]["promoted"] == [
         {"from": DRAFT, "to": "课程讲稿.md"},
@@ -454,6 +460,21 @@ def test_closing_declaration_lives_in_the_prompt_not_a_gate():
     assert "【成品归位】" not in without
     # 零归位可诚实答「无」——不是硬闸，收口不因此被拦。
     assert "本轮无成品归位" in with_tool
+    assert ".agentcore" in with_tool
+    assert "AgentCore/文档/" in with_tool
+    assert "AI 工作间" not in with_tool
+
+
+def test_schema_uses_agentcore_label_and_disk_path():
+    """用户/模型可见 schema 与 UI 同称 `.agentcore`，并点明盘上 `AgentCore/文档/`。"""
+    schema = PromoteProductTool().schema
+    paths_desc = schema.parameters["properties"]["paths"]["description"]
+    blob = schema.description + paths_desc
+
+    assert ".agentcore" in schema.description
+    assert "AgentCore/文档/" in blob
+    assert "AgentCore/文档/" in paths_desc
+    assert "AI 工作间" not in blob
 
 
 async def test_republish_failure_does_not_fail_the_move(tmp_path: Path):

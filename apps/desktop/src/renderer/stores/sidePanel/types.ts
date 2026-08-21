@@ -170,10 +170,13 @@ export interface TerminalDetailTab {
   sessionId: string | null;
 }
 
+/** File tab source channel — entries vs workspace disk. */
+export type FileTabChannel = "memory" | "document";
+
 /** Top-bar File content tab — path reference only; body keep-alives FileDetail. */
 export interface FileDetailTab {
   kind: "file";
-  /** Dedup identity: `file:<path>` or `file:<workspaceId>:<path>` when desk-scoped. */
+  /** Dedup identity: see {@link fileTabId}. */
   id: string;
   title: string;
   path: string;
@@ -183,6 +186,11 @@ export interface FileDetailTab {
    * 不同桌同路径必须是两个 tab（见 {@link fileTabId}）。
    */
   workspaceId?: string;
+  /**
+   * 条目通道（记忆 / 文档源）。缺省 = 工作区盘（{@link SidePanelState.showFile}）。
+   * 带通道时身份与盘上同路径分 tab。
+   */
+  channel?: FileTabChannel;
 }
 
 /**
@@ -245,9 +253,35 @@ export const contentDetailTabId = (
 export const simpleTurnDetailTabId = (messageId: string): string =>
   `simple-turn:${messageId}`;
 
-/** File tab identity — path alone for session-desk opens; include desk when scoped. */
-export const fileTabId = (path: string, workspaceId?: string | null): string =>
-  workspaceId ? `file:${workspaceId}:${path}` : `file:${path}`;
+/**
+ * File tab identity — path alone for session-desk opens; include desk when
+ * scoped. `channel` namespaces entry tabs so they never collide with a disk
+ * file at the same path. `showFile` omits channel (behavior unchanged).
+ */
+export const fileTabId = (
+  path: string,
+  workspaceId?: string | null,
+  channel?: FileTabChannel | null,
+): string => {
+  if (channel) return `file:${channel}:${path}`;
+  return workspaceId ? `file:${workspaceId}:${path}` : `file:${path}`;
+};
+
+/** Build a File content tab for a memory / document entry (右坞工作区设定轨). */
+export function entryFileTab(target: {
+  channel: FileTabChannel;
+  path: string;
+  name: string;
+}): FileDetailTab {
+  return {
+    kind: "file",
+    id: fileTabId(target.path, null, target.channel),
+    title: target.name,
+    path: target.path,
+    name: target.name,
+    channel: target.channel,
+  };
+}
 
 /** Tab id that currently owns focus for highlighting. */
 export function sidePanelFocusTabId(state: {

@@ -87,4 +87,4 @@ node scripts/check-ui-tokens.mjs --src apps/mobile/src
 
 ## 布局规格（细节权威 = desktop-layout）
 
-宽度：content `max-w-4xl` / canvas `max-w-[1200px]`；对话页阅读列 `max-w-3xl`；IM 会话列 `max-w-[40rem]`（消息+输入，≠ 对话页）。字号严格 4 级；圆角 3 级（8/12/pill）；按钮 sm/md。豁免：对话/文件/设置/消息两栏壳、真全屏手册。
+宽度：content `max-w-4xl` / canvas `max-w-[1200px]`；对话页阅读列 `max-w-3xl`；IM 会话列 `max-w-[52rem]`（消息+输入，832px；≠ 对话页 768px）。字号严格 4 级；圆角 3 级（8/12/pill）；按钮 sm/md。豁免：对话/文件/设置/消息两栏壳、真全屏手册。

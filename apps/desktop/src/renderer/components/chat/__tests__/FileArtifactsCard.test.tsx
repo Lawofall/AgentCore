@@ -449,7 +449,7 @@ describe("FileArtifactsCard — 清单不按归位分组", () => {
     expect(screen.queryByText("成品")).toBeNull();
     expect(screen.queryByText("过程材料")).toBeNull();
 
-    // 归位是移动：只显示新路径，AI 工作间里的旧路径已失效。
+    // 归位是移动：只显示新路径，.agentcore 里的旧路径已失效。
     const productRow = screen.getByTitle("在工作区预览 起诉状.docx");
     expect(
       screen.queryByTitle(`在文件页查看约定文档 ${WORKROOM}/起诉状.docx`),

@@ -1,7 +1,7 @@
-"""promote_product — 成品归位：把 CEO 认定的成品从 AI 工作间移进用户工作区。
+"""promote_product — 成品归位：把 CEO 认定的成品从 ``.agentcore`` 移进用户工作区。
 
 AI 团队的产物默认落在 ``AgentCore/文档/``（工作稿 / research / reviews / debate）：
-那是**工作间**，用户不该去里面翻。收口前 CEO 用本工具把「用户真正要的那几份」搬进
+用户侧叫 **``.agentcore``**，用户不该去里面翻。收口前 CEO 用本工具把「用户真正要的那几份」搬进
 工作区——**移动，不是标记**。标记在离开产品 UI 那刻即失效（打成 ZIP 里没有标记、
 合回本机也没有），文件真在哪儿才是唯一跨得过边界的事实。
 
@@ -49,7 +49,7 @@ PROMOTE_PRODUCT_TOOL_NAME = "promote_product"
 
 _DOCS_SOURCE_PREFIX = f"{DOCS_PREFIX}/"
 _INTERNAL_DEST_PREFIX = f"{AGENTCORE_ROOT}/"
-# 一次收口能搬的成品上限——够任何真实交付，又不至于把整个工作间倒进工作区根。
+# 一次收口能搬的成品上限——够任何真实交付，又不至于把整个 `.agentcore` 倒进工作区根。
 _MAX_PATHS = 24
 
 
@@ -94,13 +94,13 @@ class PromoteProductTool:
         return ToolSchema(
             name=PROMOTE_PRODUCT_TOOL_NAME,
             description=(
-                "成品归位：把【路径已核】的成品从 AI 工作间（AgentCore/文档/）"
+                "成品归位：把【路径已核】的成品从 `.agentcore`（盘上 AgentCore/文档/）"
                 "【移动】到用户工作区，让用户一眼看见。收口前调用；"
                 "先问用户要不要、下一轮再搬也可以（本会话此前批次路径已核的成品仍可归位）。\n"
-                "- paths：要归位的产物路径（工作间内的相对路径，取自交付清单）。\n"
+                "- paths：要归位的产物路径（AgentCore/文档/ 下的相对路径，取自交付清单）。\n"
                 "- dest：可选目标目录；省略 = 工作区根（裸聊 / 新建工作区首选）。"
                 "代码仓等已有结构的工作区请指定子目录（如 docs/），避免污染根目录。\n"
-                "只有交付对账里 status=accepted 的产物可归位；路径未核 / 不在工作间 / "
+                "只有交付对账里 status=accepted 的产物可归位；路径未核 / 不在 `.agentcore` / "
                 "目标已存在同名文件的会被跳过并说明原因（【绝不覆盖】用户已有文件）。"
                 "归位是移动：原路径之后不复存在，交付清单会同步改写到新路径。\n"
                 "不搬也合法（多幕协作的中间幕常常无成品可交）——但收口时请明确说明"
@@ -137,14 +137,17 @@ class PromoteProductTool:
         start = time.monotonic()
         raw_paths = arguments.get("paths")
         if not isinstance(raw_paths, list) or not raw_paths:
-            return _fail("paths 不能为空：请列出要归位的产物路径（工作间内相对路径）", start)
+            return _fail(
+                "paths 不能为空：请列出要归位的产物路径（AgentCore/文档/ 下的相对路径）",
+                start,
+            )
         requested = [_norm(p) for p in raw_paths if _norm(p)]
         if not requested:
             return _fail("paths 里没有有效路径", start)
         if len(requested) > _MAX_PATHS:
             return _fail(
                 f"一次最多归位 {_MAX_PATHS} 个成品（收到 {len(requested)} 个）。"
-                "请只挑用户真正要的成品，其余留在工作间。",
+                "请只挑用户真正要的成品，其余留在 `.agentcore`。",
                 start,
             )
 
@@ -245,7 +248,10 @@ class PromoteProductTool:
 def _ineligible_reason(path: str, accepted: dict[str, str]) -> str | None:
     """Why ``path`` cannot be promoted (``None`` = eligible)."""
     if not path.startswith(_DOCS_SOURCE_PREFIX):
-        return f"不在 AI 工作间（`{_DOCS_SOURCE_PREFIX}` 下）——已在工作区里的文件无需归位"
+        return (
+            f"不在 `.agentcore`（`{_DOCS_SOURCE_PREFIX}` 下）"
+            "——已在工作区里的文件无需归位"
+        )
     if path not in accepted:
         return "不在本回合交付对账的路径已核清单里（路径未核或本回合未产出）"
     return None
@@ -270,7 +276,7 @@ def _resolve_dest(raw: Any) -> tuple[str, str | None]:
         return "", f"dest `{raw}` 不是合法的工作区相对目录"
     if cleaned == AGENTCORE_ROOT or cleaned.startswith(_INTERNAL_DEST_PREFIX):
         return "", (
-            f"dest 不能落在 `{_INTERNAL_DEST_PREFIX}` 内——那是 AI 工作间，"
+            f"dest 不能落在 `{_INTERNAL_DEST_PREFIX}` 内——那是 `.agentcore`，"
             "归位的目的正是把成品搬出来。请给用户工作区里的目录，或省略 dest 落在根目录。"
         )
     return cleaned, None

@@ -141,7 +141,7 @@ export function listMemoryUpdates(
 
 /** folder_ids that have project-scoped memory — retained for API callers / diagnostics;
  * the file rail no longer aggregates them under a top-level「项目记忆」folder (each
- * folder mounts its own「本文件夹设定」child instead). */
+ * folder mounts its own ``.agentcore`` child instead). */
 export function listMemoryProjects(): Promise<string[]> {
   return api
     .get<{ folders: string[] }>("/v1/users/me/memory/projects")

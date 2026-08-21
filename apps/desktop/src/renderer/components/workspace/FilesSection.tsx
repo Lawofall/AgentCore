@@ -16,12 +16,14 @@ export function FilesSection({
   trailing,
   emptyTreeHint,
   onCloneGit,
+  renderWorkroomLead,
 }: {
   source: FileSource | null;
   leading?: ReactNode;
   trailing?: ReactNode;
   emptyTreeHint?: string;
   onCloneGit?: () => void;
+  renderWorkroomLead?: (indent: number) => ReactNode;
 }) {
   return (
     <FileBrowser
@@ -30,6 +32,7 @@ export function FilesSection({
       trailing={trailing}
       emptyTreeHint={emptyTreeHint}
       onCloneGit={onCloneGit}
+      renderWorkroomLead={renderWorkroomLead}
     />
   );
 }

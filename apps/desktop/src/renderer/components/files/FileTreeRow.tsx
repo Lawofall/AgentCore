@@ -7,6 +7,7 @@ import { type DropUploadCapture, captureDropUpload } from "@/lib/folderUpload";
 import {
   AGENTCORE_ROOT_LABEL,
   AGENTCORE_ROOT_TOOLTIP,
+  DOCS_PREFIX,
   countDescendantFiles,
   isAgentCoreRootDir,
   stageDirCaption,
@@ -84,6 +85,11 @@ export interface FileTreeRowProps {
   onDropTarget: (path: string | null) => void;
   /** Reload a directory after a mutation that adds siblings (e.g. export docx). */
   onReloadDir: (dir: string) => void;
+  /**
+   * Bound-folder entries, rendered inside the expanded ``.agentcore`` row
+   * (indent = this dir's file children).
+   */
+  renderWorkroomLead?: (indent: number) => React.ReactNode;
 }
 
 export function FileTreeRow(props: FileTreeRowProps) {
@@ -178,7 +184,8 @@ export function FileTreeRow(props: FileTreeRowProps) {
   const stageCaption = stage
     ? stageDirCaption(stage, countDescendantFiles(node.path, data.childrenOf))
     : null;
-  // 约定根改叫「AI 工作间」并退成次要行（钉顶、不跟用户文件抢视觉权重）：与条目区消歧，且它是过程材料。
+  // 约定根改叫 ``.agentcore`` 并退成次要行（钉顶、不跟用户文件抢视觉权重）：
+  // 条目 + 过程稿同一抽屉，默认折叠。
   const isWorkroom = isAgentCoreRootDir(node.path);
 
   return (
@@ -270,7 +277,7 @@ export function FileTreeRow(props: FileTreeRowProps) {
                       {stageCaption}
                     </span>
                   )}
-                  {/* 工作间行是刻意压低的次要行，不给它挂元信息。 */}
+                  {/* 抽屉行是刻意压低的次要行，不给它挂元信息。 */}
                   {!isWorkroom && <FileRowMeta node={node} />}
                 </Button>
               </SimpleTooltip>
@@ -291,7 +298,10 @@ export function FileTreeRow(props: FileTreeRowProps) {
               onCancel={props.onCancelCreate}
             />
           )}
-          {status === "loading" && children === undefined && (
+          {isWorkroom && props.renderWorkroomLead
+            ? props.renderWorkroomLead((depth + 1) * 14 + indentBase)
+            : null}
+          {status !== "error" && children === undefined && (
             <li
               className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground"
               style={{ paddingLeft: (depth + 1) * 14 + 8 + indentBase }}
@@ -308,14 +318,16 @@ export function FileTreeRow(props: FileTreeRowProps) {
               加载失败
             </li>
           )}
-          {children?.length === 0 && !props.creating && (
-            <li
-              className="py-1 text-xs text-muted-foreground/60"
-              style={{ paddingLeft: (depth + 1) * 14 + 8 + indentBase }}
-            >
-              空文件夹
-            </li>
-          )}
+          {children?.length === 0 &&
+            !props.creating &&
+            !(isWorkroom && props.renderWorkroomLead) && (
+              <li
+                className="py-1 text-xs text-muted-foreground/60"
+                style={{ paddingLeft: (depth + 1) * 14 + 8 + indentBase }}
+              >
+                空文件夹
+              </li>
+            )}
           {children
             ?.filter(
               (child) =>
@@ -329,7 +341,8 @@ export function FileTreeRow(props: FileTreeRowProps) {
                 depth={depth + 1}
               />
             ))}
-          {data.truncatedOf(node.path) && (
+          {(data.truncatedOf(node.path) ||
+            (isWorkroom && data.truncatedOf(DOCS_PREFIX))) && (
             <TruncatedNotice
               indent={(depth + 1) * 14 + 8 + indentBase}
               shown={children?.length ?? 0}

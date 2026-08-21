@@ -18,9 +18,17 @@ import { isInsideDir, joinPath } from "@/components/fileBrowser/paths";
 import { FILE_NOT_IN_CLOUD_TREE } from "@/lib/fileDownloadError";
 import { canShareFiles, downloadBlob, shareOrDownloadFile } from "@/lib/share";
 import {
+  AGENTCORE_ROOT_TOOLTIP,
+  type PresentCrumb,
+  canonicalBrowseDir,
   countDescendantFiles,
+  displayDirName,
+  isAgentCoreRootDir,
+  matchesBrowseQuery,
+  presentCrumbs,
   stageDirCaption,
   stageDirMeta,
+  workroomChildren,
 } from "@/lib/stageDirs";
 // Shared workspace file browser (手机端布局重构 · 文件浏览复用).
 //
@@ -241,27 +249,33 @@ export function fileSubtitle(node: {
 }
 
 type CrumbItem =
-  | { kind: "seg"; index: number; label: string }
-  | { kind: "ellipsis" };
+  | { kind: "seg"; crumb: PresentCrumb; last: boolean }
+  | { kind: "ellipsis"; jumpPath: string; title: string };
 
 /** Collapse deep crumbs: keep first + last two; middle → one 「…」. */
-function collapseCrumbs(crumbs: string[]): CrumbItem[] {
+function collapseCrumbs(crumbs: PresentCrumb[]): CrumbItem[] {
   if (crumbs.length <= CRUMB_COLLAPSE_AT) {
-    return crumbs.map((label, index) => ({
+    return crumbs.map((crumb, index) => ({
       kind: "seg" as const,
-      index,
-      label,
+      crumb,
+      last: index === crumbs.length - 1,
     }));
   }
-  const first = crumbs[0] ?? "";
-  const penult = crumbs[crumbs.length - 2] ?? "";
-  const lastLabel = crumbs[crumbs.length - 1] ?? "";
-  const last = crumbs.length - 1;
+  const first = crumbs[0];
+  const penult = crumbs[crumbs.length - 2];
+  const lastCrumb = crumbs[crumbs.length - 1];
+  if (!first || !penult || !lastCrumb) return [];
+  const collapsed = crumbs.slice(1, -2);
+  const jump = crumbs[crumbs.length - 3] ?? first;
   return [
-    { kind: "seg", index: 0, label: first },
-    { kind: "ellipsis" },
-    { kind: "seg", index: last - 1, label: penult },
-    { kind: "seg", index: last, label: lastLabel },
+    { kind: "seg", crumb: first, last: false },
+    {
+      kind: "ellipsis",
+      jumpPath: jump.path,
+      title: collapsed.map((c) => c.label).join("/"),
+    },
+    { kind: "seg", crumb: penult, last: false },
+    { kind: "seg", crumb: lastCrumb, last: true },
   ];
 }
 
@@ -373,7 +387,7 @@ export function FileBrowser({
     const node = (tree.get(dir) ?? []).find(
       (n) => !n.isDir && n.path === openPath,
     );
-    if (dir) onCwdChange(dir);
+    if (dir) onCwdChange(canonicalBrowseDir(dir));
     if (node) {
       setOpenMissing(null);
       setViewing(node);
@@ -382,13 +396,15 @@ export function FileBrowser({
     }
   }, [openPath, tree, onCwdChange]);
 
-  const children = tree?.get(cwd) ?? [];
+  const children = useMemo(
+    () => (tree ? workroomChildren(tree, cwd) : []),
+    [tree, cwd],
+  );
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return children;
-    return children.filter((n) => n.name.toLowerCase().includes(q));
+    if (!query.trim()) return children;
+    return children.filter((n) => matchesBrowseQuery(n, query));
   }, [children, query]);
-  const crumbs = cwd ? cwd.split("/") : [];
+  const crumbs = presentCrumbs(cwd);
   const crumbItems = collapseCrumbs(crumbs);
 
   function refresh() {
@@ -409,7 +425,7 @@ export function FileBrowser({
     setNewFolderBusy(true);
     setNewFolderError(null);
     try {
-      await ops.createDir(joinPath(cwd, name));
+      await ops.createDir(joinPath(canonicalBrowseDir(cwd), name));
       setNewFolder(false);
       setOpStatus(`已新建文件夹「${name}」`);
       refresh();
@@ -529,32 +545,24 @@ export function FileBrowser({
                   <button
                     type="button"
                     className="crumb crumb-ellipsis"
-                    title={crumbs.slice(1, -2).join("/")}
-                    onClick={() => {
-                      // Jump to the deepest collapsed ancestor (segment before last two).
-                      const target = crumbs
-                        .slice(0, crumbs.length - 2)
-                        .join("/");
-                      onCwdChange(target);
-                    }}
+                    title={item.title}
+                    onClick={() => onCwdChange(item.jumpPath)}
                   >
                     …
                   </button>
                 </span>
               );
             }
-            const full = crumbs.slice(0, item.index + 1).join("/");
-            const last = item.index === crumbs.length - 1;
             return (
-              <span key={full} className="crumb-seg">
+              <span key={item.crumb.path} className="crumb-seg">
                 <span className="crumb-sep">/</span>
                 <button
                   type="button"
                   className="crumb"
-                  disabled={last}
-                  onClick={() => onCwdChange(full)}
+                  disabled={item.last}
+                  onClick={() => onCwdChange(item.crumb.path)}
                 >
-                  {item.label}
+                  {item.crumb.label}
                 </button>
               </span>
             );
@@ -627,6 +635,8 @@ export function FileBrowser({
         {opStatus && <p className="muted hint">{opStatus}</p>}
         {filtered.map((node) => {
           const Icon = fileIcon(node.name, node.isDir);
+          const shownName = displayDirName(node.path, node.name);
+          const isWorkroom = isAgentCoreRootDir(node.path);
           const stage = node.isDir ? stageDirMeta(node.path) : null;
           const stageCaption =
             stage && tree
@@ -635,16 +645,22 @@ export function FileBrowser({
                   countDescendantFiles(node.path, (d) => tree.get(d)),
                 )
               : null;
-          // Stage badge wins for dirs; otherwise optional mtime subtitle.
-          const subtitle = stageCaption ? null : fileSubtitle(node);
+          // Stage badge wins for dirs; 抽屉行不挂 mtime（次要行，不跟用户文件抢元信息）。
+          const subtitle =
+            isWorkroom || stageCaption ? null : fileSubtitle(node);
           return (
             <div key={node.path} className="file-row-item">
               <button
                 type="button"
                 className="file-row"
-                title={stage?.tooltip}
+                title={
+                  stage?.tooltip ??
+                  (isWorkroom ? AGENTCORE_ROOT_TOOLTIP : undefined)
+                }
                 onClick={() =>
-                  node.isDir ? onCwdChange(node.path) : setViewing(node)
+                  node.isDir
+                    ? onCwdChange(canonicalBrowseDir(node.path))
+                    : setViewing(node)
                 }
               >
                 <span
@@ -654,7 +670,11 @@ export function FileBrowser({
                   <Icon size={16} />
                 </span>
                 <span className="file-row-main">
-                  <span className="file-name">{node.name}</span>
+                  <span
+                    className={isWorkroom ? "file-name muted" : "file-name"}
+                  >
+                    {shownName}
+                  </span>
                   {subtitle && <span className="file-sub">{subtitle}</span>}
                 </span>
                 {stageCaption && (
@@ -672,7 +692,7 @@ export function FileBrowser({
                 <button
                   type="button"
                   className="file-row-more"
-                  aria-label={`${node.name} 的更多操作`}
+                  aria-label={`${shownName} 的更多操作`}
                   onClick={() => {
                     setOpStatus(null);
                     setActing(node);
@@ -700,7 +720,9 @@ export function FileBrowser({
 
       {ops && newFolder && (
         <NewFolderDialog
-          parentLabel={cwd || "根目录"}
+          parentLabel={
+            cwd ? (presentCrumbs(cwd).at(-1)?.label ?? cwd) : "根目录"
+          }
           busy={newFolderBusy}
           error={newFolderError}
           onClose={() => setNewFolder(false)}

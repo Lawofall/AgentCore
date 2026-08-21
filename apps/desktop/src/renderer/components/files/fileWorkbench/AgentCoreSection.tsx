@@ -9,6 +9,7 @@ import {
   saveAgentCoreCollapsed,
   saveAgentCoreExpanded,
 } from "@/components/files/fileWorkbench/storage";
+import { AGENTCORE_ROOT_LABEL } from "@/lib/stageDirs";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -19,12 +20,12 @@ export type AgentCoreScope =
   | { kind: "folder"; folderId: string };
 
 /**
- * Entry-base rail titles by mount. The base holds equal md entries (画像 / 偏好 /
- * 规则 / 主题); the label names the scope, not who wrote it and not AgentCore
- * (on-disk `AgentCore/` stays「AI 工作间」).
+ * Entry-base rail titles by mount. Folder-scope entries live inside the file
+ * tree's ``.agentcore`` row; this section is the global rail (plus leftover
+ * folder title if mounted).
  */
 export const ENTRIES_SECTION_NAME_GLOBAL = "全局设定";
-export const ENTRIES_SECTION_NAME_FOLDER = "本文件夹设定";
+export const ENTRIES_SECTION_NAME_FOLDER = AGENTCORE_ROOT_LABEL;
 
 export function entriesSectionName(scope: AgentCoreScope): string {
   return scope.kind === "global"

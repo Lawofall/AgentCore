@@ -37,8 +37,8 @@ export const FILES_PREVIEW_PROJECT_FOLDER_ID = "folder-demo";
 const MAX_CHARS = 24000;
 
 /**
- * 文件夹自己的盘上文件——预览里跟条目区同屏，好一眼核对两者不再同名：条目区叫
- * 「全局设定」/「本文件夹设定」，盘上 ``AgentCore/`` 叫「AI 工作间」且钉在同级最前。
+ * 文件夹自己的盘上文件——预览里跟条目同屏：全局设定单独钉顶；文件夹条目经
+ * ``renderWorkroomLead`` 进 ``.agentcore``（盘上 ``AgentCore/``），钉在同级最前。
  */
 const PREVIEW_WORKSPACE_TREE: FileNode[] = [
   { path: "合同", name: "合同", isDir: true },

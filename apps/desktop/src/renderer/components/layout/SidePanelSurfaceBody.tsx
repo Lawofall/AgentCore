@@ -1,11 +1,9 @@
 import { ApprovalPrompt } from "@/components/chat/ApprovalPrompt";
 import { Markdown } from "@/components/chat/Markdown";
 import { RunDetailScroll } from "@/components/chat/detail/RunDetailScroll";
-import { FileDetail } from "@/components/files/FileDetail";
-import { EmptyHint } from "@/components/files/parts";
+import { FileTabSurface } from "@/components/layout/FileTabSurface";
 import { ConversationChangesPanel } from "@/components/workspace/ConversationChangesPanel";
 import { WorkspaceMode } from "@/components/workspace/WorkspacePanel";
-import { useFileTabSourceState } from "@/hooks/useConversationFileSource";
 import {
   useActiveMessageContent,
   useConversationStore,
@@ -17,7 +15,6 @@ import {
   WORKSPACE_TAB_ID,
   useSidePanelStore,
 } from "@/stores/sidePanel";
-import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
@@ -66,10 +63,11 @@ export function SidePanelSurfaceBody({
     );
   } else if (tab?.kind === "file") {
     body = (
-      <FileSurfaceBody
+      <FileTabSurface
         path={tab.path}
         name={tab.name}
         workspaceId={tab.workspaceId}
+        channel={tab.channel}
         onClose={() => closeTab(tab.id)}
       />
     );
@@ -117,55 +115,6 @@ function FloatApprovalStrip() {
     <div className="shrink-0 border-t border-border bg-card">
       <ApprovalPrompt />
     </div>
-  );
-}
-
-function FileSurfaceBody({
-  path,
-  name,
-  workspaceId,
-  onClose,
-}: {
-  path: string;
-  name: string;
-  workspaceId?: string;
-  onClose: () => void;
-}) {
-  const currentConversationId = useConversationStore(
-    (s) => s.currentConversationId,
-  );
-  const { source, pending: locating } = useFileTabSourceState(
-    currentConversationId,
-    workspaceId,
-  );
-  if (!path || !name) {
-    return (
-      <EmptyHint
-        inline
-        icon={<FileText size={26} className="text-muted-foreground/40" />}
-        title="打开文件"
-        hint="在「工作区」文件树中点击文件，或从产物卡打开——将在此显示为独立标签。"
-      />
-    );
-  }
-  if (!source) {
-    return (
-      <EmptyHint
-        inline
-        icon={<FileText size={26} className="text-muted-foreground/40" />}
-        title={name}
-        hint={locating ? "正在定位文件…" : "当前会话尚无可用文件源。"}
-      />
-    );
-  }
-  return (
-    <FileDetail
-      key={`${workspaceId ?? ""}:${path}`}
-      source={source}
-      path={path}
-      name={name}
-      onClose={onClose}
-    />
   );
 }
 

@@ -283,23 +283,24 @@ export function ChatThread({ chatId }: Props) {
         )}
       </div>
 
-      {isRequest && (
-        <div className={`${IM_SESSION_COLUMN_CLASS} px-4 pt-3`}>
-          <div className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-            这是一条消息请求，回复即代表接受。
-          </div>
-        </div>
-      )}
+      <div className="flex min-h-0 flex-1 flex-col items-center">
+        <div
+          className={`${IM_SESSION_COLUMN_CLASS} flex min-h-0 flex-1 flex-col`}
+        >
+          {isRequest && (
+            <div className="px-4 pt-3">
+              <div className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                这是一条消息请求，回复即代表接受。
+              </div>
+            </div>
+          )}
 
-      <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} className="h-full overflow-y-auto">
-          {/* min-h (never h) so the empty placeholder can center against the
-              viewport while this box still GROWS with the transcript — a pinned
-              height would freeze the size ResizeObserver watches and kill stick-to-bottom. */}
-          <div
-            ref={contentRef}
-            className={`${IM_SESSION_COLUMN_CLASS} flex min-h-full flex-col`}
-          >
+          <div className="relative min-h-0 flex-1">
+            <div ref={scrollRef} className="h-full overflow-y-auto">
+              {/* min-h (never h) so the empty placeholder can center against the
+                  viewport while this box still GROWS with the transcript — a pinned
+                  height would freeze the size ResizeObserver watches and kill stick-to-bottom. */}
+              <div ref={contentRef} className="flex min-h-full flex-col">
             {hasMessages ? (
               <div className="flex flex-col gap-2 px-4 py-4">
                 {hasMoreOlder && (
@@ -391,33 +392,33 @@ export function ChatThread({ chatId }: Props) {
                 </p>
               </div>
             )}
+              </div>
+            </div>
+            {hasMessages && !atBottom && (
+              <SimpleTooltip label="回到底部">
+                <IconButton
+                  size="md"
+                  onClick={jumpToBottom}
+                  aria-label="回到底部"
+                  className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-border bg-card text-muted-foreground shadow-md hover:text-foreground"
+                >
+                  <ArrowDown size={16} />
+                </IconButton>
+              </SimpleTooltip>
+            )}
           </div>
-        </div>
-        {hasMessages && !atBottom && (
-          <SimpleTooltip label="回到底部">
-            <IconButton
-              size="md"
-              onClick={jumpToBottom}
-              aria-label="回到底部"
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-border bg-card text-muted-foreground shadow-md hover:text-foreground"
-            >
-              <ArrowDown size={16} />
-            </IconButton>
-          </SimpleTooltip>
-        )}
-      </div>
 
-      {!isOfficial && (
-        <div className={IM_SESSION_COLUMN_CLASS}>
-          <ChatComposer
-            chatId={chatId}
-            replyTarget={replyTarget}
-            onClearReply={() => setReplyTarget(null)}
-            editTarget={editTarget}
-            onClearEdit={() => setEditTarget(null)}
-          />
+          {!isOfficial && (
+            <ChatComposer
+              chatId={chatId}
+              replyTarget={replyTarget}
+              onClearReply={() => setReplyTarget(null)}
+              editTarget={editTarget}
+              onClearEdit={() => setEditTarget(null)}
+            />
+          )}
         </div>
-      )}
+      </div>
 
       {showInfo && (
         <GroupInfoDialog

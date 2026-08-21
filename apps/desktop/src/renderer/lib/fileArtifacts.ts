@@ -5,7 +5,7 @@
 // 工具自报的产物行里——工具入参只有源 md，故任何按参数合成的清单都会漏掉它。
 //
 // ``promotedFrom`` 记录成品归位的旧路径（移动已发生，``path`` 是新位置）。产物卡不按
-// 归位分组——位置看路径；文件树把 ``AgentCore/`` 标成「AI 工作间」并钉顶。
+// 归位分组——位置看路径；文件树把 ``AgentCore/`` 标成 ``.agentcore`` 并钉顶。
 //
 // 中间稿折叠：行里自报的 ``derived_from`` 是唯一依据（见 {@link splitExportedSources}），
 // 不按扩展名 / 工具名猜派生关系；折叠只降级、不删除。
@@ -57,7 +57,7 @@ export interface FileArtifact {
   acceptanceReason?: string;
   acceptanceDetail?: string;
   /**
-   * 已归位成品的 AI 工作间旧路径（`path` 已是归位后的新路径，旧路径盘上不再存在）。
+   * 已归位成品的过程稿旧路径（`path` 已是归位后的新路径，旧路径盘上不再存在）。
    * 产物卡不据此分组；位置以 `path` 为准。
    */
   promotedFrom?: string;

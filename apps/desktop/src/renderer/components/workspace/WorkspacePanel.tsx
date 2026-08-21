@@ -1,3 +1,4 @@
+import { EntriesSection } from "@/components/files/fileWorkbench/EntriesSection";
 import { EmptyHint, IconButton } from "@/components/files/parts";
 import { Button, IconButton as UiIconButton } from "@/components/ui";
 import {
@@ -7,7 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useConversationFileSource } from "@/hooks/useConversationFileSource";
-import { getConversations } from "@/hooks/useConversations";
+import { getConversations, useConversations } from "@/hooks/useConversations";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
 import { hasLocalFiles } from "@/lib/capabilities";
 import {
@@ -16,6 +17,12 @@ import {
 } from "@/services/cloudDeskExit";
 import { useConversationStore } from "@/stores/conversation";
 import { useFoldersStore } from "@/stores/folders";
+import {
+  entryFileTab,
+  fileTabId,
+  sidePanelFocusTabId,
+  useSidePanelStore,
+} from "@/stores/sidePanel";
 import {
   Download,
   FolderDown,
@@ -48,9 +55,16 @@ import { WorkspaceModeBar } from "./WorkspaceModeBar";
  *
  * A draft conversation (no id yet) has no server workspace, so it shows an empty
  * hint until the first turn persists it.
+ *
+ * 绑定 `folderId` 时把条目挂进文件树 ``.agentcore`` 行（与文件页同款）；裸聊 /
+ * 仅 auto-desk / 无绑定不挂条目，亦不挂「全局设定」。点条目开顶栏 File tab。
  */
 export function WorkspaceMode() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
+  const conversations = useConversations();
+  const folderId =
+    conversations.find((c) => c.id === conversationId)?.folderId?.trim() ||
+    null;
   const [trashOpen, setTrashOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -121,41 +135,53 @@ export function WorkspaceMode() {
     <div className="relative flex h-full flex-col">
       {/* 单行面板头：云端选择器（leading）+ 文件操作 + 导出 / 软删区（trailing）合到
           FilesSection 的工具栏一行（文件操作经其内部 FileTree 的 ref 驱动），不再单独占一行。 */}
-      <div className="min-h-0 flex-1">
-        <FilesSection
-          source={source}
-          emptyTreeHint={emptyTreeHint}
-          onCloneGit={onCloneGit}
-          leading={<WorkspaceModeBar conversationId={conversationId} />}
-          trailing={
-            <>
-              <WorkspaceClientTools source={source} />
-              {source?.caps.snapshots ? (
-                <>
-                  <WorkspaceExportMenu
-                    fsAvailable={fsAvailable}
-                    exporting={exporting}
-                    onExportFolder={() =>
-                      void runExport(() =>
-                        exportCloudDeskToPickedFolder(conversationId),
-                      )
-                    }
-                    onExportZip={() =>
-                      void runExport(() => exportCloudDeskZip(conversationId))
-                    }
-                  />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1">
+          <FilesSection
+            source={source}
+            emptyTreeHint={emptyTreeHint}
+            onCloneGit={onCloneGit}
+            renderWorkroomLead={
+              folderId
+                ? (indent) => (
+                    <WorkspaceFolderEntries folderId={folderId} indent={indent} />
+                  )
+                : undefined
+            }
+            leading={<WorkspaceModeBar conversationId={conversationId} />}
+            trailing={
+              <>
+                <WorkspaceClientTools source={source} />
+                {source?.caps.snapshots ? (
+                  <>
+                    <WorkspaceExportMenu
+                      fsAvailable={fsAvailable}
+                      exporting={exporting}
+                      onExportFolder={() =>
+                        void runExport(() =>
+                          exportCloudDeskToPickedFolder(conversationId),
+                        )
+                      }
+                      onExportZip={() =>
+                        void runExport(() => exportCloudDeskZip(conversationId))
+                      }
+                    />
+                    <IconButton
+                      title="软删区"
+                      onClick={() => setTrashOpen(true)}
+                    >
+                      <Trash2 size={14} />
+                    </IconButton>
+                  </>
+                ) : localRootId ? (
                   <IconButton title="软删区" onClick={() => setTrashOpen(true)}>
                     <Trash2 size={14} />
                   </IconButton>
-                </>
-              ) : localRootId ? (
-                <IconButton title="软删区" onClick={() => setTrashOpen(true)}>
-                  <Trash2 size={14} />
-                </IconButton>
-              ) : null}
-            </>
-          }
-        />
+                ) : null}
+              </>
+            }
+          />
+        </div>
       </div>
 
       <ExternalMountsSection conversationId={conversationId} />
@@ -192,6 +218,56 @@ export function WorkspaceMode() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Folder-scope entries inside the ``.agentcore`` tree row. */
+function WorkspaceFolderEntries({
+  folderId,
+  indent,
+}: {
+  folderId: string;
+  indent: number;
+}) {
+  const openTab = useSidePanelStore((s) => s.openTab);
+  const closeTab = useSidePanelStore((s) => s.closeTab);
+  const tabs = useSidePanelStore((s) => s.tabs);
+  const focusId = useSidePanelStore((s) =>
+    sidePanelFocusTabId({
+      focusSurface: s.focusSurface,
+      activeTabId: s.activeTabId,
+    }),
+  );
+  const active = tabs.find((t) => t.id === focusId);
+  const memoryActivePath =
+    active?.kind === "file" && active.channel === "memory" ? active.path : null;
+  const documentActivePath =
+    active?.kind === "file" && active.channel === "document"
+      ? active.path
+      : null;
+
+  return (
+    <EntriesSection
+      scope={{ kind: "folder", folderId }}
+      memoryActivePath={memoryActivePath}
+      documentActivePath={documentActivePath}
+      indent={indent}
+      onOpen={(target) => openTab(entryFileTab(target))}
+      onDeleted={(target) =>
+        closeTab(fileTabId(target.path, null, target.channel))
+      }
+      onRenamed={(target, name) => {
+        const id = fileTabId(target.path, null, target.channel);
+        const existing = useSidePanelStore
+          .getState()
+          .tabs.find((t) => t.id === id);
+        if (!existing || existing.kind !== "file") return;
+        openTab(
+          { ...existing, title: name, name },
+          { activate: false, reveal: false },
+        );
+      }}
+    />
   );
 }
 

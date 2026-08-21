@@ -79,8 +79,7 @@ export function saveMemoryTopicsExpanded(set: Set<string>): void {
   saveStringSet(MEMORY_TOPICS_EXPANDED_KEY, set);
 }
 
-// 文件夹「本文件夹设定」节点展开态：挂在每个文件夹下的设定子节点**默认折叠**，故只持久化「被展开」
-// 的 folderId——空集 = 全部折叠。（旧「项目记忆」聚合夹的 "__projects__" 残留键无害、被忽略。）
+// 旧「项目记忆」聚合夹的 "__projects__" 残留键无害、被忽略。
 const MEMORY_PROJECTS_EXPANDED_KEY = "files-memory-projects-expanded";
 
 export function loadMemoryProjectsExpanded(): Set<string> {
@@ -115,8 +114,8 @@ export function saveRulesExpanded(set: Set<string>): void {
   saveStringSet(RULES_EXPANDED_KEY, set);
 }
 
-// AgentCore 约定根折叠态：全局段**默认展开**（取代旧双 rail），故只持久化「被折叠」；
-// 项目下 AgentCore 子节点**默认折叠**，故只持久化「被展开」的 folderId。
+// 全局设定轨**默认展开**，故只持久化「被折叠」。文件夹 ``.agentcore`` 的展开态走 FileTree
+// per-source 折叠（默认折叠）；AGENTCORE_EXPANDED_KEY 仅 AgentCoreSection 的 folder 残留路径还读。
 const AGENTCORE_COLLAPSED_KEY = "files-agentcore-collapsed";
 const AGENTCORE_EXPANDED_KEY = "files-agentcore-expanded";
 

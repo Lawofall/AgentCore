@@ -22,12 +22,15 @@ export interface FolderRailHost {
   offline: boolean;
   /** 在此新建文件夹 — a real nested folder, not a bare `mkdir`. */
   onCreateSubfolder: (parent: FolderMeta, anchorEl?: Element | null) => void;
-  /** Per-folder ``AgentCore/`` rail, when the host shows conventions at all. */
-  renderFolderRail?: (folder: FolderMeta) => ReactNode;
+  /** Per-folder entries inside ``.agentcore``, when the host shows conventions. */
+  renderWorkroomLead?: (folder: FolderMeta, indent: number) => ReactNode;
+  revealWorkroomFolderId?: string | null;
+  onWorkroomRevealApplied?: () => void;
 }
 
 /**
- * One folder row: header + its child folders + its ``AgentCore/`` + its files.
+ * One folder row: header + its child folders + its files (``.agentcore`` is a
+ * tree row, not a separate rail).
  *
  * A folder with no `/v1/workspaces` row yet (just created, list still stale) is
  * rendered from its {@link FolderMeta} so it never blinks out.
@@ -65,7 +68,13 @@ export function FolderRailRow({
       flashing={wsId === host.flashWsId}
       filterQuery={host.filterQuery}
       sortBy={host.sortBy}
-      folderRail={host.renderFolderRail?.(folder)}
+      renderWorkroomLead={
+        host.renderWorkroomLead
+          ? (indent) => host.renderWorkroomLead?.(folder, indent)
+          : undefined
+      }
+      forceExpandWorkroom={host.revealWorkroomFolderId === folder.id}
+      onWorkroomRevealApplied={host.onWorkroomRevealApplied}
       nested={
         children.length > 0 ? (
           <FolderRailNodes nodes={children} host={host} />

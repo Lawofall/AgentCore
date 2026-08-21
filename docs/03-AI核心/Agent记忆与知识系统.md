@@ -193,7 +193,7 @@ GROUP BY 1;
 记忆与规则**同载体、同注入**，仅靠 `ai_maintained` 区分谁可静默改写。作用域靠**位置**（全局 = 云端根；文件夹层 = Folder 下同名夹），不另立开关。
 
 ```
-AgentCore/                ⏳ AI 工作间（用户平时不必打开；成品经归位移进用户工作区）
+AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；成品经归位移进用户工作区）
 ├── 规则/                 用户硬规则（ai_maintained=false）
 │   └── *.md              always（默认）→ 共享 <rules>；或 on_demand → <按需目录> + consult ✅
 │                         （`conditional` ✅ 已随迁移 d1e4a9c2f7b8 从 CHECK 摘除，生效仅两档）
@@ -215,7 +215,7 @@ AgentCore/                ⏳ AI 工作间（用户平时不必打开；成品�
 - 冲突：靠措辞 + 就近相关性；用户硬规则恒胜。
 - `文档/` 与同树旁路 `AgentCore/index/`（code_search；系统噪音）正交：索引管符号检索；导航/主题管叙事路由。勿与 `~/Documents/AgentCore/` 工作区容器混淆。
 - 主题继续 `name=主题/<slug>.md`（非真实嵌套 folder）——有意设计。
-- **约定常量**：约定文档子目录 `research`/`debate`/`reviews`（⏳ 加默认落点 `工作稿`）→ 代码 `workspace/stage_dirs.py`；✅ 步 3 后 `文档/` 已无 `项目/`。`AgentCore/` 整体 = **AI 工作间**，成品经归位移出 → [工作区 §四](/docs/02-架构/双模式工作区.md#四约定文档目录约定)。
+- **约定常量**：约定文档子目录 `research`/`debate`/`reviews`（⏳ 加默认落点 `工作稿`）→ 代码 `workspace/stage_dirs.py`；✅ 步 3 后 `文档/` 已无 `项目/`。`AgentCore/` 整体 UI = **`.agentcore`**，成品经归位移出 → [工作区 §四](/docs/02-架构/双模式工作区.md#四约定文档目录约定)。
 
 → 见代码：`memory/document_store.py`、`memory/migrate_agentcore.py`
 
@@ -230,7 +230,7 @@ AgentCore/                ⏳ AI 工作间（用户平时不必打开；成品�
 3. always 序：**全局偏好 → 全局画像 →（祖先各层画像，外→内）→ 当前层画像 → 当前层导航**（缺文件跳过；导航不继承）；用户 always 规则同序进共享 `<rules>` 前半（全局 → 祖先外→内 → 当前，祖先层带「其下所有文件夹一并适用、以更近的为准」标签）。on_demand 侧（记忆主题 / 用户规则 / 系统 Skill）合并为单一 `<按需目录>` → `consult`（沿链取并集，正文按**最近层优先**解析、全局兜底；目录非空才 wire，单一 `has_entries` 门控）；目录每项只有**名字 + `description`**，不回退取正文首行。两侧都跳过用户标了「这条不对」的条目（`disputed_at`，见「纠错通道」），云侧同轨——`/v1/account/memory` 与 `/rules/list` 的载荷带 `description` / `disputed`，故 sidecar 快照与本地 DB 的目录内容一致。
 4. **文件夹清单**（✅ · 派生，**非记忆**）：CEO prompt 独立 `<文件夹清单>` 段，回合准备时由 Folder 列表 + 各文件夹 `画像.md` 首句实时拼装（一行一项：**完整路径** + 一句话；嵌套后同名末段可存在于多层，只给末段会把每次 `resolve_folder` 逼进歧义回合），按最近活跃排序、`folder_catalog_max_entries` 截断、无文件夹则不注入。派生而非落盘，故无需巩固、不会过期、改名即时反映。**不进** `<rules>`、不吃 `max_instruction_*` 预算——它服务「跨文件夹找文件夹」，不得挤掉 always 记忆。已知降级：account 票 + `prepare_reads_cache_only` 时 warm 快照只含当前 folder 及其祖先链画像，旁支文件夹可能只有名称。
 5. **当前课题认定**（✅）：「继续做项目 / 汇报现状」且用户未点名时，**工作区（及已绑工程）近况 ＞ 全局画像「正在做 X」**——全局仅软参考，不得压过工作区，也不得把旧文件夹名写进默认提问套用户。偏好/文风等仍可用全局记忆。
-6. 注入前剥人面 chrome（H1 + 说明引用块），文件本身不动。
+6. 注入仍剥存量人面 chrome（退役的 H1「用户记忆」+「本文件由 AI 自动维护…」说明引用块）。**新写入不再写这两行**，正文从小节/列表起笔；空文件的「可编辑」说明在编辑器空状态，不进 md。
 7. 装配顺序权威 → [执行引擎 §七](/docs/03-AI核心/执行引擎架构设计.md) / `runtime/context/`（`SectionOrder`）。
 
 → 见代码：`memory/rules_injection.py` · `memory/account_prepare_cache.py` · `runtime/context/project_catalog.py` · sidecar `warmAccountRulesMemory`
@@ -353,6 +353,6 @@ Worker 经 `search_conversations` / `read_conversation` 按需检索本账号历
 | 「仅手动」第三档生效方式 | 省下的只是目录里一行 token；`@` 已能把按需条目临时提升 |
 | 条目正文指向盘上路径（挂牌用户仓库 md） | 第一版不做：模型本就能 `file_read`，增量收益仅一行 `description`；疼了再加 |
 
-查看/编辑：对话内 `remember`（增改删列）与文件页 `AgentCore/` 扁平条目 + CAS 双轨；semantic diff 可搬层纠错。→ 见代码：`fileWorkbench/AgentCoreSection.tsx` · `EntriesSection.tsx`
+查看/编辑：对话内 `remember`（增改删列）与文件页「全局设定」+ 各文件夹 ``.agentcore``、右坞工作区同一 ``.agentcore`` 扁平条目 + CAS 双轨；semantic diff 可搬层纠错。→ 见代码：`fileWorkbench/AgentCoreSection.tsx` · `EntriesSection.tsx` · `workspace/WorkspacePanel.tsx`
 
-条目化后（✅）文件页不再有「记忆 / 规则 / 文档」三夹：按全局 / 各文件夹分区列条目（标题「全局设定」/「本文件夹设定」），每条露生效徽章与 `description`，并显示常驻用量。条目右键含**「这条不对…」/「恢复使用」**（纠错通道唯一入口，前者先弹确认摊开连带面）；被停用的条目名划掉并标「已停用」，也不再报它的常驻占用（它已不占池）。
+条目化后（✅）文件页不再有「记忆 / 规则 / 文档」三夹：全局钉「全局设定」；各文件夹条目与过程稿合在 ``.agentcore`` 里（默认折叠；打开后条目带常驻/按需徽章与 `description`，稿夹摊平为 `工作稿`/`research`/`debate`/`reviews`）。条目右键含**「这条不对…」/「恢复使用」**（纠错通道唯一入口，前者先弹确认摊开连带面）；被停用的条目名划掉并标「已停用」，也不再报它的常驻占用（它已不占池）。

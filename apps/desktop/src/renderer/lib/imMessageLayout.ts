@@ -5,10 +5,12 @@ import type { ChatMessageDetail } from "@/services/messaging";
 export const IM_CLUSTER_GAP_MS = 5 * 60 * 1000;
 
 /**
- * Desktop IM session column (messages + composer). 640px — distinct from the
- * AI 对话页 reading column (`max-w-3xl` / 768px). Header stays full-pane.
+ * Desktop IM session column (messages + composer). 832px — desktop IM, not a
+ * phone strip. Wider than the AI 对话页 reading column (`max-w-3xl` / 768px)
+ * because left/right bubbles need the extra room; still capped so ultrawide
+ * panes don't go edge-to-edge. Header stays full-pane.
  */
-export const IM_SESSION_COLUMN_CLASS = "mx-auto w-full min-w-0 max-w-[40rem]";
+export const IM_SESSION_COLUMN_CLASS = "mx-auto w-full min-w-0 max-w-[52rem]";
 
 /** Bubble cap inside the session column (WhatsApp / Telegram). */
 export const IM_BUBBLE_MAX_CLASS = "max-w-[75%]";

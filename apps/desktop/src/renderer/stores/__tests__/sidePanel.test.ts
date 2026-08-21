@@ -31,6 +31,7 @@ import {
   browserDismissKey,
   contentDetailTabId,
   dismissFocusedFloat,
+  entryFileTab,
   fileTabId,
   runDetailTabId,
   sidePanelFocusTabId,
@@ -631,6 +632,42 @@ describe("showChanges / showFile / openTerminalTab（方案 B 顶栏 IA）", () 
       kind: "file",
       path: "notes.md",
       workspaceId: "folder:landed",
+    });
+  });
+
+  it("entry channel File tab identity does not collide with disk path", () => {
+    const path = "project/f1/profile";
+    panel().showFile(path, "画像.md");
+    panel().openTab(entryFileTab({ channel: "memory", path, name: "画像.md" }));
+    const fileTabs = panel().tabs.filter((t) => t.kind === "file");
+    expect(fileTabs).toHaveLength(2);
+    expect(fileTabs.map((t) => t.id)).toEqual([
+      fileTabId(path),
+      fileTabId(path, null, "memory"),
+    ]);
+    expect(fileTabs[1]).toMatchObject({
+      kind: "file",
+      channel: "memory",
+      path,
+    });
+    expect(fileTabs[0].id).not.toBe(fileTabs[1].id);
+  });
+
+  it("openTab same id replaces File tab title (entry rename)", () => {
+    const tab = entryFileTab({
+      channel: "document",
+      path: "doc-1",
+      name: "旧.md",
+    });
+    panel().openTab(tab);
+    panel().openTab({ ...tab, title: "新.md", name: "新.md" });
+    const fileTabs = panel().tabs.filter((t) => t.kind === "file");
+    expect(fileTabs).toHaveLength(1);
+    expect(fileTabs[0]).toMatchObject({
+      id: tab.id,
+      title: "新.md",
+      name: "新.md",
+      channel: "document",
     });
   });
 

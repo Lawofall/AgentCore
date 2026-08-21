@@ -98,7 +98,7 @@ export function parseProjectProfilePath(path: string): string | null {
 /**
  * folderId encoded in a project-scoped synthetic memory path (`project/<id>/profile`,
  * `project/<id>/navigation`, or `project/<id>/topics/<slug>`), else null. Used by 最近更新 /
- * 对话卡深链 to expand that project and its「本文件夹设定」node in the file rail.
+ * 对话卡深链 to expand that project and its ``.agentcore`` node in the file rail.
  */
 export function parseProjectMemoryFolderId(path: string): string | null {
   const profile = PROJECT_PROFILE_RE.exec(path);

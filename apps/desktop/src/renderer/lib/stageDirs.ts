@@ -1,25 +1,28 @@
 /**
  * 约定文档约定目录（``AgentCore/文档/{工作稿,research,debate,reviews}/``）的中性元信息——
  * 文件树徽章与产物卡标签共用。与后端 ``workspace.stage_dirs`` 对齐；无匹配则零噪音。
- * 约定根本身的呈现名（「AI 工作间」）也在这里，同属「按路径给盘上目录配文案」。
+ * 约定根本身的呈现名（``.agentcore``）也在这里，同属「按路径给盘上目录配文案」。
  */
 
 /** 盘上约定根目录名——与后端 ``stage_dirs.AGENTCORE_ROOT`` 对齐（磁盘真名，勿改）。 */
 export const AGENTCORE_ROOT = "AgentCore";
-export const DOCS_PREFIX = `${AGENTCORE_ROOT}/文档`;
+/** 盘上产物柜名；UI 摊平进 ``.agentcore``，不单独露这一层。 */
+export const DOCS_DIR_NAME = "文档";
+export const DOCS_PREFIX = `${AGENTCORE_ROOT}/${DOCS_DIR_NAME}`;
+/** 步 3 迁移归档；展开 ``.agentcore`` 时不露。 */
+export const MIGRATED_MEMORY_DIR = "已迁入记忆";
 export const DRAFTS_DIR = `${DOCS_PREFIX}/工作稿`;
 export const RESEARCH_DIR = `${DOCS_PREFIX}/research`;
 export const DEBATE_DIR = `${DOCS_PREFIX}/debate`;
 export const REVIEWS_DIR = `${DOCS_PREFIX}/reviews`;
 
 /**
- * 工作区根下 ``AgentCore/`` 的**呈现名**（双模式工作区 §四「呈现层的统一入口已推翻」）：
- * 这里装的是 AI 干活留下的过程材料——故次要呈现、钉在同级最前（侧栏窄视口够得着），且与
- * 条目区（「全局设定」/「本文件夹设定」）不再同名。仅改显示：磁盘路径 / 后端常量 / stage_dirs 一律不动。
+ * 工作区根下 ``AgentCore/`` 的呈现名：文件夹设定条目 + 过程稿合成一个抽屉。
+ * 仅改显示：磁盘路径仍是 ``AgentCore/``，不迁盘、不改注入。
  */
-export const AGENTCORE_ROOT_LABEL = "AI 工作间";
+export const AGENTCORE_ROOT_LABEL = ".agentcore";
 
-export const AGENTCORE_ROOT_TOOLTIP = `AI 干活留下的过程材料（${AGENTCORE_ROOT}/）；成品会归位到工作区`;
+export const AGENTCORE_ROOT_TOOLTIP = `这个文件夹里给 AI 用的条目和过程稿（盘上 ${AGENTCORE_ROOT}/）；成品会归位到工作区`;
 
 /** 是否工作区根下那个 ``AgentCore/``（嵌套的同名目录不算，它不是约定根）。 */
 export function isAgentCoreRootDir(path: string): boolean {
@@ -78,6 +81,19 @@ export function stageFileLabel(path: string): string | null {
     if (p === dir || p.startsWith(`${dir}/`)) return meta.label;
   }
   return null;
+}
+
+/**
+ * 把 ``AgentCore/文档/`` 的子项提升为 ``AgentCore/`` 的子项（去掉 ``文档/`` 空壳，
+ * 并丢掉迁移归档）。调用方负责排序。
+ */
+export function flattenWorkroomListing<T extends { name: string }>(
+  agentCoreChildren: readonly T[],
+  docsChildren: readonly T[],
+): T[] {
+  const own = agentCoreChildren.filter((n) => n.name !== DOCS_DIR_NAME);
+  const docs = docsChildren.filter((n) => n.name !== MIGRATED_MEMORY_DIR);
+  return [...own, ...docs];
 }
 
 export type ChildrenLookup = (

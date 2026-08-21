@@ -1,13 +1,18 @@
 import { type FileNode, type FileSource, parentDir } from "@/lib/fileSource";
-import { isAgentCoreRootDir } from "@/lib/stageDirs";
+import {
+  DOCS_DIR_NAME,
+  DOCS_PREFIX,
+  flattenWorkroomListing,
+  isAgentCoreRootDir,
+} from "@/lib/stageDirs";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { FileSortBy } from "./fileTreeTypes";
 
 export type DirStatus = "loading" | "ready" | "error";
 
 /**
- * 兄弟排序档位：「AI 工作间」（盘上 ``AgentCore/``）→ 目录 → 文件。工作间仍是过程
- * 材料、次要呈现；钉在同级最前，是为了侧栏窄视口里够得着，不跟整棵用户树抢滚动。
+ * 兄弟排序档位：``.agentcore``（盘上 ``AgentCore/``）→ 目录 → 文件。抽屉默认折叠，
+ * 钉在同级最前是为了侧栏窄视口里够得着，不跟整棵用户树抢滚动。
  */
 function siblingRank(node: FileNode): number {
   if (isAgentCoreRootDir(node.path)) return 0;
@@ -194,7 +199,13 @@ export function useFileTreeData(
       statusRef.current.set(dir, "ready");
     } catch {
       if (gen !== genRef.current) return;
-      if (!silent || status !== "ready") {
+      // 约定根 / 产物柜常常还不存在；当成空层，好让 ``.agentcore`` 仍能挂条目。
+      const missingOk = isAgentCoreRootDir(dir) || dir === DOCS_PREFIX;
+      if (missingOk) {
+        childrenRef.current.set(dir, []);
+        truncatedRef.current.delete(dir);
+        statusRef.current.set(dir, "ready");
+      } else if (!silent || status !== "ready") {
         statusRef.current.set(dir, "error");
       }
     }
@@ -224,6 +235,11 @@ export function useFileTreeData(
   const ensureDir = useCallback(
     (dir: string) => {
       if (sourceRef.current.listTree) return; // whole tree already in memory
+      if (isAgentCoreRootDir(dir)) {
+        if (!statusRef.current.has(dir)) void loadDir(dir);
+        if (!statusRef.current.has(DOCS_PREFIX)) void loadDir(DOCS_PREFIX);
+        return;
+      }
       if (statusRef.current.has(dir)) return; // loading / ready / error already
       void loadDir(dir);
     },
@@ -233,7 +249,10 @@ export function useFileTreeData(
   const reload = useCallback(
     (dir: string) => {
       if (sourceRef.current.listTree) void loadEager();
-      else void loadDir(dir);
+      else if (isAgentCoreRootDir(dir)) {
+        void loadDir(dir);
+        void loadDir(DOCS_PREFIX);
+      } else void loadDir(dir);
     },
     [loadEager, loadDir],
   );
@@ -241,6 +260,12 @@ export function useFileTreeData(
   const reloadSilent = useCallback(
     (dir: string) => {
       if (sourceRef.current.listTree) return loadEager(true);
+      if (isAgentCoreRootDir(dir)) {
+        return Promise.all([
+          loadDir(dir, true),
+          loadDir(DOCS_PREFIX, true),
+        ]).then(() => undefined);
+      }
       return loadDir(dir, true);
     },
     [loadEager, loadDir],
@@ -249,11 +274,37 @@ export function useFileTreeData(
   // Stable readers (read live refs) + a memoized facade so effects/handlers can
   // depend on `data` without re-firing every render; identity stays put across
   // source-object churn (same id). Re-renders are driven by `bump`.
-  const childrenOf = useCallback(
-    (dir: string) => childrenRef.current.get(dir),
-    [],
-  );
-  const statusOf = useCallback((dir: string) => statusRef.current.get(dir), []);
+  const childrenOf = useCallback((dir: string) => {
+    if (isAgentCoreRootDir(dir)) {
+      const own = childrenRef.current.get(dir);
+      if (own === undefined) return undefined;
+      const hasDocsDir = own.some((n) => n.isDir && n.name === DOCS_DIR_NAME);
+      const docs = childrenRef.current.get(DOCS_PREFIX);
+      if (hasDocsDir && docs === undefined) return undefined;
+      return sortNodes(
+        flattenWorkroomListing(own, docs ?? []),
+        sortRef.current,
+      );
+    }
+    return childrenRef.current.get(dir);
+  }, []);
+  const statusOf = useCallback((dir: string) => {
+    if (isAgentCoreRootDir(dir)) {
+      const ownStatus = statusRef.current.get(dir);
+      const own = childrenRef.current.get(dir);
+      if (own === undefined) return ownStatus;
+      const hasDocsDir = own.some((n) => n.isDir && n.name === DOCS_DIR_NAME);
+      if (hasDocsDir) {
+        const docsStatus = statusRef.current.get(DOCS_PREFIX);
+        const docs = childrenRef.current.get(DOCS_PREFIX);
+        if (docs === undefined) {
+          return docsStatus === "error" ? "error" : (docsStatus ?? "loading");
+        }
+      }
+      return ownStatus;
+    }
+    return statusRef.current.get(dir);
+  }, []);
   const truncatedOf = useCallback(
     (dir: string) => truncatedRef.current.has(dir),
     [],

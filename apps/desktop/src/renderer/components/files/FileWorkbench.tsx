@@ -4,7 +4,10 @@ import { MemoryUpdatesView } from "@/components/files/MemoryUpdatesView";
 import type { FileSortBy } from "@/components/files/fileTreeTypes";
 import { AgentCoreSection } from "@/components/files/fileWorkbench/AgentCoreSection";
 import { DetailTabs } from "@/components/files/fileWorkbench/DetailTabs";
-import type { EntryOpenTarget } from "@/components/files/fileWorkbench/EntriesSection";
+import {
+  EntriesSection,
+  type EntryOpenTarget,
+} from "@/components/files/fileWorkbench/EntriesSection";
 import { FileSortMenu } from "@/components/files/fileWorkbench/FileSortMenu";
 import {
   type FolderRailHost,
@@ -24,11 +27,9 @@ import {
   WS_VERSIONS_PATH,
   clampRail,
   folderIdOf,
-  loadAgentCoreExpanded,
   loadExpandedWs,
   loadFileSort,
   loadRailWidth,
-  saveAgentCoreExpanded,
   saveExpandedWs,
   saveFileSort,
   saveRailWidth,
@@ -141,8 +142,8 @@ export function FileWorkbench({
   isError: boolean;
   onRetry: () => void;
   fsAvailable: boolean;
-  /** Show the pinned ``AgentCore/`` convention tree atop the rail (flat entries).
-   * Off for hosts that shouldn't surface it (e.g. side panels). */
+  /** Show the pinned global entries rail atop the file hub.
+   * 侧栏把文件夹条目挂进 ``.agentcore`` 树行；本 flag 只管 FileWorkbench 宿主。 */
   showMemory?: boolean;
   /** When navigated here with a target workspace (`/conversations`「浏览文件」),
    * auto-expand + highlight + scroll to that section（段默认折叠，故主动展开那一个；
@@ -249,9 +250,6 @@ export function FileWorkbench({
       if (folderId) {
         const wsId = `folder:${folderId}`;
         expandWs(wsId);
-        const expandedAc = loadAgentCoreExpanded();
-        expandedAc.add(folderId);
-        saveAgentCoreExpanded(expandedAc);
         setRevealMemoryFolderId(folderId);
         setFlashWsId(wsId);
         window.setTimeout(() => setFlashWsId(null), 1500);
@@ -338,7 +336,7 @@ export function FileWorkbench({
   // 对话页「记忆已更新」卡片深链跳来：打开目标记忆叶子的 tab（记忆更新对话内可见 §1.6）。每个
   // focusKey（导航键）只应用一次。记忆源与工作区列表无关，故无需等 workspaces 就绪即可打开；
   // 文件夹画像叶子的双栏编辑器会在列表到位后自行解析文件夹名。内联开 tab 逻辑（与 openFile
-  // 同义）避免依赖在其后定义的 openFile。文件夹叶子额外展开对应文件夹 +「本文件夹设定」节点；主题叶再展「主题」。
+  // 文件夹叶子额外展开对应文件夹 + ``.agentcore`` 节点；主题叶再展「主题」。
   useEffect(() => {
     if (!openMemoryLeaf || !focusKey) return;
     if (appliedMemoryLeafRef.current === focusKey) return;
@@ -526,9 +524,9 @@ export function FileWorkbench({
     offline,
     onCreateSubfolder: (parent, anchorEl) =>
       openCreateFolder(anchorEl ?? null, { id: parent.id, name: parent.name }),
-    renderFolderRail: showMemory
-      ? (folder) => (
-          <AgentCoreSection
+    renderWorkroomLead: showMemory
+      ? (folder, indent) => (
+          <EntriesSection
             scope={{ kind: "folder", folderId: folder.id }}
             memoryActivePath={
               activeTab?.wsId === MEMORY_WS ? activeTab.path : null
@@ -536,15 +534,15 @@ export function FileWorkbench({
             documentActivePath={
               activeTab?.wsId === RULES_WS ? activeTab.path : null
             }
-            onOpenEntry={openEntry}
-            onEntryDeleted={closeEntry}
-            onEntryRenamed={renameEntryTab}
-            indent={14}
-            forceOpen={revealMemoryFolderId === folder.id}
-            onRevealApplied={clearMemoryReveal}
+            onOpen={openEntry}
+            onDeleted={closeEntry}
+            onRenamed={renameEntryTab}
+            indent={indent}
           />
         )
       : undefined,
+    revealWorkroomFolderId: revealMemoryFolderId,
+    onWorkroomRevealApplied: clearMemoryReveal,
   };
 
   return (
@@ -573,8 +571,8 @@ export function FileWorkbench({
           />
         </div>
 
-        {/* Pinned global ``AgentCore/`` flat entries + 最近更新.
-            Per-folder convention tree mounts under each folder row. */}
+        {/* Pinned global entries + 最近更新. Per-folder entries mount inside
+            each folder's ``.agentcore`` tree row. */}
         {showMemory && (
           <div className="shrink-0 border-b border-border px-2 py-1">
             <AgentCoreSection

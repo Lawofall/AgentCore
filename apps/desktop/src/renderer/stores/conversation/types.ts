@@ -222,7 +222,7 @@ export interface MemoryUpdateItem {
   scope: string;
   content: string;
   target: string;
-  /** Project folder id when ``scope`` is ``project`` (深链展开该文件夹「本文件夹设定」节点). */
+  /** Project folder id when ``scope`` is ``project`` (深链展开该文件夹 ``.agentcore`` 节点). */
   projectId?: string | null;
 }
 

@@ -24,7 +24,7 @@ describe("sortNodes", () => {
     ]);
   });
 
-  it("盘上 AgentCore/（AI 工作间）钉在同级最前", () => {
+  it("盘上 AgentCore/（.agentcore）钉在同级最前", () => {
     const nodes = [dir("AgentCore"), file("报告.md"), dir("合同")];
     expect(sortNodes(nodes).map((n) => n.path)).toEqual([
       "AgentCore",

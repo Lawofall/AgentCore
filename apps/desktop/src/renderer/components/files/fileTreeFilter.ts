@@ -1,5 +1,6 @@
 import type { FileNode } from "@/lib/fileSource";
 import { parentDir } from "@/lib/fileSource";
+import { AGENTCORE_ROOT_LABEL, isAgentCoreRootDir } from "@/lib/stageDirs";
 
 /**
  * Client-side path/name filter for {@link FileTree} (no content search, no API).
@@ -13,7 +14,10 @@ export function matchesFileTreeQuery(
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return (
-    node.name.toLowerCase().includes(q) || node.path.toLowerCase().includes(q)
+    node.name.toLowerCase().includes(q) ||
+    node.path.toLowerCase().includes(q) ||
+    (isAgentCoreRootDir(node.path) &&
+      AGENTCORE_ROOT_LABEL.toLowerCase().includes(q))
   );
 }
 

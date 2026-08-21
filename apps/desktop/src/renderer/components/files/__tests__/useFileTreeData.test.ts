@@ -194,4 +194,38 @@ describe("useFileTreeData silent patch", () => {
     expect(listed).toEqual([""]);
     expect(result.current.childrenOf("docs")).toBeUndefined();
   });
+
+  it("等 AgentCore/文档 时约定根不是 ready 且 children undefined", async () => {
+    const hang = deferred<FileNode[]>();
+    const source = stubSource("local:workroom-docs-status", async (folder) => {
+      if (folder === "") return [dir("AgentCore")];
+      if (folder === "AgentCore") {
+        return [{ path: "AgentCore/文档", name: "文档", isDir: true }];
+      }
+      if (folder === "AgentCore/文档") return hang.promise;
+      return [];
+    });
+    const { result } = renderHook(() => useFileTreeData(source));
+    await waitFor(() => expect(result.current.statusOf("")).toBe("ready"));
+
+    act(() => {
+      result.current.ensureDir("AgentCore");
+    });
+    await waitFor(() => {
+      expect(result.current.childrenOf("AgentCore")).toBeUndefined();
+      expect(result.current.statusOf("AgentCore")).toBe("loading");
+    });
+
+    await act(async () => {
+      hang.resolve([
+        { path: "AgentCore/文档/工作稿", name: "工作稿", isDir: true },
+      ]);
+    });
+    await waitFor(() =>
+      expect(
+        result.current.childrenOf("AgentCore")?.map((n) => n.name),
+      ).toEqual(["工作稿"]),
+    );
+    expect(result.current.statusOf("AgentCore")).toBe("ready");
+  });
 });
