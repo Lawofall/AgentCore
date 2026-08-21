@@ -778,7 +778,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
             // P2 DURABLE：同 key 保最新（后写覆盖）；刷新后 StatusStrip 可重建。
             teamSynthesisPreview = event.payload as TeamSynthesisPreviewPayload;
           } else if (event.type === "delivery_status") {
-            // DURABLE：同 execution_id 保最新（后写覆盖）；刷新后交付状态卡可重建。
+            // DURABLE：同 execution_id 保最新（后写覆盖）；刷新后交付卡可读。
             deliveryStatus = event.payload as DeliveryStatusPayload;
           } else if (event.type === "execution_completed") {
             // DURABLE：execution 终态权威；缺省 completed（与 live handler 同口径）。

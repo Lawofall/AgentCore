@@ -84,7 +84,7 @@ description: 一行摘要    # 可空；空不是错误
 
 **合并 consult 的两处定案**：单工具 audience = **CEO + worker**（Skill 由 CEO-only 放开——worker 同样需要「怎么写调研报告」这类 HOW；代价是 worker 常驻目录多几行）。门控随之简化为单一 `has_entries`，取代现在「skill 永远 wire、memory/rule 空则不 wire」的两套。拉不到统一为**软 miss**（`success=True` + 「没有这条」，名字拼错不该炸回合）——`consult_skill` 的硬失败与「撞 playbook 名则提示去 `delegate`」特判一并取消，playbook 入口靠 `delegate` 工具 schema 自身可见；三套 `consult_*.{hit,miss}` 观测事件合一。
 
-**基座边界**：进基座 = 会被注入的条目（纯 DB 正文）。不进 = 运行产物（⏳ `工作稿` / `research` / `debate` / `reviews`）、代码、附件、用户仓库自带 md → 盘上文件 + `file_read`。**系统 Skill 正文也不进基座**（真源在代码）但**参与 `<按需目录>`**——「不进基座」讲的是存储归属，不是可见性。情景摘要与 `_memory_meta.json` 降级为巩固管线内部状态、移出基座 ✅ **已落地**（`memory_episodes` + `memory_scope_states` 两张表 + `memory/episode_store.py`；账号侧同轨端点 `/v1/account/memory/{episodes,scope-state}/*`）。**为何必须移出而非在基座里打标**：借用条目通道 = 继承条目语义，`ensure_apply_key` 会把 frontmatter 盖进 JSON sidecar，`json.loads` 随即失败并静默退回空记账——消化状态与探索指纹全部失效（每场对话把全部历史摘要重跑一遍语义巩固、冷启动每次重探），而三个症状（假常驻徽章、内部状态泄进文件页、记账失效）同源。消化状态改用 `digested_at` 列表达，取消 JSON id 集合与「逐条 load 笔记再比对集合」的 N+1 读。**回收**：消化满 `memory_episode_retention_days`（默认 30 天）的情景摘要由巩固巡检器硬删——消化后已无读者，不留无限堆积。`文档/` 退化成纯产物目录。
+**基座边界**：进基座 = 会被注入的条目（纯 DB 正文）。不进 = 运行产物（✅ `工作稿` / `research` / `debate` / `reviews`）、代码、附件、用户仓库自带 md → 盘上文件 + `file_read`。**系统 Skill 正文也不进基座**（真源在代码）但**参与 `<按需目录>`**——「不进基座」讲的是存储归属，不是可见性。情景摘要与 `_memory_meta.json` 降级为巩固管线内部状态、移出基座 ✅ **已落地**（`memory_episodes` + `memory_scope_states` 两张表 + `memory/episode_store.py`；账号侧同轨端点 `/v1/account/memory/{episodes,scope-state}/*`）。**为何必须移出而非在基座里打标**：借用条目通道 = 继承条目语义，`ensure_apply_key` 会把 frontmatter 盖进 JSON sidecar，`json.loads` 随即失败并静默退回空记账——消化状态与探索指纹全部失效（每场对话把全部历史摘要重跑一遍语义巩固、冷启动每次重探），而三个症状（假常驻徽章、内部状态泄进文件页、记账失效）同源。消化状态改用 `digested_at` 列表达，取消 JSON id 集合与「逐条 load 笔记再比对集合」的 N+1 读。**回收**：消化满 `memory_episode_retention_days`（默认 30 天）的情景摘要由巩固巡检器硬删——消化后已无读者，不留无限堆积。`文档/` 退化成纯产物目录。
 
 **配额：闸在写侧，读侧全量** ✅ **已落地**（`memory/always_quota.py` + `GET /v1/documents/always-quota`）：取消固定文件名（`偏好.md` / `画像.md` / `导航.md`）后常驻集合失去天然上限。定案是**常驻满了就不许再往常驻加，读侧永远全量注入、不截断**——让「挤」发生在用户有上下文的时刻（他正在写这条），而不是在某个回合里悄悄决定他哪条规则今天不生效。引擎不替用户挤：无分池、无自动淘汰、无 AI 溢出决策。**常驻池的唯一界是写侧配额**（`memory_always_max_chars`）；COST-001 的读侧每文件封顶（`memory_injected_file_char_cap` / `load_injected_memory`）随读侧全量定案一并作废——不得再接回。
 
@@ -193,7 +193,7 @@ GROUP BY 1;
 记忆与规则**同载体、同注入**，仅靠 `ai_maintained` 区分谁可静默改写。作用域靠**位置**（全局 = 云端根；文件夹层 = Folder 下同名夹），不另立开关。
 
 ```
-AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；成品经归位移进用户工作区）
+AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打开入口是产物卡）
 ├── 规则/                 用户硬规则（ai_maintained=false）
 │   └── *.md              always（默认）→ 共享 <rules>；或 on_demand → <按需目录> + consult ✅
 │                         （`conditional` ✅ 已随迁移 d1e4a9c2f7b8 从 CHECK 摘除，生效仅两档）
@@ -203,7 +203,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；成�
 │   ├── 导航.md           always · 仅文件夹层 · 短入口（一句话定位 + 任务路由）✅
 │   └── 主题/<slug>.md    on_demand · <按需目录> + consult（单次软顶 5；总数≤memory_max_topic_files）✅
 └── 文档/                 工作区盘 · 永不进 <rules> · 按需 file_read
-    ├── 工作稿/…          ⏳ 无显式路径产物的默认落点（取代旧「兜底进 research」）
+    ├── 工作稿/…          ✅ 无显式路径产物的默认落点（取代旧「兜底进 research」）
     └── research/ debate/ reviews/  运行产物（✅ 步 3 后 `项目/` 已撤）
 ```
 
@@ -215,7 +215,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；成�
 - 冲突：靠措辞 + 就近相关性；用户硬规则恒胜。
 - `文档/` 与同树旁路 `AgentCore/index/`（code_search；系统噪音）正交：索引管符号检索；导航/主题管叙事路由。勿与 `~/Documents/AgentCore/` 工作区容器混淆。
 - 主题继续 `name=主题/<slug>.md`（非真实嵌套 folder）——有意设计。
-- **约定常量**：约定文档子目录 `research`/`debate`/`reviews`（⏳ 加默认落点 `工作稿`）→ 代码 `workspace/stage_dirs.py`；✅ 步 3 后 `文档/` 已无 `项目/`。`AgentCore/` 整体 UI = **`.agentcore`**，成品经归位移出 → [工作区 §四](/docs/02-架构/双模式工作区.md#四约定文档目录约定)。
+- **约定常量**：约定文档子目录 `research`/`debate`/`reviews`（✅ 默认落点 `工作稿`）→ 代码 `workspace/stage_dirs.py`；✅ 步 3 后 `文档/` 已无 `项目/`。`AgentCore/` 整体 UI = **`.agentcore`**；用户要拿走的文件在派单时写入工作区，否则留在抽屉、从产物卡打开 → [工作区 §四](/docs/02-架构/双模式工作区.md#四约定文档目录约定)。
 
 → 见代码：`memory/document_store.py`、`memory/migrate_agentcore.py`
 
@@ -223,10 +223,10 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；成�
 
 ## 二、注入
 
-> 现状 ✅（按需侧「单目录 + 单工具」已随步 1 落地；**写侧常驻配额闸也已落地** → `memory/always_quota.py` + `GET /v1/documents/always-quota`，读侧全量不截断）。仍 ⏳ 的目标形态只剩「常驻拼成单块」与条目化步 2–4，见开头「目标形态」节。
+> 现状 ✅（按需侧「单目录 + 单工具」已随步 1 落地；**写侧常驻配额闸也已落地** → `memory/always_quota.py` + `GET /v1/documents/always-quota`，`remember` / `mutate_user_rule` 与文件页同一闸；读侧全量不截断）。仍 ⏳ 的目标形态只剩「常驻拼成单块」与条目化步 2–4，见开头「目标形态」节。
 
 1. 工作记忆经 `load_recent_history` 进窗口（CEO / worker 共用）。
-2. 长期记忆折叠进共享 `<rules>` 基座：用户规则在前（权威）、AI 记忆在后（软措辞）；无用户规则时与旧 memory-only 块逐字节一致（护前缀缓存）。桌面 sidecar **有 account 票**时：prepare/resume 对 always 规则 / AI 记忆正文 / on_demand 规则目录 / memory topics **只读进程快照缓存**（miss → 空注入、不 await 云 HTTP）；assemble 的 explore/画像/scope-state 经 `prepare_reads_cache_only` 同样只读快照（warm 含每作用域 scope-state，取代旧 `_memory_meta.json`）；非回合 `warmAccountRulesMemory` 并行拉取并 seed（`/rules/list` 一次供 always+on_demand，并回传云算好的 `folder_chain` 与祖先层规则；warm 据此把**祖先各层的画像 / 主题 / scope-state 一并拉进同一快照**——本机没有 folders 表，链只能由云给）。快照有 **300s TTL**，故 warm 回传 `ttlSeconds`、桌面按 account+folder 记到期时点并在下次用前**提前续期**；**detached execution 存活期**（`execution_detached` → `execution_completed`）桌面按同一 TTL **周期续暖**——CEO 回合 `startTurn` 已返回、团队仍跑时必须续，sidecar 内部收口不走桌面入口。只 warm 一次的话，TTL 到期后 miss 即空注入——用户规则与 AI 记忆会**静默**全失，故续期握手属契约而非优化。空注入仍打 `account.rules_memory_cache_miss`（收口带 `origin=execution_harvest`）。**无票**仍走本地 DB。
+2. 长期记忆折叠进共享 `<rules>` 基座：用户规则在前（权威）、AI 记忆在后（软措辞）；无用户规则时与旧 memory-only 块逐字节一致（护前缀缓存）。桌面 sidecar **有 account 票**时：prepare/resume 对 always 规则 / AI 记忆正文 / on_demand 规则目录 / memory topics **只读进程快照缓存**（miss → 空注入、不 await 云 HTTP）；`consult` 取规则正文与目录**同一份快照**（不另打 `/rules/list`）。assemble 的 explore/画像/scope-state 经 `prepare_reads_cache_only` 同样只读快照（warm 含每作用域 scope-state，取代旧 `_memory_meta.json`）；非回合 `warmAccountRulesMemory` 并行拉取并 seed（`/rules/list` 一次供 always+on_demand，并回传云算好的 `folder_chain` 与祖先层规则；warm 据此把**祖先各层的画像 / 主题 / scope-state 一并拉进同一快照**——本机没有 folders 表，链只能由云给）。快照有 **300s TTL**（他机改动 / 漏刷的兜底），故 warm 回传 `ttlSeconds`、桌面按 account+folder 记到期时点并在下次用前**提前续期**；**本机文件页写入**（规则 / 记忆叶子）与 sidecar 上 `remember` 成功后立刻对**活着的** sidecar 强制重暖（忽略 TTL）。**detached execution 存活期**（`execution_detached` → `execution_completed`）桌面按同一 TTL **周期续暖**——CEO 回合 `startTurn` 已返回、团队仍跑时必须续，sidecar 内部收口不走桌面入口。只 warm 一次的话，TTL 到期后 miss 即空注入——用户规则与 AI 记忆会**静默**全失，故续期握手属契约而非优化。空注入仍打 `account.rules_memory_cache_miss`（收口带 `origin=execution_harvest`）。**无票**仍走本地 DB。
 3. always 序：**全局偏好 → 全局画像 →（祖先各层画像，外→内）→ 当前层画像 → 当前层导航**（缺文件跳过；导航不继承）；用户 always 规则同序进共享 `<rules>` 前半（全局 → 祖先外→内 → 当前，祖先层带「其下所有文件夹一并适用、以更近的为准」标签）。on_demand 侧（记忆主题 / 用户规则 / 系统 Skill）合并为单一 `<按需目录>` → `consult`（沿链取并集，正文按**最近层优先**解析、全局兜底；目录非空才 wire，单一 `has_entries` 门控）；目录每项只有**名字 + `description`**，不回退取正文首行。两侧都跳过用户标了「这条不对」的条目（`disputed_at`，见「纠错通道」），云侧同轨——`/v1/account/memory` 与 `/rules/list` 的载荷带 `description` / `disputed`，故 sidecar 快照与本地 DB 的目录内容一致。
 4. **文件夹清单**（✅ · 派生，**非记忆**）：CEO prompt 独立 `<文件夹清单>` 段，回合准备时由 Folder 列表 + 各文件夹 `画像.md` 首句实时拼装（一行一项：**完整路径** + 一句话；嵌套后同名末段可存在于多层，只给末段会把每次 `resolve_folder` 逼进歧义回合），按最近活跃排序、`folder_catalog_max_entries` 截断、无文件夹则不注入。派生而非落盘，故无需巩固、不会过期、改名即时反映。**不进** `<rules>`、不吃 `max_instruction_*` 预算——它服务「跨文件夹找文件夹」，不得挤掉 always 记忆。已知降级：account 票 + `prepare_reads_cache_only` 时 warm 快照只含当前 folder 及其祖先链画像，旁支文件夹可能只有名称。
 5. **当前课题认定**（✅）：「继续做项目 / 汇报现状」且用户未点名时，**工作区（及已绑工程）近况 ＞ 全局画像「正在做 X」**——全局仅软参考，不得压过工作区，也不得把旧文件夹名写进默认提问套用户。偏好/文风等仍可用全局记忆。
@@ -243,8 +243,8 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；成�
 
 | 层 | 触发 | 行为 | 前端 |
 |---|---|---|---|
-| **情景沉淀** | 每场收尾 | ≤200 字摘要 + 可选「本场证实的项目事实」；输入**只取水位之后的新增消息**（上限 40 条）+ turn_journal 动作清单（路径/命令/搜索，命令先脱敏）；**不注入 prompt** | 轻提示，**LLM 摘要成功才出卡** |
-| **语义巩固** | ≥3 场未消化 **或** ≥24h | 整文件重写偏好/画像；**文件夹导航增量合并**（一行一条路由；路径/命令须本批动作清单实证，超硬上限合并）；主题保留 ops；**逐条写、常驻配额只拒它挡下的那条**（其余照常落地，被拒的攒成一张 `quota` 卡） | diff 卡片 |
+| **情景沉淀** | 每场收尾 | ≤200 字摘要 + 可选「本场证实的项目事实」；输入**只取水位之后的新增消息**（上限 40 条）+ turn_journal 动作清单（路径/命令/搜索，命令先脱敏）；**不注入 prompt** | 对话内卡片 + 记忆动态；**不 toast**（LLM 摘要成功才出卡） |
+| **语义巩固** | ≥3 场未消化 **或** ≥24h | 整文件重写偏好/画像；**文件夹导航增量合并**（一行一条路由；路径/命令须本批动作清单实证，超硬上限合并）；主题保留 ops；**逐条写、常驻配额只拒它挡下的那条**（其余照常落地，被拒的攒成一张 `quota` 卡） | diff 卡片；不在当前对话时 toast |
 
 - 异常回合（cancelled / interrupted / error）跳过沉淀仍推进 watermark。
 - **窗口按水位裁剪，不回看固定条数**：固定回看最近 40 条会让相邻 episode 输入重叠——线上出现过第二张卡把第一张整段重讲一遍（两次固化总结的本就是同一批消息）。水位改为既 gate 又裁剪后卡片互不包含；动作清单同轨裁剪，否则「本场证实的项目事实」照样逐条重复。

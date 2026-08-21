@@ -130,6 +130,29 @@ describe("documentSource", () => {
     );
   });
 
+  it("toasts frontmatter_error on a successful save that demoted the entry", async () => {
+    const { notifyWarning } = await import("@/lib/toast");
+    vi.mocked(writeDocument).mockResolvedValueOnce({
+      ok: true,
+      version: "v4",
+      conflict: false,
+      frontmatterError: "unclosed frontmatter",
+      quotaWarning: null,
+    });
+    await src.writeText?.("d1", {
+      content: "---\nbad",
+      encoding: "utf-8",
+      eol: "lf",
+      baseline: { etag: "v1" },
+    });
+    expect(notifyWarning).toHaveBeenCalledWith(
+      "规则格式有问题，这条暂时不按「每次生效」注入",
+      expect.objectContaining({
+        description: "unclosed frontmatter",
+      }),
+    );
+  });
+
   it("rejects tree / CRUD ops the editor never uses (listed directly by the rail instead)", async () => {
     await expect(src.createFile("x")).rejects.toThrow();
     await expect(src.mkdir("x")).rejects.toThrow();

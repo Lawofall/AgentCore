@@ -12,7 +12,7 @@ Shadowed names log ``consult.name_shadowed``.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -163,7 +163,12 @@ class MemoryConsultSource:
 
 @dataclass
 class RuleConsultSource:
-    """On-demand user rules; nearest-folder-then-global resolve (cloud list or local DB)."""
+    """On-demand user rules; nearest-folder-then-global resolve.
+
+    Ticketed sidecar turns share the prepare snapshot with the directory
+    (``load_on_demand_user_rules``): miss → empty, no live ``/rules/list``.
+    Unticketed turns read the local document session.
+    """
 
     folder_id: str | None = None
 
@@ -178,10 +183,17 @@ class RuleConsultSource:
         if not key:
             return None
         try:
-            payload = await self._cloud_rules_payload()
-            if payload is not None:
+            from agentcore.account.credentials import get_account_credentials
+            from agentcore.memory.account_prepare_cache import (
+                get_account_rules_memory_snapshot,
+            )
+
+            if get_account_credentials() is not None:
+                snap = get_account_rules_memory_snapshot(user_id, self.folder_id)
+                if snap is None:
+                    return None
                 return lookup_on_demand_rule_body_from_cloud(
-                    payload, folder_id=self.folder_id, name=key
+                    snap.rules_payload, folder_id=self.folder_id, name=key
                 )
             async with async_session_factory() as session:
                 from agentcore.memory.scope_chain import db_scope_chain
@@ -199,17 +211,6 @@ class RuleConsultSource:
             )
             return None
 
-    async def _cloud_rules_payload(self) -> Mapping[str, object] | None:
-        from agentcore.account.credentials import (
-            cloud_list_user_rules,
-            get_account_credentials,
-        )
-
-        creds = get_account_credentials()
-        if creds is None:
-            return None
-        return await cloud_list_user_rules(creds, folder_id=self.folder_id)
-
     @staticmethod
     async def _load_named(
         repo: DocumentRepository, user_id: str, folder_id: str | None, key: str
@@ -223,7 +224,11 @@ class RuleConsultSource:
 
 @dataclass
 class MergedConsultSource:
-    """Skill → tool → rule → memory merge; prompt directory and fetch share this instance."""
+    """Skill → tool → rule → memory merge; prompt directory and fetch share this instance.
+
+    Ticketed rule listing and body lookup both read the prepare snapshot — same
+    payload, not a live cloud list on fetch.
+    """
 
     skill: SkillConsultSource | None = None
     tool: ToolConsultSource | None = None

@@ -111,7 +111,6 @@ _CATALOG_ORCHESTRATION_ORDER = [
     "read_image",
     "board_ops",
     "board_read",
-    "promote_product",
 ]
 
 _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
@@ -167,7 +166,6 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "read_image": (AVAILABLE_TO_CEO,),
     "board_ops": (AVAILABLE_TO_CEO,),
     "board_read": (AVAILABLE_TO_CEO,),
-    "promote_product": (AVAILABLE_TO_CEO,),
 }
 
 
@@ -375,8 +373,6 @@ def test_tool_registry_declarations_cover_roster():
         "read_image": CeoWire.ALWAYS,
         "board_ops": CeoWire.BOARD,
         "board_read": CeoWire.BOARD,
-        # 成品归位：CEO 恒持（收口前把已验收成品搬进用户工作区）。
-        "promote_product": CeoWire.ALWAYS,
     }
 
     # 指挥面同样「CEO 永不持 GRANTABLE」，唯一破例是 delete_folder：删文件夹每次都要

@@ -173,9 +173,20 @@ async def _settle_resume(
     # Same-turn consecutive STOP → terminal INTERACT (no further CEO round).
     # Streak is journal-derived so it survives suspend/resume; first STOP unchanged.
     # ADJUST is excluded inside the helper (team_preview revise can repeat).
-    force_close = is_repeated_checkpoint_stop(suspension.journal_entries, decision)
+    # Ignore the card being settled — cold-path prewrite of this checkpoint_id
+    # must not count as a prior STOP (first cancel would otherwise INTERACT).
+    force_close = is_repeated_checkpoint_stop(
+        suspension.journal_entries,
+        decision,
+        ignore_checkpoint_id=suspension.checkpoint_id,
+    )
     prior_stops = (
-        consecutive_checkpoint_stops(suspension.journal_entries) if force_close else 0
+        consecutive_checkpoint_stops(
+            suspension.journal_entries,
+            ignore_checkpoint_id=suspension.checkpoint_id,
+        )
+        if force_close
+        else 0
     )
 
     def _after_settle(settled: SettledSuspension) -> SettledSuspension:
@@ -241,44 +252,51 @@ async def _settle_resume(
                 selected=response.selected,
             )
         )
-        from agentcore.runtime.coordination.session import (
-            CoordinationSession,
-            current_execution_id,
-            set_active_coordination,
-        )
+        # CONTINUE only: rebuild the mid-flight team from journal (P0-B).
+        # STOP / TIMEOUT must not try_start_coordination or set_active_coordination —
+        # attaching a session here would detach unfinished workers to background
+        # on turn_released.
+        if response.decision is CheckpointDecision.CONTINUE:
+            from agentcore.runtime.coordination.session import (
+                CoordinationSession,
+                current_execution_id,
+                set_active_coordination,
+            )
 
-        snap = state.coordination
-        if snap is not None and snap.active:
-            session = CoordinationSession.from_snapshot(snap)
-            plan = state.plan
-            seed = dict(state.completed)
-            for rid in seed:
-                session.mark_worker_completed(rid)
-            unfinished = plan is not None and any(n.run_id not in seed for n in plan.nodes)
-            if snap.execution_id:
-                current_execution_id.set(snap.execution_id)
-                base_ctx = getattr(delegate_tool, "_base_tool_context", None)
-                if base_ctx is not None:
-                    base_ctx.execution_id = snap.execution_id
-            if unfinished and plan is not None:
-                from agentcore.runtime.coordination.host import try_start_coordination
-
-                try_start_coordination(
-                    delegate_tool,
-                    plan,
-                    execution_id=snap.execution_id,
-                    seed_completed=seed,
-                    seed_notes=None,
-                    complexity_hint="standard",
-                    # Prefer the in-process mode from the live tool; missing (process
-                    # restart) → wall so mid-flight teams keep the prior default.
-                    coordination=getattr(delegate_tool, "_coordination", None) or "wall",
-                    call_idx=0,
-                    coordinate=True,
-                    session=session,
+            snap = state.coordination
+            if snap is not None and snap.active:
+                session = CoordinationSession.from_snapshot(snap)
+                plan = state.plan
+                seed = dict(state.completed)
+                for rid in seed:
+                    session.mark_worker_completed(rid)
+                unfinished = plan is not None and any(
+                    n.run_id not in seed for n in plan.nodes
                 )
-            else:
-                set_active_coordination(session)
+                if snap.execution_id:
+                    current_execution_id.set(snap.execution_id)
+                    base_ctx = getattr(delegate_tool, "_base_tool_context", None)
+                    if base_ctx is not None:
+                        base_ctx.execution_id = snap.execution_id
+                if unfinished and plan is not None:
+                    from agentcore.runtime.coordination.host import try_start_coordination
+
+                    try_start_coordination(
+                        delegate_tool,
+                        plan,
+                        execution_id=snap.execution_id,
+                        seed_completed=seed,
+                        seed_notes=None,
+                        complexity_hint="standard",
+                        # Prefer the in-process mode from the live tool; missing (process
+                        # restart) → wall so mid-flight teams keep the prior default.
+                        coordination=getattr(delegate_tool, "_coordination", None) or "wall",
+                        call_idx=0,
+                        coordinate=True,
+                        session=session,
+                    )
+                else:
+                    set_active_coordination(session)
         from agentcore.tools.builtin.ask_user import ask_user_tool_result
         from agentcore.tools.builtin.ask_user.result import (
             ask_user_daily_review_result,

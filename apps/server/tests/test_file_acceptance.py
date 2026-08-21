@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from agentcore.runtime.runs.file_acceptance import (
-    REASON_PATH_MISMATCH,
     apply_declared_path_acceptance,
     declaration_allows_landed,
     landed_matches_declared,
@@ -60,17 +59,17 @@ def test_declaration_allows_landed_empty_artifacts_uses_artifact_dir_prefix():
     assert declaration_allows_landed(landed, artifacts=[], artifact_dir="") is True
 
 
-def test_apply_declared_path_acceptance_rejects_mismatch_only():
+def test_apply_declared_path_acceptance_omits_extras():
     landed = "AgentCore/文档/reviews/a.md"
     accepted = {"path": landed, "status": "accepted"}
-    rejected = apply_declared_path_acceptance(
-        accepted,
-        artifacts=["a.md"],
-        artifact_dir="AgentCore/文档/reviews",
+    assert (
+        apply_declared_path_acceptance(
+            accepted,
+            artifacts=["a.md"],
+            artifact_dir="AgentCore/文档/reviews",
+        )
+        is None
     )
-    assert rejected["status"] == "rejected"
-    assert rejected["reason"] == REASON_PATH_MISMATCH
-    assert rejected["path"] == landed
 
     keep = apply_declared_path_acceptance(
         {"path": landed, "status": "accepted"},
@@ -81,7 +80,8 @@ def test_apply_declared_path_acceptance_rejects_mismatch_only():
     assert "reason" not in keep
 
     already = {"path": landed, "status": "rejected", "reason": "run_failed"}
-    assert apply_declared_path_acceptance(already, artifacts=["other.md"]) is already
+    assert apply_declared_path_acceptance(already, artifacts=["other.md"]) is None
+    assert apply_declared_path_acceptance(already, artifacts=[landed]) is already
 
     unconstrained = apply_declared_path_acceptance(
         {"path": landed, "status": "accepted"},

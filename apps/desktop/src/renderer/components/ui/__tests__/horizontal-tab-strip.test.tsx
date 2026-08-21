@@ -110,11 +110,10 @@ describe("HorizontalTabStrip / useSortableTabIds", () => {
     expect(screen.getByRole("navigation", { name: "标签页" })).toBeTruthy();
   });
 
-  // The app reserves a 10px scrollbar gutter on every scroller (globals.css). In a
-  // fixed-height tab header that gutter clips the tab row, so the scroller opts out
-  // via the unlayered `.scrollbar-hidden` class — Tailwind's `[scrollbar-width:none]`
-  // sits in @layer utilities and silently loses to the global `*` rule.
-  it("opts the scroll container out of the reserved scrollbar gutter", () => {
+  // Compact tab chrome uses fade arrows, not a native overlay bar. Opt out via
+  // the unlayered `.scrollbar-hidden` class — Tailwind's `[scrollbar-width:none]`
+  // sits in @layer utilities and silently loses to unlayered globals.
+  it("opts the scroll container out of the native overlay scrollbar", () => {
     const { container } = render(
       <HorizontalTabStrip>
         <div>tab</div>

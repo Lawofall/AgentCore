@@ -7,6 +7,7 @@ import pytest
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, TokenUsage
 from agentcore.runtime.delegate.continuation import (
     ContinuationRejectedError,
+    _continuation_prompt,
     merge_continuation_tools,
     register_completed_session,
     resolve_session,
@@ -772,3 +773,20 @@ async def test_continue_from_undeclared_tools_keeps_session_tools():
     )
     assert result.success is True
     assert store.get("t_1").spec.tools == ["file_read", "grep"]
+
+
+def test_continuation_prompt_includes_team_brief():
+    spec = RunSpec(run_id="t_2", task="接着改标题")
+    text, blocks = _continuation_prompt(
+        spec, {}, team_brief="全员用中文；交付 PDF"
+    )
+    assert "接着改标题" in text
+    assert "全员用中文；交付 PDF" in text
+    assert any(b.channel == "team_brief" and "全员用中文" in b.body for b in blocks)
+
+
+def test_continuation_prompt_omits_blank_team_brief():
+    spec = RunSpec(run_id="t_2", task="接着写")
+    text, blocks = _continuation_prompt(spec, {}, team_brief="  ")
+    assert "团队共识" not in text
+    assert all(b.channel != "team_brief" for b in blocks)

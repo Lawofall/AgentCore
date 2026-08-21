@@ -2,7 +2,7 @@ import { FileTreeRow } from "@/components/files/FileTreeRow";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { FileNode, FileSource } from "@/lib/fileSource";
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/files/FileTreeRowMenu", () => ({
@@ -16,6 +16,7 @@ function renderDir(
   name: string,
   fileCount: number,
   status: "ready" | "error" = "ready",
+  reload: () => void = noop,
 ) {
   const children = Array.from({ length: fileCount }, (_, i) => ({
     path: `${path}/f${i}.md`,
@@ -33,7 +34,7 @@ function renderDir(
     statusOf: () => status,
     truncatedOf: () => false,
     ensureDir: noop,
-    reload: noop,
+    reload,
     reloadSilent: async () => {},
   };
   const base = {
@@ -116,5 +117,18 @@ describe("FileTreeRow load error tone", () => {
     const line = screen.getByText("加载失败");
     expect(line.className).toContain("text-muted-foreground");
     expect(line.className).not.toContain("destructive");
+    expect(screen.getByRole("button", { name: "重试" }).className).not.toContain(
+      "destructive",
+    );
+  });
+
+  it("加载失败 and 重试 call reload so ensureDir-skipped error can retry", () => {
+    const reload = vi.fn();
+    renderDir("docs", "docs", 0, "error", reload);
+    fireEvent.click(screen.getByText("加载失败"));
+    expect(reload).toHaveBeenCalledWith("docs");
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(reload).toHaveBeenCalledTimes(2);
+    expect(reload).toHaveBeenLastCalledWith("docs");
   });
 });

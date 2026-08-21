@@ -194,6 +194,15 @@ def _reset_browser_netns_health():
 
 
 @pytest.fixture(autouse=True)
+def _reset_sandboxd_client():
+    from agentcore.tools.sandbox.sandboxd.client import reset_sandboxd_client_for_tests
+
+    reset_sandboxd_client_for_tests()
+    yield
+    reset_sandboxd_client_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def _capture_client_tool_deliveries(monkeypatch, request):
     """Make every CLIENT_TOOL fulfill delivery report DELIVERED and record the frame.
 

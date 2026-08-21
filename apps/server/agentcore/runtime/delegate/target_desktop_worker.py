@@ -6,8 +6,9 @@ from typing import Any
 
 from agentcore.memory import default_memory_store
 from agentcore.memory.rules_injection import assemble_turn_rules
-from agentcore.runtime.context.workspace_context import (
+from agentcore.runtime.context import (
     build_workspace_context,
+    collect_outlet_inventory,
     detect_workspace_git,
 )
 from agentcore.runtime.resolve.prompt import (
@@ -82,6 +83,7 @@ async def rebuild_worker_prompt_for_target(
         exec_languages=exec_languages,
         permission_axes=permission_axes,
         git_fact=git_fact,
+        outlet_inventory=await collect_outlet_inventory(backend),
     )
     shared_base = assemble_system_prompt(
         rules_markdown=rules_markdown,

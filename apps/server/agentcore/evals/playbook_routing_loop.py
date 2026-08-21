@@ -35,7 +35,7 @@ from agentcore.evals.playbook_routing_decision import run_until_terminal
 from agentcore.evals.types import EvalConfigError
 from agentcore.llm.factory import build_provider
 from agentcore.llm.profiles import TurnProfiles
-from agentcore.runtime.context import build_workspace_context
+from agentcore.runtime.context import build_workspace_context, collect_outlet_inventory
 from agentcore.runtime.engine.governance import resolve_openai_tool_defs
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.pipeline import _assemble_ceo_toolset
@@ -144,6 +144,7 @@ async def _build_ceo_context(
         desktop_online=True,
         code_execute_enabled=code_execute,
         browser_enabled=browser,
+        outlet_inventory=await collect_outlet_inventory(backend),
     )
     base = assemble_system_prompt()
     ctx = ToolContext.create(

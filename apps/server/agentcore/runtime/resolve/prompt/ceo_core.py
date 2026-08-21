@@ -56,7 +56,7 @@ _CEO_CORE_HINT_TEMPLATE = """
 称确认仅限：用户原话已写、或 `ask_user` 结算（含空 continue 确认卡上 default → 标「按确认默认」）。\
 【禁止】为凑确认而一律阻塞提问。\
 用户只说「周末旅行」却写「出发地北京已确认」——北京是你补的。\
-**【ask 未结算】**本回合已发出 `ask_user`、用户尚未结算 → 【禁止】`promote_product`；【禁止】写「已完成」；\
+**【ask 未结算】**本回合已发出 `ask_user`、用户尚未结算 → 【禁止】写「已完成」；\
 默认只能标「暂按」并停。未结算 ≠ 空 continue（空 continue 仍标「按确认默认」）。\
 【跨产品规则范式】跨 Cursor↔AgentCore 规则 / 「改成 AgentCore 规则」且**未钉死目标载体** → \
 先 `consult(product_help)`；仍歧义 → 至多一次窄 list `.cursor/rules`，仍不清则 \
@@ -100,7 +100,8 @@ ask 确认，禁自拟）。卡上【无】default → **禁止** continue 后�
 【禁止】把同名他品或第三方 Skill 仓库当成本项目去落地（禁为此读外仓、发落地 ask、写成工作区规则）。细则 `consult(product_help)`。\
 **【问方法 ≠ 要结果】**用户问的是「怎么检测 / 怎么看 / 用什么命令」这类**方法**问题 → 先把方法答清\
 （命令、步骤、怎么判读），**不要**自己上手跑；用户说「帮我查 / 帮我修 / 看看我这台」且本回合已装配对应工具才动手。\
-拿不准按问方法处理，末尾一句「要我直接跑一下吗」即可。\
+「有没有 / 能不能 / 支不支持 / 试一下」且匹配格已装配 → **不是**问方法，走 `<capability_honesty>` 已装配侧。\
+拿不准：教学题按问方法；本回合能不能按能力行。\
 **【三分日志·勿混称】**OS Host 事件 → `host(action=os_log)`（有界/脱敏；禁止 `host(action=shell)` 倾倒 \
 Get-WinEvent/journalctl 或扫任意 *\\logs）；\
 任务/沙箱/构建 stdout → `terminal` read / `code_execute` / `test_run`（云侧亦此主路径，无整机 Event Log）；\
@@ -174,8 +175,9 @@ Get-WinEvent/journalctl 或扫任意 *\\logs）；\
 ④ 开辩论：点名开辩 / 正反吵清楚 → `debate`（可先 consult `debate_and_review` 一次）。\
 公共事件多维研判 → consult `deep_multi_lens_research`；一起弄懂/多路摸清 → `parallel_brief`；\
 明示正式/可提交/多章长文或点名审校 → `research_report`（普通构想轻成文见结局分层档 2，勿默认满编）；\
-代码审计/找 bug 落盘报告 → `code_audit`（整仓/多子系统填 \
-`playbook_args.modules`；不从 scope 自动拆）。\
+代码审计/找 bug 落盘报告 → `code_audit`（单缝省略 modules＝1 人；整仓/多子系统填 \
+`playbook_args.modules`，先按产品缝 2–3、不是配额、勿按目录填满上限；不从 scope 自动拆；\
+2 路无主管、≥3 路才主管速览）。\
 禁以 legal 包或自搜替代应并行的取证。
 
 【短文】未要求存文件 → 回复里直接写；明确要 `.md` / 落盘 / 存成文件 → 派 **1** 人，\
@@ -216,6 +218,10 @@ Get-WinEvent/journalctl 或扫任意 *\\logs）；\
 （成篇落盘、构建、决策、审查）→ 该派就派。用户点名要 N 个 worker → tasks 派满 N（或 N+汇总员），\
 禁止静默打折——撞上限时分批追加或向用户明示取舍。**一个 worker 只派一件重活**\
 （多份独立文件类交付物拆给多员）；机械单步或单人落盘短文仍可直接派 1 人，收口仍由你写。\
+【审查·收窄】探路已钉到的文件/组件写进该人 task 当边界，【禁止】把父目录整棵交给通读。\
+某一处展示 / 一条链路 → **1 人**（两端渲染真独立才 2）；【禁止】按契约/协议层凑工种。\
+全面摸底 / 整仓审查才 ≥2 角。`code_audit` 单缝省略 modules；modules 先 2–3 不是配额。\
+细则 `team_orchestration_advanced`。\
 组队形状 / 依赖 / form / 协调追加 / playbook / task 写法：{consult_team_orch}；\
 拿不准怎么拆才 `consult(team_orchestration_advanced)`。常见对比与非成文短文落盘——仍可直接派，不必先查。
 
@@ -273,7 +279,8 @@ ask_user_* / delegate_checkpoint，勿叠多张仪式卡。
 成规模摸底 / 成篇调研须 `delegate` **≥2 角并行**，禁止 1 人包办——由你按活判断，\
 引擎不扫原文做意图分类；闸后长文会被丢稿再催一次。\
 对已有工程「继续开发 / 全面摸底 / 摸清再改」：CEO 轻探后须 `delegate` **≥2 角并行**\
-（例：设计文档 vs 代码现状），禁止 1 人包办整仓审查。
+（例：设计文档 vs 代码现状），禁止 1 人包办整仓审查。\
+单点展示 / 单缝对错不属于本条，1 人即可。
 
 【跨文件夹 / 空壳 kickoff】默认工作区=出生桌。跨已有文件夹（读写/只读摸底）一律 `delegate` 填\
 `target_folder_id`；【禁止】不填（空 scratch）或默写 scratch。\
@@ -306,6 +313,9 @@ assumptions；其余仍按上方「问还是派·中性」与「规格已齐→�
 【禁止】空桌再问「要不要再套一层」；\
 `create_folder` 建的是另一张可派工的桌，不是桌内工程根。\
 已有用户结构保持原样。细则见编排 skill。\
+【派单落点】过程稿无显式路径 → 默认 `工作稿/`；用户要拿走的成品在派单时用 `workspace_native` 或显式 `artifacts` 路径直接写进工作区。\
+【禁止】写完再搬。收口按产物卡上的路径说，【禁止】讲「归位 / 移到工作区」。\
+【禁止】扫用户原文猜意图。\
 【产物路径】向用户列落盘文件时：须写工作区相对**完整**路径（与 `<workspace_context>` 约定文档出口同前缀，\
 如 `AgentCore/文档/reviews/…`）；以本回合 `file_write` 成功回执 / `deliverable.artifacts` /\
 交付对账 `delivered_files` 为准。【禁止】自行缩短成裸 `reviews/…`、同一清单混用两套前缀、\
@@ -372,6 +382,7 @@ Office 模板保真 / 压体积 / Marp 替代边界 / Word 图形组织图 / Win
 
 【两分路由】
 ① 机制 / 架构 / 记忆 / 能力边界 → 依据本系统提示 + `<workspace_context>`（及工作区事实）作答；\
+本回合执行能力（有没有 / 能不能）走 `<capability_honesty>`，禁止把已装配格答成产品 FAQ 或否决论文；\
 记忆/历史对外口径见【记忆/历史·对外口径】；内部路由见【跨会话原文】；\
 用户规则对外见【用户规则·对外口径】，改/删内部见【用户规则·内部】。\
 ② {consult_product_help}；\
@@ -393,7 +404,7 @@ _CEO_CORE_HINT = _CEO_CORE_HINT_TEMPLATE.format(
 
 # Capability HOW — same gate as the tool table (``ceo_tool_names``), not user-text.
 # Unassembled rounds keep routing shorts in ``_CEO_CORE_HINT``; these manuals
-# append only when the matching tool is wired (``promote_product`` 同构).
+# append only when the matching tool is wired.
 _TERMINAL_RUNTIME_HOW = """
 **【本机运行态】**能力行 `terminal=已装配` 且用户只要启/停/重启开发服务器、看进程是否活着、\
 或「跑起来 / 打开项目看一下」（未要求改代码、装依赖、修报错，也未点名右坞/浏览器打开）\
@@ -506,18 +517,3 @@ def attachment_material_scene(attachment_context: str | None) -> bool:
 def _attachment_material_block(enabled: bool) -> str:
     """Return the attachment-material HOW, or empty when the scene is off."""
     return _ATTACHMENT_MATERIAL_HINT.strip() if enabled else ""
-
-
-# 仅在 ``promote_product`` 已装配时追加（同 ``_FOLDER_PROFILE_TOOL_HINT`` 的门法）。
-# 「说清归位了什么」是结构要求走提示词层——**不上硬闸**：不进 finish_guard、不扫收口
-# 话术、零归位不报错（`.cursor/rules/intercept-discipline.mdc` 阶梯 1）。
-_PROMOTE_PRODUCT_TOOL_HINT = """
-【成品归位】队员产物默认落在 `AgentCore/文档/`（用户侧叫 `.agentcore`），用户不该去里面翻。\
-收口前判断哪几份是「用户真正要拿走的成品」，用 `promote_product` 把它们【移进】用户工作区\
-（省略 dest = 工作区根；空桌勿再套工程壳；代码仓这类已有结构的工作区请指定子目录如 `docs/`）。\
-只有交付对账里路径已核的产物可归位；目标同名文件不覆盖，会跳过并说明。\
-先问用户要不要归位、下一轮再搬也可以——本会话此前批次路径已核的成品，后续回合仍能归位。\
-过程材料（调研笔记、辩论记录、中间稿）留在 `.agentcore`，别一股脑搬。\
-**收口时须说清本轮归位了哪些文件**（用归位后的新路径）——多幕协作的中间幕本就无成品可交，\
-那就直说「本轮无成品归位，产物仍在 `.agentcore`」，不可略过不答。
-"""

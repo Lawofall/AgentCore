@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRulesMemory";
 import type { MemoryUpdateItem } from "@/stores/conversation";
 import type { components } from "@/types/api.generated";
 
@@ -84,10 +85,15 @@ export function writeMemoryFile(
   baseline: string | null,
   folderId: string | null = null,
 ): Promise<MemoryWriteResult> {
-  return api.put<MemoryWriteResult>(memoryFilePath(kind, folderId), {
-    content,
-    baseline,
-  });
+  return api
+    .put<MemoryWriteResult>(memoryFilePath(kind, folderId), {
+      content,
+      baseline,
+    })
+    .then((result) => {
+      if (result.ok && !result.conflict) scheduleAccountRulesMemoryRefresh();
+      return result;
+    });
 }
 
 /**
@@ -186,10 +192,15 @@ export function writeMemoryTopic(
   baseline: string | null,
   folderId: string | null = null,
 ): Promise<MemoryWriteResult> {
-  return api.put<MemoryWriteResult>(memoryTopicApiPath(slug, folderId), {
-    content,
-    baseline,
-  });
+  return api
+    .put<MemoryWriteResult>(memoryTopicApiPath(slug, folderId), {
+      content,
+      baseline,
+    })
+    .then((result) => {
+      if (result.ok && !result.conflict) scheduleAccountRulesMemoryRefresh();
+      return result;
+    });
 }
 
 /** Direction for {@link moveMemoryBullet} (位置即作用域纠错). */
@@ -241,13 +252,17 @@ export function moveMemoryBullet(
       source_baseline: input.sourceBaseline ?? null,
       target_baseline: input.targetBaseline ?? null,
     })
-    .then((r) => ({
-      ok: r.ok,
-      conflict: r.conflict,
-      sourceVersion: r.source_version,
-      targetVersion: r.target_version,
-      message: r.message ?? null,
-    }));
+    .then((r) => {
+      const result = {
+        ok: r.ok,
+        conflict: r.conflict,
+        sourceVersion: r.source_version,
+        targetVersion: r.target_version,
+        message: r.message ?? null,
+      };
+      if (result.ok && !result.conflict) scheduleAccountRulesMemoryRefresh();
+      return result;
+    });
 }
 
 /**
@@ -304,12 +319,16 @@ export function disputeMemoryLine(
       topic_slug: input.topicSlug ?? null,
       baseline: input.baseline ?? null,
     })
-    .then((r) => ({
-      ok: r.ok,
-      conflict: r.conflict,
-      version: r.version,
-      lineId: r.line_id,
-    }));
+    .then((r) => {
+      const result = {
+        ok: r.ok,
+        conflict: r.conflict,
+        version: r.version,
+        lineId: r.line_id,
+      };
+      if (result.ok && !result.conflict) scheduleAccountRulesMemoryRefresh();
+      return result;
+    });
 }
 
 export interface MemoryRestoreLineInput {
@@ -340,12 +359,16 @@ export function restoreMemoryLine(
       kind: input.kind ?? "profile",
       topic_slug: input.topicSlug ?? null,
     })
-    .then((r) => ({
-      ok: r.ok,
-      conflict: r.conflict,
-      version: r.version,
-      lineId: "",
-    }));
+    .then((r) => {
+      const result = {
+        ok: r.ok,
+        conflict: r.conflict,
+        version: r.version,
+        lineId: "",
+      };
+      if (result.ok && !result.conflict) scheduleAccountRulesMemoryRefresh();
+      return result;
+    });
 }
 
 export interface MemoryDisputedLine {

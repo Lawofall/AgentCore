@@ -279,7 +279,7 @@ def format_artifact_manifest(
         f"title_tree:\n{tree_block}\n"
         f"end_preview:\n{preview}\n"
         "【验真】请以本 manifest 确认落盘；优先用 manifest 验真，"
-        "勿为空转反复 file_read（同 path 受次数上限约束）。"
+        "勿为空转反复 file_read（同 path 同窗触顶只回短指针、不灌全文）。"
     )
 
 

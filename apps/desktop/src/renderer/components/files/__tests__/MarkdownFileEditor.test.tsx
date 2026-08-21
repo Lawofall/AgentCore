@@ -25,7 +25,11 @@ import { MarkdownFileEditor } from "../MarkdownFileEditor";
 
 // --- controllable inner-editor stub (module-level so the mock factory + tests share it) ---
 
-let lastEditorProps: { onChange?: (v: string) => void; onSave?: () => void };
+let lastEditorProps: {
+  onChange?: (v: string) => void;
+  onSave?: () => void;
+  initialDoc?: string;
+};
 let editorValue: string;
 let selectionCtx: {
   from: number;
@@ -40,7 +44,11 @@ vi.mock("@/components/markdown/MarkdownSourceEditor", async () => {
   const React = await import("react");
   return {
     MarkdownSourceEditor: React.forwardRef(function Stub(
-      props: { onChange?: (v: string) => void; onSave?: () => void },
+      props: {
+        onChange?: (v: string) => void;
+        onSave?: () => void;
+        initialDoc?: string;
+      },
       ref: React.Ref<unknown>,
     ) {
       lastEditorProps = props;
@@ -51,7 +59,13 @@ vi.mock("@/components/markdown/MarkdownSourceEditor", async () => {
 });
 
 // Keep heavy children out of jsdom: the preview renderer + the toolbar.
-vi.mock("@/components/chat/Markdown", () => ({ Markdown: () => null }));
+vi.mock("@/components/chat/Markdown", async () => {
+  const React = await import("react");
+  return {
+    Markdown: ({ content }: { content: string }) =>
+      React.createElement("div", { "data-testid": "md-preview" }, content),
+  };
+});
 vi.mock("@/components/markdown/sourceToolbar", () => ({
   SourceToolbar: () => null,
 }));
@@ -397,5 +411,104 @@ describe("MarkdownFileEditor 「用默认程序打开」入口门控", () => {
   it("源没有 openWithOsDefaultApp（web 云端源）→ 入口不渲染", async () => {
     await renderLoaded(makeSource({ canOpenWithOsDefaultApp: () => true }));
     expect(screen.queryByLabelText(label)).toBeNull();
+  });
+});
+
+const MEMORY_EMPTY_HINT =
+  "AI 会把记得的内容写在这里，你也可以直接改或删除。";
+
+const RETIRED_CHROME = `# 用户记忆
+> 本文件由 AI 自动维护，你可随时编辑或删除任何条目。
+`;
+
+function makeMemorySource(text: string): FileSource {
+  return makeSource({
+    id: "memory",
+    readForEdit: vi.fn(async () => ({
+      text,
+      version: { etag: "v1" },
+      encoding: "utf-8" as const,
+      eol: "lf" as const,
+    })),
+  });
+}
+
+describe("MarkdownFileEditor memory 预览空状态", () => {
+  it("空正文预览出空状态，且不写盘", async () => {
+    const source = makeMemorySource("");
+    await renderLoaded(source);
+
+    expect(screen.getByText(MEMORY_EMPTY_HINT)).toBeTruthy();
+    expect(screen.queryByTestId("md-preview")).toBeNull();
+    expect(source.writeText).not.toHaveBeenCalled();
+  });
+
+  it("chrome-only 预览出空状态，且不写盘", async () => {
+    const source = makeMemorySource(RETIRED_CHROME);
+    await renderLoaded(source);
+
+    expect(screen.getByText(MEMORY_EMPTY_HINT)).toBeTruthy();
+    expect(screen.queryByTestId("md-preview")).toBeNull();
+    expect(source.writeText).not.toHaveBeenCalled();
+  });
+
+  it("有 ## / bullet 时剥壳后照常渲染，不出空状态", async () => {
+    const source = makeMemorySource(`${RETIRED_CHROME}
+## 沟通偏好
+- 用中文
+`);
+    await renderLoaded(source);
+
+    expect(screen.queryByText(MEMORY_EMPTY_HINT)).toBeNull();
+    expect(screen.getByTestId("md-preview").textContent).toBe(
+      "## 沟通偏好\n- 用中文",
+    );
+    expect(source.writeText).not.toHaveBeenCalled();
+  });
+
+  it("导航一句话定位不剥，也不出空状态", async () => {
+    const nav = "# 导航\n一句话：示例仓\n";
+    const source = makeMemorySource(nav);
+    await renderLoaded(source);
+
+    expect(screen.queryByText(MEMORY_EMPTY_HINT)).toBeNull();
+    expect(screen.getByTestId("md-preview").textContent).toBe(nav);
+  });
+
+  it("编辑态仍是原文（含退役壳），预览空状态卸掉", async () => {
+    const source = makeMemorySource(RETIRED_CHROME);
+    await renderEditing(source);
+
+    expect(screen.queryByText(MEMORY_EMPTY_HINT)).toBeNull();
+    expect(lastEditorProps.initialDoc).toBe(RETIRED_CHROME);
+    expect(source.writeText).not.toHaveBeenCalled();
+  });
+
+  it("用户规则 / 工作区 md 不出记忆空状态", async () => {
+    const emptyDocs = makeSource({
+      id: "documents",
+      readForEdit: vi.fn(async () => ({
+        text: "",
+        version: { etag: "d1" },
+        encoding: "utf-8" as const,
+        eol: "lf" as const,
+      })),
+    });
+    await renderLoaded(emptyDocs);
+    expect(screen.queryByText(MEMORY_EMPTY_HINT)).toBeNull();
+    expect(screen.getByTestId("md-preview").textContent).toBe("");
+
+    cleanup();
+    const emptyWorkspace = makeSource({
+      id: "workspace:cloud",
+      readForEdit: vi.fn(async () => ({
+        text: "",
+        version: { mtimeMs: 1 },
+        encoding: "utf-8" as const,
+        eol: "lf" as const,
+      })),
+    });
+    await renderLoaded(emptyWorkspace);
+    expect(screen.queryByText(MEMORY_EMPTY_HINT)).toBeNull();
   });
 });

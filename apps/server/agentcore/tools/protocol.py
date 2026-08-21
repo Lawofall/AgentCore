@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 WriteScope = Literal["none", "explore_memory", "project"]
@@ -96,6 +96,27 @@ def fork_explore_write_scope(
     return TurnExploreGate(
         pending=bool(context.cold_start_explore_pending),
         write_scope=scope,
+    )
+
+
+def isolate_file_read_ceiling(context: ToolContext) -> ToolContext:
+    """Give this run its own same-path ``file_read`` ledger.
+
+    Counts / delivered ranges / reread grants are mutable dicts: ``replace()``
+    aliases them, so sibling workers and the CEO would otherwise share one cap
+    (a second auditor of the same file hits 「上限 5 次」 after two reads).
+    Landed-artifact ledgers stay shared. Projection dual-state resets to
+    unsynced; ``apply_file_read_clear_state`` fills it on the next tool round.
+    """
+    return replace(
+        context,
+        file_read_counts={},
+        file_read_delivered_ranges={},
+        file_read_line_totals={},
+        file_read_reread_issued={},
+        file_read_reread_remaining={},
+        file_read_verbatim_paths=None,
+        file_read_cleared_paths=None,
     )
 
 
@@ -193,17 +214,17 @@ class TurnTargetDeskHint:
 
 @dataclass
 class TurnPromotionLedger:
-    """成品归位（``promote_product``）的回合台账 —— 交付对账快照 + 已归位的 ``{from,to}``。
+    """回合归位台账 —— 交付对账快照 + 已归位的 ``{from,to}``（历史事件 / journal 重放）。
 
     **为何是 ToolContext 上的共享可变对象、而不是 ContextVar**：``execute_tools`` 用
-    ``asyncio.gather`` 跑每个工具调用，gather 会复制 context —— ``delegate`` 里写的
-    ContextVar 对同回合后续那次 ``promote_product`` 调用（另一个 Task）不可见。
-    ``dataclasses.replace`` 浅拷贝仍指向同一个对象，所以整回合共用一本账
-    （同 ``turn_target_desk`` / ``landed_artifact_kinds`` 的模式；``coordination.session``
-    的注释记着同一条坑）。逐回合 ``ToolContext.create`` 天然隔离并发回合。
+    ``asyncio.gather`` 跑每个工具调用，gather 会复制 context —— 后台 drive 写的
+    ContextVar 对 CEO 父任务不可见。``dataclasses.replace`` 浅拷贝仍指向同一个对象，
+    所以整回合共用一本账（同 ``turn_target_desk`` / ``landed_artifact_kinds`` 的模式；
+    ``coordination.session`` 的注释记着同一条坑）。逐回合 ``ToolContext.create``
+    天然隔离并发回合。
 
-    ``reconciliation`` = 本回合最近一次 ``delivery_status`` 载荷（accepted 闸门的真源；
-    归位只读它，**不重算验收**）。``promotions`` = 已归位行，顺序即归位序。
+    ``reconciliation`` = 本回合最近一次 ``delivery_status`` 载荷。``promotions`` =
+    已归位行（journal 重放接手历史 ``{from,to}``），顺序即归位序。
     读写口径见 :mod:`agentcore.runtime.delegate.promotion`。
 
     ``delivery_verdict`` = 同一对象上的收口档位槽（``DeliveryVerdict | None``）。
@@ -491,20 +512,21 @@ class ToolContext:
     # signal only — ``dataclasses.replace`` drops this bool. Handoff / executor
     # body-floor exemption must read ``landed_artifact_kinds`` (prose) instead.
     has_landed_files: bool = False
-    # Wave3 B：本 run 内各相对路径成功 ``file_read`` 次数（共享可变 dict；
-    # ``dataclasses.replace`` 浅拷贝仍指向同一计数器）。从第 1 行要满安全顶的整读计次；
-    # 开窗仅当本次请求行范围已被此前交付覆盖、且投影窗内仍有该 path 正文时计次。
-    # ``tool_clear`` 全文已清后的重读不计次。超 ``FILE_READ_SAME_PATH_MAX`` 且投影窗内
-    # 仍有该 path 正文、又无再读授额时拒绝。
+    # Wave3 B：本 run 内各相对路径成功 ``file_read`` 次数。worker / CEO / 续派 fork
+    # 必须 :func:`isolate_file_read_ceiling`，禁止靠 ``replace(run_id=)`` 误共用。
+    # 从第 1 行要满安全顶的整读计次；开窗仅当本次请求行范围已被此前交付覆盖、且投影窗内
+    # 仍有该 path 正文时计次。``tool_clear`` 全文已清后的重读不计次。超
+    # ``FILE_READ_SAME_PATH_MAX`` 且投影窗内仍有该 path 正文、又无再读授额时
+    # **不硬拒**：回短指针（不灌全文）。
     file_read_counts: dict[str, int] = field(default_factory=dict)
     # 已交付行范围（path → 合并后的闭区间）+ 最近一次成功读的总行数（供把请求裁到 EOF）。
     # 与 ``file_read_counts`` 同生命周期：写成功必须一并清，否则写后核对会按旧范围误拒。
     file_read_delivered_ranges: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     file_read_line_totals: dict[str, int] = field(default_factory=dict)
     # R1 tool_clear 双态：engine 在每轮 ``execute_tools`` 前对 canonical 再跑
-    # ``project_cleared_window`` 后写入。``None`` = 未同步（单测/旁路）→ 视为正文仍在，
-    # 保持纯 ``FILE_READ_SAME_PATH_MAX`` 硬顶。``frozenset`` = 投影窗内仍有 verbatim
-    # ``file_read`` 正文的 path 集合（空集 = 该窗内全部已清）。正文已清时不因授额用尽硬拒。
+    # ``project_cleared_window`` 后写入。``None`` = 未同步（单测/旁路）→ 视为正文仍在。
+    # ``frozenset`` = 投影窗内仍有 verbatim ``file_read`` 正文的 path 集合
+    # （空集 = 该窗内全部已清）。正文已清时不因授额用尽走同窗短指针。
     file_read_verbatim_paths: frozenset[str] | None = None
     # 同一投影写下的「全文已清」path：至少一条 ``file_read`` stub，且该 path 无 verbatim。
     # ``None`` = 未同步，不按清后重读豁免计次。清后重读不计 ``FILE_READ_SAME_PATH_MAX``。
@@ -518,7 +540,7 @@ class ToolContext:
     # Artifact-first Writing：本 execution 已落盘 path → ``skeleton`` | ``prose``（共享可变
     # dict；``dataclasses.replace`` 浅拷贝与 ``file_read_counts`` 同模式）。``prose`` = 成篇
     # 正文，同 path 后续 ``file_append`` 硬拒。配 ``landed_artifact_authors``：首次落盘
-    # 该 path 的 ``agent_id``（归属/可观测；作者与读者 ``file_read`` 走同一
+    # 该 path 的 ``agent_id``（归属/可观测；作者与读者 ``file_read`` 各有独立
     # ``FILE_READ_SAME_PATH_MAX``，无身份硬闸）。
     landed_artifact_kinds: dict[str, Literal["skeleton", "prose"]] = field(
         default_factory=dict
@@ -543,7 +565,7 @@ class ToolContext:
     # 裸聊同回合先建/解析后的软默认目标桌（共享可变；``replace`` 浅拷贝同引用）。
     # 仅缺省 ``delegate`` 目标时消费；多 id 同回合清空。≠ 会话出生 ``folder_id``。
     turn_target_desk: TurnTargetDeskHint = field(default_factory=TurnTargetDeskHint)
-    # 成品归位台账（共享可变；``replace`` 浅拷贝同引用）——见 ``TurnPromotionLedger``。
+    # 历史归位重放 + delivery_verdict 槽（共享可变；``replace`` 浅拷贝同引用）。
     promotion_ledger: TurnPromotionLedger = field(default_factory=TurnPromotionLedger)
     # 空桌工程壳剥段（共享可变；``replace`` / workspace fork 同引用）——见 ``TurnProjectShell``。
     project_shell: TurnProjectShell = field(default_factory=TurnProjectShell)

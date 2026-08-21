@@ -131,6 +131,9 @@ def test_cloud_scratch_facts():
     assert "触达不了用户的电脑" not in out
     assert "本机 Host" in out or "host=" in out
     assert "host=已装配" in out
+    # Host 面是短命令/系统状态/设置，不是「仅音响面板」——邻格 terminal=未装配不得否决本格。
+    assert "短命令" in out
+    assert "音响/系统信息" not in out
     assert "bind_local_folder" in out  # 本机传统可教
     assert "open_local_project" in out
     assert "register_local_project" in out
@@ -953,3 +956,33 @@ def test_opaque_source_reads_backend_this_turn_materials():
         terminal_enabled=False,
     )
     assert "源数据文件下一步" not in _exec_fact_line(md_out)
+
+
+def test_outlet_inventory_empty_and_named_suffixes():
+    from agentcore.runtime.context.outlet_inventory import OUTLET_DIRS, OutletDirListing
+    from agentcore.workspace.stage_dirs import REVIEWS_DIR
+
+    empty = {d: OutletDirListing() for d in OUTLET_DIRS}
+    empty_out = build_workspace_context(
+        _FakeBackend("server"),
+        desktop_online=True,
+        code_execute_enabled=False,
+        terminal_enabled=False,
+        outlet_inventory=empty,
+    )
+    assert "约定文档出口·审查：`AgentCore/文档/reviews/`（当前为空）" in empty_out
+    assert "约定文档出口·调研/讨论：`AgentCore/文档/research/`（当前为空）" in empty_out
+
+    named = {
+        **empty,
+        REVIEWS_DIR: OutletDirListing(names=("协作图审计-架构.md", "协作图审计-渲染链路.md")),
+    }
+    named_out = build_workspace_context(
+        _FakeBackend("server"),
+        desktop_online=True,
+        code_execute_enabled=False,
+        terminal_enabled=False,
+        outlet_inventory=named,
+    )
+    assert "（现有：协作图审计-架构.md；协作图审计-渲染链路.md）" in named_out
+    assert "记忆注入审计.md" not in named_out

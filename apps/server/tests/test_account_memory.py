@@ -131,6 +131,33 @@ async def test_cloud_remember_ok(monkeypatch: pytest.MonkeyPatch, account_creds)
     assert "已追加" in result["message"]
 
 
+async def test_cloud_remember_quota_exceeded(
+    monkeypatch: pytest.MonkeyPatch, account_creds
+):
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(
+            409,
+            json={
+                "detail": {
+                    "code": "ALWAYS_QUOTA_EXCEEDED",
+                    "message": "常驻条目配额已满",
+                }
+            },
+        )
+
+    monkeypatch.setattr(
+        "agentcore.account.credentials.outbound_async_client",
+        lambda **kwargs: httpx.AsyncClient(transport=_FakeTransport(_handler), **kwargs),
+    )
+    with pytest.raises(AccountCloudError) as ei:
+        await cloud_remember_rule(
+            account_creds, content="以后都用中文", folder_id=None
+        )
+    assert ei.value.code == "ALWAYS_QUOTA_EXCEEDED"
+    assert "配额" in ei.value.message
+
+
 async def test_cloud_remember_replace_payload(monkeypatch: pytest.MonkeyPatch, account_creds):
     async def _handler(request: httpx.Request) -> httpx.Response:
         import json
@@ -316,12 +343,23 @@ async def test_remember_tool_cloud_success(
         "agentcore.tools.builtin.remember.async_session_factory",
         lambda: (_ for _ in ()).throw(AssertionError("must not open local DB")),
     )
+    warmed = {"n": 0}
+
+    async def _fake_warm(_creds, *, user_id, folder_id):
+        warmed["n"] += 1
+        assert user_id == "u1"
+        assert folder_id is None
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.remember._rewarm_account_rules_memory", _fake_warm
+    )
 
     tool = RememberTool(folder_id=None)
     with account_credentials_scope(account_creds):
         result = await tool.execute({"content": "以后都用中文"}, _ctx())
     assert result.success is True
     assert "已追加" in (result.output or "")
+    assert warmed["n"] == 1
 
 
 async def test_remember_tool_cloud_forget(
@@ -339,6 +377,14 @@ async def test_remember_tool_cloud_forget(
 
     monkeypatch.setattr(
         "agentcore.account.credentials.cloud_remember_rule", _fake_remember
+    )
+
+    async def _noop_rewarm(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.remember._rewarm_account_rules_memory",
+        _noop_rewarm,
     )
     tool = RememberTool(folder_id=None)
     with account_credentials_scope(account_creds):
@@ -586,9 +632,14 @@ async def test_load_on_demand_ticketed_empty_catalog_is_honest(
         assert await load_on_demand_user_rules("u1", folder_id=None) == []
 
 
-async def test_consult_cloud_hit(
+async def test_consult_ticketed_hit_uses_snapshot(
     monkeypatch: pytest.MonkeyPatch, account_creds
 ):
+    from agentcore.memory.account_prepare_cache import (
+        AccountPrepareSnapshot,
+        clear_account_rules_memory_cache,
+        seed_account_rules_memory_cache,
+    )
     from agentcore.runtime.context.consult_sources import (
         MergedConsultSource,
         RuleConsultSource,
@@ -596,16 +647,23 @@ async def test_consult_cloud_hit(
     from agentcore.tools.builtin.consult import ConsultTool
 
     body = "- 对外沟通须用中文\n"
+    clear_account_rules_memory_cache()
+    seed_account_rules_memory_cache(
+        "u1",
+        "F1",
+        AccountPrepareSnapshot(
+            rules_payload={
+                "global_on_demand_rules": [{"name": "合规附录.md", "content": body}],
+                "project_on_demand_rules": [],
+            }
+        ),
+    )
 
-    async def _fake_list(creds, *, folder_id):
-        assert folder_id == "F1"
-        return {
-            "global_on_demand_rules": [{"name": "合规附录.md", "content": body}],
-            "project_on_demand_rules": [],
-        }
+    async def _boom(*_a, **_k):
+        raise AssertionError("consult fetch must not live-list /rules")
 
     monkeypatch.setattr(
-        "agentcore.account.credentials.cloud_list_user_rules", _fake_list
+        "agentcore.account.credentials.cloud_list_user_rules", _boom
     )
     monkeypatch.setattr(
         "agentcore.db.base.async_session_factory",
@@ -620,6 +678,32 @@ async def test_consult_cloud_hit(
     assert result.display.get("name") == "合规附录"
     # 来源分类只进日志，不进 display：读侧不向用户暴露 skill/rule/memory 三分。
     assert "kind" not in result.display
+
+
+async def test_consult_ticketed_miss_does_not_http(
+    monkeypatch: pytest.MonkeyPatch, account_creds
+):
+    from agentcore.memory.account_prepare_cache import clear_account_rules_memory_cache
+    from agentcore.runtime.context.consult_sources import RuleConsultSource
+
+    clear_account_rules_memory_cache()
+    called = {"n": 0}
+
+    async def _fake_list(*_a, **_k):
+        called["n"] += 1
+        return {"global_on_demand_rules": [{"name": "合规附录.md", "content": "- x\n"}]}
+
+    monkeypatch.setattr(
+        "agentcore.account.credentials.cloud_list_user_rules", _fake_list
+    )
+    monkeypatch.setattr(
+        "agentcore.db.base.async_session_factory",
+        lambda: (_ for _ in ()).throw(AssertionError("must not open local DB")),
+    )
+    src = RuleConsultSource(folder_id="F1")
+    with account_credentials_scope(account_creds):
+        assert await src.fetch_by_name("u", "合规附录") is None
+    assert called["n"] == 0
 
 
 async def test_assemble_without_ticket_uses_db_path(

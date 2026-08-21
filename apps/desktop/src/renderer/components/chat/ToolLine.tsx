@@ -66,9 +66,8 @@ function isToolCeilingGuidance(
   step: Extract<ProcessStep, { kind: "tool" }>,
 ): boolean {
   return (
-    step.status === "error" &&
-    (isFileReadCeilingGuidance(step.tool_name, step.result) ||
-      isVerifyBudgetExceeded(step.display))
+    isFileReadCeilingGuidance(step.tool_name, step.result) ||
+    (step.status === "error" && isVerifyBudgetExceeded(step.display))
   );
 }
 
@@ -258,19 +257,18 @@ function ToolRowTail({
   // 不撑到行边缘）：失败红✗ / 天花板 warning 三角；顶层可展开补折叠 chevron；组内明细用绿✓。
   return (
     <span className="ml-1 inline-flex items-center gap-1 align-middle">
-      {status === "error" &&
-        (ceilingGuidance ? (
-          <AlertTriangle
-            size={14}
-            className="animate-status-pop text-warning motion-reduce:animate-none"
-          />
-        ) : (
-          <X
-            size={14}
-            className="animate-status-pop text-destructive motion-reduce:animate-none"
-          />
-        ))}
-      {nested && status === "success" && (
+      {ceilingGuidance ? (
+        <AlertTriangle
+          size={14}
+          className="animate-status-pop text-warning motion-reduce:animate-none"
+        />
+      ) : status === "error" ? (
+        <X
+          size={14}
+          className="animate-status-pop text-destructive motion-reduce:animate-none"
+        />
+      ) : null}
+      {nested && status === "success" && !ceilingGuidance && (
         <Check
           size={14}
           className="animate-status-pop text-success motion-reduce:animate-none"

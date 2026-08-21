@@ -206,10 +206,16 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
     );
 
     // 换源只重置这棵树自己的东西——剪贴板是全局的，清掉就再也粘不到别的树里。
+    // 持久化展开同一拍补拉子目录：必须用刚读出的集合，不能读当时仍属旧源的
+    // React expanded（否则会拿旧路径去新源 listDir）。根层由 useFileTreeData 拉。
     useEffect(() => {
-      setExpanded(loadExpanded(source.id));
+      const next = loadExpanded(source.id);
+      setExpanded(next);
+      for (const dir of next) {
+        if (dir !== "") data.ensureDir(dir);
+      }
       clearSelection();
-    }, [source.id, clearSelection]);
+    }, [source.id, clearSelection, data]);
 
     const sourceRef = useRef(source);
     sourceRef.current = source;

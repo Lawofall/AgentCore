@@ -358,6 +358,7 @@ async def test_extractor_to_applier_end_to_end():
     out = MarkdownMemoryApplier().apply("", ops)
     assert "## 技术栈与工具" in out
     assert "- 偏好 pnpm" in out
+    assert "用户记忆" not in out
 
 
 # --- PI-005: instruction-style crystallization guard (记忆投毒防御纵深) ---
@@ -474,4 +475,4 @@ async def test_extractor_drops_injected_candidate_end_to_end():
         )
     )
     assert ops == []
-    assert MarkdownMemoryApplier().apply("", ops) == "# 用户记忆\n> 本文件由 AI 自动维护，你可随时编辑或删除任何条目。\n"
+    assert MarkdownMemoryApplier().apply("", ops) == ""

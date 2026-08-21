@@ -67,6 +67,8 @@ export interface DocumentWriteResult {
   ok: boolean;
   version: string;
   conflict: boolean;
+  frontmatterError: string | null;
+  quotaWarning: string | null;
 }
 
 /**
@@ -159,6 +161,14 @@ const toDetail = (w: DocumentDetailWire): DocumentDetail => ({
   ...toNode(w),
   content: w.content,
   version: w.version,
+});
+
+const toWriteResult = (w: DocumentWriteWire): DocumentWriteResult => ({
+  ok: w.ok,
+  version: w.version,
+  conflict: Boolean(w.conflict),
+  frontmatterError: w.frontmatter_error?.trim() || null,
+  quotaWarning: w.quota_warning?.trim() || null,
 });
 
 function isUserRuleDoc(n: DocumentNode): boolean {
@@ -360,7 +370,7 @@ export function writeDocument(
     "PUT",
     { content, baseline },
     "保存规则失败",
-  );
+  ).then(toWriteResult);
 }
 
 /** Rename a document (content untouched). */
@@ -386,5 +396,5 @@ export function deleteDocument(id: string): Promise<DocumentWriteResult> {
     "DELETE",
     undefined,
     "删除规则失败",
-  );
+  ).then(toWriteResult);
 }

@@ -29,7 +29,7 @@ from agentcore.llm.tools_gate import TOOLS_SOFT_GATE_WARNING
 from tests.integration.conftest import register_and_login
 
 _MASTER_KEY = "a" * 64
-_OVER_MONTHLY_NANO = 20_000_000_000  # above the default ¥5 monthly cap
+_OVER_MONTHLY_NANO = 20_000_000_000  # above the default ¥10 monthly cap
 _BASE = "/v1/users/me/llm-providers"
 
 

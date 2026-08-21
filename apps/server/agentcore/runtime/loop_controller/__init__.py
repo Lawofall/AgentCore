@@ -529,7 +529,7 @@ class LoopController(
             # the sliding window above (REPEATED_FAILURE / round recording) and count toward
             # per-round unproductive detection, only the cumulative warn/disable tally
             # skips them. Path thrash stays constrained by validation fingerprint streak /
-            # same-path file_read ceiling — not by disabling the tool.
+            # same-path file_read cheap-hit — not by disabling the tool.
             # Permanent failures skip the incremental tally too — retire below leaps
             # straight to disable on first hit (no warn=2 / disable=3 window).
             counts_toward_breaker = (

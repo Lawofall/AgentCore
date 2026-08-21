@@ -16,8 +16,9 @@
   连同提问一起丢了。**下面那条 assembly-claim 测试就是这个 bug 的回归守卫。**
 - 可履约的操作手册 = 跟**装配门**走（``capability_how_suffix``）。通道/工具不在的回合，
   手册是一份证明履行不了的说明书。
-- **诚实底线相反：它恰在能力缺失的那一回合才生效，必须常驻**，不许按可用性下线。
-  所以「禁止把仅结构自检说成跑绿」「禁止称不可产的工具已装配」这类留在核里是对的。
+- **诚实底线双向且常驻**：未装配不许假装用过（缺失那一回合才用到）；已装配不许假装没有
+  （按需工具未进开场表的那一回合才用到）。都不许按可用性下线。
+  「禁止把仅结构自检说成跑绿」「禁止称不可产的工具已装配」这类留在核里是对的。
 
 ## 红了怎么办
 
@@ -115,8 +116,9 @@ def test_gated_manuals_do_not_ride_the_resident_core(gate_tool: str, signature: 
 
 
 def test_honesty_floors_stay_resident():
-    """诚实底线不跟门走——它恰在能力缺失那一回合才生效，按可用性下线就是删错。"""
+    """诚实底线不跟门走——缺失回合与已装配-未进表回合都要，按可用性下线就是删错。"""
     hint = _CEO_CORE_HINT
+    base = assemble_system_prompt()
     # 装包/验绿：未装配时才需要这几条。
     assert "跑绿" in hint or "单测已绿" in hint
     assert "全绿" in hint
@@ -126,3 +128,5 @@ def test_honesty_floors_stay_resident():
     # 区外授权：通道不在时才需要（手册本体已挂门，底线留下）。
     assert "host=未装配" in hint
     assert "勿挂载" in hint and "勿发卡" in hint
+    # 已装配反向诚实住共享基座（全员），不跟 host/browser 门走。
+    assert "【能力已装配·禁止否决论文】" in base

@@ -487,14 +487,14 @@ def test_max_rounds_ceiling_honesty_steer_and_banner():
     assert steer is not None
     assert "部分落地" in steer
     assert "max_rounds" in steer
-    # 纯轮次顶：诚实收口即可，勿误导成「必须续写长文」。
-    assert "continue_from_run_id" not in steer
+    assert "continue_from_run_id" in steer
+    assert "replaces_run_id" in steer
 
     dishonest = "修复已全部完成，已完整可用。"
     out = enforce_ceiling_closing_honesty(dishonest, reason="max_rounds")
     assert out.startswith("【收口说明】")
     assert "已全部完成" in out
-    assert "continue_from_run_id" not in out
+    assert "continue_from_run_id" in out
     # 扩面词族已撤回：仅「复核通过/可玩」不再触发横幅。
     thin = "独立复核通过，现在可玩了。"
     assert not claims_posture_a(thin)

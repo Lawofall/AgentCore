@@ -460,11 +460,32 @@ describe("create / apply_mode / write / rename / delete", () => {
       ok: true,
       conflict: false,
       version: "v2",
+      frontmatterError: null,
+      quotaWarning: null,
     });
     expect(apiFetch).toHaveBeenLastCalledWith("/v1/documents/r1", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: "hi", baseline: "v1" }),
+    });
+  });
+
+  it("writeDocument maps quota_warning / frontmatter_error", async () => {
+    apiFetch.mockResolvedValueOnce(
+      okJson({
+        ok: true,
+        conflict: false,
+        version: "v3",
+        quota_warning: "常驻超了",
+        frontmatter_error: "unclosed",
+      }),
+    );
+    await expect(writeDocument("r1", "hi", "v1")).resolves.toEqual({
+      ok: true,
+      conflict: false,
+      version: "v3",
+      quotaWarning: "常驻超了",
+      frontmatterError: "unclosed",
     });
   });
 
@@ -483,7 +504,11 @@ describe("create / apply_mode / write / rename / delete", () => {
     await expect(renameDocument("r1", "新名.md")).resolves.toMatchObject({
       name: "新名.md",
     });
-    await expect(deleteDocument("r1")).resolves.toMatchObject({ ok: true });
+    await expect(deleteDocument("r1")).resolves.toMatchObject({
+      ok: true,
+      frontmatterError: null,
+      quotaWarning: null,
+    });
     expect(apiFetch).toHaveBeenLastCalledWith("/v1/documents/r1", {
       method: "DELETE",
       headers: undefined,

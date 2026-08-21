@@ -147,6 +147,7 @@ async def test_host_consult_returns_how():
     body = await src.fetch_by_name("u", "host")
     assert body is not None
     assert "已启用工具 `host`" in body
+    assert "本回合下一模型轮" in body
     assert "【本机 Host】" in body
     assert _def_names(reg) == {"host"}
 
@@ -200,7 +201,8 @@ def test_preamble_and_core_make_consult_discoverable():
     preamble = "\n".join(_on_demand_preamble(with_summaries=True))
     assert "低频工具" in preamble
     assert "consult(name)" in preamble
-    assert "下一轮" in preamble
+    assert "下一模型轮" in preamble
+    assert "不必等用户再发一条" in preamble
     assert "consult(terminal)" in _CEO_CORE_HINT
     assert "consult(browser)" in _CEO_CORE_HINT
 

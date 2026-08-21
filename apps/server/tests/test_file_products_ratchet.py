@@ -69,7 +69,6 @@ from agentcore.tools.builtin.file_ops import (
 from agentcore.tools.builtin.git_ops import GitTool
 from agentcore.tools.builtin.md_to_docx import MdToDocxTool
 from agentcore.tools.builtin.md_to_pdf import MdToPdfTool
-from agentcore.tools.builtin.promote_product import PromoteProductTool
 from agentcore.tools.builtin.web import download_url as download_mod
 from agentcore.tools.builtin.web.download_url import DownloadUrlTool
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -83,7 +82,6 @@ from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace._paths import is_internal_zone_relpath
 from agentcore.workspace.server import ServerWorkspace
-from agentcore.workspace.stage_dirs import DRAFTS_DIR
 from agentcore.workspace.write_claims import WriteCoordinator
 
 # 待接清单：**只减不增**，现已清空（最后一项 ``git`` 定性为 NO_PRODUCT，见本文件末尾那条
@@ -261,33 +259,6 @@ async def _run_download_url(root: Path, monkeypatch: pytest.MonkeyPatch) -> Tool
     )
 
 
-def _seed_promotable_draft(root: Path) -> None:
-    draft = root / DRAFTS_DIR / "讲稿.md"
-    draft.parent.mkdir(parents=True, exist_ok=True)
-    draft.write_text("# 讲稿\n", encoding="utf-8")
-
-
-async def _run_promote_product(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
-    """成品归位：搬进工作区根的那份是本次落盘产物，工作间里的旧路径已不存在。"""
-    from agentcore.runtime.delegate.promotion import note_delivery_reconciliation
-
-    source = f"{DRAFTS_DIR}/讲稿.md"
-    context = _ctx(root)
-    note_delivery_reconciliation(
-        context.promotion_ledger,
-        {
-            "execution_id": "e",
-            "state": "delivered",
-            "summary": "已交付",
-            "delivered_files": [source],
-            "gaps": [],
-            "actions": [],
-            "artifacts": [{"path": source, "status": "accepted"}],
-        },
-    )
-    return await PromoteProductTool().execute({"paths": [source]}, context)
-
-
 class _CopyOutBackend:
     """沙箱替身：只回一份带 copy-out 路径的执行结果（真跑 gVisor 不属于单测）。"""
 
@@ -365,13 +336,6 @@ _CASES: tuple[_Case, ...] = (
         _seed_zip,
     ),
     _Case("download_url", _run_download_url, (("uploads/file.bin", "file", None),)),
-    # 归位是搬家不是派生：只报落地的新路径，源不是「中间稿」，不填 derived_from。
-    _Case(
-        "promote_product",
-        _run_promote_product,
-        (("讲稿.md", "md", None),),
-        _seed_promotable_draft,
-    ),
     # 间接落盘（沙箱 copy-out）：报的是 copy-out 的 EXACT 路径，含中文顿号也不会被散文切错。
     _Case(
         "code_execute",

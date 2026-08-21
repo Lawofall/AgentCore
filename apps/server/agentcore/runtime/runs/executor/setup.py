@@ -59,6 +59,7 @@ from agentcore.tools.protocol import (
     RetrievalBudgetState,
     ToolContext,
     fork_explore_write_scope,
+    isolate_file_read_ceiling,
 )
 from agentcore.tools.registry import ToolRegistry
 
@@ -195,10 +196,11 @@ async def _prepare_agent_node(
         session_folder_id=env.session_folder_id,
         base_write_scope=getattr(base_ctx, "write_scope", "project") or "project",
     )
-    tool_ctx = replace(
-        base_ctx,
-        run_id=spec.run_id,
-        agent_id=agent_id,
+    tool_ctx = isolate_file_read_ceiling(
+        replace(
+            base_ctx,
+            run_id=spec.run_id,
+            agent_id=agent_id,
         execution_id=env.execution_id,
         write_coordinator=env.write_coordinator,
         write_ancestors=env.ancestors_by_id.get(spec.run_id, frozenset()),
@@ -266,6 +268,7 @@ async def _prepare_agent_node(
         handoff_deliverable_form=(
             deliverable.form if deliverable is not None else None
         ),
+        )
     )
     # 阶段2 嵌套子任务: hand this worker delegation tools when opted in.
     _trim_started = time.monotonic()

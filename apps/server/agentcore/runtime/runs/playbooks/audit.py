@@ -15,6 +15,8 @@ from agentcore.workspace.stage_dirs import REVIEWS_DIR, REVIEWS_PREFIX
 
 # 与规划定案一致：每工人模块 Phase B 最多定案条数。
 _DEFAULT_K = 8
+# 主管只做跨模块速览；2 路交 CEO 收口（与 parallel_brief 对称），≥3 路才占座位。
+_SYNTH_MIN_SLOTS = 3
 
 # 引擎按小标题字面验收；playbook / 继承函数 / CEO·skill 必须抄同一列表。
 CODE_AUDIT_REQUIRED_SECTIONS: tuple[str, ...] = (
@@ -32,10 +34,10 @@ _LEGACY_AUDIT_SECTIONS = frozenset({"二、已撤销", "三、观察与工程债
 
 # 嵌套子任务继承父审计语境时注入（不重跑整本 playbook；防「再确认」空转）。
 _NESTED_AUDIT_HANDOFF_SUPPLEMENT = """\
-【嵌套审计·收工】父任务属代码审计。证据够定案条数后：先 file_write `.audit.json` 骨架\
-（findings 允许候选态/空），再补全字段，最后写 Markdown 成文并一次 handoff；\
-禁止以「再多读一点 / 再确认」无限扩读。骨架先落 → 补全 → 成文；handoff 后勿改同一报告再交。\
-summary/key_points 须可执行，禁空话「审计完成」。"""
+【嵌套审计·收工】父任务属代码审计。证据够定案条数后：先同时 file_write `.audit.json` 骨架\
+（findings 允许候选态/空）与 Markdown 五章空壳，再边查边填字段/章节，最后一次 handoff；\
+禁止以「再多读一点 / 再确认」无限扩读，禁止读完再一次性成文。骨架先落 → 边查边填；\
+handoff 后勿改同一报告再交。summary/key_points 须可执行，禁空话「审计完成」。"""
 
 _CODE_AUDIT_SECTION_SUPPLEMENT = (
     "【审计分栏】报告大节须用这些小标题（引擎按字面验收）："
@@ -194,8 +196,9 @@ def apply_inherited_code_audit_discipline(
 _AUDIT_DISCIPLINE = """
 【两阶段·强制】先 A 宽扫只出候选（严重度上限低/观察），
 再 B 定案（读全函数体、追上游、查根+包内配置）。
-【分段交付】Phase A 结束即先 file_write `.audit.json` 骨架（findings 允许候选态/空）；
-Phase B 补全 JSON 字段；Markdown 成文放最后再写。结构化 JSON 是便宜产物，必须前置落盘。
+【分段交付】Phase A 结束即先同时落两份骨架：`.audit.json`（findings 允许候选态/空）
+与 Markdown 五章空壳（〇–四标题先立上，内容可薄）。Phase B 补全 JSON 并往对应章节填，
+禁止读完全部再一次性成文。结构化 JSON 与章节骨架都是便宜产物，必须前置落盘。
 向用户「共 N 条缺陷」只计 B 定案属实且落入「{defect}」者；A 候选未进 B 不进 N；\
 「{by_design}」不进 N。
 预算不够则少报：本模块 Phase B 最多定案 K={k} 条；未覆盖面最多一行「未覆盖缺口」。
@@ -304,13 +307,14 @@ def _auditor_task_body(
         f"对范围【{scope}】中的模块【{module}】做代码审计（只读调查：默认不改业务源码；"
         f"允许 file_write/str_replace 写入约定文档报告，除此以外勿改工程）。{focus_line}"
         f"{_formatted_audit_discipline(k)}"
-        f"【交付顺序】骨架先落 → 补全 → 成文："
-        f"Phase A 结束即先 file_write `{json_artifact}` 骨架"
-        "（findings 允许候选态/空；severity/verification/verdict/evidence 字段面保持；"
+        f"【交付顺序】骨架先落 → 边查边填："
+        f"Phase A 结束即先 file_write `{json_artifact}` 骨架与 `{artifact}` 五章空壳"
+        "（findings 允许候选态/空；Markdown 先立 〇–四 标题，内容可薄；"
+        "severity/verification/verdict/evidence 字段面保持；"
         f'evidence 例 `"a.ts:10"` 或 `["a.ts:10","b.ts:20"]`）；'
-        f"Phase B 补全该 JSON；Markdown 成文最后再 file_write 到 `{artifact}`。"
+        f"Phase B 补全该 JSON，并往已落盘 Markdown 对应章节填，禁止读完再一次性成文。"
         "handoff 人审速览（可执行摘要，不代落盘）："
-        "【一次交接】JSON 骨架先行、补全后再写 Markdown 终稿，再调用一次 handoff；"
+        "【一次交接】骨架（JSON + 五章空壳）先行、边查边填后再调用一次 handoff；"
         "handoff 后勿再改同一报告并二次 handoff（除非主管续派）。"
         f"summary 写共 N 条属实（只计「{CODE_AUDIT_SECTION_DEFECTS}」）与报告完整相对路径"
         f"（须含约定文档前缀，如 `{artifact}`，禁裸 reviews/…）；禁空话「审计完成」。"
@@ -339,7 +343,7 @@ def _auditor_deliverable(artifact: str) -> dict[str, Any]:
 
 
 def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    """代码审计：1 人两阶段 A→B；多模块则并行审计员 + 主管跨模块速览。
+    """代码审计：1 人两阶段 A→B；2 路并行审计员（CEO 收口）；≥3 路再加主管跨模块速览。
 
     与 ``parallel_brief``（摸底对齐）、``research_report``（成文+学术审校）、
     ``repair_code``（按症状修）划界：本形状专产纪律化审计报告。
@@ -420,6 +424,9 @@ def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
         if fold_note and merged:
             body["playbook_note"] = fold_note
         tasks.append(body)
+
+    if len(slots) < _SYNTH_MIN_SLOTS:
+        return tasks, []
 
     synth_path = _landed_artifact_path(out_override or _CODE_AUDIT_SUMMARY_ARTIFACT)
     tasks.append(

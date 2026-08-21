@@ -34,7 +34,7 @@ from agentcore.runtime.runs.executor.started_run_close import (
 )
 from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunSpec, RunState
 from agentcore.runtime.suspension import captain_transcript
-from agentcore.tools.protocol import ToolContext
+from agentcore.tools.protocol import ToolContext, isolate_file_read_ceiling
 from agentcore.tools.registry import ToolRegistry
 
 logger = get_logger(__name__)
@@ -84,8 +84,10 @@ def build_captain_executor(
     user_content = build_multimodal_user_content(user_message, native_image_parts or [])
 
     async def execute(spec: RunSpec) -> RunState:
-        tool_ctx = replace(
-            base_tool_context, run_id=spec.run_id, agent_id=spec.agent_id or spec.run_id
+        tool_ctx = isolate_file_read_ceiling(
+            replace(
+                base_tool_context, run_id=spec.run_id, agent_id=spec.agent_id or spec.run_id
+            )
         )
         messages = [LLMMessage(role="system", content=chat_system_prompt)]
         for msg in history:
@@ -144,8 +146,10 @@ def build_captain_resumer(
     """
 
     async def execute(spec: RunSpec, messages: list[LLMMessage]) -> RunState:
-        tool_ctx = replace(
-            base_tool_context, run_id=spec.run_id, agent_id=spec.agent_id or spec.run_id
+        tool_ctx = isolate_file_read_ceiling(
+            replace(
+                base_tool_context, run_id=spec.run_id, agent_id=spec.agent_id or spec.run_id
+            )
         )
         return await _drive_captain_loop(
             spec=spec,

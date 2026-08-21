@@ -228,6 +228,36 @@ async def test_settle_ask_user_stop_feeds_loop_without_terminal():
     assert any(e["type"] == EventType.CHECKPOINT_RESOLVED.value for e in journal)
 
 
+async def test_settle_ask_user_stop_ignores_current_card_prewrite():
+    """journal 已含当前卡 checkpoint_resolved(stop) 预写时，第一次 STOP 仍回灌 CEO。"""
+    frame = _ask_frame()
+    frame.journal_entries = [
+        {
+            "kind": "checkpoint_resolved",
+            "payload": {
+                "checkpoint_id": frame.checkpoint_id,
+                "decision": "stop",
+                "note": "",
+                "selected": [],
+            },
+            "ts": "t0",
+        }
+    ]
+    sink = _sink_with_seeded_checkpoint()
+    settled = await settle_resumed_suspension(
+        frame,
+        decision=CheckpointDecision.STOP,
+        note="",
+        selected=[],
+        sink=sink,
+        delegate_tool=None,
+        execution_id="",
+    )
+    assert settled.effect is ToolEffect.CONTINUE
+    assert settled.terminal_text is None
+    assert "取消了澄清" in settled.output
+
+
 async def test_settle_ask_user_continue_feeds_loop_without_terminal():
     sink = EventSink()
     settled = await settle_resumed_suspension(

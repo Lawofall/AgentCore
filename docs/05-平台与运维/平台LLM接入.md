@@ -10,7 +10,7 @@ skip_if:
 
 # 平台 LLM 接入
 
-> **现状**：目标仍是 `billing_mode=platform`（额度 `quota_*` · ¥5/月·¥5/日 · 台账 **nano-CNY**，无 FX）；**现网可临时 `byok`**（见 [成本配额与计费](/docs/05-平台与运维/成本配额与计费.md) 文首）。**dev 默认仍 BYOK**。本文只记上游接入事实（厂商坑、BYOK 去向、platform 排查）。
+> **现状**：目标仍是 `billing_mode=platform`（额度 `quota_*` · ¥10/月·¥10/日 · 台账 **nano-CNY**，无 FX）；**现网可临时 `byok`**（见 [成本配额与计费](/docs/05-平台与运维/成本配额与计费.md) 文首）。**dev 默认仍 BYOK**。本文只记上游接入事实（厂商坑、BYOK 去向、platform 排查）。
 
 ## 一、三条上游路径
 
@@ -150,7 +150,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | `PLATFORM_MODEL` / `PLATFORM_MODELS` | `deepseek-v4-flash`（仅此；须有 CNY curated 价卡，否则启动后不上架 / allowlist 与默认冲突则 fail-fast） |
 | 后台档 | 同钉 `deepseek-v4-flash`（可显式 `PLATFORM_BACKGROUND_MODEL`，须 ∈ allowlist） |
 | `PLATFORM_API_KEY` | 与 Zen 控制台同一把（不换） |
-| 额度 | 月 ¥5 · 日 ¥5 · 日请求 500（`quota_*`） |
+| 额度 | 月 ¥10 · 日 ¥10 · 日请求 500（`quota_*`） |
 | 价卡 | curated 名义价 **同** 付费 Flash（¥0.02 / ¥1 / ¥2）——上游成本由 Go 订阅月费摊，产品仍按名义价扣额度 |
 | 上下文窗 | `deepseek-v4-flash` **1M**（SKU）。目录展示与近顶压缩（窗 × 80% ≈ 800K）跟 SKU，禁止按端点猜成 Zen free 的 200K |
 | Vision | 本阶段不配 `VISION_*`（白板读图仅用户 BYOK 填 vision 槽时可用） |
@@ -161,7 +161,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 1. **硬前置**：上条 opt-in + 实测通过——排在贴 `.env`、切流量、以及下面 `Use balance` 之前。
 2. Go 共享帽打满时，控制台开 `Use balance` 回落 Zen 余额（须 Zen 账户有钱）。这是人工运维动作，代码不能保证。
 
-**Go 订阅共享限额（不得省略）**：OpenCode Go 的 5 小时 $12 / 周 $30 / 月 $60 是**整个订阅共享**，不是按 AgentCore 用户分。单账号窗口打满时池会换到下一个号；**全池**打满时全体用户一起被挡（产品侧每用户 ¥5 额度拦不住这条上游共享帽）。上游类型是 **`GoUsageLimitError`（429）**，不是 `CreditsError`。兜底见上条 `Use balance`，以及用户侧「接入自己的 Key」。
+**Go 订阅共享限额（不得省略）**：OpenCode Go 的 5 小时 $12 / 周 $30 / 月 $60 是**整个订阅共享**，不是按 AgentCore 用户分。单账号窗口打满时池会换到下一个号；**全池**打满时全体用户一起被挡（产品侧每用户 ¥10 额度拦不住这条上游共享帽）。上游类型是 **`GoUsageLimitError`（429）**，不是 `CreditsError`。兜底见上条 `Use balance`，以及用户侧「接入自己的 Key」。
 
 Admin「分析 · 成本」展示这三个窗口的**我方名义价累计**，外加一列按 OpenCode 公开单价读时估算的美元（`GET /v1/admin/usage/go-windows`）——名义价用来在撞 429 时对上「那一刻我们记了多少」；美元列只用来看离 $12 / $30 / $60 还有多远。**禁止**把任一列当成上游账单或余额，也禁止据此写死换算系数。公开单价表与 curated 名义价卡分开放，取值日期随调价更新。估算有两处未证死：Go 计入窗口前可能乘未公开的 `costMultiplier`（默认 1）；上游网关是否识别 DeepSeek cache 命中未经实包验证，若不识别则估算偏低。空池时月窗锚 `PLATFORM_GO_SUBSCRIPTION_DAY`（UTC 日，短月钳到月末），须配成 env 那把 key 的真实 Go 订阅日，默认 1 只是能启动的回退。池中每个成员带自己的订阅日（号是分批买的，锚点不同）；响应 `members[]` 按账号拆窗。周窗按 UTC 周一；5 小时是固定窗 + 空闲超窗归零，不是近 5 小时滑动求和。→ [管理员后台](/docs/05-平台与运维/管理员后台.md)
 

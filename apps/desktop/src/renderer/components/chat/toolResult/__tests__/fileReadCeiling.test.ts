@@ -6,7 +6,7 @@ describe("isFileReadCeilingGuidance", () => {
     expect(
       isFileReadCeilingGuidance(
         "file_read",
-        "已多次读取 `doc.md`（本 run 上限 5 次）。正文已在对话中，勿再读此文件；可换其它文件。",
+        "已多次读取 `doc.md`（本 run 上限 5 次）。请求范围仍在对话投影窗中，本次不重复灌入全文。请直接使用已有正文，勿再读全文。",
       ),
     ).toBe(true);
     expect(

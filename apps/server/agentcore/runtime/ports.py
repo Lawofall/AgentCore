@@ -138,7 +138,8 @@ class ConversationStore(Protocol):
     ) -> None:
         """Insert the running assistant row before pipeline / SSE.
 
-        Must succeed or abort the turn — failures must not be swallowed.
+        Same conversation + assistant ``message_id`` is idempotent. Other
+        failures must not be swallowed — the turn must not proceed without a row.
         """
         ...
 

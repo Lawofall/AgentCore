@@ -112,19 +112,15 @@ async def _open_target_folder(
     # Ephemeral desk: do not share birth-desk file_read ceilings / materials;
     # do not rewrite context.backend (session mount stays put). Fresh slot so
     # this read does not follow (or cause) a parent rebind.
-    from agentcore.tools.protocol import fork_workspace_slot
+    from agentcore.tools.protocol import fork_workspace_slot, isolate_file_read_ceiling
 
-    target_ctx = replace(
-        context,
-        _workspace=fork_workspace_slot(backend, material_paths=frozenset()),
-        workspace_channel=workspace_channel,
-        shared_workspace=True,
-        file_read_counts={},
-        file_read_delivered_ranges={},
-        file_read_line_totals={},
-        file_read_reread_remaining={},
-        file_read_verbatim_paths=None,
-        file_read_cleared_paths=None,
+    target_ctx = isolate_file_read_ceiling(
+        replace(
+            context,
+            _workspace=fork_workspace_slot(backend, material_paths=frozenset()),
+            workspace_channel=workspace_channel,
+            shared_workspace=True,
+        )
     )
     logger.info(
         "folder_fs.target_opened",

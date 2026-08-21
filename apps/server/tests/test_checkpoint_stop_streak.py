@@ -72,6 +72,33 @@ def test_streak_excludes_consecutive_adjust():
     assert is_repeated_checkpoint_stop(entries, CheckpointDecision.STOP) is False
 
 
+def test_ignore_checkpoint_id_skips_current_prewritten_stop():
+    """Cold-path prewrite of the current card is not a prior STOP."""
+    entries = [_resolved("checkpoint_resolved", "stop", checkpoint_id="ck_current")]
+    assert consecutive_checkpoint_stops(entries, ignore_checkpoint_id="ck_current") == 0
+    assert (
+        is_repeated_checkpoint_stop(
+            entries, CheckpointDecision.STOP, ignore_checkpoint_id="ck_current"
+        )
+        is False
+    )
+
+
+def test_ignore_checkpoint_id_preserves_prior_stop_as_repeated():
+    """Prior card STOP + current prewrite STOP → ignore current still repeated."""
+    entries = [
+        _resolved("team_preview_resolved", "stop", checkpoint_id="tp0"),
+        _resolved("checkpoint_resolved", "stop", checkpoint_id="ck_current"),
+    ]
+    assert consecutive_checkpoint_stops(entries, ignore_checkpoint_id="ck_current") == 1
+    assert (
+        is_repeated_checkpoint_stop(
+            entries, CheckpointDecision.STOP, ignore_checkpoint_id="ck_current"
+        )
+        is True
+    )
+
+
 def test_compose_repeated_stop_closing_never_empty():
     assert "已按你的意思停下" in compose_repeated_stop_closing()
     assert "先到这" in compose_repeated_stop_closing(note="先到这")

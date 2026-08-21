@@ -10,6 +10,10 @@ vi.mock("@/services/api", () => ({
   },
 }));
 
+vi.mock("@/services/refreshAccountRulesMemory", () => ({
+  scheduleAccountRulesMemoryRefresh: vi.fn(),
+}));
+
 import { api } from "@/services/api";
 import {
   createRuleDocument,
@@ -23,6 +27,7 @@ import {
   updateDocumentApplyMode,
   writeDocument,
 } from "@/services/documents";
+import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRulesMemory";
 
 const node = (over: Record<string, unknown> = {}) => ({
   id: "n",
@@ -279,6 +284,17 @@ describe("documents client", () => {
       baseline: "v1",
     });
     expect(r.quotaWarning).toBe("常驻超了");
+    expect(scheduleAccountRulesMemoryRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("writeDocument does not refresh the sidecar snapshot on a CAS conflict", async () => {
+    vi.mocked(api.put).mockResolvedValue({
+      ok: false,
+      version: "v9",
+      conflict: true,
+    });
+    await writeDocument("d1", "body", "v1");
+    expect(scheduleAccountRulesMemoryRefresh).not.toHaveBeenCalled();
   });
 
   it("renameDocument patches the name", async () => {

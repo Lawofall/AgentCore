@@ -83,15 +83,33 @@ def test_add_creates_missing_section():
 
 def test_bootstrap_from_empty_input():
     out = apply("", MemoryOp(MemoryAction.ADD, "沟通偏好", content="用简体中文回复"))
-    assert out.startswith("# 用户记忆")
-    assert "## 沟通偏好" in out
+    assert not out.startswith("# 用户记忆")
+    assert "本文件由 AI 自动维护" not in out
+    assert out.startswith("## 沟通偏好")
     assert "- 用简体中文回复" in out
 
 
-def test_preamble_preserved():
+def test_retired_chrome_dropped_on_rewrite():
+    # SAMPLE is a leftover on-disk file; parse/render must not echo the retired shell.
     out = apply(SAMPLE, MemoryOp(MemoryAction.ADD, "沟通偏好", content="多用例子说明"))
-    assert out.startswith("# 用户记忆")
-    assert "本文件由 AI 自动维护" in out
+    assert not out.startswith("# 用户记忆")
+    assert "本文件由 AI 自动维护" not in out
+    assert out.startswith("## 沟通偏好")
+    assert "多用例子说明" in out
+
+
+def test_empty_apply_is_empty_string():
+    assert apply("") == ""
+
+
+def test_non_user_memory_preamble_is_kept():
+    # Navigation-style chrome must survive parse/render — only H1「用户记忆」is retired.
+    navish = "# 导航\n> 一句话定位：Python 支付结算仓\n\n## 技术栈与工具\n- Python\n"
+    out = apply(navish)
+    assert out.startswith("# 导航")
+    assert "一句话定位：Python 支付结算仓" in out
+    assert "## 技术栈与工具" in out
+    assert "- Python" in out
 
 
 def test_strip_memory_chrome_drops_title_and_note():
@@ -140,6 +158,7 @@ def test_output_has_trailing_newline_and_section_spacing():
     out = apply(SAMPLE)
     assert out.endswith("\n")
     assert "\n\n## 技术栈与工具" in out  # blank line between sections
+    assert not out.startswith("# 用户记忆")
 
 
 # --- containment dedup (near-duplicate ADDs collapse to the more specific one) ---
@@ -239,6 +258,8 @@ def test_split_routes_sections_to_preferences_and_profile():
     assert "用中文" not in files[CORE_MEMORY_FILE]
     assert "用 Python" in files[CORE_MEMORY_FILE]
     assert "用 Python" not in files[PREFERENCES_MEMORY_FILE]
+    assert "用户记忆" not in files[PREFERENCES_MEMORY_FILE]
+    assert "用户记忆" not in files[CORE_MEMORY_FILE]
 
 
 def test_split_routes_unknown_section_to_profile():
@@ -251,6 +272,7 @@ def test_split_routes_unknown_section_to_profile():
 def test_merge_then_split_round_trips_sections():
     merged = merge_global_core("## 沟通偏好\n- 用中文\n", "## 技术栈与工具\n- 用 Python\n")
     assert "用中文" in merged and "用 Python" in merged
+    assert "用户记忆" not in merged
     files = split_global_core(merged)
     assert "用中文" in files[PREFERENCES_MEMORY_FILE]
     assert "用 Python" in files[CORE_MEMORY_FILE]
@@ -259,6 +281,11 @@ def test_merge_then_split_round_trips_sections():
 def test_merge_of_two_empty_files_is_empty():
     # A brand-new user sees an empty editor, not a stray preamble.
     assert merge_global_core("", "") == ""
+
+
+def test_merge_of_chrome_only_files_is_empty():
+    chrome = "# 用户记忆\n> 本文件由 AI 自动维护，你可随时编辑或删除任何条目。\n"
+    assert merge_global_core(chrome, chrome) == ""
 
 
 def test_split_of_empty_clears_both_files():

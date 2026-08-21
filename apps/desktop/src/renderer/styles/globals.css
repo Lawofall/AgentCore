@@ -66,62 +66,35 @@
   border-color: var(--border);
 }
 
-/* Scrollbars — thin, rounded, auto-hiding (macOS / Linear style): the thumb is
- * transparent at rest and fades in while actively scrolling (driven by
- * lib/scrollReveal.ts toggling `.is-scrolling` on <html>), plus a stronger shade
- * under the pointer. No arrow buttons, transparent track. The 10px gutter is always
- * reserved (invisible at rest) so revealing the thumb never shifts content.
- *
- * Chromium honors ::-webkit-scrollbar only while the standard scrollbar-width /
- * -color stay unset on the element — setting both here (as this block used to) made
- * Blink drop the custom design for a transparent system bar, i.e. no visible
- * scrollbars anywhere. Engines without ::-webkit-scrollbar (Firefox / the webapp
- * build) get the standard-property approximation, which does react to hovering the
- * scroll area; Blink does not restyle a custom scrollbar when the scroller's :hover
- * flips, so the same rule there would silently never paint. */
+/* Native overlay scrollbars (Win11 / macOS / Electron OverlayScrollbar): per-pane,
+ * auto-hide, paint over content. Do not set `scrollbar-width` / `scrollbar-color`
+ * or `::-webkit-scrollbar { width }` on Chromium — any of those forces classic
+ * gutter bars, which is why three 10px tracks used to light up together.
+ * `color-scheme` lets the OS overlay follow light / `.dark`. */
+:root {
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark;
+}
+
+/* Firefox / engines without overlay: thin, hidden at rest, reveal on *this*
+ * scroller's :hover or `.is-scrolling` (the element that scrolled — never
+ * descendants, which used to paint every pane). */
 @supports not selector(::-webkit-scrollbar) {
   * {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
   }
   *:hover,
-  .is-scrolling,
-  .is-scrolling * {
+  .is-scrolling {
     scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 }
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-*::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  /* Transparent 2px border + padding-box clip renders a slimmer thumb that floats
-   * with breathing room from the track edge (GitHub-style). */
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  background-color: transparent;
-  transition: background-color 0.2s ease;
-}
-/* Reveal while the document is scrolling. */
-.is-scrolling::-webkit-scrollbar-thumb,
-.is-scrolling *::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
-}
-/* Thumb hover wins (placed last) for the stronger grab affordance. */
-*::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-thumb-hover);
-}
-*::-webkit-scrollbar-corner {
-  background: transparent;
-}
-/* Opt-out for chrome strips (tab rows) living in a fixed-height header, where the
- * reserved gutter would eat ~10px of a ~28px row and clip the tabs. Must stay
- * unlayered: the Tailwind equivalents sit in @layer utilities and lose to the
- * unlayered `*` rules above no matter their specificity. */
+
+/* Opt-out for chrome strips (tab rows) that use fade arrows instead of a bar.
+ * Must stay unlayered: Tailwind's `[scrollbar-width:none]` sits in @layer
+ * utilities and loses to unlayered rules. */
 .scrollbar-hidden {
   scrollbar-width: none;
 }

@@ -5,8 +5,9 @@ At run wrap-up each landed path gets ``accepted`` or ``rejected`` (+ reason).
 Cite-tier / contract failures that name a path reject that path even when the
 run soft-COMPLETEDs — so soft-COMPLETED must not smuggle those paths into the
 delivered list. Declared artifact / ``artifact_dir`` vs landed path is a pure
-string compare (``REASON_PATH_MISMATCH``); delivery reconciliation applies it
-so a file that landed in a non-declared directory cannot stay ``accepted``.
+string compare: a landed path that misses the declaration is **omitted** from
+the card (not ``rejected`` / 未通过). Missing declared paths are a
+``path_mismatch`` **gap**, not a row on the extra file.
 
 调研两阶段（``citation_mode=two_phase``）：阶段 A 草案仅内部态，不写入本表；
 阶段 B 过闸 → ``accepted``；不过 → ``rejected(citations_unverified)``。draft 永不
@@ -26,7 +27,8 @@ from agentcore.tools.file_products import FileProduct
 REASON_CITATIONS_UNVERIFIED = "citations_unverified"
 REASON_CONTRACT_FAILED = "contract_failed"
 REASON_RUN_FAILED = "run_failed"
-# Declared artifact / artifact_dir vs landed path (pure string after normalize).
+# Gap reason when a declared path did not land (delivery_status); no longer
+# stamped on extra-file artifact rows.
 REASON_PATH_MISMATCH = "path_mismatch"
 
 # Citation / bibliography failures from ``_artifact_citation_failures``.
@@ -100,10 +102,14 @@ def apply_declared_path_acceptance(
     *,
     artifacts: list[str] | None,
     artifact_dir: str = "",
-) -> dict[str, Any]:
-    """Reject an accepted row whose path misses declared artifacts / artifact_dir."""
-    if row.get("status") != "accepted":
-        return row
+) -> dict[str, Any] | None:
+    """Keep a row whose path matches declared artifacts / artifact_dir; else omit.
+
+    Declaration is a must-have check, not a closed whitelist that paints extras
+    「未通过」. ``None`` → caller drops the row (backup copies, undeclared
+    landings). Quality ``rejected`` on a declared path is unchanged. Empty
+    declaration = no path constraint.
+    """
     declared = [str(a).strip() for a in (artifacts or []) if str(a).strip()]
     dir_pat = (artifact_dir or "").strip()
     if not declared and not dir_pat:
@@ -111,11 +117,7 @@ def apply_declared_path_acceptance(
     path = str(row.get("path") or "")
     if declaration_allows_landed(path, artifacts=declared, artifact_dir=dir_pat):
         return row
-    out = dict(row)
-    out["status"] = "rejected"
-    out["reason"] = REASON_PATH_MISMATCH
-    out["detail"] = f"声明路径未匹配：实际 `{path}`"
-    return out
+    return None
 
 
 def path_rejections_from_contract_messages(

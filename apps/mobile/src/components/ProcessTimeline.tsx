@@ -1023,9 +1023,8 @@ function GenericToolStep({
   const detail = toolDetail(step.arguments, step.tool_name);
   const running = step.status === "running";
   const ceilingGuidance =
-    step.status === "error" &&
-    (isFileReadCeilingGuidance(step.tool_name, step.result) ||
-      isVerifyBudgetExceeded(step.display));
+    isFileReadCeilingGuidance(step.tool_name, step.result) ||
+    (step.status === "error" && isVerifyBudgetExceeded(step.display));
   const diagnostics = extractCodeDiagnostics(step.display);
   const elapsed = useRunningElapsed(running);
   // Prefer product `failure.message`; fall back to model-facing `result` when absent.

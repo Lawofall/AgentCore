@@ -420,7 +420,7 @@ describe("FileArtifactsCard — A1 查看改动", () => {
   });
 });
 
-describe("FileArtifactsCard — 清单不按归位分组", () => {
+describe("FileArtifactsCard — 清单不按历史 promoted 分组", () => {
   // 工作稿是约定目录（`stageDirs`），落在它下面的行走「在文件页查看」入口而非工作区预览。
   const WORKROOM = "AgentCore/文档/工作稿";
   const product = {

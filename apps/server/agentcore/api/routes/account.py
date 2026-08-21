@@ -41,6 +41,7 @@ from agentcore.db.repositories import (
     MessageRepository,
     TurnJournalRepository,
 )
+from agentcore.memory.always_quota import AlwaysQuotaExceededError
 from agentcore.memory.document_store import DocumentMemoryStore
 from agentcore.memory.rules_injection import mutate_user_rule
 from agentcore.security.tokens import create_account_token
@@ -387,14 +388,23 @@ async def remember_account_user_rule(
     session: AsyncSession = Depends(get_db),
 ) -> AccountRememberResponse:
     """Mutate the scope's user-rule doc (``add`` / ``replace`` / ``forget`` / ``list``)."""
-    result = await mutate_user_rule(
-        DocumentRepository(session),
-        user.user_id,
-        folder_id=body.folder_id,
-        action=body.action,
-        content=body.content,
-        replaces=body.replaces,
-    )
+    try:
+        result = await mutate_user_rule(
+            DocumentRepository(session),
+            user.user_id,
+            folder_id=body.folder_id,
+            action=body.action,
+            content=body.content,
+            replaces=body.replaces,
+        )
+    except AlwaysQuotaExceededError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ALWAYS_QUOTA_EXCEEDED",
+                "message": exc.message,
+            },
+        ) from exc
     return AccountRememberResponse(
         changed=result.changed,
         action=result.action,

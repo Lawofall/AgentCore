@@ -1,35 +1,43 @@
-/** Auto-hide scrollbars: flag the document as "scrolling" so CSS can briefly
- * reveal the (otherwise transparent) scrollbar thumb during active scrolling,
- * then fade it back out — mirroring the macOS / Linear overlay-scrollbar feel.
+/** Auto-hide scrollbars on engines that don't have OS overlay bars (Firefox).
+ * Chromium/Electron uses native overlay (per-pane, over content) and ignores
+ * `.is-scrolling`; this listener still flags the element that actually
+ * scrolled — never `<html>` plus descendants, which used to light up every pane.
  *
- * Pure CSS reveals thumbs on `:hover`, but cannot react to wheel / keyboard /
- * momentum scroll that happens without a hover change. A single capture-phase
- * listener toggles a root class; `globals.css` owns all of the visuals.
+ * Capture-phase: `scroll` does not bubble. Passive: we never preventDefault.
  */
 const SCROLLING_CLASS = "is-scrolling";
 const HIDE_DELAY_MS = 900;
 
-let hideTimer: number | undefined;
+const hideTimers = new WeakMap<Element, number>();
 let installed = false;
+
+function scrollingElementOf(event: Event): Element | null {
+  const target = event.target;
+  if (target === document || target === window) {
+    return document.scrollingElement ?? document.documentElement;
+  }
+  if (target instanceof Element) return target;
+  return null;
+}
 
 export function initScrollReveal(): void {
   if (installed || typeof document === "undefined") return;
   installed = true;
 
-  const root = document.documentElement;
-
-  const onScroll = () => {
-    if (!root.classList.contains(SCROLLING_CLASS)) {
-      root.classList.add(SCROLLING_CLASS);
-    }
-    if (hideTimer !== undefined) window.clearTimeout(hideTimer);
-    hideTimer = window.setTimeout(() => {
-      root.classList.remove(SCROLLING_CLASS);
-      hideTimer = undefined;
-    }, HIDE_DELAY_MS);
+  const onScroll = (event: Event) => {
+    const el = scrollingElementOf(event);
+    if (!el) return;
+    el.classList.add(SCROLLING_CLASS);
+    const prev = hideTimers.get(el);
+    if (prev !== undefined) window.clearTimeout(prev);
+    hideTimers.set(
+      el,
+      window.setTimeout(() => {
+        el.classList.remove(SCROLLING_CLASS);
+        hideTimers.delete(el);
+      }, HIDE_DELAY_MS),
+    );
   };
 
-  // Capture phase + a single window listener catches scroll from every nested
-  // container, since scroll events don't bubble. Passive: we never preventDefault.
   window.addEventListener("scroll", onScroll, { capture: true, passive: true });
 }

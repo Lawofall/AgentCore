@@ -25,7 +25,6 @@ from agentcore.memory.store import (
     topic_slug,
 )
 from agentcore.memory.user_memory import (
-    _DEFAULT_PREAMBLE,
     _MAX_TOPIC_SLUG_LEN,
     _MemoryDoc,
     _parse,
@@ -482,20 +481,17 @@ def merge_profile_by_sections(old_md: str, new_md: str) -> str:
 
     - Sections present in ``new_md`` with substance → replace that section's body.
     - Sections only in ``old_md`` (or empty in new) → keep old body.
-    - Bootstrap when old is empty: render new (with default preamble if needed).
+    - Bootstrap when old is empty: render new (retired 用户记忆 chrome dropped).
     - Never wipe the whole file down to a few empty lines when old had content.
     """
     if not (new_md or "").strip():
         return old_md or ""
     if folder_profile_is_empty(old_md):
-        doc = _parse(new_md)
-        if not doc.preamble.strip():
-            doc.preamble = _DEFAULT_PREAMBLE
-        return _render(doc)
+        return _render(_parse(new_md))
 
     old_doc = _parse(old_md)
     new_doc = _parse(new_md)
-    merged = _MemoryDoc(preamble=old_doc.preamble or _DEFAULT_PREAMBLE, sections=[])
+    merged = _MemoryDoc(preamble=old_doc.preamble, sections=[])
 
     {_normalize_section(s.name): s for s in old_doc.sections}
     new_by = {_normalize_section(s.name): s for s in new_doc.sections}

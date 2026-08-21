@@ -1,11 +1,13 @@
 // 回合产物盘点 —— 聊天流内联「本回合改动的文件」卡的纯数据源。
 //
 // 主清单（块 1）：只认 ``delivery_status.artifacts``（accepted+rejected 验收态）。
-// 无该字段 / 空数组 → 空清单（不 silent 降级扫工具列表）。导出件（.docx / .pdf）只存在于
+// 无该字段 / 空数组 → 空清单（不 silent 降级扫工具列表）。后端按 execution 把各波
+// 声明且落盘路径并进最新一条事件；未声明备份不在清单里。导出件（.docx / .pdf）只存在于
 // 工具自报的产物行里——工具入参只有源 md，故任何按参数合成的清单都会漏掉它。
 //
-// ``promotedFrom`` 记录成品归位的旧路径（移动已发生，``path`` 是新位置）。产物卡不按
-// 归位分组——位置看路径；文件树把 ``AgentCore/`` 标成 ``.agentcore`` 并钉顶。
+// ``promotedFrom`` 只兼容历史 ``delivery_status.promoted``（``promote_product`` 已撤销；
+// 新回合不再搬家）。产物卡不按「成品 / 过程材料」分组——位置看路径；文件树把
+// ``AgentCore/`` 标成 ``.agentcore`` 并钉顶。
 //
 // 中间稿折叠：行里自报的 ``derived_from`` 是唯一依据（见 {@link splitExportedSources}），
 // 不按扩展名 / 工具名猜派生关系；折叠只降级、不删除。
@@ -174,14 +176,8 @@ export function hasChangePreviews(artifacts: FileArtifact[]): boolean {
 }
 
 /**
- * 归位对照表（键 = 路径，值 = 该文件的归位记录）。
- *
- * 后端按同 ``execution_id`` 重发时**已把 ``artifacts[].path`` 改写成 ``to``**，故新路径侧
- * 是主匹配路径；旧路径侧一并建索引只作防御（历史快照仍可能带旧路径），两侧同指一份文件，
- * 不会因此多渲染一行——{@link dedupe} 按最终路径收敛。
- *
- * ``promoted`` 是「这张卡上已归位的」累积表，非「本回合归位的」：跨回合再归位（X→Y→Z）时
- * 旧行保留，后写条目覆盖同名键，故命中的是最近一跳。
+ * 历史 ``promoted`` 对照表（键 = 路径）。``promote_product`` 已撤销，新回合不再搬家；
+ * 本表只为旧会话回放仍带 ``{from,to}`` 的卡。
  */
 function promotionsByPath(
   deliveryStatus: DeliveryStatusPayload,

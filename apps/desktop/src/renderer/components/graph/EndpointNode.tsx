@@ -1,3 +1,4 @@
+import { NODE_HEIGHT, NODE_WIDTH } from "@/lib/graphMetrics";
 import type { RunStatus } from "@/stores/execution";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
@@ -58,7 +59,7 @@ interface EndpointNodeData {
   onActivate?: () => void;
   /** Captain only: a11y verb for the activation. Defaults to 查看最终回答. */
   actionLabel?: string;
-  /** Captain only: overrides the derived status subtitle (e.g. coordination wait). */
+  /** Captain only: coordination wait copy — face body when preview is empty. */
   statusCaption?: string;
   [key: string]: unknown;
 }
@@ -111,33 +112,11 @@ export function EndpointNode({ data, id }: NodeProps) {
       ? shell.label
       : shell.preview;
 
-  const style = SINK_STYLES[status] ?? SINK_STYLES.pending;
-  const running = !isInput && status === "running";
   const horizontal = shell.handleDirection === "horizontal";
-  const interactive = !!onActivate;
-  const highlighted = focused;
   const preview = isInput ? initiatorNodePreview(previewText) : previewText;
   const flashing = useTerminalFlash(status) && !isInput;
-  const flashColor =
-    status === "failed" ? "var(--destructive)" : "var(--success)";
   const enterDelay = Math.min((shell.enterIndex ?? 0) * 35, 280);
   const dimmed = useGraphNodeDimmed();
-
-  const interactiveProps: React.HTMLAttributes<HTMLDivElement> = interactive
-    ? {
-        role: "button",
-        tabIndex: 0,
-        "aria-label": isInput
-          ? "你的任务，对话发起，查看完整提问"
-          : `CEO 汇总，${statusCaption ?? sinkLabel(status)}，${shell.actionLabel ?? "查看最终回答"}`,
-        onKeyDown: (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onActivate?.();
-          }
-        },
-      }
-    : {};
 
   return (
     <>
@@ -149,61 +128,22 @@ export function EndpointNode({ data, id }: NodeProps) {
       <div className={graphNodeDimClass(dimmed)}>
         <div
           className="animate-graph-node-enter"
-          style={{ animationDelay: `${enterDelay}ms` }}
+          style={{
+            animationDelay: `${enterDelay}ms`,
+            width: NODE_WIDTH,
+            height: NODE_HEIGHT,
+          }}
         >
-          <div
-            {...interactiveProps}
-            style={{ "--graph-flash-color": flashColor } as React.CSSProperties}
-            className={`w-[210px] rounded-xl border px-3 py-2.5 shadow-sm outline-none ${
-              isInput
-                ? "border-border bg-muted/40"
-                : `bg-card ring-2 ${style.ring}`
-            } ${running ? "animate-pulse" : ""} ${flashing ? "animate-graph-node-flash" : ""} ${interactive ? "cursor-pointer" : ""} ${
-              highlighted
-                ? "outline outline-2 outline-offset-2 outline-primary"
-                : interactive
-                  ? "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/60"
-                  : ""
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted">
-                {isInput ? (
-                  <UserRound size={16} className="text-muted-foreground" />
-                ) : (
-                  style.icon
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {isInput ? "你的任务" : "CEO 汇总"}
-                </p>
-                <p
-                  className={`mt-0.5 truncate text-xs ${
-                    running ? "text-primary" : "text-muted-foreground"
-                  }`}
-                  data-testid={isInput ? undefined : "captain-sink-label"}
-                >
-                  {isInput ? "对话发起" : (statusCaption ?? sinkLabel(status))}
-                </p>
-              </div>
-            </div>
-
-            {preview && (
-              <p
-                className={`mt-2 line-clamp-2 text-xs leading-snug ${
-                  isInput
-                    ? "text-muted-foreground/70"
-                    : running
-                      ? "text-foreground/80"
-                      : "text-muted-foreground/80"
-                }`}
-                data-testid={isInput ? undefined : "captain-sink-preview"}
-              >
-                {preview}
-              </p>
-            )}
-          </div>
+          <EndpointNodeFace
+            isInput={isInput}
+            status={status}
+            statusCaption={statusCaption}
+            preview={preview ?? ""}
+            focused={focused}
+            onActivate={onActivate}
+            actionLabel={shell.actionLabel}
+            flashing={flashing}
+          />
         </div>
       </div>
       <Handle
@@ -213,6 +153,122 @@ export function EndpointNode({ data, id }: NodeProps) {
       />
     </>
   );
+}
+
+/** Bookend face — same whiteboard slot as AgentNode (`NODE_WIDTH` × `NODE_HEIGHT`). */
+export function EndpointNodeFace({
+  isInput,
+  status,
+  statusCaption,
+  preview,
+  focused,
+  onActivate,
+  actionLabel,
+  flashing,
+}: {
+  isInput: boolean;
+  status: RunStatus;
+  statusCaption?: string;
+  preview: string;
+  focused?: boolean;
+  onActivate?: () => void;
+  actionLabel?: string;
+  flashing?: boolean;
+}) {
+  const style = SINK_STYLES[status] ?? SINK_STYLES.pending;
+  const running = !isInput && status === "running";
+  const interactive = !!onActivate;
+  const highlighted = !!focused;
+  const flashColor =
+    status === "failed" ? "var(--destructive)" : "var(--success)";
+  const shortStatus = isInput ? "对话发起" : sinkLabel(status);
+  const bodyText = endpointBodyText({ isInput, preview, statusCaption });
+
+  const interactiveProps: React.HTMLAttributes<HTMLDivElement> = interactive
+    ? {
+        role: "button",
+        tabIndex: 0,
+        "aria-label": isInput
+          ? "你的任务，对话发起，查看完整提问"
+          : `CEO 汇总，${statusCaption || shortStatus}，${actionLabel ?? "查看最终回答"}`,
+        onKeyDown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onActivate?.();
+          }
+        },
+      }
+    : {};
+
+  return (
+    <div
+      {...interactiveProps}
+      data-testid="endpoint-node-card"
+      style={
+        {
+          "--graph-flash-color": flashColor,
+          width: NODE_WIDTH,
+          height: NODE_HEIGHT,
+        } as React.CSSProperties
+      }
+      className={`overflow-hidden rounded-xl border px-3 py-2.5 text-left shadow-sm outline-none ${
+        isInput ? "border-border bg-muted/40" : `bg-card ring-2 ${style.ring}`
+      } ${running ? "animate-pulse" : ""} ${flashing ? "animate-graph-node-flash" : ""} ${interactive ? "cursor-pointer" : ""} ${
+        highlighted
+          ? "outline outline-2 outline-offset-2 outline-primary"
+          : interactive
+            ? "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/60"
+            : ""
+      }`}
+    >
+      <div className="flex items-center gap-2.5">
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted">
+          {isInput ? (
+            <UserRound size={16} className="text-muted-foreground" />
+          ) : (
+            style.icon
+          )}
+        </div>
+        <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+          {isInput ? "你的任务" : "CEO 汇总"}
+        </p>
+      </div>
+      <p
+        className={`mt-1 truncate text-xs ${
+          running ? "text-primary" : "text-muted-foreground"
+        }`}
+        data-testid={isInput ? undefined : "captain-sink-label"}
+      >
+        {shortStatus}
+      </p>
+      {bodyText ? (
+        <p
+          className={`mt-2 line-clamp-2 text-xs leading-snug ${
+            isInput
+              ? "text-muted-foreground/70"
+              : running
+                ? "text-foreground/80"
+                : "text-muted-foreground/80"
+          }`}
+          data-testid={isInput ? undefined : "captain-sink-preview"}
+        >
+          {bodyText}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Face 正文：成稿摘录优先；等待句只在没有摘录时占这两行，避免和 statusCaption 双写。 */
+export function endpointBodyText(opts: {
+  isInput: boolean;
+  preview: string;
+  statusCaption?: string;
+}): string {
+  const preview = (opts.preview ?? "").trim();
+  if (preview) return preview;
+  if (opts.isInput) return "";
+  return (opts.statusCaption ?? "").trim();
 }
 
 function sinkLabel(status: RunStatus): string {

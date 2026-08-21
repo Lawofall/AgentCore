@@ -232,7 +232,7 @@ describe("fileArtifacts from delivery_status.artifacts", () => {
   });
 });
 
-describe("成品归位（delivery_status.promoted）", () => {
+describe("历史 delivery_status.promoted（promote_product 已撤销）", () => {
   const WORKROOM = "AgentCore/文档/工作稿";
 
   function status(

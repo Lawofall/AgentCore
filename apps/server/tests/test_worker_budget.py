@@ -456,3 +456,24 @@ def test_should_skip_contract_retry_for_budget_handoff_ok_wind_down():
         token_ceiling=80_000,
         tokens_spent=40_000,
     )
+
+
+def test_should_skip_full_contract_retry_for_round_ceiling():
+    from agentcore.runtime.runs.executor.node import (
+        should_skip_full_contract_retry_for_round_ceiling,
+    )
+
+    assert should_skip_full_contract_retry_for_round_ceiling(
+        cutoff_reasons=["max_rounds"]
+    )
+    assert should_skip_full_contract_retry_for_round_ceiling(
+        cutoff_reasons=["token_budget", "max_rounds"]
+    )
+    assert should_skip_full_contract_retry_for_round_ceiling(
+        cutoff_reasons=[],
+        prior_round_ceiling=True,
+    )
+    assert not should_skip_full_contract_retry_for_round_ceiling(
+        cutoff_reasons=["token_budget"]
+    )
+    assert not should_skip_full_contract_retry_for_round_ceiling(cutoff_reasons=[])

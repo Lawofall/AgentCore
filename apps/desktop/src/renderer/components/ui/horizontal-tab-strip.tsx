@@ -81,8 +81,8 @@ export function HorizontalTabStrip({
         min-h-0 on the flex chain: overflow-x scrollbar/min-content height must
         not inflate this box (flex default min-height:auto) or tabs sit high
         with empty space below inside h-* headers. `scrollbar-hidden` (globals.css)
-        drops the app's reserved 10px gutter for the same reason and must stay a
-        plain class — the Tailwind utility form loses to the global `*` rule.
+        hides the native overlay bar (fade arrows cover overflow) and must stay a
+        plain class — the Tailwind utility form loses to unlayered globals.
       */}
       <div className="relative flex min-h-0 min-w-0 flex-1 items-center self-stretch overflow-hidden">
         {canScrollLeft ? (

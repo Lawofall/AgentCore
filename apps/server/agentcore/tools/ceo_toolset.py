@@ -6,7 +6,6 @@ re-export the same symbol from historical import paths.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from agentcore.config import settings
@@ -33,29 +32,11 @@ from agentcore.tools.builtin import (
 from agentcore.tools.builtin.ask_user import AskUserTool
 from agentcore.tools.builtin.consult import ConsultTool
 from agentcore.tools.builtin.delegate import DelegateTool
-from agentcore.tools.builtin.promote_product import PromoteProductTool
 from agentcore.tools.builtin.remember import RememberTool
 from agentcore.tools.builtin.update_folder_profile import UpdateFolderProfileTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registration import register_always_ceo_tools
 from agentcore.tools.registry import ToolRegistry
-
-
-def _delivery_republisher(sink: EventSink) -> Callable[[dict[str, Any]], None]:
-    """Re-emit ``delivery_status`` after 成品归位 rewrote its paths.
-
-    Folds keep the LATEST per ``execution_id``, so republishing the same id lands
-    as an update: the card now names where each product actually lives, plus the
-    ``promoted`` rows. Tools stay off the event vocabulary (引擎纯化) — this
-    closure owns the event shape.
-    """
-
-    def _publish(payload: dict[str, Any]) -> None:
-        from agentcore.runtime.events import delivery_status
-
-        sink.emit(delivery_status(**payload))
-
-    return _publish
 
 
 async def _wire_consult_if_entries(
@@ -216,7 +197,6 @@ def _assemble_ceo_toolset(
         skill_registry=skill_registry,
         include_vision=include_vision,
     )
-    chat_tools.register(PromoteProductTool(on_promoted=_delivery_republisher(sink)))
     if memory_enabled:
         from agentcore.runtime.resolve.prepare import default_memory_store
 

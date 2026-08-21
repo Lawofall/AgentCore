@@ -656,10 +656,10 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "conversation_id": "str",
         "error": "str",
         "error_type": "str",
-        "ignore_cgroups": "bool",
-        "ignore_reason": "str",
-        "returncode": "int",
-        "stderr_preview": "str",
+    },
+    "sandboxd.health_failed": {
+        "shape": "str",
+        "detail": "str",
     },
     "compaction.shutdown_timeout": {
         "pending": "int",
@@ -804,6 +804,10 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
 # S3-retired names: no emit site, kept so old JSONL still validates against the registry.
 # Descriptions must say 历史兼容 — do not present as current contract.
 HISTORICAL_COMPAT: dict[str, str] = {
+    "browser.cgroup_unwritable_ignore": (
+        "历史兼容：曾在探测 subtree_control 只读后自动加 --ignore-cgroups；"
+        "现形状 B 固定 ignore-cgroups，不再发此事件"
+    ),
 }
 
 KEY_DESC: dict[str, str] = {
@@ -979,12 +983,12 @@ KEY_DESC: dict[str, str] = {
     ),
     "server.shutdown_teardown_timeout": "lifespan 抢救后的收尾超过 shutdown_teardown_seconds",
     "browser.close_all_timeout": "停机 close_all 超过墙钟上限，放弃等待交重启/reaper",
-    "browser.cgroup_unwritable_ignore": (
-        "容器内 cgroup2 subtree_control 只读，自动加 --ignore-cgroups"
-        "（会话 OCI 限额不生效，容器 mem_limit 仍在）"
-    ),
     "browser.session_open_failed": (
-        "runsc 浏览器会话握手失败；stderr_preview 为 runsc/driver 尾部（此前 PIPE 会丢掉）"
+        "浏览器会话握手失败（API 侧）；error / error_type 为包装异常。"
+        "runsc 探针失败看 sandboxd.health_failed"
+    ),
+    "sandboxd.health_failed": (
+        "sandboxd 形状探针失败：shape=code（A）或 net（B）；detail 为 runsc/ip 尾部"
     ),
     "compaction.shutdown_timeout": "停机 flush 在飞 fold 超时（best-effort，取消剩余 task）",
     "memory.consolidation_window_dropped": (

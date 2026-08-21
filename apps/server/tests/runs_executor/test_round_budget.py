@@ -1,4 +1,4 @@
-"""Pass-local round budget: dedicated light_repair cap + remaining-rounds fact."""
+"""Pass-local round budget: dedicated light_repair cap + pass-boundary cap fact."""
 
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, TokenUsage, ToolCallDelta
 from agentcore.runtime.events import EventSink
@@ -22,37 +22,39 @@ from tests.runs_executor.conftest import _ctx, _FileWriteTool, _ScriptedRounds
 
 
 def test_light_pass_rounds_are_dedicated_when_main_pool_exhausted():
-    """56/56 leftover formula collapses 4→1; dedicated pass cap stays 4."""
-    spent, pool = 56, 56
+    """Full-pass leftover formula collapses 4→1; dedicated pass cap stays 4."""
+    spent = pool = MAX_TASK_ROUNDS
     leftover = max(1, pool - spent)
     assert leftover == 1
     assert min(_LIGHT_REPAIR_MAX_ROUNDS, leftover) == 1
     assert _pass_max_rounds(light_pass=True, profile_max=pool) == 4
     assert _pass_max_rounds(light_pass=True, profile_max=1) == 4
-    assert _pass_max_rounds(light_pass=False, profile_max=56) == 56
+    assert _pass_max_rounds(light_pass=False, profile_max=MAX_TASK_ROUNDS) == MAX_TASK_ROUNDS
     # After a full first pass, light repair still gets its dedicated 4 (total cap has room).
     assert _pass_max_rounds(light_pass=True, profile_max=pool, spent=spent) == 4
 
 
 def test_pass_max_rounds_clips_retry_to_cross_attempt_total():
-    """Contract retry leftover cannot reopen a 56+54-style second segment."""
-    first_pass = 56
+    """Contract retry leftover cannot reopen a second full investigation segment."""
+    first_pass = MAX_TASK_ROUNDS
     leftover = _pass_max_rounds(
         light_pass=False, profile_max=first_pass, spent=first_pass
     )
     assert leftover == MAX_RUN_TOTAL_ROUNDS - first_pass
-    assert leftover < 54
+    assert leftover < first_pass // 2
     assert leftover > 0
-    assert _pass_max_rounds(light_pass=False, profile_max=56, spent=0) == 56
+    assert _pass_max_rounds(light_pass=False, profile_max=MAX_TASK_ROUNDS, spent=0) == (
+        MAX_TASK_ROUNDS
+    )
     assert (
         _pass_max_rounds(
-            light_pass=False, profile_max=56, spent=MAX_RUN_TOTAL_ROUNDS
+            light_pass=False, profile_max=MAX_TASK_ROUNDS, spent=MAX_RUN_TOTAL_ROUNDS
         )
         == 0
     )
     assert (
         _pass_max_rounds(
-            light_pass=True, profile_max=56, spent=MAX_RUN_TOTAL_ROUNDS
+            light_pass=True, profile_max=MAX_TASK_ROUNDS, spent=MAX_RUN_TOTAL_ROUNDS
         )
         == 0
     )
@@ -77,12 +79,12 @@ def test_max_rounds_input_clamped_to_absolute_cap():
     assert plan_low.nodes[0].max_rounds is None
 
 
-def test_round_budget_awareness_is_numbers_only():
-    text = format_round_budget_awareness(used=55, limit=56)
+def test_round_budget_awareness_is_cap_only():
+    text = format_round_budget_awareness(limit=56)
     assert text.startswith(ROUND_BUDGET_AWARENESS_PREFIX)
-    assert "已用 55 轮" in text
-    assert "剩余 1 轮" in text
     assert "本段上限 56 轮" in text
+    assert "已用" not in text
+    assert "剩余" not in text
     # No completion / quality / write-the-report steer.
     assert "报告" not in text
     assert "handoff" not in text
@@ -94,18 +96,18 @@ def test_sync_round_budget_awareness_replaces_stale_copy():
         LLMMessage(role="system", content="sys"),
         LLMMessage(role="user", content="task"),
     ]
-    first = sync_round_budget_awareness(messages, used=1, limit=8)
+    first = sync_round_budget_awareness(messages, limit=8)
     assert first is not None
     assert sum(1 for m in messages if m.content.startswith(ROUND_BUDGET_AWARENESS_PREFIX)) == 1
-    second = sync_round_budget_awareness(messages, used=2, limit=8)
-    assert "已用 2 轮" in (second or "")
-    assert "剩余 6 轮" in (second or "")
+    second = sync_round_budget_awareness(messages, limit=4)
+    assert "本段上限 4 轮" in (second or "")
+    assert "本段上限 8 轮" not in (second or "")
     facts = [m for m in messages if _is_fact(m)]
     assert len(facts) == 1
     assert facts[0].content == second
     messages.append(LLMMessage(role="user", content="请补全缺失章节：结论"))
     parked = sync_round_budget_awareness(
-        messages, used=0, limit=4, before_last_user=True
+        messages, limit=4, before_last_user=True
     )
     assert parked is not None
     assert messages[-1].content == "请补全缺失章节：结论"
@@ -114,7 +116,7 @@ def test_sync_round_budget_awareness_replaces_stale_copy():
     assert drop_round_budget_awareness(messages) is True
     assert not any(_is_fact(m) for m in messages)
     assert messages[-1].content == "请补全缺失章节：结论"
-    assert sync_round_budget_awareness(messages, used=0, limit=0) is None
+    assert sync_round_budget_awareness(messages, limit=0) is None
 
 
 def test_bind_round_budget_on_begin_increments_and_keeps_notes():
@@ -122,17 +124,14 @@ def test_bind_round_budget_on_begin_increments_and_keeps_notes():
     notes = [LLMMessage(role="user", content="note")]
     used_box = [0]
     limit_box = [8]
-    hook = bind_round_budget_on_begin(messages, lambda: list(notes), used_box, limit_box)
+    hook = bind_round_budget_on_begin(lambda: list(notes), used_box, limit_box)
     returned = hook()
     assert used_box[0] == 1
     assert returned == notes
-    assert "已用 1 轮" in (messages[-1].content or "")
-    assert "剩余 7 轮" in (messages[-1].content or "")
+    assert [m.content for m in messages] == ["open"]
     hook()
-    facts = [m for m in messages if _is_fact(m)]
-    assert len(facts) == 1
-    assert "已用 2 轮" in (facts[0].content or "")
-    assert "剩余 6 轮" in (facts[0].content or "")
+    assert used_box[0] == 2
+    assert not any(_is_fact(m) for m in messages)
 
 
 def test_bind_round_budget_stamps_coord_spend_on_same_channel():
@@ -143,7 +142,6 @@ def test_bind_round_budget_stamps_coord_spend_on_same_channel():
         set_active_coordination,
     )
 
-    messages = [LLMMessage(role="user", content="open")]
     used_box = [0]
     limit_box = [56]
     tokens_box = [2_650_000]
@@ -152,7 +150,6 @@ def test_bind_round_budget_stamps_coord_spend_on_same_channel():
     set_active_coordination(session)
     try:
         hook = bind_round_budget_on_begin(
-            messages,
             lambda: [],
             used_box,
             limit_box,
@@ -188,8 +185,8 @@ def _fact_texts(state) -> list[str]:  # noqa: ANN001
     ]
 
 
-async def test_round_budget_fact_refreshes_across_react_rounds():
-    """on_round_begin injects pass-local used/remaining; one live copy only."""
+async def test_main_pass_does_not_inject_round_budget_awareness():
+    """Main produce pass must not tick remaining-rounds into the worker window."""
     plan, _ = build_run_plan(
         [{"role": "W", "task": "write file", "max_rounds": 8}],
         id_prefix="t",
@@ -251,11 +248,7 @@ async def test_round_budget_fact_refreshes_across_react_rounds():
     state = res["t_1"]
     assert state.phase is RunPhase.COMPLETED
     assert provider.calls == 3
-    facts = _fact_texts(state)
-    assert len(facts) == 1
-    assert "已用 2 轮" in facts[0]
-    assert "剩余 6 轮" in facts[0]
-    assert "本段上限 8 轮" in facts[0]
+    assert _fact_texts(state) == []
 
 
 async def test_react_stamps_coord_live_spend_for_ceo_brief():
@@ -385,8 +378,8 @@ async def test_light_repair_announces_dedicated_four_rounds_after_exhaustion():
     assert repair_users
     # Old leftover formula after 1/1 would announce 上限 1; dedicated cap is 4.
     assert any("本段上限 4 轮" in text for text in repair_users)
-    assert any("已用 0 轮" in text and "剩余 4 轮" in text for text in repair_users)
     assert all("本段上限 1 轮" not in text for text in repair_users)
+    assert all("已用" not in text and "剩余" not in text for text in repair_users)
 
 
 async def test_light_repair_runs_two_rounds_after_main_exhaustion():
@@ -443,13 +436,15 @@ async def test_light_repair_runs_two_rounds_after_main_exhaustion():
         for _role, content in req
         if content.startswith(ROUND_BUDGET_AWARENESS_PREFIX)
     ]
-    assert any("本段上限 4 轮" in text and "已用 0 轮" in text for text in repair_facts)
-    assert any("本段上限 4 轮" in text and "已用 1 轮" in text for text in repair_facts)
+    assert any("本段上限 4 轮" in text for text in repair_facts)
     assert all("本段上限 1 轮" not in text for text in repair_facts)
+    # Cap is announced once at the pass boundary — not refreshed each repair round.
+    assert all("已用" not in text and "剩余" not in text for text in repair_facts)
+    assert sum(1 for text in repair_facts if "本段上限 4 轮" in text) >= 1
 
 
-async def test_contract_retry_cross_attempt_rounds_respect_total_cap(monkeypatch):
-    """Full contract.retry leftover is clipped by the run total, not a fresh segment."""
+async def test_contract_retry_skipped_after_round_ceiling(monkeypatch):
+    """Hitting max_rounds skips a full retry even when leftover exists under the total cap."""
     import agentcore.runtime.runs.executor.retry as retry_mod
 
     monkeypatch.setattr(retry_mod, "MAX_RUN_TOTAL_ROUNDS", 5)
@@ -480,11 +475,10 @@ async def test_contract_retry_cross_attempt_rounds_respect_total_cap(monkeypatch
     )
     res = await WaveScheduler().run(plan, executor)
     state = res["t_1"]
-    # Produce rounds (not LLM calls): max_rounds ceiling_finalize may add one extra
-    # model call per pass after the cap. Without the total cap, retry would be a
-    # fresh 4-round segment (8 produce rounds).
-    assert state.rounds == 5
-    assert provider.calls > 4
+    # Produce rounds: ceiling salvage may add a model call after the cap, but
+    # leftover under total=5 is not spent on a second investigation.
+    assert state.rounds == 4
+    assert state.phase is RunPhase.FAILED
 
 
 class _AlwaysWriteProvider:

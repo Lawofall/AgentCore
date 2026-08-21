@@ -203,7 +203,7 @@ def test_artifact_dir_mismatch_is_blocking_on_delivery_status():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir-pipe")
     assert payload is not None
-    assert payload["state"] == "partial"
+    assert payload["state"] == "blocked"
     assert payload["state"] != "delivered"
     assert payload["delivered_files"] == []
     assert any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])

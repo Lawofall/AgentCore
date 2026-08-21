@@ -12,11 +12,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from agentcore.runtime.context.outlet_inventory import (
+    OutletDirListing,
+    format_outlet_line,
+)
 from agentcore.workspace.layout import CONV_SEGMENT, INTERNAL_SEGMENT, TREE_SEGMENT
 from agentcore.workspace.stage_dirs import (
     DEBATE_DIR,
@@ -282,6 +286,7 @@ def build_workspace_context(
     mcp_label: str | None = None,
     git_fact: WorkspaceGitFact | None = None,
     opaque_source_data_paths: Sequence[str] | None = None,
+    outlet_inventory: Mapping[str, OutletDirListing] | None = None,
 ) -> str:
     """Render the ``<workspace_context>`` block for this turn's backend + client.
 
@@ -317,6 +322,10 @@ def build_workspace_context(
     ``opaque_source_data_paths`` is the same this-turn source list
     ``collect_opaque_source_data_paths`` uses for ``no_exec_table`` (tests).
     Production omits it and reads ``backend.ai_list_materials``.
+
+    ``outlet_inventory`` is the live basename listing for the four 约定文档出口
+    dirs (from :func:`collect_outlet_inventory`). ``None`` omits the suffix
+    (tests); production callers pass the probe so empty dirs say 当前为空.
     """
     if backend is None:
         return ""
@@ -373,7 +382,7 @@ def build_workspace_context(
         # Host 定案 §3.4: 云 reach 与 host= 正交——工作区在云；本机 Host 以能力行为准。
         reach_line = (
             "云端工作区文件在云端沙箱，不是用户本机磁盘；"
-            "本机 Host（音响/系统信息/打开设置等）另计，以能力行 host= 为准——"
+            "本机 Host（短命令 / 系统状态 / 设置等）另计，以能力行 host= 为准——"
             "host=已装配时可经桌面回填通道调用 host；"
             + empty_tree_clause
         )
@@ -707,10 +716,19 @@ def build_workspace_context(
         interpreters_line = format_interpreters_line(tuple(langs))
 
     # 约定文档布局（始终可见）：四行出口 + 一句边界。只陈述路径事实，不注入文档正文进 <rules>。
-    dossier_drafts_line = f"约定文档出口·默认落点（无专属出口的产物）：`{DRAFTS_DIR}/`"
-    dossier_research_line = f"约定文档出口·调研/讨论：`{RESEARCH_DIR}/`"
-    dossier_debate_line = f"约定文档出口·辩论副产物：`{DEBATE_DIR}/`"
-    dossier_reviews_line = f"约定文档出口·审查：`{REVIEWS_DIR}/`"
+    # 有 inventory 时附「现有 / 当前为空」——出口是写入落点，不是可直读的文件书目。
+    dossier_drafts_line = format_outlet_line(
+        "约定文档出口·默认落点（无专属出口的产物）：", DRAFTS_DIR, outlet_inventory
+    )
+    dossier_research_line = format_outlet_line(
+        "约定文档出口·调研/讨论：", RESEARCH_DIR, outlet_inventory
+    )
+    dossier_debate_line = format_outlet_line(
+        "约定文档出口·辩论副产物：", DEBATE_DIR, outlet_inventory
+    )
+    dossier_reviews_line = format_outlet_line(
+        "约定文档出口·审查：", REVIEWS_DIR, outlet_inventory
+    )
     dossier_boundary_line = (
         "约定文档边界：讨论/调研/审查类交付写此树，其余产物走默认落点；"
         "用户工程源码仍写业务路径。"

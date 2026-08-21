@@ -499,8 +499,13 @@ def test_team_orchestration_skill_teaches_shape_vocabulary():
     assert "整仓只填 scope 当单人" in body or "整仓" in body
     assert "必须扇出" in body  # 仅出现在「仍非必须扇出」
     assert "单缝省略" in body
+    assert "产品缝" in body
+    assert "2–3" in body or "2-3" in body
+    assert "目录树" in body
     assert "上限 8" in body or "上限8" in body
     assert "超限末槽折叠" in body
+    assert "无主管" in body
+    assert "≥3" in body and "主管" in body
     assert "凡审计必两拨人" not in body
     for title in CODE_AUDIT_REQUIRED_SECTIONS:
         assert title in body
@@ -770,6 +775,11 @@ def test_team_orchestration_skill_teaches_cross_folder_parallel():
     assert "窄例外" in body
     assert "裸聊单目标" in body or "运行时继承" in body
     assert "能少则少" in body and "拿不准先少派" in body
+    # 审查收窄：探路已见路径进 task；单点展示 1 人；modules 不是配额
+    assert "父目录" in body and "通读" in body
+    assert "单点展示" in body
+    assert "凑工种" in body
+    assert "不是配额" in body
     assert "不" in body and "覆盖" in body
     # 跨文件夹读写通吃派工换桌；CEO 只读跨桌仅认桌（禁「云端读不到本地」当唯一路径）
     assert "list_folder_dir" in body and "read_folder_file" in body

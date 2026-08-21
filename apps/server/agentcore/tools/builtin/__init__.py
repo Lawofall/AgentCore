@@ -88,24 +88,18 @@ def _desktop_bridge_ready() -> bool:
 
 
 def _browser_sandbox_host_ready() -> bool:
-    """gVisor + cloud sandbox health + browser netns — shared server / local fallback.
+    """gVisor + shape-B ``health("net")`` — shared server / local fallback.
 
     ``code_execute_cloud_enabled`` subprocess path does NOT enable browsers.
-    Netns is orthogonal to ``GVisorSandbox.health_check`` (``network_mode=none``):
-    a failed boot / refreshed / sticky probe withholds browser_* so the model never
-    first-fails then trips the circuit. ``None`` (tests / unbooted) keeps status quo —
-    do not withhold.
+    Shape A ``cloud_sandbox_health`` does not gate this: an unhealthy code
+    sandbox must not withhold a healthy browser netns. ``None`` (never probed)
+    is fail-closed — do not assemble.
     """
     if not settings.gvisor_enabled:
         return False
-    from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health
-
-    # False → known unhealthy; True / None (never probed) → config + cloud gate alone.
-    if cloud_sandbox_health() is False:
-        return False
     from agentcore.tools.sandbox.browser.netns import browser_netns_health
 
-    return browser_netns_health() is not False
+    return browser_netns_health() is True
 
 
 def browser_host_kind_for(
@@ -143,7 +137,7 @@ def browser_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
       for the current credential generation → host_kind=local.
     - **local without Bridge + gVisor/netns**: host_kind=sandbox (大众默认云端过桥；
       cloud API cannot reach本机 loopback Bridge).
-    - **server + gVisor**: host_kind=sandbox; folds boot-time sandbox + netns probes.
+    - **server + gVisor**: host_kind=sandbox; folds shape-B ``health("net")`` (fail-closed).
     - True local engine with neither Bridge nor gVisor → withhold (no fake success).
     """
     return browser_host_kind_for(backend) is not None
@@ -226,13 +220,14 @@ def build_builtin_registry(
     registry = ToolRegistry()
     for cls in declared_tools(surface=ToolSurface.BUILTIN):
         reg = tool_registration(cls)
-        if reg.execution_class and not include_execution_tools:
+        if reg.browser_class:
+            if not include_browser:
+                continue
+        elif reg.execution_class and not include_execution_tools:
             continue
         if reg.host_class and not include_host_tools:
             continue
         if reg.desktop_online_class and not include_desktop_online_tools:
-            continue
-        if reg.browser_class and not include_browser:
             continue
         if reg.git_class and not include_git:
             continue
@@ -260,7 +255,11 @@ def build_worker_registry(
     """
     location = backend.location if backend is not None else None
     include_execution = execution_class_enabled_for(backend, permission_axes)
-    include_browser = include_execution and browser_execution_enabled_for(backend)
+    ask_withhold = (
+        permission_axes is not None and permission_axes.withholds_execution_tools
+    )
+    # Shape A health must not withhold browser: only ask-withhold ∧ shape-B netns.
+    include_browser = (not ask_withhold) and browser_execution_enabled_for(backend)
     include_host = desktop_online and (
         permission_axes is None or not permission_axes.host_disabled
     )
@@ -287,9 +286,10 @@ def build_worker_registry(
             # Privacy-gated (e.g. conversation log tools): wired after registry build
             # when the user gate is on — see ``_wire_worker_conversation_log_tools``.
             continue
-        if reg.execution_class and not include_execution:
-            continue
-        if reg.browser_class and not include_browser:
+        if reg.browser_class:
+            if not include_browser:
+                continue
+        elif reg.execution_class and not include_execution:
             continue
         if reg.host_class and not include_host:
             continue

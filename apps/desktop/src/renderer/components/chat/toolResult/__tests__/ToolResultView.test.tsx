@@ -215,19 +215,19 @@ describe("ToolResultView · read_url", () => {
 });
 
 describe("ToolResultView · file_read ceiling guidance", () => {
-  it("renders ceiling rejection as warning, not destructive", () => {
+  it("renders ceiling cheap-hit as warning, not destructive", () => {
     const { container } = render(
       <ToolResultView
         data={data({
           toolName: "file_read",
           result:
-            "已多次读取 `doc.md`（本 run 上限 5 次）。正文已在对话中，勿再读此文件；",
-          status: "error",
+            "已多次读取 `doc.md`（本 run 上限 5 次）。请求范围仍在对话投影窗中，本次不重复灌入全文。请直接使用已有正文，勿再读全文。",
+          status: "success",
         })}
       />,
     );
     const pre = container.querySelector("pre");
-    expect(pre?.textContent).toContain("勿再读此文件");
+    expect(pre?.textContent).toContain("不重复灌入全文");
     expect(pre?.className).toContain("text-warning");
     expect(pre?.className).not.toContain("text-destructive");
   });

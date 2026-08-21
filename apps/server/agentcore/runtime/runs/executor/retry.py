@@ -34,9 +34,10 @@ _LIGHT_REPAIR_TOOL_NAMES: frozenset[str] = frozenset(
 )
 _LIGHT_REPAIR_MAX_ROUNDS = 4
 
-# Per-pass remaining-rounds readout (BATS-style：只报引擎已在算的已用/上限/剩余).
-# Distinct from retrieval-budget awareness and from token/timeout wind_down —
-# numbers only; no tool narrowing, no completion / quality steer.
+# Pass-boundary cap announcement (light_repair / contract retry). Not a live
+# countdown: rounds are an engine ceiling, not a worker-planning budget (BATS
+# applies to retrieval slots only). Numbers only; no tool narrowing, no
+# completion / quality steer.
 ROUND_BUDGET_AWARENESS_PREFIX = "[系统提示] 轮次余额"
 
 
@@ -45,13 +46,13 @@ def _pass_max_rounds(*, light_pass: bool, profile_max: int, spent: int = 0) -> i
 
     ``light_repair`` / ``write_pass`` / cite-upgrade short passes still get a
     dedicated :data:`_LIGHT_REPAIR_MAX_ROUNDS` — not leftover from the main
-    pool — so a format fix after 56/56 still sees 4 when the total cap has
-    room. ``spent`` is cumulative produce rounds already finished on this
-    run (main + prior retries / short passes). The total
+    pool — so a format fix after a full main pass still sees 4 when the
+    total cap has room. ``spent`` is cumulative produce rounds already
+    finished on this run (main + prior retries / short passes). The total
     :data:`MAX_RUN_TOTAL_ROUNDS` stops contract.retry from opening another
-    full segment (56+54 stacking). ``0`` means no rounds remain under the
-    total; callers must skip the pass rather than start a ``max_rounds=0``
-    loop.
+    full investigation. Round-ceiling hits skip that full retry entirely.
+    ``0`` means no rounds remain under the total; callers must skip the
+    pass rather than start a ``max_rounds=0`` loop.
     """
     remaining = max(0, MAX_RUN_TOTAL_ROUNDS - max(0, int(spent)))
     if remaining <= 0:
@@ -61,15 +62,10 @@ def _pass_max_rounds(*, light_pass: bool, profile_max: int, spent: int = 0) -> i
     return min(max(0, int(profile_max)), remaining)
 
 
-def format_round_budget_awareness(*, used: int, limit: int) -> str:
-    """One-line pass-local used / remaining / cap. No advice, no intercept."""
-    used_n = max(0, int(used))
+def format_round_budget_awareness(*, limit: int) -> str:
+    """One-line pass-cap fact for a new produce segment. No advice, no intercept."""
     limit_n = max(0, int(limit))
-    remaining = max(0, limit_n - used_n)
-    return (
-        f"{ROUND_BUDGET_AWARENESS_PREFIX}：已用 {used_n} 轮，剩余 {remaining} 轮"
-        f"（本段上限 {limit_n} 轮）。"
-    )
+    return f"{ROUND_BUDGET_AWARENESS_PREFIX}：本段上限 {limit_n} 轮。"
 
 
 def _is_round_budget_awareness(msg: LLMMessage) -> bool:
@@ -81,7 +77,7 @@ def _is_round_budget_awareness(msg: LLMMessage) -> bool:
 
 
 def drop_round_budget_awareness(messages: list[LLMMessage]) -> bool:
-    """Remove the pass-local rounds readout; True ⇒ transcript changed."""
+    """Remove the pass-cap announcement; True ⇒ transcript changed."""
     if not any(_is_round_budget_awareness(m) for m in messages):
         return False
     messages[:] = [m for m in messages if not _is_round_budget_awareness(m)]
@@ -91,25 +87,23 @@ def drop_round_budget_awareness(messages: list[LLMMessage]) -> bool:
 def sync_round_budget_awareness(
     messages: list[LLMMessage],
     *,
-    used: int,
     limit: int,
     before_last_user: bool = False,
 ) -> str | None:
-    """Refresh the single rounds-balance message.
+    """Announce this produce segment's round cap once.
 
+    Call only at a new-pass boundary (light_repair / contract retry), not every
+    ReAct round — a live used/remaining ticker hijacks the next-think user slot.
     ``limit <= 0`` ⇒ skip (no cap to report). Refresh = drop stale copy then
-    insert, so the transcript never carries two contradicting balances.
-    Counts are this pass's ``used`` / ``pass_profile.max_rounds`` (already
-    clipped by the cross-attempt total), not cumulative ``run_rounds``.
+    insert, so the transcript never carries two contradicting caps.
 
-    Default appends at the tail (adjacent to the next think). ``before_last_user``
-    parks the fact under the latest user instruction (light_repair / retry
-    shortfall stays last).
+    ``before_last_user`` parks the fact under the latest user instruction
+    (light_repair / retry shortfall stays last).
     """
     if limit <= 0:
         return None
     drop_round_budget_awareness(messages)
-    text = format_round_budget_awareness(used=used, limit=limit)
+    text = format_round_budget_awareness(limit=limit)
     msg = LLMMessage(role="user", content=text)
     if (
         before_last_user
@@ -133,8 +127,9 @@ def stamp_coord_round_budget(
 ) -> None:
     """Piggyback pass-local used/limit (and run tokens) on the busy channel.
 
-    Same 口径 as :func:`sync_round_budget_awareness`. No-op without a live
-    coordination session. Once per round / pass start — not per token.
+    Live used/limit for the CEO idle brief. No-op without a live coordination
+    session. Once per round / pass start — not per token. Does not inject into
+    the worker window.
     """
     rid = (run_id or "").strip()
     if not rid or limit <= 0:
@@ -151,7 +146,6 @@ def stamp_coord_round_budget(
 
 
 def bind_round_budget_on_begin(
-    messages: list[LLMMessage],
     pull_notes: Callable[[], list[LLMMessage]],
     used_box: list[int],
     limit_box: list[int],
@@ -159,22 +153,19 @@ def bind_round_budget_on_begin(
     run_id: str = "",
     tokens_spent_of: Callable[[], int] | None = None,
 ) -> Callable[[], list[LLMMessage]]:
-    """``on_round_begin`` wrapper: refresh pass-local remaining rounds, then notes.
+    """``on_round_begin`` wrapper: stamp CEO live spend, then teammate notes.
 
-    The engine calls the hook at the start of every round after the first, so
-    each invocation means ``used`` completed rounds and ``limit - used`` left
-    including the round about to start. Mutates ``messages`` (drop+append) and
-    returns only the notes list for the engine to extend.
+    Does **not** inject a rounds ticker into the worker window. The engine
+    calls the hook at the start of every round after the first; each
+    invocation means ``used`` completed rounds (including the round about to
+    start). Returns only the notes list for the engine to extend.
 
-    When ``run_id`` is set, the same used/limit (and optional run-level tokens)
-    are stamped onto the coordination busy channel for the CEO idle brief.
+    When ``run_id`` is set, used/limit (and optional run-level tokens) are
+    stamped onto the coordination busy channel for the CEO idle brief.
     """
 
     def _on_round_begin() -> list[LLMMessage]:
         used_box[0] += 1
-        sync_round_budget_awareness(
-            messages, used=used_box[0], limit=limit_box[0]
-        )
         spent: int | None = None
         if tokens_spent_of is not None:
             spent = int(tokens_spent_of())
@@ -251,6 +242,24 @@ def should_skip_contract_retry_for_budget(
     真缺口交给审校/CEO，不靠耗尽后再硬返工。硬顶短路见调用方的 ceiling 分支。
     """
     return bool(handoff_ok and wind_down_entered)
+
+
+def should_skip_full_contract_retry_for_round_ceiling(
+    *,
+    cutoff_reasons: list[str],
+    prior_round_ceiling: bool = False,
+) -> bool:
+    """Round fuse blown: keep light_repair / write_pass, do not reopen investigation.
+
+    Token wind-down still requires handoff_ok (定案 B). Round ceiling skips the
+    full retry even when handoff is thin — salvage already ran; leftover
+    shortfalls stay ``partial`` for CEO / ``continue_from``.
+
+    ``cutoff_reasons`` is cleared each produce pass; ``prior_round_ceiling``
+    is the sticky latch so a light_repair after the fuse still cannot open
+    a full investigation.
+    """
+    return bool(prior_round_ceiling) or "max_rounds" in cutoff_reasons
 
 
 def _narrow_for_light_repair(

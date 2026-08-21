@@ -24,6 +24,7 @@ from agentcore.runtime.events import FinishReason
 from agentcore.runtime.runs.cutoff import (
     DEGRADED_HANDOFF_WARNING,
     REASON_DEGRADED_HANDOFF,
+    REASON_MAX_ROUNDS,
     REASON_TOKEN_BUDGET,
     REASON_WORKER_TIMEOUT,
     TOKEN_BUDGET_WARNING,
@@ -138,6 +139,58 @@ async def test_ceiling_finalize_stamps_token_budget_on_track():
         )
     assert cutoff == [REASON_TOKEN_BUDGET]
     assert finish == []  # 正轨不标 DEGRADED
+
+
+@pytest.mark.asyncio
+async def test_ceiling_finalize_stamps_max_rounds_on_track():
+    """正轨撞轮次顶：不标 DEGRADED，但 cutoff_reason_sink 写入 max_rounds。"""
+    cutoff: list[str] = []
+    finish: list[FinishReason] = []
+    controller = MagicMock()
+    controller.is_thrashing.return_value = False
+
+    class _ForceFinalize:
+        async def __call__(self, **_kwargs):
+            return "已有产出", "", TokenUsage(), 80, None
+
+    with patch(
+        "agentcore.runtime.engine.ceiling.force_finalize",
+        new=_ForceFinalize(),
+    ):
+        await ceiling_finalize(
+            messages=[],
+            llm=MagicMock(),
+            profile=MagicMock(max_rounds=80),
+            active_model="m",
+            base_model="m",
+            tools=MagicMock(),
+            allowed_tool_names=None,
+            disabled_tools=set(),
+            emit_content=lambda _d: None,
+            emit_reasoning=lambda _d: None,
+            emit_reset=lambda _r: None,
+            final_content="已有产出",
+            final_reasoning="",
+            total_usage=TokenUsage(),
+            ceiling_reason="max_rounds",
+            round_idx=80,
+            role="worker",
+            run_id="del_w1",
+            token_budget=4_000_000,
+            controller=controller,
+            tool_context=MagicMock(agent_id="a1"),
+            sink=MagicMock(),
+            finish_override_sink=finish,
+            approval_gate=None,
+            citation_sink=None,
+            annotate_citations=True,
+            turn_evidence_ledger=None,
+            ledger_registrant="",
+            gate_escalation_sink=[],
+            cutoff_reason_sink=cutoff,
+        )
+    assert cutoff == [REASON_MAX_ROUNDS]
+    assert finish == []
 
 
 @pytest.mark.asyncio

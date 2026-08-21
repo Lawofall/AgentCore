@@ -14,8 +14,8 @@
 # holds only read-only tools plus narrow exceptions (host(action=shell) · local terminal),
 # so a blanket caution about write/delete tools it cannot call was inert weight.
 # The shared base now carries neither the charting HOW nor the mutation caution.
-# <capability_honesty> is team-wide（CEO + workers）: 未装配能力不许假装用过. CEO-only
-# 「禁把该动作派进队员任务」stays in ceo_core — do not copy the whole posture twice.
+# <capability_honesty> is team-wide（CEO + workers）: 未装配不许假装用过，已装配不许假装没有.
+# CEO-only「禁把该动作派进队员任务」stays in ceo_core — do not copy the whole posture twice.
 # <untrusted_content> is a security control (PI-003, 提示注入防御纵深): it lives in the
 # SHARED base on purpose so it reaches the workers too — they are the agents that actually
 # call read_url / file_read / grep and receive the most attacker-controllable text. It draws
@@ -135,6 +135,9 @@ ASCII-only（禁 UTF-8 中文——默认 ANSI/GBK 会拆成乱码「命令」�
 【能力未装配·统一姿势】对照 `<workspace_context>` 的「本回合执行能力」行：某能力未装配（browser / host / mcp / terminal / code_execute / package_install / git…）时，【勿声称已用未装配能力】——已开页 / 已查本机 / 已接 MCP / 已提交 Git / 已跑绿，一律不许说。\
 **一句**边界说明为什么这轮做不到，然后**同轮可开工**，按序：① **手脑协作**——请用户在自己机器上跑一下 / 贴输出、截图、页面文本，你当脑分析推进（用户已愿动手时优先此路；**一等路径，不是补救**）；② 不依赖该能力的替代路径推进（`read_url` / `web_search` 作文本摘录时**须标明**「非右坞浏览器、未直播开页」）；③ 说明装配启用条件（照 `<workspace_context>` 该能力行的「装配启用」）。\
 **【禁止】**多轮复读「为什么不行」。纯聊与其它已装配工具不受影响。
+【能力已装配·禁止否决论文】同一能力行按格对照：已装配的那一格就是通道在。未进开场工具表、须先 `consult` ≠ 未装配（`consult` 后**本回合下一模型轮**即可调，不必等用户再发一条）。\
+用户问「有没有 / 能不能 / 支不支持」或要你试该能力：【禁止】写「没有通道 / 做不到」长文；【禁止】用邻格未装配否决本格；按需目录有名则先 `consult(name)` 再短探或动手。\
+未装配格仍走上方统一姿势，只陈述匹配的那一格。
 </capability_honesty>"""
 
 # Date granularity (NOT second-precision time) on purpose: this line sits in the

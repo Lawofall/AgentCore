@@ -217,6 +217,14 @@ async def test_captain_identity_carries_when_to_split_guidance():
     assert "先招人再整合" in sys
     assert "未钉成单切片" in sys
     assert "不是先深读再招" in sys
+    assert "【开局】" in sys
+    assert "第一件事用 delegate" not in sys
+    assert "优先把能独立的块交出去" in sys
+    assert "不要先通读长文档" in sys
+    assert "代替招人" in sys
+    assert "不是必须第一下就招人" in sys
+    assert "你去把整座做完" in sys
+    assert "禁止为显得主动而再招人" in sys
     assert "薄切片" in sys and "整座仓" in sys
     assert "escalate（范围）" in sys
     assert "禁止默默扩编" in sys
@@ -244,6 +252,9 @@ async def test_captain_identity_carries_when_to_split_guidance():
     leaf = build_worker_identity(has_dependents=False, captain=False)
     assert "怎么拆" not in leaf
     assert "计划已让出" not in leaf
+    assert "【开局】" not in leaf
+    assert "第一件事用 delegate" not in leaf
+    assert "优先把能独立的块交出去" not in leaf
 
 
 async def test_depth_three_subworker_keeps_leaf_identity():
@@ -365,10 +376,15 @@ async def test_handoff_prompt_splits_by_topology():
     assert "汇报不完整" in leaf
     assert "权威文档冲突" in leaf
     assert "静默改权威稿" in leaf
-    # 开局找路径轻 nudge：含糊「根」先 list/grep
+    # 开局找路径轻 nudge：含糊「根」先 list/grep；约定出口不是已知文件书目
     assert "找路径" in leaf
     assert "含糊" in leaf and "根" in leaf
     assert "file_list" in leaf
+    assert "code_execute print" in leaf
+    assert "整文件 dump" in leaf
+    assert "含约定文档出口" not in leaf
+    assert "写入落点" in leaf
+    assert "勿按话题拼接" in leaf
 
     # Executor wires topology into the live system prompt (not just the helper).
     plan, _ = build_run_plan(

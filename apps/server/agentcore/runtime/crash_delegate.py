@@ -28,7 +28,11 @@ from agentcore.llm.profiles import turn_profiles_for_turn
 from agentcore.llm.resolve import resolve_credentials
 from agentcore.memory import assemble_turn_rules, default_memory_store
 from agentcore.runtime.capability_packs import enabled_packs
-from agentcore.runtime.context import build_workspace_context, detect_workspace_git
+from agentcore.runtime.context import (
+    build_workspace_context,
+    collect_outlet_inventory,
+    detect_workspace_git,
+)
 from agentcore.runtime.context.consult_sources import build_merged_consult_source
 from agentcore.runtime.facts import FactKind
 from agentcore.runtime.pipeline.resume.wire import wire_crash_turn
@@ -148,6 +152,7 @@ async def production_crash_delegate_factory(
             exec_languages=exec_languages,
             permission_axes=permission_axes,
             git_fact=await detect_workspace_git(backend),
+            outlet_inventory=await collect_outlet_inventory(backend),
         )
         system_prompt = assemble_system_prompt(
             rules_markdown=rules_markdown,

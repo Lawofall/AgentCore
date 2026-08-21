@@ -43,7 +43,7 @@ export function SegmentedNav({
       className={cn(
         // min-w-0 + 自滚：与返回链接、页级动作同处一行时，窄窗口下收缩自己而不是
         // 把整行撑出横向滚动条。`scrollbar-hidden`（globals.css，必须是普通类——
-        // Tailwind 等价物会输给全局 `*` 规则）去掉预留的 10px 槽，免得吃掉行高。
+        // Tailwind 等价物会输给全局规则）藏掉 overlay 条，免得吃掉行高。
         "scrollbar-hidden flex w-fit min-w-0 items-center gap-0.5 overflow-x-auto rounded-lg border border-border p-0.5",
         className,
       )}

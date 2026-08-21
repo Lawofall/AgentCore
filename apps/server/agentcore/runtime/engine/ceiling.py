@@ -149,14 +149,14 @@ async def ceiling_finalize(
         token_budget=token_budget,
         run_id=run_id,
     )
-    # C·掐断透明化：正轨 token 撞顶也要结构化原因码（与打转 DEGRADED 分流正交）。
+    # C·掐断透明化：正轨硬顶也要结构化原因码（与打转 DEGRADED 分流正交）。
     if (
-        ceiling_reason == "token_budget"
-        and role == "worker"
+        role == "worker"
         and cutoff_reason_sink is not None
-        and "token_budget" not in cutoff_reason_sink
+        and ceiling_reason in ("token_budget", "max_rounds")
+        and ceiling_reason not in cutoff_reason_sink
     ):
-        cutoff_reason_sink.append("token_budget")
+        cutoff_reason_sink.append(ceiling_reason)
     if thrashing:
         if finish_override_sink is not None:
             finish_override_sink.append(FinishReason.DEGRADED)
@@ -215,8 +215,7 @@ async def ceiling_finalize(
             reason=ceiling_reason,
             promotion_ledger=tool_context.promotion_ledger,
         )
-        if ceiling_reason == "token_budget":
-            note_cutoff_delivery_gap()
+        note_cutoff_delivery_gap()
 
         def _honest_close(text: str) -> str:
             return enforce_ceiling_closing_honesty(text, reason=ceiling_reason)

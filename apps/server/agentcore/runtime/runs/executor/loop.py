@@ -49,6 +49,7 @@ from agentcore.runtime.runs.executor.retry import (
     _wind_down_entered,
     bind_round_budget_on_begin,
     should_skip_contract_retry_for_budget,
+    should_skip_full_contract_retry_for_round_ceiling,
     stamp_coord_round_budget,
     sync_round_budget_awareness,
 )
@@ -138,9 +139,9 @@ async def run_contract_loop(
 
     run_usage = run_usage_box[0]
     run_rounds = run_rounds_box[0]
-    # Pass-local round counter for remaining-rounds awareness. ``run_rounds``
-    # still accumulates every produce pass (billing / exception path); the
-    # injected fact reports this pass's used vs ``pass_profile.max_rounds``.
+    # Pass-local round counter for the CEO idle brief (busy-channel used/limit).
+    # Not injected into the worker window — rounds are an engine ceiling.
+    # ``run_rounds`` still accumulates every produce pass (billing / exception).
     pass_round_used = [0]
     pass_round_limit = [profile.max_rounds]
 
@@ -149,7 +150,6 @@ async def run_contract_loop(
         return run_usage_box[0].total_tokens + extra
 
     on_round_begin = bind_round_budget_on_begin(
-        messages,
         pull_notes,
         pass_round_used,
         pass_round_limit,
@@ -185,6 +185,9 @@ async def run_contract_loop(
     finish_override: list[FinishReason] = []
     # C·掐断透明化：正轨 token 撞顶等结构化原因码（与 DEGRADED 分流正交）。
     cutoff_reasons: list[str] = []
+    # Sticky across attempts: cutoff_reasons is cleared each pass, but a round
+    # fuse already blown must not reopen a full investigation after light_repair.
+    round_ceiling_hit = False
     # Last accepted react pass's tool-failure facts (circuit-breaker tally).
     tool_failures: list[dict] = []
     # Cross-pass LoopController latches (validation path-stop / thrash).
@@ -247,10 +250,10 @@ async def run_contract_loop(
         )
         if is_light_pass or attempt > 0:
             # Round 0 of a new react_loop skips on_round_begin — announce the
-            # new pass cap immediately (light_repair after 56/56 must see 4).
+            # new pass cap once (light_repair after 56/56 must see 4). Do not
+            # refresh this fact on later rounds of the same pass.
             sync_round_budget_awareness(
                 messages,
-                used=0,
                 limit=pass_profile.max_rounds,
                 before_last_user=True,
             )
@@ -327,6 +330,8 @@ async def run_contract_loop(
         run_rounds += round_rounds
         run_usage_box[0] = run_usage
         run_rounds_box[0] = run_rounds
+        if "max_rounds" in cutoff_reasons:
+            round_ceiling_hit = True
         # This pass's usage is now folded into run_usage via its return value;
         # drop the mirror so a later non-react raise can't double-count it.
         inflight.clear()
@@ -745,6 +750,18 @@ async def run_contract_loop(
             logger.info(
                 "contract.write_pass_exhausted",
                 run_id=spec.run_id,
+                failures=verdict.failures,
+            )
+            break
+        if should_skip_full_contract_retry_for_round_ceiling(
+            cutoff_reasons=cutoff_reasons,
+            prior_round_ceiling=round_ceiling_hit,
+        ):
+            logger.info(
+                "contract.retry_skipped_budget",
+                run_id=spec.run_id,
+                reason="max_rounds",
+                rounds=run_rounds,
                 failures=verdict.failures,
             )
             break

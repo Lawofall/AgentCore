@@ -291,7 +291,7 @@ class RunSpec:
     # 显式回填值。辩论 ``research_then_draft`` 与普通 worker 共用此顶。
     token_ceiling: int | None = None
     # Optional per-node ReAct round cap (repair / light posture). ``None`` = use
-    # the agent profile default (56). Stamped by builder for light / repair_code.
+    # the agent profile default (80). Stamped by builder for light / repair_code.
     max_rounds: int | None = None
     policy: RunPolicy = field(default_factory=RunPolicy)
     # Fan-out awareness: a concise list of the *other* nodes that fanned out from

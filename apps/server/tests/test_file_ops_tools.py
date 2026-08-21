@@ -6,6 +6,7 @@ tests. These tools are thin shells, so the focus is argument handling and the
 typed-failure → user-message mapping (the heavy I/O lives in the backend).
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 from agentcore.tools.builtin.file_ops import (
@@ -21,7 +22,7 @@ from agentcore.tools.builtin.file_ops import (
     StrReplaceTool,
     expand_brace_globs,
 )
-from agentcore.tools.protocol import ToolContext
+from agentcore.tools.protocol import ToolContext, isolate_file_read_ceiling
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from agentcore.workspace.stage_dirs import REVIEWS_PREFIX
@@ -40,6 +41,17 @@ def _ctx(workspace: Path, *, agent_id: str = "a") -> ToolContext:
         backend=ServerWorkspace(root=workspace, sandbox=SubprocessSandbox()),
         user_id="u",
     )
+
+
+def _assert_same_window_hit(result, *, path: str) -> None:
+    assert result.success is True
+    assert not result.contract_failure
+    out = result.output or ""
+    assert f"`{path}`" in out
+    assert "已多次读取" in out
+    assert "不重复灌入全文" in out
+    assert "已有正文" in out
+    assert "勿再读" in out
 
 
 # --- file_write ---
@@ -418,7 +430,7 @@ async def test_file_read_allows_up_to_same_path_max(tmp_path: Path):
     assert "已被清理" in (result.output or "")
 
 
-async def test_file_read_rejects_same_path_over_max(tmp_path: Path):
+async def test_file_read_same_window_hit_over_max(tmp_path: Path):
     from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
 
     (tmp_path / "site").mkdir()
@@ -428,21 +440,9 @@ async def test_file_read_rejects_same_path_over_max(tmp_path: Path):
     tool = FileReadTool()
     for _ in range(FILE_READ_SAME_PATH_MAX):
         assert (await tool.execute({"path": "site/DESIGN.md"}, ctx)).success is True
-    blocked = await tool.execute({"path": "site/DESIGN.md"}, ctx)
-    assert blocked.success is False
-    assert blocked.contract_failure is True
-    assert "已多次读取" in (blocked.error or "")
-    assert "site/DESIGN.md" in (blocked.error or "")
-    assert "勿再读" in (blocked.error or "")
-    assert "勿再读此文件" not in (blocked.error or "")
-    assert "仍在当前对话中" not in (blocked.error or "")
-    assert "正文已在对话中" not in (blocked.error or "")
-    assert "已有正文" in (blocked.error or "")
-    assert "已被清理" in (blocked.error or "")
-    assert "可换其它文件" in (blocked.error or "")
-    # Path-scoped only: must not retire the whole tool.
-    assert "retire_tools" not in (blocked.metadata or {})
-    assert blocked.metadata.get("error_class") != "permanent"
+    hit = await tool.execute({"path": "site/DESIGN.md"}, ctx)
+    _assert_same_window_hit(hit, path="site/DESIGN.md")
+    assert "tokens" not in (hit.output or "")
     other = await tool.execute({"path": "site/OTHER.md"}, ctx)
     assert other.success is True
     assert "other body" in (other.output or "")
@@ -576,8 +576,7 @@ async def test_file_read_after_tool_clear_does_not_consume_quota(tmp_path: Path)
     assert "src/target.py" in (after.file_read_verbatim_paths or frozenset())
     assert "src/target.py" not in (after.file_read_cleared_paths or frozenset())
     blocked = await tool.execute({"path": "src/target.py"}, after)
-    assert blocked.success is False
-    assert blocked.contract_failure is True
+    _assert_same_window_hit(blocked, path="src/target.py")
     assert after.file_read_counts["src/target.py"] == FILE_READ_SAME_PATH_MAX
 
 
@@ -598,14 +597,9 @@ async def test_file_read_reread_grant_overrides_verbatim(tmp_path: Path):
     assert "keep-body" in (ok.output or "")
     assert ctx.file_read_reread_remaining["keep.md"] == 0
     assert ctx.file_read_counts["keep.md"] == FILE_READ_SAME_PATH_MAX + 1
-    # Grant spent + verbatim still present → hard reject (use existing body).
+    # Grant spent + verbatim still present → cheap hit (use existing body).
     blocked = await tool.execute({"path": "keep.md"}, ctx)
-    assert blocked.success is False
-    assert blocked.contract_failure is True
-    assert "勿再读" in (blocked.error or "")
-    assert "仍在当前对话中" not in (blocked.error or "")
-    assert "已有正文" in (blocked.error or "")
-    assert "再读次数已用尽" not in (blocked.error or "")
+    _assert_same_window_hit(blocked, path="keep.md")
     next_ok = await tool.execute({"path": "next.md"}, ctx)
     assert next_ok.success is True
 
@@ -624,10 +618,7 @@ async def test_file_read_reread_refresh_after_citation_rework(tmp_path: Path):
     ctx.file_read_reread_issued["draft.md"] = True
     ctx.file_read_reread_remaining["draft.md"] = 0
     blocked = await tool.execute({"path": "draft.md"}, ctx)
-    assert blocked.success is False
-    assert "勿再读" in (blocked.error or "")
-    assert "仍在当前对话中" not in (blocked.error or "")
-    assert "已有正文" in (blocked.error or "")
+    _assert_same_window_hit(blocked, path="draft.md")
 
     refresh_file_read_reread_grant(ctx, ["draft.md"])
     ok = await tool.execute({"path": "draft.md"}, ctx)
@@ -662,7 +653,7 @@ async def test_file_read_pagination_new_windows_never_hit_ceiling(tmp_path: Path
 
 
 async def test_file_read_repeat_delivered_window_hits_ceiling(tmp_path: Path):
-    """Same already-delivered window + body still in projection → counts and rejects."""
+    """Same already-delivered window + body still in projection → counts then cheap-hit."""
     from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
 
     lines = "\n".join(f"L{i}" for i in range(1, 21))
@@ -680,13 +671,12 @@ async def test_file_read_repeat_delivered_window_hits_ceiling(tmp_path: Path):
             assert "已在对话正文中" in (ok.output or "")
     assert ctx.file_read_counts["rep.md"] == FILE_READ_SAME_PATH_MAX
     blocked = await tool.execute({"path": "rep.md", "offset": 3, "limit": 4}, ctx)
-    assert blocked.success is False
-    assert blocked.contract_failure is True
-    assert "已多次读取" in (blocked.error or "")
-    # Subset of an already-delivered span also hits.
+    _assert_same_window_hit(blocked, path="rep.md")
+    assert "L3" not in (blocked.output or "")
+    # Subset of an already-delivered span also cheap-hits.
     subset = await tool.execute({"path": "rep.md", "offset": 4, "limit": 2}, ctx)
-    assert subset.success is False
-    # A new range is still pagination and must not hit.
+    _assert_same_window_hit(subset, path="rep.md")
+    # A new range is still pagination and must return the body.
     nxt = await tool.execute({"path": "rep.md", "offset": 10, "limit": 3}, ctx)
     assert nxt.success is True
     assert "L10" in (nxt.output or "")
@@ -709,10 +699,7 @@ async def test_file_read_window_inside_prior_full_read_counts(tmp_path: Path):
         ).success is True
     assert ctx.file_read_counts["full.md"] == FILE_READ_SAME_PATH_MAX
     blocked = await tool.execute({"path": "full.md", "offset": 5, "limit": 3}, ctx)
-    assert blocked.success is False
-    assert "勿再读" in (blocked.error or "")
-    assert "仍在当前对话中" not in (blocked.error or "")
-    assert "已有正文" in (blocked.error or "")
+    _assert_same_window_hit(blocked, path="full.md")
 
 
 async def test_file_read_cleared_verbatim_window_does_not_hit(tmp_path: Path):
@@ -757,10 +744,7 @@ async def test_file_read_reread_grant_allows_delivered_window(tmp_path: Path):
     assert ctx.file_read_reread_remaining["grant.md"] == 0
     assert ctx.file_read_counts["grant.md"] == FILE_READ_SAME_PATH_MAX + 1
     blocked = await tool.execute({"path": "grant.md", "offset": 1, "limit": 4}, ctx)
-    assert blocked.success is False
-    assert "勿再读" in (blocked.error or "")
-    assert "仍在当前对话中" not in (blocked.error or "")
-    assert "已有正文" in (blocked.error or "")
+    _assert_same_window_hit(blocked, path="grant.md")
 
 
 async def test_file_read_write_success_allows_same_window_reread(tmp_path: Path):
@@ -778,7 +762,7 @@ async def test_file_read_write_success_allows_same_window_reread(tmp_path: Path)
             await tool.execute({"path": "draft.md", "offset": 2, "limit": 3}, ctx)
         ).success is True
     blocked = await tool.execute({"path": "draft.md", "offset": 2, "limit": 3}, ctx)
-    assert blocked.success is False
+    _assert_same_window_hit(blocked, path="draft.md")
 
     w = await FileWriteTool().execute(
         {"path": "draft.md", "content": "\n".join(f"N{i}" for i in range(1, 12)) + "\n"},
@@ -897,21 +881,26 @@ async def test_file_read_from_line1_fill_cap_counts_toward_ceiling(tmp_path: Pat
     tool = FileReadTool()
     for _ in range(FILE_READ_SAME_PATH_MAX):
         assert (await tool.execute({"path": "cap.md"}, ctx)).success is True
-    assert (await tool.execute({"path": "cap.md"}, ctx)).success is False
-    assert (await tool.execute({"path": "cap.md", "offset": 1}, ctx)).success is False
-    assert (
-        await tool.execute({"path": "cap.md", "limit": FILE_READ_SAFETY_LINE_CAP}, ctx)
-    ).success is False
-    assert (
+    _assert_same_window_hit(
+        await tool.execute({"path": "cap.md"}, ctx), path="cap.md"
+    )
+    _assert_same_window_hit(
+        await tool.execute({"path": "cap.md", "offset": 1}, ctx), path="cap.md"
+    )
+    _assert_same_window_hit(
+        await tool.execute({"path": "cap.md", "limit": FILE_READ_SAFETY_LINE_CAP}, ctx),
+        path="cap.md",
+    )
+    _assert_same_window_hit(
         await tool.execute(
             {"path": "cap.md", "offset": 1, "limit": FILE_READ_SAFETY_LINE_CAP},
             ctx,
-        )
-    ).success is False
-    # Covered window after fill-cap reads: already delivered + body present → reject.
+        ),
+        path="cap.md",
+    )
+    # Covered window after fill-cap reads: already delivered + body present → cheap hit.
     covered = await tool.execute({"path": "cap.md", "offset": 1, "limit": 1}, ctx)
-    assert covered.success is False
-    assert covered.contract_failure is True
+    _assert_same_window_hit(covered, path="cap.md")
     assert ctx.file_read_counts.get("cap.md") == FILE_READ_SAME_PATH_MAX
 
 
@@ -1001,7 +990,7 @@ async def test_file_write_resets_read_ceiling_for_verify(tmp_path: Path):
     for _ in range(FILE_READ_SAME_PATH_MAX):
         assert (await tool.execute({"path": "draft.md"}, ctx)).success is True
     blocked = await tool.execute({"path": "draft.md"}, ctx)
-    assert blocked.success is False
+    _assert_same_window_hit(blocked, path="draft.md")
 
     w = await FileWriteTool().execute(
         {"path": "draft.md", "content": "v2 rewritten\n"}, ctx
@@ -1026,7 +1015,9 @@ async def test_str_replace_success_resets_read_ceiling(tmp_path: Path):
     tool = FileReadTool()
     for _ in range(FILE_READ_SAME_PATH_MAX):
         assert (await tool.execute({"path": "edit.md"}, ctx)).success is True
-    assert (await tool.execute({"path": "edit.md"}, ctx)).success is False
+    _assert_same_window_hit(
+        await tool.execute({"path": "edit.md"}, ctx), path="edit.md"
+    )
 
     ok = await StrReplaceTool().execute(
         {"path": "edit.md", "old_string": "world", "new_string": "AgentCore"},
@@ -1064,7 +1055,7 @@ async def test_str_replace_failure_does_not_refresh_reread_grant(tmp_path: Path)
 
 
 async def test_file_read_ceiling_does_not_retire_tool(tmp_path: Path):
-    """Same-path ceiling rejects only that path; file_read stays available."""
+    """Same-path cheap-hit is success and does not disable file_read."""
     from agentcore.runtime.loop_controller import LoopController, ToolAttempt
     from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
 
@@ -1075,11 +1066,9 @@ async def test_file_read_ceiling_does_not_retire_tool(tmp_path: Path):
     tool = FileReadTool()
     for _ in range(FILE_READ_SAME_PATH_MAX):
         assert (await tool.execute({"path": "attachments/PRD.md"}, ctx)).success is True
-    blocked = await tool.execute({"path": "attachments/PRD.md"}, ctx)
-    assert blocked.success is False
-    assert blocked.contract_failure is True
-    assert "retire_tools" not in (blocked.metadata or {})
-    assert blocked.metadata.get("error_class") != "permanent"
+    hit = await tool.execute({"path": "attachments/PRD.md"}, ctx)
+    _assert_same_window_hit(hit, path="attachments/PRD.md")
+    assert "retire_tools" not in (hit.metadata or {})
 
     c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
     c.record(
@@ -1087,10 +1076,9 @@ async def test_file_read_ceiling_does_not_retire_tool(tmp_path: Path):
             ToolAttempt(
                 "ceil",
                 "file_read",
-                success=False,
-                error_summary=blocked.error or "",
-                contract_failure=True,
-                meta=dict(blocked.metadata),
+                success=True,
+                error_summary="",
+                meta=dict(hit.metadata),
             )
         ]
     )
@@ -1249,10 +1237,20 @@ async def test_file_read_allows_author_self_product(tmp_path: Path):
     assert ctx.file_read_counts.get("out.md", 0) == 1
 
 
-async def test_file_read_author_and_reader_share_same_path_cap(tmp_path: Path):
-    """同 execution 共享 landed 表与计数器：作者与读者均受 FILE_READ_SAME_PATH_MAX。"""
-    from dataclasses import replace
+async def test_isolate_file_read_ceiling_does_not_share_counters(tmp_path: Path):
+    author = _ctx(tmp_path, agent_id="writer")
+    author.file_read_counts["x.md"] = 5
+    author.file_read_delivered_ranges["x.md"] = [(1, 10)]
+    reader = isolate_file_read_ceiling(replace(author, agent_id="ceo", run_id="ceo-run"))
+    assert reader.file_read_counts is not author.file_read_counts
+    assert reader.file_read_counts == {}
+    assert reader.file_read_delivered_ranges == {}
+    assert author.file_read_counts["x.md"] == 5
+    assert reader.landed_artifact_kinds is author.landed_artifact_kinds
 
+
+async def test_file_read_author_and_reader_isolated_same_path_cap(tmp_path: Path):
+    """同 execution 共享 landed 表；file_read 计数 per-run，读者不被作者顶满。"""
     from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
 
     author_ctx = _ctx(tmp_path, agent_id="writer")
@@ -1262,39 +1260,32 @@ async def test_file_read_author_and_reader_share_same_path_cap(tmp_path: Path):
     )
     assert w.success is True
     assert author_ctx.landed_artifact_kinds.get("shared.md") is not None
-    # Write success refreshes sticky grant; consume it after the normal ceiling.
     assert author_ctx.file_read_reread_remaining.get("shared.md") == 1
 
-    reader_ctx = replace(author_ctx, agent_id="ceo", run_id="ceo-run")
+    reader_ctx = isolate_file_read_ceiling(
+        replace(author_ctx, agent_id="ceo", run_id="ceo-run")
+    )
     assert reader_ctx.landed_artifact_kinds is author_ctx.landed_artifact_kinds
-    assert reader_ctx.file_read_counts is author_ctx.file_read_counts
+    assert reader_ctx.file_read_counts is not author_ctx.file_read_counts
 
     allowed = await FileReadTool().execute({"path": "shared.md"}, reader_ctx)
     assert allowed.success is True
     assert "body for downstream" in allowed.output
     assert reader_ctx.file_read_counts.get("shared.md", 0) == 1
 
-    # Author may also body-read (no identity gate); shared counter advances.
-    author_ok = await FileReadTool().execute({"path": "shared.md"}, author_ctx)
-    assert author_ok.success is True
-    assert author_ctx.file_read_counts.get("shared.md", 0) == 2
-
-    # Exhaust remaining normal slots.
     while int(author_ctx.file_read_counts.get("shared.md", 0)) < FILE_READ_SAME_PATH_MAX:
         assert (
             await FileReadTool().execute({"path": "shared.md"}, author_ctx)
         ).success is True
-    # Write-time grant overrides once more while verbatim still present.
     grant_ok = await FileReadTool().execute({"path": "shared.md"}, author_ctx)
     assert grant_ok.success is True
-    assert author_ctx.file_read_reread_remaining.get("shared.md") == 0
+    assert "body for downstream" in (grant_ok.output or "")
+    author_hit = await FileReadTool().execute({"path": "shared.md"}, author_ctx)
+    _assert_same_window_hit(author_hit, path="shared.md")
 
-    blocked_author = await FileReadTool().execute({"path": "shared.md"}, author_ctx)
-    blocked_reader = await FileReadTool().execute({"path": "shared.md"}, reader_ctx)
-    assert blocked_author.success is False and blocked_author.contract_failure is True
-    assert blocked_reader.success is False and blocked_reader.contract_failure is True
-    assert "已多次读取" in (blocked_author.error or "")
-    assert "已多次读取" in (blocked_reader.error or "")
+    still = await FileReadTool().execute({"path": "shared.md"}, reader_ctx)
+    assert still.success is True
+    assert "body for downstream" in (still.output or "")
 
 
 # --- file_write overwrite integrity nudge ---

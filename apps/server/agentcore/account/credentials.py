@@ -99,6 +99,21 @@ def _raise_for_status(resp: httpx.Response, *, op: str) -> None:
             f"account {op} server error ({resp.status_code})",
             code="account_cloud_server",
         )
+    if resp.status_code == 409:
+        try:
+            payload = resp.json()
+        except ValueError:
+            payload = None
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        if isinstance(detail, dict) and detail.get("code") == "ALWAYS_QUOTA_EXCEEDED":
+            raise AccountCloudError(
+                str(detail.get("message") or "常驻条目配额已满"),
+                code="ALWAYS_QUOTA_EXCEEDED",
+            )
+        raise AccountCloudError(
+            f"account {op} failed (409)",
+            code="account_cloud_failed",
+        )
     if resp.status_code >= 400:
         raise AccountCloudError(
             f"account {op} failed ({resp.status_code})",

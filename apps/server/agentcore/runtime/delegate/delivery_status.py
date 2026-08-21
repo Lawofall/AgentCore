@@ -9,8 +9,9 @@
 ``delivered``/``notes`` 静默、``partial``/``blocked`` 一句轻提示。
 
 ``delivered_files`` / CEO「已交付」= 仅 ``accepted``；cite-tier 等合同点名路径为
-``rejected``，不得因 soft-COMPLETED 进入 delivered_files。主清单（桌面
-FileArtifactsCard）认 ``artifacts``（accepted+rejected）。COMPLETED 只走
+``rejected``，不得因 soft-COMPLETED 进入 delivered_files。主清单认 ``artifacts``
+（accepted+rejected）= 本 ``execution_id`` 各波**声明且落盘**路径的并集（同 path
+后写覆盖）；未声明的额外落盘不进清单、不打未通过。COMPLETED 只走
 ``file_acceptance``，不从 ``files_touched`` 合成验收行；FAILED 且未盖戳时，从
 ``files_touched`` / transcript 自报补入（与 ``product_landed`` 同源——失败前已落盘
 但没走完正式交付声明的产物仍计入交付账）。每行随带工具自报的 ``kind`` /
@@ -26,7 +27,8 @@ CEO finish；写盘通道挂仍可在备注里诚实归因。
 用户面零落盘缺口投影为 ``files_not_landed`` soft（甲⁺：warning/notes，不挡整批）：
 有队员归因时按角色保留「本队员本波未交卷」（定案 B）；仅批次谓词时仍可落「本批未见落盘」。
 发射时写入回合 :data:`current_delivery_verdict` **以及** ``promotion_ledger.delivery_verdict``
-（跨 Task 共享槽，与成品归位台账同一对象）。只写 ContextVar 时，后台
+（跨 Task 共享槽，与 ``TurnPromotionLedger`` 同一对象——现只挂
+``delivery_verdict`` 与历史 ``promotions`` 重放）。只写 ContextVar 时，后台
 ``asyncio.create_task(_background_drive)`` 的 ``set`` 到不了 CEO 父任务的
 ``finish_guard``。禁止改去查 turn_journal。
 
@@ -45,16 +47,18 @@ handoff 不硬降档。``requires_draft_ack`` 扩至 ``evidence_deficit`` /
 
 挂在 drive 的各收尾路径旁路（正常终态 / 验收未满足 / 部分失败 stash / replan(stop)），
 永不抛错；纯 prose 成功批次（无落盘文件、无缺口）保持无声，不发事件。
-折叠语义：同 ``execution_id`` 保最新——反映最近一批委派的对账（多批场景下 FileArtifactsCard
-仍是全量文件清单，本事件承载「诚实对账」而非全量枚举）。finalize 终态发射幂等：同一
-``execution_id`` 同一结论只发一次；结论变了（补跑覆盖）仍发。
+折叠语义：同 ``execution_id`` 保最新一条事件；载荷里的 ``artifacts`` 已是本回合
+声明且落盘路径的并集（后一波改汇总不得整表换成该波自己的文件）。gaps / state
+仍按本批对账。finalize 终态发射幂等：同一
+``execution_id`` 同一结论只发一次；结论变了（补跑覆盖同 path）仍发。
 
 严重度：``severity=warning``（示例/虚构自注 / 交接备注等）不单独撑起
 partial/blocked。轻 B：无 blocking 且 warnings **除去** ``unverified_note`` 后为空、
 且已有 ``delivered_files`` → state=``delivered``（gaps 仍可保留 soft 行）；其余
-soft reason → 仍 ``notes``。声明路径 vs 实际落盘是纯字符串比对：失配为
-``path_mismatch`` blocking（不得 accepted / 不得进 ``delivered_files`` /
-state 不得 ``delivered``），不再当 ``path_hint`` 路径建议。blocking 缺口才标
+soft reason → 仍 ``notes``。声明路径 vs 实际落盘是纯字符串比对：声明的路径未落盘为
+``path_mismatch`` blocking gap（不得进 ``delivered_files`` / state 不得
+``delivered``）；多写的未声明文件省略、不打未通过。不再当 ``path_hint`` 路径建议。
+blocking 缺口才标
 「部分未满足 / 未满足」。成篇未写完改由对话框接着说——不再发
 ``continue_writing`` 一键按钮。
 """
@@ -107,7 +111,9 @@ REASON_DEGRADED_HANDOFF = "degraded_handoff"
 REASON_EMPTY_HANDOFF_STORM = "empty_handoff_storm"
 REASON_CANCELLED = "cancelled"
 REASON_OVER_SEAT = "over_seat"
-_WRITING_CUTOFF_REASONS = frozenset({"token_budget", "worker_timeout"})
+_WRITING_CUTOFF_REASONS = frozenset(
+    {"token_budget", "worker_timeout", "max_rounds"}
+)
 _SOFT_GAP_REASONS = frozenset({REASON_UNVERIFIED_NOTE, REASON_FILES_NOT_LANDED})
 # Gaps that latch finish_guard draft acknowledgment (扩出文献 evidence_deficit /
 # 能力4：契约硬失败 / 节点 FAILED / rejected 产物 —— 不扩姿势 A 词表).
@@ -292,16 +298,6 @@ def _website_verify_action(site: str) -> dict[str, str]:
     }
 
 
-def _delivered_files(
-    results: dict[str, RunState],
-    plan: RunPlan | None = None,
-) -> list[str]:
-    """Ordered, deduped accepted paths from the delivery ledger (stamp or FAILED backfill)."""
-    return [a["path"] for a in _collect_artifacts(results, plan) if a["status"] == "accepted"][
-        :_MAX_FILES
-    ]
-
-
 def _product_meta(raw: dict[str, Any]) -> dict[str, str]:
     """The producer's self-reported ``kind`` / ``derived_from`` (empty when unreported).
 
@@ -376,6 +372,7 @@ def _collect_artifacts(
     session birth desk). Does not rewrite session ``folder_id``.
     Self-reported ``kind`` / ``derived_from`` ride along so the client's 主清单 can
     show the export and fold its source (see :func:`_product_meta`).
+    Declared artifacts / ``artifact_dir`` omit undeclared extras (not reject).
     """
     from agentcore.runtime.runs.file_acceptance import (
         apply_declared_path_acceptance,
@@ -415,6 +412,8 @@ def _collect_artifacts(
                     artifacts=getattr(deliverable, "artifacts", None),
                     artifact_dir=str(getattr(deliverable, "artifact_dir", "") or ""),
                 )
+                if row is None:
+                    continue
             if workspace_id:
                 row = {**row, "workspace_id": workspace_id}
             meta = _product_meta(raw)
@@ -424,6 +423,49 @@ def _collect_artifacts(
             if path not in by_path:
                 order.append(path)
             by_path[path] = row
+    return [by_path[p] for p in order][:_MAX_FILES]
+
+
+def _is_card_artifact(row: dict[str, Any]) -> bool:
+    """Declared-and-landed (or unconstrained). Historical path_mismatch extras stay off."""
+    status = str(row.get("status") or "")
+    if status not in ("accepted", "rejected"):
+        return False
+    if not str(row.get("path") or "").strip():
+        return False
+    return not (status == "rejected" and str(row.get("reason") or "") == REASON_PATH_MISMATCH)
+
+
+def _prior_execution_artifacts(ledger: Any) -> list[dict[str, Any]]:
+    """Previous hop's artifact rows from the turn ledger, if any."""
+    if ledger is None:
+        return []
+    rec = getattr(ledger, "reconciliation", None)
+    if not isinstance(rec, dict):
+        return []
+    raw = rec.get("artifacts")
+    if not isinstance(raw, list):
+        return []
+    return [row for row in raw if isinstance(row, dict)]
+
+
+def _union_execution_artifacts(
+    previous: list[dict[str, Any]],
+    current: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Turn-scoped card: previous ∪ current, last-wins by path (current hop wins)."""
+    by_path: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for src in (previous, current):
+        for raw in src:
+            if not _is_card_artifact(raw):
+                continue
+            path = str(raw.get("path") or "").strip()
+            if not path:
+                continue
+            if path not in by_path:
+                order.append(path)
+            by_path[path] = dict(raw)
     return [by_path[p] for p in order][:_MAX_FILES]
 
 
@@ -493,6 +535,8 @@ def _declared_path_mismatch_gaps(
             row = apply_declared_path_acceptance(
                 row, artifacts=artifacts, artifact_dir=artifact_dir
             )
+            if row is None:
+                continue
             if row.get("status") == "accepted" and row.get("path"):
                 accepted.append(str(row["path"]))
         missing: list[str] = []
@@ -1048,8 +1092,9 @@ def build_delivery_status(
     re-verifies the workspace. ``delivered_files`` = accepted only;
     ``artifacts`` carries path-level acceptance (accepted + rejected).
 
-    ``promotion_ledger`` (回合共享台账): 已归位路径在这里被重映射到新位置，
-    并带出 ``promoted`` 行；不传（旧调用 / 单测）则完全不涉及归位。
+    ``promotion_ledger`` (回合共享台账): 历史 ``promoted`` 路径在这里被重映射；
+    且 ``reconciliation.artifacts`` 与本波声明且落盘路径做并集（同 path 后写覆盖）。
+    不传（旧调用 / 单测）则本波清单即全文。新回合 promotions 为空时是 no-op。
     """
     from agentcore.runtime.delegate.completion import (
         collect_verify_failure_gaps,
@@ -1058,8 +1103,11 @@ def build_delivery_status(
         plan_suggests_code_verification,
     )
 
-    delivered = _delivered_files(results, plan)
-    artifacts = _collect_artifacts(results, plan)
+    artifacts = _union_execution_artifacts(
+        _prior_execution_artifacts(promotion_ledger),
+        _collect_artifacts(results, plan),
+    )
+    delivered = [a["path"] for a in artifacts if a.get("status") == "accepted"][:_MAX_FILES]
     files_landed = bool(delivered) or bool(artifacts)
 
     # B1：worker 转录里 browser_* 成功 → 闩锁（CEO 综收可对账；非气泡启发式）。
@@ -1240,8 +1288,8 @@ def build_delivery_status(
             }
         )
 
-    # 已归位的产物：本回合早前 promote_product 搬走的路径此刻仍以旧路径出现在
-    # worker 台账里（RunState 不会因搬家回写）。重映射后新卡不会复活已不存在的文件。
+    # 历史 ``promoted`` 行：旧路径可能仍写在 worker 台账里（RunState 不会因搬家回写）。
+    # 重映射后新卡不会复活已经搬走的文件；新回合 promotions 为空时这是 no-op。
     from agentcore.runtime.delegate.promotion import apply_turn_promotions
 
     rejected = [a for a in artifacts if a.get("status") == "rejected"]
@@ -1372,7 +1420,6 @@ def maybe_emit_delivery_status(
         if _already_emitted_delivery(sink, execution_id, fingerprint):
             return
         sink.emit(delivery_status(**payload))
-        # 成品归位的 accepted 闸门读这一份（CEO 收口时刻的最新对账）。
         note_delivery_reconciliation(promotion_ledger, payload)
         artifacts = payload.get("artifacts") or []
         delivered_files = payload.get("delivered_files") or ()
@@ -1491,8 +1538,8 @@ async def maybe_reinject_recent_delivery_for_availability_ask(
         gaps: list[Any] = raw_gaps if isinstance(raw_gaps, list) else []
         actions: list[Any] = raw_actions if isinstance(raw_actions, list) else []
         artifacts: list[Any] = raw_artifacts if isinstance(raw_artifacts, list) else []
-        # 归位行随卡走：重发的是同一张卡（同 execution_id，fold 保最新），丢了 promoted
-        # 就把旧路径的回查线索抹了，且本回合再归位时会按空台账重发、二次抹除。
+        # 历史 ``promoted`` 行随卡走：重发同一张卡（同 execution_id，fold 保最新），
+        # 丢掉就把旧路径的回查线索抹了。
         promoted: list[Any] = raw_promoted if isinstance(raw_promoted, list) else []
         files = list(verdict.delivered_files)
         summary = str(payload.get("summary") or "").strip() or (
@@ -1513,8 +1560,7 @@ async def maybe_reinject_recent_delivery_for_availability_ask(
             "promoted": [p for p in promoted if isinstance(p, dict)],
         }
         sink.emit(delivery_status(**reinjected))
-        # 复用的对账同样是本回合的 accepted 真源（上一回合验收过、仍在工作间的产物可归位）；
-        # 卡上已有的归位行一并接手，本回合再归位时才不会把它们抹掉。
+        # 复用的对账仍是本回合档位真源；卡上已有的历史 ``promoted`` 行一并接手。
         adopt_journaled_reconciliation(promotion_ledger, reinjected)
         return True
     except Exception:  # noqa: BLE001 — short-ask side channel must never break the turn

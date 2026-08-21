@@ -276,7 +276,8 @@ def test_merge_profile_bootstrap_when_empty():
     merged = merge_profile_by_sections("", new)
     assert "Python" in merged
     assert "禁止 jQuery" in merged
-    assert merged.startswith("#")
+    assert merged.startswith("## 技术栈与工具")
+    assert "用户记忆" not in merged
 
 
 def test_merge_profile_keeps_unmentioned_sections():

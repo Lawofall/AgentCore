@@ -36,6 +36,7 @@ from agentcore.runtime.runs.executor.retry import (
     _retry_token_budget,
     _wind_down_entered,
     should_skip_contract_retry_for_budget,
+    should_skip_full_contract_retry_for_round_ceiling,
 )
 from agentcore.runtime.runs.executor.setup import prepare_agent_node
 from agentcore.runtime.runs.executor.started_run_close import (
@@ -53,6 +54,7 @@ from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
 __all__ = [
     "execute_agent_node",
     "should_skip_contract_retry_for_budget",
+    "should_skip_full_contract_retry_for_round_ceiling",
     "_stamp_retrieval_evidence_gap",
     "_narrow_for_light_repair",
     "_wind_down_entered",

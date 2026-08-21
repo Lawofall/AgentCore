@@ -48,9 +48,10 @@ class ProfileParams:
 
 PROFILES: dict[str, ProfileParams] = {
     "chat": ProfileParams(temperature=0.7, max_rounds=16, thinking=True),
-    # Single delegated-worker profile: one round budget (56) for every worker —
+    # Single delegated-worker profile: one round fuse (80) for every worker —
     # 力度差异由委派协作结构（拆分 / 复审 / replan）表达，不再有 per-worker 档位。
-    "agent": ProfileParams(temperature=0.7, max_rounds=56, thinking=True),
+    # Keep in sync with ``MAX_TASK_ROUNDS`` (runs/constants.py).
+    "agent": ProfileParams(temperature=0.7, max_rounds=80, thinking=True),
     "memory": ProfileParams(temperature=0.3, max_rounds=1, thinking=False),
     "compaction": ProfileParams(temperature=0.3, max_rounds=1, thinking=False),
     "file.rewrite": ProfileParams(temperature=0.4, max_rounds=1, thinking=False),

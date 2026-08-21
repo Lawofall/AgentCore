@@ -99,6 +99,9 @@ class WorkspaceSettings(BaseModel):
     # Local default tracks ``data_dir``; compose sets ``/data/sandbox`` when
     # ``DATA_DIR=/data``.
     gvisor_runtime_root: str = "./data/sandbox"
+    # Same-container sandboxd Unix socket (overlay entrypoint). API never execs
+    # runsc/ip; missing socket is fail-closed (unassembled), not None-pass.
+    sandboxd_socket: str = "/run/agentcore/sandboxd.sock"
 
     # ── gVisor 灰度护栏（部署与运维.md §云端执行灰度 / 安全权限与治理.md §五）──
     # Global cap on concurrently RUNNING cloud sandbox executions per API process
@@ -125,12 +128,12 @@ class WorkspaceSettings(BaseModel):
 
     # ── L3 团队浏览器 M0（内置浏览器与Agent浏览器提案.md · D9–D11）────────────
     # Session-level long-lived Chromium sandboxes (browser_* tools). Cloud-only:
-    # gated by the SAME cloud-execution predicate as code_execute (needs gVisor),
-    # so a plain-subprocess API container never runs a browser (no isolation).
-    # Concurrency gate: process-wide cap on live browser sessions (~1GB/session per
-    # PoC, so a 8GB node holds a handful). A new conversation past the cap fails
+    # assembled iff shape-B ``sandboxd.health("net")`` is True — not gated by
+    # shape-A ``code_execute`` health. Needs gVisor + sandboxd; no fake Local.
+    # Concurrency gate: process-wide cap on live browser sessions. Cloud overlay
+    # holds one (~container mem_limit=4g); a new conversation past the cap fails
     # fast with an explainable busy result after an idle reap.
-    browser_max_sessions: int = 4
+    browser_max_sessions: int = 1
     # Idle TTL: a session untouched this long is reaped (the reaper loop + lazy
     # checks). Default 10min — a research pause shouldn't hold ~1GB indefinitely.
     browser_session_idle_ttl_seconds: float = 10 * 60.0
@@ -158,11 +161,9 @@ class WorkspaceSettings(BaseModel):
     browser_sandbox_memory_limit_mb: int = 2048
     browser_sandbox_pids_limit: int = 512
     browser_sandbox_cpu_limit: float = 2.0
-    # Skip runsc OCI cgroup application. Docker's default cgroup2 mount inside the
-    # api container is read-only — non-rootless browser runsc then dies at create.
-    # Code auto-adds ``--ignore-cgroups`` when ``cgroup.subtree_control`` exists
-    # and is not writable; this flag forces the same. Session memory/pids/cpu
-    # limits then do not apply (container ``mem_limit`` still does).
+    # Shape B (sandboxd ``net``) always passes ``--ignore-cgroups``: Docker overlay
+    # session OCI cgroup is not a supported surface. Container ``mem_limit`` still
+    # bounds memory. This flag is unused by the production argv allowlist.
     browser_sandbox_ignore_cgroups: bool = False
     # Playwright Chromium bundle location inside the runtime image (ro-bind into the
     # sandbox; the product's 5 host binds don't cover /opt, so add exactly this one).

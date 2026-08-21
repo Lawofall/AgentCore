@@ -38,6 +38,14 @@ def test_apply_core_rewrite_rejects_empty_wipe():
     assert apply_core_rewrite(old, "   ") == old
 
 
+def test_apply_core_rewrite_drops_retired_chrome():
+    new = "# 用户记忆\n\n## 关于用户的事实\n- 用 pnpm\n"
+    out = apply_core_rewrite("", new)
+    assert "用户记忆" not in out
+    assert "本文件由 AI 自动维护" not in out
+    assert out.startswith("## 关于用户的事实")
+
+
 def test_diff_memory_markdown_detects_add_and_remove():
     old = "# 用户记忆\n\n## 沟通偏好\n- 用中文\n"
     new = "# 用户记忆\n\n## 沟通偏好\n- 用英文\n"
@@ -77,6 +85,7 @@ def test_sanitize_global_profile_strips_project_constraints():
     assert "项目约束" not in clean
     assert "用中文" in clean
     assert "禁止 jQuery" not in clean
+    assert "用户记忆" not in clean
 
 
 def test_sanitize_folder_profile_keeps_fixed_sections_drops_free():
@@ -220,6 +229,7 @@ async def test_consolidate_semantic_rewrites_profile(tmp_path):
     assert outcome is True
     body = await store.load("u1", CORE_MEMORY_FILE)
     assert "bun" in body
+    assert "用户记忆" not in body
     assert collected  # diff items for the card
 
 
@@ -261,6 +271,7 @@ async def test_explicit_remember_writes_immediately(tmp_path):
     assert changed
     body = await store.load("u1", CORE_MEMORY_FILE)
     assert "生日是 3 月 1 日" in body
+    assert "用户记忆" not in body
     assert collected[0].action == "add"
 
 

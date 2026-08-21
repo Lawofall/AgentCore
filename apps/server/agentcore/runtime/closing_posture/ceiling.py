@@ -3,9 +3,9 @@
 Covers ``max_rounds`` and ``token_budget`` symmetrically (worker salvage + CEO).
 Does **not** expand the posture-A closed set.
 
-``token_budget`` additionally teaches ``continue_from_run_id`` continuation
-(writing cutoff). ``max_rounds`` keeps honesty only — do not frame a pure
-round ceiling as「必须续写长文」.
+Both reasons teach ``continue_from_run_id`` continuation (same main file).
+Honesty remains: do not claim unconditional pass. Round ceiling is a fuse,
+not a live countdown injected every ReAct round.
 """
 
 from __future__ import annotations
@@ -24,13 +24,15 @@ from .hollow import (
 # Hard-ceiling reasons that share the max_rounds honesty steer / banner path.
 _CEILING_HONESTY_REASONS = frozenset({"max_rounds", "token_budget"})
 
-# Writing-cutoff / token_budget only — executable next step for CEO.
-# Shared wording with closing_posture.cutoff soft banner.
-_TOKEN_BUDGET_CONTINUE_TEACH = (
+# Executable next step after a hard ceiling (round fuse or token). Shared
+# wording with closing_posture.cutoff soft banner.
+_CEILING_CONTINUE_TEACH = (
     "【续作】下一刀用 `continue_from_run_id` 续同一主文件；"
     "禁止并行同角色抢同一路径；"
     "`replaces_run_id` 仅冷接手。"
 )
+# Backward-compat alias (cutoff.py / tests import this name).
+_TOKEN_BUDGET_CONTINUE_TEACH = _CEILING_CONTINUE_TEACH
 
 _CEILING_HONESTY_STEER_LEAD = {
     "max_rounds": "本回合已达轮次硬上限（max_rounds），强制收口。",
@@ -40,12 +42,13 @@ _CEILING_HONESTY_STEER_LEAD = {
 _CEILING_HONESTY_BANNERS = {
     "max_rounds": (
         "【收口说明】本回合因轮次上限强制结束，以下不得视为无条件验收通过——"
-        "请按「部分落地 + 未闭合项」理解。\n\n"
+        "请按「部分落地 + 未闭合项」理解。"
+        f"{_CEILING_CONTINUE_TEACH}\n\n"
     ),
     "token_budget": (
         "【收口说明】本回合因 token 预算上限强制结束，以下不得视为无条件验收通过——"
         "请按「部分落地 + 未闭合项」理解。"
-        f"{_TOKEN_BUDGET_CONTINUE_TEACH}\n\n"
+        f"{_CEILING_CONTINUE_TEACH}\n\n"
     ),
 }
 
@@ -54,21 +57,19 @@ def ceiling_honesty_steer(*, reason: str) -> str | None:
     """Steer force_finalize when hard ceiling forbids unconditional pass claims.
 
     Honesty is symmetric for ``max_rounds`` / ``token_budget``. Continuation
-    teach (``continue_from_run_id``) is ``token_budget``-only.
+    teach (``continue_from_run_id``) is shared — the fuse already blew; the
+    next user turn may resume the same file.
     """
     r = (reason or "").strip()
     lead = _CEILING_HONESTY_STEER_LEAD.get(r)
     if lead is None:
         return None
-    continue_bit = (
-        _TOKEN_BUDGET_CONTINUE_TEACH if r == "token_budget" else ""
-    )
     return (
         f"[系统提示] {lead}"
         "【禁止】无条件宣称验证通过 / 已修好 / 已全部完成 / 已完整可用等姿势 A；"
         "【禁止】空心邀请用户「请开讲 / 请讲 / 我在听」——须点名硬顶未闭合项；"
         "须按「部分落地 + 未闭合项」收口：点名已落地与未闭合，勿假装验收过关。"
-        f"{continue_bit}"
+        f"{_CEILING_CONTINUE_TEACH}"
         "有交付对账卡时以档位为准；非正式完成不得姿势 A。"
     )
 

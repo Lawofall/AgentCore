@@ -23,7 +23,6 @@ from agentcore.runtime.resolve.prompt.base import (
 )
 from agentcore.runtime.resolve.prompt.ceo_core import (
     _CEO_CORE_HINT,
-    _PROMOTE_PRODUCT_TOOL_HINT,
     _attachment_material_block,
     capability_how_suffix,
 )
@@ -100,7 +99,7 @@ def _on_demand_preamble(*, with_summaries: bool) -> list[str]:
         "<按需目录>",
         f"下列按需条目（仅列{detail}、全文未常驻）可用 `consult(name)` 拉取："
         "系统能力指引、按需用户规则、记忆主题笔记、以及本回合未进工具表的低频工具。"
-        "低频工具：consult 之后才会进入可调用工具表（下一轮即可调）；"
+        "低频工具：能力行已装配仍可能未进开场表；consult 之后本回合下一模型轮即可调（不必等用户再发一条）；"
         "常驻内容已在 ``<rules>``，常驻工具已在工具表，无需查阅。"
         "何时该拉哪条，按条目自身说明判断；"
         "「必查 / 不必先查」的路由口径以常驻正文为准，本目录不另立一套：",
@@ -211,8 +210,6 @@ def compose_ceo_chat_prompt(
         ceo_core = f"{ceo_core.rstrip()}\n{how_suffix}\n"
     if "update_folder_profile" in ceo_tool_names:
         ceo_core = f"{ceo_core.rstrip()}\n{_FOLDER_PROFILE_TOOL_HINT.strip()}\n"
-    if "promote_product" in ceo_tool_names:
-        ceo_core = f"{ceo_core.rstrip()}\n{_PROMOTE_PRODUCT_TOOL_HINT.strip()}\n"
     reason: str | None
     if cold_start_explore is True:
         reason = "empty"

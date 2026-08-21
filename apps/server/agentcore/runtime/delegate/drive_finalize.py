@@ -217,7 +217,7 @@ def handle_partial_failure(
         completed=len(results),
     )
     # 交付状态（诚实对账）：部分失败也是一次收尾——把已落盘 / 缺口如实发给用户；
-    # CEO 若 replan 补跑，补跑后的收尾会以同 execution_id 覆盖为最新对账。
+    # CEO 若 replan 补跑，同 execution_id 再发对账：artifacts 与台账并集（同 path 后写）。
     maybe_emit_delivery_status(
         tool._sink,
         plan,

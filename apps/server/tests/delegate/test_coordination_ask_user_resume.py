@@ -6,8 +6,9 @@ Covers the end-to-end path that unit snapshot round-trips do not:
 2. CEO ``ask_user`` while the session is still active → snapshot lands in the turn journal
 3. Soft-stop clears the in-process session (as turn-end / process restart would)
 4. Cold claim re-hydrates ``journal_entries`` the way ``claim_paused_turn`` does
-5. ``settle_resumed_suspension`` rebuilds ``CoordinationSession`` (draft / completed / budget)
+5. ``settle_resumed_suspension`` CONTINUE rebuilds ``CoordinationSession`` (draft / completed / budget)
 6. Restored session accepts further coordination (``update_synthesis`` + event consume)
+7. STOP settle must not attach ``active_coordination`` or ``run_started`` unfinished workers
 
 By-design boundary (not asserted here): ``resume_plan`` (plan_review wave-boundary
 resume) hardcodes ``coordinate=False`` — post-checkpoint tails stay on the blocking
@@ -20,6 +21,7 @@ import asyncio
 import contextlib
 import json
 from pathlib import Path
+from typing import Any, NamedTuple
 
 import agentcore.runtime.coordination.wait as coord_wait
 from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
@@ -45,7 +47,7 @@ from agentcore.runtime.suspension import (
 )
 from agentcore.tools.builtin.ask_user import AskUserTool
 from agentcore.tools.builtin.delegate import DelegateTool
-from agentcore.tools.protocol import ToolContext
+from agentcore.tools.protocol import ToolContext, ToolEffect
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -191,8 +193,46 @@ def _cold_claim(frame: AskUserSuspension, journal_entries: list[dict]) -> AskUse
     return restored
 
 
-async def test_ask_user_soft_stop_rebuilds_coordination_on_resume(monkeypatch):
-    """挂起快照入 journal → claim → settle 重建协调态 → CEO 可续协调。"""
+class _PausedMidCoordAsk(NamedTuple):
+    restored: AskUserSuspension
+    journal_entries: list[dict]
+    snap: Any
+    user_message: str
+
+
+def _resume_delegate(user_message: str) -> tuple[EventSink, DelegateTool, ToolContext]:
+    resume_sink = EventSink()
+    resume_sink.seed_journal(
+        [{"type": EventType.CHECKPOINT_REQUIRED.value, "payload": {}, "timestamp": "t"}]
+    )
+    resume_ctx = _ctx()
+    resume_delegate = DelegateTool(
+        llm=_SlowSecondWorker(),
+        sink=resume_sink,
+        system_prompt="SYS",
+        user_message=user_message,
+        history=[],
+        tools=ToolRegistry(),
+        base_tool_context=resume_ctx,
+        captain_run_id="cap",
+        folder_id="test_birth",
+        approval_gate=None,
+    )
+    return resume_sink, resume_delegate, resume_ctx
+
+
+async def _cancel_live_drive(execution_id: str = EXEC_ID) -> None:
+    live = active_coordination(execution_id)
+    if live is not None and live.drive_task is not None and not live.drive_task.done():
+        live.drive_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await live.drive_task
+    clear_active_coordination(execution_id)
+    clear_active_coordination()
+
+
+async def _pause_mid_coord_ask(monkeypatch) -> _PausedMidCoordAsk:
+    """CEO mid-wave ask_user → soft-stop → cold-claim frame (shared continue/stop fixture)."""
     # Short idle wait so the post-synthesis round wakes (timeout) while r2 still runs.
     monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 0.4)
     clear_active_coordination()
@@ -300,36 +340,20 @@ async def test_ask_user_soft_stop_rebuilds_coordination_on_resume(monkeypatch):
     assert any((e.get("kind") or "") == FactKind.PLAN_SNAPSHOT.value for e in journal_entries)
 
     # Soft-stop / process end: drop the live session so resume must rebuild from journal.
-    live = active_coordination(EXEC_ID)
-    if live is not None and live.drive_task is not None and not live.drive_task.done():
-        live.drive_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await live.drive_task
-    clear_active_coordination(EXEC_ID)
-    clear_active_coordination()
+    await _cancel_live_drive(EXEC_ID)
     assert active_coordination(EXEC_ID) is None
 
     frame = captured["frame"]
     assert isinstance(frame, AskUserSuspension)
     restored = _cold_claim(frame, journal_entries)
+    return _PausedMidCoordAsk(restored, journal_entries, snap, user_message)
 
-    resume_sink = EventSink()
-    resume_sink.seed_journal(
-        [{"type": EventType.CHECKPOINT_REQUIRED.value, "payload": {}, "timestamp": "t"}]
-    )
-    resume_ctx = _ctx()
-    resume_delegate = DelegateTool(
-        llm=_SlowSecondWorker(),
-        sink=resume_sink,
-        system_prompt="SYS",
-        user_message=user_message,
-        history=[],
-        tools=ToolRegistry(),
-        base_tool_context=resume_ctx,
-        captain_run_id="cap",
-        folder_id="test_birth",
-        approval_gate=None,
-    )
+
+async def test_ask_user_soft_stop_rebuilds_coordination_on_resume(monkeypatch):
+    """挂起快照入 journal → claim → settle 重建协调态 → CEO 可续协调。"""
+    paused = await _pause_mid_coord_ask(monkeypatch)
+    restored, snap, user_message = paused.restored, paused.snap, paused.user_message
+    resume_sink, resume_delegate, resume_ctx = _resume_delegate(user_message)
 
     settled = await settle_resumed_suspension(
         restored,
@@ -368,9 +392,33 @@ async def test_ask_user_soft_stop_rebuilds_coordination_on_resume(monkeypatch):
     assert any("团队协调事件" in (m.content or "") for m in injected)
 
     # Cleanup background re-drive if settle re-armed unfinished workers.
-    if session.drive_task is not None and not session.drive_task.done():
-        session.drive_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await session.drive_task
-    clear_active_coordination(EXEC_ID)
-    clear_active_coordination()
+    await _cancel_live_drive(EXEC_ID)
+
+
+async def test_ask_user_stop_does_not_rebuild_coordination(monkeypatch):
+    """STOP settle must not attach a live drive or re-start unfinished workers."""
+    paused = await _pause_mid_coord_ask(monkeypatch)
+    resume_sink, resume_delegate, _ = _resume_delegate(paused.user_message)
+
+    try:
+        settled = await settle_resumed_suspension(
+            paused.restored,
+            decision=CheckpointDecision.STOP,
+            note="",
+            selected=[],
+            sink=resume_sink,
+            delegate_tool=resume_delegate,
+            execution_id="e_fresh_mint",
+        )
+        assert settled.terminal_text is None
+        assert settled.effect is ToolEffect.CONTINUE
+        assert "取消了澄清" in settled.output
+
+        session = active_coordination(EXEC_ID)
+        assert session is None, "STOP must not set_active_coordination"
+        journal = resume_sink.execution_journal() or []
+        assert not any(
+            e.get("type") == EventType.RUN_STARTED.value for e in journal
+        ), "STOP must not run_started unfinished workers"
+    finally:
+        await _cancel_live_drive(EXEC_ID)

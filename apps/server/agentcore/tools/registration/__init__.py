@@ -132,10 +132,8 @@ def worker_only_tool_names() -> frozenset[str]:
 
 # Heavy-dep ALWAYS tools stay handwritten in ``_assemble_ceo_toolset``.
 # Everything else with ``ceo_wire=ALWAYS`` is declaration-loop wired
-# (zero-arg via ``instantiate_declared``). ``promote_product`` is here because it
-# republishes the rewritten delivery reconciliation through a caller-owned callback
-# (the turn's sink), which only assemble can supply.
-_ALWAYS_HAND_WIRE_NAMES = frozenset({"delegate", "debate", "promote_product"})
+# (zero-arg via ``instantiate_declared``).
+_ALWAYS_HAND_WIRE_NAMES = frozenset({"delegate", "debate"})
 
 
 def register_always_ceo_tools(

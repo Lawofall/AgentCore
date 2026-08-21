@@ -49,6 +49,9 @@ const APPLY_HINT: Record<DocumentApplyMode, string> = {
 const AI_CORE_NAMES = new Set(["偏好.md", "画像.md", "导航.md"]);
 const NEAR_FULL_PERCENT = 80;
 const ROW_CHARS_FLOOR = 1000;
+/** Empty AI memory/topic hint — textarea placeholder only, never written into the body. */
+const MEMORY_EMPTY_PLACEHOLDER =
+  "AI 会把记得的内容写在这里，你也可以直接改或删除。";
 
 type EntrySource =
   | { channel: "memory-file"; memoryKind: MemoryKind }
@@ -702,7 +705,15 @@ function EntryItem({
       }
       setSaved(content);
       setVersion(r.version);
-      onStatus("已保存");
+      const quota =
+        "quotaWarning" in r && typeof r.quotaWarning === "string"
+          ? r.quotaWarning.trim()
+          : "";
+      const frontmatter =
+        "frontmatterError" in r && typeof r.frontmatterError === "string"
+          ? r.frontmatterError.trim()
+          : "";
+      onStatus(quota || frontmatter || "已保存");
     } catch (e) {
       onAuthError(e);
       setError("保存失败，请重试");
@@ -820,7 +831,12 @@ function EntryItem({
               <textarea
                 className="mem-textarea"
                 value={content}
-                placeholder="（空）"
+                placeholder={
+                  source?.channel === "memory-file" ||
+                  source?.channel === "memory-topic"
+                    ? MEMORY_EMPTY_PLACEHOLDER
+                    : "（空）"
+                }
                 rows={6}
                 onChange={(e) => setContent(e.target.value)}
               />

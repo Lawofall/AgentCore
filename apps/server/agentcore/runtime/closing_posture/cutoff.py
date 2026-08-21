@@ -21,7 +21,7 @@ from .hollow import (
 )
 
 _CUTOFF_DELIVERY_GAP_REASONS = frozenset(
-    {"token_budget", "worker_timeout", "turn_token_budget"}
+    {"token_budget", "worker_timeout", "turn_token_budget", "max_rounds"}
 )
 
 _turn_cutoff_delivery_gap: ContextVar[bool] = ContextVar(

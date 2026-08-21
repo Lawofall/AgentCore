@@ -11,30 +11,39 @@ from __future__ import annotations
 # delivery_status.gaps.reason 口径（契约单源：Wire DeliveryGap.reason）
 REASON_TOKEN_BUDGET = "token_budget"
 REASON_WORKER_TIMEOUT = "worker_timeout"
+REASON_MAX_ROUNDS = "max_rounds"
 REASON_DEGRADED_HANDOFF = "degraded_handoff"
 # Turn 级累计顶（策略 A）：与 ``runtime/turn/token_budget.REASON_TURN_TOKEN_BUDGET`` 同值。
 # 本步拒派 / 跳过未跑节点时可挂 gaps.reason，勿硬补对账层。
 REASON_TURN_TOKEN_BUDGET = "turn_token_budget"
 
 CUTOFF_REASONS = frozenset(
-    {REASON_TOKEN_BUDGET, REASON_WORKER_TIMEOUT, REASON_DEGRADED_HANDOFF}
+    {
+        REASON_TOKEN_BUDGET,
+        REASON_WORKER_TIMEOUT,
+        REASON_MAX_ROUNDS,
+        REASON_DEGRADED_HANDOFF,
+    }
 )
 
 # RunState.warnings / gap description 稳定文案（collect_worker_gaps 依文案反查 reason）
 TOKEN_BUDGET_WARNING = "队员因 token 预算触顶被迫收口，产出可能不完整"
 WORKER_TIMEOUT_WARNING = "队员运行超时（硬收尾/强制取消），交付可能缩水"
+MAX_ROUNDS_WARNING = "队员因轮次上限强制收口，产出可能不完整"
 # 用户面口语：避免 worker / handoff 等内部词；引擎反查仍认本常量全文。
 DEGRADED_HANDOFF_WARNING = "交接说明不够完整，系统已代为补写摘要"
 
 WARNING_TO_REASON: dict[str, str] = {
     TOKEN_BUDGET_WARNING: REASON_TOKEN_BUDGET,
     WORKER_TIMEOUT_WARNING: REASON_WORKER_TIMEOUT,
+    MAX_ROUNDS_WARNING: REASON_MAX_ROUNDS,
     DEGRADED_HANDOFF_WARNING: REASON_DEGRADED_HANDOFF,
 }
 
 REASON_TO_WARNING: dict[str, str] = {
     REASON_TOKEN_BUDGET: TOKEN_BUDGET_WARNING,
     REASON_WORKER_TIMEOUT: WORKER_TIMEOUT_WARNING,
+    REASON_MAX_ROUNDS: MAX_ROUNDS_WARNING,
     REASON_DEGRADED_HANDOFF: DEGRADED_HANDOFF_WARNING,
 }
 

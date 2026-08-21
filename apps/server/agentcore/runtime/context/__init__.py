@@ -20,6 +20,10 @@ from agentcore.runtime.context.folder_catalog import (
     load_folder_catalog,
     render_folder_catalog,
 )
+from agentcore.runtime.context.outlet_inventory import (
+    OutletDirListing,
+    collect_outlet_inventory,
+)
 from agentcore.runtime.context.workspace_context import (
     ChannelProfile,
     WorkspaceGitFact,
@@ -40,9 +44,11 @@ __all__ = [
     "FolderCatalogEntry",
     "PromptContributor",
     "SectionOrder",
+    "OutletDirListing",
     "WorkspaceGitFact",
     "assembly_hash",
     "build_artifact_format_line",
+    "collect_outlet_inventory",
     "build_folder_catalog_entries",
     "build_workspace_context",
     "format_artifact_capability_line",

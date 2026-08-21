@@ -211,8 +211,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='browser.cgroup_unwritable_ignore',
         description=(
-            '容器内 cgroup2 subtree_control 只读，自动加 --ignore-cgroups（会话 OCI 限额不生效，容'
-            '器 mem_limit 仍在）'
+            '历史兼容：曾在探测 subtree_control 只读后自动加 --ignore-cgroups；现形状 B 固定 ignore'
+            '-cgroups，不再发此事件'
         ),
         fields={
             'reason': FieldType('str'),
@@ -250,7 +250,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='browser.registry_unbound_run'),
     EventSpec(name='browser.rpc_event_handler_error'),
     EventSpec(name='browser.rpc_nonjson'),
-    EventSpec(name='browser.runsc_cmd_timeout'),
     EventSpec(name='browser.screencast_start_failed'),
     EventSpec(name='browser.screencast_started'),
     EventSpec(name='browser.screencast_stopped'),
@@ -258,16 +257,13 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='browser.session_open_failed',
         description=(
-            'runsc 浏览器会话握手失败；stderr_preview 为 runsc/driver 尾部（此前 PIPE 会丢掉）'
+            '浏览器会话握手失败（API 侧）；error / error_type 为包装异常。runsc 探针失败看 sandboxd'
+            '.health_failed'
         ),
         fields={
             'conversation_id': FieldType('str'),
             'error': FieldType('str'),
             'error_type': FieldType('str'),
-            'ignore_cgroups': FieldType('bool'),
-            'ignore_reason': FieldType('str'),
-            'returncode': FieldType('int'),
-            'stderr_preview': FieldType('str'),
         },
     ),
     EventSpec(name='browser.session_opened'),
@@ -284,6 +280,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='chat.admin_mute'),
     EventSpec(name='chat.announced'),
     EventSpec(name='chat.assistant_placeholder_failed'),
+    EventSpec(name='chat.assistant_placeholder_idempotent'),
     EventSpec(name='chat.auto_join'),
     EventSpec(name='chat.auto_join_failed'),
     EventSpec(name='chat.beta_moderator_cleared'),
@@ -306,6 +303,9 @@ EVENTS: list[EventSpec] = [
             'user': FieldType('str'),
         },
     ),
+    EventSpec(name='chat.local_turn_abort_noop'),
+    EventSpec(name='chat.local_turn_aborted'),
+    EventSpec(name='chat.local_turn_begin'),
     EventSpec(name='chat.local_turn_harvest_claim_continue'),
     EventSpec(name='chat.local_turn_harvest_idempotent'),
     EventSpec(name='chat.local_turn_idempotent_race'),
@@ -313,6 +313,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='chat.local_turn_reuse_paired_user'),
     EventSpec(name='chat.local_turn_skip_synthetic_user'),
     EventSpec(name='chat.local_turn_tool_failures'),
+    EventSpec(name='chat.local_turn_user_idempotent'),
     EventSpec(name='chat.message_edited'),
     EventSpec(name='chat.message_recalled'),
     EventSpec(name='chat.pause_snapshot_failed'),
@@ -1919,12 +1920,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='presence.audience_failed'),
     EventSpec(name='presence.broadcast'),
     EventSpec(name='presence.broadcast_failed'),
-    EventSpec(name='promote_product.done'),
-    EventSpec(name='promote_product.journal_lookup_failed'),
-    EventSpec(name='promote_product.move_failed'),
-    EventSpec(name='promote_product.no_delivery_payload'),
-    EventSpec(name='promote_product.reconciliation_from_journal'),
-    EventSpec(name='promote_product.republish_failed'),
     EventSpec(
         name='push.fcm_configured',
         description='FCM sender 装配成功；project_id 须与真机注册的 Firebase 项目一致',
@@ -2105,6 +2100,23 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='sandbox.write_back'),
     EventSpec(name='sandbox.written_scan_failed'),
     EventSpec(name='sandbox.written_scan_truncated'),
+    EventSpec(
+        name='sandboxd.health_failed',
+        description='sandboxd 形状探针失败：shape=code（A）或 net（B）；detail 为 runsc/ip 尾部',
+        fields={
+            'detail': FieldType('str'),
+            'shape': FieldType('str'),
+        },
+    ),
+    EventSpec(name='sandboxd.netns_setup'),
+    EventSpec(name='sandboxd.netns_teardown'),
+    EventSpec(name='sandboxd.peer_denied'),
+    EventSpec(name='sandboxd.ready'),
+    EventSpec(name='sandboxd.rpc_denied'),
+    EventSpec(name='sandboxd.rpc_error'),
+    EventSpec(name='sandboxd.run'),
+    EventSpec(name='sandboxd.started'),
+    EventSpec(name='sandboxd.stopped'),
     EventSpec(name='search.backend_aclose_failed'),
     EventSpec(name='search.backend_ready'),
     EventSpec(name='search.fallback_failed'),

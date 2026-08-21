@@ -34,8 +34,8 @@ def _platform_billing():
     settings.platform_api_key = original_key
 
 
-# Above the platform monthly cap (quota_monthly_cost_cny = ¥5) — and also above
-# the ¥5 单日成本 backstop, so a fresh over-quota turn is refused whichever cost
+# Above the platform monthly cap (quota_monthly_cost_cny = ¥10) — and also above
+# the ¥10 单日成本 backstop, so a fresh over-quota turn is refused whichever cost
 # window trips first (both raise QUOTA_EXCEEDED).
 _OVER_MONTHLY_NANO = 20_000_000_000
 # Under the global caps, but enough to trip a tightened per-user monthly override (¥2).
@@ -108,7 +108,7 @@ async def test_regenerate_blocked_when_over_monthly_quota(client, session_factor
 
 
 async def test_per_user_override_tightens_cap(client, session_factory):
-    # Spend (¥3) is UNDER the global ¥5 cap, so default config would let the turn
+    # Spend (¥3) is UNDER the global ¥10 cap, so default config would let the turn
     # through — but the user's own ¥2 monthly override trips 429. Proves the turn
     # gate resolves limits via QuotaLimits.for_user (per-user), not just config.
     user_id = await register_and_login(client, "quotaovr")

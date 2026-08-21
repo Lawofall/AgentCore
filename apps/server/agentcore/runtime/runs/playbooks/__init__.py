@@ -52,14 +52,17 @@ PLAYBOOKS: dict[str, Playbook] = {
         summary=(
             "【代码审计】A 宽扫→B 定案两阶段；强制字段/严重度/checklist/人审骨架；"
             "报告落 AgentCore/文档/reviews/；扇出靠 CEO 填 modules（不从 scope 自动拆；"
-            f"按自然缝扇出，整仓/多子系统常 4–8，能少则少，上限 {CODE_AUDIT_FANOUT}）；"
-            "多模块并行+主管速览；"
+            f"先按产品缝 2–3、能少则少；目录细拆仅当探路证明真并行且单缝扛不住；"
+            f"上限 {CODE_AUDIT_FANOUT}）；"
+            "2 路并行交 CEO 收口；≥3 路才加主管速览；"
             "正交于 parallel_brief（摸底）/ research_report（成文审校）/ repair_code（按症状修）"
         ),
         slots=(
             "scope(必填,审计范围路径或子系统;亦接受 topic/target) / "
-            "modules(可选;探路后≥2 可独立并行子面则填短模块名/路径→并行审计+主管速览,"
-            f"按自然缝扇出，整仓/多子系统常 4–8、能少则少、上限 {CODE_AUDIT_FANOUT} 超限末槽折叠;"
+            "modules(可选;探路后≥2 可独立并行产品缝则填短名/路径→2 路并行无主管、≥3 路才+主管速览,"
+            f"先 2–3、能少则少;【禁】按目录树默认拆到上限;"
+            "目录细拆仅当探路证明真并行且单缝扛不住;"
+            f"上限 {CODE_AUDIT_FANOUT} 超限末槽折叠;"
             "单缝省略;playbook 不从 scope 自动拆;"
             "禁把多目录拼进 scope 冒充多模块;禁把长作文当模块名,侧重进 focus) / "
             "focus(可选,侧重如 security|eng|流式刷新) / "
@@ -240,7 +243,7 @@ def playbook_args_schema_description() -> str:
         "建站必填 topic（简述；亦接受 purpose/brief/description；不接受旧键 site）、"
         "绿场必填 app——勿空对象。"
         f"必填槽：{required_cues}。"
-        "code_audit modules：整仓扇出（不从 scope 自动拆）。"
+        "code_audit modules：整仓按产品缝扇出（先 2–3，不从 scope 自动拆；勿按目录填满上限）。"
         "其余可选槽与细节→consult(team_orchestration_advanced)。"
     )
 

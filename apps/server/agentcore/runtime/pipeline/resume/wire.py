@@ -14,6 +14,7 @@ from agentcore.desktop.channel import DesktopClientChannel
 from agentcore.llm.profiles import TurnProfiles
 from agentcore.runtime.context import (
     build_workspace_context,
+    collect_outlet_inventory,
     detect_workspace_git,
     resolve_channel_profile,
 )
@@ -298,6 +299,7 @@ async def _wire_continuation_toolset(
             mcp_enabled=mcp_discover.tool_count > 0,
             mcp_label=mcp_label,
             git_fact=git_fact,
+            outlet_inventory=await collect_outlet_inventory(backend),
         ),
     )
     # Look up via ``resume.pipeline`` so any module-level monkeypatch on that

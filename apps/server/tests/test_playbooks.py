@@ -67,10 +67,12 @@ def test_code_audit_single_module_one_auditor():
     assert "收口口径" in t["task"]
     assert "全程只读" in t["task"]
     assert "未改业务源码" in t["task"]
-    # 分段交付：骨架先落 → 补全 → 成文；artifacts 声明仍为 [md, .audit.json]
-    assert "骨架先落 → 补全 → 成文" in t["task"]
+    # 分段交付：骨架先落 → 边查边填；artifacts 声明仍为 [md, .audit.json]
+    assert "骨架先落 → 边查边填" in t["task"]
     assert "分段交付" in t["task"]
     assert "Phase A 结束" in t["task"] and "骨架" in t["task"]
+    assert "五章空壳" in t["task"]
+    assert "禁止读完再一次性成文" in t["task"]
     assert d["artifacts"] == [
         f"{REVIEWS_DIR}/code-audit-0-main.md",
         f"{REVIEWS_DIR}/code-audit-0-main.audit.json",
@@ -111,6 +113,23 @@ def test_code_audit_section_titles_literal_across_playbook_inherit_skill():
     for title in CODE_AUDIT_REQUIRED_SECTIONS:
         assert title in tasks[0]["task"]
         assert title in body
+
+
+def test_code_audit_two_modules_parallel_no_synth():
+    """2 路并行：只有审计员，不上主管（CEO 收口）。"""
+    tasks, errors = expand_playbook(
+        "code_audit",
+        {"scope": "AgentCore", "modules": ["server", "desktop"]},
+    )
+    assert errors == []
+    by_id = _by_id(tasks)
+    assert set(by_id) == {"audit_0", "audit_1"}
+    assert all(by_id[i]["role"] == "代码审计员" for i in ("audit_0", "audit_1"))
+    assert "audit_synth" not in by_id
+    plan, plan_errs = build_run_plan(tasks)
+    assert plan_errs == []
+    assert len(plan.nodes) == 2
+    assert len(plan.waves()) == 1
 
 
 def test_code_audit_multi_module_parallel_plus_synth():
@@ -245,6 +264,7 @@ def test_code_audit_fans_out_up_to_eight_modules_without_fold():
         assert f"audit_{i}" in {t["id"] for t in auditors}
         assert mod in _by_id(tasks)[f"audit_{i}"]["task"]
     assert collect_playbook_notes(tasks) == []
+    assert any(t["role"] == "审计主管" for t in tasks)
 
 
 def test_code_audit_folds_modules_beyond_eight_into_last_slot():
@@ -266,14 +286,15 @@ def test_code_audit_folds_modules_beyond_eight_into_last_slot():
     assert notes and "扇出折叠" in notes[0]
     assert f"m{CODE_AUDIT_FANOUT}" in notes[0]
     assert str(CODE_AUDIT_FANOUT) in notes[0]
+    assert any(t["role"] == "审计主管" for t in tasks)
 
 
 def test_available_playbooks_lists_code_audit():
     listing = available_playbooks()
     assert "code_audit" in listing
     assert "代码审计" in listing
-    assert "4–8" in listing or "4-8" in listing
-    assert "自然缝" in listing or "能少则少" in listing
+    assert "2–3" in listing or "2-3" in listing
+    assert "产品缝" in listing or "能少则少" in listing
     assert "上限" in listing and str(CODE_AUDIT_FANOUT) in listing
 
 
@@ -1547,7 +1568,7 @@ def test_every_playbook_expansion_builds_a_valid_run_plan():
         "multi_lens_research": {"topic": "T"},
     }
     expected_nodes = {
-        "code_audit": 3,  # 2 auditors + synth
+        "code_audit": 2,  # 2 auditors, no synth
         "parallel_brief": 3,
         "research_report": 5,
         "build_feature": 3,

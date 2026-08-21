@@ -174,6 +174,20 @@ def test_code_execute_description_does_not_overpromise_sandbox():
     assert "云端沙箱" in CodeExecuteTool(location="server").schema.description
 
 
+def test_code_execute_description_routes_source_dump_to_file_read():
+    from agentcore.tools.builtin.code_execute import code_execute_description
+    from agentcore.tools.builtin.file_ops.read import FileReadTool
+
+    ce = code_execute_description("local")
+    assert "file_read" in ce
+    assert "dump" in ce
+    assert "禁止" in ce
+    # Positive path lives on file_read so the skipped tool still names itself.
+    fr = FileReadTool().schema.description
+    assert "code_execute" in fr
+    assert "dump" in fr
+
+
 def test_code_execute_description_routes_long_running_to_terminal():
     # Long-lived servers must not be waited on via code_execute (60s timeout trap).
     from agentcore.tools.builtin.code_execute import code_execute_description

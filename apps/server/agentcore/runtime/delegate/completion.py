@@ -745,7 +745,7 @@ def collect_worker_gaps(
     convergence finalize (write tools withheld) still surfaces what was never
     delivered. Each gap row is ``{description, reason?}`` where ``reason`` is a
     machine code when the signal is a known cutoff
-    (``token_budget`` / ``worker_timeout`` / ``degraded_handoff``).
+    (``token_budget`` / ``worker_timeout`` / ``max_rounds`` / ``degraded_handoff``).
 
     刀1：worker 已有落盘时 ``degraded_handoff`` 带 ``severity=warning``（备注，非硬缺口）。
     """

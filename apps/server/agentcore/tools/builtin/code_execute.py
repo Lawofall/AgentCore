@@ -85,7 +85,9 @@ _USAGE_TAIL = (
     "读环境变量 `AGENTCORE_EXTERNAL_<别名大写>`（由执行环境注入，勿把绝对路径"
     "写进回复）。④ 抓取网页或调用公开 HTTP API 优先用 read_url / web_search "
     "工具，不要在代码里发网络请求。⑤ 大 zip 持久解压到工作区请用 archive_extract；"
-    "勿只靠本工具解压后假定内容已在 canonical 工作区树可见。"
+    "勿只靠本工具解压后假定内容已在 canonical 工作区树可见。⑥ 看已有源码 / 翻文件请用 "
+    "file_read（可分页）；【禁止】为看正文写脚本 print / 整文件 dump 到 stdout。"
+    "解析表格、改文件、跑计算仍用本工具。"
 )
 
 # Local-only: when a short CLI truly belongs on code_execute, don't default to bash —

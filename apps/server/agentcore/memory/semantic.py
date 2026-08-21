@@ -42,7 +42,6 @@ from agentcore.memory.store import (
     topic_slug,
 )
 from agentcore.memory.user_memory import (
-    _DEFAULT_PREAMBLE,
     _GLOBAL_ONLY_PROFILE_SECTIONS,
     _PROJECT_ONLY_PROFILE_SECTIONS,
     PROFILE_SECTIONS,
@@ -552,13 +551,7 @@ def apply_core_rewrite(old_md: str, new_md: str) -> str:
     """Apply a full-file rewrite with wipe protection (empty rewrite cannot erase content)."""
     if not new_md.strip():
         return old_md
-    if not old_md.strip():
-        # Bootstrap: ensure a preamble exists when the model omitted chrome.
-        doc = _parse(new_md)
-        if not doc.preamble.strip():
-            doc.preamble = _DEFAULT_PREAMBLE
-        return _render(doc)
-    # Normalize through parse/render so section formatting stays stable.
+    # Normalize through parse/render (drops retired 用户记忆 chrome).
     return _render(_parse(new_md))
 
 

@@ -312,10 +312,23 @@ export function FileTreeRow(props: FileTreeRowProps) {
           )}
           {status === "error" && (
             <li
-              className="py-1 text-xs text-muted-foreground"
+              className="flex items-center gap-2 py-1 text-xs text-muted-foreground"
               style={{ paddingLeft: (depth + 1) * 14 + 8 + indentBase }}
             >
-              加载失败
+              <Button
+                variant="ghost"
+                onClick={() => data.reload(node.path)}
+                className="h-auto px-0 py-0 font-normal text-muted-foreground hover:bg-transparent hover:underline"
+              >
+                加载失败
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => data.reload(node.path)}
+                className="h-auto px-0 py-0 font-normal text-muted-foreground underline-offset-2 hover:underline"
+              >
+                重试
+              </Button>
             </li>
           )}
           {children?.length === 0 &&

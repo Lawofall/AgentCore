@@ -94,7 +94,7 @@ describe("SegmentedNav", () => {
     // 挤不下时收缩自己横向滚，而不是把整行撑出页面级横向滚动条。
     expect(nav.className).toContain("min-w-0");
     expect(nav.className).toContain("overflow-x-auto");
-    // 滚动条槽靠 globals.css 的普通类去掉——Tailwind 等价物会输给全局 `*` 规则。
+    // overlay 条靠 globals.css 的普通类藏掉——Tailwind 等价物会输给全局规则。
     expect(nav.classList.contains("scrollbar-hidden")).toBe(true);
   });
 

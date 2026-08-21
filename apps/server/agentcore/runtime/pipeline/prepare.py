@@ -19,6 +19,7 @@ from agentcore.memory import assemble_turn_rules
 from agentcore.runtime.context import (
     FolderCatalogEntry,
     build_workspace_context,
+    collect_outlet_inventory,
     detect_workspace_git,
     load_folder_catalog,
     resolve_channel_profile,
@@ -185,12 +186,16 @@ async def prepare_fresh_turn(
         git_fact = await _timed_phase(
             "git", await_prepare_local_io(detect_workspace_git(backend))
         )
+        from agentcore.workspace.sparse_listing import collect_turn_material_paths
+
+        material_paths = collect_turn_material_paths(attachments)
+        backend.ai_list_materials = material_paths
+        outlet_inventory = await _timed_phase(
+            "outlet_inventory",
+            await_prepare_local_io(collect_outlet_inventory(backend)),
+        )
         # exists/.git (and similar) may sticky-dead after prior timeouts — stop here.
         raise_if_backend_channel_dead(backend)
-    from agentcore.workspace.sparse_listing import collect_turn_material_paths
-
-    material_paths = collect_turn_material_paths(attachments)
-    backend.ai_list_materials = material_paths
     workspace_facts = build_workspace_context(
         backend,
         desktop_online=desktop_online,
@@ -199,6 +204,7 @@ async def prepare_fresh_turn(
         mcp_enabled=mcp_discover.tool_count > 0,
         mcp_label=mcp_label,
         git_fact=git_fact,
+        outlet_inventory=outlet_inventory,
     )
     system_prompt = assemble_system_prompt(
         rules_markdown=rules_markdown,

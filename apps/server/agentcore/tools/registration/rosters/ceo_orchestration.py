@@ -24,7 +24,6 @@ def load_roster() -> tuple[type, ...]:
         ListFoldersTool,
         ResolveFolderTool,
     )
-    from agentcore.tools.builtin.promote_product import PromoteProductTool
     from agentcore.tools.builtin.read_image import ReadImageTool
     from agentcore.tools.builtin.remember import RememberTool
     from agentcore.tools.builtin.replan import ReplanTool
@@ -47,5 +46,4 @@ def load_roster() -> tuple[type, ...]:
         ReadImageTool,
         BoardOpsTool,
         BoardReadTool,
-        PromoteProductTool,
     )

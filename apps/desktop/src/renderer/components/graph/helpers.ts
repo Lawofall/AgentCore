@@ -85,7 +85,8 @@ export function deriveCaptainStatus(
  * CEO 汇聚点下面那两行摘录。
  *
  * 待汇总（工人未齐）：派单正文不是成果，不摘「人已派出 / 还在等」。
- * 有中间草稿才显示草稿；等待条已在 statusCaption，预览留空以免两行打架。
+ * 有中间草稿才显示草稿；等待条走 statusCaption（face 正文最多两行），
+ * preview 留空以免两行打架。
  * 人齐之后仍用派单泡开头（图挂在派单泡上，收口另泡不在这刀）。
  */
 export function captainSinkPreview(opts: {

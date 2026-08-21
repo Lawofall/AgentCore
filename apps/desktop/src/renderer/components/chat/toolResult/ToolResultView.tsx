@@ -811,9 +811,10 @@ export function ToolResultView({ data }: { data: ToolResultData }) {
   ) {
     return <SearchHitResult result={data.result} kind={data.toolName} />;
   }
-  const ceilingGuidance =
-    data.status === "error" &&
-    isFileReadCeilingGuidance(data.toolName, data.result);
+  const ceilingGuidance = isFileReadCeilingGuidance(
+    data.toolName,
+    data.result,
+  );
   return (
     <TextResult
       result={data.result ?? ""}

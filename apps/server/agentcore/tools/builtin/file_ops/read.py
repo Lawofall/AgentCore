@@ -43,8 +43,7 @@ from agentcore.workspace.sparse_listing import should_hide_ai_noise_from_list
 
 from .errors import (
     _error,
-    _file_read_path_ceiling_error,
-    _file_read_path_ceiling_message,
+    _file_read_same_window_hit,
     _map_workspace_read_error,
     _maybe_channel_dead_error,
     _office_extract_budget_error,
@@ -658,12 +657,13 @@ class FileReadTool:
                 "（省略则尽量整读，超安全顶截断）。"
                 "仅当页脚已标明截断或已有行号时再用 offset/limit 开窗。"
                 "禁止无目标地整目录逐文件通读。"
+                "看源码正文用本工具，勿改走 code_execute print/dump。"
                 "含糊「根」/ `.` / 仅根标签勿当文件整读——先 file_list/grep 钉真实路径。"
                 "回执为编号行；未截断页脚「全文 N 行」，截断为「第 a–b 行，共 N 行」"
                 "并标明行顶或字符顶（视图截断非磁盘残缺，勿把页脚当正文去 str_replace）。"
                 "同一相对路径本 run 对成功 file_read 有次数上限（从第 1 行要满安全顶的整读计次；"
                 "开窗仅当本次请求行范围此前已交付且正文仍在对话中时计次；新范围分页不计）。"
-                "触顶且正文仍在对话中、又无再读授额时仅拒绝该路径，其它文件仍可 file_read。"
+                "触顶且正文仍在对话中、又无再读授额时不灌全文，只回短指针；其它文件仍可 file_read。"
                 "正文已被清理时可再读且不计次；写成功后可再读核对。"
                 "已落盘产物优先以写/append 回执中的 artifact manifest 验真。"
             ),
@@ -705,8 +705,8 @@ class FileReadTool:
         # recorded the path as fully cleared (recovery does not consume quota).
         # A point window counts only when its requested span was already
         # delivered AND the path body is still in the projected window. New
-        # ranges (pagination) skip the gate. Cleared body → allow recovery
-        # even with remaining == 0.
+        # ranges (pagination) skip the gate. At cap + body present + no grant
+        # → cheap pointer (success, no full dump). Cleared body → recovery.
         from agentcore.runtime.runs.constants import FILE_READ_SAME_PATH_MAX
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
@@ -726,11 +726,10 @@ class FileReadTool:
                     # Grant overrides even when stale verbatim is still present.
                     using_reread = True
                 elif _file_read_body_present(context, path_key):
-                    return _file_read_path_ceiling_error(
-                        _file_read_path_ceiling_message(
-                            path_key, max_reads=FILE_READ_SAME_PATH_MAX
-                        ),
-                        start,
+                    return _file_read_same_window_hit(
+                        path_key,
+                        max_reads=FILE_READ_SAME_PATH_MAX,
+                        start=start,
                     )
                 # Cleared: allow recovery read (no grant required).
 

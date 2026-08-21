@@ -27,14 +27,23 @@ _RESOLVED_KINDS = frozenset(
 )
 
 
-def consecutive_checkpoint_stops(entries: Sequence[Mapping[str, Any]] | None) -> int:
+def consecutive_checkpoint_stops(
+    entries: Sequence[Mapping[str, Any]] | None,
+    *,
+    ignore_checkpoint_id: str | None = None,
+) -> int:
     """Trailing consecutive ``decision=stop`` count from journal ``*_resolved`` facts.
 
     Walks settled checkpoint decisions in order; any non-STOP decision resets.
     Current (not-yet-journaled) decision is not included — callers compare
     ``>= 1`` before settling a new STOP to detect the second consecutive stop.
+
+    ``ignore_checkpoint_id`` skips a matching ``*_resolved`` fact entirely
+    (cold-path prewrite of the card being settled: neither counted as STOP
+    nor treated as a non-STOP reset).
     """
     streak = 0
+    ignore = (ignore_checkpoint_id or "").strip()
     for entry in entries or ():
         if not isinstance(entry, Mapping):
             continue
@@ -44,6 +53,8 @@ def consecutive_checkpoint_stops(entries: Sequence[Mapping[str, Any]] | None) ->
         payload = entry.get("payload")
         if not isinstance(payload, Mapping):
             streak = 0
+            continue
+        if ignore and str(payload.get("checkpoint_id") or "").strip() == ignore:
             continue
         raw = str(payload.get("decision") or "").strip().lower()
         if raw == CheckpointDecision.ADJUST.value:
@@ -60,6 +71,8 @@ def consecutive_checkpoint_stops(entries: Sequence[Mapping[str, Any]] | None) ->
 def is_repeated_checkpoint_stop(
     entries: Sequence[Mapping[str, Any]] | None,
     decision: CheckpointDecision,
+    *,
+    ignore_checkpoint_id: str | None = None,
 ) -> bool:
     """True when ``decision`` is STOP and the journal already ends on ≥1 STOP.
 
@@ -68,7 +81,10 @@ def is_repeated_checkpoint_stop(
     """
     return (
         decision is CheckpointDecision.STOP
-        and consecutive_checkpoint_stops(entries) >= 1
+        and consecutive_checkpoint_stops(
+            entries, ignore_checkpoint_id=ignore_checkpoint_id
+        )
+        >= 1
     )
 
 

@@ -71,6 +71,34 @@ type ViewMode = "edit" | "preview";
 
 const AUTOSAVE_DEBOUNCE_MS = 1500; // 停止输入后多久自动落盘
 
+/** 记忆源空预览的固定说明——只出现在编辑器空状态，不写入 md。 */
+const MEMORY_PREVIEW_EMPTY_HINT =
+  "AI 会把记得的内容写在这里，你也可以直接改或删除。";
+
+/** 退役的人面 H1；导航等其它标题禁止按此剥。 */
+const RETIRED_MEMORY_H1 = /^#\s+用户记忆\s*$/;
+
+/**
+ * 预览专用：剥掉存量「# 用户记忆」+ 紧随的说明引用块。不泛剥其它 H1（导航一句话
+ * 定位要留）。不改 `content`、不标脏、不触发保存——编辑态仍是原文。
+ */
+function stripRetiredUserMemoryChrome(markdown: string): string {
+  const lines = markdown.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length && !lines[i].trim()) i++;
+  if (i >= lines.length || !RETIRED_MEMORY_H1.test(lines[i])) {
+    return markdown;
+  }
+  i += 1;
+  while (
+    i < lines.length &&
+    (!lines[i].trim() || lines[i].trimStart().startsWith(">"))
+  ) {
+    i += 1;
+  }
+  return lines.slice(i).join("\n").trim();
+}
+
 interface Baseline {
   version: FileVersion;
   encoding: EditEncoding;
@@ -385,6 +413,13 @@ export function MarkdownFileEditor({
 
   // 系统集成（reveal 仅本地源有；外部打开两源都有但云端过白名单谓词 → 按能力显隐，不按源分支）。
   const canOpenExternal = canOpenPathWithOsDefaultApp(source, path);
+  const isMemorySource = source.id === "memory";
+  const previewBody =
+    content == null || !isMemorySource
+      ? content
+      : stripRetiredUserMemoryChrome(content);
+  const memoryPreviewEmpty =
+    isMemorySource && previewBody !== null && previewBody.trim() === "";
   const onReveal = async () => {
     try {
       await source.revealInOsFileManager?.(path);
@@ -652,10 +687,22 @@ export function MarkdownFileEditor({
               />
             </div>
           </div>
+        ) : memoryPreviewEmpty ? (
+          <div className="flex h-full items-center justify-center px-6">
+            <p className="max-w-sm text-center text-sm text-muted-foreground">
+              {MEMORY_PREVIEW_EMPTY_HINT}
+            </p>
+          </div>
         ) : (
           <div className="h-full overflow-auto">
             <div className="mx-auto max-w-3xl px-6 py-6">
-              <Markdown content={content} />
+              <Markdown
+                content={
+                  isMemorySource
+                    ? stripRetiredUserMemoryChrome(content)
+                    : content
+                }
+              />
             </div>
           </div>
         )}

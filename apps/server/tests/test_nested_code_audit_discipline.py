@@ -37,7 +37,7 @@ def test_apply_inherited_stamps_gate_json_and_supplement():
     ]
     assert "嵌套审计·收工" in tasks[0]["system_prompt_supplement"]
     supp = tasks[0]["system_prompt_supplement"]
-    assert "骨架先落 → 补全 → 成文" in supp
+    assert "骨架先落 → 边查边填" in supp
     assert d["required_sections"] == list(CODE_AUDIT_REQUIRED_SECTIONS)
     assert CODE_AUDIT_SECTION_BY_DESIGN in supp
     # artifacts 声明不变：仍为 [md, companion .audit.json]

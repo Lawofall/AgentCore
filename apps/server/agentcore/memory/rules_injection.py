@@ -19,7 +19,8 @@ from typing import TYPE_CHECKING
 
 from agentcore.core.logging import get_logger
 from agentcore.db.repositories import DocumentRepository
-from agentcore.documents.frontmatter import strip_entry_frontmatter
+from agentcore.db.repositories.documents import USER_RULES_DOC_NAME
+from agentcore.documents.frontmatter import set_entry_frontmatter, strip_entry_frontmatter
 from agentcore.memory.injection import (
     _ANCESTOR_MEMORY_LABEL,
     _FOLDER_MEMORY_LABEL,
@@ -285,7 +286,12 @@ async def mutate_user_rule(
     content: str | None = None,
     replaces: str | None = None,
 ) -> UserRuleMutationResult:
-    """Persist a user-rule mutate for the scope's canonical rule doc (tool + account shared)."""
+    """Persist a user-rule mutate for the scope's canonical rule doc (tool + account shared).
+
+    Write-side always quota uses ``writer=ai`` (same gate as consolidation): net growth
+    past the cap raises :class:`~agentcore.memory.always_quota.AlwaysQuotaExceededError`;
+    shrink / list / unchanged skip the gate.
+    """
     doc = await repo.get_user_rules_doc(user_id, folder_id)
     current = doc.content if doc is not None else ""
     result = mutate_user_rule_markdown(
@@ -293,6 +299,41 @@ async def mutate_user_rule(
     )
     if result.action == "list" or not result.changed:
         return result
+    from agentcore.memory.always_quota import (
+        AlwaysQuotaExceededError,
+        always_entry_chars,
+        check_always_write,
+        notify_always_quota_exceeded,
+    )
+
+    body = set_entry_frontmatter(result.markdown, apply="always")
+    existing_always = (
+        doc is not None
+        and getattr(doc, "role", "rule") == "rule"
+        and doc.apply_mode == "always"
+    )
+    decision = await check_always_write(
+        repo,
+        user_id,
+        folder_id=folder_id,
+        writer="ai",
+        editing_existing_always=existing_always,
+        exclude_id=doc.id if doc is not None else None,
+        new_content=body,
+        new_is_always=True,
+    )
+    if not decision.allowed:
+        usage = decision.usage
+        assert usage is not None
+        exc = AlwaysQuotaExceededError(
+            usage,
+            decision.message,
+            file=USER_RULES_DOC_NAME,
+            scope=folder_id,
+            attempted_chars=always_entry_chars(body),
+        )
+        await notify_always_quota_exceeded(user_id, exc)
+        raise exc
     await repo.upsert_user_rules_doc(user_id, folder_id, result.markdown)
     return result
 

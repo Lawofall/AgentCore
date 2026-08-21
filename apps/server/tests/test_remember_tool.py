@@ -305,6 +305,87 @@ async def test_remember_list_unaffected_by_ellipsis_gate(monkeypatch: pytest.Mon
     assert "用中文" in (result.output or "")
 
 
+class _QuotaDoc:
+    id = "d1"
+    content = "- 已有规则\n"
+    apply_mode = "always"
+    role = "rule"
+
+
+class _QuotaRepo:
+    def __init__(self) -> None:
+        self.upserted = False
+
+    async def get_user_rules_doc(self, user_id, folder_id):  # noqa: ARG002
+        return _QuotaDoc()
+
+    async def upsert_user_rules_doc(self, user_id, folder_id, content):  # noqa: ARG002
+        self.upserted = True
+
+
+@pytest.mark.anyio
+async def test_mutate_user_rule_ai_growth_denied(monkeypatch: pytest.MonkeyPatch):
+    from agentcore.memory.always_quota import (
+        AlwaysQuotaDecision,
+        AlwaysQuotaExceededError,
+        AlwaysUsage,
+    )
+    from agentcore.memory.rules_injection import mutate_user_rule
+
+    async def _deny(*args, **kwargs):  # noqa: ARG001
+        return AlwaysQuotaDecision(
+            allowed=False,
+            usage=AlwaysUsage(used_chars=100, max_chars=50),
+            message="常驻条目配额已满",
+        )
+
+    async def _no_notify(*args, **kwargs):  # noqa: ARG001
+        return None
+
+    monkeypatch.setattr("agentcore.memory.always_quota.check_always_write", _deny)
+    monkeypatch.setattr(
+        "agentcore.memory.always_quota.notify_always_quota_exceeded", _no_notify
+    )
+    repo = _QuotaRepo()
+    with pytest.raises(AlwaysQuotaExceededError) as ei:
+        await mutate_user_rule(
+            repo,  # type: ignore[arg-type]
+            "u1",
+            folder_id=None,
+            action="add",
+            content="以后都用中文回复",
+        )
+    assert "配额" in ei.value.message
+    assert repo.upserted is False
+
+
+@pytest.mark.anyio
+async def test_remember_quota_denied_message(monkeypatch: pytest.MonkeyPatch):
+    from agentcore.memory.always_quota import AlwaysQuotaExceededError, AlwaysUsage
+
+    async def _boom(*args, **kwargs):  # noqa: ARG001
+        raise AlwaysQuotaExceededError(
+            AlwaysUsage(used_chars=100, max_chars=50),
+            "常驻条目配额已满",
+            file="用户规则.md",
+        )
+
+    monkeypatch.setattr("agentcore.tools.builtin.remember.mutate_user_rule", _boom)
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.remember.async_session_factory",
+        lambda: _FakeSession(),
+    )
+    monkeypatch.setattr(
+        "agentcore.account.credentials.get_account_credentials",
+        lambda: None,
+    )
+    tool = RememberTool(folder_id=None)
+    result = await tool.execute({"content": "以后都用中文回复"}, _ctx())
+    assert result.success is False
+    assert "配额" in (result.output or "")
+    assert "请稍后再试" not in (result.output or "")
+
+
 class _FakeSession:
     """Minimal async context manager standing in for async_session_factory()."""
 

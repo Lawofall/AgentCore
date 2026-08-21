@@ -260,7 +260,10 @@ async def run_continuation(
         session.spec = replace(session.spec, model=explicit_model)
 
     # 依赖产物：与冷开局同构，写入续干 feedback 正文（LLM）+ continuation 通道块（UI）。
-    feedback, context_blocks = _continuation_prompt(spec, completed)
+    # 本轮 team_brief 冷开局会进 system；续写回放旧 system，故改挂续干 user 指令。
+    feedback, context_blocks = _continuation_prompt(
+        spec, completed, team_brief=getattr(tool, "_team_brief", None)
+    )
     try:
         state = await continue_run(
             session=session,
@@ -310,13 +313,21 @@ async def run_continuation(
 
 
 def _continuation_prompt(
-    spec: RunSpec, completed: Mapping[str, RunState]
+    spec: RunSpec,
+    completed: Mapping[str, RunState],
+    *,
+    team_brief: str | None = None,
 ) -> tuple[str, list[ContextBlock]]:
-    """组装续干指令正文 + UI 上下文块（task + 上游依赖）。"""
+    """组装续干指令正文 + UI 上下文块（task + 上游依赖 + 本轮团队共识）。"""
     parts = [spec.task.strip()]
     blocks = [
         ContextBlock(channel="continuation", heading="续干指令", body=spec.task.strip()),
     ]
+    brief = (team_brief or "").strip()
+    if brief:
+        heading = "团队共识（主协调为本回合设定，全员遵循）"
+        parts.append(f"## {heading}\n{brief}")
+        blocks.append(ContextBlock(channel="team_brief", heading=heading, body=brief))
     for dep_id in spec.depends_on:
         st = completed.get(dep_id)
         if st is None or st.phase is not RunPhase.COMPLETED or not (st.content or "").strip():

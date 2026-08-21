@@ -97,6 +97,9 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+const MEMORY_EMPTY_PLACEHOLDER =
+  "AI 会把记得的内容写在这里，你也可以直接改或删除。";
+
 describe("MemoryPage", () => {
   it("uses icon-btn back + centered bar-title", async () => {
     render(<MemoryPage />);
@@ -231,6 +234,67 @@ describe("MemoryPage", () => {
     render(<MemoryPage />);
     expect(await screen.findByText("约 1 千字")).toBeTruthy();
     expect(screen.queryByText("不足千字")).toBeNull();
+  });
+
+  it("empty memory-file uses empty-state placeholder, not body", async () => {
+    render(<MemoryPage />);
+    fireEvent.click(await screen.findByText("偏好.md"));
+    const ta = await screen.findByPlaceholderText(MEMORY_EMPTY_PLACEHOLDER);
+    expect((ta as HTMLTextAreaElement).value).toBe("");
+    expect(screen.queryByDisplayValue(MEMORY_EMPTY_PLACEHOLDER)).toBeNull();
+    expect(getMemoryFile).toHaveBeenCalledWith("preferences");
+  });
+
+  it("empty memory-topic uses empty-state placeholder, not body", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({
+        id: "t1",
+        name: "主题/部署.md",
+        aiMaintained: true,
+        applyMode: "on_demand",
+      }),
+    ]);
+    vi.mocked(getMemoryTopic).mockResolvedValue({
+      content: "",
+      version: "v1",
+    });
+    render(<MemoryPage />);
+    fireEvent.click(await screen.findByText("主题/部署.md"));
+    const ta = await screen.findByPlaceholderText(MEMORY_EMPTY_PLACEHOLDER);
+    expect((ta as HTMLTextAreaElement).value).toBe("");
+    expect(screen.queryByDisplayValue(MEMORY_EMPTY_PLACEHOLDER)).toBeNull();
+    expect(getMemoryTopic).toHaveBeenCalledWith("部署");
+  });
+
+  it("empty user document still uses （空） placeholder", async () => {
+    vi.mocked(listScopeEntries).mockResolvedValue([
+      entry({ id: "r1", name: "语气规则.md" }),
+    ]);
+    vi.mocked(getDocument).mockResolvedValue({
+      ...entry({ id: "r1", name: "语气规则.md" }),
+      content: "",
+      version: "v1",
+    });
+    render(<MemoryPage />);
+    fireEvent.click(await screen.findByText("语气规则.md"));
+    const ta = await screen.findByPlaceholderText("（空）");
+    expect((ta as HTMLTextAreaElement).value).toBe("");
+    expect(screen.queryByPlaceholderText(MEMORY_EMPTY_PLACEHOLDER)).toBeNull();
+    expect(getDocument).toHaveBeenCalledWith("r1");
+  });
+
+  it("keeps on-disk memory chrome in the body (does not strip)", async () => {
+    const chrome =
+      "# 用户记忆\n\n本文件由 AI 自动维护，你可随时编辑或删除任何条目。\n";
+    vi.mocked(getMemoryFile).mockResolvedValue({
+      content: chrome,
+      version: "v1",
+    });
+    render(<MemoryPage />);
+    fireEvent.click(await screen.findByText("偏好.md"));
+    const ta = await screen.findByDisplayValue(/# 用户记忆/);
+    expect((ta as HTMLTextAreaElement).value).toBe(chrome);
+    expect(ta.getAttribute("placeholder")).toBe(MEMORY_EMPTY_PLACEHOLDER);
   });
 
   it("opens 主题/… via getMemoryTopic", async () => {

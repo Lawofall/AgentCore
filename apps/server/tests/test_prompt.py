@@ -815,8 +815,8 @@ def test_core_teaches_assumption_is_not_user_confirmation():
     assert "无已拍板项" in orch
 
 
-def test_core_teaches_unsettled_ask_user_stops_without_promote_or_done():
-    """本回合已发卡、用户未结算：禁 promote / 禁「已完成」；默认暂按并停。不改 pause。"""
+def test_core_teaches_unsettled_ask_user_stops_without_done():
+    """本回合已发卡、用户未结算：禁「已完成」；默认暂按并停。不改 pause。不再点名 promote。"""
     hint = _CEO_CORE_HINT
     ask_or_delegate = hint.split("【问还是派·中性】", 1)[1]
     assert ask_or_delegate.index("【假设≠用户确认】") < ask_or_delegate.index("【ask 未结算】")
@@ -824,7 +824,7 @@ def test_core_teaches_unsettled_ask_user_stops_without_promote_or_done():
     pin = ask_or_delegate.split("【ask 未结算】", 1)[1].split("【跨产品规则范式】", 1)[0]
     assert "ask_user" in pin
     assert "尚未结算" in pin
-    assert "promote_product" in pin
+    assert "promote_product" not in pin
     assert "已完成" in pin
     assert "暂按" in pin
     assert "并停" in pin
@@ -840,7 +840,7 @@ def test_core_teaches_unsettled_ask_user_stops_without_promote_or_done():
     assert "【ask 未结算】" not in worker
     kickoff = build_system_skill_registry().get("ask_user_kickoff").body
     assert "未结算" in kickoff
-    assert "promote_product" in kickoff
+    assert "promote_product" not in kickoff
     assert "暂按" in kickoff
     assert "按确认默认" in kickoff
 
@@ -931,7 +931,25 @@ def test_core_teaches_code_audit_modules_fanout():
     assert "playbook_args.modules" in hint or "modules" in hint
     assert "不从 scope 自动拆" in hint
     assert "整仓" in hint and "多子系统" in hint
-    # 上限 / 单缝省略 / 折叠 HOW → team_orchestration_advanced，不占常驻核
+    assert "产品缝" in hint
+    assert "2–3" in hint or "2-3" in hint
+    assert "目录" in hint
+    assert "无主管" in hint
+    assert "≥3" in hint
+    assert "单缝省略" in hint
+    assert "不是配额" in hint
+    # 上限 / 折叠 HOW → team_orchestration_advanced，不占常驻核
+
+
+def test_core_teaches_audit_narrow_scope():
+    """单点展示 ≠ 整仓摸底：task 钉已探路径，禁父目录通读、禁按层凑工种。"""
+    hint = _CEO_CORE_HINT
+    assert "审查·收窄" in hint
+    assert "父目录" in hint and "通读" in hint
+    assert "1 人" in hint
+    assert "契约" in hint and "凑工种" in hint
+    assert "单点展示" in hint
+    assert "不属于本条" in hint
 
 
 def test_core_teaches_outline_checkpoint_prefers_structured_path():
@@ -989,6 +1007,32 @@ def test_core_teaches_empty_desk_no_project_shell():
     assert "site/" in hint and "app/" in hint
     assert "要不要再套一层" in hint
     assert "create_folder" in hint
+
+
+def test_core_teaches_dispatch_landing_not_promote_ritual():
+    """成品在派单时显式落点；assembled CEO 提示不得再出现归位仪式。"""
+    hint = _CEO_CORE_HINT
+    assert "【派单落点】" in hint
+    between = hint.split("【空桌落盘】", 1)[1].split("【交付下载·面板路径】", 1)[0]
+    assert between.index("【派单落点】") < between.index("【产物路径】")
+    pin = hint.split("【派单落点】", 1)[1].split("【产物路径】", 1)[0]
+    assert "工作稿/" in pin
+    assert "workspace_native" in pin
+    assert "artifacts" in pin
+    assert "写完再搬" in pin
+    assert "产物卡" in pin
+    assert "归位" in pin
+    assert "移到工作区" in pin
+    assert "猜意图" in pin
+    assert "promote_product" not in hint
+    assert "【成品归位】" not in hint
+    ceo = compose_ceo_chat_prompt(
+        assemble_system_prompt(),
+        skill_registry=build_system_skill_registry(),
+        ceo_tool_names={"delegate", "consult", "ask_user", "promote_product"},
+    )
+    assert "promote_product" not in ceo
+    assert "【成品归位】" not in ceo
 
 
 def test_core_teaches_panel_path_not_workspace_root_jargon():
@@ -1070,6 +1114,27 @@ def test_shared_base_teaches_unassembled_capability_honesty():
     assert ceo.count("勿声称已用未装配能力") == 1
     assert ceo.count("【能力未装配·统一姿势】") == 1
     assert "把该能力的动作写进给队员的任务" in ceo
+
+
+def test_shared_base_teaches_assembled_capability_not_a_refusal_essay():
+    """已装配不许假装没有：同一能力行按格诚实；不在开场表 ≠ 未装配；禁邻格否决。"""
+    base = assemble_system_prompt()
+    worker = compose_worker_base_prompt(base)
+    assert "【能力已装配·禁止否决论文】" in _DEFAULT_SYSTEM_PROMPT
+    assert "【能力已装配·禁止否决论文】" not in _CEO_CORE_HINT
+    assert "【能力已装配·禁止否决论文】" in worker
+    assert "邻格" in worker and "未装配否决" in worker
+    assert "本回合下一模型轮" in worker
+    assert "不必等用户再发一条" in worker
+    hint = _CEO_CORE_HINT
+    assert "**不是**问方法" in hint
+    assert "capability_honesty" in hint
+    ceo = compose_ceo_chat_prompt(
+        base,
+        skill_registry=build_system_skill_registry(),
+        ceo_tool_names={"delegate", "consult", "ask_user"},
+    )
+    assert ceo.count("【能力已装配·禁止否决论文】") == 1
 
 
 def test_core_teaches_presentation_honesty():
@@ -1610,6 +1675,8 @@ def test_ceo_core_platform_knowledge_two_way_routing():
     assert "【两分路由】" in block
     assert "机制" in block and "架构" in block and "记忆" in block and "能力边界" in block
     assert "系统提示" in block and "workspace_context" in block
+    assert "capability_honesty" in block
+    assert "否决论文" in block
     assert "怎么用" in block or "功能介绍" in block
     assert "consult(product_help)" in block
     assert "product_help_map" in block and "product_help_faq" in block

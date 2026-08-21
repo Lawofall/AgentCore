@@ -10,7 +10,8 @@ import { getDocument, writeDocument } from "@/services/documents";
  * `/v1/documents` addresses nodes by **id**, so a tab PATH simply IS its document id. The
  * source is path-aware (one instance serves every entry). tree / CRUD reject — the rail lists
  * via `services/documents`. Successful writes may carry `quota_warning` (user edited an
- * existing always entry past the pool); that is toasted, not treated as failure.
+ * existing always entry past the pool) or `frontmatter_error` (unclosed fence; derived
+ * on_demand); both are toasted, not treated as failure.
  */
 
 const unsupported = (): Promise<never> =>
@@ -27,6 +28,14 @@ function notifyQuotaWarning(warning: string | null | undefined): void {
         window.location.hash = "/files";
       },
     },
+  });
+}
+
+function notifyFrontmatterError(error: string | null | undefined): void {
+  const text = error?.trim();
+  if (!text) return;
+  notifyWarning("规则格式有问题，这条暂时不按「每次生效」注入", {
+    description: text,
   });
 }
 
@@ -61,6 +70,7 @@ export function createDocumentSource(): FileSource {
       );
       if (r.ok) {
         notifyQuotaWarning(r.quotaWarning);
+        notifyFrontmatterError(r.frontmatterError);
         return { ok: true as const, version: { etag: r.version } };
       }
       return {

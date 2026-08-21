@@ -500,7 +500,7 @@ def _roster_facts(
             other += 1
     # Surface product-level status (hot-redirect may mark completed even if original cancelled).
     product_failed = sum(1 for p in products if p.get("status") not in ("completed",))
-    # 条数同源：accepted/rejected 与 delivery_status.artifacts 同一 file_acceptance 聚合。
+    # 条数同源：本波 file_acceptance（用户面卡片另按 execution 并集，见 delivery_status）。
     from agentcore.runtime.delegate.delivery_status import acceptance_counts
 
     accepted_n, rejected_n = acceptance_counts(results)

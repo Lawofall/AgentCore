@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRulesMemory";
 
 /**
  * Document tree REST client (`/v1/documents`) — unified md **entries** under the
@@ -326,7 +327,11 @@ export function createRuleDocument(
       folder_id: folderId,
       apply_mode: "always",
     })
-    .then(toDetail);
+    .then(toDetail)
+    .then((doc) => {
+      scheduleAccountRulesMemoryRefresh();
+      return doc;
+    });
 }
 
 /** Switch an entry's injection mode (`always` ↔ `on_demand`). */
@@ -338,7 +343,11 @@ export function updateDocumentApplyMode(
     .patch<DocumentNodeWire>(`/v1/documents/${encodeURIComponent(id)}`, {
       apply_mode: applyMode,
     })
-    .then(toNode);
+    .then(toNode)
+    .then((node) => {
+      scheduleAccountRulesMemoryRefresh();
+      return node;
+    });
 }
 
 /**
@@ -357,7 +366,11 @@ export function setDocumentDisputed(
     .patch<DocumentNodeWire>(`/v1/documents/${encodeURIComponent(id)}`, {
       disputed,
     })
-    .then(toNode);
+    .then(toNode)
+    .then((node) => {
+      scheduleAccountRulesMemoryRefresh();
+      return node;
+    });
 }
 
 /**
@@ -375,7 +388,11 @@ export function writeDocument(
       content,
       baseline,
     })
-    .then(toWriteResult);
+    .then(toWriteResult)
+    .then((result) => {
+      if (result.ok && !result.conflict) scheduleAccountRulesMemoryRefresh();
+      return result;
+    });
 }
 
 /** Rename a document (content untouched). */
@@ -387,12 +404,20 @@ export function renameDocument(
     .patch<DocumentNodeWire>(`/v1/documents/${encodeURIComponent(id)}`, {
       name,
     })
-    .then(toNode);
+    .then(toNode)
+    .then((node) => {
+      scheduleAccountRulesMemoryRefresh();
+      return node;
+    });
 }
 
 /** Soft-delete a document (and, for a folder, its subtree). */
 export function deleteDocument(id: string): Promise<DocumentWriteResult> {
   return api
     .delete<DocumentWriteWire>(`/v1/documents/${encodeURIComponent(id)}`)
-    .then(toWriteResult);
+    .then(toWriteResult)
+    .then((result) => {
+      if (result.ok && !result.conflict) scheduleAccountRulesMemoryRefresh();
+      return result;
+    });
 }

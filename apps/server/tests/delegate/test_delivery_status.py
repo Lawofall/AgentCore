@@ -599,8 +599,8 @@ def test_soft_unverified_note_only_is_delivered_not_notes():
     assert payload["actions"] == []
 
 
-def test_unverified_note_mixed_with_path_mismatch_is_partial():
-    """路径失配为 blocking：unverified_note + 声明目录未落 → partial，错位文件不进 delivered。"""
+def test_unverified_note_mixed_with_path_mismatch_is_blocked():
+    """路径失配为 blocking：unverified_note + 声明目录未落 → blocked（错位文件不进卡）。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
@@ -630,9 +630,10 @@ def test_unverified_note_mixed_with_path_mismatch_is_partial():
     }
     payload = build_delivery_status(plan, results, execution_id="e-mix-soft")
     assert payload is not None
-    assert payload["state"] == "partial"
+    assert payload["state"] == "blocked"
     assert payload["state"] != "delivered"
     assert "findings.md" not in payload["delivered_files"]
+    assert all(a.get("path") != "findings.md" for a in payload["artifacts"])
     reasons = {g.get("reason") for g in payload["gaps"]}
     assert "unverified_note" in reasons
     assert REASON_PATH_MISMATCH in reasons
@@ -668,8 +669,8 @@ def test_overlay_soft_criteria_gaps_are_delivered_not_partial():
     assert payload["actions"] == []
 
 
-def test_declared_path_a_landed_b_is_mismatch_not_in_delivered_files():
-    """声明 A 实际落 B → 失配失败；B 不得 accepted / 不得进 delivered_files。"""
+def test_declared_path_a_landed_b_is_omitted_not_on_card():
+    """声明 A 实际落 B → 缺 A 的 gap；B 不进卡、不打未通过。"""
     declared = "external/AgentCode/research/01-topic.md"
     landed = "docs/01-topic.md"
     plan = _plan(
@@ -690,13 +691,11 @@ def test_declared_path_a_landed_b_is_mismatch_not_in_delivered_files():
     }
     payload = build_delivery_status(plan, results, execution_id="e-path-mismatch")
     assert payload is not None
-    assert payload["state"] == "partial"
+    assert payload["state"] == "blocked"
     assert payload["state"] != "delivered"
     assert payload["delivered_files"] == []
     assert landed not in payload["delivered_files"]
-    by_path = {a["path"]: a for a in payload["artifacts"]}
-    assert by_path[landed]["status"] == "rejected"
-    assert by_path[landed]["reason"] == REASON_PATH_MISMATCH
+    assert all(a.get("path") != landed for a in payload["artifacts"])
     mismatch = [g for g in payload["gaps"] if g.get("reason") == REASON_PATH_MISMATCH]
     assert mismatch
     assert any(declared in (g.get("description") or "") for g in mismatch)
@@ -778,6 +777,140 @@ def test_declared_path_match_still_delivered():
     assert payload["delivered_files"] == [path]
 
 
+def test_undeclared_extra_omitted_when_declared_file_accepted():
+    """声明件过关时，file_copy 备份不进卡、不打未通过、不撑 artifact_rejected。"""
+    declared = "AgentCore/文档/reviews/code-audit-summary.md"
+    extra = "AgentCore/文档/reviews/code-audit-summary-时序审计初版.md"
+    plan = _plan(
+        RunSpec(
+            run_id="w1",
+            task="更新汇总",
+            role="审计主管",
+            deliverable=Deliverable(form="files", artifacts=[declared]),
+        )
+    )
+    results = {
+        "w1": RunState(
+            phase=RunPhase.COMPLETED,
+            content="ok",
+            files_touched=[extra, declared],
+            file_acceptance=_accepted(extra, declared),
+        )
+    }
+    payload = build_delivery_status(plan, results, execution_id="e-extra")
+    assert payload is not None
+    assert payload["state"] == "delivered"
+    assert payload["delivered_files"] == [declared]
+    paths = [a["path"] for a in payload["artifacts"]]
+    assert paths == [declared]
+    assert all(a.get("status") == "accepted" for a in payload["artifacts"])
+    assert not any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
+    assert not any(g.get("reason") == "artifact_rejected" for g in payload["gaps"])
+
+
+def test_execution_artifacts_union_across_hops():
+    """后一波 1 人改汇总：前一波已验收路径留在卡上；备份省略；同 path 后写覆盖。"""
+    first = "AgentCore/文档/reviews/code-audit-0-执行时序推进.md"
+    summary = "AgentCore/文档/reviews/code-audit-summary.md"
+    extra = "AgentCore/文档/reviews/code-audit-summary-时序审计初版.md"
+    ledger = _promotion_ledger()
+    from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
+
+    current_delivery_verdict.set(None)
+    hop1 = _plan(
+        RunSpec(
+            run_id="audit_0",
+            task="成文",
+            role="代码审计员",
+            deliverable=Deliverable(form="files", artifacts=[first]),
+        )
+    )
+    maybe_emit_delivery_status(
+        EventSink(),
+        hop1,
+        {
+            "audit_0": RunState(
+                phase=RunPhase.COMPLETED,
+                content="ok",
+                files_touched=[first],
+                file_acceptance=_accepted(first),
+            )
+        },
+        execution_id="e-union",
+        promotion_ledger=ledger,
+    )
+    current_delivery_verdict.set(None)
+    hop2 = _plan(
+        RunSpec(
+            run_id="synth",
+            task="更新汇总",
+            role="审计主管",
+            deliverable=Deliverable(form="files", artifacts=[summary]),
+        )
+    )
+    payload = build_delivery_status(
+        hop2,
+        {
+            "synth": RunState(
+                phase=RunPhase.COMPLETED,
+                content="ok",
+                files_touched=[extra, summary],
+                file_acceptance=_accepted(extra, summary),
+            )
+        },
+        execution_id="e-union",
+        promotion_ledger=ledger,
+    )
+    assert payload is not None
+    paths = [a["path"] for a in payload["artifacts"]]
+    assert paths == [first, summary]
+    assert extra not in paths
+    assert payload["delivered_files"] == [first, summary]
+    assert all(a["status"] == "accepted" for a in payload["artifacts"])
+
+
+def test_union_drops_historical_path_mismatch_extras():
+    """台账里旧的 path_mismatch 拒收行不再复活到主清单。"""
+    ledger = _promotion_ledger()
+    ledger.reconciliation = {
+        "execution_id": "e-hist",
+        "artifacts": [
+            {"path": "ok.md", "status": "accepted"},
+            {
+                "path": "backup.md",
+                "status": "rejected",
+                "reason": REASON_PATH_MISMATCH,
+            },
+        ],
+    }
+    declared = "summary.md"
+    plan = _plan(
+        RunSpec(
+            run_id="w1",
+            task="写汇总",
+            role="主管",
+            deliverable=Deliverable(form="files", artifacts=[declared]),
+        )
+    )
+    payload = build_delivery_status(
+        plan,
+        {
+            "w1": RunState(
+                phase=RunPhase.COMPLETED,
+                content="ok",
+                files_touched=[declared],
+                file_acceptance=_accepted(declared),
+            )
+        },
+        execution_id="e-hist",
+        promotion_ledger=ledger,
+    )
+    assert payload is not None
+    paths = [a["path"] for a in payload["artifacts"]]
+    assert paths == ["ok.md", declared]
+    assert "backup.md" not in paths
+
+
 def test_workspace_prefix_declared_matches_relative_landing():
     """``/workspace/A`` 与相对 ``A`` 是同一路径（normalize），不是失配。"""
     plan = _plan(
@@ -802,8 +935,8 @@ def test_workspace_prefix_declared_matches_relative_landing():
     assert payload["delivered_files"] == ["index.html"]
 
 
-def test_artifact_dir_landed_outside_is_mismatch_not_delivered():
-    """仅声明 artifact_dir 时，落到目录外的文件不得进 delivered_files。"""
+def test_artifact_dir_landed_outside_is_omitted_not_delivered():
+    """仅声明 artifact_dir 时，落到目录外的文件不进卡、不进 delivered_files。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
@@ -832,11 +965,10 @@ def test_artifact_dir_landed_outside_is_mismatch_not_delivered():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir")
     assert payload is not None
-    assert payload["state"] == "partial"
+    assert payload["state"] == "blocked"
     assert payload["state"] != "delivered"
     assert payload["delivered_files"] == []
-    assert payload["artifacts"][0]["status"] == "rejected"
-    assert payload["artifacts"][0]["reason"] == REASON_PATH_MISMATCH
+    assert all(a.get("path") != "miro-research.md" for a in payload["artifacts"])
     assert any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
     assert all(
         g.get("severity") != "warning"
@@ -868,7 +1000,7 @@ def test_artifact_dir_path_mismatch_from_warnings_alone_is_blocking():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir-warn")
     assert payload is not None
-    assert payload["state"] == "partial"
+    assert payload["state"] == "blocked"
     assert payload["delivered_files"] == []
     mismatch = [g for g in payload["gaps"] if g.get("reason") == REASON_PATH_MISMATCH]
     assert mismatch
@@ -2586,12 +2718,11 @@ def test_promoted_rows_ride_the_wire_as_from_to():
 
 def test_promoted_paths_are_rewritten_on_a_later_batch():
     """同回合第二批的对账从 worker 台账重建，仍记旧路径——必须重映射到归位后的位置。"""
-    from agentcore.runtime.delegate.promotion import record_promotions
     from agentcore.workspace.stage_dirs import DRAFTS_DIR
 
     old = f"{DRAFTS_DIR}/讲稿.md"
     ledger = _promotion_ledger()
-    record_promotions(ledger, [(old, "讲稿.md")])
+    ledger.promotions.append({"from": old, "to": "讲稿.md"})
 
     plan = _plan(RunSpec(run_id="w1", task="改讲稿", role="撰写"))
     results = {
@@ -2667,18 +2798,14 @@ async def test_availability_reinject_keeps_promoted_rows(monkeypatch):
 
 
 def test_maybe_emit_notes_reconciliation_for_the_accepted_gate():
-    """归位的 accepted 闸门读这一份对账（不重算验收）——发射时必须记进回合台账。"""
-    from agentcore.runtime.delegate.promotion import (
-        has_delivery_reconciliation,
-        promotable_paths,
-    )
+    """发射对账时必须记进回合台账（journal 重放 / 后续批次改写读这一份）。"""
     from agentcore.runtime.runs.file_acceptance import (
         build_file_acceptance,
         path_rejections_from_contract_messages,
     )
 
     ledger = _promotion_ledger()
-    assert not has_delivery_reconciliation(ledger)
+    assert ledger.reconciliation is None
 
     cite_msg = (
         "`bad.md`：正文出现学位论文/期刊式著录标记（[D]）但未就地绑定本回合台账 #rN——"
@@ -2705,6 +2832,10 @@ def test_maybe_emit_notes_reconciliation_for_the_accepted_gate():
         execution_id="e-gate",
         promotion_ledger=ledger,
     )
-    assert has_delivery_reconciliation(ledger)
-    # 只有 accepted 的进闸门；rejected 的不可归位。
-    assert promotable_paths(ledger) == ("good.md",)
+    assert ledger.reconciliation is not None
+    accepted = [
+        a["path"]
+        for a in ledger.reconciliation.get("artifacts") or []
+        if isinstance(a, dict) and a.get("status") == "accepted"
+    ]
+    assert accepted == ["good.md"]

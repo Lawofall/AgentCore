@@ -161,7 +161,13 @@ class MemoryApplier(Protocol):
 
 # --- Markdown applier (deterministic implementation of MemoryApplier) ---
 
+# Retired human-facing shell. New writes omit it; parse/render drop a leading H1
+# whose title is exactly 「用户记忆」 so the model cannot copy it back. Injection
+# still strips leftover on-disk files via ``strip_memory_chrome``.
 _DEFAULT_PREAMBLE = "# 用户记忆\n> 本文件由 AI 自动维护，你可随时编辑或删除任何条目。"
+_RETIRED_USER_MEMORY_H1_RE = re.compile(
+    r"^#\s+" + re.escape(_DEFAULT_PREAMBLE.splitlines()[0].lstrip("#").strip()) + r"\s*$"
+)
 
 _SECTION_RE = re.compile(r"^##\s+(.+?)\s*$")
 _BULLET_RE = re.compile(r"^\s*[-*]\s+(.*)$")
@@ -199,17 +205,18 @@ def _bullet_key(text: str) -> str:
 def strip_memory_chrome(markdown: str) -> str:
     """Project the stored memory file down to the signal that belongs in the prompt.
 
-    The on-disk file carries human chrome at the top — an H1 title and a blockquote note
-    (``_DEFAULT_PREAMBLE``: "本文件由 AI 自动维护，你可随时编辑或删除…") that orient the
-    *person* who opens 记忆.md. Injected verbatim that's noise: a heading the ``<rules>``
-    wrapper already supplies, plus a note addressed to the user sitting mid-prompt. So the
+    Leftover on-disk files may still carry the retired human chrome at the top — an H1
+    title and a blockquote note (``_DEFAULT_PREAMBLE``: "本文件由 AI 自动维护，你可随时
+    编辑或删除…"). Injected verbatim that's noise: a heading the ``<rules>`` wrapper
+    already supplies, plus a note addressed to the user sitting mid-prompt. So the
     injection projection drops the leading title + the blockquote block right after it and
     keeps only the substantive body (## sections / bullets, or any freeform text).
 
     Conservative on purpose: only a *leading* single-``#`` H1 and the blockquote/blank
     lines immediately following it are removed; ``##`` sections and real content are never
-    touched, and a file without that chrome passes through unchanged. The stored file is
-    left intact — this is a read-time projection, so the human still sees the note.
+    touched, and a file without that chrome passes through unchanged. Write-side parse
+    is narrower (see ``_drop_retired_user_memory_chrome``): it drops only H1 「用户记忆」,
+    so other preambles such as 导航「一句话定位」 stay on disk.
     """
     lines = markdown.splitlines()
     i = 0
@@ -222,6 +229,21 @@ def strip_memory_chrome(markdown: str) -> str:
         while i < n and (not lines[i].strip() or lines[i].lstrip().startswith(">")):
             i += 1
     return "\n".join(lines[i:]).strip()
+
+
+def _drop_retired_user_memory_chrome(markdown: str) -> str:
+    """Drop the retired H1「用户记忆」shell so parse/render cannot echo it back.
+
+    Only a leading H1 whose title is exactly 「用户记忆」 is removed (via
+    ``strip_memory_chrome``); other preambles such as 导航「一句话定位」 stay.
+    """
+    for line in markdown.splitlines():
+        if not line.strip():
+            continue
+        if _RETIRED_USER_MEMORY_H1_RE.match(line):
+            return strip_memory_chrome(markdown)
+        return markdown
+    return markdown
 
 
 # Max length of a topic's one-line summary in the CEO's 记忆主题目录 (记忆系统 §1.4): long
@@ -269,7 +291,7 @@ class _Section:
 
 @dataclass
 class _MemoryDoc:
-    preamble: str
+    preamble: str = ""
     sections: list[_Section] = field(default_factory=list)
 
     def find(self, name: str) -> _Section | None:
@@ -285,8 +307,9 @@ class _MemoryDoc:
 
 
 def _parse(markdown: str) -> _MemoryDoc:
+    markdown = _drop_retired_user_memory_chrome(markdown)
     if not markdown.strip():
-        return _MemoryDoc(preamble=_DEFAULT_PREAMBLE)
+        return _MemoryDoc()
     preamble: list[str] = []
     sections: list[_Section] = []
     current: _Section | None = None
@@ -303,7 +326,7 @@ def _parse(markdown: str) -> _MemoryDoc:
         if bullet and bullet.group(1).strip():
             current.bullets.append(bullet.group(1).strip())
     return _MemoryDoc(
-        preamble="\n".join(preamble).strip() or _DEFAULT_PREAMBLE,
+        preamble="\n".join(preamble).strip(),
         sections=sections,
     )
 
@@ -349,10 +372,15 @@ def _match_index(bullets: Sequence[str], match: str) -> int | None:
 
 
 def _render(doc: _MemoryDoc) -> str:
-    blocks = [doc.preamble.strip()]
+    blocks: list[str] = []
+    preamble = doc.preamble.strip()
+    if preamble:
+        blocks.append(preamble)
     for section in doc.sections:
         lines = [f"## {section.name}", *(f"- {b}" for b in section.bullets)]
         blocks.append("\n".join(lines))
+    if not blocks:
+        return ""
     return "\n\n".join(blocks) + "\n"
 
 
@@ -365,8 +393,9 @@ class MarkdownMemoryApplier:
     - REMOVE: delete the bullet under `section` matching `match`.
     - UPDATE: replace the matched bullet; if no match, append as new (upsert).
 
-    Missing sections are created on demand; blank input is bootstrapped from the
-    default preamble. Dedup / matching are whitespace- and case-insensitive.
+    Missing sections are created on demand; blank input starts from an empty
+    document (no retired 用户记忆 chrome). Dedup / matching are whitespace- and
+    case-insensitive.
 
     When ``section_cap`` is set, each section is trimmed to its most recent
     ``section_cap`` bullets after the ops apply (bounds growth; the consolidation
@@ -432,11 +461,12 @@ def merge_global_core(preferences_markdown: str, profile_markdown: str) -> str:
     split into 偏好.md + 画像.md (Agent记忆与知识系统 §1.4). Reading merges both into one doc
     (preference sections first, then profile sections) so the user still sees/edits
     everything in one place; ``split_global_core`` is the inverse on save. Returns "" when
-    both files are empty so a brand-new user sees an empty editor, not a stray preamble.
+    both files are empty (or chrome-only) so a brand-new user sees an empty editor, not a
+    stray preamble.
     """
     if not preferences_markdown.strip() and not profile_markdown.strip():
         return ""
-    merged = _MemoryDoc(preamble=_DEFAULT_PREAMBLE)
+    merged = _MemoryDoc()
     merged.sections = _parse(preferences_markdown).sections + _parse(profile_markdown).sections
     return _render(merged)
 
@@ -451,8 +481,8 @@ def split_global_core(combined_markdown: str) -> dict[str, str]:
     editor saves over it.
     """
     doc = _parse(combined_markdown)
-    prefs = _MemoryDoc(preamble=_DEFAULT_PREAMBLE)
-    profile = _MemoryDoc(preamble=_DEFAULT_PREAMBLE)
+    prefs = _MemoryDoc()
+    profile = _MemoryDoc()
     for section in doc.sections:
         target = prefs if _normalize(section.name) in _PREFERENCE_SECTION_KEYS else profile
         target.sections.append(section)

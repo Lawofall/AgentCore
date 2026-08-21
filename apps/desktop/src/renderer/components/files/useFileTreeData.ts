@@ -10,6 +10,30 @@ import type { FileSortBy } from "./fileTreeTypes";
 
 export type DirStatus = "loading" | "ready" | "error";
 
+/** Directory listing wall clock. Same tier as `INTERACTION_RESOLVE_TIMEOUT_MS`. */
+export const FILE_TREE_LIST_TIMEOUT_MS = 15_000;
+
+/**
+ * Non-silent loads only: if the layer is still spinning when the clock fires,
+ * flip it to error so the tree can retry. The in-flight listing is not aborted
+ * (sources have no cancel); a late success may still write `ready`.
+ */
+function armDirListTimeout(
+  gen: number,
+  genRef: { current: number },
+  statusRef: { current: Map<string, DirStatus> },
+  dir: string,
+  bump: () => void,
+): () => void {
+  const timer = setTimeout(() => {
+    if (gen !== genRef.current) return;
+    if (statusRef.current.get(dir) !== "loading") return;
+    statusRef.current.set(dir, "error");
+    bump();
+  }, FILE_TREE_LIST_TIMEOUT_MS);
+  return () => clearTimeout(timer);
+}
+
 /**
  * 兄弟排序档位：``.agentcore``（盘上 ``AgentCore/``）→ 目录 → 文件。抽屉默认折叠，
  * 钉在同级最前是为了侧栏窄视口里够得着，不跟整棵用户树抢滚动。
@@ -151,6 +175,9 @@ export function useFileTreeData(
       statusRef.current.set("", "loading");
       bump();
     }
+    const disarm = silent
+      ? () => undefined
+      : armDirListTimeout(gen, genRef, statusRef, "", bump);
     try {
       const all = await listTree();
       if (gen !== genRef.current) return;
@@ -163,6 +190,8 @@ export function useFileTreeData(
       if (!silent || !rootReady) {
         statusRef.current = new Map([["", "error"]]);
       }
+    } finally {
+      disarm();
     }
     if (gen !== genRef.current) return;
     bump();
@@ -185,6 +214,9 @@ export function useFileTreeData(
       statusRef.current.set(dir, "loading");
       bump();
     }
+    const disarm = silent
+      ? () => undefined
+      : armDirListTimeout(gen, genRef, statusRef, dir, bump);
     try {
       // Prefer the bounded reader so a capped level can say so; sources that
       // enumerate in full only implement `listDir` and stay un-truncated.
@@ -208,6 +240,8 @@ export function useFileTreeData(
       } else if (!silent || status !== "ready") {
         statusRef.current.set(dir, "error");
       }
+    } finally {
+      disarm();
     }
     if (gen !== genRef.current) return;
     bump();

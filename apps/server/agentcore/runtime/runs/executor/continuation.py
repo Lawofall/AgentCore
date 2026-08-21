@@ -58,7 +58,7 @@ from agentcore.runtime.runs.serialize import (
 )
 from agentcore.runtime.runs.session import RunSession
 from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunState
-from agentcore.tools.protocol import ToolContext
+from agentcore.tools.protocol import ToolContext, isolate_file_read_ceiling
 from agentcore.tools.registry import ToolRegistry
 
 logger = get_logger(__name__)
@@ -265,16 +265,18 @@ async def _continue_run_scoped(
         from agentcore.runtime.runs.retrieval_budget import RETRIEVAL_TOOL_NAMES
         from agentcore.tools.protocol import RetrievalBudgetState
 
-        tool_ctx = replace(
-            base_tool_context,
-            run_id=continuation_run_id,
-            agent_id=agent_id,
-            execution_id=execution_id,
-            retrieval_budget=(
-                RetrievalBudgetState(limit=spec.retrieval_budget)
-                if spec.retrieval_budget is not None
-                else None
-            ),
+        tool_ctx = isolate_file_read_ceiling(
+            replace(
+                base_tool_context,
+                run_id=continuation_run_id,
+                agent_id=agent_id,
+                execution_id=execution_id,
+                retrieval_budget=(
+                    RetrievalBudgetState(limit=spec.retrieval_budget)
+                    if spec.retrieval_budget is not None
+                    else None
+                ),
+            )
         )
         # C3: continuations must consult the same ownership ledger as cold workers.
         # Treat the continued session root as an ancestor so write-time handoff matches

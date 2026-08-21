@@ -22,10 +22,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from agentcore.account.credentials import AccountCloudError
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import DocumentRepository
+from agentcore.memory.always_quota import AlwaysQuotaExceededError
 from agentcore.memory.rules_injection import UserRuleMutationResult, mutate_user_rule
 from agentcore.tools.builtin.file_ops import has_omission_marker
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -156,6 +158,7 @@ class RememberTool:
                 error="replace 需要 replaces。",
             )
 
+        creds = None
         try:
             from agentcore.account.credentials import (
                 cloud_remember_rule,
@@ -198,6 +201,28 @@ class RememberTool:
                         content=content or None,
                         replaces=replaces,
                     )
+        except AlwaysQuotaExceededError as e:
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output=e.message,
+                error=e.message,
+            )
+        except AccountCloudError as e:
+            if e.code == "ALWAYS_QUOTA_EXCEEDED":
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output=e.message,
+                    error=e.message,
+                )
+            logger.warning("memory.remember_failed", user_id=context.user_id, error=str(e))
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="记住失败，请稍后再试。",
+                error=str(e),
+            )
         except Exception as e:  # noqa: BLE001 - a tool failure must not crash the turn
             logger.warning("memory.remember_failed", user_id=context.user_id, error=str(e))
             return ToolResult(
@@ -224,6 +249,14 @@ class RememberTool:
                 scope="folder" if folder_id else "global",
                 action=result.action,
             )
+            # Ticketed turns inject from the prepare snapshot; re-seed the
+            # conversation folder's key so the next turn sees this write.
+            if creds is not None:
+                await _rewarm_account_rules_memory(
+                    creds,
+                    user_id=context.user_id,
+                    folder_id=self.folder_id,
+                )
 
         display: dict[str, Any] = {
             "remembered": result.changed and result.action == "add",
@@ -252,6 +285,26 @@ def _fallback_cloud_message(result: UserRuleMutationResult) -> str:
     if result.changed:
         return f"已更新用户规则（action={result.action}）。"
     return "用户规则未变更。"
+
+
+async def _rewarm_account_rules_memory(
+    creds: Any,
+    *,
+    user_id: str,
+    folder_id: str | None,
+) -> None:
+    """Best-effort re-seed of the ticketed prepare snapshot after a rule write."""
+    try:
+        from agentcore.memory.account_prepare_cache import warm_account_rules_memory
+
+        await warm_account_rules_memory(creds, user_id=user_id, folder_id=folder_id)
+    except Exception as e:  # noqa: BLE001 — remember already succeeded
+        logger.warning(
+            "memory.remember_rewarm_failed",
+            user_id=user_id,
+            folder_id=folder_id,
+            error=str(e),
+        )
 
 
 def build_remember_tool(*, folder_id: str | None = None) -> RememberTool:
