@@ -23,26 +23,3 @@ export async function getFolder(id: string): Promise<FolderSummary> {
   if (!res.ok) throw new Error(`加载文件夹失败 (${res.status})`);
   return (await res.json()) as FolderSummary;
 }
-
-/** Rename a folder (自动建文件夹告知当场改名；不是手机上的文件夹管理面). */
-export async function renameFolder(
-  id: string,
-  name: string,
-): Promise<FolderSummary> {
-  const res = await apiFetch(`/v1/folders/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) {
-    let message = `重命名失败 (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: { message?: string } };
-      if (body.error?.message) message = body.error.message;
-    } catch {
-      /* keep status phrasing */
-    }
-    throw new Error(message);
-  }
-  return (await res.json()) as FolderSummary;
-}

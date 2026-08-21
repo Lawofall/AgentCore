@@ -210,7 +210,7 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
     delivery_status: dict[str, Any] | None = None
     # 预检警告（turn_warning）：P2 DURABLE。
     turn_warning: str | None = None
-    # 裸聊写盘自动建文件夹告知（auto_folder_created，§5.4 裸聊行）：DURABLE，刷新后轻提示重建。
+    # 裸聊写盘自动建文件夹（auto_folder_created，§5.4 裸聊行）：DURABLE；对话内不再渲染。
     auto_folder: dict[str, Any] | None = None
     # 团队便签墙 (§2.2 通): the batch's posted notes in chronological order. Journaled, so it
     # replays on reload (unlike transport-only board ops). Deduped by noteId for replay safety.
@@ -1160,7 +1160,7 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
         # 交付状态（delivery_status）：结构化交付对账（已交付/缺口/待操作），null 当无。
         "deliveryStatus": delivery_status,
         "turnWarning": turn_warning,
-        # 裸聊自动建文件夹告知（auto_folder_created）：{folderId, name}，null 当本回合没建。
+        # 裸聊自动建文件夹（auto_folder_created）：{folderId, name}，null 当本回合没建。
         "autoFolder": auto_folder,
         # 团队便签墙 (§2.2 通): the turn's posted notes (chronological), [] when none.
         "teamNotes": team_notes,

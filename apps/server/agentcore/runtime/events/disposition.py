@@ -119,7 +119,7 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     ),
     EventType.AUTO_FOLDER_CREATED: (
         Disposition.DURABLE,
-        "裸聊写盘自动建文件夹告知落点——刷新后轻提示仍在，用户仍可从它进文件夹 / 改名",
+        "裸聊写盘自动建文件夹——DURABLE；对话内不再渲染落点条，文件夹进「我的文件」",
     ),
     EventType.TEAM_SYNTHESIS_PREVIEW: (
         Disposition.DURABLE,

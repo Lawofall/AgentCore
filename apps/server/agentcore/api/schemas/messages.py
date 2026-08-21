@@ -661,9 +661,9 @@ class RunsPayload(BaseModel):
     # 预检警告（P2 DURABLE）：journaled ``turn_warning`` lifted like captain_context so a
     # plain-chat turn (no surface events) still replays the banner on reload. null when none.
     turn_warning: str | None = None
-    # 裸聊自动建文件夹告知（双模式工作区 §5.4）：lifted ``auto_folder_created`` payload
-    # (``folder_id`` / ``name``) so the landing notice — and its rename entry — survive a
-    # reload. null unless this turn minted the folder.
+    # 裸聊自动建文件夹（双模式工作区 §5.4）：lifted ``auto_folder_created`` payload
+    # （``folder_id`` / ``name``）；journal / 投影仍有，对话内不再渲染落点条。
+    # null unless this turn minted the folder.
     auto_folder: AutoFolderNotice | None = None
 
 

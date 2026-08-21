@@ -1,8 +1,7 @@
 import { FileArtifactsCard } from "@/components/chat/FileArtifactsCard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { FileNode, FileSource } from "@/lib/fileSource";
-import { conversationKeys, workspaceKeys } from "@/lib/queryKeys";
-import type { FolderMeta } from "@/services/folders";
+import { workspaceKeys } from "@/lib/queryKeys";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // @vitest-environment jsdom
 import {
@@ -17,10 +16,7 @@ import { type ReactElement, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-function renderCard(
-  ui: ReactElement,
-  folders: FolderMeta[] = [],
-): RenderResult {
+function renderCard(ui: ReactElement): RenderResult {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
@@ -28,8 +24,6 @@ function renderCard(
   });
   // TurnFileChangesReview → useConversationWorkspace → useWorkspaces
   client.setQueryData(workspaceKeys.list, []);
-  // AutoFolderNoticeLine → useFolders 读 /grouped 的 folders 半边
-  client.setQueryData(conversationKeys.grouped, { folders, conversations: [] });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
@@ -68,9 +62,17 @@ vi.mock("@/hooks/useWorkspaces", () => ({
 vi.mock("@/lib/openWorkspaceHtmlInBrowser", () => ({
   openWorkspaceHtmlInBrowser,
 }));
+vi.mock("@/lib/capabilities", () => ({
+  hasLocalFiles: vi.fn(() => false),
+}));
+vi.mock("@/services/cloudDeskExit", () => ({
+  mergeArtifactsOnlyToLanding: vi.fn(async () => ({ ok: true })),
+}));
 
 import { useConversationFileSource } from "@/hooks/useConversationFileSource";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
+import { hasLocalFiles } from "@/lib/capabilities";
+import { mergeArtifactsOnlyToLanding } from "@/services/cloudDeskExit";
 import type { WorkspaceInfo } from "@/services/workspaces";
 
 const sourceWithPreview = {
@@ -498,67 +500,28 @@ describe("FileArtifactsCard — 清单不按归位分组", () => {
   });
 });
 
-describe("FileArtifactsCard — 裸聊落点告知并进卡头", () => {
-  const autoFolder = { folderId: "f-auto", name: "季度复盘" };
-  const autoFolderMeta: FolderMeta = {
-    id: "f-auto",
-    name: "季度复盘",
-    mode: "cloud",
-    localRootId: null,
-    localSubpath: null,
-    relPath: "季度复盘",
-    parentRelPath: null,
-  };
-
+describe("FileArtifactsCard — 产出卡只列文件", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useConversationFileSource).mockReturnValue(null);
     vi.mocked(useConversationWorkspace).mockReturnValue(null);
   });
 
-  it("给了 autoFolder：落点在卡头，排在文件行之前", () => {
+  it("没有落点告知条或新建文件夹文案", () => {
     renderCard(
       <FileArtifactsCard
         conversationId="c1"
         turnKey="msg-1"
-        autoFolder={autoFolder}
-        artifacts={[{ path: "notes.md", name: "notes.md", op: "write" }]}
-      />,
-      [autoFolderMeta],
-    );
-
-    const notice = screen.getByTestId("auto-folder-notice");
-    const fileRow = screen.getByTitle("在工作区预览 notes.md");
-    expect(
-      notice.compareDocumentPosition(fileRow) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("清单收起后落点仍在（收起文件也得看得见文件去哪了）", () => {
-    renderCard(
-      <FileArtifactsCard
-        conversationId="c1"
-        turnKey="msg-1"
-        autoFolder={autoFolder}
-        artifacts={[{ path: "notes.md", name: "notes.md", op: "write" }]}
-      />,
-      [autoFolderMeta],
-    );
-
-    fireEvent.click(screen.getByText("本回合产出文件"));
-    expect(screen.queryByTitle("在工作区预览 notes.md")).toBeNull();
-    expect(screen.getByTestId("auto-folder-notice")).toBeTruthy();
-  });
-
-  it("没建桌的普通回合零噪音", () => {
-    renderCard(
-      <FileArtifactsCard
-        conversationId="c1"
         artifacts={[{ path: "notes.md", name: "notes.md", op: "write" }]}
       />,
     );
+
+    expect(screen.getByText("本回合产出文件")).toBeTruthy();
+    expect(screen.getByTitle("在工作区预览 notes.md")).toBeTruthy();
+    expect(screen.queryByText("文件已存到新建的文件夹")).toBeNull();
+    expect(screen.queryByText("已为这次对话新建文件夹")).toBeNull();
     expect(screen.queryByTestId("auto-folder-notice")).toBeNull();
+    expect(screen.queryByTestId("auto-folder-notice-card")).toBeNull();
   });
 });
 
@@ -568,6 +531,7 @@ describe("FileArtifactsCard — 工作区 list 修改时间", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(hasLocalFiles).mockReturnValue(false);
     vi.mocked(useConversationFileSource).mockReturnValue(null);
     vi.mocked(useConversationWorkspace).mockReturnValue(null);
   });
@@ -702,5 +666,58 @@ describe("FileArtifactsCard — 工作区 list 修改时间", () => {
     });
     expect(src.listDir).not.toHaveBeenCalled();
     expect(screen.queryByText(/2.0 KB/)).toBeNull();
+  });
+});
+
+describe("FileArtifactsCard — 合回产物", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useConversationFileSource).mockReturnValue(null);
+    vi.mocked(useConversationWorkspace).mockReturnValue(sessionWs);
+    vi.mocked(hasLocalFiles).mockReturnValue(true);
+    window.fsApi = {
+      listRoots: vi.fn().mockResolvedValue([{ id: "root-1", name: "desk" }]),
+    } as unknown as typeof window.fsApi;
+  });
+
+  it("桌面云会话有通过产物时显示，点击按本卡路径合回", async () => {
+    renderCard(
+      <FileArtifactsCard
+        conversationId="c1"
+        artifacts={[
+          {
+            path: "out/a.md",
+            name: "a.md",
+            acceptance: "accepted",
+            workspaceId: "folder:proj",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "合回产物" }));
+    await waitFor(() => {
+      expect(mergeArtifactsOnlyToLanding).toHaveBeenCalledWith(
+        "c1",
+        [{ id: "root-1", name: "desk" }],
+        [{ path: "out/a.md", workspaceId: "folder:proj" }],
+      );
+    });
+  });
+
+  it("本机工作区或非桌面不显示", () => {
+    vi.mocked(useConversationWorkspace).mockReturnValue({
+      ...sessionWs,
+      location: "local",
+    });
+    renderCard(
+      <FileArtifactsCard
+        conversationId="c1"
+        artifacts={[
+          { path: "out/a.md", name: "a.md", acceptance: "accepted" },
+        ]}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "合回产物" })).toBeNull();
   });
 });

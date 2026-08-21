@@ -785,7 +785,11 @@ class DebateResult:
         return f"{len(self.rounds)} 轮 · {_stop_label(self.stop_reason)}"
 
     def to_ceo_output(self) -> str:
-        """折算回 CEO 循环的 markdown：决策简报 + L1 焦点小结流（按形态调顺序）。"""
+        """折算回 CEO 循环的 markdown：决策简报 + L1 焦点小结流（按形态调顺序）。
+
+        尾部只提醒用自己的声音收尾并指向 skill；铁律与跨维骨架正文留在
+        ``debate_and_review`` / ``deep_multi_lens_research``，不贴进 tool result。
+        """
         brief_md = _render_brief(self.brief, self.config)
         narrative_md = _render_narrative_l1(self.rounds)
         rounds_n = len(self.rounds)
@@ -796,23 +800,8 @@ class DebateResult:
         body = [narrative_md, brief_md] if self.narrative_first else [brief_md, narrative_md]
         tail = (
             "\n\n---\n以上为本场辩论的**决策简报 + 交锋叙事线**（用户可在界面展开逐轮攻防与"
-            "各方全文）。请用你自己的声音据此收尾：先给用户结论与建议，点出仅剩需他拍板的点。"
-            "【收尾铁律·别抹平证据状态】简报里凡标了【待核实】/【需一手核实】、或注明仅【二手来源】/"
-            "【弱源】/ tier=weak 的关键事实，你转述时【必须原样保留核实状态标记、tier 与保留语】"
-            "（如「据多家媒体报道、尚待一手核实」/「弱源·待核实」），"
-            "绝不得把待核实或弱源事项升格为板上钉钉的既定事实——宁可诚实存疑，不可拿未核实的事实给用户当定论。"
-            "【收尾铁律·原样传达裁决】倾向判断里的百分比 / 置信度 / 保留意见 / 反转条件须【原样传达】，"
-            "不得抹成一边倒定论或擅自改写强弱。"
-            "【收尾铁律·不引入场外量化】据简报收尾时【不得引入辩论中未出现的数字 / 金额 / 比例 / "
-            "量化估算】——只能转述辩手发言与简报里已有的量化，并保留其证据状态语；禁止自行补算、"
-            "外推或「约 X 亿 / 约占 Y%」之类场外推算。"
-            "【收尾模板·多视角调研起源】若本场辩论源自多视角调研（会话中有多透镜调研与命题卡），"
-            "终稿按以下骨架输出【跨维度决策简报】——【禁止】塌成「辩论收报 / 正反拍板综述」："
-            "(1) 总裁决（倾向 + 置信度 + 保留意见 / 反转条件——须来自本场终审，原样传达）；"
-            "(2) 分维简报——各透镜各一小节（法律 / 品牌商业 / 舆情公关 / 文化社会或制度，"
-            "可随实际派出透镜替换），每节 = 该路调研要点 × 本场真实交锋 / 终审对该维的含义；"
-            "(3) 须用户拍板的价值分歧。"
-            "条件判断交给你（可见会话历史）；本模板与上述三条收尾铁律相容，不取代证据状态与裁决原样传达。"
+            "各方全文）。用自己的声音收尾，不要粘贴本段指令。"
+            "收尾铁律与跨维骨架见 skill `debate_and_review` / `deep_multi_lens_research`。"
         )
         return head + "\n\n".join(p for p in body if p.strip()) + tail
 

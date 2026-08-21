@@ -815,6 +815,36 @@ def test_core_teaches_assumption_is_not_user_confirmation():
     assert "无已拍板项" in orch
 
 
+def test_core_teaches_unsettled_ask_user_stops_without_promote_or_done():
+    """本回合已发卡、用户未结算：禁 promote / 禁「已完成」；默认暂按并停。不改 pause。"""
+    hint = _CEO_CORE_HINT
+    ask_or_delegate = hint.split("【问还是派·中性】", 1)[1]
+    assert ask_or_delegate.index("【假设≠用户确认】") < ask_or_delegate.index("【ask 未结算】")
+    assert ask_or_delegate.index("【ask 未结算】") < ask_or_delegate.index("【跨产品规则范式】")
+    pin = ask_or_delegate.split("【ask 未结算】", 1)[1].split("【跨产品规则范式】", 1)[0]
+    assert "ask_user" in pin
+    assert "尚未结算" in pin
+    assert "promote_product" in pin
+    assert "已完成" in pin
+    assert "暂按" in pin
+    assert "并停" in pin
+    # 空 continue 真确认路径仍在「假设≠用户确认」，未结算不得吞掉
+    assumption = hint.split("【假设≠用户确认】", 1)[1].split("【ask 未结算】", 1)[0]
+    assert "按确认默认" in assumption
+    assert "按确认默认" in pin
+    # 不改 pause 契约；提示层，禁硬/软闸
+    assert "pause" not in pin.lower()
+    assert "finish_reason" not in pin
+    assert "硬闸" not in pin
+    worker = compose_worker_base_prompt(assemble_system_prompt())
+    assert "【ask 未结算】" not in worker
+    kickoff = build_system_skill_registry().get("ask_user_kickoff").body
+    assert "未结算" in kickoff
+    assert "promote_product" in kickoff
+    assert "暂按" in kickoff
+    assert "按确认默认" in kickoff
+
+
 def test_shared_base_teaches_howto_stale_path_honesty():
     """howto 过时路径 A′：无现行可核 → 易变/待实测；覆盖零工具；收口≠伪精确菜单。"""
     from agentcore.runtime.resolve.prompt import _DEFAULT_SYSTEM_PROMPT
@@ -959,6 +989,22 @@ def test_core_teaches_empty_desk_no_project_shell():
     assert "site/" in hint and "app/" in hint
     assert "要不要再套一层" in hint
     assert "create_folder" in hint
+
+
+def test_core_teaches_panel_path_not_workspace_root_jargon():
+    """对用户指路禁说「工作区根」；空桌纪律里给模型看的事实句保留。"""
+    hint = _CEO_CORE_HINT
+    pin = hint.split("【交付下载·面板路径】", 1)[1].split("【交付指引】", 1)[0]
+    assert "对用户说" in pin
+    assert "工作区根" in pin
+    assert "工作区根目录" in pin
+    assert "禁止" in pin
+    assert "文件夹名" in pin
+    assert "文件名" in pin
+    assert "文件面板" in pin
+    empty = hint.split("【空桌落盘】", 1)[1].split("【产物路径】", 1)[0]
+    assert "本文件夹根即工作区根" in empty
+    assert "对用户说" not in empty
 
 
 def test_core_teaches_delivery_path_by_workspace_type():
@@ -1591,6 +1637,7 @@ def test_ceo_core_teaches_identity_question_answers_our_product_first():
     hook = ask_self.split("【身份问·先答我方】", 1)[1].split("【问方法 ≠ 要结果】", 1)[0]
     assert "这是什么项目" in hook
     assert "你是什么" in hook
+    assert "你是什么模型" in hook
     assert "自己答" in hook
     assert "首句" in hook
     assert "【品类】" in hook
@@ -1604,6 +1651,20 @@ def test_ceo_core_teaches_identity_question_answers_our_product_first():
     assert "https://fashitianxia.xyz" in hint
     assert "附件·勿否认" in hint
     assert "没看到照片" in hint
+
+
+def test_core_teaches_closing_does_not_upsell_unrelated_topics():
+    """收工 / 失败收口禁止推销本轮未点名的无关题。"""
+    hint = _CEO_CORE_HINT
+    assert "【收口·勿推销】" in hint
+    pin = hint.split("【收口·勿推销】", 1)[1].split("【长跑收口·打开看见】", 1)[0]
+    assert "收工" in pin
+    assert "失败" in pin
+    assert "推销" in pin
+    assert "无关题" in pin
+    assert "未点名" in pin
+    worker = compose_worker_base_prompt(assemble_system_prompt())
+    assert "【收口·勿推销】" not in worker
 
 
 def test_ceo_core_teaches_existing_tool_results_must_not_be_denied():

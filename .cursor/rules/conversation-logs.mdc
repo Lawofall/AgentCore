@@ -35,7 +35,7 @@ uv run python scripts/log_patrol.py --export-dir ../../logs/prod-export --since 
 
 ## 最短路径（贴 ID / 排查包）
 
-读本 rule 的 CLI 块即可开查；**禁止**为单次查询整篇读分析指南；**禁止**派探子干等。缺正文再 `--pack`（必要时 `--full`）。即便夹「讨论根因」——主 Agent **自跑** CLI 再讨论（不套 `multitask`「讨论+审计分相」）。**仅当**用户明说巡检 / reviews / 开案，或多 trace 宽窗，才读 [`logs/reviews/README.md`](/logs/reviews/README.md) + [`STATUS.md`](/logs/reviews/STATUS.md) 并允许分相。巡检①（全量 CID 清单 + 轴 1 失败榜 + 跨窗快照 diff）跑 `log_patrol.py`（`--families` 看家族表口径，`--snapshot-out` / `--baseline` / `--diff` 做跨窗核验），**别再复制一次性扫描脚本**；本窗特有分析（如按部署切 pre/post）才归临时脚本。
+读本 rule 的 CLI 块即可开查；**禁止**为单次查询整篇读分析指南；**禁止**派探子干等。缺正文再 `--pack`（必要时 `--full`）。即便夹「讨论根因」——主 Agent **自跑** CLI 再讨论（不套 `multitask`「讨论+审计分相」）。**仅当**用户明说巡检 / reviews / 开案，或多 trace 宽窗，才读 [`logs/reviews/README.md`](/logs/reviews/README.md) + [`STATUS.md`](/logs/reviews/STATUS.md) 并允许分相。④ 写成「建议改」（含可优化）前须对**本地 HEAD** 打开指针文件写码核行（README）；翻 STATUS ≠ 码核。巡检①（全量 CID 清单 + 轴 1 失败榜 + 跨窗快照 diff）跑 `log_patrol.py`（`--families` 看家族表口径，`--snapshot-out` / `--baseline` / `--diff` 做跨窗核验），**别再复制一次性扫描脚本**；本窗特有分析（如按部署切 pre/post）才归临时脚本。
 
 **Token 两口径** / 本机 `turn_metrics`（有行、token 空；token 面按 `mode=cloud` 滤，勿用 `input_tokens=0`）/ 事件词表 / 接缝深挖 → [对话日志分析指南](/docs/05-平台与运维/对话日志分析指南.md)（按需开节，勿仪式性整篇读）。
 

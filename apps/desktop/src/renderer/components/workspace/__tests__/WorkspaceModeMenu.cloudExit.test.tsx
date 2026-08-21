@@ -26,20 +26,11 @@ vi.mock("@/lib/toast", () => ({
   notifyActionError: vi.fn(),
 }));
 
-const exportCloudDeskZip = vi.fn(async (..._args: unknown[]) => ({
-  ok: true as const,
-}));
-const exportCloudDeskToPickedFolder = vi.fn(async (..._args: unknown[]) => ({
-  ok: true as const,
-}));
 const registerMergeLanding = vi.fn(async (..._args: unknown[]) => ({
   ok: true as const,
   root: { id: "root-1", name: "desk" },
 }));
 const mergeBackToLanding = vi.fn(async (..._args: unknown[]) => ({
-  ok: true as const,
-}));
-const mergeArtifactsOnlyToLanding = vi.fn(async (..._args: unknown[]) => ({
   ok: true as const,
 }));
 type LandingPeek = {
@@ -50,13 +41,8 @@ type LandingPeek = {
 const peekMergeLanding = vi.fn<(...args: unknown[]) => LandingPeek>(() => null);
 
 vi.mock("@/services/cloudDeskExit", () => ({
-  exportCloudDeskZip: (...args: unknown[]) => exportCloudDeskZip(...args),
-  exportCloudDeskToPickedFolder: (...args: unknown[]) =>
-    exportCloudDeskToPickedFolder(...args),
   registerMergeLanding: (...args: unknown[]) => registerMergeLanding(...args),
   mergeBackToLanding: (...args: unknown[]) => mergeBackToLanding(...args),
-  mergeArtifactsOnlyToLanding: (...args: unknown[]) =>
-    mergeArtifactsOnlyToLanding(...args),
   peekMergeLanding: (...args: unknown[]) => peekMergeLanding(...args),
 }));
 
@@ -96,11 +82,8 @@ function cloudState(
 }
 
 beforeEach(() => {
-  exportCloudDeskZip.mockClear();
-  exportCloudDeskToPickedFolder.mockClear();
   registerMergeLanding.mockClear();
   mergeBackToLanding.mockClear();
-  mergeArtifactsOnlyToLanding.mockClear();
   peekMergeLanding.mockReturnValue(null);
 });
 
@@ -109,20 +92,21 @@ afterEach(() => {
 });
 
 describe("WorkspaceModeMenu · cloud desk §7.6 exits", () => {
-  it("shows ZIP / 导出到本机 / 登记合回落点 / 合回到本机 / 只合回产物 CTAs", () => {
+  it("chip only keeps 合回到本机; export / import / git / artifacts stay off this menu", () => {
     render(<WorkspaceModeMenu state={cloudState()} conversationId="c-cloud" />);
 
-    expect(screen.getByText("导出 ZIP")).toBeTruthy();
-    expect(screen.getByText("导出到本机文件夹")).toBeTruthy();
-    expect(screen.getByText("登记合回落点")).toBeTruthy();
     expect(screen.getByText("合回到本机")).toBeTruthy();
-    expect(screen.getByText("只合回产物")).toBeTruthy();
-    expect(screen.queryByText("本地工作区")).toBeNull();
+    expect(screen.queryByText("导出 ZIP")).toBeNull();
+    expect(screen.queryByText("导出到本机文件夹")).toBeNull();
+    expect(screen.queryByText("登记合回落点")).toBeNull();
+    expect(screen.queryByText("更换合回落点")).toBeNull();
+    expect(screen.queryByText("只合回产物")).toBeNull();
+    expect(screen.queryByText("导入到「我的文件」")).toBeNull();
+    expect(screen.queryByText("从 Git 克隆")).toBeNull();
     expect(screen.queryByText("遗留：先改云拷贝再合回")).toBeNull();
-    expect(screen.queryByText("后台云端")).toBeNull();
   });
 
-  it("shows 更换合回落点 when landing is registered", () => {
+  it("shows 更换合回落点 only when landing is registered", () => {
     peekMergeLanding.mockReturnValue({
       rootId: "root-1",
       rootName: "desk",
@@ -133,25 +117,14 @@ describe("WorkspaceModeMenu · cloud desk §7.6 exits", () => {
     expect(screen.getByText("当前 · desk")).toBeTruthy();
   });
 
-  it("export ZIP click invokes cloudDeskExit", async () => {
-    render(<WorkspaceModeMenu state={cloudState()} conversationId="c-cloud" />);
-    fireEvent.click(screen.getByText("导出 ZIP"));
-    await waitFor(() => {
-      expect(exportCloudDeskZip).toHaveBeenCalledWith("c-cloud");
-    });
-  });
-
-  it("export to folder click invokes cloudDeskExit", async () => {
-    render(<WorkspaceModeMenu state={cloudState()} conversationId="c-cloud" />);
-    fireEvent.click(screen.getByText("导出到本机文件夹"));
-    await waitFor(() => {
-      expect(exportCloudDeskToPickedFolder).toHaveBeenCalledWith("c-cloud");
-    });
-  });
-
   it("register landing click invokes cloudDeskExit", async () => {
+    peekMergeLanding.mockReturnValue({
+      rootId: "root-1",
+      rootName: "desk",
+      missing: false,
+    });
     render(<WorkspaceModeMenu state={cloudState()} conversationId="c-cloud" />);
-    fireEvent.click(screen.getByText("登记合回落点"));
+    fireEvent.click(screen.getByText("更换合回落点"));
     await waitFor(() => {
       expect(registerMergeLanding).toHaveBeenCalledWith("c-cloud");
     });
@@ -163,18 +136,6 @@ describe("WorkspaceModeMenu · cloud desk §7.6 exits", () => {
     fireEvent.click(screen.getByText("合回到本机"));
     await waitFor(() => {
       expect(mergeBackToLanding).toHaveBeenCalledWith("c-cloud", state.roots);
-    });
-  });
-
-  it("merge artifacts only click invokes cloudDeskExit with roots", async () => {
-    const state = cloudState();
-    render(<WorkspaceModeMenu state={state} conversationId="c-cloud" />);
-    fireEvent.click(screen.getByText("只合回产物"));
-    await waitFor(() => {
-      expect(mergeArtifactsOnlyToLanding).toHaveBeenCalledWith(
-        "c-cloud",
-        state.roots,
-      );
     });
   });
 });

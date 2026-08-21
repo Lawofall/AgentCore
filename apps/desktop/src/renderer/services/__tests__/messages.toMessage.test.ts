@@ -79,6 +79,21 @@ describe("toMessage (reload hydrate)", () => {
     expect(msg.agentMentions).toEqual([{ agentId: "w1", role: "研究员" }]);
   });
 
+  it("does not lift runs.auto_folder onto the bubble (landing notice withdrawn)", () => {
+    const msg = toMessage(
+      row({
+        id: "a-desk",
+        role: "assistant",
+        runs: {
+          events: [],
+          finish_reason: "end_turn",
+          auto_folder: { folder_id: "f1", name: "季度复盘" },
+        },
+      }),
+    );
+    expect(msg).not.toHaveProperty("autoFolder");
+  });
+
   it("maps status=running (no paused) to isStreaming for overlay partial", () => {
     const msg = toMessage(
       row({

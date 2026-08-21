@@ -185,9 +185,7 @@ async def test_loop_records_round_boundary_and_llm_call_per_round():
 
 async def test_llm_call_fact_preserves_upstream_length_finish_reason():
     """Engine must not rewrite upstream finish_reason=length to stop on LlmCallFact."""
-    provider = _ScriptedProvider(
-        [[LLMChunk(delta_content="半截", finish_reason="length")]]
-    )
+    provider = _ScriptedProvider([[LLMChunk(delta_content="半截", finish_reason="length")]])
     facts, content, _messages = await _run(provider, _StubTool())
     assert content == "半截"
     calls = [f for f in facts if f["kind"] == FactKind.LLM_CALL]

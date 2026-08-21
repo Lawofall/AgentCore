@@ -1014,9 +1014,7 @@ async def test_length_empty_not_exempted_for_captain_coordination(monkeypatch):
 
 async def test_length_with_partial_content_does_not_hard_cut_empty_ladder():
     """Non-empty truncated content is a normal answer path — not the empty gate."""
-    provider = _ModelRecordingProvider(
-        [[LLMChunk(delta_content="半截", finish_reason="length")]]
-    )
+    provider = _ModelRecordingProvider([[LLMChunk(delta_content="半截", finish_reason="length")]])
     profile = make_profile_params(max_rounds=20)
     finish_override: list[FinishReason] = []
     content, _r, _u, rounds = await _run_loop(
@@ -1094,7 +1092,9 @@ def _errors(sink: _RecordingSink) -> list[SSEEvent]:
     return [e for e in sink.emitted if e.type == EventType.ERROR]
 
 
-async def _run_with_sink(provider, profile, sink, *, turn_model: str = "primary"):  # noqa: ANN001
+async def _run_with_sink(  # noqa: ANN001
+    provider, profile, sink, *, turn_model: str = "primary"
+):
     finish_override: list[FinishReason] = []
     content, _r, _u, rounds = await react_loop(
         messages=[LLMMessage(role="user", content="go")],
@@ -1416,13 +1416,7 @@ def _finalizes(messages: list[LLMMessage]) -> list[LLMMessage]:
 
 def _convergence_steers(messages: list[LLMMessage]) -> list[LLMMessage]:
     # Any over-investigation steer at all (the removed soft nudge used to live here).
-    return [
-        m
-        for m in messages
-        if m.role == "user"
-        and m.content
-        and "[系统提示]" in m.content
-    ]
+    return [m for m in messages if m.role == "user" and m.content and "[系统提示]" in m.content]
 
 
 async def test_few_different_target_reads_have_no_convergence_steer():
@@ -1518,9 +1512,7 @@ def _openai_tool_names(request) -> list[str]:  # noqa: ANN001
 
 
 @pytest.mark.parametrize("supervised,expect_replan", [(False, False), (True, True)])
-async def test_worker_nested_lead_replan_follows_supervised(
-    supervised: bool, expect_replan: bool
-):
+async def test_worker_nested_lead_replan_follows_supervised(supervised: bool, expect_replan: bool):
     """嵌套 lead：无子计划时开口无 replan；续跑已有 _supervised 时首轮 LLM 已挂上。"""
 
     class _Rec(_ScriptedProvider):

@@ -142,7 +142,7 @@ describe("toMessageDetail runs.error (cold-load failure)", () => {
     expect(m.runs?.error).toBeNull();
   });
 
-  it("lifts runs.auto_folder so the landing notice survives a reload", () => {
+  it("still lifts runs.auto_folder from REST (event projection; chat no longer renders it)", () => {
     const m = toMessageDetail(
       baseRow({
         runs: {

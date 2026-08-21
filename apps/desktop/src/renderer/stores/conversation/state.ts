@@ -121,10 +121,6 @@ export interface ConversationState {
   ) => void;
   recordTurnWarning: (warning: string, conversationId?: string | null) => void;
   stampPendingTurnWarning: (conversationId?: string | null) => void;
-  recordAutoFolder: (
-    autoFolder: import("./types").AutoFolderNotice,
-    conversationId?: string | null,
-  ) => void;
   attachCostToLastMessage: (
     cost: CostBreakdown,
     conversationId?: string | null,

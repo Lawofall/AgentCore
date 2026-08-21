@@ -71,6 +71,10 @@ async def test_secondary_delegate_merges_into_same_coordination_session():
     )
     assert second.success is True
     assert "队员已追加" in second.output
+    assert "wait" not in (second.output or "")
+    assert "update_synthesis" not in (second.output or "")
+    assert "coordinate=false" not in (second.output or "")
+    assert "人已派出" not in (second.output or "")
 
     after = active_coordination("e")
     assert after is not None

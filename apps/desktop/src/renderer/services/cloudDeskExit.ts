@@ -1,6 +1,6 @@
 /**
- * 云桌标准出口编排（§五 · §7.6）：ZIP / 导出到本机文件夹 / 合回落点登记与 Diff 勾选合回 /
- * ① 仅产物快捷合回。
+ * 云桌标准出口编排（§五 · §7.6）：ZIP / 导出到本机文件夹（工作区工具条）/
+ * 合回落点登记与 Diff 勾选合回（工作区芯片）/ ① 仅产物快捷合回（产物卡）。
  *
  * 合回主路径 = 云快照 zip（内存）vs 落点现态 → handoff-review 判定 → MergeLandingReview。
  * 不经 applyHandoffJob；≠ mode=local、≠ 过桥默认。整树 checkout 仅「导出到本机文件夹」旁路。
@@ -26,6 +26,7 @@ import {
   notifyWarning,
 } from "@/lib/toast";
 import {
+  type MergeArtifactRef,
   resolveMergeArtifactRefs,
   writeArtifactsToLanding,
 } from "@/services/mergeArtifactsOnly";
@@ -241,11 +242,13 @@ export async function mergeBackToLanding(
 }
 
 /**
- * §7.6 ① 只合回产物：仅写 delivery 交付路径到落点，不碰其余本机树。
+ * §7.6 ① 只合回产物：仅写交付路径到落点，不碰其余本机树。
+ * `refsOverride` 有值时用调用方清单（产物卡=该回合），否则读最近一条助手 delivery。
  */
 export async function mergeArtifactsOnlyToLanding(
   conversationId: string,
   roots: FsRoot[],
+  refsOverride?: MergeArtifactRef[],
 ): Promise<CloudDeskExitResult> {
   if (!hasLocalFiles() || !window.fsApi?.workspaceOp) {
     return {
@@ -255,9 +258,10 @@ export async function mergeArtifactsOnlyToLanding(
     };
   }
 
-  const refs = resolveMergeArtifactRefs(
-    latestTurnDeliveryStatus(conversationId),
-  );
+  const refs =
+    refsOverride !== undefined
+      ? refsOverride
+      : resolveMergeArtifactRefs(latestTurnDeliveryStatus(conversationId));
   if (refs.length === 0) {
     notifyInfo("本回合无交付产物");
     return {

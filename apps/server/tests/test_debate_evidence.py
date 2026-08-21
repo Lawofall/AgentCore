@@ -409,16 +409,32 @@ def test_brief_prompt_injects_ledger_tiers():
     assert "待核实" in user
 
 
+def _assert_ceo_short_tail(out: str) -> None:
+    """to_ceo_output 短尾：用自己的声音 + 指向 skill，不整段贴铁律/骨架。"""
+    assert "用自己的声音收尾" in out
+    assert "不要粘贴本段指令" in out
+    assert "debate_and_review" in out
+    assert "deep_multi_lens_research" in out
+    assert "【收尾铁律·别抹平证据状态】" not in out
+    assert "【收尾铁律·原样传达裁决】" not in out
+    assert "【收尾铁律·不引入场外量化】" not in out
+    assert "【收尾模板·多视角调研起源】" not in out
+
+
 def test_ceo_output_preserves_weak_tier_status():
-    """M2：CEO 收尾铁律须保留弱源 / tier=weak，不得抹平。"""
+    """简报里的弱源 / tier=weak 原样出现在 CEO 折算文本；短尾不贴铁律全文。"""
     result = DebateResult(
         config=_config(),
         rounds=[_last_round()],
-        brief=DebateBrief(crux="成本可控性"),
+        brief=DebateBrief(
+            crux="成本可控性",
+            strongest_points={"pro": "多家媒体称成本可控【弱源·tier=weak】"},
+        ),
     )
     out = result.to_ceo_output()
     assert "弱源" in out
-    assert "tier=weak" in out or "tier" in out
+    assert "tier=weak" in out
+    _assert_ceo_short_tail(out)
 
 
 def test_brief_prompt_inherits_evidence_status_into_conclusion():
@@ -494,66 +510,68 @@ def test_brief_system_carries_grounding_principle():
 
 
 def test_ceo_output_preserves_unverified_reservations():
-    """CEO 收尾折算文本带【别抹平证据状态】铁律：转述【待核实/二手】关键事实须保留保留语。"""
+    """简报【待核实】原样出现在 CEO 折算文本；短尾不贴「升格/既定事实」铁律全文。"""
     result = DebateResult(
         config=_config(),
         rounds=[_last_round()],
-        brief=DebateBrief(crux="成本可控性"),
+        brief=DebateBrief(
+            crux="成本可控性",
+            handoffs=[DebateHandoff(kind="fact", text="真实成本【待核实】")],
+        ),
     )
     out = result.to_ceo_output()
     assert "待核实" in out
-    assert "保留" in out
-    assert "既定事实" in out
-    # 强化：待核实不得升格为事实；核实状态标记须原样保留。
-    assert "升格" in out
-    assert "核实状态" in out or "状态标记" in out
+    assert "真实成本【待核实】" in out
+    _assert_ceo_short_tail(out)
+    assert "升格" not in out
+    assert "既定事实" not in out
 
 
 def test_ceo_output_requires_verbatim_verdict_conveyance():
-    """CEO 收尾须原样传达裁决倾向百分比 / 置信度 / 保留意见，不得抹成一边倒定论。"""
+    """简报倾向 / 置信度仍渲染；短尾不贴「原样传达裁决」铁律全文。"""
     result = DebateResult(
         config=_config(),
         rounds=[_last_round()],
         brief=DebateBrief(crux="赔偿合理性", leaning="略偏反方", confidence="中等"),
     )
     out = result.to_ceo_output()
-    assert "原样传达裁决" in out
-    assert "置信度" in out or "保留意见" in out
-    assert "一边倒" in out or "原样传达" in out
+    assert "略偏反方" in out
+    assert "置信度" in out
+    _assert_ceo_short_tail(out)
+    assert "原样传达裁决" not in out
+    assert "一边倒" not in out
 
 
 def test_ceo_output_bans_off_brief_quantification():
-    """CEO 收尾折算文本带【不引入场外量化】铁律：不得补辩手/简报未出现的数字估算。"""
+    """短尾不贴【不引入场外量化】铁律全文（正文留在 skill）。"""
     result = DebateResult(
         config=_config(),
         rounds=[_last_round()],
         brief=DebateBrief(crux="赔偿合理性"),
     )
     out = result.to_ceo_output()
-    assert "不引入场外量化" in out
-    assert "未出现的数字" in out or "量化估算" in out
+    _assert_ceo_short_tail(out)
+    assert "不引入场外量化" not in out
+    assert "量化估算" not in out
 
 
 def test_ceo_output_injects_multi_lens_skeleton_template():
-    """辩后回流附条件四维骨架：多视角调研起源 → 跨维度决策简报，与防抹平铁律共存。"""
+    """短尾指向 skill，不把跨维骨架正文贴进 to_ceo_output。"""
     result = DebateResult(
         config=_config(),
         rounds=[_last_round()],
         brief=DebateBrief(crux="商标近似争议", leaning="略偏正方", confidence="中等"),
     )
     out = result.to_ceo_output()
-    assert "多视角调研" in out
-    assert "跨维度决策简报" in out
-    assert "分维" in out or "各透镜" in out
-    assert "法律" in out and ("商业" in out or "品牌" in out)
-    assert "舆情" in out or "公关" in out
-    assert "文化" in out or "制度" in out
-    assert "置信" in out or "保留意见" in out
-    assert "正反拍板" in out or "辩论收报" in out
-    # 与既有三条收尾铁律并存、不互相覆盖
-    assert "别抹平证据状态" in out
-    assert "原样传达裁决" in out
-    assert "不引入场外量化" in out
+    _assert_ceo_short_tail(out)
+    assert "跨维度决策简报" not in out
+    assert "辩论收报" not in out
+    assert "正反拍板" not in out
+    assert "分维简报" not in out
+    assert "各透镜各一小节" not in out
+    assert "别抹平证据状态" not in out
+    assert "原样传达裁决" not in out
+    assert "不引入场外量化" not in out
 
 
 def test_as_handoffs_maps_three_keys_and_normalizes_bad_kind():

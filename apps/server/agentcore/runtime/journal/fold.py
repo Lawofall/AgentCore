@@ -221,7 +221,7 @@ def runs_from_entries(entries: list[dict[str, Any]] | None) -> dict[str, Any] | 
     # 预检警告（P2 DURABLE）：plain-chat 也可能只有 turn_warning（无 surface）——像
     # captain_context 一样抬到顶层，避免 surface gate 清空 events 后整段投影变 None。
     turn_warning: str | None = None
-    # 裸聊自动建文件夹告知（§5.4 裸聊行）：同样抬到顶层，重载后轻提示（含改名入口）仍在。
+    # 裸聊自动建文件夹（§5.4 裸聊行）：抬到顶层供投影；对话内不再渲染落点条。
     auto_folder: dict[str, Any] | None = None
     # deltas 退场: a worker/revision run's full output + thinking now lives only in its
     # ``message_final`` fact (the per-token run_output_delta / run_reasoning_delta are no

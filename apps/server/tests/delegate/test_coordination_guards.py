@@ -311,6 +311,8 @@ async def test_secondary_isomorphic_delegate_rejected():
     )
     assert second.success is False
     assert "同构" in (second.error or "")
+    assert "wait" not in (second.error or "")
+    assert "update_synthesis" not in (second.error or "")
     assert second.contract_failure is True
     assert session.total_workers == 2
     # 同构拒在 emit 前：不得留下第二张 durable run_plan。
@@ -1316,6 +1318,8 @@ async def test_merge_all_skipped_returns_structured_failure():
         assert "全部跳过" in err
         assert "`a`" in err
         assert "duplicate run_id" in err
+        assert "wait" not in err
+        assert "update_synthesis" not in err
         assert result.contract_failure is True
         assert session.total_workers == workers_before
         assert session.budget_remaining == budget_before
@@ -1360,6 +1364,9 @@ async def test_merge_partial_skip_lists_merged_and_skipped():
         assert "写手" in out
         assert "`a`" in out
         assert "duplicate run_id" in out
+        assert "wait" not in out
+        assert "update_synthesis" not in out
+        assert "人已派出" not in out
         assert session.total_workers == 2
         assert {n.run_id for n in live.nodes} == {"a", "b"}
     finally:

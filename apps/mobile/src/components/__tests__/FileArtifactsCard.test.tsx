@@ -257,12 +257,11 @@ describe("FileArtifactsCard open routing", () => {
     );
   });
 
-  it("keeps the auto-folder landing line visible even when the file list is collapsed", () => {
+  it("does not render auto-folder landing copy on the card", () => {
     render(
       <MemoryRouter>
         <FileArtifactsCard
           conversationId="c1"
-          autoFolder={{ folderId: "f1", name: "季度复盘" }}
           artifacts={[
             { path: "a.md", name: "a.md", acceptance: "accepted" },
             { path: "b.md", name: "b.md", acceptance: "accepted" },
@@ -273,8 +272,9 @@ describe("FileArtifactsCard open routing", () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByText("文件已存到新建的文件夹")).toBeTruthy();
-    expect(screen.getByText("季度复盘")).toBeTruthy();
+    expect(screen.getByText("本回合产出文件")).toBeTruthy();
+    expect(screen.queryByText("文件已存到新建的文件夹")).toBeNull();
+    expect(screen.queryByText("已为这次对话新建文件夹")).toBeNull();
   });
 });
 

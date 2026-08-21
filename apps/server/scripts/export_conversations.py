@@ -16,6 +16,9 @@ left ``messages`` long ago). Works in monorepo and Docker (``/app/scripts/…``)
 ``--journal-redacted`` writes structural journal rows only (no user/LLM bodies);
 ``pnpm sync:logs`` uses that by default. ``--skip-journal`` writes an empty file.
 Raw journal is the no-flag default (local maintainer dump / ``sync:logs --full``).
+``--days N`` is an activity window: conversations created in-window, *or* with
+messages / turn_metrics / cost_events (and journal, when those columns exist)
+after the cutoff. Soft-deleted rows stay out.
 """
 
 from __future__ import annotations
@@ -200,6 +203,32 @@ async def _live_columns(conn: Any, table_name: str) -> set[str]:
     return {r[0] for r in rows}
 
 
+def _conversation_window_clause(cutoff: datetime, *, journal_activity: bool):
+    """Created in-window, or still active after cutoff (messages / metrics / costs)."""
+    from sqlalchemy import exists, or_, select
+
+    from agentcore.db.models.billing import CostEvent
+    from agentcore.db.models.conversations import Conversation, Message
+    from agentcore.db.models.runs import TurnJournalRow, TurnMetricsRow
+
+    def _has_rows(id_col: Any, created_col: Any):
+        return exists(
+            select(1).where(id_col == Conversation.id, created_col >= cutoff)
+        )
+
+    clauses: list[Any] = [
+        Conversation.created_at >= cutoff,
+        _has_rows(Message.conversation_id, Message.created_at),
+        _has_rows(TurnMetricsRow.conversation_id, TurnMetricsRow.created_at),
+        _has_rows(CostEvent.conversation_id, CostEvent.created_at),
+    ]
+    if journal_activity:
+        clauses.append(
+            _has_rows(TurnJournalRow.conversation_id, TurnJournalRow.created_at)
+        )
+    return or_(*clauses)
+
+
 async def export_conversations(
     days: int,
     output_dir: Path,
@@ -238,14 +267,20 @@ async def export_conversations(
             _TURN_METRICS_KEEP,
             await _live_columns(conn, "turn_metrics"),
         )
+        journal_live = await _live_columns(conn, "turn_journal")
         tj_cols = None
         if not skip_journal:
             tj_cols = _cols(
                 TurnJournalRow.__table__,
                 _TURN_JOURNAL_KEEP,
-                await _live_columns(conn, "turn_journal"),
+                journal_live,
             )
-        conv_stmt = select(*conv_cols).where(Conversation.created_at >= cutoff)
+        journal_activity = (
+            "conversation_id" in journal_live and "created_at" in journal_live
+        )
+        conv_stmt = select(*conv_cols).where(
+            _conversation_window_clause(cutoff, journal_activity=journal_activity)
+        )
         if "deleted_at" in Conversation.__table__.columns:
             conv_stmt = conv_stmt.where(Conversation.deleted_at.is_(None))
         conversations = _mapping_rows(await conn.execute(conv_stmt))
@@ -332,7 +367,12 @@ async def export_conversations(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--days", type=int, default=7, help="Export conversations from last N days")
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=7,
+        help="Export conversations active in the last N days",
+    )
     parser.add_argument(
         "--output",
         type=Path,

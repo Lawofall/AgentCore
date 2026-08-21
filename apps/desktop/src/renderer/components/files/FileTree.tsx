@@ -13,10 +13,8 @@ import {
   FilePlus,
   FileText,
   FolderPlus,
-  FolderUp,
   Loader2,
   RefreshCw,
-  Upload,
 } from "lucide-react";
 import type React from "react";
 import {
@@ -32,6 +30,7 @@ import { FileTreeBatchDialogs } from "./FileTreeBatchDialogs";
 import { InlineCreateRow } from "./FileTreeInline";
 import { FileTreeRow } from "./FileTreeRow";
 import { FileTreeSelectionBar } from "./FileTreeSelectionBar";
+import { UploadMenu } from "./UploadMenu";
 import { dedupeName } from "./dedupeName";
 import { setFileClipboard, useFileClipboard } from "./fileClipboard";
 import {
@@ -842,53 +841,37 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
         {drop.chrome}
         {!hideToolbar && (
           <div className="flex shrink-0 items-center gap-1 px-3 py-2">
-            {canUpload && (
-              <>
-                <Button
-                  className="disabled:opacity-60"
-                  disabled={drop.uploading}
-                  onClick={drop.triggerUpload}
-                  icon={
-                    drop.uploading ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <Upload size={13} />
-                    )
-                  }
-                >
-                  上传
-                </Button>
-                <SimpleTooltip label="上传文件夹">
-                  <IconButton
-                    disabled={drop.uploading}
-                    onClick={drop.triggerUploadFolder}
-                    aria-label="上传文件夹"
-                  >
-                    <FolderUp size={14} />
-                  </IconButton>
-                </SimpleTooltip>
-              </>
-            )}
-            {canMutate && (
-              <>
-                <SimpleTooltip label="新建文件">
-                  <IconButton
-                    onClick={() => openCreate("", "file")}
-                    aria-label="新建文件"
-                  >
-                    <FilePlus size={14} />
-                  </IconButton>
-                </SimpleTooltip>
-                <SimpleTooltip label="新建文件夹">
-                  <IconButton
-                    onClick={() => openCreate("", "dir")}
-                    aria-label="新建文件夹"
-                  >
-                    <FolderPlus size={14} />
-                  </IconButton>
-                </SimpleTooltip>
-              </>
-            )}
+            {canMutate || canUpload ? (
+              <div className="flex items-center gap-2">
+                {canMutate ? (
+                  <div className="flex items-center gap-1">
+                    <SimpleTooltip label="新建文件">
+                      <IconButton
+                        onClick={() => openCreate("", "file")}
+                        aria-label="新建文件"
+                      >
+                        <FilePlus size={14} />
+                      </IconButton>
+                    </SimpleTooltip>
+                    <SimpleTooltip label="新建文件夹">
+                      <IconButton
+                        onClick={() => openCreate("", "dir")}
+                        aria-label="新建文件夹"
+                      >
+                        <FolderPlus size={14} />
+                      </IconButton>
+                    </SimpleTooltip>
+                  </div>
+                ) : null}
+                {canUpload ? (
+                  <UploadMenu
+                    uploading={drop.uploading}
+                    onUploadFiles={drop.triggerUpload}
+                    onUploadFolder={drop.triggerUploadFolder}
+                  />
+                ) : null}
+              </div>
+            ) : null}
             <div className="flex-1" />
             {expanded.size > 0 && (
               <SimpleTooltip label="全部折叠">

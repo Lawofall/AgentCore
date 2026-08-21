@@ -32,10 +32,10 @@ def workspace_op_required(
 
 
 def auto_folder_created(*, folder_id: str, name: str) -> SSEEvent:
-    """裸聊写盘自动建好云文件夹 → 在对话里告知落点（双模式工作区 §5.4 裸聊行）。
+    """裸聊写盘自动建好云文件夹（双模式工作区 §5.4 裸聊行）。
 
     只在真正建成那一次发射：跨回合复用同一张桌、或并发回合抢输后改用赢家的桌，都不再
-    重复告知。告知不是审批——回合照跑，客户端不得据此挂起或要用户先点。
+    重复发。不是审批——回合照跑，客户端不得据此挂起；对话内也不再画落点条。
     """
     return SSEEvent(
         type=EventType.AUTO_FOLDER_CREATED,

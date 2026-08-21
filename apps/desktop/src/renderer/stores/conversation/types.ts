@@ -336,9 +336,6 @@ export interface Message {
   traceId?: string;
   /** Preflight soft gate when the configured model may lack tool calling (turn_warning SSE). */
   turnWarning?: string;
-  /** 裸聊写盘时自动建的云文件夹（auto_folder_created SSE / reload runs.auto_folder）——
-   * 告知落点用，气泡里出一条可打开、可当场改名的轻提示。 */
-  autoFolder?: AutoFolderNotice;
   /**
    * 消息归因（如 `execution_harvest` 系统收口）。REST ``MessageDetail.origin`` 已投影；
    * 缺省时由 {@link import("@/lib/executionHarvest").isExecutionHarvestMessage} 从正文前缀推断。
@@ -349,16 +346,6 @@ export interface Message {
    * REST ``MessageDetail.recovered`` 投影；不做正文猜测，缺字段即视为没崩过。
    */
   recovered?: boolean;
-}
-
-/**
- * 裸聊写盘自动建的云文件夹（双模式工作区 §5.4 裸聊行）。
- *
- * `name` 是建桌那一刻的名字；渲染时按 `folderId` 查文件夹现名，改名后不必回写这里。
- */
-export interface AutoFolderNotice {
-  folderId: string;
-  name: string;
 }
 
 export interface ConversationRuntime {

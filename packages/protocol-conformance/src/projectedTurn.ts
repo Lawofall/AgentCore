@@ -496,8 +496,8 @@ export interface ProjectedTurn {
   /** 预检警告（`turn_warning`）：P2 DURABLE；刷新后横幅重建。null 当无。 */
   turnWarning: string | null;
   /** 裸聊写盘自动建的云文件夹（`auto_folder_created`，双模式工作区 §5.4 裸聊行）：
-   * 告知落点的轻提示，DURABLE，刷新后仍在。`name` 是建桌那一刻的名字（用户可当场改名，
-   * 客户端按 `folderId` 取现名）。null 当本回合没建。 */
+   * DURABLE，journal / 投影仍有；对话内不再渲染落点条。`name` 是建桌那一刻的名字。
+   * null 当本回合没建。 */
   autoFolder: { folderId: string; name: string } | null;
   /** 团队便签墙 (§2.2 通): the notes workers broadcast to their siblings this turn (`team_note_posted`),
    * in post order. Journaled, so it replays on reload. Empty for a turn with no team notes. */

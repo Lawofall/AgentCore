@@ -1,4 +1,3 @@
-import { AutoFolderNoticeCard } from "@/components/chat/AutoFolderNoticeCard";
 import { FileArtifactsCard } from "@/components/chat/FileArtifactsCard";
 import { Markdown } from "@/components/chat/Markdown";
 import { PausedContinueSurface } from "@/components/chat/PausedContinueSurface";
@@ -52,7 +51,6 @@ import { cn } from "@/lib/utils";
 import { runRegenerate } from "@/services/turns";
 import { continuePausedTurn } from "@/services/turns/continuePaused";
 import {
-  type AutoFolderNotice,
   assistantProjectionId,
   getActiveRuntime,
   useConversationStore,
@@ -94,23 +92,18 @@ function RecoveredChip() {
 }
 
 /**
- * 回合产出文件 + 裸聊落点告知，一并挂在答复正文之后。
+ * 回合产出文件，挂在答复正文之后。
  *
  * 交付对账（同 execution_id 保最新）→ 产物清单；可用性短问可在无 plan 的 CEO 回合复用
- * delivery_status，所以单 / 多 Agent 走同一条路径。
- *
- * 落点告知并进产出卡头部（文件就落在那个文件夹里，一处说清）；只有建了桌却没产出文件
- * 时——产出卡不渲染——才独立成卡。两种形态都在正文之后：建桌发生在派工前、文件还没写，
- * 顶部告知会抢在 AI 开口之前。
+ * delivery_status，所以单 / 多 Agent 走同一条路径。产出卡只列文件；裸聊自动建桌的落点
+ * 不在对话里告知（文件夹进「我的文件」，改名走文件页）。
  */
-function TurnFilesAndAutoFolder({
+function TurnFiles({
   messageId,
   conversationId,
-  autoFolder,
 }: {
   messageId: string;
   conversationId: string | null;
-  autoFolder?: AutoFolderNotice;
 }) {
   const deliveryStatus = useExecutionStore(
     (s) => s.byId[messageId]?.deliveryStatus ?? null,
@@ -119,15 +112,12 @@ function TurnFilesAndAutoFolder({
     () => resolveFileArtifactsForCard(deliveryStatus),
     [deliveryStatus],
   );
-  if (artifacts.length === 0) {
-    return autoFolder ? <AutoFolderNoticeCard notice={autoFolder} /> : null;
-  }
+  if (artifacts.length === 0) return null;
   return (
     <FileArtifactsCard
       artifacts={artifacts}
       conversationId={conversationId}
       turnKey={messageId}
-      autoFolder={autoFolder}
     />
   );
 }
@@ -501,11 +491,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           )}
         </div>
       )}
-      <TurnFilesAndAutoFolder
-        messageId={projectionId}
-        conversationId={conversationId}
-        autoFolder={message.autoFolder}
-      />
+      <TurnFiles messageId={projectionId} conversationId={conversationId} />
       {citations.length > 0 && (
         <SourceCards
           citations={citations}

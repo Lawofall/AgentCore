@@ -159,8 +159,8 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         _multi_agent_user_interjection_delegate_append,
     ),
     "multi_agent_auto_folder_created": (
-        "裸聊写盘自动建文件夹（§5.4）：auto_folder_created DURABLE → autoFolder 轻提示"
-        "（告知落点 + 可当场改名；不挂起回合）",
+        "裸聊写盘自动建文件夹（§5.4）：auto_folder_created DURABLE → autoFolder 投影"
+        "（对话内不渲染落点条；不挂起回合）",
         _multi_agent_auto_folder_created,
     ),
     "multi_agent_delegate": ("多 Agent：委派 2 队员，runs 树 + 进度 + 总账", _multi_agent_delegate),

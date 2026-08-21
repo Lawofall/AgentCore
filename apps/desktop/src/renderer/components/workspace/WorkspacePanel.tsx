@@ -1,14 +1,20 @@
 import { EmptyHint, IconButton } from "@/components/files/parts";
 import { Button } from "@/components/ui";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { getConversations } from "@/hooks/useConversations";
 import { useConversationFileSource } from "@/hooks/useConversationFileSource";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
 import { hasLocalFiles } from "@/lib/capabilities";
-import { notifyActionError, notifySuccess } from "@/lib/toast";
 import {
-  exportWorkspaceToLocal,
-  exportWorkspaceZip,
-} from "@/services/workspace";
+  exportCloudDeskToPickedFolder,
+  exportCloudDeskZip,
+} from "@/services/cloudDeskExit";
 import { useConversationStore } from "@/stores/conversation";
+import { useFoldersStore } from "@/stores/folders";
 import {
   Download,
   FolderDown,
@@ -29,7 +35,7 @@ import { WorkspaceModeBar } from "./WorkspaceModeBar";
  * Workspace mode of the conversation side panel — the file-in/out surface for a
  * conversation's project space (双模式工作区). Files are the panel's always-on body;
  * this view injects workspace-level affordances into the files toolbar's single
- * header row (FileBrowser owns that row): 云端/本地选择器 (leading) plus 导出 / 软删区
+ * header row (FileBrowser owns that row): 云端/本地选择器 (leading) plus 导出菜单 / 软删区
  * (trailing). The shell (SidePanel) owns the frame / resize / close.
  *
  * 快照不在此面板。云端命名版本在「我的文件」根右键「版本…」；
@@ -82,41 +88,33 @@ export function WorkspaceMode() {
     );
   }
 
-  const handleExport = async () => {
+  const runExport = async (fn: () => Promise<unknown>) => {
     if (!conversationId || exporting) return;
     setExporting(true);
     try {
-      if (fsAvailable) {
-        const result = await exportWorkspaceToLocal(conversationId);
-        if (result.ok) {
-          notifySuccess(
-            `已导出 ${result.fileCount} 个文件到「${result.destName}」`,
-          );
-        } else if (result.reason === "cancelled") {
-          /* user dismissed picker */
-        } else if (result.reason === "unavailable") {
-          await exportWorkspaceZip(conversationId);
-        } else {
-          notifyActionError("导出到本地失败", new Error(result.message));
-        }
-      } else {
-        await exportWorkspaceZip(conversationId);
-      }
-    } catch (e) {
-      notifyActionError("导出工作区失败", e);
+      await fn();
     } finally {
       setExporting(false);
     }
   };
 
   const emptyTreeHint = fsAvailable
-    ? "工作区暂无文件。AI 产物会出现在这里；需要时可用「导出到本地」落到本机目录。"
+    ? "工作区暂无文件。AI 产物会出现在这里；需要时可用工具栏「导出」或工作区菜单「合回到本机」。"
     : "工作区暂无文件。AI 产物会出现在这里；需要时可导出 ZIP。";
 
   // D2: shared-space mounts are cloud-execution only (local-bound chats have no
   // cross-runtime dual root).
   const isCloudWorkspace = ws?.location === "cloud";
   const localRootId = ws?.location === "local" ? ws.rootId : null;
+  const onCloneGit = isCloudWorkspace
+    ? () => {
+        const conv = getConversations().find((c) => c.id === conversationId);
+        const wsId = conv?.folderId
+          ? `folder:${conv.folderId}`
+          : `conv:${conversationId}`;
+        useFoldersStore.getState().openConnectGit(wsId);
+      }
+    : undefined;
 
   return (
     <div className="relative flex h-full flex-col">
@@ -126,25 +124,25 @@ export function WorkspaceMode() {
         <FilesSection
           source={source}
           emptyTreeHint={emptyTreeHint}
+          onCloneGit={onCloneGit}
           leading={<WorkspaceModeBar conversationId={conversationId} />}
           trailing={
             <>
               <WorkspaceClientTools source={source} />
               {source?.caps.snapshots ? (
                 <>
-                  <IconButton
-                    title={fsAvailable ? "导出到本地" : "导出 ZIP"}
-                    disabled={exporting}
-                    onClick={() => void handleExport()}
-                  >
-                    {exporting ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : fsAvailable ? (
-                      <FolderDown size={14} />
-                    ) : (
-                      <Download size={14} />
-                    )}
-                  </IconButton>
+                  <WorkspaceExportMenu
+                    fsAvailable={fsAvailable}
+                    exporting={exporting}
+                    onExportFolder={() =>
+                      void runExport(() =>
+                        exportCloudDeskToPickedFolder(conversationId),
+                      )
+                    }
+                    onExportZip={() =>
+                      void runExport(() => exportCloudDeskZip(conversationId))
+                    }
+                  />
                   <IconButton title="软删区" onClick={() => setTrashOpen(true)}>
                     <Trash2 size={14} />
                   </IconButton>
@@ -193,5 +191,81 @@ export function WorkspaceMode() {
         </div>
       )}
     </div>
+  );
+}
+
+function WorkspaceExportMenu({
+  fsAvailable,
+  exporting,
+  onExportFolder,
+  onExportZip,
+}: {
+  fsAvailable: boolean;
+  exporting: boolean;
+  onExportFolder: () => void;
+  onExportZip: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const icon = exporting ? (
+    <Loader2 size={14} className="animate-spin" />
+  ) : fsAvailable ? (
+    <FolderDown size={14} />
+  ) : (
+    <Download size={14} />
+  );
+
+  if (!fsAvailable) {
+    return (
+      <IconButton title="导出 ZIP" disabled={exporting} onClick={onExportZip}>
+        {icon}
+      </IconButton>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <IconButton
+          title="导出"
+          disabled={exporting}
+          aria-label="导出"
+          aria-expanded={open}
+        >
+          {icon}
+        </IconButton>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-56 p-1.5">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setOpen(false);
+            onExportFolder();
+          }}
+          className="h-auto w-full justify-start px-2.5 py-1.5 text-left text-xs font-medium"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">导出到本机文件夹</span>
+            <span className="block truncate text-xs font-normal text-muted-foreground">
+              每次可选目录
+            </span>
+          </span>
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setOpen(false);
+            onExportZip();
+          }}
+          className="h-auto w-full justify-start px-2.5 py-1.5 text-left text-xs font-medium"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">导出 ZIP</span>
+            <span className="block truncate text-xs font-normal text-muted-foreground">
+              下载云端快照拷贝
+            </span>
+          </span>
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }

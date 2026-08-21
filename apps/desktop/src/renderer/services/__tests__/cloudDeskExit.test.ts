@@ -244,4 +244,27 @@ describe("cloudDeskExit · merge landing", () => {
     expect(notifySuccessMock).toHaveBeenCalled();
     expect(prepareMock).not.toHaveBeenCalled();
   });
+
+  it("mergeArtifactsOnlyToLanding：传入 refs 则不读 latest delivery", async () => {
+    await registerMergeLanding("c-folder");
+    resolveRefsMock.mockReturnValue([]);
+    writeArtifactsMock.mockResolvedValue({
+      written: ["card.md"],
+      skippedExisting: [],
+      errors: [],
+    });
+
+    const result = await mergeArtifactsOnlyToLanding(
+      "c-folder",
+      [{ id: "root-x", name: "landing" }],
+      [{ path: "card.md" }],
+    );
+    expect(result).toEqual({ ok: true });
+    expect(resolveRefsMock).not.toHaveBeenCalled();
+    expect(writeArtifactsMock).toHaveBeenCalledWith({
+      conversationId: "c-folder",
+      rootId: "root-x",
+      refs: [{ path: "card.md" }],
+    });
+  });
 });

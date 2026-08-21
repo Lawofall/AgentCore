@@ -49,11 +49,6 @@ import {
   SupportDiagnosticCopyButton,
   shouldShowTeamGraph,
 } from "@/components/AssistantView";
-import {
-  type AutoFolderNotice,
-  AutoFolderNoticeCard,
-  autoFolderFromSources,
-} from "@/components/AutoFolderNoticeCard";
 import { BrowserLiveSheet } from "@/components/BrowserLiveSheet";
 import type { OpenBrowserLiveOpts } from "@/components/BrowserLoginDecisionCard";
 import { CollapsibleUserText } from "@/components/CollapsibleUserText";
@@ -990,11 +985,7 @@ function AssistantBubble({
           reviewArtifacts={reviewArtifacts}
           conversationId={conversationId}
           messageId={messageId}
-          autoFolder={p.autoFolder}
         />
-        {artifacts.length === 0 && p.autoFolder ? (
-          <AutoFolderNoticeCard notice={p.autoFolder} />
-        ) : null}
         {/* The team view carries its own progress header; the one-line meta is the
             single-agent fallback. */}
         {!isMulti && meta && <div className="meta">{meta}</div>}
@@ -1040,7 +1031,6 @@ function HistoryAssistant({
     userInterjections,
     foldedProcess,
     chrome,
-    autoFolder: foldedAutoFolder,
   } = useMemo(() => {
     const events = m.runs?.events;
     const warning =
@@ -1072,7 +1062,6 @@ function HistoryAssistant({
         userInterjections: [] as ProjectedTurn["userInterjections"],
         foldedProcess: [] as ProjectedTurn["process"],
         chrome: emptyChrome,
-        autoFolder: null as AutoFolderNotice | null,
       };
     const p = fold(events);
     const team =
@@ -1108,7 +1097,6 @@ function HistoryAssistant({
       userInterjections: p.userInterjections,
       foldedProcess: p.process,
       chrome: extractTurnChrome(events),
-      autoFolder: p.autoFolder,
     };
   }, [m.runs, conversationId]);
   // REST process 权威；旧 journal 未落 user_interjection marker 时用 fold 回放补位。
@@ -1134,10 +1122,6 @@ function HistoryAssistant({
         events: m.runs?.events,
       }),
     [deliveryStatus, process, m.runs?.events],
-  );
-  const autoFolder = autoFolderFromSources(
-    foldedAutoFolder,
-    m.runs?.auto_folder,
   );
   const escalationSlots = useMemo(
     () => extractEscalationSlots(m.runs?.events ?? []),
@@ -1303,11 +1287,7 @@ function HistoryAssistant({
           reviewArtifacts={reviewArtifacts}
           conversationId={conversationId}
           messageId={m.id}
-          autoFolder={autoFolder}
         />
-        {artifacts.length === 0 && autoFolder ? (
-          <AutoFolderNoticeCard notice={autoFolder} />
-        ) : null}
       </div>
     </>
   );

@@ -160,6 +160,7 @@ describe("整个文件夹上传到当前工作区", () => {
     expect(folderInput).toBeTruthy();
 
     const click = vi.spyOn(folderInput as HTMLInputElement, "click");
+    fireEvent.click(screen.getByRole("button", { name: "上传" }));
     fireEvent.click(screen.getByRole("button", { name: "上传文件夹" }));
     expect(click).toHaveBeenCalledTimes(1);
 

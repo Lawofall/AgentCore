@@ -373,9 +373,8 @@ export const EVENT_PARITY: Record<SSEEventType, ParityEntry> = {
     reason: "同上 · 把云端改动合并回本地磁盘，手机无本地",
   },
   auto_folder_created: {
-    verdict: "ported",
-    surface:
-      "AutoFolderNoticeCard / FileArtifactsCard · 落点告知 + 改名 + 跳转我的文件",
+    verdict: "internal",
+    reason: "fold 仍投影 autoFolder；对话无用户面（落点告知已撤）",
   },
   workspace_snapshot_done: {
     verdict: "simplified",
@@ -527,10 +526,6 @@ export const DESKTOP_CHAT_PARITY: Record<string, ParityEntry> = {
   TurnWarningBanner: {
     verdict: "ported",
     surface: "ChatPage · 预检警告条",
-  },
-  AutoFolderNoticeCard: {
-    verdict: "ported",
-    surface: "AutoFolderNoticeCard · 独立卡 / FileArtifactsCard 卡头一行",
   },
   ParallelTimeline: {
     verdict: "ported",

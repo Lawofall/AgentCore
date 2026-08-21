@@ -72,9 +72,9 @@ class EventType(StrEnum):
     # 本机 MCP Client: transport-only client-tool — desktop stdio MCP list/call
     # via backfill (never cloud→127.0.0.1). NOT journaled.
     MCP_OP_REQUIRED = "mcp_op_required"
-    # 裸聊写盘自动建文件夹「显式告知」（双模式工作区 §5.4 裸聊行）：运行时按话题起名建好
-    # 云文件夹后，在对话里说清落点。告知 ≠ 审批——不挂起回合、不等用户点。DURABLE（落
-    # journal）所以刷新后轻提示仍在；仅首次建成发一次，跨回合复用同一张桌时不再发。
+    # 裸聊写盘自动建文件夹（双模式工作区 §5.4 裸聊行）：运行时按话题起名建好云文件夹。
+    # DURABLE（落 journal）；对话内不再渲染落点条。告知 ≠ 审批——不挂起回合。
+    # 仅首次建成发一次，跨回合复用同一张桌时不再发。
     AUTO_FOLDER_CREATED = "auto_folder_created"
     HANDOFF_SNAPSHOT_DONE = "handoff_snapshot_done"
     HANDOFF_JOB_STARTED = "handoff_job_started"

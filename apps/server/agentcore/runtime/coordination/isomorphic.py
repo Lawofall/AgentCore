@@ -103,8 +103,7 @@ def isomorphic_reject_message(
         "【再委派已拒绝·同构计划】当前协作图仍有未完成队员"
         f"（已完成 {completed}/{total}），本次 tasks（{roster}）与在跑队员角色+任务高度同构，"
         "禁止静默并入以免重复派工。要让在跑的人继续干请填 continue_from_run_id；"
-        f"确需再开一份同构工作只放行本闸（{force_hint(GATE_ISOMORPHIC)}，不开其它闸）；"
-        "否则继续等待团队事件 / cancel_worker / update_synthesis，勿重复 delegate。"
+        f"确需再开一份同构工作只放行本闸（{force_hint(GATE_ISOMORPHIC)}，不开其它闸）。"
     )
 
 
@@ -120,8 +119,7 @@ def merge_all_skipped_reject_message(
         "【队员追加已拒绝·全部跳过】当前协作图未并入任何新节点"
         f"（已完成 {completed}/{total}）。跳过明细：{detail}。"
         "常见原因是 tasks.id / run_id 与图中已有节点冲突。"
-        "请换用未占用的 id 后重试，或继续等待团队事件 / cancel_worker / update_synthesis，"
-        "勿假定本批已入队。"
+        "请换用未占用的 id 后重试，勿假定本批已入队。"
     )
 
 
@@ -140,8 +138,6 @@ def merge_partial_skip_message(
         f"【队员已追加·部分跳过】已并入 {len(added_nodes)} 名队员（{roster}）；"
         f"跳过 {len(skipped)} 名：{detail}。"
         f"图共 {total_workers} 名，其中 {completed} 名已完成。"
-        "仍属同一协作图 / 同一协调会话。\n"
-        "队员正在后台报到；完成态由图事件异步呈现，勿宣称全员已就位。"
-        "取消请求与仲裁态保留；你将继续收到团队事件，全部完成后做最终合成。"
+        "仍属同一协作图 / 同一协调会话。"
         "被跳过节点未入队——请换 id 重派或确认无需该节点。"
     )

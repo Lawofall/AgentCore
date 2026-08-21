@@ -306,10 +306,7 @@ async def apply_loop_directive(
                         cache_hit_tokens=usage_meta.get("cache_hit_tokens", 0),
                         cache_miss_tokens=usage_meta.get("cache_miss_tokens", 0),
                     )
-                    if (
-                        terminal.effect is ToolEffect.SUSPEND
-                        and finish_override_sink is not None
-                    ):
+                    if terminal.effect is ToolEffect.SUSPEND and finish_override_sink is not None:
                         finish_override_sink.append(FinishReason.PAUSED)
                     return DirectiveApplyResult(
                         action="return",
@@ -329,9 +326,7 @@ async def apply_loop_directive(
                 gate_restored = maybe_restore_team_gate_tools(
                     controller, disabled_tools=disabled_tools, attempts=attempts
                 )
-                tool_defs = resolve_openai_tool_defs(
-                    tools, finalize_allowed, disabled_tools
-                )
+                tool_defs = resolve_openai_tool_defs(tools, finalize_allowed, disabled_tools)
                 breaker = apply_circuit_breaker(
                     controller,
                     messages=messages,
@@ -340,9 +335,7 @@ async def apply_loop_directive(
                     disabled_tools=disabled_tools,
                 )
                 if breaker.refresh_tool_defs or gate_restored:
-                    tool_defs = resolve_openai_tool_defs(
-                        tools, finalize_allowed, disabled_tools
-                    )
+                    tool_defs = resolve_openai_tool_defs(tools, finalize_allowed, disabled_tools)
                 from agentcore.runtime.runs.cutoff import worker_keeps_notes_in_wind_down
 
                 _ = govern_after_tools(
@@ -364,11 +357,7 @@ async def apply_loop_directive(
                     investigation_tools=controller.investigation_tool_names,
                     keep_notes=worker_keeps_notes_in_wind_down(
                         available=set(tools.names),
-                        allowed=(
-                            list(finalize_allowed)
-                            if finalize_allowed is not None
-                            else None
-                        ),
+                        allowed=(list(finalize_allowed) if finalize_allowed is not None else None),
                     ),
                 )
                 return DirectiveApplyResult(

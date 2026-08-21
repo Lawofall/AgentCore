@@ -27,7 +27,6 @@ import { useInteractionStore } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import type {
-  AutoFolderCreatedPayload,
   ContentDeltaPayload,
   ContentResetPayload,
   ErrorPayload,
@@ -135,15 +134,8 @@ export function handleMessageStreamEvent(
       return true;
     }
     case "auto_folder_created": {
-      // 裸聊写盘自动建了云文件夹：气泡里出轻提示（告知落点，不挡回合）。文件夹列表随即
-      // 刷新，提示上的「打开」「改名」才有真东西可指。
-      const p = event.payload as AutoFolderCreatedPayload;
-      useConversationStore
-        .getState()
-        .recordAutoFolder(
-          { folderId: p.folder_id, name: p.name },
-          conversationId,
-        );
+      // 裸聊写盘自动建了云文件夹：对话内不再画落点条。仍消费本事件并刷新文件夹列表，
+      // 侧栏「我的文件」能看见新桌；未知事件也不至于摔出。
       void queryClient.invalidateQueries({
         queryKey: conversationKeys.grouped,
       });

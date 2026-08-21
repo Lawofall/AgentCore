@@ -44,7 +44,6 @@ type StreamProjectionActions = Pick<
   | "attachEvidenceLedgerToLastMessage"
   | "recordTurnWarning"
   | "stampPendingTurnWarning"
-  | "recordAutoFolder"
   | "attachCostToLastMessage"
   | "attachTurnMetaToLastMessage"
   | "attachErrorToLastMessage"
@@ -339,17 +338,6 @@ export function createStreamProjectionActions(
         }
         messages[messages.length - 1] = { ...last, turnWarning: warning };
         return { messages, pendingTurnWarning: null };
-      }),
-
-    // 裸聊自动建文件夹告知：事件在 delegate 期间到达，此时助手气泡必然已开，所以不需要
-    // turn_warning 那套 pending 缓冲。
-    recordAutoFolder: (autoFolder, conversationId) =>
-      patchConversation(conversationId, (rt) => {
-        const messages = [...rt.messages];
-        const idx = lastAssistantIndex(messages);
-        if (idx < 0) return null;
-        messages[idx] = { ...messages[idx], autoFolder };
-        return { messages };
       }),
 
     attachErrorToLastMessage: (error, conversationId) =>

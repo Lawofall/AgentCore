@@ -3,10 +3,6 @@
 // 历史缺 delivery 时由 ChatPage 旁路 process/events。挂在答复正文下方；点任一可预览行 →
 // 跳到该对话的文件页并直接打开预览。「查看改动」在卡内展开（无右坞）。
 // 行尾修改时间：按路径向已有工作区 list 取 mtime_ms（对不上或缺字段就空着；sizeBytes 不画在行上）。
-import {
-  type AutoFolderNotice,
-  AutoFolderNoticeLine,
-} from "@/components/AutoFolderNoticeCard";
 import { formatFileMtime } from "@/components/FileBrowser";
 import { TurnFileChangesReview } from "@/components/TurnFileChangesReview";
 import {
@@ -197,7 +193,6 @@ export function FileArtifactsCard({
   conversationId,
   messageId = null,
   reviewArtifacts,
-  autoFolder = null,
 }: {
   artifacts: FileArtifact[];
   conversationId: string | null;
@@ -205,8 +200,6 @@ export function FileArtifactsCard({
   messageId?: string | null;
   /** A1 工具参数预览源（process/events）；缺省回落 artifacts。 */
   reviewArtifacts?: FileArtifact[];
-  /** 裸聊写盘自动建文件夹：有文件时挂卡头一行；没文件时本卡不渲染（由独立告知卡接手）。 */
-  autoFolder?: AutoFolderNotice | null;
 }) {
   const navigate = useNavigate();
   const listingMeta = useArtifactListingMeta(artifacts, conversationId);
@@ -265,7 +258,6 @@ export function FileArtifactsCard({
           </button>
         )}
       </div>
-      {autoFolder && <AutoFolderNoticeLine notice={autoFolder} />}
       {expanded && (
         <ul className="artifacts-list">
           {artifacts.map((a) => {

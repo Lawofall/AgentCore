@@ -1,4 +1,4 @@
-"""裸聊写盘自动建文件夹「显式告知」向量（双模式工作区 §5.4 裸聊行）."""
+"""裸聊写盘自动建文件夹向量（双模式工作区 §5.4 裸聊行）."""
 
 from __future__ import annotations
 
@@ -20,11 +20,11 @@ from .._common import _CONV, _COST, _USAGE
 
 
 def _multi_agent_auto_folder_created() -> list[SSEEvent]:
-    """裸聊没选文件夹就要写盘：运行时按话题建好云文件夹，并在对话里告知落点。
+    """裸聊没选文件夹就要写盘：运行时按话题建好云文件夹。
 
     发射点与生产一致——``delegate`` 的 ``tool_use_start`` 之后、``run_plan`` 之前
-    （``ensure_bare_chat_auto_cloud_desk`` 在 delegate 开头跑）。告知不是审批：本回合
-    照常派工收口，事件流里没有任何挂起帧。
+    （``ensure_bare_chat_auto_cloud_desk`` 在 delegate 开头跑）。不是审批：本回合
+    照常派工收口，事件流里没有任何挂起帧；对话内也不再画落点条。
     """
     agents = [{"id": "w1", "role": "资料整理", "thinking": True}]
     plan_runs = [

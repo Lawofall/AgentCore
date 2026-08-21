@@ -3,8 +3,9 @@ import {
   type FileTreeChromeState,
   type FileTreeHandle,
 } from "@/components/files/FileTree";
+import { UploadMenu } from "@/components/files/UploadMenu";
 import { EmptyHint } from "@/components/files/parts";
-import { Button, IconButton } from "@/components/ui";
+import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { FileSource } from "@/lib/fileSource";
 import { useSidePanelStore } from "@/stores/sidePanel";
@@ -12,11 +13,10 @@ import {
   ChevronsDownUp,
   FilePlus,
   FolderPlus,
-  FolderUp,
+  GitBranch,
   HardDrive,
   Loader2,
   RefreshCw,
-  Upload,
 } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 
@@ -25,13 +25,15 @@ import { type ReactNode, useRef, useState } from "react";
  * 点文件 → 经 {@link useSidePanelStore.showFile} 开顶栏 File 内容 tab（多开并存），
  * 不再 swap 掉树。文件中枢页仍用 {@link FileWorkbench} 左右分栏。
  *
- * 单行面板头：左侧 `leading`（文件夹·本地/云端 chip）、中段文件操作、右侧 `trailing`（快照等）。
+ * 单行面板头：左侧 `leading`（文件夹·本地/云端 chip）、中段先新建再装入（上传/克隆）、
+ * 右侧看树（折叠/刷新）+ `trailing`（导出 / 软删）。
  */
 export function FileBrowser({
   source,
   leading,
   trailing,
   emptyTreeHint,
+  onCloneGit,
 }: {
   /** 已解析的文件源；为 null 时（本地源在本机不可用）保留工具栏（含选择器）但树/操作淡出、正文兜空态。 */
   source: FileSource | null;
@@ -41,6 +43,8 @@ export function FileBrowser({
   trailing?: ReactNode;
   /** 文件树为空时的提示文案（对话工作区专用）。 */
   emptyTreeHint?: string;
+  /** 云桌浅克隆进本工作区；本机传统不挂（入口在 Composer / 缺根菜单）。 */
+  onCloneGit?: () => void;
 }) {
   const showFile = useSidePanelStore((s) => s.showFile);
   const treeRef = useRef<FileTreeHandle>(null);
@@ -56,53 +60,46 @@ export function FileBrowser({
         {leading}
         {leading && <div className="mx-1 h-4 w-px shrink-0 bg-border" />}
 
-        {source?.caps.transfer && (
-          <>
-            <Button
-              className="shrink-0 disabled:opacity-60"
-              disabled={chrome.uploading}
-              onClick={() => treeRef.current?.triggerUpload()}
-              icon={
-                chrome.uploading ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <Upload size={13} />
-                )
-              }
-            >
-              上传
-            </Button>
-            <SimpleTooltip label="上传文件夹">
-              <IconButton
-                disabled={chrome.uploading}
-                onClick={() => treeRef.current?.triggerUploadFolder()}
-                aria-label="上传文件夹"
-              >
-                <FolderUp size={14} />
-              </IconButton>
-            </SimpleTooltip>
-          </>
-        )}
-        {source && (
-          <>
-            <SimpleTooltip label="新建文件">
-              <IconButton
-                onClick={() => treeRef.current?.startCreate("file")}
-                aria-label="新建文件"
-              >
-                <FilePlus size={14} />
-              </IconButton>
-            </SimpleTooltip>
-            <SimpleTooltip label="新建文件夹">
-              <IconButton
-                onClick={() => treeRef.current?.startCreate("dir")}
-                aria-label="新建文件夹"
-              >
-                <FolderPlus size={14} />
-              </IconButton>
-            </SimpleTooltip>
-          </>
-        )}
+        {source ? (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <SimpleTooltip label="新建文件">
+                <IconButton
+                  onClick={() => treeRef.current?.startCreate("file")}
+                  aria-label="新建文件"
+                >
+                  <FilePlus size={14} />
+                </IconButton>
+              </SimpleTooltip>
+              <SimpleTooltip label="新建文件夹">
+                <IconButton
+                  onClick={() => treeRef.current?.startCreate("dir")}
+                  aria-label="新建文件夹"
+                >
+                  <FolderPlus size={14} />
+                </IconButton>
+              </SimpleTooltip>
+            </div>
+            {source.caps.transfer || onCloneGit ? (
+              <div className="flex items-center gap-1">
+                {source.caps.transfer ? (
+                  <UploadMenu
+                    uploading={chrome.uploading}
+                    onUploadFiles={() => treeRef.current?.triggerUpload()}
+                    onUploadFolder={() => treeRef.current?.triggerUploadFolder()}
+                  />
+                ) : null}
+                {onCloneGit ? (
+                  <SimpleTooltip label="从 Git 克隆">
+                    <IconButton onClick={onCloneGit} aria-label="从 Git 克隆">
+                      <GitBranch size={14} />
+                    </IconButton>
+                  </SimpleTooltip>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="min-w-0 flex-1" />
 

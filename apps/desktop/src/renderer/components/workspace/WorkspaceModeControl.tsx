@@ -15,9 +15,6 @@ import {
   resolveEffectiveWorkspace,
 } from "@/lib/workspaceEffectiveMode";
 import {
-  exportCloudDeskToPickedFolder,
-  exportCloudDeskZip,
-  mergeArtifactsOnlyToLanding,
   mergeBackToLanding,
   peekMergeLanding,
   registerMergeLanding,
@@ -37,14 +34,11 @@ import {
   ChevronDown,
   Cloud,
   CloudUpload,
-  Download,
-  FolderDown,
   FolderInput,
   GitBranch,
   HardDrive,
   Loader2,
   MapPin,
-  Package,
   Upload,
 } from "lucide-react";
 import {
@@ -59,7 +53,7 @@ import {
 /**
  * Shared workspace mode control — status for established chats (project inherit /
  * bare scratch). 出生定终身：不改当前会话 folder。§五：云会话不再主推打开本地 /
- * 绑定本机；遗留本机会话保留备份。云桌出口（ZIP / 合回落点）见 §7.6。
+ * 绑定本机；遗留本机会话保留备份。云桌合回主入口见 §7.6（导出在工具条，只合回产物在产物卡）。
  */
 
 export interface WorkspaceModeState {
@@ -200,7 +194,7 @@ export function WorkspaceModeTrigger({
   );
 }
 
-/** Status + local legacy handoff arm; cloud sessions: ZIP/合回出口 + import/Git（无 mode=local create）。 */
+/** Status + local legacy handoff arm; cloud sessions: Diff 合回（无 mode=local create）。 */
 export function WorkspaceModeMenu({
   state,
   conversationId,
@@ -239,12 +233,12 @@ export function WorkspaceModeMenu({
 
   const landing =
     !isLocal && conversationId ? peekMergeLanding(conversationId, roots) : null;
-  const landingHint =
+  const mergeHint =
     landing && !landing.missing
-      ? `当前 · ${landing.rootName ?? "已登记目录"}`
+      ? `Diff 勾选写入「${landing.rootName ?? "已登记目录"}」；冲突默认保留本机`
       : landing?.missing
-        ? "原目录已失效，请重新登记"
-        : "首次合回时也会询问";
+        ? "原目录已失效，合回时会重新询问"
+        : "Diff 勾选写入；首次会询问落点，冲突默认保留本机";
 
   const runExit = async (fn: () => Promise<unknown>) => {
     if (exitBusy) return;
@@ -275,30 +269,6 @@ export function WorkspaceModeMenu({
     onActionDone?.();
     void runExit(async () => {
       await mergeBackToLanding(conversationId, roots);
-    });
-  };
-
-  const onMergeArtifactsOnly = () => {
-    if (!conversationId) return;
-    onActionDone?.();
-    void runExit(async () => {
-      await mergeArtifactsOnlyToLanding(conversationId, roots);
-    });
-  };
-
-  const onExportZip = () => {
-    if (!conversationId) return;
-    onActionDone?.();
-    void runExit(async () => {
-      await exportCloudDeskZip(conversationId);
-    });
-  };
-
-  const onExportToFolder = () => {
-    if (!conversationId) return;
-    onActionDone?.();
-    void runExit(async () => {
-      await exportCloudDeskToPickedFolder(conversationId);
     });
   };
 
@@ -406,65 +376,27 @@ export function WorkspaceModeMenu({
           </>
         ) : desktop ? (
           <>
-            {/* §7.6 云桌→本机标准出口（常驻；不绑「后台云端」job） */}
+            {/* §7.6 云桌→本机：芯片只留 Diff 合回；首次询问落点，已登记可更换。 */}
             {conversationId ? (
               <>
                 <ModeAction
-                  icon={<Download size={14} />}
-                  label="导出 ZIP"
-                  hint="下载云端快照拷贝"
-                  onClick={onExportZip}
-                  disabled={anyBusy}
-                />
-                <ModeAction
-                  icon={<FolderDown size={14} />}
-                  label="导出到本机文件夹"
-                  hint="每次可选目录；不必先登记落点"
-                  onClick={onExportToFolder}
-                  disabled={anyBusy}
-                />
-                <ModeAction
-                  icon={<MapPin size={14} />}
-                  label={
-                    landing && !landing.missing
-                      ? "更换合回落点"
-                      : "登记合回落点"
-                  }
-                  hint={landingHint}
-                  onClick={onRegisterLanding}
-                  disabled={anyBusy}
-                />
-                <ModeAction
                   icon={<FolderInput size={14} />}
                   label="合回到本机"
-                  hint="Diff 勾选写入落点；冲突默认保留本机"
+                  hint={mergeHint}
                   onClick={onMergeBack}
                   disabled={anyBusy}
                 />
-                <ModeAction
-                  icon={<Package size={14} />}
-                  label="只合回产物"
-                  hint="仅写入本回合交付产物；无则提示"
-                  onClick={onMergeArtifactsOnly}
-                  disabled={anyBusy}
-                />
-                <div className="my-1 border-t border-border" />
+                {landing && !landing.missing ? (
+                  <ModeAction
+                    icon={<MapPin size={14} />}
+                    label="更换合回落点"
+                    hint={`当前 · ${landing.rootName ?? "已登记目录"}`}
+                    onClick={onRegisterLanding}
+                    disabled={anyBusy}
+                  />
+                ) : null}
               </>
             ) : null}
-            <ModeAction
-              icon={<Upload size={14} />}
-              label="导入到「我的文件」"
-              hint="本机文件夹快照"
-              onClick={importToCloud}
-              disabled={anyBusy}
-            />
-            <ModeAction
-              icon={<GitBranch size={14} />}
-              label="从 Git 克隆"
-              hint="云端浅克隆到本工作区"
-              onClick={connectGit}
-              disabled={anyBusy}
-            />
             <p className="px-2.5 py-1.5 text-xs text-muted-foreground">
               本会话工作区在创建时已确定，不可改绑。
             </p>

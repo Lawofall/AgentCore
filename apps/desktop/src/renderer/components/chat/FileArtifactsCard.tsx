@@ -1,4 +1,3 @@
-import { AutoFolderNoticeLine } from "@/components/chat/AutoFolderNoticeCard";
 import {
   type ArtifactListMeta,
   useArtifactListMeta,
@@ -14,6 +13,7 @@ import {
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useConversationFileSource } from "@/hooks/useConversationFileSource";
 import { useConversationWorkspace } from "@/hooks/useWorkspaces";
+import { hasLocalFiles } from "@/lib/capabilities";
 import {
   type FileArtifact,
   type FileOp,
@@ -23,7 +23,8 @@ import {
 import { isHtmlPath } from "@/lib/fileSource";
 import { openWorkspaceHtmlInBrowser } from "@/lib/openWorkspaceHtmlInBrowser";
 import { stageFileLabel } from "@/lib/stageDirs";
-import type { AutoFolderNotice } from "@/stores/conversation";
+import { mergeArtifactsOnlyToLanding } from "@/services/cloudDeskExit";
+import type { MergeArtifactRef } from "@/services/mergeArtifactsOnly";
 import { usePersistentDisclosure } from "@/stores/disclosure";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import {
@@ -33,13 +34,14 @@ import {
   ChevronUp,
   Diff,
   FilePlus,
+  FolderInput,
   FolderOpen,
   type LucideIcon,
   Pencil,
   Trash2,
   X,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 /**
  * 「本回合产出文件」卡 —— 主清单只认路径验收态（delivery_status.artifacts），挂在
@@ -47,10 +49,8 @@ import type { ReactNode } from "react";
  * 的 `showFile` 开右坞顶栏 File 内容 tab（可带 artifact.workspaceId 跟落地桌）。例外：HTML 产物在会话具备应用内「完整预览」能力时
  * **直达**内置浏览器 tab（`workspace://` + BrowserPanel；desk 优先 artifact.workspaceId，
  * 否则会话工作区 wsId）。「查看改动」聚焦右坞「改动」tab（无则先挂；与
- * {@link TurnFileChangesReview} 同源，前端UX设计.md §十）。
- *
- * 裸聊自动建桌的回合另带 `autoFolder`：落点告知作为卡头一行（{@link AutoFolderNoticeLine}），
- * 因为文件正是落进那个文件夹——同一件事不再在气泡顶部另开一张卡说第二遍。
+ * {@link TurnFileChangesReview} 同源，前端UX设计.md §十）。桌面云会话另挂
+ * 「合回产物」：只写本卡交付路径到合回落点（§7.6 ①）。
  *
  * 导出件（`报告.md` → `报告.docx`）主推、源文件降级为中间稿收进折叠区
  * （{@link splitExportedSources} 只认工具自报的 `derivedFrom`）：用户要的是那份 Word，
@@ -152,6 +152,21 @@ function rowVisual(artifact: FileArtifact): {
   };
 }
 
+function mergeableRefsFromArtifacts(
+  artifacts: FileArtifact[],
+): MergeArtifactRef[] {
+  const refs: MergeArtifactRef[] = [];
+  const seen = new Set<string>();
+  for (const a of artifacts) {
+    if (a.acceptance === "rejected" || a.op === "delete") continue;
+    const path = a.path.trim();
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    refs.push(a.workspaceId ? { path, workspaceId: a.workspaceId } : { path });
+  }
+  return refs;
+}
+
 function FileRow({
   artifact,
   onOpen,
@@ -248,14 +263,11 @@ export function FileArtifactsCard({
   artifacts,
   conversationId = null,
   turnKey,
-  autoFolder,
 }: {
   artifacts: FileArtifact[];
   conversationId?: string | null;
   /** 回合作用域（= messageId）：给了才把整卡/中间稿开合持久化。 */
   turnKey?: string;
-  /** 裸聊自动建桌的落点告知——文件落在这里，所以并进本卡头部而非另起一卡。 */
-  autoFolder?: AutoFolderNotice;
 }) {
   // 文件不多（≤4）默认展开一目了然；多了先收起，避免长清单淹没答复。
   const [expanded, setExpanded] = usePersistentDisclosure(
@@ -273,12 +285,14 @@ export function FileArtifactsCard({
   const fileSource = useConversationFileSource(conversationId);
   const canFullPreview = !!fileSource?.openInAppPreview;
   // 与侧栏同源落地 desk；产物可带独立 workspaceId 覆盖。
-  const sessionWsId = useConversationWorkspace(conversationId)?.wsId;
+  const sessionWs = useConversationWorkspace(conversationId);
+  const sessionWsId = sessionWs?.wsId;
   const lookupListMeta = useArtifactListMeta(
     fileSource,
     artifacts,
     sessionWsId,
   );
+  const [merging, setMerging] = useState(false);
 
   if (artifacts.length === 0) return null;
 
@@ -286,8 +300,27 @@ export function FileArtifactsCard({
   const { primary, intermediate } = splitExportedSources(artifacts);
   const accepted = primary.filter((a) => a.acceptance !== "rejected");
   const rejected = primary.filter((a) => a.acceptance === "rejected");
+  const mergeRefs = mergeableRefsFromArtifacts(accepted);
+  const canMergeArtifacts =
+    hasLocalFiles() &&
+    !!conversationId &&
+    sessionWs?.location === "cloud" &&
+    mergeRefs.length > 0;
   const canReview =
     hasChangePreviews(artifacts) || (!!conversationId && !!turnKey);
+
+  const onMergeArtifacts = () => {
+    if (!conversationId || merging) return;
+    setMerging(true);
+    void (async () => {
+      try {
+        const roots = (await window.fsApi?.listRoots()) ?? [];
+        await mergeArtifactsOnlyToLanding(conversationId, roots, mergeRefs);
+      } finally {
+        setMerging(false);
+      }
+    })();
+  };
 
   const openArtifact = (a: FileArtifact) => {
     // HTML 直达完整预览（内置浏览器 tab）；desk 优先 artifact，否则会话工作区。
@@ -342,6 +375,20 @@ export function FileArtifactsCard({
             )}
           </span>
         </Button>
+        {canMergeArtifacts && (
+          <SimpleTooltip label="仅把本回合交付产物写入本机落点；已有文件不覆盖">
+            <Button
+              variant="ghost"
+              onClick={onMergeArtifacts}
+              disabled={merging}
+              aria-label="合回产物"
+              className="h-auto shrink-0 rounded-none px-3 py-2.5 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            >
+              <FolderInput size={14} className="mr-1.5 shrink-0" />
+              {merging ? "合回中…" : "合回产物"}
+            </Button>
+          </SimpleTooltip>
+        )}
         {canReview && (
           <SimpleTooltip label="在右坞查看改动（只读）">
             <Button
@@ -356,8 +403,6 @@ export function FileArtifactsCard({
           </SimpleTooltip>
         )}
       </div>
-      {/* 落点先于清单，且不随清单折叠——收起文件也得看得见文件去哪了。 */}
-      {autoFolder && <AutoFolderNoticeLine notice={autoFolder} />}
       {expanded && (
         <>
           {/* 无行间横线（统一两卡列表语言）：单行可点行有 hover 底色 + 图标锚点，保持现有密度。 */}

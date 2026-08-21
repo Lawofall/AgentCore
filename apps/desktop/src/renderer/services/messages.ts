@@ -116,8 +116,7 @@ export interface BackendMessage {
     error?: { code: string; message: string } | null;
     /** 预检警告（P2 DURABLE）：journaled turn_warning lifted for plain-chat reload. */
     turn_warning?: string | null;
-    /** 裸聊自动建文件夹告知（§5.4）：lifted auto_folder_created so the landing notice
-     * (with its rename entry) survives a reload. null unless this turn minted one. */
+    /** 裸聊自动建文件夹（§5.4）：journal 仍投影；对话内不再画落点条，故不抬到气泡。 */
     auto_folder?: { folder_id: string; name: string } | null;
   } | null;
   /** 回合 token 用量 (Tier 2 重载持久化): the turn's token snapshot in the ledger short-key
@@ -358,13 +357,6 @@ export function toMessage(m: BackendMessage): Message {
     cost: m.cost ?? undefined,
     // 预检警告（P2）：runs 投影抬升的 turn_warning → 消息横幅。
     turnWarning: m.runs?.turn_warning ?? undefined,
-    // 裸聊自动建文件夹（§5.4）：runs 投影抬升 → 落点轻提示（含改名入口）。
-    autoFolder: m.runs?.auto_folder
-      ? {
-          folderId: m.runs.auto_folder.folder_id,
-          name: m.runs.auto_folder.name,
-        }
-      : undefined,
     // 收到的上下文 · CEO 侧 (上下文传递可视化 通道①): turn-level, so it replays independently
     // of the team graph — present on pure-chat reloads (empty `events`) too.
     captainContext: m.runs?.captain_context?.length
