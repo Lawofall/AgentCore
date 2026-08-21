@@ -813,7 +813,10 @@ export class SidecarManager {
       return undefined;
     }
     if (inflight && opts.force) {
-      const joined: Promise<void> = inflight
+      // Self-ref in then(): const init trips TS2454.
+      // biome-ignore lint/style/useConst: assigned after the promise closes over itself
+      let joined!: Promise<void>;
+      joined = inflight
         .catch(() => undefined)
         .then(() => {
           entry.accountRulesMemoryFreshUntil.delete(key);
@@ -832,7 +835,10 @@ export class SidecarManager {
       this.trackWarm(entry, joined);
       return joined;
     }
-    const work: Promise<void> = (async () => {
+    // Self-ref in finally: const + IIFE trips TS2454.
+    // biome-ignore lint/style/useConst: assigned after the promise closes over itself
+    let work!: Promise<void>;
+    work = (async () => {
       let freshMs = ACCOUNT_WARM_RETRY_BACKOFF_MS;
       try {
         const reply = await entry.client.request("warmAccountRulesMemory", {
