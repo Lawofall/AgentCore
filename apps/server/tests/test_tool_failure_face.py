@@ -608,7 +608,13 @@ def _scan_produced_codes() -> dict[str, set[str]]:
     - a code assembled at runtime, or handed in from outside the scanned trees.
     """
     root = Path(agentcore.__file__).resolve().parent
-    sources = [p for d in _SCANNED_PACKAGE_DIRS for p in sorted((root / d).rglob("*.py"))]
+    sources = [
+        p
+        for d in _SCANNED_PACKAGE_DIRS
+        for p in sorted((root / d).rglob("*.py"))
+        # sandboxd JSON-RPC ``code`` is a daemon wire field, not a tool-failure face.
+        if "sandbox/sandboxd" not in p.as_posix()
+    ]
     sources += [root / rel for rel in _SCANNED_FILES]
 
     found: dict[str, set[str]] = {}

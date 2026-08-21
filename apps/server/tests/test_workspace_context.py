@@ -412,11 +412,13 @@ def test_bridge_session_sandbox_browser_guide_no_relative_html(monkeypatch):
     """过桥：local + 无 Bridge + gVisor → 已装配但沙箱指引（相对路径不可测）。"""
     from agentcore.config import settings
     from agentcore.runtime.browser.desktop_bridge import reset_desktop_bridge_health_for_tests
+    from agentcore.tools.sandbox.browser.netns import set_browser_netns_health_for_tests
     from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
 
     reset_desktop_bridge_health_for_tests()
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(True)
+    set_browser_netns_health_for_tests(True)
     out = build_workspace_context(
         _FakeBackend("local"),
         desktop_online=True,

@@ -47,7 +47,7 @@ _CAPS: dict[str, int] = {
     "browser": 1750,
     "git": 2400,
     "terminal": 1450,
-    "delegate": 4770,
+    "delegate": 4790,
     "ask_user": 2750,
 }
 _TOTAL_CAP = sum(_CAPS.values())

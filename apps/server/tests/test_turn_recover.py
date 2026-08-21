@@ -1378,6 +1378,9 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
             return None
 
     backend = SimpleNamespace(location="server")
+    monkeypatch.setattr(
+        crash_mod, "collect_outlet_inventory", AsyncMock(return_value=())
+    )
     monkeypatch.setattr(crash_mod, "async_session_factory", lambda: _FakeSession())
     monkeypatch.setattr(crash_mod, "ConversationRepository", _FakeConvRepo)
     monkeypatch.setattr(crash_mod, "BoardRepository", _FakeBoardRepo)
