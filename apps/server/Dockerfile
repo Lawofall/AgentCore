@@ -124,9 +124,8 @@ RUN set -eux; \
       apt-get install -y --no-install-recommends iproute2; \
       rm -rf /var/lib/apt/lists/*; \
     fi
-# iproute2：每会话浏览器沙箱的 netns + veth 由宿主侧 `ip netns/link` 创建
-# （agentcore/tools/sandbox/browser/netns.py，D10 出口隔离）；base slim 不含 `ip`，
-# 故随浏览器层一并装（仅 INSTALL_BROWSER=1 时需要）。
+# iproute2：形状 B 的 netns + veth 由同容器 sandboxd（uid 0）exec `ip`；
+# base slim 不含 `ip`，随浏览器层一并装（仅 INSTALL_BROWSER=1 时需要）。
 
 # ④ runsc 二进制（INSTALL_RUNSC=0 时该层只拷到一个空目录占位）。
 COPY --from=runsc /out/ /usr/local/bin/

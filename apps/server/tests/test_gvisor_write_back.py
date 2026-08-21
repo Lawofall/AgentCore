@@ -18,6 +18,12 @@ from agentcore.config import settings
 from agentcore.tools.sandbox.gvisor import GVisorSandbox
 from agentcore.tools.sandbox.limits import reset_execution_slots
 from agentcore.tools.sandbox.protocol import ExecutionRequest
+from agentcore.tools.sandbox.sandboxd import (
+    SandboxdError,
+    SandboxdUnavailable,
+    set_sandboxd_client_for_tests,
+)
+from tests.sandboxd_testutil import LoopbackRunscClient
 
 
 @pytest.fixture(autouse=True)
@@ -137,6 +143,16 @@ def _install_fake_runsc(
     return str(wrapper)
 
 
+def _bind_loopback(sandbox: GVisorSandbox) -> LoopbackRunscClient:
+    """Drive fake ``runsc`` through sandboxd's test client (never production)."""
+    client = LoopbackRunscClient(
+        runsc_path=sandbox._runsc,  # noqa: SLF001
+        runtime_root=sandbox._runtime_root,  # noqa: SLF001
+    )
+    set_sandboxd_client_for_tests(client)
+    return client
+
+
 async def test_gvisor_write_back_lands_artifact_in_real_workspace(tmp_path: Path):
     ws = tmp_path / "workspace"
     ws.mkdir()
@@ -147,6 +163,7 @@ async def test_gvisor_write_back_lands_artifact_in_real_workspace(tmp_path: Path
         runsc_path=runsc,
         runtime_root=str(tmp_path / "rt"),
     )
+    _bind_loopback(sandbox)
 
     result = await sandbox.execute(
         ExecutionRequest(
@@ -181,6 +198,7 @@ async def test_gvisor_readonly_script_does_not_claim_written_files(tmp_path: Pat
         runsc_path=_install_fake_runsc(tmp_path, rematerialize=True),
         runtime_root=str(tmp_path / "rt"),
     )
+    _bind_loopback(sandbox)
     result = await sandbox.execute(
         ExecutionRequest(
             code="print('ignored-by-fake')",
@@ -214,6 +232,7 @@ async def test_gvisor_rematerialize_reports_only_actual_content_change(tmp_path:
         ),
         runtime_root=str(tmp_path / "rt"),
     )
+    _bind_loopback(sandbox)
     result = await sandbox.execute(
         ExecutionRequest(
             code="print('ignored-by-fake')",
@@ -229,29 +248,30 @@ async def test_gvisor_rematerialize_reports_only_actual_content_change(tmp_path:
     assert (ws / "dist" / "app.js").read_text(encoding="utf-8") == "bundle-a"
 
 
-async def test_gvisor_timeout_skips_write_back(tmp_path: Path, monkeypatch):
+async def test_gvisor_timeout_skips_write_back(tmp_path: Path):
     """Timeout path must not persist half-written artifacts (copy-out skipped)."""
     import time
 
     ws = tmp_path / "workspace"
     ws.mkdir()
+    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
 
-    # Hang so the deadline poll path fires (not a fast successful exit).
-    runsc = _install_fake_runsc(tmp_path, hang=True)
-    sandbox = GVisorSandbox(runsc_path=runsc, runtime_root=str(tmp_path / "rt"))
+    class _TimeoutClient(LoopbackRunscClient):
+        async def run_wait(self, **kwargs):  # noqa: ANN003
+            raise SandboxdError("loopback runsc timeout", code="sandboxd_timeout")
 
-    # Advance the poll-loop clock past the disaster wall without waiting wall-clock
-    # or relying on OS process kill (Windows .cmd wrappers often leave children).
-    clock = {"t": time.monotonic()}
+        async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
+            return None
 
-    def fake_mono() -> float:
-        return clock["t"]
+        async def delete(self, container_id: str, *, force: bool = True) -> None:
+            return None
 
-    async def jump_sleep(_delay: float = 0) -> None:
-        clock["t"] += 10_000
-
-    monkeypatch.setattr(gvisor_mod.time, "monotonic", fake_mono)
-    monkeypatch.setattr(gvisor_mod.asyncio, "sleep", jump_sleep)
+    set_sandboxd_client_for_tests(
+        _TimeoutClient(
+            runsc_path=sandbox._runsc,  # noqa: SLF001
+            runtime_root=sandbox._runtime_root,  # noqa: SLF001
+        )
+    )
 
     start = time.monotonic()
     result = await sandbox._execute_in_slot(  # noqa: SLF001
@@ -330,8 +350,8 @@ def test_runsc_run_cmd_restricted_uses_network_host(tmp_path: Path):
 
 
 async def test_health_check_smoke_run(tmp_path: Path):
-    runsc = _install_fake_runsc(tmp_path)
-    sandbox = GVisorSandbox(runsc_path=runsc, runtime_root=str(tmp_path / "rt"))
+    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
+    _bind_loopback(sandbox)
     assert await sandbox.health_check() is True
     assert sandbox.last_health_failure is None
 
@@ -346,6 +366,45 @@ async def test_health_check_not_linux_sets_failure_reason(
     assert sandbox.last_health_failure is not None
     assert sandbox.last_health_failure[0] == "not_linux"
     assert sandbox.last_health_failure[1] and "platform=" in sandbox.last_health_failure[1]
+
+
+@pytest.mark.asyncio
+async def test_health_check_sandboxd_unavailable(tmp_path: Path):
+    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
+
+    class _Down(LoopbackRunscClient):
+        async def health(self, shape):  # noqa: ANN001
+            raise SandboxdUnavailable("no daemon")
+
+    set_sandboxd_client_for_tests(
+        _Down(
+            runsc_path=sandbox._runsc,  # noqa: SLF001
+            runtime_root=sandbox._runtime_root,  # noqa: SLF001
+        )
+    )
+    assert await sandbox.health_check() is False
+    assert sandbox.last_health_failure is not None
+    assert sandbox.last_health_failure[0] == "sandboxd_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_health_check_probes_code_shape_only(tmp_path: Path):
+    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
+    shapes: list[str] = []
+
+    class _Probe(LoopbackRunscClient):
+        async def health(self, shape):  # noqa: ANN001
+            shapes.append(shape)
+            return True, ""
+
+    set_sandboxd_client_for_tests(
+        _Probe(
+            runsc_path=sandbox._runsc,  # noqa: SLF001
+            runtime_root=sandbox._runtime_root,  # noqa: SLF001
+        )
+    )
+    assert await sandbox.health_check() is True
+    assert shapes == ["code"]
 
 
 def test_resolve_runtime_root_uses_settings_default(monkeypatch, tmp_path: Path):

@@ -126,7 +126,7 @@ def _server_backend(tmp_path: Path) -> ServerWorkspace:
     return ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())
 
 
-def test_gate_requires_server_plus_gvisor_plus_health(tmp_path, monkeypatch):
+def test_gate_requires_gvisor_and_shape_b_netns(tmp_path, monkeypatch):
     backend = _server_backend(tmp_path)
     assert browser_execution_enabled_for(None) is False
     reset_desktop_bridge_health_for_tests()
@@ -135,14 +135,15 @@ def test_gate_requires_server_plus_gvisor_plus_health(tmp_path, monkeypatch):
     assert browser_execution_enabled_for(LocalBackend()) is False
     assert browser_execution_enabled_for(backend) is False  # no gVisor isolation
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_cloud_sandbox_health_for_tests(True)
+    set_browser_netns_health_for_tests(True)
+    set_cloud_sandbox_health_for_tests(False)  # A must not block B
     assert browser_execution_enabled_for(backend) is True
-    set_cloud_sandbox_health_for_tests(False)
-    assert browser_execution_enabled_for(backend) is False  # probe says unhealthy
+    set_browser_netns_health_for_tests(False)
+    assert browser_execution_enabled_for(backend) is False
 
 
 def test_gate_withholds_when_browser_netns_unhealthy(tmp_path, monkeypatch):
-    """Cloud sandbox ok but netns capability False → do not assemble ``browser``."""
+    """Shape A ok but shape-B netns False → do not assemble ``browser``."""
     backend = _server_backend(tmp_path)
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(True)
@@ -150,13 +151,13 @@ def test_gate_withholds_when_browser_netns_unhealthy(tmp_path, monkeypatch):
     assert browser_execution_enabled_for(backend) is False
 
 
-def test_gate_netns_unprobed_keeps_cloud_health_semantics(tmp_path, monkeypatch):
-    """None netns health + cloud healthy → still True (tests / unbooted compatibility)."""
+def test_gate_netns_unprobed_is_fail_closed(tmp_path, monkeypatch):
+    """None netns health is fail-closed — do not assemble even if shape A is healthy."""
     backend = _server_backend(tmp_path)
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(True)
     assert browser_netns_health() is None
-    assert browser_execution_enabled_for(backend) is True
+    assert browser_execution_enabled_for(backend) is False
 
 
 def test_gate_local_requires_desktop_bridge_when_no_gvisor(monkeypatch):
@@ -175,10 +176,11 @@ def test_gate_local_requires_desktop_bridge_when_no_gvisor(monkeypatch):
 
 
 def test_gate_local_bridge_session_falls_back_to_sandbox(monkeypatch):
-    """过桥：location=local、无 Bridge、gVisor 健康 → enabled 且 host_kind=sandbox."""
+    """过桥：location=local、无 Bridge、形状 B 健康 → enabled 且 host_kind=sandbox."""
     reset_desktop_bridge_health_for_tests()
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_cloud_sandbox_health_for_tests(True)
+    set_browser_netns_health_for_tests(True)
+    set_cloud_sandbox_health_for_tests(False)
     assert browser_execution_enabled_for(LocalBackend()) is True
     assert browser_host_kind_for(LocalBackend()) == "sandbox"
 
@@ -186,6 +188,7 @@ def test_gate_local_bridge_session_falls_back_to_sandbox(monkeypatch):
 def test_gate_local_healthy_bridge_prefers_local_over_sandbox(monkeypatch):
     """有健康 Bridge → host_kind=local（即便 gVisor 也健康）。"""
     monkeypatch.setattr(settings, "gvisor_enabled", True)
+    set_browser_netns_health_for_tests(True)
     set_cloud_sandbox_health_for_tests(True)
     set_desktop_bridge_health_for_tests(True)
     assert browser_execution_enabled_for(LocalBackend()) is True
@@ -197,6 +200,7 @@ def test_worker_registry_includes_browser_only_on_gvisor_cloud(tmp_path, monkeyp
     backend = _server_backend(tmp_path)
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(True)
+    set_browser_netns_health_for_tests(True)
     names = {s.name for s in build_worker_registry(backend=backend).list_all()}
     assert names >= _BROWSER_NAMES
 
@@ -225,13 +229,25 @@ def test_worker_registry_excludes_browser_on_local_without_bridge_or_gvisor(monk
 
 
 def test_worker_registry_includes_browser_on_local_bridge_session_sandbox(monkeypatch):
-    """过桥无 Bridge + gVisor → worker 装配 ``browser``（host_kind 由工具侧解析为 sandbox）。"""
+    """过桥无 Bridge + 形状 B → worker 装配 ``browser``（host_kind 由工具侧解析为 sandbox）。"""
     reset_desktop_bridge_health_for_tests()
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_cloud_sandbox_health_for_tests(True)
+    set_browser_netns_health_for_tests(True)
+    set_cloud_sandbox_health_for_tests(False)
     names = {s.name for s in build_worker_registry(backend=LocalBackend()).list_all()}
     assert names >= _BROWSER_NAMES
     assert browser_host_kind_for(LocalBackend()) == "sandbox"
+
+
+def test_worker_registry_assembles_browser_when_shape_a_unhealthy(tmp_path, monkeypatch):
+    """A 不健康且 B 健康 → 仍可装配 browser（code_execute 仍未装配）。"""
+    backend = _server_backend(tmp_path)
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    set_cloud_sandbox_health_for_tests(False)
+    set_browser_netns_health_for_tests(True)
+    names = {s.name for s in build_worker_registry(backend=backend).list_all()}
+    assert names >= _BROWSER_NAMES
+    assert "code_execute" not in names
 
 
 def test_worker_registry_includes_browser_on_local_with_bridge(monkeypatch):
@@ -826,7 +842,8 @@ async def test_bridge_session_sandbox_relative_path_fails_honestly(tmp_path, mon
     """过桥无 Bridge + gVisor：相对路径诚实失败；acquire 须 host_kind=sandbox。"""
     reset_desktop_bridge_health_for_tests()
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_cloud_sandbox_health_for_tests(True)
+    set_browser_netns_health_for_tests(True)
+    set_cloud_sandbox_health_for_tests(False)
     session = _FakeSession(
         BrowserCommandResult(ok=True, data={"final_url": "https://x/", "title": "T"})
     )

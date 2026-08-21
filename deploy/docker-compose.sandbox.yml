@@ -27,9 +27,10 @@ services:
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
-    # Root 只给入口脚本：准备容器私有 /run/netns 后 setpriv 降为 app，并保留
-    # ambient NET_ADMIN+SYS_ADMIN。禁止 privileged:true；不要挂宿主 /run/netns
-    #（避免 chown 宿主目录）。业务进程仍是 Dockerfile 的 USER app。
+    # Root 只给入口脚本：准备容器私有 /run/netns（保持 root 所有，不 chown 给
+    # app），以 uid 0 起 sandboxd，再 setpriv 降为 app 且不保留 ambient cap。
+    # API 进程无 NET_ADMIN/SYS_ADMIN。禁止 privileged:true；不要挂宿主
+    # /run/netns。cap_add 留给同容器 sandboxd（唯一 exec runsc/ip 的进程）。
     user: "0:0"
     cap_add:
       - NET_ADMIN
@@ -39,6 +40,6 @@ services:
     entrypoint: ["/bin/sh", "/usr/local/bin/api-sandbox-entrypoint.sh"]
     # Compose 覆盖 entrypoint 时会丢掉镜像 CMD；不写 command 则容器空跑、秒退、重启循环。
     command: ["python", "-m", "agentcore"]
-    # 沙箱内存记在 api 容器 cgroup 名下：基线 ~1G + 1×浏览器 OCI 2G + 并发 2 ×
+    # 沙箱内存记在 api 容器 cgroup 名下：基线 ~1G + 1×浏览器 + 并发 2 ×
     # 单次 512MB 执行 + 余量。覆盖 app compose 的 mem_limit=1024m。
     mem_limit: 4g

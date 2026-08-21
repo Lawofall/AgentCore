@@ -32,7 +32,6 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Callable
 from pathlib import Path
 
 from agentcore.config import settings
@@ -44,6 +43,13 @@ from agentcore.tools.sandbox.protocol import (
     ExecutionResult,
     SandboxCapabilities,
 )
+from agentcore.tools.sandbox.sandboxd import (
+    SandboxdError,
+    SandboxdUnavailable,
+    build_runsc_cmd,
+    get_sandboxd_client,
+)
+from agentcore.tools.sandbox.sandboxd.protocol import CodeNetwork, Shape
 from agentcore.tools.sandbox.staging import (
     TreeState,
     collect_changes,
@@ -73,6 +79,15 @@ _HOST_BIND_PATHS = ("/usr", "/lib", "/lib64", "/bin", "/etc")
 # Bundles must live on the DATA_DIR volume (settings.gvisor_runtime_root);
 # container /tmp overlay makes runsc mkdir fail with EINVAL inside gVisor.
 _ARTIFACT_MARKER = "__AGENTCORE_ARTIFACTS__"
+
+
+def _runsc_shape(
+    *, network_mode: str, registry_egress: bool
+) -> tuple[Shape, CodeNetwork]:
+    """Map execute request knobs onto sandboxd shape A (``code``) vs B (``net``)."""
+    if registry_egress:
+        return "net", "none"
+    return "code", "host" if network_mode == "restricted" else "none"
 
 
 def _resolve_runtime_root(explicit: str | None) -> str:
@@ -113,28 +128,6 @@ def _materialize_artifacts(staging_dir: Path, payload: dict[str, str]) -> None:
         dest.write_bytes(base64.b64decode(encoded.encode("ascii")))
 
 
-async def _read_stream(
-    stream: asyncio.StreamReader | None,
-    stream_name: str,
-    buffer: list[str],
-    on_output: Callable[[str, str], None] | None,
-    last_output_at: list[float] | None = None,
-) -> None:
-    """Read from a subprocess stream in chunks, optionally forwarding each chunk."""
-    if stream is None:
-        return
-    while True:
-        chunk = await stream.read(2048)
-        if not chunk:
-            break
-        text = chunk.decode("utf-8", errors="replace")
-        buffer.append(text)
-        if last_output_at is not None:
-            last_output_at[0] = time.monotonic()
-        if on_output:
-            on_output(stream_name, text)
-
-
 class GVisorSandbox:
     """SandboxProvider implementation using gVisor runsc."""
 
@@ -166,53 +159,34 @@ class GVisorSandbox:
         return self._last_health_failure
 
     async def health_check(self) -> bool:
-        """Smoke-run a minimal ``runsc run`` (not just ``--version``).
-
-        Exercises global flags before ``run`` and the full bundle path so
-        AppArmor / userns / flag-order faults fail the boot probe honestly.
-        """
+        """Probe shape A (``code``) via sandboxd. Never asks sandboxd about shape B."""
         self._last_health_failure = None
         if not _IS_LINUX:
             self._last_health_failure = ("not_linux", f"platform={sys.platform}")
             return False
 
-        container_id = f"agentcore-health-{uuid.uuid4().hex[:12]}"
-        bundle_dir = tempfile.mkdtemp(prefix="agentcore_gvisor_health_", dir=self._runtime_root)
         try:
-            rootfs = Path(bundle_dir) / "rootfs"
-            rootfs.mkdir()
-            (Path(bundle_dir) / "config.json").write_text(
-                json.dumps(self._build_health_oci_config()),
-                encoding="utf-8",
-            )
-            cmd = self._build_run_cmd(
-                bundle_dir=bundle_dir,
-                container_id=container_id,
-                network_mode="none",
-            )
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await proc.communicate()
-            if proc.returncode != 0:
-                detail = stderr.decode("utf-8", errors="replace").strip()
-                self._last_health_failure = ("runsc_failed", detail[:200] or None)
-                logger.debug(
-                    "sandbox.health_check_failed",
-                    returncode=proc.returncode,
-                    detail=detail[:200] or None,
-                )
-                return False
-            return True
-        except (FileNotFoundError, OSError) as exc:
+            ok, detail = await get_sandboxd_client().health("code")
+        except SandboxdUnavailable as exc:
+            self._last_health_failure = ("sandboxd_unavailable", str(exc)[:200] or None)
+            logger.debug("sandbox.health_check_failed", error=str(exc)[:200])
+            return False
+        except SandboxdError as exc:
+            self._last_health_failure = ("runsc_failed", str(exc)[:200] or None)
+            logger.debug("sandbox.health_check_failed", error=str(exc)[:200])
+            return False
+        except OSError as exc:
             self._last_health_failure = ("os_error", str(exc)[:200])
             logger.debug("sandbox.health_check_failed", error=str(exc)[:200])
             return False
-        finally:
-            await self._runsc_cmd("delete", "--force", container_id)
-            shutil.rmtree(bundle_dir, ignore_errors=True)
+        if not ok:
+            self._last_health_failure = ("runsc_failed", detail[:200] or None)
+            logger.debug(
+                "sandbox.health_check_failed",
+                detail=detail[:200] or None,
+            )
+            return False
+        return True
 
     # -- 会话面 (D9): long-lived browser sessions, added ALONGSIDE execute() -------
     # A separate surface for the L3 team browser — one-shot execute() is unchanged.
@@ -278,9 +252,11 @@ class GVisorSandbox:
     ) -> ExecutionResult:
         container_id = f"agentcore-{uuid.uuid4().hex[:12]}"
         bundle_dir = tempfile.mkdtemp(prefix="agentcore_gvisor_", dir=self._runtime_root)
-        process: asyncio.subprocess.Process | None = None
         timeout_seconds = self._effective_timeout(request)
         egress_session = None
+        exit_code = -1
+        stdout_str = ""
+        stderr_str = ""
 
         try:
             # Install-only: netns + allowlist proxy (non-rootless sandbox network).
@@ -310,6 +286,7 @@ class GVisorSandbox:
                     cache_bucket=request.cache_bucket,
                     cpu_limit=request.cpu_limit,
                     pids_limit=request.pids_limit,
+                    idle_timeout_seconds=request.idle_timeout_seconds,
                 )
 
             scratch_dir = Path(bundle_dir) / "scratch"
@@ -368,111 +345,50 @@ class GVisorSandbox:
                 encoding="utf-8",
             )
 
-            cmd = self._build_run_cmd(
-                bundle_dir=bundle_dir,
-                container_id=container_id,
+            shape, code_network = _runsc_shape(
                 network_mode=request.network_mode,
                 registry_egress=request.registry_egress,
             )
+            idle = request.idle_timeout_seconds
+            idle_timeout = float(idle) if idle is not None and idle > 0 else None
 
             try:
-                process = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    stdin=asyncio.subprocess.PIPE if request.stdin else None,
+                client = get_sandboxd_client()
+                exit_code, stdout_str, stderr_str = await client.run_wait(
+                    shape=shape,
+                    bundle_dir=bundle_dir,
+                    container_id=container_id,
+                    network_mode=code_network,
+                    netns_path=(
+                        egress_session.netns_path
+                        if egress_session is not None
+                        else None
+                    ),
+                    timeout_seconds=float(timeout_seconds),
+                    idle_timeout_seconds=idle_timeout,
+                    stdin=request.stdin,
+                    on_output=request.on_output,
                 )
-            except OSError as e:
-                raise SandboxError(f"代码执行环境启动失败：{e}") from e
-
-            stdin_bytes = request.stdin.encode() if request.stdin else None
-
-            try:
-
-                async def _collect_output() -> tuple[str, str]:
-                    if stdin_bytes is not None and process.stdin is not None:
-                        process.stdin.write(stdin_bytes)
-                        await process.stdin.drain()
-                        process.stdin.close()
-
-                    stdout_buf: list[str] = []
-                    stderr_buf: list[str] = []
-                    last_output_at = [time.monotonic()]
-                    readers = asyncio.gather(
-                        _read_stream(
-                            process.stdout,
-                            "stdout",
-                            stdout_buf,
-                            request.on_output,
-                            last_output_at,
-                        ),
-                        _read_stream(
-                            process.stderr,
-                            "stderr",
-                            stderr_buf,
-                            request.on_output,
-                            last_output_at,
-                        ),
-                    )
-                    idle = request.idle_timeout_seconds
-                    idle_limit = (
-                        float(idle) if idle is not None and idle > 0 else None
-                    )
-                    deadline = time.monotonic() + float(timeout_seconds)
-                    wait_task = asyncio.ensure_future(readers)
-                    try:
-                        while True:
-                            if wait_task.done():
-                                await wait_task
-                                break
-                            now = time.monotonic()
-                            if now >= deadline:
-                                wait_task.cancel()
-                                with contextlib.suppress(asyncio.CancelledError):
-                                    await wait_task
-                                from agentcore.tools.sandbox.exec_env import (
-                                    disaster_timeout_stderr,
-                                )
-
-                                raise SandboxTimeoutError(
-                                    disaster_timeout_stderr(int(timeout_seconds))
-                                )
-                            if (
-                                idle_limit is not None
-                                and (now - last_output_at[0]) >= idle_limit
-                            ):
-                                wait_task.cancel()
-                                with contextlib.suppress(asyncio.CancelledError):
-                                    await wait_task
-                                from agentcore.tools.sandbox.exec_env import (
-                                    idle_timeout_stderr,
-                                )
-
-                                raise SandboxTimeoutError(
-                                    idle_timeout_stderr(int(idle_limit))
-                                )
-                            await asyncio.sleep(0.05)
-                    except SandboxTimeoutError:
-                        raise
-                    finally:
-                        if not wait_task.done():
-                            wait_task.cancel()
-                            with contextlib.suppress(asyncio.CancelledError):
-                                await wait_task
-                    await process.wait()
-                    return "".join(stdout_buf), "".join(stderr_buf)
-
-                stdout_str, stderr_str = await _collect_output()
             except TimeoutError:
                 from agentcore.tools.sandbox.exec_env import disaster_timeout_stderr
 
                 raise SandboxTimeoutError(
                     disaster_timeout_stderr(int(timeout_seconds))
                 ) from None
-            except SandboxTimeoutError:
-                raise
+            except SandboxdError as exc:
+                if exc.code == "sandboxd_timeout":
+                    from agentcore.tools.sandbox.exec_env import (
+                        disaster_timeout_stderr,
+                    )
+
+                    raise SandboxTimeoutError(
+                        disaster_timeout_stderr(int(timeout_seconds))
+                    ) from exc
+                raise SandboxError(f"代码执行环境启动失败：{exc}") from exc
+            except OSError as e:
+                raise SandboxError(f"代码执行环境启动失败：{e}") from e
             finally:
-                await asyncio.shield(self._stop_container(container_id, process))
+                await asyncio.shield(self._stop_container(container_id))
 
             if staging_dir is not None:
                 clean_stdout, artifact_payload = _strip_artifact_payload(stdout_str)
@@ -489,10 +405,10 @@ class GVisorSandbox:
 
             duration_ms = int((time.monotonic() - start) * 1000)
             return ExecutionResult(
-                success=process.returncode == 0,
+                success=exit_code == 0,
                 stdout=stdout_str,
                 stderr=stderr_str,
-                exit_code=process.returncode or 0,
+                exit_code=exit_code or 0,
                 duration_ms=duration_ms,
                 written_files=written,
                 write_back_skipped=skipped,
@@ -559,67 +475,18 @@ class GVisorSandbox:
         network_mode: str,
         registry_egress: bool = False,
     ) -> list[str]:
-        """Assemble ``runsc`` argv: global flags before ``run``, bundle after.
-
-        Install ``registry_egress`` uses non-rootless ``--network=sandbox`` (netns
-        path in OCI) — same posture as browser sessions. All other paths keep
-        ``--rootless`` with ``host`` / ``none``.
-        """
-        if registry_egress:
-            cmd = [self._runsc, "--network=sandbox"]
-        else:
-            cmd = [self._runsc, "--rootless"]
-            # Rootless runsc rejects the default sandbox netstack: must pass an
-            # explicit flag (``none`` or ``host``). restricted = egress via host
-            # net; none = offline. Never omit the flag under ``--rootless``.
-            if network_mode == "restricted":
-                cmd.append("--network=host")
-            else:
-                cmd.append("--network=none")
-        cmd.extend(
-            [
-                f"--root={self._runtime_root}",
-                "run",
-                f"--bundle={bundle_dir}",
-                container_id,
-            ]
+        """Allowlisted ``runsc`` argv via sandboxd (shape A ``code`` / B ``net``)."""
+        shape, code_network = _runsc_shape(
+            network_mode=network_mode, registry_egress=registry_egress
         )
-        return cmd
-
-    def _build_health_oci_config(self) -> dict:
-        """Minimal OCI bundle for boot-time ``/bin/true`` smoke."""
-        return {
-            "ociVersion": "1.0.2",
-            "process": {
-                "terminal": False,
-                "user": {"uid": 65534, "gid": 65534},
-                "args": ["/bin/true"],
-                "env": ["PATH=/usr/bin:/bin"],
-                "cwd": "/tmp",
-            },
-            "root": {"path": "rootfs", "readonly": True},
-            "mounts": [
-                {
-                    "destination": "/tmp",
-                    "type": "tmpfs",
-                    "source": "tmpfs",
-                    "options": ["nosuid", "nodev", "size=8m"],
-                },
-                *self._host_bind_mounts(),
-            ],
-            "linux": {
-                "resources": {
-                    "memory": {"limit": 64 * 1024 * 1024},
-                    "pids": {"limit": 32},
-                },
-                "namespaces": [
-                    {"type": "pid"},
-                    {"type": "ipc"},
-                    {"type": "uts"},
-                    {"type": "mount"},
-                ],
-            },
-        }
+        return build_runsc_cmd(
+            runsc_path=self._runsc,
+            runtime_root=self._runtime_root,
+            bundle_dir=bundle_dir,
+            container_id=container_id,
+            shape=shape,
+            network_mode=code_network,
+        )
 
     def _build_command(self, request: ExecutionRequest, script_path: str) -> list[str]:
         if request.stdin and request.language == "bash":
@@ -818,25 +685,9 @@ class GVisorSandbox:
             },
         }
 
-    async def _runsc_cmd(self, *args: str) -> None:
+    async def _stop_container(self, container_id: str) -> None:
+        client = get_sandboxd_client()
         with contextlib.suppress(Exception):
-            proc = await asyncio.create_subprocess_exec(
-                self._runsc,
-                *args,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await proc.wait()
-
-    async def _stop_container(
-        self,
-        container_id: str,
-        process: asyncio.subprocess.Process | None,
-    ) -> None:
-        if process is not None and process.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                process.kill()
-            with contextlib.suppress(Exception):
-                await process.wait()
-        await self._runsc_cmd("kill", container_id, "SIGKILL")
-        await self._runsc_cmd("delete", container_id)
+            await client.kill(container_id)
+        with contextlib.suppress(Exception):
+            await client.delete(container_id, force=True)

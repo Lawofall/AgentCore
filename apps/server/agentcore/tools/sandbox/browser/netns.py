@@ -1,37 +1,25 @@
-"""Per-session network isolation (Linux-only) — validated by the M0 channel PoC.
+"""Per-session network isolation for browser sandboxes.
 
-Each browser sandbox gets its OWN network namespace with a veth pair to the host.
-The host end runs (is reachable by) the SSRF proxy; the sandbox end has a default
-route via the host end but the host does NOT NAT/forward, so the sandbox's ONLY
-reachable off-link destination is the proxy (D10 network-layer egress control —
-proven in the PoC: a raw socket to the public internet times out, only the proxy
-is reachable). runsc ``--network=sandbox`` then clones this netns's veth + routes
-into netstack (the OCI must reference the netns by PATH — see PoC finding #1).
-
-All calls shell out to ``ip`` and only run on Linux under a real gVisor deploy;
-they never execute in tests / on the dev host (the registry uses fakes there).
-
-Boot / sticky health (``browser_netns_health``) gates cloud ``browser_*`` assembly —
-``GVisorSandbox.health_check`` uses ``network_mode=none`` and does not cover netns.
+The API process never execs ``ip``: netns setup/teardown and the boot probe go
+through sandboxd (shape ``net``). ``browser_netns_health`` gates cloud
+``browser_*`` assembly — fail-closed: only ``True`` assembles.
 """
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import os
 import sys
 
 from agentcore.core.logging import get_logger
+from agentcore.tools.sandbox.sandboxd.client import get_sandboxd_client
+from agentcore.tools.sandbox.sandboxd.errors import SandboxdError, SandboxdUnavailable
 
 logger = get_logger(__name__)
 
 NETNS_RUN_DIR = "/var/run/netns"
 
-# Dedicated name for the boot probe (must not collide with slot-derived ``acbrw{N}``).
-_PROBE_NETNS_NAME = "acbrwprobe"
-
-# None = never probed → ``browser_execution_enabled_for`` keeps cloud-health-only semantics.
+# None = never probed → fail-closed (do not assemble browser_*).
 _browser_netns_healthy: bool | None = None
 
 
@@ -95,23 +83,11 @@ def chmod_netns_inode(name: str, *, run_dir: str = NETNS_RUN_DIR) -> None:
         os.chmod(f"{run_dir}/{name}", 0o644)
 
 
-async def _ip(*args: str, check: bool = True) -> tuple[int, str]:
-    proc = await asyncio.create_subprocess_exec(
-        "ip", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
-    )
-    out, _ = await proc.communicate()
-    text = out.decode("utf-8", errors="replace")
-    if check and proc.returncode != 0:
-        raise NetnsError(f"ip {' '.join(args)} failed ({proc.returncode}): {text.strip()}")
-    return proc.returncode or 0, text
-
-
 async def probe_browser_netns_at_startup() -> None:
     """One-shot boot probe when gVisor browser path is config-enabled. Never raises.
 
-    Minimal check: ``ip netns add`` + ``del`` a dedicated probe name. Only runs on
-    Linux with ``settings.gvisor_enabled``. Non-Linux / config-off leave the cache
-    at ``None`` (tests / unbooted keep status-quo assembly semantics).
+    Shape B: ``sandboxd.health("net")``. ``SandboxdUnavailable`` is fail-closed
+    (``False``). Non-Linux / config-off leave the cache at ``None``.
     """
     global _browser_netns_healthy
     from agentcore.config import settings
@@ -122,20 +98,18 @@ async def probe_browser_netns_at_startup() -> None:
     reason = "unhealthy"
     detail = ""
     try:
-        # Best-effort clear of a stale probe remnant, then add + del.
-        await _ip("netns", "del", _PROBE_NETNS_NAME, check=False)
-        await _ip("netns", "add", _PROBE_NETNS_NAME)
-        chmod_netns_inode(_PROBE_NETNS_NAME)
-        await _ip("netns", "del", _PROBE_NETNS_NAME, check=False)
-        ok = True
+        ok, detail = await get_sandboxd_client().health("net")
+        detail = detail[:200]
+    except SandboxdUnavailable as exc:
+        ok = False
+        reason = "sandboxd_unavailable"
+        detail = str(exc)[:200]
     except Exception as exc:  # noqa: BLE001 — probe must never break startup
         ok = False
         reason = type(exc).__name__
         detail = str(exc)[:200]
-        with contextlib.suppress(Exception):
-            await _ip("netns", "del", _PROBE_NETNS_NAME, check=False)
 
-    _browser_netns_healthy = ok
+    _browser_netns_healthy = bool(ok)
     if ok:
         logger.debug("browser.netns_health_ok")
         return
@@ -144,7 +118,7 @@ async def probe_browser_netns_at_startup() -> None:
         "browser.netns_health_failed",
         reason=reason,
         detail=detail or None,
-        hint="云端 browser_* 将不装配，直到容器 netns 能力可用（不回退 Local）",
+        hint="云端 browser / package_install 将不装配，直到 sandboxd 形状 B（net）探针为 True（不回退 Local）",
     )
 
 
@@ -153,37 +127,31 @@ class SessionNetns:
 
     def __init__(self, *, slot: int, subnet_base: str) -> None:
         self.slot = slot
+        self.subnet_base = subnet_base
         self.name = f"acbrw{slot}"
-        self.veth_host = f"acbrwh{slot}"
-        self.veth_sbx = f"acbrws{slot}"
         self.host_ip = f"{subnet_base}.{slot}.1"
         self.sbx_ip = f"{subnet_base}.{slot}.2"
-        self.cidr = "24"
+        self.path = f"{NETNS_RUN_DIR}/{self.name}"
 
     @property
     def netns_path(self) -> str:
-        return f"{NETNS_RUN_DIR}/{self.name}"
+        return self.path
 
     async def setup(self) -> None:
-        """Create the netns + veth, address both ends, default-route the sandbox."""
-        await self.teardown()  # clear any stale remnant from a crashed prior run
-        await _ip("netns", "add", self.name)
-        chmod_netns_inode(self.name)
-        await _ip("link", "add", self.veth_host, "type", "veth", "peer", "name", self.veth_sbx)
-        await _ip("link", "set", self.veth_sbx, "netns", self.name)
-        await _ip("addr", "add", f"{self.host_ip}/{self.cidr}", "dev", self.veth_host)
-        await _ip("link", "set", self.veth_host, "up")
-        await _ip(
-            "-n", self.name, "addr", "add", f"{self.sbx_ip}/{self.cidr}", "dev", self.veth_sbx
-        )
-        await _ip("-n", self.name, "link", "set", self.veth_sbx, "up")
-        await _ip("-n", self.name, "link", "set", "lo", "up")
-        # Default route via the host veth end. No NAT/forward on the host ⇒ the ONLY
-        # reachable off-link address is the proxy on host_ip (egress chokepoint).
-        await _ip("-n", self.name, "route", "add", "default", "via", self.host_ip)
+        """Ask sandboxd to create the netns + veth; never exec ``ip`` in the API."""
+        try:
+            info = await get_sandboxd_client().netns_setup(
+                "browser", self.slot, self.subnet_base
+            )
+        except SandboxdError as exc:
+            raise NetnsError(str(exc)) from exc
+        self.name = info.name
+        self.path = info.path
+        self.host_ip = info.host_ip
+        self.sbx_ip = info.sbx_ip
         logger.info("browser.netns_setup", netns=self.name, host_ip=self.host_ip)
 
     async def teardown(self) -> None:
-        """Best-effort removal (deleting the netns drops its veth end; then the host end)."""
-        await _ip("netns", "del", self.name, check=False)
-        await _ip("link", "del", self.veth_host, check=False)
+        """Best-effort removal via sandboxd."""
+        with contextlib.suppress(Exception):
+            await get_sandboxd_client().netns_teardown("browser", self.slot)

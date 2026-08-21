@@ -222,6 +222,69 @@ def test_registry_egress_unavailable_without_linux_gvisor(monkeypatch: pytest.Mo
     assert registry_egress_available() is False
 
 
+def test_registry_egress_available_requires_shape_b_netns(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import agentcore.tools.sandbox.egress.ready as ready
+    from agentcore.tools.sandbox.browser.netns import set_browser_netns_health_for_tests
+    from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
+
+    monkeypatch.setattr(ready.sys, "platform", "linux")
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    set_browser_netns_health_for_tests(None)
+    assert registry_egress_available() is False
+    set_browser_netns_health_for_tests(True)
+    set_cloud_sandbox_health_for_tests(False)
+    assert registry_egress_available() is True
+    set_browser_netns_health_for_tests(False)
+    assert registry_egress_available() is False
+
+
+@pytest.mark.asyncio
+async def test_package_netns_setup_uses_sandboxd_client():
+    from agentcore.tools.sandbox.egress.netns import PackageNetns, PackageNetnsError
+    from agentcore.tools.sandbox.sandboxd.client import set_sandboxd_client_for_tests
+    from agentcore.tools.sandbox.sandboxd.errors import SandboxdUnavailable
+    from agentcore.tools.sandbox.sandboxd.protocol import NetnsInfo
+
+    class _Client:
+        def __init__(self) -> None:
+            self.setups: list[tuple] = []
+            self.teardowns: list[tuple] = []
+
+        async def netns_setup(self, family, slot, subnet_base):
+            self.setups.append((family, slot, subnet_base))
+            name = f"acpkg{slot}"
+            return NetnsInfo(
+                family="package",
+                slot=slot,
+                name=name,
+                path=f"/var/run/netns/{name}",
+                host_ip=f"{subnet_base}.{slot}.1",
+                sbx_ip=f"{subnet_base}.{slot}.2",
+            )
+
+        async def netns_teardown(self, family, slot):
+            self.teardowns.append((family, slot))
+
+    client = _Client()
+    set_sandboxd_client_for_tests(client)  # type: ignore[arg-type]
+    ns = PackageNetns(slot=1, subnet_base="10.202")
+    await ns.setup()
+    assert client.setups == [("package", 1, "10.202")]
+    assert ns.host_ip == "10.202.1.1"
+    await ns.teardown()
+    assert client.teardowns == [("package", 1)]
+
+    class _Boom:
+        async def netns_setup(self, *_a, **_k):
+            raise SandboxdUnavailable("down")
+
+    set_sandboxd_client_for_tests(_Boom())  # type: ignore[arg-type]
+    with pytest.raises(PackageNetnsError):
+        await PackageNetns(slot=2, subnet_base="10.202").setup()
+
+
 def test_runsc_cmd_registry_egress_is_non_rootless_sandbox(tmp_path: Path):
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
     cmd = sandbox._build_run_cmd(  # noqa: SLF001
@@ -232,7 +295,9 @@ def test_runsc_cmd_registry_egress_is_non_rootless_sandbox(tmp_path: Path):
     )
     run_idx = cmd.index("run")
     assert "--rootless" not in cmd[:run_idx]
+    assert "--platform=systrap" in cmd[:run_idx]
     assert "--network=sandbox" in cmd[:run_idx]
+    assert "--ignore-cgroups" in cmd[:run_idx]
     assert "--network=host" not in cmd[:run_idx]
 
 
@@ -370,6 +435,8 @@ async def test_install_execute_writes_nm_without_staging_write_back(
     """registry_egress + cwd → nm lands on persistent workspace; no write_back."""
     import agentcore.tools.sandbox.gvisor as gvisor_mod
     from agentcore.tools.sandbox.limits import reset_execution_slots
+    from agentcore.tools.sandbox.sandboxd import set_sandboxd_client_for_tests
+    from tests.sandboxd_testutil import LoopbackRunscClient
     from tests.test_gvisor_write_back import _install_fake_runsc
 
     reset_execution_slots()
@@ -411,6 +478,12 @@ async def test_install_execute_writes_nm_without_staging_write_back(
     sandbox = GVisorSandbox(
         runsc_path=runsc,
         runtime_root=str(tmp_path / "rt"),
+    )
+    set_sandboxd_client_for_tests(
+        LoopbackRunscClient(
+            runsc_path=runsc,
+            runtime_root=sandbox._runtime_root,  # noqa: SLF001
+        )
     )
     result = await sandbox.execute(
         ExecutionRequest(

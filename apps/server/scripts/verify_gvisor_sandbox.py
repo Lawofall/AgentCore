@@ -15,15 +15,15 @@
 
 Docker 用法（推荐在生产镜像上验证，不在 Windows 宿主机）：
 
+验收身份必须是生产身份（``USER app`` + 已起的 ``sandboxd``）。
+**禁止** ``--user 0`` 直跑本脚本冒烟当放行——API 只走 Unix 客户端，
+root 直跑 ``runsc`` 不能代表生产。
+
 .. code-block:: bash
 
-   # 用刚构建的 api 镜像（已含 runsc + 文档库）
-   docker run --rm -it --security-opt seccomp=unconfined \\
-     --security-opt apparmor=unconfined \\
-     --cap-add NET_ADMIN --cap-add SYS_ADMIN --user 0 \\
-     -v "$PWD:/src:ro" -w /src \\
-     agentcore-api:latest \\
-     python apps/server/scripts/verify_gvisor_sandbox.py --live
+   # 叠 sandbox overlay 后进入已在跑的 api 容器（entrypoint 已起 sandboxd 并降为 app）
+   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.sandbox.yml \\
+     exec api python apps/server/scripts/verify_gvisor_sandbox.py --live
 
 退出码：0 = 通过；非 0 = 失败（CI / 人工清单可直接看）。
 """
@@ -323,7 +323,7 @@ async def check_live_runsc() -> list[str]:
 
 
 async def check_live_netns() -> list[str]:
-    """``ip netns add`` smoke — same gate as cloud browser_* / package_install."""
+    """Shape-B ``health("net")`` via sandboxd — same gate as browser / package_install."""
     sys.path.insert(0, str(SERVER_ROOT))
     from agentcore.config import settings  # noqa: WPS433
     from agentcore.tools.sandbox.browser.netns import (  # noqa: WPS433
@@ -339,13 +339,13 @@ async def check_live_netns() -> list[str]:
     reset_browser_netns_health_for_tests()
     await probe_browser_netns_at_startup()
     if browser_netns_health() is True:
-        _ok("browser netns probe (ip netns add/del)")
+        _ok("browser netns probe (sandboxd health net)")
         return errors
     errors.append("browser netns probe unhealthy")
     _fail(
-        "ip netns add failed — stack docker-compose.sandbox.yml "
-        "(cap_add NET_ADMIN/SYS_ADMIN + api-sandbox-entrypoint.sh); "
-        "do not fall back to DesktopBridge"
+        "sandboxd health(net) failed — stack docker-compose.sandbox.yml "
+        "(entrypoint starts sandboxd, then USER app); "
+        "do not fall back to DesktopBridge / ip netns add"
     )
     return errors
 
