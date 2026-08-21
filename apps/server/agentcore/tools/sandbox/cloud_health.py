@@ -234,7 +234,10 @@ async def _probe_and_store(*, phase: str) -> None:
         detail=detail or None,
         phase=phase,
         regressed=was_healthy or None,
-        hint="云端 code_execute/test_run 将不装配，直到形状 A 沙箱可用；browser/package_install 看形状 B",
+        hint=(
+            "云端 code_execute/test_run 将不装配，直到形状 A 沙箱可用；"
+            "browser/package_install 看形状 B"
+        ),
     )
 
 

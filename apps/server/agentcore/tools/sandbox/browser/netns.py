@@ -13,7 +13,7 @@ import sys
 
 from agentcore.core.logging import get_logger
 from agentcore.tools.sandbox.sandboxd.client import get_sandboxd_client
-from agentcore.tools.sandbox.sandboxd.errors import SandboxdError, SandboxdUnavailable
+from agentcore.tools.sandbox.sandboxd.errors import SandboxdError, SandboxdUnavailableError
 
 logger = get_logger(__name__)
 
@@ -86,7 +86,7 @@ def chmod_netns_inode(name: str, *, run_dir: str = NETNS_RUN_DIR) -> None:
 async def probe_browser_netns_at_startup() -> None:
     """One-shot boot probe when gVisor browser path is config-enabled. Never raises.
 
-    Shape B: ``sandboxd.health("net")``. ``SandboxdUnavailable`` is fail-closed
+    Shape B: ``sandboxd.health("net")``. ``SandboxdUnavailableError`` is fail-closed
     (``False``). Non-Linux / config-off leave the cache at ``None``.
     """
     global _browser_netns_healthy
@@ -100,7 +100,7 @@ async def probe_browser_netns_at_startup() -> None:
     try:
         ok, detail = await get_sandboxd_client().health("net")
         detail = detail[:200]
-    except SandboxdUnavailable as exc:
+    except SandboxdUnavailableError as exc:
         ok = False
         reason = "sandboxd_unavailable"
         detail = str(exc)[:200]
@@ -118,7 +118,10 @@ async def probe_browser_netns_at_startup() -> None:
         "browser.netns_health_failed",
         reason=reason,
         detail=detail or None,
-        hint="云端 browser / package_install 将不装配，直到 sandboxd 形状 B（net）探针为 True（不回退 Local）",
+        hint=(
+            "云端 browser / package_install 将不装配，"
+            "直到 sandboxd 形状 B（net）探针为 True（不回退 Local）"
+        ),
     )
 
 

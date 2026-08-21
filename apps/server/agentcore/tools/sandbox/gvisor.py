@@ -45,7 +45,7 @@ from agentcore.tools.sandbox.protocol import (
 )
 from agentcore.tools.sandbox.sandboxd import (
     SandboxdError,
-    SandboxdUnavailable,
+    SandboxdUnavailableError,
     build_runsc_cmd,
     get_sandboxd_client,
 )
@@ -167,7 +167,7 @@ class GVisorSandbox:
 
         try:
             ok, detail = await get_sandboxd_client().health("code")
-        except SandboxdUnavailable as exc:
+        except SandboxdUnavailableError as exc:
             self._last_health_failure = ("sandboxd_unavailable", str(exc)[:200] or None)
             logger.debug("sandbox.health_check_failed", error=str(exc)[:200])
             return False

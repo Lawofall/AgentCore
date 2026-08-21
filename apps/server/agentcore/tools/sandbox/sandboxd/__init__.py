@@ -11,7 +11,7 @@ from agentcore.tools.sandbox.sandboxd.client import (
 from agentcore.tools.sandbox.sandboxd.errors import (
     SandboxdError,
     SandboxdRpcError,
-    SandboxdUnavailable,
+    SandboxdUnavailableError,
 )
 from agentcore.tools.sandbox.sandboxd.protocol import (
     DEFAULT_SOCKET_PATH,
@@ -25,7 +25,7 @@ __all__ = [
     "SandboxdClient",
     "SandboxdError",
     "SandboxdRpcError",
-    "SandboxdUnavailable",
+    "SandboxdUnavailableError",
     "Shape",
     "UnixSandboxdClient",
     "build_runsc_cmd",

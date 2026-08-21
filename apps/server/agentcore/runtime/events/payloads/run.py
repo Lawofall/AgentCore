@@ -401,7 +401,8 @@ class DeliveryPromotion(WirePayload):
 class DeliveryStatusPayload(WirePayload):
     """交付状态（能力闸门与交付诚实性）: the structured delivery reconciliation a
     delegate batch emits at wrap-up — 已交付文件 / 缺口 / 待用户操作 — so the client
-    renders an honest delivery card instead of mining the CEO's prose.     Folds keep the LATEST per ``execution_id`` (the event already unions
+    renders an honest delivery card instead of mining the CEO's prose.
+    Folds keep the LATEST per ``execution_id`` (the event already unions
     declared-and-landed paths across hops of that execution).
     ``state``: delivered = 无 blocking 缺口且有落盘产物; partial = 有产物也有
     blocking 缺口; blocked = 有 blocking 缺口且无落盘产物;

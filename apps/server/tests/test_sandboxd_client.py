@@ -3,10 +3,10 @@
 import pytest
 
 from agentcore.tools.sandbox.sandboxd.client import UnixSandboxdClient
-from agentcore.tools.sandbox.sandboxd.errors import SandboxdUnavailable
+from agentcore.tools.sandbox.sandboxd.errors import SandboxdUnavailableError
 
 
 async def test_unix_client_missing_socket_is_unavailable(tmp_path):
     client = UnixSandboxdClient(str(tmp_path / "no-such.sock"))
-    with pytest.raises(SandboxdUnavailable):
+    with pytest.raises(SandboxdUnavailableError):
         await client.ping()

@@ -492,9 +492,9 @@ describe("turn_queue_started · 契约出队清轻态", () => {
     );
     expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
     expect(
-      (
-        useConversationStore.getState().byId[CID]?.messages ?? []
-      ).some((m) => m.role === "user" && m.content === "不该再插"),
+      (useConversationStore.getState().byId[CID]?.messages ?? []).some(
+        (m) => m.role === "user" && m.content === "不该再插",
+      ),
     ).toBe(false);
   });
 });

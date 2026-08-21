@@ -244,7 +244,7 @@ def test_registry_egress_available_requires_shape_b_netns(
 async def test_package_netns_setup_uses_sandboxd_client():
     from agentcore.tools.sandbox.egress.netns import PackageNetns, PackageNetnsError
     from agentcore.tools.sandbox.sandboxd.client import set_sandboxd_client_for_tests
-    from agentcore.tools.sandbox.sandboxd.errors import SandboxdUnavailable
+    from agentcore.tools.sandbox.sandboxd.errors import SandboxdUnavailableError
     from agentcore.tools.sandbox.sandboxd.protocol import NetnsInfo
 
     class _Client:
@@ -278,7 +278,7 @@ async def test_package_netns_setup_uses_sandboxd_client():
 
     class _Boom:
         async def netns_setup(self, *_a, **_k):
-            raise SandboxdUnavailable("down")
+            raise SandboxdUnavailableError("down")
 
     set_sandboxd_client_for_tests(_Boom())  # type: ignore[arg-type]
     with pytest.raises(PackageNetnsError):

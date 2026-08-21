@@ -578,7 +578,10 @@ export async function readOutboxRecord(
 ): Promise<OutboxRecord | null> {
   if (!isSafeOutboxId(userMessageId)) return null;
   try {
-    const raw = await readFile(join(outboxDir(), `${userMessageId}.json`), "utf-8");
+    const raw = await readFile(
+      join(outboxDir(), `${userMessageId}.json`),
+      "utf-8",
+    );
     const data = JSON.parse(raw) as OutboxRecord;
     if (
       !data?.user_message_id ||

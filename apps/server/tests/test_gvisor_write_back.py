@@ -20,7 +20,7 @@ from agentcore.tools.sandbox.limits import reset_execution_slots
 from agentcore.tools.sandbox.protocol import ExecutionRequest
 from agentcore.tools.sandbox.sandboxd import (
     SandboxdError,
-    SandboxdUnavailable,
+    SandboxdUnavailableError,
     set_sandboxd_client_for_tests,
 )
 from tests.sandboxd_testutil import LoopbackRunscClient
@@ -374,7 +374,7 @@ async def test_health_check_sandboxd_unavailable(tmp_path: Path):
 
     class _Down(LoopbackRunscClient):
         async def health(self, shape):  # noqa: ANN001
-            raise SandboxdUnavailable("no daemon")
+            raise SandboxdUnavailableError("no daemon")
 
     set_sandboxd_client_for_tests(
         _Down(

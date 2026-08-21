@@ -284,10 +284,10 @@ describe("midFlight · 主路门 + store 断言", () => {
       ),
     ).toBe(false);
 
-    handleMessageStreamEvent(
-      ev("message_end", { finish_reason: "end_turn" }),
-      { conversationId: CID, source: "server" },
-    );
+    handleMessageStreamEvent(ev("message_end", { finish_reason: "end_turn" }), {
+      conversationId: CID,
+      source: "server",
+    });
     releasePrimaryStream(CID, turn1Token);
     await vi.waitFor(() => {
       expect(

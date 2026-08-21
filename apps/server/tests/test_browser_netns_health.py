@@ -17,7 +17,7 @@ from agentcore.tools.sandbox.browser.netns import (
     set_browser_netns_health_for_tests,
 )
 from agentcore.tools.sandbox.sandboxd.client import set_sandboxd_client_for_tests
-from agentcore.tools.sandbox.sandboxd.errors import SandboxdUnavailable
+from agentcore.tools.sandbox.sandboxd.errors import SandboxdUnavailableError
 from agentcore.tools.sandbox.sandboxd.protocol import NetnsInfo
 
 
@@ -104,7 +104,7 @@ async def test_probe_failure_caches_unhealthy_without_raising(
 async def test_probe_unavailable_is_fail_closed(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     monkeypatch.setattr("agentcore.tools.sandbox.browser.netns.sys.platform", "linux")
-    client = _HealthClient(exc=SandboxdUnavailable("socket missing"))
+    client = _HealthClient(exc=SandboxdUnavailableError("socket missing"))
     set_sandboxd_client_for_tests(client)  # type: ignore[arg-type]
     await probe_browser_netns_at_startup()
     assert browser_netns_health() is False
@@ -149,7 +149,7 @@ async def test_session_netns_setup_uses_sandboxd_client():
 async def test_session_netns_setup_wraps_unavailable():
     class _Boom:
         async def netns_setup(self, *_a: Any, **_k: Any) -> NetnsInfo:
-            raise SandboxdUnavailable("down")
+            raise SandboxdUnavailableError("down")
 
     set_sandboxd_client_for_tests(_Boom())  # type: ignore[arg-type]
     ns = SessionNetns(slot=0, subnet_base="10.201")

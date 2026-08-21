@@ -1,15 +1,9 @@
-import {
-  flattenWorkroomListing,
-  AGENTCORE_ROOT_LABEL,
-} from "@/lib/stageDirs";
+import { AGENTCORE_ROOT_LABEL, flattenWorkroomListing } from "@/lib/stageDirs";
 import { describe, expect, it } from "vitest";
 
 describe("flattenWorkroomListing", () => {
   it("把 文档/ 的子项提升一级，丢掉文档壳和迁移归档", () => {
-    const own = [
-      { name: "文档" },
-      { name: "leftover.md" },
-    ];
+    const own = [{ name: "文档" }, { name: "leftover.md" }];
     const docs = [
       { name: "工作稿" },
       { name: "research" },

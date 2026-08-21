@@ -762,7 +762,7 @@ export type DeliveryState =
  * 
  * Optional ``reason`` is a machine-readable cutoff / shortfall code when the gap
  * comes from a structured engine signal — known:
- * ``token_budget`` / ``worker_timeout`` / ``degraded_handoff`` /
+ * ``token_budget`` / ``worker_timeout`` / ``max_rounds`` / ``degraded_handoff`` /
  * ``unverified_note`` (soft 示例/虚构自注；不单独把 state 打成 notes) /
  * ``files_not_landed`` (零落盘 soft tip：per-worker「本队员本波未交卷」/
  * 批次「本批未见落盘」；甲⁺ 起不挡收工) /
@@ -810,8 +810,9 @@ export interface DeliveryAction {
 /** One path-level acceptance row on ``delivery_status`` (主清单数据源).
  * 
  * ``status=accepted`` → counts toward ``delivered_files`` / CEO「已交付」;
- * ``rejected`` carries ``reason`` (e.g. ``citations_unverified``) and optional
- * ``detail`` for the file checklist. Draft is out of scope for block 1.
+ * ``rejected`` carries ``reason`` (e.g. ``citations_unverified`` / ``run_failed``)
+ * and optional ``detail`` for the file checklist. Undeclared extras are omitted
+ * (not rejected). Draft is out of scope for block 1.
  * ``workspace_id``: landing desk when the plan node set ``target_folder_id``
  * (``folder:{id}``); omit → client falls back to the session birth desk.
  * 
@@ -846,14 +847,16 @@ export interface DeliveryPromotion {
 
 /** 交付状态（能力闸门与交付诚实性）: the structured delivery reconciliation a
  * delegate batch emits at wrap-up — 已交付文件 / 缺口 / 待用户操作 — so the client
- * renders an honest delivery card instead of mining the CEO's prose. Folds keep the
- * LATEST per ``execution_id`` (reflects the most recent batch's reconciliation).
+ * renders an honest delivery card instead of mining the CEO's prose.
+ * Folds keep the LATEST per ``execution_id`` (the event already unions
+ * declared-and-landed paths across hops of that execution).
  * ``state``: delivered = 无 blocking 缺口且有落盘产物; partial = 有产物也有
  * blocking 缺口; blocked = 有 blocking 缺口且无落盘产物;
  * notes = 仍有 soft 提醒且非「仅 unverified_note」（轻提醒，非「部分未满足」）；
- * 声明路径失配为 path_mismatch blocking，不得 delivered。
- * ``artifacts``: path-level acceptance (accepted+rejected); ``delivered_files``
- * remains accepted-only for older clients.
+ * 声明路径未落盘为 path_mismatch blocking gap，不得 delivered；未声明落盘不进
+ * ``artifacts``。
+ * ``artifacts``: path-level acceptance (accepted+rejected) for declared landings;
+ * ``delivered_files`` remains accepted-only for older clients.
  * ``promoted``: 历史 ``{from, to}`` 归位行（``promote_product`` 已撤销；新回合不再写入）。
  * 旧卡 journal 重放仍带此字段；无归位时缺省（= 空数组）。 */
 export interface DeliveryStatusPayload {

@@ -19,12 +19,12 @@ import {
   useConversationStore,
 } from "../conversation";
 import { execRuntime, useExecutionStore } from "../execution";
-import { useQueuedTurnsStore } from "../queuedTurns";
 import {
   entryToCheckpoint,
   entryToPlanReview,
   useInteractionStore,
 } from "../interactions";
+import { useQueuedTurnsStore } from "../queuedTurns";
 
 const store = () => useConversationStore.getState();
 const ix = () => useInteractionStore.getState();

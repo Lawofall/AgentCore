@@ -1618,10 +1618,7 @@ function GenericRunToolRow({ call }: { call: RunToolCall }) {
   const [open, setOpen] = useState(false);
   const args = Object.keys(call.arguments).length > 0 ? call.arguments : null;
   const detail = toolDetail(call.arguments, call.toolName);
-  const ceilingGuidance = isFileReadCeilingGuidance(
-    call.toolName,
-    call.result,
-  );
+  const ceilingGuidance = isFileReadCeilingGuidance(call.toolName, call.result);
   const status =
     call.status === "running"
       ? TOOL_STATUS_LABEL.running

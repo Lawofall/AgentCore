@@ -340,4 +340,3 @@ describe("useFileTreeData list timeout", () => {
     expect(result.current.statusOf("docs")).toBe("loading");
   });
 });
-

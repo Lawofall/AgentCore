@@ -14,7 +14,7 @@ import pytest
 from agentcore.tools.sandbox.sandboxd import server as server_mod
 from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd
 from agentcore.tools.sandbox.sandboxd.client import UnixSandboxdClient
-from agentcore.tools.sandbox.sandboxd.errors import SandboxdRpcError, SandboxdUnavailable
+from agentcore.tools.sandbox.sandboxd.errors import SandboxdRpcError, SandboxdUnavailableError
 from agentcore.tools.sandbox.sandboxd.netns_ops import PROBE_NETNS_NAME, spec_for
 from agentcore.tools.sandbox.sandboxd.server import (
     SandboxdServer,
@@ -292,5 +292,5 @@ async def test_run_timeout_kills_and_exits(tmp_path, monkeypatch):
 async def test_peer_denied_closes_without_rpc(tmp_path, monkeypatch):
     monkeypatch.setattr(server_mod, "peer_uid", lambda _sock: 65534)
     async with _running(tmp_path, monkeypatch) as (_s, client, _c, _b):
-        with pytest.raises((SandboxdUnavailable, ConnectionResetError, OSError)):
+        with pytest.raises((SandboxdUnavailableError, ConnectionResetError, OSError)):
             await client.ping()

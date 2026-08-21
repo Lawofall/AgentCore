@@ -11,7 +11,7 @@ class SandboxdError(Exception):
         self.code = code
 
 
-class SandboxdUnavailable(SandboxdError):
+class SandboxdUnavailableError(SandboxdError):
     """Socket missing, connect refused, or peer not the daemon — fail-closed."""
 
     def __init__(self, message: str = "sandboxd 不可用") -> None:

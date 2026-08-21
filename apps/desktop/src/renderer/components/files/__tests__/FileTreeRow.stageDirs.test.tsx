@@ -117,9 +117,9 @@ describe("FileTreeRow load error tone", () => {
     const line = screen.getByText("加载失败");
     expect(line.className).toContain("text-muted-foreground");
     expect(line.className).not.toContain("destructive");
-    expect(screen.getByRole("button", { name: "重试" }).className).not.toContain(
-      "destructive",
-    );
+    expect(
+      screen.getByRole("button", { name: "重试" }).className,
+    ).not.toContain("destructive");
   });
 
   it("加载失败 and 重试 call reload so ensureDir-skipped error can retry", () => {

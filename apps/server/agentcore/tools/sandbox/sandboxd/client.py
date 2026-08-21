@@ -12,7 +12,7 @@ from typing import Any
 from agentcore.tools.sandbox.sandboxd.errors import (
     SandboxdError,
     SandboxdRpcError,
-    SandboxdUnavailable,
+    SandboxdUnavailableError,
 )
 from agentcore.tools.sandbox.sandboxd.protocol import (
     DEFAULT_SOCKET_PATH,
@@ -79,7 +79,7 @@ class SandboxdStdio:
 
     async def write(self, data: bytes) -> None:
         if self._closed:
-            raise SandboxdUnavailable("stdio closed")
+            raise SandboxdUnavailableError("stdio closed")
         self._writer.write(data)
         await self._writer.drain()
 
@@ -164,14 +164,14 @@ class UnixSandboxdClient(SandboxdClient):
 
     async def _connect(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         if sys.platform == "win32" or not hasattr(asyncio, "open_unix_connection"):
-            raise SandboxdUnavailable("sandboxd Unix socket 仅 Linux")
+            raise SandboxdUnavailableError("sandboxd Unix socket 仅 Linux")
         try:
             return await asyncio.wait_for(
                 asyncio.open_unix_connection(self.socket_path),
                 timeout=_CONNECT_TIMEOUT,
             )
         except (TimeoutError, OSError, FileNotFoundError) as exc:
-            raise SandboxdUnavailable(
+            raise SandboxdUnavailableError(
                 f"无法连接 sandboxd（{self.socket_path}）"
             ) from exc
 
@@ -187,7 +187,7 @@ class UnixSandboxdClient(SandboxdClient):
             await writer.drain()
             raw = await asyncio.wait_for(reader.readline(), timeout=_RPC_TIMEOUT)
             if not raw:
-                raise SandboxdUnavailable("sandboxd 关闭了控制连接")
+                raise SandboxdUnavailableError("sandboxd 关闭了控制连接")
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError as exc:
@@ -273,7 +273,7 @@ class UnixSandboxdClient(SandboxdClient):
             await writer.drain()
             first = await asyncio.wait_for(reader.readline(), timeout=_RPC_TIMEOUT)
             if not first:
-                raise SandboxdUnavailable("sandboxd 关闭了 run 连接")
+                raise SandboxdUnavailableError("sandboxd 关闭了 run 连接")
             header = json.loads(first)
             if not header.get("ok", False):
                 raise SandboxdRpcError(
@@ -333,7 +333,7 @@ class UnixSandboxdClient(SandboxdClient):
         first = await asyncio.wait_for(reader.readline(), timeout=_RPC_TIMEOUT)
         if not first:
             writer.close()
-            raise SandboxdUnavailable("sandboxd 关闭了 stdio 连接")
+            raise SandboxdUnavailableError("sandboxd 关闭了 stdio 连接")
         header = json.loads(first)
         if not header.get("ok", False):
             writer.close()

@@ -144,7 +144,10 @@ export function WorkspaceMode() {
             renderWorkroomLead={
               folderId
                 ? (indent) => (
-                    <WorkspaceFolderEntries folderId={folderId} indent={indent} />
+                    <WorkspaceFolderEntries
+                      folderId={folderId}
+                      indent={indent}
+                    />
                   )
                 : undefined
             }

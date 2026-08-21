@@ -4,7 +4,7 @@
  * Occupy (begin) + mid-turn journal/segments + abort. READY finalize still
  * belongs to {@link drainOutbox} → POST ``.../local-turns``.
  */
-import { watch, type FSWatcher } from "node:fs";
+import { type FSWatcher, watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { bearerPostJson } from "../auth-client";
 import { logDesktop } from "../log-service";
@@ -61,15 +61,17 @@ export function withUmidLock<T>(
     () => gate,
   );
   umidLocks.set(userMessageId, chained);
-  return prev.then(
-    () => fn(),
-    () => fn(),
-  ).finally(() => {
-    release();
-    if (umidLocks.get(userMessageId) === chained) {
-      umidLocks.delete(userMessageId);
-    }
-  });
+  return prev
+    .then(
+      () => fn(),
+      () => fn(),
+    )
+    .finally(() => {
+      release();
+      if (umidLocks.get(userMessageId) === chained) {
+        umidLocks.delete(userMessageId);
+      }
+    });
 }
 
 export function noteOccupiedLocalTurn(
@@ -113,7 +115,10 @@ export async function occupyLocalTurnBegin(
     logDesktop({
       level: "error",
       event: "outbox.local_turn_begin_invalid",
-      fields: { conversation_id: conversationId, user_message_id: userMessageId },
+      fields: {
+        conversation_id: conversationId,
+        user_message_id: userMessageId,
+      },
     });
     return false;
   }
@@ -134,7 +139,10 @@ export async function occupyLocalTurnBegin(
   if (mentions.length > 0) body.agent_mentions = mentions;
   let result: { ok: boolean; status: number; body: unknown };
   try {
-    result = await bearerPostJson(localTurnsPath(conversationId, "/begin"), body);
+    result = await bearerPostJson(
+      localTurnsPath(conversationId, "/begin"),
+      body,
+    );
   } catch (err) {
     logDesktop({
       level: "error",
@@ -202,11 +210,14 @@ async function postOpenCheckpoint(record: OutboxRecord): Promise<void> {
   const journal = journalEntriesWithExplicitSeq(record.journal);
   if (journal.length > 0) {
     try {
-      const result = await bearerPostJson(localTurnsPath(conversationId, "/journal"), {
-        message_id: messageId,
-        replace: false,
-        entries: journal,
-      });
+      const result = await bearerPostJson(
+        localTurnsPath(conversationId, "/journal"),
+        {
+          message_id: messageId,
+          replace: false,
+          entries: journal,
+        },
+      );
       if (!result.ok) {
         logDesktop({
           level: "warn",
@@ -268,7 +279,9 @@ async function postOpenCheckpoint(record: OutboxRecord): Promise<void> {
  * (user send and FIFO ``queue/needStart``). Never POST local-turns.
  * Caller must hold {@link withUmidLock} for this umid.
  */
-export async function checkpointOpenRecord(record: OutboxRecord): Promise<void> {
+export async function checkpointOpenRecord(
+  record: OutboxRecord,
+): Promise<void> {
   if (record.phase !== PHASE_OPEN) return;
   await postOpenCheckpoint(record);
 }

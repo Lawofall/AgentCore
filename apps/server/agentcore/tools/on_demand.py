@@ -135,7 +135,10 @@ def render_tool_consult_body(
     """Short enable-ack + schema trigger + (CEO) gated HOW. Full JSON stays on the next FC table."""
     siblings = [n for n in enabled if n != name]
     lines = [
-        f"已启用工具 `{name}`。本回合下一模型轮工具表将含完整参数，可直接调用（不必等用户再发一条）。",
+        (
+            f"已启用工具 `{name}`。本回合下一模型轮工具表将含完整参数，"
+            "可直接调用（不必等用户再发一条）。"
+        ),
     ]
     if siblings:
         lines.append("同族已一并启用：" + "、".join(siblings) + "。")

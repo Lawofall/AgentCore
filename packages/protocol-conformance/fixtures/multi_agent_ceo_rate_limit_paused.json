@@ -78,7 +78,7 @@
         "tool_call_id": "tc1",
         "tool_name": "file_write",
         "status": "success",
-        "result": "已写入 16 字符到 订单.csv\n【artifact manifest】\npath: 订单.csv\nkind: csv\nchars: 16\nlines: 2\ncontent_sha256: 70b1e12cfeaa62fc\ntitle_tree:\n  （无标题）\nend_preview:\nid,amount\n1,100\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 受次数上限约束）。",
+        "result": "已写入 16 字符到 订单.csv\n【artifact manifest】\npath: 订单.csv\nkind: csv\nchars: 16\nlines: 2\ncontent_sha256: 70b1e12cfeaa62fc\ntitle_tree:\n  （无标题）\nend_preview:\nid,amount\n1,100\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 同窗触顶只回短指针、不灌全文）。",
         "run_id": "r1"
       },
       "timestamp": "2026-01-01T00:00:00.006Z"
@@ -102,7 +102,7 @@
         "tool_call_id": "tc2",
         "tool_name": "file_write",
         "status": "success",
-        "result": "已写入 17 字符到 明细.csv\n【artifact manifest】\npath: 明细.csv\nkind: csv\nchars: 17\nlines: 2\ncontent_sha256: 0f18c81f11dea17c\ntitle_tree:\n  （无标题）\nend_preview:\nid,sku,qty\n1,A,2\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 受次数上限约束）。",
+        "result": "已写入 17 字符到 明细.csv\n【artifact manifest】\npath: 明细.csv\nkind: csv\nchars: 17\nlines: 2\ncontent_sha256: 0f18c81f11dea17c\ntitle_tree:\n  （无标题）\nend_preview:\nid,sku,qty\n1,A,2\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 同窗触顶只回短指针、不灌全文）。",
         "run_id": "r1"
       },
       "timestamp": "2026-01-01T00:00:00.008Z"
@@ -126,7 +126,7 @@
         "tool_call_id": "tc3",
         "tool_name": "file_write",
         "status": "success",
-        "result": "已写入 12 字符到 汇总.csv\n【artifact manifest】\npath: 汇总.csv\nkind: csv\nchars: 12\nlines: 2\ncontent_sha256: 85c6c7c38c96db2a\ntitle_tree:\n  （无标题）\nend_preview:\nsku,qty\nA,2\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 受次数上限约束）。",
+        "result": "已写入 12 字符到 汇总.csv\n【artifact manifest】\npath: 汇总.csv\nkind: csv\nchars: 12\nlines: 2\ncontent_sha256: 85c6c7c38c96db2a\ntitle_tree:\n  （无标题）\nend_preview:\nsku,qty\nA,2\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 同窗触顶只回短指针、不灌全文）。",
         "run_id": "r1"
       },
       "timestamp": "2026-01-01T00:00:00.010Z"
@@ -306,7 +306,7 @@
               "path": "订单.csv",
               "content": "id,amount\n1,100\n"
             },
-            "result": "已写入 16 字符到 订单.csv\n【artifact manifest】\npath: 订单.csv\nkind: csv\nchars: 16\nlines: 2\ncontent_sha256: 70b1e12cfeaa62fc\ntitle_tree:\n  （无标题）\nend_preview:\nid,amount\n1,100\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 受次数上限约束）。",
+            "result": "已写入 16 字符到 订单.csv\n【artifact manifest】\npath: 订单.csv\nkind: csv\nchars: 16\nlines: 2\ncontent_sha256: 70b1e12cfeaa62fc\ntitle_tree:\n  （无标题）\nend_preview:\nid,amount\n1,100\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 同窗触顶只回短指针、不灌全文）。",
             "status": "success"
           },
           {
@@ -317,7 +317,7 @@
               "path": "明细.csv",
               "content": "id,sku,qty\n1,A,2\n"
             },
-            "result": "已写入 17 字符到 明细.csv\n【artifact manifest】\npath: 明细.csv\nkind: csv\nchars: 17\nlines: 2\ncontent_sha256: 0f18c81f11dea17c\ntitle_tree:\n  （无标题）\nend_preview:\nid,sku,qty\n1,A,2\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 受次数上限约束）。",
+            "result": "已写入 17 字符到 明细.csv\n【artifact manifest】\npath: 明细.csv\nkind: csv\nchars: 17\nlines: 2\ncontent_sha256: 0f18c81f11dea17c\ntitle_tree:\n  （无标题）\nend_preview:\nid,sku,qty\n1,A,2\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 同窗触顶只回短指针、不灌全文）。",
             "status": "success"
           },
           {
@@ -328,7 +328,7 @@
               "path": "汇总.csv",
               "content": "sku,qty\nA,2\n"
             },
-            "result": "已写入 12 字符到 汇总.csv\n【artifact manifest】\npath: 汇总.csv\nkind: csv\nchars: 12\nlines: 2\ncontent_sha256: 85c6c7c38c96db2a\ntitle_tree:\n  （无标题）\nend_preview:\nsku,qty\nA,2\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 受次数上限约束）。",
+            "result": "已写入 12 字符到 汇总.csv\n【artifact manifest】\npath: 汇总.csv\nkind: csv\nchars: 12\nlines: 2\ncontent_sha256: 85c6c7c38c96db2a\ntitle_tree:\n  （无标题）\nend_preview:\nsku,qty\nA,2\n【验真】请以本 manifest 确认落盘；优先用 manifest 验真，勿为空转反复 file_read（同 path 同窗触顶只回短指针、不灌全文）。",
             "status": "success"
           }
         ]

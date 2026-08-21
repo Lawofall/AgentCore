@@ -87,10 +87,14 @@ async function processOneOutboxRecord(
       const hasUm = !!um && um !== EMPTY_USER_MESSAGE_PLACEHOLDER;
       const hasTrace = (record.trace_id || "").trim().length === 32;
       if (!hasUm || !hasTrace) {
-        console.warn("[outbox] discard empty open shell", record.user_message_id, {
-          hasUm,
-          hasTrace,
-        });
+        console.warn(
+          "[outbox] discard empty open shell",
+          record.user_message_id,
+          {
+            hasUm,
+            hasTrace,
+          },
+        );
         await abortLocalTurnPlaceholder({
           conversationId: record.conversation_id,
           userMessageId: record.user_message_id,
@@ -155,7 +159,10 @@ async function processOneOutboxRecord(
       return null;
     }
   }
-  if (!(record.trace_id || "").trim() || (record.trace_id || "").length !== 32) {
+  if (
+    !(record.trace_id || "").trim() ||
+    (record.trace_id || "").length !== 32
+  ) {
     console.warn(
       "[outbox] skip invalid trace_id",
       record.user_message_id,
@@ -190,7 +197,11 @@ async function processOneOutboxRecord(
   try {
     result = await bearerPostJson(path, toRecordTurnBody(record));
   } catch (err) {
-    console.error("[outbox] writeback network error", record.user_message_id, err);
+    console.error(
+      "[outbox] writeback network error",
+      record.user_message_id,
+      err,
+    );
     await recordTransientFailure(record);
     return null;
   }

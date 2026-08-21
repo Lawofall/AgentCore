@@ -62,10 +62,7 @@ beforeEach(() => {
 
 describe("FileTree 持久化展开水合", () => {
   it("预置 saveExpanded 后挂载，对已展开路径发出 listDir 并露出子项", async () => {
-    saveExpanded(
-      "local:hydrate",
-      new Set(["docs", "docs/api"]),
-    );
+    saveExpanded("local:hydrate", new Set(["docs", "docs/api"]));
     const listed: string[] = [];
     renderTree(
       stubSource(

@@ -414,8 +414,7 @@ describe("MarkdownFileEditor 「用默认程序打开」入口门控", () => {
   });
 });
 
-const MEMORY_EMPTY_HINT =
-  "AI 会把记得的内容写在这里，你也可以直接改或删除。";
+const MEMORY_EMPTY_HINT = "AI 会把记得的内容写在这里，你也可以直接改或删除。";
 
 const RETIRED_CHROME = `# 用户记忆
 > 本文件由 AI 自动维护，你可随时编辑或删除任何条目。

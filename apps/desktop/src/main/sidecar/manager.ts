@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import {
   SIDECAR_CHANNELS,
+  SIDECAR_QUEUE_NEED_START,
   type SidecarAccountAuth,
   type SidecarAttachRequest,
   type SidecarAttachResponse,
@@ -16,6 +18,7 @@ import {
   type SidecarListBrowserSessionsResult,
   type SidecarListQueuedTurnsRequest,
   type SidecarListQueuedTurnsResult,
+  type SidecarQueuedAttachment,
   type SidecarQueuedTurnItem,
   type SidecarRecoveryRequest,
   type SidecarRecoveryResponse,
@@ -25,8 +28,6 @@ import {
   type SidecarResumeRequest,
   type SidecarRunRedirectRequest,
   type SidecarRunStopRequest,
-  SIDECAR_QUEUE_NEED_START,
-  type SidecarQueuedAttachment,
   type SidecarStartTurnRequest,
   type SidecarStatusPush,
   type SidecarTurnFilesDiffRequest,
@@ -37,17 +38,16 @@ import {
   type SidecarWorkspaceVersionResult,
   buildSidecarResumeRpcParams,
 } from "@shared/sidecar-contract";
-import { randomUUID } from "node:crypto";
 import { BrowserWindow, type WebContents } from "electron";
 import { getDesktopBrowserBridgeCredentials } from "../browser";
 import { listSessionRoots } from "../fs/roots";
 import { logDesktop } from "../log-service";
 import { listMcpToolsValue } from "../mcp-service";
+import { listUnsyncedSummaries, sidecarDataDir } from "../outbox-writeback";
 import {
   abortLocalTurnPlaceholder,
   occupyLocalTurnBegin,
 } from "../outbox/projection";
-import { listUnsyncedSummaries, sidecarDataDir } from "../outbox-writeback";
 import { SidecarEventBuffer } from "../sidecar-event-buffer";
 import { SidecarClient, SidecarRpcError } from "./client";
 import { buildExternalMounts } from "./externalMounts";
@@ -568,7 +568,12 @@ export class SidecarManager {
         buffer: new SidecarEventBuffer(),
         attaching: false,
       });
-      this.rememberWindow(req.conversationId, wc, req.rootId, req.subpath ?? "");
+      this.rememberWindow(
+        req.conversationId,
+        wc,
+        req.rootId,
+        req.subpath ?? "",
+      );
       const externalMounts = buildExternalMounts(
         listSessionRoots(req.conversationId),
       );
@@ -808,8 +813,7 @@ export class SidecarManager {
       return undefined;
     }
     if (inflight && opts.force) {
-      let joined!: Promise<void>;
-      joined = inflight
+      const joined: Promise<void> = inflight
         .catch(() => undefined)
         .then(() => {
           entry.accountRulesMemoryFreshUntil.delete(key);
@@ -828,8 +832,7 @@ export class SidecarManager {
       this.trackWarm(entry, joined);
       return joined;
     }
-    let work!: Promise<void>;
-    work = (async () => {
+    const work: Promise<void> = (async () => {
       let freshMs = ACCOUNT_WARM_RETRY_BACKOFF_MS;
       try {
         const reply = await entry.client.request("warmAccountRulesMemory", {
