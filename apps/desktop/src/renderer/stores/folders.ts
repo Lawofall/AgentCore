@@ -39,8 +39,8 @@ export type ImportToCloudPrefill = {
   /** Suggested name for the folder created in 我的文件. */
   folderName?: string | null;
   /**
-   * Composer「从本机加入」already authorized this root. True → dialog cancel
-   * may removeRoot; false → shared binding (legacy migrate), leave it.
+   * Caller already authorized this root. True → dialog cancel may removeRoot;
+   * false → shared binding (legacy migrate / existing local folder), leave it.
    */
   ownsRoot?: boolean;
 };
@@ -71,16 +71,16 @@ interface FoldersUiState {
    *（入口「连接 Git = 云 clone remote」）。
    */
   connectGitWsId: string | null;
-  /** Composer / palette「导入到云」→ 本机夹快照上传对话框。 */
+  /** 命令面板 / 文件中枢「导入到云」→ 本机夹快照上传对话框。Composer 三选不走此框。 */
   importToCloudOpen: boolean;
   /**
    * Optional prefill for legacy local migrate：已有 `Folder.localRootId` /
    * 有效根 id，少一次选夹；找不到仍走 picker。
    */
   importToCloudPrefill: ImportToCloudPrefill | null;
-  /** Composer / palette「云上做完再写入」→ 借用云拷贝对话框。 */
+  /** 命令面板 / 文件中枢「云上做完再写入」→ 借用云拷贝对话框。Composer 三选不走此框。 */
   borrowToCloudOpen: boolean;
-  /** Optional prefill when Composer already picked the local folder. */
+  /** Optional prefill when the caller already picked the local folder. */
   borrowToCloudPrefill: ImportToCloudPrefill | null;
 
   setPendingRename: (id: string | null) => void;

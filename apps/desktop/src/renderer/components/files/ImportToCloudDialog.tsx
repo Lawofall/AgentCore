@@ -19,7 +19,7 @@ import { FolderOpen } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * AppShell host for Composer / 命令面板「导入到云」——与 {@link ConnectGitDialogHost}
+ * AppShell host for 命令面板 / 文件中枢「导入到云」——与 {@link ConnectGitDialogHost}
  * 同构：store 开关 + Dialog。遗留 local 迁移可带 prefill（localRootId）。
  */
 export function ImportToCloudDialogHost() {

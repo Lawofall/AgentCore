@@ -31,10 +31,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  ComposerPlusBackHeader,
-  useComposerPlusRow,
-} from "./ComposerPlusMenu";
+import { ComposerPlusBackHeader, useComposerPlusRow } from "./ComposerPlusMenu";
 
 /**
  * 输入框「模型组合」选择器 — 只选具体组合，不做裸模型列表。

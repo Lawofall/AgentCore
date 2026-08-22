@@ -34,10 +34,7 @@ import { useConversationStore } from "@/stores/conversation";
 import { usePermissionChangeStore } from "@/stores/permissionChanges";
 import { ChevronDown, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
-import {
-  ComposerPlusBackHeader,
-  useComposerPlusRow,
-} from "./ComposerPlusMenu";
+import { ComposerPlusBackHeader, useComposerPlusRow } from "./ComposerPlusMenu";
 
 /**
  * Composer permission badge — recipes first; three-axis custom folded.

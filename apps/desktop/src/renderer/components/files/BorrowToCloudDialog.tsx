@@ -42,7 +42,7 @@ type OwnedRoot = { root: FsRoot; owns: boolean };
 
 /**
  * 选本机夹 → 可改云上文件夹名 → 关窗后后台复制。授权根留下，不 removeRoot。
- * Composer 已选路过时带 prefill；ownsRoot 的才在取消时 removeRoot。
+ * 命令面板 / 文件中枢直达用此框；Composer 三选已直接开传。ownsRoot 的才在取消时 removeRoot。
  */
 export function BorrowToCloudDialog({
   open,

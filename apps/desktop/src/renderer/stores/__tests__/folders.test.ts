@@ -96,7 +96,7 @@ describe("import / connect git dialog flags", () => {
     expect(store().importToCloudOpen).toBe(true);
   });
 
-  it("openBorrowToCloud accepts Composer path prefill and clears on close", () => {
+  it("openBorrowToCloud accepts path prefill and clears on close", () => {
     store().openBorrowToCloud({
       rootId: "root-1",
       folderName: "MyRepo",

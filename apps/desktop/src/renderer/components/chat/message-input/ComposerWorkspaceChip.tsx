@@ -1,5 +1,5 @@
 import { CreateFolderCascadePanel } from "@/components/folders/CreateFolderMenu";
-import { Button, SearchField } from "@/components/ui";
+import { Button, ConfirmDialog, SearchField } from "@/components/ui";
 import {
   Popover,
   PopoverContent,
@@ -16,6 +16,7 @@ import {
   pickLocalFolderRoot,
 } from "@/lib/bindLocalFolder";
 import { isBorrowActive } from "@/lib/borrowOriginalPreference";
+import { startBorrowToCloudJob } from "@/lib/borrowToCloudJob";
 import { hasLocalFiles } from "@/lib/capabilities";
 import {
   getComposerChannelPreference,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/composerChannelPreference";
 import { visibleDraftFolders } from "@/lib/draftWorkspaceFolders";
 import { folderAncestorNames } from "@/lib/folderTree";
+import { startImportToCloudJob } from "@/lib/importToCloudJob";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { openLocalFolderFromRoot } from "@/lib/openLocalFolder";
 import { formatWorkspaceChipTitle } from "@/lib/workspaceEffectiveMode";
@@ -48,10 +50,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ComposerPlusBackHeader,
-  useComposerPlusRow,
-} from "./ComposerPlusMenu";
+import { ComposerPlusBackHeader, useComposerPlusRow } from "./ComposerPlusMenu";
 import { WorkspaceChannelGuideDialog } from "./WorkspaceChannelGuideDialog";
 
 /**
@@ -200,6 +199,24 @@ type LocalPicked = {
   existingFolderId?: string;
   backView: "pick" | "join";
 };
+type CloudCopyKind = "import" | "borrow";
+type CloudCopyConfirm = { kind: CloudCopyKind; picked: LocalPicked };
+
+function localToCloudConfirmCopy(
+  kind: CloudCopyKind,
+  folderName: string,
+): { title: string; description: string } {
+  if (kind === "import") {
+    return {
+      title: "复制到云上当新家",
+      description: `把「${folderName}」复制到「我的文件」。之后改云上这份，电脑上的原件不再跟着变。`,
+    };
+  }
+  return {
+    title: "先在云上做，原件先不动",
+    description: `把「${folderName}」复制到云上做这一单。电脑上的原件先不动，做完再决定写不写回。`,
+  };
+}
 
 function DraftChip() {
   const plus = useComposerPlusRow("workspace");
@@ -214,6 +231,9 @@ function DraftChip() {
   const [localPicked, setLocalPicked] = useState<LocalPicked | null>(null);
   const localPickedRef = useRef<LocalPicked | null>(null);
   localPickedRef.current = localPicked;
+  const [cloudCopyConfirm, setCloudCopyConfirm] =
+    useState<CloudCopyConfirm | null>(null);
+  const cloudCopyStartedRef = useRef(false);
   const intent = useFoldersStore((s) => s.draftWorkspaceIntent);
   const setIntent = useFoldersStore((s) => s.setDraftWorkspaceIntent);
   const isDesktop = hasLocalFiles();
@@ -348,29 +368,51 @@ function DraftChip() {
     void openLocalFolderFromRoot(picked.root, navigate);
   };
 
-  const useLocalImport = () => {
+  const dropRootIfOwned = (picked: LocalPicked) => {
+    if (!picked.owns) return;
+    void window.fsApi?.removeRoot?.(picked.root.id);
+  };
+
+  const askCloudCopy = (kind: CloudCopyKind) => {
     const picked = handoffLocalPicked();
     if (!picked) return;
-    setComposerChannelPreference("cloud");
     closePick();
-    useFoldersStore.getState().openImportToCloud({
-      rootId: picked.root.id,
-      folderName: picked.root.name,
-      ownsRoot: picked.owns,
+    cloudCopyStartedRef.current = false;
+    setCloudCopyConfirm({ kind, picked });
+  };
+
+  const dismissCloudCopy = () => {
+    setCloudCopyConfirm((pending) => {
+      if (pending && !cloudCopyStartedRef.current) {
+        dropRootIfOwned(pending.picked);
+      }
+      return null;
     });
   };
 
-  const useLocalBorrow = () => {
-    const picked = handoffLocalPicked();
-    if (!picked) return;
+  const confirmCloudCopy = () => {
+    const pending = cloudCopyConfirm;
+    if (!pending) return;
+    cloudCopyStartedRef.current = true;
+    setCloudCopyConfirm(null);
     setComposerChannelPreference("cloud");
-    closePick();
-    useFoldersStore.getState().openBorrowToCloud({
-      rootId: picked.root.id,
-      folderName: picked.root.name,
-      ownsRoot: picked.owns,
-    });
+    const { kind, picked } = pending;
+    const started =
+      kind === "import"
+        ? startImportToCloudJob({
+            root: picked.root,
+            ownsRoot: picked.owns,
+            folderName: picked.root.name,
+          })
+        : startBorrowToCloudJob({
+            root: picked.root,
+            folderName: picked.root.name,
+          });
+    if (!started) dropRootIfOwned(picked);
   };
+
+  const useLocalImport = () => askCloudCopy("import");
+  const useLocalBorrow = () => askCloudCopy("borrow");
 
   const openCreateCloud = () => {
     setComposerChannelPreference("cloud");
@@ -446,6 +488,27 @@ function DraftChip() {
       onOpenChange={setGuideOpen}
       showLocalTraditional={isDesktop}
     />
+  );
+  const cloudCopyCopy = cloudCopyConfirm
+    ? localToCloudConfirmCopy(
+        cloudCopyConfirm.kind,
+        cloudCopyConfirm.picked.root.name,
+      )
+    : null;
+  const hosts = (
+    <>
+      {guide}
+      <ConfirmDialog
+        open={cloudCopyConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) dismissCloudCopy();
+        }}
+        title={cloudCopyCopy?.title ?? ""}
+        description={cloudCopyCopy?.description}
+        confirmLabel="开始"
+        onConfirm={confirmCloudCopy}
+      />
+    </>
   );
 
   const trigger = (
@@ -574,12 +637,12 @@ function DraftChip() {
       </div>
     );
 
-  if (plus.mode === "hidden") return guide;
+  if (plus.mode === "hidden") return hosts;
 
   if (plus.mode === "panel") {
     return (
       <div className="w-64">
-        {guide}
+        {hosts}
         {view === "pick" ? (
           <ComposerPlusBackHeader
             title="在哪工作"
@@ -597,7 +660,7 @@ function DraftChip() {
   if (plus.mode === "row") {
     return (
       <>
-        {guide}
+        {hosts}
         {trigger}
       </>
     );
@@ -605,7 +668,7 @@ function DraftChip() {
 
   return (
     <div className="relative shrink-0">
-      {guide}
+      {hosts}
       <Popover
         open={pop}
         onOpenChange={(o) => {

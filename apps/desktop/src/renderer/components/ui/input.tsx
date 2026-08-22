@@ -11,8 +11,7 @@ export const fieldFocusClass =
 
 /** Shared form-control surface (border + radius + focus ring) — also the base
  *  for `Select`, so every text-ish field reads identically. */
-export const fieldSurfaceClass =
-  `rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground ${fieldFocusClass} disabled:opacity-40`;
+export const fieldSurfaceClass = `rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground ${fieldFocusClass} disabled:opacity-40`;
 
 export const Input = forwardRef<
   HTMLInputElement,

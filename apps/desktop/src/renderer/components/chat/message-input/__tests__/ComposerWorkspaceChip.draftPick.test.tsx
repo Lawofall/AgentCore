@@ -9,7 +9,9 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { pickLocalFolderRoot } from "@/lib/bindLocalFolder";
 import { isBorrowActive, set } from "@/lib/borrowOriginalPreference";
+import { startBorrowToCloudJob } from "@/lib/borrowToCloudJob";
 import { setComposerChannelPreference } from "@/lib/composerChannelPreference";
+import { startImportToCloudJob } from "@/lib/importToCloudJob";
 import { openLocalFolderFromRoot } from "@/lib/openLocalFolder";
 import { uiSet } from "@/lib/uiStorage";
 import type { FolderMeta } from "@/services/folders";
@@ -57,6 +59,18 @@ vi.mock("@/lib/bindLocalFolder", () => ({
 vi.mock("@/lib/openLocalFolder", () => ({
   openLocalFolderFromRoot: vi.fn(),
   pickAndOpenLocalFolder: vi.fn(),
+}));
+
+vi.mock("@/lib/importToCloudJob", () => ({
+  startImportToCloudJob: vi.fn(() => true),
+  isImportToCloudJobRunning: () => false,
+  cancelImportToCloudJob: vi.fn(),
+}));
+
+vi.mock("@/lib/borrowToCloudJob", () => ({
+  startBorrowToCloudJob: vi.fn(() => true),
+  isBorrowToCloudJobRunning: () => false,
+  cancelBorrowToCloudJob: vi.fn(),
 }));
 
 const boundEffective = {
@@ -158,6 +172,36 @@ function precedes(a: Element, b: Element): boolean {
   );
 }
 
+function expectImportConfirm(folderName: string) {
+  expect(
+    screen.getByRole("heading", { name: "复制到云上当新家" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(
+      `把「${folderName}」复制到「我的文件」。之后改云上这份，电脑上的原件不再跟着变。`,
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText("导入到「我的文件」")).toBeNull();
+  expect(startImportToCloudJob).not.toHaveBeenCalled();
+}
+
+function expectBorrowConfirm(folderName: string) {
+  expect(
+    screen.getByRole("heading", { name: "先在云上做，原件先不动" }),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(
+      `把「${folderName}」复制到云上做这一单。电脑上的原件先不动，做完再决定写不写回。`,
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText("云上做完再写入")).toBeNull();
+  expect(startBorrowToCloudJob).not.toHaveBeenCalled();
+}
+
+function confirmCloudCopyStart() {
+  fireEvent.click(screen.getByRole("button", { name: "开始" }));
+}
+
 beforeEach(() => {
   grouped.value = { folders: [], conversations: [] };
   setHasLocalDisk(true);
@@ -165,6 +209,8 @@ beforeEach(() => {
   useFoldersStore.setState({ draftWorkspaceIntent: { kind: "quick_cloud" } });
   vi.mocked(pickLocalFolderRoot).mockReset();
   vi.mocked(openLocalFolderFromRoot).mockReset();
+  vi.mocked(startImportToCloudJob).mockReset().mockReturnValue(true);
+  vi.mocked(startBorrowToCloudJob).mockReset().mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -240,7 +286,7 @@ describe("DraftChip pick view · 选地方", () => {
     );
   });
 
-  it("复制到云上当新家带上已选根 prefill", async () => {
+  it("复制到云上当新家先确认再开传，不走完整导入框", async () => {
     vi.mocked(pickLocalFolderRoot).mockResolvedValue({
       ok: true,
       root: { id: "root-1", name: "MyRepo" },
@@ -255,14 +301,38 @@ describe("DraftChip pick view · 选地方", () => {
       fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
     });
     fireEvent.click(menu.getByRole("button", { name: /复制到云上当新家/ }));
-    expect(openImport).toHaveBeenCalledWith({
-      rootId: "root-1",
-      folderName: "MyRepo",
+    expect(openImport).not.toHaveBeenCalled();
+    expectImportConfirm("MyRepo");
+    confirmCloudCopyStart();
+    expect(startImportToCloudJob).toHaveBeenCalledWith({
+      root: { id: "root-1", name: "MyRepo" },
       ownsRoot: true,
+      folderName: "MyRepo",
     });
   });
 
-  it("先在云上做打开借用，不打推荐；上次只打在直接改", async () => {
+  it("取消轻量确认不上传，并丢掉新授权的本机根", async () => {
+    vi.mocked(pickLocalFolderRoot).mockResolvedValue({
+      ok: true,
+      root: { id: "root-1", name: "MyRepo" },
+    });
+    const removeRoot = vi.fn();
+    (
+      window as unknown as { fsApi?: { removeRoot?: ReturnType<typeof vi.fn> } }
+    ).fsApi = { removeRoot };
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
+    await act(async () => {
+      fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
+    });
+    fireEvent.click(menu.getByRole("button", { name: /复制到云上当新家/ }));
+    expectImportConfirm("MyRepo");
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(startImportToCloudJob).not.toHaveBeenCalled();
+    expect(removeRoot).toHaveBeenCalledWith("root-1");
+  });
+
+  it("先在云上做先确认再开传，不打推荐；上次只打在直接改", async () => {
     setComposerChannelPreference("local_traditional");
     vi.mocked(pickLocalFolderRoot).mockResolvedValue({
       ok: true,
@@ -291,10 +361,12 @@ describe("DraftChip pick view · 选地方", () => {
       ),
     ).toBeTruthy();
     fireEvent.click(borrow);
-    expect(openBorrow).toHaveBeenCalledWith({
-      rootId: "root-1",
+    expect(openBorrow).not.toHaveBeenCalled();
+    expectBorrowConfirm("MyRepo");
+    confirmCloudCopyStart();
+    expect(startBorrowToCloudJob).toHaveBeenCalledWith({
+      root: { id: "root-1", name: "MyRepo" },
       folderName: "MyRepo",
-      ownsRoot: true,
     });
   });
 
@@ -361,7 +433,7 @@ describe("DraftChip pick view · 选地方", () => {
     });
   });
 
-  it("点本机文件夹后复制到云上，prefill 不交出根所有权", () => {
+  it("点本机文件夹后复制到云上，确认后再开传且不交出根", () => {
     grouped.value = {
       folders: [localFolder("f-repo", "MyRepo", null)],
       conversations: [],
@@ -373,11 +445,63 @@ describe("DraftChip pick view · 选地方", () => {
     const menu = within(openPicker());
     fireEvent.click(menu.getByRole("button", { name: /MyRepo/ }));
     fireEvent.click(menu.getByRole("button", { name: /复制到云上当新家/ }));
-    expect(openImport).toHaveBeenCalledWith({
-      rootId: "root-1",
-      folderName: "MyRepo",
+    expect(openImport).not.toHaveBeenCalled();
+    expectImportConfirm("MyRepo");
+    confirmCloudCopyStart();
+    expect(startImportToCloudJob).toHaveBeenCalledWith({
+      root: { id: "root-1", name: "MyRepo" },
       ownsRoot: false,
+      folderName: "MyRepo",
     });
+  });
+
+  it("点本机文件夹后先在云上做，确认后再开传且不交出根", () => {
+    grouped.value = {
+      folders: [localFolder("f-repo", "MyRepo", null)],
+      conversations: [],
+    };
+    const openBorrow = vi.spyOn(
+      useFoldersStore.getState(),
+      "openBorrowToCloud",
+    );
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: /MyRepo/ }));
+    fireEvent.click(
+      menu.getByRole("button", { name: /先在云上做，原件先不动/ }),
+    );
+    expect(openBorrow).not.toHaveBeenCalled();
+    expectBorrowConfirm("MyRepo");
+    confirmCloudCopyStart();
+    expect(startBorrowToCloudJob).toHaveBeenCalledWith({
+      root: { id: "root-1", name: "MyRepo" },
+      folderName: "MyRepo",
+    });
+  });
+
+  it("确认后若上传已在进行，丢掉新授权的本机根", async () => {
+    vi.mocked(startImportToCloudJob).mockReturnValue(false);
+    vi.mocked(pickLocalFolderRoot).mockResolvedValue({
+      ok: true,
+      root: { id: "root-1", name: "MyRepo" },
+    });
+    const removeRoot = vi.fn();
+    (
+      window as unknown as { fsApi?: { removeRoot?: ReturnType<typeof vi.fn> } }
+    ).fsApi = { removeRoot };
+    const openImport = vi.spyOn(
+      useFoldersStore.getState(),
+      "openImportToCloud",
+    );
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
+    await act(async () => {
+      fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
+    });
+    fireEvent.click(menu.getByRole("button", { name: /复制到云上当新家/ }));
+    expect(openImport).not.toHaveBeenCalled();
+    expectImportConfirm("MyRepo");
+    confirmCloudCopyStart();
+    expect(removeRoot).toHaveBeenCalledWith("root-1");
   });
 
   it("点云文件夹仍立刻选中，不进三选", () => {
