@@ -67,13 +67,6 @@ BYOK_PROVIDER_PRESETS: tuple[ByokProviderPreset, ...] = (
         models=("deepseek-v4-flash", "deepseek-v4-pro"),
     ),
     ByokProviderPreset(
-        id="jiurelay",
-        label="JiuRelay",
-        base_url="https://jiurelay.com/openai/v1",
-        default_model="glm-5.2",
-        models=("glm-5.2", "deepseek-v4-flash-0731", "grok-4.5"),
-    ),
-    ByokProviderPreset(
         id="openai",
         label="OpenAI",
         base_url="https://api.openai.com/v1",

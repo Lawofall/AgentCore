@@ -141,9 +141,9 @@ def test_platform_wire_model_uses_upstream_override(monkeypatch):
     monkeypatch.setattr(
         settings,
         "platform_model_credentials",
-        '{"glm-5.2-jiu": {"api_key": "sk-jiu", "upstream_model": "glm-5.2"}}',
+        '{"glm-5.2-alt": {"api_key": "sk-alt", "upstream_model": "glm-5.2"}}',
     )
-    assert platform_wire_model("glm-5.2-jiu") == "glm-5.2"
+    assert platform_wire_model("glm-5.2-alt") == "glm-5.2"
     assert platform_wire_model("glm-5.2") == "glm-5.2"  # no override → catalog id
     assert platform_wire_model("") == ""
 
@@ -388,7 +388,7 @@ async def test_platform_provider_rewrites_upstream_model(monkeypatch):
     from agentcore.llm.provider.protocol import LLMMessage, LLMRequest, LLMResponse
 
     override = (
-        '{"glm-5.2-jiu": {"api_key": "sk-jiu", "base_url": "https://jiu.example/v1",'
+        '{"glm-5.2-alt": {"api_key": "sk-alt", "base_url": "https://relay.example/v1",'
         ' "upstream_model": "glm-5.2"}}'
     )
     monkeypatch.setattr(settings, "platform_api_key", "sk-default")
@@ -404,8 +404,8 @@ async def test_platform_provider_rewrites_upstream_model(monkeypatch):
     monkeypatch.setattr(OpenAICompatibleProvider, "complete", _capture_complete)
     provider = PlatformProvider()
     msgs = [LLMMessage(role="user", content="hi")]
-    await provider.complete(LLMRequest(messages=msgs, model="glm-5.2-jiu"))
-    assert seen == [("glm-5.2", "sk-jiu")]
+    await provider.complete(LLMRequest(messages=msgs, model="glm-5.2-alt"))
+    assert seen == [("glm-5.2", "sk-alt")]
     await provider.close()
 
 

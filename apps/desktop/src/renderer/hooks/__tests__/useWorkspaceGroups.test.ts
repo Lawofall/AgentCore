@@ -138,6 +138,19 @@ describe("buildWorkspaceGroups (方案B 项目分组)", () => {
     expect(groups[0].folder.id).toBe(`f${folders.length - 1}`);
   });
 
+  it("uncapped keeps every folder group (narrow conversation drawer)", () => {
+    const folders = Array.from({ length: MAX_WORKSPACE_GROUPS + 3 }, (_, i) =>
+      folder(`f${i}`),
+    );
+    const conversations = folders.map((f, i) =>
+      conv(`c${i}`, { folderId: f.id }),
+    );
+    const groups = buildWorkspaceGroups(conversations, folders, new Set(), {
+      uncapped: true,
+    });
+    expect(groups).toHaveLength(folders.length);
+  });
+
   it("merges conversations under duplicate local bindings into the oldest folder", () => {
     const folders: FolderMeta[] = [
       {

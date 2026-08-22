@@ -30,7 +30,7 @@ describe("ManualCheckpointCardPreview", () => {
     fireEvent.click(screen.getByText("同业务线 3 个试点"));
     fireEvent.click(screen.getByRole("button", { name: "提交" }));
 
-    expect(screen.getByText("已按你的决定继续")).toBeTruthy();
+    expect(screen.queryByText("已按你的决定继续")).toBeNull();
     expect(screen.getByText(/同业务线 3 个试点/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "提交" })).toBeNull();
     expect(screen.getByText("演示，不会发给团队")).toBeTruthy();
@@ -38,7 +38,6 @@ describe("ManualCheckpointCardPreview", () => {
     fireEvent.click(screen.getByRole("button", { name: "再试一次" }));
     expect(screen.getByText("需要你拍板")).toBeTruthy();
     expect(screen.getByRole("button", { name: "提交" })).toBeTruthy();
-    expect(screen.queryByText("已按你的决定继续")).toBeNull();
   });
 
   it("取消后显示已取消本回合，可再试", () => {

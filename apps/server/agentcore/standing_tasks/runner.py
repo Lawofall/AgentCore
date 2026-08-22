@@ -13,8 +13,6 @@ from datetime import UTC, datetime
 from agentcore.billing.gate import preflight_resolved_llm_credentials
 from agentcore.conversation.background import spawn_background
 from agentcore.conversation.common import (
-    resolve_conversation_history_access,
-    resolve_memory_enabled,
     resolve_permission_axes,
     resolve_profile_set,
 )
@@ -287,10 +285,6 @@ async def run_standing_task_job(
                 )
                 return
             profile_set = await resolve_profile_set(session, conv, user_id)
-            memory_enabled = await resolve_memory_enabled(session, user_id)
-            conversation_history_access = await resolve_conversation_history_access(
-                session, user_id
-            )
             axes = await resolve_permission_axes(session, conversation_id)
 
         backend = await build_turn_backend(
@@ -326,8 +320,6 @@ async def run_standing_task_job(
                 backend=backend,
                 llm_credentials=credentials,
                 profile_set=profile_set,
-                memory_enabled=memory_enabled,
-                conversation_history_access=conversation_history_access,
                 permission_axes=axes,
                 workflow_id=workflow_id,
                 workflow_version=workflow_version,
@@ -345,8 +337,6 @@ async def run_standing_task_job(
                 backend=backend,
                 llm_credentials=credentials,
                 profile_set=profile_set,
-                memory_enabled=memory_enabled,
-                conversation_history_access=conversation_history_access,
                 permission_axes=axes,
             )
 
@@ -446,8 +436,6 @@ async def _run_pipeline(**kwargs):
         backend=kwargs["backend"],
         llm_credentials=kwargs["llm_credentials"],
         profile_set=kwargs.get("profile_set"),
-        memory_enabled=kwargs.get("memory_enabled", True),
-        conversation_history_access=kwargs.get("conversation_history_access", True),
         permission_axes=kwargs.get("permission_axes"),
     )
 
@@ -481,8 +469,6 @@ async def _run_workflow_pipeline(**kwargs):
         backend=kwargs["backend"],
         history=kwargs["history"],
         folder_id=kwargs["folder_id"],
-        memory_enabled=kwargs.get("memory_enabled", True),
-        conversation_history_access=kwargs.get("conversation_history_access", True),
         permission_axes=kwargs.get("permission_axes"),
         profile_set=kwargs.get("profile_set"),
         llm_credentials=kwargs["llm_credentials"],

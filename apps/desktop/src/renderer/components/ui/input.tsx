@@ -5,10 +5,14 @@ import {
   forwardRef,
 } from "react";
 
+/** Keyboard ring + mouse border — L2 层叠与焦点. */
+export const fieldFocusClass =
+  "focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 /** Shared form-control surface (border + radius + focus ring) — also the base
  *  for `Select`, so every text-ish field reads identically. */
 export const fieldSurfaceClass =
-  "rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-40";
+  `rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground ${fieldFocusClass} disabled:opacity-40`;
 
 export const Input = forwardRef<
   HTMLInputElement,

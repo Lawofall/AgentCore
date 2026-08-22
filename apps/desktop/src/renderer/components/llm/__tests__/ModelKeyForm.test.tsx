@@ -30,7 +30,6 @@ import { ModelKeyForm } from "../ModelKeyForm";
 
 const moonshot = getByokProviderPreset("moonshot");
 const deepseek = getByokProviderPreset("deepseek");
-const jiurelay = getByokProviderPreset("jiurelay");
 const openai = getByokProviderPreset("openai");
 
 function savedProvider(over: Partial<LlmProviderView> = {}): LlmProviderView {
@@ -246,19 +245,6 @@ describe("ModelKeyForm", () => {
         /自定义地址通常需含 \/v1（例 https:\/\/api\.example\.com\/v1）/,
       ),
     ).toBeTruthy();
-  });
-
-  it("shows JiuRelay key-model tip and all three models in the datalist", () => {
-    renderForm();
-    fireEvent.change(providerSelect(), { target: { value: "jiurelay" } });
-
-    const modelInput = defaultModelControl() as HTMLInputElement;
-    const optionValues = defaultModelDatalistOptions(modelInput);
-    for (const model of jiurelay.models) {
-      expect(optionValues).toContain(model);
-    }
-    expect(modelInput.value).toBe(jiurelay.defaultModel);
-    expect(screen.getByText("领取的 Key 须与所选模型对应。")).toBeTruthy();
   });
 
   it("offers OpenCode Go preset with its own endpoint and chat/completions seed", async () => {

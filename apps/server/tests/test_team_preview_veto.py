@@ -6,9 +6,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agentcore.core.errors import ValidationError
+from agentcore.core.errors import GoneError, ValidationError
 from agentcore.runtime.checkpoints import CheckpointDecision
-from agentcore.runtime.events import EventSink, EventType
+from agentcore.runtime.events import EventSink
+from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
 from agentcore.runtime.kickoff.team_veto import (
     apply_team_preview_veto,
     normalize_write_capability_overrides,
@@ -21,7 +22,6 @@ from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import Deliverable, RunSpec
 from agentcore.runtime.suspension import TeamPreviewSuspension
 from agentcore.runtime.turn.state import TurnState
-from agentcore.tools.protocol import ToolEffect, ToolResult
 
 
 def _plan_two_independent() -> RunPlan:
@@ -276,57 +276,30 @@ def test_debate_model_override_unknown_run_rejected():
 
 
 @pytest.mark.asyncio
-async def test_recover_debate_applies_model_overrides():
-    mod = "debate_abc"
-    pro = f"{mod}_pro"
-    args = {
-        "motion": "是否",
-        "form": "debate",
-        "moderator_run_id": mod,
-        "sides": [
-            {"key": "pro", "name": "正方", "stance": "赞", "run_id": pro},
-            {"key": "con", "name": "反方", "stance": "反", "run_id": f"{mod}_con"},
-        ],
-    }
-    frame = _frame(
-        RunPlan(),
-        primitive="debate",
-        debate_arguments=args,
-    )
-    frame.sides = [dict(s) for s in args["sides"]]
+async def test_recover_team_preview_refuses_without_drive_or_resolved():
+    """Leftover team_preview resume fails honestly — no veto apply / resolved / drive."""
+    plan = _plan_two_independent()
+    frame = _frame(plan)
     sink = EventSink()
-    seen_args = {}
-
-    async def _resume_debate(**kwargs):
-        seen_args.update(kwargs.get("arguments") or {})
-        return ToolResult(
-            tool_call_id="", success=True, output="开辩", effect=ToolEffect.CONTINUE
-        )
-
-    debate = AsyncMock()
-    debate.resume_after_kickoff = _resume_debate
     delegate = AsyncMock()
-    settled = await recover_turn(
-        state=_state(RunPlan()),
-        sink=sink,
-        delegate_tool=delegate,
-        debate_tool=debate,
-        execution_id="e1",
-        suspension=frame,
-        decision=CheckpointDecision.CONTINUE,
-        note="",
-        model_overrides={
-            pro: {"model": "deepseek-v4-pro", "origin": "platform"},
-        },
-        excluded_run_ids=["b"],
-    )
-    assert settled.output == "开辩"
-    assert seen_args["sides"][0]["model"] == "deepseek-v4-pro"
-    resolved = [e for e in sink._history if e.type is EventType.TEAM_PREVIEW_RESOLVED]
-    assert resolved[0].payload.get("model_overrides") == {
-        pro: {"model": "deepseek-v4-pro", "origin": "platform"},
-    }
-    assert "excluded_run_ids" not in resolved[0].payload
+    debate = AsyncMock()
+    with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
+        await recover_turn(
+            state=_state(plan),
+            sink=sink,
+            delegate_tool=delegate,
+            debate_tool=debate,
+            execution_id="e1",
+            suspension=frame,
+            decision=CheckpointDecision.CONTINUE,
+            note="",
+            excluded_run_ids=["b"],
+            write_capability_overrides=[{"run_id": "a", "capability": "text_only"}],
+            model_overrides={"a": {"model": "deepseek-v4-pro", "origin": "platform"}},
+        )
+    assert sink._history == []
+    delegate.resume_plan.assert_not_called()
+    debate.resume_after_kickoff.assert_not_called()
 
 
 def test_prose_override_idempotent():
@@ -351,195 +324,6 @@ def test_prose_override_idempotent():
     assert plan.by_id("a").deliverable.form == "prose"
 
 
-@pytest.mark.asyncio
-async def test_recover_exclude_one_before_resume_plan():
-    plan = _plan_two_independent()
-    frame = _frame(plan)
-    sink = EventSink()
-    called: dict = {}
-
-    async def _resume(p, seed, **kwargs):
-        called["nodes"] = [n.run_id for n in p.nodes]
-        called["kwargs"] = kwargs
-        return ToolResult(
-            tool_call_id="", success=True, output="团队已启动", effect=ToolEffect.CONTINUE
-        )
-
-    delegate = AsyncMock()
-    delegate.resume_plan = _resume
-    settled = await recover_turn(
-        state=_state(plan),
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="e1",
-        suspension=frame,
-        decision=CheckpointDecision.CONTINUE,
-        note="",
-        excluded_run_ids=["b"],
-    )
-    assert settled.output == "团队已启动"
-    assert called["nodes"] == ["a"]
-    resolved = [e for e in sink._history if e.type is EventType.TEAM_PREVIEW_RESOLVED]
-    assert len(resolved) == 1
-    assert resolved[0].payload.get("excluded_run_ids") == ["b"]
-
-
-@pytest.mark.asyncio
-async def test_recover_debate_ignores_excluded_fields():
-    plan = _plan_two_independent()
-    frame = _frame(
-        plan, primitive="debate", debate_arguments={"motion": "是否", "form": "debate"}
-    )
-    sink = EventSink()
-
-    async def _resume_debate(**kwargs):
-        return ToolResult(
-            tool_call_id="", success=True, output="开辩", effect=ToolEffect.CONTINUE
-        )
-
-    debate = AsyncMock()
-    debate.resume_after_kickoff = _resume_debate
-    delegate = AsyncMock()
-    settled = await recover_turn(
-        state=_state(plan),
-        sink=sink,
-        delegate_tool=delegate,
-        debate_tool=debate,
-        execution_id="e1",
-        suspension=frame,
-        decision=CheckpointDecision.CONTINUE,
-        note="",
-        excluded_run_ids=["b"],
-        write_capability_overrides=[{"run_id": "a", "capability": "text_only"}],
-    )
-    assert settled.output == "开辩"
-    delegate.resume_plan.assert_not_called()
-    resolved = [e for e in sink._history if e.type is EventType.TEAM_PREVIEW_RESOLVED]
-    assert "excluded_run_ids" not in resolved[0].payload
-    assert [n.run_id for n in plan.nodes] == ["a", "b"]
-
-
-@pytest.mark.asyncio
-async def test_recover_model_override_registers_route_extras(monkeypatch):
-    """人盖模后须补 ensure_delegate_route_extras（跨 provider 云端 in-process）。"""
-    plan = _plan_two_independent()
-    frame = _frame(plan)
-    sink = EventSink()
-    seen: list[object] = []
-
-    async def _extras(llm, identities, *, user_id=None):
-        seen.append(list(identities))
-
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.task_models.ensure_delegate_route_extras",
-        _extras,
-    )
-
-    async def _resume(p, seed, **kwargs):
-        assert p.by_id("a").model == "platform/deepseek-v4-pro"
-        return ToolResult(
-            tool_call_id="", success=True, output="ok", effect=ToolEffect.CONTINUE
-        )
-
-    delegate = AsyncMock()
-    delegate.resume_plan = _resume
-    delegate._llm = object()
-    delegate._base_tool_context = type("Ctx", (), {"user_id": "u1"})()
-
-    await recover_turn(
-        state=_state(plan),
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="e1",
-        suspension=frame,
-        decision=CheckpointDecision.CONTINUE,
-        model_overrides={
-            "a": {"model": "deepseek-v4-pro", "origin": "platform"},
-        },
-    )
-    assert len(seen) == 1
-    assert seen[0][0].model == "deepseek-v4-pro"
-    assert seen[0][0].origin == "platform"
-    resolved = [e for e in sink._history if e.type is EventType.TEAM_PREVIEW_RESOLVED]
-    assert resolved[0].payload.get("model_overrides") == {
-        "a": {"model": "deepseek-v4-pro", "origin": "platform"},
-    }
-
-
-@pytest.mark.asyncio
-async def test_recover_ceo_route_key_registers_extras_without_override(monkeypatch):
-    """冷 resume：人未改模时，plan 上 CEO 已写路由键也须补 extras。"""
-    plan = _plan_two_independent()
-    plan.by_id("a").model = "prov-x/custom-model"
-    frame = _frame(plan)
-    sink = EventSink()
-    seen: list[object] = []
-
-    async def _extras(llm, identities, *, user_id=None):
-        seen.append(list(identities))
-
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.task_models.ensure_delegate_route_extras",
-        _extras,
-    )
-
-    async def _resume(p, seed, **kwargs):
-        return ToolResult(
-            tool_call_id="", success=True, output="ok", effect=ToolEffect.CONTINUE
-        )
-
-    delegate = AsyncMock()
-    delegate.resume_plan = _resume
-    delegate._llm = object()
-    delegate._base_tool_context = type("Ctx", (), {"user_id": "u1"})()
-
-    await recover_turn(
-        state=_state(plan),
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="e1",
-        suspension=frame,
-        decision=CheckpointDecision.CONTINUE,
-    )
-    assert len(seen) == 1
-    assert seen[0][0].model == "custom-model"
-    assert seen[0][0].origin == "byok"
-    assert seen[0][0].provider_id == "prov-x"
-
-
-@pytest.mark.asyncio
-async def test_recover_tighten_write_then_resume():
-    plan = _plan_two_independent()
-    frame = _frame(plan)
-    sink = EventSink()
-    forms: dict[str, str | None] = {}
-
-    async def _resume(p, seed, **kwargs):
-        for n in p.nodes:
-            forms[n.run_id] = n.deliverable.form if n.deliverable else None
-        return ToolResult(
-            tool_call_id="", success=True, output="ok", effect=ToolEffect.CONTINUE
-        )
-
-    delegate = AsyncMock()
-    delegate.resume_plan = _resume
-    await recover_turn(
-        state=_state(plan),
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="e1",
-        suspension=frame,
-        decision=CheckpointDecision.CONTINUE,
-        write_capability_overrides=[{"run_id": "a", "capability": "text_only"}],
-    )
-    assert forms["a"] == "prose"
-    assert forms["b"] == "files"
-    resolved = [e for e in sink._history if e.type is EventType.TEAM_PREVIEW_RESOLVED]
-    assert resolved[0].payload.get("write_capability_overrides") == [
-        {"run_id": "a", "capability": "text_only"}
-    ]
-
-
 def test_workers_validate_dep_and_unknown():
     workers = [
         {"run_id": "a", "depends_on": []},
@@ -553,14 +337,14 @@ def test_workers_validate_dep_and_unknown():
 
 
 @pytest.mark.asyncio
-async def test_recover_invalid_veto_emits_no_resolved():
-    """非法否决：validate 先于 emit —— sink 不得先落 team_preview_resolved。"""
+async def test_recover_invalid_veto_still_refuses_retired_card():
+    """Illegal veto never reaches validate — leftover team_preview is already gone."""
     plan = _plan_two_independent()
     frame = _frame(plan)
     sink = EventSink()
     delegate = AsyncMock()
 
-    with pytest.raises(ValidationError, match="未知"):
+    with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
         await recover_turn(
             state=_state(plan),
             sink=sink,
@@ -571,36 +355,5 @@ async def test_recover_invalid_veto_emits_no_resolved():
             excluded_run_ids=["nope"],
         )
 
-    resolved = [e for e in sink._history if e.type is EventType.TEAM_PREVIEW_RESOLVED]
-    assert resolved == []
+    assert sink._history == []
     delegate.resume_plan.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_explore_gate_not_invoked_on_pruned_resume():
-    """剪枝剩 1 人：resume_plan 路径不跑 cold_start_explore≥2 闸。"""
-    plan = _plan_two_independent()
-    frame = _frame(plan)
-    sink = EventSink()
-
-    async def _resume(p, seed, **kwargs):
-        assert len(p.nodes) == 1
-        return ToolResult(
-            tool_call_id="", success=True, output="ok", effect=ToolEffect.CONTINUE
-        )
-
-    delegate = AsyncMock()
-    delegate.resume_plan = _resume
-    delegate.execute = AsyncMock(
-        side_effect=AssertionError("resume must not call execute / explore gate")
-    )
-    await recover_turn(
-        state=_state(plan),
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="e1",
-        suspension=frame,
-        decision=CheckpointDecision.CONTINUE,
-        excluded_run_ids=["b"],
-    )
-    delegate.execute.assert_not_called()

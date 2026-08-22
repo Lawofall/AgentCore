@@ -186,19 +186,14 @@ describe("surfaceResumeFromLiveTurn", () => {
     });
   });
 
-  it("surfaces team_preview with intent=kickoff (not decision)", () => {
+  it("does not surface leftover team_preview unstick shell", () => {
     seedTurn("m-server-tp");
     upsertTeamPreview();
 
     surfaceResumeFromLiveTurn(CID, "server");
 
-    expect(paused().pending).toHaveLength(1);
-    expect(paused().pending[0]).toMatchObject({
-      messageId: "m-server-tp",
-      checkpointId: "tp1",
-      kind: "team_preview",
-      intent: "kickoff",
-    });
+    expect(paused().pending).toHaveLength(0);
+    expect(listVisibleColdResumes(CID)).toHaveLength(0);
   });
 
   it("画卡后清 isGenerating / isStreaming（冷挂起不变量）", () => {
@@ -305,7 +300,7 @@ describe("surfaceResumeFromLiveTurn", () => {
 });
 
 describe("listVisibleColdResumes (InteractionStore authority)", () => {
-  it("paints from IX cold pending without pausedTurns surface", () => {
+  it("leftover team_preview IX pending does not paint a clickable card", () => {
     seedTurn("m-server-tp");
     ix().upsertRequired({
       kind: "team_preview",
@@ -328,13 +323,21 @@ describe("listVisibleColdResumes (InteractionStore authority)", () => {
       },
     });
 
+    expect(listVisibleColdResumes(CID)).toHaveLength(0);
+    expect(paused().pending).toHaveLength(0);
+    expect(ix().listPending(CID, ["team_preview"])).toHaveLength(1);
+  });
+
+  it("paints ask_user from IX cold pending without pausedTurns surface", () => {
+    seedTurn("m-server-ask");
+    upsertAsk("m-server-ask");
+
     const visible = listVisibleColdResumes(CID);
     expect(visible).toHaveLength(1);
     expect(visible[0]).toMatchObject({
-      messageId: "m-server-tp",
-      checkpointId: "tp1",
-      kind: "team_preview",
-      origin: "server",
+      messageId: "m-server-ask",
+      checkpointId: "cp1",
+      kind: "ask_user",
     });
     expect(paused().pending).toHaveLength(0);
   });
@@ -386,15 +389,25 @@ describe("listVisibleColdResumes (InteractionStore authority)", () => {
     });
   });
 
-  it("stamp from none → paints once serverMessageId lands", () => {
+  it("stamp from none → leftover team_preview still does not paint", () => {
     seedTurn(); // client-uuid, no stamp
     upsertTeamPreview("client-uuid");
+    expect(listVisibleColdResumes(CID)).toHaveLength(0);
+
+    conv().setServerMessageIdOnLastMessage("m-server-stamp", CID);
+    expect(listVisibleColdResumes(CID)).toHaveLength(0);
+  });
+
+  it("stamp from none → ask_user paints once serverMessageId lands", () => {
+    seedTurn(); // client-uuid, no stamp
+    upsertAsk("client-uuid");
     expect(listVisibleColdResumes(CID)).toHaveLength(0);
 
     conv().setServerMessageIdOnLastMessage("m-server-stamp", CID);
     const visible = listVisibleColdResumes(CID);
     expect(visible).toHaveLength(1);
     expect(visible[0]?.messageId).toBe("m-server-stamp");
+    expect(visible[0]?.kind).toBe("ask_user");
   });
 
   it("prefers Interaction origin over pausedTurns shell", () => {
@@ -495,7 +508,7 @@ describe("cold checkpoint terminal authority", () => {
     stampJournalResolved("tp1");
     surfaceResumeFromLiveTurn(CID, "server");
 
-    expect(paused().pending.length).toBeGreaterThan(0);
+    expect(paused().pending).toHaveLength(0);
     expect(listVisibleColdResumes(CID)).toHaveLength(0);
   });
 

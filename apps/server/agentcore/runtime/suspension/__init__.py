@@ -174,15 +174,6 @@ class TurnSuspension:
     folder_binding_injected: bool = False
     folder_local_root_id: str | None = None
     folder_local_subpath: str | None = None
-    # Caller-supplied memory gate at pause (product resolve always on / 定案 A):
-    # captured so a resume re-wires the toolset the SAME way the original turn did —
-    # False ⇒ consult_memory stays UNwired on resume too. Defaults True (legacy
-    # frames + product default) so an absent value never silently strips memory.
-    memory_enabled: bool = True
-    # Caller-supplied conversation-log access gate at pause. Resume re-wires
-    # ``search_conversations`` / ``read_conversation`` the same way. Defaults True
-    # for legacy frames (product resolve always on / 定案 A).
-    conversation_history_access: bool = True
     # The CEO window at pause is a PROJECTION of the turn journal, NOT a stored blob
     # (执行级事件溯源 Phase 2 ⑤): resume folds ``journal_entries`` + ``history`` via
     # ``window_from_journal``. Kept as an in-memory carrier (the suspending face captures it
@@ -253,8 +244,6 @@ class TurnSuspension:
             "folder_binding_injected": self.folder_binding_injected,
             "folder_local_root_id": self.folder_local_root_id,
             "folder_local_subpath": self.folder_local_subpath,
-            "memory_enabled": self.memory_enabled,
-            "conversation_history_access": self.conversation_history_access,
             # NOTE: ``transcript`` / ``history`` / ``journal_entries`` are deliberately NOT
             # serialized into the frame (执行级事件溯源 Phase 2 ⑤): the CEO window is rebuilt by
             # ``window_from_journal`` from the turn_journal facts (§8.3) + reloaded history, so
@@ -298,10 +287,6 @@ class TurnSuspension:
                 if data.get("folder_local_subpath") is None
                 else str(data.get("folder_local_subpath"))
             ),
-            # Legacy frames (pre-field) lack the key → default True so a resume never silently
-            # strips memory that the original turn had on.
-            "memory_enabled": data.get("memory_enabled", True),
-            "conversation_history_access": data.get("conversation_history_access", True),
             # NOTE: ``transcript`` / ``history`` / ``journal_entries`` are NOT in the frame
             # (Phase 2 ⑤) — the CEO window is rebuilt from the turn_journal facts on claim
             # (``window_from_journal``), so they default empty here; the display ``journal`` is a
@@ -365,11 +350,9 @@ class PlanReviewSuspension(TurnSuspension):
 class TeamPreviewSuspension(TurnSuspension):
     """A turn frozen at the kickoff gate (开工卡) — plan + capability auth before fan-out.
 
-    Shared by ``delegate`` (workers wave) and ``debate`` (moderator loop). Resume
-    branches on ``primitive``: delegate → ``delegate.resume_plan``; debate →
-    ``debate.resume_after_kickoff`` with the stored ``debate_arguments``.
-    ``plan`` / ``completed`` are in-memory carriers only for delegate (journal
-    rebuild on claim).
+    Shared by leftover ``delegate`` / ``debate`` frames for journal fold.
+    Resume of this kind fails honestly (开工卡已退役). ``plan`` / ``completed``
+    are in-memory carriers only for deserialize.
     """
 
     kind: ClassVar[SuspensionKind] = SuspensionKind.TEAM_PREVIEW

@@ -181,7 +181,6 @@ def resume_route(monkeypatch):
         ),
     )
     monkeypatch.setattr(turns_mod, "release_request_db_before_sse", AsyncMock())
-    monkeypatch.setattr(turns_mod, "should_apply_team_veto", lambda *_a, **_k: False)
     monkeypatch.setattr(turns_mod, "prewrite_cold_resume_settlement", AsyncMock())
     # peek / claim 扑空后的「帧真没了」复核，默认答「真没了」；要故障面的用例自行覆盖。
     monkeypatch.setattr(turns_mod, "paused_turn_exists", AsyncMock(return_value=False))

@@ -451,7 +451,7 @@ grep 全仓清单写进 task——细节靠 worker 自探。\
 「论文/开源」当资料源 ≠ 明示成文。这类纯对齐通常【不必成篇】，方向笔记可落盘供日后升档。\
 【派摸底·验收】含省略 playbook 手写：task/deliverable【必须】带目标·手段·收工——\
 目标写清「了解到什么算够」（工程：定位/技术栈/进度）；\
-手段=先用 file_list(pattern)/grep/code_search 找出真实入口再读\
+手段=先用 file_list(pattern)（非 * 即整仓按名查找）/ grep（不确定则省略 path）/ code_search 找出真实入口再读\
 （含糊「根」/ `.` / 仅根标签勿直接整读；【禁止】写死「每个 app 读 package.json」类名单；\
 【禁止】凭通用目录名如 src/shared/lib 猜测；路径不存在时按工具回报纠偏勿原样重试；\
 已知路径可直接读；Git 可用看进度），够用即停；收工须 handoff 短摘要，【禁止】为更全无限深挖；\

@@ -36,14 +36,21 @@ export function applyTheme(theme: Theme): void {
  * that turns the persisted `theme` value into an actual `.dark` toggle (the
  * store and the command palette just set the value).
  */
-export function useApplyTheme(): void {
+export function useApplyTheme(forceLight = false): void {
   const theme = useUIStore((s) => s.theme);
   useEffect(() => {
-    applyTheme(theme);
-    if (theme !== "system" || typeof window === "undefined") return;
+    applyTheme(forceLight ? "light" : theme);
+    if (
+      forceLight ||
+      theme !== "system" ||
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return;
+    }
     const mq = window.matchMedia(DARK_QUERY);
     const onChange = () => applyTheme("system");
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, [theme]);
+  }, [theme, forceLight]);
 }

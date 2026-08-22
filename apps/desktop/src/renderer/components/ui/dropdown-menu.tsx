@@ -30,7 +30,7 @@ export function DropdownMenuContent({
         <DropdownMenuPrimitive.Content
           sideOffset={sideOffset}
           className={cn(
-            "z-50 min-w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-lg",
+            "z-50 min-w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-overlay",
             "data-[state=open]:animate-dropdown-in",
             className,
           )}

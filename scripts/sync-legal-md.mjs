@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 /**
- * Mirror in-app legal copy → public repo root Markdown (+ mobile parity).
+ * Mirror in-app legal copy → public repo root Markdown.
  *
  * Canonical SoT: apps/desktop/src/renderer/pages/legal/content.ts
  *   → TERMS.md / PRIVACY.md（仓根公开镜像）
- *   → apps/mobile/src/pages/legal/content.ts（实质一致；各端可保留各自文件）
  *
  * Usage:
- *   node scripts/sync-legal-md.mjs          # write md + sync mobile
- *   node scripts/sync-legal-md.mjs --check  # fail if md / mobile ≠ desktop
+ *   node scripts/sync-legal-md.mjs          # write md
+ *   node scripts/sync-legal-md.mjs --check  # fail if md ≠ desktop
  *
  * Wired: package.json `sync:legal` / `sync:legal:check`；release:gate contracts 段。
  */
@@ -23,15 +22,6 @@ const DESKTOP_CONTENT = join(
   "desktop",
   "src",
   "renderer",
-  "pages",
-  "legal",
-  "content.ts",
-);
-const MOBILE_CONTENT = join(
-  ROOT,
-  "apps",
-  "mobile",
-  "src",
   "pages",
   "legal",
   "content.ts",
@@ -108,10 +98,6 @@ function assertSame(label, path, expected) {
   }
 }
 
-function canonicalJson(value) {
-  return JSON.stringify(value, null, 2) + "\n";
-}
-
 const desktopDocs = loadLegalDocs(DESKTOP_CONTENT);
 if (!desktopDocs?.terms || !desktopDocs?.privacy) {
   console.error("sync-legal — desktop LEGAL_DOCS missing terms/privacy");
@@ -120,24 +106,14 @@ if (!desktopDocs?.terms || !desktopDocs?.privacy) {
 
 const termsMd = renderDoc(desktopDocs.terms);
 const privacyMd = renderDoc(desktopDocs.privacy);
-const desktopSrc = normalizeNewlines(readFileSync(DESKTOP_CONTENT, "utf8"));
 
 if (checkOnly) {
   assertSame("TERMS.md", TERMS_OUT, termsMd);
   assertSame("PRIVACY.md", PRIVACY_OUT, privacyMd);
-  const mobileDocs = loadLegalDocs(MOBILE_CONTENT);
-  if (canonicalJson(mobileDocs) !== canonicalJson(desktopDocs)) {
-    console.error("sync-legal — drift: mobile legal/content.ts ≠ desktop");
-    console.error(`  desktop: ${DESKTOP_CONTENT}`);
-    console.error(`  mobile:  ${MOBILE_CONTENT}`);
-    console.error("  Fix: pnpm sync:legal");
-    process.exit(1);
-  }
-  console.log("sync-legal — check ok (desktop ↔ TERMS/PRIVACY ↔ mobile)");
+  console.log("sync-legal — check ok (desktop ↔ TERMS/PRIVACY)");
   process.exit(0);
 }
 
 writeFileSync(TERMS_OUT, termsMd, "utf8");
 writeFileSync(PRIVACY_OUT, privacyMd, "utf8");
-writeFileSync(MOBILE_CONTENT, desktopSrc, "utf8");
-console.log("sync-legal — wrote TERMS.md + PRIVACY.md + synced mobile content.ts");
+console.log("sync-legal — wrote TERMS.md + PRIVACY.md");

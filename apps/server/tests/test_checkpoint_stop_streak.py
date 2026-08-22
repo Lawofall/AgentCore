@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
 
 from agentcore.core.types import ToolEffect
@@ -15,8 +13,7 @@ from agentcore.runtime.checkpoint_stop_streak import (
 from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.events import EventSink, EventType
 from agentcore.runtime.pipeline.resume import settle_resumed_suspension
-from agentcore.runtime.runs import RunPlan, RunSpec
-from agentcore.runtime.suspension import AskUserSuspension, TeamPreviewSuspension
+from agentcore.runtime.suspension import AskUserSuspension
 
 
 def _resolved(kind: str, decision: str, *, checkpoint_id: str = "prior") -> dict:
@@ -130,24 +127,6 @@ def _ask_frame(*, journal_entries: list[dict] | None = None) -> AskUserSuspensio
     )
 
 
-def _team_frame(*, journal_entries: list[dict] | None = None) -> TeamPreviewSuspension:
-    plan = RunPlan(nodes=[RunSpec(run_id="w1", task="t", role="研究员")])
-    return TeamPreviewSuspension(
-        message_id="m1",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="cap1",
-        checkpoint_id="ck_tp",
-        tool_call_id="call_del",
-        user_message="task",
-        base_system_prompt="sys",
-        journal_entries=list(journal_entries or []),
-        plan=plan,
-        workers=[{"run_id": "w1", "role": "研究员", "task": "t"}],
-        transcript=[],
-    )
-
-
 def _sink_with_required(*, kind: EventType = EventType.CHECKPOINT_REQUIRED) -> EventSink:
     sink = EventSink()
     sink.seed_journal([{"type": kind.value, "payload": {}, "timestamp": "t"}])
@@ -216,67 +195,3 @@ async def test_single_stop_unchanged():
     assert settled.terminal_text is None
     assert "取消了澄清" in settled.output
     assert "收工" in settled.output
-
-
-@pytest.mark.asyncio
-async def test_second_team_preview_stop_after_ask_stop_terminates(monkeypatch):
-    """ask_user STOP then team_preview STOP → INTERACT (cross-kind, reverse order)."""
-    prior = [_resolved("checkpoint_resolved", "stop", checkpoint_id="ask0")]
-    sink = _sink_with_required(kind=EventType.TEAM_PREVIEW_REQUIRED)
-    delegate = MagicMock()
-    delegate.resume_plan = AsyncMock(
-        return_value=MagicMock(
-            output="用户取消了开工，团队未启动。\n宜先问…",
-            effect=ToolEffect.CONTINUE,
-        )
-    )
-    settled = await settle_resumed_suspension(
-        _team_frame(journal_entries=prior),
-        decision=CheckpointDecision.STOP,
-        note="",
-        selected=[],
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="exec1",
-    )
-    assert settled.effect is ToolEffect.INTERACT
-    assert settled.terminal_text is not None
-    assert "已按你的意思停下" in settled.terminal_text
-    # Worker finalize still ran (skip / cancel path) before upgrade.
-    delegate.resume_plan.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_three_team_preview_adjusts_do_not_terminate():
-    """Consecutive team_preview ADJUST stays CONTINUE-feed (no INTERACT upgrade)."""
-    prior = [
-        _resolved("team_preview_resolved", "adjust", checkpoint_id="tp0"),
-        _resolved("team_preview_resolved", "adjust", checkpoint_id="tp1"),
-    ]
-    sink = _sink_with_required(kind=EventType.TEAM_PREVIEW_REQUIRED)
-    delegate = MagicMock()
-    delegate.resume_plan = AsyncMock(
-        return_value=MagicMock(
-            output="用户要求调整开工方案，团队未启动。用户意见：再瘦一圈\n请按用户意见修订",
-            effect=ToolEffect.CONTINUE,
-        )
-    )
-    settled = await settle_resumed_suspension(
-        _team_frame(journal_entries=prior),
-        decision=CheckpointDecision.ADJUST,
-        note="再瘦一圈",
-        selected=[],
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="exec1",
-    )
-    assert settled.effect is ToolEffect.CONTINUE
-    assert settled.terminal_text is None
-    delegate.resume_plan.assert_awaited_once()
-    assert delegate.resume_plan.await_args.kwargs["decision"] is CheckpointDecision.ADJUST
-    journal = sink.execution_journal() or []
-    assert any(
-        e["type"] == EventType.TEAM_PREVIEW_RESOLVED.value
-        and e.get("payload", {}).get("decision") == "adjust"
-        for e in journal
-    )

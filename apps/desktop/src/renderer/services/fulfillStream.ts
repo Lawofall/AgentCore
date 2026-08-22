@@ -1,6 +1,7 @@
 import { isWebRuntime } from "@/lib/capabilities";
 import { clientHeaders } from "@/lib/clientBuildInfo";
 import { isWebPreview } from "@/lib/preview";
+import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
 import {
   BASE_URL,
   captureCsrf,
@@ -212,10 +213,11 @@ async function runStream(
   try {
     response = await fetch(buildFulfillUrl(deviceId, caps, roots), {
       method: "GET",
-      credentials: "include",
+      credentials: sessionCredentials(),
       headers: {
         Accept: "text/event-stream",
         ...clientHeaders(),
+        ...bearerAuthHeader(),
         ...getCsrfHeaders("GET"),
       },
       signal,

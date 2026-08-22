@@ -9,7 +9,6 @@ import {
   entryToCheckpoint,
   entryToColdResume,
   entryToPlanReview,
-  entryToTeamPreview,
   isColdCheckpointSettled,
   isColdResumeKind,
   settledColdIdsFromEvents,
@@ -475,45 +474,8 @@ export function surfaceResumeFromAssistant(
         intent: "decision",
       });
       painted = true;
-    } else {
-      const tpEntry = pending.find((e) => e.kind === "team_preview");
-      if (tpEntry) {
-        const tp = entryToTeamPreview(tpEntry);
-        usePausedTurnStore.getState().addLiveResume({
-          ...base,
-          checkpointId: tp.id,
-          kind: "team_preview",
-          steps: [],
-          pending: [],
-          workers: tp.workers,
-          tools: tp.tools ?? [],
-          primitive: tp.primitive,
-          ...(tp.headline ? { headline: tp.headline } : {}),
-          ...(tp.revision != null ? { revision: tp.revision } : {}),
-          ...(tp.revisedFrom ? { revisedFrom: tp.revisedFrom } : {}),
-          ...(tp.revisionNote ? { revisionNote: tp.revisionNote } : {}),
-          motion: tp.motion,
-          form: tp.form,
-          sides: tp.sides,
-          maxRounds: tp.maxRounds,
-          thorough: tp.thorough,
-          ...(tp.moderatorModel ? { moderatorModel: tp.moderatorModel } : {}),
-          ...(tp.moderatorOrigin
-            ? { moderatorOrigin: tp.moderatorOrigin }
-            : {}),
-          ...(tp.moderatorProviderId
-            ? { moderatorProviderId: tp.moderatorProviderId }
-            : {}),
-          ...(tp.sameModelDebate ? { sameModelDebate: true } : {}),
-          question: "",
-          assumptions: [],
-          questions: [],
-          // team_preview is the kickoff card — not a mid-turn decision ask.
-          intent: "kickoff",
-        });
-        painted = true;
-      }
     }
+    // leftover team_preview: fold / IX still recognize the kind; no unstick shell.
   }
   if (!painted) {
     // Stop = hard cancel: no Interaction ``*_required`` → no Resume card.
@@ -570,25 +532,6 @@ export function resolveColdResumeKey(
   );
 }
 
-/**
- * One pending kickoff card per conversation — latest by `surfacedSeq`
- * (missing seq = earliest). ask_user / plan_review are not collapsed.
- */
-function keepLatestTeamPreview(cards: PendingResume[]): PendingResume[] {
-  let best = -1;
-  let bestSeq = Number.NEGATIVE_INFINITY;
-  for (let i = 0; i < cards.length; i++) {
-    if (cards[i].kind !== "team_preview") continue;
-    const seq = cards[i].surfacedSeq ?? 0;
-    if (best < 0 || seq > bestSeq) {
-      best = i;
-      bestSeq = seq;
-    }
-  }
-  if (best < 0) return cards;
-  return cards.filter((c, i) => c.kind !== "team_preview" || i === best);
-}
-
 registerColdJournalReader((conversationId) =>
   settledColdIdsFromEvents(
     collectMessageJournalEvents(getRuntime(conversationId).messages),
@@ -599,6 +542,7 @@ registerColdJournalReader((conversationId) =>
  * Pure paint selector: InteractionStore cold pending is live authority;
  * pausedTurns covers recovery/`setForConversation` shells not covered by IX.
  * Clickability uses {@link isColdCheckpointSettled} — the only terminal gate.
+ * leftover `team_preview` is never painted (开工卡已退役；解挂壳一并作废).
  */
 export function selectVisibleColdResumes(args: {
   conversationId: string;
@@ -627,7 +571,7 @@ export function selectVisibleColdResumes(args: {
   for (const entry of byId.values()) {
     if (entry.conversationId !== conversationId) continue;
     if (entry.status !== "pending" && entry.status !== "submitting") continue;
-    if (!isColdResumeKind(entry.kind)) {
+    if (!isColdResumeKind(entry.kind) || entry.kind === "team_preview") {
       continue;
     }
     if (!entry.id || !entry.payload) continue;
@@ -665,6 +609,7 @@ export function selectVisibleColdResumes(args: {
   }
 
   for (const p of pausedForConv) {
+    if (p.kind === "team_preview") continue;
     if (covered.has(p.checkpointId)) continue;
     if (
       isColdCheckpointSettled({
@@ -678,7 +623,7 @@ export function selectVisibleColdResumes(args: {
     out.push(p);
   }
 
-  return keepLatestTeamPreview(out);
+  return out;
 }
 
 /**

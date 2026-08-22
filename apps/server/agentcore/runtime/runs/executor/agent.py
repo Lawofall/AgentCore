@@ -54,7 +54,6 @@ def build_agent_executor(
     cost_role: str = "member",
     session_folder_id: str | None = None,
     local_root_claims: object | None = None,
-    memory_enabled: bool = True,
     permission_axes_obj: object | None = None,
 ) -> RunExecutor:
     """Build a :class:`RunExecutor` bound to one turn's wiring.
@@ -115,7 +114,6 @@ def build_agent_executor(
         cost_role=cost_role,
         session_folder_id=session_folder_id,
         local_root_claims=local_root_claims,
-        memory_enabled=memory_enabled,
         permission_axes_obj=permission_axes_obj,
     )
 

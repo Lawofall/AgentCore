@@ -81,10 +81,6 @@ class EngineSettings(BaseModel):
     # ledger (file_read_cleared_paths) and does not consume this grant.
     # 0 = disable the write/citation grant.
     engine_file_read_reread_grant: int = 1
-    # C3 较强文件归属：True = 协调会话级归属表（声明即占、完成后仍占、写时互斥含
-    # str_replace/write_section）。False = 回滚「仅未完成启发式 overlap + 批内
-    # write/append claim」。
-    engine_file_ownership_v2: bool = True
 
     # Worker 累计 token 硬顶 (loose backstop): compaction (tool_clear) 挑大梁做
     # 上下文瘦身,这只是防失控的安全阀。每轮末比对累计 input+output tokens,到顶即收口。

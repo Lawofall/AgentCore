@@ -163,8 +163,6 @@ def next_pending_ask_user_suspension(
         folder_binding_injected=suspension.folder_binding_injected,
         folder_local_root_id=suspension.folder_local_root_id,
         folder_local_subpath=suspension.folder_local_subpath,
-        memory_enabled=suspension.memory_enabled,
-        conversation_history_access=suspension.conversation_history_access,
         transcript=list(messages),
         history=list(suspension.history),
         journal_entries=list(journal_entries),

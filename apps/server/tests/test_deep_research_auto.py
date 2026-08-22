@@ -11,11 +11,9 @@ from agentcore.core.types import (
     FileWriteAxis,
     HostAxis,
     PermissionAxes,
-    TeamKickoffAxis,
     ToolEffect,
     recipe_to_axes,
 )
-from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.deep_research_auto import (
     AUTO_DEBATE_SESSION_LIMIT,
     deep_research_auto_active,
@@ -27,12 +25,9 @@ from agentcore.runtime.delegate.ceo_format import (
     motion_cards_block,
 )
 from agentcore.runtime.events import EventSink, EventType
-from agentcore.runtime.facts import TurnFactLog, current_fact_log
 from agentcore.runtime.interaction import InteractionRegistry
-from agentcore.runtime.kickoff import needs_capability_auth, should_kickoff
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
-from agentcore.runtime.suspension import captain_transcript
 from agentcore.tools.builtin.debate import DebateTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
@@ -40,10 +35,9 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from tests.delegate.conftest import Provider, tool
 
-_KICKOFF_RULES = PermissionAxes(
+_ASK_RULES = PermissionAxes(
     FileWriteAxis.SESSION,
-    CommandAxis.KICKOFF,
-    TeamKickoffAxis.RULES,
+    CommandAxis.ASK,
     HostAxis.ASK,
 )
 
@@ -64,18 +58,16 @@ def _valid_card() -> dict:
 # ── helper 蕴含关系 ───────────────────────────────────────────────
 
 
-def test_helper_flag_or_full_trust():
+def test_helper_flag_only_no_recipe_implication():
     managed = recipe_to_axes(AutonomyPolicy.MANAGED)
     less_interrupt = recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT)
     cautious = recipe_to_axes(AutonomyPolicy.CAUTIOUS)
-    kickoff_rules = _KICKOFF_RULES
     assert deep_research_auto_active(deep_research_auto=True) is True
-    assert deep_research_auto_active(permission_axes=managed) is True
-    # less_interrupt = session/auto/rules/session → 弹组队卡，不蕴含深度研究自治
+    assert deep_research_auto_active(permission_axes=managed) is False
     assert deep_research_auto_active(permission_axes=less_interrupt) is False
     assert deep_research_auto_active(
         deep_research_auto=False,
-        permission_axes=kickoff_rules,
+        permission_axes=_ASK_RULES,
     ) is False
     assert deep_research_auto_active(permission_axes=cautious) is False
 
@@ -96,14 +88,15 @@ def test_helper_may_auto_debate_respects_session_cap():
             permission_axes=recipe_to_axes(AutonomyPolicy.MANAGED),
             auto_debate_count=0,
         )
-        is True
+        is False
     )
     assert (
         may_auto_debate(
+            deep_research_auto=True,
             permission_axes=recipe_to_axes(AutonomyPolicy.MANAGED),
-            auto_debate_count=1,
+            auto_debate_count=0,
         )
-        is False
+        is True
     )
 
 
@@ -167,9 +160,10 @@ def test_format_for_ceo_falls_back_when_over_cap():
     assert "不要直接调用 debate" in out or "不要】直接调用 debate" in out
 
 
-def test_format_for_ceo_full_trust_auto_guidance_no_regression_under_cap():
+def test_format_for_ceo_managed_axes_do_not_imply_auto_guidance():
     t = tool(Provider([]))
     t._permission_axes = recipe_to_axes(AutonomyPolicy.MANAGED)
+    t._base_tool_context.deep_research_auto = False
     t._base_tool_context.deep_research_auto_debate_count = 0
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="汇总", role="汇总")])
     results = {
@@ -180,7 +174,8 @@ def test_format_for_ceo_full_trust_auto_guidance_no_regression_under_cap():
         )
     }
     out = format_for_ceo(t, plan, results)
-    assert "消费指引·深度研究自治" in out
+    assert "消费指引·默认模式" in out
+    assert "消费指引·深度研究自治" not in out
 
 
 # ── 开赛卡放行域 ─────────────────────────────────────────────────
@@ -205,7 +200,7 @@ def _debate_tool(
     debate_count: int = 0,
 ) -> tuple[DebateTool, list, EventSink]:
     if permission_axes is None:
-        permission_axes = _KICKOFF_RULES
+        permission_axes = _ASK_RULES
     registry = InteractionRegistry()
     sink = EventSink()
     saved: list = []
@@ -281,31 +276,23 @@ async def test_debate_flag_skips_kickoff_under_cap():
 
 
 async def test_debate_flag_restores_kickoff_over_cap():
+    """超 cap 也不再挂新 team_preview（跳过开工卡已是默认路径）。"""
     tool, saved, sink = _debate_tool(deep_research_auto=True, debate_count=1)
-    transcript = [
-        LLMMessage(role="user", content="辩一下"),
-        LLMMessage(
-            role="assistant",
-            content=None,
-            tool_calls=[
-                ToolCall(
-                    id="call_debate",
-                    function=ToolCallFunction(name="debate", arguments="{}"),
-                )
-            ],
-        ),
-    ]
-    log = TurnFactLog()
-    fl_token = current_fact_log.set(log)
-    ct_token = captain_transcript.set(transcript)
-    try:
-        result = await tool.execute(_debate_args(), tool._base_tool_context)
-    finally:
-        captain_transcript.reset(ct_token)
-        current_fact_log.reset(fl_token)
-    assert result.effect is ToolEffect.SUSPEND
-    assert len(saved) == 1
-    assert any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+
+    async def _fake_run(config, usage_metadata):
+        return SimpleNamespace(
+            tool_call_id="",
+            success=True,
+            output="ok",
+            effect=ToolEffect.CONTINUE,
+            metadata={},
+        )
+
+    tool._run_moderator = _fake_run  # type: ignore[method-assign]
+    result = await tool.execute(_debate_args(), tool._base_tool_context)
+    assert result.effect is not ToolEffect.SUSPEND
+    assert saved == []
+    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
 
 
 async def test_debate_full_trust_still_skips_over_cap():
@@ -327,27 +314,3 @@ async def test_debate_full_trust_still_skips_over_cap():
     result = await tool.execute(_debate_args(), tool._base_tool_context)
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-
-
-def test_flag_does_not_waive_capability_auth_or_plan_kickoff():
-    """只放行 debate 开赛卡；能力审批 / 计划半 kickoff 规则不变。"""
-    assert needs_capability_auth(
-        local_gate=True, axes=_KICKOFF_RULES
-    ) is True
-    assert (
-        should_kickoff(
-            plan_preview=True,
-            local_gate=True,
-            axes=_KICKOFF_RULES,
-        )
-        is True
-    )
-    # managed 仍全跳（既有 full_trust 行为）
-    assert (
-        should_kickoff(
-            plan_preview=True,
-            local_gate=True,
-            axes=recipe_to_axes(AutonomyPolicy.MANAGED),
-        )
-        is False
-    )

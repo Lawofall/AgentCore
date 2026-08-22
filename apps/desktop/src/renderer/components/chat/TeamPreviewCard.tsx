@@ -4,7 +4,7 @@ import {
   teamCorrectionSuffix,
   teamPreviewLead,
   teamPreviewSettledLead,
-  teamResolvedOutcome,
+  teamResolvedDisplay,
 } from "@/components/chat/decision";
 import {
   DebatePreviewBody,
@@ -69,10 +69,9 @@ function summarySuffix(preview: TeamPreviewDisplay): string {
 }
 
 function ResolvedTeamPreview({ preview }: { preview: TeamPreviewDisplay }) {
-  const decision = preview.decision ?? "timeout";
-  const meta = teamResolvedOutcome(
+  const meta = teamResolvedDisplay(
     preview.primitive,
-    decision,
+    preview.decision,
     Boolean(preview.note?.trim()),
   );
   const correction = teamCorrectionSuffix({

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Tests for 设置·服务商 (platform quota + BYOK providers).
+ * Tests for 设置·服务商 (BYOK providers; platform-on has no quota copy).
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -125,7 +125,7 @@ describe("ProviderSettings", () => {
     expect(screen.queryByText(/默认模型/)).toBeNull();
   });
 
-  it("shows a compact platform status line when the deployment offers platform models", () => {
+  it("describes the page job without platform-quota copy when platform models exist", () => {
     mockProviders(
       providersResponse({
         platform_available: true,
@@ -133,12 +133,19 @@ describe("ProviderSettings", () => {
       }),
     );
     renderPage();
-    expect(screen.getByText("平台额度")).toBeTruthy();
-    expect(screen.getByText(/平台模型 deepseek-v4-flash/)).toBeTruthy();
-    expect(screen.getByText(/不接入也可用平台额度/)).toBeTruthy();
+    expect(screen.getByText("服务商")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /接入自己的 OpenAI 兼容端点（可多个）。日常选用在「设置 · 模型」。/,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/不接入也可用平台额度/)).toBeNull();
+    expect(screen.queryByText("无需配置")).toBeNull();
+    expect(screen.queryByText(/未接入自己的模型时/)).toBeNull();
+    expect(screen.queryByText(/平台模型 deepseek-v4-flash/)).toBeNull();
   });
 
-  it("when platform is off, header guides to jiurelay or providers", () => {
+  it("when platform is off, header says connect a provider to chat", () => {
     mockProviders(
       providersResponse({
         providers: [],
@@ -147,9 +154,7 @@ describe("ProviderSettings", () => {
       }),
     );
     renderPage();
-    expect(
-      screen.getByText(/需自行在 jiurelay 免费配额度或接入服务商/),
-    ).toBeTruthy();
+    expect(screen.getByText(/需自行接入服务商后才能对话/)).toBeTruthy();
     expect(screen.queryByText(/不接入也可用平台额度/)).toBeNull();
     expect(screen.queryByText(/联系管理员/)).toBeNull();
   });

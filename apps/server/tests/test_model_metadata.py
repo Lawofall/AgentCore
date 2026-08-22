@@ -114,10 +114,11 @@ def test_family_variant_doubao_seed_and_o3_mini():
 
 
 def test_exact_curated_branding_beats_auto_qualifier():
-    """Exact rows keep curated labels (not auto「· jiu」/「· preview」)."""
-    assert model_metadata_for("glm-5.2-jiu").display_name == "GLM-5.2 · JiuRelay"
+    """Exact rows keep curated labels (not auto「· preview」)."""
     assert model_metadata_for("hy3-preview").display_name == "Hy3 Preview"
     assert model_metadata_for("gpt-4o-mini").display_name == "GPT-4o mini"
+    # Alias catalog ids inherit the family display via · qualifier (no branded row).
+    assert model_metadata_for("glm-5.2-alt").display_name == "GLM-5.2 · alt"
 
 
 def test_family_prefix_requires_separator_boundary():

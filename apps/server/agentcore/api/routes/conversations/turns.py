@@ -41,10 +41,6 @@ from agentcore.runtime.events import (
 )
 from agentcore.runtime.interaction_orphan import orphan_live_turn_hot_pending
 from agentcore.runtime.journal.pending_interactions import fold_pending_interactions
-from agentcore.runtime.kickoff.team_veto import (
-    should_apply_team_veto,
-    validate_team_preview_veto_workers,
-)
 from agentcore.runtime.settlement import prewrite_cold_resume_settlement
 from agentcore.runtime.suspension import (
     TeamPreviewSuspension,
@@ -287,7 +283,7 @@ async def resume_message(
 ):
     """Continue a durably-paused turn via SSE (结构化挂起 2b ``POST .../resume``).
 
-    The turn paused at a plan_review / ask_user / team_preview checkpoint and lost its
+    The turn paused at a plan_review / ask_user checkpoint and lost its
     live stream (disconnect / restart); only its persisted frame survived.
 
     Settlement 预写 (D8)：① peek frame → ② busy 则 deferred（预写后 ``resume_deferred``，
@@ -354,29 +350,11 @@ async def resume_message(
         for rid, ov in (body.model_overrides or {}).items()
         if ov.model
     }
-    # 开工组队有限否决 + 人盖模型：delegate continue 用 workers；debate continue 用人盖槽位。
-    # 冷 peek 帧无 plan blob（plan 由 journal 重建）→ 用 workers / sides 行校验。
-    if should_apply_team_veto(peeked, body.decision) and isinstance(
-        peeked, TeamPreviewSuspension
-    ):
-        validate_team_preview_veto_workers(
-            peeked.workers,
-            excluded_run_ids=excluded,
-            write_capability_overrides=overrides,
-            model_overrides=model_overrides,
-        )
-    elif isinstance(peeked, TeamPreviewSuspension):
-        from agentcore.runtime.kickoff.team_veto import (
-            should_apply_debate_model_overrides,
-            validate_debate_model_overrides,
-        )
+    if isinstance(peeked, TeamPreviewSuspension):
+        from agentcore.runtime.kickoff.retired import refuse_team_preview_resume
 
-        if should_apply_debate_model_overrides(peeked, body.decision):
-            validate_debate_model_overrides(
-                peeked.sides,
-                debate_arguments=peeked.debate_arguments,
-                model_overrides=model_overrides,
-            )
+        refuse_team_preview_resume()
+
     if not joining_deferred:
         try:
             await prewrite_cold_resume_settlement(

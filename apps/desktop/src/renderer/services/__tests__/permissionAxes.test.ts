@@ -24,22 +24,20 @@ describe("permissionAxes mapping", () => {
     expect(RECIPE_AXES.less_interrupt).toEqual({
       file_write: "session",
       command: "auto",
-      team_kickoff: "rules",
       host: "session",
     });
-    expect(RECIPE_AXES.managed.host).toBe("session");
+    expect(RECIPE_AXES.managed).toEqual(RECIPE_AXES.less_interrupt);
     expect(RECIPE_ORDER).toEqual(["cautious", "less_interrupt", "managed"]);
     expect("write_code" in RECIPE_AXES).toBe(false);
   });
 
   it("matches recipes and reports custom", () => {
     expect(matchRecipe(RECIPE_AXES.less_interrupt)).toBe("less_interrupt");
-    expect(matchRecipe(RECIPE_AXES.managed)).toBe("managed");
+    expect(matchRecipe(RECIPE_AXES.managed)).toBe("less_interrupt");
     expect(
       matchRecipe({
         file_write: "session",
         command: "ask",
-        team_kickoff: "rules",
         host: "ask",
       }),
     ).toBe("custom");
@@ -50,7 +48,6 @@ describe("permissionAxes mapping", () => {
       isIllegalAxes({
         file_write: "ask",
         command: "auto",
-        team_kickoff: "skip",
         host: "ask",
       }),
     ).toBe(true);
@@ -60,10 +57,23 @@ describe("permissionAxes mapping", () => {
       normalizeAxes({
         file_write: "ask",
         command: "auto",
-        team_kickoff: "skip",
         host: "ask",
       }),
     ).toEqual(RECIPE_AXES.less_interrupt);
+  });
+
+  it("does not fold command=kickoff into auto/ask", () => {
+    const unknown = { file_write: "ask" as const, command: "bogus" };
+    const kickoff = { file_write: "ask" as const, command: "kickoff" };
+    expect(normalizeAxes(kickoff)).toEqual(normalizeAxes(unknown));
+    expect(normalizeAxes(kickoff)).not.toEqual({
+      file_write: "ask",
+      command: "ask",
+      host: "session",
+    });
+    expect(
+      normalizeAxes({ file_write: "session", command: "kickoff" }),
+    ).toEqual(normalizeAxes({ file_write: "session", command: "bogus" }));
   });
 
   it("flags auto-command confirm only on enter", () => {
@@ -87,50 +97,45 @@ describe("permissionAxes mapping", () => {
   it("resolves short labels for chip / 系统行", () => {
     expect(axesShortLabel(RECIPE_AXES.cautious)).toBe("谨慎");
     expect(axesShortLabel(RECIPE_AXES.less_interrupt)).toBe("少打断");
-    expect(axesShortLabel(RECIPE_AXES.managed)).toBe("托管");
+    expect(axesShortLabel(RECIPE_AXES.managed)).toBe("少打断");
     expect(
       axesShortLabel({
         file_write: "session",
         command: "ask",
-        team_kickoff: "always",
         host: "ask",
       }),
-    ).toBe("信任 · 每次 · 总挂 · 本机问");
+    ).toBe("信任 · 每次 · 本机问");
     expect(
       permissionAxesShortLabel({
         file_write: "session",
         command: "ask",
-        team_kickoff: "always",
         host: "ask",
       }),
-    ).toBe("信任 · 每次 · 总挂 · 本机问");
+    ).toBe("信任 · 每次 · 本机问");
     expect(permissionAxesShortLabel(RECIPE_AXES.less_interrupt)).toBe("少打断");
     expect(permissionAxesShortLabel("less_interrupt")).toBe("少打断");
     expect(permissionAxesShortLabel("workspace")).toBe("少打断");
     expect(permissionAxesShortLabel("first_grant")).toBe("少打断");
-    // Turn snapshot may store axes as json.dumps string — parse, don't echo JSON.
     expect(
       permissionAxesShortLabel(
         '{"file_write":"session","command":"auto","team_kickoff":"skip","host":"session"}',
       ),
-    ).toBe("托管");
+    ).toBe("少打断");
     expect(
       permissionAxesShortLabel(
         '{"file_write":"session","command":"auto","team_kickoff":"rules","host":"session"}',
       ),
     ).toBe("少打断");
-    // Legacy stored axes (auto+rules+ask) no longer match 少打断 → custom chip.
     expect(
       permissionAxesShortLabel(
         '{"file_write":"session","command":"auto","team_kickoff":"rules","host":"ask"}',
       ),
-    ).toBe("信任 · 免审 · 规则 · 本机问");
-    // Legacy stored axes (auto+skip+ask) → custom chip.
+    ).toBe("信任 · 免审 · 本机问");
     expect(
       permissionAxesShortLabel(
         '{"file_write":"session","command":"auto","team_kickoff":"skip","host":"ask"}',
       ),
-    ).toBe("信任 · 免审 · 跳卡 · 本机问");
+    ).toBe("信任 · 免审 · 本机问");
     expect(permissionAxesShortLabel("{not-json")).toBeNull();
     expect(permissionAxesShortLabel("bogus")).toBeNull();
     expect(permissionAxesShortLabel(null)).toBeNull();
@@ -153,14 +158,12 @@ describe("permissionAxes mapping", () => {
       normalizeAxes({
         file_write: "session",
         command: "auto",
-        team_kickoff: "rules",
       }),
     ).toEqual(RECIPE_AXES.less_interrupt);
     expect(
       normalizeAxes({
         file_write: "ask",
         command: "ask",
-        team_kickoff: "rules",
         host: "off",
       }),
     ).toEqual(RECIPE_AXES.cautious);

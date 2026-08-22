@@ -1,8 +1,8 @@
-"""辩论开工卡「先多视角调研再辩」— 判据与回灌文案。
+"""阶段推进卡 ``research_first`` 回灌文案，以及调研链证据探测。
 
-⏳ 2026-07-21 定案：开工卡 ``research_first`` 按键退役（庭前取证内化为辩论固有阶段）。
-``should_offer_research_first`` / ``should_recommend_research_first`` 恒 False；
-回灌文案与 resume 分支保留（旧 journal / 阶段推进卡 ``research_first`` decision 仍合法）。
+开赛前开工卡「先调研再辩」按键已退役（庭前取证内化为辩论固有阶段）。
+本模块不再提供 offer / recommend 闸。``research_first_tool_result`` 仍服务
+阶段推进卡「先补充调研」与旧 journal fold。
 """
 
 from __future__ import annotations
@@ -12,31 +12,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from agentcore.memory.followups import select_motion_card_from_journal
-from agentcore.runtime.skills import MULTI_LENS_COURTROOM_TRIGGERS
 
 _MLR_PLAYBOOK = "multi_lens_research"
-
-# 回灌文案定稿骨架（命令式、唯一合法下一步）。topic 由 motion / 用户原话填充。
-RESEARCH_FIRST_RESULT_SKELETON = (
-    "用户在开赛确认中选择「先多视角调研再辩」。本场辩论未授权，请勿再次调用 debate。"
-    "本回合必须立即调用 delegate(playbook=\"multi_lens_research\", "
-    "playbook_args.topic 从挂起的 debate motion 或用户原话取)；"
-    "调研与呈报完成、用户拍板后再开辩。"
-)
-
-
-def should_offer_research_first(
-    entries: Sequence[Mapping[str, Any]] | None,
-    *,
-    has_research_artifacts: bool = False,
-) -> bool:
-    """开工卡是否提供「先多视角调研再辩」——定案退役后恒 False。
-
-    旧判据（命题卡 / MLR 成功 / 约定文档产物并集消假阳性）保留为
-    :func:`has_research_chain_evidence` 供宿主挂接探测。
-    """
-    del entries, has_research_artifacts  # 退役：不再点亮按键
-    return False
 
 
 def has_research_chain_evidence(
@@ -50,28 +27,6 @@ def has_research_chain_evidence(
     if _has_successful_multi_lens_research(entries):
         return True
     return bool(has_research_artifacts)
-
-
-def hits_multi_lens_courtroom_triggers(user_message: str) -> bool:
-    """用户本回合输入是否命中多维取证类终局对抗触发词。
-
-    词表同源 :data:`agentcore.runtime.skills.MULTI_LENS_COURTROOM_TRIGGERS`。
-    """
-    text = (user_message or "").strip()
-    if not text:
-        return False
-    return any(trigger in text for trigger in MULTI_LENS_COURTROOM_TRIGGERS)
-
-
-def should_recommend_research_first(
-    entries: Sequence[Mapping[str, Any]] | None,
-    *,
-    has_research_artifacts: bool = False,
-    user_message: str = "",
-) -> bool:
-    """开工卡主键推荐——定案退役后恒 False。"""
-    del entries, has_research_artifacts, user_message
-    return False
 
 
 def research_first_tool_result(*, motion: str = "", user_message: str = "") -> str:

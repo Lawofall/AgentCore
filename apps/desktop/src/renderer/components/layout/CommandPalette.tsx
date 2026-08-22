@@ -7,6 +7,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
+import { isNativeRuntime } from "@/lib/capabilities";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
   COMMAND_CATEGORY_ORDER,
   type PaletteCommand,
@@ -257,6 +259,8 @@ export function CommandPalette() {
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const switchConversation = useConversationStore((s) => s.switchConversation);
   const navigate = useNavigate();
+  const { isNarrow } = useNarrowLayoutState();
+  const forceLightTheme = isNarrow || isNativeRuntime();
 
   const foldersAll = useFolders();
   const folders = useMemo(
@@ -404,6 +408,8 @@ export function CommandPalette() {
         sidebarCollapsed,
         openBookmarksInPalette,
         demoTapes,
+        restrictNarrow: isNarrow,
+        forceLightTheme,
       }),
     [
       navigate,
@@ -412,6 +418,8 @@ export function CommandPalette() {
       sidebarCollapsed,
       openBookmarksInPalette,
       demoTapes,
+      isNarrow,
+      forceLightTheme,
     ],
   );
   const matchedCommands = useMemo(

@@ -66,32 +66,30 @@ class Conversation(Base):
     )
     mode: Mapped[str] = mapped_column(String(20), default="chat", server_default=text("'chat'"))
     # Permission axes (会话级权限 · 安全权限与治理):
-    # {file_write, command, team_kickoff, host}. Runtime gates read THIS column — not
+    # {file_write, command, host}. Runtime gates read THIS column — not
     # users.autonomy_policy (which only seeds new conversations with a recipe).
-    # Default = 少打断: session + auto + rules + session.
-    # Legacy rows / server_default may omit ``host``; ``PermissionAxes.from_mapping`` fills session.
+    # Default = 少打断/托管: session + auto + session.
+    # ``team_kickoff`` / ``command=kickoff`` were rewritten by
+    # ``c1d8e4a7b2f6``; leftover keys are ignored / fail enum (no read-side merge).
     permission_axes: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
         default=lambda: {
             "file_write": "session",
             "command": "auto",
-            "team_kickoff": "rules",
             "host": "session",
         },
         server_default=text(
-            "'{\"file_write\":\"session\",\"command\":\"auto\",\"team_kickoff\":\"rules\",\"host\":\"session\"}'::jsonb"
+            "'{\"file_write\":\"session\",\"command\":\"auto\",\"host\":\"session\"}'::jsonb"
         ),
     )
     # 深度研究自治（会话级独立旗标）: when True, CEO may auto-adopt worker motion_cards
-    # and call debate without a team_preview kickoff (prompt-layer fork + debate-only
-    # kickoff waiver). Axes with command=auto ∧ team_kickoff=skip（托管） imply
-    # the same via runtime helper — this column is the explicit single-flag path.
+    # and call debate (prompt-layer fork). Only this column enables that path.
     deep_research_auto: Mapped[bool] = mapped_column(
         Boolean, server_default=text("false")
     )
-    # Auto-adopted debates started under 深度研究自治 (flag or auto+skip axes). Cap = 1
-    # per session; over the limit kickoff + ceo_format gracefully degrade (no error).
+    # Auto-adopted debates started under 深度研究自治 (explicit flag). Cap = 1
+    # per session; over the limit ceo_format gracefully degrades (no error).
     deep_research_auto_debate_count: Mapped[int] = mapped_column(
         Integer, server_default=text("0")
     )

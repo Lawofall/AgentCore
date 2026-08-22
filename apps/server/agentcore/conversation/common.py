@@ -491,28 +491,6 @@ async def resolve_turn_profiles(
 resolve_profile_set = resolve_turn_profiles
 
 
-async def resolve_memory_enabled(session: AsyncSession, user_id: str) -> bool:
-    """Long-term memory is product-always-on (定案 A); never read ``users.memory_enabled``.
-
-    ``session`` / ``user_id`` kept so call sites stay unchanged. Runtime may still
-    pass ``memory_enabled=False`` internally (unit tests / suspension frames).
-    """
-    _ = (session, user_id)
-    return True
-
-
-async def resolve_conversation_history_access(
-    session: AsyncSession, user_id: str
-) -> bool:
-    """Conversation-log access is product-always-on (定案 A); never read the user column.
-
-    ``session`` / ``user_id`` kept so call sites stay unchanged. Runtime may still
-    pass ``conversation_history_access=False`` internally (unit tests).
-    """
-    _ = (session, user_id)
-    return True
-
-
 async def resolve_autonomy_policy(session: AsyncSession, user_id: str):
     """User-global *default recipe* AutonomyPolicy (seeds new conversations only).
 

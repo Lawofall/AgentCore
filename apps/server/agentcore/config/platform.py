@@ -34,7 +34,7 @@ class PlatformSettings(BaseModel):
     # override is not mixed with a pool key (it still applies on the empty-pool
     # env fallback).
     # Optional upstream_model: catalog id may differ from the id sent to the upstream
-    # (e.g. glm-5.2-jiu → glm-5.2 on a second relay). Optional id: operator alias for
+    # (e.g. glm-5.2-alt → glm-5.2). Optional id: operator alias for
     # logs / cost_calls.platform_credential_id. Empty = every platform model shares
     # the default key/base_url; omitted upstream_model = send catalog id as-is.
     platform_model_credentials: str = ""

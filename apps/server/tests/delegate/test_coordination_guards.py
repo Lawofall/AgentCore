@@ -504,11 +504,13 @@ def test_append_overlap_reject_message_mentions_replaces_not_cancel_for_done():
 
 def test_roles_and_file_targets_detect_geo_class_overlap():
     from agentcore.runtime.coordination.append_guard import (
+        declare_plan_artifacts,
         find_append_overlaps,
         node_file_targets,
         roles_overlap,
     )
     from agentcore.runtime.runs.types import Deliverable
+    from agentcore.workspace.write_claims import WriteCoordinator
 
     # Seat = normalized exact equality only (no fuzzy prefix / stem / edit distance).
     assert not roles_overlap("内容文案", "内容策略")
@@ -552,7 +554,11 @@ def test_roles_and_file_targets_detect_geo_class_overlap():
         RunSpec(run_id="qa", role="页面 QA", task="质检并写 site/QA.md"),
     )
     overlapping = _plan(frontend)
-    hits = find_append_overlaps(overlapping, live, completed_run_ids=set())
+    ownership = WriteCoordinator()
+    declare_plan_artifacts(live, ownership)
+    hits = find_append_overlaps(
+        overlapping, live, completed_run_ids=set(), ownership=ownership
+    )
     assert hits
     assert hits[0].reason in ("deliverable", "role+deliverable")
 

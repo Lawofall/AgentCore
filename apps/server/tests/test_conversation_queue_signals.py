@@ -315,7 +315,6 @@ def resume_route(monkeypatch):
     )
     monkeypatch.setattr(turns_mod, "release_request_db_before_sse", AsyncMock())
     monkeypatch.setattr(turns_mod, "load_paused_turn", AsyncMock(return_value=object()))
-    monkeypatch.setattr(turns_mod, "should_apply_team_veto", lambda *_a, **_k: False)
     monkeypatch.setattr(turns_mod, "prewrite_cold_resume_settlement", AsyncMock())
 
 

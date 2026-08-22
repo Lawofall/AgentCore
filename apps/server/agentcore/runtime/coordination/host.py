@@ -115,7 +115,6 @@ def admit_before_run_plan_emit(
     )
     from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
     from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
-    from agentcore.workspace.write_claims import file_ownership_v2_enabled
 
     force = force_allows(tool, GATE_SEAT_OVERLAP)
 
@@ -175,9 +174,7 @@ def admit_before_run_plan_emit(
                 has_deps=False,
             )
 
-        ownership = (
-            existing.ensure_file_ownership() if file_ownership_v2_enabled() else None
-        )
+        ownership = existing.ensure_file_ownership()
         birth_desk = getattr(tool, "_folder_id", None)
         overlaps = find_append_overlaps(
             plan,
@@ -297,35 +294,34 @@ def admit_before_run_plan_emit(
             )
         return None
 
-    if file_ownership_v2_enabled():
-        birth_desk = getattr(tool, "_folder_id", None)
-        sibling_hits = find_sibling_artifact_crosses(plan, birth_desk_id=birth_desk)
-        if sibling_hits:
-            msg = append_overlap_reject_message(
-                sibling_hits,
-                completed=0,
-                total=len(plan.nodes),
-            )
-            logger.info(
-                "coordination.sibling_artifact_rejected",
-                execution_id=execution_id,
-                overlaps=len(sibling_hits),
-                paths=[o.path for o in sibling_hits if o.path],
-                call=call_idx,
-                via="pre_emit",
-            )
-            return annotate_batch_meta(
-                _ceo_result(
-                    tool_call_id="",
-                    success=False,
-                    output="",
-                    error=msg,
-                    effect=ToolEffect.CONTINUE,
-                    contract_failure=True,
-                ),
-                node_count=len(plan.nodes),
-                has_deps=any(n.depends_on for n in plan.nodes),
-            )
+    birth_desk = getattr(tool, "_folder_id", None)
+    sibling_hits = find_sibling_artifact_crosses(plan, birth_desk_id=birth_desk)
+    if sibling_hits:
+        msg = append_overlap_reject_message(
+            sibling_hits,
+            completed=0,
+            total=len(plan.nodes),
+        )
+        logger.info(
+            "coordination.sibling_artifact_rejected",
+            execution_id=execution_id,
+            overlaps=len(sibling_hits),
+            paths=[o.path for o in sibling_hits if o.path],
+            call=call_idx,
+            via="pre_emit",
+        )
+        return annotate_batch_meta(
+            _ceo_result(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=msg,
+                effect=ToolEffect.CONTINUE,
+                contract_failure=True,
+            ),
+            node_count=len(plan.nodes),
+            has_deps=any(n.depends_on for n in plan.nodes),
+        )
     return None
 
 
@@ -509,7 +505,6 @@ def _merge_into_active_coordination(
     from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
     from agentcore.runtime.delegate.plan_events import plan_event
     from agentcore.runtime.runs.plan import RunPlan, RunPlanError
-    from agentcore.workspace.write_claims import file_ownership_v2_enabled
 
     if coordination == "wall":
         session.coordination = "wall"
@@ -524,7 +519,7 @@ def _merge_into_active_coordination(
     from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
 
     force = force_allows(tool, GATE_SEAT_OVERLAP)
-    ownership = session.ensure_file_ownership() if file_ownership_v2_enabled() else None
+    ownership = session.ensure_file_ownership()
     _folder = getattr(tool, "_folder_id", None)
     birth_desk = session.birth_desk_id or (
         _folder.strip() if isinstance(_folder, str) and _folder.strip() else None
@@ -642,7 +637,7 @@ def _merge_into_active_coordination(
     added_count = len(added_nodes)
     session.total_workers = len(live.nodes)
     # C3: reserve artifacts for newly admitted nodes (replaces/continue transfer).
-    if file_ownership_v2_enabled() and added_nodes:
+    if added_nodes:
         from agentcore.runtime.runs.executor.context import _ancestors_by_id
 
         declare_plan_artifacts(
@@ -816,11 +811,10 @@ def try_start_coordination(
 
     # C3 sibling gate before session create (defense if caller skipped pre-emit admit).
     from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
-    from agentcore.workspace.write_claims import file_ownership_v2_enabled
 
     force = force_allows(tool, GATE_SEAT_OVERLAP)
     creating_fresh = session is None
-    if file_ownership_v2_enabled() and creating_fresh and not force:
+    if creating_fresh and not force:
         from agentcore.runtime.coordination.append_guard import (
             append_overlap_reject_message,
             find_sibling_artifact_crosses,
@@ -909,7 +903,7 @@ def try_start_coordination(
         sidecar.apply_folder_scope(session)
 
     # C3: first arm declares ownership after admission; resume keeps snapshot ledger.
-    if file_ownership_v2_enabled() and fresh_session:
+    if fresh_session:
         from agentcore.runtime.coordination.append_guard import declare_plan_artifacts
 
         declare_plan_artifacts(

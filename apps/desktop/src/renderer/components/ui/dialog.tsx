@@ -52,7 +52,7 @@ export function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 z-50 w-full max-w-lg -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg",
+          "fixed left-1/2 z-50 w-full max-w-lg -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-modal",
           "data-[state=open]:animate-dropdown-in",
           position === "center" ? "top-1/2 -translate-y-1/2" : "top-[15vh]",
           className,

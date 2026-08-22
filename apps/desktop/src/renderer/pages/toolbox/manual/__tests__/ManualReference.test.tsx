@@ -79,6 +79,7 @@ describe("ManualReference", () => {
     expect(screen.getByText(/其他创作工具（即将上线）/)).toBeTruthy();
     expect(screen.getByText(/白板（画布可用）/)).toBeTruthy();
     expect(screen.getByText("用的什么模型？")).toBeTruthy();
+    expect(screen.getByText(/平台代付，开箱即可对话/)).toBeTruthy();
     expect(screen.getByText(/OpenAI \/ DeepSeek \/ Kimi \/ 智谱/)).toBeTruthy();
     expect(screen.getByText("画布和白板有什么区别？")).toBeTruthy();
   });

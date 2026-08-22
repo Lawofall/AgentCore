@@ -8,8 +8,8 @@ import { useInteractionStore } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 // @vitest-environment jsdom
 /**
- * Live cold card authority = InteractionStore: team_preview_required with a
- * server stamp paints ResumePrompt without message_end → surfaceResume.
+ * Live cold card authority = InteractionStore: leftover team_preview_required
+ * is recognized (bind / stamp / IX pending) but does not paint a clickable kickoff shell.
  */
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -124,7 +124,7 @@ beforeEach(() => {
 });
 
 describe("ResumePrompt · live InteractionStore authority", () => {
-  it("team_preview_required with stamp paints without surfaceResume", () => {
+  it("team_preview_required with stamp does not paint a clickable kickoff shell", () => {
     expect(usePausedTurnStore.getState().pending).toHaveLength(0);
 
     useInteractionStore.getState().upsertRequired({
@@ -135,12 +135,16 @@ describe("ResumePrompt · live InteractionStore authority", () => {
       payload: tpPayload("tp-live"),
     });
 
-    renderResume();
+    const { container } = renderResume();
 
-    expect(screen.getByText("预计 1 人开工")).toBeTruthy();
-    expect(screen.getByText("授权并开工")).toBeTruthy();
-    // Must not have required message_end → surfaceResume dual-write.
+    expect(container.querySelector(".mx-4")).toBeNull();
+    expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
+    expect(screen.queryByRole("button", { name: "继续" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
     expect(usePausedTurnStore.getState().pending).toHaveLength(0);
+    expect(
+      useInteractionStore.getState().listPending(CID, ["team_preview"]),
+    ).toHaveLength(1);
   });
 
   it("does not paint clickable card before serverMessageId stamp", () => {
@@ -173,10 +177,10 @@ describe("ResumePrompt · live InteractionStore authority", () => {
 
     const { container } = renderResume();
     expect(container.querySelector(".mx-4")).toBeNull();
-    expect(screen.queryByText("授权并开工")).toBeNull();
+    expect(screen.queryByText("继续")).toBeNull();
   });
 
-  it("paints after stamp arrives (client-bound pending → rekey)", () => {
+  it("stamp + rekey still does not paint leftover team_preview", () => {
     useConversationStore.setState({ currentConversationId: null, byId: {} });
     useConversationStore.getState().switchConversation(CID);
     useConversationStore.getState().addMessage({
@@ -205,7 +209,7 @@ describe("ResumePrompt · live InteractionStore authority", () => {
     });
 
     renderResume();
-    expect(screen.queryByText("授权并开工")).toBeNull();
+    expect(screen.queryByText("继续")).toBeNull();
 
     act(() => {
       useConversationStore
@@ -213,7 +217,8 @@ describe("ResumePrompt · live InteractionStore authority", () => {
         .setServerMessageIdOnLastMessage("m-server-late", CID);
     });
 
-    expect(screen.getByText("授权并开工")).toBeTruthy();
+    expect(screen.queryByText("继续")).toBeNull();
+    expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
     expect(
       useInteractionStore.getState().byId.get("tp-late-stamp")?.messageId,
     ).toBe("m-server-late");
@@ -268,7 +273,7 @@ describe("ResumePrompt · live InteractionStore authority", () => {
     ).toBe("m-server-unbound");
   });
 
-  it("second-round team_preview paints after first round resolved", () => {
+  it("second-round leftover team_preview still does not paint", () => {
     useInteractionStore.getState().upsertRequired({
       kind: "team_preview",
       conversationId: CID,
@@ -313,7 +318,8 @@ describe("ResumePrompt · live InteractionStore authority", () => {
     });
 
     renderResume();
-    expect(screen.getByText("授权并开工")).toBeTruthy();
+    expect(screen.queryByText("继续")).toBeNull();
+    expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
     expect(
       useInteractionStore.getState().listPending(CID, ["team_preview"]),
     ).toHaveLength(1);
@@ -393,7 +399,7 @@ describe("ResumePrompt · live InteractionStore authority", () => {
     );
   });
 
-  it("two pending team_preview cards paint only the latest (IX + paused shell)", () => {
+  it("leftover team_preview does not paint; other cold cards still do", () => {
     useInteractionStore.getState().upsertRequired({
       kind: "ask_user",
       conversationId: CID,
@@ -468,18 +474,15 @@ describe("ResumePrompt · live InteractionStore authority", () => {
     expect(visible.map((v) => v.kind).sort()).toEqual([
       "ask_user",
       "plan_review",
-      "team_preview",
     ]);
-    const kickoffs = visible.filter((v) => v.kind === "team_preview");
-    expect(kickoffs).toHaveLength(1);
-    expect(kickoffs[0]?.checkpointId).toBe("tp-latest");
+    expect(visible.filter((v) => v.kind === "team_preview")).toHaveLength(0);
 
     renderResume();
     expect(screen.getByText("这次讨论怎么推进？")).toBeTruthy();
-    expect(screen.getByText("最新开工卡")).toBeTruthy();
-    expect(screen.queryByText("旧开工卡 · 预计 1 人")).toBeNull();
-    expect(screen.queryByText("旧 IX 开工卡")).toBeNull();
-    expect(screen.getAllByText("授权并开工")).toHaveLength(1);
+    expect(screen.getByText("「研」已完成")).toBeTruthy();
+    expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
+    expect(screen.queryByText("最新开工卡")).toBeNull();
+    expect(screen.queryByRole("button", { name: "授权并开工" })).toBeNull();
   });
 });
 
@@ -558,10 +561,11 @@ describe("ResumePrompt · ask continue → same-turn team_preview", () => {
         pausedPending: usePausedTurnStore.getState().pending,
         messages: useConversationStore.getState().byId[CID]?.messages,
       }),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
 
     renderResume();
-    expect(screen.getByText("授权并开工")).toBeTruthy();
+    expect(screen.queryByText("继续")).toBeNull();
+    expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
   });
 
   it("ensureStreamingAssistant reuses stamped paused bubble (no unstamped mint)", () => {
@@ -593,10 +597,11 @@ describe("ResumePrompt · ask continue → same-turn team_preview", () => {
       useInteractionStore.getState().byId.get("tp-ensure")?.messageId,
     ).toBe(SERVER);
     renderResume();
-    expect(screen.getByText("授权并开工")).toBeTruthy();
+    expect(screen.queryByText("继续")).toBeNull();
+    expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
   });
 
-  it("message_start after continue keeps stamp; team_preview paints", () => {
+  it("message_start after continue keeps stamp; leftover team_preview does not paint", () => {
     seedAskPaused();
     useConversationStore.getState().setTurnPhase("streaming", CID);
     useConversationStore.getState().resumePausedAssistant(SERVER, CID);
@@ -628,7 +633,8 @@ describe("ResumePrompt · ask continue → same-turn team_preview", () => {
     ).toBe(SERVER);
 
     renderResume();
-    expect(screen.getByText("授权并开工")).toBeTruthy();
+    expect(screen.queryByText("继续")).toBeNull();
+    expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
   });
 
   it("unstamped window: no clickable card", () => {
@@ -677,7 +683,7 @@ describe("ResumePrompt · ask continue → same-turn team_preview", () => {
 
     const { container } = renderResume();
     expect(container.querySelector(".mx-4")).toBeNull();
-    expect(screen.queryByText("授权并开工")).toBeNull();
+    expect(screen.queryByText("继续")).toBeNull();
   });
 
   it("resolved IX suppresses recovery shell (align mobile coldResume)", () => {

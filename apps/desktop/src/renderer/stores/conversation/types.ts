@@ -156,11 +156,10 @@ export interface Conversation {
   localRootId?: string | null;
   pinned?: boolean;
   archived?: boolean;
-  /** Session permission axes (file_write / command / team_kickoff / host). */
+  /** Session permission axes (file_write / command / host). */
   permissionAxes?: {
     file_write: "ask" | "session";
-    command: "ask" | "kickoff" | "auto";
-    team_kickoff: "always" | "rules" | "skip";
+    command: "ask" | "auto";
     host: "off" | "ask" | "session";
   };
   /**

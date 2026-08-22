@@ -291,14 +291,13 @@ async function main() {
     ]);
 
     printStep(n++, "客户端静态面（后端已上后即可；官网等桌面 Publish）", [
-      "pnpm -C apps/mobile deploy:pages",
       "pnpm -C apps/admin deploy:production",
       "pnpm -C apps/desktop deploy:web",
       "pnpm -C apps/website deploy:pages   # 须在桌面 release 已 Publish 之后；Android 链亦须 android-v* 已转正",
     ]);
   } else {
     printStep(n++, "客户端", [
-      "纯后端热修通常不必跟发桌面/官网；协议变更则同日跟 mobile/admin（见发布与门禁 §7.4）",
+      "纯后端热修通常不必跟发桌面/官网；协议变更则同日跟 admin（见发布与门禁 §7.4）",
     ]);
   }
 

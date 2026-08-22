@@ -135,7 +135,6 @@ async def test_resolve_delegate_target_desk_and_memory(
             worker_tools=birth_tools,
             sink=MagicMock(),
             local_root_claims=LocalRootClaimBook(),
-            memory_enabled=True,
         )
 
     assert applied.target_folder_id == "folder_alpha"

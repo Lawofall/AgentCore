@@ -183,6 +183,12 @@ describe("TeamPreviewCard", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("resolved 缺 decision 不猜成超时", () => {
+    renderCard(<TeamPreviewCard preview={makePreview({ decision: null })} />);
+    expect(screen.getByRole("button", { name: /已经处理过了/ })).toBeTruthy();
+    expect(screen.queryByText(/未及时回应/)).toBeNull();
+  });
+
   it.each([
     ["adjust", "已调整 · 已交回修订 · 预计 2 人开工"],
     ["stop", "已取消 · 团队未启动 · 预计 2 人开工"],

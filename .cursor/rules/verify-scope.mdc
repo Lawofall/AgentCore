@@ -41,6 +41,6 @@ alwaysApply: false
 ## 跨包边界
 
 - 只改 A 包 → **不跑 B 包套件**。desktop 改动不需要后端 pytest，反之亦然。
-- 跨端 `pnpm gen:types` + `pnpm conformance` **仅当**真动了 `packages/contract-*` / OpenAPI schema / SSE 事件类型 / 两端 fold（细则见 `protocol-conformance.mdc`）；没动契约别跑。
+- 跨端 `pnpm gen:types` + `pnpm conformance` **仅当**真动了 `packages/contract-*` / OpenAPI schema / SSE 事件类型 / 桌面 fold（细则见 `protocol-conformance.mdc`）；没动契约别跑。
 - `pnpm -r` 系列够不到 `apps/server`（不在 workspace），别指望它覆盖后端。
-- **改共享类型 / 往 `packages/` 搬代码 → 点名 vitest 会「假绿」**：vitest 只转译不做类型检查，把共享类型悄悄窄化了也照样全绿。这类改动**必须**补跑各消费方 `pnpm --filter <app> typecheck`（按实际消费方取 desktop / mobile / admin），两端全绿才算过。
+- **改共享类型 / 往 `packages/` 搬代码 → 点名 vitest 会「假绿」**：vitest 只转译不做类型检查，把共享类型悄悄窄化了也照样全绿。这类改动**必须**补跑各消费方 `pnpm --filter <app> typecheck`（按实际消费方取 desktop / admin）。

@@ -114,6 +114,14 @@ FIELD_CONSUMER_BASELINE: tuple[FieldConsumerBaselineGroup, ...] = (
         ),
         leaves=frozenset({"worker_count"}),
     ),
+    FieldConsumerBaselineGroup(
+        id="delivery_status.gaps",
+        reason=(
+            "交付缺口叶：桌面只读 delivery_status.state / summary / artifacts，"
+            "完成态条有意不挂 unmet。唯一生产读点在已拆的手机 SPA。"
+        ),
+        leaves=frozenset({"gaps"}),
+    ),
 )
 
 

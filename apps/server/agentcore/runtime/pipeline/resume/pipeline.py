@@ -182,8 +182,7 @@ async def resume_chat_pipeline(
         trace_id=suspension.trace_id or get_log_value("trace_id"),
         captain_run_id=captain_run_id,
         delegated=bool(
-            (getattr(suspension, "plan", None) and getattr(suspension.plan, "nodes", None))
-            or permission_axes.implies_deep_research_auto
+            getattr(suspension, "plan", None) and getattr(suspension.plan, "nodes", None)
         ),
         permission_axes=(
             json.dumps(permission_axes.to_dict()) if permission_axes is not None else None

@@ -8,7 +8,6 @@
 export type ByokProviderId =
   | "openai"
   | "deepseek"
-  | "jiurelay"
   | "moonshot"
   | "zhipu"
   | "doubao"
@@ -40,14 +39,6 @@ export const BYOK_PROVIDER_PRESETS: readonly ByokProviderPreset[] = [
     defaultModel: "deepseek-v4-flash",
     models: ["deepseek-v4-flash", "deepseek-v4-pro"],
     keyHelpUrl: "https://platform.deepseek.com/api_keys",
-  },
-  {
-    id: "jiurelay",
-    label: "JiuRelay",
-    baseUrl: "https://jiurelay.com/openai/v1",
-    defaultModel: "glm-5.2",
-    models: ["glm-5.2", "deepseek-v4-flash-0731", "grok-4.5"],
-    keyHelpUrl: "https://jiurelay.com/",
   },
   {
     id: "openai",

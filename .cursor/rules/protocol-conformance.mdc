@@ -2,7 +2,6 @@
 description: 协议漂移巡检纪律——改动 SSE 事件→state 折叠(fold)、run 树投影、resume/审批状态机，或后端改事件契约时必读：共享向量/golden、assertNever 穷尽、pnpm conformance 门禁
 globs:
   - "apps/desktop/src/renderer/**"
-  - "apps/mobile/**"
   - "packages/protocol-conformance/**"
   - "apps/server/**"
 alwaysApply: false
@@ -10,29 +9,29 @@ alwaysApply: false
 
 # 协议漂移巡检
 
-桌面 / 手机各自实现协议 fold（`fold(events[]) → ProjectedTurn`）。两端实现可不同，但**行为必须对齐**——靠这套巡检让漂移「响」、可被 AI 自动发现。背景见 [`前端技术与架构.md` §十 SSE 与协议一致性](/docs/04-前端/前端技术与架构.md)。
+生产 fold 只留桌面（`fold(events[]) → ProjectedTurn`）。手机 fold 已退役。行为对齐靠这套巡检让漂移「响」、可被 AI 自动发现。背景见 [`前端技术与架构.md` §十 SSE 与协议一致性](/docs/04-前端/前端技术与架构.md)。
 
-**现状：两端均已接入**。手机 fold 即生产实现；桌面 [`conformanceFold`](/apps/desktop/src/renderer/protocol/conformanceFold.ts) 适配器**复用桌面真实的 `projectExecution`**（团队图），单聊 process 时间线复用 [`@/lib/processTimeline`](/apps/desktop/src/renderer/lib/processTimeline.ts)。
+**现状：只跑桌面**。[`conformanceFold`](/apps/desktop/src/renderer/protocol/conformanceFold.ts) 适配器**复用桌面真实的 `projectExecution`**（团队图），单聊 process 时间线复用 [`@/lib/processTimeline`](/apps/desktop/src/renderer/lib/processTimeline.ts)。
 
 ## 三支柱
 
-1. **后端权威向量 + golden oracle**——`packages/protocol-conformance` 存：后端导出的真实事件序列（**向量**）+ 后端投影的期望 `ProjectedTurn`（**golden**）。两端 fold 跑同向量、断言 `== golden`。**后端是输入与期望的单一源**；两端不一致时 golden 是裁判（指明谁错）。
-2. **共享类型 + 穷尽**——两端 import 同一套事件类型；fold 用判别联合 `switch` + `assertNever` 兜底。后端加事件类型 → 重生成 → 两端编译失败直到处理。
-3. **AI 可操作**——`pnpm conformance` = `pnpm -r run conformance`（手机 tsx）+ `pnpm -C apps/desktop run conformance`（桌面 vitest）+ 类型检查（`ci.yml` mobile job **在跑**；Frontend 早失败时后续可能 skipped → **发布前本地必跑** `pnpm conformance` / `release:gate`）；失败打 `ProjectedTurn` diff（golden vs actual）指到分叉字段。
+1. **后端权威向量 + golden oracle**——`packages/protocol-conformance` 存：后端导出的真实事件序列（**向量**）+ 后端投影的期望 `ProjectedTurn`（**golden**）。桌面 fold 跑同向量、断言 `== golden`。**后端是输入与期望的单一源**。
+2. **共享类型 + 穷尽**——桌面 import 同一套事件类型；fold 用判别联合 `switch` + `assertNever` 兜底。后端加事件类型 → 重生成 → 编译失败直到处理。
+3. **AI 可操作**——`pnpm conformance` = 桌面 `pnpm -C apps/desktop run conformance`（vitest；根 `pnpm -r run conformance` 只跑仍声明该脚本的包）。失败打 `ProjectedTurn` diff（golden vs actual）指到分叉字段。发布前本地必跑 `pnpm conformance` / `release:gate`。
 
 ## 何时必跑 / 必更新
 
-- 动任一端协议 fold → **必跑** `pnpm conformance`。
-- **给已有事件 payload 加可选字段** → 字段消费棘轮必须绿（叶名在 desktop/mobile/admin/town/fold-kit 生产代码有读点，或基线分组豁免）。独立于事件名孤儿闸。判据是叶名零命中，不是 AST `(事件,字段)`；解构 / `idField` / 整包再读 / C# `JsonProperty` / 重命名拷贝都算读。禁止靠删契约字段过闸。`uv run python scripts/check_event_field_consumers.py`（`release:gate` backend）。
+- 动桌面协议 fold → **必跑** `pnpm conformance`。
+- **给已有事件 payload 加可选字段** → 字段消费棘轮必须绿（叶名在 desktop/admin/town/fold-kit 生产代码有读点，或基线分组豁免）。独立于事件名孤儿闸。判据是叶名零命中，不是 AST `(事件,字段)`；解构 / `idField` / 整包再读 / C# `JsonProperty` / 重命名拷贝都算读。禁止靠删契约字段过闸。`uv run python scripts/check_event_field_consumers.py`（`release:gate` backend）。
 - **新增向量** → 后端哨兵 `apps/server/tests/test_conformance_projection*.py` 有覆盖棘轮（未写手验断言的向量数只降不升），加向量会让它红：高危面（失败/中止/挂起态、无正文的空泡脸、生命周期不留幽灵卡）补一条**手工推导**的断言（禁抄 golden——抄了就和 oracle 同错），其余面显式抬基线数字。
-- 后端改事件契约 / 投影 → 重导向量 + golden（单一源），两端对齐到红转绿。
+- 后端改事件契约 / 投影 → 重导向量 + golden（单一源），桌面对齐到红转绿。
 - 发现协议 bug → **先加一条复现向量**（棘轮），再修。向量**两来源**：手写 builder（`agentcore/conformance/vectors/`）或从真实回合录制裁切（`agentcore/conformance/recording_cut.py`，产物 `recorded_*` 前缀）→ 见 [`前端技术与架构.md` §十 SSE 与协议一致性](/docs/04-前端/前端技术与架构.md)。
 - 手写向量字段值**必须与生产实现逐字一致**（group/channel 等分类字段尤甚），禁 `null`/占位敷衍——2026-07 取证员向量 `group:null` 而生产发 `debate:investigators:*`，布局击穿在全绿 CI 下漏网。新增 run 类向量时对照产出该 run 的后端代码抄真值。
 
 ## ProjectedTurn（规范化裁判态）
 
-平台无关、可序列化：`{ messages, runs(树), status, pendingInteraction, cost }`。每端实现 `fold → ProjectedTurn` 测试快照（内部 store 形状可不同）。
+平台无关、可序列化：`{ messages, runs(树), status, pendingInteraction, cost }`。桌面实现 `fold → ProjectedTurn` 测试快照（内部 store 形状可不同）。
 
 ## 边界
 
-只巡检**协议 / 状态 fold**（高危、静默、只能测试抓）；组件 / chrome 不进巡检（错了一眼看见、各端本就分叉）。
+只巡检**协议 / 状态 fold**（高危、静默、只能测试抓）；组件 / chrome 不进巡检（错了一眼看见）。

@@ -377,7 +377,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "到 https://jiurelay.com/ 免费自行配额度后，在「设置 · 服务商」接入即可使用。",
+                  text: "平台代付，开箱即可对话。",
                 },
                 {
                   type: "text",
@@ -529,7 +529,7 @@ export const referenceChapter: ManualChapterContent = {
           items: [
             {
               title: "自带 Key（BYOK）",
-              desc: "额度可到 https://jiurelay.com/ 免费自行配后在「设置 · 服务商」接入；也可自带 API Key（BYOK），同页填写与管理。",
+              desc: "平台代付开箱即用；想换模型再自带 API Key（BYOK），在「设置 · 服务商」填写与管理。",
             },
             {
               title: "生成的文件",

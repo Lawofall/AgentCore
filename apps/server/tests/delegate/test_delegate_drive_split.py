@@ -114,24 +114,9 @@ async def test_team_preview_skips_light_handwritten():
 
 
 @pytest.mark.asyncio
-async def test_team_preview_light_with_capability_auth_does_not_skip(monkeypatch):
-    """light + needs_capability_auth → 不早退，仍进开工卡（避免 GRANTABLE 挂门）。"""
+async def test_team_preview_light_with_capability_auth_does_not_skip():
+    """light 任务也不再挂新开工卡。"""
     from agentcore.core.types import AutonomyPolicy
-    from agentcore.runtime.checkpoints import CheckpointDecision
-    from agentcore.runtime.delegate import preview as preview_mod
-
-    await_calls = {"n": 0}
-
-    async def _fake_await(*_a, **_k):
-        await_calls["n"] += 1
-        return CheckpointDecision.CONTINUE
-
-    monkeypatch.setattr(preview_mod, "await_team_preview", _fake_await)
-    monkeypatch.setattr(preview_mod, "should_kickoff", lambda *a, **k: True)
-    monkeypatch.setattr(preview_mod, "needs_capability_auth", lambda *a, **k: True)
-    monkeypatch.setattr(
-        "agentcore.runtime.sandbox_approval.worker_gate_applies", lambda *_a, **_k: True
-    )
 
     class _Tool:
         _depth = 0
@@ -150,4 +135,3 @@ async def test_team_preview_light_with_capability_auth_does_not_skip(monkeypatch
         call_idx=0,
     )
     assert result is None
-    assert await_calls["n"] == 1

@@ -15,8 +15,8 @@ async def test_record_permission_axes_change_persists(session_factory, monkeypat
     )
     user_id = str(uuid4())
     conversation_id = str(uuid4())
-    previous = {"file_write": "session", "command": "kickoff", "team_kickoff": "rules"}
-    next_axes = {"file_write": "session", "command": "auto", "team_kickoff": "skip"}
+    previous = {"file_write": "session", "command": "ask", "host": "off"}
+    next_axes = {"file_write": "session", "command": "auto", "host": "session"}
     await record_permission_axes_change(
         user_id=user_id,
         conversation_id=conversation_id,

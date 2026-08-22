@@ -65,8 +65,6 @@ async def run_chat_pipeline(
     board_id: str | None = None,
     attachments: list[dict] | None = None,
     approvals_enabled: bool = True,
-    memory_enabled: bool = True,
-    conversation_history_access: bool = True,
     permission_axes: PermissionAxes | None = None,
     profile_set: ProfileSet | None = None,
     llm_credentials: LLMCredentials | None = None,
@@ -97,12 +95,8 @@ async def run_chat_pipeline(
     went fail-closed, a call that genuinely needs a human (MCP / Host / 恒确认 / 熔断
     FORCE) is denied on this path instead of silently executing.
 
-    ``memory_enabled`` is a caller-supplied runtime gate (product resolve is always
-    True / 定案 A): False injects no memory <rules> this turn — kept for internal
-    False-path unit tests and durable suspension frames.
-
-    ``permission_axes`` is the conversation's three-axis permission mode
-    (安全权限与治理 · 会话级权限): file_write / command / team_kickoff.
+    ``permission_axes`` is the conversation's permission mode
+    (安全权限与治理 · 会话级权限): file_write / command / host.
     ask_user / plan_review / circuit-breakers are orthogonal. ``command=ask``
     withholds the execution class at worker registry.
 
@@ -175,10 +169,7 @@ async def run_chat_pipeline(
         turn_id=message_id,
         trace_id=get_log_value("trace_id"),
         captain_run_id=captain_run_id,
-        # P2: managed axes (command=auto ∧ team_kickoff=skip) collect fuller trail.
-        delegated=(
-            permission_axes is not None and permission_axes.implies_deep_research_auto
-        ),
+        delegated=False,
         permission_axes=(
             json.dumps(permission_axes.to_dict()) if permission_axes is not None else None
         ),
@@ -253,8 +244,6 @@ async def run_chat_pipeline(
                 folder_id=folder_id,
                 board_id=board_id,
                 attachments=attachments,
-                memory_enabled=memory_enabled,
-                conversation_history_access=conversation_history_access,
                 permission_axes=permission_axes,
                 llm_credentials=llm_credentials,
                 x_client_platform=x_client_platform,
@@ -282,8 +271,6 @@ async def run_chat_pipeline(
                 sink=sink,
                 backend=assemble_backend,
                 folder_id=folder_id,
-                memory_enabled=memory_enabled,
-                conversation_history_access=conversation_history_access,
                 approvals_enabled=approvals_enabled,
                 permission_axes=permission_axes,
                 profiles=profiles,

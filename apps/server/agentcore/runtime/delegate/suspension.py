@@ -66,8 +66,6 @@ async def persist_suspension(
             folder_local_subpath=getattr(
                 tool._base_tool_context, "folder_local_subpath", None
             ),
-            memory_enabled=tool._memory_enabled,
-            conversation_history_access=tool._conversation_history_access,
             transcript=capture.transcript,
             history=capture.history,
             plan=plan,

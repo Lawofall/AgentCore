@@ -93,7 +93,7 @@ export const introChapter: ManualChapterContent = {
               text: "设置 · 服务商",
               link: { kind: "go", to: APP_PATHS.more.providers },
             },
-            " 接入服务商或自带 API Key（BYOK，自担费用）。平台额度临时不可用时会有公告，也可到 https://jiurelay.com/ 免费自配后从同一页接入。",
+            " 接入服务商或自带 API Key（BYOK，自担费用）。平台额度临时不可用时会有公告。",
           ],
         },
       ],

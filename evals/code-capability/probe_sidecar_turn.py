@@ -45,7 +45,6 @@ AGENTCORE_ROOT_ID = "24407ff4-5703-4904-8f10-68314f673384"  # fs-roots: C:\\Proj
 _PERMISSION_AXES_MANAGED: dict[str, str] = {
     "file_write": "session",
     "command": "auto",
-    "team_kickoff": "skip",
     "host": "session",
 }
 # Unpackaged Electron dumps loopback Bridge creds here (see main/browser/bridge.ts).

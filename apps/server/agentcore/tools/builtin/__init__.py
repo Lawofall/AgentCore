@@ -283,8 +283,8 @@ def build_worker_registry(
     for cls in declared_tools(surface=ToolSurface.WORKER_ONLY):
         reg = tool_registration(cls)
         if reg.manual_wire:
-            # Privacy-gated (e.g. conversation log tools): wired after registry build
-            # when the user gate is on — see ``_wire_worker_conversation_log_tools``.
+            # Manual-wire (e.g. conversation log tools): registered after registry
+            # build — see ``_wire_worker_conversation_log_tools``.
             continue
         if reg.browser_class:
             if not include_browser:

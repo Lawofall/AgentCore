@@ -48,7 +48,7 @@ export function CreateFolderMenuHost() {
         side="bottom"
         sideOffset={anchor ? 6 : 0}
         avoidCollisions={false}
-        className="w-auto p-0"
+        className="w-64 p-0"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
         onPointerDownOutside={guardOutside}
@@ -93,11 +93,14 @@ export function CreateFolderCascadePanel({
   onClose,
   parentId = null,
   parentName = null,
+  hideTitle = false,
 }: {
   onClose: () => void;
   /** Nest inside this folder; null = 我的文件 top level. */
   parentId?: string | null;
   parentName?: string | null;
+  /** Chip drill-in already shows the title in NestedHeader. */
+  hideTitle?: boolean;
 }) {
   const createFolder = useCreateFolder();
   const [name, setName] = useState("");
@@ -146,10 +149,12 @@ export function CreateFolderCascadePanel({
   const pending = busy || createFolder.isPending;
 
   return (
-    <div className="w-72 p-3">
-      <div className="mb-2 text-xs font-medium text-foreground">
-        {parentName ? `在「${parentName}」里新建文件夹` : "新建文件夹"}
-      </div>
+    <div className="w-full p-3">
+      {hideTitle ? null : (
+        <div className="mb-2 text-xs font-medium text-foreground">
+          {parentName ? `在「${parentName}」里新建文件夹` : "新建文件夹"}
+        </div>
+      )}
       <NamePane
         inputRef={nameRef}
         name={name}

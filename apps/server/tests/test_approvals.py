@@ -1005,7 +1005,6 @@ async def test_delegation_grant_does_not_cover_git_push():
         FileWriteAxis,
         HostAxis,
         PermissionAxes,
-        TeamKickoffAxis,
     )
     from agentcore.tools.builtin import approval_class_tool_names
 
@@ -1018,11 +1017,9 @@ async def test_delegation_grant_does_not_cover_git_push():
         timeout_seconds=5.0,
         file_op_tools=approval_class_tool_names(),
         delegation_grantable_tools=delegation_grantable_tool_names(),
-        # ASK file writes so only kickoff/delegation (not session trust) can cover git.
         permission_axes=PermissionAxes(
-            file_write=FileWriteAxis.ASK,
-            command=CommandAxis.KICKOFF,
-            team_kickoff=TeamKickoffAxis.RULES,
+            file_write=FileWriteAxis.SESSION,
+            command=CommandAxis.AUTO,
             host=HostAxis.ASK,
         ),
     )
@@ -1051,7 +1048,6 @@ async def test_session_host_trust_still_prompts_package_install():
         FileWriteAxis,
         HostAxis,
         PermissionAxes,
-        TeamKickoffAxis,
     )
     from agentcore.tools.registration import host_class_tool_names
 
@@ -1067,8 +1063,7 @@ async def test_session_host_trust_still_prompts_package_install():
         delegation_grantable_tools=delegation_grantable_tool_names(),
         permission_axes=PermissionAxes(
             file_write=FileWriteAxis.SESSION,
-            command=CommandAxis.KICKOFF,
-            team_kickoff=TeamKickoffAxis.RULES,
+            command=CommandAxis.AUTO,
             host=HostAxis.SESSION,
         ),
     )
@@ -1113,8 +1108,7 @@ async def test_session_host_trust_still_prompts_package_install():
         host_class_tools=host_tools,
         permission_axes=PermissionAxes(
             file_write=FileWriteAxis.SESSION,
-            command=CommandAxis.KICKOFF,
-            team_kickoff=TeamKickoffAxis.RULES,
+            command=CommandAxis.AUTO,
             host=HostAxis.SESSION,
         ),
     )

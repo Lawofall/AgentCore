@@ -94,7 +94,6 @@ describe("searchIndex", () => {
     expect(quick?.haystack).toContain("5 分钟");
     // BYOK 仍可被搜到（可选升级），但第一步是「说目标」——开箱即用，不先支去外部站点。
     expect(quick?.haystack).toContain("api key");
-    expect(quick?.haystack).toContain("jiurelay.com");
     const quickBody = quick?.body ?? "";
     expect(quickBody).toContain("说目标");
     expect(quickBody.indexOf("说目标")).toBeLessThan(quickBody.indexOf("BYOK"));

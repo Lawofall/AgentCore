@@ -97,12 +97,15 @@ interface Props {
   groupIsLocal?: boolean;
   /** Extra SurfaceRow classes (e.g. `px-2` to match workspace group headers). */
   className?: string;
+  /** Fires after the row is chosen, including when this chat is already current. */
+  onActivate?: () => void;
 }
 
 export function ConversationItem({
   conversation,
   groupIsLocal,
   className,
+  onActivate,
 }: Props) {
   const [hovered, setHovered] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -298,6 +301,7 @@ export function ConversationItem({
   const openConversation = () => {
     switchConversation(conversation.id);
     navigate(`/conversations/${conversation.id}`);
+    onActivate?.();
   };
 
   const rowActionClass =

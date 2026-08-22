@@ -119,7 +119,6 @@ async def test_prepare_fresh_turn_aborts_when_channel_dead_skips_llm(
             folder_id=None,
             board_id=None,
             attachments=None,
-            memory_enabled=False,
             permission_axes=None,
             llm_credentials=None,
             x_client_platform="desktop",

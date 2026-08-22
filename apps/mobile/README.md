@@ -1,19 +1,19 @@
 # AgentCore 手机端（apps/mobile）
 
-独立 **Vite + React** 应用（非桌面端裁剪包）：自有 stores / services / 协议 fold / 组件。Web 可本地或 Cloudflare Pages 部署；原生壳为 **Capacitor 8**（**Android 侧载 APK 已落地**，见下文「Android 发版」）。鉴权走 **Bearer**（与桌面 cookie 会话不同）。
+**Capacitor 8 原生壳**，产品页挂桌面 renderer 的 `dist-web`（对话 / 文件 / IM / 设置 / 登录同一棵树）。本目录留下推送 / 安全存储 / 语音 / Android 更新与 `android/` · `ios/`。**Android 侧载 APK 已落地**（见「Android 发版」）。壳内鉴权走 **Bearer + 安全存储**（WebView origin 不能靠同源 cookie）。
 
 ## 何时读这里
 
-- 改手机布局、会话列表、跨端 fold 投影 → 从本目录动手
-- 改桌面专属能力（Sidecar、本地 FS、Electron）→ [`apps/desktop`](../desktop/README.md)
+- 改窄屏产品页 / 对话 → [`apps/desktop`](../desktop/README.md) renderer（`dev:webapp`）
+- 改 Capacitor 壳、Android 发版、CORS / FCM → 本目录
 - 改 API / 执行语义 → [`apps/server`](../server/README.md)
 
 ## 文档入口
 
 | 主题 | 文档 |
 |------|------|
-| 手机定位、减法、Capacitor | [`前端技术与架构` §七](../../docs/04-前端/前端技术与架构.md) |
-| 跨端 fold / 协议 | 同文档 §十 SSE 与协议一致性；根目录 `pnpm conformance` |
+| 手机定位、减法、Capacitor | [`前端技术与架构` §五](../../docs/04-前端/前端技术与架构.md) |
+| fold / 协议 | 桌面树；同文档 §十；根目录 `pnpm conformance`（只跑桌面） |
 | 前端总读序 | [`前端地图`](../../docs/04-前端/前端地图.md) |
 | 目录边界 | [`项目结构` §四](../../docs/02-架构/项目结构.md) |
 | Android 发版 / CORS / FCM 闸 | [`部署与运维` §7.6a](../../docs/05-平台与运维/部署与运维.md)；下文清单 |
@@ -23,43 +23,39 @@
 
 ## 本地启动
 
-后端需在本机 `:8000`。依赖在**仓库根** `pnpm install`。
+产品 UI 用桌面 webapp（缩到 768px 以下即窄屏壳）：
 
 ```bash
-pnpm -C apps/mobile dev
-# 本机：http://localhost:5175/
+pnpm -C apps/desktop dev:webapp
 ```
 
-- **真机 LAN**：同一 WiFi 打开 `http://<开发机局域网 IP>:5175/`（Vite `host: true`）。API 经同源 `/api/*` 反代到 `localhost:8000`，一般无需改 CORS 或把 IP 写进 `.env.local`。
-- **离线看 UI 态**：`http://localhost:5175/preview`（或 `?s=<向量名>`）回放 conformance 向量，零后端。
-- 可选：`apps/mobile/.env.local` 配 `VITE_DEV_USERNAME` / `VITE_DEV_PASSWORD`（先跑后端 `seed_dev_user.py`）自动登录。
-
-截图示例：
+同步进 Android 工程：
 
 ```bash
-pnpm -C apps/mobile shot http://localhost:5175/preview?s=single_agent_tool
+pnpm -C apps/mobile cap:sync
+pnpm -C apps/mobile android:open
 ```
+
+离线看 AI 态走桌面 `#/preview`（`frontend-preview.mdc`）。
 
 ## 常用命令
 
 | 命令 | 作用 |
 |------|------|
-| `pnpm -C apps/mobile dev` | 开发服务器（5175） |
-| `pnpm -C apps/mobile build` | 类型检查 + 生产构建 |
-| `pnpm -C apps/mobile test` | Vitest |
-| `pnpm -C apps/mobile typecheck` | `tsc --noEmit` |
-| `pnpm -C apps/mobile lint` | Biome + UI token 门禁 |
-| `pnpm -C apps/mobile conformance` | 本端协议 conformance |
-| `pnpm -C apps/mobile shot <url>` | 页面截图 |
+| `pnpm -C apps/desktop dev:webapp` | 产品页（窄屏缩窗口） |
+| `pnpm -C apps/mobile build` | 构建 desktop `dist-web` 供 Capacitor |
 | `pnpm -C apps/mobile cap:sync` | 构建并 `cap sync` |
 | `pnpm -C apps/mobile android:open` | 打开 Android 工程 |
 | `pnpm -C apps/mobile android:sync-version` | 把 `package.json` version 写入 Gradle |
 | `pnpm -C apps/mobile android:assemble` | 同步版本 + 签名 `assembleRelease` |
 | `pnpm -C apps/mobile release:android` | 打正式 APK 并上传发布仓 draft |
 | 仓库根 `pnpm gen:types` | 同步共享 REST / 事件类型 |
-| 仓库根 `pnpm release:gate --only mobile` | 仅跑门禁手机段 |
+| 仓库根 `pnpm release:gate --only mobile` | 手机段（现为 fold-kit 测试；无 SPA 单测） |
+| 仓库根 `pnpm conformance` | 只跑桌面 fold |
 
-改 SSE / fold / 跨端投影后：务必仓库根 `pnpm conformance`，勿只改一端。
+`deploy:pages` 已退役：`m.example.com` 将 301 到 `app.`，不要再上传旧 SPA。浏览器窄屏走 `pnpm -C apps/desktop deploy:web`。
+
+改 SSE / fold 后：仓库根 `pnpm conformance`（桌面）。
 
 ## Android 发版（侧载 APK）
 

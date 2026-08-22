@@ -27,8 +27,8 @@ from agentcore.workspace.server import ServerWorkspace
 
 
 def test_permission_axes_changed_projection():
-    previous = {"file_write": "session", "command": "kickoff", "team_kickoff": "rules"}
-    next_axes = {"file_write": "session", "command": "auto", "team_kickoff": "skip"}
+    previous = {"file_write": "session", "command": "ask", "host": "off"}
+    next_axes = {"file_write": "session", "command": "auto", "host": "session"}
     draft = project_permission_axes_changed(previous=previous, next_axes=next_axes)
     assert draft.category == "permission"
     assert draft.action == "permission.axes_changed"
@@ -189,7 +189,7 @@ async def test_code_execute_network_mode_follows_axes(tmp_path: Path):
         agent_id="a",
         backend=backend,
         user_id="u",
-        permission_axes="{\"file_write\":\"session\",\"command\":\"auto\",\"team_kickoff\":\"skip\"}",
+        permission_axes="{\"file_write\":\"session\",\"command\":\"auto\",\"host\":\"session\"}",
     )
     await tool.execute({"code": "print(1)", "language": "python"}, ctx_trust)
     assert captured[-1].network_mode == "restricted"
@@ -200,7 +200,7 @@ async def test_code_execute_network_mode_follows_axes(tmp_path: Path):
         agent_id="a",
         backend=backend,
         user_id="u",
-        permission_axes="{\"file_write\":\"session\",\"command\":\"kickoff\",\"team_kickoff\":\"rules\"}",
+        permission_axes="{\"file_write\":\"ask\",\"command\":\"ask\",\"host\":\"off\"}",
     )
     await tool.execute({"code": "print(1)", "language": "python"}, ctx_ws)
     assert captured[-1].network_mode == "none"

@@ -38,6 +38,7 @@ import {
 import { EmptyHint, InlineError } from "@/components/files/parts";
 import { PendingSharedInvites } from "@/components/files/sharedSpaces/PendingSharedInvites";
 import { SharedSpaceSection } from "@/components/files/sharedSpaces/SharedSpaceSection";
+import { NarrowBackHeader } from "@/components/layout/NarrowBackHeader";
 import { SearchField } from "@/components/ui";
 import { WorkspaceTrashSection } from "@/components/workspace/TrashSection";
 import { useConversations } from "@/hooks/useConversations";
@@ -51,6 +52,7 @@ import {
   buildFolderTree,
   pruneFolderTree,
 } from "@/lib/folderTree";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { useReadOnlyOffline } from "@/lib/offlineMode";
 import { cn } from "@/lib/utils";
 import { dedupeFoldersByLocalBinding } from "@/services/folders";
@@ -160,6 +162,7 @@ export function FileWorkbench({
   } | null;
   focusKey?: string;
 }) {
+  const { isNarrow } = useNarrowLayoutState();
   const offline = useReadOnlyOffline();
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -545,12 +548,19 @@ export function FileWorkbench({
     onWorkroomRevealApplied: clearMemoryReveal,
   };
 
+  const narrowDetail = isNarrow && tabs.length > 0;
+
   return (
     <div className="flex h-full w-full">
-      {/* Left: workspaces + their files as one multi-root tree (resizable). */}
+      {/* Left: workspaces + their files as one multi-root tree (resizable).
+          窄屏无详情时占满；打开文件后推进到右栏（本树藏起）。 */}
       <aside
-        style={{ width: railWidth }}
-        className="flex shrink-0 flex-col border-r border-border"
+        style={isNarrow ? undefined : { width: railWidth }}
+        className={cn(
+          "flex shrink-0 flex-col border-r border-border",
+          isNarrow && "min-w-0 flex-1 border-r-0",
+          narrowDetail && "hidden",
+        )}
       >
         {/* Rail header: name + in-tree path filter（新建走各段标题的「+」；
             段级 CRUD 在各 WorkspaceSection / SharedSpaceSection 右键菜单). */}
@@ -708,136 +718,150 @@ export function FileWorkbench({
       </aside>
 
       {/* Draggable sash between tree and detail (keyboard: ←/→ to nudge). */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="调整文件树宽度"
-        tabIndex={0}
-        onPointerDown={startRailDrag}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") {
-            e.preventDefault();
-            nudgeRail(-16);
-          } else if (e.key === "ArrowRight") {
-            e.preventDefault();
-            nudgeRail(16);
-          }
-        }}
-        style={{ touchAction: "none" }}
-        className="z-10 w-1.5 shrink-0 cursor-col-resize transition-colors hover:bg-primary/20 focus-visible:bg-primary/30 focus-visible:outline-none"
-      />
+      {!isNarrow && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整文件树宽度"
+          tabIndex={0}
+          onPointerDown={startRailDrag}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              nudgeRail(-16);
+            } else if (e.key === "ArrowRight") {
+              e.preventDefault();
+              nudgeRail(16);
+            }
+          }}
+          style={{ touchAction: "none" }}
+          className="z-10 w-1.5 shrink-0 cursor-col-resize transition-colors hover:bg-primary/20 focus-visible:bg-primary/30 focus-visible:outline-none"
+        />
+      )}
 
       {/* Right: open files as tabs; every open file stays mounted (hidden when
           inactive) so switching never unmounts an editor or drops unsaved /
-          transient state. */}
-      <section className="flex min-w-0 flex-1 flex-col">
-        {tabs.length === 0 ? (
-          <EmptyHint
-            inline
-            icon={<FileText size={26} className="text-muted-foreground/40" />}
-            title="选择一个文件"
-            hint="从左侧的文件夹树里点开文件，可同时打开多个、用标签页来回切换。"
-          />
-        ) : (
-          <>
-            <DetailTabs
-              tabs={tabs}
-              activeKey={activeKey}
-              onActivate={setActiveKey}
-              onClose={closeTab}
-              onCloseOthers={closeOthers}
-              onCloseAll={closeAll}
+          transient state. 窄屏无打开文件时不占一列空态。 */}
+      {!(isNarrow && tabs.length === 0) && (
+        <section className="flex min-w-0 flex-1 flex-col">
+          {tabs.length === 0 ? (
+            <EmptyHint
+              inline
+              icon={<FileText size={26} className="text-muted-foreground/40" />}
+              title="选择一个文件"
+              hint="从左侧的文件夹树里点开文件，可同时打开多个、用标签页来回切换。"
             />
-            <div className="relative min-h-0 flex-1">
-              {tabs.map((t) => {
-                const key = tabKey(t.wsId, t.path);
-                // The synthetic「记忆动态」tab is not a file — render the cross-conversation
-                // feed view instead of a source-backed editor.
-                const isMemoryUpdates =
-                  t.wsId === MEMORY_WS && t.path === MEMORY_UPDATES_PATH;
-                // 版本 / 软删区面板：挂在真实工作区下的合成 tab，不是文件，故不解析文件源。
-                const wsPanel =
-                  t.wsId === MEMORY_WS ||
-                  t.wsId === RULES_WS ||
-                  (t.path !== WS_VERSIONS_PATH && t.path !== WS_TRASH_PATH)
-                    ? null
-                    : t.path;
-                const panelWsName =
-                  railWorkspaceByWsId.get(t.wsId)?.name ?? t.name;
-                const src =
-                  t.wsId === MEMORY_WS
-                    ? memorySource
-                    : t.wsId === RULES_WS
-                      ? documentSource
-                      : (sourceByWs.get(t.wsId) ?? null);
-                // A folder's 画像 leaf opens the two-pane 全局+本文件夹 editor instead of
-                // a lone file; resolve its live folder name for the 归属 label (fall back
-                // to stripping the tab name if the folder is gone).
-                const projFolderId =
-                  t.wsId === MEMORY_WS ? parseProjectProfilePath(t.path) : null;
-                const projName = projFolderId
-                  ? (getFolders().find((f) => f.id === projFolderId)?.name ??
-                    t.name.replace(/·画像\.md$/, ""))
-                  : null;
-                return (
-                  <div
-                    key={key}
-                    className={cn(
-                      "absolute inset-0",
-                      key === activeKey ? "" : "hidden",
-                    )}
-                  >
-                    {isMemoryUpdates ? (
-                      <MemoryUpdatesView
-                        onOpenLeaf={(path, name) =>
-                          openMemoryLeafInRail(path, name)
-                        }
-                      />
-                    ) : wsPanel === WS_VERSIONS_PATH ? (
-                      <WorkspaceVersionsPanel
-                        wsId={t.wsId}
-                        name={panelWsName}
-                      />
-                    ) : wsPanel === WS_TRASH_PATH ? (
-                      <WorkspaceTrashSection wsId={t.wsId} />
-                    ) : src ? (
-                      projFolderId ? (
-                        <MemoryProfileSplitEditor
-                          source={src}
-                          folderId={projFolderId}
-                          folderName={
-                            projName ?? t.name.replace(/·画像\.md$/, "")
+          ) : (
+            <>
+              {isNarrow && (
+                <NarrowBackHeader
+                  title={activeTab?.name ?? "文件"}
+                  onBack={() => {
+                    if (activeKey) closeTab(activeKey);
+                  }}
+                />
+              )}
+              <DetailTabs
+                tabs={tabs}
+                activeKey={activeKey}
+                onActivate={setActiveKey}
+                onClose={closeTab}
+                onCloseOthers={closeOthers}
+                onCloseAll={closeAll}
+              />
+              <div className="relative min-h-0 flex-1">
+                {tabs.map((t) => {
+                  const key = tabKey(t.wsId, t.path);
+                  // The synthetic「记忆动态」tab is not a file — render the cross-conversation
+                  // feed view instead of a source-backed editor.
+                  const isMemoryUpdates =
+                    t.wsId === MEMORY_WS && t.path === MEMORY_UPDATES_PATH;
+                  // 版本 / 软删区面板：挂在真实工作区下的合成 tab，不是文件，故不解析文件源。
+                  const wsPanel =
+                    t.wsId === MEMORY_WS ||
+                    t.wsId === RULES_WS ||
+                    (t.path !== WS_VERSIONS_PATH && t.path !== WS_TRASH_PATH)
+                      ? null
+                      : t.path;
+                  const panelWsName =
+                    railWorkspaceByWsId.get(t.wsId)?.name ?? t.name;
+                  const src =
+                    t.wsId === MEMORY_WS
+                      ? memorySource
+                      : t.wsId === RULES_WS
+                        ? documentSource
+                        : (sourceByWs.get(t.wsId) ?? null);
+                  // A folder's 画像 leaf opens the two-pane 全局+本文件夹 editor instead of
+                  // a lone file; resolve its live folder name for the 归属 label (fall back
+                  // to stripping the tab name if the folder is gone).
+                  const projFolderId =
+                    t.wsId === MEMORY_WS
+                      ? parseProjectProfilePath(t.path)
+                      : null;
+                  const projName = projFolderId
+                    ? (getFolders().find((f) => f.id === projFolderId)?.name ??
+                      t.name.replace(/·画像\.md$/, ""))
+                    : null;
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        "absolute inset-0",
+                        key === activeKey ? "" : "hidden",
+                      )}
+                    >
+                      {isMemoryUpdates ? (
+                        <MemoryUpdatesView
+                          onOpenLeaf={(path, name) =>
+                            openMemoryLeafInRail(path, name)
                           }
-                          onClose={() => closeTab(key)}
                         />
-                      ) : (
-                        <FileDetail
-                          source={src}
-                          path={t.path}
-                          name={t.name}
-                          onClose={() => closeTab(key)}
+                      ) : wsPanel === WS_VERSIONS_PATH ? (
+                        <WorkspaceVersionsPanel
+                          wsId={t.wsId}
+                          name={panelWsName}
                         />
-                      )
-                    ) : (
-                      <EmptyHint
-                        inline
-                        icon={
-                          <FileText
-                            size={26}
-                            className="text-muted-foreground/40"
+                      ) : wsPanel === WS_TRASH_PATH ? (
+                        <WorkspaceTrashSection wsId={t.wsId} />
+                      ) : src ? (
+                        projFolderId ? (
+                          <MemoryProfileSplitEditor
+                            source={src}
+                            folderId={projFolderId}
+                            folderName={
+                              projName ?? t.name.replace(/·画像\.md$/, "")
+                            }
+                            onClose={() => closeTab(key)}
                           />
-                        }
-                        title="无法打开此文件"
-                        hint="它所属文件夹的文件源暂不可用。"
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </section>
+                        ) : (
+                          <FileDetail
+                            source={src}
+                            path={t.path}
+                            name={t.name}
+                            onClose={() => closeTab(key)}
+                          />
+                        )
+                      ) : (
+                        <EmptyHint
+                          inline
+                          icon={
+                            <FileText
+                              size={26}
+                              className="text-muted-foreground/40"
+                            />
+                          }
+                          title="无法打开此文件"
+                          hint="它所属文件夹的文件源暂不可用。"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </section>
+      )}
     </div>
   );
 }

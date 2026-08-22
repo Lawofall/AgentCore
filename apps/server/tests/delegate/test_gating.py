@@ -27,11 +27,6 @@ async def _await_solo_drive() -> None:
 
 
 async def test_workers_gated_in_local_mode(monkeypatch):
-    # Skip kickoff so the executor path runs (gate forwarding is what we assert).
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
     clear_active_coordination()
     captured = capture_gate(monkeypatch)
     g = gate()

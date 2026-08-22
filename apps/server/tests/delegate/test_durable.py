@@ -40,12 +40,6 @@ async def test_durable_pause_persists_frame_on_finalize(monkeypatch):
     from agentcore.runtime.facts import TurnFactLog, current_fact_log
     from agentcore.runtime.suspension import TurnSuspension, captain_transcript
 
-    # Skip team_preview so this fixture reaches plan_review (wave-boundary durable pause).
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
-
     registry = InteractionRegistry()
     sink = EventSink()
     saved: list[TurnSuspension] = []
@@ -99,10 +93,8 @@ async def test_durable_pause_persists_frame_on_finalize(monkeypatch):
 
 
 async def test_durable_pause_captures_resume_scope():
-    # The turn's project scope AND the memory master switch ride the durable frame so a
-    # fresh-process resume re-wires consult exactly as this turn did: same project
-    # (project 主题 first, then global) and memory-off stays off — Agent记忆与知识系统 §二 /
-    # resume folder_id + memory_enabled 缺口.
+    # The turn's project scope rides the durable frame so a fresh-process resume
+    # re-wires consult to the same project (项目主题 first, then global).
     from agentcore.runtime.suspension import captain_transcript
 
     registry = InteractionRegistry()
@@ -121,7 +113,6 @@ async def test_durable_pause_captures_resume_scope():
         _save,
         _drop,
         folder_id="proj_42",
-        memory_enabled=False,
     )
     transcript = [
         LLMMessage(role="user", content="原始请求"),
@@ -141,7 +132,6 @@ async def test_durable_pause_captures_resume_scope():
 
     assert saved
     assert saved[0].folder_id == "proj_42"
-    assert saved[0].memory_enabled is False
 
 
 async def test_durable_capture_skipped_without_transcript():
@@ -168,11 +158,6 @@ async def test_durable_saver_runtime_failure_terminates(monkeypatch):
     from agentcore.runtime.facts import TurnFactLog, current_fact_log
     from agentcore.runtime.suspension import captain_transcript
     from agentcore.runtime.suspension.capture import SuspensionPersistError
-
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
 
     registry = InteractionRegistry()
 
@@ -217,11 +202,6 @@ async def test_durable_resume_drives_tail_from_journal_not_frame(monkeypatch):
         PlanReviewSuspension,
         captain_transcript,
         suspension_from_json,
-    )
-
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
     )
 
     registry = InteractionRegistry()

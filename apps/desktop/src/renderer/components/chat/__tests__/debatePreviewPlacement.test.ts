@@ -156,6 +156,14 @@ describe("kickoffReleasedFromPreviews", () => {
   const go = { status: "resolved" as const, decision: "continue" as const };
   const pending = { status: "pending" as const, decision: null };
 
+  it("无卡 → released（不挡出图）", () => {
+    expect(kickoffReleasedFromPreviews([])).toBe(true);
+  });
+
+  it("无卡 → released（不挡出图）", () => {
+    expect(kickoffReleasedFromPreviews([])).toBe(true);
+  });
+
   it("仅已授权 → released", () => {
     expect(kickoffReleasedFromPreviews([go])).toBe(true);
   });

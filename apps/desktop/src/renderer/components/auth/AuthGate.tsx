@@ -1,6 +1,9 @@
 import { MinimalTitleBar } from "@/components/layout/TitleBar";
-import { isWebClient } from "@/lib/capabilities";
+import { isNativeRuntime, isWebClient } from "@/lib/capabilities";
 import { logEvent } from "@/lib/log";
+import { clearBearerTokens } from "@/lib/sessionAuth";
+import { useApplyTheme } from "@/lib/theme";
+import { useNarrowLayout } from "@/lib/useNarrowLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { ServiceUnavailablePage } from "@/pages/ServiceUnavailablePage";
 import {
@@ -20,6 +23,7 @@ import {
   hasOfflineCache,
   hydrateOfflineShell,
 } from "@/services/offlineCache";
+import { disablePush, enablePush } from "@/services/push";
 import { confirmMidSessionOutage } from "@/services/serverHealth";
 import { useAuthStore } from "@/stores/auth";
 import { useServerHealthStore } from "@/stores/serverHealth";
@@ -35,6 +39,8 @@ export const UNAVAILABLE_BOOTSTRAP_POLL_MS = 5000;
  * omits it (the browser provides its own window chrome).
  */
 function PreAuthShell({ children }: { children: ReactNode }) {
+  const isNarrow = useNarrowLayout();
+  useApplyTheme(isNarrow || isNativeRuntime());
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden">
       {!isWebClient() && <MinimalTitleBar />}
@@ -87,6 +93,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
             useServerHealthStore.getState().markOnline();
             void persistAgentTownSession();
             void cacheShellMeta({ user: result.user });
+            void enablePush();
             break;
           case "unavailable": {
             const entered = await enterOfflineReadonly(result.reason);
@@ -113,6 +120,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
     // auth bootstrap entirely so #/preview renders fully offline.
     if (typeof window !== "undefined" && window.__WEB_PREVIEW__) return;
     setUnauthorizedHandler(() => {
+      void disablePush().finally(() => {
+        clearBearerTokens();
+      });
       void clearAgentTownSession();
       void clearOfflineCache();
       useAuthStore.getState().setUnauthenticated();

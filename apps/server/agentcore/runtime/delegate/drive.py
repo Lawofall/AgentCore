@@ -157,9 +157,8 @@ async def drive(
     ``coordinate=False`` for classic blocking. Pass ``session`` only from the
     background task (:func:`drive_coordinated`).
 
-    ``team_preview`` runs on the CEO path **before** the coordinate fork so a durable
-    pause yields ``SUSPEND`` on the main loop (``message_end(paused)``), not only inside
-    the background task.
+    ``team_preview_before_workers`` still runs on the CEO path before the coordinate
+    fork (silent grant / MLR keep). It no longer durable-pauses for a new card.
     """
     tool._pending_boundary = None
     tool._pending_pause = False
@@ -330,9 +329,9 @@ async def _drive_body(
 
     payer = credential_source_from_llm(getattr(tool, "_llm", None))
 
-    # 团队预审：必须在 coordinate fork 之前（CEO 主路径）。挂起 → SUSPEND 收口；
-    # 用户开做/调整后续跑再臂后台。后台 drive_coordinated 带 session，跳过本闸。
-    # 增量委派（合并进活跃协调）同样走开工卡——不得静默并入。
+    # 团队预审：仍在 coordinate fork 之前（CEO 主路径）跑 silent grant / MLR keep；
+    # 不再为新 team_preview 挂起。后台 drive_coordinated 带 session，跳过本闸。
+    # 增量委派（合并进活跃协调）同样不再挂开工卡。
     merging_into_active = False
     if session is None and seed_completed is None:
         from agentcore.runtime.coordination.session import active_coordination

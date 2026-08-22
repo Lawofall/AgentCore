@@ -60,7 +60,6 @@ const BOUND_TASK: StandingTask = {
   permissionAxes: {
     file_write: "session",
     command: "auto",
-    team_kickoff: "rules",
     host: "session",
   },
   enabled: true,

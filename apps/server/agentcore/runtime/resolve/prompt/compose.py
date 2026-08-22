@@ -140,7 +140,6 @@ def compose_worker_base_prompt(
     # Deprecated kwargs kept so older call sites / tests fail loudly if still passed
     # with old semantics — prefer ``on_demand_entries``.
     memory_topics: Sequence[object] = (),
-    memory_enabled: bool = True,
     on_demand_rules: Sequence[object] = (),
 ) -> str:
     """Build the delegated worker's system prompt from the shared base.
@@ -150,7 +149,6 @@ def compose_worker_base_prompt(
     the CEO uses), then the attachment block last (缓存友好). Summaries are the existing
     ``description`` / skill ``summary`` strings — this does not rewrite them.
     """
-    del memory_enabled  # gate is has_entries at wire time; entries already filtered
     if on_demand_entries:
         entries = on_demand_entries
     elif memory_topics or on_demand_rules:

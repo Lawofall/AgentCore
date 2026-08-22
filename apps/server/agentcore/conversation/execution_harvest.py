@@ -37,9 +37,7 @@ from sqlalchemy.exc import IntegrityError
 from agentcore.billing.gate import preflight_llm_credentials
 from agentcore.config import settings
 from agentcore.conversation.common import (
-    resolve_conversation_history_access,
     resolve_local_binding,
-    resolve_memory_enabled,
     resolve_permission_axes,
     resolve_profile_set,
 )
@@ -1242,8 +1240,6 @@ async def run_harvest_closing_turn(
             return
         local_binding = await resolve_local_binding(db, conv)
         profile_set = await resolve_profile_set(db, conv, user_id)
-        memory_enabled = await resolve_memory_enabled(db, user_id)
-        conversation_history_access = await resolve_conversation_history_access(db, user_id)
         permission_axes = await resolve_permission_axes(db, conversation_id)
 
         board = await BoardRepository(db).get_by_conversation_id(conversation_id, user_id=user_id)
@@ -1345,8 +1341,6 @@ async def run_harvest_closing_turn(
                         backend=backend,
                         llm_credentials=llm_credentials,
                         profile_set=profile_set,
-                        memory_enabled=memory_enabled,
-                        conversation_history_access=conversation_history_access,
                         permission_axes=permission_axes,
                         board_id=board_id,
                         llm_supports_tools=None,

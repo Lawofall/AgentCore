@@ -109,9 +109,10 @@ export function ImportToCloudDialog({
         const roots = (await window.fsApi?.listRoots?.()) ?? [];
         if (cancelled) return;
         const found = roots.find((r) => r.id === rootId);
-        if (!found) return;
-        setOwnedSync({ root: found, owns: false });
-        if (!nameHint) setFolderName(found.name);
+        if (found) {
+          setOwnedSync({ root: found, owns: Boolean(prefill?.ownsRoot) });
+          if (!nameHint) setFolderName(found.name);
+        }
       } catch {
         // Prefill miss → user still picks manually.
       }

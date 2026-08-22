@@ -67,7 +67,7 @@ export function InlineTeamGraph({
   messageId: string;
   executionId: string;
   journal?: ExecutionJournal;
-  /** 开工卡已授权 continue/adjust：pending 编制也出图，不必等第一人开跑. */
+  /** 无卡或已授权 continue：pending 编制也出图，不必等第一人开跑. */
   kickoffReleased?: boolean;
   /** 本泡开工卡；有则走 {@link teamGraphVisible}（与藏卡同一闸；取消/未开跑不出图）. */
   teamPreviews?: readonly Pick<TeamPreviewDisplay, "status" | "decision">[];

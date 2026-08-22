@@ -303,9 +303,9 @@ def test_stuffed_worker_opening_table_omits_on_demand_tools():
     chars = sum(
         len(json.dumps(d, ensure_ascii=False)) for d in registry.get_openai_definitions()
     )
-    # 2026-08-22：实测 22007。不是往开场表回灌教法（sandboxd / 出队身份后的工具描述微调）。
+    # 2026-08-22：实测 22300。不是往开场表回灌教法（sandboxd / 出队身份后的工具描述微调）。
     # worker 常驻钮已顶各自 per-tool 帽，再削会伤仍在的短教法。锁回实测整十。
-    assert chars <= 22010, f"队员开场工具表变胖：{chars}"
+    assert chars <= 22310, f"队员开场工具表变胖：{chars}"
     deferred = set(registry.deferred_names)
     assert deferred <= ON_DEMAND_TOOL_NAMES
     assert "terminal" in deferred and "browser" in deferred

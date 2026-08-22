@@ -1,6 +1,7 @@
 import { ConversationRoute } from "@/components/chat/ConversationRoute";
 import { AppShell } from "@/components/layout/AppShell";
 import { RouteError } from "@/components/layout/RouteError";
+import { NarrowBlockedPage } from "@/lib/narrowLayout";
 import { AskCommencePreviewPage } from "@/pages/AskCommencePreviewPage";
 import { CapabilityPacksPreviewPage } from "@/pages/CapabilityPacksPreviewPage";
 import { ConversationsPage } from "@/pages/ConversationsPage";
@@ -74,10 +75,31 @@ export const router = createHashRouter([
         path: "conversations/:id/turn/:turnId",
         element: <TurnDetailPage />,
       },
-      { path: "conversations", element: <ConversationsPage /> },
+      {
+        path: "conversations",
+        element: (
+          <NarrowBlockedPage>
+            <ConversationsPage />
+          </NarrowBlockedPage>
+        ),
+      },
       { path: "files", element: <FilesPage /> },
-      { path: "whiteboard", element: <WhiteboardPage /> },
-      { path: "whiteboard/:boardId", element: <WhiteboardCanvasPage /> },
+      {
+        path: "whiteboard",
+        element: (
+          <NarrowBlockedPage>
+            <WhiteboardPage />
+          </NarrowBlockedPage>
+        ),
+      },
+      {
+        path: "whiteboard/:boardId",
+        element: (
+          <NarrowBlockedPage>
+            <WhiteboardCanvasPage />
+          </NarrowBlockedPage>
+        ),
+      },
       { path: "messages", element: <MessagesPage /> },
       { path: "messages/:chatId", element: <MessagesPage /> },
       // Official product_notice in-app detail (官方号双模板 · 图文/长文).
@@ -85,26 +107,73 @@ export const router = createHashRouter([
         path: "messages/:chatId/notices/:noticeId",
         element: <MessagesPage />,
       },
-      { path: "toolbox", element: <ToolboxPage /> },
-      { path: "toolbox/tools", element: <ToolsPage /> },
-      { path: "toolbox/guidelines", element: <GuidelinesPage /> },
-      { path: "toolbox/connectors", element: <ConnectorsPage /> },
+      {
+        path: "toolbox",
+        element: (
+          <NarrowBlockedPage>
+            <ToolboxPage />
+          </NarrowBlockedPage>
+        ),
+      },
+      {
+        path: "toolbox/tools",
+        element: (
+          <NarrowBlockedPage>
+            <ToolsPage />
+          </NarrowBlockedPage>
+        ),
+      },
+      {
+        path: "toolbox/guidelines",
+        element: (
+          <NarrowBlockedPage>
+            <GuidelinesPage />
+          </NarrowBlockedPage>
+        ),
+      },
+      {
+        path: "toolbox/connectors",
+        element: (
+          <NarrowBlockedPage>
+            <ConnectorsPage />
+          </NarrowBlockedPage>
+        ),
+      },
       {
         path: "toolbox/automations",
-        element: <AutomationsPage />,
+        element: (
+          <NarrowBlockedPage>
+            <AutomationsPage />
+          </NarrowBlockedPage>
+        ),
         children: [
           { index: true, element: <StandingTasksPanel /> },
           { path: "inbox", element: <InboxPanel /> },
         ],
       },
-      { path: "toolbox/workflows", element: <WorkflowsPage /> },
+      {
+        path: "toolbox/workflows",
+        element: (
+          <NarrowBlockedPage>
+            <WorkflowsPage />
+          </NarrowBlockedPage>
+        ),
+      },
       {
         path: "toolbox/workflows/:workflowId",
-        element: <WorkflowEditorPage />,
+        element: (
+          <NarrowBlockedPage>
+            <WorkflowEditorPage />
+          </NarrowBlockedPage>
+        ),
       },
       {
         path: "toolbox/manual",
-        element: <ManualShell />,
+        element: (
+          <NarrowBlockedPage>
+            <ManualShell />
+          </NarrowBlockedPage>
+        ),
         children: [
           { index: true, element: <Navigate to="intro" replace /> },
           { path: "intro", element: <ManualIntro /> },
@@ -147,7 +216,14 @@ export const router = createHashRouter([
         element: <CapabilityPacksPreviewPage />,
       },
       // DT-01: Desktop launcher only (spawn AgentTown.exe + session.json).
-      { path: "simulation/town", element: <TownLauncherPage /> },
+      {
+        path: "simulation/town",
+        element: (
+          <NarrowBlockedPage>
+            <TownLauncherPage />
+          </NarrowBlockedPage>
+        ),
+      },
       {
         path: "more",
         element: <MorePage />,
@@ -156,19 +232,51 @@ export const router = createHashRouter([
           { index: true, element: <MoreIndexRedirect /> },
           { path: "model", element: <ModelSettings /> },
           { path: "providers", element: <ProviderSettings /> },
-          { path: "git", element: <GitCredentialSettings /> },
+          {
+            path: "git",
+            element: (
+              <NarrowBlockedPage>
+                <GitCredentialSettings />
+              </NarrowBlockedPage>
+            ),
+          },
           { path: "account", element: <AccountSettings /> },
           { path: "messages", element: <ImPrivacySettings /> },
           { path: "usage", element: <UsageSettings /> },
-          { path: "general", element: <GeneralSettings /> },
+          {
+            path: "general",
+            element: (
+              <NarrowBlockedPage>
+                <GeneralSettings />
+              </NarrowBlockedPage>
+            ),
+          },
           // 「外观」已改名「通用」并收编了原关于页的诊断类开关；旧路径仍是既有
           // 书签与外部深链的目标，故留重定向。
           {
             path: "appearance",
-            element: <Navigate to="/more/general" replace />,
+            element: (
+              <NarrowBlockedPage>
+                <Navigate to="/more/general" replace />
+              </NarrowBlockedPage>
+            ),
           },
-          { path: "shortcuts", element: <ShortcutsSettings /> },
-          { path: "feedback", element: <FeedbackSettings /> },
+          {
+            path: "shortcuts",
+            element: (
+              <NarrowBlockedPage>
+                <ShortcutsSettings />
+              </NarrowBlockedPage>
+            ),
+          },
+          {
+            path: "feedback",
+            element: (
+              <NarrowBlockedPage>
+                <FeedbackSettings />
+              </NarrowBlockedPage>
+            ),
+          },
           { path: "about", element: <AboutSettings /> },
           { path: "legal/:docId", element: <LegalSettingsPage /> },
         ],

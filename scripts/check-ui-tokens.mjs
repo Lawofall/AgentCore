@@ -7,8 +7,9 @@
  *   node scripts/check-ui-tokens.mjs --src apps/mobile/src
  *
  * Desktop also gates raw CSS font-size/border-radius px bypasses
- * (A-phase: StageCard-style second skins). Mobile keeps Tailwind-only rules
- * until a separate mobile density pass.
+ * (A-phase: StageCard-style second skins). Desktop L2 (`components/ui/`,
+ * not `__tests__`) additionally blocks raw shadow-sm/md/lg and `focus:ring`
+ * (use elevation aliases + focus-visible). Mobile keeps Tailwind-only rules.
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -50,8 +51,29 @@ const BASE_RULES = [
   },
 ];
 
+/** L2 only — business pages stay 触达即收编. */
+const L2_RULES = [
+  {
+    id: "shadow-raw",
+    re: /\bshadow-(?:sm|md|lg|xl|2xl)\b/,
+    hint: "L2: use shadow-raised / shadow-overlay / shadow-modal",
+  },
+  {
+    id: "focus-ring",
+    re: /\bfocus:ring(?:-|\b)/,
+    hint: "L2: use focus-visible:ring-2 (not focus:ring)",
+  },
+];
+
 /** Allowed CSS border-radius px (desktop-layout 3-tier + pill). */
 const ALLOWED_RADIUS_PX = new Set([8, 12, 9999]);
+
+function isDesktopL2(file) {
+  const norm = file.replace(/\\/g, "/");
+  return (
+    norm.includes("/components/ui/") && !norm.includes("/components/ui/__tests__/")
+  );
+}
 
 /**
  * Desktop-only CSS bypass rules (raw px that escape Tailwind class lint).
@@ -135,6 +157,19 @@ for (const file of await walk(srcDir)) {
     if (isDesktop && isCss) {
       for (const rule of DESKTOP_CSS_RULES) {
         if (rule.match(line)) {
+          violations.push({
+            file: relative(ROOT, file),
+            line: i + 1,
+            rule: rule.id,
+            hint: rule.hint,
+            text: line.trim().slice(0, 120),
+          });
+        }
+      }
+    }
+    if (isDesktop && isDesktopL2(file)) {
+      for (const rule of L2_RULES) {
+        if (rule.re.test(line)) {
           violations.push({
             file: relative(ROOT, file),
             line: i + 1,

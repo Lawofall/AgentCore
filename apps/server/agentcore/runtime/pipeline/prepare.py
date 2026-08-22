@@ -90,8 +90,6 @@ async def prepare_fresh_turn(
     folder_id: str | None,
     board_id: str | None,
     attachments: list[dict] | None,
-    memory_enabled: bool,
-    conversation_history_access: bool = True,
     permission_axes,
     llm_credentials: LLMCredentials | None,
     x_client_platform: str | None,
@@ -102,13 +100,9 @@ async def prepare_fresh_turn(
     folder_local_subpath: str | None = None,
 ) -> PreparedTurn:
     """Build the stable base prompt, worker tools, channels, and tool context."""
-    # Long-term memory injection is gated by the caller-supplied ``memory_enabled``
-    # flag (product resolve is always True / 定案 A): when False we inject nothing
-    # (an empty body drops the <rules> memory section) — retained for internal
-    # False-path tests and durable suspension frames.
     # 记忆作用域 (§5.2): the always-injected core spans global 偏好.md + 画像.md and — when
     # the conversation is in a project — that project's 画像.md, concatenated global-first
-    # (stable prefix) into one <rules> body. ``memory_enabled=False`` ⇒ "".
+    # (stable prefix) into one <rules> body. Long-term memory is product-always-on.
     # Look up via ``pipeline.run`` so governance tests can monkeypatch the seam
     # (``test_pipeline_governance._patch_pipeline``).
     from agentcore.runtime.pipeline import run as run_mod
@@ -123,7 +117,7 @@ async def prepare_fresh_turn(
             memory_store,
             user_id,
             folder_id=folder_id,
-            enabled=memory_enabled,
+            enabled=True,
         ),
     )
     # Derived cross-folder roster (跨文件夹找文件夹): Folder path + 画像.md first line,
@@ -240,7 +234,6 @@ async def prepare_fresh_turn(
             attachments,
             user_id=user_id,
             host_conversation_id=conversation_id,
-            conversation_history_access=conversation_history_access,
             vision_reader=None if main_native_vision else vision_reader,
             backend=backend,
             cost_sink=None if main_native_vision else vision_cost_sink,
@@ -262,13 +255,11 @@ async def prepare_fresh_turn(
     await _wire_worker_consult_tools(
         worker_tools,
         skill_registry=skill_registry,
-        memory_enabled=memory_enabled,
         folder_id=folder_id,
         user_id=user_id,
     )
     _wire_worker_conversation_log_tools(
         worker_tools,
-        conversation_history_access=conversation_history_access,
         folder_id=folder_id,
     )
     on_demand_entries: list = []

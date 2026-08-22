@@ -39,11 +39,11 @@ gh run watch <id> --exit-status            # 等 ci.yml 全绿；Linux 面只有
 pnpm deploy:backend <sha>
 # full：Win release:win ∥ Mac GHA → 齐资产后 Publish
 # full：Android release:android（CORS 预检自动跑）→ 真机冒烟（签名安装 / WebView / SSE）→ Publish android-v*（CDN 由脚本末尾 sync；与桌面 v* 分轨）
-# full：mobile / admin / web →（桌面 Publish 后）website deploy:pages
+# full：admin / web →（桌面 Publish 后）website deploy:pages（m. 将 301 到 app.，勿再 deploy mobile Pages）
 pnpm release:notice -- --phase done …      # 收口
 # tag prod-* / desktop-v*
 ```
 
-手搓顺序仍等价：git push → 后端 `pnpm deploy:backend <sha>` →（若桌面已 bump：先 Publish 桌面 release）→ Android APK（见上）→ 官网 → 手机 → admin → web 客户端 → 验收 → tag。
+手搓顺序仍等价：git push → 后端 `pnpm deploy:backend <sha>` →（若桌面已 bump：先 Publish 桌面 release）→ Android APK（见上）→ 官网 → admin → web 客户端 → 验收 → tag。`m.` 将 301 到 `app.`，勿再上传手机 Pages。
 
 公告 CLI 细节 → [`产品公告文案模板`](/docs/05-平台与运维/产品公告文案模板.md) · `pnpm release:notice --help`。

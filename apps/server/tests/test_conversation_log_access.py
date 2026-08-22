@@ -1,6 +1,6 @@
 """Unit tests for cross-session conversation log access (P0 backend).
 
-Covers: Worker-only audience / CEO registry exclusion, privacy-gate wiring,
+Covers: Worker-only audience / CEO registry exclusion, worker wire,
 host exclusion, soft-miss, cursor reassembly, output_limit vs default 4k,
 and ConversationRepository search filters.
 """
@@ -65,24 +65,13 @@ def test_worker_registry_omits_log_tools_until_wired():
     assert worker.get_optional("read_conversation") is None
 
 
-def test_wire_registers_when_gate_on():
+def test_wire_registers_log_tools():
     worker = build_worker_registry()
-    _wire_worker_conversation_log_tools(
-        worker, conversation_history_access=True, folder_id="F1"
-    )
+    _wire_worker_conversation_log_tools(worker, folder_id="F1")
     assert worker.get_optional("search_conversations") is not None
     assert worker.get_optional("read_conversation") is not None
     search = worker.get("search_conversations")
     assert getattr(search, "folder_id", None) == "F1"
-
-
-def test_wire_omits_when_gate_off():
-    worker = build_worker_registry()
-    _wire_worker_conversation_log_tools(
-        worker, conversation_history_access=False, folder_id="F1"
-    )
-    assert worker.get_optional("search_conversations") is None
-    assert worker.get_optional("read_conversation") is None
 
 
 # --- log_export chunking / output_limit --------------------------------------

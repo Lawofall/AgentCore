@@ -4,6 +4,7 @@ import {
   IM_SESSION_COLUMN_CLASS,
   buildImThreadItems,
 } from "@/lib/imMessageLayout";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { notifyActionError, notifyInfo } from "@/lib/toast";
 import { useStickToBottom } from "@/lib/useStickToBottom";
 import type { ChatMessageDetail } from "@/services/messaging";
@@ -14,8 +15,9 @@ import {
   useChatMembers,
   useMessagingStore,
 } from "@/stores/messaging";
-import { ArrowDown, BadgeCheck, Info } from "lucide-react";
+import { ArrowDown, ArrowLeft, BadgeCheck, Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ChatBubble } from "./ChatBubble";
 import {
   ChatComposer,
@@ -41,6 +43,8 @@ interface Props {
 
 /** Right pane: the active chat's message thread + composer. */
 export function ChatThread({ chatId }: Props) {
+  const { isNarrow } = useNarrowLayoutState();
+  const navigate = useNavigate();
   const chat = useActiveChat();
   const messages = useActiveMessages();
   const members = useChatMembers(chatId);
@@ -217,6 +221,16 @@ export function ChatThread({ chatId }: Props) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        {isNarrow && (
+          <IconButton
+            size="md"
+            aria-label="返回"
+            onClick={() => navigate("/messages")}
+            className="shrink-0"
+          >
+            <ArrowLeft size={18} />
+          </IconButton>
+        )}
         {chat?.type === "dm" && chat.peer?.id ? (
           <button
             type="button"

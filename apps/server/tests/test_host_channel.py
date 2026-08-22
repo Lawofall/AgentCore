@@ -11,7 +11,6 @@ from agentcore.core.types import (
     FileWriteAxis,
     HostAxis,
     PermissionAxes,
-    TeamKickoffAxis,
     ToolApproval,
 )
 from agentcore.desktop.channel import DesktopClientChannel, HostOp, HostOpError
@@ -564,7 +563,6 @@ def test_command_ask_keeps_host():
     axes = PermissionAxes(
         file_write=FileWriteAxis.ASK,
         command=CommandAxis.ASK,
-        team_kickoff=TeamKickoffAxis.RULES,
         host=HostAxis.ASK,
     )
     names = {

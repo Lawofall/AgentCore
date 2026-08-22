@@ -88,7 +88,6 @@ async def _capture_available_tools(monkeypatch, backend) -> tuple[list[str], obj
             folder_id=None,
             board_id=None,
             attachments=None,
-            memory_enabled=False,
             permission_axes=None,
             llm_credentials=None,
             x_client_platform="web",

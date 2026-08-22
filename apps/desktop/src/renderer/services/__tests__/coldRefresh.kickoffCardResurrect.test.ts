@@ -4,7 +4,7 @@
  * 生产冷开序（ConversationPage）：硬刷新清 notedSettled / IX / execution →
  * adoptMessageWindow(磁盘 cache，不跑 toMessage) → GET messages 的 toMessage
  * 水合 IX（窗口被 isMessageWindowStrictlyRicher 拒写也不回滚）→ ResumePrompt
- * 走 selectVisibleColdResumes（isColdCheckpointSettled）→ 图走 teamGraphVisible
+ * 走 selectVisibleColdResumes（leftover team_preview 不画可点开工壳）→ 图走 teamGraphVisible
  * （只看 IX 原始 status + execution.runs，不复用 settled 判据）。
  *
  * 事件字段抄自 conformance `gates._team_preview_finalized` / `team_preview_resolved`
@@ -234,8 +234,8 @@ beforeEach(() => {
   useConversationStore.setState({ currentConversationId: null, byId: {} });
 });
 
-describe("Ctrl+R after 开做 — 卡复活 + 图消失", () => {
-  it("坏序：cache 开做前快照 + GET 仍是 paused 投影（无 *_resolved）→ 卡复活、图不出现、发送键", () => {
+describe("Ctrl+R after 开做 — leftover 不画可点开工壳 + 图消失", () => {
+  it("坏序：cache 开做前快照 + GET 仍是 paused 投影（无 *_resolved）→ leftover 不画可点开工壳、图不出现", () => {
     seedUser();
     // 磁盘 cache 来自上次 GET（开工前挂起窗）。adopt 不跑 toMessage，IX 空。
     const cached = toMessage(backendRow(pauseSnapshotEvents()));
@@ -273,13 +273,11 @@ describe("Ctrl+R after 开做 — 卡复活 + 图消失", () => {
     expect(snap.journalHasResolved).toBe(false);
     expect(snap.noted).toBe(false);
     expect(snap.ixStatus).toBe("pending");
-    expect(snap.cards).toEqual([
-      { kind: "team_preview", checkpointId: TP, headline: "预计 5 人开工" },
-    ]);
+    expect(snap.cards).toEqual([]);
     expect(snap.graph).toBe(false);
     expect(snap.streaming).toBe(false);
     expect(snap.generatingChrome).toBe(false);
-    expect(snap.sendNotStop).toBe(true);
+    expect(snap.sendNotStop).toBe(false);
   });
 
   it("好序：同一 refresh，GET journal 带 team_preview_resolved → 卡不画、编制出图", () => {

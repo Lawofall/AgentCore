@@ -57,16 +57,11 @@ def _context() -> ToolContext:
     )
 
 
-async def test_loop_finalizes_plan_review_to_paused(monkeypatch):
+async def test_loop_finalizes_plan_review_to_paused():
     # Drive the REAL captain loop with a REAL DelegateTool whose plan checkpoints after s1.
     # The wave boundary persists the frame and ENDS the turn at the boundary — no resolver,
     # no parked bridge. The loop must finish on FinishReason.PAUSED with the delegate call
     # PENDING, and the persisted journal must fold to the captain transcript.
-    # Skip team_preview so this fixture reaches plan_review (wave-boundary durable pause).
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
     system_prompt = "你是 CEO。"
     user_message = "调研并撰写"
     captured: dict[str, object] = {}

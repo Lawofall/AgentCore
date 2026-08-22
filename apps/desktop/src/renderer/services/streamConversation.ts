@@ -1,6 +1,7 @@
 import { clientHeaders } from "@/lib/clientBuildInfo";
 import { StreamError, streamErrorFromResponse } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
+import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
 import {
   ApiError,
   BASE_URL,
@@ -340,6 +341,7 @@ export async function attachConversation(
     const headers: Record<string, string> = {
       Accept: "text/event-stream",
       ...clientHeaders(),
+      ...bearerAuthHeader(),
     };
     // 恒带：``0`` = 本端没有游标（服务端据此回整段），否则报出看到的最后一个 journal seq。
     headers["Last-Event-ID"] = lastEventIds.get(conversationId) ?? "0";
@@ -347,7 +349,7 @@ export async function attachConversation(
       `${BASE_URL}/v1/conversations/${conversationId}/stream`,
       {
         method: "GET",
-        credentials: "include",
+        credentials: sessionCredentials(),
         headers,
         signal,
       },
@@ -446,11 +448,12 @@ async function runMessageStream(
   const doFetch = async (signal: AbortSignal): Promise<Response> => {
     const response = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
-      credentials: "include",
+      credentials: sessionCredentials(),
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
         ...clientHeaders(),
+        ...bearerAuthHeader(),
         ...getCsrfHeaders("POST"),
       },
       body,

@@ -181,7 +181,6 @@ async def _build_ceo_context(
         chat_tools,
         skill_registry=skill_registry,
         folder_id=None,
-        memory_enabled=False,
         user_id="eval-playbook-routing",
     )
     ceo_tool_names = set(chat_tools.names)

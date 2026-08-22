@@ -20,10 +20,6 @@ import {
   assistantHasTeamStrip,
   turnOutcomeForAssistant,
 } from "@/lib/turnOutcome";
-import {
-  useBackgroundTasksStore,
-  useHandoffArmed,
-} from "@/stores/backgroundTasks";
 import { draftKeyFor, useComposerDraftStore } from "@/stores/composer";
 import {
   assistantProjectionId,
@@ -38,16 +34,7 @@ import { useFoldersStore } from "@/stores/folders";
 import { usePendingApprovals } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useServerHealthStore } from "@/stores/serverHealth";
-import {
-  AtSign,
-  CloudUpload,
-  Copy,
-  ListPlus,
-  Loader2,
-  Send,
-  Square,
-  X,
-} from "lucide-react";
+import { AtSign, Copy, ListPlus, Loader2, Send, Square, X } from "lucide-react";
 import type { ChangeEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AttachmentChips } from "./AttachmentChips";
@@ -55,7 +42,11 @@ import { ComposerCloudBridgeHint } from "./ComposerCloudBridgeHint";
 import { ComposerContextCompactedHint } from "./ComposerContextCompactedHint";
 import { ComposerGitStatusChip } from "./ComposerGitStatusChip";
 import { ComposerPendingHintNotice } from "./ComposerPendingHintNotice";
-import { ComposerPlusMenu, useComposerPlusClose } from "./ComposerPlusMenu";
+import {
+  ComposerPlusMenu,
+  useComposerPlusClose,
+  useComposerPlusHost,
+} from "./ComposerPlusMenu";
 import { ComposerSendErrorNotice } from "./ComposerSendErrorNotice";
 import { ComposerWorkspaceChip } from "./ComposerWorkspaceChip";
 import { ModelPicker } from "./ModelPicker";
@@ -96,12 +87,10 @@ export type TurnComposerVariant = "card" | "bar";
  * textarea, @ 引用（含本机附件）, drag-drop attachments, 停止生成,
  * char count, 回填 channel — hosted by the chat view's
  * {@link import("../MessageInput").MessageInput}. Canvas is look-only; 下达指令
- * stays in chat. Hosts only pick chrome (placeholder, whether legacy handoff arm
- * applies).
+ * stays in chat. Hosts only pick chrome (placeholder).
  *
  * `variant="bar"` is the compact single-row chrome used only by the chat bottom dock:
- * `[＋]` · textarea · 语音 · 发送；工作区/Git/模型/权限/@ 收进＋菜单（遗留 handoff
- * 武装在 ModeControl，不在「＋」）。
+ * `[＋]` · textarea · 语音 · 发送；工作区/Git/模型/权限/@ 收进＋菜单。
  * default `card` keeps textarea-above-toolbar（居中草稿），左簇摊开。
  * 离线态靠 {@link ComposerConnectionNotice} 与发送硬禁，不再用安静连接绿点。
  *
@@ -116,17 +105,11 @@ export type TurnComposerVariant = "card" | "bar";
  * self-gated on `!conversationId`.
  */
 export function TurnComposer({
-  placeholder = "输入消息，@ 引用文件或点名角色…",
-  allowBackground = true,
+  placeholder = "输入消息，@ 引用内容…",
   variant = "card",
   attachedBelowApproval = false,
 }: {
   placeholder?: string;
-  /**
-   * Honor ModeControl legacy handoff arm (still requires a local-mode conversation).
-   * No Composer「＋」toggle — arming lives in WorkspaceModeMenu.
-   */
-  allowBackground?: boolean;
   /**
    * `card` = textarea above toolbar (default; centered new-chat composer).
    * `bar` = compact dock: ＋菜单收纳左簇，常显仅输入与发送。
@@ -237,8 +220,6 @@ export function TurnComposer({
   );
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [isLocal, setIsLocal] = useState(false);
-  const handoffArmed = useHandoffArmed(conversationId);
   const folders = useFolders();
   const draftIntent = useFoldersStore((s) => s.draftWorkspaceIntent);
   const pendingFolderId =
@@ -316,8 +297,8 @@ export function TurnComposer({
     agentMentions,
     setAgentMentions,
     isGenerating,
-    backgroundMode: allowBackground && isLocal && handoffArmed,
-    isLocal,
+    backgroundMode: false,
+    isLocal: false,
     closeMenu: mention.closeMenu,
   });
 
@@ -378,26 +359,6 @@ export function TurnComposer({
     dismissedAssignRef.current.add(assignHint.folderId);
     setAssignHint(null);
   }, [assignHint]);
-
-  // Legacy handoff gate: only local-mode conversations can dispatch a cloud copy
-  // job. Arming is ModeControl-only; resolve mode so send honors the arm.
-  useEffect(() => {
-    if (!allowBackground || !conversationId) {
-      setIsLocal(false);
-      return;
-    }
-    let cancelled = false;
-    void useBackgroundTasksStore
-      .getState()
-      .ensureMode(conversationId)
-      .then((mode) => {
-        if (cancelled) return;
-        setIsLocal(mode === "local");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [allowBackground, conversationId]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -490,7 +451,6 @@ export function TurnComposer({
 
   const charCount = value.length;
   const menuOpen = mention.menuMode !== null;
-  const bg = allowBackground && isLocal && handoffArmed;
   const showCharCount = isBar
     ? charCount >= CHAR_COUNT_NEAR_LIMIT
     : charCount > 0;
@@ -498,7 +458,6 @@ export function TurnComposer({
   // 左簇顺序：工作区 · Git? · 模型 · 权限 · @
   // bar：整簇收进 ComposerPlusMenu（权限/@ 带文案）；card：底栏摊开（iconOnly）。
   // 否决 Composer 并排「本地引擎/云端过桥」切换器；过桥事后弱提示见 ComposerCloudBridgeHint。
-  // 遗留 handoff 武装在 ModeControl，不进「＋」。
   const sessionChrome = (
     <>
       <ComposerWorkspaceChip conversationId={conversationId} />
@@ -590,15 +549,13 @@ export function TurnComposer({
       tone="primary"
       onClick={() => void handleSend()}
       disabled={!hasDraft || sendBlocked || isSending}
-      aria-label={bg ? "派发到云端后台" : "发送"}
+      aria-label="发送"
       aria-busy={isSending || undefined}
       data-sending={isSending ? "true" : undefined}
       title={sendBlocked ? "离线时无法发送" : isSending ? "发送中…" : undefined}
     >
       {isSending ? (
         <Loader2 size={16} className="animate-spin" aria-hidden />
-      ) : bg ? (
-        <CloudUpload size={16} />
       ) : (
         <Send size={16} />
       )}
@@ -630,9 +587,7 @@ export function TurnComposer({
             e.currentTarget.selectionStart ?? 0,
           )
         }
-        placeholder={
-          bg ? "描述要交给云端团队后台完成的任务…" : resolvedPlaceholder
-        }
+        placeholder={resolvedPlaceholder}
         className={`block w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none ${
           isBar ? "px-2 py-2" : "px-4 pt-3 pb-1"
         }`}
@@ -702,6 +657,7 @@ export function TurnComposer({
       />
       {menuOpen && (
         <MentionMenu
+          placement={isBar ? "above" : "below"}
           sections={mention.sections}
           flatItems={mention.flatItems}
           activeIndex={mention.activeIndex}
@@ -840,11 +796,13 @@ function ComposerMentionButton({
   onToggle: () => void;
   iconOnly?: boolean;
 }) {
+  const plusHost = useComposerPlusHost();
   const closePlus = useComposerPlusClose();
   const onClick = () => {
     closePlus?.();
     onToggle();
   };
+  if (plusHost && plusHost.panel !== "list") return null;
   if (iconOnly) {
     return (
       <IconButton size="md" onClick={onClick} aria-label="@ 引用">
@@ -860,7 +818,7 @@ function ComposerMentionButton({
       className="inline-flex h-8 w-full items-center gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground"
     >
       <AtSign size={14} className="shrink-0" aria-hidden />
-      <span>@ 引用</span>
+      <span>引用</span>
     </button>
   );
 }

@@ -372,9 +372,10 @@ class WorkspaceBackend(Protocol):
     ) -> TreeResult:
         """Recursively list ``directory`` as a depth-bounded tree (ignore-pruned).
 
-        ``pattern`` filters file names only (directories are always included so the
-        tree stays connected). Raises ``OutsideWorkspace`` / ``NotADirectory`` /
-        ``WorkspaceIOError``.
+        ``pattern="*"`` emits directories plus matching files so the tree stays
+        connected. A narrower ``pattern`` emits matching names only (still
+        descends unmatched directories). Raises ``OutsideWorkspace`` /
+        ``NotADirectory`` / ``WorkspaceIOError``.
         """
         ...
 

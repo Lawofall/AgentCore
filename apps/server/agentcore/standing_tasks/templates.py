@@ -22,7 +22,6 @@ _KNOWN: frozenset[str] = frozenset({DAILY_CONVERSATION_REVIEW})
 DEFAULT_TEMPLATE_AXES: dict[str, str] = {
     "file_write": "ask",
     "command": "ask",
-    "team_kickoff": "skip",
     "host": "ask",
 }
 

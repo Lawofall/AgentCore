@@ -58,6 +58,22 @@ const baseCtx = {
   openBookmarksInPalette: vi.fn(),
 };
 
+describe("paletteCommands narrow restriction", () => {
+  it("hides toolbox and conversation admin when restrictNarrow", () => {
+    const cmds = buildPaletteCommands({
+      ...baseCtx,
+      restrictNarrow: true,
+      forceLightTheme: true,
+    });
+    expect(cmds.some((c) => c.id === "nav-toolbox")).toBe(false);
+    expect(cmds.some((c) => c.id === "nav-whiteboard")).toBe(false);
+    expect(cmds.some((c) => c.id === "nav-conversations")).toBe(false);
+    expect(cmds.some((c) => c.id === "theme-dark")).toBe(false);
+    expect(cmds.some((c) => c.id === "nav-files")).toBe(true);
+    expect(cmds.some((c) => c.id === "nav-settings")).toBe(true);
+  });
+});
+
 describe("paletteCommands demo tape gate", () => {
   it("hides demo-tape commands when catalog is empty", () => {
     const cmds = buildPaletteCommands(baseCtx);
@@ -145,6 +161,7 @@ describe("paletteCommands · 区外只读授权", () => {
     const cmds = buildPaletteCommands(baseCtx);
     expect(cmds.some((c) => c.id === "grant-readonly-folder")).toBe(false);
     expect(cmds.some((c) => c.id === "import-to-cloud")).toBe(false);
+    expect(cmds.some((c) => c.id === "borrow-to-cloud")).toBe(false);
     expect(cmds.some((c) => c.id === "connect-git")).toBe(false);
     expect(cmds.some((c) => c.id === "open-local-project")).toBe(false);
     expect(cmds.some((c) => c.id === "bind-local-folder")).toBe(false);
@@ -182,6 +199,10 @@ describe("paletteCommands · 区外只读授权", () => {
       useFoldersStore.getState(),
       "openImportToCloud",
     );
+    const openBorrowToCloud = vi.spyOn(
+      useFoldersStore.getState(),
+      "openBorrowToCloud",
+    );
     vi.mocked(hasLocalFiles).mockReturnValue(true);
     const cmds = buildPaletteCommands(baseCtx);
     expect(cmds.some((c) => c.id === "bind-local-folder")).toBe(false);
@@ -203,6 +224,16 @@ describe("paletteCommands · 区外只读授权", () => {
     expect(commandMatches(importCmd, "daoru")).toBe(true);
     importCmd.run();
     expect(openImportToCloud).toHaveBeenCalled();
+
+    const borrowCmd = cmds.find((c) => c.id === "borrow-to-cloud");
+    expect(borrowCmd?.title).toBe("云上做完再写入");
+    expect(borrowCmd?.hint).toBeTruthy();
+    expect(borrowCmd?.hint).not.toContain("推荐");
+    if (!borrowCmd) return;
+    expect(commandMatches(borrowCmd, "yunshang")).toBe(true);
+    borrowCmd.run();
+    expect(openBorrowToCloud).toHaveBeenCalled();
+    expect(setComposerChannelPreference).toHaveBeenCalledWith("cloud");
 
     const localCmd = cmds.find((c) => c.id === "open-local-project");
     expect(localCmd?.title).toBe("打开本机文件夹");

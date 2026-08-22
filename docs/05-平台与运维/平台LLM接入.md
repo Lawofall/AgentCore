@@ -125,7 +125,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 
 `billing_mode=platform` 走 `PLATFORM_*` 与账号池；改 env 三项须重启后端。池成员的增删改/禁用/解封经 admin 热更，不须重启。
 
-**多模型 + 每模型凭据覆盖**（成本 §〇·六 F3）：`PLATFORM_MODELS` allowlist（非空时 `PLATFORM_MODEL` / 后台档须 ∈ 列表，否则启动 fail-fast）；`PLATFORM_MODEL_CREDENTIALS`（JSON `{model → {api_key?, base_url?, upstream_model?, id?}}`）给「一 key 一模型」中转绑独立凭据；可选 `upstream_model` 让目录 id 与上游 id 解耦（如 `glm-5.2-jiu` → 上游仍发 `glm-5.2`；计费 / 目录仍用目录 id）。单点 `platform_llm_credentials(model=…)` + 出站改写 `platform_wire_model`（`PlatformProvider`）。
+**多模型 + 每模型凭据覆盖**（成本 §〇·六 F3）：`PLATFORM_MODELS` allowlist（非空时 `PLATFORM_MODEL` / 后台档须 ∈ 列表，否则启动 fail-fast）；`PLATFORM_MODEL_CREDENTIALS`（JSON `{model → {api_key?, base_url?, upstream_model?, id?}}`）给「一 key 一模型」中转绑独立凭据；可选 `upstream_model` 让目录 id 与上游 id 解耦（如目录 id `glm-5.2-alt` → 上游仍发 `glm-5.2`；计费 / 目录仍用目录 id）。单点 `platform_llm_credentials(model=…)` + 出站改写 `platform_wire_model`（`PlatformProvider`）。
 
 **平台额度账号池**（admin 可热更）：成员表 `platform_credentials`，每行是绑定的 `(api_key, base_url)` + 该号自己的订阅日。Key 走既有 `KeyEncryptor` / `ENCRYPTION_KEY`（与 BYOK 同主密钥），明文永不回前端。每成员可声明 **上游工具面上限**（`tool_surface_limits`：`max_tools` / `max_properties_total` / `max_properties_per_tool`，均可空；**未声明 = 不限**）。数字由运维按该号订阅档填写，代码不硬编码任何厂商帽子。装配期（平台叶把 `tools` 装进请求、发出 HTTP **之前**）用我方 OpenAI 形开场表测量（条数 + 顶层 `function.parameters.properties` 键数，**不**假装对齐上游嵌套算法）对照声明：超限则记 `llm.tool_surface.limit_exceeded`，并以我方诚实错误结束该次调用——**不会发给上游，也不会自动裁剪或换一档工具表**。选钥：fill-first（打满一个再用下一个；冷却 / 月耗尽 / 401·403 封禁的号跳过）+ 同一 `conversation_id` 钉在同一号（该号耗尽才换，避免打散 prompt cache）。流式 **commit 前** 的 429 与 403 `RegionError` 换到下一个启用号；commit 后维持现状（半成品 + `LLM_ERROR`，不做续写拼接）。401（封号与坏 key 不可区分）摘除该号并告警，**不**拿其余号重试同一请求。403 `RegionError`（漏做中国区托管 opt-in）同样摘除并告警，但允许 commit 前换号；分类只认上游嵌套 `error.type`。全池冷却或封禁时诚实报错（既有「接入自己的 Key」CTA），**不**回落 env、不假装排队、不静默降级模型。**池为空或全禁用 → 回落现有 `PLATFORM_API_KEY` / `PLATFORM_BASE_URL`**。带自己 `api_key` 的 `PLATFORM_MODEL_CREDENTIALS` 覆盖仍优先于池。**运行态可见与解封**：冷却 / 月耗尽 / 封禁及 `recovery_at` / 触发的限流窗名只活在 `platform_pool_state`（Redis / 进程内存、不落库），但随 `GET /v1/admin/platform-credentials` 每行下发；`POST …/{id}/clear-runtime` 手动清标记让该号重新可调度并写审计——**封禁号复活的唯一正规入口**（此前只能靠 PATCH 字段间接触发清理）。月耗尽按 `recovery_at` 自愈，故后台只对冷却 / 封禁给解封动作。本轮不做 80% 阈值提前切（名义价 ↔ 上游美元尚未校准）。可用性 = 默认 env key **或**任一覆盖有 key **或**池中有启用成员。缺 curated 价卡的 allowlist id → 不上架。
 
@@ -154,7 +154,7 @@ OpenCode 两条 OpenAI 兼容上游，**计费与目录不同，必须按精确 
 | 价卡 | curated 名义价 **同** 付费 Flash（¥0.02 / ¥1 / ¥2）——上游成本由 Go 订阅月费摊，产品仍按名义价扣额度 |
 | 上下文窗 | `deepseek-v4-flash` **1M**（SKU）。目录展示与近顶压缩（窗 × 80% ≈ 800K）跟 SKU，禁止按端点猜成 Zen free 的 200K |
 | Vision | 本阶段不配 `VISION_*`（白板读图仅用户 BYOK 填 vision 槽时可用） |
-| 公告 | 恢复时归档 `quota_jiurelay`；发模板 **`quota_platform_restored`** → [产品公告文案模板 §4.2](/docs/05-平台与运维/产品公告文案模板.md) |
+| 公告 | 恢复时归档 `quota_unavailable`（以及仍在线的旧 `quota_jiurelay`）；发模板 **`quota_platform_restored`** → [产品公告文案模板 §4.2](/docs/05-平台与运维/产品公告文案模板.md) |
 
 **运维动作（按序，不得跳）**
 

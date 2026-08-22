@@ -96,10 +96,9 @@ class ToolRegistration:
     # to spawn ``git`` under (cloud / sidecar), else a live desktop channel.
     git_class: bool = False
     # Catalog-gated tools: listed on the roster + capability catalog, but NOT
-    # auto-registered by ``build_worker_registry``. Callers wire them after the registry
-    # is built when the runtime gate is on (e.g. ``conversation_history_access`` →
-    # ``_wire_worker_conversation_log_tools``; product resolve is always on / 定案 A).
-    # Same pattern as ``consult_memory``.
+    # auto-registered by ``build_worker_registry``. Callers wire them after the
+    # registry is built (e.g. ``_wire_worker_conversation_log_tools``). Same
+    # pattern as ``consult_memory``.
     manual_wire: bool = False
     # 落盘产物自报契约（见 :class:`FileProductsContract`）。**只有开发期棘轮读它**——
     # 引擎 / 台账一律读 ``ToolResult.file_products``，绝不按这个字段（更不按工具名）判谁产了

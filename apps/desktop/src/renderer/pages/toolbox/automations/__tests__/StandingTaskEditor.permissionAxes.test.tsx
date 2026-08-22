@@ -45,7 +45,6 @@ const patch = vi.mocked(patchStandingTask);
 const TEMPLATE_AXES: PermissionAxes = {
   file_write: "ask",
   command: "ask",
-  team_kickoff: "skip",
   host: "ask",
 };
 
@@ -144,7 +143,7 @@ describe("StandingTaskEditorDrawer permission axes", () => {
     const custom = screen.getByRole("option", { name: /自定义/ });
     expect(custom.textContent).toMatch(/改文件每次确认/);
     expect(custom.textContent).toMatch(/执行每次确认/);
-    expect(custom.textContent).toMatch(/组队不弹组队卡/);
+    expect(custom.textContent).toMatch(/本机每次确认/);
   });
 
   it("sends the new axes once the user picks a recipe on purpose", async () => {
@@ -170,8 +169,7 @@ describe("StandingTaskEditorDrawer permission axes", () => {
       cron: null,
       permissionAxes: {
         file_write: "session",
-        command: "kickoff",
-        team_kickoff: "always",
+        command: "ask",
         host: "off",
       },
     });

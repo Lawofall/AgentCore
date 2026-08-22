@@ -6,6 +6,7 @@ import {
 import { SidePanel } from "@/components/layout/SidePanel";
 import { SidePanelToggle } from "@/components/layout/SidePanelToggle";
 import { logEvent } from "@/lib/log";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
   decideWarmOpenAction,
   fetchMessageWindow,
@@ -382,6 +383,7 @@ export function ConversationPage() {
   // 对话页恒聊天。右坞：打开后头栏 PanelRight 关闭；关闭时主区右上浮层打开
   // （有会话时 Ctrl/Cmd+I；草稿不可用）。
   const panelOpen = useSidePanelStore((s) => s.open);
+  const { isNarrow } = useNarrowLayoutState();
 
   return (
     <>
@@ -392,7 +394,7 @@ export function ConversationPage() {
           onRetry={() => setHydrateRetry((n) => n + 1)}
         />
       )}
-      {id && !panelOpen && (
+      {id && !panelOpen && !isNarrow && (
         <div className="absolute right-3 top-2 z-20">
           <SidePanelToggle />
         </div>

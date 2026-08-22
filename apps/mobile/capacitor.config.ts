@@ -1,13 +1,12 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-// Capacitor shell config (前端技术与架构 §七 · 上架 + 安全存储). The web SPA is built to
-// `dist` (vite default) and Capacitor serves it from the native scheme root. `appId` is
-// the reverse-domain bundle id shared by iOS/Android; keep it stable — changing it after
-// release orphans every device's Keychain/Keystore data (incl. the bearer tokens).
+// Capacitor 壳（前端技术与架构 §五）。产品页是桌面 dist-web，不是本目录 SPA。
+// `appId` 是 iOS/Android 共用的 reverse-domain；上架后改会让 Keychain/Keystore（含 Bearer）失效。
 const config: CapacitorConfig = {
   appId: "com.agentcore.mobile",
   appName: "AgentCore",
-  webDir: "dist",
+  // 产品页是桌面 renderer 的 dist-web（`pnpm build` → prepare-cap-web）。
+  webDir: "../desktop/dist-web",
   // WebView + DecorView fill under transparent system bars (Cap 8 edge-to-edge).
   // Keep in sync with android `shellBackground` / mobile-light `--panel`.
   backgroundColor: "#ffffff",

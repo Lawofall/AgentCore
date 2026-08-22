@@ -1,3 +1,8 @@
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   patchConversationCache,
@@ -14,7 +19,6 @@ import {
   type PermissionAxes,
   RECIPE_LABELS,
   RECIPE_ORDER,
-  TEAM_KICKOFF_OPTIONS,
   axesEqual,
   axesShortLabel,
   confirmAutoCommandIfNeeded,
@@ -29,10 +33,14 @@ import {
 import { useConversationStore } from "@/stores/conversation";
 import { usePermissionChangeStore } from "@/stores/permissionChanges";
 import { ChevronDown, Shield } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  ComposerPlusBackHeader,
+  useComposerPlusRow,
+} from "./ComposerPlusMenu";
 
 /**
- * Composer permission badge — recipes first; four-axis custom folded.
+ * Composer permission badge — recipes first; three-axis custom folded.
  * New chats: draft axes (seeded from 新会话默认配方); existing: read/write
  * ``conversation.permissionAxes``（下一回合生效）.
  */
@@ -49,10 +57,10 @@ export function PermissionAxesBadge({
   const [draftAxes, setDraftAxes] = useState<PermissionAxes>(
     DEFAULT_PERMISSION_AXES,
   );
+  const plus = useComposerPlusRow("permission");
   const [open, setOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [pending, setPending] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
 
   const fromCache = conversationId
     ? conversations.find((c) => c.id === conversationId)?.permissionAxes
@@ -74,15 +82,7 @@ export function PermissionAxesBadge({
   }, [fromCache]);
 
   useEffect(() => {
-    if (!open) {
-      setCustomOpen(false);
-      return;
-    }
-    const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    if (!open) setCustomOpen(false);
   }, [open]);
 
   const apply = async (next: PermissionAxes, opts: { close: boolean }) => {
@@ -92,7 +92,10 @@ export function PermissionAxesBadge({
       return;
     }
     if (!confirmAutoCommandIfNeeded(axes, next)) return;
-    if (opts.close) setOpen(false);
+    if (opts.close) {
+      if (plus.mode === "panel" || plus.mode === "row") plus.close();
+      else setOpen(false);
+    }
     if (!conversationId) {
       setDraftAxes(next);
       setComposerDraftAxes(next);
@@ -148,162 +151,190 @@ export function PermissionAxesBadge({
     void apply(next, { close: false });
   };
 
+  if (plus.mode === "hidden") return null;
+
   const tip = isCustom
     ? `自定义：${axesCustomTip(axes)}`
     : RECIPE_LABELS[recipe].description;
   const tipWithLabel = iconOnly ? `${label} — ${tip}` : tip;
 
-  return (
-    <div ref={rootRef} className="relative shrink-0">
-      <SimpleTooltip label={tipWithLabel}>
-        <button
-          type="button"
-          disabled={disabled || pending}
-          onClick={() => setOpen((v) => !v)}
-          aria-label={`权限：${label}`}
-          aria-expanded={open}
-          className={cn(
-            "inline-flex items-center rounded-lg text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground",
-            iconOnly ? "size-8 justify-center" : "h-8 max-w-44 gap-1 px-2",
-            (disabled || pending) && "cursor-not-allowed opacity-60",
-          )}
-        >
-          <Shield size={14} className="shrink-0" />
-          {!iconOnly && (
-            <>
-              <span className="truncate">{label}</span>
-              <ChevronDown size={12} className="shrink-0 opacity-60" />
-            </>
-          )}
-        </button>
-      </SimpleTooltip>
-      {open && (
-        <div className="absolute bottom-full left-0 z-50 mb-1 w-80 rounded-xl border border-border bg-popover p-2 shadow-lg">
-          <p className="px-1 pb-1.5 text-xs font-medium text-muted-foreground">
-            配方
-          </p>
-          <div className="space-y-0.5">
-            {RECIPE_ORDER.map((id) => {
-              const selected = recipe === id;
-              const meta = RECIPE_LABELS[id];
-              return (
-                <SimpleTooltip key={id} label={meta.description}>
-                  <button
-                    type="button"
-                    aria-current={selected ? "true" : undefined}
-                    onClick={() => applyRecipe(id)}
-                    className={cn(
-                      "flex w-full items-baseline gap-1.5 rounded-lg px-2.5 py-1.5 text-left",
-                      selected ? "bg-primary/10" : "hover:bg-accent/50",
-                    )}
-                  >
-                    <span className="shrink-0 text-sm font-medium text-foreground">
-                      {meta.short}
-                      {id === "less_interrupt" ? " · 荐" : ""}
-                    </span>
-                    <span className="min-w-0 truncate text-xs text-muted-foreground">
-                      {meta.description}
-                    </span>
-                  </button>
-                </SimpleTooltip>
-              );
-            })}
-          </div>
+  const dismiss = () => {
+    if (plus.mode === "panel" || plus.mode === "row") plus.close();
+    else setOpen(false);
+  };
 
-          <div className="mt-2 border-t border-border/60 px-1 pt-2">
-            <SimpleTooltip
-              label={
-                isCustom
-                  ? "仅内置配方可设为新会话默认"
-                  : "写入账户默认；只影响之后新建的对话"
-              }
-            >
-              <span className="block">
-                <button
-                  type="button"
-                  disabled={isCustom || pending || disabled}
-                  onClick={() => void setAsSessionDefault()}
-                  className={cn(
-                    "w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-medium",
-                    isCustom || pending || disabled
-                      ? "cursor-not-allowed text-muted-foreground/50"
-                      : "text-foreground hover:bg-accent/50",
-                  )}
-                >
-                  设为新会话默认
-                </button>
-              </span>
+  const panel = (
+    <>
+      <p className="px-1 pb-1.5 text-xs font-medium text-muted-foreground">
+        配方
+      </p>
+      <div className="space-y-0.5">
+        {RECIPE_ORDER.map((id) => {
+          const selected = recipe === id;
+          const meta = RECIPE_LABELS[id];
+          return (
+            <SimpleTooltip key={id} label={meta.description}>
+              <button
+                type="button"
+                aria-current={selected ? "true" : undefined}
+                onClick={() => applyRecipe(id)}
+                className={cn(
+                  "flex w-full items-baseline gap-1.5 rounded-lg px-2.5 py-1.5 text-left",
+                  selected ? "bg-primary/10" : "hover:bg-accent/50",
+                )}
+              >
+                <span className="shrink-0 text-sm font-medium text-foreground">
+                  {meta.short}
+                  {id === "less_interrupt" ? " · 荐" : ""}
+                </span>
+                <span className="min-w-0 truncate text-xs text-muted-foreground">
+                  {meta.description}
+                </span>
+              </button>
             </SimpleTooltip>
-          </div>
+          );
+        })}
+      </div>
 
-          <div className="mt-2 border-t border-border/60 pt-2">
+      <div className="mt-2 border-t border-border/60 px-1 pt-2">
+        <SimpleTooltip
+          label={
+            isCustom
+              ? "仅内置配方可设为新会话默认"
+              : "写入账户默认；只影响之后新建的对话"
+          }
+        >
+          <span className="block">
             <button
               type="button"
-              aria-expanded={customOpen}
-              onClick={() => setCustomOpen((v) => !v)}
-              className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left hover:bg-accent/50"
+              disabled={isCustom || pending || disabled}
+              onClick={() => void setAsSessionDefault()}
+              className={cn(
+                "w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-medium",
+                isCustom || pending || disabled
+                  ? "cursor-not-allowed text-muted-foreground/50"
+                  : "text-foreground hover:bg-accent/50",
+              )}
             >
-              <span className="text-xs font-medium text-muted-foreground">
-                自定义权限轴
-                {isCustom ? (
-                  <span className="ml-1.5 text-foreground">· 当前</span>
-                ) : null}
-              </span>
-              <ChevronDown
-                size={12}
-                className={cn(
-                  "shrink-0 text-muted-foreground opacity-60 transition-transform",
-                  customOpen && "rotate-180",
-                )}
-              />
+              设为新会话默认
             </button>
+          </span>
+        </SimpleTooltip>
+      </div>
 
-            {customOpen && (
-              <div className="mt-1 space-y-2 px-0.5 pb-1">
-                <AxisSegment
-                  title="改文件"
-                  options={FILE_WRITE_OPTIONS}
-                  value={axes.file_write}
-                  disabledOption={(v) => v === "ask" && axes.command === "auto"}
-                  disabledReason="免审执行须同时「本会话信任」改文件"
-                  onSelect={(v) => patchAxis("file_write", v)}
-                />
-                <AxisSegment
-                  title="执行命令"
-                  options={COMMAND_OPTIONS}
-                  value={axes.command}
-                  disabledOption={(v) =>
-                    v === "auto" && axes.file_write === "ask"
-                  }
-                  disabledReason="免审执行须同时「本会话信任」改文件"
-                  onSelect={(v) => patchAxis("command", v)}
-                />
-                <AxisSegment
-                  title="组队确认"
-                  options={TEAM_KICKOFF_OPTIONS}
-                  value={axes.team_kickoff}
-                  onSelect={(v) => patchAxis("team_kickoff", v)}
-                />
-                <AxisSegment
-                  title="本机 Host"
-                  options={HOST_OPTIONS}
-                  value={axes.host}
-                  onSelect={(v) => patchAxis("host", v)}
-                />
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setOpen(false)}
-                    className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                  >
-                    完成
-                  </button>
-                </div>
-              </div>
+      <div className="mt-2 border-t border-border/60 pt-2">
+        <button
+          type="button"
+          aria-expanded={customOpen}
+          onClick={() => setCustomOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left hover:bg-accent/50"
+        >
+          <span className="text-xs font-medium text-muted-foreground">
+            自定义权限轴
+            {isCustom ? (
+              <span className="ml-1.5 text-foreground">· 当前</span>
+            ) : null}
+          </span>
+          <ChevronDown
+            size={12}
+            className={cn(
+              "shrink-0 text-muted-foreground opacity-60 transition-transform",
+              customOpen && "rotate-180",
             )}
+          />
+        </button>
+
+        {customOpen && (
+          <div className="mt-1 space-y-2 px-0.5 pb-1">
+            <AxisSegment
+              title="改文件"
+              options={FILE_WRITE_OPTIONS}
+              value={axes.file_write}
+              disabledOption={(v) => v === "ask" && axes.command === "auto"}
+              disabledReason="免审执行须同时「本会话信任」改文件"
+              onSelect={(v) => patchAxis("file_write", v)}
+            />
+            <AxisSegment
+              title="执行命令"
+              options={COMMAND_OPTIONS}
+              value={axes.command}
+              disabledOption={(v) => v === "auto" && axes.file_write === "ask"}
+              disabledReason="免审执行须同时「本会话信任」改文件"
+              onSelect={(v) => patchAxis("command", v)}
+            />
+            <AxisSegment
+              title="本机 Host"
+              options={HOST_OPTIONS}
+              value={axes.host}
+              onSelect={(v) => patchAxis("host", v)}
+            />
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={dismiss}
+                className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              >
+                完成
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+      </div>
+    </>
+  );
+
+  const trigger = (
+    <button
+      type="button"
+      disabled={disabled || pending}
+      aria-label={`权限：${label}`}
+      aria-expanded={plus.mode === "panel" || open}
+      onClick={plus.mode === "row" ? plus.drill : undefined}
+      className={cn(
+        "inline-flex items-center rounded-lg text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+        iconOnly ? "size-8 justify-center" : "h-8 max-w-44 gap-1 px-2",
+        (disabled || pending) && "cursor-not-allowed opacity-60",
       )}
+    >
+      <Shield size={14} className="shrink-0" />
+      {!iconOnly && (
+        <>
+          <span className="truncate">{label}</span>
+          <ChevronDown size={12} className="shrink-0 opacity-60" />
+        </>
+      )}
+    </button>
+  );
+
+  if (plus.mode === "panel") {
+    return (
+      <div className="w-80 p-0">
+        <ComposerPlusBackHeader title="权限" onBack={plus.back} />
+        <div className="p-2">{panel}</div>
+      </div>
+    );
+  }
+
+  if (plus.mode === "row") {
+    return <SimpleTooltip label={tipWithLabel}>{trigger}</SimpleTooltip>;
+  }
+
+  return (
+    <div className="relative shrink-0">
+      <Popover open={open} onOpenChange={setOpen}>
+        <SimpleTooltip label={tipWithLabel}>
+          <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        </SimpleTooltip>
+        <PopoverContent
+          side="bottom"
+          align="start"
+          avoidCollisions={false}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          className="w-80 p-2"
+        >
+          {panel}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
@@ -313,11 +344,8 @@ function axesCustomTip(axes: PermissionAxes): string {
     FILE_WRITE_OPTIONS.find((o) => o.value === axes.file_write)?.short ?? "";
   const cmd =
     COMMAND_OPTIONS.find((o) => o.value === axes.command)?.short ?? "";
-  const team =
-    TEAM_KICKOFF_OPTIONS.find((o) => o.value === axes.team_kickoff)?.short ??
-    "";
   const host = HOST_OPTIONS.find((o) => o.value === axes.host)?.short ?? "";
-  return `${file} · ${cmd} · ${team} · ${host}`;
+  return `${file} · ${cmd} · ${host}`;
 }
 
 function AxisSegment<T extends string>({

@@ -68,6 +68,9 @@ function ToneStubRecord({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-label={
+          label.trim() || collapsedSummary?.trim() ? undefined : "拍板记录"
+        }
         className="flex w-full items-center gap-2 py-1.5 text-left"
       >
         <span
@@ -75,9 +78,11 @@ function ToneStubRecord({
         >
           <DecisionIcon size={14} />
         </span>
-        <span className={`shrink-0 text-xs font-medium ${tone.label}`}>
-          {label}
-        </span>
+        {label.trim() !== "" ? (
+          <span className={`shrink-0 text-xs font-medium ${tone.label}`}>
+            {label}
+          </span>
+        ) : null}
         {!open && collapsedSummary != null && collapsedSummary !== "" && (
           <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
             {collapsedSummary}

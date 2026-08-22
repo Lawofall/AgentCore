@@ -122,8 +122,6 @@ class DelegateTool:
         suspension_saver: SuspensionSaver | None = None,
         suspension_deleter: SuspensionDeleter | None = None,
         folder_id: str | None = None,
-        memory_enabled: bool = True,
-        conversation_history_access: bool = True,
         permission_axes: PermissionAxes | None = None,
         depth: int = 0,
     ) -> None:
@@ -155,10 +153,6 @@ class DelegateTool:
         # into the frame — the resumed toolset re-wires consult_memory to the same project
         # (Agent记忆与知识系统 §二). Not used by the delegate drive itself.
         self._folder_id = folder_id
-        # Same capture-only role: the memory gate rides the frame so resume re-wires
-        # consult_memory exactly as this turn did (False ⇒ stays off).
-        self._memory_enabled = memory_enabled
-        self._conversation_history_access = conversation_history_access
         # 跨文件夹指挥 · 嵌套默认目标桌（父 worker 的 target / 出生）；tasks 省略时继承。
         self._default_target_folder_id: str | None = None
         # 同回合多 local 认领簿（drive 入口 seed）；嵌套子派共享同一簿。
@@ -196,8 +190,7 @@ class DelegateTool:
         self._team_brief: str | None = None
         # Last resolved note-wall coordination mode (wall|none); resume/replan reuse it.
         self._coordination: str = "none"
-        # 本批 CEO 预贴便签（execute 解析后暂存）：开工卡挂在 setup_note_wall 之前，
-        # 耐久帧从这里捕获（persist_kickoff），否则恢复后 seed 便签永久丢失。
+        # 本批 CEO 预贴便签（execute 解析后暂存），供同回合续派 / 挂起帧回灌。
         self._seed_notes: list[dict[str, str]] = []
         # 当前 execute 展开的 playbook 名（team_preview pre-auth 判定用）。
         self._active_playbook: str | None = None

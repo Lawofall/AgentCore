@@ -13,7 +13,6 @@ import {
 } from "@/lib/queryKeys";
 import {
   type LlmProviderView,
-  type LlmProvidersResponse,
   deleteLlmProvider,
   testLlmProvider,
 } from "@/services/llmProviders";
@@ -23,14 +22,14 @@ import {
   Loader2,
   Plus,
   ShieldCheck,
-  Sparkles,
   XCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { SettingsHeader } from "./SettingsHeader";
 
 /**
- * 服务商 (/more/providers) — 平台额度说明 + BYOK 列表 / 表单 / 测连 + 安全说明。
+ * 服务商 (/more/providers) — BYOK 列表 / 表单 / 测连 + 安全说明。
+ * 页头只说本页职责；平台额度由模型页承担。平台不可用时改准入说明。
  */
 export function ProviderSettings() {
   const { data: response, isLoading, isError, error } = useLlmProviders();
@@ -115,8 +114,8 @@ export function ProviderSettings() {
         title="服务商"
         description={
           platformMode
-            ? "接入 OpenAI 兼容服务商（可多个）。不接入也可用平台额度。"
-            : "接入 OpenAI 兼容服务商（可多个）。需自行在 jiurelay 免费配额度或接入服务商后才能对话。"
+            ? "接入自己的 OpenAI 兼容端点（可多个）。日常选用在「设置 · 模型」。"
+            : "接入自己的 OpenAI 兼容端点（可多个）。需自行接入服务商后才能对话。"
         }
       />
 
@@ -132,14 +131,6 @@ export function ProviderSettings() {
         />
       ) : (
         <div className="mt-6 space-y-4">
-          {response.platform_available && (
-            <PlatformStatusLine response={response} />
-          )}
-
-          <p className="text-xs text-muted-foreground">
-            测连绿≠可聊天；自定义 Base URL 常需 /v1
-          </p>
-
           {providers.map((provider) =>
             form?.mode === "edit" && form.provider.id === provider.id ? (
               <ModelKeyForm
@@ -187,7 +178,12 @@ export function ProviderSettings() {
             </Button>
           ) : null}
 
-          <InfoNote />
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              测连绿≠可聊天；自定义 Base URL 常需 /v1
+            </p>
+            <InfoNote />
+          </div>
         </div>
       )}
 
@@ -225,27 +221,6 @@ function hostFromBaseUrl(url: string | null | undefined): string {
   } catch {
     return trimmed;
   }
-}
-
-function PlatformStatusLine({ response }: { response: LlmProvidersResponse }) {
-  return (
-    <div className="flex items-start gap-2 text-sm text-muted-foreground">
-      <Sparkles size={16} className="mt-0.5 shrink-0 text-primary" />
-      <p className="min-w-0">
-        <span className="text-foreground">平台额度</span>
-        <span className="mx-1.5 rounded bg-muted px-1 py-0.5 text-xs text-muted-foreground">
-          无需配置
-        </span>
-        <span className="text-xs">
-          未接入自己的模型时，对话默认走平台额度
-          {response.platform_model
-            ? ` · 平台模型 ${response.platform_model}`
-            : ""}
-          。接入后可在组合里选用自己的模型。
-        </span>
-      </p>
-    </div>
-  );
 }
 
 function StatusBadge({

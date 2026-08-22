@@ -1,9 +1,8 @@
 name: Deploy Mobile Web
 
-# ⚠️ 已弃用自动触发 — 改由 Cursor Agent 本地 `pnpm -C apps/mobile deploy:pages` 部署。
-# 见 docs/05-平台与运维/部署与运维.md §二、.cursor/rules/cursor-deploy.mdc
-#
-# 下方 *.example.com 为自托管占位；用 GitHub vars（如 APP_HOST / MOBILE_HOST / DNS_ZONE）覆盖。
+# 已退役：m.example.com 将 301 到 app.example.com。
+# 禁止再部署手机 SPA / stub。线上 DNS 不由本 workflow 拆改（不改 Cloudflare）。
+# 仅保留 workflow_dispatch，误触即失败退出。
 
 on:
   workflow_dispatch:
@@ -13,139 +12,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Build & deploy to Cloudflare Pages
+  retired:
+    name: Retired (m. → app. 301)
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10.28.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter agentcore-mobile...
-
-      - name: Build mobile web SPA
-        env:
-          VITE_API_URL: https://app.example.com/api
-        run: pnpm --filter agentcore-mobile build
-
-      - name: Ensure Cloudflare Pages project exists
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Refuse deploy
         run: |
-          set -euo pipefail
-          if ! npx --yes wrangler@4 pages project list | grep -q 'agentcore-mobile'; then
-            npx --yes wrangler@4 pages project create agentcore-mobile --production-branch=main
-          fi
-
-      - name: Deploy to Cloudflare Pages
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@4 pages deploy apps/mobile/dist --project-name=agentcore-mobile --branch=main
-
-      - name: Bind custom domain m.example.com
-        continue-on-error: true
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-          code="$(curl -sS -o /tmp/cf-domain.json -w '%{http_code}' \
-            -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/agentcore-mobile/domains" \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H 'Content-Type: application/json' \
-            --data '{"name":"m.example.com"}')"
-          if [[ "$code" == "200" || "$code" == "201" || "$code" == "409" ]]; then
-            echo "custom domain ok (HTTP $code)"
-          else
-            echo "domain bind returned HTTP $code:"
-            cat /tmp/cf-domain.json
-            exit 1
-          fi
-
-      - name: Ensure DNS CNAME m → Pages (override *. tunnel)
-        continue-on-error: true
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          set -euo pipefail
-          ZONE=example.com
-          FQDN=m.${ZONE}
-          TARGET=agentcore-mobile.pages.dev
-          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
-          zone_id="$(curl -sS "https://api.cloudflare.com/client/v4/zones?name=${ZONE}" \
-            "${auth[@]}" | jq -r '.result[0].id')"
-          [[ -n "$zone_id" && "$zone_id" != "null" ]] || {
-            echo "::warning::zone ${ZONE} not visible to API token (need Zone:Read + DNS:Edit). Add CNAME m → ${TARGET} manually in CF DNS."
-            exit 0
-          }
-          body="$(jq -nc --arg n m --arg c "$TARGET" \
-            '{type:"CNAME",name:$n,content:$c,proxied:true,ttl:1}')"
-          existing="$(curl -sS \
-            "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${FQDN}" \
-            "${auth[@]}")"
-          record_id="$(echo "$existing" | jq -r '.result[0].id // empty')"
-          if [[ -n "$record_id" ]]; then
-            echo "updating DNS ${FQDN} → ${TARGET}"
-            resp="$(curl -sS -X PUT \
-              "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${record_id}" \
-              "${auth[@]}" -H 'Content-Type: application/json' --data "$body")"
-          else
-            echo "creating DNS ${FQDN} → ${TARGET}"
-            resp="$(curl -sS -X POST \
-              "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
-              "${auth[@]}" -H 'Content-Type: application/json' --data "$body")"
-          fi
-          echo "$resp" | jq '{success,errors}'
-          echo "$resp" | jq -e '.success' >/dev/null || exit 1
-
-  patch-cors:
-    name: Patch production CORS + restart api
-    needs: deploy
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Ensure mobile origin in CORS_ALLOW_ORIGINS
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_SSH_HOST }}
-          username: ${{ secrets.DEPLOY_SSH_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
-          script: |
-            set -euo pipefail
-            ORIGIN="https://m.example.com"
-            DEPLOY="${AGENTCORE_DEPLOY_DIR:-/opt/agentcore/repo/deploy}"
-            ENVF="$DEPLOY/config/production.env"
-            [[ -f "$ENVF" ]] || { echo "ERROR: $ENVF missing"; exit 1; }
-
-            if grep -qF 'm.example.com' "$ENVF"; then
-              echo "CORS already includes $ORIGIN"
-            elif grep -q '^CORS_ALLOW_ORIGINS=' "$ENVF"; then
-              sed -i "s|^CORS_ALLOW_ORIGINS=\(.*\)|CORS_ALLOW_ORIGINS=\1,${ORIGIN}|" "$ENVF"
-              echo "appended $ORIGIN to CORS_ALLOW_ORIGINS"
-            else
-              echo "CORS_ALLOW_ORIGINS=${ORIGIN}" >>"$ENVF"
-              echo "created CORS_ALLOW_ORIGINS with $ORIGIN"
-            fi
-            grep '^CORS_ALLOW_ORIGINS=' "$ENVF"
-
-            COMPOSE=( docker compose -p agentcore \
-              -f "$DEPLOY/docker-compose.server.yml" \
-              -f "$DEPLOY/docker-compose.app.yml" \
-              --env-file "$ENVF" )
-            "${COMPOSE[@]}" up -d api
-            echo "api container recreated with updated env"
+          echo "手机 Web SPA 已退役：m.example.com 将 301 到 app.example.com。"
+          echo "禁止再部署 stub / SPA。本 workflow 不再构建或上传。"
+          echo "线上 DNS 不在本仓库拆改。"
+          exit 1

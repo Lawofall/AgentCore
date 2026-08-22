@@ -24,7 +24,7 @@ def load_roster() -> tuple[type, ...]:
         AmendNoteTool,
         HandoffTool,
         DesktopNotifyTool,
-        # privacy-gated worker log tools (manual_wire; not auto-registered)
+        # worker log tools (manual_wire; not auto-registered; product-always-on)
         SearchConversationsTool,
         ReadConversationTool,
     )

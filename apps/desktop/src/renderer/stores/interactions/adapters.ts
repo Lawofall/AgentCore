@@ -365,25 +365,20 @@ export function teamPreviewsExact(
   return out;
 }
 
-/** Whether a tool was granted on the team kickoff card for this conversation. */
+/**
+ * Kickoff-card grant list retired — backend `command=auto` already granted.
+ * Approval prompts no longer hide based on a team_preview tools roster.
+ */
 export function isToolGranted(
-  conversationId: string,
-  toolName: string,
+  _conversationId: string,
+  _toolName: string,
 ): boolean {
-  for (const e of useInteractionStore.getState().byId.values()) {
-    if (e.conversationId !== conversationId) continue;
-    if (e.kind !== "team_preview") continue;
-    if (e.status !== "resolved") continue;
-    const decision = str(e.resolution?.decision);
-    if (decision !== "continue") continue;
-    const tools = arr<string>(e.payload.tools);
-    if (tools.includes(toolName)) return true;
-  }
   return false;
 }
 
 /**
  * Build a ResumePrompt view-model from an InteractionStore cold pending entry.
+ * leftover `team_preview` returns null (kind stays recognizable; no operable VM).
  * Caller supplies the stamped resume key + user context + routing origin.
  */
 export function entryToColdResume(
@@ -452,39 +447,8 @@ export function entryToColdResume(
     };
   }
 
-  if (kind !== "team_preview") return null;
-
-  const tp = entryToTeamPreview(e);
-  return {
-    ...base,
-    kind,
-    steps: [],
-    pending: [],
-    workers: tp.workers,
-    tools: tp.tools ?? [],
-    primitive: tp.primitive,
-    ...(tp.headline ? { headline: tp.headline } : {}),
-    ...(tp.revision != null ? { revision: tp.revision } : {}),
-    ...(tp.revisedFrom ? { revisedFrom: tp.revisedFrom } : {}),
-    ...(tp.revisionNote ? { revisionNote: tp.revisionNote } : {}),
-    motion: tp.motion,
-    form: tp.form,
-    sides: tp.sides,
-    maxRounds: tp.maxRounds,
-    thorough: tp.thorough,
-    ...(tp.moderatorRunId ? { moderatorRunId: tp.moderatorRunId } : {}),
-    ...(tp.moderatorModel ? { moderatorModel: tp.moderatorModel } : {}),
-    ...(tp.moderatorOrigin ? { moderatorOrigin: tp.moderatorOrigin } : {}),
-    ...(tp.moderatorProviderId
-      ? { moderatorProviderId: tp.moderatorProviderId }
-      : {}),
-    ...(tp.sameModelDebate ? { sameModelDebate: true } : {}),
-    ...(tp.modelCandidates ? { modelCandidates: tp.modelCandidates } : {}),
-    question: "",
-    assumptions: [],
-    questions: [],
-    intent: "kickoff",
-  };
+  // leftover team_preview: kind stays recognizable; no operable resume VM.
+  return null;
 }
 
 /** Cold pending entries for a conversation (ResumePrompt authority). */

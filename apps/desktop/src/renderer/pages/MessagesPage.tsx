@@ -4,14 +4,15 @@ import { ContactsDialog } from "@/components/messages/ContactsDialog";
 import { NewChatDialog } from "@/components/messages/NewChatDialog";
 import { ProductNoticeDetail } from "@/components/messages/ProductNoticeDetail";
 import { UserProfileDialog } from "@/components/messages/UserProfileDialog";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { useMessagingStore } from "@/stores/messaging";
 import { Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 /**
- * 消息 page (找人 IM): a two-pane layout (chat list + thread), mirroring the
- * FilesPage shell. The route param `:chatId` is the source of truth for the open
+ * 消息 page (找人 IM): wide = list + thread; narrow = list or thread
+ * (route `/messages/:chatId` hides the tab bar). The route param `:chatId` is the source of truth for the open
  * chat — syncing it into the store (load history + mark read) mirrors how
  * ConversationPage drives the AI 对话 page (消息IM.md §六).
  *
@@ -25,6 +26,7 @@ export function MessagesPage() {
     chatId: string;
     noticeId?: string;
   }>();
+  const { isNarrow } = useNarrowLayoutState();
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
@@ -47,6 +49,8 @@ export function MessagesPage() {
     void fetchFriendRequests();
   }, [fetchFriendRequests]);
 
+  const showThread = Boolean(chatId);
+
   return (
     <div className="flex h-full w-full">
       <ChatList
@@ -54,21 +58,30 @@ export function MessagesPage() {
         onSelect={(id) => navigate(`/messages/${id}`)}
         onNewChat={() => setDialogOpen(true)}
         onOpenContacts={() => setContactsOpen(true)}
+        className={
+          isNarrow
+            ? showThread
+              ? "hidden"
+              : "w-full min-w-0 border-r-0"
+            : undefined
+        }
       />
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {chatId && noticeId ? (
-          <ProductNoticeDetail chatId={chatId} noticeId={noticeId} />
-        ) : chatId ? (
-          <ChatThread chatId={chatId} />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <Mail size={28} className="text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
-              选择一个会话，或发起新会话
-            </p>
-          </div>
-        )}
-      </section>
+      {(!isNarrow || showThread) && (
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {chatId && noticeId ? (
+            <ProductNoticeDetail chatId={chatId} noticeId={noticeId} />
+          ) : chatId ? (
+            <ChatThread chatId={chatId} />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+              <Mail size={28} className="text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">
+                选择一个会话，或发起新会话
+              </p>
+            </div>
+          )}
+        </section>
+      )}
       <NewChatDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}

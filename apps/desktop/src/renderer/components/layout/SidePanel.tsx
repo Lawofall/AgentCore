@@ -27,10 +27,12 @@ import { BrowserPanel } from "@/components/workspace/BrowserPanel";
 import { ConversationChangesPanel } from "@/components/workspace/ConversationChangesPanel";
 import { WorkspaceMode } from "@/components/workspace/WorkspacePanel";
 import { useConversationHasRestorableEntry } from "@/hooks/useConversationHasRestorableEntry";
+import { hasLocalFiles } from "@/lib/capabilities";
 import {
   shouldBounceChangesTabToWorkspace,
   shouldPinChangesTab,
 } from "@/lib/conversationFileChanges";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { notifyError } from "@/lib/toast";
 import { resolveConversationLocalTarget } from "@/services/sidecarRouting";
 import {
@@ -111,6 +113,9 @@ function isDetailTabLive(
  * 「工作区」常驻固定 tab：不可关、可 detach。「改动」按 §十 P0c 条件出现（有货才审）。
  */
 export function SidePanel() {
+  const { isNarrow } = useNarrowLayoutState();
+  // 窄屏 / Capacitor 不上弹出（与 AppShell 浮窗宿主同一判断，勿引 isNativeRuntime）。
+  const floatsDisabled = isNarrow || window.__NATIVE__ === true;
   const open = useSidePanelStore((s) => s.open);
   const width = useSidePanelStore((s) => s.width);
   const setWidth = useSidePanelStore((s) => s.setWidth);
@@ -348,10 +353,10 @@ export function SidePanel() {
   };
 
   const onNewTerminal = useCallback(async () => {
-    const tabId = openTerminalTab();
     if (!currentConversationId) return;
     const target = await resolveConversationLocalTarget(currentConversationId);
     if (!target) return;
+    const tabId = openTerminalTab();
     const result = await spawnSession({
       conversationId: currentConversationId,
       rootId: target.rootId,
@@ -411,16 +416,25 @@ export function SidePanel() {
 
   return (
     <aside
-      className="relative flex shrink-0 flex-col border-l border-border bg-card"
-      style={{ width }}
+      className={
+        isNarrow
+          ? "fixed inset-0 z-50 flex flex-col bg-card"
+          : "relative flex shrink-0 flex-col border-l border-border bg-card"
+      }
+      style={isNarrow ? undefined : { width }}
+      aria-modal={isNarrow || undefined}
+      role={isNarrow ? "dialog" : undefined}
+      aria-label={isNarrow ? "详情面板" : undefined}
     >
-      <Button
-        variant="ghost"
-        aria-label="拖拽调整面板宽度（双击在 最大/默认/最小 间复位）"
-        onPointerDown={onResizeStart}
-        onDoubleClick={cycleWidth}
-        className="absolute left-0 top-0 z-10 h-full w-1 min-w-0 cursor-col-resize rounded-none bg-transparent p-0 hover:bg-primary/40"
-      />
+      {!isNarrow && (
+        <Button
+          variant="ghost"
+          aria-label="拖拽调整面板宽度（双击在 最大/默认/最小 间复位）"
+          onPointerDown={onResizeStart}
+          onDoubleClick={cycleWidth}
+          className="absolute left-0 top-0 z-10 h-full w-1 min-w-0 cursor-col-resize rounded-none bg-transparent p-0 hover:bg-primary/40"
+        />
+      )}
 
       <div className="flex h-11 min-h-0 shrink-0 items-center gap-1 overflow-hidden border-b border-border px-2 py-1.5 pr-1">
         <HorizontalTabStrip
@@ -432,7 +446,9 @@ export function SidePanel() {
             <FixedTab
               active={workspaceActive}
               onClick={() => setActiveTab(WORKSPACE_TAB_ID)}
-              onPopOut={() => onPopOut(WORKSPACE_TAB_ID)}
+              onPopOut={
+                floatsDisabled ? undefined : () => onPopOut(WORKSPACE_TAB_ID)
+              }
               icon={<FolderOpen size={14} />}
               label="工作区"
             />
@@ -441,7 +457,9 @@ export function SidePanel() {
             <FixedTab
               active={changesActive}
               onClick={() => setActiveTab(CHANGES_TAB_ID)}
-              onPopOut={() => onPopOut(CHANGES_TAB_ID)}
+              onPopOut={
+                floatsDisabled ? undefined : () => onPopOut(CHANGES_TAB_ID)
+              }
               icon={<Diff size={14} />}
               label="改动"
             />
@@ -452,10 +470,10 @@ export function SidePanel() {
               <ContentTabChip
                 tab={tab}
                 active={tab.id === activeTab?.id}
-                canPopOut={canFloatTabId(tab.id, tabs)}
+                canPopOut={!floatsDisabled && canFloatTabId(tab.id, tabs)}
                 onSelect={() => setActiveTab(tab.id)}
                 onClose={() => onCloseContentTab(tab.id)}
-                onPopOut={() => onPopOut(tab.id)}
+                onPopOut={floatsDisabled ? undefined : () => onPopOut(tab.id)}
               />
             </SortableTab>
           ))}
@@ -471,10 +489,12 @@ export function SidePanel() {
               <FileText size={14} />
               文件
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void onNewTerminal()}>
-              <Terminal size={14} />
-              终端
-            </DropdownMenuItem>
+            {hasLocalFiles() && (
+              <DropdownMenuItem onSelect={() => void onNewTerminal()}>
+                <Terminal size={14} />
+                终端
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onSelect={() => showBrowser()}>
               <Radio size={14} />
               浏览器

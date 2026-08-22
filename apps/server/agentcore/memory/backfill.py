@@ -7,7 +7,7 @@ the periodic sweeper re-runs consolidation over their existing chats.
 
 Safety: only users whose global 偏好+画像 are empty AND who hold no other memory
 notes (topics / folder layers) are touched. Memory is product-always-on (定案 A),
-so the scan is not filtered by ``users.memory_enabled``. Idempotent — a second run
+so the scan covers every account. Idempotent — a second run
 finds watermarks already NULL and makes no changes.
 """
 
@@ -62,7 +62,7 @@ async def backfill_empty_memory_watermarks(
     store = store or default_memory_store()
 
     async with async_session_factory() as session:
-        user_ids = await UserRepository(session).list_memory_enabled_user_ids()
+        user_ids = await UserRepository(session).list_user_ids()
 
     users_reset = 0
     conversations_reset = 0

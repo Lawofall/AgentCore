@@ -1,22 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   ASK_INTENT_META,
+  SETTLED_UNKNOWN_LABEL,
   TEAM_PRIMITIVE_META,
+  askResolvedDisplay,
   askResolvedOutcome,
   fillTeamRevisionTemplate,
-  isAskSilentResolvedDecision,
   teamCorrectionSuffix,
   teamPreviewLead,
   teamPreviewRevisionVersionLabel,
   teamPreviewSettledLead,
+  teamResolvedDisplay,
   teamResolvedOutcome,
 } from "../meta";
 
 describe("decision meta", () => {
   it("ask kickoff / proposal_pick / risk_ack / organize_plan / daily_review keep settled labels", () => {
-    expect(askResolvedOutcome("kickoff", "continue").label).toBe(
-      "已按你的决定继续",
-    );
+    expect(askResolvedOutcome("kickoff", "continue").label).toBe("");
+    expect(askResolvedOutcome("decision", "continue").label).toBe("");
     expect(askResolvedOutcome("proposal_pick", "continue").label).toBe(
       "已选定方案",
     );
@@ -39,10 +40,16 @@ describe("decision meta", () => {
     expect(askResolvedOutcome("kickoff", "research_first").tone).toBe("muted");
     expect(askResolvedOutcome("decision", "stop").label).toBe("已取消本回合");
     expect(askResolvedOutcome("decision", "stop").tone).toBe("muted");
-    expect(isAskSilentResolvedDecision("stop")).toBe(true);
-    expect(isAskSilentResolvedDecision("research_first")).toBe(true);
-    expect(isAskSilentResolvedDecision("continue")).toBe(false);
-    expect(isAskSilentResolvedDecision("timeout")).toBe(false);
+    expect(askResolvedDisplay("decision", "stop").label).toBe("已取消本回合");
+    expect(askResolvedDisplay("decision", "timeout").label).toBe(
+      "未及时回应，已自行收尾",
+    );
+    expect(askResolvedDisplay("decision", null).label).toBe(
+      SETTLED_UNKNOWN_LABEL,
+    );
+    expect(askResolvedDisplay("decision", undefined).label).toBe(
+      SETTLED_UNKNOWN_LABEL,
+    );
   });
 
   it("team debate research_first + continue-with-note overrides", () => {
@@ -57,6 +64,15 @@ describe("decision meta", () => {
     );
     expect(teamResolvedOutcome("debate", "timeout", false).label).toBe(
       "未及时回应，辩论未开赛",
+    );
+    expect(teamResolvedDisplay("delegate", null, false).label).toBe(
+      SETTLED_UNKNOWN_LABEL,
+    );
+    expect(teamResolvedDisplay("debate", undefined, false).label).toBe(
+      SETTLED_UNKNOWN_LABEL,
+    );
+    expect(teamResolvedDisplay("delegate", "timeout", false).label).toBe(
+      "未及时回应，团队未启动",
     );
     expect(teamResolvedOutcome("delegate", "continue", true).label).toBe(
       "已授权开工 · 嘱咐已注入队员",

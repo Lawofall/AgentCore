@@ -104,6 +104,7 @@ export function buildWorkspaceGroups(
   conversations: Conversation[],
   folders: FolderMeta[],
   requiredIds: ReadonlySet<string> = new Set(),
+  opts?: { uncapped?: boolean },
 ): WorkspaceGroup[] {
   const displayFolders = dedupeFoldersByLocalBinding(folders);
   const canonical = canonicalFolderIds(folders);
@@ -128,6 +129,7 @@ export function buildWorkspaceGroups(
     result.push({ folder, convs, latest });
   }
   result.sort((a, b) => b.latest - a.latest);
+  if (opts?.uncapped) return result;
   return pickVisibleWorkspaceGroups(result, requiredIds);
 }
 

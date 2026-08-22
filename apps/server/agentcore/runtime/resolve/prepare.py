@@ -33,17 +33,14 @@ from agentcore.tools.registry import ToolRegistry
 def _wire_worker_conversation_log_tools(
     worker_tools: ToolRegistry,
     *,
-    conversation_history_access: bool = True,
     folder_id: str | None = None,
 ) -> None:
-    """Register cross-session log tools when the privacy gate is on.
+    """Register cross-session log tools on the worker registry.
 
     ``search_conversations`` / ``read_conversation`` are ``manual_wire`` worker-only
     tools — never auto-registered by ``build_worker_registry``, never on the CEO
-    toolset. Gate off ⇒ not wired (跨会话对话日志访问定案).
+    toolset. Product-always-on (跨会话对话日志访问定案 A).
     """
-    if not conversation_history_access:
-        return
     worker_tools.register(SearchConversationsTool(folder_id=folder_id))
     worker_tools.register(ReadConversationTool())
 

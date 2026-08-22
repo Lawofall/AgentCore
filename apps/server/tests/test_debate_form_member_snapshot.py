@@ -7,7 +7,7 @@ stay identical:
 - wire fields annotated as ``DebateForm`` (not a hand-copied ``Literal[...]``)
 - ``FORM_LABELS`` keys (import-time completeness + this snapshot)
 
-Optional: mobile ``FORM_LABEL`` Record keys (desktop types from payload form).
+Optional: desktop ``FORM_LABEL`` Record keys (same member set as ``DebateForm``).
 Adding a form without updating every surface fails this test — not a behavior vector.
 """
 
@@ -27,8 +27,34 @@ from agentcore.runtime.events.payloads.shared import MotionCard
 from agentcore.tools.builtin.debate.schema import DEBATE_PARAMETERS
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_MOBILE_DEBATE_VIEW = (
-    _REPO_ROOT / "apps" / "mobile" / "src" / "components" / "DebateView.tsx"
+_DESKTOP_FORM_LABEL_FILES = (
+    _REPO_ROOT
+    / "apps"
+    / "desktop"
+    / "src"
+    / "renderer"
+    / "components"
+    / "chat"
+    / "debate"
+    / "debateEntryCopy.ts",
+    _REPO_ROOT
+    / "apps"
+    / "desktop"
+    / "src"
+    / "renderer"
+    / "components"
+    / "chat"
+    / "StageCard.tsx",
+    _REPO_ROOT
+    / "apps"
+    / "desktop"
+    / "src"
+    / "renderer"
+    / "components"
+    / "chat"
+    / "detail"
+    / "sections"
+    / "RunDebrief.tsx",
 )
 
 
@@ -81,14 +107,15 @@ def test_debate_form_member_set_aligned_across_surfaces():
     _assert_wire_uses_debate_form(StageCardRequiredPayload)
 
 
-def test_mobile_form_label_keys_cover_debate_form():
-    """Optional dual-end: mobile FORM_LABEL keys ⊇ DebateForm (text may differ)."""
-    src = _MOBILE_DEBATE_VIEW.read_text(encoding="utf-8")
-    block = re.search(
-        r"const FORM_LABEL:\s*Record<[^>]+>\s*=\s*\{([^}]+)\}",
-        src,
-    )
-    assert block is not None, "mobile FORM_LABEL map not found"
-    keys = frozenset(re.findall(r"^\s*([a-z_]+)\s*:", block.group(1), flags=re.M))
+def test_desktop_form_label_keys_cover_debate_form():
+    """Desktop FORM_LABEL maps must cover DebateForm (text may differ)."""
     enum_vals = frozenset(m.value for m in DebateForm)
-    assert keys == enum_vals
+    for path in _DESKTOP_FORM_LABEL_FILES:
+        src = path.read_text(encoding="utf-8")
+        block = re.search(
+            r"const FORM_LABEL:\s*Record<[^>]+>\s*=\s*\{([^}]+)\}",
+            src,
+        )
+        assert block is not None, f"FORM_LABEL map not found in {path.name}"
+        keys = frozenset(re.findall(r"^\s*([a-z_]+)\s*:", block.group(1), flags=re.M))
+        assert keys == enum_vals, f"{path.name} FORM_LABEL keys {sorted(keys)} != {sorted(enum_vals)}"

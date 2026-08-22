@@ -1,5 +1,6 @@
 import { hasNativeSave } from "@/lib/capabilities";
 import { logEvent } from "@/lib/log";
+import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
 import {
   ApiError,
   NetworkError,
@@ -54,9 +55,13 @@ export async function authedFetch(
     let res: Response;
     try {
       res = await fetch(url, {
-        credentials: "include",
         ...init,
-        headers: { ...getCsrfHeaders(method), ...init.headers },
+        credentials: sessionCredentials(),
+        headers: {
+          ...bearerAuthHeader(),
+          ...getCsrfHeaders(method),
+          ...init.headers,
+        },
       });
     } catch (cause) {
       throw new NetworkError(cause);

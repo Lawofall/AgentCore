@@ -204,7 +204,7 @@ async def test_run_job_succeeded(monkeypatch):
         folder_id="folder-1",
         goal="周一简报",
         name="简报",
-        permission_axes={"file_write": "session", "command": "kickoff", "team_kickoff": "rules"},
+        permission_axes={"file_write": "session", "command": "auto", "host": "session"},
         cron="0 9 * * 1",
         enabled=True,
         conversation_id="conv-1",
@@ -305,10 +305,6 @@ async def test_run_job_succeeded(monkeypatch):
     )
     monkeypatch.setattr(
         runner_mod, "resolve_profile_set", AsyncMock(return_value=None)
-    )
-    monkeypatch.setattr(runner_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        runner_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
     )
     monkeypatch.setattr(runner_mod, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "build_turn_backend", AsyncMock(return_value=MagicMock()))
@@ -436,10 +432,6 @@ async def test_run_job_awaiting_user(monkeypatch):
         runner_mod, "preflight_resolved_llm_credentials", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(runner_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(runner_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        runner_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
     monkeypatch.setattr(runner_mod, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "build_turn_backend", AsyncMock(return_value=MagicMock()))
     monkeypatch.setattr(runner_mod, "load_chat_context", AsyncMock(return_value=[]))
@@ -573,10 +565,6 @@ async def test_run_job_ignores_residual_conversation_pause(monkeypatch):
     monkeypatch.setattr(
         runner_mod, "resolve_profile_set", AsyncMock(return_value=None)
     )
-    monkeypatch.setattr(runner_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        runner_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
     monkeypatch.setattr(runner_mod, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "build_turn_backend", AsyncMock(return_value=MagicMock()))
     monkeypatch.setattr(runner_mod, "load_chat_context", AsyncMock(return_value=[]))
@@ -707,10 +695,6 @@ async def test_run_job_awaiting_user_via_this_turn_pause(monkeypatch):
         runner_mod, "preflight_resolved_llm_credentials", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(runner_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(runner_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        runner_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
     monkeypatch.setattr(runner_mod, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "build_turn_backend", AsyncMock(return_value=MagicMock()))
     monkeypatch.setattr(runner_mod, "load_chat_context", AsyncMock(return_value=[]))
@@ -1177,10 +1161,6 @@ async def test_run_job_includes_event_text(monkeypatch):
     )
     monkeypatch.setattr(runner_mod, "preflight_resolved_llm_credentials", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(runner_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        runner_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
     monkeypatch.setattr(runner_mod, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "build_turn_backend", AsyncMock(return_value=MagicMock()))
     monkeypatch.setattr(runner_mod, "load_chat_context", AsyncMock(return_value=[]))
@@ -1976,7 +1956,7 @@ async def test_patch_folder_id_validates_cloud_workspace(monkeypatch):
         goal="g",
         trigger_kind="schedule",
         cron="0 9 * * 1",
-        permission_axes={"file_write": "session", "command": "kickoff", "team_kickoff": "rules"},
+        permission_axes={"file_write": "session", "command": "auto", "host": "session"},
         enabled=True,
         next_run_at=datetime(2026, 8, 3, 9, 0, tzinfo=UTC),
         conversation_id=None,
@@ -2217,10 +2197,6 @@ async def test_run_job_without_workflow_uses_ceo_pipeline(monkeypatch):
     )
     monkeypatch.setattr(runner_mod, "preflight_resolved_llm_credentials", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(runner_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        runner_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
     monkeypatch.setattr(runner_mod, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "build_turn_backend", AsyncMock(return_value=MagicMock()))
     monkeypatch.setattr(runner_mod, "load_chat_context", AsyncMock(return_value=[]))
@@ -2385,10 +2361,6 @@ async def test_run_job_with_workflow_uses_direct_start(monkeypatch):
     )
     monkeypatch.setattr(runner_mod, "preflight_resolved_llm_credentials", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(runner_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        runner_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
     monkeypatch.setattr(runner_mod, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(runner_mod, "build_turn_backend", AsyncMock(return_value=MagicMock()))
     monkeypatch.setattr(runner_mod, "load_chat_context", AsyncMock(return_value=[]))
@@ -2483,7 +2455,6 @@ def _standing_row(**overrides) -> SimpleNamespace:
         permission_axes={
             "file_write": "session",
             "command": "auto",
-            "team_kickoff": "rules",
             "host": "session",
         },
         enabled=True,
@@ -2659,10 +2630,6 @@ def _patch_fire(monkeypatch, *, task: SimpleNamespace, store: _FakeConversationS
     monkeypatch.setattr(
         runner_mod, "preflight_resolved_llm_credentials", AsyncMock(return_value=None)
     )
-    monkeypatch.setattr(runner_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        runner_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
     monkeypatch.setattr(runner_mod, "build_turn_backend", _backend)
     monkeypatch.setattr(runner_mod, "load_chat_context", AsyncMock(return_value=[]))
     monkeypatch.setattr(runner_mod, "_run_pipeline", _pipeline)
@@ -2685,7 +2652,7 @@ async def test_axes_edit_after_first_fire_reaches_next_run(monkeypatch):
         task_id="task-1",
         body=UpdateStandingTaskRequest(
             permission_axes=PermissionAxesModel(
-                file_write="ask", command="ask", team_kickoff="rules", host="off"
+                file_write="ask", command="ask", host="off"
             )
         ),
         user=SimpleNamespace(user_id="u1"),
@@ -2699,7 +2666,7 @@ async def test_axes_edit_after_first_fire_reaches_next_run(monkeypatch):
     assert store.axes_writes == [
         (
             "conv-1",
-            {"file_write": "ask", "command": "ask", "team_kickoff": "rules", "host": "off"},
+            {"file_write": "ask", "command": "ask", "host": "off"},
             False,
         )
     ]

@@ -1,7 +1,7 @@
 """Conversation-attachment deep-read (never client shallow ``text``).
 
-Privacy gate / host / soft-miss / cloud-or-local DB live here so file-attachment
-rendering and prompt assembly can change without touching this path.
+Host / soft-miss / cloud-or-local DB live here so file-attachment rendering and
+prompt assembly can change without touching this path.
 """
 
 from __future__ import annotations
@@ -11,15 +11,10 @@ from agentcore.workspace.attachment_parse import ATTACHMENT_INLINE_MAX_CHARS
 
 logger = get_logger(__name__)
 
-# Soft-miss / gate-off notes for conversation attachments (跨会话对话日志访问定案 P1).
+# Soft-miss notes for conversation attachments (跨会话对话日志访问定案 P1).
 # Never fall back to client shallow ``text`` — that would silently fake a deep read.
 _CONV_ATTACH_SOFT_MISS = (
     "无法打开该对话（可能不存在、已删除、为 handoff，或不在可访问范围内）。"
-)
-_CONV_ATTACH_GATE_OFF = (
-    "跨会话对话日志访问已关闭（conversation_history_access=off），"
-    "服务端拒绝深读该对话；未注入客户端浅文。"
-    "请在设置中开启「允许 AI 查阅历史对话」后重试。"
 )
 _CONV_ATTACH_NO_ID = "缺少 conversation_id，无法服务端深读；未注入客户端浅文。"
 _CONV_ATTACH_HOST = (
@@ -123,11 +118,10 @@ async def _deep_read_conversation_attachment(
     name: str,
     user_id: str | None,
     host_conversation_id: str | None,
-    conversation_history_access: bool,
 ) -> str:
     """Server-side deep transcript for ``kind=conversation`` — never client shallow text.
 
-    Privacy gate off / missing id / owner soft-miss / handoff / host → explicit note.
+    Missing id / owner soft-miss / handoff / host → explicit note.
     With sidecar account ticket → cloud read (``cloud_read_conversation``); else local DB.
     Cloud / DB-connectivity failure → soft unavailable note (never HARD the turn).
     Over-long → first prompt-capped chunk + Worker ``read_conversation`` continuation hint.
@@ -146,8 +140,6 @@ async def _deep_read_conversation_attachment(
     )
 
     cid = str(att.get("conversation_id") or "").strip()
-    if not conversation_history_access:
-        return f"--- Conversation: {name} [deep-read denied] ---\n{_CONV_ATTACH_GATE_OFF}"
     if not cid:
         return f"--- Conversation: {name} ---\n{_CONV_ATTACH_NO_ID}"
     if host_conversation_id and cid == host_conversation_id:

@@ -180,7 +180,6 @@ async def test_wire_worker_consult_when_topics_exist(tmp_path, monkeypatch):
     await _wire_worker_consult_tools(
         registry,
         skill_registry=build_system_skill_registry(),
-        memory_enabled=True,
         user_id="u",
     )
     assert "consult" in registry.names
@@ -203,7 +202,6 @@ async def test_merged_source_directory_and_fetch_agree(tmp_path):
         tool_names=set(),
         memory_store=store,
         folder_id=None,
-        memory_enabled=True,
         include_rules=False,
     )
     entries = await source.list_directory("u")

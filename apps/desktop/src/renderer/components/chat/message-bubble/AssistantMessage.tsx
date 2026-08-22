@@ -4,7 +4,6 @@ import { PausedContinueSurface } from "@/components/chat/PausedContinueSurface";
 import { SourceCards } from "@/components/chat/SourceCards";
 import { TurnWarningBanner } from "@/components/chat/TurnWarningBanner";
 import { CollapsibleSpeech } from "@/components/chat/debate/CollapsibleSpeech";
-import { isAskSilentResolvedDecision } from "@/components/chat/decision";
 import { Button, IconButton } from "@/components/ui";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -51,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { runRegenerate } from "@/services/turns";
 import { continuePausedTurn } from "@/services/turns/continuePaused";
 import {
+  type CheckpointDisplay,
   assistantProjectionId,
   getActiveRuntime,
   useConversationStore,
@@ -119,6 +119,20 @@ function TurnFiles({
       conversationId={conversationId}
       turnKey={messageId}
     />
+  );
+}
+
+/** 问句已在结算存根里；正文只有「就是那句问句」时才藏，续聊必须露出。 */
+function shouldHideAskDuplicateQuestion(
+  checkpoints: readonly Pick<CheckpointDisplay, "status" | "question">[],
+  content: string,
+): boolean {
+  const resolved = checkpoints.filter((c) => c.status === "resolved");
+  if (resolved.length === 0) return false;
+  const trimmed = content.trim();
+  if (!trimmed) return true;
+  return resolved.some(
+    (c) => c.question.trim() !== "" && trimmed === c.question.trim(),
   );
 }
 
@@ -233,22 +247,14 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     prevDisplayRef.current = next.stableCited;
     return next;
   }, [message.content, citations]);
-  // 仅「仍会画存根」的 resolved 才藏正文；取消静默（stop / research_first）否则会空泡。
-  const hideContentForCheckpoint = checkpoints.some(
-    (c) => c.status === "resolved" && !isAskSilentResolvedDecision(c.decision),
-  );
-  // absorb/content_reset 后 content 空、问句只在 checkpoint.question：静默 dismiss 时
-  // display-time 回落为普通 Markdown（不写回 store）。
+  // 结算存根已画问句：正文只在「就是那句问句副本」时藏，避免贴在结论文旁像还在催。
+  // CEO 续聊（确认/取消后的回复）必须露出。空 content 不回落问句——问句在存根展开里。
   const rawContent = message.content ?? "";
-  const displayContent =
-    rawContent.trim() || hideContentForCheckpoint
-      ? rawContent
-      : (checkpoints.find(
-          (c) =>
-            c.status === "resolved" &&
-            isAskSilentResolvedDecision(c.decision) &&
-            c.question.trim(),
-        )?.question ?? rawContent);
+  const hideContentForCheckpoint = shouldHideAskDuplicateQuestion(
+    checkpoints,
+    rawContent,
+  );
+  const displayContent = rawContent;
   const money =
     pickCostMoney(message.cost) ??
     (cachedTurn

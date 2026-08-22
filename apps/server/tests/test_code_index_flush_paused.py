@@ -111,10 +111,7 @@ def _patch_stream_chat_deps(monkeypatch, *, backend, run_and_persist):
     monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(turns_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        turns_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
+
     from agentcore.core.types import AutonomyPolicy, recipe_to_axes
 
     monkeypatch.setattr(

@@ -28,6 +28,7 @@
  */
 import { clientHeaders } from "@/lib/clientBuildInfo";
 import { logEvent } from "@/lib/log";
+import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
 import { BASE_URL, captureCsrf, tryRefresh } from "@/services/api";
 import { loadLatestWindow } from "@/services/messages";
 import {
@@ -211,12 +212,13 @@ async function followFetch(
   const headers: Record<string, string> = {
     Accept: "text/event-stream",
     ...clientHeaders(),
+    ...bearerAuthHeader(),
   };
   // 恒带：``0`` = 本端没有游标（服务端据此回整段），否则报出看到的最后一个 journal seq。
   headers["Last-Event-ID"] = peekLastEventId(conversationId) ?? "0";
   const response = await fetch(
     `${BASE_URL}/v1/conversations/${conversationId}/stream?follow=true`,
-    { method: "GET", credentials: "include", headers, signal },
+    { method: "GET", credentials: sessionCredentials(), headers, signal },
   );
   captureCsrf(response); // 长订阅也带令牌，丢了就等着下一次写请求 403
   return response;

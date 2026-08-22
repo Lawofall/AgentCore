@@ -1,4 +1,4 @@
-"""Permission axes (会话级权限 · file_write / command / team_kickoff / host)."""
+"""Permission axes (会话级权限 · file_write / command / host)."""
 
 from __future__ import annotations
 
@@ -13,30 +13,14 @@ from agentcore.core.types import (
     FileWriteAxis,
     HostAxis,
     PermissionAxes,
-    TeamKickoffAxis,
     recipe_to_axes,
     validate_permission_axes,
 )
-from agentcore.runtime.kickoff.gate import needs_capability_auth, should_kickoff
 from agentcore.runtime.sandbox_approval import (
     cloud_worker_skips_per_call_gate,
     execution_tool_auto_passes,
 )
 from agentcore.tools.builtin import build_worker_registry
-
-# Explicit kickoff-command axes for授/开工卡 tests (no longer a built-in recipe).
-_KICKOFF_RULES = PermissionAxes(
-    FileWriteAxis.SESSION,
-    CommandAxis.KICKOFF,
-    TeamKickoffAxis.RULES,
-    HostAxis.ASK,
-)
-_KICKOFF_SKIP = PermissionAxes(
-    FileWriteAxis.SESSION,
-    CommandAxis.KICKOFF,
-    TeamKickoffAxis.SKIP,
-    HostAxis.ASK,
-)
 
 
 class _LocalBackend:
@@ -56,7 +40,6 @@ def test_default_axes_are_less_interrupt():
     assert PermissionAxes(
         FileWriteAxis.SESSION,
         CommandAxis.AUTO,
-        TeamKickoffAxis.RULES,
         HostAxis.SESSION,
     ) == DEFAULT_PERMISSION_AXES
     assert recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT) == DEFAULT_PERMISSION_AXES
@@ -67,41 +50,68 @@ def test_builtin_recipes():
     assert recipe_to_axes(AutonomyPolicy.CAUTIOUS) == PermissionAxes(
         FileWriteAxis.ASK,
         CommandAxis.ASK,
-        TeamKickoffAxis.RULES,
         HostAxis.OFF,
     )
     assert recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT) == PermissionAxes(
         FileWriteAxis.SESSION,
         CommandAxis.AUTO,
-        TeamKickoffAxis.RULES,
         HostAxis.SESSION,
     )
     assert recipe_to_axes(AutonomyPolicy.MANAGED) == PermissionAxes(
         FileWriteAxis.SESSION,
         CommandAxis.AUTO,
-        TeamKickoffAxis.SKIP,
         HostAxis.SESSION,
+    )
+    assert recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT) == recipe_to_axes(
+        AutonomyPolicy.MANAGED
     )
 
 
-def test_from_mapping_roundtrip_and_legacy_missing_host():
+def test_from_mapping_roundtrip_and_retired_kickoff():
     axes = recipe_to_axes(AutonomyPolicy.MANAGED)
     assert PermissionAxes.from_mapping(axes.to_dict()) == axes
-    # Partial JSON without host → host defaults to session (not silently dropped).
-    legacy = PermissionAxes.from_mapping(
+    assert "team_kickoff" not in axes.to_dict()
+    assert "kickoff" not in axes.to_dict().values()
+
+    # Extra team_kickoff dropped; command=kickoff is not merged to auto/ask.
+    leftover_session = PermissionAxes.from_mapping(
         {"file_write": "session", "command": "kickoff", "team_kickoff": "rules"}
     )
-    assert legacy == PermissionAxes(
-        FileWriteAxis.SESSION,
-        CommandAxis.KICKOFF,
-        TeamKickoffAxis.RULES,
-        HostAxis.SESSION,
+    assert leftover_session == DEFAULT_PERMISSION_AXES
+
+    leftover_ask = PermissionAxes.from_mapping(
+        {"file_write": "ask", "command": "kickoff", "team_kickoff": "always"}
     )
-    assert legacy.host is HostAxis.SESSION
-    # Cautious seed persists host=off through dict roundtrip.
+    assert leftover_ask == DEFAULT_PERMISSION_AXES
+    assert leftover_ask.file_write is not FileWriteAxis.ASK
+    assert leftover_ask.command is not CommandAxis.ASK
+
     cautious = recipe_to_axes(AutonomyPolicy.CAUTIOUS)
     assert cautious.host is HostAxis.OFF
     assert PermissionAxes.from_mapping(cautious.to_dict()).host is HostAxis.OFF
+
+
+def test_permission_axes_model_rejects_command_kickoff():
+    with pytest.raises(ValidationError):
+        PermissionAxesModel.model_validate(
+            {"file_write": "session", "command": "kickoff", "team_kickoff": "skip"}
+        )
+    with pytest.raises(ValidationError):
+        PermissionAxesModel.model_validate(
+            {"file_write": "ask", "command": "kickoff", "team_kickoff": "rules"}
+        )
+    dropped = PermissionAxesModel.model_validate(
+        {"file_write": "session", "command": "auto", "team_kickoff": "rules"}
+    )
+    assert dropped.command is CommandAxis.AUTO
+    assert "team_kickoff" not in dropped.model_dump()
+
+
+def test_validate_permission_axes_rejects_command_kickoff():
+    with pytest.raises(ValueError):
+        validate_permission_axes(file_write="session", command="kickoff")
+    with pytest.raises(ValueError):
+        validate_permission_axes(file_write="ask", command="kickoff")
 
 
 def test_illegal_command_auto_with_file_write_ask():
@@ -109,23 +119,17 @@ def test_illegal_command_auto_with_file_write_ask():
         PermissionAxes(
             file_write=FileWriteAxis.ASK,
             command=CommandAxis.AUTO,
-            team_kickoff=TeamKickoffAxis.SKIP,
             host=HostAxis.ASK,
         )
     with pytest.raises(ValueError, match="illegal"):
-        validate_permission_axes(
-            file_write="ask", command="auto", team_kickoff="skip", host="ask"
-        )
+        validate_permission_axes(file_write="ask", command="auto", host="ask")
     with pytest.raises(ValidationError):
-        PermissionAxesModel(
-            file_write="ask", command="auto", team_kickoff="rules", host="ask"
-        )
+        PermissionAxesModel(file_write="ask", command="auto", host="ask")
     with pytest.raises(ValidationError):
         PermissionAxesUpdate(
             permission_axes={
                 "file_write": "ask",
                 "command": "auto",
-                "team_kickoff": "skip",
                 "host": "ask",
             }
         )
@@ -159,40 +163,14 @@ def test_command_ask_capability_line_matches_registry():
     )
     assert "code_execute=未装配" in out
     assert "terminal=未装配" in out
-    # Without axes, local still shows 已装配 (backend gate alone).
     assert (
         "code_execute=已装配"
         in build_workspace_context(backend, desktop_online=True)
     )
 
 
-def test_kickoff_command_keeps_capability_auth():
-    axes = _KICKOFF_RULES
-    assert needs_capability_auth(local_gate=True, axes=axes) is True
-    assert should_kickoff(plan_preview=False, local_gate=True, axes=axes) is True
-    assert should_kickoff(plan_preview=True, local_gate=False, axes=axes) is True
-
-
-def test_team_kickoff_skip_with_kickoff_command():
-    axes = _KICKOFF_SKIP
-    assert should_kickoff(plan_preview=True, local_gate=True, axes=axes) is False
-    # command still kickoff — capability auth would apply if card were shown
-    assert needs_capability_auth(local_gate=True, axes=axes) is True
-
-
-def test_team_kickoff_always_forces_plan_half():
-    axes = PermissionAxes(
-        FileWriteAxis.SESSION,
-        CommandAxis.KICKOFF,
-        TeamKickoffAxis.ALWAYS,
-        HostAxis.ASK,
-    )
-    assert should_kickoff(plan_preview=False, local_gate=False, axes=axes) is True
-
-
 def test_command_auto_skips_kickoff_and_local_exec_auto_pass():
     axes = recipe_to_axes(AutonomyPolicy.MANAGED)
-    assert should_kickoff(plan_preview=True, local_gate=True, axes=axes) is False
     assert (
         execution_tool_auto_passes(
             _LocalBackend(), "code_execute", permission_axes=axes
@@ -230,42 +208,16 @@ def test_command_auto_skips_kickoff_and_local_exec_auto_pass():
         )
         is False
     )
-    assert (
-        execution_tool_auto_passes(
-            _LocalBackend(),
-            "code_execute",
-            permission_axes=_KICKOFF_RULES,
-        )
-        is False
-    )
-    assert (
-        execution_tool_auto_passes(
-            _LocalBackend(),
-            "terminal",
-            permission_axes=_KICKOFF_RULES,
-        )
-        is False
-    )
-    assert (
-        execution_tool_auto_passes(
-            _LocalBackend(),
-            "desktop_notify",
-            permission_axes=_KICKOFF_RULES,
-        )
-        is False
-    )
 
 
-def test_less_interrupt_rules_semantics():
-    """少打断: session/auto/rules/session — 组队按规则弹卡、静默执行、不蕴含深度研究自治、host=session."""
+def test_less_interrupt_and_managed_same_axes():
+    """少打断 = 托管: session/auto/session — 静默执行、不蕴含深度研究自治、host=session."""
     axes = recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT)
     assert axes == DEFAULT_PERMISSION_AXES
-    assert should_kickoff(plan_preview=True, local_gate=True, axes=axes) is True
-    assert should_kickoff(plan_preview=False, local_gate=True, axes=axes) is False
-    assert needs_capability_auth(local_gate=True, axes=axes) is False
-    assert axes.honors_kickoff_grant is False
+    assert axes == recipe_to_axes(AutonomyPolicy.MANAGED)
+    assert not hasattr(axes, "honors_kickoff_grant")
     assert axes.auto_executes is True
-    assert axes.implies_deep_research_auto is False
+    assert not hasattr(axes, "implies_deep_research_auto")
     assert axes.host is HostAxis.SESSION
     for tool in (
         "code_execute",
@@ -301,9 +253,6 @@ def test_command_ask_no_execution_auto_pass():
 
 def test_command_ask_no_capability_auth():
     axes = recipe_to_axes(AutonomyPolicy.CAUTIOUS)
-    assert needs_capability_auth(local_gate=True, axes=axes) is False
-    # rules + plan_preview still hangs team card (组团按 rules)
-    assert should_kickoff(plan_preview=True, local_gate=True, axes=axes) is True
     assert axes.host_disabled is True
 
 
@@ -340,7 +289,6 @@ def test_cloud_worker_honors_file_write_ask():
         )
         is True
     )
-    # Non-file server tools stay historically ungated even under 谨慎.
     assert (
         cloud_worker_skips_per_call_gate(
             cloud,
@@ -350,7 +298,6 @@ def test_cloud_worker_honors_file_write_ask():
         )
         is True
     )
-    # Local never skips via this helper (full gate shared).
     assert (
         cloud_worker_skips_per_call_gate(
             _LocalBackend(),
@@ -360,7 +307,6 @@ def test_cloud_worker_honors_file_write_ask():
         )
         is False
     )
-    # Desktop-touch keeps the gate on cloud regardless of file_write axis.
     assert (
         cloud_worker_skips_per_call_gate(
             cloud,

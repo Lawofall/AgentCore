@@ -350,7 +350,6 @@ async def apply_target_desktop(
     worker_tools: ToolRegistry,
     sink: Any,
     local_root_claims: LocalRootClaimBook | None,
-    memory_enabled: bool = True,
     permission_axes: Any = None,
 ) -> AppliedTargetDesktop:
     """Swap backend + memory scope for a worker whose task named a target Folder.
@@ -396,7 +395,6 @@ async def apply_target_desktop(
         user_id=base_tool_context.user_id,
         folder_id=binding.folder_id,
         backend=backend,
-        memory_enabled=memory_enabled,
         attachment_context=attachment_context,
         desktop_online=desktop_online,
         permission_axes=permission_axes,
@@ -404,7 +402,6 @@ async def apply_target_desktop(
     tools = await _registry_rewire_consult_tools(
         worker_tools,
         folder_id=binding.folder_id,
-        memory_enabled=memory_enabled,
         user_id=base_tool_context.user_id,
     )
     from agentcore.workspace.locate import workspace_channel_for_tools

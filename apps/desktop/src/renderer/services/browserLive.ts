@@ -1,3 +1,5 @@
+import { clientHeaders } from "@/lib/clientBuildInfo";
+import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
 import {
   BASE_URL,
   captureCsrf,
@@ -129,8 +131,12 @@ export function startBrowserLive(
     try {
       response = await fetch(url, {
         method: "GET",
-        credentials: "include",
-        headers: { Accept: "text/event-stream" },
+        credentials: sessionCredentials(),
+        headers: {
+          Accept: "text/event-stream",
+          ...clientHeaders(),
+          ...bearerAuthHeader(),
+        },
         signal,
       });
       captureCsrf(response);

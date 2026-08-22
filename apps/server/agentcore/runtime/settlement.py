@@ -207,11 +207,6 @@ def cold_resume_settlement_event(
     from agentcore.runtime.events import (
         checkpoint_resolved,
         plan_review_resolved,
-        team_preview_resolved,
-    )
-    from agentcore.runtime.kickoff.team_veto import (
-        should_apply_team_veto,
-        veto_summary_for_resolved,
     )
     from agentcore.runtime.suspension import (
         AskUserSuspension,
@@ -236,26 +231,9 @@ def cold_resume_settlement_event(
             note=note,
         )
     if isinstance(suspension, TeamPreviewSuspension):
-        excl: list[str] | None = None
-        overrides: list[dict[str, str]] | None = None
-        models: dict[str, dict[str, str]] | None = None
-        if should_apply_team_veto(suspension, decision):
-            excl, overrides, models = veto_summary_for_resolved(
-                excluded_run_ids=excluded_run_ids,
-                write_capability_overrides=write_capability_overrides,
-                model_overrides=model_overrides,
-            )
-            excl = excl or None
-            overrides = overrides or None
-            models = models or None
-        return team_preview_resolved(
-            checkpoint_id=suspension.checkpoint_id,
-            decision=decision,
-            note=note,
-            excluded_run_ids=excl,
-            write_capability_overrides=overrides,
-            model_overrides=models,
-        )
+        from agentcore.runtime.kickoff.retired import refuse_team_preview_resume
+
+        refuse_team_preview_resume()
     raise ValueError(f"unknown suspension kind for cold settlement: {type(suspension)!r}")
 
 

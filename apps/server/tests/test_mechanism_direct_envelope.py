@@ -180,10 +180,6 @@ async def test_run_workflow_job_uses_mechanism_direct_envelope(monkeypatch):
     monkeypatch.setattr(wf_runner, "ConversationRepository", _Convs)
     monkeypatch.setattr(wf_runner, "MessageRepository", _Msgs)
     monkeypatch.setattr(wf_runner, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(wf_runner, "resolve_memory_enabled", AsyncMock(return_value=True))
-    monkeypatch.setattr(
-        wf_runner, "resolve_conversation_history_access", AsyncMock(return_value=True)
-    )
     monkeypatch.setattr(wf_runner, "resolve_permission_axes", AsyncMock(return_value=None))
     monkeypatch.setattr(wf_runner, "build_turn_backend", AsyncMock(return_value=MagicMock()))
     monkeypatch.setattr(wf_runner, "load_chat_context", AsyncMock(return_value=[]))
@@ -249,8 +245,6 @@ async def test_standing_bound_workflow_wrapper_uses_same_envelope(monkeypatch):
         backend=MagicMock(),
         llm_credentials=None,
         profile_set=None,
-        memory_enabled=True,
-        conversation_history_access=True,
         permission_axes=None,
         workflow_id="wf-1",
         workflow_version=2,

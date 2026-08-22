@@ -11,9 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import agentcore.runtime.pipeline as pipeline_pkg
 from agentcore.conversation.common import (
-    resolve_conversation_history_access,
     resolve_local_binding,
-    resolve_memory_enabled,
     resolve_permission_axes,
     resolve_profile_set,
 )
@@ -105,10 +103,6 @@ async def production_crash_delegate_factory(
             profile_set = await resolve_profile_set(
                 session, conv, user_id, credentials=llm_credentials
             )
-            memory_enabled = await resolve_memory_enabled(session, user_id)
-            conversation_history_access = await resolve_conversation_history_access(
-                session, user_id
-            )
             permission_axes = await resolve_permission_axes(session, conversation_id)
             board = await BoardRepository(session).get_by_conversation_id(
                 conversation_id, user_id=user_id
@@ -142,7 +136,7 @@ async def production_crash_delegate_factory(
             memory_store,
             user_id,
             folder_id=folder_id,
-            enabled=memory_enabled,
+            enabled=True,
         )
         exec_languages = await resolve_exec_languages(backend)
         # Crash rebuild has no live client header → fail-closed (no Host pretence).
@@ -170,7 +164,6 @@ async def production_crash_delegate_factory(
                 tool_names={s.name for s in provisional_tools.list_all()},
                 memory_store=memory_store,
                 folder_id=folder_id,
-                memory_enabled=memory_enabled,
                 skill_audience="worker",
                 tool_registry=provisional_tools,
             ).list_directory(user_id)
@@ -193,8 +186,6 @@ async def production_crash_delegate_factory(
             captain_run_id=captain_run_id,
             user_id=user_id,
             folder_id=folder_id,
-            memory_enabled=memory_enabled,
-            conversation_history_access=conversation_history_access,
             base_system_prompt=base_system_prompt,
             user_message=user_message,
             journal_entries=list(state.entries),

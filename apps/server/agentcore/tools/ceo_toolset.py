@@ -44,7 +44,6 @@ async def _wire_consult_if_entries(
     *,
     skill_registry: SkillRegistry,
     folder_id: str | None,
-    memory_enabled: bool,
     user_id: str,
     skill_audience: str,
 ) -> bool:
@@ -63,7 +62,6 @@ async def _wire_consult_if_entries(
         tool_names=tool_names,
         memory_store=default_memory_store(),
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
         skill_audience=skill_audience,
         tool_registry=registry,
     )
@@ -96,8 +94,6 @@ def _assemble_ceo_toolset(
     suspension_deleter: SuspensionDeleter | None,
     backend_location: str,
     skill_registry: SkillRegistry,
-    memory_enabled: bool = True,
-    conversation_history_access: bool = True,
     folder_id: str | None = None,
     permission_axes=None,
     advertise_bind_local_folder: bool = False,
@@ -131,8 +127,6 @@ def _assemble_ceo_toolset(
         suspension_saver=suspension_saver,
         suspension_deleter=suspension_deleter,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
-        conversation_history_access=conversation_history_access,
         permission_axes=permission_axes,
     )
     chat_tools = build_ceo_tool_registry(
@@ -163,8 +157,6 @@ def _assemble_ceo_toolset(
         suspension_saver=suspension_saver,
         suspension_deleter=suspension_deleter,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
-        conversation_history_access=conversation_history_access,
         permission_axes=permission_axes,
         registry=default_interaction_registry(),
         session_store=session_store,
@@ -197,19 +189,18 @@ def _assemble_ceo_toolset(
         skill_registry=skill_registry,
         include_vision=include_vision,
     )
-    if memory_enabled:
-        from agentcore.runtime.resolve.prepare import default_memory_store
+    from agentcore.runtime.resolve.prepare import default_memory_store
 
-        mem_store = default_memory_store()
-        chat_tools.register(RememberTool(folder_id=folder_id))
-        if folder_id:
-            chat_tools.register(
-                UpdateFolderProfileTool(
-                    folder_id=folder_id,
-                    store=mem_store,
-                    prompt_holders=[delegate_tool, debate_tool],
-                )
+    mem_store = default_memory_store()
+    chat_tools.register(RememberTool(folder_id=folder_id))
+    if folder_id:
+        chat_tools.register(
+            UpdateFolderProfileTool(
+                folder_id=folder_id,
+                store=mem_store,
+                prompt_holders=[delegate_tool, debate_tool],
             )
+        )
     if checkpoint_enabled:
         chat_tools.register(
             AskUserTool(
@@ -224,8 +215,6 @@ def _assemble_ceo_toolset(
                 suspension_saver=suspension_saver,
                 suspension_deleter=suspension_deleter,
                 folder_id=folder_id,
-                memory_enabled=memory_enabled,
-                conversation_history_access=conversation_history_access,
                 advertise_bind_local_folder=advertise_bind_local_folder,
             )
         )
@@ -237,7 +226,6 @@ async def wire_ceo_consult(
     *,
     skill_registry: SkillRegistry,
     folder_id: str | None,
-    memory_enabled: bool,
     user_id: str,
 ) -> bool:
     """Async companion to :func:`_assemble_ceo_toolset` — wires ``consult`` if catalog nonempty."""
@@ -245,7 +233,6 @@ async def wire_ceo_consult(
         chat_tools,
         skill_registry=skill_registry,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
         user_id=user_id,
         skill_audience=AUDIENCE_CEO,
     )
@@ -255,7 +242,6 @@ async def wire_worker_consult(
     worker_tools: ToolRegistry,
     *,
     skill_registry: SkillRegistry,
-    memory_enabled: bool = True,
     folder_id: str | None = None,
     user_id: str,
 ) -> bool:
@@ -264,7 +250,6 @@ async def wire_worker_consult(
         worker_tools,
         skill_registry=skill_registry,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
         user_id=user_id,
         skill_audience=AUDIENCE_WORKER,
     )

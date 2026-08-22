@@ -56,7 +56,6 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       permissionAxes: {
         file_write: "ask",
         command: "ask",
-        team_kickoff: "rules",
         host: "off",
       },
     };
@@ -113,7 +112,6 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
     expect(withoutInference.permissionAxes).toEqual({
       file_write: "ask",
       command: "ask",
-      team_kickoff: "rules",
       host: "off",
     });
 

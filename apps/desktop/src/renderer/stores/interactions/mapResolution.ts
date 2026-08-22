@@ -5,6 +5,20 @@ function str(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
 }
 
+function parseDecision(v: unknown): CheckpointDecision | null {
+  if (
+    v === "continue" ||
+    v === "adjust" ||
+    v === "stop" ||
+    v === "research_first" ||
+    v === "timeout" ||
+    v === "orphaned"
+  ) {
+    return v;
+  }
+  return null;
+}
+
 /**
  * Shared settlement fields for cold decision families (ask_user / team_preview /
  * plan_review). Replaces the duplicated status/decision/note branches that used
@@ -20,7 +34,7 @@ export function mapEntryResolution(e: InteractionEntry): {
   return {
     status: resolved ? "resolved" : "pending",
     decision: resolved
-      ? ((r.decision as CheckpointDecision | null | undefined) ?? null)
+      ? (parseDecision(r.decision) ?? parseDecision(e.resumeSettled?.decision))
       : null,
     note: resolved ? str(r.note) : "",
   };

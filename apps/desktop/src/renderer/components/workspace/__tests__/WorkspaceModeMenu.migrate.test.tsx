@@ -54,13 +54,13 @@ afterEach(() => {
 });
 
 describe("WorkspaceModeMenu · local traditional import CTA", () => {
-  it("healthy local: quiet 导入到「我的文件」 opens import with root prefill; legacy handoff arm secondary", () => {
+  it("healthy local: quiet 导入到「我的文件」 opens import with root prefill; no leftover handoff arm", () => {
     const state = healthyLocalState();
     render(<WorkspaceModeMenu state={state} conversationId="c1" />);
 
     expect(screen.getByText("导入到「我的文件」")).toBeTruthy();
     expect(screen.queryByText("迁移到云")).toBeNull();
-    expect(screen.getByText("遗留：先改云拷贝再合回")).toBeTruthy();
+    expect(screen.queryByText("遗留：先改云拷贝再合回")).toBeNull();
     expect(screen.queryByText("备份到云")).toBeNull();
     expect(screen.queryByText("后台云端")).toBeNull();
     expect(screen.queryByText(/请迁移到云后再继续/)).toBeNull();
@@ -71,27 +71,6 @@ describe("WorkspaceModeMenu · local traditional import CTA", () => {
       rootId: "root-1",
       folderName: "本机项目",
     });
-  });
-
-  it("healthy local: legacy handoff entry arms dispatchBackgroundTask path (not channel title)", async () => {
-    const { useBackgroundTasksStore } = await import(
-      "@/stores/backgroundTasks"
-    );
-    useBackgroundTasksStore.setState({ armedHandoffByConversation: {} });
-    const state = healthyLocalState();
-    render(<WorkspaceModeMenu state={state} conversationId="c1" />);
-
-    const arm = screen.getByRole("button", {
-      name: "开启遗留：先改云拷贝再合回",
-    });
-    expect(arm.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(arm);
-    expect(
-      useBackgroundTasksStore.getState().armedHandoffByConversation.c1,
-    ).toBe(true);
-    expect(
-      screen.getByRole("button", { name: "关闭遗留：先改云拷贝再合回" }),
-    ).toBeTruthy();
   });
 
   it("root-missing local: honest prompt + 导入到「我的文件」 (not migrate debt copy)", () => {

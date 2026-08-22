@@ -233,15 +233,10 @@ async def _finalize_ask_user() -> tuple[AskUserSuspension, list[dict]]:
     return captured["frame"], captured["journal_entries"]
 
 
-async def _finalize_plan_review(monkeypatch) -> tuple[PlanReviewSuspension, list[dict]]:
+async def _finalize_plan_review() -> tuple[PlanReviewSuspension, list[dict]]:
     """Drive the REAL captain loop to the plan_review finalize pause (flag ON): a delegate
     whose plan checkpoints after ``s1`` (``s2`` gated downstream). Return the captured frame
     + persisted journal. Producer must end on PAUSED with the bridge never parked."""
-    # Skip team_preview so this fixture reaches plan_review (wave-boundary durable pause).
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
     system_prompt = "你是 CEO。"
     user_message = "调研并撰写"
     captured: dict = {}
@@ -368,7 +363,7 @@ async def test_finalized_ask_user_frame_resumes_to_completion(monkeypatch, tmp_p
 
 async def test_finalized_plan_review_frame_resumes_to_completion(monkeypatch, tmp_path):
     # ② producer: a real plan_review pause (s1 done, s2 gated) finalized to PAUSED.
-    frame, journal_entries = await _finalize_plan_review(monkeypatch)
+    frame, journal_entries = await _finalize_plan_review()
     restored = _cold_claim(frame, journal_entries)
     assert isinstance(restored, PlanReviewSuspension)
     # The cold-claimed frame dropped the plan + completed blobs — the resume MUST rebuild

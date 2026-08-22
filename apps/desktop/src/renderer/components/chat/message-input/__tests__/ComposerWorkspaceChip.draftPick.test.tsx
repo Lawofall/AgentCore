@@ -1,16 +1,21 @@
 // @vitest-environment jsdom
 /**
- * 草稿态「在哪工作」动作区（双模式工作区 §5.1）。
+ * 草稿态「在哪工作」（双模式工作区 §5.1）。
  *
- * 位置由一行组标签承担，动作名只留动词短语——动作行不得回潮成教学文案 / 副标题；
- * 全菜单只有一条分隔线（动作区 ↔ 文件夹列表），组标签不得带线。
+ * 第一屏只选地方；新建 / Git / 本机三选收进「新建或加入…」。
+ * 全菜单只有一条分隔线（文件夹列表 ↔ 新建或加入）。
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { pickLocalFolderRoot } from "@/lib/bindLocalFolder";
+import { isBorrowActive, set } from "@/lib/borrowOriginalPreference";
 import { setComposerChannelPreference } from "@/lib/composerChannelPreference";
+import { openLocalFolderFromRoot } from "@/lib/openLocalFolder";
+import { uiSet } from "@/lib/uiStorage";
 import type { FolderMeta } from "@/services/folders";
 import { useFoldersStore } from "@/stores/folders";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -31,18 +36,60 @@ import {
 const grouped = vi.hoisted(() => ({
   value: { folders: [], conversations: [] } as {
     folders: FolderMeta[];
-    conversations: { folderId?: string | null; updatedAt: string }[];
+    conversations: {
+      id?: string;
+      folderId?: string | null;
+      updatedAt: string;
+    }[];
   },
 }));
 
 vi.mock("@/hooks/useConversations", () => ({
   useGroupedConversations: () => ({ data: grouped.value }),
-  getConversations: () => [],
+  getConversations: () => grouped.value.conversations,
+}));
+
+vi.mock("@/lib/bindLocalFolder", () => ({
+  pickLocalFolderRoot: vi.fn(),
+  notifyLocalPickerFailure: vi.fn(),
+}));
+
+vi.mock("@/lib/openLocalFolder", () => ({
+  openLocalFolderFromRoot: vi.fn(),
+  pickAndOpenLocalFolder: vi.fn(),
+}));
+
+const boundEffective = {
+  isLocal: false,
+  rootId: null,
+  rootName: null,
+  rootMissing: false,
+  viaContainer: false,
+  folderName: "Acme",
+  viaFolder: true,
+};
+
+vi.mock("@/components/workspace/WorkspaceModeControl", () => ({
+  useWorkspaceModeState: (id: string | null) =>
+    id
+      ? {
+          binding: {
+            mode: "cloud",
+            scope: "folder",
+            rootId: null,
+            source: null,
+          },
+          roots: [],
+          effective: boundEffective,
+          refresh: async () => {},
+        }
+      : null,
+  WorkspaceModeMenu: () => <div data-testid="ws-menu" />,
+  WorkspaceModeTrigger: () => <span>Acme</span>,
 }));
 
 import { ComposerWorkspaceChip } from "../ComposerWorkspaceChip";
 
-// jsdom lacks the browser APIs Radix's floating content touches on open.
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
     observe() {}
@@ -56,7 +103,25 @@ beforeAll(() => {
 
 /** `hasLocalFiles()` = fsApi preload present and not the web runtime. */
 function setHasLocalDisk(present: boolean) {
-  (window as unknown as { fsApi?: unknown }).fsApi = present ? {} : undefined;
+  (
+    window as unknown as { fsApi?: { removeRoot?: ReturnType<typeof vi.fn> } }
+  ).fsApi = present ? { removeRoot: vi.fn() } : undefined;
+}
+
+function cloudFolder(
+  id: string,
+  name: string,
+  parentRelPath?: string | null,
+): FolderMeta {
+  return {
+    id,
+    name,
+    mode: "cloud",
+    localRootId: null,
+    localSubpath: null,
+    parentRelPath: parentRelPath ?? null,
+    relPath: parentRelPath ? `${parentRelPath}/${name}` : name,
+  };
 }
 
 function localFolder(
@@ -98,37 +163,37 @@ beforeEach(() => {
   setHasLocalDisk(true);
   setComposerChannelPreference("cloud");
   useFoldersStore.setState({ draftWorkspaceIntent: { kind: "quick_cloud" } });
+  vi.mocked(pickLocalFolderRoot).mockReset();
+  vi.mocked(openLocalFolderFromRoot).mockReset();
 });
 
 afterEach(() => {
   cleanup();
   setHasLocalDisk(false);
+  uiSet("borrow-original", undefined);
 });
 
-describe("DraftChip pick view · 动作区", () => {
-  it("四个动作只留动词短语，落点不占单独一行", () => {
+describe("DraftChip pick view · 选地方", () => {
+  it("第一屏只有快速对话、文件夹和新建或加入，不铺六条动词", () => {
     const menu = within(openPicker());
+    expect(menu.getByRole("button", { name: "快速对话" })).toBeTruthy();
+    expect(menu.getByRole("button", { name: "新建或加入…" })).toBeTruthy();
+    expect(menu.getByText("了解区别")).toBeTruthy();
 
-    for (const name of [
-      "新建文件夹",
+    for (const buried of [
       "从本机导入",
+      "云上做完再写入",
       "从 Git 克隆",
       "打开本机文件夹",
+      "新建文件夹",
+      "从本机加入",
     ]) {
-      expect(menu.getByRole("button", { name })).toBeTruthy();
+      expect(menu.queryByRole("button", { name: buried })).toBeNull();
     }
-
-    // 快速对话 keeps its own wording / check state, above the actions.
-    expect(
-      precedes(menu.getByText("快速对话"), menu.getByText("新建文件夹")),
-    ).toBe(true);
     expect(menu.queryByText("在「我的文件」里新建文件夹")).toBeNull();
-    expect(menu.queryByText("导入本机文件夹到「我的文件」")).toBeNull();
-    // No group label row (folder rows carry 我的文件 in their own hint).
-    expect(menu.queryByText("我的文件")).toBeNull();
   });
 
-  it("全菜单只有一条分隔线，落在动作区与文件夹列表之间", () => {
+  it("全菜单只有一条分隔线，落在文件夹列表与新建或加入之间", () => {
     const content = openPicker();
     const menu = within(content);
 
@@ -136,61 +201,320 @@ describe("DraftChip pick view · 动作区", () => {
     expect(dividers).toHaveLength(1);
     const separator = dividers[0];
 
-    expect(precedes(menu.getByText("了解区别"), separator)).toBe(true);
-    expect(precedes(separator, menu.getByText("文件夹"))).toBe(true);
+    expect(precedes(menu.getByText("文件夹"), separator)).toBe(true);
+    expect(precedes(separator, menu.getByText("新建或加入…"))).toBe(true);
+    expect(precedes(separator, menu.getByText("了解区别"))).toBe(true);
   });
 
-  it("保留「打开本机文件夹」的上次徽标", () => {
-    setComposerChannelPreference("local_traditional");
+  it("新建或加入展开新建、Git、从本机加入", () => {
     const menu = within(openPicker());
-
-    const row = menu.getByRole("button", { name: /打开本机文件夹/ });
-    expect(within(row).getByText("上次")).toBeTruthy();
+    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
+    expect(menu.getByRole("button", { name: "返回" })).toBeTruthy();
+    expect(menu.getByText("新建或加入")).toBeTruthy();
+    expect(menu.queryByText("在哪工作")).toBeNull();
+    expect(menu.getByRole("button", { name: "新建文件夹" })).toBeTruthy();
+    expect(menu.getByRole("button", { name: "从 Git 克隆" })).toBeTruthy();
+    expect(menu.getByRole("button", { name: "从本机加入" })).toBeTruthy();
   });
 
-  it("无本机盘：只剩新建文件夹，后三项与分隔线不变", () => {
+  it("从本机加入选完路径后三选一；直接改走已选根", async () => {
+    vi.mocked(pickLocalFolderRoot).mockResolvedValue({
+      ok: true,
+      root: { id: "root-1", name: "MyRepo" },
+    });
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
+    await act(async () => {
+      fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
+    });
+    expect(menu.getByRole("button", { name: /直接改这个文件夹/ })).toBeTruthy();
+    expect(menu.getByRole("button", { name: /复制到云上当新家/ })).toBeTruthy();
+    expect(
+      menu.getByRole("button", { name: /先在云上做，原件先不动/ }),
+    ).toBeTruthy();
+
+    fireEvent.click(menu.getByRole("button", { name: /直接改这个文件夹/ }));
+    expect(openLocalFolderFromRoot).toHaveBeenCalledWith(
+      { id: "root-1", name: "MyRepo" },
+      expect.any(Function),
+    );
+  });
+
+  it("复制到云上当新家带上已选根 prefill", async () => {
+    vi.mocked(pickLocalFolderRoot).mockResolvedValue({
+      ok: true,
+      root: { id: "root-1", name: "MyRepo" },
+    });
+    const openImport = vi.spyOn(
+      useFoldersStore.getState(),
+      "openImportToCloud",
+    );
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
+    await act(async () => {
+      fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
+    });
+    fireEvent.click(menu.getByRole("button", { name: /复制到云上当新家/ }));
+    expect(openImport).toHaveBeenCalledWith({
+      rootId: "root-1",
+      folderName: "MyRepo",
+      ownsRoot: true,
+    });
+  });
+
+  it("先在云上做打开借用，不打推荐；上次只打在直接改", async () => {
+    setComposerChannelPreference("local_traditional");
+    vi.mocked(pickLocalFolderRoot).mockResolvedValue({
+      ok: true,
+      root: { id: "root-1", name: "MyRepo" },
+    });
+    const openBorrow = vi.spyOn(
+      useFoldersStore.getState(),
+      "openBorrowToCloud",
+    );
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: "新建或加入…" }));
+    expect(
+      within(menu.getByRole("button", { name: "从本机加入" })).queryByText(
+        "上次",
+      ),
+    ).toBeNull();
+    await act(async () => {
+      fireEvent.click(menu.getByRole("button", { name: "从本机加入" }));
+    });
+    const borrow = menu.getByRole("button", { name: /先在云上做，原件先不动/ });
+    expect(within(borrow).queryByText("推荐")).toBeNull();
+    expect(within(borrow).queryByText("上次")).toBeNull();
+    expect(
+      within(menu.getByRole("button", { name: /直接改这个文件夹/ })).getByText(
+        "上次",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(borrow);
+    expect(openBorrow).toHaveBeenCalledWith({
+      rootId: "root-1",
+      folderName: "MyRepo",
+      ownsRoot: true,
+    });
+  });
+
+  it("草稿落到借用中的云文件夹时标明原件尚未改动", () => {
+    grouped.value = {
+      folders: [cloudFolder("f1", "Demo")],
+      conversations: [],
+    };
+    set("f1", {
+      rootId: "root-1",
+      originalName: "Repo",
+      promoted: false,
+    });
+    useFoldersStore.setState({
+      draftWorkspaceIntent: { kind: "folder", folderId: "f1" },
+    });
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ComposerWorkspaceChip conversationId={null} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Demo")).toBeTruthy();
+    expect(screen.getByText("原件尚未改动")).toBeTruthy();
+  });
+
+  it("无本机盘：第一屏直接新建文件夹，没有本机三选", () => {
     setHasLocalDisk(false);
     const content = openPicker();
     const menu = within(content);
 
     expect(menu.getByRole("button", { name: "新建文件夹" })).toBeTruthy();
+    expect(menu.queryByText("新建或加入…")).toBeNull();
     expect(menu.queryByText("从本机导入")).toBeNull();
+    expect(menu.queryByText("从本机加入")).toBeNull();
+    expect(menu.queryByText("云上做完再写入")).toBeNull();
     expect(menu.queryByText("从 Git 克隆")).toBeNull();
     expect(menu.queryByText("打开本机文件夹")).toBeNull();
     expect(rules(content)).toHaveLength(1);
   });
+
+  it("点本机文件夹进入三选；直接改只改草稿，不新开会话", () => {
+    grouped.value = {
+      folders: [localFolder("f-repo", "MyRepo", null)],
+      conversations: [],
+    };
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: /MyRepo/ }));
+    expect(menu.getByRole("button", { name: /直接改这个文件夹/ })).toBeTruthy();
+    expect(menu.getByRole("button", { name: /复制到云上当新家/ })).toBeTruthy();
+    expect(
+      menu.getByRole("button", { name: /先在云上做，原件先不动/ }),
+    ).toBeTruthy();
+    expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
+      kind: "quick_cloud",
+    });
+
+    fireEvent.click(menu.getByRole("button", { name: /直接改这个文件夹/ }));
+    expect(openLocalFolderFromRoot).not.toHaveBeenCalled();
+    expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
+      kind: "folder",
+      folderId: "f-repo",
+    });
+  });
+
+  it("点本机文件夹后复制到云上，prefill 不交出根所有权", () => {
+    grouped.value = {
+      folders: [localFolder("f-repo", "MyRepo", null)],
+      conversations: [],
+    };
+    const openImport = vi.spyOn(
+      useFoldersStore.getState(),
+      "openImportToCloud",
+    );
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: /MyRepo/ }));
+    fireEvent.click(menu.getByRole("button", { name: /复制到云上当新家/ }));
+    expect(openImport).toHaveBeenCalledWith({
+      rootId: "root-1",
+      folderName: "MyRepo",
+      ownsRoot: false,
+    });
+  });
+
+  it("点云文件夹仍立刻选中，不进三选", () => {
+    grouped.value = {
+      folders: [cloudFolder("f-cloud", "云文件夹")],
+      conversations: [],
+    };
+    const menu = within(openPicker());
+    fireEvent.click(menu.getByRole("button", { name: /云文件夹/ }));
+    expect(useFoldersStore.getState().draftWorkspaceIntent).toEqual({
+      kind: "folder",
+      folderId: "f-cloud",
+    });
+    expect(menu.queryByText("直接改这个文件夹")).toBeNull();
+  });
 });
 
-describe("folderLocationHint · 本机位置", () => {
-  it("subpath 只是文件夹自己的名字时不重复成「本机 · 白板」", () => {
+describe("BoundChip · 借用原件", () => {
+  function renderBound() {
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ComposerWorkspaceChip conversationId="c1" />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("读到 folderId 且借用中时标明原件尚未改动", () => {
     grouped.value = {
-      folders: [localFolder("f-board", "白板", "白板")],
+      folders: [],
+      conversations: [
+        { id: "c1", folderId: "f1", updatedAt: "2026-01-01T00:00:00Z" },
+      ],
+    };
+    set("f1", {
+      rootId: "root-1",
+      originalName: "Repo",
+      promoted: false,
+    });
+    expect(isBorrowActive("f1")).toBe(true);
+    renderBound();
+    expect(screen.getByText("原件尚未改动")).toBeTruthy();
+    expect(screen.getByLabelText(/原件尚未改动/)).toBeTruthy();
+  });
+
+  it("无 folderId 或已升格不标", () => {
+    grouped.value = {
+      folders: [],
+      conversations: [
+        { id: "c1", folderId: null, updatedAt: "2026-01-01T00:00:00Z" },
+      ],
+    };
+    set("f1", {
+      rootId: "root-1",
+      originalName: "Repo",
+      promoted: false,
+    });
+    renderBound();
+    expect(screen.queryByText("原件尚未改动")).toBeNull();
+
+    cleanup();
+    grouped.value = {
+      folders: [],
+      conversations: [
+        { id: "c1", folderId: "f1", updatedAt: "2026-01-01T00:00:00Z" },
+      ],
+    };
+    set("f1", {
+      rootId: "root-1",
+      originalName: "Repo",
+      promoted: true,
+    });
+    renderBound();
+    expect(screen.queryByText("原件尚未改动")).toBeNull();
+  });
+});
+
+describe("folderLocationHint · 通道图标与祖先路径", () => {
+  it("顶层云/本机行无副标题，用图标区分", () => {
+    grouped.value = {
+      folders: [
+        cloudFolder("f-cloud", "AgentCore"),
+        localFolder("f-board", "白板", "白板"),
+      ],
       conversations: [],
     };
     const menu = within(openPicker());
 
-    expect(menu.getByText("白板")).toBeTruthy();
-    expect(menu.getByText("本机文件夹")).toBeTruthy();
+    const cloudRow = menu.getByRole("button", { name: /^AgentCore$/ });
+    expect(within(cloudRow).getByTitle("我的文件")).toBeTruthy();
+    expect(within(cloudRow).queryByText("我的文件")).toBeNull();
+
+    const localRow = menu.getByRole("button", { name: /^白板$/ });
+    expect(within(localRow).getByTitle("本机文件夹")).toBeTruthy();
+    expect(within(localRow).queryByText("本机文件夹")).toBeNull();
     expect(menu.queryByText("本机 · 白板")).toBeNull();
   });
 
-  it("嵌套 subpath 只留文件夹之上的那段", () => {
+  it("嵌套本机 subpath 只留文件夹之上的那段，不加「本机 ·」", () => {
     grouped.value = {
       folders: [localFolder("f-web", "web", "apps/web")],
       conversations: [],
     };
     const menu = within(openPicker());
 
-    expect(menu.getByText("本机 · apps")).toBeTruthy();
+    expect(menu.getByText("apps")).toBeTruthy();
+    expect(menu.queryByText("本机 · apps")).toBeNull();
+    expect(menu.queryByText("本机文件夹")).toBeNull();
   });
 
-  it("没有 subpath 时仍是「本机文件夹」", () => {
+  it("嵌套云行只写祖先路径，不加「我的文件 ·」", () => {
+    grouped.value = {
+      folders: [cloudFolder("f-icon", "图标", "设计")],
+      conversations: [],
+    };
+    const menu = within(openPicker());
+
+    expect(menu.getByText("图标")).toBeTruthy();
+    expect(menu.getByText("设计")).toBeTruthy();
+    expect(menu.queryByText("我的文件 · 设计")).toBeNull();
+    expect(menu.queryByText("我的文件")).toBeNull();
+  });
+
+  it("没有 subpath 的本机行不写通道副标题", () => {
     grouped.value = {
       folders: [localFolder("f-repo", "MyRepo", null)],
       conversations: [],
     };
     const menu = within(openPicker());
 
-    expect(menu.getByText("本机文件夹")).toBeTruthy();
+    expect(menu.getByText("MyRepo")).toBeTruthy();
+    expect(menu.queryByText("本机文件夹")).toBeNull();
+    expect(
+      within(menu.getByRole("button", { name: /^MyRepo$/ })).getByTitle(
+        "本机文件夹",
+      ),
+    ).toBeTruthy();
   });
 });

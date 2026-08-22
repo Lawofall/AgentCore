@@ -32,12 +32,17 @@ export type CreateFolderAnchorRect = {
 /** Where a new folder should land — null / absent = 我的文件 top level. */
 export type CreateFolderParent = { id: string; name: string };
 
-/** Prefill for {@link useFoldersStore}'s `openImportToCloud`. */
+/** Prefill for {@link useFoldersStore}'s `openImportToCloud` / `openBorrowToCloud`. */
 export type ImportToCloudPrefill = {
   /** Existing desktop `FsRoot.id` (e.g. Folder.localRootId). */
   rootId?: string | null;
   /** Suggested name for the folder created in 我的文件. */
   folderName?: string | null;
+  /**
+   * Composer「从本机加入」already authorized this root. True → dialog cancel
+   * may removeRoot; false → shared binding (legacy migrate), leave it.
+   */
+  ownsRoot?: boolean;
 };
 
 /**
@@ -73,6 +78,10 @@ interface FoldersUiState {
    * 有效根 id，少一次选夹；找不到仍走 picker。
    */
   importToCloudPrefill: ImportToCloudPrefill | null;
+  /** Composer / palette「云上做完再写入」→ 借用云拷贝对话框。 */
+  borrowToCloudOpen: boolean;
+  /** Optional prefill when Composer already picked the local folder. */
+  borrowToCloudPrefill: ImportToCloudPrefill | null;
 
   setPendingRename: (id: string | null) => void;
   setDraftWorkspaceIntent: (intent: DraftWorkspaceIntent) => void;
@@ -86,6 +95,8 @@ interface FoldersUiState {
   closeConnectGit: () => void;
   openImportToCloud: (prefill?: ImportToCloudPrefill | null) => void;
   closeImportToCloud: () => void;
+  openBorrowToCloud: (prefill?: ImportToCloudPrefill | null) => void;
+  closeBorrowToCloud: () => void;
   togglePinFolder: (id: string) => void;
 }
 
@@ -110,6 +121,8 @@ export const useFoldersStore = create<FoldersUiState>()(
       connectGitWsId: null,
       importToCloudOpen: false,
       importToCloudPrefill: null,
+      borrowToCloudOpen: false,
+      borrowToCloudPrefill: null,
       setPendingRename: (id) => set({ pendingRenameId: id }),
       setDraftWorkspaceIntent: (intent) =>
         set({ draftWorkspaceIntent: intent }),
@@ -144,6 +157,13 @@ export const useFoldersStore = create<FoldersUiState>()(
         }),
       closeImportToCloud: () =>
         set({ importToCloudOpen: false, importToCloudPrefill: null }),
+      openBorrowToCloud: (prefill) =>
+        set({
+          borrowToCloudOpen: true,
+          borrowToCloudPrefill: prefill ?? null,
+        }),
+      closeBorrowToCloud: () =>
+        set({ borrowToCloudOpen: false, borrowToCloudPrefill: null }),
       togglePinFolder: (id) =>
         set((s) => ({
           pinnedFolderIds: s.pinnedFolderIds.includes(id)

@@ -429,6 +429,43 @@ def _pattern_filters(pattern: str) -> bool:
     return p != "*"
 
 
+_MISSING = object()
+_FILE_LIST_TREE_DEPTH = 3
+_FILE_LIST_NAME_SEARCH_DEPTH = 8
+_FILE_LIST_DEPTH_CAP = 8
+
+
+def _resolve_file_list_walk(arguments: dict[str, Any]) -> tuple[str, bool, int]:
+    """``(pattern, recursive, max_depth)`` — Glob vs ls, explicit args win.
+
+    Omitted ``recursive``: name filter → recurse; ``*`` → current layer only.
+    Omitted ``max_depth``: name-search recurse → 8; tree listing → 3.
+    """
+    pattern = str(arguments.get("pattern", "*") or "*")
+    filtered = _pattern_filters(pattern)
+    raw_recursive = arguments.get("recursive", _MISSING)
+    if raw_recursive is _MISSING or raw_recursive is None:
+        recursive = filtered
+    else:
+        recursive = bool(raw_recursive)
+    raw_depth = arguments.get("max_depth", _MISSING)
+    if raw_depth is _MISSING or raw_depth is None:
+        max_depth = (
+            _FILE_LIST_NAME_SEARCH_DEPTH if (recursive and filtered) else _FILE_LIST_TREE_DEPTH
+        )
+    else:
+        try:
+            max_depth = int(raw_depth)
+        except (TypeError, ValueError):
+            max_depth = (
+                _FILE_LIST_NAME_SEARCH_DEPTH
+                if (recursive and filtered)
+                else _FILE_LIST_TREE_DEPTH
+            )
+    max_depth = max(1, min(max_depth, _FILE_LIST_DEPTH_CAP))
+    return pattern, recursive, max_depth
+
+
 def _pattern_targets_archives(pattern: str) -> bool:
     """True when glob(s) end with an AI-archive suffix (``*.zip``, ``*.{rar,7z}``…)."""
     for pat in expand_brace_globs(pattern):
@@ -900,9 +937,12 @@ class FileListTool:
         return ToolSchema(
             name="file_list",
             description=(
-                "列出某个目录下的文件与子目录。路径必须是相对于工作区的相对路径。"
-                "默认只列当前层（recursive=false）：`*.py` 不会进入子目录；"
-                "要搜整棵树请设 recursive=true。支持 `{ts,tsx}` 花括号二选一。"
+                "按【文件名】查找（主用法）：省略 directory，传入 pattern（如 `*.tsx`、"
+                "`*Message*`）。pattern 不是 `*` 时默认递归整棵树（深度顶 8），只列出"
+                "匹配的名字——不要为了找文件先猜目录。"
+                "pattern 省略或 `*`：只列 directory 当前层（默认 `.`）。"
+                "显式 recursive / max_depth 覆盖上述默认。"
+                "支持 `{ts,tsx}` 花括号二选一。"
                 "区外目录须 `external/<别名>/`（勿传裸 `external`）；"
                 "大 zip 持久展开请用 archive_extract，勿假定仅靠 code_execute 解压即工作区可见。"
             ),
@@ -912,29 +952,34 @@ class FileListTool:
                     "directory": {
                         "type": "string",
                         "description": (
-                            "工作区相对 POSIX 目录（默认 `.`=整仓；`/<根标签>/…` 与裸 `/`、"
+                            "工作区相对 POSIX 目录（默认 `.`=整仓根；`/<根标签>/…` 与裸 `/`、"
                             "`\\` 视为根；区外授权目录用 `external/<别名>/`，禁止裸 `external`；"
-                            "其它绝对路径拒绝）"
+                            "其它绝对路径拒绝。）"
+                            "按名查找时省略本参数，不要猜测 src/、@scope、app/。"
                         ),
                         "default": ".",
                     },
                     "pattern": {
                         "type": "string",
                         "description": (
-                            "用于过滤结果的 glob 模式（如 '*.py'、'*.{ts,tsx}'）。"
-                            "非递归时只匹配当前层文件名。"
+                            "按文件名过滤的 glob（如 '*.py'、'*.{ts,tsx}'）。"
+                            "非 `*` 时默认递归查找；省略或 `*` 只列当前层。"
                         ),
                         "default": "*",
                     },
                     "recursive": {
                         "type": "boolean",
-                        "description": "递归列出子目录（树形）。默认 false（仅当前层）。",
-                        "default": False,
+                        "description": (
+                            "是否递归子目录。省略时：pattern 非 `*` 则递归；"
+                            "pattern 为 `*` 则只列当前层。显式 true/false 始终生效。"
+                        ),
                     },
                     "max_depth": {
                         "type": "integer",
-                        "description": "递归最大深度（仅 recursive=true 时生效）。默认 3，上限 8。",
-                        "default": 3,
+                        "description": (
+                            "递归最大深度（仅递归时生效）。省略时：按名查找默认 8，"
+                            "列树默认 3。上限 8。"
+                        ),
                         "minimum": 1,
                         "maximum": 8,
                     },
@@ -948,10 +993,7 @@ class FileListTool:
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         start = time.monotonic()
         directory = arguments.get("directory", ".")
-        pattern = arguments.get("pattern", "*") or "*"
-        recursive = bool(arguments.get("recursive", False))
-        max_depth = int(arguments.get("max_depth", 3))
-        max_depth = max(1, min(max_depth, 8))
+        pattern, recursive, max_depth = _resolve_file_list_walk(arguments)
         patterns = expand_brace_globs(str(pattern))
         reveal_archives = _pattern_targets_archives(str(pattern))
 

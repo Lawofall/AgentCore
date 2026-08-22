@@ -335,7 +335,8 @@ _WORKER_PROBLEM_HANDLING = """\
 # Shared path-finding nudge (leaf + captain): avoid reading vague workspace roots.
 # Inserted in build_worker_identity — not inside captain nesting preamble (P3 surface).
 _WORKER_PATH_FIND_NUDGE = """\
-【找路径】含糊「根」/ `.` / 仅根标签时：先 file_list(pattern)/grep/code_search 钉真实文件再 \
+【找路径】含糊「根」/ `.` / 仅根标签时：先 file_list(pattern)（非 * 即整仓按名查找）/\
+ grep（不确定则省略 path）/code_search 钉真实文件再 \
 file_read；磁盘上已有的具体相对路径可直接读。看已有源码正文用 file_read（可分页）；【禁止】为看内容用 \
 code_execute print / 整文件 dump。约定文档出口是写入落点（见 `<workspace_context>` \
 该行「现有」/「当前为空」），勿按话题拼接文件名；清单没有的先 file_list 该目录。工具报路径不存在时按回报里的\

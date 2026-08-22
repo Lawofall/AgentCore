@@ -131,7 +131,9 @@ async function main() {
     });
 
     try {
-      const appUrl = new URL("index.webapp.html", base).href;
+      // `/` must be the web entry (same as production). Visiting index.webapp.html
+      // still works; the root rewrite is what humans and this smoke both hit.
+      const appUrl = base;
       await page.goto(appUrl, { waitUntil: "load", timeout: 30_000 });
 
       // (2) Backend reachable cross-origin from the browser? A real status (200/401)

@@ -50,26 +50,6 @@ def test_hy_tokenhub_aliases_yield_same_models():
         assert models == ("hy3", "hy3-preview"), url
 
 
-def test_jiurelay_preset_defaults_and_models():
-    preset = match_byok_provider_preset("https://jiurelay.com/openai/v1")
-    assert preset is not None
-    assert preset.id == "jiurelay"
-    assert preset.label == "JiuRelay"
-    assert preset.default_model == "glm-5.2"
-    assert preset.models == ("glm-5.2", "deepseek-v4-flash-0731", "grok-4.5")
-
-
-def test_jiurelay_trailing_slash_matches():
-    preset = match_byok_provider_preset("https://jiurelay.com/openai/v1/")
-    assert preset is not None
-    assert preset.id == "jiurelay"
-    assert preset_models_for_base_url("https://jiurelay.com/openai/v1/") == (
-        "glm-5.2",
-        "deepseek-v4-flash-0731",
-        "grok-4.5",
-    )
-
-
 def test_opencode_zen_preset_defaults_and_seed():
     preset = match_byok_provider_preset("https://opencode.ai/zen/v1")
     assert preset is not None
@@ -175,8 +155,8 @@ def test_chat_completions_seed_is_the_opencode_exclusion_source():
             assert preset.models == chat_completions_seed(*preset.models)
             assert set(preset.models).isdisjoint(BYOK_OFF_PROTOCOL_MODELS)
             assert is_opencode_byok_endpoint(preset.base_url) is True
-    # JiuRelay keeps grok-4.5 — that relay speaks chat/completions for it.
-    jiurelay = match_byok_provider_preset("https://jiurelay.com/openai/v1")
-    assert jiurelay is not None
-    assert "grok-4.5" in jiurelay.models
-    assert is_opencode_byok_endpoint(jiurelay.base_url) is False
+    # Unknown / custom relays are not OpenCode; seed exclusion stays endpoint-gated.
+    custom = "https://relay.example/openai/v1"
+    assert match_byok_provider_preset(custom) is None
+    assert is_opencode_byok_endpoint(custom) is False
+    assert preset_models_for_base_url(custom) == ()

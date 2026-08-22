@@ -524,7 +524,6 @@ async function route(
     let axes: NonNullable<ConversationSummary["permission_axes"]> = {
       file_write: "session",
       command: "auto",
-      team_kickoff: "rules",
       host: "session",
     };
     try {

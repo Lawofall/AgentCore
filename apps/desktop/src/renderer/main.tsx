@@ -1,8 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { isNativeRuntime } from "./lib/capabilities";
 import { initScrollReveal } from "./lib/scrollReveal";
 import { applyTheme } from "./lib/theme";
+import { readNarrowViewport } from "./lib/useNarrowLayout";
 import { installAccountStateIngress } from "./services/accountStateIngress";
 import { installClientToolIngress } from "./services/clientToolIngress";
 import { startOutboxReconcile } from "./services/outboxReconcile";
@@ -35,7 +37,11 @@ startOutboxReconcile();
 void window.fsApi?.sweepStagingOrphans?.(liveStagingIds());
 // Apply the persisted theme before the first paint to avoid a light→dark flash
 // (the store reads the saved choice from localStorage on creation).
-applyTheme(useUIStore.getState().theme);
+applyTheme(
+  isNativeRuntime() || readNarrowViewport()
+    ? "light"
+    : useUIStore.getState().theme,
+);
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element #root not found");

@@ -199,25 +199,22 @@ async def test_recover_turn_plan_review_forwards_batch_coordination():
     assert seen["team_brief"] == "口径按 v2"
 
 
-async def test_recover_turn_team_preview_forwards_batch_coordination():
-    """开工卡帧回灌批次协作参数（含 seed_notes 补种）——2026-07-20 P2 手驱真跑抓获：
-    不转发则 wall 批恢复后降级 none，worker 无便签三件套、CEO 预贴便签丢失。"""
+async def test_recover_turn_team_preview_refuses_without_drive():
+    """Leftover team_preview frames fail honestly — no resume_plan / resolved emit."""
+    import pytest
+
+    from agentcore.core.errors import GoneError
+    from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
     from agentcore.runtime.suspension import TeamPreviewSuspension
 
     state = TurnState.from_journal(_partial_journal())
     sink = EventSink()
-    seen: dict = {}
-
-    async def _resume_plan(plan, seed_completed, **kwargs):
-        seen["coordination"] = kwargs.get("coordination")
-        seen["team_brief"] = kwargs.get("team_brief")
-        seen["seed_notes"] = kwargs.get("seed_notes")
-        seen["coordinate"] = kwargs.get("coordinate")
-        return ToolResult(tool_call_id="t1", success=True, output="kicked")
-
     delegate = MagicMock()
-    delegate.resume_plan = _resume_plan
 
+    async def _resume_plan(*_a, **_k):
+        raise AssertionError("resume_plan must not run for retired team_preview")
+
+    delegate.resume_plan = _resume_plan
     suspension = TeamPreviewSuspension(
         message_id="m1",
         conversation_id="c1",
@@ -234,65 +231,17 @@ async def test_recover_turn_team_preview_forwards_batch_coordination():
         team_brief="统一用中文",
         seed_notes=[{"kind": "heads_up", "text": "接口用 REST"}],
     )
-    settled = await recover_turn(
-        state=state,
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="x",
-        suspension=suspension,
-        decision=CheckpointDecision.CONTINUE,
-        note="",
-    )
-    assert settled.output == "kicked"
-    assert seen["coordination"] == "wall"
-    assert seen["team_brief"] == "统一用中文"
-    assert seen["seed_notes"] == [{"kind": "heads_up", "text": "接口用 REST"}]
-    assert seen["coordinate"] is True
-
-
-async def test_recover_turn_team_preview_suspend_preserves_effect():
-    """resume_plan mid-settle SUSPEND must surface on SettledSuspension (cold PAUSED)."""
-    from agentcore.core.types import ToolEffect
-    from agentcore.runtime.suspension import TeamPreviewSuspension
-
-    state = TurnState.from_journal(_partial_journal())
-    sink = EventSink()
-
-    async def _resume_plan(plan, seed_completed, **kwargs):
-        return ToolResult(
-            tool_call_id="",
-            success=True,
-            output="",
-            effect=ToolEffect.SUSPEND,
+    with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
+        await recover_turn(
+            state=state,
+            sink=sink,
+            delegate_tool=delegate,
+            execution_id="x",
+            suspension=suspension,
+            decision=CheckpointDecision.CONTINUE,
+            note="",
         )
-
-    delegate = MagicMock()
-    delegate.resume_plan = _resume_plan
-
-    suspension = TeamPreviewSuspension(
-        message_id="m1",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="cap1",
-        checkpoint_id="cp1",
-        tool_call_id="tc1",
-        user_message="task",
-        base_system_prompt="sys",
-        journal_entries=_partial_journal(),
-        plan=state.plan or _plan_two_nodes(),
-        workers=[{"run_id": "w1", "role": "研究员", "task": "调研"}],
-    )
-    settled = await recover_turn(
-        state=state,
-        sink=sink,
-        delegate_tool=delegate,
-        execution_id="x",
-        suspension=suspension,
-        decision=CheckpointDecision.CONTINUE,
-        note="",
-    )
-    assert settled.effect is ToolEffect.SUSPEND
-    assert settled.terminal_text is None
+    assert sink._history == []
 
 
 async def test_recover_turn_plan_review_suspend_preserves_effect():
@@ -1392,12 +1341,6 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
     )
     monkeypatch.setattr(
         crash_mod, "resolve_profile_set", AsyncMock(return_value=object())
-    )
-    monkeypatch.setattr(
-        crash_mod, "resolve_memory_enabled", AsyncMock(return_value=True)
-    )
-    monkeypatch.setattr(
-        crash_mod, "resolve_conversation_history_access", AsyncMock(return_value=True)
     )
     monkeypatch.setattr(
         crash_mod, "resolve_permission_axes", AsyncMock(return_value=None)

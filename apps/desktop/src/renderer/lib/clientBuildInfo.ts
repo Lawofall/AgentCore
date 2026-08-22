@@ -1,11 +1,14 @@
-import { isWebRuntime } from "@/lib/capabilities";
+import { isNativeRuntime, isWebRuntime } from "@/lib/capabilities";
 import { cachedDeviceId } from "@/services/deviceIdentity";
 
 declare const __APP_VERSION__: string;
 declare const __APP_GIT_SHA__: string;
 
-/** Electron 外壳为 desktop；浏览器 web 运行时（`isWebRuntime` / `__WEB__`）为 web。 */
-export function clientPlatform(): "desktop" | "web" {
+/** Electron 外壳为 desktop；浏览器 web 为 web；Capacitor 为 android / ios。 */
+export function clientPlatform(): "desktop" | "web" | "android" | "ios" {
+  if (isNativeRuntime()) {
+    return window.__NATIVE_PLATFORM__ === "ios" ? "ios" : "android";
+  }
   return isWebRuntime() ? "web" : "desktop";
 }
 

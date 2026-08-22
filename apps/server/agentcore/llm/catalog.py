@@ -326,7 +326,7 @@ def _platform_entry(model_id: str) -> ModelCatalogEntry:
     operator pool / per-model override / ``PLATFORM_BASE_URL``), and the default
     URL is DeepSeek — gating on that URL would miss the allowlist misconfig this
     exists to catch. BYOK still gates on OpenCode endpoints because the same id
-    can be chat/completions on another user-configured relay (JiuRelay).
+    can be chat/completions on another user-configured relay.
     """
     reason = _off_protocol_unavailable(model_id)
     return _entry(

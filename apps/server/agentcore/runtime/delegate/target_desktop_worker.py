@@ -23,7 +23,6 @@ async def registry_rewire_consult_tools(
     base: ToolRegistry,
     *,
     folder_id: str,
-    memory_enabled: bool,
     user_id: str,
 ) -> ToolRegistry:
     """Fresh registry: drop birth-desk consult, wire target-scoped unified consult."""
@@ -42,7 +41,6 @@ async def registry_rewire_consult_tools(
         tool_names=tool_names,
         memory_store=default_memory_store(),
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
         skill_audience="worker",
         tool_registry=registry,
     )
@@ -56,7 +54,6 @@ async def rebuild_worker_prompt_for_target(
     user_id: str,
     folder_id: str,
     backend: WorkspaceBackend,
-    memory_enabled: bool,
     attachment_context: str | None = None,
     desktop_online: bool = False,
     permission_axes: Any = None,
@@ -71,7 +68,7 @@ async def rebuild_worker_prompt_for_target(
         memory_store,
         user_id,
         folder_id=folder_id,
-        enabled=memory_enabled,
+        enabled=True,
     )
     from agentcore.tools.sandbox.exec_languages import resolve_exec_languages
 
@@ -94,7 +91,6 @@ async def rebuild_worker_prompt_for_target(
         tool_names={s.name for s in provisional.list_all()},
         memory_store=memory_store,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
         skill_audience="worker",
         tool_registry=provisional,
     )

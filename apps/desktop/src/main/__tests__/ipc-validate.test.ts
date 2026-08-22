@@ -214,8 +214,7 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
             localSubpath: null,
             permissionAxes: {
               file_write: "session",
-              command: "kickoff",
-              team_kickoff: "rules",
+              command: "auto",
               host: "ask",
             },
           },
@@ -256,7 +255,6 @@ describe("ipc-validate（IPC 边界结构校验 · IPC-004）", () => {
             permissionAxes: {
               file_write: "ask",
               command: "auto",
-              team_kickoff: "skip",
               host: "session",
             },
           },

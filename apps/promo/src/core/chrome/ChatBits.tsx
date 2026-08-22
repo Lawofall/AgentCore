@@ -42,7 +42,7 @@ export function InputBar({
       <div className="relative rounded-xl border border-border bg-card shadow-sm">
         <div className="min-h-[44px] w-full px-4 pt-3 pb-1 text-sm">
           {empty ? (
-            <span className="text-muted-foreground">输入消息，@ 引用文件…</span>
+            <span className="text-muted-foreground">输入消息，@ 引用内容…</span>
           ) : (
             <span className="whitespace-pre-wrap text-foreground">
               {text}

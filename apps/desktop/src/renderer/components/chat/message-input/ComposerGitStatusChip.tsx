@@ -3,7 +3,7 @@ import { useGitRepoStatus } from "@/hooks/useGitRepoStatus";
 import { hasLocalFiles } from "@/lib/capabilities";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import { GitBranch } from "lucide-react";
-import { useComposerPlusClose } from "./ComposerPlusMenu";
+import { useComposerPlusClose, useComposerPlusHost } from "./ComposerPlusMenu";
 
 /**
  * U1 会话条只读 Git chip：分支名 + dirty 点 + ahead/behind。
@@ -16,6 +16,7 @@ export function ComposerGitStatusChip({
 }) {
   const state = useWorkspaceModeState(conversationId);
   const showChanges = useSidePanelStore((s) => s.showChanges);
+  const plusHost = useComposerPlusHost();
   const closePlus = useComposerPlusClose();
   const canProbe =
     hasLocalFiles() &&
@@ -28,6 +29,7 @@ export function ComposerGitStatusChip({
     canProbe,
   );
 
+  if (plusHost && plusHost.panel !== "list") return null;
   if (!status) return null;
 
   const syncBits: string[] = [];

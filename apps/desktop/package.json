@@ -1,6 +1,6 @@
 {
   "name": "agentcore-desktop",
-  "version": "0.9.10",
+  "version": "0.9.11",
   "description": "AgentCore Desktop - Multi-Agent AI Workspace",
   "author": "AgentCore",
   "main": "./out/main/index.js",
@@ -77,6 +77,10 @@
     "@agentcore/design-tokens": "workspace:*",
     "@agentcore/graph-layout": "workspace:*",
     "@agentcore/protocol-conformance": "workspace:*",
+    "@aparajita/capacitor-secure-storage": "^8.0.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/push-notifications": "^8.1.1",
+    "@capgo/capacitor-speech-recognition": "^8.1.9",
     "@agentcore/protocol-fold-kit": "workspace:*",
     "@biomejs/biome": "^1.9.0",
     "@codemirror/commands": "^6.10.3",

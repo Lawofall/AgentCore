@@ -354,16 +354,13 @@ def _admit_replan_adds_against_coordination(
     from agentcore.runtime.coordination.append_guard import admit_added_nodes
     from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
     from agentcore.runtime.runs.plan import RunPlan as Plan
-    from agentcore.workspace.write_claims import file_ownership_v2_enabled
 
     session = _replan_coordination_session(tool, plan)
     if session is None:
         return None
     # replan 在入口重解析自己的 force（见 DelegateTool.replan）——不继承上一次 delegate。
     force = force_allows(tool, GATE_SEAT_OVERLAP)
-    ownership = (
-        session.ensure_file_ownership() if file_ownership_v2_enabled() else None
-    )
+    ownership = session.ensure_file_ownership()
     staging = Plan(nodes=list(new_specs))
     reject = admit_added_nodes(
         staging,
@@ -396,7 +393,6 @@ def _declare_replan_adds_on_coordination(
     from agentcore.runtime.coordination.append_guard import declare_plan_artifacts
     from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
     from agentcore.runtime.runs.executor.context import _ancestors_by_id
-    from agentcore.workspace.write_claims import file_ownership_v2_enabled
 
     session = _replan_coordination_session(tool, plan)
     if session is None:
@@ -404,7 +400,7 @@ def _declare_replan_adds_on_coordination(
     if session.live_plan is None:
         session.live_plan = plan
     session.total_workers = len(plan.nodes)
-    if not file_ownership_v2_enabled() or not new_specs:
+    if not new_specs:
         return
     force = force_allows(tool, GATE_SEAT_OVERLAP)
     declare_plan_artifacts(

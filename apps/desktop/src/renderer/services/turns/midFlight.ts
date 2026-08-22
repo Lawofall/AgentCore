@@ -1,6 +1,8 @@
+import { clientHeaders } from "@/lib/clientBuildInfo";
 import type { MessageDelivery } from "@/lib/composerDelivery";
 import { streamErrorFromResponse } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
+import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
 import { notifyError } from "@/lib/toast";
 import {
   ApiError,
@@ -258,10 +260,12 @@ export async function sendMidFlightMessage(
       `${BASE_URL}/v1/conversations/${conversationId}/messages`,
       {
         method: "POST",
-        credentials: "include",
+        credentials: sessionCredentials(),
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
+          ...clientHeaders(),
+          ...bearerAuthHeader(),
           ...getCsrfHeaders("POST"),
         },
         body: JSON.stringify(body),

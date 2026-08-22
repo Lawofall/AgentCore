@@ -1,6 +1,6 @@
 ﻿---
 status: landed
-code: apps/desktop/src/renderer/,apps/mobile/src/components/DebateView.tsx
+code: apps/desktop/src/renderer/
 related:
   - docs/04-前端/前端UX设计.md
   - docs/03-AI核心/辩论编排设计.md
@@ -28,9 +28,9 @@ skip_if:
 
 **约束**：纯渲染层，**不动** fold/conformance。
 
-### 手机（有意精简 · ✅）
+### 窄屏
 
-无独立赛事页 / 站队 / 掌舵卡。落点 = `DebateView` + `LiveDebateNarrative`（双产物精简复盘，挂团队列表下）；介入靠主 composer 插话/排队。parity `debate_*` = `simplified`（非「未 port」债）。权威一句 → [前端 UX §十五](/docs/04-前端/前端UX设计.md)。
+走桌面辩论室同一套（`DebateArena` / `TurnDetailPage?view=debate`）；旧手机 `DebateView` 精简面已随 fold 退役。权威一句 → [前端 UX §十五](/docs/04-前端/前端UX设计.md)。
 
 ## 否决 / 退场
 

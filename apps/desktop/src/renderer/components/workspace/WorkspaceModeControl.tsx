@@ -7,6 +7,11 @@ import {
 import { getConversations } from "@/hooks/useConversations";
 import { getFolders } from "@/hooks/useFolders";
 import { WORKSPACE_BINDING_CHANGED } from "@/lib/bindLocalFolder";
+import {
+  get as getBorrowOriginal,
+  isBorrowActive,
+  markPromoted,
+} from "@/lib/borrowOriginalPreference";
 import { hasLocalFiles } from "@/lib/capabilities";
 import { notifyActionError } from "@/lib/toast";
 import {
@@ -23,17 +28,12 @@ import {
   type WorkspaceBinding,
   getWorkspaceBinding,
 } from "@/services/workspaceBinding";
-import {
-  useBackgroundTasksStore,
-  useHandoffArmed,
-} from "@/stores/backgroundTasks";
 import { useFoldersStore } from "@/stores/folders";
 import type { FsRoot } from "@shared/ipc-contract";
 import {
   AlertTriangle,
   ChevronDown,
   Cloud,
-  CloudUpload,
   FolderInput,
   GitBranch,
   HardDrive,
@@ -53,7 +53,7 @@ import {
 /**
  * Shared workspace mode control — status for established chats (project inherit /
  * bare scratch). 出生定终身：不改当前会话 folder。§五：云会话不再主推打开本地 /
- * 绑定本机；遗留本机会话保留备份。云桌合回主入口见 §7.6（导出在工具条，只合回产物在产物卡）。
+ * 绑定本机。云桌合回主入口见 §7.6（导出在工具条，只合回产物在产物卡）。
  */
 
 export interface WorkspaceModeState {
@@ -194,7 +194,7 @@ export function WorkspaceModeTrigger({
   );
 }
 
-/** Status + local legacy handoff arm; cloud sessions: Diff 合回（无 mode=local create）。 */
+/** Status + cloud Diff 合回 / borrow 写回（无 mode=local create）。 */
 export function WorkspaceModeMenu({
   state,
   conversationId,
@@ -208,8 +208,17 @@ export function WorkspaceModeMenu({
   const { isLocal, rootMissing, rootName, viaFolder, folderName } = effective;
   const desktop = hasLocalFiles();
   const [exitBusy, setExitBusy] = useState(false);
-  const handoffArmed = useHandoffArmed(conversationId ?? null);
-  const setHandoffArmed = useBackgroundTasksStore((s) => s.setHandoffArmed);
+  const [borrowEpoch, setBorrowEpoch] = useState(0);
+  const folderId = conversationId
+    ? (getConversations().find((c) => c.id === conversationId)?.folderId ??
+      null)
+    : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: borrowEpoch is an intentional re-run key
+  const borrowActive = useMemo(
+    () => Boolean(folderId && isBorrowActive(folderId)),
+    [folderId, borrowEpoch],
+  );
+  const borrowPref = folderId ? getBorrowOriginal(folderId) : null;
 
   const title = viaFolder
     ? folderName
@@ -227,14 +236,19 @@ export function WorkspaceModeMenu({
           ? `本机路径 · ${rootName}`
           : `默认容器 · ${rootName}`
         : "本机草稿"
-    : viaFolder
-      ? "云端共享空间"
-      : "云端对话";
+    : borrowActive
+      ? "原件尚未改动"
+      : viaFolder
+        ? "云端共享空间"
+        : "云端对话";
 
   const landing =
     !isLocal && conversationId ? peekMergeLanding(conversationId, roots) : null;
-  const mergeHint =
-    landing && !landing.missing
+  const mergeHint = borrowActive
+    ? borrowPref?.originalName
+      ? `Diff 勾选写入「${borrowPref.originalName}」`
+      : "Diff 勾选写入原文件夹"
+    : landing && !landing.missing
       ? `Diff 勾选写入「${landing.rootName ?? "已登记目录"}」；冲突默认保留本机`
       : landing?.missing
         ? "原目录已失效，合回时会重新询问"
@@ -270,6 +284,13 @@ export function WorkspaceModeMenu({
     void runExit(async () => {
       await mergeBackToLanding(conversationId, roots);
     });
+  };
+
+  const onStayOnCloud = () => {
+    if (!folderId) return;
+    markPromoted(folderId);
+    setBorrowEpoch((n) => n + 1);
+    onActionDone?.();
   };
 
   const importToCloud = () => {
@@ -332,27 +353,6 @@ export function WorkspaceModeMenu({
               onClick={importToCloud}
               disabled={anyBusy}
             />
-            {conversationId ? (
-              <ModeAction
-                icon={<CloudUpload size={14} />}
-                label="遗留：先改云拷贝再合回"
-                hint={
-                  handoffArmed
-                    ? "已开：下一条发送走云拷贝，完成后需点一下合回本机"
-                    : "高级：发送后在云拷贝上改，不会直写本机；再点关闭"
-                }
-                onClick={() => {
-                  setHandoffArmed(conversationId, !handoffArmed);
-                }}
-                disabled={anyBusy}
-                pressed={handoffArmed}
-                ariaLabel={
-                  handoffArmed
-                    ? "关闭遗留：先改云拷贝再合回"
-                    : "开启遗留：先改云拷贝再合回"
-                }
-              />
-            ) : null}
           </>
         ) : isLocal && rootMissing ? (
           <>
@@ -379,12 +379,21 @@ export function WorkspaceModeMenu({
             {/* §7.6 云桌→本机：芯片只留 Diff 合回；首次询问落点，已登记可更换。 */}
             <ModeAction
               icon={<FolderInput size={14} />}
-              label="合回到本机"
+              label={borrowActive ? "写入原文件夹" : "合回到本机"}
               hint={mergeHint}
               onClick={onMergeBack}
               disabled={anyBusy}
             />
-            {landing && !landing.missing ? (
+            {borrowActive ? (
+              <ModeAction
+                icon={<Cloud size={14} />}
+                label="留在云上接着用"
+                hint="不再提示原件尚未改动"
+                onClick={onStayOnCloud}
+                disabled={anyBusy}
+              />
+            ) : null}
+            {!borrowActive && landing && !landing.missing ? (
               <ModeAction
                 icon={<MapPin size={14} />}
                 label="更换合回落点"
@@ -438,7 +447,9 @@ function ModeAction({
       }`}
       icon={
         <span
-          className={`shrink-0 ${pressed ? "text-primary" : "text-muted-foreground"}`}
+          className={`flex w-4 shrink-0 justify-center ${
+            pressed ? "text-primary" : "text-muted-foreground"
+          }`}
         >
           {icon}
         </span>

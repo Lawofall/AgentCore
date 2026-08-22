@@ -61,7 +61,5 @@ class AgentExecutorEnv:
     session_folder_id: str | None = None
     # 同回合多 local 根认领簿（C0 登记、不拒）；None = 不登记（测试 / 辩论）。
     local_root_claims: Any | None = None
-    # 记忆总闸（换桌时重装 rules / consult_memory 用）。
-    memory_enabled: bool = True
     # Optional axes object for rebuild_worker_prompt_for_target (PermissionAxes | None).
     permission_axes_obj: Any | None = None

@@ -371,6 +371,30 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
     });
   });
 
+  it("list_tree name filter emits matches only and still finds deep files", async () => {
+    await run("write", { path: "d0/d1/d2/d3/hit.py", content: "x" });
+    for (let i = 0; i < 8; i += 1) {
+      await run("write", { path: `pad${i}/keep.txt`, content: "n" });
+    }
+    const treeRes = valOf(
+      await run("list_tree", {
+        directory: ".",
+        pattern: "*.py",
+        max_depth: 8,
+        max_entries: 5,
+      }),
+    ) as {
+      entries: Array<{ path: string; is_dir: boolean }>;
+      truncated: boolean;
+    };
+    const paths = treeRes.entries.map((e) => e.path.replaceAll("\\", "/"));
+    expect(paths).toContain("d0/d1/d2/d3/hit.py");
+    expect(paths.some((p) => p === "pad0" || p.startsWith("pad0/"))).toBe(
+      false,
+    );
+    expect(treeRes.entries.every((e) => e.path.endsWith(".py"))).toBe(true);
+  });
+
   it("list / list_tree on a file path still return NotADirectory", async () => {
     await run("write", { path: "a-file.txt", content: "x" });
     expect(

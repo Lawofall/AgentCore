@@ -52,13 +52,14 @@ export function isKickoffPending(
 }
 
 /**
- * Per-message kickoff: a pending card on this bubble wins over a leaked
- * resolved continue from an earlier batch (`.some(isKickoffReleased)` alone
- * would show the graph before the new 开做).
+ * Per-message kickoff: a leftover pending card on this bubble still blocks
+ * leaked resolved continue from an earlier batch. No card → released
+ * (backend `command=auto`; do not wait for 「授权并开工」).
  */
 export function kickoffReleasedFromPreviews(
   previews: readonly Pick<TeamPreviewDisplay, "status" | "decision">[],
 ): boolean {
+  if (previews.length === 0) return true;
   if (previews.some(isKickoffPending)) return false;
   return previews.some(isKickoffReleased);
 }
@@ -66,11 +67,11 @@ export function kickoffReleasedFromPreviews(
 /**
  * Chat / canvas / turn-detail share this — same gate as
  * {@link shouldHostPreviewInGraph} (禁止图+废卡双写).
- * - 工人已开跑：出图（新一波开工卡 pending 也不藏）。
- * - 本泡有待确认开工卡、工人未跑：不出图（注意力归卡）。
+ * - 工人已开跑：出图（无卡 / 存量 pending 卡都不挡）。
+ * - 本泡有存量待确认开工卡、工人未跑：不出图（注意力归最小壳）。
  * - 已授权 continue：pending 编制也出图。
  * - 取消 / 调整回灌 / 超时 / 失效且卡还在：不出图。
- * - 回放无卡 + 编制仍有 pending 工人：出图（CEO end_turn 后卡常不在泡上，避免刷新空窗）。
+ * - 无卡 + 编制仍有 pending 工人：出图（不靠「授权并开工」）。
  */
 export function teamGraphVisible(
   runs: readonly TeamGraphRun[] | null | undefined,
@@ -86,9 +87,9 @@ export function teamGraphVisible(
 
 /**
  * Inline graph visibility.
- * - 开工挂起（未拍板）：false，即使 run_plan 已把节点铺成 pending。
+ * - 存量开工卡挂起（未拍板）：false，即使 run_plan 已把节点铺成 pending。
  * - captain-only running（CEO 本轮已开、工人未跑）：false，与「零 worker」同。
- * - 已授权 continue 且编制已在：true（pending 节点也画，不必等第一人开跑）。
+ * - 无卡或已授权 continue 且编制已在：true（pending 节点也画，不必等第一人开跑）。
  * - 取消 / 调整回灌 / 超时 / 失效且从未开跑：false。
  * - 已有工人开跑（含 plan_review 波间）：true，不依赖开工卡。
  */

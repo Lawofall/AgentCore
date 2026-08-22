@@ -6,8 +6,8 @@
 ``platform_llm_credentials(model=…)`` 取对 key，并按 (api_key, base_url) 缓存
 底层 HTTP 客户端。
 
-可选 ``upstream_model``：目录 id 可与上游 id 不同（如第二中转上的
-``glm-5.2-jiu`` → 上游仍发 ``glm-5.2``）。凭据 lookup 用目录 id；出站前改写
+可选 ``upstream_model``：目录 id 可与上游 id 不同（如 ``glm-5.2-alt`` →
+上游仍发 ``glm-5.2``）。凭据 lookup 用目录 id；出站前改写
 ``request.model``，调用方持有的 request 不变（计费仍按目录 id）。
 """
 

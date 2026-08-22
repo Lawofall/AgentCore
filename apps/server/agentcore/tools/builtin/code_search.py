@@ -46,6 +46,7 @@ CODE_SEARCH_PARAMETERS = {
             "type": "string",
             "description": (
                 "搜索范围：工作区相对 POSIX 目录前缀（默认 `.`=整仓）。"
+                "不确定时省略；禁止猜测 src/、@scope、app/。"
                 "`.`/省略=根；`/<根标签>/…` 与裸 `/`、`\\` 视为根；"
                 "其它绝对路径（/etc、盘符）拒绝。"
             ),

@@ -45,7 +45,7 @@ class ModelMeta:
 # longest-family prefix scan so a dated / channel variant (…-0731, …-free) inherits
 # vendor / capabilities / context — but display_name always gets a · qualifier so
 # undated/channel siblings stay distinguishable when no curated ``badge`` is set.
-# Exact rows still win for curated branding (e.g. hy3-preview, glm-5.2-jiu).
+# Exact rows still win for curated branding (e.g. hy3-preview).
 # Uniqueness is ``(display_name, badge)`` across curated rows — ``display_name``
 # alone may repeat when a badge distinguishes the SKU (e.g. Flash +「免费额度」).
 # Context length = the window this id actually gets (native vs gateway cap).
@@ -163,14 +163,6 @@ _METADATA: dict[str, ModelMeta] = {
     # the operator's中转 upstream; curated as 智谱 AI for catalog display.
     "glm-5.2": ModelMeta(
         display_name="GLM-5.2",
-        vendor="智谱 AI",
-        capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
-        context_length=128_000,
-    ),
-    # Second platform relay (jiurelay); exact entry so family-prefix does not
-    # collapse display to plain「GLM-5.2」.
-    "glm-5.2-jiu": ModelMeta(
-        display_name="GLM-5.2 · JiuRelay",
         vendor="智谱 AI",
         capabilities=frozenset({CAPABILITY_TOOLS, CAPABILITY_REASONING}),
         context_length=128_000,

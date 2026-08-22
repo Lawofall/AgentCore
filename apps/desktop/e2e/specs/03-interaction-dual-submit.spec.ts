@@ -65,10 +65,10 @@ test.describe("交互卡闭环（双提交面）", () => {
     );
     await expectHashConversation(page);
 
-    await expect(
-      page.getByRole("button", { name: "授权并开工" }),
-    ).toBeVisible({ timeout: 30_000 });
-    await page.getByRole("button", { name: "授权并开工" }).click();
+    await expect(page.getByRole("button", { name: "继续" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.getByRole("button", { name: "继续" }).click();
 
     const req = await resume;
     expect(req.method()).toBe("POST");

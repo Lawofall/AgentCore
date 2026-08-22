@@ -82,11 +82,6 @@ class AskUserTool:
     # captures it into the frame — the resumed toolset re-wires consult to the same
     # project (Agent记忆与知识系统 §二). ``None`` for 裸聊 / local. Capture-only (unused live).
     folder_id: str | None = None
-    # Caller-supplied memory gate, captured so resume re-wires consult as this
-    # turn did (False ⇒ stays off). Capture-only; defaults True (product always-on).
-    memory_enabled: bool = True
-    # Caller-supplied conversation-log access gate, captured for resume wire parity.
-    conversation_history_access: bool = True
     # Advertise desktop-only ask_user option actions (open_local_project /
     # register_local_project / bind_local_folder / grant_readonly_folder /
     # grant_organize_folder) when the desktop client can fulfil them.

@@ -354,11 +354,6 @@ export function ModelKeyForm({
                   ))}
                 </datalist>
               )}
-              {providerPreset === "jiurelay" && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  领取的 Key 须与所选模型对应。
-                </p>
-              )}
               <p className="mt-1 text-xs text-muted-foreground">
                 可直接粘贴模型
                 ID；连接测试与目录兜底用。日常选用请到「模型组合」。

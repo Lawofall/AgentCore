@@ -32,7 +32,7 @@ export function TooltipContent({
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-50 max-w-xs rounded-lg border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-lg",
+          "z-50 max-w-xs rounded-lg border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-overlay",
           "data-[state=delayed-open]:animate-dropdown-in",
           className,
         )}

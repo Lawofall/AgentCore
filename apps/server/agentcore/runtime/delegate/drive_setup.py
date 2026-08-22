@@ -155,7 +155,6 @@ def build_drive_executor(
         turn_evidence_ledger=_turn_ledger_var.get(),
         session_folder_id=getattr(tool, "_folder_id", None),
         local_root_claims=getattr(tool, "_local_root_claims", None),
-        memory_enabled=bool(getattr(tool, "_memory_enabled", True)),
         permission_axes_obj=getattr(tool, "_permission_axes", None),
     )
 

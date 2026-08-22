@@ -330,18 +330,13 @@ async def test_pause_journal_after_completed_tool_round():
 # --- plan_review / delegate suspend golden (the harder pause shape) ----------------
 
 
-async def test_plan_review_pause_journal_projects_to_captain_transcript(monkeypatch):
+async def test_plan_review_pause_journal_projects_to_captain_transcript():
     # The delegate counterpart of the ask_user golden — the harder shape: drive the REAL
     # captain loop to a `delegate` whose plan checkpoints after s1, suspending the
     # WaveScheduler at the wave boundary. The journal-at-pause interleaves the captain's
     # facts with the WORKER's own (different run_id), and the suspended delegate has NO tool
     # result yet. The fold must still reproduce the captain transcript byte-for-byte —
     # gating the Phase 2 resume cutover for the plan_review suspend point.
-    # Skip team_preview so this fixture reaches plan_review (wave-boundary durable pause).
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
     system_prompt = "你是 CEO。"
     user_message = "调研并撰写"
 

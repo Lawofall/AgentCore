@@ -66,8 +66,10 @@ class GrepTool:
                 "返回 `path:line: text`，命中后单文件默认 file_read 整读；"
                 "仅页脚已截断或已有行号时开窗，禁止整目录通读。"
                 "概念/意图定位请用 code_search——两工具并存。"
-                "按【文件名】找文件用 `file_list`。跳过二进制与噪音目录；"
-                "用 `path`/`glob` 收窄可更快更准。"
+                "按【文件名】找文件用 `file_list`（传 pattern，勿先猜目录）。"
+                "不确定位置时省略 path（默认整仓）；禁止猜测 src/、@scope、app/。"
+                "仅本回合已证实存在的目录或文件才填 path。"
+                "跳过二进制与噪音目录。"
             ),
             parameters={
                 "type": "object",
@@ -83,10 +85,12 @@ class GrepTool:
                         "type": "string",
                         "description": (
                             "搜索范围：工作区相对 POSIX【目录】或【单个文件】"
-                            "（默认 `.`=整仓）。`.`/省略=根；`/<根标签>/…` 与裸 `/`、"
-                            "`\\` 视为根；其它绝对路径（/etc、盘符）拒绝。"
-                            "传目录则递归其下；传单个文件则只搜该文件"
-                            "（类似 `rg PATTERN FILE`，此时 glob 被忽略）。"
+                            "（默认 `.`=整仓）。不确定时省略，不要猜测 src/、"
+                            "packages/@scope、app/ 等惯例路径。"
+                            "`.`/省略=根；`/<根标签>/…` 与裸 `/`、`\\` 视为根；"
+                            "其它绝对路径（/etc、盘符）拒绝。"
+                            "仅填本回合已证实存在的路径：目录则递归其下；"
+                            "单个文件则只搜该文件（类似 `rg PATTERN FILE`，此时 glob 被忽略）。"
                         ),
                         "default": ".",
                     },
@@ -273,10 +277,10 @@ def _empty_result_note(*, pattern: str, rel_dir: str, glob: str) -> str:
     scope = "" if rel_dir in ("", ".") else f"（在 '{rel_dir}' 下）"
     glob_note = f"（文件名匹配 '{glob}'）" if glob else ""
     tips = (
-        "可执行下一步：① 收窄或放宽 path/glob；"
+        "可执行下一步：① 不确定位置则省略 path 从根再搜，勿猜 src/@scope；"
         "② 换更短/同义的 pattern，或开 case_insensitive；"
         "③ 若是概念/意图而非确切字符串，改用 code_search；"
-        "④ 确认 path 相对工作区根且存在。"
+        "④ 按文件名找用 file_list(pattern)。"
     )
     return f"本次 grep 未匹配 /{pattern}/{scope}{glob_note}。不要据此断定代码不存在。{tips}"
 

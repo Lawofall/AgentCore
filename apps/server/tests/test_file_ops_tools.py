@@ -22,6 +22,7 @@ from agentcore.tools.builtin.file_ops import (
     StrReplaceTool,
     expand_brace_globs,
 )
+from agentcore.tools.builtin.file_ops.read import _resolve_file_list_walk
 from agentcore.tools.protocol import ToolContext, isolate_file_read_ceiling
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -1855,8 +1856,36 @@ def test_expand_brace_globs_basic():
     assert expand_brace_globs("*") == ["*"]
 
 
-async def test_file_list_pattern_miss_does_not_say_empty_dir(tmp_path: Path):
-    """Trace f69e97…: CEO `*.py` on `.` returned「空目录」though server/ client/ existed."""
+def test_resolve_file_list_walk_name_search_defaults():
+    assert _resolve_file_list_walk({"pattern": "*.py"}) == ("*.py", True, 8)
+    assert _resolve_file_list_walk({}) == ("*", False, 3)
+    assert _resolve_file_list_walk({"pattern": "*"}) == ("*", False, 3)
+    assert _resolve_file_list_walk({"pattern": "*.py", "recursive": False}) == (
+        "*.py",
+        False,
+        3,
+    )
+    assert _resolve_file_list_walk({"pattern": "*", "recursive": True}) == ("*", True, 3)
+    assert _resolve_file_list_walk({"pattern": "*.tsx", "max_depth": 2}) == (
+        "*.tsx",
+        True,
+        2,
+    )
+
+
+def test_file_list_schema_teaches_name_search_default():
+    schema = FileListTool().schema
+    assert "按【文件名】" in schema.description
+    assert "不要为了找文件先猜目录" in schema.description
+    rec = schema.parameters["properties"]["recursive"]
+    assert "default" not in rec
+    depth = schema.parameters["properties"]["max_depth"]
+    assert "default" not in depth
+    assert "按名查找默认 8" in depth["description"]
+
+
+async def test_file_list_name_pattern_defaults_to_recursive(tmp_path: Path):
+    """Name glob from root finds nested files — no recursive flag required."""
     (tmp_path / "server").mkdir()
     (tmp_path / "server" / "main.py").write_text("x", encoding="utf-8")
     (tmp_path / "client").mkdir()
@@ -1867,11 +1896,36 @@ async def test_file_list_pattern_miss_does_not_say_empty_dir(tmp_path: Path):
     )
     assert result.success is True
     assert "空目录" not in result.output
+    assert "main.py" in result.output
+    assert "无匹配 pattern='*.py'" not in result.output
+
+
+async def test_file_list_explicit_nonrecursive_filter_stays_one_layer(tmp_path: Path):
+    (tmp_path / "server").mkdir()
+    (tmp_path / "server" / "main.py").write_text("x", encoding="utf-8")
+    (tmp_path / "client").mkdir()
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+
+    result = await FileListTool().execute(
+        {"directory": ".", "pattern": "*.py", "recursive": False}, _ctx(tmp_path)
+    )
+    assert result.success is True
+    assert "main.py" not in result.output
     assert "无匹配 pattern='*.py'" in result.output
-    assert "目录非空" in result.output
     assert "recursive=true" in result.output
-    # Top-level sample should surface real dirs/files
     assert "server" in result.output or "client" in result.output
+
+
+async def test_file_list_star_stays_one_layer(tmp_path: Path):
+    nested = tmp_path / "apps" / "server" / "agentcore"
+    nested.mkdir(parents=True)
+    (nested / "main.py").write_text("x", encoding="utf-8")
+    (tmp_path / "README.md").write_text("desk\n", encoding="utf-8")
+
+    result = await FileListTool().execute({"directory": "."}, _ctx(tmp_path))
+    assert result.success is True
+    assert "apps" in result.output
+    assert "main.py" not in result.output
 
 
 async def test_file_list_truly_empty_dir_still_says_empty(tmp_path: Path):
@@ -1881,7 +1935,8 @@ async def test_file_list_truly_empty_dir_still_says_empty(tmp_path: Path):
         {"directory": "blank", "pattern": "*.py"}, _ctx(tmp_path)
     )
     assert result.success is True
-    assert result.output == "（空目录）"
+    assert "空目录" in result.output
+    assert "无匹配" not in result.output
 
 
 async def test_file_list_brace_glob_matches_either_extension(tmp_path: Path):

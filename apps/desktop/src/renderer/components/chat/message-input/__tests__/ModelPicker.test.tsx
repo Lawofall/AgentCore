@@ -207,10 +207,12 @@ describe("ModelPicker", () => {
     mockProfiles(profiles());
     renderPicker();
     expect(screen.getByText("GLM-5.2")).toBeTruthy();
-    // 触发器只有一行组合名（与同排徽章等高）；主 · Worker 摘要退到 tooltip 与下拉行。
+    // 触发器与下拉都只有组合名；主 · Worker 摘要只在 tooltip，不占下拉行。
     expect(screen.queryByText(/DeepSeek V4 Pro · 跟随主模型/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /模型组合：/ }));
-    expect(screen.getByText(/DeepSeek V4 Pro · 跟随主模型/)).toBeTruthy();
+    expect(screen.getByText("系统预置")).toBeTruthy();
+    expect(screen.queryByText(/DeepSeek V4 Pro · 跟随主模型/)).toBeNull();
+    expect(screen.queryByText(/DeepSeek V4 Pro · GPT-4o/)).toBeNull();
   });
 
   it("shows the conversation's profile override over the account default", () => {
@@ -250,6 +252,14 @@ describe("ModelPicker", () => {
     expect(screen.getByText("系统预置")).toBeTruthy();
     expect(screen.getByText("我的组合")).toBeTruthy();
     expect(screen.getByText("管理组合…")).toBeTruthy();
+    const panel = screen.getByRole("button", {
+      name: /管理组合/,
+    }).parentElement;
+    const panelClasses = panel?.className.split(/\s+/) ?? [];
+    expect(panelClasses).toEqual(
+      expect.arrayContaining(["w-max", "min-w-52", "max-w-72"]),
+    );
+    expect(panelClasses).not.toContain("w-72");
     // No bare model catalog rows.
     expect(screen.queryByText("自带 Key")).toBeNull();
   });
@@ -283,20 +293,18 @@ describe("ModelPicker", () => {
     expect(screen.getByText("研究")).toBeTruthy();
   });
 
-  it("empty profile list with BYOK shows jiurelay and providers guide and keeps manage-combinations link", () => {
+  it("empty profile list with BYOK shows providers guide and keeps manage-combinations link", () => {
     mockProfiles(profiles({ data: [] }));
     mockProviders({ platform_available: false, billing_mode: "byok" });
     renderPicker();
     fireEvent.click(screen.getByRole("button", { name: /模型组合：/ }));
     expect(screen.getByText("暂无可用组合")).toBeTruthy();
-    const jiurelayLink = screen.getByRole("link", { name: "jiurelay" });
-    expect(jiurelayLink.getAttribute("href")).toBe("https://jiurelay.com/");
     const providersLink = screen.getByRole("link", { name: "接入服务商" });
     expect(providersLink.getAttribute("href")).toBe("/more/providers");
     expect(screen.getByText("管理组合…")).toBeTruthy();
   });
 
-  it("empty profile list with platform_available shows retry/settings guide without jiurelay", () => {
+  it("empty profile list with platform_available shows retry/settings guide", () => {
     mockProfiles(profiles({ data: [] }));
     mockProviders({
       platform_available: true,
@@ -305,7 +313,6 @@ describe("ModelPicker", () => {
     renderPicker();
     fireEvent.click(screen.getByRole("button", { name: /模型组合：/ }));
     expect(screen.getByText("暂无可用组合")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "jiurelay" })).toBeNull();
     expect(screen.getByText(/请稍后重试/)).toBeTruthy();
     const settingsLink = screen.getByRole("link", {
       name: "设置 · 模型",

@@ -55,9 +55,10 @@ const ASK_CLARIFY_META = {
   ctaIcon: Check,
   showFooterHint: false,
   resolved: {
-    continue: { label: "已按你的决定继续", tone: "success" },
+    // 普通澄清确认后结论文是用户答复本身；套话「已按你的决定继续」与答复、CEO 续聊三重叠。
+    continue: { label: "", tone: "success" },
     adjust: { label: "已按你的调整继续", tone: "success" },
-    // stop = 用户点「取消」硬停收口，非失败；与 timeout/orphaned、协作图 cancelled 同档 muted。
+    // stop = 用户点「取消」硬停收口，非失败；与 timeout/orphaned 同档 muted，时间线占存根。
     stop: { label: "已取消本回合", tone: "muted" },
     research_first: { label: "已取消本回合", tone: "muted" },
     timeout: { label: "未及时回应，已自行收尾", tone: "muted" },
@@ -164,14 +165,27 @@ export function askResolvedOutcome(
   };
 }
 
+/** 线材没带可识别 decision 时的结论文——宁可短，不许猜成超时。 */
+export const SETTLED_UNKNOWN_LABEL = "已经处理过了";
+
+const SETTLED_UNKNOWN: AskResolvedOutcome = {
+  label: SETTLED_UNKNOWN_LABEL,
+  tone: "muted",
+  icon: Check,
+};
+
 /**
- * ask_user 取消结算（wire `stop`；同档误用的 `research_first`）：桌面时间线不画
- * toneStub——对齐 plan_review resolved 静默。meta 文案表仍可返回「已取消本回合」。
+ * ask 结算脸：只有线材 `timeout` 才用超时文案。缺字段 / 未识别取值不猜。
+ * 取消（stop / 误用 research_first）与确认、超时同形占时间线存根。
  */
-export function isAskSilentResolvedDecision(
+export function askResolvedDisplay(
+  intent: CheckpointIntent,
   decision: CheckpointDecision | null | undefined,
-): boolean {
-  return decision === "stop" || decision === "research_first";
+): AskResolvedOutcome {
+  if (decision && decision in ASK_RESOLVED_DECISION_ICON) {
+    return askResolvedOutcome(intent, decision);
+  }
+  return SETTLED_UNKNOWN;
 }
 
 type TeamResolvedRow = { label: string; icon: LucideIcon };
@@ -351,6 +365,18 @@ export function teamResolvedOutcome(
     return table.continueWithNote;
   }
   return table.resolved[decision] ?? table.resolved.continue;
+}
+
+/** 开工卡结算脸：缺 decision 不猜超时、不降级成已授权。 */
+export function teamResolvedDisplay(
+  primitive: KickoffPrimitive,
+  decision: CheckpointDecision | null | undefined,
+  hasNote: boolean,
+): TeamResolvedOutcome {
+  if (decision && decision in TEAM_PRIMITIVE_META[primitive].resolved) {
+    return teamResolvedOutcome(primitive, decision, hasNote);
+  }
+  return { icon: Check, label: SETTLED_UNKNOWN_LABEL };
 }
 
 /**

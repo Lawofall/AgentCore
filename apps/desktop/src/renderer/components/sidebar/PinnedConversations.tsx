@@ -13,7 +13,11 @@ function byRecency(a: Conversation, b: Conversation): number {
  * absent when nothing is pinned. Pinned rows are excluded from
  * {@link WorkspaceGroups} / {@link RecentConversations} so each chat has one home.
  */
-export function PinnedConversations() {
+export function PinnedConversations({
+  onActivate,
+}: {
+  onActivate?: () => void;
+}) {
   const conversations = useConversations();
 
   const pinned = useMemo(
@@ -26,7 +30,11 @@ export function PinnedConversations() {
   return (
     <div className="space-y-0.5 px-2 pt-2 pb-1">
       {pinned.map((conv) => (
-        <ConversationItem key={conv.id} conversation={conv} />
+        <ConversationItem
+          key={conv.id}
+          conversation={conv}
+          onActivate={onActivate}
+        />
       ))}
     </div>
   );

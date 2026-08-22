@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * 已定案检查点存根：默认收起成单行（结论 + 用户答复摘要），点击展开见问题全文、
- * 选项 chips 与答复明细。收起态不展示 CEO 原问题（避免贴在成功标签旁像催促）。
+ * 已定案检查点存根：默认收起成单行（有结论文才画标签 + 用户答复摘要），点击展开见问题全文、
+ * 选项 chips 与答复明细。普通澄清确认不画「已按你的决定继续」。收起态不展示 CEO 原问题。
  */
 
 import type { CheckpointDisplay } from "@/stores/conversation";
@@ -24,21 +24,21 @@ const resolvedKickoff: CheckpointDisplay = {
 };
 
 describe("ResolvedCheckpoint 单行折叠", () => {
-  it("默认收起单行：结论+答复摘要常驻，CEO 问题与明细隐藏；点击展开见全文", () => {
+  it("默认收起单行：普通澄清确认不画套话，答复摘要常驻；点击展开见全文", () => {
     render(<CheckpointCard checkpoint={resolvedKickoff} />);
 
-    expect(screen.getByText("已按你的决定继续")).toBeTruthy();
+    expect(screen.queryByText("已按你的决定继续")).toBeNull();
     // 收起摘要是 note（截断展示），不是 CEO 问题。
     expect(document.body.textContent).toContain("就按这个方案开做：");
     expect(document.body.textContent).not.toContain(resolvedKickoff.question);
 
-    fireEvent.click(screen.getByText("已按你的决定继续"));
+    fireEvent.click(screen.getByText(/就按这个方案开做/));
     expect(document.body.textContent).toContain(resolvedKickoff.question);
     expect(document.body.textContent).toContain("· 定位？：综述型");
     expect(document.body.textContent).toContain("· 篇幅？：精简干货");
   });
 
-  it("无 note 时折叠摘要用 selected；无答复则只留结论标签", () => {
+  it("无 note 时折叠摘要用 selected；专用卡无答复则只留结论标签", () => {
     const withSelected: CheckpointDisplay = {
       ...resolvedKickoff,
       id: "cp-2",
@@ -87,9 +87,9 @@ describe("ResolvedCheckpoint 单行折叠", () => {
     expect(document.body.textContent).toContain("选哪条方案推进？");
   });
 
-  it("stop / research_first resolved 不占时间线存根（无「已取消本回合」）", () => {
+  it("stop / research_first resolved 占「已取消本回合」存根；收起不见问句", () => {
     for (const decision of ["stop", "research_first"] as const) {
-      const { container } = render(
+      render(
         <CheckpointCard
           checkpoint={{
             ...resolvedKickoff,
@@ -99,10 +99,26 @@ describe("ResolvedCheckpoint 单行折叠", () => {
           }}
         />,
       );
-      expect(container.firstChild).toBeNull();
-      expect(screen.queryByText("已取消本回合")).toBeNull();
+      expect(screen.getByText("已取消本回合")).toBeTruthy();
       expect(document.body.textContent).not.toContain(resolvedKickoff.question);
+      fireEvent.click(screen.getByText("已取消本回合"));
+      expect(document.body.textContent).toContain(resolvedKickoff.question);
       cleanup();
     }
+  });
+
+  it("缺 decision 不猜成超时", () => {
+    render(
+      <CheckpointCard
+        checkpoint={{
+          ...resolvedKickoff,
+          id: "cp-unknown",
+          decision: null,
+          note: "",
+        }}
+      />,
+    );
+    expect(screen.getByText("已经处理过了")).toBeTruthy();
+    expect(screen.queryByText("未及时回应，已自行收尾")).toBeNull();
   });
 });

@@ -90,7 +90,7 @@ function firstSlotFromGroups(
 /**
  * 无可选模型时的引导。
  * 平台可用：稍后重试 / 去设置检查（不硬推第三方）。
- * 平台不可用：jiurelay 免费配额度或接入服务商。
+ * 平台不可用：接入服务商。
  */
 function NoAvailableModelsGuide({
   className,
@@ -116,15 +116,6 @@ function NoAvailableModelsGuide({
   return (
     <p className={cn("text-xs text-muted-foreground", className)}>
       暂无可用模型。请到{" "}
-      <a
-        href="https://jiurelay.com/"
-        target="_blank"
-        rel="noreferrer"
-        className="text-primary underline-offset-2 hover:underline"
-      >
-        jiurelay
-      </a>{" "}
-      免费配额度，或{" "}
       <Link
         to="/more/providers"
         className="text-primary underline-offset-2 hover:underline"
@@ -202,32 +193,23 @@ export function ModelSettings() {
         description={
           platformAvailable
             ? "选择账号默认组合（主模型 + 可选组队队员 / 后台 / 识图）。可用平台额度直接对话，也可接入服务商。"
-            : "选择账号默认组合（主模型 + 可选组队队员 / 后台 / 识图）。需自行在 jiurelay 免费配额度或接入服务商。"
+            : "选择账号默认组合（主模型 + 可选组队队员 / 后台 / 识图）。需自行接入服务商后才能对话。"
         }
       />
 
       <SettingsStack>
         <SettingsAsync loading={isLoading} error={loadError}>
-          {response && (
-            <>
-              <PlatformStatusLine
+          {response &&
+            (canEditProfiles ? (
+              <ModelProfilesSection
+                providers={providers}
+                catalog={catalog}
                 platformAvailable={platformAvailable}
-                platformModel={response.platform_model ?? null}
-                hasProviders={providers.length > 0}
+                onChanged={refresh}
               />
-
-              {canEditProfiles ? (
-                <ModelProfilesSection
-                  providers={providers}
-                  catalog={catalog}
-                  platformAvailable={platformAvailable}
-                  onChanged={refresh}
-                />
-              ) : (
-                <EmptyProfilesCta />
-              )}
-            </>
-          )}
+            ) : (
+              <EmptyProfilesCta />
+            ))}
         </SettingsAsync>
       </SettingsStack>
     </div>
@@ -242,16 +224,14 @@ function EmptyProfilesCta() {
       empty
       emptyLabel={
         <>
-          还没有可用模型。请到{" "}
-          <a
-            href="https://jiurelay.com/"
-            target="_blank"
-            rel="noreferrer"
+          还没有可用模型。请{" "}
+          <Link
+            to="/more/providers"
             className="text-primary underline-offset-2 hover:underline"
           >
-            jiurelay
-          </a>{" "}
-          免费配额度，或接入服务商。
+            接入服务商
+          </Link>
+          。
         </>
       }
       emptyAction={
@@ -264,46 +244,6 @@ function EmptyProfilesCta() {
         </Button>
       }
     />
-  );
-}
-
-function PlatformStatusLine({
-  platformAvailable,
-  platformModel,
-  hasProviders,
-}: {
-  platformAvailable: boolean;
-  platformModel: string | null;
-  hasProviders: boolean;
-}) {
-  if (!platformAvailable && hasProviders) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        已接入服务商。{" "}
-        <Link
-          to="/more/providers"
-          className="text-primary underline-offset-2 hover:underline"
-        >
-          管理服务商
-        </Link>
-      </p>
-    );
-  }
-  if (!platformAvailable) return null;
-
-  const modelHint = platformModel ? ` · ${platformModel}` : "";
-
-  return (
-    <p className="text-xs text-muted-foreground">
-      可用平台额度
-      {modelHint}。{" "}
-      <Link
-        to="/more/providers"
-        className="text-primary underline-offset-2 hover:underline"
-      >
-        {hasProviders ? "管理服务商" : "接入服务商"}
-      </Link>
-    </p>
   );
 }
 

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 /**
- * ask_user 取消结算：不画「已取消本回合」存根；content 空时用 checkpoint.question
- * 作展示正文。continue 等仍藏正文、只留 stub。
+ * ask_user 结算：取消/确认都占存根；正文只有「就是那句问句」时才藏，续聊露出。
  */
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { CheckpointDisplay, Message } from "@/stores/conversation";
@@ -120,22 +119,46 @@ afterEach(() => {
   cardsMock.checkpoints = [];
 });
 
-describe("AssistantMessage silent ask stop", () => {
-  it("stop resolved + 空 content：问句作普通正文，无「已取消本回合」", () => {
+describe("AssistantMessage ask settled", () => {
+  it("stop resolved + 空 content：画「已取消本回合」，不把问句回落成正文", () => {
     cardsMock.checkpoints = [{ ...baseCheckpoint, decision: "stop" }];
     renderBubble(settledMessage());
-    expect(screen.getByTestId("assistant-body").textContent).toBe(
-      baseCheckpoint.question,
-    );
-    expect(screen.queryByText("已取消本回合")).toBeNull();
+    expect(screen.queryByTestId("assistant-body")).toBeNull();
+    expect(screen.getByText("已取消本回合")).toBeTruthy();
+    expect(document.body.textContent).not.toContain(baseCheckpoint.question);
   });
 
-  it("continue resolved：仍藏正文（不回落问句），保留存根", () => {
+  it("continue resolved + 空 content：藏空正文，保留成功存根", () => {
     cardsMock.checkpoints = [
       { ...baseCheckpoint, decision: "continue", note: "就按这个开做" },
     ];
     renderBubble(settledMessage());
     expect(screen.queryByTestId("assistant-body")).toBeNull();
-    expect(screen.getByText("已按你的决定继续")).toBeTruthy();
+    expect(screen.queryByText("已按你的决定继续")).toBeNull();
+    expect(screen.getByText("就按这个开做")).toBeTruthy();
+  });
+
+  it("continue resolved + CEO 续聊：存根与续聊正文同时在", () => {
+    cardsMock.checkpoints = [
+      { ...baseCheckpoint, decision: "continue", note: "就按这个开做" },
+    ];
+    renderBubble(
+      settledMessage({ content: "好，按你确认的默认项来——先不派活，继续聊。" }),
+    );
+    expect(document.body.textContent).toContain(
+      "好，按你确认的默认项来——先不派活，继续聊。",
+    );
+    expect(screen.queryByText("已按你的决定继续")).toBeNull();
+    expect(screen.getByText("就按这个开做")).toBeTruthy();
+  });
+
+  it("正文就是问句副本时仍藏（避免贴在结论文旁像还在催）", () => {
+    cardsMock.checkpoints = [
+      { ...baseCheckpoint, decision: "continue", note: "" },
+    ];
+    renderBubble(settledMessage({ content: baseCheckpoint.question }));
+    expect(screen.queryByTestId("assistant-body")).toBeNull();
+    expect(screen.queryByText("已按你的决定继续")).toBeNull();
+    expect(document.querySelector("[data-ask-status='resolved']")).toBeTruthy();
   });
 });

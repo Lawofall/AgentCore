@@ -6,6 +6,11 @@ import {
   SettingsStack,
 } from "@/components/settings";
 import { Button, Card } from "@/components/ui";
+import {
+  checkAndroidUpdate,
+  openAndroidDownload,
+  useAndroidUpdates,
+} from "@/lib/androidUpdates";
 import { hasAutoUpdater, isWebRuntime } from "@/lib/capabilities";
 import {
   clientGitSha,
@@ -54,6 +59,41 @@ function updateStatusText(status: UpdaterStatus): string {
     case "error":
       return `更新失败：${status.message}`;
   }
+}
+
+function AndroidUpdateSection() {
+  const status = useAndroidUpdates();
+  const busy = status.phase === "checking";
+  return (
+    <SettingsSection
+      title="软件更新"
+      description={status.message ?? "检查 Android 安装包是否有新版本。"}
+      divider
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        {status.phase === "available" ? (
+          <Button size="md" onClick={() => openAndroidDownload()}>
+            去下载
+          </Button>
+        ) : null}
+        <Button
+          variant="neutral"
+          size="md"
+          disabled={busy || status.phase === "unsupported"}
+          icon={
+            busy ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RefreshCw size={14} />
+            )
+          }
+          onClick={() => void checkAndroidUpdate()}
+        >
+          检查更新
+        </Button>
+      </div>
+    </SettingsSection>
+  );
 }
 
 /** 软件更新: mirror the main-process updater status + 检查 / 查看 / 打开安装包. */
@@ -291,6 +331,9 @@ export function AboutSettings() {
 
         {/* 自动更新仅桌面外壳；web 客户端随刷新拿到新版，故 web 不挂「软件更新」。 */}
         {hasAutoUpdater() && <UpdateSection />}
+        {typeof window !== "undefined" && window.__NATIVE__ === true && (
+          <AndroidUpdateSection />
+        )}
 
         <SettingsSection
           title="法律与合规"

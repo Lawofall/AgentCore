@@ -1,4 +1,8 @@
 import { notifyError } from "@/lib/toast";
+
+function isNative(): boolean {
+  return typeof window !== "undefined" && window.__NATIVE__ === true;
+}
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type VoiceInputState = "idle" | "recording" | "processing" | "error";
@@ -81,7 +85,7 @@ export interface UseVoiceInputOptions {
 
 export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
   const SpeechRecognitionClass = getSpeechRecognition();
-  const isSupported = SpeechRecognitionClass !== null;
+  const isSupported = SpeechRecognitionClass !== null || isNative();
 
   const [state, setState] = useState<VoiceInputState>("idle");
   const [interimText, setInterimText] = useState("");
@@ -154,6 +158,13 @@ export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
       } catch {
         finishWithTranscript();
       }
+    } else if (isNative()) {
+      void import("@capgo/capacitor-speech-recognition").then(
+        ({ SpeechRecognition }) => {
+          void SpeechRecognition.stop().catch(() => {});
+          finishWithTranscript();
+        },
+      );
     } else {
       finishWithTranscript();
     }
@@ -168,11 +179,72 @@ export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
     setDuration(0);
     clearTimers();
     cleanupRecognition();
+    if (isNative()) {
+      void import("@capgo/capacitor-speech-recognition").then(
+        ({ SpeechRecognition }) => {
+          void SpeechRecognition.stop().catch(() => {});
+        },
+      );
+    }
     setState("idle");
   }, [clearTimers, cleanupRecognition]);
 
+  const startNative = useCallback(async () => {
+    const { SpeechRecognition } = await import(
+      "@capgo/capacitor-speech-recognition"
+    );
+    const perm = await SpeechRecognition.requestPermissions();
+    if (perm.speechRecognition !== "granted") {
+      notifyError("麦克风权限被拒绝，请在系统设置中允许访问");
+      setState("idle");
+      return;
+    }
+    const { available } = await SpeechRecognition.available();
+    if (!available) {
+      notifyError("此设备不支持语音识别");
+      setState("idle");
+      return;
+    }
+    const language = navigator.language || "zh-CN";
+    await SpeechRecognition.removeAllListeners();
+    await SpeechRecognition.addListener("partialResults", (event) => {
+      const text = event.matches?.[0] ?? "";
+      setInterimText(text);
+      finalPartsRef.current = text ? [text] : [];
+    });
+    await SpeechRecognition.addListener("listeningState", (event) => {
+      if (event.status === "stopped" && !intentionalStopRef.current) {
+        finishWithTranscript();
+      }
+    });
+    await SpeechRecognition.start({ language, partialResults: true });
+    setState("recording");
+    durationTimerRef.current = setInterval(() => {
+      setDuration(Math.floor((Date.now() - startTimeRef.current) / 1000));
+    }, 1000);
+    maxTimerRef.current = setTimeout(() => {
+      stop();
+    }, MAX_DURATION_MS);
+  }, [finishWithTranscript, stop]);
+
   const start = useCallback(() => {
-    if (!SpeechRecognitionClass || stateRef.current !== "idle") return;
+    if (stateRef.current !== "idle") return;
+    if (!SpeechRecognitionClass) {
+      if (!isNative()) return;
+      cancelledRef.current = false;
+      intentionalStopRef.current = false;
+      finalPartsRef.current = [];
+      setInterimText("");
+      setDuration(0);
+      startTimeRef.current = Date.now();
+      setState("recording");
+      void startNative().catch(() => {
+        clearTimers();
+        notifyError("无法启动语音识别，请重试");
+        setState("idle");
+      });
+      return;
+    }
 
     cancelledRef.current = false;
     intentionalStopRef.current = false;
@@ -247,7 +319,14 @@ export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
       notifyError("无法启动语音识别，请重试");
       setState("idle");
     }
-  }, [SpeechRecognitionClass, cleanupRecognition, finishWithTranscript, stop]);
+  }, [
+    SpeechRecognitionClass,
+    cleanupRecognition,
+    clearTimers,
+    finishWithTranscript,
+    startNative,
+    stop,
+  ]);
 
   const toggle = useCallback(() => {
     if (stateRef.current === "idle") {

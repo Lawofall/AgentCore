@@ -5,6 +5,10 @@
  * Dark = luminance stacking (Material / Linear): higher elevation → lighter
  * surface; borders = white alpha; body text soft white (~0.93). Mobile: light only.
  *
+ * Elevation aliases (raised / overlay / modal) = Tailwind default shadow-sm / lg
+ * so `shadow-raised` etc. are names, not a restyle. Focus width/offset are
+ * contract only — do not remap --ring-width here (would restyle leftover ring-1).
+ *
  * Brand migration (方案 3 · 分步)：
  * - Step 0 ✅ sidebar cool gray (hue 250)
  * - Step 1–2 ↩ reverted — surfaces + primary back to pre-migration
@@ -97,6 +101,15 @@
   --catalog-orchestration: oklch(0.58 0.14 290);
   --catalog-skill: oklch(0.58 0.14 155);
   --catalog-interaction: oklch(0.58 0.14 335);
+
+  /* Layer shadows — pixel-equal to Tailwind 4.3 --shadow-sm / --shadow-lg.
+   * Dark lift stays luminance; do not invent a heavier dark shadow here. */
+  --elevation-base: none;
+  --elevation-raised: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --elevation-overlay: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --elevation-modal: var(--elevation-overlay);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
 }
 
 .dark {

@@ -524,7 +524,7 @@ async def test_stream_chat_schedules_title_before_turn(monkeypatch):
     monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(turns_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
+
     from agentcore.core.types import AutonomyPolicy, recipe_to_axes
 
     monkeypatch.setattr(
@@ -600,7 +600,7 @@ async def test_stream_chat_skips_title_when_already_named(monkeypatch):
     monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(turns_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
+
     from agentcore.core.types import AutonomyPolicy, recipe_to_axes
 
     monkeypatch.setattr(

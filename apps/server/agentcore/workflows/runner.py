@@ -15,8 +15,6 @@ from agentcore.billing.gate import preflight_resolved_llm_credentials
 from agentcore.conversation.background import spawn_background
 from agentcore.conversation.common import (
     default_permission_axes_for_user,
-    resolve_conversation_history_access,
-    resolve_memory_enabled,
     resolve_permission_axes,
     resolve_profile_set,
 )
@@ -177,10 +175,6 @@ async def run_workflow_job(
                 )
                 return
             profile_set = await resolve_profile_set(session, conv, user_id)
-            memory_enabled = await resolve_memory_enabled(session, user_id)
-            conversation_history_access = await resolve_conversation_history_access(
-                session, user_id
-            )
             axes = await resolve_permission_axes(session, conversation_id)
 
         backend = await build_turn_backend(
@@ -215,8 +209,6 @@ async def run_workflow_job(
             backend=backend,
             history=history[:-1],
             folder_id=folder_id,
-            memory_enabled=memory_enabled,
-            conversation_history_access=conversation_history_access,
             permission_axes=axes,
             profile_set=profile_set,
             llm_credentials=llm_credentials,

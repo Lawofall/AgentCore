@@ -607,13 +607,9 @@ async function main() {
 
   if (sectionEnabled("mobile", filter)) {
     section("mobile");
-    run("mobile lint", "pnpm", ["--filter", "agentcore-mobile", "lint"]);
-    run("mobile typecheck", "pnpm", ["--filter", "agentcore-mobile", "typecheck"]);
-    run("mobile conformance", "pnpm", ["--filter", "agentcore-mobile", "conformance"]);
-    // Shared protocol predicates (desktop + mobile). Same placement as ci.yml
-    // mobile job — keeps the extra seconds off the shoot-heavy desktop section.
+    // Shared protocol predicates. Same placement as ci.yml mobile job —
+    // keeps the extra seconds off the shoot-heavy desktop section.
     run("fold-kit test", "pnpm", ["--filter", "@agentcore/protocol-fold-kit", "test"]);
-    run("mobile test", "pnpm", ["--filter", "agentcore-mobile", "exec", "vitest", "run"]);
   }
 
   if (sectionEnabled("admin", filter)) {

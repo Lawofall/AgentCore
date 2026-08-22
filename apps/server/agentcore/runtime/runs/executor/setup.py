@@ -177,7 +177,6 @@ async def _prepare_agent_node(
                 worker_tools=env.tools,
                 sink=env.sink,
                 local_root_claims=env.local_root_claims,
-                memory_enabled=env.memory_enabled,
                 permission_axes=env.permission_axes_obj,
             ),
         )

@@ -65,6 +65,8 @@ interface Props {
   onBack: () => void;
   onAddRoot: () => void;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
+  /** card 朝下；bar 贴底朝上。 */
+  placement?: "above" | "below";
 }
 
 function isAgent(
@@ -125,6 +127,7 @@ export function MentionMenu({
   onBack,
   onAddRoot,
   searchInputRef,
+  placement = "below",
 }: Props) {
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -160,7 +163,11 @@ export function MentionMenu({
 
   return (
     <div
-      className="absolute bottom-full left-0 z-20 mb-2 w-full overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
+      className={
+        placement === "above"
+          ? "absolute bottom-full left-0 z-20 mb-2 w-full overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
+          : "absolute top-full left-0 z-20 mt-2 w-full overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
+      }
       data-mention-level={showCategoryLevel ? "categories" : "items"}
     >
       {showSearch && (

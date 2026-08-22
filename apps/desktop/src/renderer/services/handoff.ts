@@ -1,3 +1,4 @@
+import { clientHeaders } from "@/lib/clientBuildInfo";
 import { StreamError, streamErrorFromResponse } from "@/lib/errors";
 import {
   type ChangeType,
@@ -6,6 +7,7 @@ import {
   sha256HexFromBase64,
 } from "@/lib/handoff-review";
 import { logEvent } from "@/lib/log";
+import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
 import {
   ApiError,
   BASE_URL,
@@ -157,9 +159,11 @@ async function consumeWorkspaceStream<T>(
   const doFetch = async (): Promise<Response> => {
     const response = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
-      credentials: "include",
+      credentials: sessionCredentials(),
       headers: {
         Accept: "text/event-stream",
+        ...clientHeaders(),
+        ...bearerAuthHeader(),
         ...getCsrfHeaders("POST"),
         ...(hasBody ? { "Content-Type": "application/json" } : {}),
       },

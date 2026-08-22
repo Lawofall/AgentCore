@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   MERMAID_INLINE_FIGURE_FILL,
@@ -32,19 +29,5 @@ describe("inlineMermaidWidthPx", () => {
     expect(inlineMermaidWidthPx(320, 0)).toBe(
       Math.round(320 * MERMAID_INLINE_MAX_UPSCALE),
     );
-  });
-});
-
-describe("inlineMermaidWidth cross-platform parity", () => {
-  it("the desktop and mobile copies stay identical", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const desktop = resolve(here, "../inlineMermaidWidth.ts");
-    const mobile = resolve(
-      here,
-      "../../../../../mobile/src/lib/inlineMermaidWidth.ts",
-    );
-    const read = (p: string) =>
-      readFileSync(p, "utf8").replace(/\r\n/g, "\n").trimEnd();
-    expect(read(desktop)).toBe(read(mobile));
   });
 });

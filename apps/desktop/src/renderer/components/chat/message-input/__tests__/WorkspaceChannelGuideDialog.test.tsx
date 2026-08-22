@@ -10,7 +10,7 @@ afterEach(() => {
 const dialogText = () => screen.getByRole("dialog").textContent ?? "";
 
 describe("WorkspaceChannelGuideDialog", () => {
-  it("讲清文件在云上、不自动同步、要手动导出", () => {
+  it("讲清这次聊哪：文件在云上、不自动同步、要手动导出", () => {
     render(
       <WorkspaceChannelGuideDialog
         open
@@ -19,13 +19,18 @@ describe("WorkspaceChannelGuideDialog", () => {
       />,
     );
     expect(screen.getByText("在哪工作：怎么选")).toBeTruthy();
-    expect(screen.getByText("文件放在云上")).toBeTruthy();
+    expect(screen.getByText("这次聊哪")).toBeTruthy();
     expect(screen.queryByText("我的文件")).toBeNull();
+    expect(dialogText()).toContain("点云图标的接着聊");
+    expect(dialogText()).toContain("点硬盘图标的，会再问怎么用");
+    expect(dialogText()).toContain("硬盘图标那一行");
     expect(screen.getByText(/看到的是同一份/)).toBeTruthy();
     expect(screen.getByText(/不会自动同步到你电脑/)).toBeTruthy();
     expect(dialogText()).toContain("导出 ZIP");
     expect(
-      screen.getByText(/日常用、想在手机和网页接着看 → 上面四个/),
+      screen.getByText(
+        /日常用、想在手机和网页接着看 → 快速对话、已有云文件夹，或新建或加入/,
+      ),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "知道了" })).toBeTruthy();
   });
@@ -40,13 +45,14 @@ describe("WorkspaceChannelGuideDialog", () => {
     );
     for (const label of [
       "快速对话",
-      "新建文件夹",
-      "从本机导入",
-      "从 Git 克隆",
-      "打开本机文件夹",
+      "新建或加入…",
+      "直接改这个文件夹",
+      "复制到云上当新家",
+      "先在云上做，原件先不动",
     ]) {
       expect(screen.getByText(label)).toBeTruthy();
     }
+    expect(dialogText()).toContain("从本机加入");
   });
 
   it("导入说清是复制一份、原件不再跟着变", () => {
@@ -61,7 +67,42 @@ describe("WorkspaceChannelGuideDialog", () => {
     expect(screen.getByText(/原件不会跟着变/)).toBeTruthy();
   });
 
-  it("本机文件夹直改本地，但明说不是离线模式", () => {
+  it("先在云上做与复制到云上互斥，无盘不出现", () => {
+    render(
+      <WorkspaceChannelGuideDialog
+        open
+        onOpenChange={() => {}}
+        showLocalTraditional
+      />,
+    );
+    const borrow = screen.getByText("先在云上做，原件先不动");
+    const borrowDd = borrow.closest("div")?.querySelector("dd");
+    expect(borrowDd?.textContent).toMatch(/这一单在云上做/);
+    expect(borrowDd?.textContent).toMatch(/原件先不动/);
+    expect(borrowDd?.textContent).toMatch(/写不写回/);
+    expect(borrowDd?.textContent).toMatch(/不是复制上来当云上那份家/);
+    expect(borrowDd?.textContent).not.toMatch(/复制一份上来/);
+    expect(
+      screen.getByText(
+        /这一单想在云上做、电脑上的原件先不动 → 先在云上做，原件先不动/,
+      ),
+    ).toBeTruthy();
+    expect(dialogText()).not.toContain("上面四个");
+    expect(dialogText()).not.toContain("上面五个");
+
+    cleanup();
+    render(
+      <WorkspaceChannelGuideDialog
+        open
+        onOpenChange={() => {}}
+        showLocalTraditional={false}
+      />,
+    );
+    expect(screen.queryByText("先在云上做，原件先不动")).toBeNull();
+    expect(screen.queryByText("从本机加入")).toBeNull();
+  });
+
+  it("直接改这个文件夹明说不是离线模式", () => {
     render(
       <WorkspaceChannelGuideDialog
         open
@@ -70,7 +111,7 @@ describe("WorkspaceChannelGuideDialog", () => {
       />,
     );
     const local = screen.getByText(/不是离线模式/);
-    expect(local.textContent).toMatch(/就是你电脑上的那个目录/);
+    expect(local.textContent).toMatch(/从本机加入/);
     expect(local.textContent).toMatch(/联网/);
     expect(local.textContent).toMatch(/对话记录也仍然存在云上/);
   });
@@ -94,11 +135,16 @@ describe("WorkspaceChannelGuideDialog", () => {
         showLocalTraditional={false}
       />,
     );
-    expect(screen.getByText("文件放在云上")).toBeTruthy();
+    expect(screen.getByText("这次聊哪")).toBeTruthy();
+    expect(screen.getByText("新建文件夹")).toBeTruthy();
     expect(screen.queryByText("我的文件")).toBeNull();
+    expect(dialogText()).toContain("点列表里的文件夹接着聊");
+    expect(dialogText()).not.toContain("硬盘图标");
     expect(screen.getByText("推荐")).toBeTruthy();
     expect(screen.getByText(/不会自动同步到你电脑/)).toBeTruthy();
     expect(screen.queryByText("打开本机文件夹")).toBeNull();
+    expect(screen.queryByText("直接改这个文件夹")).toBeNull();
+    expect(screen.queryByText("先在云上做，原件先不动")).toBeNull();
     expect(dialogText()).not.toContain("离线模式");
   });
 
@@ -114,6 +160,7 @@ describe("WorkspaceChannelGuideDialog", () => {
     "后台云端",
     "通道",
     "合回",
+    "云协作",
     "≠",
   ];
 

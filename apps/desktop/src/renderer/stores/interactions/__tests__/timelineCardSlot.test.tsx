@@ -93,18 +93,40 @@ describe("classifyTimelineInteractionCard", () => {
     ).toEqual({ kind: "card" });
   });
 
-  it("team_preview 袋子未命中是 missing", () => {
+  it("team_preview 永远是有意为空（开工卡已退役）", () => {
+    const bags: TimelineCardBags = {
+      ...emptyBags,
+      teamPreviews: [
+        {
+          id: "tp-1",
+          primitive: "delegate",
+          workers: [],
+          tools: [],
+          motion: "",
+          form: "",
+          sides: [],
+          maxRounds: 0,
+          thorough: true,
+          status: "pending",
+          decision: null,
+          note: "",
+        },
+      ],
+    };
+    expect(
+      classifyTimelineInteractionCard(
+        "team_preview",
+        { checkpoint_id: "tp-1" },
+        bags,
+      ),
+    ).toEqual({ kind: "intentionalEmpty" });
     expect(
       classifyTimelineInteractionCard(
         "team_preview",
         { checkpoint_id: "tp-gone" },
         emptyBags,
       ),
-    ).toEqual({
-      kind: "missing",
-      processKind: "team_preview",
-      id: "tp-gone",
-    });
+    ).toEqual({ kind: "intentionalEmpty" });
   });
 });
 
@@ -130,6 +152,18 @@ describe("renderTimelineInteractionCard", () => {
     const el = screen.getByTestId(TIMELINE_MISSING_CARD_TEST_ID);
     expect(el.getAttribute("data-process-kind")).toBe("checkpoint");
     expect(el.getAttribute("data-card-id")).toBe("cp-gone");
+  });
+
+  it("team_preview 有意为空：不出现 missing 占位", () => {
+    const node = renderTimelineInteractionCard(
+      "team_preview",
+      { checkpoint_id: "tp-1" },
+      emptyBags,
+    );
+    expect(node).toBeNull();
+    const { container } = render(node);
+    expect(screen.queryByTestId(TIMELINE_MISSING_CARD_TEST_ID)).toBeNull();
+    expect(container.textContent).toBe("");
   });
 
   it("plan_review 有意为空：不出现 missing 占位", () => {
@@ -171,6 +205,21 @@ describe("ProcessTimeline · 有标记无实体", () => {
     const el = screen.getByTestId(TIMELINE_MISSING_CARD_TEST_ID);
     expect(el.getAttribute("data-process-kind")).toBe("checkpoint");
     expect(el.getAttribute("data-card-id")).toBe("cp-gone");
+  });
+
+  it("team_preview 标记不画卡、也不报 missing", () => {
+    render(
+      <ProcessTimeline
+        process={[{ kind: "team_preview", checkpoint_id: "tp-1" }]}
+        isStreaming={false}
+        citations={[]}
+        composingTool={null}
+        fallbackContent=""
+        conversationId="c1"
+        {...emptyBags}
+      />,
+    );
+    expect(screen.queryByTestId(TIMELINE_MISSING_CARD_TEST_ID)).toBeNull();
   });
 
   it("plan_review 标记不画卡、也不报 missing", () => {

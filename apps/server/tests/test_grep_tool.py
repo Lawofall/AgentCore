@@ -133,6 +133,14 @@ def test_grep_schema_forbids_literal_newline_as_regex():
     assert "\\n" in desc
 
 
+def test_grep_schema_teaches_omit_path_when_unsure():
+    schema = GrepTool().schema
+    assert "省略 path" in schema.description
+    path = schema.parameters["properties"]["path"]["description"]
+    assert "不确定时省略" in path
+    assert "@scope" in path or "src/" in path
+
+
 async def test_grep_rejects_path_outside_workspace(tmp_path: Path):
     ws = tmp_path / "ws"
     ws.mkdir()

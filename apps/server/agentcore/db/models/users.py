@@ -77,16 +77,6 @@ class User(Base):
     # CNY like quota_monthly_cost_cny (→ nano at check time).
     quota_daily_cost_cny: Mapped[float | None] = mapped_column(Float, nullable=True)
     quota_daily_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Legacy column: product memory gate is always on (定案 A). Retained so we avoid
-    # a destructive migration; resolve + user API ignore this value. Defaults True.
-    memory_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default=text("true")
-    )
-    # Legacy column: conversation-log access is product-always-on (定案 A). Retained
-    # without a drop migration; resolve + user API ignore this value. Defaults True.
-    conversation_history_access: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default=text("true")
-    )
     # Default permission recipe for new conversations (安全权限与治理 · AutonomyPolicy).
     # cautious | less_interrupt (default) | managed — seeds conversation.permission_axes;
     # plan_review / checkpoint confirmation unchanged.

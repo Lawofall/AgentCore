@@ -569,7 +569,6 @@ def _build_tape_frame(
         base_system_prompt="__demo_tape__",
         user_message=user_message,
         folder_id=folder_id,
-        memory_enabled=False,
         transcript=list(capture.transcript),
         history=list(capture.history),
         journal_entries=capture.journal_entries,

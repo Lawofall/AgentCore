@@ -281,7 +281,6 @@ def build_merged_consult_source(
     tool_names: Collection[str],
     memory_store: MemoryStore | None,
     folder_id: str | None,
-    memory_enabled: bool = True,
     include_rules: bool = True,
     skill_audience: str | None = None,
     tool_registry: Any | None = None,
@@ -302,9 +301,7 @@ def build_merged_consult_source(
         else None
     )
     memory = (
-        MemoryConsultSource(
-            store=memory_store, folder_id=folder_id, enabled=memory_enabled
-        )
+        MemoryConsultSource(store=memory_store, folder_id=folder_id)
         if memory_store is not None
         else None
     )

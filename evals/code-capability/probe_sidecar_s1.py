@@ -37,7 +37,6 @@ ROOT_NAME = "hello-cli-s1"
 _PERMISSION_AXES_MANAGED: dict[str, str] = {
     "file_write": "session",
     "command": "auto",
-    "team_kickoff": "skip",
     "host": "session",
 }
 

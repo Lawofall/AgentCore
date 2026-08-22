@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,21 +12,16 @@ from agentcore.core.types import (
     FileWriteAxis,
     HostAxis,
     PermissionAxes,
-    TeamKickoffAxis,
     ToolEffect,
     recipe_to_axes,
 )
 
-# Explicit kickoff-command axes for授/开工卡 (no longer a built-in recipe).
 _KICKOFF_RULES = PermissionAxes(
     FileWriteAxis.SESSION,
-    CommandAxis.KICKOFF,
-    TeamKickoffAxis.RULES,
+    CommandAxis.AUTO,
     HostAxis.ASK,
 )
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
-from agentcore.runtime.checkpoints import CheckpointDecision
-from agentcore.runtime.delegate.preview import should_kickoff as delegate_should_kickoff
 from agentcore.runtime.events import EventSink, EventType
 from agentcore.runtime.facts import TurnFactLog, current_fact_log
 from agentcore.runtime.interaction import InteractionRegistry
@@ -33,8 +29,6 @@ from agentcore.runtime.kickoff import (
     debate_kickoff_summary,
     has_unfulfilled_kickoff_adjust,
     kickoff_adjust_state,
-    needs_capability_auth,
-    should_kickoff,
     should_preview_delegate_plan,
 )
 from agentcore.runtime.runs.plan import RunPlan
@@ -123,8 +117,30 @@ async def test_ask_user_allows_after_team_preview_resolved():
     assert "勿再开开工提案卡" not in (result.error or "")
 
 
+async def _drain_coord(execution_id: str = "e") -> None:
+    from agentcore.runtime.coordination.session import (
+        active_coordination,
+        clear_active_coordination,
+    )
+
+    session = active_coordination(execution_id)
+    if session is not None and session.drive_task is not None:
+        await asyncio.wait_for(session.drive_task, timeout=10)
+    clear_active_coordination()
+
+
+async def _fake_debate_run(_config, _usage_metadata):
+    return SimpleNamespace(
+        tool_call_id="",
+        success=True,
+        output="ok",
+        effect=ToolEffect.CONTINUE,
+        metadata={},
+    )
+
+
 async def test_confirmed_ask_does_not_skip_delegate_team_preview():
-    """选项 A：同回合阻塞 ask continue（checkpoint_resolved）后 ≥2 worker 仍挂开工卡。"""
+    """同回合阻塞 ask continue 后 ≥2 worker 也不再挂开工卡。"""
     from agentcore.runtime.coordination.session import clear_active_coordination
 
     clear_active_coordination()
@@ -183,14 +199,14 @@ async def test_confirmed_ask_does_not_skip_delegate_team_preview():
         captain_transcript.reset(ct_token)
         current_fact_log.reset(fl_token)
 
-    assert result.effect is ToolEffect.SUSPEND
-    assert len(saved) == 1
-    assert any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
-    clear_active_coordination()
+    assert result.effect is not ToolEffect.SUSPEND
+    assert saved == []
+    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    await _drain_coord()
 
 
 async def test_confirmed_ask_does_not_skip_debate_team_preview():
-    """选项 A：同回合 ask continue 后顶层 debate 仍挂开工卡。"""
+    """同回合 ask continue 后顶层 debate 也不再挂开工卡。"""
     registry = InteractionRegistry()
     sink = EventSink()
     sink.seed_journal(
@@ -216,6 +232,7 @@ async def test_confirmed_ask_does_not_skip_debate_team_preview():
         pass
 
     tool = _debate_tool(sink, registry, _save, _drop)
+    tool._run_moderator = _fake_debate_run  # type: ignore[method-assign]
     transcript = [
         LLMMessage(role="user", content="辩一下"),
         LLMMessage(
@@ -249,36 +266,9 @@ async def test_confirmed_ask_does_not_skip_debate_team_preview():
         captain_transcript.reset(ct_token)
         current_fact_log.reset(fl_token)
 
-    assert result.effect is ToolEffect.SUSPEND
-    assert len(saved) == 1
-    assert any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
-
-
-def test_full_auto_releases_plan_half():
-    """full_auto skips the kickoff card even when plan_preview would show."""
-    assert (
-        should_kickoff(
-            plan_preview=True,
-            local_gate=True,
-            axes=recipe_to_axes(AutonomyPolicy.MANAGED),
-        )
-        is False
-    )
-    assert (
-        should_kickoff(
-            plan_preview=True,
-            local_gate=False,
-            axes=recipe_to_axes(AutonomyPolicy.MANAGED),
-        )
-        is False
-    )
-
-
-def test_capability_auth_three_tiers():
-    assert needs_capability_auth(local_gate=True, axes=_KICKOFF_RULES) is True
-    assert needs_capability_auth(local_gate=True, axes=recipe_to_axes(AutonomyPolicy.CAUTIOUS)) is False
-    assert needs_capability_auth(local_gate=True, axes=recipe_to_axes(AutonomyPolicy.MANAGED)) is False
-    assert needs_capability_auth(local_gate=False, axes=_KICKOFF_RULES) is False
+    assert result.effect is not ToolEffect.SUSPEND
+    assert saved == []
+    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
 
 
 def test_delegate_trigger_rules_unchanged():
@@ -289,24 +279,6 @@ def test_delegate_trigger_rules_unchanged():
     solo = _plan(RunSpec(run_id="r1", task="alone", role="写手"))
     assert should_preview_delegate_plan(multi) is True
     assert should_preview_delegate_plan(solo) is False
-    assert (
-        delegate_should_kickoff(
-            multi, local_gate=False, axes=_KICKOFF_RULES
-        )
-        is True
-    )
-    assert (
-        delegate_should_kickoff(
-            multi, local_gate=False, axes=recipe_to_axes(AutonomyPolicy.MANAGED)
-        )
-        is False
-    )
-    assert (
-        delegate_should_kickoff(
-            solo, local_gate=True, axes=_KICKOFF_RULES
-        )
-        is True
-    )  # capability half only
 
 
 def test_checkpoint_after_yields_plan_preview_half():
@@ -316,28 +288,6 @@ def test_checkpoint_after_yields_plan_preview_half():
         RunSpec(run_id="r2", task="全文", role="写作", depends_on=["r1"]),
     )
     assert should_preview_delegate_plan(with_cp) is False
-    # Capability auth still drives kickoff when local gate is on.
-    assert (
-        should_kickoff(
-            plan_preview=False,
-            local_gate=True,
-            axes=_KICKOFF_RULES,
-        )
-        is True
-    )
-    assert (
-        delegate_should_kickoff(
-            with_cp, local_gate=True, axes=_KICKOFF_RULES
-        )
-        is True
-    )
-    # No local gate + checkpoint batch → no kickoff card at all.
-    assert (
-        delegate_should_kickoff(
-            with_cp, local_gate=False, axes=_KICKOFF_RULES
-        )
-        is False
-    )
     # Solo with leftover stance/round tags must NOT hang plan-preview
     # (CEO schema no longer advertises those fields; runtime tags are not kickoff marks).
     tagged_solo = _plan(RunSpec(run_id="r1", task="辩", role="正方", stance="应推广"))
@@ -463,6 +413,7 @@ def _debate_tool(
 
 
 async def test_debate_top_level_must_kickoff():
+    """顶层 debate 不再 await team_preview；直接开跑。"""
     registry = InteractionRegistry()
     sink = EventSink()
     saved: list[TeamPreviewSuspension] = []
@@ -474,6 +425,7 @@ async def test_debate_top_level_must_kickoff():
         pass
 
     tool = _debate_tool(sink, registry, _save, _drop)
+    tool._run_moderator = _fake_debate_run  # type: ignore[method-assign]
     transcript = [
         LLMMessage(role="user", content="辩一下"),
         LLMMessage(
@@ -507,19 +459,9 @@ async def test_debate_top_level_must_kickoff():
         captain_transcript.reset(ct_token)
         current_fact_log.reset(fl_token)
 
-    assert result.effect is ToolEffect.SUSPEND
-    assert len(saved) == 1
-    assert saved[0].primitive == "debate"
-    assert saved[0].motion.startswith("该不该")
-    # 开工卡 research_first 键已退役：不再 offer
-    assert any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
-    required = next(e for e in sink._history if e.type is EventType.TEAM_PREVIEW_REQUIRED)
-    assert required.payload["primitive"] == "debate"
-    # Must pause before debate.started (no moderator run_started yet).
-    assert not any(
-        e.type is EventType.RUN_STARTED and str(e.payload.get("run_id", "")).startswith("debate_")
-        for e in sink._history
-    )
+    assert result.effect is not ToolEffect.SUSPEND
+    assert saved == []
+    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
 
 
 async def test_debate_full_auto_skips_kickoff():
@@ -561,93 +503,6 @@ async def test_debate_full_auto_skips_kickoff():
     )
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-
-
-async def test_debate_resume_stop_continue_adjust():
-    registry = InteractionRegistry()
-    sink = EventSink()
-    saved: list = []
-
-    async def _save(frame):
-        saved.append(frame)
-
-    async def _drop(_mid):
-        pass
-
-    tool = _debate_tool(sink, registry, _save, _drop)
-    args = {
-        "motion": "原命题",
-        "form": "debate",
-        "sides": [
-            {"key": "pro", "name": "正方", "stance": "a"},
-            {"key": "con", "name": "反方", "stance": "b"},
-        ],
-    }
-
-    stop = await tool.resume_after_kickoff(
-        decision=CheckpointDecision.STOP, note="算了", arguments=args
-    )
-    assert "算了" in stop.output
-    assert "宜先问" in stop.output
-    assert "再行动" in stop.output
-    stop_empty = await tool.resume_after_kickoff(
-        decision=CheckpointDecision.STOP, note="", arguments=args
-    )
-    assert "用户取消了辩论，未开赛。" in stop_empty.output
-    assert "宜先问" in stop_empty.output
-    assert "再调 debate" in stop_empty.output
-
-    captured: list[dict] = []
-
-    async def _capture_execute(arguments, context, *, skip_kickoff=False):
-        captured.append({"arguments": dict(arguments), "skip_kickoff": skip_kickoff})
-        return SimpleNamespace(
-            tool_call_id="",
-            success=True,
-            output="ran",
-            effect=ToolEffect.CONTINUE,
-        )
-
-    tool.execute = _capture_execute  # type: ignore[method-assign]
-
-    cont = await tool.resume_after_kickoff(
-        decision=CheckpointDecision.CONTINUE, note="", arguments=args
-    )
-    assert cont.output == "ran"
-    assert captured[-1]["skip_kickoff"] is True
-    assert captured[-1]["arguments"]["motion"] == "原命题"
-    assert "_kickoff_ask" not in captured[-1]["arguments"]
-
-    cont_note = await tool.resume_after_kickoff(
-        decision=CheckpointDecision.CONTINUE,
-        note="最关心成本谁买单",
-        arguments=args,
-    )
-    assert cont_note.output == "ran"
-    assert captured[-1]["arguments"]["motion"] == "原命题"
-    assert captured[-1]["arguments"]["_kickoff_ask"] == "最关心成本谁买单"
-
-    # ADJUST：不开赛、不 execute；意见回灌 CEO（不套用取消「宜先问」）。
-    before_adjust = len(captured)
-    adj = await tool.resume_after_kickoff(
-        decision=CheckpointDecision.ADJUST, note="改成新命题", arguments=args
-    )
-    assert len(captured) == before_adjust
-    assert "改成新命题" in adj.output
-    assert "未开赛" in adj.output
-    assert "重新调用 debate" in adj.output
-    assert "宜先问" not in adj.output
-    assert adj.effect is ToolEffect.CONTINUE
-
-    before_timeout = len(captured)
-    timed_out = await tool.resume_after_kickoff(
-        decision=CheckpointDecision.TIMEOUT, note="", arguments=args
-    )
-    assert len(captured) == before_timeout
-    assert "未在时限内回应" in timed_out.output
-    assert "未开赛" in timed_out.output
-    assert "自行收尾" in timed_out.output
-    assert "宜先问" not in timed_out.output
 
 
 async def test_delegate_full_auto_multi_skips_card():
@@ -699,7 +554,7 @@ async def test_delegate_full_auto_multi_skips_card():
 
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-    clear_active_coordination()
+    await _drain_coord()
 
 
 def _adjust_journal(
@@ -735,40 +590,6 @@ def _adjust_journal(
             }
         )
     return entries
-
-
-def test_unfulfilled_adjust_forces_plan_half():
-    """未兑现 adjust 绕过 ≥2 worker：solo 也挂；兑现后不再强制。"""
-    solo = _plan(RunSpec(run_id="r1", task="alone", role="写手"))
-    assert should_preview_delegate_plan(solo) is False
-    assert (
-        should_kickoff(
-            plan_preview=False,
-            local_gate=False,
-            axes=_KICKOFF_RULES,
-            unfulfilled_adjust=True,
-        )
-        is True
-    )
-    assert (
-        should_kickoff(
-            plan_preview=False,
-            local_gate=False,
-            axes=_KICKOFF_RULES,
-            unfulfilled_adjust=False,
-        )
-        is False
-    )
-    # never-adjust 路径：full_auto 仍跳。
-    assert (
-        should_kickoff(
-            plan_preview=True,
-            local_gate=True,
-            axes=recipe_to_axes(AutonomyPolicy.MANAGED),
-            unfulfilled_adjust=True,
-        )
-        is False
-    )
 
 
 def test_kickoff_adjust_state_lineage_and_fulfillment():
@@ -807,7 +628,7 @@ def test_kickoff_adjust_state_lineage_and_fulfillment():
 
 
 async def test_unfulfilled_adjust_solo_still_hangs_card():
-    """修订后只剩 1 人（会推断 light）仍挂卡，且新卡带谱系。"""
+    """修订后只剩 1 人也不再挂新开工卡。"""
     from agentcore.runtime.coordination.session import clear_active_coordination
 
     clear_active_coordination()
@@ -883,16 +704,13 @@ async def test_unfulfilled_adjust_solo_still_hangs_card():
         captain_transcript.reset(ct_token)
         current_fact_log.reset(fl_token)
 
-    assert result.effect is ToolEffect.SUSPEND
-    assert len(saved) == 1
-    required = next(e for e in sink._history if e.type is EventType.TEAM_PREVIEW_REQUIRED)
-    assert required.payload["revision"] == 2
-    assert required.payload["revised_from"] == "tp1"
-    assert required.payload["revision_note"] == note
-    assert saved[0].revision == 2
-    assert saved[0].revised_from == "tp1"
-    assert saved[0].revision_note == note
-    clear_active_coordination()
+    assert result.effect is not ToolEffect.SUSPEND
+    assert saved == []
+    assert not any(
+        e.type is EventType.TEAM_PREVIEW_REQUIRED and e.payload.get("revision") == 2
+        for e in sink._history
+    )
+    await _drain_coord()
 
 
 async def test_fulfilled_adjust_does_not_force_solo_card():
@@ -995,4 +813,4 @@ async def test_fulfilled_adjust_does_not_force_solo_card():
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
     assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
-    clear_active_coordination()
+    await _drain_coord()

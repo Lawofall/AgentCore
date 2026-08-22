@@ -1,6 +1,6 @@
 """read_conversation — Worker deep-read of one past chat (messages + journal).
 
-Worker-only; privacy-gated via ``manual_wire`` + ``_wire_worker_conversation_log_tools``.
+Worker-only; wired via ``manual_wire`` + ``_wire_worker_conversation_log_tools``.
 Supports cursor continuation so a multi-chunk transcript can be reassembled — never
 silently summarised via the default 4k ToolResult head+tail truncate.
 

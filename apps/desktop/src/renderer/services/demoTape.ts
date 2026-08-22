@@ -63,7 +63,6 @@ function openBoundConversation(
     permissionAxes: {
       file_write: "session",
       command: "auto",
-      team_kickoff: "rules",
       host: "session",
     },
   });

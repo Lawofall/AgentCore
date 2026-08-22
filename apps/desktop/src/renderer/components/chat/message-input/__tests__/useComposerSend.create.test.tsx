@@ -44,7 +44,6 @@ vi.mock("@/services/permissionAxes", () => ({
   resolveDefaultPermissionAxes: vi.fn(async () => ({
     file_write: "session",
     command: "auto",
-    team_kickoff: "rules",
     host: "session",
   })),
   setComposerDraftAxes: vi.fn(),

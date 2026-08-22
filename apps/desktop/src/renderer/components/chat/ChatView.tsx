@@ -3,6 +3,7 @@ import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useComposerDockFlip } from "@/hooks/useComposerDockFlip";
 import { useConversations } from "@/hooks/useConversations";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { shouldCenterDraftComposer } from "@/lib/onboarding";
 import { useChatScroll } from "@/lib/useChatScroll";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ import { MessageList } from "./MessageList";
 import { StageCardDock } from "./StageCardDock";
 
 export function ChatView() {
+  const { isNarrow } = useNarrowLayoutState();
   const messages = useActiveMessages();
   const conversationId = useConversationStore((s) => s.currentConversationId);
   const hasMessages = messages.length > 0;
@@ -83,6 +85,7 @@ export function ChatView() {
   // the ✕ close it (handled inside FindBar).
   const [findOpen, setFindOpen] = useState(false);
   useEffect(() => {
+    if (isNarrow) return;
     const onKey = (e: KeyboardEvent) => {
       if (
         (e.ctrlKey || e.metaKey) &&
@@ -96,7 +99,7 @@ export function ChatView() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hasMessages]);
+  }, [hasMessages, isNarrow]);
   useEffect(() => {
     if (!hasMessages && findOpen) setFindOpen(false);
   }, [hasMessages, findOpen]);
@@ -127,13 +130,18 @@ export function ChatView() {
           The relative wrapper anchors the floating 回到底部 button to the viewport
           so it stays put instead of scrolling away with the messages. */}
       <div className="relative min-h-0 flex-1">
-        <FindBar open={findOpen} onClose={() => setFindOpen(false)} />
-        <ConversationOutline />
+        {!isNarrow && (
+          <FindBar open={findOpen} onClose={() => setFindOpen(false)} />
+        )}
+        {!isNarrow && <ConversationOutline />}
         <div ref={scrollRef} className="h-full overflow-y-auto">
           {hasMessages && (
             <div
               ref={contentRef}
-              className="mx-auto min-w-0 w-full max-w-3xl space-y-4 px-6 pb-4 pt-10"
+              className={cn(
+                "mx-auto min-w-0 w-full max-w-3xl space-y-4",
+                isNarrow ? "px-4 pb-4 pt-4" : "px-6 pb-4 pt-10",
+              )}
             >
               {/* Headerless chat view: the top padding keeps the first message
                   clear of the floating side-panel toggle (top-right of the pane,

@@ -33,7 +33,7 @@ export function Switch({
       }`}
     >
       <span
-        className={`size-4 rounded-full bg-background shadow-sm transition-transform ${
+        className={`size-4 rounded-full bg-background shadow-raised transition-transform ${
           checked ? "translate-x-4" : "translate-x-0"
         }`}
       />

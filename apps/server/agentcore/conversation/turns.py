@@ -8,10 +8,8 @@ from agentcore.config import settings
 from agentcore.conversation.background import spawn_background
 from agentcore.conversation.common import (
     preview,
-    resolve_conversation_history_access,
     resolve_folder_local_binding,
     resolve_local_binding,
-    resolve_memory_enabled,
     resolve_permission_axes,
     resolve_profile_set,
     resolve_turn_file_workspace,
@@ -138,10 +136,6 @@ async def stream_chat(
             else:
                 local_binding = await resolve_local_binding(session, conv)
             profile_set = await resolve_profile_set(session, conv, user_id)
-            memory_enabled = await resolve_memory_enabled(session, user_id)
-            conversation_history_access = await resolve_conversation_history_access(
-                session, user_id
-            )
             permission_axes = await resolve_permission_axes(session, conversation_id)
 
             # AI 协作白板 (§六 M2): if this conversation is a board's dedicated thread, the
@@ -210,8 +204,6 @@ async def stream_chat(
                 backend=backend,
                 llm_credentials=llm_credentials,
                 profile_set=profile_set,
-                memory_enabled=memory_enabled,
-                conversation_history_access=conversation_history_access,
                 permission_axes=permission_axes,
                 board_id=board_id,
                 llm_supports_tools=llm_supports_tools,
@@ -317,10 +309,6 @@ async def regenerate_chat(
             else:
                 local_binding = await resolve_local_binding(session, conv)
             profile_set = await resolve_profile_set(session, conv, user_id)
-            memory_enabled = await resolve_memory_enabled(session, user_id)
-            conversation_history_access = await resolve_conversation_history_access(
-                session, user_id
-            )
             permission_axes = await resolve_permission_axes(session, conversation_id)
             board = await BoardRepository(session).get_by_conversation_id(
                 conversation_id, user_id=user_id
@@ -364,8 +352,6 @@ async def regenerate_chat(
             backend=backend,
             llm_credentials=llm_credentials,
             profile_set=profile_set,
-            memory_enabled=memory_enabled,
-            conversation_history_access=conversation_history_access,
             permission_axes=permission_axes,
             board_id=board_id,
             llm_supports_tools=llm_supports_tools,
@@ -767,10 +753,6 @@ async def continue_chat(
                 local_binding = await resolve_local_binding(session, conv)
             profile_set = await resolve_profile_set(session, conv, user_id)
             permission_axes = await resolve_permission_axes(session, conversation_id)
-            memory_enabled = await resolve_memory_enabled(session, user_id)
-            conversation_history_access = await resolve_conversation_history_access(
-                session, user_id
-            )
             entries = await TurnJournalRepository(session).load(message_id)
 
         if not entries:
@@ -857,8 +839,6 @@ async def continue_chat(
                         history=history[:-1] if history else None,
                         board_id=board_id,
                         folder_id=ws_folder_id,
-                        memory_enabled=memory_enabled,
-                        conversation_history_access=conversation_history_access,
                         llm_credentials=llm_credentials,
                         profile_set=profile_set,
                         session_saver=session_saver,

@@ -58,16 +58,7 @@ class CommandAxis(StrEnum):
     """How execution-class tools (code / terminal / test) are authorized."""
 
     ASK = "ask"
-    KICKOFF = "kickoff"
     AUTO = "auto"
-
-
-class TeamKickoffAxis(StrEnum):
-    """Whether / when the team kickoff card (plan + capability halves) hangs."""
-
-    ALWAYS = "always"
-    RULES = "rules"
-    SKIP = "skip"
 
 
 class HostAxis(StrEnum):
@@ -85,9 +76,9 @@ class AutonomyPolicy(StrEnum):
     Stored on ``users.autonomy_policy`` (设置页「新会话默认权限配方」).
     """
 
-    CAUTIOUS = "cautious"  # ask / ask / rules / off
-    LESS_INTERRUPT = "less_interrupt"  # session / auto / rules / session (default)
-    MANAGED = "managed"  # session / auto / skip / session
+    CAUTIOUS = "cautious"  # ask / ask / off
+    LESS_INTERRUPT = "less_interrupt"  # session / auto / session (default)
+    MANAGED = "managed"  # same axes as less_interrupt
 
 
 @dataclass(frozen=True)
@@ -95,18 +86,17 @@ class PermissionAxes:
     """Conversation-level permission axes (运行时单一真相源).
 
     - ``file_write`` — ask = per-call; session = trust reversible writes
-    - ``command`` — ask = withhold/no kickoff grant; kickoff = card authorizes;
-      auto = silent local exec
-    - ``team_kickoff`` — always / rules / skip for the team card
+    - ``command`` — ask = withhold execution class / per-call exec; auto = silent local exec
     - ``host`` — off / ask / session for the local Host face (orthogonal to command)
 
     Illegal: ``command=auto`` ∧ ``file_write=ask``.
     ask_user / plan_review / circuit-breakers / sensitive reads are orthogonal.
+    ``team_kickoff`` and ``command=kickoff`` are retired: extra keys dropped;
+    ``command=kickoff`` is not a :class:`CommandAxis` value (API 422).
     """
 
     file_write: FileWriteAxis = FileWriteAxis.SESSION
     command: CommandAxis = CommandAxis.AUTO
-    team_kickoff: TeamKickoffAxis = TeamKickoffAxis.RULES
     host: HostAxis = HostAxis.SESSION
 
     def __post_init__(self) -> None:
@@ -119,7 +109,6 @@ class PermissionAxes:
         return {
             "file_write": self.file_write.value,
             "command": self.command.value,
-            "team_kickoff": self.team_kickoff.value,
             "host": self.host.value,
         }
 
@@ -127,7 +116,9 @@ class PermissionAxes:
     def from_mapping(cls, raw: Mapping[str, Any] | None) -> PermissionAxes:
         """Parse stored / wire JSON; unknown / missing → less_interrupt defaults.
 
-        Explicitly resolves ``host`` (缺省 = 默认 ``session``); never silently drop it.
+        Extra keys (retired ``team_kickoff``) are ignored. ``command=kickoff`` is
+        not a live enum value — it fails :class:`CommandAxis` and falls through
+        to defaults (no session→auto / ask→ask merge). ``host`` 缺省 = ``session``.
         """
         if not raw:
             return DEFAULT_PERMISSION_AXES
@@ -137,9 +128,6 @@ class PermissionAxes:
                     str(raw.get("file_write") or FileWriteAxis.SESSION.value)
                 ),
                 command=CommandAxis(str(raw.get("command") or CommandAxis.AUTO.value)),
-                team_kickoff=TeamKickoffAxis(
-                    str(raw.get("team_kickoff") or TeamKickoffAxis.RULES.value)
-                ),
                 host=HostAxis(str(raw.get("host") or HostAxis.SESSION.value)),
             )
         except (ValueError, TypeError, KeyError):
@@ -148,11 +136,6 @@ class PermissionAxes:
     @property
     def trusts_file_writes(self) -> bool:
         return self.file_write is FileWriteAxis.SESSION
-
-    @property
-    def honors_kickoff_grant(self) -> bool:
-        """True when a kickoff continue may silence execution-class tools."""
-        return self.command is CommandAxis.KICKOFF
 
     @property
     def auto_executes(self) -> bool:
@@ -164,14 +147,6 @@ class PermissionAxes:
         return self.command is CommandAxis.ASK
 
     @property
-    def skips_team_kickoff(self) -> bool:
-        return self.team_kickoff is TeamKickoffAxis.SKIP
-
-    @property
-    def forces_team_kickoff(self) -> bool:
-        return self.team_kickoff is TeamKickoffAxis.ALWAYS
-
-    @property
     def host_disabled(self) -> bool:
         return self.host is HostAxis.OFF
 
@@ -179,22 +154,10 @@ class PermissionAxes:
     def trusts_host(self) -> bool:
         return self.host is HostAxis.SESSION
 
-    @property
-    def implies_deep_research_auto(self) -> bool:
-        """command=auto ∧ team_kickoff=skip（托管）蕴含深度研究自治.
-
-        少打断为 auto∧rules：仍弹组队/开辩卡，不蕴含自治跳卡。
-        """
-        return (
-            self.command is CommandAxis.AUTO
-            and self.team_kickoff is TeamKickoffAxis.SKIP
-        )
-
 
 DEFAULT_PERMISSION_AXES = PermissionAxes(
     file_write=FileWriteAxis.SESSION,
     command=CommandAxis.AUTO,
-    team_kickoff=TeamKickoffAxis.RULES,
     host=HostAxis.SESSION,
 )
 
@@ -202,16 +165,10 @@ _RECIPE_TO_AXES: dict[AutonomyPolicy, PermissionAxes] = {
     AutonomyPolicy.CAUTIOUS: PermissionAxes(
         FileWriteAxis.ASK,
         CommandAxis.ASK,
-        TeamKickoffAxis.RULES,
         HostAxis.OFF,
     ),
     AutonomyPolicy.LESS_INTERRUPT: DEFAULT_PERMISSION_AXES,
-    AutonomyPolicy.MANAGED: PermissionAxes(
-        FileWriteAxis.SESSION,
-        CommandAxis.AUTO,
-        TeamKickoffAxis.SKIP,
-        HostAxis.SESSION,
-    ),
+    AutonomyPolicy.MANAGED: DEFAULT_PERMISSION_AXES,
 }
 
 
@@ -224,14 +181,17 @@ def validate_permission_axes(
     *,
     file_write: str,
     command: str,
-    team_kickoff: str,
     host: str = HostAxis.SESSION.value,
+    **_discarded: object,
 ) -> PermissionAxes:
-    """Parse + validate axes for API writes; raises ValueError on illegal combo / enum."""
+    """Parse + validate axes for API writes; raises ValueError on illegal combo / enum.
+
+    Extra keys (retired ``team_kickoff``) are ignored. ``command=kickoff`` is
+    not a :class:`CommandAxis` value and raises (API 422).
+    """
     return PermissionAxes(
         file_write=FileWriteAxis(file_write),
         command=CommandAxis(command),
-        team_kickoff=TeamKickoffAxis(team_kickoff),
         host=HostAxis(host),
     )
 

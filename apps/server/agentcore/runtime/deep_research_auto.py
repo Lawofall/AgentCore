@@ -1,16 +1,13 @@
 """深度研究自治 — session-level auto-adopt debate helpers.
 
-「深度研究自治」旗标与托管配方 (command=auto ∧ team_kickoff=skip) 蕴含关系收敛
-于此：运行时判断只走这些 helpers，禁止在 kickoff / ceo_format / 工具层散落双判断。
-少打断为 auto∧rules，不蕴含本自治（仍弹组队/开辩卡）。
+只认会话显式 ``deep_research_auto`` 旗标；权限配方不再蕴含本自治。
+运行时判断只走这些 helpers，禁止在 kickoff / ceo_format / 工具层散落双判断。
 """
 
 from __future__ import annotations
 
 import uuid
 from typing import Any
-
-from agentcore.core.types import PermissionAxes
 
 
 def _is_persistable_conversation_id(conversation_id: str) -> bool:
@@ -32,29 +29,24 @@ AUTO_DEBATE_SESSION_LIMIT = 1
 def deep_research_auto_active(
     *,
     deep_research_auto: bool = False,
-    permission_axes: PermissionAxes | None = None,
+    permission_axes: Any | None = None,
 ) -> bool:
-    """True when the session flag is on **or** axes imply managed (托管) autonomy.
-
-    托管配方 (session/auto/skip) 视同旗标开（对齐原 full_trust 蕴含）。
-    """
-    if deep_research_auto:
-        return True
-    return bool(permission_axes is not None and permission_axes.implies_deep_research_auto)
+    """True only when the session flag is on. Axes no longer imply autonomy."""
+    _ = permission_axes
+    return bool(deep_research_auto)
 
 
 def may_auto_debate(
     *,
     deep_research_auto: bool = False,
-    permission_axes: PermissionAxes | None = None,
+    permission_axes: Any | None = None,
     auto_debate_count: int = 0,
     limit: int = AUTO_DEBATE_SESSION_LIMIT,
 ) -> bool:
-    """True when autonomy is active **and** under the per-session auto-debate cap.
+    """True when the session flag is on **and** under the per-session auto-debate cap.
 
-    Used by ceo_format consumption guidance and debate kickoff waiver. Over the
-    limit ⇒ False (guidance falls back to present-to-user; kickoff restores the
-    card for flag-only sessions — managed axes still skip via ``should_kickoff``).
+    Used by ceo_format consumption guidance. Over the limit ⇒ False (guidance
+    falls back to present-to-user). Axes are ignored.
     """
     if int(auto_debate_count or 0) >= limit:
         return False

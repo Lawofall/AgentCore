@@ -54,14 +54,12 @@ export interface SidecarBrowserBridge {
 /** 会话权限轴（安全权限与治理）——与服务端 `PermissionAxes` 逐字段对齐。
  *  sidecar 无会话库，桌面按回合把当前会话轴随参数送达本地引擎。 */
 export type SidecarFileWriteAxis = "ask" | "session";
-export type SidecarCommandAxis = "ask" | "kickoff" | "auto";
-export type SidecarTeamKickoffAxis = "always" | "rules" | "skip";
+export type SidecarCommandAxis = "ask" | "auto";
 export type SidecarHostAxis = "off" | "ask" | "session";
 
 export interface SidecarPermissionAxes {
   file_write: SidecarFileWriteAxis;
   command: SidecarCommandAxis;
-  team_kickoff: SidecarTeamKickoffAxis;
   host: SidecarHostAxis;
 }
 

@@ -4,17 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from agentcore.core.logging import get_logger
-from agentcore.core.types import ToolEffect
-from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.tools.protocol import ToolResult
 
 if TYPE_CHECKING:
     from agentcore.runtime.runs.plan import RunPlan
 
 type DelegateTool = Any
-
-logger = get_logger(__name__)
 
 
 async def team_preview_before_workers(
@@ -25,97 +20,33 @@ async def team_preview_before_workers(
     seed_completed: dict[str, Any] | None,
     call_idx: int,
 ) -> ToolResult | None:
-    """Hang for the kickoff card (计划+能力) before any worker / coordinate fork.
+    """No longer hangs a new team_preview card.
 
-    Returns an early ToolResult (SUSPEND / stop) or None to proceed. Under
-    AutonomyPolicy.full_auto, skips the card entirely and silently marks a
-    delegation grant for later application.
+    Returns None to proceed (or None for nested). ``command=auto`` silent grant
+    still marks ``_auto_grant_pending`` for :func:`apply_delegation_grant`.
+    Leftover hung cards are not recovered. light / seed /
+    adjust / MLR preauth no longer decide whether to emit a card — top-level
+    also runs. ``stage_card`` keep is still marked when MLR actually starts.
     """
+    _ = (plan, complexity_hint, call_idx)
     playbook_name = str(getattr(tool, "_active_playbook", None) or "").strip()
     if tool._depth != 0:
         return None
+    # 续跑 / 同回合追加带 seed：不开新卡。grant 见 seed 即 no-op。
+    if seed_completed is not None:
+        return None
     from agentcore.core.types import DEFAULT_PERMISSION_AXES
-    from agentcore.runtime.delegate.preview import (
-        await_team_preview,
-        needs_capability_auth,
-        should_kickoff,
-    )
-    from agentcore.runtime.kickoff.revision import (
-        has_unfulfilled_kickoff_adjust,
-        kickoff_turn_journal,
-    )
     from agentcore.runtime.sandbox_approval import worker_gate_applies
 
-    unfulfilled_adjust = has_unfulfilled_kickoff_adjust(
-        kickoff_turn_journal(sink=getattr(tool, "_sink", None))
-    )
-    # 续跑 / 同回合追加带 seed 通常跳卡；未兑现 adjust 必须再出卡（与 light 同缝）。
-    if seed_completed is not None and not unfulfilled_adjust:
-        return None
     axes = getattr(tool, "_permission_axes", None) or DEFAULT_PERMISSION_AXES
     local_gate = worker_gate_applies(tool._base_tool_context.backend)
-    # light 通常跳过开工卡；若需 capability auth（kickoff grant），不早退——
-    # 否则 GRANTABLE（mkdir 等）会静默挂在 ApprovalGate。
-    # 未兑现 adjust 同样不早退：否则「改成一个人」会推断 light 后直接开跑。
+    # Card skipped: still silent-grant when command=auto.
     if (
-        complexity_hint == "light"
-        and not unfulfilled_adjust
-        and not needs_capability_auth(local_gate=local_gate, axes=axes)
+        local_gate
+        and tool._approval_gate is not None
+        and axes.auto_executes
     ):
-        return None
-    if not should_kickoff(
-        plan, local_gate=local_gate, axes=axes, unfulfilled_adjust=unfulfilled_adjust
-    ):
-        # Card skipped: still silent-grant when command=auto, OR when team_kickoff=skip
-        # with command=kickoff (跳组团卡但仍开工授执行类；托管或自定义轴).
-        if (
-            local_gate
-            and tool._approval_gate is not None
-            and (
-                axes.auto_executes
-                or (axes.skips_team_kickoff and axes.honors_kickoff_grant)
-            )
-        ):
-            tool._auto_grant_pending = True  # type: ignore[attr-defined]
-        return None
-    # ask_user checkpoint_resolved 不跳 team_preview（澄清卡 ⊥ 开工卡）。
-    # 批 B：stage_card research_first 决议 → 当次 MLR 一次性 pre-auth（不得泛化）。
-    # 未兑现 adjust 不消费、不跳卡——否则重排等待面与队员开跑叠在一起。
-    if playbook_name == "multi_lens_research" and not unfulfilled_adjust:
-        from agentcore.runtime.kickoff.stage_card import (
-            consume_mlr_preauth,
-            mark_turn_keeps_stage_card,
-        )
-
-        if consume_mlr_preauth():
-            # 真正跳过开工卡并开跑 → keep pending stage_card。
-            mark_turn_keeps_stage_card()
-            logger.info("delegate.mlr_preauth_skip_team_preview", call=call_idx)
-            return None
-    show_capabilities = needs_capability_auth(local_gate=local_gate, axes=axes)
-    preview_decision = await await_team_preview(
-        tool, plan, show_capabilities=show_capabilities
-    )
-    if tool._pending_pause:
-        logger.info("delegate.team_preview_paused", call=call_idx, nodes=len(plan.nodes))
-        return ToolResult(tool_call_id="", success=True, output="", effect=ToolEffect.SUSPEND)
-    if preview_decision is CheckpointDecision.STOP:
-        from agentcore.runtime.delegate.supervised import finalize_stopped
-        from agentcore.runtime.kickoff.stage_card import clear_turn_keeps_stage_card
-
-        # 用户 STOP：清 keep，允许回合收尾 orphan 未消费推进卡。
-        if playbook_name == "multi_lens_research":
-            clear_turn_keeps_stage_card()
-        return await finalize_stopped(tool, plan, {}, kickoff_cancelled=True)
-    if preview_decision is CheckpointDecision.ADJUST:
-        from agentcore.runtime.delegate.supervised import finalize_stopped
-        from agentcore.runtime.kickoff.stage_card import clear_turn_keeps_stage_card
-
-        # 用户 ADJUST：不开工，清 keep；意见回灌走 resume 路径（此处无 note）。
-        if playbook_name == "multi_lens_research":
-            clear_turn_keeps_stage_card()
-        return await finalize_stopped(tool, plan, {}, kickoff_adjusted=True)
-    # CONTINUE：MLR 真正开跑 → keep。
+        tool._auto_grant_pending = True  # type: ignore[attr-defined]
     if playbook_name == "multi_lens_research":
         from agentcore.runtime.kickoff.stage_card import mark_turn_keeps_stage_card
 

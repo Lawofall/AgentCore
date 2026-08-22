@@ -1,4 +1,7 @@
+import { NarrowBackHeader } from "@/components/layout/NarrowBackHeader";
 import { SectionLabel, SurfaceNavLink } from "@/components/ui";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
+import { NARROW_HIDDEN_SETTINGS_PATHS } from "@/lib/narrowProduct";
 import {
   Cpu,
   Gauge,
@@ -12,7 +15,7 @@ import {
   SlidersHorizontal,
   UserCog,
 } from "lucide-react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 interface NavItem {
   icon: LucideIcon;
@@ -29,7 +32,7 @@ interface NavGroup {
 // 用量）、模型（组合 + Key 相邻）、偏好、关于（含反馈）。之前是六组，其中三组只有
 // 一项——组标题比内容还多，扫读全是分隔线。合并时只动分组，路径不变。
 // 「外观」→「通用」（多收了原本藏在关于页的诊断类开关）；旧路径见 router 重定向。
-// Opening /more 落点见 MoreIndexRedirect。
+// Opening /more 宽屏落点见 MoreIndexRedirect；窄屏 /more 是设置列表，不重定向。
 // 「自动化」已迁至工具箱 #/toolbox/automations。
 // 设定（画像 / 偏好 / 规则）在「文件」页，不设设置子页。
 // 新会话默认权限配方：对话内权限徽章「设为新会话默认」（无设置子页）。
@@ -67,13 +70,79 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+function visibleGroups(narrow: boolean): NavGroup[] {
+  if (!narrow) return NAV_GROUPS;
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) => !NARROW_HIDDEN_SETTINGS_PATHS.has(item.path),
+    ),
+  })).filter((group) => group.items.length > 0);
+}
+
+function MoreNav({ groups }: { groups: NavGroup[] }) {
+  return (
+    <nav className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto bg-muted/30 py-4">
+      <div className="space-y-4 px-2">
+        {groups.map((group) => (
+          <div key={group.label}>
+            <SectionLabel className="px-3 pb-1">{group.label}</SectionLabel>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavRow key={item.path} item={item} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function titleForPath(pathname: string, groups: NavGroup[]): string {
+  const items = groups.flatMap((g) => g.items);
+  const exact = items.find((i) => i.path === pathname);
+  if (exact) return exact.label;
+  const prefix = items.find((i) => pathname.startsWith(`${i.path}/`));
+  return prefix?.label ?? "设置";
+}
+
 export function MorePage() {
+  const { isNarrow } = useNarrowLayoutState();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const groups = visibleGroups(isNarrow);
+  const isIndex = pathname === "/more";
+
+  if (isNarrow) {
+    if (isIndex) {
+      return (
+        <div className="flex h-full w-full flex-col">
+          <MoreNav groups={groups} />
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-full w-full flex-col">
+        <NarrowBackHeader
+          title={titleForPath(pathname, NAV_GROUPS)}
+          onBack={() => navigate("/more")}
+        />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="w-full max-w-3xl px-4 py-6">
+            <Outlet />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full w-full">
       {/* Secondary navigation */}
       <nav className="flex w-[220px] shrink-0 flex-col overflow-y-auto border-r border-border bg-muted/30 py-4">
         <div className="space-y-4 px-2">
-          {NAV_GROUPS.map((group) => (
+          {groups.map((group) => (
             <div key={group.label}>
               <SectionLabel className="px-3 pb-1">{group.label}</SectionLabel>
               <div className="space-y-0.5">

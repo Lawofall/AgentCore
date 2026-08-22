@@ -253,21 +253,19 @@ ${detailLine}如有疑问，打开消息页「AgentCore 官方」查看本条归
     },
   },
   {
-    id: "quota_jiurelay",
-    label: "额度不可用 · jiurelay",
-    description: "平台额度暂不可用 · 引导免费自配",
-    title: "平台额度暂时不可用 · 请免费自配 jiurelay",
+    id: "quota_unavailable",
+    label: "额度不可用 · 接入 Key",
+    description: "平台额度暂不可用 · 引导接入自己的 Key",
+    title: "平台额度暂时不可用 · 请接入自己的 Key",
     body: `平台提供的额度暂时不可用。
 
-请到 https://jiurelay.com/ 免费自行配额度后，在「设置 · 服务商」接入即可继续使用。
+请到「设置 · 服务商」接入自己的 Key 即可继续使用。
 
 如有疑问，打开消息页「AgentCore 官方」查看本条归档。`,
     severity: "high",
     surface: "both",
     dismiss_policy: "once",
     card_template: "service",
-    cta_label: "前往 jiurelay 免费配额",
-    cta_url: "https://jiurelay.com/",
     endHint: "平台额度恢复后归档，或设结束时间避免过期横幅残留",
     slots: [
       {
@@ -281,10 +279,10 @@ ${detailLine}如有疑问，打开消息页「AgentCore 官方」查看本条归
       const note = v.note?.trim();
       const noteBlock = note ? `\n补充：${note}\n` : "\n";
       return {
-        title: "平台额度暂时不可用 · 请免费自配 jiurelay",
+        title: "平台额度暂时不可用 · 请接入自己的 Key",
         body: `平台提供的额度暂时不可用。
 
-请到 https://jiurelay.com/ 免费自行配额度后，在「设置 · 服务商」接入即可继续使用。
+请到「设置 · 服务商」接入自己的 Key 即可继续使用。
 ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归档。`,
       };
     },
@@ -303,7 +301,7 @@ ${noteBlock}如有疑问，打开消息页「AgentCore 官方」查看本条归�
     surface: "both",
     dismiss_policy: "once",
     card_template: "service",
-    endHint: "发前先归档进行中的 quota_jiurelay",
+    endHint: "发前先归档进行中的 quota_unavailable",
     slots: [
       {
         key: "note",

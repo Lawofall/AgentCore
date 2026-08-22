@@ -1,12 +1,7 @@
 """File ownership ledger (C3 · 较强文件归属 / 交接式写权).
 
-Two eras share one class:
-
-* **Legacy (``engine_file_ownership_v2=False``)** — per-batch ``WriteCoordinator``:
-  first successful ``file_write`` / ``file_append`` claims the path; concurrent
-  unrelated siblings are refused; cross-batch overwrite is intentionally open.
-* **C3 (default on)** — one ledger per coordination ``execution_id`` (session
-  authority, snapshotted). **交接式写权**：
+One :class:`WriteCoordinator` per coordination ``execution_id`` (session
+authority, snapshotted). **交接式写权**：
 
   - **Dispatch ``declare``** claims a free path; does **not** steal from an
     ancestor holder (downstream only records intent via plan artifacts). Nested
@@ -116,16 +111,6 @@ def ownership_display_path(key_or_path: str) -> str:
     if OWNERSHIP_KEY_SEP in (key_or_path or ""):
         return split_ownership_key(key_or_path)[1]
     return _normalize(key_or_path)
-
-
-def file_ownership_v2_enabled() -> bool:
-    """C3 stronger ownership. ``False`` rolls back to incomplete-heuristic + batch write/append."""
-    try:
-        from agentcore.config import settings
-
-        return bool(getattr(settings, "engine_file_ownership_v2", True))
-    except Exception:  # noqa: BLE001 — settings optional in unit stubs
-        return True
 
 
 def ownership_conflict_message(
@@ -599,14 +584,11 @@ def resolve_write_coordinator(
     execution_id: str | None = None,
     fallback: WriteCoordinator | None = None,
 ) -> WriteCoordinator:
-    """Session ledger when C3 + coordination is live; else ``fallback`` or a fresh batch book.
+    """Session ledger when coordination is live; else ``fallback`` or a fresh batch book.
 
     Nested sub-teams share the parent coordination session via
     :data:`current_execution_id` when their own ``execution_id`` has no session.
     """
-    if not file_ownership_v2_enabled():
-        return fallback if fallback is not None else WriteCoordinator()
-
     from agentcore.runtime.coordination.session import resolve_coordination_session
 
     session = resolve_coordination_session(execution_id)

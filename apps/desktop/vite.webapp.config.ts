@@ -1,6 +1,17 @@
 import { resolve } from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { viteClientBuildDefine } from "../../scripts/client-build-info.mjs";
+import { serveHtmlAtRoot } from "./scripts/vite-serve-html-entry.mjs";
+
+const clientBuildDefine = {
+  ...viteClientBuildDefine(new URL("./package.json", import.meta.url)),
+};
+if (process.env.AGENTCORE_CLIENT_VERSION) {
+  clientBuildDefine.__APP_VERSION__ = JSON.stringify(
+    process.env.AGENTCORE_CLIENT_VERSION,
+  );
+}
 
 // Production web client build/serve of the desktop renderer (P1 多端：web = 「云工作区」
 // 一等入口；cross-platform-frontend §7 / 前端技术与架构 §七). The renderer is a normal
@@ -12,9 +23,11 @@ import { defineConfig } from "vite";
 //
 // Dev server runs on 5175 — already in the backend's default CORS allowlist
 // (apps/server/agentcore/config/auth.py), so `pnpm dev:webapp` works against a local
-// backend with NO backend change. Production must serve same-site with the API for
-// SameSite cookies (see apps/server/.env.example CORS note).
+// backend with NO backend change. `/` is rewritten to index.webapp.html (same
+// remap deploy-web.mjs does for Nginx). Production must serve same-site with the
+// API for SameSite cookies (see apps/server/.env.example CORS note).
 export default defineConfig({
+  define: clientBuildDefine,
   root: resolve("src/renderer"),
   publicDir: resolve("public"),
   // envDir defaults to `root`; without this, apps/desktop/.env.production is never
@@ -45,5 +58,5 @@ export default defineConfig({
       input: resolve("src/renderer/index.webapp.html"),
     },
   },
-  plugins: [react()],
+  plugins: [serveHtmlAtRoot("/index.webapp.html"), react()],
 });

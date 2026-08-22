@@ -5,12 +5,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/useConversations", () => ({
   useGroupedConversations: () => undefined,
+  useConversations: () => [],
+  useConversationTrash: () => ({
+    data: { items: [], retentionDays: 30 },
+    isLoading: false,
+  }),
+  useRestoreConversation: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("@/hooks/useFolders", () => ({
+  useFolders: () => [],
 }));
 vi.mock("@/lib/theme", () => ({
   useApplyTheme: () => undefined,
 }));
 vi.mock("@/lib/capabilities", () => ({
   isWebClient: () => true,
+  hasLocalFiles: () => false,
+  isNativeRuntime: () => false,
 }));
 vi.mock("@/services/realtime", () => ({
   startRealtime: vi.fn(),
@@ -83,6 +94,10 @@ vi.mock("@/components/files/ImportToCloudDialog", () => ({
   ImportToCloudDialogHost: () => null,
   ImportToCloudDialog: () => null,
 }));
+vi.mock("@/components/files/BorrowToCloudDialog", () => ({
+  BorrowToCloudDialogHost: () => null,
+  BorrowToCloudDialog: () => null,
+}));
 vi.mock("@/components/workspace/MergeLandingReview", () => ({
   MergeLandingReviewHost: () => null,
 }));
@@ -91,23 +106,79 @@ vi.mock("@/components/layout/SidePanelFloatHost", () => ({
 }));
 
 import { AppShell } from "@/components/layout/AppShell";
+import { WORKSPACE_TAB_ID, useSidePanelStore } from "@/stores/sidePanel";
+
+function stubMatchMedia(matches: boolean): void {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches,
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
+function renderMore(): void {
+  render(
+    <MemoryRouter initialEntries={["/more"]}>
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="/more" element={<div>more</div>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function seedWorkspaceFloat(): void {
+  useSidePanelStore.setState({
+    floats: [
+      {
+        tabId: WORKSPACE_TAB_ID,
+        layout: { x: 72, y: 72, width: 480, height: 560, zIndex: 1 },
+      },
+    ],
+    focusSurface: { type: "float", tabId: WORKSPACE_TAB_ID },
+  });
+}
 
 afterEach(() => {
   cleanup();
+  window.__NATIVE__ = undefined;
+  useSidePanelStore.setState({
+    floats: [],
+    focusSurface: { type: "dock" },
+  });
 });
 
 describe("AppShell SidePanelFloatHost mount", () => {
   it("keeps the float host mounted on non-conversation routes", () => {
-    render(
-      <MemoryRouter initialEntries={["/more"]}>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/more" element={<div>more</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
-    );
+    stubMatchMedia(false);
+    renderMore();
     expect(screen.getByTestId("side-panel-float-host")).toBeTruthy();
     expect(screen.getByText("more")).toBeTruthy();
+  });
+
+  it("does not mount the float host on a narrow viewport", () => {
+    stubMatchMedia(true);
+    seedWorkspaceFloat();
+    renderMore();
+    expect(screen.queryByTestId("side-panel-float-host")).toBeNull();
+    expect(useSidePanelStore.getState().floats).toHaveLength(0);
+  });
+
+  it("does not mount the float host when window.__NATIVE__ is set", () => {
+    stubMatchMedia(false);
+    window.__NATIVE__ = true;
+    seedWorkspaceFloat();
+    renderMore();
+    expect(screen.queryByTestId("side-panel-float-host")).toBeNull();
+    expect(useSidePanelStore.getState().floats).toHaveLength(0);
   });
 });

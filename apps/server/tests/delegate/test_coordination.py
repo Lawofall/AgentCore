@@ -1442,17 +1442,13 @@ async def test_concurrent_sessions_isolated_by_execution_id():
     clear_active_coordination()
 
 
-async def test_checkpoint_batch_skips_coordination_for_durable_plan_review(monkeypatch):
+async def test_checkpoint_batch_skips_coordination_for_durable_plan_review():
     """B1：含 checkpoint_after 且闸开 → 不进协调，回落经典 durable plan_review。"""
     from agentcore.core.types import ToolEffect
     from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
     from agentcore.runtime.suspension import TurnSuspension, captain_transcript
     from tests.delegate.conftest import CKPT_DAG, tool_durable
 
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
     clear_active_coordination()
     registry = InteractionRegistry()
     sink = EventSink()
@@ -1492,7 +1488,7 @@ async def test_checkpoint_batch_skips_coordination_for_durable_plan_review(monke
     assert any(e.type is EventType.PLAN_REVIEW_REQUIRED for e in sink._history)
 
 
-async def test_coordination_mid_checkpoint_still_boundary_yields(monkeypatch):
+async def test_coordination_mid_checkpoint_still_boundary_yields():
     """防御：已在协调态时（如 replan 中途加把关）checkpoint 仍 BOUNDARY_YIELD。"""
     from agentcore.runtime.coordination.host import try_start_coordination
     from agentcore.runtime.coordination.session import (
@@ -1503,10 +1499,6 @@ async def test_coordination_mid_checkpoint_still_boundary_yields(monkeypatch):
     from agentcore.runtime.suspension import TurnSuspension
     from tests.delegate.conftest import CKPT_DAG, tool_durable
 
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
     clear_active_coordination()
     registry = InteractionRegistry()
     sink = EventSink()
@@ -1550,17 +1542,13 @@ async def test_coordination_mid_checkpoint_still_boundary_yields(monkeypatch):
     clear_active_coordination("e")
 
 
-async def test_classic_checkpoint_still_durable_when_not_coordinating(monkeypatch):
+async def test_classic_checkpoint_still_durable_when_not_coordinating():
     """经典阻塞 path（coordinate=false）仍 durable plan_review 挂起即收口。"""
     from agentcore.core.types import ToolEffect
     from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
     from agentcore.runtime.suspension import TurnSuspension, captain_transcript
     from tests.delegate.conftest import CKPT_DAG, tool_durable
 
-    monkeypatch.setattr(
-        "agentcore.runtime.delegate.preview.should_kickoff",
-        lambda *a, **k: False,
-    )
     clear_active_coordination()
     registry = InteractionRegistry()
     sink = EventSink()

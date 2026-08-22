@@ -230,30 +230,6 @@ class UserRepository:
         )
         await self._session.commit()
 
-    async def set_memory_enabled(self, user_id: str, enabled: bool) -> None:
-        """Legacy writer for ``users.memory_enabled`` (column retained; 定案 A).
-
-        Product resolve + user API no longer flip this gate. Kept for tests /
-        one-off ops; do not call from user-facing routes.
-        """
-        await self._session.execute(
-            update(User).where(User.user_id == user_id).values(memory_enabled=enabled)
-        )
-        await self._session.commit()
-
-    async def set_conversation_history_access(self, user_id: str, enabled: bool) -> None:
-        """Legacy writer for ``users.conversation_history_access`` (column retained; 定案 A).
-
-        Product resolve + user API no longer flip this gate. Kept for tests /
-        one-off ops; do not call from user-facing routes.
-        """
-        await self._session.execute(
-            update(User)
-            .where(User.user_id == user_id)
-            .values(conversation_history_access=enabled)
-        )
-        await self._session.commit()
-
     async def set_autonomy_policy(self, user_id: str, policy: str) -> None:
         """Set the user's capability-authorization posture (安全权限与治理 §三)."""
         await self._session.execute(
@@ -272,8 +248,8 @@ class UserRepository:
         )
         await self._session.commit()
 
-    async def list_memory_enabled_user_ids(self) -> Sequence[str]:
-        """All user ids for memory backfill scans (name kept; gate is product-always-on)."""
+    async def list_user_ids(self) -> Sequence[str]:
+        """All user ids (memory backfill / account-wide scans)."""
         result = await self._session.execute(select(User.user_id))
         return [row[0] for row in result.all()]
 

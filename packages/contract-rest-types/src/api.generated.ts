@@ -2738,7 +2738,7 @@ export interface paths {
          * Resume Message
          * @description Continue a durably-paused turn via SSE (结构化挂起 2b ``POST .../resume``).
          *
-         *     The turn paused at a plan_review / ask_user / team_preview checkpoint and lost its
+         *     The turn paused at a plan_review / ask_user checkpoint and lost its
          *     live stream (disconnect / restart); only its persisted frame survived.
          *
          *     Settlement 预写 (D8)：① peek frame → ② busy 则 deferred（预写后 ``resume_deferred``，
@@ -8618,7 +8618,7 @@ export interface components {
          * @description How execution-class tools (code / terminal / test) are authorized.
          * @enum {string}
          */
-        CommandAxis: "ask" | "kickoff" | "auto";
+        CommandAxis: "ask" | "auto";
         /**
          * ContextGapModel
          * @description 早期对话没能进摘要、也已滑出原文窗口——这一轮 AI 确实读不到它们。
@@ -11681,7 +11681,7 @@ export interface components {
         };
         /**
          * PermissionAxesModel
-         * @description Session permission axes (运行时单一真相源 · file_write/command/team_kickoff/host).
+         * @description Session permission axes (运行时单一真相源 · file_write/command/host).
          */
         PermissionAxesModel: {
             /** @default auto */
@@ -11690,8 +11690,6 @@ export interface components {
             file_write: components["schemas"]["FileWriteAxis"];
             /** @default session */
             host: components["schemas"]["HostAxis"];
-            /** @default rules */
-            team_kickoff: components["schemas"]["TeamKickoffAxis"];
         };
         /**
          * PermissionAxesUpdate
@@ -13473,12 +13471,6 @@ export interface components {
             /** Worker Count */
             worker_count: number;
         };
-        /**
-         * TeamKickoffAxis
-         * @description Whether / when the team kickoff card (plan + capability halves) hangs.
-         * @enum {string}
-         */
-        TeamKickoffAxis: "always" | "rules" | "skip";
         /**
          * TextInputEvent
          * @description Verbatim text insertion (IME-style). Content is never logged/persisted (D17).

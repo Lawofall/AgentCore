@@ -41,7 +41,7 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
         "download_url",
         # Site HTML SECTION inject (not the daily write loop; MD uses str_replace).
         "write_section",
-        # Cross-conversation logs (privacy-gated; still on-demand when wired).
+        # Cross-conversation logs (product-always-on; still on-demand when wired).
         "search_conversations",
         "read_conversation",
         # Rare CEO folder admin (list/resolve/peek stay resident).

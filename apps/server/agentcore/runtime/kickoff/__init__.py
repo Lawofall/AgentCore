@@ -1,7 +1,8 @@
-"""Orchestration-layer kickoff gate（开工卡）— shared by ``delegate`` and ``debate``.
+"""Orchestration-layer kickoff helpers — shared by ``delegate`` and ``debate``.
 
-Trigger rules live here once; each primitive builds a :class:`KickoffSummary` and
-asks the gate whether to durable-pause before fan-out / moderator start.
+New ``team_preview`` cards are not emitted. Leftover hung frames are not
+recovered (honest fail). ``stage_card`` still starts debate via
+``skip_kickoff=True``.
 """
 
 from __future__ import annotations
@@ -23,15 +24,13 @@ from agentcore.runtime.kickoff.debate_host import (
 )
 from agentcore.runtime.kickoff.gate import (
     is_short_affirmation,
-    needs_capability_auth,
-    should_kickoff,
     should_preview_delegate_plan,
 )
-from agentcore.runtime.kickoff.pause import await_kickoff, kickoff_tools
-from agentcore.runtime.kickoff.research_first import (
-    research_first_tool_result,
-    should_offer_research_first,
-    should_recommend_research_first,
+from agentcore.runtime.kickoff.pause import kickoff_tools
+from agentcore.runtime.kickoff.research_first import research_first_tool_result
+from agentcore.runtime.kickoff.retired import (
+    TEAM_PREVIEW_UNRECOVERABLE,
+    refuse_team_preview_resume,
 )
 from agentcore.runtime.kickoff.revision import (
     KickoffAdjustState,
@@ -79,12 +78,12 @@ __all__ = [
     "KickoffPrimitive",
     "KickoffSummary",
     "SESSION_DESK_LABEL",
+    "TEAM_PREVIEW_UNRECOVERABLE",
     "UNNAMED_DESK_LABEL",
     "WriteCapabilityOverride",
     "apply_debate_model_overrides",
     "apply_motion_override",
     "apply_team_preview_veto",
-    "await_kickoff",
     "build_stage_card_payload",
     "clear_turn_keeps_stage_card",
     "consume_mlr_preauth",
@@ -109,16 +108,13 @@ __all__ = [
     "kickoff_tools",
     "worker_rows",
     "mark_turn_keeps_stage_card",
-    "needs_capability_auth",
     "is_short_affirmation",
+    "refuse_team_preview_resume",
     "research_first_tool_result",
     "resolve_debate_host_attach",
     "should_apply_debate_model_overrides",
     "should_apply_team_veto",
-    "should_kickoff",
-    "should_offer_research_first",
     "should_preview_delegate_plan",
-    "should_recommend_research_first",
     "turn_keeps_stage_card",
     "validate_debate_model_overrides",
     "validate_team_preview_veto",

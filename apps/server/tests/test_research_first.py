@@ -1,25 +1,16 @@
-"""辩论开工卡「先多视角调研再辩」— 判据 / 回灌文案 / resume 分支。
-
-2026-07-21：开工卡 offer/recommend 退役；回灌文案与 resume 分支保留。
+"""辩论「先多视角调研再辩」— 判据 / 回灌文案。开工卡 resume 已退役。
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
-from agentcore.core.types import ToolEffect
 from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.kickoff.research_first import (
     has_research_chain_evidence,
-    hits_multi_lens_courtroom_triggers,
     research_first_tool_result,
-    should_offer_research_first,
-    should_recommend_research_first,
 )
-from agentcore.runtime.recover import SettledSuspension, recover_turn
-from agentcore.runtime.skills import MULTI_LENS_COURTROOM_TRIGGERS
+from agentcore.runtime.recover import recover_turn
 from agentcore.runtime.suspension import TeamPreviewSuspension
 from agentcore.runtime.turn.state import TurnState
 from agentcore.tools.builtin.motion_card import parse_motion_card
@@ -40,26 +31,6 @@ def _valid_card(**over: object) -> dict:
     parsed, err = parse_motion_card(card)
     assert parsed is not None and not err
     return parsed
-
-
-def test_should_offer_research_first_retired_always_false():
-    assert should_offer_research_first(None) is False
-    assert should_offer_research_first([]) is False
-    assert should_offer_research_first([], has_research_artifacts=False) is False
-    assert should_offer_research_first([], has_research_artifacts=True) is False
-
-
-def test_should_recommend_research_first_retired_always_false():
-    assert should_recommend_research_first([], user_message="帮我做一场模拟法庭") is False
-    assert should_recommend_research_first([], user_message="该不该上四天工作制？") is False
-
-
-def test_hits_multi_lens_courtroom_triggers_shares_skills_constant():
-    assert MULTI_LENS_COURTROOM_TRIGGERS
-    for trigger in MULTI_LENS_COURTROOM_TRIGGERS:
-        assert hits_multi_lens_courtroom_triggers(f"帮我做一场{trigger}") is True
-    assert hits_multi_lens_courtroom_triggers("该不该上四天工作制？") is False
-    assert hits_multi_lens_courtroom_triggers("") is False
 
 
 def test_has_research_chain_evidence_preserves_old_offer_sources():
@@ -121,52 +92,11 @@ def test_research_first_tool_result_falls_back_to_user_message():
 
 
 @pytest.mark.asyncio
-async def test_debate_resume_research_first_no_moderator():
+async def test_recover_research_first_on_delegate_kickoff_refuses():
+    """非辩论开工卡 research_first：卡已退役，不降级 STOP、不开做。"""
+    from agentcore.core.errors import GoneError
     from agentcore.runtime.events import EventSink
-    from agentcore.runtime.interaction import InteractionRegistry
-    from tests.test_kickoff_gate import _debate_tool
-
-    registry = InteractionRegistry()
-    sink = EventSink()
-
-    async def _save(_frame):
-        pass
-
-    async def _drop(_mid):
-        pass
-
-    tool = _debate_tool(sink, registry, _save, _drop)
-    tool._user_message = "直接开辩"
-
-    async def _boom(*_a, **_k):
-        raise AssertionError("must not run moderator on research_first")
-
-    tool._run_moderator = _boom  # type: ignore[method-assign]
-    tool.execute = _boom  # type: ignore[method-assign]
-
-    result = await tool.resume_after_kickoff(
-        decision=CheckpointDecision.RESEARCH_FIRST,
-        note="",
-        arguments={
-            "motion": "该不该上四天工作制？",
-            "form": "debate",
-            "sides": [
-                {"key": "pro", "name": "正方", "stance": "a"},
-                {"key": "con", "name": "反方", "stance": "b"},
-            ],
-        },
-    )
-    assert result.effect is ToolEffect.CONTINUE
-    assert result.success is True
-    assert "先多视角调研再辩" in result.output
-    assert 'playbook="multi_lens_research"' in result.output
-    assert "该不该上四天工作制？" in result.output
-
-
-@pytest.mark.asyncio
-async def test_recover_research_first_on_delegate_kickoff_degrades_to_stop():
-    """非辩论开工卡收到 research_first → 降级 STOP，不得静默 continue / 开做。"""
-    from agentcore.runtime.events import EventSink
+    from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
     from agentcore.runtime.runs.plan import RunPlan
 
     sink = EventSink()
@@ -193,24 +123,18 @@ async def test_recover_research_first_on_delegate_kickoff_degrades_to_stop():
     )
     state = TurnState.from_journal([])
 
-    stopped: list[str] = []
-
     class _FakeDelegate:
-        async def resume_plan(self, *_a, **kwargs):
-            stopped.append(kwargs.get("decision"))
-            return SimpleNamespace(output="stopped", effect=ToolEffect.CONTINUE)
+        async def resume_plan(self, *_a, **_k):
+            raise AssertionError("resume_plan must not run")
 
-    settled = await recover_turn(
-        state=state,
-        sink=sink,
-        delegate_tool=_FakeDelegate(),  # type: ignore[arg-type]
-        execution_id="e1",
-        suspension=suspension,
-        decision=CheckpointDecision.RESEARCH_FIRST,
-        note="",
-    )
-    assert isinstance(settled, SettledSuspension)
-    assert stopped == [CheckpointDecision.STOP]
-    resolved = [e for e in sink._history if e.type.value == "team_preview_resolved"]
-    assert len(resolved) == 1
-    assert resolved[0].payload["decision"] == "stop"
+    with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
+        await recover_turn(
+            state=state,
+            sink=sink,
+            delegate_tool=_FakeDelegate(),  # type: ignore[arg-type]
+            execution_id="e1",
+            suspension=suspension,
+            decision=CheckpointDecision.RESEARCH_FIRST,
+            note="",
+        )
+    assert sink._history == []

@@ -10,7 +10,7 @@ from agentcore.workspace.stage_dirs import RESEARCH_DIR
 # 探路轮上限唯一真源（局部拼接，与 RESEARCH_DIR 同构）。
 _IR = str(settings.engine_team_gate_investigation_rounds)
 
-# 多维取证类终局对抗触发词（kickoff research_first_recommended + MLR/debate 入口分流句同源，禁止另抄字面量）。
+# 多维取证类终局对抗触发词（MLR / debate 入口分流句同源，禁止另抄字面量）。
 MULTI_LENS_COURTROOM_TRIGGERS: Final[tuple[str, ...]] = (
     "模拟法庭",
     "庭审对抗",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from agentcore.core.types import ToolEffect
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.checkpoints import CheckpointDecision
@@ -10,7 +12,7 @@ from agentcore.runtime.coordination.session import (
     clear_active_coordination,
 )
 from agentcore.runtime.delegate.preview import (
-    should_preview,
+    should_preview_delegate_plan,
     worker_rows,
 )
 from agentcore.runtime.delegate.steer import apply_steer
@@ -35,22 +37,22 @@ def test_should_preview_multi_worker():
         RunSpec(run_id="r1", task="a", role="调研"),
         RunSpec(run_id="r2", task="b", role="撰写", depends_on=["r1"]),
     )
-    assert should_preview(plan) is True
+    assert should_preview_delegate_plan(plan) is True
 
 
 def test_should_preview_skips_solo():
     plan = _plan(RunSpec(run_id="r1", task="alone", role="写手"))
-    assert should_preview(plan) is False
+    assert should_preview_delegate_plan(plan) is False
 
 
 def test_should_preview_skips_solo_even_with_runtime_tags():
     """stance/round on RunSpec are runtime display tags — not kickoff hang marks."""
     plan = _plan(RunSpec(run_id="r1", task="辩", role="正方", stance="pro", round=1))
-    assert should_preview(plan) is False
+    assert should_preview_delegate_plan(plan) is False
 
 
 async def test_confirmed_ask_still_suspends_team_preview():
-    """选项 A：journal 已有 checkpoint_resolved 时 ≥2 worker 仍挂 team_preview。"""
+    """journal 已有 checkpoint_resolved 时 ≥2 worker 也不再挂 team_preview。"""
     clear_active_coordination()
     registry = InteractionRegistry()
     sink = EventSink()
@@ -107,9 +109,12 @@ async def test_confirmed_ask_still_suspends_team_preview():
         captain_transcript.reset(ct_token)
         current_fact_log.reset(fl_token)
 
-    assert result.effect is ToolEffect.SUSPEND
-    assert len(saved) == 1
-    assert any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    assert result.effect is not ToolEffect.SUSPEND
+    assert saved == []
+    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    session = active_coordination("e")
+    if session is not None and session.drive_task is not None:
+        await asyncio.wait_for(session.drive_task, timeout=10)
     clear_active_coordination()
 
 
@@ -243,11 +248,7 @@ def test_apply_steer_empty_roots_targets_all():
 
 
 async def test_coordinate_team_preview_suspends_before_fork():
-    """coordinate + team_preview: durable pause is on the CEO path before the fork.
-
-    CEO gets SUSPEND (so message_end(paused) / ResumePrompt can fire); no background
-    coordination session is armed until the user CONTINUEs.
-    """
+    """coordinate + ≥2 worker：不再先挂开工卡，直接臂后台。"""
     clear_active_coordination()
     registry = InteractionRegistry()
     sink = EventSink()
@@ -277,7 +278,7 @@ async def test_coordinate_team_preview_suspends_before_fork():
     fl_token = current_fact_log.set(log)
     ct_token = captain_transcript.set(transcript)
     try:
-        # Default coordinate=True (≥2 workers) — must NOT fork before preview settles.
+        # Default coordinate=True (≥2 workers) — runs without a team_preview card.
         result = await t.execute(
             {
                 "tasks": [
@@ -291,20 +292,18 @@ async def test_coordinate_team_preview_suspends_before_fork():
         captain_transcript.reset(ct_token)
         current_fact_log.reset(fl_token)
 
-    assert result.effect is ToolEffect.SUSPEND
-    assert "团队已启动" not in (result.output or "")
-    assert active_coordination("e") is None
-    assert len(saved) == 1
-    assert isinstance(saved[0], TeamPreviewSuspension)
-    assert len(saved[0].workers) == 2
-    assert any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
-    clear_active_coordination()
+    assert result.effect is not ToolEffect.SUSPEND
+    assert "团队已启动" in (result.output or "")
+    session = active_coordination("e")
+    assert session is not None and session.drive_task is not None
+    assert saved == []
+    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    await asyncio.wait_for(session.drive_task, timeout=10)
+    clear_active_coordination("e")
 
 
 async def test_team_preview_continue_then_arms_coordination():
-    """After durable team_preview CONTINUE, resume_plan(coordinate=True) arms the background."""
-    import asyncio
-
+    """顶层 ≥2 worker execute 直接臂协调，无需 team_preview CONTINUE。"""
     clear_active_coordination()
     registry = InteractionRegistry()
     sink = EventSink()
@@ -334,7 +333,7 @@ async def test_team_preview_continue_then_arms_coordination():
     fl_token = current_fact_log.set(log)
     ct_token = captain_transcript.set(transcript)
     try:
-        pause = await t.execute(
+        result = await t.execute(
             {
                 "tasks": [
                     {"role": "研究员", "task": "做A"},
@@ -347,19 +346,9 @@ async def test_team_preview_continue_then_arms_coordination():
         captain_transcript.reset(ct_token)
         current_fact_log.reset(fl_token)
 
-    assert pause.effect is ToolEffect.SUSPEND
-    frame = saved[0]
-    resumed = await t.resume_plan(
-        frame.plan,
-        dict(frame.completed),
-        decision=CheckpointDecision.CONTINUE,
-        note="",
-        checkpoint_run_ids=frame.checkpoint_run_ids,
-        execution_id="e",
-        coordinate=True,
-    )
-    assert resumed.success is True
-    assert "团队已启动" in resumed.output
+    assert result.effect is not ToolEffect.SUSPEND
+    assert saved == []
+    assert "团队已启动" in result.output
     session = active_coordination("e")
     assert session is not None and session.drive_task is not None
     await asyncio.wait_for(session.drive_task, timeout=10)
@@ -367,69 +356,55 @@ async def test_team_preview_continue_then_arms_coordination():
 
 
 async def test_kickoff_frame_captures_batch_coordination_and_fresh_tool_restores():
-    """开工卡帧携带 coordination/team_brief/seed_notes；全新工具实例恢复后墙生效。
+    """存量开工卡帧携带 coordination/team_brief/seed_notes；全新工具实例恢复后墙生效。
 
     真 bug（2026-07-20 P2 手驱真跑抓获）：挂起点在 setup_note_wall 之前，这三样只活在
     DelegateTool 实例上；耐久恢复走全新实例（_coordination 缺省 none），不随帧回灌则
     wall 批降级 → worker 被剥便签三件套、CEO 预贴便签永久丢失。
     """
-    clear_active_coordination()
-    registry = InteractionRegistry()
-    sink = EventSink()
-    saved: list[TeamPreviewSuspension] = []
+    from agentcore.runtime.runs import build_run_plan
+    from agentcore.runtime.suspension import suspension_from_json
 
-    async def _save(frame):
-        saved.append(frame)
+    clear_active_coordination()
+    plan, errors = build_run_plan(
+        [
+            {"role": "观察员", "task": "做A"},
+            {"role": "撰稿人", "task": "做B"},
+        ],
+        valid_tools=set(),
+        id_prefix="del_wall_",
+        parent_run_id="CEO",
+        depth=1,
+    )
+    assert not errors
+    frame = TeamPreviewSuspension(
+        message_id="m1",
+        conversation_id="conv1",
+        user_id="u",
+        captain_run_id="CEO",
+        checkpoint_id="ck_wall",
+        tool_call_id="call_del",
+        user_message="原始请求",
+        base_system_prompt="SYS",
+        journal_entries=[],
+        plan=plan,
+        workers=[{"run_id": n.run_id, "role": n.role, "task": n.task} for n in plan.nodes],
+        coordination="wall",
+        team_brief="统一用中文交付",
+        seed_notes=[{"kind": "heads_up", "text": "接口用 REST"}],
+    )
+    assert frame.coordination == "wall"
+    assert frame.team_brief == "统一用中文交付"
+    assert frame.seed_notes == [{"kind": "heads_up", "text": "接口用 REST"}]
+    rehydrated = suspension_from_json(frame.to_json())
+    assert rehydrated.coordination == "wall"
+
+    async def _save(_frame):
+        return None
 
     async def _drop(_mid):
         pass
 
-    t = tool_durable(Provider(["AOUT", "BOUT"]), sink, registry, _save, _drop)
-    transcript = [
-        LLMMessage(role="user", content="原始请求"),
-        LLMMessage(
-            role="assistant",
-            content=None,
-            tool_calls=[
-                ToolCall(
-                    id="call_del",
-                    function=ToolCallFunction(name="delegate", arguments="{}"),
-                )
-            ],
-        ),
-    ]
-    log = TurnFactLog()
-    fl_token = current_fact_log.set(log)
-    ct_token = captain_transcript.set(transcript)
-    try:
-        pause = await t.execute(
-            {
-                "tasks": [
-                    {"role": "观察员", "task": "做A"},
-                    {"role": "撰稿人", "task": "做B"},
-                ],
-                "coordination": "wall",
-                "team_brief": "统一用中文交付",
-                "seed_notes": [{"kind": "heads_up", "text": "接口用 REST"}],
-            },
-            ctx(),
-        )
-    finally:
-        captain_transcript.reset(ct_token)
-        current_fact_log.reset(fl_token)
-
-    assert pause.effect is ToolEffect.SUSPEND
-    frame = saved[0]
-    # 帧捕获批次协作参数，且 JSON 往返存活（耐久恢复走 suspension_from_json）。
-    assert frame.coordination == "wall"
-    assert frame.team_brief == "统一用中文交付"
-    assert frame.seed_notes == [{"kind": "heads_up", "text": "接口用 REST"}]
-    from agentcore.runtime.suspension import suspension_from_json
-
-    rehydrated = suspension_from_json(frame.to_json())
-    assert rehydrated.coordination == "wall"
-
-    # 全新工具实例（模拟耐久恢复：_coordination 缺省 none）+ 帧回灌 → 墙生效。
     sink2 = EventSink()
     t2 = tool_durable(Provider(["AOUT", "BOUT"]), sink2, InteractionRegistry(), _save, _drop)
     assert t2._coordination == "none"
@@ -440,7 +415,7 @@ async def test_kickoff_frame_captures_batch_coordination_and_fresh_tool_restores
         note="",
         checkpoint_run_ids=frame.checkpoint_run_ids,
         execution_id="e",
-        coordinate=False,  # 经典阻塞，便于同步断言
+        coordinate=False,
         apply_kickoff_grant=True,
         coordination=rehydrated.coordination,
         team_brief=rehydrated.team_brief,
@@ -449,7 +424,6 @@ async def test_kickoff_frame_captures_batch_coordination_and_fresh_tool_restores
     assert resumed.success is True
     assert t2._coordination == "wall"
     assert t2._team_brief == "统一用中文交付"
-    # CEO 预贴便签在恢复驱动里补种上墙（挂起时从未上过墙）。
     seeded = [
         e
         for e in sink2._history

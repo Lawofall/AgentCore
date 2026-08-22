@@ -11,6 +11,16 @@ describe("clientBuildInfo platform", () => {
     resetDeviceIdentityForTests();
   });
 
+  it("sends X-Client-Platform=android on Capacitor", () => {
+    vi.stubGlobal("window", {
+      __WEB__: true,
+      __NATIVE__: true,
+      __NATIVE_PLATFORM__: "android",
+    });
+    expect(clientPlatform()).toBe("android");
+    expect(clientHeaders()["X-Client-Platform"]).toBe("android");
+  });
+
   it("sends X-Client-Platform=web in web runtime", () => {
     vi.stubGlobal("window", { __WEB__: true });
     expect(clientPlatform()).toBe("web");

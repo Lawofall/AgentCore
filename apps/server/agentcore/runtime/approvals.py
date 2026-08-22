@@ -214,7 +214,7 @@ class ApprovalGate:
     def _delegation_covers(self, execution_id: str, tool_name: str) -> bool:
         # command=ask: never silently consume a kickoff grant (对齐 observe 执行侧).
         # command=auto: execution auto-passes elsewhere; grant still covers if present.
-        if not self.permission_axes.honors_kickoff_grant and not self.permission_axes.auto_executes:
+        if not self.permission_axes.auto_executes:
             return False
         if not execution_id or tool_name not in self.delegation_grantable_tools:
             return False

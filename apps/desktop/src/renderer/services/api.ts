@@ -1,6 +1,13 @@
 import { clientHeaders } from "@/lib/clientBuildInfo";
 import { logEvent } from "@/lib/log";
 import type { RecoveryMomentFields } from "@/lib/recoveryMoment";
+import {
+  bearerAuthHeader,
+  getBearerTokens,
+  isBearerAuth,
+  sessionCredentials,
+  setBearerTokens,
+} from "@/lib/sessionAuth";
 import type { AuthRefreshResult } from "../../shared/outbox-contract";
 
 export type { AuthRefreshResult };
@@ -250,6 +257,46 @@ export function tryRefresh(): Promise<AuthRefreshResult> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async (): Promise<AuthRefreshResult> => {
     try {
+      if (isBearerAuth()) {
+        const tokens = getBearerTokens();
+        if (!tokens) return "auth_dead";
+        const res = await fetchWithTimeout(
+          `${BASE_URL}/v1/auth/token/refresh`,
+          {
+            method: "POST",
+            credentials: "omit",
+            headers: {
+              "Content-Type": "application/json",
+              ...clientHeaders(),
+            },
+            body: JSON.stringify({ refresh_token: tokens.refresh_token }),
+          },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as {
+            access_token?: string;
+            refresh_token?: string;
+          };
+          if (data.access_token && data.refresh_token) {
+            setBearerTokens({
+              access_token: data.access_token,
+              refresh_token: data.refresh_token,
+            });
+          }
+          onSessionRenewed?.();
+          return "renewed";
+        }
+        if (res.status === 401 || res.status === 403) {
+          logEvent("warn", "auth.refresh", {
+            result: "auth_dead",
+            via: "bearer",
+            status: res.status,
+            message: await peekAuthErrorMessage(res),
+          });
+          return "auth_dead";
+        }
+        return "transient";
+      }
       const res = await fetchWithTimeout(`${BASE_URL}/v1/auth/refresh`, {
         method: "POST",
         credentials: "include",
@@ -312,12 +359,13 @@ async function request<T>(
   // defaults, never replace the object wholesale — a single `headers` in the
   // options would otherwise silently drop CSRF + Content-Type + client build info.
   const fetchInit: RequestInit = {
-    credentials: "include",
+    credentials: sessionCredentials(),
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...clientHeaders(),
-      ...csrfHeaders(method),
+      ...bearerAuthHeader(),
+      ...(isBearerAuth() ? {} : csrfHeaders(method)),
       ...options.headers,
     },
   };
@@ -424,12 +472,13 @@ async function requestWithStatus<T>(
   const method = (options.method ?? "GET").toUpperCase();
   // Caller headers merge into the defaults — see {@link request}.
   const fetchInit: RequestInit = {
-    credentials: "include",
+    credentials: sessionCredentials(),
     ...options,
     headers: {
       "Content-Type": "application/json",
       ...clientHeaders(),
-      ...csrfHeaders(method),
+      ...bearerAuthHeader(),
+      ...(isBearerAuth() ? {} : csrfHeaders(method)),
       ...options.headers,
     },
   };

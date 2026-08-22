@@ -1,5 +1,6 @@
 import { IconButton, SearchField } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
   useChats,
   useIncomingFriendRequestCount,
@@ -15,6 +16,7 @@ interface Props {
   onSelect: (chatId: string) => void;
   onNewChat: () => void;
   onOpenContacts: () => void;
+  className?: string;
 }
 
 /** Left pane: the chat list with a header, a local filter, and empty states. */
@@ -23,6 +25,7 @@ export function ChatList({
   onSelect,
   onNewChat,
   onOpenContacts,
+  className,
 }: Props) {
   const chats = useChats();
   const loading = useMessagingStore((s) => s.loadingChats);
@@ -44,7 +47,12 @@ export function ChatList({
   }, [chats, query]);
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r border-border">
+    <aside
+      className={cn(
+        "flex w-72 shrink-0 flex-col border-r border-border",
+        className,
+      )}
+    >
       <div className="flex items-center justify-between px-4 py-3">
         <span className="text-base font-medium text-foreground">消息</span>
         <div className="flex items-center gap-0.5">

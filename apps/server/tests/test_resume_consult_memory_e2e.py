@@ -1,20 +1,17 @@
 """End-to-end: a durable resume re-wires consult to the SAME scope the turn
-paused in, so the resumed CEO loop actually reaches the PROJECT topic (project 主题 first),
-and a memory-OFF turn cannot reach memory at all even if the model tries.
+paused in, so the resumed CEO loop actually reaches the PROJECT topic (project 主题 first).
 
 Where the unit tests pin the pieces in isolation —
 - ``consult`` resolves project-then-global (``test_consult``),
-- the durable frame carries ``folder_id`` + ``memory_enabled`` (``test_durable`` /
-  ``test_sidecar_paused``),
-- ``_assemble_ceo_toolset`` maps ``folder_id`` → ``consult.folder_id`` and leaves
-  it UNwired when memory is off (``test_consult``) —
+- the durable frame carries ``folder_id`` (``test_durable`` / ``test_sidecar_paused``),
+- ``_assemble_ceo_toolset`` maps ``folder_id`` → ``consult.folder_id`` —
 this drives the REAL :func:`resume_chat_pipeline` (the same entry the cloud
 ``POST .../resume`` route and the Sidecar both call) end to end, folding the whole chain
 ``frame → assemble → CEO loop → consult → project store`` so a regression ANYWHERE
 along it surfaces here, not just in an isolated seam.
 
 The consult wiring is kind-AGNOSTIC: ``resume_chat_pipeline`` assembles the CEO
-toolset ONCE (with the frame's ``folder_id`` + ``memory_enabled``) BEFORE the kind-specific
+toolset ONCE (with the frame's ``folder_id``) BEFORE the kind-specific
 settle, so the ask_user frame used here exercises the exact same wiring a plan_review frame
 would — ask_user is chosen because it has no plan tail to rebuild from the journal.
 """
@@ -104,7 +101,7 @@ def _patch_seams(monkeypatch, provider: _ScriptedProvider, store: FileMemoryStor
     monkeypatch.setattr(settings, "approval_gate_enabled", False)
 
 
-def _ask_frame(*, memory_enabled: bool) -> AskUserSuspension:
+def _ask_frame() -> AskUserSuspension:
     """An ask_user pause in project ``F1`` whose in-memory transcript ends at the suspended
     ``ask_user`` call (empty journal ⇒ ``resumed_captain_window`` folds back this transcript —
     the supported same-process resume carrier)."""
@@ -118,7 +115,6 @@ def _ask_frame(*, memory_enabled: bool) -> AskUserSuspension:
         base_system_prompt="SYS",
         user_message="帮我按本项目流程部署",
         folder_id=FOLDER_ID,
-        memory_enabled=memory_enabled,
         transcript=[
             LLMMessage(role="system", content="SYS"),
             LLMMessage(role="user", content="帮我按本项目流程部署"),
@@ -175,7 +171,7 @@ async def test_resume_consult_hits_project_topic(monkeypatch, tmp_path):
     _patch_seams(monkeypatch, provider, store)
 
     result = await pipeline.resume_chat_pipeline(
-        suspension=_ask_frame(memory_enabled=True),
+        suspension=_ask_frame(),
         decision=CheckpointDecision.CONTINUE,
         note="继续",
         sink=EventSink(),
@@ -192,22 +188,27 @@ async def test_resume_consult_hits_project_topic(monkeypatch, tmp_path):
     assert all(GLOBAL_BODY not in msg for msg in fed_back)
 
 
-async def test_resume_with_memory_off_cannot_reach_topic(monkeypatch, tmp_path):
-    # Resume a memory-OFF turn: even though the model TRIES consult, the tool is not
-    # wired (the privacy off-ramp), so the project note never reaches the loop — yet the turn
-    # still finishes cleanly (a model typo / stale call must never break a resume).
+async def test_resume_ignores_legacy_memory_off_frame(monkeypatch, tmp_path):
+    # Leftover ``memory_enabled=False`` on an old frame must not unload consult.
     store = FileMemoryStore(tmp_path / "memory")
     await _seed_topics(store)
     provider = _ScriptedProvider(
         [
             [_tool_chunk("consult", f'{{"name": "{TOPIC}"}}', call_id="cm1")],
-            [_content_chunk("无法查阅记忆，按现有信息继续。")],
+            [_content_chunk("已读取本项目部署流程，开始执行。")],
         ]
     )
     _patch_seams(monkeypatch, provider, store)
+    from agentcore.runtime.suspension import suspension_from_json
+
+    raw = _ask_frame().to_json()
+    raw["memory_enabled"] = False
+    suspension = suspension_from_json(raw)
+    suspension.transcript = _ask_frame().transcript
+    suspension.journal_entries = _ask_frame().journal_entries
 
     result = await pipeline.resume_chat_pipeline(
-        suspension=_ask_frame(memory_enabled=False),
+        suspension=suspension,
         decision=CheckpointDecision.CONTINUE,
         note="继续",
         sink=EventSink(),
@@ -216,13 +217,5 @@ async def test_resume_with_memory_off_cannot_reach_topic(monkeypatch, tmp_path):
     )
 
     assert result["finish_reason"] == FinishReason.END_TURN
-    # The project body never reached the model on ANY round — memory stayed fully off-ramped.
-    assert all(
-        PROJECT_BODY not in (m.content or "")
-        for req in provider.requests
-        for m in req.messages
-    )
-    # The loop DID continue past the (rebuffed) consult attempt and finalize, proving
-    # the unknown-tool result degraded gracefully instead of breaking the resumed turn.
-    assert len(provider.requests) >= 2
-    assert result["content"]
+    fed_back = _tool_messages(provider.requests[1])
+    assert PROJECT_BODY in fed_back

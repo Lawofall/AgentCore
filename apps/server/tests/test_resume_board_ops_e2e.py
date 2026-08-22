@@ -110,8 +110,7 @@ def _backend() -> ServerWorkspace:
 
 def _ask_frame() -> AskUserSuspension:
     """An ask_user pause whose in-memory transcript ends at the suspended ``ask_user`` call
-    (empty journal ⇒ ``resumed_captain_window`` folds back this transcript). Memory OFF so the
-    test never touches the memory store — it isolates the board wiring."""
+    (empty journal ⇒ ``resumed_captain_window`` folds back this transcript)."""
     susp = AskUserSuspension(
         message_id="m1",
         conversation_id=CONV_ID,
@@ -122,7 +121,6 @@ def _ask_frame() -> AskUserSuspension:
         base_system_prompt="SYS",
         user_message="在白板上把登录流程画出来",
         folder_id=None,
-        memory_enabled=False,
         transcript=[
             LLMMessage(role="system", content="SYS"),
             LLMMessage(role="user", content="在白板上把登录流程画出来"),

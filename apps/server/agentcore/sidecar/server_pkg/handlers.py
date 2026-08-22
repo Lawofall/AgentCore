@@ -812,6 +812,17 @@ class HandlerMixin:
         from agentcore.sidecar.server_pkg.turns import apply_rpc_folder_binding_to_suspension
 
         apply_rpc_folder_binding_to_suspension(suspension, params)
+        from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
+        from agentcore.runtime.suspension import TeamPreviewSuspension
+
+        if isinstance(suspension, TeamPreviewSuspension):
+            await self._paused_store.rollback_claim(message_id)
+            await self._send(
+                protocol.make_error(
+                    request_id, protocol.INVALID_PARAMS, TEAM_PREVIEW_UNRECOVERABLE
+                )
+            )
+            return
         folder_cid = str(getattr(suspension, "conversation_id", "") or "")
         prior_folder = self.stamp_folder_scope(
             folder_cid,
@@ -1018,6 +1029,16 @@ class HandlerMixin:
             return
         peeked.user_id = self._user_id
         apply_rpc_folder_binding_to_suspension(peeked, params)
+        from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
+        from agentcore.runtime.suspension import TeamPreviewSuspension
+
+        if isinstance(peeked, TeamPreviewSuspension):
+            await self._send(
+                protocol.make_error(
+                    request_id, protocol.INVALID_PARAMS, TEAM_PREVIEW_UNRECOVERABLE
+                )
+            )
+            return
         prior_folder = self.stamp_folder_scope(
             conversation_id,
             folder_id=getattr(peeked, "folder_id", None),

@@ -311,7 +311,8 @@ def test_non_deepseek_usd_curated_still_withdrawn():
     assert not has_curated_pricing(PLATFORM_RELAY_GROK_45)
     assert not has_curated_pricing("qwen-vl-max")
     assert has_curated_pricing(PLATFORM_RELAY_GLM_52)
-    assert has_curated_pricing("glm-5.2-jiu")
+    # Alias catalog ids (upstream_model remap) do not get their own curated card.
+    assert not has_curated_pricing("glm-5.2-alt")
     assert has_curated_pricing(DOUBAO_SEED_TURBO)
     assert has_curated_pricing(PLATFORM_RELAY_KIMI_K25)
 

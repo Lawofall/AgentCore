@@ -9,10 +9,10 @@ import {
 } from "@/components/ui/dialog";
 
 /**
- * 「在哪工作」说明弹窗——只回答用户的三个问题：文件放在哪、改的是哪一份、怎么拿回自己电脑。
+ * 「在哪工作」说明弹窗——对着菜单两问：这次聊哪、本机目录怎么用。
  *
  * 文案面向普通用户：入口名与「在哪工作」菜单逐字一致，内部实现词与设计文档术语一律不出现
- * （同名测试守着，防抄设计文档回潮）。菜单没有「我的文件」这一项，弹窗也不把它当入口。
+ * （同名测试守着，防抄设计文档回潮）。
  * 云是推荐默认，本机只作并列说明、不给推荐标。
  */
 export function WorkspaceChannelGuideDialog({
@@ -22,7 +22,7 @@ export function WorkspaceChannelGuideDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 有本机盘（桌面端）才讲「打开本机文件夹」；Web 只讲云。 */
+  /** 有本机盘（桌面端）才讲本机目录三选；Web 只讲云。 */
   showLocalTraditional: boolean;
 }) {
   return (
@@ -31,16 +31,14 @@ export function WorkspaceChannelGuideDialog({
         <DialogHeader>
           <DialogTitle>在哪工作：怎么选</DialogTitle>
           <DialogDescription>
-            默认把文件放在云上；也可以直接改你电脑上的文件夹。
+            先选这次聊哪。电脑上的文件夹要另选怎么用。
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 px-5 pb-2 text-sm text-foreground">
           <section className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
             <div className="flex items-center gap-1.5">
-              <h3 className="text-sm font-medium text-foreground">
-                文件放在云上
-              </h3>
+              <h3 className="text-sm font-medium text-foreground">这次聊哪</h3>
               <Badge tone="primary">推荐</Badge>
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">
@@ -53,31 +51,27 @@ export function WorkspaceChannelGuideDialog({
                   快速对话
                 </dt>
                 <dd className="text-xs leading-relaxed text-muted-foreground">
-                  不用先选地方，想到什么直接聊；真要存文件时会自动建一个文件夹，也可以先点「新建文件夹」自己建
+                  不用先选地方，想到什么直接聊；真要存文件时会自动建一个文件夹
                 </dd>
               </div>
               <div className="space-y-0.5">
                 <dt className="text-xs font-medium text-foreground">
-                  新建文件夹
+                  已有文件夹
                 </dt>
                 <dd className="text-xs leading-relaxed text-muted-foreground">
-                  建一个空文件夹，从头开始
+                  {showLocalTraditional
+                    ? "点云图标的接着聊；点硬盘图标的，会再问怎么用"
+                    : "点列表里的文件夹接着聊"}
                 </dd>
               </div>
               <div className="space-y-0.5">
                 <dt className="text-xs font-medium text-foreground">
-                  从本机导入
+                  {showLocalTraditional ? "新建或加入…" : "新建文件夹"}
                 </dt>
                 <dd className="text-xs leading-relaxed text-muted-foreground">
-                  把你电脑上的文件夹复制一份上来；之后改的是云上这份，电脑里的原件不会跟着变
-                </dd>
-              </div>
-              <div className="space-y-0.5">
-                <dt className="text-xs font-medium text-foreground">
-                  从 Git 克隆
-                </dt>
-                <dd className="text-xs leading-relaxed text-muted-foreground">
-                  把远程仓库拉一份到云上
+                  {showLocalTraditional
+                    ? "新建一个空文件夹，或从 Git 克隆一份到云上；电脑上已有的目录走「从本机加入」"
+                    : "建一个空文件夹，从头开始"}
                 </dd>
               </div>
             </dl>
@@ -86,26 +80,62 @@ export function WorkspaceChannelGuideDialog({
           {showLocalTraditional ? (
             <section className="space-y-2 rounded-lg border border-border/60 p-3">
               <h3 className="text-sm font-medium text-foreground">
-                打开本机文件夹
+                电脑上的文件夹，选完再选怎么用
               </h3>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                改的就是你电脑上的那个目录，不用先复制上来，适合东西本来就在电脑上、或者非得用你电脑上那套环境的活。它不是离线模式：模型调用一样要联网，对话记录也仍然存在云上。
+                点列表里硬盘图标那一行，或走「从本机加入」选一个新目录，都会再问怎么用。不是离线模式：模型调用一样要联网，对话记录也仍然存在云上。
               </p>
+              <dl className="space-y-2">
+                <div className="space-y-0.5">
+                  <dt className="text-xs font-medium text-foreground">
+                    直接改这个文件夹
+                  </dt>
+                  <dd className="text-xs leading-relaxed text-muted-foreground">
+                    改的就是你电脑上的那个目录，不用先复制上来，适合东西本来就在电脑上、或者非得用你电脑上那套环境的活
+                  </dd>
+                </div>
+                <div className="space-y-0.5">
+                  <dt className="text-xs font-medium text-foreground">
+                    复制到云上当新家
+                  </dt>
+                  <dd className="text-xs leading-relaxed text-muted-foreground">
+                    把你电脑上的文件夹复制一份上来；之后改的是云上这份，电脑里的原件不会跟着变
+                  </dd>
+                </div>
+                <div className="space-y-0.5">
+                  <dt className="text-xs font-medium text-foreground">
+                    先在云上做，原件先不动
+                  </dt>
+                  <dd className="text-xs leading-relaxed text-muted-foreground">
+                    这一单在云上做，电脑里的原件先不动；做完再决定写不写回。不是复制上来当云上那份家。
+                  </dd>
+                </div>
+              </dl>
             </section>
           ) : null}
 
           <section className="space-y-1.5 px-0.5">
             <h3 className="text-sm font-medium text-foreground">怎么选</h3>
             <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
-              <li>日常用、想在手机和网页接着看 → 上面四个</li>
+              <li>
+                {showLocalTraditional
+                  ? "日常用、想在手机和网页接着看 → 快速对话、已有云文件夹，或新建或加入"
+                  : "日常用、想在手机和网页接着看 → 快速对话、已有云文件夹或新建文件夹"}
+              </li>
               {showLocalTraditional ? (
                 <li>
-                  东西已经在你电脑上、又要用你电脑上的环境 → 打开本机文件夹
+                  东西已经在你电脑上、又要用你电脑上的环境 → 直接改这个文件夹
                 </li>
               ) : null}
               {showLocalTraditional ? (
                 <li>
-                  电脑上的文件夹也想换设备接着用 → 从本机导入（可选，不必搬）
+                  电脑上的文件夹也想换设备接着用 →
+                  复制到云上当新家（可选，不必搬）
+                </li>
+              ) : null}
+              {showLocalTraditional ? (
+                <li>
+                  这一单想在云上做、电脑上的原件先不动 → 先在云上做，原件先不动
                 </li>
               ) : null}
             </ul>

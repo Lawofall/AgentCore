@@ -306,7 +306,6 @@ def tool_durable(
     saver,
     deleter,
     folder_id: str | None = _TEST_BIRTH_FOLDER_ID,
-    memory_enabled: bool = True,
 ):
     # Pin CAUTIOUS: keeps command=ask / file_write=ask for approval-path tests.
     # (DEFAULT 少打断 now uses team_kickoff=rules and would also show the card.)
@@ -330,7 +329,6 @@ def tool_durable(
         suspension_deleter=deleter,
         captain_run_id="CEO",
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
         permission_axes=recipe_to_axes(AutonomyPolicy.CAUTIOUS),
     )
 

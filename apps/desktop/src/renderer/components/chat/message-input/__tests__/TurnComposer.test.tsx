@@ -68,7 +68,9 @@ vi.mock("@/hooks/useFolders", () => ({
 vi.mock("@/hooks/useConversations", () => ({
   useConversations: () => [],
   getConversations: () => [],
-  useGroupedConversations: () => ({ data: { folders: [] } }),
+  useGroupedConversations: () => ({
+    data: { folders: [], conversations: [] },
+  }),
   patchConversationCache: vi.fn(),
 }));
 vi.mock("@/hooks/useModels", () => ({
@@ -111,32 +113,27 @@ vi.mock("@/services/permissionAxes", () => ({
     less_interrupt: {
       file_write: "session",
       command: "auto",
-      team_kickoff: "rules",
       host: "session",
     },
   },
   DEFAULT_PERMISSION_AXES: {
     file_write: "session",
     command: "auto",
-    team_kickoff: "rules",
     host: "session",
   },
   FILE_WRITE_OPTIONS: [],
   COMMAND_OPTIONS: [],
-  TEAM_KICKOFF_OPTIONS: [],
   matchRecipe: () => "less_interrupt",
   axesShortLabel: () => "少打断",
   recipeToAxes: () => ({
     file_write: "session",
     command: "auto",
-    team_kickoff: "rules",
     host: "session",
   }),
   resolveDefaultPermissionAxes: () =>
     Promise.resolve({
       file_write: "session",
       command: "auto",
-      team_kickoff: "rules",
       host: "session",
     }),
   setConversationPermissionAxes: vi.fn(),
@@ -348,11 +345,35 @@ describe("TurnComposer variants", () => {
     expect(screen.getByLabelText(/模型组合：/)).toBeTruthy();
     expect(screen.getByLabelText(/权限：/)).toBeTruthy();
     expect(screen.getByLabelText("@ 引用")).toBeTruthy();
-    expect(within(menu).getByText("@ 引用")).toBeTruthy();
+    expect(within(menu).getByText("引用")).toBeTruthy();
     expect(menu.className).not.toMatch(/\bw-72\b/);
     expectWorkspaceBeforeModel(menu);
     expect(within(menu).queryByText("后台云端")).toBeNull();
     expect(within(menu).queryByRole("button", { name: /后台云端/ })).toBeNull();
+  });
+
+  it("bar: 模型在＋内展开，不另开一层；返回回到列表", () => {
+    renderComposer("bar");
+    fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
+    const menu = screen.getByTestId("composer-plus-menu");
+    fireEvent.click(screen.getByLabelText(/模型组合：/));
+    expect(menu.getAttribute("data-plus-panel")).toBe("model");
+    expect(within(menu).getByRole("button", { name: "返回" })).toBeTruthy();
+    expect(within(menu).getByText("管理组合…")).toBeTruthy();
+    expect(screen.queryByLabelText("在哪工作")).toBeNull();
+    fireEvent.click(within(menu).getByRole("button", { name: "返回" }));
+    expect(menu.getAttribute("data-plus-panel")).toBe("list");
+    expect(screen.getByLabelText("在哪工作")).toBeTruthy();
+  });
+
+  it("bar: 工作区在＋内展开", () => {
+    renderComposer("bar");
+    fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
+    const menu = screen.getByTestId("composer-plus-menu");
+    fireEvent.click(screen.getByLabelText("在哪工作"));
+    expect(menu.getAttribute("data-plus-panel")).toBe("workspace");
+    expect(within(menu).getByRole("button", { name: "快速对话" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "返回" })).toBeTruthy();
   });
 
   it("N4-A: offline hard-disables 发送 even with draft text", async () => {

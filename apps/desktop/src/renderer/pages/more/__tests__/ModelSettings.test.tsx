@@ -229,7 +229,7 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.queryByRole("button", { name: "添加服务商" })).toBeNull();
   });
 
-  it("shows a compact platform status line with link to providers", () => {
+  it("does not show a platform status line", () => {
     mockProviders(
       providersResponse({
         providers: [],
@@ -258,8 +258,9 @@ describe("ModelSettings (profiles)", () => {
       }),
     );
     renderPage();
-    expect(screen.getByText(/可用平台额度 · deepseek-v4-flash/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "接入服务商" })).toBeTruthy();
+    expect(screen.queryByText(/可用平台额度 · deepseek-v4-flash/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "接入服务商" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "管理服务商" })).toBeNull();
     expect(screen.queryByText(/平台免费额度/)).toBeNull();
   });
 
@@ -581,7 +582,7 @@ describe("ModelSettings (profiles)", () => {
     expect(screen.getByText("GLM-5.2")).toBeTruthy();
   });
 
-  it("shows empty CTA to jiurelay and providers when byok has no providers or platform", () => {
+  it("shows empty CTA to providers when byok has no providers or platform", () => {
     mockProviders(
       providersResponse({
         providers: [],
@@ -590,11 +591,9 @@ describe("ModelSettings (profiles)", () => {
       }),
     );
     renderPage();
-    expect(screen.getByRole("link", { name: "jiurelay" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "接入服务商" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "接入服务商" })).toBeTruthy();
-    expect(
-      screen.getByText(/需自行在 jiurelay 免费配额度或接入服务商/),
-    ).toBeTruthy();
+    expect(screen.getByText(/需自行接入服务商后才能对话/)).toBeTruthy();
     expect(screen.queryByText("模型组合")).toBeNull();
   });
 
@@ -659,7 +658,6 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.queryByText("新建组合", { selector: "p" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "jiurelay" })).toBeNull();
     expect(screen.getByText(/请稍后重试/)).toBeTruthy();
     expect(
       screen.getAllByRole("link", { name: "设置 · 服务商" }).length,
@@ -735,7 +733,6 @@ describe("ModelSettings (profiles)", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.getByText("新建组合", { selector: "p" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "jiurelay" })).toBeNull();
     expect(screen.getByText(/请稍后重试/)).toBeTruthy();
     expect(
       screen.getAllByRole("link", { name: "设置 · 服务商" }).length,

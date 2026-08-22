@@ -1065,15 +1065,19 @@ class ServerWorkspace:
 
                 rel = self._model_path(child, logical=directory)
 
-                if not is_dir and not fnmatch.fnmatch(child.name, name_filter):
-                    continue
+                # `*`: emit dirs + matching files (connected tree).
+                # Name filter: emit matching names only; still descend unmatched
+                # dirs so the 200-entry budget is spent on hits (Glob), not prefixes.
+                name_search = (name_filter or "*") != "*"
+                name_matches = fnmatch.fnmatch(child.name, name_filter)
+                emit = name_matches if name_search else (is_dir or name_matches)
 
-                if len(entries) >= max_entries:
-                    truncated = True
-                    elided_count += 1
-                    continue
-
-                entries.append(TreeEntry(path=rel, is_dir=is_dir, depth=depth))
+                if emit:
+                    if len(entries) >= max_entries:
+                        truncated = True
+                        elided_count += 1
+                        continue
+                    entries.append(TreeEntry(path=rel, is_dir=is_dir, depth=depth))
                 if is_dir and depth < max_depth:
                     walk(child, depth + 1, is_root=False)
 

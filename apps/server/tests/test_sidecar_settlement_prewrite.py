@@ -142,8 +142,11 @@ def _team_preview() -> Any:
 
 
 @pytest.mark.asyncio
-async def test_sidecar_settlement_prewrite_team_preview_veto_fields(tmp_path) -> None:
-    """开工否决字段进入 team_preview_resolved + resume_frame（对齐云 cold settlement）。"""
+async def test_sidecar_settlement_prewrite_refuses_team_preview(tmp_path) -> None:
+    """存量开工卡不得预写 team_preview_resolved。"""
+    from agentcore.core.errors import GoneError
+    from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
+
     outbox = OutboxStore(tmp_path / "outbox")
     outbox.bind_turn(
         conversation_id="c1",
@@ -154,28 +157,21 @@ async def test_sidecar_settlement_prewrite_team_preview_veto_fields(tmp_path) ->
     )
     await outbox.begin_turn(conversation_id="c1", message_id="m-tp", trace_id="a" * 32)
     susp = _team_preview()
-    entry = await prewrite_sidecar_resume_settlement(
-        outbox,
-        susp,
-        decision="continue",
-        note="",
-        selected=[],
-        user_message_id="u1",
-        trace_id="a" * 32,
-        excluded_run_ids=["b"],
-        write_capability_overrides=[{"run_id": "a", "capability": "text_only"}],
-    )
-    assert entry["kind"] == "team_preview_resolved"
-    payload = entry["payload"]
-    assert payload.get("excluded_run_ids") == ["b"]
-    assert payload.get("write_capability_overrides") == [
-        {"run_id": "a", "capability": "text_only"}
-    ]
-    frame = payload["resume_frame"]
-    assert frame["excluded_run_ids"] == ["b"]
-    assert frame["write_capability_overrides"] == [
-        {"run_id": "a", "capability": "text_only"}
-    ]
+    with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
+        await prewrite_sidecar_resume_settlement(
+            outbox,
+            susp,
+            decision="continue",
+            note="",
+            selected=[],
+            user_message_id="u1",
+            trace_id="a" * 32,
+            excluded_run_ids=["b"],
+            write_capability_overrides=[{"run_id": "a", "capability": "text_only"}],
+        )
+    record = outbox.find_record_by_message_id("m-tp")
+    entries = journal_entries_from_map((record or {}).get("journal")) or []
+    assert not any(e.get("kind") == "team_preview_resolved" for e in entries)
 
 
 @pytest.mark.asyncio

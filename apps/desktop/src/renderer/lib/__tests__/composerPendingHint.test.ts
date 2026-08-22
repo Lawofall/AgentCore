@@ -41,6 +41,34 @@ describe("composerPendingHint", () => {
       messageId: "m1",
       conversationId: CID,
       checkpointId: "cp1",
+      kind: "ask_user",
+      userMessage: "问",
+      userMessageId: "u1",
+      steps: [],
+      pending: [],
+      workers: [],
+      tools: [],
+      primitive: "delegate",
+      motion: "",
+      form: "",
+      sides: [],
+      maxRounds: 0,
+      thorough: true,
+      question: "怎么推进？",
+      assumptions: [],
+      questions: [],
+      intent: "decision",
+      origin: "server",
+    });
+    expect(conversationHasPendingDecision(CID)).toBe(true);
+    expect(conversationHasPendingDecision("other")).toBe(false);
+  });
+
+  it("leftover team_preview paused shell is not a pending decision", () => {
+    usePausedTurnStore.getState().addLiveResume({
+      messageId: "m1",
+      conversationId: CID,
+      checkpointId: "cp1",
       kind: "team_preview",
       userMessage: "开工",
       userMessageId: "u1",
@@ -60,8 +88,7 @@ describe("composerPendingHint", () => {
       intent: "kickoff",
       origin: "server",
     });
-    expect(conversationHasPendingDecision(CID)).toBe(true);
-    expect(conversationHasPendingDecision("other")).toBe(false);
+    expect(conversationHasPendingDecision(CID)).toBe(false);
   });
 
   it("detects cold InteractionStore pending without pausedTurns", () => {
@@ -84,9 +111,45 @@ describe("composerPendingHint", () => {
       serverMessageId: "m1",
     });
     useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+      kind: "ask_user",
       conversationId: CID,
       messageId: "m1",
+      origin: "server",
+      payload: {
+        checkpoint_id: "cp-hint",
+        conversation_id: CID,
+        question: "怎么推进？",
+        assumptions: [],
+        questions: [],
+      },
+    });
+    expect(conversationHasPendingDecision(CID)).toBe(true);
+    expect(usePausedTurnStore.getState().pending).toHaveLength(0);
+  });
+
+  it("leftover team_preview IX pending is not a pending decision", () => {
+    useConversationStore.getState().switchConversation(CID);
+    useConversationStore.getState().addMessage({
+      id: "u1",
+      role: "user",
+      content: "组团",
+      createdAt: "",
+      executionId: null,
+      isStreaming: false,
+    });
+    useConversationStore.getState().addMessage({
+      id: "client-tp",
+      role: "assistant",
+      content: "",
+      createdAt: "",
+      executionId: null,
+      isStreaming: true,
+      serverMessageId: "m-tp",
+    });
+    useInteractionStore.getState().upsertRequired({
+      kind: "team_preview",
+      conversationId: CID,
+      messageId: "m-tp",
       origin: "server",
       payload: {
         checkpoint_id: "tp-hint",
@@ -96,7 +159,7 @@ describe("composerPendingHint", () => {
         tools: [],
       },
     });
-    expect(conversationHasPendingDecision(CID)).toBe(true);
+    expect(conversationHasPendingDecision(CID)).toBe(false);
     expect(usePausedTurnStore.getState().pending).toHaveLength(0);
   });
 
@@ -111,16 +174,16 @@ describe("composerPendingHint", () => {
       isStreaming: true,
     });
     useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+      kind: "ask_user",
       conversationId: CID,
       messageId: "client-only",
       origin: "server",
       payload: {
-        checkpoint_id: "tp-nostamp-hint",
+        checkpoint_id: "cp-nostamp-hint",
         conversation_id: CID,
-        primitive: "delegate",
-        workers: [],
-        tools: [],
+        question: "怎么推进？",
+        assumptions: [],
+        questions: [],
       },
     });
     expect(conversationHasPendingDecision(CID)).toBe(false);

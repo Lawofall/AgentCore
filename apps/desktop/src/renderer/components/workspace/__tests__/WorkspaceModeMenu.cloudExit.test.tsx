@@ -3,6 +3,11 @@ import {
   WorkspaceModeMenu,
   type WorkspaceModeState,
 } from "@/components/workspace/WorkspaceModeControl";
+import { set as setBorrowOriginal } from "@/lib/borrowOriginalPreference";
+import {
+  __clearMemoryUiStorageForTests,
+  __setUiStorageBackendForTests,
+} from "@/lib/uiStorage";
 import type { EffectiveWorkspace } from "@/lib/workspaceEffectiveMode";
 import {
   cleanup,
@@ -55,6 +60,8 @@ vi.mock("@/stores/folders", () => ({
   },
 }));
 
+const memory = new Map<string, string>();
+
 function cloudState(
   overrides?: Partial<WorkspaceModeState>,
 ): WorkspaceModeState {
@@ -82,12 +89,25 @@ function cloudState(
 }
 
 beforeEach(() => {
+  memory.clear();
+  __setUiStorageBackendForTests({
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => {
+      memory.set(key, value);
+    },
+    removeItem: (key) => {
+      memory.delete(key);
+    },
+    keys: () => [...memory.keys()],
+  });
   registerMergeLanding.mockClear();
   mergeBackToLanding.mockClear();
   peekMergeLanding.mockReturnValue(null);
 });
 
 afterEach(() => {
+  __setUiStorageBackendForTests(null);
+  __clearMemoryUiStorageForTests();
   cleanup();
 });
 
@@ -138,5 +158,58 @@ describe("WorkspaceModeMenu · cloud desk §7.6 exits", () => {
     await waitFor(() => {
       expect(mergeBackToLanding).toHaveBeenCalledWith("c-cloud", state.roots);
     });
+  });
+
+  it("borrow cloud: 原件尚未改动 + 写入原文件夹；不出现合回/过桥/遗留/本机传统", async () => {
+    setBorrowOriginal("f1", {
+      rootId: "root-1",
+      originalName: "desk",
+      promoted: false,
+    });
+    const state = cloudState();
+    render(<WorkspaceModeMenu state={state} conversationId="c-cloud" />);
+
+    expect(screen.getByText("原件尚未改动")).toBeTruthy();
+    expect(screen.getByText("写入原文件夹")).toBeTruthy();
+    expect(screen.getByText("留在云上接着用")).toBeTruthy();
+    expect(screen.queryByText("合回到本机")).toBeNull();
+    expect(screen.queryByText("更换合回落点")).toBeNull();
+    expect(screen.queryByText(/合回/)).toBeNull();
+    expect(screen.queryByText(/过桥/)).toBeNull();
+    expect(screen.queryByText(/遗留/)).toBeNull();
+    expect(screen.queryByText(/本机传统/)).toBeNull();
+
+    fireEvent.click(screen.getByText("写入原文件夹"));
+    await waitFor(() => {
+      expect(mergeBackToLanding).toHaveBeenCalledWith("c-cloud", state.roots);
+    });
+  });
+
+  it("borrow cloud: 留在云上只 markPromoted，不改 folder、不再显示原件未改", () => {
+    setBorrowOriginal("f1", {
+      rootId: "root-1",
+      originalName: "desk",
+      promoted: false,
+    });
+    render(<WorkspaceModeMenu state={cloudState()} conversationId="c-cloud" />);
+    fireEvent.click(screen.getByText("留在云上接着用"));
+
+    expect(mergeBackToLanding).not.toHaveBeenCalled();
+    expect(screen.queryByText("原件尚未改动")).toBeNull();
+    expect(screen.queryByText("写入原文件夹")).toBeNull();
+    expect(screen.queryByText("留在云上接着用")).toBeNull();
+    expect(screen.getByText("合回到本机")).toBeTruthy();
+  });
+
+  it("promoted borrow keeps regular 合回到本机", () => {
+    setBorrowOriginal("f1", {
+      rootId: "root-1",
+      originalName: "desk",
+      promoted: true,
+    });
+    render(<WorkspaceModeMenu state={cloudState()} conversationId="c-cloud" />);
+    expect(screen.queryByText("原件尚未改动")).toBeNull();
+    expect(screen.getByText("合回到本机")).toBeTruthy();
+    expect(screen.queryByText("留在云上接着用")).toBeNull();
   });
 });

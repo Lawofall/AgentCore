@@ -119,10 +119,7 @@ class SessionWorkersMixin:
             from agentcore.runtime.coordination.append_guard import (
                 handoff_owned_paths_on_complete,
             )
-            from agentcore.workspace.write_claims import file_ownership_v2_enabled
 
-            if not file_ownership_v2_enabled():
-                return
             moved = handoff_owned_paths_on_complete(
                 self.live_plan,
                 self.ensure_file_ownership(),

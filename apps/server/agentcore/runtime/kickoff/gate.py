@@ -1,11 +1,9 @@
-"""Kickoff trigger rules — single copy for delegate + debate team_preview."""
+"""Kickoff trigger rules — shared helpers for leftover fold / governance."""
 
 from __future__ import annotations
 
 import re
 from typing import Any
-
-from agentcore.core.types import PermissionAxes
 
 # Short verbal affirmations (governance filters these out of "real user intent"
 # chunks). Never used to skip team_preview — ask ⊥ kickoff.
@@ -17,67 +15,17 @@ _AFFIRM_RE = re.compile(
 
 
 def should_preview_delegate_plan(plan: Any) -> bool:
-    """Whether the *plan half* of a delegate kickoff would show (ignores autonomy).
+    """Plan-half heuristic for a delegate kickoff summary (ignores autonomy).
 
-    Hang when ≥2 workers. Solo (1 worker) stays off — zero-friction kickoff.
-    Nested depth / resume / ``team_kickoff`` / full_auto are decided by
-    :func:`should_kickoff` and the caller. Confirmed ``ask_user`` does **not**
-    skip this half (ask ⊥ team_preview).
+    True when ≥2 workers. Solo stays off. Confirmed ``ask_user`` does **not**
+    interact with this half (ask ⊥ team_preview).
 
     When any node has ``checkpoint_after``, the plan-preview half yields — mid-batch
-    outline / plan_review cards own that拍板; capability-auth half is independent.
+    outline / plan_review cards own that拍板.
     """
     if any(bool(getattr(n, "checkpoint_after", False)) for n in plan.nodes):
         return False
     return len(plan.nodes) >= 2
-
-
-# Back-compat aliases used by tests / call sites.
-should_preview_plan = should_preview_delegate_plan
-should_preview = should_preview_delegate_plan
-
-
-def needs_capability_auth(
-    *,
-    local_gate: bool,
-    axes: PermissionAxes,
-) -> bool:
-    """Whether the capability-auth half of the kickoff applies.
-
-    - ``command=ask``: no kickoff grant → False
-    - ``command=auto``: silent auto-grant → False
-    - ``command=kickoff`` + local gate: True (show tools / await grant)
-    """
-    if not local_gate:
-        return False
-    return axes.honors_kickoff_grant
-
-
-def should_kickoff(
-    *,
-    plan_preview: bool,
-    local_gate: bool,
-    axes: PermissionAxes,
-    unfulfilled_adjust: bool = False,
-) -> bool:
-    """Whether to durable-pause for the merged kickoff card.
-
-    ``plan_preview`` is primitive-specific (delegate: :func:`should_preview_delegate_plan`;
-    debate top-level: always True). ``team_kickoff``:
-    - ``skip`` — release both halves (对齐原 full_auto 跳卡)
-    - ``always`` — force plan half on (仍由调用方限定「仍该挂的场景」)
-    - ``rules`` — honor ``plan_preview`` soft-skip rules
-
-    ``unfulfilled_adjust`` forces the plan half on (bypass ≥2-worker / similar
-    skips) when this turn has a settled adjust not yet followed by a new card.
-    Never-adjust callers leave it False — zero behavior change.
-    """
-    if axes.skips_team_kickoff:
-        return False
-    effective_plan = True if (axes.forces_team_kickoff or unfulfilled_adjust) else plan_preview
-    if effective_plan:
-        return True
-    return needs_capability_auth(local_gate=local_gate, axes=axes)
 
 
 def is_short_affirmation(text: str) -> bool:

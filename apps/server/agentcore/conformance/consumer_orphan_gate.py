@@ -186,8 +186,6 @@ _PROCESS_STEP_UI_FILES: tuple[tuple[str, str], ...] = (
         "apps/desktop/src/renderer/components/chat/message-bubble/ProcessTimeline.tsx",
         "desktop ProcessTimeline UI",
     ),
-    ("apps/mobile/src/protocol/fold.ts", "mobile fold process marker"),
-    ("apps/mobile/src/components/ProcessTimeline.tsx", "mobile ProcessTimeline UI"),
 )
 
 _CASE_RE = re.compile(r"case\s+['\"]([^'\"]+)['\"]")

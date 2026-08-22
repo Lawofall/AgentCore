@@ -272,7 +272,6 @@ async def test_conversation_deep_read_success(monkeypatch):
         ],
         user_id="u1",
         host_conversation_id="host-now",
-        conversation_history_access=True,
     )
     assert out is not None
     assert "--- Conversation: 讨论 X 方案 ---" in out
@@ -286,28 +285,6 @@ async def test_conversation_deep_read_success(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_conversation_gate_off_rejects_without_client_text(monkeypatch):
-    out = await _build_attachment_context(
-        [
-            {
-                "name": "旧场",
-                "text": "CLIENT_SHALLOW",
-                "kind": "conversation",
-                "conversation_id": "conv-1",
-            }
-        ],
-        user_id="u1",
-        conversation_history_access=False,
-    )
-    assert out is not None
-    assert "deep-read denied" in out
-    assert "conversation_history_access=off" in out
-    assert "CLIENT_SHALLOW" not in out
-    # Must not hit the DB when gate is off.
-    assert "### User" not in out
-
-
-@pytest.mark.asyncio
 async def test_conversation_missing_id_soft_miss():
     out = await _build_attachment_context(
         [
@@ -318,7 +295,6 @@ async def test_conversation_missing_id_soft_miss():
             }
         ],
         user_id="u1",
-        conversation_history_access=True,
     )
     assert out is not None
     assert "缺少 conversation_id" in out
@@ -338,7 +314,6 @@ async def test_conversation_soft_miss_wrong_owner(monkeypatch):
             }
         ],
         user_id="u1",
-        conversation_history_access=True,
     )
     assert out is not None
     assert "无法打开该对话" in out
@@ -367,7 +342,6 @@ async def test_conversation_soft_miss_handoff(monkeypatch):
             }
         ],
         user_id="u1",
-        conversation_history_access=True,
     )
     assert "无法打开该对话" in out
     assert "CLIENT" not in out
@@ -410,7 +384,6 @@ async def test_conversation_truncated_note(monkeypatch):
             }
         ],
         user_id="u1",
-        conversation_history_access=True,
     )
     assert out is not None
     assert "truncated" in out
@@ -474,7 +447,6 @@ async def test_conversation_deep_read_uses_cloud_when_account_creds(monkeypatch)
                 }
             ],
             user_id="u1",
-            conversation_history_access=True,
         )
     assert out is not None
     assert "--- Conversation: 云端场 ---" in out
@@ -510,7 +482,6 @@ async def test_conversation_cloud_soft_miss(monkeypatch):
                 }
             ],
             user_id="u1",
-            conversation_history_access=True,
         )
     assert out is not None
     assert "无法打开该对话" in out
@@ -545,7 +516,6 @@ async def test_conversation_cloud_failure_soft_degrades(monkeypatch):
                 }
             ],
             user_id="u1",
-            conversation_history_access=True,
         )
     assert out is not None
     assert "暂时无法深读该对话" in out
@@ -578,7 +548,6 @@ async def test_conversation_db_connectivity_soft_degrades(monkeypatch):
             }
         ],
         user_id="u1",
-        conversation_history_access=True,
     )
     assert out is not None
     assert "暂时无法深读该对话" in out

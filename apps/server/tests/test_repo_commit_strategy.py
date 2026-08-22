@@ -240,7 +240,7 @@ async def test_ensure_pinned_conversation_single_commit(monkeypatch):
         user_id="user-1",
         folder_id="folder-1",
         name="钉对话",
-        permission_axes={"file_write": "session", "command": "kickoff", "team_kickoff": "rules"},
+        permission_axes={"file_write": "session", "command": "auto", "host": "session"},
     )
     assert cid == "conv-new"
     assert create_kwargs == [{"commit": False}]
@@ -295,6 +295,6 @@ async def test_ensure_pinned_conversation_skips_commit_when_attach_fails(monkeyp
             user_id="user-1",
             folder_id="folder-1",
             name="钉对话",
-            permission_axes={"file_write": "session", "command": "kickoff", "team_kickoff": "rules"},
+            permission_axes={"file_write": "session", "command": "auto", "host": "session"},
         )
     assert session.commits == 0

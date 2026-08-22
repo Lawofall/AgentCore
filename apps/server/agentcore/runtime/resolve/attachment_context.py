@@ -130,7 +130,6 @@ async def _build_attachment_context(
     *,
     user_id: str | None = None,
     host_conversation_id: str | None = None,
-    conversation_history_access: bool = True,
     vision_reader: VisionReader | None = None,
     backend: WorkspaceBackend | None = None,
     cost_sink: list[RunCost] | None = None,
@@ -219,7 +218,6 @@ async def _build_attachment_context(
                     name=name,
                     user_id=user_id,
                     host_conversation_id=host_conversation_id,
-                    conversation_history_access=conversation_history_access,
                 )
             )
         elif parse_status == "scanned" and text:

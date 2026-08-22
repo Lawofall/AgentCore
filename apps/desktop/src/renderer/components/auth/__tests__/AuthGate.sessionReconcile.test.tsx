@@ -41,7 +41,10 @@ vi.mock("@/services/serverHealth", () => ({
   confirmMidSessionOutage: vi.fn(),
 }));
 
-vi.mock("@/lib/capabilities", () => ({ isWebClient: () => false }));
+vi.mock("@/lib/capabilities", () => ({
+  isWebClient: () => false,
+  isNativeRuntime: () => false,
+}));
 vi.mock("@/lib/log", () => ({ logEvent: vi.fn() }));
 vi.mock("@/components/layout/TitleBar", () => ({
   MinimalTitleBar: () => null,

@@ -1,7 +1,6 @@
 import {
   ResolvedDecisionRecord,
-  askResolvedOutcome,
-  isAskSilentResolvedDecision,
+  askResolvedDisplay,
 } from "@/components/chat/decision";
 import { DecisionCard } from "@/components/ui";
 import { notifyError } from "@/lib/toast";
@@ -219,14 +218,9 @@ function resolvedCollapsedSummary(checkpoint: CheckpointDisplay): string {
 /** The settled record of an ask_user card: how it was decided, plus the user's
  * answer note. Outcome tone stays on badge/label so a glance still reads the
  * verdict; shell is quiet card chrome (not a success toast).
- * 取消结算（stop / 误用 research_first）不占时间线存根——问句由 AssistantMessage
- * 回落为普通正文，对齐 plan_review resolved 静默。 */
+ * 取消 / 确认 / 超时都占时间线存根；缺 decision 不猜超时。 */
 function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
-  const decision = checkpoint.decision ?? "timeout";
-  if (isAskSilentResolvedDecision(decision)) {
-    return timelineIntentionalEmpty();
-  }
-  const resolved = askResolvedOutcome(checkpoint.intent, decision);
+  const resolved = askResolvedDisplay(checkpoint.intent, checkpoint.decision);
   const showRiskChips = checkpoint.intent === "risk_ack";
 
   return (

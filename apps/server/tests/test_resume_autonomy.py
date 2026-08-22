@@ -61,7 +61,6 @@ def _ask_frame() -> AskUserSuspension:
         tool_call_id="call_ask",
         base_system_prompt="SYS",
         user_message="继续干活",
-        memory_enabled=False,
         transcript=[
             LLMMessage(role="system", content="SYS"),
             LLMMessage(role="user", content="继续干活"),

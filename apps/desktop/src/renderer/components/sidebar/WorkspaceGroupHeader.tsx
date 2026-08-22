@@ -49,6 +49,8 @@ interface Props {
   convs: Conversation[];
   expanded: boolean;
   onToggleExpanded: () => void;
+  /** Narrow drawer: no 查看全部 / 删夹 / 导入；＋始终可见。权威 → 前端技术 §五. */
+  surface?: "wide" | "narrow";
 }
 
 /**
@@ -65,7 +67,9 @@ export function WorkspaceGroupHeader({
   convs,
   expanded,
   onToggleExpanded,
+  surface = "wide",
 }: Props) {
+  const narrow = surface === "narrow";
   const [moreOpen, setMoreOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const navigate = useNavigate();
@@ -173,7 +177,8 @@ export function WorkspaceGroupHeader({
     ? "在此本机文件夹中新开对话"
     : "在此文件夹中新开对话";
 
-  const importMenuItem = groupIsLocal ? (
+  const showImport = groupIsLocal && !narrow;
+  const importMenuItem = showImport ? (
     <>
       <ContextMenuItem onSelect={openImportToCloud}>
         <Upload size={14} className="shrink-0" />
@@ -183,7 +188,7 @@ export function WorkspaceGroupHeader({
     </>
   ) : null;
 
-  const importDropdownItem = groupIsLocal ? (
+  const importDropdownItem = showImport ? (
     <>
       <DropdownMenuItem onSelect={openImportToCloud}>
         <Upload size={14} className="shrink-0" />
@@ -200,27 +205,38 @@ export function WorkspaceGroupHeader({
         <Plus size={14} className="shrink-0" />
         <span className="flex-1 truncate">新建对话</span>
       </ContextMenuItem>
-      <ContextMenuItem onSelect={viewAllConversations}>
-        <MessageSquare size={14} className="shrink-0" />
-        <span className="flex-1 truncate">查看全部对话</span>
-      </ContextMenuItem>
-      <ContextMenuItem onSelect={browseFiles}>
-        <FolderOpen size={14} className="shrink-0" />
-        <span className="flex-1 truncate">浏览文件</span>
-      </ContextMenuItem>
-      <ContextMenuSeparator />
-      <ContextMenuItem
-        disabled={liveConvCount === 0}
-        onSelect={() => void handleArchiveAll()}
-      >
-        <Archive size={14} className="shrink-0" />
-        <span className="flex-1 truncate">{archiveLabel}</span>
-      </ContextMenuItem>
-      <ContextMenuSeparator />
-      <ContextMenuItem variant="danger" onSelect={() => setDeleteOpen(true)}>
-        <Trash2 size={14} className="shrink-0" />
-        <span className="flex-1 truncate">删除文件夹…</span>
-      </ContextMenuItem>
+      {!narrow && (
+        <ContextMenuItem onSelect={viewAllConversations}>
+          <MessageSquare size={14} className="shrink-0" />
+          <span className="flex-1 truncate">查看全部对话</span>
+        </ContextMenuItem>
+      )}
+      {(!narrow || !groupIsLocal) && (
+        <ContextMenuItem onSelect={browseFiles}>
+          <FolderOpen size={14} className="shrink-0" />
+          <span className="flex-1 truncate">浏览文件</span>
+        </ContextMenuItem>
+      )}
+      {!narrow && (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            disabled={liveConvCount === 0}
+            onSelect={() => void handleArchiveAll()}
+          >
+            <Archive size={14} className="shrink-0" />
+            <span className="flex-1 truncate">{archiveLabel}</span>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="danger"
+            onSelect={() => setDeleteOpen(true)}
+          >
+            <Trash2 size={14} className="shrink-0" />
+            <span className="flex-1 truncate">删除文件夹…</span>
+          </ContextMenuItem>
+        </>
+      )}
     </>
   );
 
@@ -231,27 +247,38 @@ export function WorkspaceGroupHeader({
         <Plus size={14} className="shrink-0" />
         <span className="flex-1 truncate">新建对话</span>
       </DropdownMenuItem>
-      <DropdownMenuItem onSelect={viewAllConversations}>
-        <MessageSquare size={14} className="shrink-0" />
-        <span className="flex-1 truncate">查看全部对话</span>
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={browseFiles}>
-        <FolderOpen size={14} className="shrink-0" />
-        <span className="flex-1 truncate">浏览文件</span>
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem
-        disabled={liveConvCount === 0}
-        onSelect={() => void handleArchiveAll()}
-      >
-        <Archive size={14} className="shrink-0" />
-        <span className="flex-1 truncate">{archiveLabel}</span>
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem variant="danger" onSelect={() => setDeleteOpen(true)}>
-        <Trash2 size={14} className="shrink-0" />
-        <span className="flex-1 truncate">删除文件夹…</span>
-      </DropdownMenuItem>
+      {!narrow && (
+        <DropdownMenuItem onSelect={viewAllConversations}>
+          <MessageSquare size={14} className="shrink-0" />
+          <span className="flex-1 truncate">查看全部对话</span>
+        </DropdownMenuItem>
+      )}
+      {(!narrow || !groupIsLocal) && (
+        <DropdownMenuItem onSelect={browseFiles}>
+          <FolderOpen size={14} className="shrink-0" />
+          <span className="flex-1 truncate">浏览文件</span>
+        </DropdownMenuItem>
+      )}
+      {!narrow && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={liveConvCount === 0}
+            onSelect={() => void handleArchiveAll()}
+          >
+            <Archive size={14} className="shrink-0" />
+            <span className="flex-1 truncate">{archiveLabel}</span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="danger"
+            onSelect={() => setDeleteOpen(true)}
+          >
+            <Trash2 size={14} className="shrink-0" />
+            <span className="flex-1 truncate">删除文件夹…</span>
+          </DropdownMenuItem>
+        </>
+      )}
     </>
   );
 
@@ -303,7 +330,7 @@ export function WorkspaceGroupHeader({
             </div>
             <span
               className={`flex shrink-0 items-center gap-0.5 ${
-                moreOpen
+                narrow || moreOpen
                   ? "opacity-100"
                   : "opacity-0 transition-opacity group-hover:opacity-100"
               }`}

@@ -314,8 +314,8 @@ export async function opListTree(
   let elidedCount = 0;
   const warnings: string[] = [];
   const nameFilter = pattern || "*";
-  const matchName = (name: string, isDir: boolean) =>
-    isDir || globToRegExp(nameFilter).test(name);
+  const nameSearch = nameFilter !== "*";
+  const nameMatches = (name: string) => globToRegExp(nameFilter).test(name);
 
   const walk = async (
     absDir: string,
@@ -358,17 +358,23 @@ export async function opListTree(
         continue;
       const childAbs = join(absDir, d.name);
       const childRel = parentRel ? `${parentRel}/${d.name}` : d.name;
-      if (!matchName(d.name, isDir)) continue;
-      if (entries.length >= maxEntries) {
-        truncated = true;
-        elidedCount += 1;
-        continue;
+      // `*`: emit dirs + matching files. Name filter: emit matches only;
+      // still descend unmatched dirs so max_entries is spent on hits.
+      const emit = nameSearch
+        ? nameMatches(d.name)
+        : isDir || nameMatches(d.name);
+      if (emit) {
+        if (entries.length >= maxEntries) {
+          truncated = true;
+          elidedCount += 1;
+          continue;
+        }
+        entries.push({
+          path: toPosix(relative(root.absPath, childAbs)),
+          is_dir: isDir,
+          depth,
+        });
       }
-      entries.push({
-        path: toPosix(relative(root.absPath, childAbs)),
-        is_dir: isDir,
-        depth,
-      });
       if (isDir && depth < maxDepth) {
         await walk(childAbs, childRel, depth + 1, false);
       }

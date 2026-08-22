@@ -28,7 +28,7 @@ from agentcore.runtime.journal.persist import (
     persist_turn_journal,
 )
 from agentcore.sidecar.settlement_prewrite import prewrite_sidecar_resume_settlement
-from tests.test_sidecar_settlement_prewrite import _team_preview
+from tests.test_sidecar_settlement_prewrite import _ask
 
 
 def _kinds(entries: list[dict[str, Any]]) -> list[str]:
@@ -280,25 +280,26 @@ async def test_sidecar_prewrite_does_not_touch_pg_turn_journal(
     await outbox.begin_turn(
         conversation_id="c1", message_id="m-tp", trace_id="a" * 32
     )
-    susp = _team_preview()
+    susp = _ask(message_id="m-tp")
     entry = await prewrite_sidecar_resume_settlement(
         outbox,
         susp,
         decision="continue",
+        selected=["是"],
         user_message_id="u1",
         trace_id="a" * 32,
     )
-    assert entry["kind"] == "team_preview_resolved"
+    assert entry["kind"] == "checkpoint_resolved"
     assert calls == []
     record = outbox.find_record_by_message_id("m-tp")
     assert record is not None
     kinds = _kinds(journal_entries_from_map(record.get("journal")) or [])
-    assert "team_preview_required" in kinds
-    assert "team_preview_resolved" in kinds
+    assert "checkpoint_required" in kinds
+    assert "checkpoint_resolved" in kinds
     assert any(
         isinstance((e.get("payload") or {}).get("resume_frame"), dict)
         for e in (journal_entries_from_map(record.get("journal")) or [])
-        if e.get("kind") == "team_preview_resolved"
+        if e.get("kind") == "checkpoint_resolved"
     )
 
 
@@ -397,12 +398,12 @@ async def test_sidecar_prewrite_on_ready_outbox_is_not_pg(
     await outbox.begin_turn(
         conversation_id="c1", message_id="m-tp", trace_id="a" * 32
     )
-    susp = _team_preview()
+    susp = _ask(message_id="m-tp")
     await outbox.finalize(
         conversation_id="c1",
-        user_message="开工",
+        user_message="原始问题",
         user_message_id="u1",
-        assistant_content="预计 2 人开工",
+        assistant_content="要继续吗？",
         message_id="m-tp",
         trace_id="a" * 32,
         finish_reason="paused",
@@ -412,6 +413,7 @@ async def test_sidecar_prewrite_on_ready_outbox_is_not_pg(
         outbox,
         susp,
         decision="continue",
+        selected=["是"],
         user_message_id="u1",
         trace_id="a" * 32,
     )
@@ -422,7 +424,7 @@ async def test_sidecar_prewrite_on_ready_outbox_is_not_pg(
         )
         or []
     )
-    assert "team_preview_resolved" in kinds
+    assert "checkpoint_resolved" in kinds
 
 
 def test_pause_journal_without_resolved_folds_pending_and_no_worker_start() -> None:
@@ -477,15 +479,16 @@ async def test_resume_writeback_persists_outbox_journal(tmp_path, monkeypatch) -
     )
     monkeypatch.setattr("agentcore.db.base.async_session_factory", lambda: _CM())
 
-    hang = _hang_frame()
+    susp = _ask(message_id="m-tp")
+    hang = list(susp.journal_entries)
     outbox = OutboxStore(tmp_path / "outbox")
     await _seal_pause(outbox, hang)
     await outbox.reopen_for_resume(turn_id="m-tp", user_message_id="u1")
-    susp = _team_preview()
     await prewrite_sidecar_resume_settlement(
         outbox,
         susp,
         decision="continue",
+        selected=["是"],
         user_message_id="u1",
         trace_id="a" * 32,
     )
@@ -503,7 +506,7 @@ async def test_resume_writeback_persists_outbox_journal(tmp_path, monkeypatch) -
     assert captured
     assert captured[0].get("replace") is True
     kinds = _kinds(list(captured[0].get("entries") or []))
-    assert "team_preview_resolved" in kinds
+    assert "checkpoint_resolved" in kinds
     assert fold_interactions(list(captured[0].get("entries") or []))[0].status == "resolved"
 
 

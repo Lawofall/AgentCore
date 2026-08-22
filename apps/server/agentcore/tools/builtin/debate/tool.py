@@ -18,7 +18,6 @@ from agentcore.core.types import (
 from agentcore.llm.profiles import TurnProfiles as ProfileSet
 from agentcore.llm.profiles import default_turn_profiles as default_profile_set
 from agentcore.llm.provider.protocol import LLMProvider
-from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.debate import (
     DebateConfig,
     Moderator,
@@ -113,8 +112,6 @@ class DebateTool:
         suspension_saver: SuspensionSaver | None = None,
         suspension_deleter: SuspensionDeleter | None = None,
         folder_id: str | None = None,
-        memory_enabled: bool = True,
-        conversation_history_access: bool = True,
         permission_axes: PermissionAxes | None = None,
         registry: ClientRequestBridge | None = None,
         session_store: Any = None,
@@ -140,8 +137,6 @@ class DebateTool:
         self._suspension_saver = suspension_saver
         self._suspension_deleter = suspension_deleter
         self._folder_id = folder_id
-        self._memory_enabled = memory_enabled
-        self._conversation_history_access = conversation_history_access
         self._permission_axes = permission_axes or DEFAULT_PERMISSION_AXES
         self._registry = registry
         # 批 D1：会话级留人 roster（探测幕1 透镜 session）；缺省 = 无证人。
@@ -482,168 +477,31 @@ class DebateTool:
             return result
         return result
 
-    async def resume_after_kickoff(
-        self,
-        *,
-        decision: CheckpointDecision,
-        note: str,
-        arguments: dict[str, Any],
-    ) -> ToolResult:
-        """Settle a debate kickoff: STOP / TIMEOUT / RESEARCH_FIRST / ADJUST → no execute;
-        CONTINUE → run moderator.
-
-        CONTINUE + note → 开赛嘱咐（首轮全场插话），不覆写 motion / 不改 sides。
-        ADJUST → 不开赛，意见回灌 CEO 修订后重新调用 debate（经开工闸重出卡）。
-        TIMEOUT → 未开赛，回灌 CEO 自行收尾（对齐 ask timeout；不套用取消「宜先问」）。
-        RESEARCH_FIRST → 不开赛，固定回灌文案令 CEO 挂 multi_lens_research（与 STOP 同构）。
-        """
-
-        if decision is CheckpointDecision.STOP:
-            from agentcore.runtime.kickoff.cancel_guidance import (
-                format_kickoff_cancel_result,
-            )
-
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=format_kickoff_cancel_result(primitive="debate", note=note),
-                effect=ToolEffect.CONTINUE,
-            )
-
-        if decision is CheckpointDecision.ADJUST:
-            from agentcore.runtime.kickoff.adjust_guidance import (
-                format_kickoff_adjust_result,
-            )
-
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=format_kickoff_adjust_result(primitive="debate", note=note),
-                effect=ToolEffect.CONTINUE,
-            )
-
-        if decision is CheckpointDecision.TIMEOUT:
-            from agentcore.runtime.kickoff.cancel_guidance import (
-                format_kickoff_timeout_result,
-            )
-
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=format_kickoff_timeout_result(primitive="debate", note=note),
-                effect=ToolEffect.CONTINUE,
-            )
-
-        if decision is CheckpointDecision.RESEARCH_FIRST:
-            from agentcore.runtime.kickoff.research_first import research_first_tool_result
-
-            motion = str(arguments.get("motion") or "").strip()
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=research_first_tool_result(
-                    motion=motion,
-                    user_message=self._user_message,
-                ),
-                effect=ToolEffect.CONTINUE,
-            )
-
-        args = dict(arguments)
-        note_text = (note or "").strip()
-        if note_text and decision is CheckpointDecision.CONTINUE:
-            args["_kickoff_ask"] = note_text
-
-        return await self.execute(args, self._base_tool_context, skip_kickoff=True)
-
     async def _kickoff_before_moderator(
         self,
         config: DebateConfig,
         arguments: dict[str, Any],
     ) -> ToolResult | None:
-        """Durable kickoff before ``debate.started``. Nested / full_auto skip."""
+        """No new team_preview card before ``debate.started``. Nested still no-op.
+
+        ``skip_kickoff`` callers (stage_card / resume CONTINUE) never enter here.
+        ``deep_research_auto`` still records when the flag allows — it no longer
+        means "skip a card that would have hung".
+        """
+        _ = (config, arguments)
         if self._depth != 0:
             return None
         from agentcore.runtime.deep_research_auto import (
             record_auto_debate,
             tool_may_auto_debate,
         )
-        from agentcore.runtime.kickoff import (
-            await_kickoff,
-            debate_kickoff_summary,
-            has_unfulfilled_kickoff_adjust,
-            kickoff_turn_journal,
-            should_kickoff,
-        )
-        from agentcore.runtime.sandbox_approval import worker_gate_applies
 
-        axes = self._permission_axes
-        local_gate = worker_gate_applies(self._base_tool_context.backend)
-        # 深度研究自治：旗标或托管配方且未超会话上限 → 免挂 debate 开赛卡
-        # （只放行本卡；本地执行 / 其他能力审批 / plan_review 不变）。
         auto_adopt = tool_may_auto_debate(self)
-        # Debate always wants the plan half at top-level; capability half is False
-        # for read-only debaters (local_gate tools aren't grantable for debate).
-        unfulfilled_adjust = has_unfulfilled_kickoff_adjust(
-            kickoff_turn_journal(sink=self._sink)
-        )
-        if not should_kickoff(
-            plan_preview=True,
-            local_gate=local_gate,
-            axes=axes,
-            unfulfilled_adjust=unfulfilled_adjust,
-        ):
-            # team_kickoff=skip 本就全跳；仍计一次自治自动开辩（上限降级用）。
-            if auto_adopt:
-                await record_auto_debate(self)
-                self._debate_authorized_by = "auto"
-            else:
-                self._debate_authorized_by = "preview"
-            return None
-        # 单开旗标（非托管配方）：免挂 team_preview，语义 = 用户预先授权这一场。
         if auto_adopt:
             await record_auto_debate(self)
             self._debate_authorized_by = "auto"
-            logger.info(
-                "debate.deep_research_auto_skip_kickoff",
-                motion=config.motion[:80],
-            )
-            return None
-        # ask_user checkpoint_resolved 不跳 team_preview（澄清卡 ⊥ 开工卡）。
-
-        # Capability half stays False for debate (read-only debaters) — never list tools.
-        summary = debate_kickoff_summary(config, arguments=arguments, tools=[])
-        decision = await await_kickoff(self, summary, plan=None)
-        if self._pending_pause:
-            logger.info(
-                "debate.team_preview_paused",
-                sides=len(config.sides),
-                motion=config.motion[:80],
-            )
-            return ToolResult(
-                tool_call_id="", success=True, output="", effect=ToolEffect.SUSPEND
-            )
-        if decision is CheckpointDecision.STOP:
-            from agentcore.runtime.kickoff.cancel_guidance import (
-                format_kickoff_cancel_result,
-            )
-
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=format_kickoff_cancel_result(primitive="debate"),
-                effect=ToolEffect.CONTINUE,
-            )
-        if decision is CheckpointDecision.ADJUST:
-            from agentcore.runtime.kickoff.adjust_guidance import (
-                format_kickoff_adjust_result,
-            )
-
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output=format_kickoff_adjust_result(primitive="debate"),
-                effect=ToolEffect.CONTINUE,
-            )
+        else:
+            self._debate_authorized_by = "preview"
         return None
 
     async def _resolve_host_attach(self, config: DebateConfig):

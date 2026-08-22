@@ -103,8 +103,6 @@ async def _wire_continuation_toolset(
     captain_run_id: str,
     user_id: str,
     folder_id: str | None,
-    memory_enabled: bool,
-    conversation_history_access: bool = True,
     base_system_prompt: str,
     user_message: str,
     journal_entries: list[dict[str, Any]],
@@ -161,13 +159,11 @@ async def _wire_continuation_toolset(
     await _wire_worker_consult_tools(
         worker_tools,
         skill_registry=skill_registry,
-        memory_enabled=memory_enabled,
         folder_id=folder_id,
         user_id=user_id,
     )
     _wire_worker_conversation_log_tools(
         worker_tools,
-        conversation_history_access=conversation_history_access,
         folder_id=folder_id,
     )
     # Same system-skill registry as a fresh turn so the continued CEO loop can
@@ -327,8 +323,6 @@ async def _wire_continuation_toolset(
         backend_location=backend.location,
         skill_registry=skill_registry,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
-        conversation_history_access=conversation_history_access,
         permission_axes=permission_axes,
         advertise_bind_local_folder=checkpoint_enabled and channel.can_bind_folder,
         desktop_online=desktop_online,
@@ -339,7 +333,6 @@ async def _wire_continuation_toolset(
         chat_tools,
         skill_registry=skill_registry,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
         user_id=user_id,
     )
 
@@ -352,7 +345,7 @@ async def _wire_continuation_toolset(
     # structured files_written inference + worker write_scope=explore_memory until
     # update_folder_profile clears the flag).
     # Soft-empty / named-refresh via resolve_hard_explore_reason（与 assemble 同源）.
-    if memory_enabled and folder_id:
+    if folder_id:
         from agentcore.conversation.scratch import resolve_conversation_local_binding
         from agentcore.memory.explore_profile import (
             folder_profile_explore_reason,
@@ -433,8 +426,6 @@ async def wire_resume_turn(
         captain_run_id=captain_run_id,
         user_id=suspension.user_id,
         folder_id=suspension.folder_id,
-        memory_enabled=suspension.memory_enabled,
-        conversation_history_access=suspension.conversation_history_access,
         base_system_prompt=suspension.base_system_prompt,
         user_message=suspension.user_message,
         journal_entries=suspension.journal_entries,
@@ -463,8 +454,6 @@ async def wire_crash_turn(
     captain_run_id: str,
     user_id: str,
     folder_id: str | None,
-    memory_enabled: bool,
-    conversation_history_access: bool = True,
     base_system_prompt: str,
     user_message: str,
     journal_entries: list[dict[str, Any]],
@@ -491,8 +480,6 @@ async def wire_crash_turn(
         captain_run_id=captain_run_id,
         user_id=user_id,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
-        conversation_history_access=conversation_history_access,
         base_system_prompt=base_system_prompt,
         user_message=user_message,
         journal_entries=journal_entries,

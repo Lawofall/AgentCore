@@ -9,6 +9,8 @@ beforeEach(() => {
     draftWorkspaceIntent: defaultDraftWorkspaceIntent(),
     importToCloudOpen: false,
     importToCloudPrefill: null,
+    borrowToCloudOpen: false,
+    borrowToCloudPrefill: null,
     connectGitOpen: false,
     connectGitWsId: null,
   });
@@ -82,5 +84,32 @@ describe("import / connect git dialog flags", () => {
     store().closeImportToCloud();
     expect(store().importToCloudOpen).toBe(false);
     expect(store().importToCloudPrefill).toBeNull();
+  });
+
+  it("openBorrowToCloud toggles independently of import", () => {
+    store().openImportToCloud();
+    store().openBorrowToCloud();
+    expect(store().borrowToCloudOpen).toBe(true);
+    expect(store().importToCloudOpen).toBe(true);
+    store().closeBorrowToCloud();
+    expect(store().borrowToCloudOpen).toBe(false);
+    expect(store().importToCloudOpen).toBe(true);
+  });
+
+  it("openBorrowToCloud accepts Composer path prefill and clears on close", () => {
+    store().openBorrowToCloud({
+      rootId: "root-1",
+      folderName: "MyRepo",
+      ownsRoot: true,
+    });
+    expect(store().borrowToCloudOpen).toBe(true);
+    expect(store().borrowToCloudPrefill).toEqual({
+      rootId: "root-1",
+      folderName: "MyRepo",
+      ownsRoot: true,
+    });
+    store().closeBorrowToCloud();
+    expect(store().borrowToCloudOpen).toBe(false);
+    expect(store().borrowToCloudPrefill).toBeNull();
   });
 });

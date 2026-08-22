@@ -61,7 +61,6 @@ from agentcore.runtime.coordination.append_sibling import (
 from agentcore.runtime.coordination.isomorphic import _node_role
 from agentcore.workspace.write_claims import (
     WriteCoordinator,
-    file_ownership_v2_enabled,
     ownership_display_path,
 )
 
@@ -177,13 +176,9 @@ def find_append_overlaps(
     if not new_plan.nodes:
         return []
 
-    # Same-batch sibling seat (+ artifact when v2) crosses before live checks.
-    if file_ownership_v2_enabled():
-        hits: list[AppendOverlap] = find_sibling_artifact_crosses(
-            new_plan, birth_desk_id=birth_desk_id
-        )
-    else:
-        hits = find_sibling_role_crosses(new_plan)
+    hits: list[AppendOverlap] = find_sibling_artifact_crosses(
+        new_plan, birth_desk_id=birth_desk_id
+    )
 
     if live_plan is None:
         return hits
@@ -191,11 +186,6 @@ def find_append_overlaps(
     done = set(completed_run_ids or ())
     incomplete = [n for n in live_plan.nodes if n.run_id not in done]
     live_by_id = {n.run_id: n for n in live_plan.nodes}
-    v2 = file_ownership_v2_enabled() and ownership is not None
-
-    # Legacy short-circuit: no incomplete → no role/file heuristic.
-    if not v2 and not incomplete:
-        return hits
 
     combined_ancestors = _ancestors_for_plan(live_plan)
     # New nodes may depend on live ids — fold their depends_on into ancestor sets.
@@ -214,9 +204,7 @@ def find_append_overlaps(
             continue
         n_role = _node_role(nn)
         n_desk = node_ownership_desk(nn, birth_desk_id=birth_desk_id)
-        n_files = (
-            node_artifact_paths(nn) if v2 else node_file_targets(nn)
-        )
+        n_files = node_artifact_paths(nn)
         n_anc = set(combined_ancestors.get(nn.run_id, frozenset()))
         if continue_from:
             n_anc.add(continue_from)
@@ -234,7 +222,7 @@ def find_append_overlaps(
         file_hit_id: str | None = None
         file_hit_role = ""
         file_hit_path = ""
-        if v2 and n_files and ownership is not None:
+        if n_files and ownership is not None:
             for path in n_files:
                 owner = ownership.owner_of(path, desk_id=n_desk)
                 if owner is None:
@@ -243,7 +231,7 @@ def find_append_overlaps(
                     continue
                 if owner in done:
                     continue
-                is_ended = getattr(ownership, "is_ended", None) if ownership is not None else None
+                is_ended = getattr(ownership, "is_ended", None)
                 if is_ended is not None and is_ended(owner):
                     continue
                 file_hit_id = owner
@@ -251,15 +239,6 @@ def find_append_overlaps(
                 file_hit_role = (_node_role(live_node) if live_node else "") or owner
                 file_hit_path = path
                 break
-        elif not v2 and incomplete:
-            for live in incomplete:
-                live_files = node_file_targets(live)
-                if n_files and live_files and (n_files & live_files):
-                    file_hit_id = live.run_id
-                    file_hit_role = _node_role(live) or live.run_id
-                    shared = sorted(n_files & live_files)
-                    file_hit_path = shared[0] if shared else ""
-                    break
 
         if role_hit_live is None and file_hit_id is None:
             continue
@@ -619,13 +598,8 @@ def declare_nested_drive_artifacts(
     Root depth-0 coordination already declares in ``host`` — skipped here.
     """
     from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
-    from agentcore.workspace.write_claims import (
-        file_ownership_v2_enabled,
-        resolve_write_coordinator,
-    )
+    from agentcore.workspace.write_claims import resolve_write_coordinator
 
-    if not file_ownership_v2_enabled():
-        return []
     if int(getattr(tool, "_depth", 0) or 0) < 1:
         return []
 

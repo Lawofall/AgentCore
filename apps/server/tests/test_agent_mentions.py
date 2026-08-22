@@ -277,7 +277,7 @@ async def test_stream_chat_persists_agent_mentions(monkeypatch):
     monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(turns_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
+
     monkeypatch.setattr(
         turns_mod,
         "resolve_permission_axes",
@@ -380,7 +380,7 @@ async def test_regenerate_forwards_stored_agent_mentions(monkeypatch):
     monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
     monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
-    monkeypatch.setattr(turns_mod, "resolve_memory_enabled", AsyncMock(return_value=True))
+
     monkeypatch.setattr(
         turns_mod,
         "resolve_permission_axes",

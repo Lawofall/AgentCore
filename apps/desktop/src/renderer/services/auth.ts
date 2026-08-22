@@ -1,5 +1,14 @@
 import { normalizeEmailCodeExpiresIn } from "@/lib/emailAuth";
 import { logEvent } from "@/lib/log";
+import {
+  bearerAuthHeader,
+  clearBearerTokens,
+  getBearerTokens,
+  hydrateBearerTokens,
+  isBearerAuth,
+  sessionCredentials,
+  setBearerTokens,
+} from "@/lib/sessionAuth";
 import { clearSidecarAccountAuth } from "@/services/accountToken";
 import { clearAgentTownSession } from "@/services/agentTownSession";
 import {
@@ -19,6 +28,7 @@ import {
 import { clearSidecarFoldersAuth } from "@/services/foldersToken";
 import { clearSidecarInference } from "@/services/inferenceToken";
 import { clearDefaultPermissionAxesCache } from "@/services/permissionAxes";
+import { disablePush } from "@/services/push";
 import type { AuthUser } from "@/stores/auth";
 import type { components } from "@/types/api.generated";
 import { restPath } from "@agentcore/contract-rest-types/paths";
@@ -26,6 +36,7 @@ import { restPath } from "@agentcore/contract-rest-types/paths";
 /** Server user payload (`/auth/me|register`), generated from OpenAPI. */
 type BackendUser = components["schemas"]["UserResponse"];
 type LoginResponse = components["schemas"]["LoginResponse"];
+type TokenResponse = components["schemas"]["TokenResponse"];
 type SessionListResponse = components["schemas"]["SessionListResponse"];
 type SessionSummary = components["schemas"]["SessionSummary"];
 type StatusResponse = components["schemas"]["StatusResponse"];
@@ -72,6 +83,26 @@ export async function login(
   username: string,
   password: string,
 ): Promise<AuthUser> {
+  if (isBearerAuth()) {
+    const body = await api.post<TokenResponse>("/v1/auth/token", {
+      username,
+      password,
+      persist_session: true,
+    });
+    if (!body.user) {
+      throw new Error("登录响应缺少用户信息");
+    }
+    setBearerTokens({
+      access_token: body.access_token,
+      refresh_token: body.refresh_token,
+    });
+    const user = toUser(body.user);
+    clearSidecarInference();
+    clearSidecarFoldersAuth();
+    clearSidecarAccountAuth();
+    clearDefaultPermissionAxesCache();
+    return user;
+  }
   const body = await api.post<LoginResponse>("/v1/auth/login", {
     username,
     password,
@@ -175,8 +206,18 @@ export async function verifyEmail(
  * from here; the local state is the part this process actually owns.
  */
 export async function logout(): Promise<void> {
+  await disablePush();
   try {
-    await api.post("/v1/auth/logout");
+    if (isBearerAuth()) {
+      const tokens = getBearerTokens();
+      if (tokens) {
+        await api.post("/v1/auth/token/revoke", {
+          refresh_token: tokens.refresh_token,
+        });
+      }
+    } else {
+      await api.post("/v1/auth/logout");
+    }
   } catch (err) {
     // Never rethrown: the caller's job is to drop to login either way. Logged so
     // "session may still be live server-side" stays visible in desktop.jsonl.
@@ -187,6 +228,7 @@ export async function logout(): Promise<void> {
       code: err instanceof ApiError ? err.code : undefined,
     });
   } finally {
+    clearBearerTokens();
     clearCsrfToken();
     clearSidecarInference(); // session ended → next login re-mints
     clearSidecarFoldersAuth();
@@ -261,11 +303,12 @@ export async function uploadAvatar(file: File): Promise<AuthUser> {
   const send = async (): Promise<Response> => {
     const res = await fetch(`${BASE_URL}/v1/users/me/avatar`, {
       method: "POST",
-      credentials: "include",
+      credentials: sessionCredentials(),
       headers: {
         "Content-Type": file.type || "application/octet-stream",
         // A mutating cookie-auth request: the CSRF header is not optional just
         // because the body is raw bytes instead of JSON (backend 403s otherwise).
+        ...bearerAuthHeader(),
         ...getCsrfHeaders("POST"),
       },
       body: file,
@@ -361,7 +404,7 @@ interface ReadinessResponse {
 export async function diagnoseOutage(): Promise<string | null> {
   try {
     const res = await fetchWithTimeout(`${BASE_URL}/readyz`, {
-      credentials: "include",
+      credentials: sessionCredentials(),
     });
     const ready = (await res.json()) as ReadinessResponse;
     if (res.ok && ready.database) return null;
@@ -454,7 +497,10 @@ function logBootstrap(
  * screen rather than a login form the user could never get past.
  */
 export async function bootstrapAuth(): Promise<BootstrapResult> {
-  // 1. Existing session via the access cookie.
+  if (isBearerAuth()) {
+    await hydrateBearerTokens();
+  }
+  // 1. Existing session via the access cookie / bearer cache.
   try {
     const user = await bootstrapFetchMe();
     logBootstrap("me_ok");

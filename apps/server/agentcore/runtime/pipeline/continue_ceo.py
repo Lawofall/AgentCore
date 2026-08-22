@@ -93,8 +93,6 @@ async def continue_ceo_pipeline(
     history: list[dict] | None = None,
     board_id: str | None = None,
     folder_id: str | None = None,
-    memory_enabled: bool = True,
-    conversation_history_access: bool = True,
     llm_credentials: LLMCredentials | None = None,
     profile_set: ProfileSet | None = None,
     session_saver: SessionSaver | None = None,
@@ -164,7 +162,7 @@ async def continue_ceo_pipeline(
         turn_id=message_id,
         trace_id=trace_id or get_log_value("trace_id"),
         captain_run_id=captain_run_id,
-        delegated=bool(permission_axes.implies_deep_research_auto),
+        delegated=False,
         permission_axes=(
             json.dumps(permission_axes.to_dict()) if permission_axes is not None else None
         ),
@@ -209,8 +207,6 @@ async def continue_ceo_pipeline(
             captain_run_id=captain_run_id,
             user_id=user_id,
             folder_id=folder_id,
-            memory_enabled=memory_enabled,
-            conversation_history_access=conversation_history_access,
             base_system_prompt=base_system_prompt,
             user_message=user_message,
             journal_entries=journal_entries,

@@ -4944,7 +4944,6 @@
         "description": "How execution-class tools (code / terminal / test) are authorized.",
         "enum": [
           "ask",
-          "kickoff",
           "auto"
         ],
         "title": "CommandAxis",
@@ -11950,7 +11949,7 @@
         "type": "object"
       },
       "PermissionAxesModel": {
-        "description": "Session permission axes (运行时单一真相源 · file_write/command/team_kickoff/host).",
+        "description": "Session permission axes (运行时单一真相源 · file_write/command/host).",
         "properties": {
           "command": {
             "$ref": "#/components/schemas/CommandAxis",
@@ -11963,10 +11962,6 @@
           "host": {
             "$ref": "#/components/schemas/HostAxis",
             "default": "session"
-          },
-          "team_kickoff": {
-            "$ref": "#/components/schemas/TeamKickoffAxis",
-            "default": "rules"
           }
         },
         "title": "PermissionAxesModel",
@@ -15942,16 +15937,6 @@
         "title": "TeamBatchSettled",
         "type": "object"
       },
-      "TeamKickoffAxis": {
-        "description": "Whether / when the team kickoff card (plan + capability halves) hangs.",
-        "enum": [
-          "always",
-          "rules",
-          "skip"
-        ],
-        "title": "TeamKickoffAxis",
-        "type": "string"
-      },
       "TextInputEvent": {
         "description": "Verbatim text insertion (IME-style). Content is never logged/persisted (D17).",
         "properties": {
@@ -18665,7 +18650,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.3"
+    "version": "0.7.4"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -29243,7 +29228,7 @@
     },
     "/v1/conversations/{conversation_id}/messages/{message_id}/resume": {
       "post": {
-        "description": "Continue a durably-paused turn via SSE (结构化挂起 2b ``POST .../resume``).\n\nThe turn paused at a plan_review / ask_user / team_preview checkpoint and lost its\nlive stream (disconnect / restart); only its persisted frame survived.\n\nSettlement 预写 (D8)：① peek frame → ② busy 则 deferred（预写后 ``resume_deferred``，\n槽空再 claim）/ idle 则立即 claim → ③ ``*_resolved`` 落库成功 → ④ claim → ⑤ resume\npipeline。settlement 写失败 ⇒ 5xx、不 claim、frame 保留可重试。settlement 落库后\npipeline 取消/失败 ⇒ interrupted_after_decision（D1：不复活决策卡）。\n\n同 ``message_id`` 重复提交一律**幂等成功**，不再 404：忙槽窗口内 join 已 park 的\nwaiter（跳过第二次预写，两条 SSE 共享同一次续跑）；帧已被那次续跑消费（peek 扑空 /\nclaim 竞争落败）则走 :func:`_resume_of_consumed_frame` —— 200 + ``resume_settled``\n事实帧（带的是**赢家**的决策：claim 赢家把结论与删帧写在同一事务里），本机在跑就同\n连接续流。谁也没消费掉这张卡（没有结论行）才是真失效（404，文案区分「超保留期清理」\n与「回合已重新生成」）。\n\n``body.selected`` carries the user's ask_user picks (ignored for plan_review).\nGated like ``send_message`` (it spends tokens): rate limit → ownership → BYOK/quota\n— all BEFORE settlement/claim, so a refused turn keeps its resumable frame.",
+        "description": "Continue a durably-paused turn via SSE (结构化挂起 2b ``POST .../resume``).\n\nThe turn paused at a plan_review / ask_user checkpoint and lost its\nlive stream (disconnect / restart); only its persisted frame survived.\n\nSettlement 预写 (D8)：① peek frame → ② busy 则 deferred（预写后 ``resume_deferred``，\n槽空再 claim）/ idle 则立即 claim → ③ ``*_resolved`` 落库成功 → ④ claim → ⑤ resume\npipeline。settlement 写失败 ⇒ 5xx、不 claim、frame 保留可重试。settlement 落库后\npipeline 取消/失败 ⇒ interrupted_after_decision（D1：不复活决策卡）。\n\n同 ``message_id`` 重复提交一律**幂等成功**，不再 404：忙槽窗口内 join 已 park 的\nwaiter（跳过第二次预写，两条 SSE 共享同一次续跑）；帧已被那次续跑消费（peek 扑空 /\nclaim 竞争落败）则走 :func:`_resume_of_consumed_frame` —— 200 + ``resume_settled``\n事实帧（带的是**赢家**的决策：claim 赢家把结论与删帧写在同一事务里），本机在跑就同\n连接续流。谁也没消费掉这张卡（没有结论行）才是真失效（404，文案区分「超保留期清理」\n与「回合已重新生成」）。\n\n``body.selected`` carries the user's ask_user picks (ignored for plan_review).\nGated like ``send_message`` (it spends tokens): rate limit → ownership → BYOK/quota\n— all BEFORE settlement/claim, so a refused turn keeps its resumable frame.",
         "operationId": "resume_message_v1_conversations__conversation_id__messages__message_id__resume_post",
         "parameters": [
           {

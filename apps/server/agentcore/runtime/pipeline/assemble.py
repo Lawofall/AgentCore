@@ -103,8 +103,6 @@ async def assemble_ceo_turn(
     sink: EventSink,
     backend: WorkspaceBackend,
     folder_id: str | None,
-    memory_enabled: bool,
-    conversation_history_access: bool = True,
     approvals_enabled: bool,
     permission_axes: PermissionAxes | None,
     profiles: TurnProfiles,
@@ -204,8 +202,6 @@ async def assemble_ceo_turn(
         suspension_deleter=suspension_deleter,
         backend_location=backend.location,
         skill_registry=prepared.skill_registry,
-        memory_enabled=memory_enabled,
-        conversation_history_access=conversation_history_access,
         folder_id=folder_id,
         permission_axes=permission_axes,
         # Same live-user gate as ask_user itself, plus desktop-only: web/mobile omit.
@@ -218,7 +214,6 @@ async def assemble_ceo_turn(
         chat_tools,
         skill_registry=prepared.skill_registry,
         folder_id=folder_id,
-        memory_enabled=memory_enabled,
         user_id=prepared.base_tool_context.user_id,
     )
 
@@ -243,7 +238,7 @@ async def assemble_ceo_turn(
     explore_reason: str | None = None
     folder_nav_stale = False
     folder_profile_empty_soft = False
-    if memory_enabled and folder_id:
+    if folder_id:
 
         async def _run_explore_gates() -> tuple[str | None, bool, bool]:
             from agentcore.conversation.scratch import resolve_conversation_local_binding

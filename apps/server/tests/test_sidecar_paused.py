@@ -269,14 +269,14 @@ async def test_sidecar_settlement_stamps_outcome_classify_resume_miss_settled(
     data = tmp_path / "data"
     store = LocalPausedTurnStore(data / "paused", outbox_base=data / "outbox")
     outbox = OutboxStore(data / "outbox")
-    susp = _team_preview_suspension(mid, cid)
+    susp = _suspension(mid, cid)
     await store.save(susp)
     claimed = await store.claim(mid, conversation_id=cid)
     assert claimed is not None
     outbox.bind_turn(
         conversation_id=cid,
         user_message_id="u1",
-        user_message="开工",
+        user_message="原始问题",
         message_id=mid,
         trace_id="a" * 32,
     )
@@ -294,8 +294,8 @@ async def test_sidecar_settlement_stamps_outcome_classify_resume_miss_settled(
 
     miss = await classify_resume_miss(conversation_id=cid, message_id=mid)
     assert miss.kind == "settled"
-    assert miss.card_kind == "team_preview"
-    assert miss.checkpoint_id == f"ck-{mid}"
+    assert miss.card_kind == "ask_user"
+    assert miss.checkpoint_id == f"cp-{mid}"
     assert miss.decision == "continue"
     assert miss.settled_by == "dev-sidecar"
     assert await store.list_pending(cid) == []
@@ -600,7 +600,6 @@ def test_resume_claims_frame_and_drives_resume_pipeline(tmp_path, monkeypatch):
                         "permissionAxes": {
                             "file_write": "ask",
                             "command": "ask",
-                            "team_kickoff": "rules",
                         },
                     },
                 }
@@ -623,13 +622,11 @@ def test_resume_claims_frame_and_drives_resume_pipeline(tmp_path, monkeypatch):
         FileWriteAxis,
         HostAxis,
         PermissionAxes,
-        TeamKickoffAxis,
     )
 
     assert captured["autonomy"] == PermissionAxes(
         FileWriteAxis.ASK,
         CommandAxis.ASK,
-        TeamKickoffAxis.RULES,
         HostAxis.SESSION,
     )
     # the reloaded history (from the local frame) is threaded into the resume pipeline so
@@ -674,20 +671,12 @@ def _team_preview_suspension(
     return susp
 
 
-def test_resume_forwards_team_preview_veto_to_pipeline(tmp_path, monkeypatch):
-    """本机 resume：excluded_run_ids / write_capability_overrides 贯通到 pipeline。"""
-    captured: dict[str, Any] = {}
+def test_resume_refuses_retired_team_preview(tmp_path, monkeypatch):
+    """本机 resume：存量 team_preview 诚实失败，不进 pipeline。"""
+    from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
 
     async def fake_resume(**kwargs: Any) -> dict[str, Any]:
-        captured["excluded_run_ids"] = kwargs.get("excluded_run_ids")
-        captured["write_capability_overrides"] = kwargs.get("write_capability_overrides")
-        kwargs["sink"].close()
-        return {
-            "finish_reason": "end_turn",
-            "content": "ok",
-            "rounds": 1,
-            "message_id": kwargs["suspension"].message_id,
-        }
+        raise AssertionError("pipeline must not run for retired team_preview")
 
     monkeypatch.setattr("agentcore.sidecar.server.resume_chat_pipeline", fake_resume)
 
@@ -695,7 +684,7 @@ def test_resume_forwards_team_preview_veto_to_pipeline(tmp_path, monkeypatch):
     server = SidecarServer(write_line)
     store = LocalPausedTurnStore(tmp_path / "data" / "paused")
 
-    async def drive() -> None:
+    async def drive() -> list[Any]:
         await _initialize(server, tmp_path, data_dir=str(tmp_path / "data"))
         await store.save(_team_preview_suspension("m-tp", "c1"))
         await server.handle_line(
@@ -717,19 +706,19 @@ def test_resume_forwards_team_preview_veto_to_pipeline(tmp_path, monkeypatch):
                 }
             )
         )
-        await asyncio.gather(*list(server._turns.values()))
+        return await store.list_pending("c1")
 
-    asyncio.run(drive())
-    done = _response(sent, 11)
-    assert done["result"]["content"] == "ok"
-    assert captured["excluded_run_ids"] == ["b"]
-    assert captured["write_capability_overrides"] == [
-        {"run_id": "a", "capability": "text_only"}
-    ]
+    remaining = asyncio.run(drive())
+    err = _response(sent, 11)
+    assert "error" in err
+    assert err["error"]["code"] == protocol.INVALID_PARAMS
+    assert TEAM_PREVIEW_UNRECOVERABLE in err["error"]["message"]
+    assert remaining
+    assert remaining[0].message_id == "m-tp"
 
 
 def test_resume_rejects_illegal_team_preview_veto(tmp_path, monkeypatch):
-    """非法否决：resume 在 settlement 前 422 等价（INVALID_PARAMS）并恢复帧。"""
+    """存量开工卡：非法否决也走退役拒绝（INVALID_PARAMS）并恢复帧。"""
 
     async def fake_resume(**kwargs: Any) -> dict[str, Any]:
         raise AssertionError("pipeline must not run on invalid veto")
@@ -765,14 +754,17 @@ def test_resume_rejects_illegal_team_preview_veto(tmp_path, monkeypatch):
     err = _response(sent, 12)
     assert "error" in err
     assert err["error"]["code"] == protocol.INVALID_PARAMS
-    assert remaining  # frame restored for retry
+    from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
+
+    assert TEAM_PREVIEW_UNRECOVERABLE in err["error"]["message"]
+    assert remaining  # frame restored (retired refuse rolls back claim)
     assert remaining[0].message_id == "m-bad"
     scope = server.folder_scope_for("c1")
     assert scope is None or scope.folder_id != "should-not-stick"
 
 
 def test_resume_veto_rolls_back_stamped_folder(tmp_path, monkeypatch):
-    """resume veto 必须回滚刚 stamp 的 folder_scope。"""
+    """存量开工卡退役拒绝不得改写已 stamp 的 folder_scope。"""
 
     async def fake_resume(**kwargs: Any) -> dict[str, Any]:
         raise AssertionError("pipeline must not run on invalid veto")

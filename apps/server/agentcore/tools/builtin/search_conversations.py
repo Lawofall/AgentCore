@@ -1,9 +1,9 @@
 """search_conversations — Worker directory / search over the owner's past chats.
 
 Worker-only (``AUDIENCE_WORKER_ONLY`` + ``ToolSurface.WORKER_ONLY`` + ``manual_wire``).
-Wired after ``build_worker_registry`` when ``conversation_history_access`` is on —
-mirrors ``_wire_worker_memory_tools``. Never reaches the CEO toolset
-(``build_ceo_tool_registry`` only collects builtin CEO-audience tools).
+Wired after ``build_worker_registry`` by ``_wire_worker_conversation_log_tools``.
+Never reaches the CEO toolset (``build_ceo_tool_registry`` only collects builtin
+CEO-audience tools).
 
 With account narrow-ticket creds (sidecar), calls the cloud HTTP API instead of
 the local ConversationRepository (大众桌面无本机 PG).

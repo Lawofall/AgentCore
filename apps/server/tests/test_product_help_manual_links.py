@@ -369,21 +369,33 @@ def test_intentional_dead_manual_links_fail_gate():
     ), joined
 
 
-# Desktop product copy uses「设置 · {侧栏}」；mobile hub is 我的 + NavRow labels.
+# Desktop product copy uses「设置 · {侧栏}」；narrow hub is 底栏「我的」+ MorePage 行。
 # Cheap fork gate: each desktop page name must share a sentence with 手机,
-# and every「我的 → X」must be a real mobile nav label (don't invent names).
-# Bug triage is in scope too — its L3 names 反馈, which is desktop-only.
+# and every「我的 → X」must be a real narrow-visible MorePage label.
+# Bug triage is in scope too — its L3 names 反馈, which is wide-only.
 _SURFACE_FORK_SKILL_NAMES = _PRODUCT_HELP_SKILL_NAMES + ("product_bug_triage",)
 _DESKTOP_SETTINGS_PAGES = ("设置 · 服务商", "设置 · 模型", "设置 · 用量", "设置 → 反馈")
-_MOBILE_MORE_PAGE = _REPO_ROOT / "apps" / "mobile" / "src" / "pages" / "MorePage.tsx"
-_MOBILE_TAB_BAR = _REPO_ROOT / "apps" / "mobile" / "src" / "components" / "TabBar.tsx"
-_MOBILE_APP = _REPO_ROOT / "apps" / "mobile" / "src" / "App.tsx"
-_NAV_ROW_LABEL = re.compile(
-    r"<NavRow\b[^>]*?\blabel=\"([^\"]+)\"",
-    flags=re.DOTALL,
+_DESKTOP_MORE_PAGE = (
+    _REPO_ROOT / "apps" / "desktop" / "src" / "renderer" / "pages" / "MorePage.tsx"
 )
-_TAB_LABEL = re.compile(r'label:\s*"([^"]+)"')
-_MORE_ROUTE = re.compile(r'path="(/more[^"]*)"')
+_NARROW_TAB_BAR = (
+    _REPO_ROOT
+    / "apps"
+    / "desktop"
+    / "src"
+    / "renderer"
+    / "components"
+    / "layout"
+    / "NarrowTabBar.tsx"
+)
+_NARROW_PRODUCT = (
+    _REPO_ROOT / "apps" / "desktop" / "src" / "renderer" / "lib" / "narrowProduct.ts"
+)
+_NAV_ITEM = re.compile(
+    r'label:\s*"(?P<label>[^"]+)",\s*path:\s*"(?P<path>/more[^"]*)"'
+)
+_TAB_LABEL = re.compile(r'\{ label: "([^"]+)", route:')
+_HIDDEN_SETTINGS_PATH = re.compile(r'"(/more/[^"]+)"')
 _MOBILE_ARROW_PAGE = re.compile(r"我的 → ([^」/（]+)")
 
 
@@ -394,24 +406,44 @@ def _sentence_units(body: str) -> list[str]:
     return units
 
 
-def test_product_help_settings_page_names_fork_by_surface():
-    """Desktop settings page names must fork; mobile names must be real nav."""
-    more_src = _MOBILE_MORE_PAGE.read_text(encoding="utf-8")
-    tab_src = _MOBILE_TAB_BAR.read_text(encoding="utf-8")
-    app_src = _MOBILE_APP.read_text(encoding="utf-8")
-    nav_labels = frozenset(_NAV_ROW_LABEL.findall(more_src))
-    tab_labels = frozenset(_TAB_LABEL.findall(tab_src))
-    more_routes = frozenset(_MORE_ROUTE.findall(app_src))
-
-    _require("模型配置" in nav_labels, f"expected 模型配置 NavRow in {_MOBILE_MORE_PAGE.name}")
-    _require("用量" in nav_labels, f"expected 用量 NavRow in {_MOBILE_MORE_PAGE.name}")
-    _require("我的" in tab_labels, f"expected 我的 tab in {_MOBILE_TAB_BAR.name}")
-    _require("/more/model" in more_routes, "mobile /more/model route missing")
-    _require("/more/usage" in more_routes, "mobile /more/usage route missing")
-    _require(
-        "/more/providers" not in more_routes,
-        "mobile unexpectedly grew /more/providers; update product_help forks",
+def _narrow_hidden_settings_paths(src: str) -> frozenset[str]:
+    block = re.search(
+        r"NARROW_HIDDEN_SETTINGS_PATHS = new Set\(\[([^\]]+)\]\)",
+        src,
     )
+    _require(
+        block is not None,
+        f"parse failure: NARROW_HIDDEN_SETTINGS_PATHS not found in {_NARROW_PRODUCT.name}",
+    )
+    assert block is not None
+    return frozenset(_HIDDEN_SETTINGS_PATH.findall(block.group(1)))
+
+
+def test_product_help_settings_page_names_fork_by_surface():
+    """Wide settings names must fork; narrow「我的 →」must be visible MorePage rows."""
+    more_src = _DESKTOP_MORE_PAGE.read_text(encoding="utf-8")
+    tab_src = _NARROW_TAB_BAR.read_text(encoding="utf-8")
+    hidden = _narrow_hidden_settings_paths(_NARROW_PRODUCT.read_text(encoding="utf-8"))
+    items = [
+        (m.group("label"), m.group("path")) for m in _NAV_ITEM.finditer(more_src)
+    ]
+    _require(items, f"expected NAV_GROUPS items in {_DESKTOP_MORE_PAGE.name}")
+    all_labels = frozenset(label for label, _ in items)
+    narrow_labels = frozenset(
+        label for label, path in items if path not in hidden
+    )
+    tab_labels = frozenset(_TAB_LABEL.findall(tab_src))
+    more_routes = frozenset(path for _, path in items)
+
+    _require("模型" in all_labels, f"expected 模型 row in {_DESKTOP_MORE_PAGE.name}")
+    _require("服务商" in all_labels, f"expected 服务商 row in {_DESKTOP_MORE_PAGE.name}")
+    _require("用量" in all_labels, f"expected 用量 row in {_DESKTOP_MORE_PAGE.name}")
+    _require("我的" in tab_labels, f"expected 我的 tab in {_NARROW_TAB_BAR.name}")
+    _require("/more/model" in more_routes, "desktop /more/model route missing")
+    _require("/more/providers" in more_routes, "desktop /more/providers route missing")
+    _require("/more/usage" in more_routes, "desktop /more/usage route missing")
+    _require("服务商" in narrow_labels, "narrow must keep 服务商")
+    _require("反馈" not in narrow_labels, "narrow hides 反馈")
 
     body = _skill_bodies(_SURFACE_FORK_SKILL_NAMES)
     units = _sentence_units(body)
@@ -425,12 +457,12 @@ def test_product_help_settings_page_names_fork_by_surface():
         )
 
     claimed = [n.strip() for n in _MOBILE_ARROW_PAGE.findall(body)]
-    _require(claimed, "expected at least one「我的 → …」mobile path in product_help*")
-    invented = [n for n in claimed if n not in nav_labels]
+    _require(claimed, "expected at least one「我的 → …」narrow path in product_help*")
+    invented = [n for n in claimed if n not in narrow_labels]
     assert not invented, (
-        "product_help* invented mobile page names not in MorePage NavRow labels: "
+        "product_help* invented narrow page names not in visible MorePage labels: "
         + ", ".join(invented)
-        + f" (have {sorted(nav_labels)})"
+        + f" (have {sorted(narrow_labels)})"
     )
 
 

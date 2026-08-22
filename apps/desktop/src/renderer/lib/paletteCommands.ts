@@ -1,5 +1,6 @@
 import { hasLocalFiles } from "@/lib/capabilities";
 import { setComposerChannelPreference } from "@/lib/composerChannelPreference";
+import { isNarrowHiddenPaletteId } from "@/lib/narrowProduct";
 import { startNewConversation } from "@/lib/newConversation";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
 import { chord } from "@/lib/shortcuts";
@@ -24,6 +25,7 @@ import {
   Bug,
   Building2,
   Clapperboard,
+  CloudUpload,
   Cpu,
   Download,
   Files,
@@ -99,6 +101,10 @@ export interface CommandContext {
    * Absent / empty → no palette entry (zero product surface when replay is off).
    */
   demoTapes?: DemoTapeSummary[];
+  /** Hide toolbox / whiteboard / conversation-admin commands (窄屏视口政策). */
+  restrictNarrow?: boolean;
+  /** Hide dark / system theme (窄屏 / Capacitor 仅浅色). */
+  forceLightTheme?: boolean;
 }
 
 /**
@@ -116,6 +122,8 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
     sidebarCollapsed,
     openBookmarksInPalette,
     demoTapes = [],
+    restrictNarrow = false,
+    forceLightTheme = false,
   } = ctx;
   const go = (path: string) => () => navigate(path);
 
@@ -311,6 +319,27 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
             run: () => {
               setComposerChannelPreference("cloud");
               useFoldersStore.getState().openImportToCloud();
+            },
+          },
+          {
+            id: "borrow-to-cloud",
+            title: "云上做完再写入",
+            category: "操作" as const,
+            icon: CloudUpload,
+            keywords: [
+              "borrow",
+              "cloud",
+              "writeback",
+              "original",
+              "yunshang",
+              "xieru",
+              "yuanjian",
+              "zuowan",
+            ],
+            hint: "这一单在云上做，原件先不动",
+            run: () => {
+              setComposerChannelPreference("cloud");
+              useFoldersStore.getState().openBorrowToCloud();
             },
           },
           {
@@ -670,7 +699,10 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
     );
   }
 
-  return commands;
+  return commands.filter(
+    (cmd) =>
+      !isNarrowHiddenPaletteId(cmd.id, { restrictNarrow, forceLightTheme }),
+  );
 }
 
 /** Local substring matcher: every whitespace-separated token of the query must

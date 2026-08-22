@@ -113,7 +113,6 @@ def test_turn_suspension_full_frame_round_trips():
         base_system_prompt="base sys",
         user_message="原始请求",
         folder_id="F1",
-        memory_enabled=False,
         transcript=transcript,
         plan=plan,
         completed={"del_abc_1": _completed_state()},
@@ -152,9 +151,11 @@ def test_turn_suspension_full_frame_round_trips():
     # The project scope survives the frame so resume re-wires consult to it.
     assert restored.folder_id == "F1"
     assert frame.to_json()["folder_id"] == "F1"
-    # The memory master switch survives too: a memory-off turn resumes memory-off.
-    assert restored.memory_enabled is False
-    assert frame.to_json()["memory_enabled"] is False
+    assert "memory_enabled" not in frame.to_json()
+    leftover = frame.to_json()
+    leftover["memory_enabled"] = False
+    ignored = suspension_from_json(leftover)
+    assert not hasattr(ignored, "memory_enabled")
     assert restored.trace_id == "trace123"
     # transcript / history are NOT serialized into the frame (Phase 2 ⑤) — the CEO window
     # is rebuilt from turn_journal on claim; resume echoes the call via the serialized

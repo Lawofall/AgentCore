@@ -504,29 +504,29 @@ async def test_opencode_zen_catalog_marks_grok_unselectable(monkeypatch):
     )
 
 
-async def test_jiurelay_grok_stays_selectable(monkeypatch):
-    """JiuRelay's grok-4.5 is chat/completions — OpenCode off-protocol gate must not hit it."""
+async def test_non_opencode_relay_grok_stays_selectable(monkeypatch):
+    """Non-OpenCode relay grok-4.5 is chat/completions — off-protocol gate must not hit it."""
     reset_discovery_cache_for_tests()
     row = _prov(
-        "prov-jiu",
+        "prov-relay",
         default_model="glm-5.2",
-        label="JiuRelay",
-        base_url="https://jiurelay.com/openai/v1",
+        label="Custom relay",
+        base_url="https://relay.example/openai/v1",
     )
     monkeypatch.setattr(catalog.settings, "platform_api_key", "")
     monkeypatch.setattr(catalog.settings, "billing_mode", "byok")
     _mock_catalog(
         monkeypatch,
         providers=[row],
-        selection=ModelSelection(model="glm-5.2", origin="byok", provider_id="prov-jiu"),
-        discovered={"prov-jiu": ["grok-4.5"]},
+        selection=ModelSelection(model="glm-5.2", origin="byok", provider_id="prov-relay"),
+        discovered={"prov-relay": ["grok-4.5"]},
     )
     cat = await resolve_model_catalog(None, "u1")
     grok = _byok_off_protocol_row("grok-4.5", cat.models)
     assert grok.available is True
     assert grok.unavailable_reason is None
     assert (
-        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-jiu") is True
+        await validate_model_choice(None, "u1", "grok-4.5", "byok", "prov-relay") is True
     )
 
 
@@ -538,7 +538,7 @@ def test_catalog_off_protocol_filter_uses_preset_singleton():
     # Lookalike ids must not be guessed at the merge layer either.
     assert catalog._off_protocol_reason("grok-4.5-fast", "https://opencode.ai/zen/go/v1") is None
     assert catalog._off_protocol_reason("grok-4.5", "https://opencode.ai/zen/go/v1") is not None
-    assert catalog._off_protocol_reason("grok-4.5", "https://jiurelay.com/openai/v1") is None
+    assert catalog._off_protocol_reason("grok-4.5", "https://relay.example/openai/v1") is None
     # Platform path: same function object, no endpoint gate (see _platform_entry).
     assert catalog._off_protocol_unavailable("grok-4.5") is not None
     assert catalog._off_protocol_unavailable("grok-4.5-fast") is None

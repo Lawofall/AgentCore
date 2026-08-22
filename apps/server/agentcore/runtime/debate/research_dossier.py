@@ -149,7 +149,7 @@ async def list_research_artifact_paths(backend: WorkspaceBackend) -> list[str]:
 
 
 async def workspace_has_research_artifacts(backend: WorkspaceBackend) -> bool:
-    """工作区是否已有幕 1 调研产物文件（供 offer_research_first 并集判据）。"""
+    """工作区是否已有幕 1 调研产物文件（供调研链证据并集判据）。"""
     return bool(await list_research_artifact_paths(backend))
 
 

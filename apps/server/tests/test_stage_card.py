@@ -490,24 +490,12 @@ async def test_orphan_writes_journal_fact(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_drive_mlr_preauth_skips_team_preview(monkeypatch):
-    """research_first 决议 pre-auth → 当次 multi_lens_research 免 team_preview。"""
+    """MLR 顶层也不再挂 team_preview；preauth 不再承担跳卡。"""
     from agentcore.core.types import AutonomyPolicy
-    from agentcore.runtime.delegate import preview as preview_mod
     from agentcore.runtime.delegate.drive import _team_preview_before_workers
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunSpec
 
-    await_calls = {"n": 0}
-
-    async def _fake_await(*_a, **_k):
-        await_calls["n"] += 1
-        from agentcore.runtime.checkpoints import CheckpointDecision
-
-        return CheckpointDecision.CONTINUE
-
-    monkeypatch.setattr(preview_mod, "await_team_preview", _fake_await)
-    monkeypatch.setattr(preview_mod, "should_kickoff", lambda *a, **k: True)
-    monkeypatch.setattr(preview_mod, "needs_capability_auth", lambda *a, **k: False)
     monkeypatch.setattr(
         "agentcore.runtime.sandbox_approval.worker_gate_applies", lambda *_a, **_k: False
     )
@@ -521,27 +509,26 @@ async def test_drive_mlr_preauth_skips_team_preview(monkeypatch):
         _approval_gate = None
 
     grant_mlr_preauth()
-    plan = RunPlan(nodes=[RunSpec(run_id="a", agent_id="a", role="r", task="t")])
-    result = await _team_preview_before_workers(
-        _Tool(),
-        plan,
-        complexity_hint="standard",
-        seed_completed=None,
-        call_idx=0,
-    )
-    assert result is None
-    assert await_calls["n"] == 0
-    assert consume_mlr_preauth() is False  # already consumed
-    # 第二次无 pre-auth → 会挂 team_preview
-    result2 = await _team_preview_before_workers(
-        _Tool(),
-        plan,
-        complexity_hint="standard",
-        seed_completed=None,
-        call_idx=1,
-    )
-    assert result2 is None  # CONTINUE → proceed
-    assert await_calls["n"] == 1
+    try:
+        plan = RunPlan(nodes=[RunSpec(run_id="a", agent_id="a", role="r", task="t")])
+        result = await _team_preview_before_workers(
+            _Tool(),
+            plan,
+            complexity_hint="standard",
+            seed_completed=None,
+            call_idx=0,
+        )
+        assert result is None
+        result2 = await _team_preview_before_workers(
+            _Tool(),
+            plan,
+            complexity_hint="standard",
+            seed_completed=None,
+            call_idx=1,
+        )
+        assert result2 is None
+    finally:
+        discard_mlr_preauth()
 
 
 @pytest.mark.asyncio
@@ -658,16 +645,11 @@ async def test_resolve_host_attach_invalid_mid_returns_none(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_mlr_stop_clears_keep_flag(monkeypatch):
-    """team_preview STOP 后清 keep，允许收尾 orphan。"""
+    """MLR 开跑仍 keep stage_card；新 team_preview STOP 路径不再触发。"""
     from agentcore.core.types import AutonomyPolicy
-    from agentcore.runtime.checkpoints import CheckpointDecision
-    from agentcore.runtime.delegate import preview as preview_mod
     from agentcore.runtime.delegate.drive import _team_preview_before_workers
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.types import RunSpec
-
-    async def _stop(*_a, **_k):
-        return CheckpointDecision.STOP
 
     async def _finalize_stopped(*_a, **_k):
         from agentcore.tools.protocol import ToolEffect, ToolResult
@@ -676,9 +658,6 @@ async def test_mlr_stop_clears_keep_flag(monkeypatch):
             tool_call_id="", success=True, output="stopped", effect=ToolEffect.CONTINUE
         )
 
-    monkeypatch.setattr(preview_mod, "await_team_preview", _stop)
-    monkeypatch.setattr(preview_mod, "should_kickoff", lambda *a, **k: True)
-    monkeypatch.setattr(preview_mod, "needs_capability_auth", lambda *a, **k: False)
     monkeypatch.setattr(
         "agentcore.runtime.sandbox_approval.worker_gate_applies", lambda *_a, **_k: False
     )
@@ -705,7 +684,8 @@ async def test_mlr_stop_clears_keep_flag(monkeypatch):
         seed_completed=None,
         call_idx=0,
     )
-    assert turn_keeps_stage_card() is False
+    # 新卡不挂：MLR 开跑 keep，不再走开工 STOP 清 keep。
+    assert turn_keeps_stage_card() is True
 
 
 @pytest.mark.asyncio
@@ -1114,9 +1094,6 @@ def _patch_start_debate_harness(monkeypatch, mod, *, pipeline):
     async def _none(*_a, **_k):
         return None
 
-    async def _true(*_a, **_k):
-        return True
-
     async def _preset(*_a, **_k):
         return recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT)
 
@@ -1163,7 +1140,6 @@ def _patch_start_debate_harness(monkeypatch, mod, *, pipeline):
     monkeypatch.setattr("agentcore.db.repositories.MessageRepository", _FakeMsgRepo)
     monkeypatch.setattr(mod, "resolve_local_binding", _none)
     monkeypatch.setattr(mod, "resolve_profile_set", _none)
-    monkeypatch.setattr(mod, "resolve_memory_enabled", _true)
     monkeypatch.setattr(mod, "resolve_permission_axes", _preset)
     monkeypatch.setattr(mod, "load_chat_context", _empty_history)
     monkeypatch.setattr(mod, "build_turn_backend", AsyncMock(return_value=object()))

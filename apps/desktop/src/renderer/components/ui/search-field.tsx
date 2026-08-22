@@ -1,4 +1,5 @@
 import { IconButton } from "@/components/ui/icon-button";
+import { fieldFocusClass } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Search, X } from "lucide-react";
 import {
@@ -141,7 +142,8 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(
           onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={handleKeyDown}
           className={cn(
-            "w-full rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring",
+            "w-full rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground",
+            fieldFocusClass,
             SIZE_CLASS[size],
             ICON_OFFSET[size],
             showClear && value ? CLEAR_OFFSET[size] : END_PADDING[size],

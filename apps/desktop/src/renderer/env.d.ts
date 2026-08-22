@@ -21,6 +21,8 @@ import type { WindowApi } from "@shared/window-contract";
 declare global {
   interface ImportMetaEnv {
     readonly VITE_API_URL?: string;
+    /** Capacitor 发版才为 true；缺 google-services.json 时不得 register 推送。 */
+    readonly VITE_PUSH_ENABLED?: string;
     /** Dev-only auto-login credentials; see apps/desktop/.env.example. */
     readonly VITE_DEV_USERNAME?: string;
     readonly VITE_DEV_PASSWORD?: string;
@@ -64,5 +66,8 @@ declare global {
     /** 仅由离线预览入口（main.web.tsx → markPreview）额外设置，标记「离线、无后端」运行，
      *  使 AuthGate 跳过认证 bootstrap（生产 web 客户端不设置，保留真实鉴权）。 */
     __WEB_PREVIEW__?: boolean;
+    /** Capacitor 原生壳（main.webapp → markNative）。Bearer + 安全存储。 */
+    __NATIVE__?: boolean;
+    __NATIVE_PLATFORM__?: "android" | "ios";
   }
 }

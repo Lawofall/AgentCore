@@ -12,6 +12,7 @@
  *
  * CI runs this then `git diff --exit-code` to block silent drift.
  */
+import { existsSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
@@ -43,6 +44,25 @@ console.log("gen:types — dump REST path templates …");
 run("uv", ["run", "python", "scripts/dump_rest_paths.py"], { cwd: SERVER });
 
 console.log("gen:types — openapi-typescript …");
+// win32: openapi-typescript writeFileSync on the existing ~900KB file often
+// raises UNKNOWN/-4094 while the TS server has it mapped; unlink first.
+const apiGenerated = join(
+  ROOT,
+  "packages",
+  "contract-rest-types",
+  "src",
+  "api.generated.ts",
+);
+if (process.platform === "win32" && existsSync(apiGenerated)) {
+  try {
+    unlinkSync(apiGenerated);
+  } catch (err) {
+    console.warn(
+      "gen:types — could not unlink api.generated.ts before rewrite:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
 run("pnpm", ["-C", join(ROOT, "packages", "contract-rest-types"), "gen"]);
 
 console.log("gen:types — validate SSE contract alignment …");

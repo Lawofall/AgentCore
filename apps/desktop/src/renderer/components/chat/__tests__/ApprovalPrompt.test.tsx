@@ -22,8 +22,7 @@ vi.mock("@/hooks/useConversations", () => ({
       id: "c1",
       permissionAxes: {
         file_write: "session",
-        command: "kickoff",
-        team_kickoff: "rules",
+        command: "auto",
         host: "ask",
       },
     },
@@ -37,7 +36,6 @@ vi.mock("@/services/permissionAxes", () => ({
   recipeToAxes: () => ({
     file_write: "session",
     command: "auto",
-    team_kickoff: "skip",
     host: "session",
   }),
 }));
@@ -437,7 +435,6 @@ describe("ApprovalCard CTA (工具审批 A+B)", () => {
     const managed = {
       file_write: "session" as const,
       command: "auto" as const,
-      team_kickoff: "skip" as const,
       host: "session" as const,
     };
     vi.mocked(setConversationPermissionAxes).mockResolvedValue(managed);

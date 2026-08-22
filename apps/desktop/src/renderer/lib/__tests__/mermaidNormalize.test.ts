@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { normalizeMermaidSource } from "@/lib/mermaidNormalize";
 import { describe, expect, it } from "vitest";
 
@@ -84,27 +81,5 @@ describe("normalizeMermaidSource", () => {
     expect(out).toContain("flowchart TD");
     expect(out).toContain("A --|yes|-> B");
     expect(out).not.toMatch(/[\u3000\uFF5C]/);
-  });
-});
-
-/**
- * 10 P3-5: desktop and mobile each own a copy of this pure "mermaid repair" leaf
- * (cross-platform-frontend.mdc: each end builds its own, zero shared business logic;
- * drift is caught by tests, not by de-duplication). The two are meant to be identical —
- * without a lock, a fix landing in one silently drifts the other (conformance guards
- * only protocol fold, never this fn). This pins them byte-for-byte, so any one-sided
- * edit fails here until both copies move together.
- */
-describe("mermaidNormalize cross-platform parity", () => {
-  it("the desktop and mobile copies stay identical", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const desktop = resolve(here, "../mermaidNormalize.ts");
-    const mobile = resolve(
-      here,
-      "../../../../../mobile/src/lib/mermaidNormalize.ts",
-    );
-    const read = (p: string) =>
-      readFileSync(p, "utf8").replace(/\r\n/g, "\n").trimEnd();
-    expect(read(desktop)).toBe(read(mobile));
   });
 });

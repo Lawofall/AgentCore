@@ -1,5 +1,7 @@
 import { invalidateAllSharedSpaces } from "@/hooks/useSharedSpaces";
+import { clientHeaders } from "@/lib/clientBuildInfo";
 import { queryClient } from "@/lib/queryClient";
+import { bearerAuthHeader, sessionCredentials } from "@/lib/sessionAuth";
 import { notifyInfo } from "@/lib/toast";
 import {
   BASE_URL,
@@ -232,8 +234,12 @@ async function runStream(signal: AbortSignal): Promise<StreamOutcome> {
   try {
     response = await fetch(`${BASE_URL}/v1/realtime`, {
       method: "GET",
-      credentials: "include",
-      headers: { Accept: "text/event-stream" },
+      credentials: sessionCredentials(),
+      headers: {
+        Accept: "text/event-stream",
+        ...clientHeaders(),
+        ...bearerAuthHeader(),
+      },
       signal,
     });
     captureCsrf(response); // 全会话长连接，每次重连都是一次刷新令牌的机会

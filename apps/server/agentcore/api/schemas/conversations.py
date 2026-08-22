@@ -10,17 +10,17 @@ from agentcore.core.types import (
     FileWriteAxis,
     HostAxis,
     PermissionAxes,
-    TeamKickoffAxis,
     validate_permission_axes,
 )
 
 
 class PermissionAxesModel(BaseModel):
-    """Session permission axes (运行时单一真相源 · file_write/command/team_kickoff/host)."""
+    """Session permission axes (运行时单一真相源 · file_write/command/host)."""
+
+    model_config = {"extra": "ignore"}
 
     file_write: FileWriteAxis = FileWriteAxis.SESSION
     command: CommandAxis = CommandAxis.AUTO
-    team_kickoff: TeamKickoffAxis = TeamKickoffAxis.RULES
     host: HostAxis = HostAxis.SESSION
 
     @model_validator(mode="after")
@@ -29,7 +29,6 @@ class PermissionAxesModel(BaseModel):
         validate_permission_axes(
             file_write=self.file_write.value,
             command=self.command.value,
-            team_kickoff=self.team_kickoff.value,
             host=self.host.value,
         )
         return self
@@ -38,7 +37,6 @@ class PermissionAxesModel(BaseModel):
         return PermissionAxes(
             file_write=self.file_write,
             command=self.command,
-            team_kickoff=self.team_kickoff,
             host=self.host,
         )
 
@@ -47,7 +45,6 @@ class PermissionAxesModel(BaseModel):
         return cls(
             file_write=axes.file_write,
             command=axes.command,
-            team_kickoff=axes.team_kickoff,
             host=axes.host,
         )
 
@@ -121,7 +118,7 @@ class ConversationSummary(BaseModel):
     permission_axes: PermissionAxesModel = Field(
         default_factory=PermissionAxesModel
     )
-    # 深度研究自治（会话级旗标；托管配方蕴含同效，见 runtime.deep_research_auto）。
+    # 深度研究自治（会话级显式旗标；不再由权限配方蕴含）。
     deep_research_auto: bool = False
     # 会话级模型组合钉（拍快照）。新建应非 null；存量 null = 仍按账号默认展开（兼容）。
     model_profile_id: str | None = None

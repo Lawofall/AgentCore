@@ -445,3 +445,19 @@ async def test_list_tree_skips_access_denied_child(tmp_path: Path, monkeypatch):
     assert "ok.txt" in paths
     assert not any(p.startswith("locked_dir/") for p in paths)
     assert any("locked_dir" in w for w in tree.warnings)
+
+
+async def test_list_tree_name_filter_emits_matches_not_prefix_dirs(tmp_path: Path):
+    """Name search must not spend max_entries on unmatched directories."""
+    deep = tmp_path / "d0" / "d1" / "d2" / "d3"
+    deep.mkdir(parents=True)
+    (deep / "hit.py").write_text("x", encoding="utf-8")
+    for i in range(8):
+        (tmp_path / f"pad{i}").mkdir()
+
+    ws = ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())
+    tree = await ws.list_tree(".", pattern="*.py", max_depth=8, max_entries=5)
+    paths = {e.path for e in tree.entries}
+    assert "d0/d1/d2/d3/hit.py" in paths
+    assert "pad0" not in paths
+    assert all(e.path.endswith(".py") or e.path.endswith(".PY") for e in tree.entries)

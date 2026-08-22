@@ -113,7 +113,7 @@ jobs:
       - name: Check town story-pack materialization (canonical ↔ Unity ↔ backend)
         run: node scripts/sync-story-packs.mjs --check
 
-      - name: Check legal Markdown mirror (desktop content.ts ↔ TERMS/PRIVACY ↔ mobile)
+      - name: Check legal Markdown mirror (desktop content.ts ↔ TERMS/PRIVACY)
         run: node scripts/sync-legal-md.mjs --check
 
       - name: Check doc section pointers (compound §N title → heading)
@@ -244,7 +244,7 @@ jobs:
           if-no-files-found: ignore
 
   mobile:
-    name: Mobile (lint + typecheck + conformance + test)
+    name: Mobile (fold-kit test)
     runs-on: ubuntu-latest
 
     steps:
@@ -262,28 +262,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      # fold-kit 已不随 mobile 壳依赖安装；须显式 filter，勿并进 desktop shoot job。
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter agentcore-mobile...
+        run: pnpm install --frozen-lockfile --filter agentcore-mobile... --filter @agentcore/protocol-fold-kit...
 
-      - name: Lint
-        run: pnpm --filter agentcore-mobile lint
-
-      - name: UI token gate
-        run: pnpm --filter agentcore-mobile check-ui-tokens
-
-      - name: Typecheck
-        run: pnpm --filter agentcore-mobile typecheck
-
-      - name: Conformance
-        run: pnpm --filter agentcore-mobile conformance
-
-      # Shared protocol predicates (desktop + mobile). Stay on this short job
+      # Shared protocol predicates. Stay on this short job
       # so they do not lengthen the shoot job (typical PR critical path).
       - name: Protocol fold-kit test
         run: pnpm --filter @agentcore/protocol-fold-kit test
-
-      - name: Test
-        run: pnpm --filter agentcore-mobile test -- --run
 
   admin:
     name: Admin (typecheck + test)

@@ -29,9 +29,6 @@ describe("resolveByokProviderFromConfig", () => {
     expect(
       resolveByokProviderFromConfig("https://open.bigmodel.cn/api/paas/v4"),
     ).toBe("zhipu");
-    expect(
-      resolveByokProviderFromConfig("https://jiurelay.com/openai/v1"),
-    ).toBe("jiurelay");
   });
 
   it("matches aliases (DeepSeek /v1, Moonshot international)", () => {
@@ -102,6 +99,7 @@ describe("resolveByokProviderFromConfig", () => {
   });
 
   it("falls back to custom for unknown endpoints", () => {
+    // Stored base_url that matches no preset stays custom — no remap or wipe.
     expect(resolveByokProviderFromConfig("https://my-proxy.example/v1")).toBe(
       "custom",
     );
@@ -125,20 +123,7 @@ describe("getByokProviderPreset", () => {
 
   it("lists DeepSeek first among vendor presets", () => {
     expect(BYOK_PROVIDER_PRESETS[0]?.id).toBe("deepseek");
-    expect(BYOK_PROVIDER_PRESETS[1]?.id).toBe("jiurelay");
-  });
-
-  it("returns JiuRelay metadata", () => {
-    const preset = getByokProviderPreset("jiurelay");
-    expect(preset.label).toBe("JiuRelay");
-    expect(preset.baseUrl).toBe("https://jiurelay.com/openai/v1");
-    expect(preset.defaultModel).toBe("glm-5.2");
-    expect(preset.models).toEqual([
-      "glm-5.2",
-      "deepseek-v4-flash-0731",
-      "grok-4.5",
-    ]);
-    expect(preset.keyHelpUrl).toBe("https://jiurelay.com/");
+    expect(BYOK_PROVIDER_PRESETS[1]?.id).toBe("openai");
   });
 
   it("defaults Moonshot to kimi-k2.6 with current models", () => {

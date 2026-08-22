@@ -27,7 +27,7 @@ export function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg outline-none",
+          "z-50 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-overlay outline-none",
           "data-[state=open]:animate-dropdown-in",
           className,
         )}

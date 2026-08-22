@@ -73,11 +73,10 @@ class StandingTask(Base):
         default=lambda: {
             "file_write": "session",
             "command": "auto",
-            "team_kickoff": "skip",
             "host": "ask",
         },
         server_default=text(
-            "'{\"file_write\":\"session\",\"command\":\"auto\",\"team_kickoff\":\"skip\",\"host\":\"ask\"}'::jsonb"
+            "'{\"file_write\":\"session\",\"command\":\"auto\",\"host\":\"ask\"}'::jsonb"
         ),
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))

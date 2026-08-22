@@ -1,7 +1,8 @@
 """Single recover primitive: journal projection → seed WaveScheduler → settle / redrive.
 
-Resume (plan_review / team_preview / ask_user) and crash redrive both route through
-:func:`recover_turn`. The journal remains the唯一事实源;
+Resume (plan_review / ask_user) and crash redrive both route through
+:func:`recover_turn`. Leftover ``team_preview`` frames fail honestly.
+The journal remains the唯一事实源;
 :class:`~agentcore.runtime.turn.state.TurnState` is the sole projection entry.
 
 This module owns the user-driven resume side. The sweeper-driven crash entry
@@ -20,7 +21,6 @@ from agentcore.runtime.events import (
     EventSink,
     checkpoint_resolved,
     plan_review_resolved,
-    team_preview_resolved,
 )
 from agentcore.runtime.recover_lease import bind_recovered_turn, recover_expired_lease
 from agentcore.runtime.suspension import (
@@ -48,10 +48,9 @@ class SettledSuspension(NamedTuple):
     path can honor re-entrant SUSPEND (downstream checkpoint while ``resume_plan``
     runs) the same way the live engine does — PAUSED, no CEO continuation.
     ``terminal_text`` is set only when settle returns a terminal ``INTERACT``
-    effect (in-band closing without another CEO round). First ask_user /
-    team_preview STOP feeds CONTINUE like timeout / kickoff cancel; a second
-    consecutive STOP in the same turn upgrades to ``INTERACT`` (no CEO round).
-    team_preview ``ADJUST`` shares the no-grant feed-CEO path but never upgrades.
+    effect (in-band closing without another CEO round). First ask_user STOP
+    feeds CONTINUE like timeout; a second consecutive STOP in the same turn
+    upgrades to ``INTERACT`` (no CEO round).
     """
 
     output: str
@@ -76,16 +75,12 @@ async def recover_turn(
 ) -> SettledSuspension:
     """Settle a resume decision or CONTINUE-redrive unfinished DAG from ``state``.
 
-    - With ``suspension`` + ``decision``: resume three kinds (behaviour-equivalent to
-      the former ``settle_resumed_suspension``).
+    - With ``suspension`` + ``decision``: resume ask_user / plan_review.
+      Leftover ``team_preview`` raises :class:`~agentcore.core.errors.GoneError`.
     - Without suspension (crash): ``decision`` defaults to CONTINUE; redrives unfinished
       plan nodes with ``seed_completed=state.completed`` (completed nodes skipped).
-    - ``debate_tool`` is required when settling a ``team_preview`` with
-      ``primitive=debate``.
-    - ``excluded_run_ids`` / ``write_capability_overrides`` apply only to delegate
-      ``team_preview`` continue (开工组队有限否决).
-    - ``model_overrides`` apply to delegate continue (人盖队员) **and** debate
-      continue (人盖辩手 / 主持人 → debate_arguments)；其它 kind / stop ignore.
+    - ``excluded_run_ids`` / ``write_capability_overrides`` / ``model_overrides``
+      are ignored for leftover ``team_preview`` (refused before apply).
     """
     if suspension is not None:
         if decision is None:
@@ -159,10 +154,14 @@ async def _settle_resume(
         is_repeated_checkpoint_stop,
     )
 
-    # research_first 仅辩论开工卡合法；其它挂起点降级为 STOP，不得静默 continue。
-    if decision is CheckpointDecision.RESEARCH_FIRST and not (
-        isinstance(suspension, TeamPreviewSuspension) and suspension.primitive == "debate"
-    ):
+    _ = (debate_tool, excluded_run_ids, write_capability_overrides, model_overrides)
+    if isinstance(suspension, TeamPreviewSuspension):
+        from agentcore.runtime.kickoff.retired import refuse_team_preview_resume
+
+        refuse_team_preview_resume()
+
+    # research_first 仅辩论开工卡合法；开工卡已退役，其它挂起点降级为 STOP。
+    if decision is CheckpointDecision.RESEARCH_FIRST:
         logger.warning(
             "team_preview.research_first_rejected",
             kind=getattr(suspension.kind, "value", suspension.kind),
@@ -363,141 +362,6 @@ async def _settle_resume(
             team_brief=suspension.team_brief,
             # CONTINUE 时读帧上 ceo_review → llm 压缩注入 gate_notes（deterministic 不下发）。
             ceo_review=suspension.ceo_review,
-        )
-        return _after_settle(
-            SettledSuspension(delegate_result.output, None, delegate_result.effect)
-        )
-
-    if isinstance(suspension, TeamPreviewSuspension):
-        from agentcore.runtime.kickoff.team_veto import (
-            apply_debate_model_overrides,
-            apply_team_preview_veto,
-            should_apply_debate_model_overrides,
-            should_apply_team_veto,
-            validate_debate_model_overrides,
-            validate_team_preview_veto,
-            veto_summary_for_resolved,
-        )
-
-        excl_for_event: list[str] | None = None
-        overrides_for_event: list[dict[str, str]] | None = None
-        model_for_event: dict[str, dict[str, str]] | None = None
-        apply_veto = should_apply_team_veto(suspension, decision)
-        apply_debate_models = should_apply_debate_model_overrides(suspension, decision)
-        seed_completed = dict(state.completed) or suspension.completed
-        plan = state.plan or suspension.plan
-        # 开工组队有限否决 + 人盖模型：validate+apply 必须在 emit resolved 之前——
-        # 非法修正不得先落事件。冷启动 explore≥2 闸只在 delegate.execute，不挡本卡剪枝后的 resume。
-        if apply_veto:
-            validate_team_preview_veto(
-                plan,
-                excluded_run_ids=excluded_run_ids,
-                write_capability_overrides=write_capability_overrides,
-                model_overrides=model_overrides,
-            )
-            apply_team_preview_veto(
-                plan,
-                excluded_run_ids=excluded_run_ids,
-                write_capability_overrides=write_capability_overrides,
-                model_overrides=model_overrides,
-                seed_completed=seed_completed,
-            )
-            excl_for_event, overrides_for_event, model_for_event = veto_summary_for_resolved(
-                excluded_run_ids=excluded_run_ids,
-                write_capability_overrides=write_capability_overrides,
-                model_overrides=model_overrides,
-            )
-            excl_for_event = excl_for_event or None
-            overrides_for_event = overrides_for_event or None
-            model_for_event = model_for_event or None
-            # 冷 resume 重建 router 只挂 Worker 槽：plan 上 CEO 已写 / 人盖后的
-            # 路由键都须补 extras，否则云端 in-process 跨 origin 软丢进 default。
-            # Sidecar proxy 按请求自解析，不依赖此。
-            from agentcore.runtime.debate.models import identity_from_route_key
-            from agentcore.runtime.delegate.task_models import (
-                ensure_delegate_route_extras,
-            )
-
-            idents = []
-            for node in plan.nodes:
-                raw = str(getattr(node, "model", "") or "").strip()
-                if not raw:
-                    continue
-                ident = identity_from_route_key(raw)
-                if not ident.is_empty() and ident.origin:
-                    idents.append(ident)
-            if idents:
-                ctx = getattr(delegate_tool, "_base_tool_context", None)
-                uid = str(getattr(ctx, "user_id", "") or "") or None
-                await ensure_delegate_route_extras(
-                    delegate_tool._llm,
-                    idents,
-                    user_id=uid,
-                )
-        elif apply_debate_models:
-            validate_debate_model_overrides(
-                suspension.sides,
-                debate_arguments=suspension.debate_arguments,
-                model_overrides=model_overrides,
-            )
-            model_for_event = apply_debate_model_overrides(
-                suspension.debate_arguments,
-                model_overrides,
-                sides=suspension.sides,
-            ) or None
-
-        sink.emit(
-            team_preview_resolved(
-                checkpoint_id=suspension.checkpoint_id,
-                decision=decision.value,
-                note=note,
-                excluded_run_ids=excl_for_event,
-                write_capability_overrides=overrides_for_event,
-                model_overrides=model_for_event,
-            )
-        )
-        logger.info(
-            "team_preview.resolved",
-            checkpoint_id=suspension.checkpoint_id,
-            decision=decision.value,
-            primitive=suspension.primitive,
-            excluded=len(excl_for_event or []),
-            write_overrides=len(overrides_for_event or []),
-            model_overrides=len(model_for_event or {}),
-        )
-        if suspension.primitive == "debate":
-            if debate_tool is None:
-                raise ValueError("recover_turn debate kickoff requires debate_tool")
-            debate_result = await debate_tool.resume_after_kickoff(
-                decision=decision,
-                note=note,
-                arguments=dict(suspension.debate_arguments),
-            )
-            # STOP / RESEARCH_FIRST / ADJUST：tool result 回灌 CEO 续跑（terminal_text=None）；
-            # 同回合连续第二次 STOP 由 ``_after_settle`` 升格 INTERACT；ADJUST 不计入。
-            return _after_settle(
-                SettledSuspension(debate_result.output, None, debate_result.effect)
-            )
-
-        eid = state.execution_id or execution_id
-        # Preview hung before the coordinate fork; CONTINUE must arm the
-        # background scheduler (product default for ≥1 worker).
-        # ADJUST / STOP / TIMEOUT：不 grant、不 drive。RESEARCH_FIRST 已在入口降级为 STOP。
-        delegate_result = await delegate_tool.resume_plan(
-            plan,
-            seed_completed,
-            decision=decision,
-            note=note,
-            checkpoint_run_ids=suspension.checkpoint_run_ids,
-            execution_id=eid,
-            coordinate=True,
-            apply_kickoff_grant=True,
-            # 帧回灌批次协作参数：开工卡挂在 setup_note_wall 之前，coordination /
-            # team_brief / seed_notes 只存在帧里；不回灌则 wall 批降级 none（worker
-            # 无便签三件套、CEO 预贴便签丢失）——2026-07-20 P2 手驱真跑抓获。
-            coordination=suspension.coordination,
-            team_brief=suspension.team_brief,
-            seed_notes=list(suspension.seed_notes),
         )
         return _after_settle(
             SettledSuspension(delegate_result.output, None, delegate_result.effect)

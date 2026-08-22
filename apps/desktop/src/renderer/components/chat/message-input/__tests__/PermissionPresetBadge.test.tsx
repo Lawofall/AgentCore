@@ -85,7 +85,6 @@ describe("PermissionAxesBadge", () => {
     vi.mocked(resolveDefaultPermissionAxes).mockResolvedValueOnce({
       file_write: "session",
       command: "ask",
-      team_kickoff: "rules",
       host: "ask",
     });
     renderBadge();

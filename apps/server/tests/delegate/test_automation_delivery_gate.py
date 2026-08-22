@@ -10,7 +10,6 @@ from agentcore.core.types import (
     FileWriteAxis,
     HostAxis,
     PermissionAxes,
-    TeamKickoffAxis,
     recipe_to_axes,
 )
 from agentcore.runtime.events import EventSink
@@ -25,8 +24,7 @@ from tests.delegate.conftest import Provider, local_ctx
 
 _KICKOFF_RULES = PermissionAxes(
     FileWriteAxis.SESSION,
-    CommandAxis.KICKOFF,
-    TeamKickoffAxis.RULES,
+    CommandAxis.AUTO,
     HostAxis.ASK,
 )
 

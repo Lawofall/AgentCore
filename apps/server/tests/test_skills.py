@@ -613,10 +613,11 @@ def test_product_help_skill_teaches_short_answers_and_manual_deeplinks():
     assert "#/toolbox/manual/" in map_body
     assert "手机" in map_body and "勿承诺" in map_body
     assert "页名也按端写" in map_body
-    assert "我的 → 模型配置" in help_body
-    assert "我的 → 模型配置" in faq_body
+    assert "我的 → 服务商" in help_body
+    assert "我的 → 服务商" in faq_body
+    assert "我的 → 模型" in faq_body
     assert "我的 → 用量" in faq_body
-    assert "手机无独立服务商页" in map_body
+    assert "窄屏不上工具箱" in map_body
     assert "?s=workspace" in map_body or "workspace" in map_body
     # .md 阅读预览（文件面板）≠ HTML「完整预览」（右坞）
     assert "阅读预览" in map_body

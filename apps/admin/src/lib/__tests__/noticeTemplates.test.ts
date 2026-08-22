@@ -29,7 +29,7 @@ describe("noticeTemplates", () => {
       "release",
       "maintenance",
       "policy",
-      "quota_jiurelay",
+      "quota_unavailable",
       "quota_platform_restored",
       "outage",
       "feature",
@@ -76,17 +76,21 @@ describe("noticeTemplates", () => {
     expect(seed.cover_url).toBe("");
   });
 
-  it("quota_jiurelay seeds jiurelay CTA and fixed copy", () => {
-    const t = NOTICE_TEMPLATES.find((x) => x.id === "quota_jiurelay")!;
+  it("quota_unavailable seeds Key-access copy without CTA", () => {
+    const t = NOTICE_TEMPLATES.find((x) => x.id === "quota_unavailable")!;
     expect(t).toBeTruthy();
     const seed = templateToFormSeed(t);
-    expect(seed.title).toBe("平台额度暂时不可用 · 请免费自配 jiurelay");
-    expect(seed.body).toContain("免费自行配额度");
+    expect(seed.title).toBe("平台额度暂时不可用 · 请接入自己的 Key");
+    expect(seed.body).toContain("平台提供的额度暂时不可用");
     expect(seed.body).toContain("设置 · 服务商");
+    expect(seed.body).toContain("接入自己的 Key");
+    expect(seed.body).toContain("AgentCore 官方");
     expect(seed.body).not.toMatch(/注册|充值/);
-    expect(seed.cta_label).toBe("前往 jiurelay 免费配额");
-    expect(seed.cta_url).toBe("https://jiurelay.com/");
+    expect(seed.cta_label).toBe("");
+    expect(seed.cta_url).toBe("");
+    expect(seed.severity).toBe("high");
     expect(seed.surface).toBe("both");
+    expect(seed.dismiss_policy).toBe("once");
     const withNote = buildFromSlots(t, { note: "预计明日恢复" });
     expect(withNote.body).toContain("补充：预计明日恢复");
   });
@@ -107,9 +111,10 @@ describe("noticeTemplates", () => {
     expect(seed.body).toContain("非永久承诺");
     expect(seed.body).toContain("设置 · 服务商");
     expect(seed.body).not.toMatch(/Flash Free|限时免费|OpenCode Zen|模型配置/);
-    expect(seed.body).not.toMatch(/送\s*\d+\s*元|jiurelay/);
+    expect(seed.body).not.toMatch(/送\s*\d+\s*元/);
     expect(seed.surface).toBe("both");
     expect(seed.severity).toBe("normal");
+    expect(t.endHint).toBe("发前先归档进行中的 quota_unavailable");
     const withNote = buildFromSlots(t, { note: "额度数字不变" });
     expect(withNote.body).toContain("补充：额度数字不变");
   });

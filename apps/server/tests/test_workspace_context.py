@@ -696,39 +696,6 @@ def test_git_absent_soft_tip_visible_with_explicit_fact():
     assert "不挡派工" in out
 
 
-def test_git_absent_soft_tip_does_not_change_should_kickoff():
-    """P3: no-git soft tip must not flip kickoff / durable-pause truth."""
-    from agentcore.core.types import (
-        CommandAxis,
-        FileWriteAxis,
-        HostAxis,
-        PermissionAxes,
-        TeamKickoffAxis,
-    )
-    from agentcore.runtime.context.workspace_context import WorkspaceGitFact
-    from agentcore.runtime.kickoff.gate import should_kickoff
-
-    out = build_workspace_context(
-        _FakeBackend("server"),
-        desktop_online=True,
-        code_execute_enabled=False,
-        terminal_enabled=False,
-        git_fact=WorkspaceGitFact(present=False),
-    )
-    assert "工作区根无 Git" in out
-    assert "init_baseline" in out
-
-    axes = PermissionAxes(
-        FileWriteAxis.SESSION,
-        CommandAxis.KICKOFF,
-        TeamKickoffAxis.RULES,
-        HostAxis.ASK,
-    )
-    # Same inputs as a normal multi-worker plan-preview kickoff — git tip is orthogonal.
-    assert should_kickoff(plan_preview=True, local_gate=True, axes=axes) is True
-    assert should_kickoff(plan_preview=False, local_gate=False, axes=axes) is False
-
-
 def test_cloud_package_install_tracks_registry_egress(monkeypatch):
     """云端：code_execute 已装配仍可 package_install=未装配（egress 假）；egress 真则拆位翻开。"""
     out_off = build_workspace_context(
