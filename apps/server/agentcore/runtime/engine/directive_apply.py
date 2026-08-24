@@ -26,7 +26,6 @@ from .finalize import force_finalize
 from .governance import (
     apply_circuit_breaker,
     govern_after_tools,
-    maybe_restore_team_gate_tools,
     note_delegate_batches,
     resolve_openai_tool_defs,
 )
@@ -323,9 +322,6 @@ async def apply_loop_directive(
                     )
                 controller.record(attempts)
                 note_delegate_batches(controller, tool_calls, attempts)
-                gate_restored = maybe_restore_team_gate_tools(
-                    controller, disabled_tools=disabled_tools, attempts=attempts
-                )
                 tool_defs = resolve_openai_tool_defs(tools, finalize_allowed, disabled_tools)
                 breaker = apply_circuit_breaker(
                     controller,
@@ -334,7 +330,7 @@ async def apply_loop_directive(
                     round_idx=round_idx,
                     disabled_tools=disabled_tools,
                 )
-                if breaker.refresh_tool_defs or gate_restored:
+                if breaker.refresh_tool_defs:
                     tool_defs = resolve_openai_tool_defs(tools, finalize_allowed, disabled_tools)
                 from agentcore.runtime.runs.cutoff import worker_keeps_notes_in_wind_down
 

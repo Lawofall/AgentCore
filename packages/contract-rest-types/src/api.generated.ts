@@ -2508,9 +2508,11 @@ export interface paths {
          *     - ``after={iso}``: the page strictly newer than the cursor (scroll down).
          *     - none: the latest window (conversation open).
          *
-         *     ``has_more_before`` / ``has_more_after`` drive infinite scroll; a one-sided
-         *     query computes only the flag for the direction it moves in (an ``around`` window
-         *     computes both). ``total`` is the conversation's full message count.
+         *     Assistant ``runs.events`` on this list may be slimmed (``events_complete=false``);
+         *     fetch ``GET …/messages/{message_id}`` for the full journal. ``has_more_before`` /
+         *     ``has_more_after`` drive infinite scroll; a one-sided query computes only the flag
+         *     for the direction it moves in (an ``around`` window computes both). ``total`` is
+         *     the conversation's full message count.
          */
         get: operations["list_messages_v1_conversations__conversation_id__messages_get"];
         put?: never;
@@ -2561,7 +2563,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Message
+         * @description One message with the full turn replay payload (冷 GET 降载).
+         *
+         *     The conversation list may slim ``runs.events``; this owner-scoped GET returns the
+         *     same ``MessageDetail`` projection **without** dropping display events, so the
+         *     team graph / turn-detail page can replay exactly. 404 when the conversation is
+         *     not owned or the message is not in it (same IDOR posture as delete).
+         */
+        get: operations["get_message_v1_conversations__conversation_id__messages__message_id__get"];
         put?: never;
         post?: never;
         /**
@@ -11340,10 +11351,9 @@ export interface components {
         };
         /**
          * ModelOverride
-         * @description Delegate ``team_preview`` continue: human model cover (人盖 CEO).
+         * @description Leftover debate ``team_preview`` continue field (开工卡已退役).
          *
-         *     Same triple family as debate ``ModelIdentity``. Empty map / missing key = leave
-         *     that node unchanged. Illegal shape → 422 (no silent fallback).
+         *     New cards are not emitted; leftover resume is 410. Shape kept for old clients.
          */
         ModelOverride: {
             /** Model */
@@ -11549,18 +11559,19 @@ export interface components {
         };
         /**
          * PausedTurnSummary
-         * @description A turn awaiting resume after a durable plan_review / ask_user / kickoff pause.
+         * @description A turn awaiting resume after a durable plan_review / ask_user pause.
          *
          *     Surfaced on conversation reopen so the client can re-render the right resume card
          *     by ``kind`` and offer the kind-appropriate actions → the resume endpoint
-         *     (kickoff: continue[+嘱咐] / adjust / stop; plan_review: continue / adjust / stop).
+         *     (plan_review: continue / adjust / stop; ask_user: continue / stop).
          *     ``message_id`` is both the pause key and the id the resumed assistant message will
          *     reuse, so an optimistic bubble reconciles cleanly.
          *
+         *     Leftover ``team_preview`` (开工卡) frames still serialize here if hung in the DB,
+         *     but resume is 410 Gone and the client must not offer continue / cancel.
          *     plan_review carries ``steps`` (the reviewed checkpoint nodes) + ``pending`` (the
-         *     gated downstream); team_preview (开工卡) carries ``primitive`` (``delegate`` /
-         *     ``debate``) + ``workers`` / ``tools`` (delegate) or ``motion`` / ``sides`` /
-         *     ``max_rounds`` / ``thorough`` (debate); ask_user carries the unified card payload
+         *     gated downstream); leftover team_preview may still carry ``primitive`` /
+         *     ``workers`` / debate fields; ask_user carries the unified card payload
          *     ``question`` (the framing / opening line) + the optional opening
          *     content ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The
          *     unused set is empty for the other kinds.
@@ -12098,6 +12109,8 @@ export interface components {
             projected?: {
                 [key: string]: unknown;
             } | null;
+            /** Reasoning Content */
+            reasoning_content?: string | null;
             /** Role */
             role: string;
             /**
@@ -12315,20 +12328,17 @@ export interface components {
          *     DURABLY persisted (so it survived a client disconnect / server restart — the live
          *     in-process resolve is the corresponding interaction instead). Same decision
          *     vocabulary as the live resolve: ``continue`` (proceed — run the gated downstream
-         *     for plan_review / accept the CEO direction for ask_user / grant+start kickoff),
-         *     ``adjust`` (plan_review: inject ``note`` as a steer then continue; team_preview:
-         *     do not grant or start — feed ``note`` back so the CEO revises and resubmits;
+         *     for plan_review / accept the CEO direction for ask_user),
+         *     ``adjust`` (plan_review: inject ``note`` as a steer then continue;
          *     ``note`` must be non-empty),
          *     or ``stop`` (end the turn here). ``selected``
          *     carries the option(s) the user picked from an ask_user menu (ignored for
          *     plan_review; the server drops any pick not actually offered). The engine-only
          *     ``timeout`` is never sent by a client.
          *
-         *     ``excluded_run_ids`` / ``write_capability_overrides`` apply
-         *     only to delegate ``team_preview`` ``continue`` (开工组队有限否决).
-         *     ``model_overrides`` also apply to debate ``team_preview`` ``continue``
-         *     (人盖辩手 / 主持人；键 = 开赛前预分配 ``sides[].run_id`` / ``moderator_run_id``).
-         *     Ask / plan_review / stop ignore them (no 422). Hot-path
+         *     Leftover ``team_preview`` resume is 410 Gone (new cards are not emitted).
+         *     ``excluded_run_ids`` / ``write_capability_overrides`` / ``model_overrides``
+         *     are ignored on ask / plan_review / stop (no 422). Hot-path
          *     ``ResolveInteraction`` is not extended.
          */
         ResumeTurnRequest: {
@@ -12344,7 +12354,7 @@ export interface components {
             };
             /**
              * Note
-             * @description adjust 必须非空（修订意见）。kickoff continue 上非空=嘱咐，不是 former adjust。stop 可选收场。
+             * @description adjust 必须非空（修订意见）。ask continue 上非空=补充说明。stop 可选收场。
              * @default
              */
             note: string;
@@ -12501,6 +12511,11 @@ export interface components {
          *     ``error`` is a 报错回合's terminal error, replaying the inline error card on
          *     reload (``null`` for a clean turn). ``null`` whole payload on messages with
          *     none of these.
+         *
+         *     ``events_complete`` is ``True`` when ``events`` is the full display journal
+         *     (single-message GET, or a list row that needed no slimming). The conversation
+         *     list may drop bulky run/tool/delta events and set this ``False``; the client
+         *     then fetches ``GET …/messages/{id}`` for graph / turn-detail replay.
          */
         RunsPayload: {
             auto_folder?: components["schemas"]["AutoFolderNotice"] | null;
@@ -12513,6 +12528,11 @@ export interface components {
             events?: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Events Complete
+             * @default true
+             */
+            events_complete: boolean;
             /** Finish Reason */
             finish_reason?: string | null;
             /** Process */
@@ -14667,10 +14687,10 @@ export interface components {
         };
         /**
          * WriteCapabilityOverride
-         * @description Delegate ``team_preview`` continue: tighten one worker's write capability.
+         * @description Leftover ``team_preview`` continue field (开工卡已退役).
          *
-         *     Only ``text_only`` is legal (→ ``deliverable.form=prose``). Unknown ``run_id`` /
-         *     non-``text_only`` / upgrade attempts → 422 on resume.
+         *     New cards are not emitted; leftover resume is 410 and never applies this.
+         *     Shape kept so old clients sending extra keys do not 422 on ask / plan_review.
          */
         WriteCapabilityOverride: {
             /**
@@ -19240,6 +19260,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_message_v1_conversations__conversation_id__messages__message_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+                message_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageDetail"];
+                };
             };
             /** @description Validation Error */
             422: {

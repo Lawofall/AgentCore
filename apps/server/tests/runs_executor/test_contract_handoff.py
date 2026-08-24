@@ -626,10 +626,7 @@ async def test_strict_degraded_handoff_completes_when_files_landed():
 
 
 async def test_strict_zero_landing_soft_completes_without_degraded_dependents():
-    """甲⁺：单节点 strict + 零落盘（无下游 degraded）→ soft-complete，不 FAILED。
-
-    strict+degraded+无落盘硬拦仍由 ``_hard_gap_blocks_completion`` 单测覆盖。
-    """
+    """甲⁺：单节点 strict + 零落盘（无下游 degraded）→ soft-complete，不 FAILED。"""
     plan, _ = build_run_plan(
         [
             {

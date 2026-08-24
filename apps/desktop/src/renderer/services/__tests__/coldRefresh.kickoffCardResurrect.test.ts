@@ -24,7 +24,6 @@ import {
 } from "@/stores/execution";
 import {
   isColdCheckpointSettled,
-  messageTeamPreviews,
   settledColdIdsFromEvents,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -84,7 +83,7 @@ const RUN_PLAN = {
 } as SSEEvent;
 
 const TEAM_PREVIEW_REQUIRED = {
-  type: "team_preview_required",
+  type: "team_preview_required" as string,
   timestamp: "2026-01-01T00:00:01.000Z",
   payload: {
     checkpoint_id: TP,
@@ -103,7 +102,7 @@ const TEAM_PREVIEW_REQUIRED = {
 } as SSEEvent;
 
 const TEAM_PREVIEW_RESOLVED = {
-  type: "team_preview_resolved",
+  type: "team_preview_resolved" as string,
   timestamp: "2026-01-01T00:00:02.000Z",
   payload: {
     checkpoint_id: TP,
@@ -179,7 +178,9 @@ function paint() {
   const journalIds = settledColdIdsFromEvents(
     messages.flatMap((m) => m.runs?.events ?? []),
   );
-  const previews = messageTeamPreviews(CID, MID);
+  const previews = useInteractionStore
+    .getState()
+    .listPending(CID, ["team_preview"]);
   const assistant = messages.find((m) => m.id === MID);
   if (assistant?.runs) {
     useExecutionStore.getState().hydrateFromJournal(MID, assistant.runs);
@@ -188,7 +189,7 @@ function paint() {
     execRuntime(useExecutionStore.getState(), MID),
   );
   const runs = projected?.runs ?? [];
-  const graph = teamGraphVisible(runs, previews);
+  const graph = teamGraphVisible(runs);
   const settled = isColdCheckpointSettled({
     checkpointId: TP,
     entry,
@@ -207,8 +208,8 @@ function paint() {
     readerHasResolved: journalSettledIdsFor(CID).has(TP),
     settled,
     previewStatuses: previews.map((p) => ({
+      kind: p.kind,
       status: p.status,
-      decision: p.decision,
     })),
     runStatuses: runs.map((r) => ({ status: r.status, kind: r.kind ?? null })),
     graph,
@@ -235,7 +236,7 @@ beforeEach(() => {
 });
 
 describe("Ctrl+R after 开做 — leftover 不画可点开工壳 + 图消失", () => {
-  it("坏序：cache 开做前快照 + GET 仍是 paused 投影（无 *_resolved）→ leftover 不画可点开工壳、图不出现", () => {
+  it("坏序：cache 开做前快照 + GET 仍是 paused 投影（无 *_resolved）→ leftover 不画可点开工壳、图随 run_plan 出", () => {
     seedUser();
     // 磁盘 cache 来自上次 GET（开工前挂起窗）。adopt 不跑 toMessage，IX 空。
     const cached = toMessage(backendRow(pauseSnapshotEvents()));
@@ -261,9 +262,9 @@ describe("Ctrl+R after 开做 — leftover 不画可点开工壳 + 图消失", (
     const existing = getRuntime(CID).messages;
     const incoming = [seededUserMessage(), getMsg];
     const wrote = isMessageWindowStrictlyRicher(incoming, existing);
-    // cache 更厚 → GET 拒写；toMessage 的 IX pending 不回滚
+    // cache 更厚 → GET 拒写；leftover 开工卡事件不再水合 IX
     expect(wrote).toBe(false);
-    expect(useInteractionStore.getState().byId.get(TP)?.status).toBe("pending");
+    expect(useInteractionStore.getState().byId.get(TP)).toBeUndefined();
 
     const snap = paint();
     // eslint-disable-next-line no-console -- 验收要贴真实快照，不是「已通过」
@@ -272,9 +273,9 @@ describe("Ctrl+R after 开做 — leftover 不画可点开工壳 + 图消失", (
     expect(snap.settled).toBe(false);
     expect(snap.journalHasResolved).toBe(false);
     expect(snap.noted).toBe(false);
-    expect(snap.ixStatus).toBe("pending");
+    expect(snap.ixStatus).toBeNull();
     expect(snap.cards).toEqual([]);
-    expect(snap.graph).toBe(false);
+    expect(snap.graph).toBe(true);
     expect(snap.streaming).toBe(false);
     expect(snap.generatingChrome).toBe(false);
     expect(snap.sendNotStop).toBe(false);
@@ -293,8 +294,8 @@ describe("Ctrl+R after 开做 — leftover 不画可点开工壳 + 图消失", (
 
     expect(snap.settled).toBe(true);
     expect(snap.journalHasResolved).toBe(true);
-    expect(snap.ixStatus).toBe("resolved");
-    expect(snap.ixDecision).toBe("continue");
+    expect(snap.ixStatus).toBeNull();
+    expect(snap.ixDecision).toBeNull();
     expect(snap.cards).toEqual([]);
     expect(snap.graph).toBe(true);
     expect(snap.sendNotStop).toBe(false);
@@ -327,18 +328,16 @@ describe("Ctrl+R after 开做 — leftover 不画可点开工壳 + 图消失", (
         getRuntime(CID).messages,
       ),
     ).toBe(false);
-    // 窗上仍是 cache（无 resolved），但 IX 已被 GET 收成 resolved
-    expect(useInteractionStore.getState().byId.get(TP)?.status).toBe(
-      "resolved",
-    );
+    // leftover 事件对不再 upsert IX
+    expect(useInteractionStore.getState().byId.get(TP)).toBeUndefined();
 
     const snap = paint();
     // eslint-disable-next-line no-console
     console.log("REJECT_WINDOW_BUT_IX_RESOLVED", JSON.stringify(snap, null, 2));
 
     expect(snap.journalHasResolved).toBe(false);
-    expect(snap.ixStatus).toBe("resolved");
-    expect(snap.settled).toBe(true);
+    expect(snap.ixStatus).toBeNull();
+    expect(snap.settled).toBe(false);
     expect(snap.cards).toEqual([]);
   });
 
@@ -355,7 +354,7 @@ describe("Ctrl+R after 开做 — leftover 不画可点开工壳 + 图消失", (
       getRuntime(CID).messages.flatMap((m) => m.runs?.events ?? []),
     );
     expect(isNotedColdServerSettled(TP)).toBe(false);
-    expect(entry?.status).toBe("pending");
+    expect(entry).toBeUndefined();
     expect(journalIds.has(TP)).toBe(false);
     expect(
       isColdCheckpointSettled({

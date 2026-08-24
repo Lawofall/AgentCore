@@ -683,6 +683,13 @@ export function applyInteractionWireEvent(
 ): boolean {
   const store = useInteractionStore.getState();
 
+  if (
+    eventType === "team_preview_required" ||
+    eventType === "team_preview_resolved"
+  ) {
+    return true;
+  }
+
   if (eventType === "interaction_orphaned") {
     const id =
       typeof payload.interaction_id === "string"

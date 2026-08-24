@@ -1,4 +1,7 @@
-import { narrowBlockedRedirect } from "@/lib/narrowProduct";
+import {
+  isNarrowBlockedPath,
+  narrowBlockedRedirect,
+} from "@/lib/narrowProduct";
 import { shouldHideNarrowChrome, useNarrowLayout } from "@/lib/useNarrowLayout";
 import {
   type ReactNode,
@@ -29,7 +32,7 @@ export function NarrowLayoutProvider({ children }: { children: ReactNode }) {
     if (!isNarrow) setConversationDrawerOpen(false);
   }, [isNarrow]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname is an intentional re-run key
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname 是换路由触发键，不是 effect 体内读取的值。
   useEffect(() => {
     setConversationDrawerOpen(false);
   }, [pathname]);
@@ -62,18 +65,15 @@ export function useNarrowLayoutState(): NarrowLayoutState {
   return useContext(NarrowLayoutContext) ?? WIDE_FALLBACK;
 }
 
-/** Deep-link guard: narrow viewport cannot open blacklisted product surfaces. */
-export function NarrowBlockedPage({
-  children,
-  to,
-}: {
-  children: ReactNode;
-  to?: string;
-}) {
-  const isNarrow = useNarrowLayout();
+/**
+ * 窄屏黑名单路由：宽屏原样渲染；窄屏落到对话或设置列表。
+ * 权威 → 前端技术 §五 / {@link isNarrowBlockedPath}。
+ */
+export function NarrowBlockedPage({ children }: { children: ReactNode }) {
+  const { isNarrow } = useNarrowLayoutState();
   const { pathname } = useLocation();
-  if (isNarrow) {
-    return <Navigate to={to ?? narrowBlockedRedirect(pathname)} replace />;
+  if (isNarrow && isNarrowBlockedPath(pathname)) {
+    return <Navigate to={narrowBlockedRedirect(pathname)} replace />;
   }
-  return children;
+  return <>{children}</>;
 }

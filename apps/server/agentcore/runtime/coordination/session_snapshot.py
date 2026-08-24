@@ -123,7 +123,11 @@ class SessionSnapshotMixin:
     def snapshot(self: CoordinationSession) -> CoordinationSnapshot:
         pending = [
             {"kind": e.kind.value, "payload": dict(e.payload)}
-            for e in (*self._pending, *self._drain_queue_copy())
+            for e in (
+                *self._deferred_progress,
+                *self._pending,
+                *self._drain_queue_copy(),
+            )
         ]
         live_plan_json: dict[str, Any] | None = None
         if self.live_plan is not None:

@@ -27,87 +27,8 @@ from .outcome import RoundOutcome
 
 logger = get_logger(__name__)
 
-# Team-gate (协作优先): investigation-only, captain-only, one shot per run.
-# ≥ settings.engine_team_gate_investigation_rounds **探路轮** → always hard-stop
-# (strip investigation tools). 按轮不计同轮并行工具次数——一轮里 git×2+file_list
-# 只计 1 轮，避免并行烧尽额度。全失败探路轮不计（见 LoopController.record）。
-# No soft nudge.
-# **不扫用户原文猜意图**分叉闸门（禁成篇/改文件/摸底正则路径）；统一文案：
-# delegate 或短答+自报归类；闸后长文由 soft_gates 丢稿再催一次。
-# 成篇形状 / 修码选型靠提示词与结构验收（playbook、冷启动拒单 worker 等），不靠分类器。
-# 本地摸仓计数仍由 LoopController 维护（观测 / probe）；不再用于分阈硬闸。
+# Local file peeks (file_list / file_read / grep) — diagnostics / eval probe only.
 LOCAL_RECON_TOOLS = frozenset({"file_list", "file_read", "grep"})
-
-
-def team_gate_investigation_threshold() -> int:
-    """CEO 探路硬上限（探路轮）；单一真源 ``settings.engine_team_gate_investigation_rounds``."""
-    return int(settings.engine_team_gate_investigation_rounds)
-
-
-def team_gate_hard_stop_prompt() -> str:
-    """Hard gate: investigation tools stripped; delegate or short classified answer."""
-    n = team_gate_investigation_threshold()
-    return (
-        f"[系统提示] 探路已达硬上限（{n} 轮）：调查类工具已收回。"
-        "请立即 delegate（成规模摸底 / 成篇调研须 ≥2 角并行，禁止一人包办）；"
-        "若坚持直答，仅限短答并写明归类理由（闲聊/单点事实/追问）；"
-        "禁止长文直答交差；禁止再搜 / 再读。"
-    )
-
-
-# 闸后长文再催：字符阈值；短答放行（归类由提示约束，引擎不扫正文做意图分类）。
-TEAM_GATE_DIRECT_REJECT_MIN_CHARS = 400
-
-
-def team_gate_direct_reject_prompt() -> str:
-    """One-shot reject after team_gate when wrap-up prose is too long."""
-    return (
-        "[系统提示] 探路硬闸后禁止长文直答：刚才的长文草稿已丢弃。"
-        "请立即 delegate，或短答并写明归类（闲聊/单点事实/追问）；禁止再搜 / 再读。"
-    )
-
-
-def should_team_gate_direct_reject(
-    controller: LoopController,
-    *,
-    role: str,
-    content: str,
-) -> bool:
-    """Whether to discard a post-gate long wrap-up and re-nudge once."""
-    if role != "captain" or not controller.team_gate_fired:
-        return False
-    if controller.team_gate_direct_reject_fired or controller.has_delegated:
-        return False
-    return len((content or "").strip()) >= TEAM_GATE_DIRECT_REJECT_MIN_CHARS
-
-
-def maybe_inject_team_gate_direct_reject(
-    controller: LoopController,
-    *,
-    messages: list[LLMMessage],
-    run_id: str,
-    round_idx: int,
-    role: str,
-    content: str,
-) -> bool:
-    """Inject one-shot direct-answer reject after team_gate. Returns True if injected."""
-    if not should_team_gate_direct_reject(controller, role=role, content=content):
-        return False
-    controller.mark_team_gate_direct_reject_fired()
-    nudge = team_gate_direct_reject_prompt()
-    logger.info(
-        "engine.team_gate_nudge",
-        trigger="direct_reject",
-        round=round_idx,
-        hard_stop=False,
-        direct_reject=True,
-        content_chars=len((content or "").strip()),
-    )
-    messages.append(LLMMessage(role="user", content=nudge))
-    record_turn_fact(
-        NoteFact(role="user", content=nudge, reason="team_gate", run_id=run_id).to_fact()
-    )
-    return True
 
 
 def _user_intent_chunks(messages: list[LLMMessage]) -> list[str]:
@@ -162,81 +83,6 @@ def maybe_inject_availability_status_nudge(
     return True
 
 
-def maybe_inject_team_gate(
-    controller: LoopController,
-    *,
-    messages: list[LLMMessage],
-    run_id: str,
-    round_idx: int,
-    role: str,
-    trigger: Literal["investigation"] = "investigation",
-    disabled_tools: set[str] | None = None,
-    investigation_tools: frozenset[str] | None = None,
-) -> bool:
-    """Inject the team-gate once for the CEO captain. Returns True if injected.
-
-    After ``settings.engine_team_gate_investigation_rounds`` **探路轮**
-    (``investigation_rounds``; 同轮并行多工具只计 1), strip investigation tools and
-    inject one hard-stop copy: delegate or short classified answer. Does **not**
-    branch on user-text intent classifiers. Records only names this gate newly
-    adds to ``disabled_tools`` so a later successful ``delegate`` can restore
-    them without resurrecting breaker / channel-dead / read_url retire disables.
-    """
-    if role != "captain" or controller.team_gate_fired or controller.has_delegated:
-        return False
-
-    if controller.investigation_rounds < team_gate_investigation_threshold():
-        return False
-
-    controller.mark_team_gate_fired()
-    if disabled_tools is not None and investigation_tools:
-        newly = frozenset(investigation_tools) - disabled_tools
-        disabled_tools.update(investigation_tools)
-        if newly:
-            controller.record_team_gate_stripped(newly)
-    nudge = team_gate_hard_stop_prompt()
-    logger.info(
-        "engine.team_gate_nudge",
-        trigger=trigger,
-        round=round_idx,
-        investigation_calls=controller.investigation_calls,
-        investigation_rounds=controller.investigation_rounds,
-        hard_stop=True,
-    )
-    messages.append(LLMMessage(role="user", content=nudge))
-    record_turn_fact(
-        NoteFact(role="user", content=nudge, reason="team_gate", run_id=run_id).to_fact()
-    )
-    return True
-
-
-def maybe_restore_team_gate_tools(
-    controller: LoopController,
-    *,
-    disabled_tools: set[str],
-    attempts: list[ToolAttempt],
-) -> bool:
-    """After a successful ``delegate`` this round, restore only gate-stripped tools.
-
-    ``team_gate_fired`` stays latched (gate still one-shot). Does not restore on
-    ``debate``. Callers must refresh tool defs when this returns True, then
-    re-apply circuit breaker / channel-dead so other mechanisms can re-disable.
-    """
-    if not any(a.tool_name == "delegate" and a.success for a in attempts):
-        return False
-    names = controller.take_team_gate_stripped()
-    if not names:
-        return False
-    before = len(disabled_tools)
-    disabled_tools.difference_update(names)
-    restored = len(disabled_tools) < before
-    if restored:
-        # 独立事件名：``team_gate_nudge`` 的计数是「探路硬闸触发次数」的真源（调阈值靠它），
-        # 恢复不得混进去。
-        logger.info("engine.team_gate_restore", restored=sorted(names))
-    return restored
-
-
 def maybe_inject_delivery_idle(
     controller: LoopController,
     *,
@@ -248,10 +94,9 @@ def maybe_inject_delivery_idle(
 ) -> Literal["none", "nudge", "narrow"]:
     """Inject read-idle steer when the controller bars are armed.
 
-    Factory only arms recon-idle (conclude/handoff; no write pressure, no narrow).
-    Files-expected delivery_idle is retired at :func:`create_loop_controller`;
-    this helper still honors an explicitly constructed controller (nudge/narrow
-    /report copy). Orthogonal to token/timeout wind_down.
+    Factory only honors an explicitly constructed controller (nudge/narrow
+    /report / leftover recon copy). Product factory never arms any delivery_idle
+    bar. Orthogonal to token/timeout wind_down.
     Narrow allowlist apply is consumed by the react loop via
     :meth:`LoopController.take_delivery_idle_narrow_apply`.
     ``keep_notes``: collaboration/wall — narrow prompt mentions note tools stay.
@@ -615,14 +460,14 @@ def create_loop_controller(
     Files-expected delivery_idle (nudge / narrow / report) is **retired**: factory
     never arms it when ``files_expected=True`` (including ``report_delivery=True``),
     and ignores leftover ``engine_delivery_idle_*`` settings so env cannot revive it.
+    Recon-idle nudge (催结论 / handoff) is **retired** the same way: factory always
+    passes ``delivery_idle_nudge_rounds=0`` and ignores ``engine_recon_idle_nudge_rounds``.
     Absolute investigation-round finalize (``engine_convergence_finalize_rounds``)
     is **retired**: factory always passes ``convergence_finalize_rounds=0`` and
     ignores the setting even if env > 0. Same-target spin
     (``engine_convergence_spin_rounds``) stays. Explicit ``LoopController``
-    construction may still pass ``finalize_rounds``.
+    construction may still pass ``finalize_rounds`` / idle bars.
     ``report_delivery`` stays for call-site compatibility and does not drive idle.
-    Non-landing workers (not ``form_prose``) still get recon-idle **nudge only**
-    (conclude/handoff; no write pressure, no tool strip).
     Orthogonal to token/timeout wind_down and never stamps DEGRADED / FAILED for
     read-idle.
     Delivery pressure otherwise stays on round/token hard ceilings + convergence
@@ -636,7 +481,7 @@ def create_loop_controller(
     ``code_execute`` ladders reach nudge→finalize sooner — still the same
     LoopController paths, not a parallel fuse.
     """
-    _ = (short_write_posture, max_rounds, report_delivery)
+    _ = (short_write_posture, max_rounds, report_delivery, files_expected)
     tool_failure_warn = settings.engine_tool_failure_warn
     tool_failure_disable = settings.engine_tool_failure_disable
     unproductive_threshold = settings.engine_unproductive_threshold
@@ -646,16 +491,12 @@ def create_loop_controller(
         unproductive_threshold = min(int(unproductive_threshold), 2)
 
     # Soft read-idle: factory never arms files-expected delivery_idle
-    # (nudge/narrow/report), even if leftover settings are still >0.
-    # Non-landing workers (not form_prose) still get recon-idle nudge only.
+    # (nudge/narrow/report) or recon-idle conclude nudges, even if leftover
+    # settings are still >0.
     delivery_idle_nudge = 0
     delivery_idle_narrow = 0
     delivery_idle_recon = False
     delivery_idle_report = False
-    if not files_expected and not form_prose:
-        delivery_idle_nudge = int(settings.engine_recon_idle_nudge_rounds or 0)
-        delivery_idle_narrow = 0
-        delivery_idle_recon = delivery_idle_nudge > 0
 
     controller = LoopController(
         empty_threshold=settings.engine_empty_response_threshold,
@@ -989,16 +830,6 @@ def govern_after_tools(
         record_turn_fact(
             NoteFact(role="user", content=reflection, reason="nudge", run_id=run_id).to_fact()
         )
-        maybe_inject_team_gate(
-            controller,
-            messages=messages,
-            run_id=run_id,
-            round_idx=round_idx,
-            role=role,
-            trigger="investigation",
-            disabled_tools=disabled_tools,
-            investigation_tools=investigation_tools,
-        )
         maybe_inject_turn_token_budget_gate(
             controller,
             messages=messages,
@@ -1043,16 +874,6 @@ def govern_after_tools(
         )
         return Finalize(reason="convergence")
 
-    maybe_inject_team_gate(
-        controller,
-        messages=messages,
-        run_id=run_id,
-        round_idx=round_idx,
-        role=role,
-        trigger="investigation",
-        disabled_tools=disabled_tools,
-        investigation_tools=investigation_tools,
-    )
     maybe_inject_turn_token_budget_gate(
         controller,
         messages=messages,

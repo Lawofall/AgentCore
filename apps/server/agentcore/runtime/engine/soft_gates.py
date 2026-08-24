@@ -1,8 +1,4 @@
-"""Captain soft gates after a no-tool Return: team-gate direct-reject + debate + audit.
-
-Team-gate hard stop itself is investigation-only (tool-round path in ``governance.py``);
-the direct-reject path here catches unclassified long wrap-ups after that hard stop.
-"""
+"""Captain soft gates after a no-tool Return: debate + audit."""
 
 from __future__ import annotations
 
@@ -16,11 +12,9 @@ from .governance import (
     maybe_inject_audit_gate,
     maybe_inject_audit_hard_block,
     maybe_inject_debate_gate,
-    maybe_inject_team_gate_direct_reject,
     should_audit_gate,
     should_audit_hard_block,
     should_debate_gate,
-    should_team_gate_direct_reject,
 )
 from .outcome import RoundOutcome
 
@@ -39,7 +33,7 @@ def maybe_soft_gate_no_tool_return(
 ) -> tuple[LoopDirective, str | None]:
     """Possibly discard a captain wrap-up draft and inject a soft/hard gate nudge.
 
-    Order: debate-commitment, then team-gate direct-reject, then audit soft/hard.
+    Order: debate-commitment, then audit soft/hard.
     Soft audit is one-shot; hard audit (成篇) may re-block end_turn until review
     is dispatched.
 
@@ -72,20 +66,6 @@ def maybe_soft_gate_no_tool_return(
         run_id=run_id,
         round_idx=round_idx,
         role=role,
-    ):
-        emit_reset("soft_gate")
-        return Continue(), content_before_round
-
-    # team_gate 后：无归类长文直答 / 摸底·改文件禁直答 → 丢稿再催一次（在审计闸之前）。
-    if should_team_gate_direct_reject(
-        controller, role=role, content=outcome.content or ""
-    ) and maybe_inject_team_gate_direct_reject(
-        controller,
-        messages=messages,
-        run_id=run_id,
-        round_idx=round_idx,
-        role=role,
-        content=outcome.content or "",
     ):
         emit_reset("soft_gate")
         return Continue(), content_before_round

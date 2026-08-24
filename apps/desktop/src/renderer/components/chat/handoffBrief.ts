@@ -10,7 +10,7 @@ export const HANDOFF_RECEIPT = "已收尾并提交交接简报。";
  */
 export function isSuccessfulHandoff(
   toolName: string,
-  status: "running" | "success" | "error",
+  status: "running" | "success" | "error" | "redirect",
 ): boolean {
   return toolName === "handoff" && status === "success";
 }

@@ -61,12 +61,11 @@ describe("timeline projection key + marker invariant (fixtures)", () => {
   });
 
   it("covers the timeline fixture families", () => {
-    // Sanity: the families the bug hit (团队预审 / 检查点 / 计划复核)
-    // + 弱式痕迹（审批 / 阶段推进卡）。
+    // Sanity: the families the bug hit (检查点 / 计划复核)
+    // + 弱式痕迹（审批 / 阶段推进卡）。开工卡事件对已退役，不再进此表。
     const names = FIXTURES.map((f) => f.name);
     expect(names).toEqual(
       expect.arrayContaining([
-        "team_preview_resolved_continue",
         "single_agent_checkpoint",
         "plan_review_paused",
         "multi_agent_legal_war_room",
@@ -74,6 +73,7 @@ describe("timeline projection key + marker invariant (fixtures)", () => {
         "multi_agent_stage_card_start_debate",
       ]),
     );
+    expect(names).not.toContain("team_preview_resolved_continue");
   });
   for (const fx of FIXTURES) {
     it(`${fx.name}: cards resolvable by projection key, every card marked`, () => {

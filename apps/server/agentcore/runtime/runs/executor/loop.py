@@ -95,6 +95,7 @@ class ContractLoopResult:
     artifact_contents: dict[str, str] | None
     workspace_paths: list[str] | None
     product_landing_artifacts: list[str] | None
+    runtime_file_products: list[Any]
     deliverable: Any
     tool_ctx: Any
 
@@ -201,6 +202,7 @@ async def run_contract_loop(
     cite_upgrade_used = False
     light_mode = False
     visual_rework_used = 0
+    runtime_file_products: list[Any] = []
     artifact_contents: dict[str, str] | None = None
     workspace_paths: list[str] | None = None
     source_data_paths: list[str] | None = None
@@ -462,6 +464,25 @@ async def run_contract_loop(
                         exc_info=True,
                     )
 
+            async def _persist_visual_preview(path: str, data: bytes) -> None:
+                write_bytes = getattr(tool_ctx.backend, "write_bytes", None)
+                if not callable(write_bytes):
+                    return
+                try:
+                    await write_bytes(path, data)
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "website.visual_critic_preview_write_failed",
+                        path=path,
+                        exc_info=True,
+                    )
+
+            async def _read_workspace_bytes(path: str) -> bytes:
+                read_bytes = getattr(tool_ctx.backend, "read_bytes", None)
+                if not callable(read_bytes):
+                    raise OSError("read_bytes unavailable")
+                return await read_bytes(path)
+
             verdict, visual_result, visual_rework_used = await apply_visual_critic_to_verdict(
                 verdict,
                 vision_reader=tool_ctx.vision_reader,
@@ -473,7 +494,11 @@ async def run_contract_loop(
                     parent_run_id=spec.run_id,
                 ),
                 persist_artifact=_persist_visual,
+                persist_preview_shot=_persist_visual_preview,
+                read_bytes=_read_workspace_bytes,
             )
+            if visual_result.preview_products:
+                runtime_file_products.extend(visual_result.preview_products)
             if visual_result.critical_findings and verdict.visual_failures:
                 logger.info(
                     "contract.visual_critic_findings",
@@ -912,6 +937,7 @@ async def run_contract_loop(
         artifact_contents=artifact_contents,
         workspace_paths=workspace_paths,
         product_landing_artifacts=product_landing_artifacts,
+        runtime_file_products=runtime_file_products,
         deliverable=deliverable,
         tool_ctx=tool_ctx,
     )

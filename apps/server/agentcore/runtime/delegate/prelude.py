@@ -177,10 +177,7 @@ def resolve_delegate_prelude(
         )
 
     # Playbook 声明闸：结构校验；建站/绿场 none 不硬拒。
-    declared_playbook, _none_reason, decl_error = resolve_playbook_declaration(
-        arguments,
-        user_message=user_message or "",
-    )
+    declared_playbook, decl_error = resolve_playbook_declaration(arguments)
     if decl_error:
         gate = declaration_reject_gate(decl_error)
         logger.info(

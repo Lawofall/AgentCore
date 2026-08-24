@@ -1,6 +1,6 @@
 """Shared anti-slop / web-quality rule catalog (prompt text ↔ scan fingerprints).
 
-Single source for ``build_website`` playbook injection and
+Single source for ``web_quality`` deliverable injection and
 :mod:`agentcore.runtime.runs.web_quality_scan` pattern labels — keep the blacklist
 wording and the detector vocabulary in lockstep.
 """

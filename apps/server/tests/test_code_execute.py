@@ -213,6 +213,81 @@ def test_project_verify_command_match_routes_to_test_run():
     assert project_verify_command_match("import pip") is None
 
 
+def test_source_inspect_match_reexport():
+    from agentcore.tools.builtin.code_execute import source_inspect_match
+
+    dump = source_inspect_match("print(open('apps/server/foo.py').read()[:80])")
+    assert dump is not None and dump.kind == "dump"
+    grep = source_inspect_match(
+        "src = open('apps/server/foo.py').read()\nprint(len(re.findall(r'TODO', src)))"
+    )
+    assert grep is not None and grep.kind == "grep"
+
+
+async def test_code_execute_blocks_source_dump_without_sandbox():
+    backend = _FakeBackend(
+        ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
+    )
+    result = await CodeExecuteTool().execute(
+        {
+            "code": (
+                "src = open('apps/server/foo.py', encoding='utf-8').read()\n"
+                "print(src[:3000])"
+            ),
+            "language": "python",
+        },
+        _ctx(backend),
+    )
+
+    assert result.success is False
+    assert result.contract_failure is True
+    assert result.metadata.get("code") == "source_dump_redirect"
+    err = result.error or ""
+    assert "file_read" in err
+    assert "code_execute" in err
+    assert backend.requests == []
+
+
+async def test_code_execute_blocks_source_grep_without_sandbox():
+    backend = _FakeBackend(
+        ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)
+    )
+    result = await CodeExecuteTool().execute(
+        {
+            "code": (
+                "src = open('apps/server/agentcore/observability/catalog.py', encoding='utf-8').read()\n"
+                "print(len(re.findall(r'EventSpec', src)))"
+            ),
+            "language": "python",
+        },
+        _ctx(backend),
+    )
+
+    assert result.success is False
+    assert result.contract_failure is True
+    assert result.metadata.get("code") == "source_grep_redirect"
+    err = result.error or ""
+    assert "grep" in err
+    assert "file_read" in err
+    assert backend.requests == []
+
+
+async def test_code_execute_allows_pandas_after_source_inspect_gate():
+    backend = _FakeBackend(
+        ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=1)
+    )
+    result = await CodeExecuteTool().execute(
+        {
+            "code": "import pandas as pd\ndf = pd.read_csv('a.csv')\nprint(df.head())",
+            "language": "python",
+        },
+        _ctx(backend),
+    )
+
+    assert result.success is True
+    assert len(backend.requests) == 1
+
+
 async def test_code_execute_blocks_project_verify_without_sandbox():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="should-not-run\n", stderr="", exit_code=0, duration_ms=1)

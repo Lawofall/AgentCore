@@ -223,7 +223,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 ## 二、注入
 
-> 现状 ✅（按需侧「单目录 + 单工具」已随步 1 落地；**写侧常驻配额闸也已落地** → `memory/always_quota.py` + `GET /v1/documents/always-quota`，`remember` / `mutate_user_rule` 与文件页同一闸；读侧全量不截断）。仍 ⏳ 的目标形态只剩「常驻拼成单块」与条目化步 2–4，见开头「目标形态」节。
+> 现状 ✅（按需侧「单目录 + 单工具」已随步 1 落地；步 2 服务端 + 文件页 UI 已落地；**写侧常驻配额闸也已落地** → `memory/always_quota.py` + `GET /v1/documents/always-quota`，`remember` / `mutate_user_rule` 与文件页同一闸；读侧全量不截断）。仍 ⏳ 的目标形态只剩「常驻拼成单块」、取消 `role` 三分、步 3–4，见开头「目标形态」节。
 
 1. 工作记忆经 `load_recent_history` 进窗口（CEO / worker 共用）。
 2. 长期记忆折叠进共享 `<rules>` 基座：用户规则在前（权威）、AI 记忆在后（软措辞）；无用户规则时与旧 memory-only 块逐字节一致（护前缀缓存）。桌面 sidecar **有 account 票**时：prepare/resume 对 always 规则 / AI 记忆正文 / on_demand 规则目录 / memory topics **只读进程快照缓存**（miss → 空注入、不 await 云 HTTP）；`consult` 取规则正文与目录**同一份快照**（不另打 `/rules/list`）。assemble 的 explore/画像/scope-state 经 `prepare_reads_cache_only` 同样只读快照（warm 含每作用域 scope-state，取代旧 `_memory_meta.json`）；非回合 `warmAccountRulesMemory` 并行拉取并 seed（`/rules/list` 一次供 always+on_demand，并回传云算好的 `folder_chain` 与祖先层规则；warm 据此把**祖先各层的画像 / 主题 / scope-state 一并拉进同一快照**——本机没有 folders 表，链只能由云给）。快照有 **300s TTL**（他机改动 / 漏刷的兜底），故 warm 回传 `ttlSeconds`、桌面按 account+folder 记到期时点并在下次用前**提前续期**；**本机文件页写入**（规则 / 记忆叶子）与 sidecar 上 `remember` 成功后立刻对**活着的** sidecar 强制重暖（忽略 TTL）。**detached execution 存活期**（`execution_detached` → `execution_completed`）桌面按同一 TTL **周期续暖**——CEO 回合 `startTurn` 已返回、团队仍跑时必须续，sidecar 内部收口不走桌面入口。只 warm 一次的话，TTL 到期后 miss 即空注入——用户规则与 AI 记忆会**静默**全失，故续期握手属契约而非优化。空注入仍打 `account.rules_memory_cache_miss`（收口带 `origin=execution_harvest`）。**无票**仍走本地 DB。
@@ -239,7 +239,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 ## 三、维护协议（情景沉淀 → 语义巩固）
 
-> 现状 ✅。条目化后（⏳）巩固由「重写固定文件的固定章节」改为「按 `description` 归位的增删改，受常驻配额约束」——是**重写**不是改造；`remember` 与巩固合流成同一条「写条目」路径，无理由留两套。冷启动第一条条目无模板可依，只能靠沉淀 prompt 给「好条目长什么样」的示例约束，**不得预置空条目**（等同系统槽位复辟）。
+> 现状：步 2 条目化服务端+文件页 UI ✅。巩固形态仍 ⏳——目标是按 `description` 归位的增删改（受常驻配额约束），表内现状仍是整文件重写偏好/画像。这是**重写**不是改造；`remember` 与巩固合流成同一条「写条目」路径，无理由留两套。冷启动第一条条目无模板可依，只能靠沉淀 prompt 给「好条目长什么样」的示例约束，**不得预置空条目**（等同系统槽位复辟）。
 
 | 层 | 触发 | 行为 | 前端 |
 |---|---|---|---|
@@ -265,7 +265,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 #### 探索触发与挡请求（✅ 软硬分层）
 
-> **本表是触发条件的唯一权威**（闸看的都是记忆态）。开幕之后的编排——探路轮数闸、`delegate` ≥2 角组队、收尾写盘——权威在 [编排器 · 冷启动探索幕](/docs/03-AI核心/编排器与CEO主Agent.md)，勿在两边各写一份。
+> **本表是触发条件的唯一权威**（闸看的都是记忆态）。开幕之后的编排——探路是提示词纪律（`team_gate` 已拆）、组队靠提示词、引擎不剥工具不丢稿、收尾写盘——权威在 [编排器 · 冷启动探索幕](/docs/03-AI核心/编排器与CEO主Agent.md)，勿在两边各写一份机制。
 
 | 触发 | 信号 | 与当前用户请求 |
 |---|---|---|
@@ -275,7 +275,7 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 | 指纹漂移 | 顶层树 + 关键清单指纹相对上次探索写入已变（README / package·锁文件 / pyproject / 顶层目录名等；**不做**纯天数、**不以** commit 为唯一闸） | **不挡**。一期（R2）✅：脏标记 + 软提示「文件夹结构已变，可点名刷新」。二期（R1）✅：`schedule_explore_refresh` 旁路静默合并更新（无 team_preview、不占当前对话） |
 | 用户点名 | 「先了解 / 重新了解 / 刷新文件夹（项目）记忆」 | **挡**（强制开幕、合并更新；点名硬闸与 pending 同级 ✅） |
 
-**产物谁写（D1）✅**：硬挡 pending 时 worker 可用 `form=files`，但 `write_scope≤explore_memory`（只写 `AgentCore/` 约定记忆/探索笔记；越权在写工具层拒）。画像 / 导航 / 主题收尾仍经 CEO `update_folder_profile`（及同族工具）。✅ 步 3 后厚背景资料是**主题条目**不是盘上文件，写它的工具本就只对 CEO 开放（`AUDIENCE_CEO_ONLY`），故该禁令由工具面天然承担，`explore_memory` 闸只判「在不在 `AgentCore/` 下」，**不**再内嵌路径禁令。R1 旁路亦不经 worker 写用户工程树。**否决**再用禁 `form=files` 代理本约束。
+**产物谁写（D1）✅**：硬挡 pending 时 worker 可用 `form=files`，但 `write_scope≤explore_memory`（只写 `AgentCore/` 约定记忆/探索笔记；越权在写工具层拒）。**例外**：本回合新建的云文件夹（`create_folder` / 裸聊自动建桌首次铸造）被点名为 `target_folder_id` 时，该 worker 用 `write_scope=project`（空新桌可填工程文件；出生文件夹仍只许约定笔记）。画像 / 导航 / 主题收尾仍经 CEO `update_folder_profile`（及同族工具）。✅ 步 3 后厚背景资料是**主题条目**不是盘上文件，写它的工具本就只对 CEO 开放（`AUDIENCE_CEO_ONLY`），故该禁令由工具面天然承担，`explore_memory` 闸只判「在不在 `AgentCore/` 下」，**不**再内嵌路径禁令。R1 旁路亦不经 worker 写用户工程树。**否决**再用禁 `form=files` 代理本约束。
 
 **主题上限（T2）✅**：取消单次硬顶 3；单次探索/更新 **软顶 5**（超额截断+warning）；仓库主题总数仍受 `memory_max_topic_files`（现状 24）约束；多轮探索可累加主题。
 

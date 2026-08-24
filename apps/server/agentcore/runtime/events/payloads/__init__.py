@@ -82,8 +82,8 @@ TS_EXPORTS: tuple[TsExport, ...] = (
     TsInterface(
         chat.ToolFailure,
         doc=(
-            "User-facing tool failure face on `tool_use_end` when status=error.\n"
-            "`message` = Chinese product copy; `code` = stable error code.\n"
+            "User-facing tool face on `tool_use_end` when status is error or redirect.\n"
+            "`message` = Chinese product copy; `code` = stable code.\n"
             "Model-facing technical detail stays in `result`."
         ),
     ),
@@ -370,8 +370,6 @@ EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.CHECKPOINT_RESOLVED: interaction.CheckpointResolvedPayload,
     EventType.PLAN_REVIEW_REQUIRED: interaction.PlanReviewRequiredPayload,
     EventType.PLAN_REVIEW_RESOLVED: interaction.PlanReviewResolvedPayload,
-    EventType.TEAM_PREVIEW_REQUIRED: interaction.TeamPreviewRequiredPayload,
-    EventType.TEAM_PREVIEW_RESOLVED: interaction.TeamPreviewResolvedPayload,
     EventType.STAGE_CARD_REQUIRED: interaction.StageCardRequiredPayload,
     EventType.STAGE_CARD_RESOLVED: interaction.StageCardResolvedPayload,
     EventType.PLAN_REVISED: run.PlanRevisedPayload,

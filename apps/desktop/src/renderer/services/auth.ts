@@ -106,6 +106,7 @@ export async function login(
   const body = await api.post<LoginResponse>("/v1/auth/login", {
     username,
     password,
+    persist_session: true,
   });
   if (!body.user) {
     throw new Error("登录响应缺少用户信息");
@@ -117,7 +118,17 @@ export async function login(
   clearSidecarFoldersAuth();
   clearSidecarAccountAuth();
   clearDefaultPermissionAxesCache(); // 自主度同为按用户的设置，换人重取
+  await persistDesktopAuthCookies();
   return user;
+}
+
+/** Electron: re-stamp HTTP cookies as persistent and flush sqlite. No-op on web. */
+async function persistDesktopAuthCookies(): Promise<void> {
+  try {
+    await window.outboxApi?.persistAuthCookies?.();
+  } catch {
+    // Best-effort — live session still works; a failed flush only risks the next quit.
+  }
 }
 
 export interface RegisterSendCodeInput {
@@ -441,7 +452,7 @@ async function devAutoLogin(): Promise<DevLoginResult> {
   try {
     const body = await bootstrapRequest<LoginResponse>("/v1/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, persist_session: true }),
     });
     if (!body.user) {
       throw new Error("登录响应缺少用户信息");
@@ -451,6 +462,7 @@ async function devAutoLogin(): Promise<DevLoginResult> {
     clearSidecarFoldersAuth();
     clearSidecarAccountAuth();
     clearDefaultPermissionAxesCache();
+    await persistDesktopAuthCookies();
     return { kind: "ok", user };
   } catch (err) {
     if (isOutage(err)) {
@@ -504,6 +516,7 @@ export async function bootstrapAuth(): Promise<BootstrapResult> {
   try {
     const user = await bootstrapFetchMe();
     logBootstrap("me_ok");
+    void persistDesktopAuthCookies();
     return { kind: "authenticated", user };
   } catch (err) {
     if (isOutage(err)) {

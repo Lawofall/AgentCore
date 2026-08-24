@@ -212,20 +212,10 @@ async def test_team_preview_capture_uses_final_content_and_marker_before_team() 
     assert snap.content == "开工前交付正文"
     assert paused_content == snap.content
     assert snap.process == []
-    assert any(e.get("kind") == "process_team_preview" for e in frame.journal_entries)
-    # before_last_team: live + process_* both keep 开工卡 before 协作图.
-    assert any(
-        s.get("kind") == "team_preview" and s.get("checkpoint_id") == "cp-team"
-        for s in (sink.raw_process() or [])
+    assert not any(e.get("kind") == "process_team_preview" for e in frame.journal_entries)
+    assert not any(
+        s.get("kind") == "team_preview" for s in (sink.raw_process() or [])
     )
-    preview_facts = [
-        e for e in frame.journal_entries if e.get("kind") == "process_team_preview"
-    ]
-    team_facts = [e for e in frame.journal_entries if e.get("kind") == "process_team"]
-    if preview_facts and team_facts:
-        assert frame.journal_entries.index(preview_facts[0]) < frame.journal_entries.index(
-            team_facts[0]
-        )
 
 
 @pytest.mark.asyncio

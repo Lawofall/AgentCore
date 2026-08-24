@@ -6,10 +6,12 @@ import { handleMessageStreamEvent } from "@/services/sse/handlers/messageStream"
 import { useConversationStore } from "@/stores/conversation";
 import { useInteractionStore } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
+import type { SSEEvent } from "@/types/events";
 // @vitest-environment jsdom
 /**
- * Live cold card authority = InteractionStore: leftover team_preview_required
- * is recognized (bind / stamp / IX pending) but does not paint a clickable kickoff shell.
+ * Live cold card authority = InteractionStore.
+ * leftover `team_preview_*` via SSE is consume-and-skip (no IX / no stamp);
+ * leftover IX upserted directly still does not paint a clickable kickoff shell.
  */
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -79,6 +81,17 @@ const tpPayload = (
   thorough: true,
   ...over,
 });
+
+function leftoverPreviewRequired(
+  checkpointId: string,
+  over: Record<string, unknown> = {},
+): SSEEvent {
+  return {
+    type: "team_preview_required" as string,
+    timestamp: "",
+    payload: tpPayload(checkpointId, over),
+  } as SSEEvent;
+}
 
 function renderResume() {
   return render(
@@ -486,7 +499,7 @@ describe("ResumePrompt · live InteractionStore authority", () => {
   });
 });
 
-describe("ResumePrompt · ask continue → same-turn team_preview", () => {
+describe("ResumePrompt · ask continue → leftover team_preview SSE skip", () => {
   const SERVER = "m-server-ask-tp";
 
   function seedAskPaused(): void {
@@ -535,25 +548,21 @@ describe("ResumePrompt · ask continue → same-turn team_preview", () => {
     });
   }
 
-  it("binds team_preview to stamped host after continue (no client UUID pin)", () => {
+  it("leftover team_preview_required after continue is skipped (no IX)", () => {
     seedAskPaused();
-    // Resume path: flip paused assistant (same turn), then SSE team_preview_required.
     useConversationStore.getState().setTurnPhase("streaming", CID);
     expect(
       useConversationStore.getState().resumePausedAssistant(SERVER, CID),
     ).toBe("client-ask");
 
-    handleInteractionEvent(
-      {
-        type: "team_preview_required",
-        timestamp: "",
-        payload: tpPayload("tp-after-ask"),
-      },
-      { conversationId: CID, source: "server" },
-    );
+    handleInteractionEvent(leftoverPreviewRequired("tp-after-ask"), {
+      conversationId: CID,
+      source: "server",
+    });
 
-    const entry = useInteractionStore.getState().byId.get("tp-after-ask");
-    expect(entry?.messageId).toBe(SERVER);
+    expect(
+      useInteractionStore.getState().byId.get("tp-after-ask"),
+    ).toBeUndefined();
     expect(
       selectVisibleColdResumes({
         conversationId: CID,
@@ -585,17 +594,13 @@ describe("ResumePrompt · ask continue → same-turn team_preview", () => {
     expect(assistants[0].serverMessageId).toBe(SERVER);
     expect(assistants[0].isStreaming).toBe(true);
 
-    handleInteractionEvent(
-      {
-        type: "team_preview_required",
-        timestamp: "",
-        payload: tpPayload("tp-ensure"),
-      },
-      { conversationId: CID, source: "server" },
-    );
+    handleInteractionEvent(leftoverPreviewRequired("tp-ensure"), {
+      conversationId: CID,
+      source: "server",
+    });
     expect(
-      useInteractionStore.getState().byId.get("tp-ensure")?.messageId,
-    ).toBe(SERVER);
+      useInteractionStore.getState().byId.get("tp-ensure"),
+    ).toBeUndefined();
     renderResume();
     expect(screen.queryByText("继续")).toBeNull();
     expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
@@ -615,22 +620,18 @@ describe("ResumePrompt · ask continue → same-turn team_preview", () => {
       { conversationId: CID, source: "server" },
     );
 
-    handleInteractionEvent(
-      {
-        type: "team_preview_required",
-        timestamp: "",
-        payload: tpPayload("tp-after-start"),
-      },
-      { conversationId: CID, source: "server" },
-    );
+    handleInteractionEvent(leftoverPreviewRequired("tp-after-start"), {
+      conversationId: CID,
+      source: "server",
+    });
 
     const assistant = useConversationStore
       .getState()
       .byId[CID]?.messages.find((m) => m.role === "assistant");
     expect(assistant?.serverMessageId).toBe(SERVER);
     expect(
-      useInteractionStore.getState().byId.get("tp-after-start")?.messageId,
-    ).toBe(SERVER);
+      useInteractionStore.getState().byId.get("tp-after-start"),
+    ).toBeUndefined();
 
     renderResume();
     expect(screen.queryByText("继续")).toBeNull();
@@ -659,19 +660,14 @@ describe("ResumePrompt · ask continue → same-turn team_preview", () => {
       isStreaming: true,
     });
 
-    handleInteractionEvent(
-      {
-        type: "team_preview_required",
-        timestamp: "",
-        payload: tpPayload("tp-nostamp-window"),
-      },
-      { conversationId: CID, source: "server" },
-    );
+    handleInteractionEvent(leftoverPreviewRequired("tp-nostamp-window"), {
+      conversationId: CID,
+      source: "server",
+    });
 
-    // Cold bind must not pin client UUID — empty until message_start stamps.
     expect(
-      useInteractionStore.getState().byId.get("tp-nostamp-window")?.messageId,
-    ).toBe("");
+      useInteractionStore.getState().byId.get("tp-nostamp-window"),
+    ).toBeUndefined();
     expect(
       selectVisibleColdResumes({
         conversationId: CID,

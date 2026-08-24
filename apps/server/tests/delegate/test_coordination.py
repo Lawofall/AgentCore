@@ -241,21 +241,28 @@ def test_coordination_from_journal():
 
 def test_necessary_decision_points():
     session = CoordinationSession(execution_id="e", total_workers=3)
-    first = [
+    success = [
         CoordinationEvent(
             kind=CoordinationEventKind.WORKER_COMPLETED,
-            payload={"run_id": "w1"},
+            payload={"run_id": "w1", "status": "completed"},
         )
     ]
-    assert session.is_necessary_decision(first)
-    session.note_decision_points(first)
-    mid = [
+    assert not session.is_necessary_decision(success)
+    session.note_decision_points(success)
+    skipped = [
         CoordinationEvent(
             kind=CoordinationEventKind.WORKER_COMPLETED,
-            payload={"run_id": "w2"},
+            payload={"run_id": "w2", "status": "skipped"},
         )
     ]
-    assert not session.is_necessary_decision(mid)
+    assert not session.is_necessary_decision(skipped)
+    failed = [
+        CoordinationEvent(
+            kind=CoordinationEventKind.WORKER_COMPLETED,
+            payload={"run_id": "w3", "status": "failed"},
+        )
+    ]
+    assert session.is_necessary_decision(failed)
     assert session.is_necessary_decision(
         [CoordinationEvent(kind=CoordinationEventKind.ESCALATION, payload={})]
     )
@@ -941,7 +948,7 @@ async def test_wait_emits_coordination_wait_sse_enter_and_exit(monkeypatch):
                 payload={
                     "run_id": "w6",
                     "role": "F",
-                    "status": "completed",
+                    "status": "failed",
                     "summary": "ok",
                 },
             )
@@ -985,6 +992,12 @@ async def test_wait_drain_nowait_skips_coordination_wait_sse():
         CoordinationEvent(
             kind=CoordinationEventKind.WORKER_COMPLETED,
             payload={"run_id": "w1", "role": "A", "status": "completed", "summary": "ok"},
+        )
+    )
+    session.post(
+        CoordinationEvent(
+            kind=CoordinationEventKind.ALL_COMPLETED,
+            payload={"completed": 1, "total": 2},
         )
     )
     msgs = await await_coordination_injection([])
@@ -1114,12 +1127,12 @@ async def test_coordination_scope_boundary_proceeds():
 
 
 async def test_coordinate_react_loop_e2e(monkeypatch):
-    """ReAct 全环：CEO delegate（省略 coordinate=默认协调）→ 波内 update_synthesis → 终稿。
+    """ReAct 全环：CEO delegate → 协调注入 → 终稿。
 
+    例行成功完成不单独叫醒；终局 all_completed（或空转 yield 捎带摘要）后写终稿。
     Drives the real ``react_loop`` (role=captain) with a scripted CEO provider and
     a separate worker LLM on DelegateTool — covers non-blocking arming,
-    coordination event injection between rounds, synthesis draft preview on the
-    sink, and final content after all_completed.
+    coordination event injection between rounds, and final content after all_completed.
     """
     import json
     from pathlib import Path
@@ -1270,14 +1283,12 @@ async def test_coordinate_react_loop_e2e(monkeypatch):
         current_execution_id.reset(exec_token)
 
     assert ceo_llm.delegate_calls == 1
-    assert ceo_llm.synth_calls == 1
+    # 中途 synth 只在空转 yield 捎带已完成摘要时才发生；终稿必须有。
     assert "最终合成" in content
-    assert rounds >= 3
+    assert rounds >= 2
     assert any("团队协调事件" in (m.content or "") for m in messages if m.role == "user")
 
     sink.close()
-    previews = [e async for e in sink if e.type == EventType.TEAM_SYNTHESIS_PREVIEW]
-    assert any(e.payload.get("text") == draft_text for e in previews)
     assert worker_llm.calls >= 2
 
 
@@ -1311,11 +1322,10 @@ async def test_captain_silent_listen_rounds_do_not_trip_empty_ladder(monkeypatch
     clear_active_coordination()
     session = CoordinationSession(execution_id="e-silent", total_workers=2)
     set_active_coordination(session)
-    session.mark_worker_completed("r1")
     session.post(
         CoordinationEvent(
-            kind=CoordinationEventKind.WORKER_COMPLETED,
-            payload={"run_id": "r1", "role": "研究员", "status": "completed"},
+            kind=CoordinationEventKind.ESCALATION,
+            payload={"run_id": "r1", "role": "研究员", "question": "范围？"},
         )
     )
 
@@ -1336,11 +1346,10 @@ async def test_captain_silent_listen_rounds_do_not_trip_empty_ladder(monkeypatch
                 return
             # 静默轮顺手把下一批事件排进队列，供下一轮注入。
             if self.calls == 1:
-                session.mark_worker_completed("r2")
                 session.post(
                     CoordinationEvent(
-                        kind=CoordinationEventKind.WORKER_COMPLETED,
-                        payload={"run_id": "r2", "role": "写手", "status": "completed"},
+                        kind=CoordinationEventKind.ESCALATION,
+                        payload={"run_id": "r2", "role": "写手", "question": "语气？"},
                     )
                 )
             elif self.calls == 2:

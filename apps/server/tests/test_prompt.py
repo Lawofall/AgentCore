@@ -19,7 +19,6 @@ Pins two things:
 
 import re
 
-from agentcore.config import settings
 from agentcore.runtime.resolve.prompt import (
     _ATTACHMENT_MATERIAL_HINT,
     _CEO_CORE_HINT,
@@ -226,6 +225,7 @@ def test_visualization_block_rides_only_the_composed_ceo_prompt():
     # base (the worker path). Pins the split end-to-end.
     assert "<visualization>" in _CEO_VISUALIZATION_HINT
     assert "mermaid" in _CEO_VISUALIZATION_HINT
+    assert "compare" in _CEO_VISUALIZATION_HINT
 
     base = assemble_system_prompt()
     ceo = compose_ceo_chat_prompt(
@@ -415,6 +415,16 @@ def test_core_teaches_split_criterion_over_count():
     assert "修引号" in hint or "转义" in hint
     assert "勿先" in hint and "ask_user_kickoff" in hint
     assert "糊建站" in hint or "做个网站" in hint
+    assert "挡路" in hint
+    assert "一页先上" not in hint
+    assert "品牌站流水线" not in hint
+    assert "已下线" not in hint
+    assert "手写" in hint and "tasks" in hint
+    assert "web_quality_scan" in hint
+    assert "营销皮" in hint
+    assert "consult `build_website`" not in hint
+    assert "consult(build_website)" not in hint
+    assert "playbook=\"build_website\"" not in hint
     assert "短问" in hint or "短澄清" in hint
     assert "提案墙" in hint
     # 点名载体/手段·顾问短对齐（与规格已齐正交；禁硬闸/format_options；禁单场景剧本）
@@ -456,6 +466,8 @@ def test_core_teaches_split_criterion_over_count():
     assert "临时交成果组长" in hint
     assert "并行写盘" in hint
     assert "私有" in hint  # 私有 path / 笔记
+    assert "【整合】" in hint
+    assert "continue_from_run_id" in hint
     assert "MVP" in hint or "契约" in hint
     assert "规格已齐 ≠ 全量" in hint or "规格已齐≠全量" in hint
     assert "结构槽" in hint or "playbook_args" in hint
@@ -463,7 +475,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "playbook=none" not in hint
     assert "playbook_id" not in hint
     # 桌面壳 / 多屏 / 完整可玩 / 交付档对照表：HOW 在 skill（本函数后段已钉 skill）
-    # 交付档 → intensity：核留结构槽指针；对照表在 kickoff / build_*
+    # 绿场桌上档 → lean|full：核留结构槽指针；建站不推具名套餐/桌上档 intensity
     assert "intensity" in hint
     assert "lean" in hint and "full" in hint
     assert "模块流水线" in hint
@@ -471,6 +483,9 @@ def test_core_teaches_split_criterion_over_count():
     assert "禁止" in hint and ("intensity=full" in hint or "满编" in hint)
     assert "做个网站" in hint
     assert "展示页" in hint or "业务应用" in hint
+    assert "intensity=solo" not in hint
+    assert "style=toolshed" not in hint
+    assert "build_website" not in hint
     # 混合分流：边界未钉 ≠ 绿场 SPA 满档 build_app；五阶段 HOW 在 build_app
     assert "build_app" in hint
     assert "不硬拒" in hint
@@ -721,15 +736,20 @@ def test_core_teaches_delegating_parallel_research():
     hint = _CEO_CORE_HINT
     assert "广度调查" in hint
     assert "探路" in hint
-    # 探路硬上限跟 settings.engine_team_gate_investigation_rounds，勿钉死字面轮数
-    n = settings.engine_team_gate_investigation_rounds
-    assert f"探路硬上限 = {n} **轮**" in hint
-    assert f"探路至多 {n} **轮**" in hint
     assert "≥2 角" in hint or "继续开发" in hint
+    # 通用：探路=定位入口；不派仅限单点；派工看规模与结构不看交付形态；引擎不剥工具 ≠ 可接着自搜
+    assert "【探路 ≠ 摸底】" in hint
+    assert "定位入口" in hint or "从哪几个入口进" in hint
+    assert "不派仅限" in hint
+    assert "规模与结构" in hint
+    assert "交付形态" in hint
+    assert "不剥工具" in hint or "不打断长文" in hint
+    assert "可以接着自搜" in hint
+    assert "规格已齐" in hint or "无新规格" in hint
 
 
-def test_prompt_investigation_rounds_follow_settings():
-    """提示词/编排技能文案中的探路轮上限必须与 settings 真源一致。"""
+def test_prompt_investigation_discipline_follows_settings():
+    """提示词/编排技能文案中的探路纪律与 D 一致（0～1 轮、不引擎硬闸）。"""
     from agentcore.runtime.resolve.prompt.cold_start import (
         _COLD_START_EXPLORE_HINT_EMPTY,
         _COLD_START_EXPLORE_HINT_REBIND,
@@ -737,14 +757,20 @@ def test_prompt_investigation_rounds_follow_settings():
     )
     from agentcore.runtime.skills.deep_multi_lens_research import _DEEP_MULTI_LENS_RESEARCH
 
-    n = settings.engine_team_gate_investigation_rounds
-    assert f"探路硬上限 = {n} **轮**" in _CEO_CORE_HINT
-    assert f"探路至多 {n} **轮**" in _CEO_CORE_HINT
-    assert f"轻量探路（≤{n} **轮**）" in _COLD_START_EXPLORE_HINT_EMPTY
-    assert f"轻量探路（≤{n} **轮**）" in _COLD_START_EXPLORE_HINT_REBIND
-    assert f"轻量探路（≤{n} **轮**）" in _COLD_START_EXPLORE_HINT_REFRESH
-    assert f"探路 ≤{n} 轮" in _TEAM_ORCHESTRATION_ADVANCED
-    assert f"探路检索至多【{n} 轮】" in _DEEP_MULTI_LENS_RESEARCH
+    assert "不派仅限" in _CEO_CORE_HINT
+    assert "规模与结构" in _CEO_CORE_HINT
+    assert "交付形态" in _CEO_CORE_HINT
+    assert "可以接着自搜" in _CEO_CORE_HINT
+    assert "0～1" in _COLD_START_EXPLORE_HINT_EMPTY
+    assert "0～1" in _COLD_START_EXPLORE_HINT_REBIND
+    assert "0～1" in _COLD_START_EXPLORE_HINT_REFRESH
+    assert "探路 0～1 轮" in _TEAM_ORCHESTRATION_ADVANCED
+    assert "探路检索默认 0～1 轮" in _DEEP_MULTI_LENS_RESEARCH
+    assert "只定位入口" in _COLD_START_EXPLORE_HINT_EMPTY
+    assert "只定位入口" in _COLD_START_EXPLORE_HINT_REBIND
+    assert "只定位入口" in _COLD_START_EXPLORE_HINT_REFRESH
+    assert "定位入口" in _TEAM_ORCHESTRATION_ADVANCED
+    assert "禁止自己取证" in _DEEP_MULTI_LENS_RESEARCH
 
 
 def test_core_forbids_silent_worker_count_discount():

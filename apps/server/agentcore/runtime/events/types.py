@@ -42,9 +42,6 @@ class EventType(StrEnum):
     CHECKPOINT_RESOLVED = "checkpoint_resolved"
     PLAN_REVIEW_REQUIRED = "plan_review_required"
     PLAN_REVIEW_RESOLVED = "plan_review_resolved"
-    # 团队预审薄预览: first-wave gate before workers start (≠ 波间 plan_review).
-    TEAM_PREVIEW_REQUIRED = "team_preview_required"
-    TEAM_PREVIEW_RESOLVED = "team_preview_resolved"
     # 阶段推进卡（批 B）：幕 1 命题卡升级为可操作交互；跨回合耐久，不挂起幕 1。
     STAGE_CARD_REQUIRED = "stage_card_required"
     STAGE_CARD_RESOLVED = "stage_card_resolved"
@@ -201,6 +198,8 @@ RETIRED_EVENT_TYPE_VALUES: frozenset[str] = frozenset(
         "question_resolved",
         "delegation_authorization_required",
         "delegation_authorization_resolved",
+        "team_preview_required",
+        "team_preview_resolved",
     }
 )
 

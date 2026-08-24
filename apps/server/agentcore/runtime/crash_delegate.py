@@ -24,24 +24,10 @@ from agentcore.db.repositories import BoardRepository, ConversationRepository
 from agentcore.llm.credentials import bind_credential_pricing_context
 from agentcore.llm.profiles import turn_profiles_for_turn
 from agentcore.llm.resolve import resolve_credentials
-from agentcore.memory import assemble_turn_rules, default_memory_store
-from agentcore.runtime.capability_packs import enabled_packs
-from agentcore.runtime.context import (
-    build_workspace_context,
-    collect_outlet_inventory,
-    detect_workspace_git,
-)
-from agentcore.runtime.context.consult_sources import build_merged_consult_source
 from agentcore.runtime.facts import FactKind
 from agentcore.runtime.pipeline.resume.wire import wire_crash_turn
-from agentcore.runtime.resolve.prompt import (
-    assemble_system_prompt,
-    compose_worker_base_prompt,
-)
+from agentcore.runtime.resolve.prompt.rebuild import rebuild_fresh_worker_base_prompt
 from agentcore.runtime.runs.types import RunKind
-from agentcore.runtime.skills import build_system_skill_registry
-from agentcore.tools.builtin import build_worker_registry
-from agentcore.tools.sandbox.exec_languages import resolve_exec_languages
 
 if TYPE_CHECKING:
     from agentcore.runtime.events import EventSink
@@ -127,52 +113,13 @@ async def production_crash_delegate_factory(
         session_saver, session_loader = session_callbacks(conversation_id)
         suspension_saver, suspension_deleter = suspension_callbacks()
 
-        # Fresh worker base (no suspension frame): same helpers as prepare_fresh_turn,
-        # attachments empty — unfinished nodes carry their own task text in the plan.
-        # ``<按需目录>`` from MergedConsultSource.list_directory (same as prepare),
-        # not the deprecated memory_topics / on_demand_rules bridge.
-        memory_store = default_memory_store()
-        rules_markdown = await assemble_turn_rules(
-            memory_store,
-            user_id,
+        # Fresh worker base (no suspension frame): shared rebuild with CEO continue.
+        base_system_prompt = await rebuild_fresh_worker_base_prompt(
+            user_id=user_id,
             folder_id=folder_id,
-            enabled=True,
-        )
-        exec_languages = await resolve_exec_languages(backend)
-        # Crash rebuild has no live client header → fail-closed (no Host pretence).
-        workspace_facts = build_workspace_context(
-            backend,
-            desktop_online=False,
-            exec_languages=exec_languages,
-            permission_axes=permission_axes,
-            git_fact=await detect_workspace_git(backend),
-            outlet_inventory=await collect_outlet_inventory(backend),
-        )
-        system_prompt = assemble_system_prompt(
-            rules_markdown=rules_markdown,
-        )
-        skill_registry = build_system_skill_registry(enabled_packs=enabled_packs())
-        provisional_tools = build_worker_registry(
             backend=backend,
             permission_axes=permission_axes,
-            languages=exec_languages if backend.location == "local" else None,
             desktop_online=False,
-        )
-        on_demand_entries = list(
-            await build_merged_consult_source(
-                skill_registry=skill_registry,
-                tool_names={s.name for s in provisional_tools.list_all()},
-                memory_store=memory_store,
-                folder_id=folder_id,
-                skill_audience="worker",
-                tool_registry=provisional_tools,
-            ).list_directory(user_id)
-        )
-        base_system_prompt = compose_worker_base_prompt(
-            system_prompt,
-            on_demand_entries=on_demand_entries,
-            attachment_context="",
-            workspace_context=workspace_facts,
         )
 
         captain_run_id = _captain_run_id_from_journal(state.entries) or new_id()

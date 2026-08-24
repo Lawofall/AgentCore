@@ -1,10 +1,11 @@
 /**
  * Open-time attach/settle after message-window fetch (P4 unified hydrate).
  *
- * Decoupled from message-window adopt and from hydrate UI ready: ConversationPage
- * reveals after adopt (message window / cache); recovery+attach stay eager in the
- * background via {@link scheduleHydrateAttachSettle} and must not cover already-adopted
- * text. `loadRecovery` never rejects.
+ * Decoupled from message-window adopt: ConversationPage reveals immediately when
+ * the slice already has content (or list metadata confirms messageCount===0); on an
+ * empty cold slice it awaits {@link awaitHydrateAttachSettle} before reveal so
+ * unsynced projection does not flash a white screen. Warm reopen with content still
+ * schedules settle in the background via {@link scheduleHydrateAttachSettle}.
  * Warm reopen keeps the in-memory slice (adopt skips overwrite) but still runs
  * recovery-driven attach/settle so a detached live / ghost running assistant is
  * not left stuck in a fake generating state.
@@ -32,14 +33,33 @@ import {
   hasLocalConversationStream,
 } from "./streamOwnership";
 
+/**
+ * Await recovery then project unsynced / kick attach.
+ * Does **not** wait for a live sidecar turn to finish — overlay may reveal
+ * once history is projected; attach continues in the background.
+ * Safe when `loadRecovery` never rejects.
+ */
+export async function awaitHydrateAttachSettle(
+  conversationId: string,
+  recoveryLoaded: Promise<ConversationRecovery>,
+): Promise<"local" | "cloud" | undefined> {
+  const recovery = await recoveryLoaded;
+  if (
+    useConversationStore.getState().currentConversationId !== conversationId
+  ) {
+    return;
+  }
+  return runHydrateAttachSettle(conversationId, recovery, {
+    waitForAttach: false,
+  });
+}
+
 /** Kick attach/settle when recovery lands. Does not delay overlay reveal. */
 export function scheduleHydrateAttachSettle(
   conversationId: string,
   recoveryLoaded: Promise<ConversationRecovery>,
 ): void {
-  void recoveryLoaded.then((recovery) => {
-    void runHydrateAttachSettle(conversationId, recovery);
-  });
+  void awaitHydrateAttachSettle(conversationId, recoveryLoaded);
 }
 
 /**
@@ -51,7 +71,9 @@ export function scheduleHydrateAttachSettle(
 export async function runHydrateAttachSettle(
   conversationId: string,
   recovery: ConversationRecovery,
+  opts?: { waitForAttach?: boolean },
 ): Promise<"local" | "cloud"> {
+  const waitForAttach = opts?.waitForAttach !== false;
   const useLocal = shouldHydrateLocalRecovery(recovery);
   logEvent("info", "conversation.hydrate", {
     conversation_id: conversationId,
@@ -82,7 +104,7 @@ export async function runHydrateAttachSettle(
     // 判定与 attachSidecarTurn.beginLocal 之间 follow 仍活着；先占闸，避免
     // 段首 full_replay 被跟播再被 sidecar 快照折一遍。嵌套 claim，回合结束才放。
     const releaseSidecarYield =
-      recovery.sidecarLive && recovery.pausedCount === 0
+      waitForAttach && recovery.sidecarLive && recovery.pausedCount === 0
         ? beginLocalConversationStream(conversationId)
         : null;
     try {
@@ -96,7 +118,9 @@ export async function runHydrateAttachSettle(
       settleOrphanEmptyAssistants(conversationId);
       if (recovery.sidecarLive && recovery.pausedCount === 0) {
         // 切会话不卸观察泵 — 无页级 signal。
-        await attachSidecarTurn(conversationId);
+        const attached = attachSidecarTurn(conversationId);
+        if (waitForAttach) await attached;
+        else void attached;
       }
       return "local";
     } finally {

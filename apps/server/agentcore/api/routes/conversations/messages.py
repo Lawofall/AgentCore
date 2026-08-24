@@ -76,7 +76,7 @@ from agentcore.db.repositories import (
 from agentcore.fulfill.origin import current_origin_device
 from agentcore.llm.resolve import resolve_user_llm_credentials
 from agentcore.runtime.events import EventSink
-from agentcore.runtime.journal import runs_from_entries_cached
+from agentcore.runtime.journal import runs_from_entries_cached, slim_runs_payload
 from agentcore.runtime.journal.entries import _PROCESS_PREFIX
 from agentcore.runtime.journal.team_batch import team_batch_from_entries
 from agentcore.runtime.turn.runs import turn_runs
@@ -88,6 +88,93 @@ from ._helpers import (
 )
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+
+def _project_message_detail(
+    m,
+    *,
+    journal_rows: list | None,
+    segments: list,
+    slim: bool,
+) -> MessageDetail:
+    """Fold + overlay one row into ``MessageDetail``. List sets ``slim`` to drop bulky events."""
+    detail = MessageDetail.model_validate(m)
+    usage = m.usage or {}
+    runs = runs_from_entries_cached(m.id, journal_rows)
+    runs = overlay_runs_with_segments(runs, segments, usage=usage)
+    if slim and runs is not None:
+        runs = slim_runs_payload(runs)
+    if runs is not None:
+        detail.runs = RunsPayload.model_validate(runs)
+    # Empty-face redesign: lift usage.error → runs.error when journal omitted it,
+    # so REST reload paints the same face as live (usage JSON is the durable home).
+    usage_err = usage.get("error")
+    if isinstance(usage_err, dict) and (
+        usage_err.get("message") or usage_err.get("code")
+    ):
+        from agentcore.api.schemas.messages import RunError
+
+        lifted = RunError(
+            code=str(usage_err.get("code") or "LLM_ERROR").strip() or "LLM_ERROR",
+            message=str(usage_err.get("message") or "").strip()
+            or "本轮未能完成，请重试。",
+        )
+        if detail.runs is None:
+            detail.runs = RunsPayload(error=lifted)
+        elif detail.runs.error is None:
+            detail.runs = detail.runs.model_copy(update={"error": lifted})
+    # 回合轮次 (Tier 2 重载): rounds shares the row's usage column but has no own
+    # attribute, so project it on read (usage itself is normalized by the schema
+    # validator). Drives the bubble's「N 轮」caption alongside usage.
+    rounds = usage.get("rounds")
+    if rounds is not None:
+        detail.rounds = rounds
+    duration_ms = usage.get("duration_ms")
+    if duration_ms is not None:
+        detail.duration_ms = int(duration_ms)
+    # Assistant-row lifecycle (usage.status) — overlay criterion for stream_state.
+    status = usage.get("status")
+    if status is not None:
+        detail.status = status
+    # Cold-path pause latch (usage.paused): write keeps status=running; lift so clients
+    # hydrate as paused rather than streaming.
+    if usage.get("paused"):
+        detail.paused = True
+    # System provenance (usage.origin) — e.g. execution_harvest synthetic user rows.
+    origin = usage.get("origin")
+    if isinstance(origin, str) and origin.strip():
+        detail.origin = origin.strip()
+    # 曾中断恢复 (usage.recovered): crash redrive finished this turn in place.
+    if usage.get("recovered"):
+        detail.recovered = True
+    # In-flight overlay: fill content / reasoning from turn_stream_state when running.
+    # When journal already has process_content, skip captain:content → messages.content
+    # (deliverable_only: narration lives on the process lane, not the content column).
+    if segments:
+        from agentcore.runtime.events.attach_replay import journal_is_structured
+
+        rows = journal_rows or []
+        skip_cap_content = any(
+            (e.get("kind") or "") == f"{_PROCESS_PREFIX}content" for e in rows
+        ) or journal_is_structured(rows)
+        content, reasoning = overlay_message_fields(
+            content=detail.content,
+            reasoning_content=detail.reasoning_content,
+            segments=segments,
+            usage=usage,
+            skip_captain_content=skip_cap_content,
+        )
+        detail.content = content or ""
+        detail.reasoning_content = reasoning
+    collab = usage.get("collab")
+    if collab is not None:
+        detail.collab = TurnCollabMetrics.model_validate(collab)
+    if m.role == "assistant":
+        detail.team_batch = parse_team_batch(team_batch_from_entries(journal_rows or []))
+    raw_outcome = usage.get("outcome")
+    if raw_outcome in ("ok", "partial", "paused", "error"):
+        detail.outcome = raw_outcome
+    return detail
 
 
 async def _persist_delivered_interjection_attachments(
@@ -150,9 +237,11 @@ async def list_messages(
     - ``after={iso}``: the page strictly newer than the cursor (scroll down).
     - none: the latest window (conversation open).
 
-    ``has_more_before`` / ``has_more_after`` drive infinite scroll; a one-sided
-    query computes only the flag for the direction it moves in (an ``around`` window
-    computes both). ``total`` is the conversation's full message count.
+    Assistant ``runs.events`` on this list may be slimmed (``events_complete=false``);
+    fetch ``GET …/messages/{message_id}`` for the full journal. ``has_more_before`` /
+    ``has_more_after`` drive infinite scroll; a one-sided query computes only the flag
+    for the direction it moves in (an ``around`` window computes both). ``total`` is
+    the conversation's full message count.
     """
     await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
     total = await repo.count_by_conversation(conversation_id)
@@ -185,86 +274,15 @@ async def list_messages(
     stream_map = await get_conversation_store().list_stream_segments_map(
         turn_ids=[m.id for m in messages]
     )
-    details: list[MessageDetail] = []
-    for m in messages:
-        detail = MessageDetail.model_validate(m)
-        usage = m.usage or {}
-        segments = stream_map.get(m.id) or []
-        runs = runs_from_entries_cached(m.id, journal_map.get(m.id))
-        runs = overlay_runs_with_segments(runs, segments, usage=usage)
-        if runs is not None:
-            detail.runs = RunsPayload.model_validate(runs)
-        # Empty-face redesign: lift usage.error → runs.error when journal omitted it,
-        # so REST reload paints the same face as live (usage JSON is the durable home).
-        usage_err = usage.get("error")
-        if isinstance(usage_err, dict) and (
-            usage_err.get("message") or usage_err.get("code")
-        ):
-            from agentcore.api.schemas.messages import RunError
-
-            lifted = RunError(
-                code=str(usage_err.get("code") or "LLM_ERROR").strip() or "LLM_ERROR",
-                message=str(usage_err.get("message") or "").strip()
-                or "本轮未能完成，请重试。",
-            )
-            if detail.runs is None:
-                detail.runs = RunsPayload(error=lifted)
-            elif detail.runs.error is None:
-                detail.runs = detail.runs.model_copy(update={"error": lifted})
-        # 回合轮次 (Tier 2 重载): rounds shares the row's usage column but has no own
-        # attribute, so project it on read (usage itself is normalized by the schema
-        # validator). Drives the bubble's「N 轮」caption alongside usage.
-        rounds = usage.get("rounds")
-        if rounds is not None:
-            detail.rounds = rounds
-        duration_ms = usage.get("duration_ms")
-        if duration_ms is not None:
-            detail.duration_ms = int(duration_ms)
-        # Assistant-row lifecycle (usage.status) — overlay criterion for stream_state.
-        status = usage.get("status")
-        if status is not None:
-            detail.status = status
-        # Cold-path pause latch (usage.paused): write keeps status=running; lift so clients
-        # hydrate as paused rather than streaming.
-        if usage.get("paused"):
-            detail.paused = True
-        # System provenance (usage.origin) — e.g. execution_harvest synthetic user rows.
-        origin = usage.get("origin")
-        if isinstance(origin, str) and origin.strip():
-            detail.origin = origin.strip()
-        # 曾中断恢复 (usage.recovered): crash redrive finished this turn in place.
-        if usage.get("recovered"):
-            detail.recovered = True
-        # In-flight overlay: fill content / reasoning from turn_stream_state when running.
-        # When journal already has process_content, skip captain:content → messages.content
-        # (deliverable_only: narration lives on the process lane, not the content column).
-        if segments:
-            journal_rows = journal_map.get(m.id) or []
-            from agentcore.runtime.events.attach_replay import journal_is_structured
-
-            skip_cap_content = any(
-                (e.get("kind") or "") == f"{_PROCESS_PREFIX}content" for e in journal_rows
-            ) or journal_is_structured(journal_rows)
-            content, reasoning = overlay_message_fields(
-                content=detail.content,
-                reasoning_content=detail.reasoning_content,
-                segments=segments,
-                usage=usage,
-                skip_captain_content=skip_cap_content,
-            )
-            detail.content = content or ""
-            detail.reasoning_content = reasoning
-        collab = usage.get("collab")
-        if collab is not None:
-            detail.collab = TurnCollabMetrics.model_validate(collab)
-        if m.role == "assistant":
-            detail.team_batch = parse_team_batch(
-                team_batch_from_entries(journal_map.get(m.id) or [])
-            )
-        raw_outcome = usage.get("outcome")
-        if raw_outcome in ("ok", "partial", "paused", "error"):
-            detail.outcome = raw_outcome
-        details.append(detail)
+    details: list[MessageDetail] = [
+        _project_message_detail(
+            m,
+            journal_rows=journal_map.get(m.id),
+            segments=stream_map.get(m.id) or [],
+            slim=True,
+        )
+        for m in messages
+    ]
 
     # 记忆更新对话内可见 (§1.6): the conversation-tail「记忆已更新」cards. They sit AFTER
     # the last message, so they belong only to the LATEST window (no before/after/around) —
@@ -282,6 +300,38 @@ async def list_messages(
         has_more_before=has_more_before,
         has_more_after=has_more_after,
         memory_updates=memory_updates,
+    )
+
+
+@router.get("/{conversation_id}/messages/{message_id}", response_model=MessageDetail)
+async def get_message(
+    conversation_id: str,
+    message_id: str,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+    repo: MessageRepository = Depends(get_message_repo),
+    journal_repo: TurnJournalRepository = Depends(get_turn_journal_repo),
+):
+    """One message with the full turn replay payload (冷 GET 降载).
+
+    The conversation list may slim ``runs.events``; this owner-scoped GET returns the
+    same ``MessageDetail`` projection **without** dropping display events, so the
+    team graph / turn-detail page can replay exactly. 404 when the conversation is
+    not owned or the message is not in it (same IDOR posture as delete).
+    """
+    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    message = await repo.get_by_id(message_id, conversation_id=conversation_id)
+    if message is None:
+        raise NotFoundError("消息不存在")
+    journal_map = await journal_repo.load_map([message.id])
+    stream_map = await get_conversation_store().list_stream_segments_map(
+        turn_ids=[message.id]
+    )
+    return _project_message_detail(
+        message,
+        journal_rows=journal_map.get(message.id),
+        segments=stream_map.get(message.id) or [],
+        slim=False,
     )
 
 

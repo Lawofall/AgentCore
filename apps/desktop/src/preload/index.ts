@@ -333,6 +333,8 @@ const outboxApi: OutboxApi = {
     return () => ipcRenderer.removeListener(OUTBOX_CHANNELS.synced, listener);
   },
   authRefresh: () => ipcRenderer.invoke(OUTBOX_CHANNELS.authRefresh),
+  persistAuthCookies: () =>
+    ipcRenderer.invoke(OUTBOX_CHANNELS.persistAuthCookies),
 };
 
 const updaterApi: UpdaterApi = {
@@ -451,6 +453,8 @@ const windowApi: WindowApi = {
   applyFramePreset: (preset: WindowFramePreset) =>
     ipcRenderer.invoke(WINDOW_CHANNELS.applyFramePreset, preset),
   getFramePreset: () => ipcRenderer.invoke(WINDOW_CHANNELS.getFramePreset),
+  setThemeSource: (theme) =>
+    ipcRenderer.send(WINDOW_CHANNELS.setThemeSource, theme),
 };
 
 /** 真 OS 浮窗（方案 C）；主窗侧 open/dock/destroy + closed 订阅。 */

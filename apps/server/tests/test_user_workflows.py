@@ -23,6 +23,7 @@ from agentcore.workflows.playbook_templates import (
     WORKFLOW_PLAYBOOK_IDS,
     PlaybookTemplateError,
     instantiate_from_playbook,
+    is_workflow_playbook,
     list_playbook_templates,
     merge_playbook_slots,
 )
@@ -259,6 +260,8 @@ def test_playbook_template_catalog():
     ids = [i.id for i in items]
     assert ids == list(WORKFLOW_PLAYBOOK_IDS)
     assert set(ids) <= set(PLAYBOOKS)
+    assert "build_website" not in ids
+    assert is_workflow_playbook("build_website") is False
     for item in items:
         assert item.title
         assert item.primary_slots
@@ -271,30 +274,18 @@ def test_playbook_template_catalog():
             assert slot.key in item.primary_slots
 
 
-def test_playbook_template_slots_expose_enum_and_optional():
+def test_playbook_template_slots_are_required_text():
     by_id = {i.id: i for i in list_playbook_templates()}
-
-    style = next(s for s in by_id["build_website"].slots if s.key == "style")
-    assert style.required is False
-    assert [c.value for c in style.choices] == ["marketing", "toolshed"]
+    assert "build_website" not in by_id
 
     compare = by_id["compare_options"]
     assert [s.key for s in compare.slots] == ["question", "options"]
     assert all(s.required for s in compare.slots)
     assert all(not s.choices for s in compare.slots)
 
-
-def test_playbook_template_rejects_value_outside_enum():
-    assert merge_playbook_slots("build_website", {"topic": "官网", "style": "toolshed"})[
-        "style"
-    ] == "toolshed"
-    # Blank optional enum slot → builder default, not an error.
-    assert "style" not in merge_playbook_slots("build_website", {"topic": "官网"})
-
-    with pytest.raises(PlaybookTemplateError) as ei:
-        merge_playbook_slots("build_website", {"topic": "官网", "style": "赛博朋克"})
-    assert "marketing" in str(ei.value)
-    assert "toolshed" in str(ei.value)
+    app = by_id["build_app"]
+    assert [s.key for s in app.slots] == ["app"]
+    assert all(not s.choices for item in by_id.values() for s in item.slots)
 
 
 def test_from_playbook_success_research_report():
@@ -337,11 +328,17 @@ def test_from_playbook_rejects_not_in_catalog():
         assert "暂未列入" in str(ei3.value)
         assert pid in PLAYBOOKS
 
-    # 旧独立 toolshed 已从 PLAYBOOKS 删除 → 未知（非「暂未列入」）。
+    # 旧独立 toolshed / 已废建站套餐已从 PLAYBOOKS 删除 → 未知（非「暂未列入」）。
     with pytest.raises(PlaybookTemplateError) as ei_gone:
         merge_playbook_slots("build_toolshed", {"site": "x"})
     assert "未知" in str(ei_gone.value)
     assert "build_toolshed" not in PLAYBOOKS
+
+    with pytest.raises(PlaybookTemplateError) as ei_site:
+        merge_playbook_slots("build_website", {"topic": "官网"})
+    assert "未知" in str(ei_site.value)
+    assert "build_website" not in PLAYBOOKS
+    assert is_workflow_playbook("build_website") is False
 
 
 def test_from_playbook_rejects_unknown_and_missing_slot():

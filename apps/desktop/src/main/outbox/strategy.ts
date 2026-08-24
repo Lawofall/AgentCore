@@ -254,8 +254,53 @@ const LOCAL_TURN_TOOL_FAILURE_CODES = new Set([
   "not_found",
   "validation_failed",
   "no_default_branch",
+  "not_a_web_url",
+  "url_not_workspace_path",
+  "project_verify_redirect",
+  "source_grep_redirect",
+  "source_dump_redirect",
+  "long_running_redirect",
+  "loopback_host",
   "other",
 ]);
+
+const CHANNEL_REDIRECT_CODES = new Set([
+  "source_grep_redirect",
+  "source_dump_redirect",
+  "project_verify_redirect",
+  "long_running_redirect",
+  "not_a_web_url",
+  "url_not_workspace_path",
+  "loopback_host",
+]);
+
+function remapPathOrVerifyFailure(raw: string): string | null {
+  if (raw.includes("禁止用 code_execute 跑项目级慢验证")) {
+    return "project_verify_redirect";
+  }
+  if (raw.includes("禁止用 code_execute 打开源码再正则扫描")) {
+    return "source_grep_redirect";
+  }
+  if (raw.includes("禁止用 code_execute 把工作区文件 dump")) {
+    return "source_dump_redirect";
+  }
+  if (raw.includes("禁止用 code_execute 启动长驻进程")) {
+    return "long_running_redirect";
+  }
+  if (
+    [
+      "文件不存在：",
+      "片段文件不存在：",
+      "源路径不存在：",
+      "不是目录：",
+      "路径不存在：",
+      "区外路径不存在",
+    ].some((n) => raw.includes(n))
+  ) {
+    return "not_found";
+  }
+  return null;
+}
 
 /**
  * Coarse write-back failure codes (mirrors server
@@ -268,6 +313,10 @@ export function normalizeToolFailureCode(
 ): string {
   const rawCode = (code || "").trim();
   if (LOCAL_TURN_TOOL_FAILURE_CODES.has(rawCode)) {
+    if (rawCode === "schema" || rawCode === "other") {
+      const remapped = remapPathOrVerifyFailure(message || "");
+      if (remapped) return remapped;
+    }
     return rawCode;
   }
   // Legacy git wall-clock used bare ``timeout``; fact write now emits ``git_timeout``.
@@ -333,6 +382,8 @@ export function normalizeToolFailureCode(
   ) {
     return "egress_connect";
   }
+  const remapped = remapPathOrVerifyFailure(raw);
+  if (remapped) return remapped;
   return "other";
 }
 
@@ -386,7 +437,9 @@ export function toolFailuresFromJournal(
     );
     if (built) fromFacts.push(built);
   }
-  if (fromFacts.length > 0) return fromFacts;
+  if (fromFacts.length > 0) {
+    return fromFacts.filter((r) => !CHANNEL_REDIRECT_CODES.has(r.code));
+  }
 
   const fromEnds: Array<{ tool: string; code: string; message: string }> = [];
   for (const entry of entries) {
@@ -398,8 +451,15 @@ export function toolFailuresFromJournal(
         ? (e.payload as Record<string, unknown>)
         : null;
     if (!payload || (payload.status ?? "success") === "success") continue;
+    if (payload.status === "redirect") continue;
+    const failure =
+      payload.failure && typeof payload.failure === "object"
+        ? (payload.failure as Record<string, unknown>)
+        : null;
+    const nestedCode =
+      typeof failure?.code === "string" ? failure.code.trim() : null;
     const rawCode =
-      typeof payload.code === "string" ? payload.code.trim() : null;
+      typeof payload.code === "string" ? payload.code.trim() : nestedCode;
     const built = row(
       String(payload.tool_name || ""),
       String(payload.result || ""),
@@ -407,7 +467,7 @@ export function toolFailuresFromJournal(
     );
     if (built) fromEnds.push(built);
   }
-  return fromEnds;
+  return fromEnds.filter((r) => !CHANNEL_REDIRECT_CODES.has(r.code));
 }
 
 /**
@@ -506,6 +566,22 @@ export function recordHasProcessState(record: OutboxRecord): boolean {
     }
   }
   return !!(record.reasoning_content || "").trim();
+}
+
+/**
+ * Whether an OPEN row should be salvaged (promote / writeback) instead of
+ * aborting the cloud running placeholder — same predicate as salvageOpen in drain.
+ */
+export function shouldSalvageOpenRecord(
+  record: OutboxRecord | null | undefined,
+): boolean {
+  if (!record || record.phase !== PHASE_OPEN) return false;
+  const hasText = fillFromCaptainStreamSegments(record);
+  if (hasText || recordHasProcessState(record)) return true;
+  const um = (record.user_message || "").trim();
+  const hasUm = !!um && um !== EMPTY_USER_MESSAGE_PLACEHOLDER;
+  const hasTrace = (record.trace_id || "").trim().length === 32;
+  return hasUm && hasTrace;
 }
 
 /**

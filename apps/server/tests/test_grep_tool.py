@@ -93,6 +93,19 @@ async def test_grep_literal_newline_pattern_keeps_rg_reason(tmp_path: Path):
     assert "正则" in err
     assert "literal" in err.lower()
     assert "\\n" in err
+    assert "--multiline" not in err
+
+
+async def test_grep_lookaround_does_not_advertise_pcre2(tmp_path: Path):
+    (tmp_path / "a.txt").write_text("hello\n", encoding="utf-8")
+    result = await GrepTool().execute({"pattern": "(?!x)"}, _ctx(tmp_path))
+    assert result.success is False
+    err = result.error or ""
+    assert "正则" in err
+    assert "PCRE2" not in err
+    assert "--pcre2" not in err
+    assert "Rust regex" in err
+    assert "多次 grep" in err
 
 
 def test_regex_error_message_keeps_multiline_rg_diagnostic():
@@ -124,18 +137,45 @@ def test_regex_error_message_keeps_literal_newline_diagnostic():
     msg = _regex_error_message(stderr)
     assert msg is not None
     assert 'literal "\\n"' in msg
-    assert "multiline" in msg.lower()
+    # Product cannot turn on rg's --multiline; don't advertise the flag.
+    assert "--multiline" not in msg
+    assert "-U" not in msg
+    assert "拆成多次" in msg
+
+
+def test_regex_error_message_rewrites_lookaround_instead_of_pcre2():
+    from agentcore.workspace.rg_grep import _regex_error_message
+
+    stderr = (
+        "rg: regex parse error:\n"
+        "    (?:^(?!\\s*$).+)\n"
+        "        ^^^\n"
+        "error: look-around, including look-ahead and look-behind, is not supported\n"
+        "Consider enabling PCRE2 with the --pcre2 flag, which can handle "
+        "look-around as well as other features.\n"
+    )
+    msg = _regex_error_message(stderr)
+    assert msg is not None
+    assert "look-around" in msg
+    assert "^^^" in msg
+    assert "PCRE2" not in msg
+    assert "--pcre2" not in msg
+    assert "Rust regex" in msg
+    assert "lookahead" in msg
+    assert "多次 grep" in msg
 
 
 def test_grep_schema_forbids_literal_newline_as_regex():
     desc = GrepTool().schema.parameters["properties"]["pattern"]["description"]
     assert "禁止把字面" in desc
     assert "\\n" in desc
+    assert "lookahead" in desc
 
 
 def test_grep_schema_teaches_omit_path_when_unsure():
     schema = GrepTool().schema
     assert "省略 path" in schema.description
+    assert "code_execute" in schema.description
     path = schema.parameters["properties"]["path"]["description"]
     assert "不确定时省略" in path
     assert "@scope" in path or "src/" in path

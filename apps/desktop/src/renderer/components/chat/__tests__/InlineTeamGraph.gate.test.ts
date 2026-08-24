@@ -70,16 +70,16 @@ describe("teamHasStartedRuns · inline graph gate", () => {
   it("授权后续跑（running + 已有 run_started）渲染图", () => {
     const exec = projectExecution(plan, [started("r1", "w1")], "running");
     expect(teamHasStartedRuns(exec.runs)).toBe(true);
-    expect(shouldShowTeamGraph(exec.runs, true)).toBe(true);
+    expect(shouldShowTeamGraph(exec.runs)).toBe(true);
   });
 
-  it("已授权但队员仍 pending → 仍渲染图", () => {
+  it("队员仍 pending 也渲染图（无开工卡闸）", () => {
     const exec = projectExecution(plan, [], "running");
     expect(teamHasStartedRuns(exec.runs)).toBe(false);
-    expect(shouldShowTeamGraph(exec.runs, true)).toBe(true);
+    expect(shouldShowTeamGraph(exec.runs)).toBe(true);
   });
 
-  it("journal 回放 captain 已开、工人仍 pending、未授权 → 不出图", () => {
+  it("journal 回放 captain 已开、工人仍 pending → 出图（无开工卡闸）", () => {
     const withCaptain: ExecutionPlan = {
       ...plan,
       id: "exec-gate-captain",
@@ -117,6 +117,6 @@ describe("teamHasStartedRuns · inline graph gate", () => {
         .every((r) => r.status === "pending"),
     ).toBe(true);
     expect(teamHasStartedRuns(exec.runs)).toBe(false);
-    expect(shouldShowTeamGraph(exec.runs, false)).toBe(false);
+    expect(shouldShowTeamGraph(exec.runs)).toBe(true);
   });
 });

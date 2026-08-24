@@ -27,6 +27,7 @@ from agentcore.core.errors import (
 )
 from agentcore.core.logging import get_logger
 from agentcore.core.net import outbound_async_client
+from agentcore.core.task_cancel import raise_if_task_cancelled
 from agentcore.llm.observability import log_llm_call
 from agentcore.llm.provider.protocol import TokenUsage
 from agentcore.vision.protocol import VisionReading
@@ -156,6 +157,7 @@ class QwenVLReader:
         last_error: Exception | None = None
         backoff = _INITIAL_BACKOFF
         for attempt in range(_MAX_RETRIES):
+            raise_if_task_cancelled()
             try:
                 response = await client.post("/chat/completions", json=payload)
                 self._raise_for_status(response.status_code, backoff, response.headers)
@@ -173,6 +175,7 @@ class QwenVLReader:
                 await asyncio.sleep(wait)
                 backoff *= _BACKOFF_MULTIPLIER
             except httpx.TimeoutException as e:
+                raise_if_task_cancelled(e)
                 last_error = LLMTimeoutError(f"连接 {self._name} 超时，请检查网络后重试")
                 if attempt == _MAX_RETRIES - 1:
                     raise last_error from e

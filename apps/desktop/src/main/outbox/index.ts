@@ -23,6 +23,7 @@ export {
   fillFromCaptainStreamSegments,
   recordHasProcessState,
   shouldDeleteOutboxAfterAck,
+  shouldSalvageOpenRecord,
   toRecordTurnBody,
 } from "./strategy";
 
@@ -33,6 +34,7 @@ export {
   statusSnapshot,
   flushTurn,
   recoverLocalPersistence,
+  handleOccupiedTurnSidecarFailure,
   startOutboxPolling,
   stopOutboxPolling,
   registerOutboxIpc,

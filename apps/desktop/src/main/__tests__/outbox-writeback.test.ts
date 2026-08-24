@@ -32,6 +32,7 @@ vi.mock("electron", () => ({
 vi.mock("../auth-client", () => ({
   bearerPostJson: h.bearerPostJson,
   refreshAccessToken: vi.fn(async () => "renewed" as const),
+  persistAuthCookies: vi.fn(async () => {}),
 }));
 
 vi.mock("../log-service", () => ({
@@ -712,6 +713,32 @@ describe("drainOutbox", () => {
     expect(normalizeToolFailureCode("x", "timeout")).toBe("git_timeout");
     expect(normalizeToolFailureCode("x", "no_repo")).toBe("no_repo");
     expect(normalizeToolFailureCode("x", "schema")).toBe("schema");
+    expect(normalizeToolFailureCode("x", "not_a_web_url")).toBe(
+      "not_a_web_url",
+    );
+    expect(normalizeToolFailureCode("x", "url_not_workspace_path")).toBe(
+      "url_not_workspace_path",
+    );
+    expect(normalizeToolFailureCode("文件不存在：docs/ghost.md")).toBe(
+      "not_found",
+    );
+    expect(
+      normalizeToolFailureCode("不是目录：apps/server/src", "schema"),
+    ).toBe("not_found");
+    expect(normalizeToolFailureCode("x", "not_found")).toBe("not_found");
+    expect(
+      normalizeToolFailureCode(
+        "禁止用 code_execute 跑项目级慢验证（检测到：pytest）。",
+      ),
+    ).toBe("project_verify_redirect");
+    expect(normalizeToolFailureCode("x", "project_verify_redirect")).toBe(
+      "project_verify_redirect",
+    );
+    expect(
+      normalizeToolFailureCode(
+        "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+      ),
+    ).toBe("source_grep_redirect");
   });
 
   it("toolFailuresFromJournal prefers tool_call over tool_use_end", () => {
@@ -763,6 +790,23 @@ describe("drainOutbox", () => {
         message: "工作区无 git 仓库",
       },
     ]);
+  });
+
+  it("toolFailuresFromJournal omits channel redirects", () => {
+    expect(
+      toolFailuresFromJournal([
+        {
+          kind: "tool_call",
+          payload: {
+            name: "code_execute",
+            success: false,
+            result:
+              "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+            code: "source_grep_redirect",
+          },
+        },
+      ]),
+    ).toEqual([]);
   });
 
   it("toolFailuresFromJournal maps 缺少必填参数 to schema", () => {

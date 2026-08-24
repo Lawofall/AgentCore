@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
 # Short verbal affirmations (governance filters these out of "real user intent"
 # chunks). Never used to skip team_preview — ask ⊥ kickoff.
@@ -12,20 +11,6 @@ _AFFIRM_RE = re.compile(
     r"ok|okay|yes|yep|sure|go|lgtm)[.!！。…]*$",
     re.IGNORECASE,
 )
-
-
-def should_preview_delegate_plan(plan: Any) -> bool:
-    """Plan-half heuristic for a delegate kickoff summary (ignores autonomy).
-
-    True when ≥2 workers. Solo stays off. Confirmed ``ask_user`` does **not**
-    interact with this half (ask ⊥ team_preview).
-
-    When any node has ``checkpoint_after``, the plan-preview half yields — mid-batch
-    outline / plan_review cards own that拍板.
-    """
-    if any(bool(getattr(n, "checkpoint_after", False)) for n in plan.nodes):
-        return False
-    return len(plan.nodes) >= 2
 
 
 def is_short_affirmation(text: str) -> bool:

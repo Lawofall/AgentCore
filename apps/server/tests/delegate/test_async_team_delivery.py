@@ -1216,6 +1216,53 @@ async def test_pillar_d_await_live_detached_drive_delays_until_done():
 
 
 @pytest.mark.asyncio
+async def test_pillar_d_await_terminal_posted_hung_drive_bounded_return():
+    """终态已投递 + drive 挂死 → grace 内有界返回，不 cancel drive，仍 settle。"""
+    from structlog.testing import capture_logs
+
+    from agentcore.runtime.coordination import session as session_mod
+    from agentcore.runtime.coordination.session import await_live_detached_drive
+
+    hang = asyncio.Event()
+
+    async def _hung() -> None:
+        await hang.wait()
+
+    session = CoordinationSession(
+        execution_id="exec-d1-hung",
+        total_workers=1,
+        conversation_id="conv-d1-hung",
+    )
+    session.drive_task = asyncio.create_task(_hung())
+    session.turn_attached = False
+    session.terminal_posted = True
+    set_active_coordination(session)
+
+    with (
+        patch.object(session_mod, "_AWAIT_DETACHED_DRIVE_GRACE_S", 0.05),
+        capture_logs() as logs,
+    ):
+        awaited = await asyncio.wait_for(
+            await_live_detached_drive("conv-d1-hung"), timeout=1
+        )
+
+    assert awaited is True
+    assert not session.drive_task.done()
+    assert not session.drive_task.cancelled()
+    expired = [
+        e
+        for e in logs
+        if e.get("event") == "coordination.await_detached_drive_grace_expired"
+    ]
+    assert expired
+    assert expired[0].get("conversation_id") == "conv-d1-hung"
+
+    session.drive_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await session.drive_task
+
+
+@pytest.mark.asyncio
 async def test_pillar_d_await_skips_when_no_live_detached_drive():
     """无 live detached drive（仍附着 / user_stopped / 无 session）→ 立即返回，不阻塞 close。"""
     from agentcore.runtime.coordination.session import await_live_detached_drive

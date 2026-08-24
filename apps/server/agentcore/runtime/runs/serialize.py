@@ -13,6 +13,7 @@ never breaks loading an older row.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, fields
 from typing import Any
 
@@ -182,6 +183,20 @@ def file_products_from_transcript(transcript: list[LLMMessage]) -> list[FileProd
         if msg.role != "tool":
             continue
         for product in file_products_from_text(llm_content_text(msg.content)):
+            path = product.path.strip()
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            out.append(product)
+    return out
+
+
+def merge_file_products(*groups: Sequence[FileProduct]) -> list[FileProduct]:
+    """Union product ledgers (first-seen path wins). Host/runtime rows after transcript."""
+    out: list[FileProduct] = []
+    seen: set[str] = set()
+    for group in groups:
+        for product in group:
             path = product.path.strip()
             if not path or path in seen:
                 continue

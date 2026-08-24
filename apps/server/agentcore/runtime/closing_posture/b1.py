@@ -18,7 +18,6 @@ from .browser import (
 )
 from .cancel_zero import (
     clear_cancel_zero_output,
-    turn_has_cancel_zero_output,
 )
 from .cloud_web import clear_cloud_web_verify_gap
 from .core import (
@@ -31,7 +30,6 @@ from .cutoff import (
 )
 from .empty_handoff import (
     clear_empty_handoff_storm,
-    turn_has_empty_handoff_storm,
 )
 from .hollow import (
     claims_hollow_in_progress,
@@ -81,31 +79,26 @@ def reset_turn_scoped_closing_state(*, promotion_ledger: Any = None) -> None:
 
 
 def _partial_storm_rework(content: str) -> str | None:
-    """超席 / 空交接风暴 / cancel·0 产出：强制 PARTIAL 缺口清单，禁空悬·空心开讲."""
+    """超席：强制 PARTIAL 缺口清单，禁空悬·空心开讲."""
     text = content or ""
     if not text.strip():
         return None
-    storm = (
-        turn_has_over_seat_reject()
-        or turn_has_empty_handoff_storm()
-        or turn_has_cancel_zero_output()
-    )
-    if not storm:
+    if not turn_has_over_seat_reject():
         return None
     if claims_posture_a(text) or claims_hollow_in_progress(text):
         return (
-            "本回合存在超席拒绝 / 大量空交接 / 取消且零落盘——"
+            "本回合存在超席拒绝——"
             "对账须按 PARTIAL：禁止姿势 A 与『仍在进行』空悬终态。"
             "请给出已完成席位摘要 + 未交付缺口清单 + 可继续动作。"
         )
     if claims_hollow_teach_invite(text):
         return (
-            "本回合存在空交接或硬顶类缺口——禁止空心『请开讲/我在听』邀请；"
+            "本回合存在超席缺口——禁止空心『请开讲/我在听』邀请；"
             "请改为点名缺口与下一步。"
         )
     if not claims_draft_acknowledgment(text):
         return (
-            "本回合超席/空交接/取消零产出——终稿须承认部分完成或点名未交付清单"
+            "本回合超席——终稿须承认部分完成或点名未交付清单"
             "（缺口 + 可继续动作），禁止仅写『重新派工』短句。"
         )
     return None
@@ -118,12 +111,11 @@ def _ceiling_hollow_teach_rework(content: str) -> str | None:
         return None
     if not (
         turn_has_cutoff_delivery_gap()
-        or turn_has_empty_handoff_storm()
         or turn_has_over_seat_reject()
     ):
         return None
     return (
-        "本回合存在预算掐断/空交接类缺口——正文不得空心邀请用户开讲或『我在听·请讲』；"
+        "本回合存在预算掐断/超席类缺口——正文不得空心邀请用户开讲或『我在听·请讲』；"
         "请按部分交付点名已落地与未闭合项。"
     )
 

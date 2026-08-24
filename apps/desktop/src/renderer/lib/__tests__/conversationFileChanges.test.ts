@@ -1,7 +1,6 @@
 import {
   conversationHasFileArtifacts,
   conversationHasRestorableEntry,
-  conversationSupportsChangesTab,
   shouldBounceChangesTabToWorkspace,
   shouldIncludeChangesTurn,
   shouldPinChangesTab,
@@ -128,36 +127,27 @@ describe("shouldIncludeChangesTurn (P0c)", () => {
 
 const pinBase = {
   conversationId: "c1" as string | null,
-  hasRestorableEntry: false,
-  changesFocusMessageId: null as string | null,
+  changesOpen: false,
   isChangesFloating: false,
-  activeTabId: WORKSPACE_TAB_ID,
 };
 
-describe("shouldPinChangesTab (P0c)", () => {
-  it("is false for drafts even with restorable / focus / float / active", () => {
+describe("shouldPinChangesTab (P0c · 按需)", () => {
+  it("is false for drafts even when open or floating", () => {
     expect(
       shouldPinChangesTab({
-        ...pinBase,
         conversationId: null,
-        hasRestorableEntry: true,
-        changesFocusMessageId: "m1",
+        changesOpen: true,
         isChangesFloating: true,
-        activeTabId: CHANGES_TAB_ID,
       }),
     ).toBe(false);
   });
 
-  it("pins when restorable without requiring the tab to be active", () => {
-    expect(shouldPinChangesTab({ ...pinBase, hasRestorableEntry: true })).toBe(
-      true,
-    );
+  it("does not pin on restorable alone", () => {
+    expect(shouldPinChangesTab({ ...pinBase, changesOpen: false })).toBe(false);
   });
 
-  it("pins on deep-link focus", () => {
-    expect(
-      shouldPinChangesTab({ ...pinBase, changesFocusMessageId: "m1" }),
-    ).toBe(true);
+  it("pins when the user opened 改动 (showChanges / + menu)", () => {
+    expect(shouldPinChangesTab({ ...pinBase, changesOpen: true })).toBe(true);
   });
 
   it("pins while the tab is floating", () => {
@@ -166,68 +156,36 @@ describe("shouldPinChangesTab (P0c)", () => {
     );
   });
 
-  it("pins when showChanges already made it the active dock tab", () => {
-    expect(
-      shouldPinChangesTab({ ...pinBase, activeTabId: CHANGES_TAB_ID }),
-    ).toBe(true);
-  });
-
   it("is false when nothing supports the tab", () => {
     expect(shouldPinChangesTab(pinBase)).toBe(false);
   });
 });
 
-describe("conversationSupportsChangesTab", () => {
-  it("does not treat active-tab crutch as independent support", () => {
-    expect(
-      conversationSupportsChangesTab({
-        conversationId: "c1",
-        hasRestorableEntry: false,
-        changesFocusMessageId: null,
-        isChangesFloating: false,
-      }),
-    ).toBe(false);
-  });
-});
-
 describe("shouldBounceChangesTabToWorkspace", () => {
-  it("bounces when the new conversation cannot support 改动 and dock is still on it", () => {
+  it("bounces when dock is still on 改动 but tab was closed", () => {
     expect(
       shouldBounceChangesTabToWorkspace({
-        conversationId: "c2",
-        hasRestorableEntry: false,
         activeTabId: CHANGES_TAB_ID,
+        changesOpen: false,
       }),
     ).toBe(true);
   });
 
-  it("does not bounce when the new conversation has restorable entries", () => {
+  it("does not bounce when 改动 is still open", () => {
     expect(
       shouldBounceChangesTabToWorkspace({
-        conversationId: "c2",
-        hasRestorableEntry: true,
         activeTabId: CHANGES_TAB_ID,
+        changesOpen: true,
       }),
     ).toBe(false);
   });
 
-  it("does not bounce when dock is not on 改动 (empty Git-chip open stays until switch)", () => {
+  it("does not bounce when dock is not on 改动", () => {
     expect(
       shouldBounceChangesTabToWorkspace({
-        conversationId: "c1",
-        hasRestorableEntry: false,
         activeTabId: WORKSPACE_TAB_ID,
+        changesOpen: false,
       }),
     ).toBe(false);
-  });
-
-  it("bounces when leaving to a draft while on 改动", () => {
-    expect(
-      shouldBounceChangesTabToWorkspace({
-        conversationId: null,
-        hasRestorableEntry: false,
-        activeTabId: CHANGES_TAB_ID,
-      }),
-    ).toBe(true);
   });
 });

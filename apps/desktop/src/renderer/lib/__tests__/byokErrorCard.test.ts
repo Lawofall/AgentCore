@@ -235,6 +235,7 @@ describe("upstream 429 is a refusal, not a connectivity fault", () => {
     expect(described?.message).toBe(QUOTA_RESET_MESSAGE);
     // Waiting is the only fix — no「去服务商」CTA next to a working key.
     expect(described?.action).toBeNull();
+    expect(described?.retriable).toBe(false);
   });
 
   it("names the recovery moment in the user's own timezone, no zone label", () => {

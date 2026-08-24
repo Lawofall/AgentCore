@@ -25,7 +25,9 @@ def code_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
     execution-equivalent). Local / sidecar execution stays on; cloud ``location=server``
     cloud defaults **on** via ``GVISOR_ENABLED`` (code default true；紧急可 false)；
     or ``CODE_EXECUTE_CLOUD_ENABLED`` escape hatch (a plain subprocess in the API
-    container is not a real isolation boundary — 安全权限与治理 §5). Keeping both
+    container is not a real isolation boundary — 安全权限与治理 §5). The desktop
+    sidecar process is never a gVisor host: a cloud desk from sidecar withholds
+    the class (do not pretend isolation on the user's machine). Keeping both
     tools behind ONE predicate (not a per-tool special-case) is what makes the
     production-security posture cover the class consistently.
 
@@ -44,12 +46,29 @@ def code_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
         return True
     if backend.location == "local":
         return True
+    # gVisor lives in the cloud API process only. The desktop sidecar must not
+    # assemble isolation execution for a cloud desk — Windows would fail
+    # ``not_linux`` in 10ms and retire the family as if the local interpreter
+    # were dead; Linux sidecar would isolate against sidecar-local files, not
+    # the cloud volume. SEC-005 also forbids falling back to a plain subprocess
+    # on ``location=server``.
+    if _sidecar_process_hosts_no_cloud_sandbox():
+        return False
     if not (settings.gvisor_enabled or settings.code_execute_cloud_enabled):
         return False
     from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health
 
     # False → known unhealthy; True / None (never probed) → config gate alone.
     return cloud_sandbox_health() is not False
+
+
+def _sidecar_process_hosts_no_cloud_sandbox() -> bool:
+    """True when this process is the desktop engine (never a gVisor host)."""
+    try:
+        from agentcore.sidecar.server_pkg.core import is_sidecar_process
+    except ImportError:
+        return False
+    return is_sidecar_process()
 
 
 def execution_class_enabled_for(

@@ -19,10 +19,6 @@ import {
   formatGrantOrganizeFolderAnswer,
   pickAndGrantOrganizeFolder,
 } from "@/lib/grantOrganizeFolder";
-import {
-  formatGrantReadonlyFolderAnswer,
-  pickAndGrantReadonlyFolder,
-} from "@/lib/grantReadonlyFolder";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
 import {
   formatRegisterLocalFolderAnswer,
@@ -51,6 +47,13 @@ import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
 
 /** 常驻人话框 — 选项 + 一句补充，前端不再注入「其他…」。 */
 export const ASK_NOTE_PLACEHOLDER = "选项都不对，或有补充，写在这里";
+
+/**
+ * 旧 Ask 按钮 `grant_readonly_folder` 停履约：枚举仍解析，点了只报诚实失败
+ *（不调目录选择器、不授权）。现行只读挂载走 `external_mount_readonly`。
+ */
+export const GRANT_READONLY_FOLDER_RETIRED =
+  "旧版只读授权已停用，不会打开目录选择、也不会授权。只读区外目录改由 AI 直接挂载。";
 
 /** The minimal ask content the shared fields render. A {@link CheckpointDisplay}
  * (live/replay), a paused-turn frame, and a worker escalation all satisfy it. */
@@ -186,6 +189,12 @@ export function AskQuestionFields({
   const handleBindOption = async (q: AskQuestion, opt: AskOption) => {
     if (disabled || bindBusyLabel) return;
 
+    if (opt.action === "grant_readonly_folder") {
+      clearPickerFeedback();
+      setBindError(GRANT_READONLY_FOLDER_RETIRED);
+      return;
+    }
+
     if (opt.action === "open_local_project") {
       if (!hasLocalFiles() || !window.fsApi) return;
       setBindBusyLabel(opt.label);
@@ -228,30 +237,6 @@ export function AskQuestionFields({
       const value = formatRegisterLocalFolderAnswer(
         opt.label,
         result.folder.name,
-      );
-      try {
-        await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
-      } catch {
-        setBindBusyLabel(null);
-      }
-      return;
-    }
-    if (opt.action === "grant_readonly_folder") {
-      const hints = grantHintsFromAskOption(opt);
-      const result = await pickAndGrantReadonlyFolder(conversationId, hints);
-      if (!result.ok) {
-        if (result.reason === "unavailable") {
-          setBindError("区外目录授权仅桌面端可用");
-        } else {
-          setBindError(result.message);
-        }
-        setBindBusyLabel(null);
-        return;
-      }
-      const value = formatGrantReadonlyFolderAnswer(
-        opt.label,
-        result.displayLabel ?? result.root.name,
-        result.namespace,
       );
       try {
         await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
@@ -514,6 +499,10 @@ function QuestionField({
                       onClick={() => {
                         if (!desktopFolder) {
                           onToggleChoice(opt.label);
+                          return;
+                        }
+                        if (opt.action === "grant_readonly_folder") {
+                          onFolderUnavailable?.(GRANT_READONLY_FOLDER_RETIRED);
                           return;
                         }
                         if (!hasLocalFiles()) {

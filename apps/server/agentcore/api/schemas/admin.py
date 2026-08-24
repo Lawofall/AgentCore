@@ -673,6 +673,9 @@ class ReplayMessage(BaseModel):
     id: str
     role: str
     content: str | None
+    # DERIVED thinking stream (``messages.reasoning_content``); null on user rows
+    # and bare turn markers. Not projected from turn_journal.
+    reasoning_content: str | None = None
     created_at: datetime
     trace_id: str | None
     metrics: TurnMetricLine | None = None

@@ -216,9 +216,8 @@ def _handoff_policy_with_dependents(form: DeliverableForm | None) -> str:
     )
     if form == "prose":
         body += (
-            "\n【正文门槛】结论与根因必须写在回复正文（非空即可）；"
-            "handoff 的 summary 不算正文——只交 summary、正文为空会被拒收，"
-            "加长 summary 也不能代替正文。"
+            "\n结论与根因写在回复正文更清楚；handoff 的 summary 是给下游的短接力，不是正文替代。"
+            "summary 不算正文；正文非空即可，不设字数门槛。"
         )
     return body
 
@@ -335,10 +334,13 @@ _WORKER_PROBLEM_HANDLING = """\
 # Shared path-finding nudge (leaf + captain): avoid reading vague workspace roots.
 # Inserted in build_worker_identity — not inside captain nesting preamble (P3 surface).
 _WORKER_PATH_FIND_NUDGE = """\
-【找路径】含糊「根」/ `.` / 仅根标签时：先 file_list(pattern)（非 * 即整仓按名查找）/\
+【找路径】「前置结果」已列出具体相对路径 → 直接 file_read 那些路径，【禁止】再全仓 \
+file_list / grep 当开工。仅路径含糊（「根」/ `.` / 仅根标签）或列表缺文件时：先 \
+file_list(pattern)（非 * 即整仓按名查找）/\
  grep（不确定则省略 path）/code_search 钉真实文件再 \
-file_read；磁盘上已有的具体相对路径可直接读。看已有源码正文用 file_read（可分页）；【禁止】为看内容用 \
-code_execute print / 整文件 dump。约定文档出口是写入落点（见 `<workspace_context>` \
+file_read；磁盘上已有的具体相对路径可直接读。看已有源码正文用 file_read（可分页）；搜/计符号用 grep / \
+code_search。【禁止】为看内容用 code_execute print / 整文件 dump，也【禁止】open 源码再正则扫描。\
+约定文档出口是写入落点（见 `<workspace_context>` \
 该行「现有」/「当前为空」），勿按话题拼接文件名；清单没有的先 file_list 该目录。工具报路径不存在时按回报里的\
 上级样本或根查找提示纠偏；约定出口列目录若回报空目录属正常（写入时会自动创建），勿当错误反复重试。"""
 

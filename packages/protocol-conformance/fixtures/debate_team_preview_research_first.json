@@ -1,6 +1,6 @@
 {
   "name": "debate_team_preview_research_first",
-  "description": "辩论开工卡：offer_research_first → resolve research_first（不开赛·回灌文案）",
+  "description": "开工卡已退役、不再发事件对：research_first 回灌旧路径（不开赛）",
   "events": [
     {
       "type": "message_start",
@@ -43,43 +43,6 @@
       "timestamp": "2026-01-01T00:00:00.003Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp-debate-rf",
-        "conversation_id": "conv_demo",
-        "workers": [],
-        "tools": [],
-        "primitive": "debate",
-        "motion": "该不该上四天工作制？",
-        "form": "debate",
-        "sides": [
-          {
-            "key": "pro",
-            "name": "正方",
-            "stance": "应推广"
-          },
-          {
-            "key": "con",
-            "name": "反方",
-            "stance": "暂缓"
-          }
-        ],
-        "max_rounds": 5,
-        "thorough": true,
-        "revision": 1
-      },
-      "timestamp": "2026-01-01T00:00:00.004Z"
-    },
-    {
-      "type": "team_preview_resolved",
-      "payload": {
-        "checkpoint_id": "tp-debate-rf",
-        "decision": "research_first",
-        "note": ""
-      },
-      "timestamp": "2026-01-01T00:00:00.005Z"
-    },
-    {
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "db1",
@@ -87,14 +50,14 @@
         "status": "success",
         "result": "用户在开赛确认中选择「先多视角调研再辩」。本场辩论未授权，请勿再次调用 debate。本回合必须立即调用 delegate(playbook=\"multi_lens_research\", playbook_args={\"topic\": \"该不该上四天工作制？\"})；调研与呈报完成、用户拍板后再开辩。"
       },
-      "timestamp": "2026-01-01T00:00:00.006Z"
+      "timestamp": "2026-01-01T00:00:00.004Z"
     },
     {
       "type": "content_delta",
       "payload": {
         "delta": "好的，我先挂多视角调研。"
       },
-      "timestamp": "2026-01-01T00:00:00.007Z"
+      "timestamp": "2026-01-01T00:00:00.005Z"
     },
     {
       "type": "message_end",
@@ -117,7 +80,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:00.008Z"
+      "timestamp": "2026-01-01T00:00:00.006Z"
     }
   ],
   "projected": {
@@ -131,15 +94,7 @@
     "process": [
       {
         "kind": "content",
-        "text": "我来组织一场辩论。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp-debate-rf"
-      },
-      {
-        "kind": "content",
-        "text": "好的，我先挂多视角调研。"
+        "text": "我来组织一场辩论。好的，我先挂多视角调研。"
       }
     ],
     "citations": [],
@@ -152,14 +107,7 @@
       "completed": 0,
       "total": 0
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp-debate-rf",
-        "status": "resolved",
-        "workerIds": []
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

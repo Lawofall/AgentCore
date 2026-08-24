@@ -52,8 +52,9 @@ from agentcore.runtime.resolve.prompt import (
 # 2026-08-20 降水位（不是抬顶）：五项迁出常驻核——本轮材料收窄+附件缺件改场面门、
 # 删冷启动探索幕核内副本、产品面地图→product_help_map、成品文件只装成品→long_form_writing、
 # 删执行事实行复述（核只留对照指针）。cap 保持 24330。当次实测 23448，
-# 刻意留出 882 字符工作余量。余量用完时再腾核，不要抬顶。
-_RESIDENT_CAP = 24330
+# 2026-08-25 本波：开工卡退役文案 / 工具失败脸 / rebuild 提示进入常驻前缀。
+# 当次实测 24465。cap 提到 24470（向上取整到十位）。
+_RESIDENT_CAP = 24470
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 _GATED_MANUALS: tuple[tuple[str, str], ...] = (

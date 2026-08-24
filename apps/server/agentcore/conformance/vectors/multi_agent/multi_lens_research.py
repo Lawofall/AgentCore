@@ -1,6 +1,6 @@
 """多视角深度调研（幕 1）端到端合成向量。
 
-对齐 playbook ``multi_lens_research``：CEO delegate → team_preview →
+对齐 playbook ``multi_lens_research``：CEO delegate →
 4 异质透镜并行 → 汇总分析师 depends_on 四路（handoff 携 ``motion_card``）→
 CEO 收尾呈报「建议开辩」（开辩入口是 stage_card，不是 followups chips）。
 
@@ -21,8 +21,6 @@ from agentcore.runtime.events import (
     run_progress,
     run_reasoning_delta,
     run_started,
-    team_preview_required,
-    team_preview_resolved,
     tool_use_end,
     tool_use_start,
 )
@@ -86,29 +84,8 @@ def _plan_runs() -> list[dict]:
     return runs
 
 
-def _preview_workers() -> list[dict]:
-    workers = [
-        {
-            "run_id": rid,
-            "role": role,
-            "task": task,
-            "depends_on": [],
-        }
-        for rid, role, task in _LENSES
-    ]
-    workers.append(
-        {
-            "run_id": "synthesizer",
-            "role": "汇总分析师",
-            "task": f"交叉验证综述 · {_TOPIC}",
-            "depends_on": [rid for rid, _r, _t in _LENSES],
-        }
-    )
-    return workers
-
-
 def _multi_agent_multi_lens_research() -> list[SSEEvent]:
-    """幕 1 全链路：team_preview(delegate) → 4 透镜并行流式 → 汇总+motion_card → CEO 建议开辩。"""
+    """幕 1 全链路：delegate → 4 透镜并行流式 → 汇总+motion_card → CEO 建议开辩。"""
     agents = _agents()
     plan_runs = _plan_runs()
     return [
@@ -130,14 +107,6 @@ def _multi_agent_multi_lens_research() -> list[SSEEvent]:
             agents=agents,
             runs=plan_runs,
         ),
-        team_preview_required(
-            checkpoint_id="tp_mlr1",
-            conversation_id=_CONV,
-            workers=_preview_workers(),
-            tools=["web_search", "web_fetch", "file_read"],
-            primitive="delegate",
-        ),
-        team_preview_resolved(checkpoint_id="tp_mlr1", decision="continue"),
         # ── 波 1：四路透镜并行开跑（汇总仍排队）──────────────────────────
         run_started("lens_0", "lens_0"),
         run_started("lens_1", "lens_1"),

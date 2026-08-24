@@ -1,8 +1,19 @@
-import { Badge } from "@/components/ui/Badge";
 import type { NormalizedCitation } from "@/components/chat/chatTurn";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ChevronDown, ChevronRight, Globe } from "lucide-react";
 import { useState } from "react";
 
+const PREVIEW_COUNT = 3;
+
+function pillLabel(c: NormalizedCitation): string {
+  return c.title || c.site || c.url || "来源";
+}
+
+/**
+ * Desktop-like source row: titles stay visible as compact numbered pills; snippets
+ * stay behind the expand control so a source-heavy turn does not inflate
+ * the reading column.
+ */
 export function SourceCards({
   citations,
 }: {
@@ -10,8 +21,11 @@ export function SourceCards({
 }) {
   const [open, setOpen] = useState(false);
   if (citations.length === 0) return null;
+  const preview = citations.slice(0, PREVIEW_COUNT);
+  const extra = citations.length - preview.length;
+
   return (
-    <section aria-label="来源" className="min-w-0 max-w-full space-y-2">
+    <section aria-label="来源" className="min-w-0 max-w-full space-y-1.5">
       <button
         type="button"
         aria-expanded={open}
@@ -19,51 +33,76 @@ export function SourceCards({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+        className="inline-flex items-center gap-1.5 rounded-lg text-muted-foreground text-xs outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
-        来源 {citations.length}
+        <Globe size={14} className="shrink-0" aria-hidden />
+        <span>
+          来源 {citations.length}
+          {extra > 0 && !open ? ` · 还有 ${extra} 个` : ""}
+        </span>
         {open ? (
           <ChevronDown size={14} className="shrink-0" aria-hidden />
         ) : (
           <ChevronRight size={14} className="shrink-0" aria-hidden />
         )}
       </button>
+      {!open && (
+        <ul className="flex flex-wrap items-center gap-1.5">
+          {preview.map((c, i) => (
+            <li key={c.id || `${c.url}-${i}`}>
+              <span
+                className="inline-flex max-w-[11rem] items-center gap-1.5 truncate rounded-full border border-border bg-card py-1 pl-2 pr-2.5 text-xs"
+                title={pillLabel(c)}
+              >
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {i + 1}
+                </span>
+                <span className="min-w-0 truncate text-foreground">
+                  {pillLabel(c)}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {open && (
-        <ul className="space-y-2">
+        <ul className="space-y-1.5">
           {citations.map((c, i) => (
             <li
-              key={c.id || `${c.url}-${i}`}
-              className="min-w-0 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm"
+              key={c.id || `${c.url}-${i}-full`}
+              className="min-w-0 rounded-lg border border-border bg-card px-3 py-2 text-sm"
             >
-              <div className="flex min-w-0 items-center gap-2">
-                <span
-                  className="min-w-0 truncate font-medium text-foreground"
-                  title={c.title || c.url || "来源"}
-                >
-                  {c.title || c.url || "来源"}
+              <div className="flex min-w-0 items-start gap-2">
+                <span className="mt-0.5 w-4 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+                  {i + 1}
                 </span>
-                {c.tier && <Badge className="shrink-0" tone="neutral">{c.tier}</Badge>}
-                {c.site && (
-                  <span className="min-w-0 truncate text-muted-foreground text-xs" title={c.site}>
-                    {c.site}
-                  </span>
-                )}
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="font-medium text-foreground"
+                    title={pillLabel(c)}
+                  >
+                    {pillLabel(c)}
+                  </p>
+                  {c.snippet ? (
+                    <p className="mt-1 line-clamp-3 break-words text-muted-foreground text-xs leading-relaxed">
+                      {c.snippet}
+                    </p>
+                  ) : null}
+                  {c.url ? (
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={cn(
+                        "mt-1 block truncate text-primary text-xs",
+                        !c.snippet && "mt-0.5",
+                      )}
+                    >
+                      {c.url}
+                    </a>
+                  ) : null}
+                </div>
               </div>
-              {c.url && (
-                <a
-                  href={c.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-0.5 block truncate text-xs text-primary"
-                >
-                  {c.url}
-                </a>
-              )}
-              {c.snippet && (
-                <p className="mt-1 line-clamp-2 break-words text-muted-foreground text-xs">
-                  {c.snippet}
-                </p>
-              )}
             </li>
           ))}
         </ul>

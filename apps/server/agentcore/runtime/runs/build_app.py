@@ -1,6 +1,6 @@
 """绿场软件 / SPA 完整交付 playbook（scaffold-first 多波 → 结构完整性 → 诚实交付）.
 
-独立模块，避免再胀 ``playbooks.py``。对标 ``build_website``：``intensity`` 编制档
+独立模块，避免再胀 ``playbooks.py``。``intensity`` 编制档
 （默认 lean 三节点；full = 五阶段满档）；``form=files`` + ``strict``；顶层批次由调用方
 设 criteria（含自动 ``graph_consistent``）。
 

@@ -21,8 +21,8 @@ import {
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { buildCitationDisplayMap } from "@/lib/citationDisplayMap";
 import { copyText } from "@/lib/clipboard";
+import { hasUnpricedUsage, resolveTurnDisplayMoney } from "@/lib/cost";
 import {
-  TURN_CANCELLED_EMPTY_MESSAGE,
   connectivityEscalationSuffix,
   degradedFinishChipLabel,
   formatAssistantErrorMessage,
@@ -55,13 +55,17 @@ import {
   getActiveRuntime,
   useConversationStore,
 } from "@/stores/conversation";
-import { useExecutionStore } from "@/stores/execution";
+import { useExecutionStore, useMessageExecution } from "@/stores/execution";
 import { useMessageInteractionCards } from "@/stores/interactions";
 import { useUsageStore } from "@/stores/usage";
 import { AlertTriangle, Check, Copy, KeyRound, RotateCcw } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { AssistantMessageFooter } from "./AssistantMessageFooter";
+import {
+  AssistantMessageFooter,
+  AssistantMessageMetaSummary,
+} from "./AssistantMessageFooter";
+import { MessageTime } from "./MessageActions";
 import { ComposingToolLine, ProcessTimeline } from "./ProcessTimeline";
 import { SyncStatusHint } from "./SyncStatusHint";
 import { ThinkingDots, ThinkingPanel } from "./Thinking";
@@ -155,12 +159,13 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
   // the same projection key — querying by the local client UUID silently missed
   // every card (统一投影键, 时间线一期).
   const projectionId = assistantProjectionId(message);
-  const { checkpoints, planReviews, teamPreviews } = useMessageInteractionCards(
+  const { checkpoints, planReviews } = useMessageInteractionCards(
     conversationId,
     projectionId,
   );
   const hasDedicatedPauseOrAskUi =
-    checkpoints.length > 0 || planReviews.length > 0 || teamPreviews.length > 0;
+    checkpoints.some((c) => c.status === "pending") ||
+    planReviews.some((p) => p.status === "pending");
   const execSlot = useExecutionStore((s) => s.byId[projectionId]);
   const hasTeamStrip = assistantHasTeamStrip(message, execSlot);
   const outcome = turnOutcomeForAssistant(message, execSlot, {
@@ -255,7 +260,9 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     rawContent,
   );
   const displayContent = rawContent;
-  const money =
+  const hasTeamGraph = message.executionId != null;
+  const execution = useMessageExecution(hasTeamGraph ? projectionId : null);
+  const fallbackMoney =
     pickCostMoney(message.cost) ??
     (cachedTurn
       ? pickCostMoney({
@@ -265,14 +272,45 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           estimated_currency: cachedTurn.estimated_cost?.currency ?? null,
         })
       : null);
-  // 未计价可见 (拍板 2026-07-20)：BYOK 无价可算时明示「未计价」，不静默省略。
-  const costText =
-    message.executionId === null && money != null && money.nano > 0
-      ? formatCostCaption(money.nano, money.estimated, money.currency)
-      : message.executionId === null &&
-          message.cost?.pricing_source === "unpriced"
-        ? COST_UNPRICED_LABEL
-        : null;
+  let costText: string | null = null;
+  if (hasTeamGraph) {
+    if (execution) {
+      const money = resolveTurnDisplayMoney(
+        null,
+        execution.runs.map((r) => r.cost),
+      );
+      if (money && money.nano > 0) {
+        costText = formatCostCaption(
+          money.nano,
+          money.estimated,
+          money.currency,
+        );
+      } else if (hasUnpricedUsage(execution.runs)) {
+        costText = COST_UNPRICED_LABEL;
+      }
+    } else if (fallbackMoney != null && fallbackMoney.nano > 0) {
+      costText = formatCostCaption(
+        fallbackMoney.nano,
+        fallbackMoney.estimated,
+        fallbackMoney.currency,
+      );
+    } else if (message.cost?.pricing_source === "unpriced") {
+      costText = COST_UNPRICED_LABEL;
+    }
+  } else if (fallbackMoney != null && fallbackMoney.nano > 0) {
+    costText = formatCostCaption(
+      fallbackMoney.nano,
+      fallbackMoney.estimated,
+      fallbackMoney.currency,
+    );
+  } else if (message.cost?.pricing_source === "unpriced") {
+    costText = COST_UNPRICED_LABEL;
+  }
+  const showCostMeta =
+    !message.isStreaming &&
+    (costText != null ||
+      (message.rounds != null && message.rounds > 1) ||
+      (message.durationMs != null && message.durationMs > 0));
 
   const onPeekCost = () => {
     if (!message.isStreaming && message.cost == null) {
@@ -340,7 +378,6 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
       conversationId={conversationId}
       checkpoints={checkpoints}
       planReviews={planReviews}
-      teamPreviews={teamPreviews}
     />
   ) : (
     <>
@@ -361,6 +398,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
         displayContent.trim() ? (
           <Markdown
             content={displayContent}
+            conversationId={conversationId}
             citations={citations}
             citationToDisplay={citationDisplay.toDisplay}
             knownLedgerIds={knownLedgerIds}
@@ -377,6 +415,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
         >
           <Markdown
             content={displayContent}
+            conversationId={conversationId}
             citations={citations}
             citationToDisplay={citationDisplay.toDisplay}
             knownLedgerIds={knownLedgerIds}
@@ -415,10 +454,9 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           )}
         />
       )}
-      {message.turnWarning &&
-        message.turnWarning !== TURN_CANCELLED_EMPTY_MESSAGE && (
-          <TurnWarningBanner message={message.turnWarning} />
-        )}
+      {outcome.showTurnWarning && message.turnWarning && (
+        <TurnWarningBanner message={message.turnWarning} />
+      )}
       {turnBody}
       {!message.isStreaming && (
         <UnproductiveToolFailureHint
@@ -550,6 +588,16 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
       {!message.isStreaming && message.syncStatus && (
         <div className="mt-1">
           <SyncStatusHint syncStatus={message.syncStatus} />
+        </div>
+      )}
+      {showCostMeta && !outcome.showFooter && (
+        <div className="mt-1 flex items-center justify-end gap-1.5">
+          <AssistantMessageMetaSummary
+            rounds={message.rounds}
+            costText={costText}
+            durationMs={message.durationMs}
+          />
+          <MessageTime iso={message.createdAt} />
         </div>
       )}
       {outcome.showFooter && (

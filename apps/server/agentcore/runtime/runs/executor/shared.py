@@ -56,13 +56,13 @@ def _delivery_gaps_from_warnings(
 ) -> list[dict[str, str]]:
     """Build first-class delivery_gaps rows from soft-accept warnings + debrief.
 
-    ``files_landed``: 刀1 / 方案 A — 已有声明路径落盘时，``degraded_handoff`` 只记
-    warning 备注，不抬成硬缺口。
+    ``files_landed``: 保留给调用方；``degraded_handoff`` 一律 warning。
 
     ``stamped_rows``: contract-source reason/severity keyed by description. Prefer
     these over copy-marker inference so placeholder self-notes carry
     ``unverified_note`` before CEO collect/format.
     """
+    _ = files_landed
     from agentcore.runtime.delegate.delivery_status import (
         REASON_FILES_NOT_LANDED,
         REASON_PATH_HINT,
@@ -105,7 +105,7 @@ def _delivery_gaps_from_warnings(
         code = reason_for_warning(text)
         if code:
             row["reason"] = code
-            if code == REASON_DEGRADED_HANDOFF and files_landed:
+            if code == REASON_DEGRADED_HANDOFF:
                 row["severity"] = "warning"
         elif any(m in text for m in path_hint_markers):
             # Contract path-reconciliation (artifact_dir / artifacts) is warning-only.
@@ -118,9 +118,11 @@ def _delivery_gaps_from_warnings(
     if isinstance(debrief, dict) and debrief.get("degraded"):
         text = DEGRADED_HANDOFF_WARNING
         if text not in seen:
-            row = {"description": text, "reason": REASON_DEGRADED_HANDOFF}
-            if files_landed:
-                row["severity"] = "warning"
+            row = {
+                "description": text,
+                "reason": REASON_DEGRADED_HANDOFF,
+                "severity": "warning",
+            }
             gaps.append(row)
     return gaps
 
@@ -139,56 +141,13 @@ def _hard_gap_blocks_completion(
     *,
     files_touched: int = 0,
 ) -> HardGapBlock | None:
-    """Strict nodes: hard gaps still block COMPLETE; degraded_handoff alone does not
-    when declared paths already landed (刀1 / 方案 A).
+    """Retired: empty handoff / undeclared landing is not a completion failure.
 
-    Soft anti-slop warnings alone do not trip this. Missing-artifact soft-accept is
-    already blocked by ``strict=True`` via :func:`_is_hard_failure`. Returns a fail
-    block (CEO may 续派) or ``None`` to allow COMPLETED.
+    Callers used to FAILED strict nodes for degraded_handoff + no files. That
+    intercept was all false positives in dogfood; keep the hook so tests can pin
+    the no-op.
     """
-    if deliverable is None or not deliverable.strict:
-        return None
-    from agentcore.runtime.runs.cutoff import (
-        DEGRADED_HANDOFF_WARNING,
-        REASON_DEGRADED_HANDOFF,
-    )
-
-    files_landed = int(files_touched or 0) > 0
-
-    for gap in delivery_gaps or []:
-        if not isinstance(gap, dict):
-            continue
-        # Soft-stamped rows (path_hint / landed degraded) never hard-block.
-        if str(gap.get("severity") or "").strip() == "warning":
-            continue
-        reason = str(gap.get("reason") or "").strip()
-        desc = str(gap.get("description") or "").strip()
-        if reason == REASON_DEGRADED_HANDOFF or DEGRADED_HANDOFF_WARNING in desc:
-            if files_landed:
-                continue
-            return HardGapBlock(
-                reason=(
-                    "硬缺口：交接说明不完整且工作区无落盘文件，不得冒充完成；"
-                    "请续派或冷补派"
-                ),
-                failure_kind="model",
-            )
-        if "未落盘" in desc or "未在工作区找到" in desc:
-            return HardGapBlock(
-                reason=(
-                    "硬缺口：声明交付物未落盘，不得冒充完成；"
-                    "请续派或冷补派"
-                ),
-                failure_kind="quality",
-            )
-    if isinstance(debrief, dict) and debrief.get("degraded") and not files_landed:
-        return HardGapBlock(
-            reason=(
-                "硬缺口：交接说明不完整且工作区无落盘文件，不得冒充完成；"
-                "请续派或冷补派"
-            ),
-            failure_kind="model",
-        )
+    _ = (delivery_gaps, debrief, deliverable, files_touched)
     return None
 
 
@@ -319,14 +278,12 @@ def _is_hard_failure(
 ) -> bool:
     """Whether a contract miss should FAIL the run vs. soft-accept with a warning.
 
-    An empty product is always hard (the non-empty baseline, 决策②).
-    甲⁺：``form=files`` / 非空 ``artifacts`` 零落盘已降为 soft tip，不再硬失败。
-    Any other shortfall is hard only when the deliverable is ``strict`` (默认软提醒, 决策③).
-    ``files_touched`` retained for call-site compatibility (unused after 甲⁺).
+    Empty body is not a hard miss. ``form=files`` zero landing is already a
+    warning, not ``verdict.failures``. Remaining shortfalls are hard only when
+    the deliverable is ``strict``. ``files_touched`` kept for call-site compatibility.
     """
     _ = files_touched
-    if not content.strip():
-        return True
+    _ = content
     return deliverable is not None and deliverable.strict
 
 

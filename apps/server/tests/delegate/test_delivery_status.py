@@ -130,8 +130,8 @@ def test_landed_files_with_only_degraded_handoff_are_notes_not_failed():
     assert all(a.get("status") != "rejected" for a in payload.get("artifacts") or [])
 
 
-def test_no_landing_with_degraded_handoff_still_blocked():
-    """无落盘 + degraded → 仍未交付（硬拦保留）。"""
+def test_no_landing_with_degraded_handoff_is_notes():
+    """无声明产物 + degraded → notes（空交不再整轮 blocked）。"""
     plan = _plan(RunSpec(run_id="w1", task="写片段", role="分区"))
     results = {
         "w1": RunState(
@@ -148,11 +148,11 @@ def test_no_landing_with_degraded_handoff_still_blocked():
     }
     payload = build_delivery_status(plan, results, execution_id="e-deg-fail")
     assert payload is not None
-    assert payload["state"] == "blocked"
+    assert payload["state"] == "notes"
     assert payload["delivered_files"] == []
     assert any(g.get("reason") == "degraded_handoff" for g in payload["gaps"])
     assert all(
-        g.get("severity") != "warning"
+        g.get("severity") == "warning"
         for g in payload["gaps"]
         if g.get("reason") == "degraded_handoff"
     )
@@ -599,8 +599,8 @@ def test_soft_unverified_note_only_is_delivered_not_notes():
     assert payload["actions"] == []
 
 
-def test_unverified_note_mixed_with_path_mismatch_is_blocked():
-    """路径失配为 blocking：unverified_note + 声明目录未落 → blocked（错位文件不进卡）。"""
+def test_unverified_note_mixed_with_path_mismatch_is_partial():
+    """路径失配为 blocking：有 files_touched 时整轮 partial（不再因未进声明清单 blocked）。"""
     plan = _plan(
         RunSpec(
             run_id="w1",
@@ -630,7 +630,7 @@ def test_unverified_note_mixed_with_path_mismatch_is_blocked():
     }
     payload = build_delivery_status(plan, results, execution_id="e-mix-soft")
     assert payload is not None
-    assert payload["state"] == "blocked"
+    assert payload["state"] == "partial"
     assert payload["state"] != "delivered"
     assert "findings.md" not in payload["delivered_files"]
     assert all(a.get("path") != "findings.md" for a in payload["artifacts"])
@@ -691,7 +691,7 @@ def test_declared_path_a_landed_b_is_omitted_not_on_card():
     }
     payload = build_delivery_status(plan, results, execution_id="e-path-mismatch")
     assert payload is not None
-    assert payload["state"] == "blocked"
+    assert payload["state"] == "partial"
     assert payload["state"] != "delivered"
     assert payload["delivered_files"] == []
     assert landed not in payload["delivered_files"]
@@ -965,7 +965,7 @@ def test_artifact_dir_landed_outside_is_omitted_not_delivered():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir")
     assert payload is not None
-    assert payload["state"] == "blocked"
+    assert payload["state"] == "partial"
     assert payload["state"] != "delivered"
     assert payload["delivered_files"] == []
     assert all(a.get("path") != "miro-research.md" for a in payload["artifacts"])
@@ -1000,7 +1000,7 @@ def test_artifact_dir_path_mismatch_from_warnings_alone_is_blocking():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir-warn")
     assert payload is not None
-    assert payload["state"] == "blocked"
+    assert payload["state"] == "partial"
     assert payload["delivered_files"] == []
     mismatch = [g for g in payload["gaps"] if g.get("reason") == REASON_PATH_MISMATCH]
     assert mismatch
@@ -1253,7 +1253,7 @@ def test_maybe_emit_logs_emitted_counts(monkeypatch):
     assert not any(name == "delegate.delivery_status_empty" for name, _ in spy.events)
 
 
-def test_qa_deferred_budget_emits_website_verify_action():
+def test_qa_deferred_budget_does_not_emit_website_verify_action():
     from agentcore.runtime.runs.types import Deliverable
 
     plan = _plan(
@@ -1293,11 +1293,8 @@ def test_qa_deferred_budget_emits_website_verify_action():
     payload = build_delivery_status(plan, results, execution_id="e-qa")
     assert payload is not None
     assert payload["state"] == "partial"
-    assert any(a.get("kind") == "website_verify" for a in payload["actions"])
-    action = next(a for a in payload["actions"] if a["kind"] == "website_verify")
-    assert "build_website_verify" in action["prompt"]
-    assert "GEO 官网" in action["prompt"]
-    assert "topic=" in action["prompt"]
+    assert not any(a.get("kind") == "website_verify" for a in payload["actions"])
+    assert all("build_website_verify" not in str(a.get("prompt") or "") for a in payload["actions"])
 
 
 @pytest.mark.asyncio
@@ -2603,8 +2600,8 @@ def test_acceptance_counts_match_delivered_and_rejected():
     assert accepted_n + rejected_n == len(payload["artifacts"])
 
 
-def test_b1_empty_handoff_storm_forces_partial():
-    """e94dcd6b：多席空交接 → empty_handoff_storm blocking + partial/blocked."""
+def test_b1_empty_handoff_storm_does_not_block():
+    """多席空交接不再打 empty_handoff_storm blocking。"""
     from agentcore.runtime.closing_posture import (
         clear_b1_closing_latches,
         turn_has_empty_handoff_storm,
@@ -2623,23 +2620,20 @@ def test_b1_empty_handoff_storm_forces_partial():
         for i in range(5)
     }
     payload = build_delivery_status(plan, results, execution_id="e-storm")
-    assert payload is not None
-    assert payload["state"] in ("partial", "blocked")
-    assert any(g.get("reason") == REASON_EMPTY_HANDOFF_STORM for g in payload["gaps"])
-    assert turn_has_empty_handoff_storm()
+    assert payload is None or payload["state"] in ("notes", "delivered")
+    if payload is not None:
+        assert not any(g.get("reason") == REASON_EMPTY_HANDOFF_STORM for g in payload["gaps"])
+    assert not turn_has_empty_handoff_storm()
     clear_b1_closing_latches()
 
 
-def test_b1_cancel_zero_emits_checklist_gap():
-    """7ad17043：cancel + 零落盘 → cancelled 缺口清单 + draft_ack latch."""
+def test_b1_cancel_zero_does_not_add_checklist_gap():
+    """cancel + 零声明产物：不再附加「未交付清单」blocking / draft_ack latch。"""
     from agentcore.runtime.closing_posture import (
         clear_b1_closing_latches,
         turn_has_cancel_zero_output,
     )
-    from agentcore.runtime.delegate.delivery_status import (
-        REASON_CANCELLED,
-        _gaps_require_draft_ack,
-    )
+    from agentcore.runtime.delegate.delivery_status import REASON_CANCELLED
 
     clear_b1_closing_latches()
     plan = _plan(
@@ -2652,11 +2646,9 @@ def test_b1_cancel_zero_emits_checklist_gap():
     }
     payload = build_delivery_status(plan, results, execution_id="e-cancel0")
     assert payload is not None
-    assert payload["state"] == "blocked"
+    assert not any("未交付清单" in str(g.get("description") or "") for g in payload["gaps"])
     assert any(g.get("reason") == REASON_CANCELLED for g in payload["gaps"])
-    assert any("未交付清单" in str(g.get("description") or "") for g in payload["gaps"])
-    assert _gaps_require_draft_ack(payload["gaps"])
-    assert turn_has_cancel_zero_output()
+    assert not turn_has_cancel_zero_output()
     clear_b1_closing_latches()
 
 

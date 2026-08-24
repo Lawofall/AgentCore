@@ -1,6 +1,9 @@
 import { selectVisibleColdResumes } from "@/services/resume";
 import { useConversationStore } from "@/stores/conversation";
-import { useInteractionStore } from "@/stores/interactions";
+import {
+  isRetiredKickoffKind,
+  useInteractionStore,
+} from "@/stores/interactions";
 import { type PendingResume, usePausedTurnStore } from "@/stores/pausedTurns";
 import type { ComponentType } from "react";
 import { AskUserResumeCard } from "./AskUserResumeCard";
@@ -39,7 +42,7 @@ export function ResumePrompt() {
 }
 
 function ResumeCard({ turn }: { turn: PendingResume }) {
-  if (turn.kind === "team_preview") return null;
+  if (isRetiredKickoffKind(turn.kind)) return null;
   const Card = COLD_RESUME_CARDS[turn.kind];
   return <Card turn={turn} />;
 }

@@ -20,10 +20,22 @@ if TYPE_CHECKING:
     from agentcore.runtime.coordination.session import CoordinationSession
 
 
+_FAILED_WORKER_STATUSES = frozenset({"failed"})
+
+
+def _worker_completion_failed(event: CoordinationEvent) -> bool:
+    """True when this event is a worker terminal failure (not skip/cancel/success)."""
+    if event.kind is not CoordinationEventKind.WORKER_COMPLETED:
+        return False
+    status = str(event.payload.get("status") or "").strip().lower()
+    return status in _FAILED_WORKER_STATUSES
+
+
 class SessionBudgetMixin:
     """Progress/decision telemetry counters plus wake-time / idle-streak stamps."""
 
     last_wake_monotonic: float | None
+    _deferred_progress: list[CoordinationEvent]
 
     @property
     def budget_remaining(self: CoordinationSession) -> int:
@@ -40,6 +52,19 @@ class SessionBudgetMixin:
         self.progress_budget_remaining -= 1
         return True
 
+    def stash_progress_events(
+        self: CoordinationSession, events: list[CoordinationEvent]
+    ) -> None:
+        """Hold non-waking progress until the next necessary inject."""
+        if events:
+            self._deferred_progress.extend(events)
+
+    def take_deferred_progress(self: CoordinationSession) -> list[CoordinationEvent]:
+        """Pop stashed progress so it can ride a necessary (or terminal) wake."""
+        held = self._deferred_progress
+        self._deferred_progress = []
+        return held
+
     def consume_decision_budget(self: CoordinationSession) -> bool:
         """Decrement 决策池 telemetry counter. Returns False when already at floor 0.
 
@@ -53,7 +78,14 @@ class SessionBudgetMixin:
     def is_necessary_decision(
         self: CoordinationSession, events: list[CoordinationEvent]
     ) -> bool:
-        """Necessary decision points always wake the CEO (even under budget pressure)."""
+        """Necessary decision points always wake the CEO (even under budget pressure).
+
+        Routine success ``worker_completed`` is not a decision point — DAG and
+        the collaboration graph already moved. Failed completions are: the CEO
+        can still replace / replan while siblings run. Skip / cancel ride the
+        failure (or ``DRIVE_CANCELLED`` / ``ALL_COMPLETED``) instead of waking
+        on their own.
+        """
         for ev in events:
             if ev.kind is CoordinationEventKind.ALL_COMPLETED:
                 return True
@@ -69,7 +101,7 @@ class SessionBudgetMixin:
                 return True
             if ev.kind is CoordinationEventKind.BOUNDARY_YIELD:
                 return True
-            if ev.kind is CoordinationEventKind.WORKER_COMPLETED and not self._saw_first_completion:
+            if _worker_completion_failed(ev):
                 return True
         return False
 

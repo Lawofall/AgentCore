@@ -4,7 +4,10 @@ import { acceptRunOutcome, submitRunRedirect } from "../runRedirect";
 
 vi.mock("@/services/api", () => ({ api: { post: vi.fn() } }));
 vi.mock("@/services/sidecarRouting", () => ({
-  getActiveSidecarTarget: vi.fn(() => null),
+  resolveSidecarControlTargetForEngine: vi.fn(async () => null),
+}));
+vi.mock("@/stores/conversation", () => ({
+  useConversationStore: { getState: () => ({ byId: {} }) },
 }));
 
 const post = vi.mocked(api.post);

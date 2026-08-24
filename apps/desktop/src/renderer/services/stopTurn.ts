@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
-import { getActiveSidecarTarget } from "@/services/sidecarRouting";
+import { resolveSidecarControlTargetForEngine } from "@/services/sidecarRouting";
+import { useConversationStore } from "@/stores/conversation";
 
 /**
  * Ask the engine to cancel a conversation's in-flight turn.
@@ -18,9 +19,12 @@ import { getActiveSidecarTarget } from "@/services/sidecarRouting";
 export async function stopConversation(
   conversationId: string,
 ): Promise<boolean> {
-  const sidecarTarget = getActiveSidecarTarget(conversationId);
+  const sidecarTarget = await resolveSidecarControlTargetForEngine(
+    conversationId,
+    useConversationStore.getState().byId[conversationId]?.executionVia,
+  );
   if (sidecarTarget) {
-    const turnId = sidecarTarget.turnId;
+    const turnId = "turnId" in sidecarTarget ? sidecarTarget.turnId : undefined;
     if (!turnId) {
       throw new Error("本地回合标识缺失，无法停止");
     }

@@ -1,12 +1,15 @@
-import { CopyableId } from "@/components/CopyableId";
 import { ChatTimeline } from "@/components/conversation-replay/ChatTimeline";
-import { InspectorPanel } from "@/components/conversation-replay/InspectorPanel";
-import { TurnOpsBar } from "@/components/conversation-replay/TurnOpsBar";
+import {
+  InspectorPanel,
+  type ReplaySessionMeta,
+} from "@/components/conversation-replay/InspectorPanel";
+import { ReplayComposerGhost } from "@/components/conversation-replay/ReplayComposerGhost";
+import { ReplayOutline } from "@/components/conversation-replay/ReplayOutline";
 import { Badge } from "@/components/ui/Badge";
-import { Page } from "@/components/ui/Page";
 import { ErrorState, TableSkeleton } from "@/components/ui/States";
 import { isExecutionHarvestMessage } from "@/lib/executionHarvest";
-import { cn, fmtCny, fmtInt, fmtTime, nanoToYuan } from "@/lib/utils";
+import { foldEmptyAssistantFollowers } from "@/lib/foldEmptyAssistant";
+import { cn, fmtCny, nanoToYuan } from "@/lib/utils";
 import {
   type AdminConversationReplay,
   type AdminReplayTurnFinalState,
@@ -15,7 +18,7 @@ import {
   fetchReplayTurnFinalState,
 } from "@/services/adminObservability";
 import { errorMessage } from "@/services/api";
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft, PanelRight } from "lucide-react";
 import {
   type CSSProperties,
   type KeyboardEvent,
@@ -44,10 +47,10 @@ import { useLocation, useSearchParams } from "react-router-dom";
  */
 const TURN_PARAM = "turn";
 
-/** Worker dock width bounds, in px. Wide enough for prose, never past half a laptop. */
+/** Worker dock: desktop side-panel default (400), never past half a laptop. */
 const DOCK_MIN = 320;
 const DOCK_MAX = 720;
-const DOCK_DEFAULT = 480;
+const DOCK_DEFAULT = 400;
 const DOCK_STEP = 24;
 const DOCK_STORAGE_KEY = "admin:replay:dock-width";
 
@@ -73,6 +76,8 @@ function persistDockWidth(px: number): void {
   }
 }
 
+const HYDRATE_CONCURRENCY = 2;
+
 export function ConversationReplay({
   conversationId,
   onBack,
@@ -91,16 +96,20 @@ export function ConversationReplay({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  /** Right dock only opens when a worker/node is selected — no standalone 检视入口. */
+  /** Diagnose dock: 诊断 toggle or a team-graph node. Closed by default like desktop. */
   const [dockOpen, setDockOpen] = useState(false);
   const [dockWidth, setDockWidth] = useState(readDockWidth);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const [finalById, setFinalById] = useState<
     Record<string, AdminReplayTurnFinalState>
   >({});
-  const [hydratingId, setHydratingId] = useState<string | null>(null);
+  const [hydratingIds, setHydratingIds] = useState<string[]>([]);
   const [hydrateError, setHydrateError] = useState<string | null>(null);
   const [hydrateNonce, setHydrateNonce] = useState(0);
+  const finalByIdRef = useRef(finalById);
+  finalByIdRef.current = finalById;
+  const hydratePriorityIdRef = useRef<string | null>(null);
+  const selectedIdForHydrateRef = useRef<string | null>(null);
 
   // RR hands back a fresh setter whenever the search string changes; holding both the
   // setter and the state to forward in refs keeps the writer identity stable.
@@ -139,14 +148,19 @@ export function ConversationReplay({
 
   useEffect(() => {
     setFinalById({});
-    setHydratingId(null);
+    setHydratingIds([]);
     setHydrateError(null);
     setHydrateNonce(0);
   }, [conversationId]);
 
-  const displayMessages = useMemo(() => {
-    if (!data) return [];
-    return data.messages.map((m) => {
+  const foldedTimeline = useMemo(() => {
+    if (!data) {
+      return {
+        messages: [] as ReplayMessage[],
+        shownIdFor: (id: string) => id,
+      };
+    }
+    const merged = data.messages.map((m) => {
       const extra = finalById[m.id];
       if (!extra) return m;
       return {
@@ -155,11 +169,14 @@ export function ConversationReplay({
         projected: extra.projected,
       };
     });
+    return foldEmptyAssistantFollowers(merged);
   }, [data, finalById]);
 
+  const displayMessages = foldedTimeline.messages;
+
   const assistantTurns = useMemo(
-    () => (data?.messages ?? []).filter((m) => m.role === "assistant"),
-    [data],
+    () => displayMessages.filter((m) => m.role === "assistant"),
+    [displayMessages],
   );
 
   const multiAgentTurns = useMemo(
@@ -172,6 +189,17 @@ export function ConversationReplay({
     [data],
   );
 
+  const outlineTurns = useMemo(
+    () =>
+      displayMessages
+        .filter((m) => m.role === "user" && !isExecutionHarvestMessage(m))
+        .map((m) => ({
+          id: m.id,
+          label: (m.content ?? "").trim().replace(/\s+/g, " ").slice(0, 80),
+        })),
+    [displayMessages],
+  );
+
   /**
    * Selection is read back off the URL instead of being mirrored in state, so a pasted
    * link, a reload and 后退 cannot disagree about which turn is open. An anchor that no
@@ -182,7 +210,7 @@ export function ConversationReplay({
   const selected = useMemo(() => {
     const messages = displayMessages;
     const byTurn = anchorTurn
-      ? messages.find((m) => m.id === anchorTurn)
+      ? messages.find((m) => m.id === foldedTimeline.shownIdFor(anchorTurn))
       : undefined;
     if (byTurn) return byTurn;
     // 对话's 跳转 hands over a trace_id rather than a message id.
@@ -190,51 +218,95 @@ export function ConversationReplay({
       ? messages.find((m) => m.trace_id === anchorTrace)
       : undefined;
     return byTrace ?? null;
-  }, [displayMessages, anchorTrace, anchorTurn]);
+  }, [displayMessages, foldedTimeline, anchorTrace, anchorTurn]);
 
   const selectedId = selected?.id ?? null;
 
+  const hydratePriorityId =
+    selected && selected.role === "assistant" && selected.has_final_state
+      ? selected.id
+      : null;
+  hydratePriorityIdRef.current = hydratePriorityId;
+  selectedIdForHydrateRef.current = selectedId;
+
   useEffect(() => {
-    if (
-      loading ||
-      !data ||
-      data.conversation.id !== conversationId ||
-      !selected ||
-      selected.role !== "assistant" ||
-      !selected.has_final_state ||
-      finalById[selected.id]
-    ) {
+    if (loading || !data || data.conversation.id !== conversationId) {
       return;
     }
-    const id = selected.id;
+
+    const pending = data.messages
+      .filter(
+        (m) =>
+          m.role === "assistant" &&
+          m.has_final_state &&
+          !finalByIdRef.current[m.id],
+      )
+      .map((m) => m.id);
+    if (pending.length === 0) {
+      setHydratingIds((cur) => (cur.length === 0 ? cur : []));
+      return;
+    }
+
+    const priority = hydratePriorityIdRef.current;
+    const order = new Map(
+      data.messages.map((m, index) => [m.id, index] as const),
+    );
+    const ordered = [...pending].sort((a, b) => {
+      if (a === priority) return -1;
+      if (b === priority) return 1;
+      return (order.get(a) ?? 0) - (order.get(b) ?? 0);
+    });
+
     let cancelled = false;
-    setHydratingId(id);
-    setHydrateError(null);
-    void fetchReplayTurnFinalState(conversationId, id)
-      .then((state) => {
-        if (cancelled) return;
-        setFinalById((prev) => ({ ...prev, [id]: state }));
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setHydrateError(errorMessage(err));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setHydratingId((cur) => (cur === id ? null : cur));
+    let slots = 0;
+    let nextIdx = 0;
+    const started = new Set<string>();
+
+    const pump = () => {
+      while (
+        !cancelled &&
+        slots < HYDRATE_CONCURRENCY &&
+        nextIdx < ordered.length
+      ) {
+        const id = ordered[nextIdx++];
+        if (finalByIdRef.current[id] || started.has(id)) continue;
+        started.add(id);
+        slots += 1;
+        if (id === selectedIdForHydrateRef.current) {
+          setHydrateError(null);
         }
-      });
+        setHydratingIds((cur) => (cur.includes(id) ? cur : [...cur, id]));
+        void fetchReplayTurnFinalState(conversationId, id)
+          .then((state) => {
+            // Apply even if this generation was replaced (Strict Mode). Dropping
+            // a successful body left the spinner on and the next effect with
+            // nothing to fetch.
+            setFinalById((prev) => ({ ...prev, [id]: state }));
+          })
+          .catch((err) => {
+            if (cancelled) return;
+            if (id === selectedIdForHydrateRef.current) {
+              setHydrateError(errorMessage(err));
+            }
+          })
+          .finally(() => {
+            started.delete(id);
+            setHydratingIds((cur) => cur.filter((item) => item !== id));
+            if (cancelled) return;
+            slots -= 1;
+            pump();
+          });
+      }
+    };
+
+    pump();
     return () => {
       cancelled = true;
+      if (started.size === 0) return;
+      const abandoned = new Set(started);
+      setHydratingIds((cur) => cur.filter((item) => !abandoned.has(item)));
     };
-  }, [
-    conversationId,
-    data,
-    loading,
-    selected,
-    finalById,
-    hydrateNonce,
-  ]);
+  }, [conversationId, data, loading, hydrateNonce]);
 
   const retryHydrate = useCallback(() => {
     if (!selectedId) return;
@@ -249,15 +321,21 @@ export function ConversationReplay({
 
   const selectTurn = useCallback(
     (id: string) => {
-      // The open worker belongs to the turn being left behind.
       if (id !== selectedId) {
         setSelectedRunId(null);
-        setDockOpen(false);
       }
       writeTurnAnchor(id);
     },
     [selectedId, writeTurnAnchor],
   );
+
+  const openDiagnose = useCallback(() => {
+    if (!selectedId) {
+      const last = assistantTurns.at(-1);
+      if (last) writeTurnAnchor(last.id);
+    }
+    setDockOpen(true);
+  }, [assistantTurns, selectedId, writeTurnAnchor]);
 
   /** Click graph node → open worker dock. */
   const selectRun = useCallback((runId: string) => {
@@ -327,123 +405,65 @@ export function ConversationReplay({
   const isAnchored = (m: ReplayMessage) =>
     anchorTrace != null && m.trace_id === anchorTrace;
 
+  const sessionMeta: ReplaySessionMeta | null = data
+    ? {
+        title: data.conversation.title || "未命名会话",
+        deleted: Boolean(data.conversation.deleted_at),
+        userLabel: `${
+          data.conversation.display_name ||
+          data.conversation.username ||
+          "未知用户"
+        }${data.conversation.username ? ` @${data.conversation.username}` : ""}`,
+        createdAt: data.conversation.created_at,
+        conversationId: data.conversation.id,
+        modelProfileName: data.conversation.model_profile_name,
+        modelProfileId: data.conversation.model_profile_id,
+        turns: data.turns,
+        errors: data.errors,
+        costLabel: fmtCny(nanoToYuan(data.cost_total)),
+        multiAgentTurns,
+      }
+    : null;
+
   const dockCny =
     selected && selected.cost_total > 0 && data
       ? fmtCny(nanoToYuan(selected.cost_total))
       : null;
 
   const dockHarvest =
-    selected && data
-      ? precedingHarvest(displayMessages, selected)
-      : null;
+    selected && data ? precedingHarvest(displayMessages, selected) : null;
 
-  /**
-   * The turn the dock is showing, and the single condition behind both the dock and
-   * the timeline's narrow-screen hiding. Editing the anchor out of the address bar
-   * while the dock is open would otherwise hide the timeline with nothing in its
-   * place — a blank page for a URL that is merely stale.
-   */
-  const dockMessage = dockOpen ? selected : null;
+  const titleText = data?.conversation.title || "未命名会话";
 
   return (
-    <Page className="flex h-full min-h-0 flex-col px-4 py-3 lg:px-6">
-      {/*
-        Session strip, not PageHeader: that component's mb-6 / gap-4 stack is
-        title + actions + filters as three layers. The back control stays
-        mounted across load so a click cannot land on a just-unmounted node.
-      */}
-      <header className="mb-2 shrink-0">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <div className="relative flex h-full min-h-0 flex-col">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 px-3 pt-2">
+        <div className="pointer-events-auto flex min-w-0 max-w-[70%] items-center gap-2 rounded-lg border border-border/60 bg-background/80 px-2 py-1 backdrop-blur">
           <ReplayBackButton onBack={onBack} backLabel={backLabel} />
           {!loading && !error && data && (
-            <>
-              <h1 className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold text-foreground">
-                <span>{data.conversation.title || "未命名会话"}</span>
-                {data.conversation.deleted_at ? (
-                  <Badge tone="neutral">会话已删</Badge>
-                ) : null}
-              </h1>
-              <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-muted-foreground text-xs">
-                <span>
-                  {data.conversation.display_name ||
-                    data.conversation.username ||
-                    "未知用户"}
-                  {data.conversation.username && (
-                    <span> @{data.conversation.username}</span>
-                  )}
-                </span>
-                <span aria-hidden>·</span>
-                <span className="tabular-nums">
-                  {fmtTime(data.conversation.created_at)}
-                </span>
-                <span aria-hidden>·</span>
-                <CopyableId
-                  value={data.conversation.id}
-                  label="conversation_id"
-                  display={data.conversation.id.slice(0, 8)}
-                />
-                {data.conversation.model_profile_name && (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span
-                      title={
-                        data.conversation.model_profile_id
-                          ? `profile ${data.conversation.model_profile_id}`
-                          : undefined
-                      }
-                    >
-                      {data.conversation.model_profile_name}
-                      {data.conversation.model_profile_id && (
-                        <span className="ml-1 font-mono text-xs">
-                          {data.conversation.model_profile_id.slice(0, 8)}
-                        </span>
-                      )}
-                    </span>
-                  </>
-                )}
-              </span>
-              <div className="flex flex-wrap items-center gap-1 text-xs">
-                <KpiChip label="回合" value={fmtInt(data.turns)} />
-                <KpiChip
-                  label="错误"
-                  value={fmtInt(data.errors)}
-                  tone={data.errors > 0 ? "destructive" : undefined}
-                />
-                <KpiChip
-                  label="成本"
-                  value={fmtCny(nanoToYuan(data.cost_total))}
-                />
-                {multiAgentTurns > 0 && (
-                  <KpiChip
-                    label="多 Agent"
-                    value={`${multiAgentTurns} 回合`}
-                    tone="primary"
-                  />
-                )}
-              </div>
-            </>
+            <h1 className="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+              <span className="truncate">{titleText}</span>
+              {data.conversation.deleted_at ? (
+                <Badge tone="neutral">会话已删</Badge>
+              ) : null}
+            </h1>
           )}
         </div>
-        {!loading && !error && data && (
-          <>
-            <TurnPills
-              turns={assistantTurns}
-              selectedId={selectedId}
-              onSelect={selectTurn}
-              anchorTrace={anchorTrace}
-            />
-            <TurnOpsBar
-              selected={selected}
-              harvests={harvests}
-              onSelectHarvest={(id) => {
-                selectTurn(id);
-                setDockOpen(true);
-              }}
-              onOpenDock={() => setDockOpen(true)}
-            />
-          </>
+        {!loading && !error && data && !dockOpen && (
+          <button
+            type="button"
+            aria-label="打开诊断"
+            title="诊断"
+            onClick={openDiagnose}
+            className="pointer-events-auto relative rounded-lg border border-border bg-card/80 p-2 text-muted-foreground outline-none backdrop-blur hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <PanelRight size={16} />
+            {harvests.length > 0 && (
+              <span className="absolute -right-1 -top-1 size-2 rounded-full bg-primary" />
+            )}
+          </button>
         )}
-      </header>
+      </div>
 
       {loading && <TableSkeleton rows={6} columns={1} />}
 
@@ -452,74 +472,92 @@ export function ConversationReplay({
       )}
 
       {!loading && !error && data && (
-        <>
-          {/*
-            One timeline and one dock, laid out by the shell's height rather than by a
-            `calc(100vh - …)` guess: the row fills whatever the scroll container gives
-            it and each pane scrolls on its own. Narrow screens stack, and an open dock
-            takes the whole width by hiding the timeline — hiding, not unmounting, so
-            the reading position survives a trip into a worker and back.
-          */}
-          <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:gap-0">
-            <ChatTimeline
-              className={cn("min-w-0 flex-1", dockMessage && "hidden lg:flex")}
-              messages={displayMessages}
-              selectedId={selectedId}
-              selectedRunId={selectedRunId}
-              onSelect={selectTurn}
-              onSelectRun={selectRun}
-              isAnchored={isAnchored}
-              hasMoreBefore={data.has_more_before}
-              hydratingId={hydratingId}
-              hydrateError={hydrateError}
-              onRetryHydrate={retryHydrate}
-            />
-
-            {dockMessage && (
-              <>
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="调整队员面板宽度"
-                  aria-valuenow={dockWidth}
-                  aria-valuemin={DOCK_MIN}
-                  aria-valuemax={DOCK_MAX}
-                  tabIndex={0}
-                  onPointerDown={startResize}
-                  onPointerMove={moveResize}
-                  onPointerUp={endResize}
-                  onPointerCancel={endResize}
-                  onKeyDown={keyResize}
-                  onDoubleClick={resetDockWidth}
-                  title="拖拽调整宽度（双击复位）"
-                  className="group hidden w-3 shrink-0 cursor-col-resize touch-none items-center justify-center outline-none lg:flex"
-                >
-                  <span
-                    aria-hidden
-                    className="h-10 w-px rounded-full bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary"
-                  />
-                </div>
-                <div
-                  className="flex min-h-0 w-full flex-1 flex-col lg:w-[var(--dock-w)] lg:flex-none"
-                  style={{ "--dock-w": `${dockWidth}px` } as CSSProperties}
-                >
-                  <InspectorPanel
-                    className="min-h-0 flex-1"
-                    message={dockMessage}
-                    selectedRunId={selectedRunId}
-                    onSelectRun={selectRun}
-                    onClearRun={clearRun}
-                    onClose={closeDock}
-                    cnyLabel={dockCny}
-                    harvest={dockHarvest}
-                  />
-                </div>
-              </>
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div
+            className={cn(
+              "relative flex min-h-0 min-w-0 flex-1 flex-col",
+              dockOpen && "hidden lg:flex",
             )}
+          >
+            <div
+              aria-label="对话阅读区"
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
+              <ChatTimeline
+                className="mx-auto w-full max-w-3xl px-6 pt-10 pb-4"
+                messages={displayMessages}
+                selectedId={selectedId}
+                selectedRunId={selectedRunId}
+                onSelect={selectTurn}
+                onSelectRun={selectRun}
+                isAnchored={isAnchored}
+                hasMoreBefore={data.has_more_before}
+                hydratingIds={hydratingIds}
+                hydrateError={hydrateError}
+                onRetryHydrate={retryHydrate}
+              />
+            </div>
+            <ReplayComposerGhost />
+            <ReplayOutline turns={outlineTurns} onJump={selectTurn} />
           </div>
-        </>
+
+          {dockOpen && (
+            <>
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="调整诊断面板宽度"
+                aria-valuenow={dockWidth}
+                aria-valuemin={DOCK_MIN}
+                aria-valuemax={DOCK_MAX}
+                tabIndex={0}
+                onPointerDown={startResize}
+                onPointerMove={moveResize}
+                onPointerUp={endResize}
+                onPointerCancel={endResize}
+                onKeyDown={keyResize}
+                onDoubleClick={resetDockWidth}
+                title="拖拽调整宽度（双击复位）"
+                className="group hidden w-3 shrink-0 cursor-col-resize touch-none items-center justify-center outline-none lg:flex"
+              >
+                <span
+                  aria-hidden
+                  className="h-10 w-px rounded-full bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary"
+                />
+              </div>
+              <div
+                className="flex min-h-0 w-full flex-1 flex-col border-border border-l bg-background lg:w-[var(--dock-w)] lg:flex-none"
+                style={{ "--dock-w": `${dockWidth}px` } as CSSProperties}
+              >
+                <InspectorPanel
+                  className="min-h-0 flex-1 rounded-none border-0"
+                  message={selected}
+                  selectedRunId={selectedRunId}
+                  onSelectRun={selectRun}
+                  onClearRun={clearRun}
+                  onClose={closeDock}
+                  cnyLabel={dockCny}
+                  harvest={dockHarvest}
+                  harvests={harvests}
+                  onSelectHarvest={(id) => {
+                    selectTurn(id);
+                    setDockOpen(true);
+                  }}
+                  session={sessionMeta}
+                  hydrating={
+                    Boolean(selected?.has_final_state) &&
+                    selected != null &&
+                    hydratingIds.includes(selected.id) &&
+                    selected.runs_payload == null &&
+                    selected.projected == null
+                  }
+                />
+              </div>
+            </>
+          )}
+        </div>
       )}
-    </Page>
+    </div>
   );
 }
 
@@ -550,97 +588,5 @@ function ReplayBackButton({
       <ArrowLeft size={14} aria-hidden />
       {backLabel}
     </button>
-  );
-}
-
-function KpiChip({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "destructive" | "primary";
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 tabular-nums",
-        tone === "destructive" && "border-destructive/30 text-destructive",
-        tone === "primary" && "border-primary/30 text-primary",
-      )}
-    >
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
-    </span>
-  );
-}
-
-/**
- * Turn index. Scrolls sideways instead of wrapping: a 40-turn conversation used to
- * push the timeline off the bottom of the window before it had rendered a line.
- */
-function TurnPills({
-  turns,
-  selectedId,
-  onSelect,
-  anchorTrace,
-}: {
-  turns: ReplayMessage[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  anchorTrace?: string;
-}) {
-  if (turns.length === 0) {
-    return (
-      <p className="mt-1.5 text-muted-foreground text-xs">暂无助手回合</p>
-    );
-  }
-
-  return (
-    <div className="mt-1.5 flex w-full min-w-0 items-center gap-1.5 overflow-x-auto pb-1">
-      <span className="shrink-0 text-muted-foreground text-xs font-medium">
-        回合
-      </span>
-      {turns.map((m, i) => {
-        const isError = m.metrics?.status === "error";
-        const multi = m.runs.length > 0 || m.metrics?.delegated;
-        const anchored = anchorTrace != null && m.trace_id === anchorTrace;
-        const active = selectedId === m.id;
-        return (
-          <button
-            key={m.id}
-            type="button"
-            // Selection is a ring and a tint otherwise — invisible to a screen reader,
-            // and the only handle a test has on "this link opened that turn".
-            aria-current={active ? "true" : undefined}
-            onClick={() => onSelect(m.id)}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-left text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-              active
-                ? "border-primary/40 bg-primary/10 text-foreground"
-                : "border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-              anchored && !active && "ring-1 ring-primary/40",
-            )}
-          >
-            <span className="font-medium tabular-nums">#{i + 1}</span>
-            {/* The pill already separates 回合号 from time by weight — dimming the
-                timestamp on top of that read at 2.7:1. */}
-            <span className="tabular-nums">{fmtTime(m.created_at)}</span>
-            {(isError || multi) && (
-              <span className="flex items-center gap-1">
-                {isError && <Badge tone="destructive">错</Badge>}
-                {multi && (
-                  <Badge tone="primary">
-                    <Users size={10} className="mr-0.5" />
-                    {m.metrics?.workers || m.runs.length || "多"}
-                  </Badge>
-                )}
-              </span>
-            )}
-          </button>
-        );
-      })}
-    </div>
   );
 }

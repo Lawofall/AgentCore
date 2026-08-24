@@ -3,7 +3,7 @@
 Structured defaults on ``RunSpec.retrieval_budget`` + strip search tools when the
 resolved limit is 0. Runtime counter lives on ``ToolContext.retrieval_budget``
 (:class:`~agentcore.tools.protocol.RetrievalBudgetState`); enforce in
-``tool_exec`` (orthogonal to LoopController / team_gate). Cache hits and A3
+``tool_exec`` (orthogonal to LoopController.investigation_calls). Cache hits and A3
 query-contract rejects do not consume budget. CEO / delegate schema 不可配置该
 字段；额度只来自统一常量（辩手有约定文档窄例外由辩论内部 writer 补写）。
 

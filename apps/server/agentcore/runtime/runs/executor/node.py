@@ -191,6 +191,7 @@ async def execute_agent_node(
             visual_rework_used=loop_result.visual_rework_used,
             received_blocks=prepared.received_blocks,
             tool_ctx=loop_result.tool_ctx,
+            runtime_file_products=loop_result.runtime_file_products,
         )
     except asyncio.CancelledError as e:
         salvaged = handle_agent_node_cancel(

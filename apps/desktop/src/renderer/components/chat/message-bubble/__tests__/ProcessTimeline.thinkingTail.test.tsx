@@ -24,7 +24,6 @@ afterEach(cleanup);
 const emptyCards = {
   checkpoints: [] as never[],
   planReviews: [] as never[],
-  teamPreviews: [] as never[],
 };
 
 const toolDone: ProcessStep = {

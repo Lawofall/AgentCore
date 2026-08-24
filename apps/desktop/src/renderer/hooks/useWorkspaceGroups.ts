@@ -1,5 +1,6 @@
 import { useConversations } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
+import { hasLocalFiles } from "@/lib/capabilities";
 import {
   type FolderMeta,
   dedupeFoldersByLocalBinding,
@@ -11,6 +12,13 @@ import { useMemo } from "react";
 
 /** Workspaces (folders) shown in the rail before deferring to /conversations. */
 export const MAX_WORKSPACE_GROUPS = 6;
+
+/** Drop local-disk workspaces on runtimes with no local filesystem (web / phone). */
+export function foldersForConversationRail(
+  folders: FolderMeta[],
+): FolderMeta[] {
+  return hasLocalFiles() ? folders : folders.filter((f) => f.mode !== "local");
+}
 
 /** One sidebar folder group: a folder plus its (recency-sorted) conversations. */
 export interface WorkspaceGroup {
@@ -140,7 +148,8 @@ export function buildWorkspaceGroups(
  */
 export function useWorkspaceGroups(): WorkspaceGroup[] {
   const conversations = useConversations();
-  const folders = useFolders();
+  const allFolders = useFolders();
+  const folders = foldersForConversationRail(allFolders);
   const requiredIds = useRequiredConversationIds();
   return useMemo(
     () => buildWorkspaceGroups(conversations, folders, requiredIds),

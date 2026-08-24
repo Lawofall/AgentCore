@@ -24,7 +24,7 @@ from agentcore.runtime.delegate.ceo_format import (
     format_for_ceo,
     motion_cards_block,
 )
-from agentcore.runtime.events import EventSink, EventType
+from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import InteractionRegistry
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
@@ -270,7 +270,7 @@ async def test_debate_flag_skips_kickoff_under_cap():
     result = await tool.execute(_debate_args(), tool._base_tool_context)
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    assert not any(str(e.type) == "team_preview_required" for e in sink._history)
     # in-memory count bumped (DB may be unavailable in unit tests)
     assert tool._base_tool_context.deep_research_auto_debate_count >= 1
 
@@ -292,7 +292,7 @@ async def test_debate_flag_restores_kickoff_over_cap():
     result = await tool.execute(_debate_args(), tool._base_tool_context)
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    assert not any(str(e.type) == "team_preview_required" for e in sink._history)
 
 
 async def test_debate_full_trust_still_skips_over_cap():

@@ -85,7 +85,12 @@ async def rebuild_worker_prompt_for_target(
     shared_base = assemble_system_prompt(
         rules_markdown=rules_markdown,
     )
-    provisional = build_worker_registry(desktop_online=desktop_online)
+    provisional = build_worker_registry(
+        backend=backend,
+        permission_axes=permission_axes,
+        desktop_online=desktop_online,
+        languages=exec_languages if backend.location == "local" else None,
+    )
     source = build_merged_consult_source(
         skill_registry=build_system_skill_registry(),
         tool_names={s.name for s in provisional.list_all()},

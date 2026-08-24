@@ -8,6 +8,7 @@ from agentcore.runtime.events import EventSink
 from agentcore.tools.builtin.ask_user.schema import (
     ListArgError,
     OptionLabelError,
+    normalize_assumptions,
     normalize_options,
     normalize_questions,
 )
@@ -367,6 +368,53 @@ def test_normalize_options_allows_tuijian_substring_in_product_name():
 def test_normalize_options_rejects_english_recommended_mark():
     with pytest.raises(OptionLabelError, match="推荐标记"):
         normalize_options([{"label": "Option A (recommended)"}])
+
+
+def test_normalize_assumptions_keeps_short_label():
+    out = normalize_assumptions(
+        [
+            {"label": "范围", "value": "国内三家"},
+            {"label": "本周=周一至周日", "value": ""},
+        ]
+    )
+    assert out == [
+        {"id": "a0", "label": "范围", "value": "国内三家"},
+        {"id": "a1", "label": "本周=周一至周日", "value": ""},
+    ]
+
+
+def test_normalize_assumptions_merges_long_label_into_value():
+    out = normalize_assumptions(
+        [{"label": "调研覆盖的默认范围", "value": "国内三家"}]
+    )
+    assert out == [
+        {"id": "a0", "label": "假设", "value": "调研覆盖的默认范围：国内三家"},
+    ]
+
+
+def test_normalize_assumptions_long_label_empty_value():
+    out = normalize_assumptions([{"label": "调研覆盖的默认范围", "value": ""}])
+    assert out == [
+        {"id": "a0", "label": "假设", "value": "调研覆盖的默认范围"},
+    ]
+
+
+def test_normalize_assumptions_merges_inventory_label():
+    out = normalize_assumptions(
+        [
+            {
+                "label": "律所名称、简介、业务领域、联系方式",
+                "value": "先用专业占位内容搭建，你提供真实资料后随时替换",
+            }
+        ]
+    )
+    assert out == [
+        {
+            "id": "a0",
+            "label": "假设",
+            "value": "律所名称、简介、业务领域、联系方式：先用专业占位内容搭建，你提供真实资料后随时替换",
+        }
+    ]
 
 
 async def test_ask_user_rejects_recommendation_in_label():

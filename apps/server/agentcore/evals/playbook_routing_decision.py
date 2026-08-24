@@ -17,8 +17,6 @@ from agentcore.llm.provider.protocol import LLMMessage, TokenUsage
 from agentcore.runtime.engine.governance import (
     LOCAL_RECON_TOOLS,
     create_loop_controller,
-    maybe_inject_team_gate,
-    resolve_openai_tool_defs,
 )
 
 _RECON = frozenset({"file_read", "file_list", "grep", "web_search", "read_url", "git"})
@@ -134,7 +132,6 @@ async def run_until_terminal(
     pre_action_frozen = False
     inv_tools = frozenset(_RECON)
     gate_controller = create_loop_controller(inv_tools)
-    disabled_tools: set[str] = set()
     live_tool_defs = tool_defs
 
     def _freeze_pre_action(reasoning: str) -> None:
@@ -264,17 +261,6 @@ async def run_until_terminal(
                     gate_controller._investigation_calls += 1
                     if name in LOCAL_RECON_TOOLS:
                         gate_controller._local_recon_calls += 1
-            if maybe_inject_team_gate(
-                gate_controller,
-                messages=messages,
-                run_id=str(ctx.run_id or "eval-playbook"),
-                round_idx=round_idx,
-                role="captain",
-                disabled_tools=disabled_tools,
-                investigation_tools=inv_tools,
-            ):
-                trail.append("team_gate")
-                live_tool_defs = resolve_openai_tool_defs(chat_tools, None, disabled_tools)
             continue
 
         if not first_action:
@@ -288,17 +274,6 @@ async def run_until_terminal(
                 gate_controller._investigation_calls += 1
                 if name in LOCAL_RECON_TOOLS:
                     gate_controller._local_recon_calls += 1
-        if maybe_inject_team_gate(
-            gate_controller,
-            messages=messages,
-            run_id=str(ctx.run_id or "eval-playbook"),
-            round_idx=round_idx,
-            role="captain",
-            disabled_tools=disabled_tools,
-            investigation_tools=inv_tools,
-        ):
-            trail.append("team_gate")
-            live_tool_defs = resolve_openai_tool_defs(chat_tools, None, disabled_tools)
 
     return _pack(
         "RECON_UNDECIDED",

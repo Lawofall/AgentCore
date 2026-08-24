@@ -32,7 +32,6 @@ from agentcore.runtime.runs.executor.shared import (
     _apply_cutoff_reasons,
     _apply_finish_interrupt,
     _delivery_gaps_from_warnings,
-    _hard_gap_blocks_completion,
     _is_hard_failure,
     _priced_failure,
 )
@@ -52,8 +51,10 @@ from agentcore.runtime.runs.serialize import (
     escalations_from_transcript,
     file_products_from_transcript,
     files_touched_from_transcript,
+    merge_file_products,
 )
 from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunSpec, RunState
+from agentcore.tools.file_products import FileProduct
 
 logger = get_logger(__name__)
 
@@ -83,6 +84,7 @@ def build_terminal_run_state(
     visual_rework_used: int,
     received_blocks: list[ContextBlock],
     tool_ctx: Any,
+    runtime_file_products: list[FileProduct] | None = None,
 ) -> RunState:
     """Build COMPLETED / contract-FAILED / hard-gap FAILED terminal RunState + emit."""
     usage = run_usage.as_dict()
@@ -117,8 +119,10 @@ def build_terminal_run_state(
     # qualified brief) — empty inventory must not mint an empty ``degraded_synth``.
     # Leaf substantial (tools / longer body): always stamp degraded when missing.
     debrief = debrief_from_transcript(messages)
-    # 交付物台账：工具自报的产物（path + kind + derived_from），``touched`` 是它的路径投影。
-    products = file_products_from_transcript(messages)
+    products = merge_file_products(
+        file_products_from_transcript(messages),
+        runtime_file_products or (),
+    )
     touched = [p.path for p in products]
     product_touched = filter_product_landing_paths(
         touched, product_landing_artifacts
@@ -132,8 +136,9 @@ def build_terminal_run_state(
         files_touched=touched,
     )
     has_dependents = node_has_dependents(env.plan, spec.run_id)
+    # Debate speech (research_then_draft): empty发言不得靠 leaf handoff 降级合成冒充正文。
     can_synth = has_salvageable_half_product(content, touched, author_brief) or (
-        expects_handoff and not has_dependents
+        expects_handoff and not has_dependents and not spec.research_then_draft
     )
     if (
         expects_handoff
@@ -318,7 +323,7 @@ def build_terminal_run_state(
         run_id=spec.run_id,
     )
     warnings = _apply_cutoff_reasons(cutoff_reasons, warnings=warnings)
-    # 刀1：已落盘时 degraded_handoff 只记 warning，不抬硬缺口。
+    # degraded_handoff 一律 warning，不抬硬缺口。
     delivery_gaps = _delivery_gaps_from_warnings(
         warnings,
         debrief,
@@ -343,6 +348,7 @@ def build_terminal_run_state(
         body_chars == 0
         and debrief
         and brief_may_satisfy_body_floor(deliverable_form=form)
+        and not spec.research_then_draft
     ):
         brief_summary = str((debrief or {}).get("summary") or "").strip()
         if brief_summary:
@@ -374,124 +380,7 @@ def build_terminal_run_state(
                 surface="promoted_brief",
                 citable_count=len(citable_ids or ()),
             )
-    if node_has_dependents(env.plan, spec.run_id) and not upstream_body_floor_satisfied(
-        body_chars=body_chars,
-        landed_artifact_kinds=tool_ctx.landed_artifact_kinds,
-        min_body_chars=floor,
-    ):
-        floor_hint = "为空"
-        summary_hint = (
-            "（summary 不算正文）"
-            if (
-                body_chars == 0
-                and debrief
-                and str((debrief or {}).get("summary") or "").strip()
-                and not brief_may_satisfy_body_floor(deliverable_form=form)
-            )
-            else ""
-        )
-        reason = (
-            f"空交付不得进入下游：正文{floor_hint}{summary_hint}"
-            "且无成篇落盘（prose；骨架/空文件不算）"
-        )
-        logger.info(
-            "handoff.empty_body_blocked",
-            run_id=spec.run_id,
-            body_chars=body_chars,
-            min_body_chars=floor,
-            deliverable_form=form,
-        )
-        env.sink.emit(
-            run_failed(
-                spec.run_id,
-                agent_id,
-                reason,
-                failure_kind="quality",
-                debrief=debrief,
-                execution_id=env.execution_id,
-                retryable=False,
-            )
-        )
-        return _stamp_retrieval_evidence_gap(
-            RunState(
-                phase=RunPhase.FAILED,
-                content=content,
-                reasoning=reasoning,
-                error=reason,
-                error_retryable=False,
-                escalations=escalations,
-                debrief=debrief,
-                citations=worker_citations,
-                model=priced_model,
-                duration_ms=duration_ms,
-                rounds=run_rounds,
-                tool_failures=list(tool_failures),
-                usage=usage,
-                cost=cost,
-                transcript=messages,
-                received_context=received_blocks,
-            ),
-            tool_ctx,
-            search_policy=spec.search_policy or "",
-        )
-    # 刀1 / 方案 A：strict + 真未落盘仍硬拦；已落盘 + 仅交接降级 → 放行 COMPLETED。
-    hard_gap = _hard_gap_blocks_completion(
-        delivery_gaps,
-        debrief,
-        deliverable,
-        files_touched=len(touched or []),
-    )
-    if hard_gap:
-        logger.info(
-            "contract.hard_gap_blocked_completion",
-            run_id=spec.run_id,
-            reason=hard_gap.reason,
-            failure_kind=hard_gap.failure_kind,
-            gaps=delivery_gaps,
-        )
-        env.sink.emit(
-            run_failed(
-                spec.run_id,
-                agent_id,
-                hard_gap.reason,
-                failure_kind=hard_gap.failure_kind,
-                debrief=debrief,
-                execution_id=env.execution_id,
-                retryable=False,
-            )
-        )
-        return _stamp_retrieval_evidence_gap(
-            RunState(
-                phase=RunPhase.FAILED,
-                content=content,
-                reasoning=reasoning,
-                error=hard_gap.reason,
-                error_retryable=False,
-                warnings=warnings,
-                delivery_gaps=delivery_gaps,
-                escalations=escalations,
-                debrief=debrief,
-                citations=worker_citations,
-                model=priced_model,
-                duration_ms=duration_ms,
-                rounds=run_rounds,
-                files_touched=touched,
-                file_acceptance=build_file_acceptance(
-                    touched,
-                    phase=RunPhase.FAILED,
-                    error=hard_gap.reason,
-                    path_rejections=path_rej,
-                    products=products,
-                ),
-                tool_failures=list(tool_failures),
-                usage=usage,
-                cost=cost,
-                transcript=messages,
-                received_context=received_blocks,
-            ),
-            tool_ctx,
-            search_policy=spec.search_policy or "",
-        )
+    # 空交 / 未落盘不再把节点打成 FAILED。
     # The worker's terminal RunState is journaled at the ``execute`` choke point
     # below (run_final_fact — covers COMPLETED *and* FAILED in one place), so resume
     # re-seeds it from facts not the旁路 frame (执行级事件溯源 Phase 2 ⑥).

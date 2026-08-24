@@ -1655,6 +1655,130 @@ async def test_admin_conversation_replay_surfaces_textless_error_turn(
     assert marker["metrics"]["status"] == "error"
     assert marker["metrics"]["error"] == "early boom"
     assert marker["trace_id"] == trace_id
+    assert marker["reasoning_content"] is None
+
+
+async def test_admin_conversation_replay_surfaces_reasoning_content(
+    client, make_admin, session_factory
+):
+    """Assistant rows expose messages.reasoning_content; user / bare markers null."""
+    username, password = await make_admin()
+    await login_admin(client, username, password)
+    alice = await _seed_user(session_factory, "alice_reasoning")
+    plain_trace = uuid4().hex
+    journal_trace = uuid4().hex
+    plain_reasoning = "先想清楚再回答"
+    journal_reasoning = "工具链前的思考"
+    async with session_factory() as session:
+        conv = await ConversationRepository(session).create(
+            user_id=alice, title="思考复盘"
+        )
+        conv_id = conv.id
+        await MessageRepository(session).create(
+            conversation_id=conv_id,
+            role="user",
+            content="纯聊一句",
+        )
+        plain_assistant = await MessageRepository(session).create(
+            conversation_id=conv_id,
+            role="assistant",
+            content="纯聊回复",
+            reasoning_content=plain_reasoning,
+            trace_id=plain_trace,
+        )
+        await TurnMetricsRepository(session).record(
+            turn_id=plain_assistant.id,
+            conversation_id=conv_id,
+            user_id=alice,
+            trace_id=plain_trace,
+            agent_id="CEO",
+            kind="turn",
+            status="ok",
+            finish_reason="stop",
+            error=None,
+            rounds=1,
+            duration_ms=200,
+            delegated=False,
+            workers=0,
+            input_tokens=10,
+            output_tokens=5,
+        )
+        await MessageRepository(session).create(
+            conversation_id=conv_id,
+            role="user",
+            content="带工具一句",
+        )
+        journal_assistant = await MessageRepository(session).create(
+            conversation_id=conv_id,
+            role="assistant",
+            content="工具回复",
+            reasoning_content=journal_reasoning,
+            trace_id=journal_trace,
+        )
+        await TurnMetricsRepository(session).record(
+            turn_id=journal_assistant.id,
+            conversation_id=conv_id,
+            user_id=alice,
+            trace_id=journal_trace,
+            agent_id="CEO",
+            kind="turn",
+            status="ok",
+            finish_reason="tool_calls",
+            error=None,
+            rounds=2,
+            duration_ms=400,
+            delegated=False,
+            workers=0,
+            input_tokens=20,
+            output_tokens=10,
+        )
+        await TurnJournalRepository(session).record(
+            turn_id=journal_assistant.id,
+            conversation_id=conv_id,
+            trace_id=journal_trace,
+            entries=[
+                {
+                    "kind": "llm_call",
+                    "payload": {
+                        "run_id": "r1",
+                        "round_idx": 0,
+                        "finish_reason": "tool_calls",
+                        "usage": {"input": 20, "output": 10},
+                    },
+                    "ts": None,
+                },
+                {
+                    "kind": "tool_call",
+                    "payload": {
+                        "run_id": "r1",
+                        "tool_call_id": "tc1",
+                        "name": "read_file",
+                        "arguments": '{"path": "x.py"}',
+                        "result": "ok",
+                        "success": True,
+                    },
+                    "ts": None,
+                },
+            ],
+        )
+
+    r = await client.get(f"/v1/admin/observability/conversations/{conv_id}")
+    assert r.status_code == 200, r.text
+    msgs = r.json()["messages"]
+    assert [m["role"] for m in msgs] == ["user", "assistant", "user", "assistant"]
+
+    plain_user, plain_asst, journal_user, journal_asst = msgs
+    assert plain_user["reasoning_content"] is None
+    assert plain_asst["reasoning_content"] == plain_reasoning
+    assert plain_asst["has_final_state"] is False
+    assert plain_asst["spans"] == []
+
+    assert journal_user["reasoning_content"] is None
+    assert journal_asst["reasoning_content"] == journal_reasoning
+    assert journal_asst["spans"]
+    assert journal_asst["has_final_state"] is False
+    assert journal_asst["runs_payload"] is None
+    assert journal_asst["projected"] is None
 
 
 async def test_admin_conversation_replay_unknown_404(client, make_admin):

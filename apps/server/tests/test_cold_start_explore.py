@@ -487,6 +487,7 @@ def test_compose_prompt_refresh_gate():
     assert "画像.md」为空" not in text
     assert "【冷启动探索幕 · 绑定已变】" not in text
     assert "写盘不得出 AgentCore/" in text
+    assert "create_folder 新建的云文件夹除外" in text
     # 步 3：厚背景资料是按需条目，不再有「勿写 文档/项目/」这类路径禁令。
     assert "文档/项目" not in text
     assert "厚背景资料" in text
@@ -809,6 +810,7 @@ def test_fork_explore_write_scope_does_not_share_write_permission():
     assert worker.write_scope == "none"
     assert worker.cold_start_explore_pending is True
     assert base.write_scope == "project"
+    assert worker.turn_created_folder_ids == base.turn_created_folder_ids
     assert base.cold_start_explore_pending is False
 
 

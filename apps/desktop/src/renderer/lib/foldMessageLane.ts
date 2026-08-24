@@ -27,11 +27,11 @@ import {
   appendReasoningStep,
   appendReworkStep,
   appendStageCardStep,
-  appendTeamPreviewStep,
   appendTeamStep,
   appendToolStep,
   appendUserInterjectionStep,
   dropTrailingContentSteps,
+  hasClosedBlockWithText,
   openBlockText,
   promoteScalarContentIntoProcess,
   replaceTrailingContentStep,
@@ -76,6 +76,7 @@ export function foldContentDelta(
 ): MessageLaneState {
   const d = delta || "";
   if (!d) return state;
+  if (hasClosedBlockWithText(state.process, "content", d)) return state;
   if (replace) {
     const open = openBlockText(state.process, "content");
     return {
@@ -115,6 +116,7 @@ export function foldReasoningDelta(
 ): MessageLaneState {
   const d = delta || "";
   if (!d) return state;
+  if (hasClosedBlockWithText(state.process, "reasoning", d)) return state;
   if (replace) {
     const open = openBlockText(state.process, "reasoning");
     return {
@@ -227,7 +229,7 @@ function appendMarkerStep(
     case "plan_review":
       return appendPlanReviewStep(process, id);
     case "team_preview":
-      return appendTeamPreviewStep(process, id);
+      return process ?? [];
     case "escalation":
       return appendEscalationStep(process, id);
     case "approval":
@@ -273,16 +275,12 @@ export function foldPlanReviewMarker(
   );
 }
 
-/** Fold a `team_preview_required` into the timeline as a positional `team_preview` marker. */
+/** Retired kickoff marker — do not insert timeline steps. */
 export function foldTeamPreviewMarker(
   state: MessageLaneState,
-  checkpointId: string,
+  _checkpointId: string,
 ): MessageLaneState {
-  return foldInteractionTimelineMarker(
-    state,
-    requiredTimeline("team_preview"),
-    checkpointId,
-  );
+  return state;
 }
 
 /** Fold a `user_interjection` into the timeline as a zero-width positional marker.
@@ -305,7 +303,8 @@ function isSettledProcessStep(step: ProcessStep): boolean {
   );
 }
 
-/** Markers whose product order sits before `team` (insertBeforeTeam). */
+/** Legacy markers that historically sat before `team` (insertBeforeTeam) — only
+ * `team_preview` (开工卡已退役). Skip/insert paths remain for old journal data. */
 function isBeforeTeamMarker(step: ProcessStep): boolean {
   return step.kind === "team_preview";
 }
@@ -379,8 +378,9 @@ function foldSettledPrefix(
  * the journal slice has no settled events but process already carries content
  * (minimal test / truncated events), falls back to append — same as legacy.
  *
- * `advancePastBeforeTeam`: after the settled prefix, skip `team_preview`
- * so product order stays 开工卡 → 协作图.
+ * `advancePastBeforeTeam`: after the settled prefix, skip legacy `team_preview`
+ * markers so hydrate inserts `team` after them (old journals). Current product no
+ * longer emits kickoff cards — the graph appears when `run_plan` lands.
  */
 function journalMarkerInsertIndex(
   process: ProcessStep[],
@@ -422,7 +422,8 @@ function journalMarkerInsertIndex(
 
 /** Reload 补标记（时间线一期）: backfill every positional marker the journal implies
  * into a persisted `process[]` — `run_plan` → `team`，`*_required` → registry marker
- * (insertBeforeTeam 语义由 appendTeamPreviewStep 内建)。保证不变量「有交互卡必有时间线
+ * （`team_preview` 已退役：journal 不再补；存量 process 若已有该标记，insert-before-team
+ * 语义仍由 appendTeamPreviewStep 保留）。保证不变量「有交互卡必有时间线
  * 标记」在重载后成立（底部堆叠回退已废除，缺标记的卡会整段消失）。
  *
  * 纯补标记：绝不吞正文。absorb 只走 ``content_reset``；重载的 process 是终态，
@@ -497,6 +498,12 @@ export function ensureTimelineMarkersFromJournal(
         const at = journalMarkerInsertIndex(steps, events, i, false);
         steps = appendUserInterjectionStep(steps, iid.trim(), at);
       }
+      continue;
+    }
+    if (
+      ev.type === "team_preview_required" ||
+      ev.type === "team_preview_resolved"
+    ) {
       continue;
     }
     const def = defFromRequiredEvent(ev.type);

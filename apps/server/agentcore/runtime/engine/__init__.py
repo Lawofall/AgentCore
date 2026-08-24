@@ -9,7 +9,6 @@ Single-agent ReAct loop for MVP:
 All intermediate events are emitted to an EventSink for SSE delivery.
 """
 
-from .loop import ReactLoopOut, react_loop
 from .segments import deliverable_continuity_instruction, join_segments
 from .timeout import resolve_tool_timeout
 
@@ -20,3 +19,17 @@ __all__ = [
     "react_loop",
     "resolve_tool_timeout",
 ]
+
+
+def __getattr__(name: str):
+    # Lazy: ``loop`` imports ``ApprovalGate`` → ``events`` while ``events`` may still
+    # be initializing (``sink_process`` imports ``tool_channel_redirect`` from this pkg).
+    if name == "ReactLoopOut":
+        from .loop import ReactLoopOut
+
+        return ReactLoopOut
+    if name == "react_loop":
+        from .loop import react_loop
+
+        return react_loop
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -13,6 +13,7 @@ export { CONVERSATION_SLICE_LRU_LIMIT } from "./sliceLru";
 export {
   isMessageWindowResident,
   isMessageWindowStrictlyRicher,
+  overlayIncomingWithRicherExisting,
   messageIdentityKeys,
   messageRichnessScore,
   type MessageWindowWriteRejectReason,

@@ -14,6 +14,7 @@ import { SidePanel } from "@/components/layout/SidePanel";
 import { SidePanelToggle } from "@/components/layout/SidePanelToggle";
 import { Button } from "@/components/ui";
 import {
+  ensureFullMessageRuns,
   fetchMessageWindow,
   shouldSetGeneratingOnHydrate,
 } from "@/services/messages";
@@ -35,7 +36,6 @@ import {
   useExecutionStore,
   useMessageExecution,
 } from "@/stores/execution";
-import { teamPreviewsExact, useInteractionStore } from "@/stores/interactions";
 import { dismissFocusedFloat, useSidePanelStore } from "@/stores/sidePanel";
 import type { TurnDetailView } from "@/stores/ui";
 import { ReactFlowProvider } from "@xyflow/react";
@@ -260,24 +260,29 @@ export function TurnDetailPage() {
       if (hydratePhase === "ready") setJournalHydrateAttempted(true);
       return;
     }
+    if (conversationId && turnMessage?.runs?.eventsComplete === false) {
+      void ensureFullMessageRuns(conversationId, scopeKey).then((got) => {
+        if (!got) setJournalHydrateAttempted(true);
+      });
+      return;
+    }
     if (stableJournalIdentity) {
       useExecutionStore
         .getState()
         .hydrateFromJournal(scopeKey, stableJournalIdentity.journal);
     }
     setJournalHydrateAttempted(true);
-  }, [stableJournalIdentity, scopeKey, hydratePhase, hasTurnMessage]);
+  }, [
+    stableJournalIdentity,
+    scopeKey,
+    hydratePhase,
+    hasTurnMessage,
+    conversationId,
+    turnMessage?.runs?.eventsComplete,
+  ]);
 
   const execution = useMessageExecution(scopeKey);
-  const interactionById = useInteractionStore((s) => s.byId);
-  const showTeamGraph = teamGraphVisible(
-    execution?.runs,
-    teamPreviewsExact(
-      interactionById.values(),
-      conversationId ?? null,
-      scopeKey,
-    ),
-  );
+  const showTeamGraph = teamGraphVisible(execution?.runs);
   const taskSummary = execution?.taskSummary;
   // Scoped to the turn being viewed — not "conversation is generating somewhere".
   const liveViewedTurn =

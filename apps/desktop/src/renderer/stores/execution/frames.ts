@@ -1,3 +1,4 @@
+import { resolveToolEndStatus } from "@/lib/channelRedirect";
 import type {
   AskQuestion,
   BatchMetricsPayload,
@@ -243,7 +244,7 @@ export type RunFrame =
       toolCallId: string;
       result: string;
       display?: ToolDisplay | null;
-      status: "success" | "error";
+      status: "success" | "error" | "redirect";
       /** Product failure face (`tool_use_end.failure`); absent on success / old journals. */
       failure?: import("@/types/events").ToolFailure;
     }
@@ -573,7 +574,7 @@ export function frameFromEvent(event: SSEEvent): RunFrame | null {
         toolCallId: p.tool_call_id,
         result: p.result,
         display: p.display ?? null,
-        status: p.status,
+        status: resolveToolEndStatus(p.status, p.failure),
         ...(p.failure != null ? { failure: p.failure } : {}),
       };
     }

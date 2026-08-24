@@ -37,29 +37,7 @@ tests/          # pytest（含架构边界测试）
 
 ## 本地启动
 
-前置：Docker Compose 已起（Postgres / Redis / SearXNG）、本目录 `uv sync`、`.env` 已从 `.env.example` 配好（至少 `ENCRYPTION_KEY`）。完整说明见本地开发 §1–§2。
-
-```bash
-# 仓库根
-docker compose -f deploy/docker-compose.dev.yml up -d
-
-cd apps/server
-cp .env.example .env
-uv sync
-uv run alembic upgrade head   # DEBUG=true 时启动也会自动迁移
-uv run python -m agentcore    # 默认 0.0.0.0:8000
-```
-
-Windows 推荐清树启动（避免孤儿 reload worker）：
-
-```powershell
-powershell -File apps/server/scripts/start-dev-server.ps1
-```
-
-开发账号：`uv run python scripts/seed_dev_user.py`（默认 `dev` / `devpassword`）。  
-管理员：`uv run python scripts/create_admin.py <username>`。
-
-**长时间真跑多 Agent 前**：`.env` 设 `AGENTCORE_RELOAD=false`，避免 WatchFiles 打断回合。
+完整步骤 → [`本地开发` §1–§2](../../docs/02-架构/本地开发.md)。Windows 清树启动：`powershell -File apps/server/scripts/start-dev-server.ps1`。长时间真跑前 `.env` 设 `AGENTCORE_RELOAD=false`。
 
 ## 常用命令
 

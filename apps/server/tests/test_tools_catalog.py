@@ -182,6 +182,8 @@ def test_code_execute_description_routes_source_dump_to_file_read():
     assert "file_read" in ce
     assert "dump" in ce
     assert "禁止" in ce
+    assert "grep" in ce
+    assert "正则扫描" in ce
     # Positive path lives on file_read so the skipped tool still names itself.
     fr = FileReadTool().schema.description
     assert "code_execute" in fr

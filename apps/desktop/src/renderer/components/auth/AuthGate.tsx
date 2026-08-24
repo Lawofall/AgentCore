@@ -1,9 +1,7 @@
 import { MinimalTitleBar } from "@/components/layout/TitleBar";
-import { isNativeRuntime, isWebClient } from "@/lib/capabilities";
+import { isWebClient } from "@/lib/capabilities";
 import { logEvent } from "@/lib/log";
 import { clearBearerTokens } from "@/lib/sessionAuth";
-import { useApplyTheme } from "@/lib/theme";
-import { useNarrowLayout } from "@/lib/useNarrowLayout";
 import { LoginPage } from "@/pages/LoginPage";
 import { ServiceUnavailablePage } from "@/pages/ServiceUnavailablePage";
 import {
@@ -39,8 +37,6 @@ export const UNAVAILABLE_BOOTSTRAP_POLL_MS = 5000;
  * omits it (the browser provides its own window chrome).
  */
 function PreAuthShell({ children }: { children: ReactNode }) {
-  const isNarrow = useNarrowLayout();
-  useApplyTheme(isNarrow || isNativeRuntime());
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden">
       {!isWebClient() && <MinimalTitleBar />}

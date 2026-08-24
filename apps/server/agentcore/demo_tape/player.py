@@ -49,8 +49,6 @@ from agentcore.runtime.events import (
     message_start,
     plan_review_required,
     plan_review_resolved,
-    team_preview_required,
-    team_preview_resolved,
 )
 from agentcore.runtime.events.types import SSEEvent
 from agentcore.runtime.facts import TurnFactLog, current_fact_log, pre_pause_from_journal
@@ -80,7 +78,6 @@ pacing_sleep = asyncio.sleep
 
 # Event type → (suspension_kind, resolved emitter name for logs).
 _WIRED_PAUSE_BY_EVENT: dict[str, str] = {
-    "team_preview_required": "team_preview",
     "checkpoint_required": "ask_user",
     "plan_review_required": "plan_review",
 }
@@ -292,24 +289,7 @@ def _build_required_event(
     """Build a live ``*_required`` SSEEvent from tape payload (minimal seed)."""
     checkpoint_id = _ensure_checkpoint_id(payload, message_id=message_id)
     payload["conversation_id"] = conversation_id
-    if et_name == "team_preview_required":
-        required = team_preview_required(
-            checkpoint_id=checkpoint_id,
-            conversation_id=conversation_id,
-            workers=list(payload.get("workers") or []),
-            tools=list(payload.get("tools") or []),
-            primitive=str(payload.get("primitive") or "debate"),
-            motion=str(payload.get("motion") or ""),
-            form=str(payload.get("form") or ""),
-            sides=list(payload.get("sides") or []),
-            max_rounds=int(payload.get("max_rounds") or 0),
-            thorough=bool(payload.get("thorough", True)),
-            headline=str(payload.get("headline") or ""),
-            revision=_tape_revision(payload.get("revision")),
-            revised_from=str(payload.get("revised_from") or ""),
-            revision_note=str(payload.get("revision_note") or ""),
-        )
-    elif et_name == "checkpoint_required":
+    if et_name == "checkpoint_required":
         intent = payload.get("intent")
         required = checkpoint_required(
             checkpoint_id=checkpoint_id,
@@ -342,13 +322,7 @@ def _emit_resolved_for_kind(
     note: str = "",
     selected: list[str] | None = None,
 ) -> None:
-    if kind == "team_preview":
-        sink.emit(
-            team_preview_resolved(
-                checkpoint_id=checkpoint_id, decision=decision, note=note
-            )
-        )
-    elif kind == "ask_user":
+    if kind == "ask_user":
         sink.emit(
             checkpoint_resolved(
                 checkpoint_id=checkpoint_id,
@@ -737,9 +711,11 @@ async def _pause_durable(
     )
 
 
-# Back-compat alias for director tests that patch ``_pause_team_preview``.
+# Retired kickoff pause — leftover tapes skip the event; do not persist a new frame.
 async def _pause_team_preview(**kwargs: Any) -> dict[str, Any]:
-    return await _pause_durable(et_name="team_preview_required", **kwargs)
+    _ = kwargs
+    logger.debug("demo_tape.skip_retired_team_preview")
+    return {}
 
 
 async def play_tape_events(

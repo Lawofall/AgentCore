@@ -465,7 +465,8 @@ def test_multi_agent_ceo_rate_limit_paused_pins_continue_face(projected):
     kinds = [e.type for e in events]
     assert EventType.PLAN_REVIEW_REQUIRED not in kinds
     assert EventType.CHECKPOINT_REQUIRED not in kinds
-    assert EventType.TEAM_PREVIEW_REQUIRED not in kinds
+    assert "team_preview_required" not in kinds
+
     starts = [e for e in events if e.type is EventType.MESSAGE_START]
     assert len(starts) == 1
 

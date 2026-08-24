@@ -17,12 +17,12 @@ moment a "playbook" needs branching / conditionals / per-call structural choices
 
 from __future__ import annotations
 
+import errno
 import re
 from typing import Any
 
 from agentcore.runtime.runs.playbooks._common import (
     CODE_AUDIT_FANOUT,
-    CONVERSATION_ID_MECH_KEY,
     MAX_PLAYBOOK_FANOUT,
     USER_MESSAGE_MECH_KEY,
     Playbook,
@@ -30,10 +30,6 @@ from agentcore.runtime.runs.playbooks._common import (
     clean_str,
 )
 from agentcore.runtime.runs.playbooks.audit import code_audit
-from agentcore.runtime.runs.playbooks.build_site import (
-    build_website,
-    build_website_verify,
-)
 from agentcore.runtime.runs.playbooks.build_soft import (
     build_app,
     build_feature,
@@ -155,44 +151,6 @@ PLAYBOOKS: dict[str, Playbook] = {
         ),
         build=build_app,
     ),
-    "build_website": Playbook(
-        name="build_website",
-        summary=(
-            "建站 intensity 编制档：默认 standard=文案→前端(DESIGN+整页+CONTRACT)"
-            "→独立 QA 三串；solo=单节点一人整页(文案+DESIGN+页面合并,无独立 copy/qa 波)；"
-            "sections 仅覆盖清单不扇出；visual critic（standard）；"
-            "默认营销 pack；style=toolshed → tool_dense + 禁营销皮"
-        ),
-        slots=(
-            "topic(必填,站点/落地页/控制台一句话简述——"
-            "产物目录固定 site/，不是文件夹槽；"
-            "delegate 时写入 playbook_args.topic；"
-            "亦接受 purpose/brief/description 同义简述键；不接受旧键 site；"
-            "例:topic=\"面向企业客户的智能数据分析 SaaS 中文营销官网\") / "
-            "intensity(可选,编制档:standard 默认三串;"
-            "solo=单节点一人整页) / "
-            "style(可选,气质槽:marketing 默认落地页;"
-            "toolshed=控制台 dense / tool pack / 禁营销皮) / "
-            "sections(可选,页面分区覆盖清单,不扇出节点;"
-            "marketing 默认首屏英雄区·卖点能力区·行动号召区;"
-            "toolshed 默认应用外壳·侧栏导航·数据表格) / "
-            "stack(可选,技术栈) / audience(可选,访客/读者/使用者)"
-        ),
-        build=build_website,
-    ),
-    "build_website_verify": Playbook(
-        name="build_website_verify",
-        summary=(
-            "第二段整页/视觉验收（qa_deferred_budget 续派）：只跑 QA，要求已有 site/；"
-            "勿重建文案/整站"
-        ),
-        slots=(
-            "topic(必填,与建站时 topic 简述一致或写工作区站点名——"
-            "产物目录固定 site/，不是文件夹槽；"
-            "例:topic=\"面向企业客户的智能数据分析 SaaS 中文营销官网\")"
-        ),
-        build=build_website_verify,
-    ),
     "compare_options": Playbook(
         name="compare_options",
         summary="N 路并行评估各选项→汇总对比推荐的决策支持",
@@ -240,7 +198,6 @@ def playbook_args_schema_description() -> str:
     required_cues = "；".join(cues)
     return (
         "具名 playbook 快捷槽位对象（与 playbook 联用；默认手写 tasks 时勿传）。"
-        "建站必填 topic（简述；亦接受 purpose/brief/description；不接受旧键 site）、"
         "绿场必填 app——勿空对象。"
         f"必填槽：{required_cues}。"
         "code_audit modules：整仓按产品缝扇出（先 2–3，不从 scope 自动拆；勿按目录填满上限）。"
@@ -268,7 +225,7 @@ def expand_playbook(
     args: dict[str, Any] | None,
     *,
     user_message: str = "",
-    conversation_id: str = "",
+    conversation_id: str = "",  # noqa: ARG001 — call-site compat; DESIGN inject is executor-side
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Expand a named playbook + slot args into a ``tasks`` dict-list for ``build_run_plan``.
 
@@ -276,10 +233,12 @@ def expand_playbook(
     mechanism-only key for playbooks that need proposition fidelity (e.g. multi_lens
     synthesizer). Not a CEO-facing slot.
 
-    ``conversation_id`` is mechanism-only for ``build_website`` style-ledger injection.
+    ``conversation_id`` is accepted for call-site compatibility. Website DESIGN
+    inject is executor-side (``web_quality_scan`` workers), not playbook expansion.
 
     Returns ``(tasks, errors)``; a non-empty ``errors`` means the instantiation is rejected (unknown
-    name, bad args type, or a missing required slot) and the caller must NOT run it — mirroring
+    name, bad args type, missing required slot, or missing packaged internal resource) and the
+    caller must NOT run it — mirroring
     ``build_run_plan``'s reject-on-error contract so the delegate entry handles both the same
     way."""
     pb = PLAYBOOKS.get(name)
@@ -288,19 +247,20 @@ def expand_playbook(
     if args is not None and not isinstance(args, dict):
         return [], [f"playbook_args 必须是对象；{pb.name} 槽位：{pb.slots}"]
     slot_args: dict[str, Any] = dict(args or {})
-    if name in ("build_website", "build_website_verify"):
-        from agentcore.runtime.runs.playbooks.build_site import (
-            normalize_website_topic_args,
-        )
-
-        slot_args = normalize_website_topic_args(slot_args)
     um = clean_str(user_message)
     if um:
         slot_args[USER_MESSAGE_MECH_KEY] = um
-    cid = clean_str(conversation_id)
-    if cid:
-        slot_args[CONVERSATION_ID_MECH_KEY] = cid
-    return pb.build(slot_args)
+    try:
+        return pb.build(slot_args)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        if exc.errno != errno.ENOENT:
+            raise
+    return [], [
+        f"playbook『{pb.name}』内部打包资源缺失，无法实例化；"
+        "请去掉 playbook，改为手写 tasks 数组。"
+    ]
 
 
 __all__ = [

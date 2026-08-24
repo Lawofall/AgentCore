@@ -225,7 +225,6 @@ def test_turn_paused_fact_round_trip():
     controller = {
         "post_delegate": True,
         "delegate_count": 1,
-        "team_gate_fired": True,
         "audit_gate_fired": False,
         "first_batch_substantial": True,
     }

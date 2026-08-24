@@ -6,12 +6,6 @@ import type { ReplaySpan } from "@/services/adminObservability";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
-export const ROLE_LABEL: Record<string, string> = {
-  user: "用户",
-  assistant: "助手",
-  system: "系统",
-};
-
 export type MobileTab = "timeline" | "team";
 export const STATUS_TONE: Record<
   string,
@@ -25,8 +19,9 @@ export const STATUS_TONE: Record<
   skipped: "neutral",
 };
 
-const COLLAPSE_CHARS = 480;
-const COLLAPSE_LINES = 10;
+/** Align with desktop assistant clamp (~640px), not the old 480-char console fold. */
+const COLLAPSE_CHARS = 1600;
+const COLLAPSE_LINES = 24;
 
 export function formatProcessSummary(
   llmCount: number,
@@ -58,7 +53,14 @@ export function EmptyPanel({ text }: { text: string }) {
   );
 }
 
-export function CollapsibleBody({ content }: { content: string }) {
+export function CollapsibleBody({
+  content,
+  fadeFrom = "from-background",
+}: {
+  content: string;
+  /** Match the surface behind the clamp (user bubble is muted). */
+  fadeFrom?: string;
+}) {
   const long =
     content.length > COLLAPSE_CHARS ||
     content.split("\n").length > COLLAPSE_LINES;
@@ -73,14 +75,17 @@ export function CollapsibleBody({ content }: { content: string }) {
       <div
         className={cn(
           "relative min-w-0",
-          !expanded && "max-h-[11rem] overflow-hidden",
+          !expanded && "max-h-[40rem] overflow-hidden",
         )}
       >
         <Markdown content={content} />
         {!expanded && (
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-card to-transparent"
+            className={cn(
+              "pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t to-transparent",
+              fadeFrom,
+            )}
           />
         )}
       </div>

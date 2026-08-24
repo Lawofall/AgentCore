@@ -24,7 +24,6 @@ from .escalation_gate import apply_escalation_gate
 from .governance import (
     apply_circuit_breaker,
     govern_after_tools,
-    maybe_restore_team_gate_tools,
     note_delegate_batches,
     resolve_openai_tool_defs,
 )
@@ -225,11 +224,6 @@ async def handle_tool_calls_round(
     controller.record(outcome.attempts)
     # Mark post-delegate mode if delegate was called
     note_delegate_batches(controller, tool_calls, outcome.attempts)
-    # Gate purpose is force-delegate, not punish the whole turn: restore only what
-    # team_gate newly stripped so CEO can read worker artifacts. Breaker re-applies below.
-    gate_restored = maybe_restore_team_gate_tools(
-        controller, disabled_tools=disabled_tools, attempts=outcome.attempts
-    )
     # 工具面瘦身: after tools run, coordination / supervised yield may have appeared —
     # promote gated tools onto the registry before re-resolving OpenAI defs.
     from agentcore.runtime.resolve.ceo_surface import promote_coordination_surface_if_needed
@@ -250,9 +244,8 @@ async def handle_tool_calls_round(
     sync_tool_failure_constraint_in_system(
         messages, controller.outstanding_tool_failures()
     )
-    if breaker.refresh_tool_defs or surface_changed or gate_restored:
+    if breaker.refresh_tool_defs or surface_changed:
         tool_defs = resolve_openai_tool_defs(tools, allowed_tool_names, disabled_tools)
-    gate_before = controller.team_gate_fired
     from agentcore.runtime.runs.cutoff import worker_keeps_notes_in_wind_down
 
     keep_notes = worker_keeps_notes_in_wind_down(
@@ -271,9 +264,6 @@ async def handle_tool_calls_round(
         investigation_tools=controller.investigation_tool_names,
         keep_notes=keep_notes,
     )
-    # Hard team-gate may have stripped investigation tools — refresh defs.
-    if controller.team_gate_fired and not gate_before:
-        tool_defs = resolve_openai_tool_defs(tools, allowed_tool_names, disabled_tools)
     return ToolRoundResult(
         outcome=outcome,
         directive=directive,

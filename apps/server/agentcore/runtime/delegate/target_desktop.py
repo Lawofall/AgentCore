@@ -315,6 +315,8 @@ async def ensure_bare_chat_auto_cloud_desk(
         )
     turn_target_desk.note_folder(folder_id)
     if tool_context is not None:
+        if announce:
+            tool_context.note_turn_created_folder(folder_id)
         await bind_tool_context_to_landing_desk(tool_context, folder_id=folder_id)
     if announce and sink is not None:
         from agentcore.runtime.events import auto_folder_created
@@ -399,8 +401,20 @@ async def apply_target_desktop(
         desktop_online=desktop_online,
         permission_axes=permission_axes,
     )
+    # Birth-desk ``worker_tools`` keep MCP / consult wiring; only the sandbox
+    # execution class follows the *target* backend. Leaving ``code_execute`` on
+    # a sidecar→cloud-folder swap lets the model call it, then 10ms-fail
+    # ``not_linux`` and retire the family as「本机执行环境不可用」.
+    from agentcore.runtime.runs.executor.shared import _registry_without
+    from agentcore.tools.builtin import execution_class_enabled_for
+
+    tools_for_desk = worker_tools
+    if not execution_class_enabled_for(backend, permission_axes):
+        tools_for_desk = _registry_without(
+            worker_tools, "code_execute", "test_run", "terminal"
+        )
     tools = await _registry_rewire_consult_tools(
-        worker_tools,
+        tools_for_desk,
         folder_id=binding.folder_id,
         user_id=base_tool_context.user_id,
     )

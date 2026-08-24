@@ -30,6 +30,7 @@ exception ``retry_attempts`` on failure).
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -231,6 +232,7 @@ class ObservingLLMProvider:
         seen_tool_names: set[str] = set()
         aborted = False
         outcome = "open"
+        interrupt_type = "GeneratorExit"
         try:
             raise_if_turn_auth_dead(self._latch_credential_source())
             await self._refuse_if_quota_spent(request)
@@ -262,9 +264,10 @@ class ObservingLLMProvider:
                                 tool_names.append(name)
                 yield chunk
             outcome = "ok"
-        except GeneratorExit:
+        except (GeneratorExit, asyncio.CancelledError) as e:
             if outcome != "ok":
                 outcome = "closed"
+            interrupt_type = type(e).__name__
             raise
         except Exception as e:
             outcome = "failed"
@@ -324,7 +327,7 @@ class ObservingLLMProvider:
                         latency_ms=latency_ms,
                         attempt=1,
                         error="stream_closed_by_consumer",
-                        error_type="GeneratorExit",
+                        error_type=interrupt_type,
                         stream=True,
                     )
             elif outcome == "failed" and self._billable_usage(usage):

@@ -1,16 +1,22 @@
+import { CopyableId } from "@/components/CopyableId";
+import { ProcessLane } from "@/components/chat/ProcessLane";
+import {
+  chatTurnFromReplay,
+  resolveChatTurn,
+} from "@/components/chat/chatTurn";
 import {
   CollapsibleBody,
   EmptyPanel,
   STATUS_TONE,
-  SpanRow,
 } from "@/components/conversation-replay/shared";
 import { LlmProcessRow, ToolLine } from "@/components/conversation-replay/ToolLine";
+import { TurnOpsBar } from "@/components/conversation-replay/TurnOpsBar";
 import { Badge } from "@/components/ui/Badge";
 import {
   harvestKindLabel,
   isExecutionHarvestMessage,
 } from "@/lib/executionHarvest";
-import { cn, fmtMs } from "@/lib/utils";
+import { cn, fmtInt, fmtMs, fmtTime } from "@/lib/utils";
 import type {
   ReplayMessage,
   ReplayRun,
@@ -30,9 +36,23 @@ function runMessageBody(run: ReplayRun): string | null {
   return null;
 }
 
+export type ReplaySessionMeta = {
+  title: string;
+  deleted: boolean;
+  userLabel: string;
+  createdAt: string;
+  conversationId: string;
+  modelProfileName?: string | null;
+  modelProfileId?: string | null;
+  turns: number;
+  errors: number;
+  costLabel: string;
+  multiAgentTurns: number;
+};
+
 /**
- * Right dock: harvest attribution, span details, worker full text.
- * Main column is user-perspective — this is where ops signals landed.
+ * Right dock: session/turn diagnose + worker full text.
+ * Mirrors the desktop side panel (closed by default, 400px).
  */
 export function InspectorPanel({
   message,
@@ -42,9 +62,13 @@ export function InspectorPanel({
   onClose,
   cnyLabel,
   harvest,
+  harvests = [],
+  onSelectHarvest,
+  session,
+  hydrating = false,
   className,
 }: {
-  message: ReplayMessage;
+  message: ReplayMessage | null;
   selectedRunId: string | null;
   onSelectRun: (runId: string) => void;
   onClearRun: () => void;
@@ -53,29 +77,37 @@ export function InspectorPanel({
   cnyLabel?: string | null;
   /** Preceding harvest, when the selected row is the assistant that followed it. */
   harvest?: ReplayMessage | null;
+  harvests?: ReplayMessage[];
+  onSelectHarvest?: (id: string) => void;
+  session?: ReplaySessionMeta | null;
+  /** Turn final-state fetch in flight — worker process may still be empty. */
+  hydrating?: boolean;
   /** Height and width come from the page's layout row, not from the viewport. */
   className?: string;
 }) {
-  const runs = message.runs;
-  const spans = message.spans;
+  const runs = message?.runs ?? [];
+  const spans = message?.spans ?? [];
   const selectedRun = useMemo(
     () => runs.find((r) => r.run_id === selectedRunId) ?? null,
     [runs, selectedRunId],
   );
-  const selfHarvest = isExecutionHarvestMessage(message);
+  const selfHarvest = message ? isExecutionHarvestMessage(message) : false;
   const shownHarvest = selfHarvest ? message : (harvest ?? null);
+  const title = selectedRun
+    ? selectedRun.role || selectedRun.agent_id || "队员"
+    : selfHarvest
+      ? "系统收口"
+      : "诊断";
 
   return (
     <aside
       className={cn(
-        "flex flex-col gap-0 overflow-hidden rounded-xl border border-border bg-card",
+        "flex flex-col gap-0 overflow-hidden bg-background",
         className,
       )}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-border border-b px-3 py-2">
-        <span className="text-xs font-medium text-foreground">
-          {selfHarvest ? "系统收口" : "队员"}
-        </span>
+        <span className="text-xs font-medium text-foreground">{title}</span>
         <button
           type="button"
           onClick={onClose}
@@ -85,29 +117,94 @@ export function InspectorPanel({
           <X size={14} />
         </button>
       </div>
-      {!selfHarvest && <OpsStrip message={message} cnyLabel={cnyLabel} />}
       <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-4">
+        {session && <SessionMeta session={session} />}
+        {(harvests.length > 0 || message) && onSelectHarvest && (
+          <TurnOpsBar
+            selected={message}
+            harvests={harvests}
+            onSelectHarvest={onSelectHarvest}
+          />
+        )}
+        {message && !selfHarvest && <OpsStrip message={message} cnyLabel={cnyLabel} />}
         {shownHarvest && (
           <HarvestBlock
             message={shownHarvest}
             asTrigger={!selfHarvest}
           />
         )}
-        {!selfHarvest && spans.length > 0 && (
+        {message && !selfHarvest && !selectedRun && spans.length > 0 && (
           <TurnSpanList message={message} />
         )}
-        {!selfHarvest && (
+        {message && !selfHarvest && (
           <WorkerPanel
+            message={message}
             run={selectedRun}
             runs={runs}
             spans={spans}
             selectedRunId={selectedRunId}
+            hydrating={hydrating}
             onSelectRun={onSelectRun}
             onClearRun={onClearRun}
           />
         )}
+        {!message && (
+          <p className="text-muted-foreground text-xs">
+            点选一条助手消息查看该回合诊断。
+          </p>
+        )}
       </div>
     </aside>
+  );
+}
+
+function SessionMeta({ session }: { session: ReplaySessionMeta }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-sm font-medium text-foreground">
+          {session.title || "未命名会话"}
+        </span>
+        {session.deleted && <Badge tone="neutral">会话已删</Badge>}
+      </div>
+      <p className="text-muted-foreground text-xs">
+        {session.userLabel}
+        <span aria-hidden> · </span>
+        <span className="tabular-nums">{fmtTime(session.createdAt)}</span>
+      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs tabular-nums">
+        <span>回合 {fmtInt(session.turns)}</span>
+        <span>错误 {fmtInt(session.errors)}</span>
+        <span>成本 {session.costLabel}</span>
+        {session.multiAgentTurns > 0 && (
+          <span>多 Agent {session.multiAgentTurns} 回合</span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <CopyableId
+          value={session.conversationId}
+          label="conversation_id"
+          display={session.conversationId.slice(0, 8)}
+        />
+        {session.modelProfileName && (
+          <span
+            className="text-muted-foreground text-xs"
+            title={
+              session.modelProfileId
+                ? `profile ${session.modelProfileId}`
+                : undefined
+            }
+          >
+            {session.modelProfileName}
+            {session.modelProfileId && (
+              <span className="ml-1 font-mono">
+                {session.modelProfileId.slice(0, 8)}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -212,17 +309,21 @@ function OpsStrip({
 }
 
 function WorkerPanel({
+  message,
   run,
   runs,
   spans,
   selectedRunId,
+  hydrating,
   onSelectRun,
   onClearRun,
 }: {
+  message: ReplayMessage;
   run: ReplayRun | null;
   runs: ReplayRun[];
   spans: ReplaySpan[];
   selectedRunId: string | null;
+  hydrating: boolean;
   onSelectRun: (runId: string) => void;
   onClearRun: () => void;
 }) {
@@ -250,8 +351,17 @@ function WorkerPanel({
   }
 
   const body = runMessageBody(run);
+  const turn = resolveChatTurn(chatTurnFromReplay(message));
+  const process =
+    turn.runs.find((r) => r.id === run.run_id)?.process ?? [];
   const runSpans = spans.filter((s) => s.run_id === run.run_id);
-  const tools = runSpans.filter((s) => s.kind === "tool");
+  const showSpanFallback = process.length === 0 && runSpans.length > 0;
+  const processHasContent = process.some((s) => s.kind === "content");
+  const bodyBlock = body ? (
+    <div className="text-sm">
+      <CollapsibleBody content={body} />
+    </div>
+  ) : null;
 
   return (
     <div className="space-y-3">
@@ -285,19 +395,33 @@ function WorkerPanel({
         </div>
       )}
 
-      {run.output_summary && !body && (
-        <p className="text-sm text-muted-foreground">{run.output_summary}</p>
+      {showSpanFallback && (
+        <div className="space-y-1.5">
+          {runSpans.map((span, i) =>
+            span.kind === "tool" ? (
+              <ToolLine key={`tool-${i}`} span={span} />
+            ) : (
+              <LlmProcessRow key={`llm-${i}`} span={span} />
+            ),
+          )}
+        </div>
       )}
 
-      {body && (
-        <div>
-          <div className="mb-1 text-muted-foreground text-xs font-medium">
-            产出
-          </div>
-          <div className="text-sm">
-            <CollapsibleBody content={body} />
-          </div>
-        </div>
+      {(process.length > 0 || (!processHasContent && bodyBlock)) && (
+        <ProcessLane
+          steps={process}
+          collapse={false}
+          hideContentSteps={false}
+          fallbackContent={!processHasContent ? bodyBlock : null}
+        />
+      )}
+
+      {hydrating && process.length === 0 && runSpans.length === 0 && (
+        <p className="text-muted-foreground text-xs">正在加载队员过程…</p>
+      )}
+
+      {run.output_summary && !body && (
+        <p className="text-sm text-muted-foreground">{run.output_summary}</p>
       )}
 
       {run.error && (
@@ -306,22 +430,14 @@ function WorkerPanel({
         </div>
       )}
 
-      {tools.length > 0 && (
-        <div>
-          <div className="mb-1.5 text-muted-foreground text-xs font-medium">
-            工具 · {tools.length}
-          </div>
-          <ol className="flex flex-col gap-1.5 border-border border-l pl-2">
-            {tools.map((s, i) => (
-              <SpanRow key={i} span={s} />
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {!body && !run.task && !run.error && tools.length === 0 && (
-        <p className="text-muted-foreground text-xs italic">暂无队员明细</p>
-      )}
+      {!body &&
+        !run.task &&
+        !run.error &&
+        process.length === 0 &&
+        runSpans.length === 0 &&
+        !hydrating && (
+          <p className="text-muted-foreground text-xs italic">暂无队员明细</p>
+        )}
     </div>
   );
 }

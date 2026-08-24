@@ -68,7 +68,7 @@ MD_EXPORT_DISCIPLINE = (
 DEFAULT_RESEARCH_REPORT_ARTIFACT = f"{RESEARCH_DIR}/报告.md"
 
 # 本地改文件 / 广度摸底 / 成篇意图 / 字数承诺：用户·task 文 RE 猜意图腿已撤；
-# team_gate 与成篇硬门不扫自由文分叉；选型靠提示词，硬门只认结构字段。
+# 成篇硬门不扫自由文分叉；选型靠提示词，硬门只认结构字段。
 
 # 独立复核短报告：案 20260803-longfix-thin-review-claim-pass B——须 files_written，禁薄 handoff。
 # 纪律文案由 playbook / 已声明 form=files·artifacts 的 task 自带；运行时不再扫角色名抬契约。
@@ -214,8 +214,8 @@ def upstream_body_floor_satisfied(
     """Upstream floor for handoff / executor completion.
 
     ``min_body_chars`` is an optional internal floor (0 = 非空即可；不暴露 CEO 合同字段）。
-    已落盘 prose 一律满足。无地板时：非空正文即视为可消费产出（拓扑仍靠
-    ``handoff_requires_body`` 挡真正空交）；有地板时须 ``body ≥ min``。
+    已落盘 prose 一律满足。无地板时：非空正文即视为可消费产出（空交不再硬拒）；
+    有地板时须 ``body ≥ min``。
     """
     if has_landed_prose_artifact(landed_artifact_kinds):
         return True

@@ -24,20 +24,31 @@ import type { AgentNodeData } from "../agentNode/shared";
 const MID = "msg-run-stop";
 const CID = "conv-run-stop";
 
+const convPhase = vi.hoisted(() => ({
+  turnPhase: "streaming" as string,
+}));
+
 const submitRunStop = vi.fn();
 
 vi.mock("@/services/runStop", () => ({
   submitRunStop: (...args: unknown[]) => submitRunStop(...args),
 }));
 
-vi.mock("@/stores/conversation", () => ({
-  useConversationStore: (
+vi.mock("@/stores/conversation", () => {
+  const useConversationStore = (
     sel: (s: { currentConversationId: string }) => unknown,
-  ) => sel({ currentConversationId: CID }),
-}));
+  ) => sel({ currentConversationId: CID });
+  (useConversationStore as unknown as { getState: () => object }).getState =
+    () => ({ currentConversationId: CID, byId: {} });
+  return {
+    useConversationStore,
+    useActiveTurnPhase: () => convPhase.turnPhase,
+    runtimeOf: () => ({ turnPhase: convPhase.turnPhase }),
+  };
+});
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
 
 /** 引擎受理了这次停止（服务端回执的正常形）。 */
@@ -128,6 +139,7 @@ function renderNodeFace(d: AgentNodeData = nodeData()) {
 
 describe("graph run-stop entries", () => {
   beforeEach(() => {
+    convPhase.turnPhase = "streaming";
     submitRunStop.mockReset();
     submitRunStop.mockResolvedValue(ACCEPTED);
     useRunStopPendingStore.getState().reset();
@@ -154,6 +166,13 @@ describe("graph run-stop entries", () => {
     renderNodeFace();
     expect(screen.getByText(/^执行中/)).toBeTruthy();
     expect(screen.queryByText("停止请求中…")).toBeNull();
+  });
+
+  it("node status line shows 停止中… while the whole turn is stopping", () => {
+    convPhase.turnPhase = "stopping";
+    renderNodeFace();
+    expect(screen.getByText("停止中…")).toBeTruthy();
+    expect(screen.queryByText(/^执行中/)).toBeNull();
   });
 
   it("node status line does not show stop-pending copy for settled workers", () => {
@@ -251,6 +270,12 @@ describe("graph run-stop entries", () => {
       MID,
     );
 
+    wrap(<GraphTeamStopControl />);
+    expect(screen.queryByRole("button", { name: "停止任务" })).toBeNull();
+  });
+
+  it("hides the team entry while the whole turn is stopping", () => {
+    convPhase.turnPhase = "stopping";
     wrap(<GraphTeamStopControl />);
     expect(screen.queryByRole("button", { name: "停止任务" })).toBeNull();
   });

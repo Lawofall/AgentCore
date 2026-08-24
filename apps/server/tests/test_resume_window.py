@@ -6,14 +6,14 @@ projection ``window_from_journal(journal-at-pause) == frame.transcript``; this p
 resume actually READS the projection: it folds ``suspension.journal_entries`` (+ reloaded
 history) into the window and ignores ``frame.transcript`` whenever the journal is present.
 A stale/wrong frame transcript must NOT leak into the resumed loop — so now that the frame
-column is dropped (Phase 2 ⑤) resume is unaffected. ``transcript`` survives only as an
-in-memory carrier (a same-process resume / these tests); a claimed frame's is empty, so the
-only fallback is that in-memory carrier — and when BOTH it and the journal are empty the
-pause is unrecoverable and resume fails LOUD rather than running on an empty window.
+column is dropped (Phase 2 ⑤) resume is unaffected. When the journal cannot be folded
+(missing ``turn_started``, empty entries, or degraded pause) resume fails loud with
+:class:`ResumeJournalDegradedError` rather than running on an empty window.
 """
 
 import pytest
 
+from agentcore.core.errors import ResumeJournalDegradedError
 from agentcore.llm.provider.protocol import LLMMessage
 from agentcore.runtime.facts import LlmCallFact, RoundBoundaryFact, TurnStartedFact
 from agentcore.runtime.journal import window_from_journal
@@ -97,16 +97,12 @@ def test_resumed_window_without_history_has_no_prefix():
     assert window != susp.transcript
 
 
-def test_resumed_window_falls_back_to_inmemory_transcript_when_journal_absent():
-    # A degraded SAME-PROCESS pause (journal write lost but the in-memory transcript still
-    # set) → no entries to fold, so resume falls back to that transcript verbatim. (A
-    # claimed cross-process frame has no transcript — see the fail-loud case below.)
-    susp = _suspension([])
+def test_resumed_window_raises_when_journal_missing_turn_started():
+    # Entries without a turn_started anchor cannot fold — fail loud for the user.
+    susp = _suspension([{"kind": "checkpoint_required", "payload": {}, "ts": "t"}])
 
-    window = resumed_captain_window(susp, history=[{"role": "user", "content": "x"}])
-
-    assert window == susp.transcript
-    assert window == _STALE
+    with pytest.raises(ResumeJournalDegradedError, match="执行日志保存失败"):
+        resumed_captain_window(susp, history=[])
 
 
 def test_resumed_window_raises_when_journal_and_transcript_both_absent():
@@ -116,5 +112,5 @@ def test_resumed_window_raises_when_journal_and_transcript_both_absent():
     susp = _suspension([])
     susp.transcript = []  # a claimed frame deserializes to empty
 
-    with pytest.raises(RuntimeError, match="cannot rebuild the CEO window"):
+    with pytest.raises(ResumeJournalDegradedError, match="执行日志保存失败"):
         resumed_captain_window(susp, history=[{"role": "user", "content": "x"}])

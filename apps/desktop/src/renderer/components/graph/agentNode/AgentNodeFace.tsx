@@ -8,6 +8,7 @@ import {
 import { agentColorVar, agentGlyph } from "@/lib/agentIdentity";
 import { formatCompact } from "@/lib/format";
 import { runningElapsedSec } from "@/lib/runningElapsed";
+import { useActiveTurnPhase } from "@/stores/conversation";
 import {
   STANCE_META,
   projectRuntime,
@@ -51,7 +52,7 @@ export function AgentNodeCardFace({
   const identityColor = agentColorVar(d.role);
   const identityGlyph = agentGlyph(d.role);
   const isRunning = d.status === "running";
-  const stopPending = useAgentNodeStopPending(d.runId, d.status);
+  const statusOverride = useAgentNodeStopOverride(d.runId, d.status);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: graph card hosts nested interactive chrome
@@ -59,8 +60,8 @@ export function AgentNodeCardFace({
       role="button"
       tabIndex={0}
       aria-label={
-        stopPending
-          ? p.ariaLabel.replace(p.statusFace.text, "停止请求中…")
+        statusOverride
+          ? p.ariaLabel.replace(p.statusFace.text, statusOverride)
           : p.ariaLabel
       }
       onKeyDown={(e) => {
@@ -111,7 +112,7 @@ export function AgentNodeCardFace({
         identityColor={identityColor}
         identityGlyph={identityGlyph}
         pulsePresence={isRunning}
-        stopPending={stopPending}
+        statusOverride={statusOverride}
       />
       <AgentNodeActivity d={d} p={p} showIdleTask />
       {p.artifacts.length > 0 && (
@@ -143,14 +144,14 @@ function AgentNodeHeader({
   identityColor,
   identityGlyph,
   pulsePresence,
-  stopPending,
+  statusOverride,
 }: {
   d: AgentNodeData;
   p: AgentNodePresentation;
   identityColor: string;
   identityGlyph: string;
   pulsePresence: boolean;
-  stopPending: boolean;
+  statusOverride: string | null;
 }) {
   return (
     <>
@@ -175,7 +176,7 @@ function AgentNodeHeader({
           {d.role}
         </p>
       </div>
-      <AgentNodeMeta d={d} p={p} stopPending={stopPending} />
+      <AgentNodeMeta d={d} p={p} statusOverride={statusOverride} />
     </>
   );
 }
@@ -185,7 +186,10 @@ function AgentNodeHeader({
  * 「停止请求中…」instead of 「执行中 · Ns」. Reuses settle cleanup from the old
  * node action bar — does not invent a parallel pending channel.
  */
-function useAgentNodeStopPending(runId: string, status: string): boolean {
+function useAgentNodeStopOverride(
+  runId: string,
+  status: string,
+): string | null {
   const messageId = useExecutionScope();
   const executionId = useExecutionStore((s) => {
     const rt = messageId ? s.byId[messageId] : undefined;
@@ -202,7 +206,11 @@ function useAgentNodeStopPending(runId: string, status: string): boolean {
       .clearIfSettled(executionId, runId, status);
   }, [executionId, runId, status]);
 
-  return covered && isStoppableRunStatus(status);
+  const turnPhase = useActiveTurnPhase();
+  if (covered && isStoppableRunStatus(status)) return "停止请求中…";
+  if (turnPhase === "stopping" && isStoppableRunStatus(status))
+    return "停止中…";
+  return null;
 }
 
 /**
@@ -214,11 +222,11 @@ function useAgentNodeStopPending(runId: string, status: string): boolean {
 function AgentNodeMeta({
   d,
   p,
-  stopPending,
+  statusOverride,
 }: {
   d: AgentNodeData;
   p: AgentNodePresentation;
-  stopPending: boolean;
+  statusOverride: string | null;
 }) {
   const showEscalationPending =
     (d.escalationPending ?? 0) > 0 && p.visibleFaceBadges.has("escalation");
@@ -275,7 +283,7 @@ function AgentNodeMeta({
             {escalationKindLabel(d.escalationKind)}
           </span>
         )}
-      <AgentNodeStatusLine d={d} p={p} stopPending={stopPending} />
+      <AgentNodeStatusLine d={d} p={p} statusOverride={statusOverride} />
     </div>
   );
 }
@@ -338,13 +346,16 @@ function CrossExamMarkButton({
 function AgentNodeStatusLine({
   d,
   p,
-  stopPending,
+  statusOverride,
 }: {
   d: AgentNodeData;
   p: AgentNodePresentation;
-  stopPending: boolean;
+  statusOverride: string | null;
 }) {
-  const elapsed = useRunningElapsed(p.statusFace.tickElapsed, d.startedAt);
+  const elapsed = useRunningElapsed(
+    p.statusFace.tickElapsed && statusOverride == null,
+    d.startedAt,
+  );
   const face = statusFaceLabel(
     d.status,
     d.durationMs,
@@ -376,7 +387,7 @@ function AgentNodeStatusLine({
     <p
       className={`ml-auto shrink-0 whitespace-nowrap text-xs tabular-nums leading-snug ${face.cls}`}
     >
-      {stopPending ? "停止请求中…" : face.text}
+      {statusOverride ?? face.text}
     </p>
   );
 }

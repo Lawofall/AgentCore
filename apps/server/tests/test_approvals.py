@@ -1190,19 +1190,6 @@ async def test_observe_policy_ignores_session_file_trust():
     assert any(e.type is EventType.APPROVAL_REQUIRED for e in _drain(sink))
 
 
-def test_kickoff_tools_lists_execution_class_only():
-    """开工卡能力半边只列执行类（文件改动已由会话档信任）。"""
-    from agentcore.runtime.kickoff.pause import kickoff_tools
-    from agentcore.tools.registration import execution_class_tool_names
-
-    assert kickoff_tools(show_capabilities=False) == []
-    shown = kickoff_tools(show_capabilities=True)
-    assert shown == sorted(execution_class_tool_names())
-    assert "mkdir" not in shown
-    assert "file_write" not in shown
-    assert "code_execute" in shown
-
-
 def test_host_actions_require_approval_like_git_writes():
     """host schema is NEVER; GRANTABLE actions elevate at runtime."""
     from agentcore.tools.builtin.host import HostTool

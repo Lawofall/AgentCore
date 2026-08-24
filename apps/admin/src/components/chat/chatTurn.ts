@@ -21,6 +21,8 @@ export type ChatTurnInput = {
   content?: string | null;
   runsPayload?: ChatRunsPayload | null;
   projected?: unknown;
+  /** List-row thinking column (`ReplayMessage.reasoning_content`). */
+  reasoningContent?: string | null;
 };
 
 export type NormalizedCitation = {
@@ -43,12 +45,16 @@ export type NormalizedRun = {
   outputSummary: string;
   error: string;
   debriefSummary: string;
+  /** Per-worker timeline (symmetric with CEO `process`). */
+  process: ProcessStep[];
 };
 
 export type NormalizedInteraction = {
   kind: string;
   id: string;
   status: string;
+  /** `ask_user` leaf already carries this; other kinds stay "". */
+  question: string;
 };
 
 export type NormalizedProjected = {
@@ -137,6 +143,7 @@ function normalizeRun(raw: unknown): NormalizedRun | null {
     outputSummary: asString(o.outputSummary) ?? "",
     error: asString(o.error) ?? "",
     debriefSummary: asString(debrief?.summary) ?? "",
+    process: asProcessSteps(o.process) ?? [],
   };
 }
 
@@ -149,7 +156,50 @@ function normalizeInteraction(raw: unknown): NormalizedInteraction | null {
     kind,
     id: asString(o.id) ?? "",
     status: asString(o.status) ?? "",
+    question: asString(o.question) ?? "",
   };
+}
+
+export function stepString(step: ProcessStep, ...keys: string[]): string {
+  const rec = step as unknown as Record<string, unknown>;
+  for (const key of keys) {
+    const value = rec[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
+/** Resolved ask with a question, matched onto a checkpoint marker. Pending / empty → null. */
+export function resolvedAskForStep(
+  step: ProcessStep,
+  interactions: NormalizedInteraction[],
+): NormalizedInteraction | null {
+  if (step.kind !== "checkpoint" && (step.kind as string) !== "ask") {
+    return null;
+  }
+  const id = stepString(step, "checkpoint_id", "checkpointId", "id");
+  if (!id) return null;
+  const match =
+    interactions.find(
+      (item) =>
+        item.id === id && (item.kind === "ask_user" || item.kind === "ask"),
+    ) ?? interactions.find((item) => item.id === id);
+  if (!match || match.status !== "resolved" || !match.question.trim()) {
+    return null;
+  }
+  return match;
+}
+
+export function slottedResolvedAskIds(
+  process: ProcessStep[],
+  interactions: NormalizedInteraction[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const step of process) {
+    const ask = resolvedAskForStep(step, interactions);
+    if (ask?.id) ids.add(ask.id);
+  }
+  return ids;
 }
 
 export function normalizeProjected(raw: unknown): NormalizedProjected | null {
@@ -205,12 +255,16 @@ export function normalizeProjected(raw: unknown): NormalizedProjected | null {
 }
 
 export function chatTurnFromReplay(
-  message: Pick<ReplayMessage, "content" | "runs_payload" | "projected">,
+  message: Pick<
+    ReplayMessage,
+    "content" | "runs_payload" | "projected" | "reasoning_content"
+  >,
 ): ChatTurnInput {
   return {
     content: message.content,
     runsPayload: message.runs_payload,
     projected: asProjectedTurn(message.projected),
+    reasoningContent: message.reasoning_content,
   };
 }
 
@@ -223,10 +277,13 @@ export function resolveChatTurn(input: ChatTurnInput): ResolvedChatTurn {
   const process = projected
     ? projected.process
     : (asProcessSteps(runs?.process) ?? []);
+  const projectedReasoning = projected?.reasoning ?? "";
   return {
     content: input.content ?? projected?.content ?? "",
     process,
-    reasoning: projected?.reasoning ?? "",
+    reasoning: projectedReasoning.trim()
+      ? projectedReasoning
+      : (input.reasoningContent?.trim() ?? ""),
     projected,
     finishReason: runs?.finish_reason ?? projected?.finishReason ?? null,
     status: projected?.status ?? null,

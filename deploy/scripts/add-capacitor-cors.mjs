@@ -63,7 +63,7 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
     echo api_ready
     docker inspect agentcore-api --format '{{range .Config.Env}}{{println .}}{{end}}' \\
       | grep '^CORS_ALLOW_ORIGINS=' \\
-      | python3 -c "import sys; v=sys.stdin.read().split('=',1)[-1]; print('https://localhost', 'https://localhost' in v); print('capacitor', 'capacitor://localhost' in v); print('mobile_web', 'm.fashitianxia' in v)"
+      | python3 -c "import sys; v=sys.stdin.read().split('=',1)[-1]; print('https://localhost', 'https://localhost' in v); print('capacitor', 'capacitor://localhost' in v); print('http_localhost', 'http://localhost' in v)"
     exit 0
   fi
   sleep 2

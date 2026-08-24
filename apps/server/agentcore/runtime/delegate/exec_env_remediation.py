@@ -39,6 +39,14 @@ def cloud_sandbox_failure_hint() -> str | None:
     return reason
 
 
+def _sidecar_engine() -> bool:
+    try:
+        from agentcore.sidecar.server_pkg.core import is_sidecar_process
+    except ImportError:
+        return False
+    return is_sidecar_process()
+
+
 def exec_env_remediation_zh(
     *,
     backend: Any,
@@ -57,6 +65,13 @@ def exec_env_remediation_zh(
             return (
                 "本回合执行环境未装配：请在本机授权命令执行后再跑验证，"
                 "或改用云协作（Composer「导入到云 / 连接 Git」）后重试。"
+            )
+        if _sidecar_engine():
+            return (
+                "当前是本机传统回合坐到了云文件夹：云端隔离执行只在云协作回合可用，"
+                "不会在这台电脑上假装起云沙箱。"
+                "拷文件请用文件工具；要在云上跑代码请新开云协作对话。"
+                "**不要**再引导「导入到云」，也不要等本机沙箱恢复。"
             )
         return (
             "本回合已是云端会话，但云端执行沙箱未装配"
@@ -96,6 +111,17 @@ def exec_env_remediation_zh(
                 "或诚实收口并标缺口（脚本仅备本机运行，目标 Office 文件未生成）。"
                 "本机传统三件套合法可教、非默认（≠离线）。"
             )
+        if _sidecar_engine():
+            return (
+                "[能力提示] 本机传统回合坐到了云文件夹，执行环境未装配"
+                "（无 code_execute / test_run / terminal），"
+                "需执行才能生成的 Office 目标（.pptx/.xlsx 等）无法在本回合生成。"
+                f"{docx_clause}"
+                "【禁止】再派「写脚本 / 跑脚本」空转；【禁止】再引导「导入到云」；"
+                "【禁止】声称本机沙箱马上会好。"
+                "请立即发 ask_user：拷文件用文件工具，要跑代码请新开云协作对话，"
+                "或诚实收口标缺口。"
+            )
         return (
             "[能力提示] 本回合已是云端会话，执行环境未装配"
             f"{failure_clause}（无 code_execute / test_run / terminal），"
@@ -115,6 +141,14 @@ def exec_env_remediation_zh(
             "无法真正运行或生成此类产物。收尾时请如实标缺口，或 ask_user 并**推荐** "
             "Composer「导入到云 / 连接 Git」后重派。"
             "本机传统三件套合法可教、非默认（≠离线）。"
+        )
+    if _sidecar_engine():
+        return (
+            "[能力提示] 本机传统回合坐到了云文件夹，执行环境未装配"
+            "（无 code_execute / test_run / terminal）："
+            "worker 只能写脚本 / 文件，无法真正运行。"
+            "【禁止】再引导「导入到云」；【禁止】再派 code_execute。"
+            "拷文件请用文件工具；要跑代码请新开云协作对话。收尾如实标缺口。"
         )
     return (
         "[能力提示] 本回合已是云端会话，执行沙箱未装配"

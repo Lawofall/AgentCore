@@ -251,7 +251,16 @@ def apply_artifact_dir_defaults(deliverable: Deliverable) -> None:
             relocated.append(f"{resolved}/{norm}")
         else:
             relocated.append(norm)
-    deliverable.artifacts = relocated
+    from agentcore.workspace._paths import sanitize_write_relpath
+
+    # Dossier writes flatten nested segments; declare the name that will land
+    # so writers, 前置结果, and delivery matching share one path.
+    deliverable.artifacts = [
+        p
+        if p.endswith("/") or any(ch in p for ch in "*?[")
+        else sanitize_write_relpath(p)
+        for p in relocated
+    ]
 
 
 def apply_artifact_dir_to_spec(spec: RunSpec) -> None:

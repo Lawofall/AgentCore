@@ -18,6 +18,7 @@ import {
   type FileArtifact,
   type FileOp,
   hasChangePreviews,
+  isPreviewScreenshot,
   splitExportedSources,
 } from "@/lib/fileArtifacts";
 import { isHtmlPath } from "@/lib/fileSource";
@@ -36,6 +37,7 @@ import {
   FilePlus,
   FolderInput,
   FolderOpen,
+  Globe,
   type LucideIcon,
   Pencil,
   Trash2,
@@ -170,11 +172,14 @@ function mergeableRefsFromArtifacts(
 function FileRow({
   artifact,
   onOpen,
+  onOpenSourceInBrowser,
   opensFullPreview = false,
   listMeta,
 }: {
   artifact: FileArtifact;
   onOpen: () => void;
+  /** 预览截图：在真浏览器打开派生源（HTML）。 */
+  onOpenSourceInBrowser?: () => void;
   /** 该行点击直达应用内「完整预览」（HTML + 会话具备能力）——仅影响提示文案。 */
   opensFullPreview?: boolean;
   /** 工作区 list 命中的大小 / 时间；对不上或缺字段则不占位。 */
@@ -182,6 +187,7 @@ function FileRow({
 }) {
   const visual = rowVisual(artifact);
   const isDelete = artifact.op === "delete";
+  const previewShot = isPreviewScreenshot(artifact);
   const dir = artifact.path.slice(
     0,
     artifact.path.length - artifact.name.length,
@@ -215,6 +221,13 @@ function FileRow({
           {visual.badge}
         </span>
       )}
+      {previewShot && (
+        <span
+          className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs leading-none ${statusPillSoft.muted}`}
+        >
+          预览图，非最终效果
+        </span>
+      )}
       <FileRowMeta
         node={{
           path: artifact.path,
@@ -235,26 +248,41 @@ function FileRow({
   }
   return (
     <li>
-      <Button
-        variant="ghost"
-        onClick={onOpen}
-        title={
-          opensFullPreview
-            ? `打开完整预览 ${artifact.path}`
-            : stageLabel
-              ? `在文件页查看约定文档 ${artifact.path}`
-              : `在工作区预览 ${artifact.path}`
-        }
-        className="h-auto w-full min-w-0 justify-start gap-2 rounded-none px-3 py-2 hover:bg-accent"
-      >
-        <span className="flex w-full items-center gap-2 text-left">
-          {body}
-          <ChevronRight
-            size={14}
-            className="shrink-0 text-muted-foreground/50"
-          />
-        </span>
-      </Button>
+      <div className="flex items-stretch">
+        <Button
+          variant="ghost"
+          onClick={onOpen}
+          title={
+            opensFullPreview
+              ? `打开完整预览 ${artifact.path}`
+              : stageLabel
+                ? `在文件页查看约定文档 ${artifact.path}`
+                : `在工作区预览 ${artifact.path}`
+          }
+          className="h-auto min-w-0 flex-1 justify-start gap-2 rounded-none px-3 py-2 hover:bg-accent"
+        >
+          <span className="flex w-full items-center gap-2 text-left">
+            {body}
+            <ChevronRight
+              size={14}
+              className="shrink-0 text-muted-foreground/50"
+            />
+          </span>
+        </Button>
+        {previewShot && onOpenSourceInBrowser && (
+          <SimpleTooltip label="在真浏览器查看完整页面效果（非截图）">
+            <Button
+              variant="ghost"
+              onClick={onOpenSourceInBrowser}
+              aria-label="去真浏览器看完整效果"
+              className="h-auto shrink-0 rounded-none px-3 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+            >
+              <Globe size={14} className="mr-1 shrink-0" />
+              去真浏览器看完整效果
+            </Button>
+          </SimpleTooltip>
+        )}
+      </div>
     </li>
   );
 }
@@ -336,11 +364,29 @@ export function FileArtifactsCard({
     showFile(a.path, a.name, a.workspaceId);
   };
 
+  const openPreviewSourceInBrowser = (a: FileArtifact) => {
+    const src = a.derivedFrom?.trim();
+    if (!canFullPreview || !conversationId || !src || !isHtmlPath(src)) return;
+    void openWorkspaceHtmlInBrowser(
+      conversationId,
+      src,
+      a.workspaceId ?? sessionWsId,
+    );
+  };
+
   const fileRow = (a: FileArtifact) => (
     <FileRow
       key={`${a.acceptance ?? a.op ?? "file"}:${a.path}`}
       artifact={a}
       onOpen={() => openArtifact(a)}
+      onOpenSourceInBrowser={
+        isPreviewScreenshot(a) &&
+        canFullPreview &&
+        conversationId &&
+        isHtmlPath(a.derivedFrom ?? "")
+          ? () => openPreviewSourceInBrowser(a)
+          : undefined
+      }
       opensFullPreview={canFullPreview && isHtmlPath(a.path)}
       listMeta={lookupListMeta(a)}
     />

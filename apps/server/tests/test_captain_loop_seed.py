@@ -3,7 +3,7 @@
 Covers G4/G5 pieces owned by this batch:
   * worker nested react_loop must not clobber the captain mirror (role gate, not
     deliverable_only)
-  * controller seed restores latches so team_gate stays latched / has_delegated
+  * controller seed restores latches (has_delegated / audit / debate)
   * note_delegate_batches stamps post_delegate with batch shape (nodes/deps)
   * debate successful returns enter the same post_delegate latch as delegate
 """
@@ -24,7 +24,6 @@ from agentcore.llm.provider.protocol import (
 )
 from agentcore.runtime.engine.governance import (
     create_loop_controller,
-    maybe_inject_team_gate,
     note_delegate_batches,
 )
 from agentcore.runtime.engine.loop import (
@@ -91,8 +90,6 @@ def _context() -> ToolContext:
 def test_controller_seed_round_trip_json_safe():
     c = LoopController()
     c.mark_post_delegate(node_count=3, has_deps=True)
-    c.mark_team_gate_fired()
-    c.mark_team_gate_direct_reject_fired()
     c.mark_audit_gate_fired()
     c.mark_debate_gate_fired()
     c.mark_debate_executed()
@@ -101,8 +98,6 @@ def test_controller_seed_round_trip_json_safe():
     assert seed == {
         "post_delegate": True,
         "delegate_count": 1,
-        "team_gate_fired": True,
-        "team_gate_direct_reject_fired": True,
         "audit_gate_fired": True,
         "first_batch_substantial": True,
         "audit_hard_required": False,
@@ -119,39 +114,12 @@ def test_controller_seed_round_trip_json_safe():
     assert restored.export_seed() == seed
     assert restored.has_delegated is True
     assert restored.delegate_count == 1
-    assert restored.team_gate_fired is True
-    assert restored.team_gate_direct_reject_fired is True
     assert restored.audit_gate_fired is True
     assert restored.first_batch_substantial is True
     assert restored.debate_gate_fired is True
     assert restored.debate_executed is True
     assert restored.turn_token_budget_gate_fired is True
     assert restored.validation_thrash_latched is False
-
-
-def test_seed_blocks_team_gate_reinjection():
-    """Resume with post_delegate + team_gate_fired must not fire team_gate again."""
-    seed = {
-        "post_delegate": True,
-        "delegate_count": 1,
-        "team_gate_fired": True,
-        "audit_gate_fired": False,
-        "first_batch_substantial": True,
-    }
-    controller = create_loop_controller(frozenset({"search"}), seed=seed)
-    messages: list[LLMMessage] = []
-    assert (
-        maybe_inject_team_gate(
-            controller,
-            messages=messages,
-            run_id="r",
-            round_idx=0,
-            role="captain",
-            trigger="investigation",
-        )
-        is False
-    )
-    assert messages == []
 
 
 def test_note_delegate_batches_batch_shape_sets_first_substantial():
@@ -346,14 +314,13 @@ async def test_captain_mirror_updates_after_prose_join():
 
 
 @pytest.mark.asyncio
-async def test_react_loop_controller_seed_skips_team_gate():
+async def test_react_loop_controller_seed_skips_audit_gate():
     """Seeded has_delegated + audit latch → long captain answer is not rewritten."""
     long = "直答" + ("字" * 400)
     seed = {
         "post_delegate": True,
         "delegate_count": 1,
-        "team_gate_fired": True,
-        "audit_gate_fired": True,  # also latch audit so soft gates stay quiet
+        "audit_gate_fired": True,
         "first_batch_substantial": True,
     }
     provider = _ScriptedProvider([[LLMChunk(delta_content=long)]])
@@ -377,6 +344,6 @@ async def test_react_loop_controller_seed_skips_team_gate():
         for m in messages
         if m.role == "user"
         and m.content
-        and ("探路已达硬上限" in m.content or "收尾前审计复核" in m.content)
+        and ("收尾前审计复核" in m.content)
     ]
     assert nudges == []

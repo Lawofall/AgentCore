@@ -3,15 +3,12 @@ import { ApiError } from "@/services/api";
 import { resolveInteraction } from "@/services/interaction";
 import type { ResolveInteractionBody } from "@/services/interaction";
 import type { PlanReviewUserDecision } from "@/services/planReview";
-import type { TeamPreviewResumeCorrections } from "@/services/teamPreviewCorrections";
 import { isPausedFrameGone, runResume } from "@/services/turns";
 import {
   INTERACTION_SUBMIT_PATH,
   useInteractionStore,
 } from "@/stores/interactions";
 import type { InteractionKind } from "@/types/interactionExt";
-
-export type { TeamPreviewResumeCorrections } from "@/services/teamPreviewCorrections";
 
 /** True when the API says this interaction is no longer answerable. */
 export function isInteractionOrphanedError(err: unknown): boolean {
@@ -112,10 +109,6 @@ export interface ColdSubmitArgs {
   decision: PlanReviewUserDecision;
   note: string;
   selected?: string[];
-  /** delegate team_preview continue only；stop / debate 不传。 */
-  excluded_run_ids?: string[];
-  write_capability_overrides?: TeamPreviewResumeCorrections["write_capability_overrides"];
-  model_overrides?: TeamPreviewResumeCorrections["model_overrides"];
 }
 
 /**
@@ -202,24 +195,6 @@ export async function submitInteraction(args: {
   if (tracked) store.beginSubmit(args.id);
 
   try {
-    const corrections: TeamPreviewResumeCorrections = {
-      ...(args.cold.excluded_run_ids && args.cold.excluded_run_ids.length > 0
-        ? { excluded_run_ids: args.cold.excluded_run_ids }
-        : {}),
-      ...(args.cold.write_capability_overrides &&
-      args.cold.write_capability_overrides.length > 0
-        ? {
-            write_capability_overrides: args.cold.write_capability_overrides,
-          }
-        : {}),
-      ...(args.cold.model_overrides &&
-      Object.keys(args.cold.model_overrides).length > 0
-        ? { model_overrides: args.cold.model_overrides }
-        : {}),
-    };
-    const hasCorrections = Object.keys(corrections).length > 0;
-    // 会话 id 显式传：卡可能不属于当前打开的会话（画布 / 浮窗 / 用户已切走），
-    // 让 runResume 挂横幅与下面清横幅落在同一条会话上。
     await runResume(
       args.cold.messageId,
       args.cold.decision,
@@ -227,7 +202,6 @@ export async function submitInteraction(args: {
       args.cold.selected,
       {
         conversationId: args.conversationId,
-        ...(hasCorrections ? { corrections } : {}),
       },
     );
     // 帧早被上一次续跑吃掉时（`resume_settled`）这次点击并不是那条 settlement——
@@ -240,7 +214,6 @@ export async function submitInteraction(args: {
           decision: args.cold.decision,
           note: args.cold.note,
           selected: args.cold.selected ?? [],
-          ...(hasCorrections ? corrections : {}),
         },
       });
     }

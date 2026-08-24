@@ -15,8 +15,6 @@ KickoffPrimitive = Literal["delegate", "debate"]
 # 未知值不映射——勿假造档名，回退仅人数文案。
 _INTENSITY_SHORT_LABEL: dict[str, str] = {
     "lean": "MVP主流程",
-    "solo": "一页先上线",
-    "standard": "品牌站流水线",
     "full": "模块流水线",
 }
 

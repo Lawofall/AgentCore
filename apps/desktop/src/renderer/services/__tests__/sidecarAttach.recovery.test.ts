@@ -176,6 +176,122 @@ describe("projectUnsyncedTurns (D5)", () => {
     );
   });
 
+  it("overwrites thinner cloud assistant when unsynced same id is richer", () => {
+    const store = useConversationStore.getState();
+    store.switchConversation(CID);
+    store.addMessage(
+      {
+        id: "u-thin",
+        role: "user",
+        content: "q",
+        createdAt: "2026-01-01T00:00:00Z",
+        executionId: null,
+        isStreaming: false,
+      },
+      CID,
+    );
+    store.addMessage(
+      {
+        id: "a-thin",
+        role: "assistant",
+        content: "",
+        createdAt: "2026-01-01T00:00:00Z",
+        executionId: null,
+        isStreaming: false,
+        serverMessageId: "a-thin",
+      },
+      CID,
+    );
+
+    projectUnsyncedTurns(CID, [
+      unsyncedReady({
+        user_message_id: "u-thin",
+        message_id: "a-thin",
+        content: "full answer from outbox",
+      }),
+    ]);
+
+    const msgs = useConversationStore.getState().byId[CID].messages;
+    expect(msgs.filter((m) => m.id === "a-thin")).toHaveLength(1);
+    expect(msgs.find((m) => m.id === "a-thin")?.content).toBe(
+      "full answer from outbox",
+    );
+  });
+
+  it("does not overwrite richer or equal cloud assistant", () => {
+    const store = useConversationStore.getState();
+    store.switchConversation(CID);
+    store.addMessage(
+      {
+        id: "u-fat",
+        role: "user",
+        content: "q",
+        createdAt: "2026-01-01T00:00:00Z",
+        executionId: null,
+        isStreaming: false,
+      },
+      CID,
+    );
+    store.addMessage(
+      {
+        id: "a-fat",
+        role: "assistant",
+        content: "rich cloud answer",
+        createdAt: "2026-01-01T00:00:00Z",
+        executionId: null,
+        isStreaming: false,
+        serverMessageId: "a-fat",
+      },
+      CID,
+    );
+
+    projectUnsyncedTurns(CID, [
+      unsyncedReady({
+        user_message_id: "u-fat",
+        message_id: "a-fat",
+        content: "thin",
+      }),
+    ]);
+
+    const msgs = useConversationStore.getState().byId[CID].messages;
+    expect(msgs.filter((m) => m.id === "a-fat")).toHaveLength(1);
+    expect(msgs.find((m) => m.id === "a-fat")?.content).toBe(
+      "rich cloud answer",
+    );
+  });
+
+  it("matches by serverMessageId when cloud client id differs", () => {
+    const store = useConversationStore.getState();
+    store.switchConversation(CID);
+    store.addMessage(
+      {
+        id: "client-assist-uuid",
+        role: "assistant",
+        content: "",
+        createdAt: "2026-01-01T00:00:00Z",
+        executionId: null,
+        isStreaming: false,
+        serverMessageId: "a-server",
+      },
+      CID,
+    );
+
+    projectUnsyncedTurns(CID, [
+      unsyncedReady({
+        user_message_id: "u-srv",
+        message_id: "a-server",
+        content: "outbox body",
+      }),
+    ]);
+
+    const msgs = useConversationStore.getState().byId[CID].messages;
+    expect(msgs.filter((m) => m.id === "client-assist-uuid")).toHaveLength(1);
+    expect(msgs.find((m) => m.id === "client-assist-uuid")?.content).toBe(
+      "outbox body",
+    );
+    expect(msgs.some((m) => m.id === "a-server")).toBe(false);
+  });
+
   it("marks open ghost as interrupted incomplete", () => {
     useConversationStore.getState().switchConversation(CID);
     projectUnsyncedTurns(CID, [

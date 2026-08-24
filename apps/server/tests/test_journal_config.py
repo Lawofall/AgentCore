@@ -44,10 +44,10 @@ def test_journal_payload_caps_tool_use_end_result_not_live_alias():
     assert wire["result"] == big
 
 
-def test_journal_payload_safety_caps_team_preview_note():
+def test_journal_payload_safety_caps_leftover_team_preview_note():
     huge = "注" * (_JOURNAL_PAYLOAD_SAFETY_CAP + 10)
     wire = {"checkpoint_id": "tp1", "decision": "continue", "note": huge}
-    persisted = journal_payload_for_persist(EventType.TEAM_PREVIEW_RESOLVED.value, wire)
+    persisted = journal_payload_for_persist("team_preview_resolved", wire)
     assert persisted["checkpoint_id"] == "tp1"
     assert persisted["decision"] == "continue"
     assert isinstance(persisted["note"], str)

@@ -128,6 +128,13 @@ _CURATED_BY_CODE: dict[str, str] = {
     "exec_env_spawn_denied": (
         "系统拒绝了启动执行程序，这段代码没有运行。常见原因是安全软件拦截，允许之后我可以再试。"
     ),
+    "exec_env_not_linux": (
+        "云端隔离执行只在云上的 Linux 环境可用。当前对话跑在你的电脑上，代码没有运行。"
+        "我会换个方式继续。"
+    ),
+    "exec_env_sandbox_unavailable": (
+        "云端隔离执行环境当前不可用，代码没有运行。我会换个方式继续。"
+    ),
     # Self-correctable in the same round (switch language) — so no「稍后重试」.
     "launcher_unavailable": (
         "代码执行环境没能启动，这段代码没有运行。我会换一种语言或换个方式继续。"
@@ -149,6 +156,14 @@ _CURATED_BY_CODE: dict[str, str] = {
     "project_verify_redirect": (
         "这一步想用跑代码的方式做项目级的安装或检查，那样很容易超时，没有执行。"
         "我会换成专门跑测试 / 构建的方式重来。"
+    ),
+    "source_dump_redirect": (
+        "这一步想用跑代码的方式把源文件内容打到输出里看，没有执行。"
+        "我会改用读文件的方式查看正文。"
+    ),
+    "source_grep_redirect": (
+        "这一步想用脚本打开源码再搜索，没有执行。"
+        "我会改用搜索工具定位后再读文件。"
     ),
     # --- 项目验证（test_run） ---
     # Deterministic: the same call fails again, so the fix is mine, not a retry by the user.
@@ -197,6 +212,14 @@ _CURATED_BY_CODE: dict[str, str] = {
     "loopback_host": (
         "这个地址指向你自己电脑上的服务，我这边访问不到，这一步没有执行。"
         "我会改用浏览器或终端来查看。"
+    ),
+    # Path / file:// / drive letter fed to read_url — tool is fine; switch to file_read.
+    "not_a_web_url": (
+        "这个不是公开网页地址，没法用读网页打开。我会改用读文件继续。"
+    ),
+    # http(s) URL fed to file_read — switch to read_url; do not treat as a workspace path.
+    "url_not_workspace_path": (
+        "这是网页地址，不是工作区里的文件。我会改用读网页继续。"
     ),
     # Reserved intranet / cloud-metadata names (*.internal, *.local). Permanent refusal.
     "blocked_host": (

@@ -205,6 +205,7 @@ async def observability_conversation(
                 id=m.id,
                 role=m.role,
                 content=m.content,
+                reasoning_content=m.reasoning_content,
                 created_at=m.created_at,
                 trace_id=m.trace_id,
                 metrics=TurnMetricLine.model_validate(overlay) if overlay else None,

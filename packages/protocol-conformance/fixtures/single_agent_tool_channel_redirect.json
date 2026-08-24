@@ -1,0 +1,170 @@
+{
+  "name": "single_agent_tool_channel_redirect",
+  "description": "单聊：工具改道（code_execute 当 grep → process status=redirect）后改用 grep",
+  "events": [
+    {
+      "type": "message_start",
+      "payload": {
+        "message_id": "m1",
+        "conversation_id": "conv_demo"
+      },
+      "timestamp": "2026-01-01T00:00:00.001Z"
+    },
+    {
+      "type": "reasoning_delta",
+      "payload": {
+        "delta": "先在源码里搜一下。"
+      },
+      "timestamp": "2026-01-01T00:00:00.002Z"
+    },
+    {
+      "type": "tool_use_start",
+      "payload": {
+        "tool_call_id": "tc1",
+        "tool_name": "code_execute",
+        "arguments": {
+          "code": "open('index.html').read()"
+        }
+      },
+      "timestamp": "2026-01-01T00:00:00.003Z"
+    },
+    {
+      "type": "tool_use_end",
+      "payload": {
+        "tool_call_id": "tc1",
+        "tool_name": "code_execute",
+        "status": "redirect",
+        "result": "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。在工作区搜符号、字符串或计数请用 grep；概念定位用 code_search；看命中正文用 file_read。解析表格、改文件、对内存数据跑计算仍用本工具。",
+        "failure": {
+          "message": "这一步想用脚本打开源码再搜索，没有执行。我会改用搜索工具定位后再读文件。",
+          "code": "source_grep_redirect"
+        }
+      },
+      "timestamp": "2026-01-01T00:00:00.004Z"
+    },
+    {
+      "type": "tool_use_start",
+      "payload": {
+        "tool_call_id": "tc2",
+        "tool_name": "grep",
+        "arguments": {
+          "pattern": "footer"
+        }
+      },
+      "timestamp": "2026-01-01T00:00:00.005Z"
+    },
+    {
+      "type": "tool_use_end",
+      "payload": {
+        "tool_call_id": "tc2",
+        "tool_name": "grep",
+        "status": "success",
+        "result": "3 处匹配，分布在 1 个文件"
+      },
+      "timestamp": "2026-01-01T00:00:00.006Z"
+    },
+    {
+      "type": "content_delta",
+      "payload": {
+        "delta": "我改用搜索定位了。"
+      },
+      "timestamp": "2026-01-01T00:00:00.007Z"
+    },
+    {
+      "type": "message_end",
+      "payload": {
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 900,
+          "output_tokens": 80,
+          "reasoning_tokens": 0,
+          "cache_hit_tokens": 0,
+          "cache_miss_tokens": 0
+        },
+        "cost": {
+          "input": 240000,
+          "cached": 64000,
+          "output": 120000,
+          "total": 360000,
+          "currency": "CNY",
+          "pricing_source": "curated"
+        },
+        "rounds": 0
+      },
+      "timestamp": "2026-01-01T00:00:00.008Z"
+    }
+  ],
+  "projected": {
+    "status": "completed",
+    "finishReason": "end_turn",
+    "outcome": "ok",
+    "error": null,
+    "content": "我改用搜索定位了。",
+    "reasoning": "先在源码里搜一下。",
+    "captainContext": [],
+    "process": [
+      {
+        "kind": "reasoning",
+        "text": "先在源码里搜一下。"
+      },
+      {
+        "kind": "tool",
+        "id": "tc1",
+        "tool_name": "code_execute",
+        "arguments": {
+          "code": "open('index.html').read()"
+        },
+        "result": "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。在工作区搜符号、字符串或计数请用 grep；概念定位用 code_search；看命中正文用 file_read。解析表格、改文件、对内存数据跑计算仍用本工具。",
+        "status": "redirect",
+        "failure": {
+          "message": "这一步想用脚本打开源码再搜索，没有执行。我会改用搜索工具定位后再读文件。",
+          "code": "source_grep_redirect"
+        }
+      },
+      {
+        "kind": "tool",
+        "id": "tc2",
+        "tool_name": "grep",
+        "arguments": {
+          "pattern": "footer"
+        },
+        "result": "3 处匹配，分布在 1 个文件",
+        "status": "success"
+      },
+      {
+        "kind": "content",
+        "text": "我改用搜索定位了。"
+      }
+    ],
+    "citations": [],
+    "evidenceLedger": [],
+    "citedIds": [],
+    "agents": [],
+    "runs": [],
+    "acts": [],
+    "progress": {
+      "completed": 0,
+      "total": 0
+    },
+    "interactions": [],
+    "cost": {
+      "input": 240000,
+      "cached": 64000,
+      "output": 120000,
+      "total": 360000,
+      "currency": "CNY",
+      "pricing_source": "curated"
+    },
+    "debate": null,
+    "debateRounds": [],
+    "debatePretrial": null,
+    "crossExamEnabled": false,
+    "debateOpening": null,
+    "teamSynthesisPreview": null,
+    "deliveryStatus": null,
+    "turnWarning": null,
+    "autoFolder": null,
+    "teamNotes": [],
+    "userInterjections": []
+  }
+}

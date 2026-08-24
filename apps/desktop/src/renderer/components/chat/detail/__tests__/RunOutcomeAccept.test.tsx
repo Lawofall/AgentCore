@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * Run detail · 跑一半改方向 Step 4: surfaces redirect_ignored / deterministic_failure
- * audit triggers and records an explicit accept via accept-outcome.
+ * Run detail · 跑一半改方向 Step 4: surfaces redirect_ignored and records an
+ * explicit accept via accept-outcome. Deterministic failure is audit-only (no card).
  */
 
 import { resetTurnAuditCacheForTests } from "@/hooks/useTurnAudit";
@@ -64,9 +64,9 @@ describe("RunOutcomeAcceptSection", () => {
   it("renders nothing when no trigger audit rows exist for the run", async () => {
     vi.mocked(fetchTurnAudit).mockResolvedValue({ data: [], total: 0 });
     const { container } = render(<RunOutcomeAcceptSection {...props} />);
-    await waitFor(() => {
-      expect(container.firstChild).toBeNull();
-    });
+    await waitFor(() => expect(fetchTurnAudit).toHaveBeenCalled());
+    await vi.mocked(fetchTurnAudit).mock.results[0]?.value;
+    expect(container.firstChild).toBeNull();
   });
 
   it("offers accept when run.redirect_ignored is present", async () => {
@@ -79,16 +79,20 @@ describe("RunOutcomeAcceptSection", () => {
     expect(screen.getByRole("button", { name: "接受此结果" })).toBeTruthy();
   });
 
-  it("offers accept for deterministic_failure when redirect_ignored is absent", async () => {
+  it("hides the card when only deterministic_failure is present", async () => {
     vi.mocked(fetchTurnAudit).mockResolvedValue({
       data: [audit({ action: "run.deterministic_failure", run_id: "r1" })],
       total: 1,
     });
-    render(<RunOutcomeAcceptSection {...props} />);
-    expect(await screen.findByText("重试大概率仍会失败")).toBeTruthy();
+    const { container } = render(<RunOutcomeAcceptSection {...props} />);
+    await waitFor(() => expect(fetchTurnAudit).toHaveBeenCalled());
+    await vi.mocked(fetchTurnAudit).mock.results[0]?.value;
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByText("重试大概率仍会失败")).toBeNull();
+    expect(screen.queryByRole("button", { name: "接受此结果" })).toBeNull();
   });
 
-  it("prefers redirect_ignored over deterministic_failure for the offer copy", async () => {
+  it("still offers redirect_ignored when deterministic_failure is also present", async () => {
     vi.mocked(fetchTurnAudit).mockResolvedValue({
       data: [
         audit({ id: "a", action: "run.deterministic_failure", run_id: "r1" }),
@@ -99,6 +103,21 @@ describe("RunOutcomeAcceptSection", () => {
     render(<RunOutcomeAcceptSection {...props} />);
     expect(await screen.findByText("改方向未生效")).toBeTruthy();
     expect(screen.queryByText("重试大概率仍会失败")).toBeNull();
+  });
+
+  it("hides leftover outcome_accepted when redirect_ignored is absent", async () => {
+    vi.mocked(fetchTurnAudit).mockResolvedValue({
+      data: [
+        audit({ action: "run.deterministic_failure", run_id: "r1" }),
+        audit({ id: "acc", action: "run.outcome_accepted", run_id: "r1" }),
+      ],
+      total: 2,
+    });
+    const { container } = render(<RunOutcomeAcceptSection {...props} />);
+    await waitFor(() => expect(fetchTurnAudit).toHaveBeenCalled());
+    await vi.mocked(fetchTurnAudit).mock.results[0]?.value;
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByText("已接受此结果")).toBeNull();
   });
 
   it("shows accepted state when run.outcome_accepted already exists", async () => {

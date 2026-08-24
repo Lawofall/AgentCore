@@ -2,11 +2,7 @@
 
 import { useLang } from "@/components/LangProvider";
 import { BRAND, CTA, FOOTER } from "@/content/home";
-import {
-  DOWNLOAD_PAGE_PATH,
-  MOBILE_WEB_URL,
-  WEB_APP_URL,
-} from "@/lib/download";
+import { DOWNLOAD_PAGE_PATH, WEB_APP_URL } from "@/lib/download";
 
 /**
  * 首页白纸页脚。
@@ -55,14 +51,6 @@ export default function PaperFooter({ home = true }: { home?: boolean }) {
               </a>
               <a href={DOWNLOAD_PAGE_PATH} className="footer-link">
                 {t(CTA.desktop)}
-              </a>
-              <a
-                href={MOBILE_WEB_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="footer-link"
-              >
-                {t(CTA.mobileWeb)}
               </a>
             </div>
 

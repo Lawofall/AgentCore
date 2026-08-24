@@ -1,7 +1,6 @@
 import type { ResumeDeferredBusyReason } from "@/lib/resumeDeferred";
 import { notifyError } from "@/lib/toast";
 import {
-  type TeamPreviewResumeCorrections,
   notifySubmitInteractionResult,
   submitInteraction,
 } from "@/services/interactionSubmit";
@@ -10,7 +9,7 @@ import { useInteractionStore } from "@/stores/interactions";
 import type { PendingResume } from "@/stores/pausedTurns";
 import { useState } from "react";
 
-/** Shared cold-path submit hook for plan_review / team_preview resume cards. */
+/** Shared cold-path submit hook for plan_review resume cards. */
 export function useColdSubmit(
   turn: PendingResume,
   onSubmitted?: (decision: PlanReviewUserDecision) => void,
@@ -35,30 +34,9 @@ export function useColdSubmit(
     decision: PlanReviewUserDecision,
     selected: string[] = [],
     note = "",
-    corrections?: TeamPreviewResumeCorrections,
   ) => {
     if (busy) return;
     setSubmitting(decision);
-    const continueCorrections =
-      decision === "continue" && corrections
-        ? {
-            ...(corrections.excluded_run_ids &&
-            corrections.excluded_run_ids.length > 0
-              ? { excluded_run_ids: corrections.excluded_run_ids }
-              : {}),
-            ...(corrections.write_capability_overrides &&
-            corrections.write_capability_overrides.length > 0
-              ? {
-                  write_capability_overrides:
-                    corrections.write_capability_overrides,
-                }
-              : {}),
-            ...(corrections.model_overrides &&
-            Object.keys(corrections.model_overrides).length > 0
-              ? { model_overrides: corrections.model_overrides }
-              : {}),
-          }
-        : {};
     void submitInteraction({
       id: turn.checkpointId,
       kind: turn.kind,
@@ -68,7 +46,6 @@ export function useColdSubmit(
         decision,
         note,
         selected,
-        ...continueCorrections,
       },
     })
       .then((result) => {

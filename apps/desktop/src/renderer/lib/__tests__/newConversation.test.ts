@@ -8,10 +8,6 @@ import { useFoldersStore } from "@/stores/folders";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/redirectLocalWorkspaceAsk", () => ({
-  redirectLocalWorkspaceAskAction: vi.fn(),
-}));
-
 describe("openDraftConversation / startNewConversation", () => {
   beforeEach(() => {
     useFoldersStore.setState({

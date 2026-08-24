@@ -8,7 +8,7 @@ alwaysApply: false
 
 # 配色 token 规范
 
-只用语义 token，颜色由主题统一定义。完整 token 表与规格 → [`UI-Pattern索引.md` §配色要点](/docs/04-前端/UI-Pattern索引.md)。阴影 / 键盘焦点不是色 → 同文「层叠与焦点」。
+只用语义 token，颜色由主题统一定义。三层语义与禁令见下；产品侧一句摘要 → [`UI-Pattern索引.md` §配色要点](/docs/04-前端/UI-Pattern索引.md)。阴影 / 键盘焦点不是色 → 同文「层叠与焦点」。
 
 ## 三层（禁止把「没做成」和「会伤数据」涂成同一种红）
 

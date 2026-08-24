@@ -55,8 +55,6 @@ def _snippet_from_recording(data: dict[str, Any], *, limit: int = 80) -> str:
             text = ""
             if et == "content_delta":
                 text = str(payload.get("delta") or payload.get("text") or "")
-            elif et == "team_preview_required":
-                text = str(payload.get("title") or payload.get("summary") or "")
             elif et in ("tool_use_end", "tool_result"):
                 text = str(payload.get("summary") or payload.get("name") or "")
             text = " ".join(text.split())

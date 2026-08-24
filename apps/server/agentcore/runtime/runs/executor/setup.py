@@ -194,6 +194,7 @@ async def _prepare_agent_node(
         target_folder_id=spec.target_folder_id,
         session_folder_id=env.session_folder_id,
         base_write_scope=getattr(base_ctx, "write_scope", "project") or "project",
+        turn_created_folder_ids=getattr(base_ctx, "turn_created_folder_ids", None),
     )
     tool_ctx = isolate_file_read_ceiling(
         replace(
@@ -261,8 +262,8 @@ async def _prepare_agent_node(
         search_policy=spec.search_policy or "",
         # Investigate/review posture: refuse outer typecheck/build on test_run.
         verify_policy=spec.verify_policy or "",
-        # 成篇交接：有下游时禁止空交；地板固定非空（不跟合同字数字段）。
-        handoff_requires_body=node_has_dependents(env.plan, spec.run_id),
+        # 成篇交接：空交不再硬拒；下游靠指针 / 缺席标注消费已有内容。
+        handoff_requires_body=False,
         handoff_min_body_chars=0,
         handoff_deliverable_form=(
             deliverable.form if deliverable is not None else None
@@ -473,6 +474,7 @@ async def _prepare_agent_node(
                 shared_workspace=bool(tool_ctx.shared_workspace),
                 context_inject=context_inject or None,
                 captain_recon=env.captain_recon,
+                conversation_id=str(getattr(tool_ctx, "conversation_id", "") or ""),
             )
         # Worker window head (§8.3): journal the opening task-prompt so
         # ``window_from_journal(run_id=…)`` anchors on THIS run's system+user, not the

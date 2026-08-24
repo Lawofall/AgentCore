@@ -18,11 +18,13 @@ vi.mock("@/hooks/useFolders", () => ({
 vi.mock("@/lib/theme", () => ({
   useApplyTheme: () => undefined,
 }));
-vi.mock("@/lib/capabilities", () => ({
-  isWebClient: () => true,
-  hasLocalFiles: () => false,
-  isNativeRuntime: () => false,
-}));
+vi.mock("@/lib/capabilities", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/capabilities")>();
+  return {
+    ...actual,
+    isWebClient: () => true,
+  };
+});
 vi.mock("@/services/realtime", () => ({
   startRealtime: vi.fn(),
   stopRealtime: vi.fn(),

@@ -1006,7 +1006,7 @@ class TurnJournalRepository:
     ) -> dict | None:
         """Newest ``website_style_confirmed`` payload for ``conversation_id`` (P1a style ledger).
 
-        Cold rehydrate for ``build_website`` after process restart / new turn when the
+        Cold rehydrate for site style after process restart / new turn when the
         hot cache is empty. Returns the raw journal payload dict or ``None``.
         """
         from sqlalchemy import text

@@ -962,7 +962,7 @@ class StrReplaceTool:
         return await attach_write_diagnostics(result, context=context, path=rel_path)
 
 class WriteSectionTool:
-    """Inject HTML into a ``<!-- SECTION:sN START/END -->`` pair (build_website assemble).
+    """Inject HTML into a ``<!-- SECTION:sN START/END -->`` pair (site assemble).
 
     Hard write contract: does not require an exact match of the prior placeholder
     body — only the SECTION markers — so indent / whitespace drift cannot fail

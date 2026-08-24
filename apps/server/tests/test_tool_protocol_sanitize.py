@@ -281,6 +281,21 @@ def test_debrief_strips_protocol_tags_from_handoff_fields():
     assert debrief["key_points"] == ["共识"]
 
 
+def test_parse_empty_arguments_repairs_to_empty_object():
+    """Empty / whitespace is a wire repair, not a silent ``None``.
+
+    Leaving ``function.arguments=""`` 400s the next OpenAI-compatible turn
+    (OpenCode Go: must be valid JSON). Callers must rewrite the slot to ``"{}"``.
+    """
+    from agentcore.runtime.engine.tool_protocol_sanitize import parse_tool_call_arguments
+
+    for raw in ("", "   ", "\n"):
+        parsed, repaired = parse_tool_call_arguments(raw, tool_name="grep")
+        assert parsed == {}
+        assert repaired == "{}"
+        assert json.loads(repaired) == {}
+
+
 def test_parse_trailing_extra_brace_keeps_object():
     from agentcore.runtime.engine.tool_protocol_sanitize import parse_tool_call_arguments
 

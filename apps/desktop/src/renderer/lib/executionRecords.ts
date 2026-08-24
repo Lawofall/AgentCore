@@ -5,6 +5,7 @@
  * 仅聚合 `code_execute` / `test_run`（长进程走 `terminal` / backgroundProcesses）。
  */
 
+import { resolveToolWireStatus } from "@/lib/channelRedirect";
 import { assistantProjectionId } from "@/stores/conversation/runtime";
 import type { Message } from "@/stores/conversation/types";
 import {
@@ -104,7 +105,7 @@ export function outputFromDisplay(display?: ToolDisplay | null): {
 }
 
 function statusFromTool(
-  status: "running" | "success" | "error",
+  status: "running" | "success" | "error" | "redirect",
   exitCode: number | null,
 ): ExecutionRecordStatus {
   if (status === "running") return "running";
@@ -133,6 +134,8 @@ function recordFromProcessTool(
   agentRole: string,
 ): ExecutionRecord | null {
   if (!isExecTool(step.tool_name)) return null;
+  if (resolveToolWireStatus(step.status, step.failure) === "redirect")
+    return null;
   const out = outputFromDisplay(step.display);
   return {
     id: step.id,
@@ -160,6 +163,7 @@ function recordFromToolCall(
   runId: string | undefined,
 ): ExecutionRecord | null {
   if (!isExecTool(tc.toolName)) return null;
+  if (tc.status === "redirect") return null;
   const out = outputFromDisplay(tc.display);
   return {
     id: tc.id,

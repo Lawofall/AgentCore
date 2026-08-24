@@ -14,6 +14,7 @@ from agentcore.runtime.runs.playbooks import (
     expand_playbook,
     playbook_args_schema_description,
 )
+from agentcore.runtime.runs.playbooks._common import Playbook
 from agentcore.runtime.runs.playbooks.audit import (
     CODE_AUDIT_REQUIRED_SECTIONS,
     CODE_AUDIT_SECTION_BY_DESIGN,
@@ -312,8 +313,9 @@ def test_playbook_args_schema_surfaces_code_audit_modules():
     # 上限 / 单缝 / 折叠 HOW 在 slots（校验报错）+ 编排 skill，不占每轮 schema
     assert str(CODE_AUDIT_FANOUT) in slots
     assert "单缝省略" in slots
-    # 必填抽取仍在（建站常驻路径勿先 consult）
-    assert "build_website→topic" in desc or ("build_website" in desc and "topic" in desc)
+    # 必填抽取仍在（绿场常驻路径勿先 consult）
+    assert "build_app→app" in desc
+    assert "build_website" not in desc
 
 
 # ── parallel_brief ────────────────────────────────────────────────────────────
@@ -857,6 +859,11 @@ def test_repair_code_diagnose_patch_verify_shape():
     assert "verify_policy" not in by_id["verify"]
     # 原 min_length 迁出：可消费短文 / 通过或失败证据写在 task，勿填已删键。
     assert "可消费短文" in by_id["diagnose"]["task"]
+    # 拟改幅度走 next_steps 活到 CEO 收口；本批照修，不加卡 / 不加闸。
+    assert "next_steps" in by_id["diagnose"]["task"]
+    assert "小修即可" in by_id["diagnose"]["task"]
+    assert "不挡修补" in by_id["diagnose"]["task"]
+    assert "不 escalate" in by_id["diagnose"]["task"]
     assert "通过或失败证据" in by_id["verify"]["task"]
     assert "min_length" not in by_id["diagnose"]["deliverable"]
     assert "min_length" not in by_id["verify"]["deliverable"]
@@ -922,201 +929,21 @@ def test_repair_code_requires_verify_how_fixed():
     assert "白屏" in errors[0] or "snapshot" in errors[0]
 
 
-# ── build_website ─────────────────────────────────────────────────────────────
+# ── 已撤登记：建站不再是具名 DAG ──────────────────────────────────────────────
 
 
-def test_build_website_three_chain_default_sections():
-    tasks, errors = expand_playbook(
-        "build_website",
-        {"topic": "GEO 官网落地页", "stack": "静态 HTML", "audience": "中小商家"},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"copy", "frontend", "qa"}
-    assert len(tasks) == 3
-    assert by_id["frontend"]["depends_on"] == ["copy"]
-    assert by_id["qa"]["depends_on"] == ["frontend"]
-    assert by_id["copy"]["role"] == "内容文案"
-    assert by_id["frontend"]["role"] == "前端开发者"
-    assert by_id["qa"]["role"] == "页面 QA"
-    # 全节点 form=files + 约定路径
-    assert by_id["copy"]["deliverable"]["form"] == "files"
-    assert by_id["copy"]["deliverable"]["artifacts"] == ["site/copy.md"]
-    assert by_id["copy"]["deliverable"].get("strict") is True
-    copy_secs = by_id["copy"]["deliverable"]["required_sections"]
-    assert copy_secs[0] == "视觉 thesis"
-    assert "品牌一句话" in copy_secs
-    assert by_id["copy"]["deliverable"].get("must_contain_soft") is True
-    assert "visual thesis" in by_id["copy"]["task"]
-    assert "anti-slop" in by_id["copy"]["task"]
-    assert "首屏英雄区" in by_id["copy"]["task"]
-    assert "卖点能力区" in by_id["copy"]["task"]
-    assert "行动号召区" in by_id["copy"]["task"]
-    # 前端一人包 DESIGN + 整页 + CONTRACT
-    assert by_id["frontend"]["deliverable"]["form"] == "files"
-    assert by_id["frontend"]["deliverable"]["artifacts"] == [
-        "site/DESIGN.md",
-        "site/index.html",
-        "site/styles.css",
-        "site/main.js",
-        "site/CONTRACT.md",
-    ]
-    assert by_id["frontend"]["deliverable"].get("web_quality_scan") is True
-    assert by_id["frontend"]["deliverable"].get("strict") is True
-    assert by_id["frontend"]["deliverable"]["placeholder_hard_exempt_artifacts"] == [
-        "site/CONTRACT.md",
-        "site/DESIGN.md",
-    ]
-    assert "site/copy.md" in by_id["frontend"]["task"]
-    assert "DESIGN" in by_id["frontend"]["task"]
-    # 无风格确认 → design_prompt_block 软注入 s_default 正向配方
-    assert "正向配方" in by_id["frontend"]["task"]
-    assert "单一视觉焦点" in by_id["frontend"]["task"]
-    assert "静态 HTML" in by_id["frontend"]["task"]
-    assert "pack=marketing" in by_id["frontend"]["task"]
-    # QA
-    assert by_id["qa"]["deliverable"].get("web_quality_scan") is True
-    assert by_id["qa"]["deliverable"].get("visual_critic") is True
-    assert by_id["qa"]["deliverable"].get("strict") is True
-    assert by_id["qa"].get("ceiling_priority") is True
-    assert by_id["qa"]["deliverable"]["form"] == "files"
-    assert by_id["qa"]["deliverable"]["artifacts"] == ["site/QA.md"]
-    assert by_id["qa"]["deliverable"]["web_seam_scope"] == "site/"
-    assert by_id["qa"]["deliverable"]["placeholder_hard_exempt"] is True
-    assert "web_seam" in by_id["qa"]["task"]
-    assert "browser(action=screenshot)" in by_id["qa"]["task"]
-    assert "未目验" in by_id["qa"]["task"] or "谎称" in by_id["qa"]["task"]
-    assert by_id["qa"]["timeout_ms"] == 300_000
-    # 文案 / 受众嵌入任务书
-    assert "GEO 官网落地页" in by_id["copy"]["task"]
-    assert "中小商家" in by_id["copy"]["task"]
-    # 无旧五波节点
-    assert "design" not in by_id
-    assert "skeleton" not in by_id
-    assert "assemble" not in by_id
-    assert not any(t["id"].startswith("section_") for t in tasks)
-
-
-def test_build_website_sections_coverage_only_no_fanout():
-    """sections 仅作文案/前端覆盖清单，节点数恒为 3。"""
-    tasks, errors = expand_playbook(
-        "build_website",
-        {"topic": "S", "sections": ["导航", "定价", "FAQ"]},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"copy", "frontend", "qa"}
-    assert "导航" in by_id["copy"]["task"] and "导航" in by_id["frontend"]["task"]
-    assert "定价" in by_id["copy"]["task"] and "定价" in by_id["frontend"]["task"]
-    assert "FAQ" in by_id["copy"]["task"] and "FAQ" in by_id["frontend"]["task"]
-    assert not any(t["id"].startswith("section_") for t in tasks)
-    assert "assemble" not in by_id
-
-    eight = [f"区{i}" for i in range(8)]
-    tasks8, errors8 = expand_playbook("build_website", {"topic": "S", "sections": eight})
-    assert errors8 == []
-    assert len(tasks8) == 3
-    by_id8 = _by_id(tasks8)
-    assert set(by_id8) == {"copy", "frontend", "qa"}
-    assert "区0" in by_id8["copy"]["task"]
-    assert "区7" in by_id8["frontend"]["task"]
-
-
-def test_build_website_custom_sections_still_three_nodes():
-    tasks, errors = expand_playbook(
-        "build_website",
-        {"topic": "S", "sections": ["导航", "定价"]},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"copy", "frontend", "qa"}
-    assert by_id["qa"]["depends_on"] == ["frontend"]
-    assert by_id["copy"]["deliverable"]["artifacts"] == ["site/copy.md"]
-    assert "定价" in by_id["frontend"]["task"]
-
-
-def test_build_website_requires_topic():
-    tasks, errors = expand_playbook("build_website", {})
-    assert tasks == []
-    assert errors and "topic" in errors[0]
-    # 旧键 site 不兼容：缺 topic 即报错，不映射
-    legacy, legacy_err = expand_playbook("build_website", {"site": "旧简述"})
-    assert legacy == []
-    assert legacy_err and "topic" in legacy_err[0]
-
-
-def test_build_website_topic_brief_aliases():
-    """purpose/brief/description → topic；有 topic 时不以别名覆盖；site 永不映射。"""
-    for key in ("purpose", "brief", "description"):
-        tasks, errors = expand_playbook("build_website", {key: f"简述via_{key}"})
-        assert errors == []
-        assert len(tasks) == 3
-        assert f"简述via_{key}" in tasks[0]["task"]
-
-    prefer, prefer_err = expand_playbook(
-        "build_website", {"topic": "规范键", "purpose": "别名不应覆盖"}
-    )
-    assert prefer_err == []
-    assert "规范键" in prefer[0]["task"]
-    assert "别名不应覆盖" not in prefer[0]["task"]
-
-    verify, verify_err = expand_playbook(
-        "build_website_verify", {"purpose": "续验简述"}
-    )
-    assert verify_err == []
-    assert len(verify) == 1
-    assert "续验简述" in verify[0]["task"]
-
-
-def test_build_website_style_toolshed_three_chain_injects_tool_dense():
-    """build_website + style=toolshed forces tool_dense + domain=tool."""
-    from agentcore.runtime.runs.website_catalog import (
-        PACK_TOOL_DENSE,
-        TOOL_DENSE_POINTER_PREFIX,
-    )
-
-    tasks, errors = expand_playbook(
-        "build_website",
-        {
-            "topic": "订单运营控制台",
-            "style": "toolshed",
-            "sections": ["应用外壳", "侧栏导航", "数据表格"],
-        },
-    )
-    assert errors == []
-    by_id = {t["id"]: t for t in tasks}
-    assert set(by_id) == {"copy", "frontend", "qa"}
-    assert len(tasks) == 3
-    assert by_id["frontend"]["depends_on"] == ["copy"]
-    assert by_id["qa"]["depends_on"] == ["frontend"]
-    fe = by_id["frontend"]["task"]
-    assert f"pack={PACK_TOOL_DENSE}" in fe
-    assert "catalog:app_shell" in fe
-    assert f"{TOOL_DENSE_POINTER_PREFIX}/app_shell.html" in fe
-    assert "catalog:sidebar" in fe
-    assert "catalog:data_table" in fe
-    assert "审美域·工具页" in by_id["copy"]["task"]
-    assert "信息架构" in by_id["copy"]["task"]
-    assert "正向配方·工具台" in fe
-    assert "#2563eb" in fe
-    assert "单一视觉焦点" not in fe
-    toolshed_secs = by_id["copy"]["deliverable"]["required_sections"]
-    assert toolshed_secs[0] == "信息架构"
-    assert "产品一句话" in toolshed_secs
-    assert by_id["copy"]["deliverable"].get("must_contain_soft") is True
-    assert "website_catalog/marketing/" not in fe
-    assert by_id["frontend"]["deliverable"]["artifacts"] == [
-        "site/DESIGN.md",
-        "site/index.html",
-        "site/styles.css",
-        "site/main.js",
-        "site/CONTRACT.md",
-    ]
-    # 无旧五波节点
-    assert "design" not in by_id
-    assert "skeleton" not in by_id
-    assert "assemble" not in by_id
-    assert not any(t["id"].startswith("section_") for t in tasks)
+def test_build_website_playbooks_are_unknown():
+    """build_website / verify 必须未知；登记表与 schema 不再出现建站槽。"""
+    listing = available_playbooks()
+    desc = playbook_args_schema_description()
+    for name in ("build_website", "build_website_verify"):
+        tasks, errors = expand_playbook(name, {"topic": "Landing"})
+        assert tasks == []
+        assert errors and "未知" in errors[0]
+        assert name in errors[0]
+        assert name not in PLAYBOOKS
+        assert name not in listing
+        assert name not in desc
 
 
 def test_build_toolshed_playbook_removed():
@@ -1125,152 +952,6 @@ def test_build_toolshed_playbook_removed():
     assert tasks == []
     assert errors and "未知" in errors[0]
     assert "build_toolshed" in errors[0]
-
-
-def test_build_website_rejects_unknown_style():
-    tasks, errors = expand_playbook(
-        "build_website", {"topic": "S", "style": "neon"}
-    )
-    assert tasks == []
-    assert errors and "style" in errors[0]
-    assert "neon" in errors[0]
-
-
-def test_build_website_solo_single_frontend_node():
-    """intensity=solo：单节点 frontend，文案+DESIGN+页面合并，无独立 copy/qa。"""
-    tasks, errors = expand_playbook(
-        "build_website",
-        {"topic": "GEO 单页", "intensity": "solo", "sections": ["英雄区", "CTA"]},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"frontend"}
-    assert len(tasks) == 1
-    fe = by_id["frontend"]
-    assert fe["role"] == "前端开发者"
-    assert fe.get("depends_on") in (None, [], ())
-    arts = fe["deliverable"]["artifacts"]
-    assert arts == [
-        "site/copy.md",
-        "site/DESIGN.md",
-        "site/index.html",
-        "site/styles.css",
-        "site/main.js",
-        "site/CONTRACT.md",
-    ]
-    assert fe["deliverable"].get("web_quality_scan") is True
-    assert fe["deliverable"].get("strict") is True
-    assert "视觉 thesis" in fe["deliverable"]["required_sections"]
-    assert "intensity=solo" in fe["task"] or "单人整页" in fe["task"]
-    assert "英雄区" in fe["task"] and "CTA" in fe["task"]
-    assert "轻验收" in fe["task"]
-    assert "copy" not in by_id
-    assert "qa" not in by_id
-
-
-def test_build_website_solo_toolshed_keeps_style_pack():
-    """solo 仍尊重 style=toolshed pack / domain。"""
-    from agentcore.runtime.runs.website_catalog import PACK_TOOL_DENSE
-
-    tasks, errors = expand_playbook(
-        "build_website",
-        {"topic": "控制台", "intensity": "solo", "style": "toolshed"},
-    )
-    assert errors == []
-    assert len(tasks) == 1
-    fe = tasks[0]
-    assert fe["id"] == "frontend"
-    assert f"pack={PACK_TOOL_DENSE}" in fe["task"]
-    assert "信息架构" in fe["deliverable"]["required_sections"]
-    assert "审美域·工具页" in fe["task"] or "工具台" in fe["task"]
-
-
-def test_build_website_rejects_unknown_intensity():
-    tasks, errors = expand_playbook(
-        "build_website", {"topic": "S", "intensity": "turbo"}
-    )
-    assert tasks == []
-    assert errors and "intensity" in errors[0]
-    assert "turbo" in errors[0]
-
-
-def test_build_website_verify_qa_only_no_rebuild():
-    """Second-act verify: single QA node, deferred_ok=False, requires topic."""
-    tasks, errors = expand_playbook("build_website_verify", {"topic": "GEO 官网"})
-    assert errors == []
-    assert len(tasks) == 1
-    qa = tasks[0]
-    assert qa["id"] == "qa"
-    assert qa.get("depends_on") in (None, [], ())
-    assert "勿重做文案" in qa["task"] or "勿重做" in qa["task"]
-    assert "预算不足可跳过" not in qa["task"]
-    assert qa["deliverable"]["artifacts"] == ["site/QA.md"]
-    assert qa["deliverable"].get("visual_critic") is True
-    assert qa.get("ceiling_priority") is True
-
-    empty, err = expand_playbook("build_website_verify", {})
-    assert empty == []
-    assert err and "topic" in err[0]
-    legacy, legacy_err = expand_playbook("build_website_verify", {"site": "旧简述"})
-    assert legacy == []
-    assert legacy_err and "topic" in legacy_err[0]
-
-
-def test_build_website_qa_shares_helper_deferred_ok():
-    tasks, _ = expand_playbook("build_website", {"topic": "S", "sections": ["A"]})
-    qa = next(t for t in tasks if t["id"] == "qa")
-    assert "预算不足可跳过" in qa["task"]
-    assert "站点【S】" in qa["task"]
-
-
-def test_build_website_files_form_builds_run_plan():
-    """form=files + artifacts 经真实 builder 接通；三串 DAG 可 waves()。"""
-    tasks, errors = expand_playbook(
-        "build_website", {"topic": "T", "sections": ["A", "B"]}
-    )
-    assert errors == []
-    plan, plan_errors = build_run_plan(tasks, id_prefix="pb_bw")
-    assert plan_errors == []
-    assert len(plan.nodes) == 3  # copy + frontend + qa
-    waves = plan.waves()
-    assert waves  # no cycle
-    by_role = {n.role: n for n in plan.nodes}
-    assert by_role["内容文案"].deliverable is not None
-    assert by_role["内容文案"].deliverable.form == "files"
-    assert by_role["内容文案"].deliverable.strict is True
-    assert by_role["前端开发者"].deliverable.artifacts == [
-        "site/DESIGN.md",
-        "site/index.html",
-        "site/styles.css",
-        "site/main.js",
-        "site/CONTRACT.md",
-    ]
-    assert by_role["前端开发者"].deliverable.placeholder_hard_exempt_artifacts == [
-        "site/CONTRACT.md",
-        "site/DESIGN.md",
-    ]
-    assert by_role["页面 QA"].deliverable.form == "files"
-    assert by_role["页面 QA"].deliverable.placeholder_hard_exempt is True
-    assert by_role["页面 QA"].policy.timeout_s == 300
-    assert by_role["页面 QA"].ceiling_priority is True
-    assert "设计契约" not in by_role
-    assert "骨架工程师" not in by_role
-    assert "页面组装" not in by_role
-
-
-def test_build_website_many_sections_still_three_nodes_run_plan():
-    """多分区仍三节点，经真实 builder 接通。"""
-    eight = [f"区{i}" for i in range(8)]
-    tasks, errors = expand_playbook("build_website", {"topic": "T", "sections": eight})
-    assert errors == []
-    plan, plan_errors = build_run_plan(tasks, id_prefix="pb_bw8")
-    assert plan_errors == []
-    assert len(plan.nodes) == 3
-    assert plan.waves()
-    by_role = {n.role: n for n in plan.nodes}
-    assert by_role["内容文案"].deliverable.artifacts == ["site/copy.md"]
-    assert by_role["前端开发者"].deliverable.artifacts[0] == "site/DESIGN.md"
-    assert "页面 QA" in by_role
 
 
 # ── compare_options ───────────────────────────────────────────────────────────
@@ -1528,6 +1209,30 @@ def test_expand_rejects_non_object_args():
     assert errors and "playbook_args" in errors[0]
 
 
+def test_expand_playbook_missing_packaged_resource_lists_error(monkeypatch):
+    """build 缺打包资源时不得 raise；errors 点名 playbook、禁泄露路径。"""
+    missing_path = "C:\\Secret\\packaged\\skill.md"
+    pb = PLAYBOOKS["parallel_brief"]
+
+    def _raise_missing(_args: dict) -> tuple[list[dict], list[str]]:
+        raise FileNotFoundError(missing_path)
+
+    monkeypatch.setitem(
+        PLAYBOOKS,
+        "parallel_brief",
+        Playbook(name=pb.name, summary=pb.summary, slots=pb.slots, build=_raise_missing),
+    )
+    tasks, errors = expand_playbook("parallel_brief", {"topic": "T", "angles": ["a", "b"]})
+
+    assert tasks == []
+    assert errors
+    assert "parallel_brief" in errors[0]
+    assert "内部打包资源缺失" in errors[0]
+    assert "手写 tasks" in errors[0]
+    assert missing_path not in errors[0]
+    assert "FileNotFoundError" not in errors[0]
+
+
 def test_available_playbooks_lists_all_registered():
     listing = available_playbooks()
     assert set(PLAYBOOKS) == {
@@ -1537,14 +1242,14 @@ def test_available_playbooks_lists_all_registered():
         "build_feature",
         "repair_code",
         "build_app",
-        "build_website",
-        "build_website_verify",
         "compare_options",
         "multi_lens_research",
     }
     for name in PLAYBOOKS:
         assert name in listing
     assert "build_toolshed" not in PLAYBOOKS
+    assert "build_website" not in PLAYBOOKS
+    assert "build_website_verify" not in PLAYBOOKS
 
 
 # ── every expansion is a runnable plan (the real builder, not a mock) ──────────
@@ -1562,8 +1267,6 @@ def test_every_playbook_expansion_builds_a_valid_run_plan():
             "target": "app.ts",
         },
         "build_app": {"app": "Ops board", "modules": ["overview", "list"]},
-        "build_website": {"topic": "Landing", "sections": ["hero", "cta"]},
-        "build_website_verify": {"topic": "Landing"},
         "compare_options": {"question": "Q", "options": ["A", "B", "C"]},
         "multi_lens_research": {"topic": "T"},
     }
@@ -1574,8 +1277,6 @@ def test_every_playbook_expansion_builds_a_valid_run_plan():
         "build_feature": 3,
         "repair_code": 3,
         "build_app": 3,  # lean 默认：scaffold + implement + smoke
-        "build_website": 3,  # standard 默认：copy + frontend + qa
-        "build_website_verify": 1,  # qa only
         "compare_options": 4,
         "multi_lens_research": 5,  # 4 lenses + synthesizer
     }

@@ -28,7 +28,7 @@ MAX_TEAM_BRIEF_CHARS = 1500
 CoordinationMode = Literal["wall", "none"]
 
 # Playbooks whose tasks assume mid-flight note-wall alignment (interface broadcast, etc.).
-_WALL_DEFAULT_PLAYBOOKS = frozenset({"build_feature", "build_website"})
+_WALL_DEFAULT_PLAYBOOKS = frozenset({"build_feature"})
 
 
 def resolve_coordination(
@@ -42,7 +42,7 @@ def resolve_coordination(
     """Resolve batch-level note-wall coordination (缺省 none；seed/brief 隐含升级).
 
     ``light`` always resolves to ``none`` (existing skip-wall behaviour).
-    ``build_feature`` / ``build_website`` playbooks default to ``wall`` when the CEO
+    ``build_feature`` playbooks default to ``wall`` when the CEO
     omitted the field.
     Non-empty ``seed_notes`` / ``team_brief`` upgrades ``none`` → ``wall`` (even if
     the CEO explicitly passed ``none``), with a debug log.

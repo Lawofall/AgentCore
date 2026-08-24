@@ -4,7 +4,7 @@ import type { ActAuthorizedBy } from "@/stores/execution";
 const LABELS: Record<ActAuthorizedBy, string> = {
   stage_card: "经推进卡授权",
   auto: "自动开辩",
-  preview: "开工卡授权",
+  preview: "已授权开跑",
 };
 
 export function actAuthorizedByLabel(

@@ -409,6 +409,32 @@ def test_execution_sourced_single_agent_tool_turn_drops_captain_events_keeps_pro
     }
 
 
+def test_legacy_channel_redirect_process_tool_normalizes_to_redirect():
+    entries = [
+        {
+            "kind": "process_tool",
+            "payload": {
+                "kind": "tool",
+                "id": "c1",
+                "tool_name": "code_execute",
+                "result": "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+                "status": "error",
+                "failure": {
+                    "message": "这一步想用脚本打开源码再搜索，没有执行。",
+                    "code": "source_grep_redirect",
+                },
+            },
+            "ts": None,
+        },
+        {"kind": "turn_end", "payload": {"finish_reason": "end_turn"}, "ts": None},
+    ]
+    runs = runs_from_entries(entries)
+    assert runs is not None
+    tool = runs["process"][0]
+    assert tool["status"] == "redirect"
+    assert tool["failure"]["code"] == "source_grep_redirect"
+
+
 def test_classic_steer_interjection_survives_the_surface_gate():
     # 经典单聊插话: a steer on a plain chat turn journals DURABLE ``user_interjection``
     # facts but no run_plan / approval / question. ``user_interjection`` is itself a

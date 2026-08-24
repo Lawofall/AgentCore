@@ -178,6 +178,8 @@ export async function persistOpenedCache(
   memoryUpdates: MemoryUpdate[],
   flags: { hasMoreBefore: boolean; hasMoreAfter: boolean },
 ): Promise<void> {
+  // Empty GET / reconcile must not poison the opened snapshot.
+  if (messages.length === 0) return;
   const listed = getConversations().find((c) => c.id === id);
   const lastMessagePreview = previewFromOpenedWindow(
     messages,

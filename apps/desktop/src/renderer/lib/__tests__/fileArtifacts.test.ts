@@ -442,4 +442,22 @@ describe("splitExportedSources（口径同后端 fold_exported_sources）", () =
       intermediate: [],
     });
   });
+
+  it("预览截图 derivedFrom HTML 不把源页面折成中间稿", () => {
+    const { primary, intermediate } = splitExportedSources([
+      accepted("site/index.html"),
+      {
+        path: "site/preview-desktop.jpg",
+        name: "preview-desktop.jpg",
+        acceptance: "accepted",
+        kind: "image",
+        derivedFrom: "site/index.html",
+      },
+    ]);
+    expect(primary.map((a) => a.path)).toEqual([
+      "site/index.html",
+      "site/preview-desktop.jpg",
+    ]);
+    expect(intermediate).toEqual([]);
+  });
 });

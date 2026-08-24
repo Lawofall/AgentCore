@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from agentcore.config import settings
 from agentcore.core.errors import LLMTimeoutError
 from agentcore.core.logging import get_logger
+from agentcore.core.task_cancel import raise_if_task_cancelled
 from agentcore.llm.provider.protocol import (
     BACKOFF_MULTIPLIER,
     INITIAL_BACKOFF,
@@ -234,6 +235,7 @@ async def stream_llm_round(
 
     try:
         for attempt in range(MAX_RETRIES):
+            raise_if_task_cancelled()
             if budget is not None and not retry_committed and (time.monotonic() - start) >= budget:
                 if last_stall_error is not None:
                     raise last_stall_error

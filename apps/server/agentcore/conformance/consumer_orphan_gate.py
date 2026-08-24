@@ -67,8 +67,6 @@ _EVENT_FACTORY_NAMES: frozenset[str] = frozenset(
         "checkpoint_resolved",
         "plan_review_required",
         "plan_review_resolved",
-        "team_preview_required",
-        "team_preview_resolved",
         "stage_card_required",
         "stage_card_resolved",
         "workspace_op_required",

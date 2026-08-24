@@ -62,6 +62,17 @@ describe("persistOpenedCache preview", () => {
     });
   });
 
+  it("does not persist an empty opened window", async () => {
+    getConversations.mockReturnValue([listed("c1", STALE_SUCCESS)]);
+
+    await persistOpenedCache("c1", [], [], {
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+    });
+
+    expect(putOpenedConversation).not.toHaveBeenCalled();
+  });
+
   it("does not keep stale list preview when last assistant is empty failure", async () => {
     getConversations.mockReturnValue([listed("c1", STALE_SUCCESS)]);
     const messages = [

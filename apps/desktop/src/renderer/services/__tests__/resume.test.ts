@@ -428,8 +428,8 @@ describe("cold checkpoint terminal authority", () => {
   function stampJournalResolved(
     checkpointId: string,
     type:
-      | "team_preview_resolved"
-      | "checkpoint_resolved" = "team_preview_resolved",
+      | "checkpoint_resolved"
+      | "plan_review_resolved" = "checkpoint_resolved",
   ): void {
     const assistant = [...getMessages()]
       .reverse()
@@ -516,7 +516,7 @@ describe("cold checkpoint terminal authority", () => {
     seedTurn("m-hydrated");
     hydrateInteractionsFromJournal(CID, "m-hydrated", [
       {
-        type: "team_preview_required",
+        type: "team_preview_required" as string,
         payload: {
           checkpoint_id: "tp-hy",
           conversation_id: CID,
@@ -525,14 +525,13 @@ describe("cold checkpoint terminal authority", () => {
         },
       },
       {
-        type: "team_preview_resolved",
+        type: "team_preview_resolved" as string,
         payload: { checkpoint_id: "tp-hy", decision: "continue" },
       },
     ]);
-    stampJournalResolved("tp-hy");
     surfaceResumeFromLiveTurn(CID, "server");
 
-    expect(ix().get("tp-hy")?.status).toBe("resolved");
+    expect(ix().get("tp-hy")).toBeUndefined();
     expect(listVisibleColdResumes(CID)).toHaveLength(0);
   });
 });

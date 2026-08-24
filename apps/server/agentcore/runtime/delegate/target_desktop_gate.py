@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Any
 
 # Honest reject when bare chat (no birth) would park a *write* worker on scratch.
@@ -64,8 +65,17 @@ def resolve_bare_chat_write_scope(
     target_folder_id: str | None,
     session_folder_id: str | None,
     base_write_scope: str,
+    turn_created_folder_ids: Collection[str] | None = None,
 ) -> str:
-    """Scratch seat (no birth, no target): ``write_scope=none``; keep ``explore_memory``."""
+    """Scratch seat (no birth, no target): ``write_scope=none``; keep ``explore_memory``.
+
+    A worker whose ``target_folder_id`` was minted this turn (empty new desk)
+    gets ``project`` even when the CEO turn is still explore-pending — filling
+    that folder *is* the job; the birth folder stays on ``base_write_scope``.
+    """
+    target = target_folder_id.strip() if isinstance(target_folder_id, str) else ""
+    if target and turn_created_folder_ids and target in turn_created_folder_ids:
+        return "project"
     if target_folder_id or session_folder_id:
         return base_write_scope
     if base_write_scope == "explore_memory":

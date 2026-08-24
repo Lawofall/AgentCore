@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-from agentcore.config import settings
 from agentcore.workspace.stage_dirs import RESEARCH_DIR
-
-# 探路轮上限唯一真源（局部拼接，与 RESEARCH_DIR 同构）。
-_IR = str(settings.engine_team_gate_investigation_rounds)
 
 # 多维取证类终局对抗触发词（MLR / debate 入口分流句同源，禁止另抄字面量）。
 MULTI_LENS_COURTROOM_TRIGGERS: Final[tuple[str, ...]] = (
@@ -63,7 +59,7 @@ _DEEP_MULTI_LENS_RESEARCH = """\
 
 【二、CEO 纪律：禁止自搜替代四路】
 你【禁止】用自己的 `web_search` / 长检索串把四路调研做完再假装组队——那是 solo 塌缩。\
-探路检索至多【""" + _IR + """ 轮】，只为写清各路任务书（边界 / 关键词 / 忌重叠）；每次 web_search 须精简到\
+探路检索默认 0～1 轮：只为写清各路入口 / 边界（关键词 / 忌重叠），禁止自己取证；每次 web_search 须精简到\
 建议 2–3 核心词；超限会自动规范化或截断并明示实搜词，仅极端过长才拒绝。取证与交叉验证交给队员。\
 广度调查归团队（见 team_orchestration_advanced）。
 

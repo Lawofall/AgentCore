@@ -248,8 +248,8 @@ def _iter_decisions(log_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if event in _DECISION_EVENTS:
             out.append(_project_decision(ev))
             continue
-        # Obvious tool failures only (success noise stays off the spine).
-        if event == "tool.execute_end" and ev.get("status") == "error":
+        # Obvious tool failures and channel steers (success noise stays off the spine).
+        if event == "tool.execute_end" and ev.get("status") in ("error", "redirect"):
             out.append(_project_decision(ev))
             continue
         # Local write-back: aggregate tool failure codes (no fake tool.execute_end).

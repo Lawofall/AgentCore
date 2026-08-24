@@ -26,8 +26,6 @@ import { useBrowserRegion } from "@/components/workspace/BrowserLivePanel";
 import { BrowserPanel } from "@/components/workspace/BrowserPanel";
 import { ConversationChangesPanel } from "@/components/workspace/ConversationChangesPanel";
 import { WorkspaceMode } from "@/components/workspace/WorkspacePanel";
-import { useConversationHasRestorableEntry } from "@/hooks/useConversationHasRestorableEntry";
-import { hasLocalFiles } from "@/lib/capabilities";
 import {
   shouldBounceChangesTabToWorkspace,
   shouldPinChangesTab,
@@ -110,7 +108,7 @@ function isDetailTabLive(
 /**
  * The conversation's single right-docked surface (前端UX设计.md §十 · 方案 B):
  * `[工作区*] [改动?] | 内容 tabs | [+]`.
- * 「工作区」常驻固定 tab：不可关、可 detach。「改动」按 §十 P0c 条件出现（有货才审）。
+ * 「工作区」常驻固定 tab：不可关、可 detach。「改动」按需打开、可关。
  */
 export function SidePanel() {
   const { isNarrow } = useNarrowLayoutState();
@@ -137,7 +135,9 @@ export function SidePanel() {
   const bindTerminalSession = useSidePanelStore((s) => s.bindTerminalSession);
   const openFileTab = useSidePanelStore((s) => s.openFileTab);
   const showBrowser = useSidePanelStore((s) => s.showBrowser);
-  const clearChangesFocus = useSidePanelStore((s) => s.clearChangesFocus);
+  const showChanges = useSidePanelStore((s) => s.showChanges);
+  const closeChanges = useSidePanelStore((s) => s.closeChanges);
+  const changesOpen = useSidePanelStore((s) => s.changesOpen);
   const floatingIds = useMemo(
     () => new Set(floats.map((f) => f.tabId)),
     [floats],
@@ -152,12 +152,6 @@ export function SidePanel() {
   );
   const currentConversationId = useConversationStore(
     (s) => s.currentConversationId,
-  );
-  const changesFocusMessageId = useSidePanelStore(
-    (s) => s.changesFocusMessageId,
-  );
-  const hasRestorableEntry = useConversationHasRestorableEntry(
-    currentConversationId,
   );
   const prevConversationIdRef = useRef<string | null | undefined>(undefined);
   const spawnSession = useUserTerminalStore((s) => s.spawnSession);
@@ -194,24 +188,18 @@ export function SidePanel() {
   const workspaceInDock = !floatingIds.has(WORKSPACE_TAB_ID);
   const changesPin = shouldPinChangesTab({
     conversationId: currentConversationId,
-    hasRestorableEntry,
-    changesFocusMessageId,
+    changesOpen,
     isChangesFloating: floatingIds.has(CHANGES_TAB_ID),
-    activeTabId,
   });
   const changesInDock = changesPin && !floatingIds.has(CHANGES_TAB_ID);
   const workspaceActive = workspaceInDock && activeTabId === WORKSPACE_TAB_ID;
   const changesActive = changesInDock && activeTabId === CHANGES_TAB_ID;
 
-  // 切对话：清深链聚焦 + 清浮窗 + 清对话作用域内容 tab；桌面须先/并关对应真窗。
-  // 新会话撑不起改动且仍停在改动 tab → 回工作区。bounce 只跟切对话走（同会话
-  // Git chip 打开的空改动不能被弹走；初次挂载也不弹，避免 messages 未到就卸）。
-  // hasRestorableEntry 故意不进 deps。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: currentConversationId is an intentional re-run key
+  // 切对话：卸改动 + 清浮窗 + 清对话作用域内容 tab；桌面须先/并关对应真窗。
+  // closeChanges 只跟切对话走——初次挂载 / 进画布重挂不得卸掉用户刚打开的改动。
   useEffect(() => {
     const prevConversationId = prevConversationIdRef.current;
     prevConversationIdRef.current = currentConversationId;
-    clearChangesFocus();
     const floated = useSidePanelStore.getState().floats.map((f) => f.tabId);
     clearFloats();
     closeOsFloatWindowsForTabs(floated);
@@ -220,19 +208,19 @@ export function SidePanel() {
       prevConversationId !== undefined &&
       prevConversationId !== currentConversationId;
     if (!switched) return;
+    closeChanges();
     const stillActive = useSidePanelStore.getState().activeTabId;
     if (
       shouldBounceChangesTabToWorkspace({
-        conversationId: currentConversationId,
-        hasRestorableEntry,
         activeTabId: stillActive,
+        changesOpen: useSidePanelStore.getState().changesOpen,
       })
     ) {
       setActiveTab(WORKSPACE_TAB_ID);
     }
   }, [
     currentConversationId,
-    clearChangesFocus,
+    closeChanges,
     clearFloats,
     closeConversationScopedTabs,
     setActiveTab,
@@ -353,10 +341,10 @@ export function SidePanel() {
   };
 
   const onNewTerminal = useCallback(async () => {
+    const tabId = openTerminalTab();
     if (!currentConversationId) return;
     const target = await resolveConversationLocalTarget(currentConversationId);
     if (!target) return;
-    const tabId = openTerminalTab();
     const result = await spawnSession({
       conversationId: currentConversationId,
       rootId: target.rootId,
@@ -457,6 +445,7 @@ export function SidePanel() {
             <FixedTab
               active={changesActive}
               onClick={() => setActiveTab(CHANGES_TAB_ID)}
+              onClose={closeChanges}
               onPopOut={
                 floatsDisabled ? undefined : () => onPopOut(CHANGES_TAB_ID)
               }
@@ -489,15 +478,17 @@ export function SidePanel() {
               <FileText size={14} />
               文件
             </DropdownMenuItem>
-            {hasLocalFiles() && (
-              <DropdownMenuItem onSelect={() => void onNewTerminal()}>
-                <Terminal size={14} />
-                终端
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem onSelect={() => void onNewTerminal()}>
+              <Terminal size={14} />
+              终端
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => showBrowser()}>
               <Radio size={14} />
               浏览器
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => showChanges()}>
+              <Diff size={14} />
+              改动
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -622,12 +613,14 @@ export function SidePanel() {
 function FixedTab({
   active,
   onClick,
+  onClose,
   onPopOut,
   icon,
   label,
 }: {
   active: boolean;
   onClick: () => void;
+  onClose?: () => void;
   onPopOut?: () => void;
   icon: ReactNode;
   label: string;
@@ -659,6 +652,16 @@ function FixedTab({
             <PictureInPicture2 size={12} />
           </IconButton>
         </SimpleTooltip>
+      )}
+      {onClose && (
+        <IconButton
+          {...{ [NO_TAB_DRAG_ATTR]: "" }}
+          onClick={onClose}
+          aria-label={`关闭 ${label}`}
+          className="mr-1 size-5 opacity-0 group-hover/tab:opacity-100"
+        >
+          <X size={12} />
+        </IconButton>
       )}
     </div>
   );

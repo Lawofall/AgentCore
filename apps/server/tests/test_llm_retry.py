@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
 
@@ -828,6 +829,7 @@ def _stream_response(line_iter):
     mock_response.headers = {}
     mock_response.aread = AsyncMock(return_value=b"")
     mock_response.aiter_lines = line_iter
+    mock_response.aclose = AsyncMock()
     mock_response.__aenter__ = AsyncMock(return_value=mock_response)
     mock_response.__aexit__ = AsyncMock(return_value=False)
     return mock_response
@@ -926,5 +928,115 @@ async def test_stream_reasoning_only_incomplete_exhausts_to_empty(monkeypatch):
         assert calls["n"] == _MAX_RETRIES
         assert len(sleeps) == _MAX_RETRIES - 1
         assert [c.empty_diagnosis for c in chunks if c.empty_diagnosis] == ["silent_empty"]
+    finally:
+        await provider.close()
+
+
+def _http_error_from_cancel() -> httpx.ConnectError:
+    req = httpx.Request("POST", "http://example.invalid/v1/chat/completions")
+    err = httpx.ConnectError("wrapped-cancel", request=req)
+    err.__cause__ = asyncio.CancelledError()
+    return err
+
+
+async def test_complete_wrapped_cancel_does_not_retry(monkeypatch):
+    sleeps: list[float] = []
+
+    async def fake_sleep(sec: float) -> None:
+        sleeps.append(sec)
+
+    monkeypatch.setattr("agentcore.llm.provider.openai_compatible.asyncio.sleep", fake_sleep)
+
+    provider = OpenAICompatibleProvider(
+        name="test", api_key="k", base_url="http://example.invalid/v1"
+    )
+    calls = {"n": 0}
+
+    async def boom(*_a, **_kw):
+        calls["n"] += 1
+        raise _http_error_from_cancel()
+
+    provider._client.post = boom
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await provider.complete(_req())
+        assert calls["n"] == 1
+        assert sleeps == []
+    finally:
+        await provider.close()
+
+
+async def test_stream_cancel_aborts_in_flight_and_does_not_retry():
+    provider = OpenAICompatibleProvider(
+        name="test", api_key="k", base_url="http://example.invalid/v1"
+    )
+    hang = asyncio.Event()
+    responses: list = []
+
+    async def hanging_lines():
+        await hang.wait()
+        yield "data: [DONE]\n"
+
+    def stream_side_effect(*_a, **_kw):
+        resp = _stream_response(hanging_lines)
+        responses.append(resp)
+        return resp
+
+    provider._client.stream = MagicMock(side_effect=stream_side_effect)
+
+    async def consume() -> None:
+        async for _ in provider.stream(_req()):
+            pass
+
+    task = asyncio.create_task(consume())
+    try:
+        deadline = asyncio.get_running_loop().time() + 0.5
+        while not responses:
+            if asyncio.get_running_loop().time() > deadline:
+                pytest.fail("stream never opened")
+            await asyncio.sleep(0)
+        assert len(responses) == 1
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(responses) == 1
+        assert responses[0].aclose.await_count >= 1
+    finally:
+        hang.set()
+        if not task.done():
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        await provider.close()
+
+
+async def test_stream_wrapped_cancel_does_not_retry(monkeypatch):
+    sleeps: list[float] = []
+
+    async def fake_sleep(sec: float) -> None:
+        sleeps.append(sec)
+
+    monkeypatch.setattr("agentcore.llm.provider.openai_compatible.asyncio.sleep", fake_sleep)
+
+    provider = OpenAICompatibleProvider(
+        name="test", api_key="k", base_url="http://example.invalid/v1"
+    )
+    calls = {"n": 0}
+
+    async def boom_lines():
+        raise _http_error_from_cancel()
+        yield "data: [DONE]\n"  # pragma: no cover
+
+    def stream_side_effect(*_a, **_kw):
+        calls["n"] += 1
+        return _stream_response(boom_lines)
+
+    provider._client.stream = MagicMock(side_effect=stream_side_effect)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            async for _ in provider.stream(_req()):
+                pass
+        assert calls["n"] == 1
+        assert sleeps == []
     finally:
         await provider.close()

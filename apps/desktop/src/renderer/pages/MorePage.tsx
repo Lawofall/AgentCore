@@ -1,7 +1,6 @@
 import { NarrowBackHeader } from "@/components/layout/NarrowBackHeader";
 import { SectionLabel, SurfaceNavLink } from "@/components/ui";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
-import { NARROW_HIDDEN_SETTINGS_PATHS } from "@/lib/narrowProduct";
 import {
   Cpu,
   Gauge,
@@ -70,13 +69,19 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/** 窄屏不上：Git 本机凭据、暗色/诊断、快捷键、反馈。权威 → 前端技术 §五。 */
+const NARROW_HIDE_PATHS = new Set([
+  "/more/git",
+  "/more/general",
+  "/more/shortcuts",
+  "/more/feedback",
+]);
+
 function visibleGroups(narrow: boolean): NavGroup[] {
   if (!narrow) return NAV_GROUPS;
   return NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter(
-      (item) => !NARROW_HIDDEN_SETTINGS_PATHS.has(item.path),
-    ),
+    items: group.items.filter((item) => !NARROW_HIDE_PATHS.has(item.path)),
   })).filter((group) => group.items.length > 0);
 }
 

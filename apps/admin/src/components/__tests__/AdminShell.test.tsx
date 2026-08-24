@@ -203,4 +203,11 @@ describe("AdminShell resilience", () => {
     const skip = screen.getByRole("link", { name: "跳到主内容" });
     expect(skip.getAttribute("href")).toBe("#main");
   });
+
+  it("lets the replay page fill the pane instead of scrolling the console", () => {
+    renderShell("/replay/c1");
+    const main = document.getElementById("main");
+    expect(main?.className).toMatch(/overflow-hidden/);
+    expect(main?.className).not.toMatch(/overflow-y-auto/);
+  });
 });

@@ -20,10 +20,10 @@ alwaysApply: false
 - **凭据禁令**：`deploy/.env.deploy.local` 不入仓。禁止在 chat 索要/回显 token、SSH 私钥或其它部署凭据。
 - **不重新启用** deploy/release workflow 的 push/tag/schedule 自动触发。
 - **新增/改接口 → 后端必须先部署**。前端 deploy 脚本内置版本漂移门禁。
-- **桌面发版**：Win = 本地 `release:win`（`--publish never` + `gh upload` + 资产断言 + `sync:release-cdn`；对齐 Mac）；Mac = GHA `Release Desktop`（仅 mac）。为省额度：GHA 桌面发布仅 Mac；Win 本地；**勿用 GHA 打 Win**。官网首装 = GitHub Releases；updater feed = 品牌域 nginx（见 [发布与门禁 §7.6b](/docs/05-平台与运维/发布与门禁.md)；勿在 chat 回显主机名或凭据）。
-- 发布前本地一键门禁：`pnpm release:gate`（与 `ci.yml` 同构；触发保留，不关 CI）。含 **schema gate**（迁移 head ↔ ORM；`uv run python scripts/check_schema_gate.py`）。日常迭代可用 `pnpm release:gate:lite`（跳过 desktop shoot + smoke；**发布仍须全量**）。
-- **「同构」只指检查内容，不指运行平台**：本地跑 Windows、CI 跑 Linux 容器。平台相关判定（路径绝对性 / 分隔符 / 大小写 / 换行）本地必绿而只有 CI 会红——`os.path.isabs` 判客户端路径就这么漏到过生产（`agentcore/core/paths.py` 即其收口）。**同构也不含 `tests/integration`**：gate 段 `--ignore` 掉了它（需真实 Postgres），只有 CI backend job 跑；gate 结尾会列出因此未覆盖的契约面，勿把 ✓ 读成全覆盖 → [发布与门禁 · integration 覆盖缺口](/docs/05-平台与运维/发布与门禁.md#决策与落差代码看不出来)。故 **`deploy:backend` 前须等 `ci.yml` 全绿**，本地全量绿只是必要条件；红灯或未跑完不得上后端。
-- **后端上线顺序**：`finish-server.sh` / `deploy-server.sh` = 停旧 api → `alembic upgrade` → schema gate `--live` → 起新 api。禁止旧容器接流量时跑破坏性迁移。
+- **桌面发版**：Win = 本地 `release:win`；Mac = GHA 仅 mac；**勿用 GHA 打 Win**。官网首装 / updater feed → [发布与门禁 §7.6b](/docs/05-平台与运维/发布与门禁.md)。
+- 发布前本地一键门禁：`pnpm release:gate`（含 schema gate）。日常可用 `:lite`；**发布仍须全量**。
+- **`deploy:backend` 前须等 `ci.yml` 全绿**（本地 gate 不含 integration、且 Win≠Linux）→ [发布与门禁 · 决策与落差](/docs/05-平台与运维/发布与门禁.md#决策与落差代码看不出来)。
+- **后端上线顺序**：停旧 api → `alembic upgrade` → schema gate `--live` → 起新 api。禁止旧容器接流量时跑破坏性迁移。
 
 ## 全端发布顺序（速查）
 
@@ -39,11 +39,11 @@ gh run watch <id> --exit-status            # 等 ci.yml 全绿；Linux 面只有
 pnpm deploy:backend <sha>
 # full：Win release:win ∥ Mac GHA → 齐资产后 Publish
 # full：Android release:android（CORS 预检自动跑）→ 真机冒烟（签名安装 / WebView / SSE）→ Publish android-v*（CDN 由脚本末尾 sync；与桌面 v* 分轨）
-# full：admin / web →（桌面 Publish 后）website deploy:pages（m. 将 301 到 app.，勿再 deploy mobile Pages）
+# full：admin / web →（桌面 Publish 后）website deploy:pages（独立 m. 站已下线，勿再 deploy mobile Pages）
 pnpm release:notice -- --phase done …      # 收口
 # tag prod-* / desktop-v*
 ```
 
-手搓顺序仍等价：git push → 后端 `pnpm deploy:backend <sha>` →（若桌面已 bump：先 Publish 桌面 release）→ Android APK（见上）→ 官网 → admin → web 客户端 → 验收 → tag。`m.` 将 301 到 `app.`，勿再上传手机 Pages。
+手搓顺序仍等价：git push → 后端 `pnpm deploy:backend <sha>` →（若桌面已 bump：先 Publish 桌面 release）→ Android APK（见上）→ 官网 → admin → web 客户端 → 验收 → tag。独立 `m.` 站已下线，勿再上传手机 Pages。
 
 公告 CLI 细节 → [`产品公告文案模板`](/docs/05-平台与运维/产品公告文案模板.md) · `pnpm release:notice --help`。

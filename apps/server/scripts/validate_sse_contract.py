@@ -18,7 +18,7 @@ from pathlib import Path
 
 from agentcore.core.error_codes import ErrorCode
 from agentcore.runtime.events.payloads import EVENT_PAYLOAD_MODELS
-from agentcore.runtime.events.types import EventType
+from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES, EventType
 from agentcore.runtime.interaction import INTERACTION_KIND_SPECS, InteractionKind
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -117,16 +117,19 @@ def main() -> None:
         errors.append(
             f"UserInteractionKind extras not in INTERACTION_KIND_SPECS: {', '.join(only_gen_wire)}"
         )
+    # Leftover kinds (e.g. team_preview → 410) keep wire names after the
+    # events themselves enter RETIRED_EVENT_TYPE_VALUES.
+    known_wire = py_events | RETIRED_EVENT_TYPE_VALUES
     for kind, spec in INTERACTION_KIND_SPECS.items():
-        if spec.required_event not in py_events:
+        if spec.required_event not in known_wire:
             errors.append(
                 f"INTERACTION_KIND_SPECS[{kind.value}].required_event "
-                f"{spec.required_event!r} not in EventType"
+                f"{spec.required_event!r} not in EventType or RETIRED_EVENT_TYPE_VALUES"
             )
-        if spec.resolved_event is not None and spec.resolved_event not in py_events:
+        if spec.resolved_event is not None and spec.resolved_event not in known_wire:
             errors.append(
                 f"INTERACTION_KIND_SPECS[{kind.value}].resolved_event "
-                f"{spec.resolved_event!r} not in EventType"
+                f"{spec.resolved_event!r} not in EventType or RETIRED_EVENT_TYPE_VALUES"
             )
 
     # ErrorCode catalog

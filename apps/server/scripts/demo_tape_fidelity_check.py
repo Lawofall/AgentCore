@@ -3,9 +3,9 @@
 Replaces the journal-era "fresh re-export" check (that layer is retired): fidelity
 is now asserted on BOTH the tape file (content/reasoning byte-equal vs the oracle
 conversation in the DB, ordering/debate-structure invariants, monotonic t_ms) and an
-actual in-process REPLAY through the player (pause at team_preview → resume →
-complete; replayed captain content/reasoning byte-equal; exactly one live resolve;
-replay checkpoint identity differs from the recorded one).
+actual in-process REPLAY through the player (leftover team_preview_* skip — no
+kickoff pause / no persist; play-through complete; replayed captain
+content/reasoning byte-equal).
 
 Usage (from apps/server)::
 
@@ -139,12 +139,11 @@ def _check_monotonic(events: list[dict]) -> list[str]:
 
 
 async def _replay_check(tape_path: Path, report: dict) -> None:
-    """Play the tape through the real player (pause → resume → complete), offline."""
+    """Play the tape through the real player (leftover kickoff skip → complete)."""
     from agentcore.demo_tape import player as player_mod
     from agentcore.demo_tape.binding import TapeBinding
-    from agentcore.demo_tape.player import continue_tape_turn, play_tape_events
-    from agentcore.runtime.checkpoints import CheckpointDecision, CheckpointResponse
-    from agentcore.runtime.events import EventSink, EventType, FinishReason
+    from agentcore.demo_tape.player import play_tape_events
+    from agentcore.runtime.events import EventSink, FinishReason
     from agentcore.runtime.journal.writer import TurnJournalWriter
 
     saved: list = []
@@ -160,14 +159,6 @@ async def _replay_check(tape_path: Path, report: dict) -> None:
 
     tape = load_tape(tape_path)
     events = list(tape.get("events") or [])
-    recorded_checkpoint = next(
-        (
-            str((e.get("payload") or {}).get("checkpoint_id") or "")
-            for e in events
-            if event_type(e) == "team_preview_required"
-        ),
-        "",
-    )
 
     binding = TapeBinding(
         conversation_id="fidelity-conv",
@@ -196,36 +187,27 @@ async def _replay_check(tape_path: Path, report: dict) -> None:
         trace_id="f" * 32,
     )
 
-    paused = result["finish_reason"] is FinishReason.PAUSED
-    report["checks"]["replay_pauses_at_team_preview"] = paused
-    if not paused:
-        report["errors"].append(f"replay did not pause: {result['finish_reason']}")
+    done = result["finish_reason"] is FinishReason.END_TURN
+    report["checks"]["replay_completes_without_kickoff_pause"] = done
+    if not done:
+        report["errors"].append(f"replay did not complete: {result['finish_reason']}")
         return
 
-    cards = [e for e in sink._history if e.type is EventType.TEAM_PREVIEW_REQUIRED]
-    live_checkpoint = str(cards[0].payload.get("checkpoint_id")) if cards else ""
-    ok_identity = bool(live_checkpoint) and live_checkpoint != recorded_checkpoint
-    report["checks"]["replay_identity_reminted"] = ok_identity
-    if not ok_identity:
+    leftover_emitted = [
+        e.type.value
+        for e in sink._history
+        if e.type.value in ("team_preview_required", "team_preview_resolved")
+    ]
+    ok_skip = leftover_emitted == [] and saved == []
+    report["checks"]["replay_skips_leftover_team_preview"] = ok_skip
+    if not ok_skip:
         report["errors"].append(
-            f"replay checkpoint identity not reminted: {live_checkpoint!r}"
+            f"leftover team_preview not skipped: emitted={leftover_emitted!r} "
+            f"saved_frames={len(saved)}"
         )
 
-    sink2 = EventSink()
-    result2 = await continue_tape_turn(
-        suspension=saved[0],
-        response=CheckpointResponse(decision=CheckpointDecision.CONTINUE, note=""),
-        sink=sink2,
-        folder_id=None,
-        trace_id="f" * 32,
-    )
-    done = result2["finish_reason"] is FinishReason.END_TURN
-    report["checks"]["replay_completes_after_resume"] = done
-    if not done:
-        report["errors"].append(f"resume did not complete: {result2['finish_reason']}")
-
     # Chips product-offline: replay must not re-attach meta.followups onto result.
-    actual_followups = list(result2.get("followups") or [])
+    actual_followups = list(result.get("followups") or [])
     ok_followups = actual_followups == []
     report["checks"]["replay_followups_ignored"] = ok_followups
     if not ok_followups:
@@ -234,46 +216,16 @@ async def _replay_check(tape_path: Path, report: dict) -> None:
             f"(meta had {(tape.get('meta') or {}).get('followups')!r})"
         )
 
-    resolved = [e for e in sink2._history if e.type is EventType.TEAM_PREVIEW_RESOLVED]
-    report["checks"]["replay_single_live_resolve"] = len(resolved) == 1
-    if len(resolved) != 1:
-        report["errors"].append(f"expected 1 live team_preview_resolved, got {len(resolved)}")
-
-    # Cross-pause client visibility: fold pause+resume histories; pre-pause captain
-    # content must still be present once the collab graph (run_plan) has started.
     from agentcore.conformance.projection import project_turn
 
-    pre_pause_text = ""
-    for e in reversed(saved[0].journal_entries or []):
-        if e.get("kind") == "turn_paused":
-            pre_pause_text = str((e.get("payload") or {}).get("content") or "")
-            break
     wire = [{"type": e.type.value, "payload": e.payload} for e in sink._history]
-    wire.extend({"type": e.type.value, "payload": e.payload} for e in sink2._history)
     folded = project_turn(wire)
     folded_content = folded.get("content") or ""
-    visible = bool(pre_pause_text) and pre_pause_text in folded_content
-    report["checks"]["replay_pre_pause_visible_after_collab"] = visible
-    if not visible:
-        report["errors"].append(
-            "pre-pause captain content missing from folded client view after collab graph: "
-            f"pre_pause_chars={len(pre_pause_text)} folded_chars={len(folded_content)}"
-        )
-    # G6 arming must be live-parity (reinjection hook set from turn_paused content).
-    g6_armed = bool(pre_pause_text) and sink2._content_reset_reinjection == (
-        pre_pause_text + "\n\n"
-    )
-    report["checks"]["replay_g6_reinjection_armed"] = g6_armed
-    if not g6_armed:
-        report["errors"].append(
-            "resume did not arm G6 content_reset reinjection from turn_paused content"
-        )
 
     report["replay"] = {
-        "content": result2.get("content") or "",
-        "reasoning": result2.get("reasoning_content") or "",
+        "content": result.get("content") or "",
+        "reasoning": result.get("reasoning_content") or "",
         "folded_content": folded_content,
-        "pre_pause_content": pre_pause_text,
         "followups": actual_followups,
     }
 

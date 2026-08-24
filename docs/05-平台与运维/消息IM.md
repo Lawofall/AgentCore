@@ -58,7 +58,7 @@ skip_if:
 - **在线态（✅ 基本功能）**：在线 = ChatHub 上该用户 ≥1 条活着的 `/v1/realtime` 订阅（与 admin 同源）。REST 快照：`ChatParticipant.online`（会话列表 dm peer / 群成员面板）；实时：`presence` 事件。桌面呈现：单聊列表绿点 + 头「在线/离线」；群成员绿点 + 头「N 人在线」。不做：正在输入、last_seen、隐身、Redis TTL、手机端。
 - **会话/成员变更（`chat_changed`）**：载荷 `{ type, chat_id, reason }`，`reason ∈ created | member_added | activated`，推给**受影响成员**——对方建 DM 推给 peer、加入群推给新成员、`pending → accepted` 激活推给双方。**薄事件**：不带 `ChatView`（unread / peer / 成员状态按查看者算，一个载荷服务不了两个成员），客户端收到自行重拉会话列表。**为何需要**：在此之前只有消息才驱动对端刷新，于是「对方建了会话但没发消息」「被拉进群」「消息请求被激活」都要等重启或断线重连才可见——被添加方看不到、添加方看得到。
 - **离线补偿**：不另建表，上线时按 `last_read_message_id` 拉 `chat_messages` 增量。`chat_changed` 同样不入库，靠重连时的整表重拉兜底。
-- **多 worker（⏳）**：换 Redis / NATS pub-sub——`ChatEventPublisher` Protocol 已抽象（`events.py`），届时为 seam 局部替换，不动业务逻辑（同限流 / 审批门的多机化路径）。
+- **多 worker（⏳）**：`ChatEventPublisher` Protocol 已抽象（`events.py`），换 Redis / NATS 时为 seam 局部替换。现状 API 进程一律单 worker → [部署拓扑 · API 进程约束：多 worker 一律拒启](/docs/05-平台与运维/部署拓扑与环境.md#api-进程约束多-worker-一律拒启)。
 
 ## 五、隐私与反滥用（✅ 护栏；好友门见 §九）
 

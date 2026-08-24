@@ -93,8 +93,6 @@ def fold_fanout_slots(
 # Mechanism-only key: inject turn ``user_message`` via ``expand_playbook(..., user_message=)``.
 # Not a CEO-facing playbook slot — CEO must not be required to re-state the user line in topic.
 USER_MESSAGE_MECH_KEY = "__user_message__"
-# Mechanism-only: conversation_id for website style ledger injection (build_website frontend).
-CONVERSATION_ID_MECH_KEY = "_conversation_id"
 
 # 调研员便签协作提示（parallel_brief / research_report / multi_lens 共用）.
 RESEARCHER_NOTE_GUIDANCE = (

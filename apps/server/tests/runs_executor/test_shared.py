@@ -50,9 +50,10 @@ def test_priced_failure_without_products_leaves_ledger_empty():
     assert state.file_acceptance == []
 
 
-def test_is_hard_failure_empty_always_hard():
-    assert _is_hard_failure("   ", None) is True
-    assert _is_hard_failure("", Deliverable(strict=False)) is True
+def test_is_hard_failure_empty_is_not_hard():
+    assert _is_hard_failure("   ", None) is False
+    assert _is_hard_failure("", Deliverable(strict=False)) is False
+    assert _is_hard_failure("", Deliverable(strict=True)) is True
 
 
 def test_is_hard_failure_nonempty_depends_on_strict():
@@ -68,71 +69,31 @@ def test_is_hard_failure_files_form_zero_disk_is_soft():
     assert _is_hard_failure("有正文且已落盘", d, files_touched=1) is False
 
 
-def test_hard_gap_blocks_completion_non_strict_allows():
-    """Non-strict (legacy soft-accept) still allows COMPLETED with degraded gaps."""
+def test_hard_gap_blocks_completion_never_fails_empty_or_unlanded():
+    """空交 / 未落盘不再把节点打成 FAILED。"""
     gaps = [{"description": DEGRADED_HANDOFF_WARNING, "reason": REASON_DEGRADED_HANDOFF}]
     assert (
         _hard_gap_blocks_completion(gaps, {"degraded": True}, Deliverable(strict=False))
         is None
     )
     assert _hard_gap_blocks_completion(gaps, {"degraded": True}, None) is None
-
-
-def test_hard_gap_blocks_completion_strict_degraded_no_files():
-    """刀1：strict + degraded_handoff + 无落盘 → 仍硬拦（failure_kind=model）。"""
-    gaps = [{"description": DEGRADED_HANDOFF_WARNING, "reason": REASON_DEGRADED_HANDOFF}]
-    block = _hard_gap_blocks_completion(
-        gaps,
-        {"summary": "薄", "degraded": True},
-        Deliverable(strict=True, form="files"),
-        files_touched=0,
-    )
-    assert block is not None
-    assert "交接说明不完整" in block.reason or "不得冒充完成" in block.reason
-    assert "continue_from_run_id" not in block.reason
-    assert "degraded_handoff" not in block.reason
-    assert block.failure_kind == "model"
-
-
-def test_hard_gap_blocks_completion_strict_degraded_with_files_allows():
-    """刀1 / 方案 A：strict + degraded_handoff + 已落盘 → 不 FAILED，放行 COMPLETED。"""
-    gaps = [
-        {
-            "description": DEGRADED_HANDOFF_WARNING,
-            "reason": REASON_DEGRADED_HANDOFF,
-            "severity": "warning",
-        }
-    ]
     assert (
         _hard_gap_blocks_completion(
             gaps,
             {"summary": "薄", "degraded": True},
             Deliverable(strict=True, form="files"),
-            files_touched=1,
+            files_touched=0,
         )
         is None
     )
-    # 即便未预盖 severity，有落盘也不硬拦。
-    gaps_raw = [
-        {"description": DEGRADED_HANDOFF_WARNING, "reason": REASON_DEGRADED_HANDOFF}
-    ]
     assert (
         _hard_gap_blocks_completion(
-            gaps_raw,
-            {"summary": "薄", "degraded": True},
-            Deliverable(strict=True, form="files"),
-            files_touched=2,
+            [{"description": "声明的交付物路径未落盘：site/sections/s0.html"}],
+            None,
+            Deliverable(strict=True),
         )
         is None
     )
-
-
-def test_hard_gap_blocks_completion_strict_missing_artifact_desc():
-    gaps = [{"description": "声明的交付物路径未落盘：site/sections/s0.html"}]
-    block = _hard_gap_blocks_completion(gaps, None, Deliverable(strict=True))
-    assert block is not None
-    assert "未落盘" in block.reason or "不得冒充完成" in block.reason
-    assert block.failure_kind == "quality"
 
 
 def test_hard_gap_blocks_completion_soft_warning_alone_ok():

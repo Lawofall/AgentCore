@@ -8,7 +8,6 @@ import pytest
 
 from agentcore.llm.provider.protocol import TokenUsage
 from agentcore.runtime.runs.contract import ContractVerdict
-from agentcore.runtime.runs.playbooks import expand_playbook
 from agentcore.runtime.runs.website_style import STYLE_ID_HEADING
 from agentcore.runtime.runs.website_visual_critic import (
     MAX_VISUAL_REWORK,
@@ -20,6 +19,7 @@ from agentcore.runtime.runs.website_visual_critic import (
     browser_tool_available,
     build_critic_prompt,
     parse_critic_response,
+    preview_shot_path,
     run_visual_critic,
 )
 from agentcore.vision.protocol import VisionReading
@@ -59,24 +59,14 @@ def test_browser_tool_available_accepts_new_and_legacy_names():
     assert browser_tool_available(_Reg({"file_read"})) is False
 
 
-def test_build_website_qa_enables_visual_critic():
-    tasks, errors = expand_playbook(
-        "build_website",
-        {"topic": "Demo", "audience": "访客"},
-    )
-    assert errors == []
-    qa = next(t for t in tasks if t["id"] == "qa")
-    assert qa["deliverable"].get("visual_critic") is True
-    assert "未目验" in qa["task"] or "VisionReader" in qa["task"]
-
-
 def test_assemble_preview_inlines_css():
     doc = assemble_preview_document(
         "<html><head></head><body><h1>x</h1></body></html>",
         "h1{color:red}",
     )
-    assert "h1{color:red}" in doc
-    assert "</head>" in doc
+    assert doc.ok is True
+    assert "h1{color:red}" in doc.document
+    assert "</head>" in doc.document
 
 
 def test_parse_critic_response_structured_and_skips_vague():
@@ -274,3 +264,122 @@ async def test_apply_verdict_critical_triggers_rework_then_partial():
     assert v3.ok is True
     assert v3.visual_failures == []
     assert any("partial" in w for w in v3.warnings)
+
+
+def test_assemble_preview_inlines_local_stylesheet_and_image():
+    html = (
+        '<html><head><link rel="stylesheet" href="styles.css"></head>'
+        '<body><img src="logo.png" alt="x"></body></html>'
+    )
+    arts = {
+        "site/index.html": html,
+        "site/styles.css": "body{color:blue}",
+    }
+    png = b"\x89PNG\r\n\x1a\n"
+    assembled = assemble_preview_document(
+        html,
+        artifact_contents=arts,
+        artifact_bytes={"site/logo.png": png},
+        source_path="site/index.html",
+    )
+    assert assembled.ok is True
+    assert "body{color:blue}" in assembled.document
+    assert "data:image/png;base64," in assembled.document
+    assert 'href="styles.css"' not in assembled.document
+
+
+def test_assemble_preview_fails_when_local_ref_missing():
+    html = '<html><body><img src="missing.png"></body></html>'
+    assembled = assemble_preview_document(
+        html,
+        artifact_contents={"site/index.html": html},
+        source_path="site/index.html",
+    )
+    assert assembled.ok is False
+    assert "未能内联" in assembled.reason
+
+
+async def test_inline_failure_skips_screenshot_persist():
+    reader = _FakeReader('{"findings":[]}')
+    shot = StubPageScreenshot()
+    written: dict[str, bytes] = {}
+
+    async def persist_preview(path: str, data: bytes) -> None:
+        written[path] = data
+
+    arts = {
+        "site/index.html": '<html><body><img src="ghost.png"></body></html>',
+        "site/DESIGN.md": _DESIGN,
+    }
+    _updated, result, _used = await apply_visual_critic_to_verdict(
+        ContractVerdict(ok=True),
+        vision_reader=reader,
+        screenshot=shot,
+        artifact_contents=arts,
+        visual_rework_used=0,
+        persist_preview_shot=persist_preview,
+    )
+    assert result.status == "skipped"
+    assert "未能内联" in result.reason
+    assert written == {}
+    assert shot.calls == []
+    assert reader.calls == []
+
+
+async def test_apply_verdict_persists_preview_products():
+    reader = _FakeReader('{"findings":[]}')
+    shot = StubPageScreenshot()
+    written: dict[str, bytes] = {}
+
+    async def persist_preview(path: str, data: bytes) -> None:
+        written[path] = data
+
+    arts = {
+        "site/index.html": "<html><head></head><body>ok</body></html>",
+        "site/DESIGN.md": _DESIGN,
+    }
+    _updated, result, _used = await apply_visual_critic_to_verdict(
+        ContractVerdict(ok=True),
+        vision_reader=reader,
+        screenshot=shot,
+        artifact_contents=arts,
+        visual_rework_used=0,
+        persist_preview_shot=persist_preview,
+    )
+    assert result.status == "passed"
+    assert preview_shot_path("desktop") in written
+    assert preview_shot_path("narrow") in written
+    assert len(result.preview_products) == 2
+    assert all(p.kind == "image" for p in result.preview_products)
+    assert all(p.derived_from == "site/index.html" for p in result.preview_products)
+
+
+async def test_extra_html_candidates_get_their_own_preview_shots():
+    reader = _FakeReader('{"findings":[]}')
+    shot = StubPageScreenshot()
+    written: dict[str, bytes] = {}
+
+    async def persist_preview(path: str, data: bytes) -> None:
+        written[path] = data
+
+    arts = {
+        "site/index.html": "<html><head></head><body>a</body></html>",
+        "site/alt.html": "<html><head></head><body>b</body></html>",
+        "site/DESIGN.md": _DESIGN,
+    }
+    _updated, result, _used = await apply_visual_critic_to_verdict(
+        ContractVerdict(ok=True),
+        vision_reader=reader,
+        screenshot=shot,
+        artifact_contents=arts,
+        visual_rework_used=0,
+        persist_preview_shot=persist_preview,
+    )
+    alt_desktop = preview_shot_path("desktop", source_path="site/alt.html")
+    alt_narrow = preview_shot_path("narrow", source_path="site/alt.html")
+    assert preview_shot_path("desktop") in written
+    assert alt_desktop in written
+    assert alt_narrow in written
+    derived = {p.path: p.derived_from for p in result.preview_products}
+    assert derived[preview_shot_path("desktop")] == "site/index.html"
+    assert derived[alt_desktop] == "site/alt.html"

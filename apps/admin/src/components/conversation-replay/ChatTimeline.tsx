@@ -1,13 +1,10 @@
 import { ChatView } from "@/components/chat/ChatView";
 import { UserBubble } from "@/components/chat/UserBubble";
 import { chatTurnFromReplay } from "@/components/chat/chatTurn";
-import {
-  EmptyPanel,
-  ROLE_LABEL,
-} from "@/components/conversation-replay/shared";
+import { EmptyPanel } from "@/components/conversation-replay/shared";
 import { Spinner } from "@/components/ui/Spinner";
 import { isExecutionHarvestMessage } from "@/lib/executionHarvest";
-import { cn, fmtTime } from "@/lib/utils";
+import { cn, fmtCny, fmtMs, fmtTime, nanoToYuan } from "@/lib/utils";
 import type { ReplayMessage } from "@/services/adminObservability";
 import { type KeyboardEvent, useEffect, useMemo, useRef } from "react";
 
@@ -37,7 +34,7 @@ export function ChatTimeline({
   onSelectRun,
   isAnchored,
   hasMoreBefore = false,
-  hydratingId = null,
+  hydratingIds = [],
   hydrateError = null,
   onRetryHydrate,
   className,
@@ -49,7 +46,7 @@ export function ChatTimeline({
   onSelectRun: (runId: string) => void;
   isAnchored: (m: ReplayMessage) => boolean;
   hasMoreBefore?: boolean;
-  hydratingId?: string | null;
+  hydratingIds?: readonly string[];
   hydrateError?: string | null;
   onRetryHydrate?: () => void;
   /** Sizing comes from the page's layout row — this pane just scrolls inside it. */
@@ -73,7 +70,7 @@ export function ChatTimeline({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col gap-4 overflow-y-auto pr-0.5",
+        "flex min-w-0 flex-col gap-5",
         className,
       )}
     >
@@ -107,7 +104,12 @@ export function ChatTimeline({
               selected={m.id === selectedId}
               selectedRunId={m.id === selectedId ? selectedRunId : null}
               anchored={isAnchored(m)}
-              hydrating={m.id === hydratingId}
+              hydrating={
+                Boolean(m.has_final_state) &&
+                hydratingIds.includes(m.id) &&
+                m.runs_payload == null &&
+                m.projected == null
+              }
               hydrateError={m.id === selectedId ? hydrateError : null}
               onRetryHydrate={onRetryHydrate}
               onSelect={() => onSelect(m.id)}
@@ -143,30 +145,22 @@ function UserTurn({
       onClick={onSelect}
       onKeyDown={(e) => activateOnSelfKey(e, onSelect)}
       className={cn(
-        "flex min-w-0 w-full justify-end outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl",
-        selected && "ring-1 ring-primary/30",
-        anchored && !selected && "ring-1 ring-primary/20",
+        "group flex min-w-0 w-full justify-end rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        selected && "ring-1 ring-primary/25",
+        anchored && !selected && "ring-1 ring-primary/15",
       )}
     >
-      <div
-        className={cn(
-          "min-w-0 max-w-[min(100%,36rem)] rounded-xl rounded-br-none border px-4 py-2.5",
-          selected
-            ? "border-primary/40 bg-primary/10"
-            : "border-border/60 bg-muted/50",
-        )}
-      >
-        <div className="mb-1 flex items-center gap-2 text-muted-foreground text-xs">
-          <span className="font-medium text-foreground">
-            {ROLE_LABEL.user}
-          </span>
-          <span className="tabular-nums">{fmtTime(message.created_at)}</span>
+      <div className="flex min-w-0 max-w-[80%] flex-col items-end gap-1">
+        <div className="min-w-0 w-full rounded-xl rounded-br-none bg-muted px-4 py-3 text-sm text-foreground">
+          <UserBubble
+            content={message.content}
+            attachments={message.attachments}
+            agentMentions={message.agent_mentions}
+          />
         </div>
-        <UserBubble
-          content={message.content}
-          attachments={message.attachments}
-          agentMentions={message.agent_mentions}
-        />
+        <span className="text-muted-foreground text-xs tabular-nums opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {fmtTime(message.created_at)}
+        </span>
       </div>
     </div>
   );
@@ -203,19 +197,14 @@ function AssistantTurn({
       onClick={onSelect}
       onKeyDown={(e) => activateOnSelfKey(e, onSelect)}
       className={cn(
-        "min-w-0 w-full max-w-[min(100%,48rem)] rounded-xl px-1 py-1 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-        selected && "ring-1 ring-primary/25",
-        anchored && !selected && "ring-1 ring-primary/15",
+        "group min-w-0 w-full rounded-xl px-1 py-1 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+        selected && "bg-muted/40",
+        anchored && !selected && "bg-muted/20",
       )}
     >
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-foreground">
-          {ROLE_LABEL.assistant}
-        </span>
-        <span className="text-muted-foreground text-xs tabular-nums">
-          {fmtTime(message.created_at)}
-        </span>
-      </div>
+      <span className="mb-1 block text-muted-foreground text-xs tabular-nums opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        {fmtTime(message.created_at)}
+      </span>
       {hydrating && (
         <p
           role="status"
@@ -243,12 +232,32 @@ function AssistantTurn({
         </div>
       )}
       <ChatView
-        content={turn.content}
-        runsPayload={turn.runsPayload}
-        projected={turn.projected}
+        {...turn}
         selectedRunId={selectedRunId}
         onSelectRun={onSelectRun}
       />
+      <AssistantUsageFooter message={message} />
+    </div>
+  );
+}
+
+/** Desktop AssistantMessageFooter analog — cost · rounds · duration only. */
+function AssistantUsageFooter({ message }: { message: ReplayMessage }) {
+  const cost =
+    message.cost_total > 0 ? fmtCny(nanoToYuan(message.cost_total)) : null;
+  const rounds = message.metrics?.rounds;
+  const durationMs = message.metrics?.duration_ms;
+  const parts: string[] = [];
+  if (cost) parts.push(cost);
+  if (rounds != null && rounds > 1) parts.push(`${rounds} 轮`);
+  if (durationMs != null && durationMs > 0) parts.push(fmtMs(durationMs));
+  if (parts.length === 0) return null;
+  return (
+    <div
+      aria-label="回合用量"
+      className="mt-2 text-muted-foreground/70 text-xs tabular-nums"
+    >
+      {parts.join(" · ")}
     </div>
   );
 }

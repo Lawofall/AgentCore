@@ -5,7 +5,7 @@ Gate: when ``spent >= engine_turn_token_ceiling`` (>0), reject new ``delegate`` 
 ``debate`` and soft-stop WaveScheduler admission (in-flight drain only).
 
 Delivery reserve: when ``spent >= ceiling − delivery_reserve``, prefer
-``ceiling_priority`` tails — **not** the primary product fix for build_website QA.
+``ceiling_priority`` tails — **not** the primary product fix for whole-page QA.
 Website quality bottom line = section-level mechanical gates; whole-page / visual
 verify may defer to a follow-up turn (``qa_deferred_budget``) rather than raising
 reserve dials.

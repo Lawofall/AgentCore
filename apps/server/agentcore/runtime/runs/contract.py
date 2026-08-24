@@ -925,6 +925,11 @@ def matching_artifact_paths(pattern: str, workspace_paths: list[str]) -> list[st
                 hits.append(p)
         elif p == pat or p.endswith("/" + pat):
             hits.append(p)
+        elif not pat.endswith("/") and not any(ch in pat for ch in "*?["):
+            from agentcore.workspace._paths import sanitize_write_relpath
+
+            if p == sanitize_write_relpath(pat):
+                hits.append(p)
     return hits
 
 
@@ -1047,7 +1052,7 @@ def contract_run_failure_kind(
     """Wire ``run_failed.failure_kind`` for contract hard-fail.
 
     ``format`` = every failure is structure/schema（code_audit / 缺章节 / JSON 形）→
-    UI「格式未过」；``quality`` = 内容/结论/硬缺口/空交付或混合 →「未达标」。
+    UI「格式未过」；``quality`` = 内容/结论/硬缺口或混合 →「未达标」。
     """
     if not verdict.failures:
         return "quality"
@@ -1247,7 +1252,7 @@ def format_interrupted_pass_note() -> str:
 
     Without it the worker reads a bare 「产出为空」 as its own authoring failure —
     观测到的真实回归: 一次断流后 worker 的 reasoning 变成「上一轮我写空了」，于是它
-    不重写正文、只是又调了一次 handoff，被空交付门禁挡回，白烧一轮。The pass's
+    不重写正文、只是又调了一次 handoff，白烧一轮。The pass's
     finish reason (ERROR / DEGRADED) is the executor's only reliable signal that
     the round never came back, so it — not the verdict — decides this note.
     """

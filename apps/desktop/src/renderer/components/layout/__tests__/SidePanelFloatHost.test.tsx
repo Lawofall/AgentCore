@@ -3,6 +3,7 @@ import { SidePanelFloatHost } from "@/components/layout/SidePanelFloatHost";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useConversationStore } from "@/stores/conversation";
 import {
+  CHANGES_TAB_ID,
   WORKSPACE_TAB_ID,
   runDetailTabId,
   useSidePanelStore,
@@ -36,6 +37,7 @@ beforeEach(() => {
     activeTabId: WORKSPACE_TAB_ID,
     floats: [],
     focusSurface: { type: "dock" },
+    changesOpen: false,
     changesFocusMessageId: null,
     dismissedContexts: new Set(),
     pendingBadge: 0,
@@ -108,5 +110,15 @@ describe("SidePanelFloatHost", () => {
     expect(screen.getByRole("dialog", { name: "工作区" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "钉回主坞" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "关闭浮窗" })).toBeNull();
+  });
+
+  it("changes float can be closed via destroy (unload tab)", () => {
+    useSidePanelStore.getState().showChanges();
+    useSidePanelStore.getState().floatTab(CHANGES_TAB_ID);
+    renderHost();
+    expect(screen.getByRole("dialog", { name: "改动" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "关闭浮窗" }));
+    expect(useSidePanelStore.getState().floats).toHaveLength(0);
+    expect(useSidePanelStore.getState().changesOpen).toBe(false);
   });
 });

@@ -110,9 +110,9 @@ describe("ChatView", () => {
         runsPayload={{ process: [] }}
       />,
     );
-    expect(screen.queryByText("完整思考")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
     expect(screen.getByText("完整思考")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
+    expect(screen.getAllByText("完整思考").length).toBeGreaterThan(0);
   });
 
   it("does not crash on a sparse production projected dict", () => {
@@ -169,11 +169,11 @@ describe("ChatView", () => {
       />,
     );
     expect(screen.getByText("思考 1 步 · 使用 1 个工具")).toBeTruthy();
-    expect(screen.queryByText("先查资料。")).toBeNull();
+    expect(screen.getByText("先查资料。")).toBeTruthy();
     expect(screen.queryByText("web_search")).toBeNull();
     expect(screen.queryByLabelText("工具参数")).toBeNull();
-    expect(screen.queryByText("来源 A")).toBeNull();
     expect(screen.queryByText("片段 A")).toBeNull();
+    expect(screen.getByText("来源 A")).toBeTruthy();
     expect(screen.getByText("来源 1")).toBeTruthy();
     expect(screen.getByText("审批")).toBeTruthy();
     expect(screen.getByText("resolved")).toBeTruthy();
@@ -184,11 +184,11 @@ describe("ChatView", () => {
 
     fireEvent.click(screen.getByText("思考 1 步 · 使用 1 个工具"));
     expect(screen.getByText("web_search")).toBeTruthy();
-    expect(screen.queryByText("先查资料。")).toBeNull();
+    expect(screen.getByRole("button", { name: /^思考$/ })).toBeTruthy();
     expect(screen.queryByLabelText("工具参数")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
-    expect(screen.getByText("先查资料。")).toBeTruthy();
+    expect(screen.getAllByText("先查资料。").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByText("web_search"));
     expect(screen.getByLabelText("工具参数").textContent).toContain(
@@ -199,7 +199,7 @@ describe("ChatView", () => {
     expect(screen.getByLabelText("工具结果").className).toMatch(/max-h-48/);
 
     fireEvent.click(screen.getByText("来源 1"));
-    expect(screen.getByText("来源 A")).toBeTruthy();
+    expect(screen.getAllByText("来源 A").length).toBeGreaterThan(0);
     expect(screen.getByText("片段 A")).toBeTruthy();
   });
 
@@ -270,5 +270,142 @@ describe("ChatView", () => {
     expect(screen.queryByText("outcome ok")).toBeNull();
     expect(screen.queryByText("finish end_turn")).toBeNull();
     expect(screen.queryByText("助手")).toBeNull();
+  });
+
+  it("slots the team tree and a resolved ask into process markers, body before team", () => {
+    const question = "先做官网还是先做品牌？";
+    const body = "按品牌站流程做完了。";
+    render(
+      <ChatView
+        content={body}
+        projected={turn({
+          process: [
+            {
+              kind: "tool",
+              id: "tc1",
+              tool_name: "write",
+              arguments: {},
+              result: null,
+              status: "success",
+            },
+            { kind: "checkpoint", checkpoint_id: "cp1" },
+            { kind: "team", execution_id: "ex1" },
+          ],
+          interactions: [
+            {
+              kind: "ask_user",
+              id: "cp1",
+              status: "resolved",
+              question,
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.queryByText("协作图")).toBeNull();
+    expect(screen.getByLabelText("提问")).toBeTruthy();
+    expect(screen.getByText(question)).toBeTruthy();
+    expect(screen.getByText("调研员")).toBeTruthy();
+    expect(screen.getByText(body)).toBeTruthy();
+    expect(screen.queryByText("ask_user")).toBeNull();
+    const ask = screen.getByLabelText("提问");
+    const team = screen.getByLabelText("团队");
+    const prose = screen.getByText(body);
+    expect(ask.compareDocumentPosition(prose) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(prose.compareDocumentPosition(team) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("使用 1 个工具")).toBeTruthy();
+    expect(screen.queryByText("write")).toBeNull();
+  });
+
+  it("keeps body before team tree when runs exist without a team marker", () => {
+    const body = "正文先于协作树";
+    render(
+      <ChatView
+        content={body}
+        projected={turn({
+          process: [
+            {
+              kind: "tool",
+              id: "tc1",
+              tool_name: "write",
+              arguments: {},
+              result: null,
+              status: "success",
+            },
+          ],
+        })}
+      />,
+    );
+    const prose = screen.getByText(body);
+    const team = screen.getByLabelText("团队");
+    expect(prose.compareDocumentPosition(team) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("调研员")).toBeTruthy();
+  });
+
+  it("does not paint an empty 提问 label for a pending ask", () => {
+    render(
+      <ChatView
+        content="正文"
+        projected={turn({
+          process: [{ kind: "checkpoint", checkpoint_id: "cp1" }],
+          interactions: [
+            {
+              kind: "ask_user",
+              id: "cp1",
+              status: "pending",
+              question: "还没答的问题",
+            },
+          ],
+          runs: [],
+        })}
+      />,
+    );
+    expect(screen.queryByLabelText("提问")).toBeNull();
+    expect(screen.queryByText("还没答的问题")).toBeNull();
+    expect(screen.getByText("提问")).toBeTruthy();
+    expect(screen.getByText("pending")).toBeTruthy();
+  });
+
+  it("does not paint 无正文 when tools/team already occupy the lane", () => {
+    render(
+      <ChatView
+        content=""
+        projected={turn({
+          content: "",
+          process: [
+            { kind: "team", execution_id: "ex1" },
+            {
+              kind: "tool",
+              id: "tc1",
+              tool_name: "write",
+              arguments: {},
+              result: null,
+              status: "success",
+            },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getAllByLabelText("团队")).toHaveLength(1);
+    expect(screen.getByText("使用 1 个工具")).toBeTruthy();
+    expect(screen.queryByText("（无正文）")).toBeNull();
+  });
+
+  it("paints the team tree only once even with two team markers", () => {
+    render(
+      <ChatView
+        content=""
+        projected={turn({
+          content: "",
+          process: [
+            { kind: "team", execution_id: "ex1" },
+            { kind: "team", execution_id: "ex1" },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getAllByLabelText("团队")).toHaveLength(1);
+    expect(screen.queryByText("（无正文）")).toBeNull();
   });
 });

@@ -56,8 +56,8 @@ interface EditSession {
  * 而非裸 `writeBytes`（后者无基线，必然静默覆盖）。
  *
  * HTML 与其他文本文件一致显示源码（C+ 决策：面板内静态快照已取消，页面效果只在真浏览器
- * 环境呈现）——顶部横幅指路完整效果出口，CTA 按能力递进：「打开完整预览」（内置浏览器
- * tab）→「在浏览器打开」（系统浏览器）→「下载」（web 兜底），与标题栏图标同一套门控。
+ * 环境呈现）。完整效果出口在标题栏，按能力显隐：「完整预览」（内置浏览器 tab）→
+ * 「在浏览器打开」（系统浏览器）；web 无这两项时只剩下载。
  */
 export function FilePreviewView({
   source,
@@ -468,95 +468,23 @@ export function FilePreviewView({
               className="animate-spin text-muted-foreground/50"
             />
           </Centered>
+        ) : isMarkdown && result.kind === "text" && !result.truncated ? (
+          // 阅读优先：md 默认渲染预览（复用聊天渲染器）。截断的 md 会渲染不全 →
+          // 回落源码 + FilePreviewBody 的截断提示。
+          <div className="mx-auto max-w-3xl px-6 py-6">
+            <Markdown content={result.text} fileSource={source} />
+          </div>
         ) : (
-          <>
-            {isHtml && result.kind === "text" && (
-              <HtmlSourceNotice
-                onOpenInAppPreview={
-                  source.openInAppPreview
-                    ? () => void onOpenInAppPreview()
-                    : undefined
-                }
-                onOpenInBrowser={
-                  source.openInBrowser
-                    ? () => void onOpenInBrowser()
-                    : undefined
-                }
-                onDownload={
-                  source.download ? () => void onDownload() : undefined
-                }
-              />
-            )}
-            {isMarkdown && result.kind === "text" && !result.truncated ? (
-              // 阅读优先：md 默认渲染预览（复用聊天渲染器）。截断的 md 会渲染不全 →
-              // 回落源码 + FilePreviewBody 的截断提示。
-              <div className="mx-auto max-w-3xl px-6 py-6">
-                <Markdown content={result.text} />
-              </div>
-            ) : (
-              <FilePreviewBody
-                result={result}
-                name={name}
-                onOpenWithOsDefaultApp={
-                  canOpenExternal ? () => void onOpenExternal() : undefined
-                }
-                onDownload={
-                  source.download ? () => void onDownload() : undefined
-                }
-              />
-            )}
-          </>
+          <FilePreviewBody
+            result={result}
+            name={name}
+            onOpenWithOsDefaultApp={
+              canOpenExternal ? () => void onOpenExternal() : undefined
+            }
+            onDownload={source.download ? () => void onDownload() : undefined}
+          />
         )}
       </div>
-    </div>
-  );
-}
-
-/**
- * HTML 源码视图顶部的指路横幅：面板内不渲染页面效果（快照已取消），完整交互效果的
- * CTA 按能力递进——「打开完整预览」（内置浏览器 tab）→「在浏览器打开」（系统浏览器）
- * →「下载」（web 兜底）；三者都无（只读源且不可传输）时仅留说明不带 CTA。
- */
-function HtmlSourceNotice({
-  onOpenInAppPreview,
-  onOpenInBrowser,
-  onDownload,
-}: {
-  onOpenInAppPreview?: () => void;
-  onOpenInBrowser?: () => void;
-  onDownload?: () => void;
-}) {
-  const cta = onOpenInAppPreview
-    ? {
-        label: "打开完整预览",
-        verb: "可打开完整预览",
-        onClick: onOpenInAppPreview,
-      }
-    : onOpenInBrowser
-      ? {
-          label: "在浏览器打开",
-          verb: "请在浏览器打开",
-          onClick: onOpenInBrowser,
-        }
-      : onDownload
-        ? { label: "下载", verb: "请下载后在浏览器打开", onClick: onDownload }
-        : null;
-  const notice = cta
-    ? `这是网页文件的源码，完整交互效果${cta.verb}。`
-    : "这是网页文件的源码。";
-
-  return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground">
-      <span className="min-w-0 flex-1">{notice}</span>
-      {cta && (
-        <button
-          type="button"
-          onClick={cta.onClick}
-          className="shrink-0 font-medium text-primary hover:underline"
-        >
-          {cta.label}
-        </button>
-      )}
     </div>
   );
 }

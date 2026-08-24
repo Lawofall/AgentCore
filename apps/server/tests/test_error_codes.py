@@ -8,10 +8,13 @@ an unrecognized crash to the fallback (避免 pipeline 把多种错误压成 PIP
 """
 
 import inspect
+import re
+from pathlib import Path
 
 from agentcore.core import errors as errors_module
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.errors import (
+    MAX_RETRY_AFTER,
     UNCLASSIFIED_EXCEPTION_USER_MESSAGE,
     AgentCoreError,
     LLMAuthError,
@@ -105,3 +108,17 @@ def test_insufficient_balance_backend_flag_matches_frontend_policy():
     # catalog; assert the backend's own retryable flag agrees so the two can't drift.
     assert LLMInsufficientBalanceError().retryable is False
     assert LLMAuthError().retryable is False
+
+
+def _contract_types_max_retry_after() -> float:
+    root = Path(__file__).resolve().parents[3]
+    text = (root / "packages/contract-types/src/rateLimit.ts").read_text(
+        encoding="utf-8",
+    )
+    match = re.search(r"export const MAX_RETRY_AFTER = (\d+(?:\.\d+)?)", text)
+    assert match, "MAX_RETRY_AFTER not found in contract-types rateLimit.ts"
+    return float(match.group(1))
+
+
+def test_max_retry_after_matches_contract_types():
+    assert _contract_types_max_retry_after() == MAX_RETRY_AFTER

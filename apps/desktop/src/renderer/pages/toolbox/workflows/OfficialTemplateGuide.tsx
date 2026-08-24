@@ -4,7 +4,6 @@ import type { WorkflowTemplate } from "@/services/workflows";
 const PICK_WHEN: Record<string, string> = {
   parallel_brief: "只想弄懂议题、先摸清几个方向",
   research_report: "要一份能落盘交付的长文报告",
-  build_website: "要落地页 / 营销站 / 控制台页面",
   build_app: "从零搭一个能跑的应用",
   compare_options: "要在几个选项里比完再拍板",
 };

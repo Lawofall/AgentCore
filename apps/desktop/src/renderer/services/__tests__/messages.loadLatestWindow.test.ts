@@ -303,6 +303,16 @@ describe("loadLatestWindow write gates", () => {
     );
   });
 
+  it("does not persist an empty latest window", async () => {
+    store().switchConversation("a");
+
+    mockWindow([], { before: false, after: false });
+    await expect(loadLatestWindow("a")).resolves.toBe(true);
+
+    expect(getRuntime("a").messages).toHaveLength(0);
+    expect(persistOpenedCache).not.toHaveBeenCalled();
+  });
+
   it("persists opened cache after soft refresh richer write", async () => {
     store().switchConversation("a");
     store().setMessageWindow(

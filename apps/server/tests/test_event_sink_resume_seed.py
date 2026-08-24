@@ -15,7 +15,6 @@ from agentcore.runtime.events import (
     content_reset,
     reasoning_delta,
     run_plan,
-    team_preview_required,
     tool_use_end,
     tool_use_start,
 )
@@ -140,34 +139,34 @@ def test_seed_run_processes_merge_and_stream_isolation():
     assert sink.raw_run_processes()["r1"] == merged["r1"]
 
 
-def test_synthesize_team_preview_inserts_before_last_team():
+def test_synthesize_retired_team_preview_is_noop_before_team():
+    """Leftover team_preview_required does not insert a team_preview marker."""
     steps: list[dict] = [
         {"kind": "content", "text": "intro"},
         {"kind": "team", "execution_id": "exec-1"},
         {"kind": "content", "text": "after"},
     ]
-    assert synthesize_required_marker(
+    assert not synthesize_required_marker(
         steps,
-        EventType.TEAM_PREVIEW_REQUIRED,
+        "team_preview_required",
         {"checkpoint_id": "cp-tp"},
     )
     assert [s["kind"] for s in steps] == [
         "content",
-        "team_preview",
         "team",
         "content",
     ]
-    assert steps[1]["checkpoint_id"] == "cp-tp"
+    assert not any(s.get("kind") == "team_preview" for s in steps)
 
 
-def test_synthesize_team_preview_appends_when_no_team():
+def test_synthesize_retired_team_preview_is_noop_without_team():
     steps: list[dict] = [{"kind": "content", "text": "only"}]
-    assert synthesize_required_marker(
+    assert not synthesize_required_marker(
         steps,
-        EventType.TEAM_PREVIEW_REQUIRED,
+        "team_preview_required",
         {"checkpoint_id": "cp-tp"},
     )
-    assert steps[-1] == {"kind": "team_preview", "checkpoint_id": "cp-tp"}
+    assert steps == [{"kind": "content", "text": "only"}]
 
 
 def test_synthesize_marker_dedup_within_steps():
@@ -195,20 +194,19 @@ def test_live_emit_marker_dedups_against_seeded():
     assert sum(1 for s in timeline if s.get("kind") == "checkpoint") == 1
 
 
-def test_live_team_preview_insert_order_matches_helper():
+def test_live_retired_team_preview_does_not_insert_marker():
+    """New turns do not emit a team_preview marker; leftover type is skipped."""
     sink = EventSink()
     sink.emit(_plan())
-    sink.emit(
-        team_preview_required(
-            checkpoint_id="cp-tp",
-            conversation_id="c1",
-            workers=[{"id": "w1", "role": "研究员", "task": "调研"}],
-        )
+    sink.persist_required_marker(
+        "team_preview_required",
+        {"checkpoint_id": "cp-tp"},
     )
     timeline = sink.process_timeline()
     assert timeline is not None
     kinds = [s["kind"] for s in timeline]
-    assert kinds == ["team_preview", "team"]
+    assert kinds == ["team"]
+    assert "team_preview" not in kinds
 
 
 def test_synthesize_plan_review_append():

@@ -760,7 +760,7 @@ async def continue_chat(
             sink.emit(message_end(FinishReason.ERROR))
             return
 
-        user_message, base_system_prompt = _turn_started_fields(entries)
+        user_message, _ceo_chat_prompt = _turn_started_fields(entries)
         captain_run_id = _captain_run_id_from_journal(entries)
 
         await maybe_compact_near_ceiling(
@@ -831,7 +831,6 @@ async def continue_chat(
                         message_id=message_id,
                         user_id=user_id,
                         user_message=user_message,
-                        base_system_prompt=base_system_prompt,
                         journal_entries=list(entries),
                         captain_run_id=captain_run_id,
                         sink=sink,

@@ -69,9 +69,6 @@ function stampByProcessKind(
     case "plan_review":
       store.stampPlanReviewMarker(id, conversationId);
       break;
-    case "team_preview":
-      store.stampTeamPreviewMarker(id, conversationId);
-      break;
     default:
       break;
   }
@@ -83,6 +80,14 @@ export function handleInteractionEvent(
 ): boolean {
   const { conversationId } = ctx;
   const live = ctx.replay !== true;
+
+  const leftoverType = event.type as string;
+  if (
+    leftoverType === "team_preview_required" ||
+    leftoverType === "team_preview_resolved"
+  ) {
+    return true;
+  }
 
   if (isInteractionOrphanedEvent(event.type)) {
     const p = event.payload as InteractionOrphanedPayload;

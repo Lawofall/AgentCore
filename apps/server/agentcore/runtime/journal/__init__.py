@@ -15,6 +15,7 @@ inverses on the display replay shape, so a turn round-trips through the journal 
 Subpackages:
 - ``entries`` — write path (runs payload → ordered facts)
 - ``fold`` — read path (facts → runs / LLM window / resume seed)
+- ``slim`` — list GET drops bulky display events; full journal is GET one message
 - ``persist`` — best-effort Postgres write
 - ``team_batch`` — 本回合团队状态三态（journal 纯函数投影）
 """
@@ -34,6 +35,7 @@ from .fold import (
     window_from_journal,
 )
 from .fold_cache import clear_runs_cache, runs_from_entries_cached
+from .slim import list_retained_event_types, slim_runs_payload
 from .team_batch import team_batch_from_entries
 
 __all__ = [
@@ -45,6 +47,8 @@ __all__ = [
     "execution_id_from_journal",
     "journal_entries_from_display_runs",
     "last_turn_end_finish",
+    "list_retained_event_types",
+    "slim_runs_payload",
     "TurnJournalWriter",
     "current_journal_writer",
     "persist_turn_journal",

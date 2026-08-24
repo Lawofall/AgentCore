@@ -59,8 +59,6 @@ from agentcore.runtime.events.interaction import (
     plan_review_resolved,
     stage_card_required,
     stage_card_resolved,
-    team_preview_required,
-    team_preview_resolved,
 )
 from agentcore.runtime.events.journal_config import (
     _JOURNAL_EVENT_TYPES,
@@ -138,8 +136,6 @@ __all__ = [
     "checkpoint_resolved",
     "plan_review_required",
     "plan_review_resolved",
-    "team_preview_required",
-    "team_preview_resolved",
     "stage_card_required",
     "stage_card_resolved",
     "workspace_op_required",

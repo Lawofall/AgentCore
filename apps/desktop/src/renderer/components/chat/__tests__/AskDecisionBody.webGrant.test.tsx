@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 import { AskDecisionBody } from "@/components/chat/ask/AskDecisionBody";
-import type { AskUserContent } from "@/components/chat/ask/AskUserFields";
-import { useAskAnswer } from "@/components/chat/ask/AskUserFields";
 import {
-  DESKTOP_DOWNLOAD_URL,
-  DESKTOP_REQUIRED_HINT,
-} from "@/lib/desktopDownload";
+  type AskUserContent,
+  GRANT_READONLY_FOLDER_RETIRED,
+  useAskAnswer,
+} from "@/components/chat/ask/AskUserFields";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -68,18 +67,11 @@ describe("AskDecisionBody web grant actions", () => {
     window.__WEB__ = undefined;
   });
 
-  it("does not toggleChoice on grant; shows desktop download guide", () => {
+  it("does not toggleChoice on grant; shows retired fail without download", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: /授权本机目录/ }));
-    expect(window.open).toHaveBeenCalledWith(
-      DESKTOP_DOWNLOAD_URL,
-      "_blank",
-      "noopener,noreferrer",
-    );
-    expect(screen.getByText(new RegExp(DESKTOP_REQUIRED_HINT))).toBeTruthy();
-    expect(
-      screen.getByText(/https:\/\/fashitianxia\.xyz\/download/),
-    ).toBeTruthy();
+    expect(window.open).not.toHaveBeenCalled();
+    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
     // 未把 grant 选项写入答案选中态（假确认）
     const grantBtn = screen.getByRole("button", { name: /授权本机目录/ });
     expect(grantBtn.getAttribute("aria-pressed")).not.toBe("true");

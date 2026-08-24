@@ -76,8 +76,8 @@ async def test_execute_allows_automation_text_without_delivery_ledger():
 
 
 @pytest.mark.asyncio
-async def test_execute_allows_build_website_toolshed_style_without_style_ledger():
-    """无视觉风格账 + 非 full_auto 亦可 build_website style=toolshed（场面账硬闸已拆）。"""
+async def test_execute_allows_toolshed_shaped_handwrite_without_style_ledger():
+    """无视觉风格账 + 非 full_auto 亦可手写控制台形 tasks（场面账硬闸已拆）。"""
     cid = "auto-gate-toolshed-no-style"
     clear_delivery_confirmation(cid)
     clear_style_confirmation(cid)
@@ -88,12 +88,7 @@ async def test_execute_allows_build_website_toolshed_style_without_style_ledger(
     )
     result = await t.execute(
         {
-            "playbook": "build_website",
-            "playbook_args": {
-                "topic": "Ops",
-                "style": "toolshed",
-                "sections": ["应用外壳", "数据表格"],
-            },
+            "tasks": [{"role": "前端", "task": "搭运营控制台外壳与数据表格"}],
             "coordinate": False,
         },
         local_ctx(),
@@ -104,7 +99,7 @@ async def test_execute_allows_build_website_toolshed_style_without_style_ledger(
 
 
 @pytest.mark.asyncio
-async def test_execute_allows_build_website_without_style_ledger():
+async def test_execute_allows_site_handwrite_without_style_ledger():
     cid = "auto-gate-website-no-style"
     clear_style_confirmation(cid)
     t = _delegate(
@@ -114,8 +109,7 @@ async def test_execute_allows_build_website_without_style_ledger():
     )
     result = await t.execute(
         {
-            "playbook": "build_website",
-            "playbook_args": {"topic": "Acme 落地页", "sections": ["首页"]},
+            "tasks": [{"role": "前端", "task": "实现 Acme 落地页首页"}],
             "coordinate": False,
         },
         local_ctx(),
@@ -126,7 +120,7 @@ async def test_execute_allows_build_website_without_style_ledger():
 
 @pytest.mark.asyncio
 async def test_execute_runnable_ledger_no_longer_rejects_website_toolshed_style():
-    """即便残留 delivery 账，也不再硬拒 website + style=toolshed。"""
+    """即便残留 delivery 账，也不再硬拒控制台形手写 tasks。"""
     cid = "auto-gate-runnable-toolshed"
     clear_delivery_confirmation(cid)
     clear_style_confirmation(cid)
@@ -140,12 +134,7 @@ async def test_execute_runnable_ledger_no_longer_rejects_website_toolshed_style(
     )
     result = await t.execute(
         {
-            "playbook": "build_website",
-            "playbook_args": {
-                "topic": "Ops",
-                "style": "toolshed",
-                "sections": ["应用外壳", "数据表格"],
-            },
+            "tasks": [{"role": "前端", "task": "搭运营控制台外壳与数据表格"}],
             "coordinate": False,
         },
         local_ctx(),
@@ -170,12 +159,7 @@ async def test_execute_plan_ledger_no_longer_rejects_website():
     )
     r1 = await t.execute(
         {
-            "playbook": "build_website",
-            "playbook_args": {
-                "topic": "X",
-                "style": "toolshed",
-                "sections": ["应用外壳"],
-            },
+            "tasks": [{"role": "前端", "task": "搭控制台应用外壳"}],
             "coordinate": False,
         },
         local_ctx(),
@@ -184,8 +168,7 @@ async def test_execute_plan_ledger_no_longer_rejects_website():
 
     r2 = await t.execute(
         {
-            "playbook": "build_website",
-            "playbook_args": {"topic": "X", "sections": ["首页"]},
+            "tasks": [{"role": "前端", "task": "实现落地页首页"}],
             "coordinate": False,
         },
         local_ctx(),

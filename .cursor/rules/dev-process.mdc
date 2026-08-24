@@ -5,13 +5,11 @@ alwaysApply: true
 
 # 开发工作流
 
-项目采用「AI 全程开发、人做决策」模式，多 Agent 并行开发（不同模块同时推进）。
+项目采用「AI 全程开发、人做决策」模式，多 Agent 并行开发。
 
 ## 新会话冷启动
 
-AgentCore = 面向大众的 Multi-Agent AI 工作台，核心差异是**真正的 Agent 团队协作**（非「单 Agent + 子任务派发」）。Monorepo：`apps/server`（FastAPI · runtime 执行引擎 · LLM 网关）+ `apps/desktop`（Electron+React）+ `apps/mobile` + `apps/admin` + `packages/`（跨端契约）。
-
-定位任务/找文档 → 先读 `docs/索引.md`「任务路由」表，别盲 grep；跑通项目 → `docs/02-架构/本地开发.md`；接缝/漂移排查 → `seam-audit.mdc`；桌面前端自检渲染 → `frontend-preview.mdc`；本地产品 AI / eval / probe 真跑 LLM → `local-llm-dogfood.mdc`（`dev` OpenCode Zen，禁默认踩 `PLATFORM_API_KEY`）；沉淀可复用经验 → `memory.mdc`。
+定位任务 → `docs/索引.md`「任务路由」；跑通 → `docs/02-架构/本地开发.md`；接缝 → `seam-audit.mdc`；桌面渲染自检 → `frontend-preview.mdc`；本地产品 AI / eval / probe → `local-llm-dogfood.mdc`（`dev` OpenCode Zen，禁默认踩 `PLATFORM_API_KEY`）；沉淀 → `memory.mdc`。产品介绍与仓地图 → `AGENTS.md`。
 
 ## 决策权限
 
@@ -23,34 +21,31 @@ AgentCore = 面向大众的 Multi-Agent AI 工作台，核心差异是**真正�
 
 ## 设计纪律
 
-- 正向推导：**用户需求 → 产品设计 → 技术实现**，禁止用「技术方便」反推需求；动手前答三问：**谁用 / 解决什么真实问题 / 产品上如何呈现**。
-- 出现「为复用旧实现而裁剪需求」「实现冒充需求」→ 立即停，回到三问或提报决策。
-- **证据分档，先查再谈**：内测已有生产流量（查法 → `conversation-logs.mdc`）。谈质量前先声明证据档——**生产实测**（点名 trace / cid，可复查）> **dogfood 金标** > **合成**（`conformance/vectors/`、`evals/`）> **推理假设**；已 sync 窗口 / 巡检纪要能答的先查，别拿「无真实数据」当免查借口，新窗口 sync 由人点名。小样本不外推：几十条内测会话 ≠ 分布，不当发布门禁 / 对外证据；**禁止**编造观测值与生产 ID；用户对话正文不进仓内文件，只留 ID + 脱敏摘述。
+- 正向推导：**用户需求 → 产品设计 → 技术实现**；动手前答三问：**谁用 / 解决什么真实问题 / 产品上如何呈现**。为复用旧实现而裁剪需求 → 停。
+- **证据分档**：生产实测（点名 trace / cid）> dogfood 金标 > 合成 > 推理假设。查法 → `conversation-logs.mdc`。小样本不外推；禁止编造观测值与生产 ID；用户对话正文不进仓，只留 ID + 脱敏摘述。
 
 ## 补丁绊线
 
-修复满足任一，**先停**、提根因重设计提案：1. 需新增兜底/对账/自愈/特例逻辑；2. 同一根因改 ≥2 层；3. 同一接缝第 3 次打补丁。
-
-硬/软拦截提案纪律（禁默认加闸、误伤优先）→ `intercept-discipline.mdc`。
+修复满足任一，**先停**、提根因重设计提案：1. 需新增兜底/对账/自愈/特例逻辑；2. 同一根因改 ≥2 层；3. 同一接缝第 3 次打补丁。拦截提案 → `intercept-discipline.mdc`。
 
 ## 开发准则
 
-生产级代码（完整错误处理、类型标注、合理日志）；优先写接口定义（Protocol/ABC/Pydantic）再实现；模块间经抽象接口解耦，共享类型放 `shared/` 或 `core/types/`；核心逻辑必须有单元测试；子代理委派规范见 `multitask.mdc`。
+生产级代码（错误处理、类型、日志）；先 Protocol/ABC/Pydantic 再实现；共享类型放 `shared/` 或 `core/types/`；核心逻辑有单测；委派 → `multitask.mdc`。
 
 ## 验证范围
 
-改完默认只跑**点名的测试文件 / 用例**，收尾才跑改动所涉包，`release:gate` 仅发布决策时跑（三档见 `AGENTS.md`）。**反空转**：上次验证后没编辑过任何文件 → 不得重跑同一命令；失败只重跑失败面（`--lf` / 点名文件 / `--from <段>`），不从头再来。只改 A 包不跑 B 包套件。窄化配方与门禁分段 → `verify-scope.mdc`。
+三档定义见 `AGENTS.md`；窄化命令、门禁分段、反空转、真跑核证据 → `verify-scope.mdc`。
 
 ## 文件编辑安全
 
-禁止用脚本批量改源码（易静默损坏文件）；用 StrReplace + `replace_all` 逐文件改；改完用 **Read 读文件**自检（不应出现大量删除/清空）。
+禁止用脚本批量改源码；用 StrReplace + `replace_all` 逐文件改；改完用 **Read** 自检。
 
 ## 并行开发 Git 约束
 
-`git status` / `git diff` 不代表本会话的真实改动：1. 校验自己的改动用 **Read**；2. git 输出对不上是正常噪音（其他并行 worktree），一律接受、继续任务；3. 禁止排查 git 内部（worktree 嵌套/路径大小写/配置损坏）；4. 仅用户明确要求才跑 git 命令，仍遵守「非请勿 commit」。
+`git status` / `git diff` 不代表本会话改动：1. 用 **Read** 校验自己的改动；2. git 对不上是并行噪音，接受并继续；3. 禁止排查 git 内部；4. 仅用户明确要求才跑 git，非请勿 commit。
 
 ## 产品 AI 日志查询
 
 用户给出 32 位 hex ID / UUID → **只读 `conversation-logs.mdc`** 再动手（勿整篇读分析指南、勿为单次查询派探子），禁止在文件系统（含 `agent-transcripts/`）搜索这类 ID。
 
-文档治理规范见 `doc-governance.mdc`。
+文档治理 → `doc-governance.mdc`。

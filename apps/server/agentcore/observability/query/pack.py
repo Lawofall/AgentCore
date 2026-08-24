@@ -195,6 +195,10 @@ async def write_investigation_pack(
     ``journal.redacted.jsonl`` + ``journal.summary.json``,
     and with ``full=True`` ``messages.json`` (no LLM body dump).
     Never writes raw ``turn_journal`` (user/LLM bodies).
+    ``meta.layers`` is a pack-presence index (not a second journal contract):
+    ``decision`` / ``execution`` are always present; ``turn_metrics`` follows
+    whether the file was written; ``sidecar_host`` stays ``not_in_pack`` (desktop
+    jsonl is not synced). Journal presence remains ``meta.journal.mode``.
     """
     if result.mode != "trace":
         raise ValueError("investigation pack requires a trace query result")
@@ -262,6 +266,15 @@ async def write_investigation_pack(
             )
             written.append("messages.json")
 
+    head = spine.get("head") or {}
+    via = head.get("via")
+    layers: dict[str, str] = {
+        "decision": "present",
+        "execution": "present",
+        "turn_metrics": "present" if turn_metrics is not None else "absent",
+        "sidecar_host": "not_in_pack",
+    }
+
     journal_rows: list[dict[str, Any]] = []
     if store is not None and trace_id:
         getter = getattr(store, "get_journal_by_trace", None)
@@ -293,6 +306,7 @@ async def write_investigation_pack(
                 "never ships raw turn_journal; allowlist-redacted kinds/ids/status only"
             ),
         },
+        "layers": layers,
         "environment": {
             "log_file": str(log_file) if log_file else None,
             "export_dir": str(export_dir) if export_dir else None,
@@ -301,6 +315,8 @@ async def write_investigation_pack(
         },
         "files": written + ["meta.json"],
     }
+    if via is not None and str(via).strip():
+        meta["hints"] = {"via": str(via)}
     _write_json(out_dir / "meta.json", meta)
     return meta
 

@@ -55,6 +55,8 @@ worker 唯一向上通道。`blocking=false`（默认）= 已有合理默认、�
 
 铁律：正文与简报**只指向产出、不复述其内容**——`form=files` 时正文只交代路径 / 怎么运行 / 关键取舍，落盘产物才装完整说明。`form=prose` 时产出 ≡ 正文；简报要不要再带结论见下节矩阵。
 
+下游整合（扇入写总稿）：引擎把上游落盘路径注入「前置结果」；终端环**先读这些路径再写**，不把开工做成全仓勘探。CEO 派单应点名路径；缺稿用同一整合员续派。**否决**「整合员必须 `file_write`」硬闸。
+
 ### `handoff`
 
 收尾接力契约（非正文复述）。有下游依赖则强制；叶节点仅有增量才写。门禁不足则合成降级 debrief。
@@ -68,6 +70,8 @@ worker 唯一向上通道。`blocking=false`（默认）= 已有合理默认、�
 | 有下游 | 只读简报（正文由下游经依赖上下文池完整读走） | 保留结论 |
 
 后两档的「正文 ↔ 简报重复」是**功能性冗余**（两个读者各需一份），不是缺陷，别再当重复去修。写侧只能按 `form` 代理判断（prose 禁落盘 → 必然 pass_through），故 `files` / 省略 `form` 一律按「保留结论」处理：宁留重复，不造「简报去了结论、CEO 又读不到正文」的静默空洞。→ 见代码: `runtime/runs/executor/identities.py` · `runtime/delegate/ceo_format.py`
+
+`repair_code` 诊断员是「有下游 + `form=prose`」：根因与拟改路径走正文 / `key_points`（修补员接力）；**拟改幅度**（压住表面 / 根因在结构上）走 `next_steps`，活到 CEO 收口「队员建议的下一步」，本批照修。人不点开队员详情也能在收口看见「这是不是结构问题」。**否决**新卡、档位枚举、开局扫用户原文判大小、以及默认给 `patch` 加 `bind_after_deps`（多一轮 CEO，等真实使用再定）。「同一接缝反复补」产品 AI 无修补史，不要求诊断员判。→ 见代码: `runtime/runs/playbooks/build_soft.py`
 
 被否决：`key_points` 换成纯接力状态（它是计划复核卡 / CEO 确定性评审 / 审计 playbook 的事实载荷，换血同时饿死三方）；门禁改「必须 ≥2 条 key_points」（数条数挡不住结论复述，却误伤只写长 summary 的合规上游 → [拦截纪律](/.cursor/rules/intercept-discipline.mdc)）。`summary` 长度只作 schema 提示，不做运行时拒收（harvest 不 enforce `maxLength`）。
 
@@ -117,10 +121,10 @@ CEO 唯一裁决；置信度低才 `ask_user`。资源冲突靠 DAG。
 
 | 档 | 信号（例） | 座位 / 修路 |
 |---|---|---|
-| **Hard** | 空 handoff 且有下游、strict 未落盘等 | `FAILED` → 进 `vacated_run_ids`；同座可 auto-`replaces` |
-| **Soft** | 薄交接但已落盘、引用可剥、批次 `files_written` soft note | 仍 `COMPLETED`；**不** vacated；修路 = **同座位** replan/append（系统 auto-`replaces` + declare 转锁） |
+| **Hard** | 写权冲突、契约 `strict` 结构失败等 | `FAILED` → 进 `vacated_run_ids`；同座可 auto-`replaces` |
+| **Soft** | 薄交接、未声明路径落盘、引用可剥、批次 `files_written` soft note | 仍 `COMPLETED`；**不** vacated；修路 = **同座位** replan/append（系统 auto-`replaces` + declare 转锁） |
 
-**不做**：把 soft 质量塞进 vacated（污染失败语义）。**禁止**：另起 `-v2` 角色名假装新座位抢同一路径；队员对已完成锁主 escalate 要用户移交。
+**不做**：把 soft 质量塞进 vacated（污染失败语义）。**已撤**：空 handoff / 零声明清单把节点或整轮打成失败（实测误伤；行业也无此闸）。**禁止**：另起 `-v2` 角色名假装新座位抢同一路径；队员对已完成锁主 escalate 要用户移交。
 
 → 见代码: `workspace/write_claims.py` · `coordination/append_guard.py` · `EscalationCard`
 
@@ -128,7 +132,7 @@ CEO 唯一裁决；置信度低才 `ask_user`。资源冲突靠 DAG。
 
 | 项 | 状态 |
 |---|---|
-| 完整 Preflight Audit | ⏳；薄预览 = 开工卡 ✅ |
-| 一等 Team 实体 / A2A | ⏳（勿与现行 `delegate` 临时组队混淆） |
+| 完整 Preflight Audit | ⏳；薄预览不等于开工卡（`team_preview` 产品位已拆，编制到即开跑） |
+| 一等 Team 实体 / A2A | ⏳ 暂不启动（勿与现行 `delegate` 临时组队混淆）→ [定位 §四](/docs/01-产品/产品定位与品牌.md) |
 | 独立 Arena | **否决** |
 | 树级共享 Semaphore | **否决**（父子互等死锁） |

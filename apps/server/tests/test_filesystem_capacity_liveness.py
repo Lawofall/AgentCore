@@ -117,6 +117,32 @@ async def test_file_read_office_extract_budget_is_contract(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_file_read_office_extract_timeout_is_contract_not_liveness(tmp_path: Path):
+    from unittest.mock import AsyncMock, patch
+
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+
+    (tmp_path / "slow.pdf").write_bytes(b"%PDF-x")
+    with patch(
+        "agentcore.tools.builtin.file_ops.read.extract_office_bytes",
+        new=AsyncMock(
+            return_value=ExtractResult(
+                status=ParseStatus.FAILED, detail="extract_timeout"
+            )
+        ),
+    ):
+        result = await FileReadTool().execute({"path": "slow.pdf"}, _ctx(_ws(tmp_path)))
+    assert result.success is False
+    assert result.contract_failure is True
+    assert result.metadata.get("liveness_timeout") is not True
+    assert result.metadata.get("extract_timeout") is True
+    assert "活性挂起" not in (result.error or "")
+    assert "抽文本失败或超时" in (result.error or "")
+    assert "markitdown" not in (result.error or "").lower()
+    assert "code_execute" not in (result.error or "")
+
+
+@pytest.mark.asyncio
 async def test_file_read_channel_liveness_maps_meta(tmp_path: Path):
     """Single-op settle timeout: liveness meta only — no family sticky retire."""
 

@@ -28,6 +28,9 @@ def create_sandbox(
 ) -> SandboxProvider:
     """Pick a sandbox backend for the given deployment location."""
     if location == "server" and gvisor_enabled:
+        # Non-Linux health_check fails immediately (``not_linux``). Do **not**
+        # fall back to SubprocessSandbox here: that would run user code on the
+        # host against a ``location=server`` desk (SEC-005).
         return GVisorSandbox(
             runsc_path=runsc_path,
             workspace_root=workspace_root,

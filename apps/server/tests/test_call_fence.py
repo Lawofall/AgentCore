@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock
 
@@ -238,6 +239,37 @@ async def test_fence_stream_aclose_without_usage_does_not_fabricate_bill(monkeyp
     failed = next(c for c in caps if c.get("event") == "llm.call_failed")
     assert failed["error"] == "stream_closed_by_consumer"
     assert failed["error_type"] == "GeneratorExit"
+    assert not any(c.get("event") == "llm.call" for c in caps)
+    assert enqueued == []
+
+
+@pytest.mark.asyncio
+async def test_fence_stream_cancelled_logs_closed_not_failed(monkeypatch):
+    """Task cancel is the same metering path as consumer aclose — no fabricated bill."""
+    enqueued: list[object] = []
+
+    def _capture_enqueue(**kwargs):
+        enqueued.append(kwargs)
+        return "run-1"
+
+    monkeypatch.setattr(
+        "agentcore.billing.call_meter.maybe_enqueue_inprocess_call",
+        _capture_enqueue,
+    )
+
+    class _ThenCancel(_FakeLeaf):
+        async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
+            yield LLMChunk(delta_content="x")
+            raise asyncio.CancelledError()
+
+    provider = observe_provider(_ThenCancel())
+    with capture_logs() as caps, pytest.raises(asyncio.CancelledError):
+        async for _ in provider.stream(_req()):
+            pass
+
+    failed = next(c for c in caps if c.get("event") == "llm.call_failed")
+    assert failed["error"] == "stream_closed_by_consumer"
+    assert failed["error_type"] == "CancelledError"
     assert not any(c.get("event") == "llm.call" for c in caps)
     assert enqueued == []
 

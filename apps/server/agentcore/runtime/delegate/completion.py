@@ -195,27 +195,6 @@ def plan_has_writable_worker(plan: RunPlan) -> bool:
             return True
     return False
 
-def validate_cold_start_explore_deliverables(
-    plan: RunPlan,
-    *,
-    explicit_criteria: Any = None,
-) -> str | None:
-    """Hard-reject thin explore teams while cold-start explore is pending.
-
-    ``form`` / ``artifacts`` are orthogonal to explore-pending: workers may land
-    notes under ``write_scope=explore_memory`` (enforced at write-tool layer).
-    Explore teams must fan out ≥2 angles (1 worker 包办整仓 is rejected).
-    ``explicit_criteria`` is retained for call-site compat (unused).
-    Returns CEO-facing error text, or ``None`` when the batch is fine.
-    """
-    del explicit_criteria  # API compat; form/artifacts no longer gated here.
-    if len(plan.nodes) < 2:
-        return (
-            "冷启动探索未完成：探路委派须 ≥2 角并行（例：目录/入口 vs 设计·约定文档），"
-            "禁止 1 人包办整仓摸底。请拆成至少两名调研 worker 后重调 delegate。"
-        )
-    return None
-
 def plan_mentions_binary_artifact(plan: RunPlan) -> bool:
     """True when any worker task reads like a binary / playable deliverable."""
     for node in plan.nodes:

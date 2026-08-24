@@ -13,8 +13,8 @@ import type { ReplayMessage } from "@/services/adminObservability";
 import { Users } from "lucide-react";
 
 /**
- * Selected-turn ops strip: cost / trace / spans / harvest / workers.
- * Lives in the header so the main column can stay user-perspective.
+ * Turn ops: cost / trace / spans / harvest / workers.
+ * Lives in the diagnose dock so the reading column can stay desktop-like.
  */
 export function TurnOpsBar({
   selected,
@@ -25,7 +25,8 @@ export function TurnOpsBar({
   selected: ReplayMessage | null;
   harvests: ReplayMessage[];
   onSelectHarvest: (id: string) => void;
-  onOpenDock: () => void;
+  /** When omitted, process/worker rows are read-only (already inside the dock). */
+  onOpenDock?: () => void;
 }) {
   const tools = selected?.spans.filter((s) => s.kind === "tool").length ?? 0;
   const llms = selected?.spans.filter((s) => s.kind !== "tool").length ?? 0;
@@ -54,10 +55,7 @@ export function TurnOpsBar({
   if (!hasOps && harvests.length === 0) return null;
 
   return (
-    <div
-      aria-label="运维信号"
-      className="flex flex-col gap-2 border-border border-t pt-2"
-    >
+    <div aria-label="运维信号" className="flex flex-col gap-2">
       {harvests.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-muted-foreground text-xs font-medium">
@@ -126,26 +124,35 @@ export function TurnOpsBar({
               {m}
             </span>
           ))}
-          {processSummary && (
-            <button
-              type="button"
-              onClick={onOpenDock}
-              className="rounded text-xs outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {processSummary}
-            </button>
-          )}
-          {hasWorkers && (
-            <button
-              type="button"
-              aria-label="打开队员面板"
-              onClick={onOpenDock}
-              className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-0.5 text-xs outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Users size={10} />
-              队员 {selected.runs.length}
-            </button>
-          )}
+          {processSummary &&
+            (onOpenDock ? (
+              <button
+                type="button"
+                onClick={onOpenDock}
+                className="rounded text-xs outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {processSummary}
+              </button>
+            ) : (
+              <span>{processSummary}</span>
+            ))}
+          {hasWorkers &&
+            (onOpenDock ? (
+              <button
+                type="button"
+                aria-label="打开队员面板"
+                onClick={onOpenDock}
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-0.5 text-xs outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Users size={10} />
+                队员 {selected.runs.length}
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <Users size={10} />
+                队员 {selected.runs.length}
+              </span>
+            ))}
         </div>
       )}
     </div>

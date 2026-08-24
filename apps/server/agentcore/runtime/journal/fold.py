@@ -27,6 +27,25 @@ if TYPE_CHECKING:
 _BEFORE_LAST_TEAM_PROCESS_KINDS = frozenset({"team_preview"})
 
 
+def _normalize_process_lane(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Journal compat: pre-redirect tool rows stored channel steers as ``status=error``."""
+    from agentcore.runtime.engine.tool_channel_redirect import process_tool_status_from_end
+
+    changed = False
+    out: list[dict[str, Any]] = []
+    for step in steps:
+        if step.get("kind") != "tool":
+            out.append(step)
+            continue
+        new_status = process_tool_status_from_end(step)
+        if new_status == step.get("status"):
+            out.append(step)
+            continue
+        changed = True
+        out.append({**step, "status": new_status})
+    return out if changed else steps
+
+
 def _upsert_tool_step(steps: list[dict[str, Any]], step: dict[str, Any]) -> None:
     """Append a tool step, or replace an earlier row with the same ``id`` (last wins).
 
@@ -351,9 +370,11 @@ def runs_from_entries(entries: list[dict[str, Any]] | None) -> dict[str, Any] | 
         return None
     runs: dict[str, Any] = {"events": events, "finish_reason": finish_reason}
     if process:
-        runs["process"] = process
+        runs["process"] = _normalize_process_lane(process)
     if run_processes:
-        runs["run_processes"] = run_processes
+        runs["run_processes"] = {
+            rid: _normalize_process_lane(steps) for rid, steps in run_processes.items()
+        }
     if captain_context is not None:
         runs["captain_context"] = captain_context
     if turn_error is not None:

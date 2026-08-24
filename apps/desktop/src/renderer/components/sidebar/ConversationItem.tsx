@@ -55,6 +55,7 @@ import {
 } from "@/stores/conversation";
 import {
   isAwaitingUserEntry,
+  isRetiredKickoffKind,
   useInteractionStore,
 } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
@@ -141,14 +142,17 @@ export function ConversationItem({
   );
   const cloudRunning = useConversationCloudRunning(conversation.id);
   // 「等你」灯（前端UX设计.md §对话列表状态点）：热阻塞交互（审批 / 授权 / 升级拍板，
-  // CEO 仲裁除外）+ 任意 kind 的暂停帧（开工确认 / 途中提问 / 计划复核）都算等用户。
+  // CEO 仲裁除外）+ 可操作暂停帧（途中提问 / 计划复核）都算等用户。leftover 开工卡不算。
   const awaitingInteraction = useInteractionStore((s) =>
     [...s.byId.values()].some(
       (e) => e.conversationId === conversation.id && isAwaitingUserEntry(e),
     ),
   );
   const awaitingResume = usePausedTurnStore((s) =>
-    s.pending.some((p) => p.conversationId === conversation.id),
+    s.pending.some(
+      (p) =>
+        p.conversationId === conversation.id && !isRetiredKickoffKind(p.kind),
+    ),
   );
   // 上面两个只看得见**本端流过**的对话。firehose 的 `ai_attention` 补上另一端起的回合
   // ——从没在这台机器上打开过的对话也能亮灯（云对话多端同权 B2 · L1）。

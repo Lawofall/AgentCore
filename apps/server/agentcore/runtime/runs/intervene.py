@@ -13,9 +13,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from agentcore.core.logging import get_logger
 from agentcore.runtime.runs.drive_reach import drive_reach
 from agentcore.runtime.runs.redirect_queue import enqueue_redirect, peek_redirect_count
 from agentcore.runtime.runs.stop_queue import enqueue_stop, peek_stop_count
+
+logger = get_logger(__name__)
 
 InterveneReason = Literal["queued", "no_live_drive", "unknown_run"]
 
@@ -43,6 +46,32 @@ def _refuse(reason: InterveneReason, detail: str) -> InterveneAck:
     return InterveneAck(accepted=False, reason=reason, detail=detail, queued=0)
 
 
+def _log_run_stop_ack(
+    *,
+    conversation_id: str,
+    execution_id: str,
+    run_id: str | None,
+    ack: InterveneAck,
+) -> None:
+    """Cloud HTTP and sidecar RPC share this so local turns leave the same fingerprint."""
+    if ack.accepted:
+        logger.info(
+            "run_stop.queued",
+            conversation_id=conversation_id,
+            execution_id=execution_id,
+            run_id=run_id,
+            queued=ack.queued,
+        )
+    else:
+        logger.info(
+            "run_stop.unreachable",
+            conversation_id=conversation_id,
+            execution_id=execution_id,
+            run_id=run_id,
+            reason=ack.reason,
+        )
+
+
 def accept_run_stop(
     *,
     execution_id: str,
@@ -53,20 +82,28 @@ def accept_run_stop(
     rid = (run_id or "").strip() or None
     reach = drive_reach(execution_id, rid)
     if not reach.driving:
-        return _refuse("no_live_drive", _NO_DRIVE_STOP)
-    if not reach.in_plan:
-        return _refuse("unknown_run", _UNKNOWN_STOP)
-    enqueue_stop(
-        execution_id=execution_id,
+        ack = _refuse("no_live_drive", _NO_DRIVE_STOP)
+    elif not reach.in_plan:
+        ack = _refuse("unknown_run", _UNKNOWN_STOP)
+    else:
+        enqueue_stop(
+            execution_id=execution_id,
+            conversation_id=conversation_id,
+            run_id=rid,
+        )
+        ack = InterveneAck(
+            accepted=True,
+            reason="queued",
+            detail=_QUEUED_STOP_ONE if rid else _QUEUED_STOP_ALL,
+            queued=peek_stop_count(execution_id),
+        )
+    _log_run_stop_ack(
         conversation_id=conversation_id,
+        execution_id=execution_id,
         run_id=rid,
+        ack=ack,
     )
-    return InterveneAck(
-        accepted=True,
-        reason="queued",
-        detail=_QUEUED_STOP_ONE if rid else _QUEUED_STOP_ALL,
-        queued=peek_stop_count(execution_id),
-    )
+    return ack
 
 
 def accept_run_redirect(

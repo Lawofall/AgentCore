@@ -294,6 +294,88 @@ async def test_crash_message_carries_exception_type(registry: tuple[ToolRegistry
     assert "SandboxError: sandbox blew up" in (crash_msg.content or "")
 
 
+class _MissingFileTool:
+    def __init__(self, name: str = "missing_file", *, exc: BaseException) -> None:
+        self._name = name
+        self._exc = exc
+        self.executed = False
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name=self._name,
+            description="stub",
+            parameters={"type": "object", "properties": {}},
+            category=ToolCategory.SEARCH,
+        )
+
+    async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+        self.executed = True
+        raise self._exc
+
+
+async def test_uncaught_file_not_found_is_contract_rejection_not_crash():
+    """Uncaught FileNotFoundError must not leak paths or exception types to the model."""
+    import errno
+
+    win_path = r"C:\Users\secret\Projects\missing.txt"
+    reg = ToolRegistry()
+    reg.register(_MissingFileTool(exc=FileNotFoundError(win_path)))
+    sink = EventSink()
+    with capture_logs() as logs:
+        messages, _terminal, attempts = await execute_tools(
+            [_call("c1", "missing_file")],
+            reg,
+            _ctx(),
+            sink,
+            approval_gate=None,
+            run_id="r1",
+        )
+
+    body = messages[0].content or ""
+    assert win_path not in body
+    assert "FileNotFoundError" not in body
+    assert "missing.txt" not in body
+    assert "内部资源缺失" in body
+
+    assert len(attempts) == 1
+    assert attempts[0].success is False
+    assert attempts[0].contract_failure is True
+    assert attempts[0].policy_failure is False
+
+    ends = [e for e in sink._history if e.type == EventType.TOOL_USE_END]  # noqa: SLF001
+    assert len(ends) == 1
+    assert ends[0].payload["status"] == "error"
+    assert win_path not in (ends[0].payload.get("result") or "")
+    assert ends[0].payload.get("failure") == {
+        "message": "未找到所需资源，请换一种方式继续。",
+        "code": "NOT_FOUND",
+    }
+
+    exec_ends = [e for e in logs if e.get("event") == "tool.execute_end"]
+    assert len(exec_ends) == 1
+    assert exec_ends[0]["status"] == "error"
+    assert exec_ends[0]["status"] != "crash"
+
+    reg2 = ToolRegistry()
+    reg2.register(
+        _MissingFileTool(
+            name="missing_os",
+            exc=OSError(errno.ENOENT, "No such file or directory", win_path),
+        )
+    )
+    messages2, _, attempts2 = await execute_tools(
+        [_call("c2", "missing_os")],
+        reg2,
+        _ctx(),
+        EventSink(),
+        approval_gate=None,
+        run_id="r1",
+    )
+    assert attempts2[0].contract_failure is True
+    assert win_path not in (messages2[0].content or "")
+
+
 async def test_suspend_terminal_unchanged(registry: tuple[ToolRegistry, _OkTool]):
     reg, _ok_b = registry
     sink = EventSink()
@@ -403,6 +485,32 @@ async def test_captain_role_strips_run_id_from_sse_but_facts_keep_it(
     ]
     assert wrk_events
     assert all(e.payload.get("run_id") == "w-run" for e in wrk_events)
+
+
+async def test_empty_args_rewrite_tool_call_to_valid_json_object():
+    """Empty ``function.arguments`` still execute as ``{}``, but the slot is rewritten.
+
+    The next LLM request must send valid JSON (OpenCode Go 400 otherwise). Illegal
+    JSON stays on the args_parse_failed path — see the test below.
+    """
+    tracked = _OkTool("ok_a", output="alpha")
+    reg = ToolRegistry()
+    reg.register(tracked)
+    call = _call("c1", "ok_a", "")
+    messages, terminal, attempts = await execute_tools(
+        [call],
+        reg,
+        _ctx(),
+        EventSink(),
+        approval_gate=None,
+        run_id="r1",
+    )
+    assert terminal is None
+    assert tracked.executed is True
+    assert attempts[0].success is True
+    assert call.function.arguments == "{}"
+    assert json.loads(call.function.arguments) == {}
+    assert messages[0].role == "tool"
 
 
 async def test_illegal_json_args_return_explicit_error_not_empty_dict():
@@ -580,10 +688,10 @@ def test_unwrap_nested_delegate_arguments_success_and_no_false_positive():
     assert out is not None
     assert out["tasks"] == inner_tasks
 
-    as_dict = {"arguments": {"playbook": "build_website", "playbook_args": {"topic": "X"}}}
+    as_dict = {"arguments": {"playbook": "build_app", "playbook_args": {"app": "X"}}}
     out2 = unwrap_nested_delegate_arguments(as_dict)
     assert out2 is not None
-    assert out2["playbook"] == "build_website"
+    assert out2["playbook"] == "build_app"
 
     # Narrow wrappers: parameters / input sole payload key (same salvage family).
     via_params = {"parameters": {"tasks": inner_tasks}}

@@ -60,6 +60,11 @@ export const COLD_RESUME_KINDS = kindsWhere((kind) => {
 
 export type ColdResumeKind = (typeof COLD_RESUME_KINDS)[number];
 
+/** Retired kickoff kinds — wire kind remains; no operable desktop surface. */
+export function isRetiredKickoffKind(kind: string): kind is "team_preview" {
+  return kind === "team_preview";
+}
+
 /** Live turn blocked on the user (`hot && pausesTurn`). Today: approval. */
 export const HOT_GATE_INTERACTION_KINDS = kindsWhere((kind) => {
   const w = INTERACTION_KIND_WIRE[kind];
@@ -130,7 +135,7 @@ export interface TimelineMarkerDef {
     | "escalation_id"
     | "approval_id"
     | "stage_card_id";
-  /** Insert before the last `team` marker (team_preview product order). */
+  /** Historical marker order (before final `team`); not the current kickoff card. */
   insertBeforeTeam?: boolean;
 }
 

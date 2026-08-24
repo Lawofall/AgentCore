@@ -16,10 +16,10 @@ EscalationKind = Literal["normal", "scope", "dep"]
 PlanRevisionKind = Literal["bind", "steer"]
 # 幕类型 = 能力档取用键（首批 multi_agent / debate；single_agent 不进幕序列）。
 ActKind = Literal["multi_agent", "debate"]
-# 幕授权来源（批 B）：推进卡点开辩 / 自动开辩 / 开工卡确认。
+# 幕授权来源（批 B）：推进卡 / 自动开辩 / 存量 leftover（preview 非新开开工卡）。
 ActAuthorizedBy = Literal["stage_card", "auto", "preview"]
 # run_failed 可机读原因类（additive）：协作图脸优先按此类贴文案。
-# quality=内容契约/硬缺口/空交付→「未达标」；
+# quality=内容契约/硬缺口→「未达标」；
 # format=结构/格式闸（code_audit·缺章节·JSON）→「格式未过」；
 # model=中断/停滞/降级交接→「模型中断」；call=LLM/超时→「调用失败」；
 # 缺省→「失败」/空 error「调用失败」。禁前端扫正文猜脸。
@@ -344,13 +344,14 @@ class DeliveryAction(WirePayload):
     本机传统合法非默认，≠离线)；
     ``export_to_local`` (云端已有 delivered_files → 导出到本机文件夹后即可 npm install / 本地运行；
     与 bind_local_folder 可并存但语义不同);
-    ``website_verify`` (整页 QA 因预算 defer → 一键续派 ``build_website_verify``);
+    ``website_verify`` (legacy tape only — runtime 已停发整页 QA 续派按钮);
     ``continue_skipped_runs`` (turn/nested 额度 SKIPPED 未跑节点 → 下一回合续跑);
     unknown kinds render as a plain hint.
     （成篇未写完改由对话框接着说——已撤 ``continue_writing`` 一键按钮。）
 
     Optional ``prompt`` is the exact user-turn text a client should send for
-    kinds that open a new message (e.g. ``website_verify``). Absent for
+    kinds that open a new message (e.g. ``continue_skipped_runs``; old
+    ``website_verify`` tapes still carry one). Absent for
     non-message actions like ``bind_local_folder`` / ``export_to_local``."""
 
     kind: str

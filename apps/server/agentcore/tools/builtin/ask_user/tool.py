@@ -181,14 +181,15 @@ class AskUserTool:
                     "assumptions": {
                         "type": "array",
                         "description": (
-                            "可选：低影响默认可逆决策（只读陈列）。高杠杆放 questions。"
+                            "可选：低影响默认可逆决策（只读陈列）。"
+                            "label 2–6 字项名。高杠杆放 questions。"
                         ),
                         "items": {
                             "type": "object",
                             "properties": {
                                 "label": {
                                     "type": "string",
-                                    "description": "决策项。",
+                                    "description": "2–6 字项名。",
                                 },
                                 "value": {
                                     "type": "string",

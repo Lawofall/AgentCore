@@ -71,8 +71,6 @@ export type SSEEventType =
   | "stage_card_required"
   | "stage_card_resolved"
   | "team_note_posted"
-  | "team_preview_required"
-  | "team_preview_resolved"
   | "team_synthesis_preview"
   | "title_generated"
   | "tool_progress"

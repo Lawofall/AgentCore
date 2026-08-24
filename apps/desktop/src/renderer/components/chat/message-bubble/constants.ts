@@ -1,3 +1,7 @@
+import {
+  channelRedirectFace,
+  resolveToolWireStatus,
+} from "@/lib/channelRedirect";
 import type { ProcessStep, ToolPhase } from "@/types/events";
 import {
   ArrowUp,
@@ -411,18 +415,32 @@ export function toolGroupSummary(
     return `Read page · ${n} source${n === 1 ? "" : "s"}`;
   }
   if (sameKind && tools.length <= 3) {
-    const label = toolSummaryLabel(tools[0].tool_name, tools[0].arguments);
+    const label = groupToolLabel(tools[0]);
     const names = tools.map((t) =>
       baseName(toolDetail(t.arguments, t.tool_name)),
     );
-    if (names.every(Boolean)) return `${label} ${names.join(" · ")}`;
+    if (
+      names.every(Boolean) &&
+      tools.every(
+        (t) => resolveToolWireStatus(t.status, t.failure) !== "redirect",
+      )
+    ) {
+      return `${label} ${names.join(" · ")}`;
+    }
   }
   const order: string[] = [];
   const counts = new Map<string, number>();
   for (const t of tools) {
-    const label = toolSummaryLabel(t.tool_name, t.arguments);
+    const label = groupToolLabel(t);
     if (!counts.has(label)) order.push(label);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   return order.map((l) => `${l} ${counts.get(l)}`).join(" · ");
+}
+
+function groupToolLabel(t: Extract<ProcessStep, { kind: "tool" }>): string {
+  const face = channelRedirectFace(t.failure?.code);
+  if (resolveToolWireStatus(t.status, t.failure) === "redirect" && face)
+    return face.label;
+  return toolSummaryLabel(t.tool_name, t.arguments);
 }

@@ -93,10 +93,7 @@ export const PLATFORMS: PlatformDownload[] = platformsFromArtifacts({
 
 export const DOWNLOAD_PAGE_PATH = "/download" as const;
 
-/** 手机端 web SPA（Cloudflare Pages · deploy-mobile-web.yml） */
-export const MOBILE_WEB_URL = "https://m.fashitianxia.xyz" as const;
-
-/** 主力 web 客户端（apps/desktop 渲染层跑浏览器，同源托管在 app. 根路径；免安装、需登录）。 */
+/** 主力 web 客户端（apps/desktop 渲染层跑浏览器，同源托管在 app. 根路径；免安装、需登录）。窄屏同一地址，不再另挂 m.。 */
 export const WEB_APP_URL = "https://app.fashitianxia.xyz" as const;
 
 /** Hero 那块「产品截图」地址栏里显示的 host。从 WEB_APP_URL 推，别再手写第二份。 */

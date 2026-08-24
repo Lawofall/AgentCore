@@ -161,7 +161,7 @@ class DebateTool:
         self._debate_prev_execution_id: str | None = None
         # 新图+prev：parent 用本回合 captain；act.anchor_run_id 仍指向上一图汇总员。
         self._debate_graph_parent_run_id: str | None = None
-        # 批 B：幕授权来源 stage_card / auto / preview；缺省 = 开工卡路径补 preview。
+        # 批 B：幕授权来源 stage_card / auto / preview；缺省新路径补 auto（preview 仅存量 leftover）。
         self._debate_authorized_by: str | None = None
         # 推进卡消费 / 点卡直起时携带的卡 payload（宿主三元组优先）。
         self._debate_stage_card: dict[str, Any] | None = None
@@ -455,8 +455,8 @@ class DebateTool:
                     clear_turn_keeps_stage_card()
                 return early
         elif self._debate_authorized_by is None:
-            # skip_kickoff 调用方未显式授权时：resume 开工卡 = preview。
-            self._debate_authorized_by = "preview"
+            # skip_kickoff 未显式授权：新路径缺省 = auto。
+            self._debate_authorized_by = "auto"
 
         # 成功边界 = debate.started：开跑即 finalize（见 _run_moderator）。
         if (
@@ -499,9 +499,7 @@ class DebateTool:
         auto_adopt = tool_may_auto_debate(self)
         if auto_adopt:
             await record_auto_debate(self)
-            self._debate_authorized_by = "auto"
-        else:
-            self._debate_authorized_by = "preview"
+        self._debate_authorized_by = "auto"
         return None
 
     async def _resolve_host_attach(self, config: DebateConfig):
@@ -551,7 +549,7 @@ class DebateTool:
 
     async def _run_moderator(self, config: DebateConfig, usage_metadata) -> ToolResult:
         if self._debate_authorized_by is None:
-            self._debate_authorized_by = "preview"
+            self._debate_authorized_by = "auto"
 
         # 底料预登记：【已核实·出处】→ 台账条目 + 改写为 #eN（咬合点 1）
         from agentcore.runtime.debate.evidence_ledger import (

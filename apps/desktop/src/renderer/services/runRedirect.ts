@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
-import { getActiveSidecarTarget } from "@/services/sidecarRouting";
+import { resolveSidecarControlTargetForEngine } from "@/services/sidecarRouting";
+import { useConversationStore } from "@/stores/conversation";
 import type { InterveneAck } from "@agentcore/protocol-fold-kit";
 
 export interface SubmitRunRedirectParams {
@@ -28,7 +29,10 @@ export async function submitRunRedirect(
   conversationId: string,
   params: SubmitRunRedirectParams,
 ): Promise<RunRedirectAck> {
-  const sidecarTarget = getActiveSidecarTarget(conversationId);
+  const sidecarTarget = await resolveSidecarControlTargetForEngine(
+    conversationId,
+    useConversationStore.getState().byId[conversationId]?.executionVia,
+  );
   if (sidecarTarget) {
     return window.sidecarApi.runRedirect({
       rootId: sidecarTarget.rootId,
@@ -49,8 +53,8 @@ export async function submitRunRedirect(
   );
 }
 
-/** Why a run reached a terminal dead end the user is asked to accept (跑一半改方向 Step 4):
- *  a non-retryable failure, or a「立即改此人」steer that arrived too late to apply mid-run. */
+/** Why a run's terminal outcome was recorded as accepted (跑一半改方向 Step 4).
+ *  User-facing offer is only ``redirect_ignored``; the other two stay audit-only. */
 export type RunOutcomeReason =
   | "deterministic_failure"
   | "redirect_ignored"

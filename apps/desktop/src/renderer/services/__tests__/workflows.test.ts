@@ -214,28 +214,28 @@ describe("workflow templates / from-playbook (§10.8)", () => {
 
   it("keeps optional slots optional and carries their allowed values", () => {
     const t = toWorkflowTemplate({
-      id: "build_website",
-      title: "建站",
-      summary: "文案→前端→QA",
-      primary_slots: "topic（必填，一句话简述）；style（可选，站点气质）",
+      id: "build_app",
+      title: "从零搭应用",
+      summary: "脚手架→模块→联调",
+      primary_slots: "app（必填，应用简述）；intensity（可选，编制档）",
       slots: [
-        { key: "topic", label: "简述", required: true, hint: "一句话简述" },
+        { key: "app", label: "应用", required: true, hint: "应用简述" },
         {
-          key: "style",
-          label: "气质",
+          key: "intensity",
+          label: "编制",
           required: false,
-          hint: "不填按 marketing",
+          hint: "不填按 lean",
           choices: [
-            { value: "marketing", label: "营销落地页" },
-            { value: "toolshed", label: "工具台 dense" },
+            { value: "lean", label: "瘦启动" },
+            { value: "standard", label: "标准" },
           ],
         },
       ],
     });
     expect(t.slots.map((s) => s.required)).toEqual([true, false]);
     expect(t.slots[1]?.choices.map((c) => c.value)).toEqual([
-      "marketing",
-      "toolshed",
+      "lean",
+      "standard",
     ]);
   });
 
@@ -288,7 +288,7 @@ describe("workflow templates / from-playbook (§10.8)", () => {
   it("createWorkflowFromPlaybook posts playbook + slots", async () => {
     apiPost.mockResolvedValueOnce({
       id: "wf-from-pb",
-      name: "我的建站",
+      name: "我的应用",
       description: null,
       definition: { nodes: [], edges: [] },
       version: 1,
@@ -296,15 +296,15 @@ describe("workflow templates / from-playbook (§10.8)", () => {
       updated_at: "2026-07-31T00:00:00Z",
     });
     const created = await createWorkflowFromPlaybook({
-      playbook: "build_website",
-      name: "我的建站",
-      slots: { topic: "SaaS 营销官网" },
+      playbook: "build_app",
+      name: "我的应用",
+      slots: { app: "记账 SPA" },
     });
     expect(created.id).toBe("wf-from-pb");
     expect(apiPost).toHaveBeenCalledWith("/v1/workflows/from-playbook", {
-      playbook: "build_website",
-      name: "我的建站",
-      slots: { topic: "SaaS 营销官网" },
+      playbook: "build_app",
+      name: "我的应用",
+      slots: { app: "记账 SPA" },
     });
   });
 

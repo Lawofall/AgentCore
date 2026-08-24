@@ -54,6 +54,7 @@ vi.mock("@/lib/log", () => ({
 }));
 
 import {
+  awaitHydrateAttachSettle,
   runHydrateAttachSettle,
   scheduleHydrateAttachSettle,
 } from "../turns/hydrateAttachSettle";
@@ -416,6 +417,54 @@ describe("runHydrateAttachSettle (warm reopen / cold adopt)", () => {
 
     expect(useAiAttentionStore.getState().entries).toHaveLength(1);
     expect(useAiAttentionStore.getState().entries[0].conversationId).toBe(CID);
+  });
+
+  it("awaitHydrateAttachSettle returns before a live sidecar attach finishes", async () => {
+    seedMessages({ role: "assistant", status: "running" });
+    let finishAttach!: (ok: boolean) => void;
+    attachSidecarTurn.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishAttach = resolve;
+        }),
+    );
+
+    const settled = awaitHydrateAttachSettle(
+      CID,
+      Promise.resolve({
+        sidecarLive: true,
+        cloudLive: false,
+        cloudKnown: true,
+        pausedCount: 0,
+        unsynced: [],
+      }),
+    );
+
+    await expect(settled).resolves.toBe("local");
+    expect(attachSidecarTurn).toHaveBeenCalledTimes(1);
+    expect(projectUnsyncedTurns).toHaveBeenCalledWith(CID, []);
+    finishAttach(true);
+  });
+
+  it("awaitHydrateAttachSettle runs settle after recovery resolves", async () => {
+    seedMessages({ role: "assistant", status: "complete" });
+    let resolveRecovery!: (value: ConversationRecovery) => void;
+    const recoveryLoaded = new Promise<ConversationRecovery>((resolve) => {
+      resolveRecovery = resolve;
+    });
+
+    const pending = awaitHydrateAttachSettle(CID, recoveryLoaded);
+    expect(settleOrphanEmptyAssistants).not.toHaveBeenCalled();
+
+    resolveRecovery({
+      sidecarLive: false,
+      cloudLive: false,
+      cloudKnown: true,
+      pausedCount: 0,
+      unsynced: [],
+    });
+    await pending;
+    expect(settleOrphanEmptyAssistants).toHaveBeenCalledWith(CID);
   });
 
   it("scheduleHydrateAttachSettle returns before recovery lands", async () => {

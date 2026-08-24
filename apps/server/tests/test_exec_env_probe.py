@@ -15,10 +15,12 @@ import pytest
 
 from agentcore.tools.sandbox.exec_env import (
     EXEC_ENV_NO_INTERPRETER_CODE,
+    EXEC_ENV_NOT_LINUX_CODE,
     EXEC_ENV_PROBE_FAIL_CODE,
     EXEC_ENV_PROBE_FAIL_CODES,
     EXEC_ENV_PROBE_FAIL_MARKER,
     EXEC_ENV_PROBE_TIMEOUT_CODE,
+    EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
     EXEC_ENV_SPAWN_DENIED_CODE,
     annotate_real_exec_failure,
     classify_probe_failure,
@@ -35,6 +37,7 @@ from agentcore.tools.sandbox.exec_env import (
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
 from agentcore.workspace.channel import WorkspaceOp
 from agentcore.workspace.limits import (
+    EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER,
     EXEC_ENV_DEAD_BODY_MARKER,
     EXEC_ENV_DEAD_USER_VISIBLE,
     EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE,
@@ -700,6 +703,25 @@ async def test_server_workspace_keeps_one_runtime_verdict_for_gvisor(tmp_path: P
 
 
 @pytest.mark.anyio
+async def test_server_workspace_maps_gvisor_not_linux_code(tmp_path: Path):
+    """Windows / non-Linux gVisor smoke → classified code, not the opaque fallback."""
+    sandbox = _ClassifyingSandbox(
+        code=EXEC_ENV_NOT_LINUX_CODE, evidence="not_linux platform=win32"
+    )
+    sandbox.last_health_failure = ("not_linux", "platform=win32")
+    ws = ServerWorkspace(root=tmp_path, sandbox=sandbox, location="server")
+
+    first = await ws.execute(
+        ExecutionRequest(code="print(1)", language="python", timeout_seconds=5)
+    )
+    assert first.success is False
+    assert exec_env_probe_failure_code(first.stderr) == EXEC_ENV_NOT_LINUX_CODE
+    assert "不是本机解释器坏了" in first.stderr
+    assert exec_env_probe_failure_language(first.stderr) is None
+    assert sandbox.execute_calls == 0
+
+
+@pytest.mark.anyio
 async def test_code_execute_retires_only_what_the_probe_proved():
     from agentcore.tools.builtin.code_execute import CodeExecuteTool
     from agentcore.tools.protocol import ToolContext
@@ -1226,12 +1248,17 @@ def test_exec_env_dead_lines_fork_per_reason_and_drop_unbacked_advice():
     assert set(EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE) == (
         EXEC_ENV_PROBE_FAIL_CODES - {EXEC_ENV_PROBE_FAIL_CODE}
     )
+    cloud_codes = {EXEC_ENV_NOT_LINUX_CODE, EXEC_ENV_SANDBOX_UNAVAILABLE_CODE}
     every_line = [EXEC_ENV_DEAD_USER_VISIBLE, *EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE.values()]
-    for line in every_line:
-        assert line.startswith(EXEC_ENV_DEAD_BODY_MARKER)
-        # The desktop channel is alive in exactly the cases this fires — never
-        # send the user to check it.
+    for code, line in EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE.items():
+        if code in cloud_codes:
+            assert EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER in line
+            assert not line.startswith(EXEC_ENV_DEAD_BODY_MARKER)
+            assert "本机执行环境不可用" not in line
+        else:
+            assert line.startswith(EXEC_ENV_DEAD_BODY_MARKER)
         assert "请检查桌面" not in line
+    assert EXEC_ENV_DEAD_USER_VISIBLE.startswith(EXEC_ENV_DEAD_BODY_MARKER)
     # Security software is only ever named where a refused spawn proves it.
     named_av = [
         line for line in every_line if "安全软件" in line
@@ -1253,6 +1280,21 @@ def test_exec_env_dead_lines_fork_per_reason_and_drop_unbacked_advice():
     assert "就绪" in timeout
     assert "命令" in timeout
     assert "代码执行环境" not in timeout
+    not_linux = EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE[EXEC_ENV_NOT_LINUX_CODE]
+    assert "Linux" in not_linux
+    assert "本机暂时跑不了命令" not in not_linux
+    sandbox_down = EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE[EXEC_ENV_SANDBOX_UNAVAILABLE_CODE]
+    assert EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER in sandbox_down
+
+
+def test_probe_retire_steer_cloud_isolation_does_not_blame_the_laptop():
+    steer = probe_failure_retire_steer(EXEC_ENV_NOT_LINUX_CODE)
+    assert "云端隔离执行不可用" in steer
+    assert "本机执行环境不可用" not in steer
+    assert "terminal" not in steer
+    stderr = probe_failure_result(code=EXEC_ENV_NOT_LINUX_CODE).stderr
+    assert exec_env_probe_failure_code(stderr) == EXEC_ENV_NOT_LINUX_CODE
+    assert "不是本机解释器坏了" in stderr
 
 
 def test_exec_env_dead_notice_speaks_the_classified_cause():
@@ -1308,3 +1350,15 @@ def test_harvest_fallback_repeats_the_classified_cause():
     assert EXEC_ENV_DEAD_USER_VISIBLE in build_harvest_fallback_content(
         session, kind="failure"
     )
+
+    session.exec_env_dead_reason = EXEC_ENV_NOT_LINUX_CODE
+    cloud = build_harvest_fallback_content(session, kind="failure")
+    assert EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE[EXEC_ENV_NOT_LINUX_CODE] in cloud
+    assert "本机暂时跑不了命令" not in cloud
+
+    session.exec_env_dead = False
+    session.exec_env_dead_reason = None
+    session.draft = "云端隔离执行当前不可用，我改读文件。"
+    from_draft = build_harvest_fallback_content(session, kind="failure")
+    assert EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE[EXEC_ENV_SANDBOX_UNAVAILABLE_CODE] in from_draft
+    assert "本机暂时跑不了命令" not in from_draft

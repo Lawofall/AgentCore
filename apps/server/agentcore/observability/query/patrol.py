@@ -68,6 +68,8 @@ TOOL_FAIL_STATUSES = frozenset(
     }
 )
 TOOL_OK_STATUSES = frozenset({"ok", "success", "done", ""})
+# Wrong-tool-channel steer: runtime refused and named the right tool. Not a fault.
+TOOL_STEER_STATUSES = frozenset({"redirect"})
 
 MUST_REVIEW_FAMILIES = frozenset(
     {
@@ -169,6 +171,8 @@ def is_tool_failure(obj: dict[str, Any]) -> bool:
     if obj.get("ok") is False:
         return True
     status = str(obj.get("status") or "").strip().lower()
+    if status in TOOL_STEER_STATUSES:
+        return False
     return status not in TOOL_OK_STATUSES
 
 

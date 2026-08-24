@@ -7,10 +7,7 @@ import {
   ToolLine,
   ToolLineGroup,
 } from "@/components/chat/ToolLine";
-import {
-  kickoffReleasedFromPreviews,
-  teamGraphVisible,
-} from "@/components/chat/debatePreviewPlacement";
+import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
 import { executionGraphCapabilities } from "@/components/graph/planCapabilities";
 import {
   type TimelineNode,
@@ -21,7 +18,6 @@ import {
 import type {
   CheckpointDisplay,
   PlanReviewDisplay,
-  TeamPreviewDisplay,
 } from "@/stores/conversation";
 import { useStreamAwareDisclosure } from "@/stores/disclosure";
 import { type ExecutionJournal, useMessageExecution } from "@/stores/execution";
@@ -151,6 +147,7 @@ function ProcessRow({
       <div className="process-narration min-w-0 max-w-full text-foreground">
         <Markdown
           content={step.text}
+          conversationId={conversationId}
           citations={citations}
           citationToDisplay={citationToDisplay}
           knownLedgerIds={knownLedgerIds}
@@ -227,7 +224,6 @@ export function ProcessTimeline({
   conversationId,
   checkpoints,
   planReviews,
-  teamPreviews,
   /** When false, never collapse reasoning/tool rows into a summary (run-detail panel).
    * Default true keeps CEO bubble chrome. */
   collapseProcessSteps = true,
@@ -245,23 +241,19 @@ export function ProcessTimeline({
   conversationId: string | null;
   checkpoints: CheckpointDisplay[];
   planReviews: PlanReviewDisplay[];
-  teamPreviews: TeamPreviewDisplay[];
   collapseProcessSteps?: boolean;
 }) {
   const execution = useMessageExecution(messageId ?? null);
   const last = process[process.length - 1];
   const hasContentStep = process.some((s) => s.kind === "content");
-  const kickoffReleased = kickoffReleasedFromPreviews(teamPreviews);
   const graphVisibleAtTail = (() => {
     const slotExecutionId = graphSlotExecutionId(last);
     if (!slotExecutionId) return false;
     if (!execution || execution.id !== slotExecutionId) return false;
     if (!executionGraphCapabilities(execution).showsTeamGraph) return false;
-    // Same gate as InlineTeamGraph: empty teamPreviews is still a provided list.
-    return teamGraphVisible(execution.runs, teamPreviews);
+    return teamGraphVisible(execution.runs);
   })();
   const pendingUserGate =
-    teamPreviews.some((p) => p.status === "pending") ||
     checkpoints.some((c) => c.status === "pending") ||
     planReviews.some((p) => p.status === "pending");
   // wait 结束后不刷 Thinking 尾迹（S4）；下一轮有真实动作再出现。wait / wait-idle
@@ -311,6 +303,7 @@ export function ProcessTimeline({
     >
       <Markdown
         content={fallbackContent}
+        conversationId={conversationId}
         citations={citations}
         citationToDisplay={citationToDisplay}
         knownLedgerIds={knownLedgerIds}
@@ -330,8 +323,6 @@ export function ProcessTimeline({
           messageId={messageId}
           executionId={node.execution_id}
           journal={journal}
-          kickoffReleased={kickoffReleased}
-          teamPreviews={teamPreviews}
         />
       ) : null;
     }
@@ -372,7 +363,6 @@ export function ProcessTimeline({
         {
           checkpoints,
           planReviews,
-          teamPreviews,
         },
         {
           messageId: messageId ?? "",

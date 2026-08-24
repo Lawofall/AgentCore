@@ -6,6 +6,12 @@
 
 from __future__ import annotations
 
+import asyncio
+
+from agentcore.runtime.coordination.session import (
+    active_coordination,
+    clear_active_coordination,
+)
 from agentcore.runtime.runs import RunPhase
 from agentcore.runtime.runs.types import RunState
 from tests.delegate.conftest import Provider, ctx, tool
@@ -97,3 +103,38 @@ async def test_second_delegate_seed_omits_yielded_untouched_tail(monkeypatch):
     assert second.success is True
     assert "写手" in executed
     assert (t._last_graph_seed or {})[nodes["写手"]].phase is RunPhase.COMPLETED
+
+
+async def test_coordinated_drive_stamps_seed_after_workers_finish():
+    """协调态 kickoff 不把未完成人写入 seed；drive 收口后必须 stamp，避免同构闸谎报 0/N。"""
+    t = tool(Provider(["AOUT", "BOUT"]))
+    first = await t.execute(
+        {
+            "tasks": [
+                {"role": "研究员", "task": "做A调研"},
+                {"role": "写手", "task": "做B撰写"},
+            ],
+            "coordinate": True,
+        },
+        ctx(),
+    )
+    assert first.success is True
+    session = active_coordination("e")
+    assert session is not None
+    try:
+        await asyncio.wait_for(session.drive_task, timeout=10)
+        seed = t._last_graph_seed or {}
+        assert len(seed) == 2
+        assert all(state.phase is RunPhase.COMPLETED for state in seed.values())
+
+        second = await t.execute(
+            {
+                "tasks": [{"role": "写手", "task": "做B撰写完善"}],
+                "coordinate": True,
+            },
+            ctx(),
+        )
+        blob = f"{second.error or ''}{second.output or ''}"
+        assert "已完成 0/" not in blob
+    finally:
+        clear_active_coordination("e")

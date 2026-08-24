@@ -73,7 +73,7 @@ describe("preview source adapter (consumer A / FOLD)", () => {
       name: "fx",
       events: [
         {
-          type: "team_preview_required",
+          type: "plan_review_required",
           payload: { checkpoint_id: "cp-fixed" },
           timestamp: null,
         },

@@ -20,6 +20,7 @@ from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCall, Tool
 from agentcore.runtime import pipeline
 from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.events import EventSink, EventType, FinishReason
+from agentcore.runtime.facts import LlmCallFact, RoundBoundaryFact, TurnStartedFact
 from agentcore.runtime.pipeline.resume import pipeline as resume_pipeline_mod
 from agentcore.runtime.suspension import AskUserSuspension
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -77,10 +78,46 @@ def _ask_frame() -> AskUserSuspension:
         ],
         question="要继续吗？",
     )
-    susp.journal_entries = [
-        {"kind": EventType.CHECKPOINT_REQUIRED.value, "payload": {}, "ts": "t"}
-    ]
+    susp.journal_entries = _ask_pause_journal(
+        system_prompt="SYS",
+        user_message="继续干活",
+        captain_run_id="cap1",
+        tool_call_id="call_ask",
+    )
     return susp
+
+
+def _ask_pause_journal(
+    *,
+    system_prompt: str,
+    user_message: str,
+    captain_run_id: str,
+    tool_call_id: str,
+) -> list[dict]:
+    """Journal-at-pause for ask_user: head + suspended tool call + checkpoint."""
+    return [
+        TurnStartedFact(
+            system_prompt=system_prompt, user_message=user_message, model_profile="m"
+        )
+        .to_fact()
+        .entry(),
+        RoundBoundaryFact(round_idx=0, run_id=captain_run_id, role="captain").to_fact().entry(),
+        LlmCallFact(
+            run_id=captain_run_id,
+            round_idx=0,
+            tool_calls=[
+                {
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {"name": "ask_user", "arguments": "{}"},
+                }
+            ],
+            finish_reason="tool_calls",
+        )
+        .to_fact()
+        .entry(),
+        {"kind": EventType.CHECKPOINT_REQUIRED.value, "payload": {}, "ts": "t"},
+    ]
 
 
 def _patch_seams(monkeypatch) -> None:

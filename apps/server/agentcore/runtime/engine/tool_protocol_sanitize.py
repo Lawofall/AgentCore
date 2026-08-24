@@ -348,7 +348,9 @@ def salvage_handoff_raw_arguments(raw: str, *, tool_name: str = "") -> str | Non
 def parse_tool_call_arguments(raw: str, *, tool_name: str = "") -> tuple[Any, str | None]:
     """Unique tool-argument parse after protocol sanitize.
 
-    1. Empty → ``({}, None)``.
+    1. Empty / whitespace → ``({}, "{}")`` so callers rewrite the OpenAI
+       ``function.arguments`` slot. An empty string is not valid JSON; leaving it
+       on the assistant message 400s the next upstream turn.
     2. ``JSONDecoder.raw_decode`` — a complete value plus trailing junk is success
        (the Extra-data class: legal object + leftover ``}``).
     3. Still failing + ``handoff`` → :func:`salvage_handoff_raw_arguments`.
@@ -363,10 +365,11 @@ def parse_tool_call_arguments(raw: str, *, tool_name: str = "") -> tuple[Any, st
     Returns ``(parsed, repaired_raw)``. ``repaired_raw`` is the accepted prefix /
     quoted string when a structural repair was used; ``None`` when the original ``raw``
     already decoded cleanly. Raises ``JSONDecodeError`` when unparseable — callers must
-    not rewrite arguments.
+    not rewrite arguments (truncated writes must not execute). Empty is not that
+    case: callers *should* rewrite the slot to ``"{}"``.
     """
-    if not raw:
-        return {}, None
+    if not str(raw or "").strip():
+        return {}, "{}"
 
     decoder = json.JSONDecoder()
     first_exc: json.JSONDecodeError | None = None

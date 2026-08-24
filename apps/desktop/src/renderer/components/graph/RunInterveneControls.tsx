@@ -4,8 +4,9 @@
  *
  * 调用方用 `isLiveRunStatus` **终局整条不挂载**（不留空 wrapper）。仍挂载时
  * （running / pending），不可用动作变灰并说明原因——排队改方向就是这一类，不要
- * 藏成「按钮不见了」。判定与文案由 `protocol-fold-kit/runIntervene` 给出，不在
- * 本文件另写 status 表。
+ * 藏成「按钮不见了」。整轮 `turnPhase === "stopping"` 除外：按人停已被输入框
+ * 硬停覆盖，再挂会打空 run-stop。判定与文案由 `protocol-fold-kit/runIntervene`
+ * 给出，不在本文件另写 status 表。
  */
 
 import { Button, Textarea } from "@/components/ui";
@@ -13,6 +14,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { detectReviewConcern } from "@/lib/reviewConcern";
 import { cn } from "@/lib/utils";
 import { submitRunRedirect } from "@/services/runRedirect";
+import { runtimeOf, useConversationStore } from "@/stores/conversation";
 import type { RunStatus } from "@/stores/execution";
 import { useRunStopPendingStore } from "@/stores/runStopPending";
 import {
@@ -66,6 +68,9 @@ export function RunInterveneControls({
   const stopCovered = useRunStopPendingStore((s) =>
     s.isRunCovered(executionId, runId),
   );
+  const wholeTurnStopping = useConversationStore(
+    (s) => runtimeOf(s, conversationId).turnPhase === "stopping",
+  );
   const [stopSubmitting, setStopSubmitting] = useState(false);
   const [draft, setDraft] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -102,8 +107,10 @@ export function RunInterveneControls({
   // 改方向的原因更具体（「跑完了 / 还没开工」），优先说它；辩论幕本就不出改方向按钮，
   // 那时只说停止为什么不行。
   const panelReason = redirectCapable
-    ? (redirectGate.reason ?? stopGate.reason)
-    : stopGate.reason;
+    ? (redirectGate.reason ?? (wholeTurnStopping ? null : stopGate.reason))
+    : wholeTurnStopping
+      ? null
+      : stopGate.reason;
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
@@ -118,27 +125,29 @@ export function RunInterveneControls({
             onClick={openComposer}
           />
         )}
-        <GatedButton
-          gate={stopGate}
-          label={stopLabel}
-          tip={stopTip}
-          icon={<Square size={13} />}
-          tone="destructive"
-          busy={stopBusy}
-          onClick={async () => {
-            setStopSubmitting(true);
-            try {
-              await requestRunStop({
-                conversationId,
-                executionId,
-                runId,
-                scope: "node",
-              });
-            } finally {
-              setStopSubmitting(false);
-            }
-          }}
-        />
+        {!wholeTurnStopping && (
+          <GatedButton
+            gate={stopGate}
+            label={stopLabel}
+            tip={stopTip}
+            icon={<Square size={13} />}
+            tone="destructive"
+            busy={stopBusy}
+            onClick={async () => {
+              setStopSubmitting(true);
+              try {
+                await requestRunStop({
+                  conversationId,
+                  executionId,
+                  runId,
+                  scope: "node",
+                });
+              } finally {
+                setStopSubmitting(false);
+              }
+            }}
+          />
+        )}
       </div>
 
       {composerOpen && (

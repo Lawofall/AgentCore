@@ -1,6 +1,6 @@
 {
   "name": "debate_team_preview_model_override_continue",
-  "description": "辩论开工卡人盖模型：continue + model_overrides → resolved 投影（预分配 run_id）",
+  "description": "开工卡已退役、不再发事件对：开赛沿用预分配 run_id（不从事件投影 veto）",
   "events": [
     {
       "type": "message_start",
@@ -43,56 +43,6 @@
       "timestamp": "2026-01-01T00:00:00.003Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp-debate",
-        "conversation_id": "conv_demo",
-        "workers": [],
-        "tools": [],
-        "primitive": "debate",
-        "motion": "该不该上四天工作制？",
-        "form": "debate",
-        "sides": [
-          {
-            "key": "pro",
-            "name": "正方",
-            "stance": "应推广",
-            "run_id": "debate_mod1_pro"
-          },
-          {
-            "key": "con",
-            "name": "反方",
-            "stance": "暂缓",
-            "run_id": "debate_mod1_con"
-          }
-        ],
-        "max_rounds": 5,
-        "thorough": true,
-        "revision": 1,
-        "moderator_run_id": "debate_mod1"
-      },
-      "timestamp": "2026-01-01T00:00:00.004Z"
-    },
-    {
-      "type": "team_preview_resolved",
-      "payload": {
-        "checkpoint_id": "tp-debate",
-        "decision": "continue",
-        "note": "",
-        "model_overrides": {
-          "debate_mod1_pro": {
-            "model": "deepseek-v4-pro",
-            "origin": "platform"
-          },
-          "debate_mod1": {
-            "model": "deepseek-v4-flash",
-            "origin": "platform"
-          }
-        }
-      },
-      "timestamp": "2026-01-01T00:00:00.005Z"
-    },
-    {
       "type": "run_plan",
       "payload": {
         "execution_id": "exec1",
@@ -114,7 +64,7 @@
           }
         ]
       },
-      "timestamp": "2026-01-01T00:00:00.006Z"
+      "timestamp": "2026-01-01T00:00:00.004Z"
     },
     {
       "type": "run_started",
@@ -124,7 +74,7 @@
         "parent_run_id": "captain1",
         "kind": "agent"
       },
-      "timestamp": "2026-01-01T00:00:00.007Z"
+      "timestamp": "2026-01-01T00:00:00.005Z"
     }
   ],
   "projected": {
@@ -139,10 +89,6 @@
       {
         "kind": "content",
         "text": "我来组织一场辩论。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp-debate"
       },
       {
         "kind": "team",
@@ -209,24 +155,7 @@
       "completed": 0,
       "total": 1
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp-debate",
-        "status": "resolved",
-        "workerIds": [],
-        "modelOverrides": {
-          "debate_mod1_pro": {
-            "model": "deepseek-v4-pro",
-            "origin": "platform"
-          },
-          "debate_mod1": {
-            "model": "deepseek-v4-flash",
-            "origin": "platform"
-          }
-        }
-      }
-    ],
+    "interactions": [],
     "cost": null,
     "debate": null,
     "debateRounds": [],

@@ -174,7 +174,7 @@ export interface RunEscalation {
 /** 幕类型 = 能力档取用键（首批 multi_agent / debate）。 */
 export type ActKind = "multi_agent" | "debate";
 
-/** 幕授权来源（批 B）：推进卡 / 自动开辩 / 开工卡确认。 */
+/** 幕授权来源（批 B）：推进卡 / 自动开辩 / 存量 leftover（preview 非新开开工卡）。 */
 export type ActAuthorizedBy = "stage_card" | "auto" | "preview";
 
 /** One act in an execution's act sequence (批 A1 幕契约). */

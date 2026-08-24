@@ -9,6 +9,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ToolResultData, ToolResultView } from "../ToolResultView";
+import { GENERIC_TOOL_FAILURE_MESSAGE } from "../productFailureFace";
 
 const navigate = vi.fn();
 
@@ -247,7 +248,7 @@ describe("ToolResultView · file_read ceiling guidance", () => {
     );
   });
 
-  it("expanded view keeps model-facing result when failure is present", () => {
+  it("expanded view keeps model-facing result and hides the generic fallback", () => {
     const { container } = render(
       <ToolResultView
         data={data({
@@ -256,14 +257,58 @@ describe("ToolResultView · file_read ceiling guidance", () => {
           result:
             "搜索失败：ConnectError: [Errno 111] Connection refused to searxng.internal:8080",
           failure: {
-            message: "工具执行失败，请稍后重试。",
+            message: GENERIC_TOOL_FAILURE_MESSAGE,
             code: "TOOL_ERROR",
           },
         })}
       />,
     );
     expect(container.textContent).toContain("searxng.internal:8080");
-    expect(container.textContent).not.toContain("工具执行失败，请稍后重试。");
+    expect(container.textContent).not.toContain(GENERIC_TOOL_FAILURE_MESSAGE);
+    expect(
+      container.querySelector("[data-testid=tool-product-failure]"),
+    ).toBeNull();
+  });
+
+  it("expanded view shows a specific product failure above the technical result", () => {
+    const { container } = render(
+      <ToolResultView
+        data={data({
+          toolName: "browser_click",
+          status: "error",
+          result: "ElementNotFound: e13",
+          failure: { message: "未找到元素 e13。", code: "NOT_FOUND" },
+        })}
+      />,
+    );
+    expect(container.textContent).toContain("未找到元素 e13。");
+    expect(container.textContent).toContain("ElementNotFound: e13");
+    expect(
+      container.querySelector("[data-testid=tool-product-failure]")
+        ?.textContent,
+    ).toBe("未找到元素 e13。");
+  });
+
+  it("redirect shows only the user face, not the model steer", () => {
+    const { container } = render(
+      <ToolResultView
+        data={data({
+          toolName: "code_execute",
+          status: "redirect",
+          result:
+            "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+          failure: {
+            message:
+              "这一步想用脚本打开源码再搜索，没有执行。我会改用搜索工具定位后再读文件。",
+            code: "source_grep_redirect",
+          },
+        })}
+      />,
+    );
+    expect(container.textContent).toContain("我会改用搜索工具定位后再读文件");
+    expect(container.textContent).not.toContain("禁止用 code_execute");
+    expect(container.querySelector("pre")).toBeNull();
+    expect(container.querySelector(".text-destructive")).toBeNull();
   });
 });
 

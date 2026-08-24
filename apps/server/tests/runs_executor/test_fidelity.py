@@ -1,7 +1,7 @@
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.constants import DEP_CONTEXT_BUDGET
-from agentcore.runtime.runs.fidelity import allocate, truncate_head_tail
+from agentcore.runtime.runs.fidelity import allocate, pointer_body, truncate_head_tail
 from agentcore.runtime.runs.wave import WaveScheduler
 from tests.runs_executor.conftest import _ContentProvider, _executor
 
@@ -25,6 +25,16 @@ def test_allocate_splits_equal_large_deps_evenly():
 
 def test_allocate_empty_is_empty():
     assert allocate([], 16_000) == []
+
+
+def test_pointer_body_tells_downstream_to_read_listed_paths():
+    body = pointer_body("短交接", ["工作稿/a.md", "工作稿/b.md"])
+    assert "工作稿/a.md" in body
+    assert "先 file_read" in body
+    assert "磁盘真实路径" in body
+    assert "子目录" in body
+    assert "全仓" in body
+    assert "不要凭空臆测" in body
 
 
 def test_truncate_head_tail_keeps_both_ends():

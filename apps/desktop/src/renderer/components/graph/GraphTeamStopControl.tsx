@@ -5,7 +5,10 @@
 
 import { Button } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useConversationStore } from "@/stores/conversation";
+import {
+  useActiveTurnPhase,
+  useConversationStore,
+} from "@/stores/conversation";
 import {
   projectRuntime,
   useExecutionScope,
@@ -21,6 +24,7 @@ import { isStoppableRunStatus, requestRunStop } from "./runStopActions";
 export function GraphTeamStopControl({ className }: { className?: string }) {
   const messageId = useExecutionScope();
   const conversationId = useConversationStore((s) => s.currentConversationId);
+  const turnPhase = useActiveTurnPhase();
   // projectRuntime layers fresh overlay objects over its cached base, so handing it
   // back from a selector makes every getSnapshot compare unequal — React then
   // re-renders forever (dev: "getSnapshot should be cached"; prod: React #185).
@@ -49,7 +53,10 @@ export function GraphTeamStopControl({ className }: { className?: string }) {
     useRunStopPendingStore.getState().clearAllIfIdle(executionId, anyActive);
   }, [executionId, anyActive]);
 
-  if (!conversationId || !executionId || !anyActive) return null;
+  // 整轮已在停：再挂「停止任务」会打 run-stop，驱动往往已经不在了，toast
+  // 「没有停下任何工作」像失败。输入框硬停才是这条路径；两档停机不合并。
+  if (!conversationId || !executionId || !anyActive || turnPhase === "stopping")
+    return null;
 
   const busy = pendingAll || submitting;
   const label = busy ? "停止请求中…" : "停止任务";

@@ -67,6 +67,12 @@ export function foldInteractions(
   const order = { n: 0 };
 
   for (const ev of events) {
+    if (
+      ev.type === "team_preview_required" ||
+      ev.type === "team_preview_resolved"
+    ) {
+      continue;
+    }
     const p = asRecord(ev.payload);
     switch (ev.type) {
       case "approval_required": {
@@ -143,75 +149,6 @@ export function foldInteractions(
       case "plan_review_resolved": {
         const id = str(p.checkpoint_id);
         if (id) settle(map, "plan_review", id, "resolved");
-        break;
-      }
-      case "team_preview_required": {
-        const id = str(p.checkpoint_id);
-        if (!id) break;
-        const workers = Array.isArray(p.workers) ? p.workers : [];
-        const workerIds = workers.map((w) => str(asRecord(w).run_id));
-        upsert(map, order, {
-          kind: "team_preview",
-          id,
-          status: "pending",
-          workerIds,
-        });
-        break;
-      }
-      case "team_preview_resolved": {
-        const id = str(p.checkpoint_id);
-        if (!id) break;
-        const prev = map.get(keyOf("team_preview", id));
-        if (
-          !prev ||
-          prev.leaf.status !== "pending" ||
-          prev.leaf.kind !== "team_preview"
-        ) {
-          break;
-        }
-        const excluded = Array.isArray(p.excluded_run_ids)
-          ? p.excluded_run_ids.filter(
-              (x): x is string => typeof x === "string" && x.length > 0,
-            )
-          : [];
-        const overridesRaw = Array.isArray(p.write_capability_overrides)
-          ? p.write_capability_overrides
-          : [];
-        const overrides: Array<{ runId: string; capability: "text_only" }> = [];
-        for (const row of overridesRaw) {
-          const r = asRecord(row);
-          const rid = str(r.run_id);
-          if (!rid) continue;
-          overrides.push({ runId: rid, capability: "text_only" });
-        }
-        const modelOverridesRaw = asRecord(p.model_overrides);
-        const modelOverrides: Record<
-          string,
-          { model: string; origin?: string; provider_id?: string }
-        > = {};
-        for (const [rid, row] of Object.entries(modelOverridesRaw)) {
-          if (!rid || typeof row !== "object" || row === null) continue;
-          const r = asRecord(row);
-          const model = str(r.model);
-          if (!model) continue;
-          const entry: {
-            model: string;
-            origin?: string;
-            provider_id?: string;
-          } = { model };
-          const origin = str(r.origin);
-          if (origin) entry.origin = origin;
-          const providerId = str(r.provider_id);
-          if (providerId) entry.provider_id = providerId;
-          modelOverrides[rid] = entry;
-        }
-        prev.leaf = {
-          ...prev.leaf,
-          status: "resolved",
-          ...(excluded.length ? { excludedRunIds: excluded } : {}),
-          ...(overrides.length ? { writeCapabilityOverrides: overrides } : {}),
-          ...(Object.keys(modelOverrides).length ? { modelOverrides } : {}),
-        };
         break;
       }
       case "stage_card_required": {

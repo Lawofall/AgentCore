@@ -1,7 +1,7 @@
 name: Deploy Mobile Web
 
-# 已退役：m.example.com 将 301 到 app.example.com。
-# 禁止再部署手机 SPA / stub。线上 DNS 不由本 workflow 拆改（不改 Cloudflare）。
+# 已退役：独立 m.example.com 站已下线（Pages 项目已删）。
+# 禁止再部署手机 SPA / stub。
 # 仅保留 workflow_dispatch，误触即失败退出。
 
 on:
@@ -13,12 +13,11 @@ concurrency:
 
 jobs:
   retired:
-    name: Retired (m. → app. 301)
+    name: Retired (m. host removed)
     runs-on: ubuntu-latest
     steps:
       - name: Refuse deploy
         run: |
-          echo "手机 Web SPA 已退役：m.example.com 将 301 到 app.example.com。"
+          echo "手机 Web SPA 已退役：独立 m.example.com 站已下线。"
           echo "禁止再部署 stub / SPA。本 workflow 不再构建或上传。"
-          echo "线上 DNS 不在本仓库拆改。"
           exit 1

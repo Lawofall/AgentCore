@@ -142,12 +142,12 @@ async def test_team_preview_resolved_does_not_block_ask():
     sink.seed_journal(
         [
             {
-                "type": EventType.TEAM_PREVIEW_REQUIRED.value,
+                "type": "team_preview_required",
                 "payload": {"checkpoint_id": "tp1"},
                 "timestamp": "t0",
             },
             {
-                "type": EventType.TEAM_PREVIEW_RESOLVED.value,
+                "type": "team_preview_resolved",
                 "payload": {"checkpoint_id": "tp1", "decision": "continue"},
                 "timestamp": "t1",
             },

@@ -478,7 +478,7 @@ async def test_contract_retry_skipped_after_round_ceiling(monkeypatch):
     # Produce rounds: ceiling salvage may add a model call after the cap, but
     # leftover under total=5 is not spent on a second investigation.
     assert state.rounds == 4
-    assert state.phase is RunPhase.FAILED
+    assert state.phase is RunPhase.COMPLETED
 
 
 class _AlwaysWriteProvider:

@@ -74,6 +74,11 @@ export interface FileArtifact {
   workspaceId?: string;
 }
 
+/** 视觉 critic 落盘的预览截图：`kind=image` 且自报 `derivedFrom`（源 HTML 等）。 */
+export function isPreviewScreenshot(artifact: FileArtifact): boolean {
+  return artifact.kind === "image" && !!artifact.derivedFrom?.trim();
+}
+
 /**
  * 写文件的 builtin 工具名 → 变更类型。只读工具（file_read / list 等）与未知/外部
  * 工具不在表内 —— 它们不产出文件，不进卡。
@@ -246,7 +251,8 @@ export function fileArtifactsFromDeliveryStatus(
  * 自报的派生关系——不看扩展名、不看工具名，没自报就一份都不降级。
  *
  * 折叠 ≠ 删除：中间稿仍在返回值里，调用方须留可展开的入口。导出件本身永不被藏——源未验收
- * 时无从折叠；自报成环导致主清单会被清空时整体不折叠。
+ * 时无从折叠；自报成环导致主清单会被清空时整体不折叠。``kind=image`` 的预览截图虽带
+ * ``derivedFrom``（被截 HTML），但不把源页面降为中间稿。
  */
 export function splitExportedSources(artifacts: FileArtifact[]): {
   primary: FileArtifact[];
@@ -258,6 +264,7 @@ export function splitExportedSources(artifacts: FileArtifact[]): {
   const sources = new Set<string>();
   for (const a of artifacts) {
     if (a.acceptance !== "accepted") continue;
+    if (a.kind === "image") continue;
     const src = a.derivedFrom;
     if (!src || src === a.path) continue;
     if (acceptedPaths.has(src)) sources.add(src);

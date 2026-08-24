@@ -2,7 +2,7 @@
  * 本对话「改动 / 恢复」入场 —— 与 {@link ConversationChangesPanel} /
  * 产物卡同源（process + execution → fileArtifacts），并含 Local zip 基线
  *（不依赖 file_*；脚本删事故仍可进 restore）。
- * 供右坞「改动」tab 条件显隐（前端UX设计.md §十 · P0c）。
+ * 供右坞「改动」tab 按需显隐（前端UX设计.md §十）。
  */
 
 import {
@@ -64,48 +64,27 @@ export function shouldIncludeChangesTurn(opts: {
   return false;
 }
 
-/** 新会话是否「自己撑得起」改动 tab（不含「当前正在看」撑场）。 */
-export function conversationSupportsChangesTab(opts: {
-  conversationId: string | null;
-  hasRestorableEntry: boolean;
-  changesFocusMessageId: string | null;
-  isChangesFloating: boolean;
-}): boolean {
-  if (!opts.conversationId) return false;
-  return (
-    opts.hasRestorableEntry ||
-    opts.changesFocusMessageId != null ||
-    opts.isChangesFloating
-  );
-}
-
 /**
- * 右坞是否挂「改动」（§十 · P0c）。草稿无会话不出现。
- * `activeTabId === CHANGES` 也挂：Git chip / 产物卡 `showChanges()` 能先挂再看。
+ * 右坞是否挂「改动」（§十 · 按需）。草稿无会话不出现。
+ * 仅用户已打开（`changesOpen`）或改动正在 float 时 pin；有货 / 深链 alone 不挂。
  */
 export function shouldPinChangesTab(opts: {
   conversationId: string | null;
-  hasRestorableEntry: boolean;
-  changesFocusMessageId: string | null;
+  changesOpen: boolean;
   isChangesFloating: boolean;
-  activeTabId: string;
 }): boolean {
   if (!opts.conversationId) return false;
-  if (opts.activeTabId === CHANGES_TAB_ID) return true;
-  return conversationSupportsChangesTab(opts);
+  return opts.changesOpen || opts.isChangesFloating;
 }
 
 /**
- * 切对话后是否把坞焦点从「改动」弹回工作区。
- * 只看新会话有无可恢复入口——不含 active 撑场（否则同会话 Git chip 打开的空改动会被弹走）。
+ * 切对话后是否把坞焦点从「改动」弹回工作区（安全网；主路径是 `closeChanges`）。
  * 调用方必须只在 `conversationId` 变化时使用。
  */
 export function shouldBounceChangesTabToWorkspace(opts: {
-  conversationId: string | null;
-  hasRestorableEntry: boolean;
   activeTabId: string;
+  changesOpen: boolean;
 }): boolean {
   if (opts.activeTabId !== CHANGES_TAB_ID) return false;
-  if (!opts.conversationId) return true;
-  return !opts.hasRestorableEntry;
+  return !opts.changesOpen;
 }

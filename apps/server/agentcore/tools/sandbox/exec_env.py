@@ -30,6 +30,13 @@ EXEC_ENV_PROBE_FAIL_USER_MESSAGE = (
     "本机执行环境不可用：这次没能判断出具体原因，代码没有运行。"
     "我会换个方式继续。"
 )
+EXEC_ENV_NOT_LINUX_USER_MESSAGE = (
+    "云端隔离执行只在云上的 Linux 环境可用。当前对话跑在你的电脑上，代码没有运行。"
+    "我会换个方式继续。"
+)
+EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE = (
+    "云端隔离执行环境当前不可用，代码没有运行。我会换个方式继续。"
+)
 # Stable wire code for probe fail (distinct from idle ``exec_timeout``).
 EXEC_ENV_PROBE_FAIL_CODE = "exec_env_probe_failed"
 # Classified reasons. A code is only assigned when one of the three fields the
@@ -40,12 +47,19 @@ EXEC_ENV_NO_INTERPRETER_CODE = "exec_env_no_interpreter"
 # ``exec_timeout`` envelope and retires nothing.
 EXEC_ENV_PROBE_TIMEOUT_CODE = "exec_env_probe_timeout"
 EXEC_ENV_SPAWN_DENIED_CODE = "exec_env_spawn_denied"
+# gVisor health_check: isolation needs Linux (sidecar on Windows, or any
+# non-Linux host that still constructed GVisorSandbox).
+EXEC_ENV_NOT_LINUX_CODE = "exec_env_not_linux"
+# gVisor health_check: sandboxd / runsc / OS error — cloud isolation is down.
+EXEC_ENV_SANDBOX_UNAVAILABLE_CODE = "exec_env_sandbox_unavailable"
 EXEC_ENV_PROBE_FAIL_CODES: frozenset[str] = frozenset(
     {
         EXEC_ENV_PROBE_FAIL_CODE,
         EXEC_ENV_NO_INTERPRETER_CODE,
         EXEC_ENV_PROBE_TIMEOUT_CODE,
         EXEC_ENV_SPAWN_DENIED_CODE,
+        EXEC_ENV_NOT_LINUX_CODE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
     }
 )
 
@@ -179,6 +193,13 @@ _PROBE_FAIL_MODEL_HEAD: dict[str, str] = {
         "本机执行被拒：启动{interpreter}进程时被系统拒绝（EACCES / EPERM）。"
         "解释器在，是进程启动这一步被拦下的。"
     ),
+    EXEC_ENV_NOT_LINUX_CODE: (
+        "云端隔离执行不可用：隔离沙箱只在 Linux 上运行，当前进程不是 Linux。"
+        "代码没有执行；这不是本机解释器坏了。"
+    ),
+    EXEC_ENV_SANDBOX_UNAVAILABLE_CODE: (
+        "云端隔离执行不可用：隔离沙箱健康检查未通过。代码没有执行。"
+    ),
     EXEC_ENV_PROBE_FAIL_CODE: (
         "本机执行失败：这次运行没能完成；"
         "退出码 / 用时 / stderr 都不足以判定具体原因。"
@@ -190,6 +211,8 @@ _PROBE_FAIL_RETIRE_CAUSE: dict[str, str] = {
     EXEC_ENV_NO_INTERPRETER_CODE: "PATH 上没有{interpreter}",
     EXEC_ENV_PROBE_TIMEOUT_CODE: f"最短 print 未在 {EXEC_ENV_PROBE_TIMEOUT_S}s 内跑完",
     EXEC_ENV_SPAWN_DENIED_CODE: "启动解释器进程被系统拒绝",
+    EXEC_ENV_NOT_LINUX_CODE: "当前引擎不在 Linux 云上",
+    EXEC_ENV_SANDBOX_UNAVAILABLE_CODE: "云端隔离沙箱未就绪",
     EXEC_ENV_PROBE_FAIL_CODE: "原因未判明",
 }
 
@@ -465,6 +488,12 @@ def probe_failure_retire_steer(
     scope = f"本回合起停用 {retired}" if retired else "本回合起停用该语言的执行"
     if lang:
         scope += f"（这次跑的是 {lang}，其它语言未被本次判定）"
+    if code in (EXEC_ENV_NOT_LINUX_CODE, EXEC_ENV_SANDBOX_UNAVAILABLE_CODE):
+        return (
+            f"云端隔离执行不可用（{cause}），{scope}——"
+            "请改静态核验 / 读文件取证，并如实报告「云端代码执行未运行」；"
+            "禁止再原样重试跑命令。"
+        )
     return (
         f"本机执行环境不可用（{cause}），{scope}——"
         "请改静态核验 / 读文件取证，并如实报告「执行环境不可用、验证未实跑」；"

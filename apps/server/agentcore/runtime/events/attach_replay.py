@@ -279,7 +279,7 @@ def journal_is_structured(rows: list[dict[str, Any]]) -> bool:
             EventType.RUN_STARTED.value,
             EventType.CHECKPOINT_REQUIRED.value,
             EventType.PLAN_REVIEW_REQUIRED.value,
-            EventType.TEAM_PREVIEW_REQUIRED.value,
+            "team_preview_required",
         ):
             return True
     return False

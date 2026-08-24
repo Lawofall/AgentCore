@@ -23,6 +23,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const submitRunStop = vi.fn();
 
+const convPhase = vi.hoisted(() => ({
+  turnPhase: "streaming" as string,
+}));
+
 vi.mock("@/services/runStop", () => ({
   submitRunStop: (...args: unknown[]) => submitRunStop(...args),
 }));
@@ -35,16 +39,21 @@ vi.mock("@/stores/execution", async (importOriginal) => {
   };
 });
 
-vi.mock("@/stores/conversation", () => ({
-  useConversationStore: (sel: (s: Record<string, unknown>) => unknown) =>
+vi.mock("@/stores/conversation", () => {
+  const useConversationStore = (sel: (s: Record<string, unknown>) => unknown) =>
     sel({
       currentConversationId: "c1",
       messages: [{ id: "m1", isStreaming: true, collab: null, traceId: null }],
       stopGeneration: vi.fn(),
-    }),
-  activeRuntime: (s: { messages: unknown[] }) => s,
-  runtimeOf: () => ({ toolStartedMs: {} }),
-}));
+    });
+  (useConversationStore as unknown as { getState: () => object }).getState =
+    () => ({ currentConversationId: "c1", byId: {} });
+  return {
+    useConversationStore,
+    activeRuntime: (s: { messages: unknown[] }) => s,
+    runtimeOf: () => ({ toolStartedMs: {}, turnPhase: convPhase.turnPhase }),
+  };
+});
 
 vi.mock("@/stores/sidePanel", () => ({
   useSidePanelStore: (sel: (s: Record<string, unknown>) => unknown) =>
@@ -71,7 +80,7 @@ vi.mock("@/stores/disclosure", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
 
 /** 引擎受理了这次停止（服务端回执的正常形）。 */
@@ -159,6 +168,7 @@ function seed(opts: {
   agentStatus: AgentState["status"];
   runStatus: RunNode["status"];
   runKind?: RunNode["kind"];
+  replacesRunId?: string | null;
 }) {
   mockExecution = {
     ...mockExecution,
@@ -170,7 +180,12 @@ function seed(opts: {
       },
     ],
     runs: [
-      { ...baseRun, status: opts.runStatus, kind: opts.runKind ?? "agent" },
+      {
+        ...baseRun,
+        status: opts.runStatus,
+        kind: opts.runKind ?? "agent",
+        replacesRunId: opts.replacesRunId ?? null,
+      },
     ],
   };
 }
@@ -185,6 +200,7 @@ function wrap(ui: ReactElement) {
 
 describe("RunDetailBody member stop", () => {
   beforeEach(() => {
+    convPhase.turnPhase = "streaming";
     submitRunStop.mockReset();
     submitRunStop.mockResolvedValue(ACCEPTED);
     useRunStopPendingStore.getState().reset();
@@ -204,9 +220,38 @@ describe("RunDetailBody member stop", () => {
     wrap(<RunDetailBody messageId="m1" runId="r1" />);
 
     expect(screen.getByRole("button", { name: "停止这位队员" })).toBeTruthy();
-    expect(screen.getByText(/正在实时输出/)).toBeTruthy();
+    expect(screen.queryByText(/正在实时输出/)).toBeNull();
+    expect(screen.queryByText("接手")).toBeNull();
     expect(screen.queryByRole("button", { name: /记下改法/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "停止整轮" })).toBeNull();
+  });
+
+  it("shows 接手 chip when this run replaces another, without live-output copy", () => {
+    seed({
+      agentStatus: "working",
+      runStatus: "running",
+      replacesRunId: "r0",
+    });
+    wrap(<RunDetailBody messageId="m1" runId="r1" />);
+
+    const chip = screen.getByText("接手");
+    expect(chip.getAttribute("title")).toMatch(/同角色新人/);
+    expect(
+      screen.queryByText(/接手重写|正在实时输出|同一人接续|辩论主持/),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "停止这位队员" })).toBeTruthy();
+  });
+
+  it("keeps 接手 chip after the replacement run finishes", () => {
+    seed({
+      agentStatus: "completed",
+      runStatus: "completed",
+      replacesRunId: "r0",
+    });
+    wrap(<RunDetailBody messageId="m1" runId="r1" />);
+
+    expect(screen.getByText("接手")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /停止这位队员/ })).toBeNull();
   });
 
   it.each(["completed", "failed", "cancelled", "skipped"] as const)(
@@ -292,5 +337,74 @@ describe("RunDetailBody member stop", () => {
     expect(screen.queryByRole("button", { name: /立即改此人/ })).toBeNull();
     expect(screen.getByRole("button", { name: "停止整轮" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /记下改法/ })).toBeNull();
+  });
+
+  it("hides 停止这位队员 while the whole turn is stopping", () => {
+    convPhase.turnPhase = "stopping";
+    seed({ agentStatus: "working", runStatus: "running" });
+    wrap(<RunDetailBody messageId="m1" runId="r1" />);
+
+    expect(screen.queryByRole("button", { name: /停止这位队员/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /停止请求中/ })).toBeNull();
+  });
+
+  it("does not list DAG neighbors — topology stays on the collab graph", () => {
+    seed({ agentStatus: "idle", runStatus: "completed" });
+    mockExecution = {
+      ...mockExecution,
+      agents: [
+        { ...baseAgent, id: "ceo", role: "CEO", currentRunId: null },
+        { ...baseAgent, id: "w1", role: "调研员", currentRunId: null },
+        { ...baseAgent, id: "w2", role: "方案总纲整合", currentRunId: null },
+      ],
+      runs: [
+        {
+          ...baseRun,
+          id: "ceo",
+          agentId: "ceo",
+          kind: "captain",
+          role: "ceo",
+          task: "统筹",
+          status: "completed",
+          parentRunId: null,
+          dependsOn: [],
+        },
+        {
+          ...baseRun,
+          id: "r0",
+          agentId: "w2",
+          task: "方案总纲整合",
+          status: "completed",
+          parentRunId: "ceo",
+          dependsOn: [],
+        },
+        {
+          ...baseRun,
+          id: "r1",
+          agentId: "w1",
+          task: "调研竞品",
+          status: "completed",
+          parentRunId: "ceo",
+          dependsOn: ["r0"],
+        },
+        {
+          ...baseRun,
+          id: "r2",
+          agentId: "w2",
+          task: "后续整合",
+          status: "completed",
+          parentRunId: "r1",
+          dependsOn: ["r1"],
+        },
+      ],
+    };
+    wrap(<RunDetailBody messageId="m1" runId="r1" />);
+
+    expect(screen.queryByText("关系")).toBeNull();
+    expect(screen.queryByText("依赖")).toBeNull();
+    expect(screen.queryByText("后续")).toBeNull();
+    expect(screen.queryByText("上级")).toBeNull();
+    expect(screen.queryByText(/子任务/)).toBeNull();
+    expect(screen.queryByText("数据从哪来")).toBeNull();
   });
 });

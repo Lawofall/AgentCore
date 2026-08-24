@@ -75,10 +75,16 @@ class TurnExploreGate:
 
     Worker forks that need a different write_scope must pass a fresh gate
     (:func:`fork_explore_write_scope`) so siblings do not share write permission.
+
+    ``turn_created_folder_ids`` is a turn-level ledger (shared by reference on
+    fork): folders minted this turn via ``create_folder`` / first auto-desk.
+    A worker whose ``target_folder_id`` is in this set may write the project
+    tree even while explore-pending still locks the birth folder.
     """
 
     pending: bool = False
     write_scope: WriteScope = "project"
+    turn_created_folder_ids: set[str] = field(default_factory=set)
 
 
 def fork_explore_write_scope(
@@ -96,6 +102,7 @@ def fork_explore_write_scope(
     return TurnExploreGate(
         pending=bool(context.cold_start_explore_pending),
         write_scope=scope,
+        turn_created_folder_ids=context._explore_gate.turn_created_folder_ids,
     )
 
 
@@ -636,6 +643,18 @@ class ToolContext:
     @write_scope.setter
     def write_scope(self, value: WriteScope) -> None:
         self._explore_gate.write_scope = value
+
+    @property
+    def turn_created_folder_ids(self) -> frozenset[str]:
+        return frozenset(self._explore_gate.turn_created_folder_ids)
+
+    def note_turn_created_folder(self, folder_id: str | None) -> None:
+        """Record a cloud folder minted this turn (create_folder / first auto-desk)."""
+        if not isinstance(folder_id, str):
+            return
+        cleaned = folder_id.strip()
+        if cleaned:
+            self._explore_gate.turn_created_folder_ids.add(cleaned)
 
 
 @dataclass

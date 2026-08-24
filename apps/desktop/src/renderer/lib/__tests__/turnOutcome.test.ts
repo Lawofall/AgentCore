@@ -1,3 +1,4 @@
+import { MAX_RETRY_AFTER } from "@agentcore/contract-types";
 import { turnVerdictHostContradiction } from "@agentcore/protocol-conformance/turnVerdict";
 import { describe, expect, it } from "vitest";
 import {
@@ -159,6 +160,33 @@ describe("arbitrateTurnOutcome", () => {
     expect(o.recovery.kind).toBe("wait_then_retry");
     expect(o.message).toBe(`${LLM_RATE_LIMIT_WHY}约 4 秒后可继续。`);
     expect(o.recovery.retryAfterSec).toBe(4);
+  });
+
+  it("long attested retry_after suppresses wait_then_retry (matches 重试会失败 copy)", () => {
+    const o = arbitrateTurnOutcome(
+      measuredCase({
+        messageError: {
+          code: "LLM_RATE_LIMIT",
+          message:
+            "上游限流，本回合无法继续。你的服务商额度恢复前重试仍会失败。",
+          context: { retry_after: MAX_RETRY_AFTER + 1 },
+        },
+        runs: [
+          {
+            id: "r1",
+            status: "failed",
+            errorCode: "LLM_RATE_LIMIT",
+            retryable: true,
+            retryAfter: MAX_RETRY_AFTER + 1,
+            productLanded: true,
+          },
+        ],
+      }),
+    );
+    expect(o.kind).toBe("partial");
+    expect(o.recovery.kind).not.toBe("wait_then_retry");
+    expect(o.showComposerHint).toBe(true);
+    expect(o.showFooter).toBe(false);
   });
 
   it("retryable=false terminal recovery is not wait_then_retry", () => {
@@ -324,6 +352,7 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     expect(o.showBubbleBanner).toBe(false);
     expect(o.showComposerHint).toBe(false);
     expect(o.showFooter).toBe(false);
+    expect(o.showTurnWarning).toBe(false);
     expect(o.recovery.kind).toBe("none");
     expect(o.supportPackHost).toBe("none");
   });
@@ -341,6 +370,7 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     expect(withSession.showStripStopped).toBe(true);
     expect(withSession.showBubbleBanner).toBe(false);
     expect(withSession.showSessionBanner).toBe(false);
+    expect(withSession.showTurnWarning).toBe(false);
 
     const attestedError = arbitrateTurnOutcome({
       content: "半成品",
@@ -351,6 +381,63 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     });
     expect(attestedError.showBubbleBanner).toBe(false);
     expect(attestedError.showSessionBanner).toBe(false);
+    expect(attestedError.showTurnWarning).toBe(false);
+
+    const withPreflight = arbitrateTurnOutcome({
+      content: "半成品",
+      finishReason: "cancelled",
+      hasTeamStrip: true,
+      executionStatus: "cancelled",
+      turnWarning: true,
+      processLength: 2,
+    });
+    expect(withPreflight.showStripStopped).toBe(true);
+    expect(withPreflight.showTurnWarning).toBe(false);
+    expect(withPreflight.showBubbleBanner).toBe(false);
+  });
+
+  it("user-stop after resolved ask is ok, not paused — no bubble 已停止", () => {
+    const o = arbitrateTurnOutcome({
+      content: "好，按确认的方案开工",
+      finishReason: "cancelled",
+      hasTeamStrip: true,
+      hasDedicatedPauseOrAskUi: true,
+      executionStatus: "cancelled",
+      processLength: 2,
+    });
+    expect(o.kind).toBe("ok");
+    expect(o.kind).not.toBe("paused");
+    expect(o.showBubbleBanner).toBe(false);
+    expect(o.showStripStopped).toBe(true);
+    expect(o.showTurnWarning).toBe(false);
+    expect(o.face?.code).toBe("TURN_CANCELLED");
+  });
+
+  it("attested paused leftover on the same bubble yields to user-stop", () => {
+    const o = arbitrateTurnOutcome({
+      content: "半成品",
+      finishReason: "cancelled",
+      attestedKind: "paused",
+      hasTeamStrip: true,
+      hasDedicatedPauseOrAskUi: true,
+      executionStatus: "cancelled",
+      processLength: 2,
+    });
+    expect(o.kind).toBe("ok");
+    expect(o.showBubbleBanner).toBe(false);
+    expect(o.showStripStopped).toBe(true);
+  });
+
+  it("preflight turn_warning still paints when the turn is not a user-stop", () => {
+    const o = arbitrateTurnOutcome({
+      content: "正文",
+      finishReason: "end_turn",
+      turnWarning: true,
+    });
+    expect(o.kind).toBe("ok");
+    expect(o.showTurnWarning).toBe(true);
+    expect(o.showStripStopped).toBe(false);
+    expect(o.showBubbleBanner).toBe(false);
   });
 
   it("rate-limit on cancelled status follows kind, never 已停止", () => {

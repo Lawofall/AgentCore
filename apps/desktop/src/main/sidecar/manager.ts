@@ -43,11 +43,13 @@ import { getDesktopBrowserBridgeCredentials } from "../browser";
 import { listSessionRoots } from "../fs/roots";
 import { logDesktop } from "../log-service";
 import { listMcpToolsValue } from "../mcp-service";
-import { listUnsyncedSummaries, sidecarDataDir } from "../outbox-writeback";
 import {
-  abortLocalTurnPlaceholder,
-  occupyLocalTurnBegin,
-} from "../outbox/projection";
+  handleOccupiedTurnSidecarFailure,
+  listUnsyncedSummaries,
+  recoverLocalPersistence,
+  sidecarDataDir,
+} from "../outbox-writeback";
+import { occupyLocalTurnBegin } from "../outbox/projection";
 import { SidecarEventBuffer } from "../sidecar-event-buffer";
 import { SidecarClient, SidecarRpcError } from "./client";
 import { buildExternalMounts } from "./externalMounts";
@@ -432,6 +434,7 @@ export class SidecarManager {
       this.entries.delete(key);
       this.pushStatus({ rootId, phase: "exited", detail: err.message });
       this.finalizeEphemeralTurns(rootId, subpath, err);
+      void recoverLocalPersistence();
     });
 
     const ready = client
@@ -622,7 +625,7 @@ export class SidecarManager {
       return result as SidecarTurnResult;
     } catch (err) {
       if (occupied) {
-        await abortLocalTurnPlaceholder({
+        await handleOccupiedTurnSidecarFailure({
           conversationId: req.conversationId,
           userMessageId: req.userMessageId,
           messageId,

@@ -14,7 +14,6 @@ import {
   resolveDraftRequestId,
 } from "@/lib/draftRequestId";
 import { isReadOnlyOffline } from "@/lib/offlineMode";
-import { redirectLocalWorkspaceAskAction } from "@/lib/redirectLocalWorkspaceAsk";
 import type { SupportDiagnosticIds } from "@/lib/supportDiagnostics";
 import { notifyError } from "@/lib/toast";
 import { api } from "@/services/api";
@@ -338,7 +337,6 @@ export function useComposerSend({
           // §7.2：残留 quick_local 意图硬改导云（禁新建本机草稿）；存量会话不经此分支。
           const localContainerRootId: string | null = null;
           if (intent.kind === "quick_local") {
-            redirectLocalWorkspaceAskAction();
             useFoldersStore
               .getState()
               .setDraftWorkspaceIntent({ kind: "quick_cloud" });

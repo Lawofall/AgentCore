@@ -142,15 +142,36 @@ def _parse_count_line(line: str) -> tuple[str, int] | None:
     return m.group(1), int(m.group(2))
 
 
+# rg stderr often appends CLI flags this product does not expose (--pcre2,
+# --multiline / -U). Passing those through teaches the model a switch it cannot
+# flip. Keep the parse reason; drop the flag advertisement.
+_RG_CLI_FLAG_LINE = re.compile(
+    r"(?i)consider enabling|--pcre2|--multiline|"
+    r"\(or -U for short\)|when multiline mode is enabled"
+)
+_LOOKAROUND_STEER = (
+    "本工具是 Rust regex，不支持 lookahead/lookbehind。"
+    "请改成不含 (?!)/(?=)/(?< 的简单模式，或拆成多次 grep。"
+)
+_NEWLINE_STEER = (
+    "不要把字面换行或 \\n 写进正则。跨行请拆成多次搜索，或只搜其中一行。"
+)
+
+
 def _regex_diagnostic_detail(stderr: str) -> str:
     """Keep rg's useful diagnostic, not a header-only first line.
 
     ``rg: regex parse error:`` is a label; the reason and caret live on the
-    following lines. Clipping to first (or last) line drops that reason — or,
-    for ``the literal "\\n" is not allowed``, drops the multiline hint.
+    following lines. Clipping to first (or last) line drops that reason.
+    CLI-flag advertisements (PCRE2 / --multiline) are stripped — this tool
+    cannot enable them.
     """
-    lines = [ln.rstrip() for ln in (stderr or "").splitlines() if ln.strip()]
-    return "\n".join(lines) if lines else (stderr or "").strip()
+    lines = [
+        ln.rstrip()
+        for ln in (stderr or "").splitlines()
+        if ln.strip() and not _RG_CLI_FLAG_LINE.search(ln)
+    ]
+    return "\n".join(lines) if lines else ""
 
 
 def _regex_error_message(stderr: str) -> str | None:
@@ -158,9 +179,15 @@ def _regex_error_message(stderr: str) -> str | None:
     if not text:
         return None
     lower = text.lower()
-    if "regex" in lower or "parse error" in lower or "syntax error" in lower:
-        return f"正则表达式无效：{_regex_diagnostic_detail(text)}"
-    return None
+    if "regex" not in lower and "parse error" not in lower and "syntax error" not in lower:
+        return None
+    detail = _regex_diagnostic_detail(text) or "正则语法无法解析"
+    msg = f"正则表达式无效：{detail}"
+    if "look-around" in lower or "look-ahead" in lower or "look-behind" in lower:
+        msg = f"{msg}\n{_LOOKAROUND_STEER}"
+    if "literal" in lower and "\\n" in text:
+        msg = f"{msg}\n{_NEWLINE_STEER}"
+    return msg
 
 
 _RG_IO_HINTS = (

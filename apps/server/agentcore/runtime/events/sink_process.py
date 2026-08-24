@@ -10,12 +10,13 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from agentcore.runtime.engine.tool_channel_redirect import process_tool_status_from_end
 from agentcore.runtime.events.journal_config import cap_process_result
 from agentcore.runtime.events.process_persist import (
     ProcessPersistCursor,
     should_persist_on_close,
 )
-from agentcore.runtime.events.types import EventType, SSEEvent
+from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES, EventType, SSEEvent
 
 # Orchestration tools hand the turn to a sub-team and open a team execution. Their
 # captain-level call is NOT rendered as a tool step — the `team` marker (emitted at
@@ -47,8 +48,8 @@ def _insert_marker_step(
 ) -> None:
     """Insert a positional marker into ``steps`` (caller owns dedup).
 
-    ``before_last_team`` mirrors team_preview product narrative: 开工卡 sits just
-    before the collaboration-graph ``team`` marker, not after it.
+    ``before_last_team`` inserts ahead of the last ``team`` marker (legacy
+    开工卡 order). New turns no longer emit that marker.
     """
     if before_last_team:
         for i in range(len(steps) - 1, -1, -1):
@@ -69,6 +70,9 @@ def _marker_spec_for_required(
     ``turn_paused`` snapshot stay lockstep. Returns None when the event is not a
     marker surface or the id is empty.
     """
+    raw = event_type.value if isinstance(event_type, EventType) else str(event_type)
+    if raw in RETIRED_EVENT_TYPE_VALUES:
+        return None
     t = event_type if isinstance(event_type, EventType) else EventType(event_type)
     if t == EventType.CHECKPOINT_REQUIRED:
         cid = payload.get("checkpoint_id") or ""
@@ -80,11 +84,6 @@ def _marker_spec_for_required(
         if not cid:
             return None
         return {"kind": "plan_review", "checkpoint_id": cid}, False
-    if t == EventType.TEAM_PREVIEW_REQUIRED:
-        cid = payload.get("checkpoint_id") or ""
-        if not cid:
-            return None
-        return {"kind": "team_preview", "checkpoint_id": cid}, True
     if t in (EventType.ESCALATION_REQUIRED, EventType.RUN_ESCALATION):
         eid = payload.get("escalation_id") or ""
         if not eid:
@@ -327,7 +326,7 @@ class SinkProcessMixin:
             for step in reversed(self._run_process(run_id)):
                 if step.get("kind") == "tool" and step.get("id") == call_id:
                     step["result"] = result
-                    step["status"] = payload.get("status", "success")
+                    step["status"] = process_tool_status_from_end(payload)
                     if display is not None:
                         step["display"] = display
                     if failure is not None:
@@ -452,7 +451,7 @@ class SinkProcessMixin:
             for step in reversed(self._process):
                 if step.get("kind") == "tool" and step.get("id") == call_id:
                     step["result"] = result
-                    step["status"] = payload.get("status", "success")
+                    step["status"] = process_tool_status_from_end(payload)
                     if display is not None:
                         step["display"] = display
                     if failure is not None:
@@ -468,7 +467,6 @@ class SinkProcessMixin:
         elif t in (
             EventType.CHECKPOINT_REQUIRED,
             EventType.PLAN_REVIEW_REQUIRED,
-            EventType.TEAM_PREVIEW_REQUIRED,
             EventType.ESCALATION_REQUIRED,
             EventType.RUN_ESCALATION,
             EventType.APPROVAL_REQUIRED,

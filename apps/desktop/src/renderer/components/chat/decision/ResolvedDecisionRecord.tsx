@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import type { ResolvedToneKey } from "./meta";
 
 /**
- * Shared settled-record shell for ask_user + team_preview.
+ * Shared settled-record shell for ask_user.
  *
  * Timeline metadata light card (ghost) — not the white DecisionCard box used by
  * live collaboration / pending decisions. Callers pick toneStub vs

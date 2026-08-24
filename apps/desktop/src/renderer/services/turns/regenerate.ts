@@ -22,7 +22,6 @@ import {
   resumeConversation,
 } from "@/services/streamConversation";
 import { resumeConversationViaSidecar } from "@/services/streamConversationViaSidecar";
-import type { TeamPreviewResumeCorrections } from "@/services/teamPreviewCorrections";
 import { getRuntime, useConversationStore } from "@/stores/conversation";
 import { beginTurnPreflight } from "@/stores/conversation/turnPhaseActions";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
@@ -158,8 +157,6 @@ export async function runRegenerate(
 }
 
 export interface RunResumeOptions {
-  /** team_preview（delegate）continue 修正；缺省 / 空 = 全员按原案开工。 */
-  corrections?: TeamPreviewResumeCorrections;
   /**
    * 这张卡所属的会话。缺省 = 当前打开的那个。
    *
@@ -202,7 +199,6 @@ export async function runResume(
   if (!conversationId) {
     throw new Error("resume blocked: no active conversation");
   }
-  const corrections = opts.corrections;
   // D9：冷卡与 live 可合法共存。冷卡在位时不抹 generating，直接发 resume
   // （忙槽由服务端收下决策并推 EPHEMERAL `resume_deferred`）。无冷卡的中途流式仍拦截。
   const liveGeneratingAtStart = getRuntime(conversationId).isGenerating;
@@ -316,9 +312,6 @@ export async function runResume(
         decision,
         note,
         selected,
-        excluded_run_ids: corrections?.excluded_run_ids,
-        write_capability_overrides: corrections?.write_capability_overrides,
-        model_overrides: corrections?.model_overrides,
         userMessage,
         userMessageId,
         signal: ac.signal,
@@ -330,9 +323,6 @@ export async function runResume(
         decision,
         note,
         selected,
-        excluded_run_ids: corrections?.excluded_run_ids,
-        write_capability_overrides: corrections?.write_capability_overrides,
-        model_overrides: corrections?.model_overrides,
         signal: ac.signal,
       });
     }

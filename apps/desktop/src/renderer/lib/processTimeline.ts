@@ -8,6 +8,7 @@
 // store 做 no-op 短路。
 
 import { assertNever } from "@/lib/assertNever";
+import { resolveToolWireStatus } from "@/lib/channelRedirect";
 import type {
   ProcessStep,
   ToolPhase,
@@ -49,6 +50,26 @@ export const PROCESS_STEP_KIND: Record<ProcessStep["kind"], true> = {
 };
 
 /**
+ * True when `text` is already a closed `kind` block and the lane is no longer
+ * writing that kind (last step is a tool / marker / the other lane).
+ *
+ * Attach / follow catch-up resends journal `process_content` as a whole-block
+ * `content_delta`. After a checkpoint or reasoning step the open block is gone,
+ * so a naive replace/append would paint the same paragraph twice. Live token
+ * deltas are short and do not equal a finished step.
+ */
+export function hasClosedBlockWithText(
+  process: ProcessStep[] | undefined,
+  kind: "content" | "reasoning",
+  text: string,
+): boolean {
+  if (!text || !process?.length) return false;
+  const last = process[process.length - 1];
+  if (last?.kind === kind) return false;
+  return process.some((s) => s.kind === kind && s.text === text);
+}
+
+/**
  * Fold one reasoning delta into the timeline: extend the trailing reasoning step
  * when the last step is thinking, else open a new one. Coalescing consecutive
  * deltas keeps the timeline a few segments (one per think→act boundary) rather
@@ -63,6 +84,8 @@ export function appendReasoningStep(
   if (last && last.kind === "reasoning") {
     steps[steps.length - 1] = { ...last, text: last.text + delta };
   } else {
+    if (hasClosedBlockWithText(process, "reasoning", delta))
+      return process ?? [];
     steps.push({ kind: "reasoning", text: delta });
   }
   return steps;
@@ -82,6 +105,7 @@ export function appendContentStep(
   if (last && last.kind === "content") {
     steps[steps.length - 1] = { ...last, text: last.text + delta };
   } else {
+    if (hasClosedBlockWithText(process, "content", delta)) return process ?? [];
     steps.push({ kind: "content", text: delta });
   }
   return steps;
@@ -119,7 +143,10 @@ export function replaceTrailingContentStep(
   const steps = process ? [...process] : [];
   const last = steps[steps.length - 1];
   if (last?.kind === "content") steps[steps.length - 1] = { ...last, text };
-  else steps.push({ kind: "content", text });
+  else {
+    if (hasClosedBlockWithText(process, "content", text)) return process ?? [];
+    steps.push({ kind: "content", text });
+  }
   return steps;
 }
 
@@ -131,7 +158,11 @@ export function replaceTrailingReasoningStep(
   const steps = process ? [...process] : [];
   const last = steps[steps.length - 1];
   if (last?.kind === "reasoning") steps[steps.length - 1] = { ...last, text };
-  else steps.push({ kind: "reasoning", text });
+  else {
+    if (hasClosedBlockWithText(process, "reasoning", text))
+      return process ?? [];
+    steps.push({ kind: "reasoning", text });
+  }
   return steps;
 }
 
@@ -231,7 +262,11 @@ export function resolveToolStep(
   const steps = process.map((s) => {
     if (!changed && s.kind === "tool" && s.id === payload.tool_call_id) {
       changed = true;
-      const resolved = { ...s, result: payload.result, status: payload.status };
+      const resolved = {
+        ...s,
+        result: payload.result,
+        status: resolveToolWireStatus(payload.status, payload.failure),
+      };
       if (payload.display != null) resolved.display = payload.display;
       if (payload.failure != null) resolved.failure = payload.failure;
       return resolved;
@@ -442,10 +477,10 @@ export function appendPlanReviewStep(
   ];
 }
 
-/** Drop a `team_preview` marker (开工卡 gate). Event order is run_plan →
- * team_preview_required, but product narrative is 开工卡 → 协作图 — if a `team`
- * marker already exists, insert before the last one; else append. Dedupes by
- * checkpoint_id. Mirrors backend `EventSink._accumulate_process`. */
+/** Legacy: drop a persisted `team_preview` marker (开工卡已退役 — 现行编制到即出协作图).
+ * Old journals / process may still carry this kind; insert-before-last-`team` keeps
+ * historical timeline order. Dedupes by checkpoint_id. New events no longer insert
+ * team_preview markers. */
 export function appendTeamPreviewStep(
   process: ProcessStep[] | undefined,
   checkpointId: string,
@@ -610,8 +645,9 @@ export function omitCoordinationIdleSteps(
 /**
  * Stable render keys for timeline nodes (时间线一期 · 流式 key 稳定化).
  *
- * Index-based keys break under `insertBeforeTeam`: a `team_preview` marker inserted
- * mid-array shifts every later node's index → React unmounts/remounts them (flicker,
+ * Index-based keys break when legacy `team_preview` markers are inserted mid-array
+ * (insertBeforeTeam hydrate) → every later node's index shifts → React unmounts/remounts
+ * them (flicker,
  * lost disclosure state). Identity-bearing nodes key by their own id; text nodes
  * (`reasoning`/`content`/`rework`) key by same-kind ordinal — marker insertion never
  * disturbs the relative order of same-kind text steps, so ordinals stay stable.

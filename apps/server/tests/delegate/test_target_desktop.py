@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from agentcore.core.types import ToolCategory
 from agentcore.runtime.delegate.target_desktop import (
     NO_TARGET_SCRATCH_GATE_MSG,
     LocalRootClaimBook,
@@ -21,7 +22,7 @@ from agentcore.runtime.delegate.target_desktop import (
 )
 from agentcore.runtime.delegate.target_desktop_auto_cloud import auto_cloud_desk_name
 from agentcore.runtime.runs.builder import build_run_plan
-from agentcore.tools.protocol import ToolContext
+from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registry import ToolRegistry
 from agentcore.workspace.locate import LocalBinding
 
@@ -108,6 +109,33 @@ def test_resolve_bare_chat_write_scope():
             target_folder_id=None,
             session_folder_id="birth",
             base_write_scope="project",
+        )
+        == "project"
+    )
+    assert (
+        resolve_bare_chat_write_scope(
+            target_folder_id="new-desk",
+            session_folder_id="birth",
+            base_write_scope="explore_memory",
+            turn_created_folder_ids={"new-desk"},
+        )
+        == "project"
+    )
+    assert (
+        resolve_bare_chat_write_scope(
+            target_folder_id="birth",
+            session_folder_id="birth",
+            base_write_scope="explore_memory",
+            turn_created_folder_ids={"new-desk"},
+        )
+        == "explore_memory"
+    )
+    assert (
+        resolve_bare_chat_write_scope(
+            target_folder_id="new-desk",
+            session_folder_id=None,
+            base_write_scope="explore_memory",
+            turn_created_folder_ids={"new-desk"},
         )
         == "project"
     )
@@ -709,6 +737,168 @@ async def test_apply_target_desktop_mixed_local_and_cloud():
     assert applied.system_prompt == "CLOUD_PROMPT"
 
 
+class _NamedTool:
+    """Minimal registry occupant so apply_target_desktop can drop execution names."""
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name=self._name,
+            description="t",
+            parameters={"type": "object", "properties": {}},
+            category=ToolCategory.EXECUTION,
+        )
+
+    async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
+        return ToolResult(tool_call_id="", success=True, output="ok")
+
+
+@pytest.mark.asyncio
+async def test_apply_target_desktop_sidecar_strips_cloud_exec_tools(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Birth-desk code_execute must not ride onto a sidecar cloud folder."""
+    from agentcore.config import settings
+    from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
+
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    set_cloud_sandbox_health_for_tests(True)
+
+    session_backend = SimpleNamespace(location="local", _channel=None)
+    cloud_backend = SimpleNamespace(location="server", _channel=None)
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="r",
+        agent_id="a",
+        backend=session_backend,  # type: ignore[arg-type]
+        user_id="u1",
+        conversation_id="c1",
+    )
+    binding = SimpleNamespace(
+        folder_id="cloud_c",
+        rel_path="cloud_c",
+        name="云C",
+        local_binding=None,
+    )
+    worker_tools = ToolRegistry()
+    worker_tools.register(_NamedTool("code_execute"))
+    worker_tools.register(_NamedTool("test_run"))
+    worker_tools.register(_NamedTool("file_read"))
+
+    async def _fake_rebuild(**_kwargs):
+        return "CLOUD_PROMPT"
+
+    with (
+        patch(
+            "agentcore.runtime.delegate.target_desktop.load_target_folder_binding",
+            new=AsyncMock(return_value=binding),
+        ),
+        patch(
+            "agentcore.runtime.delegate.target_desktop.build_target_backend",
+            return_value=cloud_backend,
+        ),
+        patch(
+            "agentcore.runtime.delegate.target_desktop.rebuild_worker_prompt_for_target",
+            new=_fake_rebuild,
+        ),
+        patch(
+            "agentcore.workspace.locate.workspace_channel_for_tools",
+            return_value=None,
+        ),
+    ):
+        applied = await apply_target_desktop(
+            target_folder_id="cloud_c",
+            session_folder_id="birth",
+            env_system_prompt="P",
+            base_tool_context=ctx,
+            worker_tools=worker_tools,
+            sink=MagicMock(),
+            local_root_claims=None,
+        )
+
+    names = set(applied.worker_tools.names)
+    assert "code_execute" not in names
+    assert "test_run" not in names
+    assert "file_read" in names
+    assert "code_execute" in set(worker_tools.names)
+
+
+@pytest.mark.asyncio
+async def test_apply_target_desktop_cloud_api_keeps_exec_when_sandbox_healthy(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Cloud API process + healthy gVisor: swapping onto a cloud desk keeps execution."""
+    from agentcore.config import settings
+    from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
+
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: False
+    )
+    set_cloud_sandbox_health_for_tests(True)
+
+    session_backend = SimpleNamespace(location="server", _channel=None)
+    cloud_backend = SimpleNamespace(location="server", _channel=None)
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="r",
+        agent_id="a",
+        backend=session_backend,  # type: ignore[arg-type]
+        user_id="u1",
+        conversation_id="c1",
+    )
+    binding = SimpleNamespace(
+        folder_id="cloud_c",
+        rel_path="cloud_c",
+        name="云C",
+        local_binding=None,
+    )
+    worker_tools = ToolRegistry()
+    worker_tools.register(_NamedTool("code_execute"))
+    worker_tools.register(_NamedTool("file_read"))
+
+    async def _fake_rebuild(**_kwargs):
+        return "CLOUD_PROMPT"
+
+    with (
+        patch(
+            "agentcore.runtime.delegate.target_desktop.load_target_folder_binding",
+            new=AsyncMock(return_value=binding),
+        ),
+        patch(
+            "agentcore.runtime.delegate.target_desktop.build_target_backend",
+            return_value=cloud_backend,
+        ),
+        patch(
+            "agentcore.runtime.delegate.target_desktop.rebuild_worker_prompt_for_target",
+            new=_fake_rebuild,
+        ),
+        patch(
+            "agentcore.workspace.locate.workspace_channel_for_tools",
+            return_value=None,
+        ),
+    ):
+        applied = await apply_target_desktop(
+            target_folder_id="cloud_c",
+            session_folder_id="birth",
+            env_system_prompt="P",
+            base_tool_context=ctx,
+            worker_tools=worker_tools,
+            sink=MagicMock(),
+            local_root_claims=None,
+        )
+
+    names = set(applied.worker_tools.names)
+    assert "code_execute" in names
+    assert "file_read" in names
+
+
 def test_auto_cloud_desk_name_takes_name_shaped_title():
     """显示宽度 ≤16、没有截断标记 → 直接当文件夹名（中西文同轨）。"""
     assert auto_cloud_desk_name(conversation_title="  抚养费起诉状  ") == "抚养费起诉状"
@@ -966,6 +1156,7 @@ async def test_ensure_bare_chat_auto_cloud_desk_persists_on_first_mint(monkeypat
     # 建成即告知落点（§5.4 裸聊行）：一条 auto_folder_created，不挂起回合。
     # 无标题 → 通用名（用户原话不参与命名）。
     assert _auto_folder_notices(sink) == [{"folder_id": "desk-1", "name": "云文件夹"}]
+    assert "desk-1" in ctx.turn_created_folder_ids
 
 
 @pytest.mark.asyncio
@@ -1027,6 +1218,7 @@ async def test_ensure_bare_chat_auto_cloud_desk_reuses_persisted(monkeypatch):
     assert hint.auto_cloud_provisioned is False
     # 复用同一张桌不再告知：落点在建桌那回合已经说过了。
     assert _auto_folder_notices(sink) == []
+    assert ctx.turn_created_folder_ids == frozenset()
 
 
 @pytest.mark.asyncio

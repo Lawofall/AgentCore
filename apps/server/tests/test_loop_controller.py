@@ -1,8 +1,10 @@
 """Tests for convergence governance (runtime.loop_controller).
 
-Pure logic — no LLM, no I/O. Covers the fingerprint, the three stuck patterns,
-detection priority, and the two-strike NUDGE→FINALIZE ladder (including the
-window clear that prevents a stale pattern from finalizing prematurely).
+Pure logic — no LLM, no I/O. Covers the fingerprint, failure-repeat / A-B-A-B
+stuck patterns, detection priority, and the two-strike NUDGE→FINALIZE ladder
+(including the window clear that prevents a stale pattern from finalizing
+prematurely). Identical investigation success (re-read / paging) is not stuck;
+identical non-investigation success is ``REPEATED_CALL``.
 """
 
 import pytest
@@ -98,31 +100,37 @@ def test_detect_distinct_calls_returns_none():
     assert c.detect() is None
 
 
-# --- detect: repeated identical call ---
+# --- detect: investigation paging is not stuck; execution repeats are ---
 
 
-def test_detect_repeated_call():
-    c = LoopController()
-    c.record([_ok("a"), _ok("a"), _ok("a")])
+def test_detect_repeated_success_is_not_stuck():
+    c = LoopController(investigation_tools=frozenset({"file_read"}))
+    c.record([_ok("a", "file_read"), _ok("a", "file_read"), _ok("a", "file_read")])
+    assert c.detect() is None
+
+
+def test_detect_repeated_success_across_rounds_is_not_stuck():
+    c = LoopController(investigation_tools=frozenset({"file_read"}))
+    c.record([_ok("a", "file_read")])
+    c.record([_ok("a", "file_read")])
+    assert c.detect() is None
+    c.record([_ok("a", "file_read")])
+    assert c.detect() is None
+
+
+def test_detect_three_identical_parallel_success_is_not_stuck():
+    c = LoopController(investigation_tools=frozenset({"file_read"}))
+    c.record([_ok("a", "file_read"), _ok("a", "file_read"), _ok("a", "file_read")])
+    assert c.detect() is None
+
+
+def test_detect_repeated_execution_success_is_stuck():
+    c = LoopController(investigation_tools=frozenset({"file_read"}))
+    c.record([_ok("a", "compute"), _ok("a", "compute"), _ok("a", "compute")])
     signal = c.detect()
     assert signal is not None
     assert signal.reason is StuckReason.REPEATED_CALL
-    assert signal.count == 3
-
-
-def test_detect_repeated_call_across_rounds():
-    c = LoopController()
-    c.record([_ok("a")])
-    c.record([_ok("a")])
-    assert c.detect() is None  # only 2 so far
-    c.record([_ok("a")])
-    assert c.detect().reason is StuckReason.REPEATED_CALL
-
-
-def test_detect_three_identical_parallel_calls_in_one_round():
-    c = LoopController()
-    c.record([_ok("a"), _ok("a"), _ok("a")])
-    assert c.detect().reason is StuckReason.REPEATED_CALL
+    assert signal.tool_name == "compute"
 
 
 # --- detect: repeated failure takes priority ---
@@ -136,10 +144,10 @@ def test_detect_repeated_failure_priority_over_repeated_call():
     assert signal.count == 3
 
 
-def test_detect_mixed_success_is_repeated_call_not_failure():
+def test_detect_mixed_success_is_not_stuck():
     c = LoopController()
     c.record([_ok("a"), _fail("a"), _ok("a")])  # only 2 failures < threshold
-    assert c.detect().reason is StuckReason.REPEATED_CALL
+    assert c.detect() is None
 
 
 # --- detect: A-B-A-B alternation ---
@@ -153,11 +161,18 @@ def test_detect_alternating():
     assert signal.reason is StuckReason.ALTERNATING
 
 
-def test_detect_not_alternating_when_same_fingerprint():
-    c = LoopController()
-    # a,a,a,a → repeated_call wins, not alternation
-    c.record([_ok("a"), _ok("a"), _ok("a"), _ok("a")])
-    assert c.detect().reason is StuckReason.REPEATED_CALL
+def test_detect_identical_success_is_not_alternating():
+    c = LoopController(investigation_tools=frozenset({"file_read"}))
+    # a,a,a,a → not stuck (investigation paging) and not alternation
+    c.record(
+        [
+            _ok("a", "file_read"),
+            _ok("a", "file_read"),
+            _ok("a", "file_read"),
+            _ok("a", "file_read"),
+        ]
+    )
+    assert c.detect() is None
 
 
 # --- decide: two-strike ladder ---
@@ -170,19 +185,19 @@ def test_decide_continue_when_no_signal():
 
 def test_decide_first_signal_nudges_then_finalizes():
     c = LoopController()
-    c.record([_ok("a"), _ok("a"), _ok("a")])
+    c.record([_fail("a"), _fail("a"), _fail("a")])
     first = c.detect()
     assert c.decide(first) is Intervention.NUDGE
     # window was cleared by the nudge: a fresh repeat is needed to escalate
     assert c.detect() is None
-    c.record([_ok("a"), _ok("a"), _ok("a")])
+    c.record([_fail("a"), _fail("a"), _fail("a")])
     second = c.detect()
     assert c.decide(second) is Intervention.FINALIZE
 
 
 def test_nudge_clears_window_so_one_stale_repeat_does_not_finalize():
     c = LoopController()
-    c.record([_ok("a"), _ok("a"), _ok("a")])
+    c.record([_fail("a"), _fail("a"), _fail("a")])
     c.decide(c.detect())  # NUDGE + clear
     # Model recovers: a single different call must NOT immediately finalize.
     c.record([_ok("b")])
@@ -1660,10 +1675,11 @@ def test_safety_net_round_clock_survives_nudge_window_clear():
     # The investigation-round clock is run-scoped (like the failure tally): a stuck-loop
     # NUDGE clears the sliding window but must NOT reset the safety-net clock.
     c = _worker(finalize_rounds=6)
-    c.record([_ok("a", "web_search"), _ok("a", "web_search"), _ok("a", "web_search")])
+    c.record([_ok("start", "web_search")])  # investigation round 1
+    c.record([_fail("a", "web_search"), _fail("a", "web_search"), _fail("a", "web_search")])
     assert c.decide(c.detect()) is Intervention.NUDGE  # clears the window
-    assert c.investigation_rounds == 1  # survived the clear
-    c.record([_ok("b", "read_url")])  # 2nd round, different target
+    assert c.investigation_rounds == 1  # survived the clear (fail round doesn't add)
+    c.record([_ok("b", "read_url")])  # 2nd successful investigation round
     assert c.investigation_rounds == 2
     assert c.convergence_action() is Intervention.CONTINUE  # still ≪ 6
 
@@ -1724,7 +1740,7 @@ def test_factory_ignores_convergence_finalize_rounds_setting(monkeypatch):
 
 
 def test_delivery_idle_does_not_finalize_mid_loop():
-    """Idle 读不 FINALIZE；交文件 factory tracking 关（rounds=0）；recon 仍累计。"""
+    """Idle 读不 FINALIZE；交文件与调查 factory tracking 均关（rounds=0）。"""
     from agentcore.runtime.engine.governance import create_loop_controller
 
     c = create_loop_controller(
@@ -1749,9 +1765,9 @@ def test_delivery_idle_does_not_finalize_mid_loop():
         short_write_posture=True,
         max_rounds=4,
     )
-    assert recon.delivery_idle_nudge_rounds > 0
+    assert recon.delivery_idle_nudge_rounds == 0
     assert recon.delivery_idle_narrow_rounds == 0
-    assert recon.delivery_idle_recon is True
+    assert recon.delivery_idle_recon is False
     for i in range(6):
         recon.record([ToolAttempt(fingerprint=f"p{i}", tool_name="file_read", success=True)])
     assert recon.convergence_action() is Intervention.CONTINUE
@@ -1800,8 +1816,8 @@ def test_factory_does_not_inject_files_or_report_delivery_idle():
     assert not report.take_delivery_idle_narrow_apply()
 
 
-def test_recon_idle_nudges_without_narrow():
-    """Recon-idle nudges investigate workers; never arms tool narrow."""
+def test_recon_idle_factory_never_nudges():
+    """Recon-idle factory is retired: no conclude nudge, no tool narrow."""
     from agentcore.runtime.engine.governance import (
         create_loop_controller,
         maybe_inject_delivery_idle,
@@ -1811,38 +1827,44 @@ def test_recon_idle_nudges_without_narrow():
         frozenset({"file_read"}),
         files_expected=False,
     )
-    assert plain.delivery_idle_recon is True
+    assert plain.delivery_idle_recon is False
+    assert plain.delivery_idle_nudge_rounds == 0
     assert plain.delivery_idle_narrow_rounds == 0
-    bar = plain.delivery_idle_nudge_rounds
-    assert bar > 0
-    for i in range(bar):
+    for i in range(12):
         plain.record(
             [ToolAttempt(fingerprint=f"p{i}", tool_name="file_read", success=True)]
         )
-    assert plain.delivery_idle_rounds == bar
+    assert plain.delivery_idle_rounds == 0
     messages: list = []
     assert (
         maybe_inject_delivery_idle(
-            plain, messages=messages, run_id="r", round_idx=bar, role="worker"
+            plain, messages=messages, run_id="r", round_idx=12, role="worker"
+        )
+        == "none"
+    )
+    assert messages == []
+    assert not plain.take_delivery_idle_narrow_apply()
+
+
+def test_explicit_controller_still_injects_recon_idle():
+    """Leftover API: constructing LoopController with bars still injects."""
+    from agentcore.runtime.engine.governance import maybe_inject_delivery_idle
+
+    explicit = LoopController(
+        investigation_tools=frozenset({"file_read"}),
+        delivery_idle_nudge_rounds=2,
+        delivery_idle_recon=True,
+    )
+    explicit.record([ToolAttempt(fingerprint="p0", tool_name="file_read", success=True)])
+    explicit.record([ToolAttempt(fingerprint="p1", tool_name="file_read", success=True)])
+    messages: list = []
+    assert (
+        maybe_inject_delivery_idle(
+            explicit, messages=messages, run_id="r", round_idx=2, role="worker"
         )
         == "nudge"
     )
     assert any("调查空转提醒" in str(m.content) for m in messages)
-    assert any(
-        "handoff" in str(m.content).lower() or "escalate" in str(m.content).lower()
-        for m in messages
-    )
-    # Recon path never arms tool narrow.
-    plain.record(
-        [ToolAttempt(fingerprint="p-extra", tool_name="file_read", success=True)]
-    )
-    assert (
-        maybe_inject_delivery_idle(
-            plain, messages=[], run_id="r", round_idx=bar + 1, role="worker"
-        )
-        == "none"
-    )
-    assert not plain.take_delivery_idle_narrow_apply()
 
 
 def test_recon_idle_nudge_prompt_does_not_demand_writes():

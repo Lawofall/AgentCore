@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import errno
 import json
 import time
 from dataclasses import replace
@@ -36,6 +37,7 @@ from agentcore.tools.protocol import TOOL_AUDIENCE_CEO, ToolContext, ToolResult
 from agentcore.tools.registry import ToolRegistry
 
 from .timeout import resolve_tool_timeout
+from .tool_channel_redirect import tool_wire_status
 from .tool_exec_args import (
     _ARGS_PARSE_FAILED_MARKER,
     _attempt_meta_with_landing_path,
@@ -59,6 +61,15 @@ from .tool_protocol_sanitize import (
 from .write_args_clear import landed_status_name_rejection
 
 logger = get_logger(__name__)
+
+_MISSING_FILE_MODEL_MSG = "内部资源缺失，请换一种方式继续，不要原样重试。"
+
+
+def _is_missing_file_exc(exc: BaseException) -> bool:
+    if isinstance(exc, FileNotFoundError):
+        return True
+    return isinstance(exc, OSError) and getattr(exc, "errno", None) == errno.ENOENT
+
 
 type ToolCallQuad = tuple[LLMMessage, ToolResult | None, ToolAttempt, list[dict[str, Any]]]
 
@@ -373,7 +384,7 @@ async def run_one_tool(
 
     # 检索预算 (提案 A1): reserve a per-run slot immediately before execute so
     # approval / breaker denials never consume budget. Orthogonal to
-    # LoopController.investigation_calls / team_gate.
+    # LoopController.investigation_calls.
     from agentcore.runtime.runs.retrieval_budget import (
         RETRIEVAL_TOOL_NAMES,
         budget_exhausted_output,
@@ -539,6 +550,45 @@ async def run_one_tool(
         if budget_reserved and budget_state is not None:
             await budget_state.refund(name)
         duration_ms = int((time.monotonic() - started) * 1000)
+        if _is_missing_file_exc(e):
+            error_msg = f"工具 '{name}' {_MISSING_FILE_MODEL_MSG}"
+            sink.emit(
+                tool_use_end(
+                    tc.id,
+                    name,
+                    success=False,
+                    output=error_msg,
+                    failure=tool_failure_fields(code=ErrorCode.NOT_FOUND),
+                    run_id=event_run_id,
+                )
+            )
+            logger.exception(
+                "tool.execute_end",
+                tool=name,
+                status="error",
+                duration_ms=duration_ms,
+                reason=_short_tool_error_reason(error_msg),
+                **_shell_observe_log_fields(name, args),
+            )
+            return (
+                _failed_tool_message(tc.id, error_msg),
+                None,
+                ToolAttempt(
+                    fingerprint,
+                    name,
+                    success=False,
+                    contract_failure=True,
+                    error_summary=error_msg,
+                    meta=_attempt_meta_with_landing_path(
+                        name,
+                        args,
+                        {"error_class": ERROR_CLASS_VALIDATION},
+                        error=error_msg,
+                        contract_failure=True,
+                    ),
+                ),
+                [],
+            )
         # Always carry the exception type: some builtins (e.g. NotImplementedError)
         # stringify to "" and the model would see a blank reason and retry blindly.
         detail = str(e).strip()
@@ -632,15 +682,20 @@ async def run_one_tool(
     # 检索观测：web_search 把 query / hosts 放进 metadata；code_search 把
     # index_status 放进 metadata——一并转发到 execute_end，便于从统一工具结束
     # 事件还原「搜了什么 / 命中哪些域 / 索引快照新鲜度」。
+    wire_fail_code: str | None = result.failure_code
+    if not isinstance(wire_fail_code, str) or not wire_fail_code.strip():
+        meta_code = (result.metadata or {}).get("code") if result.metadata else None
+        wire_fail_code = meta_code if isinstance(meta_code, str) else None
+    wire_status = tool_wire_status(success=result.success, failure_code=wire_fail_code)
     end_fields: dict[str, Any] = {
         "tool": name,
-        "status": "ok" if result.success else "error",
+        "status": "ok" if wire_status == "success" else wire_status,
         "duration_ms": int((time.monotonic() - started) * 1000),
     }
-    if not result.success:
-        # Short aggregable failure reason (status=error only). Full text stays on
+    if wire_status == "error":
+        # Short aggregable failure reason (true faults only). Full text stays on
         # tool_use_end.output / transcript; logs need a greppable tip without adjacent
-        # event archaeology.
+        # event archaeology. Channel steers are status=redirect — no fault reason.
         end_fields["reason"] = _short_tool_error_reason(output)
     meta = result.metadata or {}
     if isinstance(meta.get("query"), str) and meta["query"]:

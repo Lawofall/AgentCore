@@ -5,7 +5,7 @@ describe("actAuthorizedByLabel", () => {
   it("maps authorized_by contract values", () => {
     expect(actAuthorizedByLabel("stage_card")).toBe("经推进卡授权");
     expect(actAuthorizedByLabel("auto")).toBe("自动开辩");
-    expect(actAuthorizedByLabel("preview")).toBe("开工卡授权");
+    expect(actAuthorizedByLabel("preview")).toBe("已授权开跑");
     expect(actAuthorizedByLabel(null)).toBeNull();
     expect(actAuthorizedByLabel(undefined)).toBeNull();
   });

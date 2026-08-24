@@ -57,7 +57,7 @@ DELEGATE_DESCRIPTION = (
     "动【同一支团队】（含批次已收口后补跑/接着干）＝ tasks[] 上填 "
     "continue_from_run_id（续派，不限条数）/ replaces_run_id（补缺口），不是冷派整团。"
     "playbook 与 tasks 二选一：禁止二者同时有内容（反例：既填 code_audit 又传 tasks）。"
-    "建站快捷套餐必填 playbook_args.topic；绿场必填 app。"
+    "绿场必填 playbook_args.app。"
     "HOW→consult(team_orchestration_advanced)。"
 )
 
@@ -156,7 +156,7 @@ DELEGATE_PARAMETERS = {
         "playbook": {
             "type": "string",
             "enum": sorted(PLAYBOOKS),
-            "description": "固化流水线名（非默认）；填了就不要传 tasks。建站→build_website；绿场→build_app。",
+            "description": "固化流水线名（非默认）；填了就不要传 tasks。绿场→build_app。",
         },
         "playbook_args": {
             "type": "object",

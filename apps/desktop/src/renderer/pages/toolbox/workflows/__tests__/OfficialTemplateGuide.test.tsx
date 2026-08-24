@@ -11,7 +11,6 @@ function tpl(id: string, title: string): WorkflowTemplate {
 const CATALOG: WorkflowTemplate[] = [
   tpl("parallel_brief", "多角摸底"),
   tpl("research_report", "调研报告成文"),
-  tpl("build_website", "搭建营销站点"),
   tpl("build_app", "从零搭应用"),
   tpl("compare_options", "方案对比选型"),
 ];
@@ -51,7 +50,7 @@ describe("OfficialTemplateGuide", () => {
     const text =
       screen.getByTestId("official-template-guide").textContent ?? "";
     expect(text).not.toMatch(
-      /parallel_brief|research_report|build_website|build_app|compare_options/,
+      /parallel_brief|research_report|build_app|compare_options/,
     );
   });
 });

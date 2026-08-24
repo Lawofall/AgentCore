@@ -386,7 +386,7 @@ def test_run_process_round_trips_via_journal_entries():
 
 async def test_emit_updates_in_memory_journal_when_writer_sealed(monkeypatch) -> None:
     """Post-pause emit must still update EventSink display journal; sealed writer no-ops DB."""
-    from agentcore.runtime.events import team_preview_required
+    from agentcore.runtime.events import checkpoint_required
     from agentcore.runtime.journal.writer import TurnJournalWriter, current_journal_writer
 
     written: list[int] = []
@@ -425,10 +425,10 @@ async def test_emit_updates_in_memory_journal_when_writer_sealed(monkeypatch) ->
         sealed_at = len(written)
 
         await writer.seal()
-        required = team_preview_required(
+        required = checkpoint_required(
             checkpoint_id="cp1",
             conversation_id="c1",
-            workers=[{"id": "w1", "role": "研究员", "task": "调研"}],
+            question="继续?",
         )
         sink.emit(required)
         await writer.flush()
@@ -436,7 +436,7 @@ async def test_emit_updates_in_memory_journal_when_writer_sealed(monkeypatch) ->
         # In-memory display journal still got the card; durable writer did not append.
         journal = sink.execution_journal()
         assert journal is not None
-        assert journal[-1]["type"] == EventType.TEAM_PREVIEW_REQUIRED.value
+        assert journal[-1]["type"] == EventType.CHECKPOINT_REQUIRED.value
         assert len(written) == sealed_at
         assert writer.schedule_append({"kind": "x"}) is None
     finally:
@@ -523,8 +523,8 @@ def test_journal_persist_caps_tool_use_end_live_payload_stays_full():
         current_fact_log.reset(token)
 
 
-def test_journal_persist_safety_caps_team_preview_resolved_note():
-    from agentcore.runtime.events import team_preview_resolved
+def test_journal_persist_safety_caps_checkpoint_resolved_note():
+    from agentcore.runtime.events import checkpoint_resolved
     from agentcore.runtime.events.journal_config import _JOURNAL_PAYLOAD_SAFETY_CAP
     from agentcore.runtime.facts import TurnFactLog, current_fact_log
 
@@ -534,10 +534,10 @@ def test_journal_persist_safety_caps_team_preview_resolved_note():
     try:
         huge = "注" * (_JOURNAL_PAYLOAD_SAFETY_CAP + 25)
         sink.emit(_plan())
-        ev = team_preview_resolved(checkpoint_id="tp1", decision="continue", note=huge)
+        ev = checkpoint_resolved(checkpoint_id="cp1", decision="continue", note=huge)
         sink.emit(ev)
         assert ev.payload["note"] == huge
-        fact = next(e for e in log.entries() if e["kind"] == "team_preview_resolved")
+        fact = next(e for e in log.entries() if e["kind"] == "checkpoint_resolved")
         note = fact["payload"]["note"]
         assert len(note) == _JOURNAL_PAYLOAD_SAFETY_CAP
         assert "journal_capped" in note

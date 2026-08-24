@@ -36,6 +36,7 @@ from agentcore.core.net import (
     describe_net_error,
     outbound_async_client,
 )
+from agentcore.core.task_cancel import raise_if_task_cancelled
 from agentcore.tools.builtin.web._net import (
     circuit_remaining,
     note_failure,
@@ -371,15 +372,18 @@ class SearXNGBackend:
             if on_phase:
                 on_phase("querying")
             for attempt in range(_SEARCH_ATTEMPTS):
+                raise_if_task_cancelled()
                 try:
                     resp = await client.get(f"{self.base_url}/search", params=params)
                     resp.raise_for_status()
                     data = resp.json()
-                except (httpx.TimeoutException, httpx.NetworkError):
+                except (httpx.TimeoutException, httpx.NetworkError) as e:
                     # A down / blocked host: fast-fail into the breaker, do not retry.
+                    raise_if_task_cancelled(e)
                     note_failure(host)
                     raise
                 except httpx.HTTPStatusError as e:
+                    raise_if_task_cancelled(e)
                     status = e.response.status_code
                     if status < 500:
                         raise  # client error (4xx): not transient, not a breaker fault
@@ -519,6 +523,7 @@ class FallbackSearchBackend:
                 query, max_results=max_results, on_phase=on_phase, language=language
             )
         except Exception as primary_exc:  # noqa: BLE001 - any primary failure → try fallback
+            raise_if_task_cancelled(primary_exc)
             logger.warning(
                 "search.primary_failed_try_fallback",
                 reason=(
@@ -537,6 +542,7 @@ class FallbackSearchBackend:
                     query, max_results=max_results, on_phase=on_phase, language=language
                 )
             except Exception as fb_exc:  # noqa: BLE001 - both down → surface primary's reason
+                raise_if_task_cancelled(fb_exc)
                 logger.warning(
                     "search.fallback_failed",
                     reason=describe_net_error(fb_exc),

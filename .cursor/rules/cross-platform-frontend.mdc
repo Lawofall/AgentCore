@@ -29,8 +29,8 @@ packages/       protocol-conformance + contract-types + design-tokens + protocol
 
 ## 分步
 
-①②③ 已落地。产品改动只落桌面树。`pnpm conformance` 只跑桌面。浏览器窄屏走 `app.`；`m.` 将 301 到 `app.`。
+①②③ 已落地。产品改动只落桌面树。`pnpm conformance` 只跑桌面。浏览器窄屏走 `app.`；独立 `m.` 站已下线。
 
 ## 曾否决「一棵树」
 
-各端全新建曾是定案（怕共享核爆炸半径）。主回复页双写后漂移与 UI 分叉更贵，2026-08-22 改为产品页单树。
+各端全新建曾是定案。2026-08-22 改为产品页单树 → [前端技术 §五 客户端架构（桌面 + 手机）](/docs/04-前端/前端技术与架构.md)。

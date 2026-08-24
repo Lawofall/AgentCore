@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES
 from agentcore.runtime.interaction import (
     INTERACTION_KIND_SPECS,
     RECOVERY_PENDING_KINDS,
@@ -92,6 +93,8 @@ def fold_interactions(entries: list[dict[str, Any]]) -> list[InteractionRecord]:
     for entry in entries:
         event_kind = str(entry.get("kind") or entry.get("type") or "")
         payload = dict(entry.get("payload") or {})
+        if event_kind in RETIRED_EVENT_TYPE_VALUES:
+            continue
 
         if event_kind == "interaction_orphaned":
             orphan_kind = str(payload.get("kind") or "")

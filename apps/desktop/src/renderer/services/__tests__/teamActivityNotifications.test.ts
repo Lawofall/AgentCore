@@ -255,7 +255,7 @@ describe("startTeamActivityNotifications", () => {
     );
   });
 
-  it("team_preview 挂起弹等待你确认后才会开工（且不与已完成双弹）", async () => {
+  it("leftover team_preview 挂起不弹开工提醒（且不与已完成双弹）", async () => {
     seedTitle(CID, "开工");
     setGenerating(CID, true);
     usePausedTurnStore
@@ -266,9 +266,7 @@ describe("startTeamActivityNotifications", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    const messages = notifyInfoMock.mock.calls.map((c) => String(c[0]));
-    expect(messages).toContain("「开工」等待你确认后才会开工");
-    expect(messages.some((m) => m.includes("已完成"))).toBe(false);
+    expect(notifyInfoMock).not.toHaveBeenCalled();
   });
 
   it("幕终 pending stage_card 不弹已完成，弹需要你确认推进", async () => {

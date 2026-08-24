@@ -1,4 +1,3 @@
-import { redirectLocalWorkspaceAskAction } from "@/lib/redirectLocalWorkspaceAsk";
 import { useConversationStore } from "@/stores/conversation";
 import { useFoldersStore } from "@/stores/folders";
 import { useSidePanelStore } from "@/stores/sidePanel";
@@ -16,7 +15,6 @@ function prepareNewConversationDraft(
   const foldersStore = useFoldersStore.getState();
   if (opts?.local) {
     // §7.2：禁新建本机草稿；改导云路径（存量会话续跑不经本入口）。
-    redirectLocalWorkspaceAskAction();
     foldersStore.setDraftWorkspaceIntent({ kind: "quick_cloud" });
   } else if (opts?.cloud) {
     foldersStore.setDraftWorkspaceIntent({ kind: "quick_cloud" });

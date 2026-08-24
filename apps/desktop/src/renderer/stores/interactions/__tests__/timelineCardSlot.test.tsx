@@ -28,7 +28,6 @@ vi.mock("@/stores/disclosure", () => ({
 const emptyBags: TimelineCardBags = {
   checkpoints: [],
   planReviews: [],
-  teamPreviews: [],
 };
 
 const pendingCheckpoint: CheckpointDisplay = {
@@ -94,30 +93,11 @@ describe("classifyTimelineInteractionCard", () => {
   });
 
   it("team_preview 永远是有意为空（开工卡已退役）", () => {
-    const bags: TimelineCardBags = {
-      ...emptyBags,
-      teamPreviews: [
-        {
-          id: "tp-1",
-          primitive: "delegate",
-          workers: [],
-          tools: [],
-          motion: "",
-          form: "",
-          sides: [],
-          maxRounds: 0,
-          thorough: true,
-          status: "pending",
-          decision: null,
-          note: "",
-        },
-      ],
-    };
     expect(
       classifyTimelineInteractionCard(
         "team_preview",
         { checkpoint_id: "tp-1" },
-        bags,
+        emptyBags,
       ),
     ).toEqual({ kind: "intentionalEmpty" });
     expect(

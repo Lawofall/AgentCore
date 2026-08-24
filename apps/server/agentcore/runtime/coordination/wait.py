@@ -26,11 +26,10 @@ _COORD_WAIT_TIMEOUT_S = 120.0
 _COORD_WAIT_TIMEOUT_MAX_S = 600.0
 # Frontend UX heartbeat while blocked in wait_events (≤15s per task constraint).
 _WAIT_HEARTBEAT_S = 15.0
-# Progress-event batching (事件合并唤醒): after the first wake, coalesce follow-up
-# progress events (worker_completed / note) instead of waking per event. Wake when
-# ≥``_MERGE_BATCH_MAX`` events pile up OR ``_MERGE_WINDOW_S`` elapsed since the last
-# wake — whichever first. Necessary decision points (terminal / escalation / conflict
-# / interjection / per-worker timeout / boundary) never merge; they wake immediately.
+# After a failed worker_completed, briefly coalesce cascade skip/cancel so one
+# inject carries 「甲失败，乙丙跳过」instead of a failure wake plus N skip wakes.
+_CASCADE_COALESCE_S = 0.15
+# Legacy merge knobs — progress-only events no longer wake; tests may still patch.
 _MERGE_BATCH_MAX = 3
 _MERGE_WINDOW_S = 60.0
 
@@ -183,34 +182,21 @@ def _idle_patrol_nudge(session: CoordinationSession) -> CoordinationEvent:
     )
 
 
-async def _accumulate_batch(
+def _has_failed_worker(events: list[CoordinationEvent]) -> bool:
+    from agentcore.runtime.coordination.session_budget import _worker_completion_failed
+
+    return any(_worker_completion_failed(ev) for ev in events)
+
+
+async def _coalesce_cascade(
     session: CoordinationSession,
     events: list[CoordinationEvent],
 ) -> list[CoordinationEvent]:
-    """Coalesce follow-up progress events into one wake (事件合并唤醒).
-
-    Holds the initial (non-necessary) progress batch until ≥``_MERGE_BATCH_MAX``
-    events accumulate OR ``_MERGE_WINDOW_S`` has elapsed since the last wake —
-    whichever comes first. A necessary decision event arriving mid-hold breaks out
-    immediately (终局 / 升级 / 冲突不拖延). Never held before the first wake
-    (``seconds_since_wake() is None`` → the first completion is itself a decision
-    point and must wake at once).
-    """
-    batch = list(events)
-    while len(batch) < _MERGE_BATCH_MAX:
-        if session.is_necessary_decision(batch):
-            break
-        since = session.seconds_since_wake()
-        if since is None:
-            break
-        remaining = _MERGE_WINDOW_S - since
-        if remaining <= 0:
-            break
-        more = await session.wait_events(timeout=remaining)
-        if not more:
-            break
-        batch.extend(more)
-    return batch
+    """After a failure, scoop skip/cancel posted in the same scheduler tick."""
+    extra = await session.wait_events(timeout=_CASCADE_COALESCE_S)
+    if extra:
+        events = events + extra
+    return events
 
 
 async def await_coordination_injection(
@@ -222,13 +208,13 @@ async def await_coordination_injection(
     append (possibly empty when not coordinating).
 
     唤醒降噪（协调层记账开销治理）：
-    - 进展攒批（:func:`_accumulate_batch`）：非必要的 worker_completed / note 合并成一次
-      唤醒（≥3 事件或距上次唤醒≥60s），而非每个完成都醒。
-    - 空转退避（:func:`_idle_wait_timeout`）：无事件的 idle 巡查 **与** 忙等 yield 都按
-      ``2**idle_streak`` 拉长等待，不再每~2 分钟烧一次全量 LLM 轮；真卡死仍发
-      周期性 patrol nudge。wall+0 继续等（不让出）不 bump。
-    - 两池预算（进度池 / 决策池，见 session.py）：纯遥测计数，不闸唤醒。例行进展记
-      【进度池】；必要决策记【决策池】。池耗尽仍唤醒（合并窗口仍攒批）。
+    - 例行成功 worker_completed / note / skip / cancel **不叫醒** CEO，暂存后挂在
+      下一次必要决策（失败 / 升级 / 插话 / 超时 / 边界 / 全员完成 / 整队取消）。
+    - 失败立刻叫醒，并短暂收口级联跳过/取消，合成一条注入。
+    - 空转退避（:func:`_idle_wait_timeout`）：无事件的 idle 巡查按 ``2**idle_streak``
+      拉长；忙等（队员仍有 in-flight LLM/工具）**不叫醒** CEO，只退避再等。无人
+      in-flight 的卡死仍发周期性 patrol nudge。wall+0 继续等不 bump。
+    - 两池预算（进度池 / 决策池，见 session.py）：纯遥测计数，不闸唤醒。
     """
     session = active_coordination()
     if session is None or not session.active:
@@ -284,11 +270,10 @@ async def await_coordination_injection(
             else:
                 # No coordination events for the idle window. If workers still have
                 # in-flight LLM/tool calls, progress simply has not posted yet —
-                # do NOT fire a TIMEOUT patrol nudge (那会烧冤枉 LLM 轮). Instead:
-                # one short re-wait for real events, then yield a progress brief so
-                # the captain can still act (ask_user / cancel_worker) while busy.
-                # Infinite ``continue`` would park the CEO until workers finish and
-                # break mid-wave soft-stop / 显式转后台.
+                # do NOT fire a TIMEOUT patrol nudge (那会烧冤枉 LLM 轮). One short
+                # re-wait for real events; if still busy, hold (CEO would only wait).
+                # User interrupt / failure / all_completed still arrive via the queue.
+                # True stall (no in-flight) still yields so CEO can cancel_worker.
                 if session.has_inflight_work():
                     wait_reason = "idle_active"
                     logger.info(
@@ -318,24 +303,16 @@ async def await_coordination_injection(
                                 busy=len(session._busy_workers),
                             )
                             continue
-                        # Same wake timing (still yield a progress brief). Participate
-                        # in idle backoff so the *next* wait uses ``2**idle_streak``.
                         session.bump_idle_backoff()
                         logger.info(
-                            "coordination.idle_yield_to_captain",
+                            "coordination.idle_yield_held_inflight",
                             execution_id=session.execution_id,
                             completed=len(session.completed_run_ids),
                             total=session.total_workers,
                             busy=len(session._busy_workers),
                             idle_streak=session.idle_streak,
                         )
-                        # Same wake timing; inject pipeline progress so CEO does not
-                        # read「闲着了」and append overlapping workers.
-                        from agentcore.runtime.coordination.inject import (
-                            idle_yield_messages,
-                        )
-
-                        return idle_yield_messages(session)
+                        continue
                 elif _wall_zero_still_pending(session):
                     # No busy stamp yet (dispatch→LLM 间隙) or between clear_busy and
                     # completion post — still not a true stall under wall+0.
@@ -365,14 +342,17 @@ async def await_coordination_injection(
                     session.bump_idle_backoff()
                     wait_reason = "idle_timeout"
 
-        # 攒批：仅对「真实到达且非必要」的进展事件合并唤醒；必要决策点与空转巡查不攒批。
+        if events:
+            events = session.take_deferred_progress() + events
+
+        # 失败后短暂收口级联 skip/cancel，合成一次注入。
         if (
             events
             and wait_reason in ("drained", "waited")
-            and not session.is_necessary_decision(events)
+            and _has_failed_worker(events)
         ):
             before = len(events)
-            events = await _accumulate_batch(session, events)
+            events = await _coalesce_cascade(session, events)
             merged += len(events) - before
 
         nudge = False
@@ -389,14 +369,16 @@ async def await_coordination_injection(
         # 空转巡查 nudge：保留卡死巡查语义，直接唤醒，不消耗任一池。
         if nudge:
             break
-        # 例行进展：记进度池遥测并唤醒（池耗尽仍唤醒；合并窗口已在上方处理）。
+        # 例行进展（成功完成 / note / skip / cancel）：入账暂存，不唤醒 CEO。
+        session.stash_progress_events(events)
+        session.note_decision_points(events)
         if not session.consume_progress_budget():
             logger.info(
                 "coordination.progress_budget_floor",
                 execution_id=session.execution_id,
                 decision_budget=session.decision_budget_remaining,
             )
-        break
+        continue
 
     # 记账首个完成等决策点（对齐 is_necessary_decision）。
     session.note_decision_points(events)

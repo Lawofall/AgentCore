@@ -2,10 +2,17 @@
  * Project unsynced sidecar outbox summaries into the conversation slice (D5).
  *
  * Adapts each summary into BackendMessage shape → `toMessage` → `addMessage`.
- * Skips ids already present (cloud window wins). Marks ready rows synced_pending.
+ * Cloud window is primary: skip matching ids unless unsynced is strictly richer
+ * (`messageRichnessScore`). Marks ready rows synced_pending.
  */
 import { type BackendMessage, toMessage } from "@/services/messages";
-import { getRuntime, useConversationStore } from "@/stores/conversation";
+import {
+  getRuntime,
+  messageIdentityKeys,
+  messageRichnessScore,
+  useConversationStore,
+} from "@/stores/conversation";
+import type { Message } from "@/stores/conversation/types";
 import type { ProcessStep, SSEEvent, UsageBreakdown } from "@/types/events";
 import type { SidecarUnsyncedTurnSummary } from "@shared/sidecar-contract";
 
@@ -88,9 +95,17 @@ function summaryToBackendMessages(
   return [user, assistant];
 }
 
+function findMessageByIdentity(
+  messages: Message[],
+  needle: Message,
+): Message | undefined {
+  const keys = new Set(messageIdentityKeys(needle));
+  return messages.find((m) => messageIdentityKeys(m).some((k) => keys.has(k)));
+}
+
 /**
  * Append unsynced outbox turns (sorted by updated_at ascending by recovery).
- * Idempotent on message id.
+ * Idempotent on message id unless unsynced is strictly richer than cloud.
  */
 export function projectUnsyncedTurns(
   conversationId: string,
@@ -105,7 +120,6 @@ export function projectUnsyncedTurns(
   for (const u of unsynced) {
     const rows = summaryToBackendMessages(conversationId, u);
     for (const row of rows) {
-      if (existing.has(row.id)) continue;
       const msg = toMessage(row);
       // Open ghost (sidecar died mid-turn): surface as interrupted, not streaming.
       // Empty cancelled/dead: keep terminal finish (cancelled → synthetic cancelled
@@ -134,6 +148,21 @@ export function projectUnsyncedTurns(
           }
         }
       }
+
+      const resident = findMessageByIdentity(
+        getRuntime(conversationId).messages,
+        msg,
+      );
+      if (resident) {
+        const incomingScore = messageRichnessScore(msg);
+        const residentScore = messageRichnessScore(resident);
+        if (incomingScore <= residentScore) continue;
+        const { id: _drop, ...patch } = msg;
+        store.updateMessage(resident.id, patch, conversationId);
+        continue;
+      }
+      if (existing.has(row.id)) continue;
+
       store.addMessage(msg, conversationId);
       existing.add(row.id);
     }

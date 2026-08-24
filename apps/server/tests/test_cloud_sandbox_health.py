@@ -9,7 +9,11 @@ from typing import Any
 import pytest
 
 from agentcore.config import settings
-from agentcore.tools.builtin import browser_execution_enabled_for, code_execution_enabled_for
+from agentcore.tools.builtin import (
+    browser_execution_enabled_for,
+    build_worker_registry,
+    code_execution_enabled_for,
+)
 from agentcore.tools.sandbox.cloud_health import (
     age_cloud_sandbox_health_for_tests,
     cloud_sandbox_health,
@@ -339,4 +343,35 @@ async def test_wedged_probe_times_out_instead_of_freezing_the_verdict(
     assert cloud_sandbox_health() is False
     failure = cloud_sandbox_health_failure()
     assert failure is not None and failure[0] == "probe_timeout"
+    assert code_execution_enabled_for(_CloudBackend()) is False
+
+
+def test_sidecar_withholds_cloud_execution_even_when_unprobed(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Desktop engine sitting on a cloud desk must not assemble gVisor tools."""
+    from agentcore.tools.sandbox.cloud_health import reset_cloud_sandbox_health_for_tests
+
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    reset_cloud_sandbox_health_for_tests()
+    assert code_execution_enabled_for(_CloudBackend()) is False
+    assert code_execution_enabled_for(LocalBackend()) is True
+    names = set(build_worker_registry(backend=_CloudBackend()).names)
+    assert "code_execute" not in names
+    assert "test_run" not in names
+    local_names = set(build_worker_registry(backend=LocalBackend()).names)
+    assert "code_execute" in local_names
+
+
+def test_sidecar_withholds_cloud_execution_even_if_probe_says_healthy(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    set_cloud_sandbox_health_for_tests(True)
     assert code_execution_enabled_for(_CloudBackend()) is False

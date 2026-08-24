@@ -18,6 +18,13 @@ const loadLatestWindow = vi.fn<
 const jumpToMessage = vi.fn<typeof import("@/services/messages").jumpToMessage>(
   async () => {},
 );
+const getConversations = vi.fn(
+  () => [] as import("@/stores/conversation").Conversation[],
+);
+vi.mock("@/hooks/useConversations", () => ({
+  getConversations: () => getConversations(),
+}));
+
 const scheduleHydrateAttachSettle =
   vi.fn<typeof import("@/services/turns").scheduleHydrateAttachSettle>();
 const syncConversationFollow =
@@ -55,11 +62,14 @@ vi.mock("@/services/messages", async (importOriginal) => {
       jumpToMessage(...args),
   };
 });
-vi.mock("@/services/resume", () => ({
-  loadRecovery: (
-    ...args: Parameters<typeof import("@/services/resume").loadRecovery>
-  ) => loadRecovery(...args),
-}));
+vi.mock("@/services/resume", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/resume")>();
+  return {
+    ...actual,
+    loadRecovery: (...args: Parameters<typeof actual.loadRecovery>) =>
+      loadRecovery(...args),
+  };
+});
 vi.mock("@/services/offlineCache", () => ({
   loadCachedConversation: (
     ...args: Parameters<
@@ -68,13 +78,15 @@ vi.mock("@/services/offlineCache", () => ({
   ) => loadCachedConversation(...args),
   persistOpenedCache: vi.fn(async () => {}),
 }));
-vi.mock("@/services/turns", () => ({
-  scheduleHydrateAttachSettle: (
-    ...args: Parameters<
-      typeof import("@/services/turns").scheduleHydrateAttachSettle
-    >
-  ) => scheduleHydrateAttachSettle(...args),
-}));
+vi.mock("@/services/turns", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/turns")>();
+  return {
+    ...actual,
+    scheduleHydrateAttachSettle: (
+      ...args: Parameters<typeof actual.scheduleHydrateAttachSettle>
+    ) => scheduleHydrateAttachSettle(...args),
+  };
+});
 vi.mock("@/services/turns/conversationFollow", () => ({
   syncConversationFollow: (
     ...args: Parameters<typeof syncConversationFollow>
@@ -133,6 +145,7 @@ function Switcher() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  getConversations.mockReturnValue([]);
   useConversationStore.setState({ currentConversationId: null, byId: {} });
 });
 
@@ -250,6 +263,240 @@ describe("ConversationPage cold reconcile", () => {
         (m) => m.id === "a1",
       )?.runs;
       expect(runs?.events?.length).toBe(1);
+    });
+  });
+});
+
+function listedConversation(
+  id: string,
+  messageCount: number,
+): import("@/stores/conversation").Conversation {
+  return {
+    id,
+    title: "对话",
+    updatedAt: "2026-08-15T00:00:00Z",
+    messageCount,
+    lastMessagePreview: messageCount > 0 ? "preview" : null,
+    folderId: null,
+    localContainerRootId: null,
+    localRootId: null,
+    pinned: false,
+    archived: false,
+  };
+}
+
+describe("ConversationPage cold empty GET reveal gate", () => {
+  beforeEach(() => {
+    useConversationStore.setState({ currentConversationId: null, byId: {} });
+    loadCachedConversation.mockReset();
+    fetchMessageWindow.mockReset();
+    loadRecovery.mockReset();
+    getConversations.mockReturnValue([listedConversation("conv-empty-get", 3)]);
+  });
+
+  it("shows load failure when cold GET and recovery stay empty but list says messages exist", async () => {
+    fetchMessageWindow.mockResolvedValue({
+      messages: [],
+      total: 0,
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+      memoryUpdates: [],
+    });
+    loadRecovery.mockResolvedValue({
+      sidecarLive: false,
+      cloudLive: false,
+      cloudKnown: true,
+      pausedCount: 0,
+      unsynced: [],
+    });
+
+    render(<StaticHarness id="conv-empty-get" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("对话加载失败")).toBeTruthy();
+    });
+    expect(screen.queryByLabelText("正在加载对话")).toBeNull();
+    expect(getRuntime("conv-empty-get").messages).toHaveLength(0);
+  });
+
+  it("does not reveal from an empty opened cache while GET is in flight", async () => {
+    let resolveGet!: (
+      value: Awaited<ReturnType<typeof fetchMessageWindow>>,
+    ) => void;
+    fetchMessageWindow.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+    loadCachedConversation.mockResolvedValue({
+      conversation: {
+        id: "conv-empty-get",
+        title: "对话",
+        updatedAt: "2026-08-15T00:00:00Z",
+        messageCount: 3,
+        lastMessagePreview: "preview",
+        openedAt: 1,
+        byteSize: 1,
+      },
+      messages: [],
+      memoryUpdates: [],
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+    });
+
+    render(<StaticHarness id="conv-empty-get" />);
+
+    await waitFor(() => {
+      expect(loadCachedConversation).toHaveBeenCalled();
+    });
+    expect(screen.getByLabelText("正在加载对话")).toBeTruthy();
+
+    resolveGet({
+      messages: [bubble("m1", "user", "from network")],
+      total: 1,
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+      memoryUpdates: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("正在加载对话")).toBeNull();
+    });
+    expect(getRuntime("conv-empty-get").messages).toHaveLength(1);
+  });
+
+  it("keeps overlay loading until recovery settles when cold GET is empty", async () => {
+    let resolveRecovery!: (
+      value: Awaited<ReturnType<typeof loadRecovery>>,
+    ) => void;
+    const recoveryLoaded = new Promise<
+      Awaited<ReturnType<typeof loadRecovery>>
+    >((resolve) => {
+      resolveRecovery = resolve;
+    });
+    loadRecovery.mockReturnValue(recoveryLoaded);
+    fetchMessageWindow.mockResolvedValue({
+      messages: [],
+      total: 0,
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+      memoryUpdates: [],
+    });
+
+    render(<StaticHarness id="conv-empty-get" />);
+
+    await waitFor(() => {
+      expect(fetchMessageWindow).toHaveBeenCalled();
+    });
+    expect(screen.getByLabelText("正在加载对话")).toBeTruthy();
+
+    resolveRecovery({
+      sidecarLive: false,
+      cloudLive: false,
+      cloudKnown: true,
+      pausedCount: 0,
+      unsynced: [
+        {
+          user_message_id: "u-unsynced",
+          user_message: "离线回合",
+          message_id: "a-unsynced",
+          trace_id: "a".repeat(32),
+          phase: "ready",
+          updated_at: 1_700_000_000,
+          content: "投影正文",
+          reasoning_content: null,
+          citations: [],
+          runs: { events: [], finish_reason: "stop" },
+          finish_reason: "stop",
+          input_tokens: 1,
+          output_tokens: 2,
+          reasoning_tokens: 0,
+          cache_hit_tokens: 0,
+          cache_miss_tokens: 0,
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("正在加载对话")).toBeNull();
+    });
+    expect(getRuntime("conv-empty-get").messages.length).toBeGreaterThan(0);
+  });
+
+  it("reveals immediately when cold GET already has messages", async () => {
+    let resolveRecovery!: (
+      value: Awaited<ReturnType<typeof loadRecovery>>,
+    ) => void;
+    const recoveryLoaded = new Promise<
+      Awaited<ReturnType<typeof loadRecovery>>
+    >((resolve) => {
+      resolveRecovery = resolve;
+    });
+    loadRecovery.mockReturnValue(recoveryLoaded);
+    fetchMessageWindow.mockResolvedValue({
+      messages: [bubble("m1", "user", "hello")],
+      total: 1,
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+      memoryUpdates: [],
+    });
+
+    render(<StaticHarness id="conv-empty-get" />);
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("正在加载对话")).toBeNull();
+    });
+    expect(getRuntime("conv-empty-get").messages).toHaveLength(1);
+
+    resolveRecovery({
+      sidecarLive: false,
+      cloudLive: false,
+      cloudKnown: true,
+      pausedCount: 0,
+      unsynced: [],
+    });
+    await waitFor(() => {
+      expect(scheduleHydrateAttachSettle).toHaveBeenCalled();
+    });
+  });
+
+  it("reveals immediately for confirmed-empty conversations without waiting recovery", async () => {
+    getConversations.mockReturnValue([
+      listedConversation("conv-known-empty", 0),
+    ]);
+    let resolveRecovery!: (
+      value: Awaited<ReturnType<typeof loadRecovery>>,
+    ) => void;
+    const recoveryLoaded = new Promise<
+      Awaited<ReturnType<typeof loadRecovery>>
+    >((resolve) => {
+      resolveRecovery = resolve;
+    });
+    loadRecovery.mockReturnValue(recoveryLoaded);
+    fetchMessageWindow.mockResolvedValue({
+      messages: [],
+      total: 0,
+      hasMoreBefore: false,
+      hasMoreAfter: false,
+      memoryUpdates: [],
+    });
+
+    render(<StaticHarness id="conv-known-empty" />);
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("正在加载对话")).toBeNull();
+    });
+    expect(getRuntime("conv-known-empty").messages).toHaveLength(0);
+
+    resolveRecovery({
+      sidecarLive: false,
+      cloudLive: false,
+      cloudKnown: true,
+      pausedCount: 0,
+      unsynced: [],
+    });
+    await waitFor(() => {
+      expect(scheduleHydrateAttachSettle).toHaveBeenCalled();
     });
   });
 });

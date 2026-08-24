@@ -170,6 +170,21 @@ def test_single_agent_tool_failure(projected):
     assert p["content"] == "检索失败了，我先按已有知识回答。"
 
 
+def test_single_agent_tool_channel_redirect(projected):
+    p = projected["single_agent_tool_channel_redirect"]
+    assert p["status"] == "completed"
+    kinds = [s["kind"] for s in p["process"]]
+    assert kinds == ["reasoning", "tool", "tool", "content"]
+    steer = p["process"][1]
+    assert steer["tool_name"] == "code_execute"
+    assert steer["status"] == "redirect"
+    assert steer["failure"]["code"] == "source_grep_redirect"
+    assert "禁止用" in (steer["result"] or "")
+    grep = p["process"][2]
+    assert grep["tool_name"] == "grep"
+    assert grep["status"] == "success"
+
+
 def test_single_agent_cancelled(projected):
     p = projected["single_agent_cancelled"]
     assert p["status"] == "cancelled"
@@ -362,65 +377,47 @@ def test_team_preview_finalized(projected):
     p = projected["team_preview_finalized"]
     assert p["status"] == "paused"
     assert p["finishReason"] == "paused"
-    assert p["interactions"] == [
-        {
-            "kind": "team_preview",
-            "id": "tp1",
-            "status": "pending",
-            "workerIds": ["r1", "r2"],
-        }
-    ]
-    # Narrative order: 开工卡 before 协作图 (even though events are run_plan → preview).
-    assert [s["kind"] for s in p["process"]] == [
-        "content",
-        "team_preview",
-        "team",
-    ]
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
+    # 有 run_plan：过程时间线 content + team；开工卡事件对已退役，不再投影。
+    assert [s["kind"] for s in p["process"]] == ["content", "team"]
 
 
 def test_team_preview_resolved_continue(projected):
     p = projected["team_preview_resolved_continue"]
     assert p["status"] == "completed"
     assert _pending_gates(p) == []
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
     assert p["progress"]["completed"] == 2
-    assert [s["kind"] for s in p["process"]] == [
-        "content",
-        "team_preview",
-        "team",
-        "content",
-    ]
+    assert [s["kind"] for s in p["process"]] == ["content", "team", "content"]
 
 
 def test_team_preview_resolved_adjust(projected):
-    """开工卡 adjust：卡已结算、无 worker 开跑、意见在 resolved 事件里。"""
+    """adjust 路径：无开工卡、无 worker 开跑、意见在 tool_use_end 回灌。"""
     from agentcore.conformance.vectors import VECTORS
     from agentcore.runtime.events.types import EventType
 
     p = projected["team_preview_resolved_adjust"]
     assert p["status"] == "completed"
     assert _pending_gates(p) == []
-    tp = next(i for i in p["interactions"] if i["kind"] == "team_preview")
-    assert tp["status"] == "resolved"
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
     assert p["progress"]["completed"] == 0
     assert all(r["status"] != "running" for r in p["runs"])
     assert all(r["status"] != "completed" for r in p["runs"])
 
     _description, builder = VECTORS["team_preview_resolved_adjust"]
     events = builder()
-    resolved = next(e for e in events if e.type == EventType.TEAM_PREVIEW_RESOLVED)
-    assert resolved.payload["decision"] == "adjust"
-    assert "人太多" in (resolved.payload.get("note") or "")
     assert not any(e.type == EventType.RUN_STARTED for e in events)
     ended = next(e for e in events if e.type == EventType.TOOL_USE_END)
     assert "宜先问" not in (ended.payload.get("result") or "")
     assert "重新调用 delegate" in (ended.payload.get("result") or "")
+    assert "人太多" in (ended.payload.get("result") or "")
 
 
 def test_team_preview_resolved_adjust_pre_ttft(projected):
     """adjust 后 CEO 已续跑、尚未吐首 token：挂起后续跑、气泡无新正文。
 
     手工推导（不抄 golden）：生产冷恢复在 captain ``run_started`` 之后、上游 TTFT
-    之前有一段无 delta 窗口。折完应是 running、开工卡已结算、未跑 worker 为
+    之前有一段无 delta 窗口。折完应是 running、无开工卡、未跑 worker 为
     skipped、captain 为 running、正文仍是挂起前那句、过程时间线不再长出新
     content/reasoning。
     """
@@ -434,12 +431,9 @@ def test_team_preview_resolved_adjust_pre_ttft(projected):
     assert _pending_gates(p) == []
     assert p["content"] == "我来安排团队。"
     assert p["reasoning"] == ""
-    assert [s["kind"] for s in p["process"]] == ["content", "team_preview", "team"]
+    assert [s["kind"] for s in p["process"]] == ["content", "team"]
     assert p["process"][0]["text"] == "我来安排团队。"
-
-    tp = next(i for i in p["interactions"] if i["kind"] == "team_preview")
-    assert tp["status"] == "resolved"
-    assert tp["id"] == "tp1"
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
 
     by_id = {r["id"]: r for r in p["runs"]}
     assert by_id["c1"]["status"] == "running"
@@ -469,41 +463,28 @@ def test_team_preview_resolved_adjust_pre_ttft(projected):
         for e in after_end
     )
 
-    resolved = next(e for e in events if e.type == EventType.TEAM_PREVIEW_RESOLVED)
-    assert resolved.payload["decision"] == "adjust"
-    assert "人太多" in (resolved.payload.get("note") or "")
     skipped = [e for e in events if e.type == EventType.RUN_SKIPPED]
     assert len(skipped) == 2
     assert all(e.payload["reason"] == "abort" for e in skipped)
     ended = next(e for e in events if e.type == EventType.TOOL_USE_END)
     assert "宜先问" not in (ended.payload.get("result") or "")
     assert "重新调用 delegate" in (ended.payload.get("result") or "")
+    assert "人太多" in (ended.payload.get("result") or "")
 
 
 def test_team_preview_revised_card(projected):
-    """修订卡：pending 是第二张；谱系字段在 required payload 上递增串起。"""
+    """修订后再挂起：无开工卡；不再从 required 事件读谱系。"""
     from agentcore.conformance.vectors import VECTORS
     from agentcore.runtime.events.types import EventType
 
     p = projected["team_preview_revised_card"]
     assert p["status"] == "paused"
     assert p["finishReason"] == "paused"
-    pending = _pending_gates(p)
-    assert len(pending) == 1
-    assert pending[0]["id"] == "tp2"
-    assert pending[0]["kind"] == "team_preview"
+    assert _pending_gates(p) == []
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
 
     _description, builder = VECTORS["team_preview_revised_card"]
     events = builder()
-    requireds = [e for e in events if e.type == EventType.TEAM_PREVIEW_REQUIRED]
-    assert len(requireds) == 2
-    assert requireds[0].payload["checkpoint_id"] == "tp1"
-    assert requireds[0].payload.get("revision", 1) == 1
-    assert "revised_from" not in requireds[0].payload
-    assert requireds[1].payload["checkpoint_id"] == "tp2"
-    assert requireds[1].payload["revision"] == 2
-    assert requireds[1].payload["revised_from"] == "tp1"
-    assert requireds[1].payload["revision_note"] == "人太多，改成一个人做"
     assert not any(e.type == EventType.RUN_STARTED for e in events)
 
 
@@ -511,10 +492,8 @@ def test_team_preview_exclude_one_continue(projected):
     p = projected["team_preview_exclude_one_continue"]
     assert p["status"] == "completed"
     assert _pending_gates(p) == []
-    tp = next(i for i in p["interactions"] if i["kind"] == "team_preview")
-    assert tp["status"] == "resolved"
-    assert tp["excludedRunIds"] == ["r2"]
-    assert "writeCapabilityOverrides" not in tp
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
+    assert not any("excludedRunIds" in i for i in p["interactions"])
     assert p["progress"]["completed"] == 1
 
 
@@ -522,12 +501,8 @@ def test_team_preview_tighten_write_continue(projected):
     p = projected["team_preview_tighten_write_continue"]
     assert p["status"] == "completed"
     assert _pending_gates(p) == []
-    tp = next(i for i in p["interactions"] if i["kind"] == "team_preview")
-    assert tp["status"] == "resolved"
-    assert "excludedRunIds" not in tp
-    assert tp["writeCapabilityOverrides"] == [
-        {"runId": "r2", "capability": "text_only"},
-    ]
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
+    assert not any("writeCapabilityOverrides" in i for i in p["interactions"])
     assert p["progress"]["completed"] == 2
 
 
@@ -535,11 +510,8 @@ def test_team_preview_model_override_continue(projected):
     p = projected["team_preview_model_override_continue"]
     assert p["status"] == "completed"
     assert _pending_gates(p) == []
-    tp = next(i for i in p["interactions"] if i["kind"] == "team_preview")
-    assert tp["status"] == "resolved"
-    assert tp["modelOverrides"] == {
-        "r2": {"model": "deepseek-v4-pro", "origin": "platform"},
-    }
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
+    assert not any("modelOverrides" in i for i in p["interactions"])
     r2 = next(r for r in p["runs"] if r["id"] == "r2")
     assert r2["model"] == "deepseek-v4-pro"
 
@@ -548,21 +520,17 @@ def test_debate_team_preview_resolved_continue(projected):
     p = projected["debate_team_preview_resolved_continue"]
     assert p["status"] == "running"
     assert _pending_gates(p) == []
-    assert any(
-        i["kind"] == "team_preview" and i["status"] == "resolved" for i in p["interactions"]
-    )
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
     assert len(p["runs"]) >= 1
     assert "team" in [s["kind"] for s in p["process"]]
 
 
 def test_debate_team_preview_research_first(projected):
-    """棘轮：research_first 决议仍不开赛 — 无辩手 runs；开工卡不再 offer 第三键。"""
+    """棘轮：research_first 回灌仍不开赛 — 无辩手 runs；无开工卡。"""
     p = projected["debate_team_preview_research_first"]
     assert p["status"] == "completed"
     assert _pending_gates(p) == []
-    assert any(
-        i["kind"] == "team_preview" and i["status"] == "resolved" for i in p["interactions"]
-    )
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
     assert p["runs"] == []
     assert p.get("debate") is None
     assert p.get("debateRounds") == []
@@ -570,16 +538,14 @@ def test_debate_team_preview_research_first(projected):
 
 
 def test_debate_team_preview_resolved_adjust(projected):
-    """辩论开工卡 adjust：不开赛、无辩手 runs、意见回灌。"""
+    """辩论 adjust：无开工卡、不开赛、无辩手 runs、意见回灌。"""
     from agentcore.conformance.vectors import VECTORS
     from agentcore.runtime.events.types import EventType
 
     p = projected["debate_team_preview_resolved_adjust"]
     assert p["status"] == "completed"
     assert _pending_gates(p) == []
-    assert any(
-        i["kind"] == "team_preview" and i["status"] == "resolved" for i in p["interactions"]
-    )
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
     assert p["runs"] == []
     assert p.get("debate") is None
     assert p.get("debateRounds") == []
@@ -587,13 +553,11 @@ def test_debate_team_preview_resolved_adjust(projected):
 
     _description, builder = VECTORS["debate_team_preview_resolved_adjust"]
     events = builder()
-    resolved = next(e for e in events if e.type == EventType.TEAM_PREVIEW_RESOLVED)
-    assert resolved.payload["decision"] == "adjust"
-    assert "先改命题" in (resolved.payload.get("note") or "")
     assert not any(e.type == EventType.RUN_STARTED for e in events)
     ended = next(e for e in events if e.type == EventType.TOOL_USE_END)
     assert "宜先问" not in (ended.payload.get("result") or "")
     assert "重新调用 debate" in (ended.payload.get("result") or "")
+    assert "先改命题" in (ended.payload.get("result") or "")
 
 
 def test_debate_pretrial_fast_projection(projected):
@@ -655,17 +619,11 @@ def test_debate_pretrial_evidence_pack_partial_projection(projected):
 
 
 def test_debate_team_preview_research_first_recommended(projected):
-    """棘轮：退役后普通开工卡挂起（无 recommended 主键）。"""
+    """棘轮：不再点亮 recommended 主键；paused 收口、无开工卡。"""
     p = projected["debate_team_preview_research_first_recommended"]
     assert p["status"] == "paused"
-    assert _pending_gates(p) == [
-        {
-            "kind": "team_preview",
-            "id": "tp-debate-rf-rec",
-            "status": "pending",
-            "workerIds": [],
-        }
-    ]
+    assert _pending_gates(p) == []
+    assert not any(i["kind"] == "team_preview" for i in p["interactions"])
     assert p["runs"] == []
     assert p.get("debate") is None
     assert "team" not in [s["kind"] for s in p["process"]]

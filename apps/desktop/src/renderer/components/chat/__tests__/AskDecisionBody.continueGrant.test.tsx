@@ -1,19 +1,18 @@
 // @vitest-environment jsdom
 /**
- * Continue 不得把预选 grant_* 退化成口头「已授权」——须先解析履约（无 picker）。
- * 找不到 → 卡面失败文案（≠ cancelled 静默）。
+ * Continue 不得把预选 grant_* 退化成口头「已授权」。
+ * 旧 `grant_readonly_folder` 停履约：卡面诚实失败（不调 helper / 不授权）。
+ * `grant_organize_folder` 仍须先解析履约（无 picker）；找不到 → 卡面失败（≠ cancelled 静默）。
  */
 import { AskDecisionBody } from "@/components/chat/ask/AskDecisionBody";
 import {
   ASK_NOTE_PLACEHOLDER,
   type AskUserContent,
+  GRANT_READONLY_FOLDER_RETIRED,
   useAskAnswer,
 } from "@/components/chat/ask/AskUserFields";
 import { hasLocalFiles } from "@/lib/capabilities";
-import {
-  DESKTOP_DOWNLOAD_URL,
-  DESKTOP_REQUIRED_HINT,
-} from "@/lib/desktopDownload";
+import { DESKTOP_REQUIRED_HINT } from "@/lib/desktopDownload";
 import {
   cleanup,
   fireEvent,
@@ -101,12 +100,12 @@ function Harness({
   );
 }
 
-describe("AskDecisionBody Continue + grant fulfillment", () => {
+describe("AskDecisionBody Continue + retired grant_readonly_folder", () => {
   beforeEach(() => {
     pickAndGrantReadonlyFolder.mockReset();
     pickAndGrantOrganizeFolder.mockReset();
     vi.mocked(hasLocalFiles).mockReturnValue(true);
-    // canLocalFs 需要 fsApi；履约本身已 mock，不必真实现。
+    // canLocalFs 需要 fsApi；旧 grant 已停履约，不得走到 helper。
     window.fsApi = {
       grantSessionReadonlyRoot: vi.fn(),
     } as unknown as typeof window.fsApi;
@@ -119,36 +118,22 @@ describe("AskDecisionBody Continue + grant fulfillment", () => {
     delete (window as { fsApi?: unknown }).fsApi;
   });
 
-  it("preselected grant default + Continue fulfills (not bare onContinue)", async () => {
+  it("preselected grant default + Continue is honest fail — no helper / no onContinue", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
-    pickAndGrantReadonlyFolder.mockResolvedValue({
-      ok: false,
-      reason: "not_found",
-      message: "找不到该目录",
-    });
 
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
-    await waitFor(() => {
-      expect(pickAndGrantReadonlyFolder).toHaveBeenCalledWith(
-        "conv-1",
-        undefined,
-      );
-    });
+    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
+    expect(window.fsApi?.grantSessionReadonlyRoot).not.toHaveBeenCalled();
     expect(onContinue).not.toHaveBeenCalled();
     expect(onBindResolve).not.toHaveBeenCalled();
-    expect(screen.getByText("找不到该目录")).toBeTruthy();
+    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
   });
 
-  it("forwards well_known / target_name hints to grant helper", async () => {
+  it("ignores well_known / target_name hints — does not call grant helper", () => {
     const onBindResolve = vi.fn(async () => {});
-    pickAndGrantReadonlyFolder.mockResolvedValue({
-      ok: false,
-      reason: "not_found",
-      message: "找不到该目录",
-    });
     const content: AskUserContent = {
       ...grantDefaultContent,
       questions: [
@@ -169,87 +154,32 @@ describe("AskDecisionBody Continue + grant fulfillment", () => {
     render(<Harness content={content} onBindResolve={onBindResolve} />);
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
-    await waitFor(() => {
-      expect(pickAndGrantReadonlyFolder).toHaveBeenCalledWith("conv-1", {
-        wellKnown: "desktop",
-        targetName: "报表",
-      });
-    });
-    expect(screen.getByText("找不到该目录")).toBeTruthy();
+    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
+    expect(onBindResolve).not.toHaveBeenCalled();
+    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
   });
 
-  it("not_found stays on card with failure copy — no resume / no bare grant", async () => {
+  it("retired grant stays on card with muted fail — no resume / no bare grant", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
-    pickAndGrantReadonlyFolder.mockResolvedValue({
-      ok: false,
-      reason: "not_found",
-      message: "找不到该目录",
-    });
 
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
-    await waitFor(() => {
-      expect(pickAndGrantReadonlyFolder).toHaveBeenCalled();
-    });
+    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
     expect(onContinue).not.toHaveBeenCalled();
     expect(onBindResolve).not.toHaveBeenCalled();
-    const bindFail = screen.getByText("找不到该目录");
+    const bindFail = screen.getByText(GRANT_READONLY_FOLDER_RETIRED);
     expect(bindFail.className).toContain("text-muted-foreground");
     expect(bindFail.className).not.toContain("destructive");
-    // 卡仍在：主 CTA 仍可点
     expect(screen.getByRole("button", { name: /^提交$/ })).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: /^提交$/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 
-  it("resolve success resumes via onBindResolve with fulfilled answer", async () => {
-    const onContinue = vi.fn();
-    const onBindResolve = vi.fn(async (_answer: string) => {});
-    pickAndGrantReadonlyFolder.mockResolvedValue({
-      ok: true,
-      root: { id: "r1", name: "报表", alias: "报表" },
-      alias: "报表",
-      namespace: "external/报表",
-      displayLabel: "报表",
-    });
-
-    render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
-    fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
-
-    await waitFor(() => {
-      expect(onBindResolve).toHaveBeenCalled();
-    });
-    expect(onContinue).not.toHaveBeenCalled();
-    const composed = onBindResolve.mock.calls[0]?.[0] ?? "";
-    expect(composed).toContain("授权访问本机目录");
-    expect(composed).toContain("报表");
-    expect(composed).toContain("external/报表");
-    expect(composed).toContain("只读");
-  });
-
-  it("resolve success clears bindBusy so CTA is not stuck when card stays mounted", async () => {
-    // resume 成功但不卸载卡（例如父级尚未换阶段）——主 CTA 不得永久 busy
-    const onBindResolve = vi.fn(async () => {});
-    pickAndGrantReadonlyFolder.mockResolvedValue({
-      ok: true,
-      root: { id: "r1", name: "报表", alias: "报表" },
-      alias: "报表",
-      namespace: "external/报表",
-    });
-
-    render(<Harness onBindResolve={onBindResolve} />);
-    fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
-
-    await waitFor(() => {
-      expect(onBindResolve).toHaveBeenCalled();
-    });
-    await waitFor(() => {
-      const submit = screen.getByRole("button", { name: /^提交$/ });
-      expect((submit as HTMLButtonElement).disabled).toBe(false);
-    });
-  });
-
-  it("normal non-folder selection still uses onContinue", async () => {
+  it("normal non-folder selection still uses onContinue", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
@@ -262,14 +192,8 @@ describe("AskDecisionBody Continue + grant fulfillment", () => {
     expect(onBindResolve).not.toHaveBeenCalled();
   });
 
-  it("option-row grant click fulfills without picker", async () => {
+  it("option-row grant click is honest fail — no picker / no helper", () => {
     const onBindResolve = vi.fn(async () => {});
-    pickAndGrantReadonlyFolder.mockResolvedValue({
-      ok: true,
-      root: { id: "r1", name: "资料", alias: "资料" },
-      alias: "资料",
-      namespace: "external/资料",
-    });
 
     const content: AskUserContent = {
       ...grantDefaultContent,
@@ -283,13 +207,10 @@ describe("AskDecisionBody Continue + grant fulfillment", () => {
     render(<Harness content={content} onBindResolve={onBindResolve} />);
     fireEvent.click(screen.getByRole("button", { name: /授权访问本机目录/ }));
 
-    await waitFor(() => {
-      expect(pickAndGrantReadonlyFolder).toHaveBeenCalledWith(
-        "conv-1",
-        undefined,
-      );
-      expect(onBindResolve).toHaveBeenCalled();
-    });
+    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
+    expect(window.fsApi?.grantSessionReadonlyRoot).not.toHaveBeenCalled();
+    expect(onBindResolve).not.toHaveBeenCalled();
+    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
   });
 });
 
@@ -633,7 +554,7 @@ describe("AskDecisionBody Continue + grant on Web", () => {
     window.__WEB__ = undefined;
   });
 
-  it("Continue with grant default shows download guide — no onContinue", () => {
+  it("Continue with grant default shows retired fail — no download / no onContinue", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
@@ -642,11 +563,8 @@ describe("AskDecisionBody Continue + grant on Web", () => {
     expect(onContinue).not.toHaveBeenCalled();
     expect(onBindResolve).not.toHaveBeenCalled();
     expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
-    expect(window.open).toHaveBeenCalledWith(
-      DESKTOP_DOWNLOAD_URL,
-      "_blank",
-      "noopener,noreferrer",
-    );
-    expect(screen.getByText(new RegExp(DESKTOP_REQUIRED_HINT))).toBeTruthy();
+    expect(window.open).not.toHaveBeenCalled();
+    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
+    expect(screen.queryByText(new RegExp(DESKTOP_REQUIRED_HINT))).toBeNull();
   });
 });

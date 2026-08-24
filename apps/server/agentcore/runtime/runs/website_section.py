@@ -1,4 +1,4 @@
-"""SECTION marker inject + turn-ceiling light shell checks (build_website Wave3 A/B3).
+"""SECTION marker inject + turn-ceiling light shell checks (site assemble Wave3 A/B3).
 
 Hard write contract: replace the whole body between
 ``<!-- SECTION:sN START -->`` … ``<!-- SECTION:sN END -->`` without needing an
@@ -14,7 +14,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-# Match playbook skeleton artifacts (build_website).
+# Match site skeleton artifacts.
 CRITICAL_SITE_PATHS: tuple[str, ...] = (
     "site/index.html",
     "site/styles.css",

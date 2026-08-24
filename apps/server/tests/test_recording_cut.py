@@ -40,17 +40,12 @@ def _e(etype: str, payload: dict | None = None, t_ms: int = 0) -> dict:
     return {"type": etype, "payload": payload or {}, "timestamp": None, "t_ms": t_ms}
 
 
-def _team_preview_payload() -> dict:
+def _plan_review_payload() -> dict:
     return {
         "checkpoint_id": "cp-1",
-        "form": "delegate",
-        "sides": [],
-        "workers": [{"id": "w1", "role": "研究员"}],
-        "tools": [],
-        "primitive": "delegate",
-        "motion": "",
-        "max_rounds": 1,
-        "thorough": True,
+        "conversation_id": "conv1",
+        "steps": [{"id": "s1", "title": "调研", "status": "pending"}],
+        "pending": [{"id": "s1", "title": "调研"}],
     }
 
 
@@ -87,13 +82,13 @@ def _synthetic_recording() -> dict:
         _e("content_delta", {"delta": "这是"}, 50),
         _e("content_delta", {"delta": "定稿正文。"}, 55),
         _e("workspace_op_required", {"op_id": "op1", "op": "read"}, 60),
-        _e("team_preview_required", _team_preview_payload(), 70),
+        _e("plan_review_required", _plan_review_payload(), 70),
         _e("message_end", {"finish_reason": "paused", "usage": _USAGE, "cost": _COST}, 80),
         _e("turn_saved", {}, 85),
     ]
     resume_leg = [
         _e("message_start", {"message_id": "m1", "conversation_id": "conv1"}, 0),
-        _e("team_preview_resolved", {"checkpoint_id": "cp-1", "decision": "continue"}, 5),
+        _e("plan_review_resolved", {"checkpoint_id": "cp-1", "decision": "continue"}, 5),
         _e("run_plan", _run_plan_payload(), 10),
         _e("run_started", {"run_id": "r1", "agent_id": "w1", "kind": "agent"}, 20),
         _e("run_reasoning_delta", {"run_id": "r1", "agent_id": "w1", "delta": "查。"}, 25),
@@ -138,7 +133,7 @@ def test_durable_face_filters_by_disposition():
     face_types = [ev["type"] for ev in durable_face(events)]
     # DURABLE / DERIVED 保留。
     for kept in ("tool_use_start", "tool_use_end", "content_delta", "reasoning_delta",
-                 "run_plan", "run_completed", "message_end", "team_preview_required"):
+                 "run_plan", "run_completed", "message_end", "plan_review_required"):
         assert kept in face_types
     # 白名单 EPHEMERAL 保留。
     for kept in ("message_start", "content_reset", "run_output_reset", "run_tool_progress"):
@@ -178,6 +173,11 @@ def test_retired_question_posted_event_types_are_dropped():
                 "type": "delegation_authorization_resolved",
                 "payload": {"authorization_id": "d", "status": "granted"},
             },
+            {"type": "team_preview_required", "payload": {"checkpoint_id": "tp1"}},
+            {
+                "type": "team_preview_resolved",
+                "payload": {"checkpoint_id": "tp1", "decision": "continue"},
+            },
             {"type": "message_start", "payload": {"message_id": "m"}},
         ]
     )
@@ -188,6 +188,8 @@ def test_retired_question_posted_event_types_are_dropped():
             "question_resolved",
             "delegation_authorization_required",
             "delegation_authorization_resolved",
+            "team_preview_required",
+            "team_preview_resolved",
         }
     ) == RETIRED_EVENT_TYPE_VALUES
 
@@ -296,8 +298,8 @@ def test_e2e_synthetic_recording_cut_passes_turn_conformance(tmp_path: Path):
     # 回合巡检判定核心：对产物事件跑 fold（后端 oracle 即 parity 裁判）== 内嵌 golden。
     assert project_turn(on_disk["events"]) == on_disk["projected"]
     # 挂起→恢复的交互全生命周期折出 resolved（不是悬空 pending）。
-    tp = next(i for i in on_disk["projected"]["interactions"] if i["kind"] == "team_preview")
-    assert tp["status"] == "resolved"
+    pr = next(i for i in on_disk["projected"]["interactions"] if i["kind"] == "plan_review")
+    assert pr["status"] == "resolved"
     # 幂等：重裁重写字节一致（golden 可复现）。
     again = cut_recording_to_fixture(
         _synthetic_recording(), name="delegate_pause_resume", description="e2e"

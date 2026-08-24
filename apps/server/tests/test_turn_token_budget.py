@@ -466,9 +466,7 @@ async def test_skip_qa_delivery_status_partial_with_honesty_gaps():
     assert "续派" in descs or "下一回合" in descs
     assert "web_quality" not in descs  # section gates already ran; don't false-claim
     assert any(g.get("reason") == "qa_deferred_budget" for g in payload["gaps"])
-    assert any(a.get("kind") == "website_verify" for a in payload["actions"])
-    verify = next(a for a in payload["actions"] if a["kind"] == "website_verify")
-    assert "prompt" in verify and "build_website_verify" in verify["prompt"]
+    assert not any(a.get("kind") == "website_verify" for a in payload["actions"])
     kinds = {a.get("kind") for a in payload["actions"]}
     assert "continue_skipped_runs" in kinds
     assert "continue_writing" not in kinds

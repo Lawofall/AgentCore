@@ -587,6 +587,7 @@ async def test_create_folder_cloud_success(monkeypatch: pytest.MonkeyPatch):
     assert "未改会话" in result.output or "conversation_untouched" in result.output
     assert "运行时继承" in result.output or "省略" in result.output
     assert ctx.turn_target_desk.folder_id == "new-cloud-1"
+    assert "new-cloud-1" in ctx.turn_created_folder_ids
 
 
 async def test_create_folder_nested_under_parent_path(monkeypatch: pytest.MonkeyPatch):

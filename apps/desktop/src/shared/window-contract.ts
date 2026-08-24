@@ -58,7 +58,10 @@ export const WINDOW_CHANNELS = {
   minimize: "window:minimize",
   maximize: "window:maximize",
   close: "window:close",
+  setThemeSource: "window:setThemeSource",
 } as const;
+
+export type WindowThemeSource = "light" | "dark" | "system";
 
 export interface WindowApi {
   minimize: () => void;
@@ -67,4 +70,6 @@ export interface WindowApi {
   /** 跳到预设外框尺寸并锁定比例；`free` 解除锁定。最大化时先还原。 */
   applyFramePreset: (preset: WindowFramePreset) => Promise<void>;
   getFramePreset: () => Promise<WindowFramePreset>;
+  /** 同步 Electron `nativeTheme`（标题栏 / 系统控件）到渲染层主题。 */
+  setThemeSource: (theme: WindowThemeSource) => void;
 }

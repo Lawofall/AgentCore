@@ -1,6 +1,6 @@
 {
   "name": "debate_team_preview_research_first_recommended",
-  "description": "辩论开工卡：research_first_recommended 键位反转（挂起·第三键升主键）",
+  "description": "开工卡已退役、不再发事件对：不再点亮 research_first_recommended（paused 收口）",
   "events": [
     {
       "type": "message_start",
@@ -43,34 +43,6 @@
       "timestamp": "2026-01-01T00:00:00.003Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp-debate-rf-rec",
-        "conversation_id": "conv_demo",
-        "workers": [],
-        "tools": [],
-        "primitive": "debate",
-        "motion": "LV 案模拟法庭：一审判决是否过重？",
-        "form": "debate",
-        "sides": [
-          {
-            "key": "plaintiff",
-            "name": "原告",
-            "stance": "判决过重"
-          },
-          {
-            "key": "defendant",
-            "name": "被告",
-            "stance": "判决适当"
-          }
-        ],
-        "max_rounds": 5,
-        "thorough": true,
-        "revision": 1
-      },
-      "timestamp": "2026-01-01T00:00:00.004Z"
-    },
-    {
       "type": "message_end",
       "payload": {
         "finish_reason": "paused",
@@ -91,7 +63,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:00.005Z"
+      "timestamp": "2026-01-01T00:00:00.004Z"
     }
   ],
   "projected": {
@@ -106,10 +78,6 @@
       {
         "kind": "content",
         "text": "我来组织一场辩论。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp-debate-rf-rec"
       }
     ],
     "citations": [],
@@ -122,14 +90,7 @@
       "completed": 0,
       "total": 0
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp-debate-rf-rec",
-        "status": "pending",
-        "workerIds": []
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

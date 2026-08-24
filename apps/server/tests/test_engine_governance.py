@@ -2,7 +2,7 @@
 
 Uses a scripted fake provider (no network) and a stub tool to drive the three
 behaviors added to ``engine.react_loop``:
-  * a repeated identical tool call → fact-anchored NUDGE, then FINALIZE
+  * identical successful tool calls are not a stuck pattern (no nudge)
   * a repeated failing tool call → failure-flavored NUDGE
   * round-budget exhaustion mid-tool-call → forced tool-free answer (never blank)
 
@@ -166,30 +166,20 @@ async def _run(
     return result, messages
 
 
-async def test_repeated_call_nudges_then_finalizes(monkeypatch):
+async def test_repeated_success_does_not_nudge(monkeypatch):
     monkeypatch.setattr(settings, "engine_convergence_spin_rounds", 0)
     same = _tool_chunk("search", '{"q": "x"}')
-    # 3 identical calls → NUDGE; window clears; 3 more → FINALIZE.
-    # Successful stub tool output counts as salvage inventory → soft+hard LLM salvage
-    # (script exhausted → empty answers; content stays '').
-    provider = _ScriptedProvider([[same], [same], [same], [same], [same], [same]])
+    provider = _ScriptedProvider(
+        [[same], [same], [same], [_content_chunk("done from inventory")]]
+    )
     tool = _StubTool()
     (content, _r, _usage, rounds), messages = await _run(provider, tool, max_rounds=20)
 
-    assert content == ""
-    assert rounds == 6  # finalized at the 6th round, before the cap
-    assert tool.calls == 6
-    assert provider.calls == 8  # 6 scripted + soft + hard salvage
-    # exactly one fact-anchored nudge was injected (repeated-call flavor)
+    assert content == "done from inventory"
+    assert rounds == 4
+    assert tool.calls == 3
     nudges = [m for m in messages if m.role == "user" and m.content and "停止重复" in m.content]
-    assert len(nudges) == 1
-    # salvage inventory → finalize prompt is injected once
-    finalize = [
-        m
-        for m in messages
-        if m.role == "user" and m.content and "停止使用调查与执行类工具" in m.content
-    ]
-    assert len(finalize) == 1
+    assert nudges == []
 
 
 async def test_repeated_failure_nudge_is_failure_flavored():

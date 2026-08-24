@@ -26,6 +26,7 @@ from agentcore.core.net import (
     site_of,
     web_timeout,
 )
+from agentcore.core.task_cancel import raise_if_task_cancelled
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.tools.builtin.file_ops import (
     _mark_landed_files,
@@ -243,6 +244,7 @@ class DownloadUrlTool:
                 )
             return _fail(f"下载失败：{msg}", start)
         except Exception as e:
+            raise_if_task_cancelled(e)
             reason = describe_net_error(e)
             logger.warning(
                 "tool.download_url_error",

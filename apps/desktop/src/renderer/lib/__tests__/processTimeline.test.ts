@@ -3,20 +3,55 @@ import {
   REWORK_LABEL_DONE,
   REWORK_LABEL_IN_PROGRESS,
   type TimelineNode,
+  appendContentStep,
   appendStageCardStep,
   appendTeamPreviewStep,
   appendUserInterjectionStep,
   dropTrailingContentSteps,
   groupToolRuns,
+  hasClosedBlockWithText,
   isOrchestrationTool,
   isWaitIdleReasoning,
   omitCoordinationIdleSteps,
   promoteScalarContentIntoProcess,
+  replaceTrailingContentStep,
   reworkChipLabel,
   timelineNodeKeys,
 } from "@/lib/processTimeline";
 import type { ProcessStep } from "@/types/events";
 import { describe, expect, it } from "vitest";
+
+describe("hasClosedBlockWithText", () => {
+  const block = "收到，按完整官网来做。我这就派团队开工。";
+  const closed: ProcessStep[] = [
+    { kind: "content", text: "开场白。" },
+    { kind: "content", text: block },
+    { kind: "reasoning", text: "接着编排" },
+    { kind: "team", execution_id: "e1" },
+  ];
+
+  it("is true when a closed content block already matches", () => {
+    expect(hasClosedBlockWithText(closed, "content", block)).toBe(true);
+  });
+
+  it("is false while that kind is still the open trailing step", () => {
+    expect(
+      hasClosedBlockWithText(
+        [
+          { kind: "content", text: "开场白。" },
+          { kind: "content", text: block },
+        ],
+        "content",
+        block,
+      ),
+    ).toBe(false);
+  });
+
+  it("append/replace keep the same process when the closed block is resent", () => {
+    expect(appendContentStep(closed, block)).toBe(closed);
+    expect(replaceTrailingContentStep(closed, block)).toBe(closed);
+  });
+});
 
 describe("appendUserInterjectionStep", () => {
   it("appends once per interjection id and dedupes later calls", () => {

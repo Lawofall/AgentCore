@@ -16,12 +16,12 @@
 ``files_touched`` / transcript 自报补入（与 ``product_landed`` 同源——失败前已落盘
 但没走完正式交付声明的产物仍计入交付账）。每行随带工具自报的 ``kind`` /
 ``derived_from``（导出件 ← 源 md），客户端据此把源折成中间稿，口径同
-``fold_exported_sources``。blocked = 纯失败无文件；partial = 有落盘有缺口。
+``fold_exported_sources``。blocked = 有硬缺口且本波无任何 ``files_touched`` /
+声明产物；partial = 有落盘有缺口。未声明但已 ``file_write`` 的路径仍把整轮从
+blocked 抬成 partial（空交/零声明清单 ≠ 整轮失败）。
 
-刀1 / 方案 A：声明路径已落盘 → verdict 走交付成功路径；``degraded_handoff`` 仅
-notes/warning 备注，不整单硬失败、不拖文件 rejected。甲⁺：真无落盘 soft
-（``files_not_landed`` → notes），不挡整批收工 /
-CEO finish；写盘通道挂仍可在备注里诚实归因。
+``degraded_handoff`` 一律 warning。空交接风暴 / 取消零落盘附加缺口 **已撤**。
+甲⁺：真无落盘 soft（``files_not_landed`` → notes），不挡整批收工。
 同图已有 continue_from / replaces 补派已跑时，收掉并排「计划收口时跳过」。
 
 用户面零落盘缺口投影为 ``files_not_landed`` soft（甲⁺：warning/notes，不挡整批）：
@@ -74,7 +74,7 @@ from weakref import WeakKeyDictionary
 from agentcore.core.logging import get_logger
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPhase, RunState
-from agentcore.runtime.turn.token_budget import REASON_QA_DEFERRED, REASON_TURN_TOKEN_BUDGET
+from agentcore.runtime.turn.token_budget import REASON_TURN_TOKEN_BUDGET
 
 if TYPE_CHECKING:
     from agentcore.tools.protocol import TurnPromotionLedger
@@ -107,7 +107,7 @@ REASON_ARTIFACT_REJECTED = "artifact_rejected"
 REASON_WRITE_OWNERSHIP = "write_ownership_conflict"
 # Keep in sync with runtime.runs.cutoff.REASON_DEGRADED_HANDOFF (wire gap reason).
 REASON_DEGRADED_HANDOFF = "degraded_handoff"
-# B1：超席/空交接风暴；cancel 且零落盘须缺口清单（draft_ack）。
+# B1：超席。空交接风暴 / cancel·0 附加缺口已撤（常量留着给旧对账行对照）。
 REASON_EMPTY_HANDOFF_STORM = "empty_handoff_storm"
 REASON_CANCELLED = "cancelled"
 REASON_OVER_SEAT = "over_seat"
@@ -125,7 +125,6 @@ _DRAFT_ACK_GAP_REASONS = frozenset(
         REASON_VERIFY_BUDGET,
         REASON_NODE_FAILED,
         REASON_ARTIFACT_REJECTED,
-        REASON_EMPTY_HANDOFF_STORM,
         REASON_CANCELLED,
         REASON_OVER_SEAT,
     }
@@ -242,25 +241,9 @@ _PATH_MISMATCH_MARKERS = (
     "声明的交付物路径未落盘",
 )
 
-# build_website task books embed ``站点【…】`` — reuse for verify-action prompt.
-_SITE_BRACKET_RE = re.compile(r"站点【([^】]+)】")
 # 「不阻断验收，3 处」/「自注（3 处）」/ skeleton soft / legacy soft copy.
 _SOFT_HIT_COUNT_RE = re.compile(r"(?:不阻断验收，|自注（)(\d+)\s*处")
 _SOFT_PATH_RE = re.compile(r"`([^`]+)`\s*·")
-
-
-def _infer_website_site(plan: RunPlan) -> str:
-    """Best-effort site label from plan task text (empty when unknown)."""
-    for node in plan.nodes:
-        task = getattr(node, "task", None)
-        if not isinstance(task, str) or not task:
-            continue
-        match = _SITE_BRACKET_RE.search(task)
-        if match:
-            site = match.group(1).strip()
-            if site:
-                return site
-    return ""
 
 
 def _continue_skipped_runs_action(roles: list[str]) -> dict[str, str]:
@@ -278,23 +261,6 @@ def _continue_skipped_runs_action(roles: list[str]) -> dict[str, str]:
             "；优先 append 同一协作图或 replan/点名角色，"
             "不要另开无关大派，不要把部分完成说成全部交付。"
         ),
-    }
-
-
-def _website_verify_action(site: str) -> dict[str, str]:
-    """Structured second-act CTA when whole-page QA deferred for budget."""
-    topic_arg = f'topic="{site}"' if site else 'topic="<站点简述>"'
-    prompt = (
-        "请对本站做第二段整页验收：delegate 时用 playbook=build_website_verify，"
-        f"playbook_args 填 {topic_arg}。"
-        "工作区已有 site/ 产物，只跑整页/视觉 QA，勿重做文案、骨架或分区。"
-    )
-    return {
-        "kind": "website_verify",
-        "description": (
-            "整页验收因预算推迟——点此续派页面 QA（不重建站，只用 build_website_verify）"
-        ),
-        "prompt": prompt,
     }
 
 
@@ -726,114 +692,13 @@ def _node_gaps(plan: RunPlan, results: dict[str, RunState]) -> list[dict[str, An
     return gaps
 
 
-def _count_empty_or_degraded_nodes(
-    plan: RunPlan,
-    results: dict[str, RunState],
-) -> tuple[int, int, list[str]]:
-    """Return (emptyish_count, terminal_count, role_labels) for empty-handoff storm.
-
-    emptyish = cancelled(no revision) / failed / completed+degraded_handoff /
-    completed with zero files and empty content.
-    """
-    emptyish = 0
-    terminal = 0
-    roles: list[str] = []
-    for node in plan.nodes:
-        state = results.get(node.run_id)
-        if state is None:
-            continue
-        role = str(node.role or node.agent_name or node.run_id)
-        if state.phase is RunPhase.CANCELLED and not _has_completed_revision(node.run_id, results):
-            terminal += 1
-            emptyish += 1
-            roles.append(role)
-            continue
-        if state.phase is RunPhase.FAILED:
-            terminal += 1
-            emptyish += 1
-            roles.append(role)
-            continue
-        if state.phase is not RunPhase.COMPLETED:
-            continue
-        terminal += 1
-        files = bool(state.files_touched) or any(
-            isinstance(a, dict) and a.get("status") == "accepted"
-            for a in (state.file_acceptance or [])
-        )
-        degraded = False
-        for row in getattr(state, "delivery_gaps", None) or []:
-            if isinstance(row, dict) and str(row.get("reason") or "") == REASON_DEGRADED_HANDOFF:
-                degraded = True
-                break
-        if not degraded and state.warnings:
-            degraded = any("交接说明不够完整" in str(w) for w in state.warnings)
-        debrief = state.debrief if isinstance(state.debrief, dict) else None
-        if debrief and debrief.get("degraded"):
-            degraded = True
-        body = (state.content or "").strip()
-        if degraded or (not files and len(body) < 40):
-            emptyish += 1
-            roles.append(role)
-    return emptyish, terminal, roles
-
-
-def _empty_handoff_storm_gap(
-    plan: RunPlan,
-    results: dict[str, RunState],
-    *,
-    files_landed: bool,
-) -> dict[str, Any] | None:
-    """B1：空交接占比高 → blocking PARTIAL gap（禁『仍在进行』空悬）."""
-    if files_landed:
-        return None
-    emptyish, terminal, roles = _count_empty_or_degraded_nodes(plan, results)
-    if emptyish < 3 and not (terminal >= 5 and emptyish * 2 >= terminal):
-        return None
-    shown = "、".join(roles[:6]) if roles else "多席"
-    extra = f"等 {len(roles)} 席" if len(roles) > 6 else shown
-    return _annotate_gap(
-        "验收",
-        f"空交接/未交付席位过多（{emptyish}/{terminal}）：{extra}——"
-        "须同回合 PARTIAL 终稿（已完成摘要 + 缺口清单 + 下一步），禁止『仍在进行』空悬",
-        reason=REASON_EMPTY_HANDOFF_STORM,
-    )
-
-
-def _cancel_zero_output_checklist_gap(
-    plan: RunPlan,
-    results: dict[str, RunState],
-    *,
-    files_landed: bool,
-) -> dict[str, Any] | None:
-    """B1：cancel + 零落盘 → 结构化未交付清单（须 draft_ack）."""
-    if files_landed:
-        return None
-    cancelled_roles: list[str] = []
-    for node in plan.nodes:
-        state = results.get(node.run_id)
-        if state is None:
-            continue
-        if state.phase is RunPhase.CANCELLED and not _has_completed_revision(node.run_id, results):
-            cancelled_roles.append(str(node.role or node.agent_name or node.run_id))
-    if not cancelled_roles:
-        return None
-    shown = "、".join(cancelled_roles[:8])
-    extra = f"等 {len(cancelled_roles)} 项" if len(cancelled_roles) > 8 else shown
-    return _annotate_gap(
-        "验收",
-        f"取消且零落盘——未交付清单：{extra}；请给出可继续动作，禁止仅『重新派工』短句",
-        reason=REASON_CANCELLED,
-    )
-
-
 def _soften_landed_degraded_gaps(
     gaps: list[dict[str, Any]],
     *,
     files_landed: bool,
 ) -> list[dict[str, Any]]:
-    """刀1 / 方案 A：有落盘时 degraded_handoff → warning 备注，不挡 delivered/notes。"""
-    if not files_landed:
-        return gaps
+    """degraded_handoff 一律 warning，不挡 delivered/notes（空交 ≠ 整轮失败）。"""
+    _ = files_landed
     out: list[dict[str, Any]] = []
     for gap in gaps:
         reason = str(gap.get("reason") or "").strip()
@@ -842,12 +707,9 @@ def _soften_landed_degraded_gaps(
             softened = dict(gap)
             softened["severity"] = "warning"
             softened["reason"] = REASON_DEGRADED_HANDOFF
-            # 人口语：去掉可能残留的内部码。
             text = str(softened.get("description") or "").strip()
             if not text or "degraded_handoff" in text or "continue_from" in text:
-                softened["description"] = (
-                    "交接说明不够完整，系统已代为补写摘要（已落盘文件不受影响）"
-                )
+                softened["description"] = "交接说明不够完整，系统已代为补写摘要"
             out.append(softened)
         else:
             out.append(gap)
@@ -1108,7 +970,11 @@ def build_delivery_status(
         _collect_artifacts(results, plan),
     )
     delivered = [a["path"] for a in artifacts if a.get("status") == "accepted"][:_MAX_FILES]
-    files_landed = bool(delivered) or bool(artifacts)
+    files_landed = bool(delivered) or bool(artifacts) or any(
+        bool(getattr(state, "files_touched", None))
+        for state in results.values()
+        if state is not None
+    )
 
     # B1：worker 转录里 browser_* 成功 → 闩锁（CEO 综收可对账；非气泡启发式）。
     from agentcore.runtime.closing_posture import note_browser_tool_success_from_messages
@@ -1203,19 +1069,6 @@ def build_delivery_status(
     # 与 delivered_files / synthesis「路径已核」同源；不扫盘上「缺席」散文。
     raw_gaps.extend(_artifact_rejected_gaps(artifacts))
     raw_gaps = _dedupe_gap_rows(raw_gaps)
-    # ③d B1：空交接风暴 / cancel·0 产出 → blocking + draft_ack（强制 PARTIAL 缺口清单）。
-    storm = _empty_handoff_storm_gap(plan, results, files_landed=files_landed)
-    if storm is not None:
-        raw_gaps.append(storm)
-        from agentcore.runtime.closing_posture import note_empty_handoff_storm
-
-        note_empty_handoff_storm()
-    cancel_gap = _cancel_zero_output_checklist_gap(plan, results, files_landed=files_landed)
-    if cancel_gap is not None:
-        raw_gaps.append(cancel_gap)
-        from agentcore.runtime.closing_posture import note_cancel_zero_output
-
-        note_cancel_zero_output()
     # 用户面：零落盘按队员 soft 投影（本队员本波未交卷）；仅批次谓词时合并。
     projected = _project_user_gaps(raw_gaps, results)
     gaps = projected[:_MAX_GAPS]
@@ -1242,13 +1095,11 @@ def build_delivery_status(
 
     # 待用户操作：① 无执行环境 → 按会话 location 诚实分流（已在云≠再导入到云；
     #    wire kind 仍可 bind_local_folder；本机传统合法非默认）；
-    # ② 整页 QA 预算 defer → 一键续派验收；
-    # ③ 额度 SKIPPED 未跑节点 → 续跑入口。
+    # ② 额度 SKIPPED 未跑节点 → 续跑入口。
+    # 整页 QA 预算 defer 不再挂一键续派（旧磁带 kind=website_verify 仅兼容）。
     # 成篇未写完不再挂 continue_writing——改由对话框接着说。
     # ① 判定复用 code_execution_enabled_for 单一真相源（与 worker registry / 委派闸同一谓词）。
     actions: list[dict[str, str]] = []
-    if any(g.get("reason") == REASON_QA_DEFERRED for g in blocking):
-        actions.append(_website_verify_action(_infer_website_site(plan)))
     skipped_budget_roles = [
         str(g.get("role") or "").strip() or "未跑节点"
         for g in blocking

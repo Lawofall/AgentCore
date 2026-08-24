@@ -194,7 +194,7 @@ export const interactiveCheckpointTone = {
   },
 } as const;
 
-/** Settled ask_user / team_preview record shells (timeline metadata light cards). */
+/** Settled ask_user record shells (timeline metadata light cards). */
 export const resolvedCheckpointTone = {
   success: {
     // Ghost row — no thick border/card fill; continue vs stop still differs by icon + label.

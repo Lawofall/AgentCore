@@ -68,22 +68,14 @@ export const LABELS = {
   allPlatforms: { zh: "全部平台 · ALL PLATFORMS", en: "All platforms" },
 };
 
-/** 免安装入口：与桌面端并列的两张快捷卡。 */
+/** 免安装入口：窄屏 / 宽屏都走同一网页版。 */
 export const QUICK_ENTRIES = [
   {
     key: "web",
     title: { zh: "网页版 · 免安装", en: "Web app · no install" },
     body: {
-      zh: "浏览器打开即用，功能与客户端一致",
-      en: "Open it in the browser and start right away.",
-    },
-  },
-  {
-    key: "mobile",
-    title: { zh: "手机网页版", en: "Mobile web" },
-    body: {
-      zh: "在手机上下达任务，回来再审阅产出",
-      en: "Assign a task on the phone, review the result later.",
+      zh: "浏览器打开即用，手机与电脑同一地址",
+      en: "Open it in the browser — same app on phone and desktop.",
     },
   },
 ] as const;

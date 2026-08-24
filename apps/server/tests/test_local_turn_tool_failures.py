@@ -68,10 +68,46 @@ _TRACE = "0123456789abcdef0123456789abcdef"
         ("schema reject", "schema", "schema"),
         ("dirty", "dirty_skip", "dirty_skip"),
         ("auth", "unauthenticated", "unauthenticated"),
+        ("x", "not_a_web_url", "not_a_web_url"),
+        ("x", "url_not_workspace_path", "url_not_workspace_path"),
+        ("文件不存在：docs/ghost.md", None, "not_found"),
+        ("不是目录：apps/server/src", "schema", "not_found"),
+        ("路径不存在：apps/server/src", "other", "not_found"),
+        ("anything", "not_found", "not_found"),
+        (
+            "禁止用 code_execute 跑项目级慢验证（检测到：pytest）。本工具约 60s 硬顶",
+            None,
+            "project_verify_redirect",
+        ),
+        ("anything", "project_verify_redirect", "project_verify_redirect"),
+        (
+            "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+            None,
+            "source_grep_redirect",
+        ),
+        ("anything", "source_grep_redirect", "source_grep_redirect"),
+        ("缺少参数", "schema", "schema"),
     ],
 )
 def test_normalize_local_turn_tool_failure_code(message, code, expected):
     assert normalize_local_turn_tool_failure_code(message, code=code) == expected
+
+
+def test_tool_failures_from_journal_omits_channel_redirect():
+    failures = tool_failures_from_journal(
+        [
+            {
+                "kind": "tool_call",
+                "payload": {
+                    "name": "code_execute",
+                    "success": False,
+                    "result": "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+                    "code": "source_grep_redirect",
+                },
+            }
+        ]
+    )
+    assert failures == []
 
 
 def test_tool_failures_from_journal_passes_payload_code():

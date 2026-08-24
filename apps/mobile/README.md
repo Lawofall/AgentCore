@@ -16,7 +16,7 @@
 | fold / 协议 | 桌面树；同文档 §十；根目录 `pnpm conformance`（只跑桌面） |
 | 前端总读序 | [`前端地图`](../../docs/04-前端/前端地图.md) |
 | 目录边界 | [`项目结构` §四](../../docs/02-架构/项目结构.md) |
-| Android 发版 / CORS / FCM 闸 | [`部署与运维` §7.6a](../../docs/05-平台与运维/部署与运维.md)；下文清单 |
+| Android 发版 / CORS / FCM 闸 | [`发布与门禁` §7.6a Android APK（官网侧载）](../../docs/05-平台与运维/发布与门禁.md)；本目录命令见下 |
 | clone 后跑通 | [`本地开发`](../../docs/02-架构/本地开发.md) §3 |
 
 产品减法与商店 / iOS 余项以设计文档为准；远期能力见 [`产品路线图摘要`](../../docs/01-产品/产品路线图摘要.md)（提案全文不在公开仓）。
@@ -53,41 +53,13 @@ pnpm -C apps/mobile android:open
 | 仓库根 `pnpm release:gate --only mobile` | 手机段（现为 fold-kit 测试；无 SPA 单测） |
 | 仓库根 `pnpm conformance` | 只跑桌面 fold |
 
-`deploy:pages` 已退役：`m.example.com` 将 301 到 `app.`，不要再上传旧 SPA。浏览器窄屏走 `pnpm -C apps/desktop deploy:web`。
+`deploy:pages` 已退役：独立 `m.example.com` 站已下线，不要再上传旧 SPA。浏览器窄屏走 `pnpm -C apps/desktop deploy:web`。
 
 改 SSE / fold 后：仓库根 `pnpm conformance`（桌面）。
 
 ## Android 发版（侧载 APK）
 
-官网侧载；App 内仅软提示「去下载」（浏览器打开 APK URL），**不强制、不静默换包、不做 Capacitor OTA**。
-
-| 项 | 约定 |
-|----|------|
-| 产物 | `AgentCore-<ver>-android.apk` |
-| Tag | `android-v<ver>`（与桌面 `v<ver>` 分轨） |
-| 发布仓 | [`Lawofall/AgentCore-releases`](https://github.com/Lawofall/AgentCore-releases) |
-| 烘焙 API | `VITE_API_URL` / `AGENTCORE_APP_API_URL` / `AGENTCORE_APP_HOST`（与 `deploy:pages` 同口径） |
-
-### 签名
-
-1. 生成 release keystore（只做一次，离线妥善保管）。
-2. 复制 `android/keystore.properties.example` → `android/keystore.properties`，填入 `storeFile` / 密码 / `keyAlias`。
-3. **`keystore.properties` 与 `*.keystore` 已 gitignore，勿提交。**
-4. 无 `keystore.properties` 时 `release:android` / `android:assemble` **会明确失败**（不会默默打出 unsigned 当正式包）。
-
-### 本机构建环境
-
-- **JDK 21**（Capacitor 8 / AGP 要求；`JAVA_HOME` 指向 JDK 21）
-- Android SDK（`android/local.properties` 的 `sdk.dir`，或 `ANDROID_HOME`）
-- 首次 Gradle 若下载超时：已将 wrapper `networkTimeout` 调大；也可手动预置 `gradle-*-all.zip`
-
-### 发第一包 checklist
-
-1. 确认 `apps/mobile/package.json` 的 `version`（会写入 `versionName`；`versionCode = major*1e6 + minor*1e3 + patch`）。
-2. Android SDK：`android/local.properties` 的 `sdk.dir=…`，或环境变量 `ANDROID_HOME`。
-3. 配置好 `android/keystore.properties`。
-4. `gh auth login`（对 `Lawofall/AgentCore-releases` 有写权限）。
-5. 跑：
+产品机制、CORS、CDN、硬地板 → [`发布与门禁` §7.6a Android APK（官网侧载）](../../docs/05-平台与运维/发布与门禁.md)。本目录只留包内命令：
 
 ```bash
 pnpm -C apps/mobile release:android
@@ -95,21 +67,7 @@ pnpm -C apps/mobile release:android
 pnpm -C apps/mobile release:android -- --skip-draft
 ```
 
-6. 真机侧载 `release/<ver>/AgentCore-<ver>-android.apk` 冒烟（签名安装 / 系统 WebView 渲染 / 端到端 SSE）后转正：
-
-```bash
-gh release edit android-v<ver> --repo Lawofall/AgentCore-releases --draft=false
-```
-
-脚本末尾会跑 `sync-release-cdn --android`（品牌域 `downloads.*/android/` + `latest.json`；官网 APK 按钮走 GitHub）。若该步因路径空格失败，可手动：
-
-```bash
-node deploy/scripts/sync-release-cdn.mjs --android apps/mobile/release/<ver>/AgentCore-<ver>-android.apk --version <ver>
-```
-
-7. App 内更新提示：原生壳用 CapacitorHttp 拉 `https://downloads…/android/latest.json`（绕过 WebView CORS），与本地 `clientVersion()` 做 semver 比较；仅 Android；`dev` 不提示。官网下载按钮另走 GitHub Releases 资产探测。下载站对 `latest.json` 须有公开 CORS（`pnpm sync:release-cdn --install-nginx`），以便旧壳 WebView `fetch` 仍可用。
-
-8. **生产 API CORS**：后端 `CORS_ALLOW_ORIGINS` 须含 `https://localhost`（及 `capacitor://localhost` / `http://localhost`）。缺则壳内「无法连接后端」。`release:android` 出包前对公网 `/api` 自动 OPTIONS 预检（`pnpm check:capacitor-cors` 可单跑）；明确拒绝才失败，网络抖动 fail-open。补洞脚本：`node deploy/scripts/add-capacitor-cors.mjs`。
+签名：`android/keystore.properties`（gitignore；缺则脚本拒绝打 release）。需 **JDK 21** + Android SDK。FCM → 下文。
 
 ## FCM 推送（原生）
 

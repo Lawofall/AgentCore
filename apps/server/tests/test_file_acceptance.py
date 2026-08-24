@@ -25,6 +25,17 @@ def test_landed_matches_declared_dir_prefix_and_glob():
     assert landed_matches_declared(landed, "AgentCore/文档/reviews/*.txt") is False
 
 
+def test_landed_matches_declared_dossier_flatten():
+    from agentcore.runtime.runs.contract import matching_artifact_paths
+    from agentcore.workspace.stage_dirs import DRAFTS_DIR
+
+    declared = f"{DRAFTS_DIR}/主题/01.md"
+    landed = f"{DRAFTS_DIR}/主题_01.md"
+    assert landed_matches_declared(landed, declared) is True
+    assert landed_matches_declared(landed, f"{DRAFTS_DIR}/其它/01.md") is False
+    assert matching_artifact_paths(declared, [landed]) == [landed]
+
+
 def test_declaration_allows_landed_nonempty_artifacts_ignores_artifact_dir():
     """artifacts 非空：只对声明路径做精确/目录/通配，artifact_dir 不兜底。"""
     landed = "AgentCore/文档/reviews/前端刷新审计-对话页面.md"

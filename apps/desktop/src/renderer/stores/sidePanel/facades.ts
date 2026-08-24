@@ -6,6 +6,7 @@ import {
   useExecutionStore,
 } from "../execution";
 import { canRevealSidePanel, persistOpen } from "./chrome";
+import { floatingIdSet } from "./helpers";
 import {
   CHANGES_TAB_ID,
   type SidePanelGet,
@@ -36,6 +37,7 @@ type FacadeActions = Pick<
   | "showSimpleTurnDetail"
   | "showWorkspace"
   | "showChanges"
+  | "closeChanges"
   | "clearChangesFocus"
   | "showFile"
   | "openFileTab"
@@ -113,7 +115,10 @@ export function createFacadeActions(
 
     showChanges: (messageId) => {
       if (get().isFloating(CHANGES_TAB_ID)) {
-        set({ changesFocusMessageId: messageId ?? null });
+        set({
+          changesOpen: true,
+          changesFocusMessageId: messageId ?? null,
+        });
         get().focusFloat(CHANGES_TAB_ID);
         return;
       }
@@ -122,9 +127,46 @@ export function createFacadeActions(
       set({
         open: true,
         activeTabId: CHANGES_TAB_ID,
+        changesOpen: true,
         changesFocusMessageId: messageId ?? null,
         pendingBadge: 0,
         focusSurface: { type: "dock" },
+      });
+    },
+
+    closeChanges: () => {
+      set((s) => {
+        const floats = s.floats.filter((f) => f.tabId !== CHANGES_TAB_ID);
+        let activeTabId = s.activeTabId;
+        let focusSurface = s.focusSurface;
+        if (s.activeTabId === CHANGES_TAB_ID) {
+          const floatingIds = floatingIdSet(floats);
+          const dockedContent = s.tabs.filter((t) => !floatingIds.has(t.id));
+          activeTabId =
+            dockedContent[dockedContent.length - 1]?.id ?? WORKSPACE_TAB_ID;
+        }
+        if (
+          focusSurface.type === "float" &&
+          focusSurface.tabId === CHANGES_TAB_ID
+        ) {
+          focusSurface = { type: "dock" };
+        }
+        if (
+          !s.changesOpen &&
+          s.changesFocusMessageId == null &&
+          floats.length === s.floats.length &&
+          activeTabId === s.activeTabId &&
+          focusSurface === s.focusSurface
+        ) {
+          return s;
+        }
+        return {
+          changesOpen: false,
+          changesFocusMessageId: null,
+          floats,
+          activeTabId,
+          focusSurface,
+        };
       });
     },
 

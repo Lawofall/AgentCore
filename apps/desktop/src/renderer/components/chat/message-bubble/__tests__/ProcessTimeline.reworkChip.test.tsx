@@ -18,7 +18,6 @@ afterEach(cleanup);
 const emptyCards = {
   checkpoints: [] as never[],
   planReviews: [] as never[],
-  teamPreviews: [] as never[],
 };
 
 function renderTimeline(process: ProcessStep[], isStreaming: boolean) {

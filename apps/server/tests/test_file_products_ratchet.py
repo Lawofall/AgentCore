@@ -483,10 +483,9 @@ async def test_git_swaps_the_worktree_but_lands_no_products(tmp_path: Path):
 
     台账语义是「本 run 产出的交付物」而不是「盘上多了什么」：checkout / pull / merge 落下的
     是别人或过去已提交的版本，一次切分支能带上千个 worker 根本没碰过的文件。更硬的理由在
-    ``runtime/runs/executor/terminal.py``——它拿 ``files_touched`` 判「有没有落盘产物」
-    （``_is_hard_failure`` / ``_hard_gap_blocks_completion`` / degraded_handoff 软化），
-    若换工作树算落盘，一个毫无产出、交接残缺的 worker 只要切一次分支就能把 blocked 刷成
-    delivered——正是自报重设计要防的假装交付。想推翻这条定案，先答：那次假装交付怎么防。
+    ``runtime/runs/executor/terminal.py``：对账用 ``files_touched`` 判有没有落盘产物
+    （blocked vs partial）。若换工作树算落盘，一个毫无产出的 worker 只要切一次分支就能把
+    无产物批次刷成有落盘——正是自报重设计要防的假装交付。想推翻这条定案，先答：那次假装交付怎么防。
     """
     if not shutil.which("git"):
         pytest.skip("git not installed")

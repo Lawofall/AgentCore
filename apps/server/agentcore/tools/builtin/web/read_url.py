@@ -27,6 +27,7 @@ from agentcore.core.net import (
 from agentcore.core.net import (
     classify_url as _classify_url,
 )
+from agentcore.core.task_cancel import raise_if_task_cancelled
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.tools.builtin.web._net import (
     circuit_remaining,
@@ -95,6 +96,14 @@ _LOOPBACK_REROUTE_HINT = (
     "② 用 terminal 在用户本机跑 `curl -sS <url>` 取内容。"
     "两者都不可用时，请用户把页面内容贴过来。"
 )
+# 工作区路径 / file:// / 盘符误喂 read_url：同构 loopback——工具没坏，换 file_read
+# 就能做。贴收口话术会让模型放弃一次本可完成的读文件；补 https:// 会去抓公网
+# （文件夹名长得像域名时更糟，例如工作区 `_scratch/zoogame.cc/`）。
+_NOT_A_WEB_URL_REROUTE_HINT = (
+    "。read_url 只接受 http/https 公网网页，不是读工作区文件的工具："
+    "工作区相对路径、file://、盘符请改用 file_read(path=相对路径)。"
+    "不要给本参数补 https:// 再调 read_url——那会去抓公网，读不到工作区文件。"
+)
 
 # --- 用户可见失败 code ---------------------------------------------------------
 # ``metadata["code"]`` keys the curated user sentence (runtime/engine/tool_failure_face);
@@ -102,10 +111,11 @@ _LOOPBACK_REROUTE_HINT = (
 # an uncoded path collapses into a single info-free sentence for the user, which is what
 # every read_url failure used to do regardless of cause.
 _CODE_LOOPBACK_HOST = "loopback_host"
+_CODE_NOT_A_WEB_URL = "not_a_web_url"
 _CODE_PRIVATE_IP = "private_address_blocked"
 
 _BLOCK_CODES: dict[URLBlock, str] = {
-    URLBlock.BAD_SCHEME: ErrorCode.VALIDATION_ERROR,
+    URLBlock.BAD_SCHEME: _CODE_NOT_A_WEB_URL,
     URLBlock.BLOCKED_HOST: "blocked_host",
     URLBlock.LOOPBACK_HOST: _CODE_LOOPBACK_HOST,
     URLBlock.DNS_FAIL: "dns_resolve_failed",
@@ -197,6 +207,11 @@ def _is_loopback_refusal(e: BaseException) -> bool:
     return getattr(e, "block", None) is URLBlock.LOOPBACK_HOST
 
 
+def _is_not_a_web_url_refusal(e: BaseException) -> bool:
+    """True when the target is not an http(s) URL (path / file:// / other scheme)."""
+    return getattr(e, "block", None) is URLBlock.BAD_SCHEME
+
+
 def _failed(error: str, start: float, *, code: str, policy: bool = False) -> ToolResult:
     """Failed ``ToolResult`` carrying the stable code (and optional policy marker)."""
     metadata: dict[str, Any] = {"code": code}
@@ -224,6 +239,22 @@ def _loopback_refusal(reason: str, start: float) -> ToolResult:
         f"{reason}{_LOOPBACK_REROUTE_HINT}",
         start,
         code=_CODE_LOOPBACK_HOST,
+        policy=True,
+    )
+
+
+def _not_a_web_url_refusal(reason: str, start: float) -> ToolResult:
+    """Refuse a non-http(s) target with a file_read reroute instead of a stop-read.
+
+    Same posture as :func:`_loopback_refusal`: the tool is fine; this call used the
+    wrong one. Must not spend run-breaker budget, and must not carry
+    ``_STOP_READ_HINT``. Do not suggest prefixing ``https://`` — a workspace
+    folder named like a domain is a file path, not a missing scheme.
+    """
+    return _failed(
+        f"{reason}{_NOT_A_WEB_URL_REROUTE_HINT}",
+        start,
+        code=_CODE_NOT_A_WEB_URL,
         policy=True,
     )
 
@@ -481,6 +512,8 @@ class ReadUrlTool:
         return ToolSchema(
             name="read_url",
             description=(
+                "仅 http/https 公网网页正文。工作区相对路径、file://、盘符路径用 file_read，"
+                "不要把路径传给本工具，也不要补 https:// 冒充网页。"
                 "获取指定网页的正文文本（比 web_search 摘要更完整，但长页面会按 "
                 "max_chars 截断），用于在 web_search 摘要不足、确需深读某条结果时。"
                 "成稿挂 #rN 须先对本工具深读（或来源已 selected）；仅 search 命中不可挂号——"
@@ -494,7 +527,13 @@ class ReadUrlTool:
             parameters={
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "要读取的网页 URL"},
+                    "url": {
+                        "type": "string",
+                        "description": (
+                            "必须是 http:// 或 https:// 开头的公网网页地址。"
+                            "工作区文件用 file_read。"
+                        ),
+                    },
                     "max_chars": {
                         "type": "integer",
                         "description": "返回的最大字符数，默认 8000",
@@ -542,6 +581,8 @@ class ReadUrlTool:
         if block is not None:
             if block is URLBlock.LOOPBACK_HOST:
                 return _loopback_refusal(block.value, start)
+            if block is URLBlock.BAD_SCHEME:
+                return _not_a_web_url_refusal(block.value, start)
             # SSRF / DNS / blocked-host: count toward the run breaker (not policy_failure)
             # so consecutive environmental refusals hard-stop empty URL thrashing.
             return _failed(
@@ -663,12 +704,15 @@ class ReadUrlTool:
                         context.on_phase("reading")
                     title, text, description = _extract_page(html, max_chars)
         except Exception as e:
+            raise_if_task_cancelled(e)
             reason = describe_net_error(e)
             logger.warning("tool.read_url_error", url=url, error=reason, error_repr=repr(e))
             # A rebind / redirect that lands on the user's own machine is the same
             # situation as the pre-flight loopback refusal — reroute, do not close.
             if _is_loopback_refusal(e):
                 return _loopback_refusal(f"网页读取失败：{reason}", start)
+            if _is_not_a_web_url_refusal(e):
+                return _not_a_web_url_refusal(f"网页读取失败：{reason}", start)
             hint, code = _failure_face(e)
             return _failed(f"网页读取失败：{reason}{hint}", start, code=code)
 

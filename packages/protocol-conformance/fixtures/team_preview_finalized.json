@@ -1,6 +1,6 @@
 {
   "name": "team_preview_finalized",
-  "description": "团队预审：首波前挂起收口（finish_reason=paused）",
+  "description": "开工卡已退役、不再发事件对：首波前 paused 收口（无开工卡）",
   "events": [
     {
       "type": "message_start",
@@ -74,42 +74,6 @@
       "timestamp": "2026-01-01T00:00:00.004Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp1",
-        "conversation_id": "conv_demo",
-        "workers": [
-          {
-            "run_id": "r1",
-            "role": "调研",
-            "task": "调研方案",
-            "depends_on": []
-          },
-          {
-            "run_id": "r2",
-            "role": "撰写",
-            "task": "写初稿",
-            "depends_on": [
-              "r1"
-            ]
-          }
-        ],
-        "tools": [
-          "code_execute",
-          "file_write",
-          "test_run"
-        ],
-        "primitive": "delegate",
-        "motion": "",
-        "form": "",
-        "sides": [],
-        "max_rounds": 0,
-        "thorough": true,
-        "revision": 1
-      },
-      "timestamp": "2026-01-01T00:00:00.005Z"
-    },
-    {
       "type": "message_end",
       "payload": {
         "finish_reason": "paused",
@@ -130,7 +94,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:00.006Z"
+      "timestamp": "2026-01-01T00:00:00.005Z"
     }
   ],
   "projected": {
@@ -145,10 +109,6 @@
       {
         "kind": "content",
         "text": "我来安排团队。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp1"
       },
       {
         "kind": "team",
@@ -257,17 +217,7 @@
       "completed": 0,
       "total": 2
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp1",
-        "status": "pending",
-        "workerIds": [
-          "r1",
-          "r2"
-        ]
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

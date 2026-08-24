@@ -27,14 +27,22 @@ const h = vi.hoisted(() => {
         cookies.set(details.name, details.value);
       },
     ),
+    cookieFlush: vi.fn(async () => {}),
+    appOn: vi.fn(),
+    appQuit: vi.fn(),
   };
 });
 
 vi.mock("electron", () => ({
   net: { fetch: h.fetchMock },
+  app: { on: h.appOn, quit: h.appQuit },
   session: {
     defaultSession: {
-      cookies: { get: h.cookieGet, set: h.cookieSet },
+      cookies: {
+        get: h.cookieGet,
+        set: h.cookieSet,
+        flushStore: h.cookieFlush,
+      },
     },
   },
 }));
@@ -49,6 +57,7 @@ vi.stubGlobal("__API_BASE_URL__", "http://localhost:8000");
 import {
   bearerPostJson,
   deriveAuthCookieAttrs,
+  persistAuthCookies,
   refreshAccessToken,
   resetAuthClientForTests,
 } from "../auth-client";
@@ -59,6 +68,7 @@ beforeEach(() => {
   h.fetchMock.mockReset();
   h.cookieGet.mockClear();
   h.cookieSet.mockClear();
+  h.cookieFlush.mockClear();
   vi.mocked(logDesktop).mockClear();
   resetAuthClientForTests();
 });
@@ -138,6 +148,7 @@ describe("refreshAccessToken (Bearer body refresh)", () => {
     expect(refreshSet.expirationDate).toBeGreaterThan(
       Math.floor(Date.now() / 1000) + 29 * 86400,
     );
+    expect(h.cookieFlush).toHaveBeenCalled();
   });
 
   it("falls back to 30d refresh expirationDate when field omitted", async () => {
@@ -340,5 +351,28 @@ describe("bearerPostJson", () => {
       { headers: Record<string, string> },
     ];
     expect(retryPost[1].headers.Authorization).toBe("Bearer fresh");
+  });
+});
+
+describe("persistAuthCookies", () => {
+  it("stamps session cookies with expirationDate and flushes", async () => {
+    h.cookies.set("access_token", "a");
+    h.cookies.set("refresh_token", "r");
+    const before = Math.floor(Date.now() / 1000);
+    await persistAuthCookies();
+    const refreshSet = h.cookieSet.mock.calls.find(
+      (c) => (c[0] as { name: string }).name === "refresh_token",
+    )?.[0] as { expirationDate: number; path: string };
+    expect(refreshSet.expirationDate).toBeGreaterThanOrEqual(
+      before + 30 * 86400,
+    );
+    expect(refreshSet.path).toBe("/v1/auth");
+    expect(h.cookieFlush).toHaveBeenCalled();
+  });
+
+  it("is a no-op when the jar is empty", async () => {
+    await persistAuthCookies();
+    expect(h.cookieSet).not.toHaveBeenCalled();
+    expect(h.cookieFlush).not.toHaveBeenCalled();
   });
 });

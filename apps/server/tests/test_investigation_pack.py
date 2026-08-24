@@ -27,6 +27,7 @@ def _events(trace_id: str = "b" * 32) -> list[dict]:
             "trace_id": trace_id,
             "conversation_id": "conv-pack",
             "preview": "pack me",
+            "via": "cloud",
         },
         {
             "type": "log",
@@ -120,6 +121,13 @@ async def test_write_investigation_pack_required_files(tmp_path: Path) -> None:
     assert loaded_meta["exported_at"]
     assert "messages.json" not in loaded_meta["files"]
     assert loaded_meta["journal"]["mode"] == "absent"
+    assert loaded_meta["layers"] == {
+        "decision": "present",
+        "execution": "present",
+        "turn_metrics": "absent",
+        "sidecar_host": "not_in_pack",
+    }
+    assert loaded_meta["hints"]["via"] == "cloud"
     assert not (out / "turn_journal.jsonl").exists()
 
 
@@ -202,6 +210,8 @@ async def test_write_investigation_pack_optional_and_full(tmp_path: Path) -> Non
         export_dir=export,
     )
     assert "turn_metrics.json" in meta["files"]
+    assert meta["layers"]["turn_metrics"] == "present"
+    assert meta["layers"]["sidecar_host"] == "not_in_pack"
     assert "messages.preview.json" in meta["files"]
     assert "messages.json" in meta["files"]
     assert meta["full"] is True

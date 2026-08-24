@@ -7,7 +7,8 @@
  * effects, and expanding a section in one copy did nothing to the other. (2) The panes
  * were sized with `calc(100vh - 11rem)`, a number that was already wrong the day the
  * shell moved to `h-dvh` with its own scroll container. (3) The dock was a fixed 480px
- * with no way — mouse or keyboard — to give a long worker transcript more room.
+ * (now 400, matching the desktop side panel default) with no way — mouse or keyboard —
+ * to give a long worker transcript more room.
  *
  * The anchor is the fourth: which turn was open lived only in component state, so the
  * best link an operator could hand a colleague pointed at a whole conversation, and a
@@ -32,6 +33,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigationType } from "react-router-dom";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/adminObservability", () => ({
@@ -174,10 +176,9 @@ function renderReplay(
   return { ...view, onBack };
 }
 
-/** Opens the worker dock: select the turn, then the ops 队员 control. */
+/** Opens the diagnose dock (desktop side-panel analog, closed by default). */
 async function openDock() {
-  fireEvent.click(await screen.findByText("CEO 汇总"));
-  fireEvent.click(await screen.findByRole("button", { name: "打开队员面板" }));
+  fireEvent.click(await screen.findByRole("button", { name: "打开诊断" }));
   return screen.findByRole("separator");
 }
 
@@ -212,20 +213,20 @@ describe("ConversationReplay layout", () => {
     expect(screen.getByText("搜集资料")).toBeTruthy();
   });
 
-  it("队员面板宽度键盘可调并记住", async () => {
+  it("诊断面板宽度键盘可调并记住", async () => {
     vi.mocked(fetchConversationReplay).mockResolvedValue(replay(MESSAGES));
 
     renderReplay();
     const handle = await openDock();
-    expect(handle.getAttribute("aria-valuenow")).toBe("480");
+    expect(handle.getAttribute("aria-valuenow")).toBe("400");
 
     // 左箭头把分隔条往左推 = 右侧面板变宽。
     fireEvent.keyDown(handle, { key: "ArrowLeft" });
-    expect(handle.getAttribute("aria-valuenow")).toBe("504");
+    expect(handle.getAttribute("aria-valuenow")).toBe("424");
 
     fireEvent.keyDown(handle, { key: "ArrowRight" });
     fireEvent.keyDown(handle, { key: "ArrowRight" });
-    expect(handle.getAttribute("aria-valuenow")).toBe("456");
+    expect(handle.getAttribute("aria-valuenow")).toBe("376");
 
     // 越界被夹住，不会拖成负宽或吃掉整屏。
     fireEvent.keyDown(handle, { key: "Home" });
@@ -234,6 +235,18 @@ describe("ConversationReplay layout", () => {
     expect(handle.getAttribute("aria-valuenow")).toBe("320");
 
     expect(window.localStorage.getItem("admin:replay:dock-width")).toBe("320");
+  });
+
+  it("阅读柱是桌面对话同款 max-w-3xl，开坞不改这个上限", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(replay(MESSAGES));
+
+    renderReplay();
+    await screen.findByText("CEO 汇总");
+    const pane = screen.getByLabelText("对话阅读区");
+    expect(pane.querySelector(".max-w-3xl")).toBeTruthy();
+
+    await openDock();
+    expect(screen.getByLabelText("对话阅读区").querySelector(".max-w-3xl")).toBeTruthy();
   });
 
   it("下次进入沿用上次的面板宽度", async () => {
@@ -266,37 +279,70 @@ describe("ConversationReplay layout", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it("顶栏收成薄会话条：元数据与 KPI 同行，pills 横滑，运维条挂在条下", async () => {
+  it("主画面是桌面对话克隆：无顶栏 pills/KPI，诊断默认关", async () => {
     vi.mocked(fetchConversationReplay).mockResolvedValue(replay(MESSAGES));
 
     const { container } = renderReplay();
     await screen.findByText("一次多 Agent 会话");
 
-    const page = container.firstElementChild as HTMLElement;
-    expect(page.className).toMatch(/\bpx-4\b/);
-    expect(page.className).toMatch(/\bpy-3\b/);
-
-    const header = container.querySelector("header");
-    expect(header).toBeTruthy();
-    expect(header!.className).not.toMatch(/\bmb-6\b/);
-    expect(header!.className).not.toMatch(/\bgap-4\b/);
-
+    expect(container.querySelector("header")).toBeNull();
+    expect(screen.queryByRole("button", { name: /#1/ })).toBeNull();
+    expect(screen.queryByLabelText("运维信号")).toBeNull();
     expect(screen.getByRole("button", { name: "返回" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "打开诊断" })).toBeTruthy();
+    expect(screen.getByLabelText("只读输入").textContent).toContain("只读复盘");
+    expect(screen.queryByRole("button", { name: "对话大纲" })).toBeNull();
+  });
+
+  it("会话 KPI 与 id 复制在诊断坞内", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(replay(MESSAGES));
+
+    renderReplay();
+    await openDock();
+
     expect(screen.getByTitle("c1（点击复制）")).toBeTruthy();
-    expect(screen.getByText("错误")).toBeTruthy();
-    expect(screen.getByText("成本")).toBeTruthy();
-    expect(screen.getByText("多 Agent")).toBeTruthy();
+    expect(screen.getByText(/错误 0/)).toBeTruthy();
+    expect(screen.getByText(/成本/)).toBeTruthy();
+    expect(screen.getByText(/多 Agent 1 回合/)).toBeTruthy();
+    expect(screen.getByLabelText("运维信号")).toBeTruthy();
+  });
 
-    const pill = screen.getByRole("button", { name: /#1/ });
-    expect(pill.textContent).toMatch(/#1/);
-    expect(pill.parentElement?.className).toMatch(/overflow-x-auto/);
-    expect(screen.queryByRole("combobox")).toBeNull();
-    expect(screen.queryByRole("listbox")).toBeNull();
+  it("至少两条用户消息才出现对话大纲", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay(ANCHOR_MESSAGES),
+    );
 
-    fireEvent.click(screen.getByText("CEO 汇总"));
-    const ops = screen.getByLabelText("运维信号");
-    expect(header!.contains(ops)).toBe(true);
-    expect(screen.getByRole("button", { name: "打开队员面板" })).toBeTruthy();
+    renderReplay();
+    await screen.findByText("第一回合结论");
+    expect(screen.getByRole("button", { name: "对话大纲" })).toBeTruthy();
+  });
+
+  it("打开诊断且未选回合时锚到最后一条助手消息", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay(ANCHOR_MESSAGES),
+    );
+
+    renderReplay();
+    await screen.findByText("第一回合结论");
+    expect(screen.getByTestId("loc-search").textContent).toBe("");
+
+    fireEvent.click(screen.getByRole("button", { name: "打开诊断" }));
+    expect(screen.getByTestId("loc-search").textContent).toBe("?turn=a2");
+    expect(screen.getByRole("separator")).toBeTruthy();
+  });
+
+  it("切回合时诊断坞保持打开", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay(ANCHOR_MESSAGES),
+    );
+
+    renderReplay();
+    await openDock();
+    expect(screen.getByRole("separator")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("第一回合结论"));
+    expect(screen.getByRole("separator")).toBeTruthy();
+    expect(screen.getByTestId("loc-search").textContent).toBe("?turn=a1");
   });
 
   it("moves execution_harvest to the ops bar, not the user column", async () => {
@@ -316,7 +362,9 @@ describe("ConversationReplay layout", () => {
 
     renderReplay();
     await screen.findByText("CEO 汇总");
+    expect(screen.queryByLabelText("运维信号")).toBeNull();
 
+    await openDock();
     expect(screen.getByLabelText("运维信号").textContent).toContain("系统收口");
     expect(screen.getByText("已取消")).toBeTruthy();
     expect(
@@ -347,15 +395,23 @@ describe("ConversationReplay layout", () => {
 
     renderReplay();
     await screen.findByText("综合产出");
+    expect(
+      screen.getByLabelText("对话阅读区").textContent,
+    ).not.toContain("【系统收口】");
+
+    await openDock();
 
     expect(screen.getByLabelText("运维信号").textContent).toContain("系统收口");
-    expect(screen.getByText("已完成")).toBeTruthy();
+    expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
+    // Opening diagnose anchors the following assistant, so the harvest body
+    // is in the dock as the preceding trigger — still not in the reading column.
+    expect(screen.getByText("【系统收口】后台团队任务已全部完成。请综合队员产出。")).toBeTruthy();
     expect(
-      screen.queryByText("【系统收口】后台团队任务已全部完成。请综合队员产出。"),
-    ).toBeNull();
+      screen.getByLabelText("对话阅读区").textContent,
+    ).not.toContain("【系统收口】");
   });
 
-  it("keeps span ops in the header after selecting a turn", async () => {
+  it("keeps span ops in the diagnose dock after selecting a turn", async () => {
     vi.mocked(fetchConversationReplay).mockResolvedValue(
       replay([
         msg({ id: "u1", role: "user", content: "帮我查一下" }),
@@ -395,11 +451,12 @@ describe("ConversationReplay layout", () => {
 
     renderReplay();
     fireEvent.click(await screen.findByText("查完了"));
-    expect(screen.getByText("1 次模型调用 · 1 次工具")).toBeTruthy();
+    expect(screen.queryByText("1 次模型调用 · 1 次工具")).toBeNull();
     expect(screen.queryByText("web_search")).toBeNull();
 
-    fireEvent.click(screen.getByText("1 次模型调用 · 1 次工具"));
-    expect(await screen.findByText("web_search")).toBeTruthy();
+    await openDock();
+    expect(screen.getByText("1 次模型调用 · 1 次工具")).toBeTruthy();
+    expect(screen.getByText("web_search")).toBeTruthy();
   });
 
   it("tells ops when earlier messages were truncated", async () => {
@@ -443,7 +500,7 @@ const ANCHOR_MESSAGES: ReplayMessage[] = [
   msg({ id: "a2", role: "assistant", content: "第二回合结论", trace_id: "t-2" }),
 ];
 
-/** Selection is a ring on screen and `aria-current` in the DOM — pill and bubble both. */
+/** Selection is a ring on screen and `aria-current` in the DOM — the bubble only. */
 function selectedTurns() {
   return screen.queryAllByRole("button", { current: true });
 }
@@ -457,9 +514,9 @@ describe("ConversationReplay 回合锚点", () => {
     renderReplay({ search: "?turn=a2" });
     await screen.findByText("第二回合结论");
 
-    // 回合索引里的那颗 pill + 时间线里的那条气泡，仅此两处，且都是被锚定的回合。
+    // 时间线里被锚定的那条气泡（大纲按钮不加 aria-current）。
     const current = selectedTurns();
-    expect(current).toHaveLength(2);
+    expect(current).toHaveLength(1);
     expect(
       current.filter((el) => el.textContent?.includes("第二回合结论")),
     ).toHaveLength(1);
@@ -510,7 +567,7 @@ describe("ConversationReplay 回合锚点", () => {
     fireEvent.click(await screen.findByText("第二回合结论"));
 
     expect(screen.getByTestId("loc-search").textContent).toBe("?turn=a2");
-    expect(selectedTurns()).toHaveLength(2);
+    expect(selectedTurns()).toHaveLength(1);
     // 每点一个回合压一条历史，浏览器的返回键就再也退不回来源列表了。
     expect(screen.getByTestId("nav-type").textContent).toBe("REPLACE");
   });
@@ -552,7 +609,7 @@ describe("ConversationReplay 回合锚点", () => {
 });
 
 describe("ConversationReplay 按需终态", () => {
-  it("does not fetch final state until a journaled assistant turn is selected", async () => {
+  it("auto-fetches final state for journaled assistant rows in the loaded window", async () => {
     vi.mocked(fetchConversationReplay).mockResolvedValue(
       replay([
         msg({ id: "u1", role: "user", content: "帮我查一下" }),
@@ -567,6 +624,7 @@ describe("ConversationReplay 按需终态", () => {
     vi.mocked(fetchReplayTurnFinalState).mockResolvedValue({
       message_id: "a1",
       runs_payload: {
+        events_complete: true,
         finish_reason: "end_turn",
         process: [{ kind: "tool", tool_name: "web_search", status: "success" }],
       },
@@ -575,10 +633,6 @@ describe("ConversationReplay 按需终态", () => {
 
     renderReplay();
     await screen.findByText("CEO 汇总");
-    expect(fetchReplayTurnFinalState).not.toHaveBeenCalled();
-    expect(screen.queryByText("web_search")).toBeNull();
-
-    fireEvent.click(screen.getByText("CEO 汇总"));
     await waitFor(() =>
       expect(fetchReplayTurnFinalState).toHaveBeenCalledWith("c1", "a1"),
     );
@@ -598,6 +652,7 @@ describe("ConversationReplay 按需终态", () => {
     vi.mocked(fetchReplayTurnFinalState).mockResolvedValue({
       message_id: "a2",
       runs_payload: {
+        events_complete: true,
         finish_reason: "end_turn",
         process: [{ kind: "tool", tool_name: "read_file", status: "success" }],
       },
@@ -629,14 +684,14 @@ describe("ConversationReplay 按需终态", () => {
       .mockResolvedValueOnce({
         message_id: "a1",
         runs_payload: {
+          events_complete: true,
           finish_reason: "end_turn",
           process: [{ kind: "tool", tool_name: "web_search", status: "success" }],
         },
         projected: null,
       });
 
-    renderReplay();
-    fireEvent.click(await screen.findByText("CEO 汇总"));
+    renderReplay({ search: "?turn=a1" });
     expect(
       await screen.findByRole("button", { name: "重试加载终态" }),
     ).toBeTruthy();
@@ -647,5 +702,65 @@ describe("ConversationReplay 按需终态", () => {
     fireEvent.click(screen.getByText("使用 1 个工具"));
     expect(screen.getByText("web_search")).toBeTruthy();
     expect(fetchConversationReplay).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not leave 正在加载终态 stuck when Strict Mode remounts the hydrate effect", async () => {
+    let resolveFetch!: (value: {
+      message_id: string;
+      runs_payload: {
+        events_complete: boolean;
+        finish_reason: string;
+        process: { kind: string; tool_name: string; status: string }[];
+      };
+      projected: null;
+    }) => void;
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay([
+        msg({
+          id: "a1",
+          role: "assistant",
+          content: "CEO 汇总",
+          has_final_state: true,
+        }),
+      ]),
+    );
+    vi.mocked(fetchReplayTurnFinalState).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={["/replay/c1"]}>
+          <ConversationReplay
+            conversationId="c1"
+            onBack={vi.fn()}
+            backLabel="返回"
+          />
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    await screen.findByText("CEO 汇总");
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "正在加载终态",
+    );
+
+    resolveFetch({
+      message_id: "a1",
+      runs_payload: {
+        events_complete: true,
+        finish_reason: "end_turn",
+        process: [{ kind: "tool", tool_name: "web_search", status: "success" }],
+      },
+      projected: null,
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("正在加载终态")).toBeNull();
+    });
+    expect(screen.getByText("使用 1 个工具")).toBeTruthy();
   });
 });

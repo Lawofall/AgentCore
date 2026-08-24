@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agentcore.runtime.engine.tool_channel_redirect import process_tool_status_from_end
 from agentcore.runtime.events.journal_config import cap_process_result
 from agentcore.runtime.events.sink import MARKER_STANDIN_TOOLS
 from agentcore.runtime.interaction import GATE_KINDS
@@ -362,7 +363,7 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                     for step in reversed(run["process"]):
                         if step.get("kind") == "tool" and step.get("id") == call_id:
                             step["result"] = result
-                            step["status"] = p.get("status", "success")
+                            step["status"] = process_tool_status_from_end(p)
                             if display is not None:
                                 step["display"] = display
                             if failure is not None:
@@ -374,7 +375,7 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
             for step in reversed(process):
                 if step.get("kind") == "tool" and step.get("id") == call_id:
                     step["result"] = result
-                    step["status"] = p.get("status", "success")
+                    step["status"] = process_tool_status_from_end(p)
                     if display is not None:
                         step["display"] = display
                     if failure is not None:
@@ -947,20 +948,8 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                         "decision": p.get("decision"),
                     }
 
-        elif etype == "team_preview_required":
-            # Event order is run_plan → team_preview_required, but product narrative is
-            # 开工卡 → 协作图 — insert before the last team marker when one exists.
-            cid = p.get("checkpoint_id", "")
-            if cid and not has_marker("team_preview", "checkpoint_id", cid):
-                marker = {"kind": "team_preview", "checkpoint_id": cid}
-                for i in range(len(process) - 1, -1, -1):
-                    if process[i].get("kind") == "team":
-                        process.insert(i, marker)
-                        break
-                else:
-                    process.append(marker)
-
-        elif etype == "team_preview_resolved":
+        elif etype in ("team_preview_required", "team_preview_resolved"):
+            # Retired kickoff pair — skip (old journal segment may be absent).
             pass
 
         elif etype == "stage_card_required":

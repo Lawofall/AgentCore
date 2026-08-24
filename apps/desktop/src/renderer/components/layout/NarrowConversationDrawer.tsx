@@ -8,9 +8,10 @@ import {
   useRestoreConversation,
 } from "@/hooks/useConversations";
 import { useFolders } from "@/hooks/useFolders";
-import { buildWorkspaceGroups } from "@/hooks/useWorkspaceGroups";
-import { hasLocalFiles } from "@/lib/capabilities";
-import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
+import {
+  buildWorkspaceGroups,
+  foldersForConversationRail,
+} from "@/hooks/useWorkspaceGroups";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import type { DeletedConversationMeta } from "@/services/conversations";
 import { useRequiredConversationIds } from "@/stores/aiAttention";
@@ -34,19 +35,23 @@ export function NarrowConversationDrawer() {
   const folders = useFolders();
   const requiredIds = useRequiredConversationIds();
   const [view, setView] = useState<"live" | "trash">("live");
+  const listedFolders = useMemo(
+    () => foldersForConversationRail(folders),
+    [folders],
+  );
   const trashQuery = useConversationTrash(
     isNarrow && conversationDrawerOpen && view === "trash",
   );
   const restoreMutation = useRestoreConversation();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const groups = useMemo(() => {
-    const all = buildWorkspaceGroups(conversations, folders, new Set(), {
-      uncapped: true,
-    });
-    if (hasLocalFiles()) return all;
-    return all.filter(({ folder }) => !deriveGroupWorkspaceIsLocal(folder));
-  }, [conversations, folders]);
+  const groups = useMemo(
+    () =>
+      buildWorkspaceGroups(conversations, listedFolders, new Set(), {
+        uncapped: true,
+      }),
+    [conversations, listedFolders],
+  );
 
   const bare = useMemo(
     () =>
@@ -73,12 +78,12 @@ export function NarrowConversationDrawer() {
         aria-label="关闭对话列表"
         onClick={close}
       />
-      {/* biome-ignore lint/a11y/useSemanticElements: 侧滑列表，不要 native <dialog> 的 modal/top-layer。 */}
       <aside
-        role="dialog"
-        aria-label="对话列表"
         className="absolute inset-y-0 left-0 flex w-[min(20rem,86vw)] flex-col bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-foreground shadow-md"
         style={{ backgroundImage: "var(--sidebar-gradient)" }}
+        // biome-ignore lint/a11y/useSemanticElements: 自定义遮罩抽屉；原生 dialog 的 modal/form 语义不合适。
+        role="dialog"
+        aria-label="对话列表"
       >
         <div className="flex h-12 shrink-0 items-center justify-between px-2">
           {view === "trash" ? (
@@ -144,7 +149,6 @@ export function NarrowConversationDrawer() {
                             folder={folder}
                             convs={convs}
                             expanded={expanded}
-                            surface="narrow"
                             onToggleExpanded={() =>
                               setCollapsed((prev) => ({
                                 ...prev,

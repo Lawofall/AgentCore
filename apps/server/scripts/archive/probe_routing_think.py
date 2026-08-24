@@ -40,7 +40,6 @@ from agentcore.runtime.context import build_workspace_context
 from agentcore.runtime.engine.governance import (
     LOCAL_RECON_TOOLS,
     create_loop_controller,
-    maybe_inject_team_gate,
     resolve_openai_tool_defs,
 )
 from agentcore.runtime.events import EventSink
@@ -470,11 +469,6 @@ def _spin_counts_for_gate(
         return False
     act = (action or "").upper()
     fa = (first_action or "").upper()
-    if ("team_gate" in trail) and act in {
-        "ASK",
-        "DIRECT",
-    }:
-        return False
     only_long = set(spinish) <= {"长"}
     return not (
         only_long and (act == "ASK" or fa == "ASK" or fa.startswith("ASK"))
@@ -726,7 +720,6 @@ async def _run_one(
     # （成篇意图另追加形状句；本地改文件 → 摸仓≥2 独立硬催派）
     inv_tools = frozenset(_RECON)
     gate_controller = create_loop_controller(inv_tools)
-    disabled_tools: set[str] = set()
     live_tool_defs = tool_defs
     # code_execute / browser 仍由调用方注入 workspace 上下文；引擎不再做 exec_verify 硬闸。
     _ = (code_execute, browser)
@@ -894,17 +887,6 @@ async def _run_one(
                     gate_controller._investigation_calls += 1
                     if name in LOCAL_RECON_TOOLS:
                         gate_controller._local_recon_calls += 1
-            if maybe_inject_team_gate(
-                gate_controller,
-                messages=messages,
-                run_id=str(ctx.run_id or "probe"),
-                round_idx=r,
-                role="captain",
-                disabled_tools=disabled_tools,
-                investigation_tools=inv_tools,
-            ):
-                trail.append("team_gate")
-                live_tool_defs = resolve_openai_tool_defs(chat_tools, None, disabled_tools)
             continue
 
         # 其它工具：也喂回继续，避免卡死
@@ -919,17 +901,6 @@ async def _run_one(
                 gate_controller._investigation_calls += 1
                 if name in LOCAL_RECON_TOOLS:
                     gate_controller._local_recon_calls += 1
-        if maybe_inject_team_gate(
-            gate_controller,
-            messages=messages,
-            run_id=str(ctx.run_id or "probe"),
-            round_idx=r,
-            role="captain",
-            disabled_tools=disabled_tools,
-            investigation_tools=inv_tools,
-        ):
-            trail.append("team_gate")
-            live_tool_defs = resolve_openai_tool_defs(chat_tools, None, disabled_tools)
         continue
 
     return _pack(

@@ -7,18 +7,17 @@ conceptual model is fact kinds including::
     turn_started | run_head | round_boundary | llm_call | tool_call | interaction
                  | note | run_event | message_final | turn_end
 
-Today the journal is **display-level**: it is derived from the SSE stream
-(``events._JOURNAL_EVENT_TYPES``), so it carries the team graph / tool cards /
-interaction cards (the ``run_event`` / ``tool_call`` / ``interaction`` umbrellas,
-stored under their SSE *event-type* kind) + a closing ``turn_end``. That is enough
-to **show** a past turn but NOT to **rebuild the engine** (the LLM window, the pause
-frame): the captain transcript never enters the stream, ``run_completed`` carries
-only a summary, and the system prompt / injected nudges are not facts. Resume bridges
-the gap with the旁路 ``paused_turns.frame``.
+Display events (SSE kinds from the sink) and execution-level facts (this module)
+share **one** ordered ``turn_journal``. Display fold skips
+:data:`EXECUTION_ONLY_KINDS`. Resume / crash / CEO continue rebuild the engine from
+projections (``window_from_journal`` / ``plan_from_journal`` /
+``completed_from_journal`` / ``pre_pause_from_journal``) — not from a second
+``paused_turns.frame`` blob. The cloud frame keeps identity + card re-render +
+worker base prompt (cold resume); it does not serialize transcript / plan /
+completed / journal_entries / citations.
 
-This module owns the **execution-level facts** that close that gap (the new
-kinds), making the journal lossless so the window / frame become projections of it
-(执行级事件溯源；as-built 见执行引擎 §8.3):
+This module owns the execution-level kinds (执行级事件溯源；as-built →
+执行引擎 §8.3):
 
 - :class:`TurnStartedFact` — the turn's head: the *verbatim* system prompt, the user
   message, the model profile. Anchors the **captain** window fold (the system prompt is

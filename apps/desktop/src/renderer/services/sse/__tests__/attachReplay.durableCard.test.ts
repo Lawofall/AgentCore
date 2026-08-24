@@ -156,11 +156,11 @@ describe("attach 游标回放 · 耐久卡绑定", () => {
     expect(prev.content).toBe("上一轮答复");
   });
 
-  it("full replay with *_resolved does not paint a clickable card", () => {
-    foldReplay([
+  it("full replay leftover team_preview is skipped (no IX / no stamp)", () => {
+    const leftoverReplay = [
       ev("message_start", { message_id: LIVE_MID, conversation_id: CID }),
       ev("content_delta", { delta: "预计 2 人开工" }),
-      ev("team_preview_required", {
+      ev("team_preview_required" as string, {
         checkpoint_id: "tp-settled",
         conversation_id: CID,
         primitive: "delegate",
@@ -176,41 +176,23 @@ describe("attach 游标回放 · 耐久卡绑定", () => {
         thorough: true,
       }),
       ev("message_end", { finish_reason: "paused" }),
-      ev("team_preview_resolved", {
+      ev("team_preview_resolved" as string, {
         checkpoint_id: "tp-settled",
         decision: "continue",
       }),
       ev("message_end", { finish_reason: "stop" }),
-    ]);
-    foldReplay([
-      ev("message_start", { message_id: LIVE_MID, conversation_id: CID }),
-      ev("content_delta", { delta: "预计 2 人开工" }),
-      ev("team_preview_required", {
-        checkpoint_id: "tp-settled",
-        conversation_id: CID,
-        primitive: "delegate",
-        workers: [
-          { run_id: "r1", role: "研", task: "调研", depends_on: [] },
-          { run_id: "r2", role: "写", task: "成文", depends_on: [] },
-        ],
-        tools: [],
-        motion: "",
-        form: "",
-        sides: [],
-        max_rounds: 0,
-        thorough: true,
-      }),
-      ev("message_end", { finish_reason: "paused" }),
-      ev("team_preview_resolved", {
-        checkpoint_id: "tp-settled",
-        decision: "continue",
-      }),
-      ev("message_end", { finish_reason: "stop" }),
-    ]);
+    ];
+    foldReplay(leftoverReplay);
+    foldReplay(leftoverReplay);
 
-    expect(useInteractionStore.getState().byId.get("tp-settled")?.status).toBe(
-      "resolved",
-    );
+    expect(
+      useInteractionStore.getState().byId.get("tp-settled"),
+    ).toBeUndefined();
+    expect(
+      (assistants().at(-1)?.process ?? []).some(
+        (s) => s.kind === "team_preview",
+      ),
+    ).toBe(false);
     expect(pendingCards()).toHaveLength(0);
   });
 });

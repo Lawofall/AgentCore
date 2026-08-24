@@ -229,6 +229,34 @@ describe("toMessage (reload hydrate)", () => {
     ]);
   });
 
+  it("classic incomplete list journal does not hydrateFromJournal", () => {
+    toMessage(
+      row({
+        id: "m-classic-slim",
+        role: "assistant",
+        content: "总结如下…",
+        status: "complete",
+        runs: {
+          events: [
+            {
+              type: "user_interjection",
+              timestamp: "2026-01-01T00:00:01.000Z",
+              payload: {
+                interjection_id: "inj-slim",
+                execution_id: "exec-classic",
+                content: "改成用中文总结",
+                status: "injected",
+              },
+            },
+          ],
+          finish_reason: "stop",
+          events_complete: false,
+        } as NonNullable<BackendMessage["runs"]>,
+      }),
+    );
+    expect(useExecutionStore.getState().byId["m-classic-slim"]).toBeUndefined();
+  });
+
   it("multi-agent reload: keeps runs but does not hydrate in toMessage", () => {
     // 多 Agent 仍由 InlineTeamGraph mount 时 hydrate；toMessage 不得抢先 fold。
     const msg = toMessage(

@@ -1,14 +1,14 @@
 """Pre-parse text-like binary attachments at residency time (附件分流预解析).
 
-分流：docx/pdf/pptx 等用 markitdown 抽文本，写出与原件并存的 ``原名.ext.md``；
-``.txt`` / ``.md`` / HTML 等可直接 UTF-8 读的格式只内联正文（原件已是可读副本）；
-xlsx/csv/tsv 不把全表抽进 prompt，只产**结构面**（列名 / 行数 / 推断类型 / 样例行），
-原始数据留在工作区文件。扫描版 PDF 首版不做 OCR，写入明确降级提示。解析失败
-不阻塞驻留，回落路径提示。
+分流：``.docx`` 用 python-docx（段落+表格）抽文本；pdf/pptx/odt/rtf 用 markitdown。
+写出与原件并存的 ``原名.ext.md``。``.txt`` / ``.md`` / HTML 等可直接 UTF-8 读的
+格式只内联正文（原件已是可读副本）；xlsx/csv/tsv 不把全表抽进 prompt，只产
+**结构面**（列名 / 行数 / 推断类型 / 样例行），原始数据留在工作区文件。扫描版
+PDF 首版不做 OCR，写入明确降级提示。解析失败不阻塞驻留，回落路径提示。
 
-工作区 ``file_read`` 对同一 markitdown 桶做**透明抽取**（读时默认不写 ``*.md``），
-复用本模块公开核 ``extract_office_bytes`` / ``convert_with_markitdown`` /
-``looks_like_scanned``；``preparse_resident`` 仍只服务附件驻留。
+工作区 ``file_read`` 与附件预解析共用公开核 ``extract_office_bytes``（可杀子进程，
+墙钟超时 = FAILED / extract_timeout，不是通道活性挂起；读时默认不写 ``*.md``）。
+``convert_with_markitdown`` 仅服务非 docx 桶；``preparse_resident`` 仍只服务附件驻留。
 
 → 见决策：docs/02-架构/双模式工作区.md §七（Office 云=本地）与附件驻留实现。
 """
@@ -16,14 +16,21 @@ xlsx/csv/tsv 不把全表抽进 prompt，只产**结构面**（列名 / 行数 /
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import csv
 import io
+import json
 import os
 import re
+import signal
+import subprocess
+import sys
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from enum import StrEnum
 from io import BytesIO
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from agentcore.core.logging import get_logger
@@ -31,8 +38,11 @@ from agentcore.workspace.protocol import WorkspaceBackend, WorkspaceError
 
 logger = get_logger(__name__)
 
-# Office / PDF：必须经 markitdown（或等价）才能得到可读正文。
+# Office / PDF 透明抽取路由桶（含 docx）。docx 主路径是 python-docx，不是 markitdown。
 MARKITDOWN_EXTENSIONS = frozenset({".docx", ".pdf", ".pptx", ".odt", ".rtf"})
+_PYTHON_DOCX_EXTENSIONS = frozenset({".docx"})
+_IS_WINDOWS = sys.platform == "win32"
+_EXTRACT_OUTPUT_ENV = "AGENTCORE_OFFICE_EXTRACT_OUTPUT"
 # 已是文本层：直接 UTF-8 解码；原件本身即工作区可读副本。
 PLAIN_TEXT_EXTENSIONS = frozenset({".txt", ".md", ".markdown", ".html", ".htm"})
 # 大表 / 计算场景：不预解析全表进 prompt；只产结构面。``file_read`` 亦不透明抽。
@@ -238,7 +248,7 @@ def truncate_for_prompt(text: str, limit: int = ATTACHMENT_INLINE_MAX_CHARS) -> 
 
 
 def convert_with_markitdown(data: bytes, ext: str) -> str:
-    """Sync markitdown convert (call via ``asyncio.to_thread`` from async paths)."""
+    """Sync markitdown convert for non-docx office/PDF. Not used for ``.docx``."""
     return _convert_with_markitdown(data, ext)
 
 
@@ -259,14 +269,39 @@ def _decode_plain_text(data: bytes) -> str | None:
     return None
 
 
-async def extract_office_bytes(data: bytes, *, ext: str) -> ExtractResult:
-    """Extract text from office/PDF bytes without writing a workspace ``*.md`` copy.
+def _normalize_extract_ext(ext: str) -> str:
+    if not ext:
+        return ""
+    return ext.lower() if ext.startswith(".") else f".{ext.lower()}"
 
-    Applies to ``MARKITDOWN_EXTENSIONS`` only. Spreadsheets return ``SKIPPED``;
-    convert errors return ``FAILED`` (never raises). Scanned / empty text layer
-    returns ``SCANNED`` with ``SCAN_NOTICE`` (honest receipt, not empty success).
-    """
-    normalized = ext.lower() if ext.startswith(".") else (f".{ext.lower()}" if ext else "")
+
+def _extract_docx_with_python_docx(data: bytes) -> str:
+    """Paragraphs + tables in document order. No markitdown / HTML preprocess."""
+    from docx import Document
+    from docx.oxml.ns import qn
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    document = Document(BytesIO(data))
+    parts: list[str] = []
+    body = document.element.body
+    for child in body:
+        if child.tag == qn("w:p"):
+            text = (Paragraph(child, document).text or "").strip()
+            if text:
+                parts.append(text)
+        elif child.tag == qn("w:tbl"):
+            table = Table(child, document)
+            for row in table.rows:
+                cells = [(cell.text or "").replace("\n", " ").strip() for cell in row.cells]
+                if any(cells):
+                    parts.append("\t".join(cells))
+    return "\n".join(parts).strip()
+
+
+def extract_office_payload(data: bytes, ext: str) -> ExtractResult:
+    """Sync extract used by the worker. Never spawns (avoids recursion)."""
+    normalized = _normalize_extract_ext(ext)
     if normalized in SKIP_EXTENSIONS:
         return ExtractResult(status=ParseStatus.SKIPPED, detail=f"skip_ext:{normalized}")
     if normalized not in MARKITDOWN_EXTENSIONS:
@@ -281,7 +316,12 @@ async def extract_office_bytes(data: bytes, *, ext: str) -> ExtractResult:
         )
 
     try:
-        text = await asyncio.to_thread(_convert_with_markitdown, data, normalized)
+        if normalized in _PYTHON_DOCX_EXTENSIONS:
+            text = _extract_docx_with_python_docx(data)
+            engine = "python-docx"
+        else:
+            text = _convert_with_markitdown(data, normalized)
+            engine = "markitdown"
     except Exception as e:
         logger.warning(
             "attachment.extract_failed",
@@ -298,7 +338,181 @@ async def extract_office_bytes(data: bytes, *, ext: str) -> ExtractResult:
             detail="scanned_or_empty_text_layer",
         )
 
-    return ExtractResult(status=ParseStatus.OK, text=text, detail="ok")
+    return ExtractResult(status=ParseStatus.OK, text=text, detail=f"ok:{engine}")
+
+
+def _spawn_group_kwargs() -> dict:
+    """Match SubprocessSandbox: POSIX new session so the tree is killable."""
+    return {} if _IS_WINDOWS else {"start_new_session": True}
+
+
+def _reap_tree_sync(process: subprocess.Popen[bytes], pid: int) -> None:
+    """Kill the child and every descendant, then reap. Best-effort, never raises."""
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        with contextlib.suppress(Exception):
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+    else:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(pid, signal.SIGKILL)
+    with contextlib.suppress(Exception):
+        process.wait(timeout=5)
+
+
+def _extract_worker_argv(ext: str) -> list[str]:
+    """``sys.executable`` so the sidecar bundled interpreter is used."""
+    return [
+        sys.executable,
+        "-m",
+        "agentcore.workspace.attachment_parse",
+        "--extract-worker",
+        ext,
+    ]
+
+
+def _run_extract_subprocess(
+    data: bytes,
+    ext: str,
+    timeout: float,
+    *,
+    holder: dict | None = None,
+) -> ExtractResult:
+    """Blocking Popen + communicate timeout. Safe on Windows SelectorEventLoop."""
+    fd, out_path = tempfile.mkstemp(suffix=".extract.json")
+    os.close(fd)
+    proc: subprocess.Popen[bytes] | None = None
+    try:
+        env = os.environ.copy()
+        env[_EXTRACT_OUTPUT_ENV] = out_path
+        proc = subprocess.Popen(
+            _extract_worker_argv(ext),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=env,
+            **_spawn_group_kwargs(),
+        )
+        if holder is not None:
+            holder["proc"] = proc
+        try:
+            _, stderr = proc.communicate(input=data, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _reap_tree_sync(proc, proc.pid)
+            return ExtractResult(status=ParseStatus.FAILED, detail="extract_timeout")
+        if proc.returncode != 0:
+            err = (stderr or b"").decode("utf-8", errors="replace").strip()[:120]
+            return ExtractResult(
+                status=ParseStatus.FAILED,
+                detail=f"extract_worker:{proc.returncode}:{err}",
+            )
+        raw = Path(out_path).read_text(encoding="utf-8")
+        payload = json.loads(raw)
+        status = ParseStatus(str(payload.get("status") or "failed"))
+        return ExtractResult(
+            status=status,
+            text=str(payload.get("text") or ""),
+            detail=str(payload.get("detail") or ""),
+        )
+    except Exception as e:
+        if proc is not None and proc.poll() is None:
+            _reap_tree_sync(proc, proc.pid)
+        logger.warning(
+            "attachment.extract_spawn_failed",
+            ext=ext,
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+        return ExtractResult(status=ParseStatus.FAILED, detail=f"extract_spawn:{type(e).__name__}")
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(out_path)
+
+
+def _extract_worker_main(argv: list[str]) -> int:
+    """Worker entry: stdin bytes → JSON file in ``_EXTRACT_OUTPUT_ENV``. Sync only."""
+    ext = ".pdf"
+    args = list(argv)
+    while args:
+        token = args.pop(0)
+        if token == "--extract-worker" and args:
+            ext = args.pop(0)
+    out_path = os.environ.get(_EXTRACT_OUTPUT_ENV, "")
+    if not out_path:
+        return 2
+    data = sys.stdin.buffer.read()
+    # Keep JSON file the only stdout protocol; libraries may print.
+    sys.stdout = sys.stderr
+    result = extract_office_payload(data, ext)
+    Path(out_path).write_text(
+        json.dumps(
+            {"status": result.status.value, "text": result.text, "detail": result.detail},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return 0
+
+
+async def extract_office_bytes(
+    data: bytes,
+    *,
+    ext: str,
+    timeout: float | None = None,
+) -> ExtractResult:
+    """Extract text from office/PDF bytes without writing a workspace ``*.md`` copy.
+
+    Skip / byte-budget checks run in-process. Conversion runs in a killable
+    child (``sys.executable -m``). Wall-clock timeout is ``extract_timeout``
+    (contract), not channel liveness. Worker must call ``extract_office_payload``,
+    never this coroutine.
+    """
+    from agentcore.workspace.limits import (
+        OFFICE_EXTRACT_MAX_BYTES,
+        OFFICE_EXTRACT_TIMEOUT_SECONDS,
+    )
+
+    normalized = _normalize_extract_ext(ext)
+    if normalized in SKIP_EXTENSIONS:
+        return ExtractResult(status=ParseStatus.SKIPPED, detail=f"skip_ext:{normalized}")
+    if normalized not in MARKITDOWN_EXTENSIONS:
+        return ExtractResult(status=ParseStatus.SKIPPED, detail=f"unknown_ext:{normalized or '?'}")
+    if len(data) > OFFICE_EXTRACT_MAX_BYTES:
+        return ExtractResult(
+            status=ParseStatus.FAILED,
+            detail=f"extract_budget:{len(data)}>{OFFICE_EXTRACT_MAX_BYTES}",
+        )
+
+    budget = OFFICE_EXTRACT_TIMEOUT_SECONDS if timeout is None else timeout
+    holder: dict = {}
+    loop = asyncio.get_running_loop()
+
+    def blocking() -> ExtractResult:
+        return _run_extract_subprocess(data, normalized, budget, holder=holder)
+
+    fut = loop.run_in_executor(None, blocking)
+    try:
+        return await fut
+    except asyncio.CancelledError:
+        proc = holder.get("proc")
+        if proc is not None:
+            await asyncio.to_thread(_reap_tree_sync, proc, proc.pid)
+        with contextlib.suppress(Exception):
+            await fut
+        raise
+
+
+def _cli_main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] == "--extract-worker":
+        return _extract_worker_main(args)
+    sys.stderr.write("internal office extract worker\n")
+    return 2
 
 
 async def preparse_resident(
@@ -851,3 +1065,7 @@ async def preview_table_resident(
             detail=result.detail,
         )
     return result
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli_main())

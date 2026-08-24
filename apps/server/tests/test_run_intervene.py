@@ -139,3 +139,30 @@ def test_refusals_carry_a_user_facing_line_per_action():
 
     assert stop.detail != redirect.detail
     assert "改" in redirect.detail
+
+
+def test_stop_logs_queued_when_the_drive_is_live():
+    from structlog.testing import capture_logs
+
+    register_drive(EID, plan_of("r1"))
+    with capture_logs() as logs:
+        accept_run_stop(execution_id=EID, conversation_id=CID, run_id="r1")
+
+    hits = [e for e in logs if e.get("event") == "run_stop.queued"]
+    assert len(hits) == 1
+    assert hits[0]["conversation_id"] == CID
+    assert hits[0]["execution_id"] == EID
+    assert hits[0]["run_id"] == "r1"
+    assert hits[0]["queued"] == 1
+
+
+def test_stop_logs_unreachable_when_the_drive_is_gone():
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        accept_run_stop(execution_id=EID, conversation_id=CID, run_id="r1")
+
+    hits = [e for e in logs if e.get("event") == "run_stop.unreachable"]
+    assert len(hits) == 1
+    assert hits[0]["reason"] == "no_live_drive"
+    assert hits[0]["run_id"] == "r1"

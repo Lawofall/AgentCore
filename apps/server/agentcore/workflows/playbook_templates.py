@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from agentcore.runtime.runs.playbooks import PLAYBOOKS, expand_playbook
-from agentcore.runtime.runs.playbooks.build_site import STYLE_MARKETING, STYLE_TOOLSHED
 from agentcore.workflows.definition import (
     WorkflowDefinitionError,
     tasks_dropped_meta_keys,
@@ -92,24 +91,6 @@ _SLOT_DEFS: dict[str, tuple[PlaybookTemplateSlot, ...]] = {
             key="topic", label="主题", required=True, hint="调研 / 报告主题"
         ),
     ),
-    "build_website": (
-        PlaybookTemplateSlot(
-            key="topic",
-            label="简述",
-            required=True,
-            hint="站点/落地页/控制台一句话简述；产物目录固定 site/，不是文件夹槽",
-        ),
-        PlaybookTemplateSlot(
-            key="style",
-            label="气质",
-            required=False,
-            hint="站点气质；不填按 marketing",
-            choices=(
-                PlaybookSlotChoice(value=STYLE_MARKETING, label="营销落地页"),
-                PlaybookSlotChoice(value=STYLE_TOOLSHED, label="工具台 dense"),
-            ),
-        ),
-    ),
     "build_app": (
         PlaybookTemplateSlot(
             key="app", label="应用", required=True, hint="要搭建的应用 / SPA 简述"
@@ -149,7 +130,6 @@ _DEFAULT_OPTIONAL_SLOTS: dict[str, dict[str, Any]] = {
 _TITLE: dict[str, str] = {
     "parallel_brief": "多角摸底",
     "research_report": "调研报告成文",
-    "build_website": "搭建营销站点",
     "build_app": "从零搭应用",
     "compare_options": "方案对比选型",
 }
@@ -163,10 +143,6 @@ _SUMMARY: dict[str, str] = {
     "research_report": (
         "调研→提纲→写作→审校；仅当你明确要落盘成文或交报告时用。"
         "只想弄懂议题请用「多角摸底」。"
-    ),
-    "build_website": (
-        "文案→整页站点→独立验收；默认营销/落地页。"
-        "可做后台工具台气质（对话里 style=toolshed）。"
     ),
     "build_app": (
         "从零搭一个小应用：脚手架→模块→联调→冒烟；默认瘦启动。"
@@ -249,13 +225,6 @@ def merge_playbook_slots(playbook: str, slots: dict[str, Any] | None) -> dict[st
 
     merged: dict[str, Any] = dict(_DEFAULT_OPTIONAL_SLOTS.get(playbook) or {})
     merged.update(dict(slots or {}))
-
-    if playbook == "build_website":
-        from agentcore.runtime.runs.playbooks.build_site import (
-            normalize_website_topic_args,
-        )
-
-        merged = normalize_website_topic_args(merged)
 
     # List slots: coerce UI string → list before missing/expand checks.
     list_key = _LIST_SLOTS.get(playbook)

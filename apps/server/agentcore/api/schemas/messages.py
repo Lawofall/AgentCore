@@ -140,8 +140,9 @@ class SetMessageFeedbackRequest(BaseModel):
 # One ``POST /conversations/{id}/interactions/{interaction_id}`` settles hot-path
 # interactions; the body is discriminated on ``kind`` (approval /
 # client_tool / escalation / stage_card). Cold-path
-# ``ask_user`` / ``plan_review`` / ``team_preview`` are NOT in this union — they
-# finalize the turn and continue via ``POST .../resume``.
+# ``ask_user`` / ``plan_review`` are NOT in this union — they
+# finalize the turn and continue via ``POST .../resume``. Leftover
+# ``team_preview`` frames refuse resume (410 Gone); new cards are not emitted.
 
 
 class ResolveApprovalInteraction(BaseModel):
@@ -404,10 +405,10 @@ class AcceptRunOutcomeResponse(BaseModel):
 
 
 class WriteCapabilityOverride(BaseModel):
-    """Delegate ``team_preview`` continue: tighten one worker's write capability.
+    """Leftover ``team_preview`` continue field (开工卡已退役).
 
-    Only ``text_only`` is legal (→ ``deliverable.form=prose``). Unknown ``run_id`` /
-    non-``text_only`` / upgrade attempts → 422 on resume.
+    New cards are not emitted; leftover resume is 410 and never applies this.
+    Shape kept so old clients sending extra keys do not 422 on ask / plan_review.
     """
 
     run_id: str = Field(..., min_length=1, max_length=128)
@@ -415,10 +416,9 @@ class WriteCapabilityOverride(BaseModel):
 
 
 class ModelOverride(BaseModel):
-    """Delegate ``team_preview`` continue: human model cover (人盖 CEO).
+    """Leftover debate ``team_preview`` continue field (开工卡已退役).
 
-    Same triple family as debate ``ModelIdentity``. Empty map / missing key = leave
-    that node unchanged. Illegal shape → 422 (no silent fallback).
+    New cards are not emitted; leftover resume is 410. Shape kept for old clients.
     """
 
     model: str = Field(..., min_length=1, max_length=256)
@@ -433,20 +433,17 @@ class ResumeTurnRequest(BaseModel):
     DURABLY persisted (so it survived a client disconnect / server restart — the live
     in-process resolve is the corresponding interaction instead). Same decision
     vocabulary as the live resolve: ``continue`` (proceed — run the gated downstream
-    for plan_review / accept the CEO direction for ask_user / grant+start kickoff),
-    ``adjust`` (plan_review: inject ``note`` as a steer then continue; team_preview:
-    do not grant or start — feed ``note`` back so the CEO revises and resubmits;
+    for plan_review / accept the CEO direction for ask_user),
+    ``adjust`` (plan_review: inject ``note`` as a steer then continue;
     ``note`` must be non-empty),
     or ``stop`` (end the turn here). ``selected``
     carries the option(s) the user picked from an ask_user menu (ignored for
     plan_review; the server drops any pick not actually offered). The engine-only
     ``timeout`` is never sent by a client.
 
-    ``excluded_run_ids`` / ``write_capability_overrides`` apply
-    only to delegate ``team_preview`` ``continue`` (开工组队有限否决).
-    ``model_overrides`` also apply to debate ``team_preview`` ``continue``
-    (人盖辩手 / 主持人；键 = 开赛前预分配 ``sides[].run_id`` / ``moderator_run_id``).
-    Ask / plan_review / stop ignore them (no 422). Hot-path
+    Leftover ``team_preview`` resume is 410 Gone (new cards are not emitted).
+    ``excluded_run_ids`` / ``write_capability_overrides`` / ``model_overrides``
+    are ignored on ask / plan_review / stop (no 422). Hot-path
     ``ResolveInteraction`` is not extended.
     """
 
@@ -455,8 +452,8 @@ class ResumeTurnRequest(BaseModel):
         "",
         max_length=4000,
         description=(
-            "adjust 必须非空（修订意见）。kickoff continue 上非空=嘱咐，"
-            "不是 former adjust。stop 可选收场。"
+            "adjust 必须非空（修订意见）。ask continue 上非空=补充说明。"
+            "stop 可选收场。"
         ),
     )
     selected: list[str] = Field(default_factory=list, max_length=50)
@@ -495,18 +492,19 @@ class PendingInteractionSummary(BaseModel):
 
 
 class PausedTurnSummary(BaseModel):
-    """A turn awaiting resume after a durable plan_review / ask_user / kickoff pause.
+    """A turn awaiting resume after a durable plan_review / ask_user pause.
 
     Surfaced on conversation reopen so the client can re-render the right resume card
     by ``kind`` and offer the kind-appropriate actions → the resume endpoint
-    (kickoff: continue[+嘱咐] / adjust / stop; plan_review: continue / adjust / stop).
+    (plan_review: continue / adjust / stop; ask_user: continue / stop).
     ``message_id`` is both the pause key and the id the resumed assistant message will
     reuse, so an optimistic bubble reconciles cleanly.
 
+    Leftover ``team_preview`` (开工卡) frames still serialize here if hung in the DB,
+    but resume is 410 Gone and the client must not offer continue / cancel.
     plan_review carries ``steps`` (the reviewed checkpoint nodes) + ``pending`` (the
-    gated downstream); team_preview (开工卡) carries ``primitive`` (``delegate`` /
-    ``debate``) + ``workers`` / ``tools`` (delegate) or ``motion`` / ``sides`` /
-    ``max_rounds`` / ``thorough`` (debate); ask_user carries the unified card payload
+    gated downstream); leftover team_preview may still carry ``primitive`` /
+    ``workers`` / debate fields; ask_user carries the unified card payload
     ``question`` (the framing / opening line) + the optional opening
     content ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The
     unused set is empty for the other kinds.
@@ -647,9 +645,15 @@ class RunsPayload(BaseModel):
     ``error`` is a 报错回合's terminal error, replaying the inline error card on
     reload (``null`` for a clean turn). ``null`` whole payload on messages with
     none of these.
+
+    ``events_complete`` is ``True`` when ``events`` is the full display journal
+    (single-message GET, or a list row that needed no slimming). The conversation
+    list may drop bulky run/tool/delta events and set this ``False``; the client
+    then fetches ``GET …/messages/{id}`` for graph / turn-detail replay.
     """
 
     events: list[dict[str, Any]] = Field(default_factory=list)
+    events_complete: bool = True
     finish_reason: str | None = None
     process: list[dict[str, Any]] | None = None
     # Per-worker-run 思考·正文·工具 timeline (run_id → ProcessStep[]). Symmetric to
@@ -986,10 +990,47 @@ LOCAL_TURN_TOOL_FAILURE_CODES = frozenset(
         "not_found",
         "validation_failed",
         "no_default_branch",
+        "not_a_web_url",
+        "url_not_workspace_path",
+        "project_verify_redirect",
+        "source_grep_redirect",
+        "source_dump_redirect",
+        "long_running_redirect",
+        "loopback_host",
         "other",
     }
 )
 TOOL_FAILURE_MESSAGE_MAX = 200
+
+
+def _remap_path_or_verify_failure(message: str) -> str | None:
+    """Lift path-missing / slow-verify-refusal copy into a stable bucket.
+
+    Used when the client sent ``schema`` / ``other`` / no code, or when a leftover
+    journal row only has the Chinese tool error. Known codes in the whitelist stay.
+    """
+    raw = message or ""
+    if "禁止用 code_execute 跑项目级慢验证" in raw:
+        return "project_verify_redirect"
+    if "禁止用 code_execute 打开源码再正则扫描" in raw:
+        return "source_grep_redirect"
+    if "禁止用 code_execute 把工作区文件 dump" in raw:
+        return "source_dump_redirect"
+    if "禁止用 code_execute 启动长驻进程" in raw:
+        return "long_running_redirect"
+    if any(
+        needle in raw
+        for needle in (
+            "文件不存在：",
+            "片段文件不存在：",
+            "源路径不存在：",
+            "不是目录：",
+            "路径不存在：",
+            "区外路径不存在",
+        )
+    ):
+        return "not_found"
+    return None
 
 
 def normalize_local_turn_tool_failure_code(message: str, *, code: str | None = None) -> str:
@@ -1000,6 +1041,10 @@ def normalize_local_turn_tool_failure_code(message: str, *, code: str | None = N
     """
     raw_code = (code or "").strip()
     if raw_code in LOCAL_TURN_TOOL_FAILURE_CODES:
+        if raw_code in ("schema", "other"):
+            remapped = _remap_path_or_verify_failure(message or "")
+            if remapped:
+                return remapped
         return raw_code
     # Legacy git wall-clock used bare ``timeout``; fact write now emits ``git_timeout``.
     if raw_code == "timeout":
@@ -1051,6 +1096,9 @@ def normalize_local_turn_tool_failure_code(message: str, *, code: str | None = N
         )
     ):
         return "egress_connect"
+    remapped = _remap_path_or_verify_failure(message or "")
+    if remapped:
+        return remapped
     return "other"
 
 

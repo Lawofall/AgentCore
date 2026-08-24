@@ -19,7 +19,6 @@ import {
 } from "@/content/download";
 import { useDesktopRelease } from "@/hooks/useDesktopRelease";
 import {
-  MOBILE_WEB_URL,
   RELEASES_LATEST,
   WEB_APP_URL,
   platformsFromArtifacts,
@@ -234,11 +233,11 @@ export default function DownloadView() {
           </div>
 
           {/* 免安装入口 */}
-          <div className="container-x mt-4 grid gap-4 sm:mt-5 sm:gap-5 lg:grid-cols-2">
+          <div className="container-x mt-4 grid gap-4 sm:mt-5 sm:gap-5">
             {QUICK_ENTRIES.map((entry, i) => (
               <Reveal key={entry.key} delay={i * 70}>
                 <a
-                  href={entry.key === "web" ? WEB_APP_URL : MOBILE_WEB_URL}
+                  href={WEB_APP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="dl-quick"

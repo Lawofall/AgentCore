@@ -839,8 +839,8 @@ def test_b1_ceiling_bans_hollow_teach_invite():
     clear_cutoff_delivery_gap()
 
 
-def test_b1_cancel_zero_requires_gap_ack():
-    """7ad17043：cancel/0 产出闩锁 → 禁仅再派短句."""
+def test_b1_cancel_zero_does_not_force_gap_ack():
+    """取消零落盘不再闩 B1：仅 note 不得要求缺口承认."""
     from agentcore.runtime.closing_posture import (
         clear_b1_closing_latches,
         closing_honesty_rework,
@@ -850,11 +850,7 @@ def test_b1_cancel_zero_requires_gap_ack():
     clear_b1_closing_latches()
     note_cancel_zero_output()
     thin = "好的，我重新建图派工继续完成。"
-    rework = closing_honesty_rework(thin)
-    assert rework is not None
-    assert "缺口" in rework or "未交付" in rework
-    honest = "部分完成：三份机理评审均未落盘（0/3）；缺口清单：调研员/审校/执笔；建议续派或缩小范围。"
-    assert closing_honesty_rework(honest) is None
+    assert closing_honesty_rework(thin) is None
     clear_b1_closing_latches()
 
 

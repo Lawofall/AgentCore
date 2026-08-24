@@ -107,7 +107,7 @@ class Deliverable:
     workspace_native: bool = False
     # When set (e.g. ``site/``), the contract gate cross-checks HTML↔CSS↔JS seams
     # across ALL web files under this workspace prefix — not only this run's batch.
-    # Used by build_website QA to catch integrated orphan selectors after parallel
+    # Used by whole-page QA to catch integrated orphan selectors after parallel
     # section workers each patch a subset of files.
     web_seam_scope: str = ""
     # Placeholder hard-signal exemption (internal coordination docs): when True, every
@@ -119,13 +119,13 @@ class Deliverable:
     placeholder_hard_exempt_artifacts: list[str] = field(default_factory=list)
     # Frontend quality gate (``web_quality_scan``): opt-in static HTML/CSS/JS checks
     # (syntax damage + fabricated contacts = hard; anti-slop visuals = soft, one retry).
-    # Separate from placeholder_scan / web_seam. Playbook ``build_website`` enables it.
+    # Separate from placeholder_scan / web_seam. Opt-in via deliverable ``web_quality_scan``.
     web_quality_scan: bool = False
     # Skip soft anti-slop only (hard syntax / fake contacts still apply).
     web_quality_soft_exempt: bool = False
     # Skip named soft rules when the user explicitly asked for that style.
     web_quality_soft_exempt_labels: list[str] = field(default_factory=list)
-    # P1c visual critic (screenshot → VisionReader): opt-in on build_website QA.
+    # P1c visual critic (screenshot → VisionReader): opt-in via deliverable ``visual_critic``.
     # Runs after web_quality hard; missing browser/vision ⇒ 未目验 (never fake pass).
     # Critical findings → up to 2 contract reworks, then partial warnings.
     visual_critic: bool = False
@@ -256,7 +256,7 @@ class RunSpec:
     force_continue: bool = False
     # Turn delivery reserve: when spent enters ``engine_turn_token_delivery_reserve``
     # window, WaveScheduler still admits these nodes and soft-skips ready non-priority
-    # peers so lenient fan-in can run the acceptance tail (build_website assemble+QA).
+    # peers so lenient fan-in can run the acceptance tail (assemble+QA).
     ceiling_priority: bool = False
     # Wave3 B：开局从工作区注入这些相对路径的截断正文（契约/设计摘要），
     # 减少分区 worker 对同文件的反复 file_read。空 = 不注入。

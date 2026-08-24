@@ -64,6 +64,7 @@ export function nextDockActiveAfterFloat(
     activeTabId: string;
     tabs: readonly DetailTab[];
     floats: readonly SidePanelFloat[];
+    changesOpen: boolean;
   },
   floatedId: string,
 ): string {
@@ -74,11 +75,11 @@ export function nextDockActiveAfterFloat(
   if (dockedContent.length > 0) {
     return dockedContent[dockedContent.length - 1]?.id ?? WORKSPACE_TAB_ID;
   }
-  // 工作区仍停靠时回工作区。「改动」是 §十 P0c 条件 tab，不能当 float 后的默认 home。
+  // 工作区仍停靠时回工作区。「改动」仅 changesOpen 时作 float 后默认 home。
   if (!floating.has(WORKSPACE_TAB_ID)) return WORKSPACE_TAB_ID;
-  if (!floating.has(CHANGES_TAB_ID)) return CHANGES_TAB_ID;
-  // All fixed homes floating and no docked content — keep a stable dock sentinel;
-  // UI shows pin-back when workspace itself is floating.
+  if (state.changesOpen && !floating.has(CHANGES_TAB_ID)) {
+    return CHANGES_TAB_ID;
+  }
   return WORKSPACE_TAB_ID;
 }
 
@@ -104,6 +105,7 @@ export function createFloatActions(
 
     floatTab: (tabId, layout) => {
       const state = get();
+      if (tabId === CHANGES_TAB_ID && !state.changesOpen) return false;
       if (!canFloatTabId(tabId, state.tabs)) return false;
       const existing = state.floats.find((f) => f.tabId === tabId);
       if (existing) {
@@ -141,7 +143,12 @@ export function createFloatActions(
     },
 
     destroyFloat: (tabId) => {
-      if (tabId === WORKSPACE_TAB_ID || tabId === CHANGES_TAB_ID) return false;
+      if (tabId === WORKSPACE_TAB_ID) return false;
+      if (tabId === CHANGES_TAB_ID) {
+        if (!get().floats.some((f) => f.tabId === CHANGES_TAB_ID)) return false;
+        get().closeChanges();
+        return true;
+      }
       const state = get();
       if (!state.floats.some((f) => f.tabId === tabId)) return false;
       const tab = state.tabs.find((t) => t.id === tabId);

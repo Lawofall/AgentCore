@@ -20,6 +20,8 @@ alwaysApply: false
 
 自有布局豁免：对话页、文件页、设置页、全屏页、消息页两栏壳不走 content/canvas 梯度。消息页右栏内走 IM 会话列。
 
+窄屏（`<768px`）：`AppShell` 收成底栏 4-tab + 对话 ☰ 抽屉 + 右坞全屏 sheet，**不要**把侧栏和 ≥280px 坞挤进主列。权威 → [前端技术 §五](/docs/04-前端/前端技术与架构.md)。
+
 ## 禁止
 
 - **字号**：禁 `text-[10px]`/`text-[11px]`/`text-[13px]`/`text-lg` 及自定义像素值（4 级：xs/sm/base/xl）。

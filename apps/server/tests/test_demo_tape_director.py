@@ -34,7 +34,7 @@ def test_build_chapters_debate_structure():
     chapters = build_chapters(events)
     by_id = {c.id: c for c in chapters}
     assert by_id["opening"].event_index == 0
-    assert by_id["team_preview"].label == "组队授权"
+    assert "team_preview" not in by_id
     assert by_id["r1_argument"].label == "第1轮·立论"
     assert by_id["r1_cross"].label == "第1轮·质询"
     assert by_id["r1_score"].label == "第1轮·打分"
@@ -43,7 +43,6 @@ def test_build_chapters_debate_structure():
     assert by_id["verdict"].label == "终审"
     assert [c.id for c in chapters] == [
         "opening",
-        "team_preview",
         "r1_argument",
         "r1_cross",
         "r1_score",
@@ -204,8 +203,8 @@ def test_transport_registry_preserves_speed_and_armed_burst_on_reattach():
 
 
 @pytest.mark.asyncio
-async def test_player_burst_auto_resolves_team_preview(monkeypatch):
-    """Seek past team_preview emits required+resolved and continues (no durable pause)."""
+async def test_player_burst_skips_leftover_team_preview(monkeypatch):
+    """Seek past leftover team_preview skips the retired event (no emit / no pause)."""
     from agentcore.demo_tape import player as player_mod
     from agentcore.demo_tape.binding import TapeBinding
     from agentcore.demo_tape.player import play_tape_events
@@ -222,6 +221,13 @@ async def test_player_burst_auto_resolves_team_preview(monkeypatch):
         return None
 
     monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
+
+    saved: list = []
+
+    async def fake_save(suspension):  # noqa: ANN001
+        saved.append(suspension)
+
+    monkeypatch.setattr(player_mod, "save_paused_turn", fake_save)
 
     events = [
         {"type": "content_delta", "payload": {"delta": "开场"}, "t_ms": 0},
@@ -266,18 +272,18 @@ async def test_player_burst_auto_resolves_team_preview(monkeypatch):
         transport=transport,
     )
     assert result["finish_reason"] is FinishReason.END_TURN
-    assert result["content"] == "开场\n\n辩论中"
-    types = [e.type for e in sink._history]
-    assert EventType.TEAM_PREVIEW_REQUIRED in types
-    assert EventType.TEAM_PREVIEW_RESOLVED in types
-    # Continued past the card (second content delta present); not left PAUSED.
-    assert types.count(EventType.CONTENT_DELTA) == 2
+    assert result["content"] == "开场辩论中"
+    assert saved == []
+    types = [e.type.value for e in sink._history]
+    assert "team_preview_required" not in types
+    assert "team_preview_resolved" not in types
+    assert EventType.CONTENT_DELTA.value in types
     assert transport.state is PlaybackState.FINISHED
 
 
 @pytest.mark.asyncio
-async def test_player_lands_on_team_preview_without_auto_resolve(monkeypatch):
-    """Seek *to* team_preview (not past) still durable-pauses."""
+async def test_player_lands_on_checkpoint_without_auto_resolve(monkeypatch):
+    """Seek *to* checkpoint (not past) still durable-pauses."""
     from agentcore.demo_tape import player as player_mod
     from agentcore.demo_tape.binding import TapeBinding
     from agentcore.demo_tape.player import play_tape_events
@@ -317,8 +323,8 @@ async def test_player_lands_on_team_preview_without_auto_resolve(monkeypatch):
     events = [
         {"type": "content_delta", "payload": {"delta": "开场"}, "t_ms": 0},
         {
-            "type": "team_preview_required",
-            "payload": {"checkpoint_id": "cp", "primitive": "debate"},
+            "type": "checkpoint_required",
+            "payload": {"checkpoint_id": "cp", "question": "继续？"},
             "t_ms": 100,
         },
         {"type": "content_delta", "payload": {"delta": "后"}, "t_ms": 200},
@@ -365,7 +371,7 @@ async def test_player_lands_on_team_preview_without_auto_resolve(monkeypatch):
 async def test_player_burst_auto_resolves_cold_path_pauses(
     monkeypatch, required_type: str, resolved_type: EventType
 ):
-    """Seek past checkpoint / plan_review emits required+resolved (same as team_preview)."""
+    """Seek past checkpoint / plan_review emits required+resolved (no durable hang)."""
     from agentcore.demo_tape import player as player_mod
     from agentcore.demo_tape.binding import TapeBinding
     from agentcore.demo_tape.player import play_tape_events
@@ -451,7 +457,8 @@ def test_has_pause_before_covers_all_wired_kinds():
     assert _has_pause_before(events, 0, 2) is True
     assert _has_pause_before(events, 2, 4) is True
     assert _has_pause_before(events, 0, 1) is False
-    assert _has_pause_before(events, 4, 5) is True
+    # leftover team_preview is retired — not a wired interactive pause.
+    assert _has_pause_before(events, 4, 5) is False
     assert _has_pause_before(events, 5, 6) is True
 
 
@@ -538,7 +545,7 @@ def test_real_tape_chapters_lv_molihua():
     chapters = build_chapters(events)
     labels = [c.label for c in chapters]
     assert "开场检索" in labels
-    assert "组队授权" in labels
+    assert "组队授权" not in labels
     assert "终审" in labels
     assert any("立论" in x for x in labels)
     assert any("质询" in x for x in labels)

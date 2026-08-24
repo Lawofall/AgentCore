@@ -142,7 +142,8 @@ class GVisorSandbox:
         self._workspace_root = workspace_root
         self._runtime_root = _resolve_runtime_root(runtime_root)
         os.makedirs(self._runtime_root, exist_ok=True)
-        # Set by ``health_check`` on failure so boot probe can log a stable reason.
+        # Set by ``health_check`` on failure so boot probe / exec-env can log a
+        # stable reason (and a classified code — not the unclassified fallback).
         self._last_health_failure: tuple[str, str | None] | None = None
 
     def capabilities(self) -> SandboxCapabilities:
@@ -157,6 +158,30 @@ class GVisorSandbox:
     def last_health_failure(self) -> tuple[str, str | None] | None:
         """``(reason, detail)`` from the latest failed ``health_check``, else ``None``."""
         return self._last_health_failure
+
+    @property
+    def last_health_failure_code(self) -> str | None:
+        """Exec-env reason code for the latest failed health check, else ``None``."""
+        if self._last_health_failure is None:
+            return None
+        from agentcore.tools.sandbox.exec_env import (
+            EXEC_ENV_NOT_LINUX_CODE,
+            EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+        )
+
+        reason = self._last_health_failure[0]
+        if reason == "not_linux":
+            return EXEC_ENV_NOT_LINUX_CODE
+        return EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+
+    @property
+    def last_health_evidence(self) -> str:
+        """Compact reason + detail behind the latest failed health check."""
+        failure = self._last_health_failure
+        if failure is None:
+            return ""
+        reason, detail = failure
+        return f"{reason} {detail}".strip() if detail else reason
 
     async def health_check(self) -> bool:
         """Probe shape A (``code``) via sandboxd. Never asks sandboxd about shape B."""

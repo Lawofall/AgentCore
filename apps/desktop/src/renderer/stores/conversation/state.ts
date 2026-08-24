@@ -172,10 +172,6 @@ export interface ConversationState {
     checkpointId: string,
     conversationId?: string | null,
   ) => void;
-  stampTeamPreviewMarker: (
-    checkpointId: string,
-    conversationId?: string | null,
-  ) => void;
   /** Registry-driven timeline marker stamp (approval / escalation / …). */
   stampTimelineMarker: (
     marker: TimelineMarkerDef,

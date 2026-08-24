@@ -3,22 +3,14 @@ import { CollapsibleSpeech } from "@/components/chat/debate/CollapsibleSpeech";
 import { processHasSuccessfulHandoff } from "@/components/chat/handoffBrief";
 import { ProcessTimeline } from "@/components/chat/message-bubble/ProcessTimeline";
 import { RunInterveneControls } from "@/components/graph/RunInterveneControls";
-import {
-  executionGraphCapabilities,
-  runActCapabilities,
-} from "@/components/graph/planCapabilities";
+import { runActCapabilities } from "@/components/graph/planCapabilities";
 import { Button } from "@/components/ui";
 import { useRunLlmWindow } from "@/hooks/useRunLlmWindow";
 import { useTurnAudit } from "@/hooks/useTurnAudit";
-import { filterInjectInEdges } from "@/lib/causalInject";
 import type { AgentAuditEvent } from "@/services/audit";
 import { permissionAxesShortLabel } from "@/services/permissionAxes";
 import { activeRuntime, useConversationStore } from "@/stores/conversation";
-import {
-  type RunNode,
-  revisionChains,
-  useMessageExecution,
-} from "@/stores/execution";
+import { revisionChains, useMessageExecution } from "@/stores/execution";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import { turnDetailPath, useUIStore } from "@/stores/ui";
 import { isLiveRunStatus } from "@agentcore/protocol-fold-kit";
@@ -31,17 +23,11 @@ import {
   isThinkingLivePlaceholder,
 } from "./debateModerator";
 import { receivedContextForList, selectRunTaskSection } from "./runTaskSection";
-import { RunCausalInjectBlock } from "./sections/RunCausalInject";
 import { DebriefSection } from "./sections/RunDebrief";
 import { DiagnosticSection } from "./sections/RunDiagnostics";
 import { EscalationSection } from "./sections/RunEscalations";
 import { RunModeratorLedger } from "./sections/RunModeratorLedger";
 import { RunOutcomeAcceptSection } from "./sections/RunOutcomeAccept";
-import {
-  RunRefGroup,
-  SubtaskTree,
-  countDescendants,
-} from "./sections/RunRelations";
 import { ResourceSection } from "./sections/RunResources";
 import {
   RevisionChainSection,
@@ -79,9 +65,10 @@ function turnPresetSnapshot(
 
 /**
  * Single-run detail content — hybrid layout aligned with the CEO bubble timeline:
- * header anchors (role / status / live banner / task / moderator / revision /
+ * header anchors (role / 接手 chip / status / task / moderator / revision /
  * escalation / context) → interleaved ProcessTimeline body → footer (debrief /
- * relations / resources / diagnostics).
+ * resources / diagnostics). Topology (depends / parent / children) lives on the
+ * collab graph, not this inspector.
  *
  * Bound to a specific message's execution slot (§9.3) via `messageId`, so the
  * conversation's right-side detail panel can pin a run from any turn (live or
@@ -120,7 +107,6 @@ export function RunDetailBody({
   const agent = run
     ? execution?.agents.find((a) => a.id === run.agentId)
     : null;
-  const graphCaps = executionGraphCapabilities(execution);
   const runCaps = runActCapabilities(execution, runId);
   const turnAudit = useTurnAudit(
     conversationId != null ? conversationId : null,
@@ -175,18 +161,6 @@ export function RunDetailBody({
 
   const isModerator = isDebateModeratorRun(execution, run.id);
   const moderatorLedger = isModerator ? buildModeratorLedger(execution) : null;
-  const upstream = run.dependsOn
-    .map((id) => execution.runs.find((r) => r.id === id))
-    .filter((r): r is RunNode => r != null);
-  const downstream = execution.runs.filter((r) => r.dependsOn.includes(run.id));
-  const parent =
-    run.parentRunId != null && run.continuesRunId == null
-      ? (execution.runs.find((r) => r.id === run.parentRunId) ?? null)
-      : null;
-  const childCount = countDescendants(execution.runs, run.id);
-  const hasInjectIn =
-    graphCaps.auditInject &&
-    filterInjectInEdges(turnAudit.data?.causal_graph, run.id).length > 0;
   const chain =
     revisionChains(execution).find((c) =>
       c.versions.some((v) => v.run.id === run.id),
@@ -213,6 +187,14 @@ export function RunDetailBody({
         <span className="flex-1 truncate text-sm font-medium text-foreground">
           {agent.role}
         </span>
+        {run.replacesRunId != null && (
+          <span
+            title="同角色新人按新方向重做"
+            className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
+          >
+            接手
+          </span>
+        )}
         {turnPresetLabel && (
           <span
             title="本回合生效的权限模式"
@@ -234,25 +216,18 @@ export function RunDetailBody({
         )}
       </div>
 
-      {agent.status === "working" && (
-        <div className="mb-4 space-y-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs">
-          <p className="text-sm text-foreground">
-            {run.continuesRunId != null
-              ? "同一人接续中——带着现场按新指令接着干。"
-              : run.replacesRunId != null
-                ? "接手重写——同角色新人按新方向重做。"
-                : isModerator
-                  ? "辩论主持中——下方台账会随轮次更新焦点与小结。"
-                  : "正在实时输出——下方内容会边写边更新。"}
-          </p>
+      {/* 进行中用 live 底托住干预按钮；排队中无底托。终局 `intervene` 为 null，
+          整块不挂，避免空 wrapper。 */}
+      {intervene && (
+        <div
+          className={
+            agent.status === "working"
+              ? "mb-4 space-y-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs"
+              : "mb-4"
+          }
+        >
           {intervene}
         </div>
-      )}
-
-      {/* 队员不在跑、但仍 live（排队 pending）时露出按人干预。终局 `intervene` 为
-          null，这里整块不挂，避免空 wrapper。 */}
-      {agent.status !== "working" && intervene && (
-        <div className="mb-4">{intervene}</div>
       )}
 
       <Section title={taskSection.title}>
@@ -342,8 +317,8 @@ export function RunDetailBody({
         </Section>
       )}
 
-      {/* 跑一半改方向 · 忽略路径收口 (Step 4): a terminal run whose「改方向」steer couldn't apply or
-          whose failure is non-retryable — surface it + let the user record an explicit accept.
+      {/* 跑一半改方向 · 忽略路径收口 (Step 4): a terminal run whose「改方向」steer couldn't apply —
+          surface it + let the user record an explicit accept.
           Gated to terminal runs so an in-flight run never triggers the audit read. */}
       {conversationId != null &&
         run.status !== "pending" &&
@@ -369,7 +344,6 @@ export function RunDetailBody({
             conversationId={conversationId}
             checkpoints={[]}
             planReviews={[]}
-            teamPreviews={[]}
             collapseProcessSteps={false}
           />
         </div>
@@ -382,65 +356,6 @@ export function RunDetailBody({
           <Markdown content={run.outputSummary} />
         </Section>
       ) : null}
-
-      {(upstream.length > 0 ||
-        downstream.length > 0 ||
-        parent ||
-        childCount > 0 ||
-        hasInjectIn) && (
-        <Section title="关系">
-          <div className="space-y-3">
-            {upstream.length > 0 && (
-              <RunRefGroup
-                label="依赖"
-                runs={upstream}
-                agents={execution.agents}
-                onSelect={(rid, role) => showRunDetail(messageId, rid, role)}
-              />
-            )}
-            {downstream.length > 0 && (
-              <RunRefGroup
-                label="后续"
-                runs={downstream}
-                agents={execution.agents}
-                onSelect={(rid, role) => showRunDetail(messageId, rid, role)}
-              />
-            )}
-            {parent && (
-              <RunRefGroup
-                label="上级"
-                runs={[parent]}
-                agents={execution.agents}
-                onSelect={(rid, role) => showRunDetail(messageId, rid, role)}
-              />
-            )}
-            {childCount > 0 && (
-              <div>
-                <p className="mb-1 text-xs text-muted-foreground">
-                  子任务（{childCount}）
-                </p>
-                <SubtaskTree
-                  parentId={run.id}
-                  runs={execution.runs}
-                  agents={execution.agents}
-                  depth={0}
-                  onSelect={(rid, role) => showRunDetail(messageId, rid, role)}
-                />
-              </div>
-            )}
-            {hasInjectIn && (
-              <RunCausalInjectBlock
-                runId={run.id}
-                graph={turnAudit.data?.causal_graph}
-                runs={execution.runs}
-                agents={execution.agents}
-                onSelect={(rid, role) => showRunDetail(messageId, rid, role)}
-                sceneKey={`run:${runId}:causal-inject`}
-              />
-            )}
-          </div>
-        </Section>
-      )}
 
       {(run.usage || run.cost) && (
         <ResourceSection

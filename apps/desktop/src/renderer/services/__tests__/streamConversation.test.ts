@@ -8,6 +8,7 @@ import {
 import { formatLocalMoment } from "@/lib/recoveryMoment";
 import { captureCsrf, clearCsrfToken } from "@/services/api";
 import { useConversationStore } from "@/stores/conversation";
+import { MAX_RETRY_AFTER } from "@agentcore/contract-types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as dispatchMod from "../sse/dispatch";
 import {
@@ -144,6 +145,44 @@ describe("isRetriableStreamError", () => {
     ).toBe(true);
     expect(isRetriableStreamError(new StreamError("network"))).toBe(true);
     expect(isRetriableStreamError(new Error("boom"))).toBe(true);
+  });
+
+  it("suppresses retry when attested retry_after exceeds the shared ceiling", () => {
+    expect(
+      isRetriableStreamError(
+        new StreamError("http", 429, {
+          code: "RATE_LIMITED",
+          retryAfter: MAX_RETRY_AFTER + 1,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isRetriableStreamError(
+        new StreamError("http", 429, {
+          code: "LLM_RATE_LIMIT",
+          retryAfter: 57_600,
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("still offers retry at the ceiling and below", () => {
+    expect(
+      isRetriableStreamError(
+        new StreamError("http", 429, {
+          code: "RATE_LIMITED",
+          retryAfter: MAX_RETRY_AFTER,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isRetriableStreamError(
+        new StreamError("http", 429, {
+          code: "LLM_RATE_LIMIT",
+          retryAfter: 4,
+        }),
+      ),
+    ).toBe(true);
   });
 });
 

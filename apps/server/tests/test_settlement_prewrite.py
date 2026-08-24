@@ -465,11 +465,13 @@ async def test_cold_resume_settlement_redemit_does_not_phantom_fact_log() -> Non
     A phantom log row drifts index vs DB seq; finalize enumerate then inserts a
     duplicate trailing process_content (92f7fea8 / seq 286+287).
     """
-    from agentcore.runtime.events import team_preview_resolved
     from agentcore.runtime.facts import Fact, TurnFactLog, current_fact_log, record_turn_fact
 
-    event = team_preview_resolved(checkpoint_id="ck1", decision="continue", note="")
-    entry = entry_from_sse(event)
+    entry = {
+        "kind": "team_preview_resolved",
+        "payload": {"checkpoint_id": "ck1", "decision": "continue", "note": ""},
+        "ts": "t1",
+    }
     inherited = [
         {"kind": "turn_paused", "payload": {}, "ts": "t0"},
         entry,
@@ -484,7 +486,7 @@ async def test_cold_resume_settlement_redemit_does_not_phantom_fact_log() -> Non
         before = len(log.entries())
         assert writer.would_dedupe_settlement(entry)
         fut = record_turn_fact(
-            Fact(kind=event.type.value, payload=dict(event.payload), ts=event.timestamp)
+            Fact(kind="team_preview_resolved", payload=dict(entry["payload"]), ts=entry["ts"])
         )
         if fut is not None:
             await fut

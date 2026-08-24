@@ -21,7 +21,6 @@ afterEach(cleanup);
 const emptyCards = {
   checkpoints: [] as never[],
   planReviews: [] as never[],
-  teamPreviews: [] as never[],
 };
 
 function renderTimeline(process: ProcessStep[], isStreaming: boolean) {
@@ -81,20 +80,18 @@ describe("ProcessTimeline · wait visibility (CEO bubble)", () => {
     expect(screen.getByText("Thinking…")).toBeTruthy();
   });
 
-  it("does not stack Thinking tail while a kickoff card is still pending", () => {
-    render(
-      <ProcessTimeline
-        process={[{ kind: "team", execution_id: "e1" }]}
-        isStreaming={true}
-        citations={[]}
-        composingTool={null}
-        fallbackContent=""
-        conversationId="c1"
-        {...emptyCards}
-        teamPreviews={[{ status: "pending" } as never]}
-      />,
-    );
-    expect(screen.queryByText("Thinking…")).toBeNull();
+  it("does not stack Thinking tail when graph is visible at team tail", () => {
+    // Mock execution store would be needed for graph visibility — use shouldShowThinkingTail
+    // for the gate; pending leftover IX no longer blocks graph.
+    expect(
+      shouldShowThinkingTail({
+        isStreaming: true,
+        composingTool: false,
+        last: { kind: "team", execution_id: "e1" },
+        graphVisibleAtTail: true,
+        pendingUserGate: false,
+      }),
+    ).toBe(false);
   });
 });
 

@@ -3,12 +3,19 @@
  * Render test for ToolLine 过程工具默认折叠: every process tool (web_search / code_execute /
  * file_write / str_replace / …) stays collapsed on the running→done edge — aligned with
  * Cursor/Claude「过程收敛、答案突出」. Folded rows keep inlineMeta / inlineBody /
- * peek; expand is a click away. Failures also stay collapsed (red ✗ + red peek).
+ * peek; expand is a click away. Failures stay collapsed (red ✗, one line);
+ * specific product copy lives in the expanded detail.
  * The block comment detaches the
  * @vitest-environment directive from the import block so organizeImports keeps it file-leading.
  */
 
+import { GENERIC_TOOL_FAILURE_MESSAGE } from "@/components/chat/toolResult/productFailureFace";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  DRAFT_KEY,
+  runtimeOf,
+  useConversationStore,
+} from "@/stores/conversation";
 import type { ProcessStep } from "@/types/events";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
@@ -514,6 +521,22 @@ describe("ToolLine · 过程工具默认折叠", () => {
     expect(screen.queryByText(/lv_jasmine_cultural/)).toBeNull();
   });
 
+  it("omits the green check on nested success rows", () => {
+    const { container } = render(
+      <ToolLine
+        nested
+        step={step({
+          tool_name: "file_read",
+          arguments: { path: "docs/a.md" },
+          result: "ok",
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("Read file")).toBeTruthy();
+    expect(container.querySelector(".lucide-check")).toBeNull();
+  });
+
   it("chips run_id for resolve_escalation without dumping answer or ack peek", () => {
     const ack = "已将裁决回传给 worker run_legal_1，队员将据此继续。";
     render(
@@ -629,7 +652,47 @@ describe("ToolLine · browser 单步折叠一行", () => {
     expect(collapsedSubline(container)).toBeNull();
   });
 
-  it("surfaces failure.message on the collapsed row", () => {
+  it("puts live elapsed seconds at the trailing-dot slot, still one line", () => {
+    vi.useFakeTimers();
+    const key =
+      useConversationStore.getState().currentConversationId ?? DRAFT_KEY;
+    const prev = runtimeOf(useConversationStore.getState(), key);
+    useConversationStore.setState({
+      byId: {
+        ...useConversationStore.getState().byId,
+        [key]: { ...prev, toolStartedMs: { call_1: Date.now() - 6_000 } },
+      },
+    });
+    try {
+      const { container, unmount } = render(
+        <ToolLine
+          step={step({
+            tool_name: "grep",
+            arguments: { pattern: "WaveScheduler" },
+            status: "running",
+            result: null,
+          })}
+        />,
+      );
+      expect(screen.getByText("6s")).toBeTruthy();
+      expect(collapsedSubline(container)).toBeNull();
+      expect(container.querySelector(".animate-pulse.rounded-full")).toBeNull();
+      unmount();
+    } finally {
+      vi.useRealTimers();
+      useConversationStore.setState({
+        byId: {
+          ...useConversationStore.getState().byId,
+          [key]: {
+            ...runtimeOf(useConversationStore.getState(), key),
+            toolStartedMs: {},
+          },
+        },
+      });
+    }
+  });
+
+  it("keeps the collapsed error row to one line (no failure.message subline)", () => {
     const { container } = renderWithTooltip(
       <ToolLine
         step={step({
@@ -641,9 +704,10 @@ describe("ToolLine · browser 单步折叠一行", () => {
         })}
       />,
     );
-    expect(screen.getByText("未找到元素 e13。")).toBeTruthy();
+    expect(screen.getByText("Click")).toBeTruthy();
+    expect(screen.queryByText("未找到元素 e13。")).toBeNull();
     expect(screen.queryByText(/ElementNotFound/)).toBeNull();
-    expect(collapsedSubline(container)).toBeTruthy();
+    expect(collapsedSubline(container)).toBeNull();
   });
 });
 
@@ -985,9 +1049,13 @@ describe("ToolLine · handoff brief card", () => {
         })}
       />,
     );
-    expect(screen.getByText("空交付不得交接。")).toBeTruthy();
+    expect(screen.getByText("Handoff")).toBeTruthy();
+    expect(screen.queryByText("空交付不得交接。")).toBeNull();
     expect(screen.queryByText("半成品结论")).toBeNull();
     expect(screen.queryByText("关键要点")).toBeNull();
+    fireEvent.click(screen.getByText("Handoff"));
+    expect(screen.getByText("空交付不得交接。")).toBeTruthy();
+    expect(screen.getByText(/空交付不得交接：本轮正文 0 字/)).toBeTruthy();
   });
 });
 
@@ -1012,8 +1080,8 @@ describe("ToolLine · wait 一行收口", () => {
     expect(screen.queryByText(/已等待/)).toBeNull();
   });
 
-  it("failed wait still shows the product failure face", () => {
-    render(
+  it("failed wait stays one line; product copy is in the expanded detail", () => {
+    const { container } = renderWithTooltip(
       <ToolLine
         step={step({
           tool_name: "wait",
@@ -1027,8 +1095,13 @@ describe("ToolLine · wait 一行收口", () => {
         })}
       />,
     );
-    expect(screen.getByText("等待队员超时。")).toBeTruthy();
+    expect(screen.getByText("Wait")).toBeTruthy();
+    expect(screen.queryByText("等待队员超时。")).toBeNull();
     expect(screen.queryByText(/WaitError/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
+    fireEvent.click(screen.getByText("Wait"));
+    expect(screen.getByText("等待队员超时。")).toBeTruthy();
+    expect(screen.getByText(/WaitError/)).toBeTruthy();
   });
 });
 
@@ -1151,8 +1224,8 @@ describe("ToolLine · ack 族成功无 peek", () => {
     ["host_storage", "Host storage"],
     ["post_note", "Post note"],
     ["desktop_notify", "Notify"],
-  ] as const)("surfaces failure.message for %s", (tool, label) => {
-    render(
+  ] as const)("keeps collapsed %s error to one line", (tool, label) => {
+    const { container } = render(
       <ToolLine
         step={step({
           tool_name: tool,
@@ -1167,8 +1240,9 @@ describe("ToolLine · ack 族成功无 peek", () => {
       />,
     );
     expect(screen.getByText(label)).toBeTruthy();
-    expect(screen.getByText("操作失败，请稍后重试。")).toBeTruthy();
+    expect(screen.queryByText("操作失败，请稍后重试。")).toBeNull();
     expect(screen.queryByText(/leaked internals/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
   });
 });
 
@@ -1395,8 +1469,8 @@ describe("ComposingToolLine · 中文组装心跳", () => {
 });
 
 describe("ToolLine · tool_use_end.failure product face", () => {
-  it("shows failure.message on the collapsed row, not the technical result", () => {
-    renderWithTooltip(
+  it("keeps the collapsed row to one line (no generic failure copy)", () => {
+    const { container } = renderWithTooltip(
       <ToolLine
         step={step({
           tool_name: "web_search",
@@ -1405,18 +1479,19 @@ describe("ToolLine · tool_use_end.failure product face", () => {
             "搜索失败：ConnectError: [Errno 111] Connection refused to searxng.internal:8080",
           status: "error",
           failure: {
-            message: "工具执行失败，请稍后重试。",
+            message: GENERIC_TOOL_FAILURE_MESSAGE,
             code: "TOOL_ERROR",
           },
         })}
       />,
     );
-    expect(screen.getByText("工具执行失败，请稍后重试。")).toBeTruthy();
+    expect(screen.getByText("Search web")).toBeTruthy();
+    expect(screen.queryByText(GENERIC_TOOL_FAILURE_MESSAGE)).toBeNull();
     expect(screen.queryByText(/searxng\.internal/)).toBeNull();
-    expect(screen.queryByText(/Connection refused/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
   });
 
-  it("still exposes technical result after expand", () => {
+  it("shows a specific product sentence only after expand, with technical result", () => {
     renderWithTooltip(
       <ToolLine
         step={step({
@@ -1426,18 +1501,21 @@ describe("ToolLine · tool_use_end.failure product face", () => {
             "搜索失败：ConnectError: [Errno 111] Connection refused to searxng.internal:8080",
           status: "error",
           failure: {
-            message: "工具执行失败，请稍后重试。",
-            code: "TOOL_ERROR",
+            message: "搜索服务暂时不可用，请稍后重试。",
+            code: "HOST_UNAVAILABLE",
           },
         })}
       />,
     );
-    fireEvent.click(screen.getByText("工具执行失败，请稍后重试。"));
+    expect(screen.queryByText("搜索服务暂时不可用，请稍后重试。")).toBeNull();
+    expect(screen.queryByText(/searxng\.internal/)).toBeNull();
+    fireEvent.click(screen.getByText("Search web"));
+    expect(screen.getByText("搜索服务暂时不可用，请稍后重试。")).toBeTruthy();
     expect(screen.getByText(/searxng\.internal:8080/)).toBeTruthy();
   });
 
-  it("falls back to result peek when failure is absent", () => {
-    renderWithTooltip(
+  it("does not peek technical result on a collapsed error row", () => {
+    const { container } = renderWithTooltip(
       <ToolLine
         step={step({
           tool_name: "code_execute",
@@ -1447,11 +1525,14 @@ describe("ToolLine · tool_use_end.failure product face", () => {
         })}
       />,
     );
-    expect(screen.getByText("ExecEnvProbeFailed: 127.0.0.1:5432")).toBeTruthy();
+    expect(screen.queryByText(/ExecEnvProbeFailed/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
+    fireEvent.click(screen.getByText("Run code"));
+    expect(screen.getByText(/ExecEnvProbeFailed: 127.0.0.1:5432/)).toBeTruthy();
   });
 
-  it("surfaces failure.message even for peek-suppressed tools", () => {
-    renderWithTooltip(
+  it("peek-suppressed tools stay one line; specific copy is in the expanded detail", () => {
+    const { container } = renderWithTooltip(
       <ToolLine
         step={step({
           tool_name: "file_read",
@@ -1465,8 +1546,12 @@ describe("ToolLine · tool_use_end.failure product face", () => {
         })}
       />,
     );
-    expect(screen.getByText("读取文件失败。")).toBeTruthy();
+    expect(screen.queryByText("读取文件失败。")).toBeNull();
     expect(screen.queryByText(/FileNotFoundError/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
+    fireEvent.click(screen.getByText("Read file"));
+    expect(screen.getByText("读取文件失败。")).toBeTruthy();
+    expect(screen.getByText(/FileNotFoundError/)).toBeTruthy();
   });
 });
 
@@ -1591,5 +1676,55 @@ describe("ToolLine · test_run budget exceeded", () => {
     expect(container.querySelector(".text-destructive")).toBeNull();
     expect(container.querySelector(".text-warning")).toBeTruthy();
     expect(container.textContent).toContain("验证未完成（预算耗尽）");
+  });
+});
+
+describe("ToolLine · channel redirect", () => {
+  it("titles the row 改用搜索 without a fault X or model steer", () => {
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "code_execute",
+          arguments: { code: "open('index.html').read()" },
+          result:
+            "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+          status: "redirect",
+          failure: {
+            message:
+              "这一步想用脚本打开源码再搜索，没有执行。我会改用搜索工具定位后再读文件。",
+            code: "source_grep_redirect",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText("改用搜索")).toBeTruthy();
+    expect(screen.queryByText("Run code")).toBeNull();
+    expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(screen.queryByText(/禁止用/)).toBeNull();
+    fireEvent.click(screen.getByText("改用搜索"));
+    expect(screen.getByText(/我会改用搜索工具定位后再读文件/)).toBeTruthy();
+    expect(screen.queryByText(/禁止用 code_execute/)).toBeNull();
+  });
+
+  it("normalizes a legacy error + redirect code the same way", () => {
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "code_execute",
+          arguments: { code: "open('index.html').read()" },
+          result:
+            "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+          status: "error",
+          failure: {
+            message:
+              "这一步想用脚本打开源码再搜索，没有执行。我会改用搜索工具定位后再读文件。",
+            code: "source_grep_redirect",
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText("改用搜索")).toBeTruthy();
+    expect(container.querySelector(".text-destructive")).toBeNull();
+    expect(screen.queryByText(/禁止用/)).toBeNull();
   });
 });

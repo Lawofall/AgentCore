@@ -1,6 +1,6 @@
 """Website DESIGN.md helpers + optional style confirmation cache.
 
-场面账硬闸已拆除：``build_website`` 不再因缺视觉风格账拒调
+场面账硬闸已拆除：站点流水线不再因缺视觉风格账拒调
 （``playbook_args.style`` 气质槽另计，与本账无关）。
 无确认时 :func:`design_prompt_block` 软注入 ``s_default`` 与短正向 DESIGN 配方
 （``domain=tool`` 为工具台配方，否则营销向默认配方）；
@@ -70,7 +70,7 @@ _LEDGER: dict[str, StyleConfirmation] = {}
 
 @dataclass(frozen=True, slots=True)
 class WebsiteStyleConfirmedFact:
-    """Durable structured style pick for ``build_website`` gate rehydration."""
+    """Durable structured style pick for site-style gate rehydration."""
 
     style_id: str
     label: str
@@ -93,9 +93,9 @@ class WebsiteStyleConfirmedFact:
 
 def build_website_missing_style_error() -> str:
     return (
-        "建站 playbook（build_website）需要先经 ask_user 开工卡确认风格"
-        "（DESIGN.md「用户选定风格 id」约定；无确认时软注入 s_default）。"
-        "请先开开工提案卡选风格，或在 AutonomyPolicy.full_auto 下由机制落默认风格。"
+        "站点风格无确认时由机制软注入 s_default"
+        "（写入 site/DESIGN.md「用户选定风格 id」）。"
+        "AutonomyPolicy.full_auto 同样落默认风格，无需开工卡。"
     )
 
 

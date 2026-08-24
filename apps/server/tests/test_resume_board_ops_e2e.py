@@ -27,15 +27,13 @@ from pathlib import Path
 from agentcore.config import settings
 from agentcore.llm.provider.protocol import (
     LLMChunk,
-    LLMMessage,
-    ToolCall,
     ToolCallDelta,
-    ToolCallFunction,
 )
 from agentcore.memory.store import FileMemoryStore
 from agentcore.runtime import pipeline
 from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.events import EventSink, EventType, FinishReason, SSEEvent
+from agentcore.runtime.facts import LlmCallFact, RoundBoundaryFact, TurnStartedFact
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.suspension import AskUserSuspension
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -108,9 +106,34 @@ def _backend() -> ServerWorkspace:
     return ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox())
 
 
+def _ask_pause_journal(*, user_message: str) -> list[dict]:
+    """Journal-at-pause for an ask_user suspend: head + suspended tool call + checkpoint."""
+    return [
+        TurnStartedFact(system_prompt="SYS", user_message=user_message, model_profile="m")
+        .to_fact()
+        .entry(),
+        RoundBoundaryFact(round_idx=0, run_id="cap1", role="captain").to_fact().entry(),
+        LlmCallFact(
+            run_id="cap1",
+            round_idx=0,
+            tool_calls=[
+                {
+                    "id": "call_ask",
+                    "type": "function",
+                    "function": {"name": "ask_user", "arguments": "{}"},
+                }
+            ],
+            finish_reason="tool_calls",
+        )
+        .to_fact()
+        .entry(),
+        {"kind": EventType.CHECKPOINT_REQUIRED.value, "payload": {}, "ts": "t"},
+    ]
+
+
 def _ask_frame() -> AskUserSuspension:
-    """An ask_user pause whose in-memory transcript ends at the suspended ``ask_user`` call
-    (empty journal ⇒ ``resumed_captain_window`` folds back this transcript)."""
+    """An ask_user pause whose CEO window is rebuilt from ``journal_entries`` only."""
+    user_message = "在白板上把登录流程画出来"
     susp = AskUserSuspension(
         message_id="m1",
         conversation_id=CONV_ID,
@@ -119,30 +142,12 @@ def _ask_frame() -> AskUserSuspension:
         checkpoint_id="ck1",
         tool_call_id="call_ask",
         base_system_prompt="SYS",
-        user_message="在白板上把登录流程画出来",
+        user_message=user_message,
         folder_id=None,
-        transcript=[
-            LLMMessage(role="system", content="SYS"),
-            LLMMessage(role="user", content="在白板上把登录流程画出来"),
-            LLMMessage(
-                role="assistant",
-                content=None,
-                tool_calls=[
-                    ToolCall(
-                        id="call_ask",
-                        function=ToolCallFunction(name="ask_user", arguments="{}"),
-                    )
-                ],
-            ),
-        ],
+        transcript=[],
         question="确认要继续吗？",
     )
-    # Seed the surface checkpoint via journal_entries (唯一权威载体; the display seed derives —
-    # P0-B Phase 3) so settle's journaled checkpoint_resolved has its pair. No turn_started
-    # anchor ⇒ resumed_captain_window still folds back the in-memory transcript.
-    susp.journal_entries = [
-        {"kind": EventType.CHECKPOINT_REQUIRED.value, "payload": {}, "ts": "t"}
-    ]
+    susp.journal_entries = _ask_pause_journal(user_message=user_message)
     return susp
 
 

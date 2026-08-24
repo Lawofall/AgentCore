@@ -20,6 +20,7 @@ import { DRAFT_KEY, useConversationStore } from "@/stores/conversation";
 import {
   type InteractionEntry,
   isAwaitingUserEntry,
+  isRetiredKickoffKind,
   isStageInteractionKind,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -33,8 +34,8 @@ import { usePausedTurnStore } from "@/stores/pausedTurns";
  *
  * 云对话完成认 fulfill `ai_turn_activity` 的 `reason`：只对 `completed|error` 报完成/
  * 失败，`paused|stopped` 不报「已完成」。本机 sidecar / 本地容器忽略云信号，仍走本端
- * isGenerating↓。挂起收口（pausedTurns 仍在）也不是「已完成」，感知统一走 pausedTurns
- * 订阅（team_preview → 等待确认后开工；ask_user / plan_review → 等待确认后继续）。
+ * isGenerating↓。挂起收口（可操作 cold resume 仍在）也不是「已完成」，感知统一走
+ * pausedTurns 订阅（ask_user / plan_review → 等待确认后继续）。
  *
  * 热阻塞卡（approval / escalation）走 InteractionStore 订阅，
  * 判定直接复用侧栏「等你」灯的 {@link isAwaitingUserEntry}（含 CEO 仲裁中的升级卡不打扰）
@@ -104,18 +105,7 @@ function notifyHotBlocking(entry: InteractionEntry): void {
   void showNativeNotification("AgentCore", message, { conversationId });
 }
 
-function notifyKickoff(conversationId: string): void {
-  if (!shouldNotify(conversationId)) return;
-  const title = titleOf(conversationId);
-  if (!title) return;
-  const message = `「${title}」等待你确认后才会开工`;
-  notifyInfo(message, {
-    action: { label: "去处理", onClick: () => jumpTo(conversationId) },
-  });
-  void showNativeNotification("AgentCore", message, { conversationId });
-}
-
-/** ask_user / plan_review 挂起：与 team_preview 同通道，文案区分「开工」vs「拍板」。 */
+/** ask_user / plan_review 挂起：文案区分「开工」vs「拍板」。 */
 function notifyAwaitingDecision(conversationId: string): void {
   if (!shouldNotify(conversationId)) return;
   const title = titleOf(conversationId);
@@ -217,7 +207,10 @@ function ignoresCloudActivity(conversationId: string): boolean {
 function conversationHasPausedTurn(conversationId: string): boolean {
   return usePausedTurnStore
     .getState()
-    .pending.some((p) => p.conversationId === conversationId);
+    .pending.some(
+      (p) =>
+        p.conversationId === conversationId && !isRetiredKickoffKind(p.kind),
+    );
 }
 
 function conversationHasPendingStageCard(conversationId: string): boolean {
@@ -305,13 +298,9 @@ export function startTeamActivityNotifications(): () => void {
 
   const unsubPaused = usePausedTurnStore.subscribe((state) => {
     for (const p of state.pending) {
+      if (isRetiredKickoffKind(p.kind)) continue;
       if (!claim(p.checkpointId)) continue;
-      if (p.kind === "team_preview") {
-        notifyKickoff(p.conversationId);
-      } else {
-        // ask_user | plan_review
-        notifyAwaitingDecision(p.conversationId);
-      }
+      notifyAwaitingDecision(p.conversationId);
     }
     prune();
   });

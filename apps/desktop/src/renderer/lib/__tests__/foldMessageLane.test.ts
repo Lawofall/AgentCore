@@ -142,6 +142,39 @@ describe("foldMessageLane", () => {
     expect(next.content).toBe(laneText(next.process, "content"));
   });
 
+  // Follow / attach catch-up resends a closed process_content snapshot after the
+  // lane has moved on (reasoning / team). Opening a new block paints the same
+  // paragraph twice — the live-only duplicate a hard refresh clears.
+  it("foldContentDelta does not reopen a closed content block already on the lane", () => {
+    const block =
+      "收到，按**完整官网**来做。我这就派团队开工：多页展示型官网。";
+    const base = messageLaneFromMessage({
+      content: `开场白。${block}`,
+      process: [
+        { kind: "content", text: "开场白。" },
+        { kind: "content", text: block },
+        { kind: "reasoning", text: "接着编排" },
+        { kind: "team", execution_id: "exec1" },
+      ],
+    });
+    expect(foldContentDelta(base, block, true)).toBe(base);
+    expect(foldContentDelta(base, block, false)).toBe(base);
+  });
+
+  it("foldReasoningDelta does not reopen a closed reasoning block already on the lane", () => {
+    const block = "先对齐规模，再派视觉与内容。";
+    const base = messageLaneFromMessage({
+      content: "开场白。",
+      reasoning: block,
+      process: [
+        { kind: "reasoning", text: block },
+        { kind: "content", text: "开场白。" },
+      ],
+    });
+    expect(foldReasoningDelta(base, block, true)).toBe(base);
+    expect(foldReasoningDelta(base, block, false)).toBe(base);
+  });
+
   it("foldReasoningDelta(replace) swaps the open reasoning block only", () => {
     const base = messageLaneFromMessage({
       content: "",
@@ -248,7 +281,6 @@ describe("ensureTimelineMarkersFromJournal", () => {
     { type: "message_start", payload: { message_id: "m1" } },
     { type: "content_delta", payload: { delta: "我来安排团队。" } },
     { type: "run_plan", payload: { execution_id: "exec1" } },
-    { type: "team_preview_required", payload: { checkpoint_id: "tp1" } },
     { type: "checkpoint_required", payload: { checkpoint_id: "cp1" } },
     { type: "plan_review_required", payload: { checkpoint_id: "pr1" } },
   ];
@@ -260,8 +292,6 @@ describe("ensureTimelineMarkersFromJournal", () => {
     );
     expect(process).toEqual([
       { kind: "content", text: "我来安排团队。" },
-      // team_preview product order: inserted BEFORE the team marker (insertBeforeTeam).
-      { kind: "team_preview", checkpoint_id: "tp1" },
       { kind: "team", execution_id: "exec1" },
       { kind: "checkpoint", checkpoint_id: "cp1" },
       { kind: "plan_review", checkpoint_id: "pr1" },
@@ -347,7 +377,7 @@ describe("ensureTimelineMarkersFromJournal", () => {
     ]);
   });
 
-  // 已有 team_preview 时仍保持产品序：开工卡 → team → 终稿。
+  // 历史 journal 仍可能带 team_preview marker：插入 team 时保持 marker → 图 → 终稿。
   it("inserts missing team after persisted team_preview (product order)", () => {
     const process = ensureTimelineMarkersFromJournal(
       [
@@ -358,10 +388,6 @@ describe("ensureTimelineMarkersFromJournal", () => {
       [
         { type: "content_delta", payload: { delta: "我来安排团队。" } },
         { type: "run_plan", payload: { execution_id: "exec1" } },
-        {
-          type: "team_preview_required",
-          payload: { checkpoint_id: "tp1" },
-        },
         { type: "content_delta", payload: { delta: "终稿。" } },
       ],
     );

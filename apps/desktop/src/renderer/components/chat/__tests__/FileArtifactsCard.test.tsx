@@ -276,6 +276,96 @@ describe("FileArtifactsCard stage labels", () => {
   });
 });
 
+describe("FileArtifactsCard — 预览截图标注", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useConversationFileSource).mockReturnValue(null);
+    vi.mocked(useConversationWorkspace).mockReturnValue(null);
+  });
+
+  it("预览截图显示「预览图，非最终效果」徽章", () => {
+    renderCard(
+      <FileArtifactsCard
+        conversationId="c1"
+        artifacts={[
+          {
+            path: "site/v1-preview.png",
+            name: "v1-preview.png",
+            acceptance: "accepted",
+            kind: "image",
+            derivedFrom: "site/v1.html",
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("预览图，非最终效果")).toBeTruthy();
+  });
+
+  it("非预览图（无 derivedFrom）不显示预览徽章", () => {
+    renderCard(
+      <FileArtifactsCard
+        conversationId="c1"
+        artifacts={[
+          {
+            path: "photo.png",
+            name: "photo.png",
+            acceptance: "accepted",
+            kind: "image",
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText("预览图，非最终效果")).toBeNull();
+  });
+
+  it("预览截图 + 完整预览能力：显示去真浏览器入口", () => {
+    vi.mocked(useConversationFileSource).mockReturnValue(sourceWithPreview);
+    vi.mocked(useConversationWorkspace).mockReturnValue(sessionWs);
+    renderCard(
+      <FileArtifactsCard
+        conversationId="c1"
+        artifacts={[
+          {
+            path: "site/v1-preview.png",
+            name: "v1-preview.png",
+            acceptance: "accepted",
+            kind: "image",
+            derivedFrom: "site/v1.html",
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "去真浏览器看完整效果" }),
+    );
+    expect(openWorkspaceHtmlInBrowser).toHaveBeenCalledWith(
+      "c1",
+      "site/v1.html",
+      "folder:proj",
+    );
+  });
+
+  it("预览截图无完整预览能力：不显示去真浏览器入口", () => {
+    renderCard(
+      <FileArtifactsCard
+        conversationId="c1"
+        artifacts={[
+          {
+            path: "site/v1-preview.png",
+            name: "v1-preview.png",
+            acceptance: "accepted",
+            kind: "image",
+            derivedFrom: "site/v1.html",
+          },
+        ]}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "去真浏览器看完整效果" }),
+    ).toBeNull();
+  });
+});
+
 describe("FileArtifactsCard — HTML 产物直达完整预览", () => {
   beforeEach(() => {
     vi.clearAllMocks();

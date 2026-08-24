@@ -11,10 +11,7 @@ from agentcore.runtime.coordination.session import (
     active_coordination,
     clear_active_coordination,
 )
-from agentcore.runtime.delegate.preview import (
-    should_preview_delegate_plan,
-    worker_rows,
-)
+from agentcore.runtime.delegate.preview import worker_rows
 from agentcore.runtime.delegate.steer import apply_steer
 from agentcore.runtime.events import EventSink, EventType
 from agentcore.runtime.facts import TurnFactLog, current_fact_log
@@ -30,25 +27,6 @@ def _plan(*nodes: RunSpec) -> RunPlan:
     for n in nodes:
         plan.add(n)
     return plan
-
-
-def test_should_preview_multi_worker():
-    plan = _plan(
-        RunSpec(run_id="r1", task="a", role="调研"),
-        RunSpec(run_id="r2", task="b", role="撰写", depends_on=["r1"]),
-    )
-    assert should_preview_delegate_plan(plan) is True
-
-
-def test_should_preview_skips_solo():
-    plan = _plan(RunSpec(run_id="r1", task="alone", role="写手"))
-    assert should_preview_delegate_plan(plan) is False
-
-
-def test_should_preview_skips_solo_even_with_runtime_tags():
-    """stance/round on RunSpec are runtime display tags — not kickoff hang marks."""
-    plan = _plan(RunSpec(run_id="r1", task="辩", role="正方", stance="pro", round=1))
-    assert should_preview_delegate_plan(plan) is False
 
 
 async def test_confirmed_ask_still_suspends_team_preview():
@@ -111,7 +89,7 @@ async def test_confirmed_ask_still_suspends_team_preview():
 
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    assert not any(str(e.type) == "team_preview_required" for e in sink._history)
     session = active_coordination("e")
     if session is not None and session.drive_task is not None:
         await asyncio.wait_for(session.drive_task, timeout=10)
@@ -297,7 +275,7 @@ async def test_coordinate_team_preview_suspends_before_fork():
     session = active_coordination("e")
     assert session is not None and session.drive_task is not None
     assert saved == []
-    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    assert not any(str(e.type) == "team_preview_required" for e in sink._history)
     await asyncio.wait_for(session.drive_task, timeout=10)
     clear_active_coordination("e")
 

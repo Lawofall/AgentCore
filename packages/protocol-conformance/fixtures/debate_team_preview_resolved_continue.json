@@ -1,6 +1,6 @@
 {
   "name": "debate_team_preview_resolved_continue",
-  "description": "辩论开工卡：开赛后主持人+正反已 start（协作图可见）",
+  "description": "开工卡已退役、不再发事件对：开赛后主持人+正反已 start（协作图可见）",
   "events": [
     {
       "type": "message_start",
@@ -43,46 +43,6 @@
       "timestamp": "2026-01-01T00:00:00.003Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp-debate",
-        "conversation_id": "conv_demo",
-        "workers": [],
-        "tools": [],
-        "primitive": "debate",
-        "motion": "该不该上四天工作制？",
-        "form": "debate",
-        "sides": [
-          {
-            "key": "pro",
-            "name": "正方",
-            "stance": "应推广",
-            "run_id": "debate_mod1_pro"
-          },
-          {
-            "key": "con",
-            "name": "反方",
-            "stance": "暂缓",
-            "run_id": "debate_mod1_con"
-          }
-        ],
-        "max_rounds": 5,
-        "thorough": true,
-        "revision": 1,
-        "moderator_run_id": "debate_mod1"
-      },
-      "timestamp": "2026-01-01T00:00:00.004Z"
-    },
-    {
-      "type": "team_preview_resolved",
-      "payload": {
-        "checkpoint_id": "tp-debate",
-        "decision": "continue",
-        "note": ""
-      },
-      "timestamp": "2026-01-01T00:00:00.005Z"
-    },
-    {
       "type": "run_plan",
       "payload": {
         "execution_id": "exec1",
@@ -105,7 +65,7 @@
           }
         ]
       },
-      "timestamp": "2026-01-01T00:00:00.006Z"
+      "timestamp": "2026-01-01T00:00:00.004Z"
     },
     {
       "type": "run_started",
@@ -115,7 +75,7 @@
         "parent_run_id": "captain1",
         "kind": "agent"
       },
-      "timestamp": "2026-01-01T00:00:00.007Z"
+      "timestamp": "2026-01-01T00:00:00.005Z"
     },
     {
       "type": "debate_round_started",
@@ -127,7 +87,7 @@
         "cross_exam_enabled": true,
         "opening": "这场要定的是该不该上四天工作制，先从产出与休息的权衡切入。"
       },
-      "timestamp": "2026-01-01T00:00:00.008Z"
+      "timestamp": "2026-01-01T00:00:00.006Z"
     },
     {
       "type": "run_plan",
@@ -170,7 +130,7 @@
           }
         ]
       },
-      "timestamp": "2026-01-01T00:00:00.009Z"
+      "timestamp": "2026-01-01T00:00:00.007Z"
     },
     {
       "type": "run_started",
@@ -180,7 +140,7 @@
         "parent_run_id": "debate_mod1",
         "kind": "agent"
       },
-      "timestamp": "2026-01-01T00:00:00.010Z"
+      "timestamp": "2026-01-01T00:00:00.008Z"
     },
     {
       "type": "run_output_delta",
@@ -189,7 +149,7 @@
         "agent_id": "d_pro",
         "delta": "正方：四天制可降低倦怠、提升专注产出，试点企业已有可量化对照。"
       },
-      "timestamp": "2026-01-01T00:00:00.011Z"
+      "timestamp": "2026-01-01T00:00:00.009Z"
     },
     {
       "type": "run_started",
@@ -199,7 +159,7 @@
         "parent_run_id": "debate_mod1",
         "kind": "agent"
       },
-      "timestamp": "2026-01-01T00:00:00.012Z"
+      "timestamp": "2026-01-01T00:00:00.010Z"
     },
     {
       "type": "run_output_delta",
@@ -208,7 +168,7 @@
         "agent_id": "d_con",
         "delta": "反方：服务业与协作密集岗位难以压缩工时，仓促推广会抬高成本与排班摩擦。"
       },
-      "timestamp": "2026-01-01T00:00:00.013Z"
+      "timestamp": "2026-01-01T00:00:00.011Z"
     }
   ],
   "projected": {
@@ -223,10 +183,6 @@
       {
         "kind": "content",
         "text": "我来组织一场辩论。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp-debate"
       },
       {
         "kind": "team",
@@ -383,14 +339,7 @@
       "completed": 0,
       "total": 3
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp-debate",
-        "status": "resolved",
-        "workerIds": []
-      }
-    ],
+    "interactions": [],
     "cost": null,
     "debate": null,
     "debateRounds": [

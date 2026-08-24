@@ -1,6 +1,6 @@
 {
   "name": "multi_agent_incremental_preview_badge",
-  "description": "批次4·增量 preview：首批仍在跑时 team_preview_required 叠加（不压运行态）",
+  "description": "批次4·增量组队：首批仍在跑时二次 delegate 叠加（不压运行态）",
   "events": [
     {
       "type": "message_start",
@@ -99,33 +99,6 @@
       "timestamp": "2026-01-01T00:00:00.007Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp-incr",
-        "conversation_id": "conv_demo",
-        "workers": [
-          {
-            "run_id": "r3",
-            "role": "法务",
-            "task": "审阅",
-            "depends_on": []
-          }
-        ],
-        "tools": [
-          "file_read",
-          "file_write"
-        ],
-        "primitive": "delegate",
-        "motion": "",
-        "form": "",
-        "sides": [],
-        "max_rounds": 0,
-        "thorough": true,
-        "revision": 1
-      },
-      "timestamp": "2026-01-01T00:00:00.008Z"
-    },
-    {
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "dc1",
@@ -133,7 +106,7 @@
         "status": "success",
         "result": "团队已启动"
       },
-      "timestamp": "2026-01-01T00:00:00.009Z"
+      "timestamp": "2026-01-01T00:00:00.008Z"
     },
     {
       "type": "message_end",
@@ -156,7 +129,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:00.010Z"
+      "timestamp": "2026-01-01T00:00:00.009Z"
     }
   ],
   "projected": {
@@ -171,10 +144,6 @@
       {
         "kind": "content",
         "text": "先派首批。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp-incr"
       },
       {
         "kind": "team",
@@ -281,16 +250,7 @@
       "completed": 0,
       "total": 2
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp-incr",
-        "status": "pending",
-        "workerIds": [
-          "r3"
-        ]
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

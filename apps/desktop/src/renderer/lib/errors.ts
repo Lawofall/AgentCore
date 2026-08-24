@@ -6,7 +6,9 @@ import { ApiError, NetworkError } from "@/services/api";
 import {
   KEY_CONFIG_ERROR_CODES,
   NON_RETRIABLE_ERROR_CODES,
+  isRateLimitFamilyCode,
   isUnstartedSendRefusal as matchUnstartedSendRefusal,
+  rateLimitRetrySuppressed,
 } from "@agentcore/contract-types";
 import {
   EMPTY_RESPONSE_CHIP_LABELS,
@@ -711,6 +713,32 @@ function factsOf(err: unknown): ErrorFacts {
   return { transport: false, auth: false };
 }
 
+function attestedRetryAfterSec(f: ErrorFacts): number | undefined {
+  if (f.retryAfter != null) return f.retryAfter;
+  const fromContext = f.context?.retry_after;
+  if (typeof fromContext === "number" && Number.isFinite(fromContext)) {
+    return fromContext;
+  }
+  return undefined;
+}
+
+function isRetriableFromFacts(f: ErrorFacts): boolean {
+  if (f.code === "CLIENT_TOO_OLD" || f.status === 426) return false;
+  if (
+    isRateLimitFamilyCode(f.code) &&
+    rateLimitRetrySuppressed(attestedRetryAfterSec(f))
+  ) {
+    return false;
+  }
+  if (
+    f.code !== undefined &&
+    (NON_RETRIABLE_ERROR_CODES as readonly string[]).includes(f.code)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function resolveMessage(f: ErrorFacts): string {
   if (f.transport) return "网络连接中断，请检查网络后重试";
   // Force-update floor: CLIENT_TOO_OLD or HTTP 426 Upgrade Required.
@@ -827,14 +855,7 @@ export function describeError(err: unknown): DescribedError | null {
     // exhausted). Inference JWT expiry is remintable — keep retry, and so is a CSRF
     // rejection: the 403 re-armed the client, so the re-send is the fix. The shared
     // contract-types catalog is the single source for the rest.
-    retriable: inferenceTokenFailure
-      ? true
-      : f.code === "CLIENT_TOO_OLD" || f.status === 426
-        ? false
-        : !(
-            f.code !== undefined &&
-            (NON_RETRIABLE_ERROR_CODES as readonly string[]).includes(f.code)
-          ),
+    retriable: inferenceTokenFailure ? true : isRetriableFromFacts(f),
     code: f.code,
     context: f.context,
   };

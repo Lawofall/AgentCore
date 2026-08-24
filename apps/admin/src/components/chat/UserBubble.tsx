@@ -65,7 +65,7 @@ export function UserBubble({
         </div>
       )}
       {content ? (
-        <CollapsibleBody content={content} />
+        <CollapsibleBody content={content} fadeFrom="from-muted" />
       ) : (
         <div className="text-muted-foreground text-sm italic">（无正文）</div>
       )}

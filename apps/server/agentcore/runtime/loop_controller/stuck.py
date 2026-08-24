@@ -130,7 +130,7 @@ class StuckInterventionMixin:
 
     @property
     def delivery_idle_nudge_rounds(self) -> int:
-        """Configured soft nudge threshold (0 = off). Factory: recon-idle only."""
+        """Configured soft nudge threshold (0 = off). Product factory always 0."""
         return self._delivery_idle_nudge_rounds
 
     @property
@@ -247,7 +247,9 @@ class StuckInterventionMixin:
     def detect(self) -> StuckSignal | None:
         """Return the strongest stuck signal in the window, or ``None``.
 
-        Priority: repeated failure (most actionable) > repeated call > A-B-A-B.
+        Priority: repeated failure (most actionable) > repeated non-investigation
+        success > A-B-A-B.
+        Successful identical investigation calls are not a stuck pattern (re-read / paging).
         """
         if len(self._recent) < self._threshold:
             return None
@@ -261,13 +263,23 @@ class StuckInterventionMixin:
                     fail_counts[attempt.fingerprint],
                 )
 
-        all_counts = Counter(a.fingerprint for a in self._recent)
+        # Identical successful non-investigation calls (compute / code_execute) — not
+        # read paging. Investigation tools stay exempt (re-read / paging is legitimate).
+        success_counts = Counter(
+            a.fingerprint
+            for a in self._recent
+            if a.success and a.tool_name not in self._investigation_tools
+        )
         for attempt in reversed(self._recent):
-            if all_counts[attempt.fingerprint] >= self._threshold:
+            if (
+                attempt.success
+                and attempt.tool_name not in self._investigation_tools
+                and success_counts[attempt.fingerprint] >= self._threshold
+            ):
                 return StuckSignal(
                     StuckReason.REPEATED_CALL,
                     attempt.tool_name,
-                    all_counts[attempt.fingerprint],
+                    success_counts[attempt.fingerprint],
                 )
 
         if len(self._recent) >= 4:

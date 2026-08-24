@@ -358,6 +358,7 @@ def test_runner_mismatch_still_claims_vitest_purpose_with_jest_command():
         ({"event": "tool.execute_end", "status": "allowlist_deny"}, True),
         ({"event": "tool.execute_end", "status": "brand_new_failure"}, True),
         ({"event": "tool.execute_end", "status": "ok"}, False),
+        ({"event": "tool.execute_end", "status": "redirect"}, False),
         ({"event": "tool.execute_end"}, False),
         ({"event": "llm.call", "status": "error"}, False),
     ],

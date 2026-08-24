@@ -36,11 +36,16 @@ vi.mock("@/stores/usage", () => ({
   ) => sel({ loadMessageCost: () => {}, messageCosts: {} }),
 }));
 
-vi.mock("@/stores/execution", () => ({
-  useExecutionStore: (
-    sel: (s: { byId: Record<string, { deliveryStatus: null }> }) => unknown,
-  ) => sel({ byId: {} }),
-}));
+vi.mock("@/stores/execution", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/stores/execution")>();
+  return {
+    ...actual,
+    useExecutionStore: (
+      sel: (s: { byId: Record<string, { deliveryStatus: null }> }) => unknown,
+    ) => sel({ byId: {} }),
+    useMessageExecution: () => null,
+  };
+});
 
 vi.mock("@/stores/interactions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/stores/interactions")>();
@@ -49,7 +54,6 @@ vi.mock("@/stores/interactions", async (importOriginal) => {
     useMessageInteractionCards: () => ({
       checkpoints: [],
       planReviews: [],
-      teamPreviews: [],
     }),
   };
 });

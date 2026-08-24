@@ -79,7 +79,6 @@ def test_registry_registers_the_system_skills():
         "product_help_map",
         "product_help_faq",
         "product_bug_triage",
-        "build_website",
         "build_app",
         "debate_and_review",
         "revising_a_product",
@@ -124,7 +123,8 @@ def test_available_hides_gated_skills_without_required_tools():
     assert "product_help_map" in available
     assert "product_help_faq" in available
     assert "product_bug_triage" in available
-    assert "build_website" in available
+    assert "build_website" not in available
+    assert "build_app" in available
     assert "debate_and_review" in available
     assert "revising_a_product" in available
     assert "verify_and_fix" in available
@@ -352,27 +352,17 @@ async def test_consult_product_help_hit():
         assert hit.output == sibling.body
 
 
-async def test_consult_build_website_hit():
-    """按需目录对齐：consult('build_website') 可命中（回归 miss→none 旁路）。"""
+async def test_consult_build_website_is_plain_soft_miss():
+    """目录与 consult 不再有 build_website（CEO 侧不推具名建站套餐）。"""
     reg = build_system_skill_registry()
-    assert reg.get("build_website") is not None
+    assert reg.get("build_website") is None
     tool = _skill_consult(reg)
     result = await tool.execute({"name": "build_website"}, _ctx())
-    assert result.success
-    assert "playbook=\"build_website\"" in result.output
-    assert (
-        "playbook_args.topic" in result.output
-        or 'playbook_args={{"topic"' in result.output
-        or '"topic"' in result.output
-    )
-    assert "none" in result.output
-    directory = render_skill_directory(reg, _NO_LIVE_USER)
-    assert "- build_website：" in directory
-    # 「topic 必填」由 build_website 正文持有，目录不再复述（去重定案）
-    assert "**必填** `playbook_args.topic`" in result.output
-    assert "playbook_args.topic" not in directory
-    assert "- build_toolshed：" not in directory
-    assert "style=\"toolshed\"" in result.output or "style=toolshed" in result.output
+    assert result.success  # soft miss
+    assert "没有名为" in result.output
+    directory = render_skill_directory(reg, _FULL_TOOLS)
+    assert "- build_website：" not in directory
+    assert "build_website：" not in directory
 
 
 async def test_consult_build_toolshed_removed():
@@ -385,10 +375,7 @@ async def test_consult_build_toolshed_removed():
     assert "没有名为" in result.output
     directory = render_skill_directory(reg, _NO_LIVE_USER)
     assert "- build_toolshed：" not in directory
-    website = reg.get("build_website")
-    assert website is not None
-    assert "style" in website.body and "toolshed" in website.body
-    assert 'playbook="build_toolshed"' not in website.body
+    assert reg.get("build_website") is None
 
 
 async def test_consult_degrades_on_unknown_name():
@@ -531,9 +518,12 @@ def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
     assert "成文后梯度" in body
     assert "轻→标准→重" in body
     assert "档 1" in body and "档 2" in body and "档 3" in body
-    # 核下沉独有句：A/档2 不成篇硬门；开局禁连搜（探路轮跟 settings）
+    # 核下沉独有句：A/档2 不成篇硬门；开局禁连搜摸底（组队靠提示词，无探路硬闸）
     assert "成篇硬门" in body
     assert "开局自己连搜" in body or "连搜多轮" in body
+    assert "规模与结构" in body
+    assert "定位入口" in body
+    assert "探路默认" in body
     assert "research_report" in body
     assert "满编" in body
     assert "套 `research_report` 满编" in body
@@ -573,6 +563,7 @@ def test_work_discipline_skill_teaches_design_and_patch_tripwires():
     # 定稿漂移 A′：写 task 须含「已确认约束」；自拟默认不进该块
     assert "已确认约束" in body
     assert "自拟默认" in body
+    assert "扇入整合" in body and "artifacts" in body
     # 小步增量：用户偏好小步时首派更切片，勿一口吞绿场
     assert "小步" in body or "增量" in body
     assert "绿场" in body or "切片" in body
@@ -844,6 +835,8 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     assert "并行写盘" in body and "同路径" in body
     assert "私有产出" in body or "私有 path" in body
     assert "sibling_artifact" in body or "硬拒" in body
+    assert "整合员" in body and "先 file_read" in body
+    assert "再派同名" in body
     assert "嵌套委派" in body and "大模块" in body
     assert "编排自主" in body
     assert "摸底波" in body
@@ -1009,9 +1002,12 @@ def test_build_app_skill_teaches_admission_and_agent_diversion():
     assert "进入本 playbook 后" in body or "形状内部" in body
     assert "五阶段不可跳" in body
     assert "不强迫一切绿场" in body or "不强迫" in body
-    # 无新 playbook 登记：仍只教既有 build_app / build_feature / build_website
+    # 无新 playbook 登记：仍只教既有 build_app / build_feature；不推建站套餐
     assert "playbook=\"build_app\"" in body or 'playbook="build_app"' in body
     assert "build_feature" in body
+    assert "build_website" not in body
+    assert "intensity=solo" not in body
+    assert "style=toolshed" not in body
     # 交付档 → lean|full；MVP 禁默升 full
     assert "intensity" in body
     assert "lean" in body and "full" in body
@@ -1087,7 +1083,13 @@ def test_team_orchestration_skill_teaches_coordination_wall_vs_none():
     assert "coordination" in body
     assert "wall" in body and "none" in body
     assert "build_feature" in body
-    assert "build_website" in body
+    assert "consult `build_website`" not in body
+    assert "consult(build_website)" not in body
+    assert "style=toolshed" not in body
+    assert "intensity=solo" not in body
+    assert "单页一人" in body or "一人做完" in body
+    assert "营销皮" in body
+    assert "web_quality_scan" in body
 
 
 def test_debate_skill_teaches_debate_tool_forms_and_dual_products():
@@ -1233,6 +1235,7 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert skill.requires_tools == ("ask_user",)
     body = skill.body
     assert "assumptions" in body
+    assert "2–6 字项名" in body
     assert "questions" in body
     assert "短问" in body or "短澄清" in body
     assert "挡路" in body
@@ -1242,9 +1245,9 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "开工提案卡" not in body
     assert "提案体硬闸" not in body
     assert "一键开做" not in body or "禁止" in body
-    # 开工卡取消：skills 仅补一句，主引导在 tool result
-    assert "开工卡取消" in body
-    assert "宜先短问" in body or "哪里要调" in body
+    assert "开工卡取消" not in body
+    assert "机制软注入" in body
+    assert "DESIGN" in body
     assert "checkpoint_after" not in body
     # 缺主体 continue = 确认卡上 default；无 default 不得派工
     assert "缺主体" in body
@@ -1258,12 +1261,16 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "继续·承接确认项" in body
     assert "空转确认" in body or "不承接选项" in body
     assert "默认路径" in body
-    # 交付档：桌上结果 label → intensity/playbook；禁编制/意图分类器
+    # 交付档：绿场 lean|full + 只改一处；建站只留形态消歧，禁桌上档/具名套餐
     assert "交付档" in body
     assert "桌上结果" in body
     assert "intensity" in body
-    assert "一页先上线" in body
-    assert "品牌站流水线" in body
+    assert "一页先上" not in body
+    assert "品牌站流水线" not in body
+    assert "已下线" not in body
+    assert "手写" in body and "tasks" in body
+    assert "intensity=solo" not in body
+    assert "style=toolshed" not in body
     assert "工具壳" in body
     assert "MVP 主流程可点" in body
     assert "模块流水线一次做完" in body
@@ -1272,7 +1279,12 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "意图分类器" in body or "扫原文" in body
     assert "做个网站" in body
     assert "展示页" in body or "业务应用" in body
+    assert "挡路" in body
+    assert "web_quality_scan" in body
+    assert "营销皮" in body
     assert "intensity=full" in body or "满编" in body
+    assert "playbook=\"build_website\"" not in body
+    assert "consult(build_website)" not in body
     # 点名载体/手段·顾问短对齐（与规格已齐正交；禁硬闸/format_options；禁单场景剧本）
     assert "点名载体" in body or "载体/手段" in body
     assert "顾问" in body
@@ -1342,16 +1354,13 @@ def test_ask_user_midtask_skill_teaches_carrier_advisory_crossref():
     assert "落地页 HTML" in body or "不打扰" in body
 
 
-def test_build_website_skill_teaches_delivery_intensity():
-    body = _body("build_website")
-    assert "intensity" in body
-    assert "solo" in body and "standard" in body
-    assert "一页先上线" in body or "solo" in body
-    assert "品牌站" in body or "standard" in body
-    assert "toolshed" in body
-    assert "做个网站" in body
-    assert "桌上档" in body or "交付档" in body
-    assert "禁静默满编" in body or "静默满编" in body
+def test_catalog_has_no_build_website_skill():
+    """目录不再登记 build_website；不新开 skill / playbook。"""
+    reg = build_system_skill_registry()
+    names = {s.name for s in reg.list_all()}
+    assert "build_website" not in names
+    assert "build_app" in names
+    assert reg.get("build_website") is None
 
 
 def test_ask_user_midtask_skill_teaches_fork_and_annotate():
@@ -1705,8 +1714,7 @@ def test_deep_multi_lens_research_teaches_parallel_lenses_and_motion_card():
     assert "见分歧" in body  # 严禁见分歧就建议开辩
     assert "真对立轴" in body  # 存在真对立轴则必须产卡
     # CEO 禁止自搜替代四路；先调研后辩；探路 query 建议短查（工具会截断过长）
-    # 探路轮上限跟 settings 真源，勿钉死字面「5 轮」
-    assert f"{settings.engine_team_gate_investigation_rounds} 轮" in body
+    assert "0～1 轮" in body or "默认 0～1" in body
     assert "禁止自搜" in body or ("禁止" in body and "替代四路" in body)
     assert "截断" in body or "规范化" in body
     assert "≤8 词" not in body

@@ -126,8 +126,8 @@ def test_deep_deliverable_signals():
     assert not is_deep_deliverable(None)
 
 
-def test_factory_closes_files_delivery_idle_keeps_recon():
-    """交文件空转已关：files/report factory 不注入；recon 仍 nudge；prose 全关。"""
+def test_factory_closes_files_and_recon_delivery_idle():
+    """交文件空转与调查空转催结论均已关：factory 不注入。"""
     from agentcore.runtime.engine.governance import create_loop_controller
     from agentcore.runtime.runs.worker_budget import is_short_write_posture
 
@@ -174,10 +174,9 @@ def test_factory_closes_files_delivery_idle_keeps_recon():
         frozenset({"file_read"}),
         files_expected=False,
     )
-    # Investigate/diagnose: recon-idle nudge only (no tool narrow, no write pressure).
-    assert no_files.delivery_idle_nudge_rounds > 0
+    assert no_files.delivery_idle_nudge_rounds == 0
     assert no_files.delivery_idle_narrow_rounds == 0
-    assert no_files.delivery_idle_recon is True
+    assert no_files.delivery_idle_recon is False
     assert no_files.delivery_idle_report is False
     prose_no_files = create_loop_controller(
         frozenset({"file_read"}),
@@ -277,10 +276,10 @@ def test_should_tighten_verify_exec_thrash_for_repair_verify_posture():
         tighten_verify_exec_thrash=True,
         max_rounds=4,
     )
-    # Recon-idle still opens for non-files; files delivery_idle is closed at factory.
-    assert tightened.delivery_idle_nudge_rounds > 0
+    # Recon-idle is closed at factory the same way as files delivery_idle.
+    assert tightened.delivery_idle_nudge_rounds == 0
     assert tightened.delivery_idle_narrow_rounds == 0
-    assert tightened.delivery_idle_recon is True
+    assert tightened.delivery_idle_recon is False
     # disable<=2：两次同工具失败即 disable（默认 3 才 disable）
     tightened.record(
         [ToolAttempt(fingerprint="fp0", tool_name="code_execute", success=False)]
@@ -335,9 +334,9 @@ def test_factory_delivery_idle_not_finalize():
         short_write_posture=True,
         max_rounds=4,
     )
-    assert ctrl.delivery_idle_nudge_rounds > 0
+    assert ctrl.delivery_idle_nudge_rounds == 0
     assert ctrl.delivery_idle_narrow_rounds == 0
-    assert ctrl.delivery_idle_recon is True
+    assert ctrl.delivery_idle_recon is False
     for i in range(12):
         ctrl.record([ToolAttempt(fingerprint=f"r{i}", tool_name="file_read", success=True)])
     assert ctrl.convergence_action() is Intervention.CONTINUE

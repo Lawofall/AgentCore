@@ -241,7 +241,12 @@ def test_allowlists_default_empty():
         PRODUCER_ORPHAN_ALLOWLIST,
     )
 
-    assert CONSUMER_ORPHAN_ALLOWLIST == {}
+    assert CONSUMER_ORPHAN_ALLOWLIST == {
+        "process_step:team_preview": (
+            "Retired kickoff marker: leftover process[] only; no live producer "
+            "(team_preview_required/resolved are RETIRED_EVENT_TYPE_VALUES)."
+        ),
+    }
     assert PRODUCER_ORPHAN_ALLOWLIST == {}
 
 

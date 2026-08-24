@@ -176,12 +176,19 @@ def tool_use_end(
 
     ``output`` is the model-facing result (wire field ``result``) — technical detail
     stays intact on failure. ``failure`` is the optional user face
-    (``{message, code}``) and is attached **only** when ``success=False``.
+    (``{message, code}``) and is attached when ``success=False`` (``error`` or
+    ``redirect``). Channel-mismatch steers are ``status=redirect``, not ``error``.
     """
+    from agentcore.runtime.engine.tool_channel_redirect import tool_wire_status
+
+    fail_code = None
+    if failure is not None:
+        raw = str(failure.get("code") or "").strip()
+        fail_code = raw or None
     payload: dict[str, Any] = {
         "tool_call_id": tool_call_id,
         "tool_name": tool_name,
-        "status": "success" if success else "error",
+        "status": tool_wire_status(success=success, failure_code=fail_code),
         "result": output,
     }
     capped = _cap_display(display)

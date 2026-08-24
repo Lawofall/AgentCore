@@ -321,9 +321,25 @@ export function AdminShell() {
           </span>
         </header>
 
-        <main id="main" ref={mainRef} tabIndex={-1} className="flex-1 overflow-y-auto outline-none">
+        <main
+          id="main"
+          ref={mainRef}
+          tabIndex={-1}
+          className={cn(
+            "flex-1 outline-none",
+            location.pathname.startsWith("/replay/")
+              ? "flex min-h-0 flex-col overflow-hidden"
+              : "overflow-y-auto",
+          )}
+        >
           <ErrorBoundary resetKey={location.pathname}>
-            <Outlet />
+            {location.pathname.startsWith("/replay/") ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <Outlet />
+              </div>
+            ) : (
+              <Outlet />
+            )}
           </ErrorBoundary>
         </main>
       </div>

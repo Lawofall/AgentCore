@@ -1,12 +1,14 @@
 """Convergence governance: deterministic stuck detection + graded intervention.
 
 This runs *outside* the model — no extra LLM calls — between ReAct rounds. It
-catches the three canonical mechanical loop patterns that a model does not
-recognize about itself, over a sliding window of recent tool attempts:
+catches mechanical loop patterns that a model does not recognize about itself,
+over a sliding window of recent tool attempts:
 
-  * repeated identical tool call  — same tool + same normalized args
+  * repeated identical *failure*  — same tool failing the same way
+  * repeated identical *success* on non-investigation tools (compute / execute)
   * A-B-A-B alternation           — oscillating between two calls
-  * repeated identical failure    — same tool failing the same way
+
+Successful identical investigation calls (re-read / paging) are not a stuck pattern.
 
 When a pattern trips, the controller recommends a *graded* intervention: first a
 nudge (a reflection message anchored to the concrete detected fact, never
@@ -137,10 +139,9 @@ class LoopController(
         convergence_finalize_rounds: int = 0,
         convergence_spin_rounds: int = DEFAULT_THRESHOLD,
         form_prose: bool = False,
-        # Idle bars (nudge → optional tool narrow). Factory never arms
-        # files-expected delivery_idle; recon uses nudge only. Explicit
-        # construction may still set these. Orthogonal to token/timeout
-        # wind_down. ≤0 disables each step.
+        # Idle bars (nudge → optional tool narrow). Product factory never arms
+        # any delivery_idle bar (files or recon). Explicit construction may still
+        # set these. Orthogonal to token/timeout wind_down. ≤0 disables each step.
         delivery_idle_nudge_rounds: int = 0,
         delivery_idle_narrow_rounds: int = 0,
         # True → nudge prompt is recon (conclude/handoff), not write-disk pressure.
@@ -163,20 +164,18 @@ class LoopController(
         self._investigation_tools = investigation_tools
         # ``investigation_calls`` = cumulative read-only calls (run-scoped, incl. failures);
         # ``investigation_rounds`` = rounds with ≥1 *successful* investigation call (all-fail
-        # rounds gather no intel → do not spend breadth budget). Safety net / team_gate
-        # trigger on ROUNDS; a parallel batch still counts once. Calls still feed diagnostics.
+        # rounds gather no intel → do not spend breadth budget). Calls still feed diagnostics.
         self._investigation_calls = 0
         self._investigation_rounds = 0
-        # Local file peeks only (file_list / file_read / grep) — team_gate local-edit path.
+        # Local file peeks only (file_list / file_read / grep) — diagnostics / eval probe.
         self._local_recon_calls = 0
         # Over-investigation safety net (收敛治理, 保险丝): absolute round ceiling plus
         # progress-aware spinning on repeated same-target reads. ``finalize_rounds <= 0``
         # disables the absolute cap; ``spin_rounds <= 0`` disables spinning detection.
         self._convergence_finalize_rounds = max(0, convergence_finalize_rounds)
         self._convergence_spin_rounds = max(0, convergence_spin_rounds)
-        # Idle-round counter (factory: recon-idle; explicit delivery_idle
-        # construction still uses the same clock). Soft nudge/narrow read it.
-        # Landing *attempt* resets; success latches done.
+        # Idle-round counter (explicit construction with bars still uses it).
+        # Factory leaves bars at 0 so tracking stays off.
         self._form_prose = bool(form_prose)
         self._delivery_idle_nudge_rounds = max(0, int(delivery_idle_nudge_rounds))
         self._delivery_idle_narrow_rounds = max(0, int(delivery_idle_narrow_rounds))
@@ -241,12 +240,6 @@ class LoopController(
         # from repeating investigation work the team already did.
         self._post_delegate: bool = False
         self._post_delegate_investigation_count: int = 0
-        # Soft team-gate nudge (协作优先阶段 3): at most once per run, captain-only.
-        self._team_gate_fired: bool = False
-        # Names this gate newly added to disabled_tools (for post-delegate restore).
-        self._team_gate_stripped_tools: frozenset[str] = frozenset()
-        # 闸后长文直答再催：每 run 一次。
-        self._team_gate_direct_reject_fired: bool = False
         # Soft audit-gate nudge (协作优先阶段 3 返工环): at most once per run, captain-only.
         self._audit_gate_fired: bool = False
         # 成篇硬门：research_report / deliverable 结构信号 — nudge 后仍不可直接 end_turn。
@@ -317,39 +310,6 @@ class LoopController(
         self._audit_includes_review = True
 
     @property
-    def team_gate_fired(self) -> bool:
-        """True after the soft team-gate nudge has been injected (latched)."""
-        return self._team_gate_fired
-
-    def mark_team_gate_fired(self) -> None:
-        """Latch the one-shot team-gate so it cannot fire again this run."""
-        self._team_gate_fired = True
-
-    def record_team_gate_stripped(self, names: frozenset[str] | set[str]) -> None:
-        """Remember tools this team_gate newly stripped (not pre-disabled ones)."""
-        self._team_gate_stripped_tools = frozenset(names)
-
-    @property
-    def team_gate_stripped_tools(self) -> frozenset[str]:
-        """Tools recorded as newly stripped by the last team_gate fire."""
-        return self._team_gate_stripped_tools
-
-    def take_team_gate_stripped(self) -> frozenset[str]:
-        """Consume the team_gate strip set (post-delegate restore)."""
-        names = self._team_gate_stripped_tools
-        self._team_gate_stripped_tools = frozenset()
-        return names
-
-    @property
-    def team_gate_direct_reject_fired(self) -> bool:
-        """True after the post-gate long-answer reject has fired."""
-        return self._team_gate_direct_reject_fired
-
-    def mark_team_gate_direct_reject_fired(self) -> None:
-        """Latch the one-shot team-gate direct-answer reject."""
-        self._team_gate_direct_reject_fired = True
-
-    @property
     def audit_gate_fired(self) -> bool:
         """True after the soft audit-gate nudge has been injected (latched)."""
         return self._audit_gate_fired
@@ -394,8 +354,6 @@ class LoopController(
         return {
             "post_delegate": self._post_delegate,
             "delegate_count": self._delegate_count,
-            "team_gate_fired": self._team_gate_fired,
-            "team_gate_direct_reject_fired": self._team_gate_direct_reject_fired,
             "audit_gate_fired": self._audit_gate_fired,
             "first_batch_substantial": self._first_batch_substantial,
             "audit_hard_required": self._audit_hard_required,
@@ -411,10 +369,6 @@ class LoopController(
         """Restore cross-suspension latches from a prior :meth:`export_seed` snapshot."""
         self._post_delegate = bool(seed.get("post_delegate", False))
         self._delegate_count = int(seed.get("delegate_count", 0) or 0)
-        self._team_gate_fired = bool(seed.get("team_gate_fired", False))
-        self._team_gate_direct_reject_fired = bool(
-            seed.get("team_gate_direct_reject_fired", False)
-        )
         self._audit_gate_fired = bool(seed.get("audit_gate_fired", False))
         self._first_batch_substantial = bool(seed.get("first_batch_substantial", False))
         self._audit_hard_required = bool(seed.get("audit_hard_required", False))

@@ -4,7 +4,6 @@
  * 条上不得再出现「接续 N 次」「互相把关」「预计 N 人开工」「同时开工省下」。
  * 数据字段 / formatCollabSummary / teamPreviewLead 仍保留，只是不画在这条上。
  */
-import { teamPreviewLead } from "@/components/chat/decision";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { formatCollabSummary } from "@/lib/collabSummary";
 import { conversationKeys } from "@/lib/queryKeys";
@@ -123,14 +122,6 @@ describe("StatusStrip · 去掉多余 chrome", () => {
       escalations: 0,
     });
     expect(collabLine).toBe("互相把关：发现跑偏 1 处 · 返工重写 2 处");
-    expect(
-      teamPreviewLead({
-        primitive: "delegate",
-        headline: null,
-        workerCount: 2,
-        sideCount: 0,
-      }),
-    ).toBe("预计 2 人开工");
 
     const { execution } = renderStrip();
     expect(execution.runs.some((r) => r.continuesRunId != null)).toBe(true);

@@ -1,9 +1,8 @@
 """Delegate playbook declaration gate（结构校验）.
 
 默认主路：手写顶层 ``tasks``（可省略 playbook）。
-具名 playbook = 固化流水线快捷进阶（建站 / 工具台 / 绿场等）；与 tasks XOR。
-建站快捷：``build_website``（工具台气质用 ``style=toolshed``）；绿场快捷：``build_app``
-（软引导见 skill / schema）；省略 playbook / 手写不再因意图硬拒。
+具名 playbook = 固化流水线快捷进阶（如绿场 ``build_app``）；与 tasks XOR。
+软引导见 skill / schema；省略 playbook / 手写不再因意图硬拒。
 
 场面账（automation delivery / website style / presentation format）已拆除：
 具名 playbook 不再因交付形态记账硬拒。
@@ -20,6 +19,9 @@ DeclarationRejectGate = Literal[
     "unknown",
     "xor",
 ]
+
+# Runtime no longer treats these as named shortcuts (hand-write tasks instead).
+RETIRED_NAMED_SHORTCUTS = frozenset({"build_website", "build_website_verify"})
 
 PLAYBOOK_TASKS_XOR_MSG = (
     "playbook 与 tasks 二选一，不可同时传。"
@@ -78,28 +80,20 @@ def declaration_reject_gate(error: str | None) -> DeclarationRejectGate:
 
 def resolve_playbook_declaration(
     arguments: dict[str, Any],
-    *,
-    user_message: str = "",
-    automation_delivery: Any = None,
-) -> tuple[str | None, str | None, str | None]:
-    """Resolve declaration → ``(playbook_name|None, none_reason|None, error|None)``.
+) -> tuple[str | None, str | None]:
+    """Resolve declaration → ``(playbook_name|None, error|None)``.
 
-    ``playbook_name`` set ⇒ expand that playbook. ``none_reason`` is always ``None``
-    (legacy slot retained for call-site compat; field removed from CEO schema).
+    ``playbook_name`` set ⇒ expand that playbook.
     ``error`` set ⇒ reject the call.
 
     Free teaming defaults to handwritten ``tasks`` (playbook may be omitted). Named
-    playbooks remain a shortcut when declared. ``automation_delivery`` retained for
-    call-site compatibility (ignored — scene ledger removed).
-    ``user_message`` retained for call-site compatibility (no intent hard-lock).
+    playbooks remain a shortcut when declared.
     """
-    _ = user_message  # call-site compat; soft guidance only (no intent hard-lock)
-    _ = automation_delivery  # scene ledger removed; kw kept for call-site compat
-    legacy = arguments.get("playbook")
+    declared = arguments.get("playbook")
 
     # Named playbook: non-empty ``playbook`` naming a registry entry.
-    legacy_s = legacy.strip() if isinstance(legacy, str) and legacy.strip() else ""
-    named: str | None = legacy_s or None
+    named_s = declared.strip() if isinstance(declared, str) and declared.strip() else ""
+    named: str | None = named_s or None
 
     tasks = arguments.get("tasks")
     has_tasks = isinstance(tasks, list) and bool(tasks)
@@ -107,21 +101,31 @@ def resolve_playbook_declaration(
     if named is not None:
         if has_tasks:
             # playbook XOR tasks — reject before expand / fanout (避免半跑).
-            return None, None, PLAYBOOK_TASKS_XOR_MSG
+            return None, PLAYBOOK_TASKS_XOR_MSG
+        if named in RETIRED_NAMED_SHORTCUTS:
+            return None, (
+                f"未知 playbook『{named}』。"
+                "建站请手写 `tasks`：一人一页完整 HTML（导航和页脚写进同一页）；"
+                "不要找内部模板；不要再传该 playbook 名。"
+            )
         if named not in PLAYBOOKS:
-            return None, None, (
-                f"未知 playbook『{named}』；可用：{available_playbooks()}。"
+            catalog = "；".join(
+                f"{p.name}（{p.summary}）"
+                for p in PLAYBOOKS.values()
+                if p.name not in RETIRED_NAMED_SHORTCUTS
+            ) or available_playbooks()
+            return None, (
+                f"未知 playbook『{named}』；可用：{catalog}。"
                 "或手写 `tasks`（可不声明 playbook）；"
-                "建站推荐具名 `build_website`（控制台 dense 加 style=toolshed）；"
                 "绿场软件推荐具名 `build_app`。"
             )
-        # 具名 build_app / build_website 等直接放行。
-        return named, None, None
+        # 具名 build_app 等直接放行。
+        return named, None
 
     # Hand-written path: omit playbook, pass non-empty tasks.
     if has_tasks:
         if arguments.get("playbook_args"):
-            return None, None, HANDWRITTEN_PLAYBOOK_ARGS_MSG
-        return None, None, None
+            return None, HANDWRITTEN_PLAYBOOK_ARGS_MSG
+        return None, None
 
-    return None, None, _EMPTY_DELEGATE_MSG
+    return None, _EMPTY_DELEGATE_MSG

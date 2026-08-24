@@ -37,6 +37,28 @@ type DelegateTool = Any
 logger = get_logger(__name__)
 
 
+def stamp_last_graph_seed(
+    tool: DelegateTool,
+    plan: RunPlan,
+    results: dict[str, RunState] | None,
+) -> None:
+    """Copy terminal phases from a drive result map onto the tool instance.
+
+    Kickoff must not pretend in-flight workers are done. Call this when the
+    wave scheduler has a real result map (finalize, or execute tail after the
+    coordination session has already closed). Nodes absent from ``results``
+    stay unscheduled for a same-turn append.
+    """
+    from agentcore.runtime.runs.types import RunState as _RunState
+
+    terminal = results or {}
+    tool._last_graph_seed = {
+        n.run_id: _RunState(phase=state.phase, error=state.error)
+        for n in plan.nodes
+        if (state := terminal.get(n.run_id)) is not None
+    }
+
+
 def emit_batch_metrics(
     tool: DelegateTool,
     batch_metrics: list[BatchMetrics],
@@ -365,6 +387,7 @@ async def finalize_drive(
     # （``DelegateTool._last_drive_results``）。必须在 pause / boundary / partial 早退之前
     # 记——正是那几条路径上有失败节点与让出后未跑的尾节点。
     tool._last_drive_results = dict(results)
+    stamp_last_graph_seed(tool, plan, results)
     # Thrash rebrand memory before early exits (pause / partial) so cold re-delegate
     # in the same conversation still sees DEGRADED/ceiling_backstop workers.
     from agentcore.runtime.coordination.thrash import record_thrashing_from_results

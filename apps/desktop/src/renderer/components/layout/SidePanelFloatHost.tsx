@@ -8,11 +8,7 @@ import {
   sidePanelFloatTitle,
 } from "@/components/layout/SidePanelSurfaceBody";
 import { canUseOsFloatWindow } from "@/lib/floatWindowApi";
-import {
-  CHANGES_TAB_ID,
-  WORKSPACE_TAB_ID,
-  useSidePanelStore,
-} from "@/stores/sidePanel";
+import { WORKSPACE_TAB_ID, useSidePanelStore } from "@/stores/sidePanel";
 import { useCallback, useMemo } from "react";
 
 /**
@@ -43,7 +39,7 @@ export function SidePanelFloatHost() {
           height: f.layout.height,
         },
         zIndex: f.layout.zIndex,
-        closable: f.tabId !== WORKSPACE_TAB_ID && f.tabId !== CHANGES_TAB_ID,
+        closable: f.tabId !== WORKSPACE_TAB_ID,
         focused:
           focusSurface.type === "float" && focusSurface.tabId === f.tabId,
       })),

@@ -47,8 +47,11 @@ export interface ActiveSidecarTurn extends SidecarTarget {
 }
 
 const activeSidecarTurns = new Map<string, ActiveSidecarTurn>();
-/** 回合结束后仍记住最近 sidecar 目标，供 harvest 等自发回合重新 setActive。 */
-const lastSidecarTargetByCid = new Map<string, SidecarTarget>();
+/**
+ * 回合结束后仍记住最近 sidecar 目标（含 turnId），供 harvest 重新 setActive，
+ * 以及渲染侧流已拆、引擎可能仍在跑时的活干预（run-stop / 整轮 cancel）。
+ */
+const lastSidecarTargetByCid = new Map<string, ActiveSidecarTurn>();
 
 /** 登记：该会话此刻在某 sidecar 目标（root + subpath）上跑回合（回合开始 / attach 时调）。 */
 export function setActiveSidecarTurn(
@@ -57,8 +60,9 @@ export function setActiveSidecarTurn(
   subpath = "",
   turnId?: string,
 ): void {
-  activeSidecarTurns.set(conversationId, { rootId, subpath, turnId });
-  lastSidecarTargetByCid.set(conversationId, { rootId, subpath });
+  const target: ActiveSidecarTurn = { rootId, subpath, turnId };
+  activeSidecarTurns.set(conversationId, target);
+  lastSidecarTargetByCid.set(conversationId, target);
 }
 
 /**
@@ -86,11 +90,37 @@ export function getActiveSidecarTarget(
   return activeSidecarTurns.get(conversationId) ?? null;
 }
 
-/** 该会话最近一次 sidecar 目标（回合结束后仍在）；无则 null。 */
+/** 该会话最近一次 sidecar 目标（回合结束后仍在，含 turnId）；无则 null。 */
 export function getLastSidecarTarget(
   conversationId: string,
-): SidecarTarget | null {
+): ActiveSidecarTurn | null {
   return lastSidecarTargetByCid.get(conversationId) ?? null;
+}
+
+/**
+ * 活干预寻址：渲染侧流已拆（C1 断连 ≠ 取消）时活 map 为空，
+ * 引擎仍可能在 sidecar 进程里跑。先活 map，再 last（含 turnId）。
+ *
+ * ``executionVia=sidecar`` 且两表都空时（例如渲染进程重载）才落到会话本地根。
+ * 云过桥（``cloud_bridge``）不得走本地根，否则停令打进空 sidecar、云上队员不停。
+ */
+export function resolveSidecarControlTarget(
+  conversationId: string,
+): ActiveSidecarTurn | null {
+  return (
+    getActiveSidecarTarget(conversationId) ??
+    getLastSidecarTarget(conversationId)
+  );
+}
+
+export async function resolveSidecarControlTargetForEngine(
+  conversationId: string,
+  executionVia: "sidecar" | "cloud_bridge" | null | undefined,
+): Promise<ActiveSidecarTurn | SidecarTarget | null> {
+  const mapped = resolveSidecarControlTarget(conversationId);
+  if (mapped) return mapped;
+  if (executionVia !== "sidecar") return null;
+  return resolveConversationLocalTarget(conversationId);
 }
 
 /** 测试隔离：清空活回合与最近目标。 */

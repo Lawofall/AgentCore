@@ -8,6 +8,7 @@
  */
 import { ChatTimeline } from "@/components/conversation-replay/ChatTimeline";
 import { InspectorPanel } from "@/components/conversation-replay/InspectorPanel";
+import { foldEmptyAssistantFollowers } from "@/lib/foldEmptyAssistant";
 import type {
   ReplayMessage,
   ReplayRun,
@@ -118,10 +119,46 @@ describe("ChatTimeline chat layout", () => {
 
     expect(screen.getByText("帮我查一下")).toBeTruthy();
     expect(screen.getByText("查完了，结论如下。")).toBeTruthy();
+    expect(screen.queryByText("用户")).toBeNull();
+    expect(screen.queryByText("助手")).toBeNull();
     expect(screen.getByLabelText("对话终态")).toBeTruthy();
     // Span ops left the main column — not folded into ChatView, not reverse-engineered.
     expect(screen.queryByText("1 次模型调用 · 1 次工具")).toBeNull();
     expect(screen.queryByText("web_search")).toBeNull();
+  });
+
+  it("assistant footer shows cost · extra rounds · duration, not span counts", () => {
+    render(
+      <ChatTimeline
+        messages={[
+          msg({
+            id: "a1",
+            role: "assistant",
+            content: "结论",
+            cost_total: 100_000_000,
+            metrics: {
+              rounds: 3,
+              duration_ms: 1500,
+            } as ReplayMessage["metrics"],
+            spans: [
+              span({ kind: "llm", round_idx: 0 }),
+              span({ kind: "tool", name: "web_search" }),
+            ],
+          }),
+        ]}
+        selectedId={null}
+        selectedRunId={null}
+        onSelect={vi.fn()}
+        onSelectRun={vi.fn()}
+        isAnchored={() => false}
+      />,
+    );
+
+    const footer = screen.getByLabelText("回合用量");
+    expect(footer.textContent).toMatch(/¥0\.10/);
+    expect(footer.textContent).toMatch(/3 轮/);
+    expect(footer.textContent).toMatch(/1\.5s/);
+    expect(screen.queryByText("1 次模型调用 · 1 次工具")).toBeNull();
   });
 
   it("paints user attachment and @Agent chips without download links", () => {
@@ -278,6 +315,62 @@ describe("ChatTimeline chat layout", () => {
     expect(onSelectRun).toHaveBeenCalledWith("r-worker");
   });
 
+  it("after folding an empty trailing assistant, process and team paint once", () => {
+    const projected = {
+      process: [
+        { kind: "team", execution_id: "ex1" },
+        {
+          kind: "tool",
+          id: "t1",
+          tool_name: "read",
+          status: "success",
+        },
+      ],
+      runs: [
+        {
+          id: "captain",
+          role: "captain",
+          status: "completed",
+          task: "统筹",
+        },
+      ],
+      progress: { completed: 1, total: 1 },
+    };
+    const { messages } = foldEmptyAssistantFollowers([
+      msg({ id: "u1", role: "user", content: "审计" }),
+      msg({
+        id: "a1",
+        role: "assistant",
+        content: "结论如下",
+        projected,
+        has_final_state: true,
+      }),
+      msg({
+        id: "a2",
+        role: "assistant",
+        content: "",
+        projected,
+        has_final_state: true,
+      }),
+    ]);
+
+    render(
+      <ChatTimeline
+        messages={messages}
+        selectedId="a1"
+        selectedRunId={null}
+        onSelect={vi.fn()}
+        onSelectRun={vi.fn()}
+        isAnchored={() => false}
+      />,
+    );
+
+    expect(screen.getAllByLabelText("团队")).toHaveLength(1);
+    expect(screen.getAllByText("使用 1 个工具")).toHaveLength(1);
+    expect(screen.queryByText("（无正文）")).toBeNull();
+    expect(screen.getByText("结论如下")).toBeTruthy();
+  });
+
   it("气泡不再吞掉内部控件的键盘事件（协作图节点可键盘点选）", () => {
     const onSelect = vi.fn();
     const onSelectRun = vi.fn();
@@ -344,18 +437,65 @@ describe("ChatTimeline chat layout", () => {
   it("shows a loading status while a turn's final state hydrates", () => {
     render(
       <ChatTimeline
+        messages={[
+          msg({
+            id: "a1",
+            role: "assistant",
+            content: "最近一条",
+            has_final_state: true,
+          }),
+        ]}
+        selectedId="a1"
+        selectedRunId={null}
+        onSelect={vi.fn()}
+        onSelectRun={vi.fn()}
+        isAnchored={() => false}
+        hydratingIds={["a1"]}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain("正在加载终态");
+    expect(screen.getByText("最近一条")).toBeTruthy();
+  });
+
+  it("does not show 正在加载终态 when the row has no final state to fetch", () => {
+    render(
+      <ChatTimeline
         messages={[msg({ id: "a1", role: "assistant", content: "最近一条" })]}
         selectedId="a1"
         selectedRunId={null}
         onSelect={vi.fn()}
         onSelectRun={vi.fn()}
         isAnchored={() => false}
-        hydratingId="a1"
+        hydratingIds={["a1"]}
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("正在加载终态");
-    expect(screen.getByText("最近一条")).toBeTruthy();
+    expect(screen.queryByText("正在加载终态")).toBeNull();
+  });
+
+  it("hides 正在加载终态 once runs_payload is already on the row", () => {
+    render(
+      <ChatTimeline
+        messages={[
+          msg({
+            id: "a1",
+            role: "assistant",
+            content: "最近一条",
+            has_final_state: true,
+            runs_payload: { events_complete: true, process: [] },
+          }),
+        ]}
+        selectedId="a1"
+        selectedRunId={null}
+        onSelect={vi.fn()}
+        onSelectRun={vi.fn()}
+        isAnchored={() => false}
+        hydratingIds={["a1"]}
+      />,
+    );
+
+    expect(screen.queryByText("正在加载终态")).toBeNull();
   });
 
   it("offers a retry when hydrating final state failed", () => {
@@ -416,8 +556,61 @@ describe("InspectorPanel worker dock", () => {
 
     expect(screen.getByText("队员正文在此")).toBeTruthy();
     expect(screen.getByText("起草")).toBeTruthy();
+    expect(screen.getByText("file_read")).toBeTruthy();
+    expect(screen.queryByText(/过程明细/)).toBeNull();
     fireEvent.click(screen.getByText("返回列表"));
     expect(onClearRun).toHaveBeenCalled();
+  });
+
+  it("renders the worker process timeline in the dock instead of only the final body", () => {
+    const message = msg({
+      id: "a1",
+      role: "assistant",
+      content: "CEO",
+      runs: [
+        run({
+          run_id: "r1",
+          role: "写手",
+          task: "起草",
+          content: "队员正文在此",
+        }),
+      ],
+      projected: {
+        runs: [
+          {
+            id: "r1",
+            role: "写手",
+            process: [
+              { kind: "reasoning", text: "先列提纲。" },
+              {
+                kind: "tool",
+                id: "t1",
+                tool_name: "web_search",
+                status: "success",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(
+      <InspectorPanel
+        message={message}
+        selectedRunId="r1"
+        onSelectRun={vi.fn()}
+        onClearRun={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("web_search")).toBeTruthy();
+    expect(screen.getByText("队员正文在此")).toBeTruthy();
+    expect(screen.queryByText("思考 1 步 · 使用 1 个工具")).toBeNull();
+    expect(screen.queryByText(/^过程$/)).toBeNull();
+    expect(screen.queryByText(/^产出$/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
+    expect(screen.getByText("先列提纲。")).toBeTruthy();
   });
 
   it("shows worker list without tabs when nothing selected", () => {

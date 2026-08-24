@@ -321,8 +321,7 @@ async def test_handoff_prompt_splits_by_topology():
     prose_up = build_worker_identity(
         has_dependents=True, captain=False, form="prose"
     )
-    assert "summary 不算正文" in prose_up
-    assert "加长 summary 也不能代替正文" in prose_up
+    assert "结论与根因写在回复正文更清楚" in prose_up
     assert "交接勿回灌" in prose_up
     files_leaf = build_worker_identity(
         has_dependents=False, captain=False, form="files"
@@ -376,12 +375,14 @@ async def test_handoff_prompt_splits_by_topology():
     assert "汇报不完整" in leaf
     assert "权威文档冲突" in leaf
     assert "静默改权威稿" in leaf
-    # 开局找路径轻 nudge：含糊「根」先 list/grep；约定出口不是已知文件书目
+    # 开局找路径轻 nudge：已有前置路径直接读；含糊「根」才 list/grep
     assert "找路径" in leaf
+    assert "前置结果" in leaf
     assert "含糊" in leaf and "根" in leaf
     assert "file_list" in leaf
     assert "code_execute print" in leaf
     assert "整文件 dump" in leaf
+    assert "正则扫描" in leaf
     assert "含约定文档出口" not in leaf
     assert "写入落点" in leaf
     assert "勿按话题拼接" in leaf

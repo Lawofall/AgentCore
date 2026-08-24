@@ -21,7 +21,6 @@ def build_chapters(events: list[dict[str, Any]]) -> list[TapeChapter]:
 
     Rules (lv-molihua / debate tapes):
     - 开场检索 — index 0
-    - 组队授权 — ``team_preview_required``
     - 第 N 轮·立论 — ``debate_round_started``
     - 第 N 轮·质询 — first ``run_started`` with ``_cx_`` in ``run_id`` in that round
     - 第 N 轮·打分 — ``debate_round`` (round verdict)
@@ -37,13 +36,6 @@ def build_chapters(events: list[dict[str, Any]]) -> list[TapeChapter]:
         et = event_type(ev)
         payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
         t_ms = int(ev.get("t_ms") or 0)
-
-        if et == "team_preview_required":
-            cid = "team_preview"
-            if cid not in seen:
-                chapters.append(TapeChapter(cid, "组队授权", t_ms, i))
-                seen.add(cid)
-            continue
 
         if et == "debate_round_started":
             round_no = int(payload.get("round_no") or 0)

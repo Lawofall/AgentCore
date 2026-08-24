@@ -36,6 +36,7 @@ def _error(
     failure_code: str | None = None,
     user_face: bool = True,
     cross_turn_retry: CrossTurnRetry | str | None = None,
+    product_face: str | None = None,
 ) -> ToolResult:
     """Build a failed ToolResult with elapsed timing.
 
@@ -48,6 +49,10 @@ def _error(
 
     ``cross_turn_retry`` is a recorded fact (futile / not_futile); unknown stays
     omitted — never default. Orthogonal to loop-controller ``error_class``.
+
+    ``product_face``: optional user-channel copy that must stay even when a stable
+    ``failure_code`` is set (path-missing sibling listings). Default: lift ``error``
+    only when ``user_face`` and there is no code.
 
     User face (``tool_use_end.failure``):
     - ``user_face=True`` (default) → product Chinese in ``error`` also fills
@@ -65,10 +70,13 @@ def _error(
     retry = normalize_cross_turn_retry(cross_turn_retry)
     if retry:
         meta[CROSS_TURN_RETRY_KEY] = retry
-    # Prefer curated-by-code when a stable code is present; only pass through
-    # ``error`` as failure_message when the call site opts into dynamic product copy
-    # without a code (filenames / paths).
-    face_message = error if (user_face and not code) else None
+    face_message: str | None
+    if product_face is not None:
+        face_message = product_face
+    elif user_face and not code:
+        face_message = error
+    else:
+        face_message = None
     return ToolResult(
         tool_call_id="",
         success=False,
@@ -79,6 +87,29 @@ def _error(
         metadata=meta,
         failure_message=face_message,
         failure_code=code,
+    )
+
+
+def looks_like_http_url(path: str) -> bool:
+    """True when ``path`` is an http(s) URL, not a workspace-relative file path."""
+    lowered = (path or "").strip().casefold()
+    return lowered.startswith("http://") or lowered.startswith("https://")
+
+
+def _url_not_workspace_path_error(path: str, start: float) -> ToolResult:
+    """file_read was given a public URL — reroute to read_url; do not treat as a path."""
+    clipped = path if len(path) <= 200 else path[:199] + "…"
+    return _error(
+        (
+            f"`{clipped}` 是 http(s) 网页地址，不是工作区相对路径。"
+            "请改用 read_url(url=该地址) 深读正文；工作区文件才用 file_read。"
+            "不要把 URL 改写成路径再重试本工具。"
+        ),
+        start,
+        contract_failure=True,
+        failure_code="url_not_workspace_path",
+        user_face=False,
+        cross_turn_retry=CrossTurnRetry.FUTILE,
     )
 
 
@@ -110,6 +141,30 @@ def _office_extract_budget_error(path: str, size: int, start: float) -> ToolResu
         start,
         contract_failure=True,
         metadata={"capacity_contract": "extract_bytes"},
+    )
+
+
+def _office_extract_failed_error(path: str, detail: str, start: float) -> ToolResult:
+    """Extract convert failure or wall-clock timeout: contract, not liveness."""
+    lower = path.lower()
+    if lower.endswith(".docx"):
+        kind = "Word"
+    elif lower.endswith(".pdf"):
+        kind = "PDF"
+    else:
+        kind = "Word/PDF"
+    return _error(
+        (
+            f"这份{kind}抽文本失败或超时：`{path}`。"
+            "请用户提供文本版、粘贴相关段落，或换一份带文本层的文件。"
+        ),
+        start,
+        contract_failure=True,
+        metadata={
+            "capacity_contract": "extract",
+            "extract_detail": detail,
+            **({"extract_timeout": True} if "timeout" in (detail or "").lower() else {}),
+        },
     )
 
 
@@ -189,7 +244,13 @@ def _path_missing_error(error: str, start: float) -> ToolResult:
     Same-path thrash is constrained elsewhere (validation fingerprint streak /
     same-path ``file_read`` cheap-hit), not by burning the run-scoped tool fuse.
     """
-    return _error(error, start, contract_failure=True)
+    return _error(
+        error,
+        start,
+        contract_failure=True,
+        failure_code="not_found",
+        product_face=error,
+    )
 
 
 # Backend ``OutsideWorkspace`` is reused for two different facts:

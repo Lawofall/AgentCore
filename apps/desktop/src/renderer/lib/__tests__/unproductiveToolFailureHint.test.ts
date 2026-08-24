@@ -8,7 +8,7 @@ import {
 
 function toolStep(
   tool_name: string,
-  status: "running" | "success" | "error",
+  status: "running" | "success" | "error" | "redirect",
   id = tool_name,
 ): Extract<ProcessStep, { kind: "tool" }> {
   return {
@@ -37,6 +37,25 @@ describe("collectFailedToolNames", () => {
       [],
     );
     expect(collectFailedToolNames(undefined)).toEqual([]);
+  });
+
+  it("omits channel-redirect rows even when journaled as error", () => {
+    expect(
+      collectFailedToolNames([
+        {
+          kind: "tool",
+          id: "c1",
+          tool_name: "code_execute",
+          arguments: {},
+          result: "禁止用 code_execute 打开源码再正则扫描。",
+          status: "error",
+          failure: {
+            message: "这一步想用脚本打开源码再搜索，没有执行。",
+            code: "source_grep_redirect",
+          },
+        },
+      ]),
+    ).toEqual([]);
   });
 
   it("falls back to journal.runProcesses only when process has no failures", () => {

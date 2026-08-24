@@ -71,6 +71,7 @@ from agentcore.runtime.turn.runs import turn_runs
 from agentcore.workspace.limits import (
     CHANNEL_DEAD_PREPARE_ABORT,
     CHANNEL_DEAD_USER_VISIBLE,
+    EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER,
     EXEC_ENV_DEAD_BODY_MARKER,
     exec_env_dead_user_visible,
     is_channel_dead_detail,
@@ -515,9 +516,20 @@ def build_harvest_fallback_content(
     parts: list[str] = []
     if _session_saw_channel_dead(session, draft):
         parts.append(CHANNEL_DEAD_USER_VISIBLE)
-    if getattr(session, "exec_env_dead", False) or (draft and EXEC_ENV_DEAD_BODY_MARKER in draft):
+    if getattr(session, "exec_env_dead", False) or (
+        draft
+        and (
+            EXEC_ENV_DEAD_BODY_MARKER in draft
+            or EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER in draft
+        )
+    ):
         # Same classified cause the live notice gave (None → cause-free fallback).
-        parts.append(exec_env_dead_user_visible(getattr(session, "exec_env_dead_reason", None)))
+        # A draft that already said 云端隔离执行 must not fall back to the
+        # local-machine opening.
+        reason = getattr(session, "exec_env_dead_reason", None)
+        if not reason and draft and EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER in draft:
+            reason = "exec_env_sandbox_unavailable"
+        parts.append(exec_env_dead_user_visible(reason))
     parts.append(_render_user_harvest_body(session, kind))
     err = (error_message or "").strip()
     if err:

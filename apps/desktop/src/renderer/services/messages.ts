@@ -20,6 +20,7 @@ import {
   getRuntime,
   isMessageWindowResident,
   isMessageWindowStrictlyRicher,
+  overlayIncomingWithRicherExisting,
   useConversationStore,
 } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
@@ -116,6 +117,8 @@ export interface BackendMessage {
     error?: { code: string; message: string } | null;
     /** 预检警告（P2 DURABLE）：journaled turn_warning lifted for plain-chat reload. */
     turn_warning?: string | null;
+    /** List GET may drop bulky events; false → fetch GET …/messages/{id} for graph. */
+    events_complete?: boolean;
     /** 裸聊自动建文件夹（§5.4）：journal 仍投影；对话内不再画落点条，故不抬到气泡。 */
     auto_folder?: { folder_id: string; name: string } | null;
   } | null;
@@ -303,11 +306,13 @@ export function toMessage(m: BackendMessage): Message {
           events,
           finishReason: finishReason ?? "stop",
           runProcesses: m.runs?.run_processes ?? null,
+          eventsComplete: m.runs?.events_complete !== false,
         }
       : undefined;
   // Classic cold path only: multi-agent keeps hydrate timing on InlineTeamGraph
   // mount — do not double-fold here when executionId (run_plan) is present.
-  if (!executionId && journal) {
+  // Incomplete list journals must not fold a skeleton graph (full GET on mount).
+  if (!executionId && journal && journal.eventsComplete !== false) {
     useExecutionStore.getState().hydrateFromJournal(m.id, journal);
   }
   const mapped: Message = {
@@ -468,6 +473,80 @@ export async function fetchMessageWindow(
     hasMoreAfter: res.has_more_after,
     memoryUpdates: (res.memory_updates ?? []).map(toMemoryUpdate),
   };
+}
+
+const _fullRunsInflight = new Map<string, Promise<Message | null>>();
+const _fullRunsFailed = new Set<string>();
+
+/** Test seam: clear in-flight / failed GET-one-message journal fetches. */
+export function resetEnsureFullMessageRunsForTests(): void {
+  _fullRunsInflight.clear();
+  _fullRunsFailed.clear();
+}
+
+function storeMessageByProjectionId(
+  conversationId: string,
+  messageId: string,
+): Message | undefined {
+  const msgs =
+    useConversationStore.getState().byId[conversationId]?.messages ?? [];
+  return msgs.find(
+    (m) => m.id === messageId || m.serverMessageId === messageId,
+  );
+}
+
+/**
+ * When the list GET slimmed ``runs.events``, fetch the full ``MessageDetail``
+ * and write it onto the resident bubble so graph / turn-detail can fold.
+ * No-op when already complete (including legacy cache without the flag).
+ */
+export async function ensureFullMessageRuns(
+  conversationId: string,
+  messageId: string,
+  signal?: AbortSignal,
+): Promise<Message | null> {
+  const key = `${conversationId}:${messageId}`;
+  if (_fullRunsFailed.has(key)) return null;
+  const existing = storeMessageByProjectionId(conversationId, messageId);
+  if (existing?.runs?.eventsComplete !== false) {
+    return existing ?? null;
+  }
+  const pending = _fullRunsInflight.get(key);
+  if (pending) return pending;
+
+  const task = (async (): Promise<Message | null> => {
+    try {
+      const row = await api.get<BackendMessage>(
+        `/v1/conversations/${conversationId}/messages/${messageId}`,
+        signal ? { signal } : undefined,
+      );
+      const full = toMessage(row);
+      const store = useConversationStore.getState();
+      const bubble = storeMessageByProjectionId(conversationId, messageId);
+      if (bubble && store.byId[conversationId]) {
+        store.updateMessage(
+          bubble.id,
+          {
+            runs: full.runs,
+            process: full.process,
+            executionId: full.executionId,
+          },
+          conversationId,
+        );
+      }
+      if (full.runs && full.runs.eventsComplete !== false) {
+        useExecutionStore.getState().hydrateFromJournal(messageId, full.runs);
+      }
+      return full;
+    } catch {
+      _fullRunsFailed.add(key);
+      return null;
+    } finally {
+      _fullRunsInflight.delete(key);
+    }
+  })();
+  _fullRunsInflight.set(key, task);
+  return task;
 }
 
 /** ISO `createdAt` of a conversation slice's oldest / newest loaded message, or
@@ -677,10 +756,12 @@ export async function loadLatestWindow(
   // Latest window owns the tail cards; replace them (older/around pages return none).
   store.setMemoryUpdates(win.memoryUpdates, conversationId);
   // Trusted write only — reject paths above return without persisting.
-  void persistOpenedCache(conversationId, win.messages, win.memoryUpdates, {
-    hasMoreBefore: win.hasMoreBefore,
-    hasMoreAfter: win.hasMoreAfter,
-  });
+  if (win.messages.length > 0) {
+    void persistOpenedCache(conversationId, win.messages, win.memoryUpdates, {
+      hasMoreBefore: win.hasMoreBefore,
+      hasMoreAfter: win.hasMoreAfter,
+    });
+  }
   return true;
 }
 
@@ -718,8 +799,15 @@ export async function jumpToMessage(
     // The user may have navigated away while the window loaded — only swap it in
     // if this conversation is still the one on screen.
     if ((after.currentConversationId ?? "") !== conversationId) return;
+    if (win.messages.length === 0) return;
+    const existing = after.byId[conversationId]?.messages ?? [];
+    const merged = overlayIncomingWithRicherExisting(win.messages, existing);
+    const hitInMerged = merged.find(
+      (m) => m.id === messageId || m.serverMessageId === messageId,
+    );
+    if (!hitInMerged) return;
     after.setMessageWindow(
-      win.messages,
+      merged,
       { hasMoreBefore: win.hasMoreBefore, hasMoreAfter: win.hasMoreAfter },
       conversationId,
     );

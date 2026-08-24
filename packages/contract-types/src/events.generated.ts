@@ -103,8 +103,8 @@ export interface ToolUseStartPayload {
  * model-facing `result` text. Opaque on the wire (snake_case). */
 export type ToolDisplay = Record<string, unknown>;
 
-/** User-facing tool failure face on `tool_use_end` when status=error.
- * `message` = Chinese product copy; `code` = stable error code.
+/** User-facing tool face on `tool_use_end` when status is error or redirect.
+ * `message` = Chinese product copy; `code` = stable code.
  * Model-facing technical detail stays in `result`. */
 export interface ToolFailure {
   message: string;
@@ -115,10 +115,10 @@ export interface ToolUseEndPayload {
   tool_call_id: string;
   tool_name: string;
   result: string;
-  status: "success" | "error";
+  status: "success" | "error" | "redirect";
   /** A tool's OPTIONAL render-oriented payload (工具结果富渲染), distinct from the model-facing `result` text. */
   display?: ToolDisplay | null;
-  /** Present only when status=error: Chinese product message + stable code. Model-facing technical text stays in result. */
+  /** Present when status is error or redirect: Chinese product message + stable code. Model-facing technical text stays in result. */
   failure?: ToolFailure;
   /** Worker-call tag; absent for the captain's own calls. */
   run_id?: string;
@@ -136,7 +136,7 @@ export type ProcessStep =
   | { kind: "reasoning"; text: string }
   | { kind: "content"; text: string }
   | { kind: "rework" }
-  | { kind: "tool"; id: string; tool_name: string; arguments: Record<string, unknown>; result: string | null; status: "running" | "success" | "error"; display?: ToolDisplay | null; failure?: ToolFailure; phase?: ToolPhase }
+  | { kind: "tool"; id: string; tool_name: string; arguments: Record<string, unknown>; result: string | null; status: "running" | "success" | "error" | "redirect"; display?: ToolDisplay | null; failure?: ToolFailure; phase?: ToolPhase }
   | { kind: "team"; execution_id: string }
   | { kind: "graph_append"; execution_id: string; host_message_id: string; added_count: number }
   | { kind: "checkpoint"; checkpoint_id: string }
@@ -793,13 +793,14 @@ export interface DeliveryGap {
  * 本机传统合法非默认，≠离线)；
  * ``export_to_local`` (云端已有 delivered_files → 导出到本机文件夹后即可 npm install / 本地运行；
  * 与 bind_local_folder 可并存但语义不同);
- * ``website_verify`` (整页 QA 因预算 defer → 一键续派 ``build_website_verify``);
+ * ``website_verify`` (legacy tape only — runtime 已停发整页 QA 续派按钮);
  * ``continue_skipped_runs`` (turn/nested 额度 SKIPPED 未跑节点 → 下一回合续跑);
  * unknown kinds render as a plain hint.
  * （成篇未写完改由对话框接着说——已撤 ``continue_writing`` 一键按钮。）
  * 
  * Optional ``prompt`` is the exact user-turn text a client should send for
- * kinds that open a new message (e.g. ``website_verify``). Absent for
+ * kinds that open a new message (e.g. ``continue_skipped_runs``; old
+ * ``website_verify`` tapes still carry one). Absent for
  * non-message actions like ``bind_local_folder`` / ``export_to_local``. */
 export interface DeliveryAction {
   kind: string;
@@ -1936,8 +1937,6 @@ export type SSEPayloadMap = {
   checkpoint_resolved: CheckpointResolvedPayload;
   plan_review_required: PlanReviewRequiredPayload;
   plan_review_resolved: PlanReviewResolvedPayload;
-  team_preview_required: TeamPreviewRequiredPayload;
-  team_preview_resolved: TeamPreviewResolvedPayload;
   stage_card_required: StageCardRequiredPayload;
   stage_card_resolved: StageCardResolvedPayload;
   plan_revised: PlanRevisedPayload;

@@ -1,6 +1,6 @@
 """P1c — website visual critic (screenshot → VisionReader → structured findings).
 
-Runs **after** ``web_quality`` hard gates on ``build_website`` QA. Critic never
+Runs **after** ``web_quality`` hard gates on site QA. Critic never
 replaces syntax / fake-contact / DESIGN-token hard checks.
 
 Capability posture (honest degrade, board_read-shaped):
@@ -25,6 +25,17 @@ from typing import Any, Literal, Protocol
 
 from agentcore.core.logging import get_logger
 from agentcore.runtime.runs.web_quality_rules import soft_rule_labels
+from agentcore.runtime.runs.website_visual_critic_preview import (
+    DEFAULT_VIEWPORTS,
+    ViewportName,
+    assemble_preview_document,
+    capture_html_preview_products,
+    load_preview_asset_bytes,
+    other_html_source_paths,
+    preview_shot_path,
+    resolve_html_source_path,
+)
+from agentcore.tools.file_products import FileProduct
 from agentcore.vision.protocol import VisionReader, VisionReading
 
 logger = get_logger(__name__)
@@ -33,15 +44,8 @@ MAX_VISUAL_REWORK = 2
 VISUAL_CRITIC_ARTIFACT = "site/VISUAL_CRITIC.json"
 UNINSPECTED_MARKER = "未目验"
 
-ViewportName = Literal["desktop", "narrow"]
 FindingSeverity = Literal["critical", "major", "minor"]
 CriticStatus = Literal["passed", "findings", "skipped", "error"]
-
-# Two viewports: desktop + one narrow (定案).
-DEFAULT_VIEWPORTS: tuple[tuple[ViewportName, int, int], ...] = (
-    ("desktop", 1280, 800),
-    ("narrow", 390, 844),
-)
 
 _SEVERITIES = frozenset({"critical", "major", "minor"})
 _VIEWPORT_NAMES = frozenset({"desktop", "narrow"})
@@ -71,6 +75,7 @@ class VisualCriticResult:
     viewports_shot: list[str] = field(default_factory=list)
     reason: str = ""
     raw_texts: list[str] = field(default_factory=list)
+    preview_products: list[FileProduct] = field(default_factory=list)
 
     @property
     def critical_findings(self) -> list[VisualFinding]:
@@ -95,32 +100,6 @@ class PageScreenshotPort(Protocol):
     ) -> bytes | None:
         """Return image bytes, or ``None`` when capture is unavailable / failed."""
         ...
-
-
-def assemble_preview_document(
-    html: str,
-    css: str = "",
-    js: str = "",
-) -> str:
-    """Inline CSS/JS into a single HTML document for headless preview."""
-    doc = (html or "").strip() or "<!doctype html><html><body></body></html>"
-    injections: list[str] = []
-    if css.strip():
-        injections.append(f"<style>\n{css.strip()}\n</style>")
-    if js.strip():
-        injections.append(f"<script>\n{js.strip()}\n</script>")
-    if not injections:
-        return doc
-    block = "\n".join(injections)
-    lower = doc.lower()
-    head_close = lower.rfind("</head>")
-    if head_close >= 0:
-        return doc[:head_close] + block + "\n" + doc[head_close:]
-    body = lower.find("<body")
-    if body >= 0:
-        # Insert before <body …>
-        return doc[:body] + block + "\n" + doc[body:]
-    return block + "\n" + doc
 
 
 def build_critic_prompt(*, design_md: str, viewport: str) -> str:
@@ -244,6 +223,8 @@ async def run_visual_critic(
     design_md: str,
     viewports: Sequence[tuple[ViewportName, int, int]] = DEFAULT_VIEWPORTS,
     bill: Callable[[VisionReading], None] | None = None,
+    persist_preview_shot: Callable[[str, bytes], Awaitable[None]] | None = None,
+    preview_derived_from: str = "",
 ) -> VisualCriticResult:
     """Screenshot → VLM critic. Missing capability ⇒ skipped（未目验）."""
     if vision_reader is None and screenshot is None:
@@ -266,6 +247,7 @@ async def run_visual_critic(
     shot: list[str] = []
     raw_texts: list[str] = []
     capture_errors: list[str] = []
+    preview_products: list[FileProduct] = []
 
     for name, width, height in viewports:
         try:
@@ -280,6 +262,24 @@ async def run_visual_critic(
             capture_errors.append(f"{name}:empty")
             continue
         shot.append(name)
+        if persist_preview_shot is not None and preview_derived_from:
+            preview_path = preview_shot_path(name, source_path=preview_derived_from)
+            try:
+                await persist_preview_shot(preview_path, frame)
+                preview_products.append(
+                    FileProduct(
+                        path=preview_path,
+                        kind="image",
+                        derived_from=preview_derived_from,
+                    )
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "website.visual_critic_preview_write_failed",
+                    path=preview_path,
+                    viewport=name,
+                    exc_info=True,
+                )
         png_b64 = base64.b64encode(frame).decode("ascii")
         prompt = build_critic_prompt(design_md=design_md, viewport=name)
         try:
@@ -290,6 +290,7 @@ async def run_visual_critic(
                 status="error",
                 reason=f"VisionReader 失败（{name}）：{exc}",
                 viewports_shot=shot,
+                preview_products=preview_products,
             )
         if bill is not None:
             try:
@@ -303,6 +304,7 @@ async def run_visual_critic(
         return VisualCriticResult(
             status="skipped",
             reason="截图失败：" + ("；".join(capture_errors) if capture_errors else "无帧"),
+            preview_products=preview_products,
         )
 
     if findings:
@@ -311,11 +313,13 @@ async def run_visual_critic(
             findings=findings,
             viewports_shot=shot,
             raw_texts=raw_texts,
+            preview_products=preview_products,
         )
     return VisualCriticResult(
         status="passed",
         viewports_shot=shot,
         raw_texts=raw_texts,
+        preview_products=preview_products,
     )
 
 
@@ -484,6 +488,8 @@ async def apply_visual_critic_to_verdict(
     visual_rework_used: int,
     bill: Callable[[VisionReading], None] | None = None,
     persist_artifact: Callable[[str, str], Awaitable[None]] | None = None,
+    persist_preview_shot: Callable[[str, bytes], Awaitable[None]] | None = None,
+    read_bytes: Callable[[str], Awaitable[bytes]] | None = None,
 ) -> tuple[Any, VisualCriticResult, int]:
     """Run critic after hard gates; merge into verdict; return (verdict, result, rework_used).
 
@@ -491,25 +497,51 @@ async def apply_visual_critic_to_verdict(
     loosely to avoid an import cycle with the executor). Critical findings flip
     ``ok`` via ``visual_failures`` while ``visual_rework_used < MAX_VISUAL_REWORK``;
     otherwise demote to warnings (partial).
+
+    Preview frames: primary shell → ``site/preview-{viewport}.jpg``; other HTML
+    candidates → ``{stem}.preview-{viewport}.jpg``. Each row is ``kind=image`` /
+    ``derived_from`` the HTML source. Inline assembly failure ⇒ that file gets
+    **no** preview shot (primary failure also skips the VLM critic).
     """
-    html = artifact_contents.get("site/index.html") or artifact_contents.get(
-        "index.html", ""
-    )
-    css = artifact_contents.get("site/styles.css") or artifact_contents.get(
-        "styles.css", ""
-    )
-    js = artifact_contents.get("site/main.js") or artifact_contents.get("main.js", "")
+    html_source = resolve_html_source_path(artifact_contents)
+    html = artifact_contents.get(html_source, "")
     design = artifact_contents.get("site/DESIGN.md") or artifact_contents.get(
         "DESIGN.md", ""
     )
-    document = assemble_preview_document(html, css, js)
-    result = await run_visual_critic(
-        vision_reader=vision_reader,
-        screenshot=screenshot,
-        document_html=document,
-        design_md=design,
-        bill=bill,
+    asset_bytes = await load_preview_asset_bytes(
+        html, html_source, artifact_contents, read_bytes
     )
+    assembled = assemble_preview_document(
+        html,
+        artifact_contents=artifact_contents,
+        artifact_bytes=asset_bytes,
+        source_path=html_source,
+    )
+    if not assembled.ok:
+        result = VisualCriticResult(
+            status="skipped",
+            reason=assembled.reason or "预览 HTML 未能内联本地资源",
+        )
+    else:
+        result = await run_visual_critic(
+            vision_reader=vision_reader,
+            screenshot=screenshot,
+            document_html=assembled.document,
+            design_md=design,
+            bill=bill,
+            persist_preview_shot=persist_preview_shot,
+            preview_derived_from=html_source,
+        )
+    if persist_preview_shot is not None and screenshot is not None:
+        for extra in other_html_source_paths(artifact_contents, html_source):
+            extra_products = await capture_html_preview_products(
+                screenshot=screenshot,
+                persist_preview_shot=persist_preview_shot,
+                read_bytes=read_bytes,
+                artifact_contents=artifact_contents,
+                source_path=extra,
+            )
+            result.preview_products.extend(extra_products)
     if persist_artifact is not None:
         try:
             await persist_artifact(

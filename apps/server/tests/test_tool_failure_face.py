@@ -146,11 +146,20 @@ def test_curated_copy_stays_synced_with_tool_sources():
     """Curated table must stay byte-equal to tool/db product constants (no import cycle)."""
     from agentcore.db.errors import DATABASE_UNAVAILABLE_MESSAGE
     from agentcore.runtime.engine.tool_failure_face import _CURATED_BY_CODE
-    from agentcore.tools.sandbox.exec_env import EXEC_ENV_PROBE_FAIL_USER_MESSAGE
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_NOT_LINUX_USER_MESSAGE,
+        EXEC_ENV_PROBE_FAIL_USER_MESSAGE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+    )
 
     assert _CURATED_BY_CODE["database_unavailable"] == DATABASE_UNAVAILABLE_MESSAGE
     assert _CURATED_BY_CODE[ErrorCode.DATABASE_UNAVAILABLE] == DATABASE_UNAVAILABLE_MESSAGE
     assert _CURATED_BY_CODE["exec_env_probe_failed"] == EXEC_ENV_PROBE_FAIL_USER_MESSAGE
+    assert _CURATED_BY_CODE["exec_env_not_linux"] == EXEC_ENV_NOT_LINUX_USER_MESSAGE
+    assert (
+        _CURATED_BY_CODE["exec_env_sandbox_unavailable"]
+        == EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
+    )
     assert _CURATED_BY_CODE["searxng_unreachable"] == "本地搜索服务不可用，请稍后重试"
     assert _CURATED_BY_CODE["workspace_channel_dead"] == _CURATED_BY_CODE[ErrorCode.STREAM_ERROR]
 
@@ -181,6 +190,43 @@ def test_tool_use_end_attaches_failure_on_error():
         "message": DEFAULT_TOOL_FAILURE_MESSAGE,
         "code": "TOOL_ERROR",
     }
+
+
+def test_tool_use_end_channel_redirect_is_not_error():
+    ev = tool_use_end(
+        "tc1",
+        "code_execute",
+        success=False,
+        output="禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。",
+        failure=tool_failure_fields(code="source_grep_redirect"),
+    )
+    assert ev.payload["status"] == "redirect"
+    assert ev.payload["failure"]["code"] == "source_grep_redirect"
+    assert "我会改用搜索工具" in ev.payload["failure"]["message"]
+    assert "禁止用" in ev.payload["result"]
+
+
+def test_legacy_error_payload_normalizes_to_redirect():
+    from agentcore.runtime.engine.tool_channel_redirect import (
+        process_tool_status_from_end,
+    )
+
+    assert (
+        process_tool_status_from_end(
+            {
+                "status": "error",
+                "failure": {
+                    "message": "这一步想用脚本打开源码再搜索，没有执行。",
+                    "code": "source_grep_redirect",
+                },
+            }
+        )
+        == "redirect"
+    )
+    assert (
+        process_tool_status_from_end({"status": "error", "failure": {"message": "x", "code": "TOOL_ERROR"}})
+        == "error"
+    )
 
 
 def test_validation_error_exc_passes_through():
@@ -218,8 +264,11 @@ _DETERMINISTIC_CODES = (
     "local_workspace_required",
     "long_running_redirect",
     "loopback_host",
+    "exec_env_not_linux",
+    "exec_env_sandbox_unavailable",
     "no_default_branch",
     "no_remote",
+    "not_a_web_url",
     "not_found",
     "not_github",
     "novel_domain_blocked",
@@ -227,6 +276,8 @@ _DETERMINISTIC_CODES = (
     "postcondition_failed",
     "private_address_blocked",
     "project_verify_redirect",
+    "source_dump_redirect",
+    "source_grep_redirect",
     "read_url_retired",
     "repo_unusable",
     "sandbox_network_unsupported",
@@ -236,6 +287,7 @@ _DETERMINISTIC_CODES = (
     "too_many_redirects",
     "validation_failed",
     "unauthenticated",
+    "url_not_workspace_path",
     "user_in_control",
     "verify_contract",
     "verify_policy_inner",
@@ -732,10 +784,14 @@ def test_pre_registered_codes_for_incoming_paths_have_copy():
     """Codes landing with the parallel tool changes — copy ships ahead of the producer."""
     for code in (
         "loopback_host",
+        "not_a_web_url",
+        "url_not_workspace_path",
         "bridge_unauthorized",
         "exec_env_no_interpreter",
         "exec_env_probe_timeout",
         "exec_env_spawn_denied",
+        "exec_env_not_linux",
+        "exec_env_sandbox_unavailable",
         "workspace_io_error",
     ):
         assert _CURATED_BY_CODE[code].strip()
@@ -762,8 +818,10 @@ def test_attribute_reached_codes_have_copy():
         "session_not_found",
         # code_execute / test_run → ``ExecEnvProbeVerdict.code`` (``classify_probe_failure``)
         "exec_env_no_interpreter",
+        "exec_env_not_linux",
         "exec_env_probe_failed",
         "exec_env_probe_timeout",
+        "exec_env_sandbox_unavailable",
         "exec_env_spawn_denied",
     ):
         assert _CURATED_BY_CODE[code].strip()

@@ -43,7 +43,6 @@ from agentcore.demo_tape.sanitize import (
 )
 from agentcore.demo_tape.schema import (
     CLIENT_TOOL_REQUIRED_KINDS,
-    DEMO_TAPE_FRAME_KEY,
     RECORDING_FORMAT_VERSION,
     TAPE_EXCLUDED_KINDS,
     TAPE_FORMAT_VERSION,
@@ -61,7 +60,6 @@ from agentcore.runtime.events.types import SSEEvent
 from agentcore.runtime.suspension import (
     AskUserSuspension,
     PlanReviewSuspension,
-    TeamPreviewSuspension,
 )
 from scripts.demo_tape_bind import build_parser
 
@@ -75,6 +73,7 @@ def test_tape_excluded_kinds_cut_lifecycle_settlements_and_client_ops():
     assert "message_start" in TAPE_EXCLUDED_KINDS
     assert "message_end" in TAPE_EXCLUDED_KINDS
     assert "team_preview_resolved" in TAPE_EXCLUDED_KINDS
+    assert "team_preview_required" in TAPE_EXCLUDED_KINDS
     assert "approval_resolved" in TAPE_EXCLUDED_KINDS
     # followups_generated stays cut — chips ride meta.followups, not the event stream.
     assert "followups_generated" in TAPE_EXCLUDED_KINDS
@@ -83,10 +82,10 @@ def test_tape_excluded_kinds_cut_lifecycle_settlements_and_client_ops():
     assert "desktop_notify_required" in TAPE_EXCLUDED_KINDS
     assert "external_mount_readonly_required" in TAPE_EXCLUDED_KINDS
     assert "external_mount_readonly_required" in CLIENT_TOOL_REQUIRED_KINDS
-    # Content / liveliness stays.
+    # Content / liveliness stays. Living cold/hot required cards stay on tape.
     assert "content_delta" not in TAPE_EXCLUDED_KINDS
     assert "tool_progress" not in TAPE_EXCLUDED_KINDS
-    assert "team_preview_required" not in TAPE_EXCLUDED_KINDS
+    assert "checkpoint_required" not in TAPE_EXCLUDED_KINDS
     assert "approval_required" not in TAPE_EXCLUDED_KINDS
 
 
@@ -305,7 +304,7 @@ def test_pacing_step_never_rewinds_clock():
 
 def test_remint_interaction_ids_maps_all_interaction_keys_deterministically():
     events = [
-        {"kind": "team_preview_required", "payload": {"checkpoint_id": "cp-1", "motion": "m"}},
+        {"kind": "checkpoint_required", "payload": {"checkpoint_id": "cp-1", "question": "q"}},
         {"kind": "approval_required", "payload": {"approval_id": "ap-1"}},
         {"kind": "run_escalation", "payload": {"escalation_id": "esc-1"}},
         {"kind": "interaction_orphaned", "payload": {"interaction_id": "cp-1"}},
@@ -317,7 +316,7 @@ def test_remint_interaction_ids_maps_all_interaction_keys_deterministically():
     by_kind = {e["kind"]: e["payload"] for e in out}
 
     for kind, key, original in (
-        ("team_preview_required", "checkpoint_id", "cp-1"),
+        ("checkpoint_required", "checkpoint_id", "cp-1"),
         ("approval_required", "approval_id", "ap-1"),
         ("run_escalation", "escalation_id", "esc-1"),
     ):
@@ -328,13 +327,13 @@ def test_remint_interaction_ids_maps_all_interaction_keys_deterministically():
     # Same recorded id ⇒ same minted id (orphan still targets the reminted card).
     assert (
         by_kind["interaction_orphaned"]["interaction_id"]
-        == by_kind["team_preview_required"]["checkpoint_id"]
+        == by_kind["checkpoint_required"]["checkpoint_id"]
     )
     # Untouched events pass through unchanged (payload identity preserved).
     assert by_kind["run_started"]["run_id"] == "debate_x_r1_lv"
     assert out[5]["payload"] is events[5]["payload"]
     # Non-payload fields survive on touched events.
-    assert by_kind["team_preview_required"]["motion"] == "m"
+    assert by_kind["checkpoint_required"]["question"] == "q"
     # A different turn mints different ids.
     assert replay_interaction_id("cp-1", message_id="m1") != replay_interaction_id(
         "cp-1", message_id="m2"
@@ -359,8 +358,8 @@ def test_build_tape_from_recording_stitches_segments_and_cuts_excluded():
                     {"kind": "reasoning_delta", "payload": {"delta": "想"}, "ts": None, "t_ms": 10},
                     {"kind": "content_delta", "payload": {"delta": "简介"}, "ts": None, "t_ms": 500},
                     {
-                        "kind": "team_preview_required",
-                        "payload": {"checkpoint_id": "cp-src"},
+                        "kind": "checkpoint_required",
+                        "payload": {"checkpoint_id": "cp-src", "question": "继续？"},
                         "ts": None,
                         "t_ms": 900,
                     },
@@ -377,7 +376,7 @@ def test_build_tape_from_recording_stitches_segments_and_cuts_excluded():
                 "wall_t0_ms": 1_013_000,
                 "events": [
                     {
-                        "kind": "team_preview_resolved",
+                        "kind": "checkpoint_resolved",
                         "payload": {"checkpoint_id": "cp-src", "decision": "continue"},
                         "ts": None,
                         "t_ms": 0,
@@ -404,11 +403,11 @@ def test_build_tape_from_recording_stitches_segments_and_cuts_excluded():
     types = [e["type"] for e in doc["events"]]
     assert "message_start" not in types
     assert "message_end" not in types
-    assert "team_preview_resolved" not in types
+    assert "checkpoint_resolved" not in types
     assert types == [
         "reasoning_delta",
         "content_delta",
-        "team_preview_required",
+        "checkpoint_required",
         "run_output_delta",
         "content_delta",
     ]
@@ -416,12 +415,12 @@ def test_build_tape_from_recording_stitches_segments_and_cuts_excluded():
     assert all("timestamp" in e for e in doc["events"])
     assert "followups" not in doc["meta"]  # no followups_generated in this fixture
     # Recording identities stay verbatim on the tape (the PLAYER remints per replay).
-    preview = next(e for e in doc["events"] if e["type"] == "team_preview_required")
-    assert preview["payload"]["checkpoint_id"] == "cp-src"
+    card = next(e for e in doc["events"] if e["type"] == "checkpoint_required")
+    assert card["payload"]["checkpoint_id"] == "cp-src"
     # Global timeline: segment 2 anchored 13s after segment 1's start.
     t = {(e["type"], e["payload"].get("delta")): e["t_ms"] for e in doc["events"]}
     assert t[("reasoning_delta", "想")] == 10
-    assert t[("team_preview_required", None)] == 900
+    assert t[("checkpoint_required", None)] == 900
     assert t[("run_output_delta", "观点")] == 13_100
     assert t[("content_delta", "汇总")] == 13_400
     assert doc["meta"]["user_prompt"] == "go"
@@ -944,7 +943,7 @@ def test_build_tape_lifts_followups_generated_into_meta():
 async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Path):
     """合成回合闭环：真实 EventSink 发流 → tap 录制 → 出磁带 → player 回放。
 
-    覆盖录制层重构的验收面：磁带无生命周期/结算事件、暂停点如期挂起、回放身份
+    覆盖录制层重构的验收面：磁带无生命周期/结算事件、冷闸暂停点如期挂起、回放身份
     重铸（≠录制 id）、resume 后正文/辩手输出逐字节回放、live resolve 恰好一次。
     旧磁带 meta.followups 仍可导出；回放不再挂到 result（chips 已下线）。
     """
@@ -952,16 +951,16 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
     from agentcore.demo_tape.binding import TapeBinding
     from agentcore.demo_tape.player import continue_tape_turn, play_tape_events
     from agentcore.runtime.events import (
+        checkpoint_resolved,
         message_end,
         message_start,
-        team_preview_resolved,
     )
     from agentcore.runtime.journal.writer import TurnJournalWriter
 
     chips = ["下一步甲", "下一步乙"]
     recorder = _install_recorder_at(monkeypatch, tmp_path)
     try:
-        # —— Source run (send leg): brief → kickoff card → paused. ——
+        # —— Source run (send leg): brief → checkpoint card → paused. ——
         send_sink = EventSink(conversation_id="src-conv", message_id="src-msg")
         send_sink.emit(message_start("src-msg", conversation_id="src-conv"))
         send_sink.emit(_ev("reasoning_delta", {"delta": "先搜索案件。"}))
@@ -976,17 +975,11 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
         send_sink.emit(_ev("tool_progress", {"tool_name": "debate", "chars": 42}))
         send_sink.emit(
             _ev(
-                "team_preview_required",
+                "checkpoint_required",
                 {
                     "checkpoint_id": "cp-src",
-                    "form": "debate",
-                    "primitive": "debate",
-                    "motion": "m",
-                    "sides": [{"key": "a", "name": "A", "stance": "s"}],
-                    "workers": [],
-                    "tools": [],
-                    "max_rounds": 2,
-                    "thorough": True,
+                    "conversation_id": "src-conv",
+                    "question": "继续？",
                 },
             )
         )
@@ -995,7 +988,7 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
         # —— Source run (resume leg): live resolve → debate → wrap → end. ——
         resume_sink = EventSink(conversation_id="src-conv", message_id="src-msg")
         resume_sink.emit(
-            team_preview_resolved(checkpoint_id="cp-src", decision="continue", note="")
+            checkpoint_resolved(checkpoint_id="cp-src", decision="continue", note="")
         )
         resume_sink.emit(_ev("run_plan", {"execution_id": "ex1", "runs": []}))
         resume_sink.emit(_ev("run_started", {"run_id": "w1", "agent_id": "w1", "kind": "agent"}))
@@ -1018,7 +1011,7 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
     types = [e["type"] for e in tape_doc["events"]]
     assert "message_start" not in types
     assert "message_end" not in types
-    assert "team_preview_resolved" not in types
+    assert "checkpoint_resolved" not in types
     assert "followups_generated" not in types
     assert "tool_progress" in types  # EPHEMERAL liveliness recorded verbatim
     assert all("kind" not in e for e in tape_doc["events"])
@@ -1060,7 +1053,7 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
     )
     assert result["finish_reason"] is FinishReason.PAUSED
     assert result["content"] == "案情简介。"
-    card = next(e for e in sink._history if e.type is EventType.TEAM_PREVIEW_REQUIRED)
+    card = next(e for e in sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
     assert card.payload["checkpoint_id"] != "cp-src"  # replay identity reminted
 
     sink2 = EventSink(conversation_id="replay-conv", message_id="replay-msg")
@@ -1078,7 +1071,7 @@ async def test_recording_to_tape_to_replay_closed_loop(monkeypatch, tmp_path: Pa
     assert result2.get("followups") is None
     assert all(e.type.value != "followups_generated" for e in sink2._history)
     types2 = [e.type for e in sink2._history]
-    assert types2.count(EventType.TEAM_PREVIEW_RESOLVED) == 1
+    assert types2.count(EventType.CHECKPOINT_RESOLVED) == 1
     deltas = [
         e.payload.get("delta")
         for e in sink2._history
@@ -1282,10 +1275,11 @@ async def test_player_pathological_gaps_do_not_double_sleep(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_player_pauses_and_continues(monkeypatch, tmp_path: Path):
+async def test_player_skips_leftover_team_preview(monkeypatch, tmp_path: Path):
+    """旧磁带 leftover team_preview_* skip：不进 PAUSE、不 persist 开工卡帧。"""
     from agentcore.demo_tape import player as player_mod
     from agentcore.demo_tape.binding import TapeBinding
-    from agentcore.demo_tape.player import continue_tape_turn, play_tape_events
+    from agentcore.demo_tape.player import play_tape_events
     from agentcore.runtime.journal.writer import TurnJournalWriter
 
     saved: list = []
@@ -1302,6 +1296,7 @@ async def test_player_pauses_and_continues(monkeypatch, tmp_path: Path):
 
     events = [
         {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
+        {"kind": "content_delta", "payload": {"delta": "开场"}, "t_ms": 50},
         {
             "kind": "team_preview_required",
             "payload": {
@@ -1323,7 +1318,7 @@ async def test_player_pauses_and_continues(monkeypatch, tmp_path: Path):
             "payload": {"run_id": "w1", "agent_id": "w1", "delta": "hello"},
             "t_ms": 300,
         },
-        {"kind": "content_delta", "payload": {"delta": "summary"}, "t_ms": 400},
+        {"kind": "content_delta", "payload": {"delta": "汇总"}, "t_ms": 400},
     ]
     tape_path = tmp_path / "mini.json"
     tape_path.write_text(
@@ -1351,48 +1346,14 @@ async def test_player_pauses_and_continues(monkeypatch, tmp_path: Path):
         folder_id=None,
         journal_writer=writer,
     )
-    assert result["finish_reason"] is FinishReason.PAUSED
-    assert len(saved) == 1
-    assert is_demo_tape_frame(saved[0])
-    assert DEMO_TAPE_FRAME_KEY in saved[0].debate_arguments
-    types = [e.type for e in sink._history]
-    assert EventType.TEAM_PREVIEW_REQUIRED in types
-    # message_end is transport-only (not in _history); PAUSED finish is the signal.
-
-    # Continue after resolve
-    sink2 = EventSink(conversation_id="conv1", message_id="msg1")
-    suspension = saved[0]
-    assert isinstance(suspension, TeamPreviewSuspension)
-    result2 = await continue_tape_turn(
-        suspension=suspension,
-        response=CheckpointResponse(decision=CheckpointDecision.CONTINUE, note=""),
-        sink=sink2,
-        folder_id=None,
-        trace_id="t" * 32,
-    )
-    assert result2["finish_reason"] is FinishReason.END_TURN
-    assert "summary" in (result2.get("content") or "")
-    types2 = [e.type for e in sink2._history]
-    # Shared resume bootstrap emits message_start (live parity).
-    assert EventType.MESSAGE_START in types2
-    assert EventType.TEAM_PREVIEW_RESOLVED in types2
-    assert EventType.RUN_OUTPUT_DELTA in types2
-    # Recorded resolve must not be double-emitted from tape
-    assert types2.count(EventType.TEAM_PREVIEW_RESOLVED) == 1
-    # Pause frame carries turn_paused (content on shared fact, not DEMO_TAPE_FRAME_KEY).
-    paused_fact = next(
-        (
-            e
-            for e in (saved[0].journal_entries or [])
-            if e.get("kind") == "turn_paused"
-        ),
-        None,
-    )
-    assert paused_fact is not None
-    assert "content" not in (saved[0].debate_arguments.get(DEMO_TAPE_FRAME_KEY) or {})
-    # Reload path: journal_entries must carry message_final so fold can splice deltas.
-    entries = result2.get("journal_entries") or []
-    assert any(e.get("kind") == "message_final" for e in entries)
+    assert result["finish_reason"] is FinishReason.END_TURN
+    assert saved == []
+    assert result["content"] == "开场汇总"
+    types = [e.type.value for e in sink._history]
+    assert "team_preview_required" not in types
+    assert "team_preview_resolved" not in types
+    assert EventType.RUN_OUTPUT_DELTA in [e.type for e in sink._history]
+    assert types.count("content_delta") == 2
 
 
 @pytest.mark.asyncio
@@ -1429,21 +1390,11 @@ async def test_resume_keeps_pre_pause_content_visible_across_collab_graph(
         {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
         {"kind": "content_delta", "payload": {"delta": pre_pause_body}, "t_ms": 50},
         {
-            "kind": "team_preview_required",
-            "payload": {
-                "checkpoint_id": "cp-vis",
-                "form": "debate",
-                "sides": [{"key": "a", "name": "A"}],
-                "workers": [],
-                "tools": [],
-                "primitive": "debate",
-                "motion": "m",
-                "max_rounds": 2,
-                "thorough": True,
-            },
+            "kind": "checkpoint_required",
+            "payload": {"checkpoint_id": "cp-vis", "question": "继续？"},
             "t_ms": 100,
         },
-        {"kind": "team_preview_resolved", "payload": {"decision": "continue"}, "t_ms": 150},
+        {"kind": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 150},
         {
             "kind": "run_plan",
             "payload": {
@@ -1540,7 +1491,7 @@ async def test_resume_keeps_pre_pause_content_visible_across_collab_graph(
 def test_persisted_captain_content_joins_at_durable_pause_seam():
     """暂停接缝：流内无 joiner，持久化正文须经 join_segments（对齐 messages.content）。
 
-    回归：正反对决。|team_preview|--- 不得粘成「。---」；须为「。\\n\\n---」。
+    回归：正反对决。|checkpoint|--- 不得粘成「。---」；须为「。\\n\\n---」。
     """
     from agentcore.runtime.engine.segments import join_segments
 
@@ -1549,8 +1500,8 @@ def test_persisted_captain_content_joins_at_durable_pause_seam():
     events = [
         {"type": "content_delta", "payload": {"delta": pre}, "t_ms": 0},
         {
-            "type": "team_preview_required",
-            "payload": {"checkpoint_id": "cp-seam"},
+            "type": "checkpoint_required",
+            "payload": {"checkpoint_id": "cp-seam", "question": "继续？"},
             "t_ms": 10,
         },
         {"type": "content_delta", "payload": {"delta": post}, "t_ms": 20},
@@ -1565,7 +1516,7 @@ def test_persisted_captain_content_joins_at_durable_pause_seam():
 
 @pytest.mark.asyncio
 async def test_player_result_content_joins_at_pause_seam(monkeypatch, tmp_path: Path):
-    """player result[\"content\"] 跨 team_preview 须用 join_segments，对齐 live finish。"""
+    """player result[\"content\"] 跨 checkpoint 须用 join_segments，对齐 live finish。"""
     from agentcore.demo_tape import player as player_mod
     from agentcore.demo_tape.binding import TapeBinding
     from agentcore.demo_tape.player import continue_tape_turn, play_tape_events
@@ -1591,21 +1542,11 @@ async def test_player_result_content_joins_at_pause_seam(monkeypatch, tmp_path: 
         {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
         {"kind": "content_delta", "payload": {"delta": pre}, "t_ms": 50},
         {
-            "kind": "team_preview_required",
-            "payload": {
-                "checkpoint_id": "cp-seam",
-                "form": "debate",
-                "sides": [{"key": "a", "name": "A"}],
-                "workers": [],
-                "tools": [],
-                "primitive": "debate",
-                "motion": "m",
-                "max_rounds": 2,
-                "thorough": True,
-            },
+            "kind": "checkpoint_required",
+            "payload": {"checkpoint_id": "cp-seam", "question": "继续？"},
             "t_ms": 100,
         },
-        {"kind": "team_preview_resolved", "payload": {"decision": "continue"}, "t_ms": 150},
+        {"kind": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 150},
         {"kind": "content_delta", "payload": {"delta": post}, "t_ms": 400},
     ]
     tape_path = tmp_path / "seam.json"
@@ -1654,113 +1595,6 @@ async def test_player_result_content_joins_at_pause_seam(monkeypatch, tmp_path: 
     expected = join_segments(pre, post)
     assert result2.get("content") == expected
     assert "。\n\n---" in (result2.get("content") or "")
-
-
-@pytest.mark.asyncio
-async def test_replaying_same_tape_twice_remints_distinct_checkpoints(
-    monkeypatch, tmp_path: Path
-):
-    """同一磁带连放两次：开工卡两次都发出，且 checkpoint 身份互不相同、均非录制 id。
-
-    桌面 InteractionStore 以 interaction id 为跨会话全局键（已 resolved 不复活、pending
-    首见保留）——若回放复用录制 id，同一桌面进程内第二次回放的开工卡会被静默吞掉。
-    挂起帧与 resume 结算必须与发出的卡片共用同一铸造 id。
-    """
-    from agentcore.demo_tape import player as player_mod
-    from agentcore.demo_tape.binding import TapeBinding
-    from agentcore.demo_tape.player import continue_tape_turn, play_tape_events
-    from agentcore.runtime.journal.writer import TurnJournalWriter
-
-    saved: list = []
-
-    async def fake_save(suspension):
-        saved.append(suspension)
-
-    monkeypatch.setattr(player_mod, "save_paused_turn", fake_save)
-
-    async def noop_flush(self):
-        return None
-
-    monkeypatch.setattr(TurnJournalWriter, "flush", noop_flush)
-
-    events = [
-        {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
-        {
-            "kind": "team_preview_required",
-            "payload": {
-                "checkpoint_id": "cp-recorded",
-                "form": "debate",
-                "sides": [{"key": "lv", "name": "LV"}],
-                "workers": [],
-                "tools": [],
-                "primitive": "debate",
-                "motion": "m",
-                "max_rounds": 4,
-                "thorough": True,
-            },
-            "t_ms": 100,
-        },
-        {"kind": "content_delta", "payload": {"delta": "wrap"}, "t_ms": 200},
-    ]
-    tape_path = tmp_path / "twice.json"
-    tape_path.write_text(
-        json.dumps({"version": 1, "meta": {}, "events": events}, ensure_ascii=False),
-        encoding="utf-8",
-    )
-
-    emitted: list[str] = []
-    for i, message_id in enumerate(("msg-a", "msg-b")):
-        conversation_id = f"conv-{i}"
-        binding = TapeBinding(
-            conversation_id=conversation_id,
-            tape_path=tape_path,
-            speed=100.0,
-            max_gap_ms=50,
-        )
-        sink = EventSink(conversation_id=conversation_id, message_id=message_id)
-        writer = TurnJournalWriter(
-            turn_id=message_id, conversation_id=conversation_id, trace_id="t" * 32
-        )
-        result = await play_tape_events(
-            sink=sink,
-            events=events,
-            start_index=0,
-            binding=binding,
-            message_id=message_id,
-            conversation_id=conversation_id,
-            user_id="u",
-            user_message="go",
-            folder_id=None,
-            journal_writer=writer,
-        )
-        assert result["finish_reason"] is FinishReason.PAUSED
-        card = next(
-            e for e in sink._history if e.type is EventType.TEAM_PREVIEW_REQUIRED
-        )
-        emitted.append(str(card.payload["checkpoint_id"]))
-
-    # 两次都出卡；身份互不相同、不等于录制 id；确定性铸造（同回合可重导出）。
-    assert len(emitted) == 2
-    assert emitted[0] != emitted[1]
-    assert "cp-recorded" not in emitted
-    assert emitted[0] == replay_interaction_id("cp-recorded", message_id="msg-a")
-    assert emitted[1] == replay_interaction_id("cp-recorded", message_id="msg-b")
-
-    # 挂起帧与卡片同 id；resume 结算沿用同一 id（不回落到录制 id）。
-    assert [s.checkpoint_id for s in saved] == emitted
-    sink2 = EventSink(conversation_id="conv-0", message_id="msg-a")
-    result2 = await continue_tape_turn(
-        suspension=saved[0],
-        response=CheckpointResponse(decision=CheckpointDecision.CONTINUE, note=""),
-        sink=sink2,
-        folder_id=None,
-        trace_id="t" * 32,
-    )
-    assert result2["finish_reason"] is FinishReason.END_TURN
-    resolved = next(
-        e for e in sink2._history if e.type is EventType.TEAM_PREVIEW_RESOLVED
-    )
-    assert resolved.payload["checkpoint_id"] == emitted[0]
 
 
 @pytest.mark.asyncio
@@ -1992,6 +1826,11 @@ async def test_player_skip_kinds_do_not_advance_pacing_clock(monkeypatch):
     events = [
         {"kind": "turn_paused", "payload": {"checkpoint_id": "cp"}, "t_ms": 34_000},
         {
+            "kind": "team_preview_required",
+            "payload": {"checkpoint_id": "cp", "primitive": "debate"},
+            "t_ms": 34_000,
+        },
+        {
             "kind": "team_preview_resolved",
             "payload": {"decision": "continue"},
             "t_ms": 34_000,
@@ -2035,16 +1874,15 @@ async def test_player_skip_kinds_do_not_advance_pacing_clock(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resume_folds_team_preview_into_resolved(monkeypatch, tmp_path: Path):
-    """磁带回放开工卡授权后，client fold（reload + live 两路）必须把 team_preview 判为
-    resolved（并入协作图），而不是停在 pending「等待开工确认」横条。
+async def test_resume_folds_checkpoint_into_resolved(monkeypatch, tmp_path: Path):
+    """磁带回放冷闸授权后，client fold（reload + live 两路）必须把 ask_user 判为
+    resolved，而不是停在 pending 横条。
 
-    回归钉子：曾出现「协作图已长满、顶部仍残留待确认横条」的旁路 bug（team_preview 停
-    在 pending）。修复靠 ① continue_tape_turn 结算时 emit team_preview_resolved，②
-    identity.remint 让 send/resume 两腿共用同一 checkpoint_id。此测试锁死两点，且覆盖
-    reload（journal_entries → runs_from_entries）与 live（send._history + resume._history）
-    两条 fold 路径，防 demo_tape 重构再退化。桌面 fold 逻辑同源见
-    stores/interactions（hydrateInteractionsFromJournal）。
+    回归钉子：曾出现「协作图已长满、顶部仍残留待确认横条」的旁路 bug。修复靠
+    ① continue_tape_turn 结算时 emit checkpoint_resolved，② identity.remint 让
+    send/resume 两腿共用同一 checkpoint_id。此测试锁死两点，且覆盖 reload
+    （journal_entries → runs_from_entries）与 live（send._history + resume._history）
+    两条 fold 路径。桌面 fold 逻辑同源见 stores/interactions。
     """
     from agentcore.conformance.projection import project_turn
     from agentcore.demo_tape import player as player_mod
@@ -2067,21 +1905,11 @@ async def test_resume_folds_team_preview_into_resolved(monkeypatch, tmp_path: Pa
     events = [
         {"kind": "run_started", "payload": {"run_id": "c1", "kind": "captain"}, "t_ms": 0},
         {
-            "kind": "team_preview_required",
-            "payload": {
-                "checkpoint_id": "cp-tape",
-                "form": "debate",
-                "sides": [{"key": "lv", "name": "LV"}, {"key": "ml", "name": "ML"}],
-                "workers": [],
-                "tools": [],
-                "primitive": "debate",
-                "motion": "m",
-                "max_rounds": 4,
-                "thorough": True,
-            },
+            "kind": "checkpoint_required",
+            "payload": {"checkpoint_id": "cp-tape", "question": "继续？"},
             "t_ms": 100,
         },
-        {"kind": "team_preview_resolved", "payload": {"decision": "continue"}, "t_ms": 200},
+        {"kind": "checkpoint_resolved", "payload": {"decision": "continue"}, "t_ms": 200},
         {
             "kind": "run_plan",
             "payload": {
@@ -2104,7 +1932,7 @@ async def test_resume_folds_team_preview_into_resolved(monkeypatch, tmp_path: Pa
         },
         {"kind": "content_delta", "payload": {"delta": "汇总"}, "t_ms": 400},
     ]
-    tape_path = tmp_path / "tp_resolve.json"
+    tape_path = tmp_path / "cp_resolve.json"
     tape_path.write_text(
         json.dumps({"version": 1, "meta": {}, "events": events}, ensure_ascii=False),
         encoding="utf-8",
@@ -2131,7 +1959,7 @@ async def test_resume_folds_team_preview_into_resolved(monkeypatch, tmp_path: Pa
     required_ids = {
         e.payload["checkpoint_id"]
         for e in sink._history
-        if e.type is EventType.TEAM_PREVIEW_REQUIRED
+        if e.type is EventType.CHECKPOINT_REQUIRED
     }
     assert len(required_ids) == 1
     assert "cp-tape" not in required_ids  # reminted, never the recorded id
@@ -2148,14 +1976,14 @@ async def test_resume_folds_team_preview_into_resolved(monkeypatch, tmp_path: Pa
     resolved_ids = {
         e.payload.get("checkpoint_id")
         for e in sink2._history
-        if e.type is EventType.TEAM_PREVIEW_RESOLVED
+        if e.type is EventType.CHECKPOINT_RESOLVED
     }
     # send/resume legs settle the SAME reminted checkpoint (else the pending card lingers).
     assert resolved_ids == required_ids
 
-    def _team_preview(proj: dict) -> dict:
-        cards = [i for i in proj.get("interactions", []) if i.get("kind") == "team_preview"]
-        assert len(cards) == 1, f"expected 1 team_preview, got {cards}"
+    def _ask_user(proj: dict) -> dict:
+        cards = [i for i in proj.get("interactions", []) if i.get("kind") == "ask_user"]
+        assert len(cards) == 1, f"expected 1 ask_user, got {cards}"
         return cards[0]
 
     # Reload fold: message-detail projects turn_journal via runs_from_entries.
@@ -2164,14 +1992,14 @@ async def test_resume_folds_team_preview_into_resolved(monkeypatch, tmp_path: Pa
         {"type": ev["type"], "payload": ev.get("payload") or {}}
         for ev in (runs or {}).get("events", [])
     ]
-    assert _team_preview(project_turn(reload_wire))["status"] == "resolved"
+    assert _ask_user(project_turn(reload_wire))["status"] == "resolved"
 
     # Live fold: desktop folds send leg + resume leg SSE histories back-to-back.
     live_wire = [
         {"type": e.type.value, "payload": e.payload}
         for e in (*sink._history, *sink2._history)
     ]
-    assert _team_preview(project_turn(live_wire))["status"] == "resolved"
+    assert _ask_user(project_turn(live_wire))["status"] == "resolved"
 
 
 # ── 入库脱敏双防线 + 导出门禁 + 客户端工具断言 ─────────────────────────────
@@ -2260,6 +2088,7 @@ def test_ingest_scan_rejects_unsanitized_memory_and_system_contacts():
 def test_export_allows_wired_cold_and_hot_approval_pauses():
     assert "checkpoint_required" in TAPE_WIRED_PAUSE_KINDS
     assert "plan_review_required" in TAPE_WIRED_PAUSE_KINDS
+    assert "team_preview_required" not in TAPE_WIRED_PAUSE_KINDS
     assert "checkpoint_required" not in TAPE_UNWIRED_PAUSE_KINDS
     from agentcore.demo_tape.schema import TAPE_HOT_PAUSE_KINDS
 
@@ -2527,7 +2356,7 @@ async def test_player_pauses_and_continues_cold_path_kinds(
 
 @pytest.mark.asyncio
 async def test_cold_path_kinds_remint_distinct_across_replays(monkeypatch, tmp_path: Path):
-    """二次回放 remint 不串卡：checkpoint / plan_review 与 team_preview 同语义。"""
+    """二次回放 remint 不串卡：checkpoint / plan_review 身份互不相同。"""
     from agentcore.demo_tape import player as player_mod
     from agentcore.demo_tape.binding import TapeBinding
     from agentcore.demo_tape.player import play_tape_events
@@ -3311,12 +3140,10 @@ async def test_multi_act_cold_pause_and_resume_keeps_act_cursor(
                             "t_ms": 0,
                         },
                         {
-                            "type": "team_preview_required",
+                            "type": "checkpoint_required",
                             "payload": {
                                 "checkpoint_id": "cp-m",
-                                "motion": "m",
-                                "workers": [],
-                                "tools": [],
+                                "question": "继续？",
                             },
                             "timestamp": None,
                             "t_ms": 100,

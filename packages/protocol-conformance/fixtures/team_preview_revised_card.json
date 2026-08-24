@@ -1,6 +1,6 @@
 {
   "name": "team_preview_revised_card",
-  "description": "开工卡：adjust 后修订成 1 人仍再出卡，谱系 revision/revised_from/revision_note",
+  "description": "开工卡已退役、不再发事件对：adjust 后修订成 1 人再挂起（不再出第二张卡）",
   "events": [
     {
       "type": "message_start",
@@ -74,51 +74,6 @@
       "timestamp": "2026-01-01T00:00:00.004Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp1",
-        "conversation_id": "conv_demo",
-        "workers": [
-          {
-            "run_id": "r1",
-            "role": "调研",
-            "task": "调研方案",
-            "depends_on": []
-          },
-          {
-            "run_id": "r2",
-            "role": "撰写",
-            "task": "写初稿",
-            "depends_on": [
-              "r1"
-            ]
-          }
-        ],
-        "tools": [
-          "code_execute",
-          "file_write",
-          "test_run"
-        ],
-        "primitive": "delegate",
-        "motion": "",
-        "form": "",
-        "sides": [],
-        "max_rounds": 0,
-        "thorough": true,
-        "revision": 1
-      },
-      "timestamp": "2026-01-01T00:00:00.005Z"
-    },
-    {
-      "type": "team_preview_resolved",
-      "payload": {
-        "checkpoint_id": "tp1",
-        "decision": "adjust",
-        "note": "人太多，改成一个人做"
-      },
-      "timestamp": "2026-01-01T00:00:00.006Z"
-    },
-    {
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "dc1",
@@ -126,14 +81,14 @@
         "status": "success",
         "result": "用户要求调整开工方案，团队未启动。用户意见：人太多，改成一个人做\n请按用户意见修订方案后重新调用 delegate；修订后须再次经开工确认，未获确认不得开工。若某条意见做不到，必须在新方案里明说做不到及原因，禁止静默忽略。下一步是改方案并重新提交，而不是再问用户同一件事。"
       },
-      "timestamp": "2026-01-01T00:00:00.007Z"
+      "timestamp": "2026-01-01T00:00:00.005Z"
     },
     {
       "type": "content_delta",
       "payload": {
         "delta": "按你的意见改成一人，请再确认。"
       },
-      "timestamp": "2026-01-01T00:00:00.008Z"
+      "timestamp": "2026-01-01T00:00:00.006Z"
     },
     {
       "type": "tool_use_start",
@@ -149,7 +104,7 @@
           ]
         }
       },
-      "timestamp": "2026-01-01T00:00:00.009Z"
+      "timestamp": "2026-01-01T00:00:00.007Z"
     },
     {
       "type": "run_plan",
@@ -173,37 +128,7 @@
           }
         ]
       },
-      "timestamp": "2026-01-01T00:00:00.010Z"
-    },
-    {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp2",
-        "conversation_id": "conv_demo",
-        "workers": [
-          {
-            "run_id": "r3",
-            "role": "写手",
-            "task": "一个人做完",
-            "depends_on": []
-          }
-        ],
-        "tools": [
-          "code_execute",
-          "file_write",
-          "test_run"
-        ],
-        "primitive": "delegate",
-        "motion": "",
-        "form": "",
-        "sides": [],
-        "max_rounds": 0,
-        "thorough": true,
-        "revision": 2,
-        "revised_from": "tp1",
-        "revision_note": "人太多，改成一个人做"
-      },
-      "timestamp": "2026-01-01T00:00:00.011Z"
+      "timestamp": "2026-01-01T00:00:00.008Z"
     },
     {
       "type": "message_end",
@@ -226,7 +151,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:00.012Z"
+      "timestamp": "2026-01-01T00:00:00.009Z"
     }
   ],
   "projected": {
@@ -243,20 +168,12 @@
         "text": "我来安排团队。"
       },
       {
-        "kind": "team_preview",
-        "checkpoint_id": "tp1"
-      },
-      {
         "kind": "team",
         "execution_id": "exec1"
       },
       {
         "kind": "content",
         "text": "按你的意见改成一人，请再确认。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp2"
       },
       {
         "kind": "team",
@@ -323,25 +240,7 @@
       "completed": 0,
       "total": 1
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp1",
-        "status": "resolved",
-        "workerIds": [
-          "r1",
-          "r2"
-        ]
-      },
-      {
-        "kind": "team_preview",
-        "id": "tp2",
-        "status": "pending",
-        "workerIds": [
-          "r3"
-        ]
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

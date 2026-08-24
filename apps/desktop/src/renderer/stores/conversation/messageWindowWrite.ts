@@ -72,6 +72,23 @@ export function isMessageWindowStrictlyRicher(
 }
 
 /**
+ * Around-window write: keep the existing object when it is strictly thicker on
+ * the same identity (search jump must not wipe an adopted live/cache bubble).
+ * Historical slices with no overlap pass through unchanged.
+ */
+export function overlayIncomingWithRicherExisting(
+  incoming: Message[],
+  existing: Message[],
+): Message[] {
+  if (existing.length === 0) return incoming;
+  return incoming.map((inc) => {
+    const ex = findMatchingMessage(existing, inc);
+    if (!ex) return inc;
+    return messageRichnessScore(ex) > messageRichnessScore(inc) ? ex : inc;
+  });
+}
+
+/**
  * Residency: non-active conversations missing from `byId` must not be
  * materialized by a whole-window write (LRU eviction must stick).
  * The currently open conversation may always receive a window write.

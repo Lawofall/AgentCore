@@ -516,7 +516,6 @@ class DelegateTool:
         batch_audit_hard = playbook == "research_report"
         from agentcore.runtime.delegate.completion import (
             execution_capability_warning,
-            validate_cold_start_explore_deliverables,
             validate_repair_how_fixed,
         )
 
@@ -540,23 +539,6 @@ class DelegateTool:
                 error=how_fixed_err,
                 contract_failure=True,
             )
-
-        # 冷启动探索未完成：探路队须 ≥2 worker（S3：不再有 code_verified 例外）。
-        explore_pending = bool(self._base_tool_context.cold_start_explore_pending)
-        if explore_pending:
-            explore_form_err = validate_cold_start_explore_deliverables(plan)
-            if explore_form_err:
-                logger.info(
-                    "delegate.cold_start_explore_rejected",
-                    reason="thin_team",
-                )
-                return ToolResult(
-                    tool_call_id="",
-                    success=False,
-                    output="",
-                    error=explore_form_err,
-                    contract_failure=True,
-                )
 
         capability_warning = execution_capability_warning(
             plan,
@@ -838,7 +820,6 @@ class DelegateTool:
             self._last_graph_execution_id = execution_id
             # 同回合二次合入：保留本图节点快照（journal 未命中时仍可作 existing_plan）。
             from agentcore.runtime.runs.plan import RunPlan as _RunPlan
-            from agentcore.runtime.runs.types import RunState as _RunState
 
             self._last_graph_plan = _RunPlan(
                 nodes=list(plan.nodes),
@@ -854,14 +835,11 @@ class DelegateTool:
                 # 每个节点的相直接抄波调度器终态（完成 / 失败 / 跳过 / 取消照抄，
                 # 失败原因随行供二次名册点名）；让出或软停后从未跑的节点不在映射里，
                 # 也就不进 seed——二次派发仍会调度它们，不会静默漏跑。
-                # 只带相与失败原因：用量 / 产物 / 引用归属首批 segment，已在那边入账，
-                # 随 seed 二次流入会重复计费。
-                terminal = self._last_drive_results or {}
-                self._last_graph_seed = {
-                    n.run_id: _RunState(phase=state.phase, error=state.error)
-                    for n in plan.nodes
-                    if (state := terminal.get(n.run_id)) is not None
-                }
+                # 协调态 kickoff 会话仍活跃时不 stamp（队员未终态）；后台 drive
+                # 收口走 finalize_drive → stamp_last_graph_seed，避免同构闸读到空 seed。
+                from agentcore.runtime.delegate.drive_finalize import stamp_last_graph_seed
+
+                stamp_last_graph_seed(self, plan, self._last_drive_results)
         return annotate_batch_meta(
             result,
             node_count=len(added_nodes_for_anchor),

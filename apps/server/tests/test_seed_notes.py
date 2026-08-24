@@ -219,7 +219,7 @@ def test_resolve_coordination_build_feature_playbook_defaults_wall():
     )
 
 
-def test_resolve_coordination_build_website_playbook_defaults_wall():
+def test_resolve_coordination_retired_website_playbook_does_not_default_wall():
     assert (
         resolve_coordination(
             raw=None,
@@ -228,7 +228,7 @@ def test_resolve_coordination_build_website_playbook_defaults_wall():
             team_brief=None,
             playbook="build_website",
         )
-        == "wall"
+        == "none"
     )
     assert (
         resolve_coordination(

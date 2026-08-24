@@ -8,6 +8,7 @@ import {
   fetchMe,
   forgotPassword,
   listSessions,
+  login,
   logout,
   resetPassword,
   revokeOtherSessions,
@@ -617,5 +618,19 @@ describe("listSessions / revokeSession / revokeOtherSessions", () => {
 
     expect(calls[0].url).toContain("/v1/auth/sessions/revoke-others");
     expect(calls[0].method).toBe("POST");
+  });
+});
+
+describe("login", () => {
+  it("cookie login sends persist_session true", async () => {
+    const calls = captureFetch(json({ user: backendUser }));
+
+    await login("dev", "secret");
+
+    expect(calls[0].url).toContain("/v1/auth/login");
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].body).toEqual(
+      expect.objectContaining({ persist_session: true }),
+    );
   });
 });

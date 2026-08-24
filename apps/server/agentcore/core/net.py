@@ -13,6 +13,8 @@ What lives here (stateless):
 - :func:`outbound_async_client` — product egress ``httpx.AsyncClient`` with
   ``trust_env=False`` (do not inherit system SOCKS / HTTP proxy env; avoids
   missing-``socksio``「调用失败」on Clash/V2Ray machines).
+- :func:`abort_httpx_response` — tear down an in-flight stream on cancel
+  (shielded ``aclose``; does not drain remaining SSE).
 - :func:`describe_net_error` — turn opaque httpx errors into an honest,
   model-facing reason (so logs show the real cause, not ``error: ""``).
 - :func:`site_of` — display hostname for source/citation cards.
@@ -27,6 +29,7 @@ The *stateful* per-host egress circuit breaker lives in
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import socket
 import ssl
@@ -80,6 +83,18 @@ class PinnedAddressError(httpx.ConnectError):
 def web_timeout(read: float = WEB_READ_TIMEOUT) -> httpx.Timeout:
     """Timeout with a short connect deadline and a configurable read window."""
     return httpx.Timeout(read, connect=WEB_CONNECT_TIMEOUT)
+
+
+async def abort_httpx_response(response: httpx.Response | None) -> None:
+    """Abort an in-flight httpx response so the upstream connection is torn down.
+
+    Shielded: a cancelling task must still finish the close (cleanup, not new
+    work). ``aclose`` releases the stream; it does not drain remaining SSE.
+    """
+    if response is None:
+        return
+    with contextlib.suppress(BaseException):
+        await asyncio.shield(response.aclose())
 
 
 def outbound_async_client(**kwargs: object) -> httpx.AsyncClient:
@@ -498,6 +513,7 @@ class PinnedIPTransport(httpx.AsyncBaseTransport):
 
 
 __all__ = [
+    "abort_httpx_response",
     "SEARCH_TIMEOUT",
     "WEB_CONNECT_TIMEOUT",
     "WEB_READ_TIMEOUT",

@@ -179,9 +179,7 @@ async def _persist_suspension_capture_unlocked(
         transcript=list(transcript),
         history=list(turn_history.get() or []),
         journal_entries=journal_entries,
-        # The turn's live citation pool (引用池单一权威): snapshot so the resumed loop
-        # re-seeds it — pre-pause [n] markers keep their cards, finish_guard sees the
-        # real count. Empty outside a wired turn (tests / worker loops).
+        # In-memory carrier for legacy / settle paths; durable copy lives on ``turn_paused``.
         citations=list(turn_citations.get() or []),
         trace_id=get_log_value("trace_id"),
         paused_content=paused_content,

@@ -22,6 +22,7 @@ export {
   settleOrphanEmptyAssistants,
 } from "./turns/recovery";
 export {
+  awaitHydrateAttachSettle,
   runHydrateAttachSettle,
   scheduleHydrateAttachSettle,
 } from "./turns/hydrateAttachSettle";

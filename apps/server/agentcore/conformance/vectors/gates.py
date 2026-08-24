@@ -27,8 +27,6 @@ from agentcore.runtime.events import (
     run_plan,
     run_skipped,
     run_started,
-    team_preview_required,
-    team_preview_resolved,
     tool_use_end,
     tool_use_start,
 )
@@ -464,9 +462,9 @@ def _organize_plan_checkpoint() -> list[SSEEvent]:
 
 
 def _team_preview_finalized() -> list[SSEEvent]:
-    """团队预审薄预览【收口即终止】：多 Agent 首委派在 run_plan 后、首波前挂起，以
-    ``message_end(finish_reason=paused)`` 收口。``pendingInteraction`` = team_preview，
-    时间线落 ``team_preview`` 标记；与 plan_review 波间闸门分离。"""
+    """开工卡事件对已退役、不再发。团队预审向量：多 Agent 首委派在 run_plan 后、
+    首波前以 ``message_end(finish_reason=paused)`` 收口。投影无 team_preview；
+    有 run_plan 时过程时间线为 content + team。与 plan_review 波间闸门分离。"""
     agents = [
         {
             "id": "w1",
@@ -498,33 +496,12 @@ def _team_preview_finalized() -> list[SSEEvent]:
             agents=agents,
             runs=plan_runs,
         ),
-        team_preview_required(
-            checkpoint_id="tp1",
-            conversation_id=_CONV,
-            workers=[
-                {
-                    "run_id": "r1",
-                    "role": "调研",
-                    "task": "调研方案",
-                    "depends_on": [],
-                },
-                {
-                    "run_id": "r2",
-                    "role": "撰写",
-                    "task": "写初稿",
-                    "depends_on": ["r1"],
-                },
-            ],
-            tools=["code_execute", "file_write", "test_run"],
-            primitive="delegate",
-        ),
         message_end(FinishReason.PAUSED, input_tokens=1200, output_tokens=80, cost=_COST),
     ]
 
 
 def _debate_team_preview_finalized() -> list[SSEEvent]:
-    """辩论开工卡：顶层 debate 在主持人循环启动前挂起收口。"""
-    mod = "debate_mod1"
+    """开工卡事件对已退役、不再发。辩论向量：顶层 debate 在主持人循环启动前挂起收口。"""
     return [
         message_start("m1", conversation_id=_CONV),
         content_delta("我来组织一场辩论。"),
@@ -541,41 +518,14 @@ def _debate_team_preview_finalized() -> list[SSEEvent]:
                 "thorough": True,
             },
         ),
-        team_preview_required(
-            checkpoint_id="tp-debate",
-            conversation_id=_CONV,
-            workers=[],
-            tools=[],
-            primitive="debate",
-            motion="该不该上四天工作制？",
-            form="debate",
-            sides=[
-                {
-                    "key": "pro",
-                    "name": "正方",
-                    "stance": "应推广",
-                    "run_id": f"{mod}_pro",
-                },
-                {
-                    "key": "con",
-                    "name": "反方",
-                    "stance": "暂缓",
-                    "run_id": f"{mod}_con",
-                },
-            ],
-            max_rounds=5,
-            thorough=True,
-            moderator_run_id=mod,
-        ),
         message_end(FinishReason.PAUSED, input_tokens=800, output_tokens=40, cost=_COST),
     ]
 
 
 def _debate_team_preview_research_first() -> list[SSEEvent]:
-    """退役棘轮：开工卡不再 offer research_first；本向量保留 resolve 旧决议路径。
+    """开工卡事件对已退役、不再发。本向量保留 research_first 回灌旧路径（不开赛）。
 
-    挂起 payload **无** offer_research_first；若用户仍经旧客户端提交 research_first，
-    回灌文案与不开赛行为不变。
+    不再发挂起 / resolve 事件对；回灌文案与不开赛行为不变。
     """
     from agentcore.runtime.kickoff.research_first import research_first_tool_result
 
@@ -597,24 +547,6 @@ def _debate_team_preview_research_first() -> list[SSEEvent]:
                 "thorough": True,
             },
         ),
-        team_preview_required(
-            checkpoint_id="tp-debate-rf",
-            conversation_id=_CONV,
-            workers=[],
-            tools=[],
-            primitive="debate",
-            motion=motion,
-            form="debate",
-            sides=[
-                {"key": "pro", "name": "正方", "stance": "应推广"},
-                {"key": "con", "name": "反方", "stance": "暂缓"},
-            ],
-            max_rounds=5,
-            thorough=True,
-        ),
-        team_preview_resolved(
-            checkpoint_id="tp-debate-rf", decision="research_first"
-        ),
         tool_use_end("db1", "debate", success=True, output=refeed),
         content_delta("好的，我先挂多视角调研。"),
         message_end(FinishReason.END_TURN, input_tokens=900, output_tokens=60, cost=_COST),
@@ -622,14 +554,13 @@ def _debate_team_preview_research_first() -> list[SSEEvent]:
 
 
 def _debate_team_preview_resolved_adjust() -> list[SSEEvent]:
-    """辩论开工卡 adjust：不开赛，意见回灌 CEO；无辩手 / 主持人 start。"""
+    """开工卡事件对已退役、不再发。adjust 路径：不开赛，意见回灌 CEO；无辩手 / 主持人 start。"""
     from agentcore.runtime.kickoff.adjust_guidance import format_kickoff_adjust_result
 
     note = "先改命题再辩"
     refeed = format_kickoff_adjust_result(primitive="debate", note=note)
     return [
         *_debate_team_preview_finalized()[:-1],
-        team_preview_resolved(checkpoint_id="tp-debate", decision="adjust", note=note),
         tool_use_end("db1", "debate", success=True, output=refeed),
         content_delta("好的，我按你的意见改开赛方案再提交。"),
         message_end(FinishReason.END_TURN, input_tokens=900, output_tokens=60, cost=_COST),
@@ -637,7 +568,7 @@ def _debate_team_preview_resolved_adjust() -> list[SSEEvent]:
 
 
 def _debate_team_preview_research_first_recommended() -> list[SSEEvent]:
-    """退役棘轮：不再点亮 research_first_recommended；普通开工卡挂起。"""
+    """开工卡事件对已退役、不再发。不再点亮 research_first_recommended；辩论工具后 paused 收口。"""
     motion = "LV 案模拟法庭：一审判决是否过重？"
     return [
         message_start("m1", conversation_id=_CONV),
@@ -655,30 +586,15 @@ def _debate_team_preview_research_first_recommended() -> list[SSEEvent]:
                 "thorough": True,
             },
         ),
-        team_preview_required(
-            checkpoint_id="tp-debate-rf-rec",
-            conversation_id=_CONV,
-            workers=[],
-            tools=[],
-            primitive="debate",
-            motion=motion,
-            form="debate",
-            sides=[
-                {"key": "plaintiff", "name": "原告", "stance": "判决过重"},
-                {"key": "defendant", "name": "被告", "stance": "判决适当"},
-            ],
-            max_rounds=5,
-            thorough=True,
-        ),
         message_end(FinishReason.PAUSED, input_tokens=800, output_tokens=40, cost=_COST),
     ]
 
 
 def _debate_team_preview_resolved_continue() -> list[SSEEvent]:
-    """辩论开工卡放行后主持人循环已开赛（team_preview resolved + 协作图有 runs）。
+    """开工卡事件对已退役、不再发。主持人循环已开赛（协作图有 runs）。
 
-    对照 ``debate_team_preview_finalized``（pending）与 ``team_preview_resolved_continue``
-    （delegate resolved+started）：本向量停在首轮正反陈述进行中，不收场——前端可离线预览
+    对照 ``debate_team_preview_finalized``（paused、无开工卡）与 ``team_preview_resolved_continue``
+    （delegate 已 start）：本向量停在首轮正反陈述进行中，不收场——前端可离线预览
     「已开赛」协作图态。
     """
     cap, mod = "captain1", "debate_mod1"
@@ -695,7 +611,6 @@ def _debate_team_preview_resolved_continue() -> list[SSEEvent]:
     )
     return [
         *_debate_team_preview_finalized()[:-1],
-        team_preview_resolved(checkpoint_id="tp-debate", decision="continue"),
         run_plan(
             execution_id="exec1",
             plan_type="debate",
@@ -736,19 +651,10 @@ def _debate_team_preview_resolved_continue() -> list[SSEEvent]:
 
 
 def _debate_team_preview_model_override_continue() -> list[SSEEvent]:
-    """辩论开工卡人盖模型：continue + model_overrides → resolved 投影；开赛沿用预分配 id。"""
+    """开工卡事件对已退役、不再发。开赛沿用预分配 id；人盖模型写在 run，不从事件投影 veto。"""
     mod = "debate_mod1"
-    pro_slot = f"{mod}_pro"
     return [
         *_debate_team_preview_finalized()[:-1],
-        team_preview_resolved(
-            checkpoint_id="tp-debate",
-            decision="continue",
-            model_overrides={
-                pro_slot: {"model": "deepseek-v4-pro", "origin": "platform"},
-                mod: {"model": "deepseek-v4-flash", "origin": "platform"},
-            },
-        ),
         run_plan(
             execution_id="exec1",
             plan_type="debate",
@@ -769,10 +675,9 @@ def _debate_team_preview_model_override_continue() -> list[SSEEvent]:
 
 
 def _team_preview_resolved_continue() -> list[SSEEvent]:
-    """团队预审放行后首波开跑到 end_turn。"""
+    """开工卡事件对已退役、不再发。首波开跑到 end_turn；投影无 team_preview。"""
     return [
         *_team_preview_finalized()[:-1],
-        team_preview_resolved(checkpoint_id="tp1", decision="continue"),
         run_started("r1", "w1"),
         run_completed(
             "r1",
@@ -802,14 +707,13 @@ def _team_preview_resolved_continue() -> list[SSEEvent]:
 
 
 def _team_preview_resolved_adjust() -> list[SSEEvent]:
-    """开工卡 adjust：不授权、不开工，意见回灌 CEO；无 worker start。"""
+    """开工卡事件对已退役、不再发。adjust 路径：不授权、不开工，意见回灌 CEO；无 worker start。"""
     from agentcore.runtime.kickoff.adjust_guidance import format_kickoff_adjust_result
 
     note = "人太多，改成两人调研"
     refeed = format_kickoff_adjust_result(primitive="delegate", note=note)
     return [
         *_team_preview_finalized()[:-1],
-        team_preview_resolved(checkpoint_id="tp1", decision="adjust", note=note),
         run_skipped("r1", "w1", reason="abort"),
         run_skipped("r2", "w2", reason="abort"),
         tool_use_end("dc1", "delegate", success=True, output=refeed),
@@ -819,10 +723,10 @@ def _team_preview_resolved_adjust() -> list[SSEEvent]:
 
 
 def _team_preview_resolved_adjust_pre_ttft() -> list[SSEEvent]:
-    """开工卡 adjust 后 CEO 续跑、尚未吐首 token。
+    """开工卡事件对已退役、不再发。adjust 后 CEO 续跑、尚未吐首 token。
 
     生产冷恢复增量（服务端已核实）：``message_start``（复用原助手 id，无 ``full_replay``）
-    → ``team_preview_resolved(adjust)`` → 每个未跑 worker 一条 ``run_skipped(abort)``
+    → 每个未跑 worker 一条 ``run_skipped(abort)``
     → ``tool_use_end``（修订引导回灌）→ ``run_started(captain)``（复用同一 captain_run_id）。
     本向量停在 captain ``run_started`` 之后、首个 ``reasoning_delta`` / ``content_delta`` /
     ``tool_use_start`` 之前，供逐帧回放看见该窗口的气泡。
@@ -862,28 +766,7 @@ def _team_preview_resolved_adjust_pre_ttft() -> list[SSEEvent]:
                 {"id": "r2", "agent_id": "w2", "task": "写初稿", "depends_on": ["r1"]},
             ],
         ),
-        team_preview_required(
-            checkpoint_id="tp1",
-            conversation_id=_CONV,
-            workers=[
-                {
-                    "run_id": "r1",
-                    "role": "调研",
-                    "task": "调研方案",
-                    "depends_on": [],
-                },
-                {
-                    "run_id": "r2",
-                    "role": "撰写",
-                    "task": "写初稿",
-                    "depends_on": ["r1"],
-                },
-            ],
-            tools=["code_execute", "file_write", "test_run"],
-            primitive="delegate",
-        ),
         message_start("m1", conversation_id=_CONV),
-        team_preview_resolved(checkpoint_id="tp1", decision="adjust", note=note),
         run_skipped("r1", "w1", reason="abort"),
         run_skipped("r2", "w2", reason="abort"),
         tool_use_end("dc1", "delegate", success=True, output=refeed),
@@ -892,7 +775,7 @@ def _team_preview_resolved_adjust_pre_ttft() -> list[SSEEvent]:
 
 
 def _team_preview_revised_card() -> list[SSEEvent]:
-    """adjust 后修订成 1 人仍再出开工卡；新卡带 revision / revised_from / revision_note。"""
+    """开工卡事件对已退役、不再发。adjust 后修订成 1 人再挂起（不再出第二张开工卡）。"""
     from agentcore.runtime.kickoff.adjust_guidance import format_kickoff_adjust_result
 
     note = "人太多，改成一个人做"
@@ -900,7 +783,6 @@ def _team_preview_revised_card() -> list[SSEEvent]:
     first = _team_preview_finalized()[:-1]
     return [
         *first,
-        team_preview_resolved(checkpoint_id="tp1", decision="adjust", note=note),
         tool_use_end("dc1", "delegate", success=True, output=refeed),
         content_delta("按你的意见改成一人，请再确认。"),
         tool_use_start(
@@ -915,29 +797,12 @@ def _team_preview_revised_card() -> list[SSEEvent]:
             agents=[{"id": "w3", "role": "写手", "thinking": True}],
             runs=[{"id": "r3", "agent_id": "w3", "task": "一个人做完", "depends_on": []}],
         ),
-        team_preview_required(
-            checkpoint_id="tp2",
-            conversation_id=_CONV,
-            workers=[
-                {
-                    "run_id": "r3",
-                    "role": "写手",
-                    "task": "一个人做完",
-                    "depends_on": [],
-                }
-            ],
-            tools=["code_execute", "file_write", "test_run"],
-            primitive="delegate",
-            revision=2,
-            revised_from="tp1",
-            revision_note=note,
-        ),
         message_end(FinishReason.PAUSED, input_tokens=1800, output_tokens=140, cost=_COST),
     ]
 
 
 def _team_preview_exclude_one_continue() -> list[SSEEvent]:
-    """开工组队有限否决：排除一人后 continue — resolved 投影带 excluded_run_ids。
+    """开工卡事件对已退役、不再发。排除一人后续跑 — 否决字段不再从事件投影。
 
     两岗无依赖，可合法排除 r2；首波仅 r1 开跑到 end_turn。
     非法依赖排除（仍被 depends_on 引用）→ API 422 单测，本向量不表达拒答。
@@ -965,37 +830,6 @@ def _team_preview_exclude_one_continue() -> list[SSEEvent]:
             agents=agents,
             runs=plan_runs,
         ),
-        team_preview_required(
-            checkpoint_id="tp-ex1",
-            conversation_id=_CONV,
-            workers=[
-                {
-                    "run_id": "r1",
-                    "role": "调研",
-                    "task": "调研方案",
-                    "depends_on": [],
-                    "write_capability": "can_write_files",
-                    "write_capability_label": "可改文件",
-                    "target_folder_name": "本会话工作区",
-                },
-                {
-                    "run_id": "r2",
-                    "role": "校对",
-                    "task": "校对摘要",
-                    "depends_on": [],
-                    "write_capability": "text_only",
-                    "write_capability_label": "仅文字报告",
-                    "target_folder_name": "本会话工作区",
-                },
-            ],
-            tools=["code_execute", "file_write", "test_run"],
-            primitive="delegate",
-        ),
-        team_preview_resolved(
-            checkpoint_id="tp-ex1",
-            decision="continue",
-            excluded_run_ids=["r2"],
-        ),
         run_started("r1", "w1"),
         run_completed(
             "r1",
@@ -1014,7 +848,7 @@ def _team_preview_exclude_one_continue() -> list[SSEEvent]:
 
 
 def _team_preview_tighten_write_continue() -> list[SSEEvent]:
-    """开工组队有限否决：收紧写盘后 continue — resolved 投影带 write_capability_overrides。"""
+    """开工卡事件对已退役、不再发。收紧写盘后续跑 — write_capability_overrides 不再从事件投影。"""
     agents = [
         {"id": "w1", "role": "调研", "thinking": True},
         {"id": "w2", "role": "撰写", "thinking": True},
@@ -1037,39 +871,6 @@ def _team_preview_tighten_write_continue() -> list[SSEEvent]:
             task_summary="构建 X",
             agents=agents,
             runs=plan_runs,
-        ),
-        team_preview_required(
-            checkpoint_id="tp-tw1",
-            conversation_id=_CONV,
-            workers=[
-                {
-                    "run_id": "r1",
-                    "role": "调研",
-                    "task": "调研方案",
-                    "depends_on": [],
-                    "write_capability": "can_write_files",
-                    "write_capability_label": "可改文件",
-                    "target_folder_name": "本会话工作区",
-                },
-                {
-                    "run_id": "r2",
-                    "role": "撰写",
-                    "task": "写初稿",
-                    "depends_on": ["r1"],
-                    "write_capability": "can_write_files",
-                    "write_capability_label": "可改文件",
-                    "target_folder_name": "本会话工作区",
-                },
-            ],
-            tools=["code_execute", "file_write", "test_run"],
-            primitive="delegate",
-        ),
-        team_preview_resolved(
-            checkpoint_id="tp-tw1",
-            decision="continue",
-            write_capability_overrides=[
-                {"run_id": "r2", "capability": "text_only"},
-            ],
         ),
         run_started("r1", "w1"),
         run_completed(
@@ -1100,7 +901,7 @@ def _team_preview_tighten_write_continue() -> list[SSEEvent]:
 
 
 def _team_preview_model_override_continue() -> list[SSEEvent]:
-    """人盖 CEO 模型：continue + model_overrides → resolved 投影 modelOverrides；该 run 用覆盖模。"""
+    """开工卡事件对已退役、不再发。人盖模型写在 run_completed，不再从事件投影 modelOverrides。"""
     agents = [
         {"id": "w1", "role": "调研", "thinking": True},
         {"id": "w2", "role": "撰写", "thinking": True},
@@ -1123,41 +924,6 @@ def _team_preview_model_override_continue() -> list[SSEEvent]:
             task_summary="调研撰写",
             agents=agents,
             runs=plan_runs,
-        ),
-        team_preview_required(
-            checkpoint_id="tp-mo1",
-            conversation_id=_CONV,
-            workers=[
-                {
-                    "run_id": "r1",
-                    "role": "调研",
-                    "task": "调研方案",
-                    "depends_on": [],
-                    "write_capability": "can_write_files",
-                    "write_capability_label": "可改文件",
-                    "model": "deepseek-v4-flash",
-                    "origin": "platform",
-                    "target_folder_name": "本会话工作区",
-                },
-                {
-                    "run_id": "r2",
-                    "role": "撰写",
-                    "task": "写初稿",
-                    "depends_on": ["r1"],
-                    "write_capability": "can_write_files",
-                    "write_capability_label": "可改文件",
-                    "target_folder_name": "本会话工作区",
-                },
-            ],
-            tools=["code_execute", "file_write", "test_run"],
-            primitive="delegate",
-        ),
-        team_preview_resolved(
-            checkpoint_id="tp-mo1",
-            decision="continue",
-            model_overrides={
-                "r2": {"model": "deepseek-v4-pro", "origin": "platform"},
-            },
         ),
         run_started("r1", "w1"),
         run_completed(
@@ -1243,7 +1009,6 @@ def _decision_then_kill() -> list[SSEEvent]:
     """
     return [
         *_team_preview_finalized()[:-1],
-        team_preview_resolved(checkpoint_id="tp1", decision="continue"),
         run_started("r1", "w1"),
         # 杀进程：无 message_end / 无新 gate
     ]
@@ -1253,7 +1018,6 @@ def _decision_then_second_gate_then_kill() -> list[SSEEvent]:
     """决策后执行中二次挂起再杀：只投影新决策卡，旧 settlement 不产生中断态双显。"""
     return [
         *_team_preview_finalized()[:-1],
-        team_preview_resolved(checkpoint_id="tp1", decision="continue"),
         run_started("r1", "w1"),
         run_completed(
             "r1",
@@ -1281,30 +1045,30 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     "plan_review_paused": ("结构化挂起：plan_review_required 暂停", _plan_review_paused),
     "plan_review_resolved_continue": ("结构化挂起：放行后跑完下游", _plan_review_resolved_continue),
     "plan_review_finalized": ("结构化挂起：计划复核收口即终止（②，plan_review_required→message_end(paused)，单一冷路 resume）", _plan_review_finalized),
-    "team_preview_finalized": ("团队预审：首波前挂起收口（finish_reason=paused）", _team_preview_finalized),
-    "team_preview_resolved_continue": ("团队预审：开做后跑完首波", _team_preview_resolved_continue),
+    "team_preview_finalized": ("开工卡已退役、不再发事件对：首波前 paused 收口（无开工卡）", _team_preview_finalized),
+    "team_preview_resolved_continue": ("开工卡已退役、不再发事件对：首波开跑到 end_turn", _team_preview_resolved_continue),
     "team_preview_resolved_adjust": (
-        "开工卡：adjust 不授权不开工、意见回灌 CEO（无 worker start）",
+        "开工卡已退役、不再发事件对：adjust 不授权不开工、意见回灌 CEO（无 worker start）",
         _team_preview_resolved_adjust,
     ),
     "team_preview_resolved_adjust_pre_ttft": (
-        "开工卡：adjust 后 CEO 续跑、尚未吐首 token（停在 captain run_started）",
+        "开工卡已退役、不再发事件对：adjust 后 CEO 续跑、尚未吐首 token（停在 captain run_started）",
         _team_preview_resolved_adjust_pre_ttft,
     ),
     "team_preview_revised_card": (
-        "开工卡：adjust 后修订成 1 人仍再出卡，谱系 revision/revised_from/revision_note",
+        "开工卡已退役、不再发事件对：adjust 后修订成 1 人再挂起（不再出第二张卡）",
         _team_preview_revised_card,
     ),
     "team_preview_exclude_one_continue": (
-        "开工组队有限否决：排除一人 continue → resolved 投影 excluded_run_ids",
+        "开工卡已退役、不再发事件对：排除一人后续跑（否决字段不再从事件投影）",
         _team_preview_exclude_one_continue,
     ),
     "team_preview_tighten_write_continue": (
-        "开工组队有限否决：收紧写盘 continue → resolved 投影 write_capability_overrides",
+        "开工卡已退役、不再发事件对：收紧写盘后续跑（否决字段不再从事件投影）",
         _team_preview_tighten_write_continue,
     ),
     "team_preview_model_override_continue": (
-        "开工卡人盖模型：continue + model_overrides → resolved 投影 modelOverrides",
+        "开工卡已退役、不再发事件对：人盖模型写在 run，不从事件投影 modelOverrides",
         _team_preview_model_override_continue,
     ),
     "execution_completed_gate_still_pending": (
@@ -1319,25 +1083,25 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         "恢复收口：决策后二次挂起再杀 → 仅新决策卡 pending，无中断态双显",
         _decision_then_second_gate_then_kill,
     ),
-    "debate_team_preview_finalized": ("辩论开工卡：主持人循环前挂起收口", _debate_team_preview_finalized),
+    "debate_team_preview_finalized": ("开工卡已退役、不再发事件对：辩论主持人循环前挂起收口", _debate_team_preview_finalized),
     "debate_team_preview_research_first": (
-        "辩论开工卡：offer_research_first → resolve research_first（不开赛·回灌文案）",
+        "开工卡已退役、不再发事件对：research_first 回灌旧路径（不开赛）",
         _debate_team_preview_research_first,
     ),
     "debate_team_preview_resolved_adjust": (
-        "辩论开工卡：adjust 不开赛、意见回灌 CEO（无辩手 start）",
+        "开工卡已退役、不再发事件对：辩论 adjust 不开赛、意见回灌 CEO（无辩手 start）",
         _debate_team_preview_resolved_adjust,
     ),
     "debate_team_preview_research_first_recommended": (
-        "辩论开工卡：research_first_recommended 键位反转（挂起·第三键升主键）",
+        "开工卡已退役、不再发事件对：不再点亮 research_first_recommended（paused 收口）",
         _debate_team_preview_research_first_recommended,
     ),
     "debate_team_preview_resolved_continue": (
-        "辩论开工卡：开赛后主持人+正反已 start（协作图可见）",
+        "开工卡已退役、不再发事件对：开赛后主持人+正反已 start（协作图可见）",
         _debate_team_preview_resolved_continue,
     ),
     "debate_team_preview_model_override_continue": (
-        "辩论开工卡人盖模型：continue + model_overrides → resolved 投影（预分配 run_id）",
+        "开工卡已退役、不再发事件对：开赛沿用预分配 run_id（不从事件投影 veto）",
         _debate_team_preview_model_override_continue,
     ),
     "single_agent_checkpoint": ("单聊：检查点 ask_user(blocking) 在时间线原位落 checkpoint 标记 + 暂停", _single_agent_checkpoint),

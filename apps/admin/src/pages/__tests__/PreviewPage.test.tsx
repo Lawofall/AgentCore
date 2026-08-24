@@ -74,6 +74,56 @@ const FIXTURES: PreviewFixture[] = [
       ],
     }),
   },
+  {
+    name: "team_worker",
+    description: "多 Agent 队员过程",
+    projected: projected({
+      content: "综合结论",
+      runs: [
+        {
+          id: "r1",
+          agentId: "researcher",
+          task: "查资料",
+          status: "completed",
+          dependsOn: [],
+          outputSummary: "调研摘要",
+          debrief: null,
+          durationMs: null,
+          error: null,
+          failureKind: null,
+          productLanded: null,
+          parentRunId: null,
+          kind: "agent",
+          role: "调研员",
+          model: null,
+          usage: null,
+          cost: null,
+          stance: null,
+          group: null,
+          round: 0,
+          continuesRunId: null,
+          revised: null,
+          replacesRunId: null,
+          actId: "act-1",
+          checkpoint: null,
+          receivedContext: [],
+          escalations: [],
+          process: [
+            { kind: "reasoning", text: "先搜公开材料。" },
+            {
+              kind: "tool",
+              id: "t1",
+              tool_name: "web_search",
+              arguments: {},
+              result: null,
+              status: "success",
+            },
+          ],
+        },
+      ],
+      progress: { completed: 1, total: 1 },
+    }),
+  },
 ];
 
 function renderPreview(path = "/preview") {
@@ -107,5 +157,13 @@ describe("PreviewPage", () => {
     expect(screen.getAllByText("需要批准").length).toBeGreaterThan(0);
     expect(screen.getByText("审批")).toBeTruthy();
     expect(screen.getByText("pending")).toBeTruthy();
+  });
+
+  it("opens a worker process dock from the team graph", () => {
+    renderPreview("/preview?s=team_worker");
+    fireEvent.click(screen.getByText("调研员"));
+    expect(screen.getByLabelText("队员过程")).toBeTruthy();
+    expect(screen.getByText("web_search")).toBeTruthy();
+    expect(screen.getByText("调研摘要")).toBeTruthy();
   });
 });

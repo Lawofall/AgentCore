@@ -1,10 +1,13 @@
-"""P0-B ratchet: mid-coordination ask_user soft-stop → cold claim → settle rebuilds session.
+"""P0-B ratchet: mid-coordination ask_user journal → cold claim → settle rebuilds session.
 
-Covers the end-to-end path that unit snapshot round-trips do not:
+Covers the durable path that unit snapshot round-trips do not. The pause
+journal is a static fixture (live react_loop cannot stably hang mid-wave:
+routine ``worker_completed`` no longer wakes the CEO). Shape matches what
+the live path would persist:
 
-1. CEO coordinates (≥2 workers) and writes a synthesis draft
-2. CEO ``ask_user`` while the session is still active → snapshot lands in the turn journal
-3. Soft-stop clears the in-process session (as turn-end / process restart would)
+1. CEO coordinated (≥2 workers) and wrote a synthesis draft
+2. CEO ``ask_user`` while the session was still active → snapshot in the turn journal
+3. Soft-stop / process restart would clear the in-process session
 4. Cold claim re-hydrates ``journal_entries`` the way ``claim_paused_turn`` does
 5. ``settle_resumed_suspension`` CONTINUE rebuilds ``CoordinationSession`` (draft / completed / budget)
 6. Restored session accepts further coordination (``update_synthesis`` + event consume)
@@ -19,47 +22,47 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 from pathlib import Path
 from typing import Any, NamedTuple
 
-import agentcore.runtime.coordination.wait as coord_wait
-from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
+from agentcore.llm.provider.protocol import LLMChunk
 from agentcore.runtime.checkpoints import CheckpointDecision
-from agentcore.runtime.coordination.journal import coordination_from_journal
+from agentcore.runtime.coordination.journal import (
+    CoordinationSnapshotFact,
+    coordination_from_journal,
+)
 from agentcore.runtime.coordination.session import (
     CoordinationEvent,
     CoordinationEventKind,
+    CoordinationSnapshot,
     active_coordination,
     clear_active_coordination,
-    current_execution_id,
 )
-from agentcore.runtime.coordination.tools import CancelWorkerTool, UpdateSynthesisTool
+from agentcore.runtime.coordination.tools import UpdateSynthesisTool
 from agentcore.runtime.coordination.wait import await_coordination_injection
-from agentcore.runtime.engine import ReactLoopOut, react_loop
-from agentcore.runtime.events import EventSink, EventType, FinishReason
-from agentcore.runtime.facts import FactKind, TurnFactLog, TurnStartedFact, current_fact_log
+from agentcore.runtime.events import EventSink, EventType
+from agentcore.runtime.facts import FactKind, LlmCallFact, RoundBoundaryFact, TurnStartedFact
 from agentcore.runtime.pipeline.resume import settle_resumed_suspension
-from agentcore.runtime.suspension import (
-    AskUserSuspension,
-    captain_transcript,
-    suspension_from_json,
-)
-from agentcore.tools.builtin.ask_user import AskUserTool
+from agentcore.runtime.runs import RunPlan, RunSpec
+from agentcore.runtime.runs.serialize import plan_snapshot_fact, run_final_fact
+from agentcore.runtime.runs.types import RunPhase, RunState
+from agentcore.runtime.suspension import AskUserSuspension, suspension_from_json
 from agentcore.tools.builtin.delegate import DelegateTool
 from agentcore.tools.protocol import ToolContext, ToolEffect
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from tests.delegate.conftest import _upstream_body
-from tests.llm_helpers import make_profile_params
 
 EXEC_ID = "e-coord-ask-resume"
+CAP_RUN_ID = "cap"
+RUN_R1 = "del_fixture_r1"
+RUN_R2 = "del_fixture_r2"
 DRAFT_TEXT = "进展草稿：研究员方向已对齐，写手待完成。"
 
 
 class _SlowSecondWorker:
-    """First worker instant; second delayed so CEO can ask_user mid-wave."""
+    """Delayed second worker for settle re-drive of unfinished r2."""
 
     def __init__(self) -> None:
         self.calls = 0
@@ -68,109 +71,8 @@ class _SlowSecondWorker:
         idx = self.calls
         self.calls += 1
         if idx >= 1:
-            # Long enough that CEO can ask_user after the first completion + synthesis
-            # while r2 is still in flight (mid-wave soft-stop).
-            await asyncio.sleep(5.0)
-        yield LLMChunk(
-            delta_content=_upstream_body("AOUT" if idx == 0 else "BOUT")
-        )
-
-
-class _CoordAskCeoProvider:
-    """CEO script: delegate → update_synthesis → ask_user (pause before all_completed)."""
-
-    def __init__(self) -> None:
-        self.delegate_calls = 0
-        self.synth_calls = 0
-        self.ask_calls = 0
-
-    async def stream(self, request):  # noqa: ANN001
-        tool_msgs = [m for m in request.messages if m.role == "tool"]
-        last_tool = (tool_msgs[-1].content or "") if tool_msgs else ""
-        coord_injected = any(
-            m.role == "user" and m.content and "团队协调事件" in m.content
-            for m in request.messages
-        )
-        # Require a real completion — idle_timeout patrol also carries「团队协调事件」
-        # and must not drive synthesis while completed_run_ids is still empty.
-        worker_completed = any(
-            m.role == "user" and m.content and "worker_completed" in m.content
-            for m in request.messages
-        )
-        all_done = any(
-            m.role == "user" and m.content and "all_completed" in m.content
-            for m in request.messages
-        )
-        if not tool_msgs:
-            self.delegate_calls += 1
-            args = json.dumps(
-                {
-                    "tasks": [
-                        {"id": "r1", "role": "研究员", "task": "做A"},
-                        {
-                            "id": "r2",
-                            "role": "写手",
-                            "task": "做B",
-                            "depends_on": ["r1"],
-                        },
-                    ],
-                }
-            )
-            yield LLMChunk(
-                delta_tool_calls=[
-                    ToolCallDelta(
-                        index=0,
-                        id="ceo-dc1",
-                        function_name="delegate",
-                        arguments_delta=args,
-                    )
-                ]
-            )
-        elif "已更新合成草稿" in last_tool:
-            self.ask_calls += 1
-            args = json.dumps(
-                {
-                    "message": "写手方向是否按方案 A 继续？",
-                    "questions": [
-                        {
-                            "prompt": "写手方向是否按方案 A 继续？",
-                            "kind": "choice",
-                            "options": ["按 A 继续", "改方案 B"],
-                        }
-                    ],
-                }
-            )
-            yield LLMChunk(
-                delta_tool_calls=[
-                    ToolCallDelta(
-                        index=0,
-                        id="ceo-ask1",
-                        function_name="ask_user",
-                        arguments_delta=args,
-                    )
-                ]
-            )
-        elif (
-            coord_injected
-            and worker_completed
-            and self.synth_calls == 0
-            and not all_done
-        ):
-            self.synth_calls += 1
-            args = json.dumps({"draft": DRAFT_TEXT})
-            yield LLMChunk(
-                delta_tool_calls=[
-                    ToolCallDelta(
-                        index=0,
-                        id="ceo-syn1",
-                        function_name="update_synthesis",
-                        arguments_delta=args,
-                    )
-                ]
-            )
-        else:
-            # Should not reach a free-text finalize before ask_user suspends.
-            yield LLMChunk(delta_content="意外收口")
+            await asyncio.sleep(0.05)
+        yield LLMChunk(delta_content=_upstream_body("BOUT"))
 
 
 def _ctx() -> ToolContext:
@@ -231,122 +133,146 @@ async def _cancel_live_drive(execution_id: str = EXEC_ID) -> None:
     clear_active_coordination()
 
 
-async def _pause_mid_coord_ask(monkeypatch) -> _PausedMidCoordAsk:
-    """CEO mid-wave ask_user → soft-stop → cold-claim frame (shared continue/stop fixture)."""
-    # Short idle wait so the post-synthesis round wakes (timeout) while r2 still runs.
-    monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 0.4)
-    clear_active_coordination()
+def _mid_coord_ask_pause_fixture() -> _PausedMidCoordAsk:
+    """Cold-claimable ask_user pause mid-coordination (journal is the authority).
 
-    captured: dict = {}
-
-    async def saver(frame) -> None:  # noqa: ANN001
-        captured["frame"] = frame
-        captured["journal_entries"] = list(frame.journal_entries)
-
-    async def deleter(_message_id: str) -> None:
-        return None
-
-    sink = EventSink()
-    base_ctx = _ctx()
-    worker_llm = _SlowSecondWorker()
-    ceo_llm = _CoordAskCeoProvider()
-
-    delegate = DelegateTool(
-        llm=worker_llm,
-        sink=sink,
-        system_prompt="SYS",
-        user_message="请协调团队并行完成 A 和 B",
-        history=[],
-        tools=ToolRegistry(),
-        base_tool_context=base_ctx,
-        captain_run_id="cap",
-        folder_id="test_birth",
-        approval_gate=None,
-    )
-    ask_tool = AskUserTool(
-        sink=sink,
-        conversation_id="c-coord-ask",
-        timeout_seconds=1.0,
-        captain_run_id="cap",
-        base_system_prompt="你是 CEO。",
-        user_message="请协调团队并行完成 A 和 B",
-        message_id="m-coord-ask",
-        suspension_saver=saver,
-        suspension_deleter=deleter,
-    )
-    reg = ToolRegistry()
-    reg.register(delegate)
-    reg.register(UpdateSynthesisTool(sink=sink))
-    reg.register(CancelWorkerTool())
-    reg.register(ask_tool)
-
+    Live react_loop mid-wave pause is nondeterministic under coordination wake
+    policy (routine worker_completed no longer wakes CEO). This fixture mirrors
+    the journal-at-pause shape the live path would persist: turn_started, captain
+    rounds through delegate → synthesis → ask_user, plan + coordination snapshots.
+    """
     system_prompt = "你是 CEO。"
     user_message = "请协调团队并行完成 A 和 B"
-    messages: list[LLMMessage] = [
-        LLMMessage(role="system", content=system_prompt),
-        LLMMessage(role="user", content=user_message),
-    ]
-    log = TurnFactLog()
-    log.record_fact(
+    plan = RunPlan(
+        nodes=[
+            RunSpec(run_id=RUN_R1, agent_id=RUN_R1, role="研究员", task="做A"),
+            RunSpec(
+                run_id=RUN_R2,
+                agent_id=RUN_R2,
+                role="写手",
+                task="做B",
+                depends_on=[RUN_R1],
+            ),
+        ]
+    )
+    snap = CoordinationSnapshot(
+        execution_id=EXEC_ID,
+        draft=DRAFT_TEXT,
+        conversation_id="c-coord-ask",
+        completed_run_ids=[RUN_R1],
+        total_workers=2,
+        active=True,
+        saw_first_completion=True,
+    )
+    r1_done = RunState(phase=RunPhase.COMPLETED, content="AOUT")
+    journal_entries = [
         TurnStartedFact(
             system_prompt=system_prompt, user_message=user_message, model_profile="m"
-        ).to_fact()
-    )
-    finish_override: list[FinishReason] = []
-
-    fl_token = current_fact_log.set(log)
-    ct_token = captain_transcript.set(messages)
-    exec_token = current_execution_id.set(EXEC_ID)
-    try:
-        await react_loop(
-            messages=messages,
-            llm=ceo_llm,
-            tools=reg,
-            sink=sink,
-            tool_context=base_ctx,
-            profile=make_profile_params(max_rounds=12),
-            turn_model="m",
-            out=ReactLoopOut(finish_override=finish_override),
-            run_id="cap",
-            role="captain",
-            approval_gate=None,
         )
-    finally:
-        current_execution_id.reset(exec_token)
-        captain_transcript.reset(ct_token)
-        current_fact_log.reset(fl_token)
+        .to_fact()
+        .entry(),
+        RoundBoundaryFact(round_idx=0, run_id=CAP_RUN_ID, role="captain").to_fact().entry(),
+        LlmCallFact(
+            run_id=CAP_RUN_ID,
+            round_idx=0,
+            tool_calls=[
+                {
+                    "id": "ceo-dc1",
+                    "type": "function",
+                    "function": {"name": "delegate", "arguments": "{}"},
+                }
+            ],
+            finish_reason="tool_calls",
+        )
+        .to_fact()
+        .entry(),
+        {
+            "kind": EventType.RUN_PLAN.value,
+            "payload": {"execution_id": EXEC_ID},
+            "ts": "t0",
+        },
+        plan_snapshot_fact(plan).entry(),
+        run_final_fact(RUN_R1, r1_done).entry(),
+        RoundBoundaryFact(round_idx=1, run_id=CAP_RUN_ID, role="captain").to_fact().entry(),
+        LlmCallFact(
+            run_id=CAP_RUN_ID,
+            round_idx=1,
+            tool_calls=[
+                {
+                    "id": "ceo-syn1",
+                    "type": "function",
+                    "function": {
+                        "name": "update_synthesis",
+                        "arguments": '{"draft": "' + DRAFT_TEXT + '"}',
+                    },
+                }
+            ],
+            finish_reason="tool_calls",
+        )
+        .to_fact()
+        .entry(),
+        CoordinationSnapshotFact(snapshot=snap.to_dict()).to_fact().entry(),
+        RoundBoundaryFact(round_idx=2, run_id=CAP_RUN_ID, role="captain").to_fact().entry(),
+        LlmCallFact(
+            run_id=CAP_RUN_ID,
+            round_idx=2,
+            tool_calls=[
+                {
+                    "id": "ceo-ask1",
+                    "type": "function",
+                    "function": {"name": "ask_user", "arguments": "{}"},
+                }
+            ],
+            finish_reason="tool_calls",
+        )
+        .to_fact()
+        .entry(),
+        {"kind": EventType.CHECKPOINT_REQUIRED.value, "payload": {}, "ts": "t"},
+    ]
 
-    assert finish_override == [FinishReason.PAUSED], "ask_user must ② finalize mid-coordination"
-    assert ceo_llm.delegate_calls == 1
-    assert ceo_llm.synth_calls == 1
-    assert ceo_llm.ask_calls == 1
-    assert "frame" in captured
+    frame = AskUserSuspension(
+        message_id="m-coord-ask",
+        conversation_id="c-coord-ask",
+        user_id="u",
+        captain_run_id=CAP_RUN_ID,
+        checkpoint_id="ck-coord-ask",
+        tool_call_id="ceo-ask1",
+        base_system_prompt=system_prompt,
+        user_message=user_message,
+        transcript=[],
+        question="写手方向是否按方案 A 继续？",
+        questions=[
+            {
+                "prompt": "写手方向是否按方案 A 继续？",
+                "kind": "choice",
+                "options": ["按 A 继续", "改方案 B"],
+                "multiple": False,
+                "default": "",
+            }
+        ],
+    )
+    frame.journal_entries = list(journal_entries)
 
-    journal_entries = captured["journal_entries"]
-    snap = coordination_from_journal(journal_entries)
-    assert snap is not None, "ask_user suspend must journal a coordination_snapshot"
-    assert snap.active is True
-    assert snap.execution_id == EXEC_ID
-    assert snap.draft == DRAFT_TEXT
-    assert snap.total_workers == 2
-    assert snap.budget_remaining >= 0
-    # At least the first worker completed; prefer mid-wave (r2 still unfinished) so
-    # settle's try_start_coordination re-drive path is exercised when plan is present.
-    assert len(snap.completed_run_ids) >= 1
-    assert len(snap.completed_run_ids) < snap.total_workers
+    snap_from_journal = coordination_from_journal(journal_entries)
+    assert snap_from_journal is not None
+    assert snap_from_journal.active is True
+    assert snap_from_journal.execution_id == EXEC_ID
+    assert snap_from_journal.draft == DRAFT_TEXT
+    assert snap_from_journal.total_workers == 2
+    assert len(snap_from_journal.completed_run_ids) == 1
+    assert len(snap_from_journal.completed_run_ids) < snap_from_journal.total_workers
     assert any(
         (e.get("kind") or "") == FactKind.COORDINATION_SNAPSHOT.value for e in journal_entries
     )
     assert any((e.get("kind") or "") == FactKind.PLAN_SNAPSHOT.value for e in journal_entries)
 
-    # Soft-stop / process end: drop the live session so resume must rebuild from journal.
-    await _cancel_live_drive(EXEC_ID)
-    assert active_coordination(EXEC_ID) is None
-
-    frame = captured["frame"]
-    assert isinstance(frame, AskUserSuspension)
     restored = _cold_claim(frame, journal_entries)
     return _PausedMidCoordAsk(restored, journal_entries, snap, user_message)
+
+
+async def _pause_mid_coord_ask(_monkeypatch) -> _PausedMidCoordAsk:
+    """Mid-coordination ask_user pause → cold-claim frame (shared continue/stop fixture)."""
+    return _mid_coord_ask_pause_fixture()
 
 
 async def test_ask_user_soft_stop_rebuilds_coordination_on_resume(monkeypatch):

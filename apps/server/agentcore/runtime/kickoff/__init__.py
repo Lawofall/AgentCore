@@ -22,11 +22,7 @@ from agentcore.runtime.kickoff.debate_host import (
     DebateHostAttach,
     resolve_debate_host_attach,
 )
-from agentcore.runtime.kickoff.gate import (
-    is_short_affirmation,
-    should_preview_delegate_plan,
-)
-from agentcore.runtime.kickoff.pause import kickoff_tools
+from agentcore.runtime.kickoff.gate import is_short_affirmation
 from agentcore.runtime.kickoff.research_first import research_first_tool_result
 from agentcore.runtime.kickoff.retired import (
     TEAM_PREVIEW_UNRECOVERABLE,
@@ -105,7 +101,6 @@ __all__ = [
     "KICKOFF_ADJUST_GUIDANCE_DELEGATE",
     "KICKOFF_CANCEL_GUIDANCE",
     "KICKOFF_TIMEOUT_GUIDANCE",
-    "kickoff_tools",
     "worker_rows",
     "mark_turn_keeps_stage_card",
     "is_short_affirmation",
@@ -114,7 +109,6 @@ __all__ = [
     "resolve_debate_host_attach",
     "should_apply_debate_model_overrides",
     "should_apply_team_veto",
-    "should_preview_delegate_plan",
     "turn_keeps_stage_card",
     "validate_debate_model_overrides",
     "validate_team_preview_veto",

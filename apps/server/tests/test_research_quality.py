@@ -132,18 +132,17 @@ def test_paper_parallel_merge_discipline_constant():
 
 def test_research_handwritten_ok_without_declaration():
     """调研意图手写 tasks：可不声明 playbook；不再强推 research_report / 收紧预算。"""
-    name, reason, err = resolve_playbook_declaration(
+    name, err = resolve_playbook_declaration(
         {
             "tasks": [{"role": "调研员", "task": "写实务研究报告"}],
-        },
-        user_message="写一篇调研报告")
+        }
+    )
     assert err is None
     assert name is None
-    assert reason is None
 
 
 def test_resolve_optional_research_report_still_expands():
-    name, reason, err = resolve_playbook_declaration(
+    name, err = resolve_playbook_declaration(
         {
             "playbook": "research_report",
             "playbook_args": {"topic": "立案实务"},
@@ -151,7 +150,6 @@ def test_resolve_optional_research_report_still_expands():
     )
     assert err is None
     assert name == "research_report"
-    assert reason is None
 
 
 def test_annotate_batch_meta_audit_flags():
@@ -301,8 +299,8 @@ async def test_handoff_promotes_brief_when_empty_body_min0(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_handoff_rejects_brief_promote_for_prose_with_dependents(tmp_path: Path):
-    """有下游 prose：body=0 + 仅长 summary → 硬拒（summary 不算正文）。"""
+async def test_handoff_allows_brief_for_prose_with_dependents(tmp_path: Path):
+    """有下游 prose：body=0 + 仅 summary → 仍交接（空交不再硬拒；prose 不升格 summary）。"""
     summary = "诊断结论：" + ("根因分析充分。" * 20)
     assert len(summary) >= MIN_UPSTREAM_BODY_CHARS
     ctx = _ctx(
@@ -312,16 +310,13 @@ async def test_handoff_rejects_brief_promote_for_prose_with_dependents(tmp_path:
         handoff_deliverable_form="prose",
         round_content_chars=0)
     result = await HandoffTool().execute({"summary": summary}, ctx)
-    assert result.success is False
-    assert "空交付不得交接" in (result.error or "")
-    assert "summary 不算正文" in (result.error or "")
-    assert result.contract_failure is True
-    assert not (result.final_text or "")
+    assert result.success is True
+    assert (result.final_text or "") == ""
 
 
 @pytest.mark.asyncio
-async def test_handoff_rejects_promoted_brief_below_floor(tmp_path: Path):
-    """非 prose：地板>0 且升格正文仍短于地板 → 仍拒。"""
+async def test_handoff_promotes_short_brief_when_below_floor(tmp_path: Path):
+    """非 prose：地板>0 且升格仍短 → 仍交接（升格短文，不拒）。"""
     ctx = _ctx(
         tmp_path,
         handoff_requires_body=True,
@@ -329,10 +324,8 @@ async def test_handoff_rejects_promoted_brief_below_floor(tmp_path: Path):
         handoff_deliverable_form=None,
         round_content_chars=0)
     result = await HandoffTool().execute({"summary": "太短"}, ctx)
-    assert result.success is False
-    assert "空交付不得交接" in (result.error or "")
-    assert result.contract_failure is True
-    assert not (result.final_text or "")
+    assert result.success is True
+    assert (result.final_text or "") == "太短"
 
 
 @pytest.mark.asyncio
@@ -366,30 +359,26 @@ async def test_handoff_prose_allows_when_real_body_meets_floor(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_handoff_rejects_empty_body_when_required(tmp_path: Path):
+async def test_handoff_allows_empty_body_when_required(tmp_path: Path):
     ctx = _ctx(
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=MIN_UPSTREAM_BODY_CHARS,
         round_content_chars=10)
     result = await HandoffTool().execute({"summary": "结论够长" * 10}, ctx)
-    assert result.success is False
-    assert "空交付不得交接" in (result.error or "")
-    assert "prose" in (result.error or "")
-    assert result.contract_failure is True
+    assert result.success is True
 
 
 @pytest.mark.asyncio
-async def test_handoff_rejects_empty_summary_when_body_zero(tmp_path: Path):
-    """空 summary 不豁免：正文 0 + 无 summary → 仍拒。"""
+async def test_handoff_allows_empty_summary_when_body_zero(tmp_path: Path):
+    """空 summary + 正文 0 → 仍交接。"""
     ctx = _ctx(
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=0,
         round_content_chars=0)
     result = await HandoffTool().execute({"summary": "   "}, ctx)
-    assert result.success is False
-    assert "空交付不得交接" in (result.error or "")
+    assert result.success is True
 
 
 @pytest.mark.asyncio
@@ -426,7 +415,7 @@ def test_handoff_schema_brief_field_bounds():
 
 @pytest.mark.asyncio
 async def test_handoff_allows_short_body_when_no_contract_floor(tmp_path: Path):
-    """无 min_length 时：有下游只挡空交，不挡「一句话」级短正文。"""
+    """无 min_length 时：有下游也不挡「一句话」级短正文。"""
     ctx = _ctx(
         tmp_path,
         handoff_requires_body=True,
@@ -451,18 +440,17 @@ async def test_handoff_allows_empty_body_when_prose_landed(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_handoff_rejects_empty_body_when_only_skeleton_landed(tmp_path: Path):
+async def test_handoff_allows_empty_body_when_only_skeleton_landed(tmp_path: Path):
     ctx = _ctx(
         tmp_path,
         handoff_requires_body=True,
         handoff_min_body_chars=MIN_UPSTREAM_BODY_CHARS,
         round_content_chars=0,
         landed_artifact_kinds={"outline.md": "skeleton"},
-        has_landed_files=True,  # bool 不得单独豁免
+        has_landed_files=True,
     )
     result = await HandoffTool().execute({"summary": "骨架已落盘"}, ctx)
-    assert result.success is False
-    assert "空交付不得交接" in (result.error or "")
+    assert result.success is True
 
 
 @pytest.mark.asyncio
@@ -491,7 +479,7 @@ async def test_handoff_prose_landed_survives_replace_empty_body(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_handoff_skeleton_write_after_replace_still_blocks(tmp_path: Path):
+async def test_handoff_skeleton_write_after_replace_still_handoffs(tmp_path: Path):
     base = _ctx(
         tmp_path,
         handoff_requires_body=True,
@@ -504,9 +492,7 @@ async def test_handoff_skeleton_write_after_replace_still_blocks(tmp_path: Path)
     assert base.landed_artifact_kinds.get("outline.md") == "skeleton"
     handoff_ctx = replace(base, round_content_chars=0)
     result = await HandoffTool().execute({"summary": "提纲已落盘"}, handoff_ctx)
-    assert result.success is False
-    assert "空交付不得交接" in (result.error or "")
-    assert "skeleton" in (result.error or "") or "骨架" in (result.error or "")
+    assert result.success is True
 
 
 @pytest.mark.asyncio

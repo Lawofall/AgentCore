@@ -58,7 +58,14 @@ async def record_local_turn(
     ``tool_failures`` is observability-only (logged, not persisted to message tables).
     """
     with log_context(trace_id=trace_id, conversation_id=conversation_id, user_id=user_id):
-        failures = [f for f in (tool_failures or ()) if isinstance(f, dict)]
+        from agentcore.runtime.engine.tool_channel_redirect import is_channel_redirect_code
+
+        failures = [
+            f
+            for f in (tool_failures or ())
+            if isinstance(f, dict)
+            and not is_channel_redirect_code(str(f.get("code") or ""))
+        ]
         if failures:
             codes = [str(f.get("code") or "other") for f in failures]
             tools = [str(f.get("tool") or "") for f in failures]

@@ -1,8 +1,10 @@
+import { channelRedirectFace } from "@/lib/channelRedirect";
 import {
   appendContentStep,
   appendReasoningStep,
   appendReworkStep,
   dropTrailingContentSteps,
+  hasClosedBlockWithText,
   openBlockText,
   replaceTrailingContentStep,
   replaceTrailingReasoningStep,
@@ -291,6 +293,9 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
       const agent = s.agentIndex.get(f.agentId);
       const runId = f.runId || agent?.currentRunId;
       const run = runId ? s.runIndex.get(runId) : undefined;
+      if (f.delta && hasClosedBlockWithText(run?.process, "content", f.delta)) {
+        break;
+      }
       // attach 增量重放：本帧带的是这一路末尾未闭合块的全文（那一步还没说完），整块换掉；
       // 前面已闭合的步骤不动。CEO 侧同语义见 `foldContentDelta`。
       if (f.replace && f.delta) {
@@ -335,6 +340,12 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
       const agent = s.agentIndex.get(f.agentId);
       const runId = f.runId || agent?.currentRunId;
       const run = runId ? s.runIndex.get(runId) : undefined;
+      if (
+        f.delta &&
+        hasClosedBlockWithText(run?.process, "reasoning", f.delta)
+      ) {
+        break;
+      }
       if (f.replace && f.delta) {
         const open = openBlockText(run?.process, "reasoning");
         if (agent) {
@@ -897,7 +908,12 @@ export function describeFrame(frame: RunFrame, plan: ExecutionPlan): string {
     case "tool_use_start":
       return `调用工具 ${frame.toolName}`;
     case "tool_use_end":
-      return `工具${frame.status === "success" ? "完成" : "失败"}`;
+      if (frame.status === "success") return "工具完成";
+      if (frame.status === "redirect") {
+        const face = channelRedirectFace(frame.failure?.code);
+        return face ? face.label : "改用其他工具";
+      }
+      return "工具失败";
     case "plan_review_required":
       return "执行暂停 · 待你放行";
     case "plan_review_resolved":

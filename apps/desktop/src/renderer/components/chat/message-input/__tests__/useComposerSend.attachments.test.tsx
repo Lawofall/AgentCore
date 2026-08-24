@@ -17,9 +17,6 @@ vi.mock("@/lib/composerPendingHint", () => ({
   confirmSendDespitePendingIfNeeded: () => true,
 }));
 vi.mock("@/lib/offlineMode", () => ({ isReadOnlyOffline: () => false }));
-vi.mock("@/lib/redirectLocalWorkspaceAsk", () => ({
-  redirectLocalWorkspaceAskAction: vi.fn(),
-}));
 vi.mock("@/lib/toast", () => ({ notifyError: vi.fn() }));
 // 真 ApiError（只换掉 api.post）：失败链路要证明的正是「原始错误对象没被拆」。
 vi.mock("@/services/api", async (importOriginal) => {

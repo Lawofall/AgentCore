@@ -5,6 +5,7 @@ import { TeamLane } from "@/components/chat/TeamLane";
 import {
   type ChatTurnInput,
   resolveChatTurn,
+  slottedResolvedAskIds,
 } from "@/components/chat/chatTurn";
 import { CollapsibleBody } from "@/components/conversation-replay/shared";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ export function ChatView({
   content,
   runsPayload,
   projected,
+  reasoningContent,
   className,
   selectedRunId,
   onSelectRun,
@@ -27,12 +29,32 @@ export function ChatView({
   selectedRunId?: string | null;
   onSelectRun?: (runId: string) => void;
 }) {
-  const turn = resolveChatTurn({ content, runsPayload, projected });
+  const turn = resolveChatTurn({
+    content,
+    runsPayload,
+    projected,
+    reasoningContent,
+  });
   const hasReasoningStep = turn.process.some((s) => s.kind === "reasoning");
   const fallbackReasoning =
     !hasReasoningStep && turn.reasoning.trim() ? turn.reasoning : "";
   const body = turn.content.trim();
   const processHasContent = turn.process.some((s) => s.kind === "content");
+  const teamLane =
+    turn.runs.length > 0 ? (
+      <TeamLane
+        runs={turn.runs}
+        progress={turn.progress}
+        selectedRunId={selectedRunId}
+        onSelectRun={onSelectRun}
+      />
+    ) : null;
+  const bodyBlock = body ? (
+    <CollapsibleBody content={turn.content} />
+  ) : null;
+  const leftoverInteractions = turn.interactions.filter(
+    (item) => !slottedResolvedAskIds(turn.process, turn.interactions).has(item.id),
+  );
 
   return (
     <div
@@ -51,23 +73,22 @@ export function ChatView({
         </p>
       )}
 
-      <article className="min-w-0 w-full max-w-[min(100%,48rem)] space-y-3">
+      <article className="min-w-0 w-full space-y-3">
         <ProcessLane
           steps={turn.process}
           fallbackReasoning={fallbackReasoning}
           hideContentSteps={Boolean(body)}
+          interactions={turn.interactions}
+          fallbackContent={bodyBlock}
+          team={teamLane}
         />
-        <TeamLane
-          runs={turn.runs}
-          progress={turn.progress}
-          selectedRunId={selectedRunId}
-          onSelectRun={onSelectRun}
-        />
-        {body ? (
-          <CollapsibleBody content={turn.content} />
-        ) : processHasContent ? null : (
+        {!body &&
+        !processHasContent &&
+        turn.runs.length === 0 &&
+        turn.process.length === 0 &&
+        leftoverInteractions.length === 0 ? (
           <p className="text-muted-foreground text-sm italic">（无正文）</p>
-        )}
+        ) : null}
         <SourceCards citations={turn.citations} />
         {turn.debate && (
           <p className="text-sm text-muted-foreground">
@@ -81,7 +102,7 @@ export function ChatView({
             交付 {turn.deliveryStatus.state}
           </p>
         )}
-        <InteractionLane interactions={turn.interactions} />
+        <InteractionLane interactions={leftoverInteractions} />
       </article>
     </div>
   );

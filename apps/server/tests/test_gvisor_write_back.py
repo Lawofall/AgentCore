@@ -366,6 +366,8 @@ async def test_health_check_not_linux_sets_failure_reason(
     assert sandbox.last_health_failure is not None
     assert sandbox.last_health_failure[0] == "not_linux"
     assert sandbox.last_health_failure[1] and "platform=" in sandbox.last_health_failure[1]
+    assert sandbox.last_health_failure_code == "exec_env_not_linux"
+    assert "not_linux" in sandbox.last_health_evidence
 
 
 @pytest.mark.asyncio
@@ -385,6 +387,7 @@ async def test_health_check_sandboxd_unavailable(tmp_path: Path):
     assert await sandbox.health_check() is False
     assert sandbox.last_health_failure is not None
     assert sandbox.last_health_failure[0] == "sandboxd_unavailable"
+    assert sandbox.last_health_failure_code == "exec_env_sandbox_unavailable"
 
 
 @pytest.mark.asyncio

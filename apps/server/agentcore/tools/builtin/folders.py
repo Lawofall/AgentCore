@@ -720,6 +720,7 @@ class CreateFolderTool:
 
         folder_id = folder.get("id") if isinstance(folder.get("id"), str) else None
         context.turn_target_desk.note_folder(folder_id)
+        context.note_turn_created_folder(folder_id)
         rel_path = folder_display_path(folder)
         logger.info(
             "folders.created",

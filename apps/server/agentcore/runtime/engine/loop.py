@@ -6,17 +6,22 @@ Public import path stays this module (``react_loop``, ``ReactLoopOut``,
 ``CaptainLoopMirror``, ``current_captain_loop``, ``sync_captain_loop_mirror``).
 """
 
+from __future__ import annotations
+
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.logging import get_logger
 from agentcore.llm.profiles import ProfileParams, get_profile
 from agentcore.llm.provider.openai_compatible import OpenAICompatibleProvider
 from agentcore.llm.provider.protocol import LLMMessage, TokenUsage
-from agentcore.runtime.approvals import ApprovalGate
+
+if TYPE_CHECKING:
+    from agentcore.runtime.approvals import ApprovalGate
+
 from agentcore.runtime.events import (
     EventSink,
     FinishReason,

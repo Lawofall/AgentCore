@@ -21,7 +21,7 @@
 3. 按方向深入：
    - 后端 / runtime → [`apps/server/README.md`](./apps/server/README.md) → [`运行时总览`](./docs/03-AI核心/运行时总览.md)
    - 桌面 → [`apps/desktop/README.md`](./apps/desktop/README.md) → [`前端地图`](./docs/04-前端/前端地图.md)
-   - 手机 → [`apps/mobile/README.md`](./apps/mobile/README.md) → [`前端技术` §七](./docs/04-前端/前端技术与架构.md)
+   - 手机 → [`apps/mobile/README.md`](./apps/mobile/README.md) → [`前端技术` §五 客户端架构（桌面 + 手机）](./docs/04-前端/前端技术与架构.md)
    - 管理后台 → [`apps/admin/README.md`](./apps/admin/README.md) → [`管理员后台`](./docs/05-平台与运维/管理员后台.md)
 4. 术语不确定时查 [`术语表`](./docs/01-产品/术语表.md)
 
@@ -50,33 +50,9 @@ cd apps/server && uv sync
 
 ### 提交前检查
 
-可选（推荐）：安装 [pre-commit](https://pre-commit.com/) hooks，对 staged 的 Python 跑 ruff、对 desktop/mobile 跑 Biome（见仓库根 `.pre-commit-config.yaml`）。`uv tool install pre-commit` 后在仓库根执行 `pre-commit install`。不强制；完整门禁仍靠下方 `release:gate`。
+可选（推荐）：安装 [pre-commit](https://pre-commit.com/) hooks，对 staged 的 Python 跑 ruff、对 desktop/mobile 跑 Biome（见仓库根 `.pre-commit-config.yaml`）。`uv tool install pre-commit` 后在仓库根执行 `pre-commit install`。不强制。
 
-尽量跑与 CI 同构的本地门禁：
-
-```bash
-pnpm release:gate
-```
-
-迭代时可缩小范围（正式发布仍需完整通过）：
-
-- `pnpm release:gate --only <段>` — 只跑一段（`backend` | `contracts` | `desktop` | `mobile` | `admin`）
-- `pnpm release:gate --from <段>` — 从某段起跑到结束
-
-按区域自测：
-
-```bash
-# 后端单元测试（跳过 integration）
-pnpm test:server:unit
-
-# 桌面端单元测试（裸 vitest 会进 watch，跑一次务必带 --run）
-pnpm --filter agentcore-desktop test -- --run
-
-# 只跑单个测试文件
-pnpm --filter agentcore-desktop exec vitest run <路径>
-```
-
-改了 OpenAPI / SSE / fold：仓库根 `pnpm gen:types`，再 `pnpm conformance`。
+验证分三档（默认点名用例，勿默认全量 gate）→ [`AGENTS.md`](./AGENTS.md)。窄化命令与门禁分段 → [`verify-scope.mdc`](./.cursor/rules/verify-scope.mdc)。改了 OpenAPI / SSE / fold：仓库根 `pnpm gen:types`，再 `pnpm conformance`。
 
 ## 许可证
 

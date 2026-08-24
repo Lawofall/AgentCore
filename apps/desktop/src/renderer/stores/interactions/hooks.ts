@@ -1,7 +1,6 @@
 import type {
   CheckpointDisplay,
   PlanReviewDisplay,
-  TeamPreviewDisplay,
 } from "@/stores/conversation/types";
 import { useMemo } from "react";
 import {
@@ -9,7 +8,6 @@ import {
   entryToApproval,
   entryToCheckpoint,
   entryToPlanReview,
-  entryToTeamPreview,
 } from "./adapters";
 import { useInteractionStore } from "./store";
 import type { InteractionEntry } from "./types";
@@ -36,24 +34,20 @@ export function useMessageInteractionCards(
 ): {
   checkpoints: CheckpointDisplay[];
   planReviews: PlanReviewDisplay[];
-  teamPreviews: TeamPreviewDisplay[];
 } {
   const byId = useInteractionStore((s) => s.byId);
   return useMemo(() => {
     const checkpoints: CheckpointDisplay[] = [];
     const planReviews: PlanReviewDisplay[] = [];
-    const teamPreviews: TeamPreviewDisplay[] = [];
     if (!conversationId) {
-      return { checkpoints, planReviews, teamPreviews };
+      return { checkpoints, planReviews };
     }
     for (const e of byId.values()) {
       if (!matchesMessage(e, conversationId, messageId)) continue;
       if (e.kind === "ask_user") checkpoints.push(entryToCheckpoint(e));
       else if (e.kind === "plan_review") planReviews.push(entryToPlanReview(e));
-      else if (e.kind === "team_preview")
-        teamPreviews.push(entryToTeamPreview(e));
     }
-    return { checkpoints, planReviews, teamPreviews };
+    return { checkpoints, planReviews };
   }, [byId, conversationId, messageId]);
 }
 

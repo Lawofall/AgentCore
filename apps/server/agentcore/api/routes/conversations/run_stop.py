@@ -4,15 +4,12 @@ from fastapi import APIRouter, Depends
 
 from agentcore.api.dependencies import AuthUser, get_conversation_repo
 from agentcore.api.schemas import SubmitRunStopRequest, SubmitRunStopResponse
-from agentcore.core.logging import get_logger
 from agentcore.db.repositories import ConversationRepository
 from agentcore.runtime.runs.intervene import accept_run_stop
 
 from ._helpers import _require_owned_conversation
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
-
-logger = get_logger(__name__)
 
 
 @router.post("/{conversation_id}/run-stop", response_model=SubmitRunStopResponse)
@@ -38,22 +35,6 @@ async def submit_run_stop(
         run_id=body.run_id,
         conversation_id=conversation_id,
     )
-    if ack.accepted:
-        logger.info(
-            "run_stop.queued",
-            conversation_id=conversation_id,
-            execution_id=body.execution_id,
-            run_id=body.run_id,
-            queued=ack.queued,
-        )
-    else:
-        logger.info(
-            "run_stop.unreachable",
-            conversation_id=conversation_id,
-            execution_id=body.execution_id,
-            run_id=body.run_id,
-            reason=ack.reason,
-        )
     return SubmitRunStopResponse(
         queued=ack.queued,
         accepted=ack.accepted,

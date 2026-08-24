@@ -1,7 +1,9 @@
 """Shared workspace capacity ceilings (capacity contract ≠ liveness timeout).
 
-Byte / entry ceilings fail fast as capacity contracts. Wall-clock timeouts are a
-separate liveness signal (see ``runtime.engine.tool_deadline`` + tool_exec).
+Byte / entry ceilings fail fast as capacity contracts. Channel / tool-exec
+wall-clock hangs are a separate liveness signal (see ``runtime.engine.tool_deadline``
++ tool_exec). Office/PDF **extract** wall-clock is a capacity contract
+(``extract_timeout`` → ``contract_failure``), not channel liveness.
 
 Aligned with desktop ``WORKSPACE_READ_MAX`` (``apps/desktop/src/main/fs/constants.ts``).
 """
@@ -11,9 +13,14 @@ from __future__ import annotations
 # Whole-file read ceiling (text / bytes / line windows that load the file).
 WORKSPACE_READ_MAX_BYTES = 5 * 1024 * 1024  # 5 MiB — mirrors desktop Local
 
-# Office/PDF transparent extract: tighter than raw read so markitdown cannot burn
-# the liveness wall-clock on a multi-MiB PDF that still fits the read ceiling.
+# Office/PDF transparent extract: tighter than raw read so a multi-MiB PDF that
+# still fits the read ceiling cannot burn the extract worker. Byte cap is
+# fail-fast; extract wall-clock is also a contract (see timeout below).
 OFFICE_EXTRACT_MAX_BYTES = 2 * 1024 * 1024  # 2 MiB
+
+# Killable extract-worker budget. Timeout → FAILED + extract_timeout, not
+# liveness_timeout. Tests may patch this down to sub-second.
+OFFICE_EXTRACT_TIMEOUT_SECONDS = 12.0
 
 # Entry ceiling for the **file panel** listing (REST ``/files``), far above the
 # AI-facing ``_MAX_LIST_ENTRIES``: browsing is not a context budget, and a user
@@ -79,14 +86,18 @@ CHANNEL_DEAD_USER_VISIBLE = (
 # through it), and security software only ever fits the spawn-denied branch below.
 EXEC_ENV_DEAD_USER_VISIBLE = "本机暂时跑不了命令。我将基于已有材料收口。"
 
-# Opening clause every variant below shares — harvest fallback detects the fact in
-# an already-written body with it, so the wording may grow a cause but not lose this.
+# Opening clause every *local-machine* variant below shares — harvest fallback
+# detects the fact in an already-written body with it. Cloud-isolation deaths
+# use ``EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER`` instead (do not say 本机).
 EXEC_ENV_DEAD_BODY_MARKER = "本机暂时跑不了命令"
+EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER = "云端隔离执行"
 
 # Per-reason lines, keyed by the exec-env probe codes classified in
 # ``tools/sandbox/exec_env.py`` (kept as literals so this constants module stays
-# import-free; a test pins the keys to that code set). Each keeps the shared
-# 「本机暂时跑不了命令」opening so harvest detection stays keyed on one phrase.
+# import-free; a test pins the keys to that code set). Local-machine reasons keep
+# the shared 「本机暂时跑不了命令」opening so harvest detection stays keyed on
+# one phrase; cloud-isolation reasons must not claim the user's computer is
+# broken.
 EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE: dict[str, str] = {
     # No language on this path — do not name Python (or any other interpreter).
     "exec_env_no_interpreter": (
@@ -100,6 +111,13 @@ EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE: dict[str, str] = {
     "exec_env_spawn_denied": (
         "本机暂时跑不了命令：系统拒绝启动运行命令的进程（权限被拒）。"
         "这类拦截通常来自安全软件或权限策略，放行后可以重试；我将基于已有材料收口。"
+    ),
+    "exec_env_not_linux": (
+        "云端隔离执行当前不可用：隔离沙箱只在云上的 Linux 环境运行。"
+        "当前对话跑在你的电脑上，代码没有运行。我将基于已有材料收口。"
+    ),
+    "exec_env_sandbox_unavailable": (
+        "云端隔离执行当前不可用，代码没有运行。我将基于已有材料收口。"
     ),
 }
 

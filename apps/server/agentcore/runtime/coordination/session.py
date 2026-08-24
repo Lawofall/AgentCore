@@ -166,8 +166,10 @@ class CoordinationSession(
     # Wakes ``wait_events`` when snapshot/drain moves queue items into ``_pending``
     # (otherwise a blocked ``queue.get`` would miss them until timeout).
     _wake: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
-    # First worker completion always forces a decision point.
+    # Snapshot compat: first worker_completed seen (no longer a wake trigger).
     _saw_first_completion: bool = False
+    # Success / skip / cancel completions held until a necessary wake.
+    _deferred_progress: list[CoordinationEvent] = field(default_factory=list, repr=False)
     # Per-worker wall-clock timers (notify-only; never auto-cancel).
     _worker_started_at: dict[str, float] = field(default_factory=dict, repr=False)
     _timeout_tasks: dict[str, asyncio.Task[None]] = field(default_factory=dict, repr=False)
@@ -536,6 +538,10 @@ def _release_turn_one(eid: str, session: CoordinationSession | None) -> None:
 # to "cover one LLM round". Inject does not cancel this wait.
 _HARVEST_ATTACH_GRACE_S = 5.0
 _HARVEST_ATTACH_POLL_S = 0.05
+# After terminal_posted: bound ``await_live_detached_drive`` so sidecar/cloud
+# owners can finalize outbox even if the drive task never unwinds. Same order of
+# magnitude as attach grace; does not cancel the drive.
+_AWAIT_DETACHED_DRIVE_GRACE_S = 5.0
 
 
 def finish_detached_coordination(session: CoordinationSession) -> None:
@@ -922,7 +928,19 @@ async def await_live_detached_drive(conversation_id: str) -> bool:
     # race the last workers, so this is the first place that sees post-detach
     # host_fact_log (harvest's settled_via stamp cannot).
     if not task.done():
-        await asyncio.wait({task})
+        if session.terminal_posted:
+            done, pending = await asyncio.wait(
+                {task}, timeout=_AWAIT_DETACHED_DRIVE_GRACE_S
+            )
+            if pending:
+                logger.error(
+                    "coordination.await_detached_drive_grace_expired",
+                    conversation_id=conversation_id,
+                    execution_id=session.execution_id,
+                    grace_s=_AWAIT_DETACHED_DRIVE_GRACE_S,
+                )
+        else:
+            await asyncio.wait({task})
     writer = session.host_journal_writer
     if writer is not None:
         flush = getattr(writer, "flush", None)

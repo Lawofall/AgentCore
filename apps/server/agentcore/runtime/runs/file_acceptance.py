@@ -4,8 +4,9 @@ At run wrap-up each landed path gets ``accepted`` or ``rejected`` (+ reason).
 ``delivery_status.delivered_files`` / CEO「已交付」only count ``accepted``.
 Cite-tier / contract failures that name a path reject that path even when the
 run soft-COMPLETEDs — so soft-COMPLETED must not smuggle those paths into the
-delivered list. Declared artifact / ``artifact_dir`` vs landed path is a pure
-string compare: a landed path that misses the declaration is **omitted** from
+delivered list. Declared artifact / ``artifact_dir`` vs landed path: exact / dir / glob after
+normalize, **or** the write-sanitizer flatten (dossier nested ``a/b.md`` →
+``a_b.md``). A landed path that misses the declaration is **omitted** from
 the card (not ``rejected`` / 未通过). Missing declared paths are a
 ``path_mismatch`` **gap**, not a row on the extra file.
 
@@ -57,7 +58,9 @@ def landed_matches_declared(landed: str, declared: str) -> bool:
     """True when ``landed`` satisfies one declared pattern (no basename heuristic).
 
     Exact equality after normalize; trailing-``/`` is a directory prefix; glob
-    chars in the declaration match the full relative path only.
+    chars in the declaration match the full relative path only. File patterns
+    also match the write-sanitizer flatten so ``工作稿/主题/01.md`` equals the
+    landed ``工作稿/主题_01.md``.
     """
     actual = normalize_delivery_relpath(landed)
     pattern = normalize_delivery_relpath(declared)
@@ -67,7 +70,11 @@ def landed_matches_declared(landed: str, declared: str) -> bool:
         return actual == pattern.rstrip("/") or actual.startswith(pattern)
     if any(ch in pattern for ch in "*?["):
         return fnmatch.fnmatch(actual, pattern)
-    return actual == pattern
+    if actual == pattern:
+        return True
+    from agentcore.workspace._paths import sanitize_write_relpath
+
+    return actual == sanitize_write_relpath(pattern)
 
 
 def declaration_allows_landed(
@@ -227,6 +234,9 @@ def fold_exported_sources(
     只是中间稿——同列两份会让答复把 ``.md`` 说成「Word 文档」的位置（真实事故）。折叠只认
     自报的 ``derived_from``：不看扩展名、不看工具名，没自报就一份都不降级。
 
+    ``kind=image`` 的预览截图也自报 ``derived_from``（被截的 HTML），但截图是注解不是
+    导出件——不得把源页面折进中间稿。
+
     导出件本身永不被藏：源文件没被验收（导出件是唯一产物）时无从折叠；自报成环导致主推
     清单会被清空时整体不折叠。
     """
@@ -239,6 +249,8 @@ def fold_exported_sources(
         if not isinstance(row, dict) or row.get("status") != "accepted":
             continue
         path = str(row.get("path") or "").strip()
+        if str(row.get("kind") or "").strip() == "image":
+            continue
         source = str(row.get("derived_from") or "").strip()
         if not source or source == path:
             continue

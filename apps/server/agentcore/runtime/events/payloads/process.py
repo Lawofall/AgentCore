@@ -38,12 +38,12 @@ class ProcessToolStep(WirePayload):
     tool_name: str
     arguments: dict[str, Any]
     result: str | None
-    status: Literal["running", "success", "error"]
+    status: Literal["running", "success", "error", "redirect"]
     display: dict[str, Any] | None = Field(
         default=None, json_schema_extra={"ts_type": "ToolDisplay"}
     )
     failure: dict[str, Any] | None = absent(
-        "User-facing failure from tool_use_end (status=error only). "
+        "User-facing copy from tool_use_end (status=error or redirect). "
         "Shape mirrors ToolFailure: {message, code}.",
         ts_type="ToolFailure",
     )
@@ -137,4 +137,4 @@ PROCESS_STEP_MEMBERS: tuple[type[WirePayload], ...] = (
 )
 
 # Retired process-step discriminants that may still sit on historical process[] rows.
-RETIRED_PROCESS_STEP_KINDS: frozenset[str] = frozenset({"ask"})
+RETIRED_PROCESS_STEP_KINDS: frozenset[str] = frozenset({"ask", "team_preview"})

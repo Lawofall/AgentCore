@@ -164,6 +164,13 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
   const frames: RunFrame[] = [];
 
   for (const ev of events) {
+    const leftoverType = ev.type as string;
+    if (
+      leftoverType === "team_preview_required" ||
+      leftoverType === "team_preview_resolved"
+    ) {
+      continue;
+    }
     switch (ev.type) {
       // `replace`（attach 增量重放的帧级替换）：带标记的帧携带的是末尾那个尚未闭合的
       // 文本块的全文，换块而非追加——与生产 fold 同一实现（`foldContentDelta`），
@@ -391,7 +398,6 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
         break;
       }
       case "plan_review_required":
-      case "team_preview_required":
       case "checkpoint_required":
       case "approval_required":
       case "stage_card_required": {
@@ -404,7 +410,6 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
         break;
       }
       case "plan_review_resolved":
-      case "team_preview_resolved":
       case "checkpoint_resolved":
       case "approval_resolved":
       case "stage_card_resolved": {

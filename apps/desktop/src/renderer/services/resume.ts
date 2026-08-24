@@ -11,6 +11,7 @@ import {
   entryToPlanReview,
   isColdCheckpointSettled,
   isColdResumeKind,
+  isRetiredKickoffKind,
   settledColdIdsFromEvents,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -571,7 +572,7 @@ export function selectVisibleColdResumes(args: {
   for (const entry of byId.values()) {
     if (entry.conversationId !== conversationId) continue;
     if (entry.status !== "pending" && entry.status !== "submitting") continue;
-    if (!isColdResumeKind(entry.kind) || entry.kind === "team_preview") {
+    if (!isColdResumeKind(entry.kind) || isRetiredKickoffKind(entry.kind)) {
       continue;
     }
     if (!entry.id || !entry.payload) continue;
@@ -609,7 +610,7 @@ export function selectVisibleColdResumes(args: {
   }
 
   for (const p of pausedForConv) {
-    if (p.kind === "team_preview") continue;
+    if (isRetiredKickoffKind(p.kind)) continue;
     if (covered.has(p.checkpointId)) continue;
     if (
       isColdCheckpointSettled({

@@ -39,8 +39,8 @@ DeliveryKind = Literal["runnable", "console", "plan"]
 # Canonical delivery-form hints for teaching / option labels (ids still minted f0/f1…).
 SUGGESTED_FORMAT_LABELS: tuple[str, ...] = (
     "可运行自动化 — 真实可调度的 Agent/工作流（有执行环境时按环境能力交付；无则如实降级）",
-    "控制台原型 — 工具台 / 运营后台 UI 原型（build_website + style=toolshed）",
-    "仅方案 — 方案文档 / 架构说明，不进 website 硬锁流水线",
+    "控制台原型 — 工具台 / 运营后台 UI 原型",
+    "仅方案 — 方案文档 / 架构说明",
 )
 
 _RUNNABLE_LABEL_RE = re.compile(
@@ -95,16 +95,16 @@ class AutomationDeliveryConfirmedFact:
 
 def automation_toolshed_rejected_message() -> str:
     return (
-        "当前记账交付形态禁止 `playbook=\"build_website\"` + `style=toolshed`："
-        "可运行自动化请自由组队 / `build_feature`；仅方案不进 website 硬锁流水线。"
+        "当前记账交付形态与所选控制台原型气质不符："
+        "可运行自动化请自由组队 / `build_feature`；仅方案请手写 tasks 交方案文档。"
         "若要做控制台原型，请先经 ask_user 重选「控制台原型」。"
     )
 
 
 def automation_website_rejected_message() -> str:
     return (
-        "当前记账交付形态为「仅方案」：禁止 `playbook=\"build_website\"` "
-        "硬锁流水线。请手写 tasks 交方案文档，或经 ask_user 重选形态。"
+        "当前记账交付形态为「仅方案」：请手写 tasks 交方案文档，"
+        "或经 ask_user 重选形态。"
     )
 
 

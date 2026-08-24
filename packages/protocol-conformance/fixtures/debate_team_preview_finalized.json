@@ -1,6 +1,6 @@
 {
   "name": "debate_team_preview_finalized",
-  "description": "辩论开工卡：主持人循环前挂起收口",
+  "description": "开工卡已退役、不再发事件对：辩论主持人循环前挂起收口",
   "events": [
     {
       "type": "message_start",
@@ -43,37 +43,6 @@
       "timestamp": "2026-01-01T00:00:00.003Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp-debate",
-        "conversation_id": "conv_demo",
-        "workers": [],
-        "tools": [],
-        "primitive": "debate",
-        "motion": "该不该上四天工作制？",
-        "form": "debate",
-        "sides": [
-          {
-            "key": "pro",
-            "name": "正方",
-            "stance": "应推广",
-            "run_id": "debate_mod1_pro"
-          },
-          {
-            "key": "con",
-            "name": "反方",
-            "stance": "暂缓",
-            "run_id": "debate_mod1_con"
-          }
-        ],
-        "max_rounds": 5,
-        "thorough": true,
-        "revision": 1,
-        "moderator_run_id": "debate_mod1"
-      },
-      "timestamp": "2026-01-01T00:00:00.004Z"
-    },
-    {
       "type": "message_end",
       "payload": {
         "finish_reason": "paused",
@@ -94,7 +63,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:00.005Z"
+      "timestamp": "2026-01-01T00:00:00.004Z"
     }
   ],
   "projected": {
@@ -109,10 +78,6 @@
       {
         "kind": "content",
         "text": "我来组织一场辩论。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp-debate"
       }
     ],
     "citations": [],
@@ -125,14 +90,7 @@
       "completed": 0,
       "total": 0
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp-debate",
-        "status": "pending",
-        "workerIds": []
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

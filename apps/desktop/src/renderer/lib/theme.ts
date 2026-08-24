@@ -26,6 +26,7 @@ export function resolveDark(theme: Theme): boolean {
 export function applyTheme(theme: Theme): void {
   if (typeof document === "undefined") return;
   document.documentElement.classList.toggle("dark", resolveDark(theme));
+  window.windowApi?.setThemeSource?.(theme);
 }
 
 /**
@@ -40,12 +41,7 @@ export function useApplyTheme(forceLight = false): void {
   const theme = useUIStore((s) => s.theme);
   useEffect(() => {
     applyTheme(forceLight ? "light" : theme);
-    if (
-      forceLight ||
-      theme !== "system" ||
-      typeof window === "undefined" ||
-      typeof window.matchMedia !== "function"
-    ) {
+    if (forceLight || theme !== "system" || typeof window === "undefined") {
       return;
     }
     const mq = window.matchMedia(DARK_QUERY);

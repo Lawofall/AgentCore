@@ -25,6 +25,7 @@ import {
   isColdResumeKind,
   isHotGateInteractionKind,
   isHotInteractionKind,
+  isRetiredKickoffKind,
   isStageInteractionKind,
   submitPathOf,
 } from "../registry";
@@ -85,6 +86,14 @@ describe("kind bags derived from INTERACTION_KIND_WIRE flags", () => {
       expect(isStageInteractionKind(kind)).toBe(
         w.reconnectAnswerable && !w.hot && !w.pausesTurn,
       );
+    }
+  });
+
+  it("isRetiredKickoffKind: only team_preview is retired", () => {
+    expect(isRetiredKickoffKind("team_preview")).toBe(true);
+    for (const kind of USER_INTERACTION_KIND_VALUES) {
+      if (kind === "team_preview") continue;
+      expect(isRetiredKickoffKind(kind)).toBe(false);
     }
   });
 

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from agentcore.runtime.delegate.completion import (
-    validate_cold_start_explore_deliverables,
-)
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.contract import describe_deliverable
 from agentcore.runtime.runs.executor.identities import build_worker_identity
@@ -196,8 +193,10 @@ def test_schema_exposes_form_enum():
     # 纠正「一次只能 / 同步阻塞到全队完成」误述（协调默认立即返回、可同回合追加）
     assert "立即返回" in DELEGATE_DESCRIPTION
     assert "一张图" in DELEGATE_DESCRIPTION
-    # 建站常驻路径勿先 consult：schema 必须带 playbook_args.topic，否则缺 slot 全失败。
-    assert "playbook_args.topic" in DELEGATE_DESCRIPTION
+    # 绿场常驻路径勿先 consult：schema 必须带 playbook_args.app，否则缺 slot 全失败。
+    assert "playbook_args.app" in DELEGATE_DESCRIPTION
+    assert "建站→build_website" not in DELEGATE_DESCRIPTION
+    assert "建站→build_website" not in DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
     assert "禁止二者同时有内容" in DELEGATE_DESCRIPTION
     assert "既填 code_audit 又传 tasks" in DELEGATE_DESCRIPTION
     # 弱模型空失败可抄：顶层非空 tasks 三件套骨架（与 empty 拒收同源）。
@@ -217,8 +216,9 @@ def test_schema_exposes_form_enum():
     assert "playbook_id" not in DELEGATE_PARAMETERS["properties"]
     assert "parallelism" not in DELEGATE_PARAMETERS["properties"]
     pa = DELEGATE_PARAMETERS["properties"]["playbook_args"]["description"]
-    assert "build_website" in pa and "topic" in pa
-    assert "建站必填 topic" in pa
+    assert "build_app" in pa and "app" in pa
+    assert "绿场必填 app" in pa
+    assert "建站→build_website" not in pa
     assert "勿空对象" in pa
     assert "快捷" in pa or "手写" in pa
     # code_audit.modules 必须出现在 CEO 工具面（扇出靠填槽，不从 scope 推断）
@@ -391,31 +391,34 @@ async def test_files_worker_keeps_write_tools_and_identity():
     assert "form=files" in provider.system_messages[0]
     assert "file_write" in provider.system_messages[0]
 
-def test_cold_start_rejects_single_worker():
-    plan, errs = build_run_plan(
-        [{"role": "调研", "task": "摸清项目结构", "deliverable": {"form": "prose"}}],
-        id_prefix="t",
-    )
-    assert errs == []
-    err = validate_cold_start_explore_deliverables(plan)
-    assert err is not None
-    assert "≥2" in err or "至少两" in err
-    assert "1 人" in err or "包办" in err
+async def test_cold_start_pending_allows_single_worker_delegate():
+    """pending ∧ 1 worker：不再因节点数拒（组队靠提示词）。"""
+    from tests.delegate.conftest import Provider, ctx, tool
 
-def test_cold_start_allows_form_files():
-    """Pending explore no longer hard-rejects form=files (≥2 workers sufficient)."""
-    plan, errs = build_run_plan(
-        [
-            {"role": "A", "task": "摸目录", "deliverable": {"form": "files"}},
-            {"role": "B", "task": "读设计", "deliverable": {"form": "prose"}},
-        ],
-        id_prefix="t",
+    t = tool(Provider(["结构笔记"]))
+    t._base_tool_context.cold_start_explore_pending = True
+    result = await t.execute(
+        {
+            "tasks": [
+                {
+                    "role": "调研",
+                    "task": "摸清项目结构",
+                    "deliverable": {"form": "prose"},
+                }
+            ],
+            "coordinate": False,
+        },
+        ctx(),
     )
-    assert errs == []
-    assert validate_cold_start_explore_deliverables(plan) is None
+    assert result.success is True
+    assert result.contract_failure is not True
+    err = result.error or ""
+    assert "≥2" not in err
+    assert "包办" not in err
+    assert "至少两" not in err
 
 def test_cold_start_allows_artifacts():
-    """Pending explore no longer hard-rejects artifacts (≥2 workers sufficient)."""
+    """裸 artifacts 文件名仍迁入默认落点（与节点数闸无关）。"""
     plan, errs = build_run_plan(
         [
             {
@@ -429,18 +432,6 @@ def test_cold_start_allows_artifacts():
     )
     assert errs == []
     assert plan.nodes[0].deliverable is not None
-    # 裸文件名迁入默认落点（无显式路径 → 工作稿/）；冷启动不再因 artifacts 非空而拒。
+    # 裸文件名迁入默认落点（无显式路径 → 工作稿/）。
     assert plan.nodes[0].deliverable.artifacts == ["AgentCore/文档/工作稿/brief.md"]
-    assert validate_cold_start_explore_deliverables(plan) is None
-
-def test_cold_start_allows_all_prose():
-    plan, errs = build_run_plan(
-        [
-            {"role": "A", "task": "摸目录", "deliverable": {"form": "prose"}},
-            {"role": "B", "task": "读 README", "deliverable": {"form": "prose"}},
-        ],
-        id_prefix="t",
-    )
-    assert errs == []
-    assert validate_cold_start_explore_deliverables(plan) is None
 

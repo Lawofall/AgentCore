@@ -14,11 +14,17 @@ afterEach(() => {
 
 describe("coldSettlement criterion", () => {
   it("reads cold *_resolved ids from journal events", () => {
+    const leftoverResolved = "team_preview_resolved" as string;
     expect(
-      checkpointIdIfColdResolved("team_preview_resolved", {
+      checkpointIdIfColdResolved(leftoverResolved, {
         checkpoint_id: "tp1",
       }),
     ).toBe("tp1");
+    expect(
+      checkpointIdIfColdResolved("plan_review_resolved", {
+        checkpoint_id: "pr1",
+      }),
+    ).toBe("pr1");
     expect(
       checkpointIdIfColdResolved("checkpoint_resolved", {
         checkpoint_id: "cp1",
@@ -29,11 +35,15 @@ describe("coldSettlement criterion", () => {
     ).toBeNull();
 
     const ids = settledColdIdsFromEvents([
-      { type: "team_preview_required", payload: { checkpoint_id: "tp1" } },
-      { type: "team_preview_resolved", payload: { checkpoint_id: "tp1" } },
+      {
+        type: "team_preview_required" as string,
+        payload: { checkpoint_id: "tp1" },
+      },
+      { type: leftoverResolved, payload: { checkpoint_id: "tp1" } },
+      { type: "plan_review_resolved", payload: { checkpoint_id: "pr1" } },
       { type: "approval_resolved", payload: { approval_id: "a1" } },
     ]);
-    expect([...ids]).toEqual(["tp1"]);
+    expect([...ids].sort()).toEqual(["pr1", "tp1"]);
   });
 
   it("collects journal events across messages", () => {
@@ -42,8 +52,8 @@ describe("coldSettlement criterion", () => {
         runs: {
           events: [
             {
-              type: "team_preview_resolved",
-              payload: { checkpoint_id: "tp1" },
+              type: "plan_review_resolved",
+              payload: { checkpoint_id: "pr1" },
             },
           ],
         },
@@ -51,7 +61,7 @@ describe("coldSettlement criterion", () => {
       { runs: { events: [] } },
       {},
     ]);
-    expect(settledColdIdsFromEvents(events).has("tp1")).toBe(true);
+    expect(settledColdIdsFromEvents(events).has("pr1")).toBe(true);
   });
 
   it("is settled when journal, noted id, or entry is terminal", () => {

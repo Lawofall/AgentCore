@@ -28,9 +28,6 @@ vi.mock("@/lib/composerPendingHint", () => ({
   confirmSendDespitePendingIfNeeded: () => true,
 }));
 vi.mock("@/lib/offlineMode", () => ({ isReadOnlyOffline: () => false }));
-vi.mock("@/lib/redirectLocalWorkspaceAsk", () => ({
-  redirectLocalWorkspaceAskAction: vi.fn(),
-}));
 vi.mock("@/lib/toast", () => ({ notifyError: vi.fn() }));
 vi.mock("@/services/api", () => ({ api: { post: vi.fn() } }));
 vi.mock("@/services/conversations", () => ({

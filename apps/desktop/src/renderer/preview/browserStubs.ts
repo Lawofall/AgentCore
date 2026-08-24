@@ -222,6 +222,7 @@ const windowApi: WindowApi = {
   close: noop,
   applyFramePreset: async () => {},
   getFramePreset: async () => "free" as const,
+  setThemeSource: noop,
 };
 
 if (typeof window !== "undefined") {

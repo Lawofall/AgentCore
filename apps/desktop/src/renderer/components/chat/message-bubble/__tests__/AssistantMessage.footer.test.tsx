@@ -14,6 +14,10 @@ const genMock = vi.hoisted(() => ({ value: true }));
 const execById = vi.hoisted(() => ({
   value: {} as Record<string, { deliveryStatus: null; plan?: unknown }>,
 }));
+const interactionCards = vi.hoisted(() => ({
+  checkpoints: [] as { status: "pending" | "resolved"; question?: string }[],
+  planReviews: [] as { status: "pending" | "resolved" }[],
+}));
 
 vi.mock("@/stores/conversation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/stores/conversation")>();
@@ -38,22 +42,26 @@ vi.mock("@/stores/usage", () => ({
   ) => sel({ loadMessageCost: () => {}, messageCosts: {} }),
 }));
 
-vi.mock("@/stores/execution", () => ({
-  useExecutionStore: (
-    sel: (s: {
-      byId: Record<string, { deliveryStatus: null; plan?: unknown }>;
-    }) => unknown,
-  ) => sel({ byId: execById.value }),
-}));
+vi.mock("@/stores/execution", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/stores/execution")>();
+  return {
+    ...actual,
+    useExecutionStore: (
+      sel: (s: {
+        byId: Record<string, { deliveryStatus: null; plan?: unknown }>;
+      }) => unknown,
+    ) => sel({ byId: execById.value }),
+    useMessageExecution: () => null,
+  };
+});
 
 vi.mock("@/stores/interactions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/stores/interactions")>();
   return {
     ...actual,
     useMessageInteractionCards: () => ({
-      checkpoints: [],
-      planReviews: [],
-      teamPreviews: [],
+      checkpoints: interactionCards.checkpoints,
+      planReviews: interactionCards.planReviews,
     }),
   };
 });
@@ -106,6 +114,8 @@ afterEach(() => {
   cleanup();
   genMock.value = true;
   execById.value = {};
+  interactionCards.checkpoints = [];
+  interactionCards.planReviews = [];
 });
 
 describe("AssistantMessage footer gate", () => {
@@ -461,6 +471,7 @@ describe("AssistantMessage trusts turnOutcome flags", () => {
     );
     expect(screen.getByText("半成品答案")).toBeTruthy();
     expect(screen.queryByText("已停止")).toBeNull();
+    expect(screen.queryByTestId("turn-warning-banner")).toBeNull();
     cleanup();
     renderBubble(
       settledMessage({
@@ -470,7 +481,21 @@ describe("AssistantMessage trusts turnOutcome flags", () => {
       }),
     );
     expect(screen.queryByText("已停止")).toBeNull();
+    expect(screen.queryByTestId("turn-warning-banner")).toBeNull();
     expect(screen.getByTestId("assistant-footer")).toBeTruthy();
+    cleanup();
+    renderBubble(
+      settledMessage({
+        content: "半成品答案",
+        finishReason: "cancelled",
+        turnWarning: "当前模型可能不支持工具调用，复杂任务效果可能受限。",
+      }),
+    );
+    expect(screen.queryByTestId("turn-warning-banner")).toBeNull();
+    expect(
+      screen.queryByText("当前模型可能不支持工具调用，复杂任务效果可能受限。"),
+    ).toBeNull();
+    expect(screen.queryByText("已停止")).toBeNull();
     cleanup();
     renderBubble(
       settledMessage({ content: "半成品答案", finishReason: "interrupted" }),
@@ -478,6 +503,33 @@ describe("AssistantMessage trusts turnOutcome flags", () => {
     expect(screen.getByText("半成品答案")).toBeTruthy();
     expect(screen.queryByText(/已中断/)).toBeNull();
     expect(screen.getByTestId("assistant-footer")).toBeTruthy();
+  });
+
+  it("非停止回合仍画预检 turn_warning 横幅", () => {
+    renderBubble(
+      settledMessage({
+        content: "正文",
+        finishReason: "end_turn",
+        turnWarning: "当前模型可能不支持工具调用，复杂任务效果可能受限。",
+      }),
+    );
+    expect(screen.getByTestId("turn-warning-banner")).toBeTruthy();
+    expect(
+      screen.getByText("当前模型可能不支持工具调用，复杂任务效果可能受限。"),
+    ).toBeTruthy();
+  });
+
+  it("已结算 ask 卡 + user-stop：不把「已停止」画成气泡警告条", () => {
+    interactionCards.checkpoints = [{ status: "resolved", question: "" }];
+    renderBubble(
+      settledMessage({
+        content: "好，按确认的方案开工",
+        finishReason: "cancelled",
+      }),
+    );
+    expect(screen.getByText("好，按确认的方案开工")).toBeTruthy();
+    expect(screen.queryByText("已停止")).toBeNull();
+    expect(screen.queryByTestId("turn-warning-banner")).toBeNull();
   });
 
   it("有团队图时条是主判决，气泡不重复红卡", () => {

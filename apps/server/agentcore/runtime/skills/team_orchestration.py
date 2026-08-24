@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agentcore.config import settings
 from agentcore.runtime.coordination.session import (
     DEFAULT_COORDINATION_BUDGET,
     MAX_COORDINATION_BUDGET,
@@ -14,9 +13,6 @@ from agentcore.runtime.runs.playbooks.audit import (
     CODE_AUDIT_SECTION_DEFECTS,
 )
 from agentcore.workspace.stage_dirs import RESEARCH_DIR, REVIEWS_DIR
-
-# 探路轮上限唯一真源（局部拼接，与 RESEARCH_DIR / 协调预算同构）。
-_IR = str(settings.engine_team_gate_investigation_rounds)
 
 # playbook 降级为形状词汇教学示例（协作优先重设计阶段 2）：listing 仍嵌进 skill，口径改为对照学形状。
 _PLAYBOOK_LISTING = available_playbooks()
@@ -50,7 +46,7 @@ _TEAM_ORCHESTRATION_ADVANCED = """\
 **多屏 UI / 单文件大原型** → 默认 MVP 或同上真两段 / wave1=`form=files`；\
 **禁止**首 grant「完整可玩 N 屏」（桌上档 / `playbook_args` 等结构槽已点「一次做完」除外；禁扫长文）；\
 **规格已齐 ≠ 全量**。\
-单页 / 落地页仍可一人整页（`build_website`）；勿误伤 light 小活 / 短文落盘。
+单页一人做完；控制台别套营销皮；HTML 落盘可开 `web_quality_scan`；勿误伤 light 小活 / 短文落盘。
 
 **【根委派切片诚实】**方向已定、本轮边界未钉 → 立刻派但须结构表达切片：默认根多节点手写 tasks / deliverable 钉边界（固定流水线可快捷具名 playbook），\
 **或**单 lead 嵌套扇出（路径 B）；禁无边界整锅。
@@ -130,8 +126,8 @@ Composer「导入到云 / 连接 Git」后再 `resolve`；\
 
 教学示例形状（playbook）：下列是词汇表的可实例化快捷套餐——对照学形状，勿「是就直接套」。\
 【默认】按词汇手写顶层 `tasks`；固化流水线时再快捷设 `playbook` + `playbook_args`（与手写 tasks 二选一）。\
-建站 / 工具台 / 绿场软件【快捷套餐】具名 playbook（见 consult `build_website` / \
-`build_app`；控制台 dense 用 `build_website` + `style=toolshed`）；手写 / `none` 不再硬拒，勿在此复读全文。\
+绿场软件【快捷套餐】具名 playbook（见 consult `build_app`）；手写 / `none` 不再硬拒，勿在此复读全文。\
+建站用手写顶层 `tasks`；单页一人做完。\
 方向已定但本轮边界未钉 ≠ 绿场 SPA 满档：首派轻切片 / 手写少节点 / 单 lead 嵌套再拆，再 `replan`；\
 仅真 SPA / 用户明示完整可跑 / 点选模块流水线才满档 `build_app`（五阶段不可跳仅约束进入后）。\
 【结局分层】先定桌上结果再组队：「多角 / 多 Agent」≠成文产线。\
@@ -183,7 +179,8 @@ choice 服务下一步动作，【禁止】正文候选菜单再投卡催收敛�
 不盖则 A 稿即被立即验收，且吃不到文献证据不足降档）。\
 材料已齐扩写 / 短文落盘仍单人（档 3 满编质量缝保留独立审校；档 1/2 勿默认审校环）。\
 A / 档 2**不**因多人而触发成篇硬门。\
-【禁止】开局自己连搜多轮做完整场再派——探路至多 """ + _IR + """ **轮**只为写清 angles，到限即派。\
+【禁止】开局自己连搜多轮做完整场再派——探路默认 0～1 轮只定位入口（派给谁、从哪进），禁止用探路收集结论 / 清单 / 对照。\
+派工看规模与结构，不看本轮是否落盘或改码。\
 本地修码：【无先验调查批】单文件/单符号一刀切 → 宜显式 `complexity_hint=light`+短任务（可 \
 `form=files`）；有复现症状 / 多点 / 需验 → `repair_code`（单症状三波；`playbook_args` 必填 \
 `problem` + `verify`）。白屏/挂载/渲染复现 → `verify=` 写 browser 形说明\
@@ -257,6 +254,11 @@ score（0–10））——`artifacts` 对账路径存在，`output_format=json` 
 把这些调研依赖设 `summarize` 省 token；要保金额 / 法条编号 / 代码原样时才留 `pass_through`。\
 （注意：`result_handling` 只管【上游→下游】注入，不影响回到你手里的内容——后者由 task 措辞\
 决定，见下「广度调查」。）
+- 【整合员·先读指针再写】扇入写总稿 / 方案合成（`depends_on` 吃上游落盘）：派前给上游各钉 \
+`artifacts` 私有路径，整合员 task **逐条点名**这些路径并写「先 file_read 再写总稿」；整合员自己钉总稿 \
+`artifacts`。【禁止】整合员 task 写成「再调研 / 摸清仓库 / 自己找材料」。引擎会把上游路径注入「前置结果」，\
+模型仍常忽略去全仓勘探，故 task 必须点名。缺稿 / 没写成文件 → `continue_from_run_id` 唤回**同一**整合员接着写，\
+【禁止】再派同名角色从零搜（会撞同构 / 抢产物）。【禁止】为此加「整合员必须 file_write」硬闸。
 - 嵌套委派（lead 下放）——每个 worker **默认**就能再带一层子队（深度上限内自动开、无需声明）；\
 硬顶 `depth≤3`（合法链 CEO→depth1→depth2→depth3 叶子；depth&lt;3 获 `delegate`，`replan` 在已有子计划后挂上）。\
 与根侧多节点 DAG **等价合法**（根委派切片诚实路径 B）：根可只派单 lead 交成果级目标·约束·验收。\
@@ -280,7 +282,7 @@ task 写「先组队 / 你可以组队」**不算**已拆编制。已钉薄切�
 **禁止**写死「凡审计必先摸底队再开审计队 / 凡大活必嵌套」——那是编排波次，**不是**禁止填 \
 `modules`：整仓/多子系统按产品缝填 `modules` 一次扇出专班（先 2–3）≠ 两波摸底；单缝省略；\
 【禁止】按目录树填满上限；勿把整仓塞进 `scope` 当单人；仍非「必须扇出」。\
-① **轻探即派**：范围缝已清（或探路 ≤""" + _IR + """ 轮已写出可并行子面）→ 一次扇出专班（如 `code_audit`+`modules`、\
+① **轻探即派**：范围缝已清（或探路 0～1 轮已定位可并行入口，非已收集结论）→ 一次扇出专班（如 `code_audit`+`modules`、\
 多角调研、多模块实现）；每人 task 写入探路已见路径/组件当边界，【禁止】父目录整棵通读；\
 单点展示/一条链路 → 1 人（两端渲染真独立才 2），【禁止】按契约/协议层凑工种；\
 `code_audit` 单缝省略 modules，modules 先 2–3 不是配额。\
@@ -484,7 +486,7 @@ PDF；【禁止】code_execute+reportlab / python-docx 做主路径）。仅用�
 隐含升级为 wall；`complexity_hint=light` 隐含 none（不再缩短 worker 轮次预算；\
 单文件一刀切修码即使 `form=files` 也可显式 light；无调查批且有症状/需验用 \
 `playbook="repair_code"`；已有调查批确认修 → 手写+`continue_from_run_id`，禁再套 \
-repair_code；禁 none 当修码默认）。`build_feature` / `build_website` \
+repair_code；禁 none 当修码默认）。`build_feature` \
 教学示例默认 wall（接口或页面契约经便签对齐）。**主 Agent 可在 `delegate` 上预置共识**：`seed_notes`（`[{kind,text}]` \
 写入便签墙，首波并行 worker 开局即见）与 `team_brief`（回合级「团队共识」块注入每个 worker 开局上下文，\
 跨多波 `delegate` 仍沿用直至覆盖）——brief 写总述、seed 钉关键决定，减少在各 task 里重复粘贴同一段背景。\

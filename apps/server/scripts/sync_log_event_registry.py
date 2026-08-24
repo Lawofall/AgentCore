@@ -808,6 +808,21 @@ HISTORICAL_COMPAT: dict[str, str] = {
         "历史兼容：曾在探测 subtree_control 只读后自动加 --ignore-cgroups；"
         "现形状 B 固定 ignore-cgroups，不再发此事件"
     ),
+    "handoff.empty_body_blocked": (
+        "历史兼容：曾因空正文拒收 handoff；实测误伤已撤，不再发此事件"
+    ),
+    "contract.hard_gap_blocked_completion": (
+        "历史兼容：曾因空交/未落盘把节点打成 FAILED；已撤"
+    ),
+    "coordination.idle_yield_to_captain": (
+        "历史兼容：曾在有在飞工作时 idle-yield 回 CEO；现改为 held_inflight"
+    ),
+    "team_preview.list_pending_failed": (
+        "历史兼容：曾在列出待处理开工卡失败时发出；开工卡产品位已拆，不再发此事件"
+    ),
+    "team_preview.orphaned": (
+        "历史兼容：曾在发新开工卡前结算旧 pending 时发出；开工卡产品位已拆，不再发此事件"
+    ),
 }
 
 KEY_DESC: dict[str, str] = {

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Collection
 
 from agentcore.runtime.skills.ask_user import _ASK_USER_KICKOFF, _ASK_USER_MIDTASK
-from agentcore.runtime.skills.build import _BUILD_APP, _BUILD_WEBSITE
+from agentcore.runtime.skills.build import _BUILD_APP
 from agentcore.runtime.skills.data_file_landing import _DATA_FILE_LANDING
 from agentcore.runtime.skills.debate_and_review import _DEBATE_AND_REVIEW
 from agentcore.runtime.skills.deep_multi_lens_research import (
@@ -102,16 +102,6 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
-        name="build_website",
-        summary=(
-            "建站/落地页：糊问形态+桌上档；规格已齐→playbook=build_website + topic + "
-            "intensity(solo|standard)；控制台 dense 加 style=toolshed"
-        ),
-        body=_BUILD_WEBSITE,
-        requires_tools=("delegate",),
-        audience=AUDIENCE_CEO_ONLY,
-    ),
-    SystemSkill(
         name="build_app",
         summary=(
             "绿场 SPA【推荐】build_app（手写/none 不硬拒）：交付档→intensity(lean|full)；"
@@ -142,7 +132,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     SystemSkill(
         name="ask_user_kickoff",
         summary=(
-            "通用短澄清：桌上档 label→intensity/playbook；糊建站问形态+档；"
+            "通用短澄清：糊建站挡路才问形态；绿场桌上档 label→lean|full；只改一处；"
             "点名载体/手段顾问短对齐；选项勿写编制；禁意图分类器"
         ),
         body=_ASK_USER_KICKOFF,

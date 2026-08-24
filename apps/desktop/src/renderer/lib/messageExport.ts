@@ -6,6 +6,10 @@
  * 搜索与下轮 history 仍只用交付正文——本模块只服务出口，不改持久化契约。
  */
 
+import {
+  channelRedirectFace,
+  resolveToolWireStatus,
+} from "@/lib/channelRedirect";
 import { visibleMessageText } from "@/lib/errors";
 import { reworkChipLabel } from "@/lib/processTimeline";
 import type { ProcessStep } from "@/types/events";
@@ -200,17 +204,22 @@ function hostExportLabel(args: Record<string, unknown>): string {
 }
 
 function formatToolLine(step: Extract<ProcessStep, { kind: "tool" }>): string {
+  const wire = resolveToolWireStatus(step.status, step.failure);
+  const redirect = channelRedirectFace(step.failure?.code);
   const label =
-    step.tool_name === "browser"
-      ? browserExportLabel(step.arguments ?? {})
-      : step.tool_name === "host"
-        ? hostExportLabel(step.arguments ?? {})
-        : (TOOL_LABEL[step.tool_name] ?? step.tool_name);
-  const detail = toolDetail(step.arguments ?? {}, step.tool_name);
+    wire === "redirect" && redirect
+      ? redirect.label
+      : step.tool_name === "browser"
+        ? browserExportLabel(step.arguments ?? {})
+        : step.tool_name === "host"
+          ? hostExportLabel(step.arguments ?? {})
+          : (TOOL_LABEL[step.tool_name] ?? step.tool_name);
+  const detail =
+    wire === "redirect" ? "" : toolDetail(step.arguments ?? {}, step.tool_name);
   const status =
-    step.status === "error"
+    wire === "error"
       ? MESSAGE_EXPORT_TOOL_STATUS_SUFFIX.error
-      : step.status === "running"
+      : wire === "running"
         ? MESSAGE_EXPORT_TOOL_STATUS_SUFFIX.running
         : "";
   return detail ? `· ${label}${status}：${detail}` : `· ${label}${status}`;

@@ -626,6 +626,25 @@ describe("projectExecution (fold)", () => {
     );
   });
 
+  it("names a channel-redirect tool_use_end 改用搜索, not 工具失败", () => {
+    expect(
+      describeFrame(
+        {
+          t: 3,
+          kind: "tool_use_end",
+          toolCallId: "tc-1",
+          result: "禁止用 code_execute 打开源码再正则扫描。",
+          status: "redirect",
+          failure: {
+            message: "这一步想用脚本打开源码再搜索，没有执行。",
+            code: "source_grep_redirect",
+          },
+        },
+        plan,
+      ),
+    ).toBe("改用搜索");
+  });
+
   // FE-003 (run_id 归属): a delegated worker tags its tool calls with `runId`.
   // Workers share the turn's top-level tool_use stream, so with width>1 a call
   // must land on ITS run's agent — not whichever run started first. (Before: the

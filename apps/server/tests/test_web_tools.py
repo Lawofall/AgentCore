@@ -668,9 +668,65 @@ async def test_read_url_loopback_refusal_survives_dns_rebinding(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "url",
+    [
+        "src/foo.ts",
+        "file:///C:/scratch/page.html",
+        r"C:\scratch\page.html",
+        "zoogame.cc",
+        "ftp://example.com/a",
+        "_scratch/zoogame.cc/index.html",
+    ],
+)
+async def test_read_url_not_a_web_url_reroutes_to_file_read(url: str):
+    """非 http(s)：改道 file_read，不贴收口话术，也不教补 https://。"""
+    result = await ReadUrlTool().execute({"url": url}, _ctx())
+    err = result.error or ""
+
+    assert result.success is False
+    assert result.metadata.get("code") == "not_a_web_url"
+    assert result.metadata.get("policy_failure") is True
+    assert "不要再空转外网深读" not in err
+    assert "基于已有材料收口写作" not in err
+    assert "file_read" in err
+    assert "不要给本参数补 https://" in err
+    assert "请补 https" not in err
+    assert "加上 https://" not in err
+
+
+async def test_read_url_not_a_web_url_survives_file_redirect(monkeypatch):
+    """公网跳到 file:// 走同一条改道，不是「停止深读」。"""
+    from agentcore.tools.builtin.web.read_url import BlockedRedirectError
+
+    async def _allow(_url: str):
+        return None
+
+    async def _rebound(_client, _method, url, **_kwargs):
+        raise BlockedRedirectError(_URLBlock.BAD_SCHEME)
+
+    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
+    monkeypatch.setattr(read_url_mod, "_safe_request", _rebound)
+    result = await ReadUrlTool().execute({"url": "https://example.com/x"}, _ctx())
+    err = result.error or ""
+    assert result.success is False
+    assert result.metadata.get("code") == "not_a_web_url"
+    assert result.metadata.get("policy_failure") is True
+    assert "不要再空转外网深读" not in err
+    assert "file_read" in err
+
+
+def test_read_url_schema_routes_workspace_paths_to_file_read():
+    schema = ReadUrlTool().schema
+    assert "file_read" in schema.description
+    assert "不要补 https://" in schema.description
+    url_desc = schema.parameters["properties"]["url"]["description"]
+    assert "http://" in url_desc and "https://" in url_desc
+    assert "file_read" in url_desc
+
+
+@pytest.mark.parametrize(
     ("block", "code"),
     [
-        (_URLBlock.BAD_SCHEME, "VALIDATION_ERROR"),
         (_URLBlock.BLOCKED_HOST, "blocked_host"),
         (_URLBlock.DNS_FAIL, "dns_resolve_failed"),
         (_URLBlock.PRIVATE_IP, "private_address_blocked"),
@@ -1454,6 +1510,18 @@ async def test_fallback_surfaces_primary_error_when_both_fail():
 
     with pytest.raises(EgressError, match="主熔断信息"):
         await FallbackSearchBackend(primary, fallback).search("q")
+
+
+async def test_fallback_does_not_run_on_wrapped_cancel():
+    req = httpx.Request("GET", "http://example.invalid/search")
+    wrapped = httpx.ConnectError("wrapped-cancel", request=req)
+    wrapped.__cause__ = asyncio.CancelledError()
+    primary = _StubBackend(exc=wrapped)
+    fallback = _StubBackend(results=[SearchResult("F", "https://f.com", "fs")])
+
+    with pytest.raises(asyncio.CancelledError):
+        await FallbackSearchBackend(primary, fallback).search("q")
+    assert fallback.calls == 0
 
 
 async def test_fallback_emits_fallback_phase():

@@ -1,6 +1,6 @@
 {
   "name": "debate_team_preview_resolved_adjust",
-  "description": "辩论开工卡：adjust 不开赛、意见回灌 CEO（无辩手 start）",
+  "description": "开工卡已退役、不再发事件对：辩论 adjust 不开赛、意见回灌 CEO（无辩手 start）",
   "events": [
     {
       "type": "message_start",
@@ -43,46 +43,6 @@
       "timestamp": "2026-01-01T00:00:00.003Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp-debate",
-        "conversation_id": "conv_demo",
-        "workers": [],
-        "tools": [],
-        "primitive": "debate",
-        "motion": "该不该上四天工作制？",
-        "form": "debate",
-        "sides": [
-          {
-            "key": "pro",
-            "name": "正方",
-            "stance": "应推广",
-            "run_id": "debate_mod1_pro"
-          },
-          {
-            "key": "con",
-            "name": "反方",
-            "stance": "暂缓",
-            "run_id": "debate_mod1_con"
-          }
-        ],
-        "max_rounds": 5,
-        "thorough": true,
-        "revision": 1,
-        "moderator_run_id": "debate_mod1"
-      },
-      "timestamp": "2026-01-01T00:00:00.004Z"
-    },
-    {
-      "type": "team_preview_resolved",
-      "payload": {
-        "checkpoint_id": "tp-debate",
-        "decision": "adjust",
-        "note": "先改命题再辩"
-      },
-      "timestamp": "2026-01-01T00:00:00.005Z"
-    },
-    {
       "type": "tool_use_end",
       "payload": {
         "tool_call_id": "db1",
@@ -90,14 +50,14 @@
         "status": "success",
         "result": "用户要求调整开赛方案，辩论未开赛。用户意见：先改命题再辩\n请按用户意见修订方案后重新调用 debate；修订后须再次经开赛确认，未获确认不得开赛。若某条意见做不到，必须在新方案里明说做不到及原因，禁止静默忽略。下一步是改方案并重新提交，而不是再问用户同一件事。"
       },
-      "timestamp": "2026-01-01T00:00:00.006Z"
+      "timestamp": "2026-01-01T00:00:00.004Z"
     },
     {
       "type": "content_delta",
       "payload": {
         "delta": "好的，我按你的意见改开赛方案再提交。"
       },
-      "timestamp": "2026-01-01T00:00:00.007Z"
+      "timestamp": "2026-01-01T00:00:00.005Z"
     },
     {
       "type": "message_end",
@@ -120,7 +80,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:00.008Z"
+      "timestamp": "2026-01-01T00:00:00.006Z"
     }
   ],
   "projected": {
@@ -134,15 +94,7 @@
     "process": [
       {
         "kind": "content",
-        "text": "我来组织一场辩论。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp-debate"
-      },
-      {
-        "kind": "content",
-        "text": "好的，我按你的意见改开赛方案再提交。"
+        "text": "我来组织一场辩论。好的，我按你的意见改开赛方案再提交。"
       }
     ],
     "citations": [],
@@ -155,14 +107,7 @@
       "completed": 0,
       "total": 0
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp-debate",
-        "status": "resolved",
-        "workerIds": []
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

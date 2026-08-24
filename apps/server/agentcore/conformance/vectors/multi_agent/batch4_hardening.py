@@ -13,7 +13,6 @@ from agentcore.runtime.events import (
     run_plan,
     run_progress,
     run_started,
-    team_preview_required,
     tool_use_end,
     tool_use_start,
 )
@@ -58,7 +57,7 @@ def _multi_agent_stop_gate_run_frames() -> list[SSEEvent]:
 
 
 def _multi_agent_incremental_preview_badge() -> list[SSEEvent]:
-    """增量开工卡：首批仍在跑时二次 delegate 弹 team_preview（徽标叠加，不压运行态）。"""
+    """增量组队：首批仍在跑时二次 delegate（徽标叠加，不压运行态）。"""
     agents = [
         {"id": "w1", "role": "研究员", "thinking": True},
         {"id": "w2", "role": "分析师", "thinking": True},
@@ -83,20 +82,6 @@ def _multi_agent_incremental_preview_badge() -> list[SSEEvent]:
         run_started("r1", "w1"),
         run_started("r2", "w2"),
         run_progress(0, 2),
-        team_preview_required(
-            checkpoint_id="tp-incr",
-            conversation_id=_CONV,
-            workers=[
-                {
-                    "run_id": "r3",
-                    "role": "法务",
-                    "task": "审阅",
-                    "depends_on": [],
-                }
-            ],
-            tools=["file_read", "file_write"],
-            primitive="delegate",
-        ),
         tool_use_end("dc1", "delegate", success=True, output="团队已启动"),
         message_end(FinishReason.PAUSED, input_tokens=1200, output_tokens=80, cost=_COST),
     ]

@@ -119,6 +119,12 @@ def test_apply_fills_dir_prefix_and_relocates_bare_filename():
     assert d.artifacts == [f"{DRAFTS_DIR}/miro-research.md"]
 
 
+def test_apply_flattens_nested_drafts_artifact_name():
+    d = Deliverable(form="files", artifacts=[f"{DRAFTS_DIR}/主题/01.md"])
+    apply_artifact_dir_defaults(d)
+    assert d.artifacts == [f"{DRAFTS_DIR}/主题_01.md"]
+
+
 def test_apply_empty_artifacts_keeps_shared_dir_without_fake_artifact():
     """裸目录只进 artifact_dir（验收），不注入 artifacts 冒充归属键。"""
     d = Deliverable(form="files")
@@ -203,7 +209,7 @@ def test_artifact_dir_mismatch_is_blocking_on_delivery_status():
     }
     payload = build_delivery_status(plan, results, execution_id="e-adir-pipe")
     assert payload is not None
-    assert payload["state"] == "blocked"
+    assert payload["state"] == "partial"
     assert payload["state"] != "delivered"
     assert payload["delivered_files"] == []
     assert any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])

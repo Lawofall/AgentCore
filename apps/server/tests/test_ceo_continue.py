@@ -532,3 +532,151 @@ class _CM:
 
 async def _async_noop(*_a: object, **_k: object) -> None:
     return None
+
+
+@pytest.mark.anyio
+async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
+    """CEO continue must not pass ``turn_started.system_prompt`` into ``wire_crash_turn``."""
+    from unittest.mock import AsyncMock
+
+    import agentcore.runtime.pipeline as pipeline_pkg
+    from agentcore.runtime.events import EventSink, FinishReason
+    from agentcore.runtime.pipeline import continue_ceo as continue_mod
+    from agentcore.runtime.pipeline.continue_ceo import continue_ceo_pipeline
+    from agentcore.runtime.resolve.prompt import (
+        CHAT_CITATION_HINT,
+        assemble_system_prompt,
+        compose_ceo_chat_prompt,
+    )
+    from agentcore.runtime.resolve.prompt import rebuild as rebuild_mod
+    from agentcore.runtime.runs.types import RunPhase, RunState
+
+    ceo_chat_prompt = compose_ceo_chat_prompt(
+        assemble_system_prompt(),
+        ceo_tool_names={"consult", "delegate"},
+    )
+    assert CHAT_CITATION_HINT in ceo_chat_prompt
+
+    captured: dict[str, str] = {}
+    wired = SimpleNamespace(
+        bound_execution_id="e1",
+        execution_id_token=None,
+        chat_tools=[],
+        base_tool_context=SimpleNamespace(),
+        approval_gate=None,
+        delegate_tool=None,
+        debate_tool=None,
+        vision_cost_sink=[],
+    )
+
+    async def _fake_wire(**kwargs):
+        captured["base_system_prompt"] = kwargs["base_system_prompt"]
+        return wired
+
+    hydrated = SimpleNamespace(
+        pre_pause_reasoning="",
+        citations=[],
+        evidence_ledger=None,
+        controller_seed=None,
+        pre_pause_content="",
+    )
+
+    backend = SimpleNamespace(location="server")
+    monkeypatch.setattr(
+        rebuild_mod, "collect_outlet_inventory", AsyncMock(return_value=())
+    )
+    monkeypatch.setattr(
+        rebuild_mod, "assemble_turn_rules", AsyncMock(return_value="")
+    )
+    monkeypatch.setattr(
+        rebuild_mod, "resolve_exec_languages", AsyncMock(return_value=())
+    )
+    monkeypatch.setattr(
+        rebuild_mod, "detect_workspace_git", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        rebuild_mod, "build_workspace_context", lambda *_a, **_k: ""
+    )
+    monkeypatch.setattr(
+        "agentcore.memory.rules_injection.load_on_demand_user_rules",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "agentcore.memory.injection.load_memory_topics",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        pipeline_pkg, "build_turn_router", AsyncMock(return_value=SimpleNamespace(close=AsyncMock()))
+    )
+    monkeypatch.setattr(continue_mod, "wire_crash_turn", _fake_wire)
+    monkeypatch.setattr(continue_mod, "wire_roster_for_turn", lambda *_a, **_k: None)
+    monkeypatch.setattr(continue_mod, "_seed_continue_display", lambda **_kw: hydrated)
+    monkeypatch.setattr(continue_mod, "resumed_captain_window", lambda *_a, **_k: [])
+    monkeypatch.setattr(continue_mod, "arm_content_reset_reinjection", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        continue_mod,
+        "finish_resume_turn",
+        AsyncMock(return_value={"content": "ok", "finish_reason": FinishReason.END_TURN}),
+    )
+
+    async def _run_captain(_spec, _messages):
+        return RunState(phase=RunPhase.COMPLETED, content="ok")
+
+    monkeypatch.setattr(continue_mod, "build_captain_resumer", lambda **_kw: _run_captain)
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_a):
+            return None
+
+    class _FakeJournalRepo:
+        def __init__(self, _session):
+            pass
+
+        async def max_seq(self, _mid):
+            return None
+
+    monkeypatch.setattr("agentcore.db.base.async_session_factory", lambda: _FakeSession())
+    monkeypatch.setattr(
+        "agentcore.db.repositories.TurnJournalRepository", _FakeJournalRepo
+    )
+    monkeypatch.setattr(
+        "agentcore.runtime.interaction_orphan.orphan_registry_pending",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "agentcore.conversation.stage_card_resolve.maybe_orphan_stage_cards_at_turn_end",
+        AsyncMock(),
+    )
+
+    journal = [
+        {
+            "kind": "turn_started",
+            "payload": {
+                "user_message": "继续",
+                "system_prompt": ceo_chat_prompt,
+            },
+            "ts": "t0",
+            "seq": 0,
+        },
+    ]
+
+    await continue_ceo_pipeline(
+        conversation_id="c-continue",
+        message_id="m-continue",
+        user_id="u1",
+        user_message="继续",
+        journal_entries=journal,
+        captain_run_id="cap-1",
+        sink=EventSink(),
+        backend=backend,
+        folder_id=None,
+    )
+
+    prompt = captured["base_system_prompt"]
+    assert prompt != ceo_chat_prompt
+    assert CHAT_CITATION_HINT not in prompt
+    assert "<按需目录>" in prompt
+    assert "- work_discipline" in prompt

@@ -1,6 +1,6 @@
 {
   "name": "team_preview_resolved_adjust_pre_ttft",
-  "description": "开工卡：adjust 后 CEO 续跑、尚未吐首 token（停在 captain run_started）",
+  "description": "开工卡已退役、不再发事件对：adjust 后 CEO 续跑、尚未吐首 token（停在 captain run_started）",
   "events": [
     {
       "type": "message_start",
@@ -97,57 +97,12 @@
       "timestamp": "2026-01-01T00:00:00.005Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp1",
-        "conversation_id": "conv_demo",
-        "workers": [
-          {
-            "run_id": "r1",
-            "role": "调研",
-            "task": "调研方案",
-            "depends_on": []
-          },
-          {
-            "run_id": "r2",
-            "role": "撰写",
-            "task": "写初稿",
-            "depends_on": [
-              "r1"
-            ]
-          }
-        ],
-        "tools": [
-          "code_execute",
-          "file_write",
-          "test_run"
-        ],
-        "primitive": "delegate",
-        "motion": "",
-        "form": "",
-        "sides": [],
-        "max_rounds": 0,
-        "thorough": true,
-        "revision": 1
-      },
-      "timestamp": "2026-01-01T00:00:00.006Z"
-    },
-    {
       "type": "message_start",
       "payload": {
         "message_id": "m1",
         "conversation_id": "conv_demo"
       },
-      "timestamp": "2026-01-01T00:00:00.007Z"
-    },
-    {
-      "type": "team_preview_resolved",
-      "payload": {
-        "checkpoint_id": "tp1",
-        "decision": "adjust",
-        "note": "人太多，改成两人调研"
-      },
-      "timestamp": "2026-01-01T00:00:00.008Z"
+      "timestamp": "2026-01-01T00:00:00.006Z"
     },
     {
       "type": "run_skipped",
@@ -156,7 +111,7 @@
         "agent_id": "w1",
         "reason": "abort"
       },
-      "timestamp": "2026-01-01T00:00:00.009Z"
+      "timestamp": "2026-01-01T00:00:00.007Z"
     },
     {
       "type": "run_skipped",
@@ -165,7 +120,7 @@
         "agent_id": "w2",
         "reason": "abort"
       },
-      "timestamp": "2026-01-01T00:00:00.010Z"
+      "timestamp": "2026-01-01T00:00:00.008Z"
     },
     {
       "type": "tool_use_end",
@@ -175,7 +130,7 @@
         "status": "success",
         "result": "用户要求调整开工方案，团队未启动。用户意见：人太多，改成两人调研\n请按用户意见修订方案后重新调用 delegate；修订后须再次经开工确认，未获确认不得开工。若某条意见做不到，必须在新方案里明说做不到及原因，禁止静默忽略。下一步是改方案并重新提交，而不是再问用户同一件事。"
       },
-      "timestamp": "2026-01-01T00:00:00.011Z"
+      "timestamp": "2026-01-01T00:00:00.009Z"
     },
     {
       "type": "run_started",
@@ -185,7 +140,7 @@
         "parent_run_id": null,
         "kind": "captain"
       },
-      "timestamp": "2026-01-01T00:00:00.012Z"
+      "timestamp": "2026-01-01T00:00:00.010Z"
     }
   ],
   "projected": {
@@ -200,10 +155,6 @@
       {
         "kind": "content",
         "text": "我来安排团队。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp1"
       },
       {
         "kind": "team",
@@ -352,17 +303,7 @@
       "completed": 0,
       "total": 3
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp1",
-        "status": "resolved",
-        "workerIds": [
-          "r1",
-          "r2"
-        ]
-      }
-    ],
+    "interactions": [],
     "cost": null,
     "debate": null,
     "debateRounds": [],

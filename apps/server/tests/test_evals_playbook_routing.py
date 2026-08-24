@@ -54,10 +54,10 @@ def test_named_playbook_strips_none():
 
 def test_parse_delegate_reads_intensity():
     raw = parse_delegate_rich(
-        '{"playbook":"build_website","playbook_args":{"topic":"待办","intensity":"solo"}}'
+        '{"playbook":"build_app","playbook_args":{"app":"待办","intensity":"lean"}}'
     )
-    assert raw["playbook"] == "build_website"
-    assert raw["intensity"] == "solo"
+    assert raw["playbook"] == "build_app"
+    assert raw["intensity"] == "lean"
     assert raw["task_count"] == 0
 
 
@@ -68,7 +68,7 @@ def test_classify_landing_variants():
     )
     assert expected["landing"] == "selected_expected"
     other = classify_landing(
-        action="DELEGATE", playbook="build_website", expect="build_app", offered=offered, task_count=0
+        action="DELEGATE", playbook="research_report", expect="build_app", offered=offered, task_count=0
     )
     assert other["landing"] == "selected_other"
     hand = classify_landing(

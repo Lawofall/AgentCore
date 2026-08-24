@@ -24,6 +24,7 @@ beforeEach(() => {
     activeTabId: WORKSPACE_TAB_ID,
     floats: [],
     focusSurface: { type: "dock" },
+    changesOpen: false,
     changesFocusMessageId: null,
     dismissedContexts: new Set(),
     pendingBadge: 0,

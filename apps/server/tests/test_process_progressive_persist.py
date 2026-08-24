@@ -540,17 +540,9 @@ def test_run_plan_growth_frame_skips_process_team():
         current_fact_log.reset(token)
 
 
-def test_persist_required_marker_keeps_team_preview_before_team():
-    """Capture-path team_preview must cold-reload before ``team`` (before_last_team).
-
-    Regression: flush-then-``seed_captain(len)`` pinned ``process_team`` ahead of
-    ``process_team_preview`` in journal order, so reopen showed 协作图 before 开工卡.
-
-    ``run_plan`` now journals ``process_team`` immediately; fold still applies
-    before_last_team so reload order stays 开工卡 → 协作图.
-    """
+def test_persist_required_marker_skips_retired_team_preview():
+    """Leftover team_preview_required is a no-op — no team_preview marker inserted."""
     from agentcore.runtime.events import run_plan
-    from agentcore.runtime.events.types import EventType
     from agentcore.runtime.journal.fold import runs_from_entries
 
     log = TurnFactLog()
@@ -567,27 +559,24 @@ def test_persist_required_marker_keeps_team_preview_before_team():
                 runs=[],
             )
         )
-        # Capture order: marker first, then flush (see turn_paused_capture).
         sink.persist_required_marker(
-            EventType.TEAM_PREVIEW_REQUIRED, {"checkpoint_id": "tp1"}
+            "team_preview_required", {"checkpoint_id": "tp1"}
         )
         sink.flush_process_to_journal()
 
         assert [s["kind"] for s in sink.raw_process()] == [
             "content",
-            "team_preview",
             "team",
         ]
+        assert not any(s.get("kind") == "team_preview" for s in sink.raw_process())
         runs = runs_from_entries(log.entries())
         assert runs is not None
         assert [s["kind"] for s in (runs.get("process") or [])] == [
             "content",
-            "team_preview",
             "team",
         ]
-        # No duplicate process_team from mid-insert compensation.
         assert len([e for e in log.entries() if e["kind"] == "process_team"]) == 1
-        assert len([e for e in log.entries() if e["kind"] == "process_team_preview"]) == 1
+        assert not any(e["kind"] == "process_team_preview" for e in log.entries())
     finally:
         current_fact_log.reset(token)
 
@@ -684,13 +673,15 @@ def test_settlement_fact_log_phantom_no_longer_duplicates_trailing_process_conte
     flush open captain content, then enumerate like ``persist_turn_journal``. With the
     root fix, fact_log stays aligned so enumerate only adds ``turn_end`` after one PC.
     """
-    from agentcore.runtime.events import team_preview_resolved
     from agentcore.runtime.facts import Fact, record_turn_fact
     from agentcore.runtime.journal.writer import TurnJournalWriter, current_journal_writer
-    from agentcore.runtime.settlement import entry_from_sse, seed_settlement_dedupe_from_entries
+    from agentcore.runtime.settlement import seed_settlement_dedupe_from_entries
 
-    event = team_preview_resolved(checkpoint_id="ck1", decision="continue", note="")
-    resolved = entry_from_sse(event)
+    resolved = {
+        "kind": "team_preview_resolved",
+        "payload": {"checkpoint_id": "ck1", "decision": "continue", "note": ""},
+        "ts": "t3",
+    }
     inherited = [
         {"kind": "turn_started", "payload": {}, "ts": "t0"},
         {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck1"}, "ts": "t1"},
@@ -707,9 +698,13 @@ def test_settlement_fact_log_phantom_no_longer_duplicates_trailing_process_conte
     fl = current_fact_log.set(log)
     wt = current_journal_writer.set(writer)
     try:
-        # Recover-path re-emit (SSE still desired; must not phantom the log).
+        # Recover-path leftover re-emit must not phantom the log.
         record_turn_fact(
-            Fact(kind=event.type.value, payload=dict(event.payload), ts=event.timestamp)
+            Fact(
+                kind="team_preview_resolved",
+                payload=dict(resolved["payload"]),
+                ts=resolved["ts"],
+            )
         )
         assert sum(1 for e in log.entries() if e.get("kind") == "team_preview_resolved") == 1
 

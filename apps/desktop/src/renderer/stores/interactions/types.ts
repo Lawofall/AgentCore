@@ -21,6 +21,7 @@ export {
   isColdResumeKind,
   isHotGateInteractionKind,
   isHotInteractionKind,
+  isRetiredKickoffKind,
   isStageInteractionKind,
   kindFromRequiredEvent,
   kindFromResolvedEvent,

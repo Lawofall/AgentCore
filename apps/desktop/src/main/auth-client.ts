@@ -10,7 +10,7 @@
  * renderer IPC so refresh-family rotation never double-fires.
  */
 import type { components } from "@agentcore/contract-rest-types";
-import { net, session } from "electron";
+import { net, app, session } from "electron";
 import type { AuthRefreshResult } from "../shared/outbox-contract";
 import { logDesktop } from "./log-service";
 
@@ -18,8 +18,12 @@ type TokenResponse = components["schemas"]["TokenResponse"];
 
 const ACCESS_COOKIE = "access_token";
 const REFRESH_COOKIE = "refresh_token";
+/** Fallback when bearer TokenResponse omits `expires_in`. */
+const DEFAULT_ACCESS_EXPIRES_SEC = 30 * 60;
 /** Fallback when bearer TokenResponse omits `refresh_expires_in` (older servers). */
 const DEFAULT_REFRESH_EXPIRES_SEC = 30 * 86400;
+/** Don't block app quit if Chromium's cookie sqlite flush hangs. */
+const QUIT_FLUSH_TIMEOUT_MS = 2000;
 
 declare const __API_BASE_URL__: string;
 
@@ -119,10 +123,13 @@ async function writeAuthCookies(tokens: {
   const url = cookieUrl();
   const { secure, sameSite } = deriveAuthCookieAttrs(url);
   const nowSec = Math.floor(Date.now() / 1000);
+  // Always stamp expirationDate — omitting it makes a session cookie that
+  // Chromium drops when the Electron process exits (reopen → login screen).
   const accessExpiry =
-    typeof tokens.expires_in === "number"
-      ? nowSec + tokens.expires_in
-      : undefined;
+    nowSec +
+    (typeof tokens.expires_in === "number"
+      ? tokens.expires_in
+      : DEFAULT_ACCESS_EXPIRES_SEC);
   const refreshExpiry =
     nowSec + (tokens.refresh_expires_in ?? DEFAULT_REFRESH_EXPIRES_SEC);
   await session.defaultSession.cookies.set({
@@ -144,6 +151,114 @@ async function writeAuthCookies(tokens: {
     secure,
     sameSite,
     expirationDate: refreshExpiry,
+  });
+  await flushAuthCookieStore();
+}
+
+/** Best-effort cookie sqlite flush. Failures must not look like session death. */
+export async function flushAuthCookieStore(): Promise<void> {
+  try {
+    await session.defaultSession.cookies.flushStore();
+  } catch (err) {
+    logDesktop({
+      level: "warn",
+      event: "auth.persist",
+      fields: {
+        result: "flush_failed",
+        message: String(err).slice(0, 120),
+      },
+    });
+  }
+}
+
+/**
+ * Re-stamp HTTP Set-Cookie auth cookies with expirationDate + SameSite/Secure
+ * that Electron will persist, then flush to disk. Renderer login relies on
+ * Chromium accepting Set-Cookie from the API host; those can land as session
+ * cookies (no Max-Age from the jar's POV, or never flushed). Calling this
+ * after login (and on cold-start /me ok) is what keeps reopen logged in.
+ */
+export async function persistAuthCookies(): Promise<void> {
+  const all = await session.defaultSession.cookies.get({});
+  const access = all.find((c) => c.name === ACCESS_COOKIE);
+  const refreshPath = refreshCookiePath();
+  const refreshNamed = all.filter((c) => c.name === REFRESH_COOKIE);
+  const refresh =
+    refreshNamed.find((c) => (c.path ?? "") === refreshPath) ?? refreshNamed[0];
+  const url = cookieUrl();
+  const { secure, sameSite } = deriveAuthCookieAttrs(url);
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const writes: Promise<void>[] = [];
+  if (access?.value) {
+    const accessExpiry =
+      typeof access.expirationDate === "number" &&
+      access.expirationDate > nowSec
+        ? access.expirationDate
+        : nowSec + DEFAULT_ACCESS_EXPIRES_SEC;
+    writes.push(
+      session.defaultSession.cookies.set({
+        url,
+        name: ACCESS_COOKIE,
+        value: access.value,
+        path: "/",
+        httpOnly: true,
+        secure,
+        sameSite,
+        expirationDate: accessExpiry,
+      }),
+    );
+  }
+  if (refresh?.value) {
+    const refreshExpiry =
+      typeof refresh.expirationDate === "number" &&
+      refresh.expirationDate > nowSec
+        ? refresh.expirationDate
+        : nowSec + DEFAULT_REFRESH_EXPIRES_SEC;
+    writes.push(
+      session.defaultSession.cookies.set({
+        url,
+        name: REFRESH_COOKIE,
+        value: refresh.value,
+        path: refreshCookiePath(),
+        httpOnly: true,
+        secure,
+        sameSite,
+        expirationDate: refreshExpiry,
+      }),
+    );
+  }
+  if (writes.length === 0) return;
+  await Promise.all(writes);
+  await flushAuthCookieStore();
+  logDesktop({
+    level: "info",
+    event: "auth.persist",
+    fields: {
+      result: "stamped",
+      access: Boolean(access?.value),
+      refresh: Boolean(refresh?.value),
+    },
+  });
+}
+
+let quitFlushHooked = false;
+
+/** Wait for cookie sqlite flush on quit so a fast exit after login doesn't drop the jar. */
+export function installAuthCookieFlushOnQuit(): void {
+  if (quitFlushHooked) return;
+  quitFlushHooked = true;
+  let flushed = false;
+  app.on("before-quit", (event) => {
+    if (flushed) return;
+    event.preventDefault();
+    const timeout = new Promise<void>((resolve) => {
+      setTimeout(resolve, QUIT_FLUSH_TIMEOUT_MS);
+    });
+    void Promise.race([flushAuthCookieStore(), timeout]).finally(() => {
+      flushed = true;
+      app.quit();
+    });
   });
 }
 

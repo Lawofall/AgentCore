@@ -49,6 +49,8 @@ export const OUTBOX_CHANNELS = {
   synced: "outbox:synced",
   /** Cross-process refresh single-flight (as-built: 认证与会话 §五 / §七) — renderer tryRefresh delegates here. */
   authRefresh: "outbox:authRefresh",
+  /** Stamp HTTP login cookies with expirationDate and flush sqlite (reopen stay-logged-in). */
+  persistAuthCookies: "outbox:persistAuthCookies",
 } as const;
 
 /**
@@ -70,4 +72,6 @@ export interface OutboxApi {
   onSynced(cb: (payload: OutboxSyncedPayload) => void): () => void;
   /** Main-owned token refresh (single-flight across renderer + writebacker). */
   authRefresh(): Promise<AuthRefreshResult>;
+  /** Re-stamp auth cookies as persistent + flush to disk (Electron). No-op if jar empty. */
+  persistAuthCookies(): Promise<void>;
 }

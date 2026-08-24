@@ -8,7 +8,6 @@ import { assertNever } from "@/lib/assertNever";
 import type {
   CheckpointDisplay,
   PlanReviewDisplay,
-  TeamPreviewDisplay,
 } from "@/stores/conversation";
 import type { ReactNode } from "react";
 import type { TimelineProcessKind } from "./registry";
@@ -16,7 +15,6 @@ import type { TimelineProcessKind } from "./registry";
 export type TimelineCardBags = {
   checkpoints: CheckpointDisplay[];
   planReviews: PlanReviewDisplay[];
-  teamPreviews: TeamPreviewDisplay[];
 };
 
 export type TimelineSlotNodeId = {

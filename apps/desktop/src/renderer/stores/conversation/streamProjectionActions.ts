@@ -9,7 +9,6 @@ import {
   foldPlanReviewMarker,
   foldReasoningDelta,
   foldTeamMarker,
-  foldTeamPreviewMarker,
   foldToolUseEnd,
   foldToolUsePhase,
   foldToolUseStart,
@@ -51,7 +50,6 @@ type StreamProjectionActions = Pick<
   | "stampCheckpointMarker"
   | "stampUserInterjectionMarker"
   | "stampPlanReviewMarker"
-  | "stampTeamPreviewMarker"
   | "stampTimelineMarker"
   | "createAssistantMessage"
   | "finalizeLastMessage"
@@ -425,20 +423,6 @@ export function createStreamProjectionActions(
         if (idx === -1) return null;
         const msg = messages[idx];
         const lane = foldPlanReviewMarker(
-          messageLaneFromMessage(msg),
-          checkpointId,
-        );
-        messages[idx] = { ...msg, process: lane.process };
-        return { messages };
-      }),
-
-    stampTeamPreviewMarker: (checkpointId, conversationId) =>
-      patchConversation(conversationId, (rt) => {
-        const messages = [...rt.messages];
-        const idx = lastAssistantIndex(messages);
-        if (idx === -1) return null;
-        const msg = messages[idx];
-        const lane = foldTeamPreviewMarker(
           messageLaneFromMessage(msg),
           checkpointId,
         );

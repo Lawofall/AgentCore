@@ -27,10 +27,6 @@ import {
   formatGrantOrganizeFolderAnswer,
   pickAndGrantOrganizeFolder,
 } from "@/lib/grantOrganizeFolder";
-import {
-  formatGrantReadonlyFolderAnswer,
-  pickAndGrantReadonlyFolder,
-} from "@/lib/grantReadonlyFolder";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
 import {
   formatRegisterLocalFolderAnswer,
@@ -44,7 +40,11 @@ import { useNavigate } from "react-router-dom";
 import { AskCardFooter, AskCardShell, AskSectionLabel } from "./AskCardShell";
 import { CommenceNote } from "./AskCommenceParts";
 import { type AskRow, AskRowGroup } from "./AskOptionRow";
-import type { AskUserContent, useAskAnswer } from "./AskUserFields";
+import {
+  type AskUserContent,
+  GRANT_READONLY_FOLDER_RETIRED,
+  type useAskAnswer,
+} from "./AskUserFields";
 import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
 
 const META = ASK_INTENT_META.decision;
@@ -138,8 +138,18 @@ export function AskDecisionBody({
     return null;
   };
 
+  const rejectRetiredReadonlyGrant = () => {
+    setPickerFailure(null);
+    setBindError(GRANT_READONLY_FOLDER_RETIRED);
+  };
+
   const handleBindOption = async (q: AskQuestion, opt: AskOption) => {
     if (busy || bindBusyLabel) return;
+
+    if (opt.action === "grant_readonly_folder") {
+      rejectRetiredReadonlyGrant();
+      return;
+    }
 
     if (opt.action === "open_local_project") {
       if (!canLocalFs) return;
@@ -196,35 +206,6 @@ export function AskDecisionBody({
       return;
     }
 
-    if (opt.action === "grant_readonly_folder") {
-      const hints = grantHintsFromAskOption(opt);
-      const result = await pickAndGrantReadonlyFolder(conversationId, hints);
-      if (!result.ok) {
-        // not_found / not_directory / ambiguous / error → 卡面明确失败（≠ cancelled 静默）
-        if (result.reason === "unavailable") {
-          setBindError("区外目录授权仅桌面端可用");
-        } else {
-          setBindError(result.message);
-        }
-        setBindBusyLabel(null);
-        return;
-      }
-      const value = formatGrantReadonlyFolderAnswer(
-        opt.label,
-        result.displayLabel ?? result.root.name,
-        result.namespace,
-      );
-      try {
-        await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
-      } catch {
-        // resume 失败：留在卡上
-      } finally {
-        // resume 未 throw 且卡未卸载时，也须清 busy，避免主 CTA 永久卡住
-        setBindBusyLabel(null);
-      }
-      return;
-    }
-
     if (opt.action === "grant_organize_folder") {
       const hints = grantHintsFromAskOption(opt);
       const result = await pickAndGrantOrganizeFolder(conversationId, hints);
@@ -272,11 +253,12 @@ export function AskDecisionBody({
   };
 
   /**
-   * 继续：普通选项 → 原 onContinue；选中 grant_* / bind_* / open_local_project /
-   * register_local_project → 一键履约（对齐点选项行）。grant 无系统选文件夹；
-   * 找不到则卡面失败、不提交口头授权。同 root 只读已挂仍须点允许走 organize 履约
-   *（禁止静默升写）。人话框命中整理短允许表且 listed 未勾选 → 同真 grant（非纯文本冒充已授权）。
-   * register 履约后 resume 本对话；open 开新会话不 resume。
+   * 继续：普通选项 → 原 onContinue；选中 grant_organize / bind_* / open_local_project /
+   * register_local_project → 一键履约（对齐点选项行）。旧 `grant_readonly_folder`
+   * 停履约：卡面诚实失败，不调选择器、不授权、不提交口头「已授权」。
+   * grant_organize 无系统选文件夹；找不到则卡面失败。同 root 只读已挂仍须点允许走
+   * organize 履约（禁止静默升写）。人话框命中整理短允许表且 listed 未勾选 → 同真
+   * grant（非纯文本冒充已授权）。register 履约后 resume 本对话；open 开新会话不 resume。
    */
   const handleContinue = () => {
     if (busy || bindBusyLabel) return;
@@ -286,6 +268,10 @@ export function AskDecisionBody({
       return;
     }
     const { q, opt } = pending;
+    if (opt.action === "grant_readonly_folder") {
+      rejectRetiredReadonlyGrant();
+      return;
+    }
     if (!hasLocalFiles()) {
       setBindError(guideDesktopDownload());
       setPickerFailure(null);
@@ -347,6 +333,10 @@ export function AskDecisionBody({
             answer.toggleChoice(q, opt.label);
             return;
           }
+          if (opt.action === "grant_readonly_folder") {
+            rejectRetiredReadonlyGrant();
+            return;
+          }
           // Web / 无本地文件：禁止退化成 toggleChoice（假确认）。
           if (!hasLocalFiles()) {
             setBindError(guideDesktopDownload());
@@ -388,11 +378,11 @@ export function AskDecisionBody({
             <AskSectionLabel>起步计划</AskSectionLabel>
             <dl className="divide-y divide-border/60 px-2">
               {content.assumptions.map((a) => (
-                <div key={a.id} className="flex gap-3 py-1.5">
-                  <dt className="w-16 shrink-0 text-xs leading-snug text-muted-foreground">
+                <div key={a.id} className="space-y-0.5 py-1.5">
+                  <dt className="text-xs leading-snug text-muted-foreground">
                     {a.label}
                   </dt>
-                  <dd className="min-w-0 flex-1 whitespace-pre-wrap text-xs leading-snug text-foreground/90">
+                  <dd className="min-w-0 whitespace-pre-wrap text-xs leading-snug text-foreground/90">
                     {a.value}
                   </dd>
                 </div>

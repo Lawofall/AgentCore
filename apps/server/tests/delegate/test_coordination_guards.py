@@ -182,7 +182,11 @@ async def test_idle_timeout_defers_when_workers_busy(monkeypatch):
             session.post(
                 CoordinationEvent(
                     kind=CoordinationEventKind.WORKER_COMPLETED,
-                    payload={"run_id": "w1", "role": "研究员", "status": "completed"},
+                    payload={
+                        "run_id": "w1",
+                        "role": "研究员",
+                        "status": "failed",
+                    },
                 )
             )
 
@@ -1139,10 +1143,11 @@ def test_idle_yield_brief_pending_approval_forbids_wait(monkeypatch):
     assert "保持静默，引导" not in brief
 
 
-async def test_idle_yield_injects_healthy_brief_instead_of_empty(monkeypatch):
-    """idle_yield_to_captain 仍按原时机唤醒，但注入进度+无动作导向（不再 injected=0）。"""
+async def test_idle_yield_held_while_inflight(monkeypatch):
+    """队员仍有 in-flight LLM 时不叫醒 CEO；失败完成仍立刻叫醒。"""
     monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 0.05)
     monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_MAX_S", 1.0)
+    monkeypatch.setattr(coord_wait, "_WAIT_HEARTBEAT_S", 0.05)
     clear_active_coordination()
     live = _plan(
         RunSpec(run_id="a", role="内容文案", task="写 site/copy.md", depends_on=[]),
@@ -1161,13 +1166,31 @@ async def test_idle_yield_injects_healthy_brief_instead_of_empty(monkeypatch):
     session.drive_task = asyncio.create_task(asyncio.sleep(30))
     set_active_coordination(session)
     try:
-        msgs = await asyncio.wait_for(await_coordination_injection([]), timeout=3.0)
-        assert len(msgs) == 1
-        text = msgs[0].content or ""
-        assert "流水线进度" in text
-        assert "无需追加" in text or "正常推进" in text
-        assert "等待团队事件超时" not in text
-        assert session.idle_streak == 1
+        from agentcore.runtime.coordination.session import (
+            CoordinationEvent,
+            CoordinationEventKind,
+        )
+
+        async def _fail_later() -> None:
+            await asyncio.sleep(0.25)
+            session.post(
+                CoordinationEvent(
+                    kind=CoordinationEventKind.WORKER_COMPLETED,
+                    payload={
+                        "run_id": "a",
+                        "role": "内容文案",
+                        "status": "failed",
+                        "summary": "boom",
+                    },
+                )
+            )
+
+        fail_task = asyncio.create_task(_fail_later())
+        msgs = await asyncio.wait_for(await_coordination_injection([]), timeout=2.0)
+        await fail_task
+        assert session.idle_streak == 0
+        assert msgs
+        assert "worker_completed" in (msgs[0].content or "")
     finally:
         session.drive_task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -1216,6 +1239,12 @@ async def test_wall_zero_completed_does_not_idle_yield(monkeypatch):
                     "status": "completed",
                     "summary": "ok",
                 },
+            )
+        )
+        session.post(
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 1, "total": 2},
             )
         )
 
@@ -1272,6 +1301,12 @@ async def test_wall_zero_holds_without_busy_stamp(monkeypatch):
                     "status": "completed",
                     "summary": "ok",
                 },
+            )
+        )
+        session.post(
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 1, "total": 2},
             )
         )
 

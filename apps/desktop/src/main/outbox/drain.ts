@@ -9,7 +9,11 @@ import {
   type OutboxSyncedPayload,
 } from "@shared/outbox-contract";
 import { BrowserWindow, app, ipcMain } from "electron";
-import { bearerPostJson, refreshAccessToken } from "../auth-client";
+import {
+  bearerPostJson,
+  persistAuthCookies,
+  refreshAccessToken,
+} from "../auth-client";
 import {
   abortLocalTurnPlaceholder,
   checkpointOpenRecord,
@@ -31,8 +35,8 @@ import {
   isSafeOutboxId,
   readOutboxRecord,
   readOutboxRecords,
-  recordHasProcessState,
   shouldDeleteOutboxAfterAck,
+  shouldSalvageOpenRecord,
   toRecordTurnBody,
   writeRecord,
 } from "./strategy";
@@ -71,9 +75,7 @@ async function processOneOutboxRecord(
   const salvageOpen = opts.salvageOpen;
   const bypassBackoff = opts.bypassBackoff;
   if (salvageOpen && record.phase === PHASE_OPEN) {
-    const hasText = fillFromCaptainStreamSegments(record);
-    const salvageable = hasText || recordHasProcessState(record);
-    if (salvageable) {
+    if (shouldSalvageOpenRecord(record)) {
       record.phase = PHASE_READY;
       record.finish_reason = record.finish_reason || "cancelled";
       try {
@@ -83,34 +85,14 @@ async function processOneOutboxRecord(
         return null;
       }
     } else {
-      const um = (record.user_message || "").trim();
-      const hasUm = !!um && um !== EMPTY_USER_MESSAGE_PLACEHOLDER;
-      const hasTrace = (record.trace_id || "").trim().length === 32;
-      if (!hasUm || !hasTrace) {
-        console.warn(
-          "[outbox] discard empty open shell",
-          record.user_message_id,
-          {
-            hasUm,
-            hasTrace,
-          },
-        );
-        await abortLocalTurnPlaceholder({
-          conversationId: record.conversation_id,
-          userMessageId: record.user_message_id,
-          messageId: (record.message_id || "").trim(),
-        });
-        await deleteRecord(record.user_message_id);
-        return null;
-      }
-      record.phase = PHASE_READY;
-      record.finish_reason = record.finish_reason || "cancelled";
-      try {
-        await writeRecord(record);
-      } catch (err) {
-        console.error("[outbox] empty-shell promote failed", err);
-        return null;
-      }
+      console.warn("[outbox] discard empty open shell", record.user_message_id);
+      await abortLocalTurnPlaceholder({
+        conversationId: record.conversation_id,
+        userMessageId: record.user_message_id,
+        messageId: (record.message_id || "").trim(),
+      });
+      await deleteRecord(record.user_message_id);
+      return null;
     }
   }
   if (record.phase === PHASE_OPEN) {
@@ -370,6 +352,20 @@ export async function recoverLocalPersistence(): Promise<void> {
   await drainOutboxDetailed({ salvageOpen: true });
 }
 
+/** After occupy succeeded: salvage salvageable OPEN rows; abort begin-only shells only. */
+export async function handleOccupiedTurnSidecarFailure(args: {
+  conversationId: string;
+  userMessageId: string;
+  messageId: string;
+}): Promise<void> {
+  const record = await readOutboxRecord(args.userMessageId.trim());
+  if (shouldSalvageOpenRecord(record)) {
+    await recoverLocalPersistence();
+    return;
+  }
+  await abortLocalTurnPlaceholder(args);
+}
+
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startOutboxPolling(intervalMs = 2000): void {
@@ -398,6 +394,9 @@ export function registerOutboxIpc(): void {
   );
   ipcMain.handle(OUTBOX_CHANNELS.status, async () => statusSnapshot());
   ipcMain.handle(OUTBOX_CHANNELS.authRefresh, async () => refreshAccessToken());
+  ipcMain.handle(OUTBOX_CHANNELS.persistAuthCookies, async () =>
+    persistAuthCookies(),
+  );
 
   void recoverLocalPersistence();
   startOutboxPolling();

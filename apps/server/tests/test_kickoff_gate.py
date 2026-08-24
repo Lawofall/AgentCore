@@ -29,7 +29,6 @@ from agentcore.runtime.kickoff import (
     debate_kickoff_summary,
     has_unfulfilled_kickoff_adjust,
     kickoff_adjust_state,
-    should_preview_delegate_plan,
 )
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunSpec
@@ -41,13 +40,6 @@ from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 from tests.delegate.conftest import Provider, ctx, tool_durable
-
-
-def _plan(*nodes: RunSpec) -> RunPlan:
-    plan = RunPlan()
-    for n in nodes:
-        plan.add(n)
-    return plan
 
 
 async def test_ask_user_allows_after_verbal_affirm():
@@ -85,12 +77,12 @@ async def test_ask_user_allows_after_team_preview_resolved():
     sink.seed_journal(
         [
             {
-                "type": EventType.TEAM_PREVIEW_REQUIRED.value,
+                "type": "team_preview_required",
                 "payload": {"checkpoint_id": "tp1"},
                 "timestamp": "t0",
             },
             {
-                "type": EventType.TEAM_PREVIEW_RESOLVED.value,
+                "type": "team_preview_resolved",
                 "payload": {"checkpoint_id": "tp1", "decision": "continue"},
                 "timestamp": "t1",
             },
@@ -201,7 +193,7 @@ async def test_confirmed_ask_does_not_skip_delegate_team_preview():
 
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    assert not any(str(e.type) == "team_preview_required" for e in sink._history)
     await _drain_coord()
 
 
@@ -268,35 +260,7 @@ async def test_confirmed_ask_does_not_skip_debate_team_preview():
 
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
-
-
-def test_delegate_trigger_rules_unchanged():
-    multi = _plan(
-        RunSpec(run_id="r1", task="a", role="调研"),
-        RunSpec(run_id="r2", task="b", role="撰写", depends_on=["r1"]),
-    )
-    solo = _plan(RunSpec(run_id="r1", task="alone", role="写手"))
-    assert should_preview_delegate_plan(multi) is True
-    assert should_preview_delegate_plan(solo) is False
-
-
-def test_checkpoint_after_yields_plan_preview_half():
-    """B2: checkpoint_after in batch → plan half off; capability half independent."""
-    with_cp = _plan(
-        RunSpec(run_id="r1", task="提纲", role="写作", checkpoint_after=True),
-        RunSpec(run_id="r2", task="全文", role="写作", depends_on=["r1"]),
-    )
-    assert should_preview_delegate_plan(with_cp) is False
-    # Solo with leftover stance/round tags must NOT hang plan-preview
-    # (CEO schema no longer advertises those fields; runtime tags are not kickoff marks).
-    tagged_solo = _plan(RunSpec(run_id="r1", task="辩", role="正方", stance="应推广"))
-    assert should_preview_delegate_plan(tagged_solo) is False
-    # checkpoint_after still yields plan half regardless of leftover tags.
-    tagged_cp = _plan(
-        RunSpec(run_id="r1", task="辩", role="正方", stance="应推广", checkpoint_after=True)
-    )
-    assert should_preview_delegate_plan(tagged_cp) is False
+    assert not any(str(e.type) == "team_preview_required" for e in sink._history)
 
 
 def test_debate_kickoff_summary_shape():
@@ -348,8 +312,8 @@ def test_delegate_kickoff_headline_intensity_and_fallback():
     )
 
     assert intensity_short_label("lean") == "MVP主流程"
-    assert intensity_short_label("solo") == "一页先上线"
-    assert intensity_short_label("standard") == "品牌站流水线"
+    assert intensity_short_label("solo") is None
+    assert intensity_short_label("standard") is None
     assert intensity_short_label("full") == "模块流水线"
     assert intensity_short_label("unknown") is None
     assert intensity_short_label(None) is None
@@ -461,7 +425,7 @@ async def test_debate_top_level_must_kickoff():
 
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    assert not any(str(e.type) == "team_preview_required" for e in sink._history)
 
 
 async def test_debate_full_auto_skips_kickoff():
@@ -638,12 +602,12 @@ async def test_unfulfilled_adjust_solo_still_hangs_card():
     sink.seed_journal(
         [
             {
-                "type": EventType.TEAM_PREVIEW_REQUIRED.value,
+                "type": "team_preview_required",
                 "payload": {"checkpoint_id": "tp1", "revision": 1},
                 "timestamp": "t0",
             },
             {
-                "type": EventType.TEAM_PREVIEW_RESOLVED.value,
+                "type": "team_preview_resolved",
                 "payload": {
                     "checkpoint_id": "tp1",
                     "decision": "adjust",
@@ -707,7 +671,7 @@ async def test_unfulfilled_adjust_solo_still_hangs_card():
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
     assert not any(
-        e.type is EventType.TEAM_PREVIEW_REQUIRED and e.payload.get("revision") == 2
+        str(e.type) == "team_preview_required" and e.payload.get("revision") == 2
         for e in sink._history
     )
     await _drain_coord()
@@ -724,12 +688,12 @@ async def test_fulfilled_adjust_does_not_force_solo_card():
     sink.seed_journal(
         [
             {
-                "type": EventType.TEAM_PREVIEW_REQUIRED.value,
+                "type": "team_preview_required",
                 "payload": {"checkpoint_id": "tp1", "revision": 1},
                 "timestamp": "t0",
             },
             {
-                "type": EventType.TEAM_PREVIEW_RESOLVED.value,
+                "type": "team_preview_resolved",
                 "payload": {
                     "checkpoint_id": "tp1",
                     "decision": "adjust",
@@ -738,7 +702,7 @@ async def test_fulfilled_adjust_does_not_force_solo_card():
                 "timestamp": "t1",
             },
             {
-                "type": EventType.TEAM_PREVIEW_REQUIRED.value,
+                "type": "team_preview_required",
                 "payload": {
                     "checkpoint_id": "tp2",
                     "revision": 2,
@@ -812,5 +776,5 @@ async def test_fulfilled_adjust_does_not_force_solo_card():
 
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
-    assert not any(e.type is EventType.TEAM_PREVIEW_REQUIRED for e in sink._history)
+    assert not any(str(e.type) == "team_preview_required" for e in sink._history)
     await _drain_coord()

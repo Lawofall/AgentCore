@@ -47,8 +47,11 @@ from .errors import (
     _map_workspace_read_error,
     _maybe_channel_dead_error,
     _office_extract_budget_error,
+    _office_extract_failed_error,
     _outside_workspace_error,
     _path_missing_error,
+    _url_not_workspace_path_error,
+    looks_like_http_url,
 )
 from .path_hints import enrich_missing_path_message
 
@@ -686,6 +689,7 @@ class FileReadTool:
         return ToolSchema(
             name="file_read",
             description=(
+                "仅工作区相对路径。http(s) 公网 URL 用 read_url，不要把网页地址当 path。"
                 "读取工作区内某个文件的内容（相对路径）。"
                 "Office/PDF（docx/pdf/pptx/odt/rtf）自动抽取文本；表格（xlsx/csv 等）"
                 "默认不抽文本（本回合若有 code_execute 用它按路径解析；"
@@ -711,7 +715,8 @@ class FileReadTool:
                         "type": "string",
                         "description": (
                             "工作区相对 POSIX 文件路径（`.`=根；`/<根标签>/…` 与裸 `/`、"
-                            "`\\` 视为根；其它绝对路径如 /etc、盘符拒绝）"
+                            "`\\` 视为根；其它绝对路径如 /etc、盘符拒绝）。"
+                            "http(s) URL 请用 read_url。"
                         ),
                     },
                     "offset": {
@@ -737,6 +742,9 @@ class FileReadTool:
         rel_path = arguments.get("path", "")
         offset = arguments.get("offset")
         limit = arguments.get("limit")
+
+        if looks_like_http_url(str(rel_path or "")):
+            return _url_not_workspace_path_error(str(rel_path).strip(), start)
 
         # Same-path ceiling: fill-cap whole reads always count unless tool_clear
         # recorded the path as fully cleared (recovery does not consume quota).
@@ -846,7 +854,7 @@ class FileReadTool:
         start: float,
         context: ToolContext,
     ) -> ToolResult:
-        """Transparent office/PDF extract via markitdown (no default ``*.md`` write)."""
+        """Transparent office/PDF extract (killable worker; no default ``*.md`` write)."""
         sidecar = parsed_copy_path(rel_path.replace("\\", "/"))
         text: str | None = None
 
@@ -888,14 +896,8 @@ class FileReadTool:
 
             extracted = await extract_office_bytes(data, ext=extension_of(path_key or rel_path))
             if extracted.status == ParseStatus.FAILED:
-                return _error(
-                    (
-                        f"无法从 `{path_key or rel_path}` 抽取文本"
-                        f"（{extracted.detail or 'convert failed'}）。"
-                        "若缺 markitdown 依赖或文件损坏，请告知用户；"
-                        "不要改用 code_execute 硬解 Office/PDF。"
-                    ),
-                    start,
+                return _office_extract_failed_error(
+                    path_key or rel_path, extracted.detail or "convert failed", start
                 )
             if extracted.status == ParseStatus.SKIPPED:
                 return _error(

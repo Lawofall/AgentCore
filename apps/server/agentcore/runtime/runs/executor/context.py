@@ -138,6 +138,7 @@ def _build_messages(
     shared_workspace: bool = False,
     context_inject: Mapping[str, str] | None = None,
     captain_recon: str | None = None,
+    conversation_id: str = "",
 ) -> list[LLMMessage]:
     """Assemble the worker's OPENING (system, user) messages from its inline role,
     the original request, its upstream dependency products, and its task.
@@ -159,6 +160,16 @@ def _build_messages(
         sys_parts.append(f"你的角色：{spec.role}")
     if spec.system_prompt_supplement:
         sys_parts.append(spec.system_prompt_supplement)
+    design_gate = deliverable or spec.deliverable
+    if design_gate is not None and design_gate.web_quality_scan:
+        from agentcore.runtime.runs.website_style import (
+            design_prompt_block,
+            get_style_confirmation,
+        )
+
+        cid = (conversation_id or "").strip()
+        style = get_style_confirmation(cid) if cid else None
+        sys_parts.append(design_prompt_block(style=style))
     system_content = "\n\n".join(p for p in sys_parts if p)
     _observe_worker_opening(
         worker_base=system_prompt,
@@ -495,6 +506,9 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
         parts.append(
             f"你的位置：你是这条流水线的【终端环】。上游【{joined}】的产出已在下方「前置结果」"
             "交给你，你的职责是据此整合、产出团队交给老板的【最终交付物】。"
+            "「前置结果」若已列出工作区路径：先 file_read 这些路径再写总稿；"
+            "【禁止】把开工做成全仓 file_list / grep / 再调研一遍。"
+            "路径含糊或列表缺文件时才按【找路径】补钉。"
         )
     if not parts:
         return ""

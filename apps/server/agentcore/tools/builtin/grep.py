@@ -70,6 +70,7 @@ class GrepTool:
                 "不确定位置时省略 path（默认整仓）；禁止猜测 src/、@scope、app/。"
                 "仅本回合已证实存在的目录或文件才填 path。"
                 "跳过二进制与噪音目录。"
+                "禁止用 code_execute 打开源码再正则扫描——搜符号/计数是本工具的工作。"
             ),
             parameters={
                 "type": "object",
@@ -78,7 +79,7 @@ class GrepTool:
                         "type": "string",
                         "description": (
                             "要搜索的正则表达式（ripgrep / Rust regex 语法）。"
-                            "禁止把字面 \\n 当正则。"
+                            "禁止把字面 \\n 当正则；不支持 lookahead/lookbehind（`(?!` `(?=`）。"
                         ),
                     },
                     "path": {

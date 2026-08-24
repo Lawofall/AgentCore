@@ -1,5 +1,6 @@
 import { api } from "@/services/api";
-import { getActiveSidecarTarget } from "@/services/sidecarRouting";
+import { resolveSidecarControlTargetForEngine } from "@/services/sidecarRouting";
+import { useConversationStore } from "@/stores/conversation";
 import type { InterveneAck } from "@agentcore/protocol-fold-kit";
 
 export interface SubmitRunStopParams {
@@ -15,7 +16,7 @@ export type RunStopAck = InterveneAck & { queued: number };
  * Ask the engine to stop a mid-flight worker (does **not** cancel the turn or CEO).
  *
  * Routing mirrors ``submitRunRedirect``:
- * - **Local (sidecar) turn** → ``sidecarApi.runStop``
+ * - **Local (sidecar) turn**（含活 map 已空、引擎仍在跑）→ ``sidecarApi.runStop``
  * - **Cloud turn** → ``POST …/run-stop``
  *
  * Not fire-and-forget: the response says whether a live drive loop actually took
@@ -26,7 +27,10 @@ export async function submitRunStop(
   conversationId: string,
   params: SubmitRunStopParams,
 ): Promise<RunStopAck> {
-  const sidecarTarget = getActiveSidecarTarget(conversationId);
+  const sidecarTarget = await resolveSidecarControlTargetForEngine(
+    conversationId,
+    useConversationStore.getState().byId[conversationId]?.executionVia,
+  );
   if (sidecarTarget) {
     return window.sidecarApi.runStop({
       rootId: sidecarTarget.rootId,

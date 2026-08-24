@@ -43,6 +43,7 @@ import {
 } from "@/stores/conversation";
 import {
   isAwaitingUserEntry,
+  isRetiredKickoffKind,
   useInteractionStore,
 } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
@@ -110,7 +111,10 @@ export function ConversationManageRow({
     ),
   );
   const awaitingResume = usePausedTurnStore((s) =>
-    s.pending.some((p) => p.conversationId === conversation.id),
+    s.pending.some(
+      (p) =>
+        p.conversationId === conversation.id && !isRetiredKickoffKind(p.kind),
+    ),
   );
   // firehose `ai_attention`：另一端起的回合也亮灯（本端从未流过该对话时唯一的来源）。
   const awaitingAttention = useConversationAwaitingAttention(conversation.id);

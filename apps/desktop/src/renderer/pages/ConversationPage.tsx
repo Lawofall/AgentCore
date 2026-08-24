@@ -5,6 +5,7 @@ import {
 } from "@/components/chat/ConversationHydrateOverlay";
 import { SidePanel } from "@/components/layout/SidePanel";
 import { SidePanelToggle } from "@/components/layout/SidePanelToggle";
+import { getConversations } from "@/hooks/useConversations";
 import { logEvent } from "@/lib/log";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import {
@@ -20,7 +21,10 @@ import {
 } from "@/services/offlineCache";
 import { loadRecovery } from "@/services/resume";
 import { clearLastEventId } from "@/services/streamConversation";
-import { scheduleHydrateAttachSettle } from "@/services/turns";
+import {
+  awaitHydrateAttachSettle,
+  scheduleHydrateAttachSettle,
+} from "@/services/turns";
 import { syncConversationFollow } from "@/services/turns/conversationFollow";
 import { hasLocalConversationStream } from "@/services/turns/streamOwnership";
 import { useBookmarkStore } from "@/stores/bookmarks";
@@ -60,6 +64,7 @@ function adoptMessageWindow(
   flags: { hasMoreBefore: boolean; hasMoreAfter: boolean },
   memoryUpdates: MemoryUpdate[],
 ): boolean {
+  if (messages.length === 0) return false;
   const s = useConversationStore.getState();
   if (s.currentConversationId !== id) return false;
   const rt = getRuntime(id);
@@ -108,6 +113,16 @@ function reconcileMessageWindow(
   return true;
 }
 
+/** List metadata says this persisted conversation truly has zero messages. */
+function isConfirmedEmptyConversation(id: string): boolean {
+  return getConversations().find((c) => c.id === id)?.messageCount === 0;
+}
+
+function sliceHasVisibleContent(id: string): boolean {
+  const rt = getRuntime(id);
+  return rt.messages.length > 0 || hasLocalConversationStream(id);
+}
+
 export function ConversationPage() {
   const { id } = useParams<{ id: string }>();
   // Cold open with `:id` must not paint one ready frame of empty draft before the
@@ -138,9 +153,12 @@ export function ConversationPage() {
     // ONE owner-gated read that both (a) surfaces any turn paused at a plan_review /
     // ask_user checkpoint then disconnected (结构化挂起 2b) as a resume card above the
     // composer, and (b) reports whether a detached run is still live to 续看. Eager but
-    // non-blocking: overlay reveals after the message window (or cache), then
-    // `scheduleHydrateAttachSettle` runs when this promise lands. `loadRecovery` never
-    // rejects, so the handle is safe to leave unawaited on the paths that skip the gate.
+    // gated on reveal: overlay stays loading on an empty cold slice until recovery
+    // projection lands, unless list metadata confirms messageCount===0. GET/cache with
+    // content reveals immediately; recovery still runs in the background on that path.
+    // After recovery, still-empty slice with messageCount!==0 → hydrate error (never
+    // ready blank). Empty opened cache is not adopted for early reveal.
+    // `loadRecovery` never rejects.
     const recoveryLoaded = loadRecovery(id);
 
     const warm =
@@ -164,6 +182,30 @@ export function ConversationPage() {
       if (useConversationStore.getState().currentConversationId !== id) return;
       syncConversationFollow(id);
       setHydratePhase("ready");
+    };
+    const finishHydrateReveal = async (): Promise<void> => {
+      if (cancelled) {
+        scheduleHydrateAttachSettle(id, recoveryLoaded);
+        return;
+      }
+      if (sliceHasVisibleContent(id) || isConfirmedEmptyConversation(id)) {
+        reveal();
+        scheduleHydrateAttachSettle(id, recoveryLoaded);
+        return;
+      }
+      await awaitHydrateAttachSettle(id, recoveryLoaded);
+      if (cancelled) {
+        scheduleHydrateAttachSettle(id, recoveryLoaded);
+        return;
+      }
+      if (sliceHasVisibleContent(id) || isConfirmedEmptyConversation(id)) {
+        reveal();
+        return;
+      }
+      // Cold slice still empty after recovery and list says messages exist — never
+      // reveal a blank persisted conversation (hydrate error overlay covers slice).
+      scheduleHydrateAttachSettle(id, recoveryLoaded);
+      setHydratePhase("error");
     };
     if (warm) reveal();
     else setHydratePhase("loading");
@@ -223,7 +265,7 @@ export function ConversationPage() {
               network_count: win.messages.length,
               has_more_after: win.hasMoreAfter,
             });
-            if (wrote) {
+            if (wrote && win.messages.length > 0) {
               void persistOpenedCache(id, win.messages, win.memoryUpdates, {
                 hasMoreBefore: win.hasMoreBefore,
                 hasMoreAfter: win.hasMoreAfter,
@@ -266,10 +308,7 @@ export function ConversationPage() {
             }
           }
         }
-        // Reveal as soon as the window is in the store. Recovery/attach stay
-        // eager in the background — they must not cover already-adopted text.
-        reveal();
-        scheduleHydrateAttachSettle(id, recoveryLoaded);
+        await finishHydrateReveal();
       } catch {
         if (cancelled) {
           scheduleHydrateAttachSettle(id, recoveryLoaded);
@@ -282,8 +321,7 @@ export function ConversationPage() {
           hasLocalConversationStream(id) ||
           getRuntime(id).isGenerating
         ) {
-          scheduleHydrateAttachSettle(id, recoveryLoaded);
-          reveal();
+          await finishHydrateReveal();
         } else {
           const cached = await loadCachedConversation(id);
           if (cached) {
@@ -300,8 +338,7 @@ export function ConversationPage() {
               conversation_id: id,
               branch: "offline_cache",
             });
-            scheduleHydrateAttachSettle(id, recoveryLoaded);
-            reveal();
+            await finishHydrateReveal();
           } else if (!warm) {
             scheduleHydrateAttachSettle(id, recoveryLoaded);
             // No cache + cold slice: explicit error (never silent blank like a draft).

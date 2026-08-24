@@ -32,6 +32,7 @@ from agentcore.runtime.pipeline.settle import (
     salvage_failed_captain,
     salvage_pipeline_exception,
 )
+from agentcore.runtime.resolve.prompt.rebuild import rebuild_fresh_worker_base_prompt
 from agentcore.runtime.runs import RunKind, RunPhase, RunSpec, build_captain_resumer
 from agentcore.runtime.session_persistence import SessionRosterWriter, wire_roster_for_turn
 from agentcore.runtime.sessions import SessionLoader, SessionSaver
@@ -85,7 +86,6 @@ async def continue_ceo_pipeline(
     message_id: str,
     user_id: str,
     user_message: str,
-    base_system_prompt: str,
     journal_entries: list[dict[str, Any]],
     captain_run_id: str,
     sink: EventSink,
@@ -197,6 +197,13 @@ async def continue_ceo_pipeline(
     citations_token = None
     ledger_token = None
     try:
+        base_system_prompt = await rebuild_fresh_worker_base_prompt(
+            user_id=user_id,
+            folder_id=folder_id,
+            backend=backend,
+            permission_axes=permission_axes,
+            desktop_online=False,
+        )
         wired = await wire_crash_turn(
             llm=llm,
             sink=sink,

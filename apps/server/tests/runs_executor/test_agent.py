@@ -687,8 +687,8 @@ async def test_contract_retired_min_length_even_strict_ignored():
 
 
 async def test_contract_empty_hard_fail_not_wave_retried():
-    # Empty product is always a hard fail; after in-executor contract retries the
-    # wave must not re-dispatch (failures=['产出为空'] burned tokens twice already).
+    # Empty product completes honestly; in-executor contract retries still run but
+    # the wave must not re-dispatch (empty body, tokens already spent twice).
     # Use whitespace (not "") so the fake provider still yields a stop chunk that
     # ends the react round in one call — "" can leave the loop taking an extra round.
     plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
@@ -696,9 +696,9 @@ async def test_contract_empty_hard_fail_not_wave_retried():
     provider = _ContentProvider(["   ", "\n\t", "第三次冷启不应发生"])
     res = await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     assert provider.calls == 2
-    assert res["t_1"].phase is RunPhase.FAILED
-    assert res["t_1"].error_retryable is False
-    assert "空" in res["t_1"].error
+    state = res["t_1"]
+    assert state.phase is RunPhase.COMPLETED
+    assert not (state.content or "").strip()
 
 
 async def test_contract_retired_min_length_dict_ignored_completes():

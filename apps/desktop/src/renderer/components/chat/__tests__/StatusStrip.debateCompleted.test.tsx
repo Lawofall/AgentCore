@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 辩论完成态 StatusStrip：meta（子任务 / 用时 / ¥）不得因 isDebate 整段隐藏，
- * 与多 Agent「¥ 归状态条」口径对齐（前端成本呈现）。
+ * 辩论完成态 StatusStrip：meta（子任务 / 用时）不得因 isDebate 整段隐藏。
  */
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { conversationKeys } from "@/lib/queryKeys";
@@ -137,7 +136,7 @@ beforeEach(() => {
 });
 
 describe("StatusStrip · 辩论完成态 meta", () => {
-  it("isDebate 完成态仍展示子任务 / 费用（不含 Agent 数）", () => {
+  it("isDebate 完成态仍展示子任务进度（不含 Agent 数）", () => {
     useExecutionStore.getState().startExecution(debatePlan, MID);
     const exec = projectExecution(debatePlan, doneFrames, "completed");
     expect(isDebate(exec)).toBe(true);
@@ -146,8 +145,9 @@ describe("StatusStrip · 辩论完成态 meta", () => {
 
     expect(screen.queryByText(/个 Agent/)).toBeNull();
     expect(screen.getByText(/2\/2/)).toBeTruthy();
-    // 费用段归状态条：有真实花费时可见（非「团队完成」独占）。
-    // fixture 是 USD 计价，按币种如实显示；旧断言写死 ¥，固化的正是「美元价表当人民币」那个 bug。
-    expect(screen.getByText(/\$/)).toBeTruthy();
+    expect(screen.queryByText(/\$/)).toBeNull();
+    expect(screen.queryByText(/¥/)).toBeNull();
+    expect(screen.queryByText(/已花/)).toBeNull();
+    expect(screen.queryByText(/未计价/)).toBeNull();
   });
 });

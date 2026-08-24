@@ -12,14 +12,6 @@ class EngineSettings(BaseModel):
     engine_tool_failure_warn: int = 2
     engine_tool_failure_disable: int = 3
     engine_unproductive_threshold: int = 3
-    # CEO 探路硬上限（team_gate，captain-only、每 run 一次）：达此 **探路轮** 数即收回
-    # 调查类工具，逼 delegate 或短答。同轮并行多工具只计 1 轮；一轮内所有调查调用
-    # 全失败（幻觉路径等）不计——那一轮没换到任何情报，不该扣广度预算。
-    # 数字唯一真源：提示词文案与文档都跟这里，禁止各处硬编码。
-    # 默认 7（原 5）：实测触发时模型每轮并行 2–3 次调用，5 轮≈10–16 次读，但 3/3 触发
-    # 都有整轮花在不存在的路径上；补上被幻觉路径吃掉的余量。抬得更高会放大 CEO
-    # 单干塌缩面（成规模审计恰恰该早派）。
-    engine_team_gate_investigation_rounds: int = 7
     # 调查满 N 轮强制收工已退役：create_loop_controller 永远把
     # convergence_finalize_rounds 设为 0，即便本项 >0 也忽略，防止
     # 环境变量把误设计救活。读很多轮不同内容不是空转。
@@ -34,10 +26,10 @@ class EngineSettings(BaseModel):
     # 与 token/timeout wind_down 无关（那是额度将尽，不是「没写过文件」）。
     engine_delivery_idle_nudge_rounds: int = 0
     engine_delivery_idle_narrow_rounds: int = 0
-    # 非交文件（调查/诊断）队员：久读无结论只 soft nudge，不收窄工具、不 FINALIZE。
-    # 与 delivery_idle 共用纯调查轮计数器；文案催 handoff/escalate/收敛，不催写盘。
-    # ≤0 关闭。默认 8：给一次刹车（不依赖已退役的调查轮绝对顶）。
-    engine_recon_idle_nudge_rounds: int = 8
+    # 非交文件（调查/诊断）队员：久读无结论的 soft nudge **已退役**（与交文件空转同构：
+    # 行业不在循环里插「你读太多了」；收口靠轮次/额度保险丝 + 同目标连读 spin）。
+    # factory 永远传 0，即便本项 >0 也忽略。LoopController 显式构造仍可用。
+    engine_recon_idle_nudge_rounds: int = 0
     engine_finish_guard_max_reworks: int = 2
     # C2 概览契约：本回合已发 delivery_status 时，CEO 终稿超过此字数 → finish_guard
     # 影子观测（hit=overview_length），不回炉。细节已在交付卡 / 产物卡 / run 详情。
@@ -98,7 +90,7 @@ class EngineSettings(BaseModel):
     # 默认 8M：单路嵌套略放宽；三路同时预占仍依赖父 turn 顶（约 24M+ 父已耗）。
     engine_nested_turn_token_ceiling: int = 8_000_000
     # Turn 交付预留（对齐 worker wind_down）：spent ≥ ceiling − reserve 时只放行
-    # ``ceiling_priority`` 节点（如 build_website QA），未开跑的次要节点软跳过以便依赖汇合。
+    # ``ceiling_priority`` 节点（如整页 QA），未开跑的次要节点软跳过以便依赖汇合。
     # 默认 400k（够一次 QA/目验；不随 worker 顶同步抬）；≤0 或
     # reserve ≥ ceiling 关闭预留软闸（硬顶仍在）。
     engine_turn_token_delivery_reserve: int = 400_000

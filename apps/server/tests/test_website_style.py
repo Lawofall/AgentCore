@@ -120,7 +120,7 @@ def test_rehydrate_from_turn_paused_style_after_memory_clear():
 
 
 def test_no_persistent_style_means_gate_miss():
-    """Acceptance: no journal/paused/cache → get returns None (build_website rejects)."""
+    """Acceptance: no journal/paused/cache → get returns None (style miss)."""
     cid = "test-style-absent"
     clear_style_confirmation(cid)
     assert get_style_confirmation(cid) is None
@@ -217,10 +217,11 @@ async def test_ask_user_website_with_style_options_succeeds():
     assert res.success is True
 
 
-def test_build_website_missing_style_error_mentions_ask_user():
+def test_build_website_missing_style_error_is_soft_default():
     err = build_website_missing_style_error()
-    assert "build_website" in err
-    assert "ask_user" in err
+    assert "build_website" not in err
+    assert "开工提案" not in err
+    assert "s_default" in err
     _ = AutonomyPolicy.MANAGED  # keyed exemption exists in product vocabulary
     assert "full_auto" in err.lower()
 

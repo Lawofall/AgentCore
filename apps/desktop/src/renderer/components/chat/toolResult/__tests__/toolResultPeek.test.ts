@@ -206,7 +206,7 @@ describe("toolResultPeek", () => {
     ).toBe("未匹配");
   });
 
-  it("prefers failure.message over model-facing result on error", () => {
+  it("does not peek failure.message on error (collapsed stays one line)", () => {
     expect(
       toolResultPeek(
         data({
@@ -215,15 +215,15 @@ describe("toolResultPeek", () => {
           result:
             "搜索失败：ConnectError: [Errno 111] Connection refused to searxng.internal:8080",
           failure: {
-            message: "工具执行失败，请稍后重试。",
-            code: "TOOL_ERROR",
+            message: "未找到元素 e13。",
+            code: "NOT_FOUND",
           },
         }),
       ),
-    ).toBe("工具执行失败，请稍后重试。");
+    ).toBe("");
   });
 
-  it("keeps result-first-line peek when failure is absent on error", () => {
+  it("does not peek model-facing result on error when failure is absent", () => {
     expect(
       toolResultPeek(
         data({
@@ -232,7 +232,7 @@ describe("toolResultPeek", () => {
           result: "ExecEnvProbeFailed: 127.0.0.1:5432",
         }),
       ),
-    ).toBe("ExecEnvProbeFailed: 127.0.0.1:5432");
+    ).toBe("");
   });
 
   it("summarizes code_diagnostics as N 个类型错误", () => {
@@ -338,6 +338,35 @@ describe("hasToolResultBody", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("is true for a specific failure face even when result is empty", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "wait",
+          status: "error",
+          result: "",
+          failure: { message: "等待队员超时。", code: "WAIT_TIMEOUT" },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("is false for the generic failure fallback with an empty result", () => {
+    expect(
+      hasToolResultBody(
+        data({
+          toolName: "grep",
+          status: "error",
+          result: "  ",
+          failure: {
+            message: "这一步没能完成，我会换个方式继续。",
+            code: "TOOL_ERROR",
+          },
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("successful handoff is expandable only when the brief has details", () => {

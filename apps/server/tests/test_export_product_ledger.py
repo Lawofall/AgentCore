@@ -170,3 +170,19 @@ def test_fold_never_empties_the_list_on_pathological_lineage():
     assert fold_exported_sources(cycle) == (["a.docx", "b.docx"], [])
     self_ref = [_accepted_row("报告.docx", kind="docx", derived_from="报告.docx")]
     assert fold_exported_sources(self_ref) == (["报告.docx"], [])
+
+
+def test_fold_skips_preview_screenshots():
+    """kind=image 的 derived_from 是预览注解，不得把源 HTML 折成中间稿。"""
+    acceptance = [
+        _accepted_row("site/index.html", kind="html"),
+        _accepted_row(
+            "site/preview-desktop.jpg",
+            kind="image",
+            derived_from="site/index.html",
+        ),
+    ]
+    assert fold_exported_sources(acceptance) == (
+        ["site/index.html", "site/preview-desktop.jpg"],
+        [],
+    )

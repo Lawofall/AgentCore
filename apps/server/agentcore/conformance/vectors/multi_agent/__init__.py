@@ -113,7 +113,7 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         _multi_agent_stop_gate_run_frames,
     ),
     "multi_agent_incremental_preview_badge": (
-        "批次4·增量 preview：首批仍在跑时 team_preview_required 叠加（不压运行态）",
+        "批次4·增量组队：首批仍在跑时二次 delegate 叠加（不压运行态）",
         _multi_agent_incremental_preview_badge,
     ),
     "multi_agent_merge_race_secondary_delegate": (

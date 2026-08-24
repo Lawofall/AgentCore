@@ -106,76 +106,30 @@
       "timestamp": "2026-01-01T00:00:00.004Z"
     },
     {
-      "type": "team_preview_required",
+      "type": "run_started",
       "payload": {
-        "checkpoint_id": "tp_mlr1",
-        "conversation_id": "conv_demo",
-        "workers": [
-          {
-            "run_id": "lens_0",
-            "role": "法律视角",
-            "task": "梳理代言合同解约条款、连带责任与监管口径",
-            "depends_on": []
-          },
-          {
-            "run_id": "lens_1",
-            "role": "品牌商业视角",
-            "task": "评估联名营收贡献、库存与渠道契约成本",
-            "depends_on": []
-          },
-          {
-            "run_id": "lens_2",
-            "role": "舆情公关视角",
-            "task": "盘点舆论热度、声量拐点与危机公关窗口",
-            "depends_on": []
-          },
-          {
-            "run_id": "lens_3",
-            "role": "文化社会视角",
-            "task": "分析代言人象征意义与圈层价值冲突",
-            "depends_on": []
-          },
-          {
-            "run_id": "synthesizer",
-            "role": "汇总分析师",
-            "task": "交叉验证综述 · 某消费品牌是否应在争议代言人事件后继续联名",
-            "depends_on": [
-              "lens_0",
-              "lens_1",
-              "lens_2",
-              "lens_3"
-            ]
-          }
-        ],
-        "tools": [
-          "web_search",
-          "web_fetch",
-          "file_read"
-        ],
-        "primitive": "delegate",
-        "motion": "",
-        "form": "",
-        "sides": [],
-        "max_rounds": 0,
-        "thorough": true,
-        "revision": 1
+        "run_id": "lens_0",
+        "agent_id": "lens_0",
+        "parent_run_id": null,
+        "kind": "agent"
       },
       "timestamp": "2026-01-01T00:00:00.005Z"
     },
     {
-      "type": "team_preview_resolved",
+      "type": "run_started",
       "payload": {
-        "checkpoint_id": "tp_mlr1",
-        "decision": "continue",
-        "note": ""
+        "run_id": "lens_1",
+        "agent_id": "lens_1",
+        "parent_run_id": null,
+        "kind": "agent"
       },
       "timestamp": "2026-01-01T00:00:00.006Z"
     },
     {
       "type": "run_started",
       "payload": {
-        "run_id": "lens_0",
-        "agent_id": "lens_0",
+        "run_id": "lens_2",
+        "agent_id": "lens_2",
         "parent_run_id": null,
         "kind": "agent"
       },
@@ -184,32 +138,12 @@
     {
       "type": "run_started",
       "payload": {
-        "run_id": "lens_1",
-        "agent_id": "lens_1",
-        "parent_run_id": null,
-        "kind": "agent"
-      },
-      "timestamp": "2026-01-01T00:00:00.008Z"
-    },
-    {
-      "type": "run_started",
-      "payload": {
-        "run_id": "lens_2",
-        "agent_id": "lens_2",
-        "parent_run_id": null,
-        "kind": "agent"
-      },
-      "timestamp": "2026-01-01T00:00:00.009Z"
-    },
-    {
-      "type": "run_started",
-      "payload": {
         "run_id": "lens_3",
         "agent_id": "lens_3",
         "parent_run_id": null,
         "kind": "agent"
       },
-      "timestamp": "2026-01-01T00:00:00.010Z"
+      "timestamp": "2026-01-01T00:00:00.008Z"
     },
     {
       "type": "run_reasoning_delta",
@@ -218,7 +152,7 @@
         "agent_id": "lens_0",
         "delta": "先核对代言合同解约与连带责任条款…"
       },
-      "timestamp": "2026-01-01T00:00:00.011Z"
+      "timestamp": "2026-01-01T00:00:00.009Z"
     },
     {
       "type": "run_output_delta",
@@ -227,7 +161,7 @@
         "agent_id": "lens_0",
         "delta": "【法律】合同含道德条款，解约需举证重大声誉损害；"
       },
-      "timestamp": "2026-01-01T00:00:00.012Z"
+      "timestamp": "2026-01-01T00:00:00.010Z"
     },
     {
       "type": "run_output_delta",
@@ -236,7 +170,7 @@
         "agent_id": "lens_1",
         "delta": "【品牌商业】联名贡献约 18% 季度营收，渠道有最低采购约束；"
       },
-      "timestamp": "2026-01-01T00:00:00.013Z"
+      "timestamp": "2026-01-01T00:00:00.011Z"
     },
     {
       "type": "run_output_delta",
@@ -245,7 +179,7 @@
         "agent_id": "lens_2",
         "delta": "【舆情公关】负面声量 72h 内翻倍，品牌官号评论区失控；"
       },
-      "timestamp": "2026-01-01T00:00:00.014Z"
+      "timestamp": "2026-01-01T00:00:00.012Z"
     },
     {
       "type": "run_reasoning_delta",
@@ -254,7 +188,7 @@
         "agent_id": "lens_3",
         "delta": "代言人象征意义与品牌调性是否仍兼容…"
       },
-      "timestamp": "2026-01-01T00:00:00.015Z"
+      "timestamp": "2026-01-01T00:00:00.013Z"
     },
     {
       "type": "run_output_delta",
@@ -263,7 +197,7 @@
         "agent_id": "lens_3",
         "delta": "【文化社会】圈层撕裂明显，年轻用户要求切割，铁粉要求澄清；"
       },
-      "timestamp": "2026-01-01T00:00:00.016Z"
+      "timestamp": "2026-01-01T00:00:00.014Z"
     },
     {
       "type": "run_output_delta",
@@ -272,7 +206,7 @@
         "agent_id": "lens_0",
         "delta": "监管口径偏谨慎，仓促解约亦有违约风险。"
       },
-      "timestamp": "2026-01-01T00:00:00.017Z"
+      "timestamp": "2026-01-01T00:00:00.015Z"
     },
     {
       "type": "run_completed",
@@ -307,7 +241,7 @@
           "next_steps": "汇总时对照舆情时间线评估举证难度"
         }
       },
-      "timestamp": "2026-01-01T00:00:02.107Z"
+      "timestamp": "2026-01-01T00:00:02.105Z"
     },
     {
       "type": "run_progress",
@@ -315,7 +249,7 @@
         "completed": 1,
         "total": 5
       },
-      "timestamp": "2026-01-01T00:00:02.108Z"
+      "timestamp": "2026-01-01T00:00:02.106Z"
     },
     {
       "type": "run_output_delta",
@@ -324,7 +258,7 @@
         "agent_id": "lens_1",
         "delta": "库存与退货成本估算约两千万量级。"
       },
-      "timestamp": "2026-01-01T00:00:02.109Z"
+      "timestamp": "2026-01-01T00:00:02.107Z"
     },
     {
       "type": "run_completed",
@@ -358,7 +292,7 @@
           ]
         }
       },
-      "timestamp": "2026-01-01T00:00:02.408Z"
+      "timestamp": "2026-01-01T00:00:02.406Z"
     },
     {
       "type": "run_progress",
@@ -366,7 +300,7 @@
         "completed": 2,
         "total": 5
       },
-      "timestamp": "2026-01-01T00:00:02.409Z"
+      "timestamp": "2026-01-01T00:00:02.407Z"
     },
     {
       "type": "run_output_delta",
@@ -375,7 +309,7 @@
         "agent_id": "lens_2",
         "delta": "危机窗口约 5–7 天，沉默会被解读为纵容。"
       },
-      "timestamp": "2026-01-01T00:00:02.410Z"
+      "timestamp": "2026-01-01T00:00:02.408Z"
     },
     {
       "type": "run_completed",
@@ -409,7 +343,7 @@
           ]
         }
       },
-      "timestamp": "2026-01-01T00:00:02.411Z"
+      "timestamp": "2026-01-01T00:00:02.409Z"
     },
     {
       "type": "run_progress",
@@ -417,7 +351,7 @@
         "completed": 3,
         "total": 5
       },
-      "timestamp": "2026-01-01T00:00:02.412Z"
+      "timestamp": "2026-01-01T00:00:02.410Z"
     },
     {
       "type": "run_output_delta",
@@ -426,7 +360,7 @@
         "agent_id": "lens_3",
         "delta": "价值冲突难靠更多事实消解，更接近立场对抗。"
       },
-      "timestamp": "2026-01-01T00:00:02.413Z"
+      "timestamp": "2026-01-01T00:00:02.411Z"
     },
     {
       "type": "run_completed",
@@ -460,7 +394,7 @@
           ]
         }
       },
-      "timestamp": "2026-01-01T00:00:02.414Z"
+      "timestamp": "2026-01-01T00:00:02.412Z"
     },
     {
       "type": "run_progress",
@@ -468,7 +402,7 @@
         "completed": 4,
         "total": 5
       },
-      "timestamp": "2026-01-01T00:00:02.415Z"
+      "timestamp": "2026-01-01T00:00:02.413Z"
     },
     {
       "type": "run_started",
@@ -478,7 +412,7 @@
         "parent_run_id": null,
         "kind": "agent"
       },
-      "timestamp": "2026-01-01T00:00:02.416Z"
+      "timestamp": "2026-01-01T00:00:02.414Z"
     },
     {
       "type": "run_reasoning_delta",
@@ -487,7 +421,7 @@
         "agent_id": "synthesizer",
         "delta": "四路已齐：标清共识/冲突，判断是否必须对抗开辩…"
       },
-      "timestamp": "2026-01-01T00:00:02.417Z"
+      "timestamp": "2026-01-01T00:00:02.415Z"
     },
     {
       "type": "run_output_delta",
@@ -496,7 +430,7 @@
         "agent_id": "synthesizer",
         "delta": "### 交叉验证\n**共识**：事件已实质伤害品牌声誉，需在一周内给出清晰立场。\n"
       },
-      "timestamp": "2026-01-01T00:00:02.418Z"
+      "timestamp": "2026-01-01T00:00:02.416Z"
     },
     {
       "type": "run_output_delta",
@@ -505,7 +439,7 @@
         "agent_id": "synthesizer",
         "delta": "**冲突**：法律侧强调举证与违约风险；舆情侧强调沉默即纵容；商业侧强调短期财务代价。\n"
       },
-      "timestamp": "2026-01-01T00:00:02.419Z"
+      "timestamp": "2026-01-01T00:00:02.417Z"
     },
     {
       "type": "run_output_delta",
@@ -514,7 +448,7 @@
         "agent_id": "synthesizer",
         "delta": "**分歧**：是否「立即终止联名」是价值判断，继续调研无法收敛。\n"
       },
-      "timestamp": "2026-01-01T00:00:02.420Z"
+      "timestamp": "2026-01-01T00:00:02.418Z"
     },
     {
       "type": "run_completed",
@@ -573,7 +507,7 @@
           }
         }
       },
-      "timestamp": "2026-01-01T00:00:05.216Z"
+      "timestamp": "2026-01-01T00:00:05.214Z"
     },
     {
       "type": "run_progress",
@@ -581,7 +515,7 @@
         "completed": 5,
         "total": 5
       },
-      "timestamp": "2026-01-01T00:00:05.217Z"
+      "timestamp": "2026-01-01T00:00:05.215Z"
     },
     {
       "type": "tool_use_end",
@@ -591,14 +525,14 @@
         "status": "success",
         "result": "多视角调研完成：4 透镜 + 汇总；汇总员提交了建议开辩命题卡。"
       },
-      "timestamp": "2026-01-01T00:00:05.218Z"
+      "timestamp": "2026-01-01T00:00:05.216Z"
     },
     {
       "type": "content_delta",
       "payload": {
         "delta": "\n\n## 多视角调研结论\n\n围绕「某消费品牌是否应在争议代言人事件后继续联名」，四路透镜与汇总已完成交叉验证。\n\n**共识**：事件已实质伤害品牌声誉，需在约一周内给出清晰立场。\n**冲突**：法律侧强调举证与违约风险；舆情侧强调沉默成本；商业侧强调短期财务冲击。\n**缺口**：内部合同全文与库存明细尚未核验。\n\n### 建议开辩\n\n**命题**：品牌是否应立即终止与该代言人的联名合作\n- 立即终止方：应立刻切割止损\n- 冷静观望方：证据未定不宜仓促解约\n**为何必须对抗**：法律风险与品牌声誉的取舍无法靠继续取证收敛，必须对抗检验价值判断。\n\n若你同意，可开一场正反辩论；本回合我不会直接开辩，请你拍板。"
       },
-      "timestamp": "2026-01-01T00:00:05.219Z"
+      "timestamp": "2026-01-01T00:00:05.217Z"
     },
     {
       "type": "message_end",
@@ -621,7 +555,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:05.220Z"
+      "timestamp": "2026-01-01T00:00:05.218Z"
     }
   ],
   "projected": {
@@ -636,10 +570,6 @@
       {
         "kind": "content",
         "text": "我将按多视角深度调研推进「某消费品牌是否应在争议代言人事件后继续联名」。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp_mlr1"
       },
       {
         "kind": "team",
@@ -1033,20 +963,7 @@
       "completed": 5,
       "total": 5
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp_mlr1",
-        "status": "resolved",
-        "workerIds": [
-          "lens_0",
-          "lens_1",
-          "lens_2",
-          "lens_3",
-          "synthesizer"
-        ]
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

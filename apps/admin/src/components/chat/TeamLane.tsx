@@ -1,20 +1,56 @@
-import { Badge } from "@/components/ui/Badge";
 import type { NormalizedRun } from "@/components/chat/chatTurn";
 import { cn } from "@/lib/utils";
-import { Users } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, Users, XCircle } from "lucide-react";
 import { useMemo } from "react";
 
-const STATUS_TONE: Record<
-  string,
-  "neutral" | "primary" | "success" | "warning" | "destructive"
-> = {
-  pending: "neutral",
-  running: "primary",
-  completed: "success",
-  failed: "destructive",
-  cancelled: "warning",
-  skipped: "neutral",
+const STATUS_DOT: Record<string, string> = {
+  pending: "bg-muted-foreground/40",
+  running: "bg-primary",
+  completed: "bg-success",
+  failed: "bg-destructive",
+  cancelled: "bg-warning",
+  skipped: "bg-muted-foreground/30",
 };
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "排队中",
+  running: "执行中",
+  completed: "已完成",
+  failed: "失败",
+  cancelled: "已停止",
+  skipped: "未执行",
+};
+
+function teamLifecycleLabel(runs: NormalizedRun[]): {
+  text: string;
+  tone: "success" | "primary" | "destructive" | "warning" | "neutral";
+} {
+  if (runs.length === 0) return { text: "无协作", tone: "neutral" };
+  const statuses = runs.map((r) => r.status);
+  if (statuses.every((s) => s === "completed"))
+    return { text: "协作已完成", tone: "success" };
+  if (statuses.some((s) => s === "failed"))
+    return { text: "部分失败", tone: "destructive" };
+  if (statuses.some((s) => s === "cancelled"))
+    return { text: "已停止", tone: "warning" };
+  if (statuses.some((s) => s === "running"))
+    return { text: "执行中", tone: "primary" };
+  return { text: "协作", tone: "neutral" };
+}
+
+function LifecycleIcon({
+  tone,
+}: {
+  tone: "success" | "primary" | "destructive" | "warning" | "neutral";
+}) {
+  if (tone === "success")
+    return <CheckCircle2 size={14} className="shrink-0 text-success" aria-hidden />;
+  if (tone === "primary")
+    return <Loader2 size={14} className="shrink-0 animate-spin text-primary" aria-hidden />;
+  if (tone === "destructive")
+    return <XCircle size={14} className="shrink-0 text-destructive" aria-hidden />;
+  return <Circle size={14} className="shrink-0 text-muted-foreground" aria-hidden />;
+}
 
 /**
  * Static multi-agent final-state tree — no @xyflow / elkjs.
@@ -55,22 +91,25 @@ export function TeamLane({
   if (runs.length === 0) return null;
   const completed = progress.completed;
   const total = progress.total || runs.length;
+  const lifecycle = teamLifecycleLabel(runs);
 
   return (
     <section aria-label="团队" className="min-w-0 max-w-full space-y-2">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <Users size={14} className="text-primary" />
-        <span className="font-medium text-foreground">协作图</span>
-        <span>
-          {completed}/{total} 完成
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs">
+        <Users size={14} className="shrink-0 text-primary" aria-hidden />
+        <LifecycleIcon tone={lifecycle.tone} />
+        <span className="font-medium text-foreground">{lifecycle.text}</span>
+        <span className="text-muted-foreground">
+          <span className="tabular-nums text-foreground">{completed}</span>
+          <span className="text-muted-foreground">/{total}</span>
+          <span className="ml-0.5">完成</span>
         </span>
       </div>
-      <ul className="space-y-1.5">
+      <ul className="space-y-1">
         {roots.map((run) => (
           <TeamNode
             key={run.id}
             run={run}
-            depth={0}
             byParent={byParent}
             selectedRunId={selectedRunId ?? null}
             onSelectRun={onSelectRun}
@@ -83,44 +122,59 @@ export function TeamLane({
 
 function TeamNode({
   run,
-  depth,
   byParent,
   selectedRunId,
   onSelectRun,
 }: {
   run: NormalizedRun;
-  depth: number;
   byParent: Map<string | null, NormalizedRun[]>;
   selectedRunId: string | null;
   onSelectRun?: (runId: string) => void;
 }) {
   const children = byParent.get(run.id) ?? [];
   const active = selectedRunId === run.id;
-  const body = (
-    <>
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className="min-w-0 truncate font-medium text-foreground"
-          title={run.role || run.agentId || run.id}
-        >
-          {run.role || run.agentId || run.id}
+  const role = run.role || run.agentId || run.id;
+  const statusLabel = STATUS_LABEL[run.status] ?? run.status;
+  const dotClass = STATUS_DOT[run.status] ?? "bg-muted-foreground/40";
+
+  const card = (
+    <div className="flex min-w-0 items-center gap-2">
+      <span
+        className={cn("size-2 shrink-0 rounded-full", dotClass)}
+        title={statusLabel}
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate">
+        <span className="shrink-0 font-medium text-foreground text-sm" title={role}>
+          {role}
         </span>
-        <Badge className="shrink-0" tone={STATUS_TONE[run.status] ?? "neutral"}>
-          {run.status}
-        </Badge>
-        {run.kind !== "agent" && (
-          <span className="shrink-0 text-muted-foreground text-xs">
-            {run.kind}
-          </span>
-        )}
+        {run.task ? (
+          <>
+            <span className="shrink-0 text-muted-foreground text-xs" aria-hidden>
+              ·
+            </span>
+            <span
+              className="min-w-0 truncate text-muted-foreground text-xs"
+              title={run.task}
+            >
+              {run.task}
+            </span>
+          </>
+        ) : null}
+        {run.kind !== "agent" ? (
+          <span className="shrink-0 text-muted-foreground text-xs">({run.kind})</span>
+        ) : null}
       </div>
-      {run.task && (
-        <p className="mt-1 truncate text-muted-foreground text-xs" title={run.task}>
-          {run.task}
-        </p>
-      )}
-    </>
+    </div>
   );
+
+  const shellClass = cn(
+    "min-w-0 w-full rounded-lg border px-2.5 py-1.5 text-left outline-none transition-colors",
+    active
+      ? "border-primary/40 bg-primary/10 ring-2 ring-primary/25"
+      : "border-border/60 bg-card hover:bg-accent/60",
+  );
+
   return (
     <li>
       {onSelectRun ? (
@@ -130,31 +184,19 @@ function TeamNode({
             e.stopPropagation();
             onSelectRun(run.id);
           }}
-          className={cn(
-            "min-w-0 w-full rounded-lg border px-3 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            active
-              ? "border-primary/50 bg-primary/10 ring-1 ring-primary/30"
-              : "border-border bg-muted/30 hover:bg-muted/50",
-          )}
-          style={{ marginLeft: depth * 14 }}
+          className={cn(shellClass, "focus-visible:ring-2 focus-visible:ring-ring")}
         >
-          {body}
+          {card}
         </button>
       ) : (
-        <div
-          className="min-w-0 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm"
-          style={{ marginLeft: depth * 14 }}
-        >
-          {body}
-        </div>
+        <div className={shellClass}>{card}</div>
       )}
       {children.length > 0 && (
-        <ul className="mt-1.5 space-y-1.5">
+        <ul className="mt-1 ml-3 space-y-1 border-muted-foreground/25 border-l pl-2">
           {children.map((child) => (
             <TeamNode
               key={child.id}
               run={child}
-              depth={depth + 1}
               byParent={byParent}
               selectedRunId={selectedRunId}
               onSelectRun={onSelectRun}

@@ -100,12 +100,10 @@ captain_transcript: ContextVar[list[LLMMessage] | None] = ContextVar(
 turn_history: ContextVar[list[dict[str, Any]] | None] = ContextVar("turn_history", default=None)
 
 # The turn's live web-source pool (the CEO loop's ``citation_sink``), bound by the pipeline
-# right after it creates the list — same pattern as :data:`turn_history`. A suspending face
-# snapshots it into the durable frame so a resume re-seeds the pool instead of starting
-# empty: the pre-pause [n] markers in the CEO's prose keep resolving to the same source
-# cards, and finish_guard's citation_count reflects the sources actually consulted (引用池
-# 单一权威 — without this a resumed wrap-up was serially reworked as「编造引用」).
-# ``None`` outside a turn → the face captures no citations.
+# right after it creates the list — same pattern as :data:`turn_history`. At pause the pool
+# is snapshotted into the trailing ``turn_paused`` journal fact (not ``paused_turns.frame``);
+# resume rehydrates from that fact (legacy frames without it still read ``frame.citations``).
+# ``None`` outside a turn → capture writes an empty pool on the fact.
 turn_citations: ContextVar[list[dict[str, Any]] | None] = ContextVar("turn_citations", default=None)
 
 # 回合共享调研台账（引用即出处 P1 · ``EvidenceLedgerCore`` id_prefix=``#r``）。
@@ -200,13 +198,10 @@ class TurnSuspension:
     # checks this to surface a clear error instead of silently rebuilding an empty CEO
     # window (the frame alone is not enough without the journal facts).
     journal_degraded: bool = False
-    # The turn's web-source pool at pause (the CEO loop's ``citation_sink`` snapshot,
-    # captured off :data:`turn_citations`). Serialized into the frame — unlike the
-    # window it is NOT rebuildable from the journal (the source dicts live on
-    # ``ToolResult.citations``, not in the folded tool text) — so a resume re-seeds
-    # the pool: pre-pause [n] markers keep resolving to the same cards and
-    # finish_guard sees the real citation_count (引用池单一权威). Legacy frames
-    # lack the key → empty list (the pre-fix behavior, degraded but valid).
+    # The turn's web-source pool at pause (captured off :data:`turn_citations` into the
+    # trailing ``turn_paused`` fact — the authoritative durable copy). This in-memory field
+    # is NOT serialized into new ``paused_turns.frame`` rows; legacy frames may still carry
+    # ``frame.citations``, which resume reads as fallback when the fact omits citations.
     citations: list[dict[str, Any]] = field(default_factory=list)
     # Kickoff 段已 consult_memory 的主题正文；resume 复用，避免同 key 再拉一遍。
     consulted_memory: dict[str, str] = field(default_factory=dict)
@@ -249,9 +244,9 @@ class TurnSuspension:
             # ``window_from_journal`` from the turn_journal facts (§8.3) + reloaded history, so
             # the frame holds only resume CONTROL metadata. The display ``journal`` is a derived
             # property (never stored). See the module docstring + ``runtime/journal.py``.
-            # ``citations`` IS serialized: the source dicts are not journal-rebuildable.
+            # ``citations`` is NOT serialized — new pauses persist the pool on ``turn_paused``.
             "journal_degraded": self.journal_degraded,
-            "citations": list(self.citations),
+            "citations": [],
             "consulted_memory": dict(self.consulted_memory or {}),
             "trace_id": self.trace_id,
         }

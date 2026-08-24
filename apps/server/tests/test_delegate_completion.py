@@ -6,7 +6,6 @@ from agentcore.runtime.delegate.completion import (
     collect_worker_gaps,
     format_worker_gaps_block,
     plan_suggests_code_verification,
-    validate_cold_start_explore_deliverables,
     validate_repair_how_fixed,
 )
 from agentcore.runtime.runs.plan import RunPlan
@@ -83,21 +82,24 @@ def test_plan_suggests_code_verification_open_acceptance():
     assert plan_suggests_code_verification(plan)
 
 
-def test_cold_start_explore_requires_two_workers():
-    thin = RunPlan(
-        nodes=[RunSpec(run_id="a", role="explorer", task="摸仓")]
-    )
-    msg = validate_cold_start_explore_deliverables(thin)
-    assert msg is not None
-    assert "≥2" in msg
+async def test_cold_start_pending_allows_single_worker_delegate():
+    """pending ∧ 1 worker：不再因节点数 contract_failure（组队靠提示词）。"""
+    from tests.delegate.conftest import Provider, ctx, tool
 
-    wide = RunPlan(
-        nodes=[
-            RunSpec(run_id="a", role="A", task="目录"),
-            RunSpec(run_id="b", role="B", task="文档"),
-        ]
+    t = tool(Provider(["摸仓笔记"]))
+    t._base_tool_context.cold_start_explore_pending = True
+    result = await t.execute(
+        {
+            "tasks": [{"role": "调研", "task": "摸仓"}],
+            "coordinate": False,
+        },
+        ctx(),
     )
-    assert validate_cold_start_explore_deliverables(wide) is None
+    assert result.success is True
+    assert result.contract_failure is not True
+    err = result.error or ""
+    assert "≥2" not in err
+    assert "包办" not in err
 
 
 def test_repair_how_fixed_playbook_only():

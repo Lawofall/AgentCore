@@ -50,7 +50,7 @@ import { MessageTime, RegenerateMessageAction } from "./MessageActions";
 import { useCopyAction } from "./useCopyAction";
 
 /** Signal-only summary (cost / rounds / duration) — token detail lives in「更多」. */
-function MessageUsageSummary({
+export function AssistantMessageMetaSummary({
   rounds,
   costText,
   durationMs,
@@ -440,7 +440,7 @@ export function AssistantMessageFooter({
         />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <MessageUsageSummary
+        <AssistantMessageMetaSummary
           rounds={message.rounds}
           costText={costText}
           durationMs={message.durationMs}

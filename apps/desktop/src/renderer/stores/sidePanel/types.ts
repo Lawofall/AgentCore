@@ -3,8 +3,8 @@
  * ONE flat tab strip (方案 B · 图1式):
  *
  *  - 「工作区」(first)：不可销毁、可 detach 为应用内浮窗；
- *  - 「改动」(second)：§十 P0c 条件固定（有货才审），出现后不可关、可 detach；
- *  - closable content tabs (≤12, 固定不计): File 多实例、Terminal / Browser 各一壳
+ *  - 「改动」(second)：§十 按需打开（产物卡 / Git chip / `+`），可关、可 detach；
+ *  - closable content tabs (≤12, 工作区 / 打开中的改动不计): File 多实例、Terminal / Browser 各一壳
  *   （壳内各自管会话/页签）、run / endpoint / simple-turn 详情。
  *
  * 应用内浮窗（§十 · 方案 B）：Move 不 Copy；可 float = run / workspace / file / changes；
@@ -65,9 +65,8 @@ export const SIDE_PANEL_MAX_FLOATS = MAX_FLOATS;
 export const WORKSPACE_TAB_ID = "workspace";
 
 /**
- * Reserved id of the 「改动」 tab（§十 · P0c 条件固定：本对话有可恢复入口 /
- * 深链 / 已 float / 当前正在看时挂上；出现后不可关、可 detach）。
- * 有货才审，空态不常驻。
+ * Reserved id of the 「改动」 tab（§十 · P0c 按需打开：仅 `showChanges` /
+ * 顶栏 `+` 显式打开；可关、可 detach；写盘 / 基线 / 深链不自动挂）。
  */
 export const CHANGES_TAB_ID = "changes";
 
@@ -317,6 +316,11 @@ export interface SidePanelState {
    */
   focusSurface: SidePanelFocusSurface;
   /**
+   * Session-level：用户是否显式打开过「改动」tab（`showChanges` / 顶栏 `+`）。
+   * 不 persist；切对话 / `closeChanges` 卸掉。有货 alone 不置 true。
+   */
+  changesOpen: boolean;
+  /**
    * 「改动」tab 聚焦的回合（产物卡「查看改动」写入）。
    * 切对话时应清掉（避免旧 messageId 在新对话上错误聚焦）。
    */
@@ -403,9 +407,12 @@ export interface SidePanelState {
   /** Reveal the panel on the 工作区 home tab (the chat toggle / Ctrl+J). */
   showWorkspace: () => void;
   /**
-   * 揭示面板并激活「改动」tab（条件固定；无货时仍可先挂再看）；可选聚焦某回合。
+   * 揭示面板并激活「改动」tab（无货时仍可先挂再看）；可选聚焦某回合。
+   * 置 `changesOpen` —— 仅此与顶栏 `+` → 改动 可挂 tab。
    */
   showChanges: (messageId?: string | null) => void;
+  /** 关闭「改动」tab（顶栏 × / 应用内浮窗 ×）；不关整坞。 */
+  closeChanges: () => void;
   /** 清除改动深链聚焦（切对话时调用）。 */
   clearChangesFocus: () => void;
   /**
@@ -467,8 +474,9 @@ export interface SidePanelState {
    */
   dockTab: (tabId: string) => void;
   /**
-   * Explicitly destroy a closable float (run / file). Workspace / changes cannot
-   * be destroyed — use {@link dockTab}. Returns false when rejected.
+   * Explicitly destroy a closable float (run / file / changes). Workspace cannot
+   * be destroyed — use {@link dockTab}. Changes float × → {@link closeChanges}.
+   * Returns false when rejected.
    */
   destroyFloat: (tabId: string) => boolean;
   /**

@@ -35,7 +35,8 @@ from agentcore.core.errors import (
     upstream_rate_limit_error,
 )
 from agentcore.core.logging import get_logger
-from agentcore.core.net import outbound_async_client
+from agentcore.core.net import abort_httpx_response, outbound_async_client
+from agentcore.core.task_cancel import raise_if_task_cancelled
 from agentcore.llm.errors import (
     apply_locator_context,
     body_preview,
@@ -86,6 +87,7 @@ from agentcore.llm.provider.protocol import (
 )
 from agentcore.llm.provider.wire_dialect import resolve_wire_dialect, wire_model_leaf
 from agentcore.llm.sub2api_probe import probe_sub2api_diagnosis_result
+from agentcore.llm.tool_arguments import coerce_openai_tool_arguments
 
 logger = get_logger(__name__)
 
@@ -802,6 +804,7 @@ class OpenAICompatibleProvider:
         self._ensure_client_open()
 
         for attempt in range(_IO_ATTEMPT_CEILING):
+            raise_if_task_cancelled()
             self._enforce_declared_tool_surface(payload)
             # Same per-attempt narrowing as the unary loop. Streaming turns are the
             # interactive ones and carry no patience, so this is normally the
@@ -830,6 +833,7 @@ class OpenAICompatibleProvider:
             forwarded_diagnosis: str | None = None
             forwarded_preview: str | None = None
 
+            in_flight: httpx.Response | None = None
             try:
                 self._ensure_client_open()
                 async with self._client.stream(
@@ -838,6 +842,7 @@ class OpenAICompatibleProvider:
                     json=payload,
                     headers=_request_attribution_headers() or None,
                 ) as response:
+                    in_flight = response
                     body = await response.aread() if response.status_code >= 400 else None
                     if body is not None and self._try_omit_temperature_once(
                         payload, response.status_code, body, stream=True
@@ -974,6 +979,9 @@ class OpenAICompatibleProvider:
                     )
                 return
 
+            except asyncio.CancelledError:
+                await abort_httpx_response(in_flight)
+                raise
             except LLMUpstreamError as e:
                 last_error = e
                 if committed:
@@ -1032,6 +1040,7 @@ class OpenAICompatibleProvider:
                 clear_cooldown(self._cooldown_key)
                 backoff *= _BACKOFF_MULTIPLIER
             except httpx.TimeoutException as e:
+                raise_if_task_cancelled(e)
                 last_error = LLMTimeoutError(f"连接 {self._display_name} 超时，请检查网络后重试")
                 if committed:
                     logger.warning(
@@ -1063,6 +1072,7 @@ class OpenAICompatibleProvider:
                 else:
                     backoff = next_backoff
             except httpx.HTTPError as e:
+                raise_if_task_cancelled(e)
                 last_error = self._network_error_to_llm(e)
                 if committed:
                     logger.warning(
@@ -1122,7 +1132,10 @@ class OpenAICompatibleProvider:
                     {
                         "id": tc.id,
                         "type": "function",
-                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": coerce_openai_tool_arguments(tc.function.arguments),
+                        },
                     }
                     for tc in msg.tool_calls
                 ]
@@ -1474,6 +1487,7 @@ class OpenAICompatibleProvider:
         partial_sse_lines: int = 0,
         max_attempts: int | None = None,
     ) -> float:
+        raise_if_task_cancelled()
         wait = backoff
         logger.info(
             "llm.call_retried",
@@ -1509,6 +1523,7 @@ class OpenAICompatibleProvider:
         started = time.monotonic()
         self._ensure_client_open()
         for attempt in range(_IO_ATTEMPT_CEILING):
+            raise_if_task_cancelled()
             self._enforce_declared_tool_surface(payload)
             # Recomputed each attempt: a 429 we already slept off spent part of the
             # caller's wall clock, so the next cooldown is judged against what is
@@ -1550,6 +1565,8 @@ class OpenAICompatibleProvider:
                     raise LLMInvalidResponseError(
                         f"{self._display_name} 响应格式无效"
                     ) from e
+            except asyncio.CancelledError:
+                raise
             except LLMUpstreamError as e:
                 last_error = e
                 if not e.retryable or not self._can_retry_attempt(attempt):
@@ -1583,6 +1600,7 @@ class OpenAICompatibleProvider:
                     raise translated from e
                 raise
             except httpx.TimeoutException as e:
+                raise_if_task_cancelled(e)
                 last_error = LLMTimeoutError(f"连接 {self._display_name} 超时，请检查网络后重试")
                 is_connect = isinstance(e, httpx.ConnectTimeout)
                 max_attempts = connect_max if is_connect else _MAX_RETRIES
@@ -1600,6 +1618,7 @@ class OpenAICompatibleProvider:
                 else:
                     backoff = next_backoff
             except httpx.HTTPError as e:
+                raise_if_task_cancelled(e)
                 last_error = self._network_error_to_llm(e)
                 is_connect = self._is_connect_failure(e)
                 max_attempts = connect_max if is_connect else _MAX_RETRIES
@@ -1631,6 +1650,7 @@ class OpenAICompatibleProvider:
         try:
             response = await self._client.post("/chat/completions", json=payload)
         except httpx.HTTPError as e:
+            raise_if_task_cancelled(e)
             raise self._probe_connect_error(e) from e
         code = response.status_code
         # 429 = authenticated but throttled — treat as reachable without body parse.
@@ -1799,6 +1819,7 @@ class OpenAICompatibleProvider:
         try:
             response = await self._client.get("/models")
         except httpx.HTTPError as e:
+            raise_if_task_cancelled(e)
             raise self._probe_connect_error(e) from e
         code = response.status_code
         if 400 <= code < 500:

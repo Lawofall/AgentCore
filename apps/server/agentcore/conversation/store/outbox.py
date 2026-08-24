@@ -1011,6 +1011,7 @@ def tool_failures_from_journal(
         normalize_local_turn_tool_failure_code,
         truncate_tool_failure_message,
     )
+    from agentcore.runtime.engine.tool_channel_redirect import is_channel_redirect_code
 
     if not entries:
         return []
@@ -1047,7 +1048,7 @@ def tool_failures_from_journal(
         if row:
             from_facts.append(row)
     if from_facts:
-        return from_facts
+        return [row for row in from_facts if not is_channel_redirect_code(row["code"])]
 
     from_ends: list[dict[str, str]] = []
     for entry in entries:
@@ -1058,9 +1059,11 @@ def tool_failures_from_journal(
         payload = entry.get("payload") or {}
         if not isinstance(payload, dict):
             continue
-        if payload.get("status", "success") == "success":
+        if payload.get("status", "success") in ("success", "redirect"):
             continue
-        raw_code = payload.get("code")
+        raw_failure = payload.get("failure")
+        failure = raw_failure if isinstance(raw_failure, dict) else {}
+        raw_code = payload.get("code") or failure.get("code")
         code = str(raw_code).strip() if isinstance(raw_code, str) else None
         row = _row(
             str(payload.get("tool_name") or ""),
@@ -1069,7 +1072,7 @@ def tool_failures_from_journal(
         )
         if row:
             from_ends.append(row)
-    return from_ends
+    return [row for row in from_ends if not is_channel_redirect_code(row["code"])]
 
 
 def list_outbox_records(base: Path) -> list[dict[str, Any]]:

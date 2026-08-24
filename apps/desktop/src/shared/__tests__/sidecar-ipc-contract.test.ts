@@ -127,29 +127,6 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
     expect("permissionAxes" in withoutAxes).toBe(false);
   });
 
-  it("buildSidecarResumeRpcParams 可选透传 excluded_run_ids / write_capability_overrides", () => {
-    const params = buildSidecarResumeRpcParams({
-      messageId: "m-asst",
-      conversationId: "c1",
-      traceId: "abc123",
-      decision: "continue",
-      note: "",
-      selected: [],
-      excluded_run_ids: ["r2"],
-      write_capability_overrides: [{ run_id: "r1", capability: "text_only" }],
-    });
-    expect(params.excluded_run_ids).toEqual(["r2"]);
-    expect(params.write_capability_overrides).toEqual([
-      { run_id: "r1", capability: "text_only" },
-    ]);
-    expect(params.messageId).toBe("m-asst");
-    expect(params.decision).toBe("continue");
-    expect(params.selected).toEqual([]);
-    for (const key of Object.keys(params)) {
-      expect(sidecarIpc.resumeRpcParams.keys).toContain(key);
-    }
-  });
-
   it("buildSidecarResumeRpcParams 可选透传 userId", () => {
     const withUser = buildSidecarResumeRpcParams({
       messageId: "m-asst",

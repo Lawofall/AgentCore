@@ -41,20 +41,21 @@ import { codeDiagnosticsPeek, extractCodeDiagnostics } from "./codeDiagnostics";
 import { type DiffLine, lineDiff } from "./diff";
 import { isFileReadCeilingGuidance } from "./fileReadCeiling";
 import { isSearchHitTool } from "./parseSearchHits";
+import { specificToolFailureMessage } from "./productFailureFace";
 import { isVerifyBudgetExceeded } from "./verifyBudget";
 
 /** Normalized data a tool result renders from, shared by the single-agent process
  * panel (ProcessToolRow) and the multi-agent run detail (RunDetailBody): the call
  * `args`, the model-facing `result` text, optional rich `display`, and optional
- * product `failure` face (折叠行用；展开详情仍可读 model-facing `result`). */
+ * product `failure` face (展开详情用；折叠行保持一行). */
 export interface ToolResultData {
   toolName: string;
   args: Record<string, unknown>;
   result: string | null;
   display?: ToolDisplay | null;
-  /** Present on status=error when the server sent `tool_use_end.failure`. */
+  /** Present on status=error or status=redirect when the server sent `tool_use_end.failure`. */
   failure?: ToolFailure | null;
-  status: "running" | "success" | "error";
+  status: "running" | "success" | "error" | "redirect";
   /** Conversation the call belongs to — only the browser result uses it, to lazy-fetch
    * its key-frame from that conversation's workspace. Absent everywhere else. */
   conversationId?: string | null;
@@ -144,6 +145,9 @@ function isConversationLogDisplay(d: unknown): d is ConversationLogDisplay {
  * non-empty text result. Drives ProcessToolRow's click-to-expand affordance. */
 export function hasToolResultBody(d: ToolResultData): boolean {
   if (d.status === "running") return false;
+  if (d.status === "redirect") {
+    return Boolean(d.failure?.message?.trim());
+  }
   // Successful handoff: expandable only when the brief has details (not summary-only).
   // The protocol receipt is never a body.
   if (isSuccessfulHandoff(d.toolName, d.status)) {
@@ -154,6 +158,7 @@ export function hasToolResultBody(d: ToolResultData): boolean {
   if (d.display) return true;
   if (isFileEdit(d)) return true;
   if (isFileWrite(d)) return true;
+  if (specificToolFailureMessage(d)) return true;
   return !!d.result?.trim();
 }
 
@@ -176,15 +181,12 @@ function isFileWrite(d: ToolResultData): boolean {
 
 /** A compact one-line peek for the collapsed row — display-aware so it reads as
  * 「3 results」/「exit 1」rather than the first line of a JSON / "stdout:" blob.
- * On status=error, prefer `failure.message` (产品句) so the timeline never leaks
- * model-facing internals (host:port / exception class) by default; expand still
- * shows technical `result`. Absent `failure` (旧服务端 / 历史 journal) keeps the
- * legacy result-first-line fallback. */
+ * Collapsed error rows stay one line (title + red ✗): product `failure.message`
+ * is not peeked here (specific copy lives in the expanded detail; generic copy
+ * is hidden). Display-derived summaries still apply; expand shows technical
+ * `result`. Absent `failure` (旧服务端 / 历史 journal) keeps the legacy
+ * result-first-line fallback when a display summary is not available. */
 export function toolResultPeek(d: ToolResultData): string {
-  if (d.status === "error") {
-    const product = d.failure?.message?.trim();
-    if (product) return clampLine(product);
-  }
   if (isSuccessfulHandoff(d.toolName, d.status)) {
     return clampLine(handoffSummaryPeek(d.args));
   }
@@ -254,6 +256,12 @@ export function toolResultPeek(d: ToolResultData): string {
   if (isFileWrite(d)) {
     const path = asString(d.args.path);
     return path ? `已写入 ${path}` : "已写入文件";
+  }
+  if (
+    d.status === "error" &&
+    !isFileReadCeilingGuidance(d.toolName, d.result)
+  ) {
+    return "";
   }
   if (d.toolName === "grep") return grepCollapsedPeek(d.result);
   const line = (d.result ?? "").split("\n").find((l) => l.trim()) ?? "";
@@ -710,6 +718,35 @@ function TextResult({
  * rich data is absent — falls back to the model-facing text result.
  */
 export function ToolResultView({ data }: { data: ToolResultData }) {
+  if (data.status === "redirect") {
+    const message = data.failure?.message?.trim();
+    if (!message) return null;
+    return (
+      <p
+        className="mt-1 text-xs text-muted-foreground"
+        data-testid="tool-channel-redirect"
+      >
+        {message}
+      </p>
+    );
+  }
+  const face = specificToolFailureMessage(data);
+  const body = <ToolResultBody data={data} />;
+  if (!face) return body;
+  return (
+    <div>
+      <p
+        className="mt-1 truncate text-xs text-muted-foreground"
+        data-testid="tool-product-failure"
+      >
+        {face}
+      </p>
+      {body}
+    </div>
+  );
+}
+
+function ToolResultBody({ data }: { data: ToolResultData }) {
   const diagnostics = extractCodeDiagnostics(data.display);
 
   if (isSuccessfulHandoff(data.toolName, data.status)) {

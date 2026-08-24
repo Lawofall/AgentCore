@@ -51,7 +51,7 @@ export type ExecutionStatus =
 /** 幕类型 = 能力档取用键（首批 multi_agent / debate）。 */
 export type ActKind = "multi_agent" | "debate";
 
-/** 幕授权来源（批 B）。 */
+/** 幕授权来源（批 B）：stage_card=推进卡；auto=新开默认；preview=存量 leftover 标记（非新开开工卡）。 */
 export type ActAuthorizedBy = "stage_card" | "auto" | "preview";
 
 /** One act in an execution's act sequence (批 A1 幕契约). */
@@ -183,7 +183,7 @@ export interface ToolCallState {
   /** Rich rendering data resolved on `tool_use_end` (工具结果富渲染); absent for
    * tools whose text `result` is enough. */
   display?: ToolDisplay | null;
-  status: "running" | "success" | "error";
+  status: "running" | "success" | "error" | "redirect";
 }
 
 export interface AgentState {
@@ -618,6 +618,12 @@ export interface ExecutionJournal {
   finishReason: string;
   /** Per-run ProcessStep[] from journal (reload overlay). Absent on older journals. */
   runProcesses?: Record<string, ProcessStep[]> | null;
+  /**
+   * False when REST list dropped bulky journal events; graph / turn-detail
+   * fetch `GET …/messages/{id}` before hydrateFromJournal. Absent on live SSE
+   * journals and pre-slim opened cache (treat as complete).
+   */
+  eventsComplete?: boolean;
   /**
    * Structured turn failure from journal ``turn_end.error`` (cold reload / duck
    * path). Live SSE usually lifts this onto ``Message.error``; keep optional here

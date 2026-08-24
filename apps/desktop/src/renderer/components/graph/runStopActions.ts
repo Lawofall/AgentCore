@@ -1,4 +1,5 @@
 import { type RunStopAck, submitRunStop } from "@/services/runStop";
+import { runtimeOf, useConversationStore } from "@/stores/conversation";
 import { useRunStopPendingStore } from "@/stores/runStopPending";
 import { interveneAckText } from "@agentcore/protocol-fold-kit";
 import { toast } from "sonner";
@@ -38,7 +39,16 @@ export async function requestRunStop(opts: {
   }
   if (!ack.accepted) {
     store.clearPending(executionId, runId);
-    toast.warning("没有停下任何工作", { description: interveneAckText(ack) });
+    // Composer 硬停已经把整轮标成 stopping；此时 run-stop 常拿到 no_live_drive
+    // （驱动正在拆）。再警告「没有停下任何工作」像第二次停失败了。
+    const wholeTurnStopping =
+      runtimeOf(useConversationStore.getState(), conversationId).turnPhase ===
+      "stopping";
+    if (ack.reason === "no_live_drive" && wholeTurnStopping) {
+      toast.info("整轮正在停下来");
+    } else {
+      toast.warning("没有停下任何工作", { description: interveneAckText(ack) });
+    }
     return ack;
   }
   toast.success(scope === "team" ? "已请求停止任务" : "已请求停止此成员", {

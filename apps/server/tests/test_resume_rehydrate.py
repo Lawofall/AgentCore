@@ -115,7 +115,6 @@ def _paused_entry(**payload_overrides) -> dict:
         controller={
             "post_delegate": False,
             "delegate_count": 0,
-            "team_gate_fired": False,
             "audit_gate_fired": False,
             "first_batch_substantial": False,
         },
@@ -225,7 +224,6 @@ def test_settle_mark_sets_post_delegate_with_substantial_shape():
     seed = {
         "post_delegate": False,
         "delegate_count": 0,
-        "team_gate_fired": False,
         "audit_gate_fired": False,
         "first_batch_substantial": False,
     }
@@ -239,15 +237,12 @@ def test_settle_mark_sets_post_delegate_with_substantial_shape():
     restored = create_loop_controller(frozenset(), seed=marked)
     assert restored.has_delegated is True
     assert restored.first_batch_substantial is True
-    # Soft gates latched off → long answer must not re-fire team_gate.
-    assert restored.team_gate_fired is False
 
 
 def test_settle_mark_plan_review_with_deps():
     seed = {
         "post_delegate": False,
         "delegate_count": 0,
-        "team_gate_fired": True,  # already fired pre-pause cycle
         "audit_gate_fired": False,
         "first_batch_substantial": False,
     }
@@ -255,7 +250,6 @@ def test_settle_mark_plan_review_with_deps():
     marked = mark_controller_after_settle(seed, frame)
     assert marked["post_delegate"] is True
     assert marked["first_batch_substantial"] is True  # has_deps
-    assert marked["team_gate_fired"] is True  # preserved
 
 
 def test_settle_mark_skips_ask_user():
@@ -282,7 +276,6 @@ def test_settle_mark_without_shape_would_leave_substantial_false():
         {
             "post_delegate": False,
             "delegate_count": 0,
-            "team_gate_fired": False,
             "audit_gate_fired": False,
             "first_batch_substantial": False,
         },

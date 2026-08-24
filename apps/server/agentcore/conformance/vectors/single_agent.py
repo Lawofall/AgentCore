@@ -258,6 +258,40 @@ def _single_agent_tool_failure() -> list[SSEEvent]:
     ]
 
 
+def _single_agent_tool_channel_redirect() -> list[SSEEvent]:
+    """Wrong-tool-channel steer: ``code_execute`` as grep → wire ``status=redirect``.
+
+    Model-facing ``result`` still carries the steer imperative; process status is
+    not ``error``. The next step is the right-channel tool succeeding.
+    """
+    from agentcore.runtime.engine.tool_failure_face import tool_failure_fields
+
+    return [
+        message_start("m1", conversation_id=_CONV),
+        reasoning_delta("先在源码里搜一下。"),
+        tool_use_start("tc1", "code_execute", {"code": "open('index.html').read()"}),
+        tool_use_end(
+            "tc1",
+            "code_execute",
+            success=False,
+            output=(
+                "禁止用 code_execute 打开源码再正则扫描（检测到：re.findall(）。"
+                "在工作区搜符号、字符串或计数请用 grep；概念定位用 code_search；"
+                "看命中正文用 file_read。解析表格、改文件、对内存数据跑计算仍用本工具。"
+            ),
+            failure=tool_failure_fields(code="source_grep_redirect"),
+        ),
+        tool_use_start("tc2", "grep", {"pattern": "footer"}),
+        tool_use_end(
+            "tc2", "grep", success=True, output="3 处匹配，分布在 1 个文件"
+        ),
+        content_delta("我改用搜索定位了。"),
+        message_end(
+            FinishReason.END_TURN, input_tokens=900, output_tokens=80, cost=_COST
+        ),
+    ]
+
+
 def _single_agent_cancelled() -> list[SSEEvent]:
     """单聊：用户取消（``message_end(FinishReason.CANCELLED)``）。
 
@@ -801,6 +835,10 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     "single_agent_tool_failure": (
         "单聊：工具失败（tool_use_end success=False → process status=error）后继续作答",
         _single_agent_tool_failure,
+    ),
+    "single_agent_tool_channel_redirect": (
+        "单聊：工具改道（code_execute 当 grep → process status=redirect）后改用 grep",
+        _single_agent_tool_channel_redirect,
     ),
     "single_agent_cancelled": (
         "单聊：用户取消（message_end finish_reason=cancelled → status=cancelled，半截正文保留）",

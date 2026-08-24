@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
+import sys
+import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -14,6 +17,7 @@ from agentcore.workspace.attachment_parse import (
     ATTACHMENT_INLINE_MAX_CHARS,
     ParseStatus,
     extract_office_bytes,
+    extract_office_payload,
     extract_table_preview,
     looks_like_scanned,
     parsed_copy_path,
@@ -28,6 +32,34 @@ from agentcore.workspace.server import ServerWorkspace
 
 def _ws(root: Path) -> ServerWorkspace:
     return ServerWorkspace(root=root, sandbox=SubprocessSandbox())
+
+
+def _docx_bytes(*, paragraphs: list[str], table: list[list[str]] | None = None) -> bytes:
+    from docx import Document
+
+    doc = Document()
+    for paragraph in paragraphs:
+        doc.add_paragraph(paragraph)
+    if table:
+        grid = doc.add_table(rows=len(table), cols=max(len(row) for row in table))
+        for i, row in enumerate(table):
+            for j, value in enumerate(row):
+                grid.cell(i, j).text = value
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _inprocess_extract():
+    """Run the worker payload in-process so markitdown mocks still apply (pdf)."""
+
+    def _run(data: bytes, ext: str, timeout: float, *, holder=None):
+        return extract_office_payload(data, ext)
+
+    return patch(
+        "agentcore.workspace.attachment_parse._run_extract_subprocess",
+        side_effect=_run,
+    )
 
 
 def test_should_preparse_routing():
@@ -66,27 +98,125 @@ def test_parsed_copy_path():
 
 
 async def test_extract_office_bytes_ok_and_skip(tmp_path: Path):
+    payload = _docx_bytes(
+        paragraphs=["Hello paragraph from python-docx with enough alphanumeric body."],
+        table=[["Name", "Qty"], ["Widget", "42"]],
+    )
     with patch(
         "agentcore.workspace.attachment_parse._convert_with_markitdown",
-        return_value="# Title\n\nEnough alphanumeric content for the scan heuristic here.",
+        side_effect=AssertionError("docx must not call markitdown"),
     ):
-        ok = await extract_office_bytes(b"PK-fake", ext=".docx")
+        ok = await extract_office_bytes(payload, ext=".docx")
     assert ok.status == ParseStatus.OK
-    assert "Enough alphanumeric" in ok.text
+    assert "Hello paragraph from python-docx" in ok.text
+    assert "Widget" in ok.text
+    assert "42" in ok.text
+    assert "python-docx" in ok.detail
 
     skipped = await extract_office_bytes(b"PK", ext=".xlsx")
     assert skipped.status == ParseStatus.SKIPPED
     assert skipped.detail.startswith("skip_ext")
 
 
+async def test_extract_docx_payload_skips_markitdown():
+    payload = _docx_bytes(
+        paragraphs=["In-process paragraph body with alphanumeric content here."]
+    )
+    with patch(
+        "agentcore.workspace.attachment_parse._convert_with_markitdown",
+        side_effect=AssertionError("docx payload must not call markitdown"),
+    ):
+        result = extract_office_payload(payload, ".docx")
+    assert result.status == ParseStatus.OK
+    assert "In-process paragraph body" in result.text
+
+
+async def test_extract_pdf_payload_still_uses_markitdown():
+    with patch(
+        "agentcore.workspace.attachment_parse._convert_with_markitdown",
+        return_value="PDF body with enough alphanumeric content for the scan heuristic.",
+    ) as mocked:
+        result = extract_office_payload(b"%PDF-fake", ".pdf")
+    mocked.assert_called_once()
+    assert result.status == ParseStatus.OK
+    assert "PDF body" in result.text
+    assert "markitdown" in result.detail
+
+
+async def test_extract_hanging_worker_fails_within_budget_and_kills():
+    from agentcore.workspace import attachment_parse as ap
+
+    orig = ap._run_extract_subprocess
+    seen: dict = {}
+
+    def wrapped(data: bytes, ext: str, timeout: float, *, holder=None):
+        result = orig(data, ext, timeout, holder=holder)
+        seen["proc"] = None if holder is None else holder.get("proc")
+        return result
+
+    with (
+        patch.object(ap, "_run_extract_subprocess", wrapped),
+        patch.object(
+            ap,
+            "_extract_worker_argv",
+            lambda ext: [
+                sys.executable,
+                "-c",
+                "import sys,time; sys.stdin.buffer.read(); time.sleep(60)",
+            ],
+        ),
+    ):
+        t0 = time.monotonic()
+        result = await extract_office_bytes(b"%PDF-x", ext=".pdf", timeout=0.4)
+        elapsed = time.monotonic() - t0
+    assert result.status == ParseStatus.FAILED
+    assert "timeout" in result.detail
+    assert elapsed < 2.0
+    assert elapsed >= 0.3
+    proc = seen.get("proc")
+    assert proc is not None
+    assert proc.poll() is not None
+
+
+async def test_extract_does_not_block_event_loop():
+    with patch(
+        "agentcore.workspace.attachment_parse._extract_worker_argv",
+        lambda ext: [
+            sys.executable,
+            "-c",
+            "import sys,time; sys.stdin.buffer.read(); time.sleep(60)",
+        ],
+    ):
+        ping: list[bool] = []
+
+        async def _mark() -> None:
+            await asyncio.sleep(0.05)
+            ping.append(True)
+
+        extract = asyncio.create_task(
+            extract_office_bytes(b"%PDF-x", ext=".pdf", timeout=0.8)
+        )
+        marker = asyncio.create_task(_mark())
+        done, _pending = await asyncio.wait({marker}, timeout=0.3)
+        assert marker in done
+        assert ping == [True]
+        result = await extract
+    assert result.status == ParseStatus.FAILED
+    assert "timeout" in result.detail
+
+
 async def test_preparse_docx_writes_md_copy(tmp_path: Path):
     ws = _ws(tmp_path)
     (tmp_path / "attachments").mkdir()
-    (tmp_path / "attachments" / "brief.docx").write_bytes(b"PK-fake-docx")
+    (tmp_path / "attachments" / "brief.docx").write_bytes(
+        _docx_bytes(
+            paragraphs=["Hello from docx with enough alphanumeric body for the scan heuristic."]
+        )
+    )
 
     with patch(
         "agentcore.workspace.attachment_parse._convert_with_markitdown",
-        return_value="# Brief\n\nHello from docx with enough alphanumeric body for the scan heuristic.",
+        side_effect=AssertionError("docx must not call markitdown"),
     ):
         result = await preparse_resident(
             ws, workspace_path="attachments/brief.docx", name="brief.docx"
@@ -95,9 +225,9 @@ async def test_preparse_docx_writes_md_copy(tmp_path: Path):
     assert result.status == ParseStatus.OK
     assert result.parsed_workspace_path == "attachments/brief.docx.md"
     assert "Hello from docx" in result.text
-    assert (tmp_path / "attachments" / "brief.docx.md").read_text(encoding="utf-8").startswith(
-        "# Brief"
-    )
+    assert "Hello from docx" in (
+        tmp_path / "attachments" / "brief.docx.md"
+    ).read_text(encoding="utf-8")
 
 
 async def test_preparse_pdf_success_via_persist(tmp_path: Path):
@@ -105,7 +235,7 @@ async def test_preparse_pdf_success_via_persist(tmp_path: Path):
     (tmp_path / "attachments").mkdir()
     (tmp_path / "attachments" / "paper.pdf").write_bytes(b"%PDF-fake")
 
-    with patch(
+    with _inprocess_extract(), patch(
         "agentcore.workspace.attachment_parse._convert_with_markitdown",
         return_value="Abstract\n\nThis paper studies agents." + ("x" * 20),
     ):
@@ -133,7 +263,7 @@ async def test_preparse_scanned_pdf_writes_notice(tmp_path: Path):
     (tmp_path / "attachments").mkdir()
     (tmp_path / "attachments" / "scan.pdf").write_bytes(b"%PDF" + b"\x00" * 100)
 
-    with patch(
+    with _inprocess_extract(), patch(
         "agentcore.workspace.attachment_parse._convert_with_markitdown",
         return_value="   \n",  # empty text layer
     ):
@@ -146,7 +276,6 @@ async def test_preparse_scanned_pdf_writes_notice(tmp_path: Path):
     assert result.parsed_workspace_path == "attachments/scan.pdf.md"
     note = (tmp_path / "attachments" / "scan.pdf.md").read_text(encoding="utf-8")
     assert "OCR" in note
-
 
 async def test_preparse_xlsx_invalid_has_no_body(tmp_path: Path):
     ws = _ws(tmp_path)
@@ -179,22 +308,18 @@ async def test_preparse_failure_falls_back(tmp_path: Path):
     (tmp_path / "attachments").mkdir()
     (tmp_path / "attachments" / "broken.docx").write_bytes(b"not-a-docx")
 
-    with patch(
-        "agentcore.workspace.attachment_parse._convert_with_markitdown",
-        side_effect=RuntimeError("boom"),
-    ):
-        out = await persist_attachments(
-            ws,
-            [
-                {
-                    "name": "broken.docx",
-                    "path": "attachments/broken.docx",
-                    "text": "",
-                    "binary": True,
-                    "workspace_path": "attachments/broken.docx",
-                }
-            ],
-        )
+    out = await persist_attachments(
+        ws,
+        [
+            {
+                "name": "broken.docx",
+                "path": "attachments/broken.docx",
+                "text": "",
+                "binary": True,
+                "workspace_path": "attachments/broken.docx",
+            }
+        ],
+    )
 
     assert out[0]["parse_status"] == "failed"
     assert not (out[0].get("text") or "").strip()
@@ -208,7 +333,6 @@ async def test_preparse_failure_falls_back(tmp_path: Path):
     assert "file_read" in ctx
     assert "do not default to code_execute" in ctx
     assert "openpyxl" not in ctx
-
 
 async def test_context_preparsed_inline_and_large_truncation():
     small = {

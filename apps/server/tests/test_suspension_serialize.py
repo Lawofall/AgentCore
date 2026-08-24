@@ -348,6 +348,26 @@ def test_suspension_from_json_requires_kind():
         suspension_from_json({"message_id": "m1"})
 
 
+def test_turn_suspension_frame_omits_citations_from_json():
+    """New frames persist the citation pool on ``turn_paused``, not ``paused_turns.frame``."""
+    frame = AskUserSuspension(
+        message_id="m-cite",
+        conversation_id="c1",
+        user_id="u1",
+        captain_run_id="cap1",
+        checkpoint_id="ck1",
+        tool_call_id="call_ask",
+        base_system_prompt="sys",
+        user_message="hi",
+        citations=[{"url": "https://live.example", "title": "Live"}],
+    )
+    data = frame.to_json()
+    assert data["citations"] == []
+    # Legacy frames still hydrate frame.citations for resume fallback.
+    legacy = suspension_from_json({**data, "citations": [{"url": "https://old.example", "title": "Old"}]})
+    assert legacy.citations == [{"url": "https://old.example", "title": "Old"}]
+
+
 def test_find_tool_call_id_picks_trailing_matching_call():
     transcript = [
         LLMMessage(role="user", content="原始"),

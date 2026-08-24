@@ -31,6 +31,10 @@ import type {
   RunFrame,
 } from "@/stores/execution";
 import type { SSEEvent } from "@/types/events";
+import {
+  isRateLimitFamilyCode,
+  rateLimitRetrySuppressed,
+} from "@agentcore/contract-types";
 import type { ProjectedTurn } from "@agentcore/protocol-conformance/projectedTurn";
 import {
   type ProjectedTurnVerdict,
@@ -108,6 +112,10 @@ export type TurnOutcomeInput = {
   deliverySummary?: string | null;
   conversationError?: string | null;
   conversationErrorAction?: ErrorAction | null;
+  /**
+   * Live pause/ask/plan_review/team_preview still waiting. Callers must pass
+   * **pending only** — a resolved stub is history, not a hang.
+   */
   hasDedicatedPauseOrAskUi?: boolean;
   hasPendingDecision?: boolean;
   /** Server-attested kind (`message_end.outcome` / REST). Gate pause leaves this null. */
@@ -172,6 +180,12 @@ export type TurnOutcome = {
    * stays on the composer; do not spin「进行中」or paint 已停止 / 失败.
    */
   showStripIdle: boolean;
+  /**
+   * Preflight `turn_warning` banner. Off for user-stop — strip / half-finished
+   * body is the verdict; do not restyle Stop as a warning. Streaming may still
+   * light this so the soft-gate appears before settle.
+   */
+  showTurnWarning: boolean;
   /**
    * 「复制排查包」host. Follows the unique verdict: empty interrupt and
    * partial+rate-limit → composer; hard fail → bubble/strip; paused → none.
@@ -291,6 +305,9 @@ function winningRetryable(
     if (run.retryable === true) sawTrue = true;
     if (run.retryable === false) sawFalse = true;
   }
+  if (isRateLimitFamilyCode(code) && rateLimitRetrySuppressed(retryAfterSec)) {
+    return { retryable: false, retryAfterSec };
+  }
   if (sawTrue) return { retryable: true, retryAfterSec };
   if (sawFalse) return { retryable: false, retryAfterSec };
   if (code && TRANSIENT_CODES.has(code)) {
@@ -299,18 +316,29 @@ function winningRetryable(
   return { retryable: false, retryAfterSec };
 }
 
+function isUserStopTurn(
+  input: TurnOutcomeInput,
+  face: { code: string } | null,
+): boolean {
+  return isCancelCode(face?.code) || input.finishReason === "cancelled";
+}
+
 function deriveKind(
   input: TurnOutcomeInput,
   face: { code: string; message: string } | null,
 ): TurnOutcomeKind {
   const attested = parseTurnOutcomeKind(input.attestedKind);
-  if (attested) return attested;
+  const userStopped = isUserStopTurn(input, face);
+  // Attested paused can linger on the same bubble after ask→resume→Stop.
+  // User-stop is not a hang — do not keep kind=paused (that path paints the
+  // cancel face as a bubble warning under the team graph).
+  if (attested && !(attested === "paused" && userStopped)) return attested;
 
   const structuredFailure =
     face != null &&
     !isCancelCode(face.code) &&
     face.code !== "TURN_INTERRUPTED";
-  if (pauseSignal(input) && !structuredFailure) return "paused";
+  if (pauseSignal(input) && !structuredFailure && !userStopped) return "paused";
   // User-stop face wins over leftover delivery.partial / productLanded.
   // Rate-limit (or any non-cancel face) on a cancelled *status* still follows
   // the winning face — do not let execution.status paint「已停止」over kind.
@@ -406,6 +434,7 @@ function quietFlags(): Pick<
   | "showStripFailure"
   | "showStripStopped"
   | "showStripIdle"
+  | "showTurnWarning"
   | "supportPackHost"
 > {
   return {
@@ -418,6 +447,7 @@ function quietFlags(): Pick<
     showStripFailure: false,
     showStripStopped: false,
     showStripIdle: false,
+    showTurnWarning: false,
     supportPackHost: "none",
   };
 }
@@ -454,6 +484,8 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
       recovery: { kind: "none", label: null },
       face: null,
       ...quietFlags(),
+      // Soft-gate may arrive before message_end; Stop is not settled yet.
+      showTurnWarning: Boolean(input.turnWarning),
     };
   }
 
@@ -487,8 +519,13 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
 
   // `kind=paused` is a frozen read-only path — flag formulas must stay byte-stable.
   if (kind === "paused") {
+    // Cancel face must not become a warning card if kind is still paused
+    // (attested leftover / resolved-card pauseSignal). Stop is not an error.
     const showBubbleBanner =
-      face != null && !hideEmptyBubble && !attestedContinue;
+      face != null &&
+      !hideEmptyBubble &&
+      !attestedContinue &&
+      !isCancelCode(face.code);
     const showComposerHint =
       recovery.kind === "send_next" &&
       !input.hasPendingDecision &&
@@ -533,6 +570,7 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
       showStripFailure: false,
       showStripStopped: false,
       showStripIdle: false,
+      showTurnWarning: Boolean(input.turnWarning),
       supportPackHost: "none",
     };
   }
@@ -572,6 +610,13 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
   const showFinishReasonChip = Boolean(
     chipMeta && !chipOwnedByBanner && !showBubbleBanner,
   );
+  // User-stop is not a warning. Follow finishReason / cancel face — not a
+  // leaf `turnWarning === "已停止"` string match (copy drift would leak it back).
+  const showTurnWarning =
+    Boolean(input.turnWarning) &&
+    !isCancelCode(face?.code) &&
+    fr !== "cancelled" &&
+    !hideEmptyBubble;
   const showFooter =
     !hideEmptyBubble &&
     !namedRecoveryHidesFooter(recovery.kind) &&
@@ -620,6 +665,7 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
     showStripFailure,
     showStripStopped,
     showStripIdle,
+    showTurnWarning,
     supportPackHost,
   };
 }

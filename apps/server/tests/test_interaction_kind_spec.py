@@ -57,7 +57,7 @@ def test_settlement_event_kinds_are_derived_from_specs() -> None:
             EventType.ESCALATION_RESOLVED.value,
             EventType.CHECKPOINT_RESOLVED.value,
             EventType.PLAN_REVIEW_RESOLVED.value,
-            EventType.TEAM_PREVIEW_RESOLVED.value,
+            "team_preview_resolved",
             EventType.STAGE_CARD_REQUIRED.value,
             EventType.STAGE_CARD_RESOLVED.value,
             EventType.INTERACTION_ORPHANED.value,

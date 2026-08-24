@@ -3,7 +3,7 @@
  *
  * §八 切段落点：运行期按事件类型识别边界（不用导出期标注）。
  * - hot（approval）：在 `*_required` 后暂停同流，等 POST interactions 再续推后续段
- * - cold（team_preview）：首段用带 `message_end(paused)` 的 finalized 向量；
+ * - cold（plan_review）：首段用带 `message_end(paused)` 的 finalized 向量；
  *   resume 段从 `*_resolved_continue` 的 `*_resolved` 起推（事件仍全部来自真实向量）
  */
 import {
@@ -32,7 +32,6 @@ const HOT_REQUIRED = new Set([
 ]);
 
 const COLD_REQUIRED = new Set([
-  "team_preview_required",
   "plan_review_required",
   "checkpoint_required",
   "ask_user_required",
@@ -62,21 +61,21 @@ function splitHot(fixture: ConformanceFixture): ScriptPlan {
  * Cold gate: pin finalized (paused close) for the first SSE, and the
  * resolved_continue vector's post-gate tail for POST resume.
  */
-function splitColdTeamPreview(): ScriptPlan {
-  const finalized = loadFixture("team_preview_finalized");
-  const cont = loadFixture("team_preview_resolved_continue");
-  const resolvedIdx = indexOfType(cont.events, "team_preview_resolved");
+function splitColdPlanReview(): ScriptPlan {
+  const finalized = loadFixture("plan_review_finalized");
+  const cont = loadFixture("plan_review_resolved_continue");
+  const resolvedIdx = indexOfType(cont.events, "plan_review_resolved");
   if (resolvedIdx < 0) {
     throw new Error(
-      "team_preview_resolved_continue missing team_preview_resolved",
+      "plan_review_resolved_continue missing plan_review_resolved",
     );
   }
-  const requiredIdx = indexOfType(finalized.events, "team_preview_required");
+  const requiredIdx = indexOfType(finalized.events, "plan_review_required");
   if (requiredIdx < 0) {
-    throw new Error("team_preview_finalized missing team_preview_required");
+    throw new Error("plan_review_finalized missing plan_review_required");
   }
   return {
-    name: "team_preview_resolved_continue",
+    name: "plan_review_resolved_continue",
     kind: "cold_gate",
     initial: finalized.events,
     continueSameStream: [],
@@ -200,7 +199,9 @@ const PLANS: Record<string, () => ScriptPlan> = {
   browser_login_escalate: () => browserLoginEscalate(),
   approval_resolved_continue: () =>
     splitHot(loadFixture("approval_resolved_continue")),
-  team_preview_resolved_continue: () => splitColdTeamPreview(),
+  plan_review_resolved_continue: () => splitColdPlanReview(),
+  // server.ts resume fallback still names this key; leftover fixtures are stripped.
+  team_preview_resolved_continue: () => splitColdPlanReview(),
 };
 
 /** Parse `__e2e_script__:<name>` from the user message; default single_agent_text. */

@@ -283,132 +283,27 @@ class HandoffTool:
                 output="",
                 error=_MOTION_CARD_MISSING_TIP,
             )
-        # 成篇质量：有下游时禁止空交（地板 = 非空即可；生产 handoff_min_body_chars=0）。
-        # 豁免认 landed_artifact_kinds 中的 prose（跨 replace 存活）；骨架/空落盘不算。
-        # 非 prose：同轮正文 0 字但 summary 非空 → 可升格简报为候选正文。
-        # prose + 有下游：summary 不算正文，禁止升格顶地板（对齐 identity）。
-        # 空 summary 不豁免。勿依赖 has_landed_files bool——经 dataclasses.replace 会丢。
+        # 空交不再硬拒（实测误伤多，行业也不拦「没写出东西」）。
+        # 正文空时仍可把 summary 升格成下游可读正文，有真实正文则不覆盖。
         promoted_body = ""
-        if context.handoff_requires_body:
+        body_chars = _body_chars(context)
+        if body_chars == 0 and summary:
             from agentcore.runtime.runs.research_quality import (
                 brief_may_satisfy_body_floor,
                 promote_brief_to_deliverable,
-                upstream_body_floor_satisfied,
             )
 
-            body_chars = _body_chars(context)
-            floor = max(0, int(context.handoff_min_body_chars or 0))
-            kinds = context.landed_artifact_kinds
             form = context.handoff_deliverable_form
-            if not upstream_body_floor_satisfied(
-                body_chars=body_chars,
-                landed_artifact_kinds=kinds,
-                min_body_chars=floor,
-            ):
-                if (
-                    body_chars == 0
-                    and summary
-                    and brief_may_satisfy_body_floor(deliverable_form=form)
-                ):
-                    candidate = promote_brief_to_deliverable(
-                        summary, arguments.get("key_points")
-                    )
-                    if upstream_body_floor_satisfied(
-                        body_chars=len(candidate),
-                        landed_artifact_kinds=kinds,
-                        min_body_chars=floor,
-                    ):
-                        promoted_body = candidate
-                    else:
-                        kinds_map = kinds or {}
-                        only_skeleton = bool(kinds_map) and all(
-                            v == "skeleton" for v in kinds_map.values()
-                        )
-                        floor_hint = (
-                            f"至少 {floor} 字" if floor > 0 else "非空正文"
-                        )
-                        land_hint = (
-                            "已落盘的是骨架/提纲（skeleton），不算成篇交付；"
-                            if only_skeleton
-                            else ""
-                        )
-                        logger.info(
-                            "worker.handoff",
-                            run_id=context.run_id,
-                            has_summary=bool(summary),
-                            chars=len(summary),
-                            body_chars=body_chars,
-                            promoted_chars=len(candidate),
-                            has_motion_card=card is not None,
-                            rejected="empty_body",
-                            only_skeleton=only_skeleton,
-                            min_body_chars=floor,
-                        )
-                        return ToolResult(
-                            tool_call_id="",
-                            success=False,
-                            output="",
-                            error=(
-                                "空交付不得交接：有下游队员依赖你的产出，但"
-                                f"{land_hint}本轮正文 0 字，交接简报升格后仍不足"
-                                f"（须{floor_hint}）。"
-                                "请补写实质正文或加长 summary / key_points 后再 handoff。"
-                            ),
-                            contract_failure=True,
-                        )
-                else:
-                    kinds_map = kinds or {}
-                    only_skeleton = bool(kinds_map) and all(
-                        v == "skeleton" for v in kinds_map.values()
-                    )
-                    floor_hint = (
-                        f"至少 {floor} 字" if floor > 0 else "非空正文"
-                    )
-                    prose_summary_hint = (
-                        "handoff 的 summary 不算正文；"
-                        if (
-                            body_chars == 0
-                            and summary
-                            and not brief_may_satisfy_body_floor(deliverable_form=form)
-                        )
-                        else ""
-                    )
-                    land_hint = (
-                        "已落盘的是骨架/提纲（skeleton），不算成篇交付；请补写实质正文并 "
-                        f"file_write/file_append 成 prose，或在本轮写出{floor_hint}后再 handoff。"
-                        if only_skeleton
-                        else (
-                            f"{prose_summary_hint}本轮正文仅 {body_chars} 字（须{floor_hint}，"
-                            "或先落盘成篇 prose 产物后再交；骨架/空文件不算）。"
-                            "请先写完交付正文并落盘，或在本轮写出足够正文后再调用 handoff——"
-                            "禁止空壳简报进入下游任务。"
-                        )
-                    )
-                    logger.info(
-                        "worker.handoff",
-                        run_id=context.run_id,
-                        has_summary=bool(summary),
-                        chars=len(summary),
-                        body_chars=body_chars,
-                        has_motion_card=card is not None,
-                        rejected="empty_body",
-                        only_skeleton=only_skeleton,
-                        min_body_chars=floor,
-                        deliverable_form=form,
-                    )
-                    return ToolResult(
-                        tool_call_id="",
-                        success=False,
-                        output="",
-                        error=f"空交付不得交接：有下游队员依赖你的产出，但{land_hint}",
-                        contract_failure=True,
-                    )
+            if brief_may_satisfy_body_floor(deliverable_form=form):
+                promoted_body = promote_brief_to_deliverable(
+                    summary, arguments.get("key_points")
+                )
         logger.info(
             "worker.handoff",
             run_id=context.run_id,
             has_summary=bool(summary),
             chars=len(summary),
-            body_chars=_body_chars(context),
+            body_chars=body_chars,
             has_motion_card=card is not None,
             promoted_body=bool(promoted_body),
         )

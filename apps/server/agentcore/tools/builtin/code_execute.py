@@ -21,6 +21,10 @@ from agentcore.tools.builtin.project_verify import (
     project_verify_command_match,
     project_verify_redirect_message,
 )
+from agentcore.tools.builtin.source_inspect import (
+    source_inspect_match,
+    source_inspect_redirect_message,
+)
 from agentcore.tools.file_products import file_product
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -44,6 +48,8 @@ __all__ = [
     "long_running_redirect_message",
     "project_verify_command_match",
     "project_verify_redirect_message",
+    "source_inspect_match",
+    "source_inspect_redirect_message",
 ]
 
 # 结构化写回自报 (交付物台账事实口径 · 契约见 tools/file_products.py):
@@ -86,7 +92,8 @@ _USAGE_TAIL = (
     "写进回复）。④ 抓取网页或调用公开 HTTP API 优先用 read_url / web_search "
     "工具，不要在代码里发网络请求。⑤ 大 zip 持久解压到工作区请用 archive_extract；"
     "勿只靠本工具解压后假定内容已在 canonical 工作区树可见。⑥ 看已有源码 / 翻文件请用 "
-    "file_read（可分页）；【禁止】为看正文写脚本 print / 整文件 dump 到 stdout。"
+    "file_read（可分页）；在源码里搜符号、计数请用 grep / code_search。"
+    "【禁止】为看正文写脚本 print / 整文件 dump 到 stdout，也【禁止】open 源码再正则扫描当检索。"
     "解析表格、改文件、跑计算仍用本工具。"
 )
 
@@ -288,6 +295,28 @@ class CodeExecuteTool:
                 error=msg,
                 duration_ms=int((time.monotonic() - start) * 1000),
                 metadata={"code": "project_verify_redirect", "matched": verify_matched},
+                contract_failure=True,
+            )
+
+        inspect_hit = source_inspect_match(code)
+        if inspect_hit is not None:
+            msg = source_inspect_redirect_message(inspect_hit)
+            inspect_code = (
+                "source_dump_redirect"
+                if inspect_hit.kind == "dump"
+                else "source_grep_redirect"
+            )
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=msg,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                metadata={
+                    "code": inspect_code,
+                    "matched": inspect_hit.matched,
+                    "kind": inspect_hit.kind,
+                },
                 contract_failure=True,
             )
 

@@ -61,6 +61,7 @@ def test_team_position_block_four_dag_shapes():
     #     — reinforces structure ownership (the worker-side L3 lever).
     term = _build_messages(plan, w, {}, "SYS", "原始请求")[1].content or ""
     assert "终端环" in term and "最终交付物" in term
+    assert "先 file_read" in term and "全仓" in term
     assert "不要自己产出整个最终交付物" not in term  # not an upstream link
     assert "自起描述性文件名" not in term  # A1 is upstream-only
     assert w.sibling_summary == ""  # lone fan-in → no parallel-peer line
@@ -287,3 +288,18 @@ def test_worker_turn_observe_covers_identity(monkeypatch):
     assert row["sections"]["worker_base"] == 3
     assert row["sections"]["identity"] > 0
     assert row["sections"]["role"] == len("你的角色：汇报员")
+
+
+def test_web_quality_scan_injects_design_prompt():
+    spec = RunSpec(
+        run_id="x",
+        agent_id="x",
+        role="页面",
+        task="做落地页",
+        deliverable=Deliverable(form="files", web_quality_scan=True),
+    )
+    msgs = _build_messages(_plan(spec), spec, {}, "SYS", "原始请求")
+    system = msgs[0].content or ""
+    assert "site/DESIGN.md" in system
+    assert "s_default" in system
+    assert "正向配方" in system

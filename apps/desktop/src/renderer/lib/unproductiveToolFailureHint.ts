@@ -1,3 +1,4 @@
+import { resolveToolWireStatus } from "@/lib/channelRedirect";
 import type { ExecutionJournal } from "@/stores/execution/types";
 import type { ProcessStep } from "@/types/events";
 
@@ -27,7 +28,10 @@ function failedNamesFromSteps(steps: ProcessStep[] | undefined): string[] {
   if (!steps?.length) return [];
   const names: string[] = [];
   for (const step of steps) {
-    if (step.kind === "tool" && step.status === "error") {
+    if (
+      step.kind === "tool" &&
+      resolveToolWireStatus(step.status, step.failure) === "error"
+    ) {
       names.push(step.tool_name);
     }
   }

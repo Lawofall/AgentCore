@@ -31,7 +31,10 @@ import {
 } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
 import { useFoldersStore } from "@/stores/folders";
-import { usePendingApprovals } from "@/stores/interactions";
+import {
+  isRetiredKickoffKind,
+  usePendingApprovals,
+} from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useServerHealthStore } from "@/stores/serverHealth";
 import { AtSign, Copy, ListPlus, Loader2, Send, Square, X } from "lucide-react";
@@ -133,7 +136,11 @@ export function TurnComposer({
   );
   const hasPausedDecision = usePausedTurnStore((s) =>
     conversationId
-      ? s.pending.some((p) => p.conversationId === conversationId)
+      ? s.pending.some(
+          (p) =>
+            p.conversationId === conversationId &&
+            !isRetiredKickoffKind(p.kind),
+        )
       : false,
   );
   const pendingApprovals = usePendingApprovals(conversationId);

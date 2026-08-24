@@ -39,8 +39,8 @@ export async function fetchConversationReplay(
 
 /**
  * One assistant turn's user-end final state (`runs_payload` + `projected`).
- * The conversation list omits this pair; call after the operator opens a turn
- * whose `has_final_state` is true.
+ * The conversation list omits this pair; the replay page auto-fetches it for
+ * `has_final_state` rows in the loaded window (anchor first, concurrency 2).
  */
 export async function fetchReplayTurnFinalState(
   conversationId: string,

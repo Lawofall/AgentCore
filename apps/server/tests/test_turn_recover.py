@@ -1298,6 +1298,7 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
     from agentcore.runtime import crash_delegate as crash_mod
     from agentcore.runtime.crash_delegate import production_crash_delegate_factory
     from agentcore.runtime.facts import FactKind
+    from agentcore.runtime.resolve.prompt import rebuild as rebuild_mod
 
     captured: dict = {}
 
@@ -1328,7 +1329,7 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
 
     backend = SimpleNamespace(location="server")
     monkeypatch.setattr(
-        crash_mod, "collect_outlet_inventory", AsyncMock(return_value=())
+        rebuild_mod, "collect_outlet_inventory", AsyncMock(return_value=())
     )
     monkeypatch.setattr(crash_mod, "async_session_factory", lambda: _FakeSession())
     monkeypatch.setattr(crash_mod, "ConversationRepository", _FakeConvRepo)
@@ -1362,16 +1363,16 @@ async def test_production_crash_factory_base_prompt_lists_system_skills(monkeypa
         crash_mod, "suspension_callbacks", lambda: (AsyncMock(), AsyncMock())
     )
     monkeypatch.setattr(
-        crash_mod, "assemble_turn_rules", AsyncMock(return_value="")
+        rebuild_mod, "assemble_turn_rules", AsyncMock(return_value="")
     )
     monkeypatch.setattr(
-        crash_mod, "resolve_exec_languages", AsyncMock(return_value=())
+        rebuild_mod, "resolve_exec_languages", AsyncMock(return_value=())
     )
     monkeypatch.setattr(
-        crash_mod, "detect_workspace_git", AsyncMock(return_value=None)
+        rebuild_mod, "detect_workspace_git", AsyncMock(return_value=None)
     )
     monkeypatch.setattr(
-        crash_mod, "build_workspace_context", lambda *_a, **_k: ""
+        rebuild_mod, "build_workspace_context", lambda *_a, **_k: ""
     )
     # Rules / memory IO must not block the skill-directory assertion.
     monkeypatch.setattr(

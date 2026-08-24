@@ -21,7 +21,6 @@ LEGACY_TAPE_FORMAT_VERSION = 1
 # turn as PAUSED, and waits for ``POST …/resume``.
 PAUSE_REQUIRED_KINDS = frozenset(
     {
-        "team_preview_required",
         "checkpoint_required",
         "plan_review_required",
     }
@@ -30,7 +29,6 @@ PAUSE_REQUIRED_KINDS = frozenset(
 # Cold-path durable pauses wired for true tape-frame suspend + live resume.
 TAPE_WIRED_PAUSE_KINDS = frozenset(
     {
-        "team_preview_required",
         "checkpoint_required",
         "plan_review_required",
     }
@@ -49,10 +47,10 @@ TAPE_INTERACTIVE_PAUSE_KINDS = TAPE_WIRED_PAUSE_KINDS | TAPE_HOT_PAUSE_KINDS
 # Recorded resolve events are skipped; the live resolve is emitted fresh.
 PAUSE_RESOLVED_KINDS = frozenset(
     {
-        "team_preview_resolved",
         "checkpoint_resolved",
         "plan_review_resolved",
         "approval_resolved",
+        "team_preview_resolved",
     }
 )
 
@@ -94,6 +92,8 @@ TAPE_EXCLUDED_KINDS = PAUSE_RESOLVED_KINDS | CLIENT_TOOL_REQUIRED_KINDS | frozen
         "followups_generated",
         "citations",
         "error",
+        "team_preview_required",
+        "team_preview_resolved",
     }
 )
 

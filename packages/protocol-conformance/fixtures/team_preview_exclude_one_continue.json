@@ -1,6 +1,6 @@
 {
   "name": "team_preview_exclude_one_continue",
-  "description": "开工组队有限否决：排除一人 continue → resolved 投影 excluded_run_ids",
+  "description": "开工卡已退役、不再发事件对：排除一人后续跑（否决字段不再从事件投影）",
   "events": [
     {
       "type": "message_start",
@@ -72,58 +72,6 @@
       "timestamp": "2026-01-01T00:00:00.004Z"
     },
     {
-      "type": "team_preview_required",
-      "payload": {
-        "checkpoint_id": "tp-ex1",
-        "conversation_id": "conv_demo",
-        "workers": [
-          {
-            "run_id": "r1",
-            "role": "调研",
-            "task": "调研方案",
-            "depends_on": [],
-            "write_capability": "can_write_files",
-            "write_capability_label": "可改文件",
-            "target_folder_name": "本会话工作区"
-          },
-          {
-            "run_id": "r2",
-            "role": "校对",
-            "task": "校对摘要",
-            "depends_on": [],
-            "write_capability": "text_only",
-            "write_capability_label": "仅文字报告",
-            "target_folder_name": "本会话工作区"
-          }
-        ],
-        "tools": [
-          "code_execute",
-          "file_write",
-          "test_run"
-        ],
-        "primitive": "delegate",
-        "motion": "",
-        "form": "",
-        "sides": [],
-        "max_rounds": 0,
-        "thorough": true,
-        "revision": 1
-      },
-      "timestamp": "2026-01-01T00:00:00.005Z"
-    },
-    {
-      "type": "team_preview_resolved",
-      "payload": {
-        "checkpoint_id": "tp-ex1",
-        "decision": "continue",
-        "note": "",
-        "excluded_run_ids": [
-          "r2"
-        ]
-      },
-      "timestamp": "2026-01-01T00:00:00.006Z"
-    },
-    {
       "type": "run_started",
       "payload": {
         "run_id": "r1",
@@ -131,7 +79,7 @@
         "parent_run_id": null,
         "kind": "agent"
       },
-      "timestamp": "2026-01-01T00:00:00.007Z"
+      "timestamp": "2026-01-01T00:00:00.005Z"
     },
     {
       "type": "run_completed",
@@ -158,7 +106,7 @@
           "pricing_source": "curated"
         }
       },
-      "timestamp": "2026-01-01T00:00:00.907Z"
+      "timestamp": "2026-01-01T00:00:00.905Z"
     },
     {
       "type": "tool_use_end",
@@ -168,14 +116,14 @@
         "status": "success",
         "result": "团队完成（已排除校对岗）"
       },
-      "timestamp": "2026-01-01T00:00:00.908Z"
+      "timestamp": "2026-01-01T00:00:00.906Z"
     },
     {
       "type": "content_delta",
       "payload": {
         "delta": "已排除校对岗，调研交付。"
       },
-      "timestamp": "2026-01-01T00:00:00.909Z"
+      "timestamp": "2026-01-01T00:00:00.907Z"
     },
     {
       "type": "message_end",
@@ -198,7 +146,7 @@
         },
         "rounds": 0
       },
-      "timestamp": "2026-01-01T00:00:00.910Z"
+      "timestamp": "2026-01-01T00:00:00.908Z"
     }
   ],
   "projected": {
@@ -213,10 +161,6 @@
       {
         "kind": "content",
         "text": "我来安排团队。"
-      },
-      {
-        "kind": "team_preview",
-        "checkpoint_id": "tp-ex1"
       },
       {
         "kind": "team",
@@ -340,20 +284,7 @@
       "completed": 1,
       "total": 2
     },
-    "interactions": [
-      {
-        "kind": "team_preview",
-        "id": "tp-ex1",
-        "status": "resolved",
-        "workerIds": [
-          "r1",
-          "r2"
-        ],
-        "excludedRunIds": [
-          "r2"
-        ]
-      }
-    ],
+    "interactions": [],
     "cost": {
       "input": 240000,
       "cached": 64000,

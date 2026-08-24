@@ -179,7 +179,7 @@ async def test_persist_turn_journal_replaces_pause_prefix(monkeypatch) -> None:
     assert "run_completed" in kinds
     assert recorded[0][-1]["payload"]["finish_reason"] == "end_turn"
     cards = fold_interactions(recorded[0])
-    assert cards[0].status == "resolved"
+    assert not any(c.kind == "team_preview" for c in cards)
 
 
 @pytest.mark.asyncio
@@ -357,10 +357,10 @@ async def test_pause_ready_resume_rewrites_journal_and_appends_live(tmp_path) ->
     assert after.get("finish_reason") == "end_turn"
     assert after.get("content") == "工人已收工"
     cards = fold_interactions(journal_entries_from_map(after.get("journal")) or [])
-    assert cards[0].status == "resolved"
+    assert not any(c.kind == "team_preview" for c in cards)
     runs = runs_from_entries(journal_entries_from_map(after.get("journal")) or [])
     types = [e.get("type") for e in ((runs or {}).get("events") or [])]
-    assert "team_preview_resolved" in types
+    assert "team_preview_resolved" not in types
     assert "run_started" in types
 
 
@@ -428,18 +428,15 @@ async def test_sidecar_prewrite_on_ready_outbox_is_not_pg(
 
 
 def test_pause_journal_without_resolved_folds_pending_and_no_worker_start() -> None:
-    """GET messages / recovery hydrate: hang-frame only → pending card, no started workers."""
+    """Leftover hang-frame: retired kickoff pair does not fold a pending card."""
     hang = _hang_frame()
     cards = fold_interactions(hang)
-    assert len(cards) == 1
-    assert cards[0].kind == "team_preview"
-    assert cards[0].id == "ck-tp"
-    assert cards[0].status == "pending"
+    assert not any(c.kind == "team_preview" for c in cards)
 
     runs = runs_from_entries(hang)
     events = (runs or {}).get("events") or []
     types = [e.get("type") for e in events]
-    assert "team_preview_required" in types
+    assert "team_preview_required" not in types
     assert "team_preview_resolved" not in types
     assert "run_started" not in types
 
@@ -456,7 +453,7 @@ def test_persist_replace_lands_resolved_and_worker_facts() -> None:
     assert "run_started" in kinds
     assert "run_completed" in kinds
     assert landed[-1]["payload"]["finish_reason"] == "end_turn"
-    assert fold_interactions(landed)[0].status == "resolved"
+    assert not any(c.kind == "team_preview" for c in fold_interactions(landed))
 
 
 @pytest.mark.asyncio

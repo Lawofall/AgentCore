@@ -3,7 +3,15 @@ import { pathToFileURL } from "node:url";
 import { is } from "@electron-toolkit/utils";
 import { isSafeExternalUrl } from "@shared/safe-url";
 import { WINDOW_CHANNELS } from "@shared/window-contract";
-import { net, BrowserWindow, app, ipcMain, protocol, shell } from "electron";
+import {
+  net,
+  BrowserWindow,
+  app,
+  ipcMain,
+  nativeTheme,
+  protocol,
+  shell,
+} from "electron";
 import iconBeta from "../../resources/icon-beta.png?asset";
 // `?asset` 让 electron-vite 把图标拷入产物并解析为运行时绝对路径；用作窗口/任务栏图标
 // （resources/icon.png = rounded squircle；测试轨用 icon-beta.png。打包 exe/.app 图标另由
@@ -16,6 +24,7 @@ import {
   decodeAppRelativePath,
   frameSrcForCsp,
 } from "./app-protocol-csp";
+import { installAuthCookieFlushOnQuit } from "./auth-client";
 import { registerBrowserIpc, startDesktopBrowserBridge } from "./browser";
 import { WORKSPACE_SCHEME } from "./browser/workspace-paths";
 import { registerDeviceIdentityIpc } from "./device-identity";
@@ -83,6 +92,11 @@ function registerWindowChromeIpc(): void {
   });
   ipcMain.on(WINDOW_CHANNELS.close, (e) => {
     BrowserWindow.fromWebContents(e.sender)?.close();
+  });
+  ipcMain.on(WINDOW_CHANNELS.setThemeSource, (_e, theme: unknown) => {
+    if (theme === "light" || theme === "dark" || theme === "system") {
+      nativeTheme.themeSource = theme;
+    }
   });
 }
 
@@ -342,6 +356,7 @@ app.whenReady().then(async () => {
   registerFsIpc();
   registerSidecarIpc();
   registerOutboxIpc();
+  installAuthCookieFlushOnQuit();
   registerLocalStoreIpc();
   registerTerminalIpc();
   registerProcessIpc();

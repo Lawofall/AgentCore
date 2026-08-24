@@ -88,3 +88,19 @@ def test_cloud_runtime_ready_copy_when_execution_on(
     assert "terminal" in warn
     assert "不要" in warn or "勿" in warn
     assert "导入到云" in warn
+
+
+def test_sidecar_cloud_desk_delivery_does_not_wait_for_gvisor(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    desc = exec_env_remediation_zh(backend=_CloudBackend(), kind="delivery_action")
+    assert "不要" in desc or "勿" in desc
+    assert "导入到云" in desc
+    assert "gVisor" not in desc
+    assert "假装起云沙箱" in desc
+    run = exec_env_remediation_zh(backend=_CloudBackend(), kind="capability_run")
+    assert "新开云协作对话" in run
+    assert "稍后重试" not in run

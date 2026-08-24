@@ -77,6 +77,7 @@ beforeEach(() => {
     activeTabId: WORKSPACE_TAB_ID,
     floats: [],
     focusSurface: { type: "dock" },
+    changesOpen: false,
     changesFocusMessageId: null,
     dismissedContexts: new Set(),
     pendingBadge: 0,
@@ -596,6 +597,7 @@ describe("showChanges / showFile / openTerminalTab（方案 B 顶栏 IA）", () 
     panel().showChanges(MID);
     expect(panel().open).toBe(true);
     expect(panel().activeTabId).toBe(CHANGES_TAB_ID);
+    expect(panel().changesOpen).toBe(true);
     expect(panel().changesFocusMessageId).toBe(MID);
   });
 
@@ -604,6 +606,24 @@ describe("showChanges / showFile / openTerminalTab（方案 B 顶栏 IA）", () 
     panel().clearChangesFocus();
     expect(panel().changesFocusMessageId).toBeNull();
     expect(panel().activeTabId).toBe(CHANGES_TAB_ID);
+    expect(panel().changesOpen).toBe(true);
+  });
+
+  it("closeChanges unloads the tab and falls back to 工作区", () => {
+    panel().showChanges(MID);
+    panel().closeChanges();
+    expect(panel().changesOpen).toBe(false);
+    expect(panel().changesFocusMessageId).toBeNull();
+    expect(panel().activeTabId).toBe(WORKSPACE_TAB_ID);
+  });
+
+  it("closeChanges after write would not re-pin without showChanges", () => {
+    panel().showChanges(MID);
+    panel().closeChanges();
+    expect(panel().changesOpen).toBe(false);
+    panel().showChanges();
+    panel().closeChanges();
+    expect(panel().changesOpen).toBe(false);
   });
 
   it("showFile opens a File content tab (path reference) instead of workspace swap", () => {
@@ -923,7 +943,12 @@ describe("应用内浮窗（§十 · Move / float·dock / 上限 8）", () => {
   it("nextDockActiveAfterFloat prefers 工作区 when it is still docked", () => {
     expect(
       nextDockActiveAfterFloat(
-        { activeTabId: tabId("run-1"), tabs: [], floats: [] },
+        {
+          activeTabId: tabId("run-1"),
+          tabs: [],
+          floats: [],
+          changesOpen: false,
+        },
         tabId("run-1"),
       ),
     ).toBe(WORKSPACE_TAB_ID);
@@ -972,9 +997,16 @@ describe("应用内浮窗（§十 · Move / float·dock / 上限 8）", () => {
     expect(panel().floats).toHaveLength(0);
   });
 
+  it("rejects float for 改动 until showChanges opened it", () => {
+    expect(panel().floatTab(CHANGES_TAB_ID)).toBe(false);
+    panel().showChanges();
+    expect(panel().floatTab(CHANGES_TAB_ID)).toBe(true);
+  });
+
   it("allows float for run / workspace / file / changes", () => {
     panel().openTab(runDetail("run-1"));
     panel().showFile("src/a.ts", "a.ts");
+    panel().showChanges();
     expect(panel().floatTab(tabId("run-1"))).toBe(true);
     expect(panel().floatTab(fileTabId("src/a.ts"))).toBe(true);
     expect(panel().floatTab(WORKSPACE_TAB_ID)).toBe(true);
@@ -1039,14 +1071,16 @@ describe("应用内浮窗（§十 · Move / float·dock / 上限 8）", () => {
     expect(panel().tabs.some((t) => t.id === tabId("run-0"))).toBe(false);
   });
 
-  it("workspace detach does not destroy; destroyFloat rejects fixed tabs", () => {
+  it("workspace detach does not destroy; changes float × closes via destroyFloat", () => {
     expect(panel().floatTab(WORKSPACE_TAB_ID)).toBe(true);
     expect(panel().destroyFloat(WORKSPACE_TAB_ID)).toBe(false);
     expect(panel().isFloating(WORKSPACE_TAB_ID)).toBe(true);
 
+    panel().showChanges();
     panel().floatTab(CHANGES_TAB_ID);
-    expect(panel().destroyFloat(CHANGES_TAB_ID)).toBe(false);
-    expect(panel().isFloating(CHANGES_TAB_ID)).toBe(true);
+    expect(panel().destroyFloat(CHANGES_TAB_ID)).toBe(true);
+    expect(panel().isFloating(CHANGES_TAB_ID)).toBe(false);
+    expect(panel().changesOpen).toBe(false);
 
     panel().dockTab(WORKSPACE_TAB_ID);
     expect(panel().isFloating(WORKSPACE_TAB_ID)).toBe(false);

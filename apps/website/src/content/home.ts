@@ -37,8 +37,6 @@ export const CTA = {
   webApp: { zh: "立即使用 · 网页版", en: "Open the web app" },
   webAppShort: { zh: "打开网页版", en: "Open the app" },
   desktop: { zh: "下载客户端", en: "Desktop app" },
-  mobileWeb: { zh: "手机网页版", en: "Mobile web" },
-  mobileStart: { zh: "立即使用 · 手机版", en: "Start on mobile" },
   desktopSite: { zh: "电脑版网站", en: "Desktop site" },
   backHome: { zh: "返回首页", en: "Back to site" },
 } satisfies Record<string, T>;

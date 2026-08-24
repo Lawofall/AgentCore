@@ -637,17 +637,6 @@ export interface ResumeConversationOptions {
   decision: PlanReviewUserDecision;
   note: string;
   selected?: string[];
-  /** team_preview（delegate）continue 修正；缺省 / 空 = 全员开工。 */
-  excluded_run_ids?: string[];
-  write_capability_overrides?: Array<{
-    run_id: string;
-    capability: "text_only";
-  }>;
-  /** 人盖 CEO 的 per-run 模型；空/缺 = 不改。 */
-  model_overrides?: Record<
-    string,
-    { model: string; origin?: "platform" | "byok"; provider_id?: string }
-  >;
   /** Structured website style pick (s0/s1/…). */
   signal?: AbortSignal;
 }
@@ -658,24 +647,12 @@ export async function resumeConversation({
   decision,
   note,
   selected = [],
-  excluded_run_ids,
-  write_capability_overrides,
-  model_overrides,
   signal,
 }: ResumeConversationOptions): Promise<void> {
   const body = JSON.stringify({
     decision,
     note,
     selected,
-    ...(excluded_run_ids && excluded_run_ids.length > 0
-      ? { excluded_run_ids }
-      : {}),
-    ...(write_capability_overrides && write_capability_overrides.length > 0
-      ? { write_capability_overrides }
-      : {}),
-    ...(model_overrides && Object.keys(model_overrides).length > 0
-      ? { model_overrides }
-      : {}),
   });
   await runMessageStream(
     `/v1/conversations/${conversationId}/messages/${messageId}/resume`,

@@ -10,53 +10,44 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Section } from "./shared";
 
-/** What the terminal dead end was, driving the card copy + the recorded `reason`. */
+/** User-facing offer is only「改方向未生效」; other accept reasons stay API/audit-only. */
 type AcceptState =
   | { kind: "hidden" }
   | { kind: "accepted" }
-  | { kind: "offer"; reason: RunOutcomeReason };
+  | { kind: "offer"; reason: Extract<RunOutcomeReason, "redirect_ignored"> };
 
-const COPY: Record<RunOutcomeReason, { heading: string; body: string }> = {
+const COPY = {
   redirect_ignored: {
     heading: "改方向未生效",
     body: "你的「立即改此人」发出时，该步骤已结束或无法中途改道——这次调整没有应用。可接受当前结果，或在对话里让 CEO 重新安排。",
   },
-  deterministic_failure: {
-    heading: "重试大概率仍会失败",
-    body: "这是确定性失败（如提示过长 / 鉴权 / 余额），同样的重试会再次失败。可接受此结果，让团队据此收尾。",
-  },
-  recovery_ignored: {
-    heading: "已忽略这次救火",
-    body: "你发起了新回合，上次救火已隐式收口——该步骤保持失败态收尾。可接受此结果，或在对话里让 CEO 重新安排。",
-  },
-};
+} as const;
 
 function resolveAcceptState(
   forRun: { action: string }[],
   optimisticAccepted: boolean,
 ): AcceptState {
-  if (optimisticAccepted) return { kind: "accepted" };
-  if (forRun.some((ev) => ev.action === "run.outcome_accepted")) {
+  const hasRedirectIgnored = forRun.some(
+    (ev) => ev.action === "run.redirect_ignored",
+  );
+  if (!hasRedirectIgnored) return { kind: "hidden" };
+  if (
+    optimisticAccepted ||
+    forRun.some((ev) => ev.action === "run.outcome_accepted")
+  ) {
     return { kind: "accepted" };
   }
-  if (forRun.some((ev) => ev.action === "run.redirect_ignored")) {
-    return { kind: "offer", reason: "redirect_ignored" };
-  }
-  if (forRun.some((ev) => ev.action === "run.deterministic_failure")) {
-    return { kind: "offer", reason: "deterministic_failure" };
-  }
-  return { kind: "hidden" };
+  return { kind: "offer", reason: "redirect_ignored" };
 }
 
 /**
- * 跑一半改方向 · 忽略路径收口 (run_redirect Step 4): when a run hit a dead end the system can't
- * auto-recover — a「改方向」steer that arrived too late (``run.redirect_ignored``) or a
- * non-retryable failure (``run.deterministic_failure``) — surface it in the run detail and let the
- * user *record* an explicit accept, instead of the old frontend-only「忽略」that left no trace.
+ * 跑一半改方向 · 忽略路径收口 (run_redirect Step 4): a「立即改此人」steer that arrived too
+ * late (``run.redirect_ignored``) — surface it in the run detail and let the user record an
+ * explicit accept. Deterministic failures are already terminal (error shown above); they do
+ * not get this card.
  *
- * Read/written entirely on the owner-scoped audit trail (no new SSE event): the two triggers are
- * existing audit rows; the accept appends a ``run.outcome_accepted`` row (via
- * {@link acceptRunOutcome}). Renders nothing unless a trigger is present for this run.
+ * Read/written entirely on the owner-scoped audit trail (no new SSE event). Renders nothing
+ * unless ``run.redirect_ignored`` is present for this run.
  */
 export function RunOutcomeAcceptSection({
   conversationId,
