@@ -30,6 +30,7 @@ beforeEach(() => {
         loadingOlder: false,
         loadingNewer: false,
         pendingTurnWarning: null,
+        pendingTraceId: null,
         toolStartedMs: {},
         executionVia: null,
         waitingForWorkspaceLock: false,

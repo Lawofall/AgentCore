@@ -1,8 +1,8 @@
 """绿场软件 / SPA 完整交付 playbook（scaffold-first 多波 → 结构完整性 → 诚实交付）.
 
 独立模块，避免再胀 ``playbooks.py``。``intensity`` 编制档
-（默认 lean 三节点；full = 五阶段满档）；``form=files`` + ``strict``；顶层批次由调用方
-设 criteria（含自动 ``graph_consistent``）。
+（默认 lean 三节点；full = 五阶段满档）；写工程节点 ``form=workspace`` + ``strict``；
+顶层批次由调用方设 criteria（含自动 ``graph_consistent``）。
 
 ``lean``：scaffold → 单实现（公共层+主流程页）→ smoke（≤3 节点）。
 ``full``：scaffold→shared→N×module→integrate→smoke；显式 ``modules`` 经
@@ -115,7 +115,7 @@ def _scaffold_task(
             "用 file_write 落盘；勿在本步实现业务逻辑。"
         ),
         "deliverable": {
-            "form": "files",
+            "form": "workspace",
             "artifacts": scaffold_artifacts,
             "strict": True,
         },
@@ -184,7 +184,7 @@ def _build_app_lean(
             ),
             "depends_on": ["scaffold"],
             "deliverable": {
-                "form": "files",
+                "form": "workspace",
                 "artifacts": [*shared_arts, *stub_pages],
                 "strict": True,
             },
@@ -227,7 +227,7 @@ def _build_app_full(
             ),
             "depends_on": ["scaffold"],
             "deliverable": {
-                "form": "files",
+                "form": "workspace",
                 "artifacts": [
                     f"{root}/src/styles/tokens.css",
                     f"{root}/src/components/AppButton.vue",
@@ -269,7 +269,7 @@ def _build_app_full(
             ),
             "depends_on": ["shared"],
             "deliverable": {
-                "form": "files",
+                "form": "workspace",
                 "artifacts": page_paths,
                 "strict": True,
             },
@@ -290,7 +290,7 @@ def _build_app_full(
             ),
             "depends_on": list(module_ids),
             "deliverable": {
-                "form": "files",
+                "form": "workspace",
                 "artifacts": [
                     f"{root}/src/router/index.ts",
                     f"{root}/src/App.vue",

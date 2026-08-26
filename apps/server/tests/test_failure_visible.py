@@ -41,6 +41,28 @@ def test_empty_failed_falls_back_to_category_label():
     assert "鉴权失败" in (export_visible_text(msg) or "")
 
 
+def test_empty_pipeline_error_uses_pipeline_label_not_llm():
+    msg = SimpleNamespace(
+        role="assistant",
+        content="",
+        usage={"status": "failed", "error_code": ErrorCode.PIPELINE_ERROR},
+    )
+    text = export_visible_text(msg) or ""
+    assert "管线" in text
+    assert "模型" not in text
+
+
+def test_empty_failed_without_code_does_not_claim_llm():
+    msg = SimpleNamespace(
+        role="assistant",
+        content="",
+        usage={"status": "failed", "finish_reason": "error"},
+    )
+    text = export_visible_text(msg) or ""
+    assert "模型" not in text
+    assert text
+
+
 def test_empty_failed_from_journal_turn_end():
     msg = SimpleNamespace(
         role="assistant",

@@ -16,9 +16,10 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from agentcore.core.error_codes import ErrorCode
+from agentcore.core.errors import UNCLASSIFIED_EXCEPTION_USER_MESSAGE
 from agentcore.runtime.journal import KIND_TURN_END
 
-_DEFAULT_FAILURE_TEXT = "模型调用失败，请稍后重试。"
+_DEFAULT_FAILURE_TEXT = UNCLASSIFIED_EXCEPTION_USER_MESSAGE
 
 # Error codes → short zh category labels (history notes + export fallback).
 FAILURE_CATEGORY_LABELS: dict[str, str] = {
@@ -60,7 +61,7 @@ def failure_category_label(msg: Any) -> str:
     finish = usage.get("finish_reason")
     if finish == "degraded":
         return "模型空响应（降级收尾）"
-    return "模型调用失败"
+    return "本轮未能完成"
 
 
 def _message_from_error_value(value: Any) -> str | None:

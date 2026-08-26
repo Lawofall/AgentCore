@@ -22,7 +22,7 @@ import type {
   ReplayRun,
   ReplaySpan,
 } from "@/services/adminObservability";
-import { ArrowLeft, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 
 /** Prefer run body; fall back to debrief.summary as plain message text. */
@@ -50,15 +50,23 @@ export type ReplaySessionMeta = {
   multiAgentTurns: number;
 };
 
+export type InspectorActiveTab = "diagnosis" | string;
+
+function runTabLabel(run: ReplayRun): string {
+  return run.role || run.agent_id || "队员";
+}
+
 /**
- * Right dock: session/turn diagnose + worker full text.
- * Mirrors the desktop side panel (closed by default, 400px).
+ * Right dock: pinned diagnosis tab + closable worker tabs.
+ * Mirrors the desktop side panel tab strip (without + / pop-out / cap).
  */
 export function InspectorPanel({
   message,
-  selectedRunId,
+  activeTab,
+  workerTabIds,
+  onActivateTab,
+  onCloseWorkerTab,
   onSelectRun,
-  onClearRun,
   onClose,
   cnyLabel,
   harvest,
@@ -69,9 +77,11 @@ export function InspectorPanel({
   className,
 }: {
   message: ReplayMessage | null;
-  selectedRunId: string | null;
+  activeTab: InspectorActiveTab;
+  workerTabIds: string[];
+  onActivateTab: (tab: InspectorActiveTab) => void;
+  onCloseWorkerTab: (runId: string) => void;
   onSelectRun: (runId: string) => void;
-  onClearRun: () => void;
   onClose: () => void;
   /** Pre-formatted turn cost for ops strip, e.g. "¥0.12". */
   cnyLabel?: string | null;
@@ -87,17 +97,17 @@ export function InspectorPanel({
 }) {
   const runs = message?.runs ?? [];
   const spans = message?.spans ?? [];
-  const selectedRun = useMemo(
-    () => runs.find((r) => r.run_id === selectedRunId) ?? null,
-    [runs, selectedRunId],
-  );
+  const runById = useMemo(() => {
+    const map = new Map<string, ReplayRun>();
+    for (const r of runs) map.set(r.run_id, r);
+    return map;
+  }, [runs]);
+  const visibleWorkerTabIds = workerTabIds.filter((id) => runById.has(id));
+  const activeRun =
+    activeTab !== "diagnosis" ? (runById.get(activeTab) ?? null) : null;
+  const showDiagnosis = activeTab === "diagnosis" || !activeRun;
   const selfHarvest = message ? isExecutionHarvestMessage(message) : false;
   const shownHarvest = selfHarvest ? message : (harvest ?? null);
-  const title = selectedRun
-    ? selectedRun.role || selectedRun.agent_id || "队员"
-    : selfHarvest
-      ? "系统收口"
-      : "诊断";
 
   return (
     <aside
@@ -106,55 +116,190 @@ export function InspectorPanel({
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-border border-b px-3 py-2">
-        <span className="text-xs font-medium text-foreground">{title}</span>
+      <div className="flex shrink-0 items-center gap-1 border-border border-b px-2 py-1.5">
+        <div
+          role="tablist"
+          aria-label="诊断面板"
+          className="scrollbar-hidden flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+        >
+          <DockTab
+            id="diagnosis"
+            label="诊断"
+            selected={activeTab === "diagnosis"}
+            onSelect={() => onActivateTab("diagnosis")}
+          />
+          {visibleWorkerTabIds.length > 0 && (
+            <span
+              aria-hidden
+              className="mx-0.5 shrink-0 text-muted-foreground/60 text-xs"
+            >
+              |
+            </span>
+          )}
+          {visibleWorkerTabIds.map((runId) => {
+            const run = runById.get(runId);
+            if (!run) return null;
+            return (
+              <DockTab
+                key={runId}
+                id={runId}
+                label={runTabLabel(run)}
+                selected={activeTab === runId}
+                onSelect={() => onActivateTab(runId)}
+                onClose={() => onCloseWorkerTab(runId)}
+              />
+            );
+          })}
+        </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md p-1 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="shrink-0 rounded-md p-1 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="关闭"
         >
           <X size={14} />
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-4">
-        {session && <SessionMeta session={session} />}
-        {(harvests.length > 0 || message) && onSelectHarvest && (
-          <TurnOpsBar
-            selected={message}
+        {showDiagnosis ? (
+          <DiagnosisBody
+            message={message}
+            selfHarvest={selfHarvest}
+            shownHarvest={shownHarvest}
+            spans={spans}
+            runs={runs}
+            cnyLabel={cnyLabel}
             harvests={harvests}
             onSelectHarvest={onSelectHarvest}
-          />
-        )}
-        {message && !selfHarvest && <OpsStrip message={message} cnyLabel={cnyLabel} />}
-        {shownHarvest && (
-          <HarvestBlock
-            message={shownHarvest}
-            asTrigger={!selfHarvest}
-          />
-        )}
-        {message && !selfHarvest && !selectedRun && spans.length > 0 && (
-          <TurnSpanList message={message} />
-        )}
-        {message && !selfHarvest && (
-          <WorkerPanel
-            message={message}
-            run={selectedRun}
-            runs={runs}
-            spans={spans}
-            selectedRunId={selectedRunId}
-            hydrating={hydrating}
+            session={session}
+            listHighlightRunId={
+              activeTab !== "diagnosis" ? activeTab : null
+            }
             onSelectRun={onSelectRun}
-            onClearRun={onClearRun}
           />
-        )}
-        {!message && (
-          <p className="text-muted-foreground text-xs">
-            点选一条助手消息查看该回合诊断。
-          </p>
-        )}
+        ) : activeRun ? (
+          <WorkerDetail
+            message={message!}
+            run={activeRun}
+            spans={spans}
+            hydrating={hydrating}
+          />
+        ) : null}
       </div>
     </aside>
+  );
+}
+
+function DockTab({
+  id,
+  label,
+  selected,
+  onSelect,
+  onClose,
+}: {
+  id: string;
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+  onClose?: () => void;
+}) {
+  return (
+    <div
+      role="tab"
+      id={`inspector-tab-${id}`}
+      aria-selected={selected}
+      aria-controls={`inspector-tabpanel-${id}`}
+      className={cn(
+        "group flex shrink-0 items-center gap-0.5 rounded-md border px-2 py-1 text-xs outline-none transition-colors",
+        selected
+          ? "border-primary/40 bg-primary/10 text-foreground"
+          : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        className="max-w-[8rem] truncate outline-none focus-visible:underline"
+      >
+        {label}
+      </button>
+      {onClose && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className="rounded p-0.5 text-muted-foreground outline-none opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`关闭 ${label}`}
+        >
+          <X size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DiagnosisBody({
+  message,
+  selfHarvest,
+  shownHarvest,
+  spans,
+  runs,
+  cnyLabel,
+  harvests,
+  onSelectHarvest,
+  session,
+  listHighlightRunId,
+  onSelectRun,
+}: {
+  message: ReplayMessage | null;
+  selfHarvest: boolean;
+  shownHarvest: ReplayMessage | null;
+  spans: ReplaySpan[];
+  runs: ReplayRun[];
+  cnyLabel?: string | null;
+  harvests: ReplayMessage[];
+  onSelectHarvest?: (id: string) => void;
+  session?: ReplaySessionMeta | null;
+  listHighlightRunId: string | null;
+  onSelectRun: (runId: string) => void;
+}) {
+  return (
+  <div
+    role="tabpanel"
+    id="inspector-tabpanel-diagnosis"
+    aria-labelledby="inspector-tab-diagnosis"
+    className="space-y-4"
+  >
+    {session && <SessionMeta session={session} />}
+    {(harvests.length > 0 || message) && onSelectHarvest && (
+      <TurnOpsBar
+        selected={message}
+        harvests={harvests}
+        onSelectHarvest={onSelectHarvest}
+      />
+    )}
+    {message && !selfHarvest && <OpsStrip message={message} cnyLabel={cnyLabel} />}
+    {shownHarvest && (
+      <HarvestBlock message={shownHarvest} asTrigger={!selfHarvest} />
+    )}
+    {message && !selfHarvest && spans.length > 0 && (
+      <TurnSpanList message={message} />
+    )}
+    {message && !selfHarvest && (
+      <WorkerList
+        runs={runs}
+        selectedRunId={listHighlightRunId}
+        onSelectRun={onSelectRun}
+      />
+    )}
+    {!message && (
+      <p className="text-muted-foreground text-xs">
+        点选一条助手消息查看该回合诊断。
+      </p>
+    )}
+  </div>
   );
 }
 
@@ -308,24 +453,14 @@ function OpsStrip({
   );
 }
 
-function WorkerPanel({
-  message,
-  run,
+function WorkerList({
   runs,
-  spans,
   selectedRunId,
-  hydrating,
   onSelectRun,
-  onClearRun,
 }: {
-  message: ReplayMessage;
-  run: ReplayRun | null;
   runs: ReplayRun[];
-  spans: ReplaySpan[];
   selectedRunId: string | null;
-  hydrating: boolean;
   onSelectRun: (runId: string) => void;
-  onClearRun: () => void;
 }) {
   if (runs.length === 0) {
     return (
@@ -335,21 +470,31 @@ function WorkerPanel({
     );
   }
 
-  if (!run) {
-    return (
-      <div>
-        <p className="mb-2 text-muted-foreground text-xs">
-          点选队员查看详情（主栏协作图亦可）
-        </p>
-        <RunTree
-          runs={runs}
-          selectedRunId={selectedRunId}
-          onSelectRun={onSelectRun}
-        />
-      </div>
-    );
-  }
+  return (
+    <div>
+      <p className="mb-2 text-muted-foreground text-xs">
+        点选队员查看详情（主栏协作图亦可）
+      </p>
+      <RunTree
+        runs={runs}
+        selectedRunId={selectedRunId}
+        onSelectRun={onSelectRun}
+      />
+    </div>
+  );
+}
 
+function WorkerDetail({
+  message,
+  run,
+  spans,
+  hydrating,
+}: {
+  message: ReplayMessage;
+  run: ReplayRun;
+  spans: ReplaySpan[];
+  hydrating: boolean;
+}) {
   const body = runMessageBody(run);
   const turn = resolveChatTurn(chatTurnFromReplay(message));
   const process =
@@ -364,16 +509,12 @@ function WorkerPanel({
   ) : null;
 
   return (
-    <div className="space-y-3">
-      <button
-        type="button"
-        onClick={onClearRun}
-        className="inline-flex items-center gap-1 text-muted-foreground text-xs outline-none hover:text-foreground focus-visible:underline"
-      >
-        <ArrowLeft size={12} />
-        返回列表
-      </button>
-
+    <div
+      role="tabpanel"
+      id={`inspector-tabpanel-${run.run_id}`}
+      aria-labelledby={`inspector-tab-${run.run_id}`}
+      className="space-y-3"
+    >
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone={STATUS_TONE[run.status] ?? "neutral"}>{run.status}</Badge>
         <span className="text-sm font-medium text-foreground">

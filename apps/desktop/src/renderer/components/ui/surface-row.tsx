@@ -21,7 +21,7 @@ const variantClass: Record<SurfaceRowVariant, string> = {
     "flex items-center rounded-lg text-sm transition-colors hover:bg-accent",
   sidebar:
     "group flex h-9 w-full items-center gap-2 rounded-lg px-3 text-sm transition-colors text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-  file: "group flex items-center rounded-lg pr-1 text-xs hover:bg-accent",
+  file: "group flex items-center rounded-lg pr-1 text-xs max-md:text-sm hover:bg-accent",
   settings:
     "flex h-9 w-full items-center gap-3 rounded-lg px-3 text-sm transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground",
 };

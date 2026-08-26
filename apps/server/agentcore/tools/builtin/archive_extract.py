@@ -49,9 +49,9 @@ _EXTRACT_MAX_FILES = 5_000
 _EXTRACT_MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024  # 200 MiB
 
 # 自报产物条数上限（交付物台账 · 契约见 ``tools/file_products.py``）。取值与
-# ``sandbox/written_scan._MAX_FILES`` / ``gvisor_write_back_max_files`` 一致：解压是
+# ``sandbox/written_scan._MAX_FILES`` 一致：解压是
 # 唯一一支单次能落上千个文件的笔，而产物尾注**进 transcript 并回喂模型**，把 5000 条
-# 路径列全既冲爆上下文也没有信息量（用户面产物卡同理）。落盘不受此限——限的只是记账
+# 路径列全既冲爆上下文也没有信息量（用户面路径列表同理）。落盘不受此限——限的只是记账
 # 与回执的条数；截断时回执明说，绝不假装只产了这些。
 _PRODUCT_REPORT_MAX = 200
 

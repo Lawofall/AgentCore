@@ -137,6 +137,27 @@ def test_reconcile_drops_confirm_pre_pause_when_new_delivers():
     assert reconcile_resume_closing(pre, new) == new
 
 
+def test_reconcile_ask_settled_drops_confirm_few_without_expanding_posture_c():
+    """67a9e6d6：卡已结算后丢掉「先确认几个」残留；不扩姿势 C 词表。"""
+    pre = "先确认几个关键信息（直接回车即按默认走）"
+    new = "行程规划完成。天津周末两日行程已落盘。"
+    assert not claims_posture_c(pre)
+    joined = reconcile_resume_closing(pre, new)
+    assert "先确认几个" in joined
+    assert "行程规划完成" in joined
+    out = reconcile_resume_closing(pre, new, ask_settled=True)
+    assert "先确认几个" not in out
+    assert "行程规划完成" in out
+
+
+def test_reconcile_ask_settled_keeps_pre_pause_over_hollow():
+    pre = "先确认几个关键信息：目的地还没定。"
+    hollow = "等待确认后再派工；此前尚未真正开工。"
+    out = reconcile_resume_closing(pre, hollow, ask_settled=True)
+    assert "目的地还没定" in out
+    assert out != hollow
+
+
 def test_reconcile_keeps_neutral_join():
     pre = "阶段成果如下：已整理竞品表。"
     new = "接下来补渠道策略一节。"
@@ -472,7 +493,7 @@ def test_cloud_web_verify_honesty_banner_soft_only():
 
 
 def test_max_rounds_ceiling_honesty_steer_and_banner():
-    """max_rounds：steer 禁止无条件通过；仍宣称姿势 A → 加收口说明横幅。"""
+    """max_rounds：steer 禁止无条件通过；用户面不再贴【收口说明】。"""
     from agentcore.runtime.closing_posture import (
         ceiling_honesty_steer,
         downgrade_verdict_for_max_rounds,
@@ -492,9 +513,8 @@ def test_max_rounds_ceiling_honesty_steer_and_banner():
 
     dishonest = "修复已全部完成，已完整可用。"
     out = enforce_ceiling_closing_honesty(dishonest, reason="max_rounds")
-    assert out.startswith("【收口说明】")
-    assert "已全部完成" in out
-    assert "continue_from_run_id" in out
+    assert out == dishonest
+    assert "【收口说明】" not in out
     # 扩面词族已撤回：仅「复核通过/可玩」不再触发横幅。
     thin = "独立复核通过，现在可玩了。"
     assert not claims_posture_a(thin)
@@ -516,7 +536,7 @@ def test_max_rounds_ceiling_honesty_steer_and_banner():
 
 
 def test_token_budget_ceiling_honesty_steer_and_banner_symmetric_with_max_rounds():
-    """token_budget ↔ max_rounds：诚实 steer / 姿势 A 横幅 / verdict 降档对称。"""
+    """token_budget ↔ max_rounds：诚实 steer / 用户面不贴横幅 / verdict 降档对称。"""
     from agentcore.runtime.closing_posture import (
         ceiling_honesty_steer,
         downgrade_verdict_for_ceiling,
@@ -538,11 +558,8 @@ def test_token_budget_ceiling_honesty_steer_and_banner_symmetric_with_max_rounds
 
     dishonest = "修复已全部完成，已完整可用。"
     out = enforce_ceiling_closing_honesty(dishonest, reason="token_budget")
-    assert out.startswith("【收口说明】")
-    assert "token" in out.lower() or "预算" in out
-    assert "已全部完成" in out
-    assert "continue_from_run_id" in out
-    assert "replaces_run_id" in out
+    assert out == dishonest
+    assert "【收口说明】" not in out
     # 非姿势 A 不因 ceiling banner  alone 改写（「完整落盘」不进姿势 A）。
     complete_landing = "文档已完整落盘（六章全部）。"
     assert not claims_posture_a(complete_landing)
@@ -567,7 +584,7 @@ def test_token_budget_ceiling_honesty_steer_and_banner_symmetric_with_max_rounds
 
 
 def test_cutoff_delivery_gap_ceo_soft_banner_not_posture_a_expansion():
-    """B′：token_budget gap latch → CEO 综收软横幅；「完整落盘」不靠扩姿势 A。"""
+    """B′：token_budget gap latch 仍记下；用户面不再贴【收口说明】。"""
     from agentcore.runtime.closing_posture import (
         clear_cutoff_delivery_gap,
         enforce_cutoff_closing_honesty,
@@ -582,17 +599,12 @@ def test_cutoff_delivery_gap_ceo_soft_banner_not_posture_a_expansion():
     )
     assert turn_has_cutoff_delivery_gap()
 
-    # 本案用户可见句：不进姿势 A，靠结构化 latch 软横幅 + continue_from 续作教法。
+    # 用户面不再贴【收口说明】；结构化 latch 仍在，续作教法走私下 steer。
     dishonest = "文档已完整落盘（六章全部），可直接使用。"
     assert not claims_posture_a(dishonest)
     bannered = enforce_cutoff_closing_honesty(dishonest)
-    assert bannered.startswith("【收口说明】")
-    assert "部分交付" in bannered
-    assert "完整落盘" in bannered
-    assert "continue_from_run_id" in bannered
-    assert "replaces_run_id" in bannered
-    assert "禁止并行" in bannered
-    assert "continue_writing" not in bannered
+    assert bannered == dishonest
+    assert "【收口说明】" not in bannered
 
     # 已诚实部分交付 → 不叠横幅。
     honest = "部分交付：前五章已落盘，第六章未闭合，建议续派补齐。"
@@ -829,13 +841,14 @@ def test_b1_ceiling_bans_hollow_teach_invite():
     assert "请开讲" in steer or "请讲" in steer
     assert "continue_from_run_id" in steer
     out = enforce_ceiling_closing_honesty(hollow, reason="token_budget")
-    assert out.startswith("【收口说明】")
-    assert "开讲" in out or "请讲" in out or "硬顶" in out
+    assert out == hollow
+    assert "【收口说明】" not in out
 
     clear_cutoff_delivery_gap()
     note_cutoff_delivery_gap()
     cut = enforce_cutoff_closing_honesty(hollow)
-    assert cut.startswith("【收口说明】")
+    assert cut == hollow
+    assert "【收口说明】" not in cut
     clear_cutoff_delivery_gap()
 
 

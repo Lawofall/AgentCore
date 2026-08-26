@@ -724,6 +724,7 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
       supersedes: n.supersedes,
       ...(n.source ? { source: n.source } : {}),
     })),
+    ...(execution?.noteWall ? { noteWall: true } : {}),
     userInterjections,
   };
 }

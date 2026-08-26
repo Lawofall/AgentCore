@@ -1,4 +1,3 @@
-import { FileArtifactsCard } from "@/components/chat/FileArtifactsCard";
 import { Markdown } from "@/components/chat/Markdown";
 import { PausedContinueSurface } from "@/components/chat/PausedContinueSurface";
 import { SourceCards } from "@/components/chat/SourceCards";
@@ -12,7 +11,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FinishReasonChip } from "@/components/ui/finish-reason-chip";
 import {
   noticeChipNeutral,
   statusAccentText,
@@ -24,16 +22,15 @@ import { copyText } from "@/lib/clipboard";
 import { hasUnpricedUsage, resolveTurnDisplayMoney } from "@/lib/cost";
 import {
   connectivityEscalationSuffix,
-  degradedFinishChipLabel,
   formatAssistantErrorMessage,
 } from "@/lib/errors";
-import { resolveFileArtifactsForCard } from "@/lib/fileArtifacts";
 import {
   COST_UNPRICED_LABEL,
   formatCostCaption,
   pickCostMoney,
 } from "@/lib/format";
 import { formatMessageExport } from "@/lib/messageExport";
+import { openWorkspaceDeliverable } from "@/lib/openWorkspaceDeliverable";
 import {
   buildSupportDiagnosticPack,
   formatSupportDiagnosticText,
@@ -59,7 +56,7 @@ import { useExecutionStore, useMessageExecution } from "@/stores/execution";
 import { useMessageInteractionCards } from "@/stores/interactions";
 import { useUsageStore } from "@/stores/usage";
 import { AlertTriangle, Check, Copy, KeyRound, RotateCcw } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AssistantMessageFooter,
@@ -69,7 +66,6 @@ import { MessageTime } from "./MessageActions";
 import { ComposingToolLine, ProcessTimeline } from "./ProcessTimeline";
 import { SyncStatusHint } from "./SyncStatusHint";
 import { ThinkingDots, ThinkingPanel } from "./Thinking";
-import { UnproductiveToolFailureHint } from "./UnproductiveToolFailureHint";
 import { WholeFilePasteHint } from "./WholeFilePasteHint";
 import type { MessageBubbleProps } from "./types";
 import { useCopyAction } from "./useCopyAction";
@@ -92,37 +88,6 @@ function RecoveredChip() {
       <RotateCcw size={14} />
       曾中断恢复
     </Badge>
-  );
-}
-
-/**
- * 回合产出文件，挂在答复正文之后。
- *
- * 交付对账（同 execution_id 保最新）→ 产物清单；可用性短问可在无 plan 的 CEO 回合复用
- * delivery_status，所以单 / 多 Agent 走同一条路径。产出卡只列文件；裸聊自动建桌的落点
- * 不在对话里告知（文件夹进「我的文件」，改名走文件页）。
- */
-function TurnFiles({
-  messageId,
-  conversationId,
-}: {
-  messageId: string;
-  conversationId: string | null;
-}) {
-  const deliveryStatus = useExecutionStore(
-    (s) => s.byId[messageId]?.deliveryStatus ?? null,
-  );
-  const artifacts = useMemo(
-    () => resolveFileArtifactsForCard(deliveryStatus),
-    [deliveryStatus],
-  );
-  if (artifacts.length === 0) return null;
-  return (
-    <FileArtifactsCard
-      artifacts={artifacts}
-      conversationId={conversationId}
-      turnKey={messageId}
-    />
   );
 }
 
@@ -252,6 +217,12 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
     prevDisplayRef.current = next.stableCited;
     return next;
   }, [message.content, citations]);
+  const onOpenWorkspacePath = useCallback(
+    (path: string) => {
+      openWorkspaceDeliverable(conversationId, path);
+    },
+    [conversationId],
+  );
   // 结算存根已画问句：正文只在「就是那句问句副本」时藏，避免贴在结论文旁像还在催。
   // CEO 续聊（确认/取消后的回复）必须露出。空 content 不回落问句——问句在存根展开里。
   const rawContent = message.content ?? "";
@@ -378,6 +349,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
       conversationId={conversationId}
       checkpoints={checkpoints}
       planReviews={planReviews}
+      onOpenWorkspacePath={onOpenWorkspacePath}
     />
   ) : (
     <>
@@ -404,6 +376,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
             knownLedgerIds={knownLedgerIds}
             evidenceLedger={evidenceLedger}
             isStreaming={message.isStreaming}
+            onOpenWorkspacePath={onOpenWorkspacePath}
           />
         ) : null
       ) : hideContentForCheckpoint || !displayContent.trim() ? null : (
@@ -421,6 +394,7 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
             knownLedgerIds={knownLedgerIds}
             evidenceLedger={evidenceLedger}
             isStreaming={false}
+            onOpenWorkspacePath={onOpenWorkspacePath}
           />
         </CollapsibleSpeech>
       )}
@@ -445,27 +419,10 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
   return (
     <div className="group min-w-0" onMouseEnter={onPeekCost}>
       {message.recovered && <RecoveredChip />}
-      {outcome.showFinishReasonChip && (
-        <FinishReasonChip
-          reason={finishReason}
-          diagnosisLabel={degradedFinishChipLabel(
-            emptyDiagnosis,
-            displayError?.message ?? message.error?.message,
-          )}
-        />
-      )}
       {outcome.showTurnWarning && message.turnWarning && (
         <TurnWarningBanner message={message.turnWarning} />
       )}
       {turnBody}
-      {!message.isStreaming && (
-        <UnproductiveToolFailureHint
-          finishReason={finishReason}
-          content={message.content}
-          process={message.process}
-          journal={message.runs}
-        />
-      )}
       {!message.isStreaming && (
         <WholeFilePasteHint
           content={message.content}
@@ -535,7 +492,6 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           )}
         </div>
       )}
-      <TurnFiles messageId={projectionId} conversationId={conversationId} />
       {citations.length > 0 && (
         <SourceCards
           citations={citations}
@@ -605,7 +561,6 @@ export function AssistantMessage({ message }: MessageBubbleProps) {
           message={message}
           captainContext={captainContext}
           costText={costText}
-          finishReason={finishReason}
           onRegenerate={handleRegenerate}
           displayError={displayError}
         />

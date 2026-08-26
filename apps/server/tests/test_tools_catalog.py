@@ -14,6 +14,7 @@ from agentcore.tools.builtin import (
     build_worker_registry,
     file_mutation_tool_names,
 )
+from agentcore.tools.builtin.terminal import TerminalTool
 
 _EXPECTED_NAMES = {
     "web_search",
@@ -39,6 +40,7 @@ _EXPECTED_NAMES = {
     "git",
     "test_run",
     "code_execute",
+    "terminal",
 }
 
 # The CEO chat agent is a COORDINATOR: it directly holds only the read/retrieval
@@ -54,6 +56,7 @@ _CEO_READONLY_NAMES = {
     "code_search",
     "code_diagnostics",
     "git",
+    "terminal",
 }
 _DELEGATED_MUTATION_NAMES = {
     "file_write",
@@ -212,13 +215,26 @@ def test_code_execute_description_routes_long_running_to_terminal():
     assert "wait_for" in td
     assert "code_execute" in td  # short commands still pointed there
     assert "CEO" in td
+    assert "仅本地" not in td
+    assert "仅本地" not in TerminalTool(location="server").schema.description
 
 
-def test_ceo_registry_holds_terminal_only_when_local():
-    assert "terminal" not in {s.name for s in build_ceo_tool_registry().list_all()}
+def test_ceo_registry_holds_terminal_with_execution_class():
+    assert "terminal" in {s.name for s in build_ceo_tool_registry().list_all()}
+    assert "terminal" in {
+        s.name for s in build_ceo_tool_registry(backend_location="server").list_all()
+    }
     assert "terminal" in {
         s.name for s in build_ceo_tool_registry(backend_location="local").list_all()
     }
+    assert "terminal" not in {
+        s.name
+        for s in build_ceo_tool_registry(include_execution_tools=False).list_all()
+    }
+    assert (
+        build_ceo_tool_registry(backend_location="server").get("terminal").schema.approval
+        is TerminalTool().schema.approval
+    )
 
 
 def test_code_execute_description_server_omits_local_wsl_hint():
@@ -353,7 +369,8 @@ def test_worker_registry_keeps_execution_class_on_local_server_workspace():
     assert "terminal" in names
 
 
-def test_worker_registry_omits_terminal_on_cloud_server():
+def test_worker_registry_omits_terminal_when_cloud_desk_unhealthy():
+    """Cloud without a healthy desk withholds the whole execution class, including terminal."""
     from pathlib import Path
 
     from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -362,7 +379,29 @@ def test_worker_registry_omits_terminal_on_cloud_server():
     backend = ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox(), location="server")
     names = {s.name for s in build_worker_registry(backend=backend).list_all()}
     assert "terminal" not in names
-    # Catalog path (no backend) also omits local-only terminal.
-    assert "terminal" not in {s.name for s in build_worker_registry().list_all()}
-    assert "terminal" not in {s.name for s in build_builtin_registry().list_all()}
-    assert "terminal" not in {s.name for s in build_ceo_tool_registry().list_all()}
+    assert "code_execute" not in names
+
+
+def test_worker_registry_assembles_terminal_when_cloud_desk_healthy(
+    monkeypatch,
+):
+    from pathlib import Path
+
+    from agentcore.config import settings
+    from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
+    from agentcore.tools.sandbox.subprocess import SubprocessSandbox
+    from agentcore.workspace.server import ServerWorkspace
+
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    set_cloud_sandbox_health_for_tests(True)
+    backend = ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox(), location="server")
+    names = {s.name for s in build_worker_registry(backend=backend).list_all()}
+    assert "terminal" in names
+    assert "browser" in names
+    desc = build_worker_registry(backend=backend).get("terminal").schema.description
+    assert "云桌" in desc
+    assert "仅本地" not in desc
+    # Catalog / default CEO (execution class on) advertise terminal.
+    assert "terminal" in {s.name for s in build_worker_registry().list_all()}
+    assert "terminal" in {s.name for s in build_builtin_registry().list_all()}
+    assert "terminal" in {s.name for s in build_ceo_tool_registry().list_all()}

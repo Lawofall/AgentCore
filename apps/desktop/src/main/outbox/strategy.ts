@@ -108,6 +108,12 @@ export interface OutboxRecord {
   harvest_kind?: string | null;
   /** Soft @Agent chips on the local user bubble (optional; old records omit). */
   agent_mentions?: Array<{ agent_id: string; role: string }>;
+  /**
+   * Pause-turn journal watermark stamped on ``reopen_for_resume``.
+   * Write-back keeps the full journal on the wire and only filters
+   * ``tool_failures`` to seqs strictly after this value.
+   */
+  resume_after_seq?: number;
 }
 
 /**
@@ -228,6 +234,22 @@ export function journalEntriesFromMap(
   return sorted.map((k) => journal[k]);
 }
 
+function journalMapAfterSeq(
+  journal: Record<string, unknown>,
+  afterSeq: number,
+): Record<string, unknown> {
+  // Mirror server ``JOURNAL_OVERFLOW_SEQ_START``: overflow is pause-turn.
+  const overflowStart = 1_000_000;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(journal)) {
+    if (!isNumericJournalKey(key)) continue;
+    const seq = Number(key);
+    if (seq >= overflowStart) continue;
+    if (seq > afterSeq) out[key] = value;
+  }
+  return out;
+}
+
 const TOOL_FAILURE_MESSAGE_MAX = 200;
 
 /** Known local-turn write-back failure codes (mirrors server frozenset). */
@@ -262,6 +284,7 @@ const LOCAL_TURN_TOOL_FAILURE_CODES = new Set([
   "long_running_redirect",
   "loopback_host",
   "other",
+  "too_large",
 ]);
 
 const CHANNEL_REDIRECT_CODES = new Set([
@@ -627,7 +650,14 @@ export function toRecordTurnBody(
   };
   const journal = journalEntriesFromMap(record.journal);
   if (journal) body.journal = journal;
-  const failures = toolFailuresFromJournal(journal);
+  const watermark = record.resume_after_seq;
+  const failureJournal =
+    typeof watermark === "number" &&
+    Number.isFinite(watermark) &&
+    record.journal
+      ? journalEntriesFromMap(journalMapAfterSeq(record.journal, watermark))
+      : journal;
+  const failures = toolFailuresFromJournal(failureJournal);
   if (failures.length > 0) body.tool_failures = failures;
   const origin = (record.origin || "").trim();
   if (origin) body.origin = origin;

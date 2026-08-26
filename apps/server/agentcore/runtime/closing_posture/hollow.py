@@ -1,7 +1,8 @@
-"""Hollow teach-invite / in-progress claim detectors + shared ceiling-hollow banner.
+"""Hollow teach-invite / in-progress claim detectors.
 
 ceiling / cutoff 后空心「请开讲」——把硬顶/空交接伪装成可继续教。
 超席/空交接后禁止「仍在进行」空悬终态（须 PARTIAL + 缺口）。
+User-visible 【收口说明】 prefixes are gone; detectors remain for finish_guard.
 """
 
 from __future__ import annotations
@@ -26,11 +27,6 @@ _HOLLOW_IN_PROGRESS_CLAIMS = re.compile(
     r"最终审查结论尚未|"
     r"目前仍在"
     r")"
-)
-
-_CEILING_HOLLOW_TEACH_BANNER = (
-    "【收口说明】本回合已触达硬顶或存在预算/空交接缺口——"
-    "禁止空心邀请用户「开讲/请讲」；请改为点名已落地与未闭合项。\n\n"
 )
 
 

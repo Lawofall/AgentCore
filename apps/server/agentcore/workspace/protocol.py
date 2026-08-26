@@ -26,9 +26,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
+
+if TYPE_CHECKING:
+    from agentcore.workspace.attachment_parse import ExtractResult
 
 
 class CodeIndexStatus(StrEnum):
@@ -135,6 +138,14 @@ class ReadLinesResult:
     start_line: int
     end_line: int
     total_lines: int
+
+
+@dataclass(frozen=True)
+class ReadHeadResult:
+    """First bytes of a file plus total size. Not a whole-file ingest."""
+
+    data: bytes
+    size_bytes: int
 
 
 @dataclass(frozen=True)
@@ -307,13 +318,43 @@ class WorkspaceBackend(Protocol):
         """
         ...
 
-    async def read_bytes(self, path: str) -> bytes:
+    async def read_bytes(self, path: str, *, max_bytes: int | None = None) -> bytes:
         """Return the raw bytes of ``path`` (binary-safe; AI / tool whole-file read).
 
-        Subject to the AI capacity gate (``WORKSPACE_READ_MAX_BYTES``). HTTP panel
+        Default capacity is ``WORKSPACE_READ_MAX_BYTES`` (text). Channel-side
+        Office/PDF extract (``LocalWorkspace``) may pass a higher ``max_bytes``,
+        clamped to ``OFFICE_EXTRACT_CHANNEL_MAX_BYTES``. On-disk backends must use
+        :meth:`extract_office` instead of this method for Office/PDF. HTTP panel
         download must not use this — it goes through the dedicated download path
         (upload-aligned ceiling + ``FileResponse``). Raises ``OutsideWorkspace`` /
         ``PathNotFound`` / ``NotAFile`` / ``WorkspaceIOError``.
+        """
+        ...
+
+    async def read_head(
+        self, path: str, *, max_bytes: int | None = None
+    ) -> ReadHeadResult:
+        """Return the first ``max_bytes`` (default 1024) plus total file size.
+
+        Does **not** apply the whole-file ``read_bytes`` / ``read_lines`` gate:
+        a 20 MiB PDF can still yield its magic. Peek length is clamped to
+        ``WORKSPACE_READ_HEAD_MAX_BYTES``. Raises ``OutsideWorkspace`` /
+        ``PathNotFound`` / ``NotAFile`` / ``WorkspaceIOError``.
+        """
+        ...
+
+    async def extract_office(
+        self, path: str, *, ext: str, start_page: int = 1
+    ) -> ExtractResult:
+        """Extract Office/PDF text without the tool layer slurping the file.
+
+        On-disk backends (cloud / sidecar ``ServerWorkspace``) stat first, then
+        open the file in the extract child (disk ingest cap). Channel
+        ``LocalWorkspace`` still ingests via ``read_bytes`` (JSON/base64 IPC;
+        desktop has no Python extract stack; channel ingest cap). ``start_page``
+        is 1-based and only windows PDF extract (``offset``/``limit`` still
+        slice the extracted text). Path errors raise like ``read_bytes``;
+        conversion failures return an ``ExtractResult``, they are not raised.
         """
         ...
 

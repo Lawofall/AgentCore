@@ -56,7 +56,8 @@ logger = get_logger(__name__)
 # Schema layer (工具面瘦身): short trigger. HOW → team_orchestration_advanced（晚绑定段）。
 _REPLAN_DESCRIPTION = (
     "在 delegate 让出『计划已让出』后续跑同一计划（非终结）。"
-    "binds=定稿 bind_after_deps 步；steers=操舵未跑步；add=追加新步；stop=true 收口。"
+    "binds=定稿让出简报里的待定稿步；手写未定下游用 add；steers=操舵未跑步；"
+    "add=追加新步；stop=true 收口。"
     "协调中追加全新角色/任务队员请再调 delegate（自动并入当前图），勿等本工具；"
     "本工具 add=… 留给波边界让出之后。"
     "细节见 consult(team_orchestration_advanced)。"

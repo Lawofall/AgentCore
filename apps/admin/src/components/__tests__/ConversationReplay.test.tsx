@@ -290,7 +290,8 @@ describe("ConversationReplay layout", () => {
     expect(screen.queryByLabelText("运维信号")).toBeNull();
     expect(screen.getByRole("button", { name: "返回" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "打开诊断" })).toBeTruthy();
-    expect(screen.getByLabelText("只读输入").textContent).toContain("只读复盘");
+    expect(screen.queryByLabelText("只读输入")).toBeNull();
+    expect(screen.queryByText("只读复盘")).toBeNull();
     expect(screen.queryByRole("button", { name: "对话大纲" })).toBeNull();
   });
 
@@ -343,6 +344,208 @@ describe("ConversationReplay layout", () => {
     fireEvent.click(screen.getByText("第一回合结论"));
     expect(screen.getByRole("separator")).toBeTruthy();
     expect(screen.getByTestId("loc-search").textContent).toBe("?turn=a1");
+  });
+
+  it("打开诊断停在诊断 tab，KPI 与过程明细不被队员详情顶掉", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay([
+        msg({ id: "u1", role: "user", content: "帮我查一下" }),
+        msg({
+          id: "a1",
+          role: "assistant",
+          content: "查完了",
+          runs: [
+            run({
+              run_id: "r1",
+              role: "研究员",
+              task: "搜集资料",
+              content: "队员正文",
+            }),
+          ],
+          spans: [
+            {
+              args_preview: "q=foo",
+              finish_reason: null,
+              input_tokens: 10,
+              kind: "llm",
+              name: null,
+              output_tokens: 20,
+              result_preview: null,
+              round_idx: 0,
+              run_id: null,
+              success: true,
+            },
+          ],
+        }),
+      ]),
+    );
+
+    renderReplay();
+    await openDock();
+
+    expect(screen.getByRole("tab", { selected: true, name: /诊断/ })).toBeTruthy();
+    expect(screen.getByTitle("c1（点击复制）")).toBeTruthy();
+    expect(screen.getByText(/过程明细/)).toBeTruthy();
+    expect(screen.queryByText("队员正文")).toBeNull();
+    expect(screen.queryByText("返回列表")).toBeNull();
+  });
+
+  it("点协作图节点后诊断 tab 仍在条上", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay([
+        msg({ id: "u1", role: "user", content: "帮我查一下" }),
+        msg({
+          id: "a1",
+          role: "assistant",
+          content: "CEO 汇总",
+          runs: [run({ run_id: "r1", role: "研究员", task: "搜集资料" })],
+          projected: {
+            runs: [
+              {
+                id: "r1",
+                role: "研究员",
+                task: "搜集资料",
+                status: "completed",
+                process: [],
+              },
+            ],
+          },
+        }),
+      ]),
+    );
+
+    renderReplay();
+    fireEvent.click(await screen.findByText("CEO 汇总"));
+    fireEvent.click(screen.getByText("研究员"));
+
+    expect(screen.getByRole("tab", { name: /诊断/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { selected: true, name: "研究员" })).toBeTruthy();
+  });
+
+  it("关队员 tab 回到诊断", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay([
+        msg({ id: "u1", role: "user", content: "帮我查一下" }),
+        msg({
+          id: "a1",
+          role: "assistant",
+          content: "CEO 汇总",
+          runs: [run({ run_id: "r1", role: "研究员", task: "搜集资料" })],
+          projected: {
+            runs: [
+              {
+                id: "r1",
+                role: "研究员",
+                task: "搜集资料",
+                status: "completed",
+                process: [],
+              },
+            ],
+          },
+        }),
+      ]),
+    );
+
+    renderReplay();
+    fireEvent.click(await screen.findByText("CEO 汇总"));
+    fireEvent.click(screen.getByText("研究员"));
+    expect(screen.getByRole("tab", { selected: true, name: "研究员" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭 研究员" }));
+    expect(screen.getByRole("tab", { selected: true, name: /诊断/ })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "研究员" })).toBeNull();
+    expect(screen.getByText(/多 Agent 1 回合/)).toBeTruthy();
+  });
+
+  it("切回合卸掉队员 tab 并回到诊断", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay([
+        msg({ id: "u1", role: "user", content: "帮我查一下" }),
+        msg({
+          id: "a1",
+          role: "assistant",
+          content: "第一回合结论",
+          trace_id: "t-1",
+          runs: [run({ run_id: "r1", role: "研究员", task: "回合一任务" })],
+          projected: {
+            runs: [
+              {
+                id: "r1",
+                role: "研究员",
+                task: "回合一任务",
+                status: "completed",
+                process: [],
+              },
+            ],
+          },
+        }),
+        msg({ id: "u2", role: "user", content: "再看看这个" }),
+        msg({
+          id: "a2",
+          role: "assistant",
+          content: "第二回合结论",
+          trace_id: "t-2",
+          runs: [run({ run_id: "r2", role: "写手", task: "回合二任务" })],
+          projected: {
+            runs: [
+              {
+                id: "r2",
+                role: "写手",
+                task: "回合二任务",
+                status: "completed",
+                process: [],
+              },
+            ],
+          },
+        }),
+      ]),
+    );
+
+    renderReplay();
+    fireEvent.click(await screen.findByText("第二回合结论"));
+    fireEvent.click(screen.getByText("写手"));
+    expect(screen.getByRole("tab", { name: "写手" })).toBeTruthy();
+
+    fireEvent.click(screen.getByText("第一回合结论"));
+    expect(screen.queryByRole("tab", { name: "写手" })).toBeNull();
+    expect(screen.getByRole("tab", { selected: true, name: /诊断/ })).toBeTruthy();
+  });
+
+  it("收起坞后再开仍记住已挂队员 tab", async () => {
+    vi.mocked(fetchConversationReplay).mockResolvedValue(
+      replay([
+        msg({ id: "u1", role: "user", content: "帮我查一下" }),
+        msg({
+          id: "a1",
+          role: "assistant",
+          content: "CEO 汇总",
+          runs: [run({ run_id: "r1", role: "研究员", task: "搜集资料" })],
+          projected: {
+            runs: [
+              {
+                id: "r1",
+                role: "研究员",
+                task: "搜集资料",
+                status: "completed",
+                process: [],
+              },
+            ],
+          },
+        }),
+      ]),
+    );
+
+    renderReplay();
+    fireEvent.click(await screen.findByText("CEO 汇总"));
+    fireEvent.click(screen.getByText("研究员"));
+    expect(screen.getByRole("tab", { name: "研究员" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    expect(screen.queryByRole("separator")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "打开诊断" }));
+    expect(screen.getByRole("tab", { name: "研究员" })).toBeTruthy();
+    expect(screen.getByRole("tab", { selected: true, name: /诊断/ })).toBeTruthy();
   });
 
   it("moves execution_harvest to the ops bar, not the user column", async () => {

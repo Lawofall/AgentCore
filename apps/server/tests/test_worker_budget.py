@@ -120,9 +120,10 @@ def test_explicit_timeout_ms_wins_over_backstop():
 
 def test_deep_deliverable_signals():
     assert is_deep_deliverable(Deliverable(form="files"))
+    assert is_deep_deliverable(Deliverable(form="workspace"))
     assert is_deep_deliverable(Deliverable(artifacts=["report.md"]))
     assert not is_deep_deliverable(Deliverable(form="prose"))
-    assert not is_deep_deliverable(Deliverable())
+    assert is_deep_deliverable(Deliverable())
     assert not is_deep_deliverable(None)
 
 

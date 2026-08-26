@@ -19,7 +19,7 @@ DelegateTool = Any
 
 CHANNEL_DEAD_WRITE_DESK_REJECT = (
     "本地工作区通道已挂起（channel dead）：拒绝再派需要写盘的队员"
-    "（deliverable.form=files / 非空 artifacts）。"
+    "（deliverable.form=files / workspace / 非空 artifacts；省略 form 按 files）。"
     "请基于已有材料收口，或改派纯 prose 队员；请用户检查桌面连接后重试。"
 )
 
@@ -88,7 +88,7 @@ def node_structurally_requires_write_desk(node: Any) -> bool:
 
     raw = _deliverable_as_dict(getattr(node, "deliverable", None))
     if raw is None:
-        return False
+        return True
     return task_structurally_requires_write_desk({"deliverable": raw})
 
 

@@ -272,6 +272,13 @@ export interface ConversationRuntime {
   loadingNewer: boolean;
   /** turn_warning received before message_start — stamped onto the next assistant bubble. */
   pendingTurnWarning: string | null;
+  /**
+   * SSE ``X-AgentCore-Trace`` (32-hex) waiting for this turn's assistant.
+   * Stashed when the pump saw the header but the last bubble is not this
+   * turn's empty streaming assistant (follow / queue: last is the previous
+   * turn). Applied on create / resume / stamp onto an empty streaming bubble.
+   */
+  pendingTraceId: string | null;
   /** 桌面本地 · live-only：每个 CEO 工具调用的真实开始时刻（epoch ms，键 = tool_call_id）。
    * ToolLine 的「运行 · Ns」计时锚定于此而非组件挂载时刻，故过程折叠/展开、聊天列表虚拟化
    * 重挂后仍准。`addProcessTool` 盖章、`endProcessTool` 清理；不落 journal（重载后工具已完成，

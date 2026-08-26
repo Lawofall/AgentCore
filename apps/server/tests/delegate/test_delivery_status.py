@@ -702,8 +702,8 @@ def test_declared_path_a_landed_b_is_omitted_not_on_card():
     assert all(g.get("severity") != "warning" for g in mismatch)
 
 
-def test_bare_artifacts_artifact_dir_workspace_native_joined_path_delivered():
-    """生产组合：裸名 + artifact_dir + workspace_native，落盘 {dir}/{裸名} → accepted。"""
+def test_workspace_leftover_dir_keeps_bare_names_delivered_at_worker_path():
+    """workspace leftover 目录不 join；worker 落在裸名上 → accepted。"""
     from agentcore.runtime.runs.artifact_dir import apply_artifact_dir_defaults
     from agentcore.workspace.stage_dirs import REVIEWS_DIR
 
@@ -712,10 +712,9 @@ def test_bare_artifacts_artifact_dir_workspace_native_joined_path_delivered():
         "前端刷新审计-工作台.md",
         "前端刷新审计-协作图.md",
     ]
-    landed = [f"{REVIEWS_DIR}/{n}" for n in names]
     nodes: list[RunSpec] = []
     results: dict[str, RunState] = {}
-    for i, (name, path) in enumerate(zip(names, landed, strict=True), start=1):
+    for i, name in enumerate(names, start=1):
         deliverable = Deliverable(
             form="files",
             artifacts=[name],
@@ -723,6 +722,9 @@ def test_bare_artifacts_artifact_dir_workspace_native_joined_path_delivered():
             workspace_native=True,
         )
         apply_artifact_dir_defaults(deliverable)
+        assert deliverable.form == "workspace"
+        assert deliverable.artifact_dir == ""
+        assert deliverable.artifacts == [name]
         run_id = f"w{i}"
         nodes.append(
             RunSpec(
@@ -735,8 +737,8 @@ def test_bare_artifacts_artifact_dir_workspace_native_joined_path_delivered():
         results[run_id] = RunState(
             phase=RunPhase.COMPLETED,
             content="ok",
-            files_touched=[path],
-            file_acceptance=_accepted(path),
+            files_touched=[name],
+            file_acceptance=_accepted(name),
         )
     payload = build_delivery_status(
         RunPlan(nodes=nodes),
@@ -745,10 +747,10 @@ def test_bare_artifacts_artifact_dir_workspace_native_joined_path_delivered():
     )
     assert payload is not None
     assert payload["state"] == "delivered"
-    assert payload["delivered_files"] == landed
+    assert payload["delivered_files"] == names
     by_path = {a["path"]: a for a in payload["artifacts"]}
-    for path in landed:
-        assert by_path[path]["status"] == "accepted"
+    for name in names:
+        assert by_path[name]["status"] == "accepted"
     assert not any(g.get("reason") == REASON_PATH_MISMATCH for g in payload["gaps"])
 
 
@@ -2021,6 +2023,13 @@ def test_two_phase_predicate_and_playbook_stamp():
     assert not ml_errs
     for t in ml_tasks:
         assert t["deliverable"].get("citation_mode") == "two_phase"
+
+    brief, brief_errs = PLAYBOOKS["parallel_brief"].build(
+        {"topic": "测试主题", "angles": ["甲", "乙"]}
+    )
+    assert not brief_errs
+    for t in brief:
+        assert t["deliverable"].get("citation_mode") in (None, "")
 
 
 def _literature_report_plan() -> RunPlan:

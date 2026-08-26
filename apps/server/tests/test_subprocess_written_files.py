@@ -73,8 +73,6 @@ async def test_written_files_reports_artifacts_and_skips_bypass_zones(tmp_path: 
     assert (root / "AgentCore" / "index" / "noise.json").is_file()  # 真写了，只是不报
     assert (root / "node_modules" / "dep.js").is_file()
     assert (root / "out" / "build.txt").is_file()
-    # 本地沙箱是直写：不存在「写回限额未保存」这回事，别借用云端那条腿的字段。
-    assert result.write_back_skipped == 0
 
 
 async def test_written_files_empty_when_execution_writes_nothing(tmp_path: Path):
@@ -154,7 +152,7 @@ def test_scan_stops_at_budget_and_flags_truncation(tmp_path: Path):
 
 
 def test_scan_ignores_symlinks(tmp_path: Path):
-    """符号链接既不下潜也不上报（与 staging 写回腿同口径）。"""
+    """符号链接既不下潜也不上报。"""
     root = tmp_path / "ws"
     root.mkdir()
     outside = tmp_path / "outside"

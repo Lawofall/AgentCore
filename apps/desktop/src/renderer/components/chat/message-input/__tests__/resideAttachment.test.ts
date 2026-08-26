@@ -300,7 +300,7 @@ describe("prepareBrowserFileAttachment", () => {
     const res = await prepareBrowserFileAttachment(null, file);
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.reason).toContain("25MB");
+    expect(res.reason).toContain("50MB");
   });
 
   it("draft without conversationId holds fileBlob (binary allowed)", async () => {
@@ -342,7 +342,7 @@ describe("prepareBrowserFileAttachment", () => {
       rootId: null,
       source: "container",
     });
-    const refused = new Error("文件超出 26214400 字节的上传上限");
+    const refused = new Error("文件超出 52428800 字节的上传上限");
     upload.mockRejectedValue(refused);
 
     const res = await prepareBrowserFileAttachment(
@@ -352,7 +352,7 @@ describe("prepareBrowserFileAttachment", () => {
 
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.reason).toBe("文件超出 26214400 字节的上传上限");
+    expect(res.reason).toBe("文件超出 52428800 字节的上传上限");
     expect(res.cause).toBe(refused);
   });
 
@@ -489,7 +489,7 @@ describe("residentAttachmentForFile（附加即上传）", () => {
 
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.reason).toContain("25MB");
+    expect(res.reason).toContain("50MB");
     expect(stageDroppedFile).not.toHaveBeenCalled();
     expect(upload).not.toHaveBeenCalled();
   });

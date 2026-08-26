@@ -12,7 +12,7 @@ import {
   fetchLatestReleaseArtifacts,
 } from "../functions/_lib/releaseArtifacts.mjs";
 
-const FALLBACK_VERSION = "0.9.12";
+const FALLBACK_VERSION = "0.9.13";
 /** 测试版 SSG 回退；空 = 无 beta CDN 时不生成测试版按钮 URL。 */
 const FALLBACK_BETA_VERSION = "";
 

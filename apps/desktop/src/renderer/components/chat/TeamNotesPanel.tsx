@@ -29,6 +29,10 @@ const NOTE_STATUS_META: Record<string, { label: string; className: string }> = {
 export interface TeamNotesPanelProps {
   notes: TeamNote[];
   /**
+   * 墙已升。空数组时仅在此项为真才画空态；缺省/无墙仍不渲染。
+   */
+  noteWall?: boolean;
+  /**
    * Tighter padding. Collapsible header when controlled or when
    * `defaultExpanded` / `disclosureKey` is set.
    */
@@ -63,14 +67,15 @@ export interface TeamNotesPanelProps {
  * {@link Execution.teamNotes}). This is the visible, glass-box face of the note wall — and what
  * makes it worth more than direct chat: every broadcast is a recorded, attributed, kind-tagged
  * fact shown in ONE place, not a conversation. Each note is fire-and-forget (贴事实·不要求回应),
- * shown with its author (谁贴的) and kind (我定了 / 提个醒), in post order. Renders nothing for a
- * turn that posted no notes (the common case), so it is pure addition over today's behaviour.
+ * shown with its author (谁贴的) and kind (我定了 / 提个醒), in post order. Renders nothing when
+ * the wall was never raised (缺省无墙). A raised empty wall shows an honest empty state.
  *
  * Chat lifts open state via `expanded` / `onExpandedChange`. The compact /
  * stream-aware `disclosureKey` path remains for uncontrolled hosts.
  */
 export function TeamNotesPanel({
   notes,
+  noteWall = false,
   compact = false,
   defaultExpanded,
   disclosureKey,
@@ -95,7 +100,9 @@ export function TeamNotesPanel({
       ? streamExpanded
       : legacyExpanded;
 
-  if (notes.length === 0) return null;
+  if (notes.length === 0 && !noteWall) return null;
+
+  const empty = notes.length === 0;
 
   if (!collapsible) {
     return (
@@ -107,7 +114,11 @@ export function TeamNotesPanel({
         }
       >
         <NotesHeader count={notes.length} compact={compact} />
-        <NotesList notes={notes} compact={compact} />
+        {empty ? (
+          <EmptyHint compact={compact} />
+        ) : (
+          <NotesList notes={notes} compact={compact} />
+        )}
       </section>
     );
   }
@@ -148,9 +159,12 @@ export function TeamNotesPanel({
         <span className="flex-1 text-left">团队便签</span>
         <span className="tabular-nums">{notes.length}</span>
       </button>
-      {expanded && (
-        <NotesList notes={notes} compact={compact} className="mt-1.5" />
-      )}
+      {expanded &&
+        (empty ? (
+          <EmptyHint compact={compact} className="mt-1.5" />
+        ) : (
+          <NotesList notes={notes} compact={compact} className="mt-1.5" />
+        ))}
     </section>
   );
 }
@@ -172,6 +186,22 @@ function NotesHeader({
       <span className="flex-1">团队便签</span>
       <span className="tabular-nums">{count}</span>
     </div>
+  );
+}
+
+function EmptyHint({
+  compact,
+  className = "",
+}: {
+  compact: boolean;
+  className?: string;
+}) {
+  return (
+    <p
+      className={`text-muted-foreground ${compact ? "text-xs" : "text-sm"} ${className}`}
+    >
+      对齐点会贴在这里
+    </p>
   );
 }
 

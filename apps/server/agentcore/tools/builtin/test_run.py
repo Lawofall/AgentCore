@@ -13,9 +13,9 @@ Idle hang → ``exec_timeout`` (exec-env family); disaster wall → ``exec_force
 via a Python argv runner so Windows never defaults through a WSL bash trampoline.
 
 Install path: registry pin / argv deny — see ``package_install``. Cloud
-(``backend.location=server``) also requires the packaging egress chokepoint
-(``registry_egress_available``). Local runs skip that host gate (desktop /
-sidecar policy) but still need the permission axis; else honest 甲 degrade.
+install rides the same desk guest as ``code_execute``. Local runs skip the
+host gVisor chokepoint (desktop / sidecar policy) but still need the
+permission axis; else honest 甲 degrade.
 """
 
 from __future__ import annotations
@@ -1073,37 +1073,17 @@ class TestRunTool:
                 contract_failure=True,
                 metadata={"code": network_unavailable_code(), "check": check},
             )
-        # Host gVisor egress gate is cloud-only. Local execution must not inherit
-        # "API host has runsc" as permission to bare-install on the desktop.
-        if needs_install_net and not is_local_backend:
-            from agentcore.tools.sandbox.egress import registry_egress_available
-
-            if not registry_egress_available():
-                msg = network_unavailable_message()
-                _note_install_network_unavailable()
-                return ToolResult(
-                    tool_call_id="",
-                    success=False,
-                    output=msg,
-                    error=msg,
-                    duration_ms=int((time.monotonic() - start) * 1000),
-                    contract_failure=True,
-                    metadata={"code": network_unavailable_code(), "check": check},
-                )
-
         command_shell = _argv_to_shell(argv)
         budget_seconds, idle_seconds = resolve_verify_timeouts(check)
         env: dict[str, str] | None = None
         cache_bucket: str | None = None
-        registry_egress = False
         if needs_install_net:
             if is_local_backend:
                 # Local: pin registry only. Package managers use the user's own
-                # caches — do not require /pkg-cache or cloud egress.
+                # caches — do not require /pkg-cache or cloud desk netns.
                 env = {**registry_pin_env()}
             else:
                 env = {**registry_pin_env(), **install_cache_env()}
-                registry_egress = True
                 # Prefer user_id; conversation_id as secondary. Missing → leave None so
                 # open_package_egress mints a per-run ephemeral-* bucket (no shared global).
                 cache_bucket = (context.user_id or "").strip() or (
@@ -1116,7 +1096,6 @@ class TestRunTool:
             idle_timeout_seconds=idle_seconds,
             on_output=_make_output_callback(context),
             network_mode="restricted" if allows_restricted else "none",
-            registry_egress=registry_egress,
             cache_bucket=cache_bucket,
             env=env,
         )

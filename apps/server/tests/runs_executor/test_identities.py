@@ -237,6 +237,13 @@ async def test_captain_identity_carries_when_to_split_guidance():
     assert "怎么拆" in sys
     assert "假两段" in sys
     assert "何时不该拆" in sys
+    assert "摸底一页地图" in sys
+    assert "已经做了很久" in sys
+    assert "禁止开局先招人" in sys
+    assert "已覆盖" in sys
+    assert "再整仓" in sys
+    assert "会改变还在跑的队友" in sys
+    assert "入口与关键结论" in sys
     assert "计划已让出" in sys
     assert "replan" in sys
     # Path-B encyclopedia 仍不进 identity。
@@ -354,8 +361,9 @@ async def test_handoff_prompt_splits_by_topology():
     assert "不必为交而交" in leaf
     assert "接力契约 + 增量交代" in leaf
     assert "必须调用 handoff" not in leaf
-    # 省略 form 的叶子也可能落盘 → 保留结论性，宁可重复不要空洞。
-    assert "给人读的说明" in leaf
+    # 省略 form = files：叶子走 pointer，简报保留结论性。
+    assert "form=files" in leaf
+    assert "落盘产物是给人读的完整说明" in leaf
     assert "结论、根因、关键取舍" in leaf
     assert "summary（结论）" in leaf
     assert "一句话说清你这次做出了什么" in leaf
@@ -379,6 +387,8 @@ async def test_handoff_prompt_splits_by_topology():
     assert "找路径" in leaf
     assert "前置结果" in leaf
     assert "含糊" in leaf and "根" in leaf
+    assert "已覆盖" in leaf
+    assert "再整仓" in leaf
     assert "file_list" in leaf
     assert "code_execute print" in leaf
     assert "整文件 dump" in leaf

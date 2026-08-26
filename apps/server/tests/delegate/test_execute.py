@@ -160,8 +160,11 @@ async def test_single_worker_failure_still_folds_to_ceo():
 
 
 def test_should_auto_light_delegate():
-    assert delegate_prelude_mod._should_auto_light_delegate(
+    assert not delegate_prelude_mod._should_auto_light_delegate(
         [{"role": "工程师", "task": "做A"}]
+    )
+    assert delegate_prelude_mod._should_auto_light_delegate(
+        [{"role": "工程师", "task": "做A", "deliverable": {"form": "prose"}}]
     )
     assert not delegate_prelude_mod._should_auto_light_delegate(
         [{"role": "A", "task": "a"}, {"role": "B", "task": "b"}]
@@ -185,13 +188,14 @@ def test_should_auto_light_delegate():
             }
         ]
     )
-    # light 不再盖短轮：browser_* 工具面可走 auto-light（coordination=none 等）
+    # light 不再盖短轮：browser_* 工具面可走 auto-light（须显式 prose）
     assert delegate_prelude_mod._should_auto_light_delegate(
         [
             {
                 "role": "浏览器操作员",
                 "task": "打开百度搜一下",
                 "tools": ["browser"],
+                "deliverable": {"form": "prose"},
             }
         ]
     )
@@ -201,7 +205,18 @@ async def test_single_worker_auto_infers_light_complexity_hint(monkeypatch):
     spy = LogSpy()
     monkeypatch.setattr(delegate_tool_mod, "logger", spy)
     t = tool(Provider(["OUT"]))
-    await t.execute({"tasks": [{"role": "工程师", "task": "做A"}]}, ctx())
+    await t.execute(
+        {
+            "tasks": [
+                {
+                    "role": "工程师",
+                    "task": "做A",
+                    "deliverable": {"form": "prose"},
+                }
+            ]
+        },
+        ctx(),
+    )
     assert spy.get("delegate.started")["complexity_hint"] == "light"
 
 
@@ -457,6 +472,69 @@ async def test_seed_notes_implies_wall_even_when_none(monkeypatch):
     assert len(notes) == 1
     assert notes[0].payload["source"] == "ceo"
     assert notes[0].payload["text"] == "接口用 REST"
+
+
+async def test_team_brief_materializes_onto_wall(monkeypatch):
+    """非空 team_brief 升墙后按行物化开局便签（不经 CEO 可见 seed_notes）。"""
+    from agentcore.runtime.events import EventType
+    from agentcore.runtime.runs.types import RunPhase, RunState
+
+    spy = LogSpy()
+    monkeypatch.setattr(delegate_tool_mod, "logger", spy)
+    captured: dict = {}
+
+    async def _exec(spec, completed):  # noqa: ANN001
+        return RunState(phase=RunPhase.COMPLETED, content="OK")
+
+    def _capture_build(**kwargs):  # noqa: ANN003
+        captured["collaboration"] = kwargs.get("collaboration")
+        captured["note_wall"] = kwargs.get("note_wall")
+        return _exec
+
+    monkeypatch.setattr("agentcore.runtime.runs.build_agent_executor", _capture_build)
+    sink = EventSink()
+    t = tool(Provider([]), sink=sink)
+    result = await t.execute(
+        {
+            "tasks": [{"role": "A", "task": "a"}, {"role": "B", "task": "b"}],
+            "team_brief": "自研画布\n协作后置",
+            "coordinate": False,
+        },
+        ctx(),
+    )
+    assert result.success is True
+    assert spy.get("delegate.started")["coordination"] == "wall"
+    assert captured["collaboration"] is True
+    notes = [e for e in sink._history if e.type == EventType.TEAM_NOTE_POSTED]  # noqa: SLF001
+    assert [e.payload["text"] for e in notes] == ["自研画布", "协作后置"]
+    assert all(e.payload["source"] == "ceo" for e in notes)
+
+
+async def test_explicit_seed_notes_not_merged_with_brief(monkeypatch):
+    """经理内部仍可传 seed_notes 时，不以 brief 再种一遍。"""
+    from agentcore.runtime.events import EventType
+    from agentcore.runtime.runs.types import RunPhase, RunState
+
+    async def _exec(spec, completed):  # noqa: ANN001
+        return RunState(phase=RunPhase.COMPLETED, content="OK")
+
+    monkeypatch.setattr(
+        "agentcore.runtime.runs.build_agent_executor", lambda **kwargs: _exec
+    )
+    sink = EventSink()
+    t = tool(Provider([]), sink=sink)
+    result = await t.execute(
+        {
+            "tasks": [{"role": "A", "task": "a"}, {"role": "B", "task": "b"}],
+            "team_brief": "不该上墙的散文段落",
+            "seed_notes": [{"kind": "decision", "text": "只贴这一条"}],
+            "coordinate": False,
+        },
+        ctx(),
+    )
+    assert result.success is True
+    notes = [e for e in sink._history if e.type == EventType.TEAM_NOTE_POSTED]  # noqa: SLF001
+    assert [e.payload["text"] for e in notes] == ["只贴这一条"]
 
 
 async def test_delegate_started_logs_who_what_and_first_wave_parallel(monkeypatch):
@@ -813,14 +891,14 @@ def test_schema_cues_xor_and_top_level_completion_criteria():
     assert "completion_criteria" not in t.schema.description
 
 
-def test_strict_description_separates_rework_from_disposition():
+def test_ceo_deliverable_schema_omits_internal_qa_knobs():
+    """派活单三档：CEO 只见 form+artifacts；strict 等内部闸不进填参面。"""
     t = tool(Provider([]))
-    deliverable_props = t.schema.parameters["properties"]["tasks"]["items"]["properties"]["deliverable"]
-    strict_desc = deliverable_props["properties"]["strict"]["description"]
-    assert "硬退" in strict_desc
-    assert "软" in strict_desc
-    assert "必须返工" not in strict_desc
-    # Schema 瘦身：deliverable 总述指向 skill；硬退/软接受语义留在 strict 字段。
-    deliverable_desc = deliverable_props["description"]
-    assert "form" in deliverable_desc
-    assert "team_orchestration_advanced" in deliverable_desc
+    deliverable_props = t.schema.parameters["properties"]["tasks"]["items"]["properties"][
+        "deliverable"
+    ]
+    props = deliverable_props["properties"]
+    assert "form" in props and "artifacts" in props
+    for banned in ("strict", "required_sections", "output_format", "citation_mode"):
+        assert banned not in props
+    assert "team_orchestration_advanced" in deliverable_props["description"]

@@ -219,7 +219,7 @@ def _multi_agent_delivery_status_partial() -> list[SSEEvent]:
 def _multi_agent_export_docx_artifacts() -> list[SSEEvent]:
     """交付台账·导出件：写 md 再导出 docx，两件都进 ``artifacts``（首条非空产物向量）。
 
-    真实事故形状：worker ``file_write`` 起诉状 md → ``md_to_docx`` 导出真实 .docx；产物卡
+    真实事故形状：worker ``file_write`` 起诉状 md → ``md_to_docx`` 导出真实 .docx；客户端
     只认 ``delivery_status.artifacts``，而两个工具的**入参都只有那份 md**——docx 只存在于
     工具自报的产物里。故本向量钉死 wire 侧的两件事：导出件自成一行（计数不再是 1），且
     它带 ``derived_from`` 指向源 md（客户端据此把源折成中间稿；``kind`` 同为自报）。

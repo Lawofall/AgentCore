@@ -243,7 +243,7 @@ export function canOpenPathWithOsDefaultApp(
   return source.canOpenWithOsDefaultApp?.(path) ?? true;
 }
 
-/** 是否 HTML 文件路径（.html/.htm）。文件视图标题栏预览入口与产物卡「直达完整预览」共用判定。 */
+/** 是否 HTML 文件路径（.html/.htm）。文件视图标题栏预览入口与终稿路径点击共用判定。 */
 export function isHtmlPath(path: string): boolean {
   return /\.html?$/i.test(path);
 }

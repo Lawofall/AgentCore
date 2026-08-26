@@ -22,7 +22,7 @@ import { ensureReady, getRoot } from "./roots";
 const execFileAsync = promisify(execFile);
 
 /** 与服务端 ``workspace_upload_max_bytes`` 对齐。 */
-export const ATTACH_MAX_BYTES = 25 * 1024 * 1024;
+export const ATTACH_MAX_BYTES = 50 * 1024 * 1024;
 /** 占位文件 / 网络盘 open 挂起时快速失败（勿吃满 code_execute 的 30–60s）。 */
 export const ATTACH_COPY_TIMEOUT_MS = 8_000;
 

@@ -667,6 +667,30 @@ class BrowserSessionRegistry:
                 "请稍后重试，或结束其它对话的浏览器会话后再试。"
             )
 
+    def has_live_sandbox_on_desk(self, container_id: str) -> bool:
+        """True when a live sandbox browser (including a watched live tab) is on this guest."""
+        wanted = str(container_id)
+        for entry in self._entries.values():
+            if entry.host_kind != "sandbox":
+                continue
+            if not entry.session.alive:
+                continue
+            if getattr(entry.session, "desk_container_id", None) == wanted:
+                return True
+        return False
+
+    async def close_sandbox_sessions_on_desk(self, container_id: str) -> None:
+        """Tear down sandbox browsers on this guest. Local Bridge sessions are untouched."""
+        wanted = str(container_id)
+        stale = [
+            sid
+            for sid, entry in self._entries.items()
+            if entry.host_kind == "sandbox"
+            and getattr(entry.session, "desk_container_id", None) == wanted
+        ]
+        for sid in stale:
+            await self._drop(sid, reason="desk_reaped")
+
     async def reap(self) -> int:
         """Close idle / over-lifetime / dead sessions. Returns how many were closed.
 
@@ -812,11 +836,11 @@ def default_browser_session_registry() -> BrowserSessionRegistry:
 
 
 async def browser_reaper_loop() -> None:
-    """Background sweep that recycles idle / over-lifetime browser sandboxes.
+    """Background sweep: idle browser sessions, then idle cloud-desk guests.
 
-    Mirrors the other lifespan retention loops (main.py). The active reaper is the
-    backstop for the lazy on-access checks: a conversation that goes quiet still
-    releases its ~1GB sandbox within the idle TTL instead of pinning it forever.
+    Session reap and desk reap share this loop's cadence; they are different
+    objects (a browser close never freeze/pauses the desk). Local Bridge /
+    sidecar never populate the desk map, so the desk sweep is a no-op there.
     """
     interval = float(settings.browser_reaper_interval_seconds)
     registry = default_browser_session_registry()
@@ -828,6 +852,14 @@ async def browser_reaper_loop() -> None:
                 logger.info("browser.reaper_swept", closed=closed, live=len(registry))
         except Exception:  # noqa: BLE001 - a sweep failure must not kill the loop
             logger.warning("browser.reaper_error")
+        try:
+            from agentcore.tools.sandbox.gvisor import reap_idle_desks
+
+            closed_desks = await reap_idle_desks()
+            if closed_desks:
+                logger.info("sandbox.desk_reaper_swept", closed=closed_desks)
+        except Exception:  # noqa: BLE001 - a desk sweep failure must not kill the loop
+            logger.warning("sandbox.desk_reaper_error")
 
 
 async def shutdown_browser_sessions() -> None:

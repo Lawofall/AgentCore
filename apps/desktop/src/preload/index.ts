@@ -224,7 +224,7 @@ const fsApi: FsApi = {
       }) as Promise<FsResult<StagedAttachment>>;
     }
     // 剪贴板截图等：File 无盘路径（Electron getPathForFile → ""）。按字节驻留。
-    const maxBytes = 25 * 1024 * 1024;
+    const maxBytes = 50 * 1024 * 1024;
     if (typeof file.size === "number" && file.size > maxBytes) {
       return {
         ok: false as const,

@@ -4,8 +4,8 @@
 (:func:`~agentcore.runtime.delegate.completion.collect_worker_gaps`，含 degraded
 交接与 artifacts 对账残差)、失败 / 未执行
 节点——汇成一条 ``delivery_status`` 事件（已交付文件 / 缺口 / 待操作元数据 /
-``artifacts`` 验收行），模板拼接、不调 LLM。事件继续发射，供产物清单与
-``finish_guard``；**用户面**已否决验收大卡——桌面/手机仅
+``artifacts`` 验收行），模板拼接、不调 LLM。事件继续发射，供 ``finish_guard``
+与「只合回产物」读路径；聊天流产物清单卡已撤。**用户面**已否决验收大卡——桌面/手机仅
 ``delivered``/``notes`` 静默、``partial``/``blocked`` 一句轻提示。
 
 ``delivered_files`` / CEO「已交付」= 仅 ``accepted``；cite-tier 等合同点名路径为

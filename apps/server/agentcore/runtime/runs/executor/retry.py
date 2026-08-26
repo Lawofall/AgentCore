@@ -183,13 +183,12 @@ def bind_round_budget_on_begin(
 def _files_expected(deliverable: Any) -> bool:
     """True when this run's contract expects workspace landing.
 
-    Only ``form=files`` and/or non-empty ``artifacts`` — legacy flags alone do not.
+    Only ``form=files`` / ``form=workspace`` / non-empty ``artifacts``.
+    Parsed omit is files. Legacy flags alone do not.
     """
-    if deliverable is None:
-        return False
-    if getattr(deliverable, "form", None) == "files":
-        return True
-    return bool(getattr(deliverable, "artifacts", None))
+    from agentcore.runtime.runs.types import deliverable_expects_landing
+
+    return deliverable_expects_landing(deliverable)
 
 
 def _retry_token_budget(*, ceiling: int, spent: int) -> int:

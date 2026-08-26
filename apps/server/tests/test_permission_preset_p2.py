@@ -139,34 +139,21 @@ async def test_full_trust_journal_tool_side_effect_without_delegate():
         current_audit_recorder.reset(token)
 
 
-def test_gvisor_restricted_adds_network_namespace():
+def test_gvisor_desk_oci_always_has_packaging_netns():
     sandbox = GVisorSandbox(workspace_root="/tmp")
-    req = ExecutionRequest(
-        code="print(1)",
-        language="python",
-        network_mode="restricted",
-    )
-    config = sandbox._build_oci_config(  # noqa: SLF001
-        req,
-        script_name="main.py",
+    cache = "/tmp/cache"
+    config = sandbox._build_desk_oci(  # noqa: SLF001
         workspace="/tmp/ws",
         scratch_dir="/tmp/scratch",
+        netns_path="/var/run/netns/acpkg1",
+        cache_host_dir=cache,
+        proxy_url="http://10.0.0.1:8898",
     )
     ns_types = {n["type"] for n in config["linux"]["namespaces"]}
     assert "network" in ns_types
-
-
-def test_gvisor_none_mode_keeps_offline_namespaces():
-    sandbox = GVisorSandbox(workspace_root="/tmp")
-    req = ExecutionRequest(code="print(1)", language="python", network_mode="none")
-    config = sandbox._build_oci_config(  # noqa: SLF001
-        req,
-        script_name="main.py",
-        workspace="/tmp/ws",
-        scratch_dir="/tmp/scratch",
-    )
-    ns_types = {n["type"] for n in config["linux"]["namespaces"]}
-    assert "network" not in ns_types
+    net = next(n for n in config["linux"]["namespaces"] if n["type"] == "network")
+    assert net.get("path") == "/var/run/netns/acpkg1"
+    assert config["process"]["user"]["uid"] != 65534
 
 
 @pytest.mark.asyncio

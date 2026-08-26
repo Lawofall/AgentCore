@@ -125,7 +125,6 @@ export function turnDetailPath(
   turnId: string,
   view?: TurnDetailView,
   comparePair?: [string, string],
-  opts?: { autoplay?: boolean },
 ): string {
   const path = `/conversations/${conversationId}/turn/${turnId}`;
   const params = new URLSearchParams();
@@ -134,7 +133,6 @@ export function turnDetailPath(
     params.set("a", comparePair[0]);
     params.set("b", comparePair[1]);
   }
-  if (opts?.autoplay) params.set("autoplay", "1");
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;
 }

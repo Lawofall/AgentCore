@@ -58,7 +58,12 @@ from agentcore.workspace.indexing.registry import (
     shared_index_maintainer_for_dir,
     shared_index_manager_for_dir,
 )
-from agentcore.workspace.limits import FILE_TOO_LARGE_DETAIL, WORKSPACE_READ_MAX_BYTES
+from agentcore.workspace.limits import (
+    FILE_TOO_LARGE_DETAIL,
+    OFFICE_EXTRACT_DISK_MAX_BYTES,
+    effective_read_bytes_cap,
+    effective_read_head_cap,
+)
 from agentcore.workspace.local import LocalWorkspace
 from agentcore.workspace.locks import workspace_lock
 from agentcore.workspace.protocol import (
@@ -77,6 +82,7 @@ from agentcore.workspace.protocol import (
     NotUTF8,
     OutsideWorkspace,
     PathNotFound,
+    ReadHeadResult,
     ReadLinesResult,
     ReplaceOutcome,
     TreeEntry,
@@ -192,7 +198,7 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
 def _write_bytes_sync(path: Path, data: bytes) -> None:
     """Parent ``mkdir`` + atomic write — must run off the asyncio event-loop thread.
 
-    Panel uploads / editor saves run up to ``workspace_upload_max_bytes`` (25 MiB);
+    Panel uploads / editor saves run up to ``workspace_upload_max_bytes`` (50 MiB);
     writing that inline would stall every other request on this worker (other
     users' SSE streams included) for the whole flush.
     """
@@ -692,17 +698,30 @@ class ServerWorkspace:
             self._index_manager = shared_index_manager_for_dir(self.index_dir)
         return self._index_manager
 
-    def _reject_oversized_file(self, target: Path) -> None:
-        """Capacity contract: refuse whole-file loads above ``WORKSPACE_READ_MAX_BYTES``.
+    def _reject_oversized_file(
+        self,
+        target: Path,
+        *,
+        max_bytes: int | None = None,
+        ingest_cap: int | None = None,
+    ) -> None:
+        """Capacity contract: refuse whole-file loads above the requested cap.
 
-        Same detail string as desktop Local so the tool layer can mark ``contract_failure``.
+        Same detail prefix as desktop Local so the tool layer can mark
+        ``too_large`` / observation envelopes. Size suffix is optional metadata.
+        ``ingest_cap`` bypasses the ``read_bytes`` channel clamp (disk extract).
         """
+        cap = (
+            ingest_cap
+            if ingest_cap is not None
+            else effective_read_bytes_cap(max_bytes)
+        )
         try:
             size = target.stat().st_size
         except OSError as e:
             raise WorkspaceIOError(str(e)) from e
-        if size > WORKSPACE_READ_MAX_BYTES:
-            raise WorkspaceIOError(FILE_TOO_LARGE_DETAIL)
+        if size > cap:
+            raise WorkspaceIOError(f"{FILE_TOO_LARGE_DETAIL}（{size}字节）")
 
     async def read(self, path: str) -> str:
         # Reads stay inline, unlike the write path: the background index maintainer
@@ -782,20 +801,65 @@ class ServerWorkspace:
             raise WorkspaceIOError(FILE_TOO_LARGE_DETAIL)
         return target
 
-    async def read_bytes(self, path: str) -> bytes:
+    async def read_bytes(self, path: str, *, max_bytes: int | None = None) -> bytes:
         if self._external_needs_channel(path):
-            return await self._require_external_bridge().read_bytes(path)
+            return await self._require_external_bridge().read_bytes(
+                path, max_bytes=max_bytes
+            )
         await self._gate_shared(path, write=False)
         target = self._safe(path)
         if not target.exists():
             raise PathNotFound(path)
         if not target.is_file():
             raise NotAFile(path)
-        self._reject_oversized_file(target)
+        self._reject_oversized_file(target, max_bytes=max_bytes)
         try:
             return target.read_bytes()
         except OSError as e:
             raise WorkspaceIOError(str(e)) from e
+
+    async def read_head(
+        self, path: str, *, max_bytes: int | None = None
+    ) -> ReadHeadResult:
+        if self._external_needs_channel(path):
+            return await self._require_external_bridge().read_head(
+                path, max_bytes=max_bytes
+            )
+        await self._gate_shared(path, write=False)
+        target = self._safe(path)
+        if not target.exists():
+            raise PathNotFound(path)
+        if not target.is_file():
+            raise NotAFile(path)
+        cap = effective_read_head_cap(max_bytes)
+        try:
+            size = target.stat().st_size
+            with target.open("rb") as fh:
+                data = fh.read(cap)
+        except OSError as e:
+            raise WorkspaceIOError(str(e)) from e
+        return ReadHeadResult(data=data, size_bytes=size)
+
+    async def extract_office(
+        self, path: str, *, ext: str, start_page: int = 1
+    ):
+        """Stat then extract in a child that opens ``path``; do not slurp here."""
+        from agentcore.workspace.attachment_parse import extract_office_file
+
+        if self._external_needs_channel(path):
+            return await self._require_external_bridge().extract_office(
+                path, ext=ext, start_page=start_page
+            )
+        await self._gate_shared(path, write=False)
+        target = self._safe(path)
+        if not target.exists():
+            raise PathNotFound(path)
+        if not target.is_file():
+            raise NotAFile(path)
+        self._reject_oversized_file(target, ingest_cap=OFFICE_EXTRACT_DISK_MAX_BYTES)
+        return await extract_office_file(
+            target, ext=ext, start_page=start_page
+        )
 
     async def write_bytes(self, path: str, data: bytes) -> int:
         if self._external_needs_channel(path):

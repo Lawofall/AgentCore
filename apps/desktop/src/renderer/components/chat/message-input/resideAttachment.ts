@@ -19,7 +19,7 @@ import type {
 import { TEXT_PREVIEW_CAP } from "./composerAttachments";
 
 /** Align with main-process ``ATTACH_MAX_BYTES`` / IM ChatComposer. */
-export const ATTACH_MAX_BYTES = 25 * 1024 * 1024;
+export const ATTACH_MAX_BYTES = 50 * 1024 * 1024;
 
 export type ResideResult =
   | {

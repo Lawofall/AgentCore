@@ -25,8 +25,6 @@ export type ProjectedTurnVerdict = {
   hasTeamStrip?: boolean | null;
   /** Where「复制排查包」hangs. Orthogonal to {@link hasTeamStrip}. */
   supportPackHost?: TurnSupportPackHost | null;
-  /** Failed tool names shown by the unproductive-with-body hint; `[]` if none. */
-  failedToolHintNames?: string[];
 };
 
 /**
@@ -55,14 +53,4 @@ export function projectedHasDedicatedPauseUi(p: ProjectedTurn): boolean {
       (i.status === "pending" || i.status === "resolved") &&
       (GATE_INTERACTION_KINDS as readonly string[]).includes(i.kind),
   );
-}
-
-export function projectedFailedToolNames(p: ProjectedTurn): string[] {
-  const names: string[] = [];
-  for (const step of p.process ?? []) {
-    if (step.kind === "tool" && step.status === "error") {
-      names.push(step.tool_name);
-    }
-  }
-  return names;
 }

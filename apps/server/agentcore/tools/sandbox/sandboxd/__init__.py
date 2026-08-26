@@ -1,6 +1,6 @@
 """Same-container privileged helper: runsc + ip netns, Unix socket only."""
 
-from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd
+from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd, build_runsc_exec_cmd
 from agentcore.tools.sandbox.sandboxd.client import (
     SandboxdClient,
     UnixSandboxdClient,
@@ -29,6 +29,7 @@ __all__ = [
     "Shape",
     "UnixSandboxdClient",
     "build_runsc_cmd",
+    "build_runsc_exec_cmd",
     "get_sandboxd_client",
     "reset_sandboxd_client_for_tests",
     "set_sandboxd_client_for_tests",

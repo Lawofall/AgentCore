@@ -65,15 +65,6 @@ function isToolFaultError(
   );
 }
 
-function isToolCeilingGuidance(
-  step: Extract<ProcessStep, { kind: "tool" }>,
-): boolean {
-  return (
-    isFileReadCeilingGuidance(step.tool_name, step.result) ||
-    (step.status === "error" && isVerifyBudgetExceeded(step.display))
-  );
-}
-
 /** Tools whose collapsed title already names the target (path / topic / skill / action)
  * and whose peek would only repeat an ack line or leak result body. Skip the peek —
  * collapsed rows stay a clean single line (mirrors how web_search folds its count into
@@ -85,8 +76,12 @@ const PEEK_SUPPRESSED = new Set([
   "consult",
   // 跨会话对话日志：标题已自解释（query / conversation_id），正文在展开卡。
   "search_conversations",
-  // read_conversation 不在此列：标题不再拼 conversation_id，改由 peek 亮出对话标题——
-  // 用户认的是「上次那场讨论」，不是一串 id。
+  // read_url / read_conversation：peek 并进标题 inlineMeta，折叠无第二行。
+  "read_url",
+  "read_conversation",
+  // 执行类：成功 stdout 不进折叠行；失败/预算 inlineMeta 并进标题。
+  "code_execute",
+  "test_run",
   "file_read",
   "file_list",
   // 写盘家族：标题已有 path / source→destination；成功 ack 与路径重复。
@@ -351,15 +346,23 @@ export function ToolLine({
   const successfulHandoff = isSuccessfulHandoff(step.tool_name, status);
   const peek = toolResultPeek(data);
   const running = status === "running";
-  const ceilingGuidance = isToolCeilingGuidance(step);
+  const fileReadCeiling = isFileReadCeilingGuidance(
+    step.tool_name,
+    step.result,
+  );
+  const verifyBudgetExceeded =
+    step.status === "error" && isVerifyBudgetExceeded(step.display);
+  const ceilingGuidance = fileReadCeiling || verifyBudgetExceeded;
   const isWebSearch = step.tool_name === "web_search";
-  // Collapsed error rows stay one line (title + red ✗). Ceiling guidance keeps
-  // its warning subline; specific product copy lives in the expanded detail.
+  // Collapsed error rows stay one line (title + red ✗ / warning 三角). file_read
+  // 天花板仍保留 warning 第二行；验证预算与其它失败态 inlineMeta 并进标题。
   const suppressesPeek =
     status === "redirect" ||
     (status === "error"
-      ? !ceilingGuidance
-      : PEEK_SUPPRESSED.has(step.tool_name) || isBrowserTool(step.tool_name));
+      ? !fileReadCeiling
+      : PEEK_SUPPRESSED.has(step.tool_name) ||
+        isBrowserTool(step.tool_name) ||
+        (step.tool_name === "terminal" && detail));
   // Real backend-ish start anchor (stamped at tool_use_start) keyed by tool_call_id (= step.id),
   // so the running timer survives this row remounting. Undefined on a reloaded turn (tool done).
   const startedAt = useConversationStore(
@@ -373,16 +376,38 @@ export function ToolLine({
     status === "success" && WRITE_FAMILY.has(step.tool_name)
       ? writeFamilyDiagnosticPeek(data)
       : null;
-  const inlineMeta =
-    status !== "success"
-      ? null
-      : browserTail
-        ? browserTail
-        : !nested && step.tool_name === "web_search" && hasBody
-          ? peek || null
-          : step.tool_name === "grep"
-            ? peek || null
-            : writeDiagPeek;
+  let inlineMetaWarning = false;
+  const inlineMeta = (() => {
+    if (status === "success") {
+      if (browserTail) return browserTail;
+      if (!nested && step.tool_name === "web_search" && hasBody)
+        return peek || null;
+      if (step.tool_name === "grep") return peek || null;
+      if (writeDiagPeek) {
+        inlineMetaWarning = true;
+        return writeDiagPeek;
+      }
+      if (
+        step.tool_name === "read_url" ||
+        step.tool_name === "read_conversation"
+      ) {
+        return peek || null;
+      }
+      return null;
+    }
+    if (status === "error") {
+      if (verifyBudgetExceeded) {
+        inlineMetaWarning = true;
+        return peek || null;
+      }
+      const execTool =
+        step.tool_name === "code_execute" ||
+        step.tool_name === "test_run" ||
+        step.tool_name === "terminal";
+      if (execTool && peek) return peek;
+    }
+    return null;
+  })();
   const inlineBody = successfulHandoff && peek ? peek : null;
   return (
     <div className="min-w-0 max-w-full">
@@ -424,7 +449,7 @@ export function ToolLine({
               {inlineMeta && (
                 <span
                   className={`ml-1.5 min-w-0 max-w-[40%] truncate ${
-                    writeDiagPeek
+                    inlineMetaWarning
                       ? "text-warning/80"
                       : "text-muted-foreground/70"
                   }`}

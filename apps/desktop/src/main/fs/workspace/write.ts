@@ -10,7 +10,11 @@ import {
 } from "node:path";
 import type { WorkspaceOpResult } from "@shared/ipc-contract";
 import { shell } from "electron";
-import { WORKSPACE_READ_MAX } from "../constants";
+import {
+  WORKSPACE_EXTRACT_SOURCE_MAX,
+  WORKSPACE_READ_HEAD_MAX,
+  WORKSPACE_READ_MAX,
+} from "../constants";
 import { realInside, resolveLexical, toReason } from "../pathGuard";
 import type { StoredRoot } from "../roots";
 import { TRASH_REL, isInternalZoneRelPath } from "../workspaceIgnore";
@@ -64,6 +68,7 @@ export async function resolveWritable(
 export async function opReadBytes(
   root: StoredRoot,
   relPath: string,
+  maxBytes?: number,
 ): Promise<WorkspaceOpResult> {
   const abs = resolveLexical(root, relPath);
   if (!abs) return opErr("OutsideWorkspace", relPath);
@@ -77,8 +82,13 @@ export async function opReadBytes(
     return opErr("WorkspaceIOError", toReason(e));
   }
   if (!st.isFile()) return opErr("NotAFile", relPath);
-  if (st.size > WORKSPACE_READ_MAX) {
-    return opErr("WorkspaceIOError", "文件过大，无法读取");
+  const requested =
+    typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes >= 1
+      ? Math.floor(maxBytes)
+      : WORKSPACE_READ_MAX;
+  const cap = Math.min(requested, WORKSPACE_EXTRACT_SOURCE_MAX);
+  if (st.size > cap) {
+    return opErr("WorkspaceIOError", `文件过大，无法读取（${st.size}字节）`);
   }
   const real = await realInside(root, abs);
   if (!real.ok) {
@@ -91,6 +101,50 @@ export async function opReadBytes(
     return opOk((await fs.readFile(real.path)).toString("base64"));
   } catch (e) {
     return opErr("WorkspaceIOError", toReason(e));
+  }
+}
+
+export async function opReadHead(
+  root: StoredRoot,
+  relPath: string,
+  maxBytes?: number,
+): Promise<WorkspaceOpResult> {
+  const abs = resolveLexical(root, relPath);
+  if (!abs) return opErr("OutsideWorkspace", relPath);
+  let st: import("node:fs").Stats;
+  try {
+    st = await fs.stat(abs);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+      return opErr("PathNotFound", relPath);
+    }
+    return opErr("WorkspaceIOError", toReason(e));
+  }
+  if (!st.isFile()) return opErr("NotAFile", relPath);
+  const requested =
+    typeof maxBytes === "number" && Number.isFinite(maxBytes) && maxBytes >= 1
+      ? Math.floor(maxBytes)
+      : WORKSPACE_READ_HEAD_MAX;
+  const cap = Math.min(requested, WORKSPACE_READ_HEAD_MAX);
+  const n = Math.min(cap, st.size);
+  const real = await realInside(root, abs);
+  if (!real.ok) {
+    return real.code === "out_of_root"
+      ? opErr("OutsideWorkspace", relPath)
+      : opErr("PathNotFound", relPath);
+  }
+  let fh: import("node:fs/promises").FileHandle | undefined;
+  try {
+    fh = await fs.open(real.path, "r");
+    const buf = Buffer.alloc(n);
+    if (n > 0) {
+      await fh.read(buf, 0, n, 0);
+    }
+    return opOk({ data: buf.toString("base64"), size_bytes: st.size });
+  } catch (e) {
+    return opErr("WorkspaceIOError", toReason(e));
+  } finally {
+    await fh?.close().catch(() => {});
   }
 }
 

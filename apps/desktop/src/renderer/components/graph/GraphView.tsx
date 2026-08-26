@@ -22,7 +22,6 @@ import { useGraphStore } from "@/stores/graph";
 import type { EndpointKind } from "@/stores/sidePanel";
 import { Background, type Edge, type Node, ReactFlow } from "@xyflow/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CanvasPlaybackControls } from "./CanvasPlaybackControls";
 import { CanvasZoomControls } from "./CanvasZoomControls";
 import { DebateStageBands } from "./DebateStageBands";
 import { GraphActionBar } from "./GraphActionBar";
@@ -80,7 +79,6 @@ interface GraphViewProps {
   ) => void;
   onMeasure?: (m: { height: number; overflowing: boolean }) => void;
   onClose?: () => void;
-  autoplay?: boolean;
 }
 
 export const GraphView = memo(function GraphView({
@@ -90,7 +88,6 @@ export const GraphView = memo(function GraphView({
   onEndpointSelect,
   onMeasure,
   onClose,
-  autoplay = false,
 }: GraphViewProps = {}) {
   const messageId = useExecutionScope();
   const conversationId = useConversationStore((s) => s.currentConversationId);
@@ -114,7 +111,6 @@ export const GraphView = memo(function GraphView({
   );
   const showAuditInjectFlow = useGraphStore((s) => s.showAuditInjectFlow);
   const setShowAuditInjectFlow = useGraphStore((s) => s.setShowAuditInjectFlow);
-  const hasFrames = useActiveExecField((rt) => rt.frames.length > 0);
   const layoutKind = useGraphStore((s) => s.layoutKind);
   const setLayoutKind = useGraphStore((s) => s.setLayoutKind);
   const parallelAvailable = !!execution && hasParallelTimeline(execution);
@@ -651,8 +647,7 @@ export const GraphView = memo(function GraphView({
                 )}
 
               {interactive && (
-                <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-2">
-                  {hasFrames && <CanvasPlaybackControls autoPlay={autoplay} />}
+                <div className="absolute bottom-3 left-3 z-10">
                   <CanvasZoomControls
                     onZoomIn={() => rfRef.current?.zoomIn({ duration: 200 })}
                     onZoomOut={() => rfRef.current?.zoomOut({ duration: 200 })}

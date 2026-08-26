@@ -1,6 +1,11 @@
 import type { FileSource } from "@/lib/fileSource";
 import { remarkCitations } from "@/lib/remarkCitations";
 import { remarkEvidence } from "@/lib/remarkEvidence";
+import { remarkWorkspacePaths } from "@/lib/remarkWorkspacePaths";
+import {
+  isWorkspaceFilePath,
+  normalizeWorkspaceRelPath,
+} from "@/lib/workspaceFilePath";
 import type { Citation, TurnEvidenceLedgerEntry } from "@/types/events";
 import {
   type ComponentPropsWithoutRef,
@@ -225,6 +230,28 @@ function CitationChip({
   );
 }
 
+function WorkspaceFileMark({
+  path,
+  onOpen,
+  children,
+}: {
+  path: string;
+  onOpen: (path: string) => void;
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(path)}
+      aria-label={`打开 ${path}`}
+      title={`打开 ${path}`}
+      className="inline p-0 text-left font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+    >
+      {children ?? path}
+    </button>
+  );
+}
+
 interface Props {
   content: string;
   /** 会话 id — compare 围栏经工作区源加载图片时需要。 */
@@ -254,13 +281,20 @@ interface Props {
   knownLedgerIds?: ReadonlySet<string> | null;
   /** Turn research ledger — `#rN` chip URL fallback when citations lag or omit id. */
   evidenceLedger?: readonly TurnEvidenceLedgerEntry[] | null;
+  /**
+   * 助手终稿：工作区相对路径可点开（聊天流产物清单卡已撤）。
+   * 不传则不改写路径（思考 / 过程 / 文件预览等保持纯文本）。
+   */
+  onOpenWorkspacePath?: (path: string) => void;
 }
 
 /**
  * Assistant-message Markdown: GFM (tables/strikethrough/task lists), syntax
  * highlighting with a per-block copy button, KaTeX math ($…$ / $$…$$),
  * ```mermaid / ```markmap diagrams (rendered via Diagram.tsx), and — when the
- * message has sources — clickable `[n]` citation chips.
+ * message has sources — clickable `[n]` citation chips. Assistant replies may
+ * also pass {@link Props.onOpenWorkspacePath} so workspace-relative file paths
+ * in the body open the File tab (产物清单卡已撤).
  */
 export const Markdown = memo(function Markdown({
   content,
@@ -273,6 +307,7 @@ export const Markdown = memo(function Markdown({
   evidence = false,
   knownLedgerIds = null,
   evidenceLedger = null,
+  onOpenWorkspacePath,
 }: Props) {
   const citationCount = citations?.length ?? 0;
   const resolvedLedgerIds = useMemo(() => {
@@ -298,8 +333,9 @@ export const Markdown = memo(function Markdown({
   // Only enrich once sources / ledger ids exist (they arrive at end-of-turn), so streaming
   // deltas keep using the stable module-level remark plugins. `evidence` (debate
   // speech) appends remarkEvidence; deps-memoized so it stays a stable ref across deltas.
+  const linkWorkspace = Boolean(onOpenWorkspacePath);
   const remarks = useMemo(() => {
-    if (citationCount <= 0 && ledgerIdCount <= 0 && !evidence)
+    if (citationCount <= 0 && ledgerIdCount <= 0 && !evidence && !linkWorkspace)
       return remarkPlugins;
     return [
       ...remarkPlugins,
@@ -307,8 +343,15 @@ export const Markdown = memo(function Markdown({
         ? [remarkCitations(citationCount, resolvedLedgerIds)]
         : []),
       ...(evidence ? [remarkEvidence()] : []),
+      ...(linkWorkspace ? [remarkWorkspacePaths()] : []),
     ];
-  }, [citationCount, ledgerIdCount, resolvedLedgerIds, evidence]);
+  }, [
+    citationCount,
+    ledgerIdCount,
+    resolvedLedgerIds,
+    evidence,
+    linkWorkspace,
+  ]);
 
   const comps = useMemo<Components>(() => {
     // Route ```mermaid / ```markmap / ```vega-lite fences to the diagram
@@ -374,20 +417,34 @@ export const Markdown = memo(function Markdown({
       );
     };
 
-    const base: Components =
-      citationCount <= 0
-        ? { pre, img }
-        : {
-            pre,
-            img,
-            a({ href, children, node: _node, ...props }) {
+    const a =
+      citationCount > 0 || onOpenWorkspacePath
+        ? ({
+            href,
+            children,
+            node: _node,
+            ...props
+          }: ComponentPropsWithoutRef<"a"> & { node?: unknown }) => {
+            const url = typeof href === "string" ? href : "";
+            if (onOpenWorkspacePath && url && isWorkspaceFilePath(url)) {
               return (
-                <a href={href} target="_blank" rel="noreferrer" {...props}>
+                <WorkspaceFileMark
+                  path={normalizeWorkspaceRelPath(url)}
+                  onOpen={onOpenWorkspacePath}
+                >
                   {children}
-                </a>
+                </WorkspaceFileMark>
               );
-            },
-          };
+            }
+            return (
+              <a href={href} target="_blank" rel="noreferrer" {...props}>
+                {children}
+              </a>
+            );
+          }
+        : undefined;
+
+    const base: Components = a ? { pre, img, a } : { pre, img };
     // Citation chips: remarkCitations emits `citemark` via data.hProperties (not a
     // cite: link url — urlTransform would strip that). Same seam as evidencemark.
     // Register whenever pool or ledger ids exist — chips may resolve URL from ledger alone.
@@ -415,6 +472,21 @@ export const Markdown = memo(function Markdown({
     if (evidence) {
       (base as Record<string, unknown>).evidencemark = EvidenceBadge;
     }
+    if (onOpenWorkspacePath) {
+      const FileMark = (props: {
+        "data-path"?: string;
+        children?: ReactNode;
+      }) => {
+        const path = props["data-path"]?.trim() ?? "";
+        if (!path) return <>{props.children}</>;
+        return (
+          <WorkspaceFileMark path={path} onOpen={onOpenWorkspacePath}>
+            {props.children}
+          </WorkspaceFileMark>
+        );
+      };
+      (base as Record<string, unknown>).filemark = FileMark;
+    }
     return base;
   }, [
     citationCount,
@@ -426,6 +498,7 @@ export const Markdown = memo(function Markdown({
     evidence,
     conversationId,
     fileSource,
+    onOpenWorkspacePath,
   ]);
 
   // While streaming, split into per-block memoized chunks so each finished block

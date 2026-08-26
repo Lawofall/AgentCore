@@ -86,6 +86,9 @@ class RunPlanPayload(WirePayload):
     prev_execution_id: str | None = absent()
     # 幕声明（additive）：旧客户端 / 旧 journal 忽略；缺省时前端 fold 合成 act-1。
     act: RunPlanAct | None = absent()
+    # 便签墙已升（additive）：与 ``setup_note_wall`` 同谓词（≥2 worker 且 coordination=wall）。
+    # 真才上线；假 / 旧 journal 缺省 = 无墙。看面据此画空态，避免把「墙已升还没字」当成没开。
+    note_wall: bool | None = absent()
 
 
 class GraphAppendPayload(WirePayload):

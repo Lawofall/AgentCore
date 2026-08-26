@@ -63,7 +63,7 @@ def load_roster() -> tuple[type, ...]:
         GitTool,
         TestRunTool,
         CodeExecuteTool,
-        # Long-running process face (CEO+worker · local_only · start 运行时升审批)
+        # Long-running process face (CEO+worker · execution_class · start 运行时升审批)
         TerminalTool,
         # L3 团队浏览器：单一 ``browser``（GRANTABLE · action 政策表；screenshot 仅 worker）
         BrowserTool,

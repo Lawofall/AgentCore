@@ -1,14 +1,16 @@
-"""交付形态 form=prose|files 派单纪律度量.
+"""交付形态 form=prose|files|workspace 派单纪律度量.
 
 背景：委派 worker 的交付形态曾靠提示词两段式措辞，同任务时对时错（打招呼被乱落盘）。
-已决策把 ``deliverable.form`` 升为结构化契约；CEO 侧用一条【看→prose / 用→files】分流。
+已决策把 ``deliverable.form`` 升为结构化契约；CEO 侧用三档分流：
+【看】→prose / 【存文档】→files（默认，落工作稿）/ 【改工程】→workspace。漏填=files。
 
-本模块把「CEO 是否按分流正确声明 form、files 任务是否点明落盘」变成可复跑信号：
+本模块把「CEO 是否按分流正确声明 form、落盘任务是否点明写文件」变成可复跑信号：
 
-1. **合成样本**（:data:`SAMPLES`）：打招呼 / 纯分析类（prose）与建站 / 写代码类（files）。
+1. **合成样本**（:data:`SAMPLES`）：打招呼 / 纯分析类（prose）、存文档（files）、
+   改工程（workspace）。
 2. **直连** ``provider.complete``（无工具）——让模型只输出 JSON
-   ``{"form":"prose"|"files","task":"..."}``，不跑完整 ReAct。
-3. **合规检查**（:func:`check_form_call`）：form 对齐期望；files 时 task 须含落盘指示。
+   ``{"form":"prose"|"files"|"workspace","task":"..."}``，不跑完整 ReAct。
+3. **合规检查**（:func:`check_form_call`）：form 对齐期望；files/workspace 时 task 须含落盘指示。
 
 真跑需平台 / ``EVAL_DEEPSEEK_API_KEY``；单测注入脚本化假 provider 零成本验证检查器与样本集。
 """
@@ -29,7 +31,7 @@ from agentcore.tools.builtin.delegate.schema import (
     TASK_DELIVERABLE_SCHEMA,
 )
 
-_FORM_RE = re.compile(r'"form"\s*:\s*"(prose|files)"', re.IGNORECASE)
+_FORM_RE = re.compile(r'"form"\s*:\s*"(prose|files|workspace)"', re.IGNORECASE)
 _TASK_RE = re.compile(r'"task"\s*:\s*"((?:\\.|[^"\\])*)"', re.DOTALL)
 _LANDING_HINT = re.compile(
     r"file_write|写入工作区|写进工作区|"
@@ -41,13 +43,15 @@ _LANDING_HINT = re.compile(
 
 _CLASSIFIER_SYSTEM = (
     "你是 CEO Agent，正在决定如何委派一条子任务。根据用户请求，输出【且仅输出】一个 JSON 对象：\n"
-    '{"form":"prose"|"files","task":"<交给 worker 的任务描述>"}\n'
+    '{"form":"prose"|"files"|"workspace","task":"<交给 worker 的任务描述>"}\n'
     "\n"
-    "分流（抓本质）：\n"
-    "- 产出给用户【看】（回答 / 分析 / 汇报 / 创意文字 / 打招呼）→ form=prose；"
+    "分流（三档；漏填=files；禁止扫用户原话补 prose）：\n"
+    "- 【看】（回答 / 分析 / 汇报 / 创意文字 / 打招呼）→ form=prose；"
     "task 写清用正文交付，不要要求落盘。\n"
-    "- 产出给用户【用】（要打开 / 运行 / 编辑 / 保存的文件）→ form=files；"
+    "- 【存文档】（报告 / 笔记 / 网页成品等要保存的文件，默认落工作稿）→ form=files；"
     "task 必须点明用 file_write 把产物写进工作区。\n"
+    "- 【改工程】（改用户工程树：源码 / 测试 / 配置）→ form=workspace；"
+    "task 必须点明用 file_write 把改动写进工作区。\n"
     "\n"
     "不要输出其它文字、不要 markdown 代码围栏。"
 )
@@ -59,7 +63,7 @@ class DeliverableFormSample:
 
     id: str
     user_prompt: str
-    expected_form: str  # prose | files
+    expected_form: str  # prose | files | workspace
     # files 样本：模型写出的 task 是否应含落盘指示（默认 True）
     expect_landing_hint: bool = True
 
@@ -110,18 +114,23 @@ SAMPLES: tuple[DeliverableFormSample, ...] = (
     ),
     DeliverableFormSample(
         id="scaffold_api",
-        user_prompt="在工作区搭一个最小 FastAPI hello 服务，我要能本地启动",
-        expected_form="files",
+        user_prompt="在现有项目里搭一个最小 FastAPI hello 服务，直接改工程源码",
+        expected_form="workspace",
     ),
     DeliverableFormSample(
         id="fix_css",
-        user_prompt="改一下 styles.css 把主色换成深蓝，直接改文件",
-        expected_form="files",
+        user_prompt="改一下 styles.css 把主色换成深蓝，直接改工程文件",
+        expected_form="workspace",
     ),
     DeliverableFormSample(
         id="readme_md",
         user_prompt="给这个项目写一份 README.md 落到仓库里",
-        expected_form="files",
+        expected_form="workspace",
+    ),
+    DeliverableFormSample(
+        id="patch_login_bug",
+        user_prompt="现有仓库登录页有 bug，直接改源码修好",
+        expected_form="workspace",
     ),
 )
 
@@ -164,12 +173,12 @@ def check_form_call(
         form = (m_form.group(1).lower() if m_form else "")
         task = (m_task.group(1).encode().decode("unicode_escape") if m_task else "")
 
-    if form not in ("prose", "files"):
+    if form not in ("prose", "files", "workspace"):
         failures.append("missing_or_invalid_form")
     elif form != expected_form:
         failures.append(f"form_mismatch:got={form}:want={expected_form}")
 
-    if expected_form == "files" and expect_landing_hint:
+    if expected_form in ("files", "workspace") and expect_landing_hint:
         if not task:
             failures.append("missing_task")
         elif not _LANDING_HINT.search(task):
@@ -190,22 +199,49 @@ def check_prompt_contract() -> list[str]:
     orch_body = orch.body if orch is not None else ""
     if "form=prose" not in orch_body and "【看】" not in orch_body:
         gaps.append("team_orchestration_missing_form_routing")
+    if "【存文档】" not in orch_body and "form=files" not in orch_body:
+        gaps.append("team_orchestration_missing_files_tier")
+    if "【改工程】" not in orch_body and "form=workspace" not in orch_body:
+        gaps.append("team_orchestration_missing_workspace_tier")
+    if "可开 web_quality_scan" in orch_body:
+        gaps.append("team_orchestration_still_teaches_web_quality_scan_opt_in")
+    if 'required_sections": ["问题"' in orch_body:
+        gaps.append("team_orchestration_still_teaches_required_sections_json")
     if "form" not in TASK_DELIVERABLE_SCHEMA.get("properties", {}):
         gaps.append("schema_missing_form")
     else:
         enum = TASK_DELIVERABLE_SCHEMA["properties"]["form"].get("enum")  # type: ignore[index]
-        if enum != ["prose", "files"]:
+        if enum != ["prose", "files", "workspace"]:
             gaps.append(f"schema_form_enum:{enum}")
+        props = TASK_DELIVERABLE_SCHEMA["properties"]
+        for banned in (
+            "required_sections",
+            "output_format",
+            "strict",
+            "citation_mode",
+            "workspace_native",
+            "artifact_dir",
+        ):
+            if banned in props:
+                gaps.append(f"schema_still_exposes_{banned}")
     if "才用本工具" in DELEGATE_DESCRIPTION:
         gaps.append("delegate_desc_still_implies_file_artifact_only")
     if "【看】" not in DELEGATE_DESCRIPTION and "prose" not in DELEGATE_DESCRIPTION:
         gaps.append("delegate_desc_missing_form_hint")
+    if "【存文档】" not in DELEGATE_DESCRIPTION and "【改工程】" not in DELEGATE_DESCRIPTION:
+        gaps.append("delegate_desc_missing_three_tier")
     prose = build_worker_identity(has_dependents=False, form="prose")
     files = build_worker_identity(has_dependents=False, form="files")
+    omitted = build_worker_identity(has_dependents=False)
+    workspace = build_worker_identity(has_dependents=False, form="workspace")
     if "file_write" in prose:
         gaps.append("prose_identity_still_mentions_file_write")
     if "file_write" not in files:
         gaps.append("files_identity_missing_file_write")
+    if "form=files" not in omitted or "可独立阅读的文字" in omitted:
+        gaps.append("omit_identity_not_files")
+    if "form=workspace" not in workspace or "AgentCore/文档" not in workspace:
+        gaps.append("workspace_identity_missing_in_place_copy")
     return gaps
 
 
@@ -255,14 +291,14 @@ def lint_samples(samples: Sequence[DeliverableFormSample] = SAMPLES) -> None:
     if len(ids) != len(set(ids)):
         raise EvalConfigError("deliverable_form 样本 id 不唯一")
     forms = {s.expected_form for s in samples}
-    if forms != {"prose", "files"}:
-        raise EvalConfigError(f"样本须同时覆盖 prose 与 files（got {forms}）")
+    if forms != {"prose", "files", "workspace"}:
+        raise EvalConfigError(f"样本须同时覆盖 prose、files 与 workspace（got {forms}）")
     for s in samples:
-        if s.expected_form not in ("prose", "files"):
+        if s.expected_form not in ("prose", "files", "workspace"):
             raise EvalConfigError(f"{s.id}: expected_form 非法 {s.expected_form!r}")
         system, user = s.build_messages()
-        if "【看】" not in system or "【用】" not in system:
-            raise EvalConfigError(f"{s.id}: classifier system 缺看/用分流")
+        if "【看】" not in system or "【存文档】" not in system or "【改工程】" not in system:
+            raise EvalConfigError(f"{s.id}: classifier system 缺三档分流")
         if not user.strip():
             raise EvalConfigError(f"{s.id}: user_prompt 为空")
     gaps = check_prompt_contract()

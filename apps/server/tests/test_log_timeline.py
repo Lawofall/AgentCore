@@ -135,3 +135,22 @@ def test_format_trace_incomplete_status_header() -> None:
     ]
     out = format_trace("t1", events)
     assert "Status: ⚠️ 未完成（进行中或仅 kickoff）" in out
+
+
+def test_attach_failure_pack_meta(monkeypatch) -> None:
+    from scripts.log_timeline import _attach_failure_pack_meta
+
+    tid = "a" * 32
+    monkeypatch.setattr(
+        "scripts.log_timeline.failure_pack_pointer",
+        lambda _tid: {"kind": "journal_only", "path": f"logs/packs/{tid}"},
+    )
+    out = _attach_failure_pack_meta({"mode": "trace", "meta": {}}, tid)
+    assert out["meta"]["failure_pack"] == {
+        "kind": "journal_only",
+        "path": f"logs/packs/{tid}",
+    }
+    monkeypatch.setattr("scripts.log_timeline.failure_pack_pointer", lambda _tid: None)
+    bare = _attach_failure_pack_meta({"mode": "trace", "meta": {"k": 1}}, tid)
+    assert "failure_pack" not in bare["meta"]
+    assert bare["meta"]["k"] == 1

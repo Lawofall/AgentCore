@@ -67,8 +67,8 @@ def test_apply_workspace_native_empty_artifacts_clears_leftover_dir():
     assert d.artifacts == []
 
 
-def test_apply_joins_bare_names_when_artifact_dir_conflicts_with_workspace_native():
-    """生产组合：裸名 + 显式目录 + native → join 成全路径，关掉 native，目录留下。"""
+def test_apply_workspace_does_not_join_leftover_artifact_dir():
+    """workspace / native leftover 目录不得把裸名拧进约定文档路径。"""
     name = "前端刷新审计-对话页面.md"
     d = Deliverable(
         form="files",
@@ -77,12 +77,13 @@ def test_apply_joins_bare_names_when_artifact_dir_conflicts_with_workspace_nativ
         workspace_native=True,
     )
     apply_artifact_dir_defaults(d)
-    assert d.workspace_native is False
-    assert d.artifact_dir == REVIEWS_DIR
-    assert d.artifacts == [f"{REVIEWS_DIR}/{name}"]
+    assert d.form == "workspace"
+    assert d.workspace_native is True
+    assert d.artifact_dir == ""
+    assert d.artifacts == [name]
     desc = describe_deliverable(d)
-    assert "不要落进 `AgentCore/文档/`" not in desc
-    assert f"建议约定文档落盘目录：`{REVIEWS_DIR}/`" in desc
+    assert "不要落进 `AgentCore/文档/`" in desc
+    assert f"建议约定文档落盘目录：`{REVIEWS_DIR}/`" not in desc
 
 
 def test_describe_workspace_native_replaces_drafts_hint():
@@ -259,13 +260,41 @@ def test_build_run_plan_workspace_native_skips_default_drafts_dir():
     assert errors == []
     coder, researcher = (n.deliverable for n in plan.nodes)
     assert coder is not None and researcher is not None
+    assert coder.form == "workspace"
     assert coder.workspace_native is True
     assert coder.artifact_dir == ""
     assert researcher.artifact_dir == DRAFTS_DIR
 
 
-def test_build_run_plan_joins_bare_review_names_despite_workspace_native():
-    """生产组合经 builder：裸名 reviews 文件 + native 误戳 → 进入验收的是全路径。"""
+def test_build_run_plan_omit_form_gets_default_drafts_dir():
+    plan, errors = build_run_plan([{"role": "写手", "task": "写笔记"}])
+    assert errors == []
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "files"
+    assert d.artifact_dir == DRAFTS_DIR
+
+
+def test_build_run_plan_workspace_form_skips_default_drafts_dir():
+    plan, errors = build_run_plan(
+        [
+            {
+                "role": "后端工程师",
+                "task": "实现登录接口",
+                "deliverable": {"form": "workspace"},
+            }
+        ]
+    )
+    assert errors == []
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "workspace"
+    assert d.artifact_dir == ""
+    assert d.workspace_native is True
+
+
+def test_build_run_plan_workspace_does_not_join_leftover_review_dir():
+    """生产组合经 builder：裸名 + leftover reviews 目录 + native → 目录清掉，裸名保留。"""
     name = "前端刷新审计-对话页面.md"
     plan, errors = build_run_plan(
         [
@@ -284,18 +313,28 @@ def test_build_run_plan_joins_bare_review_names_despite_workspace_native():
     assert errors == []
     d = plan.nodes[0].deliverable
     assert d is not None
-    assert d.workspace_native is False
-    assert d.artifact_dir == REVIEWS_DIR
-    assert d.artifacts == [f"{REVIEWS_DIR}/{name}"]
+    assert d.form == "workspace"
+    assert d.workspace_native is True
+    assert d.artifact_dir == ""
+    assert d.artifacts == [name]
 
 
-def test_ceo_schema_exposes_workspace_native():
-    """CEO 手写「实现某功能」时路径未知，需要这个字段来表达落点。"""
+def test_ceo_schema_exposes_three_tier_form_only():
+    """CEO 填参面只有三档 form + artifacts；内部旋钮不进 schema。"""
     from agentcore.tools.builtin.delegate.schema import TASK_DELIVERABLE_SCHEMA
 
     props = TASK_DELIVERABLE_SCHEMA["properties"]
-    assert props["workspace_native"]["type"] == "boolean"
-    assert "工作区原生文件" in props["workspace_native"]["description"]
+    assert props["form"]["enum"] == ["prose", "files", "workspace"]
+    assert set(props) == {"form", "artifacts"}
+    for banned in (
+        "required_sections",
+        "output_format",
+        "strict",
+        "citation_mode",
+        "workspace_native",
+        "artifact_dir",
+    ):
+        assert banned not in props
 
 
 def test_shared_artifact_dir_not_sibling_cross():

@@ -46,6 +46,7 @@ def run_plan(
     host_message_id: str | None = None,
     prev_execution_id: str | None = None,
     act: dict[str, Any] | None = None,
+    note_wall: bool | None = None,
 ) -> SSEEvent:
     payload: dict[str, Any] = {
         "execution_id": execution_id,
@@ -61,6 +62,8 @@ def run_plan(
         payload["prev_execution_id"] = prev_execution_id
     if act:
         payload["act"] = act
+    if note_wall:
+        payload["note_wall"] = True
     return SSEEvent(
         type=EventType.RUN_PLAN,
         payload=payload,
@@ -785,15 +788,12 @@ def execution_completed(
 
 
 def batch_metrics(*, execution_id: str, metrics: dict[str, Any]) -> SSEEvent:
-    """One WaveScheduler run's observability snapshot (调度埋点量化), surfaced for the
-    client's 诊断模式 (前端UX设计.md §十「深层诊断指标」). ``metrics`` is the verbatim
-    ``dataclasses.asdict`` of a :class:`~agentcore.runtime.runs.types.BatchMetrics`
-    (nodes / width / peak_running / wall_ms / busy_ms / slot_starved / outcome counts /
-    受监督波循环 boundary + escalate tallies) — carried snake_case as a wire-shaped leaf,
-    folded onto the desktop ``Execution.batches`` and shown in run detail's 诊断信息. A
-    delegate turn emits one per scheduler segment (a checkpoint/scope yield + resume emits
-    another), so the fold accrues a list. Journaled (it rides a delegate turn alongside
-    ``run_plan``), so it replays on reload; the mobile fold no-ops it (no diagnostic surface)."""
+    """WaveScheduler 观测快照（调度埋点量化）→ 桌面诊断模式。
+
+    ``metrics`` 是 :class:`~agentcore.runtime.runs.types.BatchMetrics` 的 asdict
+    （nodes / width / wall_ms / busy_ms / slot_starved / 受监督波循环 + escalate）。
+    每段调度一条，fold 累成 ``Execution.batches``；journaled，手机 fold 空操作。
+    """
     return SSEEvent(
         type=EventType.BATCH_METRICS,
         payload={"execution_id": execution_id, **metrics},

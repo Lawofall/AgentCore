@@ -24,10 +24,11 @@ single atomic write (no ``await`` between write and flush), so a live frame can 
 interleave with a command reply. This file is a SELF-CONTAINED script (stdlib + playwright
 only — NO agentcore imports): it executes where only the ro-bound system site-packages exist.
 
-Egress is pinned to the host SSRF proxy via ``BROWSER_PROXY`` (--proxy-server); the sandbox
-netns has no other route out, so there is no bypass.
+Public egress is pinned to the host SSRF proxy via ``BROWSER_PROXY`` (--proxy-server).
+Loopback (guest vite) must bypass that proxy — SSRF would refuse 127.0.0.1.
 
-Env: BROWSER_PROXY, BROWSER_WIDTH, BROWSER_HEIGHT, BROWSER_JPEG_Q.
+Env: BROWSER_PROXY, BROWSER_WIDTH, BROWSER_HEIGHT, BROWSER_JPEG_Q. Do not inherit
+the desk packaging HTTP_PROXY.
 """
 
 from __future__ import annotations
@@ -46,9 +47,19 @@ HEIGHT = int(os.environ.get("BROWSER_HEIGHT", "800"))
 JPEG_Q = int(os.environ.get("BROWSER_JPEG_Q", "70"))
 PROXY = os.environ.get("BROWSER_PROXY", "").strip()
 
-CHROME_ARGS = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
-if PROXY:
-    CHROME_ARGS.append(f"--proxy-server={PROXY}")
+def chromium_launch_args(proxy: str) -> list[str]:
+    """Chromium flags: public traffic via SSRF proxy; guest loopback must bypass it."""
+    args = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+    if proxy:
+        args.append(f"--proxy-server={proxy}")
+        # Chromium otherwise sends loopback through the proxy; the SSRF filter
+        # refuses 127.0.0.1, so guest vite would be invisible. ``<-loopback>`` is
+        # Chromium's bypass token (plus explicit loopback names).
+        args.append("--proxy-bypass-list=<-loopback>;127.0.0.1;localhost;[::1]")
+    return args
+
+
+CHROME_ARGS = chromium_launch_args(PROXY)
 
 # The commands the host may invoke (allowlist keeps ``cmd:"start"`` / dunder probing from
 # reaching internal methods). ``input`` (M2 · D17) injects user takeover events via CDP Input.

@@ -23,7 +23,7 @@ import {
   claimPrimaryStream,
   releasePrimaryStream,
 } from "@/services/turns/streamOwnership";
-import { getRuntime } from "@/stores/conversation";
+import { getRuntime, useConversationStore } from "@/stores/conversation";
 import {
   enterTurnStreaming,
   throwIfCannotOpenStream,
@@ -37,6 +37,9 @@ import { resetPartialTurnForReplay } from "./turns/replayReset";
 /** SSE comment after attach journal replay (+ hot re-hang); mirrors server
  * ``sse._ATTACH_CAUGHT_UP``. Not an EventType — pump-level only. */
 export const ATTACH_CAUGHT_UP_COMMENT = "attach-caught-up";
+
+/** Matches server ``api.sse._TRACE_HEADER`` / ``INFERENCE_TRACE_HEADER``. */
+const AGENTCORE_TRACE_HEADER = "X-AgentCore-Trace";
 
 /** Max wait for response headers (connect + server accept). Distinct from {@link pumpSSE}'s
  *  idle timeout, which only applies once the body is streaming. */
@@ -153,6 +156,13 @@ export async function pumpSseBody(
   onEvent?: (event: SSEEvent) => void,
   onComment?: (comment: string) => void,
 ): Promise<void> {
+  useConversationStore
+    .getState()
+    .applySseTraceHeader(
+      response.headers.get(AGENTCORE_TRACE_HEADER),
+      conversationId,
+    );
+
   const reader = response.body?.getReader();
   if (!reader) return;
 

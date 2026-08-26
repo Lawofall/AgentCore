@@ -24,6 +24,11 @@ export interface FolderRailHost {
   onCreateSubfolder: (parent: FolderMeta, anchorEl?: Element | null) => void;
   /** Per-folder entries inside ``.agentcore``, when the host shows conventions. */
   renderWorkroomLead?: (folder: FolderMeta, indent: number) => ReactNode;
+  /**
+   * 「新建条目」on that folder's ``.agentcore`` header. Returning `false`
+   * skips expanding the drawer after a failed create.
+   */
+  onCreateWorkroomEntry?: (folder: FolderMeta) => boolean | Promise<boolean>;
   revealWorkroomFolderId?: string | null;
   onWorkroomRevealApplied?: () => void;
 }
@@ -48,6 +53,7 @@ export function FolderRailRow({
   const wsId = `folder:${folder.id}`;
   const ws = host.workspaceByWsId.get(wsId) ?? folderWorkspaceFallback(folder);
   const children = node?.children ?? [];
+  const createWorkroomEntry = host.onCreateWorkroomEntry;
   return (
     <WorkspaceSection
       ws={ws}
@@ -72,6 +78,9 @@ export function FolderRailRow({
         host.renderWorkroomLead
           ? (indent) => host.renderWorkroomLead?.(folder, indent)
           : undefined
+      }
+      onCreateWorkroomEntry={
+        createWorkroomEntry ? () => createWorkroomEntry(folder) : undefined
       }
       forceExpandWorkroom={host.revealWorkroomFolderId === folder.id}
       onWorkroomRevealApplied={host.onWorkroomRevealApplied}

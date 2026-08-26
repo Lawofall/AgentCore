@@ -20,6 +20,14 @@ from agentcore.runtime.delegate.team_synthesis import worker_output_blurb
 
 _COORD_HINT_CLOSED_TAIL = "全部完成后做最终合成（正文），然后退出协调。"
 
+# Independent-review / audit-package roles (playbook stamps). Not 调研/方向专员.
+_AUDIT_REVIEW_ROLE_MARKERS = ("审校", "审计")
+# code_audit = 审计套餐; research_report = 成文专线（用户点名审校的结构戳）.
+_AUDIT_PLAYBOOKS = frozenset({"code_audit", "research_report"})
+_AUDIT_NUDGE = (
+    "质量面敏感成品（成篇/构建/审查类）若未经独立审计，先派审计再收尾。"
+)
+
 _HARVEST_CLOSE_LINE = {
     "success": (
         "本波结果按终稿纪律向用户交代（走 content_delta）；"
@@ -38,6 +46,85 @@ _HARVEST_CLOSE_LINE = {
         "等用户拍板后再继续，不要自行接着干。"
     ),
 }
+
+
+def _user_facts_dict(session: CoordinationSession, payload: dict) -> dict:
+    raw = payload.get("user_facts")
+    if isinstance(raw, dict):
+        return raw
+    stashed = session.harvest_user_facts
+    return stashed if isinstance(stashed, dict) else {}
+
+
+def _accepted_landing_paths(session: CoordinationSession, payload: dict) -> list[str]:
+    """Accepted relative paths from harvest user_facts (CEO inject only)."""
+    facts = _user_facts_dict(session, payload)
+    files = facts.get("files") or []
+    if not isinstance(files, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in files:
+        path = str(raw).strip()
+        if path and path not in seen:
+            seen.add(path)
+            out.append(path)
+    return out
+
+
+def _role_is_independent_review(role: str) -> bool:
+    text = (role or "").strip()
+    return bool(text) and any(m in text for m in _AUDIT_REVIEW_ROLE_MARKERS)
+
+
+def _deliverable_is_review_form(deliverable: object) -> bool:
+    if deliverable is None:
+        return False
+    if isinstance(deliverable, dict):
+        if deliverable.get("code_audit_gate"):
+            return True
+    elif getattr(deliverable, "code_audit_gate", False):
+        return True
+    from agentcore.runtime.runs.research_quality import deliverable_declares_reviews_files
+
+    return deliverable_declares_reviews_files(deliverable)
+
+
+def _playbook_is_audit_package(payload: dict, facts: dict) -> bool:
+    for raw in (payload.get("playbook"), facts.get("playbook")):
+        name = str(raw).strip() if raw is not None else ""
+        if name in _AUDIT_PLAYBOOKS:
+            return True
+    return False
+
+
+def _wave_wants_audit_nudge(session: CoordinationSession, payload: dict) -> bool:
+    """True when this wave is audit-shaped (playbook / form / review role).
+
+    Does not scan user prose or wrap-up wording. parallel_brief and ordinary
+    writing (no review node / audit playbook / reviews/ form) stay off.
+    """
+    facts = _user_facts_dict(session, payload)
+    if _playbook_is_audit_package(payload, facts):
+        return True
+    live = session.live_plan
+    if live is not None:
+        for node in getattr(live, "nodes", ()) or ():
+            role = str(
+                getattr(node, "role", None) or getattr(node, "agent_name", None) or ""
+            )
+            if _role_is_independent_review(role):
+                return True
+            if _deliverable_is_review_form(getattr(node, "deliverable", None)):
+                return True
+    for raw in facts.get("nodes") or []:
+        if not isinstance(raw, dict):
+            continue
+        if _role_is_independent_review(str(raw.get("role") or "")):
+            return True
+        if _deliverable_is_review_form(raw.get("deliverable")):
+            return True
+    return False
 
 
 def _harvest_close_kind(
@@ -296,10 +383,17 @@ def _format_one(session: CoordinationSession, ev: CoordinationEvent) -> str:
         )
         if isinstance(output, str) and output.strip() and not already_embedded:
             lines.append(f"团队成品：\n{output.strip()}")
-        if not (p.get("cancelled") or p.get("error")):
+        landing = _accepted_landing_paths(session, p)
+        if landing:
+            listed = "、".join(f"`{path}`" for path in landing)
             lines.append(
-                "质量面敏感成品（成篇/构建/审查类）若未经独立审计，先派审计再收尾。"
+                f"已接受落盘：{listed}。"
+                "概览须点名这些工作区相对路径；禁止整段粘贴本清单当产物卡。"
             )
+        if not (p.get("cancelled") or p.get("error")) and _wave_wants_audit_nudge(
+            session, p
+        ):
+            lines.append(_AUDIT_NUDGE)
         if not already_embedded:
             # The synthesis package ends with its own【终稿纪律】; only restate it
             # when that package is not already in front of the model.

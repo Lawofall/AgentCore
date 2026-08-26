@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agentcore.llm.resilience import COUNT_KEYS, LAYER_ORDER
 from agentcore.observability.query.decision_spine import (
     SCHEMA_VERSION,
     build_decision_spine,
@@ -666,3 +667,108 @@ def test_obs_turn_spans_runs_fold_without_tool_children() -> None:
     text = format_decision_spine(spine)
     assert "invoke_agent writer" in text
     assert "execute_tool web_search" not in text
+
+
+def test_spine_omits_degradation_without_events() -> None:
+    spine = build_decision_spine(_events_delegated_ok(), trace_id="a" * 32)
+    assert "degradation" not in spine
+    assert "Degraded" not in format_decision_spine(spine)
+
+
+def test_spine_degradation_keys_complete_when_present() -> None:
+    tid = "j" * 32
+    events = [
+        {
+            "type": "log",
+            "event": "chat.turn_start",
+            "timestamp": "2026-08-26T07:00:00Z",
+            "trace_id": tid,
+            "preview": "retry then stall",
+        },
+        {
+            "type": "log",
+            "event": "llm.call_retried",
+            "timestamp": "2026-08-26T07:00:01Z",
+            "trace_id": tid,
+            "reason": "upstream_502",
+            "attempt": 1,
+        },
+        {
+            "type": "log",
+            "event": "platform_pool.failover",
+            "timestamp": "2026-08-26T07:00:02Z",
+            "trace_id": tid,
+            "from_credential_id": "a",
+            "to_credential_id": "b",
+        },
+        {
+            "type": "log",
+            "event": "llm.stream_stalled",
+            "timestamp": "2026-08-26T07:00:03Z",
+            "trace_id": tid,
+            "committed": False,
+        },
+        {
+            "type": "log",
+            "event": "chat.turn_complete",
+            "timestamp": "2026-08-26T07:00:04Z",
+            "trace_id": tid,
+            "finish_reason": "stop",
+        },
+    ]
+    spine = build_decision_spine(events, trace_id=tid)
+    deg = spine["degradation"]
+    assert set(deg) == {"layers", "counts", "summary"}
+    assert deg["layers"] == list(LAYER_ORDER)
+    assert set(deg["counts"]) == set(COUNT_KEYS)
+    assert deg["counts"]["leaf_retry"] == 1
+    assert deg["counts"]["credential_pool"] == 1
+    assert deg["counts"]["stream_stall_precommit"] == 1
+    assert deg["counts"]["admission"] == 0
+    text = format_decision_spine(spine)
+    assert "Degraded" in text
+    assert "leaf_retry=1" in text
+    assert "credential_pool=1" in text
+    assert "stream_stall_precommit=1" in text
+
+
+def test_spine_omits_replay_persist_when_saved() -> None:
+    spine = build_decision_spine(_events_delegated_ok(), trace_id="a" * 32)
+    assert "replay_persist" not in spine
+    assert "这一轮的回放没存上" not in format_decision_spine(spine)
+
+
+def test_spine_replay_persist_failed_human_line() -> None:
+    tid = "k" * 32
+    events = [
+        {
+            "type": "log",
+            "event": "chat.turn_start",
+            "timestamp": "2026-08-26T08:00:00Z",
+            "trace_id": tid,
+            "preview": "ok reply",
+        },
+        {
+            "type": "log",
+            "event": "journal.persist_failed",
+            "timestamp": "2026-08-26T08:00:02Z",
+            "trace_id": tid,
+            "message_id": "m1",
+            "error": "disk full",
+        },
+        {
+            "type": "log",
+            "event": "chat.turn_complete",
+            "timestamp": "2026-08-26T08:00:03Z",
+            "trace_id": tid,
+            "finish_reason": "stop",
+        },
+    ]
+    spine = build_decision_spine(events, trace_id=tid)
+    assert spine["replay_persist"] == {
+        "saved": False,
+        "summary": "这一轮的回放没存上",
+    }
+    text = format_decision_spine(spine)
+    assert "Replay  这一轮的回放没存上" in text
+    assert "journal.persist_failed" not in text

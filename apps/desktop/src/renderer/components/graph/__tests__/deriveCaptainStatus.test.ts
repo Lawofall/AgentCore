@@ -231,7 +231,7 @@ describe("captainSinkPreview", () => {
         captainStatus: "pending",
         answerPreview: "人已派出，还在等。",
         synthesisPreview: "草稿不应盖过等待文案",
-        waitCaption: "等待「撰写员」(1/2) · 已等 15s",
+        waitCaption: "等待「撰写员」(1/2)",
       }),
     ).toBe("");
   });

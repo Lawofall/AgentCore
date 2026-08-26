@@ -51,8 +51,6 @@ BrowserConsoleTool = _alias("console")
 BrowserScreenshotTool = _alias("screenshot")
 from agentcore.tools.sandbox.browser.netns import (
     EGRESS_UNAVAILABLE_CODE,
-    browser_netns_health,
-    set_browser_netns_health_for_tests,
 )
 from agentcore.tools.sandbox.browser.protocol import (
     BrowserCommandResult,
@@ -126,7 +124,7 @@ def _server_backend(tmp_path: Path) -> ServerWorkspace:
     return ServerWorkspace(root=tmp_path, sandbox=SubprocessSandbox())
 
 
-def test_gate_requires_gvisor_and_shape_b_netns(tmp_path, monkeypatch):
+def test_gate_requires_gvisor_and_desk_health(tmp_path, monkeypatch):
     backend = _server_backend(tmp_path)
     assert browser_execution_enabled_for(None) is False
     reset_desktop_bridge_health_for_tests()
@@ -135,29 +133,26 @@ def test_gate_requires_gvisor_and_shape_b_netns(tmp_path, monkeypatch):
     assert browser_execution_enabled_for(LocalBackend()) is False
     assert browser_execution_enabled_for(backend) is False  # no gVisor isolation
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_browser_netns_health_for_tests(True)
-    set_cloud_sandbox_health_for_tests(False)  # A must not block B
+    set_cloud_sandbox_health_for_tests(False)
+    assert browser_execution_enabled_for(backend) is False
+    set_cloud_sandbox_health_for_tests(True)
     assert browser_execution_enabled_for(backend) is True
-    set_browser_netns_health_for_tests(False)
-    assert browser_execution_enabled_for(backend) is False
 
 
-def test_gate_withholds_when_browser_netns_unhealthy(tmp_path, monkeypatch):
-    """Shape A ok but shape-B netns False → do not assemble ``browser``."""
+def test_gate_withholds_when_desk_unhealthy(tmp_path, monkeypatch):
+    """Desk guest unhealthy → do not assemble ``browser``."""
     backend = _server_backend(tmp_path)
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_cloud_sandbox_health_for_tests(True)
-    set_browser_netns_health_for_tests(False)
+    set_cloud_sandbox_health_for_tests(False)
     assert browser_execution_enabled_for(backend) is False
 
 
-def test_gate_netns_unprobed_is_fail_closed(tmp_path, monkeypatch):
-    """None netns health is fail-closed — do not assemble even if shape A is healthy."""
+def test_gate_unprobed_desk_assembles_like_code_execute(tmp_path, monkeypatch):
+    """None desk health keeps config-only semantics — assemble when gVisor is on."""
     backend = _server_backend(tmp_path)
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_cloud_sandbox_health_for_tests(True)
-    assert browser_netns_health() is None
-    assert browser_execution_enabled_for(backend) is False
+    set_cloud_sandbox_health_for_tests(None)
+    assert browser_execution_enabled_for(backend) is True
 
 
 def test_gate_local_requires_desktop_bridge_when_no_gvisor(monkeypatch):
@@ -176,11 +171,10 @@ def test_gate_local_requires_desktop_bridge_when_no_gvisor(monkeypatch):
 
 
 def test_gate_local_bridge_session_falls_back_to_sandbox(monkeypatch):
-    """过桥：location=local、无 Bridge、形状 B 健康 → enabled 且 host_kind=sandbox."""
+    """过桥：location=local、无 Bridge、云桌健康 → enabled 且 host_kind=sandbox."""
     reset_desktop_bridge_health_for_tests()
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_browser_netns_health_for_tests(True)
-    set_cloud_sandbox_health_for_tests(False)
+    set_cloud_sandbox_health_for_tests(True)
     assert browser_execution_enabled_for(LocalBackend()) is True
     assert browser_host_kind_for(LocalBackend()) == "sandbox"
 
@@ -188,7 +182,6 @@ def test_gate_local_bridge_session_falls_back_to_sandbox(monkeypatch):
 def test_gate_local_healthy_bridge_prefers_local_over_sandbox(monkeypatch):
     """有健康 Bridge → host_kind=local（即便 gVisor 也健康）。"""
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_browser_netns_health_for_tests(True)
     set_cloud_sandbox_health_for_tests(True)
     set_desktop_bridge_health_for_tests(True)
     assert browser_execution_enabled_for(LocalBackend()) is True
@@ -200,7 +193,6 @@ def test_worker_registry_includes_browser_only_on_gvisor_cloud(tmp_path, monkeyp
     backend = _server_backend(tmp_path)
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(True)
-    set_browser_netns_health_for_tests(True)
     names = {s.name for s in build_worker_registry(backend=backend).list_all()}
     assert names >= _BROWSER_NAMES
 
@@ -229,25 +221,39 @@ def test_worker_registry_excludes_browser_on_local_without_bridge_or_gvisor(monk
 
 
 def test_worker_registry_includes_browser_on_local_bridge_session_sandbox(monkeypatch):
-    """过桥无 Bridge + 形状 B → worker 装配 ``browser``（host_kind 由工具侧解析为 sandbox）。"""
+    """过桥无 Bridge + 云桌健康 → worker 装配 ``browser``（host_kind 由工具侧解析为 sandbox）。"""
     reset_desktop_bridge_health_for_tests()
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_browser_netns_health_for_tests(True)
-    set_cloud_sandbox_health_for_tests(False)
+    set_cloud_sandbox_health_for_tests(True)
     names = {s.name for s in build_worker_registry(backend=LocalBackend()).list_all()}
     assert names >= _BROWSER_NAMES
     assert browser_host_kind_for(LocalBackend()) == "sandbox"
 
 
-def test_worker_registry_assembles_browser_when_shape_a_unhealthy(tmp_path, monkeypatch):
-    """A 不健康且 B 健康 → 仍可装配 browser（code_execute 仍未装配）。"""
+def test_worker_registry_withholds_browser_when_desk_unhealthy(tmp_path, monkeypatch):
+    """Desk 不健康 → 不装配 browser（与 code_execute 同一谓词）。"""
     backend = _server_backend(tmp_path)
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(False)
-    set_browser_netns_health_for_tests(True)
     names = {s.name for s in build_worker_registry(backend=backend).list_all()}
-    assert names >= _BROWSER_NAMES
+    assert not (_BROWSER_NAMES & names)
     assert "code_execute" not in names
+
+
+def test_sidecar_does_not_assemble_sandbox_browser(tmp_path, monkeypatch):
+    """sidecar / 真·本机无 Bridge 仍不装云隔离。"""
+    reset_desktop_bridge_health_for_tests()
+    monkeypatch.setattr(
+        "agentcore.sidecar.server_pkg.core.is_sidecar_process", lambda: True
+    )
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    set_cloud_sandbox_health_for_tests(True)
+    assert browser_execution_enabled_for(LocalBackend()) is False
+    assert browser_host_kind_for(LocalBackend()) is None
+    backend = _server_backend(tmp_path)
+    assert browser_execution_enabled_for(backend) is False
+    names = {s.name for s in build_worker_registry(backend=backend).list_all()}
+    assert not (_BROWSER_NAMES & names)
 
 
 def test_worker_registry_includes_browser_on_local_with_bridge(monkeypatch):
@@ -355,10 +361,13 @@ async def test_navigate_builds_display_contract_and_writes_keyframe(tmp_path):
             frame=b"\xff\xd8\xff\xe0jpeg",
         )
     )
-    tool = BrowserNavigateTool(registry=_FakeRegistry(session=session))
+    reg = _FakeRegistry(session=session)
+    tool = BrowserNavigateTool(registry=reg)
     result = await tool.execute({"url": "https://example.com/"}, _ctx(tmp_path))
 
     assert result.success
+    assert reg.last_request is not None
+    assert Path(reg.last_request.workspace_root) == tmp_path
     d = result.display
     assert d["kind"] == "browser" and d["action"] == "navigate"
     assert d["url"] == "https://example.com/" and d["title"] == "Example Domain"
@@ -558,8 +567,7 @@ async def test_egress_unavailable_retires_all_browser_tools(tmp_path):
     assert "web_search" in _fail_text(result) and "browser" in _fail_text(result)
     # No double「浏览器会话启动失败」prefix on the classified path.
     assert _fail_text(result).count("浏览器会话启动失败") == 0
-    # Sticky: next turn's assembly gate must see netns as unavailable.
-    assert browser_netns_health() is False
+    # Retire this turn; assembly follows desk health, not a second jail.
 
 
 @pytest.mark.asyncio
@@ -577,7 +585,6 @@ async def test_egress_unavailable_from_wrapped_netns_message(tmp_path):
     assert not result.success
     assert (result.metadata or {}).get("code") == EGRESS_UNAVAILABLE_CODE
     assert set(result.metadata.get("retire_tools") or []) == BROWSER_TOOL_NAMES
-    assert browser_netns_health() is False
 
 
 @pytest.mark.asyncio
@@ -842,8 +849,7 @@ async def test_bridge_session_sandbox_relative_path_fails_honestly(tmp_path, mon
     """过桥无 Bridge + gVisor：相对路径诚实失败；acquire 须 host_kind=sandbox。"""
     reset_desktop_bridge_health_for_tests()
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_browser_netns_health_for_tests(True)
-    set_cloud_sandbox_health_for_tests(False)
+    set_cloud_sandbox_health_for_tests(True)
     session = _FakeSession(
         BrowserCommandResult(ok=True, data={"final_url": "https://x/", "title": "T"})
     )

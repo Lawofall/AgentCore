@@ -566,7 +566,6 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     expect(o.recovery.kind).toBe("none");
     expect(o.showBubbleBanner).toBe(true);
     expect(o.showComposerHint).toBe(false);
-    expect(o.showFinishReasonChip).toBe(false);
     expect(o.showFooter).toBe(true);
     expect(o.supportPackHost).toBe("bubble");
   });
@@ -583,13 +582,12 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     expect(o.supportPackHost).toBe("bubble");
   });
 
-  it("max_rounds with body is chip-only, not a failure face", () => {
+  it("max_rounds with body is a normal complete, not a failure face", () => {
     const o = arbitrateTurnOutcome({
       content: "写到一半",
       finishReason: "max_rounds",
     });
     expect(o.kind).toBe("ok");
-    expect(o.showFinishReasonChip).toBe(true);
     expect(o.showBubbleBanner).toBe(false);
     expect(o.showComposerHint).toBe(false);
     expect(o.recovery.kind).toBe("none");
@@ -658,21 +656,6 @@ describe("arbitrateTurnOutcome · rest-of-states flag contract", () => {
     const v = toConformanceTurnVerdict({ outcome: o, hasTeamStrip: true });
     expect(v.hasTeamStrip).toBe(true);
     expect(v.supportPackHost).toBe("strip");
-    expect(v).not.toHaveProperty("surface");
-  });
-
-  it("conformance envelope carries unproductive tool hint names", () => {
-    const o = arbitrateTurnOutcome({
-      content: "已写完大半",
-      finishReason: "unproductive",
-    });
-    const v = toConformanceTurnVerdict({
-      outcome: o,
-      hasTeamStrip: false,
-      failedToolHintNames: ["host"],
-    });
-    expect(v.failedToolHintNames).toEqual(["host"]);
-    expect(v.hasTeamStrip).toBe(false);
     expect(v).not.toHaveProperty("surface");
   });
 

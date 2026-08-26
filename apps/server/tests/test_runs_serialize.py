@@ -510,6 +510,24 @@ def test_spec_unknown_persisted_keys_are_ignored():
     assert restored.deliverable is None
 
 
+def test_spec_retired_deliverable_keys_are_ignored():
+    raw = {
+        "run_id": "r1",
+        "task": "t",
+        "policy": {},
+        "deliverable": {
+            "form": "files",
+            "must_contain_soft": True,
+            "name": "retired",
+        },
+    }
+    restored = spec_from_json(raw)
+    assert restored.deliverable is not None
+    assert restored.deliverable.form == "files"
+    assert not hasattr(restored.deliverable, "must_contain_soft")
+    assert not hasattr(restored.deliverable, "name")
+
+
 def test_plan_json_round_trips_late_bound_placeholder_node():
     # 受监督的波循环 P5 (partial spec 往返): a bind_after_deps node carries a PLACEHOLDER spec
     # (its real role/task land at the BIND boundary via replan). The plan must serialize +

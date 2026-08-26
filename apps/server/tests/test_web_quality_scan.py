@@ -60,10 +60,12 @@ def test_soft_emoji_icon_and_purple_gradient():
     assert result.failures == []
 
 
-def test_hard_missing_design_md():
+def test_hard_missing_design_md_only_with_contract():
     html = "<html><body><p>ok</p></body></html>"
-    result = scan_web_quality({"site/index.html": html})
-    assert any("缺DESIGN.md" in f for f in result.failures)
+    auto = scan_web_quality({"site/index.html": html})
+    assert not any("缺DESIGN.md" in f for f in auto.failures)
+    flagged = scan_web_quality({"site/index.html": html}, design_contract=True)
+    assert any("缺DESIGN.md" in f for f in flagged.failures)
 
 
 def test_hard_missing_style_id_in_design():
@@ -72,7 +74,8 @@ def test_hard_missing_style_id_in_design():
         {
             "site/index.html": "<html><body></body></html>",
             "site/DESIGN.md": design,
-        }
+        },
+        design_contract=True,
     )
     assert any("缺选定风格id" in f for f in result.failures)
 
@@ -81,7 +84,8 @@ def test_hard_scattered_color_not_in_tokens():
     design = _MIN_DESIGN
     css = ".hero { color: #6366f1; }"
     result = scan_web_quality(
-        {"site/styles.css": css, "site/DESIGN.md": design}
+        {"site/styles.css": css, "site/DESIGN.md": design},
+        design_contract=True,
     )
     assert any("实现散色" in f for f in result.failures)
 
@@ -90,7 +94,8 @@ def test_scattered_color_ok_when_in_tokens():
     design = _MIN_DESIGN
     css = ".hero { color: #1a1a2e; background: #fff; }"
     result = scan_web_quality(
-        {"site/styles.css": css, "site/DESIGN.md": design}
+        {"site/styles.css": css, "site/DESIGN.md": design},
+        design_contract=True,
     )
     assert not any("实现散色" in f for f in result.failures)
 
@@ -108,7 +113,8 @@ def test_var_fallback_hex_not_scattered():
         "}\n"
     )
     result = scan_web_quality(
-        {"site/styles.css": css, "site/DESIGN.md": design}
+        {"site/styles.css": css, "site/DESIGN.md": design},
+        design_contract=True,
     )
     assert not any("实现散色" in f for f in result.failures)
 
@@ -120,10 +126,50 @@ def test_bare_hex_still_scattered_beside_var_fallback():
         ".hero { color: #6366f1; }\n"
     )
     result = scan_web_quality(
-        {"site/styles.css": css, "site/DESIGN.md": design}
+        {"site/styles.css": css, "site/DESIGN.md": design},
+        design_contract=True,
     )
     assert any("实现散色" in f for f in result.failures)
     assert any("#6366f1" in f for f in result.failures)
+
+
+def test_contract_web_quality_auto_scans_without_flag():
+    html = "<html><body><p>call 400-888-0000</p></body></html>"
+    v = check_contract(
+        "ok",
+        Deliverable(form="files", artifacts=["site/index.html"]),
+        files_written=1,
+        artifact_contents={"site/index.html": html},
+        workspace_paths=["site/index.html"],
+    )
+    assert not v.ok
+    assert any("编造400电话" in f for f in v.failures)
+    assert not any("缺DESIGN.md" in f for f in v.failures)
+
+
+def test_contract_web_quality_design_hard_only_with_flag():
+    html = "<html><body><p>ok</p></body></html>"
+    no_flag = check_contract(
+        "ok",
+        Deliverable(form="files", artifacts=["site/index.html"]),
+        files_written=1,
+        artifact_contents={"site/index.html": html},
+        workspace_paths=["site/index.html"],
+    )
+    assert not any("缺DESIGN.md" in f for f in no_flag.failures)
+    flagged = check_contract(
+        "ok",
+        Deliverable(
+            form="files",
+            artifacts=["site/index.html"],
+            web_quality_scan=True,
+        ),
+        files_written=1,
+        artifact_contents={"site/index.html": html},
+        workspace_paths=["site/index.html"],
+    )
+    assert not flagged.ok
+    assert any("缺DESIGN.md" in f for f in flagged.failures)
 
 
 def test_contract_web_quality_hard_fails_when_enabled():

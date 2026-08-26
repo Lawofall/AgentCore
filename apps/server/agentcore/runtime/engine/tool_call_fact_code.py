@@ -19,7 +19,7 @@ def tool_call_fact_code(attempt: ToolAttempt) -> str:
         return "git_timeout"
     if code:
         return code
-    if attempt.parse_failure or attempt.contract_failure:
+    if attempt.parse_failure:
         return "schema"
     if meta.get("error_class") == ERROR_CLASS_VALIDATION:
         return "schema"

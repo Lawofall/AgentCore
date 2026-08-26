@@ -519,8 +519,8 @@ describe("ChatTimeline chat layout", () => {
 });
 
 describe("InspectorPanel worker dock", () => {
-  it("shows worker content and can clear selection", () => {
-    const onClearRun = vi.fn();
+  it("shows worker content and can close the worker tab", () => {
+    const onCloseWorkerTab = vi.fn();
     const message = msg({
       id: "a1",
       role: "assistant",
@@ -546,20 +546,25 @@ describe("InspectorPanel worker dock", () => {
     render(
       <InspectorPanel
         message={message}
-        selectedRunId="r1"
+        activeTab="r1"
+        workerTabIds={["r1"]}
+        onActivateTab={vi.fn()}
+        onCloseWorkerTab={onCloseWorkerTab}
         onSelectRun={vi.fn()}
-        onClearRun={onClearRun}
         onClose={vi.fn()}
         cnyLabel="¥0.01"
       />,
     );
 
+    expect(screen.getByRole("tab", { name: /诊断/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "写手" })).toBeTruthy();
     expect(screen.getByText("队员正文在此")).toBeTruthy();
     expect(screen.getByText("起草")).toBeTruthy();
     expect(screen.getByText("file_read")).toBeTruthy();
     expect(screen.queryByText(/过程明细/)).toBeNull();
-    fireEvent.click(screen.getByText("返回列表"));
-    expect(onClearRun).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "关闭 写手" }));
+    expect(onCloseWorkerTab).toHaveBeenCalledWith("r1");
+    expect(screen.queryByText("返回列表")).toBeNull();
   });
 
   it("renders the worker process timeline in the dock instead of only the final body", () => {
@@ -597,9 +602,11 @@ describe("InspectorPanel worker dock", () => {
     render(
       <InspectorPanel
         message={message}
-        selectedRunId="r1"
+        activeTab="r1"
+        workerTabIds={["r1"]}
+        onActivateTab={vi.fn()}
+        onCloseWorkerTab={vi.fn()}
         onSelectRun={vi.fn()}
-        onClearRun={vi.fn()}
         onClose={vi.fn()}
       />,
     );
@@ -613,7 +620,7 @@ describe("InspectorPanel worker dock", () => {
     expect(screen.getByText("先列提纲。")).toBeTruthy();
   });
 
-  it("shows worker list without tabs when nothing selected", () => {
+  it("shows diagnosis tab and worker short list when on diagnosis", () => {
     const message = msg({
       id: "a1",
       role: "assistant",
@@ -624,17 +631,21 @@ describe("InspectorPanel worker dock", () => {
     render(
       <InspectorPanel
         message={message}
-        selectedRunId={null}
+        activeTab="diagnosis"
+        workerTabIds={[]}
+        onActivateTab={vi.fn()}
+        onCloseWorkerTab={vi.fn()}
         onSelectRun={vi.fn()}
-        onClearRun={vi.fn()}
         onClose={vi.fn()}
       />,
     );
 
+    expect(screen.getByRole("tab", { selected: true, name: /诊断/ })).toBeTruthy();
     expect(screen.queryByText("运维")).toBeNull();
     expect(screen.queryByText("执行")).toBeNull();
     expect(screen.queryByText("检视")).toBeNull();
     expect(screen.getByText("写手")).toBeTruthy();
+    expect(screen.queryByText("返回列表")).toBeNull();
   });
 
   it("keeps harvest attribution in the dock, not as a user bubble", () => {
@@ -650,9 +661,11 @@ describe("InspectorPanel worker dock", () => {
     render(
       <InspectorPanel
         message={harvest}
-        selectedRunId={null}
+        activeTab="diagnosis"
+        workerTabIds={[]}
+        onActivateTab={vi.fn()}
+        onCloseWorkerTab={vi.fn()}
         onSelectRun={vi.fn()}
-        onClearRun={vi.fn()}
         onClose={vi.fn()}
       />,
     );

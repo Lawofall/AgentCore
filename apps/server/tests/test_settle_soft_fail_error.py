@@ -153,7 +153,67 @@ async def test_salvage_pipeline_exception_carries_journal_entries():
 
 
 @pytest.mark.asyncio
-async def test_salvage_pipeline_exception_hides_raw_exception_from_user_face():
+async def test_salvage_failed_captain_hides_uncoded_exception_from_user_face():
+    from agentcore.core.errors import UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    from agentcore.runtime.pipeline.settle import salvage_failed_captain
+
+    sink = EventSink()
+    audit = SimpleNamespace(drops=0, flush=AsyncMock())
+    raw = "TerminalTool.__init__() got an unexpected keyword argument 'languages'"
+
+    result = await salvage_failed_captain(
+        message_id="m-cap",
+        captain_run_id="cap",
+        captain_state=SimpleNamespace(
+            error=raw,
+            error_code="",
+            content="",
+            reasoning="",
+            usage={},
+        ),
+        vision_cost_sink=[],
+        sink=sink,
+        audit_recorder=audit,
+        roster_writer=None,
+    )
+    assert result["error_code"] == ErrorCode.PIPELINE_ERROR
+    assert result["error"] == UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    assert "TerminalTool" not in result["error"]
+    turn_err = sink.last_turn_error()
+    assert turn_err is not None
+    assert turn_err.get("code") == ErrorCode.PIPELINE_ERROR
+    assert turn_err.get("message") == UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_salvage_failed_captain_preserves_coded_llm_failure():
+    from agentcore.core.errors import UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    from agentcore.runtime.pipeline.settle import salvage_failed_captain
+
+    sink = EventSink()
+    audit = SimpleNamespace(drops=0, flush=AsyncMock())
+
+    result = await salvage_failed_captain(
+        message_id="m-cap-llm",
+        captain_run_id="cap",
+        captain_state=SimpleNamespace(
+            error="鉴权失败（API Key 无效或无权限）",
+            error_code=ErrorCode.LLM_KEY_INVALID,
+            content="",
+            reasoning="",
+            usage={},
+        ),
+        vision_cost_sink=[],
+        sink=sink,
+        audit_recorder=audit,
+        roster_writer=None,
+    )
+    assert result["error_code"] == ErrorCode.LLM_KEY_INVALID
+    assert "无效" in result["error"]
+    assert result["error"] != UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    turn_err = sink.last_turn_error()
+    assert turn_err is not None
+    assert turn_err.get("code") == ErrorCode.LLM_KEY_INVALID
     """Unclassified exceptions: product message on settle result / SSE, not str(e)."""
     from agentcore.core.errors import UNCLASSIFIED_EXCEPTION_USER_MESSAGE
 

@@ -103,10 +103,9 @@ export interface ExecutionRuntime {
    * 不再挂合成草稿行。 */
   teamSynthesisPreview: TeamSynthesisPreviewPayload | null;
   /** CEO 协调等待（`coordination_wait`）：captain 空等团队事件。EPHEMERAL——仅 live
-   * stream；waiting=false / 回合结束 / `execution_detached` 清除。状态条只报 n/m。 */
+   * stream；waiting=false / 回合结束 / `execution_detached` 清除。状态条只报 n/m；
+   * CEO 节点等待句写等谁，不挂已等秒数。 */
   coordinationWait: CoordinationWaitPayload | null;
-  /** Client-only: wall-clock ms when the current wait segment began (heartbeats keep it). */
-  coordinationWaitStartedAt: number | null;
   /** 执行转后台（`execution_detached`）：附着回合已收口、团队继续跑。EPHEMERAL——仅 live；
    * 驱动 StatusStrip「后台」徽标。n/m 与节点活体跟后续帧/相位，不冻在 stamp 快照。
    * `execution_completed` / 终态清除。 */
@@ -246,7 +245,6 @@ const EMPTY_EXEC: ExecutionRuntime = {
   runProcesses: null,
   teamSynthesisPreview: null,
   coordinationWait: null,
-  coordinationWaitStartedAt: null,
   executionDetached: null,
   deliveryStatus: null,
   userInterjections: [],
@@ -410,7 +408,6 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
         runProcesses: null,
         teamSynthesisPreview: null,
         coordinationWait: null,
-        coordinationWaitStartedAt: null,
         executionDetached: null,
         deliveryStatus: null,
         userInterjections: [],
@@ -577,29 +574,26 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
         // Detached: n/m follows live execution.progress (run_*). Wait is
         // CEO-foreground chrome; late heartbeats must not revive a frozen stamp.
         if (cur.executionDetached != null) {
-          if (
-            cur.coordinationWait == null &&
-            cur.coordinationWaitStartedAt == null
-          ) {
-            return null;
-          }
-          return { coordinationWait: null, coordinationWaitStartedAt: null };
+          return cur.coordinationWait == null
+            ? null
+            : { coordinationWait: null };
         }
         if (wait == null || wait.waiting === false) {
-          if (
-            cur.coordinationWait == null &&
-            cur.coordinationWaitStartedAt == null
-          ) {
-            return null;
-          }
-          return { coordinationWait: null, coordinationWaitStartedAt: null };
+          return cur.coordinationWait == null
+            ? null
+            : { coordinationWait: null };
         }
-        return {
-          coordinationWait: wait,
-          // Heartbeats refresh completed/total; keep the segment clock.
-          coordinationWaitStartedAt:
-            cur.coordinationWaitStartedAt ?? Date.now(),
-        };
+        const prev = cur.coordinationWait;
+        if (
+          prev &&
+          prev.waiting === wait.waiting &&
+          prev.completed === wait.completed &&
+          prev.total === wait.total &&
+          prev.execution_id === wait.execution_id
+        ) {
+          return null;
+        }
+        return { coordinationWait: wait };
       }),
 
     setExecutionDetached: (detached, messageId) =>
@@ -618,7 +612,6 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
         return {
           executionDetached: detached,
           coordinationWait: null,
-          coordinationWaitStartedAt: null,
         };
       }),
 
@@ -650,7 +643,6 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
           return {
             status,
             coordinationWait: null,
-            coordinationWaitStartedAt: null,
             executionDetached: null,
           };
         }
@@ -658,7 +650,6 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
           return {
             status,
             coordinationWait: null,
-            coordinationWaitStartedAt: null,
           };
         }
         return cur.status === status ? null : { status };
@@ -870,7 +861,6 @@ export const useExecutionStore = create<ExecutionState>((set, get) => {
               runProcesses: journal.runProcesses ?? null,
               teamSynthesisPreview,
               coordinationWait: null,
-              coordinationWaitStartedAt: null,
               executionDetached: stillUnsettled
                 ? (cur.executionDetached ?? null)
                 : null,

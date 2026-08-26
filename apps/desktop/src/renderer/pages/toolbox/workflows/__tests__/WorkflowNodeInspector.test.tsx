@@ -30,7 +30,7 @@ const CONTRACT_REST = {
   citation_mode: "inline",
 };
 
-const FULL_CONTRACT = { form: "简报 Markdown", ...CONTRACT_REST };
+const FULL_CONTRACT = { form: "files", ...CONTRACT_REST };
 
 function renderInspector(definition: WorkflowDefinition) {
   const onChange = vi.fn();
@@ -51,6 +51,10 @@ function nextDeliverable(onChange: ReturnType<typeof vi.fn>) {
   return node.kind === "agent_step" ? node.deliverable : undefined;
 }
 
+function deliverableSelect() {
+  return screen.getByLabelText(/交付形式/) as HTMLSelectElement;
+}
+
 afterEach(() => {
   cleanup();
 });
@@ -59,46 +63,51 @@ describe("WorkflowNodeInspector 交付形式", () => {
   it("改交付形式不会抹掉 artifacts / required_sections / strict", () => {
     const onChange = renderInspector(definitionWithDeliverable(FULL_CONTRACT));
 
-    fireEvent.change(screen.getByLabelText(/交付形式/), {
-      target: { value: "周报 Markdown" },
+    fireEvent.change(deliverableSelect(), {
+      target: { value: "workspace" },
     });
 
     expect(nextDeliverable(onChange)).toEqual({
-      ...FULL_CONTRACT,
-      form: "周报 Markdown",
+      ...CONTRACT_REST,
+      form: "workspace",
     });
   });
 
-  it("清空交付形式只撤 form，其余交付契约仍在", () => {
-    const onChange = renderInspector(definitionWithDeliverable(FULL_CONTRACT));
-
-    fireEvent.change(screen.getByLabelText(/交付形式/), {
-      target: { value: "   " },
-    });
-
-    expect(nextDeliverable(onChange)).toEqual(CONTRACT_REST);
-  });
-
-  it("只有 form 时清空才整体撤掉 deliverable", () => {
+  it("非法旧自由文按文档档显示，改档仍保留其余契约", () => {
     const onChange = renderInspector(
-      definitionWithDeliverable({ form: "简报 Markdown" }),
+      definitionWithDeliverable({ form: "自由文旧值", ...CONTRACT_REST }),
     );
 
-    fireEvent.change(screen.getByLabelText(/交付形式/), {
-      target: { value: "" },
+    expect(deliverableSelect().value).toBe("files");
+
+    fireEvent.change(deliverableSelect(), {
+      target: { value: "prose" },
     });
 
-    expect(nextDeliverable(onChange)).toBeUndefined();
+    expect(nextDeliverable(onChange)).toEqual({
+      ...CONTRACT_REST,
+      form: "prose",
+    });
   });
 
-  it("原本没有交付契约时填写只写 form", () => {
+  it("未声明 form 按文档档显示，选项是三选一", () => {
+    renderInspector(definitionWithDeliverable(undefined));
+    expect(deliverableSelect().value).toBe("files");
+    expect([...deliverableSelect().options].map((o) => o.value)).toEqual([
+      "prose",
+      "files",
+      "workspace",
+    ]);
+  });
+
+  it("原本没有交付契约时改档只写 form", () => {
     const onChange = renderInspector(definitionWithDeliverable(undefined));
 
-    fireEvent.change(screen.getByLabelText(/交付形式/), {
-      target: { value: "简报 Markdown" },
+    fireEvent.change(deliverableSelect(), {
+      target: { value: "prose" },
     });
 
-    expect(nextDeliverable(onChange)).toEqual({ form: "简报 Markdown" });
+    expect(nextDeliverable(onChange)).toEqual({ form: "prose" });
   });
 });
 

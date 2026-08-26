@@ -373,6 +373,7 @@ async def capture_via_browser_session(
     document_html: str,
     width: int,
     height: int,
+    workspace_root: str | None = None,
 ) -> bytes | None:
     """Best-effort host-side capture using the conversation browser session.
 
@@ -396,7 +397,7 @@ async def capture_via_browser_session(
     registry = default_browser_session_registry()
     request = BrowserSessionRequest(
         conversation_id=conversation_id,
-        workspace_root=None,
+        workspace_root=workspace_root,
         viewport_width=width,
         viewport_height=height,
         jpeg_quality=int(settings.browser_keyframe_jpeg_quality),
@@ -435,6 +436,7 @@ class BrowserPageScreenshot:
     """Production screenshot port over the conversation's browser session."""
 
     conversation_id: str
+    workspace_root: str | None = None
 
     async def capture(
         self, *, document_html: str, width: int, height: int
@@ -444,6 +446,7 @@ class BrowserPageScreenshot:
             document_html=document_html,
             width=width,
             height=height,
+            workspace_root=self.workspace_root,
         )
 
 
@@ -452,12 +455,15 @@ def resolve_screenshot_port(
     conversation_id: str,
     browser_tool_available: bool,
     override: PageScreenshotPort | None = None,
+    workspace_root: str | None = None,
 ) -> PageScreenshotPort | None:
     """Pick screenshot port: explicit override → browser session → None."""
     if override is not None:
         return override
     if browser_tool_available and conversation_id:
-        return BrowserPageScreenshot(conversation_id=conversation_id)
+        return BrowserPageScreenshot(
+            conversation_id=conversation_id, workspace_root=workspace_root
+        )
     return None
 
 

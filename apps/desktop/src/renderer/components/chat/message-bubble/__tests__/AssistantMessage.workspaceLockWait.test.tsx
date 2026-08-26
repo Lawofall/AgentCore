@@ -52,6 +52,7 @@ describe("AssistantMessage · workspace_lock_wait", () => {
           loadingOlder: false,
           loadingNewer: false,
           pendingTurnWarning: null,
+          pendingTraceId: null,
           toolStartedMs: {},
           executionVia: null,
           waitingForWorkspaceLock: false,

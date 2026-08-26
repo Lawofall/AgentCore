@@ -344,15 +344,26 @@ def test_parallel_brief_fans_out_notes_without_write_pipeline():
         assert d["artifacts"][0] in expected
         assert "方向笔记" in t["task"]
         assert "终稿" in t["task"]
-        assert "≤12 词" in t["task"]
-        # 摸底验收：够用即停 + handoff 必交（提示词纪律，非完成硬闸）
+        # 摸底验收：一页地图 + 够用即停 + handoff 必交（提示词纪律，非完成硬闸）
         assert "摸底验收" in t["task"] or "够用即停" in t["task"]
+        assert "一页地图" in t["task"]
+        assert "白皮书" in t["task"]
+        assert "开局先招人" in t["task"]
+        assert "已经做了很久" in t["task"]
+        assert "分段追加" in t["task"]
+        assert "给用户看的回复" in t["task"]
+        assert "法条" not in t["task"]
+        assert "完整要点须用" not in t["task"]
+        assert "重复通读" in t["task"]
+        assert "web_search" not in t["task"]
+        assert "权威出处" not in t["task"]
+        assert "≤12 词" not in t["task"]
+        assert "为凑台账编号" in t["task"]
+        assert "文件名或路径" in t["task"]
+        assert d.get("citation_mode") in (None, "")
         assert "定位" in t["task"] and "技术栈" in t["task"]
-        assert "file_list" in t["task"] and ("grep" in t["task"] or "code_search" in t["task"])
-        assert "每个 app" in t["task"] and "package.json" in t["task"]
-        assert "禁止" in t["task"] and "名单" in t["task"]
-        assert "已知路径" in t["task"]
-        assert "含糊" in t["task"] and "根" in t["task"]
+        assert "必读书单" in t["task"] or "章节大纲" in t["task"]
+        assert "定优化方案" in t["task"]
         assert "handoff" in t["task"].lower()
         assert "禁" in t["task"] and "业务代码" in t["task"]
         assert "够用即停" in t["task"] or "handoff" in t["task"].lower()
@@ -382,8 +393,10 @@ def test_available_playbooks_lists_parallel_brief_before_research_report_semanti
     assert "parallel_brief" in listing
     assert "对齐推进" in listing or "方向笔记" in listing
     assert "讨论对齐" in listing or "摸清" in listing
-    assert "少扇出" in listing or "常 2" in listing
+    assert "人数跟缝走" in listing or "独立缝" in listing
     assert "够用即停" in listing or "handoff" in listing
+    assert "一页地图" in listing
+    assert "一句目标" in listing or "必读文件" in listing
     assert "research_report" in listing
     assert "成文专线" in listing
     assert "明示" in listing
@@ -603,16 +616,11 @@ def test_build_feature_defaults_to_api_plus_parallel_ui_and_test():
 
 
 def test_build_feature_code_nodes_land_in_workspace_not_dossier():
-    """三个写码节点的产物是工作区源码 → 不得被派去 AI 工作间的默认落点。"""
-    from agentcore.runtime.runs.builder import build_run_plan
-
+    """三个写码节点的产物是工作区源码 → form=workspace，不得被派去 AI 工作间的默认落点。"""
     tasks, errors = expand_playbook("build_feature", {"feature": "用户登录"})
     assert errors == []
-    assert all(t["deliverable"]["workspace_native"] is True for t in tasks)
-
-    plan, plan_errors = build_run_plan(tasks, id_prefix="pb_bf")
-    assert plan_errors == []
-    assert all(n.deliverable and n.deliverable.artifact_dir == "" for n in plan.nodes)
+    assert all(t["deliverable"]["form"] == "workspace" for t in tasks)
+    assert all("workspace_native" not in t["deliverable"] for t in tasks)
 
 
 def test_build_feature_include_filters_steps():
@@ -647,6 +655,10 @@ def test_build_app_lean_three_nodes_default():
     assert "integrate" not in by_id
     assert "module_0" not in by_id
     assert by_id["scaffold"]["deliverable"]["strict"] is True
+    assert by_id["scaffold"]["deliverable"]["form"] == "workspace"
+    assert by_id["implement"]["deliverable"]["form"] == "workspace"
+    assert by_id["smoke"]["deliverable"]["form"] == "files"
+    assert all("workspace_native" not in t["deliverable"] for t in tasks)
     assert "铁律" in by_id["scaffold"]["task"]
     assert "悬空" in by_id["scaffold"]["task"]
     assert "npm" in by_id["smoke"]["task"].lower() or "build" in by_id["smoke"]["task"]
@@ -714,6 +726,10 @@ def test_build_app_full_five_waves_default_modules():
     assert by_id["module_0"]["depends_on"] == ["shared"]
     assert set(by_id["integrate"]["depends_on"]) == {"module_0"}
     assert by_id["smoke"]["depends_on"] == ["integrate"]
+    for nid in ("scaffold", "shared", "module_0", "integrate"):
+        assert by_id[nid]["deliverable"]["form"] == "workspace"
+    assert by_id["smoke"]["deliverable"]["form"] == "files"
+    assert all("workspace_native" not in t["deliverable"] for t in tasks)
     scaffold_arts = by_id["scaffold"]["deliverable"]["artifacts"]
     assert scaffold_arts
     assert all(a.startswith("app/") for a in scaffold_arts)
@@ -832,9 +848,9 @@ def test_repair_code_diagnose_patch_verify_shape():
     assert by_id["verify"]["depends_on"] == ["patch"]
     assert by_id["diagnose"]["max_rounds"] == 4
     assert by_id["patch"]["max_rounds"] == 6
-    assert by_id["patch"]["deliverable"]["form"] == "files"
-    # 就地改工作区源码 → 无约定落点（不套 AI 工作间）。
-    assert by_id["patch"]["deliverable"]["workspace_native"] is True
+    assert by_id["patch"]["deliverable"]["form"] == "workspace"
+    # 就地改工作区源码 → form=workspace，无约定落点（不套 AI 工作间）。
+    assert "workspace_native" not in by_id["patch"]["deliverable"]
     assert "requires_files" not in by_id["patch"]["deliverable"]
     assert "name" not in by_id["patch"]["deliverable"]
     assert "src/app.ts" in by_id["patch"]["deliverable"]["artifacts"]
@@ -872,21 +888,13 @@ def test_repair_code_diagnose_patch_verify_shape():
 
 
 def test_repair_code_patch_without_target_still_lands_in_workspace():
-    """无 target/artifacts 的 patch 节点最易被默认落点误导——这里钉死无落点。"""
-    from agentcore.runtime.runs.builder import build_run_plan
-
+    """无 target/artifacts 的 patch 节点最易被默认落点误导——这里钉死 form=workspace。"""
     tasks, errors = expand_playbook(
         "repair_code", {"problem": "Dashboard 白屏", "verify": "pytest -q"}
     )
     assert errors == []
     patch = _by_id(tasks)["patch"]
-    assert patch["deliverable"] == {"form": "files", "workspace_native": True}
-
-    plan, plan_errors = build_run_plan(tasks, id_prefix="pb_rc")
-    assert plan_errors == []
-    node = next(n for n in plan.nodes if n.run_id.endswith("patch"))
-    assert node.deliverable is not None
-    assert node.deliverable.artifact_dir == ""
+    assert patch["deliverable"] == {"form": "workspace"}
 
 
 def test_repair_code_ui_verify_slot_flows_into_verify_task():
@@ -1289,6 +1297,9 @@ def test_every_playbook_expansion_builds_a_valid_run_plan():
         assert len(plan.nodes) == expected_nodes[name], name
         # waves() raises on a cycle / dangling edge — a clean call proves the DAG is sound.
         assert plan.waves()
+        assert all(
+            "workspace_native" not in (t.get("deliverable") or {}) for t in tasks
+        ), name
         if name == "repair_code":
             assert all(
                 (n.max_rounds or 0) > 0 and (n.max_rounds or 99) <= 6 for n in plan.nodes

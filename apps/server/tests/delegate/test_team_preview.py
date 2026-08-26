@@ -106,7 +106,7 @@ def test_worker_rows_shape():
     assert "debate" not in rows[0]
     assert rows[1]["depends_on"] == ["r1"]
     assert "debate" not in rows[1]
-    # D4: omitted form → can write files (legacy)
+    # D4: omitted form = files
     assert rows[0]["write_capability"] == "can_write_files"
     assert rows[0]["write_capability_label"] == "可改文件"
     # 无显式 model → 行上不透出（跟槽）

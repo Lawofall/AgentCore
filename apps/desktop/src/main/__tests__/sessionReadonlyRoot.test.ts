@@ -145,6 +145,7 @@ describe("session organize root mode whitelist", () => {
 const OP_POLICY: Record<WorkspaceOpName, "readonly" | "mutation" | "denied"> = {
   read: "readonly",
   read_bytes: "readonly",
+  read_head: "readonly",
   read_lines: "readonly",
   list: "readonly",
   exists: "readonly",

@@ -244,7 +244,8 @@ def test_cloud_scratch_facts():
     assert "host_os_log_summary" not in hint
     # 案 20260803-image-gen-byok-egress-boundary A：云沙箱无任意 HTTPS 出口事实行
     assert "出站网络" in out
-    assert "--network=none" in out
+    assert "包装源" in out or "allowlist" in out
+    assert "无任意 HTTPS" in out
     assert "无原生生图工具" in out
     # 「禁代调出图」归核；「Key 不落明文」归共享基座，事实层都不写
     assert "代调" not in out
@@ -412,13 +413,11 @@ def test_bridge_session_sandbox_browser_guide_no_relative_html(monkeypatch):
     """过桥：local + 无 Bridge + gVisor → 已装配但沙箱指引（相对路径不可测）。"""
     from agentcore.config import settings
     from agentcore.runtime.browser.desktop_bridge import reset_desktop_bridge_health_for_tests
-    from agentcore.tools.sandbox.browser.netns import set_browser_netns_health_for_tests
     from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
 
     reset_desktop_bridge_health_for_tests()
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(True)
-    set_browser_netns_health_for_tests(True)
     out = build_workspace_context(
         _FakeBackend("local"),
         desktop_online=True,
@@ -442,7 +441,7 @@ def test_browser_unassembled_guide_mentions_bind_or_gvisor():
         browser_enabled=False,
     )
     assert "浏览器事实" in out
-    assert "gVisor" in out or "沙箱" in out or "netns" in out
+    assert "gVisor" in out or "沙箱" in out or "云桌" in out
     # 本机传统可教非默认；云协作仍推荐
     assert "本机传统" in out or "合法非默认" in out or "非默认" in out
     assert "bind_local_folder" in out or "open_local_project" in out or "open/bind" in out
@@ -696,8 +695,8 @@ def test_git_absent_soft_tip_visible_with_explicit_fact():
     assert "不挡派工" in out
 
 
-def test_cloud_package_install_tracks_registry_egress(monkeypatch):
-    """云端：code_execute 已装配仍可 package_install=未装配（egress 假）；egress 真则拆位翻开。"""
+def test_cloud_package_install_tracks_code_execute():
+    """云端：package_install 与 code_execute 同一谓词；override 仅测试探针。"""
     out_off = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
@@ -707,7 +706,7 @@ def test_cloud_package_install_tracks_registry_egress(monkeypatch):
     )
     assert "code_execute=已装配" in out_off
     assert "package_install=未装配" in out_off
-    assert "能跑代码 ≠ 能装依赖" in out_off or "registry_egress" in out_off
+    assert "同一谓词" in out_off or "云桌 guest 未起" in out_off
 
     out_on = build_workspace_context(
         _FakeBackend("server"),
@@ -718,31 +717,23 @@ def test_cloud_package_install_tracks_registry_egress(monkeypatch):
     )
     assert "code_execute=已装配" in out_on
     assert "package_install=已装配" in out_on
-    assert "allowlist egress" in out_on or "netns" in out_on
+    assert "allowlist" in out_on or "chokepoint" in out_on or "云桌" in out_on
 
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: False,
-    )
-    out_probe_off = build_workspace_context(
+    out_same = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
         code_execute_enabled=True,
         terminal_enabled=False,
     )
-    assert "package_install=未装配" in out_probe_off
+    assert "package_install=已装配" in out_same
 
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: True,
-    )
-    out_probe_on = build_workspace_context(
+    out_both_off = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=True,
-        code_execute_enabled=True,
+        code_execute_enabled=False,
         terminal_enabled=False,
     )
-    assert "package_install=已装配" in out_probe_on
+    assert "package_install=未装配" in out_both_off
 
 
 def test_local_package_install_follows_execution_class():

@@ -67,6 +67,7 @@ function renderTree(
   source: FileSource,
   extra: {
     renderWorkroomLead?: () => import("react").ReactNode;
+    onCreateWorkroomEntry?: () => boolean | Promise<boolean>;
     filterQuery?: string;
   } = {},
 ) {
@@ -169,6 +170,64 @@ describe("FileTree .agentcore 抽屉", () => {
       ctrlKey: true,
     });
     expect(screen.getByText("已选择 2 项")).toBeTruthy();
+  });
+
+  it("「新建条目」与 .agentcore 同一 header 行，始终可见", async () => {
+    const src = eagerSource(
+      [{ path: "报告.md", name: "报告.md", isDir: false }],
+      "workspace:workroom-create-header",
+    );
+    const onCreate = vi.fn(() => true);
+    renderTree(src, {
+      renderWorkroomLead: () => <div>画像.md</div>,
+      onCreateWorkroomEntry: onCreate,
+    });
+
+    expect(await screen.findByText(".agentcore")).toBeTruthy();
+    const create = screen.getByRole("button", { name: "新建条目" });
+    expect(create).toBeTruthy();
+    expect(
+      screen.getByText(".agentcore").closest("button")?.contains(create),
+    ).toBe(false);
+    expect(create.parentElement?.contains(screen.getByText(".agentcore"))).toBe(
+      true,
+    );
+    expect(create.parentElement?.className).not.toMatch(/group-hover/);
+    expect(screen.queryByText("画像.md")).toBeNull();
+  });
+
+  it("折叠时点新建会建条目并展开抽屉，不把已展开的抽屉折回去", async () => {
+    const src = eagerSource(
+      [{ path: "报告.md", name: "报告.md", isDir: false }],
+      "workspace:workroom-create-expand",
+    );
+    const onCreate = vi.fn(async () => true);
+    renderTree(src, {
+      renderWorkroomLead: () => <div>画像.md</div>,
+      onCreateWorkroomEntry: onCreate,
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "新建条目" }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+    expect(await screen.findByText("画像.md")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "新建条目" }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("画像.md")).toBeTruthy();
+  });
+
+  it("新建失败时不展开抽屉", async () => {
+    const src = eagerSource(
+      [{ path: "报告.md", name: "报告.md", isDir: false }],
+      "workspace:workroom-create-fail",
+    );
+    renderTree(src, {
+      renderWorkroomLead: () => <div>画像.md</div>,
+      onCreateWorkroomEntry: () => false,
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "新建条目" }));
+    expect(screen.queryByText("画像.md")).toBeNull();
   });
 
   it("懒加载等 AgentCore/文档 时抽屉转圈，不能当成就绪空层", async () => {

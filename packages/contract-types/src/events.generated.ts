@@ -313,7 +313,7 @@ export interface TeamPreviewWorker {
   write_capability_label?: string;
   /** 该队员模型 id（可展示裸 id）。 */
   model?: string;
-  /** 模型来源；有三元组时透出。 */
+  /** 付款来源（行属性）；旧帧缺省。 */
   origin?: "platform" | "byok";
   /** BYOK 服务商 id；platform 缺省。 */
   provider_id?: string;
@@ -333,7 +333,7 @@ export interface TeamPreviewSide {
   run_id?: string;
   /** 该方辩手模型 id。 */
   model?: string;
-  /** 模型来源。 */
+  /** 付款来源（行属性）。 */
   origin?: "platform" | "byok";
   /** BYOK 服务商 id；platform 缺省。 */
   provider_id?: string;
@@ -347,6 +347,8 @@ export interface ModelCandidate {
   label?: string;
   /** 触发消歧的参与方 key；缺省=整场。 */
   side_key?: string;
+  /** 目录身份 @platform/… 或 @byok/…；旧帧缺省。 */
+  ref?: string;
 }
 
 /** 开工卡：计划预览 + 能力授权（两卡合一）。
@@ -381,7 +383,7 @@ export interface TeamPreviewRequiredPayload {
   moderator_provider_id?: string;
   /** 目录只剩一模型时为 true，开赛卡明示同模型降级。 */
   same_model_debate?: boolean;
-  /** 模型消歧候选（model/origin/provider_id/label）；旧帧缺省。 */
+  /** 模型消歧候选（ref + model/origin/provider_id/label）；旧帧缺省。 */
   model_candidates?: ModelCandidate[];
   /** 开工卡主导语（如「MVP主流程 · 预计 3 人」）；旧帧缺省。 */
   headline?: string;
@@ -399,14 +401,15 @@ export interface WriteCapabilityOverride {
   capability: "text_only";
 }
 
-/** 开工卡 continue 人盖：按 run_id 覆盖队员 / 辩手 / 主持人模型三元组。
+/** 开工卡 continue 人盖：按 run_id 覆盖队员 / 辩手 / 主持人目录身份。
  * 
- * 空 model = 该项不改（与 map 缺键同效）。非法三元组 → 422（引擎侧硬失败）。 */
+ * ``model`` 填 ``@platform/{id}`` / ``@byok/{provider_id}/{id}``。
+ * 空 model = 该项不改。非法身份 → 422。库存 leftover 仍可带 origin/provider_id。 */
 export interface ModelOverride {
   model: string;
-  /** 模型来源；非空时须合法。 */
+  /** 库存 leftover；新调用不必填。 */
   origin?: "platform" | "byok";
-  /** BYOK 服务商 id；origin=byok 时必填。 */
+  /** 库存 leftover；新调用不必填。 */
   provider_id?: string;
 }
 
@@ -418,7 +421,7 @@ export interface TeamPreviewResolvedPayload {
   excluded_run_ids?: string[];
   /** 写盘单向收紧；仅 capability=text_only；未知 run_id / 升权 → 422（引擎侧）。 */
   write_capability_overrides?: WriteCapabilityOverride[];
-  /** 人确认盖 CEO：run_id → {model, origin?, provider_id?}；delegate=队员；debate=sides[].run_id / moderator_run_id；空/缺=不改。 */
+  /** 人确认盖 CEO：run_id → {model}（目录身份 @platform/… 或 @byok/…）；delegate=队员；debate=sides[].run_id / moderator_run_id；空/缺=不改。 */
   model_overrides?: Record<string, ModelOverride>;
 }
 
@@ -508,6 +511,7 @@ export interface RunPlanPayload {
   host_message_id?: string;
   prev_execution_id?: string;
   act?: RunPlanAct;
+  note_wall?: boolean;
 }
 
 /** 已停发：旧跨回合同图追加锚点（兼容旧 journal 回放）。新路径用 prev_execution_id。 */
@@ -1144,7 +1148,7 @@ export interface DebateSideInfo {
   is_subject: boolean;
   /** 该方辩手模型 id。 */
   model?: string;
-  /** 模型来源。 */
+  /** 付款来源（行属性）。 */
   origin?: "platform" | "byok";
   /** BYOK 服务商 id。 */
   provider_id?: string;

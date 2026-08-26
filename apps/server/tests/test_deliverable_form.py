@@ -11,6 +11,7 @@ from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_PARAMETERS,
     TASK_DELIVERABLE_SCHEMA,
 )
+from agentcore.workspace.stage_dirs import DRAFTS_DIR
 
 
 def test_form_parsed_onto_deliverable():
@@ -33,6 +34,21 @@ def test_form_files_is_write_disk():
     d = plan.nodes[0].deliverable
     assert d is not None
     assert d.form == "files"
+
+
+def test_form_workspace_parsed():
+    plan, errs = build_run_plan(
+        [{"role": "A", "task": "改登录", "deliverable": {"form": "workspace"}}],
+        id_prefix="t",
+    )
+    assert errs == []
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "workspace"
+    assert d.workspace_native is True
+    assert d.artifact_dir == ""
+
+
 def test_form_alone_is_enough_content():
     plan, errs = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {"form": "prose"}}],
@@ -98,18 +114,21 @@ def test_form_prose_alone_still_builds():
     assert d.form == "prose"
     assert d.artifacts == []
 
-def test_invalid_form_alone_is_no_deliverable():
+def test_invalid_form_defaults_to_files():
     plan, _ = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {"form": "slides", "name": "x"}}],
         id_prefix="t",
     )
-    # Invalid form + deleted name key → no enforceable rule.
-    assert plan.nodes[0].deliverable is None
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "files"
+
 
 def test_identity_form_prose_has_no_file_write_guidance():
     prose = build_worker_identity(has_dependents=False, form="prose")
     files = build_worker_identity(has_dependents=False, form="files")
     omitted = build_worker_identity(has_dependents=False, form=None)
+    workspace = build_worker_identity(has_dependents=False, form="workspace")
 
     assert "form=prose" in prose
     assert "file_write" not in prose
@@ -131,14 +150,21 @@ def test_identity_form_prose_has_no_file_write_guidance():
     assert "consult(data_file_landing)" in omitted
     assert "consult(data_file_landing)" not in prose
 
-    # omit = legacy two-way + 同一套压缩落盘纪律
-    assert "可独立阅读的文字" in omitted
+    # omit = files（无双向自判）
+    assert "form=files" in omitted
+    assert "可独立阅读的文字" not in omitted
     assert "file_write" in omitted
     assert "artifact manifest" in omitted
     assert "禁止" in omitted and "file_read" in omitted
     assert "write_section" in omitted or "SECTION" in omitted
     assert "Artifact-first" not in omitted
     assert "落盘与修订" not in omitted
+
+    assert "form=workspace" in workspace
+    assert "改工程" in workspace
+    assert "AgentCore/文档" in workspace
+    assert "file_write" in workspace
+    assert "consult(long_form_landing)" in workspace
 
 def test_artifacts_inject_files_form_identity_block():
     """非空 artifacts 且 form 省略 ⇒ 强制 files 形态提示，非 legacy。"""
@@ -148,9 +174,9 @@ def test_artifacts_inject_files_form_identity_block():
     assert "form=files" in by_artifacts
     assert "落盘文件" in by_artifacts
 
-    # Omit form + empty artifacts → legacy (no files-form coerce).
+    # Omit form + empty artifacts → files（漏填默认）。
     by_omit = build_worker_identity(has_dependents=False)
-    assert "form=files" not in by_omit
+    assert "form=files" in by_omit
 
     # Explicit prose still wins.
     prose_wins = build_worker_identity(
@@ -184,10 +210,16 @@ def test_describe_deliverable_form_split():
     assert "落盘" in files
     assert "file_write" in files
 
+    workspace = describe_deliverable(Deliverable(form="workspace"))
+    assert "改工程" in workspace
+    assert "AgentCore/文档" in workspace
+    assert DRAFTS_DIR not in workspace
+
 def test_schema_exposes_form_enum():
     props = TASK_DELIVERABLE_SCHEMA["properties"]
     assert "form" in props
-    assert props["form"]["enum"] == ["prose", "files"]
+    assert props["form"]["enum"] == ["prose", "files", "workspace"]
+    assert "workspace" in props["form"]["description"]
     assert "prose" in props["form"]["description"]
     assert "才用本工具" not in DELEGATE_DESCRIPTION
     # 纠正「一次只能 / 同步阻塞到全队完成」误述（协调默认立即返回、可同回合追加）
@@ -230,21 +262,22 @@ def test_schema_exposes_form_enum():
     assert "本批 id" in deps or "同回合" in deps
     assert ("角色名" in deps or "role" in deps) and "del_*" in deps
     props_task = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
-    assert "require_upstream" in props_task
+    assert "require_upstream" not in props_task
     assert "retrieval_budget" not in props_task  # CEO 不可配置；额度走结构化默认
-    assert "≥1" in props_task["require_upstream"]["description"] or "全量" in props_task[
-        "require_upstream"
-    ]["description"]
     # 定稿漂移 A′：task / deliverable / team_brief schema 钉「已确认约束」
     assert "已确认约束" in props_task["task"]["description"]
     assert "已确认约束" in str(TASK_DELIVERABLE_SCHEMA.get("description") or "")
     brief = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
     assert "已确认约束" in brief
     assert "附件" in brief or "优先" in brief
+    assert "便签墙" in brief
 
-    coord = DELEGATE_PARAMETERS["properties"]["coordinate"]["description"]
-    assert "协调" in coord
-    assert "阻塞" in coord
+    assert "coordinate" not in DELEGATE_PARAMETERS["properties"]
+    assert "coordination" not in DELEGATE_PARAMETERS["properties"]
+    assert "complexity_hint" not in DELEGATE_PARAMETERS["properties"]
+    assert "checkpoint_after" not in props_task
+    assert "bind_after_deps" not in props_task
+    assert "result_handling" not in props_task
     cf = props_task["continue_from_run_id"]["description"]
     assert "同人" in cf or "续派" in cf
     assert "调查" in cf or "改稿" in cf
@@ -261,9 +294,17 @@ def test_schema_exposes_form_enum():
     assert "name" not in props
     assert "objective" not in props_task
     assert "playbook_none_reason" not in DELEGATE_PARAMETERS["properties"]
-    cite = props["citation_mode"]
-    assert cite.get("enum") == ["two_phase"]
-    assert "immediate" not in cite.get("enum", [])
+    for banned in (
+        "required_sections",
+        "output_format",
+        "strict",
+        "citation_mode",
+        "workspace_native",
+        "artifact_dir",
+        "web_quality_scan",
+        "code_audit_gate",
+    ):
+        assert banned not in props
 
 def test_schema_depends_on_teaches_when_to_declare_dependency():
     # 工具面瘦身：【何时填】长引导（生产者→消费者 + 正反例）已迁入 CEO core

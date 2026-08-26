@@ -3,7 +3,6 @@
  * 生产 ask 已统一为 {@link AskDecisionBody}；本文件只剩预览路由的
  * `ask-commence-v2` 对照场景在挂，留作历史视觉参照，勿再接生产。
  */
-import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
 import { Button } from "@/components/ui";
 import {
   formatBindLocalFolderAnswer,
@@ -154,7 +153,6 @@ export function AskCommenceKickoffBody({
           <p className="min-w-0 flex-1 text-xs font-medium text-muted-foreground">
             开工提案 · 确认即开做
           </p>
-          <ManualHelpLink to={MANUAL_HELP.checkpoint} />
         </div>
 
         <button

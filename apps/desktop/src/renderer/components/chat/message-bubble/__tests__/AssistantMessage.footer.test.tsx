@@ -261,7 +261,7 @@ describe("AssistantMessage footer gate", () => {
 });
 
 describe("AssistantMessage empty-response single surface", () => {
-  it("LLM_EMPTY_RESPONSE：只错误卡，不叠 FinishReasonChip / 连通升级句", () => {
+  it("LLM_EMPTY_RESPONSE：只错误卡，不叠软收尾灰标 / 连通升级句", () => {
     renderBubble(
       settledMessage({
         id: "empty-1",
@@ -303,15 +303,16 @@ describe("AssistantMessage empty-response single surface", () => {
     expect(screen.queryByText("空响应收尾")).toBeNull();
   });
 
-  it("degraded 无空响应错误时仍可显示 FinishReasonChip", () => {
+  it("degraded 有正文时不贴软收尾灰标", () => {
     renderBubble(
       settledMessage({
         content: "部分输出",
         finishReason: "degraded",
       }),
     );
-    expect(screen.getByText("空响应收尾")).toBeTruthy();
+    expect(screen.queryByText("空响应收尾")).toBeNull();
     expect(screen.queryByText(/降级完成/)).toBeNull();
+    expect(screen.getByText("部分输出")).toBeTruthy();
   });
 
   it("空正文 + finishReason=degraded 无 error 载荷：仍合成非空脸", () => {

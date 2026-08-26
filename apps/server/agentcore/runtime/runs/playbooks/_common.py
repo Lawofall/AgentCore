@@ -97,8 +97,8 @@ USER_MESSAGE_MECH_KEY = "__user_message__"
 # 调研员便签协作提示（parallel_brief / research_report / multi_lens 共用）.
 RESEARCHER_NOTE_GUIDANCE = (
     "开始本子方向前先 read_notes 检查队友是否已覆盖；"
-    "发现重要结论或关键数据点时用 post_note(kind=decision) 或 post_note(kind=heads_up) "
-    "分享给团队，避免重复劳动。"
+    "并行摸底/调研时，入口与关键结论可贴一行 post_note(kind=decision 或 heads_up)，"
+    "避免队友重复通读；不是聊天、不要求回复；墙上已有的不必复读；完工别贴。"
 )
 
 # 调研员检索纪律（通用；A3 查询契约 + 连续空结果换策略 + 少搜多读；暂不做无引用不得交卷）。

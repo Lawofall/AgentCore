@@ -627,3 +627,111 @@ describe("pumpSseBody comments", () => {
     clearLastEventId("c-commit");
   });
 });
+
+describe("pumpSseBody X-AgentCore-Trace", () => {
+  const TRACE = "a".repeat(32);
+  const OTHER = "b".repeat(32);
+  const CID = "c-trace";
+
+  function lastOf() {
+    const rt = useConversationStore.getState().byId[CID];
+    return rt?.messages[rt.messages.length - 1];
+  }
+
+  function pumpWithHeader(header?: string) {
+    const headers: Record<string, string> = {
+      "Content-Type": "text/event-stream",
+    };
+    if (header !== undefined) headers["X-AgentCore-Trace"] = header;
+    return pumpSseBody(
+      new Response("", { status: 200, headers }),
+      CID,
+      () => {},
+    );
+  }
+
+  it("stamps last assistant when the header is 32-hex", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    useConversationStore.getState().createAssistantMessage(CID);
+    await pumpWithHeader(TRACE);
+    expect(lastOf()?.role).toBe("assistant");
+    expect(lastOf()?.traceId).toBe(TRACE);
+  });
+
+  it("stashes when there is no assistant and createAssistantMessage applies it", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    await pumpWithHeader(TRACE);
+    expect(useConversationStore.getState().byId[CID]?.messages).toEqual([]);
+    expect(useConversationStore.getState().byId[CID]?.pendingTraceId).toBe(
+      TRACE,
+    );
+    useConversationStore.getState().createAssistantMessage(CID);
+    expect(lastOf()?.traceId).toBe(TRACE);
+    expect(
+      useConversationStore.getState().byId[CID]?.pendingTraceId,
+    ).toBeNull();
+  });
+
+  it("does not overwrite an existing non-empty traceId", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    useConversationStore.getState().createAssistantMessage(CID);
+    useConversationStore.getState().setTraceIdOnLastMessage(TRACE, CID);
+    await pumpWithHeader(OTHER);
+    expect(lastOf()?.traceId).toBe(TRACE);
+    expect(useConversationStore.getState().byId[CID]?.pendingTraceId).toBe(
+      OTHER,
+    );
+  });
+
+  it("stashes when last assistant is a completed previous turn", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    useConversationStore.getState().createAssistantMessage(CID);
+    useConversationStore.getState().setTraceIdOnLastMessage(TRACE, CID);
+    useConversationStore.getState().finalizeLastMessage(CID);
+    await pumpWithHeader(OTHER);
+    expect(lastOf()?.traceId).toBe(TRACE);
+    expect(useConversationStore.getState().byId[CID]?.pendingTraceId).toBe(
+      OTHER,
+    );
+    useConversationStore.getState().createAssistantMessage(CID);
+    expect(lastOf()?.traceId).toBe(OTHER);
+    expect(
+      useConversationStore.getState().byId[CID]?.pendingTraceId,
+    ).toBeNull();
+  });
+
+  it("keeps pending when stamp hits an already-traced streaming bubble", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    useConversationStore.getState().createAssistantMessage(CID);
+    useConversationStore.getState().setTraceIdOnLastMessage(TRACE, CID);
+    await pumpWithHeader(OTHER);
+    useConversationStore.getState().stampPendingTraceId(CID);
+    expect(lastOf()?.traceId).toBe(TRACE);
+    expect(useConversationStore.getState().byId[CID]?.pendingTraceId).toBe(
+      OTHER,
+    );
+  });
+
+  it("ignores invalid or empty headers", async () => {
+    useConversationStore.getState().switchConversation(CID);
+    await pumpWithHeader("not-a-trace");
+    expect(
+      useConversationStore.getState().byId[CID]?.pendingTraceId,
+    ).toBeNull();
+    useConversationStore.getState().createAssistantMessage(CID);
+    expect(lastOf()?.traceId).toBeUndefined();
+    await pumpWithHeader("");
+    expect(lastOf()?.traceId).toBeUndefined();
+    await pumpWithHeader("g".repeat(32));
+    expect(lastOf()?.traceId).toBeUndefined();
+    await pumpWithHeader("a".repeat(31));
+    expect(lastOf()?.traceId).toBeUndefined();
+    await pumpWithHeader("aabbccdd-eeff-0011-2233-445566778899");
+    expect(lastOf()?.traceId).toBeUndefined();
+    await pumpWithHeader();
+    expect(lastOf()?.traceId).toBeUndefined();
+    expect(
+      useConversationStore.getState().byId[CID]?.pendingTraceId,
+    ).toBeNull();
+  });
+});

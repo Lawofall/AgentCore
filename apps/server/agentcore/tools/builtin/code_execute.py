@@ -82,7 +82,7 @@ _USAGE_TAIL = (
     "一次性计算）。【禁止】用本工具跑项目级慢验证或装包（npm/pnpm/yarn install|ci、"
     "全量 tsc / typecheck / npm run build / 整仓 pytest·vitest）——请改用 test_run"
     "（有界项目验证，分钟级预算；装包 check=install）。【禁止】启动永不退出的进程"
-    "（npm run dev / vite / next dev / watch / 开发服务器等）——会卡满超时；本地模式"
+    "（npm run dev / vite / next dev / watch / 开发服务器等）——会卡满超时；"
     "请改用 terminal（subcommand=start，建议带 wait_for 等 ready 信号）。② 优先用 "
     "language=python 或 javascript 直接运行内联代码，少用 bash 外壳——bash 在"
     "部分主机（如 Windows）可能不可用。③ 代码的工作目录就是工作区根目录，访问"
@@ -173,7 +173,8 @@ class CodeExecuteTool:
         audience=AUDIENCE_WORKER_ONLY,
         execution_class=True,
         needs_location=True,
-        # 间接落盘（沙箱 copy-out）也是落盘：自报 copy-out 的 EXACT 路径。
+        accepts_exec_languages=True,
+        # 间接落盘（沙箱 bind 写盘）也是落盘：自报 ``written_files`` 的 EXACT 路径。
         file_products=FileProductsContract.SELF_REPORT,
         # 沙箱预装库见 cloud_python.txt；无专用 md_to_* 导出器的 Office 走这里。
         produces_formats=(".xlsx", ".pptx"),
@@ -375,16 +376,9 @@ class CodeExecuteTool:
         if result.exit_code != 0:
             output += f"\n\n退出码：{result.exit_code}"
 
-        # 产物写回 (gVisor copy-out): tell the model exactly which files landed in
-        # the workspace so it can reference them (and never claim an artifact that
-        # was skipped by the write-back caps).
+        # 产物写回: tell the model exactly which files landed in the workspace.
         if result.written_files:
             output += "\n\n已写回工作区：" + "、".join(result.written_files)
-        if result.write_back_skipped:
-            output += (
-                f"\n注意：另有 {result.write_back_skipped} 个文件超出写回限额未保存"
-                "（单次执行的产物总量/文件数有限制，可分次生成）。"
-            )
         # Render-oriented twin of ``output`` (工具结果富渲染): the client shows a
         # terminal-style view (stdout, stderr in red, exit-code badge) instead of
         # the flattened "stdout:\n…\nstderr:\n…" text. Kept structured so failures
@@ -475,7 +469,7 @@ class CodeExecuteTool:
             display=display,
             metadata=meta,
             contract_failure=launcher_unavailable or probe_language_unavailable,
-            # 结构化写回自报 (见模块顶部说明): 沙箱 copy-out 的 EXACT 路径，交付物台账据此
+            # 结构化写回自报: 沙箱 ``written_files`` 的 EXACT 路径，交付物台账据此
             # 记账，永不解析那行「已写回工作区」中文散文（文件名可含「、」、措辞会变）。
             file_products=[file_product(p) for p in (result.written_files or [])],
         )

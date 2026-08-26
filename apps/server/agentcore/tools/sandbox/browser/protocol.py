@@ -102,9 +102,9 @@ class BrowserSessionRequest:
     """Inputs to open one conversation's long-lived browser sandbox."""
 
     conversation_id: str
-    # Absolute host path of the conversation's workspace root — the sandbox may mount
-    # it read-only later (M0 does not need workspace files for browsing, but the field
-    # keeps the contract stable for future "self-test my generated site" flows).
+    # Absolute host path of the conversation's workspace root. Sandbox Chromium
+    # execs into that workspace's desk guest — missing/non-dir fails honestly
+    # (no diskless jail). Local Bridge may omit this.
     workspace_root: str | None = None
     # Viewport / keyframe geometry, threaded from settings so the driver renders at the
     # keyframe width from the first paint.

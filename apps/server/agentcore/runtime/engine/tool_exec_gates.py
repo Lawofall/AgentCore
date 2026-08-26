@@ -36,8 +36,8 @@ async def _apply_local_destructive_baseline_gate(
     Regular :func:`~agentcore.workspace.turn_baseline.maybe_capture_turn_baseline`
     remains non-blocking. This gate only upgrades the breaker hit when the call
     matches a destructive_fs heuristic, the backend is Local, and no usable zip
-    can be ensured. Cloud staging deletes-not-written-back are unchanged
-    (``location != local`` skips). ``registry_egress`` rw-bind deletes are out of
+    can be ensured. Cloud desk guests bind the workspace (``location != local``
+    skips this Local-only gate). Packaging allowlist rw-bind deletes are out of
     scope (footnote / tests).
 
     Readiness is ``ensure_local_baseline_for_destructive`` (Path root *or*

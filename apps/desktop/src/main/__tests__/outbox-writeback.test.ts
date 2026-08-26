@@ -1292,6 +1292,44 @@ describe("toRecordTurnBody", () => {
     });
     expect(body.agent_mentions).toEqual(mentions);
   });
+
+  it("resume_after_seq filters tool_failures but keeps the full journal", () => {
+    const body = toRecordTurnBody({
+      user_message_id: "u-r",
+      conversation_id: "c1",
+      user_message: "hi",
+      content: "ok",
+      trace_id: "a".repeat(32),
+      resume_after_seq: 0,
+      journal: {
+        "0": {
+          kind: "tool_call",
+          payload: {
+            name: "file_read",
+            success: false,
+            result: "pause fail",
+            code: "too_large",
+          },
+        },
+        "1": {
+          kind: "tool_call",
+          payload: {
+            name: "web_search",
+            success: false,
+            result: "搜索服务 down",
+          },
+        },
+      },
+    });
+    expect(body.journal).toHaveLength(2);
+    expect(body.tool_failures).toEqual([
+      {
+        tool: "web_search",
+        code: "searxng_unreachable",
+        message: "搜索服务 down",
+      },
+    ]);
+  });
 });
 
 describe("isSafeOutboxId (F3)", () => {

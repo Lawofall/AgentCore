@@ -9,9 +9,9 @@ A worker's product is accepted only if it satisfies its node's delivery spec
 ``required_sections``（Markdown 小标题语义）混用时跳过章节校验，避免自相矛盾的假失败。
 
 交付形态对齐：文件形态交付（:func:`is_file_deliverable` — ``form=files`` /
-非空 ``artifacts``）的章节检查读「正文 + 本 run 落盘
+``form=workspace`` / 非空 ``artifacts``）的章节检查读「正文 + 本 run 落盘
 文件」——任一通道命中即满足。产品在盘上时不再因正文只是
-简报而假失败「缺章节」；prose 交付保持只看正文。
+简报而假失败「缺章节」；仅显式 ``prose`` 保持只看正文。
 
 网页接缝静态检查：同批落盘出现 HTML + CSS/JS 时，交叉校验 HTML class/id 与 CSS/JS
 选择器命中率（未命中率超过阈值则 fail → ``contract.retry``）；普通文档交付不触发。
@@ -51,7 +51,7 @@ from agentcore.runtime.runs.placeholder_scan import (
     needs_placeholder_scan,
     scan_placeholder_signals,
 )
-from agentcore.runtime.runs.types import Deliverable
+from agentcore.runtime.runs.types import Deliverable, deliverable_expects_landing
 from agentcore.runtime.runs.web_quality_scan import (
     needs_web_quality_scan,
     scan_web_quality,
@@ -97,16 +97,12 @@ class ContractVerdict:
 def is_file_deliverable(deliverable: Deliverable | None) -> bool:
     """Whether the deliverable's product lands as workspace files (not chat prose).
 
-    ``form="files"`` (explicit) or a non-empty ``artifacts`` list mean the product is a
-    file — so the contract's content checks (section) must read the landed files, not
-    only the chat body (交付形态对齐: a paper written to disk with a terse chat note must
-    not fail「缺章节」). Prose / unspecified deliverables keep body-only semantics.
-    Legacy flags alone do not qualify.
+    ``form="files"`` / ``form="workspace"`` / non-empty ``artifacts`` mean the
+    product is on disk — so content checks read landed files alongside the chat
+    body. Only explicit ``prose`` keeps body-only semantics. ``None`` (legacy
+    serialized specs) is not a landing node.
     """
-    return bool(
-        deliverable is not None
-        and (deliverable.form == "files" or deliverable.artifacts)
-    )
+    return deliverable_expects_landing(deliverable)
 
 
 def needs_file_contents(
@@ -132,15 +128,13 @@ def needs_file_contents(
     # this load path.
     if landed_paths and needs_placeholder_scan(landed_paths):
         return True
+    if landed_paths and needs_web_quality_scan(landed_paths):
+        return True
     if deliverable is None:
         return False
     if deliverable.web_seam_scope:
         return True
-    if deliverable.web_quality_scan and landed_paths and needs_web_quality_scan(landed_paths):
-        return True
     if deliverable.web_quality_scan:
-        return True
-    if deliverable.form == "files" and deliverable.artifacts:
         return True
     if deliverable.output_format == "json" and deliverable.artifacts:
         return True
@@ -398,7 +392,7 @@ def check_contract(
     not a gap: landing csv/xlsx is the product.
 
     交付形态对齐: for a FILE deliverable (:func:`is_file_deliverable` — ``form=files`` /
-    ``artifacts``) the same texts back the section
+    ``form=workspace`` / ``artifacts``) the same texts back the section
     checks, which then read the run's landed files ALONGSIDE the chat body — a section
     hit in either satisfies it. The executor loads them (matching ``artifacts`` when
     declared, else this run's ``files_touched``); check_contract stays a pure function.
@@ -426,6 +420,12 @@ def check_contract(
             else []
         )
         failures = [*web_failures, *ph.failures, *cite_failures]
+        landed_web = needs_web_quality_scan(list(artifact_contents or {}))
+        wq_soft: list[str] = []
+        if landed_web:
+            wq = scan_web_quality(artifact_contents, design_contract=False)
+            failures.extend(wq.failures)
+            wq_soft.extend(wq.soft_failures)
         table_gap = _no_exec_table_gap(
             can_execute=can_execute,
             artifact_contents=artifact_contents,
@@ -442,9 +442,14 @@ def check_contract(
                 failures=failures,
                 warnings=warnings,
                 warning_rows=warning_rows,
+                soft_failures=wq_soft,
             )
+        ok = not wq_soft
         return ContractVerdict(
-            ok=True, warnings=warnings, warning_rows=warning_rows
+            ok=ok,
+            warnings=warnings,
+            warning_rows=warning_rows,
+            soft_failures=wq_soft,
         )
 
     exempt_paths = _placeholder_hard_exempt_paths(deliverable, artifact_contents)
@@ -479,9 +484,9 @@ def check_contract(
             )
         elif not _is_json(content):
             failures.append("产出不是可解析的 JSON")
-    # 甲⁺：form=files / 非空 artifacts 零成功落盘 → soft tip（不 fail、不触发 write_pass）。
+    # 甲⁺：files / workspace / 非空 artifacts 零成功落盘 → soft tip（不 fail、不触发 write_pass）。
     zero_files_warnings: list[str] = []
-    expects_files = deliverable.form == "files" or bool(deliverable.artifacts)
+    expects_files = is_file_deliverable(deliverable)
     if expects_files and files_written <= 0:
         zero_files_warnings.append(
             zero_files_gap_message(landing_failure_kind=landing_failure_kind)
@@ -581,12 +586,19 @@ def check_contract(
         else:
             failures.extend(gate_fails)
     soft_failures: list[str] = []
-    # 前端质量门禁（独立于 placeholder / web_seam）：硬=语法损坏+编造联系方式；软=anti-slop。
-    if deliverable.web_quality_scan:
+    # 前端质量：落盘含 web 扩展名即跑静态扫描；DESIGN.md 硬闸仅当 ``web_quality_scan``。
+    landed_web = needs_web_quality_scan(
+        list(artifact_contents or {})
+        or list(workspace_paths or [])
+    )
+    if landed_web or (deliverable is not None and deliverable.web_quality_scan):
         wq = scan_web_quality(
             artifact_contents,
-            soft_exempt=deliverable.web_quality_soft_exempt,
-            soft_exempt_labels=deliverable.web_quality_soft_exempt_labels,
+            soft_exempt=bool(deliverable and deliverable.web_quality_soft_exempt),
+            soft_exempt_labels=(
+                deliverable.web_quality_soft_exempt_labels if deliverable else None
+            ),
+            design_contract=bool(deliverable and deliverable.web_quality_scan),
         )
         failures.extend(wq.failures)
         soft_failures.extend(wq.soft_failures)
@@ -1286,7 +1298,12 @@ def describe_deliverable(deliverable: Deliverable | None) -> str:
     lines: list[str] = []
     if deliverable.form == "prose":
         lines.append("- 交付形态：纯文字（正文直接交付，不要落盘）")
-    elif deliverable.form == "files":
+    elif deliverable.form == "workspace" or deliverable.workspace_native:
+        lines.append(
+            "- 交付形态：改工程（就地改用户工作区源码 / 项目文件，必须写入工作区，"
+            "不要落进 `AgentCore/文档/`）"
+        )
+    else:
         lines.append("- 交付形态：落盘文件（必须 file_write 写入工作区）")
     # Markdown section headings and JSON are mutually exclusive acceptance shapes.
     if deliverable.output_format == "json":
@@ -1307,7 +1324,7 @@ def describe_deliverable(deliverable: Deliverable | None) -> str:
         lines.append("- 建议正文骨架（小标题须与上列一致，可在节内自由展开）：\n" + skeleton)
     # prose form never surfaces file-landing requirements (even if a stale flag slipped in).
     if deliverable.form != "prose":
-        if deliverable.workspace_native:
+        if deliverable.form == "workspace" or deliverable.workspace_native:
             lines.append(
                 "- 产物是工作区原生文件（源码 / 项目文件）：写在工作区里它本该在的位置"
                 "（改存量用 str_replace 就地改），"
@@ -1342,7 +1359,7 @@ def describe_deliverable(deliverable: Deliverable | None) -> str:
             elif not deliverable.artifact_dir:
                 listed = "、".join(f"`{p}`" for p in deliverable.artifacts)
                 lines.append(f"- 建议把以下交付物路径写入工作区（可用目录或通配）：{listed}")
-        elif deliverable.form == "files":
+        elif deliverable.form in ("files", "workspace"):
             lines.append(
                 "- 必须调用 file_write / str_replace / file_append 把产物写进工作区"
                 "（成品是落盘文件，不能只贴在回复正文里）"

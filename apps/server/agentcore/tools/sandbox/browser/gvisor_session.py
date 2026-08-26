@@ -1,25 +1,22 @@
-"""Long-lived gVisor browser session (Linux-only) — the D9/D10 production wiring.
+"""Long-lived Chromium inside the workspace cloud-desk guest.
 
-Ties together the pieces the M0 channel PoC validated end-to-end:
-- a per-session isolated netns + veth (``netns``), whose only egress is the proxy;
+Ties together:
+- the workspace desk guest (``gvisor.attach_workspace_desk``);
 - the process-wide SSRF filter proxy (``proxy``);
-- a runsc container running the in-sandbox ``driver`` forever (via sandboxd);
-- a stdio JSON-RPC channel (``rpc``) to it, one command at a time;
+- ``sandboxd exec`` stdio of the in-guest ``driver`` (JSON-RPC);
 - base64 keyframes returned inline and surfaced as ``BrowserCommandResult.frame``.
 
-The API process never execs ``runsc`` or ``ip``: session open is sandboxd
-``run_stdio``; close/reaper is stdio 收口 then ``kill`` / ``delete`` +
-``netns_teardown``. Tests drive the registry / tools with fake sessions.
+The API process never execs ``runsc`` or ``ip``. Open is exec-into-desk; close
+reclaims only the driver / Chromium (kill the exec track id). Never kill/delete
+the desk guest and never tear down the packaging netns.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import shutil
 import sys
-import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -29,11 +26,8 @@ from agentcore.config import settings
 from agentcore.core.logging import get_logger
 from agentcore.tools.sandbox.browser.netns import (
     EGRESS_UNAVAILABLE_CODE,
-    NetnsError,
-    SessionNetns,
     is_netns_capability_error,
 )
-from agentcore.tools.sandbox.browser.oci import build_browser_oci
 from agentcore.tools.sandbox.browser.protocol import (
     BrowserCommand,
     BrowserCommandResult,
@@ -60,28 +54,37 @@ _slot_lock = asyncio.Lock()
 _used_slots: set[int] = set()
 
 
-def build_browser_runsc_cmd(
-    *,
-    runsc_path: str,
-    runtime_root: str,
-    bundle_dir: str,
-    container_id: str,
-) -> list[str]:
-    """Shape B argv pin — always ``--ignore-cgroups`` (sandboxd allowlist)."""
-    from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd
-
-    return build_runsc_cmd(
-        runsc_path=runsc_path,
-        runtime_root=runtime_root,
-        bundle_dir=bundle_dir,
-        container_id=container_id,
-        shape="net",
-    )
-
-
 def browser_sessions_supported() -> bool:
     """True only where a real gVisor browser sandbox can run (Linux)."""
     return _IS_LINUX
+
+
+def _driver_env(
+    *,
+    proxy_url: str,
+    width: int,
+    height: int,
+    jpeg_quality: int,
+) -> list[str]:
+    """Exec env for the driver. Must not inherit the desk packaging HTTP_PROXY."""
+    browsers = settings.browser_playwright_browsers_path
+    return [
+        "PATH=/usr/local/bin:/usr/bin:/bin",
+        "HOME=/tmp",
+        "LANG=C.UTF-8",
+        "PYTHONDONTWRITEBYTECODE=1",
+        f"PLAYWRIGHT_BROWSERS_PATH={browsers}",
+        f"BROWSER_PROXY={proxy_url}",
+        f"BROWSER_WIDTH={width}",
+        f"BROWSER_HEIGHT={height}",
+        f"BROWSER_JPEG_Q={jpeg_quality}",
+        "HTTP_PROXY=",
+        "HTTPS_PROXY=",
+        "http_proxy=",
+        "https_proxy=",
+        "NO_PROXY=localhost,127.0.0.1,::1",
+        "no_proxy=localhost,127.0.0.1,::1",
+    ]
 
 
 async def _alloc_slot(max_slots: int) -> int:
@@ -101,16 +104,16 @@ async def _free_slot(slot: int) -> None:
 
 
 class GVisorBrowserSession:
-    """One conversation's long-lived Chromium inside a runsc sandbox."""
+    """One conversation's long-lived Chromium inside the workspace desk guest."""
 
     def __init__(
         self,
         *,
         conversation_id: str,
         slot: int,
-        netns: SessionNetns,
-        bundle_dir: str,
-        container_id: str,
+        exec_id: str,
+        desk_container_id: str,
+        driver_script: Path | None,
         stdio: Any,
         channel: StdioRpcChannel,
         client: SandboxdClient,
@@ -119,25 +122,27 @@ class GVisorBrowserSession:
         self.created_at = time.time()
         self.last_used = self.created_at
         self._slot = slot
-        self._netns = netns
-        self._bundle_dir = bundle_dir
-        self._container_id = container_id
+        self._exec_id = exec_id
+        self._desk_container_id = desk_container_id
+        self._driver_script = driver_script
         self._stdio = stdio
         self._channel = channel
         self._client = client
         self._alive = True
         # Teardown-idempotency flag, SEPARATE from ``_alive``: a driver crash marks the
-        # session dead (``_alive=False``) but its host-side resources (netns / veth / slot /
-        # runsc container / bundle dir) still exist and MUST be reclaimed by close().
+        # session dead (``_alive=False``) but the exec process / slot / driver script
+        # still exist and MUST be reclaimed by close(). Never tear down the desk.
         self._closed = False
-        # Live screencast (M1 · D14): the hub sets this to fan driver-pushed frames out to
-        # viewers. The channel routes driver ``live_frame`` event lines to _handle_driver_event.
         self._frame_listener: BrowserFrameListener | None = None
         self._screencast_on = False
 
     @property
     def alive(self) -> bool:
         return self._alive and not getattr(self._stdio, "_closed", False)
+
+    @property
+    def desk_container_id(self) -> str:
+        return self._desk_container_id
 
     async def _request(
         self, action: str, args: dict, *, timeout: float, touch: bool
@@ -151,6 +156,9 @@ class GVisorBrowserSession:
             raise BrowserDriverCrashedError("浏览器会话已失效")
         if touch:
             self.last_used = time.time()
+            from agentcore.tools.sandbox.gvisor import touch_desk_by_container
+
+            touch_desk_by_container(self._desk_container_id)
         try:
             return await self._channel.request(action, args, timeout=timeout)
         except (RpcChannelClosedError, RpcError) as exc:
@@ -214,10 +222,8 @@ class GVisorBrowserSession:
         self._screencast_on = False
 
     async def close(self) -> None:
-        # Idempotency is keyed on ``_closed``, NOT ``_alive``: a session whose driver crashed
-        # (``_alive=False``, e.g. RPC channel death) has never run teardown — its netns/veth,
-        # concurrency slot, runsc container and bundle dir are all still allocated and must be
-        # reclaimed here, else they leak until process exit.
+        # Idempotency is keyed on ``_closed``, NOT ``_alive``: a crashed driver
+        # still holds the exec process and concurrency slot.
         if self._closed:
             return
         self._closed = True
@@ -228,15 +234,20 @@ class GVisorBrowserSession:
                 await asyncio.wait_for(self._channel.request("close", {}, timeout=5), timeout=6)
         await self._channel.aclose()
         with contextlib.suppress(Exception):
+            await self._client.kill(self._exec_id)
+        with contextlib.suppress(Exception):
             await self._stdio.aclose()
-        with contextlib.suppress(Exception):
-            await self._client.kill(self._container_id)
-        with contextlib.suppress(Exception):
-            await self._client.delete(self._container_id, force=True)
-        await self._netns.teardown()
         await _free_slot(self._slot)
-        shutil.rmtree(self._bundle_dir, ignore_errors=True)
-        logger.info("browser.session_closed", conversation_id=self.conversation_id, slot=self._slot)
+        if self._driver_script is not None:
+            with contextlib.suppress(Exception):
+                self._driver_script.unlink(missing_ok=True)
+        logger.info(
+            "browser.session_closed",
+            conversation_id=self.conversation_id,
+            slot=self._slot,
+            exec_id=self._exec_id,
+            desk_container_id=self._desk_container_id,
+        )
 
 
 def _log_session_open_failed(*, conversation_id: str, exc: BaseException) -> None:
@@ -248,34 +259,64 @@ def _log_session_open_failed(*, conversation_id: str, exc: BaseException) -> Non
     )
 
 
+def _as_browser_launch_error(exc: BaseException) -> BrowserSessionError:
+    if isinstance(exc, BrowserSessionError):
+        return exc
+    details = getattr(exc, "details", None)
+    detail_code = details.get("code") if isinstance(details, dict) else None
+    code = detail_code or getattr(exc, "code", None)
+    if code == EGRESS_UNAVAILABLE_CODE or is_netns_capability_error(exc):
+        return BrowserSessionError(
+            "云端浏览器沙箱网络隔离不可用（netns 创建失败），"
+            "browser_* 本回合不可用；请改用 web_search / read_url 等非浏览器路径。",
+            code=EGRESS_UNAVAILABLE_CODE,
+        )
+    text = str(exc)
+    lowered = text.lower()
+    if "netns" in lowered or "egress" in lowered or "出网" in text:
+        return BrowserSessionError(
+            "云端浏览器沙箱网络隔离不可用（netns 创建失败），"
+            "browser_* 本回合不可用；请改用 web_search / read_url 等非浏览器路径。",
+            code=EGRESS_UNAVAILABLE_CODE,
+        )
+    return BrowserSessionError(f"浏览器会话启动失败：{type(exc).__name__}: {exc}")
+
+
 async def open_gvisor_browser_session(
     request: BrowserSessionRequest,
     *,
     runsc_path: str,
     runtime_root: str,
 ) -> GVisorBrowserSession:
-    """Launch a long-lived browser sandbox for one conversation.
+    """Exec the browser driver into the conversation workspace's desk guest.
 
     Raises :class:`BrowserSessionsBusyError` at the slot cap and
     :class:`BrowserSessionError` on any launch / handshake failure (cleaning up
-    every partial resource first). ``runsc_path`` / ``runtime_root`` match the
-    provider factory signature; sandboxd owns the actual runsc argv.
+    the driver exec first). Never starts a second container. ``runsc_path`` is
+    unused (sandboxd owns argv); ``runtime_root`` is forwarded to desk attach.
     """
-    _ = runsc_path
+    del runsc_path
     if not _IS_LINUX:
         raise BrowserSessionError("云端浏览器仅在 Linux + gVisor 环境可用")
 
-    proxy = await ensure_browser_proxy()
+    root = (request.workspace_root or "").strip()
+    if not root:
+        raise BrowserSessionError("云端浏览器需要已挂载的工作区盘（禁止无盘 jail）。")
+    workspace_path = Path(root)
+    if not workspace_path.is_dir():
+        raise BrowserSessionError("云端浏览器需要已挂载的工作区盘（禁止无盘 jail）。")
+    workspace = str(workspace_path.resolve())
+    data_dir = str(Path(settings.data_dir).resolve())
+    if workspace == data_dir:
+        raise BrowserSessionError("禁止把整份 DATA_DIR 绑进云桌 guest")
+
+    from agentcore.tools.sandbox.gvisor import attach_workspace_desk
+
     slot = await _alloc_slot(int(settings.browser_max_sessions))
-    netns = SessionNetns(slot=slot, subnet_base=settings.browser_veth_subnet_base)
-    # Bundles must live on the DATA_DIR volume (same as execute()): sandboxd
-    # rejects paths outside runtime_root, and container /tmp breaks runsc mkdir.
-    root = Path(runtime_root)
-    root.mkdir(parents=True, exist_ok=True)
-    bundle_dir = tempfile.mkdtemp(prefix="agentcore_browser_", dir=str(root))
-    container_id = f"agentcore-browser-{uuid.uuid4().hex[:12]}"
     client = get_sandboxd_client()
     stdio: Any = None
+    exec_id: str | None = None
+    driver_script: Path | None = None
     logged_fail = False
 
     def _note_fail(exc: BaseException) -> None:
@@ -286,39 +327,29 @@ async def open_gvisor_browser_session(
         _log_session_open_failed(conversation_id=request.conversation_id, exc=exc)
 
     try:
-        try:
-            await netns.setup()
-        except NetnsError as exc:
-            raise BrowserSessionError(
-                "云端浏览器沙箱网络隔离不可用（netns 创建失败），"
-                "browser_* 本回合不可用；请改用 web_search / read_url 等非浏览器路径。",
-                code=EGRESS_UNAVAILABLE_CODE,
-            ) from exc
-        scratch = Path(bundle_dir) / "scratch"
-        scratch.mkdir()
-        (Path(bundle_dir) / "rootfs").mkdir()
-        shutil.copy(Path(__file__).parent / "driver.py", scratch / "browser_driver.py")
+        desk = await attach_workspace_desk(workspace, runtime_root=runtime_root)
+        proxy = await ensure_browser_proxy()
+        proxy_url = f"http://{desk.host_ip}:{proxy.port}"
+        driver_name = f"browser_driver_{slot}_{uuid.uuid4().hex[:8]}.py"
+        driver_script = desk.scratch_dir / driver_name
+        shutil.copy(Path(__file__).parent / "driver.py", driver_script)
 
-        proxy_url = f"http://{netns.host_ip}:{proxy.port}"
-        config = build_browser_oci(
-            scratch_dir=str(scratch.resolve()),
-            browsers_path=settings.browser_playwright_browsers_path,
-            netns_path=netns.netns_path,
-            proxy_url=proxy_url,
-            width=request.viewport_width,
-            height=request.viewport_height,
-            jpeg_quality=request.jpeg_quality,
-            memory_limit_mb=int(settings.browser_sandbox_memory_limit_mb),
-            pids_limit=int(settings.browser_sandbox_pids_limit),
-            cpu_limit=float(settings.browser_sandbox_cpu_limit),
+        stdio = await client.exec_stdio(
+            container_id=desk.container_id,
+            argv=["python3", "-u", f"/scratch/{driver_name}"],
+            cwd="/workspace",
+            env=_driver_env(
+                proxy_url=proxy_url,
+                width=request.viewport_width,
+                height=request.viewport_height,
+                jpeg_quality=request.jpeg_quality,
+            ),
         )
-        (Path(bundle_dir) / "config.json").write_text(json.dumps(config), encoding="utf-8")
-
-        stdio = await client.run_stdio(
-            bundle_dir=bundle_dir,
-            container_id=container_id,
-            netns_path=netns.netns_path,
-        )
+        exec_id = str(getattr(stdio, "container_id", "") or "")
+        if not exec_id:
+            raise BrowserSessionError("浏览器会话启动失败：exec stdio missing exec_id")
+        if exec_id == f"{desk.container_id}-exec":
+            raise BrowserSessionError("浏览器会话启动失败：exec 跟踪 id 与 execute() 撞车")
 
         channel = StdioRpcChannel(write=stdio.write, readline=stdio.readline)
         channel.start()
@@ -329,51 +360,42 @@ async def open_gvisor_browser_session(
         session = GVisorBrowserSession(
             conversation_id=request.conversation_id,
             slot=slot,
-            netns=netns,
-            bundle_dir=bundle_dir,
-            container_id=container_id,
+            exec_id=exec_id,
+            desk_container_id=desk.container_id,
+            driver_script=driver_script,
             stdio=stdio,
             channel=channel,
             client=client,
         )
-        # Route driver-INITIATED event lines (M1 live frames) into the session.
         channel.set_event_handler(session._handle_driver_event)
-        logger.info("browser.session_opened", conversation_id=request.conversation_id, slot=slot)
+        logger.info(
+            "browser.session_opened",
+            conversation_id=request.conversation_id,
+            slot=slot,
+            exec_id=exec_id,
+            desk_container_id=desk.container_id,
+        )
         return session
-    except BrowserSessionError as exc:
-        _note_fail(exc)
-        await _cleanup_partial(stdio, netns, slot, bundle_dir, container_id, client)
-        raise
     except Exception as exc:  # noqa: BLE001 - any launch failure → explainable error
         _note_fail(exc)
-        await _cleanup_partial(stdio, netns, slot, bundle_dir, container_id, client)
-        if is_netns_capability_error(exc):
-            raise BrowserSessionError(
-                "云端浏览器沙箱网络隔离不可用（netns 创建失败），"
-                "browser_* 本回合不可用；请改用 web_search / read_url 等非浏览器路径。",
-                code=EGRESS_UNAVAILABLE_CODE,
-            ) from exc
-        raise BrowserSessionError(
-            f"浏览器会话启动失败：{type(exc).__name__}: {exc}"
-        ) from exc
+        await _cleanup_partial(stdio, exec_id, slot, client, driver_script)
+        raise _as_browser_launch_error(exc) from exc
 
 
 async def _cleanup_partial(
     stdio: Any,
-    netns: SessionNetns,
+    exec_id: str | None,
     slot: int,
-    bundle_dir: str,
-    container_id: str,
     client: SandboxdClient,
+    driver_script: Path | None,
 ) -> None:
     if stdio is not None:
         with contextlib.suppress(Exception):
             await stdio.aclose()
-    with contextlib.suppress(Exception):
-        await client.kill(container_id)
-    with contextlib.suppress(Exception):
-        await client.delete(container_id, force=True)
-    with contextlib.suppress(Exception):
-        await netns.teardown()
+    if exec_id:
+        with contextlib.suppress(Exception):
+            await client.kill(exec_id)
     await _free_slot(slot)
-    shutil.rmtree(bundle_dir, ignore_errors=True)
+    if driver_script is not None:
+        with contextlib.suppress(Exception):
+            driver_script.unlink(missing_ok=True)

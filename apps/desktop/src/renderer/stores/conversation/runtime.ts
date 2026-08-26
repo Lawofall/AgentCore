@@ -18,6 +18,7 @@ export const EMPTY_RUNTIME: ConversationRuntime = {
   loadingOlder: false,
   loadingNewer: false,
   pendingTurnWarning: null,
+  pendingTraceId: null,
   toolStartedMs: {},
   executionVia: null,
   waitingForWorkspaceLock: false,

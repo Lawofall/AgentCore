@@ -440,12 +440,17 @@ def _render_user_harvest_body(session: CoordinationSession, kind: HarvestKind) -
         parts.append("已有这些文件：\n" + "\n".join(f"- {path}" for path in files))
     node_lines: list[str] = []
     unfinished: list[str] = []
+    seen_nodes: set[tuple[str, str, str]] = set()
     for raw in facts.get("nodes") or []:
         if not isinstance(raw, dict):
             continue
         role = str(raw.get("role") or "").strip() or "队员"
         status = str(raw.get("status") or "").strip()
         summary = str(raw.get("summary") or "").strip()
+        key = (role, status, summary)
+        if key in seen_nodes:
+            continue
+        seen_nodes.add(key)
         face = _node_status_face(status)
         line = f"- {role}：{face}"
         if summary:

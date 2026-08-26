@@ -39,6 +39,7 @@ from agentcore.tools.builtin.delegate.schema import (
 )
 from agentcore.tools.builtin.git_ops.policy import GIT_TOOL_PARAMETERS
 from agentcore.tools.builtin.git_ops.tool import GitTool
+from agentcore.tools.builtin.replan import _REPLAN_DESCRIPTION, _REPLAN_PARAMETERS
 from agentcore.tools.builtin.terminal import TerminalTool
 from agentcore.tools.protocol import ToolSchema
 
@@ -46,8 +47,8 @@ from agentcore.tools.protocol import ToolSchema
 _CAPS: dict[str, int] = {
     "browser": 1750,
     "git": 2400,
-    "terminal": 1450,
-    "delegate": 4790,
+    "terminal": 1460,
+    "delegate": 3320,
     "ask_user": 2750,
 }
 _TOTAL_CAP = sum(_CAPS.values())
@@ -148,11 +149,30 @@ def test_deleted_delegate_fields_have_no_negative_list():
         "finalize",
         "playbook_id",
         "parallelism",
+        "seed_notes",
+        "force_continue",
+        "coordination",
+        "checkpoint_after",
+        "bind_after_deps",
+        "complexity_hint",
+        "result_handling",
+        "require_upstream",
     )
     blob = DELEGATE_DESCRIPTION + json.dumps(DELEGATE_PARAMETERS, ensure_ascii=False)
     for field in retired:
         assert field not in props, f"{field} 不该回到 delegate 顶层参数"
         assert field not in blob, f"{field} 已删，schema 不必再提它"
+    task_props = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
+    assert "checkpoint_after" not in task_props
+    assert "bind_after_deps" not in task_props
+    assert "result_handling" not in task_props
+    assert "require_upstream" not in task_props
+    # C1：顶层 coordinate 已下架。子串检查会误伤 retired 的 coordination，故单独钉 JSON 键。
+    assert "coordinate" not in props
+    assert '"coordinate"' not in json.dumps(DELEGATE_PARAMETERS, ensure_ascii=False)
+    replan_blob = _REPLAN_DESCRIPTION + json.dumps(_REPLAN_PARAMETERS, ensure_ascii=False)
+    for field in ("coordination", "checkpoint_after", "bind_after_deps"):
+        assert field not in replan_blob, f"{field} 已删，replan schema 不必再提它"
 
 
 def test_shared_mutation_tail_does_not_repeat_per_tool_receipts():

@@ -65,7 +65,9 @@ def _catalog_with_off_protocol() -> ModelCatalog:
 
 def test_to_response_includes_unavailable_reason() -> None:
     dumped = route._to_response(_catalog_with_off_protocol()).model_dump()
+    assert dumped["current"]["ref"] == "@byok/p1/kimi-k2.5"
     grok = next(m for m in dumped["models"] if m["id"] == "grok-4.5")
+    assert grok["ref"] == "@byok/p1/grok-4.5"
     assert grok["available"] is False
     assert grok["unavailable_reason"] == {
         "code": "upstream_protocol_unsupported",

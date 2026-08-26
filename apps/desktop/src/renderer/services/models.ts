@@ -26,8 +26,8 @@ export type ModelUnavailableReason = Schemas["ModelUnavailableReason"];
 export type ModelCapability = "vision" | "tools" | "reasoning";
 
 /**
- * 模型选择键：唯一键为 `(id, origin, providerId)`——同一模型 id 可在多个 BYOK 服务商下
- * 重复出现（且平台再出现一次），故 byok 选择须带 `providerId` 消歧；平台 / 旧存储无。
+ * 模型选择键：产品身份为目录 `ref`（`@platform/{id}` / `@byok/{provider_id}/{id}`）。
+ * 同一模型 id 可在多个 BYOK 服务商下重复出现（且平台再出现一次）。
  */
 export type ModelOrigin = ModelCatalogItem["origin"];
 export type ModelSelection = {
@@ -36,6 +36,20 @@ export type ModelSelection = {
   /** byok 行所属服务商 id（平台行为空）。旧存储可能缺省——匹配时回落到 (id, origin)。 */
   providerId?: string | null;
 };
+
+/** Product catalog identity: `@platform/{id}` or `@byok/{provider_id}/{id}`. */
+export function catalogItemRef(
+  item: Pick<ModelCatalogItem, "id" | "origin"> & {
+    provider_id?: string | null;
+    ref?: string;
+  },
+): string {
+  if (typeof item.ref === "string" && item.ref.trim()) return item.ref.trim();
+  if (item.origin === "platform" || !item.provider_id) {
+    return `@platform/${item.id}`;
+  }
+  return `@byok/${item.provider_id}/${item.id}`;
+}
 
 /** Stable key for maps / MRU lists —— `(origin, providerId, id)` 三元组。 */
 export function modelItemKey(

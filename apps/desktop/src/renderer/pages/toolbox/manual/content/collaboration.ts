@@ -180,7 +180,7 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "拍板卡",
-              desc: "两键：提交（带上选择与说明继续）+ 取消（结束本回合）。没有单独的「继续 / 调整」。",
+              desc: "两键：提交（带上选择与说明继续）+ 取消（结束本回合）。多题时右上编号切换，提交仍一次带走全部选择。没有单独的「继续 / 调整」。",
             },
             {
               title: "计划复核",

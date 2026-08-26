@@ -45,7 +45,6 @@ describe("composerDelivery", () => {
           crossExamEnabled: false,
           debateOpening: null,
           coordinationWait: null,
-          coordinationWaitStartedAt: null,
           deliveryStatus: null,
           userInterjections: [],
           teamSynthesisPreview: null,

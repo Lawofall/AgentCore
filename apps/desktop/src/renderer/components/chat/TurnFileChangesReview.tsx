@@ -23,7 +23,7 @@ import {
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 /**
- * A1 / A1+ 只读「查看改动」——挂在产物卡内 / 右坞「改动」tab。
+ * A1 / A1+ 只读「查看改动」——右坞「改动」tab。
  * 优先拉回合基线真 diff（A1+）；无基线 / 失败则降级工具参数预览（A1）。
  * 标签按路径相对回合初是否存在（新建/更新/删除），不按 file_write/str_replace 工具名。
  * 有 Local zip 基线即可恢复（不依赖 file_* 产物；P0c）。
@@ -434,13 +434,99 @@ function TrueDiffRow({
 function ToolArgFallback({ artifacts }: { artifacts: FileArtifact[] }) {
   return (
     <>
-      <p className="text-xs text-muted-foreground">
-        改动已写入工作区。以下为工具参数侧预览（非云→本地「应用」）。
-      </p>
       {artifacts.map((a) => (
         <ArtifactChangeRow key={`${a.op}:${a.path}`} artifact={a} />
       ))}
     </>
+  );
+}
+
+function ChangeCounts({
+  counts,
+}: {
+  counts: { added: number; modified: number; deleted: number };
+}) {
+  return (
+    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+      <span className="text-success">+{counts.added}</span>
+      <span className="mx-1 text-primary">~{counts.modified}</span>
+      <span className="text-destructive">-{counts.deleted}</span>
+    </span>
+  );
+}
+
+function RestoreTurnButton({
+  restoring,
+  onRestore,
+}: {
+  restoring: boolean;
+  onRestore: () => void;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={restoring}
+      onClick={onRestore}
+      aria-label="恢复到本回合开始"
+      title={BASELINE_RESTORE_HINT}
+      className="h-7 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+    >
+      {restoring ? (
+        <Loader2 size={13} className="animate-spin" />
+      ) : (
+        <RotateCcw size={13} />
+      )}
+      恢复
+    </Button>
+  );
+}
+
+function TurnChrome({
+  isPanel,
+  divided,
+  heading,
+  headingTime,
+  loading,
+  counts,
+  restore,
+}: {
+  isPanel: boolean;
+  divided: boolean;
+  heading?: string;
+  headingTime?: string;
+  loading: boolean;
+  counts: { added: number; modified: number; deleted: number } | null;
+  restore: ReactNode;
+}) {
+  return (
+    <header
+      className={
+        isPanel
+          ? `flex items-center gap-2 px-3 py-2${divided ? " border-b border-border" : ""}`
+          : "flex flex-wrap items-center gap-x-3 gap-y-1"
+      }
+    >
+      {heading ? (
+        <h3 className="shrink-0 text-xs font-medium text-muted-foreground">
+          {heading}
+        </h3>
+      ) : null}
+      {loading ? (
+        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 size={13} className="animate-spin" />
+          {heading ? null : "正在读取改动…"}
+        </span>
+      ) : null}
+      {!loading && counts ? <ChangeCounts counts={counts} /> : null}
+      <div className="min-w-0 flex-1" />
+      {restore}
+      {headingTime ? (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {headingTime}
+        </span>
+      ) : null}
+    </header>
   );
 }
 
@@ -449,13 +535,17 @@ export function TurnFileChangesReview({
   conversationId = null,
   messageId = null,
   variant = "card",
+  heading,
+  headingTime,
 }: {
   artifacts: FileArtifact[];
   conversationId?: string | null;
   /** Assistant message id（= turnKey）；有则尝试 A1+ 真 diff。 */
   messageId?: string | null;
-  /** `card` = 产物卡内嵌（顶部分隔）；`panel` = 右坞「改动」tab 段落内。 */
+  /** `card` 历史别名；`panel` = 右坞「改动」tab，与 heading / 时间同一行壳。 */
   variant?: "card" | "panel";
+  heading?: string;
+  headingTime?: string;
 }) {
   const ws = useConversationWorkspace(conversationId);
   const isLocal = ws?.location === "local" && !!ws.rootId;
@@ -548,84 +638,74 @@ export function TurnFileChangesReview({
     }
   };
 
-  if (artifacts.length === 0 && phase !== "true" && phase !== "loading") {
-    if (variant === "panel") {
-      return (
-        <div className="px-3 py-2.5 text-xs text-muted-foreground">
-          暂无工具参数侧预览；若本回合有工作区基线，上方会显示相对基线的改动。
-        </div>
-      );
-    }
+  const isPanel = variant === "panel";
+  const emptyFallback =
+    artifacts.length === 0 && phase !== "true" && phase !== "loading";
+  if (emptyFallback && !isPanel) {
     return null;
   }
+
+  const showRestore =
+    phase === "true" && !!baselineSnapshotId && !!conversationId;
+  const showCounts = phase === "true" && counts != null;
+  const emptyTrueDiff =
+    phase === "true" && trueChanges != null && trueChanges.length === 0;
+  const fileRows =
+    phase === "true" && trueChanges && trueChanges.length > 0 ? (
+      trueChanges.map((c) => (
+        <TrueDiffRow
+          key={`${c.changeType}:${c.path}`}
+          change={c}
+          conversationId={conversationId}
+          isLocal={isLocal}
+          localRootId={isLocal ? (ws?.rootId ?? null) : null}
+          localSubpath={ws?.subpath ?? ""}
+        />
+      ))
+    ) : phase === "fallback" && artifacts.length > 0 ? (
+      <ToolArgFallback artifacts={artifacts} />
+    ) : null;
+  const body =
+    fileRows ??
+    (emptyTrueDiff ? (
+      <p className="text-xs text-muted-foreground">相对基线无文件差异</p>
+    ) : isPanel && emptyFallback ? (
+      <p className="text-xs text-muted-foreground">暂无改动</p>
+    ) : null);
+  const showChrome =
+    isPanel || phase === "loading" || showCounts || showRestore;
 
   return (
     <div
       className={
-        variant === "panel"
-          ? "space-y-3 px-3 py-2.5"
+        isPanel
+          ? undefined
           : "space-y-3 border-t border-border bg-muted/20 px-3 py-2.5"
       }
     >
-      {phase === "loading" && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 size={13} className="animate-spin" />
-          正在读取相对基线的改动…
-        </div>
-      )}
-      {phase === "true" && trueChanges && (
-        <>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-              {isLocal
-                ? "相对本回合开始时的本机 zip 基线（只读 overlay；忽略未打包目录）。"
-                : "相对本回合开始时的工作区基线（只读 overlay；非云→本地应用）。"}
-              {counts && (
-                <span className="ml-2 tabular-nums">
-                  <span className="text-success">+{counts.added}</span>
-                  <span className="mx-1 text-primary">~{counts.modified}</span>
-                  <span className="text-destructive">-{counts.deleted}</span>
-                </span>
-              )}
-            </p>
-            {baselineSnapshotId && conversationId && (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={restoring}
-                onClick={() => void onRollback()}
-                aria-label="恢复到本回合开始"
-                title={BASELINE_RESTORE_HINT}
-                className="h-7 shrink-0 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-              >
-                {restoring ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <RotateCcw size={13} />
-                )}
-                恢复到本回合开始
-              </Button>
-            )}
-          </div>
-          {trueChanges.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              相对基线无文件差异。
-            </p>
-          ) : (
-            trueChanges.map((c) => (
-              <TrueDiffRow
-                key={`${c.changeType}:${c.path}`}
-                change={c}
-                conversationId={conversationId}
-                isLocal={isLocal}
-                localRootId={isLocal ? (ws?.rootId ?? null) : null}
-                localSubpath={ws?.subpath ?? ""}
+      {showChrome ? (
+        <TurnChrome
+          isPanel={isPanel}
+          divided={isPanel && body != null}
+          heading={heading}
+          headingTime={headingTime}
+          loading={phase === "loading"}
+          counts={showCounts ? counts : null}
+          restore={
+            showRestore ? (
+              <RestoreTurnButton
+                restoring={restoring}
+                onRestore={() => void onRollback()}
               />
-            ))
-          )}
-        </>
+            ) : null
+          }
+        />
+      ) : null}
+      {body == null ? null : isPanel ? (
+        <div className="space-y-3 px-3 py-2.5">{body}</div>
+      ) : (
+        body
       )}
-      {phase === "fallback" && <ToolArgFallback artifacts={artifacts} />}
     </div>
   );
 }

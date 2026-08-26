@@ -17,7 +17,9 @@ from agentcore.core.errors import ValidationError
 from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.debate.models import (
     ModelIdentity,
+    coerce_identity,
     identity_shape_error,
+    needs_mention_resolve,
 )
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import Deliverable
@@ -34,7 +36,7 @@ class WriteCapabilityOverride:
 
 @dataclass(frozen=True)
 class ModelOverride:
-    """Human override for one worker / debate slot — same triple family as ModelIdentity."""
+    """Human override for one worker / debate slot — catalog identity family as ModelIdentity."""
 
     run_id: str
     model: str
@@ -42,11 +44,13 @@ class ModelOverride:
     provider_id: str = ""
 
     def identity(self) -> ModelIdentity:
-        return ModelIdentity(
+        ident = ModelIdentity(
             model=self.model,
             origin=self.origin,
             provider_id=self.provider_id,
-        ).normalized()
+        )
+        coerced, _err = coerce_identity(ident)
+        return coerced.normalized()
 
 
 def normalize_write_capability_overrides(
@@ -78,8 +82,9 @@ def normalize_model_overrides(
 ) -> list[ModelOverride]:
     """Coerce map ``{run_id: {model, origin?, provider_id?}}`` (list of dicts also ok).
 
-    Empty / missing model for a key → skip (不改该节点). Non-empty must pass
-    :func:`identity_shape_error` (禁 silent).
+    ``model`` may be a catalog ``@`` ref or a leftover triple. Empty / missing
+    model for a key → skip (不改该节点). Non-empty must pass
+    :func:`identity_shape_error` after coerce (禁 silent).
     """
     items: list[tuple[str, dict[str, Any]]] = []
     if raw is None:
@@ -103,7 +108,7 @@ def normalize_model_overrides(
                 raise ValidationError("model_overrides.run_id 不能为空")
             items.append((key, row))
     else:
-        raise ValidationError("model_overrides 须为 run_id→三元组 的对象")
+        raise ValidationError("model_overrides 须为 run_id→目录身份 的对象")
 
     out: list[ModelOverride] = []
     for run_id, row in items:
@@ -119,7 +124,13 @@ def normalize_model_overrides(
             origin=origin,
             provider_id=provider_id,
         )
-        err = identity_shape_error(ov.identity(), where=f"model_overrides[{run_id}]")
+        ident = ov.identity()
+        if needs_mention_resolve(ident):
+            raise ValidationError(
+                f"model_overrides[{run_id}] 请抄写目录身份 "
+                "@platform/{model} 或 @byok/{provider_id}/{model}"
+            )
+        err = identity_shape_error(ident, where=f"model_overrides[{run_id}]")
         if err:
             raise ValidationError(err)
         out.append(ov)
@@ -416,7 +427,7 @@ def apply_team_preview_veto(
         if not route:
             # normalize already shape-checked; belt-and-suspenders hard fail.
             raise ValidationError(
-                f"model_overrides[{model_item.run_id}] 无法编成路由键（三元组不完整）"
+                f"model_overrides[{model_item.run_id}] 无法编成路由键（目录身份不完整）"
             )
         node.model = route
 

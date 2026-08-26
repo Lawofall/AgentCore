@@ -73,6 +73,20 @@ export interface ConversationState {
     traceId: string,
     conversationId?: string | null,
   ) => void;
+  /**
+   * Fill-if-empty from SSE ``X-AgentCore-Trace`` (32-hex). Ignores invalid /
+   * empty values; does not overwrite a non-empty ``message.traceId``
+   * (``message_start`` may still write later). Stamps only an empty
+   * *streaming* last assistant; otherwise stashes on
+   * {@link ConversationRuntime.pendingTraceId} (follow / queue: last is the
+   * previous turn).
+   */
+  applySseTraceHeader: (
+    raw: string | null,
+    conversationId?: string | null,
+  ) => void;
+  /** Stamp pending onto the last *streaming* assistant if that bubble has no traceId. Keep pending if last is already traced (next turn). */
+  stampPendingTraceId: (conversationId?: string | null) => void;
   setServerMessageIdOnLastMessage: (
     messageId: string,
     conversationId?: string | null,

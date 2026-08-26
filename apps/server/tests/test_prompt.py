@@ -240,7 +240,7 @@ def test_visualization_block_rides_only_the_composed_ceo_prompt():
 
 def test_core_states_coordinator_tool_boundary():
     # 协调者 CEO: mainly read/retrieval; production/mutation → delegate. Narrow
-    # exceptions (host(action=shell) · local terminal for pure start/stop/list / 跑起来) stay pinned.
+    # exceptions (host(action=shell) · terminal 纯启/停/读 / 跑起来，云桌或本机) stay pinned.
     hint = _CEO_CORE_HINT
     assert "只读" in hint
     assert "delegate" in hint
@@ -275,6 +275,8 @@ def test_capability_how_gated_on_ceo_tool_names():
     assert "wait_for" not in spine
     assert "ask_user(browser_login=true)" not in spine
     assert "通识长文当交付" not in spine
+    assert "已登录，继续" not in spine
+    assert "口头假验收" not in spine
     assert "假开页" in spine
     assert "三分日志" in spine
     assert "把启服写进队员任务" in spine
@@ -282,6 +284,7 @@ def test_capability_how_gated_on_ceo_tool_names():
 
     term = assemble_ceo_core({"terminal"})
     assert "wait_for" in term
+    assert "云桌" in term
     assert "ask_user(browser_login=true)" not in term
     assert "通识长文当交付" not in term
 
@@ -300,6 +303,8 @@ def test_capability_how_gated_on_ceo_tool_names():
 
     browser = assemble_ceo_core({"browser"})
     assert "ask_user(browser_login=true)" in browser
+    assert "已登录，继续" in browser
+    assert "口头假验收" in browser
     assert "wait_for" not in browser
 
     grant = assemble_ceo_core({"external_mount_readonly"})
@@ -347,35 +352,50 @@ def test_core_teaches_split_criterion_over_count():
     assert "单人直出" not in hint
     assert "轻量直出" not in hint
     assert "finalize" not in hint
-    # 结局分层：挡路才讨论开场 ask；未明示成文宜 A parallel_brief；
-    # 明示成文可 research_report，但须成文梯度（档 2 轻成文勿满编；档 3 才满编）
+    # 结局分层短脊柱：每轮先定桌上结果；未明示成文禁成文产线（≠禁 brief/组队）；
+    # 未明示成文宜 A parallel_brief；【禁止】一上来 research_report 满编；
+    # 论文/开源当资料 ≠ 明示成文；明示成文不拦。该派就派仅桌上结果已定之后。
+    # 档 2 轻成文 / 成文梯度全文 / 讨论开场三选长字面 / consumer_deps → test_skills
     assert "结局分层" in hint
-    assert "ask·挡路" in hint or "挡路" in hint
-    assert "讨论开场" in hint
-    assert "先多角度摸清" in hint
-    assert "写成文档" in hint
-    assert "暂不派队" in hint
-    assert "对话本身" in hint  # 共创/审美等桌上结果已是对话 → 不发卡
-    assert "催收敛" in hint or "候选菜单" in hint
+    assert "讨论开场" in hint  # 一句钩；三选全文在 kickoff / 编排 skill
+    assert "对话本身" in hint  # 已是对话 → 不发卡
+    assert "编制自选" in hint
+    assert "自动两路" in hint
+    assert "帮我想明白" in hint
+    assert "只能闲聊" in hint
     assert "内部编制" in hint
     assert "明示成文不拦" in hint
     assert "parallel_brief" in hint
-    assert "对齐推进" in hint or "默认走 A" in hint or "默认 A" in hint
+    assert "默认 A" in hint or "对齐推进" in hint or "默认走 A" in hint
+    assert "不是默认两路" in hint or "编制自选" in hint
     assert "research_report" in hint
-    assert "成文交付" in hint or "成文梯度" in hint or "成篇" in hint
-    assert "禁止" in hint and "research_report" in hint  # A / 档 2 禁套满编
-    assert "成文梯度" in hint
-    assert "档 2" in hint and "轻成文" in hint
+    assert "成文产线" in hint
+    assert "不是" in hint and "禁止组队" in hint
+    assert "禁止" in hint and "research_report" in hint
+    assert "一上来" in hint and "满编" in hint
+    assert "成文梯度" in hint  # 钩，全文在 skill
+    assert "档 2" not in hint and "轻成文" not in hint
+    assert "consumer_deps" not in hint
+    assert "先多角度摸清" not in hint
+    assert "暂不派队" not in hint
+    assert "写成文档并保存" not in hint
     assert "学术审校" in hint
-    assert "少扇出" in hint or "常 2" in hint
+    assert "编制自选" in hint or "人数=方向缝" in hint or "凑人" in hint
     assert "论文" in hint and ("资料" in hint or "开源" in hint)  # 论文/开源当资料 ≠ 明示成文
     assert "写一篇" in hint and "综述" in hint  # 「写一篇…论文/综述」=明示成文
     assert "写一篇…论文/综述" in hint or "写一篇论文" in hint
-    # 派摸底验收：核留短钩（目标·手段·收工 / 够用即停）；检索手册在编排 skill
+    assert "答完澄清" in hint and "end_turn" in hint
+    assert "该派就派" in hint and "桌上结果已定" in hint
+    assert "请拍板下一步" in hint
+    assert "需要你拍板" in hint
+    assert "答完维度" in hint or "不写盘" in hint
+    # 派摸底短钩（检索手段长 HOW 在编排 skill）
     assert "派摸底" in hint or "摸底·验收" in hint
     assert "够用即停" in hint
+    assert "一页地图" in hint
+    assert "一句目标" in hint
     assert "handoff" in hint
-    assert "目标·手段·收工" in hint
+    assert "目标·边界·验收" in hint or "目标·手段·收工" in hint
     # 三路/多路调研缺主体：硬 ask + 预填 default；continue=确认默认；禁静默自拟
     assert "缺主体" in hint
     assert "静默自拟" in hint
@@ -392,12 +412,8 @@ def test_core_teaches_split_criterion_over_count():
     assert "整锅重派" in hint
     assert "空转确认" in hint or "不承接选项" in hint
     assert "默认路径" in hint
-    assert "一人包办" in hint or "自搜+成文" in hint
-    assert "角 prose" in hint and "仅主笔落盘" in hint
+    assert "1 人包办" in hint or "一人包办" in hint
     assert "form=files" in hint
-    assert "独立审校" in hint
-    assert "调研→撰稿" in hint
-    assert "质量缝" in hint
     # 路由：禁止思考里先干完（强制「方向：…」一句模板已撤，试跑中）。
     assert "禁止长篇路由推演" in hint
     assert "完整设计" in hint  # 禁思考里先写完整设计
@@ -415,26 +431,26 @@ def test_core_teaches_split_criterion_over_count():
     assert "修引号" in hint or "转义" in hint
     assert "勿先" in hint and "ask_user_kickoff" in hint
     assert "糊建站" in hint or "做个网站" in hint
-    assert "挡路" in hint
     assert "一页先上" not in hint
     assert "品牌站流水线" not in hint
     assert "已下线" not in hint
     assert "手写" in hint and "tasks" in hint
-    assert "web_quality_scan" in hint
-    assert "营销皮" in hint
+    # 糊建站细则 / 营销皮 / 静态质检 HOW 只在 ask_user_kickoff（test_skills）
+    assert "可开 web_quality_scan" not in hint
+    assert "web_quality_scan" not in hint
+    assert "visual_critic" not in hint
     assert "consult `build_website`" not in hint
     assert "consult(build_website)" not in hint
     assert "playbook=\"build_website\"" not in hint
     assert "短问" in hint or "短澄清" in hint
     assert "提案墙" in hint
-    # 点名载体/手段·顾问短对齐（与规格已齐正交；禁硬闸/format_options；禁单场景剧本）
+    # 点名载体/手段·顾问：核只留开火短钩；次优/话术全文在 Skill
     assert "点名载体" in hint or "载体/手段" in hint
     assert "顾问" in hint
     assert "recommended" in hint
     assert "零摩擦" in hint
     assert "规格已齐" in hint
     assert "内容齐" in hint or "手段已核" in hint
-    assert "可读" in hint or "可扫" in hint or "可编辑" in hint
     assert "不得" in hint and ("吞掉" in hint or "delegate" in hint)
     assert "SmartArt" not in hint and "DrawingML" not in hint
     assert "极宽" not in hint
@@ -447,26 +463,25 @@ def test_core_teaches_split_criterion_over_count():
     assert "同一 task" in hint  # 禁同 task 文案冒充两段
     assert "规格已齐" in hint
     assert "立刻派 ≠ 立刻全量" in hint or "立刻全量" in hint
-    assert "编排自主" in hint
-    assert "摸底波" in hint
-    assert "根委派切片诚实" in hint or "路径 A" in hint or "路径 B" in hint
-    assert "嵌套扇出" in hint or "单 lead" in hint
-    assert "凡大活必嵌套" in hint
-    # 不知轻重：禁猜一人扛整座；任务写「先组队」≠已拆编制；规格已齐 ≠ 一人做完 M0
-    assert "不知轻重" in hint
-    assert "一人能扛整座成果" in hint
-    assert "缝不清" in hint and "真两波" in hint
-    assert "按块派" in hint and "不必先称重量" in hint
-    assert "目标·约束·验收" in hint
-    assert "整个里程碑" in hint
-    assert "你可以组队" in hint and "先组队" in hint
-    assert "不算已拆编制" in hint
+    # 第三刀：编排自主 / 摸底波 / 路径 A·B / 不知轻重手册 → test_skills，核不复读
+    assert "编排自主" not in hint
+    assert "摸底波" not in hint
+    assert "路径 A" not in hint and "路径 B" not in hint
+    assert "根委派切片诚实" not in hint
+    assert "凡大活必嵌套" not in hint
+    assert "不知轻重" not in hint
+    assert "一人能扛整座成果" not in hint
+    assert "不必先称重量" not in hint
+    assert "目标·约束·验收" not in hint
+    assert "整个里程碑" not in hint
+    assert "你可以组队" not in hint
+    assert "不算已拆编制" not in hint
+    assert "临时交成果组长" not in hint
+    assert "薄旁路" in hint  # 开火：任意软件派工，不跟 build_app consult
+    assert "单 lead" in hint  # 绿场准入短卡：边界未钉 → 轻切片或单 lead
     assert "规格已齐 ≠ 一人扛整座里程碑" in hint or "规格已齐≠一人扛整座里程碑" in hint
     assert "一人做完 M0" in hint
-    assert "临时交成果组长" in hint
-    assert "并行写盘" in hint
-    assert "私有" in hint  # 私有 path / 笔记
-    assert "【整合】" in hint
+    assert "并行写盘" in hint  # 钩；细则在编排 skill
     assert "continue_from_run_id" in hint
     assert "MVP" in hint or "契约" in hint
     assert "规格已齐 ≠ 全量" in hint or "规格已齐≠全量" in hint
@@ -481,8 +496,6 @@ def test_core_teaches_split_criterion_over_count():
     assert "模块流水线" in hint
     assert "桌上结果" in hint or "桌上档" in hint
     assert "禁止" in hint and ("intensity=full" in hint or "满编" in hint)
-    assert "做个网站" in hint
-    assert "展示页" in hint or "业务应用" in hint
     assert "intensity=solo" not in hint
     assert "style=toolshed" not in hint
     assert "build_website" not in hint
@@ -566,14 +579,19 @@ def test_core_teaches_split_criterion_over_count():
 
     assert CONSULT_TEAM_ORCH_BY_SCENE in hint
     # 成文 consult 不以「是否单人」为前提，否则永远读不到档 2「不宜单人」。
+    # 调研默认 A 很常见：不成文不强制 consult。
     assert "勿因单人免查" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "成文才必查" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "调研默认 A" in CONSULT_TEAM_ORCH_BY_SCENE
     assert "非成文短文落盘" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "Office" in CONSULT_TEAM_ORCH_BY_SCENE
     assert "单人落盘、提问卡" not in CONSULT_TEAM_ORCH_BY_SCENE
     assert "可选，非开场必做" not in hint
     assert "先 `consult(team_orchestration_advanced)` 再规划" not in hint
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "形状词汇" in skill
-    assert "实质任务该派就派" in skill or "自然缝" in skill
+    assert "实质任务该派就派" in skill
+    assert "桌上结果已定" in skill
     assert "教学示例形状" in skill and "对照学形状" in skill
     assert "免手搓" not in skill  # 旧「是就直接套 / 免手搓」广告口径已撤
     assert "并列对象分组" in skill and "独立多透镜诊断" in skill
@@ -663,9 +681,11 @@ def test_core_teaches_delegate_graph_and_coordinate_invariants():
     # 常驻 core 钉短判决；HOW 在 team_orchestration_advanced。
     hint = _CEO_CORE_HINT
     assert "一回合一张协作图" in hint
-    assert "coordinate=false" in hint
+    assert "默认协调非阻塞" in hint
+    assert "coordinate=false" not in hint
     assert "嵌套 lead" in hint
-    assert "波间把关" in hint and "checkpoint_after" in hint
+    assert "成篇套餐提纲把关" in hint
+    assert "checkpoint_after" not in hint
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "不必等" in skill or "同回合再调" in skill
     assert "再带一层子队" in skill
@@ -736,7 +756,8 @@ def test_core_teaches_delegating_parallel_research():
     hint = _CEO_CORE_HINT
     assert "广度调查" in hint
     assert "探路" in hint
-    assert "≥2 角" in hint or "继续开发" in hint
+    assert "编制自选" in hint
+    assert "自动两路" in hint or "默认 ≥2" in hint
     # 通用：探路=定位入口；不派仅限单点；派工看规模与结构不看交付形态；引擎不剥工具 ≠ 可接着自搜
     assert "【探路 ≠ 摸底】" in hint
     assert "定位入口" in hint or "从哪几个入口进" in hint
@@ -746,6 +767,11 @@ def test_core_teaches_delegating_parallel_research():
     assert "不剥工具" in hint or "不打断长文" in hint
     assert "可以接着自搜" in hint
     assert "规格已齐" in hint or "无新规格" in hint
+    assert "对话本身除外" not in hint
+    assert "必须派 brief" in hint
+    assert "帮我想明白" in hint
+    assert "讨论优化本仓" not in hint
+    assert "盘点参数" not in hint
 
 
 def test_prompt_investigation_discipline_follows_settings():
@@ -797,25 +823,17 @@ def test_core_reminds_pass_hidden_context_to_worker():
 
 
 def test_core_teaches_confirmed_constraints_block_on_delegate():
-    """定稿漂移 A′：委派须固定「已确认约束」；有 ask 槽位写入、无卡亦枚举；约束优先于附件旧表。"""
+    """第七刀：核只留开火短卡（定稿漂移 A′）；HOW 在编排 skill。"""
     hint = _CEO_CORE_HINT
     assert "已确认约束" in hint
-    assert "ask_user" in hint
     assert "自由文" in hint
     assert "意图分类" in hint  # 禁止自动抽
-    assert "约束块优先" in hint or "优先" in hint
+    assert "约束块优先" in hint
     assert "附件" in hint
-    # 自拟默认不得进「已确认约束」块冒充拍板（与终稿「假设≠用户确认」同口径）
-    assert "自拟的默认" in hint
+    assert "自拟默认" in hint
     assert "冒充拍板" in hint
-    assert "无已拍板项" in hint
-    # 编排 skill 同口径
-    skill = _TEAM_ORCHESTRATION_ADVANCED
-    assert "已确认约束" in skill
-    assert "约束块优先" in skill or "优先" in skill
-    assert "自拟的默认" in skill
-    assert "冒充拍板" in skill
-    assert "无已拍板项" in skill
+    assert "（无）" in hint or "无已拍板项" in hint
+    assert "猜定稿" in hint
 
 
 def test_core_teaches_assumption_is_not_user_confirmation():
@@ -897,8 +915,10 @@ def test_skill_teaches_constraint_vs_solution_boundary():
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "专业方案" in skill
     assert "填字员" in skill
-    # 审查 / 评估类「指路不代答」：初审线索走便签，不写进 task 替答。
-    assert "seed_notes" in skill and "heads_up" in skill
+    # 审查 / 评估类「指路不代答」：重点关注进 team_brief 或审查员 post_note(heads_up)，不写进 task 替答。
+    assert "heads_up" in skill
+    assert "替答" in skill
+    assert "seed_notes" not in skill
     assert "引导性问题" in skill or "风险预判" in skill
     assert "已确认约束" in skill
 
@@ -910,13 +930,14 @@ def test_core_teaches_delegate_point_dont_answer():
     assert "编排 skill" in hint or "team_orchestration_advanced" in hint
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "施工图" in skill or "填字员" in skill
-    assert "seed_notes" in skill and "heads_up" in skill
+    assert "heads_up" in skill
+    assert "替答" in skill
+    assert "seed_notes" not in skill
     assert "引导性问题" in skill or "风险预判" in skill
 
 
 def test_core_teaches_execution_and_recall_routing():
-    # 短指针：跑/修/打开验证终向靠提示词（对照 workspace）；引擎不扫用户文硬分叉。
-    # 意图梯度：跑起来→CEO terminal 报 URL；右坞/浏览器才 navigate；验收才截图。
+    # 第五刀：核只留开火短卡（门关也要判）；HOW 在挂门手册 / 编排 skill。
     hint = _CEO_CORE_HINT
     assert "【执行 / 运行 / 打开】" in hint
     assert "workspace_context" in hint
@@ -933,6 +954,16 @@ def test_core_teaches_execution_and_recall_routing():
     assert "冒充已跑或已验" in hint
     assert "不扫用户文" in hint or "硬分叉" in hint
     assert "已绑定本地工程" in hint or "跑当前工作区" in hint
+    assert "tsc -b" in hint
+    assert "npm install" in hint
+    assert "code_execute" in hint
+    assert "open_local_project" in hint
+    assert "勿主推 bind" in hint or "导入" in hint
+    # 挂门 HOW 长字面不在核
+    assert "wait_for" not in hint
+    assert "口头假验收" not in hint
+    assert "已登录，继续" not in hint
+    assert "code_diagnostics" not in hint
     # 不再叠长禁令散文
     assert "不要先读完口述" not in hint
     assert "禁止 DIRECT" not in hint
@@ -943,39 +974,35 @@ def test_core_teaches_execution_and_recall_routing():
 def test_core_teaches_repair_code_ui_verify_routing():
     """白屏/挂载复现 → verify= browser 形；勿默认全仓 tsc/pytest（提示词分流，非硬闸）."""
     hint = _CEO_CORE_HINT
+    assert "手写 1 人" in hint
+    assert "form=workspace" in hint
+    assert "短任务" in hint
     assert 'playbook="repair_code"' in hint
     assert "白屏" in hint or "挂载" in hint
     assert "browser" in hint
     assert "verify=" in hint
     assert "勿" in hint and ("tsc" in hint or "pytest" in hint)
+    for token in ("complexity_hint", "result_handling", "require_upstream"):
+        assert token not in hint, token
 
 
 def test_core_teaches_code_audit_modules_fanout():
-    """整仓审计填 modules 扇出；引擎不从 scope 自动拆（结构槽，非必须扇出）。"""
+    """整仓审计填 modules 扇出；细则（2–3、配额、无主管）在编排 skill。"""
     hint = _CEO_CORE_HINT
     assert "code_audit" in hint
     assert "playbook_args.modules" in hint or "modules" in hint
-    assert "不从 scope 自动拆" in hint
     assert "整仓" in hint and "多子系统" in hint
-    assert "产品缝" in hint
-    assert "2–3" in hint or "2-3" in hint
-    assert "目录" in hint
-    assert "无主管" in hint
-    assert "≥3" in hint
     assert "单缝省略" in hint
-    assert "不是配额" in hint
-    # 上限 / 折叠 HOW → team_orchestration_advanced，不占常驻核
+    # 上限 / 折叠 / 配额 HOW → team_orchestration_advanced，不占常驻核
 
 
 def test_core_teaches_audit_narrow_scope():
-    """单点展示 ≠ 整仓摸底：task 钉已探路径，禁父目录通读、禁按层凑工种。"""
+    """审查收窄 HOW 在编排 skill；核只留钩。单点展示走 1 人，不属于探路摸底。"""
     hint = _CEO_CORE_HINT
-    assert "审查·收窄" in hint
-    assert "父目录" in hint and "通读" in hint
-    assert "1 人" in hint
-    assert "契约" in hint and "凑工种" in hint
+    assert "审查收窄" in hint or "审查·收窄" in hint
     assert "单点展示" in hint
-    assert "不属于本条" in hint
+    assert "探路 ≠ 摸底" in hint
+    assert "1 人即可" in hint
 
 
 def test_core_teaches_outline_checkpoint_prefers_structured_path():
@@ -996,13 +1023,15 @@ def test_core_worker_capability_follows_workspace_facts():
     assert "code_execute=未装配" in hint
     assert "能写文件、不能运行" in hint
     assert "data_file_landing" in hint
-    assert "表质量基线" in hint
-    assert "冒充表结构" in hint
     assert "表格 → `.csv`" not in hint
-    assert "源数据文件下一步" in hint
-    assert "无法可靠解析的源数据文件" in hint
     assert "执行事实行" in hint
-    assert "禁止】另编" in hint
+    # 表质量 / 源数据下一步 HOW 在编排 skill（核只留 consult 一句）
+    orch = _TEAM_ORCHESTRATION_ADVANCED
+    assert "表质量基线" in orch
+    assert "冒充表结构" in orch
+    assert "源数据文件下一步" in orch
+    assert "无法可靠解析的源数据文件" in orch
+    assert "禁止】另编" in orch
     # 工程/代码无执行补救权威在执行事实行（test_workspace_context），核不复述。
     assert "export_to_local" in hint
     # 成品文件只装成品：核只留路由短钩，全文在 long_form_writing
@@ -1025,14 +1054,15 @@ def test_core_teaches_delivery_honesty_when_no_execution():
 
 
 def test_core_teaches_empty_desk_no_project_shell():
+    """第四刀：核只留开火短卡；目录枚举 / create_folder vs mkdir 在编排 skill。"""
     hint = _CEO_CORE_HINT
     assert "【空桌落盘】" in hint
-    assert "本文件夹根即工作区根" in hint
-    assert "工程壳" in hint
-    assert "空桌" in hint
-    assert "site/" in hint and "app/" in hint
-    assert "要不要再套一层" in hint
-    assert "create_folder" in hint
+    pin = hint.split("【空桌落盘】", 1)[1].split("【派单落点】", 1)[0]
+    assert "工程壳" in pin
+    assert "要不要再套一层" in pin
+    assert "site/" not in pin
+    assert "mkdir" not in pin
+    assert "create_folder" not in pin
 
 
 def test_core_teaches_dispatch_landing_not_promote_ritual():
@@ -1043,13 +1073,14 @@ def test_core_teaches_dispatch_landing_not_promote_ritual():
     assert between.index("【派单落点】") < between.index("【产物路径】")
     pin = hint.split("【派单落点】", 1)[1].split("【产物路径】", 1)[0]
     assert "工作稿/" in pin
-    assert "workspace_native" in pin
-    assert "artifacts" in pin
-    assert "写完再搬" in pin
-    assert "产物卡" in pin
-    assert "归位" in pin
-    assert "移到工作区" in pin
-    assert "猜意图" in pin
+    assert "【看】" in pin and "【存文档】" in pin and "【改工程】" in pin
+    assert "form=prose" in pin and "form=files" in pin
+    assert "form=workspace" in pin or "【改工程】" in pin
+    assert "扫用户原话" in pin
+    assert "workspace_native" not in pin
+    assert "写完再搬" not in pin
+    assert "产物卡" not in pin
+    assert "归位" not in pin
     assert "promote_product" not in hint
     assert "【成品归位】" not in hint
     ceo = compose_ceo_chat_prompt(
@@ -1062,26 +1093,23 @@ def test_core_teaches_dispatch_landing_not_promote_ritual():
 
 
 def test_core_teaches_panel_path_not_workspace_root_jargon():
-    """对用户指路禁说「工作区根」；空桌纪律里给模型看的事实句保留。"""
+    """对用户指路禁说「工作区根」；空桌短卡不复述用户话术。"""
     hint = _CEO_CORE_HINT
     pin = hint.split("【交付下载·面板路径】", 1)[1].split("【交付指引】", 1)[0]
     assert "对用户说" in pin
     assert "工作区根" in pin
     assert "工作区根目录" in pin
     assert "禁止" in pin
-    assert "文件夹名" in pin
-    assert "文件名" in pin
-    assert "文件面板" in pin
     empty = hint.split("【空桌落盘】", 1)[1].split("【产物路径】", 1)[0]
-    assert "本文件夹根即工作区根" in empty
     assert "对用户说" not in empty
+    assert "本文件夹根即工作区根" not in empty
 
 
 def test_core_teaches_delivery_path_by_workspace_type():
-    # 收口信任级：产物出口按执行位置分道。
+    # 收口开火短卡：完整相对路径 / 面板下载 / 云端面板+预览 vs 本机真实路径。
     hint = _CEO_CORE_HINT
     assert "【产物路径】" in hint
-    assert "完整" in hint and "约定文档出口" in hint
+    assert "完整" in hint
     assert "裸" in hint or "reviews/" in hint
     # 午后巡 87de：交付下载给面板可用相对路径；404 须解释+列目录，禁闷声
     assert "交付下载·面板路径" in hint
@@ -1089,21 +1117,24 @@ def test_core_teaches_delivery_path_by_workspace_type():
     assert "file_list" in hint
     assert "闷声" in hint or "空泡" in hint
     assert "【交付指引】" in hint
-    assert "执行位置分道" in hint
-    assert "收口硬约束" in hint
     assert "文件」面板" in hint
     assert "完整预览" in hint
-    assert "右坞「浏览器」" in hint or "右坞" in hint
-    assert "【右坞浏览器】" in hint
-    assert "consult(browser)" in hint
-    assert "escalate" in hint
-    assert "用浏览器打开" in hint
-    assert "跑起来" in hint or "打开看一下" in hint  # 切断跑起来→必须 navigate
-    assert "delegate" in hint  # 验收仍 delegate
     assert "双击打开" in hint
-    assert "系统浏览器" in hint
     assert "禁止给本机磁盘路径" in hint or "禁止给本机" in hint
     assert "真实路径" in hint
+    # 分道百科不在核
+    assert "执行位置分道" not in hint
+    assert "收口硬约束" not in hint
+    assert "系统浏览器" not in hint
+    # 第五刀：【右坞浏览器】HOW 在挂门手册；核只留开火短卡
+    assert "consult(browser)" in hint
+    assert "用浏览器打开" in hint or "右坞打开" in hint
+    assert "跑起来" in hint or "打开看一下" in hint
+    assert "验收" in hint and "delegate" in hint
+    assert "右坞" in hint
+    assert "wait_for" not in hint
+    assert "已登录，继续" not in hint
+    assert "口头假验收" not in hint
     # 缺能力怎么开工 / 勿声称已用：全员基座；本核只留禁派 + 假开页底线指针
     assert "同轮可开工" in _DEFAULT_SYSTEM_PROMPT
     assert "手脑" in _DEFAULT_SYSTEM_PROMPT
@@ -1164,23 +1195,26 @@ def test_shared_base_teaches_assembled_capability_not_a_refusal_essay():
 
 
 def test_core_teaches_presentation_honesty():
-    # 演讲/PPT/Office：诚实性钩子保留；场面 format_options 已退役。
-    # 须真目标后缀；无执行禁再派跑脚本；当模板须 file_copy。
-    # 案 5d25 / 08-08④：图形组织图直接拒+替代；仅文本/表格 Word；禁说满空派。
+    # 第六刀：核只留开火短卡；替代表 / Marp / Presentation() 长 HOW 钉编排 skill。
+    # 案 0a71：核不枚举后缀、不散文断言导出器装配态。
     hint = _CEO_CORE_HINT
-    # 案 0a71：核里原来枚举后缀 + 散文断言导出器装配态，逼模型自己推理「团队能产什么」，
-    # 烧掉整段思考链。诚实钩子保留但通用化——只认 `产物格式` 事实行，核不再点格式。
     assert "产物格式" in hint
     assert "不可产" in hint and "等效替代" in hint
     assert "已落盘可直接使用" in hint
     assert "静默降级" in hint
+    assert "确定性导出器" in hint
+    assert "先干再问" in hint
+    assert "顾问短对齐" in hint
     assert "ask_user" in hint
     assert "说满" in hint and "空派" in hint
+    assert "已装配" in hint and "续派" in hint
+    assert "form/artifacts" in hint
     assert "pptx" not in hint.lower() and "xlsx" not in hint.lower()
     assert "SmartArt" not in hint and "DrawingML" not in hint
-    # 图形组织图的 HOW（直接拒 + 文本/表格版替代）在编排 skill；核只留短指针。
+    assert "Presentation()" not in hint
+    assert "Marp 语法" not in hint
     assert "图形组织图" in hint
-    # 当模板 / 压体积 / Presentation()：HOW 在编排 skill（核只留短指针）
+    assert "data_file_landing" in hint
     kickoff = build_system_skill_registry().get("ask_user_kickoff").body
     # 场面 format_options 已退役；仅允许以「禁复活」语境出现，不得当字段教
     assert "复活" in kickoff and "format_options" in kickoff
@@ -1199,6 +1233,8 @@ def test_core_teaches_presentation_honesty():
     assert "直接拒" in orch
     assert "文本" in orch and "表格版" in orch
     assert "说满" in orch and "空派" in orch
+    assert "先干再问" in orch
+    assert "文档 → `.md`" in orch or "文档 →" in orch
 
 
 def test_core_defers_format_capability_to_facts_not_prose():
@@ -1212,6 +1248,8 @@ def test_core_defers_format_capability_to_facts_not_prose():
     hint = _CEO_CORE_HINT
     assert "md_to_docx" not in hint and "md_to_pdf" not in hint
     assert "产物格式" in hint
+    assert "确定性导出器" in hint
+    assert "可产" in hint
     orch = _TEAM_ORCHESTRATION_ADVANCED
     assert "md_to_docx" in orch and "md_to_pdf" in orch
     assert "与执行正交" in orch
@@ -1219,19 +1257,14 @@ def test_core_defers_format_capability_to_facts_not_prose():
     assert "无条件装配" not in orch
 
 
-def test_core_teaches_required_sections_same_literal():
-    """案 f9a6 / 08-08②：派活钉必备章节同字面；禁对用户藏裸报错。"""
+def test_core_teaches_review_sections_in_task_body():
+    """第七刀：核只留开火短卡；审查章节 HOW 在编排 skill。"""
     hint = _CEO_CORE_HINT
-    assert "required_sections" in hint
+    assert "审查章节" in hint
+    assert "task 正文" in hint
     assert "同字面" in hint or "同一套原文" in hint
     assert "近义" in hint
     assert "裸报错" in hint or "藏契约" in hint
-    assert "must_contain" not in hint
-    assert "deliverable.name" not in hint
-    assert "requires_files" not in hint
-    orch = _TEAM_ORCHESTRATION_ADVANCED
-    assert "同字面" in orch or "同一套原文" in orch
-    assert "裸报错" in orch or "藏起契约" in orch or "藏契约" in orch
 
 
 def test_core_teaches_short_edit_not_m2a_kickoff_template():
@@ -1456,7 +1489,7 @@ def test_ceo_core_workspace_outranks_global_current_project_memory():
     assert "上一题残留" in hint
     assert "ask_user" in hint
     assert "旧项目名" in hint
-    # CEO 增量钩：权威线索 / 未定案窄义 / 禁为读规则再派；HOW 在 work_discipline。
+    # 第七刀：权威线索 / 未定案窄义 / 禁为读规则再派 —— 核短卡；HOW 在编排 skill。
     hint = _CEO_CORE_HINT
     assert "权威线索" in hint
     assert "未定案·窄" in hint
@@ -1609,8 +1642,18 @@ def test_core_drops_advanced_mechanism_detail():
     # so its DETAIL must not creep back into the always-on core (that would re-inflate
     # the per-turn prompt). These tokens are unique to the moved-out skill bodies.
     hint = _CEO_CORE_HINT
-    # checkpoint_after 现为同步阻塞不变量点名（非 HOW），允许出现在核心。
-    for token in ("多轮辩论", "跨轮", "stance", "采纳正方", "target_run_id"):
+    # 核心也不点 checkpoint_after（同步阻塞只写嵌套 lead / 成篇套餐提纲把关）。
+    for token in (
+        "多轮辩论",
+        "跨轮",
+        "stance",
+        "采纳正方",
+        "target_run_id",
+        "checkpoint_after",
+        "complexity_hint",
+        "result_handling",
+        "require_upstream",
+    ):
         assert token not in hint, f"advanced detail '{token}' leaked back into the core"
 
 

@@ -70,10 +70,10 @@ def test_capability_office_copy_carves_out_deterministic_word_pdf():
         assert ".docx/.pptx/.xlsx" not in copy
 
 
-def test_cloud_runtime_ready_copy_when_execution_on(
+def test_cloud_runtime_ready_silent_when_execution_on(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """Cloud + execution on + runtime smell → terminal gap, never 「再导入到云」."""
+    """Cloud + execution on → terminal 已装配，不再报「无本机 terminal」。"""
     from agentcore.config import settings
     from agentcore.tools.builtin import execution_class_enabled_for
 
@@ -82,12 +82,8 @@ def test_cloud_runtime_ready_copy_when_execution_on(
     set_cloud_sandbox_health_for_tests(True)
     backend = _CloudBackend()
     assert execution_class_enabled_for(backend) is True
-    warn = exec_env_remediation_zh(
-        backend=backend, kind="capability_runtime_ready"
-    )
-    assert "terminal" in warn
-    assert "不要" in warn or "勿" in warn
-    assert "导入到云" in warn
+    warn = execution_capability_warning(_plan("启动开发服务器 pnpm dev"), backend)
+    assert warn is None
 
 
 def test_sidecar_cloud_desk_delivery_does_not_wait_for_gvisor(

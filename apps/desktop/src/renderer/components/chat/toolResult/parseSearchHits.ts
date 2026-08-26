@@ -28,7 +28,7 @@ export function isSearchHitTool(toolName: string): toolName is SearchHitKind {
   return toolName === "grep" || toolName === "code_search";
 }
 
-/** Basename for side-panel `showFile(path, name)` — mirrors FileArtifactsCard. */
+/** Basename for side-panel `showFile(path, name)`. */
 export function searchHitFileName(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || path;

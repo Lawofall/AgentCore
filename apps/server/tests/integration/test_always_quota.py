@@ -50,7 +50,8 @@ async def test_user_over_limit_edit_saves_with_warning(client, tiny_always_cap):
     assert body["ok"] is True
     assert body["conflict"] is False
     assert body["quota_warning"]
-    assert "字符" in body["quota_warning"]
+    assert "已保存" in body["quota_warning"]
+    assert "字符" not in body["quota_warning"]
 
     fetched = (await client.get(f"/v1/documents/{doc['id']}")).json()
     assert big in fetched["content"]

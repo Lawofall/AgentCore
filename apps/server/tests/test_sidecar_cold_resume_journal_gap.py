@@ -325,6 +325,7 @@ async def test_pause_ready_resume_rewrites_journal_and_appends_live(tmp_path) ->
     assert opened["phase"] == PHASE_OPEN
     assert "finalize" not in opened["ops"]
     assert "reopen_for_resume" in opened["ops"]
+    assert isinstance(opened.get("resume_after_seq"), int)
 
     allocated = await outbox.append_journal(
         turn_id="m-tp",

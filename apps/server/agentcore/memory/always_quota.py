@@ -48,13 +48,16 @@ Writer = Literal["user", "ai"]
 
 QUOTA_CARD_KIND = "quota"
 _USER_OVER_WARNING = (
-    "常驻条目已超配额（{used}/{max} 字符）。已保存；请删减或改为按需，以免撑爆上下文。"
+    "常驻太多了。这次改动已保存；请删减或改为按需，以免 AI 记不下新的。"
+)
+_USER_CREATE_DENIED = (
+    "常驻太多了。请先删减已有常驻或改为按需，再新建或改成常驻。"
 )
 _AI_DENIED_MESSAGE = (
-    "常驻条目已满（{used}/{max} 字符），无法继续写入常驻。请删减或改为按需后再试。"
+    "常驻太多，AI 暂时记不下新的。请删减或改为按需后再试。"
 )
 _CARD_SUMMARY = (
-    "常驻条目已满（{used}/{max} 字符）：以下 {denied} 条没能写进常驻，"
+    "常驻太多，AI 暂时记不下新的：以下 {denied} 条没能写进常驻，"
     "现有条目一条也没被删。删减或改为按需后即可继续。"
 )
 # How many current always entries the card names as「谁占着配额」. Enough to act on,
@@ -64,7 +67,7 @@ _HOLDER_ROWS = 5
 
 @dataclass(frozen=True)
 class AlwaysUsage:
-    """UI-facing always-pool meter (percentage + absolute chars)."""
+    """Write-side always-pool usage (percentage + absolute chars)."""
 
     used_chars: int
     max_chars: int
@@ -117,9 +120,7 @@ class AlwaysQuotaExceededError(Exception):
         self.file = file
         self.scope = scope
         self.attempted_chars = attempted_chars
-        self.message = message or _AI_DENIED_MESSAGE.format(
-            used=usage.used_chars, max=usage.max_chars
-        )
+        self.message = message or _AI_DENIED_MESSAGE
         super().__init__(self.message)
 
     @property
@@ -269,7 +270,7 @@ def evaluate_always_write(
     if writer == "user" and editing_existing_always:
         return AlwaysQuotaDecision(
             allowed=True,
-            warning=_USER_OVER_WARNING.format(used=projected.used_chars, max=max_chars),
+            warning=_USER_OVER_WARNING,
             usage=projected,
         )
 
@@ -280,12 +281,7 @@ def evaluate_always_write(
     if projected.used_chars <= current_used:
         return AlwaysQuotaDecision(allowed=True, usage=projected)
 
-    msg = _AI_DENIED_MESSAGE.format(used=projected.used_chars, max=max_chars)
-    if writer == "user":
-        msg = (
-            f"常驻条目配额不足（将达 {projected.used_chars}/{max_chars} 字符）。"
-            "请先删减已有常驻或改为按需，再新建/提升为常驻。"
-        )
+    msg = _USER_CREATE_DENIED if writer == "user" else _AI_DENIED_MESSAGE
     return AlwaysQuotaDecision(allowed=False, usage=projected, message=msg)
 
 
@@ -413,9 +409,7 @@ async def record_always_quota_card_once(
         return None
 
     denied_rows = _denied_rows(denials)
-    summary = _CARD_SUMMARY.format(
-        used=usage.used_chars, max=usage.max_chars, denied=len(denied_rows)
-    )
+    summary = _CARD_SUMMARY.format(denied=len(denied_rows))
     items = [
         MemoryUpdateItem(
             action="quota",

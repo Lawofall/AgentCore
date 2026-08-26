@@ -180,7 +180,10 @@ async def test_unknown_deliverable_fields_ignored_no_contract_retry():
 
 async def test_clean_success_has_no_finish_interrupt_warning():
     """Regression: a normal content answer must not pick up the interrupt warning."""
-    plan, _ = build_run_plan([{"role": "分析", "task": "出结论"}], id_prefix="t")
+    plan, _ = build_run_plan(
+        [{"role": "分析", "task": "出结论", "deliverable": {"form": "prose"}}],
+        id_prefix="t",
+    )
     provider = _ContentProvider(["完整交付正文"])
     executor = build_agent_executor(
         plan=plan,

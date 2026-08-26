@@ -514,6 +514,11 @@ export interface Execution {
    * {@link projectExecution}. Journaled, so it replays on reload (hydrateFromJournal). Empty for
    * a single-agent turn or a multi-agent turn with no notes. */
   teamNotes: TeamNote[];
+  /**
+   * 墙已升（`run_plan.note_wall`）。缺省 / 旧 journal = 无墙。空 `teamNotes` 时据此画空态，
+   * 避免把「墙已升还没字」画成没开。
+   */
+  noteWall?: boolean;
 }
 
 /** Mid-flight user interjection (`user_interjection` · 经典 steer + 协调共用).
@@ -604,6 +609,11 @@ export interface ExecutionPlan {
      */
     delegateBatch?: number;
   }[];
+  /**
+   * 便签墙已升（`run_plan.note_wall`）。缺省 / 旧 journal = 无墙。
+   * 同回合后批 sticky-OR：一旦升墙，后续 merge 不降。
+   */
+  noteWall?: boolean;
 }
 
 /**

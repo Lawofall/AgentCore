@@ -303,13 +303,23 @@ class NoteWall:
             self._notes = self._notes[-MAX_WALL_NOTES:]
         return note
 
-    def new_for(self, run_id: str) -> list[TeamNote]:
+    def new_for(
+        self,
+        run_id: str,
+        *,
+        exclude_run_ids: frozenset[str] = frozenset(),
+    ) -> list[TeamNote]:
         """Notes posted by OTHER runs since ``run_id`` last looked; advances its cursor.
 
         Returns the newest :data:`MAX_PUSH_PER_ROUND` such notes (a burst is capped, not
         re-sent in full). A run never sees its own notes pushed back to it. The cursor
         advances to the current max seq regardless (so a run's own posts don't re-appear),
-        making each note delivered to a given sibling at most once (增量·不重塞整墙)."""
+        making each note delivered to a given sibling at most once (增量·不重塞整墙).
+
+        ``exclude_run_ids`` filters the *returned* burst only (cursor still advances past
+        them) — used to skip CEO-materialized brief seeds when the worker already has
+        the ``team_brief`` opening block.
+        """
         seen = self._cursor.get(run_id, 0)
         if self._notes:
             self._cursor[run_id] = max(seen, self._notes[-1].seq)
@@ -319,9 +329,31 @@ class NoteWall:
         fresh = [
             n
             for n in self._notes
-            if n.seq > seen and n.run_id != run_id and n.status == NOTE_STATUS_ACTIVE
+            if n.seq > seen
+            and n.run_id != run_id
+            and n.run_id not in exclude_run_ids
+            and n.status == NOTE_STATUS_ACTIVE
         ]
         return fresh[-MAX_PUSH_PER_ROUND:]
+
+    def teammate_active_count(
+        self,
+        run_id: str,
+        *,
+        exclude_run_ids: frozenset[str] = frozenset(),
+    ) -> int:
+        """ACTIVE notes from other workers, excluding engine/CEO/system rows.
+
+        The one-shot NOTE_NUDGE should fire on sibling broadcasts, not on
+        materialized ``team_brief`` seeds or conflict heads-ups.
+        """
+        return sum(
+            1
+            for n in self._notes
+            if n.run_id != run_id
+            and n.run_id not in exclude_run_ids
+            and n.status == NOTE_STATUS_ACTIVE
+        )
 
     def all_for(self, run_id: str) -> list[TeamNote]:
         """The whole current wall as ``run_id`` sees it — every OTHER run's note, oldest→newest

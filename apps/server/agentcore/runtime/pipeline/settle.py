@@ -282,8 +282,20 @@ async def salvage_failed_captain(
     roster_writer: Any,
 ) -> dict:
     """Salvage content/cost when the captain run ends FAILED."""
-    err = captain_state.error or "captain run failed"
-    sink.emit(error_event(ErrorCode.PIPELINE_ERROR, err))
+    coded = (getattr(captain_state, "error_code", None) or "").strip()
+    raw = (getattr(captain_state, "error", None) or "").strip()
+    if coded:
+        code, message = coded, raw or UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    else:
+        # Uncoded crash (TypeError in tool ctor, …): logs already have str(exc)
+        # on ``run.captain_failed``; the turn face must not leak it or flatten a
+        # later coded failure. Same product sentence as salvage_pipeline_exception.
+        code, message = ErrorCode.PIPELINE_ERROR, UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    err_ctx = None
+    retry_after = getattr(captain_state, "error_retry_after", None)
+    if retry_after is not None:
+        err_ctx = {"retry_after": retry_after}
+    sink.emit(error_event(code, message, context=err_ctx))
     # Salvage longest available text (segment / captain_state / sink) — P1 §3.4.
     with contextlib.suppress(Exception):
         await sink.flush_stream_state()
@@ -330,8 +342,8 @@ async def salvage_failed_captain(
         "message_id": message_id,
         "content": salvaged_content,
         "reasoning_content": salvaged_reasoning or None,
-        "error": err,
-        "error_code": ErrorCode.PIPELINE_ERROR,
+        "error": message,
+        "error_code": code,
         "finish_reason": FinishReason.ERROR,
         "cost_runs": cost_runs,
         "audit_drops": audit_recorder.drops,

@@ -41,6 +41,7 @@ READONLY_ALLOWED_OPS: frozenset[str] = frozenset(
     {
         "read",
         "read_bytes",
+        "read_head",
         "read_lines",
         "list",
         "exists",

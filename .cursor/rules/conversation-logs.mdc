@@ -1,9 +1,13 @@
 ---
-description: 用户给出 32 位 hex ID / UUID、贴排查包、或说查产品 AI 日志时读——用 logs/dev.jsonl + DB，禁止在文件系统搜文件名。
+description: 仅当用户贴 32-hex / UUID / 排查包，或明说查产品 AI 失败 / 巡检时读。讨论产品或架构默认不打开。用 logs/dev.jsonl + DB，禁止在文件系统搜文件名。
 alwaysApply: false
 ---
 
 # 对话日志查询
+
+## 何时打开（默认关）
+
+满足任一才往下查：贴了 32-hex / UUID / 排查包；或明说查这次失败 / 巡检 / reviews。其余讨论（产品、架构、拦截、取舍）→ 不 sync、不 patrol、不 `--recent`。打开后只答「这次发生了什么」；驱动改动须码核 HEAD；与已确认设计冲突时日志让路。按问题选证据 → `dev-process.mdc`。
 
 ## 两套日志，不要混
 
@@ -12,11 +16,7 @@ alwaysApply: false
 | **位置** | `logs/dev.jsonl` + Postgres | `agent-transcripts/`（UUID.jsonl） |
 | **ID** | 32 位 hex 无连字符 = **trace_id**；带连字符 UUID = **conversation_id** | 文件名 = UUID 带连字符 |
 
-## 铁律
-
-- 用户给 trace_id / conversation_id → **`logs/dev.jsonl` + DB**，**禁止**在文件系统搜。
-- `agent-transcripts/` 是 Cursor 编码 Agent 转录，与产品 AI **无关**。
-- 日志**不含消息正文**，正文在 Postgres。
+用户给 id → **`logs/dev.jsonl` + DB**，**禁止**在文件系统搜。`agent-transcripts/` 与产品 AI **无关**。日志**不含消息正文**（在 Postgres）。
 
 ## 查询入口（apps/server 下）
 
@@ -31,22 +31,20 @@ uv run python scripts/log_stats.py --json
 uv run python scripts/log_patrol.py --export-dir ../../logs/prod-export --since 2d  # 巡检①
 ```
 
-有 ID → 优先 **decision_spine** / **排查包**（`--pack`）；全量 `--raw` 仅深挖需要时。包内必有 `decision_spine.json` + `timeline.jsonl` + `meta.json`（`schema_version` / `layers`）；有 journal 时附 `journal.redacted.jsonl` + `journal.summary.json`（**永不**带原文）。另一会话只读包即可复盘。`spine_events` = **turn_spine**，勿与产品面混称。
+有 ID → 优先 **decision_spine** / **排查包**（`--pack`）；`--raw` 仅深挖。包内必有 `decision_spine.json` + `timeline.jsonl` + `meta.json`；有 journal 时附 `journal.redacted.jsonl` + `journal.summary.json`（**永不**带原文）。失败回合 persist 后可能已有 `logs/packs/<trace_id>/`（journal-only：`meta.json` + `journal.redacted.jsonl`，无原文，不等 jsonl）。`--trace` 人读 / `--json` 的 `meta.failure_pack` 会标明这份自动存档在不在；过期删除记 `journal.failure_pack_gc_expired`。`spine_events` = **turn_spine**，勿与产品面混称。
 
-## 最短路径（贴 ID / 排查包）
+## 最短路径（已打开时）
 
-读本 rule 的 CLI 块即可开查；**禁止**为单次查询整篇读分析指南；**禁止**派探子干等。缺正文再 `--pack`（必要时 `--full`）。即便夹「讨论根因」——主 Agent **自跑** CLI 再讨论（不套 `multitask`「讨论+审计分相」）。**仅当**用户明说巡检 / reviews / 开案，或多 trace 宽窗，才读 [`logs/reviews/README.md`](/logs/reviews/README.md) + [`STATUS.md`](/logs/reviews/STATUS.md) 并允许分相。④ 写成「建议改」（含可优化）前须对**本地 HEAD** 打开指针文件写码核行（README）；翻 STATUS ≠ 码核。巡检①（全量 CID 清单 + 轴 1 失败榜 + 跨窗快照 diff）跑 `log_patrol.py`（`--families` 看家族表口径，`--snapshot-out` / `--baseline` / `--diff` 做跨窗核验），**别再复制一次性扫描脚本**；本窗特有分析（如按部署切 pre/post）才归临时脚本。
+读本 rule CLI 即可；禁止整篇读分析指南；禁止派探子。缺正文再 `--pack`（必要时 `--full`）。单条 ID（即便夹讨论根因）→ 主 Agent 自跑 CLI，不套分相。
 
-**症状进层**（假卡 / 本机横幅 / 缺窗 / token 空…）→ [分析指南 · 症状进层](/docs/05-平台与运维/对话日志分析指南.md#症状进层)（按需开该节，勿整篇读）。**Token 两口径** / 本机 `turn_metrics` / 事件词表 / 接缝深挖 → 同文按需开节。
+巡检 / reviews / 开案 / 多 trace 宽窗（仅用户明说）→ [`logs/reviews/README.md`](/logs/reviews/README.md) + [`STATUS.md`](/logs/reviews/STATUS.md)：**①** 主自跑 `log_patrol.py`；**②** 按密度拆只读审阅桶（拆几飞几，禁垫桶）。写成「建议改」前须对 HEAD 打开指针文件码核；翻 STATUS ≠ 码核。巡检①用 `log_patrol.py`（`--families` / `--snapshot-out` / `--baseline` / `--diff`），别复制一次性扫描脚本。
 
-Dogfood：出包后仓库根 `python evals/dogfood/fill_from_pack.py --pack <dir>` → [`evals/dogfood/README.md`](/evals/dogfood/README.md)。
-
-生产：本地无命中且像线上 → `pnpm sync:logs`（Node；`DEPLOY_SSH_*`；默认 **脱敏** `turn_journal`，不要整份原文；深挖本机才加 `--full`）后 `--export-dir ../../logs/prod-export`（可再 `--pack`）。勿再用 `AGENTCORE_SSH` / `$AGENTCORE_HOME/logs`（已退役）。
+**症状进层**（假卡 / 本机横幅 / 缺窗 / token 空…）→ [分析指南 · 症状进层](/docs/05-平台与运维/对话日志分析指南.md#症状进层)（按需开节）。Token 两口径 / 事件词表 / 接缝深挖 → 同文按需开节。Dogfood 入槽 → [`evals/dogfood/README.md`](/evals/dogfood/README.md)。本地无命中且像线上 → `pnpm sync:logs`（脱敏 `turn_journal`；深挖本机才 `--full`）后 `--export-dir ../../logs/prod-export`。勿再用 `AGENTCORE_SSH` / `$AGENTCORE_HOME/logs`。
 
 ## 查询策略
 
-- **无连字符 32-hex** → 一律当 `trace_id`，用 `--trace`（勿先当 conversation_id）
-- **带连字符 UUID** → conversation_id；查全貌用位置参数，单轮细节再 `--trace`
-- **无 ID / 仅截图 /「查最新」** → `--recent` 后必须用文案/`preview` **确认匹配**再深挖，勿默认第一条
+- **无连字符 32-hex** → `--trace`（勿先当 conversation_id）
+- **带连字符 UUID** → conversation_id；全貌用位置参数，单轮再 `--trace`
+- **无 ID** → 未明说查日志则不打开；仅当用户明说「查最新」才 `--recent`，须用文案/`preview` 确认匹配，勿默认第一条
 - **本地空、ID 像线上** → 先 sync / `--export-dir`，勿在空库硬猜
-- **ID 已齐**（cid / trace / 已贴排查包）→ 主 Agent **直接**跑 `log_timeline --json` 或 `--pack`
+- **ID 已齐** → 主 Agent 直接跑 `log_timeline --json` 或 `--pack`

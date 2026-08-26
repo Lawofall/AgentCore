@@ -100,13 +100,20 @@ def rewrite_stale_ask_after_dispatch(content: str) -> str:
     return rewritten
 
 
-def reconcile_resume_closing(pre_pause: str, new: str) -> str:
+def reconcile_resume_closing(
+    pre_pause: str, new: str, *, ask_settled: bool = False
+) -> str:
     """Join resume segments without creating A∪C or process-kickoff∪交付流水账.
 
     When pre-pause still carries「请确认」 framing (often leftover ask prose) and the
     post-resume segment claims posture A, keep only the post-resume segment —
     the question already lived on the ask_user card; splicing recreates cef27dfa /
     e8fb470c dishonest closings.
+
+    When this resume **settled an ask_user card** (``ask_settled=True``), keep only
+    the post-resume segment whenever it has substance — even if leftover confirm
+    prose misses the posture-C closed set (``先确认几个关键`` vs ``先确认(?:一个)?关键``).
+    Do not expand that closed set; the card settlement is the join signal (67a9e6d6).
 
     When pre-pause is ask framing（方向：先问你…）and post-resume already dispatched
     （方向：派团队… / 按确认默认）, keep only the post-resume segment — empty continue
@@ -131,6 +138,8 @@ def reconcile_resume_closing(pre_pause: str, new: str) -> str:
     # Empty / legacy pause shell must not wipe structured confirm substance.
     if _is_hollow_pause_text(right):
         return left
+    if ask_settled:
+        return rewrite_stale_ask_after_dispatch(right)
     if claims_posture_c(left) and claims_posture_a(right):
         return rewrite_stale_ask_after_dispatch(right)
     if claims_posture_a(left) and claims_posture_c(right):

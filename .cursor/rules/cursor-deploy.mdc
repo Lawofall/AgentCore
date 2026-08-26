@@ -38,7 +38,7 @@ pnpm release:gate                          # Win 默认串行；红灯不得部�
 gh run watch <id> --exit-status            # 等 ci.yml 全绿；Linux 面只有它能兜
 pnpm deploy:backend <sha>
 # full：Win release:win ∥ Mac GHA → 齐资产后 Publish
-# full：Android release:android（CORS 预检自动跑）→ 真机冒烟（签名安装 / WebView / SSE）→ Publish android-v*（CDN 由脚本末尾 sync；与桌面 v* 分轨）
+# full：Android release:android（CORS 预检自动跑）→ 仅原生面变更才真机（签名安装 / WebView / SSE）再 Publish android-v*；纯 renderer/协议跟发直接转正。其它轨不等 APK。CDN 由脚本末尾 sync（与桌面 v* 分轨）
 # full：admin / web →（桌面 Publish 后）website deploy:pages（独立 m. 站已下线，勿再 deploy mobile Pages）
 pnpm release:notice -- --phase done …      # 收口
 # tag prod-* / desktop-v*

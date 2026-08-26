@@ -9,6 +9,7 @@ reject-on-error / reject-when-none-valid contract.
 import agentcore.runtime.runs.builder as builder_mod
 from agentcore.runtime.runs.builder import build_run_plan
 from agentcore.runtime.runs.types import RunKind
+from agentcore.workspace.stage_dirs import DRAFTS_DIR
 from tests.conftest import LogSpy
 
 
@@ -287,7 +288,8 @@ def test_sibling_summary_ignores_deleted_deliverable_name():
     assert errs == []
     b = plan.nodes[1]
     assert b.sibling_summary == "- A：a"
-    assert plan.nodes[0].deliverable is None
+    assert plan.nodes[0].deliverable is not None
+    assert plan.nodes[0].deliverable.form == "files"
 
 
 def test_dag_namespaces_ids_and_rewrites_edges():
@@ -537,6 +539,7 @@ def test_deliverable_parsed_onto_policy():
                     "required_sections": ["结论", "  "],  # blank dropped
                     "must_contain": ["风险"],  # deleted — ignored
                     "min_length": 100,  # deleted — ignored
+                    "must_contain_soft": True,  # deleted — ignored
                     "output_format": "json",
                     "strict": True,
                 },
@@ -551,34 +554,54 @@ def test_deliverable_parsed_onto_policy():
     assert c.strict is True
     assert not hasattr(c, "must_contain")
     assert not hasattr(c, "min_length")
+    assert not hasattr(c, "must_contain_soft")
 
 
-def test_no_deliverable_leaves_deliverable_none():
+def test_no_deliverable_defaults_to_files_with_drafts():
     plan, _ = build_run_plan([{"role": "A", "task": "a"}], id_prefix="t")
-    assert plan.nodes[0].deliverable is None
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "files"
+    assert d.artifact_dir == DRAFTS_DIR
 
 
-def test_deliverable_block_with_no_rule_is_none():
-    # strict alone declares no enforceable rule → None (baseline still applies).
+def test_empty_deliverable_object_defaults_to_files():
+    plan, _ = build_run_plan(
+        [{"role": "A", "task": "a", "deliverable": {}}], id_prefix="t"
+    )
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "files"
+    assert d.artifact_dir == DRAFTS_DIR
+
+
+def test_deliverable_block_with_internal_knob_still_files():
     plan, _ = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {"strict": True}}], id_prefix="t"
     )
-    assert plan.nodes[0].deliverable is None
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "files"
+    assert d.strict is True
 
 
-def test_requires_files_alone_is_ignored():
-    # Deleted requires_files key is not consumed as contract.
+def test_requires_files_alone_defaults_to_files():
+    # Deleted requires_files key is not consumed; omitted form still files.
     plan, _ = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {"requires_files": True}}], id_prefix="t"
     )
-    assert plan.nodes[0].deliverable is None
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "files"
 
 
-def test_requires_files_false_alone_is_no_rule():
+def test_requires_files_false_alone_defaults_to_files():
     plan, _ = build_run_plan(
         [{"role": "A", "task": "a", "deliverable": {"requires_files": False}}], id_prefix="t"
     )
-    assert plan.nodes[0].deliverable is None
+    d = plan.nodes[0].deliverable
+    assert d is not None
+    assert d.form == "files"
 
 
 def test_artifacts_parsed_without_requires_files_backfill():
@@ -606,7 +629,8 @@ def test_dag_step_deliverable_parsed_independently():
     plan, errs = build_run_plan(tasks, id_prefix="t")
     assert errs == []
     assert plan.by_id("t_s1").deliverable.form == "prose"
-    assert plan.by_id("t_s2").deliverable is None
+    assert plan.by_id("t_s2").deliverable is not None
+    assert plan.by_id("t_s2").deliverable.form == "files"
 
 
 def test_prose_with_downstream_keeps_form():

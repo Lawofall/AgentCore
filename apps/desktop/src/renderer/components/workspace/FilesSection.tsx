@@ -17,6 +17,7 @@ export function FilesSection({
   emptyTreeHint,
   onCloneGit,
   renderWorkroomLead,
+  onCreateWorkroomEntry,
 }: {
   source: FileSource | null;
   leading?: ReactNode;
@@ -24,6 +25,7 @@ export function FilesSection({
   emptyTreeHint?: string;
   onCloneGit?: () => void;
   renderWorkroomLead?: (indent: number) => ReactNode;
+  onCreateWorkroomEntry?: () => boolean | Promise<boolean>;
 }) {
   return (
     <FileBrowser
@@ -33,6 +35,7 @@ export function FilesSection({
       emptyTreeHint={emptyTreeHint}
       onCloneGit={onCloneGit}
       renderWorkroomLead={renderWorkroomLead}
+      onCreateWorkroomEntry={onCreateWorkroomEntry}
     />
   );
 }

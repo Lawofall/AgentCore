@@ -50,6 +50,7 @@ export function planFromRunPlan(p: RunPlanPayload): ExecutionPlan {
     taskSummary: p.task_summary,
     prevExecutionId: prev,
     acts: [act],
+    noteWall: p.note_wall === true,
     agents: p.agents.map((a) => ({
       id: a.id,
       role: a.role,
@@ -130,5 +131,7 @@ export function mergePlanInto(
     taskSummary: normalized.taskSummary || next.taskSummary,
     // First plan wins — later same-id batches must not overwrite the续自 link.
     prevExecutionId: normalized.prevExecutionId ?? next.prevExecutionId ?? null,
+    // 墙一旦升过，同回合后批不降（第二批可能省略字段）。
+    noteWall: Boolean(normalized.noteWall || next.noteWall),
   };
 }

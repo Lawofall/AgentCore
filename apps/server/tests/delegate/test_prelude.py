@@ -208,9 +208,24 @@ def test_playbook_expands_tasks_and_carries_marks(monkeypatch):
 def test_single_dependency_free_worker_infers_light(monkeypatch):
     spy = LogSpy()
     monkeypatch.setattr(prelude_mod, "logger", spy)
-    out = accepted({"tasks": _ONE_TASK})
+    out = accepted(
+        {
+            "tasks": [
+                {
+                    "role": "工程师",
+                    "task": "做A",
+                    "deliverable": {"form": "prose"},
+                }
+            ]
+        }
+    )
     assert out.complexity_hint == "light"
     assert spy.get("delegate.complexity_hint_inferred")["hint"] == "light"
+
+
+def test_omitted_form_single_worker_stays_standard():
+    out = accepted({"tasks": _ONE_TASK})
+    assert out.complexity_hint == "standard"
 
 
 def test_explicit_hint_is_never_auto_inferred():
@@ -299,7 +314,7 @@ def test_root_slice_honesty_soft_warns_at_root_only(monkeypatch):
     spy = LogSpy()
     monkeypatch.setattr(prelude_mod, "logger", spy)
     tasks = [
-        {"role": "工程师", "task": "从零实现应用 MVP", "deliverable": {"form": "files"}}
+        {"role": "工程师", "task": "从零实现应用 MVP", "deliverable": {"form": "workspace"}}
     ]
     assert accepted({"tasks": tasks}).root_slice_warn is not None
     assert "delegate.root_slice_honesty_soft_warn" in [n for n, _ in spy.events]

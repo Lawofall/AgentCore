@@ -15,7 +15,6 @@ import {
   coordinationWaitCaptainCaption,
   waitingWorkerRoles,
 } from "@/components/chat/teamSynthesisPhase";
-import { useElapsedSince } from "@/components/chat/useCoordinationWaitChrome";
 import type { InjectGraphOverlay } from "@/lib/causalInject";
 import {
   chunksTailText,
@@ -620,13 +619,9 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
     return `${base}|${previewSig}|${waitSig}`;
   });
   const wait = useActiveExecField((rt) => rt.coordinationWait);
-  const waitStartedAt = useActiveExecField(
-    (rt) => rt.coordinationWaitStartedAt,
-  );
   const teamSynthesisPreview = useActiveExecField(
     (rt) => rt.teamSynthesisPreview,
   );
-  const elapsedSec = useElapsedSince(wait ? waitStartedAt : null);
   const getExecution = useLiveExecutionGetter();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveSig is intentional invalidation key (getExecution reads fresh)
@@ -639,10 +634,7 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
       : ("pending" as RunStatus);
     const waitingRoles = execution ? waitingWorkerRoles(execution) : [];
     const waitCaption = (
-      coordinationWaitCaptainCaption(wait, {
-        elapsedSec,
-        waitingRoles,
-      }) ?? ""
+      coordinationWaitCaptainCaption(wait, { waitingRoles }) ?? ""
     ).trim();
     const sinkStatus: RunStatus = waitCaption ? "running" : captainStatus;
     const preview = captainSinkPreview({
@@ -669,7 +661,6 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
     actions,
     answer,
     wait,
-    elapsedSec,
     teamSynthesisPreview,
     getExecution,
   ]);

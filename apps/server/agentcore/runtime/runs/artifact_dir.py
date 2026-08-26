@@ -2,16 +2,12 @@
 
 工作区布局事实见 ``workspace_context``；本模块只在 ``form=files`` /
 已声明 ``artifacts`` 时按 ``stage_dirs`` 填默认落盘目录。Worker 只定文件名。
+``form=workspace``（及入参 ``workspace_native`` 升档）无约定文档落点，默认
+``工作稿/`` 只给 ``files``，leftover ``artifact_dir`` 不得把 workspace 拧进工作稿。
 
-**落点只认显式来源**（按序）：``deliverable.workspace_native``（真 = 产物是用户
-工作区原生文件，无约定落点）→ 已声明 ``artifacts`` 推导出的目录 → 显式
-``deliverable.artifact_dir`` → 默认 ``DRAFTS_DIR``（``AgentCore/文档/工作稿``）。
-``workspace_native`` 与 leftover ``artifact_dir`` 在 ``apply_artifact_dir_defaults``
-互斥：已定位路径旁的 leftover 目录清掉（native 压过误钉的工作间路径）；裸文件名
-+ 显式目录则 join 成全路径并关掉 native（目录是路径合同，避免任务书两句打架）。
-运行时**不**扫 role / task 自由文猜「像调研还是像审查」——那条整链已净删除
-（意图分类器形态，且误判对用户不可见）。``research/`` 有机器语义（辩手读它
-取证），只经 playbook 常量或显式声明进入。→ 双模式工作区 §四
+**落点只认显式来源**（按序）：``form=workspace`` / ``workspace_native``（无约定落点）
+→ 已声明 ``artifacts`` 推导出的目录 → 显式 ``deliverable.artifact_dir`` → 默认
+``DRAFTS_DIR``（仅 ``form=files``）。运行时**不**扫 role / task 自由文。
 
 **验收 vs 归属分键**：``artifact_dir`` / 目录前缀 / 通配 = 验收覆盖；具体文件
 路径 = C3 归属与 sibling 互斥。裸目录**永不**注入 ``artifacts`` 冒充归属键。
@@ -37,6 +33,8 @@ from agentcore.workspace.stage_dirs import (
 
 if TYPE_CHECKING:
     from agentcore.runtime.runs.types import Deliverable, RunSpec
+
+from agentcore.runtime.runs.types import is_workspace_landing
 
 _STAGE_DIRS = (DRAFTS_DIR, RESEARCH_DIR, DEBATE_DIR, REVIEWS_DIR)
 
@@ -141,12 +139,9 @@ def resolve_artifact_dir(deliverable: Deliverable) -> str:
     **not** an input: no signature to read it from, so the deleted intent
     classifier cannot creep back in.
     """
-    # 最高优先级：产物是用户工作区原生文件（源码 / 项目文件）→ 无约定落点。
-    # 压过 ``artifacts`` 推导与显式 ``artifact_dir``：写码节点即便声明了工作间
-    # 路径，代码也该留在工作区里它本来的位置。
-    if deliverable.workspace_native:
-        return ""
-    if deliverable.form == "prose":
+    # 最高优先级：form=workspace / workspace_native → 无约定落点。
+    # 压过 ``artifacts`` 推导与 leftover ``artifact_dir``：不得拧进工作稿。
+    if is_workspace_landing(deliverable) or deliverable.form == "prose":
         return ""
     fileish = deliverable.form == "files" or bool(deliverable.artifacts)
     if not fileish:
@@ -187,38 +182,23 @@ def is_file_ownership_path(path: str) -> bool:
     return not is_acceptance_only_artifact_pattern(path)
 
 
-def _has_relocatable_bare_filename(artifacts: list[str] | None) -> bool:
-    """True when a concrete filename has no directory and can join under ``artifact_dir``."""
-    for raw in artifacts or []:
-        if not isinstance(raw, str):
-            continue
-        raw_s = raw.replace("\\", "/").strip()
-        if not raw_s or is_acceptance_only_artifact_pattern(raw_s):
-            continue
-        norm = normalize_artifact_dir(raw_s)
-        if norm and "/" not in norm:
-            return True
-    return False
-
-
 def apply_artifact_dir_defaults(deliverable: Deliverable) -> None:
     """Fill ``artifact_dir``; relocate bare filenames under it (in-place).
 
     Empty ``artifacts`` stays empty — acceptance uses ``artifact_dir`` directly;
     do not inject ``[dir/]`` (that falsely exclusivizes a shared dossier).
 
-    ``workspace_native`` and an explicit ``artifact_dir`` never both survive:
-    leftover dir next to already-located paths is dropped (native outranks a
-    mistaken dossier pin); leftover dir + bare filenames is a path contract —
-    native is cleared so the join runs and task briefs stay consistent.
+    ``form=workspace`` (and ``workspace_native``) never takes a dossier default:
+    leftover ``artifact_dir`` is cleared so workspace is not twisted into
+    ``工作稿/``. Bare filenames stay where the worker locates them.
+    ``form=files`` still joins bare names under an explicit leftover dir
+    (path contract).
     """
-    leftover = normalize_artifact_dir(deliverable.artifact_dir)
-    if deliverable.workspace_native:
-        if leftover and _has_relocatable_bare_filename(deliverable.artifacts):
-            deliverable.workspace_native = False
-        else:
-            deliverable.artifact_dir = ""
-            return
+    if is_workspace_landing(deliverable):
+        deliverable.form = "workspace"
+        deliverable.workspace_native = True
+        deliverable.artifact_dir = ""
+        return
 
     resolved = resolve_artifact_dir(deliverable)
     if not resolved:

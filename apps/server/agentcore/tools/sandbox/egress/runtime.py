@@ -117,6 +117,10 @@ class PackageEgressSession:
     def netns_path(self) -> str:
         return self.netns.netns_path
 
+    @property
+    def host_ip(self) -> str:
+        return self.netns.host_ip
+
     async def close(self) -> None:
         with contextlib.suppress(Exception):
             await self.netns.teardown()

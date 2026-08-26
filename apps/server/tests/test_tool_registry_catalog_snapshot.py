@@ -50,6 +50,7 @@ _BUILTIN_ORDER = [
     "git",
     "test_run",
     "code_execute",
+    "terminal",
 ]
 
 # Host face is host_class — only appears when desktop_online=True (not default roster).
@@ -92,6 +93,7 @@ _CEO_BUILTIN_ORDER = [
     "code_search",
     "code_diagnostics",
     "git",
+    "terminal",
 ]
 
 _CATALOG_ORCHESTRATION_ORDER = [
@@ -139,6 +141,7 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "download_url": (AVAILABLE_TO_WORKER,),
     "test_run": (AVAILABLE_TO_WORKER,),
     "code_execute": (AVAILABLE_TO_WORKER,),
+    "terminal": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "host": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "external_mount_readonly": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "escalate": (AVAILABLE_TO_WORKER,),
@@ -225,6 +228,7 @@ def test_tool_registry_builtin_approvals_snapshot():
         "code_search",
         "code_diagnostics",
         "git",
+        "terminal",
     }
     grantable = set(_BUILTIN_ORDER) - never
     for name in never:

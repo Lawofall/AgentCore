@@ -72,8 +72,8 @@ class CheckpointResponse:
     (人盖辩手 / 主持人 → debate_arguments). Ignored for ask_user / plan_review / stop
     and for debate excluded/write fields. Write override shape:
     ``{run_id, capability: "text_only"}`` only (tighten write → ``form=prose``;
-    never hard-strip tools). ``model_overrides``: ``run_id → {model, origin?,
-    provider_id?}`` (空/缺=不改；非法三元组硬失败).
+    never hard-strip tools). ``model_overrides``: ``run_id → {model}`` 目录身份
+    (``@platform/…`` / ``@byok/…``；空/缺=不改；非法身份硬失败).
     """
 
     decision: CheckpointDecision

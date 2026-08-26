@@ -802,6 +802,7 @@ export function finalizeFold(
       ? debate.evidence_ledger
       : [],
     teamNotes: s.teamNotes,
+    noteWall: s.plan.noteWall === true,
   };
 }
 

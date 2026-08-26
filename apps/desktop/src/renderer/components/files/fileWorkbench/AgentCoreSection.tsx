@@ -3,15 +3,23 @@ import {
   EntriesSection,
   type EntryOpenTarget,
 } from "@/components/files/fileWorkbench/EntriesSection";
+import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
 import {
   loadAgentCoreCollapsed,
   loadAgentCoreExpanded,
   saveAgentCoreCollapsed,
   saveAgentCoreExpanded,
 } from "@/components/files/fileWorkbench/storage";
+import { IconButton } from "@/components/files/parts";
 import { AGENTCORE_ROOT_LABEL } from "@/lib/stageDirs";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FilePlus,
+  Folder,
+  FolderOpen,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 /** Which convention-tree layer: GLOBAL (cloud root) or one folder's. */
@@ -35,8 +43,8 @@ export function entriesSectionName(scope: AgentCoreScope): string {
 
 /**
  * Entry-base rail section — flat entries by scope (目标形态 · 文件页形态).
- * No 记忆/规则/文档 subfolders; always-pool meter + 常驻/按需 badges live in
- * {@link EntriesSection}. Leaves open via memory / document sources (CAS unchanged).
+ * No 记忆/规则/文档 subfolders; 常驻/按需 badges live in {@link EntriesSection}.
+ * 「新建条目」sits on this header so it stays available while the list is collapsed.
  *
  * Presentation only — entries still live under the `AgentCore` document root.
  */
@@ -73,6 +81,28 @@ export function AgentCoreSection({
   );
   const revealAppliedRef = useRef(false);
 
+  const persistOpen = (open: boolean) => {
+    if (scope.kind === "global") {
+      const set = loadAgentCoreCollapsed();
+      if (open) set.delete(foldKey);
+      else set.add(foldKey);
+      saveAgentCoreCollapsed(set);
+    } else {
+      const set = loadAgentCoreExpanded();
+      if (open) set.add(foldKey);
+      else set.delete(foldKey);
+      saveAgentCoreExpanded(set);
+    }
+  };
+
+  const ensureOpen = () => {
+    setSectionOpen((open) => {
+      if (open) return open;
+      persistOpen(true);
+      return true;
+    });
+  };
+
   useEffect(() => {
     if (!forceOpen) {
       revealAppliedRef.current = false;
@@ -100,17 +130,7 @@ export function AgentCoreSection({
   const toggleSection = () =>
     setSectionOpen((open) => {
       const next = !open;
-      if (scope.kind === "global") {
-        const set = loadAgentCoreCollapsed();
-        if (next) set.delete(foldKey);
-        else set.add(foldKey);
-        saveAgentCoreCollapsed(set);
-      } else {
-        const set = loadAgentCoreExpanded();
-        if (next) set.add(foldKey);
-        else set.delete(foldKey);
-        saveAgentCoreExpanded(set);
-      }
+      persistOpen(next);
       return next;
     });
 
@@ -119,37 +139,50 @@ export function AgentCoreSection({
       ? ({ kind: "global" } as const)
       : ({ kind: "folder", folderId: scope.folderId } as const);
 
+  const createEntry = async () => {
+    const ok = await createAndOpenScopeEntry(entryScope, onOpenEntry);
+    if (ok) ensureOpen();
+  };
+
   const headerPad = indent + 8;
   const childIndent = indent + 14;
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={toggleSection}
-        aria-expanded={sectionOpen}
-        style={{ paddingLeft: headerPad }}
-        className={cn(
-          "flex h-7 w-full items-center gap-1.5 rounded-lg pr-2 text-left text-sm text-foreground transition-colors hover:bg-accent/60",
-          scope.kind === "global" && "font-medium",
-        )}
-      >
-        {sectionOpen ? (
-          <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight size={14} className="shrink-0 text-muted-foreground" />
-        )}
-        {scope.kind === "global" ? (
-          <BrandMarkIcon size={14} />
-        ) : sectionOpen ? (
-          <FolderOpen size={14} className="shrink-0 text-muted-foreground" />
-        ) : (
-          <Folder size={14} className="shrink-0 text-muted-foreground" />
-        )}
-        <span className="min-w-0 flex-1 truncate">
-          {entriesSectionName(scope)}
-        </span>
-      </button>
+      <div className="flex items-center rounded-lg pr-1">
+        <button
+          type="button"
+          onClick={toggleSection}
+          aria-expanded={sectionOpen}
+          style={{ paddingLeft: headerPad }}
+          className={cn(
+            "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-lg pr-2 text-left text-sm text-foreground transition-colors hover:bg-accent/60",
+            scope.kind === "global" && "font-medium",
+          )}
+        >
+          {sectionOpen ? (
+            <ChevronDown size={14} className="shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight
+              size={14}
+              className="shrink-0 text-muted-foreground"
+            />
+          )}
+          {scope.kind === "global" ? (
+            <BrandMarkIcon size={14} />
+          ) : sectionOpen ? (
+            <FolderOpen size={14} className="shrink-0 text-muted-foreground" />
+          ) : (
+            <Folder size={14} className="shrink-0 text-muted-foreground" />
+          )}
+          <span className="min-w-0 flex-1 truncate">
+            {entriesSectionName(scope)}
+          </span>
+        </button>
+        <IconButton title="新建条目" onClick={() => void createEntry()}>
+          <FilePlus size={14} />
+        </IconButton>
+      </div>
 
       {sectionOpen && (
         <EntriesSection

@@ -6,8 +6,11 @@
 **结构面**（列名 / 行数 / 推断类型 / 样例行），原始数据留在工作区文件。扫描版
 PDF 首版不做 OCR，写入明确降级提示。解析失败不阻塞驻留，回落路径提示。
 
-工作区 ``file_read`` 与附件预解析共用公开核 ``extract_office_bytes``（可杀子进程，
-墙钟超时 = FAILED / extract_timeout，不是通道活性挂起；读时默认不写 ``*.md``）。
+工作区 ``file_read`` 与附件预解析共用公开核 ``extract_office_file`` /
+``extract_office_bytes``（可杀子进程；墙钟超时 = FAILED / extract_timeout，由
+``file_read`` 收成成功观察信封，不是通道活性挂起；读时默认不写 ``*.md``）。
+磁盘后端父进程只 stat，子进程 ``--extract-path`` 打开文件（磁盘摄入 100 MiB）；过桥 Local 仍
+``read_bytes`` 再 ``extract_office_bytes``（IPC 摄入 25 MiB）。PDF 认 ``start_page`` 开窗。
 ``convert_with_markitdown`` 仅服务非 docx 桶；``preparse_resident`` 仍只服务附件驻留。
 
 → 见决策：docs/02-架构/双模式工作区.md §七（Office 云=本地）与附件驻留实现。
@@ -27,7 +30,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
@@ -49,11 +52,6 @@ PLAIN_TEXT_EXTENSIONS = frozenset({".txt", ".md", ".markdown", ".html", ".htm"})
 SKIP_EXTENSIONS = frozenset({".xlsx", ".xlsm", ".xls", ".csv", ".tsv"})
 TABLE_EXTENSIONS = SKIP_EXTENSIONS
 
-# Back-compat aliases (private names used by older call sites / tests).
-_MARKITDOWN_EXTENSIONS = MARKITDOWN_EXTENSIONS
-_PLAIN_TEXT_EXTENSIONS = PLAIN_TEXT_EXTENSIONS
-_SKIP_EXTENSIONS = SKIP_EXTENSIONS
-
 # 扫描件启发式：可打印字母数字过少 → 视为无文本层（不做 OCR）。
 _SCAN_MIN_ALNUM = 40
 # 大文件仍几乎无字：≥50KB 且 alnum < 200 → 扫描件。
@@ -73,12 +71,10 @@ TABLE_PREVIEW_MAX_SHEETS = 3
 TABLE_PREVIEW_MAX_PROMPT_CHARS = 4_000
 
 SCAN_NOTICE = (
-    "This file appears to be a scanned / image-only document with little or no "
-    "extractable text layer. OCR is not available in this build. Tell the user "
-    "the file looks like a scan and ask them to provide a text-layer PDF or paste "
-    "the relevant passages."
+    "这份文件几乎抽不到文本层（扫描件或纯图）。当前没有 OCR。"
+    "可用 read_image 看首页，或按文件名归类；"
+    "offset/limit / start_page 变不出文本层。"
 )
-_SCAN_NOTICE = SCAN_NOTICE
 
 
 class ParseStatus(StrEnum):
@@ -97,6 +93,14 @@ class ExtractResult:
     """Full extracted text, or scan/failure note. Empty when skipped."""
     detail: str = ""
     """Short machine-oriented reason for logs / tests."""
+    size_bytes: int | None = None
+    """Source file size from stat or ``len(data)``; used by observation envelopes."""
+    page_start: int | None = None
+    """1-based first page of a PDF extract window; None when not a paged PDF."""
+    page_end: int | None = None
+    """1-based last page included in this window (may be past EOF if total unknown)."""
+    page_total: int | None = None
+    """PDF page count when pdfminer could count pages; None if unknown."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,11 +256,17 @@ def convert_with_markitdown(data: bytes, ext: str) -> str:
     return _convert_with_markitdown(data, ext)
 
 
-def _convert_with_markitdown(data: bytes, ext: str) -> str:
+def _convert_with_markitdown(
+    data: bytes | None, ext: str, *, path: Path | None = None
+) -> str:
     from markitdown import MarkItDown
 
     md = MarkItDown(enable_plugins=False)
-    result = md.convert_stream(BytesIO(data), file_extension=ext)
+    if path is not None:
+        with path.open("rb") as fh:
+            result = md.convert_stream(fh, file_extension=ext)
+    else:
+        result = md.convert_stream(BytesIO(data or b""), file_extension=ext)
     return (result.text_content or "").strip()
 
 
@@ -275,14 +285,92 @@ def _normalize_extract_ext(ext: str) -> str:
     return ext.lower() if ext.startswith(".") else f".{ext.lower()}"
 
 
-def _extract_docx_with_python_docx(data: bytes) -> str:
+def _normalize_start_page(start_page: int | str | None) -> int:
+    try:
+        n = int(start_page or 1)
+    except (TypeError, ValueError):
+        return 1
+    return max(1, n)
+
+
+def _pdf_page_numbers(start_page: int) -> list[int]:
+    from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
+
+    start0 = _normalize_start_page(start_page) - 1
+    return list(range(start0, start0 + OFFICE_EXTRACT_PDF_MAX_PAGES))
+
+
+def _pdf_window_end(start_page: int, page_total: int | None) -> int:
+    from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
+
+    start = _normalize_start_page(start_page)
+    nominal = start + OFFICE_EXTRACT_PDF_MAX_PAGES - 1
+    if page_total is not None and page_total > 0:
+        return min(nominal, page_total)
+    return nominal
+
+
+def _pdf_page_total(
+    data: bytes | None = None, *, path: Path | None = None
+) -> int | None:
+    """Best-effort page count. 0 or parse errors → unknown (do not skip extract)."""
+    try:
+        from pdfminer.pdfpage import PDFPage
+
+        if path is not None:
+            with path.open("rb") as fh:
+                n = sum(1 for _ in PDFPage.get_pages(fh))
+        else:
+            n = sum(1 for _ in PDFPage.get_pages(BytesIO(data or b"")))
+        return n if n > 0 else None
+    except Exception:
+        return None
+
+
+def _extract_pdf_text(
+    data: bytes | None = None,
+    *,
+    path: Path | None = None,
+    start_page: int = 1,
+) -> tuple[str, str]:
+    """Page-windowed pdfminer first, then markitdown on page 1 only.
+
+    Returns ``(text, engine)``. ``start_page`` > 1 never falls back to
+    markitdown (it cannot honor the window).
+    """
+    start = _normalize_start_page(start_page)
+    page_numbers = _pdf_page_numbers(start)
+    try:
+        from pdfminer.high_level import extract_text
+
+        source: str | BytesIO = str(path) if path is not None else BytesIO(data or b"")
+        text = extract_text(source, page_numbers=page_numbers) or ""
+        if text.strip():
+            return text.strip(), "pdfminer"
+    except Exception as e:
+        logger.warning(
+            "attachment.pdfminer_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+    if start > 1:
+        return "", "pdfminer"
+    return _convert_with_markitdown(data, ".pdf", path=path), "markitdown"
+
+
+def _extract_docx_with_python_docx(
+    data: bytes | None = None,
+    *,
+    char_cap: int | None = None,
+    path: Path | None = None,
+) -> str:
     """Paragraphs + tables in document order. No markitdown / HTML preprocess."""
     from docx import Document
     from docx.oxml.ns import qn
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
-    document = Document(BytesIO(data))
+    document = Document(str(path) if path is not None else BytesIO(data or b""))
     parts: list[str] = []
     body = document.element.body
     for child in body:
@@ -296,31 +384,95 @@ def _extract_docx_with_python_docx(data: bytes) -> str:
                 cells = [(cell.text or "").replace("\n", " ").strip() for cell in row.cells]
                 if any(cells):
                     parts.append("\t".join(cells))
-    return "\n".join(parts).strip()
+            if char_cap is not None and sum(len(p) + 1 for p in parts) >= char_cap:
+                break
+        if char_cap is not None and sum(len(p) + 1 for p in parts) >= char_cap:
+            break
+    joined = "\n".join(parts).strip()
+    if char_cap is not None and len(joined) > char_cap:
+        return joined[:char_cap]
+    return joined
 
 
-def extract_office_payload(data: bytes, ext: str) -> ExtractResult:
+def _source_size(*, data: bytes | None, path: Path | None) -> int | None:
+    if path is not None:
+        try:
+            return path.stat().st_size
+        except OSError:
+            return None
+    if data is not None:
+        return len(data)
+    return None
+
+
+def extract_office_payload(
+    data: bytes, ext: str, start_page: int = 1
+) -> ExtractResult:
     """Sync extract used by the worker. Never spawns (avoids recursion)."""
+    return _extract_office_core(ext, data=data, path=None, start_page=start_page)
+
+
+def extract_office_from_disk(
+    path: Path, ext: str, start_page: int = 1
+) -> ExtractResult:
+    """Sync extract from a filesystem path. Worker opens the file; parent must not slurp."""
+    return _extract_office_core(ext, data=None, path=path, start_page=start_page)
+
+
+def _extract_office_core(
+    ext: str,
+    *,
+    data: bytes | None,
+    path: Path | None,
+    start_page: int = 1,
+) -> ExtractResult:
+    """Shared worker body for stdin bytes or ``--extract-path``."""
     normalized = _normalize_extract_ext(ext)
+    raw_size = _source_size(data=data, path=path)
     if normalized in SKIP_EXTENSIONS:
-        return ExtractResult(status=ParseStatus.SKIPPED, detail=f"skip_ext:{normalized}")
-    if normalized not in MARKITDOWN_EXTENSIONS:
-        return ExtractResult(status=ParseStatus.SKIPPED, detail=f"unknown_ext:{normalized or '?'}")
-
-    from agentcore.workspace.limits import OFFICE_EXTRACT_MAX_BYTES
-
-    if len(data) > OFFICE_EXTRACT_MAX_BYTES:
         return ExtractResult(
-            status=ParseStatus.FAILED,
-            detail=f"extract_budget:{len(data)}>{OFFICE_EXTRACT_MAX_BYTES}",
+            status=ParseStatus.SKIPPED,
+            detail=f"skip_ext:{normalized}",
+            size_bytes=raw_size,
+        )
+    if normalized not in MARKITDOWN_EXTENSIONS:
+        return ExtractResult(
+            status=ParseStatus.SKIPPED,
+            detail=f"unknown_ext:{normalized or '?'}",
+            size_bytes=raw_size,
         )
 
+    from agentcore.workspace.limits import OFFICE_EXTRACT_OUTPUT_CHARS
+
+    page_start: int | None = None
+    page_end: int | None = None
+    page_total: int | None = None
     try:
         if normalized in _PYTHON_DOCX_EXTENSIONS:
-            text = _extract_docx_with_python_docx(data)
+            text = _extract_docx_with_python_docx(
+                data, char_cap=OFFICE_EXTRACT_OUTPUT_CHARS, path=path
+            )
             engine = "python-docx"
+        elif normalized == ".pdf":
+            start = _normalize_start_page(start_page)
+            page_total = _pdf_page_total(data, path=path)
+            page_start = start
+            page_end = _pdf_window_end(start, page_total)
+            if page_total is not None and start > page_total:
+                return ExtractResult(
+                    status=ParseStatus.OK,
+                    text="",
+                    detail="pdf_page_window_empty",
+                    size_bytes=raw_size,
+                    page_start=page_start,
+                    page_end=page_end,
+                    page_total=page_total,
+                )
+            text, engine = _extract_pdf_text(
+                data, path=path, start_page=start
+            )
         else:
-            text = _convert_with_markitdown(data, normalized)
+            text = _convert_with_markitdown(data, normalized, path=path)
             engine = "markitdown"
     except Exception as e:
         logger.warning(
@@ -329,16 +481,50 @@ def extract_office_payload(data: bytes, ext: str) -> ExtractResult:
             error=str(e),
             error_type=type(e).__name__,
         )
-        return ExtractResult(status=ParseStatus.FAILED, detail=f"convert:{type(e).__name__}")
+        return ExtractResult(
+            status=ParseStatus.FAILED,
+            detail=f"convert:{type(e).__name__}",
+            size_bytes=raw_size,
+            page_start=page_start,
+            page_end=page_end,
+            page_total=page_total,
+        )
 
-    if looks_like_scanned(text, len(data)):
+    if normalized == ".pdf" and _normalize_start_page(start_page) > 1 and not (
+        text or ""
+    ).strip():
+        return ExtractResult(
+            status=ParseStatus.OK,
+            text="",
+            detail="pdf_page_window_empty",
+            size_bytes=raw_size,
+            page_start=page_start,
+            page_end=page_end,
+            page_total=page_total,
+        )
+
+    if looks_like_scanned(text, raw_size or 0):
         return ExtractResult(
             status=ParseStatus.SCANNED,
             text=SCAN_NOTICE,
             detail="scanned_or_empty_text_layer",
+            size_bytes=raw_size,
+            page_start=page_start,
+            page_end=page_end,
+            page_total=page_total,
         )
 
-    return ExtractResult(status=ParseStatus.OK, text=text, detail=f"ok:{engine}")
+    if len(text) > OFFICE_EXTRACT_OUTPUT_CHARS:
+        text = text[:OFFICE_EXTRACT_OUTPUT_CHARS]
+    return ExtractResult(
+        status=ParseStatus.OK,
+        text=text,
+        detail=f"ok:{engine}",
+        size_bytes=raw_size,
+        page_start=page_start,
+        page_end=page_end,
+        page_total=page_total,
+    )
 
 
 def _spawn_group_kwargs() -> dict:
@@ -365,34 +551,46 @@ def _reap_tree_sync(process: subprocess.Popen[bytes], pid: int) -> None:
         process.wait(timeout=5)
 
 
-def _extract_worker_argv(ext: str) -> list[str]:
+def _extract_worker_argv(
+    ext: str, *, source_path: Path | None = None, start_page: int = 1
+) -> list[str]:
     """``sys.executable`` so the sidecar bundled interpreter is used."""
-    return [
+    argv = [
         sys.executable,
         "-m",
         "agentcore.workspace.attachment_parse",
         "--extract-worker",
         ext,
+        "--start-page",
+        str(_normalize_start_page(start_page)),
     ]
+    if source_path is not None:
+        argv.extend(["--extract-path", str(source_path)])
+    return argv
 
 
 def _run_extract_subprocess(
-    data: bytes,
+    data: bytes | None,
     ext: str,
     timeout: float,
     *,
     holder: dict | None = None,
+    source_path: Path | None = None,
+    start_page: int = 1,
 ) -> ExtractResult:
     """Blocking Popen + communicate timeout. Safe on Windows SelectorEventLoop."""
     fd, out_path = tempfile.mkstemp(suffix=".extract.json")
     os.close(fd)
     proc: subprocess.Popen[bytes] | None = None
+    path_mode = source_path is not None
     try:
         env = os.environ.copy()
         env[_EXTRACT_OUTPUT_ENV] = out_path
         proc = subprocess.Popen(
-            _extract_worker_argv(ext),
-            stdin=subprocess.PIPE,
+            _extract_worker_argv(
+                ext, source_path=source_path, start_page=start_page
+            ),
+            stdin=subprocess.DEVNULL if path_mode else subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             env=env,
@@ -401,7 +599,9 @@ def _run_extract_subprocess(
         if holder is not None:
             holder["proc"] = proc
         try:
-            _, stderr = proc.communicate(input=data, timeout=timeout)
+            _, stderr = proc.communicate(
+                input=None if path_mode else data, timeout=timeout
+            )
         except subprocess.TimeoutExpired:
             _reap_tree_sync(proc, proc.pid)
             return ExtractResult(status=ParseStatus.FAILED, detail="extract_timeout")
@@ -412,13 +612,7 @@ def _run_extract_subprocess(
                 detail=f"extract_worker:{proc.returncode}:{err}",
             )
         raw = Path(out_path).read_text(encoding="utf-8")
-        payload = json.loads(raw)
-        status = ParseStatus(str(payload.get("status") or "failed"))
-        return ExtractResult(
-            status=status,
-            text=str(payload.get("text") or ""),
-            detail=str(payload.get("detail") or ""),
-        )
+        return _result_from_worker_payload(json.loads(raw))
     except Exception as e:
         if proc is not None and proc.poll() is None:
             _reap_tree_sync(proc, proc.pid)
@@ -434,26 +628,70 @@ def _run_extract_subprocess(
             os.unlink(out_path)
 
 
+def _optional_json_int(payload: dict, key: str) -> int | None:
+    raw = payload.get(key)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _result_from_worker_payload(payload: dict) -> ExtractResult:
+    status = ParseStatus(str(payload.get("status") or "failed"))
+    size_raw = payload.get("size_bytes")
+    size_bytes = int(size_raw) if size_raw is not None else None
+    return ExtractResult(
+        status=status,
+        text=str(payload.get("text") or ""),
+        detail=str(payload.get("detail") or ""),
+        size_bytes=size_bytes,
+        page_start=_optional_json_int(payload, "page_start"),
+        page_end=_optional_json_int(payload, "page_end"),
+        page_total=_optional_json_int(payload, "page_total"),
+    )
+
+
+def _result_to_worker_payload(result: ExtractResult) -> dict:
+    return {
+        "status": result.status.value,
+        "text": result.text,
+        "detail": result.detail,
+        "size_bytes": result.size_bytes,
+        "page_start": result.page_start,
+        "page_end": result.page_end,
+        "page_total": result.page_total,
+    }
+
+
 def _extract_worker_main(argv: list[str]) -> int:
-    """Worker entry: stdin bytes → JSON file in ``_EXTRACT_OUTPUT_ENV``. Sync only."""
+    """Worker entry: stdin bytes or ``--extract-path`` → JSON in ``_EXTRACT_OUTPUT_ENV``."""
     ext = ".pdf"
+    source_path: Path | None = None
+    start_page = 1
     args = list(argv)
     while args:
         token = args.pop(0)
         if token == "--extract-worker" and args:
             ext = args.pop(0)
+        elif token == "--extract-path" and args:
+            source_path = Path(args.pop(0))
+        elif token == "--start-page" and args:
+            start_page = _normalize_start_page(args.pop(0))
     out_path = os.environ.get(_EXTRACT_OUTPUT_ENV, "")
     if not out_path:
         return 2
-    data = sys.stdin.buffer.read()
     # Keep JSON file the only stdout protocol; libraries may print.
     sys.stdout = sys.stderr
-    result = extract_office_payload(data, ext)
+    if source_path is not None:
+        result = extract_office_from_disk(source_path, ext, start_page=start_page)
+    else:
+        result = extract_office_payload(
+            sys.stdin.buffer.read(), ext, start_page=start_page
+        )
     Path(out_path).write_text(
-        json.dumps(
-            {"status": result.status.value, "text": result.text, "detail": result.detail},
-            ensure_ascii=False,
-        ),
+        json.dumps(_result_to_worker_payload(result), ensure_ascii=False),
         encoding="utf-8",
     )
     return 0
@@ -464,28 +702,30 @@ async def extract_office_bytes(
     *,
     ext: str,
     timeout: float | None = None,
+    start_page: int = 1,
 ) -> ExtractResult:
     """Extract text from office/PDF bytes without writing a workspace ``*.md`` copy.
 
-    Skip / byte-budget checks run in-process. Conversion runs in a killable
-    child (``sys.executable -m``). Wall-clock timeout is ``extract_timeout``
-    (contract), not channel liveness. Worker must call ``extract_office_payload``,
-    never this coroutine.
+    Skip checks run in-process. Conversion runs in a killable child
+    (``sys.executable -m``). Wall-clock timeout is ``extract_timeout`` (an
+    observation for ``file_read``, not channel liveness). Worker must call
+    ``extract_office_payload``, never this coroutine. Used by channel
+    ``LocalWorkspace`` (IPC ingest) and tests that already hold bytes.
     """
-    from agentcore.workspace.limits import (
-        OFFICE_EXTRACT_MAX_BYTES,
-        OFFICE_EXTRACT_TIMEOUT_SECONDS,
-    )
+    from agentcore.workspace.limits import OFFICE_EXTRACT_TIMEOUT_SECONDS
 
     normalized = _normalize_extract_ext(ext)
     if normalized in SKIP_EXTENSIONS:
-        return ExtractResult(status=ParseStatus.SKIPPED, detail=f"skip_ext:{normalized}")
-    if normalized not in MARKITDOWN_EXTENSIONS:
-        return ExtractResult(status=ParseStatus.SKIPPED, detail=f"unknown_ext:{normalized or '?'}")
-    if len(data) > OFFICE_EXTRACT_MAX_BYTES:
         return ExtractResult(
-            status=ParseStatus.FAILED,
-            detail=f"extract_budget:{len(data)}>{OFFICE_EXTRACT_MAX_BYTES}",
+            status=ParseStatus.SKIPPED,
+            detail=f"skip_ext:{normalized}",
+            size_bytes=len(data),
+        )
+    if normalized not in MARKITDOWN_EXTENSIONS:
+        return ExtractResult(
+            status=ParseStatus.SKIPPED,
+            detail=f"unknown_ext:{normalized or '?'}",
+            size_bytes=len(data),
         )
 
     budget = OFFICE_EXTRACT_TIMEOUT_SECONDS if timeout is None else timeout
@@ -493,11 +733,13 @@ async def extract_office_bytes(
     loop = asyncio.get_running_loop()
 
     def blocking() -> ExtractResult:
-        return _run_extract_subprocess(data, normalized, budget, holder=holder)
+        return _run_extract_subprocess(
+            data, normalized, budget, holder=holder, start_page=start_page
+        )
 
     fut = loop.run_in_executor(None, blocking)
     try:
-        return await fut
+        result = await fut
     except asyncio.CancelledError:
         proc = holder.get("proc")
         if proc is not None:
@@ -505,6 +747,63 @@ async def extract_office_bytes(
         with contextlib.suppress(Exception):
             await fut
         raise
+    if result.size_bytes is None:
+        return replace(result, size_bytes=len(data))
+    return result
+
+
+async def extract_office_file(
+    path: Path,
+    *,
+    ext: str,
+    timeout: float | None = None,
+    start_page: int = 1,
+) -> ExtractResult:
+    """Extract from a resolved on-disk path. Parent must not ``read_bytes`` first."""
+    from agentcore.workspace.limits import OFFICE_EXTRACT_TIMEOUT_SECONDS
+
+    normalized = _normalize_extract_ext(ext)
+    size = _source_size(data=None, path=path)
+    if normalized in SKIP_EXTENSIONS:
+        return ExtractResult(
+            status=ParseStatus.SKIPPED,
+            detail=f"skip_ext:{normalized}",
+            size_bytes=size,
+        )
+    if normalized not in MARKITDOWN_EXTENSIONS:
+        return ExtractResult(
+            status=ParseStatus.SKIPPED,
+            detail=f"unknown_ext:{normalized or '?'}",
+            size_bytes=size,
+        )
+
+    budget = OFFICE_EXTRACT_TIMEOUT_SECONDS if timeout is None else timeout
+    holder: dict = {}
+    loop = asyncio.get_running_loop()
+
+    def blocking() -> ExtractResult:
+        return _run_extract_subprocess(
+            None,
+            normalized,
+            budget,
+            holder=holder,
+            source_path=path,
+            start_page=start_page,
+        )
+
+    fut = loop.run_in_executor(None, blocking)
+    try:
+        result = await fut
+    except asyncio.CancelledError:
+        proc = holder.get("proc")
+        if proc is not None:
+            await asyncio.to_thread(_reap_tree_sync, proc, proc.pid)
+        with contextlib.suppress(Exception):
+            await fut
+        raise
+    if result.size_bytes is None and size is not None:
+        return replace(result, size_bytes=size)
+    return result
 
 
 def _cli_main(argv: list[str] | None = None) -> int:
@@ -526,23 +825,29 @@ async def preparse_resident(
     Never raises for parse failures — returns ``FAILED`` / ``SKIPPED`` so the
     caller can keep the existing path-hint behaviour.
     """
+    from agentcore.workspace.limits import OFFICE_EXTRACT_CHANNEL_MAX_BYTES
+
     ext = extension_of(name, workspace_path)
     if ext in SKIP_EXTENSIONS:
         return PreparseResult(status=ParseStatus.SKIPPED, detail=f"skip_ext:{ext}")
     if ext not in MARKITDOWN_EXTENSIONS and ext not in PLAIN_TEXT_EXTENSIONS:
         return PreparseResult(status=ParseStatus.SKIPPED, detail=f"unknown_ext:{ext or '?'}")
 
-    try:
-        data = await backend.read_bytes(workspace_path)
-    except WorkspaceError as e:
-        logger.warning(
-            "attachment.preparse_read_failed",
-            path=workspace_path,
-            error=str(e),
-        )
-        return PreparseResult(status=ParseStatus.FAILED, detail=f"read:{e}")
-
     if ext in PLAIN_TEXT_EXTENSIONS:
+        try:
+            try:
+                data = await backend.read_bytes(
+                    workspace_path, max_bytes=OFFICE_EXTRACT_CHANNEL_MAX_BYTES
+                )
+            except TypeError:
+                data = await backend.read_bytes(workspace_path)
+        except WorkspaceError as e:
+            logger.warning(
+                "attachment.preparse_read_failed",
+                path=workspace_path,
+                error=str(e),
+            )
+            return PreparseResult(status=ParseStatus.FAILED, detail=f"read:{e}")
         try:
             text = _decode_plain_text(data)
             if text is None:
@@ -566,7 +871,15 @@ async def preparse_resident(
             detail="plain_text",
         )
 
-    extracted = await extract_office_bytes(data, ext=ext)
+    try:
+        extracted = await backend.extract_office(workspace_path, ext=ext)
+    except WorkspaceError as e:
+        logger.warning(
+            "attachment.preparse_read_failed",
+            path=workspace_path,
+            error=str(e),
+        )
+        return PreparseResult(status=ParseStatus.FAILED, detail=f"read:{e}")
 
     if extracted.status == ParseStatus.FAILED:
         return PreparseResult(status=ParseStatus.FAILED, detail=extracted.detail)
@@ -589,7 +902,7 @@ async def preparse_resident(
             "attachment.preparse_scanned",
             path=workspace_path,
             name=name,
-            raw_bytes=len(data),
+            raw_bytes=extracted.size_bytes,
             extracted_chars=len(extracted.text),
         )
         return PreparseResult(

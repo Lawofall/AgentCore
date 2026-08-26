@@ -48,7 +48,7 @@ export function SettingField({
   className,
   children,
 }: SettingFieldProps) {
-  const labelClass = "text-xs font-medium text-foreground";
+  const labelClass = "text-xs font-medium text-foreground max-md:text-sm";
   const labelId = htmlFor ? `${htmlFor}-label` : undefined;
   const hintId = htmlFor ? `${htmlFor}-hint` : undefined;
   const inlineHint = hintPlacement === "label" ? hint : null;

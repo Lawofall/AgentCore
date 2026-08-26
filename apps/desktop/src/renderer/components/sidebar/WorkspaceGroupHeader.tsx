@@ -1,5 +1,10 @@
 import { DeleteFolderDialog } from "@/components/folders/DeleteFolderDialog";
-import { IconButton, SurfaceRow } from "@/components/ui";
+import {
+  IconButton,
+  NO_TAB_DRAG_ATTR,
+  type SortableTabItemProps,
+  SurfaceRow,
+} from "@/components/ui";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,6 +30,7 @@ import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
 import { folderAncestorNames } from "@/lib/folderTree";
 import { startNewConversation } from "@/lib/newConversation";
 import { notifyError, notifyInfo } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import type { FolderMeta } from "@/services/folders";
 import type { Conversation } from "@/stores/conversation";
 import { useConversationStore } from "@/stores/conversation";
@@ -51,6 +57,8 @@ interface Props {
   onToggleExpanded: () => void;
   /** Narrow drawer: no 查看全部 / 删夹 / 导入；＋始终可见。权威 → 前端技术 §五. */
   surface?: "wide" | "narrow";
+  /** Vertical reorder handle; omit when the row is not in a sortable list. */
+  sortable?: SortableTabItemProps;
 }
 
 /**
@@ -68,6 +76,7 @@ export function WorkspaceGroupHeader({
   expanded,
   onToggleExpanded,
   surface = "wide",
+  sortable,
 }: Props) {
   const narrow = surface === "narrow";
   const [moreOpen, setMoreOpen] = useState(false);
@@ -284,6 +293,7 @@ export function WorkspaceGroupHeader({
 
   const rowActionClass =
     "size-6 text-sidebar-foreground/40 hover:text-sidebar-foreground";
+  const { className: sortableClassName, ...sortableRest } = sortable ?? {};
 
   return (
     <>
@@ -291,7 +301,11 @@ export function WorkspaceGroupHeader({
         <ContextMenuTrigger asChild>
           <SurfaceRow
             variant="sidebar"
-            className="group h-8 px-2 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+            className={cn(
+              "group h-8 px-2 text-sidebar-foreground/70 hover:text-sidebar-foreground",
+              sortableClassName,
+            )}
+            {...sortableRest}
           >
             {/* biome-ignore lint/a11y/useSemanticElements: 行内嵌 DropdownMenuTrigger 的真 <button>，此可点击区不可套 <button>。 */}
             <div
@@ -329,6 +343,7 @@ export function WorkspaceGroupHeader({
               </span>
             </div>
             <span
+              {...{ [NO_TAB_DRAG_ATTR]: "" }}
               className={`flex shrink-0 items-center gap-0.5 ${
                 narrow || moreOpen
                   ? "opacity-100"

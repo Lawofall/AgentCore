@@ -1,26 +1,28 @@
-// 回合产物盘点 —— 聊天流内联「本回合改动的文件」卡的纯数据源。
+// 回合产物盘点 —— delivery 验收路径与工具变更的纯数据源。
 //
-// 主清单（块 1）：只认 ``delivery_status.artifacts``（accepted+rejected 验收态）。
+// 聊天流产物清单卡已撤：打开入口是终稿路径可点 + 工作区树。「查看改动」走右坞。
+//
+// 主清单解析仍只认 ``delivery_status.artifacts``（accepted+rejected 验收态）。
 // 无该字段 / 空数组 → 空清单（不 silent 降级扫工具列表）。后端按 execution 把各波
 // 声明且落盘路径并进最新一条事件；未声明备份不在清单里。导出件（.docx / .pdf）只存在于
 // 工具自报的产物行里——工具入参只有源 md，故任何按参数合成的清单都会漏掉它。
 //
 // ``promotedFrom`` 只兼容历史 ``delivery_status.promoted``（``promote_product`` 已撤销；
-// 新回合不再搬家）。产物卡不按「成品 / 过程材料」分组——位置看路径；文件树把
+// 新回合不再搬家）。不按「成品 / 过程材料」分组——位置看路径；文件树把
 // ``AgentCore/`` 标成 ``.agentcore`` 并钉顶。
 //
 // 中间稿折叠：行里自报的 ``derived_from`` 是唯一依据（见 {@link splitExportedSources}），
 // 不按扩展名 / 工具名猜派生关系；折叠只降级、不删除。
 //
-// 工具列表（process / execution）仍供「查看改动」等旁路（TurnFileChangesReview /
+// 工具列表（process / execution）仍供「查看改动」（TurnFileChangesReview /
 // ConversationChangesPanel）：写/改/删/移经 builtin file_ops，抽成功变更 + 参数预览。
-// 主清单不把工具名当交付成功。
+// 不把工具名当交付成功。
 //
 // A1「查看改动」：从工具参数附带只读预览（str_replace → old/new；file_write → 写入正文；
 // delete/move → 元信息）。无 before 快照、不改写盘契约。
 //
-// 纯函数、只读已有运行时状态，不碰协议 fold（故不触发 conformance、零持久化）。卡片
-// 只是把「文件去哪了」可视化，真相仍以工作区文件树为准。
+// 纯函数、只读已有运行时状态，不碰协议 fold（故不触发 conformance、零持久化）。
+// 真相仍以工作区文件树为准。
 
 import type { Execution } from "@/stores/execution";
 import type {
@@ -60,7 +62,7 @@ export interface FileArtifact {
   acceptanceDetail?: string;
   /**
    * 已归位成品的过程稿旧路径（`path` 已是归位后的新路径，旧路径盘上不再存在）。
-   * 产物卡不据此分组；位置以 `path` 为准。
+   * 不据此分组；位置以 `path` 为准。
    */
   promotedFrom?: string;
   /** 产出工具自报的产物类型（`md` / `docx` / `pdf` / `code` / …）；未自报时缺省。 */

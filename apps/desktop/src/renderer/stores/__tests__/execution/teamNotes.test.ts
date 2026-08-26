@@ -93,6 +93,17 @@ describe("team note wall (§2.2 通)", () => {
       "running",
     );
     expect(exec.teamNotes).toEqual([]);
+    expect(exec.noteWall).toBe(false);
+  });
+
+  it("folds noteWall from the plan skeleton (raised empty wall)", () => {
+    const exec = projectExecution(
+      { ...plan, noteWall: true },
+      [started("agent-1", "run-1")],
+      "running",
+    );
+    expect(exec.teamNotes).toEqual([]);
+    expect(exec.noteWall).toBe(true);
   });
 
   // 便签会过期 → supersession (§2.2): an amendment (carries `supersedes` + mode) marks its TARGET

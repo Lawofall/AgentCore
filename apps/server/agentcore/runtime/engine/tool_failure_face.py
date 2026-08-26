@@ -307,13 +307,20 @@ _CURATED_BY_CODE: dict[str, str] = {
     "api_error": "GitHub 返回了错误，创建 PR 这一步没能完成。我会看它的回复再决定怎么继续。",
     "network_error": "连接 GitHub 失败，创建 PR 这一步没能完成，请稍后重试。",
     # --- 本机工作区：终端 / 文件读写 ---
-    # ``terminal`` needs a live connection to the user's own machine; on a cloud-only
-    # workspace there is nothing to run commands on.
+    # ``terminal`` ``location=local`` needs a live desktop process channel.
     "local_workspace_required": (
-        "运行终端命令需要连到你自己电脑上的工作区，当前没有这个连接，这一步没有执行。"
+        "在你自己的电脑上启动终端需要连到本机工作区，当前没有这个连接，这一步没有执行。"
         "把项目连到本机之后我可以再试，或者我换个方式继续。"
     ),
+    "cloud_desk_required": (
+        "云端这边现在没法托管会一直运行的进程，这一步没有执行。我会换个方式继续。"
+    ),
+    "process_not_registered": (
+        "这个后台进程已经找不到了（服务重启后不会假装它还在），这一步没有执行。"
+        "需要的话我会重新启动。"
+    ),
     "workspace_io_error": "读写工作区文件时出错，这一步没能完成。我会换个方式再试。",
+    "too_large": "这份文件太大，没法一次读完。我会换办法继续。",
 }
 
 

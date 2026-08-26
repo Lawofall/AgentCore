@@ -449,9 +449,11 @@ async def run_contract_loop(
             and deliverable.visual_critic
             and not verdict.failures
         ):
+            root = getattr(tool_ctx.backend, "root", None)
             shot_port = resolve_screenshot_port(
                 conversation_id=tool_ctx.conversation_id or "",
                 browser_tool_available=browser_tool_available(worker_tools),
+                workspace_root=str(root) if root is not None else None,
             )
 
             async def _persist_visual(path: str, text: str) -> None:

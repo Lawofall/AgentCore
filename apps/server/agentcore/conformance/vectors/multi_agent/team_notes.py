@@ -64,6 +64,7 @@ def _multi_agent_team_notes() -> list[SSEEvent]:
             task_summary="并行调研 + 撰写",
             agents=agents,
             runs=plan_runs,
+            note_wall=True,
         ),
         run_started("r1", "w1"),
         run_started("r2", "w2"),
@@ -167,6 +168,7 @@ def _multi_agent_team_notes_amended() -> list[SSEEvent]:
             task_summary="并行调研 + 撰写",
             agents=agents,
             runs=plan_runs,
+            note_wall=True,
         ),
         run_started("r1", "w1"),
         run_started("r2", "w2"),
@@ -296,6 +298,7 @@ def _multi_agent_team_notes_ceo_seed() -> list[SSEEvent]:
             task_summary="简介稿并行审查",
             agents=agents,
             runs=plan_runs,
+            note_wall=True,
         ),
         # CEO seed_notes land before the first worker wave (same batch wall).
         team_note_posted(
@@ -396,6 +399,74 @@ def _multi_agent_team_notes_ceo_seed() -> list[SSEEvent]:
     ]
 
 
+def _multi_agent_team_notes_empty_wall() -> list[SSEEvent]:
+    """多 Agent·通·便签墙已升、尚无便签：``run_plan.note_wall`` 让看面画空态。
+
+    ``build_feature`` / 升墙但 brief 未物化出字时，墙在开跑就存在。缺字段的旧 journal 仍当无墙，
+    不对所有空 ``teamNotes`` 画空态。本向量钉 fold：``teamNotes=[]`` 且 ``noteWall=true``。
+    """
+    agents = [
+        {
+            "id": "w1",
+            "role": "后端",
+            "thinking": True,
+        },
+        {
+            "id": "w2",
+            "role": "前端",
+            "thinking": True,
+        },
+    ]
+    plan_runs = [
+        {"id": "r1", "agent_id": "w1", "task": "写接口", "depends_on": []},
+        {"id": "r2", "agent_id": "w2", "task": "写页面", "depends_on": []},
+    ]
+    return [
+        message_start("m1", conversation_id=_CONV),
+        content_delta("我来安排并行交付。"),
+        tool_use_start(
+            "dc1",
+            "delegate",
+            {"tasks": [{"role": "后端"}, {"role": "前端"}], "playbook": "build_feature"},
+        ),
+        run_plan(
+            execution_id="exec1",
+            plan_type="multi_agent",
+            task_summary="并行接口 + 页面",
+            agents=agents,
+            runs=plan_runs,
+            note_wall=True,
+        ),
+        run_started("r1", "w1"),
+        run_started("r2", "w2"),
+        run_output_delta("r1", "w1", "接口草稿"),
+        run_completed(
+            "r1",
+            "w1",
+            output_summary="完成接口",
+            duration_ms=1000,
+            role="member",
+            model="deepseek-v4-flash",
+            usage=_USAGE,
+            cost=_COST,
+        ),
+        run_output_delta("r2", "w2", "页面草稿"),
+        run_completed(
+            "r2",
+            "w2",
+            output_summary="完成页面",
+            duration_ms=1100,
+            role="member",
+            model="deepseek-v4-flash",
+            usage=_USAGE,
+            cost=_COST,
+        ),
+        tool_use_end("dc1", "delegate", success=True, output="团队完成 2 项任务。"),
+        content_delta(" 团队已完成。"),
+        message_end(FinishReason.END_TURN, input_tokens=4000, output_tokens=700, cost=_COST),
+    ]
+
+
 def _multi_agent_coordinate() -> list[SSEEvent]:
     """多 Agent·CEO 协调模式：≥2 worker 并行 + 波内便签 + 合成草稿预览 + 收束。
 
@@ -440,6 +511,7 @@ def _multi_agent_coordinate() -> list[SSEEvent]:
             task_summary="协调模式：并行调研 + 撰写",
             agents=agents,
             runs=plan_runs,
+            note_wall=True,
         ),
         tool_use_end(
             "dc1",

@@ -1,9 +1,8 @@
 """产物写回 · 直写沙箱的本地腿：扫描「本次执行改了工作区哪些文件」。
 
-gVisor 走 copy-in / copy-out，改动天然可枚举（``staging.collect_changes`` 拿 staging
-副本比对基线）；``SubprocessSandbox`` 与桌面 Local 通道则**直接以工作区为 cwd** 让脚本
-写盘，没有 staging 可比对——不事后看盘就没人能如实填 ``ExecutionResult.written_files``，
-桌面用户跑脚本产出的文件于是全部不进交付物台账。本模块补的就是这条腿。
+云桌 guest 与 ``SubprocessSandbox`` / 桌面 Local 都以工作区真盘为 cwd 写文件
+（无 copy-out 枚举）。不事后看盘就没人能如实填 ``ExecutionResult.written_files``。
+本模块是这条腿。
 
 为什么是「执行后单次有界扫描 + mtime 截止」，而不是执行前后各拍一次全树快照：
 
@@ -22,10 +21,9 @@ gVisor 走 copy-in / copy-out，改动天然可枚举（``staging.collect_change
 （``*.db`` / ``*.pyc``）、符号链接。**不**排除 AI 噪音后缀——AI 生成的 ``.png`` 图表、
 ``.zip`` 打包件正是交付物。
 
-与 gVisor 腿的一处**有意分歧**：云端 copy-out 只剔旁路区，会把 ``out/`` ``dist/``
-``build/`` 里的改动也报出来；本地腿连同 ``IGNORED_DIRS`` 一起剪掉。三条理由——枚举
-这些目录正是成本大头（性能是硬约束）；它们对 AI 视图与**用户文件面板**都隐藏，报出
-去等于给用户一条他在界面里打不开的路径；名单共用单一真源，好过为写回再造一份。
+扫描连同 ``IGNORED_DIRS`` 一起剪掉（含 ``node_modules`` / ``out`` / ``dist``）。
+三条理由——枚举这些目录正是成本大头；它们对 AI 视图与**用户文件面板**都隐藏；
+名单共用单一真源。文件仍在真盘上，只是不进 ``written_files`` 台账。
 """
 
 from __future__ import annotations
@@ -47,8 +45,7 @@ _MAX_DIRS = 4000
 # 墙钟兜底：网络盘 / 被杀毒软件挂钩的目录上，单次 scandir 可能慢几个数量级，
 # 目录数上限就兜不住了。两道闸都要。
 _BUDGET_MS = 250.0
-# 报告条数上限，与 gVisor 侧 ``gvisor_write_back_max_files`` 取齐：一次写出上千个
-# 文件（构建产物）时，列全既冲爆模型上下文也没有信息量。
+# 报告条数上限：一次写出上千个文件（构建产物）时，列全既冲爆模型上下文也没有信息量。
 _MAX_FILES = 200
 
 # 文件系统时间戳粒度比墙钟粗且**向下截断**：刚起步就写的文件，mtime 可能落在我们读到
@@ -109,8 +106,7 @@ def scan_written_files(
         for entry in entries:
             child_rel = f"{parent_rel}/{entry.name}" if parent_rel else entry.name
             try:
-                # follow_symlinks=False 两处都给：符号链接既不入队也不上报，
-                # 与 staging 写回腿「symlinks are never staged nor copied back」一致。
+                # follow_symlinks=False 两处都给：符号链接既不入队也不上报。
                 if entry.is_dir(follow_symlinks=False):
                     # 等价于 ``is_ignored_dir_entry``：既然从不下潜进噪音目录，
                     # 它那趟「祖先段是否噪音」的复检在这里恒为假，省掉。

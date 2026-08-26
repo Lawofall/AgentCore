@@ -143,12 +143,12 @@ def _sh(cmd: list[str]) -> str:
 
 def host_state() -> dict:
     """Enumerate this session's kernel resources by product naming (netns/veth) + runsc."""
-    netns = [ln for ln in _sh(["ip", "netns", "list"]).splitlines() if "acbrw" in ln]
-    veth = [ln for ln in _sh(["ip", "-o", "link", "show"]).splitlines() if "acbrwh" in ln]
+    netns = [ln for ln in _sh(["ip", "netns", "list"]).splitlines() if "acpkg" in ln]
+    veth = [ln for ln in _sh(["ip", "-o", "link", "show"]).splitlines() if "acpkgh" in ln]
     runsc = [
         ln
         for ln in _sh(["runsc", f"--root={settings.gvisor_runtime_root}", "list"]).splitlines()
-        if "agentcore-browser-" in ln
+        if "agentcore-desk-" in ln
     ]
     return {"netns": netns, "veth": veth, "runsc_containers": runsc}
 
@@ -219,6 +219,7 @@ async def main() -> int:
         # === 断言 2：BrowserSessionRegistry.acquire → 真 netns+veth+代理+runsc（冷启耗时）===
         req = BrowserSessionRequest(
             conversation_id=CID,
+            workspace_root=str(WS_ROOT),
             viewport_width=int(settings.browser_keyframe_width),
             viewport_height=800,
             jpeg_quality=int(settings.browser_keyframe_jpeg_quality),
@@ -456,20 +457,9 @@ async def main() -> int:
         metrics["traceback"] = traceback.format_exc()
         print("[smoke] EXCEPTION:\n" + metrics["traceback"], flush=True)
 
-    # === 断言 7：干净拆除（registry.close 后 runsc/netns/veth 全消失）===
+    # === 断言 7：关浏览器只收驱动；desk netns/runsc 仍在 ===
     try:
         _mark("teardown start")
-        # Test-only timing wrapper on the session's runsc helper (no product change) to
-        # attribute the teardown cost precisely.
-        if session is not None and hasattr(session, "_runsc_cmd"):
-            _orig_runsc = session._runsc_cmd
-
-            async def _timed_runsc(*a):  # noqa: ANN001
-                _s = time.monotonic()
-                await _orig_runsc(*a)
-                print(f"[smoke]   runsc {' '.join(a)} took {time.monotonic() - _s:.1f}s", flush=True)
-
-            session._runsc_cmd = _timed_runsc
         pre = host_state()
         _tc = time.monotonic()
         await registry.close(CID)
@@ -481,12 +471,11 @@ async def main() -> int:
         had_resources = (
             len(pre["netns"]) + len(pre["veth"]) + len(pre["runsc_containers"])
         ) > 0
-        clean = (
-            len(post["netns"]) == 0
-            and len(post["veth"]) == 0
-            and len(post["runsc_containers"]) == 0
+        desk_still = (
+            len(post["netns"]) >= 1
+            and len(post["runsc_containers"]) >= 1
         )
-        checks["a7_teardown_clean"] = bool(had_resources and clean)
+        checks["a7_teardown_clean"] = bool(had_resources and desk_still)
     except Exception as exc:  # noqa: BLE001
         metrics["teardown_error"] = f"{type(exc).__name__}: {exc}"
         checks["a7_teardown_clean"] = False

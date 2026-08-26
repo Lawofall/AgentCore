@@ -21,8 +21,17 @@ function note(
 }
 
 describe("teamNotesDefaultExpanded", () => {
-  it("returns false when there are no notes", () => {
+  it("returns false when there are no notes and the wall was not raised", () => {
     expect(teamNotesDefaultExpanded("running", [])).toBe(false);
+    expect(teamNotesDefaultExpanded("running", [], false)).toBe(false);
+  });
+
+  it("expands a raised empty wall while running", () => {
+    expect(teamNotesDefaultExpanded("running", [], true)).toBe(true);
+  });
+
+  it("stays collapsed for a raised empty wall once the turn settles", () => {
+    expect(teamNotesDefaultExpanded("completed", [], true)).toBe(false);
   });
 
   it("expands while running with an active note", () => {

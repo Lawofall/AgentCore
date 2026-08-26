@@ -330,11 +330,10 @@ export function toMessage(m: BackendMessage): Message {
     // below lets that graph replay the turn (executionId null for classic / no plan).
     executionId,
     runs: journal,
-    // 结束原因 chip (Tier 2 c): surface the persisted finish_reason turn-level so a
-    // single-agent abnormal turn (max_rounds / degraded / unproductive) replays its
-    // chip on reload too — the bubble reads `finishReason ?? runs?.finishReason`.
-    // A clean turn carries no journal → undefined → no chip. (Multi-agent also
-    // keeps its `runs.finishReason` above; this is redundant but harmless there.)
+    // Persist finish_reason turn-level so reload can still paint empty-failure
+    // cards. The bubble reads `finishReason ?? runs?.finishReason`. A clean
+    // turn carries no journal → undefined. (Multi-agent also keeps
+    // `runs.finishReason`; redundant but harmless.)
     finishReason,
     outcome:
       parseTurnOutcomeKind(m.outcome) ??

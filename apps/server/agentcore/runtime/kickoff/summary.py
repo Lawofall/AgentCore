@@ -149,7 +149,7 @@ def worker_rows(
         if len(task) > limit:
             task = task[:limit] + "…"
         form = getattr(n.deliverable, "form", None) if n.deliverable else None
-        # form=prose → 仅文字；form=files / omitted → 可改文件（写工具仍装配）。
+        # form=prose → 仅文字；files / workspace / omitted → 可改文件。
         if form == "prose":
             write_capability = "text_only"
             write_capability_label = "仅文字报告"
@@ -165,7 +165,7 @@ def worker_rows(
             "write_capability": write_capability,
             "write_capability_label": write_capability_label,
         }
-        # Per-worker 模型：优先显式三元组 attrs（若执行链写入）；否则从 RunSpec.model 路由键还原。
+        # Per-worker 模型：优先显式身份 attrs（若执行链写入）；否则从 RunSpec.model 路由键还原。
         origin_attr = str(getattr(n, "origin", "") or "").strip().lower()
         provider_attr = str(getattr(n, "provider_id", "") or "").strip()
         model_raw = (n.model or "").strip()

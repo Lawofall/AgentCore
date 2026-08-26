@@ -1,9 +1,9 @@
 import { ChatTimeline } from "@/components/conversation-replay/ChatTimeline";
 import {
   InspectorPanel,
+  type InspectorActiveTab,
   type ReplaySessionMeta,
 } from "@/components/conversation-replay/InspectorPanel";
-import { ReplayComposerGhost } from "@/components/conversation-replay/ReplayComposerGhost";
 import { ReplayOutline } from "@/components/conversation-replay/ReplayOutline";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorState, TableSkeleton } from "@/components/ui/States";
@@ -95,7 +95,8 @@ export function ConversationReplay({
   const [data, setData] = useState<AdminConversationReplay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<InspectorActiveTab>("diagnosis");
+  const [workerTabIds, setWorkerTabIds] = useState<string[]>([]);
   /** Diagnose dock: 诊断 toggle or a team-graph node. Closed by default like desktop. */
   const [dockOpen, setDockOpen] = useState(false);
   const [dockWidth, setDockWidth] = useState(readDockWidth);
@@ -151,6 +152,8 @@ export function ConversationReplay({
     setHydratingIds([]);
     setHydrateError(null);
     setHydrateNonce(0);
+    setWorkerTabIds([]);
+    setActiveTab("diagnosis");
   }, [conversationId]);
 
   const foldedTimeline = useMemo(() => {
@@ -322,7 +325,8 @@ export function ConversationReplay({
   const selectTurn = useCallback(
     (id: string) => {
       if (id !== selectedId) {
-        setSelectedRunId(null);
+        setWorkerTabIds([]);
+        setActiveTab("diagnosis");
       }
       writeTurnAnchor(id);
     },
@@ -334,23 +338,34 @@ export function ConversationReplay({
       const last = assistantTurns.at(-1);
       if (last) writeTurnAnchor(last.id);
     }
+    setActiveTab("diagnosis");
     setDockOpen(true);
   }, [assistantTurns, selectedId, writeTurnAnchor]);
 
-  /** Click graph node → open worker dock. */
+  /** Click graph node or worker list → hang worker tab and activate. */
   const selectRun = useCallback((runId: string) => {
-    setSelectedRunId(runId);
+    setWorkerTabIds((prev) =>
+      prev.includes(runId) ? prev : [...prev, runId],
+    );
+    setActiveTab(runId);
     setDockOpen(true);
   }, []);
 
-  const clearRun = useCallback(() => {
-    setSelectedRunId(null);
+  const activateTab = useCallback((tab: InspectorActiveTab) => {
+    setActiveTab(tab);
+  }, []);
+
+  const closeWorkerTab = useCallback((runId: string) => {
+    setWorkerTabIds((prev) => prev.filter((id) => id !== runId));
+    setActiveTab((cur) => (cur === runId ? "diagnosis" : cur));
   }, []);
 
   const closeDock = useCallback(() => {
-    setSelectedRunId(null);
     setDockOpen(false);
   }, []);
+
+  const graphHighlightRunId =
+    activeTab !== "diagnosis" ? activeTab : null;
 
   const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -484,10 +499,10 @@ export function ConversationReplay({
               className="min-h-0 flex-1 overflow-y-auto"
             >
               <ChatTimeline
-                className="mx-auto w-full max-w-3xl px-6 pt-10 pb-4"
+                className="mx-auto w-full max-w-3xl px-6 pt-10 pb-10"
                 messages={displayMessages}
                 selectedId={selectedId}
-                selectedRunId={selectedRunId}
+                selectedRunId={graphHighlightRunId}
                 onSelect={selectTurn}
                 onSelectRun={selectRun}
                 isAnchored={isAnchored}
@@ -497,7 +512,6 @@ export function ConversationReplay({
                 onRetryHydrate={retryHydrate}
               />
             </div>
-            <ReplayComposerGhost />
             <ReplayOutline turns={outlineTurns} onJump={selectTurn} />
           </div>
 
@@ -532,9 +546,11 @@ export function ConversationReplay({
                 <InspectorPanel
                   className="min-h-0 flex-1 rounded-none border-0"
                   message={selected}
-                  selectedRunId={selectedRunId}
+                  activeTab={activeTab}
+                  workerTabIds={workerTabIds}
+                  onActivateTab={activateTab}
+                  onCloseWorkerTab={closeWorkerTab}
                   onSelectRun={selectRun}
-                  onClearRun={clearRun}
                   onClose={closeDock}
                   cnyLabel={dockCny}
                   harvest={dockHarvest}

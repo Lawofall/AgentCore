@@ -998,6 +998,7 @@ LOCAL_TURN_TOOL_FAILURE_CODES = frozenset(
         "long_running_redirect",
         "loopback_host",
         "other",
+        "too_large",
     }
 )
 TOOL_FAILURE_MESSAGE_MAX = 200

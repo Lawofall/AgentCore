@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## 模型约束
 
-子代理（Task tool）**必须**指定 `model: "cursor-grok-4.6-xhigh-fast"`，无例外；`resume` 与同任务线再起同样每次显式传。工具说明（resume 勿传 model）与实测不符：不传会静默回落主模型。本规则即用户指定。hook 会兜底，显式传仍是第一道防线。
+子代理（Task tool）**必须**指定 `model: "cursor-grok-4.6-xhigh"`，无例外；`resume` 与同任务线再起同样每次显式传。工具说明（resume 勿传 model）与实测不符：不传会静默回落主模型。本规则即用户指定。hook 会兜底，显式传仍是第一道防线。
 
 ## 分工
 
@@ -27,7 +27,7 @@ alwaysApply: true
 
 ## 讨论 + 审计分相
 
-讨论+宽窗事实审计：主只对齐；审计派只读子代理；禁重探同一证据面。窄例外：用户贴单条 trace/cid → 主按 `conversation-logs.mdc` 自跑。
+讨论默认审计 **HEAD 与 docs**，不是生产窗。宽窗日志审计仅当用户明说巡检 / reviews：主只对齐；审计派只读子代理；禁重探同一证据面。用户贴单条 trace/cid → 主按 `conversation-logs.mdc` 自跑（不套分相）。
 
 ## 委派
 

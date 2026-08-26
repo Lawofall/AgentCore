@@ -31,7 +31,7 @@ def setup_note_wall(
 
     Returns ``(note_wall | None, collaboration)``.
     """
-    from agentcore.runtime.delegate.seed_notes import seed_note_wall
+    from agentcore.runtime.delegate.seed_notes import is_note_wall_batch, seed_note_wall
     from agentcore.runtime.runs.notewall import NoteWall
 
     # 团队便签墙 (§2.2 通 / §2.3 合·对账): own this batch's wall here so the CEO finalize can fold
@@ -40,7 +40,7 @@ def setup_note_wall(
     # (normal 终态 below + replan(stop) finalize_stopped). One wall per drive call = per fan-out
     # batch, matching the wall's existing per-batch visibility scope.
     # 存在性由 CEO 的 coordination 声明（缺省 none）；light 隐含 none。collaboration 仍走既有开关。
-    collaboration = len(plan.nodes) > 1 and coordination == "wall"
+    collaboration = is_note_wall_batch(len(plan.nodes), coordination)
     if not collaboration:
         tool._note_wall = None
         return None, False

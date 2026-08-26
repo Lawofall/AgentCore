@@ -2,21 +2,33 @@
 
 Byte / entry ceilings fail fast as capacity contracts. Channel / tool-exec
 wall-clock hangs are a separate liveness signal (see ``runtime.engine.tool_deadline``
-+ tool_exec). Office/PDF **extract** wall-clock is a capacity contract
-(``extract_timeout`` → ``contract_failure``), not channel liveness.
++ tool_exec). Office/PDF **extract** wall-clock is an observation (success
+envelope), not channel liveness and not ``contract_failure``.
 
 Aligned with desktop ``WORKSPACE_READ_MAX`` (``apps/desktop/src/main/fs/constants.ts``).
 """
 
 from __future__ import annotations
 
-# Whole-file read ceiling (text / bytes / line windows that load the file).
+# Whole-file read ceiling for **text** views (code / md). Office/PDF extract
+# uses the ingest caps below instead of this gate.
 WORKSPACE_READ_MAX_BYTES = 5 * 1024 * 1024  # 5 MiB — mirrors desktop Local
 
-# Office/PDF transparent extract: tighter than raw read so a multi-MiB PDF that
-# still fits the read ceiling cannot burn the extract worker. Byte cap is
-# fail-fast; extract wall-clock is also a contract (see timeout below).
-OFFICE_EXTRACT_MAX_BYTES = 2 * 1024 * 1024  # 2 MiB
+# Magic sniff / OLE size: first N bytes + total size. Not a whole-file gate.
+WORKSPACE_READ_HEAD_MAX_BYTES = 1024
+
+# Office/PDF extract ingest — two ceilings, because ingest is not one pipe:
+# on-disk (sidecar / cloud) stats then opens the path in the child; channel
+# Local still slurps via JSON/base64 IPC (desktop has no Python extract stack).
+# Output is still windowed (``OFFICE_EXTRACT_OUTPUT_CHARS`` + file_read caps).
+# Desktop ``WORKSPACE_EXTRACT_SOURCE_MAX`` mirrors the **channel** cap only.
+OFFICE_EXTRACT_DISK_MAX_BYTES = 100 * 1024 * 1024  # 100 MiB
+OFFICE_EXTRACT_CHANNEL_MAX_BYTES = 25 * 1024 * 1024  # 25 MiB
+
+# Extracted-text window inside the worker (same order as file_read char cap).
+OFFICE_EXTRACT_OUTPUT_CHARS = 80_000
+# PDF page window so a 200-page scan does not burn the full extract timeout.
+OFFICE_EXTRACT_PDF_MAX_PAGES = 40
 
 # Killable extract-worker budget. Timeout → FAILED + extract_timeout, not
 # liveness_timeout. Tests may patch this down to sub-second.
@@ -29,8 +41,33 @@ OFFICE_EXTRACT_TIMEOUT_SECONDS = 12.0
 # whole-tree pull) — and the response carries ``truncated`` when it does.
 WORKSPACE_BROWSE_LIST_MAX = 2000
 
-# Exact detail string shared with desktop ``opErr("WorkspaceIOError", …)``.
+# Exact detail prefix shared with desktop ``opErr("WorkspaceIOError", …)``.
+# AI reads may append ``（N字节）``; ``is_file_too_large_detail`` matches the prefix.
 FILE_TOO_LARGE_DETAIL = "文件过大，无法读取"
+
+
+def effective_read_bytes_cap(max_bytes: int | None) -> int:
+    """Clamp a ``read_bytes`` request: default text gate, never above channel ingest.
+
+    ``read_bytes`` is the IPC/memory path. On-disk Office extract must pass
+    ``OFFICE_EXTRACT_DISK_MAX_BYTES`` into ``_reject_oversized_file(ingest_cap=…)``
+    instead of this helper, or a 40 MiB sidecar PDF would still be refused.
+    """
+    requested = WORKSPACE_READ_MAX_BYTES if max_bytes is None else int(max_bytes)
+    if requested < 1:
+        requested = WORKSPACE_READ_MAX_BYTES
+    return min(requested, OFFICE_EXTRACT_CHANNEL_MAX_BYTES)
+
+
+def effective_read_head_cap(max_bytes: int | None) -> int:
+    """Clamp a ``read_head`` peek: never above ``WORKSPACE_READ_HEAD_MAX_BYTES``."""
+    requested = (
+        WORKSPACE_READ_HEAD_MAX_BYTES if max_bytes is None else int(max_bytes)
+    )
+    if requested < 1:
+        requested = WORKSPACE_READ_HEAD_MAX_BYTES
+    return min(requested, WORKSPACE_READ_HEAD_MAX_BYTES)
+
 
 # Channel / tool-result markers for hung desktop / cancelled transport (not capacity).
 LIVENESS_TIMEOUT_DETAIL_MARKERS = (

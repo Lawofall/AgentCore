@@ -91,7 +91,7 @@ async def test_spreadsheet_without_preview_omits_code_execute_when_unassembled()
         available_tools=frozenset({"file_read", "file_write"}),
     )
     assert out is not None
-    assert "[table / path only]" in out
+    assert "[表格 / 仅路径]" in out
     assert "includes code_execute" not in out
     assert "with code_execute" not in out
     assert "Do NOT use an OS absolute path" in out
@@ -674,7 +674,7 @@ async def test_non_image_spreadsheet_skips_vision():
         available_tools=frozenset(),
     )
     assert out is not None
-    assert "[table /" in out
+    assert "[表格 /" in out
     assert "[image" not in out
     assert "未配置识图" not in out
     assert "includes code_execute" not in out
@@ -701,7 +701,7 @@ async def test_table_structure_preview_hides_full_body():
         available_tools=frozenset(),
     )
     assert out is not None
-    assert "[table / structure]" in out
+    assert "[表格 / 结构面]" in out
     assert "rows: 20" in out
     assert "date:date" in out
     assert "amount:float" in out or "amount:int" in out

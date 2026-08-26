@@ -90,6 +90,88 @@ def test_run_plan_payload_accepts_prev_execution_id():
     assert model.prev_execution_id == "e1"
 
 
+def test_run_plan_payload_accepts_note_wall():
+    ev = run_plan(
+        execution_id="e1",
+        plan_type="multi_agent",
+        task_summary="t",
+        agents=[],
+        runs=[],
+        note_wall=True,
+    )
+    model = RunPlanPayload.model_validate(ev.payload)
+    assert model.note_wall is True
+
+
+def test_run_plan_omits_note_wall_when_false():
+    ev = run_plan(
+        execution_id="e1",
+        plan_type="multi_agent",
+        task_summary="t",
+        agents=[],
+        runs=[],
+        note_wall=False,
+    )
+    assert "note_wall" not in ev.payload
+
+
+class _WallDelegate:
+    _depth = 0
+    _captain_run_id = "cap-1"
+    _coordination = "wall"
+
+
+def test_delegate_plan_event_emits_note_wall_for_parallel_wall_batch():
+    plan = RunPlan(
+        nodes=[
+            RunSpec(run_id="r1", task="接口", role="后端"),
+            RunSpec(run_id="r2", task="页面", role="前端"),
+        ]
+    )
+    ev = plan_event(_WallDelegate(), "e1", plan)
+    assert ev.payload.get("note_wall") is True
+
+
+def test_delegate_plan_event_omits_note_wall_for_solo_or_none():
+    solo = RunPlan(nodes=[RunSpec(run_id="r1", task="调研", role="研究员")])
+    ev = plan_event(_WallDelegate(), "e1", solo)
+    assert "note_wall" not in ev.payload
+    parallel = RunPlan(
+        nodes=[
+            RunSpec(run_id="r1", task="接口", role="后端"),
+            RunSpec(run_id="r2", task="页面", role="前端"),
+        ]
+    )
+    ev = plan_event(_StubDelegate(), "e1", parallel)
+    assert "note_wall" not in ev.payload
+
+
+def test_project_turn_note_wall_without_notes():
+    projected = project_turn(
+        [
+            {
+                "type": "run_plan",
+                "payload": {
+                    "execution_id": "e1",
+                    "plan_type": "multi_agent",
+                    "task_summary": "t",
+                    "note_wall": True,
+                    "agents": [
+                        {"id": "a1", "role": "后端", "thinking": True},
+                        {"id": "a2", "role": "前端", "thinking": True},
+                    ],
+                    "runs": [
+                        {"id": "r1", "agent_id": "a1", "task": "接口", "depends_on": []},
+                        {"id": "r2", "agent_id": "a2", "task": "页面", "depends_on": []},
+                    ],
+                },
+            }
+        ]
+    )
+    assert projected["teamNotes"] == []
+    assert projected.get("noteWall") is True
+
+
 def test_debate_moderator_plan_event_emits_act_1_debate():
     cfg = SimpleNamespace(form="oxford", motion="是否应采用方案 A")
     ev = moderator_plan_event(_StubDebate(), "e1", "mod-1", cfg)  # type: ignore[arg-type]

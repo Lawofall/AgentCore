@@ -374,6 +374,15 @@ export function toolDetail(
 ): string {
   if (toolName === "browser") return browserToolDetail(args);
   if (toolName === "host") return hostToolDetail(args);
+  if (toolName === "code_execute") {
+    const lang = typeof args.language === "string" ? args.language.trim() : "";
+    if (lang) return asTitleDetail(lang);
+  }
+  if (toolName === "test_run") {
+    const check = typeof args.check === "string" ? args.check.trim() : "";
+    // check=command 时芯片用真实命令；枚举词 "command" 本身不进标题。
+    if (check && check !== "command") return asTitleDetail(check);
+  }
   const transfer = fileTransferDetail(args);
   if (transfer) return transfer;
   for (const k of TOOL_DETAIL_KEYS) {

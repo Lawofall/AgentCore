@@ -3,7 +3,7 @@
  * ONE flat tab strip (方案 B · 图1式):
  *
  *  - 「工作区」(first)：不可销毁、可 detach 为应用内浮窗；
- *  - 「改动」(second)：§十 按需打开（产物卡 / Git chip / `+`），可关、可 detach；
+ *  - 「改动」(second)：§十 按需打开（Git chip / `+`），可关、可 detach；
  *  - closable content tabs (≤12, 工作区 / 打开中的改动不计): File 多实例、Terminal / Browser 各一壳
  *   （壳内各自管会话/页签）、run / endpoint / simple-turn 详情。
  *
@@ -321,7 +321,7 @@ export interface SidePanelState {
    */
   changesOpen: boolean;
   /**
-   * 「改动」tab 聚焦的回合（产物卡「查看改动」写入）。
+   * 「改动」tab 聚焦的回合（`showChanges(turnKey)` 写入）。
    * 切对话时应清掉（避免旧 messageId 在新对话上错误聚焦）。
    */
   changesFocusMessageId: string | null;

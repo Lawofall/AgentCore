@@ -181,11 +181,9 @@ async def test_sandbox_broken_after_boot_is_detected_on_stale_read(
     """AppArmor / runtime_root / userns regression AFTER boot must close the gate.
 
     Boot says healthy, runsc then rots. A boot-only cache would keep assembling
-    code_execute forever; the aged verdict has to be re-probed. Browser is
-    gated by shape B, not this shape-A verdict.
+    code_execute forever; the aged verdict has to be re-probed. Browser uses the
+    same desk verdict.
     """
-    from agentcore.tools.sandbox.browser.netns import set_browser_netns_health_for_tests
-
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     sandbox = _FakeSandbox(ok=True)
     monkeypatch.setattr(
@@ -194,7 +192,6 @@ async def test_sandbox_broken_after_boot_is_detected_on_stale_read(
     )
     backend = _CloudBackend()
 
-    set_browser_netns_health_for_tests(True)
     await probe_cloud_sandbox_at_startup()
     assert cloud_sandbox_health() is True
     assert code_execution_enabled_for(backend) is True
@@ -214,8 +211,8 @@ async def test_sandbox_broken_after_boot_is_detected_on_stale_read(
     assert cloud_sandbox_health() is False
     assert cloud_sandbox_health_failure() == ("runsc_failed", "userns disabled")
     assert code_execution_enabled_for(backend) is False
-    # Shape A rot must not withhold a healthy shape-B browser.
-    assert browser_execution_enabled_for(backend) is True
+    # Desk health rot withholds browser too (same guest).
+    assert browser_execution_enabled_for(backend) is False
 
 
 @pytest.mark.asyncio
@@ -229,9 +226,6 @@ async def test_fresh_verdict_is_never_reprobed_per_call(monkeypatch: pytest.Monk
     )
     backend = _CloudBackend()
 
-    from agentcore.tools.sandbox.browser.netns import set_browser_netns_health_for_tests
-
-    set_browser_netns_health_for_tests(True)
     await probe_cloud_sandbox_at_startup()
     for _ in range(5):
         assert code_execution_enabled_for(backend) is True
@@ -362,8 +356,10 @@ def test_sidecar_withholds_cloud_execution_even_when_unprobed(
     names = set(build_worker_registry(backend=_CloudBackend()).names)
     assert "code_execute" not in names
     assert "test_run" not in names
+    assert "browser" not in names
     local_names = set(build_worker_registry(backend=LocalBackend()).names)
     assert "code_execute" in local_names
+    assert "browser" not in local_names
 
 
 def test_sidecar_withholds_cloud_execution_even_if_probe_says_healthy(
@@ -375,3 +371,4 @@ def test_sidecar_withholds_cloud_execution_even_if_probe_says_healthy(
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(True)
     assert code_execution_enabled_for(_CloudBackend()) is False
+    assert browser_execution_enabled_for(_CloudBackend()) is False

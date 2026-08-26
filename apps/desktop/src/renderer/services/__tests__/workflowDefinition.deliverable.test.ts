@@ -23,7 +23,6 @@ const FULL_DELIVERABLE = {
   web_quality_soft_exempt: false,
   web_quality_soft_exempt_labels: ["emoji_heading"],
   visual_critic: true,
-  must_contain_soft: false,
   strict: true,
   citation_mode: "two_phase",
   code_audit_gate: true,

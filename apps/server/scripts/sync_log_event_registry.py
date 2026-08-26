@@ -57,6 +57,34 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "kind": "str",
         "reason": "str",
     },
+    "journal.failure_pack_written": {
+        "trace_id": "str",
+        "conversation_id": "str",
+        "message_id": "str",
+        "finish_reason": "str",
+        "rows": "int",
+        "path": "str",
+    },
+    "journal.failure_pack_skipped": {
+        "message_id": "str",
+        "conversation_id": "str",
+        "finish_reason": "str",
+        "reason": "str",
+    },
+    "journal.failure_pack_failed": {
+        "message_id": "str",
+        "trace_id": "str",
+        "error": "str",
+    },
+    "journal.failure_pack_gc_failed": {
+        "path": "str",
+        "error": "str",
+    },
+    "journal.failure_pack_gc_expired": {
+        "path": "str",
+        "trace_id": "str",
+        "ttl_days": "int",
+    },
     "llm.rate_limit_no_retry": {
         "provider": "str",
         "scenario": "str",
@@ -661,6 +689,46 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "shape": "str",
         "detail": "str",
     },
+    "sandbox.desk_started": {
+        "workspace": "str",
+        "container_id": "str",
+    },
+    "sandbox.desk_closed": {
+        "workspace": "str",
+        "container_id": "str",
+    },
+    "sandbox.desk_process_started": {
+        "process_id": "str",
+        "conversation_id": "str",
+        "workspace": "str",
+    },
+    "sandbox.desk_process_stopped": {
+        "process_id": "str",
+        "conversation_id": "str",
+    },
+    "sandbox.desk_processes_dropped": {
+        "count": "int",
+        "desks": "int",
+    },
+    "sandbox.desk_reaped": {
+        "workspace": "str",
+        "container_id": "str",
+    },
+    "sandbox.desk_reaper_swept": {
+        "closed": "int",
+    },
+    "sandboxd.start_detach": {
+        "container_id": "str",
+    },
+    "sandboxd.exec": {
+        "container_id": "str",
+        "bin": "str",
+    },
+    "sandboxd.exec_stdio": {
+        "container_id": "str",
+        "exec_id": "str",
+        "bin": "str",
+    },
     "compaction.shutdown_timeout": {
         "pending": "int",
         "timeout_seconds": "float",
@@ -822,6 +890,18 @@ HISTORICAL_COMPAT: dict[str, str] = {
     ),
     "team_preview.orphaned": (
         "历史兼容：曾在发新开工卡前结算旧 pending 时发出；开工卡产品位已拆，不再发此事件"
+    ),
+    "sandbox.write_back": (
+        "历史兼容：曾为 copy-out 写回计数；云桌 bind 落盘后不再发此事件"
+    ),
+    "browser.netns_health_failed": (
+        "历史兼容：曾为独立 browser netns 装配门失败；现跟 desk 健康，不再发此事件"
+    ),
+    "browser.netns_health_ok": (
+        "历史兼容：曾为独立 browser netns 装配门成功；现跟 desk 健康，不再发此事件"
+    ),
+    "browser.netns_setup": (
+        "历史兼容：曾为 family=browser 会话 netns；现 Chromium exec 进桌，不再发此事件"
     ),
 }
 
@@ -1003,8 +1083,19 @@ KEY_DESC: dict[str, str] = {
         "runsc 探针失败看 sandboxd.health_failed"
     ),
     "sandboxd.health_failed": (
-        "sandboxd 形状探针失败：shape=code（A）或 net（B）；detail 为 runsc/ip 尾部"
+        "sandboxd 形状探针失败：shape=net（desk guest）；detail 为 runsc/ip 尾部"
     ),
+    "sandbox.desk_started": "云桌长寿命 guest 已 start-detach（会话键=工作区根）",
+    "sandbox.desk_closed": "云桌 guest 已 kill+delete（lifespan close_all 或测试重置）",
+    "sandbox.desk_process_started": "云桌 guest 内已短 exec 拉起按对话记账的长驻进程",
+    "sandbox.desk_process_stopped": "云桌 guest 内已短 exec 结束一条长驻进程",
+    "sandbox.desk_processes_dropped": "关停 desk 时丢掉该桌的进程登记（guest kill 收掉 pid）",
+    "sandbox.desk_reaped": "空闲云桌 guest 已 kill+delete（盘保留；下次懒创建）",
+    "sandbox.desk_reaper_error": "桌级 idle reap 扫一轮失败（不打死 browser_reaper 循环）",
+    "sandbox.desk_reaper_swept": "桌级 idle reap 扫到并关掉了若干空闲 guest",
+    "sandboxd.start_detach": "sandboxd 已 ``runsc run -d`` 拉起长寿命 guest",
+    "sandboxd.exec": "sandboxd 已 ``runsc exec`` 进允许表解释器",
+    "sandboxd.exec_stdio": "sandboxd 已 ``runsc exec`` stdio 进桌内驱动（不另起 guest）",
     "compaction.shutdown_timeout": "停机 flush 在飞 fold 超时（best-effort，取消剩余 task）",
     "memory.consolidation_window_dropped": (
         "不可重试 consolidation 失败：推进水位并丢弃本窗口（防 sweeper 无限重选）"
@@ -1093,6 +1184,17 @@ KEY_DESC: dict[str, str] = {
     ),
     "journal.sealed_overflow": "pause 封盘后的 run_*/execution_* 终态转到未封 overflow writer",
     "journal.sealed_skip": "pause 快照流在 seal 后被拒绝追加（trailing *_required 等，有意定格）",
+    "journal.failure_pack_written": (
+        "失败回合 persist 成功后写出 journal-only 包（meta + redacted jsonl；无原文）"
+    ),
+    "journal.failure_pack_skipped": (
+        "失败回合本应写 journal-only 包但跳过（missing_trace / invalid_trace）"
+    ),
+    "journal.failure_pack_failed": "journal-only 失败包写盘失败（best-effort，不打断回合）",
+    "journal.failure_pack_gc_failed": "清理 30 天外 logs/packs 目录失败（只记日志）",
+    "journal.failure_pack_gc_expired": (
+        "因超过 30 天 TTL 删除 logs/packs/<trace_id>/（成功清理，记下删了哪份）"
+    ),
     "sidecar.outbox_ready_overflow": "outbox 已 READY 仍追加 execution 终态（pause 快照定格、终态不丢）",
     "sidecar.outbox_ready_skip": "outbox 已 READY，非 execution 终态的 journal append 被跳过",
     "roster.conversation_evicted": (

@@ -1,9 +1,7 @@
 """Package-registry egress chokepoint (install path only).
 
-Shape borrowed from browser netns+proxy; policy is **allowlist-only** (hosts from
-``ALLOWED_NPM_REGISTRIES`` + egress-only ``ALLOWED_NPM_HOSTS`` CDN; CDN ≠ pin registry),
-not browser SSRF deny-private. Non-install code paths keep their existing offline /
-rootless-host behaviour.
+Allowlist-only (hosts from ``ALLOWED_NPM_REGISTRIES`` + egress-only
+``ALLOWED_NPM_HOSTS`` CDN; CDN ≠ pin registry), not browser SSRF deny-private.
 """
 
 from __future__ import annotations

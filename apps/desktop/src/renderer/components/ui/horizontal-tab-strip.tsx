@@ -13,16 +13,20 @@ import {
 } from "react";
 import {
   NO_TAB_DRAG_ATTR,
+  type ReorderAxis,
   type ReorderPlace,
   TAB_DRAG_THRESHOLD_PX,
   moveItem,
+  placeAlongAxis,
 } from "./tab-reorder";
 import { useHorizontalTabScroll } from "./useHorizontalTabScroll";
 
 export {
   moveItem,
   NO_TAB_DRAG_ATTR,
+  placeAlongAxis,
   TAB_DRAG_THRESHOLD_PX,
+  type ReorderAxis,
   type ReorderPlace,
 } from "./tab-reorder";
 export {
@@ -139,9 +143,32 @@ type DragSession = {
   el: HTMLElement;
 };
 
+/** Lift geometry for a floating drag ghost (pointer-follow; not the source row). */
+export type SortableDragPreview = {
+  id: string;
+  width: number;
+  height: number;
+  grabOffsetX: number;
+  grabOffsetY: number;
+  pointerX: number;
+  pointerY: number;
+};
+
 export interface UseSortableTabIdsOptions {
   disabled?: boolean;
   thresholdPx?: number;
+  /**
+   * Hit-test axis for before/after. Default `"x"` keeps the dock tab strip
+   * horizontal; stacked rows (sidebar folder groups) pass `"y"`.
+   */
+  axis?: ReorderAxis;
+  /**
+   * Idle grab cursor. Tabs default to grab; folder group rows pass `false`
+   * so the row stays a clickable header until a drag actually starts.
+   */
+  idleGrabCursor?: boolean;
+  /** Source-row classes while dragging. Tabs fade at 60%; stacked rows pass 40%. */
+  draggingClassName?: string;
 }
 
 export interface SortableTabItemProps
@@ -165,7 +192,18 @@ export function useSortableTabIds(
 ) {
   const disabled = options?.disabled ?? false;
   const thresholdPx = options?.thresholdPx ?? TAB_DRAG_THRESHOLD_PX;
+  const axis = options?.axis ?? "x";
+  const idleGrabCursor = options?.idleGrabCursor ?? true;
+  const draggingClassName =
+    options?.draggingClassName ?? "cursor-grabbing opacity-60";
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overTarget, setOverTarget] = useState<{
+    overId: string;
+    place: ReorderPlace;
+  } | null>(null);
+  const [dragPreview, setDragPreview] = useState<SortableDragPreview | null>(
+    null,
+  );
   const sessionRef = useRef<DragSession | null>(null);
   /** Survives past pointerup so the trailing click does not activate the tab. */
   const suppressClickRef = useRef(false);
@@ -176,6 +214,8 @@ export function useSortableTabIds(
   onReorderRef.current = onReorder;
   const thresholdPxRef = useRef(thresholdPx);
   thresholdPxRef.current = thresholdPx;
+  const axisRef = useRef(axis);
+  axisRef.current = axis;
 
   const detachDocListeners = useCallback(() => {
     detachDocListenersRef.current?.();
@@ -189,6 +229,8 @@ export function useSortableTabIds(
       const { el } = session;
       sessionRef.current = null;
       setDraggingId(null);
+      setOverTarget(null);
+      setDragPreview(null);
       detachDocListeners();
       try {
         if (el.hasPointerCapture?.(pointerId)) {
@@ -228,8 +270,7 @@ export function useSortableTabIds(
         const overId = tab.getAttribute("data-tab-id");
         if (!overId || overId === fromId) continue;
         const rect = tab.getBoundingClientRect();
-        const place: ReorderPlace =
-          clientX < rect.left + rect.width / 2 ? "before" : "after";
+        const place = placeAlongAxis(axisRef.current, clientX, clientY, rect);
         return { overId, place };
       }
       return null;
@@ -259,6 +300,16 @@ export function useSortableTabIds(
           session.dragging = true;
           suppressClickRef.current = true;
           setDraggingId(fromId);
+          const rect = el.getBoundingClientRect();
+          setDragPreview({
+            id: fromId,
+            width: rect.width,
+            height: rect.height,
+            grabOffsetX: e.clientX - rect.left,
+            grabOffsetY: e.clientY - rect.top,
+            pointerX: e.clientX,
+            pointerY: e.clientY,
+          });
           try {
             el.setPointerCapture?.(e.pointerId);
           } catch {
@@ -269,6 +320,11 @@ export function useSortableTabIds(
         if (hit) {
           session.overId = hit.overId;
           session.place = hit.place;
+          setOverTarget((prev) =>
+            prev?.overId === hit.overId && prev.place === hit.place
+              ? prev
+              : hit,
+          );
         }
       };
 
@@ -347,17 +403,30 @@ export function useSortableTabIds(
         className: cn(
           "touch-none select-none",
           draggingId === id
-            ? "cursor-grabbing opacity-60"
-            : disabled
+            ? draggingClassName
+            : disabled || !idleGrabCursor
               ? undefined
               : "cursor-grab",
         ),
       };
     },
-    [attachDocListeners, disabled, draggingId, endSession],
+    [
+      attachDocListeners,
+      disabled,
+      draggingClassName,
+      draggingId,
+      endSession,
+      idleGrabCursor,
+    ],
   );
 
-  return { getItemProps, draggingId };
+  return {
+    getItemProps,
+    draggingId,
+    overId: overTarget?.overId ?? null,
+    place: overTarget?.place ?? null,
+    dragPreview,
+  };
 }
 
 export interface SortableTabProps extends HTMLAttributes<HTMLDivElement> {

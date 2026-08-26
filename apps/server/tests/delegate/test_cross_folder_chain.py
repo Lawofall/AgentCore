@@ -286,7 +286,15 @@ async def test_bare_chat_prose_no_target_passes_2b_gate(
         approval_gate=None,
     )
     result = await tool.execute(
-        {"tasks": [{"role": "客服", "task": "打招呼"}]},
+        {
+            "tasks": [
+                {
+                    "role": "客服",
+                    "task": "打招呼",
+                    "deliverable": {"form": "prose"},
+                }
+            ]
+        },
         ctx,
     )
     err = result.error or ""

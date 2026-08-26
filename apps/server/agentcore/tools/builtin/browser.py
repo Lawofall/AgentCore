@@ -48,7 +48,6 @@ from agentcore.tools.registration import (
 from agentcore.tools.sandbox.browser.netns import (
     EGRESS_UNAVAILABLE_CODE,
     is_netns_capability_error,
-    mark_browser_netns_unavailable,
 )
 from agentcore.tools.sandbox.browser.protocol import (
     STATE_CHANGING_ACTIONS,
@@ -153,6 +152,16 @@ def browser_action_name(arguments: dict[str, Any] | None) -> str:
     return str((arguments or {}).get("action") or "").strip().lower()
 
 
+def _workspace_root_str(backend: object | None) -> str | None:
+    if backend is None:
+        return None
+    root = getattr(backend, "root", None)
+    if root is None:
+        return None
+    text = str(root).strip()
+    return text or None
+
+
 def _is_ceo_context(context: Any) -> bool:
     """CEO turns carry no worker-only coordination channels (same as host/git)."""
     return (
@@ -222,8 +231,8 @@ def _classify_session_error(exc: BrowserSessionError) -> str | None:
 
 
 def _egress_unavailable_result(start: float, *, message: str | None = None) -> ToolResult:
-    # Sticky: host netns proven unavailable → withhold browser_* on subsequent turns.
-    mark_browser_netns_unavailable()
+    # This turn: retire browser_* so the model stops retrying. Assembly still
+    # follows desk cloud_sandbox_health, not a second sticky jail.
     return _error(
         message or _EGRESS_UNAVAILABLE_MSG,
         start,
@@ -428,7 +437,7 @@ class _BrowserToolBase:
             host_kind = "sandbox"
         request = BrowserSessionRequest(
             conversation_id=context.conversation_id,
-            workspace_root=None,
+            workspace_root=_workspace_root_str(context.backend),
             viewport_width=int(settings.browser_keyframe_width),
             jpeg_quality=int(settings.browser_keyframe_jpeg_quality),
             session_id=want_sid,

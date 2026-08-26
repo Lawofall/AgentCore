@@ -200,25 +200,13 @@ export function ConversationChangesPanel() {
                   focused ? "ring-1 ring-primary/40" : ""
                 }`}
               >
-                <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-                  <Diff size={13} className="shrink-0 text-muted-foreground" />
-                  <h3 className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
-                    {entry.label}
-                    {entry.artifacts.length > 0 && (
-                      <span className="ml-2 tabular-nums text-muted-foreground/80">
-                        {entry.artifacts.length} 个文件
-                      </span>
-                    )}
-                  </h3>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {formatMessageTime(entry.at)}
-                  </span>
-                </header>
                 <TurnFileChangesReview
                   artifacts={entry.artifacts}
                   conversationId={conversationId}
                   messageId={entry.messageId}
                   variant="panel"
+                  heading={entry.label}
+                  headingTime={formatMessageTime(entry.at)}
                 />
               </section>
             );

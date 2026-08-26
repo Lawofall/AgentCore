@@ -7,7 +7,7 @@ import type { FsRoot, WorkspaceOpResult } from "@shared/ipc-contract";
 import JSZip from "jszip";
 
 /** Align server ``workspace_upload_max_bytes`` — skip oversized leaves on PUT. */
-export const IMPORT_PUT_MAX_BYTES = 25 * 1024 * 1024;
+export const IMPORT_PUT_MAX_BYTES = 50 * 1024 * 1024;
 
 export type ArchivePayload = {
   archive: string;

@@ -3,6 +3,7 @@ import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
+  mergeFolderGroupOrder,
   useSidebarStore,
 } from "../sidebar";
 
@@ -13,6 +14,7 @@ beforeEach(() => {
     collapsed: false,
     width: SIDEBAR_DEFAULT_WIDTH,
     expandedSections: { "folder-a": true },
+    folderGroupOrder: [],
   });
 });
 
@@ -96,6 +98,44 @@ describe("sidebar store", () => {
     it("leaves other sections untouched", () => {
       store().setSection("ws-1", true);
       expect(store().expandedSections["folder-a"]).toBe(true);
+    });
+  });
+
+  describe("mergeFolderGroupOrder / reorderFolderGroups", () => {
+    it("first reorder writes the visible order (empty stored)", () => {
+      expect(mergeFolderGroupOrder([], ["c", "a", "b"])).toEqual([
+        "c",
+        "a",
+        "b",
+      ]);
+      store().reorderFolderGroups(["c", "a", "b"]);
+      expect(store().folderGroupOrder).toEqual(["c", "a", "b"]);
+    });
+
+    it("second reorder splices visible ids and keeps overflow ids", () => {
+      const stored = ["a", "b", "c", "d", "e", "f", "overflow"];
+      expect(
+        mergeFolderGroupOrder(stored, ["b", "a", "c", "d", "e", "f"]),
+      ).toEqual(["b", "a", "c", "d", "e", "f", "overflow"]);
+      store().reorderFolderGroups(stored);
+      store().reorderFolderGroups(["b", "a", "c", "d", "e", "f"]);
+      expect(store().folderGroupOrder).toEqual([
+        "b",
+        "a",
+        "c",
+        "d",
+        "e",
+        "f",
+        "overflow",
+      ]);
+    });
+
+    it("keeps a hidden id's 序位 when splicing a visible permutation", () => {
+      expect(mergeFolderGroupOrder(["a", "hidden", "b"], ["b", "a"])).toEqual([
+        "b",
+        "hidden",
+        "a",
+      ]);
     });
   });
 });

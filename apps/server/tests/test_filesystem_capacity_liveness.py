@@ -18,12 +18,11 @@ from agentcore.tools.builtin.grep import GrepTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.limits import (
-    FILE_TOO_LARGE_DETAIL,
-    OFFICE_EXTRACT_MAX_BYTES,
     WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS,
     WORKSPACE_READ_MAX_BYTES,
+    is_file_too_large_detail,
 )
-from agentcore.workspace.protocol import WorkspaceIOError
+from agentcore.workspace.protocol import PathNotFound, WorkspaceIOError
 from agentcore.workspace.server import ServerWorkspace
 
 
@@ -48,7 +47,7 @@ async def test_server_workspace_read_rejects_over_5mib(tmp_path: Path):
     ws = _ws(tmp_path)
     with pytest.raises(WorkspaceIOError) as ei:
         await ws.read("huge.bin")
-    assert str(ei.value) == FILE_TOO_LARGE_DETAIL
+    assert is_file_too_large_detail(str(ei.value))
 
 
 @pytest.mark.asyncio
@@ -58,7 +57,19 @@ async def test_server_workspace_read_bytes_rejects_over_5mib(tmp_path: Path):
     ws = _ws(tmp_path)
     with pytest.raises(WorkspaceIOError) as ei:
         await ws.read_bytes("huge.bin")
-    assert str(ei.value) == FILE_TOO_LARGE_DETAIL
+    assert is_file_too_large_detail(str(ei.value))
+
+
+@pytest.mark.asyncio
+async def test_server_workspace_read_bytes_extract_cap_allows_over_5mib(tmp_path: Path):
+    from agentcore.workspace.limits import OFFICE_EXTRACT_CHANNEL_MAX_BYTES
+
+    mid = WORKSPACE_READ_MAX_BYTES + 16
+    big = tmp_path / "mid.bin"
+    big.write_bytes(b"x" * mid)
+    ws = _ws(tmp_path)
+    data = await ws.read_bytes("mid.bin", max_bytes=OFFICE_EXTRACT_CHANNEL_MAX_BYTES)
+    assert len(data) == mid
 
 
 @pytest.mark.asyncio
@@ -78,7 +89,7 @@ async def test_resolve_for_download_bypasses_ai_read_gate(tmp_path: Path):
     # AI path still gated:
     with pytest.raises(WorkspaceIOError) as ei:
         await ws.read_bytes("deck.pptx")
-    assert str(ei.value) == FILE_TOO_LARGE_DETAIL
+    assert is_file_too_large_detail(str(ei.value))
 
 
 @pytest.mark.asyncio
@@ -89,7 +100,7 @@ async def test_resolve_for_download_rejects_over_upload_ceiling(tmp_path: Path):
     ws = _ws(tmp_path)
     with pytest.raises(WorkspaceIOError) as ei:
         await ws.resolve_for_download("too-big.bin", max_bytes=ceiling)
-    assert str(ei.value) == FILE_TOO_LARGE_DETAIL
+    assert is_file_too_large_detail(str(ei.value))
 
 
 @pytest.mark.asyncio
@@ -99,32 +110,205 @@ async def test_file_read_oversized_is_contract_failure(tmp_path: Path):
     result = await FileReadTool().execute({"path": "huge.txt"}, _ctx(_ws(tmp_path)))
     assert result.success is False
     assert result.contract_failure is True
+    assert result.failure_code == "too_large"
     assert "MiB" in (result.error or "")
+    assert "请用户" not in (result.error or "")
     assert result.metadata.get("capacity_contract") == "bytes"
 
 
 @pytest.mark.asyncio
-async def test_file_read_office_extract_budget_is_contract(tmp_path: Path):
-    # Under whole-file read max but over extract budget.
+async def test_file_read_office_midsize_extracts_not_budget_failure(tmp_path: Path):
+    """3 MiB-class PDF is under the text 5 MiB gate and must extract, not fail-fast."""
+    from unittest.mock import AsyncMock, patch
+
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+
     path = tmp_path / "deck.pdf"
-    path.write_bytes(b"%PDF-" + b"x" * (OFFICE_EXTRACT_MAX_BYTES + 100))
-    assert WORKSPACE_READ_MAX_BYTES > len(path.read_bytes()) > OFFICE_EXTRACT_MAX_BYTES
-    result = await FileReadTool().execute({"path": "deck.pdf"}, _ctx(_ws(tmp_path)))
-    assert result.success is False
-    assert result.contract_failure is True
-    assert result.metadata.get("capacity_contract") == "extract_bytes"
-    assert "抽取预算" in (result.error or "")
+    path.write_bytes(b"%PDF-" + b"x" * (3 * 1024 * 1024))
+    assert len(path.read_bytes()) < WORKSPACE_READ_MAX_BYTES
+    with patch(
+        "agentcore.tools.builtin.file_ops.read._extract_office",
+        new=AsyncMock(
+            return_value=ExtractResult(
+                status=ParseStatus.OK, text="Abstract in output\n", detail="ok"
+            )
+        ),
+    ):
+        result = await FileReadTool().execute({"path": "deck.pdf"}, _ctx(_ws(tmp_path)))
+    assert result.success is True
+    assert "Abstract in output" in (result.output or "")
+    assert "抽取预算" not in (result.output or "")
+    assert "请用户" not in (result.output or "")
 
 
 @pytest.mark.asyncio
-async def test_file_read_office_extract_timeout_is_contract_not_liveness(tmp_path: Path):
+async def test_file_read_office_over_text_gate_still_extracts(tmp_path: Path):
+    """6 MiB-class PDF exceeds the text 5 MiB gate but must still extract."""
+    from unittest.mock import AsyncMock, patch
+
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+
+    path = tmp_path / "contract.pdf"
+    path.write_bytes(b"%PDF-" + b"x" * (WORKSPACE_READ_MAX_BYTES + 16))
+    with patch(
+        "agentcore.tools.builtin.file_ops.read._extract_office",
+        new=AsyncMock(
+            return_value=ExtractResult(
+                status=ParseStatus.OK, text="Loan contract clause\n", detail="ok"
+            )
+        ),
+    ):
+        result = await FileReadTool().execute(
+            {"path": "contract.pdf"}, _ctx(_ws(tmp_path))
+        )
+    assert result.success is True
+    assert "Loan contract clause" in (result.output or "")
+    assert "请用户" not in (result.output or "")
+
+
+@pytest.mark.asyncio
+async def test_file_read_office_parent_does_not_read_bytes(tmp_path: Path):
+    """Sidecar/cloud disk extract must not slurp the PDF through ``read_bytes``."""
+    from unittest.mock import AsyncMock, patch
+
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+
+    (tmp_path / "deck.pdf").write_bytes(b"%PDF-x")
+    calls: list[str] = []
+    orig = ServerWorkspace.read_bytes
+
+    async def spy(self, path: str, *, max_bytes: int | None = None) -> bytes:
+        calls.append(path)
+        return await orig(self, path, max_bytes=max_bytes)
+
+    with (
+        patch.object(ServerWorkspace, "read_bytes", spy),
+        patch(
+            "agentcore.workspace.attachment_parse.extract_office_file",
+            new=AsyncMock(
+                return_value=ExtractResult(
+                    status=ParseStatus.OK,
+                    text="Abstract in output\n",
+                    detail="ok",
+                    size_bytes=6,
+                )
+            ),
+        ),
+    ):
+        result = await FileReadTool().execute(
+            {"path": "deck.pdf"}, _ctx(_ws(tmp_path))
+        )
+    assert result.success is True
+    assert "Abstract in output" in (result.output or "")
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_file_read_ole_does_not_read_bytes(tmp_path: Path):
+    from unittest.mock import patch
+
+    (tmp_path / "memo.doc").write_bytes(b"\xd0\xcf\x11\xe0" + b"\x00" * 32)
+    calls: list[str] = []
+    orig = ServerWorkspace.read_bytes
+
+    async def spy(self, path: str, *, max_bytes: int | None = None) -> bytes:
+        calls.append(path)
+        return await orig(self, path, max_bytes=max_bytes)
+
+    with patch.object(ServerWorkspace, "read_bytes", spy):
+        result = await FileReadTool().execute(
+            {"path": "memo.doc"}, _ctx(_ws(tmp_path))
+        )
+    assert result.success is True
+    assert "ole" in (result.output or "").lower()
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_file_read_misnamed_oversize_pdf_is_truncated_envelope(tmp_path: Path):
+    """``.txt`` that is a huge PDF must sniff via peek, not ``too_large`` contract."""
+    from agentcore.workspace.limits import (
+        FILE_TOO_LARGE_DETAIL,
+        OFFICE_EXTRACT_DISK_MAX_BYTES,
+    )
+    from agentcore.workspace.protocol import ReadHeadResult
+
+    class _PeekBackend(ServerWorkspace):
+        async def read_lines(  # noqa: ARG002
+            self, path: str, *, offset: int = 1, limit: int | None = None
+        ):
+            raise WorkspaceIOError(
+                f"{FILE_TOO_LARGE_DETAIL}（{OFFICE_EXTRACT_DISK_MAX_BYTES + 1}字节）"
+            )
+
+        async def read_head(  # noqa: ARG002
+            self, path: str, *, max_bytes: int | None = None
+        ) -> ReadHeadResult:
+            return ReadHeadResult(
+                data=b"%PDF-x\x00",
+                size_bytes=OFFICE_EXTRACT_DISK_MAX_BYTES + 1,
+            )
+
+        async def extract_office(
+            self, path: str, *, ext: str, start_page: int = 1
+        ):  # noqa: ARG002
+            raise WorkspaceIOError(
+                f"{FILE_TOO_LARGE_DETAIL}（{OFFICE_EXTRACT_DISK_MAX_BYTES + 1}字节）"
+            )
+
+    (tmp_path / "notes.txt").write_bytes(b"%PDF-x")
+    result = await FileReadTool().execute(
+        {"path": "notes.txt"},
+        _ctx(_PeekBackend(tmp_path, sandbox=SubprocessSandbox())),
+    )
+    assert result.success is True
+    assert result.contract_failure is not True
+    out = result.output or ""
+    assert "[观察信封]" in out
+    assert "kind: truncated" in out
+    assert "请用户" not in out
+
+
+@pytest.mark.asyncio
+async def test_file_read_office_source_over_extract_cap_is_truncated_envelope(
+    tmp_path: Path,
+):
+    from agentcore.workspace.limits import (
+        FILE_TOO_LARGE_DETAIL,
+        OFFICE_EXTRACT_DISK_MAX_BYTES,
+    )
+
+    class _CapBackend(ServerWorkspace):
+        async def read(self, path: str) -> str:  # noqa: ARG002
+            raise PathNotFound(path)
+
+        async def extract_office(
+            self, path: str, *, ext: str, start_page: int = 1
+        ):  # noqa: ARG002
+            raise WorkspaceIOError(
+                f"{FILE_TOO_LARGE_DETAIL}（{OFFICE_EXTRACT_DISK_MAX_BYTES + 1}字节）"
+            )
+
+    (tmp_path / "huge.pdf").write_bytes(b"%PDF-x")
+    result = await FileReadTool().execute(
+        {"path": "huge.pdf"}, _ctx(_CapBackend(tmp_path, sandbox=SubprocessSandbox()))
+    )
+    assert result.success is True
+    out = result.output or ""
+    assert "[观察信封]" in out
+    assert "kind: truncated" in out
+    assert "请用户" not in out
+
+
+@pytest.mark.asyncio
+async def test_file_read_office_extract_timeout_is_observation_not_liveness(tmp_path: Path):
     from unittest.mock import AsyncMock, patch
 
     from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
 
     (tmp_path / "slow.pdf").write_bytes(b"%PDF-x")
     with patch(
-        "agentcore.tools.builtin.file_ops.read.extract_office_bytes",
+        "agentcore.tools.builtin.file_ops.read._extract_office",
         new=AsyncMock(
             return_value=ExtractResult(
                 status=ParseStatus.FAILED, detail="extract_timeout"
@@ -132,14 +316,18 @@ async def test_file_read_office_extract_timeout_is_contract_not_liveness(tmp_pat
         ),
     ):
         result = await FileReadTool().execute({"path": "slow.pdf"}, _ctx(_ws(tmp_path)))
-    assert result.success is False
-    assert result.contract_failure is True
+    assert result.success is True
+    out = result.output or ""
     assert result.metadata.get("liveness_timeout") is not True
-    assert result.metadata.get("extract_timeout") is True
-    assert "活性挂起" not in (result.error or "")
-    assert "抽文本失败或超时" in (result.error or "")
-    assert "markitdown" not in (result.error or "").lower()
-    assert "code_execute" not in (result.error or "")
+    assert "活性挂起" not in out
+    assert "[观察信封]" in out
+    assert "kind: extract" in out
+    assert "超时" in out
+    assert "extract_timeout" not in out
+    assert "markitdown" not in out.lower()
+    assert "请用 code_execute" not in out
+    assert "不要用 code_execute" in out
+    assert "请用户" not in out
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,11 @@ class ModelCatalogCurrent(BaseModel):
         default=None,
         description="The BYOK provider the default runs on (null for platform / keyless).",
     )
+    ref: str = Field(
+        description=(
+            "Catalog identity for this row: @platform/{id} or @byok/{provider_id}/{id}."
+        ),
+    )
 
 
 class ModelUnavailableReason(BaseModel):
@@ -41,13 +46,20 @@ class ModelUnavailableReason(BaseModel):
 class ModelCatalogItem(BaseModel):
     """One selectable (or greyed-out) model in the user's catalog.
 
-    ``(id, origin, provider_id)`` is the unique key — the same model id may appear under
-    several BYOK providers (and once as a platform row), so the picker groups by provider.
+    Product identity is ``ref``. Internally ``(id, origin, provider_id)`` is still unique
+    — the same model id may appear under several BYOK providers (and once as a platform
+    row), so the picker groups by provider.
     """
 
     id: str
+    ref: str = Field(
+        description=(
+            "Catalog identity: @platform/{id} or @byok/{provider_id}/{id}. "
+            "Copy this into tool `model` fields; do not send origin/provider_id."
+        ),
+    )
     origin: Literal["byok", "platform"] = Field(
-        description="Credential origin when this model is selected."
+        description="Credential origin when this model is selected (row attribute)."
     )
     display_name: str
     vendor: str

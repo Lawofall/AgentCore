@@ -2,7 +2,6 @@
  * daily_review — 复盘提案清单：行式多选（与 organize_plan 同壳）。
  * 默认全选（seedAllMultiple）；取消勾选即跳过。detail = review_kind 中文 + 摘要。
  */
-import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { AskOption } from "@/types/events";
@@ -76,7 +75,6 @@ export function DailyReviewBody({
       caption={caption ?? META.activeCaption}
       title={content.question}
       subtitle={subtitle}
-      extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
       footer={
         <AskCardFooter
           cta={picked.length > 0 ? `${META.cta}（${picked.length}）` : META.cta}

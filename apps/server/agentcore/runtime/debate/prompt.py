@@ -306,7 +306,7 @@ def debater_task(
 
     两阶段契约：``task`` = 检索阶段（证据笔记）；``draft_brief`` / ``draft_system`` = 成稿阶段。
     ``interjections`` 为开赛嘱咐等首轮预注入的全场/定向用户插话；空则零行为变化。
-    ``turn_model`` = 本 turn 主模型（空 side 回退）；side 非空三元组优先注入路由键（§7.5）。
+    ``turn_model`` = 本 turn 主模型（空 side 回退）；side 非空身份优先注入路由键（§7.5）。
     """
     quick_suffix = "" if config.policy.thorough else f"\n{QUICK_DEBATER_HINT}"
     bg_block = _background_block(config)

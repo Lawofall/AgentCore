@@ -184,22 +184,21 @@ def _reset_cloud_sandbox_health():
 
 
 @pytest.fixture(autouse=True)
-def _reset_browser_netns_health():
-    """Clear the browser netns health cache so sticky/probe injection cannot leak."""
-    from agentcore.tools.sandbox.browser.netns import reset_browser_netns_health_for_tests
-
-    reset_browser_netns_health_for_tests()
-    yield
-    reset_browser_netns_health_for_tests()
-
-
-@pytest.fixture(autouse=True)
 def _reset_sandboxd_client():
     from agentcore.tools.sandbox.sandboxd.client import reset_sandboxd_client_for_tests
 
     reset_sandboxd_client_for_tests()
     yield
     reset_sandboxd_client_for_tests()
+
+
+@pytest.fixture(autouse=True)
+def _reset_desk_sessions():
+    from agentcore.tools.sandbox.gvisor import reset_desk_sessions_for_tests
+
+    reset_desk_sessions_for_tests()
+    yield
+    reset_desk_sessions_for_tests()
 
 
 @pytest.fixture(autouse=True)

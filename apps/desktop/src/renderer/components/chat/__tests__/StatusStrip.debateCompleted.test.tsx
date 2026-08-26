@@ -119,7 +119,6 @@ function renderStrip(execution: ReturnType<typeof projectExecution>) {
             expanded
             onToggle={() => {}}
             onMaximize={() => {}}
-            onReplay={() => {}}
           />
         </ExecutionScopeContext.Provider>
       </TooltipProvider>

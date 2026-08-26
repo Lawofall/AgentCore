@@ -1,4 +1,4 @@
-import { Input, Textarea } from "@/components/ui";
+import { Input, Select, Textarea } from "@/components/ui";
 import {
   type WorkflowDefNode,
   type WorkflowDefinition,
@@ -10,21 +10,38 @@ import {
   workflowSlots,
 } from "@/services/workflowDefinition";
 
+const DELIVERABLE_FORMS = [
+  { value: "prose", label: "纯文字" },
+  { value: "files", label: "文档" },
+  { value: "workspace", label: "改工程" },
+] as const;
+
+type DeliverableForm = (typeof DELIVERABLE_FORMS)[number]["value"];
+
+function isDeliverableForm(value: string): value is DeliverableForm {
+  return value === "prose" || value === "files" || value === "workspace";
+}
+
+/** 缺省或旧自由文都按文档档展示，不在渲染时改写 definition。 */
+function shownDeliverableForm(form: string | undefined): DeliverableForm {
+  return form !== undefined && isDeliverableForm(form) ? form : "files";
+}
+
 /**
  * 只改 `form`，其余交付契约（artifacts / required_sections / strict …）逐字保留：
  * 画布把整份 definition 原样 PATCH 回去，这里换成 `{ form }` 就等于用户改一次
- * 交付形式便抹掉契约。清空输入也只撤 `form`，全空了才整体撤掉 deliverable。
+ * 交付形式便抹掉契约。
  */
 function withDeliverableForm(
   current: WorkflowDeliverable | undefined,
-  form: string,
-): WorkflowDeliverable | undefined {
+  form: DeliverableForm,
+): WorkflowDeliverable {
   const next: WorkflowDeliverable = {};
   for (const [key, value] of Object.entries(current ?? {})) {
     if (key !== "form") next[key] = value;
   }
-  if (form.trim()) next.form = form;
-  return Object.keys(next).length > 0 ? next : undefined;
+  next.form = form;
+  return next;
 }
 
 /**
@@ -158,24 +175,26 @@ export function WorkflowNodeInspector({
       <TaskSlotHints definition={definition} task={node.task} />
       <label className="block" htmlFor="wf-deliverable">
         <span className="mb-1 block text-xs text-muted-foreground">
-          交付形式（可选）
+          交付形式
         </span>
-        <Input
+        <Select
           id="wf-deliverable"
-          className="w-full"
-          value={node.deliverable?.form ?? ""}
-          maxLength={120}
-          placeholder="例如：简报 Markdown"
-          onChange={(e) =>
+          value={shownDeliverableForm(node.deliverable?.form)}
+          onChange={(e) => {
+            const form = e.target.value;
+            if (!isDeliverableForm(form)) return;
             patch({
               ...node,
-              deliverable: withDeliverableForm(
-                node.deliverable,
-                e.target.value,
-              ),
-            })
-          }
-        />
+              deliverable: withDeliverableForm(node.deliverable, form),
+            });
+          }}
+        >
+          {DELIVERABLE_FORMS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
       </label>
     </div>
   );

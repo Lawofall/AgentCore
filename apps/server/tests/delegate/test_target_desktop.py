@@ -54,29 +54,32 @@ def test_effective_target_folder_id_prefers_explicit():
 
 
 def test_task_structurally_requires_write_desk():
-    assert task_structurally_requires_write_desk({"task": "打招呼"}) is False
+    assert task_structurally_requires_write_desk({"task": "打招呼"}) is True
     assert task_structurally_requires_write_desk(
         {"deliverable": {"form": "prose"}}
     ) is False
-    assert task_structurally_requires_write_desk({"deliverable": {}}) is False
+    assert task_structurally_requires_write_desk({"deliverable": {}}) is True
     assert task_structurally_requires_write_desk(
         {"deliverable": {"form": "files"}}
     ) is True
     assert task_structurally_requires_write_desk(
+        {"deliverable": {"form": "workspace"}}
+    ) is True
+    assert task_structurally_requires_write_desk(
         {"deliverable": {"requires_files": True}}
-    ) is False
+    ) is True
     assert task_structurally_requires_write_desk(
         {"deliverable": {"requires_files": False}}
-    ) is False
+    ) is True
     assert task_structurally_requires_write_desk(
         {"deliverable": {"artifacts": ["a.py"]}}
     ) is True
     assert task_structurally_requires_write_desk(
         {"deliverable": {"artifacts": ["  ", ""]}}
-    ) is False
+    ) is True
     assert task_structurally_requires_write_desk(
         {"deliverable": {"artifacts": []}}
-    ) is False
+    ) is True
 
 
 def test_resolve_bare_chat_write_scope():
@@ -165,14 +168,14 @@ def test_gate_bare_chat_blocks_write_deliverable_without_target():
     assert "写文件勿泄露正文" not in msg
 
 
-def test_gate_bare_chat_allows_prose_and_no_deliverable():
-    """无 deliverable / form=prose → 放行（坐 scratch、禁写由 write_scope 管）。"""
+def test_gate_bare_chat_allows_prose_only():
+    """仅显式 form=prose 免写桌；漏填 / 无 deliverable 须写桌。"""
     assert (
         gate_bare_chat_requires_target(
             session_folder_id=None,
             tasks_raw=[{"role": "客服", "task": "打招呼"}],
         )
-        is None
+        is not None
     )
     assert (
         gate_bare_chat_requires_target(
@@ -211,7 +214,7 @@ def test_gate_bare_chat_lists_all_missing_write_targets():
                 "task": "也缺写盘",
                 "deliverable": {"form": "files"},
             },
-            {"role": "丁", "task": "纯对话不进拒名单"},
+            {"role": "丁", "task": "纯对话不进拒名单", "deliverable": {"form": "prose"}},
         ],
     )
     assert msg is not None

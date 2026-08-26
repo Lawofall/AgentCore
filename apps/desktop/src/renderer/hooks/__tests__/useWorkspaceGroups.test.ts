@@ -179,4 +179,93 @@ describe("buildWorkspaceGroups (方案B 项目分组)", () => {
     expect(groups[0].folder.id).toBe("oldest");
     expect(groups[0].convs.map((c) => c.id)).toEqual(["b", "a"]);
   });
+
+  it("empty folderGroupOrder keeps activity order", () => {
+    const groups = buildWorkspaceGroups(
+      [
+        conv("old", { folderId: "f1", at: "2026-01-01T00:00:00Z" }),
+        conv("new", { folderId: "f2", at: "2026-02-01T00:00:00Z" }),
+      ],
+      [folder("f1"), folder("f2")],
+      new Set(),
+      { folderGroupOrder: [] },
+    );
+    expect(groups.map((g) => g.folder.id)).toEqual(["f2", "f1"]);
+  });
+
+  it("pinned order is sticky: a hotter group cannot jump a later pin", () => {
+    const groups = buildWorkspaceGroups(
+      [
+        conv("old", { folderId: "f1", at: "2026-01-01T00:00:00Z" }),
+        conv("new", { folderId: "f2", at: "2026-02-01T00:00:00Z" }),
+      ],
+      [folder("f1"), folder("f2")],
+      new Set(),
+      { folderGroupOrder: ["f1", "f2"] },
+    );
+    expect(groups.map((g) => g.folder.id)).toEqual(["f1", "f2"]);
+  });
+
+  it("unknown ids follow stored, sorted by activity among themselves", () => {
+    const groups = buildWorkspaceGroups(
+      [
+        conv("slow", { folderId: "pinned", at: "2026-01-01T00:00:00Z" }),
+        conv("hot", { folderId: "new-hot", at: "2026-03-01T00:00:00Z" }),
+        conv("warm", { folderId: "new-warm", at: "2026-02-01T00:00:00Z" }),
+      ],
+      [folder("pinned"), folder("new-hot"), folder("new-warm")],
+      new Set(),
+      { folderGroupOrder: ["pinned"] },
+    );
+    expect(groups.map((g) => g.folder.id)).toEqual([
+      "pinned",
+      "new-hot",
+      "new-warm",
+    ]);
+  });
+
+  it("cap follows pinned order, not activity", () => {
+    const folders = Array.from({ length: MAX_WORKSPACE_GROUPS + 1 }, (_, i) =>
+      folder(`f${i}`),
+    );
+    const conversations = folders.map((f, i) =>
+      conv(`c${i}`, {
+        folderId: f.id,
+        at: `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`,
+      }),
+    );
+    // Pin oldest-first so the hottest group is last and dropped by the cap.
+    const folderGroupOrder = folders.map((f) => f.id);
+    const groups = buildWorkspaceGroups(conversations, folders, new Set(), {
+      folderGroupOrder,
+    });
+    expect(groups).toHaveLength(MAX_WORKSPACE_GROUPS);
+    expect(groups.map((g) => g.folder.id)).toEqual(
+      folderGroupOrder.slice(0, MAX_WORKSPACE_GROUPS),
+    );
+  });
+
+  it("required squeeze-in still overlays a pinned order without sorting by activity", () => {
+    const folders = Array.from({ length: MAX_WORKSPACE_GROUPS + 1 }, (_, i) =>
+      folder(`f${i}`),
+    );
+    const conversations = folders.map((f, i) =>
+      conv(`c${i}`, {
+        folderId: f.id,
+        at: `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`,
+      }),
+    );
+    const folderGroupOrder = folders.map((f) => f.id);
+    const groups = buildWorkspaceGroups(
+      conversations,
+      folders,
+      new Set([`c${MAX_WORKSPACE_GROUPS}`]),
+      { folderGroupOrder },
+    );
+    expect(groups).toHaveLength(MAX_WORKSPACE_GROUPS);
+    expect(groups.map((g) => g.folder.id)).toEqual([
+      ...folderGroupOrder.slice(0, MAX_WORKSPACE_GROUPS - 1),
+      folderGroupOrder[MAX_WORKSPACE_GROUPS],
+    ]);
+  });
 });

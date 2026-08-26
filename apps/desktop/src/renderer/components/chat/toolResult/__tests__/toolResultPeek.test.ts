@@ -59,7 +59,7 @@ describe("toolResultPeek", () => {
     ).toBe("退出码 1");
   });
 
-  it("shows the first stdout line for a successful code_execute", () => {
+  it("does not peek stdout on successful code_execute", () => {
     expect(
       toolResultPeek(
         data({
@@ -67,7 +67,25 @@ describe("toolResultPeek", () => {
           display: { stdout: "hello\nworld", stderr: "", exit_code: 0 },
         }),
       ),
-    ).toBe("hello");
+    ).toBe("");
+  });
+
+  it("shows budget exceeded text for test_run over-budget", () => {
+    expect(
+      toolResultPeek(
+        data({
+          toolName: "test_run",
+          status: "error",
+          display: {
+            check: "typecheck",
+            stdout: "",
+            stderr: "timeout",
+            exit_code: -1,
+            budget_exceeded: true,
+          },
+        }),
+      ),
+    ).toBe("验证未完成（预算耗尽）");
   });
 
   it("names the path for a str_replace edit", () => {

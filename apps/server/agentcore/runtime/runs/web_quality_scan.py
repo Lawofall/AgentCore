@@ -1,13 +1,15 @@
 """Deterministic frontend quality gate for website / marketing file deliverables.
 
-Pure static scan — no browser, no new deps. Mounted from :mod:`contract` when a
-deliverable opts in via ``web_quality_scan`` (do **not** fold into placeholder_scan
-or web_seam).
+Pure static scan — no browser, no new deps. Mounted from :mod:`contract` when
+landed files include web extensions (HTML/CSS/JS/SVG). DESIGN.md contract
+(style id / tokens) is opt-in via ``design_contract`` / deliverable
+``web_quality_scan``. Do **not** fold into placeholder_scan or web_seam.
 
 **Hard** (always fail → contract.retry): shallow syntax damage (unclosed tags /
 broken CSS declarations) + fabricated contact fingerprints (fake 400 phones /
-fake ICP / placeholder emails) + P1a DESIGN contract (missing DESIGN.md /
-missing selected style id / scattered hex colors ⊈ DESIGN tokens).
+fake ICP / placeholder emails). P1a DESIGN contract (missing DESIGN.md /
+missing selected style id / scattered hex colors ⊈ DESIGN tokens) only when
+``design_contract`` is true.
 
 **Fill-phase hard** (when ``soft_exempt`` is false): unreplaced catalog mustache
 slots ``{{…}}`` in HTML — skeleton keeps soft_exempt so empty shells may land;
@@ -481,8 +483,14 @@ def scan_web_quality(
     *,
     soft_exempt: bool = False,
     soft_exempt_labels: Iterable[str] | None = None,
+    design_contract: bool = False,
 ) -> WebQualityScanResult:
-    """Scan landed web artifacts; return hard failures + soft anti-slop hits."""
+    """Scan landed web artifacts; return hard failures + soft anti-slop hits.
+
+    ``design_contract`` (deliverable ``web_quality_scan``) gates DESIGN.md /
+    style-id / scattered-color hard checks. Syntax / fake contacts / anti-slop
+    run whenever landed files include web extensions.
+    """
     result = WebQualityScanResult()
     if not artifact_contents:
         return result
@@ -491,7 +499,8 @@ def scan_web_quality(
     known_soft = soft_rule_labels()
     hard_hits: list[WebQualityHit] = []
     soft_hits: list[WebQualityHit] = []
-    hard_hits.extend(_scan_design_contract(artifact_contents))
+    if design_contract:
+        hard_hits.extend(_scan_design_contract(artifact_contents))
     for path, text in artifact_contents.items():
         if not path or not text or not _is_web_path(path):
             continue

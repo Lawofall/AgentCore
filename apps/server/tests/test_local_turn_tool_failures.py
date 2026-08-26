@@ -87,6 +87,7 @@ _TRACE = "0123456789abcdef0123456789abcdef"
         ),
         ("anything", "source_grep_redirect", "source_grep_redirect"),
         ("缺少参数", "schema", "schema"),
+        ("这份文件太大", "too_large", "too_large"),
     ],
 )
 def test_normalize_local_turn_tool_failure_code(message, code, expected):
@@ -319,6 +320,77 @@ def test_to_record_turn_body_includes_tool_failures_from_journal():
             "message": "搜索服务 down",
         }
     ]
+
+
+def test_to_record_turn_body_resume_after_seq_filters_only_tool_failures():
+    journal = {
+        "0": {
+            "kind": "tool_call",
+            "payload": {
+                "name": "file_read",
+                "success": False,
+                "result": "pause-turn fail",
+                "code": "too_large",
+            },
+            "ts": "t0",
+        },
+        "1": {
+            "kind": "tool_call",
+            "payload": {
+                "name": "web_search",
+                "success": False,
+                "result": "搜索服务 down",
+            },
+            "ts": "t1",
+        },
+    }
+    body = to_record_turn_body(
+        {
+            "user_message_id": "u1",
+            "user_message": "hi",
+            "trace_id": _TRACE,
+            "resume_after_seq": 0,
+            "journal": journal,
+        }
+    )
+    assert len(body["journal"]) == 2
+    assert body["tool_failures"] == [
+        {
+            "tool": "web_search",
+            "code": "searxng_unreachable",
+            "message": "搜索服务 down",
+        }
+    ]
+
+
+def test_tool_call_fact_code_schema_is_parse_only_not_all_contract_failure():
+    from agentcore.runtime.engine.tool_call_fact_code import tool_call_fact_code
+    from agentcore.runtime.loop_controller import ToolAttempt
+
+    too_large = ToolAttempt(
+        fingerprint="a",
+        tool_name="file_read",
+        success=False,
+        contract_failure=True,
+        meta={"code": "too_large"},
+    )
+    assert tool_call_fact_code(too_large) == "too_large"
+
+    parse = ToolAttempt(
+        fingerprint="b",
+        tool_name="file_read",
+        success=False,
+        parse_failure=True,
+    )
+    assert tool_call_fact_code(parse) == "schema"
+
+    contract_only = ToolAttempt(
+        fingerprint="c",
+        tool_name="file_read",
+        success=False,
+        contract_failure=True,
+    )
+    assert tool_call_fact_code(contract_only) == ""
 
 
 def test_to_record_turn_body_omits_tool_failures_when_none():

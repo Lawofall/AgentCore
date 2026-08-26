@@ -103,6 +103,7 @@ class WorkspaceOp(StrEnum):
     WRITE = "write"
     APPEND = "append"
     READ_BYTES = "read_bytes"
+    READ_HEAD = "read_head"
     WRITE_BYTES = "write_bytes"
     LIST = "list"
     EXISTS = "exists"

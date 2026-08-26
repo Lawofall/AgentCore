@@ -45,12 +45,16 @@ vi.mock("@/stores/sidebar", () => ({
     sel: (s: {
       expandedSections: Record<string, boolean>;
       setSection: () => void;
+      folderGroupOrder: string[];
+      reorderFolderGroups: (nextVisibleIds: string[]) => void;
     }) => unknown,
   ) =>
     sel({
       // Auto-expand every group in tests so unpinned rows are visible.
       expandedSections: { f1: true },
       setSection: vi.fn(),
+      folderGroupOrder: [],
+      reorderFolderGroups: vi.fn(),
     }),
 }));
 

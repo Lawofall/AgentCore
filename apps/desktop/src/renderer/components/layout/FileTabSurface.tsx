@@ -52,7 +52,7 @@ export function FileTabSurface({
         inline
         icon={<FileText size={26} className="text-muted-foreground/40" />}
         title="打开文件"
-        hint="在「工作区」文件树中点击文件，或从产物卡打开——将在此显示为独立标签。"
+        hint="在「工作区」文件树中点击文件，或点终稿里的路径——将在此显示为独立标签。"
       />
     );
   }

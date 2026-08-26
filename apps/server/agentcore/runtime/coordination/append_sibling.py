@@ -114,13 +114,8 @@ def node_artifact_keys(
 
 
 def node_file_targets(node: Any) -> set[str]:
-    """Declared artifact paths + paths mentioned in task / deliverable name."""
+    """Declared artifact paths + paths mentioned in the task text."""
     out = set(node_artifact_paths(node))
-    deliverable = getattr(node, "deliverable", None)
-    if deliverable is not None:
-        name = getattr(deliverable, "name", None)
-        if isinstance(name, str):
-            out |= _paths_in_text(name)
     out |= _paths_in_text(_node_task(node))
     return out
 
@@ -135,16 +130,12 @@ def _deliverable_scope(node: Any) -> frozenset[str]:
     """Scope tokens that distinguish fan-out peers sharing a role name.
 
     Empty scope = whole-seat claim (collides with any same-role peer). Non-empty
-    disjoint scopes (distinct artifact paths and/or deliverable names) are
+    disjoint scopes (distinct artifact paths) are
     intentional parallel fan-out — not double-booking.
     """
     tokens: set[str] = set()
     for path in node_artifact_paths(node):
         tokens.add(f"art:{path}")
-    deliverable = getattr(node, "deliverable", None)
-    name = getattr(deliverable, "name", None) if deliverable is not None else None
-    if isinstance(name, str) and name.strip():
-        tokens.add(f"name:{_norm_role(name)}")
     return frozenset(tokens)
 
 

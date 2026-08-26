@@ -34,26 +34,27 @@ _DEBATE_AND_REVIEW = """\
 你只需定【命题与参与方】：`motion` 放命题（用户原话或你提炼的争议命题）；`sides` 每方给 `key`\
 （唯一英文短词，如 pro/con/red1，用于跨轮定位）、`name`（展示名：用简短的【立场 / 视角】名，\
 各方【对称同风格】——甜党 / 咸党、正方 / 反方、经济学视角 / 工程视角；别一方用立场名、另一方用\
-模型名「原生DeepSeek」，模型走单独的三元组字段 + 界面徽章；仅「比谁更聪明」类辩论才两方都用\
+模型名「原生DeepSeek」，模型走单独的 `model` 字段 + 界面徽章；仅「比谁更聪明」类辩论才两方都用\
 模型名）、`stance`（一句立场倾向，见下）。轮数与收敛【你和用户都不设】——主持人据交锋质量自调。\
 `thorough=false`（单轮快速对碰，对**含圆桌在内的所有形态**生效）用于【用户只想轻量看看】：明说\
 「快速对碰一下」，或意图明显轻量（如「测试下这个功能」「简单一点就好」「随便聊聊 / 看个大概」）\
 ——这类不该被强制跑满多轮、产出冗余的「修订 v2」；其余默认 `thorough=true`（圆桌多轮、正反/红队辩透）。
 
 【真·多模型辩手】正反 `debate`×2 方可填各方模型。用户【点名】双方模型（如「正方平台 glm-5.2、\
-反方 DeepSeek」）→ 各方 `model` 只填人类可读提及或目录裸 id（「glm-5.2」/「平台 glm-5.2」/\
-「DeepSeek」），【禁止】把 `origin/model` 路由键写入 `model`（含 `/` 即形状错误）。\
-`origin`/`provider_id` 可省略——开赛前 runtime 消歧成正式三元组后【直开】。\
+反方 DeepSeek」）→ 各方 `model` 填人类可读提及或目录身份（「glm-5.2」/「平台 glm-5.2」/\
+「DeepSeek」/ `@platform/glm-5.2` / `@byok/{provider_id}/deepseek-v4-flash`）。\
+【禁止】把未加 `@` 的路由键（`platform/xxx`）写入 `model`。\
+`origin` / `provider_id` 已从工具参数撤掉——开赛前 runtime 把提及消歧成目录行后【直开】。\
 用户话已含「平台的 / 用平台」等偏好时，提及可省略「平台」前缀——runtime 从用户原文取 prefer。\
 【禁止】再 `ask_user` 元问题（如「是不是当前主模型？」/「选 A 还是 B？」）；消歧多候选 / \
-零匹配时工具错误会按分字段列出候选（`model=… · origin=… · provider_id=…`），\
-你按分字段重填正式三元组即可，勿抄写成 `platform/xxx` 再塞进 `model`。\
+零匹配时工具错误会列出候选的目录身份（`@platform/…` 或 `@byok/…`），\
+你把 `model` 抄成那一条即可。\
 用户【只说跨模型 / 不同模型辩论】未点名 → `cross_model=true` 且各方 `model`【留空】，\
 runtime 真调默认对阵（平台 allowlist 前两名 `PLATFORM_MODELS[0]` vs `[1]`，或\
 「1 平台 + 已配 BYOK DeepSeek」）；凑不齐则失败并提示去配模型。\
 留空且【无】`cross_model` = 同模型场（跟本 turn 主模型），【不是】跨模型。\
-完整三元组（`model`+`origin`+byok 时 `provider_id`）亦可直通。\
-用户点名裁判 → 填 `moderator_model` 提及（同辩手消歧）；未点名 → 系统默认（可与辩手同模）。\
+目录身份（`@platform/{id}` 或 `@byok/{provider_id}/{id}`）可直通。\
+用户点名裁判 → 填 `moderator_model` 提及或目录身份（同辩手消歧）；未点名 → 系统默认（可与辩手同模）。\
 红队 / 圆桌本阶段可不填 per-side。
 
 立场倾向（`stance`）：每方只给【一句话】该方主张什么结论的立场倾向（单句判断句；工具硬上限\

@@ -206,8 +206,7 @@ export function toolResultPeek(d: ToolResultData): string {
     const code =
       typeof d.display.exit_code === "number" ? d.display.exit_code : 0;
     if (code !== 0) return `退出码 ${code}`;
-    const firstOut = (d.display.stdout ?? "").split("\n").find((l) => l.trim());
-    return clampLine(firstOut ?? "已执行");
+    return "";
   }
   if (isSkillConsultDisplay(d.display)) {
     return clampLine(d.display.summary || "已查阅能力指引");

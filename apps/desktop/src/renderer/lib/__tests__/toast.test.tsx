@@ -32,14 +32,14 @@ beforeEach(() => {
 describe("notifyError", () => {
   it("后端错误：显示服务端文案，不是通用兜底", () => {
     notifyError(
-      apiError(422, "VALIDATION_ERROR", "文件超出 26214400 字节的上传上限"),
+      apiError(422, "VALIDATION_ERROR", "文件超出 52428800 字节的上传上限"),
       "附件驻留失败",
     );
 
     expect(toastError).toHaveBeenCalledWith(
       "附件驻留失败",
       expect.objectContaining({
-        description: "文件超出 26214400 字节的上传上限",
+        description: "文件超出 52428800 字节的上传上限",
       }),
     );
   });

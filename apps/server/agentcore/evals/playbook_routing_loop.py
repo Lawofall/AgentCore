@@ -35,6 +35,7 @@ from agentcore.evals.playbook_routing_decision import run_until_terminal
 from agentcore.evals.types import EvalConfigError
 from agentcore.llm.factory import build_provider
 from agentcore.llm.profiles import TurnProfiles
+from agentcore.llm.provider.protocol import LLMMessage
 from agentcore.runtime.context import build_workspace_context, collect_outlet_inventory
 from agentcore.runtime.engine.governance import resolve_openai_tool_defs
 from agentcore.runtime.events import EventSink
@@ -115,15 +116,14 @@ def _extract_playbook_surface(tool_defs: list[dict] | None, expect: str) -> dict
     playbook = props.get("playbook") if isinstance(props, dict) else None
     enum = (playbook or {}).get("enum") if isinstance(playbook, dict) else None
     enum_list = list(enum) if isinstance(enum, list) else []
+    expect_ok = (not expect) or (expect in enum_list)
     return {
         "delegate_on_surface": delegate is not None,
         "playbook_property_present": isinstance(playbook, dict),
         "playbook_enum": enum_list,
-        "expected_in_enum": expect in enum_list,
+        "expected_in_enum": expect_ok,
         "tool_names": names,
-        "offered": bool(
-            delegate is not None and isinstance(playbook, dict) and expect in enum_list
-        ),
+        "offered": bool(delegate is not None and isinstance(playbook, dict) and expect_ok),
     }
 
 
@@ -249,11 +249,20 @@ def _pack_sample(
     dsum = result.delegate_summary or {}
     playbook = named_playbook(dsum.get("playbook") if isinstance(dsum, dict) else None)
     intensity = None
+    forms: list[str] = []
+    max_workers = None
     if isinstance(dsum, dict):
         intensity = dsum.get("intensity")
         if not intensity and isinstance(dsum.get("playbook_args"), dict):
             intensity = named_playbook(dsum["playbook_args"].get("intensity"))
+        forms = list(dsum.get("forms") or [])
+        max_workers = dsum.get("max_workers")
     task_count = int((dsum or {}).get("task_count") or 0) if isinstance(dsum, dict) else 0
+    form = None
+    if isinstance(dsum, dict):
+        form = dsum.get("form")
+        if not form and len(set(forms)) == 1:
+            form = forms[0]
     action = result.action
     outcome = classify_landing(
         action=action,
@@ -261,6 +270,14 @@ def _pack_sample(
         expect=sc.expect_playbook,
         offered=bool(surface.get("offered")),
         task_count=task_count,
+        form=form if isinstance(form, str) else None,
+        max_workers=max_workers if isinstance(max_workers, int) else None,
+        expect_action=sc.expect_action or None,
+        expect_max_workers=sc.expect_max_workers,
+        expect_min_workers=sc.expect_min_workers,
+        expect_form=sc.expect_form,
+        recon_rounds=int(result.recon_rounds or 0),
+        expect_max_recon_rounds=sc.expect_max_recon_rounds,
     )
     reasoning = result.reasoning or ""
     mentions = extract_think_mentions(reasoning)
@@ -277,6 +294,7 @@ def _pack_sample(
         "first_action": result.first_action,
         "tool_name": result.tool_name,
         "rounds": result.rounds,
+        "recon_rounds": result.recon_rounds,
         "trail": list(result.trail),
         "detour": list(result.detour),
         "delegated": action == "DELEGATE",
@@ -284,6 +302,9 @@ def _pack_sample(
         "playbook": playbook,
         "intensity": intensity,
         "task_count": task_count,
+        "form": form,
+        "forms": forms,
+        "max_workers": max_workers,
         "delegate_summary": dsum,
         "outcome": outcome,
         "think_mentions": mentions,
@@ -341,6 +362,10 @@ async def run_scripted_sample(
                 _ws_root,
             ) = bundle
             surface = _extract_playbook_surface(tool_defs, sc.expect_playbook)
+            history = [
+                LLMMessage(role=turn.role, content=turn.content)
+                for turn in sc.prior_turns
+            ]
             result = await run_until_terminal(
                 provider,
                 profile,
@@ -351,6 +376,7 @@ async def run_scripted_sample(
                 ctx,
                 sc.user_message,
                 rounds,
+                history=history or None,
             )
             packed = _pack_sample(
                 sc=sc,
@@ -480,6 +506,11 @@ async def run_playbook_routing(
                 "phrasing": sc.phrasing,
                 "category": sc.category,
                 "expect_playbook": sc.expect_playbook,
+                "expect_action": sc.expect_action or None,
+                "expect_form": sc.expect_form,
+                "expect_max_workers": sc.expect_max_workers,
+                "expect_min_workers": sc.expect_min_workers,
+                "expect_max_recon_rounds": sc.expect_max_recon_rounds,
                 "user_message": sc.user_message,
                 "workspace": sc.workspace,
                 "samples": sample_payloads,

@@ -1,23 +1,25 @@
 """Background-process tool — spawn / read / stop / list long-lived commands.
 
-CEO + worker, local-mode only (``backend.location == "local"``). Processes are held
-by the desktop main process; this tool routes four ``WorkspaceOp`` values over the
-existing ``workspace_op_required`` channel (云 LocalWorkspace 与 sidecar 同路).
+CEO + worker. Assembly follows the execution class (desk health on cloud).
+``location=local`` (本机 / sidecar) still routes four ``WorkspaceOp`` values over
+``WorkspaceChannel`` (desktop ``process_*``). ``location=server`` manages
+processes inside the cloud-desk guest — short exec to background / kill,
+host-runtime logs, ledger keyed by ``conversation_id``.
 
-CEO holds it for pure start/stop/list of workspace long-running processes (B2);
-write/repair/install still goes through ``delegate``. Schema stays
-``ToolApproval.NEVER`` so read / stop / list skip the gate; ``start`` is gated via
-``tool_call_requires_approval`` (same posture as ``git`` write subcommands).
-See docs/03-AI核心/工具与能力系统.md (terminal 行).
+CEO holds it for pure start/stop/list; write/repair/install still goes through
+``delegate``. Schema stays ``ToolApproval.NEVER`` so read / stop / list skip the
+gate; ``start`` is gated via ``tool_call_requires_approval``.
+See docs/03-AI核心/工具与能力系统.md (terminal 行) and 安全权限与治理 §五.
 """
 
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Literal
 
 from agentcore.config import settings
 from agentcore.core.error_codes import ErrorCode
+from agentcore.core.errors import SandboxError
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.tools.builtin.long_running import (
     long_running_command_match,
@@ -30,6 +32,15 @@ from agentcore.tools.registration import (
     FileProductsContract,
     ToolRegistration,
     ToolSurface,
+)
+from agentcore.tools.sandbox.desk_process import (
+    CLOUD_DESK_REQUIRED,
+    PROCESS_NOT_REGISTERED,
+    DeskProcessError,
+    list_desk_processes,
+    read_desk_process,
+    start_desk_process,
+    stop_desk_process,
 )
 from agentcore.workspace.channel import WorkspaceOp
 from agentcore.workspace.limits import (
@@ -51,6 +62,7 @@ _WORKSPACE_IO_ERROR = "workspace_io_error"
 _FAST_TIMEOUT_SECONDS = 60.0
 _DEFAULT_WAIT_TIMEOUT_SECONDS = 30.0
 _MAX_WAIT_TIMEOUT_SECONDS = 300.0
+_DEFAULT_TAIL_LINES = 80
 
 TERMINAL_TOOL_PARAMETERS: dict[str, Any] = {
     "type": "object",
@@ -110,6 +122,37 @@ TERMINAL_TOOL_PARAMETERS: dict[str, Any] = {
     },
     "required": ["subcommand"],
 }
+
+
+def terminal_description(location: Literal["server", "local"] | None = None) -> str:
+    """Location-aware schema copy. Catalog (location=None) does not say 仅本地."""
+    if location == "local":
+        where = (
+            "在用户本机启动/管理长时后台进程（dev server、watch、长脚本等）。"
+            "进程由桌面主进程托管，跨回合存活。"
+        )
+    elif location == "server":
+        where = (
+            "在云桌执行环境里启动/管理长时后台进程（dev server、watch、长脚本等）。"
+            "进程按本对话记账（同文件夹不共用一条开发服务器）；"
+            "日志在宿主机运行时目录，不是工作区交付物。"
+            "服务重启后进程登记可能丢失，勿把已消失的 process_id 当成还活着。"
+        )
+    else:
+        where = (
+            "启动/管理长时后台进程（dev server、watch、长脚本等）。"
+            "本机由桌面托管；云端在同一张云桌 guest 内按对话记账。"
+        )
+    return (
+        where
+        + "【凡永不退出的命令必须用本工具，禁止改走 code_execute / host(action=shell)】"
+        "典型：npm run dev / vite / next dev / uvicorn --reload。"
+        "会自行退出的短命令中，装包 / build / test 请用 test_run（worker）；"
+        "其它极短 CLI 可用 code_execute（worker）。"
+        "CEO 可对「只启服 / 重启 / 看是否活着」直接使用本工具；"
+        "改代码、装依赖、修报错仍须 delegate。"
+        "宣称「已就绪」前须用 wait_for 等到 ready 信号，勿仅凭首段输出下结论。"
+    )
 
 
 def terminal_approval_subcommands() -> frozenset[str]:
@@ -180,6 +223,30 @@ def _arg_error(error: str, start: float) -> ToolResult:
     transient failures disabled the whole tool after three model typos.
     """
     return _error(error, start, code=ErrorCode.VALIDATION_ERROR, contract_failure=True)
+
+
+def _desk_process_failure(exc: DeskProcessError, start: float) -> ToolResult:
+    """Map a cloud-desk ledger failure; named codes stay visible to the face scanner."""
+    if exc.code == CLOUD_DESK_REQUIRED:
+        return _error(
+            str(exc),
+            start,
+            code=CLOUD_DESK_REQUIRED,
+            contract_failure=exc.contract_failure,
+        )
+    if exc.code == PROCESS_NOT_REGISTERED:
+        return _error(
+            str(exc),
+            start,
+            code=PROCESS_NOT_REGISTERED,
+            contract_failure=exc.contract_failure,
+        )
+    return _error(
+        str(exc),
+        start,
+        code=exc.code,
+        contract_failure=exc.contract_failure,
+    )
 
 
 def _workspace_error(e: WorkspaceError, start: float) -> ToolResult:
@@ -263,33 +330,25 @@ def _process_display(subcommand: str, value: dict[str, Any]) -> dict[str, Any]:
 
 
 class TerminalTool:
-    """Spawn and manage long-lived processes on the user's desktop."""
+    """Spawn and manage long-lived processes (desktop channel or cloud-desk guest)."""
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
         audience=AUDIENCE_BOTH,
         execution_class=True,
-        local_only=True,
-        # 长驻进程（dev server / build）在用户机器上留下的东西枚举不出，也不是交付物。
+        needs_location=True,
+        # 长驻进程（dev server / build）留下的东西枚举不出，也不是交付物。
         file_products=FileProductsContract.NO_PRODUCT,
     )
+
+    def __init__(self, *, location: Literal["server", "local"] | None = None) -> None:
+        self._location = location
 
     @property
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="terminal",
-            description=(
-                # 四个子命令各自做什么只写在 subcommand 参数里；这里只留路由与纪律。
-                "在用户本机启动/管理长时后台进程（dev server、watch、长脚本等）。"
-                "【凡永不退出的命令必须用本工具，禁止改走 code_execute / host(action=shell)】"
-                "典型：npm run dev / vite / next dev / uvicorn --reload。"
-                "会自行退出的短命令中，装包 / build / test 请用 test_run（worker）；"
-                "其它极短 CLI 可用 code_execute（worker）。"
-                "CEO 可对「只启服 / 重启 / 看是否活着」直接使用本工具；"
-                "改代码、装依赖、修报错仍须 delegate。"
-                "宣称「已就绪」前须用 wait_for 等到 ready 信号，勿仅凭首段输出下结论。"
-                "仅本地模式可用，进程跨回合存活。"
-            ),
+            description=terminal_description(self._location),
             parameters=TERMINAL_TOOL_PARAMETERS,
             category=ToolCategory.EXECUTION,
             approval=ToolApproval.NEVER,
@@ -300,21 +359,36 @@ class TerminalTool:
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         start = time.monotonic()
-        channel = context.workspace_channel
-        if channel is None:
-            return _error(
-                "terminal 仅在本地工作区可用：当前无桌面进程通道，无法托管后台进程。"
-                "需本机终端时：**推荐**引导 Composer「导入到云 / 连接 Git」"
-                "或诚实说明本回合无法托管；本机传统 open/bind 合法非默认（≠离线）。",
-                start,
-                code=_LOCAL_WORKSPACE_REQUIRED,
-            )
-
         subcommand = str(arguments.get("subcommand", "")).strip().lower()
         if not subcommand:
             return _arg_error("subcommand 为必填参数", start)
         if subcommand not in _ALLOWED_SUBCOMMANDS:
             return _arg_error(f"子命令 '{subcommand}' 不在允许列表中", start)
+
+        if getattr(context.backend, "location", None) == "server":
+            try:
+                return await self._cloud_dispatch(subcommand, arguments, context, start)
+            except DeskProcessError as exc:
+                return _desk_process_failure(exc, start)
+            except SandboxError as exc:
+                msg = exc.message or str(exc)
+                launcher = "代码执行环境启动失败" in msg or "云桌短执行超时" in msg
+                return _error(
+                    msg,
+                    start,
+                    code="launcher_unavailable" if launcher else _WORKSPACE_IO_ERROR,
+                    contract_failure=launcher,
+                )
+
+        channel = context.workspace_channel
+        if channel is None:
+            return _error(
+                "当前没有本机桌面进程通道，无法在用户电脑上托管后台进程。"
+                "需本机终端时：**推荐**引导 Composer「导入到云 / 连接 Git」"
+                "或诚实说明本回合无法托管；本机传统 open/bind 合法非默认（≠离线）。",
+                start,
+                code=_LOCAL_WORKSPACE_REQUIRED,
+            )
 
         try:
             if subcommand == "start":
@@ -326,6 +400,103 @@ class TerminalTool:
             return await self._cmd_list(context, start)
         except WorkspaceError as e:
             return _workspace_error(e, start)
+
+    async def _cloud_dispatch(
+        self,
+        subcommand: str,
+        arguments: dict[str, Any],
+        context: ToolContext,
+        start: float,
+    ) -> ToolResult:
+        bucket = (context.user_id or "").strip() or None
+        conv = context.conversation_id or ""
+        if subcommand == "start":
+            return await self._cloud_start(arguments, context, start, bucket)
+        if subcommand == "read":
+            process_id = str(arguments.get("process_id") or "").strip()
+            if not process_id:
+                return _arg_error("read 需要 process_id 参数", start)
+            wait_for = str(arguments.get("wait_for") or "").strip()
+            tail_lines = _DEFAULT_TAIL_LINES
+            if arguments.get("tail_lines") is not None:
+                try:
+                    tail_lines = int(arguments["tail_lines"])
+                except (TypeError, ValueError):
+                    return _arg_error("tail_lines 必须是整数", start)
+            value = await read_desk_process(
+                context.backend,
+                conversation_id=conv,
+                process_id=process_id,
+                wait_for=wait_for,
+                wait_timeout_seconds=clamp_wait_timeout_seconds(
+                    arguments.get("wait_timeout_seconds")
+                )
+                if wait_for
+                else 30.0,
+                tail_lines=tail_lines,
+                cache_bucket=bucket,
+            )
+            return self._process_result("read", value, start, had_wait_for=bool(wait_for))
+        if subcommand == "stop":
+            process_id = str(arguments.get("process_id") or "").strip()
+            if not process_id:
+                return _arg_error("stop 需要 process_id 参数", start)
+            value = await stop_desk_process(
+                context.backend,
+                conversation_id=conv,
+                process_id=process_id,
+                cache_bucket=bucket,
+            )
+            return self._process_result("stop", value, start, had_wait_for=False)
+        value = await list_desk_processes(conversation_id=conv)
+        processes = value.get("processes") or []
+        if not isinstance(processes, list):
+            processes = []
+        duration_ms = int((time.monotonic() - start) * 1000)
+        return ToolResult(
+            tool_call_id="",
+            success=True,
+            output=_format_list_output(processes),
+            duration_ms=duration_ms,
+            display=_process_display("list", {"processes": processes}),
+        )
+
+    async def _cloud_start(
+        self,
+        arguments: dict[str, Any],
+        context: ToolContext,
+        start: float,
+        cache_bucket: str | None,
+    ) -> ToolResult:
+        command = str(arguments.get("command") or "").strip()
+        if not command:
+            return _arg_error("start 需要 command 参数", start)
+        wait_for = str(arguments.get("wait_for") or "").strip()
+        if not wait_for:
+            detected = long_running_command_match(command)
+            if detected is not None:
+                return ToolResult(
+                    tool_call_id="",
+                    success=False,
+                    output="",
+                    error=wait_for_required_message(detected),
+                    duration_ms=int((time.monotonic() - start) * 1000),
+                    metadata={"code": "wait_for_required", "matched": detected},
+                    contract_failure=True,
+                )
+        value = await start_desk_process(
+            context.backend,
+            conversation_id=context.conversation_id or "",
+            command=command,
+            cwd=str(arguments.get("cwd") or "").strip(),
+            name=str(arguments.get("name") or "").strip(),
+            wait_for=wait_for,
+            wait_timeout_seconds=clamp_wait_timeout_seconds(
+                arguments.get("wait_timeout_seconds")
+            ),
+            cache_bucket=cache_bucket,
+        )
+        return self._process_result("start", value, start, had_wait_for=bool(wait_for))
 
     async def _cmd_start(
         self, arguments: dict[str, Any], context: ToolContext, start: float

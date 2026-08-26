@@ -96,9 +96,6 @@ describe("turn stop lifecycle", () => {
     expect(
       execRuntime(useExecutionStore.getState(), mid).coordinationWait,
     ).toBeNull();
-    expect(
-      execRuntime(useExecutionStore.getState(), mid).coordinationWaitStartedAt,
-    ).toBeNull();
   });
 
   it("已 abort 的 signal → throwIfCannotOpenStream 阻断", () => {

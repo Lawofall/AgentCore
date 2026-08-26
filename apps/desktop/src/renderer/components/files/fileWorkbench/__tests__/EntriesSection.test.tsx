@@ -17,7 +17,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/documents", () => ({
   listScopeEntries: vi.fn(),
-  getAlwaysQuota: vi.fn(),
   getDocument: vi.fn(),
   createRuleDocument: vi.fn(),
   deleteDocument: vi.fn(),
@@ -33,8 +32,6 @@ vi.mock("@/lib/toast", () => ({
 import {
   type DocumentDetail,
   type DocumentNode,
-  createRuleDocument,
-  getAlwaysQuota,
   getDocument,
   listScopeEntries,
   setDocumentDisputed,
@@ -42,10 +39,8 @@ import {
 } from "@/services/documents";
 import {
   EntriesSection,
-  alwaysMeterTone,
   entryOpenTarget,
   formatAlwaysChars,
-  formatMeterHeadline,
   isAiCoreMemoryLeaf,
 } from "../EntriesSection";
 
@@ -123,13 +118,6 @@ beforeEach(() => {
   // Call history must not leak: the dispute tests assert that nothing was marked.
   vi.clearAllMocks();
   vi.mocked(listScopeEntries).mockResolvedValue([]);
-  vi.mocked(getAlwaysQuota).mockResolvedValue({
-    usedChars: 100,
-    maxChars: 1000,
-    percent: 10,
-    globalChars: 100,
-    projectChars: 0,
-  });
   vi.mocked(getDocument).mockResolvedValue(
     entryDetail({ id: "g1", name: "偏好.md", content: PREFERENCES_BODY }),
   );
@@ -140,106 +128,12 @@ afterEach(() => {
 });
 
 describe("always usage copy helpers", () => {
-  // The 0 / 不足千字 buckets survive for the meter (`还剩 0 字` / `还剩不足千字`);
-  // rows below the floor render no size at all, which is asserted on the section.
+  // Rows below the floor render no size at all, which is asserted on the section.
   it("distinguishes 0 from under-a-thousand and coarsens to 千/万", () => {
     expect(formatAlwaysChars(0)).toBe("0 字");
     expect(formatAlwaysChars(450)).toBe("不足千字");
     expect(formatAlwaysChars(4200)).toBe("约 4 千字");
     expect(formatAlwaysChars(12000)).toBe("约 1.2 万字");
-  });
-
-  it("leads with remaining capacity so users need no subtraction", () => {
-    expect(
-      formatMeterHeadline(
-        {
-          usedChars: 0,
-          maxChars: 24000,
-          percent: 0,
-          globalChars: 0,
-          projectChars: 0,
-        },
-        "global",
-      ),
-    ).toBe("常驻 · 还剩约 2.4 万字");
-    expect(
-      formatMeterHeadline(
-        {
-          usedChars: 4200,
-          maxChars: 24000,
-          percent: 17.5,
-          globalChars: 4200,
-          projectChars: 0,
-        },
-        "global",
-      ),
-    ).toBe("常驻 · 还剩约 2 万字");
-    expect(
-      formatMeterHeadline(
-        {
-          usedChars: 5600,
-          maxChars: 24000,
-          percent: 23.3,
-          globalChars: 4200,
-          projectChars: 1400,
-        },
-        "folder",
-      ),
-    ).toBe("常驻（含全局） · 还剩约 1.8 万字");
-    expect(
-      formatMeterHeadline(
-        {
-          usedChars: 20000,
-          maxChars: 24000,
-          percent: 83.3,
-          globalChars: 20000,
-          projectChars: 0,
-        },
-        "global",
-      ),
-    ).toBe("常驻 · 快满了，还剩约 4 千字");
-    expect(
-      formatMeterHeadline(
-        {
-          usedChars: 28000,
-          maxChars: 24000,
-          percent: 116.7,
-          globalChars: 28000,
-          projectChars: 0,
-        },
-        "global",
-      ),
-    ).toBe("常驻 · 已满，超出约 4 千字");
-  });
-
-  it("tones near-full and over for consequence copy", () => {
-    expect(
-      alwaysMeterTone({
-        usedChars: 4200,
-        maxChars: 24000,
-        percent: 17.5,
-        globalChars: 4200,
-        projectChars: 0,
-      }),
-    ).toBe("ok");
-    expect(
-      alwaysMeterTone({
-        usedChars: 20000,
-        maxChars: 24000,
-        percent: 83.3,
-        globalChars: 20000,
-        projectChars: 0,
-      }),
-    ).toBe("near");
-    expect(
-      alwaysMeterTone({
-        usedChars: 28000,
-        maxChars: 24000,
-        percent: 116.7,
-        globalChars: 28000,
-        projectChars: 0,
-      }),
-    ).toBe("over");
   });
 });
 
@@ -348,10 +242,14 @@ describe("EntriesSection (global)", () => {
     expect(screen.queryByText("记忆")).toBeNull();
     expect(screen.queryByText("规则")).toBeNull();
     expect(screen.queryByText(/^文档$/)).toBeNull();
-    expect(screen.getByText(/还剩不足千字/)).toBeTruthy();
     expect(screen.getByText("约 1 千字")).toBeTruthy();
     // 画像.md is 800 chars: below the row floor, so it prints no size at all.
     expect(screen.queryByText("不足千字")).toBeNull();
+    expect(screen.queryByText(/还剩约/)).toBeNull();
+    expect(screen.queryByText(/快满了/)).toBeNull();
+    expect(screen.queryByText(/已满，超出/)).toBeNull();
+    expect(screen.queryByText(/用量加载失败/)).toBeNull();
+    expect(screen.queryByLabelText("新建条目")).toBeNull();
     expect(screen.getByText("最近更新")).toBeTruthy();
   });
 
@@ -376,14 +274,14 @@ describe("EntriesSection (global)", () => {
     expect(screen.queryByText("0 字")).toBeNull();
   });
 
-  it("keeps a calm meter to the number alone — explainer stays a tooltip", async () => {
+  it("does not fetch always-quota and does not render a usage meter", async () => {
     renderScope("global");
-    const headline = await screen.findByText(/常驻 · 还剩/);
-    // 「每次对话都会带上」only as title; a rendered line would put the calm meter
-    // back to the multi-line block this rail was flattened out of.
-    expect(headline.getAttribute("title")).toBe("每次对话都会带上");
-    expect(screen.queryByText("每次对话都会带上")).toBeNull();
-    expect(screen.queryByText(/去整理/)).toBeNull();
+    expect(await screen.findByText("偏好.md")).toBeTruthy();
+    expect(screen.queryByText(/还剩约/)).toBeNull();
+    expect(screen.queryByText(/快满了/)).toBeNull();
+    expect(screen.queryByText(/已满，超出/)).toBeNull();
+    expect(screen.queryByText(/用量加载失败/)).toBeNull();
+    expect(screen.queryByLabelText("新建条目")).toBeNull();
   });
 
   it("shows core placeholders when the scope has no documents yet", async () => {
@@ -442,22 +340,6 @@ describe("EntriesSection (global)", () => {
     await waitFor(() =>
       expect(updateDocumentApplyMode).toHaveBeenCalledWith("g1", "on_demand"),
     );
-  });
-
-  it("creates a new entry and opens it", async () => {
-    vi.mocked(createRuleDocument).mockResolvedValue(
-      entryDetail({ id: "new", name: "新条目.md" }),
-    );
-    const { onOpen } = renderScope("global");
-    fireEvent.click(screen.getByLabelText("新建条目"));
-    await waitFor(() =>
-      expect(createRuleDocument).toHaveBeenCalledWith("新条目.md", null),
-    );
-    expect(onOpen).toHaveBeenCalledWith({
-      channel: "document",
-      path: "new",
-      name: "新条目.md",
-    });
   });
 
   it("marks a disputed entry as 已停用 and stops counting its always chars", async () => {
@@ -617,13 +499,6 @@ describe("EntriesSection (project)", () => {
         alwaysChars: 2400,
       }),
     ]);
-    vi.mocked(getAlwaysQuota).mockResolvedValue({
-      usedChars: 9800,
-      maxChars: 12000,
-      percent: 81.7,
-      globalChars: 4200,
-      projectChars: 5600,
-    });
     const { onOpenUpdates } = renderScope("folder");
     expect(await screen.findByText("导航.md")).toBeTruthy();
     expect(screen.getByText("项目路由")).toBeTruthy();
@@ -632,61 +507,12 @@ describe("EntriesSection (project)", () => {
     expect(screen.queryByText("最近更新")).toBeNull();
     expect(onOpenUpdates).not.toHaveBeenCalled();
     expect(listScopeEntries).toHaveBeenCalledWith("F1");
-    expect(getAlwaysQuota).toHaveBeenCalledWith("F1");
-    const headline = screen.getByText(/常驻（含全局） · 快满了，还剩约 2 千字/);
-    expect(headline.className).toContain("text-primary");
-    expect(headline.className).not.toContain("destructive");
-    expect(headline.parentElement?.className).toContain("bg-primary/5");
-    expect(headline.parentElement?.className).not.toContain("destructive");
-    // Consequence copy earns its line back once the pool is 快满 — that is the
-    // whole point of collapsing the calm state.
-    const caption = screen.getByText("AI 快记不下新东西了，去整理");
-    expect(caption.className).toContain("text-primary");
-    expect(caption.className).not.toContain("destructive");
-    const fills = headline.parentElement?.querySelectorAll(
-      "[class*='bg-primary']",
-    );
-    expect(fills?.length).toBeGreaterThan(0);
-    for (const fill of fills ?? []) {
-      expect(fill.className).not.toContain("destructive");
-    }
     expect(screen.getByText("约 2 千字")).toBeTruthy();
-  });
-
-  it("已满 meter uses primary wash, not destructive", async () => {
-    vi.mocked(getAlwaysQuota).mockResolvedValue({
-      usedChars: 14000,
-      maxChars: 12000,
-      percent: 116.7,
-      globalChars: 4200,
-      projectChars: 9800,
-    });
-    renderScope("folder");
-    const headline = await screen.findByText(
-      /常驻（含全局） · 已满，超出约 2 千字/,
-    );
-    expect(headline.className).toContain("text-primary");
-    expect(headline.className).not.toContain("destructive");
-    expect(headline.parentElement?.className).toContain("bg-primary/5");
-    expect(headline.parentElement?.className).not.toContain("destructive");
-    const caption = screen.getByText("AI 暂时记不下新东西，去整理");
-    expect(caption.className).toContain("text-primary");
-    expect(caption.className).not.toContain("destructive");
-    const fills = headline.parentElement?.querySelectorAll(
-      "[class*='bg-primary']",
-    );
-    expect(fills?.length).toBeGreaterThan(0);
-    for (const fill of fills ?? []) {
-      expect(fill.className).not.toContain("destructive");
-    }
-  });
-
-  it("用量加载失败 is muted, not destructive", async () => {
-    vi.mocked(getAlwaysQuota).mockRejectedValue(new Error("quota down"));
-    renderScope("global");
-    const btn = await screen.findByText("用量加载失败，点此重试");
-    expect(btn.className).toContain("text-muted-foreground");
-    expect(btn.className).not.toContain("destructive");
+    expect(screen.queryByText(/还剩约/)).toBeNull();
+    expect(screen.queryByText(/快满了/)).toBeNull();
+    expect(screen.queryByText(/已满，超出/)).toBeNull();
+    expect(screen.queryByText(/用量加载失败/)).toBeNull();
+    expect(screen.queryByLabelText("新建条目")).toBeNull();
   });
 
   it("条目列表加载失败 is muted, not destructive", async () => {

@@ -10,9 +10,10 @@ import { scheduleAccountRulesMemoryRefresh } from "@/services/refreshAccountRule
  * are derived indexes of body frontmatter; UI shows 常驻/按需 badges, never the raw
  * `apply` key. `frontmatter_error` means the entry does not inject — surface it.
  *
- * Always-pool meter: {@link getAlwaysQuota}. Write past the cap while editing an
- * existing always entry returns `quota_warning`; create / promote past the cap is
- * 409 `ALWAYS_QUOTA_EXCEEDED`.
+ * Write-side always cap (file rail does not meter remaining chars). Editing an
+ * existing always entry past the cap returns `quota_warning`; create / promote
+ * past the cap is 409 `ALWAYS_QUOTA_EXCEEDED`. {@link getAlwaysQuota} is the
+ * internal usage endpoint, not a product dashboard.
  *
  * 纠错通道: {@link setDocumentDisputed} marks an entry「这条不对」so the AI stops using
  * it while the entry itself stays readable (`disputedAt`).

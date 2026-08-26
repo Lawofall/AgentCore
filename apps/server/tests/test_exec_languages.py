@@ -156,3 +156,27 @@ def test_worker_registry_trims_code_execute_enum():
         "python",
         "javascript",
     ]
+    # Same factory path also constructs ``terminal`` (needs_location, no languages).
+    assert reg.get("terminal") is not None
+
+
+def test_instantiate_declared_languages_skips_unflagged_location_tools():
+    """Local prepare always passes languages=; every needs_location tool must survive."""
+    from agentcore.tools.registration import (
+        ToolSurface,
+        declared_tools,
+        instantiate_declared,
+        tool_registration,
+    )
+
+    constructed = []
+    for surface in ToolSurface:
+        for cls in declared_tools(surface=surface):
+            if not tool_registration(cls).needs_location:
+                continue
+            tool = instantiate_declared(
+                cls, location="local", languages=("python", "javascript")
+            )
+            constructed.append(tool.schema.name)
+    assert "code_execute" in constructed
+    assert "terminal" in constructed

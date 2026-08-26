@@ -21,6 +21,7 @@ import {
   SharedSpacesRailHeader,
 } from "@/components/files/fileWorkbench/RailHeaders";
 import { WorkspaceVersionsPanel } from "@/components/files/fileWorkbench/WorkspaceVersionsPanel";
+import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
 import {
   type Tab,
   WS_TRASH_PATH,
@@ -543,6 +544,13 @@ export function FileWorkbench({
             indent={indent}
           />
         )
+      : undefined,
+    onCreateWorkroomEntry: showMemory
+      ? (folder) =>
+          createAndOpenScopeEntry(
+            { kind: "folder", folderId: folder.id },
+            openEntry,
+          )
       : undefined,
     revealWorkroomFolderId: revealMemoryFolderId,
     onWorkroomRevealApplied: clearMemoryReveal,

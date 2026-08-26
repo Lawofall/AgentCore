@@ -1,13 +1,13 @@
 import { FileTree } from "@/components/files/FileTree";
 import { AgentCoreSection } from "@/components/files/fileWorkbench/AgentCoreSection";
 import { EntriesSection } from "@/components/files/fileWorkbench/EntriesSection";
+import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
 import { queryClient } from "@/lib/queryClient";
 import { AGENTCORE_ROOT } from "@/lib/stageDirs";
 import {
   FILES_PREVIEW_PROJECT_FOLDER_ID,
   FILES_PREVIEW_SCENES,
   type FilesPreviewSceneId,
-  alwaysQuotaForScene,
   entriesForScene,
   filesPreviewSource,
 } from "@/preview/filesScenes";
@@ -17,20 +17,17 @@ import { useSearchParams } from "react-router-dom";
 const PROJECT_FOLDER_ID = FILES_PREVIEW_PROJECT_FOLDER_ID;
 
 function seedFilesPreviewCaches(sceneId: FilesPreviewSceneId) {
-  const quotas = alwaysQuotaForScene(sceneId);
   const entries = entriesForScene(sceneId);
   queryClient.setQueryData(["scope-entries", "global"], entries.global);
   queryClient.setQueryData(
     ["scope-entries", PROJECT_FOLDER_ID],
     entries.project,
   );
-  queryClient.setQueryData(["always-quota", "global"], quotas.global);
-  queryClient.setQueryData(["always-quota", PROJECT_FOLDER_ID], quotas.project);
 }
 
 /**
  * Offline UI preview for the AgentCore flat entries rail (`#/preview/files`).
- * Seeds React Query caches — no backend. Deep-link: `#/preview/files?s=files-quota-normal`.
+ * Seeds React Query caches — no backend. Deep-link: `#/preview/files?s=files-entries`.
  */
 export function FilesPreviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,9 +89,7 @@ export function FilesPreviewPage() {
           <AgentCoreSection
             scope={{ kind: "global" }}
             memoryActivePath={null}
-            documentActivePath={
-              selected === "files-quota-empty" ? null : "g-rule"
-            }
+            documentActivePath={selected === "files-empty" ? null : "g-rule"}
             onOpenEntry={() => undefined}
             onEntryDeleted={() => undefined}
             onEntryRenamed={() => undefined}
@@ -113,6 +108,12 @@ export function FilesPreviewPage() {
             activePath={null}
             onOpenFile={() => undefined}
             forceExpandPaths={[AGENTCORE_ROOT]}
+            onCreateWorkroomEntry={() =>
+              createAndOpenScopeEntry(
+                { kind: "folder", folderId: PROJECT_FOLDER_ID },
+                () => undefined,
+              )
+            }
             renderWorkroomLead={(indent) => (
               <EntriesSection
                 scope={{ kind: "folder", folderId: PROJECT_FOLDER_ID }}

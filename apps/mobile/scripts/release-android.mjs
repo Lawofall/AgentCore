@@ -135,7 +135,7 @@ function ensureDraftRelease(tag) {
     "--title",
     tag,
     "--notes",
-    "Android APK release (draft — publish after sideload smoke check).",
+    "Android APK release (draft — publish after native-surface smoke, or immediately for renderer/protocol-only).",
   ]);
 }
 
@@ -282,7 +282,9 @@ async function main() {
   console.log(`  local: ${apkPath}`);
   console.log(`  CDN: https://downloads.fashitianxia.xyz/android/`);
   console.log("");
-  console.log("Publish when sideload smoke is green:");
+  console.log(
+    "Publish now unless this wave touched native surface (android/, Capacitor, CORS, shell auth/SSE).",
+  );
   console.log(
     `  gh release edit ${tag} --repo ${RELEASES_REPO} --draft=false`,
   );

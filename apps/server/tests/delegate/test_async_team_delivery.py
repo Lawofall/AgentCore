@@ -295,7 +295,7 @@ def test_harvest_user_text_embeds_product_and_inject_skips_duplicate():
     assert "团队成品" not in inject
     assert "报告本波结果" in inject
     assert "活没干完就接着干" in inject
-    assert "独立审计" in inject
+    assert "先派审计再收尾" not in inject
 
 
 @pytest.mark.asyncio

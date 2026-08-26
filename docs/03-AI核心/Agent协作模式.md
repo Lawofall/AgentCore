@@ -33,7 +33,7 @@ Multi-Agent First：组合优于堆叠；单 Agent = 无成员的 Team（统一�
 
 ### `escalate`
 
-worker 唯一向上通道。`blocking=false`（默认）= 已有合理默认、报后按假设续跑、主管收尾纠偏；`blocking=true` = 猜错作废 / 用户要不确定就问 / 只有上级能定 → 挂起求决（须写 assumption；默认无限期等 +「按假设继续」按钮）。经典路径直挂**用户**（否决挂 CEO——会死锁）；协调模式例外：CEO 波内存活 → 等 `resolve_escalation`（单 worker 同样进协调，一并适用）。仅 `coordinate=false` / 嵌套 lead / `checkpoint_after` 等阻塞路径永不走 resolve——那时 CEO 卡在 `delegate` 内，挂 CEO 必死锁。快跑还是停下由 **worker 按题自选** `blocking`（省着用、该停别装非阻塞），不设用户总开关。
+worker 唯一向上通道。`blocking=false`（默认）= 已有合理默认、报后按假设续跑、主管收尾纠偏；`blocking=true` = 猜错作废 / 用户要不确定就问 / 只有上级能定 → 挂起求决（须写 assumption；默认无限期等 +「按假设继续」按钮）。经典路径直挂**用户**（否决挂 CEO——会死锁）；协调模式例外：CEO 波内存活 → 等 `resolve_escalation`（单 worker 同样进协调，一并适用）。仅嵌套 lead / 成篇套餐提纲把关 / 画布人工把关等阻塞路径永不走 resolve——那时 CEO 卡在 `delegate` 内，挂 CEO 必死锁。快跑还是停下由 **worker 按题自选** `blocking`（省着用、该停别装非阻塞），不设用户总开关。
 
 前端分卡：真·非阻塞 escalate →「边干边上报」+「暂定假设」；引擎早停 / 硬顶打转（wire `source=validation_thrash|ceiling_backstop`）→「卡住早停」，**不**冒充边干边上报或「已按假设继续」。真挂起 →「请你拍板」。
 
@@ -85,11 +85,11 @@ Worker 工具后还有确定性 **Escalation Gate**：只把工具失败当执�
 
 ### 便签墙
 
-`coordination=wall|none`（缺省 `none`）。贴事实、不要求回应；四能力：`decision` / `heads_up` / `claim` + `read_notes`；`amend_note` 改写/作废；仅推 ACTIVE。缺「还不存在」的输入走 `escalate kind=dep`，不走便签。
+非空 `team_brief` 或 `build_feature` 升墙（缺省无墙；CEO schema 不暴露 wall/none 勾）。升墙时引擎把 `team_brief` **按行**物化成开局便签（`source=ceo`，给「看」）；工人开局仍读共识块，推增量不重复塞这些种子。`run_plan.note_wall` 与建墙同谓词，让看面在墙上还没字时也能认出墙已升（缺省/旧 journal 无字段 = 无墙，不对所有空数组画空态）。贴事实、不要求回应；并行摸底/调研允许「入口 / 关键结论」一行，以免队友重复通读，完工仍不贴。四能力：`decision` / `heads_up` / `claim` + `read_notes`；`amend_note` 改写/作废；仅推 ACTIVE。缺「还不存在」的输入走 `escalate kind=dep`，不走便签。
 
 **一批一墙，同回合续跑继承**：墙的可见域 = 一次扇出批。同一 CEO 回合内的后续批（replan 续跑 / 追加批 / 检查点复核）**继承**上一批仍 ACTIVE 的便签——续跑的队员要看见队友已广播的决定与认领，CEO 收尾对账也要拿这些便签；跨回合 / 耐久恢复是全新实例，自然从空墙起（此时才补种 CEO 预贴便签）。
 
-**否决**点对点直聊；变味信号 = 拿便签来回讨论。
+**否决**点对点直聊；变味信号 = 拿便签来回讨论。墙**不**代替 `depends_on`：≥2 人各交完整成稿且共享口径未进 `team_brief`、无短规格落盘 → 先 brief 或短规格岗，禁止无依赖并肩、禁止互依赖成环（编排 skill「两篇成稿·先口径」）。不新套餐；不扩 `consumer_deps` 漏边软提示。
 
 ### 协调态与视图（写/读分工）
 
@@ -136,3 +136,5 @@ CEO 唯一裁决；置信度低才 `ask_user`。资源冲突靠 DAG。
 | 一等 Team 实体 / A2A | ⏳ 暂不启动（勿与现行 `delegate` 临时组队混淆）→ [定位 §四](/docs/01-产品/产品定位与品牌.md) |
 | 独立 Arena | **否决** |
 | 树级共享 Semaphore | **否决**（父子互等死锁） |
+| 按 ReAct 轮卸写盘催贴便签 | **否决**（与 H2「form 不再硬卸写工具」、已拆 `team_gate` 不按轮剥工具同机制；真两段只承认 wave / `depends_on` / `continue_from_run_id`） |
+| 两篇成稿靠同波墙互焊 / 互 `depends_on` 成环 | **否决**；先非空 `team_brief` 或短规格岗。不新 playbook；不扩 `consumer_deps` 漏边软提示 |

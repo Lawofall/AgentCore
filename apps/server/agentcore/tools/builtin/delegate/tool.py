@@ -566,6 +566,7 @@ class DelegateTool:
             self._sub_workers_spawned += len(plan.nodes)
 
         from agentcore.runtime.delegate.seed_notes import (
+            materialize_brief_as_seed_notes,
             parse_seed_notes,
             parse_team_brief,
             resolve_coordination,
@@ -607,6 +608,13 @@ class DelegateTool:
             playbook=playbook_name,
         )
         self._coordination = coordination
+        # 升墙 ⇒ 墙上有字：非空 brief 且经理未另给内部 seed 时，按行物化开局便签。
+        # 不写回 CEO 可见 schema；light→none 不建墙，不必播种。
+        if coordination == "wall" and not seed_notes and self._team_brief:
+            seed_notes = materialize_brief_as_seed_notes(
+                self._team_brief,
+                execution_id=kickoff_execution_id,
+            )
         self._seed_notes = seed_notes
 
         # 同回合 / 热图合入：先对「仅新批次」入闸，再合并进旧图。

@@ -8,6 +8,7 @@ import {
 } from "@/services/folders";
 import { useRequiredConversationIds } from "@/stores/aiAttention";
 import type { Conversation } from "@/stores/conversation";
+import { useSidebarStore } from "@/stores/sidebar";
 import { useMemo } from "react";
 
 /** Workspaces (folders) shown in the rail before deferring to /conversations. */
@@ -40,8 +41,10 @@ function byRecency(a: Conversation, b: Conversation): number {
 /**
  * Partition conversations into folder groups (前端UX §一 方案C): folder → its
  * conversations (newest-first; pinned included for header/latest), groups ordered
- * by latest activity and capped at {@link MAX_WORKSPACE_GROUPS}. Pure (no React)
- * so it's unit-testable; the {@link useWorkspaceGroups} hook just memoizes it.
+ * by latest activity until `folderGroupOrder` is set, then that pin is sticky
+ * (unknown ids after stored, still by activity among themselves) and capped at
+ * {@link MAX_WORKSPACE_GROUPS}. Pure (no React) so it's unit-testable; the
+ * {@link useWorkspaceGroups} hook just memoizes it.
  *
  * **裸聊 (folderless chats) are excluded** — they live in「快速对话」. Pinned
  * foldered chats stay in `convs` for group actions but the rail renders them only
@@ -108,11 +111,38 @@ export function pickVisibleWorkspaceGroups(
   return groups.filter((g) => keep.has(g.folder.id));
 }
 
+/** Empty `folderGroupOrder` → newest-latest first. Otherwise stored ids stay put;
+ * folders not in the pin list follow, sorted by activity. */
+export function orderWorkspaceGroups(
+  groups: WorkspaceGroup[],
+  folderGroupOrder: readonly string[] | undefined,
+): WorkspaceGroup[] {
+  if (!folderGroupOrder || folderGroupOrder.length === 0) {
+    return [...groups].sort((a, b) => b.latest - a.latest);
+  }
+  const byId = new Map(groups.map((g) => [g.folder.id, g]));
+  const used = new Set<string>();
+  const pinned: WorkspaceGroup[] = [];
+  for (const id of folderGroupOrder) {
+    if (used.has(id)) continue;
+    const g = byId.get(id);
+    if (!g) continue;
+    pinned.push(g);
+    used.add(id);
+  }
+  const unknown: WorkspaceGroup[] = [];
+  for (const g of groups) {
+    if (!used.has(g.folder.id)) unknown.push(g);
+  }
+  unknown.sort((a, b) => b.latest - a.latest);
+  return [...pinned, ...unknown];
+}
+
 export function buildWorkspaceGroups(
   conversations: Conversation[],
   folders: FolderMeta[],
   requiredIds: ReadonlySet<string> = new Set(),
-  opts?: { uncapped?: boolean },
+  opts?: { uncapped?: boolean; folderGroupOrder?: readonly string[] },
 ): WorkspaceGroup[] {
   const displayFolders = dedupeFoldersByLocalBinding(folders);
   const canonical = canonicalFolderIds(folders);
@@ -136,9 +166,9 @@ export function buildWorkspaceGroups(
     );
     result.push({ folder, convs, latest });
   }
-  result.sort((a, b) => b.latest - a.latest);
-  if (opts?.uncapped) return result;
-  return pickVisibleWorkspaceGroups(result, requiredIds);
+  const ordered = orderWorkspaceGroups(result, opts?.folderGroupOrder);
+  if (opts?.uncapped) return ordered;
+  return pickVisibleWorkspaceGroups(ordered, requiredIds);
 }
 
 /**
@@ -151,8 +181,12 @@ export function useWorkspaceGroups(): WorkspaceGroup[] {
   const allFolders = useFolders();
   const folders = foldersForConversationRail(allFolders);
   const requiredIds = useRequiredConversationIds();
+  const folderGroupOrder = useSidebarStore((s) => s.folderGroupOrder);
   return useMemo(
-    () => buildWorkspaceGroups(conversations, folders, requiredIds),
-    [conversations, folders, requiredIds],
+    () =>
+      buildWorkspaceGroups(conversations, folders, requiredIds, {
+        folderGroupOrder,
+      }),
+    [conversations, folders, requiredIds, folderGroupOrder],
   );
 }

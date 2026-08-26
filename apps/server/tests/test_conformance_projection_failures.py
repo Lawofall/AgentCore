@@ -510,7 +510,6 @@ def test_multi_agent_ceo_rate_limit_paused_pins_continue_face(projected):
 
 _TURN_VERDICT_PROBES = (
     "turn_verdict_team_host",
-    "turn_verdict_unproductive_body_tool",
 )
 
 
@@ -529,16 +528,6 @@ def test_turn_verdict_team_host_has_a_team_error_face(projected):
     assert (p["error"] or {}).get("code") == "LLM_ERROR"
 
 
-def test_turn_verdict_unproductive_body_tool_keeps_failed_tool(projected):
-    """Hand-derived: non-empty body + unproductive + host status=error."""
-    p = projected["turn_verdict_unproductive_body_tool"]
-    assert (p["content"] or "").strip()
-    assert p["finishReason"] == "unproductive"
-    assert p["runs"] == []
-    tools = [s for s in p["process"] if s.get("kind") == "tool"]
-    assert any(s.get("tool_name") == "host" and s.get("status") == "error" for s in tools)
-
-
 def test_turn_verdict_sidecar_is_exported():
     """Export attaches the partial envelope; values are wire / documented host rule."""
     from agentcore.conformance.export import build_fixtures
@@ -551,9 +540,3 @@ def test_turn_verdict_sidecar_is_exported():
         "hasTeamStrip": True,
         "supportPackHost": "strip",
     }
-    body = by_name["turn_verdict_unproductive_body_tool"]
-    assert body["turnVerdict"] == project_turn_verdict(
-        "turn_verdict_unproductive_body_tool",
-        body["projected"],
-    )
-    assert body["turnVerdict"]["failedToolHintNames"] == ["host"]

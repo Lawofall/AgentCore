@@ -11,6 +11,7 @@ import {
 import type { ModelProfileSlot } from "@/services/llmModelProfiles";
 import type { LlmProviderView } from "@/services/llmProviders";
 import type { ModelCatalog, ModelCatalogItem } from "@/services/models";
+import { catalogItemRef } from "@/services/models";
 import { describe, expect, it } from "vitest";
 
 function provider(
@@ -28,21 +29,32 @@ function provider(
 function catalogItem(
   over: Partial<ModelCatalogItem> & { id: string },
 ): ModelCatalogItem {
-  return {
-    origin: "byok",
+  const origin = over.origin ?? "byok";
+  const provider_id = over.provider_id ?? (origin === "platform" ? null : "p1");
+  const row = {
+    origin,
     display_name: over.id,
     vendor: "V",
     capabilities: [],
     available: true,
-    provider_id: over.provider_id ?? "p1",
+    provider_id,
     ...over,
   };
+  return { ...row, ref: catalogItemRef(row) };
 }
 
 function catalog(models: ModelCatalogItem[]): ModelCatalog {
+  const first = models[0];
   return {
     byok_configured: true,
-    current: { id: models[0]?.id ?? "x", origin: "byok" },
+    current: first
+      ? {
+          id: first.id,
+          origin: first.origin,
+          provider_id: first.provider_id,
+          ref: first.ref,
+        }
+      : { id: "x", origin: "byok", ref: "@byok/p1/x" },
     models,
   };
 }
@@ -63,8 +75,26 @@ describe("encode/decode pointer", () => {
       provider_id: null,
       model: "flash",
     };
-    expect(encodePointer(slot)).toBe(`${PLATFORM_POINTER_ID}::flash`);
+    expect(encodePointer(slot)).toBe("@platform/flash");
     expect(decodePointer(encodePointer(slot))).toEqual(slot);
+  });
+
+  it("round-trips a byok model id that contains slashes", () => {
+    const slot: ModelProfileSlot = {
+      origin: "byok",
+      provider_id: "p1",
+      model: "openai/gpt-4o",
+    };
+    expect(encodePointer(slot)).toBe("@byok/p1/openai/gpt-4o");
+    expect(decodePointer(encodePointer(slot))).toEqual(slot);
+  });
+
+  it("still reads leftover __platform__:: pointers", () => {
+    expect(decodePointer(`${PLATFORM_POINTER_ID}::flash`)).toEqual({
+      origin: "platform",
+      provider_id: null,
+      model: "flash",
+    });
   });
 
   it("returns null for empty follow value", () => {

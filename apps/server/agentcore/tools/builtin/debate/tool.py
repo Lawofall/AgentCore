@@ -374,7 +374,7 @@ class DebateTool:
             moderator_run_id=str(arguments.get("moderator_run_id") or "").strip(),
         )
 
-        # §7.5：校验非空三元组 + 解析裁判（点名优先；空=系统默认，可同模）。
+        # §7.5：校验非空目录身份 + 解析裁判（点名优先；空=系统默认，可同模）。
         from agentcore.runtime.debate.models import (
             collect_debate_identities,
             ensure_debate_route_extras,

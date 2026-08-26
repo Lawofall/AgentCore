@@ -1,40 +1,23 @@
 import { type FileNode, type FileSource, parentDir } from "@/lib/fileSource";
-import type { AlwaysQuota, DocumentNode } from "@/services/documents";
+import type { DocumentNode } from "@/services/documents";
 
-/** Offline mock scenes for `#/preview/files` — always-usage states for shoot review. */
+/** Offline mock scenes for `#/preview/files` — empty vs populated entries. */
 export const FILES_PREVIEW_SCENES = [
   {
-    id: "files-quota-empty",
-    title: "用量 · 空态",
-    description: "新账号 0 字 · 空画像/偏好 · 还没占用",
+    id: "files-empty",
+    title: "空态",
+    description: "新账号 · 画像/偏好占位 · 还没有自建条目",
   },
   {
-    id: "files-quota-normal",
-    title: "用量 · 常态",
-    description: "还剩多少 · 行内字数 · 徽章解释",
-  },
-  {
-    id: "files-quota-near-full",
-    title: "用量 · 接近满",
-    description: "快满后果文案 · 去整理出口",
-  },
-  {
-    id: "files-quota-over",
-    title: "用量 · 已超限",
-    description: "已超后果文案 · 去整理出口",
-  },
-  {
-    id: "files-quota-project-split",
-    title: "用量 · 文件夹两段",
-    description: "全局/本文件夹各占一半 · tooltip 解色",
+    id: "files-entries",
+    title: "有条目",
+    description: "常驻/按需徽章 · 行尾字数 · 不生效/已停用",
   },
 ] as const;
 
 export type FilesPreviewSceneId = (typeof FILES_PREVIEW_SCENES)[number]["id"];
 
 export const FILES_PREVIEW_PROJECT_FOLDER_ID = "folder-demo";
-
-const MAX_CHARS = 24000;
 
 /**
  * 文件夹自己的盘上文件——预览里跟条目同屏：全局设定单独钉顶；文件夹条目经
@@ -277,28 +260,12 @@ export function buildEmptyProjectEntriesMock(folderId: string): DocumentNode[] {
   ];
 }
 
-export function buildAlwaysQuotaMock(input: {
-  used: number;
-  max: number;
-  globalChars: number;
-  projectChars: number;
-}): AlwaysQuota {
-  const { used, max, globalChars, projectChars } = input;
-  return {
-    usedChars: used,
-    maxChars: max,
-    percent: max > 0 ? Math.round((1000 * used) / max) / 10 : 0,
-    globalChars,
-    projectChars,
-  };
-}
-
 export function entriesForScene(sceneId: FilesPreviewSceneId): {
   global: DocumentNode[];
   project: DocumentNode[];
 } {
   const folderId = FILES_PREVIEW_PROJECT_FOLDER_ID;
-  if (sceneId === "files-quota-empty") {
+  if (sceneId === "files-empty") {
     return {
       global: buildEmptyGlobalEntriesMock(),
       project: buildEmptyProjectEntriesMock(folderId),
@@ -308,91 +275,4 @@ export function entriesForScene(sceneId: FilesPreviewSceneId): {
     global: buildGlobalEntriesMock(),
     project: buildProjectEntriesMock(folderId),
   };
-}
-
-/** Quota fixtures keyed by scene — global meter + project meter. */
-export function alwaysQuotaForScene(sceneId: FilesPreviewSceneId): {
-  global: AlwaysQuota;
-  project: AlwaysQuota;
-} {
-  switch (sceneId) {
-    case "files-quota-empty":
-      return {
-        global: buildAlwaysQuotaMock({
-          used: 0,
-          max: MAX_CHARS,
-          globalChars: 0,
-          projectChars: 0,
-        }),
-        project: buildAlwaysQuotaMock({
-          used: 0,
-          max: MAX_CHARS,
-          globalChars: 0,
-          projectChars: 0,
-        }),
-      };
-    case "files-quota-near-full":
-      return {
-        global: buildAlwaysQuotaMock({
-          used: 20000,
-          max: MAX_CHARS,
-          globalChars: 20000,
-          projectChars: 0,
-        }),
-        project: buildAlwaysQuotaMock({
-          used: 22000,
-          max: MAX_CHARS,
-          globalChars: 20000,
-          projectChars: 2000,
-        }),
-      };
-    case "files-quota-over":
-      return {
-        global: buildAlwaysQuotaMock({
-          used: 28000,
-          max: MAX_CHARS,
-          globalChars: 28000,
-          projectChars: 0,
-        }),
-        project: buildAlwaysQuotaMock({
-          used: 32000,
-          max: MAX_CHARS,
-          globalChars: 28000,
-          projectChars: 4000,
-        }),
-      };
-    case "files-quota-project-split":
-      // The two-tone bar only renders once a scope goes 快满/已超 (calm scopes are
-      // a single line), so this scene sits just past the threshold — with a
-      // near-even split, which 接近满 / 已超限 don't cover.
-      return {
-        global: buildAlwaysQuotaMock({
-          used: 4200,
-          max: MAX_CHARS,
-          globalChars: 4200,
-          projectChars: 0,
-        }),
-        project: buildAlwaysQuotaMock({
-          used: 21000,
-          max: MAX_CHARS,
-          globalChars: 11000,
-          projectChars: 10000,
-        }),
-      };
-    default:
-      return {
-        global: buildAlwaysQuotaMock({
-          used: 4200,
-          max: MAX_CHARS,
-          globalChars: 4200,
-          projectChars: 0,
-        }),
-        project: buildAlwaysQuotaMock({
-          used: 5600,
-          max: MAX_CHARS,
-          globalChars: 4200,
-          projectChars: 1400,
-        }),
-      };
-  }
 }

@@ -134,9 +134,14 @@ def _assemble_ceo_toolset(
         permission_axes=permission_axes,
         backend_location=backend_location,
         include_browser="browser" in worker_tools.names,
-        # The worker roster already asked ``git_execution_enabled_for`` with the live
-        # backend; reuse its verdict so CEO and workers never disagree on git.
+        # The worker roster already asked ``git_execution_enabled_for`` / execution
+        # class with the live backend; reuse those verdicts so CEO and workers agree.
         include_git="git" in worker_tools.names,
+        include_execution_tools=(
+            "code_execute" in worker_tools.names
+            or "test_run" in worker_tools.names
+            or "terminal" in worker_tools.names
+        ),
     )
     chat_tools.register(delegate_tool)
     from agentcore.tools.builtin.debate import DebateTool

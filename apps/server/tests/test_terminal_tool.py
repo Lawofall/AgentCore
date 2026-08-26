@@ -1,4 +1,4 @@
-"""Tests for the worker-only ``terminal`` background-process tool (M1)."""
+"""Tests for the ``terminal`` background-process tool (local WorkspaceChannel path)."""
 
 from __future__ import annotations
 
@@ -96,6 +96,8 @@ def test_terminal_schema_is_never_execution():
     assert schema.category is ToolCategory.EXECUTION
     assert "start" in schema.parameters["properties"]["subcommand"]["enum"]
     assert terminal_approval_subcommands() == frozenset({"start"})
+    assert "仅本地" not in schema.description
+    assert "云桌" in TerminalTool(location="server").schema.description
 
 
 def test_tool_call_requires_approval_only_for_start():
@@ -109,23 +111,30 @@ def test_tool_call_requires_approval_only_for_start():
         )
 
 
-def test_terminal_omitted_without_local_backend():
-    """Default / cloud catalogs omit local-only terminal; CEO needs backend_location=local."""
-    assert "terminal" not in {s.name for s in build_builtin_registry().list_all()}
-    assert "terminal" not in {s.name for s in build_ceo_tool_registry().list_all()}
+def test_terminal_omitted_when_execution_class_withheld():
+    """Catalog default includes terminal; CEO/worker follow execution-class gate."""
+    assert "terminal" in {s.name for s in build_builtin_registry().list_all()}
+    assert "terminal" in {s.name for s in build_ceo_tool_registry().list_all()}
     assert "terminal" in {
         s.name for s in build_builtin_registry(location="local").list_all()
     }
     assert "terminal" in {
         s.name for s in build_ceo_tool_registry(backend_location="local").list_all()
     }
+    assert "terminal" in {
+        s.name for s in build_ceo_tool_registry(backend_location="server").list_all()
+    }
     assert (
         build_ceo_tool_registry(backend_location="local").get("terminal").schema.approval
         is TerminalTool().schema.approval
     )
+    assert "terminal" not in {
+        s.name
+        for s in build_builtin_registry(include_execution_tools=False).list_all()
+    }
 
 
-def test_worker_registry_registers_terminal_only_on_local():
+def test_worker_registry_registers_terminal_with_execution_class():
     local = ServerWorkspace(
         root=Path("."), sandbox=SubprocessSandbox(), location="local"
     )
@@ -133,8 +142,9 @@ def test_worker_registry_registers_terminal_only_on_local():
         root=Path("."), sandbox=SubprocessSandbox(), location="server"
     )
     assert "terminal" in {s.name for s in build_worker_registry(backend=local).list_all()}
+    # conftest forces gvisor off → cloud server withholds the class.
     assert "terminal" not in {s.name for s in build_worker_registry(backend=server).list_all()}
-    assert "terminal" not in {s.name for s in build_worker_registry().list_all()}
+    assert "terminal" in {s.name for s in build_worker_registry().list_all()}
 
 
 def test_delegation_grantable_includes_terminal():
@@ -357,7 +367,7 @@ async def test_start_with_wait_for_extends_channel_timeout(monkeypatch):
 async def test_missing_channel_errors():
     result = await TerminalTool().execute({"subcommand": "list"}, _ctx(None))
     assert not result.success
-    assert "本地" in (result.error or "")
+    assert "本地" in (result.error or "") or "本机" in (result.error or "")
     # Not a parameter mistake: the environment genuinely has no desktop to host on.
     assert result.metadata.get("code") == "local_workspace_required"
     assert result.contract_failure is False

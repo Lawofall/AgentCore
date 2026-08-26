@@ -110,6 +110,11 @@ interface FileTreeProps {
    * so the entries still have a drawer.
    */
   renderWorkroomLead?: (indent: number) => React.ReactNode;
+  /**
+   * 「新建条目」on the ``.agentcore`` header (always visible, not hover-only).
+   * Returning `false` skips expanding the drawer after a failed create.
+   */
+  onCreateWorkroomEntry?: () => boolean | Promise<boolean>;
   /** Deep-link: expand these dirs once (``AgentCore`` for memory cards). */
   forceExpandPaths?: readonly string[];
   onForceExpandApplied?: () => void;
@@ -131,6 +136,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
       hideRootDirs,
       sortBy = "name",
       renderWorkroomLead,
+      onCreateWorkroomEntry,
       forceExpandPaths,
       onForceExpandApplied,
     },
@@ -143,7 +149,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
     // Render / filter / keyboard-select-all share this view (virtual ``.agentcore``
     // + hideRootDirs). data.childrenOf stays the disk map for truncated counts.
     const childrenOf = withVirtualAgentCore(data.childrenOf, {
-      injectVirtual: Boolean(renderWorkroomLead),
+      injectVirtual: Boolean(renderWorkroomLead || onCreateWorkroomEntry),
       hideRootDirs,
       sortBy,
     });
@@ -852,6 +858,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
               onDropTarget={setDropTarget}
               onReloadDir={(dir) => data.reload(dir)}
               renderWorkroomLead={renderWorkroomLead}
+              onCreateWorkroomEntry={onCreateWorkroomEntry}
             />
           ))}
           {data.truncatedOf("") && (

@@ -15,7 +15,6 @@ from agentcore.workspace import external_mounts as _external_mounts
 from agentcore.workspace import shared_mounts as _shared_mounts
 from agentcore.workspace.limits import (
     FILE_TOO_LARGE_DETAIL,
-    OFFICE_EXTRACT_MAX_BYTES,
     WORKSPACE_READ_MAX_BYTES,
     channel_dead_error_message,
     channel_dead_retire_metadata,
@@ -113,58 +112,20 @@ def _url_not_workspace_path_error(path: str, start: float) -> ToolResult:
     )
 
 
-def _file_too_large_error(path: str, start: float) -> ToolResult:
-    """Capacity contract: oversized whole-file read (cloud + local share detail)."""
+def _file_too_large_error(path: str, start: float, *, size: int | None = None) -> ToolResult:
+    """Capacity contract: oversized **text** whole-file read (not Office extract)."""
     max_mib = WORKSPACE_READ_MAX_BYTES // (1024 * 1024)
+    size_bit = f"（{size}字节）" if size is not None else ""
     return _error(
         (
-            f"`{path}` {FILE_TOO_LARGE_DETAIL}（上限 {max_mib} MiB）。"
-            "请用 grep 定位，或请用户提供更小片段 / 先转文本；"
-            "禁止原样重试整文件读取。"
+            f"`{path}` {FILE_TOO_LARGE_DETAIL}{size_bit}（上限 {max_mib} MiB）。"
+            "不要原样重试整文件读取。"
         ),
         start,
         contract_failure=True,
+        failure_code="too_large",
+        user_face=False,
         metadata={"capacity_contract": "bytes"},
-    )
-
-
-def _office_extract_budget_error(path: str, size: int, start: float) -> ToolResult:
-    """Capacity contract: Office/PDF extract cost pre-check (avoid burning liveness)."""
-    max_mib = OFFICE_EXTRACT_MAX_BYTES // (1024 * 1024)
-    size_mib = max(1, (size + 1024 * 1024 - 1) // (1024 * 1024))
-    return _error(
-        (
-            f"`{path}` 体积约 {size_mib} MiB，超过透明抽取预算（{max_mib} MiB）。"
-            "请请用户提供更小文件、先转 `.md`/文本后再 file_read，或改用已有 "
-            "attachments 旁路摘要；禁止原样重试抽取。"
-        ),
-        start,
-        contract_failure=True,
-        metadata={"capacity_contract": "extract_bytes"},
-    )
-
-
-def _office_extract_failed_error(path: str, detail: str, start: float) -> ToolResult:
-    """Extract convert failure or wall-clock timeout: contract, not liveness."""
-    lower = path.lower()
-    if lower.endswith(".docx"):
-        kind = "Word"
-    elif lower.endswith(".pdf"):
-        kind = "PDF"
-    else:
-        kind = "Word/PDF"
-    return _error(
-        (
-            f"这份{kind}抽文本失败或超时：`{path}`。"
-            "请用户提供文本版、粘贴相关段落，或换一份带文本层的文件。"
-        ),
-        start,
-        contract_failure=True,
-        metadata={
-            "capacity_contract": "extract",
-            "extract_detail": detail,
-            **({"extract_timeout": True} if "timeout" in (detail or "").lower() else {}),
-        },
     )
 
 
@@ -205,9 +166,11 @@ def _maybe_channel_dead_error(exc: WorkspaceError, start: float) -> ToolResult |
 
 def _map_workspace_read_error(exc: WorkspaceError, *, path: str, start: float) -> ToolResult:
     """Map backend read failures to capacity vs liveness vs generic I/O."""
+    from agentcore.workspace.file_kind import parse_too_large_size
+
     detail = str(exc)
     if is_file_too_large_detail(detail):
-        return _file_too_large_error(path, start)
+        return _file_too_large_error(path, start, size=parse_too_large_size(detail))
     dead = _maybe_channel_dead_error(exc, start)
     if dead is not None:
         return dead

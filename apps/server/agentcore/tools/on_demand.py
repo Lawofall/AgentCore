@@ -30,7 +30,7 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
         "host",
         # Browser face — single ``browser`` (action policy table).
         "browser",
-        # Long-running local processes.
+        # Long-running processes (cloud desk / local desktop).
         "terminal",
         # Desktop-only silent mount.
         "external_mount_readonly",
@@ -55,7 +55,7 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
 ON_DEMAND_SUMMARIES: dict[str, str] = {
     "host": "本机 Host（status/os_log/shell；面板/音频/服务/装包仅队员）",
     "browser": "右坞浏览器（navigate/click/type/scroll/snapshot/console；screenshot 仅队员）",
-    "terminal": "本机长驻进程启/停/读（dev server；禁改走 code_execute）",
+    "terminal": "长驻进程启/停/读（dev server；云桌 guest / 本机桌面；禁改走 code_execute）",
     "external_mount_readonly": "静默只读挂载本机目录为 external/<别名>/",
     "md_to_docx": "工作区 .md 导出为同名 .docx",
     "md_to_pdf": "工作区 .md 导出为同名 .pdf",

@@ -37,12 +37,9 @@ def spec_for(
     *,
     run_dir: str = NETNS_RUN_DIR,
 ) -> NetnsSpec:
-    if family == "browser":
-        prefix, host, sbx = "acbrw", "acbrwh", "acbrws"
-    elif family == "package":
-        prefix, host, sbx = "acpkg", "acpkgh", "acpkgs"
-    else:
+    if family != "package":
         raise NetnsOpsError(f"unknown netns family: {family}")
+    prefix, host, sbx = "acpkg", "acpkgh", "acpkgs"
     name = f"{prefix}{slot}"
     return NetnsSpec(
         family=family,

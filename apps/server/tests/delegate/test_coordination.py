@@ -1653,7 +1653,7 @@ def test_note_attached_inject_visible_close_is_structural():
     assert harvest.attached_inject_visible_close is False
 
 
-def test_all_completed_inject_carries_output_and_audit_hint():
+def test_all_completed_inject_carries_output_without_unconditional_audit():
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     session = CoordinationSession(execution_id="e", total_workers=3)
@@ -1670,8 +1670,154 @@ def test_all_completed_inject_carries_output_and_audit_hint():
     )
     assert product in text
     assert "团队成品" in text
+    assert "先派审计再收尾" not in text
+
+
+def test_all_completed_inject_names_accepted_files():
+    from agentcore.conversation.execution_harvest import format_harvest_user_text
+    from agentcore.runtime.coordination.inject import format_coordination_events
+
+    paths = ["工作稿/报告.md", "工作稿/附录.md"]
+    facts = {"nodes": [], "files": paths, "outstanding_tool_failures": []}
+    product = "【队员成品】调研报告正文……"
+    session = CoordinationSession(execution_id="e", total_workers=2)
+    session.harvest_closing = True
+    session.harvest_user_facts = facts
+    payload = {
+        "completed": 2,
+        "total": 2,
+        "output": product,
+        "user_facts": facts,
+    }
+    text = format_coordination_events(
+        session,
+        [CoordinationEvent(kind=CoordinationEventKind.ALL_COMPLETED, payload=payload)],
+    )
+    assert "已接受落盘" in text
+    assert "`工作稿/报告.md`" in text
+    assert "`工作稿/附录.md`" in text
+    assert "禁止整段粘贴本清单当产物卡" in text
+
+    session._harvest_stash.append(
+        CoordinationEvent(kind=CoordinationEventKind.ALL_COMPLETED, payload=payload)
+    )
+    user_text = format_harvest_user_text(session)
+    assert "已接受落盘" not in user_text
+    assert "禁止整段粘贴本清单当产物卡" not in user_text
+
+
+def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
+    from agentcore.runtime.coordination.inject import format_coordination_events
+    from agentcore.runtime.runs.plan import RunPlan
+    from agentcore.runtime.runs.types import Deliverable, RunSpec
+
+    brief = CoordinationSession(execution_id="e-brief", total_workers=2)
+    brief.harvest_closing = True
+    brief.live_plan = RunPlan(
+        nodes=[
+            RunSpec(
+                run_id="b0",
+                task="摸底",
+                role="方向专员",
+                deliverable=Deliverable(
+                    form="files",
+                    artifacts=["AgentCore/文档/research/甲方向笔记.md"],
+                ),
+            ),
+            RunSpec(
+                run_id="b1",
+                task="摸底",
+                role="方向专员",
+                deliverable=Deliverable(
+                    form="files",
+                    artifacts=["AgentCore/文档/research/乙方向笔记.md"],
+                ),
+            ),
+        ]
+    )
+    brief_text = format_coordination_events(
+        brief,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 2, "total": 2, "playbook": "parallel_brief"},
+            )
+        ],
+    )
+    assert "先派审计再收尾" not in brief_text
+
+    writing = CoordinationSession(execution_id="e-write", total_workers=1)
+    writing.harvest_closing = True
+    writing.live_plan = RunPlan(
+        nodes=[
+            RunSpec(
+                run_id="w0",
+                task="成文",
+                role="撰稿人",
+                deliverable=Deliverable(
+                    form="files",
+                    artifacts=["AgentCore/文档/research/报告.md"],
+                ),
+            )
+        ]
+    )
+    writing_text = format_coordination_events(
+        writing,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 1, "total": 1},
+            )
+        ],
+    )
+    assert "先派审计再收尾" not in writing_text
+
+
+def test_all_completed_inject_keeps_audit_nudge_for_audit_wave():
+    from agentcore.runtime.coordination.inject import format_coordination_events
+    from agentcore.runtime.runs.plan import RunPlan
+    from agentcore.runtime.runs.types import Deliverable, RunSpec
+
+    session = CoordinationSession(execution_id="e-audit", total_workers=1)
+    session.harvest_closing = True
+    session.live_plan = RunPlan(
+        nodes=[
+            RunSpec(
+                run_id="a0",
+                task="审计",
+                role="代码审计员",
+                deliverable=Deliverable(
+                    form="files",
+                    artifacts=["AgentCore/文档/reviews/code-audit.md"],
+                    code_audit_gate=True,
+                ),
+            )
+        ]
+    )
+    text = format_coordination_events(
+        session,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 1, "total": 1, "playbook": "code_audit"},
+            )
+        ],
+    )
     assert "独立审计" in text
     assert "先派审计再收尾" in text
+
+    by_playbook = CoordinationSession(execution_id="e-rr", total_workers=1)
+    by_playbook.harvest_closing = True
+    rr_text = format_coordination_events(
+        by_playbook,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 1, "total": 1, "playbook": "research_report"},
+            )
+        ],
+    )
+    assert "先派审计再收尾" in rr_text
 
 
 def test_inject_carries_final_synthesis_discipline():
@@ -1702,8 +1848,10 @@ def test_inject_carries_final_synthesis_discipline():
     assert "然后退出协调" not in text
 
 
-def test_all_completed_inject_without_output_still_has_audit_hint():
+def test_all_completed_inject_without_output_skips_audit_unless_review_wave():
     from agentcore.runtime.coordination.inject import format_coordination_events
+    from agentcore.runtime.runs.plan import RunPlan
+    from agentcore.runtime.runs.types import RunSpec
 
     session = CoordinationSession(execution_id="e", total_workers=2)
     session.harvest_closing = True
@@ -1717,8 +1865,27 @@ def test_all_completed_inject_without_output_still_has_audit_hint():
         ],
     )
     assert "团队已全部结束" in text
-    assert "独立审计" in text
+    assert "先派审计再收尾" not in text
     assert "团队成品" not in text
+
+    review = CoordinationSession(execution_id="e-rev", total_workers=2)
+    review.harvest_closing = True
+    review.live_plan = RunPlan(
+        nodes=[
+            RunSpec(run_id="w", task="写", role="撰稿人"),
+            RunSpec(run_id="r", task="审", role="学术审校员"),
+        ]
+    )
+    review_text = format_coordination_events(
+        review,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 2, "total": 2},
+            )
+        ],
+    )
+    assert "先派审计再收尾" in review_text
 
 
 def test_all_completed_criteria_unmet_inject_steers_reuse_not_respawn():

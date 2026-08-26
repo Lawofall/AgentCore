@@ -1,7 +1,7 @@
 """Unit tests for workspace destructive_fs heuristics + Local baseline gate (P0a/b+P2).
 
 Honest positioning: heuristics are a narrow blacklist, not a complete boundary.
-Cloud staging deletes-not-written-back and registry_egress rw-bind exceptions are
+Cloud desk bind-to-disk and packaging allowlist rw-bind exceptions are
 out of scope here (maintained as-is).
 """
 
@@ -240,7 +240,7 @@ async def test_local_gate_passes_with_baseline(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_local_gate_skips_server_location():
-    """Cloud staging: deletes not written back — baseline gate does not apply."""
+    """Cloud desk: baseline gate does not apply (server location)."""
     backend = SimpleNamespace(location="server", root=Path("/tmp/unused"))
     context = SimpleNamespace(backend=backend, user_id="u1", conversation_id="c1")
     hit = await _apply_local_destructive_baseline_gate(

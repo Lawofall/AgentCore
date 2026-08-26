@@ -14,7 +14,7 @@ import {
   stageDirMeta,
 } from "@/lib/stageDirs";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FilePlus, Loader2 } from "lucide-react";
 import type React from "react";
 import { InlineCreateRow, InlineInput, InlineRow } from "./FileTreeInline";
 import { FileTreeRowMenu } from "./FileTreeRowMenu";
@@ -26,7 +26,7 @@ import {
   isSelectionOnlyClick,
 } from "./fileTreeSelection";
 import type { BatchMenuActions } from "./fileTreeTypes";
-import { FileRowMeta, TruncatedNotice } from "./parts";
+import { FileRowMeta, IconButton, TruncatedNotice } from "./parts";
 import type { useFileTreeData } from "./useFileTreeData";
 
 export interface FileTreeRowProps {
@@ -90,6 +90,11 @@ export interface FileTreeRowProps {
    * (indent = this dir's file children).
    */
   renderWorkroomLead?: (indent: number) => React.ReactNode;
+  /**
+   * 「新建条目」on the ``.agentcore`` header — sibling of the title, always
+   * visible. Returning `false` skips expanding the drawer after a failed create.
+   */
+  onCreateWorkroomEntry?: () => boolean | Promise<boolean>;
 }
 
 export function FileTreeRow(props: FileTreeRowProps) {
@@ -157,7 +162,7 @@ export function FileTreeRow(props: FileTreeRowProps) {
                       if (isSelectionOnlyClick(intent)) return;
                       props.onOpenFile(node.path, node.name);
                     }}
-                    className="h-auto min-w-0 flex-1 justify-start gap-1.5 overflow-hidden rounded-none px-0 py-1.5 text-left text-xs font-normal"
+                    className="h-auto min-w-0 flex-1 justify-start gap-1.5 overflow-hidden rounded-none px-0 py-1.5 text-left text-xs font-normal max-md:text-sm"
                   >
                     <FileTypeIcon name={node.name} size={13} />
                     <span className="min-w-0 flex-1 truncate">{node.name}</span>
@@ -252,7 +257,7 @@ export function FileTreeRow(props: FileTreeRowProps) {
                     props.onToggle(node.path);
                   }}
                   className={cn(
-                    "h-auto min-w-0 flex-1 justify-start gap-1.5 overflow-hidden rounded-none px-0 py-1.5 text-left text-xs font-normal",
+                    "h-auto min-w-0 flex-1 justify-start gap-1.5 overflow-hidden rounded-none px-0 py-1.5 text-left text-xs font-normal max-md:text-sm",
                     isWorkroom && "text-muted-foreground",
                   )}
                 >
@@ -281,6 +286,22 @@ export function FileTreeRow(props: FileTreeRowProps) {
                   {!isWorkroom && <FileRowMeta node={node} />}
                 </Button>
               </SimpleTooltip>
+              {isWorkroom && props.onCreateWorkroomEntry ? (
+                <IconButton
+                  title="新建条目"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void (async () => {
+                      const result = await props.onCreateWorkroomEntry?.();
+                      if (result === false) return;
+                      if (!open) props.onToggle(node.path);
+                    })();
+                  }}
+                >
+                  <FilePlus size={14} />
+                </IconButton>
+              ) : null}
             </SurfaceRow>
           </ContextMenuTrigger>
           <FileTreeRowMenu {...props} batch={rowBatch} />

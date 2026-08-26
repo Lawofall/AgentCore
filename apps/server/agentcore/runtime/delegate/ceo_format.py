@@ -477,8 +477,8 @@ def _roster_facts(
                     "下一回合请 append 同图或 replan/点名续派该角色，"
                     "禁止本回合假装已全部完成"
                 )
-            # Cancel / hard-absence skips under strict require_upstream, or
-            # lenient zero-success: tip CEO to replan or loosen fan-in.
+            # Cancel / hard-absence skips under strict extra-key fan-in, or
+            # lenient zero-success: tip CEO to replace, not to fill a join knob.
             upstream_cancel = any(
                 (results.get(d) is not None and results[d].phase is RunPhase.CANCELLED)
                 for d in (node.depends_on or [])
@@ -486,9 +486,8 @@ def _roster_facts(
             if upstream_cancel and not budget_skip:
                 cancel_cascade_lines.append(
                     f"- {label}（`{node.run_id}`）因上游取消未跑；"
-                    "默认可在其它上游已交付时继续（require_upstream=false）；"
-                    "若需全量成功才跑请设 require_upstream=true；"
-                    "零上游成功仍要放行可 force_continue=true 或 replaces_run_id 重派"
+                    "其它上游已交付时下游默认可继续；"
+                    "零上游成功仍要补人：用 replaces_run_id 重派"
                 )
         elif phase is RunPhase.CANCELLED:
             # Cold handoff originals that a replaces_run_id took over stay cancelled —
@@ -552,7 +551,7 @@ def render_roster_block(facts: dict[str, Any]) -> str:
         lines.append("因额度跳过、从未开跑（下一回合可续）：\n" + "\n".join(budget_skip_lines))
     if cancel_cascade_lines:
         lines.append(
-            "上游取消导致下游未跑（仅严格 require_upstream 或零成功时）：\n"
+            "上游取消导致下游未跑（其它路都没交上时）：\n"
             + "\n".join(cancel_cascade_lines)
         )
     if replaced_lines:

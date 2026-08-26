@@ -2,7 +2,7 @@
 
 产品判据（可证明结构，不扫用户/task 长文意图）：
 根 depth=0、无具名 playbook、本批恰好 1 task、显式写工程
-（只认 ``form=files``；form 省略 / 仅 legacy 旗标不算）、且无切片钉 →
+（只认 ``form=workspace``；``form=files`` / 省略不算）、且无切片钉 →
 记一次软告警。不拒收、不改图。路径 B（该 lead 嵌套扇出）为合法等价编制，文案须明示。
 
 切片钉（白名单，任一即豁免）：非空 ``artifacts`` / 非空 ``artifact_dir`` /
@@ -22,8 +22,8 @@ def _deliverable(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _explicit_write_engineering(task: dict[str, Any]) -> bool:
-    """True only when CEO explicitly marked ``form=files`` (omit ≠ files)."""
-    return _deliverable(task).get("form") == "files"
+    """True only when CEO explicitly marked ``form=workspace`` (files / omit ≠ 写工程)."""
+    return _deliverable(task).get("form") == "workspace"
 
 
 def _has_slice_nail(task: dict[str, Any]) -> bool:

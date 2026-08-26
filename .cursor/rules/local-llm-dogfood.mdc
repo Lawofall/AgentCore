@@ -11,6 +11,12 @@ alwaysApply: false
 - **原因**：本地默认应走测试账号 BYOK，不是平台 key。
 - **对策**：`dev` / `devpassword`（`DEV_USERNAME` / `DEV_PASSWORD` 可覆盖）+ 账号已配 **OpenCode Zen**（如 `deepseek-v4-flash-free`）；先 `uv run python scripts/seed_dev_user.py`，再设置页或 `scripts/set_dev_llm_key.py`。
 
+## 改 prompt / runtime 后仍像旧核
+
+- **症状**：刚跑过 `start-dev-server.ps1`，桌面本机对话的 `cost.prompt_assembled` 仍与改前逐字节相同（`ceo_prompt` 字数 / `assembly_hash` 不变），或行为完全没变。
+- **原因**：本机传统回合在 sidecar 里 `import`，不在 API 进程。清树脚本只杀 `-m agentcore`，故意不碰 sidecar。
+- **对策**：完全退出并重开桌面后再开新对话。对账要看到新的 `sidecar.ready`，且本场装配哈希相对改前变化。云协作或关于里关掉「允许本机执行」才是重启 API 即加载。权威 → [本地开发 · 改代码后哪边会加载](/docs/02-架构/本地开发.md#改代码后哪边会加载)。
+
 ## 真跑入口
 
 - 产品回合：`scripts/archive/probe_turn.py`（HTTP，与桌面同路）。

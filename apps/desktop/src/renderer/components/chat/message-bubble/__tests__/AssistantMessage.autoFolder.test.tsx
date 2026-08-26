@@ -140,11 +140,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AssistantMessage · 对话内不渲染裸聊落点告知", () => {
-  it("有产出文件：只出产出卡，卡头没有落点条", () => {
+  it("有产出文件：不出产出卡，也没有落点条", () => {
     state.artifacts = [{ path: "notes.md", status: "accepted" }];
     renderBubble(settledMessage());
 
-    expect(screen.getByText("本回合产出文件")).toBeTruthy();
+    expect(screen.queryByText("本回合产出文件")).toBeNull();
     expect(screen.getByTestId("assistant-body")).toBeTruthy();
     expectNoLandingNotice();
   });

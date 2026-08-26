@@ -25,19 +25,10 @@ class ExecutionRequest:
     idle_timeout_seconds: int | None = None
     # Resource / isolation knobs (optional; defaults preserve subprocess behaviour).
     env: dict[str, str] | None = None
-    # Reserved historically; GVisorSandbox now honors this (P2):
-    # - ``none`` → ``--network=none`` (observe / workspace)
-    # - ``restricted`` → ``--network=host`` under rootless (sandbox netstack
-    #   is unsupported with ``--rootless``); outbound still subject to OS /
-    #   SSRF policy for app-level fetches (``core/net.py``).
-    #   Intended for ``full_trust`` cloud gVisor only — not SubprocessSandbox.
-    # Install path sets ``registry_egress=True`` instead of relying on host-net
-    # as a fake allowlist — see ``tools/sandbox/egress/``.
+    # Reserved historically; cloud desk guests always attach the packaging
+    # allowlist netns. SubprocessSandbox ignores this. ``restricted`` vs ``none``
+    # is no longer an independent gVisor execute mode.
     network_mode: Literal["none", "restricted"] = "none"
-    # Packaging install only: netns + allowlist proxy + non-rootless
-    # ``--network=sandbox``, and (when cwd is set) durable workspace rw-bind
-    # instead of staging/base64 wrap. Never set for non-install restricted egress.
-    registry_egress: bool = False
     # Optional DATA_DIR pkg-cache bucket (user_id / conversation id). Empty →
     # per-open ``ephemeral-*`` under pkg-cache (no shared global fallback).
     cache_bucket: str | None = None
@@ -65,13 +56,9 @@ class ExecutionResult:
     exit_code: int
     duration_ms: int
     truncated: bool = False
-    # 产物写回 (gVisor copy-out): workspace-relative paths the execution created or
-    # modified that were persisted into the real workspace. Empty for sandboxes that
-    # write the workspace directly (SubprocessSandbox) or when nothing changed.
+    # Bind-to-disk (cloud desk / SubprocessSandbox): workspace-relative paths
+    # the execution created or modified. Empty when nothing changed or scan skipped.
     written_files: list[str] | None = None
-    # Files that changed but were NOT persisted (write-back caps / guards) — reported
-    # so the failure mode is explainable instead of silent.
-    write_back_skipped: int = 0
 
     _MAX_OUTPUT_LEN = 8000
 

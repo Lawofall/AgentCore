@@ -31,7 +31,7 @@ class _FixedForm:
 def test_samples_lint_ok():
     lint_samples(SAMPLES)
     assert len(SAMPLES) >= 8
-    assert {s.expected_form for s in SAMPLES} == {"prose", "files"}
+    assert {s.expected_form for s in SAMPLES} == {"prose", "files", "workspace"}
 
 
 def test_prompt_contract_ok():
@@ -46,6 +46,15 @@ def test_check_ok_prose():
     )
     assert r.ok
     assert r.form == "prose"
+
+
+def test_check_ok_workspace():
+    r = check_form_call(
+        '{"form":"workspace","task":"用 file_write 改 src/app.py"}',
+        expected_form="workspace",
+    )
+    assert r.ok
+    assert r.form == "workspace"
 
 
 def test_check_ok_files():
@@ -96,6 +105,8 @@ def test_run_with_scripted_provider():
                 sample = next(s for s in SAMPLES if s.user_prompt == user)
                 if sample.expected_form == "prose":
                     body = '{"form":"prose","task":"正文交付，勿落盘"}'
+                elif sample.expected_form == "workspace":
+                    body = '{"form":"workspace","task":"用 file_write 写入工作区"}'
                 else:
                     body = '{"form":"files","task":"用 file_write 写入工作区"}'
                 return LLMResponse(content=body)

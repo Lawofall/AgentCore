@@ -35,7 +35,7 @@ export const Textarea = forwardRef<
       ref={ref}
       className={cn(
         fieldSurfaceClass,
-        "resize-none px-2.5 py-1.5 text-xs",
+        "resize-none px-2.5 py-1.5 text-xs max-md:text-sm",
         className,
       )}
       {...props}

@@ -2,8 +2,8 @@
 
 Semantics: remove the bullet from the source layer, then add it under the same
 section on the target layer — never a scope flag flip. Used by the desktop
-「移到本文件夹 / 移到全局」actions on the semantic diff card and the dual-pane
-profile editor (Agent记忆与知识系统 §1.6 P2-b).
+「移到本文件夹 / 移到全局」actions on the semantic diff card
+(Agent记忆与知识系统 §1.6 P2-b).
 
 ``MoveDirection`` keeps the ``to_project`` spelling: it is the ``POST /v1/memory/move``
 request contract the desktop already sends, not product wording (双模式工作区 §5.4).

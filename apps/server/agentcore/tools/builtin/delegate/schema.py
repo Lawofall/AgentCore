@@ -13,34 +13,27 @@ from agentcore.runtime.runs.constants import MAX_DELEGATION_TASKS, MAX_GAP_FILL_
 from agentcore.runtime.runs.playbooks import PLAYBOOKS, playbook_args_schema_description
 
 # Shared task-level deliverable shape (delegate tasks + replan binds/add).
+# CEO / replan fill-in: three-tier form + optional artifact paths only.
+# Playbook-internal knobs still parse in builder; they are not on this schema.
 TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
     "type": "object",
-    "description": "可选交付物。form；已拍板验收写入「已确认约束」；细则→team_orchestration_advanced。",
+    "description": (
+        "交付形态。省略或空对象=form=files（默认工作稿/）。"
+        "已拍板验收写入「已确认约束」；细则→team_orchestration_advanced。"
+    ),
     "properties": {
         "form": {
             "type": "string",
-            "enum": ["prose", "files"],
-            "description": "prose=看；files=用（须落盘）。",
+            "enum": ["prose", "files", "workspace"],
+            "description": (
+                "【看】prose；【存文档】files（默认，落工作稿）；"
+                "【改工程】workspace。漏填=files。"
+            ),
         },
-        "required_sections": {"type": "array", "items": {"type": "string"}},
-        "output_format": {"type": "string", "enum": ["text", "json"]},
-        "artifacts": {"type": "array", "items": {"type": "string"}},
-        "artifact_dir": {
-            "type": "string",
-            "description": "约定落盘目录（可省；写码类改 workspace_native）。",
-        },
-        "workspace_native": {
-            "type": "boolean",
-            "description": "true=用户工作区原生文件（改代码/写测试）；与 AgentCore/文档 落点冲突时以本字段为准。",
-        },
-        "citation_mode": {
-            "type": "string",
-            "enum": ["two_phase"],
-            "description": "two_phase=A 草案不跑成稿闸、同 worker 升 B 再验。省略=非两阶段。",
-        },
-        "strict": {
-            "type": "boolean",
-            "description": "不达标：true=硬退；false=软接受。",
+        "artifacts": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "钉具体路径（不扫 task 自由文）。",
         },
     },
 }
@@ -50,7 +43,7 @@ DELEGATE_DESCRIPTION = (
     f"拆任务给临时团队（默认手写顶层 tasks：role+task，≤{MAX_DELEGATION_TASKS}；非终结）。"
     f"默认可抄：{HANDWRITTEN_TASKS_SKELETON}（deliverable 可选）。"
     "具名 playbook 仅当走固化流水线时用（快捷进阶），且勿同时传 tasks。"
-    "【看】→deliverable.form=prose；【用】→files。"
+    "【看】→form=prose；【存文档】→files（默认，落工作稿）；【改工程】→workspace。漏填=files。"
     "多任务先判生产者→消费者；互不依赖才平铺并行。"
     "≥1 worker 默认协调（立即返回、可同回合追加同一张图；含单 worker）。"
     "跨回合再派人＝新开一队、接续上一张图（append_to_execution_id 只填 latest）。"
@@ -95,10 +88,6 @@ DELEGATE_PARAMETERS = {
                             "跨回合是新开一队，不是 depends_on 连旧图。"
                         ),
                     },
-                    "result_handling": {
-                        "type": "string",
-                        "enum": ["pass_through", "summarize"],
-                    },
                     "replaces_run_id": {
                         "type": "string",
                         "description": (
@@ -114,13 +103,6 @@ DELEGATE_PARAMETERS = {
                             "同人续派（调查后确认修 / 改稿 / 收口后接着干）；填已完成 run_id。"
                         ),
                     },
-                    "checkpoint_after": {"type": "boolean"},
-                    "bind_after_deps": {"type": "boolean"},
-                    "require_upstream": {
-                        "type": "boolean",
-                        "description": "false=≥1 上游成功即跑；true=须全量。",
-                    },
-                    "force_continue": {"type": "boolean"},
                     "target_folder_id": {
                         "type": "string",
                         "description": (
@@ -140,11 +122,6 @@ DELEGATE_PARAMETERS = {
                 "同回合再调一般不必传。"
             ),
         },
-        "coordinate": {
-            "type": "boolean",
-            "default": True,
-            "description": "协调（默认 true）；false=阻塞。",
-        },
         "force": {
             "type": "array",
             "items": {"type": "string", "enum": list(FORCE_GATES)},
@@ -162,35 +139,12 @@ DELEGATE_PARAMETERS = {
             "type": "object",
             "description": playbook_args_schema_description(),
         },
-        "coordination": {
-            "type": "string",
-            "enum": ["wall", "none"],
-            "default": "none",
-        },
-        "seed_notes": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": ["decision", "heads_up", "claim"],
-                    },
-                    "text": {"type": "string"},
-                },
-                "required": ["text"],
-            },
-        },
         "team_brief": {
             "type": "string",
             "description": (
                 "全队共识（含「已确认约束」）；各 worker 开局可见；"
-                "约束块优先于附件旧角色表。"
+                "约束块优先于附件旧角色表。非空会建便签墙并按行贴。"
             ),
-        },
-        "complexity_hint": {
-            "type": "string",
-            "enum": ["light", "standard"],
         },
     },
 }

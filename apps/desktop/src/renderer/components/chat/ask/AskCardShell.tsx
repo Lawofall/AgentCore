@@ -31,7 +31,7 @@ export function AskCardShell({
   title?: string;
   /** 可选副标题（organize/daily_review 的本地总览等）。 */
   subtitle?: string;
-  /** 头部右上角插槽（帮助链接 / 分页器）。 */
+  /** 头部右上角插槽（通用澄清多题时挂编号跳转）。 */
   extra?: ReactNode;
   footer?: ReactNode;
   /** `data-ask-card` 取值，供预览与截图定位。 */

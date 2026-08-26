@@ -209,6 +209,49 @@ def test_build_harvest_fallback_uses_user_facts_not_ceo_terminal():
     assert "本地文件暂时连不上" not in text
 
 
+def test_build_harvest_fallback_collapses_duplicate_node_lines():
+    """同角色+同结果只列一次；不同摘要仍分开。"""
+    import agentcore.conversation.execution_harvest as eh
+    from agentcore.runtime.coordination.session import (
+        CoordinationEvent,
+        CoordinationEventKind,
+    )
+
+    dup = {
+        "role": "PPT 转换工程师",
+        "status": "failed",
+        "summary": "本月额度已用完",
+        "files": [],
+    }
+    other = {
+        "role": "写手",
+        "status": "failed",
+        "summary": "另一处失败",
+        "files": [],
+    }
+    session = _session("exec-dup", "conv-dup")
+    session._pending.append(
+        CoordinationEvent(
+            kind=CoordinationEventKind.ALL_COMPLETED,
+            payload={
+                "output": "不应出现",
+                "completed": 0,
+                "total": 2,
+                "user_facts": {
+                    "nodes": [dup, dup, other],
+                    "files": [],
+                    "outstanding_tool_failures": [],
+                },
+            },
+        )
+    )
+    text = eh.build_harvest_fallback_content(session, kind="failure")
+    assert text.count("- PPT 转换工程师") == 1
+    assert text.count("本月额度已用完") == 1
+    assert "写手" in text
+    assert "另一处失败" in text
+
+
 def test_build_harvest_fallback_omits_ceo_internals_keeps_outstanding_failures():
     """User bubble must not dump CEO-audience blocks; uncompensated failures stay."""
     import agentcore.conversation.execution_harvest as eh
@@ -255,6 +298,8 @@ def test_build_harvest_fallback_omits_ceo_internals_keeps_outstanding_failures()
     assert "工程师" in text
     assert "run.py" in text
     assert "没做成" in text or "没有成功" in text
+    assert "已接受落盘" not in text
+    assert "禁止整段粘贴本清单当产物卡" not in text
 
 
 def test_build_harvest_fallback_channel_dead_notice_from_flag():

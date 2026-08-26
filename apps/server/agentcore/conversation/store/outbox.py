@@ -431,6 +431,10 @@ class OutboxStore:
         if "reopen_for_resume" not in ops:
             ops.append("reopen_for_resume")
         record["ops"] = ops
+        journal = record.get("journal")
+        record["resume_after_seq"] = _journal_max_seq(
+            journal if isinstance(journal, dict) else None
+        )
         self._write_sync(user_message_id, record)
 
     async def reopen_for_resume(
@@ -985,6 +989,51 @@ def captain_text_from_stream_segments(
     return content, reasoning
 
 
+def _journal_max_seq(journal: dict[str, Any] | None) -> int:
+    """Highest **live** integer journal key, or ``-1`` when the live band is empty.
+
+    Overflow-band keys (``>= JOURNAL_OVERFLOW_SEQ_START``) stay on the pause
+    snapshot; they must not raise the resume watermark or resume live seqs
+    would all look ``<= watermark``.
+    """
+    from agentcore.runtime.journal.seq_space import JOURNAL_OVERFLOW_SEQ_START
+
+    best = -1
+    for key in journal or {}:
+        try:
+            seq = int(key)
+        except (TypeError, ValueError):
+            continue
+        if seq >= JOURNAL_OVERFLOW_SEQ_START:
+            continue
+        if seq > best:
+            best = seq
+    return best
+
+
+def _journal_map_after_seq(
+    journal: dict[str, Any], after_seq: int
+) -> dict[str, Any]:
+    """Live-band entries whose integer key is strictly after ``after_seq``.
+
+    Overflow keys stay on the full journal wire; they are pause-turn facts and
+    must not re-enter the resume ``tool_failures`` rollup.
+    """
+    from agentcore.runtime.journal.seq_space import JOURNAL_OVERFLOW_SEQ_START
+
+    out: dict[str, Any] = {}
+    for key, value in journal.items():
+        try:
+            seq = int(key)
+        except (TypeError, ValueError):
+            continue
+        if seq >= JOURNAL_OVERFLOW_SEQ_START:
+            continue
+        if seq > after_seq:
+            out[key] = value
+    return out
+
+
 def journal_entries_from_map(journal: dict[str, Any] | None) -> list[dict[str, Any]] | None:
     """Sort an outbox ``journal`` map into a list in emission order."""
     if not journal:
@@ -1135,10 +1184,19 @@ def to_record_turn_body(record: dict[str, Any]) -> dict[str, Any]:
         val = record.get(key)
         if isinstance(val, str) and val.strip():
             body[key] = val.strip()
-    journal = journal_entries_from_map(record.get("journal"))
+    journal_map = record.get("journal")
+    journal = journal_entries_from_map(
+        journal_map if isinstance(journal_map, dict) else None
+    )
     if journal is not None:
         body["journal"] = journal
-    failures = tool_failures_from_journal(journal)
+    failure_source = journal
+    raw_watermark = record.get("resume_after_seq")
+    if isinstance(journal_map, dict) and isinstance(raw_watermark, int):
+        failure_source = journal_entries_from_map(
+            _journal_map_after_seq(journal_map, raw_watermark)
+        )
+    failures = tool_failures_from_journal(failure_source)
     if failures:
         body["tool_failures"] = failures
     mentions = record.get("agent_mentions")

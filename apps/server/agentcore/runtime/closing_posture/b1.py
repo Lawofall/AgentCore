@@ -105,7 +105,7 @@ def _partial_storm_rework(content: str) -> str | None:
 
 
 def _ceiling_hollow_teach_rework(content: str) -> str | None:
-    """cutoff/ceiling latch 后禁空心请开讲（finish_guard 轴；与 enforce 横幅双保险）。"""
+    """cutoff/ceiling latch 后禁空心请开讲（finish_guard 轴；用户面不再贴【收口说明】）。"""
     text = content or ""
     if not text.strip() or not claims_hollow_teach_invite(text):
         return None

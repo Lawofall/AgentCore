@@ -58,7 +58,10 @@ def test_cloud_when_gvisor_off_chain_stays_withheld(
     names = build_worker_registry(backend=backend).names
     assert "code_execute" not in names
     assert "test_run" not in names
-    assert "code_execute=未装配" in build_workspace_context(backend, desktop_online=True)
+    assert "terminal" not in names
+    ctx = build_workspace_context(backend, desktop_online=True)
+    assert "code_execute=未装配" in ctx
+    assert "terminal=未装配" in ctx
     warn = execution_capability_warning(_pptx_plan(), backend)
     assert warn is not None
     assert execution_approval_posture(backend) is ExecutionApprovalPosture.UNAVAILABLE
@@ -85,7 +88,10 @@ def test_cloud_escape_hatch_registers_execution_chain(
     names = build_worker_registry(backend=backend).names
     assert "code_execute" in names
     assert "test_run" in names
-    assert "code_execute=已装配" in build_workspace_context(backend, desktop_online=True)
+    assert "terminal" in names
+    ctx = build_workspace_context(backend, desktop_online=True)
+    assert "code_execute=已装配" in ctx
+    assert "terminal=已装配" in ctx
     plan = _pptx_plan()
     assert execution_capability_warning(plan, backend) is None
     assert execution_approval_posture(backend) is ExecutionApprovalPosture.UNAVAILABLE
@@ -100,11 +106,13 @@ def test_cloud_gvisor_on_chain_flips_end_to_end(tmp_path: Path, monkeypatch: pyt
     names = build_worker_registry(backend=backend).names
     assert "code_execute" in names
     assert "test_run" in names
+    assert "terminal" in names
 
     # ② 能力自述：workspace_context 能力行翻「已装配」。
     # 装包另位：无 netns egress 时 package_install 保持未装配（能跑 ≠ 能装）。
     ctx = build_workspace_context(backend, desktop_online=True)
     assert "code_execute=已装配" in ctx
+    assert "terminal=已装配" in ctx
     assert "package_install=" in ctx
 
 
@@ -136,7 +144,10 @@ def test_cloud_probe_failed_withholds_execution_chain(
     names = build_worker_registry(backend=backend).names
     assert "code_execute" not in names
     assert "test_run" not in names
-    assert "code_execute=未装配" in build_workspace_context(backend, desktop_online=True)
+    assert "terminal" not in names
+    ctx = build_workspace_context(backend, desktop_online=True)
+    assert "code_execute=未装配" in ctx
+    assert "terminal=未装配" in ctx
 
 
 def test_cloud_probe_ok_keeps_execution_chain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -151,7 +162,10 @@ def test_cloud_probe_ok_keeps_execution_chain(tmp_path: Path, monkeypatch: pytes
     names = build_worker_registry(backend=backend).names
     assert "code_execute" in names
     assert "test_run" in names
-    assert "code_execute=已装配" in build_workspace_context(backend, desktop_online=True)
+    assert "terminal" in names
+    ctx = build_workspace_context(backend, desktop_online=True)
+    assert "code_execute=已装配" in ctx
+    assert "terminal=已装配" in ctx
 
 
 def test_cloud_unprobed_keeps_config_only_semantics(
@@ -168,7 +182,10 @@ def test_cloud_unprobed_keeps_config_only_semantics(
     names = build_worker_registry(backend=backend).names
     assert "code_execute" in names
     assert "test_run" in names
-    assert "code_execute=已装配" in build_workspace_context(backend, desktop_online=True)
+    assert "terminal" in names
+    ctx = build_workspace_context(backend, desktop_online=True)
+    assert "code_execute=已装配" in ctx
+    assert "terminal=已装配" in ctx
 
 
 def test_server_tool_description_declares_libs_and_write_back():
@@ -178,32 +195,25 @@ def test_server_tool_description_declares_libs_and_write_back():
     assert "保存进工作区" in desc
 
 
-def test_gvisor_oci_workspace_rw_when_staged(tmp_path: Path):
-    # 产物写回前提：staged 工作区以 rw 绑定（相对路径写不再静默失败）；
-    # 无工作区的裸执行保持旧 ro 姿态；内存上限取护栏配置而非请求默认。
+def test_gvisor_desk_oci_workspace_rw(tmp_path: Path):
     from agentcore.tools.sandbox.gvisor import GVisorSandbox
-    from agentcore.tools.sandbox.protocol import ExecutionRequest
 
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
-    req = ExecutionRequest(code="print(1)", language="python")
-
-    staged = sandbox._build_oci_config(  # noqa: SLF001
-        req,
-        script_name="main.py",
-        workspace="/stage/ws",
-        scratch_dir="/stage/sc",
-        workspace_writable=True,
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    staged = sandbox._build_desk_oci(  # noqa: SLF001
+        workspace=str(tmp_path / "ws"),
+        scratch_dir=str(tmp_path / "sc"),
+        netns_path="/var/run/netns/acpkg1",
+        cache_host_dir=str(cache),
+        proxy_url="http://10.0.0.1:8898",
         memory_limit_mb=512,
     )
     ws_mount = next(m for m in staged["mounts"] if m["destination"] == "/workspace")
     assert "rw" in ws_mount["options"]
+    assert ws_mount["type"] == "bind"
     assert staged["linux"]["resources"]["memory"]["limit"] == 512 * 1024 * 1024
-
-    bare = sandbox._build_oci_config(  # noqa: SLF001
-        req, script_name="main.py", workspace="/stage/sc", scratch_dir="/stage/sc"
-    )
-    ws_bare = next(m for m in bare["mounts"] if m["destination"] == "/workspace")
-    assert "ro" in ws_bare["options"]
+    assert staged["process"]["user"]["uid"] != 65534
 
 
 def test_gvisor_timeout_clamped_by_guardrail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

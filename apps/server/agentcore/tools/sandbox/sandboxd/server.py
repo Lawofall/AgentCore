@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from agentcore.core.logging import get_logger
-from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd
+from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd, build_runsc_exec_cmd
 from agentcore.tools.sandbox.sandboxd.netns_ops import (
     NETNS_RUN_DIR,
     PROBE_NETNS_NAME,
@@ -33,6 +33,7 @@ from agentcore.tools.sandbox.sandboxd.protocol import (
     CONTAINER_ID_PREFIX,
     DEFAULT_SOCKET_PATH,
     METHOD_DELETE,
+    METHOD_EXEC,
     METHOD_HEALTH,
     METHOD_KILL,
     METHOD_NETNS_SETUP,
@@ -40,7 +41,6 @@ from agentcore.tools.sandbox.sandboxd.protocol import (
     METHOD_PING,
     METHOD_RUN,
     SOCKET_ENV,
-    CodeNetwork,
     NetFamily,
     Shape,
 )
@@ -76,6 +76,30 @@ def lookup_user_uid(name: str) -> int | None:
         return int(getpwnam(name).pw_uid)
     except (ImportError, KeyError, AttributeError):
         return None
+
+
+def lookup_user_gid(name: str) -> int | None:
+    try:
+        import pwd
+
+        getpwnam = getattr(pwd, "getpwnam", None)
+        if getpwnam is None:
+            return None
+        return int(getpwnam(name).pw_gid)
+    except (ImportError, KeyError, AttributeError):
+        return None
+
+
+def _guest_ids(app_user: str) -> tuple[int, int]:
+    """OCI process user for guests: API ``app``, never nobody (65534) or implicit root."""
+    uid = lookup_user_uid(app_user)
+    gid = lookup_user_gid(app_user)
+    if uid is None:
+        uid = _self_uid()
+    if gid is None:
+        getter = getattr(os, "getgid", None)
+        gid = int(getter()) if getter is not None else uid
+    return uid, gid
 
 
 def peer_uid(sock: socket.socket | None) -> int | None:
@@ -131,7 +155,7 @@ def _host_bind_mounts() -> list[dict[str, Any]]:
     return mounts
 
 
-def _health_oci_config(*, netns_path: str | None = None) -> dict[str, Any]:
+def _health_oci_config(*, netns_path: str | None = None, uid: int, gid: int) -> dict[str, Any]:
     namespaces: list[dict[str, Any]] = [
         {"type": "pid"},
         {"type": "ipc"},
@@ -144,7 +168,7 @@ def _health_oci_config(*, netns_path: str | None = None) -> dict[str, Any]:
         "ociVersion": "1.0.2",
         "process": {
             "terminal": False,
-            "user": {"uid": 65534, "gid": 65534},
+            "user": {"uid": uid, "gid": gid},
             "args": ["/bin/true"],
             "env": ["PATH=/usr/bin:/bin"],
             "cwd": "/tmp",
@@ -185,9 +209,11 @@ class SandboxdServer:
         self._netns_run_dir = netns_run_dir
         self._app_user = app_user
         self._app_uid = lookup_user_uid(app_user)
+        self._app_gid = lookup_user_gid(app_user)
         self._self_uid = _self_uid()
         self._server: asyncio.Server | None = None
         self._procs: dict[str, asyncio.subprocess.Process] = {}
+        self._detached: set[str] = set()
         self._proc_lock = asyncio.Lock()
 
     @classmethod
@@ -216,6 +242,11 @@ class SandboxdServer:
         logger.info("sandboxd.started", socket=self.socket_path)
 
     async def close(self) -> None:
+        detached = list(self._detached)
+        for container_id in detached:
+            await self._kill_tracked(container_id)
+            await self._runsc_aux("delete", "--force", container_id)
+            self._detached.discard(container_id)
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
@@ -317,8 +348,8 @@ class SandboxdServer:
             return False
         if method == METHOD_HEALTH:
             shape = params.get("shape")
-            if shape not in ("code", "net"):
-                raise RpcDeniedError("health shape must be code or net")
+            if shape != "net":
+                raise RpcDeniedError("health shape must be net")
             ok, detail = await self._health(shape)
             writer.write(_json_bytes(_ok(req_id, {"ok": ok, "detail": detail})))
             await writer.drain()
@@ -345,6 +376,8 @@ class SandboxdServer:
             return False
         if method == METHOD_RUN:
             return await self._run(params, req_id, reader, writer)
+        if method == METHOD_EXEC:
+            return await self._exec(params, req_id, reader, writer)
         raise RpcDeniedError(f"unknown method: {method}", code="unknown_method")
 
     def _parse_slot(self, raw: Any) -> int:
@@ -353,8 +386,8 @@ class SandboxdServer:
         return raw
 
     def _parse_family(self, raw: Any) -> NetFamily:
-        if raw not in ("browser", "package"):
-            raise RpcDeniedError("family must be browser or package")
+        if raw != "package":
+            raise RpcDeniedError("family must be package")
         return raw
 
     def _parse_subnet(self, raw: Any) -> str:
@@ -385,23 +418,22 @@ class SandboxdServer:
         logger.info("sandboxd.netns_teardown", family=family, slot=slot, name=spec.name)
 
     async def _health(self, shape: Shape) -> tuple[bool, str]:
+        del shape  # RPC still sends shape=net; production probe is net-only.
         container_id = f"agentcore-health-{uuid.uuid4().hex[:12]}"
         bundle_dir = tempfile.mkdtemp(prefix="agentcore_health_", dir=self._runtime_root)
         netns_path: str | None = None
         try:
-            if shape == "net":
-                netns_path = await probe_setup(PROBE_NETNS_NAME, run_dir=self._netns_run_dir)
+            netns_path = await probe_setup(PROBE_NETNS_NAME, run_dir=self._netns_run_dir)
             rootfs = Path(bundle_dir) / "rootfs"
             rootfs.mkdir()
-            config = _health_oci_config(netns_path=netns_path)
+            uid, gid = _guest_ids(self._app_user)
+            config = _health_oci_config(netns_path=netns_path, uid=uid, gid=gid)
             (Path(bundle_dir) / "config.json").write_text(json.dumps(config), encoding="utf-8")
             cmd = build_runsc_cmd(
                 runsc_path=self._runsc,
                 runtime_root=self._runtime_root,
                 bundle_dir=bundle_dir,
                 container_id=container_id,
-                shape=shape,
-                network_mode="none",
             )
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -413,20 +445,19 @@ class SandboxdServer:
                 detail = stderr.decode("utf-8", errors="replace").strip()[:200]
                 logger.warning(
                     "sandboxd.health_failed",
-                    shape=shape,
+                    shape="net",
                     detail=detail or None,
                 )
                 return False, detail
             return True, ""
         except (FileNotFoundError, OSError, NetnsOpsError) as exc:
             detail = str(exc)[:200]
-            logger.warning("sandboxd.health_failed", shape=shape, detail=detail)
+            logger.warning("sandboxd.health_failed", shape="net", detail=detail)
             return False, detail
         finally:
             await self._runsc_aux("delete", "--force", container_id)
-            if shape == "net":
-                with contextlib.suppress(Exception):
-                    await probe_teardown(PROBE_NETNS_NAME)
+            with contextlib.suppress(Exception):
+                await probe_teardown(PROBE_NETNS_NAME)
             shutil.rmtree(bundle_dir, ignore_errors=True)
 
     async def _run(
@@ -438,56 +469,34 @@ class SandboxdServer:
     ) -> bool:
         shape = params.get("shape")
         mode = params.get("mode")
-        if shape not in ("code", "net"):
-            raise RpcDeniedError("shape must be code or net")
-        if mode not in ("wait", "stdio"):
-            raise RpcDeniedError("mode must be wait or stdio")
-        if mode == "stdio" and shape != "net":
-            raise RpcDeniedError("stdio mode requires shape=net")
+        if shape != "net":
+            raise RpcDeniedError("shape must be net")
+        if mode != "detach":
+            raise RpcDeniedError("run mode must be detach")
         container_id = self._require_container_id(params.get("container_id"))
         bundle_dir = str(
             self._require_under_root(
                 params.get("bundle_dir"), self._runtime_root, label="bundle_dir"
             )
         )
-        network_mode: CodeNetwork = "host" if params.get("network_mode") == "host" else "none"
         netns_path_raw = params.get("netns_path")
-        if shape == "net":
-            if not isinstance(netns_path_raw, str) or not netns_path_raw:
-                raise RpcDeniedError("netns_path is required for shape=net")
-            self._require_under_root(netns_path_raw, self._netns_run_dir, label="netns_path")
+        if not isinstance(netns_path_raw, str) or not netns_path_raw:
+            raise RpcDeniedError("netns_path is required for shape=net")
+        self._require_under_root(netns_path_raw, self._netns_run_dir, label="netns_path")
         cmd = build_runsc_cmd(
             runsc_path=self._runsc,
             runtime_root=self._runtime_root,
             bundle_dir=bundle_dir,
             container_id=container_id,
-            shape=shape,
-            network_mode=network_mode,
+            detach=True,
         )
         logger.info(
             "sandboxd.run",
-            shape=shape,
-            mode=mode,
+            shape="net",
+            mode="detach",
             container_id=container_id,
         )
-        if mode == "stdio":
-            await self._run_stdio(cmd, container_id, req_id, reader, writer)
-            return True
-        timeout = params.get("timeout_seconds")
-        timeout_seconds = float(timeout) if isinstance(timeout, (int, float)) else 60.0
-        idle = params.get("idle_timeout_seconds")
-        idle_timeout = float(idle) if isinstance(idle, (int, float)) and idle > 0 else None
-        stdin = params.get("stdin")
-        stdin_s = stdin if isinstance(stdin, str) else None
-        await self._run_wait(
-            cmd,
-            container_id,
-            req_id,
-            writer,
-            timeout_seconds=max(timeout_seconds, 0.1),
-            idle_timeout_seconds=idle_timeout,
-            stdin=stdin_s,
-        )
+        await self._run_detach(cmd, container_id, req_id, writer)
         return False
 
     async def _track(self, container_id: str, proc: asyncio.subprocess.Process) -> None:
@@ -508,6 +517,8 @@ class SandboxdServer:
         timeout_seconds: float,
         idle_timeout_seconds: float | None,
         stdin: str | None,
+        delete_after: bool = True,
+        result_mode: str = "wait",
     ) -> None:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -523,7 +534,7 @@ class SandboxdServer:
                 writer.write(_json_bytes(obj))
                 await writer.drain()
 
-        await emit(_ok(req_id, {"mode": "wait"}))
+        await emit(_ok(req_id, {"mode": result_mode}))
         last_output_at = [time.monotonic()]
         try:
             if stdin is not None and proc.stdin is not None:
@@ -576,7 +587,8 @@ class SandboxdServer:
             await emit({"event": "exit", "code": exit_code})
         finally:
             await self._untrack(container_id)
-            await self._runsc_aux("delete", "--force", container_id)
+            if delete_after:
+                await self._runsc_aux("delete", "--force", container_id)
 
     async def _run_stdio(
         self,
@@ -585,6 +597,8 @@ class SandboxdServer:
         req_id: Any,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
+        *,
+        extra_result: dict[str, Any] | None = None,
     ) -> None:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -593,7 +607,10 @@ class SandboxdServer:
             stderr=asyncio.subprocess.PIPE,
         )
         await self._track(container_id, proc)
-        writer.write(_json_bytes(_ok(req_id, {"mode": "stdio"})))
+        result = {"mode": "stdio"}
+        if extra_result:
+            result.update(extra_result)
+        writer.write(_json_bytes(_ok(req_id, result)))
         await writer.drain()
 
         async def sock_to_stdin() -> None:
@@ -633,12 +650,134 @@ class SandboxdServer:
             with contextlib.suppress(Exception):
                 await writer.wait_closed()
 
+    async def _run_detach(
+        self,
+        cmd: list[str],
+        container_id: str,
+        req_id: Any,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60.0)
+        except TimeoutError:
+            await self._kill_proc(proc)
+            await self._runsc_aux("delete", "--force", container_id)
+            raise RpcDeniedError("start-detach timed out", code="sandboxd_timeout") from None
+        if proc.returncode != 0:
+            detail = (stderr or b"").decode("utf-8", errors="replace").strip()[:200]
+            await self._runsc_aux("delete", "--force", container_id)
+            raise RpcDeniedError(
+                detail or "runsc run -d failed",
+                code="sandboxd_rpc",
+            )
+        self._detached.add(container_id)
+        logger.info("sandboxd.start_detach", container_id=container_id)
+        writer.write(_json_bytes(_ok(req_id, {"mode": "detach"})))
+        await writer.drain()
+
+    def _parse_exec_env(self, raw: Any) -> list[str]:
+        if raw is None:
+            return []
+        if not isinstance(raw, list):
+            raise RpcDeniedError("env must be a list of KEY=VALUE strings")
+        env: list[str] = []
+        for item in raw:
+            if not isinstance(item, str) or "=" not in item or "\n" in item or "\x00" in item:
+                raise RpcDeniedError("env entries must be KEY=VALUE")
+            key, _sep, _val = item.partition("=")
+            if not key.isidentifier():
+                raise RpcDeniedError("env key is not allowlisted")
+            env.append(item)
+        return env
+
+    def _parse_exec_argv(self, raw: Any) -> list[str]:
+        if not isinstance(raw, list) or not raw or not all(isinstance(p, str) and p for p in raw):
+            raise RpcDeniedError("argv must be a non-empty string list")
+        return [str(p) for p in raw]
+
+    async def _exec(
+        self,
+        params: dict[str, Any],
+        req_id: Any,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> bool:
+        container_id = self._require_container_id(params.get("container_id"))
+        argv = self._parse_exec_argv(params.get("argv"))
+        cwd = params.get("cwd") or "/workspace"
+        if cwd != "/workspace":
+            raise RpcDeniedError("exec cwd must be /workspace")
+        env = self._parse_exec_env(params.get("env"))
+        mode = params.get("mode") or "wait"
+        if mode not in ("wait", "stdio"):
+            raise RpcDeniedError("exec mode must be wait or stdio")
+        try:
+            cmd = build_runsc_exec_cmd(
+                runsc_path=self._runsc,
+                runtime_root=self._runtime_root,
+                container_id=container_id,
+                argv=argv,
+                cwd=cwd,
+                env=env,
+            )
+        except ValueError as exc:
+            raise RpcDeniedError(str(exc)) from exc
+        if mode == "stdio":
+            exec_track_id = f"{container_id}-exec-stdio-{uuid.uuid4().hex[:12]}"
+            logger.info(
+                "sandboxd.exec_stdio",
+                container_id=container_id,
+                exec_id=exec_track_id,
+                bin=argv[0],
+            )
+            await self._run_stdio(
+                cmd,
+                exec_track_id,
+                req_id,
+                reader,
+                writer,
+                extra_result={"exec_id": exec_track_id},
+            )
+            return True
+        timeout = params.get("timeout_seconds")
+        timeout_seconds = float(timeout) if isinstance(timeout, (int, float)) else 60.0
+        idle = params.get("idle_timeout_seconds")
+        idle_timeout = float(idle) if isinstance(idle, (int, float)) and idle > 0 else None
+        stdin = params.get("stdin")
+        stdin_s = stdin if isinstance(stdin, str) else None
+        logger.info("sandboxd.exec", container_id=container_id, bin=argv[0])
+        exec_track_id = f"{container_id}-exec"
+        await self._run_wait(
+            cmd,
+            exec_track_id,
+            req_id,
+            writer,
+            timeout_seconds=max(timeout_seconds, 0.1),
+            idle_timeout_seconds=idle_timeout,
+            stdin=stdin_s,
+            delete_after=False,
+            result_mode="exec",
+        )
+        return False
+
     async def _delete(self, params: dict[str, Any]) -> None:
         container_id = self._require_container_id(params.get("container_id"))
         await self._kill_tracked(container_id)
+        await self._kill_tracked(f"{container_id}-exec")
+        prefix = f"{container_id}-exec-stdio-"
+        async with self._proc_lock:
+            extra_keys = [key for key in self._procs if key.startswith(prefix)]
+        for key in extra_keys:
+            await self._kill_tracked(key)
         force = params.get("force", True)
-        extra = ("--force",) if force else ()
-        await self._runsc_aux("delete", *extra, container_id)
+        extra_flags = ("--force",) if force else ()
+        await self._runsc_aux("delete", *extra_flags, container_id)
+        self._detached.discard(container_id)
 
     async def _kill(self, params: dict[str, Any]) -> None:
         container_id = self._require_container_id(params.get("container_id"))

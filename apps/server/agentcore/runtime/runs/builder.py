@@ -32,7 +32,14 @@ from agentcore.runtime.runs.constants import (
     VALID_ON_FAILURE,
 )
 from agentcore.runtime.runs.plan import RunPlan, RunPlanError
-from agentcore.runtime.runs.types import Deliverable, RunKind, RunOrigin, RunPolicy, RunSpec
+from agentcore.runtime.runs.types import (
+    Deliverable,
+    RunKind,
+    RunOrigin,
+    RunPolicy,
+    RunSpec,
+    normalize_deliverable_form,
+)
 
 # Debate/review opposition markers (前端UX设计.md §四): a display-only side tag the
 # frontend pairs into a side-by-side comparison; anything else is dropped (lenient)
@@ -811,7 +818,7 @@ def _inline_spec(
             else ""
         ),
         tools=_tools(item.get("tools"), valid_tools),
-        # Explicit model override：路由键字符串（真·多模型辩手 / per-worker 三元组编码后）。
+        # Explicit model override：路由键字符串（真·多模型辩手 / per-worker 目录身份编码后）。
         # 普通 worker 省略 → 空 = 跟组合 Worker 槽；执行器覆写 profile 并经路由器分发。
         model=model_raw.strip() if isinstance(model_raw, str) else "",
         thinking=thinking_raw if isinstance(thinking_raw, bool) else None,
@@ -998,20 +1005,17 @@ def _dag_policy(item: dict[str, Any]) -> RunPolicy:
     )
 
 
-def _parse_deliverable(item: dict[str, Any]) -> Deliverable | None:
-    """Parse a task's ``deliverable`` object into a :class:`Deliverable`.
+def _parse_deliverable(item: dict[str, Any]) -> Deliverable:
+    """Parse a task's ``deliverable`` into a :class:`Deliverable`.
 
-    Returns None when no enforceable rule is declared — the executor still
-    enforces the non-empty baseline regardless. Invalid knob values are dropped
-    (lenient handling). Unknown keys are ignored (not consumed as contract)."""
+    Nodes always carry a Deliverable. Missing object / empty object / omitted
+    or invalid ``form`` → ``files``. Playbook-internal knobs still parse; unknown
+    keys are ignored.
+    """
     raw = item.get("deliverable")
     if not isinstance(raw, dict):
-        return None
-    deliverable = _deliverable_from_dict(raw)
-    return deliverable if _deliverable_has_content(deliverable) else None
-
-
-_VALID_DELIVERABLE_FORMS = frozenset({"prose", "files"})
+        raw = {}
+    return _deliverable_from_dict(raw)
 
 
 def prose_form_conflict_error(item: dict[str, Any]) -> str | None:
@@ -1033,7 +1037,7 @@ def prose_form_conflict_error(item: dict[str, Any]) -> str | None:
         return None
     return (
         "契约矛盾：deliverable.form=prose 不能同时声明 artifacts。"
-        "纯文字交付请去掉 artifacts；若需落盘/钉路径请改 form=files。"
+        "纯文字交付请去掉 artifacts；若需落盘/钉路径请改 form=files 或 form=workspace。"
     )
 
 
@@ -1042,9 +1046,8 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
     artifacts = _str_list(raw.get("artifacts"))
     fmt = raw.get("output_format")
     output_format = fmt if fmt in _VALID_OUTPUT_FORMATS else "text"
-    form_raw = raw.get("form")
-    form = form_raw if form_raw in _VALID_DELIVERABLE_FORMS else None
-    # Write-disk recognition: form=files and/or non-empty artifacts only.
+    native_in = bool(raw.get("workspace_native", False))
+    form = normalize_deliverable_form(raw.get("form"), workspace_native=native_in)
     # form=prose ∩ artifacts is rejected upstream (:func:`prose_form_conflict_error`);
     # do not silently coerce that combo away.
     if form == "prose":
@@ -1058,7 +1061,7 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
             if isinstance(artifact_dir_raw, str)
             else ""
         )
-        workspace_native = bool(raw.get("workspace_native", False))
+        workspace_native = form == "workspace"
     web_seam_scope = raw.get("web_seam_scope", "")
     if not isinstance(web_seam_scope, str):
         web_seam_scope = ""
@@ -1072,13 +1075,12 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
         raw.get("web_quality_soft_exempt_labels")
     )
     visual_critic = bool(raw.get("visual_critic", False))
-    must_contain_soft = bool(raw.get("must_contain_soft", False))
     citation_mode_raw = raw.get("citation_mode")
     citation_mode = citation_mode_raw if citation_mode_raw == "two_phase" else None
     return Deliverable(
         output_format=output_format,
         required_sections=required_sections,
-        form=form,  # type: ignore[arg-type]
+        form=form,
         artifacts=artifacts,
         artifact_dir=artifact_dir,
         workspace_native=workspace_native,
@@ -1089,23 +1091,9 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
         web_quality_soft_exempt=web_quality_soft_exempt,
         web_quality_soft_exempt_labels=web_quality_soft_exempt_labels,
         visual_critic=visual_critic,
-        must_contain_soft=must_contain_soft,
         strict=bool(raw.get("strict", False)),
         citation_mode=citation_mode,  # type: ignore[arg-type]
         code_audit_gate=bool(raw.get("code_audit_gate", False)),
-    )
-
-
-def _deliverable_has_content(deliverable: Deliverable) -> bool:
-    return bool(
-        deliverable.form
-        or deliverable.required_sections
-        or deliverable.output_format == "json"
-        or deliverable.artifacts
-        or deliverable.artifact_dir
-        or deliverable.workspace_native
-        or deliverable.web_quality_scan
-        or deliverable.visual_critic
     )
 
 

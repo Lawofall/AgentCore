@@ -2,10 +2,10 @@
  * 产物写回 · 本地执行腿：扫描「本次执行改了工作区哪些文件」。
  *
  * 服务端 `tools/sandbox/written_scan.py` 的镜像实现（同一口径，逐条对应；改一侧须同步
- * 另一侧）。云端 gVisor 走 copy-in / copy-out，改动天然可枚举；本机执行（本模块）与
+ * 另一侧）。云端 gVisor 与本机一样 bind 落盘，改动靠事后扫描；本机执行（本模块）与
  * sidecar 直接以工作区为 cwd 让脚本写盘，不事后看盘就没人能如实填
  * `ExecutionResult.written_files` —— 桌面用户跑脚本产出的文件于是全部不进交付物台账
- * （不上产物卡、不进用户面路径、CEO 清单也看不见）。
+ * （不上交付 artifacts、不进用户面路径、CEO 清单也看不见）。
  *
  * 为什么是「执行后单次有界扫描 + mtime 截止」，而不是执行前后各拍一次全树快照：
  *
@@ -33,7 +33,7 @@ import { toPosix } from "./result";
 export const SCAN_MAX_DIRS = 4000;
 /** 墙钟兜底：网络盘 / 被杀毒软件挂钩的目录上单次 readdir 可能慢几个数量级。 */
 export const SCAN_BUDGET_MS = 250;
-/** 报告条数上限（与服务端 `_MAX_FILES` / `gvisor_write_back_max_files` 取齐）。 */
+/** 报告条数上限（与服务端 `_MAX_FILES` 取齐）。 */
 export const SCAN_MAX_FILES = 200;
 
 /**

@@ -116,6 +116,7 @@ function ProcessRow({
   turnKey,
   rowKey,
   conversationId,
+  onOpenWorkspacePath,
 }: {
   step: ProcessStep;
   streaming: boolean;
@@ -131,6 +132,7 @@ function ProcessRow({
   rowKey: string;
   /** 所属对话（= conversationId）：仅 browser 单步结果用它懒加载关键帧。 */
   conversationId?: string | null;
+  onOpenWorkspacePath?: (path: string) => void;
 }) {
   if (step.kind === "reasoning") {
     return (
@@ -153,6 +155,7 @@ function ProcessRow({
           knownLedgerIds={knownLedgerIds}
           evidenceLedger={evidenceLedger}
           isStreaming={streaming}
+          onOpenWorkspacePath={onOpenWorkspacePath}
         />
       </div>
     );
@@ -224,6 +227,7 @@ export function ProcessTimeline({
   conversationId,
   checkpoints,
   planReviews,
+  onOpenWorkspacePath,
   /** When false, never collapse reasoning/tool rows into a summary (run-detail panel).
    * Default true keeps CEO bubble chrome. */
   collapseProcessSteps = true,
@@ -241,6 +245,7 @@ export function ProcessTimeline({
   conversationId: string | null;
   checkpoints: CheckpointDisplay[];
   planReviews: PlanReviewDisplay[];
+  onOpenWorkspacePath?: (path: string) => void;
   collapseProcessSteps?: boolean;
 }) {
   const execution = useMessageExecution(messageId ?? null);
@@ -309,6 +314,7 @@ export function ProcessTimeline({
         knownLedgerIds={knownLedgerIds}
         evidenceLedger={evidenceLedger}
         isStreaming={isStreaming}
+        onOpenWorkspacePath={onOpenWorkspacePath}
       />
     </div>
   );
@@ -406,6 +412,7 @@ export function ProcessTimeline({
         turnKey={messageId}
         rowKey={nodeKey}
         conversationId={conversationId}
+        onOpenWorkspacePath={onOpenWorkspacePath}
       />
     );
   };

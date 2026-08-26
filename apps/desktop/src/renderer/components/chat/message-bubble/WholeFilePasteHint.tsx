@@ -9,7 +9,7 @@ import { AlertTriangle } from "lucide-react";
 
 /**
  * B′paste：无写盘成功且正文像「请用户整文件替换交差」时的可忽略提示。
- * 同姿 UnproductiveToolFailureHint；不改正文、不恢复【落盘说明】横幅。
+ * 不改正文、不恢复【落盘说明】横幅。
  */
 export function WholeFilePasteHint({
   content,

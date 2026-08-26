@@ -7,6 +7,7 @@ import { runActCapabilities } from "@/components/graph/planCapabilities";
 import { Button } from "@/components/ui";
 import { useRunLlmWindow } from "@/hooks/useRunLlmWindow";
 import { useTurnAudit } from "@/hooks/useTurnAudit";
+import { openWorkspaceDeliverable } from "@/lib/openWorkspaceDeliverable";
 import type { AgentAuditEvent } from "@/services/audit";
 import { permissionAxesShortLabel } from "@/services/permissionAxes";
 import { activeRuntime, useConversationStore } from "@/stores/conversation";
@@ -345,6 +346,9 @@ export function RunDetailBody({
             checkpoints={[]}
             planReviews={[]}
             collapseProcessSteps={false}
+            onOpenWorkspacePath={(path) =>
+              openWorkspaceDeliverable(conversationId, path)
+            }
           />
         </div>
       )}
@@ -353,7 +357,12 @@ export function RunDetailBody({
         <DebriefSection debrief={run.debrief} />
       ) : run.outputSummary && !run.debrief ? (
         <Section title="结论">
-          <Markdown content={run.outputSummary} />
+          <Markdown
+            content={run.outputSummary}
+            onOpenWorkspacePath={(path) =>
+              openWorkspaceDeliverable(conversationId, path)
+            }
+          />
         </Section>
       ) : null}
 

@@ -81,12 +81,12 @@ class Deliverable:
 
     output_format: str = "text"
     required_sections: list[str] = field(default_factory=list)
-    # Structured deliverable form: ``prose`` = text body only (tools still assembled;
-    # identity asks the worker not to land files); ``files`` = must land via
-    # file_write. Omit = worker follows the legacy two-way identity guidance and
-    # decides itself. Write-disk recognition = ``form=files`` and/or non-empty
-    # ``artifacts`` (no separate requires_files flag).
-    form: Literal["prose", "files"] | None = None
+    # Structured deliverable form (always set after parse): ``prose`` = text body
+    # only; ``files`` = land documents (default ``工作稿/``); ``workspace`` = edit
+    # the user project tree in place (swallows ``workspace_native``; no dossier
+    # landing). Missing / empty / invalid form → ``files``. Write-disk recognition
+    # = ``files`` ∪ ``workspace`` ∪ non-empty ``artifacts``.
+    form: Literal["prose", "files", "workspace"] = "files"
     # Declarative artifact path list (files / dirs / globs). When non-empty, the
     # contract gate reconciles each pattern against the live workspace (existence),
     # and a batch that declares any artifacts auto-enables completion acceptance.
@@ -98,12 +98,10 @@ class Deliverable:
     # prefix-match this dir; non-empty artifacts → exact / trailing-/ / glob on
     # those paths only (this field is not a fallback).
     artifact_dir: str = ""
-    # 产物 = 用户工作区原生文件（源码 / 项目文件，就地改或新建），不套 AI 工作间落点。
-    # ``resolve_artifact_dir`` 里优先级最高：为真直接返回空落点，压过 ``artifacts``
-    # 推导与显式 ``artifact_dir``。``apply_artifact_dir_defaults`` 另把两字段收成互斥：
-    # leftover 目录旁已是全路径 → 清 leftover；裸名 + 显式目录 → join 并关本戳。
-    # 写码类节点（build_feature / repair_code）盖此戳，否则 ``form=files`` 语义过载
-    # 会把业务代码引向默认的 ``文档/工作稿/``。
+    # Playbook-internal alias swallowed into ``form=workspace`` at parse
+    # (``form=workspace`` ⇔ no dossier landing). Leftover ``artifact_dir`` must
+    # not pull a workspace node into ``工作稿/``. Direct constructions may still
+    # set this; ``is_workspace_landing`` treats it as workspace.
     workspace_native: bool = False
     # When set (e.g. ``site/``), the contract gate cross-checks HTML↔CSS↔JS seams
     # across ALL web files under this workspace prefix — not only this run's batch.
@@ -117,9 +115,10 @@ class Deliverable:
     # hardcode paths in placeholder_scan.
     placeholder_hard_exempt: bool = False
     placeholder_hard_exempt_artifacts: list[str] = field(default_factory=list)
-    # Frontend quality gate (``web_quality_scan``): opt-in static HTML/CSS/JS checks
-    # (syntax damage + fabricated contacts = hard; anti-slop visuals = soft, one retry).
-    # Separate from placeholder_scan / web_seam. Opt-in via deliverable ``web_quality_scan``.
+    # DESIGN.md contract for static web quality (style id / tokens). Landed
+    # HTML/CSS/JS/SVG always runs syntax / fake-contact / anti-slop; this flag
+    # only gates the DESIGN.md hard checks and DESIGN prompt injection.
+    # Separate from placeholder_scan / web_seam. ``visual_critic`` stays opt-in.
     web_quality_scan: bool = False
     # Skip soft anti-slop only (hard syntax / fake contacts still apply).
     web_quality_soft_exempt: bool = False
@@ -129,8 +128,6 @@ class Deliverable:
     # Runs after web_quality hard; missing browser/vision ⇒ 未目验 (never fake pass).
     # Critical findings → up to 2 contract reworks, then partial warnings.
     visual_critic: bool = False
-    # Legacy soft keyword flag（旧派单 JSON 兼容；关键词字段已撤，仅保留位）。
-    must_contain_soft: bool = False
     strict: bool = False
     # 调研类两阶段引用验收（块 2）：``two_phase`` = 广搜落盘为 draft（A，不跑成稿
     # 引用闸 / 不因 cite 重试）→ 同 worker 自动升级 B（deep_read 或无编号综述）后再跑
@@ -142,8 +139,80 @@ class Deliverable:
     # （未读全不得中+、高须触发路径等）。与成篇审计硬门正交。
     code_audit_gate: bool = False
 
+    def __post_init__(self) -> None:
+        if self.form not in DELIVERABLE_FORMS:
+            self.form = "workspace" if self.workspace_native else "files"
+        if self.form == "prose":
+            self.workspace_native = False
+        elif self.form == "workspace" or self.workspace_native:
+            self.form = "workspace"
+            self.workspace_native = True
+
 
 RunContract = Deliverable
+
+DELIVERABLE_FORMS = frozenset({"prose", "files", "workspace"})
+LANDING_FORMS = frozenset({"files", "workspace"})
+
+
+def normalize_deliverable_form(
+    form: object,
+    *,
+    workspace_native: bool = False,
+) -> Literal["prose", "files", "workspace"]:
+    """Map raw form + native stamp to the three-tier form.
+
+    ``prose`` stays prose (native is cleared by the caller). Explicit
+    ``workspace`` or ``workspace_native`` (non-prose) → ``workspace``.
+    Missing / invalid → ``files``.
+    """
+    if form == "prose":
+        return "prose"
+    if form == "workspace" or workspace_native:
+        return "workspace"
+    return "files"
+
+
+def is_workspace_landing(deliverable: Deliverable | None) -> bool:
+    """True when the node has no agreed dossier landing (form=workspace / native)."""
+    if deliverable is None:
+        return False
+    return deliverable.form == "workspace" or deliverable.workspace_native
+
+
+def deliverable_expects_landing(deliverable: Deliverable | None) -> bool:
+    """Expected on-disk landing: files ∪ workspace ∪ non-empty artifacts.
+
+    ``None`` (legacy serialized specs) is not a landing node. Parsed plan nodes
+    always carry a Deliverable; omitted form is ``files``.
+    """
+    if deliverable is None:
+        return False
+    if deliverable.form == "prose":
+        return False
+    return deliverable.form in LANDING_FORMS or bool(deliverable.artifacts)
+
+
+def raw_deliverable_expects_landing(raw: object) -> bool:
+    """Same landing predicate on a CEO/playbook task dict (before parse).
+
+    No object / empty object / omitted form → files (must write). Only explicit
+    ``form=prose`` is exempt. Does not scan ``task`` free text.
+    """
+    if not isinstance(raw, dict):
+        return True
+    form = raw.get("form")
+    if form == "prose":
+        return False
+    if form in LANDING_FORMS:
+        return True
+    arts = raw.get("artifacts")
+    if isinstance(arts, list) and any(isinstance(a, str) and a.strip() for a in arts):
+        return True
+    if bool(raw.get("workspace_native", False)):
+        return True
+    # 漏填 / 非法 form / 空对象 → files
+    return True
 
 
 @dataclass
@@ -201,7 +270,7 @@ class RunSpec:
     # 真纯丙：历史上曾作 allow-list；builder 现忽略入参 tools，executor 亦不再用本字段
     # 收窄（``allowed_tools=None``）。字段保留兼容旧 session / 序列化；新派发恒为 ``None``。
     tools: list[str] | None = None
-    # Explicit per-node model override (辩论辩手 / per-worker 三元组编成的路由键).
+    # Explicit per-node model override (辩论辩手 / per-worker 目录身份编成的路由键).
     # Empty = resolve from the turn's ProfileSet Worker 槽 (ordinary default). When set,
     # the executor replaces only the resolved profile's ``model`` and dispatches through
     # the turn's ProviderRouter (``platform/{id}`` or ``{provider_id}/{id}``). Pricing

@@ -1,17 +1,13 @@
-﻿import { FINISH_REASON_META } from "@/components/ui/finish-reason-chip";
-import type { DescribedError } from "@/lib/errors";
+﻿import type { DescribedError } from "@/lib/errors";
 import {
-  EMPTY_RESPONSE_CHIP_LABELS,
   OUR_SERVICE_UNAVAILABLE_MESSAGE,
   StreamError,
   connectivityEscalationSuffix,
-  degradedFinishChipLabel,
   describeError,
   errorActionForCode,
   formatAssistantErrorMessage,
   isClientSideLlmRejection,
   isConnectivityErrorCode,
-  isEmptyResponseUserSurface,
   isOurServiceErrorCode,
   isUnstartedSendRefusal,
   resetSessionConnectivityFailures,
@@ -303,17 +299,6 @@ describe("upstream 429 is a refusal, not a connectivity fault", () => {
   });
 });
 
-describe("FinishReasonChip error meta", () => {
-  it("keeps error label for footer; chip itself must not paint it", () => {
-    expect(FINISH_REASON_META.error).toMatchObject({ label: "调用失败" });
-  });
-
-  it("degraded default is 空响应收尾 (no 降级完成)", () => {
-    expect(FINISH_REASON_META.degraded.label).toBe("空响应收尾");
-    expect(FINISH_REASON_META.degraded.label).not.toContain("降级完成");
-  });
-});
-
 describe("syntheticErrorForHardFailure", () => {
   it("synthesizes when finishReason=error even if body exists", () => {
     expect(syntheticErrorForHardFailure("error")).toEqual({
@@ -340,52 +325,6 @@ describe("syntheticErrorForHardFailure", () => {
     expect(syntheticErrorForHardFailure("degraded")).toBeNull();
     expect(syntheticErrorForHardFailure("max_rounds")).toBeNull();
     expect(syntheticErrorForHardFailure(undefined)).toBeNull();
-  });
-});
-
-describe("empty-response diagnosis labels", () => {
-  it("maps upstream_non_api / legacy oauth_expired without Sub2API", () => {
-    const expected = "上游返回了网页或登录页，请检查服务商地址与鉴权";
-    expect(EMPTY_RESPONSE_CHIP_LABELS.upstream_non_api).toBe(expected);
-    expect(EMPTY_RESPONSE_CHIP_LABELS.oauth_expired).toBe(expected);
-    expect(EMPTY_RESPONSE_CHIP_LABELS.oauth_expired).not.toContain("Sub2API");
-    expect(EMPTY_RESPONSE_CHIP_LABELS.length_empty).toContain("截断");
-  });
-
-  it("degradedFinishChipLabel prefers diagnosis map", () => {
-    expect(degradedFinishChipLabel("upstream_non_api", undefined)).toBe(
-      "上游返回了网页或登录页，请检查服务商地址与鉴权",
-    );
-    expect(degradedFinishChipLabel("oauth_expired", undefined)).toBe(
-      "上游返回了网页或登录页，请检查服务商地址与鉴权",
-    );
-  });
-});
-
-describe("isEmptyResponseUserSurface", () => {
-  it("detects code / diagnosis / message markers", () => {
-    expect(isEmptyResponseUserSurface({ code: "LLM_EMPTY_RESPONSE" })).toBe(
-      true,
-    );
-    expect(isEmptyResponseUserSurface({ emptyDiagnosis: "silent_empty" })).toBe(
-      true,
-    );
-    expect(
-      isEmptyResponseUserSurface({
-        message: "模型多次空响应 · 模型返回空内容",
-      }),
-    ).toBe(true);
-    expect(
-      isEmptyResponseUserSurface({
-        message: "模型空响应 · 输出长度截断 · 返回空内容",
-      }),
-    ).toBe(true);
-    expect(
-      isEmptyResponseUserSurface({
-        code: "LLM_ERROR",
-        message: "模型调用失败，请重试。",
-      }),
-    ).toBe(false);
   });
 });
 

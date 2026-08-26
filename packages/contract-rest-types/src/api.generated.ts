@@ -11255,13 +11255,19 @@ export interface components {
              * @description The BYOK provider the default runs on (null for platform / keyless).
              */
             provider_id?: string | null;
+            /**
+             * Ref
+             * @description Catalog identity for this row: @platform/{id} or @byok/{provider_id}/{id}.
+             */
+            ref: string;
         };
         /**
          * ModelCatalogItem
          * @description One selectable (or greyed-out) model in the user's catalog.
          *
-         *     ``(id, origin, provider_id)`` is the unique key — the same model id may appear under
-         *     several BYOK providers (and once as a platform row), so the picker groups by provider.
+         *     Product identity is ``ref``. Internally ``(id, origin, provider_id)`` is still unique
+         *     — the same model id may appear under several BYOK providers (and once as a platform
+         *     row), so the picker groups by provider.
          */
         ModelCatalogItem: {
             /**
@@ -11291,7 +11297,7 @@ export interface components {
             id: string;
             /**
              * Origin
-             * @description Credential origin when this model is selected.
+             * @description Credential origin when this model is selected (row attribute).
              * @enum {string}
              */
             origin: "byok" | "platform";
@@ -11306,6 +11312,11 @@ export interface components {
              * @description Display name of the provider (byok rows only).
              */
             provider_label?: string | null;
+            /**
+             * Ref
+             * @description Catalog identity: @platform/{id} or @byok/{provider_id}/{id}. Copy this into tool `model` fields; do not send origin/provider_id.
+             */
+            ref: string;
             /** @description Present when available=false for a known structured reason. Clients render copy from code + required_protocol. Null when unspecified or the row is selectable. Optional for backward compatibility. */
             unavailable_reason?: components["schemas"]["ModelUnavailableReason"] | null;
             /** Vendor */

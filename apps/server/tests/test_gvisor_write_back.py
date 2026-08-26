@@ -1,21 +1,24 @@
-"""GVisorSandbox 产物写回端到端（mock runsc，Windows / 无 runsc 主机可跑）。
+"""GVisorSandbox 云桌 bind 落盘（mock runsc，Windows / 无 runsc 主机可跑）。
 
-真 runsc 是 Linux-only；这里用假 runsc 二进制模拟「容器内写文件」：
-解析 ``--bundle=`` → 往 staging workspace 落产物 → 退出 0，让 copy-out 腿跑通。
+真 runsc 是 Linux-only；这里用假 runsc 二进制模拟 desk guest：
+``run -d`` 立即成功；``exec``（测试 Loopback 仍带 ``--bundle=``）往
+``/workspace`` rw-bind 真盘写产物。
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
 
 import agentcore.tools.sandbox.gvisor as gvisor_mod
 from agentcore.config import settings
-from agentcore.tools.sandbox.gvisor import GVisorSandbox
+from agentcore.tools.sandbox.gvisor import GVisorSandbox, reset_desk_sessions_for_tests
 from agentcore.tools.sandbox.limits import reset_execution_slots
 from agentcore.tools.sandbox.protocol import ExecutionRequest
 from agentcore.tools.sandbox.sandboxd import (
@@ -27,39 +30,54 @@ from tests.sandboxd_testutil import LoopbackRunscClient
 
 
 @pytest.fixture(autouse=True)
-def _fresh_slots_and_linux(monkeypatch):
+def _fresh_slots_linux_and_egress(monkeypatch, tmp_path):
     reset_execution_slots()
+    reset_desk_sessions_for_tests()
     monkeypatch.setattr(gvisor_mod, "_IS_LINUX", True)
     monkeypatch.setattr(settings, "gvisor_max_concurrent_executions", 2)
     monkeypatch.setattr(settings, "gvisor_slot_wait_seconds", 1.0)
     monkeypatch.setattr(settings, "gvisor_timeout_max_seconds", 30)
     monkeypatch.setattr(settings, "gvisor_memory_limit_mb", 256)
-    monkeypatch.setattr(settings, "gvisor_stage_max_bytes", 16 * 1024 * 1024)
-    monkeypatch.setattr(settings, "gvisor_write_back_max_bytes", 8 * 1024 * 1024)
-    monkeypatch.setattr(settings, "gvisor_write_back_max_files", 50)
+
+    async def _fake_egress(*, cache_bucket=None):  # noqa: ANN001, ARG001
+        class _S:
+            netns_path = "/var/run/netns/fake"
+            cache_host_dir = tmp_path / "pkg-cache" / "b"
+            proxy_url = "http://10.0.0.1:8898"
+            host_ip = "10.0.0.1"
+
+            async def close(self):
+                return None
+
+        _S.cache_host_dir.mkdir(parents=True, exist_ok=True)
+        return _S()
+
+    monkeypatch.setattr(
+        "agentcore.tools.sandbox.egress.open_package_egress",
+        _fake_egress,
+    )
     yield
+    reset_desk_sessions_for_tests()
     reset_execution_slots()
 
 
 def _install_fake_runsc(
     tmp_path: Path,
     *,
-    artifact_rel: str = "out/hello.txt",
+    artifact_rel: str = "hello.txt",
+    artifact_text: str = "from-sandbox",
     hang: bool = False,
-    rematerialize: bool = False,
-    rematerialize_edit: dict[str, str] | None = None,
+    write_artifact: bool = True,
 ) -> str:
     """Install a cross-platform fake ``runsc``.
 
-    Default: write ``artifact_rel`` into the staging mount (legacy bind-write).
-    ``rematerialize``: emit the production artifact trailer (whole-tree
-    base64) so host ``write_bytes`` refreshes mtime — the read-only honesty path.
+    ``-d`` / ``--detach`` → exit 0 (desk start). Otherwise write ``artifact_rel``
+    into the ``/workspace`` rw-bind (exec / one-shot).
     """
     impl = tmp_path / "fake_runsc_impl.py"
     impl.write_text(
         textwrap.dedent(
             f"""\
-            import base64
             import json
             import sys
             from pathlib import Path
@@ -69,6 +87,8 @@ def _install_fake_runsc(
                 print("runsc version fake")
                 raise SystemExit(0)
             if args[:1] in (["kill"], ["delete"]):
+                raise SystemExit(0)
+            if "-d" in args or "--detach" in args:
                 raise SystemExit(0)
 
             bundle = None
@@ -86,41 +106,25 @@ def _install_fake_runsc(
 
             ws = None
             for m in cfg.get("mounts", []):
-                if m.get("destination") in ("/workspace-seed", "/workspace-sync"):
-                    ws = Path(m["source"])
-                    break
+                if m.get("destination") == "/workspace":
+                    if m.get("type") == "bind" and "rw" in (m.get("options") or []):
+                        ws = Path(m["source"])
+                        break
             if ws is None:
-                for m in cfg.get("mounts", []):
-                    if m.get("destination") == "/workspace":
-                        if m.get("type") == "bind" and "rw" in (m.get("options") or []):
-                            ws = Path(m["source"])
-                            break
-            if ws is None:
-                print("fake_runsc: no workspace staging mount", file=sys.stderr)
+                print("fake_runsc: no /workspace rw-bind", file=sys.stderr)
                 raise SystemExit(2)
 
             if {hang!r}:
                 import time
                 time.sleep(99999)
 
-            if {rematerialize!r}:
-                files = {{}}
-                for p in ws.rglob("*"):
-                    if p.is_file():
-                        files[p.relative_to(ws).as_posix()] = (
-                            base64.b64encode(p.read_bytes()).decode("ascii")
-                        )
-                edits = {rematerialize_edit!r} or {{}}
-                for rel, text in edits.items():
-                    files[rel] = base64.b64encode(text.encode("utf-8")).decode("ascii")
-                print("listed dist")
-                print("__AGENTCORE_ARTIFACTS__" + json.dumps(files, separators=(",", ":")))
+            if not {write_artifact!r}:
                 raise SystemExit(0)
 
             rel = Path({artifact_rel!r})
             dest = ws / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text("from-sandbox", encoding="utf-8")
+            dest.write_text({artifact_text!r}, encoding="utf-8")
             print("wrote", rel.as_posix())
             raise SystemExit(0)
             """
@@ -143,6 +147,11 @@ def _install_fake_runsc(
     return str(wrapper)
 
 
+def _age(path: Path, seconds: float = 60.0) -> None:
+    old = time.time() - seconds
+    os.utime(path, (old, old))
+
+
 def _bind_loopback(sandbox: GVisorSandbox) -> LoopbackRunscClient:
     """Drive fake ``runsc`` through sandboxd's test client (never production)."""
     client = LoopbackRunscClient(
@@ -153,10 +162,28 @@ def _bind_loopback(sandbox: GVisorSandbox) -> LoopbackRunscClient:
     return client
 
 
+def _desk_oci(sandbox: GVisorSandbox, tmp_path: Path, **kwargs):
+    cache = tmp_path / "cache"
+    cache.mkdir(exist_ok=True)
+    ws = Path(kwargs.get("workspace", tmp_path / "ws"))
+    ws.mkdir(exist_ok=True)
+    scratch = Path(kwargs.get("scratch", tmp_path / "scratch"))
+    scratch.mkdir(exist_ok=True)
+    return sandbox._build_desk_oci(  # noqa: SLF001
+        workspace=str(ws),
+        scratch_dir=str(scratch),
+        netns_path=str(kwargs.get("netns_path", "/var/run/netns/acpkg1")),
+        cache_host_dir=str(cache),
+        proxy_url="http://10.0.0.1:8898",
+        memory_limit_mb=kwargs.get("memory_limit_mb"),
+    )
+
+
 async def test_gvisor_write_back_lands_artifact_in_real_workspace(tmp_path: Path):
     ws = tmp_path / "workspace"
     ws.mkdir()
     (ws / "seed.txt").write_text("keep", encoding="utf-8")
+    _age(ws / "seed.txt")
 
     runsc = _install_fake_runsc(tmp_path)
     sandbox = GVisorSandbox(
@@ -175,27 +202,21 @@ async def test_gvisor_write_back_lands_artifact_in_real_workspace(tmp_path: Path
     )
 
     assert result.success is True
-    assert result.written_files == ["out/hello.txt"]
-    assert result.write_back_skipped == 0
-    assert (ws / "out" / "hello.txt").read_text(encoding="utf-8") == "from-sandbox"
+    assert result.written_files == ["hello.txt"]
+    assert (ws / "hello.txt").read_text(encoding="utf-8") == "from-sandbox"
     assert (ws / "seed.txt").read_text(encoding="utf-8") == "keep"
 
 
 async def test_gvisor_readonly_script_does_not_claim_written_files(tmp_path: Path):
-    """Cloud sandbox rematerializes every seed path; same bytes must not be a delivery."""
     ws = tmp_path / "workspace"
-    (ws / "dist").mkdir(parents=True)
+    ws.mkdir()
     seed = ws / "seed.txt"
-    app = ws / "dist" / "app.js"
-    vendor = ws / "dist" / "vendor.js"
     seed.write_text("keep", encoding="utf-8")
-    app.write_text("bundle-a", encoding="utf-8")
-    vendor.write_text("bundle-b", encoding="utf-8")
+    _age(seed)
     seed_mtime = seed.stat().st_mtime_ns
-    app_mtime = app.stat().st_mtime_ns
 
     sandbox = GVisorSandbox(
-        runsc_path=_install_fake_runsc(tmp_path, rematerialize=True),
+        runsc_path=_install_fake_runsc(tmp_path, write_artifact=False),
         runtime_root=str(tmp_path / "rt"),
     )
     _bind_loopback(sandbox)
@@ -210,25 +231,23 @@ async def test_gvisor_readonly_script_does_not_claim_written_files(tmp_path: Pat
 
     assert result.success is True
     assert result.written_files == []
-    assert result.write_back_skipped == 0
     assert seed.read_text(encoding="utf-8") == "keep"
-    assert app.read_text(encoding="utf-8") == "bundle-a"
     assert seed.stat().st_mtime_ns == seed_mtime
-    assert app.stat().st_mtime_ns == app_mtime
 
 
-async def test_gvisor_rematerialize_reports_only_actual_content_change(tmp_path: Path):
-    """Whole-tree artifact payload + one real edit → only the edited path is delivered."""
+async def test_gvisor_bind_reports_only_actual_content_change(tmp_path: Path):
     ws = tmp_path / "workspace"
-    (ws / "dist").mkdir(parents=True)
+    ws.mkdir()
     (ws / "seed.txt").write_text("keep", encoding="utf-8")
-    (ws / "dist" / "app.js").write_text("bundle-a", encoding="utf-8")
+    (ws / "other.txt").write_text("untouched", encoding="utf-8")
+    _age(ws / "seed.txt")
+    _age(ws / "other.txt")
 
     sandbox = GVisorSandbox(
         runsc_path=_install_fake_runsc(
             tmp_path,
-            rematerialize=True,
-            rematerialize_edit={"seed.txt": "changed-in-sandbox"},
+            artifact_rel="seed.txt",
+            artifact_text="changed-in-sandbox",
         ),
         runtime_root=str(tmp_path / "rt"),
     )
@@ -245,11 +264,10 @@ async def test_gvisor_rematerialize_reports_only_actual_content_change(tmp_path:
     assert result.success is True
     assert result.written_files == ["seed.txt"]
     assert (ws / "seed.txt").read_text(encoding="utf-8") == "changed-in-sandbox"
-    assert (ws / "dist" / "app.js").read_text(encoding="utf-8") == "bundle-a"
+    assert (ws / "other.txt").read_text(encoding="utf-8") == "untouched"
 
 
-async def test_gvisor_timeout_skips_write_back(tmp_path: Path):
-    """Timeout path must not persist half-written artifacts (copy-out skipped)."""
+async def test_gvisor_timeout_does_not_claim_copy_out(tmp_path: Path):
     import time
 
     ws = tmp_path / "workspace"
@@ -257,7 +275,10 @@ async def test_gvisor_timeout_skips_write_back(tmp_path: Path):
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
 
     class _TimeoutClient(LoopbackRunscClient):
-        async def run_wait(self, **kwargs):  # noqa: ANN003
+        async def start_detach(self, **kwargs):  # noqa: ANN003, ARG002
+            return None
+
+        async def exec_wait(self, **kwargs):  # noqa: ANN003, ARG002
             raise SandboxdError("loopback runsc timeout", code="sandboxd_timeout")
 
         async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
@@ -280,46 +301,41 @@ async def test_gvisor_timeout_skips_write_back(tmp_path: Path):
     )
 
     assert result.success is False
-    assert "Timeout" in result.stderr
-    assert "未写回" in result.stderr
-    assert not (ws / "out").exists()
+    assert "Timeout" in result.stderr or "超时" in result.stderr or "中断" in result.stderr
+    assert "未写回" not in result.stderr
+    assert not (ws / "hello.txt").exists()
     assert result.written_files is None
 
 
-def test_oci_workspace_mount_is_rw_when_staged(tmp_path: Path):
+def test_desk_oci_rw_binds_workspace_with_app_uid(tmp_path: Path):
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
-    cfg = sandbox._build_oci_config(  # noqa: SLF001
-        ExecutionRequest(code="x", language="python"),
-        script_name="main.py",
-        workspace=str(tmp_path / "staged"),
-        scratch_dir=str(tmp_path / "scratch"),
-        workspace_writable=True,
-        memory_limit_mb=256,
-    )
+    cfg = _desk_oci(sandbox, tmp_path, memory_limit_mb=256)
     mounts = {m["destination"]: m for m in cfg["mounts"]}
-    assert mounts["/workspace"]["type"] == "tmpfs"
-    assert mounts["/workspace-seed"]["type"] == "bind"
-    assert mounts["/scratch"]["options"] == ["ro", "bind", "nosuid", "nodev"]
-    # Memory ceiling comes from the guardrail knob, not the request default.
+    assert mounts["/workspace"]["type"] == "bind"
+    assert "rw" in mounts["/workspace"]["options"]
+    assert "/workspace-seed" not in mounts
+    assert mounts["/workspace"]["type"] != "tmpfs"
+    user = cfg["process"]["user"]
+    assert user["uid"] != 65534
+    assert user["gid"] != 65534
+    getuid = getattr(os, "getuid", None)
+    if getuid is not None:
+        assert user["uid"] == int(getuid())
     assert cfg["linux"]["resources"]["memory"]["limit"] == 256 * 1024 * 1024
+    net = [n for n in cfg["linux"]["namespaces"] if n["type"] == "network"]
+    assert len(net) == 1
+    assert net[0].get("path")
 
 
 def test_oci_config_json_roundtrip_shape(tmp_path: Path):
-    """config.json must be JSON-serializable for runsc (regression for Path/set leaks)."""
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
-    cfg = sandbox._build_oci_config(  # noqa: SLF001
-        ExecutionRequest(code="print(1)", language="python", network_mode="none"),
-        script_name="main.py",
-        workspace=str(tmp_path),
-        scratch_dir=str(tmp_path / "scratch"),
-        workspace_writable=False,
-    )
+    cfg = _desk_oci(sandbox, tmp_path)
     dumped = json.dumps(cfg)
     assert '"cwd": "/workspace"' in dumped
-    assert '"network"' not in dumped  # offline posture
+    assert cfg["process"]["args"] == ["sleep", "infinity"]
 
 
-def test_runsc_run_cmd_global_flags_before_run(tmp_path: Path):
+def test_runsc_run_cmd_is_shape_net_detach(tmp_path: Path):
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
     cmd = sandbox._build_run_cmd(  # noqa: SLF001
         bundle_dir="/tmp/bundle",
@@ -328,15 +344,16 @@ def test_runsc_run_cmd_global_flags_before_run(tmp_path: Path):
     )
     assert cmd[0] == sandbox._runsc  # noqa: SLF001
     run_idx = cmd.index("run")
-    assert "--rootless" in cmd[:run_idx]
-    assert "--network=none" in cmd[:run_idx]
-    assert f"--root={tmp_path / 'rt'}" in cmd[:run_idx]
-    assert cmd[run_idx + 1] == "--bundle=/tmp/bundle"
-    assert cmd[run_idx + 2] == "agentcore-test"
+    assert "--rootless" not in cmd[:run_idx]
+    assert "--platform=systrap" in cmd[:run_idx]
+    assert "--network=sandbox" in cmd[:run_idx]
+    assert "--ignore-cgroups" in cmd[:run_idx]
+    assert cmd[run_idx + 1] == "-d"
+    assert cmd[run_idx + 2] == "--bundle=/tmp/bundle"
+    assert cmd[run_idx + 3] == "agentcore-test"
 
 
-def test_runsc_run_cmd_restricted_uses_network_host(tmp_path: Path):
-    """Rootless runsc requires an explicit network flag; restricted → host."""
+def test_runsc_run_cmd_ignores_legacy_network_mode(tmp_path: Path):
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
     cmd = sandbox._build_run_cmd(  # noqa: SLF001
         bundle_dir="/tmp/bundle",
@@ -344,9 +361,9 @@ def test_runsc_run_cmd_restricted_uses_network_host(tmp_path: Path):
         network_mode="restricted",
     )
     run_idx = cmd.index("run")
-    assert "--network=host" in cmd[:run_idx]
-    assert "--network=none" not in cmd[:run_idx]
-    assert "--rootless" in cmd[:run_idx]
+    assert "--network=sandbox" in cmd[:run_idx]
+    assert "--network=host" not in cmd[:run_idx]
+    assert "--rootless" not in cmd[:run_idx]
 
 
 async def test_health_check_smoke_run(tmp_path: Path):
@@ -391,7 +408,7 @@ async def test_health_check_sandboxd_unavailable(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_health_check_probes_code_shape_only(tmp_path: Path):
+async def test_health_check_probes_net_shape_only(tmp_path: Path):
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
     shapes: list[str] = []
 
@@ -407,7 +424,7 @@ async def test_health_check_probes_code_shape_only(tmp_path: Path):
         )
     )
     assert await sandbox.health_check() is True
-    assert shapes == ["code"]
+    assert shapes == ["net"]
 
 
 def test_resolve_runtime_root_uses_settings_default(monkeypatch, tmp_path: Path):
@@ -427,5 +444,33 @@ def test_gvisor_runtime_root_settings_default_not_tmp_legacy():
     """Class default must land on the data volume path, not /tmp legacy."""
     from agentcore.config.workspace import WorkspaceSettings
 
-    assert WorkspaceSettings.model_fields["gvisor_runtime_root"].default == "./data/sandbox"
-    assert WorkspaceSettings.model_fields["gvisor_runtime_root"].default != "/tmp/agentcore-sandbox"
+    assert "tmp" not in WorkspaceSettings().gvisor_runtime_root.replace("\\", "/")
+
+
+def test_desk_oci_merges_browser_resources(tmp_path: Path, monkeypatch):
+    browsers = tmp_path / "ms-playwright"
+    browsers.mkdir()
+    monkeypatch.setattr(settings, "browser_playwright_browsers_path", str(browsers))
+    monkeypatch.setattr(settings, "gvisor_memory_limit_mb", 512)
+    monkeypatch.setattr(settings, "browser_sandbox_memory_limit_mb", 2048)
+    monkeypatch.setattr(settings, "browser_sandbox_pids_limit", 512)
+    monkeypatch.setattr(settings, "browser_sandbox_cpu_limit", 2.0)
+    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
+    cfg = _desk_oci(sandbox, tmp_path)
+    mounts = {m["destination"]: m for m in cfg["mounts"]}
+    tmp_opts = mounts["/tmp"]["options"]
+    assert "size=512m" in tmp_opts
+    assert "mode=1777" in tmp_opts
+    assert str(browsers) in mounts
+    assert "ro" in mounts[str(browsers)]["options"]
+    assert cfg["linux"]["resources"]["memory"]["limit"] == 2048 * 1024 * 1024
+    assert cfg["linux"]["resources"]["pids"]["limit"] == 512
+    assert cfg["linux"]["resources"]["cpu"]["quota"] == 200000
+    assert cfg["process"]["user"]["uid"] != 65534
+
+
+def test_desk_oci_memory_override_still_wins(tmp_path: Path):
+    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
+    cfg = _desk_oci(sandbox, tmp_path, memory_limit_mb=256)
+    assert cfg["linux"]["resources"]["memory"]["limit"] == 256 * 1024 * 1024
+    assert cfg["process"]["user"]["uid"] != 65534

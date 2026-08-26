@@ -23,10 +23,10 @@ Thin facade — implementation split by axis (under ``runtime/closing_posture/``
 
 * ``.core`` — tier & posture-A/C/draft + honesty rework
 * ``.resume`` — resume / continuity join & steer
-* ``.ceiling`` — hard-ceiling steer / banner / verdict downgrade
+* ``.ceiling`` — hard-ceiling steer / verdict downgrade（用户面不贴【收口说明】）
 * ``.ceo_mutation`` — CEO mutation / disk-landing claims
 * ``.cloud_web`` — cloud web verify latch + enforce
-* ``.cutoff`` — cutoff / token_budget latch + enforce
+* ``.cutoff`` — cutoff / token_budget latch（用户面不贴【收口说明】）
 * ``.write_ownership`` — write-ownership latch + enforce
 * ``.browser`` — browser assemble/tool-success latch
 * ``.over_seat`` / ``.empty_handoff`` / ``.cancel_zero`` — storm latches

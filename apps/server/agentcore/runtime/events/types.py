@@ -133,7 +133,8 @@ class EventType(StrEnum):
     # 交付状态（能力闸门与交付诚实性）：delegate 批次收尾时把已有的完成度缺口 / artifacts
     # 对账 / degraded 信号汇成结构化交付对账（已交付文件 / 缺口 / 操作元数据），
     # 模板拼接、不调 LLM。DURABLE——落 journal；前端 fold 同 execution_id 保最新（反映
-    # 最近一批委派的对账），供产物清单与 finish_guard；用户面无验收大卡（失败仅轻提示）。
+    # 最近一批委派的对账），供 finish_guard 与只合回产物读路径；用户面无验收大卡、
+    # 无聊天流产物清单卡。
     # 仅在有实质内容（有落盘文件或有缺口 / 行动项）时发射——纯 prose 成功批次保持无声。
     DELIVERY_STATUS = "delivery_status"
     # 运行中用户插话（经典 steer + 协调插话共用）：POST …/messages delivery=steer 时注入；

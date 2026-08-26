@@ -62,8 +62,8 @@ class DebateSide:
     （正方 / 红队A / 经济学视角），``stance`` 是喂给辩手的立场定位（拼进它的角色补充）。
     ``is_subject`` 标记红队形态里那个「被审方案方」（单向攻击的承受方），其余形态恒 False。
 
-    模型身份（Phase 3 · 真·多模型辩手，§7.5）为三元组：``model`` + ``origin``
-    （platform|byok）+ ``provider_id``（byok 必填）。空 ``model`` = 回退 turn 主模型；
+    模型身份（Phase 3 · 真·多模型辩手，§7.5）产品面是目录 ``ref`` 或提及；解析后
+    内部仍为 ``model`` + ``origin`` + ``provider_id``。空 ``model`` = 回退 turn 主模型；
     非空须过目录校验后注入路由键。见 ``runtime.debate.models``。
 
     ``run_id`` 是开赛前预分配的稳定槽位 id（开工卡 wire / ``model_overrides`` 键）；

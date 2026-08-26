@@ -3,7 +3,11 @@
 # Kills every matching `python -m agentcore` / `uv run python -m agentcore`
 # process TREE (taskkill /T), waits until PORT has no LISTEN, then starts a
 # fresh server. Whitelist is command-line exact — will not touch pytest, node,
-# electron/desktop, or unrelated python.
+# electron/desktop, sidecar (`python -m agentcore.sidecar`), or unrelated python.
+# Sidecar is owned by the desktop Electron host (stdio JSON-RPC). Killing it
+# here would drop live 本机传统 turns and would not reload the API; desktop
+# local chats keep the already-imported runtime/prompt until the app is fully
+# quit and reopened.
 #
 # Live-run guard: before killing trees, reads the last line of repo-root
 # logs/dev.jsonl. If its `timestamp` is within -ActiveWindowSeconds (default
@@ -155,6 +159,12 @@ Stop-AgentcoreServerTrees
 Wait-PortFree -LocalPort $Port
 
 Write-Host "Starting: uv run python -m agentcore  (cwd=$serverRoot)"
+Write-Host ""
+Write-Host "This restarts the API only. Desktop 本机传统 turns run in sidecar" -ForegroundColor Yellow
+Write-Host "(python -m agentcore.sidecar) and keep the already-imported runtime/prompt." -ForegroundColor Yellow
+Write-Host "To load code changes there: fully quit and reopen the desktop app." -ForegroundColor Yellow
+Write-Host "This script never kills sidecar (Electron owns that stdio)." -ForegroundColor Yellow
+Write-Host ""
 Set-Location $serverRoot
 & uv run python -m agentcore
 exit $LASTEXITCODE

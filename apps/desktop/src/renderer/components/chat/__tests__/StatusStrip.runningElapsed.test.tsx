@@ -73,7 +73,6 @@ function renderStrip(
             expanded
             onToggle={() => {}}
             onMaximize={() => {}}
-            onReplay={() => {}}
           />
         </ExecutionScopeContext.Provider>
       </TooltipProvider>
@@ -129,7 +128,7 @@ describe("StatusStrip · 运行态墙钟用时", () => {
     expect(screen.queryByText(/用时/)).toBeNull();
   });
 
-  it("stopping 冻住用时且不自增、不挂回放 Play", () => {
+  it("stopping 冻住用时且不自增", () => {
     vi.useFakeTimers();
     const now = 1_700_000_040_000;
     vi.setSystemTime(now);
@@ -145,7 +144,6 @@ describe("StatusStrip · 运行态墙钟用时", () => {
     expect(screen.getByTestId("status-strip-stopping")).toBeTruthy();
     expect(screen.getByText("停止中")).toBeTruthy();
     expect(screen.getByText("0/2 · 用时 40s")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "回放协作过程" })).toBeNull();
     act(() => {
       vi.advanceTimersByTime(2_000);
     });

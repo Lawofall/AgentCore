@@ -137,7 +137,7 @@ _TITLE: dict[str, str] = {
 # User-facing blurbs (not raw CEO/runtime summaries).
 _SUMMARY: dict[str, str] = {
     "parallel_brief": (
-        "多人并行摸清议题并写方向笔记；适合「先弄懂」。"
+        "多人并行摸清议题并写一页方向笔记；适合「先弄懂」。"
         "要交长文/落盘报告请用「调研报告成文」。"
     ),
     "research_report": (

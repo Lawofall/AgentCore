@@ -99,6 +99,7 @@ export function WorkspaceSection({
   renderWorkroomLead,
   forceExpandWorkroom = false,
   onWorkroomRevealApplied,
+  onCreateWorkroomEntry,
   nested,
   depth = 0,
   hideRootDirs,
@@ -117,6 +118,11 @@ export function WorkspaceSection({
   flashing: boolean;
   /** Folder-scope entries, rendered inside the expanded ``.agentcore`` row. */
   renderWorkroomLead?: (indent: number) => ReactNode;
+  /**
+   * 「新建条目」on the tree's ``.agentcore`` header — always visible.
+   * Returning `false` skips expanding the drawer after a failed create.
+   */
+  onCreateWorkroomEntry?: () => boolean | Promise<boolean>;
   forceExpandWorkroom?: boolean;
   onWorkroomRevealApplied?: () => void;
   /** Nested folder rows (我的文件 tree), rendered directly under the header. */
@@ -510,6 +516,7 @@ export function WorkspaceSection({
       sortBy={sortBy}
       hideRootDirs={hideRootDirs}
       renderWorkroomLead={renderWorkroomLead}
+      onCreateWorkroomEntry={onCreateWorkroomEntry}
       forceExpandPaths={forceExpandWorkroom ? ["AgentCore"] : undefined}
       onForceExpandApplied={onWorkroomRevealApplied}
       onOpenFile={onOpenFile}

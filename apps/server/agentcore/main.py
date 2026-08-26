@@ -307,13 +307,9 @@ async def lifespan(app: FastAPI):
     # (the verdict then TTL-refreshes in the background — runsc can rot after boot).
     # Failure must not block boot — folds into ``code_execution_enabled_for`` so
     # code_execute/test_run stay withheld and workspace_context says 未装配.
-    from agentcore.tools.sandbox.browser.netns import probe_browser_netns_at_startup
     from agentcore.tools.sandbox.cloud_health import probe_cloud_sandbox_at_startup
 
     await probe_cloud_sandbox_at_startup()
-    # Browser netns is orthogonal to GVisorSandbox.health_check (network_mode=none).
-    # Failure withholds cloud browser_* (no Local fallback — C4); never blocks boot.
-    await probe_browser_netns_at_startup()
     # Server-side ``git`` binary: withholds the git tool on an image/PATH without it
     # rather than letting every call surface as FileNotFoundError. Orthogonal to the
     # sandbox — git is spawned by the API process, not inside gVisor.
@@ -529,6 +525,9 @@ async def lifespan(app: FastAPI):
                 from agentcore.runtime.browser.registry import shutdown_browser_sessions
 
                 await shutdown_browser_sessions()
+            from agentcore.tools.sandbox.gvisor import close_all_desk_sessions
+
+            await close_all_desk_sessions()
             # Flush in-flight debounced passes and cancel pending timers.
             await shutdown_scheduler()
             await shutdown_explore_refresh_scheduler()

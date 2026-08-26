@@ -2,7 +2,6 @@
  * organize_plan — 整理方案清单：行式多选（与 kickoff 同壳）。
  * 默认全选（seedAllMultiple）；取消勾选即剔除。原路径→新路径进 detail。
  */
-import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { AskOption } from "@/types/events";
@@ -73,7 +72,6 @@ export function OrganizePlanBody({
       caption={caption ?? META.activeCaption}
       title={content.question}
       subtitle={subtitle}
-      extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
       footer={
         <AskCardFooter
           cta={picked.length > 0 ? `${META.cta}（${picked.length}）` : META.cta}

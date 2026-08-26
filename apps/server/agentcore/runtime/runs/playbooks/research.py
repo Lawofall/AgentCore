@@ -117,18 +117,21 @@ def _user_request_anchor_block(user_message: str) -> str:
 # A 档摸底验收：写进 parallel_brief task（提示词纪律，非完成硬闸）。
 _BRIEF_ACCEPTANCE = (
     "【摸底验收·够用即停】"
+    "本任务是方向摸底、不是整座成果：默认自己交一页地图；"
+    "【禁止】开局先招人再通读；"
+    "仅当本方向内仍有互不影响、可同时查的独立块才 delegate；"
+    "【禁止】因为已经做了很久再招人。"
     "目标：本方向能讲清「定位 / 技术栈或手段 / 进度或开放问题」即算够"
     "（非工程主题则对应本方向的是什么 / 怎么做 / 到哪了）。"
-    "手段：先用 file_list(pattern)（非 * 即整仓按名查找）/ "
-    "grep（不确定则省略 path）/ code_search 找出真实入口文件再读"
-    "（含糊「根」/ `.` / 仅根标签勿直接整读；有什么读什么：package.json / "
-    "pyproject.toml / README 等；"
-    "【禁止】写死「每个 app 读 package.json」类名单；"
-    "【禁止】凭通用目录名如 src/shared/lib 猜测；路径不存在时按工具回报纠偏勿原样重试）；"
-    "已知路径可直接读；Git 可用则看进度与近期变更；"
-    "信息够用即停，【禁止】为更全无限深挖。"
+    "笔记只交一页地图：入口路径（文档 + 代码目录）、模块边界、三到五个开放问题。"
+    "【禁止】写成完整要点 / 白皮书 / 终稿章节。"
+    "【禁止】本轮替用户定优化方案或开做。"
+    "手段：自己定位真实入口再读（找路径见身份说明），够用即停；"
+    "【禁止】整仓通读、【禁止】把方向文案当成章节大纲或必读书单逐项打卡。"
     "收工：handoff 短摘要【必须】交（精炼结论 + 关键证据指引）；"
-    "方向笔记落盘是叠加、不得替代 handoff；"
+    "方向笔记用 file_write 落盘，过长则分段追加；"
+    "【禁止】把笔记正文写进给用户看的回复；"
+    "落盘是叠加、不得替代 handoff；"
     "只读/零写入摸底时【禁止】落盘改业务代码（本约定方向笔记除外）。"
 )
 
@@ -137,8 +140,8 @@ def parallel_brief(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str
     """A 档·对齐推进：N 路并行摸底 → 方向笔记落盘；无提纲/撰稿/审校（交回 CEO 对话综述）.
 
     与 ``research_report``（B/重成文专线）划界：本形状是默认——一起弄懂 / 多路摸清 /
-    讨论对齐；未明示成文勿升 ``research_report``。angles 宜少扇出（常 2）。
-    验收口径见 ``_BRIEF_ACCEPTANCE``（够用即停 + handoff 必交；非完成硬闸）。
+    讨论对齐；未明示成文勿升 ``research_report``。仅确有 ≥2 独立缝才用；人数跟缝走。
+    验收口径见 ``_BRIEF_ACCEPTANCE``（一页地图 + 够用即停 + handoff 必交；非完成硬闸）。
     """
     topic = clean_str(args.get("topic"))
     if not topic:
@@ -168,24 +171,20 @@ def parallel_brief(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str
             "role": "方向专员",
             "task": (
                 f"围绕主题【{topic}】，{scope}"
-                "给出该方向的关键事实 / 现状 / 证据与开放问题；关键数字 / 关键结论旁须就地标"
-                "台账 id（#rN，与工具「[已登记来源]」一致）或显式待核实语，"
-                "勿裸写无出处主张；附来源（文件:行 或 链接）。"
-                "对关键法条、司法解释、判例等权威出处，须用 read_url 核对原文后再引用，"
-                "勿仅凭搜索摘要断言条文或裁判要旨。"
-                "聚焦本方向、回报精炼结论供 CEO 与用户对齐，不要写成终稿章节。"
+                "把方向句当目标，【禁止】当成章节大纲或必读书单逐项打卡。"
+                "给出该方向一页地图（入口、边界、三到五个开放问题）。"
+                "有出处写文件名或路径即可；【禁止】为凑台账编号继续挖。"
+                "聚焦本方向、回报精炼结论供 CEO 与用户对齐。"
                 f"{_BRIEF_ACCEPTANCE}"
-                f"完整要点须用 file_write 落盘到 `{artifact}`"
-                "（内容=本方向完整要点 + 来源，不是 handoff 摘要的复制）；"
-                "handoff 结构化简报照旧，落盘是叠加、不得替代 handoff。"
-                f"{RESEARCHER_SEARCH_DISCIPLINE}"
+                f"一页地图须用 file_write 落盘到 `{artifact}`"
+                "（内容=入口 / 边界 / 开放问题 + 来源路径，不是 handoff 摘要的复制）；"
+                "handoff 结构化简报照旧。"
                 f"{RESEARCHER_NOTE_GUIDANCE}"
                 f"{fold_hint}"
             ),
             "deliverable": {
                 "form": "files",
                 "artifacts": [artifact],
-                "citation_mode": "two_phase",
             },
         }
         if angle_fold_note and merged:

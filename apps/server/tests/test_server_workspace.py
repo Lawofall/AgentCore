@@ -426,6 +426,87 @@ async def test_read_bytes_escape_raises_outside_workspace(tmp_path: Path):
         await _ws(ws_root).read_bytes("../secret.bin")
 
 
+async def test_extract_office_does_not_call_read_bytes(tmp_path: Path):
+    from unittest.mock import AsyncMock, patch
+
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+
+    (tmp_path / "a.pdf").write_bytes(b"%PDF-x")
+    ws = _ws(tmp_path)
+    with (
+        patch.object(
+            ServerWorkspace,
+            "read_bytes",
+            side_effect=AssertionError("parent must not slurp"),
+        ),
+        patch(
+            "agentcore.workspace.attachment_parse.extract_office_file",
+            new=AsyncMock(
+                return_value=ExtractResult(
+                    status=ParseStatus.OK, text="hi", detail="ok", size_bytes=6
+                )
+            ),
+        ),
+    ):
+        result = await ws.extract_office("a.pdf", ext=".pdf")
+    assert result.text == "hi"
+
+
+async def test_extract_office_disk_cap_allows_above_channel(tmp_path: Path):
+    """On-disk extract may open a file larger than the channel IPC ingest cap."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from agentcore.workspace.attachment_parse import ExtractResult, ParseStatus
+    from agentcore.workspace.limits import OFFICE_EXTRACT_CHANNEL_MAX_BYTES
+
+    pdf = tmp_path / "big.pdf"
+    pdf.write_bytes(b"%PDF-x")
+    orig_stat = Path.stat
+
+    def fake_stat(self: Path, *args, **kwargs):
+        st = orig_stat(self, *args, **kwargs)
+        if self.name == "big.pdf":
+            mocked = MagicMock()
+            mocked.st_size = OFFICE_EXTRACT_CHANNEL_MAX_BYTES + 1
+            mocked.st_mode = st.st_mode
+            return mocked
+        return st
+
+    ws = _ws(tmp_path)
+    with (
+        patch.object(Path, "stat", fake_stat),
+        patch(
+            "agentcore.workspace.attachment_parse.extract_office_file",
+            new=AsyncMock(
+                return_value=ExtractResult(
+                    status=ParseStatus.OK, text="ok", detail="ok", size_bytes=1
+                )
+            ),
+        ),
+    ):
+        result = await ws.extract_office("big.pdf", ext=".pdf")
+        assert result.text == "ok"
+        with pytest.raises(WorkspaceIOError):
+            await ws.read_bytes("big.pdf")
+
+
+async def test_read_head_peeks_past_text_gate(tmp_path: Path):
+    from agentcore.workspace.limits import (
+        WORKSPACE_READ_HEAD_MAX_BYTES,
+        WORKSPACE_READ_MAX_BYTES,
+    )
+
+    payload = b"%PDF-" + b"x" * (WORKSPACE_READ_MAX_BYTES + 16)
+    (tmp_path / "big.bin").write_bytes(payload)
+    ws = _ws(tmp_path)
+    with pytest.raises(WorkspaceIOError):
+        await ws.read_bytes("big.bin")
+    head = await ws.read_head("big.bin")
+    assert head.data.startswith(b"%PDF-")
+    assert len(head.data) == WORKSPACE_READ_HEAD_MAX_BYTES
+    assert head.size_bytes == len(payload)
+
+
 async def test_write_bytes_escape_raises_outside_workspace(tmp_path: Path):
     ws_root = tmp_path / "ws"
     ws_root.mkdir()

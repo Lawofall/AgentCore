@@ -77,7 +77,6 @@ function renderStrip(execution: ReturnType<typeof projectExecution>) {
             expanded
             onToggle={() => {}}
             onMaximize={() => {}}
-            onReplay={() => {}}
           />
         </ExecutionScopeContext.Provider>
       </TooltipProvider>
@@ -124,7 +123,7 @@ describe("StatusStrip · coordination_wait", () => {
     expect(screen.queryByText("研究员")).toBeNull();
   });
 
-  it("keeps waitStartedAt across heartbeats", () => {
+  it("heartbeats update completed/total; waiting=false clears", () => {
     useExecutionStore.getState().startExecution(plan, MID);
     useExecutionStore.getState().setCoordinationWait(
       {
@@ -135,9 +134,12 @@ describe("StatusStrip · coordination_wait", () => {
       },
       MID,
     );
-    const first =
-      useExecutionStore.getState().byId[MID]?.coordinationWaitStartedAt;
-    expect(first).toBeTypeOf("number");
+    expect(useExecutionStore.getState().byId[MID]?.coordinationWait).toEqual({
+      execution_id: "exec-1",
+      waiting: true,
+      completed: 0,
+      total: 2,
+    });
 
     useExecutionStore.getState().setCoordinationWait(
       {
@@ -149,8 +151,8 @@ describe("StatusStrip · coordination_wait", () => {
       MID,
     );
     expect(
-      useExecutionStore.getState().byId[MID]?.coordinationWaitStartedAt,
-    ).toBe(first);
+      useExecutionStore.getState().byId[MID]?.coordinationWait?.completed,
+    ).toBe(1);
 
     useExecutionStore.getState().setCoordinationWait(
       {
@@ -162,8 +164,5 @@ describe("StatusStrip · coordination_wait", () => {
       MID,
     );
     expect(useExecutionStore.getState().byId[MID]?.coordinationWait).toBeNull();
-    expect(
-      useExecutionStore.getState().byId[MID]?.coordinationWaitStartedAt,
-    ).toBeNull();
   });
 });

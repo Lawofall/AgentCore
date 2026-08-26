@@ -64,6 +64,7 @@ from agentcore.workspace.protocol import (
     IndexFilesResult,
     OutsideWorkspace,
     PathNotFound,
+    ReadHeadResult,
     ReadLinesResult,
     ReplaceOutcome,
     TreeEntry,
@@ -320,13 +321,46 @@ class LocalWorkspace:
         self._mark_mutated()
         return int(value)
 
-    async def read_bytes(self, path: str) -> bytes:
+    async def read_bytes(self, path: str, *, max_bytes: int | None = None) -> bytes:
         # The desktop returns base64 (JSON has no byte type); decode back to raw.
         root_id, rel, _ = self._route(path)
+        payload: dict[str, Any] = {"path": rel}
+        if max_bytes is not None:
+            payload["max_bytes"] = int(max_bytes)
         value = await self._channel.request(
-            WorkspaceOp.READ_BYTES, {"path": rel}, root_id=root_id
+            WorkspaceOp.READ_BYTES, payload, root_id=root_id
         )
         return base64.b64decode(str(value))
+
+    async def read_head(
+        self, path: str, *, max_bytes: int | None = None
+    ) -> ReadHeadResult:
+        root_id, rel, _ = self._route(path)
+        payload: dict[str, Any] = {"path": rel}
+        if max_bytes is not None:
+            payload["max_bytes"] = int(max_bytes)
+        value = await self._channel.request(
+            WorkspaceOp.READ_HEAD, payload, root_id=root_id
+        )
+        value = value or {}
+        return ReadHeadResult(
+            data=base64.b64decode(str(value.get("data") or "")),
+            size_bytes=int(value.get("size_bytes") or 0),
+        )
+
+    async def extract_office(
+        self, path: str, *, ext: str, start_page: int = 1
+    ):
+        """IPC ingest: desktop has no Python extract stack, so still ``read_bytes``."""
+        from agentcore.workspace.attachment_parse import extract_office_bytes
+        from agentcore.workspace.limits import OFFICE_EXTRACT_CHANNEL_MAX_BYTES
+
+        data = await self.read_bytes(
+            path, max_bytes=OFFICE_EXTRACT_CHANNEL_MAX_BYTES
+        )
+        return await extract_office_bytes(
+            data, ext=ext, start_page=start_page
+        )
 
     async def write_bytes(self, path: str, data: bytes) -> int:
         root_id, rel, _ = self._route(path, write=True, op="write_bytes")

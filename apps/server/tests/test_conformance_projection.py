@@ -1024,6 +1024,19 @@ def test_multi_agent_team_notes_ceo_seed_and_brief(projected):
     assert "初学者" in brief_blocks[0]["body"]
 
 
+def test_multi_agent_team_notes_empty_wall(projected):
+    p = projected["multi_agent_team_notes_empty_wall"]
+    assert p["status"] == "completed"
+    assert p["teamNotes"] == []
+    assert p.get("noteWall") is True
+
+
+def test_multi_agent_team_notes_kinds_carry_note_wall(projected):
+    p = projected["multi_agent_team_notes"]
+    assert p.get("noteWall") is True
+    assert p["teamNotes"]
+
+
 def test_process_tool_result_cap_matches_sink():
     """>8KB tool results: sink process timeline and oracle projection must agree.
 

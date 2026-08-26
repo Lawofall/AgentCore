@@ -64,7 +64,7 @@ interface Pending {
 }
 
 const MAX_ATTACHMENTS = 9;
-const MAX_FILE_BYTES = 25 * 1024 * 1024; // mirrors workspace_upload_max_bytes
+const MAX_FILE_BYTES = 50 * 1024 * 1024; // mirrors workspace_upload_max_bytes
 
 /**
  * IM message composer: an auto-growing textarea + attachments (图/文件). Enter
@@ -321,7 +321,9 @@ export function ChatComposer({
             break;
           }
           if (file.size > MAX_FILE_BYTES) {
-            setLocalError(`「${file.name}」超过 25 MB 上限`);
+            setLocalError(
+              `「${file.name}」超过 ${Math.round(MAX_FILE_BYTES / (1024 * 1024))} MB 上限`,
+            );
             continue;
           }
           next.push({

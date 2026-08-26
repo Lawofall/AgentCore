@@ -51,7 +51,11 @@ from agentcore.runtime.runs.executor.shared import (
     _registry_with,
     _registry_without,
 )
-from agentcore.runtime.runs.notewall import NOTE_NUDGE_TEXT, format_notes_for_injection
+from agentcore.runtime.runs.notewall import (
+    NOTE_NUDGE_TEXT,
+    SYSTEM_RUN_ID,
+    format_notes_for_injection,
+)
 from agentcore.runtime.runs.retrieval_budget import RETRIEVAL_TOOL_NAMES
 from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunSpec, RunState
 from agentcore.runtime.runs.website_visual_critic import MAX_VISUAL_REWORK
@@ -304,9 +308,9 @@ async def _prepare_agent_node(
         # lead_subteam tools now living in worker_tools.
     # Topology-split handoff wording + deliverable.form: DAG is known at identity
     # build — upstream nodes get imperative「必须 handoff」; leaves get conditional
-    # 「有增量才写」. form=prose/files selects the landing block (omit = legacy).
-    # Non-empty artifacts with form omitted → files block (not「可当文字」).
-    deliverable_form = deliverable.form if deliverable is not None else None
+    # 「有增量才写」. form=prose/files/workspace selects the landing block
+    # (omit = files). Non-empty artifacts with form omitted → files block.
+    deliverable_form = deliverable.form if deliverable is not None else "files"
     identity = build_worker_identity(
         has_dependents=node_has_dependents(env.plan, spec.run_id),
         captain=is_captain,
@@ -516,16 +520,23 @@ async def _prepare_agent_node(
     # advances this run's cursor (each note delivered at most once). Empty (solo / no
     # fresh notes) → [] → a no-op round, identical to today's behaviour.
     #
-    # Cold-open preload: seed / inherited notes sit on the wall before round 0, but the
-    # loop only calls this hook from round≥1 — extend once here so「开局即见」holds.
-    # Cursor advance means the same notes are not re-pushed on the first mid-flight pull.
+    # Cold-open preload: sibling / inherited notes sit on the wall before round 0, but
+    # the loop only calls this hook from round≥1 — extend once here. CEO-materialized
+    # brief seeds are skipped when ``team_brief`` is already an opening block (避免双份);
+    # explicit seed_notes without a brief still push. Cursor advances either way.
+    from agentcore.runtime.delegate.seed_notes import CEO_SEED_RUN_ID
+
     _note_nudged: list[bool] = [False]
+    _skip_seed_push = (
+        frozenset({CEO_SEED_RUN_ID}) if env.team_brief else frozenset()
+    )
+    _nudge_exclude = frozenset({CEO_SEED_RUN_ID, SYSTEM_RUN_ID})
 
     def _pull_notes(_rid: str = spec.run_id) -> list[LLMMessage]:
         if env.note_wall is None:  # non-collaborative batch: no wall to push
             return []
         injected: list[LLMMessage] = []
-        fresh = env.note_wall.new_for(_rid)
+        fresh = env.note_wall.new_for(_rid, exclude_run_ids=_skip_seed_push)
         if fresh:
             injected.append(
                 LLMMessage(role="user", content=format_notes_for_injection(fresh))
@@ -533,7 +544,10 @@ async def _prepare_agent_node(
         if (
             not _note_nudged[0]
             and not env.note_wall.own_active(_rid)
-            and len(env.note_wall.all_for(_rid)) >= 2
+            and env.note_wall.teammate_active_count(
+                _rid, exclude_run_ids=_nudge_exclude
+            )
+            >= 1
         ):
             _note_nudged[0] = True
             injected.append(LLMMessage(role="user", content=NOTE_NUDGE_TEXT))

@@ -27,6 +27,7 @@ async def finish_resume_turn(
     journal_writer,
     vision_cost_runs: list | None = None,
     pre_pause_reasoning: str = "",
+    ask_settled: bool = False,
 ) -> dict:
     """Bill + close a resumed turn whose CEO loop ran (plan_review / ask_user continue).
 
@@ -38,12 +39,18 @@ async def finish_resume_turn(
     ``vision_cost_runs`` are the resumed turn's board_read 读图 ledger rows (role=vision,
     §九.4 Gap ②), collected off the shared ``ToolContext.cost_sink``.
 
+    ``ask_settled`` is True when this resume answered an ask_user card: join then
+    keeps only the post-resume body (do not splice leftover「请确认」prose).
+    Plan-review / rate-limit continue leave it False.
+
     ``pre_pause_reasoning`` joins ahead of the live captain reasoning (G3) so
     multi-cycle pauses keep ``join(join(r1, r2), live)`` continuity.
     """
     # Resume-only body assembly — must land on captain_state before settle reads it.
     final_reasoning = join_segments(pre_pause_reasoning, captain_state.reasoning or "")
-    captain_state.content = reconcile_resume_closing(pre_pause_content, captain_state.content)
+    captain_state.content = reconcile_resume_closing(
+        pre_pause_content, captain_state.content, ask_settled=ask_settled
+    )
     captain_state.reasoning = final_reasoning
 
     result = await settle_successful_turn(
@@ -73,6 +80,7 @@ def finish_terminal_resume(
     closing: str,
     sink: EventSink,
     pre_pause_reasoning: str = "",
+    ask_settled: bool = False,
 ) -> dict:
     """Close a resumed turn whose settle returned terminal ``INTERACT`` (no CEO round).
 
@@ -95,7 +103,9 @@ def finish_terminal_resume(
     journal_entries = _journal_entries_for_turn(current_fact_log.get(), sink=sink, finish=finish)
     return {
         "message_id": message_id,
-        "content": reconcile_resume_closing(pre_pause_content, closing),
+        "content": reconcile_resume_closing(
+            pre_pause_content, closing, ask_settled=ask_settled
+        ),
         "reasoning_content": pre_pause_reasoning or None,
         "input_tokens": 0,
         "output_tokens": 0,

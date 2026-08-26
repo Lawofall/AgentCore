@@ -609,16 +609,11 @@ async def test_check_install_runs_with_restricted_network_and_registry_pin(
         "agentcore.tools.builtin.test_run.detect_workspace_profile",
         _fake_profile,
     )
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: True,
-    )
     result = await TestRunTool().execute({"check": "install"}, _auto_permission_ctx(backend))
     assert result.success is True
     assert len(backend.requests) == 1
     req = backend.requests[0]
     assert req.network_mode == "restricted"
-    assert req.registry_egress is True
     assert req.cache_bucket == "u"
     assert req.timeout_seconds == _VERIFY_BUDGET_SECONDS
     assert req.env is not None
@@ -643,10 +638,6 @@ async def test_check_install_pure_python_resolves_uv_not_npm(
     monkeypatch.setattr(
         "agentcore.tools.builtin.test_run.detect_workspace_profile",
         _fake_profile,
-    )
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: True,
     )
     result = await TestRunTool().execute({"check": "install"}, _auto_permission_ctx(backend))
     assert result.success is True
@@ -674,10 +665,6 @@ async def test_check_install_omits_cache_bucket_without_user_id(
     monkeypatch.setattr(
         "agentcore.tools.builtin.test_run.detect_workspace_profile",
         _fake_profile,
-    )
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: True,
     )
     ctx = ToolContext.create(
         execution_id="e",
@@ -714,30 +701,6 @@ async def test_check_install_rejects_without_restricted_network(
     assert backend.requests == []
 
 
-async def test_check_install_rejects_without_egress_chokepoint(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    backend = _FakeBackend(exists={"package.json"})
-
-    async def _fake_profile(_backend):
-        return _make_profile(package_managers=["npm"])
-
-    monkeypatch.setattr(
-        "agentcore.tools.builtin.test_run.detect_workspace_profile",
-        _fake_profile,
-    )
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: False,
-    )
-    result = await TestRunTool().execute({"check": "install"}, _auto_permission_ctx(backend))
-    assert result.success is False
-    assert result.contract_failure is True
-    assert result.metadata is not None
-    assert result.metadata.get("code") == "install_network_unavailable"
-    assert backend.requests == []
-
-
 async def test_check_install_local_skips_host_egress_gate(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -757,14 +720,9 @@ async def test_check_install_local_skips_host_egress_gate(
         "agentcore.tools.builtin.test_run.detect_workspace_profile",
         _fake_profile,
     )
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: False,
-    )
     result = await TestRunTool().execute({"check": "install"}, _auto_permission_ctx(backend))
     assert result.success is True
     req = backend.requests[0]
-    assert req.registry_egress is False
     assert req.cache_bucket is None
     assert req.env is not None
     assert "registry.npmjs.org" in (req.env.get("NPM_CONFIG_REGISTRY") or "")
@@ -846,17 +804,12 @@ async def test_command_npm_prefix_install_allowed(monkeypatch: pytest.MonkeyPatc
         "agentcore.tools.builtin.test_run.detect_workspace_profile",
         _fake_profile,
     )
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: True,
-    )
     result = await TestRunTool().execute(
         {"check": "command", "command": "npm --prefix apps/web install"},
         _auto_permission_ctx(backend),
     )
     assert result.success is True
     assert backend.requests[0].network_mode == "restricted"
-    assert backend.requests[0].registry_egress is True
     assert "--prefix" in backend.requests[0].code
 
 
@@ -873,10 +826,6 @@ async def test_working_directory_injects_npm_prefix(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(
         "agentcore.tools.builtin.test_run.detect_workspace_profile",
         _fake_profile,
-    )
-    monkeypatch.setattr(
-        "agentcore.tools.sandbox.egress.registry_egress_available",
-        lambda: True,
     )
     result = await TestRunTool().execute(
         {"check": "install", "working_directory": "apps/web"},

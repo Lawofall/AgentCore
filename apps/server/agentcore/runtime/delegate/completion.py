@@ -165,10 +165,10 @@ def plan_declares_artifacts(plan: RunPlan) -> bool:
     return False
 
 def plan_declares_files_form(plan: RunPlan) -> bool:
-    """True when any worker deliverable declares ``form=files``."""
+    """True when any worker deliverable declares ``form=files`` or ``workspace``."""
     for node in plan.nodes:
         d = node.deliverable
-        if d is not None and d.form == "files":
+        if d is not None and d.form in ("files", "workspace"):
             return True
     return False
 
@@ -185,7 +185,7 @@ def plan_all_workers_prose(plan: RunPlan) -> bool:
 def plan_has_writable_worker(plan: RunPlan) -> bool:
     """True when at least one worker can land files (not ``form=prose``).
 
-    ``form`` omitted (legacy) keeps write tools; only explicit ``prose`` withholds them.
+    Omitted form is files; only explicit ``prose`` withholds landing expectation.
     """
     if not plan.nodes:
         return False
@@ -223,9 +223,6 @@ def plan_suggests_exec_office_deliverable(plan: RunPlan) -> bool:
         d = node.deliverable
         if d is None:
             continue
-        name = str(getattr(d, "name", "") or "").strip()
-        if name and _path_looks_exec_office(name):
-            return True
         for art in d.artifacts or []:
             if art and _path_looks_exec_office(str(art)):
                 return True
@@ -254,13 +251,7 @@ def execution_capability_warning(
     from agentcore.tools.builtin import execution_class_enabled_for
 
     if execution_class_enabled_for(backend, permission_axes):
-        if (
-            plan_suggests_runtime_ready(plan)
-            and getattr(backend, "location", None) != "local"
-        ):
-            return exec_env_remediation_zh(
-                backend=backend, kind="capability_runtime_ready"
-            )
+        # Execution class includes cloud ``terminal`` (desk guest) — no local-only gap.
         return None
     if plan_suggests_exec_office_deliverable(plan):
         return exec_env_remediation_zh(backend=backend, kind="capability_office")

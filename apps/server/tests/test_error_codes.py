@@ -78,6 +78,24 @@ def test_error_fields_for_collapses_unknown_exception_to_product_fallback():
     assert "raw technical" not in message
 
 
+def test_unclassified_fallback_is_pipeline_copy_not_llm():
+    """Pre-LLM crashes (e.g. tool ctor) share this fallback; must not claim 模型调用."""
+    from agentcore.core.message_merge import DEFAULT_FAILED_ERROR_MESSAGE
+
+    assert DEFAULT_FAILED_ERROR_MESSAGE == UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    assert "模型" not in UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    code, message, _ = error_fields_for(
+        TypeError(
+            "TerminalTool.__init__() got an unexpected keyword argument 'languages'"
+        ),
+        fallback_code=ErrorCode.PIPELINE_ERROR,
+        fallback_message=UNCLASSIFIED_EXCEPTION_USER_MESSAGE,
+    )
+    assert code == ErrorCode.PIPELINE_ERROR
+    assert message == UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+    assert "TerminalTool" not in message
+
+
 def test_error_fields_for_empty_fallback_degrades_to_product_default():
     """A caller with no curated copy still owes the user a sentence, not silence."""
     boom = ValueError("PIPELINE_ERROR: build_turn_router requires explicit credentials")

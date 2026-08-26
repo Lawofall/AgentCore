@@ -78,7 +78,8 @@
             "task": "核查事实与引用",
             "depends_on": []
           }
-        ]
+        ],
+        "note_wall": true
       },
       "timestamp": "2026-01-01T00:00:00.004Z"
     },
@@ -670,6 +671,7 @@
         "supersedes": null
       }
     ],
+    "noteWall": true,
     "userInterjections": []
   }
 }

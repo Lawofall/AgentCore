@@ -35,6 +35,7 @@ export function FileBrowser({
   emptyTreeHint,
   onCloneGit,
   renderWorkroomLead,
+  onCreateWorkroomEntry,
 }: {
   /** 已解析的文件源；为 null 时（本地源在本机不可用）保留工具栏（含选择器）但树/操作淡出、正文兜空态。 */
   source: FileSource | null;
@@ -48,6 +49,8 @@ export function FileBrowser({
   onCloneGit?: () => void;
   /** Bound-folder entries inside the expanded ``.agentcore`` row. */
   renderWorkroomLead?: (indent: number) => ReactNode;
+  /** 「新建条目」on the ``.agentcore`` header; returning `false` skips expand. */
+  onCreateWorkroomEntry?: () => boolean | Promise<boolean>;
 }) {
   const showFile = useSidePanelStore((s) => s.showFile);
   const treeRef = useRef<FileTreeHandle>(null);
@@ -148,6 +151,7 @@ export function FileBrowser({
             onChromeState={setChrome}
             onOpenFile={(path, name) => showFile(path, name)}
             renderWorkroomLead={renderWorkroomLead}
+            onCreateWorkroomEntry={onCreateWorkroomEntry}
           />
         ) : (
           // 仅本地源在本机不可用时到这（如 web 构建无 fsApi）；桌面端本地源恒可解析。

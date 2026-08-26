@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from agentcore.api.routes.documents import _always_chars
 from agentcore.memory.always_quota import (
+    _AI_DENIED_MESSAGE,
+    _CARD_SUMMARY,
+    _USER_CREATE_DENIED,
+    _USER_OVER_WARNING,
     AlwaysUsage,
     always_entry_chars,
     evaluate_always_write,
@@ -59,8 +63,21 @@ def test_user_edit_existing_always_over_limit_allows_with_warning():
         projected=projected,
     )
     assert decision.allowed is True
-    assert decision.warning is not None
-    assert "24000" in decision.warning
+    assert decision.warning == _USER_OVER_WARNING
+
+
+def test_user_facing_quota_copy_omits_char_meter():
+    texts = (
+        _USER_OVER_WARNING,
+        _USER_CREATE_DENIED,
+        _AI_DENIED_MESSAGE,
+        _CARD_SUMMARY.format(denied=1),
+    )
+    for text in texts:
+        assert "{used}" not in text
+        assert "{max}" not in text
+        assert "24000" not in text
+        assert "字符" not in text
 
 
 def test_user_create_over_limit_denied():
@@ -72,7 +89,9 @@ def test_user_create_over_limit_denied():
         projected=projected,
     )
     assert decision.allowed is False
-    assert decision.message is not None
+    assert decision.message == _USER_CREATE_DENIED
+    assert "字符" not in decision.message
+    assert "24000" not in decision.message
 
 
 def test_user_create_adding_nothing_while_over_allowed():
@@ -97,6 +116,7 @@ def test_ai_growth_over_limit_denied():
         projected=projected,
     )
     assert decision.allowed is False
+    assert decision.message == _AI_DENIED_MESSAGE
 
 
 def test_ai_shrink_while_over_allowed():

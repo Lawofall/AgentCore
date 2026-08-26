@@ -49,7 +49,7 @@ export {
  * (historical) multi-agent turns render identically — the live turn streams into
  * the slot, a reloaded turn hydrates it from the persisted journal (`runs`), and
  * both project through the same fold. Node clicks drill into the passive
- * right-side panel; 「在画布打开」/「回放」navigate to the turn's full-screen
+ * right-side panel; 「在画布打开」 navigates to the turn's full-screen
  * detail page (`#/conversations/:id/turn/:turnId`).
  */
 export function InlineTeamGraph({
@@ -91,21 +91,14 @@ export function InlineTeamGraph({
   ]);
 
   const execution = useMessageExecution(messageId);
-  // 「打开辩论室」/「在画布打开」/「回放」→ 全屏回合详情；辩论回合传 view=debate
+  // 「打开辩论室」/「在画布打开」→ 全屏回合详情；辩论回合传 view=debate
   //（与右坞 RunDetailBody / RunModeratorLedger 深链一致）。
-  const openInCanvas = useCallback(
-    (autoplay: boolean) => {
-      if (!conversationId) return;
-      const view =
-        execution && isDebate(execution) ? ("debate" as const) : undefined;
-      navigate(
-        turnDetailPath(conversationId, messageId, view, undefined, {
-          autoplay,
-        }),
-      );
-    },
-    [conversationId, messageId, navigate, execution],
-  );
+  const openInCanvas = useCallback(() => {
+    if (!conversationId) return;
+    const view =
+      execution && isDebate(execution) ? ("debate" as const) : undefined;
+    navigate(turnDetailPath(conversationId, messageId, view));
+  }, [conversationId, messageId, navigate, execution]);
   const [measured, setMeasured] = useState<{
     height: number;
     overflowing: boolean;
@@ -135,6 +128,7 @@ export function InlineTeamGraph({
   const notesLive = teamNotesDefaultExpanded(
     execution?.status,
     execution?.teamNotes ?? [],
+    execution?.noteWall === true,
   );
   const [notesExpanded, , setNotesExpanded] = useStreamAwareDisclosure(
     `${messageId}:team-notes`,
@@ -178,8 +172,7 @@ export function InlineTeamGraph({
             execution={execution}
             expanded={expanded}
             onToggle={() => setExpanded(!expanded)}
-            onMaximize={() => openInCanvas(false)}
-            onReplay={() => openInCanvas(true)}
+            onMaximize={openInCanvas}
           />
           {debateLive && (
             <DebateProgressLine
@@ -205,9 +198,10 @@ export function InlineTeamGraph({
             />
           )}
           {/* 团队便签墙 (§2.2 通): collapsible; stays available when the graph is folded.
-              Empty turns render nothing. */}
+              Raised empty walls show an empty state; unraised walls render nothing. */}
           <TeamNotesPanel
             notes={execution.teamNotes}
+            noteWall={execution.noteWall === true}
             expanded={notesExpanded}
             onExpandedChange={setNotesExpanded}
           />

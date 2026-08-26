@@ -11,6 +11,12 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ConversationItem } from "./ConversationItem";
 import { WorkspaceGroupHeader } from "./WorkspaceGroupHeader";
+import {
+  FolderGroupDragGhost,
+  FolderGroupInsertLine,
+  folderGroupInsertPlace,
+} from "./folderGroupDragFeedback";
+import { useFolderGroupReorder } from "./useFolderGroupReorder";
 
 /**
  * The sidebar's **folder** zone (前端UX §一 方案C): collapsible per-folder groups
@@ -43,6 +49,18 @@ export function WorkspaceGroups() {
   const requiredIds = useRequiredConversationIds();
   const navigate = useNavigate();
 
+  const folderIds = useMemo(
+    () => groups.map(({ folder }) => folder.id),
+    [groups],
+  );
+  const { getItemProps, draggingId, overId, place, dragPreview } =
+    useFolderGroupReorder(folderIds);
+
+  const dragFolder = useMemo(
+    () => groups.find((g) => g.folder.id === draggingId)?.folder ?? null,
+    [draggingId, groups],
+  );
+
   const activeFolderId = useMemo(() => {
     const active = conversations.find((c) => c.id === currentId);
     if (!active || active.pinned) return null;
@@ -67,14 +85,24 @@ export function WorkspaceGroups() {
           const shown = pickGroupVisible(visible, requiredIds);
           const overflow = visible.length - shown.length;
           const groupIsLocal = deriveGroupWorkspaceIsLocal(folder);
+          const insert = folderGroupInsertPlace(
+            folder.id,
+            draggingId,
+            overId,
+            place,
+          );
           return (
             <div key={folder.id}>
-              <WorkspaceGroupHeader
-                folder={folder}
-                convs={convs}
-                expanded={expanded}
-                onToggleExpanded={() => setSection(folder.id, !expanded)}
-              />
+              <div className="relative">
+                {insert ? <FolderGroupInsertLine place={insert} /> : null}
+                <WorkspaceGroupHeader
+                  folder={folder}
+                  convs={convs}
+                  expanded={expanded}
+                  onToggleExpanded={() => setSection(folder.id, !expanded)}
+                  sortable={getItemProps(folder.id)}
+                />
+              </div>
               {expanded && (
                 // Same icon column as group header / 裸聊 / top nav — no nested
                 // indent (status dots & cloud icons must share that axis).
@@ -106,6 +134,13 @@ export function WorkspaceGroups() {
           );
         })}
       </div>
+      {dragPreview && dragFolder ? (
+        <FolderGroupDragGhost
+          label={dragFolder.name}
+          isLocal={deriveGroupWorkspaceIsLocal(dragFolder)}
+          preview={dragPreview}
+        />
+      ) : null}
     </>
   );
 }

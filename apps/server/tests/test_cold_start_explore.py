@@ -456,6 +456,11 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
     assert "1 人" in with_flag or "包办" in with_flag
     assert "轮" in with_flag
     assert "与巩固侧「冷启动」无关" in with_flag
+    block = with_flag[
+        with_flag.find("<cold_start_explore>") : with_flag.find("</cold_start_explore>")
+    ]
+    assert "team_preview" not in block
+    assert "同其它委派直接开跑" in block
 
 
 def test_compose_prompt_rebind_gate():

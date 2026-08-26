@@ -9,6 +9,7 @@ from agentcore.runtime.context_cap import log_context_capped
 from agentcore.runtime.events import team_note_posted
 from agentcore.runtime.runs.notewall import (
     MAX_NOTE_CHARS,
+    NOTE_KIND_DECISION,
     NOTE_KIND_HEADS_UP,
     NOTE_KINDS,
     NoteWall,
@@ -71,6 +72,11 @@ def resolve_coordination(
     return resolved
 
 
+def is_note_wall_batch(node_count: int, coordination: str) -> bool:
+    """Whether this fan-out owns a note wall (same predicate as ``setup_note_wall``)."""
+    return node_count > 1 and coordination == "wall"
+
+
 def _clean_brief(text: str, *, execution_id: str | None = None) -> str:
     collapsed = "\n".join(line.rstrip() for line in text.splitlines()).strip()
     original = len(collapsed)
@@ -96,6 +102,30 @@ def parse_team_brief(
     if not brief:
         return None, "team_brief 清理后为空。"
     return brief, None
+
+
+def materialize_brief_as_seed_notes(
+    brief: str, *, execution_id: str | None = None
+) -> list[dict[str, str]]:
+    """Split ``team_brief`` into wall seeds (newline = one note; cap 8 × 200).
+
+    CEO schema does not expose ``seed_notes``; this is the engine projection so
+    升墙 is visible on the wall (看) without a second fill-surface field.
+    Worker opening still injects the full brief block — callers must not also
+    推增量 these seeds when the brief block is present.
+    """
+    items: list[dict[str, str]] = []
+    for raw in brief.splitlines():
+        text = " ".join(raw.split())
+        if not text:
+            continue
+        items.append({"kind": NOTE_KIND_DECISION, "text": text})
+        if len(items) >= MAX_SEED_NOTES:
+            break
+    if not items:
+        return []
+    notes, err = parse_seed_notes(items, execution_id=execution_id)
+    return notes if err is None else []
 
 
 def parse_seed_notes(

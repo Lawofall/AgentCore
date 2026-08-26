@@ -127,11 +127,25 @@ def test_model_override_writes_route_key():
 
 def test_model_override_bare_model_rejected():
     plan = _plan_two_independent()
-    with pytest.raises(ValidationError, match="origin"):
+    with pytest.raises(ValidationError, match="目录身份|@platform"):
         validate_team_preview_veto(
             plan,
             model_overrides={"a": {"model": "deepseek-v4-pro"}},
         )
+
+
+def test_model_override_at_ref_writes_route_key():
+    plan = _plan_two_independent()
+    validate_team_preview_veto(
+        plan,
+        model_overrides={"a": {"model": "@platform/deepseek-v4-pro"}},
+    )
+    _, _, models = apply_team_preview_veto(
+        plan,
+        model_overrides={"a": {"model": "@platform/deepseek-v4-pro"}},
+    )
+    assert models[0].run_id == "a"
+    assert plan.by_id("a").model == "platform/deepseek-v4-pro"
 
 
 def test_model_override_unknown_run_rejected():

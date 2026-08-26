@@ -10959,17 +10959,23 @@
             ],
             "description": "The BYOK provider the default runs on (null for platform / keyless).",
             "title": "Provider Id"
+          },
+          "ref": {
+            "description": "Catalog identity for this row: @platform/{id} or @byok/{provider_id}/{id}.",
+            "title": "Ref",
+            "type": "string"
           }
         },
         "required": [
           "id",
-          "origin"
+          "origin",
+          "ref"
         ],
         "title": "ModelCatalogCurrent",
         "type": "object"
       },
       "ModelCatalogItem": {
-        "description": "One selectable (or greyed-out) model in the user's catalog.\n\n``(id, origin, provider_id)`` is the unique key — the same model id may appear under\nseveral BYOK providers (and once as a platform row), so the picker groups by provider.",
+        "description": "One selectable (or greyed-out) model in the user's catalog.\n\nProduct identity is ``ref``. Internally ``(id, origin, provider_id)`` is still unique\n— the same model id may appear under several BYOK providers (and once as a platform\nrow), so the picker groups by provider.",
         "properties": {
           "available": {
             "default": true,
@@ -11018,7 +11024,7 @@
             "type": "string"
           },
           "origin": {
-            "description": "Credential origin when this model is selected.",
+            "description": "Credential origin when this model is selected (row attribute).",
             "enum": [
               "byok",
               "platform"
@@ -11060,6 +11066,11 @@
             "description": "Display name of the provider (byok rows only).",
             "title": "Provider Label"
           },
+          "ref": {
+            "description": "Catalog identity: @platform/{id} or @byok/{provider_id}/{id}. Copy this into tool `model` fields; do not send origin/provider_id.",
+            "title": "Ref",
+            "type": "string"
+          },
           "unavailable_reason": {
             "anyOf": [
               {
@@ -11078,6 +11089,7 @@
         },
         "required": [
           "id",
+          "ref",
           "origin",
           "display_name",
           "vendor"
@@ -18666,7 +18678,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.5"
+    "version": "0.7.6"
   },
   "openapi": "3.1.0",
   "paths": {

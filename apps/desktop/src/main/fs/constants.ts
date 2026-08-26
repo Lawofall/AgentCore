@@ -10,9 +10,14 @@ export const LIST_FILES_MAX_DEPTH = 12; // 递归最大深度，防极深目录
 export { LIST_FILES_SKIP_DIRS } from "./workspaceIgnore";
 
 // --- 本地工作区 op（双模式工作区 P2）执行边界 ---
-// 整文读取上限：云 ServerWorkspace 与桌面 Local 对齐 ``WORKSPACE_READ_MAX``（5 MiB）；
-// 超限早失败为容量合同（工具层 ``contract_failure``），与活性墙钟超时分离。
+// 整文文本读取上限：云 ServerWorkspace 与桌面 Local 对齐 ``WORKSPACE_READ_MAX``（5 MiB）。
+// Office/PDF 过桥抽取摄入用 ``WORKSPACE_EXTRACT_SOURCE_MAX``（25 MiB IPC）。
+// 磁盘后端抽取顶是服务端 ``OFFICE_EXTRACT_DISK_MAX_BYTES``（100 MiB）；上传顶另见 50 MiB。
 export const WORKSPACE_READ_MAX = 5 * 1024 * 1024; // 5 MiB
+/** Magic sniff / OLE size — mirrors server ``WORKSPACE_READ_HEAD_MAX_BYTES``. */
+export const WORKSPACE_READ_HEAD_MAX = 1024;
+/** Channel extract ingest — mirrors server ``OFFICE_EXTRACT_CHANNEL_MAX_BYTES``. */
+export const WORKSPACE_EXTRACT_SOURCE_MAX = 25 * 1024 * 1024; // 25 MiB
 // AI 面单次列举默认上限，与 ServerWorkspace.list 的 _MAX_LIST_ENTRIES 对齐。
 // 命中即在 op 结果里回 `truncated: true`——上限可以有，静默不行。
 export const WORKSPACE_LIST_MAX = 100;

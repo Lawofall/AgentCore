@@ -41,6 +41,7 @@ from agentcore.runtime.sessions import SessionLoader, SessionSaver
 from agentcore.runtime.settlement import seed_settlement_dedupe_from_entries
 from agentcore.runtime.suspension import (
     SuspensionDeleter,
+    SuspensionKind,
     SuspensionSaver,
     TurnSuspension,
     turn_citations,
@@ -112,6 +113,8 @@ async def resume_chat_pipeline(
     """
     if permission_axes is None:
         permission_axes = DEFAULT_PERMISSION_AXES
+    # Card already answered this resume — join uses this bit, not extra confirm-word regex.
+    ask_settled = suspension.kind == SuspensionKind.ASK_USER
     profiles = turn_profiles_for_turn(profile_set, llm_credentials)
     message_id = suspension.message_id
     conversation_id = suspension.conversation_id
@@ -347,6 +350,7 @@ async def resume_chat_pipeline(
                 closing=settled.terminal_text,
                 sink=sink,
                 pre_pause_reasoning=pre_pause_reasoning,
+                ask_settled=ask_settled,
             )
             await audit_recorder.flush()
             if roster_writer is not None:
@@ -420,7 +424,9 @@ async def resume_chat_pipeline(
                 audit_recorder=audit_recorder,
                 roster_writer=roster_writer,
             )
-            result["content"] = reconcile_resume_closing(pre_pause, result.get("content") or "")
+            result["content"] = reconcile_resume_closing(
+                pre_pause, result.get("content") or "", ask_settled=ask_settled
+            )
             return result
 
         # settle_successful_turn (via finish_resume_turn) already flushes journal /
@@ -441,6 +447,7 @@ async def resume_chat_pipeline(
             journal_writer=journal_writer,
             vision_cost_runs=wired.vision_cost_sink,
             pre_pause_reasoning=pre_pause_reasoning,
+            ask_settled=ask_settled,
         )
 
     except Exception as e:
@@ -458,7 +465,9 @@ async def resume_chat_pipeline(
         )
         post = result.get("content") or ""
         result["content"] = (
-            reconcile_resume_closing(pre_pause, post) if pre_pause or post else ""
+            reconcile_resume_closing(pre_pause, post, ask_settled=ask_settled)
+            if pre_pause or post
+            else ""
         )
         return result
     finally:

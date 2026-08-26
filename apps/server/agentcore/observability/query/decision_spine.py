@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agentcore.llm.resilience import summarize_degradation
 from agentcore.observability.query.stats import (
     COLLAB_FIELD_MAP,
     accumulate_trace,
@@ -741,7 +742,23 @@ def build_decision_spine(
     execution = _execution_summary(log_events)
     if execution:
         spine["execution"] = execution
+    degradation = summarize_degradation(log_events)
+    if degradation is not None:
+        spine["degradation"] = degradation
+    replay_persist = _replay_persist_block(log_events)
+    if replay_persist is not None:
+        spine["replay_persist"] = replay_persist
     return spine
+
+
+_REPLAY_UNSAVED = "这一轮的回放没存上"
+
+
+def _replay_persist_block(log_events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Optional spine line when journal persist failed (reply still reached the user)."""
+    if any(ev.get("event") == "journal.persist_failed" for ev in log_events):
+        return {"saved": False, "summary": _REPLAY_UNSAVED}
+    return None
 
 
 def _format_ms(ms: int) -> str:
@@ -937,6 +954,17 @@ def format_decision_spine(spine: dict[str, Any]) -> str:
             f"{slowest.get('model') or '?'}  {slowest.get('scenario')}"
             f"  {slowest.get('latency_ms')}ms"
             f"  in={slowest.get('input_tokens')} out={slowest.get('output_tokens')}"
+        )
+
+    degradation = spine.get("degradation") or {}
+    summary = degradation.get("summary")
+    if summary:
+        lines.append(f"  Degraded  {summary}")
+
+    replay_persist = spine.get("replay_persist") or {}
+    if replay_persist.get("saved") is False:
+        lines.append(
+            f"  Replay  {replay_persist.get('summary') or _REPLAY_UNSAVED}"
         )
 
     tail = spine.get("tail") or {}

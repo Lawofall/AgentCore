@@ -1,6 +1,22 @@
 /** Placement relative to the tab under the pointer. */
 export type ReorderPlace = "before" | "after";
 
+/** Axis used to decide before/after from the pointer vs the hit rect. */
+export type ReorderAxis = "x" | "y";
+
+/** Midpoint split along `axis`. Default tab strips use `"x"`. */
+export function placeAlongAxis(
+  axis: ReorderAxis,
+  clientX: number,
+  clientY: number,
+  rect: Pick<DOMRect, "left" | "top" | "width" | "height">,
+): ReorderPlace {
+  if (axis === "y") {
+    return clientY < rect.top + rect.height / 2 ? "before" : "after";
+  }
+  return clientX < rect.left + rect.width / 2 ? "before" : "after";
+}
+
 /**
  * Move `fromId` next to `overId` (`before` / `after`).
  * Unknown ids or a no-op move return a shallow copy of `ids`.

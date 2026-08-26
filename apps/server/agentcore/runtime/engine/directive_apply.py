@@ -41,10 +41,11 @@ def _captain_closing_honesty(
     *,
     promotion_ledger: Any = None,
 ) -> str:
-    """CEO soft banners: softⅡ′ → write-ownership → cutoff/partial → cloud-web verify.
+    """CEO soft banners: softⅡ′ → write-ownership → cloud-web verify.
 
-    Each enforce_* skips when an honesty banner prefix is already present.
-    Cutoff latch（token_budget 等）真源=结构化 gaps/partial，不扩姿势 A 词表。
+    Cutoff latch still arms finish_guard; ``enforce_cutoff_closing_honesty`` no
+    longer prefixes 【收口说明】 into the answer.
+    Each remaining enforce_* skips when an honesty banner prefix is already present.
     """
     if not content:
         return content

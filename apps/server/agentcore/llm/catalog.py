@@ -12,8 +12,9 @@ model, for ``GET /v1/users/me/models`` and the conversation-model PATCH validati
 
 Each catalog row carries ``origin`` (``byok`` | ``platform``) and, for byok rows, the
 ``provider_id`` + ``provider_label`` of the exact 服务商 it lives under.
-``(id, origin, provider_id)`` is the unique key — the SAME model id may appear under
-several providers (and once more as a platform row), because「run model X on provider
+Product identity is the catalog ``ref`` (``@platform/{id}`` / ``@byok/{provider_id}/{id}``).
+Internally the row is still ``(id, origin, provider_id)`` — the SAME model id may appear
+under several providers (and once more as a platform row), because「run model X on provider
 A」vs「on provider B」vs「on platform free quota」are genuinely different options.
 
 * **byok** rows — per provider: ``default_model ∪`` vendor presets matched by
@@ -89,6 +90,12 @@ class ModelCatalogCurrent:
     origin: ModelOrigin
     provider_id: str | None = None
 
+    @property
+    def ref(self) -> str:
+        from agentcore.llm.model_ref import format_model_ref
+
+        return format_model_ref(self.origin, self.id, self.provider_id)
+
 
 @dataclass(frozen=True)
 class ModelUnavailableReason:
@@ -117,6 +124,12 @@ class ModelCatalogEntry:
     provider_label: str | None = None
     # Set when listed but not selectable (e.g. gateway lacks the upstream protocol).
     unavailable_reason: ModelUnavailableReason | None = None
+
+    @property
+    def ref(self) -> str:
+        from agentcore.llm.model_ref import format_model_ref
+
+        return format_model_ref(self.origin, self.id, self.provider_id)
 
 
 @dataclass(frozen=True)

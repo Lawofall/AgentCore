@@ -24,7 +24,7 @@
 |------|-------|
 | 一条 trace / 会话的时间线、排查包 | `log_timeline.py` |
 | 一个窗的事件分布、成本、协作质量 | `log_stats.py` |
-| 巡检①：全量 CID 清单 + 失败榜（带 trace/cid 反查）+ 跨窗快照 diff | `log_patrol.py` |
+| 巡检①：全量 CID 清单 + 失败榜（带 trace/cid 反查）+ 跨窗快照 diff（主 Agent 自跑，不另派 Task） | `log_patrol.py` |
 
 `log_patrol.py` 纯只读、不进 `release:gate`；失败家族表是入仓常量（`agentcore/observability/query/failure_families.py`），
 新增家族安全、改名/改口径会在跨窗 diff 里响。窗口快照落 `logs/` 下（gitignore，不入仓）。

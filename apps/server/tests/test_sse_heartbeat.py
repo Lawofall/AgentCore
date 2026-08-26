@@ -13,6 +13,8 @@ import json
 import pytest
 
 from agentcore.api import sse
+from agentcore.core.log_context import bind_log_context, clear_log_context
+from agentcore.llm.credentials import INFERENCE_TRACE_HEADER
 from agentcore.runtime.events import EventSink, content_delta
 
 
@@ -118,3 +120,25 @@ def test_pump_sse_style_parser_ignores_id_lines():
     assert len(events) == 1
     assert events[0]["type"] == "content_delta"
     assert events[0]["payload"] == {"delta": "hi"}
+
+
+def test_sse_response_stamps_bound_trace_header():
+    sink = EventSink()
+    clear_log_context()
+    try:
+        bind_log_context(trace_id="0123456789abcdef0123456789abcdef")
+        stream = sse.sse_response(sink)
+        attach = sse.sse_attach_response(sink)
+        assert stream.headers[INFERENCE_TRACE_HEADER] == "0123456789abcdef0123456789abcdef"
+        assert attach.headers[INFERENCE_TRACE_HEADER] == "0123456789abcdef0123456789abcdef"
+    finally:
+        clear_log_context()
+
+
+def test_sse_response_omits_trace_header_when_unbound():
+    sink = EventSink()
+    clear_log_context()
+    stream = sse.sse_response(sink)
+    attach = sse.sse_attach_response(sink)
+    assert INFERENCE_TRACE_HEADER not in stream.headers
+    assert INFERENCE_TRACE_HEADER not in attach.headers

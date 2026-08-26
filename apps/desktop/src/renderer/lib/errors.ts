@@ -11,23 +11,17 @@ import {
   rateLimitRetrySuppressed,
 } from "@agentcore/contract-types";
 import {
-  EMPTY_RESPONSE_CHIP_LABELS,
   LLM_EMPTY_RESPONSE_MESSAGE,
   LLM_ERROR_MESSAGE,
   LLM_UNPRODUCTIVE_MESSAGE,
   TURN_INTERRUPTED_EMPTY_MESSAGE,
-  degradedFinishChipLabel,
-  isEmptyResponseUserSurface,
 } from "@agentcore/protocol-fold-kit";
 
 export {
-  EMPTY_RESPONSE_CHIP_LABELS,
   LLM_EMPTY_RESPONSE_MESSAGE,
   LLM_ERROR_MESSAGE,
   LLM_UNPRODUCTIVE_MESSAGE,
   TURN_INTERRUPTED_EMPTY_MESSAGE,
-  degradedFinishChipLabel,
-  isEmptyResponseUserSurface,
 };
 
 /**

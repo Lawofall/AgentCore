@@ -48,16 +48,13 @@ def effective_target_folder_id(
 def task_structurally_requires_write_desk(task: dict[str, Any]) -> bool:
     """True when deliverable structurally needs a write desk (no task-body scan).
 
-    Conditions (any): ``form=="files"`` / non-empty string ``artifacts``.
-    No deliverable / ``form=prose`` / omit / legacy flags alone → False.
+    Missing / empty / omitted form → files (must write). Only explicit
+    ``form=prose`` is exempt. ``files`` / ``workspace`` / non-empty ``artifacts``
+    / ``workspace_native`` also require a write desk.
     """
-    raw = task.get("deliverable")
-    if not isinstance(raw, dict):
-        return False
-    if raw.get("form") == "files":
-        return True
-    arts = raw.get("artifacts")
-    return isinstance(arts, list) and any(isinstance(a, str) and a.strip() for a in arts)
+    from agentcore.runtime.runs.types import raw_deliverable_expects_landing
+
+    return raw_deliverable_expects_landing(task.get("deliverable"))
 
 
 def resolve_bare_chat_write_scope(

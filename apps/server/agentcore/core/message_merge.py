@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from agentcore.core.errors import UNCLASSIFIED_EXCEPTION_USER_MESSAGE
+
 # Progressive assistant-row lifecycle (Message.usage.status).
 MESSAGE_STATUS_RUNNING = "running"
 MESSAGE_STATUS_COMPLETE = "complete"
@@ -116,7 +118,9 @@ def pick_longest(*candidates: str | None) -> str:
 
 # Default ``error.message`` when a FAILED settle must synthesize structured
 # ``{code, message}`` for journal/usage. Never stuffed into ``message.content``.
-DEFAULT_FAILED_ERROR_MESSAGE = "模型调用失败，请稍后重试。"
+# Default ``code`` in that synthesizer is ``PIPELINE_ERROR`` — keep this sentence
+# identical to ``UNCLASSIFIED_EXCEPTION_USER_MESSAGE``.
+DEFAULT_FAILED_ERROR_MESSAGE = UNCLASSIFIED_EXCEPTION_USER_MESSAGE
 
 
 def visible_failed_assistant_content(

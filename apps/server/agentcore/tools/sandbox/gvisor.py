@@ -1,37 +1,32 @@
-"""GVisor (runsc) based sandbox for secure code execution.
+"""GVisor (runsc) cloud-desk sandbox.
 
-Execution model (安全权限与治理.md §五, as-built):
+Execution model (安全权限与治理.md §五):
 
-- **copy-in / copy-out 产物写回** (default writable runs): when the request
-  carries a workspace ``cwd``, the workspace is COPIED into a per-run staging
-  dir, seeded into a tmpfs ``/workspace``, then new/changed files are copied
-  back under caps (``ExecutionResult.written_files``). Timeout / cancel skip
-  copy-out.
-- **install 专用例外** (``registry_egress=True``): rw-bind the persistent
-  workspace (``request.cwd`` / DATA_DIR workspaces) at ``/workspace`` — skip
-  staging copy-out and the whole-tree base64 wrap. ``node_modules`` / ``.venv``
-  land on disk directly; short-lived sandbox only runs the install command (+ netns /
-  ``/pkg-cache``). Why the exception: install trees are too large for
-  staging↔base64 round-trip, and the product needs them on the durable workspace.
-  Non-install writable execution keeps the staging model.
-- **灰度护栏**: a process-global slot limiter caps concurrent executions
-  (``GVISOR_MAX_CONCURRENT_EXECUTIONS``), with a bounded grace wait before an
-  explainable busy failure; memory/timeout ceilings come from settings.
+- One long-lived shape-net guest per workspace root (non-rootless
+  ``--network=sandbox`` + netns). ``execute()`` is ``sandboxd exec`` into that
+  guest. Only the current workspace is rw-bound at ``/workspace``.
+- OCI uid/gid ≡ API ``os.getuid`` / ``os.getgid`` (``app``). No nobody, no
+  chmod of the workspace, no guest root, no replica disk, no copy-in/out.
+- Outbound is the desk-resident packaging allowlist chokepoint (netns + proxy
+  opened once per guest), not a per-install hole punch.
+- Concurrent exec slots + memory/duration ceilings still apply.
+- Cloud Chromium is ``sandboxd exec`` stdio into this same guest (not a second
+  runsc jail). Playwright is ro-bound here; ``/tmp`` is Chromium-sized.
 """
 
 from __future__ import annotations
 
 import asyncio
-import base64
 import contextlib
+import hashlib
 import json
 import os
-import shlex
 import shutil
 import sys
 import tempfile
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from agentcore.config import settings
@@ -49,13 +44,9 @@ from agentcore.tools.sandbox.sandboxd import (
     build_runsc_cmd,
     get_sandboxd_client,
 )
-from agentcore.tools.sandbox.sandboxd.protocol import CodeNetwork, Shape
-from agentcore.tools.sandbox.staging import (
-    TreeState,
-    collect_changes,
-    prepare_bind_tree_for_sandbox,
-    stage_workspace,
-    write_back,
+from agentcore.tools.sandbox.written_scan import (
+    scan_written_files,
+    written_scan_cutoff_ns,
 )
 
 logger = get_logger(__name__)
@@ -76,60 +67,222 @@ _FILE_EXTENSIONS: dict[str, str] = {
 
 _HOST_BIND_PATHS = ("/usr", "/lib", "/lib64", "/bin", "/etc")
 
-# Bundles must live on the DATA_DIR volume (settings.gvisor_runtime_root);
-# container /tmp overlay makes runsc mkdir fail with EINVAL inside gVisor.
-_ARTIFACT_MARKER = "__AGENTCORE_ARTIFACTS__"
+_desks: dict[str, _DeskSession] = {}
+_desk_locks: dict[str, asyncio.Lock] = {}
+_registry_lock = asyncio.Lock()
 
 
-def _runsc_shape(
-    *, network_mode: str, registry_egress: bool
-) -> tuple[Shape, CodeNetwork]:
-    """Map execute request knobs onto sandboxd shape A (``code``) vs B (``net``)."""
-    if registry_egress:
-        return "net", "none"
-    return "code", "host" if network_mode == "restricted" else "none"
+def _host_uid_gid() -> tuple[int, int]:
+    uid_fn = getattr(os, "getuid", None)
+    gid_fn = getattr(os, "getgid", None)
+    uid = int(uid_fn()) if uid_fn is not None else 0
+    gid = int(gid_fn()) if gid_fn is not None else 0
+    return uid, gid
+
+
+def _desk_key(workspace: str) -> str:
+    return str(Path(workspace).resolve())
+
+
+def _desk_ids(key: str) -> tuple[str, str]:
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return f"agentcore-desk-{digest[:16]}", digest[:32]
 
 
 def _resolve_runtime_root(explicit: str | None) -> str:
-    """Prefer constructor override; else settings (default under data_dir)."""
     if explicit:
         return explicit
     return settings.gvisor_runtime_root
 
 
-def _strip_artifact_payload(stdout: str) -> tuple[str, dict[str, str]]:
-    """Remove the sandbox artifact trailer from stdout (tmpfs → host bridge)."""
-    idx = stdout.rfind(_ARTIFACT_MARKER)
-    if idx == -1:
-        return stdout, {}
-    prefix = stdout[:idx]
-    tail = stdout[idx + len(_ARTIFACT_MARKER) :].lstrip("\n")
-    line = tail.split("\n", 1)[0].strip()
-    if not line:
-        return prefix, {}
-    try:
-        payload = json.loads(line)
-    except json.JSONDecodeError:
-        logger.warning("sandbox.artifact_payload_invalid")
-        return prefix, {}
-    if not isinstance(payload, dict):
-        return prefix, {}
-    files = {k: v for k, v in payload.items() if isinstance(k, str) and isinstance(v, str)}
-    return prefix, files
+def reset_desk_sessions_for_tests() -> None:
+    """Drop in-process desk map without talking to sandboxd (unit tests)."""
+    _desks.clear()
+    _desk_locks.clear()
+    from agentcore.tools.sandbox.desk_process import reset_desk_processes_for_tests
+
+    reset_desk_processes_for_tests()
 
 
-def _materialize_artifacts(staging_dir: Path, payload: dict[str, str]) -> None:
-    """Write sandbox tmpfs artifacts onto the host staging tree (mkdir OK on host)."""
-    for rel, encoded in payload.items():
-        if not rel or rel.startswith("/") or ".." in Path(rel).parts:
+def _now() -> float:
+    """Monotonic clock for desk idle TTL. Tests monkeypatch this."""
+    return time.monotonic()
+
+
+@dataclass
+class _DeskSession:
+    key: str
+    container_id: str
+    bundle_dir: Path
+    scratch_dir: Path
+    workspace: str
+    egress: object
+    last_used: float = 0.0
+    inflight: int = 0
+
+    async def close(self) -> None:
+        client = get_sandboxd_client()
+        with contextlib.suppress(Exception):
+            await client.kill(self.container_id)
+        with contextlib.suppress(Exception):
+            await client.delete(self.container_id, force=True)
+        closer = getattr(self.egress, "close", None)
+        if closer is not None:
+            with contextlib.suppress(Exception):
+                await closer()
+        shutil.rmtree(self.bundle_dir, ignore_errors=True)
+        logger.info("sandbox.desk_closed", workspace=self.key, container_id=self.container_id)
+
+
+@dataclass(frozen=True)
+class DeskAttach:
+    """Handle for exec-into-desk (browser driver). Does not own the guest lifetime."""
+
+    container_id: str
+    scratch_dir: Path
+    host_ip: str
+
+
+def _egress_host_ip(egress: object) -> str:
+    host_ip = getattr(egress, "host_ip", None)
+    if host_ip:
+        return str(host_ip)
+    proxy_url = str(getattr(egress, "proxy_url", "") or "")
+    from urllib.parse import urlsplit
+
+    host = urlsplit(proxy_url).hostname
+    if host:
+        return host
+    raise SandboxError("云桌 egress 没有可达的 host_ip")
+
+
+async def attach_workspace_desk(
+    workspace: str, *, cache_bucket: str | None = None, runtime_root: str | None = None
+) -> DeskAttach:
+    """Attach to the workspace desk guest. Does not take a gVisor execution slot."""
+    if not _IS_LINUX:
+        raise SandboxError("GVisor sandbox is only available on Linux")
+    workspace_resolved = str(Path(workspace).resolve())
+    if not Path(workspace_resolved).is_dir():
+        raise SandboxError("云桌需要已挂载的工作区盘（禁止无盘 jail）。")
+    data_dir = str(Path(settings.data_dir).resolve())
+    if workspace_resolved == data_dir:
+        raise SandboxError("禁止把整份 DATA_DIR 绑进云桌 guest")
+    sandbox = GVisorSandbox(runtime_root=runtime_root)
+    desk = await sandbox._ensure_desk(workspace_resolved, cache_bucket=cache_bucket)
+    return DeskAttach(
+        container_id=desk.container_id,
+        scratch_dir=desk.scratch_dir,
+        host_ip=_egress_host_ip(desk.egress),
+    )
+
+
+def touch_workspace_desk(workspace: str) -> None:
+    """Refresh last_used for an already-running desk (terminal / browser activity)."""
+    session = _desks.get(_desk_key(workspace))
+    if session is not None:
+        session.last_used = _now()
+
+
+def touch_desk_by_container(container_id: str) -> None:
+    """Refresh last_used when a sandbox browser on this guest is active."""
+    for session in _desks.values():
+        if session.container_id == container_id:
+            session.last_used = _now()
+            return
+
+
+def _desk_has_running_process(key: str) -> bool:
+    from agentcore.tools.sandbox.desk_process import desk_has_running_process
+
+    return desk_has_running_process(key)
+
+
+def _desk_has_live_sandbox_browser(container_id: str) -> bool:
+    from agentcore.runtime.browser.registry import default_browser_session_registry
+
+    return default_browser_session_registry().has_live_sandbox_on_desk(container_id)
+
+
+async def _close_sandbox_browsers_for_desk(container_id: str) -> None:
+    from agentcore.runtime.browser.registry import default_browser_session_registry
+
+    await default_browser_session_registry().close_sandbox_sessions_on_desk(container_id)
+
+
+def _can_reap_desk(session: _DeskSession, *, now: float, ttl: float) -> bool:
+    if session.inflight > 0:
+        return False
+    if _desk_has_running_process(session.key):
+        return False
+    if _desk_has_live_sandbox_browser(session.container_id):
+        return False
+    return (now - session.last_used) >= ttl
+
+
+async def reap_idle_desks() -> int:
+    """Kill idle cloud-desk guests (memory path). Disk stays; next use lazy-creates.
+
+    Never freeze/pause. Local Bridge / sidecar never populate ``_desks``.
+    """
+    ttl = float(settings.gvisor_desk_idle_ttl_seconds)
+    now = _now()
+    async with _registry_lock:
+        keys = list(_desks)
+    reaped = 0
+    for key in keys:
+        async with _registry_lock:
+            lock = _desk_locks.get(key)
+        if lock is None:
             continue
-        dest = staging_dir / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(base64.b64decode(encoded.encode("ascii")))
+        async with lock:
+            session = _desks.get(key)
+            if session is None or not _can_reap_desk(session, now=now, ttl=ttl):
+                continue
+            _desks.pop(key, None)
+            from agentcore.tools.sandbox.desk_process import drop_processes_for_desk_keys
+
+            drop_processes_for_desk_keys((key,))
+            await _close_sandbox_browsers_for_desk(session.container_id)
+            await session.close()
+            reaped += 1
+            logger.info(
+                "sandbox.desk_reaped",
+                workspace=session.key,
+                container_id=session.container_id,
+            )
+    return reaped
+
+
+async def _unpin_desk(workspace: str) -> None:
+    key = _desk_key(workspace)
+    async with _registry_lock:
+        lock = _desk_locks.get(key)
+    if lock is None:
+        return
+    async with lock:
+        session = _desks.get(key)
+        if session is not None:
+            session.inflight = max(0, session.inflight - 1)
+            session.last_used = _now()
+
+
+async def close_all_desk_sessions() -> None:
+    """Lifespan shutdown: tear down every lazy-started cloud-desk guest."""
+    async with _registry_lock:
+        sessions = list(_desks.values())
+        _desks.clear()
+        _desk_locks.clear()
+    from agentcore.tools.sandbox.desk_process import drop_processes_for_desk_keys
+
+    drop_processes_for_desk_keys(tuple(session.key for session in sessions))
+    for session in sessions:
+        with contextlib.suppress(Exception):
+            await session.close()
 
 
 class GVisorSandbox:
-    """SandboxProvider implementation using gVisor runsc."""
+    """SandboxProvider implementation using a long-lived gVisor desk guest."""
 
     def __init__(
         self,
@@ -142,26 +295,22 @@ class GVisorSandbox:
         self._workspace_root = workspace_root
         self._runtime_root = _resolve_runtime_root(runtime_root)
         os.makedirs(self._runtime_root, exist_ok=True)
-        # Set by ``health_check`` on failure so boot probe / exec-env can log a
-        # stable reason (and a classified code — not the unclassified fallback).
         self._last_health_failure: tuple[str, str | None] | None = None
 
     def capabilities(self) -> SandboxCapabilities:
         return SandboxCapabilities(
             isolation="gvisor",
-            supports_network=True,  # restricted mode can enable; default still none
+            supports_network=True,
             max_memory_mb=settings.gvisor_memory_limit_mb,
             max_timeout_seconds=settings.gvisor_timeout_max_seconds,
         )
 
     @property
     def last_health_failure(self) -> tuple[str, str | None] | None:
-        """``(reason, detail)`` from the latest failed ``health_check``, else ``None``."""
         return self._last_health_failure
 
     @property
     def last_health_failure_code(self) -> str | None:
-        """Exec-env reason code for the latest failed health check, else ``None``."""
         if self._last_health_failure is None:
             return None
         from agentcore.tools.sandbox.exec_env import (
@@ -176,7 +325,6 @@ class GVisorSandbox:
 
     @property
     def last_health_evidence(self) -> str:
-        """Compact reason + detail behind the latest failed health check."""
         failure = self._last_health_failure
         if failure is None:
             return ""
@@ -184,14 +332,14 @@ class GVisorSandbox:
         return f"{reason} {detail}".strip() if detail else reason
 
     async def health_check(self) -> bool:
-        """Probe shape A (``code``) via sandboxd. Never asks sandboxd about shape B."""
+        """Probe shape ``net`` (desk/net can start)."""
         self._last_health_failure = None
         if not _IS_LINUX:
             self._last_health_failure = ("not_linux", f"platform={sys.platform}")
             return False
 
         try:
-            ok, detail = await get_sandboxd_client().health("code")
+            ok, detail = await get_sandboxd_client().health("net")
         except SandboxdUnavailableError as exc:
             self._last_health_failure = ("sandboxd_unavailable", str(exc)[:200] or None)
             logger.debug("sandbox.health_check_failed", error=str(exc)[:200])
@@ -206,23 +354,16 @@ class GVisorSandbox:
             return False
         if not ok:
             self._last_health_failure = ("runsc_failed", detail[:200] or None)
-            logger.debug(
-                "sandbox.health_check_failed",
-                detail=detail[:200] or None,
-            )
+            logger.debug("sandbox.health_check_failed", detail=detail[:200] or None)
             return False
         return True
 
-    # -- 会话面 (D9): long-lived browser sessions, added ALONGSIDE execute() -------
-    # A separate surface for the L3 team browser — one-shot execute() is unchanged.
     def supports_browser_sessions(self) -> bool:
-        """True where a real gVisor browser sandbox can run (Linux)."""
         from agentcore.tools.sandbox.browser.gvisor_session import browser_sessions_supported
 
         return browser_sessions_supported()
 
     async def open_browser_session(self, request):  # type: ignore[no-untyped-def]
-        """Launch a long-lived browser sandbox (see ``browser.gvisor_session``)."""
         from agentcore.tools.sandbox.browser.gvisor_session import open_gvisor_browser_session
 
         return await open_gvisor_browser_session(
@@ -230,7 +371,6 @@ class GVisorSandbox:
         )
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:
-        """Execute code inside a gVisor sandbox (slot-limited, staged workspace)."""
         if not _IS_LINUX:
             raise SandboxError("GVisor sandbox is only available on Linux")
 
@@ -244,8 +384,6 @@ class GVisorSandbox:
             )
 
         start = time.monotonic()
-        # 灰度护栏: bounded wait for a global execution slot, then fail fast with an
-        # explainable busy result (never queue past the engine's tool deadline).
         release = await try_acquire_execution_slot()
         if release is None:
             return self._slot_busy_result(start)
@@ -275,266 +413,254 @@ class GVisorSandbox:
     async def _execute_in_slot(
         self, request: ExecutionRequest, start: float
     ) -> ExecutionResult:
-        container_id = f"agentcore-{uuid.uuid4().hex[:12]}"
-        bundle_dir = tempfile.mkdtemp(prefix="agentcore_gvisor_", dir=self._runtime_root)
-        timeout_seconds = self._effective_timeout(request)
-        egress_session = None
-        exit_code = -1
-        stdout_str = ""
-        stderr_str = ""
-
-        try:
-            # Install-only: netns + allowlist proxy (non-rootless sandbox network).
-            # Merges proxy env into the request so npm/pnpm/yarn dial the chokepoint.
-            if request.registry_egress:
-                from agentcore.tools.sandbox.egress import (
-                    install_proxy_env,
-                    open_package_egress,
-                )
-
-                egress_session = await open_package_egress(
-                    cache_bucket=request.cache_bucket
-                )
-                merged_env = dict(request.env or {})
-                merged_env.update(install_proxy_env(egress_session.proxy_url))
-                request = ExecutionRequest(
-                    code=request.code,
-                    language=request.language,
-                    timeout_seconds=request.timeout_seconds,
-                    memory_limit_mb=request.memory_limit_mb,
-                    stdin=request.stdin,
-                    cwd=request.cwd,
-                    on_output=request.on_output,
-                    env=merged_env,
-                    network_mode=request.network_mode,
-                    registry_egress=True,
-                    cache_bucket=request.cache_bucket,
-                    cpu_limit=request.cpu_limit,
-                    pids_limit=request.pids_limit,
-                    idle_timeout_seconds=request.idle_timeout_seconds,
-                )
-
-            scratch_dir = Path(bundle_dir) / "scratch"
-            scratch_dir.mkdir()
-            rootfs = Path(bundle_dir) / "rootfs"
-            rootfs.mkdir()
-
-            ext = _FILE_EXTENSIONS[request.language]
-            script_name = f"main{ext}"
-            (scratch_dir / script_name).write_text(request.code, encoding="utf-8")
-            if request.stdin:
-                (scratch_dir / "stdin.txt").write_text(request.stdin, encoding="utf-8")
-            prepare_bind_tree_for_sandbox(scratch_dir)
-
-            # Workspace mount policy:
-            # - install (registry_egress): rw-bind persistent workspace (no staging /
-            #   base64 wrap / write_back). Never prepare_bind_tree on the canonical tree.
-            # - other writable: staging copy → tmpfs + wrap → write_back.
-            # - no workspace: scratch as read-only /workspace.
-            workspace_root = request.cwd or self._workspace_root
-            staging_dir: Path | None = None
-            staged_state: TreeState | None = None
-            install_workspace_rw = bool(request.registry_egress and workspace_root)
-            if install_workspace_rw and workspace_root is not None:
-                workspace = str(Path(workspace_root).resolve())
-            elif workspace_root:
-                staging_dir = Path(bundle_dir) / "workspace"
-                staged_state = await asyncio.to_thread(
-                    stage_workspace,
-                    Path(workspace_root),
-                    staging_dir,
-                    max_bytes=settings.gvisor_stage_max_bytes,
-                )
-                workspace = str(staging_dir.resolve())
-            else:
-                workspace = str(scratch_dir)
-            config = self._build_oci_config(
-                request,
-                script_name=script_name,
-                workspace=workspace,
-                scratch_dir=str(scratch_dir.resolve()),
-                workspace_writable=staging_dir is not None,
-                install_workspace_rw=install_workspace_rw,
-                memory_limit_mb=settings.gvisor_memory_limit_mb,
-                egress_netns_path=(
-                    egress_session.netns_path if egress_session is not None else None
-                ),
-                cache_host_dir=(
-                    str(egress_session.cache_host_dir)
-                    if egress_session is not None
-                    else None
-                ),
-            )
-            (Path(bundle_dir) / "config.json").write_text(
-                json.dumps(config),
-                encoding="utf-8",
-            )
-
-            shape, code_network = _runsc_shape(
-                network_mode=request.network_mode,
-                registry_egress=request.registry_egress,
-            )
-            idle = request.idle_timeout_seconds
-            idle_timeout = float(idle) if idle is not None and idle > 0 else None
-
-            try:
-                client = get_sandboxd_client()
-                exit_code, stdout_str, stderr_str = await client.run_wait(
-                    shape=shape,
-                    bundle_dir=bundle_dir,
-                    container_id=container_id,
-                    network_mode=code_network,
-                    netns_path=(
-                        egress_session.netns_path
-                        if egress_session is not None
-                        else None
-                    ),
-                    timeout_seconds=float(timeout_seconds),
-                    idle_timeout_seconds=idle_timeout,
-                    stdin=request.stdin,
-                    on_output=request.on_output,
-                )
-            except TimeoutError:
-                from agentcore.tools.sandbox.exec_env import disaster_timeout_stderr
-
-                raise SandboxTimeoutError(
-                    disaster_timeout_stderr(int(timeout_seconds))
-                ) from None
-            except SandboxdError as exc:
-                if exc.code == "sandboxd_timeout":
-                    from agentcore.tools.sandbox.exec_env import (
-                        disaster_timeout_stderr,
-                    )
-
-                    raise SandboxTimeoutError(
-                        disaster_timeout_stderr(int(timeout_seconds))
-                    ) from exc
-                raise SandboxError(f"代码执行环境启动失败：{exc}") from exc
-            except OSError as e:
-                raise SandboxError(f"代码执行环境启动失败：{e}") from e
-            finally:
-                await asyncio.shield(self._stop_container(container_id))
-
-            if staging_dir is not None:
-                clean_stdout, artifact_payload = _strip_artifact_payload(stdout_str)
-                if artifact_payload:
-                    _materialize_artifacts(staging_dir, artifact_payload)
-                stdout_str = clean_stdout
-
-            # Copy-out leg: only a run that COMPLETED (any exit code) persists its
-            # artifacts — a partial success (chart saved, later step failed) still
-            # delivers files; a timeout-killed run never lands half-written ones.
-            written, skipped = await self._write_back_if_staged(
-                staging_dir, staged_state, workspace_root
-            )
-
-            duration_ms = int((time.monotonic() - start) * 1000)
-            return ExecutionResult(
-                success=exit_code == 0,
-                stdout=stdout_str,
-                stderr=stderr_str,
-                exit_code=exit_code or 0,
-                duration_ms=duration_ms,
-                written_files=written,
-                write_back_skipped=skipped,
-            )
-
-        except SandboxTimeoutError as exc:
-            duration_ms = int((time.monotonic() - start) * 1000)
-            from agentcore.tools.sandbox.exec_env import disaster_timeout_stderr
-
-            detail = str(exc).strip() or disaster_timeout_stderr(int(timeout_seconds))
+        workspace_root = request.cwd or self._workspace_root
+        if not workspace_root:
             return ExecutionResult(
                 success=False,
                 stdout="",
-                stderr=(
-                    f"{detail}；执行被中断，中断前的文件改动未写回工作区。"
-                ),
+                stderr="云桌执行需要工作区路径（禁止无盘 exec）。",
+                exit_code=1,
+                duration_ms=int((time.monotonic() - start) * 1000),
+            )
+        workspace = str(Path(workspace_root).resolve())
+        data_dir = str(Path(settings.data_dir).resolve())
+        if workspace == data_dir:
+            raise SandboxError("禁止把整份 DATA_DIR 绑进云桌 guest")
+
+        timeout_seconds = self._effective_timeout(request)
+        pinned = False
+        try:
+            desk = await self._ensure_desk(
+                workspace, cache_bucket=request.cache_bucket, pin=True
+            )
+            pinned = True
+            script_name = f"exec-{uuid.uuid4().hex[:12]}{_FILE_EXTENSIONS[request.language]}"
+            (desk.scratch_dir / script_name).write_text(request.code, encoding="utf-8")
+            argv = _LANGUAGE_COMMANDS[request.language] + [f"/scratch/{script_name}"]
+            env_pairs = self._exec_env_pairs(request, desk)
+            idle = request.idle_timeout_seconds
+            idle_timeout = float(idle) if idle is not None and idle > 0 else None
+            cutoff_ns = written_scan_cutoff_ns()
+            client = get_sandboxd_client()
+            exit_code, stdout_str, stderr_str = await client.exec_wait(
+                container_id=desk.container_id,
+                argv=argv,
+                cwd="/workspace",
+                env=env_pairs,
+                timeout_seconds=float(timeout_seconds),
+                idle_timeout_seconds=idle_timeout,
+                stdin=request.stdin,
+                on_output=request.on_output,
+            )
+        except (TimeoutError, SandboxTimeoutError):
+            duration_ms = int((time.monotonic() - start) * 1000)
+            from agentcore.tools.sandbox.exec_env import disaster_timeout_stderr
+
+            detail = disaster_timeout_stderr(int(timeout_seconds))
+            return ExecutionResult(
+                success=False,
+                stdout="",
+                stderr=f"{detail}；执行被中断，工作区可能已有部分改动。",
                 exit_code=-1,
                 duration_ms=duration_ms,
             )
+        except SandboxdError as exc:
+            if exc.code == "sandboxd_timeout":
+                duration_ms = int((time.monotonic() - start) * 1000)
+                from agentcore.tools.sandbox.exec_env import disaster_timeout_stderr
+
+                detail = disaster_timeout_stderr(int(timeout_seconds))
+                return ExecutionResult(
+                    success=False,
+                    stdout="",
+                    stderr=f"{detail}；执行被中断，工作区可能已有部分改动。",
+                    exit_code=-1,
+                    duration_ms=duration_ms,
+                )
+            raise SandboxError(f"代码执行环境启动失败：{exc}") from exc
+        except OSError as e:
+            raise SandboxError(f"代码执行环境启动失败：{e}") from e
         finally:
-            if egress_session is not None:
-                with contextlib.suppress(Exception):
-                    await egress_session.close()
-            shutil.rmtree(bundle_dir, ignore_errors=True)
+            if pinned:
+                await _unpin_desk(workspace)
 
-    async def _write_back_if_staged(
-        self,
-        staging_dir: Path | None,
-        staged_state: TreeState | None,
-        workspace_root: str | None,
-    ) -> tuple[list[str], int]:
-        """Copy new/changed staged files back into the real workspace (capped)."""
-        if staging_dir is None or staged_state is None or not workspace_root:
-            return [], 0
-
-        def _run() -> tuple[list[str], int]:
-            changes = collect_changes(staging_dir, staged_state)
-            if not changes:
-                return [], 0
-            report = write_back(
-                staging_dir,
-                Path(workspace_root),
-                changes,
-                max_bytes=settings.gvisor_write_back_max_bytes,
-                max_files=settings.gvisor_write_back_max_files,
-            )
-            return report.written, len(report.skipped)
-
-        written, skipped = await asyncio.to_thread(_run)
-        if written or skipped:
-            logger.info(
-                "sandbox.write_back",
-                written=len(written),
-                skipped=skipped,
-                files=written[:20],
-            )
-        return written, skipped
-
-    def _build_run_cmd(
-        self,
-        *,
-        bundle_dir: str,
-        container_id: str,
-        network_mode: str,
-        registry_egress: bool = False,
-    ) -> list[str]:
-        """Allowlisted ``runsc`` argv via sandboxd (shape A ``code`` / B ``net``)."""
-        shape, code_network = _runsc_shape(
-            network_mode=network_mode, registry_egress=registry_egress
-        )
-        return build_runsc_cmd(
-            runsc_path=self._runsc,
-            runtime_root=self._runtime_root,
-            bundle_dir=bundle_dir,
-            container_id=container_id,
-            shape=shape,
-            network_mode=code_network,
+        written = await self._scan_written(workspace, cutoff_ns)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        return ExecutionResult(
+            success=exit_code == 0,
+            stdout=stdout_str,
+            stderr=stderr_str,
+            exit_code=exit_code or 0,
+            duration_ms=duration_ms,
+            written_files=written,
         )
 
-    def _build_command(self, request: ExecutionRequest, script_path: str) -> list[str]:
-        if request.stdin and request.language == "bash":
-            return ["bash", "-c", f"{script_path} < /scratch/stdin.txt"]
-        return _LANGUAGE_COMMANDS[request.language] + [script_path]
+    async def _scan_written(self, workspace: str, cutoff_ns: int) -> list[str]:
+        try:
+            scan = await asyncio.to_thread(
+                scan_written_files, Path(workspace), cutoff_ns=cutoff_ns
+            )
+        except Exception as exc:  # noqa: BLE001 — scan must not fail the run
+            logger.info("sandbox.written_scan_failed", error=str(exc)[:200])
+            return []
+        if scan.truncated:
+            logger.info("sandbox.written_scan_truncated", found=len(scan.files))
+        return scan.files
 
-    def _build_env(self, request: ExecutionRequest) -> list[str]:
+    def _desk_env_pairs(self, desk: _DeskSession) -> list[str]:
         env: dict[str, str] = {
             "PATH": "/usr/local/bin:/usr/bin:/bin",
             "HOME": "/tmp",
             "LANG": "C.UTF-8",
             "GIT_TERMINAL_PROMPT": "0",
             "PYTHONDONTWRITEBYTECODE": "1",
-            # Headless plotting: the sandbox has no display; without an explicit
-            # backend matplotlib may probe for GUI toolkits and fail confusingly.
             "MPLBACKEND": "Agg",
-            # Keep sandbox-created artifacts world-readable so the non-root API
-            # user can copy them back after runsc exits (umask 022 → 644 files).
-            "UMASK": "0022",
         }
-        if request.env:
-            env.update(request.env)
+        proxy_url = getattr(desk.egress, "proxy_url", None)
+        if proxy_url:
+            from agentcore.tools.sandbox.egress import install_proxy_env
+
+            env.update(install_proxy_env(str(proxy_url)))
         return [f"{key}={value}" for key, value in env.items()]
+
+    def _exec_env_pairs(self, request: ExecutionRequest, desk: _DeskSession) -> list[str]:
+        env_pairs = self._desk_env_pairs(desk)
+        if not request.env:
+            return env_pairs
+        merged = dict(item.split("=", 1) for item in env_pairs)
+        merged.update(request.env)
+        return [f"{key}={value}" for key, value in merged.items()]
+
+    async def ensure_workspace_desk(
+        self, workspace: str, *, cache_bucket: str | None = None
+    ) -> None:
+        """Start (or reuse) the long-lived desk guest for this workspace root."""
+        await self._ensure_desk(workspace, cache_bucket=cache_bucket)
+
+    def host_scratch_dir(self, workspace: str) -> Path | None:
+        """Host path of the guest ``/scratch`` bind, or None if the desk is down."""
+        session = _desks.get(_desk_key(workspace))
+        return None if session is None else session.scratch_dir
+
+    async def short_exec_script(
+        self,
+        workspace: str,
+        *,
+        guest_script: str,
+        timeout_seconds: float = 15.0,
+        cache_bucket: str | None = None,
+    ) -> tuple[int, str, str]:
+        """``bash`` a ``/scratch/…`` script and return when that script exits.
+
+        Holds the global execution slot only for this wait. Callers that start
+        long-running children must background them inside the script.
+        """
+        if not _IS_LINUX:
+            raise SandboxError("GVisor sandbox is only available on Linux")
+        if not guest_script.startswith("/scratch/") or ".." in guest_script:
+            raise SandboxError("desk short exec 脚本必须落在 /scratch")
+        start = time.monotonic()
+        release = await try_acquire_execution_slot()
+        if release is None:
+            busy = self._slot_busy_result(start)
+            return busy.exit_code, busy.stdout, busy.stderr
+        pinned = False
+        try:
+            desk = await self._ensure_desk(workspace, cache_bucket=cache_bucket, pin=True)
+            pinned = True
+            argv = ["bash", guest_script]
+            env_pairs = self._desk_env_pairs(desk)
+            client = get_sandboxd_client()
+            return await client.exec_wait(
+                container_id=desk.container_id,
+                argv=argv,
+                cwd="/workspace",
+                env=env_pairs,
+                timeout_seconds=float(timeout_seconds),
+            )
+        except (TimeoutError, SandboxTimeoutError) as exc:
+            raise SandboxError("云桌短执行超时") from exc
+        except SandboxdError as exc:
+            if exc.code == "sandboxd_timeout":
+                raise SandboxError("云桌短执行超时") from exc
+            raise SandboxError(f"代码执行环境启动失败：{exc}") from exc
+        except OSError as exc:
+            raise SandboxError(f"代码执行环境启动失败：{exc}") from exc
+        finally:
+            if pinned:
+                await _unpin_desk(workspace)
+            release()
+
+    async def _ensure_desk(
+        self, workspace: str, *, cache_bucket: str | None, pin: bool = False
+    ) -> _DeskSession:
+        key = _desk_key(workspace)
+        async with _registry_lock:
+            lock = _desk_locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            existing = _desks.get(key)
+            if existing is not None:
+                existing.last_used = _now()
+                if pin:
+                    existing.inflight += 1
+                return existing
+            session = await self._start_desk(key, workspace, cache_bucket=cache_bucket)
+            session.last_used = _now()
+            if pin:
+                session.inflight += 1
+            _desks[key] = session
+            return session
+
+    async def _start_desk(
+        self, key: str, workspace: str, *, cache_bucket: str | None
+    ) -> _DeskSession:
+        from agentcore.tools.sandbox.egress import open_package_egress
+
+        container_id, bucket_id = _desk_ids(key)
+        bundle_dir = Path(
+            tempfile.mkdtemp(prefix="agentcore_desk_", dir=self._runtime_root)
+        )
+        scratch_dir = bundle_dir / "scratch"
+        scratch_dir.mkdir()
+        rootfs = bundle_dir / "rootfs"
+        rootfs.mkdir()
+        egress = await open_package_egress(cache_bucket=cache_bucket or bucket_id)
+        try:
+            config = self._build_desk_oci(
+                workspace=workspace,
+                scratch_dir=str(scratch_dir.resolve()),
+                netns_path=egress.netns_path,
+                cache_host_dir=str(egress.cache_host_dir),
+                proxy_url=egress.proxy_url,
+            )
+            (bundle_dir / "config.json").write_text(
+                json.dumps(config), encoding="utf-8"
+            )
+            client = get_sandboxd_client()
+            await client.start_detach(
+                bundle_dir=str(bundle_dir),
+                container_id=container_id,
+                netns_path=egress.netns_path,
+            )
+        except Exception:
+            with contextlib.suppress(Exception):
+                await egress.close()
+            shutil.rmtree(bundle_dir, ignore_errors=True)
+            raise
+        logger.info(
+            "sandbox.desk_started",
+            workspace=key,
+            container_id=container_id,
+        )
+        return _DeskSession(
+            key=key,
+            container_id=container_id,
+            bundle_dir=bundle_dir,
+            scratch_dir=scratch_dir,
+            workspace=workspace,
+            egress=egress,
+            last_used=_now(),
+        )
 
     def _host_bind_mounts(self) -> list[dict]:
         mounts: list[dict] = []
@@ -550,169 +676,117 @@ class GVisorSandbox:
                 )
         return mounts
 
-    def _wrap_staged_workspace_command(self, inner_cmd: list[str]) -> list[str]:
-        """Seed tmpfs /workspace, run, then emit artifacts on stdout for host copy-out."""
-        inner = " ".join(shlex.quote(part) for part in inner_cmd)
-        script = (
-            "cp -a /workspace-seed/. /workspace/ 2>/dev/null || true; "
-            f"{inner}; "
-            "ec=$?; "
-            "python3 - <<'PY'\n"
-            "import base64, json, sys\n"
-            "from pathlib import Path\n"
-            "root = Path('/workspace')\n"
-            "payload = {\n"
-            "    p.relative_to(root).as_posix(): "
-            "base64.b64encode(p.read_bytes()).decode('ascii')\n"
-            "    for p in root.rglob('*') if p.is_file()\n"
-            "}\n"
-            "marker = "
-            f"{_ARTIFACT_MARKER!r}\n"
-            "sys.stdout.write(marker + json.dumps(payload, separators=(',', ':')))\n"
-            "sys.stdout.write('\\n')\n"
-            "PY\n"
-            "exit $ec"
-        )
-        return ["bash", "-c", script]
-
-    def _build_oci_config(
+    def _build_desk_oci(
         self,
-        request: ExecutionRequest,
         *,
-        script_name: str,
         workspace: str,
         scratch_dir: str,
-        workspace_writable: bool = False,
-        install_workspace_rw: bool = False,
+        netns_path: str,
+        cache_host_dir: str,
+        proxy_url: str,
         memory_limit_mb: int | None = None,
-        egress_netns_path: str | None = None,
-        cache_host_dir: str | None = None,
     ) -> dict:
-        script_path = f"/scratch/{script_name}"
-        namespaces = [
-            {"type": "pid"},
-            {"type": "ipc"},
-            {"type": "uts"},
-            {"type": "mount"},
-        ]
-        # Install registry_egress: network ns BY PATH so sandbox netstack clones
-        # the packaging veth (browser PoC finding). Other restricted stays as
-        # empty network ns + rootless ``--network=host``.
-        if egress_netns_path:
-            namespaces.append({"type": "network", "path": egress_netns_path})
-        elif request.network_mode == "restricted":
-            namespaces.append({"type": "network"})
+        uid, gid = _host_uid_gid()
+        from agentcore.tools.sandbox.browser.oci import (
+            CHROMIUM_TMPFS_SIZE,
+            playwright_browsers_mount,
+        )
+        from agentcore.tools.sandbox.egress import install_proxy_env
+        from agentcore.tools.sandbox.egress.runtime import PACKAGE_CACHE_MOUNT
 
+        env = {
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "HOME": "/tmp",
+            "LANG": "C.UTF-8",
+            "GIT_TERMINAL_PROMPT": "0",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "MPLBACKEND": "Agg",
+            **install_proxy_env(proxy_url),
+        }
         mounts = [
             {
                 "destination": "/tmp",
                 "type": "tmpfs",
                 "source": "tmpfs",
-                "options": ["nosuid", "nodev", "size=64m"],
+                "options": ["nosuid", "nodev", "mode=1777", f"size={CHROMIUM_TMPFS_SIZE}"],
             },
-        ]
-        process_args = self._build_command(request, script_path)
-        if install_workspace_rw:
-            # Install-only: durable workspace rw-bind. Staging/tmpfs + whole-tree
-            # base64 wrap cannot carry node_modules / .venv; sandbox is short-lived for
-            # the install command only. Non-install writable stays below.
-            mounts.append(
-                {
-                    "destination": "/workspace",
-                    "type": "bind",
-                    "source": workspace,
-                    "options": ["rw", "rbind", "nosuid", "nodev"],
-                }
-            )
-        elif workspace_writable:
-            # runsc cannot mkdir on bind mounts (EINVAL) from inside Docker; use
-            # tmpfs for live writes and copy-in/out via twin binds on staging.
-            stage_mb = max(64, settings.gvisor_stage_max_bytes // (1024 * 1024))
-            mounts.extend(
-                [
-                    {
-                        "destination": "/workspace-seed",
-                        "type": "bind",
-                        "source": workspace,
-                        "options": ["ro", "bind", "nosuid", "nodev"],
-                    },
-                    {
-                        "destination": "/workspace",
-                        "type": "tmpfs",
-                        "source": "tmpfs",
-                        "options": [
-                            "rw",
-                            "nosuid",
-                            "nodev",
-                            "mode=1777",
-                            f"size={stage_mb}m",
-                        ],
-                    },
-                ]
-            )
-            process_args = self._wrap_staged_workspace_command(process_args)
-        else:
-            mounts.append(
-                {
-                    "destination": "/workspace",
-                    "type": "bind",
-                    "source": workspace,
-                    "options": ["ro", "rbind"],
-                }
-            )
-        mounts.append(
+            {
+                "destination": "/workspace",
+                "type": "bind",
+                "source": workspace,
+                "options": ["rw", "rbind", "nosuid", "nodev"],
+            },
             {
                 "destination": "/scratch",
                 "type": "bind",
                 "source": scratch_dir,
-                "options": ["ro", "bind", "nosuid", "nodev"],
-            }
-        )
-        if cache_host_dir:
-            from agentcore.tools.sandbox.egress.runtime import PACKAGE_CACHE_MOUNT
-
-            mounts.append(
-                {
-                    "destination": PACKAGE_CACHE_MOUNT,
-                    "type": "bind",
-                    "source": cache_host_dir,
-                    "options": ["rw", "bind", "nosuid", "nodev"],
-                }
+                "options": ["rw", "bind", "nosuid", "nodev"],
+            },
+            {
+                "destination": PACKAGE_CACHE_MOUNT,
+                "type": "bind",
+                "source": cache_host_dir,
+                "options": ["rw", "bind", "nosuid", "nodev"],
+            },
+            *self._host_bind_mounts(),
+        ]
+        pw = playwright_browsers_mount(settings.browser_playwright_browsers_path)
+        if pw is not None:
+            mounts.append(pw)
+        if memory_limit_mb is not None:
+            mem_mb = int(memory_limit_mb)
+        else:
+            mem_mb = max(
+                int(settings.gvisor_memory_limit_mb),
+                int(settings.browser_sandbox_memory_limit_mb),
             )
-        mounts.extend(self._host_bind_mounts())
-
+        mem = mem_mb * 1024 * 1024
+        cpu_quota = int(float(settings.browser_sandbox_cpu_limit) * 100000)
+        pids_limit = int(settings.browser_sandbox_pids_limit)
         return {
             "ociVersion": "1.0.2",
             "process": {
                 "terminal": False,
-                "user": {"uid": 65534, "gid": 65534},
-                "args": process_args,
-                "env": self._build_env(request),
+                "user": {"uid": uid, "gid": gid},
+                "args": ["sleep", "infinity"],
+                "env": [f"{k}={v}" for k, v in env.items()],
                 "cwd": "/workspace",
             },
             "root": {"path": "rootfs", "readonly": True},
             "mounts": mounts,
             "linux": {
                 "resources": {
-                    # Cloud runs take the configured guardrail ceiling; the request's
-                    # own field only applies when no explicit limit is passed (bare
-                    # sandbox use in tests).
-                    "memory": {
-                        "limit": (memory_limit_mb or request.memory_limit_mb) * 1024 * 1024
-                    },
-                    "cpu": {
-                        "quota": int(request.cpu_limit * 100000),
-                        "period": 100000,
-                    },
-                    "pids": {"limit": request.pids_limit},
+                    "memory": {"limit": mem},
+                    "cpu": {"quota": cpu_quota, "period": 100000},
+                    "pids": {"limit": pids_limit},
                 },
-                "namespaces": namespaces,
+                "namespaces": [
+                    {"type": "pid"},
+                    {"type": "ipc"},
+                    {"type": "uts"},
+                    {"type": "mount"},
+                    {"type": "network", "path": netns_path},
+                ],
             },
         }
 
-    async def _stop_container(self, container_id: str) -> None:
-        client = get_sandboxd_client()
-        with contextlib.suppress(Exception):
-            await client.kill(container_id)
-        with contextlib.suppress(Exception):
-            await client.delete(container_id, force=True)
+    def _build_run_cmd(
+        self,
+        *,
+        bundle_dir: str,
+        container_id: str,
+        network_mode: str = "none",
+        detach: bool = True,
+    ) -> list[str]:
+        """Desk start argv: always shape net (ignore leftover network_mode)."""
+        del network_mode
+        return build_runsc_cmd(
+            runsc_path=self._runsc,
+            runtime_root=self._runtime_root,
+            bundle_dir=bundle_dir,
+            container_id=container_id,
+            detach=detach,
+        )
+
+    async def close_all(self) -> None:
+        await close_all_desk_sessions()

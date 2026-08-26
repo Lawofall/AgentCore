@@ -179,9 +179,9 @@ class TeamPreviewWorker(WirePayload):
     write_capability_label: str | None = absent(
         "写盘能力展示文案（可改文件 / 仅文字报告）。"
     )
-    # Per-worker 模型身份（与辩论 TeamPreviewSide / ModelIdentity 同族）；缺字段=跟槽。
+    # Per-worker 已消歧目录行属性（产品身份见 catalog ``ref``）；缺字段=跟槽。
     model: str | None = absent("该队员模型 id（可展示裸 id）。")
-    origin: Literal["platform", "byok"] | None = absent("模型来源；有三元组时透出。")
+    origin: Literal["platform", "byok"] | None = absent("付款来源（行属性）；旧帧缺省。")
     provider_id: str | None = absent("BYOK 服务商 id；platform 缺省。")
     # 落座桌：有效 Folder id（节点 target 优先，否则本会话工作区）；无 Folder 的裸聊
     # scratch 仅透出 target_folder_name=本会话工作区。缺字段=旧帧，前端不展示桌列。
@@ -202,9 +202,9 @@ class TeamPreviewSide(WirePayload):
     is_subject: bool | None = absent()
     # 开赛前预分配稳定槽位；人盖 ``model_overrides`` 键（≠ 各拍发言 run）。旧帧缺省。
     run_id: str | None = absent("开赛前预分配稳定 id；人盖 model_overrides 键。")
-    # §7.5 真·多模型：三元组；缺字段（老 journal / 同模型场）→ 前端跟 turn 主模型。
+    # §7.5 真·多模型：已消歧行属性；缺字段（老 journal / 同模型场）→ 前端跟 turn 主模型。
     model: str | None = absent("该方辩手模型 id。")
-    origin: Literal["platform", "byok"] | None = absent("模型来源。")
+    origin: Literal["platform", "byok"] | None = absent("付款来源（行属性）。")
     provider_id: str | None = absent("BYOK 服务商 id；platform 缺省。")
 
 
@@ -216,6 +216,7 @@ class ModelCandidate(WirePayload):
     provider_id: str | None = absent()
     label: str | None = absent()
     side_key: str | None = absent("触发消歧的参与方 key；缺省=整场。")
+    ref: str | None = absent("目录身份 @platform/… 或 @byok/…；旧帧缺省。")
 
 
 class TeamPreviewRequiredPayload(WirePayload):
@@ -249,7 +250,7 @@ class TeamPreviewRequiredPayload(WirePayload):
     )
     # §7.5 D：消歧零/多候选目录行；缺字段（老 journal）→ 前端不展示候选区。
     model_candidates: list[ModelCandidate] | None = absent(
-        "模型消歧候选（model/origin/provider_id/label）；旧帧缺省。"
+        "模型消歧候选（ref + model/origin/provider_id/label）；旧帧缺省。"
     )
     # 主文案：交付档短标 + 预计人数；缺字段（老 journal）→ 前端按人数本地回退。
     headline: str | None = absent(
@@ -268,14 +269,15 @@ class WriteCapabilityOverride(WirePayload):
 
 
 class ModelOverride(WirePayload):
-    """开工卡 continue 人盖：按 run_id 覆盖队员 / 辩手 / 主持人模型三元组。
+    """开工卡 continue 人盖：按 run_id 覆盖队员 / 辩手 / 主持人目录身份。
 
-    空 model = 该项不改（与 map 缺键同效）。非法三元组 → 422（引擎侧硬失败）。
+    ``model`` 填 ``@platform/{id}`` / ``@byok/{provider_id}/{id}``。
+    空 model = 该项不改。非法身份 → 422。库存 leftover 仍可带 origin/provider_id。
     """
 
     model: str
-    origin: Literal["platform", "byok"] | None = absent("模型来源；非空时须合法。")
-    provider_id: str | None = absent("BYOK 服务商 id；origin=byok 时必填。")
+    origin: Literal["platform", "byok"] | None = absent("库存 leftover；新调用不必填。")
+    provider_id: str | None = absent("库存 leftover；新调用不必填。")
 
 
 class TeamPreviewResolvedPayload(WirePayload):
@@ -291,7 +293,7 @@ class TeamPreviewResolvedPayload(WirePayload):
         "写盘单向收紧；仅 capability=text_only；未知 run_id / 升权 → 422（引擎侧）。"
     )
     model_overrides: dict[str, ModelOverride] | None = absent(
-        "人确认盖 CEO：run_id → {model, origin?, provider_id?}；"
+        "人确认盖 CEO：run_id → {model}（目录身份 @platform/… 或 @byok/…）；"
         "delegate=队员；debate=sides[].run_id / moderator_run_id；空/缺=不改。"
     )
 

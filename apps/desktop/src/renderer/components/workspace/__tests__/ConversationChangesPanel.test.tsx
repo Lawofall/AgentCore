@@ -45,11 +45,16 @@ vi.mock("@/components/chat/TurnFileChangesReview", () => ({
   TurnFileChangesReview: ({
     messageId,
     artifacts,
+    heading,
   }: {
     messageId?: string | null;
     artifacts: unknown[];
+    heading?: string;
   }) => (
-    <div data-testid={`review-${messageId}`}>artifacts:{artifacts.length}</div>
+    <div data-testid={`review-${messageId}`}>
+      {heading ? <span>{heading}</span> : null}
+      artifacts:{artifacts.length}
+    </div>
   ),
 }));
 

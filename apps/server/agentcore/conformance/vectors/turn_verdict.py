@@ -1,8 +1,7 @@
 """Conformance vectors that exercise the turnOutcome sidecar (not fold-only).
 
 These probe the optional ``turnVerdict`` sidecar: team-host flags
-(``hasTeamStrip`` + ``supportPackHost``) and the unproductive-with-body
-failed-tool hint.
+(``hasTeamStrip`` + ``supportPackHost``).
 """
 
 from __future__ import annotations
@@ -56,35 +55,9 @@ def _turn_verdict_team_host() -> list[SSEEvent]:
     ]
 
 
-def _turn_verdict_unproductive_body_tool() -> list[SSEEvent]:
-    """Body + unproductive + a failed tool — desktop hint lists the tool name."""
-    return [
-        message_start("m1", conversation_id=_CONV),
-        content_delta("已写完大半"),
-        tool_use_start("tc1", "host", {"action": "shell", "command": "do_work"}),
-        tool_use_end(
-            "tc1",
-            "host",
-            success=False,
-            output="host failed: CalledProcessError: exit 1",
-            failure={"message": "命令执行失败", "code": "TOOL_ERROR"},
-        ),
-        message_end(
-            FinishReason.UNPRODUCTIVE,
-            input_tokens=800,
-            output_tokens=40,
-            cost=_COST,
-        ),
-    ]
-
-
 VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     "turn_verdict_team_host": (
         "判决对账：团队图 + attested error → 条是主判决（hasTeamStrip + supportPackHost）",
         _turn_verdict_team_host,
-    ),
-    "turn_verdict_unproductive_body_tool": (
-        "判决对账：有正文 unproductive + 失败工具 → 工具名提示",
-        _turn_verdict_unproductive_body_tool,
     ),
 }

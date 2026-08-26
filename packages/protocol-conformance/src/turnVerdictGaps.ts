@@ -29,7 +29,7 @@ export function knownGapFieldsFor(impl: string, fixture: string): ReadonlySet<st
   return out;
 }
 
-/** `turnVerdict.failedToolHintNames.length: …` → `failedToolHintNames`. */
+/** `turnVerdict.notice: …` → `notice`. */
 export function turnVerdictDiffField(diff: string): string | null {
   const rest = diff.startsWith("turnVerdict.") ? diff.slice("turnVerdict.".length) : diff;
   const path = rest.split(":")[0] ?? "";

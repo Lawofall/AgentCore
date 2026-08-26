@@ -133,7 +133,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         name="ask_user_kickoff",
         summary=(
             "通用短澄清：糊建站挡路才问形态；绿场桌上档 label→lean|full；只改一处；"
-            "点名载体/手段顾问短对齐；选项勿写编制；禁意图分类器"
+            "短确认只补缺口；点名载体/手段顾问短对齐；选项勿写编制；禁意图分类器"
         ),
         body=_ASK_USER_KICKOFF,
         requires_tools=("ask_user",),
@@ -147,15 +147,14 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         body=_ASK_USER_MIDTASK,
         requires_tools=("ask_user",),
     ),
-    # checkpoint_after is a delegate-DAG mechanism, but it pauses for USER review —
-    # only meaningful with a live user. Gate it on ``ask_user`` (the live-user proxy,
-    # same as the other ask_* skills) so it never advertises on the autonomous path,
-    # exactly as it did when it rode the merged asking_the_user skill.
+    # Outline / mid-pipeline user gate: pauses for USER review — only meaningful
+    # with a live user. Gate on ``ask_user`` (the live-user proxy, same as the
+    # other ask_* skills) so it never advertises on the autonomous path.
     SystemSkill(
         name="delegate_checkpoint",
         summary=(
-            "委派多步流水线时给高危中间步设 checkpoint_after，在波边界暂停让用户把关"
-            "「继续 / 调整 / 取消」"
+            "用户明文要看提纲：playbook=research_report（套餐提纲步会停）或先只派提纲、"
+            "收回后 ask_user、再派撰稿"
         ),
         body=_DELEGATE_CHECKPOINT,
         requires_tools=("ask_user",),

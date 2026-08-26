@@ -8,7 +8,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FINISH_REASON_META } from "@/components/ui/finish-reason-chip";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { copyText } from "@/lib/clipboard";
 import { formatCompact, formatDuration } from "@/lib/format";
@@ -164,11 +163,9 @@ function messagePermalink(conversationId: string, messageId: string): string {
 function MessageMoreMenu({
   message,
   captainContext,
-  finishReason,
 }: {
   message: Message;
   captainContext: ContextBlockWire[];
-  finishReason: string | undefined;
 }) {
   const [contextOpen, setContextOpen] = useState(false);
   const conversationId = useConversationStore((s) => s.currentConversationId);
@@ -188,18 +185,13 @@ function MessageMoreMenu({
     ...supportDiagnosticExtrasFromError(message.error),
   };
   const diagnosticText = formatSupportDiagnosticText(diagnosticIds);
-  const finishLabel = finishReason
-    ? FINISH_REASON_META[finishReason]?.label
-    : null;
-
   const usage = message.usage;
   const hasSpendUsage = !!usage && (usage.input > 0 || usage.output > 0);
   const hasMenu =
     !!conversationId ||
     captainContext.length > 0 ||
     hasSpendUsage ||
-    !!diagnosticText ||
-    !!finishLabel;
+    !!diagnosticText;
 
   if (!hasMenu) return null;
 
@@ -246,15 +238,6 @@ function MessageMoreMenu({
                   </span>
                 </div>
               )}
-            </>
-          )}
-          {finishLabel && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>收尾原因</DropdownMenuLabel>
-              <p className="px-3 pb-1.5 text-xs text-muted-foreground">
-                {finishLabel}
-              </p>
             </>
           )}
           {diagnosticText && (
@@ -360,14 +343,12 @@ export function AssistantMessageFooter({
   message,
   captainContext,
   costText,
-  finishReason,
   onRegenerate,
   displayError,
 }: {
   message: Message;
   captainContext: ContextBlockWire[];
   costText: string | null;
-  finishReason: string | undefined;
   onRegenerate: () => void;
   /** Settled empty-failure card (message.error or synthetic); feeds copy via visibleMessageText. */
   displayError?: { code: string; message: string } | null;
@@ -433,11 +414,7 @@ export function AssistantMessageFooter({
         <FeedbackButtons message={message} />
         <BookmarkButton message={message} />
         <RegenerateMessageAction onRegenerate={onRegenerate} />
-        <MessageMoreMenu
-          message={message}
-          captainContext={captainContext}
-          finishReason={finishReason}
-        />
+        <MessageMoreMenu message={message} captainContext={captainContext} />
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <AssistantMessageMetaSummary

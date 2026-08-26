@@ -502,6 +502,8 @@ export interface ProjectedTurn {
   /** 团队便签墙 (§2.2 通): the notes workers broadcast to their siblings this turn (`team_note_posted`),
    * in post order. Journaled, so it replays on reload. Empty for a turn with no team notes. */
   teamNotes: ProjectedTeamNote[];
+  /** 墙已升（`run_plan.note_wall`）：仅 `true` 上线。缺字段 / 旧 journal = 无墙。 */
+  noteWall?: boolean;
   /** 协调中用户插话（`user_interjection`，同 interjectionId 保最新 status）。Empty when none. */
   userInterjections: ProjectedUserInterjection[];
 }

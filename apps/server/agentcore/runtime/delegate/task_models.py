@@ -1,7 +1,7 @@
-"""Per-worker 模型覆盖（编排器权威段）：delegate/replan 任务三元组 → RunSpec.model。
+"""Per-worker 模型覆盖（编排器权威段）：delegate/replan 任务目录身份 → RunSpec.model。
 
-空身份 = 跟组合 Worker 槽（合法）；非空须完整三元组 + 目录校验，非法硬失败。
-校验通过后把三元组编成路由键写入 ``item["model"]``（builder 只透传该字符串）。
+空身份 = 跟组合 Worker 槽（合法）；非空须目录身份（``@`` 句柄或可消歧提及）+ 目录校验，非法硬失败。
+校验通过后把身份编成路由键写入 ``item["model"]``（builder 只透传该字符串）。
 跨 provider 经 :func:`ensure_debate_route_extras` 窄接注册 router extras。
 
 → 见设计: docs/03-AI核心/编排器与CEO主Agent.md §Per-worker 模型覆盖
@@ -12,10 +12,14 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+from agentcore.llm.model_ref import parse_model_input
 from agentcore.runtime.debate.models import (
     ModelIdentity,
+    coerce_identity,
     ensure_debate_route_extras,
     identity_shape_error,
+    needs_mention_resolve,
+    resolve_model_mention,
     validate_identity_in_catalog,
 )
 
@@ -30,28 +34,30 @@ TASK_MODEL_SCHEMA_PROPS: dict[str, dict[str, object]] = {
     "model": {
         "type": "string",
         "description": (
-            "（可选）本节点模型：目录裸 id（如 glm-5.2）；禁路由键（含 /）。"
-            "须配 origin；byok 再填 provider_id。空=跟组合 Worker 槽。"
+            "（可选）本节点模型：目录身份 @platform/{id} 或 @byok/{provider_id}/{id}，"
+            "或可读提及。空=跟组合 Worker 槽。勿写未加 @ 的 platform/{id} 路由键。"
         ),
-    },
-    "origin": {
-        "type": "string",
-        "enum": ["platform", "byok"],
-        "description": "platform|byok；model 非空时必填。",
-    },
-    "provider_id": {
-        "type": "string",
-        "description": "BYOK 服务商 id（origin=byok 必填；platform 勿填）。",
     },
 }
 
 
 def identity_from_task_item(item: Mapping[str, Any]) -> ModelIdentity:
-    """从 task/bind/add 字典读三元组（空 model = 未指定）。"""
+    """从 task/bind/add 字典读目录身份（空 model = 未指定）。"""
+    raw_model = str(item.get("model") or "").strip()
+    parsed = parse_model_input(raw_model)
+    if parsed.kind == "ref":
+        ident = ModelIdentity(
+            model=parsed.model,
+            origin=parsed.origin,
+            provider_id=parsed.provider_id,
+        ).normalized()
+        return ident
+    origin = str(item.get("origin") or "").strip().lower()
+    provider_id = str(item.get("provider_id") or "").strip()
     return ModelIdentity(
-        model=str(item.get("model") or "").strip(),
-        origin=str(item.get("origin") or "").strip().lower(),
-        provider_id=str(item.get("provider_id") or "").strip(),
+        model=raw_model,
+        origin=origin,
+        provider_id=provider_id,
     ).normalized()
 
 
@@ -79,6 +85,10 @@ async def prepare_task_model_fields(
             continue
         where = f"{where_prefix}[{i}]"
         ident = identity_from_task_item(raw)
+        ident, coerce_err = coerce_identity(ident)
+        if coerce_err:
+            errors.append(f"{where}.model {coerce_err}")
+            continue
         if ident.is_empty():
             # 同人续派：默认继承该 run 已解析模型（路由键）；本次显式改则走下方非空分支。
             cf = str(raw.get("continue_from_run_id") or "").strip()
@@ -88,6 +98,37 @@ async def prepare_task_model_fields(
                     raw["model"] = inherited
             continue
 
+        if needs_mention_resolve(ident):
+            if catalog is None and session is None:
+                errors.append(
+                    f"{where}.model 已填模型提及「{ident.model}」但无法加载目录消歧；"
+                    "请稍后重试，禁止 silent 回退。"
+                )
+                continue
+            from agentcore.llm.catalog import resolve_model_catalog as _resolve_cat
+
+            cat = catalog
+            if cat is None and session is not None and user_id:
+                cat = await _resolve_cat(session, user_id)
+            if cat is None:
+                errors.append(
+                    f"{where}.model 已填模型提及「{ident.model}」但无法加载目录消歧；"
+                    "请稍后重试，禁止 silent 回退。"
+                )
+                continue
+            prefer = ident.origin if ident.origin in ("platform", "byok") else None
+            result = resolve_model_mention(
+                ident.model,
+                cat,
+                prefer,  # type: ignore[arg-type]
+                where=f"{where}.model",
+            )
+            if not result.ok:
+                errors.append(result.error)
+                continue
+            ident = result.identity
+            catalog = cat
+
         shape = identity_shape_error(ident, where=f"{where}.model")
         if shape:
             errors.append(shape)
@@ -95,7 +136,7 @@ async def prepare_task_model_fields(
 
         if not user_id and catalog is None and session is None:
             errors.append(
-                f"{where}.model 已填模型三元组但无法校验目录；请稍后重试，禁止 silent 回退。"
+                f"{where}.model 已填模型身份但无法校验目录；请稍后重试，禁止 silent 回退。"
             )
             continue
 
@@ -112,7 +153,7 @@ async def prepare_task_model_fields(
 
         route = ident.route_key()
         if not route:
-            errors.append(f"{where}.model 无法编成路由键（三元组不完整）。")
+            errors.append(f"{where}.model 无法编成路由键。")
             continue
         raw["model"] = route
         # 路由键已写入；清掉 origin/provider 避免下游误把路由键当裸 id 再解析。

@@ -96,7 +96,7 @@ function readUrlStep(
 
 describe("ToolLine · 过程工具默认折叠", () => {
   it("keeps code_execute's terminal collapsed on the running→done edge", () => {
-    const { rerender } = render(
+    const { rerender, container } = render(
       <ToolLine
         step={step({
           tool_name: "code_execute",
@@ -124,11 +124,14 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    // Done: stays collapsed — 退出码 badge is expanded-only; peek shows stdout.
+    // Done: one line — language in title, stdout stays in expanded terminal card.
+    expect(screen.getByText("python")).toBeTruthy();
+    expect(screen.queryByText(/hello world/)).toBeNull();
     expect(screen.queryByText(/退出码 0/)).toBeNull();
-    expect(screen.getByText(/hello world/)).toBeTruthy();
+    expect(collapsedSubline(container)).toBeNull();
 
     fireEvent.click(screen.getByText("Run code"));
+    expect(screen.getByText(/hello world/)).toBeTruthy();
     expect(screen.getByText(/退出码 0/)).toBeTruthy();
   });
 
@@ -418,7 +421,7 @@ describe("ToolLine · 过程工具默认折叠", () => {
   });
 
   it("read_conversation 折叠态亮对话标题（不摆 conversation_id、不泄正文）", () => {
-    render(
+    const { container } = render(
       <ToolLine
         step={step({
           tool_name: "read_conversation",
@@ -435,7 +438,8 @@ describe("ToolLine · 过程工具默认折叠", () => {
     );
     expect(screen.queryByText(/很长的 transcript/)).toBeNull();
     expect(screen.queryByText("conv_abc")).toBeNull();
-    expect(screen.getByText("上周方案")).toBeTruthy();
+    expect(container.textContent).toContain("上周方案");
+    expect(collapsedSubline(container)).toBeNull();
   });
 
   it("suppresses the peek for consult_skill — the summary shows only when expanded", () => {
@@ -559,7 +563,7 @@ describe("ToolLine · 过程工具默认折叠", () => {
   });
 
   it("leaves read_url collapsed on completion (same default as every other tool)", () => {
-    const { rerender } = render(
+    const { rerender, container } = render(
       <ToolLine
         step={step({
           tool_name: "read_url",
@@ -585,9 +589,10 @@ describe("ToolLine · 过程工具默认折叠", () => {
         })}
       />,
     );
-    // Collapsed peek shows「标题 · 域名」; body stays hidden until the user expands.
-    expect(screen.getByText("深圳天气 · weather.example.com")).toBeTruthy();
+    // inlineMeta shows「标题 · 域名」; body stays hidden until the user expands.
+    expect(container.textContent).toContain("深圳天气 · weather.example.com");
     expect(screen.queryByText(/正文预览不应自动展开/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
   });
 });
 
@@ -1368,6 +1373,18 @@ describe("toolDetail · title chip", () => {
     expect(toolDetail({ code: "line1\nline2\nline3\nline4\nline5" })).toBe("");
   });
 
+  it("prefers language / check over short code for execute tools", () => {
+    expect(
+      toolDetail({ code: "print(1)", language: "python" }, "code_execute"),
+    ).toBe("python");
+    expect(
+      toolDetail({ code: "vitest run", check: "typecheck" }, "test_run"),
+    ).toBe("typecheck");
+    expect(
+      toolDetail({ check: "command", command: "pnpm test" }, "test_run"),
+    ).toBe("pnpm test");
+  });
+
   it("does not chip handoff summary into toolDetail (ToolLine inlines peek instead)", () => {
     expect(toolDetail({ summary: "交叉验证完成，建议一周内表态" })).toBe("");
   });
@@ -1676,6 +1693,65 @@ describe("ToolLine · test_run budget exceeded", () => {
     expect(container.querySelector(".text-destructive")).toBeNull();
     expect(container.querySelector(".text-warning")).toBeTruthy();
     expect(container.textContent).toContain("验证未完成（预算耗尽）");
+    expect(collapsedSubline(container)).toBeNull();
+  });
+});
+
+describe("ToolLine · code_execute / test_run / terminal 一行契约", () => {
+  it("test_run success shows check in title, not stdout banner", () => {
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "test_run",
+          arguments: { check: "typecheck" },
+          result: "stdout:\n== 总量 ==\n0 errors",
+          display: {
+            check: "typecheck",
+            stdout: "== 总量 ==\n0 errors",
+            stderr: "",
+            exit_code: 0,
+          },
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("typecheck")).toBeTruthy();
+    expect(screen.queryByText(/== 总量 ==/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("code_execute failure inlineMeta shows exit code, one line", () => {
+    const { container } = renderWithTooltip(
+      <ToolLine
+        step={step({
+          tool_name: "code_execute",
+          arguments: { code: "raise SystemExit(1)", language: "python" },
+          result: "boom",
+          status: "error",
+          display: { stdout: "", stderr: "boom", exit_code: 1 },
+        })}
+      />,
+    );
+    expect(screen.getByText("python")).toBeTruthy();
+    expect(screen.getByText(/退出码 1/)).toBeTruthy();
+    expect(container.querySelector(".text-destructive")).toBeTruthy();
+    expect(collapsedSubline(container)).toBeNull();
+  });
+
+  it("terminal with command in title suppresses result first line", () => {
+    const { container } = render(
+      <ToolLine
+        step={step({
+          tool_name: "terminal",
+          arguments: { command: "pnpm test" },
+          result: "first line of output\nmore",
+          status: "success",
+        })}
+      />,
+    );
+    expect(screen.getByText("pnpm test")).toBeTruthy();
+    expect(screen.queryByText(/first line of output/)).toBeNull();
+    expect(collapsedSubline(container)).toBeNull();
   });
 });
 

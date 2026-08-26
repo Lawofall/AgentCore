@@ -17,12 +17,10 @@ import {
   TURN_CANCELLED_EMPTY_MESSAGE,
   TURN_INTERRUPTED_EMPTY_MESSAGE,
   errorActionForCode,
-  isEmptyResponseUserSurface,
   resolveAssistantFailureFace,
 } from "@/lib/errors";
 import type { ErrorAction } from "@/lib/errors";
 import { withRecoveryMoment } from "@/lib/recoveryMoment";
-import { shouldShowUnproductiveToolFailureHint } from "@/lib/unproductiveToolFailureHint";
 import { assistantProjectionId } from "@/stores/conversation";
 import type { Message } from "@/stores/conversation";
 import type {
@@ -38,7 +36,6 @@ import {
 import type { ProjectedTurn } from "@agentcore/protocol-conformance/projectedTurn";
 import {
   type ProjectedTurnVerdict,
-  projectedFailedToolNames,
   projectedHasDedicatedPauseUi,
   projectedHasTeamGraph,
 } from "@agentcore/protocol-conformance/turnVerdict";
@@ -155,7 +152,6 @@ export type TurnOutcome = {
    * primary verdict. Block D: `suppressSession={!showSessionBanner}`.
    */
   showSessionBanner: boolean;
-  showFinishReasonChip: boolean;
   /**
    * Assistant footer chrome (copy / cost / feedback / 重新生成).
    * Named recovery (`configure` / `wait_then_retry` / `send_next`) hides it.
@@ -428,7 +424,6 @@ function quietFlags(): Pick<
   | "showBubbleBanner"
   | "showComposerHint"
   | "showSessionBanner"
-  | "showFinishReasonChip"
   | "showFooter"
   | "hideEmptyBubble"
   | "showStripFailure"
@@ -441,7 +436,6 @@ function quietFlags(): Pick<
     showBubbleBanner: false,
     showComposerHint: false,
     showSessionBanner: false,
-    showFinishReasonChip: false,
     showFooter: false,
     hideEmptyBubble: false,
     showStripFailure: false,
@@ -508,14 +502,7 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
   const hasTeamStrip = Boolean(input.hasTeamStrip);
   const hasBody = Boolean((input.content ?? "").trim());
 
-  const chipOwnedByBanner = isEmptyResponseUserSurface({
-    code: face?.code ?? input.messageError?.code,
-    emptyDiagnosis: input.messageError?.context?.empty_diagnosis,
-    message: face?.message ?? input.messageError?.message,
-  });
   const fr = input.finishReason ?? undefined;
-  const chipMeta =
-    fr === "max_rounds" || fr === "degraded" || fr === "unproductive";
 
   // `kind=paused` is a frozen read-only path — flag formulas must stay byte-stable.
   if (kind === "paused") {
@@ -533,9 +520,6 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
       !attestedContinue;
     const showSessionBanner = Boolean(
       sessionCopy && !showBubbleBanner && !attestedContinue,
-    );
-    const showFinishReasonChip = Boolean(
-      chipMeta && !chipOwnedByBanner && !showBubbleBanner && !attestedContinue,
     );
     const showFooter =
       !attestedContinue &&
@@ -564,7 +548,6 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
       showBubbleBanner,
       showComposerHint,
       showSessionBanner,
-      showFinishReasonChip,
       showFooter,
       hideEmptyBubble,
       showStripFailure: false,
@@ -606,9 +589,6 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
       kind !== "partial" &&
       !isCancelCode(face?.code) &&
       sessionCopy !== TURN_CANCELLED_EMPTY_MESSAGE,
-  );
-  const showFinishReasonChip = Boolean(
-    chipMeta && !chipOwnedByBanner && !showBubbleBanner,
   );
   // User-stop is not a warning. Follow finishReason / cancel face — not a
   // leaf `turnWarning === "已停止"` string match (copy drift would leak it back).
@@ -659,7 +639,6 @@ export function arbitrateTurnOutcome(input: TurnOutcomeInput): TurnOutcome {
     showBubbleBanner,
     showComposerHint,
     showSessionBanner,
-    showFinishReasonChip,
     showFooter,
     hideEmptyBubble,
     showStripFailure,
@@ -793,7 +772,6 @@ export function projectionSlotKey(message: Message): string {
 export function toConformanceTurnVerdict(args: {
   outcome: TurnOutcome;
   hasTeamStrip: boolean | null;
-  failedToolHintNames?: readonly string[];
 }): ProjectedTurnVerdict {
   return {
     kind: args.outcome.kind,
@@ -801,7 +779,6 @@ export function toConformanceTurnVerdict(args: {
     notice: args.outcome.message,
     hasTeamStrip: args.hasTeamStrip,
     supportPackHost: args.outcome.supportPackHost,
-    failedToolHintNames: [...(args.failedToolHintNames ?? [])],
   };
 }
 
@@ -834,17 +811,8 @@ export function turnVerdictFromProjected(
         productLanded: r.productLanded,
       })),
   });
-  const failed = projectedFailedToolNames(projected);
-  const hintNames = shouldShowUnproductiveToolFailureHint({
-    finishReason: projected.finishReason ?? undefined,
-    content: projected.content,
-    failedToolNames: failed,
-  })
-    ? failed
-    : [];
   return toConformanceTurnVerdict({
     outcome,
     hasTeamStrip,
-    failedToolHintNames: hintNames,
   });
 }

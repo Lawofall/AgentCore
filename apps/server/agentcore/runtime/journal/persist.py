@@ -214,6 +214,26 @@ async def persist_turn_journal(
             message_id=message_id,
         )
 
+    # Journal-only failure pack (error / degraded / unproductive). Same choke
+    # point as span export; never waits on jsonl / query_trace; never raises.
+    if incoming_finish in ("error", "degraded", "unproductive"):
+        try:
+            from agentcore.runtime.journal.failure_pack import write_journal_failure_pack
+
+            write_journal_failure_pack(
+                entries,
+                message_id=message_id,
+                conversation_id=conversation_id,
+                trace_id=trace_id,
+            )
+        except Exception as e:  # noqa: BLE001 — pack write must never break the turn
+            logger.warning(
+                "journal.failure_pack_failed",
+                message_id=message_id,
+                trace_id=trace_id,
+                error=str(e),
+            )
+
 
 async def persist_sidecar_journal_best_effort(
     *,

@@ -137,6 +137,7 @@ export interface PendingResume {
     provider_id?: string;
     label?: string;
     side_key?: string;
+    ref?: string;
   }>;
   /** ask_user: the framing / opening line (always shown). */
   question: string;
@@ -452,6 +453,7 @@ function entryFromSummary(
             ...(typeof c.side_key === "string" && c.side_key
               ? { side_key: c.side_key }
               : {}),
+            ...(typeof c.ref === "string" && c.ref ? { ref: c.ref } : {}),
           };
         });
       return modelCandidates.length > 0 ? { modelCandidates } : {};

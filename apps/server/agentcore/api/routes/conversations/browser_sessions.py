@@ -20,14 +20,40 @@ from agentcore.api.schemas import (
     StatusResponse,
 )
 from agentcore.config import settings
+from agentcore.conversation.common import resolve_turn_file_workspace
 from agentcore.core.errors import NotFoundError, ValidationError
+from agentcore.db.models import Conversation
 from agentcore.db.repositories import ConversationRepository
+from agentcore.folders.placement import resolve_folder_placement
 from agentcore.runtime.browser import default_browser_session_registry
 from agentcore.tools.sandbox.browser.protocol import BrowserCommand, BrowserSessionRequest
+from agentcore.workspace.locate import workspace_root_path
 
-from ._helpers import _require_owned_conversation
+from ._helpers import _get_owned_conversation, _require_owned_conversation
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+
+async def _conversation_workspace_root_str(
+    conv: Conversation, user_id: str, session: AsyncSession
+) -> str | None:
+    """Same physical root as file tools. Do not mkdir for opening a browser."""
+    ws_folder_id, _ = resolve_turn_file_workspace(
+        birth_folder_id=conv.folder_id,
+        auto_desk_folder_id=getattr(conv, "auto_desk_folder_id", None),
+    )
+    placement = await resolve_folder_placement(ws_folder_id, session=session)
+    try:
+        root = workspace_root_path(
+            user_id=user_id,
+            folder_rel_path=placement.rel_path,
+            conversation_id=conv.id,
+        )
+    except ValueError:
+        return None
+    if not root.is_dir():
+        return None
+    return str(root)
 
 
 def _view_from_info(info) -> BrowserSessionView:
@@ -75,13 +101,16 @@ async def create_browser_session(
     session: AsyncSession = Depends(get_db),
 ) -> BrowserSessionView:
     """Create a new browser session tab (owner-only)."""
-    await _require_owned_conversation(
+    conv = await _get_owned_conversation(
         conversation_id, user.user_id, ConversationRepository(session)
     )
+    workspace_root = await _conversation_workspace_root_str(conv, user.user_id, session)
+    if body.host_kind == "sandbox" and not workspace_root:
+        raise ValidationError("云端浏览器需要已挂载的工作区盘（禁止无盘 jail）。")
     reg = default_browser_session_registry()
     request = BrowserSessionRequest(
         conversation_id=conversation_id,
-        workspace_root=None,
+        workspace_root=workspace_root,
         viewport_width=int(settings.browser_keyframe_width),
         jpeg_quality=int(settings.browser_keyframe_jpeg_quality),
         host_kind=body.host_kind,

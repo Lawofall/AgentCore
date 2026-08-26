@@ -200,7 +200,7 @@ describe("projectFlowNodes · captain synthesis preview", () => {
       captainStatus: "pending",
       finalAnswer: null,
       captainSynthesisPreview: "草稿不应盖过等待文案",
-      captainStatusCaption: "等待「撰写员」(1/2) · 已等 15s",
+      captainStatusCaption: "等待「撰写员」(1/2)",
       taskMessage: null,
       activateNode: () => {},
       groups: [],
@@ -208,7 +208,7 @@ describe("projectFlowNodes · captain synthesis preview", () => {
     });
 
     const captain = nodes.find((n) => n.id === "captain");
-    const waitCaption = "等待「撰写员」(1/2) · 已等 15s";
+    const waitCaption = "等待「撰写员」(1/2)";
     expect(captain?.data).toMatchObject({
       variant: "captain",
       status: "running",

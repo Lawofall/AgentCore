@@ -910,7 +910,7 @@ def _gate() -> ApprovalGate:
 
 
 def test_side_model_injected_as_route_key_when_triple_set():
-    """§7.5：sides 非空三元组 → 注入路由键；空方回退 turn_model。"""
+    """§7.5：sides 非空身份 → 注入路由键；空方回退 turn_model。"""
     sides, err = parse_sides(
         [
             {

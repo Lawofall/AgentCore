@@ -1,6 +1,6 @@
 /**
  * 约定文档约定目录（``AgentCore/文档/{工作稿,research,debate,reviews}/``）的中性元信息——
- * 文件树徽章与产物卡标签共用。与后端 ``workspace.stage_dirs`` 对齐；无匹配则零噪音。
+ * 文件树徽章与约定目录标签共用。与后端 ``workspace.stage_dirs`` 对齐；无匹配则零噪音。
  * 约定根本身的呈现名（``.agentcore``）也在这里，同属「按路径给盘上目录配文案」。
  */
 

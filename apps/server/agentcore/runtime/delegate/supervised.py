@@ -259,7 +259,7 @@ async def apply_replan(
             parsed = _parse_deliverable({"deliverable": raw_deliverable})
             if parsed is not None:
                 fields["deliverable"] = parsed
-        # Per-worker 模型：prepare 已把合法三元组编成路由键写入 b["model"]。
+        # Per-worker 模型：prepare 已把合法目录身份编成路由键写入 b["model"]。
         model_raw = b.get("model")
         if isinstance(model_raw, str) and model_raw.strip():
             fields["model"] = model_raw.strip()

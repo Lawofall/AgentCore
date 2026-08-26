@@ -25,7 +25,10 @@ export function ensureStreamingAssistant(conversationId: string): void {
   const store = useConversationStore.getState();
   const messages = getRuntime(conversationId).messages;
   const last = messages[messages.length - 1];
-  if (last?.role === "assistant" && last.isStreaming) return;
+  if (last?.role === "assistant" && last.isStreaming) {
+    store.stampPendingTraceId(conversationId);
+    return;
+  }
 
   if (last?.role === "assistant" && last.serverMessageId) {
     if (store.resumePausedAssistant(last.serverMessageId, conversationId)) {

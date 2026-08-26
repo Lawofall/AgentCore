@@ -17,7 +17,9 @@ Default output is ``decision_spine`` (human + ``--json`` isomorphic). Pass
 pack (decision_spine.json + timeline.jsonl + meta.json; optional previews /
 turn_metrics; redacted journal when the store has rows; ``--full`` adds
 messages.json without LLM bodies — never raw turn_journal). Exact-ID queries
-always include synthetic ``traffic=eval|test`` lines. Message bodies live in
+always include synthetic ``traffic=eval|test`` lines. Failed turns may already
+have ``logs/packs/<trace_id>/`` (journal-only); ``--trace`` prints **Auto pack**
+when that folder is present (``--json``: ``meta.failure_pack``). Message bodies live in
 Postgres; turn traces live in logs/dev.jsonl (+ rotation backups) or
 ``--export-dir`` (``events.jsonl`` + joinable ``turn_metrics.jsonl`` /
 ``cost_events.jsonl``; journal is redacted by default after ``pnpm sync:logs``).
@@ -66,12 +68,34 @@ from agentcore.observability.query.timeutil import (  # noqa: E402
     parse_since,
     parse_timestamp,
 )
+from agentcore.runtime.journal.failure_pack import (  # noqa: E402
+    failure_pack_pointer,
+    format_auto_pack_line,
+)
 
 # Re-exports for ad-hoc scripts / older imports
 _discover_log_files = discover_log_files
 
 # Consecutive jsonl timestamps beyond this → likely rotation/handle drop, not idle LLM.
 _JSONL_GAP_HINT_SECONDS = 120.0
+
+
+def _attach_failure_pack_meta(payload: dict[str, Any], trace_id: str) -> dict[str, Any]:
+    pointer = failure_pack_pointer(trace_id)
+    if pointer is None:
+        return payload
+    meta = dict(payload.get("meta") or {})
+    meta["failure_pack"] = pointer
+    payload["meta"] = meta
+    return payload
+
+
+def _print_auto_pack_line(trace_id: str) -> None:
+    line = format_auto_pack_line(trace_id)
+    if line:
+        print(line)
+
+
 _JOURNAL_SOURCE_HINT = (
     "⚠ jsonl 时间线疑似断档；以 Postgres journal 为准 "
     "(Windows 日志轮转失败时 structlog 可能静默丢段，journal 更完整)。"
@@ -595,7 +619,15 @@ async def main() -> None:
                 print(f"  files: {', '.join(meta.get('files') or [])}")
                 return
             if as_json:
-                print(json.dumps(result.to_json_dict(raw=raw), ensure_ascii=False, default=str))
+                print(
+                    json.dumps(
+                        _attach_failure_pack_meta(
+                            result.to_json_dict(raw=raw), trace_id
+                        ),
+                        ensure_ascii=False,
+                        default=str,
+                    )
+                )
                 return
             if raw:
                 print(
@@ -608,6 +640,7 @@ async def main() -> None:
                         using_export_dir=export_dir is not None,
                     )
                 )
+                _print_auto_pack_line(trace_id)
                 return
             assert result.decision_spine is not None
             if not result.log_events:
@@ -618,14 +651,17 @@ async def main() -> None:
                 )
                 if joined:
                     print(format_decision_spine(result.decision_spine))
+                    _print_auto_pack_line(trace_id)
                     if hint:
                         print(hint)
                     return
                 print(f"Trace: {trace_id}\n  Log events: 0")
+                _print_auto_pack_line(trace_id)
                 if hint:
                     print(hint)
                 return
             print(format_decision_spine(result.decision_spine))
+            _print_auto_pack_line(trace_id)
             if result.meta.get("conversation_id"):
                 print(
                     format_conversation_context(

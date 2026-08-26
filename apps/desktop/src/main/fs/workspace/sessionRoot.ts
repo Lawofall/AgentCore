@@ -27,6 +27,7 @@ export type SessionRootMode = "readonly" | "organize";
 export const READONLY_ALLOWED_OPS = new Set<WorkspaceOpName>([
   "read",
   "read_bytes",
+  "read_head",
   "read_lines",
   "list",
   "exists",

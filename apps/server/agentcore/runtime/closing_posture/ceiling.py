@@ -1,55 +1,34 @@
-"""Hard-ceiling honesty steer / banner + informal verdict downgrade.
+"""Hard-ceiling honesty steer + informal verdict downgrade.
 
 Covers ``max_rounds`` and ``token_budget`` symmetrically (worker salvage + CEO).
 Does **not** expand the posture-A closed set.
 
 Both reasons teach ``continue_from_run_id`` continuation (same main file).
-Honesty remains: do not claim unconditional pass. Round ceiling is a fuse,
-not a live countdown injected every ReAct round.
+Honesty remains in the private steer: do not claim unconditional pass.
+User-visible 【收口说明】 prefixes are gone — the fuse is not a caption.
+Round ceiling is a fuse, not a live countdown injected every ReAct round.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .core import (
-    claims_posture_a,
-    is_formal_complete_tier,
-)
-from .hollow import (
-    _CEILING_HOLLOW_TEACH_BANNER,
-    claims_hollow_teach_invite,
-)
+from .core import is_formal_complete_tier
 
-# Hard-ceiling reasons that share the max_rounds honesty steer / banner path.
+# Hard-ceiling reasons that share the max_rounds honesty steer path.
 _CEILING_HONESTY_REASONS = frozenset({"max_rounds", "token_budget"})
 
 # Executable next step after a hard ceiling (round fuse or token). Shared
-# wording with closing_posture.cutoff soft banner.
+# wording for the private steer (not user-visible).
 _CEILING_CONTINUE_TEACH = (
     "【续作】下一刀用 `continue_from_run_id` 续同一主文件；"
     "禁止并行同角色抢同一路径；"
     "`replaces_run_id` 仅冷接手。"
 )
-# Backward-compat alias (cutoff.py / tests import this name).
-_TOKEN_BUDGET_CONTINUE_TEACH = _CEILING_CONTINUE_TEACH
 
 _CEILING_HONESTY_STEER_LEAD = {
     "max_rounds": "本回合已达轮次硬上限（max_rounds），强制收口。",
     "token_budget": "本回合已达 token 预算硬上限（token_budget），强制收口。",
-}
-
-_CEILING_HONESTY_BANNERS = {
-    "max_rounds": (
-        "【收口说明】本回合因轮次上限强制结束，以下不得视为无条件验收通过——"
-        "请按「部分落地 + 未闭合项」理解。"
-        f"{_CEILING_CONTINUE_TEACH}\n\n"
-    ),
-    "token_budget": (
-        "【收口说明】本回合因 token 预算上限强制结束，以下不得视为无条件验收通过——"
-        "请按「部分落地 + 未闭合项」理解。"
-        f"{_CEILING_CONTINUE_TEACH}\n\n"
-    ),
 }
 
 
@@ -75,27 +54,13 @@ def ceiling_honesty_steer(*, reason: str) -> str | None:
 
 
 def enforce_ceiling_closing_honesty(content: str, *, reason: str) -> str:
-    """Deterministic backstop: ceiling salvage still claiming posture A → banner.
+    """No user-visible prefix. Call sites kept; ``reason`` unused after banner removal.
 
-    force_finalize bypasses finish_guard; when the model ignores
-    :func:`ceiling_honesty_steer`, prefix a short honesty note instead of
-    shipping an unconditional pass claim. ``max_rounds`` / ``token_budget`` share
-    this path; does **not** expand the posture-A closed set.
-    Also banners hollow teach-invites（请开讲）after ceiling（案 1eb5eb99 C）.
+    force_finalize still gets :func:`ceiling_honesty_steer`; verdict still
+    downgrades. Do not paste 【收口说明】 into the answer.
     """
-    text = content or ""
-    r = (reason or "").strip()
-    banner = _CEILING_HONESTY_BANNERS.get(r)
-    if banner is None:
-        return text
-    stripped = text.lstrip()
-    if stripped.startswith("【收口说明】"):
-        return text
-    if claims_posture_a(text):
-        return banner + text
-    if claims_hollow_teach_invite(text):
-        return _CEILING_HOLLOW_TEACH_BANNER + text
-    return text
+    del reason
+    return content or ""
 
 
 def downgrade_verdict_for_ceiling(

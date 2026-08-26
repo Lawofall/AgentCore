@@ -37,11 +37,13 @@ def _to_response(catalog: ModelCatalog) -> ModelCatalogResponse:
             id=catalog.current.id,
             origin=catalog.current.origin,
             provider_id=catalog.current.provider_id,
+            ref=catalog.current.ref,
         ),
         byok_configured=catalog.byok_configured,
         models=[
             ModelCatalogItem(
                 id=item.id,
+                ref=item.ref,
                 origin=item.origin,
                 display_name=item.display_name,
                 vendor=item.vendor,

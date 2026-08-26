@@ -15,8 +15,10 @@ from agentcore.runtime.pipeline import _build_attachment_context
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.attachment_parse import (
     ATTACHMENT_INLINE_MAX_CHARS,
+    SCAN_NOTICE,
     ParseStatus,
     extract_office_bytes,
+    extract_office_from_disk,
     extract_office_payload,
     extract_table_preview,
     looks_like_scanned,
@@ -53,8 +55,12 @@ def _docx_bytes(*, paragraphs: list[str], table: list[list[str]] | None = None) 
 def _inprocess_extract():
     """Run the worker payload in-process so markitdown mocks still apply (pdf)."""
 
-    def _run(data: bytes, ext: str, timeout: float, *, holder=None):
-        return extract_office_payload(data, ext)
+    def _run(data, ext, timeout, *, holder=None, source_path=None, start_page=1):
+        if source_path is not None:
+            return extract_office_from_disk(
+                Path(source_path), ext, start_page=start_page
+            )
+        return extract_office_payload(data or b"", ext, start_page=start_page)
 
     return patch(
         "agentcore.workspace.attachment_parse._run_extract_subprocess",
@@ -118,6 +124,79 @@ async def test_extract_office_bytes_ok_and_skip(tmp_path: Path):
     assert skipped.detail.startswith("skip_ext")
 
 
+def test_extract_worker_argv_path_mode(tmp_path: Path):
+    from agentcore.workspace.attachment_parse import _extract_worker_argv
+
+    path = tmp_path / "a.pdf"
+    argv = _extract_worker_argv(".pdf", source_path=path)
+    assert "--extract-path" in argv
+    assert str(path) in argv
+    assert "--start-page" in argv
+    assert "--extract-path" not in _extract_worker_argv(".pdf")
+
+
+def test_extract_office_from_disk_pdf_passes_path(tmp_path: Path):
+    path = tmp_path / "x.pdf"
+    path.write_bytes(b"%PDF-x")
+    seen: dict = {}
+
+    def fake_extract_text(source, **kwargs):  # noqa: ARG001
+        seen["source"] = source
+        seen["kwargs"] = kwargs
+        return "a" * 50
+
+    from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
+
+    with patch("pdfminer.high_level.extract_text", fake_extract_text):
+        result = extract_office_from_disk(path, ".pdf")
+    assert seen["source"] == str(path)
+    assert seen["kwargs"].get("page_numbers") == list(
+        range(OFFICE_EXTRACT_PDF_MAX_PAGES)
+    )
+    assert result.status == ParseStatus.OK
+    assert result.size_bytes == path.stat().st_size
+
+
+def test_extract_office_from_disk_pdf_start_page_window(tmp_path: Path):
+    from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
+
+    path = tmp_path / "x.pdf"
+    path.write_bytes(b"%PDF-x")
+    seen: dict = {}
+
+    def fake_extract_text(source, **kwargs):  # noqa: ARG001
+        seen["kwargs"] = kwargs
+        return "b" * 50
+
+    with patch("pdfminer.high_level.extract_text", fake_extract_text):
+        result = extract_office_from_disk(path, ".pdf", start_page=41)
+    start0 = 40
+    assert seen["kwargs"].get("page_numbers") == list(
+        range(start0, start0 + OFFICE_EXTRACT_PDF_MAX_PAGES)
+    )
+    assert result.page_start == 41
+    assert result.status == ParseStatus.OK
+
+
+def test_extract_pdf_start_page_skips_markitdown_and_is_not_scan():
+    with (
+        patch(
+            "pdfminer.high_level.extract_text",
+            side_effect=RuntimeError("no text layer"),
+        ),
+        patch(
+            "agentcore.workspace.attachment_parse._convert_with_markitdown",
+            side_effect=AssertionError(
+                "page window must not fall back to markitdown"
+            ),
+        ),
+    ):
+        result = extract_office_payload(b"%PDF-fake", ".pdf", start_page=41)
+    assert result.status == ParseStatus.OK
+    assert result.detail == "pdf_page_window_empty"
+    assert result.page_start == 41
+
+
 async def test_extract_docx_payload_skips_markitdown():
     payload = _docx_bytes(
         paragraphs=["In-process paragraph body with alphanumeric content here."]
@@ -131,11 +210,17 @@ async def test_extract_docx_payload_skips_markitdown():
     assert "In-process paragraph body" in result.text
 
 
-async def test_extract_pdf_payload_still_uses_markitdown():
-    with patch(
-        "agentcore.workspace.attachment_parse._convert_with_markitdown",
-        return_value="PDF body with enough alphanumeric content for the scan heuristic.",
-    ) as mocked:
+async def test_extract_pdf_payload_falls_back_to_markitdown():
+    with (
+        patch(
+            "pdfminer.high_level.extract_text",
+            side_effect=RuntimeError("no text layer"),
+        ),
+        patch(
+            "agentcore.workspace.attachment_parse._convert_with_markitdown",
+            return_value="PDF body with enough alphanumeric content for the scan heuristic.",
+        ) as mocked,
+    ):
         result = extract_office_payload(b"%PDF-fake", ".pdf")
     mocked.assert_called_once()
     assert result.status == ParseStatus.OK
@@ -149,8 +234,15 @@ async def test_extract_hanging_worker_fails_within_budget_and_kills():
     orig = ap._run_extract_subprocess
     seen: dict = {}
 
-    def wrapped(data: bytes, ext: str, timeout: float, *, holder=None):
-        result = orig(data, ext, timeout, holder=holder)
+    def wrapped(data, ext, timeout, *, holder=None, source_path=None, start_page=1):
+        result = orig(
+            data,
+            ext,
+            timeout,
+            holder=holder,
+            source_path=source_path,
+            start_page=start_page,
+        )
         seen["proc"] = None if holder is None else holder.get("proc")
         return result
 
@@ -159,7 +251,7 @@ async def test_extract_hanging_worker_fails_within_budget_and_kills():
         patch.object(
             ap,
             "_extract_worker_argv",
-            lambda ext: [
+            lambda ext, *, source_path=None, start_page=1: [
                 sys.executable,
                 "-c",
                 "import sys,time; sys.stdin.buffer.read(); time.sleep(60)",
@@ -181,7 +273,7 @@ async def test_extract_hanging_worker_fails_within_budget_and_kills():
 async def test_extract_does_not_block_event_loop():
     with patch(
         "agentcore.workspace.attachment_parse._extract_worker_argv",
-        lambda ext: [
+        lambda ext, *, source_path=None, start_page=1: [
             sys.executable,
             "-c",
             "import sys,time; sys.stdin.buffer.read(); time.sleep(60)",
@@ -236,8 +328,8 @@ async def test_preparse_pdf_success_via_persist(tmp_path: Path):
     (tmp_path / "attachments" / "paper.pdf").write_bytes(b"%PDF-fake")
 
     with _inprocess_extract(), patch(
-        "agentcore.workspace.attachment_parse._convert_with_markitdown",
-        return_value="Abstract\n\nThis paper studies agents." + ("x" * 20),
+        "agentcore.workspace.attachment_parse._extract_pdf_text",
+        return_value=("Abstract\n\nThis paper studies agents." + ("x" * 20), "markitdown"),
     ):
         out = await persist_attachments(
             ws,
@@ -264,18 +356,19 @@ async def test_preparse_scanned_pdf_writes_notice(tmp_path: Path):
     (tmp_path / "attachments" / "scan.pdf").write_bytes(b"%PDF" + b"\x00" * 100)
 
     with _inprocess_extract(), patch(
-        "agentcore.workspace.attachment_parse._convert_with_markitdown",
-        return_value="   \n",  # empty text layer
+        "agentcore.workspace.attachment_parse._extract_pdf_text",
+        return_value=("   \n", "pdfminer"),
     ):
         result = await preparse_resident(
             ws, workspace_path="attachments/scan.pdf", name="scan.pdf"
         )
 
     assert result.status == ParseStatus.SCANNED
-    assert "scanned" in result.text.lower() or "OCR" in result.text
+    assert "扫描" in result.text or "OCR" in result.text
     assert result.parsed_workspace_path == "attachments/scan.pdf.md"
     note = (tmp_path / "attachments" / "scan.pdf.md").read_text(encoding="utf-8")
     assert "OCR" in note
+    assert "请用户" not in note
 
 async def test_preparse_xlsx_invalid_has_no_body(tmp_path: Path):
     ws = _ws(tmp_path)
@@ -347,7 +440,7 @@ async def test_context_preparsed_inline_and_large_truncation():
     out = await _build_attachment_context([small])
     assert out is not None
     assert "Hello world from docx extract" in out
-    assert "pre-parsed → attachments/a.docx.md" in out
+    assert "预解析 → attachments/a.docx.md" in out
     assert "pre-parsed at upload" in out
     assert "lossy for tabular content" in out
     assert "Do not use this extract as the data source" in out
@@ -363,7 +456,7 @@ async def test_context_preparsed_inline_and_large_truncation():
     out2 = await _build_attachment_context([large])
     assert out2 is not None
     assert "truncated" in out2
-    assert "full extracted text is at attachments/big.docx.md" in out2
+    assert "全文在 attachments/big.docx.md" in out2
     # Inline body capped.
     assert "Z" * (ATTACHMENT_INLINE_MAX_CHARS + 1) not in out2
 
@@ -378,13 +471,14 @@ async def test_context_scanned_shows_notice():
                 "workspace_path": "attachments/scan.pdf",
                 "parsed_workspace_path": "attachments/scan.pdf.md",
                 "parse_status": "scanned",
-                "text": "This file appears to be a scanned / image-only document.",
+                "text": SCAN_NOTICE,
             }
         ]
     )
     assert out is not None
-    assert "scanned / no text layer" in out
-    assert "image-only" in out
+    assert "扫描件 / 无文本层" in out
+    assert "扫描" in out or "OCR" in out
+    assert "请用户" not in out
 
 
 async def test_plain_txt_binary_resident_decodes(tmp_path: Path):
@@ -554,7 +648,7 @@ async def test_persist_csv_structure_does_not_inline_full_table(tmp_path: Path):
 
     ctx = await _build_attachment_context(out, available_tools=frozenset())
     assert ctx is not None
-    assert "[table / structure]" in ctx
+    assert "[表格 / 结构面]" in ctx
     assert "rows: 20" in ctx
     assert "date:date" in ctx
     assert "amount:float" in ctx
@@ -589,7 +683,7 @@ async def test_persist_xlsx_structure_does_not_inline_full_table(tmp_path: Path)
     assert _SECRET_TAIL not in str(out[0]["table_preview"])
     ctx = await _build_attachment_context(out, available_tools=frozenset())
     assert ctx is not None
-    assert "[table / structure]" in ctx
+    assert "[表格 / 结构面]" in ctx
     assert "rows: 20" in ctx
     assert _SECRET_TAIL not in ctx
     assert "includes code_execute" not in ctx

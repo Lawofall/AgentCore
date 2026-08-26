@@ -104,7 +104,16 @@ async def test_worker_identity_states_output_is_user_visible():
     (drillable in the UI) — P2, to motivate user-ready quality rather than
     writing only for the CEO. The old「直接展示给用户」line moved into the
     compressed form block as「可独立阅读」/「自包含」."""
-    plan, _ = build_run_plan([{"role": "分析师", "task": "拆解需求"}], id_prefix="t")
+    plan, _ = build_run_plan(
+        [
+            {
+                "role": "分析师",
+                "task": "拆解需求",
+                "deliverable": {"form": "prose"},
+            }
+        ],
+        id_prefix="t",
+    )
     provider = _ContentProvider(["X"])
     await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     system = provider.system_messages[0]
@@ -789,8 +798,8 @@ async def test_files_form_strict_soft_completes_when_never_written():
     assert EventType.RUN_FAILED not in types
 
 
-async def test_retired_requires_files_alone_ignored_no_zero_disk_soft():
-    """S3：仅 legacy requires_files、无 form=files → 不产生零落盘 soft tip。"""
+async def test_requires_files_alone_defaults_to_files_zero_disk_soft():
+    """Deleted requires_files key is ignored; omitted form is files → 零落盘 soft."""
     plan, _ = build_run_plan(
         [{"role": "前端", "task": "建页面", "deliverable": {"requires_files": True}}],
         id_prefix="t",
@@ -799,7 +808,7 @@ async def test_retired_requires_files_alone_ignored_no_zero_disk_soft():
     res = await WaveScheduler().run(plan, _executor(plan, provider, EventSink()))
     state = res["t_1"]
     assert state.phase is RunPhase.COMPLETED
-    assert not any("未把产物写入工作区" in w for w in (state.warnings or []))
+    assert any("未把产物写入工作区" in w for w in (state.warnings or []))
 
 
 async def test_worker_grantable_tool_gated_when_gate_denies():

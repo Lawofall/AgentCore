@@ -16,7 +16,6 @@ RemediationKind = Literal[
     "delivery_action",
     "capability_run",
     "capability_office",
-    "capability_runtime_ready",
 ]
 
 
@@ -79,16 +78,6 @@ def exec_env_remediation_zh(
             "可选：① 稍后重试（待宿主 gVisor/沙箱恢复）；"
             "② 有产物时 export_to_local 后在本机 npm/pip 运行；"
             "③ 本机传统打开本地文件夹（合法非默认，≠离线）。"
-        )
-
-    if kind == "capability_runtime_ready":
-        # Cloud never mounts ``terminal`` by design — not a sandbox health issue.
-        return (
-            "[能力提示] 本批任务像「启动长驻进程 / 开发服务器」，但云端无本机 "
-            "terminal：worker 无法真正托管服务。"
-            "**不要**再引导「导入到云」指望出现 terminal。"
-            "可选：export_to_local 后本机启服，或改为启动步骤说明并标"
-            "「未在本回合启动」。本机传统 open/bind 合法非默认（≠离线）。"
         )
 
     if kind == "capability_office":

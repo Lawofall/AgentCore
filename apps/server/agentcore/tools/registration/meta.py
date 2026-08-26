@@ -80,8 +80,12 @@ class ToolRegistration:
     execution_class: bool = False
     local_only: bool = False
     ceo_wire: CeoWire = CeoWire.ALWAYS
-    # ``code_execute`` stamps description from backend location.
+    # ``code_execute`` / ``terminal`` stamp description from backend location.
     needs_location: bool = False
+    # Probe-trimmed ``code_execute`` language enum. Factory forwards ``languages=``
+    # only when this is True — ``needs_location`` alone must not imply the kwarg
+    # (``terminal`` takes location only).
+    accepts_exec_languages: bool = False
     # L3 team browser (D11 / C1): gated by ``browser_execution_enabled_for`` ON TOP OF
     # ``execution_class`` — server+gVisor, local+Bridge, **or** local 过桥无 Bridge
     # but gVisor/netns healthy (host_kind=sandbox; never open_local_bridge_session).
@@ -147,9 +151,9 @@ def instantiate_declared(
     """Zero-arg (or location-aware) construction for builtin / worker-only / board /
     ALWAYS tools."""
     reg = tool_registration(cls)
+    kwargs: dict[str, Any] = {}
     if reg.needs_location:
-        # ``languages`` only applies to ``code_execute`` (probe-trimmed local surface).
-        if languages is not None:
-            return cls(location=location, languages=languages)  # type: ignore[call-arg]
-        return cls(location=location)  # type: ignore[call-arg]
-    return cls()  # type: ignore[call-arg]
+        kwargs["location"] = location
+    if languages is not None and reg.accepts_exec_languages:
+        kwargs["languages"] = languages
+    return cls(**kwargs)

@@ -1,6 +1,12 @@
 import { ConversationItem } from "@/components/sidebar/ConversationItem";
 import { PinnedConversations } from "@/components/sidebar/PinnedConversations";
 import { WorkspaceGroupHeader } from "@/components/sidebar/WorkspaceGroupHeader";
+import {
+  FolderGroupDragGhost,
+  FolderGroupInsertLine,
+  folderGroupInsertPlace,
+} from "@/components/sidebar/folderGroupDragFeedback";
+import { useFolderGroupReorder } from "@/components/sidebar/useFolderGroupReorder";
 import { IconButton, SurfaceRow, SurfaceRowButton } from "@/components/ui";
 import {
   useConversationTrash,
@@ -12,9 +18,11 @@ import {
   buildWorkspaceGroups,
   foldersForConversationRail,
 } from "@/hooks/useWorkspaceGroups";
+import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import type { DeletedConversationMeta } from "@/services/conversations";
 import { useRequiredConversationIds } from "@/stores/aiAttention";
+import { useSidebarStore } from "@/stores/sidebar";
 import {
   ArchiveRestore,
   ArrowLeft,
@@ -44,13 +52,25 @@ export function NarrowConversationDrawer() {
   );
   const restoreMutation = useRestoreConversation();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const folderGroupOrder = useSidebarStore((s) => s.folderGroupOrder);
 
   const groups = useMemo(
     () =>
       buildWorkspaceGroups(conversations, listedFolders, new Set(), {
         uncapped: true,
+        folderGroupOrder,
       }),
-    [conversations, listedFolders],
+    [conversations, listedFolders, folderGroupOrder],
+  );
+  const folderIds = useMemo(
+    () => groups.map(({ folder }) => folder.id),
+    [groups],
+  );
+  const { getItemProps, draggingId, overId, place, dragPreview } =
+    useFolderGroupReorder(folderIds);
+  const dragFolder = useMemo(
+    () => groups.find((g) => g.folder.id === draggingId)?.folder ?? null,
+    [draggingId, groups],
   );
 
   const bare = useMemo(
@@ -142,13 +162,24 @@ export function NarrowConversationDrawer() {
                     );
                     const expanded =
                       hasRequired || collapsed[folder.id] !== true;
+                    const insert = folderGroupInsertPlace(
+                      folder.id,
+                      draggingId,
+                      overId,
+                      place,
+                    );
                     return (
                       <div key={folder.id}>
-                        <div className="px-2 pt-2">
+                        <div className="relative px-2 pt-2">
+                          {insert ? (
+                            <FolderGroupInsertLine place={insert} />
+                          ) : null}
                           <WorkspaceGroupHeader
                             folder={folder}
                             convs={convs}
                             expanded={expanded}
+                            surface="narrow"
+                            sortable={getItemProps(folder.id)}
                             onToggleExpanded={() =>
                               setCollapsed((prev) => ({
                                 ...prev,
@@ -180,6 +211,13 @@ export function NarrowConversationDrawer() {
                       ))}
                     </div>
                   )}
+                  {dragPreview && dragFolder ? (
+                    <FolderGroupDragGhost
+                      label={dragFolder.name}
+                      isLocal={deriveGroupWorkspaceIsLocal(dragFolder)}
+                      preview={dragPreview}
+                    />
+                  ) : null}
                 </>
               )}
               <div className="mt-2 border-t border-sidebar-border px-2 py-1">

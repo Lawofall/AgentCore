@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from agentcore.llm.model_ref import parse_model_input
 from agentcore.runtime.debate import DebateForm, DebateSide
 from agentcore.runtime.debate.constants import (
     CLOSING_LENGTH_HINT,
@@ -117,16 +118,11 @@ DEBATE_PARAMETERS = {
                     },
                     "model": {
                         "type": "string",
-                        "description": "辩手模型（目录裸 id 或可读提及）；禁路由键（含 /）。空=跟主模型。",
-                    },
-                    "origin": {
-                        "type": "string",
-                        "enum": ["platform", "byok"],
-                        "description": "platform|byok；缺省由 model 提及消歧。",
-                    },
-                    "provider_id": {
-                        "type": "string",
-                        "description": "BYOK 服务商 id（origin=byok 必填）。",
+                        "description": (
+                            "辩手模型：目录身份 @platform/{id} 或 @byok/{provider_id}/{id}，"
+                            "或可读提及（「glm-5.2」/「平台 Flash」/「DeepSeek」）。"
+                            "空=跟主模型。勿写未加 @ 的 platform/{id} 路由键。"
+                        ),
                     },
                 },
                 "required": ["key", "name", "stance"],
@@ -153,18 +149,9 @@ DEBATE_PARAMETERS = {
         "moderator_model": {
             "type": "string",
             "description": (
-                "（可选）裁判模型：同 sides[].model 填法；禁路由键（含 /）；"
+                "（可选）裁判模型：同 sides[].model 填法（目录身份或提及）。"
                 "空=系统默认（可与辩手同模）。"
             ),
-        },
-        "moderator_origin": {
-            "type": "string",
-            "enum": ["platform", "byok"],
-            "description": "裁判来源 platform|byok；可选。",
-        },
-        "moderator_provider_id": {
-            "type": "string",
-            "description": "裁判 BYOK 服务商 id（origin=byok 最终必填）。",
         },
     },
     "required": ["motion", "form", "sides"],
@@ -240,21 +227,25 @@ def parse_sides(raw: Any) -> tuple[list[DebateSide], str]:
         if stance_err:
             return [], stance_err
         seen.add(key)
-        # §7.5 B：model 非空但缺 origin = 待消歧提及（prepare 阶段消歧）；完整三元组直通。
         model = str(item.get("model") or "").strip()
-        origin = str(item.get("origin") or "").strip().lower()
-        provider_id = str(item.get("provider_id") or "").strip()
-        if not model:
-            origin = ""
-            provider_id = ""
-        elif origin and origin not in ("platform", "byok"):
-            return (
-                [],
-                f"sides[`{key}`].origin 须为 platform|byok（收到 `{origin}`）。",
-            )
-        elif origin == "platform":
-            provider_id = ""
-        # origin 空 / byok 缺 provider_id → 保留提及，交 prepare 消歧；不在此硬拒。
+        parsed = parse_model_input(model)
+        if parsed.kind == "bad_ref":
+            return [], f"sides[`{key}`].model {parsed.error}"
+        if parsed.kind == "ref":
+            model, origin, provider_id = parsed.model, parsed.origin, parsed.provider_id
+        elif parsed.kind == "empty":
+            origin, provider_id = "", ""
+        else:
+            # 提及；库存/旧调用若仍带 origin/provider_id 则作消歧偏好（不在 schema 里）。
+            origin = str(item.get("origin") or "").strip().lower()
+            provider_id = str(item.get("provider_id") or "").strip()
+            if origin and origin not in ("platform", "byok"):
+                return (
+                    [],
+                    f"sides[`{key}`].origin 须为 platform|byok（收到 `{origin}`）。",
+                )
+            if origin == "platform":
+                provider_id = ""
         sides.append(
             DebateSide(
                 key=key,
@@ -279,13 +270,18 @@ def parse_moderator_fields(
 ) -> tuple[str, str, str, str]:
     """解析顶层裁判模型字段；返回 (model, origin, provider_id, 错误)。
 
-    与 sides[].model 同规：提及可缺 origin；完整三元组直通；非法 origin 硬拒。
+    与 sides[].model 同规：``@`` 句柄展开；提及可缺 origin；库存 origin 仅作消歧偏好。
     """
     model = str(raw_model or "").strip()
+    parsed = parse_model_input(model)
+    if parsed.kind == "bad_ref":
+        return "", "", "", f"moderator_model {parsed.error}"
+    if parsed.kind == "empty":
+        return "", "", "", ""
+    if parsed.kind == "ref":
+        return parsed.model, parsed.origin, parsed.provider_id, ""
     origin = str(raw_origin or "").strip().lower()
     provider_id = str(raw_provider_id or "").strip()
-    if not model:
-        return "", "", "", ""
     if origin and origin not in ("platform", "byok"):
         return (
             "",

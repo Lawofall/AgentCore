@@ -9,6 +9,7 @@ execute and continue; worker fan-out does not. Credentials are the caller's
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from agentcore.evals.playbook_routing import parse_delegate_rich
@@ -36,6 +37,7 @@ class FirstMove:
     delegate_summary: dict | None = None
     detail: str = ""
     usage: dict[str, int] = field(default_factory=dict)
+    recon_rounds: int = 0
 
 
 def _classify_action(first_tool: str | None) -> str:
@@ -117,12 +119,13 @@ async def run_until_terminal(
     ctx,
     user_message: str,
     max_rounds: int,
+    history: Sequence[LLMMessage] | None = None,
 ) -> FirstMove:
     """CEO 决策环：探路 / consult 续跑，直到发卡、派团队、开辩或直答。"""
-    messages = [
-        LLMMessage(role="system", content=ceo_prompt),
-        LLMMessage(role="user", content=user_message),
-    ]
+    messages = [LLMMessage(role="system", content=ceo_prompt)]
+    if history:
+        messages.extend(history)
+    messages.append(LLMMessage(role="user", content=user_message))
     usage = TokenUsage()
     trail: list[str] = []
     detour: list[str] = []
@@ -130,6 +133,7 @@ async def run_until_terminal(
     last_reasoning = ""
     pre_action_reasoning = ""
     pre_action_frozen = False
+    recon_rounds = 0
     inv_tools = frozenset(_RECON)
     gate_controller = create_loop_controller(inv_tools)
     live_tool_defs = tool_defs
@@ -165,6 +169,7 @@ async def run_until_terminal(
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
             },
+            recon_rounds=recon_rounds,
         )
 
     for round_idx in range(max_rounds):
@@ -252,6 +257,7 @@ async def run_until_terminal(
         if recon_only:
             if not first_action:
                 first_action = f"RECON({calls[0].function.name})"
+            recon_rounds += 1
             await _feed_tool_calls(
                 messages, calls, chat_tools, ctx, trail, assistant_content=resp.content
             )

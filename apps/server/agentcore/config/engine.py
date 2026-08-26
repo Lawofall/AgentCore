@@ -32,7 +32,7 @@ class EngineSettings(BaseModel):
     engine_recon_idle_nudge_rounds: int = 0
     engine_finish_guard_max_reworks: int = 2
     # C2 概览契约：本回合已发 delivery_status 时，CEO 终稿超过此字数 → finish_guard
-    # 影子观测（hit=overview_length），不回炉。细节已在交付卡 / 产物卡 / run 详情。
+    # 影子观测（hit=overview_length），不回炉。细节在终稿路径与 run 详情。
     # ≤0 关闭探测。无交付卡的 prose 回合不设顶。默认值勿当「未复述 UI」硬闸。
     engine_ceo_overview_max_chars: int = 1000
 

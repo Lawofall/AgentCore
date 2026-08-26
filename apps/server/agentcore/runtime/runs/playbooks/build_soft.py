@@ -32,7 +32,7 @@ def build_feature(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]
                 "务必用 file_write 把代码写进工作区。"
                 "交付：可用的后端接口 + 已广播的接口契约。"
             ),
-            "deliverable": {"form": "files", "workspace_native": True},
+            "deliverable": {"form": "workspace"},
         }
     ]
     if want_ui:
@@ -48,7 +48,7 @@ def build_feature(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]
                     "交付：可用的前端页面，对接后端接口。"
                 ),
                 "depends_on": ["api"],
-                "deliverable": {"form": "files", "workspace_native": True},
+                "deliverable": {"form": "workspace"},
             }
         )
     if want_test:
@@ -63,7 +63,7 @@ def build_feature(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]
                     "交付：覆盖接口契约的测试。"
                 ),
                 "depends_on": ["api"],
-                "deliverable": {"form": "files", "workspace_native": True},
+                "deliverable": {"form": "workspace"},
             }
         )
     return tasks, []
@@ -97,7 +97,7 @@ def repair_code(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     artifacts = clean_str_list(args.get("artifacts"), cap=4)
     if target and target not in artifacts:
         artifacts = [target, *artifacts]
-    patch_deliverable: dict[str, Any] = {"form": "files", "workspace_native": True}
+    patch_deliverable: dict[str, Any] = {"form": "workspace"}
     if artifacts:
         patch_deliverable["artifacts"] = artifacts
 

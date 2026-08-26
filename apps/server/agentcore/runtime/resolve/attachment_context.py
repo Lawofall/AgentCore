@@ -225,9 +225,9 @@ async def _build_attachment_context(
             if ws_path:
                 resident = True
             has_preparsed = True
-            copy_note = f" [scan note → {parsed_path}]" if parsed_path else ""
+            copy_note = f" [扫描说明 → {parsed_path}]" if parsed_path else ""
             blocks.append(
-                f"--- File: {name} ({path}) [scanned / no text layer]{copy_note} ---\n{text}"
+                f"--- File: {name} ({path}) [扫描件 / 无文本层]{copy_note} ---\n{text}"
             )
         elif kind == "file" and ext in TABLE_EXTENSIONS:
             path = ws_path or att.get("path") or name
@@ -243,14 +243,14 @@ async def _build_attachment_context(
             if preview is not None:
                 structure = format_table_preview(preview)
                 blocks.append(
-                    f"--- File: {name} ({path}) [table / structure] ---\n"
+                    f"--- File: {name} ({path}) [表格 / 结构面] ---\n"
                     f"{structure}\n\n"
                     "This is a structure preview only — the full table stays in "
                     f"the workspace file. {steer}"
                 )
             else:
                 blocks.append(
-                    f"--- File: {name} ({path}) [table / path only] ---\n"
+                    f"--- File: {name} ({path}) [表格 / 仅路径] ---\n"
                     "Could not build a structure preview. "
                     f"{steer} Do NOT treat file_list emptiness as missing."
                 )
@@ -263,18 +263,17 @@ async def _build_attachment_context(
             client_trunc = bool(att.get("truncated"))
             flags: list[str] = []
             if parsed_path and parsed_path != path:
-                flags.append(f"pre-parsed → {parsed_path}")
+                flags.append(f"预解析 → {parsed_path}")
             if clipped or client_trunc:
                 flags.append("truncated")
             flag_s = f" [{'; '.join(flags)}]" if flags else ""
             block = f"--- File: {name} ({path}){flag_s} ---\n{body}"
             if clipped and parsed_path:
                 block += (
-                    f"\n\n… [truncated at {len(body)} chars for context; "
-                    f"full extracted text is at {parsed_path}]"
+                    f"\n\n… [上下文截到 {len(body)} 字；全文在 {parsed_path}]"
                 )
             elif clipped:
-                block += f"\n\n… [truncated at {len(body)} chars for context]"
+                block += f"\n\n… [上下文截到 {len(body)} 字]"
             if ext in MARKITDOWN_EXTENSIONS:
                 has_office_inline = True
                 block += f"\n\n{_office_lossy_steer(has_code_execute=has_code_execute)}"

@@ -34,6 +34,8 @@ type StreamProjectionActions = Pick<
   | "appendReasoningToLastMessage"
   | "setComposingTool"
   | "setTraceIdOnLastMessage"
+  | "applySseTraceHeader"
+  | "stampPendingTraceId"
   | "setServerMessageIdOnLastMessage"
   | "resumePausedAssistant"
   | "resetAssistantForNewTurn"
@@ -63,6 +65,19 @@ function lastAssistantIndex(messages: Message[]): number {
     if (messages[i].role === "assistant") return i;
   }
   return -1;
+}
+
+const HEX32_TRACE = /^[0-9a-f]{32}$/i;
+
+/** SSE ``X-AgentCore-Trace`` / ``messages.trace_id``: 32 hex, same as server ``new_trace_id``. */
+function parseHex32TraceId(raw: string | null | undefined): string | null {
+  const v = (raw ?? "").trim();
+  if (!HEX32_TRACE.test(v)) return null;
+  return v.toLowerCase();
+}
+
+function hasNonEmptyTraceId(message: Message): boolean {
+  return Boolean(message.traceId?.trim());
 }
 
 /** Streaming / projection mutations — fold entry points onto the live assistant lane. */
@@ -143,6 +158,44 @@ export function createStreamProjectionActions(
         return { messages };
       }),
 
+    applySseTraceHeader: (raw, conversationId) =>
+      patchConversation(conversationId, (rt) => {
+        const traceId = parseHex32TraceId(raw);
+        if (!traceId) return null;
+        const messages = [...rt.messages];
+        const last = messages[messages.length - 1];
+        // Only the current turn's empty streaming placeholder. A completed
+        // (or already-traced) last assistant is the previous turn on
+        // follow / queue — stash for the next bubble, do not stamp or drop.
+        if (
+          last?.role === "assistant" &&
+          last.isStreaming &&
+          !hasNonEmptyTraceId(last)
+        ) {
+          messages[messages.length - 1] = { ...last, traceId };
+          return { messages, pendingTraceId: null };
+        }
+        return { pendingTraceId: traceId };
+      }),
+
+    stampPendingTraceId: (conversationId) =>
+      patchConversation(conversationId, (rt) => {
+        const pending = rt.pendingTraceId;
+        if (!pending) return null;
+        const messages = [...rt.messages];
+        const last = messages[messages.length - 1];
+        if (
+          !last ||
+          last.role !== "assistant" ||
+          !last.isStreaming ||
+          hasNonEmptyTraceId(last)
+        ) {
+          return null;
+        }
+        messages[messages.length - 1] = { ...last, traceId: pending };
+        return { messages, pendingTraceId: null };
+      }),
+
     setServerMessageIdOnLastMessage: (messageId, conversationId) => {
       let clientId: string | null = null;
       patchConversation(conversationId, (rt) => {
@@ -210,6 +263,7 @@ export function createStreamProjectionActions(
         const messages = [...rt.messages];
         const prev = messages[idx];
         foundId = prev.id;
+        const pending = rt.pendingTraceId;
         messages[idx] = {
           ...prev,
           isStreaming: true,
@@ -217,8 +271,13 @@ export function createStreamProjectionActions(
           finishReason: undefined,
           outcome: undefined,
           composingTool: null,
+          ...(!hasNonEmptyTraceId(prev) && pending ? { traceId: pending } : {}),
         };
-        return { messages, isGenerating: true };
+        return {
+          messages,
+          isGenerating: true,
+          ...(pending ? { pendingTraceId: null } : {}),
+        };
       });
       return foundId;
     },
@@ -451,22 +510,27 @@ export function createStreamProjectionActions(
 
     createAssistantMessage: (conversationId) => {
       const id = crypto.randomUUID();
-      patchConversation(conversationId, (rt) => ({
-        messages: [
-          ...rt.messages,
-          {
-            id,
-            role: "assistant",
-            content: "",
-            createdAt: new Date().toISOString(),
-            executionId: null,
-            isStreaming: true,
-          },
-        ],
-        isGenerating: true,
-        // Fresh bubble: clear any prior lock-wait chrome（不得静默等锁）.
-        waitingForWorkspaceLock: false,
-      }));
+      patchConversation(conversationId, (rt) => {
+        const pending = rt.pendingTraceId;
+        return {
+          messages: [
+            ...rt.messages,
+            {
+              id,
+              role: "assistant",
+              content: "",
+              createdAt: new Date().toISOString(),
+              executionId: null,
+              isStreaming: true,
+              ...(pending ? { traceId: pending } : {}),
+            },
+          ],
+          isGenerating: true,
+          // Fresh bubble: clear any prior lock-wait chrome（不得静默等锁）.
+          waitingForWorkspaceLock: false,
+          pendingTraceId: null,
+        };
+      });
       return id;
     },
 

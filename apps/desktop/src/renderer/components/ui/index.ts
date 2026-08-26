@@ -40,17 +40,19 @@ export {
   SortableTab,
   moveItem,
   NO_TAB_DRAG_ATTR,
+  placeAlongAxis,
   TAB_DRAG_THRESHOLD_PX,
   useHorizontalTabScroll,
   useSortableTabIds,
   type HorizontalTabScrollState,
   type HorizontalTabStripProps,
+  type ReorderAxis,
   type ReorderPlace,
+  type SortableDragPreview,
   type SortableTabItemProps,
   type SortableTabProps,
   type UseSortableTabIdsOptions,
 } from "./horizontal-tab-strip";
-export { FinishReasonChip } from "./finish-reason-chip";
 export { Input, Textarea, fieldSurfaceClass } from "./input";
 export { Select } from "./select";
 export {

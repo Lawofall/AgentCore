@@ -89,14 +89,12 @@ _OUTER_VERIFY_ROLE_MARKERS: tuple[str, ...] = (
 def is_deep_deliverable(deliverable: Deliverable | None) -> bool:
     """True when dispatch-time deliverable signals a write-desk / file report.
 
-    Write-disk recognition only: ``form=files`` and/or non-empty ``artifacts``.
-    No word-count / retired-field heuristics.
+    Write-disk recognition: ``form=files`` / ``form=workspace`` / non-empty
+    ``artifacts``. Omitted form on a parsed Deliverable is ``files``.
     """
-    if deliverable is None:
-        return False
-    if deliverable.form == "files":
-        return True
-    return bool(deliverable.artifacts)
+    from agentcore.runtime.runs.types import deliverable_expects_landing
+
+    return deliverable_expects_landing(deliverable)
 
 
 def is_short_write_posture(*, max_rounds: int | None) -> bool:

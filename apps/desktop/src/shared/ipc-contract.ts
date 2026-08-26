@@ -181,6 +181,7 @@ export type WorkspaceOpName =
   | "write"
   | "append"
   | "read_bytes"
+  | "read_head"
   | "write_bytes"
   | "list"
   | "exists"

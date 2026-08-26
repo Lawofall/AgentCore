@@ -12,7 +12,9 @@ _BUILD_APP = f"""\
 → 可进本 playbook；满档须 `intensity=full` + 显式 `modules`。\
 方向已定但本轮边界未钉（讨论形态 / 先 MVP）→ **禁止**首派本形状满编（五波脚手架不当讨论落点）；\
 改首派轻切片（宜 `intensity=lean`）、手写少节点，或单 lead 嵌套再拆，再 `replan`。\
-局部单功能 → 手写或可选 `build_feature`。
+局部单功能 → 手写或可选 `build_feature`。\
+绿场仍走 `intensity` / playbook，**勿**改成临时交成果组长。\
+做**软件**时**【禁止】**单前端单 HTML 薄旁路交差。
 
 【交付档 → intensity】结构槽（非意图分类器）：`intensity=lean|full`。\
 MVP 主流程可点 → `intensity=lean`；模块流水线一次做完 → `intensity=full` + **显式** `modules`；\
@@ -23,7 +25,7 @@ MVP 主流程可点 → `intensity=lean`；模块流水线一次做完 → `inte
 `delegate(playbook="build_app", playbook_args={{...}})`\
 （scaffold-first 多波更稳；手写 / `none` 仍可用，**不硬拒**）。\
 营销落地页 / 官网 / 控制台【勿】进本 playbook。单页一人做完；控制台别套营销皮；\
-HTML 落盘可开 `web_quality_scan`。
+HTML 落盘即自动静态质检。
 
 形状：{_BUILD_APP_PLAYBOOK.summary}
 槽位：{_BUILD_APP_PLAYBOOK.slots}
@@ -39,7 +41,7 @@ HTML 落盘可开 `web_quality_scan`。
 五阶段纪律只约束 `full` 形状内部，不强迫一切绿场进本 playbook。
 4. 批次会自动扫 `.ts/.tsx/.vue` import 图（`graph_consistent`）；冒烟优先云端 \
 `test_run` check=install → build（对照能力行 `package_install=`；未装配再结构自检 / `export_to_local` 本机装包）。\
-`package_install=未装配`（云端能跑代码 ≠ 能装依赖）时：【禁止】把仅结构自检说成「自检全过 / 跑绿 / 单测已绿」；\
+`package_install=未装配`（与 `code_execute=` 同一谓词：云桌 guest 未起）时：【禁止】把仅结构自检说成「自检全过 / 跑绿 / 单测已绿」；\
 须写明未装包 / 未外环验绿，并给本机命令或 `export_to_local`（与 Office / 生图 / 零写盘假改分轴）。\
 **【外环验绿对账】**宣称「N/N OK / passed / PASS / 全绿」须本回合有成功的 `test_run` 或 `terminal` \
 验证证据；本轮仅 error → 【禁止】写全绿，应标工具卡未通过或「曾失败→改命令后通过（附依据）」。\

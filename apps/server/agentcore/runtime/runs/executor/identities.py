@@ -5,7 +5,7 @@ from typing import Literal
 from agentcore.runtime.runs.constants import MAX_DELEGATION_DEPTH
 from agentcore.tools.protocol import Tool
 
-DeliverableForm = Literal["prose", "files"]
+DeliverableForm = Literal["prose", "files", "workspace"]
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ _WORKER_STRUCTURE_OWNERSHIP = (
 _WORKER_NO_PREAMBLE = (
     "直接以产出本身开头，别写「我来为你生成…」「我是一个 agent」之类开场白或元叙述。"
 )
-# Compressed landing (files + omit). Artifact-first / 中间省略 is not identity copy;
+# Compressed landing (files + workspace). Artifact-first / 中间省略 is not identity copy;
 # the files handoff field guide may still mention 短骨架.
 _WORKER_LANDING_DISCIPLINE = """\
 写文件类工具（file_write / file_append / str_replace）返回成功即代表已落盘；写/append \
@@ -67,15 +67,12 @@ str_replace（局部修订）或同轮 handoff，勿为空转自检。成篇 md�
 或 `<!-- SECTION: -->`（二者仅用于建站 site HTML）。超长成篇细则 consult(long_form_landing)。\
 交可打开的表（xlsx 等）时质量基线 consult(data_file_landing)。"""
 
-# Legacy two-way form policy (form omitted): worker judges prose vs files itself.
-# Kept as the default so omitting form preserves prior behaviour.
-_WORKER_DELIVERABLE_FORM = f"""\
-分清你的交付【形态】，用对的方式交付：
-- 交付物是【可独立阅读的文字】（分析、审查意见、设计 / 调研说明、解释、问答）时，直接\
-作为你的文字产出写出来，自包含、完整准确。
-- 交付物是【文件 / 产物】（可运行代码 / 网页 / 应用、脚本、配置、数据文件、多文件工程，\
-或任何用户要打开 / 运行 / 编辑 / 保存的东西，或任务要求「产出文件」）时，你【必须】调用 \
-file_write 把它真正写进工作区，聊天粘贴不算交付。正文只简短交代路径、怎么运行、关键取舍。
+# form=workspace: in-place project edits — must land, never into AgentCore/docs.
+_WORKER_DELIVERABLE_FORM_WORKSPACE = f"""\
+你的交付形态是【改工程】（form=workspace）：就地改用户工作区里的源码 / 项目文件\
+（改存量用 str_replace），不要落进 `AgentCore/文档/`——那是 AI 的过程材料抽屉，不装业务代码。\
+你【必须】调用写文件工具把改动真正落到工作区，聊天粘贴不算交付。正文只简短交代改了哪些路径、\
+怎么运行、关键取舍。
 
 {_WORKER_LANDING_DISCIPLINE}
 
@@ -83,7 +80,6 @@ file_write 把它真正写进工作区，聊天粘贴不算交付。正文只简
 
 {_WORKER_STRUCTURE_OWNERSHIP}"""
 
-# form=prose: text body only — no file_write landing guidance at all.
 _WORKER_DELIVERABLE_FORM_PROSE = f"""\
 你的交付形态是【纯文字】（form=prose）：把完整内容直接作为正文交付，自包含、准确、可独立阅读。\
 不要落盘、不要调用写文件工具；成品就是你的文字产出本身（回答 / 分析 / 汇报 / 创意文字等）。\
@@ -102,18 +98,6 @@ _WORKER_DELIVERABLE_FORM_FILES = f"""\
 {_WORKER_NO_PREAMBLE}
 
 {_WORKER_STRUCTURE_OWNERSHIP}"""
-
-# Shared handoff field checklist (appended after the topology-specific opener).
-_HANDOFF_FIELD_GUIDE = """\
-先把交付正文写完（或用 file_write / file_append 落盘），再在【同一轮】调用 handoff：
-- summary（结论）：一句话说清你这次做出了什么 / 核心结论。
-- key_points（关键要点）：下游或主管最该知道的 2-4 条（具体数字 / 文件路径 / 关键决定，别空泛）。
-- assumptions（关键假设）：信息不足时你采用的关键假设（没有就省略此条）。
-- next_steps（建议下一步）：基于你这一环的发现，团队 / 用户接下来值得考虑做什么（没有就省略）。\
-这只是顺带给主管的建议、供其与用户定夺，不替谁拍板、也不是停工理由——它与 escalate 不同：\
-escalate 是「缺了它整件事会走偏、需要现在有人拍板」，交接简报里的建议是「我已做完、\
-提示个后续方向」。
-调用 handoff 即代表你这次的活已完成；别把简报重复写进交付正文，也别在还没产出交付时就调它。"""
 
 _HANDOFF_FIELD_GUIDE_PROSE = """\
 先把交付正文写完，再在【同一轮】调用 handoff：
@@ -160,7 +144,26 @@ def _handoff_field_guide_leaf(form: DeliverableForm | None) -> str:
             "简报只写接力状态（完成边界、明确没做什么、未决项/阻塞、指回产出的指针）；"
             "正文里已经写过的结论不要在简报里再说一遍。\n"
         )
-    elif form == "files":
+    elif form in ("files", "workspace"):
+        write_first = (
+            "先用 file_write 把产物落盘（可一次写完完整正文，或超长时先短骨架再按节 "
+            "file_append / str_replace 填空）"
+        )
+        if form == "workspace":
+            body_audience = (
+                "就地改工程：落盘产物写在工作区里它本该在的位置，不要落进 `AgentCore/文档/`；"
+                "聊天正文只交代路径、怎么运行、关键取舍。"
+            )
+        else:
+            body_audience = (
+                "落盘产物是给人读的完整说明：结论、根因、关键取舍、意外、怎么用；"
+                "聊天正文只交代路径、怎么运行、关键取舍。"
+            )
+        kp = "下游或主管最该知道的 2-4 条（具体路径 / 怎么运行 / 关键决定，别空泛）"
+        summary_line = "- summary（结论）：一句话说清你这次做出了什么 / 核心结论。"
+        deconclude = ""
+    else:
+        # omit → files (resolved before this helper; keep files copy as fallback)
         write_first = (
             "先用 file_write 把产物落盘（可一次写完完整正文，或超长时先短骨架再按节 "
             "file_append / str_replace 填空）"
@@ -170,15 +173,6 @@ def _handoff_field_guide_leaf(form: DeliverableForm | None) -> str:
             "聊天正文只交代路径、怎么运行、关键取舍。"
         )
         kp = "下游或主管最该知道的 2-4 条（具体路径 / 怎么运行 / 关键决定，别空泛）"
-        summary_line = "- summary（结论）：一句话说清你这次做出了什么 / 核心结论。"
-        deconclude = ""
-    else:
-        write_first = "先把交付正文写完（或用 file_write / file_append 落盘）"
-        body_audience = (
-            "正文是给人读的说明：结论、根因、关键取舍、意外、怎么用"
-            "（文件交付时这些写进落盘产物）。"
-        )
-        kp = "下游或主管最该知道的 2-4 条（具体数字 / 文件路径 / 关键决定，别空泛）"
         summary_line = "- summary（结论）：一句话说清你这次做出了什么 / 核心结论。"
         deconclude = ""
     return (
@@ -203,9 +197,9 @@ def _handoff_field_guide(form: DeliverableForm | None, *, leaf: bool = False) ->
         return _handoff_field_guide_leaf(form)
     if form == "prose":
         return _HANDOFF_FIELD_GUIDE_PROSE
-    if form == "files":
+    if form == "workspace":
         return _HANDOFF_FIELD_GUIDE_FILES
-    return _HANDOFF_FIELD_GUIDE
+    return _HANDOFF_FIELD_GUIDE_FILES
 
 
 def _handoff_policy_with_dependents(form: DeliverableForm | None) -> str:
@@ -229,7 +223,7 @@ def _handoff_policy_leaf(form: DeliverableForm | None) -> str:
         else "关键假设 / 风险 / 建议下一步 / 落盘文件清单"
     )
     # Only prose leaves go pass_through (no files_touched); CEO reads the body.
-    # files / omit may land artifacts → pointer; brief stays the CEO's only source.
+    # files / workspace land artifacts → pointer; brief stays the CEO's only source.
     brief_shape = (
         "一行标题 + 接力状态" if form == "prose" else "结论 + 关键要点"
     )
@@ -246,27 +240,28 @@ def _handoff_policy_leaf(form: DeliverableForm | None) -> str:
 def _form_block(form: DeliverableForm | None) -> str:
     if form == "prose":
         return _WORKER_DELIVERABLE_FORM_PROSE
-    if form == "files":
-        return _WORKER_DELIVERABLE_FORM_FILES
-    return _WORKER_DELIVERABLE_FORM
+    if form == "workspace":
+        return _WORKER_DELIVERABLE_FORM_WORKSPACE
+    return _WORKER_DELIVERABLE_FORM_FILES
 
 
 def resolve_identity_form(
     form: DeliverableForm | None,
     *,
     artifacts: Sequence[str] | None = None,
-) -> DeliverableForm | None:
-    """Coerce identity form: non-empty artifacts ⇒ files block (not legacy).
+) -> DeliverableForm:
+    """Coerce identity form: omit / invalid → files. Non-empty artifacts ⇒ files.
 
-    Explicit ``form`` wins (``prose`` stays prose). When form is omitted but the
-    CEO declared non-empty ``artifacts``, inject the files-form prompt — otherwise
-    the legacy two-way block says「分析可当文字产出」and fights the contract gate.
+    Explicit ``prose`` / ``workspace`` win. Omitted form is files (no two-way
+    self-judgment). Artifacts with omitted form still select the files block.
     """
-    if form is not None:
-        return form
-    if bool(artifacts):
+    if form == "prose":
+        return "prose"
+    if form == "workspace":
+        return "workspace"
+    if form == "files" or bool(artifacts):
         return "files"
-    return None
+    return "files"
 
 
 def _deliverable_policy(
@@ -283,7 +278,7 @@ def _deliverable_policy(
 # Shared by every delegated worker (leaf + captain): when to post on the team note
 # wall. Solo setup strips this constant by exact replace — keep the replacement mechanism.
 _WORKER_TEAM_NOTE_POLICY = """\
-会改变还在跑的队友才 post_note 一行；完工别贴。"""
+会改变还在跑的队友才 post_note 一行；并行摸底/调研时入口与关键结论也可贴一行以免重复通读（不是聊天、不要求回复）；墙上已有的主协调共识不必复读；完工别贴。"""
 
 # 环境能力自述（能写 ≠ 能跑）: appended ONLY when the turn's worker registry carries no
 # execution class (cloud location=server without sandbox — see
@@ -335,7 +330,8 @@ _WORKER_PROBLEM_HANDLING = """\
 # Inserted in build_worker_identity — not inside captain nesting preamble (P3 surface).
 _WORKER_PATH_FIND_NUDGE = """\
 【找路径】「前置结果」已列出具体相对路径 → 直接 file_read 那些路径，【禁止】再全仓 \
-file_list / grep 当开工。仅路径含糊（「根」/ `.` / 仅根标签）或列表缺文件时：先 \
+file_list / grep 当开工。笔记、墙上或前置结果已有入口/结论 → 接着补缺口；\
+【禁止】把已覆盖的面再整仓 file_list / 通读一遍。仅路径含糊（「根」/ `.` / 仅根标签）或列表缺文件时：先 \
 file_list(pattern)（非 * 即整仓按名查找）/\
  grep（不确定则省略 path）/code_search 钉真实文件再 \
 file_read；磁盘上已有的具体相对路径可直接读。看已有源码正文用 file_read（可分页）；搜/计符号用 grep / \
@@ -375,7 +371,8 @@ def _worker_captain_intro(*, depth: int) -> str:
     return f"""\
 你是团队中的一名专家 worker，除了自己干活，你还可以再向下委派一层子团队来分担。你负责一个划定\
 好的任务，外加完成它所需的上下文；你够不到用户、不会有人实时答疑。\
-【开局】接到（整座成果 / 多模块工程 / 完整可跑壳）且任务未钉成单切片 → 先招人再整合（不是先深读再招）。\
+【开局】摸底一页地图 / 已钉薄切片 / 小修 → 默认自己干，禁止开局先招人再通读；禁止因为已经做了很久再招人。\
+接到（整座成果 / 多模块工程 / 完整可跑壳）且任务未钉成单切片 → 先招人再整合（不是先深读再招）。\
 优先把能独立的块交出去；不要先通读长文档、不要在思考里先做完整设计来代替招人。\
 拆得清也可以本层一次做完；缝不清可以先短摸底再招——不是必须第一下就招人。\
 任务写成「你去把整座做完」仍算未拆编制。有 delegate 就可以招，不看任务里有没有「先组队」。\
@@ -384,7 +381,7 @@ def _worker_captain_intro(*, depth: int) -> str:
 怎么拆：按活的自然缝，不按工种凑人。一块够大、够独立 → delegate 交子成员，task 只写目标·约束·验收；\
 细粒度已清楚 → 本层一次拆完。同一摊只走一条路，勿自己带队同时又平级再派同职责。\
 【假两段·禁】两个阶段写进同一 task 不算两段——须拆成不同 task，或等控制权交回后再派下一波。\
-何时不该拆：单文件 / 已钉薄壳 / 小修自己干——这种活禁止为显得主动而再招人。\
+何时不该拆：单文件 / 已钉薄壳 / 小修 / 摸底一页地图 → 默认自己干；仅当本方向内仍有互不影响、可同时查的独立块才拆。禁止为显得主动而再招人。禁止因为已经做了很久再招人。\
 控制权交回（delegate 返回『计划已让出』）后用 replan 把未跑步骤定稿，或不续跑则 stop；\
 replan 只在已有子计划后出现，开场只有 delegate。
 {nest_honesty}{_WORKER_PROBLEM_HANDLING}"""
@@ -405,9 +402,8 @@ def build_worker_identity(
     upstream nodes get the imperative handoff relay; leaves get the conditional
     「有增量才写」wording. ``captain`` selects the nested-delegation intro;
     ``depth`` (when captain) picks honest child-nesting copy vs ``MAX_DELEGATION_DEPTH``.
-    ``form`` selects the deliverable-form block (omit = legacy two-way guidance).
-    Non-empty ``artifacts`` coerce omit → files block when the CEO declared
-    a file deliverable without setting ``form`` (等效 form=files).
+    ``form`` selects the deliverable-form block (omit = files).
+    Non-empty ``artifacts`` still select the files-form prompt.
     ``can_execute`` mirrors whether the execution class (code_execute / test_run) is in
     this turn's worker registry — False layers the 能写≠能跑 self-description in so the
     prompt never over-claims capability the toolset withheld (能力闸门与交付诚实性).

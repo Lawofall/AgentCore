@@ -224,11 +224,11 @@ def build_terminal_run_state(
         # 交付真相：零落盘硬失败时上浮 escalate，供 CEO 续派 / 收口（非自愈旁路）。
         if (
             deliverable is not None
-            and (deliverable.form == "files" or bool(deliverable.artifacts))
+            and (deliverable.form in ("files", "workspace") or bool(deliverable.artifacts))
             and not product_touched
         ):
             esc_q = (
-                "落盘契约未满足：form=files/artifacts 且零落盘"
+                "落盘契约未满足：form=files/workspace/artifacts 且零落盘"
                 + ("（写盘 pass 已用尽）" if write_pass_used else "")
                 + "——请 continue_from_run_id 续派或冷补派，勿当作已完成。"
             )

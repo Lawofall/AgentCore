@@ -25,6 +25,7 @@ import {
 import { __clearAttachmentUploadsForTests } from "../attachmentUploads";
 import type { PendingAttachment } from "../composerAttachments";
 import {
+  ATTACH_MAX_BYTES,
   type ResideResult,
   describeFileAttachment,
   residentAttachmentForFile,
@@ -147,7 +148,7 @@ describe("useComposerDrop 附加即上传", () => {
 
   it("超过大小上限：不建 chip，只给中文提示", async () => {
     const big = fileNamed("big.bin");
-    Object.defineProperty(big, "size", { value: 26 * 1024 * 1024 });
+    Object.defineProperty(big, "size", { value: ATTACH_MAX_BYTES + 1 });
     const { result } = renderHook(() => useDropHarness("c1"));
 
     await act(async () => {
@@ -155,7 +156,7 @@ describe("useComposerDrop 附加即上传", () => {
     });
 
     expect(result.current.attachments).toHaveLength(0);
-    expect(result.current.drop.dropError).toContain("25MB");
+    expect(result.current.drop.dropError).toContain("50MB");
     expect(residentMock).not.toHaveBeenCalled();
   });
 

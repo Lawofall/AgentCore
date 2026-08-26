@@ -46,14 +46,16 @@ def _catalog(*entries: ModelCatalogEntry) -> ModelCatalog:
     )
 
 
-def test_schema_exposes_model_triple_on_tasks_and_replan():
+def test_schema_exposes_single_model_field_on_tasks_and_replan():
     task_props = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
-    assert "model" in task_props and "origin" in task_props and "provider_id" in task_props
-    assert task_props["origin"]["enum"] == ["platform", "byok"]
+    assert "model" in task_props
+    assert "origin" not in task_props and "provider_id" not in task_props
+    assert "@platform" in str(task_props["model"].get("description", ""))
     bind_props = _REPLAN_PARAMETERS["properties"]["binds"]["items"]["properties"]
     add_props = _REPLAN_PARAMETERS["properties"]["add"]["items"]["properties"]
     for props in (bind_props, add_props):
         assert set(TASK_MODEL_SCHEMA_PROPS).issubset(props)
+        assert "origin" not in props
 
 
 @pytest.mark.asyncio
@@ -68,33 +70,50 @@ async def test_prepare_empty_follows_slot():
 
 
 @pytest.mark.asyncio
-async def test_prepare_rejects_bare_model_without_origin():
+async def test_prepare_bare_model_resolves_unique_catalog_hit():
     items = [{"role": "A", "task": "do", "model": "glm-5.2"}]
     errors, idents = await prepare_task_model_fields(
         items, user_id="u1", catalog=_catalog(_entry("glm-5.2"))
     )
-    assert errors and "origin" in errors[0]
-    assert idents == []
+    assert errors == []
+    assert len(idents) == 1
+    assert items[0]["model"] == f"{PLATFORM_PROVIDER_SENTINEL}/glm-5.2"
 
 
 @pytest.mark.asyncio
-async def test_prepare_rejects_route_key_in_model():
-    items = [{"role": "A", "task": "do", "model": "platform/glm-5.2", "origin": "platform"}]
+async def test_prepare_rejects_unprefixed_route_key_as_unknown_mention():
+    items = [{"role": "A", "task": "do", "model": "platform/glm-5.2"}]
     errors, _ = await prepare_task_model_fields(
         items, user_id="u1", catalog=_catalog(_entry("glm-5.2"))
     )
-    assert errors and "/" in errors[0]
+    assert errors
+    assert "@platform/glm-5.2" in errors[0]
+    assert "platform/platform" not in errors[0]
 
 
 @pytest.mark.asyncio
-async def test_prepare_rejects_byok_without_provider_id():
-    items = [{"role": "A", "task": "do", "model": "deepseek-chat", "origin": "byok"}]
+async def test_prepare_at_ref_encodes_route_key():
+    items = [{"role": "A", "task": "do", "model": "@platform/glm-5.2"}]
+    errors, idents = await prepare_task_model_fields(
+        items, user_id="u1", catalog=_catalog(_entry("glm-5.2"))
+    )
+    assert errors == []
+    assert items[0]["model"] == f"{PLATFORM_PROVIDER_SENTINEL}/glm-5.2"
+
+
+@pytest.mark.asyncio
+async def test_prepare_byok_mention_ambiguous_without_provider():
+    items = [{"role": "A", "task": "do", "model": "deepseek-chat"}]
     errors, _ = await prepare_task_model_fields(
         items,
         user_id="u1",
-        catalog=_catalog(_entry("deepseek-chat", origin="byok", provider_id="p1")),
+        catalog=_catalog(
+            _entry("deepseek-chat", origin="byok", provider_id="p1"),
+            _entry("deepseek-chat", origin="byok", provider_id="p2"),
+        ),
     )
-    assert errors and "provider_id" in errors[0]
+    assert errors
+    assert "@byok/" in errors[0]
 
 
 @pytest.mark.asyncio
@@ -216,3 +235,10 @@ def test_identity_from_task_item_normalizes_platform():
     assert ident.origin == "platform"
     assert ident.provider_id == ""
     assert ident.route_key() == f"{PLATFORM_PROVIDER_SENTINEL}/glm-5.2"
+
+
+def test_identity_from_task_item_at_ref():
+    ident = identity_from_task_item({"model": "@byok/prov-1/openai/gpt-4o"})
+    assert ident.model == "openai/gpt-4o"
+    assert ident.origin == "byok"
+    assert ident.provider_id == "prov-1"

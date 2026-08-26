@@ -4,7 +4,7 @@
  * （``agentcore.workspace._paths``）。
  *
  * 模型常吐沙箱绝对路径（``/workspace/index.html``）或裸根 ``/`` / ``\\``；
- * 写工具落盘时会 normalize 成相对路径。桌面预览 / 产物卡若原样只去前导 ``/``，
+ * 写工具落盘时会 normalize 成相对路径。桌面预览 / 终稿路径点击若原样只去前导 ``/``，
  * 会把根标签当成子目录（``workspace/index.html``）→ 上游 404。本模块是桌面侧
  * 同一语义的单一源；pathGuard 也走这里，禁止各 op 私有 ``if path==="/"``。
  */

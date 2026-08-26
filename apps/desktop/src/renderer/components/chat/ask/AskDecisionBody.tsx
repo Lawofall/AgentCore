@@ -2,8 +2,9 @@
  * 生产通用澄清卡 —— AskCardShell + 行式选项（{@link AskRowGroup}）。
  * Wire `intent=kickoff` 与 `decision` 均挂此体；无开场仪式主 CTA。
  * 彩色「推荐 / 默认」徽章已删：`default` 由 {@link useAskAnswer} 预选，选中态即其表达。
+ * `questions.length ≥ 2`：体内一次一题，头右侧 {@link AskQuestionPager} 乱序跳；
+ * 底栏仍一次提交整张卡（未看过的题走已有 default）。不是 Wizard。
  */
-import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import {
   type LocalPickerFailureKind,
@@ -40,6 +41,7 @@ import { useNavigate } from "react-router-dom";
 import { AskCardFooter, AskCardShell, AskSectionLabel } from "./AskCardShell";
 import { CommenceNote } from "./AskCommenceParts";
 import { type AskRow, AskRowGroup } from "./AskOptionRow";
+import { AskQuestionPager } from "./AskQuestionPager";
 import {
   type AskUserContent,
   GRANT_READONLY_FOLDER_RETIRED,
@@ -81,6 +83,13 @@ export function AskDecisionBody({
   const [pickerFailure, setPickerFailure] = useState<PickerFailureState | null>(
     null,
   );
+  const questionSig = content.questions.map((q) => q.id).join("\0");
+  const [step, setStep] = useState(0);
+  const [seenQuestionSig, setSeenQuestionSig] = useState(questionSig);
+  if (seenQuestionSig !== questionSig) {
+    setSeenQuestionSig(questionSig);
+    setStep(0);
+  }
   const canLocalFs = hasLocalFiles() && !!window.fsApi;
   const canBindAction = !!conversationId && !!onBindResolve && canLocalFs;
 
@@ -297,6 +306,11 @@ export function AskDecisionBody({
   const hasQuestions = content.questions.length > 0;
   /** 无题：message 当唯一题干进壳标题。有题：不画总标题，题干在体内。 */
   const shellTitle = hasQuestions ? undefined : content.question;
+  const paged = content.questions.length >= 2;
+  const safeStep = paged ? Math.min(step, content.questions.length - 1) : 0;
+  const visibleQuestions = paged
+    ? content.questions.slice(safeStep, safeStep + 1)
+    : content.questions;
 
   const questionRows = (q: AskQuestion): AskRow[] => {
     const picked = answer.answers[q.id] ?? [];
@@ -360,7 +374,16 @@ export function AskDecisionBody({
       icon={shellIcon}
       caption={shellCaption}
       title={shellTitle}
-      extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
+      extra={
+        paged ? (
+          <AskQuestionPager
+            total={content.questions.length}
+            index={safeStep}
+            disabled={busy || !!bindBusyLabel}
+            onChange={setStep}
+          />
+        ) : undefined
+      }
       footer={
         <AskCardFooter
           cta={shellCta}
@@ -372,7 +395,10 @@ export function AskDecisionBody({
         />
       }
     >
-      <div className="space-y-3">
+      <div
+        className="space-y-3"
+        data-ask-question-step={paged ? safeStep : undefined}
+      >
         {content.assumptions.length > 0 && (
           <div className="space-y-1">
             <AskSectionLabel>起步计划</AskSectionLabel>
@@ -391,13 +417,13 @@ export function AskDecisionBody({
           </div>
         )}
 
-        {content.questions.map((q) => {
+        {visibleQuestions.map((q) => {
           const stem =
             content.questions.length === 1 && !q.prompt.trim()
               ? content.question
               : q.prompt;
           return (
-            <div key={q.id}>
+            <div key={q.id} data-ask-question-id={q.id}>
               <p className="px-2 whitespace-pre-wrap text-sm font-semibold leading-snug text-foreground">
                 {stem}
                 {q.kind === "choice" && q.multiple && (

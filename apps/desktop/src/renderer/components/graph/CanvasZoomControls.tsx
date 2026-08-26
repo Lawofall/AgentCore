@@ -4,11 +4,10 @@ import { Maximize, Minus, Plus } from "lucide-react";
 /**
  * Shared zoom cluster for the 全屏放大态 collaboration graph (统一观感,
  * 协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大). {@link import("./GraphView")}
- * (interactive) floats this vertical 放大 / 缩小 / 适应 pill bottom-left, stacked
- * under {@link CanvasPlaybackControls} when frames exist. The chat embed is not
- * interactive and does not show this cluster. Each GraphView wires its own
- * ReactFlow instance through the callbacks. (Fit moved here from GraphToolbar,
- * which now selects layout only — zoom + fit live together.)
+ * (interactive) floats this vertical 放大 / 缩小 / 适应 pill bottom-left.
+ * The chat embed is not interactive and does not show this cluster. Each
+ * GraphView wires its own ReactFlow instance through the callbacks. (Fit moved
+ * here from GraphToolbar, which now selects layout only — zoom + fit live together.)
  */
 export function CanvasZoomControls({
   onZoomIn,

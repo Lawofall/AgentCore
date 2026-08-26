@@ -1,6 +1,5 @@
-"""Per-install-run network isolation — packaging egress (not browser sessions).
+"""Per-install-run network isolation — packaging egress (package family only).
 
-Same netns+veth shape as browser, distinct names/subnet so slots never collide.
 The API process never execs ``ip``: setup/teardown go through sandboxd.
 """
 
@@ -27,7 +26,6 @@ class PackageNetns:
     def __init__(self, *, slot: int, subnet_base: str) -> None:
         self.slot = slot
         self.subnet_base = subnet_base
-        # Prefix distinct from browser ``acbrw*``.
         self.name = f"acpkg{slot}"
         self.host_ip = f"{subnet_base}.{slot}.1"
         self.sbx_ip = f"{subnet_base}.{slot}.2"

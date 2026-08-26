@@ -844,7 +844,9 @@ class ClientTooOldError(AgentCoreError):
 
 # Product-face fallback when an unclassified exception hits a user-facing boundary.
 # Same sentence as ``message_merge.DEFAULT_FAILED_ERROR_MESSAGE`` (settle / usage).
-UNCLASSIFIED_EXCEPTION_USER_MESSAGE = "模型调用失败，请稍后重试。"
+# Must not say 「模型调用失败」: callers stamp ``PIPELINE_ERROR`` here, and the
+# crash may be pre-LLM (tool construction, prepare). LLM_ERROR keeps its own copy.
+UNCLASSIFIED_EXCEPTION_USER_MESSAGE = "管线执行失败，请稍后重试。"
 
 
 def error_fields_for(

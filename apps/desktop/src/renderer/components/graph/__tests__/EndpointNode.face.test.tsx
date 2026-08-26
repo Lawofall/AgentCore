@@ -20,9 +20,9 @@ describe("endpointBodyText", () => {
       endpointBodyText({
         isInput: false,
         preview: "",
-        statusCaption: "等待「撰写员」(1/2) · 已等 15s",
+        statusCaption: "等待「撰写员」(1/2)",
       }),
-    ).toBe("等待「撰写员」(1/2) · 已等 15s");
+    ).toBe("等待「撰写员」(1/2)");
   });
 
   it("does not echo wait copy onto the input bookend", () => {
@@ -42,7 +42,7 @@ describe("EndpointNodeFace · whiteboard slot", () => {
       <EndpointNodeFace
         isInput={false}
         status="running"
-        statusCaption="等待「协作图渲染链路审计员」(0/1) · 已等 53s"
+        statusCaption="等待「协作图渲染链路审计员」(0/1)"
         preview=""
       />,
     );
@@ -53,7 +53,7 @@ describe("EndpointNodeFace · whiteboard slot", () => {
       "正在生成汇总…",
     );
     expect(screen.getByTestId("captain-sink-preview").textContent).toBe(
-      "等待「协作图渲染链路审计员」(0/1) · 已等 53s",
+      "等待「协作图渲染链路审计员」(0/1)",
     );
   });
 

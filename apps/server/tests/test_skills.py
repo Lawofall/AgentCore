@@ -471,11 +471,16 @@ def test_team_orchestration_skill_teaches_shape_vocabulary():
     assert "独立审校" in body
     assert "调研→撰稿" in body
     assert "质量缝" in body
-    # 本地修码：白屏/UI → verify= browser 形，勿默认全仓 tsc/pytest
+    # 本地修码：手写 1 人 + form=workspace + 短任务；白屏/UI → verify= browser 形
+    assert "手写 1 人" in body
+    assert "form=workspace" in body
+    assert "短任务" in body
     assert "repair_code" in body
     assert "白屏" in body or "挂载" in body
     assert "verify=" in body and "browser" in body
     assert "tsc" in body or "pytest" in body
+    for token in ("complexity_hint", "result_handling", "require_upstream"):
+        assert token not in body, token
     # 代码审计：模板路 / 手写路互斥，禁 code_audit+tasks 叠用
     assert "代码审计" in body
     assert "模板路" in body and "手写路" in body
@@ -505,19 +510,37 @@ def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
     """开场桌上结果 + 成文后梯度 + 审校不默认（与 CEO 常驻对齐的 HOW）。"""
     body = _body("team_orchestration_advanced")
     # 讨论类 ask_user：仅挡编制时摸清/成文/先聊；对话本身不发卡；选项不写编制
+    # （核已不钉三选长字面；本 skill 是 HOW 真源）
     assert "讨论类开场" in body
     assert "ask·挡路" in body or "挡路" in body
-    assert "先多角度摸清" in body
+    assert "先摸清" in body
     assert "对话对齐" in body
     assert "写成文档并保存" in body
+    assert "暂不派队" in body
     assert "对话本身" in body
+    assert "编制自选" in body
+    assert "自动两路" in body
     assert "催收敛" in body or "候选菜单" in body
     assert "内部编制" in body
     assert "几人几步" in body
-    # 成文后轻→标准→重；满编 research_report 仅档 3
-    assert "成文后梯度" in body
+    assert "明示成文不拦" in body
+    # 禁成文产线 ≠ 禁 brief（核只留短脊柱；本 skill 是划界 HOW）
+    assert "禁成文产线 ≠ 禁 brief" in body or "禁成文产线≠禁 brief" in body
+    assert "答完澄清" in body and "end_turn" in body
+    assert "不写盘" in body or "答完维度" in body
+    assert "consumer_deps" in body
+    assert "请拍板下一步" in body
+    assert "短文" in body and "档 1" in body and "1 人" in body
+    assert "档 2" in body and "≥2" in body
+    # 成文后轻→标准→重；满编 research_report 仅档 3（核已不钉档 2 轻成文全文）
+    assert "成文后梯度" in body or "成文梯度" in body
     assert "轻→标准→重" in body
     assert "档 1" in body and "档 2" in body and "档 3" in body
+    assert "轻成文" in body
+    assert "C 材料已齐" in body or "材料已齐成文" in body
+    assert "long_form_writing" in body
+    assert "deep_multi_lens_research" in body
+    assert "点名开辩" in body or "debate" in body
     # 核下沉独有句：A/档2 不成篇硬门；开局禁连搜摸底（组队靠提示词，无探路硬闸）
     assert "成篇硬门" in body
     assert "开局自己连搜" in body or "连搜多轮" in body
@@ -536,14 +559,15 @@ def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
     assert "写一篇" in body and "综述" in body
     assert "写一篇…论文/综述" in body or "写一篇论文" in body
     assert "收成单人主笔" in body
-    # 派摸底验收：手写也要目标·手段·收工；够用即停 + handoff
+    # 派摸底验收：手写也要目标·边界·验收；够用即停 + handoff
     assert "派摸底" in body or "摸底·验收" in body or "了解到什么算够" in body
     assert "够用即停" in body
-    assert "file_list" in body and ("grep" in body or "code_search" in body)
-    assert "每个 app" in body and "package.json" in body
-    assert "禁止" in body and "名单" in body
-    assert "已知路径" in body
-    assert "含糊" in body and "根" in body
+    assert "一页地图" in body
+    assert "开局先招人" in body
+    assert "凑台账" in body or "上网检索" in body
+    assert "一句目标" in body
+    assert "必读文件" in body or "书单" in body
+    assert "定优化方案" in body
     assert "无限深挖" in body or "更全" in body
     assert "handoff" in body
 
@@ -768,10 +792,12 @@ def test_team_orchestration_skill_teaches_cross_folder_parallel():
     assert "裸聊单目标" in body or "运行时继承" in body
     assert "能少则少" in body and "拿不准先少派" in body
     # 审查收窄：探路已见路径进 task；单点展示 1 人；modules 不是配额
+    assert "审查·收窄" in body or "审查收窄" in body
     assert "父目录" in body and "通读" in body
     assert "单点展示" in body
     assert "凑工种" in body
     assert "不是配额" in body
+    assert "全面摸底" in body or "整仓审查" in body
     assert "不" in body and "覆盖" in body
     # 跨文件夹读写通吃派工换桌；CEO 只读跨桌仅认桌（禁「云端读不到本地」当唯一路径）
     assert "list_folder_dir" in body and "read_folder_file" in body
@@ -809,6 +835,8 @@ def test_team_orchestration_skill_teaches_empty_desk_no_project_shell():
     assert "要不要再套一层" in body
     assert "create_folder" in body
     assert "mkdir" in body
+    assert "court-game/" in body
+    assert "file_write" in body
 
 
 def test_team_orchestration_skill_teaches_delegate_knobs():
@@ -816,7 +844,7 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     # the DAG-vs-nesting distinction (model tiers were removed).
     body = _body("team_orchestration_advanced")
     assert "deliverable" in body
-    assert "coordinate" in body and "coordinate=false" in body
+    assert "coordinate=false" not in body
     assert "轻量直出" not in body
     assert "单人直出" not in body
     assert "finalize" not in body
@@ -825,8 +853,11 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     assert "规格已齐建站" in CONSULT_TEAM_ORCH_BY_SCENE
     assert "建站/工具台套 playbook" not in CONSULT_TEAM_ORCH_BY_SCENE
     assert "勿因单人免查" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "成文才必查" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "调研默认 A" in CONSULT_TEAM_ORCH_BY_SCENE
     assert "非成文短文落盘" in CONSULT_TEAM_ORCH_BY_SCENE
     assert "写一篇论文" in CONSULT_TEAM_ORCH_BY_SCENE or "综述" in CONSULT_TEAM_ORCH_BY_SCENE
+    assert "Office" in CONSULT_TEAM_ORCH_BY_SCENE
     assert "depends_on" in body and "同一层" in body
     # 依赖流水线 bullet 须教「派前先判生产者→消费者」+ 正反例（何时串行 / 何时并行），
     # 而非只讲 DAG 机械怎么填——修复 CEO 默认全平铺把有先后的流水线拍平的根因。
@@ -872,6 +903,22 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     assert "append_to_execution_id" in body
     assert "已往上方协作图追加" not in body
     assert "同回合再调" in body or "并入当前活跃图" in body
+    # 下游未定：先跑上游，再 replan(add=…) / 再 delegate（不教占位晚绑定填参）
+    assert "下游未定" in body
+    assert "replan(add=" in body
+    assert "再 `delegate`" in body or "再 delegate" in body
+    assert "有文件系统递路径" in body
+    assert "没文件尽量给全文" in body
+    assert "过长引擎" in body
+    for token in (
+        "checkpoint_after",
+        "bind_after_deps",
+        'coordination="wall"',
+        "complexity_hint",
+        "result_handling",
+        "require_upstream",
+    ):
+        assert token not in body, token
 
 
 def test_team_orchestration_skill_teaches_constraint_vs_solution_and_outline_step():
@@ -879,19 +926,31 @@ def test_team_orchestration_skill_teaches_constraint_vs_solution_and_outline_ste
     # a deliverable's professional STRUCTURE belongs to the expert worker (not the
     # CEO's task), that contract.required_sections is an acceptance floor (not a
     # structure blueprint), and that研究级大型交付 should make「定结构」an evidence-driven,
-    # user-gated outline step (调研 → 提纲 + checkpoint_after → 全文) rather than the
+    # user-gated outline step (调研 → 提纲：套餐停 / 先派再问 → 全文) rather than the
     # CEO fixing the skeleton up front. Pins the范式 so it can't silently drop out.
     # 案 f9a6a1c3 / 08-08②：必备章节标题与验收同字面；禁藏裸报错。
     body = _body("team_orchestration_advanced")
     assert "方案" in body  # 约束 vs 方案
-    assert "required_sections" in body  # 验收底线、非结构蓝图
+    assert "审查章节" in body
+    assert "task 正文" in body
+    assert 'required_sections": ["问题", "建议", "评分"]' not in body
     assert "同字面" in body or "同一套原文" in body
     assert "近义" in body
     assert "裸报错" in body or "藏起契约" in body or "藏契约" in body
     assert "面向用户·大白话" in body or "用人话概括" in body
     assert "瞒报" in body or "改口称已过关" in body
     assert "提纲" in body
-    assert "checkpoint_after" in body
+    assert "playbook=research_report" in body or "套餐提纲步" in body
+    assert "先只派提纲" in body and "ask_user" in body
+    for token in (
+        "checkpoint_after",
+        "bind_after_deps",
+        'coordination="wall"',
+        "complexity_hint",
+        "result_handling",
+        "require_upstream",
+    ):
+        assert token not in body, token
     # 定案 A：调研驱动大型交付 — 各角 MD 笔记 files，禁三人 prose 只靠主笔落盘
     assert "三人 prose" in body or "角 prose" in body
     assert "仅主笔落盘" in body or "只靠主笔落盘" in body
@@ -935,6 +994,14 @@ def test_team_orchestration_skill_teaches_presentation_pptx_honesty():
     assert "文本" in body and "表格" in body
     assert "说满" in body and "空派" in body
     assert "SmartArt" not in body and "DrawingML" not in body
+    assert "凭印象" in body
+    assert "先干再问" in body
+    assert "顾问短对齐" in body
+    assert "源数据文件下一步" in body
+    assert "无法可靠解析的源数据文件" in body
+    assert "表质量基线" in body
+    assert "冒充表结构" in body
+    assert "form/artifacts" in body
 
 
 def test_team_orchestration_skill_teaches_deterministic_word_pdf_export():
@@ -943,6 +1010,8 @@ def test_team_orchestration_skill_teaches_deterministic_word_pdf_export():
     assert "md_to_docx" in body
     assert "python-docx" in body  # 只作禁用主路径出现
     assert "目标格式标不可产" in body
+    assert "与执行正交" in body
+    assert "确定性导出器" in body
     assert "`.docx`/`.pptx`/`.xlsx` 等且能力行" not in body
 
 
@@ -991,6 +1060,156 @@ def test_build_app_skill_teaches_cloud_install_verify_honesty():
     assert "分项分开写" in body
 
 
+def test_dispatch_writing_how_lives_in_skill_not_core():
+    """第七刀：必读锚点 / 正反例 / required_sections 禁填细则在编排 skill；核不复述百科。"""
+    from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
+
+    hint = _CEO_CORE_HINT
+    orch = _body("team_orchestration_advanced")
+    discipline = _body("work_discipline")
+
+    assert "必读锚点" in orch
+    assert "正例·交需求" in orch
+    assert "反例·替它设计完" in orch
+    assert "禁止】再填 `required_sections`" in orch or "【禁止】再填 `required_sections`" in orch
+    assert "worker 看不到对话历史" in orch
+    assert "权威线索" in orch
+    assert "设计稿" in orch
+    assert "读全局规则" in orch
+    assert "团队负责人口吻" in orch
+    assert "已确认约束" in orch
+    assert "同字面" in orch or "同一套原文" in orch
+    assert "写 task" in discipline or "【写 task】" in discipline
+
+    for token in (
+        "必读锚点",
+        "正例·交需求",
+        "反例·替它设计完",
+        'required_sections": [',
+        "must_contain",
+        "deliverable.name",
+        "requires_files",
+        "少吓用户",
+        "缺章失败如实可见",
+        "引擎按小标题字面验",
+        "设计三问",
+        "补丁绊线",
+        "探索信任",
+        "团队负责人口吻",
+        "动笔前在思考",
+        "用户点名或导航指向的设计稿",
+        "规则已在共享基座",
+    ):
+        assert token not in hint, token
+
+
+def test_execution_how_lives_in_skill_not_core_encyclopedia():
+    """第五刀：内环 code_diagnostics / 修码外环 HOW 在编排 skill；挂门长字面不在核。"""
+    from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
+
+    hint = _CEO_CORE_HINT
+    orch = _body("team_orchestration_advanced")
+    assert "code_diagnostics" in orch
+    assert "tsc -b" in orch
+    assert "写盘回执" in orch
+    assert "验收员" in orch
+    assert "wait_for" not in hint
+    assert "口头假验收" not in hint
+    assert "已登录，继续" not in hint
+    assert "code_diagnostics" not in hint
+
+
+def test_delivery_landing_how_lives_in_skills_not_core():
+    """第四刀：空桌目录枚举 / create_folder vs mkdir / 分道百科在 Skill；核只留开火短卡。"""
+    from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
+
+    hint = _CEO_CORE_HINT
+    orch = _body("team_orchestration_advanced")
+    help_map = _body("product_help_map")
+
+    for token in (
+        "site/",
+        "mkdir",
+        "court-game/",
+        "执行位置分道",
+        "收口硬约束",
+        "系统浏览器",
+        "约定文档出口",
+        "写完再搬",
+        "本文件夹根即工作区根",
+    ):
+        assert token not in hint, token
+
+    assert "site/" in orch and "app/" in orch
+    assert "src/" in orch and "docs/" in orch
+    assert "mkdir" in orch
+    assert "create_folder" in orch and "桌内工程根" in orch
+    assert "court-game/" in orch
+    assert "写完再搬" in orch
+    assert "工作区相对完整路径" in orch
+    assert "归位" in orch and "移到工作区" in orch
+    assert "约定文档出口" in orch
+    assert "裸 `reviews/…`" in orch
+    assert "混用两套前缀" in orch
+    assert "交付下载·面板路径" in orch
+    assert "404" in orch or "下载失败" in orch
+    assert "file_list" in orch
+
+    assert "执行位置分道" in help_map
+    assert "双击打开" in help_map
+    assert "系统浏览器" in help_map
+    assert "禁止给本机磁盘路径" in help_map
+    assert "工作区根目录" in help_map
+    assert "文件夹名" in help_map
+    assert "文件名" in help_map
+    assert "完整预览" in help_map
+    assert "文件」面板" in help_map or "文件面板" in help_map
+
+
+def test_slice_honesty_how_lives_in_skills_not_core():
+    """第三刀：立刻派≠全量 HOW 真源在编排 / build_app；核只留开火短卡。"""
+    from agentcore.runtime.resolve.prompt import _CEO_CORE_HINT
+
+    hint = _CEO_CORE_HINT
+    orch = _body("team_orchestration_advanced")
+    build = _body("build_app")
+
+    for token in (
+        "编排自主",
+        "摸底波",
+        "路径 A",
+        "路径 B",
+        "不知轻重",
+        "一人能扛整座成果",
+        "不必先称重量",
+        "你可以组队",
+        "不算已拆编制",
+        "整个里程碑",
+        "临时交成果组长",
+        "凡大活必嵌套",
+        "根委派切片诚实",
+        "目标·约束·验收",
+    ):
+        assert token not in hint, token
+
+    assert "不知轻重" in orch
+    assert "一人能扛整座成果" in orch
+    assert "按块派" in orch and "不必先称重量" in orch
+    assert "缝不清" in orch and "真两波" in orch
+    assert "整个里程碑" in orch
+    assert "目标·约束·验收" in orch
+    assert "你可以组队" in orch and "先组队" in orch
+    assert "不算" in orch and "已拆编制" in orch
+    assert "路径 A" in orch and "路径 B" in orch
+    assert "根委派切片诚实" in orch
+    assert "编排自主" in orch and "摸底波" in orch
+    assert "凡大活必嵌套" in orch
+    assert "嵌套扇出" in orch
+    assert "临时交成果组长" in build
+    assert "薄旁路" in build
+    assert "薄旁路" in hint  # 核开火短卡；build_app 仍复述准入语境
+
+
 def test_build_app_skill_teaches_admission_and_agent_diversion():
     """准入：真 SPA/明示完整可跑才满档；边界未钉禁首派五波；五阶段仅形状内。"""
     body = _body("build_app")
@@ -1019,15 +1238,19 @@ def test_build_app_skill_teaches_admission_and_agent_diversion():
 
 def test_team_orchestration_skill_teaches_sections_not_deleted_deliverable_keys():
     # 定案：已删 name/must_contain/min_length/requires_files；主题约束进 task /
-    # required_sections / team_brief；写盘用 form=files 和/或 artifacts。
-    # 已删字段不留负面清单（与 schema 棘轮同向）。
+    # team_brief；审查章节写进 task 正文，勿填 required_sections。
+    # 写盘用 form 三档 + artifacts。已删字段不留负面清单（与 schema 棘轮同向）。
     body = _body("team_orchestration_advanced")
-    assert "required_sections" in body
-    assert "验收点" in body or "验收项" in body
+    assert "审查章节" in body
+    assert "task 正文" in body
+    assert "验收项" in body or "验收要点" in body
     assert "2–4" in body or "2-4" in body
+    assert "【看】" in body and "【存文档】" in body and "【改工程】" in body
+    assert "form=workspace" in body
     assert "form=files" in body or "form\": \"files\"" in body or '"form": "files"' in body
     assert "artifacts" in body
     assert "team_brief" in body
+    assert 'required_sections": ["问题", "建议", "评分"]' not in body
     assert "must_contain" not in body
     assert "细则清单进 `deliverable.must_contain`" not in body
     assert "细则清单进 deliverable.must_contain" not in body
@@ -1049,15 +1272,18 @@ def test_team_orchestration_skill_teaches_parallel_review_notewall():
 
 
 def test_team_orchestration_skill_teaches_review_contract_template():
-    # 审查默认 prose + 中文 required_sections；结构化 JSON 仅走文件通道（artifacts）。
-    # 钉：格式只在 deliverable、task 不双写、勿混用 json+required_sections、web_search 软引导。
+    # 审查默认 prose；章节写进 task 正文；结构化 JSON 走文件通道（artifacts）。
+    # 钉：勿教填 required_sections JSON、task 写审查章节、web_search 软引导。
     body = _body("team_orchestration_advanced")
     assert "审查类任务的统一契约" in body
     assert "默认 prose" in body
-    assert 'required_sections": ["问题", "建议", "评分"]' in body
+    assert "问题" in body and "建议" in body and "评分" in body
+    assert "审查章节写进 task 正文" in body or "审查章节" in body
+    assert 'required_sections": ["问题", "建议", "评分"]' not in body
     assert "结构化交付走文件通道" in body
-    assert "artifacts" in body and "output_format" in body and "json" in body
-    assert "禁止" in body  # 混用防御
+    assert "artifacts" in body
+    assert "勿填 `output_format`" in body or "勿填 output_format" in body
+    assert "禁止" in body  # 勿填字段 / 瞒报
     assert "web_search" in body
     assert "全文" in body or "复制" in body
     assert "deliverable" in body
@@ -1066,10 +1292,27 @@ def test_team_orchestration_skill_teaches_review_contract_template():
 
 def test_team_orchestration_skill_teaches_seed_notes_and_team_brief():
     body = _body("team_orchestration_advanced")
-    assert "seed_notes" in body and "team_brief" in body
-    assert 'coordination="wall"' in body or "coordination" in body
-    assert "wall" in body and "none" in body
-    assert "正交" in body or "互不依赖" in body
+    assert "team_brief" in body
+    assert "seed_notes" not in body
+    assert "写非空" in body and "建墙" in body
+    assert "build_feature" in body
+    assert "正交扇出" in body
+    assert "不写 brief" in body
+    assert "一行一条" in body
+    assert "一次完整写入" in body
+    assert "两篇成稿" in body
+    assert "短规格" in body
+    assert "互填" in body
+    assert "成环" in body
+    for token in (
+        "checkpoint_after",
+        "bind_after_deps",
+        'coordination="wall"',
+        "complexity_hint",
+        "result_handling",
+        "require_upstream",
+    ):
+        assert token not in body, token
     # 定稿漂移 A′：team_brief / task 固定「已确认约束」；约束优先于附件旧表；自拟默认不进该块
     assert "已确认约束" in body
     assert "约束块优先" in body or "优先" in body
@@ -1080,16 +1323,28 @@ def test_team_orchestration_skill_teaches_seed_notes_and_team_brief():
 
 def test_team_orchestration_skill_teaches_coordination_wall_vs_none():
     body = _body("team_orchestration_advanced")
-    assert "coordination" in body
-    assert "wall" in body and "none" in body
+    assert "写非空" in body and "team_brief" in body and "建墙" in body
     assert "build_feature" in body
+    assert "正交扇出" in body and "不写 brief" in body
+    for token in (
+        "checkpoint_after",
+        "bind_after_deps",
+        'coordination="wall"',
+        "complexity_hint",
+        "result_handling",
+        "require_upstream",
+    ):
+        assert token not in body, token
     assert "consult `build_website`" not in body
     assert "consult(build_website)" not in body
     assert "style=toolshed" not in body
     assert "intensity=solo" not in body
     assert "单页一人" in body or "一人做完" in body
     assert "营销皮" in body
-    assert "web_quality_scan" in body
+    assert "自动静态质检" in body
+    assert "可开 web_quality_scan" not in body
+    assert "web_quality_scan" not in body
+    assert "visual_critic" not in body
 
 
 def test_debate_skill_teaches_debate_tool_forms_and_dual_products():
@@ -1242,6 +1497,8 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "催收敛" in body or "候选菜单" in body
     assert "讨论开场" in body
     assert "对话本身" in body
+    assert "答完澄清" in body and "end_turn" in body
+    assert "不写盘" in body or "答完维度" in body
     assert "开工提案卡" not in body
     assert "提案体硬闸" not in body
     assert "一键开做" not in body or "禁止" in body
@@ -1261,6 +1518,11 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "继续·承接确认项" in body
     assert "空转确认" in body or "不承接选项" in body
     assert "默认路径" in body
+    # 短确认·只补缺口：核只留短钩；全文在本 Skill
+    assert "短确认·只补缺口" in body
+    assert "prior_delivery_gaps" in body
+    assert "整锅重派" in body
+    assert "静默自拟" in body
     # 交付档：绿场 lean|full + 只改一处；建站只留形态消歧，禁桌上档/具名套餐
     assert "交付档" in body
     assert "桌上结果" in body
@@ -1280,7 +1542,10 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "做个网站" in body
     assert "展示页" in body or "业务应用" in body
     assert "挡路" in body
-    assert "web_quality_scan" in body
+    assert "自动静态质检" in body
+    assert "可开 web_quality_scan" not in body
+    assert "web_quality_scan" not in body
+    assert "visual_critic" not in body
     assert "营销皮" in body
     assert "intensity=full" in body or "满编" in body
     assert "playbook=\"build_website\"" not in body
@@ -1435,18 +1700,28 @@ def test_ask_user_midtask_skill_teaches_fork_and_annotate():
 
 
 def test_delegate_checkpoint_skill_teaches_wave_boundary_pause():
-    # 委派波间挂起 split out: the checkpoint_after wave-boundary pause. Gated on
+    # 委派途中把关：套餐提纲步会停，或先只派提纲、收回后再问。Gated on
     # ask_user (the live-user proxy) since it pauses for user review.
     skill = build_system_skill_registry().get("delegate_checkpoint")
     assert skill.requires_tools == ("ask_user",)
     body = skill.body
-    assert "checkpoint_after" in body
-    assert "depends_on" in body  # only meaningful inside a multi-step DAG
-    # B1 轻教法：用户明文要把关 → 必用结构化卡，禁止纯聊天代卡。
-    assert "明文要求" in body
+    assert "playbook=research_report" in body
+    assert "套餐提纲步" in body
+    assert "先只派提纲" in body
+    assert "ask_user" in body
+    assert "再派撰稿" in body
+    # B1 轻教法：用户明文要把关 → 必用结构化路径，禁止纯聊天代卡。
+    assert "明文" in body
     assert "必用" in body
     assert "禁止纯聊天" in body
     assert "research_report" in body
+    for token in (
+        "checkpoint_after",
+        "bind_after_deps",
+        'coordination="wall"',
+        "require_upstream",
+    ):
+        assert token not in body, token
 
 
 def test_verify_and_fix_skill_teaches_test_run_loop():
@@ -1490,10 +1765,17 @@ def test_long_form_writing_skill_teaches_skeleton_fill():
     assert "主路径" in body and "完整正文" in body
     assert "禁止】整篇一次" not in body and "禁止】无骨架整篇一次" not in body
     assert "连续写失败" in body or "分段" in body
-    # B1 轻教法：明文把关 → checkpoint_after / research_report；自主确认才可对话式。
+    # B1 轻教法：明文把关 → research_report 套餐 / 先派提纲再问；自主确认才可对话式。
     assert "明文要求" in body
-    assert "checkpoint_after" in body
-    assert "research_report" in body
+    assert "playbook=research_report" in body or "research_report" in body
+    assert "先只派提纲" in body and "ask_user" in body
+    for token in (
+        "checkpoint_after",
+        "bind_after_deps",
+        'coordination="wall"',
+        "require_upstream",
+    ):
+        assert token not in body, token
     # 与多角协作划界：A parallel_brief / B research_report；材料已齐才单写手
     assert "划界" in body
     assert "parallel_brief" in body

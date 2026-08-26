@@ -4,10 +4,8 @@ What it actually provides:
 - Timeout enforcement (kill the whole process tree on timeout / cancel)
 - A per-execution temp dir used as the default working directory
 - stdout/stderr capture
-- 产物写回 reporting: which workspace files the run wrote (``written_files``).
-  Unlike gVisor there is no copy-out leg to enumerate — the script writes the real
-  workspace directly — so the landing is reconstructed by a bounded post-run scan
-  (``written_scan``).
+- 产物写回 reporting: which workspace files the run wrote (``written_files``),
+  via the same bounded post-run scan as the cloud desk (``written_scan``).
 
 What it does NOT provide — read before enabling on a shared/cloud host:
 - NO real isolation: the child runs with the **full privileges of the API process**

@@ -2,7 +2,6 @@
  * risk_ack — 风险勾选清单：行式多选（与 kickoff 同壳）。
  * label「[高]/[中]/[低]」前缀解析为右侧灰字严重度；recommended → 灰字「建议处理」（无彩色徽章）。
  */
-import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import { AskCardFooter, AskCardShell } from "./AskCardShell";
@@ -39,7 +38,6 @@ export function RiskAckBody({
       icon={META.icon}
       caption={caption ?? META.activeCaption}
       title={content.question}
-      extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
       footer={
         <AskCardFooter
           cta={META.cta}

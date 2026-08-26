@@ -70,9 +70,8 @@ async def test_code_execute_emits_executing_phase():
 
 
 async def test_code_execute_surfaces_written_back_files():
-    # 产物写回 (gVisor copy-out): the model must see exactly which files landed in
-    # the workspace (so it references real paths), and the display carries them for
-    # the client. Skipped-by-cap files are disclosed, never silent.
+    # Bind-to-disk: the model must see exactly which files landed in the
+    # workspace, and the display carries them for the client.
     backend = _FakeBackend(
         ExecutionResult(
             success=True,
@@ -81,7 +80,6 @@ async def test_code_execute_surfaces_written_back_files():
             exit_code=0,
             duration_ms=5,
             written_files=["out/course.pptx", "out/chart.png"],
-            write_back_skipped=1,
         )
     )
     result = await CodeExecuteTool(location="server").execute(
@@ -90,7 +88,7 @@ async def test_code_execute_surfaces_written_back_files():
 
     assert result.success is True
     assert "已写回工作区：out/course.pptx、out/chart.png" in result.output
-    assert "1 个文件超出写回限额" in result.output
+    assert "超出写回限额" not in result.output
     assert result.display is not None
     assert result.display["written_files"] == ["out/course.pptx", "out/chart.png"]
 
@@ -369,7 +367,7 @@ async def test_code_execute_blocks_long_running_without_sandbox():
     assert backend.requests == []
 
 
-async def test_code_execute_long_running_server_message_has_no_terminal():
+async def test_code_execute_long_running_server_message_points_to_terminal():
     backend = _FakeBackend(
         ExecutionResult(success=True, stdout="", stderr="", exit_code=0, duration_ms=1)
     )
@@ -381,8 +379,8 @@ async def test_code_execute_long_running_server_message_has_no_terminal():
     assert result.success is False
     assert result.contract_failure is True
     err = result.error or ""
-    assert "无本机 terminal" in err
-    assert "subcommand=start" not in err
+    assert "terminal" in err
+    assert "subcommand=start" in err
     assert backend.requests == []
 
 

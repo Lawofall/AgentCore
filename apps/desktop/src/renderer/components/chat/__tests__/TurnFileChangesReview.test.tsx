@@ -164,7 +164,7 @@ describe("TurnFileChangesReview change labels", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/工具参数侧预览/)).toBeTruthy();
+      expect(screen.getByText("a.ts")).toBeTruthy();
     });
     // Row labels: write+edit → 更新; delete → 删除
     expect(screen.getAllByText("更新").length).toBeGreaterThanOrEqual(2);
@@ -275,7 +275,7 @@ describe("TurnFileChangesReview A2′ rollback", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/工具参数侧预览/)).toBeTruthy();
+      expect(screen.getByText("a.ts")).toBeTruthy();
     });
     expect(screen.queryByLabelText("恢复到本回合开始")).toBeNull();
   });
@@ -316,8 +316,38 @@ describe("TurnFileChangesReview A2′ rollback", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("恢复到本回合开始")).toBeTruthy();
     });
-    expect(screen.getByText(/overlay/)).toBeTruthy();
     expect(screen.getByText("删除")).toBeTruthy();
+  });
+
+  it("true diff with zero files still explains the empty body", async () => {
+    getTurnFilesDiff.mockResolvedValue({
+      messageId: "m1",
+      baselineSnapshotId: "snap-1",
+      available: true,
+      changes: [],
+      total: 0,
+      added: 0,
+      modified: 0,
+      deleted: 0,
+    });
+
+    render(
+      <TooltipProvider>
+        <TurnFileChangesReview
+          variant="panel"
+          heading="回合 1"
+          conversationId="c1"
+          messageId="m1"
+          artifacts={[]}
+        />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("相对基线无文件差异")).toBeTruthy();
+    });
+    expect(screen.getByLabelText("恢复到本回合开始")).toBeTruthy();
+    expect(screen.queryByText("暂无改动")).toBeNull();
   });
 
   it("uses sidecar local diff/restore when workspace location is local", async () => {
@@ -366,7 +396,6 @@ describe("TurnFileChangesReview A2′ rollback", () => {
       "m1",
     );
     expect(getTurnFilesDiff).not.toHaveBeenCalled();
-    expect(screen.getByText(/本机 zip 基线/)).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText("恢复到本回合开始"));
     await waitFor(() => {
@@ -376,6 +405,69 @@ describe("TurnFileChangesReview A2′ rollback", () => {
       );
     });
     expect(restoreSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("panel chrome is one row: heading, counts, restore, time; no file-count", async () => {
+    getTurnFilesDiff.mockResolvedValue({
+      messageId: "m1",
+      baselineSnapshotId: "snap-1",
+      available: true,
+      changes: [
+        {
+          path: "a.ts",
+          changeType: "added",
+          baseSha: null,
+          resultSha: "r",
+          isBinary: false,
+          content: "x",
+          sizeBytes: 1,
+          baseContent: null,
+        },
+        {
+          path: "b.ts",
+          changeType: "added",
+          baseSha: null,
+          resultSha: "r2",
+          isBinary: false,
+          content: "y",
+          sizeBytes: 1,
+          baseContent: null,
+        },
+      ],
+      total: 2,
+      added: 2,
+      modified: 0,
+      deleted: 0,
+    });
+
+    render(
+      <TooltipProvider>
+        <TurnFileChangesReview
+          variant="panel"
+          heading="回合 2"
+          headingTime="01:12"
+          conversationId="c1"
+          messageId="m1"
+          artifacts={[
+            {
+              path: "a.ts",
+              name: "a.ts",
+              op: "write",
+              change: { kind: "write", content: "x", mode: "overwrite" },
+            },
+          ]}
+        />
+      </TooltipProvider>,
+    );
+
+    const restore = await screen.findByLabelText("恢复到本回合开始");
+    expect(screen.getByText("回合 2")).toBeTruthy();
+    expect(screen.getByText("+2")).toBeTruthy();
+    expect(screen.getByText("01:12")).toBeTruthy();
+    expect(screen.queryByText(/个文件/)).toBeNull();
+    expect(restore.textContent).toContain("恢复");
+    expect(restore.textContent).not.toContain("到本回合开始");
+    expect(screen.queryByText("正在读取改动…")).toBeNull();
   });
 
   it("binary change offers direct download instead of workspace-only dead end", async () => {

@@ -18,10 +18,10 @@ from agentcore.tools.registration import (
 from agentcore.workspace._paths import AI_ARCHIVE_FILE_SUFFIXES
 from agentcore.workspace.attachment_parse import (
     MARKITDOWN_EXTENSIONS,
+    SCAN_NOTICE,
     SKIP_EXTENSIONS,
     ParseStatus,
     extension_of,
-    extract_office_bytes,
     parsed_copy_path,
 )
 from agentcore.workspace.declared_dirs import (
@@ -29,15 +29,27 @@ from agentcore.workspace.declared_dirs import (
     is_declared_latent_dir,
 )
 from agentcore.workspace.external_mounts import EXTERNAL_PREFIX, parse_external_path
-from agentcore.workspace.limits import OFFICE_EXTRACT_MAX_BYTES
+from agentcore.workspace.file_kind import (
+    OLE_WORD_EXTENSIONS,
+    decode_text_bytes,
+    parse_too_large_size,
+    sniff_bytes,
+)
+from agentcore.workspace.limits import (
+    FILE_TOO_LARGE_DETAIL,
+    WORKSPACE_READ_MAX_BYTES,
+    is_file_too_large_detail,
+)
 from agentcore.workspace.protocol import (
     DirEntry,
     NotADirectory,
     NotAFile,
     OutsideWorkspace,
     PathNotFound,
+    ReadHeadResult,
     TreeEntry,
     WorkspaceError,
+    WorkspaceIOError,
 )
 from agentcore.workspace.sparse_listing import should_hide_ai_noise_from_list
 
@@ -46,12 +58,20 @@ from .errors import (
     _file_read_same_window_hit,
     _map_workspace_read_error,
     _maybe_channel_dead_error,
-    _office_extract_budget_error,
-    _office_extract_failed_error,
     _outside_workspace_error,
     _path_missing_error,
     _url_not_workspace_path_error,
     looks_like_http_url,
+)
+from .observe import (
+    binary_next,
+    extract_failed_next,
+    extract_failed_text,
+    format_observe_envelope,
+    ole_next,
+    scan_next,
+    source_too_large_next,
+    table_next,
 )
 from .path_hints import enrich_missing_path_message
 
@@ -181,14 +201,25 @@ def _effective_line_limit(limit: object) -> int:
     return max(1, min(_as_int(limit), FILE_READ_SAFETY_LINE_CAP))
 
 
-def _is_ceiling_counted_read(offset: object, limit: object) -> bool:
+def _effective_start_page(start_page: object) -> int:
+    if start_page is None:
+        return 1
+    return max(1, _as_int(start_page))
+
+
+def _is_ceiling_counted_read(
+    offset: object, limit: object, *, start_page: int = 1
+) -> bool:
     """From line 1 filling the safety cap — counts unless tool_clear recovery.
 
     双省 / 只传 offset=1 / 只传 limit=行顶 (and offset=1+limit≥行顶) are this
     shape. ``_file_read_should_count`` skips the increment when the path is
     fully cleared. Point windows count only when the requested span was
     already delivered and the path body is still in the projection window.
+    PDF ``start_page`` > 1 is pagination and never counts as a fill-cap read.
     """
+    if start_page > 1:
+        return False
     if _effective_offset(offset) > 1:
         return False
     if limit is None:
@@ -264,18 +295,24 @@ def _request_range_already_delivered(
 
 
 def _file_read_should_count(
-    context: ToolContext, path_key: str, offset: object, limit: object
+    context: ToolContext,
+    path_key: str,
+    offset: object,
+    limit: object,
+    *,
+    start_page: int = 1,
 ) -> bool:
     """Whether this successful read increments ``file_read_counts``.
 
     tool_clear recovery (path fully cleared in the projection) never counts.
     Fill-cap whole reads otherwise count. A point window counts only when the
     requested line range was already delivered *and* the path body is still in
-    the projection window. A new range (pagination) never counts.
+    the projection window. A new range (pagination, including PDF start_page)
+    never counts.
     """
     if _file_read_cleared_recovery(context, path_key):
         return False
-    if _is_ceiling_counted_read(offset, limit):
+    if _is_ceiling_counted_read(offset, limit, start_page=start_page):
         return True
     return _file_read_body_present(
         context, path_key
@@ -386,6 +423,83 @@ def _file_read_ok(output: str, start: float) -> ToolResult:
         output=output,
         duration_ms=int((time.monotonic() - start) * 1000),
         output_limit=max(len(output), ToolResult._MAX_OUTPUT_LEN),
+    )
+
+
+async def _backend_read_bytes(
+    backend: object, path: str, *, max_bytes: int | None = None
+) -> bytes:
+    """Call ``read_bytes``; tolerate fakes that omit the ``max_bytes`` keyword."""
+    read = getattr(backend, "read_bytes", None)
+    if not callable(read):
+        raise WorkspaceError("read_bytes unavailable")
+    try:
+        if max_bytes is None:
+            return await read(path)
+        return await read(path, max_bytes=max_bytes)
+    except TypeError:
+        return await read(path)
+
+
+async def _extract_office(
+    backend: object, rel_path: str, *, ext: str, start_page: int = 1
+):
+    """Office/PDF extract: on-disk backends open the file in the child, not here."""
+    extract = getattr(backend, "extract_office", None)
+    if not callable(extract):
+        raise WorkspaceError("extract_office unavailable")
+    return await extract(rel_path, ext=ext, start_page=start_page)
+
+
+async def _backend_read_head(
+    backend: object, path: str, *, max_bytes: int | None = None
+) -> ReadHeadResult:
+    """Peek first bytes + total size. Not a whole-file ingest."""
+    read_head = getattr(backend, "read_head", None)
+    if not callable(read_head):
+        raise WorkspaceError("read_head unavailable")
+    return await read_head(path, max_bytes=max_bytes)
+
+
+def _is_undecodable_read(exc: BaseException) -> bool:
+    """True when the backend failed because the file is not UTF-8 text."""
+    text = str(exc).lower()
+    return (
+        "codec" in text
+        or "utf-8" in text
+        or "decode" in text
+        or "unicode" in text
+        or "二进制" in text
+        or "not utf" in text
+    )
+
+
+def _sidecar_is_scan_notice(text: str) -> bool:
+    """True when the ``*.md`` sidecar is the scan-notice body, not extracted prose."""
+    body = (text or "").strip()
+    return bool(body) and body == SCAN_NOTICE.strip()
+
+
+def _observe_ok(
+    *,
+    kind: str,
+    path: str,
+    type_label: str,
+    next_actions: str,
+    start: float,
+    size: int | None = None,
+    text: str = "",
+) -> ToolResult:
+    return _file_read_ok(
+        format_observe_envelope(
+            kind=kind,
+            path=path,
+            type_label=type_label,
+            next_actions=next_actions,
+            size=size,
+            text=text,
+        ),
+        start,
     )
 
 
@@ -652,6 +766,34 @@ def _note_file_read_success(
     return output
 
 
+def _append_pdf_page_footer(
+    output: str,
+    *,
+    page_start: int | None,
+    page_end: int | None,
+    page_total: int | None,
+) -> str:
+    """Tell the model this extract was a page window, not the whole PDF."""
+    if page_start is None or page_end is None:
+        return output
+    from agentcore.workspace.limits import OFFICE_EXTRACT_PDF_MAX_PAGES
+
+    if page_total is not None:
+        line = f"抽取第 {page_start}–{page_end} 页，共 {page_total} 页"
+        if page_end < page_total:
+            line += (
+                f"。后面的页请用 start_page={page_end + 1} 再读"
+                "（offset/limit 仍是本窗文本行号）"
+            )
+        return f"{output.rstrip()}\n\n{line}。"
+    line = (
+        f"抽取第 {page_start}–{page_end} 页"
+        f"（每窗最多 {OFFICE_EXTRACT_PDF_MAX_PAGES} 页）。"
+        f"若后面还有内容，用 start_page={page_end + 1} 再读"
+    )
+    return f"{output.rstrip()}\n\n{line}。"
+
+
 def _format_extracted_read(
     text: str,
     *,
@@ -697,6 +839,7 @@ class FileReadTool:
                 "定位请用 grep / code_search；单文件默认整读"
                 "（省略则尽量整读，超安全顶截断）。"
                 "仅当页脚已标明截断或已有行号时再用 offset/limit 开窗。"
+                "PDF 每窗约 40 页；后面的页用 start_page 再读（offset/limit 仍是抽出文本的行号）。"
                 "禁止无目标地整目录逐文件通读。"
                 "看源码正文用本工具，勿改走 code_execute print/dump。"
                 "含糊「根」/ `.` / 仅根标签勿当文件整读——先 file_list/grep 钉真实路径。"
@@ -730,6 +873,15 @@ class FileReadTool:
                         "minimum": 1,
                         "maximum": FILE_READ_SAFETY_LINE_CAP,
                     },
+                    "start_page": {
+                        "type": "integer",
+                        "description": (
+                            "PDF 抽取起始页（1-based）。每窗最多约 40 页；"
+                            "后面的页请提高 start_page 再读。"
+                            "offset/limit 仍是本窗抽出文本的行号。其它格式忽略。"
+                        ),
+                        "minimum": 1,
+                    },
                 },
                 "required": ["path"],
             },
@@ -742,6 +894,7 @@ class FileReadTool:
         rel_path = arguments.get("path", "")
         offset = arguments.get("offset")
         limit = arguments.get("limit")
+        start_page_arg = arguments.get("start_page")
 
         if looks_like_http_url(str(rel_path or "")):
             return _url_not_workspace_path_error(str(rel_path).strip(), start)
@@ -759,8 +912,10 @@ class FileReadTool:
             rel_path, context, register=False
         )
         path_key = (rel_path or "").strip().replace("\\", "/")
+        ext = extension_of(path_key or rel_path)
+        pdf_start = _effective_start_page(start_page_arg)
         should_count = bool(path_key) and _file_read_should_count(
-            context, path_key, offset, limit
+            context, path_key, offset, limit, start_page=pdf_start
         )
         using_reread = False
         if should_count:
@@ -778,14 +933,22 @@ class FileReadTool:
                     )
                 # Cleared: allow recovery read (no grant required).
 
-        ext = extension_of(path_key or rel_path)
         if ext in SKIP_EXTENSIONS and not _is_run_landed_path(context, path_key):
-            return _error(
-                _spreadsheet_skip_error(
-                    path_key or rel_path,
-                    code_execute_assembled=_code_execute_assembled(context),
+            assembled = _code_execute_assembled(context)
+            return _observe_ok(
+                kind="table",
+                path=path_key or rel_path,
+                type_label=ext.lstrip(".") or "table",
+                next_actions=table_next(code_execute_assembled=assembled),
+                start=start,
+                text=_spreadsheet_skip_error(
+                    path_key or rel_path, code_execute_assembled=assembled
                 ),
-                start,
+            )
+
+        if ext in OLE_WORD_EXTENSIONS:
+            return await self._observe_ole(
+                rel_path, path_key=path_key, start=start, context=context
             )
 
         if ext in MARKITDOWN_EXTENSIONS:
@@ -794,6 +957,7 @@ class FileReadTool:
                 path_key=path_key,
                 offset=offset,
                 limit=limit,
+                start_page=pdf_start,
                 should_count=should_count,
                 using_reread=using_reread,
                 start=start,
@@ -817,6 +981,21 @@ class FileReadTool:
         except NotAFile:
             return _error(f"不是文件：{rel_path}", start)
         except WorkspaceError as e:
+            dead = _maybe_channel_dead_error(e, start)
+            if dead is not None:
+                return dead
+            if _is_undecodable_read(e) or is_file_too_large_detail(str(e)):
+                return await self._observe_undecodable(
+                    rel_path,
+                    path_key=path_key,
+                    offset=offset,
+                    limit=limit,
+                    start_page=pdf_start,
+                    should_count=should_count,
+                    using_reread=using_reread,
+                    start=start,
+                    context=context,
+                )
             return _map_workspace_read_error(e, path=path_key or rel_path, start=start)
 
         selected, start_line, end_line, cap_kind = _finalize_window(
@@ -825,6 +1004,23 @@ class FileReadTool:
             total_lines=result.total_lines,
             line_limit=eff_limit,
         )
+        first = result.lines[0] if result.lines else ""
+        if (
+            "\x00" in first
+            or first.startswith("%PDF")
+            or any("\x00" in line for line in result.lines)
+        ):
+            return await self._observe_undecodable(
+                rel_path,
+                path_key=path_key,
+                offset=offset,
+                limit=limit,
+                start_page=pdf_start,
+                should_count=should_count,
+                using_reread=using_reread,
+                start=start,
+                context=context,
+            )
         output = _format_line_window(
             selected,
             start_line=start_line,
@@ -849,33 +1045,54 @@ class FileReadTool:
         path_key: str,
         offset: object,
         limit: object,
+        start_page: int = 1,
         should_count: bool,
         using_reread: bool,
         start: float,
         context: ToolContext,
+        extract_ext: str | None = None,
     ) -> ToolResult:
         """Transparent office/PDF extract (killable worker; no default ``*.md`` write)."""
         sidecar = parsed_copy_path(rel_path.replace("\\", "/"))
         text: str | None = None
+        page_start: int | None = None
+        page_end: int | None = None
+        page_total: int | None = None
+        use_sidecar = start_page <= 1
 
-        try:
-            sidecar_text = await context.backend.read(sidecar)
-            if (sidecar_text or "").strip():
-                text = sidecar_text
-        except PathNotFound:
-            pass
-        except OutsideWorkspace as e:
-            return _outside_workspace_error(
-                rel_path, start, location=context.backend.location, reason=str(e)
-            )
-        except NotAFile:
-            pass
-        except WorkspaceError:
-            pass
+        if use_sidecar:
+            try:
+                sidecar_text = await context.backend.read(sidecar)
+                if (sidecar_text or "").strip():
+                    if _sidecar_is_scan_notice(sidecar_text):
+                        return _observe_ok(
+                            kind="scan",
+                            path=path_key or rel_path,
+                            type_label="pdf-scan",
+                            next_actions=scan_next(),
+                            start=start,
+                            text=SCAN_NOTICE,
+                        )
+                    text = sidecar_text
+            except PathNotFound:
+                pass
+            except OutsideWorkspace as e:
+                return _outside_workspace_error(
+                    rel_path, start, location=context.backend.location, reason=str(e)
+                )
+            except NotAFile:
+                pass
+            except WorkspaceError:
+                pass
 
         if text is None:
             try:
-                data = await context.backend.read_bytes(rel_path)
+                extracted = await _extract_office(
+                    context.backend,
+                    rel_path,
+                    ext=extract_ext or extension_of(path_key or rel_path),
+                    start_page=start_page,
+                )
             except OutsideWorkspace as e:
                 return _outside_workspace_error(
                     rel_path, start, location=context.backend.location, reason=str(e)
@@ -887,34 +1104,74 @@ class FileReadTool:
             except NotAFile:
                 return _error(f"不是文件：{rel_path}", start)
             except WorkspaceError as e:
-                return _map_workspace_read_error(e, path=path_key or rel_path, start=start)
-
-            if len(data) > OFFICE_EXTRACT_MAX_BYTES:
-                return _office_extract_budget_error(
-                    path_key or rel_path, len(data), start
+                if is_file_too_large_detail(str(e)):
+                    return _observe_ok(
+                        kind="truncated",
+                        path=path_key or rel_path,
+                        type_label="office-source",
+                        next_actions=source_too_large_next(),
+                        start=start,
+                        size=parse_too_large_size(str(e)),
+                        text="源文件超过抽取摄入顶。",
+                    )
+                return _map_workspace_read_error(
+                    e, path=path_key or rel_path, start=start
                 )
 
-            extracted = await extract_office_bytes(data, ext=extension_of(path_key or rel_path))
+            display = path_key or rel_path
+            size = extracted.size_bytes
             if extracted.status == ParseStatus.FAILED:
-                return _office_extract_failed_error(
-                    path_key or rel_path, extracted.detail or "convert failed", start
+                return _observe_ok(
+                    kind="extract",
+                    path=display,
+                    type_label=extension_of(display).lstrip(".") or "office",
+                    next_actions=extract_failed_next(),
+                    start=start,
+                    size=size,
+                    text=extract_failed_text(extracted.detail or ""),
                 )
             if extracted.status == ParseStatus.SKIPPED:
-                return _error(
-                    f"`{path_key or rel_path}` 不支持透明文本抽取。",
-                    start,
+                return _observe_ok(
+                    kind="extract",
+                    path=display,
+                    type_label=extension_of(display).lstrip(".") or "office",
+                    next_actions=extract_failed_next(),
+                    start=start,
+                    size=size,
+                    text=extract_failed_text(extracted.detail or ""),
                 )
-            # OK or SCANNED — both carry honest text (scan notice is not empty success).
+            if extracted.status == ParseStatus.SCANNED:
+                return _observe_ok(
+                    kind="scan",
+                    path=display,
+                    type_label="pdf-scan",
+                    next_actions=scan_next(),
+                    start=start,
+                    size=size,
+                    text=extracted.text or SCAN_NOTICE,
+                )
+            if extracted.detail == "pdf_page_window_empty":
+                extra = (
+                    f"文档共 {extracted.page_total} 页。"
+                    if extracted.page_total is not None
+                    else ""
+                )
+                output = f"第 {extracted.page_start} 页起没有更多文本。{extra}"
+                return _file_read_ok(output, start)
             text = extracted.text
-            if extracted.status == ParseStatus.SCANNED and not (text or "").strip():
-                return _error(
-                    f"`{path_key or rel_path}` 看起来是扫描件且无可抽文本层（无 OCR）。",
-                    start,
-                )
+            page_start = extracted.page_start
+            page_end = extracted.page_end
+            page_total = extracted.page_total
 
         assert text is not None
         output, start_line, end_line, total = _format_extracted_read(
             text, offset=offset, limit=limit
+        )
+        output = _append_pdf_page_footer(
+            output,
+            page_start=page_start,
+            page_end=page_end,
+            page_total=page_total,
         )
         if path_key:
             _record_file_read_delivery(context, path_key, start_line, end_line, total)
@@ -923,6 +1180,158 @@ class FileReadTool:
                     context, path_key, output, using_reread=using_reread
                 )
         return _file_read_ok(output, start)
+
+    async def _observe_ole(
+        self,
+        rel_path: str,
+        *,
+        path_key: str,
+        start: float,
+        context: ToolContext,
+    ) -> ToolResult:
+        """Legacy Word (.doc): success envelope, never UTF-8 decode."""
+        display = path_key or rel_path
+        size: int | None = None
+        try:
+            head = await _backend_read_head(context.backend, rel_path)
+            size = head.size_bytes
+        except OutsideWorkspace as e:
+            return _outside_workspace_error(
+                rel_path, start, location=context.backend.location, reason=str(e)
+            )
+        except PathNotFound:
+            return await _file_not_found_error(rel_path, start=start, context=context)
+        except NotAFile:
+            return _error(f"不是文件：{rel_path}", start)
+        except WorkspaceError as e:
+            dead = _maybe_channel_dead_error(e, start)
+            if dead is not None:
+                return dead
+            if is_file_too_large_detail(str(e)):
+                size = parse_too_large_size(str(e))
+            else:
+                return _map_workspace_read_error(e, path=display, start=start)
+        return _observe_ok(
+            kind="binary",
+            path=display,
+            type_label="ole-word",
+            next_actions=ole_next(),
+            start=start,
+            size=size,
+            text="旧版 Word（OLE），本工具不能抽正文。",
+        )
+
+    async def _observe_undecodable(
+        self,
+        rel_path: str,
+        *,
+        path_key: str,
+        offset: object,
+        limit: object,
+        start_page: int = 1,
+        should_count: bool,
+        using_reread: bool,
+        start: float,
+        context: ToolContext,
+    ) -> ToolResult:
+        """UTF-8 / size gate failed: sniff magic via peek, then extract or envelope."""
+        display = path_key or rel_path
+        try:
+            head = await _backend_read_head(context.backend, rel_path)
+        except OutsideWorkspace as e:
+            return _outside_workspace_error(
+                rel_path, start, location=context.backend.location, reason=str(e)
+            )
+        except PathNotFound:
+            return await _file_not_found_error(rel_path, start=start, context=context)
+        except NotAFile:
+            return _error(f"不是文件：{rel_path}", start)
+        except WorkspaceError as e:
+            return _map_workspace_read_error(e, path=display, start=start)
+
+        kind = sniff_bytes(head.data)
+        if kind == "pdf":
+            return await self._read_office_or_pdf(
+                rel_path,
+                path_key=path_key,
+                offset=offset,
+                limit=limit,
+                start_page=start_page,
+                should_count=should_count,
+                using_reread=using_reread,
+                start=start,
+                context=context,
+                extract_ext=".pdf",
+            )
+        if kind == "ole":
+            return _observe_ok(
+                kind="binary",
+                path=display,
+                type_label="ole",
+                next_actions=ole_next(),
+                start=start,
+                size=head.size_bytes,
+                text="OLE 复合文档，本工具不能抽正文。",
+            )
+        if kind == "binary":
+            return _observe_ok(
+                kind="binary",
+                path=display,
+                type_label=kind,
+                next_actions=binary_next(),
+                start=start,
+                size=head.size_bytes,
+                text="无法按文本解码。",
+            )
+        if head.size_bytes > WORKSPACE_READ_MAX_BYTES:
+            return _map_workspace_read_error(
+                WorkspaceIOError(
+                    f"{FILE_TOO_LARGE_DETAIL}（{head.size_bytes}字节）"
+                ),
+                path=display,
+                start=start,
+            )
+
+        try:
+            data = await _backend_read_bytes(
+                context.backend,
+                rel_path,
+                max_bytes=WORKSPACE_READ_MAX_BYTES,
+            )
+        except OutsideWorkspace as e:
+            return _outside_workspace_error(
+                rel_path, start, location=context.backend.location, reason=str(e)
+            )
+        except PathNotFound:
+            return await _file_not_found_error(rel_path, start=start, context=context)
+        except NotAFile:
+            return _error(f"不是文件：{rel_path}", start)
+        except WorkspaceError as e:
+            return _map_workspace_read_error(e, path=display, start=start)
+
+        decoded = decode_text_bytes(data)
+        if decoded is not None:
+            output, start_line, end_line, total = _format_extracted_read(
+                decoded, offset=offset, limit=limit
+            )
+            if path_key:
+                _record_file_read_delivery(
+                    context, path_key, start_line, end_line, total
+                )
+                if should_count:
+                    output = _note_file_read_success(
+                        context, path_key, output, using_reread=using_reread
+                    )
+            return _file_read_ok(output, start)
+        return _observe_ok(
+            kind="binary",
+            path=display,
+            type_label=kind,
+            next_actions=binary_next(),
+            start=start,
+            size=head.size_bytes,
+            text="无法按文本解码。",
+        )
 
 
 class FileListTool:

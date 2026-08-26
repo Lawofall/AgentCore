@@ -1,9 +1,9 @@
-"""真·多模型辩手（Phase 3）——三元组身份 / 路由键 / 默认对阵 / 裁判选型。
+"""真·多模型辩手（Phase 3）——目录身份 / 路由键 / 默认对阵 / 裁判选型。
 
 权威定案：docs/03-AI核心/辩论编排设计.md §7.5。
 
-- 身份 = model + origin(platform|byok) + provider_id(byok 必填)
-- 路由键 = platform/{id} 或 {provider_id}/{id}
+- 产品身份 = 目录 ``ref``（``@platform/{id}`` / ``@byok/{provider_id}/{id}``）或口语提及
+- 解析后内部仍是 model + origin + provider_id；出站路由键 = platform/{id} 或 {provider_id}/{id}
 - 空身份 → 回退 turn 主模型；非空校验失败 → 硬失败（禁 silent）
 - 裁判不要求中立、可与辩手同模；用户点名优先
 """
@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from agentcore.llm.model_ref import format_model_ref, parse_model_input
 from agentcore.llm.profiles import PLATFORM_PROVIDER_SENTINEL
 from agentcore.runtime.debate.types import DebateSide
 
@@ -29,7 +30,7 @@ ModelOrigin = Literal["platform", "byok"]
 
 @dataclass(frozen=True)
 class ModelIdentity:
-    """目录对齐的模型三元组（空 model = 未指定）。"""
+    """解析后的目录行槽位（空 model = 未指定）。产品面用 :meth:`ref`。"""
 
     model: str = ""
     origin: str = ""  # platform | byok | ""
@@ -79,6 +80,33 @@ class ModelIdentity:
             return ka == kb
         return a.model == b.model
 
+    def ref(self) -> str:
+        """Product catalog identity; empty if the triple is not yet complete."""
+        ident = self.normalized()
+        if ident.is_empty():
+            return ""
+        return format_model_ref(ident.origin, ident.model, ident.provider_id or None)
+
+
+def coerce_identity(ident: ModelIdentity) -> tuple[ModelIdentity, str]:
+    """Expand an unparsed ``@`` handle sitting in ``model``; leftover triples pass through."""
+    ident = ident.normalized()
+    if ident.is_empty():
+        return ident, ""
+    parsed = parse_model_input(ident.model)
+    if parsed.kind == "bad_ref":
+        return ident, parsed.error
+    if parsed.kind == "ref":
+        return (
+            ModelIdentity(
+                model=parsed.model,
+                origin=parsed.origin,
+                provider_id=parsed.provider_id,
+            ).normalized(),
+            "",
+        )
+    return ident, ""
+
 
 def identity_from_side(side: DebateSide) -> ModelIdentity:
     return ModelIdentity(
@@ -89,60 +117,56 @@ def identity_from_side(side: DebateSide) -> ModelIdentity:
 
 
 def identity_shape_error(ident: ModelIdentity, *, where: str = "model") -> str:
-    """同步形状校验（无目录）。空身份合法；非空须三元组齐。
+    """Complete identity ready to route. Empty is ok. Mentions must be resolved first.
 
-    ``model`` 只允许人类提及或目录裸 id——含 ``/`` 一律形状错误（禁止剥前缀自愈）。
+    Unparsed ``@`` handles in ``model`` are expanded. Upstream ids may contain ``/``.
     """
+    ident, coerce_err = coerce_identity(ident)
+    if coerce_err:
+        return f"{where} {coerce_err}"
     ident = ident.normalized()
     if ident.is_empty():
         return ""
-    if "/" in ident.model:
-        return (
-            f"{where} 的 model 禁止写入路由键（含 /）。"
-            "请分字段填写：model=目录裸 id 或人类提及，"
-            "origin=platform|byok，byok 时再填 provider_id。"
-            "勿把 origin/model 拼进 model；禁止剥前缀重试。"
-        )
     if ident.origin not in ("platform", "byok"):
-        return (
-            f"{where} 非空时须同时给出 origin（platform|byok）；"
-            "禁止只填裸 model 字符串消歧。请补全三元组后重试。"
-        )
+        return ""
     if ident.origin == "byok" and not ident.provider_id:
-        return f"{where} origin=byok 时 provider_id 必填。请补全三元组后重试。"
+        return (
+            f"{where} 须抄写完整目录身份 @byok/{{provider_id}}/{{model}}，"
+            "或只填可消歧提及。"
+        )
     if not ident.route_key():
-        return f"{where} 无法编成路由键（三元组不完整）。"
+        return f"{where} 无法编成路由键。"
     return ""
 
 
 def format_candidate_line(c: dict[str, Any], *, with_label: bool = True) -> str:
-    """候选 / 错误 tip 同形：分字段展示，禁止 ``{origin}/{model}`` 作可抄写主串。"""
+    """候选 / 错误 tip 同形：展示名 + 可抄写 ``ref``，禁止教 ``platform/{id}`` 路由键。"""
     parts: list[str] = []
     if with_label:
         label = (c.get("label") or "").strip()
         if label:
             parts.append(label)
-    model = (c.get("model") or "").strip()
-    if model:
-        parts.append(f"model={model}")
-    origin = (c.get("origin") or "").strip()
-    if origin:
-        parts.append(f"origin={origin}")
-    provider_id = (c.get("provider_id") or "").strip()
-    if provider_id:
-        parts.append(f"provider_id={provider_id}")
+    ref = (c.get("ref") or "").strip()
+    if not ref:
+        ident = ModelIdentity(
+            model=str(c.get("model") or ""),
+            origin=str(c.get("origin") or ""),
+            provider_id=str(c.get("provider_id") or ""),
+        ).normalized()
+        ref = ident.ref()
+    if ref:
+        parts.append(ref)
     return " · ".join(parts) if parts else "(empty)"
 
 
 def format_identity_fields(ident: ModelIdentity) -> str:
-    """校验失败文案用：``model=… · origin=…``，勿拼可误抄的路由键观感串。"""
+    """校验失败文案用：优先 ``ref``，未齐时回落裸 model。"""
+    ident, _ = coerce_identity(ident)
     ident = ident.normalized()
-    parts = [f"model={ident.model}"]
-    if ident.origin:
-        parts.append(f"origin={ident.origin}")
-    if ident.provider_id:
-        parts.append(f"provider_id={ident.provider_id}")
-    return " · ".join(parts)
+    ref = ident.ref()
+    if ref:
+        return ref
+    return ident.model or "(empty)"
 
 
 def infer_utterance_origin_preference(*texts: str) -> ModelOrigin | None:
@@ -200,7 +224,7 @@ def priced_model_from_route(route_or_model: str) -> str:
 
 
 def identity_from_route_key(route_or_model: str) -> ModelIdentity:
-    """``RunSpec.model`` 路由键 → 开工卡可展示三元组（空=未指定）。
+    """``RunSpec.model`` 路由键 → 可展示目录行槽位（空=未指定）。
 
     ``platform/{id}`` / ``{provider_id}/{id}`` 还原 origin；厂商前缀裸串
     （如 ``doubao/…``）与无前缀裸 id 仅透出 ``model``（无 origin）。
@@ -241,8 +265,10 @@ def _available_entries(catalog: ModelCatalog) -> list[ModelCatalogEntry]:
 def candidate_from_entry(
     entry: ModelCatalogEntry, *, side_key: str = ""
 ) -> dict[str, Any]:
-    """开赛卡 / 错误载荷候选行（model/origin/provider_id/label）。"""
+    """开赛卡 / 错误载荷候选行（ref 为可抄写身份；origin/provider_id 仍作行属性）。"""
+    ident = _entry_identity(entry)
     row: dict[str, Any] = {
+        "ref": ident.ref() or entry.ref,
         "model": entry.id,
         "origin": entry.origin,
         "provider_id": entry.provider_id or "",
@@ -288,18 +314,25 @@ class MentionResolveResult:
 
 
 def _strip_platform_prefix(mention: str) -> tuple[str, ModelOrigin | None]:
-    """去「平台」前缀；命中则 prefer_origin=platform。"""
+    """去「平台」前缀；命中则 prefer_origin=platform。
+
+    ``platform/…`` / ``平台/…`` 是路由键残片，不当口语前缀。
+    """
     raw = (mention or "").strip()
     if not raw:
         return "", None
     lower = raw.lower()
     for prefix in ("平台", "platform"):
-        if raw.startswith(prefix):
-            rest = raw[len(prefix) :].strip(" \t　:：-_")
-            return rest, "platform"
-        if lower.startswith(prefix.lower()) and prefix.isascii():
-            rest = raw[len(prefix) :].strip(" \t　:：-_")
-            return rest, "platform"
+        matched = raw.startswith(prefix) or (
+            prefix.isascii() and lower.startswith(prefix.lower())
+        )
+        if not matched:
+            continue
+        rest = raw[len(prefix) :]
+        if rest.startswith("/"):
+            continue
+        rest = rest.strip(" \t　:：-_")
+        return rest, "platform"
     return raw, None
 
 
@@ -312,7 +345,7 @@ def resolve_model_mention(
     side_key: str = "",
     where: str = "",
 ) -> MentionResolveResult:
-    """口语提及 → 目录唯一三元组。
+    """口语提及 → 目录唯一身份。
 
     去「平台」前缀、大小写不敏感匹配 id / display_name；DeepSeek 系走
     :func:`_is_deepseek_family`。唯一命中 → ok；0 / 多命中 → 结构化失败带 candidates。
@@ -320,16 +353,20 @@ def resolve_model_mention(
     偏好合并优先级：``prefer_origin``（side 已填 origin）> mention「平台」前缀 >
     ``utterance_prefer``（用户原文 / motion）。同 id 多 origin 时有偏好则池过滤后唯一选定。
     """
-    if "/" in (mention or "").strip():
+    mention_text = (mention or "").strip()
+    parsed = parse_model_input(mention_text)
+    if parsed.kind == "bad_ref":
         where_l = where or (f"sides[`{side_key}`]" if side_key else "model")
-        return MentionResolveResult(
-            ok=False,
-            error=identity_shape_error(
-                ModelIdentity(model=mention.strip()), where=where_l
-            ),
-        )
+        return MentionResolveResult(ok=False, error=f"{where_l} {parsed.error}")
+    if parsed.kind == "ref":
+        ident = ModelIdentity(
+            model=parsed.model,
+            origin=parsed.origin,
+            provider_id=parsed.provider_id,
+        ).normalized()
+        return MentionResolveResult(ok=True, identity=ident)
 
-    text, inferred = _strip_platform_prefix(mention)
+    text, inferred = _strip_platform_prefix(mention_text)
     # side.origin > mention 前缀 > utterance
     prefer: ModelOrigin | None = prefer_origin or inferred or utterance_prefer
     if not text:
@@ -364,7 +401,7 @@ def resolve_model_mention(
         if (e.display_name or "").strip().lower() == text_l:
             _add(e)
             continue
-        if _is_deepseek_family(text) and (
+        if _is_deepseek_family(text) and "/" not in text and (
             _is_deepseek_family(e.id) or _is_deepseek_family(e.display_name or "")
         ):
             _add(e)
@@ -381,12 +418,14 @@ def resolve_model_mention(
         tip = (
             f"{label} 提及「{mention}」在可用目录中零匹配"
             + (f"（prefer={prefer}）" if prefer else "")
-            + "。请从下列候选按分字段重填正式三元组；禁止再 ask_user 元问题。"
+            + "。请从下列候选把 `model` 抄成 @platform/… 或 @byok/{provider_id}/…；"
+            "禁止再 ask_user 元问题。"
         )
     else:
         tip = (
             f"{label} 提及「{mention}」匹配到 {len(hits)} 个目录条目，无法唯一消歧。"
-            "请从下列候选选定一条按分字段重填；禁止再 ask_user「是不是当前主模型」类元问题。"
+            "请从下列候选选定一条，把 `model` 抄成 @platform/… 或 @byok/{provider_id}/…；"
+            "禁止再 ask_user「是不是当前主模型」类元问题。"
         )
     lines = [f"  - {format_candidate_line(c)}" for c in candidates]
     body = tip + ("\n候选：\n" + "\n".join(lines) if lines else "（目录无可选项）")
@@ -557,13 +596,14 @@ async def prepare_debate_model_plan(
     cross_model: bool = False,
     user_message: str = "",
 ) -> str:
-    """开赛前：提及消歧 → 校验三元组 → 解析裁判（点名优先），写回 config。失败返回错误文案。
+    """开赛前：提及消歧 → 校验目录身份 → 解析裁判（点名优先），写回 config。失败返回错误文案。
 
-    - 口语提及（model 非空缺 origin）→ :func:`resolve_model_mention` 写回正式三元组
+    - 口语提及（model 非空缺 origin）→ :func:`resolve_model_mention` 写回正式身份
+    - ``@platform/…`` / ``@byok/…`` 句柄 → 直接展开
     - ``cross_model=True`` 且各方空 model → 真调 :func:`resolve_default_matchup`
     - 空且无旗标 = 同模型场（回退 turn main）
     - 消歧 0/多候选 → 硬失败，``config.model_candidates`` 挂目录候选
-    - 裁判：``moderator_model`` 提及/三元组非空 → 消歧或校验写回；空 → 系统默认（可同模）
+    - 裁判：``moderator_model`` 提及/句柄非空 → 消歧或校验写回；空 → 系统默认（可同模）
     - ``user_message`` + motion → :func:`infer_utterance_origin_preference` 作消歧偏好
     """
     from agentcore.llm.catalog import resolve_model_catalog
@@ -603,14 +643,20 @@ async def prepare_debate_model_plan(
             config.sides[0] = apply_identity_to_side(config.sides[0], a)
             config.sides[1] = apply_identity_to_side(config.sides[1], b)
 
-    # B · 提及消歧（写回正式三元组）；含 / 的 model 先形状错误（禁剥前缀自愈）
+    # B · 提及消歧（写回正式身份）；``@`` 句柄先展开
     for i, side in enumerate(config.sides):
         ident = identity_from_side(side)
         where = f"sides[`{side.key}`]"
+        ident, coerce_err = coerce_identity(ident)
+        if coerce_err:
+            return f"{where} {coerce_err}"
         if ident.is_empty():
             continue
-        if "/" in ident.model:
-            return identity_shape_error(ident, where=where)
+        if ident.model != (getattr(side, "model", "") or "") or ident.origin != (
+            getattr(side, "origin", "") or ""
+        ):
+            config.sides[i] = apply_identity_to_side(side, ident)
+            side = config.sides[i]
         if not needs_mention_resolve(ident):
             continue
         if catalog is None:
@@ -633,7 +679,7 @@ async def prepare_debate_model_plan(
             return result.error
         config.sides[i] = apply_identity_to_side(side, result.identity)
 
-    # 校验各方（完整三元组；空=同模型场）
+    # 校验各方（完整目录身份；空=同模型场）
     for side in config.sides:
         ident = identity_from_side(side)
         where = f"sides[`{side.key}`]"
@@ -644,7 +690,7 @@ async def prepare_debate_model_plan(
             continue
         if catalog is None and session is None:
             return (
-                f"{where} 已填模型三元组但无法校验目录；"
+                f"{where} 已填模型身份但无法校验目录；"
                 "请稍后重试，禁止 silent 回退。"
             )
         err = await validate_identity_in_catalog(
@@ -657,16 +703,17 @@ async def prepare_debate_model_plan(
         if err:
             return err
 
-    # 裁判：用户点名优先（提及消歧 / 完整三元组校验）；未点名 → 系统默认（可与辩手同模）
+    # 裁判：用户点名优先（提及消歧 / 完整身份校验）；未点名 → 系统默认（可与辩手同模）
     mod_named = ModelIdentity(
         model=config.moderator_model or "",
         origin=config.moderator_origin or "",
         provider_id=config.moderator_provider_id or "",
     ).normalized()
+    mod_named, mod_coerce_err = coerce_identity(mod_named)
+    if mod_coerce_err:
+        return f"moderator_model {mod_coerce_err}"
 
     if not mod_named.is_empty():
-        if "/" in mod_named.model:
-            return identity_shape_error(mod_named, where="moderator_model")
         if needs_mention_resolve(mod_named):
             if catalog is None:
                 return (
@@ -693,7 +740,7 @@ async def prepare_debate_model_plan(
                 return shape
             if catalog is None and session is None:
                 return (
-                    "moderator_model 已填模型三元组但无法校验目录；"
+                    "moderator_model 已填模型身份但无法校验目录；"
                     "请稍后重试，禁止 silent 回退。"
                 )
             mod_err = await validate_identity_in_catalog(
@@ -811,7 +858,7 @@ def collect_debate_identities(config: DebateConfig, *, turn_model: str = "") -> 
 
 
 def side_wire_fields(side: DebateSide) -> dict[str, Any]:
-    """开赛卡 / debate_result sides 行：有三元组才带字段（absent 兼容旧向量）。"""
+    """开赛卡 / debate_result sides 行：有已消歧身份才带字段（absent 兼容旧向量）。"""
     row: dict[str, Any] = {
         "key": side.key,
         "name": side.name,

@@ -36,9 +36,9 @@ class DebateSideInfo(WirePayload):
     name: str
     stance: str
     is_subject: bool
-    # §7.5 真·多模型三元组；缺字段（老 journal / 同模型场）→ 前端跟 run 实际 model。
+    # §7.5 真·多模型：已消歧行属性；缺字段（老 journal / 同模型场）→ 前端跟 run 实际 model。
     model: str | None = absent("该方辩手模型 id。")
-    origin: Literal["platform", "byok"] | None = absent("模型来源。")
+    origin: Literal["platform", "byok"] | None = absent("付款来源（行属性）。")
     provider_id: str | None = absent("BYOK 服务商 id。")
 
 

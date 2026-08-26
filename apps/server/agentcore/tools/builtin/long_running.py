@@ -46,22 +46,13 @@ def long_running_redirect_message(
     matched: str, *, location: Literal["server", "local"] | None
 ) -> str:
     """``code_execute`` refusal: tip the correct tool without running the command."""
-    head = (
+    del location
+    return (
         f"禁止用 code_execute 启动长驻进程（检测到：{matched}）。"
         "本工具会等待进程退出，约 60s 必超时，无法托管开发服务器。"
-    )
-    if location == "local":
-        return (
-            head
-            + "请改用 terminal：subcommand=start，填入同一命令，并设 wait_for"
-            f"（如 {DEFAULT_DEV_WAIT_FOR}）等到就绪信号后再宣称已启动；"
-            "用 list/read 确认进程仍在跑。"
-        )
-    return (
-        head
-        + "当前工作区无本机 terminal 托管能力：不要在此启动开发服务器；"
-        "改为给出本地启动步骤，或请用户绑定本机执行环境"
-        "（bind_local_folder）/ 打开本地项目（open_local_project）后再启动。"
+        "请改用 terminal：subcommand=start，填入同一命令，并设 wait_for"
+        f"（如 {DEFAULT_DEV_WAIT_FOR}）等到就绪信号后再宣称已启动；"
+        "用 list/read 确认进程仍在跑。"
     )
 
 

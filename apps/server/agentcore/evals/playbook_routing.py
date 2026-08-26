@@ -16,8 +16,9 @@
         --keys audit_check_bugs_save_file
 
 花费量级（2026-08-20 手搓 9 场景 × 1 采样、economy / deepseek-v4-flash）：全套约
-43 万 input / 0.9 万 output tokens，审计场景因探路最贵。默认 ``samples=3`` 约
-×3；``samples=5`` 约 ×5。免费档连跑可能撞小时限流，宜等不宜硬重试。
+43 万 input / 0.9 万 output tokens；其后加讨论/成文场景，量级略增。审计场景因探路
+最贵。默认 ``samples=3`` 约 ×3；``samples=5`` 约 ×5。免费档连跑可能撞小时限流，
+宜等不宜硬重试。
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from agentcore.evals.types import EvalConfigError
 from agentcore.runtime.runs.playbooks import PLAYBOOKS
@@ -60,6 +61,9 @@ _COLLOQUIAL_BAN = frozenset(
 
 _INTENSITIES = frozenset({"lean", "full", "solo", "standard"})
 _NONE_PLAYBOOK = frozenset({"", "none"})
+_ACTIONS = frozenset({"ASK", "DELEGATE", "DEBATE", "DIRECT"})
+_FORMS = frozenset({"prose", "files", "workspace"})
+_HISTORY_ROLES = frozenset({"user", "assistant"})
 
 _STRONG_PLAYBOOK = re.compile(
     r"playbook\s*=\s*[\"']?(?P<eq>[a-z][a-z0-9_]*)"
@@ -78,15 +82,29 @@ _NEG_TAIL = re.compile(r"(?:不要用|不(?:要|用|再|必)|勿|禁(?:止)?|别
 
 
 @dataclass(frozen=True)
+class RoutingTurn:
+    """上一轮历史（第二轮短答把问句写进 history，不真跑上轮 ASK）。"""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+@dataclass(frozen=True)
 class RoutingScenario:
     key: str
     phrasing: str  # textbook | colloquial
     category: str
-    expect_playbook: str
+    expect_playbook: str  # 空 = 不要求具名 playbook（直答 / 手写人数）
     user_message: str
     workspace: str  # empty | codebase
     code_execute: bool = False
     browser: bool = False
+    expect_action: str = ""  # ASK|DELEGATE|DEBATE|DIRECT，可用 | 表示可接受集合
+    expect_max_workers: int | None = None
+    expect_min_workers: int | None = None
+    expect_form: str | None = None  # prose | files | workspace
+    expect_max_recon_rounds: int | None = None
+    prior_turns: tuple[RoutingTurn, ...] = ()
 
 
 # 教科书措辞 = 提示词触发句的对照基线（允许含内部用语）。口语 = 这次手搓原句，禁止改措辞追结果。
@@ -184,6 +202,71 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         workspace="empty",
         code_execute=True,
     ),
+    # 讨论未声明免文档：允许 DIRECT / ASK 桌上结果 / parallel_brief；禁止双人 files 成文。
+    RoutingScenario(
+        key="discuss_license_no_doc_waiver",
+        phrasing="colloquial",
+        category="research_brief",
+        expect_playbook="parallel_brief",
+        user_message=(
+            "我们公司项目准备开源，我纠结该用 MIT 还是 GPL，"
+            "你帮我把各自限制和风险讲清楚就行。"
+        ),
+        workspace="empty",
+        expect_action="DIRECT|ASK",
+    ),
+    RoutingScenario(
+        key="discuss_license_round2_short_answers",
+        phrasing="colloquial",
+        category="research_brief",
+        expect_playbook="parallel_brief",
+        user_message="1. 给社区贡献\n2. 没有\n3. 更在意传染性",
+        workspace="empty",
+        expect_action="DIRECT|ASK",
+        prior_turns=(
+            RoutingTurn(
+                role="user",
+                content=(
+                    "我们公司项目准备开源，我纠结该用 MIT 还是 GPL，"
+                    "你帮我把各自限制和风险讲清楚就行。"
+                ),
+            ),
+            RoutingTurn(
+                role="assistant",
+                content=(
+                    "先对几件事实，我按编号问：\n"
+                    "1. 主要给社区用，还是也要卖给客户？\n"
+                    "2. 有没有必须保密的模块？\n"
+                    "3. 更在意别人改了还得公开，还是闭源用也行？"
+                ),
+            ),
+        ),
+    ),
+    RoutingScenario(
+        key="write_prd_save_file",
+        phrasing="colloquial",
+        category="solo_doc",
+        expect_playbook="",
+        user_message="帮我写一份 PRD，存成文件给我。",
+        workspace="empty",
+        expect_action="DELEGATE",
+        expect_max_workers=1,
+        expect_form="files",
+    ),
+    # 绑大仓「讨论」优化参数：编制自选（直答 / 1 人 / brief 均可），禁止金标绑死 ≥2 路
+    # brief；仍禁老板多轮自搜。
+    RoutingScenario(
+        key="discuss_worker_params_industry",
+        phrasing="colloquial",
+        category="research_brief",
+        expect_playbook="",
+        user_message=(
+            "讨论删除worker的一些参数、需要参考行业实践的标准设计进行优化、有些参数实际没有多大用"
+        ),
+        workspace="codebase",
+        expect_action="DELEGATE|DIRECT|ASK",
+        expect_max_recon_rounds=1,
+    ),
 )
 
 
@@ -194,6 +277,54 @@ def named_playbook(value: object) -> str | None:
     if not text or text.lower() in _NONE_PLAYBOOK:
         return None
     return text
+
+
+def history_messages(turns: Sequence[RoutingTurn]) -> list[tuple[str, str]]:
+    """prior_turns → (role, content)，供决策环拼进 LLM history。"""
+    return [(t.role, t.content) for t in turns]
+
+
+def split_expect_action(raw: str) -> frozenset[str]:
+    return frozenset(p.strip() for p in (raw or "").split("|") if p.strip())
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def _task_form(task: dict[str, Any]) -> str | None:
+    deliverable = task.get("deliverable")
+    if isinstance(deliverable, dict):
+        form = deliverable.get("form")
+        if isinstance(form, str) and form.strip():
+            return form.strip().lower()
+    form = task.get("form")
+    if isinstance(form, str) and form.strip():
+        return form.strip().lower()
+    return None
+
+
+def _unanimous_form(forms: Sequence[str]) -> str | None:
+    unique = {f for f in forms if f}
+    if len(unique) == 1:
+        return next(iter(unique))
+    return None
+
+
+def _effective_form(form: str | None) -> str:
+    return (form or "files").lower()
+
+
+def observable_workers(*, task_count: int, max_workers: int | None) -> int:
+    if task_count >= 1:
+        return task_count
+    return int(max_workers or 0)
 
 
 def parse_delegate_rich(args_json: str) -> dict[str, Any]:
@@ -207,6 +338,9 @@ def parse_delegate_rich(args_json: str) -> dict[str, Any]:
             "playbook": None,
             "playbook_args": None,
             "intensity": None,
+            "forms": [],
+            "form": None,
+            "max_workers": None,
             "tasks_preview": None,
             "parse_error": True,
         }
@@ -217,6 +351,9 @@ def parse_delegate_rich(args_json: str) -> dict[str, Any]:
             "playbook": None,
             "playbook_args": None,
             "intensity": None,
+            "forms": [],
+            "form": None,
+            "max_workers": None,
             "tasks_preview": None,
             "parse_error": True,
         }
@@ -231,20 +368,28 @@ def parse_delegate_rich(args_json: str) -> dict[str, Any]:
         tasks = []
     roles: list[str] = []
     preview: list[dict[str, Any]] = []
+    forms: list[str] = []
     for t in tasks[:12]:
         if not isinstance(t, dict):
             continue
         role = str(t.get("role") or "").strip()
         if role:
             roles.append(role)
-        preview.append(
-            {k: t.get(k) for k in ("role", "task", "title", "form") if t.get(k) not in (None, "")}
-        )
+        form = _task_form(t)
+        if form:
+            forms.append(form)
+        item = {k: t.get(k) for k in ("role", "task", "title") if t.get(k) not in (None, "")}
+        if form:
+            item["form"] = form
+        preview.append(item)
     playbook = named_playbook(raw.get("playbook"))
     args = raw.get("playbook_args")
     intensity = None
+    max_workers = _optional_int(raw.get("max_workers"))
     if isinstance(args, dict):
         intensity = named_playbook(args.get("intensity"))
+        if max_workers is None:
+            max_workers = _optional_int(args.get("max_workers"))
     return {
         "task_count": len(tasks),
         "roles": roles,
@@ -252,6 +397,9 @@ def parse_delegate_rich(args_json: str) -> dict[str, Any]:
         "playbook_field": raw.get("playbook"),
         "playbook_args": args if isinstance(args, dict) else args,
         "intensity": intensity,
+        "forms": forms,
+        "form": _unanimous_form(forms),
+        "max_workers": max_workers,
         "tasks_preview": preview,
         "parse_error": False,
     }
@@ -273,21 +421,86 @@ def classify_landing(
     expect: str,
     offered: bool,
     task_count: int,
+    form: str | None = None,
+    max_workers: int | None = None,
+    expect_action: str | None = None,
+    expect_max_workers: int | None = None,
+    expect_min_workers: int | None = None,
+    expect_form: str | None = None,
+    recon_rounds: int = 0,
+    expect_max_recon_rounds: int | None = None,
 ) -> dict[str, Any]:
-    """终向落点分类（观测标签，不是 pass/fail 门禁）。"""
+    """终向落点分类（观测标签，不是 pass/fail 门禁）。
+
+    未声明 ``expect_action`` / ``expect_form`` / ``expect_max_workers`` /
+    ``expect_min_workers`` / ``expect_max_recon_rounds`` 时保持原口径
+    （具名 playbook 场景指纹不变）。扩字段后才启用直答允许集、手写人数、form、探路轮次观测。
+    """
+    extended = bool(
+        expect_action
+        or expect_form
+        or expect_max_workers is not None
+        or expect_min_workers is not None
+        or expect_max_recon_rounds is not None
+    )
+    workers = observable_workers(task_count=task_count, max_workers=max_workers)
+    effective_form = _effective_form(form)
+    files_like = effective_form == "files"
+    files_duo = action == "DELEGATE" and not playbook and task_count >= 2 and files_like
+    allowed_actions = split_expect_action(expect_action or "")
+
     if not offered:
         landing, note = "not_offered", "工具面上没有该 playbook 槽/枚举，属于选不到"
+    elif (
+        expect_max_recon_rounds is not None
+        and recon_rounds > expect_max_recon_rounds
+    ):
+        landing, note = (
+            "recon_over",
+            f"探路 {recon_rounds} 轮，超过 expect_max_recon_rounds={expect_max_recon_rounds}",
+        )
+    elif extended and files_duo:
+        landing, note = "files_duo", f"手写 {task_count} 人 form=files 成文产线"
     elif action != "DELEGATE":
-        landing, note = "no_delegate", f"终向是 {action}，没有发出 delegate"
-    elif playbook == expect:
+        if allowed_actions and action in allowed_actions:
+            landing, note = "allowed_action", f"终向是 {action}（允许 {expect_action}）"
+        else:
+            landing, note = "no_delegate", f"终向是 {action}，没有发出 delegate"
+    elif expect and playbook == expect:
         landing, note = "selected_expected", f"选了期望的 {expect}"
     elif playbook:
-        landing, note = "selected_other", f"选了别的 playbook={playbook!r}（期望 {expect}）"
+        want = expect or "手写"
+        landing, note = "selected_other", f"选了别的 playbook={playbook!r}（期望 {want}）"
     elif task_count >= 1:
-        landing, note = (
-            "handwritten_tasks",
-            f"未填具名 playbook，改走手写 tasks（n={task_count}）",
-        )
+        if expect_min_workers is not None and workers < expect_min_workers:
+            landing, note = (
+                "workers_under",
+                f"手写 {workers} 人，低于 expect_min_workers={expect_min_workers}",
+            )
+        elif expect_max_workers is not None and workers > expect_max_workers:
+            landing, note = (
+                "workers_over",
+                f"手写 {workers} 人，超过 expect_max_workers={expect_max_workers}",
+            )
+        elif expect_form and effective_form != expect_form:
+            landing, note = (
+                "form_mismatch",
+                f"form={effective_form!r}（期望 {expect_form}）",
+            )
+        elif (
+            expect_form
+            or expect_max_workers is not None
+            or expect_min_workers is not None
+        ):
+            landing, note = (
+                "handwritten_expected",
+                f"手写 tasks n={task_count} form={effective_form}",
+            )
+        else:
+            landing, note = (
+                "handwritten_tasks",
+                f"未填具名 playbook，改走手写 tasks（n={task_count}）",
+            )
     else:
         landing, note = "empty_delegate", "发出了 delegate，但既无具名 playbook 也无 tasks"
     return {
@@ -295,6 +508,9 @@ def classify_landing(
         "playbook": playbook,
         "landing": landing,
         "note": note,
+        "files_duo": files_duo,
+        "form": form,
+        "workers": workers,
     }
 
 
@@ -468,8 +684,8 @@ def diff_fingerprints(
 
 def lint_scenarios(scenarios: Sequence[RoutingScenario] = SCENARIOS) -> None:
     """零 LLM：结构 + 口语禁术语 + 教科书对照组存在。"""
-    if len(scenarios) < 8:
-        raise EvalConfigError(f"playbook_routing 场景不足 8 条（got {len(scenarios)}）")
+    if len(scenarios) < 11:
+        raise EvalConfigError(f"playbook_routing 场景不足 11 条（got {len(scenarios)}）")
     keys = [s.key for s in scenarios]
     if len(keys) != len(set(keys)):
         raise EvalConfigError("playbook_routing 场景 key 不唯一")
@@ -480,15 +696,44 @@ def lint_scenarios(scenarios: Sequence[RoutingScenario] = SCENARIOS) -> None:
     n_col = sum(1 for s in scenarios if s.phrasing == "colloquial")
     if n_text < 3:
         raise EvalConfigError(f"教科书对照至少 3 条（got {n_text}）")
-    if n_col < 6:
-        raise EvalConfigError(f"口语场景至少 6 条（got {n_col}）")
+    if n_col < 8:
+        raise EvalConfigError(f"口语场景至少 8 条（got {n_col}）")
     known = set(PLAYBOOKS.keys())
     workspaces = {s.workspace for s in scenarios}
     if "codebase" not in workspaces:
         raise EvalConfigError("至少要有一档 workspace=codebase（真实代码量，避免空仓假象）")
+    if not any(s.prior_turns for s in scenarios):
+        raise EvalConfigError("至少一条场景须带 prior_turns（第二轮短答）")
+    if not any(s.expect_form == "files" and s.expect_max_workers == 1 for s in scenarios):
+        raise EvalConfigError("至少一条场景须 expect_form=files 且 expect_max_workers=1")
+    if not any("DIRECT" in split_expect_action(s.expect_action) for s in scenarios):
+        raise EvalConfigError("至少一条场景须允许 DIRECT（讨论未声明免文档）")
+    if not any(s.expect_max_recon_rounds is not None for s in scenarios):
+        raise EvalConfigError("至少一条场景须声明 expect_max_recon_rounds（绑仓讨论摸底禁连搜）")
     for s in scenarios:
-        if s.expect_playbook not in known:
-            raise EvalConfigError(f"{s.key}: 未知 expect_playbook {s.expect_playbook!r}")
+        if s.expect_playbook:
+            if s.expect_playbook not in known:
+                raise EvalConfigError(f"{s.key}: 未知 expect_playbook {s.expect_playbook!r}")
+        elif not s.expect_action:
+            raise EvalConfigError(f"{s.key}: 空 expect_playbook 须同时声明 expect_action")
+        if s.expect_action:
+            parts = split_expect_action(s.expect_action)
+            if not parts or any(p not in _ACTIONS for p in parts):
+                raise EvalConfigError(f"{s.key}: expect_action 非法 {s.expect_action!r}")
+        if s.expect_form is not None and s.expect_form not in _FORMS:
+            raise EvalConfigError(f"{s.key}: expect_form 非法 {s.expect_form!r}")
+        if s.expect_max_workers is not None and s.expect_max_workers < 1:
+            raise EvalConfigError(f"{s.key}: expect_max_workers 须 >= 1")
+        if s.expect_min_workers is not None and s.expect_min_workers < 1:
+            raise EvalConfigError(f"{s.key}: expect_min_workers 须 >= 1")
+        if (
+            s.expect_min_workers is not None
+            and s.expect_max_workers is not None
+            and s.expect_min_workers > s.expect_max_workers
+        ):
+            raise EvalConfigError(f"{s.key}: expect_min_workers 不能大于 expect_max_workers")
+        if s.expect_max_recon_rounds is not None and s.expect_max_recon_rounds < 0:
+            raise EvalConfigError(f"{s.key}: expect_max_recon_rounds 须 >= 0")
         if s.phrasing not in {"textbook", "colloquial"}:
             raise EvalConfigError(f"{s.key}: phrasing 非法")
         if s.workspace not in {"empty", "codebase"}:
@@ -497,11 +742,18 @@ def lint_scenarios(scenarios: Sequence[RoutingScenario] = SCENARIOS) -> None:
             raise EvalConfigError(f"{s.key}: user_message 为空")
         if s.category == "code_audit" and s.workspace != "codebase":
             raise EvalConfigError(f"{s.key}: code_audit 必须用 codebase 工作区")
+        for i, turn in enumerate(s.prior_turns):
+            if turn.role not in _HISTORY_ROLES:
+                raise EvalConfigError(f"{s.key}: prior_turns[{i}] role 非法 {turn.role!r}")
+            if not turn.content.strip():
+                raise EvalConfigError(f"{s.key}: prior_turns[{i}] content 为空")
         if s.phrasing == "colloquial":
-            lowered = s.user_message.lower()
-            hits = [term for term in sorted(_COLLOQUIAL_BAN) if term.lower() in lowered]
-            if hits:
-                raise EvalConfigError(f"{s.key}: 口语场景含提示词术语 {hits}")
+            blobs = [s.user_message, *(t.content for t in s.prior_turns)]
+            for blob in blobs:
+                lowered = blob.lower()
+                hits = [term for term in sorted(_COLLOQUIAL_BAN) if term.lower() in lowered]
+                if hits:
+                    raise EvalConfigError(f"{s.key}: 口语场景含提示词术语 {hits}")
     lint_codebase_fixture()
 
 
@@ -578,7 +830,8 @@ def format_playbook_routing_report(report: dict[str, Any]) -> str:
     for row in report.get("scenarios") or []:
         agg = row.get("aggregate") or {}
         lines.append(
-            f"  [{row['key']}] {row.get('phrasing')} expect={row.get('expect_playbook')}  "
+            f"  [{row['key']}] {row.get('phrasing')} "
+            f"expect={row.get('expect_playbook') or row.get('expect_action') or '-'}  "
             f"派团队 {agg.get('delegated')}  期望playbook {agg.get('expected_playbook')}  "
             f"发卡 {agg.get('card_issued')}  分歧 {agg.get('think_act_divergence')}"
         )
@@ -642,6 +895,6 @@ class PlaybookRoutingRunConfig:
 
 
 COST_NOTE = (
-    "手搓 9×1 约 43 万 in / 0.9 万 out；默认 samples=3 约 ×3；samples=5 约 ×5。"
-    "审计场景因探路最贵。免费档连跑可能撞小时限流。"
+    "手搓 9×1 约 43 万 in / 0.9 万 out；现 12 场景量级略增。默认 samples=3 约 ×3；"
+    "samples=5 约 ×5。审计场景因探路最贵。免费档连跑可能撞小时限流。"
 )

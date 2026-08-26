@@ -207,7 +207,7 @@ describe("stageAttachment", () => {
 
   it("rejects oversized files", async () => {
     const src = join(dir, "huge.bin");
-    expect(ATTACH_MAX_BYTES).toBe(25 * 1024 * 1024);
+    expect(ATTACH_MAX_BYTES).toBe(50 * 1024 * 1024);
     await writeFile(src, "ok");
     const res = await stageFromAbsPath(src);
     expect(res.ok).toBe(true);
@@ -562,7 +562,7 @@ describe("stageAttachment", () => {
     const res = await stageFromBytes("big.bin", bytes);
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.reason).toContain("25MB");
+    expect(res.reason).toContain("50MB");
   });
 
   it("stageFromBytes rejects empty payloads", async () => {

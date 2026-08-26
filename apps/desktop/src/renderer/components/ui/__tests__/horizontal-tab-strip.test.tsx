@@ -7,6 +7,7 @@ import {
   SortableTab,
   TAB_DRAG_THRESHOLD_PX,
   moveItem,
+  placeAlongAxis,
   useSortableTabIds,
 } from "../horizontal-tab-strip";
 
@@ -66,6 +67,41 @@ describe("moveItem", () => {
     expect(moveItem(ids, "c", "b", "after")).toEqual(["a", "b", "c", "d"]);
   });
 });
+
+describe("placeAlongAxis", () => {
+  const rect = { left: 10, top: 20, width: 40, height: 30 };
+
+  it("uses X midpoint for the default horizontal strip", () => {
+    expect(placeAlongAxis("x", 29, 999, rect)).toBe("before");
+    expect(placeAlongAxis("x", 30, 999, rect)).toBe("after");
+  });
+
+  it("uses Y midpoint for stacked rows", () => {
+    expect(placeAlongAxis("y", 999, 34, rect)).toBe("before");
+    expect(placeAlongAxis("y", 999, 35, rect)).toBe("after");
+  });
+});
+
+function mockRect(
+  el: Element,
+  box: { left?: number; top?: number; width?: number; height?: number },
+) {
+  const left = box.left ?? 0;
+  const top = box.top ?? 0;
+  const width = box.width ?? 40;
+  const height = box.height ?? 20;
+  vi.spyOn(el, "getBoundingClientRect").mockReturnValue({
+    x: left,
+    y: top,
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+    toJSON() {},
+  });
+}
 
 function SortableHarness({
   initial,
@@ -188,5 +224,116 @@ describe("HorizontalTabStrip / useSortableTabIds", () => {
     fireEvent.click(tab);
     expect(onSelect).not.toHaveBeenCalled();
     setCapture.mockRestore();
+  });
+
+  it("idle tabs show grab cursor; a completed drag reorders along X", () => {
+    const onReorder = vi.fn();
+    render(<SortableHarness initial={["a", "b"]} onReorder={onReorder} />);
+    const a = screen.getByTestId("drag-a").closest("[data-tab-id]");
+    const b = screen.getByTestId("drag-b").closest("[data-tab-id]");
+    expect(a).toBeTruthy();
+    expect(b).toBeTruthy();
+    expect(a?.classList.contains("cursor-grab")).toBe(true);
+    mockRect(a as Element, { left: 0, width: 40, height: 20 });
+    mockRect(b as Element, { left: 40, width: 40, height: 20 });
+    document.elementsFromPoint = () => [b as Element];
+    fireEvent.pointerDown(a as Element, {
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(document, {
+      clientX: 10 + TAB_DRAG_THRESHOLD_PX + 1,
+      clientY: 10,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(document, {
+      clientX: 70,
+      clientY: 10,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(document, {
+      clientX: 70,
+      clientY: 10,
+      pointerId: 1,
+    });
+    expect(onReorder).toHaveBeenCalledWith(["b", "a"]);
+  });
+});
+
+function VerticalHarness({
+  initial,
+  onReorder,
+}: {
+  initial: string[];
+  onReorder?: (ids: string[]) => void;
+}) {
+  const [ids, setIds] = useState(initial);
+  const { getItemProps, draggingId, overId, place } = useSortableTabIds(
+    ids,
+    (next) => {
+      setIds(next);
+      onReorder?.(next);
+    },
+    { axis: "y", idleGrabCursor: false },
+  );
+  return (
+    <div>
+      {ids.map((id) => (
+        <div key={id} {...getItemProps(id)}>
+          <span data-testid={`drag-${id}`}>
+            {draggingId === id ? "dragging" : "idle"}
+          </span>
+          <span data-testid={`over-${id}`}>
+            {overId === id ? (place ?? "") : ""}
+          </span>
+          {id}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+describe("useSortableTabIds axis y", () => {
+  it("does not put grab cursor on idle stacked rows", () => {
+    render(<VerticalHarness initial={["a", "b"]} />);
+    const row = screen.getByTestId("drag-a").closest("[data-tab-id]");
+    expect(row?.classList.contains("cursor-grab")).toBe(false);
+  });
+
+  it("reorders along Y after threshold", () => {
+    const onReorder = vi.fn();
+    render(<VerticalHarness initial={["a", "b"]} onReorder={onReorder} />);
+    const a = screen.getByTestId("drag-a").closest("[data-tab-id]");
+    const b = screen.getByTestId("drag-b").closest("[data-tab-id]");
+    expect(a).toBeTruthy();
+    expect(b).toBeTruthy();
+    mockRect(a as Element, { top: 0, height: 32, width: 200 });
+    mockRect(b as Element, { top: 40, height: 32, width: 200 });
+    document.elementsFromPoint = () => [b as Element];
+    fireEvent.pointerDown(a as Element, {
+      button: 0,
+      clientX: 10,
+      clientY: 8,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(document, {
+      clientX: 10,
+      clientY: 8 + TAB_DRAG_THRESHOLD_PX + 1,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(document, {
+      clientX: 10,
+      clientY: 64,
+      pointerId: 1,
+    });
+    expect(screen.getByTestId("over-b").textContent).toBe("after");
+    fireEvent.pointerUp(document, {
+      clientX: 10,
+      clientY: 64,
+      pointerId: 1,
+    });
+    expect(onReorder).toHaveBeenCalledWith(["b", "a"]);
   });
 });

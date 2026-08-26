@@ -1,6 +1,6 @@
 """Built-in tool implementations — registries collect from ``tools.registration``."""
 
-from typing import Literal
+from typing import Literal, cast
 
 from agentcore.config import settings
 from agentcore.core.types import PermissionAxes, ToolApproval, ToolCategory
@@ -107,18 +107,19 @@ def _desktop_bridge_ready() -> bool:
 
 
 def _browser_sandbox_host_ready() -> bool:
-    """gVisor + shape-B ``health("net")`` — shared server / local fallback.
+    """gVisor + desk ``cloud_sandbox_health`` — same predicate as code_execute's guest.
 
     ``code_execute_cloud_enabled`` subprocess path does NOT enable browsers.
-    Shape A ``cloud_sandbox_health`` does not gate this: an unhealthy code
-    sandbox must not withhold a healthy browser netns. ``None`` (never probed)
-    is fail-closed — do not assemble.
+    Sidecar / true-local without Bridge never assemble cloud isolation.
+    ``None`` (never probed) keeps config-only semantics, same as the desk gate.
     """
+    if _sidecar_process_hosts_no_cloud_sandbox():
+        return False
     if not settings.gvisor_enabled:
         return False
-    from agentcore.tools.sandbox.browser.netns import browser_netns_health
+    from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health
 
-    return browser_netns_health() is True
+    return cloud_sandbox_health() is not False
 
 
 def browser_host_kind_for(
@@ -127,7 +128,7 @@ def browser_host_kind_for(
     """Registry / navigate host_kind aligned with :func:`browser_execution_enabled_for`.
 
     - Healthy DesktopBrowserBridge → ``local`` (real page).
-    - No usable Bridge but gVisor/sandbox/netns ready → ``sandbox`` (covers cloud
+    - No usable Bridge but 云桌 guest 健康 → ``sandbox`` (covers cloud
       过桥: ``location=local`` while the API process cannot reach desktop loopback).
     - True local engine (no Bridge, no gVisor) → ``None`` (withhold; no fake success).
     - ``location=server`` → ``sandbox`` when sandbox host ready, else ``None``.
@@ -154,9 +155,9 @@ def browser_execution_enabled_for(backend: WorkspaceBackend | None) -> bool:
     - **local + DesktopBrowserBridge**: desktop re-sends ``browserBridge`` on each
       sidecar turn (``apply_desktop_bridge_from_turn``); successful ``GET /health``
       for the current credential generation → host_kind=local.
-    - **local without Bridge + gVisor/netns**: host_kind=sandbox (大众默认云端过桥；
+    - **local without Bridge + 云桌 guest 健康**: host_kind=sandbox (大众默认云端过桥；
       cloud API cannot reach本机 loopback Bridge).
-    - **server + gVisor**: host_kind=sandbox; folds shape-B ``health("net")`` (fail-closed).
+    - **server + gVisor**: host_kind=sandbox; folds ``cloud_sandbox_health`` (same as desk).
     - True local engine with neither Bridge nor gVisor → withhold (no fake success).
     """
     return browser_host_kind_for(backend) is not None
@@ -213,9 +214,9 @@ def build_builtin_registry(
     and worker-only tools are separate surfaces.
 
     ``include_execution_tools`` gates the code-execution class as a unit
-    (``test_run`` + ``code_execute`` + local ``terminal``): the worker registry
+    (``test_run`` + ``code_execute`` + ``terminal``): the worker registry
     withholds the class on a backend that can't run code safely (see
-    ``code_execution_enabled_for``). ``terminal`` is additionally ``local_only``.
+    ``code_execution_enabled_for``).
 
     ``include_host_tools`` gates the Host face (``host_class``): only when the
     desktop backfill channel is reachable and ``host≠off``.
@@ -231,8 +232,8 @@ def build_builtin_registry(
     Default False so a no-Bridge / no-gVisor process does not leak browser tools into the
     default builtin roster.
 
-    ``location`` stamps ``code_execute``'s description to match the turn's backend
-    and gates ``local_only`` tools (``terminal`` only when ``location=="local"``).
+    ``location`` stamps ``code_execute`` / ``terminal`` descriptions to match the
+    turn's backend and gates remaining ``local_only`` tools.
     ``languages`` trims ``code_execute``'s language enum after a local/sidecar probe
     (cloud / catalog leave ``None`` → full fixed surface).
     """
@@ -277,7 +278,6 @@ def build_worker_registry(
     ask_withhold = (
         permission_axes is not None and permission_axes.withholds_execution_tools
     )
-    # Shape A health must not withhold browser: only ask-withhold ∧ shape-B netns.
     include_browser = (not ask_withhold) and browser_execution_enabled_for(backend)
     include_host = desktop_online and (
         permission_axes is None or not permission_axes.host_disabled
@@ -329,22 +329,24 @@ def build_ceo_tool_registry(
     backend_location: str | None = None,
     include_browser: bool = False,
     include_git: bool = True,
+    include_execution_tools: bool = True,
 ) -> ToolRegistry:
-    """The CEO chat agent's DIRECT toolset: read / retrieval + Host + local terminal.
+    """The CEO chat agent's DIRECT toolset: read / retrieval + Host + terminal.
 
     Collects ``surface=builtin`` tools whose declared audience includes ``ceo``.
     Historically aligned with ``approval=NEVER``; ``host`` stays NEVER at schema
     (runtime elevation for GRANTABLE actions; CEO holds status/os_log/shell,
     worker-only actions fail and require ``delegate``).
-    **B2**: local ``terminal`` is also CEO-holdable (schema NEVER; ``start`` elevates
+    **B2**: ``terminal`` is CEO-holdable (schema NEVER; ``start`` elevates
     at runtime like ``git`` write) for pure start/stop/list of workspace long-running
-    processes — not a GRANTABLE schema exception.
+    processes — cloud desk guest or local desktop, same tool. Not a GRANTABLE
+    schema exception. Assembly follows ``include_execution_tools`` (desk health /
+    ``code_execution_enabled_for``), same bit as the worker roster.
     **Browser**: single ``browser`` (GRANTABLE · ``browser_class``),
     gated by ``include_browser`` — same tier as host / terminal; screenshot
     is a worker-only action on the same tool.
     Orchestration primitives are wired separately in ``tools.ceo_toolset``.
     Host tools appear only when ``desktop_online`` ∧ ``host≠off``.
-    ``terminal`` appears only when ``backend_location=="local"``.
     **Git**: ``include_git`` mirrors the worker registry's ``git_execution_enabled_for``
     verdict — callers pass the worker roster's answer so both toolsets agree on whether
     this workspace can run git at all.
@@ -352,10 +354,12 @@ def build_ceo_tool_registry(
     include_host = desktop_online and (
         permission_axes is None or not permission_axes.host_disabled
     )
-    location: Literal["server", "local"] | None = (
-        "local" if backend_location == "local" else None
+    location = cast(
+        Literal["server", "local"] | None,
+        backend_location if backend_location in ("local", "server") else None,
     )
     full = build_builtin_registry(
+        include_execution_tools=include_execution_tools,
         include_host_tools=include_host,
         include_desktop_online_tools=desktop_online,
         include_browser=include_browser,

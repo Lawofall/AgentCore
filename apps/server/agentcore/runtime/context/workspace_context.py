@@ -303,10 +303,10 @@ def build_workspace_context(
     (案 20260803-docx-office-exec-capability-lie A). When ``host_axis`` is omitted,
     it is taken from ``permission_axes.host``.
 
-    ``package_install`` is **not** identical to ``code_execute``: cloud needs
-    ``registry_egress_available`` (gVisor + netns chokepoint); local follows
-    execution-class only (pinned registry env, no host egress gate). Override
-    ``package_install_enabled`` is tests/probes only.
+    ``package_install`` on cloud uses the same predicate as ``code_execute``
+    (desk/net guest can start). Local follows execution-class only (pinned
+    registry env, no host egress gate). Override ``package_install_enabled``
+    is tests/probes only.
 
     ``exec_languages`` is the probed (local/sidecar) or fixed (cloud) language
     surface advertised on ``code_execute``; when set and execution is on, a one-line
@@ -389,15 +389,14 @@ def build_workspace_context(
         artifact_line = (
             "产物出口：你写入工作区的文件保存在云端工作区（不在用户本机），"
             "用户可在桌面端「文件」面板查看与下载；"
-            "HTML 完整效果走产物卡或文件横幅的「完整预览」"
+            "HTML 完整效果走终稿路径或文件横幅的「完整预览」"
             "（打开右坞「浏览器」标签，应用内渲染，非系统浏览器）。"
         )
-        # 案 20260803-image-gen-byok-egress-boundary A：云沙箱 code_execute 默认
-        # --network=none；有执行 ≠ 能代调用户 Key 出网（含生图）。事实面只陈述出口，
-        # 「不许承诺代出图 / 不许写 Key 明文」分别归 ceo_core 与共享基座。
+        # 案 20260803-image-gen-byok-egress-boundary A：云桌 guest 出站经包装源
+        # allowlist chokepoint，不是任意 HTTPS。事实面只陈述出口。
         egress_line = (
-            "出站网络：云端 code_execute 默认无任意 HTTPS 出口（`--network=none`；"
-            "装包白名单 egress 仅 test_run install，≠通用出网）；无原生生图工具；"
+            "出站网络：云端 code_execute 无任意 HTTPS 出口（包装源 allowlist "
+            "chokepoint 仅装包，≠通用出网）；无原生生图工具；"
             "browser 另计（隔离浏览器，≠ code_execute 出网）。"
         )
 
@@ -490,9 +489,9 @@ def build_workspace_context(
         from agentcore.tools.builtin import execution_class_enabled_for
 
         exec_on = execution_class_enabled_for(backend, permission_axes)
-    # terminal is execution_class ∧ local_only — same ask withhold as registry.
+    # terminal follows the same execution-class predicate as code_execute / test_run.
     term_on = (
-        terminal_enabled if terminal_enabled is not None else is_local and exec_on
+        terminal_enabled if terminal_enabled is not None else exec_on
     )
     if browser_enabled is not None:
         browser_on = browser_enabled
@@ -515,17 +514,10 @@ def build_workspace_context(
     host_on = desktop_online and not host_off
     mcp_on = bool(mcp_enabled) if mcp_label is None else mcp_label == "已装配"
     mcp_cap = mcp_label if mcp_label is not None else ("已装配" if mcp_enabled else "未装配")
-    # 装包 ≠ 跑代码：云端另需 registry_egress（netns）；本机不吃该主机门。
-    if package_install_enabled is not None:
-        pkg_on = package_install_enabled
-    elif not exec_on:
-        pkg_on = False
-    elif is_local:
-        pkg_on = True
-    else:
-        from agentcore.tools.sandbox.egress import registry_egress_available
-
-        pkg_on = registry_egress_available()
+    # 装包与跑代码同一装配谓词（云桌 guest）；本机不吃主机 egress 门。
+    pkg_on = (
+        package_install_enabled if package_install_enabled is not None else exec_on
+    )
     caps: list[str] = []
     caps.append(f"code_execute={'已装配' if exec_on else '未装配'}")
     caps.append(f"package_install={'已装配' if pkg_on else '未装配'}")
@@ -566,20 +558,15 @@ def build_workspace_context(
             )
     elif pkg_on:
         package_guide_line = (
-            "装包事实：package_install=已装配（gVisor 健康 + 包装源 allowlist egress/"
-            "netns）——`test_run` check=install 可装依赖；≠通用 HTTPS 出网"
+            "装包事实：package_install=已装配（云桌 guest 健康 + 包装源 allowlist "
+            "chokepoint）——`test_run` check=install 可装依赖；≠通用 HTTPS 出网"
             "（对照「出站网络」行）；任意 URL 落盘用 download_url。"
-        )
-    elif exec_on:
-        package_guide_line = (
-            "装包事实：package_install=未装配（云端能跑代码 ≠ 能装依赖；"
-            "另需 netns/registry_egress chokepoint）——可走结构自检 / "
-            "export_to_local / 本机命令。"
         )
     else:
         package_guide_line = (
-            "装包事实：package_install=未装配（云端执行沙箱亦未开；"
-            "装包腿随执行类一并不可用；对照执行事实行）。"
+            "装包事实：package_install=未装配（云桌 guest 未起，与 code_execute= "
+            "同一谓词；装包腿随执行类一并不可用）——可走结构自检 / "
+            "export_to_local / 本机命令。"
         )
     if exec_on:
         exec_guide_line = None
@@ -692,7 +679,7 @@ def build_workspace_context(
         elif desktop_online:
             browser_base = "浏览器事实：本回合 browser=未装配（无云端隔离浏览器）——"
             how_enable = (
-                "装配启用：云端路径需 gVisor/沙箱/netns 健康；"
+                "装配启用：云端路径需云桌 guest 健康；"
                 "本机传统/已绑会话可走本机 Bridge"
                 "（或过桥会话在云侧沙箱健康时装配 sandbox）；"
                 "云协作仍推荐；本机传统 open/bind 合法非默认（≠离线）。"
@@ -701,7 +688,7 @@ def build_workspace_context(
             browser_base = "浏览器事实：本回合 browser=未装配（无云端隔离浏览器）——"
             how_enable = (
                 "装配启用：当前非桌面会话无法绑定本机 Local Bridge；"
-                "云端路径需 gVisor/沙箱/netns 健康，或换桌面端。"
+                "云端路径需云桌 guest 健康，或换桌面端。"
             )
         browser_guide_line = browser_base + how_enable
 

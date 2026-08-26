@@ -2,7 +2,6 @@
  * proposal_pick — 方案挑选：行式单选（与 kickoff 同壳）。
  * 方案墙卡片感有意弱化；彩色推荐徽章已删，仅当 recommended ≠ default 时右侧灰字「推荐」。
  */
-import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import { AskCardFooter, AskCardShell } from "./AskCardShell";
@@ -38,7 +37,6 @@ export function ProposalPickBody({
       icon={META.icon}
       caption={caption ?? META.activeCaption}
       title={content.question}
-      extra={<ManualHelpLink to={MANUAL_HELP.checkpoint} />}
       footer={
         <AskCardFooter
           cta={META.cta}

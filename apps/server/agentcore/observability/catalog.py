@@ -93,6 +93,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='attachment.extract_failed'),
     EventSpec(name='attachment.extract_spawn_failed'),
     EventSpec(name='attachment.native_image_read_failed'),
+    EventSpec(name='attachment.pdfminer_failed'),
     EventSpec(name='attachment.persist_failed'),
     EventSpec(name='attachment.preparse_copy_write_failed'),
     EventSpec(name='attachment.preparse_failed'),
@@ -235,9 +236,18 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='browser.keyframe_write_failed'),
     EventSpec(name='browser.live_attached'),
     EventSpec(name='browser.live_detached'),
-    EventSpec(name='browser.netns_health_failed'),
-    EventSpec(name='browser.netns_health_ok'),
-    EventSpec(name='browser.netns_setup'),
+    EventSpec(
+        name='browser.netns_health_failed',
+        description='历史兼容：曾为独立 browser netns 装配门失败；现跟 desk 健康，不再发此事件',
+    ),
+    EventSpec(
+        name='browser.netns_health_ok',
+        description='历史兼容：曾为独立 browser netns 装配门成功；现跟 desk 健康，不再发此事件',
+    ),
+    EventSpec(
+        name='browser.netns_setup',
+        description='历史兼容：曾为 family=browser 会话 netns；现 Chromium exec 进桌，不再发此事件',
+    ),
     EventSpec(name='browser.observer_gone_failed'),
     EventSpec(name='browser.observer_ready_failed'),
     EventSpec(name='browser.proxy_decision'),
@@ -1532,6 +1542,54 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(
+        name='journal.failure_pack_failed',
+        description='journal-only 失败包写盘失败（best-effort，不打断回合）',
+        fields={
+            'error': FieldType('str'),
+            'message_id': FieldType('str'),
+            'trace_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='journal.failure_pack_gc_expired',
+        description='因超过 30 天 TTL 删除 logs/packs/<trace_id>/（成功清理，记下删了哪份）',
+        fields={
+            'path': FieldType('str'),
+            'trace_id': FieldType('str'),
+            'ttl_days': FieldType('int'),
+        },
+    ),
+    EventSpec(
+        name='journal.failure_pack_gc_failed',
+        description='清理 30 天外 logs/packs 目录失败（只记日志）',
+        fields={
+            'error': FieldType('str'),
+            'path': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='journal.failure_pack_skipped',
+        description='失败回合本应写 journal-only 包但跳过（missing_trace / invalid_trace）',
+        fields={
+            'conversation_id': FieldType('str'),
+            'finish_reason': FieldType('str'),
+            'message_id': FieldType('str'),
+            'reason': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='journal.failure_pack_written',
+        description='失败回合 persist 成功后写出 journal-only 包（meta + redacted jsonl；无原文）',
+        fields={
+            'conversation_id': FieldType('str'),
+            'finish_reason': FieldType('str'),
+            'message_id': FieldType('str'),
+            'path': FieldType('str'),
+            'rows': FieldType('int'),
+            'trace_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
         name='journal.live_seq_near_overflow',
         description='live-band seq 逼近或越过 overflow 段起点；只告警，不改分配',
         fields={
@@ -2097,18 +2155,97 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='run_redirect.unreachable'),
     EventSpec(name='run_stop.queued'),
     EventSpec(name='run_stop.unreachable'),
-    EventSpec(name='sandbox.artifact_payload_invalid'),
     EventSpec(name='sandbox.cloud_health_failed'),
     EventSpec(name='sandbox.cloud_health_ok'),
+    EventSpec(
+        name='sandbox.desk_closed',
+        description='云桌 guest 已 kill+delete（lifespan close_all 或测试重置）',
+        fields={
+            'container_id': FieldType('str'),
+            'workspace': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='sandbox.desk_process_started',
+        description='云桌 guest 内已短 exec 拉起按对话记账的长驻进程',
+        fields={
+            'conversation_id': FieldType('str'),
+            'process_id': FieldType('str'),
+            'workspace': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='sandbox.desk_process_stopped',
+        description='云桌 guest 内已短 exec 结束一条长驻进程',
+        fields={
+            'conversation_id': FieldType('str'),
+            'process_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='sandbox.desk_processes_dropped',
+        description='关停 desk 时丢掉该桌的进程登记（guest kill 收掉 pid）',
+        fields={
+            'count': FieldType('int'),
+            'desks': FieldType('int'),
+        },
+    ),
+    EventSpec(
+        name='sandbox.desk_reaped',
+        description='空闲云桌 guest 已 kill+delete（盘保留；下次懒创建）',
+        fields={
+            'container_id': FieldType('str'),
+            'workspace': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='sandbox.desk_reaper_error',
+        description='桌级 idle reap 扫一轮失败（不打死 browser_reaper 循环）',
+    ),
+    EventSpec(
+        name='sandbox.desk_reaper_swept',
+        description='桌级 idle reap 扫到并关掉了若干空闲 guest',
+        fields={
+            'closed': FieldType('int'),
+        },
+    ),
+    EventSpec(
+        name='sandbox.desk_started',
+        description='云桌长寿命 guest 已 start-detach（会话键=工作区根）',
+        fields={
+            'container_id': FieldType('str'),
+            'workspace': FieldType('str'),
+        },
+    ),
     EventSpec(name='sandbox.exec_env_probe_failed'),
     EventSpec(name='sandbox.health_check_failed'),
     EventSpec(name='sandbox.slot_busy'),
-    EventSpec(name='sandbox.write_back'),
+    EventSpec(
+        name='sandbox.write_back',
+        description='历史兼容：曾为 copy-out 写回计数；云桌 bind 落盘后不再发此事件',
+    ),
     EventSpec(name='sandbox.written_scan_failed'),
     EventSpec(name='sandbox.written_scan_truncated'),
     EventSpec(
+        name='sandboxd.exec',
+        description='sandboxd 已 ``runsc exec`` 进允许表解释器',
+        fields={
+            'bin': FieldType('str'),
+            'container_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
+        name='sandboxd.exec_stdio',
+        description='sandboxd 已 ``runsc exec`` stdio 进桌内驱动（不另起 guest）',
+        fields={
+            'bin': FieldType('str'),
+            'container_id': FieldType('str'),
+            'exec_id': FieldType('str'),
+        },
+    ),
+    EventSpec(
         name='sandboxd.health_failed',
-        description='sandboxd 形状探针失败：shape=code（A）或 net（B）；detail 为 runsc/ip 尾部',
+        description='sandboxd 形状探针失败：shape=net（desk guest）；detail 为 runsc/ip 尾部',
         fields={
             'detail': FieldType('str'),
             'shape': FieldType('str'),
@@ -2121,6 +2258,13 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='sandboxd.rpc_denied'),
     EventSpec(name='sandboxd.rpc_error'),
     EventSpec(name='sandboxd.run'),
+    EventSpec(
+        name='sandboxd.start_detach',
+        description='sandboxd 已 ``runsc run -d`` 拉起长寿命 guest',
+        fields={
+            'container_id': FieldType('str'),
+        },
+    ),
     EventSpec(name='sandboxd.started'),
     EventSpec(name='sandboxd.stopped'),
     EventSpec(name='search.backend_aclose_failed'),

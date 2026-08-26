@@ -15,6 +15,7 @@ from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
+from agentcore.core.log_context import get_log_value
 from agentcore.runtime.events import (
     ConversationWatcher,
     EventSink,
@@ -50,6 +51,28 @@ _HEARTBEAT_INTERVAL_S = 15.0
 # not an EventType (no journal / conformance). Desktop + mobile pump parsers
 # recognize the same token; older clients ignore unknown ``:`` comments.
 _ATTACH_CAUGHT_UP = ": attach-caught-up\n\n"
+
+_SSE_BASE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+# Same value as ``INFERENCE_TRACE_HEADER``; keep api.sse off llm.credentials.
+_TRACE_HEADER = "X-AgentCore-Trace"
+
+
+def _sse_headers() -> dict[str, str]:
+    """Transport headers for every chat SSE StreamingResponse.
+
+    When ``trace_id`` is already bound in contextvars, stamp
+    ``X-AgentCore-Trace`` so a captured stream joins the same jsonl line.
+    Unbound / empty → omit the header (never send a blank value).
+    """
+    headers = dict(_SSE_BASE_HEADERS)
+    trace_id = get_log_value("trace_id")
+    if trace_id:
+        headers[_TRACE_HEADER] = trace_id
+    return headers
 
 
 def _note_sse_byte(
@@ -252,11 +275,7 @@ def sse_response(
     return StreamingResponse(
         _event_generator(sink, producer, detach_on_disconnect=detach_on_disconnect),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_sse_headers(),
     )
 
 
@@ -404,11 +423,7 @@ def sse_attach_response(
     return StreamingResponse(
         _attach_generator(sink, cursor=cursor),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_sse_headers(),
     )
 
 
@@ -536,11 +551,7 @@ def sse_conversation_response(
             cursor=cursor,
         ),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_sse_headers(),
     )
 
 
@@ -617,11 +628,7 @@ def sse_queued_response(
             degraded_from=degraded_from,
         ),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_sse_headers(),
     )
 
 
@@ -679,11 +686,7 @@ def sse_resume_deferred_response(
             started=started,
         ),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_sse_headers(),
     )
 
 
@@ -726,9 +729,5 @@ def sse_resume_settled_response(
     return StreamingResponse(
         _resume_settled_generator(settled, sink=sink),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers=_sse_headers(),
     )

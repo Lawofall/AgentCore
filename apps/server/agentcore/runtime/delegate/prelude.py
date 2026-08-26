@@ -54,24 +54,15 @@ def _has_wave_boundary_features(tasks_raw: list[Any]) -> bool:
 
 
 def _has_deep_deliverable_signal(tasks_raw: list[Any]) -> bool:
-    """True when any task declares ``form=files`` / non-empty ``artifacts``.
-
-    Orchestration shape (single worker, no DAG) is orthogonal to output weight —
-    file-shaped deliverable must not be collapsed into auto-light.
-    Retired fields (``min_length`` / ``requires_files``) are not consulted.
+    """True when any task declares a landing deliverable (files / workspace /
+    non-empty artifacts / omitted form). Only explicit ``form=prose`` is exempt.
     """
+    from agentcore.runtime.runs.types import raw_deliverable_expects_landing
+
     for task in tasks_raw:
         if not isinstance(task, dict):
             continue
-        raw = task.get("deliverable")
-        if not isinstance(raw, dict):
-            continue
-        if raw.get("form") == "files":
-            return True
-        arts = raw.get("artifacts")
-        if isinstance(arts, list) and any(
-            isinstance(a, str) and a.strip() for a in arts
-        ):
+        if raw_deliverable_expects_landing(task.get("deliverable")):
             return True
     return False
 
@@ -79,8 +70,9 @@ def _has_deep_deliverable_signal(tasks_raw: list[Any]) -> bool:
 def _should_auto_light_delegate(tasks_raw: list[Any]) -> bool:
     """True when a single dependency-free worker needs no multi-agent coordination.
 
-    Skips auto-light when deliverable is file-shaped (``form=files`` / artifacts)
-    so budget mapping can still promote standard → deep.
+    Skips auto-light when the task expects on-disk landing (``form=files`` /
+    ``workspace`` / omitted form / non-empty artifacts). Only explicit
+    ``form=prose`` auto-lights.
     ``complexity_hint=light`` no longer stamps short ``max_rounds``; browser tool
     surfaces are not excluded from auto-light for round-budget reasons.
     """

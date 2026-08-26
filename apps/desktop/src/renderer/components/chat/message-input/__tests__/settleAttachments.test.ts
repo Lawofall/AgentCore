@@ -217,7 +217,7 @@ describe("settleAttachments", () => {
 
   it("驻留失败时把原始错误一并交出去（toast 靠它说真实原因）", async () => {
     const att = fileAttachment();
-    const refused = new Error("文件超出 26214400 字节的上传上限");
+    const refused = new Error("文件超出 52428800 字节的上传上限");
     ensure.mockResolvedValue({
       ok: false,
       reason: refused.message,
@@ -229,7 +229,7 @@ describe("settleAttachments", () => {
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.cause).toBe(refused);
-    expect(res.reason).toBe("文件超出 26214400 字节的上传上限");
+    expect(res.reason).toBe("文件超出 52428800 字节的上传上限");
   });
 
   it("已删会话的 workspacePath 不能跳过：换会话要再驻留", async () => {

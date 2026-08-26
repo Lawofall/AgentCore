@@ -4,7 +4,7 @@
  * `execution.status==="cancelled"`. Rate-limit / partial / empty interrupt on a
  * cancelled status must not take the stopped face. Empty interrupt (`send_next`)
  * is idle chrome — no spinner「进行中」, no 已停止 / 失败. Stop is not an error.
- * 硬停改动入口不在状态条（产物卡 / 右坞「改动」tab / 画布详情段）。
+ * 硬停改动入口不在状态条（右坞「改动」tab / 画布详情段）。
  * 整轮 Stop 在输入框，不在状态条。
  */
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -138,7 +138,6 @@ function renderStrip(execution: ReturnType<typeof projectExecution>) {
             expanded
             onToggle={() => {}}
             onMaximize={() => {}}
-            onReplay={() => {}}
           />
         </ExecutionScopeContext.Provider>
       </TooltipProvider>
@@ -169,7 +168,6 @@ describe("StatusStrip · user stop cancelled", () => {
     expect(screen.queryByText(/改动 \d+ 个文件/)).toBeNull();
     expect(screen.queryByRole("button", { name: "复制排查包" })).toBeNull();
     expect(screen.queryByTestId("status-strip-failed")).toBeNull();
-    expect(screen.getByRole("button", { name: "回放协作过程" })).toBeTruthy();
   });
 
   it("cancelled status + 限流脸 → 失败条, 不画已停止", () => {
@@ -354,7 +352,7 @@ describe("StatusStrip · user stop cancelled", () => {
     expect(screen.queryByLabelText("进行中")).toBeNull();
   });
 
-  it("stopping：可见停止中、冻脸不挂回放 Play（图仍 running）", () => {
+  it("stopping：可见停止中（图仍 running）", () => {
     turnPhase = "stopping";
     assistantFace = { isStreaming: true };
     const startedOnly: RunFrame[] = [
@@ -374,7 +372,6 @@ describe("StatusStrip · user stop cancelled", () => {
     expect(screen.getByTestId("status-strip-stopping")).toBeTruthy();
     expect(screen.getByText("停止中")).toBeTruthy();
     expect(screen.queryByText("已停止")).toBeNull();
-    expect(screen.queryByRole("button", { name: "回放协作过程" })).toBeNull();
     expect(container.querySelector(".animate-spin")).toBeTruthy();
   });
 

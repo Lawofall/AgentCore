@@ -10,7 +10,8 @@ import { findCatalogItem } from "@/services/models";
 /**
  * 模型组合槽位选择器的纯逻辑（设置·模型配置 · 编辑组合）。
  *
- * 槽位是 `(model, origin, provider_id)` 指针。选择器按服务商分组呈现 BYOK 候选，
+ * 槽位解析后仍是 `(model, origin, provider_id)`；选择器的值是目录身份
+ * `@platform/{id}` / `@byok/{provider_id}/{id}`。按服务商分组呈现 BYOK 候选，
  * 并在平台可用时追加「平台额度」分组；每个服务商的候选 = 其 `default_model` ∪
  * 模型目录里该服务商带出的模型；再把**当前编辑组合**的槽位并入（查目录补显示名），
  * 保证现值始终可选。已删服务商的孤儿槽会单独成组，避免 select 静默错位。
@@ -69,19 +70,39 @@ const SEP = "::";
  */
 export const PLATFORM_POINTER_ID = "__platform__";
 
+const PLATFORM_REF_PREFIX = "@platform/";
+const BYOK_REF_PREFIX = "@byok/";
+
+/** Encode a catalog identity (`@platform/{id}` / `@byok/{provider_id}/{id}`). */
+export function formatModelRef(
+  origin: "platform" | "byok",
+  model: string,
+  providerId?: string | null,
+): string {
+  const mid = model.trim();
+  if (!mid) return "";
+  if (origin === "platform" || !providerId) {
+    return `${PLATFORM_REF_PREFIX}${mid}`;
+  }
+  return `${BYOK_REF_PREFIX}${providerId}/${mid}`;
+}
+
 /** Encode a `(provider_id|__platform__, model)` pair or a full slot into a select value. */
 export function encodePointer(
   providerIdOrSlot: string | ModelProfileSlot,
   model?: string,
 ): string {
   if (typeof providerIdOrSlot === "string") {
-    return `${providerIdOrSlot}${SEP}${model ?? ""}`;
+    if (isPlatformGroupId(providerIdOrSlot) || !providerIdOrSlot) {
+      return formatModelRef("platform", model ?? "");
+    }
+    return formatModelRef("byok", model ?? "", providerIdOrSlot);
   }
   const p = providerIdOrSlot;
   if (p.origin === "platform" || !p.provider_id) {
-    return `${PLATFORM_POINTER_ID}${SEP}${p.model}`;
+    return formatModelRef("platform", p.model);
   }
-  return `${p.provider_id}${SEP}${p.model}`;
+  return formatModelRef("byok", p.model, p.provider_id);
 }
 
 /** The `<select>` value for a slot (empty string = 未设置 / 跟随). */
@@ -94,10 +115,28 @@ export function pointerValue(
 
 /** Parse a `<select>` option value back into a slot (null for the empty value). */
 export function decodePointer(value: string): ModelProfileSlot | null {
-  const idx = value.indexOf(SEP);
+  const text = value.trim();
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  if (lower.startsWith(PLATFORM_REF_PREFIX)) {
+    const model = text.slice(PLATFORM_REF_PREFIX.length).trim();
+    if (!model) return null;
+    return { origin: "platform", provider_id: null, model };
+  }
+  if (lower.startsWith(BYOK_REF_PREFIX)) {
+    const rest = text.slice(BYOK_REF_PREFIX.length);
+    const slash = rest.indexOf("/");
+    if (slash < 0) return null;
+    const provider_id = rest.slice(0, slash).trim();
+    const model = rest.slice(slash + 1).trim();
+    if (!provider_id || !model) return null;
+    return { origin: "byok", provider_id, model };
+  }
+  // Leftover local UI values from the old `__platform__::model` pointer.
+  const idx = text.indexOf(SEP);
   if (idx < 0) return null;
-  const provider_id = value.slice(0, idx);
-  const model = value.slice(idx + SEP.length);
+  const provider_id = text.slice(0, idx);
+  const model = text.slice(idx + SEP.length);
   if (!provider_id || !model) return null;
   if (provider_id === PLATFORM_POINTER_ID) {
     return { origin: "platform", provider_id: null, model };

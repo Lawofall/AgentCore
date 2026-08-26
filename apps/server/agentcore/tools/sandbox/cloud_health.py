@@ -8,9 +8,8 @@ Reads return the cached verdict immediately and schedule a *background*
 re-probe once it ages out: cost stays one runsc smoke per TTL window instead of
 one per ``code_execute``, and no caller ever blocks on a probe.
 
-The result folds into ``code_execution_enabled_for`` (shape A). Shape B
-browser / package_install is gated separately by ``browser_netns_health``.
-``None`` (never probed) preserves
+The result folds into ``code_execution_enabled_for`` and the cloud browser
+assembly predicate (same desk guest). ``None`` (never probed) preserves
 config-only semantics for tests / local / unbooted, and is a *different state*
 from a probe that ran and failed — the latter carries a timestamp and a reason.
 A refresh therefore replaces the verdict only when the new one is complete: a
@@ -235,8 +234,8 @@ async def _probe_and_store(*, phase: str) -> None:
         phase=phase,
         regressed=was_healthy or None,
         hint=(
-            "云端 code_execute/test_run 将不装配，直到形状 A 沙箱可用；"
-            "browser/package_install 看形状 B"
+            "云端 code_execute/test_run/package_install/browser 将不装配，直到 desk/net "
+            "guest 可用"
         ),
     )
 

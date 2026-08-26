@@ -1,4 +1,5 @@
 import { EntriesSection } from "@/components/files/fileWorkbench/EntriesSection";
+import { createAndOpenScopeEntry } from "@/components/files/fileWorkbench/createScopeEntry";
 import { EmptyHint, IconButton } from "@/components/files/parts";
 import { Button, IconButton as UiIconButton } from "@/components/ui";
 import {
@@ -14,6 +15,7 @@ import { hasLocalFiles } from "@/lib/capabilities";
 import {
   exportCloudDeskToPickedFolder,
   exportCloudDeskZip,
+  mergeArtifactsOnlyToLanding,
 } from "@/services/cloudDeskExit";
 import { useConversationStore } from "@/stores/conversation";
 import { useFoldersStore } from "@/stores/folders";
@@ -151,6 +153,18 @@ export function WorkspaceMode() {
                   )
                 : undefined
             }
+            onCreateWorkroomEntry={
+              folderId
+                ? () =>
+                    createAndOpenScopeEntry(
+                      { kind: "folder", folderId },
+                      (target) =>
+                        useSidePanelStore
+                          .getState()
+                          .openTab(entryFileTab(target)),
+                    )
+                : undefined
+            }
             leading={<WorkspaceModeBar conversationId={conversationId} />}
             trailing={
               <>
@@ -167,6 +181,19 @@ export function WorkspaceMode() {
                       }
                       onExportZip={() =>
                         void runExport(() => exportCloudDeskZip(conversationId))
+                      }
+                      onMergeArtifacts={
+                        isCloudWorkspace && fsAvailable
+                          ? () =>
+                              void runExport(async () => {
+                                const roots =
+                                  (await window.fsApi?.listRoots()) ?? [];
+                                await mergeArtifactsOnlyToLanding(
+                                  conversationId,
+                                  roots,
+                                );
+                              })
+                          : undefined
                       }
                     />
                     <IconButton
@@ -279,11 +306,14 @@ function WorkspaceExportMenu({
   exporting,
   onExportFolder,
   onExportZip,
+  onMergeArtifacts,
 }: {
   fsAvailable: boolean;
   exporting: boolean;
   onExportFolder: () => void;
   onExportZip: () => void;
+  /** 云桌 + 本机盘：只把最近一回合交付路径写入合回落点。 */
+  onMergeArtifacts?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const icon = exporting ? (
@@ -347,6 +377,23 @@ function WorkspaceExportMenu({
             </span>
           </span>
         </Button>
+        {onMergeArtifacts && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setOpen(false);
+              onMergeArtifacts();
+            }}
+            className="h-auto w-full justify-start px-2.5 py-1.5 text-left text-xs font-medium"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">只合回产物</span>
+              <span className="block truncate text-xs font-normal text-muted-foreground">
+                仅写入本回合交付文件，已有的不覆盖
+              </span>
+            </span>
+          </Button>
+        )}
       </PopoverContent>
     </Popover>
   );

@@ -1,4 +1,4 @@
-"""sandboxd Unix RPC: allowlisted runsc/ip, peercred, health shapes A/B."""
+"""sandboxd Unix RPC: allowlisted runsc/ip, peercred, health(net)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,11 @@ from agentcore.tools.sandbox.sandboxd import server as server_mod
 from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd
 from agentcore.tools.sandbox.sandboxd.client import UnixSandboxdClient
 from agentcore.tools.sandbox.sandboxd.errors import SandboxdRpcError, SandboxdUnavailableError
-from agentcore.tools.sandbox.sandboxd.netns_ops import PROBE_NETNS_NAME, spec_for
+from agentcore.tools.sandbox.sandboxd.netns_ops import (
+    PROBE_NETNS_NAME,
+    NetnsOpsError,
+    spec_for,
+)
 from agentcore.tools.sandbox.sandboxd.server import (
     SandboxdServer,
     lookup_user_uid,
@@ -63,7 +67,11 @@ async def _running(
             cfg_path = Path(bundle) / "config.json"
             if cfg_path.is_file():
                 bundles.append(json.loads(cfg_path.read_text(encoding="utf-8")))
-        script = run_script if "run" in argv_s else "raise SystemExit(0)"
+        script = "raise SystemExit(0)"
+        if "-d" in argv_s or "--detach" in argv_s:
+            script = "raise SystemExit(0)"
+        elif "exec" in argv_s or "run" in argv_s:
+            script = run_script
         return await _REAL_EXEC(sys.executable, "-c", script, **kwargs)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_exec)
@@ -102,15 +110,18 @@ async def _running(
         await server.close()
 
 
-def test_spec_for_browser_and_package_names():
-    br = spec_for("browser", 3, "10.201")
-    assert br.name == "acbrw3"
-    assert br.path.endswith("/acbrw3") or br.path.endswith("\\acbrw3")
-    assert br.host_ip == "10.201.3.1"
-    assert br.sbx_ip == "10.201.3.2"
+def test_spec_for_package_names():
     pkg = spec_for("package", 1, "10.202")
     assert pkg.name == "acpkg1"
+    assert pkg.path.endswith("/acpkg1") or pkg.path.endswith("\\acpkg1")
+    assert pkg.host_ip == "10.202.1.1"
+    assert pkg.sbx_ip == "10.202.1.2"
     assert pkg.veth_host == "acpkgh1"
+
+
+def test_spec_for_rejects_browser_family():
+    with pytest.raises(NetnsOpsError):
+        spec_for("browser", 0, "10.201")  # type: ignore[arg-type]
 
 
 def test_peer_allowed_self_or_app():
@@ -124,29 +135,27 @@ def test_peer_allowed_self_or_app():
 
 
 @pytest.mark.asyncio
-async def test_ping_and_run_wait_uses_shape_argv(tmp_path, monkeypatch):
+async def test_ping_and_start_detach_uses_net_argv(tmp_path, monkeypatch):
     async with _running(tmp_path, monkeypatch) as (server, client, captured, _b):
         await client.ping()
         bundle = Path(server._runtime_root) / "b"
         bundle.mkdir()
-        _code, stdout, stderr = await client.run_wait(
-            shape="code",
+        netns = Path(server._netns_run_dir) / "acpkg0"
+        await client.start_detach(
             bundle_dir=str(bundle),
-            container_id="agentcore-code1",
-            timeout_seconds=5,
+            container_id="agentcore-desk1",
+            netns_path=str(netns),
         )
-        assert "out-chunk" in stdout
-        assert "err-chunk" in stderr
-        # UnixSandboxdClient maps JSON 0 through ``code or 1``; pin argv instead.
         run = _run_argv(captured)
         assert run == build_runsc_cmd(
             runsc_path="runsc",
             runtime_root=server._runtime_root,
             bundle_dir=str(bundle.resolve()),
-            container_id="agentcore-code1",
-            shape="code",
-            network_mode="none",
+            container_id="agentcore-desk1",
+            detach=True,
         )
+        assert "--rootless" not in run
+        assert "-d" in run
 
 
 @pytest.mark.asyncio
@@ -154,42 +163,31 @@ async def test_run_rejects_bad_container_id_and_bundle(tmp_path, monkeypatch):
     async with _running(tmp_path, monkeypatch) as (server, client, _c, _b):
         bundle = Path(server._runtime_root) / "b"
         bundle.mkdir()
+        netns = Path(server._netns_run_dir) / "acpkg0"
         with pytest.raises(SandboxdRpcError) as bad_id:
-            await client.run_wait(
-                shape="code",
+            await client.start_detach(
                 bundle_dir=str(bundle),
                 container_id="evil",
-                timeout_seconds=5,
+                netns_path=str(netns),
             )
         assert bad_id.value.code == "sandboxd_denied"
         outside = tmp_path / "outside"
         outside.mkdir()
         with pytest.raises(SandboxdRpcError) as bad_bundle:
-            await client.run_wait(
-                shape="code",
+            await client.start_detach(
                 bundle_dir=str(outside),
                 container_id="agentcore-x",
-                timeout_seconds=5,
+                netns_path=str(netns),
             )
         assert bad_bundle.value.code == "sandboxd_denied"
 
 
 @pytest.mark.asyncio
-async def test_health_code_is_true_oci_shape_a(tmp_path, monkeypatch):
-    async with _running(tmp_path, monkeypatch) as (_s, client, captured, bundles):
-        ok, detail = await client.health("code")
-        assert ok is True
-        assert detail == ""
-        run = _run_argv(captured)
-        run_idx = run.index("run")
-        assert "--rootless" in run[:run_idx]
-        assert "--network=none" in run[:run_idx]
-        assert "--network=sandbox" not in run[:run_idx]
-        assert bundles
-        cfg = bundles[-1]
-        assert cfg["process"]["args"] == ["/bin/true"]
-        ns_types = [n.get("type") for n in cfg.get("linux", {}).get("namespaces", [])]
-        assert "network" not in ns_types
+async def test_health_rejects_shape_code(tmp_path, monkeypatch):
+    async with _running(tmp_path, monkeypatch) as (_s, client, _c, _b):
+        with pytest.raises(SandboxdRpcError) as denied:
+            await client.health("code")  # type: ignore[arg-type]
+        assert denied.value.code == "sandboxd_denied"
 
 
 @pytest.mark.asyncio
@@ -211,6 +209,7 @@ async def test_health_net_is_probe_plus_shape_b(tmp_path, monkeypatch):
         assert bundles
         cfg = bundles[-1]
         assert cfg["process"]["args"] == ["/bin/true"]
+        assert cfg["process"]["user"]["uid"] != 65534
         blob = json.dumps(cfg)
         assert "playwright" not in blob.lower()
         assert "chromium" not in blob.lower()
@@ -221,15 +220,15 @@ async def test_health_net_is_probe_plus_shape_b(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_netns_setup_teardown_and_delete_kill(tmp_path, monkeypatch):
     async with _running(tmp_path, monkeypatch) as (server, client, captured, _b):
-        info = await client.netns_setup("browser", 2, "10.201")
-        assert info.name == "acbrw2"
-        assert info.host_ip == "10.201.2.1"
-        assert info.sbx_ip == "10.201.2.2"
-        await client.netns_teardown("browser", 2)
+        info = await client.netns_setup("package", 2, "10.202")
+        assert info.name == "acpkg2"
+        assert info.host_ip == "10.202.2.1"
+        assert info.sbx_ip == "10.202.2.2"
+        await client.netns_teardown("package", 2)
         await client.delete("agentcore-box", force=True)
         await client.kill("agentcore-box", "SIGKILL")
         ip_calls = [a[1:] for a in captured if a and a[0] == "ip"]
-        assert any(c[:3] == ["netns", "add", "acbrw2"] for c in ip_calls)
+        assert any(c[:3] == ["netns", "add", "acpkg2"] for c in ip_calls)
         delete = next(
             a for a in captured if a[:1] == ["runsc"] and "delete" in a and "--force" in a
         )
@@ -240,33 +239,35 @@ async def test_netns_setup_teardown_and_delete_kill(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_stdio_splices_bytes(tmp_path, monkeypatch):
-    async with _running(tmp_path, monkeypatch, run_script=_STDIO_SCRIPT) as (
-        server,
-        client,
-        captured,
-        _b,
-    ):
+async def test_run_wait_and_stdio_are_denied(tmp_path, monkeypatch):
+    async with _running(tmp_path, monkeypatch) as (server, client, _c, _b):
         bundle = Path(server._runtime_root) / "b"
         bundle.mkdir()
-        netns = Path(server._netns_run_dir) / "acbrw0"
-        stdio = await client.run_stdio(
-            bundle_dir=str(bundle),
-            container_id="agentcore-br1",
-            netns_path=str(netns),
-        )
-        await stdio.write(b"hello-rpc\n")
-        line = await asyncio.wait_for(stdio.readline(), timeout=5)
-        assert line == b"hello-rpc\n"
-        await stdio.aclose()
-        run = _run_argv(captured)
-        assert run == build_runsc_cmd(
-            runsc_path="runsc",
-            runtime_root=server._runtime_root,
-            bundle_dir=str(bundle.resolve()),
-            container_id="agentcore-br1",
-            shape="net",
-        )
+        netns = Path(server._netns_run_dir) / "acpkg0"
+        with pytest.raises(SandboxdRpcError) as wait_denied:
+            await client._rpc(
+                "run",
+                {
+                    "shape": "net",
+                    "mode": "wait",
+                    "bundle_dir": str(bundle),
+                    "container_id": "agentcore-wait",
+                    "netns_path": str(netns),
+                },
+            )
+        assert wait_denied.value.code == "sandboxd_denied"
+        with pytest.raises(SandboxdRpcError) as stdio_denied:
+            await client._rpc(
+                "run",
+                {
+                    "shape": "net",
+                    "mode": "stdio",
+                    "bundle_dir": str(bundle),
+                    "container_id": "agentcore-stdio",
+                    "netns_path": str(netns),
+                },
+            )
+        assert stdio_denied.value.code == "sandboxd_denied"
 
 
 @pytest.mark.asyncio
@@ -279,13 +280,80 @@ async def test_run_timeout_kills_and_exits(tmp_path, monkeypatch):
     ):
         bundle = Path(server._runtime_root) / "b"
         bundle.mkdir()
-        code, _out, _err = await client.run_wait(
-            shape="code",
+        netns = Path(server._netns_run_dir) / "acpkg0"
+        await client.start_detach(
             bundle_dir=str(bundle),
             container_id="agentcore-hang",
+            netns_path=str(netns),
+        )
+        code, _out, _err = await client.exec_wait(
+            container_id="agentcore-hang",
+            argv=["python3", "-u", "/scratch/x.py"],
             timeout_seconds=0.3,
         )
         assert code != 0
+
+
+@pytest.mark.asyncio
+async def test_start_detach_then_exec(tmp_path, monkeypatch):
+    async with _running(tmp_path, monkeypatch) as (server, client, captured, _b):
+        bundle = Path(server._runtime_root) / "b"
+        bundle.mkdir()
+        netns = Path(server._netns_run_dir) / "acpkg0"
+        await client.start_detach(
+            bundle_dir=str(bundle),
+            container_id="agentcore-desk1",
+            netns_path=str(netns),
+        )
+        code, stdout, stderr = await client.exec_wait(
+            container_id="agentcore-desk1",
+            argv=["python3", "-u", "/scratch/x.py"],
+            timeout_seconds=5,
+        )
+        assert "out-chunk" in stdout
+        assert "err-chunk" in stderr
+        detach = next(a for a in captured if "-d" in a)
+        assert "--network=sandbox" in detach
+        assert "--rootless" not in detach
+        exec_cmd = next(a for a in captured if "exec" in a)
+        assert "--cwd=/workspace" in exec_cmd
+        assert "python3" in exec_cmd
+        assert "/scratch/x.py" in exec_cmd
+        assert "--bundle=" not in exec_cmd
+
+
+@pytest.mark.asyncio
+async def test_exec_stdio_splices_into_running_guest(tmp_path, monkeypatch):
+    async with _running(tmp_path, monkeypatch, run_script=_STDIO_SCRIPT) as (
+        server,
+        client,
+        captured,
+        _b,
+    ):
+        bundle = Path(server._runtime_root) / "b"
+        bundle.mkdir()
+        netns = Path(server._netns_run_dir) / "acpkg0"
+        await client.start_detach(
+            bundle_dir=str(bundle),
+            container_id="agentcore-desk1",
+            netns_path=str(netns),
+        )
+        stdio = await client.exec_stdio(
+            container_id="agentcore-desk1",
+            argv=["python3", "-u", "/scratch/x.py"],
+        )
+        assert stdio.container_id.startswith("agentcore-desk1-exec-stdio-")
+        assert stdio.container_id != "agentcore-desk1-exec"
+        await stdio.write(b"hello-rpc\n")
+        line = await asyncio.wait_for(stdio.readline(), timeout=5)
+        assert line == b"hello-rpc\n"
+        await stdio.aclose()
+        exec_cmd = next(a for a in captured if a[:1] == ["runsc"] and "exec" in a)
+        assert "--cwd=/workspace" in exec_cmd
+        assert "python3" in exec_cmd
+        assert "/scratch/x.py" in exec_cmd
+        assert "--bundle=" not in exec_cmd
+        assert "run" not in exec_cmd[exec_cmd.index("exec") :]
 
 
 @pytest.mark.asyncio

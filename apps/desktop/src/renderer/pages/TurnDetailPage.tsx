@@ -72,7 +72,6 @@ export function TurnDetailPage() {
   const [hydrateRetry, setHydrateRetry] = useState(0);
 
   const requestedView = parseView(searchParams.get("view"));
-  const autoplay = searchParams.get("autoplay") === "1";
   const compareA = searchParams.get("a");
   const compareB = searchParams.get("b");
   const initialComparePair = useMemo<[string, string] | undefined>(() => {
@@ -486,11 +485,7 @@ export function TurnDetailPage() {
                 <div className="min-h-0 flex-1">
                   {showTeamGraph ? (
                     <ReactFlowProvider>
-                      <GraphView
-                        interactive
-                        fitMode="view"
-                        autoplay={autoplay}
-                      />
+                      <GraphView interactive fitMode="view" />
                     </ReactFlowProvider>
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">

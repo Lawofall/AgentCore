@@ -1,6 +1,6 @@
 /**
- * 本对话「改动 / 恢复」入场 —— 与 {@link ConversationChangesPanel} /
- * 产物卡同源（process + execution → fileArtifacts），并含 Local zip 基线
+ * 本对话「改动 / 恢复」入场 —— 与 {@link ConversationChangesPanel} 同源
+ * （process + execution → fileArtifacts），并含 Local zip 基线
  *（不依赖 file_*；脚本删事故仍可进 restore）。
  * 供右坞「改动」tab 按需显隐（前端UX设计.md §十）。
  */

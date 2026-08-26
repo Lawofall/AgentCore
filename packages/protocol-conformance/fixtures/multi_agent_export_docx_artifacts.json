@@ -1,6 +1,6 @@
 {
   "name": "multi_agent_export_docx_artifacts",
-  "description": "交付台账·导出件：md + 自报 derived_from 的 docx 双双进 delivery_status.artifacts（首条非空产物清单向量；产物卡不漏导出件、可把源 md 折为中间稿）",
+  "description": "交付台账·导出件：md + 自报 derived_from 的 docx 双双进 delivery_status.artifacts（导出件自成 artifacts 行并带 derived_from；终稿路径可点）",
   "events": [
     {
       "type": "message_start",

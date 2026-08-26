@@ -872,11 +872,10 @@ def test_named_review_without_files_not_elevated_playbook_review_lands():
     assert errors == []
     by_role = {n.role: n for n in plan.nodes}
     review = by_role["独立复核员"]
-    # 未声明 files → 不再静默抬 form/artifacts
-    assert review.deliverable is None or (
-        review.deliverable.form != "files"
-        and not review.deliverable.artifacts
-    )
+    # 漏填=files；不因角色名钉审校 artifacts / 纪律段。
+    assert review.deliverable is not None
+    assert review.deliverable.form == "files"
+    assert not review.deliverable.artifacts
     assert INDEPENDENT_REVIEW_REPORT_DISCIPLINE not in (review.task or "")
 
     verify = by_role["验证员"]

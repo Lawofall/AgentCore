@@ -515,7 +515,10 @@ describe("AskDecisionBody question stems", () => {
     render(<Harness content={content} />);
     expect(screen.queryByText("总标题不要画")).toBeNull();
     expect(screen.getByText("第一题")).toBeTruthy();
+    expect(screen.queryByText("第二题")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "第 2 题，共 2 题" }));
     expect(screen.getByText("第二题")).toBeTruthy();
+    expect(screen.queryByText("第一题")).toBeNull();
   });
 
   it("falls back to message when the only question has an empty prompt", () => {

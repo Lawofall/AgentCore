@@ -5,13 +5,13 @@
 
 1. **本机语法 / 边界自检**（任何 OS，默认）：
    ``python apps/server/scripts/verify_gvisor_sandbox.py``
-   覆盖：产物写回 staging 纯函数、OCI config 形状、settings 灰度默认值、
+   覆盖：OCI config 形状、settings 灰度默认值、
    Dockerfile / compose / env 样例资产是否在仓。
 
 2. **真沙箱冒烟**（Linux + runsc，或 Docker 容器内）：
    ``python apps/server/scripts/verify_gvisor_sandbox.py --live``
-   需要 PATH 上有 ``runsc``（或 ``GVISOR_RUNSC_PATH``）。会真实 ``runsc run``
-   一段 python，并把产物写回临时工作区。
+   需要 PATH 上有 ``runsc``（或 ``GVISOR_RUNSC_PATH``）。会真实 ``runsc run -d``
+   再 ``exec`` 一段 python，产物 bind 落在临时工作区。
 
 Docker 用法（推荐在生产镜像上验证，不在 Windows 宿主机）：
 
@@ -71,7 +71,6 @@ def check_repo_assets() -> list[str]:
         print("  SKIP repo asset checks (not a full monorepo checkout / deploy/)")
         required = [
             SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "gvisor.py",
-            SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "staging.py",
             SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "limits.py",
         ]
         for path in required:
@@ -86,7 +85,6 @@ def check_repo_assets() -> list[str]:
         SERVER_ROOT / "Dockerfile",
         SERVER_ROOT / "scripts" / "fetch_runsc.py",
         SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "gvisor.py",
-        SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "staging.py",
         SERVER_ROOT / "agentcore" / "tools" / "sandbox" / "limits.py",
         REPO_ROOT / "deploy" / "docker-compose.sandbox.yml",
         REPO_ROOT / "deploy" / "api-sandbox-entrypoint.sh",
@@ -129,48 +127,13 @@ def check_repo_assets() -> list[str]:
         "GVISOR_ENABLED",
         "GVISOR_MAX_CONCURRENT_EXECUTIONS",
         "GVISOR_TIMEOUT_MAX_SECONDS",
-        "GVISOR_WRITE_BACK_MAX_BYTES",
+        "GVISOR_DESK_IDLE_TTL_SECONDS",
     ):
         if key in env_ex:
             _ok(f"production.env.example has {key}")
         else:
             errors.append(f"production.env.example missing {key}")
             _fail(f"production.env.example missing {key}")
-    return errors
-
-
-def check_staging_write_back() -> list[str]:
-    """OS-agnostic copy-in / copy-out boundary (same as unit tests, as a smoke gate)."""
-    # Ensure apps/server is importable when run from repo root.
-    sys.path.insert(0, str(SERVER_ROOT))
-    from agentcore.tools.sandbox.staging import (  # noqa: WPS433
-        collect_changes,
-        stage_workspace,
-        write_back,
-    )
-
-    errors: list[str] = []
-    with tempfile.TemporaryDirectory(prefix="gvisor_verify_") as td:
-        root = Path(td)
-        ws = root / "ws"
-        (ws / "in").mkdir(parents=True)
-        (ws / "in" / "seed.txt").write_text("seed", encoding="utf-8")
-        staged = root / "staged"
-        before = stage_workspace(ws, staged, max_bytes=1024 * 1024)
-        (staged / "out").mkdir()
-        (staged / "out" / "course.pptx").write_bytes(b"PK-fake-pptx")
-        changes = collect_changes(staged, before)
-        report = write_back(
-            staged, ws, changes, max_bytes=1024 * 1024, max_files=20
-        )
-        if report.written != ["out/course.pptx"]:
-            errors.append(f"unexpected written={report.written}")
-            _fail(f"write_back written={report.written}")
-        elif not (ws / "out" / "course.pptx").is_file():
-            errors.append("pptx missing after write_back")
-            _fail("pptx missing after write_back")
-        else:
-            _ok("staging copy-in/copy-out lands pptx into workspace")
     return errors
 
 
@@ -210,16 +173,16 @@ def check_settings_defaults() -> list[str]:
 def check_oci_config_shape() -> list[str]:
     sys.path.insert(0, str(SERVER_ROOT))
     from agentcore.tools.sandbox.gvisor import GVisorSandbox  # noqa: WPS433
-    from agentcore.tools.sandbox.protocol import ExecutionRequest  # noqa: WPS433
 
     errors: list[str] = []
     sandbox = GVisorSandbox(runtime_root=tempfile.mkdtemp(prefix="gvisor_oci_"))
-    cfg = sandbox._build_oci_config(  # noqa: SLF001
-        ExecutionRequest(code="print(1)", language="python"),
-        script_name="main.py",
+    cache = tempfile.mkdtemp(prefix="gvisor_cache_")
+    cfg = sandbox._build_desk_oci(  # noqa: SLF001
         workspace="/tmp/ws",
         scratch_dir="/tmp/scratch",
-        workspace_writable=True,
+        netns_path="/var/run/netns/acpkg1",
+        cache_host_dir=cache,
+        proxy_url="http://10.0.0.1:8898",
         memory_limit_mb=512,
     )
     try:
@@ -230,13 +193,20 @@ def check_oci_config_shape() -> list[str]:
         return errors
 
     mounts = {m["destination"]: m for m in cfg["mounts"]}
-    if mounts.get("/workspace", {}).get("type") == "tmpfs":
-        _ok("OCI staged workspace uses tmpfs + seed bind")
-    elif "rw" in mounts.get("/workspace", {}).get("options", []):
-        _ok("OCI /workspace is rw for staged runs")
+    if mounts.get("/workspace", {}).get("type") != "bind":
+        errors.append("/workspace should be a rw bind of the real workspace")
+        _fail("/workspace mount is not bind")
+    elif "rw" not in mounts.get("/workspace", {}).get("options", []):
+        errors.append("/workspace should be writable")
+        _fail("/workspace mount not writable")
     else:
-        errors.append("/workspace should be writable when staged")
-        _fail("/workspace mount not writable for staged runs")
+        _ok("OCI /workspace is rw-bind (cloud desk)")
+    uid = cfg.get("process", {}).get("user", {}).get("uid")
+    if uid == 65534:
+        errors.append("desk OCI uid is nobody (65534)")
+        _fail("desk OCI uid 65534")
+    else:
+        _ok(f"OCI uid={uid} (not 65534)")
     if cfg["process"]["cwd"] != "/workspace":
         errors.append("cwd != /workspace")
         _fail("process.cwd != /workspace")
@@ -272,8 +242,7 @@ async def check_live_runsc() -> list[str]:
         ws.mkdir()
         code = (
             "from pathlib import Path\n"
-            "Path('out').mkdir(exist_ok=True)\n"
-            "Path('out/live.txt').write_text('gvisor-live-ok', encoding='utf-8')\n"
+            "Path('live.txt').write_text('gvisor-live-ok', encoding='utf-8')\n"
             "print('ok')\n"
         )
         result = await sandbox.execute(
@@ -288,15 +257,15 @@ async def check_live_runsc() -> list[str]:
             errors.append(f"live execute failed: {result.stderr!r}")
             _fail(f"live execute failed exit={result.exit_code} stderr={result.stderr!r}")
             return errors
-        if "out/live.txt" not in (result.written_files or []):
+        if "live.txt" not in (result.written_files or []):
             errors.append(f"written_files={result.written_files}")
-            _fail(f"expected out/live.txt in written_files, got {result.written_files}")
-        landed = ws / "out" / "live.txt"
+            _fail(f"expected live.txt in written_files, got {result.written_files}")
+        landed = ws / "live.txt"
         if not landed.is_file() or landed.read_text(encoding="utf-8") != "gvisor-live-ok":
-            errors.append("artifact missing after live write-back")
+            errors.append("artifact missing after live execute")
             _fail(f"artifact missing or wrong: {landed}")
         else:
-            _ok("live runsc execute + write-back → out/live.txt")
+            _ok("live runsc execute bind-writes live.txt")
 
         # Optional: document libs present in the sandbox image (best-effort).
         lib_check = await sandbox.execute(
@@ -322,30 +291,30 @@ async def check_live_runsc() -> list[str]:
     return errors
 
 
-async def check_live_netns() -> list[str]:
-    """Shape-B ``health("net")`` via sandboxd — same gate as browser / package_install."""
+async def check_live_desk_health() -> list[str]:
+    """Same predicate as cloud Chromium assembly: desk ``cloud_sandbox_health``."""
     sys.path.insert(0, str(SERVER_ROOT))
     from agentcore.config import settings  # noqa: WPS433
-    from agentcore.tools.sandbox.browser.netns import (  # noqa: WPS433
-        browser_netns_health,
-        probe_browser_netns_at_startup,
-        reset_browser_netns_health_for_tests,
+    from agentcore.tools.sandbox.cloud_health import (  # noqa: WPS433
+        cloud_sandbox_health,
+        probe_cloud_sandbox_at_startup,
+        reset_cloud_sandbox_health_for_tests,
     )
 
     errors: list[str] = []
     if not settings.gvisor_enabled:
-        print("  SKIP netns probe (gvisor_enabled=false)")
+        print("  SKIP desk health probe (gvisor_enabled=false)")
         return errors
-    reset_browser_netns_health_for_tests()
-    await probe_browser_netns_at_startup()
-    if browser_netns_health() is True:
-        _ok("browser netns probe (sandboxd health net)")
+    reset_cloud_sandbox_health_for_tests()
+    await probe_cloud_sandbox_at_startup()
+    if cloud_sandbox_health() is not False:
+        _ok("cloud desk guest health")
         return errors
-    errors.append("browser netns probe unhealthy")
+    errors.append("cloud desk guest unhealthy")
     _fail(
-        "sandboxd health(net) failed — stack docker-compose.sandbox.yml "
+        "cloud_sandbox_health failed — stack docker-compose.sandbox.yml "
         "(entrypoint starts sandboxd, then USER app); "
-        "do not fall back to DesktopBridge / ip netns add"
+        "do not fall back to DesktopBridge / a second browser jail"
     )
     return errors
 
@@ -355,7 +324,7 @@ def main() -> int:
     parser.add_argument(
         "--live",
         action="store_true",
-        help="Run a real runsc execute+write-back smoke (Linux / Docker only)",
+        help="Run a real runsc execute smoke (Linux / Docker only)",
     )
     args = parser.parse_args()
 
@@ -363,8 +332,6 @@ def main() -> int:
     errors: list[str] = []
     print("-- repo assets --")
     errors.extend(check_repo_assets())
-    print("-- staging write-back --")
-    errors.extend(check_staging_write_back())
     print("-- settings defaults --")
     if not args.live:
         errors.extend(check_settings_defaults())
@@ -376,11 +343,11 @@ def main() -> int:
     if args.live:
         print("-- live runsc --")
         errors.extend(asyncio.run(check_live_runsc()))
-        print("-- live netns --")
-        errors.extend(asyncio.run(check_live_netns()))
+        print("-- live desk --")
+        errors.extend(asyncio.run(check_live_desk_health()))
     else:
         print("-- live runsc -- (skipped; pass --live on Linux/Docker)")
-        print("-- live netns -- (skipped; pass --live on Linux/Docker)")
+        print("-- live desk -- (skipped; pass --live on Linux/Docker)")
 
     if errors:
         print(f"\nFAILED ({len(errors)} issue(s))")

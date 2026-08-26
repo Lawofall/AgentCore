@@ -2,12 +2,13 @@
 
 Supports JS (npm/pnpm/yarn) and Python (uv/pip/poetry) with the same discipline.
 
-- **A**：云端装包走 ``tools/sandbox/egress``（netns + allowlist proxy）；辅以 argv
-  形态白名单 + 固定包装源 env + 拒绝改 registry/index 的 CLI 参数。无 chokepoint 时甲降级。
-  本地（``backend.location=local``）不走主机 gVisor egress 门禁，只钉源 + 权限轴。
+- **A**：云端装包走桌上常驻 allowlist chokepoint（netns + proxy，与
+  ``code_execute`` 同一 desk guest）；辅以 argv 形态白名单 + 固定包装源 env +
+  拒绝改 registry/index 的 CLI 参数。本地（``backend.location=local``）不走主机
+  gVisor 门禁，只钉源 + 权限轴。
 - **B**：云端 ``install_cache_env`` → 沙箱 ``/pkg-cache``（OCI bind 到
-  ``DATA_DIR/pkg-cache/<bucket>``）。云端 install 将持久工作区 rw-bind 到
-  ``/workspace``，``node_modules`` / ``.venv`` 直接落盘（短命沙箱只跑命令，不整树 base64 回传）。
+  ``DATA_DIR/pkg-cache/<bucket>``）。工作区 rw-bind 为 ``/workspace``，
+  ``node_modules`` / ``.venv`` 直接落在真盘。
 
 Used by ``test_run`` (check=install / command=JS|Python install-shaped).
 """

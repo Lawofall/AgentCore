@@ -67,7 +67,8 @@
             "task": "撰写文档",
             "depends_on": []
           }
-        ]
+        ],
+        "note_wall": true
       },
       "timestamp": "2026-01-01T00:00:00.004Z"
     },
@@ -486,6 +487,7 @@
         "supersedes": "n2"
       }
     ],
+    "noteWall": true,
     "userInterjections": []
   }
 }

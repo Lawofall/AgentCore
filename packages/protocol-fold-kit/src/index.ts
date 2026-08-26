@@ -10,7 +10,7 @@
  * Allowed under cross-platform-frontend: protocol constants yes; shared fold
  * implementation no. Gate remains `pnpm conformance`.
  *
- * 协议文案层：空失败脸与降级 chip、导出 chrome、恢复时刻子句、
+ * 协议文案层：空失败脸、导出 chrome、恢复时刻子句、
  * 排查包 extras 成文、交互卡名（桌面/手机逐字同一份）。
  */
 
@@ -61,13 +61,10 @@ export {
 } from "./teamGain";
 
 export {
-  EMPTY_RESPONSE_CHIP_LABELS,
   LLM_EMPTY_RESPONSE_MESSAGE,
   LLM_ERROR_MESSAGE,
   LLM_UNPRODUCTIVE_MESSAGE,
   TURN_INTERRUPTED_EMPTY_MESSAGE,
-  degradedFinishChipLabel,
-  isEmptyResponseUserSurface,
 } from "./errorCopy";
 
 export {

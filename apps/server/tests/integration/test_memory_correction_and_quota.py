@@ -388,6 +388,8 @@ async def test_quota_card_names_denied_entry_and_holders(
     assert [it["file"] for it in denied] == ["画像"]
     assert any(it["file"] == "占坑规则.md" and "占用" in it["content"] for it in holders)
     assert "没能写进常驻" in (quota_rows[0].summary or "")
+    assert "记不下" in (quota_rows[0].summary or "")
+    assert "字符" not in (quota_rows[0].summary or "")
     # 诚实：没有静默淘汰，占坑的那条还在。
     async with session_factory() as session:
         kept = await DocumentRepository(session).list_injectable_rules(

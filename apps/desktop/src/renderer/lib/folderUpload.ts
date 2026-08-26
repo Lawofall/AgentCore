@@ -20,7 +20,7 @@ import { joinPath } from "@/lib/fileSource";
  * 单文件硬顶，镜像服务端 ``workspace_upload_max_bytes``
  *（`apps/server/agentcore/config/workspace.py`）。超限项不发请求，直接记进报告。
  */
-export const UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+export const UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
 
 /** 单次整夹上传的文件数上限（对齐主进程 `ARCHIVE_MAX_FILES`）；命中即诚实报告截断。 */
 export const UPLOAD_MAX_FILES = 20000;

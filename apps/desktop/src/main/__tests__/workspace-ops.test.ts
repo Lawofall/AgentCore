@@ -36,7 +36,11 @@ vi.mock("electron", () => ({
 
 import type { WorkspaceOpResult } from "@shared/ipc-contract";
 import { type StoredRoot, executeWorkspaceOp } from "../fs-service";
-import { BASELINE_KEEP_MAX } from "../fs/constants";
+import {
+  BASELINE_KEEP_MAX,
+  WORKSPACE_EXTRACT_SOURCE_MAX,
+  WORKSPACE_READ_MAX,
+} from "../fs/constants";
 
 // Discriminated-union accessors that fail loudly on the wrong branch.
 const valOf = (r: WorkspaceOpResult): unknown => {
@@ -121,6 +125,33 @@ describe("executeWorkspaceOp (本地工作区写类 op，P2b)", () => {
     expect(errOf(await run("read_bytes", { path: "nope" })).kind).toBe(
       "PathNotFound",
     );
+  });
+
+  it("read_bytes default stays 5 MiB; max_bytes can raise to the extract ingest cap", async () => {
+    const raw = Buffer.alloc(WORKSPACE_READ_MAX + 16, 7);
+    await writeFile(join(dir, "big.bin"), raw);
+    const denied = errOf(await run("read_bytes", { path: "big.bin" }));
+    expect(denied.kind).toBe("WorkspaceIOError");
+    expect(String(denied.detail)).toContain("文件过大，无法读取");
+    const ok = await run("read_bytes", {
+      path: "big.bin",
+      max_bytes: WORKSPACE_EXTRACT_SOURCE_MAX,
+    });
+    expect(Buffer.from(valOf(ok) as string, "base64").length).toBe(raw.length);
+  });
+
+  it("read_head peeks past the 5 MiB whole-file gate", async () => {
+    const raw = Buffer.alloc(WORKSPACE_READ_MAX + 16, 7);
+    raw.write("%PDF-", 0);
+    await writeFile(join(dir, "big.bin"), raw);
+    const denied = errOf(await run("read_bytes", { path: "big.bin" }));
+    expect(denied.kind).toBe("WorkspaceIOError");
+    const ok = await run("read_head", { path: "big.bin" });
+    const val = valOf(ok) as { data: string; size_bytes: number };
+    expect(val.size_bytes).toBe(raw.length);
+    const head = Buffer.from(val.data, "base64");
+    expect(head.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(head.length).toBe(1024);
   });
 
   it("write_bytes decodes base64 and reports the byte count", async () => {

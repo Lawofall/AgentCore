@@ -200,7 +200,7 @@ def test_format_light_repair_feedback_carries_prior_and_skips_reinvestigate():
 
 def test_zero_files_gap_and_write_pass_feedback():
     # 甲⁺：零落盘进 warnings，不再是 hard gap / write_pass 触发条件。
-    # 写盘期望只认 form=files / artifacts（requires_files  alone 不触发）。
+    # 写盘期望认 form=files / workspace / artifacts（漏填=files）。
     v = check_contract(
         "只有文字", Deliverable(form="files"), files_written=0
     )
@@ -208,9 +208,9 @@ def test_zero_files_gap_and_write_pass_feedback():
     assert any("本队员本波未交卷" in w for w in v.warnings)
     assert any("未把产物写入工作区" in w for w in v.warnings)
     assert not is_zero_files_gap(v)
-    # legacy requires_files alone → 不再产生零落盘 soft tip
+    # 显式 prose → 不再产生零落盘 soft tip
     legacy_flag = check_contract(
-        "只有文字", Deliverable(), files_written=0
+        "只有文字", Deliverable(form="prose"), files_written=0
     )
     assert legacy_flag.ok
     assert not any("未把产物写入工作区" in w for w in legacy_flag.warnings)
@@ -392,10 +392,18 @@ def test_form_files_soft_when_none_written():
     assert not is_zero_files_gap(v)
 
 
-def test_requires_files_alone_no_zero_disk_soft():
-    """Legacy requires_files alone no longer triggers zero-disk soft tip."""
+def test_omitted_form_zero_disk_soft():
+    """漏填 form=files → 零落盘仍只 soft warning。"""
     v = check_contract(
         "我把整份代码贴在这里", RunContract(), files_written=0
+    )
+    assert v.ok
+    assert any("未把产物写入工作区" in w for w in v.warnings)
+
+
+def test_prose_form_no_zero_disk_soft():
+    v = check_contract(
+        "我把整份代码贴在这里", RunContract(form="prose"), files_written=0
     )
     assert v.ok
     assert not any("未把产物写入工作区" in w for w in v.warnings)
@@ -561,9 +569,9 @@ def test_artifact_path_mismatch_is_warning_not_zero_gap():
     assert not is_zero_files_gap(v)
 
 
-def test_requires_files_off_by_default_ignores_file_count():
-    # A prose contract (no form=files / artifacts) never fails for lack of a file write.
-    assert check_contract("纯文字分析", RunContract(), files_written=0).ok
+def test_prose_form_ignores_file_count():
+    # 显式 prose 从不因零写失败。
+    assert check_contract("纯文字分析", RunContract(form="prose"), files_written=0).ok
 
 
 def test_describe_deliverable_form_files_without_artifacts():
@@ -573,10 +581,10 @@ def test_describe_deliverable_form_files_without_artifacts():
     assert "工作区" in desc
 
 
-def test_describe_deliverable_omitted_form_no_must_write_line():
-    # Omit / empty deliverable no longer surfaces the must-write identity line.
+def test_describe_deliverable_omitted_form_has_must_write_line():
+    # 漏填 = files，须写桌。
     desc = describe_deliverable(Deliverable())
-    assert "必须调用 file_write" not in desc
+    assert "必须调用 file_write" in desc or "必须 file_write" in desc
 
 
 # --- artifacts: declarative path reconciliation ---------------------------------
@@ -757,22 +765,23 @@ def test_node_has_dependents():
 
 def test_is_file_deliverable_predicate():
     assert is_file_deliverable(Deliverable(form="files"))
+    assert is_file_deliverable(Deliverable(form="workspace"))
     assert is_file_deliverable(Deliverable(artifacts=["a.md"]))
     assert not is_file_deliverable(Deliverable(form="prose"))
-    assert not is_file_deliverable(Deliverable())
+    assert is_file_deliverable(Deliverable())
     assert not is_file_deliverable(None)
     assert not hasattr(Deliverable(), "requires_files")
     assert not hasattr(Deliverable(), "min_length")
     assert not hasattr(Deliverable(), "must_contain")
     assert not hasattr(Deliverable(), "name")
+    assert not hasattr(Deliverable(), "must_contain_soft")
 
 
 def test_needs_file_contents_predicate():
     # file-form + section check → must read the file
     assert needs_file_contents(Deliverable(form="files", required_sections=["X"]))
     assert needs_file_contents(Deliverable(artifacts=["a.md"], required_sections=["X"]))
-    # Retired length/keyword fields alone do not force a read
-    assert not needs_file_contents(Deliverable(form="files"))
+    # existence-only files（漏填默认 files）→ no read needed
     assert not needs_file_contents(Deliverable())
     # JSON file gate still needs contents
     assert needs_file_contents(Deliverable(output_format="json", artifacts=["a.json"]))
@@ -780,7 +789,7 @@ def test_needs_file_contents_predicate():
     assert not needs_file_contents(Deliverable(form="files"))
     assert not needs_file_contents(Deliverable(artifacts=["a.md"]))
     # prose (body-only) → no file read
-    assert not needs_file_contents(Deliverable())
+    assert not needs_file_contents(Deliverable(form="prose"))
     assert not needs_file_contents(None)
     # web batch (HTML+CSS/JS) → read even for existence-only / no deliverable
     assert needs_file_contents(

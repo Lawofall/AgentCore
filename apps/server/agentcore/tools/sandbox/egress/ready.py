@@ -11,15 +11,13 @@ EGRESS_UNAVAILABLE_CODE = "egress_unavailable"
 
 
 def registry_egress_available() -> bool:
-    """True only when the host can enforce a real packaging allowlist chokepoint.
+    """True when the host can start a desk-resident packaging chokepoint.
 
-    Requires Linux + gVisor + a successful netns capability probe (shared with
-    browser). Subprocess / unprobed / failed netns ⇒ False — callers must 甲-degrade
-    rather than pretend argv/env pin is network-layer allowlisting.
+    Linux + gVisor config + cloud sandbox health is not a known failure.
+    Unprobed (``None``) is fail-open like ``code_execute`` assembly.
     """
     if sys.platform != "linux" or not settings.gvisor_enabled:
         return False
-    # Reuse browser netns probe: same host capability (ip netns add/del).
-    from agentcore.tools.sandbox.browser.netns import browser_netns_health
+    from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health
 
-    return browser_netns_health() is True
+    return cloud_sandbox_health() is not False

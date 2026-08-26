@@ -1,16 +1,28 @@
 // @vitest-environment jsdom
+import { TAB_DRAG_THRESHOLD_PX } from "@/components/ui";
 import type { DeletedConversationMeta } from "@/services/conversations";
 import type { FolderMeta } from "@/services/folders";
 import type { Conversation } from "@/stores/conversation";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { HTMLAttributes } from "react";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 const conversations: Conversation[] = [];
 const folders: FolderMeta[] = [];
 const trashItems: DeletedConversationMeta[] = [];
 const requiredIds = new Set<string>();
+const folderGroupOrder: string[] = [];
 const restore = vi.fn();
 const setConversationDrawerOpen = vi.fn();
+const reorderFolderGroups = vi.fn();
 
 vi.mock("@/lib/narrowLayout", () => ({
   useNarrowLayoutState: () => ({
@@ -38,6 +50,19 @@ vi.mock("@/stores/aiAttention", () => ({
   useRequiredConversationIds: () => requiredIds,
 }));
 
+vi.mock("@/stores/sidebar", () => ({
+  useSidebarStore: (
+    sel: (s: {
+      folderGroupOrder: string[];
+      reorderFolderGroups: (nextVisibleIds: string[]) => void;
+    }) => unknown,
+  ) =>
+    sel({
+      folderGroupOrder,
+      reorderFolderGroups,
+    }),
+}));
+
 vi.mock("@/components/sidebar/ConversationItem", () => ({
   ConversationItem: ({
     conversation,
@@ -61,12 +86,14 @@ vi.mock("@/components/sidebar/WorkspaceGroupHeader", () => ({
     folder,
     expanded,
     onToggleExpanded,
+    sortable,
   }: {
     folder: { id: string; name: string };
     expanded: boolean;
     onToggleExpanded: () => void;
+    sortable?: HTMLAttributes<HTMLDivElement>;
   }) => (
-    <div>
+    <div data-testid={`group-${folder.id}`} {...sortable}>
       <span data-testid={`group-${folder.id}-expanded`}>
         {expanded ? "open" : "closed"}
       </span>
@@ -79,14 +106,29 @@ vi.mock("@/components/sidebar/WorkspaceGroupHeader", () => ({
 
 import { NarrowConversationDrawer } from "@/components/layout/NarrowConversationDrawer";
 
+beforeAll(() => {
+  Element.prototype.setPointerCapture ??= function setPointerCapture() {};
+  Element.prototype.releasePointerCapture ??=
+    function releasePointerCapture() {};
+  Element.prototype.hasPointerCapture ??= function hasPointerCapture() {
+    return false;
+  };
+  document.elementsFromPoint ??= () => [];
+});
+
 function makeConv(
   id: string,
-  opts: { folderId?: string | null; pinned?: boolean; title?: string } = {},
+  opts: {
+    folderId?: string | null;
+    pinned?: boolean;
+    title?: string;
+    at?: string;
+  } = {},
 ): Conversation {
   return {
     id,
     title: opts.title ?? id,
-    updatedAt: "2026-08-01T00:00:00Z",
+    updatedAt: opts.at ?? "2026-08-01T00:00:00Z",
     messageCount: 1,
     lastMessagePreview: null,
     folderId: opts.folderId ?? null,
@@ -105,6 +147,8 @@ beforeEach(() => {
   requiredIds.clear();
   restore.mockReset();
   setConversationDrawerOpen.mockReset();
+  reorderFolderGroups.mockReset();
+  folderGroupOrder.length = 0;
 });
 
 afterEach(cleanup);
@@ -189,5 +233,145 @@ describe("NarrowConversationDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "折叠 商标案" }));
     expect(screen.getByTestId("group-f1-expanded").textContent).toBe("open");
     expect(screen.getByTestId("conv-need-you")).toBeTruthy();
+  });
+
+  it("renders folder groups in the stored folderGroupOrder when uncapped", () => {
+    folders.push(
+      {
+        id: "f1",
+        name: "甲",
+        mode: "cloud",
+        localRootId: null,
+        localSubpath: null,
+      },
+      {
+        id: "f2",
+        name: "乙",
+        mode: "cloud",
+        localRootId: null,
+        localSubpath: null,
+      },
+    );
+    conversations.push(
+      makeConv("c1", {
+        folderId: "f1",
+        title: "新",
+        at: "2026-08-02T00:00:00Z",
+      }),
+      makeConv("c2", {
+        folderId: "f2",
+        title: "旧",
+        at: "2026-08-01T00:00:00Z",
+      }),
+    );
+    folderGroupOrder.push("f2", "f1");
+
+    renderDrawer();
+
+    const headers = screen.getAllByRole("button", { name: /折叠 / });
+    expect(headers.map((el) => el.textContent)).toEqual(["折叠 乙", "折叠 甲"]);
+  });
+
+  it("drag past threshold calls reorderFolderGroups with visible folder ids", () => {
+    folders.push(
+      {
+        id: "f1",
+        name: "甲",
+        mode: "cloud",
+        localRootId: null,
+        localSubpath: null,
+      },
+      {
+        id: "f2",
+        name: "乙",
+        mode: "cloud",
+        localRootId: null,
+        localSubpath: null,
+      },
+    );
+    conversations.push(
+      makeConv("c1", { folderId: "f1", title: "甲对话" }),
+      makeConv("c2", { folderId: "f2", title: "乙对话" }),
+    );
+
+    renderDrawer();
+
+    const a = screen.getByTestId("group-f1");
+    const b = screen.getByTestId("group-f2");
+    vi.spyOn(a, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      width: 200,
+      height: 32,
+      right: 200,
+      bottom: 32,
+      toJSON() {},
+    });
+    vi.spyOn(b, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 40,
+      left: 0,
+      top: 40,
+      width: 200,
+      height: 32,
+      right: 200,
+      bottom: 72,
+      toJSON() {},
+    });
+    document.elementsFromPoint = () => [b];
+    fireEvent.pointerDown(screen.getByRole("button", { name: "折叠 甲" }), {
+      button: 0,
+      clientX: 10,
+      clientY: 8,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(document, {
+      clientX: 10,
+      clientY: 8 + TAB_DRAG_THRESHOLD_PX + 1,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(document, {
+      clientX: 10,
+      clientY: 64,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(document, {
+      clientX: 10,
+      clientY: 64,
+      pointerId: 1,
+    });
+
+    expect(reorderFolderGroups).toHaveBeenCalledWith(["f2", "f1"]);
+  });
+
+  it("click below threshold still toggles expand", () => {
+    folders.push({
+      id: "f1",
+      name: "商标案",
+      mode: "cloud",
+      localRootId: null,
+      localSubpath: null,
+    });
+    conversations.push(makeConv("c1", { folderId: "f1", title: "待拍板" }));
+
+    renderDrawer();
+    const toggle = screen.getByRole("button", { name: "折叠 商标案" });
+    fireEvent.pointerDown(toggle, {
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(document, {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+    });
+    fireEvent.click(toggle);
+
+    expect(screen.getByTestId("group-f1-expanded").textContent).toBe("closed");
+    expect(reorderFolderGroups).not.toHaveBeenCalled();
   });
 });

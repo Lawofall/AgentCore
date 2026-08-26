@@ -9,11 +9,13 @@ import pytest
 from agentcore.evals.__main__ import main
 from agentcore.evals.playbook_routing import (
     SCENARIOS,
+    RoutingTurn,
     aggregate_samples,
     classify_landing,
     diff_fingerprints,
     extract_think_mentions,
     format_playbook_routing_report,
+    history_messages,
     landing_fingerprint,
     lint_codebase_fixture,
     lint_scenarios,
@@ -24,12 +26,70 @@ from agentcore.evals.playbook_routing import (
 )
 from agentcore.evals.types import EvalConfigError
 
+_LEGACY_EXPECT = {
+    "research_brief_parallel": "parallel_brief",
+    "code_audit_report": "code_audit",
+    "greenfield_spa_build_app": "build_app",
+    "research_mit_vs_gpl_chat": "parallel_brief",
+    "research_knowledge_base_chat": "parallel_brief",
+    "audit_check_bugs_save_file": "code_audit",
+    "audit_find_issues_workspace_doc": "code_audit",
+    "app_todo_website_usable": "build_app",
+    "app_todo_web_must_run": "build_app",
+}
+
 
 def test_scenarios_lint_ok():
     lint_scenarios(SCENARIOS)
-    assert sum(1 for s in SCENARIOS if s.phrasing == "colloquial") >= 6
+    assert sum(1 for s in SCENARIOS if s.phrasing == "colloquial") >= 8
     assert sum(1 for s in SCENARIOS if s.phrasing == "textbook") >= 3
     assert any(s.workspace == "codebase" for s in SCENARIOS)
+    keys = {s.key for s in SCENARIOS}
+    assert set(_LEGACY_EXPECT) <= keys
+    assert "discuss_license_no_doc_waiver" in keys
+    assert "discuss_license_round2_short_answers" in keys
+    assert "write_prd_save_file" in keys
+    assert "discuss_worker_params_industry" in keys
+
+
+def test_legacy_named_playbook_scenarios_unchanged():
+    by_key = {s.key: s for s in SCENARIOS}
+    for key, pb in _LEGACY_EXPECT.items():
+        sc = by_key[key]
+        assert sc.expect_playbook == pb
+        assert sc.expect_action == ""
+        assert sc.expect_form is None
+        assert sc.expect_max_workers is None
+        assert sc.prior_turns == ()
+    assert "先别写成文档" in by_key["research_mit_vs_gpl_chat"].user_message
+    assert "先别写成文档" not in by_key["discuss_license_no_doc_waiver"].user_message
+    assert "存成文件" in by_key["write_prd_save_file"].user_message
+    assert "落盘" not in by_key["write_prd_save_file"].user_message
+
+
+def test_discuss_and_prd_fixture_fields():
+    by_key = {s.key: s for s in SCENARIOS}
+    discuss = by_key["discuss_license_no_doc_waiver"]
+    assert discuss.expect_playbook == "parallel_brief"
+    assert "DIRECT" in discuss.expect_action and "ASK" in discuss.expect_action
+    round2 = by_key["discuss_license_round2_short_answers"]
+    assert round2.prior_turns
+    assert round2.user_message.startswith("1.")
+    assert history_messages(round2.prior_turns)[0][0] == "user"
+    prd = by_key["write_prd_save_file"]
+    assert prd.expect_playbook == ""
+    assert prd.expect_action == "DELEGATE"
+    assert prd.expect_max_workers == 1
+    assert prd.expect_form == "files"
+    bound = by_key["discuss_worker_params_industry"]
+    assert bound.workspace == "codebase"
+    assert bound.expect_playbook == ""
+    assert "DELEGATE" in bound.expect_action and "DIRECT" in bound.expect_action
+    assert bound.expect_form is None
+    assert bound.expect_min_workers is None
+    assert bound.expect_max_recon_rounds == 1
+    assert "讨论删除worker" in bound.user_message
+    assert "行业实践" in bound.user_message
 
 
 def test_codebase_fixture_has_real_volume():
@@ -43,6 +103,52 @@ def test_colloquial_rejects_playbook_jargon():
     )
     with pytest.raises(EvalConfigError, match="提示词术语"):
         lint_scenarios((*SCENARIOS[:3], bad, *SCENARIOS[4:]))
+
+
+def test_colloquial_rejects_jargon_in_prior_turns():
+    base = next(s for s in SCENARIOS if s.prior_turns)
+    bad = replace(
+        base,
+        prior_turns=(RoutingTurn(role="assistant", content="请调用 ask_user 确认"),),
+    )
+    patched = tuple(bad if s.key == base.key else s for s in SCENARIOS)
+    with pytest.raises(EvalConfigError, match="提示词术语"):
+        lint_scenarios(patched)
+
+
+def test_lint_empty_playbook_requires_expect_action():
+    bad = replace(SCENARIOS[0], expect_playbook="", expect_action="")
+    with pytest.raises(EvalConfigError, match="expect_action"):
+        lint_scenarios((bad, *SCENARIOS[1:]))
+
+
+def test_lint_rejects_unknown_expect_playbook():
+    bad = replace(SCENARIOS[0], expect_playbook="not_a_real_playbook")
+    with pytest.raises(EvalConfigError, match="未知 expect_playbook"):
+        lint_scenarios((bad, *SCENARIOS[1:]))
+
+
+def test_lint_rejects_illegal_expect_action():
+    bad = replace(SCENARIOS[0], expect_action="CHAT")
+    with pytest.raises(EvalConfigError, match="expect_action 非法"):
+        lint_scenarios((bad, *SCENARIOS[1:]))
+
+
+def test_lint_requires_recon_round_cap_scenario():
+    trimmed = tuple(s for s in SCENARIOS if s.expect_max_recon_rounds is None)
+    with pytest.raises(EvalConfigError, match="expect_max_recon_rounds"):
+        lint_scenarios(trimmed)
+
+
+def test_lint_rejects_min_workers_above_max():
+    bad = replace(
+        next(s for s in SCENARIOS if s.key == "discuss_worker_params_industry"),
+        expect_min_workers=4,
+        expect_max_workers=2,
+    )
+    patched = tuple(bad if s.key == bad.key else s for s in SCENARIOS)
+    with pytest.raises(EvalConfigError, match="expect_min_workers"):
+        lint_scenarios(patched)
 
 
 def test_named_playbook_strips_none():
@@ -59,6 +165,21 @@ def test_parse_delegate_reads_intensity():
     assert raw["playbook"] == "build_app"
     assert raw["intensity"] == "lean"
     assert raw["task_count"] == 0
+    assert raw["forms"] == []
+    assert raw["form"] is None
+
+
+def test_parse_delegate_reads_deliverable_form_and_max_workers():
+    raw = parse_delegate_rich(
+        '{"tasks":[{"role":"撰稿","task":"写 PRD","deliverable":{"form":"files"}}],'
+        '"playbook_args":{"max_workers":1}}'
+    )
+    assert raw["playbook"] is None
+    assert raw["task_count"] == 1
+    assert raw["form"] == "files"
+    assert raw["forms"] == ["files"]
+    assert raw["max_workers"] == 1
+    assert raw["tasks_preview"][0]["form"] == "files"
 
 
 def test_classify_landing_variants():
@@ -79,6 +200,119 @@ def test_classify_landing_variants():
         action="ASK", playbook=None, expect="build_app", offered=offered, task_count=0
     )
     assert ask["landing"] == "no_delegate"
+
+
+def test_classify_landing_extended_observation():
+    offered = True
+    allowed = classify_landing(
+        action="DIRECT",
+        playbook=None,
+        expect="parallel_brief",
+        offered=offered,
+        task_count=0,
+        expect_action="DIRECT|ASK",
+    )
+    assert allowed["landing"] == "allowed_action"
+    duo = classify_landing(
+        action="DELEGATE",
+        playbook=None,
+        expect="parallel_brief",
+        offered=offered,
+        task_count=2,
+        form="files",
+        expect_action="DIRECT|ASK",
+    )
+    assert duo["landing"] == "files_duo"
+    assert duo["files_duo"] is True
+    one = classify_landing(
+        action="DELEGATE",
+        playbook=None,
+        expect="",
+        offered=offered,
+        task_count=1,
+        form="files",
+        expect_action="DELEGATE",
+        expect_max_workers=1,
+        expect_form="files",
+    )
+    assert one["landing"] == "handwritten_expected"
+    over = classify_landing(
+        action="DELEGATE",
+        playbook=None,
+        expect="",
+        offered=offered,
+        task_count=2,
+        form="files",
+        expect_action="DELEGATE",
+        expect_max_workers=1,
+        expect_form="files",
+    )
+    assert over["landing"] == "files_duo"
+    mismatch = classify_landing(
+        action="DELEGATE",
+        playbook=None,
+        expect="",
+        offered=offered,
+        task_count=1,
+        form="prose",
+        expect_action="DELEGATE",
+        expect_max_workers=1,
+        expect_form="files",
+    )
+    assert mismatch["landing"] == "form_mismatch"
+    recon = classify_landing(
+        action="DELEGATE",
+        playbook="parallel_brief",
+        expect="parallel_brief",
+        offered=offered,
+        task_count=0,
+        expect_action="DELEGATE",
+        expect_form="prose",
+        expect_min_workers=2,
+        recon_rounds=3,
+        expect_max_recon_rounds=1,
+    )
+    assert recon["landing"] == "recon_over"
+    under = classify_landing(
+        action="DELEGATE",
+        playbook=None,
+        expect="parallel_brief",
+        offered=offered,
+        task_count=1,
+        form="prose",
+        expect_action="DELEGATE",
+        expect_form="prose",
+        expect_min_workers=2,
+        expect_max_recon_rounds=1,
+    )
+    assert under["landing"] == "workers_under"
+    brief_hand = classify_landing(
+        action="DELEGATE",
+        playbook=None,
+        expect="parallel_brief",
+        offered=offered,
+        task_count=2,
+        form="prose",
+        expect_action="DELEGATE",
+        expect_form="prose",
+        expect_min_workers=2,
+        expect_max_recon_rounds=1,
+        recon_rounds=1,
+    )
+    assert brief_hand["landing"] == "handwritten_expected"
+    brief_named = classify_landing(
+        action="DELEGATE",
+        playbook="parallel_brief",
+        expect="parallel_brief",
+        offered=offered,
+        task_count=0,
+        expect_action="DELEGATE",
+        expect_form="prose",
+        expect_min_workers=2,
+        expect_max_recon_rounds=1,
+        recon_rounds=0,
+    )
+    assert brief_named["landing"] == "selected_expected"
 
 
 def test_think_act_catches_build_app_then_ask_user():
@@ -344,3 +578,47 @@ def test_execution_entry_assembles_surface_and_parses_delegate():
     assert packed["tool_surface"]["offered"] is True
     assert "build_app" in (packed["tool_surface"].get("playbook_enum") or [])
     assert packed["think_act_divergences"] == []
+
+
+def test_prior_turns_reach_the_model():
+    import asyncio
+
+    from agentcore.evals.eval_modes import KNOWN_MODELS, resolve_profile_set
+    from agentcore.evals.playbook_routing_loop import run_scripted_sample
+    from agentcore.llm.provider.protocol import LLMResponse, TokenUsage
+
+    sc = next(s for s in SCENARIOS if s.key == "discuss_license_round2_short_answers")
+
+    class _StubProvider:
+        def __init__(self) -> None:
+            self.requests: list = []
+
+        async def complete(self, request):  # noqa: ANN001
+            self.requests.append(request)
+            return LLMResponse(
+                content="限制和风险如下。",
+                reasoning_content="桌上短答即可",
+                tool_calls=[],
+                usage=TokenUsage(input_tokens=4, output_tokens=2),
+            )
+
+    stub = _StubProvider()
+    profiles = resolve_profile_set(
+        "economy", custom_modes={}, ceiling=frozenset(KNOWN_MODELS)
+    )
+    packed = asyncio.run(
+        run_scripted_sample(
+            stub,
+            sc,
+            profiles=profiles,
+            model=profiles.model_for("chat"),
+            rounds=2,
+        )
+    )
+    assert packed["ok"] is True, packed.get("error")
+    assert stub.requests
+    texts = [str(getattr(m, "content", "") or "") for m in stub.requests[0].messages]
+    assert sc.prior_turns[0].content in texts
+    assert sc.prior_turns[1].content in texts
+    assert sc.user_message in texts
+    assert packed["action"] == "DIRECT"

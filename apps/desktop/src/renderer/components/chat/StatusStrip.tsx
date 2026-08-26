@@ -55,7 +55,6 @@ import {
   Maximize2,
   MessagesSquare,
   Pause,
-  Play,
   Square,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -66,7 +65,6 @@ export interface StatusStripProps {
   expanded: boolean;
   onToggle: () => void;
   onMaximize: () => void;
-  onReplay: () => void;
   /** Incremental kickoff: overlay「新批次待确认」on the running strip. */
   pendingBatchBadge?: boolean;
 }
@@ -89,7 +87,7 @@ function canPaintTeamCompleted(execution: Execution): boolean {
 
 /**
  * Thin toolbar above the collaboration graph (前端UX设计.md §三 / 协作图 UX §三).
- * Lifecycle icon + n/m + duration + fold / canvas / replay.
+ * Lifecycle icon + n/m + duration + fold / canvas.
  * Running duration ticks from frames[0].t (ToolLine useRunningElapsed shape);
  * completed still uses elapsedMs(frames) span. No talking titles; Stop lives
  * on the composer, not here.
@@ -99,7 +97,7 @@ function canPaintTeamCompleted(execution: Execution): boolean {
  * User-stop is not an error; rate-limit / partial must not paint「已停止」.
  * Empty interrupt (`send_next`) is idle chrome — verdict lives on the composer.
  * Partial + rate-limit keeps this scoreboard; why + 排查包 follow `showComposerHint`.
- * stopping：可见「停止中」、冻住用时、不挂回放 Play。工人全终态且图已
+ * stopping：可见「停止中」、冻住用时。工人全终态且图已
  * cancelled、仲裁未判 partial/error/限流 → 已停止，不等气泡 finishReason。
  *
  * Incremental kickoff (`paused` while first batch still running): keep the
@@ -324,30 +322,18 @@ function StripControls({
   expanded,
   onToggle,
   onMaximize,
-  onReplay,
-  hideReplay,
-}: StatusStripProps & { hideReplay?: boolean }) {
-  const canReplay =
-    !hideReplay &&
-    (execution.status === "completed" || execution.status === "cancelled");
+}: StatusStripProps) {
   const debate = isDebate(execution);
 
   return (
     <>
-      {canReplay && (
-        <StripIconButton
-          icon={<Play size={15} />}
-          title="回放协作过程"
-          onClick={onReplay}
-        />
-      )}
       <StripIconButton
         icon={expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
         title={expanded ? "收起协作图" : "展开协作图"}
         onClick={onToggle}
       />
       {/* 入口：辩论回合给醒目「打开辩论室」CTA，其余给通用「在画布打开」；
-          二者同去处（放大态 Route A），辩论默认落群聊、回放走同一去处 + 自动播放。 */}
+          二者同去处（放大态 Route A），辩论默认落群聊。 */}
       <Button
         variant="ghost"
         className="ml-0.5 shrink-0 bg-primary/10 text-primary hover:bg-primary/20"
@@ -365,7 +351,6 @@ function RunningStrip({
   expanded,
   onToggle,
   onMaximize,
-  onReplay,
   pendingBatchBadge,
   backgroundBadge,
 }: StatusStripProps & { backgroundBadge?: boolean }) {
@@ -442,8 +427,6 @@ function RunningStrip({
           expanded={expanded}
           onToggle={onToggle}
           onMaximize={onMaximize}
-          onReplay={onReplay}
-          hideReplay={stopping}
         />
       </div>
     </div>
@@ -459,7 +442,6 @@ function PausedStrip({
   expanded,
   onToggle,
   onMaximize,
-  onReplay,
   continueAction,
 }: StatusStripProps & {
   continueAction?: {
@@ -495,7 +477,6 @@ function PausedStrip({
           expanded={expanded}
           onToggle={onToggle}
           onMaximize={onMaximize}
-          onReplay={onReplay}
         />
       </div>
     </div>
@@ -559,7 +540,6 @@ function IdleStrip({
   expanded,
   onToggle,
   onMaximize,
-  onReplay,
 }: StatusStripProps) {
   const frames = useActiveExecField((rt) => rt.frames);
   const { completed, total } = execution.progress;
@@ -580,7 +560,6 @@ function IdleStrip({
           expanded={expanded}
           onToggle={onToggle}
           onMaximize={onMaximize}
-          onReplay={onReplay}
         />
       </div>
     </div>
@@ -593,7 +572,6 @@ function CompletedStrip({
   expanded,
   onToggle,
   onMaximize,
-  onReplay,
 }: StatusStripProps & { stopped?: boolean }) {
   const frames = useActiveExecField((rt) => rt.frames);
   const { completed, total } = execution.progress;
@@ -630,7 +608,6 @@ function CompletedStrip({
           expanded={expanded}
           onToggle={onToggle}
           onMaximize={onMaximize}
-          onReplay={onReplay}
         />
       </div>
     </div>
@@ -642,7 +619,6 @@ function PartialStrip({
   expanded,
   onToggle,
   onMaximize,
-  onReplay,
   showSupportPack,
 }: StatusStripProps & {
   showSupportPack: boolean;
@@ -670,7 +646,6 @@ function PartialStrip({
           expanded={expanded}
           onToggle={onToggle}
           onMaximize={onMaximize}
-          onReplay={onReplay}
         />
       </div>
     </div>
@@ -682,7 +657,6 @@ function FailureStrip({
   expanded,
   onToggle,
   onMaximize,
-  onReplay,
   verdictMessage,
   sessionError,
   showSupportPack,
@@ -746,7 +720,6 @@ function FailureStrip({
           expanded={expanded}
           onToggle={onToggle}
           onMaximize={onMaximize}
-          onReplay={onReplay}
         />
       </div>
 

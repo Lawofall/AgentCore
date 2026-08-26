@@ -17,13 +17,13 @@ from agentcore.tools.sandbox.sandboxd.errors import (
 from agentcore.tools.sandbox.sandboxd.protocol import (
     DEFAULT_SOCKET_PATH,
     METHOD_DELETE,
+    METHOD_EXEC,
     METHOD_HEALTH,
     METHOD_KILL,
     METHOD_NETNS_SETUP,
     METHOD_NETNS_TEARDOWN,
     METHOD_PING,
     METHOD_RUN,
-    CodeNetwork,
     NetFamily,
     NetnsInfo,
     Shape,
@@ -127,14 +127,22 @@ class SandboxdClient:
     async def netns_teardown(self, family: NetFamily, slot: int) -> None:
         raise NotImplementedError
 
-    async def run_wait(
+    async def start_detach(
         self,
         *,
-        shape: Shape,
         bundle_dir: str,
         container_id: str,
-        network_mode: CodeNetwork = "none",
-        netns_path: str | None = None,
+        netns_path: str,
+    ) -> None:
+        raise NotImplementedError
+
+    async def exec_wait(
+        self,
+        *,
+        container_id: str,
+        argv: list[str],
+        cwd: str = "/workspace",
+        env: list[str] | None = None,
         timeout_seconds: float = 60.0,
         idle_timeout_seconds: float | None = None,
         stdin: str | None = None,
@@ -142,12 +150,13 @@ class SandboxdClient:
     ) -> tuple[int, str, str]:
         raise NotImplementedError
 
-    async def run_stdio(
+    async def exec_stdio(
         self,
         *,
-        bundle_dir: str,
         container_id: str,
-        netns_path: str,
+        argv: list[str],
+        cwd: str = "/workspace",
+        env: list[str] | None = None,
     ) -> SandboxdStdio:
         raise NotImplementedError
 
@@ -233,14 +242,31 @@ class UnixSandboxdClient(SandboxdClient):
             METHOD_NETNS_TEARDOWN, {"family": family, "slot": slot}
         )
 
-    async def run_wait(
+    async def start_detach(
         self,
         *,
-        shape: Shape,
         bundle_dir: str,
         container_id: str,
-        network_mode: CodeNetwork = "none",
-        netns_path: str | None = None,
+        netns_path: str,
+    ) -> None:
+        await self._rpc(
+            METHOD_RUN,
+            {
+                "shape": "net",
+                "mode": "detach",
+                "bundle_dir": bundle_dir,
+                "container_id": container_id,
+                "netns_path": netns_path,
+            },
+        )
+
+    async def exec_wait(
+        self,
+        *,
+        container_id: str,
+        argv: list[str],
+        cwd: str = "/workspace",
+        env: list[str] | None = None,
         timeout_seconds: float = 60.0,
         idle_timeout_seconds: float | None = None,
         stdin: str | None = None,
@@ -253,14 +279,12 @@ class UnixSandboxdClient(SandboxdClient):
             payload = json.dumps(
                 {
                     "id": next_request_id(),
-                    "method": METHOD_RUN,
+                    "method": METHOD_EXEC,
                     "params": {
-                        "shape": shape,
-                        "mode": "wait",
-                        "bundle_dir": bundle_dir,
                         "container_id": container_id,
-                        "network_mode": network_mode,
-                        "netns_path": netns_path,
+                        "argv": argv,
+                        "cwd": cwd,
+                        "env": env,
                         "timeout_seconds": timeout_seconds,
                         "idle_timeout_seconds": idle_timeout_seconds,
                         "stdin": stdin,
@@ -273,56 +297,44 @@ class UnixSandboxdClient(SandboxdClient):
             await writer.drain()
             first = await asyncio.wait_for(reader.readline(), timeout=_RPC_TIMEOUT)
             if not first:
-                raise SandboxdUnavailableError("sandboxd 关闭了 run 连接")
+                raise SandboxdUnavailableError("sandboxd 关闭了 exec 连接")
             header = json.loads(first)
             if not header.get("ok", False):
                 raise SandboxdRpcError(
-                    str(header.get("error") or "run failed"),
+                    str(header.get("error") or "exec failed"),
                     code=str(header.get("code") or "sandboxd_rpc"),
                 )
-            deadline = asyncio.get_event_loop().time() + max(timeout_seconds, 1.0) + 5.0
-            exit_code = 1
-            while True:
-                remaining = deadline - asyncio.get_event_loop().time()
-                if remaining <= 0:
-                    raise SandboxdError("sandboxd run 等待超时", code="sandboxd_timeout")
-                raw = await asyncio.wait_for(reader.readline(), timeout=remaining)
-                if not raw:
-                    break
-                event = json.loads(raw)
-                kind = event.get("event")
-                if kind in ("stdout", "stderr"):
-                    chunk = str(event.get("data") or "")
-                    (stdout_buf if kind == "stdout" else stderr_buf).append(chunk)
-                    if on_output and chunk:
-                        on_output(kind, chunk)
-                elif kind == "exit":
-                    exit_code = int(event.get("code") or 1)
-                    break
-            return exit_code, "".join(stdout_buf), "".join(stderr_buf)
+            return await _read_wait_stream(
+                reader,
+                timeout_seconds=timeout_seconds,
+                on_output=on_output,
+                stdout_buf=stdout_buf,
+                stderr_buf=stderr_buf,
+            )
         finally:
             writer.close()
             with contextlib.suppress(Exception):
                 await writer.wait_closed()
 
-    async def run_stdio(
+    async def exec_stdio(
         self,
         *,
-        bundle_dir: str,
         container_id: str,
-        netns_path: str,
+        argv: list[str],
+        cwd: str = "/workspace",
+        env: list[str] | None = None,
     ) -> SandboxdStdio:
         reader, writer = await self._connect()
         payload = json.dumps(
             {
                 "id": next_request_id(),
-                "method": METHOD_RUN,
+                "method": METHOD_EXEC,
                 "params": {
-                    "shape": "net",
-                    "mode": "stdio",
-                    "bundle_dir": bundle_dir,
                     "container_id": container_id,
-                    "netns_path": netns_path,
+                    "mode": "stdio",
+                    "argv": argv,
+                    "cwd": cwd,
+                    "env": env,
                 },
             },
             ensure_ascii=False,
@@ -333,20 +345,54 @@ class UnixSandboxdClient(SandboxdClient):
         first = await asyncio.wait_for(reader.readline(), timeout=_RPC_TIMEOUT)
         if not first:
             writer.close()
-            raise SandboxdUnavailableError("sandboxd 关闭了 stdio 连接")
+            raise SandboxdUnavailableError("sandboxd 关闭了 exec stdio 连接")
         header = json.loads(first)
         if not header.get("ok", False):
             writer.close()
             raise SandboxdRpcError(
-                str(header.get("error") or "run stdio failed"),
+                str(header.get("error") or "exec stdio failed"),
                 code=str(header.get("code") or "sandboxd_rpc"),
             )
-        return SandboxdStdio(
-            reader, writer, container_id=container_id, client=self
-        )
+        result = header.get("result")
+        result_dict = result if isinstance(result, dict) else {}
+        exec_id = str(result_dict.get("exec_id") or "")
+        if not exec_id:
+            writer.close()
+            raise SandboxdError("exec stdio missing exec_id")
+        return SandboxdStdio(reader, writer, container_id=exec_id, client=self)
 
     async def delete(self, container_id: str, *, force: bool = True) -> None:
         await self._rpc(METHOD_DELETE, {"container_id": container_id, "force": force})
 
     async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
         await self._rpc(METHOD_KILL, {"container_id": container_id, "signal": signal})
+
+
+async def _read_wait_stream(
+    reader: asyncio.StreamReader,
+    *,
+    timeout_seconds: float,
+    on_output: Callable[[str, str], None] | None,
+    stdout_buf: list[str],
+    stderr_buf: list[str],
+) -> tuple[int, str, str]:
+    deadline = asyncio.get_event_loop().time() + max(timeout_seconds, 1.0) + 5.0
+    exit_code = 1
+    while True:
+        remaining = deadline - asyncio.get_event_loop().time()
+        if remaining <= 0:
+            raise SandboxdError("sandboxd run 等待超时", code="sandboxd_timeout")
+        raw = await asyncio.wait_for(reader.readline(), timeout=remaining)
+        if not raw:
+            break
+        event = json.loads(raw)
+        kind = event.get("event")
+        if kind in ("stdout", "stderr"):
+            chunk = str(event.get("data") or "")
+            (stdout_buf if kind == "stdout" else stderr_buf).append(chunk)
+            if on_output and chunk:
+                on_output(kind, chunk)
+        elif kind == "exit":
+            exit_code = int(event.get("code") or 1)
+            break
+    return exit_code, "".join(stdout_buf), "".join(stderr_buf)

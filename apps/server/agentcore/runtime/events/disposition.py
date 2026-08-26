@@ -122,7 +122,7 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     ),
     EventType.DELIVERY_STATUS: (
         Disposition.DURABLE,
-        "交付状态结构化对账（已交付/缺口/元数据）——同 execution_id 保最新；供产物清单与 finish_guard（用户面无验收大卡）",
+        "交付状态结构化对账（已交付/缺口/元数据）——同 execution_id 保最新；供 finish_guard 与只合回产物读路径（用户面无验收大卡、无聊天流产物清单卡）",
     ),
     EventType.USER_INTERJECTION: (
         Disposition.DURABLE,

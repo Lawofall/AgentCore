@@ -25,7 +25,6 @@ from agentcore.tools.sandbox.egress.runtime import (
 )
 from agentcore.tools.sandbox.gvisor import GVisorSandbox
 from agentcore.tools.sandbox.protocol import ExecutionRequest
-from agentcore.tools.sandbox.staging import write_back
 
 
 def test_allowed_registry_hosts_from_allowlist():
@@ -222,22 +221,20 @@ def test_registry_egress_unavailable_without_linux_gvisor(monkeypatch: pytest.Mo
     assert registry_egress_available() is False
 
 
-def test_registry_egress_available_requires_shape_b_netns(
+def test_registry_egress_available_follows_desk_health(
     monkeypatch: pytest.MonkeyPatch,
 ):
     import agentcore.tools.sandbox.egress.ready as ready
-    from agentcore.tools.sandbox.browser.netns import set_browser_netns_health_for_tests
     from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
 
     monkeypatch.setattr(ready.sys, "platform", "linux")
     monkeypatch.setattr(settings, "gvisor_enabled", True)
-    set_browser_netns_health_for_tests(None)
-    assert registry_egress_available() is False
-    set_browser_netns_health_for_tests(True)
-    set_cloud_sandbox_health_for_tests(False)
+    set_cloud_sandbox_health_for_tests(None)
     assert registry_egress_available() is True
-    set_browser_netns_health_for_tests(False)
+    set_cloud_sandbox_health_for_tests(False)
     assert registry_egress_available() is False
+    set_cloud_sandbox_health_for_tests(True)
+    assert registry_egress_available() is True
 
 
 @pytest.mark.asyncio
@@ -285,13 +282,12 @@ async def test_package_netns_setup_uses_sandboxd_client():
         await PackageNetns(slot=2, subnet_base="10.202").setup()
 
 
-def test_runsc_cmd_registry_egress_is_non_rootless_sandbox(tmp_path: Path):
+def test_runsc_cmd_desk_is_non_rootless_sandbox(tmp_path: Path):
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
     cmd = sandbox._build_run_cmd(  # noqa: SLF001
         bundle_dir="/tmp/bundle",
         container_id="agentcore-test",
         network_mode="restricted",
-        registry_egress=True,
     )
     run_idx = cmd.index("run")
     assert "--rootless" not in cmd[:run_idx]
@@ -299,37 +295,19 @@ def test_runsc_cmd_registry_egress_is_non_rootless_sandbox(tmp_path: Path):
     assert "--network=sandbox" in cmd[:run_idx]
     assert "--ignore-cgroups" in cmd[:run_idx]
     assert "--network=host" not in cmd[:run_idx]
+    assert cmd[run_idx + 1] == "-d"
 
 
-def test_runsc_cmd_restricted_without_registry_keeps_rootless_host(tmp_path: Path):
-    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
-    cmd = sandbox._build_run_cmd(  # noqa: SLF001
-        bundle_dir="/tmp/bundle",
-        container_id="agentcore-test",
-        network_mode="restricted",
-        registry_egress=False,
-    )
-    run_idx = cmd.index("run")
-    assert "--rootless" in cmd[:run_idx]
-    assert "--network=host" in cmd[:run_idx]
-
-
-def test_oci_registry_egress_binds_cache_and_netns_path(tmp_path: Path):
+def test_desk_oci_binds_cache_and_netns_path(tmp_path: Path):
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
     cache = tmp_path / "cache"
     cache.mkdir()
-    cfg = sandbox._build_oci_config(  # noqa: SLF001
-        ExecutionRequest(
-            code="print(1)",
-            language="python",
-            network_mode="restricted",
-            registry_egress=True,
-        ),
-        script_name="main.py",
+    cfg = sandbox._build_desk_oci(  # noqa: SLF001
         workspace=str(tmp_path),
         scratch_dir=str(tmp_path / "scratch"),
-        egress_netns_path="/var/run/netns/acpkg1",
+        netns_path="/var/run/netns/acpkg1",
         cache_host_dir=str(cache),
+        proxy_url="http://10.0.0.1:8898",
     )
     net = [n for n in cfg["linux"]["namespaces"] if n["type"] == "network"]
     assert len(net) == 1
@@ -338,60 +316,11 @@ def test_oci_registry_egress_binds_cache_and_netns_path(tmp_path: Path):
     assert PACKAGE_CACHE_MOUNT in mounts
     assert mounts[PACKAGE_CACHE_MOUNT]["source"] == str(cache)
     assert "rw" in mounts[PACKAGE_CACHE_MOUNT]["options"]
+    assert cfg["process"]["user"]["uid"] != 65534
 
 
-def test_write_back_skips_node_modules(tmp_path: Path):
-    """Non-install staging still skips nm on write-back (install uses rw-bind)."""
-    staging = tmp_path / "stage"
-    ws = tmp_path / "ws"
-    staging.mkdir()
-    ws.mkdir()
-    nm = staging / "node_modules" / "left-pad" / "index.js"
-    nm.parent.mkdir(parents=True)
-    nm.write_text("module.exports=1\n", encoding="utf-8")
-    other = staging / "src" / "a.js"
-    other.parent.mkdir(parents=True)
-    other.write_text("ok\n", encoding="utf-8")
-    report = write_back(
-        staging,
-        ws,
-        ["node_modules/left-pad/index.js", "src/a.js"],
-        max_bytes=10_000,
-        max_files=50,
-    )
-    assert report.written == ["src/a.js"]
-    assert "node_modules/left-pad/index.js" in report.skipped
-    assert not (ws / "node_modules").exists()
-    assert (ws / "src" / "a.js").is_file()
-
-
-def test_write_back_skips_venv(tmp_path: Path):
-    """Same residual-staging skip spirit for Python ``.venv`` trees."""
-    staging = tmp_path / "stage"
-    ws = tmp_path / "ws"
-    staging.mkdir()
-    ws.mkdir()
-    venv_file = staging / ".venv" / "lib" / "site.py"
-    venv_file.parent.mkdir(parents=True)
-    venv_file.write_text("# venv\n", encoding="utf-8")
-    other = staging / "src" / "a.py"
-    other.parent.mkdir(parents=True)
-    other.write_text("ok\n", encoding="utf-8")
-    report = write_back(
-        staging,
-        ws,
-        [".venv/lib/site.py", "src/a.py"],
-        max_bytes=10_000,
-        max_files=50,
-    )
-    assert report.written == ["src/a.py"]
-    assert ".venv/lib/site.py" in report.skipped
-    assert not (ws / ".venv").exists()
-    assert (ws / "src" / "a.py").is_file()
-
-
-def test_oci_install_rw_binds_workspace_without_base64_wrap(tmp_path: Path):
-    """Install path: durable rw-bind + no staged tmpfs/seed + no wrap argv."""
+def test_desk_oci_rw_binds_workspace_without_base64_wrap(tmp_path: Path):
+    """Desk guest: durable rw-bind + no staged tmpfs/seed + no wrap argv."""
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
     ws = tmp_path / "workspace"
     ws.mkdir()
@@ -399,21 +328,12 @@ def test_oci_install_rw_binds_workspace_without_base64_wrap(tmp_path: Path):
     scratch.mkdir()
     cache = tmp_path / "cache"
     cache.mkdir()
-    cfg = sandbox._build_oci_config(  # noqa: SLF001
-        ExecutionRequest(
-            code="print(1)",
-            language="python",
-            network_mode="restricted",
-            registry_egress=True,
-            cwd=str(ws),
-        ),
-        script_name="main.py",
+    cfg = sandbox._build_desk_oci(  # noqa: SLF001
         workspace=str(ws),
         scratch_dir=str(scratch),
-        workspace_writable=False,
-        install_workspace_rw=True,
-        egress_netns_path="/var/run/netns/acpkg1",
+        netns_path="/var/run/netns/acpkg1",
         cache_host_dir=str(cache),
+        proxy_url="http://10.0.0.1:8898",
     )
     mounts = {m["destination"]: m for m in cfg["mounts"]}
     assert mounts["/workspace"]["type"] == "bind"
@@ -426,36 +346,44 @@ def test_oci_install_rw_binds_workspace_without_base64_wrap(tmp_path: Path):
     assert "__AGENTCORE_ARTIFACTS__" not in joined
     assert "base64" not in joined
     assert PACKAGE_CACHE_MOUNT in mounts
+    assert cfg["process"]["user"]["uid"] != 65534
 
 
 @pytest.mark.asyncio
-async def test_install_execute_writes_nm_without_staging_write_back(
+async def test_install_execute_writes_nm_on_real_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    """registry_egress + cwd → nm lands on persistent workspace; no write_back."""
+    """Default execute bind-writes node_modules onto the persistent workspace."""
     import agentcore.tools.sandbox.gvisor as gvisor_mod
+    from agentcore.tools.sandbox.gvisor import reset_desk_sessions_for_tests
     from agentcore.tools.sandbox.limits import reset_execution_slots
     from agentcore.tools.sandbox.sandboxd import set_sandboxd_client_for_tests
     from tests.sandboxd_testutil import LoopbackRunscClient
     from tests.test_gvisor_write_back import _install_fake_runsc
 
     reset_execution_slots()
+    reset_desk_sessions_for_tests()
     monkeypatch.setattr(gvisor_mod, "_IS_LINUX", True)
     monkeypatch.setattr(settings, "gvisor_max_concurrent_executions", 2)
     monkeypatch.setattr(settings, "gvisor_slot_wait_seconds", 0.1)
     monkeypatch.setattr(settings, "gvisor_timeout_max_seconds", 30)
     monkeypatch.setattr(settings, "gvisor_memory_limit_mb", 256)
-    monkeypatch.setattr(settings, "gvisor_stage_max_bytes", 16 * 1024 * 1024)
 
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "package.json").write_text('{"name":"t"}', encoding="utf-8")
+    import os
+    import time
+
+    old = time.time() - 60
+    os.utime(ws / "package.json", (old, old))
 
     async def _fake_egress(*, cache_bucket=None):  # noqa: ANN001
         class _S:
             netns_path = "/var/run/netns/fake"
             cache_host_dir = tmp_path / "pkg-cache" / "b"
             proxy_url = "http://10.0.0.1:8898"
+            host_ip = "10.0.0.1"
 
             async def close(self):
                 return None
@@ -490,13 +418,8 @@ async def test_install_execute_writes_nm_without_staging_write_back(
             code="print('install')",
             language="python",
             cwd=str(ws),
-            network_mode="restricted",
-            registry_egress=True,
-            cache_bucket="u",
             timeout_seconds=10,
         )
     )
     assert result.success is True
     assert (ws / "node_modules" / "left-pad" / "index.js").is_file()
-    assert result.written_files == []
-    assert result.write_back_skipped == 0

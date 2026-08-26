@@ -1,7 +1,4 @@
-"""GVisorBrowserSession close/open: sandboxd stdio, then kill/delete + netns_teardown.
-
-API never execs ``runsc`` / ``ip``. Shape B argv always includes ``--ignore-cgroups``.
-"""
+"""GVisorBrowserSession: exec-into-desk, close does not tear down the guest."""
 
 from __future__ import annotations
 
@@ -13,15 +10,18 @@ import pytest
 from structlog.testing import capture_logs
 
 from agentcore.tools.sandbox.browser import gvisor_session as gs
+from agentcore.tools.sandbox.browser.driver import chromium_launch_args
 from agentcore.tools.sandbox.browser.gvisor_session import GVisorBrowserSession
 from agentcore.tools.sandbox.browser.protocol import (
     BrowserSessionError,
     BrowserSessionRequest,
 )
-from agentcore.tools.sandbox.sandboxd.argv import build_runsc_cmd
+from agentcore.tools.sandbox.gvisor import DeskAttach
+from agentcore.tools.sandbox.sandboxd.argv import EXEC_BINS, build_runsc_exec_cmd
 from agentcore.tools.sandbox.sandboxd.client import set_sandboxd_client_for_tests
 
-_CID = "agentcore-browser-test"
+_DESK = "agentcore-desk-testdesk01"
+_EXEC = f"{_DESK}-exec-stdio-deadbeef0001"
 
 
 class _FakeChannel:
@@ -41,18 +41,11 @@ class _FakeStdio:
     def __init__(self) -> None:
         self._closed = False
         self.closed = False
+        self.container_id = _EXEC
 
     async def aclose(self) -> None:
         self.closed = True
         self._closed = True
-
-
-class _FakeNetns:
-    def __init__(self) -> None:
-        self.torn = False
-
-    async def teardown(self) -> None:
-        self.torn = True
 
 
 class _FakeClient:
@@ -66,15 +59,13 @@ class _FakeClient:
         self.calls.append(("delete", container_id, force))
 
 
-def _make_session(
-    stdio: _FakeStdio, channel: _FakeChannel, netns: _FakeNetns, client: _FakeClient
-):
+def _make_session(stdio: _FakeStdio, channel: _FakeChannel, client: _FakeClient):
     return GVisorBrowserSession(
         conversation_id="c1",
         slot=0,
-        netns=netns,  # type: ignore[arg-type]
-        bundle_dir="/nonexistent/agentcore_browser_test_bundle",
-        container_id=_CID,
+        exec_id=_EXEC,
+        desk_container_id=_DESK,
+        driver_script=None,
         stdio=stdio,
         channel=channel,  # type: ignore[arg-type]
         client=client,  # type: ignore[arg-type]
@@ -82,23 +73,18 @@ def _make_session(
 
 
 @pytest.mark.asyncio
-async def test_close_aclose_stdio_then_kill_delete():
+async def test_close_kills_exec_not_desk():
     stdio = _FakeStdio()
     ch = _FakeChannel()
-    netns = _FakeNetns()
     client = _FakeClient()
-    session = _make_session(stdio, ch, netns, client)
+    session = _make_session(stdio, ch, client)
 
     await session.close()
 
     assert ch.requests == ["close"]
     assert ch.closed is True
     assert stdio.closed is True
-    assert client.calls == [
-        ("kill", _CID, "SIGKILL"),
-        ("delete", _CID, True),
-    ]
-    assert netns.torn is True
+    assert client.calls == [("kill", _EXEC, "SIGKILL")]
     assert session.alive is False
 
 
@@ -107,28 +93,22 @@ async def test_close_is_idempotent():
     stdio = _FakeStdio()
     ch = _FakeChannel()
     client = _FakeClient()
-    session = _make_session(stdio, ch, _FakeNetns(), client)
+    session = _make_session(stdio, ch, client)
 
     await session.close()
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
     await session.close()
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
     assert ch.requests == ["close"]
 
 
 @pytest.mark.asyncio
-async def test_close_after_driver_crash_still_reclaims_resources():
-    """A crashed session (``_alive=False``, teardown never ran) must still tear down fully.
-
-    Idempotency is keyed on ``_closed``, not ``_alive`` — otherwise the netns/veth, the
-    concurrency slot, the runsc container and the bundle dir of a crashed driver leak until
-    process exit (they are host-side resources; the crash only killed the RPC channel).
-    """
+async def test_close_after_driver_crash_still_reclaims_driver_only():
+    """Crashed session must kill the exec track, never the desk guest."""
     stdio = _FakeStdio()
     ch = _FakeChannel()
-    netns = _FakeNetns()
     client = _FakeClient()
-    session = _make_session(stdio, ch, netns, client)
+    session = _make_session(stdio, ch, client)
 
     session._alive = False
 
@@ -137,67 +117,53 @@ async def test_close_after_driver_crash_still_reclaims_resources():
     assert ch.requests == []
     assert ch.closed is True
     assert stdio.closed is True
-    assert client.calls == [
-        ("kill", _CID, "SIGKILL"),
-        ("delete", _CID, True),
-    ]
-    assert netns.torn is True
+    assert client.calls == [("kill", _EXEC, "SIGKILL")]
 
     await session.close()
-    assert len(client.calls) == 2
+    assert len(client.calls) == 1
 
 
 @pytest.mark.asyncio
 async def test_close_swallows_client_kill_failure():
-    """Best-effort teardown: a failing kill/delete must not raise."""
-
     class _BoomClient(_FakeClient):
         async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
             raise RuntimeError("sandboxd kill failed")
 
     stdio = _FakeStdio()
     ch = _FakeChannel()
-    netns = _FakeNetns()
-    session = _make_session(stdio, ch, netns, _BoomClient())
+    session = _make_session(stdio, ch, _BoomClient())
     await session.close()
     assert ch.closed is True
-    assert netns.torn is True
 
 
-def test_build_browser_runsc_cmd_matches_shape_net():
-    kwargs = {
-        "runsc_path": "runsc",
-        "runtime_root": "/data/sandbox",
-        "bundle_dir": "/b",
-        "container_id": "c1",
-    }
-    cmd = gs.build_browser_runsc_cmd(**kwargs)
-    assert cmd == build_runsc_cmd(**kwargs, shape="net")
-    run_idx = cmd.index("run")
-    assert "--ignore-cgroups" in cmd[:run_idx]
-    assert "--rootless" not in cmd[:run_idx]
-    assert cmd[:4] == [
-        "runsc",
-        "--platform=systrap",
-        "--network=sandbox",
-        "--ignore-cgroups",
-    ]
+def test_browser_exec_argv_stays_in_exec_bins():
+    cmd = build_runsc_exec_cmd(
+        runsc_path="runsc",
+        runtime_root="/data/sandbox",
+        container_id=_DESK,
+        argv=["python3", "-u", "/scratch/browser_driver_0_abcd.py"],
+        env=["BROWSER_PROXY=http://10.0.0.1:8899", "HTTP_PROXY="],
+    )
+    assert "python3" in EXEC_BINS
+    assert cmd[0] == "runsc"
+    assert "exec" in cmd
+    assert "run" not in cmd[cmd.index("exec") :]
+    assert "--cwd=/workspace" in cmd
+    assert "/scratch/browser_driver_0_abcd.py" in cmd
+    assert "-env" in cmd
+    assert "HTTP_PROXY=" in cmd
+
+
+def test_chromium_launch_args_bypass_loopback():
+    args = chromium_launch_args("http://10.0.0.1:8899")
+    assert any(a.startswith("--proxy-server=") for a in args)
+    bypass = next(a for a in args if a.startswith("--proxy-bypass-list="))
+    assert "<-loopback>" in bypass
+    assert "127.0.0.1" in bypass
 
 
 class _FakeProxy:
     port = 8899
-
-
-class _OpenFakeNetns:
-    def __init__(self, **_kwargs):
-        self.host_ip = "10.201.0.1"
-        self.netns_path = "/var/run/netns/acbrw0"
-
-    async def setup(self) -> None:
-        return None
-
-    async def teardown(self) -> None:
-        return None
 
 
 class _ReadyStdio:
@@ -208,6 +174,7 @@ class _ReadyStdio:
         self._replies: asyncio.Queue[bytes] = asyncio.Queue()
         self.closed = False
         self.writes: list[bytes] = []
+        self.container_id = _EXEC
 
     async def write(self, data: bytes) -> None:
         self.writes.append(data)
@@ -240,6 +207,7 @@ class _ReadyStdio:
 
 class _EofStdio:
     _closed = False
+    container_id = _EXEC
 
     async def write(self, data: bytes) -> None:
         return None
@@ -254,19 +222,22 @@ class _EofStdio:
 class _OpenFakeClient:
     def __init__(self, stdio) -> None:
         self.stdio = stdio
-        self.run_stdio_calls: list[dict] = []
+        self.exec_stdio_calls: list[dict] = []
+        self.netns_setup_calls: list[dict] = []
         self.kills: list[str] = []
         self.deletes: list[str] = []
 
-    async def run_stdio(self, *, bundle_dir: str, container_id: str, netns_path: str):
-        self.run_stdio_calls.append(
-            {
-                "bundle_dir": bundle_dir,
-                "container_id": container_id,
-                "netns_path": netns_path,
-            }
+    async def exec_stdio(self, *, container_id: str, argv: list[str], cwd: str = "/workspace", env=None):
+        self.exec_stdio_calls.append(
+            {"container_id": container_id, "argv": argv, "cwd": cwd, "env": list(env or [])}
         )
         return self.stdio
+
+    async def netns_setup(self, family: str, slot: int, subnet_base: str):
+        self.netns_setup_calls.append(
+            {"family": family, "slot": slot, "subnet_base": subnet_base}
+        )
+        raise AssertionError("must not set up family=browser netns")
 
     async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
         self.kills.append(container_id)
@@ -275,14 +246,21 @@ class _OpenFakeClient:
         self.deletes.append(container_id)
 
 
-def _install_open_mocks(monkeypatch, *, stdio):
+def _install_open_mocks(monkeypatch, tmp_path: Path, *, stdio):
     monkeypatch.setattr(gs, "_IS_LINUX", True)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    desk = DeskAttach(container_id=_DESK, scratch_dir=scratch, host_ip="10.0.0.1")
+
+    async def _attach(workspace, **_k):
+        assert Path(workspace).is_dir()
+        return desk
 
     async def _proxy():
         return _FakeProxy()
 
+    monkeypatch.setattr("agentcore.tools.sandbox.gvisor.attach_workspace_desk", _attach)
     monkeypatch.setattr(gs, "ensure_browser_proxy", _proxy)
-    monkeypatch.setattr(gs, "SessionNetns", _OpenFakeNetns)
     client = _OpenFakeClient(stdio)
     set_sandboxd_client_for_tests(client)  # type: ignore[arg-type]
     gs._used_slots.clear()
@@ -290,48 +268,106 @@ def _install_open_mocks(monkeypatch, *, stdio):
 
 
 @pytest.mark.asyncio
-async def test_open_session_uses_run_stdio_not_subprocess(monkeypatch, tmp_path):
+async def test_open_session_uses_exec_stdio_not_second_container(monkeypatch, tmp_path):
     async def _boom(*_a, **_k):
         raise AssertionError("API must not exec runsc")
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _boom)
-    client = _install_open_mocks(monkeypatch, stdio=_ReadyStdio())
-    runtime_root = tmp_path / "rt"
+    client = _install_open_mocks(monkeypatch, tmp_path, stdio=_ReadyStdio())
+    ws = tmp_path / "ws"
+    ws.mkdir()
     session = await gs.open_gvisor_browser_session(
-        BrowserSessionRequest(conversation_id="c-ok"),
+        BrowserSessionRequest(conversation_id="c-ok", workspace_root=str(ws)),
         runsc_path="runsc",
-        runtime_root=str(runtime_root),
+        runtime_root=str(tmp_path / "rt"),
     )
     try:
-        assert client.run_stdio_calls
-        assert client.run_stdio_calls[0]["netns_path"] == "/var/run/netns/acbrw0"
-        bundle = client.run_stdio_calls[0]["bundle_dir"]
-        assert Path(bundle).resolve().is_relative_to(runtime_root.resolve())
+        assert not hasattr(client, "run_stdio")
+        assert client.netns_setup_calls == []
+        assert client.exec_stdio_calls
+        call = client.exec_stdio_calls[0]
+        assert call["container_id"] == _DESK
+        assert call["cwd"] == "/workspace"
+        assert call["argv"][0] == "python3"
+        assert call["argv"][1] == "-u"
+        assert call["argv"][2].startswith("/scratch/browser_driver_")
+        env = call["env"]
+        assert "BROWSER_PROXY=http://10.0.0.1:8899" in env
+        assert "HTTP_PROXY=" in env
+        assert not any(item.startswith("HTTP_PROXY=http") for item in env)
         assert session.alive is True
     finally:
         await session.close()
+    assert _DESK not in client.kills
+    assert _DESK not in client.deletes
+    assert client.deletes == []
+    assert _EXEC in client.kills
 
 
 @pytest.mark.asyncio
-async def test_open_session_stdio_eof_logs_and_cleans_up(monkeypatch, tmp_path):
+async def test_open_without_workspace_root_fails_honestly(monkeypatch, tmp_path):
+    called: list[int] = []
+
+    async def _attach(*_a, **_k):
+        called.append(1)
+        raise AssertionError("must not attach without a disk")
+
+    monkeypatch.setattr(gs, "_IS_LINUX", True)
+    monkeypatch.setattr("agentcore.tools.sandbox.gvisor.attach_workspace_desk", _attach)
+    with pytest.raises(BrowserSessionError, match="工作区盘"):
+        await gs.open_gvisor_browser_session(
+            BrowserSessionRequest(conversation_id="c-nodisk"),
+            runsc_path="runsc",
+            runtime_root=str(tmp_path / "rt"),
+        )
+    assert called == []
+
+
+@pytest.mark.asyncio
+async def test_open_non_directory_workspace_fails_honestly(monkeypatch, tmp_path):
+    called: list[int] = []
+
+    async def _attach(*_a, **_k):
+        called.append(1)
+        raise AssertionError("must not attach a missing disk")
+
+    monkeypatch.setattr(gs, "_IS_LINUX", True)
+    monkeypatch.setattr("agentcore.tools.sandbox.gvisor.attach_workspace_desk", _attach)
+    missing = tmp_path / "no-such-ws"
+    with pytest.raises(BrowserSessionError, match="工作区盘"):
+        await gs.open_gvisor_browser_session(
+            BrowserSessionRequest(conversation_id="c-missing", workspace_root=str(missing)),
+            runsc_path="runsc",
+            runtime_root=str(tmp_path / "rt"),
+        )
+    assert called == []
+
+
+@pytest.mark.asyncio
+async def test_open_session_stdio_eof_logs_and_cleans_driver_only(monkeypatch, tmp_path):
     async def _boom(*_a, **_k):
         raise AssertionError("API must not exec runsc")
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", _boom)
-    client = _install_open_mocks(monkeypatch, stdio=_EofStdio())
+    client = _install_open_mocks(monkeypatch, tmp_path, stdio=_EofStdio())
+    ws = tmp_path / "ws"
+    ws.mkdir()
 
     with (
         capture_logs() as logs,
         pytest.raises(BrowserSessionError, match="RpcChannelClosedError"),
     ):
         await gs.open_gvisor_browser_session(
-            BrowserSessionRequest(conversation_id="c-eof"),
+            BrowserSessionRequest(conversation_id="c-eof", workspace_root=str(ws)),
             runsc_path="runsc",
             runtime_root=str(tmp_path / "rt"),
         )
 
-    assert client.run_stdio_calls
-    assert client.kills and client.deletes
+    assert client.exec_stdio_calls
+    assert not hasattr(client, "run_stdio")
+    assert _EXEC in client.kills
+    assert _DESK not in client.kills
+    assert client.deletes == []
     events = {row["event"]: row for row in logs if "event" in row}
     failed = events["browser.session_open_failed"]
     assert failed["conversation_id"] == "c-eof"

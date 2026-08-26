@@ -216,6 +216,8 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
     # 团队便签墙 (§2.2 通): the batch's posted notes in chronological order. Journaled, so it
     # replays on reload (unlike transport-only board ops). Deduped by noteId for replay safety.
     team_notes: list[dict[str, Any]] = []
+    # 墙已升（run_plan.note_wall）：缺省 / 旧 journal = 无墙。Sticky-OR 同 execution；换图重置。
+    note_wall = False
     # 运行中用户插话（user_interjection，经典+协调共用）：同 interjection_id 保最新 status
     # （含 injected）。DURABLE。
     user_interjections: list[dict[str, Any]] = []
@@ -433,6 +435,11 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                 and not has_marker("team", "execution_id", ip)
             ):
                 process.append({"kind": "team", "execution_id": ip})
+            if plan_id is not None and plan_id != ip:
+                # A different execution id is a fresh plan (desktop resets the slot).
+                note_wall = False
+            if p.get("note_wall") is True:
+                note_wall = True
             if plan_id is None or plan_id == ip:
                 plan_id = ip
                 _upsert_act(acts, act)
@@ -1153,6 +1160,8 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
         "autoFolder": auto_folder,
         # 团队便签墙 (§2.2 通): the turn's posted notes (chronological), [] when none.
         "teamNotes": team_notes,
+        # 墙已升：仅真上线（旧 journal / 无墙批次缺省）。
+        **({"noteWall": True} if note_wall else {}),
         # 协调中用户插话：同 interjectionId 保最新，[] when none.
         "userInterjections": user_interjections,
     }

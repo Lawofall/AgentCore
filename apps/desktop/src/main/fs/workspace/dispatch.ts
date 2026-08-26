@@ -45,6 +45,7 @@ import {
   opMkdir,
   opMove,
   opReadBytes,
+  opReadHead,
   opReplace,
   opWrite,
   opWriteBytes,
@@ -104,6 +105,7 @@ function pathArgsForReservedCheck(
   switch (op) {
     case "read":
     case "read_bytes":
+    case "read_head":
     case "read_lines":
     case "write":
     case "append":
@@ -557,7 +559,17 @@ export async function executeWorkspaceOp(
       case "read":
         return await opRead(root, String(args.path ?? ""));
       case "read_bytes":
-        return await opReadBytes(root, String(args.path ?? ""));
+        return await opReadBytes(
+          root,
+          String(args.path ?? ""),
+          typeof args.max_bytes === "number" ? args.max_bytes : undefined,
+        );
+      case "read_head":
+        return await opReadHead(
+          root,
+          String(args.path ?? ""),
+          typeof args.max_bytes === "number" ? args.max_bytes : undefined,
+        );
       case "write":
         return await opWrite(
           root,

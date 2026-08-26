@@ -99,7 +99,7 @@ function ManualAskSettledRecord({
 /**
  * 手册「真组件预览」：检查点拍板卡（ask_user 途中味）。
  * 复用 {@link AskUserCard}；提交 / 取消卸卡，换成对话里同一套结算记录，可再试。
- * 自带 TooltipProvider：卡内 ManualHelpLink 依赖它，保证手册页外也可独立渲染。
+ * 自带 TooltipProvider：手册页外也可独立渲染。
  */
 export function ManualCheckpointCardPreview() {
   const [settled, setSettled] = useState<DemoSettled | null>(null);

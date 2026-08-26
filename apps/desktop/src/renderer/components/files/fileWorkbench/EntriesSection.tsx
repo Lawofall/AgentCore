@@ -1,4 +1,3 @@
-import { IconButton } from "@/components/files/parts";
 import { Badge } from "@/components/ui";
 import {
   ContextMenu,
@@ -11,12 +10,9 @@ import { isFeatureUnavailable } from "@/lib/errors";
 import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
-  type AlwaysQuota,
   type DocumentApplyMode,
   type DocumentNode,
-  createRuleDocument,
   deleteDocument,
-  getAlwaysQuota,
   listScopeEntries,
   renameDocument,
   setDocumentDisputed,
@@ -33,7 +29,6 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  FilePlus,
   FileText,
   History,
   Loader2,
@@ -51,7 +46,6 @@ export type EntryScope =
   | { kind: "folder"; folderId: string };
 
 const ENTRIES_QUERY_KEY = ["scope-entries"] as const;
-const QUOTA_QUERY_KEY = ["always-quota"] as const;
 
 const APPLY_LABEL: Record<DocumentApplyMode, string> = {
   always: "常驻",
@@ -62,9 +56,6 @@ const APPLY_HINT: Record<DocumentApplyMode, string> = {
   always: "每次对话都会带上",
   on_demand: "需要时再查阅",
 };
-
-/** Near-full threshold for consequence copy (not just color). */
-const NEAR_FULL_PERCENT = 80;
 
 /**
  * Rows under this print no size at all. A row's char count exists to answer
@@ -87,17 +78,6 @@ export function isAiCoreMemoryLeaf(
 /** Ensure an entry name is markdown so it opens in the shared editor. */
 function ensureMdName(name: string): string {
   return /\.(md|markdown)$/i.test(name) ? name : `${name}.md`;
-}
-
-/** Collision-free「新条目.md」within a scope's existing names. */
-function nextEntryName(existing: Iterable<string>): string {
-  const taken = new Set(existing);
-  const base = "新条目";
-  if (!taken.has(`${base}.md`)) return `${base}.md`;
-  for (let i = 2; ; i++) {
-    const candidate = `${base} ${i}.md`;
-    if (!taken.has(candidate)) return candidate;
-  }
 }
 
 /** Cold-start placeholders so core leaves stay visible before any document row exists. */
@@ -212,48 +192,11 @@ export function formatAlwaysChars(n: number): string {
   return formatRoughChars(n);
 }
 
-export type AlwaysMeterTone = "ok" | "near" | "over";
-
-export function alwaysMeterTone(q: AlwaysQuota): AlwaysMeterTone {
-  if (q.maxChars > 0 && q.usedChars > q.maxChars) return "over";
-  if (q.usedChars <= 0) return "ok";
-  if (q.percent >= NEAR_FULL_PERCENT) return "near";
-  return "ok";
-}
-
-/** `还剩约 8 千字` / `还剩不足千字` / `超出约 2 千字`. */
-function glueCapacity(verb: "还剩" | "超出", amount: string): string {
-  if (amount.startsWith("约 ")) return `${verb}${amount}`;
-  if (amount === "0 字") return `${verb} ${amount}`;
-  return `${verb}${amount}`;
-}
-
-/**
- * Meter primary line: remaining (or over-by) in one unit — no 千/万 mix, no subtraction.
- * Exported for unit tests.
- */
-export function formatMeterHeadline(
-  q: AlwaysQuota,
-  variant: "global" | "folder",
-): string {
-  const tone = alwaysMeterTone(q);
-  const subject = variant === "folder" ? "常驻（含全局）" : "常驻";
-  if (tone === "over") {
-    const overBy = Math.max(0, q.usedChars - q.maxChars);
-    return `${subject} · 已满，${glueCapacity("超出", formatRoughChars(overBy))}`;
-  }
-  const remain = glueCapacity(
-    "还剩",
-    formatRoughChars(Math.max(0, q.maxChars - q.usedChars)),
-  );
-  if (tone === "near") return `${subject} · 快满了，${remain}`;
-  return `${subject} · ${remain}`;
-}
-
 /**
  * Flat entry list for one AgentCore scope (目标形态 · 文件页形态).
  * No 记忆/规则/文档 folders — partition is scope only; each row shows 常驻/按需 +
- * description + frontmatter errors; always-pool meter stays visible when open.
+ * description + frontmatter errors. Create lives on the section / `.agentcore`
+ * header so it still works while this list is unmounted (collapsed).
  */
 export function EntriesSection({
   scope,
@@ -288,36 +231,12 @@ export function EntriesSection({
       !isFeatureUnavailable(error) && failureCount < 3,
   });
 
-  const quota = useQuery({
-    queryKey: [...QUOTA_QUERY_KEY, folderId ?? "global"],
-    queryFn: () => getAlwaysQuota(folderId),
-    staleTime: 15_000,
-    retry: (failureCount, error) =>
-      !isFeatureUnavailable(error) && failureCount < 3,
-  });
-
   const rows = entries.data ?? [];
   const displayRows = mergeDisplayRows(scope, rows);
   const leafPad = indent + 8;
 
   const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ENTRIES_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: QUOTA_QUERY_KEY }),
-    ]);
-  };
-
-  const createEntry = async () => {
-    try {
-      const doc = await createRuleDocument(
-        nextEntryName(rows.map((r) => r.name)),
-        folderId,
-      );
-      await refresh();
-      onOpen(entryOpenTarget(doc));
-    } catch (e) {
-      notifyError(e, "新建条目失败");
-    }
+    await queryClient.invalidateQueries({ queryKey: ENTRIES_QUERY_KEY });
   };
 
   const renameEntry = async (doc: DocumentNode) => {
@@ -495,31 +414,6 @@ export function EntriesSection({
 
   return (
     <div>
-      <div
-        className="flex items-center gap-1 py-0.5"
-        style={{ paddingLeft: leafPad }}
-      >
-        <div className="min-w-0 flex-1">
-          {quota.isSuccess ? (
-            <AlwaysQuotaMeter
-              quota={quota.data}
-              variant={scope.kind === "global" ? "global" : "folder"}
-            />
-          ) : quota.isError && !isFeatureUnavailable(quota.error) ? (
-            <button
-              type="button"
-              onClick={() => void quota.refetch()}
-              className="text-left text-xs text-muted-foreground hover:underline"
-            >
-              用量加载失败，点此重试
-            </button>
-          ) : null}
-        </div>
-        <IconButton title="新建条目" onClick={() => void createEntry()}>
-          <FilePlus size={14} />
-        </IconButton>
-      </div>
-
       {scope.kind === "global" && onOpenUpdates && (
         <EntryLeafRow
           paddingLeft={leafPad}
@@ -590,114 +484,6 @@ export function EntriesSection({
         }}
         onConfirm={() => void confirmDispute()}
       />
-    </div>
-  );
-}
-
-/**
- * Always-pool meter, sized by state: calm scopes collapse to the remaining-chars
- * line alone so the rail reads as a list of entries; 快满 / 已超 keep the full
- * block (consequence copy + two-tone bar). Quota stays visible in every state —
- * only the chrome around it shrinks.
- *
- * Calm state deliberately has **no bar**: at the 288px default rail width an
- * inline bar pushes `常驻（含全局）· 还剩约 N 万字` past truncation, and the number
- * it would cut is the only thing this line exists to say.
- */
-function AlwaysQuotaMeter({
-  quota,
-  variant,
-}: {
-  quota: AlwaysQuota;
-  variant: "global" | "folder";
-}) {
-  const tone = alwaysMeterTone(quota);
-  const headline = formatMeterHeadline(quota, variant);
-
-  if (tone === "ok") {
-    return (
-      <div
-        className="min-w-0 truncate text-xs text-muted-foreground"
-        title="每次对话都会带上"
-      >
-        {headline}
-      </div>
-    );
-  }
-
-  const caption =
-    tone === "over"
-      ? "AI 暂时记不下新东西，去整理"
-      : "AI 快记不下新东西了，去整理";
-  const title = [
-    variant === "folder" ? "浅色是全局，深色是本文件夹" : null,
-    tone === "over" ? `已满：${caption}` : `快满了：${caption}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <div
-      className="min-w-0 rounded-lg bg-primary/5 px-1.5 py-1.5"
-      title={title}
-    >
-      {/* Wraps rather than truncates: this is the state where 还剩/超出多少字 must
-          survive, and the block is already the one allowed to take room. */}
-      <div className="text-sm font-medium leading-snug text-primary">
-        {headline}
-      </div>
-      <div className="mt-1.5 text-xs leading-snug text-primary">{caption}</div>
-      <AlwaysQuotaBar quota={quota} variant={variant} />
-    </div>
-  );
-}
-
-/** 快满 / 已超 fill — calm scopes render no bar, so every tone here is primary. */
-function AlwaysQuotaBar({
-  quota,
-  variant,
-}: {
-  quota: AlwaysQuota;
-  variant: "global" | "folder";
-}) {
-  const max = Math.max(1, quota.maxChars);
-  // When over the cap, scale segments against used so both tones stay visible
-  // (max-based math would clamp global to 100% and hide the project slice).
-  const over = quota.usedChars > quota.maxChars;
-  const barBase = over ? Math.max(1, quota.usedChars) : max;
-  const globalPct = Math.min(
-    100,
-    Math.max(0, (100 * quota.globalChars) / barBase),
-  );
-  const projectPct = Math.min(
-    100 - globalPct,
-    Math.max(0, (100 * quota.projectChars) / barBase),
-  );
-  const usedPct = over
-    ? 100
-    : Math.min(100, Math.max(0, (100 * quota.usedChars) / max));
-
-  return (
-    <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
-      {variant === "folder" ? (
-        <>
-          <div
-            className="h-full bg-primary/45 transition-[width]"
-            style={{ width: `${globalPct}%` }}
-            title="全局"
-          />
-          <div
-            className="h-full bg-primary transition-[width]"
-            style={{ width: `${projectPct}%` }}
-            title="本文件夹"
-          />
-        </>
-      ) : (
-        <div
-          className="h-full rounded-full bg-primary transition-[width]"
-          style={{ width: `${usedPct}%` }}
-        />
-      )}
     </div>
   );
 }

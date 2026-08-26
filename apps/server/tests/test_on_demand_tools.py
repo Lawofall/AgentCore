@@ -228,6 +228,7 @@ async def test_terminal_consult_returns_runtime_how():
     assert body is not None
     assert "wait_for" in body
     assert "【本机运行态】" in body
+    assert "云桌" in body
 
 
 async def test_write_section_consult_promotes_onto_table():
@@ -303,9 +304,9 @@ def test_stuffed_worker_opening_table_omits_on_demand_tools():
     chars = sum(
         len(json.dumps(d, ensure_ascii=False)) for d in registry.get_openai_definitions()
     )
-    # 2026-08-25：实测 22629（工具描述随 source_inspect 改道 / 失败脸对齐微调）。
+    # 2026-08-26：实测 22834（云端 terminal 走云桌后，code_execute 长驻改道不再写「仅本地」）。
     # worker 常驻钮已顶各自 per-tool 帽。锁回实测整十。
-    assert chars <= 22630, f"队员开场工具表变胖：{chars}"
+    assert chars <= 22840, f"队员开场工具表变胖：{chars}"
     deferred = set(registry.deferred_names)
     assert deferred <= ON_DEMAND_TOOL_NAMES
     assert "terminal" in deferred and "browser" in deferred

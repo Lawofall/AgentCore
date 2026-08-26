@@ -50,7 +50,10 @@ class WorkspaceSettings(BaseModel):
     workspace_retention_sweep_interval_seconds: int = 6 * 3600
     workspace_retention_batch_limit: int = 100
 
-    workspace_upload_max_bytes: int = 25 * 1024 * 1024
+    # Product ingest (panel PUT / attachments / download_url). Distinct from
+    # AI text read (5 MiB) and from channel extract IPC (25 MiB). Desktop
+    # mirrors this literal — it cannot import server settings.
+    workspace_upload_max_bytes: int = 50 * 1024 * 1024
     avatar_upload_max_bytes: int = 5 * 1024 * 1024
     workspace_clone_timeout_seconds: int = 120
     workspace_op_timeout_seconds: float = 60.0
@@ -119,20 +122,19 @@ class WorkspaceSettings(BaseModel):
     # so bounded project verify (test_run outer loop) is not silently truncated on
     # cloud gVisor. Covers disaster wall (1200s) + engine slack (30s).
     gvisor_timeout_max_seconds: int = 1230
-    # 产物写回 (copy-in/copy-out): the workspace is COPIED into a per-execution
-    # staging dir (mounted rw at /workspace), and new/changed regular files are
-    # copied back after the run. Caps bound both legs.
-    gvisor_stage_max_bytes: int = 512 * 1024 * 1024
-    gvisor_write_back_max_bytes: int = 128 * 1024 * 1024
-    gvisor_write_back_max_files: int = 200
+    # Idle cloud-desk guest reap (kill+delete; disk stays; next use lazy-creates).
+    # Default matches browser session idle (10min). A desk with inflight
+    # execute/short_exec, a running desk_process (e.g. vite), or a live sandbox
+    # browser (including a watched live tab) is never reaped. Not freeze/pause.
+    gvisor_desk_idle_ttl_seconds: float = 10 * 60.0
 
     # ── L3 团队浏览器 M0（内置浏览器与Agent浏览器提案.md · D9–D11）────────────
-    # Session-level long-lived Chromium sandboxes (browser_* tools). Cloud-only:
-    # assembled iff shape-B ``sandboxd.health("net")`` is True — not gated by
-    # shape-A ``code_execute`` health. Needs gVisor + sandboxd; no fake Local.
-    # Concurrency gate: process-wide cap on live browser sessions. Cloud overlay
-    # holds one (~container mem_limit=4g); a new conversation past the cap fails
-    # fast with an explainable busy result after an idle reap.
+    # Session-level Chromium inside the workspace desk guest (browser_* tools).
+    # Cloud assembled iff desk ``cloud_sandbox_health`` (same predicate as
+    # code_execute). Needs gVisor + sandboxd; no fake Local.
+    # Concurrency gate: process-wide cap on live browser sessions; a new
+    # conversation past the cap fails fast with an explainable busy result
+    # after an idle session reap.
     browser_max_sessions: int = 1
     # Idle TTL: a session untouched this long is reaped (the reaper loop + lazy
     # checks). Default 10min — a research pause shouldn't hold ~1GB indefinitely.

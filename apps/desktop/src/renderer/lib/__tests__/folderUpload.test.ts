@@ -224,7 +224,7 @@ describe("逐项诚实报告（不许一个 toast 吞掉整批）", () => {
     );
     expect(written).toEqual(["ok.md"]);
     expect(report.failures[0].path).toBe("big.zip");
-    expect(report.failures[0].reason).toContain("25MB");
+    expect(report.failures[0].reason).toContain("50MB");
   });
 
   it("目录先建好，空目录因此不会消失", async () => {
