@@ -76,7 +76,7 @@ describe("formatImportToCloudToast", () => {
     });
     expect(t.message).toBe("已在「我的文件」建好「Big」（部分导入）");
     expect(t.description).toContain("100MiB");
-    expect(t.description).toContain("25MiB");
+    expect(t.description).toContain("50MiB");
     expect(t.description).toContain("已上传 1 个文件");
     expect(t.description).toContain("请在新文件夹里继续");
   });
@@ -158,52 +158,68 @@ describe("runImportToCloud", () => {
   });
 
   it("skips oversized PUT leaves and marks partial", async () => {
-    const big = new Uint8Array(IMPORT_PUT_MAX_BYTES + 1);
-    const archive = await zipBase64({
-      "ok.txt": "small",
-      "huge.bin": big,
-    });
+    // Don't zip a 50MiB buffer — generate+inflate of that size times out the
+    // default 5s vitest budget on Linux CI. The skip gate only reads byteLength.
+    const loadAsync = vi.spyOn(JSZip, "loadAsync").mockResolvedValue({
+      files: {
+        "ok.txt": {
+          dir: false,
+          name: "ok.txt",
+          async: async () => new TextEncoder().encode("small"),
+        },
+        "huge.bin": {
+          dir: false,
+          name: "huge.bin",
+          async: async () =>
+            ({ byteLength: IMPORT_PUT_MAX_BYTES + 1 }) as Uint8Array,
+        },
+      },
+    } as unknown as JSZip);
     const uploadFile = vi.fn().mockResolvedValue(undefined);
 
-    const result = await runImportToCloud({
-      folderName: "Partial",
-      deps: {
-        pickRoot: async () => ({
-          ok: true,
-          root: { id: "r", name: "x" },
-        }),
-        archiveRoot: async () => ({
-          ok: true,
-          value: {
-            archive,
-            file_count: 2,
-            total_bytes: big.byteLength + 5,
-            truncated: false,
-          },
-        }),
-        createCloudFolder: async (name) => ({
-          folder: {
-            id: "f",
-            name,
-            mode: "cloud",
-            localRootId: null,
-            localSubpath: null,
-          },
-          created: true,
-        }),
-        uploadFile,
-        createDir: vi.fn(),
-        removeRoot: vi.fn(),
-        setDraftIntent: vi.fn(),
-        addFolderToCache: vi.fn(),
-      },
-    });
+    try {
+      const result = await runImportToCloud({
+        folderName: "Partial",
+        deps: {
+          pickRoot: async () => ({
+            ok: true,
+            root: { id: "r", name: "x" },
+          }),
+          archiveRoot: async () => ({
+            ok: true,
+            value: {
+              archive: "unused",
+              file_count: 2,
+              total_bytes: IMPORT_PUT_MAX_BYTES + 6,
+              truncated: false,
+            },
+          }),
+          createCloudFolder: async (name) => ({
+            folder: {
+              id: "f",
+              name,
+              mode: "cloud",
+              localRootId: null,
+              localSubpath: null,
+            },
+            created: true,
+          }),
+          uploadFile,
+          createDir: vi.fn(),
+          removeRoot: vi.fn(),
+          setDraftIntent: vi.fn(),
+          addFolderToCache: vi.fn(),
+        },
+      });
 
-    expect(result.uploaded).toBe(1);
-    expect(result.skippedOversized).toEqual(["huge.bin"]);
-    expect(result.partial).toBe(true);
-    expect(uploadFile).toHaveBeenCalledTimes(1);
-    expect(uploadFile.mock.calls[0]?.[1]).toBe("ok.txt");
+      expect(result.uploaded).toBe(1);
+      expect(result.skippedOversized).toEqual(["huge.bin"]);
+      expect(result.partial).toBe(true);
+      expect(uploadFile).toHaveBeenCalledTimes(1);
+      expect(uploadFile.mock.calls[0]?.[1]).toBe("ok.txt");
+    } finally {
+      loadAsync.mockRestore();
+    }
   });
 
   it("marks partial when archive truncated", async () => {

@@ -5,6 +5,7 @@
  */
 import { set as setBorrowPreference } from "@/lib/borrowOriginalPreference";
 import {
+  IMPORT_PUT_MAX_BYTES,
   ImportToCloudCancelledError,
   type ImportToCloudProgress,
   type ImportToCloudResult,
@@ -85,7 +86,9 @@ export function formatBorrowToCloudToast(result: ImportToCloudResult): {
     bits.push("内容超过 100MiB 或 2 万个文件，只复制了一部分");
   }
   if (result.skippedOversized.length > 0) {
-    bits.push(`跳过 ${result.skippedOversized.length} 个超过 25MiB 的文件`);
+    bits.push(
+      `跳过 ${result.skippedOversized.length} 个超过 ${IMPORT_PUT_MAX_BYTES / (1024 * 1024)}MiB 的文件`,
+    )
   }
   return {
     message: `已复制到云上「${result.folderName}」（部分）`,

@@ -154,7 +154,9 @@ export function formatImportToCloudToast(result: ImportToCloudResult): {
     bits.push("内容超过 100MiB 或 2 万个文件，只导入了一部分");
   }
   if (result.skippedOversized.length > 0) {
-    bits.push(`跳过 ${result.skippedOversized.length} 个超过 25MiB 的文件`);
+    bits.push(
+      `跳过 ${result.skippedOversized.length} 个超过 ${IMPORT_PUT_MAX_BYTES / (1024 * 1024)}MiB 的文件`,
+    )
   }
   return {
     message: `已在「我的文件」建好「${result.folderName}」（部分导入）`,
