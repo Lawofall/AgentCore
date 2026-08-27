@@ -110,7 +110,7 @@ export type TurnOutcomeInput = {
   conversationError?: string | null;
   conversationErrorAction?: ErrorAction | null;
   /**
-   * Live pause/ask/plan_review/team_preview still waiting. Callers must pass
+   * Live pause/ask/plan_review still waiting. Callers must pass
    * **pending only** — a resolved stub is history, not a hang.
    */
   hasDedicatedPauseOrAskUi?: boolean;

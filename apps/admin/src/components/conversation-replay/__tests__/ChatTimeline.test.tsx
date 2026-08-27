@@ -195,6 +195,53 @@ describe("ChatTimeline chat layout", () => {
     expect(screen.getByLabelText("@Agent").textContent).toContain("@调研员");
     expect(screen.getByLabelText("附件").textContent).toContain("brief.pdf");
     expect(screen.getByText("文件")).toBeTruthy();
+    expect(screen.getByTestId("replay-chip-tray")).toBeTruthy();
+    expect(screen.queryByTestId("user-inline-body")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /brief\.pdf/ }),
+    ).toBeNull();
+  });
+
+  it("renders marked attachment/@ chips inline and skips the tray", () => {
+    const object = "\uFFFC";
+    const messages: ReplayMessage[] = [
+      msg({
+        id: "u1",
+        role: "user",
+        content: `看这份${object}A0${object}给${object}M0${object}`,
+        attachments: [
+          {
+            binary: false,
+            kind: "file",
+            name: "brief.pdf",
+            path: "attachments/brief.pdf",
+            size_bytes: 2048,
+            truncated: false,
+          },
+        ],
+        agent_mentions: [{ agent_id: "researcher", role: "调研员" }],
+      }),
+    ];
+
+    render(
+      <ChatTimeline
+        messages={messages}
+        selectedId={null}
+        selectedRunId={null}
+        onSelect={vi.fn()}
+        onSelectRun={vi.fn()}
+        isAnchored={() => false}
+      />,
+    );
+
+    expect(screen.getByTestId("user-inline-body")).toBeTruthy();
+    expect(screen.queryByTestId("replay-chip-tray")).toBeNull();
+    expect(screen.getAllByLabelText("@Agent")).toHaveLength(1);
+    expect(screen.getAllByLabelText("附件")).toHaveLength(1);
+    expect(screen.getByTestId("user-inline-body").textContent).toContain("看这份");
+    expect(screen.getByTestId("user-inline-body").textContent).not.toContain(
+      "\uFFFC",
+    );
     expect(
       screen.queryByRole("link", { name: /brief\.pdf/ }),
     ).toBeNull();
@@ -613,11 +660,12 @@ describe("InspectorPanel worker dock", () => {
 
     expect(screen.getByText("web_search")).toBeTruthy();
     expect(screen.getByText("队员正文在此")).toBeTruthy();
+    expect(screen.getByText("先列提纲。")).toBeTruthy();
     expect(screen.queryByText("思考 1 步 · 使用 1 个工具")).toBeNull();
     expect(screen.queryByText(/^过程$/)).toBeNull();
     expect(screen.queryByText(/^产出$/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
-    expect(screen.getByText("先列提纲。")).toBeTruthy();
+    expect(screen.queryByText("先列提纲。")).toBeNull();
   });
 
   it("shows diagnosis tab and worker short list when on diagnosis", () => {

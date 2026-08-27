@@ -29,6 +29,7 @@ _ALLOWED_SUBCOMMANDS = frozenset(
         "push",
         "pull",
         "init_baseline",
+        "clone",
         "stash",
         "merge",
         "rebase",
@@ -48,6 +49,7 @@ _ALWAYS_WRITE_SUBCOMMANDS = frozenset(
         "push",
         "pull",
         "init_baseline",
+        "clone",
         "merge",
         "rebase",
         "cherry-pick",
@@ -62,15 +64,19 @@ _ACTION_WRITE_MAP: dict[str, frozenset[str]] = {
 }
 _WRITE_SUBCOMMANDS = _ALWAYS_WRITE_SUBCOMMANDS | frozenset(_ACTION_WRITE_MAP)
 # Writes that never take ``.git/index.lock``: refs (``branch`` / ``tag``), config
-# (``remote add``), or the network alone (``push`` reads refs, ``create_pr`` is REST).
-# They stay outside the per-repo serializer (``repo_lock``) so they keep running
-# beside an index writer — and so ``push``'s remote round trip cannot park an
-# unrelated ``commit`` behind a minute of network. Everything else is serialized by
+# (``remote add``), or the network alone (``push`` reads refs, ``create_pr`` is REST,
+# ``clone`` writes a *new* dest tree — not this workspace's index). They stay
+# outside the per-repo serializer (``repo_lock``) so they keep running beside an
+# index writer — and so ``push``'s remote round trip cannot park an unrelated
+# ``commit`` behind a minute of network. Everything else is serialized by
 # subtraction, so a newly allowlisted write queues by default.
-_NO_INDEX_LOCK_SUBCOMMANDS = frozenset({"branch", "tag", "remote", "push", "create_pr"})
+_NO_INDEX_LOCK_SUBCOMMANDS = frozenset(
+    {"branch", "tag", "remote", "push", "create_pr", "clone"}
+)
 _INDEX_LOCK_SUBCOMMANDS = _WRITE_SUBCOMMANDS - _NO_INDEX_LOCK_SUBCOMMANDS
-# CEO may run this one write: one-shot「初始化并首提交」(user still approves via gate).
-_CEO_ALLOWED_WRITE_SUBCOMMANDS = frozenset({"init_baseline"})
+# CEO may run these writes: one-shot first baseline, and clone into an empty dest
+# (user still approves via gate). Same GRANTABLE posture; neither is always-confirm.
+_CEO_ALLOWED_WRITE_SUBCOMMANDS = frozenset({"init_baseline", "clone"})
 _NO_REPO_CODE = "no_repo"
 # Root ``.git`` exists but git refuses it as a work tree — never a soft ``no_repo``.
 _REPO_UNUSABLE_CODE = "repo_unusable"
@@ -190,6 +196,8 @@ _SERIAL_GIT_OPS: dict[str, int] = {
     # remote
     "pull": 1,
     "fetch": 1,
+    # clone --single-branch --depth 1 (no repo probe)
+    "clone": 1,
     # remote + remote get-url + branch --show-current
     "create_pr": 3,
 }
@@ -202,6 +210,7 @@ _NETWORK_IO_BUDGET: dict[str, float] = {
     "push": _GIT_CREDENTIAL_TIMEOUT + _GIT_NETWORK_TIMEOUT,
     "pull": _GIT_CREDENTIAL_TIMEOUT + _GIT_NETWORK_TIMEOUT,
     "fetch": _GIT_CREDENTIAL_TIMEOUT + _GIT_NETWORK_TIMEOUT,
+    "clone": _GIT_CREDENTIAL_TIMEOUT + _GIT_NETWORK_TIMEOUT,
     # Token resolution, then GitHub REST (default-branch GET + create POST).
     "create_pr": _GIT_TOKEN_RESOLVE_TIMEOUT + _GITHUB_API_CALLS * _GITHUB_API_TIMEOUT,
 }
@@ -247,6 +256,7 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
                 "push",
                 "pull",
                 "init_baseline",
+                "clone",
                 "stash",
                 "merge",
                 "rebase",
@@ -327,7 +337,11 @@ GIT_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "url": {
             "type": "string",
-            "description": "remote add 的 URL/路径。",
+            "description": "remote add / clone 的仓库 URL（clone 仅 GitHub http(s)）。",
+        },
+        "dest": {
+            "type": "string",
+            "description": "clone 落点（相对工作区根，默认仓名）；非空拒绝。",
         },
         "title": {
             "type": "string",

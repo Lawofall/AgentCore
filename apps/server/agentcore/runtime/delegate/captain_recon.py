@@ -1,7 +1,7 @@
 """B2 · 主管探路下传：把 CEO 本回合已看过的路径/短摘要注入 worker 开局。
 
 产品目标：派人后工人不要从零再 list 根目录 / 通读主管刚读过的文件。
-收 ``file_list`` / ``file_read`` / ``grep`` / ``code_search``；指针 + 短截断，
+收 ``file_list`` / ``glob`` / ``file_read`` / ``grep`` / ``code_search``；指针 + 短截断，
 不转发全文 transcript。保活按路径/工具类型筛选：优先检索命中，丢掉生成物、
 ``release/``、工作区噪音目录、``.env*``，避免低信号条目挤掉定位。
 仅在根 CEO 委派（depth=0）时启用——嵌套 lead 的 transcript 不在
@@ -17,7 +17,7 @@ from typing import Any
 from agentcore.llm.provider.protocol import LLMMessage, llm_content_text
 from agentcore.workspace._paths import is_ignored_dir_name, is_ignored_relpath
 
-_RECON_TOOLS = frozenset({"file_list", "file_read", "grep", "code_search"})
+_RECON_TOOLS = frozenset({"file_list", "glob", "file_read", "grep", "code_search"})
 _SEARCH_TOOLS = frozenset({"grep", "code_search"})
 _MAX_ENTRIES = 8
 _PER_SNIPPET_CHARS = 360
@@ -153,8 +153,15 @@ def _target_info(tool_name: str, raw_args: str) -> tuple[str, str]:
         return (path or "?"), path
     if tool_name == "file_list":
         directory = path or "."
-        pattern = str(args.get("pattern") or "*").strip() or "*"
-        return f"{directory} ({pattern})", directory
+        pattern = str(args.get("pattern") or "").strip()
+        if pattern:
+            return f"{directory} ({pattern})", directory
+        return directory, directory
+    if tool_name == "glob":
+        directory = path or "."
+        pattern = str(args.get("pattern") or "").strip()
+        label = f"{directory} ({pattern})" if pattern else directory
+        return label, directory
     query = str(args.get("pattern") or args.get("query") or "").strip()
     label = f"{path} ~ {query}" if query else path
     return label, path

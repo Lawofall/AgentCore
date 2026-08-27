@@ -282,7 +282,7 @@ def _outside_workspace_msg(
     if location == "server":
         return (
             f"路径 '{path}' 超出了工作区范围。"
-            "若要把该本机目录进产品工作区：**推荐**引导 Composer「导入到云 / 连接 Git」；"
+            "若要把该本机目录进产品工作区：**推荐**引导 Composer「导入到云」；"
             "仅当用户明确要求新建云文件夹时才用 create_folder"
             "（禁止为过写盘闸而建；裸聊写盘缺桌由运行时自动建云桌）；"
             "本机传统 open_local_project / register_local_project / "

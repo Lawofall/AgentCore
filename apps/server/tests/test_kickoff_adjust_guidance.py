@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from agentcore.runtime.checkpoints import CheckpointDecision
-from agentcore.runtime.events import EventSink
 from agentcore.runtime.kickoff.adjust_guidance import (
     KICKOFF_ADJUST_GUIDANCE_DEBATE,
     KICKOFF_ADJUST_GUIDANCE_DELEGATE,
@@ -149,188 +148,27 @@ async def test_drive_preview_adjust_does_not_start_workers():
     assert provider.calls == 0
 
 
-@pytest.mark.asyncio
-async def test_recover_window_team_preview_adjust_skips_continuity_steer(monkeypatch):
-    """team_preview ADJUST feeds CEO but must not inject deliverable continuity steer."""
-    from unittest.mock import AsyncMock, MagicMock
-
-    from agentcore.core.types import ToolEffect
-    from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
-    from agentcore.runtime.pipeline.resume import recover_path as rp
-    from agentcore.runtime.recover import SettledSuspension
-    from agentcore.runtime.suspension import TeamPreviewSuspension
-
-    plan = RunPlan(nodes=[RunSpec(run_id="w1", task="t", role="研究员")])
-    suspension = TeamPreviewSuspension(
-        message_id="m1",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="cap1",
-        checkpoint_id="ck_tp",
-        tool_call_id="call_del",
-        user_message="task",
-        base_system_prompt="sys",
-        journal_entries=[],
-        plan=plan,
-        workers=[{"run_id": "w1", "role": "研究员", "task": "t"}],
-        transcript=[],
-    )
-    suspension.transcript = [
-        LLMMessage(role="user", content="组个队"),
-        LLMMessage(
-            role="assistant",
-            content="方向：派团队 — 直接开委派。",
-            tool_calls=[
-                ToolCall(
-                    id="call_del",
-                    function=ToolCallFunction(name="delegate", arguments="{}"),
-                )
-            ],
-        ),
-    ]
-    monkeypatch.setattr(
-        rp,
-        "resumed_captain_window",
-        lambda _s, _h: list(suspension.transcript),
-    )
-    monkeypatch.setattr(
-        rp,
-        "recover_turn",
-        AsyncMock(
-            return_value=SettledSuspension(
-                format_kickoff_adjust_result(primitive="delegate", note="人太多"),
-                None,
-                ToolEffect.CONTINUE,
-            ),
-        ),
-    )
-    monkeypatch.setattr(rp, "persist_resumed_tool_results", MagicMock())
-    monkeypatch.setattr(
-        rp,
-        "append_resumed_tool_results",
-        lambda msgs, _id, output: msgs.append(
-            LLMMessage(role="tool", content=output, tool_call_id="call_del")
-        ),
-    )
-
-    recovered = await rp.recover_and_rebuild_window(
-        suspension=suspension,
-        decision=CheckpointDecision.ADJUST,
-        note="人太多",
-        selected=[],
-        history=None,
-        sink=EventSink(),
-        delegate_tool=MagicMock(),
-        debate_tool=MagicMock(),
-        execution_id="e1",
-        captain_run_id="cap1",
-        pre_pause_override="方向：派团队 — 直接开委派。",
-    )
-    assert recovered.settled.terminal_text is None
-    assert recovered.messages[-1].role == "tool"
-    assert "用户要求调整开工方案" in (recovered.messages[-1].content or "")
-    assert not any(
-        m.role == "user" and "[系统提示]" in (m.content or "") for m in recovered.messages
-    )
-
-
-@pytest.mark.asyncio
-async def test_recover_debate_adjust_refuses_retired_team_preview():
-    """Debate team_preview ADJUST：开工卡已退役，不回灌、不执行。"""
-    from unittest.mock import AsyncMock, MagicMock
-
+def test_leftover_team_preview_from_json_refuses():
+    """存量开工卡：from_json 410，ADJUST 不回灌、不 recover。"""
     from agentcore.core.errors import GoneError
     from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
-    from agentcore.runtime.recover import recover_turn
-    from agentcore.runtime.suspension import TeamPreviewSuspension
-    from agentcore.runtime.turn.state import TurnState
+    from agentcore.runtime.suspension import suspension_from_json
 
-    frame = TeamPreviewSuspension(
-        message_id="m1",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="cap1",
-        checkpoint_id="ck_tp",
-        tool_call_id="call_db",
-        user_message="辩一下",
-        base_system_prompt="sys",
-        journal_entries=[],
-        plan=RunPlan(),
-        primitive="debate",
-        debate_arguments={"motion": "原命题", "form": "debate"},
-        transcript=[],
-    )
-    debate = MagicMock()
-    debate.resume_after_kickoff = AsyncMock()
-    debate.execute = AsyncMock()
     with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
-        await recover_turn(
-            state=TurnState(
-                plan=RunPlan(),
-                completed={},
-                execution_id="e1",
-                coordination=None,
-                entries=(),
-            ),
-            sink=EventSink(),
-            delegate_tool=MagicMock(),
-            debate_tool=debate,
-            execution_id="e1",
-            suspension=frame,
-            decision=CheckpointDecision.ADJUST,
-            note="三",
+        suspension_from_json(
+            {
+                "kind": "team_preview",
+                "message_id": "m1",
+                "conversation_id": "c1",
+                "user_id": "u1",
+                "captain_run_id": "cap1",
+                "checkpoint_id": "ck_tp",
+                "tool_call_id": "call_del",
+                "base_system_prompt": "sys",
+                "user_message": "组队",
+                "primitive": "delegate",
+            }
         )
-    debate.resume_after_kickoff.assert_not_called()
-    debate.execute.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_recover_delegate_adjust_refuses_retired_team_preview():
-    """Delegate team_preview ADJUST：开工卡已退役，不 grant、不跑 worker。"""
-    from agentcore.core.errors import GoneError
-    from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
-    from agentcore.runtime.recover import recover_turn
-    from agentcore.runtime.suspension import TeamPreviewSuspension
-    from agentcore.runtime.turn.state import TurnState
-    from tests.delegate.conftest import Provider, gate, resume_plan, tool
-
-    plan = resume_plan()
-    provider = Provider(["SHOULD_NOT_RUN"])
-    approval = gate()
-    t = tool(provider)
-    t._approval_gate = approval
-    frame = TeamPreviewSuspension(
-        message_id="m1",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="cap1",
-        checkpoint_id="ck_tp",
-        tool_call_id="call_del",
-        user_message="组队",
-        base_system_prompt="sys",
-        journal_entries=[],
-        plan=plan,
-        workers=[{"run_id": n.run_id, "role": n.role, "task": n.task} for n in plan.nodes],
-        transcript=[],
-    )
-    with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
-        await recover_turn(
-            state=TurnState(
-                plan=plan,
-                completed={},
-                execution_id="e-adj-3",
-                coordination=None,
-                entries=(),
-            ),
-            sink=EventSink(),
-            delegate_tool=t,
-            execution_id="e-adj-3",
-            suspension=frame,
-            decision=CheckpointDecision.ADJUST,
-            note="三",
-        )
-    assert provider.calls == 0
-    assert not approval.has_delegation_grant("e-adj-3")
 
 
 def test_resume_adjust_requires_non_empty_note():
@@ -348,6 +186,10 @@ def test_resume_adjust_requires_non_empty_note():
     # continue / stop 仍允许空 note（嘱咐 / 收场可选）。
     ResumeTurnRequest(decision=CheckpointDecision.CONTINUE, note="")
     ResumeTurnRequest(decision=CheckpointDecision.STOP, note="")
+    with pytest.raises(ValidationError):
+        ResumeTurnRequest.model_validate(
+            {"decision": CheckpointDecision.CONTINUE.value, "excluded_run_ids": ["a"]}
+        )
 
 
 def _unfulfilled_adjust_facts(*, note: str = "人太多") -> list[dict]:
@@ -457,7 +299,7 @@ async def test_drive_preview_mlr_preauth_still_hangs_on_unfulfilled_adjust():
     real = tool(Provider([]))
     real._depth = 0
     real._pending_pause = False
-    real._active_playbook = "multi_lens_research"
+    real._active_playbook = "lens_crosscheck"
     real._permission_axes = recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT)
 
     plan = RunPlan(
@@ -499,7 +341,7 @@ async def test_drive_preview_mlr_preauth_skips_when_adjust_fulfilled():
     real = tool(Provider([]))
     real._depth = 0
     real._pending_pause = False
-    real._active_playbook = "multi_lens_research"
+    real._active_playbook = "lens_crosscheck"
     real._permission_axes = recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT)
 
     plan = RunPlan(

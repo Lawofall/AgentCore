@@ -110,12 +110,12 @@ describe("submitInteraction path table", () => {
     expect(store().get("cp1")?.status).toBe("resolved");
   });
 
-  it("cold path after recovery: no interactions entry still calls runResume (team_preview)", async () => {
+  it("cold path after recovery: no interactions entry still calls runResume (plan_review)", async () => {
     // Recovery clears cold pending_interactions; pausedTurns is the authority.
-    expect(store().get("tp1")).toBeUndefined();
+    expect(store().get("pr1")).toBeUndefined();
     const result = await submitInteraction({
-      id: "tp1",
-      kind: "team_preview",
+      id: "pr1",
+      kind: "plan_review",
       conversationId: "c1",
       cold: {
         messageId: "srv-m1",
@@ -131,7 +131,7 @@ describe("submitInteraction path table", () => {
       undefined,
       { conversationId: "c1" },
     );
-    expect(store().get("tp1")?.status).toBe("resolved");
+    expect(store().get("pr1")?.status).toBe("resolved");
   });
 
   it("cold path after recovery: ask_user without interactions entry still resumes", async () => {
@@ -163,15 +163,15 @@ describe("submitInteraction path table", () => {
     );
     await expect(
       submitInteraction({
-        id: "tp1",
-        kind: "team_preview",
+        id: "pr1",
+        kind: "plan_review",
         conversationId: "c1",
         cold: { messageId: "srv-m1", decision: "continue", note: "" },
       }),
     ).rejects.toThrow(/sidecar unavailable/);
     // Stub from markResolved must not appear — failure left no resolved entry,
     // or if a prior pending existed it would reopen. Here there was none.
-    expect(store().get("tp1")).toBeUndefined();
+    expect(store().get("pr1")).toBeUndefined();
   });
 
   it("cold path: tracked entry reopens on runResume failure (no fake resolved)", async () => {
@@ -284,14 +284,14 @@ describe("submitInteraction path table", () => {
     resumeMock.mockResolvedValueOnce(undefined);
 
     const first = submitInteraction({
-      id: "tp1",
-      kind: "team_preview",
+      id: "pr1",
+      kind: "plan_review",
       conversationId: "c1",
       cold: { messageId: "srv-m1", decision: "continue", note: "" },
     });
     const second = await submitInteraction({
-      id: "tp1",
-      kind: "team_preview",
+      id: "pr1",
+      kind: "plan_review",
       conversationId: "c1",
       cold: { messageId: "srv-m1", decision: "continue", note: "" },
     });

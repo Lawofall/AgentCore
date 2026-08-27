@@ -31,7 +31,6 @@ import {
 import { useFolders } from "@/hooks/useFolders";
 import {
   DELETE_CONVERSATION_LABEL,
-  deleteConversationConfirmLabel,
   notifyConversationDeleted,
 } from "@/lib/conversationDeleteCopy";
 import { buildMessagePreview } from "@/lib/conversationListPreview";
@@ -55,14 +54,13 @@ import {
 } from "@/stores/conversation";
 import {
   isAwaitingUserEntry,
-  isRetiredKickoffKind,
+  isColdResumeKind,
   useInteractionStore,
 } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useShareStore } from "@/stores/share";
 import {
   Archive,
-  Check,
   Copy,
   Download,
   FileJson,
@@ -72,7 +70,6 @@ import {
   PinOff,
   Share2,
   Trash2,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -113,7 +110,6 @@ export function ConversationItem({
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [draft, setDraft] = useState(conversation.title);
   const inputRef = useRef<HTMLInputElement>(null);
   const skipBlurRef = useRef(false);
@@ -142,7 +138,7 @@ export function ConversationItem({
   );
   const cloudRunning = useConversationCloudRunning(conversation.id);
   // 「等你」灯（前端UX设计.md §对话列表状态点）：热阻塞交互（审批 / 授权 / 升级拍板，
-  // CEO 仲裁除外）+ 可操作暂停帧（途中提问 / 计划复核）都算等用户。leftover 开工卡不算。
+  // CEO 仲裁除外）+ 可操作暂停帧（途中提问 / 计划复核）都算等用户。
   const awaitingInteraction = useInteractionStore((s) =>
     [...s.byId.values()].some(
       (e) => e.conversationId === conversation.id && isAwaitingUserEntry(e),
@@ -150,8 +146,7 @@ export function ConversationItem({
   );
   const awaitingResume = usePausedTurnStore((s) =>
     s.pending.some(
-      (p) =>
-        p.conversationId === conversation.id && !isRetiredKickoffKind(p.kind),
+      (p) => p.conversationId === conversation.id && isColdResumeKind(p.kind),
     ),
   );
   // 上面两个只看得见**本端流过**的对话。firehose 的 `ai_attention` 补上另一端起的回合
@@ -159,11 +154,7 @@ export function ConversationItem({
   const awaitingAttention = useConversationAwaitingAttention(conversation.id);
   const navigate = useNavigate();
   const isActive = conversation.id === currentId;
-  const currentFolderId = conversation.folderId ?? null;
-  const showRowActions = hovered || confirmingDelete || moreOpen;
-  const deleteConfirmLabel = deleteConversationConfirmLabel(
-    currentFolderId ? "folder" : undefined,
-  );
+  const showRowActions = hovered || moreOpen;
 
   // 等你灯 > 云 running > 本端 isGenerating。sidecar / 本地容器忽略云 running，
   // 免得本机引擎对话被账号级集合再点一次灯。
@@ -175,7 +166,7 @@ export function ConversationItem({
     localContainerRootId: conversation.localContainerRootId,
   });
 
-  const suppressPreview = moreOpen || confirmingDelete || contextMenuOpen;
+  const suppressPreview = moreOpen || contextMenuOpen;
   const messagePreview = useMemo(
     () => buildMessagePreview(conversation.lastMessagePreview, cachedMessages),
     [conversation.lastMessagePreview, cachedMessages],
@@ -212,7 +203,6 @@ export function ConversationItem({
   }, [editing]);
 
   const startEdit = () => {
-    setConfirmingDelete(false);
     setDraft(conversation.title);
     setEditing(true);
   };
@@ -228,7 +218,7 @@ export function ConversationItem({
   };
 
   const handleDelete = async () => {
-    setConfirmingDelete(false);
+    setMoreOpen(false);
     const wasActive = conversation.id === currentId;
     const title = conversation.title;
     try {
@@ -297,11 +287,6 @@ export function ConversationItem({
     }
   };
 
-  const requestDelete = () => {
-    setMoreOpen(false);
-    setConfirmingDelete(true);
-  };
-
   const openConversation = () => {
     switchConversation(conversation.id);
     navigate(`/conversations/${conversation.id}`);
@@ -342,12 +327,7 @@ export function ConversationItem({
   }
 
   return (
-    <ContextMenu
-      onOpenChange={(open) => {
-        setContextMenuOpen(open);
-        if (open) setConfirmingDelete(false);
-      }}
-    >
+    <ContextMenu onOpenChange={setContextMenuOpen}>
       <Tooltip
         open={previewVisible}
         onOpenChange={(open) => {
@@ -375,7 +355,6 @@ export function ConversationItem({
                 setHovered(false);
                 clearPreviewTimer();
                 setPreviewVisible(false);
-                if (!moreOpen) setConfirmingDelete(false);
               }}
             >
               {/* biome-ignore lint/a11y/useSemanticElements: 行内另有 DropdownMenuTrigger 的真 <button>，此可点击区不可套 <button>。 */}
@@ -422,36 +401,7 @@ export function ConversationItem({
                   {conversation.title}
                 </span>
               </div>
-              {confirmingDelete ? (
-                <span className="flex shrink-0 items-center gap-0.5">
-                  <SimpleTooltip label={deleteConfirmLabel}>
-                    <IconButton
-                      tone="sidebar"
-                      aria-label={deleteConfirmLabel}
-                      className="size-6 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleDelete();
-                      }}
-                    >
-                      <Check size={13} />
-                    </IconButton>
-                  </SimpleTooltip>
-                  <SimpleTooltip label="取消">
-                    <IconButton
-                      tone="sidebar"
-                      aria-label="取消"
-                      className={rowActionClass}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmingDelete(false);
-                      }}
-                    >
-                      <X size={13} />
-                    </IconButton>
-                  </SimpleTooltip>
-                </span>
-              ) : showRowActions ? (
+              {showRowActions ? (
                 <span className="flex shrink-0 items-center gap-0.5">
                   <SimpleTooltip label="重命名">
                     <IconButton
@@ -534,7 +484,7 @@ export function ConversationItem({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="danger"
-                        onSelect={requestDelete}
+                        onSelect={() => void handleDelete()}
                       >
                         <Trash2 size={14} className="shrink-0" />
                         <span className="flex-1 truncate">
@@ -614,7 +564,7 @@ export function ConversationItem({
           <span className="flex-1 truncate">导出 JSON</span>
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem variant="danger" onSelect={requestDelete}>
+        <ContextMenuItem variant="danger" onSelect={() => void handleDelete()}>
           <Trash2 size={14} className="shrink-0" />
           <span className="flex-1 truncate">{DELETE_CONVERSATION_LABEL}</span>
         </ContextMenuItem>

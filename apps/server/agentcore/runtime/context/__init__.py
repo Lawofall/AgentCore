@@ -17,6 +17,7 @@ from agentcore.runtime.context.contributor import PromptContributor, SectionOrde
 from agentcore.runtime.context.folder_catalog import (
     FolderCatalogEntry,
     build_folder_catalog_entries,
+    catalog_label_for,
     load_folder_catalog,
     render_folder_catalog,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "build_artifact_format_line",
     "collect_outlet_inventory",
     "build_folder_catalog_entries",
+    "catalog_label_for",
     "build_workspace_context",
     "format_artifact_capability_line",
     "build_workspace_overview",

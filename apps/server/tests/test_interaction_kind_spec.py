@@ -31,14 +31,10 @@ def test_specs_cover_every_user_facing_kind() -> None:
 
 def test_derived_behavior_sets_match_declared_flags() -> None:
     assert frozenset({"approval", "escalation"}) == HOT_KINDS
-    assert frozenset({"approval", "ask_user", "plan_review", "team_preview"}) == GATE_KINDS
+    assert frozenset({"approval", "ask_user", "plan_review"}) == GATE_KINDS
     assert frozenset({"approval", "escalation", "stage_card"}) == RECOVERY_PENDING_KINDS
-    assert frozenset(
-        {"approval", "escalation", "ask_user", "plan_review", "team_preview"}
-    ) == ATTENTION_KINDS
-    assert frozenset(
-        {InteractionKind.ASK_USER, InteractionKind.PLAN_REVIEW, InteractionKind.TEAM_PREVIEW}
-    ) == DURABLE_INTERACTION_KINDS
+    assert frozenset({"approval", "escalation", "ask_user", "plan_review"}) == ATTENTION_KINDS
+    assert frozenset({InteractionKind.ASK_USER, InteractionKind.PLAN_REVIEW}) == DURABLE_INTERACTION_KINDS
     assert SUSPENSION_DURABLE is DURABLE_INTERACTION_KINDS
 
 
@@ -57,7 +53,6 @@ def test_settlement_event_kinds_are_derived_from_specs() -> None:
             EventType.ESCALATION_RESOLVED.value,
             EventType.CHECKPOINT_RESOLVED.value,
             EventType.PLAN_REVIEW_RESOLVED.value,
-            "team_preview_resolved",
             EventType.STAGE_CARD_REQUIRED.value,
             EventType.STAGE_CARD_RESOLVED.value,
             EventType.INTERACTION_ORPHANED.value,

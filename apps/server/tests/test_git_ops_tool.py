@@ -203,6 +203,8 @@ def test_forbidden_patterns_disjoint_from_allowlist():
     assert "pull" in git_write_subcommands()
     assert "create_pr" in _ALLOWED_SUBCOMMANDS
     assert "create_pr" in git_write_subcommands()
+    assert "clone" in _ALLOWED_SUBCOMMANDS
+    assert "clone" in git_write_subcommands()
     assert "fetch" in _ALLOWED_SUBCOMMANDS
     assert "fetch" not in git_write_subcommands()
     assert {"show", "blame"} <= _ALLOWED_SUBCOMMANDS
@@ -235,7 +237,7 @@ async def test_unknown_subcommand_rejected(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "subcommand",
-    sorted(s for s in git_write_subcommands() if s != "init_baseline"),
+    sorted(s for s in git_write_subcommands() if s not in {"init_baseline", "clone"}),
 )
 async def test_ceo_context_rejects_all_write_subcommands(tmp_path: Path, subcommand: str):
     _init_repo(tmp_path / "repo")
@@ -1194,6 +1196,7 @@ def test_git_tool_timeout_outlives_inner_ops():
     merge_ceiling = git_tool_timeout_seconds({"subcommand": "merge"})
     pull_ceiling = git_tool_timeout_seconds({"subcommand": "pull"})
     fetch_ceiling = git_tool_timeout_seconds({"subcommand": "fetch"})
+    clone_ceiling = git_tool_timeout_seconds({"subcommand": "clone"})
     push_ceiling = git_tool_timeout_seconds({"subcommand": "push"})
     pr_ceiling = git_tool_timeout_seconds({"subcommand": "create_pr"})
     baseline_ceiling = git_tool_timeout_seconds({"subcommand": "init_baseline"})
@@ -1210,6 +1213,8 @@ def test_git_tool_timeout_outlives_inner_ops():
     assert fetch_ceiling == (
         _GIT_TIMEOUT + _GIT_CREDENTIAL_TIMEOUT + _GIT_NETWORK_TIMEOUT + _GIT_KILL_SLACK
     )
+    # clone matches fetch: PAT + network, no index.lock (new dest tree).
+    assert clone_ceiling == fetch_ceiling
     assert pull_ceiling == fetch_ceiling + _GIT_REPO_LOCK_WAIT
     # push never takes index.lock — it stays out of the queue and off its budget.
     assert push_ceiling == (
@@ -1355,6 +1360,17 @@ async def test_engine_ceiling_outlives_measured_inner_budget(
     (fresh / "app.py").write_text("print('hi')\n", encoding="utf-8")
 
     ledger = _budget_probe(monkeypatch)
+    from agentcore.tools.builtin.git_ops import cmds_remote as cmds_remote_mod
+
+    async def _skip_clone_url_policy(_url: str, _start: float):
+        return None
+
+    monkeypatch.setattr(
+        cmds_remote_mod, "_clone_url_policy_error", _skip_clone_url_policy
+    )
+    clone_src = _init_repo(tmp_path / "clone_src")
+    clone_ws = tmp_path / "clone_ws"
+    clone_ws.mkdir()
     cases: list[tuple[dict[str, Any], Path, bool, bool]] = [
         ({"subcommand": "status"}, repo, False, False),
         ({"subcommand": "add", "paths": ["extra.txt"]}, repo, False, True),
@@ -1364,6 +1380,12 @@ async def test_engine_ceiling_outlives_measured_inner_budget(
         ({"subcommand": "fetch", "remote": "origin"}, repo, True, False),
         ({"subcommand": "pull", "remote": "origin"}, repo, True, True),
         ({"subcommand": "init_baseline"}, fresh, False, True),
+        (
+            {"subcommand": "clone", "url": clone_src.as_uri()},
+            clone_ws,
+            True,
+            False,
+        ),
     ]
     for args, workspace, wants_credential, wants_repo_lock in cases:
         ledger.clear()
@@ -1485,6 +1507,7 @@ _PHASE_BY_OP: dict[str, str | None] = {
     "git:push": PHASE_REMOTE,
     "git:pull": PHASE_REMOTE,
     "git:fetch": PHASE_REMOTE,
+    "git:clone": PHASE_REMOTE,
 }
 
 
@@ -1594,6 +1617,17 @@ async def test_phases_name_the_leg_that_is_actually_running(
     (fresh / "app.py").write_text("print('hi')\n", encoding="utf-8")
 
     remote_leg = [PHASE_LOCAL, PHASE_CREDENTIALS, PHASE_REMOTE]
+    from agentcore.tools.builtin.git_ops import cmds_remote as cmds_remote_mod
+
+    async def _skip_clone_url_policy(_url: str, _start: float):
+        return None
+
+    monkeypatch.setattr(
+        cmds_remote_mod, "_clone_url_policy_error", _skip_clone_url_policy
+    )
+    clone_src = _init_repo(tmp_path / "clone_src")
+    clone_ws = tmp_path / "clone_ws"
+    clone_ws.mkdir()
     cases: list[tuple[dict[str, Any], Path, list[str]]] = [
         ({"subcommand": "status"}, repo, [PHASE_LOCAL]),
         ({"subcommand": "add", "paths": ["extra.txt"]}, repo, [PHASE_LOCAL]),
@@ -1602,6 +1636,11 @@ async def test_phases_name_the_leg_that_is_actually_running(
         ({"subcommand": "fetch", "remote": "origin"}, repo, remote_leg),
         ({"subcommand": "pull", "remote": "origin"}, repo, remote_leg),
         ({"subcommand": "push", "remote": "origin"}, repo, remote_leg),
+        (
+            {"subcommand": "clone", "url": clone_src.as_uri()},
+            clone_ws,
+            remote_leg,
+        ),
     ]
     watch = _phase_probe(monkeypatch)
     for args, workspace, expected in cases:
@@ -1766,7 +1805,7 @@ def test_repo_lock_covers_exactly_the_index_writers():
         assert git_call_needs_repo_lock({"subcommand": sub}) is True, sub
     # Writes that never take index.lock keep their concurrency — push's remote round
     # trip must not park a sibling commit behind a minute of network.
-    for sub in ("push", "create_pr", "branch"):
+    for sub in ("push", "create_pr", "branch", "clone"):
         assert git_call_needs_repo_lock({"subcommand": sub}) is False, sub
     for sub in ("status", "diff", "log", "fetch", "show", "blame"):
         assert git_call_needs_repo_lock({"subcommand": sub}) is False, sub
@@ -2036,6 +2075,170 @@ async def test_init_baseline_clean_existing_repo_reports_already(tmp_path: Path)
 def test_init_baseline_in_write_allowlist():
     assert "init_baseline" in _ALLOWED_SUBCOMMANDS
     assert "init_baseline" in git_write_subcommands()
+
+
+# --- clone (G3 Agent shallow clone under tool cwd) ---
+
+
+def _patch_clone_url_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hermetic clones use file://; skip http(s)/GitHub/SSRF for the spawn path."""
+    from agentcore.tools.builtin.git_ops import cmds_remote as cmds_remote_mod
+
+    async def _skip(_url: str, _start: float):
+        return None
+
+    monkeypatch.setattr(cmds_remote_mod, "_clone_url_policy_error", _skip)
+
+
+def test_clone_in_allowlist_ceo_exception_and_budget():
+    from agentcore.core.types import ToolApproval
+    from agentcore.runtime.always_confirm import requires_always_confirm
+    from agentcore.runtime.approvals import tool_call_requires_approval
+    from agentcore.tools.builtin.git_ops import (
+        _CEO_ALLOWED_WRITE_SUBCOMMANDS,
+        GIT_TOOL_PARAMETERS,
+        git_call_is_write,
+        git_call_needs_repo_lock,
+        git_tool_timeout_seconds,
+    )
+
+    assert "clone" in _ALLOWED_SUBCOMMANDS
+    assert "clone" in git_write_subcommands()
+    assert "clone" in _CEO_ALLOWED_WRITE_SUBCOMMANDS
+    assert "clone" in GIT_TOOL_PARAMETERS["properties"]["subcommand"]["enum"]
+    assert git_call_is_write({"subcommand": "clone"}) is True
+    assert git_call_needs_repo_lock({"subcommand": "clone"}) is False
+    clone_args = {"subcommand": "clone", "url": "https://github.com/o/r.git"}
+    assert tool_call_requires_approval("git", ToolApproval.NEVER, clone_args) is True
+    assert requires_always_confirm("git", clone_args) is False
+    assert git_tool_timeout_seconds({"subcommand": "clone"}) == git_tool_timeout_seconds(
+        {"subcommand": "fetch"}
+    )
+
+
+def test_clone_schema_has_no_password_params():
+    from agentcore.tools.builtin.git_ops import GIT_TOOL_PARAMETERS
+
+    props = GIT_TOOL_PARAMETERS["properties"]
+    forbidden = {"password", "token", "pat", "credential", "access_token", "secret"}
+    assert forbidden.isdisjoint(props)
+    assert "dest" in props
+    assert "clone" in props["subcommand"]["enum"]
+
+
+async def test_clone_rejects_password_argument(tmp_path: Path):
+    result = await GitTool().execute(
+        {
+            "subcommand": "clone",
+            "url": "https://github.com/acme/demo.git",
+            "password": "s3cret",
+        },
+        _ceo_ctx(tmp_path),
+    )
+    assert result.success is False
+    assert "密码" in (result.error or "") or "凭据" in (result.error or "")
+
+
+async def test_clone_rejects_ssrf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    from agentcore.core.net import URLBlock
+    from agentcore.workspace import git as gitmod
+
+    async def _blocked(_url: str):
+        return URLBlock.BLOCKED_HOST
+
+    monkeypatch.setattr(gitmod, "classify_url", _blocked)
+    spawned: list[list[str]] = []
+
+    async def _refuse_git(args: list[str], **_kwargs: Any):
+        spawned.append(list(args))
+        raise AssertionError(f"SSRF must not spawn git: {args}")
+
+    from agentcore.tools.builtin.git_ops import spawn as spawn_mod
+
+    monkeypatch.setattr(spawn_mod, "_run_git", _refuse_git)
+    result = await GitTool().execute(
+        {"subcommand": "clone", "url": "https://github.com/owner/repo.git"},
+        _ceo_ctx(tmp_path),
+    )
+    assert result.success is False
+    assert spawned == []
+    err = result.error or ""
+    assert "本地" in err or "内网" in err or "保留" in err
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ssh://git@github.com/x/y.git",
+        "git@github.com:x/y.git",
+        "https://gitlab.com/x/y.git",
+        "https://example.com/x/y.git",
+    ],
+)
+async def test_clone_rejects_non_github_and_non_http(tmp_path: Path, url: str):
+    result = await GitTool().execute(
+        {"subcommand": "clone", "url": url}, _ceo_ctx(tmp_path)
+    )
+    assert result.success is False
+    err = result.error or ""
+    assert "http(s)" in err or "GitHub" in err
+
+
+async def test_clone_empty_dest_shallow_succeeds_as_ceo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _patch_clone_url_policy(monkeypatch)
+    src = _init_repo(tmp_path / "demo")
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    result = await GitTool().execute(
+        {"subcommand": "clone", "url": src.as_uri()},
+        _ceo_ctx(ws),
+    )
+    assert result.success is True, result.error
+    cloned = ws / "demo"
+    assert (cloned / ".git").exists()
+    text = (cloned / "README.md").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert text == "hello\n"
+    shallow = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=cloned,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=_GIT_ENV,
+    )
+    assert shallow.stdout.strip() == "true"
+    assert result.metadata.get("shallow") is True
+    assert result.metadata.get("dest") == "demo"
+
+
+async def test_clone_rejects_nonempty_dest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _patch_clone_url_policy(monkeypatch)
+    src = _init_repo(tmp_path / "demo")
+    ws = tmp_path / "ws"
+    (ws / "demo").mkdir(parents=True)
+    (ws / "demo" / "f.txt").write_text("occupied\n", encoding="utf-8")
+    spawned: list[list[str]] = []
+
+    async def _refuse_git(args: list[str], **_kwargs: Any):
+        spawned.append(list(args))
+        raise AssertionError(f"nonempty dest must not spawn git: {args}")
+
+    from agentcore.tools.builtin.git_ops import spawn as spawn_mod
+
+    monkeypatch.setattr(spawn_mod, "_run_git", _refuse_git)
+    result = await GitTool().execute(
+        {"subcommand": "clone", "url": src.as_uri()},
+        _ceo_ctx(ws),
+    )
+    assert result.success is False
+    assert spawned == []
+    assert "非空" in (result.error or "")
 
 
 # --- G2 collaboration: stash / merge / rebase / cherry-pick / tag / remote ---

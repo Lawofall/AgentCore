@@ -10,7 +10,7 @@ layer that makes that pause **durable**: a frozen frame carrying everything
 
 Two suspend points are persisted, sharing one frame via a ``kind`` discriminated
 union (base :class:`TurnSuspension` + :class:`PlanReviewSuspension` /
-:class:`AskUserSuspension` / :class:`TeamPreviewSuspension`):
+:class:`AskUserSuspension`):
 
 - **plan_review** — the ``WaveScheduler`` paused at a wave boundary after a
   ``checkpoint_after`` step (inside ``delegate``). Resume re-drives the remaining
@@ -19,11 +19,6 @@ union (base :class:`TurnSuspension` + :class:`PlanReviewSuspension` /
   ``pending`` (display re-render): the ``plan`` (with minted run_ids) and the
   finished-worker ``completed`` seed are BOTH re-projected from the journal on resume
   (``plan_from_journal`` / ``completed_from_journal``), not serialized — 执行级事件溯源 Phase 2.
-- **team_preview** — orchestration kickoff gate paused BEFORE fan-out /
-  moderator start (``delegate`` workers or ``debate`` loop). Resume branches on
-  ``primitive``: delegate uses ``delegate.resume_plan``; debate re-enters
-  ``DebateTool.execute`` (skip kickoff). Carries workers (delegate) or
-  motion/sides/budget (debate) plus optional capability ``tools``.
 - **ask_user** — the CEO paused mid-loop on its ``ask_user`` checkpoint (the one
   asking primitive — opening 引导 or mid-task fork). Resume maps the user's answer
   to the ``ask_user`` tool result and continues the CEO loop (no plan tail). Carries
@@ -122,13 +117,12 @@ turn_evidence_ledger: ContextVar[Any | None] = ContextVar("turn_evidence_ledger"
 class SuspensionKind(StrEnum):
     """Which suspend point a durable frame captured (the JSON discriminator).
 
-    Interaction kinds (plan_review / ask_user / team_preview) mirror
+    Interaction kinds (plan_review / ask_user) mirror
     :data:`DURABLE_INTERACTION_KINDS`.
     """
 
     PLAN_REVIEW = InteractionKind.PLAN_REVIEW.value
     ASK_USER = InteractionKind.ASK_USER.value
-    TEAM_PREVIEW = InteractionKind.TEAM_PREVIEW.value
 
 
 @dataclass(kw_only=True)
@@ -342,53 +336,6 @@ class PlanReviewSuspension(TurnSuspension):
 
 
 @dataclass(kw_only=True)
-class TeamPreviewSuspension(TurnSuspension):
-    """A turn frozen at the kickoff gate (开工卡) — plan + capability auth before fan-out.
-
-    Shared by leftover ``delegate`` / ``debate`` frames for journal fold.
-    Resume of this kind fails honestly (开工卡已退役). ``plan`` / ``completed``
-    are in-memory carriers only for deserialize.
-    """
-
-    kind: ClassVar[SuspensionKind] = SuspensionKind.TEAM_PREVIEW
-
-    plan: RunPlan
-    completed: dict[str, RunState] = field(default_factory=dict)
-    # Upcoming workers the user is confirming ({run_id, role, task, depends_on}).
-    workers: list[dict[str, Any]] = field(default_factory=list)
-    # Execution-class tools the kickoff grant covers（将授权的执行能力；文件类由会话档信任）.
-    tools: list[str] = field(default_factory=list)
-    # Orchestration primitive discriminant (delegate | debate).
-    primitive: str = "delegate"
-    # Debate card fields (empty for delegate).
-    motion: str = ""
-    form: str = ""
-    sides: list[dict[str, Any]] = field(default_factory=list)
-    max_rounds: int = 0
-    thorough: bool = True
-    # Resume blob for debate.execute (motion/form/sides/thorough).
-    debate_arguments: dict[str, Any] = field(default_factory=dict)
-    # 主文案（交付档 + 人数）；缺省空 = 旧帧兼容。
-    headline: str = ""
-    # 修订谱系（与 team_preview_required 同名字段）；旧帧 revision 缺省 1。
-    revision: int = 1
-    revised_from: str = ""
-    revision_note: str = ""
-    # 委派批次协作参数：开工卡挂在 setup_note_wall **之前**，coordination / team_brief /
-    # seed_notes 此刻只活在 DelegateTool 实例上（未上墙、未进 journal）。耐久恢复走全新
-    # 工具实例（_coordination 缺省 "none"），不随帧回灌则 wall 批降级为 none —— worker 被
-    # 剥掉便签三件套、CEO 预贴便签永久丢失（2026-07-20 P2 手驱真跑抓获）。debate 帧恒缺省。
-    coordination: str = "none"
-    team_brief: str | None = None
-    seed_notes: list[dict[str, str]] = field(default_factory=list)
-
-    @property
-    def checkpoint_run_ids(self) -> set[str]:
-        """Empty roots → ``apply_steer`` targets every not-yet-run node (all workers)."""
-        return set()
-
-
-@dataclass(kw_only=True)
 class AskUserSuspension(TurnSuspension):
     """A turn frozen at the CEO's ``ask_user`` checkpoint — the CEO-loop resume substrate.
 
@@ -411,14 +358,6 @@ class AskUserSuspension(TurnSuspension):
     browser_login: bool = False
 
 
-def _revision_from_frame(raw: Any) -> int:
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return 1
-    return value if value >= 1 else 1
-
-
 # ---------------------------------------------------------------------------
 # Per-kind codec registry (S2) — single site for frame extras + wire summary.
 # Adding an Interaction durable kind: set ``pauses_turn and not hot`` on the spec,
@@ -431,14 +370,6 @@ def _revision_from_frame(raw: Any) -> int:
 _EMPTY_SUMMARY_EXTRAS: dict[str, Any] = {
     "steps": [],
     "pending": [],
-    "workers": [],
-    "tools": [],
-    "primitive": "delegate",
-    "motion": "",
-    "form": "",
-    "sides": [],
-    "max_rounds": 0,
-    "thorough": True,
     "question": "",
     "assumptions": [],
     "questions": [],
@@ -499,83 +430,6 @@ def _plan_review_summary_extras(s: TurnSuspension) -> dict[str, Any]:
     return out
 
 
-def _team_preview_frame_extras(s: TurnSuspension) -> dict[str, Any]:
-    assert isinstance(s, TeamPreviewSuspension)
-    extras: dict[str, Any] = {
-        "workers": list(s.workers),
-        "tools": list(s.tools),
-        "primitive": s.primitive,
-        "motion": s.motion,
-        "form": s.form,
-        "sides": list(s.sides),
-        "max_rounds": s.max_rounds,
-        "thorough": s.thorough,
-        "debate_arguments": dict(s.debate_arguments),
-    }
-    if s.headline:
-        extras["headline"] = s.headline
-    extras["revision"] = s.revision if s.revision >= 1 else 1
-    if s.revised_from:
-        extras["revised_from"] = s.revised_from
-    if s.revision_note:
-        extras["revision_note"] = s.revision_note
-    # 委派批次协作参数（见类注释）：非缺省才落帧，旧帧读回走缺省。
-    if s.coordination != "none":
-        extras["coordination"] = s.coordination
-    if s.team_brief:
-        extras["team_brief"] = s.team_brief
-    if s.seed_notes:
-        extras["seed_notes"] = [dict(n) for n in s.seed_notes]
-    return extras
-
-
-def _team_preview_from_extras(data: dict[str, Any]) -> dict[str, Any]:
-    from agentcore.runtime.runs.serialize import plan_from_json
-
-    return {
-        "plan": plan_from_json({}),
-        "workers": list(data.get("workers") or []),
-        "tools": list(data.get("tools") or []),
-        "primitive": data.get("primitive") or "delegate",
-        "motion": data.get("motion") or "",
-        "form": data.get("form") or "",
-        "sides": list(data.get("sides") or []),
-        "max_rounds": int(data.get("max_rounds") or 0),
-        "thorough": bool(data.get("thorough", True)),
-        "debate_arguments": dict(data.get("debate_arguments") or {}),
-        "headline": str(data.get("headline") or ""),
-        "revision": _revision_from_frame(data.get("revision")),
-        "revised_from": str(data.get("revised_from") or ""),
-        "revision_note": str(data.get("revision_note") or ""),
-        "coordination": str(data.get("coordination") or "none"),
-        "team_brief": data.get("team_brief") or None,
-        "seed_notes": list(data.get("seed_notes") or []),
-    }
-
-
-def _team_preview_summary_extras(s: TurnSuspension) -> dict[str, Any]:
-    assert isinstance(s, TeamPreviewSuspension)
-    out: dict[str, Any] = {
-        **_EMPTY_SUMMARY_EXTRAS,
-        "workers": list(s.workers),
-        "tools": list(s.tools),
-        "primitive": s.primitive,
-        "motion": s.motion,
-        "form": s.form,
-        "sides": list(s.sides),
-        "max_rounds": s.max_rounds,
-        "thorough": s.thorough,
-    }
-    if s.headline:
-        out["headline"] = s.headline
-    out["revision"] = s.revision if s.revision >= 1 else 1
-    if s.revised_from:
-        out["revised_from"] = s.revised_from
-    if s.revision_note:
-        out["revision_note"] = s.revision_note
-    return out
-
-
 def _ask_user_frame_extras(s: TurnSuspension) -> dict[str, Any]:
     assert isinstance(s, AskUserSuspension)
     extras: dict[str, Any] = {
@@ -626,13 +480,6 @@ SUSPENSION_KIND_CODECS: Mapping[SuspensionKind, SuspensionKindCodec] = {
         from_extras=_ask_user_from_extras,
         summary_extras=_ask_user_summary_extras,
     ),
-    SuspensionKind.TEAM_PREVIEW: SuspensionKindCodec(
-        kind=SuspensionKind.TEAM_PREVIEW,
-        cls=TeamPreviewSuspension,
-        frame_extras=_team_preview_frame_extras,
-        from_extras=_team_preview_from_extras,
-        summary_extras=_team_preview_summary_extras,
-    ),
 }
 
 
@@ -657,8 +504,15 @@ def suspension_paused_summary(suspension: TurnSuspension) -> dict[str, Any]:
 
 
 def suspension_from_json(data: dict[str, Any]) -> TurnSuspension:
-    """Rebuild the right :class:`TurnSuspension` subclass from a stored frame dict."""
+    """Rebuild the right :class:`TurnSuspension` subclass from a stored frame dict.
+
+    Leftover ``kind=team_preview`` frames raise :class:`~agentcore.core.errors.GoneError`
+    (开工卡已退役) — no live subclass / codec.
+    """
     data = dict(data or {})
+    from agentcore.runtime.kickoff.retired import refuse_if_leftover_team_preview
+
+    refuse_if_leftover_team_preview(data)
     kind_raw = data.get("kind")
     try:
         kind = SuspensionKind(kind_raw)

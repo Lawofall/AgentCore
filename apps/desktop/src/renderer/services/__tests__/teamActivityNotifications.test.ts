@@ -43,14 +43,6 @@ function resume(
     userMessageId: "u1",
     steps: [],
     pending: [],
-    workers: [],
-    tools: [],
-    primitive: "delegate",
-    motion: "",
-    form: "",
-    sides: [],
-    maxRounds: 0,
-    thorough: true,
     question: "",
     assumptions: [],
     questions: [],
@@ -260,7 +252,9 @@ describe("startTeamActivityNotifications", () => {
     setGenerating(CID, true);
     usePausedTurnStore
       .getState()
-      .addLiveResume(resume({ kind: "team_preview", checkpointId: "cp-tp" }));
+      .addLiveResume(
+        resume({ kind: "team_preview" as never, checkpointId: "cp-tp" }),
+      );
     setGenerating(CID, false);
 
     await Promise.resolve();
@@ -492,14 +486,18 @@ describe("startTeamActivityNotifications", () => {
     stop();
     usePausedTurnStore
       .getState()
-      .addLiveResume(resume({ kind: "team_preview", checkpointId: "cp-seed" }));
+      .addLiveResume(
+        resume({ kind: "team_preview" as never, checkpointId: "cp-seed" }),
+      );
     stop = startTeamActivityNotifications();
     notifyInfoMock.mockClear();
 
     // Re-add same checkpoint (idempotent replace) — must not re-toast
     usePausedTurnStore
       .getState()
-      .addLiveResume(resume({ kind: "team_preview", checkpointId: "cp-seed" }));
+      .addLiveResume(
+        resume({ kind: "team_preview" as never, checkpointId: "cp-seed" }),
+      );
     expect(notifyInfoMock).not.toHaveBeenCalled();
   });
 });

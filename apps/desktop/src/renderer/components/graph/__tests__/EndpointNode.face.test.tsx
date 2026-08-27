@@ -50,7 +50,7 @@ describe("EndpointNodeFace · whiteboard slot", () => {
     expect(card.style.width).toBe(`${NODE_WIDTH}px`);
     expect(card.style.height).toBe(`${NODE_HEIGHT}px`);
     expect(screen.getByTestId("captain-sink-label").textContent).toBe(
-      "正在生成汇总…",
+      "正在收尾…",
     );
     expect(screen.getByTestId("captain-sink-preview").textContent).toBe(
       "等待「协作图渲染链路审计员」(0/1)",

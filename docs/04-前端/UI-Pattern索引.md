@@ -32,7 +32,7 @@ skip_if:
 | PatternCardHeader | 后台任务卡头 | `BackgroundTaskCard.tsx` |
 | SurfaceRow | 侧栏/文件树/对话管理/设置导航 | `SurfaceRow*` |
 | ToolLine | 过程工具行 | `ToolLine` |
-| PanelShell | 右坞；Web 应用内浮窗（B）；桌面真 OS 窗（C） | `SidePanel` / `FloatingPanelShell` + `SidePanelFloatHost`；真窗 `DesktopFloatWindowBridge` + `FloatWindowPage`（`#/float?cid&tab`） |
+| PanelShell | 右坞；Web 应用内浮窗；桌面真 OS 窗 | `SidePanel` / `FloatingPanelShell` + `SidePanelFloatHost`；真窗 `DesktopFloatWindowBridge` + `FloatWindowPage`（`#/float?cid&tab`） |
 | SearchField / *SearchTrigger | 筛选 / 全局入口 | → CommandPalette |
 | BrandMark | 登录/TitleBar/侧栏/关于 | `brand/BrandMark.tsx`（仅 Latin `font-brand`） |
 

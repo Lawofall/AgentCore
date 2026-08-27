@@ -413,3 +413,106 @@ async def test_regenerate_forwards_stored_agent_mentions(monkeypatch):
 
     assert captured
     assert captured[0]["agent_mentions"] == mentions
+
+
+@pytest.mark.asyncio
+async def test_regenerate_replaces_agent_mentions_when_edit_sends_empty(monkeypatch):
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from agentcore.api.sse import EventSink
+    from agentcore.conversation import turns as turns_mod
+    from agentcore.core.types import AutonomyPolicy, recipe_to_axes
+
+    captured: list[dict] = []
+    updates: list[dict] = []
+    mentions = [{"agent_id": "w1", "role": "写手"}]
+
+    class _FakeSessionCM:
+        async def __aenter__(self):
+            return SimpleNamespace(expire_all=lambda: None, commit=AsyncMock())
+
+        async def __aexit__(self, *_a):
+            return False
+
+    class _ConvRepo:
+        def __init__(self, _session):
+            pass
+
+        async def get_by_id_unscoped(self, _cid):
+            return SimpleNamespace(title="t", folder_id=None)
+
+    class _MsgRepo:
+        def __init__(self, _session):
+            pass
+
+        async def get_by_id(self, _mid, conversation_id=None):
+            return SimpleNamespace(
+                id=_mid,
+                role="user",
+                content="帮我写",
+                created_at=datetime.now(UTC),
+                agent_mentions=mentions,
+            )
+
+        async def delete_after(self, *_a, **_k):
+            return None
+
+        async def update_content(self, message_id, content=None, **kwargs):
+            updates.append({"message_id": message_id, "content": content, **kwargs})
+
+    class _BoardRepo:
+        def __init__(self, _session):
+            pass
+
+        async def get_by_conversation_id(self, *_a, **_k):
+            return None
+
+    async def _run(**kwargs):
+        captured.append(kwargs)
+
+    monkeypatch.setattr(turns_mod, "async_session_factory", lambda: _FakeSessionCM())
+    monkeypatch.setattr(turns_mod, "ConversationRepository", _ConvRepo)
+    monkeypatch.setattr(turns_mod, "MessageRepository", _MsgRepo)
+    monkeypatch.setattr(turns_mod, "BoardRepository", _BoardRepo)
+    monkeypatch.setattr(turns_mod, "resolve_local_binding", AsyncMock(return_value=None))
+    monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        turns_mod,
+        "resolve_permission_axes",
+        AsyncMock(return_value=recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT)),
+    )
+    monkeypatch.setattr(
+        turns_mod,
+        "build_turn_backend",
+        AsyncMock(return_value=SimpleNamespace(location="server")),
+    )
+    monkeypatch.setattr(
+        turns_mod,
+        "load_chat_context",
+        AsyncMock(return_value=[{"role": "user", "content": "帮我写"}]),
+    )
+    monkeypatch.setattr(turns_mod, "maybe_compact_near_ceiling", AsyncMock())
+    monkeypatch.setattr(turns_mod, "run_and_persist", _run)
+    monkeypatch.setattr(
+        "agentcore.runtime.coordination.await_live_detached_drive",
+        AsyncMock(),
+    )
+
+    sink = EventSink()
+    await turns_mod.regenerate_chat(
+        conversation_id="c1",
+        message_id="u1",
+        user_id="u1",
+        sink=sink,
+        edited_content="帮我写",
+        edited_attachments=[],
+        edited_agent_mentions=[],
+    )
+
+    assert updates
+    assert updates[0]["agent_mentions"] == []
+    assert updates[0]["attachments"] == []
+    assert captured
+    assert captured[0]["agent_mentions"] is None

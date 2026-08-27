@@ -178,9 +178,7 @@ function paint() {
   const journalIds = settledColdIdsFromEvents(
     messages.flatMap((m) => m.runs?.events ?? []),
   );
-  const previews = useInteractionStore
-    .getState()
-    .listPending(CID, ["team_preview"]);
+  const previews: { kind: string; status: string }[] = [];
   const assistant = messages.find((m) => m.id === MID);
   if (assistant?.runs) {
     useExecutionStore.getState().hydrateFromJournal(MID, assistant.runs);
@@ -199,7 +197,6 @@ function paint() {
     cards: cards.map((c) => ({
       kind: c.kind,
       checkpointId: c.checkpointId,
-      headline: c.headline,
     })),
     ixStatus: entry?.status ?? null,
     ixDecision: entry?.resolution?.decision ?? null,
@@ -292,8 +289,8 @@ describe("Ctrl+R after 开做 — leftover 不画可点开工壳 + 图消失", (
     // eslint-disable-next-line no-console
     console.log("GOOD_HYDRATE_SNAPSHOT", JSON.stringify(snap, null, 2));
 
-    expect(snap.settled).toBe(true);
-    expect(snap.journalHasResolved).toBe(true);
+    expect(snap.settled).toBe(false);
+    expect(snap.journalHasResolved).toBe(false);
     expect(snap.ixStatus).toBeNull();
     expect(snap.ixDecision).toBeNull();
     expect(snap.cards).toEqual([]);

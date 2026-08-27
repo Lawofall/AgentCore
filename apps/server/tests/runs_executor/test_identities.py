@@ -373,23 +373,28 @@ async def test_handoff_prompt_splits_by_topology():
     assert "summary（结论）" in upstream
     assert "一句话说清你这次做出了什么" in upstream
     assert "一行标题" not in upstream
-    # 巡检定案 B：交付各一句防回灌（leaf / upstream / 各 form 同源）
+    # 队员合同：原则标题 + 结构真相；不守卫完成话术近义词必须在场
     assert "交接勿回灌" in leaf and "交接勿回灌" in upstream
-    assert "修复完成" in leaf and "已修复" in leaf
-    assert "现象已消除" in leaf and "已全部落地" in leaf
+    assert "改文件" in leaf and "症状消失" in leaf
     assert "系统已就绪" in leaf and "界面没改" in leaf
     assert "最后一次同命令" in leaf and "分项分开写" in leaf
+    assert "修复完成" not in leaf
+    assert "现象已消除" not in leaf and "已全部落地" not in leaf
     assert "有工具活动或较长交付" in leaf
     assert "汇报不完整" in leaf
-    assert "权威文档冲突" in leaf
-    assert "静默改权威稿" in leaf
-    # 开局找路径轻 nudge：已有前置路径直接读；含糊「根」才 list/grep
+    assert "权威文档冲突" not in leaf
+    assert "静默改权威稿" not in leaf
+    # 开局找路径轻 nudge：已有前置路径直接读；含糊「根」才 glob/grep；已知目录一层 file_list
     assert "找路径" in leaf
     assert "前置结果" in leaf
     assert "含糊" in leaf and "根" in leaf
     assert "已覆盖" in leaf
     assert "再整仓" in leaf
+    assert "glob" in leaf
+    assert "已知目录" in leaf
     assert "file_list" in leaf
+    assert "file_list(pattern)" not in leaf
+    assert "整仓按名" not in leaf
     assert "code_execute print" in leaf
     assert "整文件 dump" in leaf
     assert "正则扫描" in leaf
@@ -433,7 +438,7 @@ def test_worker_identity_states_no_execution_capability():
     """能写≠能跑（能力闸门与交付诚实性）：执行类未装配时 identity 自述能力边界。
 
     can_execute=False（云端无沙箱 → registry 扣掉执行类）追加「执行环境未装配」块：
-    能写脚本落盘、不能运行、不能生成需运行程序才产出的二进制文件、禁止谎称已运行/已生成；
+    能写脚本落盘、不能运行、不能生成需运行程序才产出的二进制文件；
     can_execute=True（默认）保持原样，本地/沙箱路径字节不变。
     """
     from agentcore.runtime.runs.executor.identities import build_worker_identity
@@ -443,7 +448,8 @@ def test_worker_identity_states_no_execution_capability():
     assert "能】用写文件工具" in no_exec
     assert "不能】运行" in no_exec
     assert "二进制" in no_exec
-    assert "已运行 / 已验证 / 已生成" in no_exec
+    assert "已运行 / 已验证 / 已生成" not in no_exec
+    assert "谎称" not in no_exec
     assert "未运行验证" in no_exec
     assert "手抄" in no_exec
     assert "表格" in no_exec

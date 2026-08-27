@@ -52,7 +52,7 @@ def _brief_form_hint(form: DebateForm) -> str:
         return (
             "这是【红队挑刺】：简报应是【finding 台账视图 + 门决】——围绕刺→处置→复核全线程，"
             "给出 conditional_pass / needs_major_rework / not_viable；must-fix 来自未关闭的 "
-            "critical/major。勿再按方填 risk_severities（已退役）。"
+            "critical/major。"
         )
     if form is DebateForm.ROUNDTABLE:
         return (
@@ -343,8 +343,6 @@ async def build_brief(
     return DebateBrief(
         crux=_as_str(data.get("crux")) or config.motion,
         strongest_points=_as_str_dict(data.get("strongest_points")),
-        # 按方 risk_severities 已退役（新场次恒空）；wire 字段保留供旧载荷降级渲染。
-        risk_severities={},
         handoffs=_as_handoffs(data),
         decisive=_as_str(data.get("decisive")),
         leaning=_as_str(data.get("leaning")),

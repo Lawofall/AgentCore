@@ -44,12 +44,26 @@ const TOOL_LABEL: Record<string, string> = {
   file_write: "Write file",
   file_append: "Append file",
   file_list: "List dir",
+  glob: "Glob",
+  list_folders: "List folders",
+  resolve_folder: "Resolve folder",
+  create_folder: "Create folder",
+  delete_folder: "Delete folder",
+  list_folder_dir: "List folder dir",
+  read_folder_file: "Read folder file",
   str_replace: "Edit file",
   file_delete: "Delete file",
   file_move: "Move file",
   file_copy: "Copy file",
   mkdir: "Make dir",
   file_batch: "Batch files",
+  write_section: "Write section",
+  md_to_docx: "Export Word",
+  md_to_pdf: "Export PDF",
+  archive_extract: "Extract archive",
+  download_url: "Download file",
+  read_image: "Read image",
+  code_diagnostics: "Check types",
   delegate: "Delegate",
   replan: "Replan",
   debate: "Debate",
@@ -58,6 +72,8 @@ const TOOL_LABEL: Record<string, string> = {
   consult_memory: "Consult memory",
   consult_rule: "Consult rule",
   consult: "Consult",
+  remember: "Remember",
+  update_folder_profile: "Update folder profile",
   search_conversations: "Search conversations",
   read_conversation: "Read conversation",
   revise: "Revise",
@@ -104,16 +120,28 @@ const TOOL_DETAIL_KEYS = [
   "url",
   "pattern",
   "path",
+  "directory",
   "command",
   "code",
   "q",
-  "name", // consult / consult_*
+  "name", // consult / consult_* / create_folder
   "text",
 ] as const;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** `id` / `*_id` 是内部标识：复制出去的过程稿同样不摆（与工具行标题同一条纪律）。 */
 function isInternalIdArg(key: string): boolean {
   return key === "id" || key.endsWith("_id");
+}
+
+function skipExportChip(key: string, raw: string): boolean {
+  const v = raw.trim();
+  if (!v || v === ".") return true;
+  if (isInternalIdArg(key)) return true;
+  if (UUID_RE.test(v)) return true;
+  return false;
 }
 
 function browserExportDetail(args: Record<string, unknown>): string {
@@ -157,6 +185,11 @@ function hostExportDetail(args: Record<string, unknown>): string {
   return "";
 }
 
+function gitExportDetail(args: Record<string, unknown>): string {
+  const sub = typeof args.subcommand === "string" ? args.subcommand.trim() : "";
+  return sub;
+}
+
 function toolDetail(args: Record<string, unknown>, toolName?: string): string {
   // WaitTool.reason 仅记日志，复制稿同样不摆。
   if (toolName === "wait") return "";
@@ -168,13 +201,20 @@ function toolDetail(args: Record<string, unknown>, toolName?: string): string {
     const host = hostExportDetail(args);
     if (host) return host;
   }
+  if (toolName === "git") {
+    const git = gitExportDetail(args);
+    if (git) return git;
+  }
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "string" && v.trim() && !skipExportChip(k, v)) {
+      return v.trim();
+    }
   }
   for (const [k, v] of Object.entries(args)) {
-    if (isInternalIdArg(k)) continue;
-    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v !== "string" || !v.trim()) continue;
+    if (skipExportChip(k, v)) continue;
+    return v.trim();
   }
   return "";
 }
@@ -263,9 +303,6 @@ export function formatProcessExport(
         break;
       case "plan_review":
         lines.push(MESSAGE_EXPORT_STEP_CHROME.plan_review);
-        break;
-      case "team_preview":
-        lines.push(MESSAGE_EXPORT_STEP_CHROME.team_preview);
         break;
       default:
         break;

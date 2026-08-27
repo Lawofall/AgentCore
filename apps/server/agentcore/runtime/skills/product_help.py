@@ -1,23 +1,10 @@
-"""Skill bodies: product_help* + product_bug_triage (+ scene consult hints)."""
+"""Skill bodies: product_help* + product_bug_triage.
+
+Product WHEN (L1) is the catalog summary, not a resident intensity string.
+Identity one-liner lives in CEO ``<role>``; this body is HOW after consult.
+"""
 
 from __future__ import annotations
-
-# Shared with按需目录 preamble — carve product UX out of「纯对话无需 consult」.
-CONSULT_PRODUCT_HELP_BY_SCENE = (
-    "按场面：本产品用法 / 入口 / UI / 功能介绍 / 这是什么项目 / 你是什么 / "
-    "产品面 FAQ / 官网 / 你的网站 / 下载"
-    "（为何没组团、费用、Key、断网、.md/文件面板怎么打开、"
-    "Cursor 规则 / `.mdc` / 改成 AgentCore 规则…）→ 必查 `product_help`；"
-    "细节按场面再查 `product_help_map` / `product_help_faq`；"
-    "非产品用法的知识问答 / 闲聊 → 直接答不必查"
-)
-
-# Shared with按需目录 preamble — product-self triage (主动触发；勿与 FAQ「必查」对打).
-CONSULT_PRODUCT_BUG_TRIAGE_BY_SCENE = (
-    "按场面：用户主动查/报产品本身可证伪故障"
-    "（UI/运行时/工具/编排异常，像不像产品 Bug）→ 查 `product_bug_triage`；"
-    "用法 FAQ / Key / 一直转等自助短答仍走 product_help*，勿把诊断塞进 FAQ"
-)
 
 _PRODUCT_HELP = """\
 <product_help>
@@ -83,7 +70,16 @@ AgentCore 是 Multi-Agent AI 工作台：你只对接一位 CEO；简单问题�
 平台额度临时不可用时会有公告，也可到设置接入自己的 Key。\
 深链：`#/toolbox/manual/intro?s=quickstart`
 
-【边界】本 skill 只管产品面怎么用；机制/架构/记忆边界仍按系统提示作答，勿用本 skill 替代。\
+【记忆/历史·对外口径】用户问「能不能读历史对话 / 有没有记忆 / 记忆怎么工作」：白话三层——\
+①当前这场对话；②偏好与笔记（非聊天全文）；③你点名时我可派队员去查旧对话原文。\
+禁止报工具名与内部角色名（`consult` / `delegate` / 查阅员 / 日志工具）；禁止在能力说明里举例画像细节。\
+结尾说明查旧场需要派队员、可问要不要现在找——勿停在「不能 / 不知道」。跨会话原文的**派工**仍走常驻核【跨会话原文】。\
+【用户规则·内部】用户规则可增、可改、可删、可列；改/删须调 `remember`（action=replace/forget），禁止只追加却声称「已更新/已替换」。\
+【用户规则·对外口径】用户规则可增、可改、可删。对外说话跟工具返回一致；禁止报内部参数名堆砌，可用「已改成… / 已忘掉… / 当前规则是…」。\
+用户问「你能改规则吗」：能，说明可记/改/删；大段手改也可去文件页规则本。与记忆分工：用户规则用 `remember` 增改删，常驻条目（含偏好/画像）同在 `<rules>` 平权注入、按需用 `consult`；跨会话原文仍须派队员。\
+细则口播也可再查 `product_help_faq`。
+
+【边界】本 skill 管产品面怎么用，以及记忆·规则**对外口径**；机制/架构/能力边界仍按系统提示作答。跨会话原文**派工**走常驻核【跨会话原文】，勿用本 skill 替代。\
 用户主动查/报产品本身可证伪故障 → `consult(product_bug_triage)`（归因+复现）；\
 勿在本 skill / faq 做四类结论或复现包。\
 完整入口表与 FAQ 清单不在本 body——分别见 `product_help_map` / `product_help_faq`。
@@ -173,6 +169,8 @@ force push / reset·clean / 在 main·master 直接提交或 push / GitLab 开 P
 `#/toolbox/manual/reference?s=troubleshooting`
 - 任务一直转？——点停止结束本回合，或发消息追问；长任务可中途打断后续跑。`?s=troubleshooting`
 - 产物找不到？——打开文件页看工作区；本机传统确认绑的是对的文件夹。`?s=troubleshooting`
+- 能不能读历史对话 / 有没有记忆？——白话三层：①当前这场对话；②偏好与笔记（非聊天全文）；③你点名时我可派队员去查旧对话原文。禁止报内部工具名与角色名；禁止在能力说明里举例画像细节。查旧场需要派队员、可问要不要现在找——勿停在「不能 / 不知道」。`?s=faq`
+- 你能改规则吗？——能：可记/改/删。对外说话跟工具返回一致（已改成… / 已忘掉… / 当前规则是…）；禁止报内部参数名。大段手改也可去文件页规则本。改/删走 `remember`，禁止只追加却声称已更新/已替换。跨会话原文仍须派队员。`?s=faq`
 </product_help_faq>"""
 
 _PRODUCT_BUG_TRIAGE = """\
@@ -220,8 +218,7 @@ _PRODUCT_BUG_TRIAGE = """\
 
 【L3】用户要上报时：口头指路——桌面「设置 → 反馈」；\
 手机没有应用内反馈入口（有意如此，非缺失），据实说明，**勿指向不存在的页面**（手机「我的」下只有账户设置 / 用量 / 模型 / 服务商 / 消息隐私 / 关于）。\
-可提示把上方 L2 要点粘进描述。\
-本档不加提交工具、不改反馈 API。
+可提示把上方 L2 要点粘进描述。
 
 【禁区】
 - L4：自动改产品仓 / 开 PR / 自愈修产品 = 禁

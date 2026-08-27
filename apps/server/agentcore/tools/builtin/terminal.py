@@ -90,7 +90,8 @@ TERMINAL_TOOL_PARAMETERS: dict[str, Any] = {
             "description": (
                 "start / read：等待输出匹配此正则后再返回"
                 "（如 Local:|ready in|Listening）。"
-                "启动 npm run dev / vite / next dev 等长驻进程时【必填】。"
+                "启动 npm run dev / vite / next dev / uvicorn --reload 等长驻进程时【必填】。"
+                "宣称「已就绪」须 wait_for 命中，勿仅凭首段输出。"
             ),
         },
         "wait_timeout_seconds": {
@@ -145,13 +146,11 @@ def terminal_description(location: Literal["server", "local"] | None = None) -> 
         )
     return (
         where
-        + "【凡永不退出的命令必须用本工具，禁止改走 code_execute / host(action=shell)】"
-        "典型：npm run dev / vite / next dev / uvicorn --reload。"
-        "会自行退出的短命令中，装包 / build / test 请用 test_run（worker）；"
-        "其它极短 CLI 可用 code_execute（worker）。"
-        "CEO 可对「只启服 / 重启 / 看是否活着」直接使用本工具；"
-        "改代码、装依赖、修报错仍须 delegate。"
-        "宣称「已就绪」前须用 wait_for 等到 ready 信号，勿仅凭首段输出下结论。"
+        + "永不退出的长驻进程用本工具，禁止改走 code_execute / host(action=shell)。"
+        "短命令：装包/build/test → test_run（worker）；极短 CLI → code_execute（worker）。"
+        "CEO 可只启服/重启/看是否活着；改代码、装依赖、修报错须 delegate。"
+        "start 须 wait_for。"
+        "HOW→consult(terminal)。"
     )
 
 
@@ -384,7 +383,7 @@ class TerminalTool:
         if channel is None:
             return _error(
                 "当前没有本机桌面进程通道，无法在用户电脑上托管后台进程。"
-                "需本机终端时：**推荐**引导 Composer「导入到云 / 连接 Git」"
+                "需本机终端时：**推荐**引导 Composer「导入到云」"
                 "或诚实说明本回合无法托管；本机传统 open/bind 合法非默认（≠离线）。",
                 start,
                 code=_LOCAL_WORKSPACE_REQUIRED,

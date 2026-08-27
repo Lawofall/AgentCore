@@ -13,6 +13,14 @@ afterEach(() => {
 });
 
 describe("Markdown", () => {
+  it("muted thought does not keep heading color on --foreground", () => {
+    const { container } = render(
+      <Markdown muted content={"# 标题行\n正文"} />,
+    );
+    const body = container.querySelector(".markdown-body");
+    expect(body?.className).toContain("markdown-body--muted");
+  });
+
   it("caps the body so an unbreakable token cannot blow the replay column", () => {
     const { container } = render(
       <Markdown content={"1000+500+50+".repeat(40)} />,

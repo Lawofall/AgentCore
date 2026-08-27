@@ -66,8 +66,10 @@ def test_code_audit_single_module_one_auditor():
     assert "一次交接" in t["task"]
     assert "二次 handoff" in t["task"]
     assert "收口口径" in t["task"]
-    assert "全程只读" in t["task"]
+    assert "全程只读" not in t["task"]
+    assert "通过验收" not in t["task"]
     assert "未改业务源码" in t["task"]
+    assert "cite_write_review" not in t["task"]
     # 分段交付：骨架先落 → 边查边填；artifacts 声明仍为 [md, .audit.json]
     assert "骨架先落 → 边查边填" in t["task"]
     assert "分段交付" in t["task"]
@@ -159,7 +161,10 @@ def test_code_audit_multi_module_parallel_plus_synth():
     assert "一次交接" in synth["task"]
     assert "显著短于" in synth["task"] or "细节只进落盘" in synth["task"]
     assert "收口口径" in synth["task"]
-    assert "通过验收" in synth["task"]
+    assert "通过验收" not in synth["task"]
+    assert "全程只读" not in synth["task"]
+    assert "未改业务源码" in synth["task"]
+    assert "cite_write_review" not in synth["task"]
     plan, plan_errs = build_run_plan(tasks)
     assert plan_errs == []
     assert len(plan.waves()) >= 2
@@ -318,12 +323,12 @@ def test_playbook_args_schema_surfaces_code_audit_modules():
     assert "build_website" not in desc
 
 
-# ── parallel_brief ────────────────────────────────────────────────────────────
+# ── map_fanout ────────────────────────────────────────────────────────────
 
 
-def test_parallel_brief_fans_out_notes_without_write_pipeline():
+def test_map_fanout_fans_out_notes_without_write_pipeline():
     tasks, errors = expand_playbook(
-        "parallel_brief",
+        "map_fanout",
         {"topic": "P vs NP", "angles": ["为何难", "若解决", "下界", "攻击失败"]},
     )
     assert errors == []
@@ -348,13 +353,14 @@ def test_parallel_brief_fans_out_notes_without_write_pipeline():
         assert "摸底验收" in t["task"] or "够用即停" in t["task"]
         assert "一页地图" in t["task"]
         assert "白皮书" in t["task"]
-        assert "开局先招人" in t["task"]
-        assert "已经做了很久" in t["task"]
+        assert "开局先招人" not in t["task"]
+        assert "已经做了很久" not in t["task"]
         assert "分段追加" in t["task"]
         assert "给用户看的回复" in t["task"]
         assert "法条" not in t["task"]
         assert "完整要点须用" not in t["task"]
-        assert "重复通读" in t["task"]
+        assert "read_notes" in t["task"]
+        assert "重复通读" not in t["task"]
         assert "web_search" not in t["task"]
         assert "权威出处" not in t["task"]
         assert "≤12 词" not in t["task"]
@@ -377,39 +383,41 @@ def test_parallel_brief_fans_out_notes_without_write_pipeline():
     assert all(n.search_policy == "" for n in plan.nodes)
 
 
-def test_parallel_brief_requires_topic_and_two_angles():
-    tasks, errors = expand_playbook("parallel_brief", {"angles": ["甲", "乙"]})
+def test_map_fanout_requires_topic_and_two_angles():
+    tasks, errors = expand_playbook("map_fanout", {"angles": ["甲", "乙"]})
     assert tasks == []
     assert any("topic" in e for e in errors)
     tasks2, errors2 = expand_playbook(
-        "parallel_brief", {"topic": "X", "angles": ["仅一角"]}
+        "map_fanout", {"topic": "X", "angles": ["仅一角"]}
     )
     assert tasks2 == []
     assert any("≥2" in e or "angles" in e for e in errors2)
 
 
-def test_available_playbooks_lists_parallel_brief_before_research_report_semantics():
+def test_available_playbooks_lists_map_fanout_before_cite_write_review_semantics():
     listing = available_playbooks()
-    assert "parallel_brief" in listing
+    assert "map_fanout" in listing
     assert "对齐推进" in listing or "方向笔记" in listing
     assert "讨论对齐" in listing or "摸清" in listing
     assert "人数跟缝走" in listing or "独立缝" in listing
     assert "够用即停" in listing or "handoff" in listing
     assert "一页地图" in listing
     assert "一句目标" in listing or "必读文件" in listing
-    assert "research_report" in listing
+    assert "cite_write_review" in listing
     assert "成文专线" in listing
     assert "明示" in listing
     assert "正式长文" in listing or "可提交" in listing or "审校满编" in listing
     assert "形态未定" in listing or "勿默认学术审校" in listing
+    assert "consult(team_delivery_env)" in listing
+    assert "reportlab" not in listing
 
 
-# ── research_report ───────────────────────────────────────────────────────────
+# ── cite_write_review ───────────────────────────────────────────────────────────
 
 
-def test_research_report_fans_out_one_researcher_per_angle_then_outline_then_write():
+def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_write():
     tasks, errors = expand_playbook(
-        "research_report",
+        "cite_write_review",
         {"topic": "向量数据库", "angles": ["原理", "选型", "成本"], "checkpoint": True},
     )
     assert errors == []
@@ -458,10 +466,9 @@ def test_research_report_fans_out_one_researcher_per_angle_then_outline_then_wri
         assert d["artifacts"] and d["artifacts"][0] in expected_research_artifacts
         assert d["artifacts"][0] in by_id[rid]["task"]
         assert "file_write" in by_id[rid]["task"]
-        # A3 查询契约进调研员任务书（超限自动规范化/截断并明示；仅极端过长拒）
-        assert "≤12 词" in by_id[rid]["task"]
-        assert "截断" in by_id[rid]["task"] or "规范化" in by_id[rid]["task"]
-        assert "明示" in by_id[rid]["task"]
+        assert "≤12 词" not in by_id[rid]["task"]
+        assert "截断" not in by_id[rid]["task"]
+        assert "规范化" not in by_id[rid]["task"]
     outline_d = by_id["outline"]["deliverable"]
     assert outline_d["form"] == "files"
     assert outline_d["artifacts"] == ["AgentCore/文档/research/提纲.md"]
@@ -481,13 +488,11 @@ def test_research_report_fans_out_one_researcher_per_angle_then_outline_then_wri
     # each angle is named into its researcher's task so the fan-out doesn't run blind/overlapping.
     assert "选型" in by_id["research_1"]["task"]
     assert "read_notes" in by_id["research_1"]["task"]
-    assert "post_note" in by_id["research_1"]["task"]
-    # 引用即出处 P3：调研员成稿主张须证（#rN 或待核实）。
-    assert "#rN" in by_id["research_1"]["task"]
-    assert "待核实" in by_id["research_1"]["task"]
-    # 深读姿态：关键法条 / 司法解释 / 判例须 read_url 核对原文。
-    assert "read_url" in by_id["research_1"]["task"]
-    assert "法条" in by_id["research_1"]["task"]
+    assert "post_note" not in by_id["research_1"]["task"]
+    assert "#rN" not in by_id["research_1"]["task"]
+    assert "待核实" not in by_id["research_1"]["task"]
+    assert "read_url" not in by_id["research_1"]["task"]
+    assert "法条" not in by_id["research_1"]["task"]
     # 成文综述：调研员盖学术检索挡位 + 纪律句；提纲/撰稿/审校不盖。
     for rid in research_ids:
         assert by_id[rid]["search_policy"] == "academic_literature"
@@ -505,26 +510,23 @@ def test_research_report_fans_out_one_researcher_per_angle_then_outline_then_wri
     assert all(
         n.search_policy == "" for n in plan.nodes if n.role != "调研员"
     )
-    assert "read_url" in by_id["review"]["task"]
-    assert "法条" in by_id["review"]["task"]
-    # 真纯丙：审校不再靠显式 tools 名单；定向检索纪律写在 task 正文。
+    assert "read_url" not in by_id["review"]["task"]
+    assert "法条" not in by_id["review"]["task"]
     assert "tools" not in by_id["review"]
-    assert "检索纪律" in by_id["review"]["task"]
-    assert "grep" in by_id["review"]["task"]
-    assert "code_search" in by_id["review"]["task"]
-    assert "整目录" in by_id["review"]["task"]
+    assert "检索纪律" not in by_id["review"]["task"]
+    assert "code_search" not in by_id["review"]["task"]
+    assert "整目录" not in by_id["review"]["task"]
 
 
-def test_research_report_without_angles_uses_single_researcher():
-    tasks, errors = expand_playbook("research_report", {"topic": "X"})
+def test_cite_write_review_without_angles_uses_single_researcher():
+    tasks, errors = expand_playbook("cite_write_review", {"topic": "X"})
     assert errors == []
     by_id = _by_id(tasks)
     assert by_id["outline"]["depends_on"] == ["research_0"]
     assert by_id["outline"]["checkpoint_after"] is True  # default: checkpoint on outline
     assert by_id["review"]["depends_on"] == ["write"]
-    # 单调研员路径同样钉住主张须证教法。
-    assert "#rN" in by_id["research_0"]["task"]
-    assert "待核实" in by_id["research_0"]["task"]
+    assert "#rN" not in by_id["research_0"]["task"]
+    assert "待核实" not in by_id["research_0"]["task"]
     assert by_id["research_0"]["search_policy"] == "academic_literature"
     assert "学术检索" in by_id["research_0"]["task"]
     # 无 angles 时默认约定文档路径（仍落 RESEARCH_DIR，不用角色名）。
@@ -534,9 +536,9 @@ def test_research_report_without_angles_uses_single_researcher():
     assert by_id["outline"]["deliverable"]["artifacts"] == ["AgentCore/文档/research/提纲.md"]
 
 
-def test_research_report_output_path_overrides_main_artifact():
+def test_cite_write_review_output_path_overrides_main_artifact():
     tasks, errors = expand_playbook(
-        "research_report",
+        "cite_write_review",
         {"topic": "T", "output_path": "paper/main.md"},
     )
     assert errors == []
@@ -546,19 +548,19 @@ def test_research_report_output_path_overrides_main_artifact():
     assert "paper/main.md" in by_id["review"]["task"]
 
 
-def test_research_report_checkpoint_can_be_disabled():
-    tasks, errors = expand_playbook("research_report", {"topic": "X", "checkpoint": False})
+def test_cite_write_review_checkpoint_can_be_disabled():
+    tasks, errors = expand_playbook("cite_write_review", {"topic": "X", "checkpoint": False})
     assert errors == []
     assert _by_id(tasks)["outline"]["checkpoint_after"] is False
 
 
-def test_research_report_review_explicit_wall_clock_survives_build():
+def test_cite_write_review_review_explicit_wall_clock_survives_build():
     """审校节点显式 timeout_ms=300000 经真实 builder 落成 policy.timeout_s=300；
     token 顶走统一 backstop（200k）。"""
     from agentcore.runtime.runs.worker_budget import WORKER_TIMEOUT_BACKSTOP_S
 
     tasks, errors = expand_playbook(
-        "research_report", {"topic": "T", "angles": ["a", "b"]}
+        "cite_write_review", {"topic": "T", "angles": ["a", "b"]}
     )
     assert errors == []
     assert _by_id(tasks)["review"]["timeout_ms"] == 300_000
@@ -573,19 +575,19 @@ def test_research_report_review_explicit_wall_clock_survives_build():
     assert by_role["提纲编辑"].token_ceiling == 4_000_000
 
 
-def test_research_report_requires_topic():
-    tasks, errors = expand_playbook("research_report", {})
+def test_cite_write_review_requires_topic():
+    tasks, errors = expand_playbook("cite_write_review", {})
     assert tasks == []
     assert errors and "topic" in errors[0]
 
 
-def test_research_report_folds_angle_fanout_with_note():
+def test_cite_write_review_folds_angle_fanout_with_note():
     """angles 超扇出上限：折叠进末节点（合并不丢弃），带 playbook_note。"""
     from agentcore.runtime.runs.playbooks import MAX_PLAYBOOK_FANOUT, collect_playbook_notes
 
     n = MAX_PLAYBOOK_FANOUT + 5
     tasks, errors = expand_playbook(
-        "research_report", {"topic": "X", "angles": [f"a{i}" for i in range(n)]}
+        "cite_write_review", {"topic": "X", "angles": [f"a{i}" for i in range(n)]}
     )
     assert errors == []
     researchers = [t for t in tasks if t["role"] == "调研员"]
@@ -597,43 +599,6 @@ def test_research_report_folds_angle_fanout_with_note():
     notes = collect_playbook_notes(tasks)
     assert notes and "扇出折叠" in notes[0]
     assert f"a{MAX_PLAYBOOK_FANOUT}" in notes[0]
-
-
-# ── build_feature ─────────────────────────────────────────────────────────────
-
-
-def test_build_feature_defaults_to_api_plus_parallel_ui_and_test():
-    tasks, errors = expand_playbook("build_feature", {"feature": "用户登录", "stack": "FastAPI+React"})
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"api", "ui", "test"}
-    # ui & test both fan out from api (share its dep set → parallel siblings on the same seam).
-    assert by_id["ui"]["depends_on"] == ["api"]
-    assert by_id["test"]["depends_on"] == ["api"]
-    # the api task tells the worker to broadcast its interface contract on the note wall (4b 对账 hook).
-    assert "post_note" in by_id["api"]["task"]
-    assert "FastAPI+React" in by_id["api"]["task"]
-
-
-def test_build_feature_code_nodes_land_in_workspace_not_dossier():
-    """三个写码节点的产物是工作区源码 → form=workspace，不得被派去 AI 工作间的默认落点。"""
-    tasks, errors = expand_playbook("build_feature", {"feature": "用户登录"})
-    assert errors == []
-    assert all(t["deliverable"]["form"] == "workspace" for t in tasks)
-    assert all("workspace_native" not in t["deliverable"] for t in tasks)
-
-
-def test_build_feature_include_filters_steps():
-    tasks, _ = expand_playbook("build_feature", {"feature": "X", "include": ["ui"]})
-    assert set(_by_id(tasks)) == {"api", "ui"}
-    tasks, _ = expand_playbook("build_feature", {"feature": "X", "include": ["test"]})
-    assert set(_by_id(tasks)) == {"api", "test"}
-
-
-def test_build_feature_requires_feature():
-    tasks, errors = expand_playbook("build_feature", {})
-    assert tasks == []
-    assert errors and "feature" in errors[0]
 
 
 # ── build_app ─────────────────────────────────────────────────────────────────
@@ -829,12 +794,12 @@ def test_build_app_default_root_is_app_not_name_slug():
     assert by_id["smoke"]["deliverable"]["artifacts"] == ["app/QA.md"]
 
 
-# ── repair_code ───────────────────────────────────────────────────────────────
+# ── diagnose_fix_verify ───────────────────────────────────────────────────────────────
 
 
-def test_repair_code_diagnose_patch_verify_shape():
+def test_diagnose_fix_verify_diagnose_patch_verify_shape():
     tasks, errors = expand_playbook(
-        "repair_code",
+        "diagnose_fix_verify",
         {
             "problem": "Module missing export foo",
             "verify": "npx tsc -b",
@@ -881,28 +846,30 @@ def test_repair_code_diagnose_patch_verify_shape():
     assert "不挡修补" in by_id["diagnose"]["task"]
     assert "不 escalate" in by_id["diagnose"]["task"]
     assert "通过或失败证据" in by_id["verify"]["task"]
+    assert "勿套 diagnose_fix_verify" not in by_id["diagnose"]["task"]
+    assert "continue_from_run_id" not in by_id["diagnose"]["task"]
     assert "min_length" not in by_id["diagnose"]["deliverable"]
     assert "min_length" not in by_id["verify"]["deliverable"]
     assert by_id["diagnose"]["deliverable"]["form"] == "prose"
     assert by_id["verify"]["deliverable"]["form"] == "prose"
 
 
-def test_repair_code_patch_without_target_still_lands_in_workspace():
+def test_diagnose_fix_verify_patch_without_target_still_lands_in_workspace():
     """无 target/artifacts 的 patch 节点最易被默认落点误导——这里钉死 form=workspace。"""
     tasks, errors = expand_playbook(
-        "repair_code", {"problem": "Dashboard 白屏", "verify": "pytest -q"}
+        "diagnose_fix_verify", {"problem": "Dashboard 白屏", "verify": "pytest -q"}
     )
     assert errors == []
     patch = _by_id(tasks)["patch"]
     assert patch["deliverable"] == {"form": "workspace"}
 
 
-def test_repair_code_ui_verify_slot_flows_into_verify_task():
+def test_diagnose_fix_verify_ui_verify_slot_flows_into_verify_task():
     """UI 复现形 verify 原样注入验证员约定；slots 并列 CLI 与 UI 例示。"""
     from agentcore.runtime.runs.playbooks import PLAYBOOKS
 
     tasks, errors = expand_playbook(
-        "repair_code",
+        "diagnose_fix_verify",
         {
             "problem": "Dashboard 白屏",
             "verify": "打开 /app 白屏消失+snapshot 可见主内容",
@@ -912,22 +879,22 @@ def test_repair_code_ui_verify_slot_flows_into_verify_task():
     by_id = _by_id(tasks)
     assert "打开 /app 白屏消失+snapshot 可见主内容" in by_id["verify"]["task"]
     assert "页面/UI 复现" in by_id["verify"]["task"]
-    pb = PLAYBOOKS["repair_code"]
+    pb = PLAYBOOKS["diagnose_fix_verify"]
     assert "pytest tests/test_app.py -q" in pb.slots
     assert "白屏消失" in pb.slots or "snapshot 可见主内容" in pb.slots
     assert "CLI" in pb.summary or "UI" in pb.summary
     assert "白屏" in pb.summary
 
 
-def test_repair_code_requires_problem():
-    tasks, errors = expand_playbook("repair_code", {})
+def test_diagnose_fix_verify_requires_problem():
+    tasks, errors = expand_playbook("diagnose_fix_verify", {})
     assert tasks == []
     assert errors and "problem" in errors[0]
 
 
-def test_repair_code_requires_verify_how_fixed():
+def test_diagnose_fix_verify_requires_verify_how_fixed():
     tasks, errors = expand_playbook(
-        "repair_code",
+        "diagnose_fix_verify",
         {"problem": "Module missing export foo", "target": "src/app.ts"},
     )
     assert tasks == []
@@ -954,6 +921,20 @@ def test_build_website_playbooks_are_unknown():
         assert name not in desc
 
 
+def test_compare_options_and_build_feature_are_unknown():
+    """已删具名本必须未知；登记表与 schema 不再出现废名。"""
+    listing = available_playbooks()
+    desc = playbook_args_schema_description()
+    for name in ("compare_options", "build_feature"):
+        tasks, errors = expand_playbook(name, {"topic": "X"})
+        assert tasks == []
+        assert errors and "未知" in errors[0]
+        assert name in errors[0]
+        assert name not in PLAYBOOKS
+        assert name not in listing
+        assert name not in desc
+
+
 def test_build_toolshed_playbook_removed():
     """旧独立 playbook 名直接未知失败——无别名 / 静默改写。"""
     tasks, errors = expand_playbook("build_toolshed", {"topic": "Ops"})
@@ -962,55 +943,31 @@ def test_build_toolshed_playbook_removed():
     assert "build_toolshed" in errors[0]
 
 
-# ── compare_options ───────────────────────────────────────────────────────────
+def test_renamed_playbook_ids_are_unknown():
+    """旧具名 id 与拼写错误同等未知；无别名。"""
+    listing = available_playbooks()
+    desc = playbook_args_schema_description()
+    for name in (
+        "parallel_brief",
+        "research_report",
+        "multi_lens_research",
+        "repair_code",
+    ):
+        tasks, errors = expand_playbook(name, {"topic": "X"})
+        assert tasks == []
+        assert errors and "未知" in errors[0]
+        assert name in errors[0]
+        assert name not in PLAYBOOKS
+        assert name not in listing
+        assert name not in desc
 
 
-def test_compare_options_evaluates_each_then_summarises():
+# ── lens_crosscheck ───────────────────────────────────────────────────────
+
+
+def test_lens_crosscheck_default_four_lenses_plus_synthesizer():
     tasks, errors = expand_playbook(
-        "compare_options",
-        {"question": "选 Postgres 还是 MySQL", "options": ["Postgres", "MySQL"], "criteria": ["性能", "生态"]},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert {"eval_0", "eval_1", "summary"} == set(by_id)
-    assert set(by_id["summary"]["depends_on"]) == {"eval_0", "eval_1"}
-    # each evaluator is pinned to ONE option and carries the criteria.
-    assert "Postgres" in by_id["eval_0"]["task"] and "性能" in by_id["eval_0"]["task"]
-
-
-def test_compare_options_requires_question_and_two_options():
-    _, errors = expand_playbook("compare_options", {"options": ["only-one"]})
-    joined = "；".join(errors)
-    assert "question" in joined and "options" in joined
-
-
-def test_compare_options_rejects_over_fanout():
-    """options>6：显式拒绝，不折叠、不静默截断。"""
-    from agentcore.runtime.runs.playbooks import MAX_PLAYBOOK_FANOUT
-
-    opts = [f"opt{i}" for i in range(MAX_PLAYBOOK_FANOUT + 1)]
-    tasks, errors = expand_playbook(
-        "compare_options", {"question": "Q", "options": opts}
-    )
-    assert tasks == []
-    assert errors and "上限" in errors[0]
-    assert "短名单" in errors[0] or "收敛" in errors[0]
-    assert str(MAX_PLAYBOOK_FANOUT + 1) in errors[0] or str(len(opts)) in errors[0]
-    # Exactly at cap still works.
-    tasks_ok, errors_ok = expand_playbook(
-        "compare_options",
-        {"question": "Q", "options": [f"opt{i}" for i in range(MAX_PLAYBOOK_FANOUT)]},
-    )
-    assert errors_ok == []
-    assert len([t for t in tasks_ok if t["id"].startswith("eval_")]) == MAX_PLAYBOOK_FANOUT
-
-
-# ── multi_lens_research ───────────────────────────────────────────────────────
-
-
-def test_multi_lens_research_default_four_lenses_plus_synthesizer():
-    tasks, errors = expand_playbook(
-        "multi_lens_research", {"topic": "LV 诉茉莉奶白商标案"}
+        "lens_crosscheck", {"topic": "LV 诉茉莉奶白商标案"}
     )
     assert errors == []
     by_id = _by_id(tasks)
@@ -1036,10 +993,9 @@ def test_multi_lens_research_default_four_lenses_plus_synthesizer():
         assert d["artifacts"][0] in by_id[lid]["task"]
         assert "完整" in by_id[lid]["task"]  # 完整报告，非摘要复制
         assert "handoff" in by_id[lid]["task"]  # 落盘叠加，不得替代 handoff
-        # 引用即出处 P3：透镜成稿主张须证（#rN 或待核实；不强迫辩词二分）。
-        assert "#rN" in by_id[lid]["task"] or "#r1" in by_id[lid]["task"]
-        assert "待核实" in by_id[lid]["task"]
-        assert "不强迫" in by_id[lid]["task"]
+        assert "#rN" not in by_id[lid]["task"] and "#r1" not in by_id[lid]["task"]
+        assert "待核实" not in by_id[lid]["task"]
+        assert "不强迫" not in by_id[lid]["task"]
     # 汇总员落盘汇总与命题卡；motion_card 仍走 handoff
     synth_d = by_id["synthesizer"]["deliverable"]
     assert synth_d["form"] == "files"
@@ -1062,16 +1018,15 @@ def test_multi_lens_research_default_four_lenses_plus_synthesizer():
     assert "模拟法庭" in synth_task or "庭审" in synth_task
     assert "制度" in synth_task
     assert "替换命题对象" in synth_task or "抬成制度层" in synth_task
-    # P3：汇总继承关键数字须带 #rN 或待核实语
-    assert "待核实" in synth_task
-    assert "#rN" in synth_task
+    assert "待核实" not in synth_task
+    assert "#rN" not in synth_task
 
 
-def test_multi_lens_research_injects_user_message_into_synthesizer():
+def test_lens_crosscheck_injects_user_message_into_synthesizer():
     """机制：expand 时注入用户原话全文到汇总员任务书（不依赖 CEO topic）。"""
     user_line = "茉莉奶白使用四叶花卉图形是否侵犯 LV 商标权，进行模拟法庭"
     tasks, errors = expand_playbook(
-        "multi_lens_research",
+        "lens_crosscheck",
         {"topic": "LV 诉茉莉奶白"},  # 故意丢「模拟法庭」——任务书仍须含原话
         user_message=user_line,
     )
@@ -1083,8 +1038,8 @@ def test_multi_lens_research_injects_user_message_into_synthesizer():
     assert user_line not in _by_id(tasks)["lens_0"]["task"]
 
 
-def test_multi_lens_research_without_user_message_omits_anchor_block():
-    tasks, errors = expand_playbook("multi_lens_research", {"topic": "X"})
+def test_lens_crosscheck_without_user_message_omits_anchor_block():
+    tasks, errors = expand_playbook("lens_crosscheck", {"topic": "X"})
     assert errors == []
     synth_task = _by_id(tasks)["synthesizer"]["task"]
     assert "机制注入" not in synth_task
@@ -1092,9 +1047,9 @@ def test_multi_lens_research_without_user_message_omits_anchor_block():
     assert "命题保真" in synth_task
 
 
-def test_multi_lens_research_custom_lenses():
+def test_lens_crosscheck_custom_lenses():
     tasks, errors = expand_playbook(
-        "multi_lens_research",
+        "lens_crosscheck",
         {"topic": "X", "lenses": ["技术", "伦理", "监管"]},
     )
     assert errors == []
@@ -1105,14 +1060,14 @@ def test_multi_lens_research_custom_lenses():
     assert by_id["lens_1"]["deliverable"]["artifacts"] == ["AgentCore/文档/research/伦理透镜报告.md"]
 
 
-def test_multi_lens_research_folds_lenses_with_note_keeps_base_owner():
+def test_lens_crosscheck_folds_lenses_with_note_keeps_base_owner():
     """lenses 超扇出：折叠进末节点带 note；首透镜仍独占公共底料分工。"""
     from agentcore.runtime.runs.playbooks import MAX_PLAYBOOK_FANOUT, collect_playbook_notes
 
     n = MAX_PLAYBOOK_FANOUT + 2
     lenses = [f"透镜{i}" for i in range(n)]
     tasks, errors = expand_playbook(
-        "multi_lens_research", {"topic": "T", "lenses": lenses}
+        "lens_crosscheck", {"topic": "T", "lenses": lenses}
     )
     assert errors == []
     by_id = _by_id(tasks)
@@ -1132,10 +1087,10 @@ def test_multi_lens_research_folds_lenses_with_note_keeps_base_owner():
     assert "负责人" not in last["task"]
 
 
-def test_multi_lens_research_lens_retrieval_division():
+def test_lens_crosscheck_lens_retrieval_division():
     """教法：首透镜查全公共底料；其余透镜简要确认、预算盯独有缺口；并行无运行时依赖。"""
     tasks, errors = expand_playbook(
-        "multi_lens_research", {"topic": "LV 诉茉莉奶白商标案"}
+        "lens_crosscheck", {"topic": "LV 诉茉莉奶白商标案"}
     )
     assert errors == []
     by_id = _by_id(tasks)
@@ -1160,12 +1115,12 @@ def test_multi_lens_research_lens_retrieval_division():
     assert "retrieval_budget" not in by_id["synthesizer"]
 
 
-def test_multi_lens_research_lens_budgets_survive_build_run_plan():
+def test_lens_crosscheck_lens_budgets_survive_build_run_plan():
     """透镜无显式预算时经 builder 得统一默认。"""
     from agentcore.runtime.runs.retrieval_budget import DEFAULT_RETRIEVAL_BUDGET
 
     tasks, errors = expand_playbook(
-        "multi_lens_research", {"topic": "T", "lenses": ["法律", "品牌商业"]}
+        "lens_crosscheck", {"topic": "T", "lenses": ["法律", "品牌商业"]}
     )
     assert errors == []
     plan, plan_errors = build_run_plan(tasks, id_prefix="pb_mlr_budget")
@@ -1175,10 +1130,10 @@ def test_multi_lens_research_lens_budgets_survive_build_run_plan():
     assert by_role["品牌商业视角"].retrieval_budget == DEFAULT_RETRIEVAL_BUDGET
 
 
-def test_multi_lens_research_files_form_builds_run_plan_with_artifacts():
+def test_lens_crosscheck_files_form_builds_run_plan_with_artifacts():
     """form=files + artifacts 经真实 builder 接通写盘验收。"""
     tasks, errors = expand_playbook(
-        "multi_lens_research", {"topic": "T", "lenses": ["法律", "品牌商业"]}
+        "lens_crosscheck", {"topic": "T", "lenses": ["法律", "品牌商业"]}
     )
     assert errors == []
     plan, plan_errors = build_run_plan(tasks, id_prefix="pb_mlr_files")
@@ -1194,8 +1149,8 @@ def test_multi_lens_research_files_form_builds_run_plan_with_artifacts():
     assert synth.deliverable.artifacts == ["AgentCore/文档/research/汇总与命题卡.md"]
 
 
-def test_multi_lens_research_requires_topic():
-    tasks, errors = expand_playbook("multi_lens_research", {})
+def test_lens_crosscheck_requires_topic():
+    tasks, errors = expand_playbook("lens_crosscheck", {})
     assert tasks == []
     assert errors and "topic" in errors[0]
 
@@ -1212,7 +1167,7 @@ def test_expand_unknown_playbook_lists_available():
 
 
 def test_expand_rejects_non_object_args():
-    tasks, errors = expand_playbook("research_report", ["not", "a", "dict"])  # type: ignore[arg-type]
+    tasks, errors = expand_playbook("cite_write_review", ["not", "a", "dict"])  # type: ignore[arg-type]
     assert tasks == []
     assert errors and "playbook_args" in errors[0]
 
@@ -1220,21 +1175,21 @@ def test_expand_rejects_non_object_args():
 def test_expand_playbook_missing_packaged_resource_lists_error(monkeypatch):
     """build 缺打包资源时不得 raise；errors 点名 playbook、禁泄露路径。"""
     missing_path = "C:\\Secret\\packaged\\skill.md"
-    pb = PLAYBOOKS["parallel_brief"]
+    pb = PLAYBOOKS["map_fanout"]
 
     def _raise_missing(_args: dict) -> tuple[list[dict], list[str]]:
         raise FileNotFoundError(missing_path)
 
     monkeypatch.setitem(
         PLAYBOOKS,
-        "parallel_brief",
+        "map_fanout",
         Playbook(name=pb.name, summary=pb.summary, slots=pb.slots, build=_raise_missing),
     )
-    tasks, errors = expand_playbook("parallel_brief", {"topic": "T", "angles": ["a", "b"]})
+    tasks, errors = expand_playbook("map_fanout", {"topic": "T", "angles": ["a", "b"]})
 
     assert tasks == []
     assert errors
-    assert "parallel_brief" in errors[0]
+    assert "map_fanout" in errors[0]
     assert "内部打包资源缺失" in errors[0]
     assert "手写 tasks" in errors[0]
     assert missing_path not in errors[0]
@@ -1245,19 +1200,27 @@ def test_available_playbooks_lists_all_registered():
     listing = available_playbooks()
     assert set(PLAYBOOKS) == {
         "code_audit",
-        "parallel_brief",
-        "research_report",
-        "build_feature",
-        "repair_code",
+        "map_fanout",
+        "cite_write_review",
+        "diagnose_fix_verify",
         "build_app",
-        "compare_options",
-        "multi_lens_research",
+        "lens_crosscheck",
     }
     for name in PLAYBOOKS:
         assert name in listing
     assert "build_toolshed" not in PLAYBOOKS
     assert "build_website" not in PLAYBOOKS
     assert "build_website_verify" not in PLAYBOOKS
+    assert "build_feature" not in PLAYBOOKS
+    assert "compare_options" not in PLAYBOOKS
+    for retired in (
+        "parallel_brief",
+        "research_report",
+        "multi_lens_research",
+        "repair_code",
+    ):
+        assert retired not in PLAYBOOKS
+        assert retired not in listing
 
 
 # ── every expansion is a runnable plan (the real builder, not a mock) ──────────
@@ -1266,27 +1229,23 @@ def test_available_playbooks_lists_all_registered():
 def test_every_playbook_expansion_builds_a_valid_run_plan():
     samples = {
         "code_audit": {"scope": "apps/server", "modules": ["auth", "storage"]},
-        "parallel_brief": {"topic": "T", "angles": ["a", "b", "c"]},
-        "research_report": {"topic": "T", "angles": ["a", "b"], "checkpoint": True},
-        "build_feature": {"feature": "F", "stack": "S"},
-        "repair_code": {
+        "map_fanout": {"topic": "T", "angles": ["a", "b", "c"]},
+        "cite_write_review": {"topic": "T", "angles": ["a", "b"], "checkpoint": True},
+        "diagnose_fix_verify": {
             "problem": "missing export",
             "verify": "pytest -q",
             "target": "app.ts",
         },
         "build_app": {"app": "Ops board", "modules": ["overview", "list"]},
-        "compare_options": {"question": "Q", "options": ["A", "B", "C"]},
-        "multi_lens_research": {"topic": "T"},
+        "lens_crosscheck": {"topic": "T"},
     }
     expected_nodes = {
         "code_audit": 2,  # 2 auditors, no synth
-        "parallel_brief": 3,
-        "research_report": 5,
-        "build_feature": 3,
-        "repair_code": 3,
+        "map_fanout": 3,
+        "cite_write_review": 5,
+        "diagnose_fix_verify": 3,
         "build_app": 3,  # lean 默认：scaffold + implement + smoke
-        "compare_options": 4,
-        "multi_lens_research": 5,  # 4 lenses + synthesizer
+        "lens_crosscheck": 5,  # 4 lenses + synthesizer
     }
     assert set(samples) == set(PLAYBOOKS)  # 名副其实的 every：新增 playbook 必须补样本
     for name, args in samples.items():
@@ -1300,7 +1259,7 @@ def test_every_playbook_expansion_builds_a_valid_run_plan():
         assert all(
             "workspace_native" not in (t.get("deliverable") or {}) for t in tasks
         ), name
-        if name == "repair_code":
+        if name == "diagnose_fix_verify":
             assert all(
                 (n.max_rounds or 0) > 0 and (n.max_rounds or 99) <= 6 for n in plan.nodes
             )

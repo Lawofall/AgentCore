@@ -611,6 +611,18 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "reason": "str",
         "salvaged": "bool",
     },
+    "delegate.coordinate_cancelled": {
+        "execution_id": "str",
+        "reason": "str",
+    },
+    "coordination.user_stop_cancelled": {
+        "execution_id": "str",
+        "conversation_id": "str",
+        "cancelled_workers": "int",
+        "completed": "int",
+        "total": "int",
+        "reason": "str",
+    },
     "compaction.done": {
         "conversation_id": "str",
         "folded": "int",
@@ -970,7 +982,7 @@ KEY_DESC: dict[str, str] = {
     "desktop.mcp_list_cache_hit": "MCP list 命中进程内缓存（含 cache_scope / duration_ms）",
     "desktop.mcp_list_cache_miss": (
         "MCP list 只读缓存未命中（prepare/resume；不发 ClientTool；"
-        "origin=execution_harvest 时为收口空装配）"
+        "origin 可标历史 execution_harvest 行）"
     ),
     "desktop.mcp_list_cache_seed": "MCP list 结果写入进程内缓存（非回合暖）",
     "delegate.started": "编排委派开始（agents/plan/waves；task_chars=完整 task 长度）",
@@ -1049,6 +1061,12 @@ KEY_DESC: dict[str, str] = {
     ),
     "sidecar.turn_cancelled": (
         "本地回合 CancelledError salvage；reason=cancelled_without_rpc 表示非 RPC cancel"
+    ),
+    "delegate.coordinate_cancelled": (
+        "后台 drive 被取消；reason 为取消指纹（无指纹=cancelled_without_rpc）"
+    ),
+    "coordination.user_stop_cancelled": (
+        "显式 Stop 级联取消协调；reason 恒为 user_stop，与 drive 任务戳对齐"
     ),
     "billing.background_byok_provider_error": (
         "后台 chrome 因非重试配置形失败将用户 BYOK 服务商标为 error"
@@ -1153,7 +1171,7 @@ KEY_DESC: dict[str, str] = {
     "account.rules_memory_cache_hit": "prepare rules/memory 命中进程快照缓存",
     "account.rules_memory_cache_miss": (
         "prepare rules/memory 只读缓存未命中（空注入；不 await 云；"
-        "origin=execution_harvest 时为收口空注入）"
+        "origin 可标历史 execution_harvest 行）"
     ),
     "account.rules_memory_cache_seed": "账户 rules/memory 快照写入进程缓存（非回合暖）",
     "account.rules_memory_warm_failed": "warm 拉取 rules/memory 部分失败（degraded seed）",

@@ -16,7 +16,7 @@
         "tool_call_id": "dc1",
         "tool_name": "delegate",
         "arguments": {
-          "playbook": "multi_lens_research",
+          "playbook": "lens_crosscheck",
           "playbook_args": {
             "topic": "品牌是否应立即终止争议代言联名"
           }

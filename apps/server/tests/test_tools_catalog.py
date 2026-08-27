@@ -26,6 +26,7 @@ _EXPECTED_NAMES = {
     "str_replace",
     "write_section",
     "file_list",
+    "glob",
     "file_delete",
     "file_move",
     "file_copy",
@@ -52,6 +53,7 @@ _CEO_READONLY_NAMES = {
     "read_url",
     "file_read",
     "file_list",
+    "glob",
     "grep",
     "code_search",
     "code_diagnostics",
@@ -134,6 +136,8 @@ def test_write_and_exec_tools_are_grantable():
     assert approvals["archive_extract"] is ToolApproval.GRANTABLE
     # Read-only tools auto-run (no approval prompt).
     assert approvals["file_read"] is ToolApproval.NEVER
+    assert approvals["file_list"] is ToolApproval.NEVER
+    assert approvals["glob"] is ToolApproval.NEVER
     assert approvals["web_search"] is ToolApproval.NEVER
 
 

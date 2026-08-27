@@ -1,4 +1,4 @@
-"""代码审计 playbook：``code_audit``（报告纪律内建；正交于 research_report 成篇审校）。"""
+"""代码审计 playbook：``code_audit``（报告纪律内建；正交于 cite_write_review 成篇审校）。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from agentcore.workspace.stage_dirs import REVIEWS_DIR, REVIEWS_PREFIX
 
 # 与规划定案一致：每工人模块 Phase B 最多定案条数。
 _DEFAULT_K = 8
-# 主管只做跨模块速览；2 路交 CEO 收口（与 parallel_brief 对称），≥3 路才占座位。
+# 主管只做跨模块速览；2 路交 CEO 收口（与 map_fanout 对称），≥3 路才占座位。
 _SYNTH_MIN_SLOTS = 3
 
 # 引擎按小标题字面验收；playbook / 继承函数 / CEO·skill 必须抄同一列表。
@@ -233,7 +233,7 @@ P0/critical/high→高，P1/medium→中，P2/low→低，P3/info/observation→
 {skeleton}。
 人审速览仍列仍成立中+ / 设计如此 / 已撤销 / 待核实与缺口。
 「{by_design}」= 模块 docstring 或设计文档已写明的目标形态；禁止写入「{defect}」、不进 N。
-正向确认默认不写。禁止套 research_report 学术审校环；质量靠 A/B+本契约。
+正向确认默认不写。质量靠 A/B+本契约。
 """.strip()
 
 
@@ -323,8 +323,7 @@ def _auditor_task_body(
         "本轮正文可短/空（详情在文件），但 summary + key_points 不得空泛。"
         "受 handoff 条数上限时中+优先，并写「另有 n 条见报告」。"
         "不得以 handoff 替代落盘（Markdown 与 .audit.json 仍须 file_write）。"
-        "【收口口径】向用户/主管交接时写「报告已落盘、未改业务源码」；"
-        "禁止「通过验收 / 全程只读 / 未使用写工具」。"
+        "【收口口径】向用户/主管交接时写「报告已落盘、未改业务源码」。"
         "短命令优先：rg/grep、定点 read、git check-ignore、git ls-files；"
         "禁止把全量 typecheck/全量 pytest 超时当作中+缺陷证据。"
     )
@@ -345,8 +344,8 @@ def _auditor_deliverable(artifact: str) -> dict[str, Any]:
 def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     """代码审计：1 人两阶段 A→B；2 路并行审计员（CEO 收口）；≥3 路再加主管跨模块速览。
 
-    与 ``parallel_brief``（摸底对齐）、``research_report``（成文+学术审校）、
-    ``repair_code``（按症状修）划界：本形状专产纪律化审计报告。
+    与 ``map_fanout``（摸底对齐）、``cite_write_review``（成文+学术审校）、
+    ``diagnose_fix_verify``（按症状修）划界：本形状专产纪律化审计报告。
     """
     scope = clean_str(args.get("scope") or args.get("topic") or args.get("target"))
     if not scope:
@@ -447,8 +446,8 @@ def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
                 "handoff 人审速览同审计员：key_points 覆盖属实（`缺陷id|严重度|一句话`）"
                 f"+ 汇总路径 `{synth_path}`；summary 须含结论+路径；"
                 "空话不够；不得以 handoff 代落盘。"
-                "【收口口径】写「汇总已落盘、未改业务源码」；禁「通过验收 / 全程只读」。"
-                "不要重做全量审计；不要套 research_report 审校环。"
+                "【收口口径】写「汇总已落盘、未改业务源码」。"
+                "不要重做全量审计。"
                 "正向确认默认不写。"
             ),
             "deliverable": {

@@ -11,7 +11,7 @@
  * 不替任何人认领。
  */
 
-export type ResumeSettledCardKind = "ask_user" | "plan_review" | "team_preview";
+export type ResumeSettledCardKind = "ask_user" | "plan_review";
 
 export type ResumeSettledTurnStatus =
   | "running"
@@ -30,11 +30,7 @@ export interface ResumeSettledPayload {
   turn_status: ResumeSettledTurnStatus;
 }
 
-const CARD_KINDS: readonly string[] = [
-  "ask_user",
-  "plan_review",
-  "team_preview",
-];
+const CARD_KINDS: readonly string[] = ["ask_user", "plan_review"];
 
 const TURN_STATUSES: readonly string[] = [
   "running",

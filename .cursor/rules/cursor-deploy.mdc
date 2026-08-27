@@ -20,19 +20,21 @@ alwaysApply: false
 - **凭据禁令**：`deploy/.env.deploy.local` 不入仓。禁止在 chat 索要/回显 token、SSH 私钥或其它部署凭据。
 - **不重新启用** deploy/release workflow 的 push/tag/schedule 自动触发。
 - **新增/改接口 → 后端必须先部署**。前端 deploy 脚本内置版本漂移门禁。
+- **协议 / UI 混改**：api + admin + desktop + Android + website **同一发版窗口一起发**（独立 semver，不强制同 tag / 同 SHA）。同船内后端仍先部署。勿把桌面拆到「过几天再补」。
 - **桌面发版**：Win = 本地 `release:win`；Mac = GHA 仅 mac；**勿用 GHA 打 Win**。官网首装 / updater feed → [发布与门禁 §7.6b](/docs/05-平台与运维/发布与门禁.md)。
 - 发布前本地一键门禁：`pnpm release:gate`（含 schema gate）。日常可用 `:lite`；**发布仍须全量**。
 - **`deploy:backend` 前须等 `ci.yml` 全绿**（本地 gate 不含 integration、且 Win≠Linux）→ [发布与门禁 · 决策与落差](/docs/05-平台与运维/发布与门禁.md#决策与落差代码看不出来)。
 - **后端上线顺序**：停旧 api → `alembic upgrade` → schema gate `--live` → 起新 api。禁止旧容器接流量时跑破坏性迁移。
+- **紧急续跑 finish**：镜像已在机上、finish 因 `/data/logs` 权限失败 → `node deploy/scripts/resume-finish.mjs <short-sha>`（chown 后再跑 `finish-server.sh`）。不是主路径、不是 npm script。
 
 ## 全端发布顺序（速查）
 
 半自动清单（只打印步骤/探针，不替你 Publish）：`pnpm release:ship`（`--track api` = 仅热修轨；`--check` = 探桌面·Android draft 资产 + updater feed 健康：走公开 DoH 解析后校 TLS 到期与 feed 当前 version，**不**断言版本，勿据此判「没同步」）。full 清单含 Android APK 步（`release:android` 出包前自动 CORS 预检 → 真机冒烟仅签名安装 / WebView / SSE → Publish `android-v*`）。
 
-**公告两段式（定案 D · 工作流 A）**：人定「今天发 + 约时」后**立刻预告**（与 gate / 修拦阻并行）；门禁不过则改约时或归档预告。收口在验收完成后发。勿绑进 `deploy:backend` 自动发。**部署前**仍须 `release:gate` 全绿。
+**公告两段式**：人定「今天发 + 约时」后**立刻预告**（与 gate / 修拦阻并行）；门禁不过则改约时或归档预告。收口在验收完成后发。勿绑进 `deploy:backend` 自动发。**部署前**仍须 `release:gate` 全绿。
 
 ```text
-pnpm release:notice -- --phase preview …   # 定案约时后立刻（可与下行并行）
+pnpm release:notice -- --phase preview …   # 约时后立刻（可与下行并行）
 pnpm release:gate                          # Win 默认串行；红灯不得部署
 # bump（api 轨会连带同步 uv.lock + openapi info.version）→ commit → push
 gh run watch <id> --exit-status            # 等 ci.yml 全绿；Linux 面只有它能兜

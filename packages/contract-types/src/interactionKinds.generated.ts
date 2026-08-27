@@ -9,8 +9,7 @@ export type InteractionKind =
   | "client_tool"
   | "escalation"
   | "plan_review"
-  | "stage_card"
-  | "team_preview";
+  | "stage_card";
 
 export const INTERACTION_KIND_VALUES = [
   "approval",
@@ -19,7 +18,6 @@ export const INTERACTION_KIND_VALUES = [
   "escalation",
   "plan_review",
   "stage_card",
-  "team_preview",
 ] as const;
 
 /** User-facing decision / ask kinds (InteractionStore + journal fold). */
@@ -28,8 +26,7 @@ export type UserInteractionKind =
   | "ask_user"
   | "escalation"
   | "plan_review"
-  | "stage_card"
-  | "team_preview";
+  | "stage_card";
 
 export const USER_INTERACTION_KIND_VALUES = [
   "approval",
@@ -37,7 +34,6 @@ export const USER_INTERACTION_KIND_VALUES = [
   "escalation",
   "plan_review",
   "stage_card",
-  "team_preview",
 ] as const;
 
 export type InteractionKindWire = {
@@ -102,15 +98,5 @@ export const INTERACTION_KIND_WIRE: Readonly<Record<UserInteractionKind, Interac
     reconnectAnswerable: true,
     journalSurface: true,
     attention: false,
-  },
-  "team_preview": {
-    requiredEvent: "team_preview_required",
-    resolvedEvent: "team_preview_resolved",
-    idField: "checkpoint_id",
-    hot: false,
-    pausesTurn: true,
-    reconnectAnswerable: false,
-    journalSurface: true,
-    attention: true,
   },
 };

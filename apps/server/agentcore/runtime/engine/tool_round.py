@@ -180,7 +180,7 @@ async def handle_tool_calls_round(
     # 交付正文只留最终交付、旁白入 journal (Fork-B): this round wrote prose
     # and then called a NON-terminal tool, so that prose is process
     # narration (a lead-in, or an acknowledgement of an injected
-    # [系统提示] steer such as「谢谢指正，我重新整理」), not deliverable. Roll it
+    # [系统提示] steer 的致谢寒暄), not deliverable. Roll it
     # back off final_content — it already streamed live + was journaled this
     # round (llm_call fact) — mirroring the finish_guard Rework rollback, so
     # only the FINAL answer round's text reaches the persisted product.

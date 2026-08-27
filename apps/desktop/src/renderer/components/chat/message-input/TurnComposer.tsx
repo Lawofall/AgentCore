@@ -10,6 +10,12 @@ import {
   isContinuableAssistant,
 } from "@/lib/composerContinueHint";
 import {
+  dropInlineIndex,
+  insertInlineToken,
+  migrateLegacyDraft,
+  plainText,
+} from "@/lib/inlineBody";
+import {
   buildSupportDiagnosticPack,
   formatSupportDiagnosticText,
   precedingUserMessageId,
@@ -31,16 +37,16 @@ import {
 } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
 import { useFoldersStore } from "@/stores/folders";
-import {
-  isRetiredKickoffKind,
-  usePendingApprovals,
-} from "@/stores/interactions";
+import { isColdResumeKind, usePendingApprovals } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useServerHealthStore } from "@/stores/serverHealth";
 import { AtSign, Copy, ListPlus, Loader2, Send, Square, X } from "lucide-react";
 import type { ChangeEvent, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AttachmentChips } from "./AttachmentChips";
+import {
+  ComposerBodyEditor,
+  type ComposerBodyHandle,
+} from "./ComposerBodyEditor";
 import { ComposerCloudBridgeHint } from "./ComposerCloudBridgeHint";
 import { ComposerContextCompactedHint } from "./ComposerContextCompactedHint";
 import { ComposerGitStatusChip } from "./ComposerGitStatusChip";
@@ -114,7 +120,7 @@ export function TurnComposer({
 }: {
   placeholder?: string;
   /**
-   * `card` = textarea above toolbar (default; centered new-chat composer).
+   * `card` = editor above toolbar (default; centered new-chat composer).
    * `bar` = compact dock: ＋菜单收纳左簇，常显仅输入与发送。
    */
   variant?: TurnComposerVariant;
@@ -138,8 +144,7 @@ export function TurnComposer({
     conversationId
       ? s.pending.some(
           (p) =>
-            p.conversationId === conversationId &&
-            !isRetiredKickoffKind(p.kind),
+            p.conversationId === conversationId && isColdResumeKind(p.kind),
         )
       : false,
   );
@@ -226,7 +231,9 @@ export function TurnComposer({
     [draftKey],
   );
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const bodyRef = useRef<ComposerBodyHandle | null>(null);
+  const bodyHostRef = useRef<HTMLDivElement>(null);
+  const pendingCaretRef = useRef<number | null>(null);
   const folders = useFolders();
   const draftIntent = useFoldersStore((s) => s.draftWorkspaceIntent);
   const pendingFolderId =
@@ -259,6 +266,26 @@ export function TurnComposer({
     fileInputRef.current?.click();
   }, []);
 
+  const insertTokenAtCaret = useCallback(
+    (kind: "A" | "M", index: number) => {
+      setValue((prev) => {
+        const caret =
+          pendingCaretRef.current ?? bodyRef.current?.getCaret() ?? prev.length;
+        const ins = insertInlineToken(prev, caret, kind, index);
+        pendingCaretRef.current = ins.caret;
+        return ins.value;
+      });
+      requestAnimationFrame(() => {
+        const caret = pendingCaretRef.current;
+        if (caret == null) return;
+        bodyRef.current?.focus();
+        bodyRef.current?.setCaret(caret);
+        pendingCaretRef.current = null;
+      });
+    },
+    [setValue],
+  );
+
   const mention = useMentionMenu({
     conversationId,
     value,
@@ -267,22 +294,34 @@ export function TurnComposer({
     setAttachments,
     agentMentions,
     setAgentMentions,
-    textareaRef,
+    bodyRef,
     onAttachmentFolderHint: conversationId
       ? undefined
       : handleAttachmentFolderHint,
     onBrowserFilePick,
   });
 
-  const drop = useComposerDrop(attachments, setAttachments, conversationId);
+  const onAttachmentInserted = useCallback(
+    (index: number) => {
+      insertTokenAtCaret("A", index);
+    },
+    [insertTokenAtCaret],
+  );
+
+  const drop = useComposerDrop(
+    attachments,
+    setAttachments,
+    conversationId,
+    onAttachmentInserted,
+  );
 
   const onBrowserFilesSelected = useCallback(
     async (e: ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files ?? []);
       e.target.value = "";
       if (files.length === 0) return;
-      await drop.attachFiles(files);
       mention.clearActiveMention();
+      await drop.attachFiles(files);
     },
     [drop.attachFiles, mention.clearActiveMention],
   );
@@ -290,7 +329,21 @@ export function TurnComposer({
   const voice = useVoiceInput({
     onTranscript: useCallback(
       (text: string) => {
-        setValue((prev) => prev + text);
+        setValue((prev) => {
+          const caret =
+            pendingCaretRef.current ??
+            bodyRef.current?.getCaret() ??
+            prev.length;
+          pendingCaretRef.current = caret + text.length;
+          return prev.slice(0, caret) + text + prev.slice(caret);
+        });
+        requestAnimationFrame(() => {
+          const caret = pendingCaretRef.current;
+          if (caret == null) return;
+          bodyRef.current?.focus();
+          bodyRef.current?.setCaret(caret);
+          pendingCaretRef.current = null;
+        });
       },
       [setValue],
     ),
@@ -310,7 +363,9 @@ export function TurnComposer({
   });
 
   const adjustHeight = useCallback(() => {
-    const el = textareaRef.current;
+    const el = bodyHostRef.current?.querySelector<HTMLElement>(
+      "[data-testid=composer-body]",
+    );
     if (!el) return;
     el.style.height = "0";
     el.style.height = `${Math.min(
@@ -332,8 +387,21 @@ export function TurnComposer({
   useEffect(() => {
     if (fillToken === seenFillRef.current) return;
     seenFillRef.current = fillToken;
-    requestAnimationFrame(() => textareaRef.current?.focus());
+    requestAnimationFrame(() => bodyRef.current?.focus());
   }, [fillToken]);
+
+  useEffect(() => {
+    const current = useComposerDraftStore.getState().drafts[draftKey];
+    if (!current) return;
+    const migrated = migrateLegacyDraft(
+      current.value,
+      current.attachments.length,
+      (current.agentMentions ?? []).length,
+    );
+    if (migrated !== current.value) {
+      useComposerDraftStore.getState().setValue(draftKey, migrated);
+    }
+  }, [draftKey]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -367,30 +435,55 @@ export function TurnComposer({
     setAssignHint(null);
   }, [assignHint]);
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const text = e.target.value;
-      setValue(text);
-      mention.syncMention(text, e.target.selectionStart ?? text.length);
-      // Soft drop errors dismiss on next edit (industry: ephemeral, not form-sticky).
+  const handleBodyChange = useCallback(
+    (next: string) => {
+      setValue(next);
+      mention.syncMention(next, bodyRef.current?.getCaret() ?? next.length);
       if (drop.dropError) drop.clearDropError();
     },
     [drop, mention, setValue],
   );
 
+  const handleCaret = useCallback(
+    (caret: number) => {
+      mention.syncMention(value, caret);
+    },
+    [mention, value],
+  );
+
+  const handleReconcile = useCallback(
+    (nextAtts: PendingAttachment[], nextMents: PendingAgentMention[]) => {
+      const removed = attachments.filter(
+        (a) => !nextAtts.some((b) => b.id === a.id),
+      );
+      for (const a of removed) forgetAttachmentUpload(a.id);
+      setAttachments(nextAtts);
+      setAgentMentions(nextMents);
+    },
+    [attachments, setAttachments, setAgentMentions],
+  );
+
   const removeAttachment = useCallback(
     (id: string) => {
+      const index = attachments.findIndex((a) => a.id === id);
       forgetAttachmentUpload(id);
+      if (index >= 0) {
+        setValue((prev) => dropInlineIndex(prev, "attachment", index));
+      }
       setAttachments((prev) => prev.filter((a) => a.id !== id));
     },
-    [setAttachments],
+    [attachments, setAttachments, setValue],
   );
 
   const removeAgentMention = useCallback(
     (id: string) => {
+      const index = agentMentions.findIndex((a) => a.id === id);
+      if (index >= 0) {
+        setValue((prev) => dropInlineIndex(prev, "mention", index));
+      }
       setAgentMentions((prev) => prev.filter((a) => a.id !== id));
     },
-    [setAgentMentions],
+    [agentMentions, setAgentMentions, setValue],
   );
 
   const stopGeneration = useCallback(() => {
@@ -493,7 +586,7 @@ export function TurnComposer({
   // 插队 = 显式 steer（下一步生效），不把主槽改成 Stop&send。
   // N4-A：只读离线硬禁用发送。
   const sendBlocked = serverUnhealthy;
-  const hasDraft = composerHasSendableDraft(value, attachments);
+  const hasDraft = composerHasSendableDraft(value, attachments, agentMentions);
   const queueDisabled = !hasDraft || sendBlocked || isSending;
   const midFlightLabel = "排队发送";
   const midFlightHint = "排队至本回合结束后发送（Enter）；Ctrl/Cmd+Enter 插队";
@@ -569,8 +662,8 @@ export function TurnComposer({
     </IconButton>
   );
 
-  const textareaBlock = (
-    <div className="relative min-w-0 flex-1">
+  const editorBlock = (
+    <div ref={bodyHostRef} className="relative min-w-0 flex-1">
       {voice.isRecording && voice.interimText && (
         <div
           aria-hidden
@@ -578,28 +671,25 @@ export function TurnComposer({
             isBar ? "px-2 py-2" : "px-4 pt-3 pb-1"
           }`}
         >
-          <span className="invisible">{value}</span>
+          <span className="invisible">{plainText(value)}</span>
           <span className="text-foreground/40">{voice.interimText}</span>
         </div>
       )}
-      <textarea
-        ref={textareaRef}
+      <ComposerBodyEditor
+        ref={bodyRef}
         value={value}
-        onChange={handleChange}
+        attachments={attachments}
+        agentMentions={agentMentions}
+        placeholder={resolvedPlaceholder}
+        className={isBar ? "px-2 py-2" : "px-4 pt-3 pb-1"}
+        maxLength={MESSAGE_CHAR_LIMIT}
+        onChange={handleBodyChange}
+        onReconcile={handleReconcile}
+        onRemoveAttachment={removeAttachment}
+        onRemoveAgent={removeAgentMention}
+        onCaret={handleCaret}
         onKeyDown={handleKeyDown}
         onPaste={drop.handlePaste}
-        onSelect={(e) =>
-          mention.syncMention(
-            e.currentTarget.value,
-            e.currentTarget.selectionStart ?? 0,
-          )
-        }
-        placeholder={resolvedPlaceholder}
-        className={`block w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none ${
-          isBar ? "px-2 py-2" : "px-4 pt-3 pb-1"
-        }`}
-        rows={isBar ? 1 : 2}
-        maxLength={MESSAGE_CHAR_LIMIT}
       />
     </div>
   );
@@ -702,13 +792,6 @@ export function TurnComposer({
         />
       )}
 
-      <AttachmentChips
-        attachments={attachments}
-        agentMentions={agentMentions}
-        onRemove={removeAttachment}
-        onRemoveAgent={removeAgentMention}
-      />
-
       {/* 断连提示：仅在心跳判定服务器不可达时出现，主动告知「发送前」状态。 */}
       <ComposerConnectionNotice />
 
@@ -757,7 +840,7 @@ export function TurnComposer({
               {mentionButton}
             </ComposerPlusMenu>
           </div>
-          {textareaBlock}
+          {editorBlock}
           <div className="flex shrink-0 items-center gap-1 pb-0.5">
             {voice.isSupported && (
               <VoiceButton state={voice.state} onClick={voice.toggle} />
@@ -772,7 +855,7 @@ export function TurnComposer({
         </div>
       ) : (
         <>
-          {textareaBlock}
+          {editorBlock}
           <div className="flex items-center justify-between px-4 pb-3">
             <div className="flex min-w-0 flex-1 items-center gap-1">
               {leftCluster}

@@ -203,7 +203,7 @@ AI_NOISE_FILE_SUFFIXES: frozenset[str] = frozenset(
 )
 
 # Archive subset of AI noise — visible under ``external/<alias>/`` list / when
-# ``file_list`` pattern targets these suffixes. ↔ desktop ``AI_ARCHIVE_FILE_SUFFIXES``.
+# ``glob`` pattern targets these suffixes. ↔ desktop ``AI_ARCHIVE_FILE_SUFFIXES``.
 AI_ARCHIVE_FILE_SUFFIXES: frozenset[str] = frozenset(
     {
         ".zip",

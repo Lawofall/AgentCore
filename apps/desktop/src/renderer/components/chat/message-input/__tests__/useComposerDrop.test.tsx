@@ -51,9 +51,17 @@ function deferred() {
 }
 
 /** 真 React state，这样 chip 的 patch（函数式更新）能被观察到。 */
-function useDropHarness(conversationId: string | null) {
+function useDropHarness(
+  conversationId: string | null,
+  onAttached?: (index: number) => void,
+) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const drop = useComposerDrop(attachments, setAttachments, conversationId);
+  const drop = useComposerDrop(
+    attachments,
+    setAttachments,
+    conversationId,
+    onAttached,
+  );
   return { attachments, drop };
 }
 
@@ -160,13 +168,18 @@ describe("useComposerDrop 附加即上传", () => {
     expect(residentMock).not.toHaveBeenCalled();
   });
 
-  it("多文件并行：两个 chip 同时出现，不等前一个传完", async () => {
+  it("多文件并行：两个 chip 同时出现，不等前一个传完，index 递增", async () => {
     const first = deferred();
     const second = deferred();
     residentMock
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
-    const { result } = renderHook(() => useDropHarness("c1"));
+    const indices: number[] = [];
+    const { result } = renderHook(() =>
+      useDropHarness("c1", (index) => {
+        indices.push(index);
+      }),
+    );
 
     let dropping!: Promise<void>;
     await act(async () => {
@@ -179,6 +192,7 @@ describe("useComposerDrop 附加即上传", () => {
       "a.txt",
       "b.txt",
     ]);
+    expect(indices).toEqual([0, 1]);
     expect(residentMock).toHaveBeenCalledTimes(2);
 
     await act(async () => {

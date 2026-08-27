@@ -145,7 +145,7 @@ def _act1_events(act1: dict) -> list[SSEEvent]:
             "dc1",
             "delegate",
             {
-                "playbook": "multi_lens_research",
+                "playbook": "lens_crosscheck",
                 "playbook_args": {"topic": _TOPIC},
                 "coordinate": False,
             },

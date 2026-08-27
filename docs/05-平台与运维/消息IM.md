@@ -9,7 +9,7 @@ skip_if:
 
 # 消息 IM（找人）
 
-> **状态**：**P0（人 ↔ 人单聊）✅ + 内测全员群 MVP & 自助管理（退群/静音/置顶/成员面板）& 审核治理（平台 admin + 群管理员）& 富消息（图/文件）✅ 已落地**；**Admin「内测群」管理员任命 ✅**；**官方号产品公告广播 ✅**；**P1 在线态（部分）✅**；**回复引用 S1 ✅**；**@人/@所有人 S2 ✅**；**撤回 S3 ✅**；**编辑 S4 ✅**；**隐私设置面 ✅**；**好友关系 + 资料卡 / 通讯录 ✅**（见 §九）；**对方用户头像 ✅**（人侧 DTO 带与 `/me` 同公式的 `avatar_url`）；⏳ 官方号服务推送（任务/审批 deep-link）、P1 余项（已读 UI / 正在输入）、P2 余项（通用建群 + 群审核；人+AI 混合群见远期规划）、多 worker 实时。
+> **状态**：人 ↔ 人单聊、内测全员群（自助管理 / 审核治理 / 富消息）、官方号产品公告、好友与资料卡、回复 / @ / 撤回 / 编辑均已接上。⏳ 官方号服务推送（任务/审批 deep-link）、已读 UI / 正在输入、通用建群 + 群审核（人+AI 混合群见远期规划）、多 worker 实时。
 >
 > **定位**：**对话页 = 找 AI，消息页 = 找人**——复用前端聊天内核 + 实时通道，IM 另开后端表。
 
@@ -81,13 +81,13 @@ skip_if:
 
 → 见代码 `apps/desktop/src/renderer/pages/MessagesPage.tsx`、`services/messaging.ts`、`stores/messaging.ts`
 
-## 七、余项缺口（⏳）与内测全员群关键决策（✅）
+## 七、余项与内测全员群
 
 | 项 | 现状 / 缺口 |
 |---|---|
-| 官方号(C) 推送 | **产品公告 ✅**：Admin `publish` 且 `surface∈{inbox,both,modal}` → 写入全站唯一 `type=official` 会话 1 条共享 `system_card`（`payload.kind=product_notice`），经现有 `chat_message` firehose 扇出；归档/过期不删 IM 历史、不回填。**双模板卡片 ✅**（`service` / `article` + 应用内详情）→ [管理员后台 · 官方号双模板](/docs/05-平台与运维/管理员后台.md#官方号双模板服务通知--图文)。任务完成 / 审批 → 官方号 deep-link **二期 ⏳** |
-| P1 | 已读回执 UI、**在线态 ✅（见 §四）** / 正在输入 ⏳（typing 仍待）、**隐私设置面 ✅**、**好友 / 资料卡 / 通讯录 ✅（§九）**；**基础社交原语 ✅（§八）** |
-| P2 | **人群聊：内测全员群 MVP + 自助管理 + 审核治理 + 富消息（图/文件）+ 群管理员 ✅**（`type=group` + `auto_join` + 退群/静音/置顶/成员面板 + 平台 admin **或** 群管理员踢人/禁言/公告 + Admin「内测群」任命管理员 + system_card + 图/文件附件）；通用建群 + 群审核仍 ⏳；**人 + AI 混合群**已迁提案——详细提案不在公开仓 / 维护者本地 |
+| 官方号推送 | **产品公告 ✅**：Admin `publish` 且 `surface∈{inbox,both,modal}` → 写入全站唯一 `type=official` 会话 1 条共享 `system_card`（`payload.kind=product_notice`），经现有 `chat_message` firehose 扇出；归档/过期不删 IM 历史、不回填。**双模板卡片 ✅**（`service` / `article` + 应用内详情）→ [管理员后台 · 官方号双模板](/docs/05-平台与运维/管理员后台.md#官方号双模板服务通知--图文)。任务完成 / 审批 → 官方号 deep-link ⏳ |
+| 已读 / 输入 | 在线态 ✅（§四）；已读回执 UI ⏳；正在输入 ⏳；隐私设置 / 好友 / 社交原语 ✅（§八 · §九） |
+| 人群聊 | 内测全员群（自助管理 / 审核治理 / 富消息 / 群管理员）✅（`type=group` + `auto_join` + 退群/静音/置顶/成员面板 + 平台 admin **或** 群管理员踢人/禁言/公告 + Admin「内测群」任命管理员 + system_card + 图/文件附件）；通用建群 + 群审核 ⏳；**人 + AI 混合群** → 提案（详细不在公开仓） |
 | 多 worker 实时 | firehose / pub-sub 上 Redis / NATS（见 §四） |
 
 > **内测全员群关键决策**（首个「人群聊」落地形态）：
@@ -103,9 +103,8 @@ skip_if:
 
 ## 八、基础社交原语（✅ 已落地）
 
-> **目标**：补齐「找人」会话的线程感与可治理性——回复引用、@人/@所有人、撤回与编辑；对齐主流 IM 习惯，优先做透每一档，不与远期 `@agent` 混合群绑死。  
-> **现状锚点**：**S1 回复 ✅**；**S2 @ ✅**；**S3 撤回 ✅**——`POST .../messages/{id}/recall`；2 分钟窗；平台 admin **或群管理员**群内治理撤；`system_card`/官方号仅平台 admin；`recalled_at` 软撤 + `chat_message_updated` 原地替换。**S4 编辑 ✅**——`PATCH .../messages/{id}`；15 分钟窗；仅本人纯文本；`edited_at`；附件/已撤/官方/system_card 拒；同帧 `chat_message_updated`。  
-> **范围外（本轮不做）**：emoji 反应、转发到他聊、消息搜索全文、置顶单条消息、正在输入/已读 UI（仍归 §七 P1）、`@agent` 接编排（远期）。
+> **现行**：回复引用、@人/@所有人、撤回、编辑均已接上——对齐主流 IM 习惯，不与远期 `@agent` 混合群绑死。撤回：`POST .../messages/{id}/recall`；2 分钟窗；平台 admin **或群管理员**群内治理撤；`system_card`/官方号仅平台 admin；`recalled_at` 软撤 + `chat_message_updated` 原地替换。编辑：`PATCH .../messages/{id}`；15 分钟窗；仅本人纯文本；`edited_at`；附件/已撤/官方/system_card 拒；同帧 `chat_message_updated`。  
+> **范围外**：emoji 反应、转发到他聊、消息搜索全文、置顶单条消息、正在输入/已读 UI（仍归 §七）、`@agent` 接编排（远期）。
 
 ### 8.1 关键取舍（已定）
 
@@ -120,20 +119,20 @@ skip_if:
 | 与对话页 `@` | IM `@` = **人**（及日后 Agent 分区）；对话页 `@` = 附件/路径（file/dir/conversation）+ 可选 **`agent_mentions` 软点名**（非强制派单）——**两套语义、两套 UI，禁止混用组件当真源**。对话页点名 ✅ 落 `messages.agent_mentions` JSONB，经 `MessageDetail.agent_mentions` 读回历史用户气泡角色芯片；**禁止**塞进 `MessageAttachment.kind` | 术语已分域 |
 | 客户端节奏 | 契约与桌面先做透；手机跟渲染与入口，不阻塞桌面验收 | 单契约多端 |
 
-### 8.2 分阶段与验收（慢慢做透）
+### 8.2 现行能力
 
-| 阶段 | 内容 | 验收要点 |
+| 能力 | 行为 | 契约要点 |
 |---|---|---|
-| **S1 回复可用化** ✅ | 校验 + 引用快照 API/事件；桌面：回复入口、composer 引用条、气泡引用块、点击滚到原消息 | 跨端收到带快照的回复；非法 `reply_to`（跨会话/不存在）→ **422**；乐观发送与 firehose 一致；快照落库列 `chat_messages.reply_to`（JSONB，冻结 `sender_user_id` / `sender_display_name` / `body_preview`，预览截断 100 字、空白折成单行） |
-| **S2 @人 + @所有人** ✅ | `mentions` 落库与校验；composer `@` 菜单；高亮；静音弱通知；平台 admin **或群管理员** `@所有人`（群） | 非 accepted 成员 id → 422；普通成员发 `@所有人` → 403；单聊 everyone → 422；静音用户被 @ 有列表角标 + 弱通知；未读策略不破坏现有 `last_read_*` |
-| **S3 撤回** ✅ | recall API + firehose `chat_message_updated`；2 分钟窗；平台 admin / 群管理员治理撤；官方/system_card 仅平台 admin | 超时本人撤 → 403；撤后引用仍显示快照；列表预览不露出已撤正文 |
-| **S4 编辑** ✅ | `PATCH .../messages/{id}` + `edited_at`；气泡「已编辑」；15 分钟窗；composer 编辑态 | 附件消息拒编辑；已撤拒编辑；他端实时看到正文替换 |
-| **（并行可选）** | §七 P1：正在输入（单聊优先）、已读 UI（单聊） | 不阻塞 S1–S4；typing 不入库 |
+| **回复** | 校验 + 引用快照 API/事件；桌面：回复入口、composer 引用条、气泡引用块、点击滚到原消息 | 跨端收到带快照的回复；非法 `reply_to`（跨会话/不存在）→ **422**；乐观发送与 firehose 一致；快照落库列 `chat_messages.reply_to`（JSONB，冻结 `sender_user_id` / `sender_display_name` / `body_preview`，预览截断 100 字、空白折成单行） |
+| **@人 / @所有人** | `mentions` 落库与校验；composer `@` 菜单；高亮；静音弱通知；平台 admin **或群管理员** `@所有人`（群） | 非 accepted 成员 id → 422；普通成员发 `@所有人` → 403；单聊 everyone → 422；静音用户被 @ 有列表角标 + 弱通知；未读策略不破坏现有 `last_read_*` |
+| **撤回** | recall API + firehose `chat_message_updated`；2 分钟窗；平台 admin / 群管理员治理撤；官方/system_card 仅平台 admin | 超时本人撤 → 403；撤后引用仍显示快照；列表预览不露出已撤正文 |
+| **编辑** | `PATCH .../messages/{id}` + `edited_at`；气泡「已编辑」；15 分钟窗；composer 编辑态 | 附件消息拒编辑；已撤拒编辑；他端实时看到正文替换 |
+| ⏳ 正在输入 / 已读 UI | 单聊优先；见 §七 | typing 不入库 |
 
-### 8.3 契约方向（实现时细化，此处锁语义）
+### 8.3 契约
 
 - **发送**：延续 `POST .../messages`，扩展可选 `reply_to_message_id`、`mentions`；`@所有人` 用约定 sentinel（如 `mentions` 含特殊 `user_id` / `kind=everyone`——实现时二选一写进 OpenAPI，禁止魔法字符串散落前端）。
-- **变更**：撤回走独立写接口 `POST .../messages/{message_id}/recall`，经 firehose 扇出显式 `chat_message_updated`（勿复用 `chat_message` 以免误加未读）；客户端按 `message_id` 原地替换。编辑（S4）同模式。
+- **变更**：撤回走独立写接口 `POST .../messages/{message_id}/recall`，经 firehose 扇出显式 `chat_message_updated`（勿复用 `chat_message` 以免误加未读）；客户端按 `message_id` 原地替换。编辑同模式。
 - **快照**：引用预览字段与消息同生命周期返回；不另建「引用表」。
 - **被否**：① 用正文 `@Name` 正则当唯一真相源；② 撤回物理删除行；③ 全员群开放全员 `@所有人`；④ 首期做反应/转发冒充「基础能力」。
 

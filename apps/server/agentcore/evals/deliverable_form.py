@@ -205,8 +205,8 @@ def check_prompt_contract() -> list[str]:
         gaps.append("team_orchestration_missing_workspace_tier")
     if "可开 web_quality_scan" in orch_body:
         gaps.append("team_orchestration_still_teaches_web_quality_scan_opt_in")
-    if 'required_sections": ["问题"' in orch_body:
-        gaps.append("team_orchestration_still_teaches_required_sections_json")
+    if "required_sections" in orch_body:
+        gaps.append("team_orchestration_still_teaches_required_sections")
     if "form" not in TASK_DELIVERABLE_SCHEMA.get("properties", {}):
         gaps.append("schema_missing_form")
     else:
@@ -226,10 +226,17 @@ def check_prompt_contract() -> list[str]:
                 gaps.append(f"schema_still_exposes_{banned}")
     if "才用本工具" in DELEGATE_DESCRIPTION:
         gaps.append("delegate_desc_still_implies_file_artifact_only")
-    if "【看】" not in DELEGATE_DESCRIPTION and "prose" not in DELEGATE_DESCRIPTION:
-        gaps.append("delegate_desc_missing_form_hint")
-    if "【存文档】" not in DELEGATE_DESCRIPTION and "【改工程】" not in DELEGATE_DESCRIPTION:
-        gaps.append("delegate_desc_missing_three_tier")
+    # 三档只留参数面（tasks.deliverable.form），工具 description 不再抄。
+    form_hint = ""
+    form_props = TASK_DELIVERABLE_SCHEMA.get("properties") or {}
+    if isinstance(form_props, dict):
+        form_field = form_props.get("form") or {}
+        if isinstance(form_field, dict):
+            form_hint = str(form_field.get("description") or "")
+    if "【看】" not in form_hint and "prose" not in form_hint:
+        gaps.append("delegate_param_missing_form_hint")
+    if "【存文档】" not in form_hint and "【改工程】" not in form_hint:
+        gaps.append("delegate_param_missing_three_tier")
     prose = build_worker_identity(has_dependents=False, form="prose")
     files = build_worker_identity(has_dependents=False, form="files")
     omitted = build_worker_identity(has_dependents=False)

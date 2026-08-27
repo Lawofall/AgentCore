@@ -132,7 +132,11 @@ def render_tool_consult_body(
     audience: str | None,
     enabled: Sequence[str],
 ) -> str:
-    """Short enable-ack + schema trigger + (CEO) gated HOW. Full JSON stays on the next FC table."""
+    """Enable-ack + one HOW owner. Full JSON stays on the next FC table.
+
+    CEO + host/terminal/browser/grant: consult HOW only (no schema reprint).
+    Everyone else: schema description as the trigger until that face has a HOW.
+    """
     siblings = [n for n in enabled if n != name]
     lines = [
         (
@@ -142,33 +146,19 @@ def render_tool_consult_body(
     ]
     if siblings:
         lines.append("同族已一并启用：" + "、".join(siblings) + "。")
+    how = _ceo_how_for(name) if audience == "ceo" else ""
     desc = (description or "").strip()
-    if desc:
+    if how:
+        lines.append("")
+        lines.append(how)
+    elif desc:
         lines.append("")
         lines.append(desc)
-    if audience == "ceo":
-        how = _ceo_how_for(name)
-        if how:
-            lines.append("")
-            lines.append(how)
     return "\n".join(lines)
 
 
 def _ceo_how_for(name: str) -> str:
-    """CEO routing manuals that used to ride ``capability_how_suffix`` for these tools."""
-    from agentcore.runtime.resolve.prompt.ceo_core import (
-        _BROWSER_HOW,
-        _EXTERNAL_GRANT_HOW,
-        _HOST_HOW,
-        _TERMINAL_RUNTIME_HOW,
-    )
+    """CEO routing manuals: unique owner is this consult body, not the frozen core."""
+    from agentcore.runtime.resolve.prompt.ceo_core import capability_how_suffix
 
-    if name == "terminal":
-        return _TERMINAL_RUNTIME_HOW.strip()
-    if name == "host":
-        return _HOST_HOW.strip()
-    if name == "browser":
-        return _BROWSER_HOW.strip()
-    if name == "external_mount_readonly":
-        return _EXTERNAL_GRANT_HOW.strip()
-    return ""
+    return capability_how_suffix({name})

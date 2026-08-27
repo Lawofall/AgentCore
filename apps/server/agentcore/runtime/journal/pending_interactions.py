@@ -5,10 +5,10 @@
 **单一实现，不双写规则**。
 
 7 user-facing kind：approval / escalation /
-ask_user / plan_review / team_preview / stage_card。
+ask_user / plan_review / stage_card。
 
 ``awaiting=ceo`` 的 escalation 不进用户可答清单（由活着的 CEO 仲裁）。
-冷路（ask_user / plan_review / team_preview）的 frame 恢复仍走 ``paused_turns``；
+冷路（ask_user / plan_review）的 frame 恢复仍走 ``paused_turns``；
 本 fold 只负责交互卡生命周期投影。
 """
 
@@ -201,47 +201,6 @@ def project_interaction_leaf(rec: InteractionRecord) -> dict[str, Any]:
     if rec.kind == "plan_review":
         run_ids = [s.get("run_id", "") for s in (p.get("steps") or [])]
         return {**base, "runIds": run_ids}
-    if rec.kind == "team_preview":
-        worker_ids = [w.get("run_id", "") for w in (p.get("workers") or [])]
-        leaf: dict[str, Any] = {**base, "workerIds": worker_ids}
-        # Resolved 修正摘要（开工组队有限否决）— 仅非空时投影，旧向量保持无字段。
-        resolution = rec.resolution or {}
-        excluded = resolution.get("excluded_run_ids")
-        if isinstance(excluded, list) and excluded:
-            leaf["excludedRunIds"] = [str(x) for x in excluded if str(x).strip()]
-        overrides = resolution.get("write_capability_overrides")
-        if isinstance(overrides, list) and overrides:
-            projected_overrides: list[dict[str, str]] = []
-            for row in overrides:
-                if not isinstance(row, dict):
-                    continue
-                rid = str(row.get("run_id") or "").strip()
-                if not rid:
-                    continue
-                projected_overrides.append({"runId": rid, "capability": "text_only"})
-            if projected_overrides:
-                leaf["writeCapabilityOverrides"] = projected_overrides
-        models = resolution.get("model_overrides")
-        if isinstance(models, dict) and models:
-            projected_models: dict[str, dict[str, str]] = {}
-            for rid, row in models.items():
-                key = str(rid or "").strip()
-                if not key or not isinstance(row, dict):
-                    continue
-                model = str(row.get("model") or "").strip()
-                if not model:
-                    continue
-                entry: dict[str, str] = {"model": model}
-                origin = str(row.get("origin") or "").strip()
-                if origin:
-                    entry["origin"] = origin
-                provider_id = str(row.get("provider_id") or "").strip()
-                if provider_id:
-                    entry["provider_id"] = provider_id
-                projected_models[key] = entry
-            if projected_models:
-                leaf["modelOverrides"] = projected_models
-        return leaf
     if rec.kind == "escalation":
         esc: dict[str, Any] = {
             **base,

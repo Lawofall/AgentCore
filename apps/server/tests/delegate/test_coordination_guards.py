@@ -763,7 +763,7 @@ def test_same_batch_serial_same_role_with_depends_on_admits():
 
 
 def test_same_batch_scoped_fanout_same_role_admits():
-    """同批同角色但交付物 scope 互斥（compare_options 扇出）→ 放行。"""
+    """同批同角色但交付物 scope 互斥（sibling 各写 distinct artifacts）→ 放行。"""
     from agentcore.runtime.coordination.append_guard import (
         admit_added_nodes,
         find_sibling_role_crosses,
@@ -1135,12 +1135,17 @@ def test_idle_yield_brief_pending_approval_forbids_wait(monkeypatch):
     )
 
     brief = format_idle_yield_brief(session)
+    assert "等你允许" in brief
     assert "等待用户审批" in brief or "审批/授权" in brief
     assert "正常推进" not in brief
     assert "这是预期中的等待" not in brief
     assert "禁止" in brief or "勿" in brief
     assert "会继续" in brief or "报告阻塞" in brief
+    assert "听团" in brief or "wait" in brief
+    assert "【禁止】调用 wait" not in brief
     assert "保持静默，引导" not in brief
+    assert "团队已取消" not in brief
+    assert "调度已停" not in brief
 
 
 async def test_idle_yield_held_while_inflight(monkeypatch):
@@ -1492,6 +1497,11 @@ async def test_user_stop_cancels_drive_and_release_clears():
     # Drive cancel signalled
     await asyncio.sleep(0)
     assert session.drive_task.cancelled() or session.drive_task.done()
+    assert session.drive_cancel_reason == "user_stop"
+    from agentcore.core.task_cancel import CANCEL_REASON_ATTR, cancel_reason_from_task
+
+    assert getattr(session.drive_task, CANCEL_REASON_ATTR, None) == "user_stop"
+    assert cancel_reason_from_task(session.drive_task) == "user_stop"
 
     release_turn_coordination("e-stop")
     assert active_coordination("e-stop") is None

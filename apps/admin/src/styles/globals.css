@@ -166,6 +166,17 @@ body {
   color: var(--foreground);
   font-size: 0.9375rem;
   line-height: 1.65;
+}
+
+.markdown-body.markdown-body--muted,
+.markdown-body.markdown-body--muted h1,
+.markdown-body.markdown-body--muted h2,
+.markdown-body.markdown-body--muted h3,
+.markdown-body.markdown-body--muted h4,
+.markdown-body.markdown-body--muted h5,
+.markdown-body.markdown-body--muted h6 {
+  color: var(--muted-foreground);
+}
   word-break: break-word;
   overflow-wrap: anywhere;
 }

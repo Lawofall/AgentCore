@@ -384,8 +384,8 @@ class _EpisodicDigest:
     text is fine as raw material for the semantic pass (which reads episodes as input
     and decides for itself what is durable), but it must NEVER surface as a card: it is
     the user's own words verbatim, and a chat that opened with an ID number, a phone
-    number and an address would have all three re-posted into the thread under a
-    「已记下本场摘要」heading. No summary ⇒ no card.
+    number and an address would have all three re-posted into the thread under the
+    episodic card heading. No summary ⇒ no card.
     """
 
     summary: str

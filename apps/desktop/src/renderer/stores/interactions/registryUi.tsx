@@ -40,7 +40,7 @@ export type TimelineRenderCtx = {
  * Render the inline decision card / 痕迹 for a timeline process marker.
  *
  * Two empty paths (do not collapse them back to a bare `null`):
- * - {@link timelineIntentionalEmpty}: 设计上不画（`plan_review` 只在 ResumePrompt；`team_preview` 开工卡已退役）。
+ * - {@link timelineIntentionalEmpty}: 设计上不画（`plan_review` 只在 ResumePrompt）。
  * - {@link timelineMissingCard}: 有标记但袋子/store 里没有实体；dev 占位，prod 仍空白。
  */
 export function renderTimelineInteractionCard(
@@ -65,8 +65,6 @@ export function renderTimelineInteractionCard(
       }
       return <CheckpointCard key={cp.id} checkpoint={cp} />;
     }
-    case "team_preview":
-      return timelineIntentionalEmpty();
     case "escalation": {
       if (!ctx?.messageId || !node.escalation_id) {
         return timelineMissingCard({

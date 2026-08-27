@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from agentcore.core.types import ToolEffect
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
 from agentcore.runtime.checkpoints import CheckpointDecision
@@ -18,7 +20,7 @@ from agentcore.runtime.facts import TurnFactLog, current_fact_log
 from agentcore.runtime.interaction import InteractionRegistry
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunSpec
-from agentcore.runtime.suspension import TeamPreviewSuspension, captain_transcript
+from agentcore.runtime.suspension import captain_transcript
 from tests.delegate.conftest import Provider, ctx, tool_durable
 
 
@@ -48,7 +50,7 @@ async def test_confirmed_ask_still_suspends_team_preview():
             },
         ]
     )
-    saved: list[TeamPreviewSuspension] = []
+    saved: list = []
 
     async def _save(frame):
         saved.append(frame)
@@ -230,7 +232,7 @@ async def test_coordinate_team_preview_suspends_before_fork():
     clear_active_coordination()
     registry = InteractionRegistry()
     sink = EventSink()
-    saved: list[TeamPreviewSuspension] = []
+    saved: list = []
 
     async def _save(frame):
         saved.append(frame)
@@ -285,7 +287,7 @@ async def test_team_preview_continue_then_arms_coordination():
     clear_active_coordination()
     registry = InteractionRegistry()
     sink = EventSink()
-    saved: list[TeamPreviewSuspension] = []
+    saved: list = []
 
     async def _save(frame):
         saved.append(frame)
@@ -333,17 +335,31 @@ async def test_team_preview_continue_then_arms_coordination():
     clear_active_coordination("e")
 
 
-async def test_kickoff_frame_captures_batch_coordination_and_fresh_tool_restores():
-    """存量开工卡帧携带 coordination/team_brief/seed_notes；全新工具实例恢复后墙生效。
-
-    真 bug（2026-07-20 P2 手驱真跑抓获）：挂起点在 setup_note_wall 之前，这三样只活在
-    DelegateTool 实例上；耐久恢复走全新实例（_coordination 缺省 none），不随帧回灌则
-    wall 批降级 → worker 被剥便签三件套、CEO 预贴便签永久丢失。
-    """
+async def test_leftover_kickoff_frame_refuses_hydrate_resume_plan_still_restores_wall():
+    """存量开工卡 from_json 410；resume_plan 仍可按 kwargs 回灌 wall。"""
+    from agentcore.core.errors import GoneError
+    from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
     from agentcore.runtime.runs import build_run_plan
     from agentcore.runtime.suspension import suspension_from_json
 
     clear_active_coordination()
+    with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
+        suspension_from_json(
+            {
+                "kind": "team_preview",
+                "message_id": "m1",
+                "conversation_id": "conv1",
+                "user_id": "u",
+                "captain_run_id": "CEO",
+                "checkpoint_id": "ck_wall",
+                "tool_call_id": "call_del",
+                "base_system_prompt": "SYS",
+                "user_message": "原始请求",
+                "coordination": "wall",
+                "team_brief": "统一用中文交付",
+            }
+        )
+
     plan, errors = build_run_plan(
         [
             {"role": "观察员", "task": "做A"},
@@ -355,27 +371,6 @@ async def test_kickoff_frame_captures_batch_coordination_and_fresh_tool_restores
         depth=1,
     )
     assert not errors
-    frame = TeamPreviewSuspension(
-        message_id="m1",
-        conversation_id="conv1",
-        user_id="u",
-        captain_run_id="CEO",
-        checkpoint_id="ck_wall",
-        tool_call_id="call_del",
-        user_message="原始请求",
-        base_system_prompt="SYS",
-        journal_entries=[],
-        plan=plan,
-        workers=[{"run_id": n.run_id, "role": n.role, "task": n.task} for n in plan.nodes],
-        coordination="wall",
-        team_brief="统一用中文交付",
-        seed_notes=[{"kind": "heads_up", "text": "接口用 REST"}],
-    )
-    assert frame.coordination == "wall"
-    assert frame.team_brief == "统一用中文交付"
-    assert frame.seed_notes == [{"kind": "heads_up", "text": "接口用 REST"}]
-    rehydrated = suspension_from_json(frame.to_json())
-    assert rehydrated.coordination == "wall"
 
     async def _save(_frame):
         return None
@@ -387,17 +382,17 @@ async def test_kickoff_frame_captures_batch_coordination_and_fresh_tool_restores
     t2 = tool_durable(Provider(["AOUT", "BOUT"]), sink2, InteractionRegistry(), _save, _drop)
     assert t2._coordination == "none"
     resumed = await t2.resume_plan(
-        frame.plan,
+        plan,
         {},
         decision=CheckpointDecision.CONTINUE,
         note="",
-        checkpoint_run_ids=frame.checkpoint_run_ids,
+        checkpoint_run_ids=set(),
         execution_id="e",
         coordinate=False,
         apply_kickoff_grant=True,
-        coordination=rehydrated.coordination,
-        team_brief=rehydrated.team_brief,
-        seed_notes=list(rehydrated.seed_notes),
+        coordination="wall",
+        team_brief="统一用中文交付",
+        seed_notes=[{"kind": "heads_up", "text": "接口用 REST"}],
     )
     assert resumed.success is True
     assert t2._coordination == "wall"

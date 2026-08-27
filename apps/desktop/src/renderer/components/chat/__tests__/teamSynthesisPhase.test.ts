@@ -93,7 +93,7 @@ describe("teamSynthesisPhase", () => {
       ],
     });
     expect(isTeamSynthesizing(e)).toBe(true);
-    expect(teamSynthesisPhaseLabel(e)).toBe("2/2 已完成，正在生成汇总");
+    expect(teamSynthesisPhaseLabel(e)).toBe("2/2 已完成，正在收尾");
   });
 
   it("not synthesizing while a worker is still running", () => {
@@ -118,7 +118,7 @@ describe("teamSynthesisPhase", () => {
     expect(isTeamSynthesizing(e)).toBe(false);
   });
 
-  it("still synthesizing after CEO turn ended while harvest is live", () => {
+  it("still synthesizing after CEO turn ended while still attached", () => {
     const e = exec({
       status: "running",
       runs: [
@@ -127,6 +127,20 @@ describe("teamSynthesisPhase", () => {
       ],
     });
     expect(isTeamSynthesizing(e, { turnTerminal: true })).toBe(true);
+  });
+
+  it("not synthesizing when detached even if all workers are done", () => {
+    const e = exec({
+      status: "running",
+      runs: [
+        run({ id: "w1", status: "completed" }),
+        run({ id: "w2", status: "completed" }),
+      ],
+    });
+    expect(isTeamSynthesizing(e, { detached: true })).toBe(false);
+    expect(isTeamSynthesizing(e, { turnTerminal: true, detached: true })).toBe(
+      false,
+    );
   });
 
   it("not synthesizing when CEO turn ended but a worker is still live", () => {

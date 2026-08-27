@@ -101,9 +101,8 @@ def render_prior_delivery_gaps(payload: dict[str, Any]) -> str:
     return (
         "<prior_delivery_gaps>\n"
         "【上轮交付缺口】上一回合 durable delivery 仍有阻塞缺口。"
-        "本提示一次性、可忽略；本轮用户新目标优先于本旧账本。"
-        "若短确认只补缺口：只续跑下列未闭合项；可优先同人 `continue_from_run_id`。"
-        "【禁止】整锅重派或重写路径已核文件。\n"
+        "一次性、可忽略；本轮用户新目标优先。"
+        "只补缺口则续跑下列未闭合项（可 `continue_from_run_id`），勿整锅重派或重写路径已核文件。\n"
         f"state={state}\n"
         f"accepted/delivered_files: {file_line}\n"
         "blocking gaps:\n"

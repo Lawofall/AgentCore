@@ -296,6 +296,9 @@ async def _wire_continuation_toolset(
             mcp_label=mcp_label,
             git_fact=git_fact,
             outlet_inventory=await collect_outlet_inventory(backend),
+            desk_folder_id=folder_id,
+            desk_folder_label=(getattr(backend, "root_label", None) or "").strip() or None,
+            desk_is_birth=True,
         ),
     )
     # Look up via ``resume.pipeline`` so any module-level monkeypatch on that

@@ -9,6 +9,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -897,9 +898,18 @@ async def test_read_url_requires_url():
 def test_parse_github_page_url_repo_tree_blob():
     from agentcore.tools.builtin.web.github_page import (
         _GithubBlobPage,
+        _GithubOwnerPage,
         _GithubRepoPage,
         parse_github_page_url,
     )
+
+    user = parse_github_page_url("https://github.com/octo")
+    assert isinstance(user, _GithubOwnerPage)
+    assert user.owner == "octo"
+
+    org_tab = parse_github_page_url("https://www.github.com/acme?tab=repositories")
+    assert isinstance(org_tab, _GithubOwnerPage)
+    assert org_tab.owner == "acme"
 
     root = parse_github_page_url("https://github.com/octo/demo")
     assert isinstance(root, _GithubRepoPage)
@@ -913,22 +923,43 @@ def test_parse_github_page_url_repo_tree_blob():
     assert isinstance(blob, _GithubBlobPage)
     assert blob.ref == "main" and blob.path == "src/a.py"
 
+    assert parse_github_page_url("https://github.com/octo?tab=stars") is None
+    assert parse_github_page_url("https://github.com/settings") is None
     assert parse_github_page_url("https://github.com/octo/demo/issues/1") is None
     assert parse_github_page_url("https://gist.github.com/octo/abc") is None
     assert parse_github_page_url("https://example.com/octo/demo") is None
 
 
+def _no_git_pat(monkeypatch):
+    async def _load(_user_id: str):
+        return None
+
+    monkeypatch.setattr(
+        "agentcore.workspace.git_credentials.load_git_auth_for_user",
+        _load,
+    )
+
+
+def _assert_secret_absent(*blobs: object, secret: str) -> None:
+    for blob in blobs:
+        if secret and isinstance(blob, str) and secret in blob:
+            raise AssertionError("secret token leaked into test-visible output")
+
+
 async def test_read_url_github_repo_root_via_api(monkeypatch):
     import base64
 
+    _no_git_pat(monkeypatch)
     readme_b64 = base64.b64encode(b"# Demo\nHello from README.\n").decode()
     api_calls: list[str] = []
 
     async def _allow(_url: str):
         return None
 
-    async def _fake_request(_client, _method, url, **_kwargs):
+    async def _fake_request(_client, _method, url, **kwargs):
         api_calls.append(url)
+        headers = kwargs.get("headers") or {}
+        assert "Authorization" not in headers
         if url == "https://api.github.com/repos/octo/demo":
             return httpx.Response(
                 200,
@@ -973,6 +1004,7 @@ async def test_read_url_github_repo_root_via_api(monkeypatch):
 async def test_read_url_github_blob_via_api(monkeypatch):
     import base64
 
+    _no_git_pat(monkeypatch)
     file_b64 = base64.b64encode(b"print('hi')\n").decode()
 
     async def _allow(_url: str):
@@ -1007,6 +1039,7 @@ async def test_read_url_github_blob_via_api(monkeypatch):
 
 
 async def test_read_url_github_api_failure_falls_back_to_html(monkeypatch):
+    _no_git_pat(monkeypatch)
     html = (
         "<html><head><title>HTML fallback</title>"
         '<meta name="description" content="from html">'
@@ -1034,6 +1067,250 @@ async def test_read_url_github_api_failure_falls_back_to_html(monkeypatch):
     body = json.loads(result.output)
     assert body["title"] == "HTML fallback"
     assert body["content"] == "HTML body"
+
+
+async def test_read_url_github_user_page_via_api(monkeypatch):
+    _no_git_pat(monkeypatch)
+    api_paths: list[str] = []
+
+    async def _allow(_url: str):
+        return None
+
+    async def _fake_request(_client, _method, url, **kwargs):
+        parsed = urlparse(url)
+        api_paths.append(parsed.path)
+        headers = kwargs.get("headers") or {}
+        assert "Authorization" not in headers
+        if parsed.path == "/users/octo":
+            return httpx.Response(
+                200,
+                json={"login": "octo", "type": "User", "bio": "builds demos"},
+                request=httpx.Request("GET", url),
+            )
+        if parsed.path == "/users/octo/repos":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "full_name": "octo/demo",
+                        "description": "A demo repo",
+                        "default_branch": "main",
+                        "html_url": "https://github.com/octo/demo",
+                        "private": False,
+                    }
+                ],
+                request=httpx.Request("GET", url),
+            )
+        raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
+
+    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
+    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+
+    result = await ReadUrlTool().execute({"url": "https://github.com/octo"}, _ctx())
+    assert result.success is True
+    body = json.loads(result.output)
+    assert body["title"] == "octo"
+    assert "octo/demo" in body["content"]
+    assert "description: A demo repo" in body["content"]
+    assert "default_branch: main" in body["content"]
+    assert "html_url: https://github.com/octo/demo" in body["content"]
+    assert any(p == "/users/octo/repos" or p == "/orgs/octo/repos" for p in api_paths)
+
+
+async def test_read_url_github_org_page_via_api(monkeypatch):
+    _no_git_pat(monkeypatch)
+    api_paths: list[str] = []
+
+    async def _allow(_url: str):
+        return None
+
+    async def _fake_request(_client, _method, url, **_kwargs):
+        parsed = urlparse(url)
+        api_paths.append(parsed.path)
+        if parsed.path == "/users/acme":
+            return httpx.Response(
+                200,
+                json={"login": "acme", "type": "Organization", "description": "org"},
+                request=httpx.Request("GET", url),
+            )
+        if parsed.path == "/orgs/acme/repos":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "full_name": "acme/sdk",
+                        "description": "SDK",
+                        "default_branch": "main",
+                        "html_url": "https://github.com/acme/sdk",
+                    }
+                ],
+                request=httpx.Request("GET", url),
+            )
+        if parsed.path == "/users/acme/repos":
+            raise AssertionError("org listing must use /orgs/{org}/repos")
+        raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
+
+    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
+    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+
+    result = await ReadUrlTool().execute(
+        {"url": "https://github.com/acme?tab=repositories"}, _ctx()
+    )
+    assert result.success is True
+    body = json.loads(result.output)
+    assert "acme/sdk" in body["content"]
+    assert "/orgs/acme/repos" in api_paths
+
+
+async def test_read_url_github_user_page_sends_pat_authorization(monkeypatch):
+    from agentcore.workspace.git_credentials import GitAuthMaterial
+
+    secret = "ghs_unit_test_pat_value"
+    seen_auth: list[bool] = []
+
+    async def _load(user_id: str):
+        assert user_id == "u"
+        return GitAuthMaterial(username="x-access-token", token=secret)
+
+    monkeypatch.setattr(
+        "agentcore.workspace.git_credentials.load_git_auth_for_user",
+        _load,
+    )
+
+    async def _allow(_url: str):
+        return None
+
+    async def _fake_request(_client, _method, url, **kwargs):
+        headers = kwargs.get("headers") or {}
+        auth = headers.get("Authorization") or ""
+        if not auth.startswith("Bearer ") or auth[7:] != secret:
+            raise AssertionError("expected account PAT in Authorization header")
+        seen_auth.append(True)
+        parsed = urlparse(url)
+        if parsed.path == "/users/octo":
+            return httpx.Response(
+                200,
+                json={"login": "octo", "type": "User"},
+                request=httpx.Request("GET", url),
+            )
+        if parsed.path == "/users/octo/repos":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "full_name": "octo/private-demo",
+                        "description": "secret sauce",
+                        "default_branch": "main",
+                        "html_url": "https://github.com/octo/private-demo",
+                        "private": True,
+                    }
+                ],
+                request=httpx.Request("GET", url),
+            )
+        raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
+
+    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
+    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+
+    result = await ReadUrlTool().execute({"url": "https://github.com/octo"}, _ctx())
+    assert result.success is True
+    assert seen_auth
+    _assert_secret_absent(result.output, result.error or "", secret=secret)
+    body = json.loads(result.output)
+    assert "octo/private-demo" in body["content"]
+    assert "private: true" in body["content"]
+
+
+async def test_read_url_github_user_page_api_failure_falls_back_to_html(monkeypatch):
+    _no_git_pat(monkeypatch)
+    html = (
+        "<html><head><title>User HTML</title>"
+        "</head><body><p>JS shell</p></body></html>"
+    )
+
+    async def _allow(_url: str):
+        return None
+
+    async def _fake_request(_client, _method, url, **_kwargs):
+        if "api.github.com" in url:
+            return httpx.Response(
+                403, json={"message": "rate limit"}, request=httpx.Request("GET", url)
+            )
+        assert url == "https://github.com/octo"
+        return httpx.Response(200, html=html, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
+    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+
+    result = await ReadUrlTool().execute({"url": "https://github.com/octo"}, _ctx())
+    assert result.success is True
+    body = json.loads(result.output)
+    assert body["title"] == "User HTML"
+    assert "JS shell" in body["content"]
+
+
+async def test_read_url_github_repo_sends_pat_authorization(monkeypatch):
+    import base64
+
+    from agentcore.workspace.git_credentials import GitAuthMaterial
+
+    secret = "ghs_unit_test_pat_value"
+    seen_auth: list[bool] = []
+    readme_b64 = base64.b64encode(b"# Private\n").decode()
+
+    async def _load(_user_id: str):
+        return GitAuthMaterial(username="x-access-token", token=secret)
+
+    monkeypatch.setattr(
+        "agentcore.workspace.git_credentials.load_git_auth_for_user",
+        _load,
+    )
+
+    async def _allow(_url: str):
+        return None
+
+    async def _fake_request(_client, _method, url, **kwargs):
+        headers = kwargs.get("headers") or {}
+        auth = headers.get("Authorization") or ""
+        if not auth.startswith("Bearer ") or auth[7:] != secret:
+            raise AssertionError("expected account PAT in Authorization header")
+        seen_auth.append(True)
+        if url == "https://api.github.com/repos/octo/demo":
+            return httpx.Response(
+                200,
+                json={
+                    "full_name": "octo/demo",
+                    "private": True,
+                    "visibility": "private",
+                    "default_branch": "main",
+                    "description": "private demo",
+                    "html_url": "https://github.com/octo/demo",
+                },
+                request=httpx.Request("GET", url),
+            )
+        if url == "https://api.github.com/repos/octo/demo/readme":
+            return httpx.Response(
+                200,
+                json={
+                    "path": "README.md",
+                    "encoding": "base64",
+                    "content": readme_b64,
+                },
+                request=httpx.Request("GET", url),
+            )
+        raise AssertionError(f"unexpected URL (HTML must not be hit): {url}")
+
+    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
+    monkeypatch.setattr(read_url_mod, "_safe_request", _fake_request)
+
+    result = await ReadUrlTool().execute(
+        {"url": "https://github.com/octo/demo"}, _ctx()
+    )
+    assert result.success is True
+    assert seen_auth
+    _assert_secret_absent(result.output, result.error or "", secret=secret)
+    body = json.loads(result.output)
+    assert "private: true" in body["content"]
 
 
 async def test_web_search_requires_query():

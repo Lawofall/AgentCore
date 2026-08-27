@@ -490,11 +490,11 @@ describe("TurnComposer variants", () => {
     fireEvent.click(mentionBtn);
     expect(mentionToggleMock).toHaveBeenCalled();
 
-    const textarea = container.querySelector("textarea");
+    const body = screen.getByTestId("composer-body");
     const root = container.querySelector("[data-composer-variant]");
-    if (!textarea || !root) throw new Error("composer textarea / root missing");
+    if (!root) throw new Error("composer root missing");
 
-    fireEvent.paste(textarea);
+    fireEvent.paste(body);
     expect(dropMock.handlePaste).toHaveBeenCalled();
     fireEvent.drop(root);
     expect(dropMock.handleDrop).toHaveBeenCalled();
@@ -515,8 +515,8 @@ describe("TurnComposer variants", () => {
     const { useComposerDraftStore } = await import("@/stores/composer");
     useComposerDraftStore.getState().setValue("__draft__", "插一句");
     renderComposer("bar");
-    const textarea = screen.getByPlaceholderText(/输入消息/);
-    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+    const body = screen.getByTestId("composer-body");
+    fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
     expect(handleSendMock).toHaveBeenCalledWith({ delivery: "steer" });
   });
 
@@ -524,8 +524,8 @@ describe("TurnComposer variants", () => {
     const { useComposerDraftStore } = await import("@/stores/composer");
     useComposerDraftStore.getState().setValue("__draft__", "hello");
     renderComposer("bar");
-    const textarea = screen.getByPlaceholderText(/输入消息/);
-    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+    const body = screen.getByTestId("composer-body");
+    fireEvent.keyDown(body, { key: "Enter", metaKey: true });
     expect(handleSendMock).toHaveBeenCalledWith();
   });
 
@@ -567,18 +567,42 @@ describe("TurnComposer variants", () => {
     expect((send as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("empty draft: composer send error is on the card, not in the textarea", () => {
+  it("has no composer textarea; body editor is the textbox", () => {
+    const { container } = renderComposer();
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(screen.getByTestId("composer-body")).toBeTruthy();
+    expect(screen.getByRole("textbox")).toBeTruthy();
+  });
+
+  it("migrates a legacy chip-tray draft into inline markers", async () => {
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue("__draft__", "hello");
+    useComposerDraftStore.getState().setAttachments("__draft__", [
+      {
+        id: "a1",
+        key: "file:local:pic.png",
+        name: "pic.png",
+        path: "pic.png",
+        text: "",
+        truncated: false,
+        kind: "file",
+      },
+    ]);
+    renderComposer();
+    expect(useComposerDraftStore.getState().drafts.__draft__?.value).toContain(
+      "\uFFFC",
+    );
+  });
+
+  it("empty draft: composer send error is on the card, not in the body", () => {
     const copy = "发送失败：没有可用的模型密钥";
     setComposerSendError("__draft__", { message: copy, action: null });
     renderComposer();
     expect(screen.getByTestId("composer-send-error").textContent).toContain(
       copy,
     );
-    const textarea = screen.getByPlaceholderText(
-      /输入消息/,
-    ) as HTMLTextAreaElement;
-    expect(textarea.value).toBe("");
-    expect(textarea.value).not.toContain(copy);
+    const body = screen.getByTestId("composer-body");
+    expect(body.textContent ?? "").not.toContain(copy);
   });
 
   it("empty draft: falls back to session error when composer slot is empty", () => {
@@ -588,10 +612,8 @@ describe("TurnComposer variants", () => {
     expect(screen.getByTestId("composer-send-error").textContent).toContain(
       copy,
     );
-    const textarea = screen.getByPlaceholderText(
-      /输入消息/,
-    ) as HTMLTextAreaElement;
-    expect(textarea.value).not.toContain(copy);
+    const body = screen.getByTestId("composer-body");
+    expect(body.textContent ?? "").not.toContain(copy);
   });
 
   it("closing the send-error notice clears composer and session slots", () => {
@@ -745,7 +767,7 @@ describe("TurnComposer variants", () => {
     seedLastAssistant({ finishReason: "interrupted", content: "半成品" });
     renderComposer();
     expect(
-      screen.getByPlaceholderText(COMPOSER_CONTINUE_PLACEHOLDER),
+      screen.getByRole("textbox", { name: COMPOSER_CONTINUE_PLACEHOLDER }),
     ).toBeTruthy();
     expect(screen.queryByTestId("composer-empty-interrupted-hint")).toBeNull();
   });

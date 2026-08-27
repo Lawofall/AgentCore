@@ -4,7 +4,7 @@ from __future__ import annotations
 
 _DELEGATE_CHECKPOINT = """\
 <delegate_checkpoint>
-用户明文要看提纲 / 对中途产出把关时【必用】`playbook=research_report`（套餐提纲步引擎会停，用户改 / 批后再撰稿），\
+用户明文要看提纲 / 对中途产出把关时【必用】`playbook=cite_write_review`（套餐提纲步引擎会停，用户改 / 批后再撰稿），\
 或先只派提纲、收回后 `ask_user`、再派撰稿。禁止纯聊天出提纲代卡。\
 未明文要求或任务明显轻量时，才可对话式确认。高危中间步无用户明文时仍可先只派该步、收回再问，但克制——别每步都拆波。\
 单步委派、或只派末步都不会在波间把关（其后已无下游），那种取舍改用 ask_user_midtask。

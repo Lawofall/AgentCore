@@ -60,7 +60,7 @@ _MAX_RESULTS_CAP = 12
 # model-facing budget so a full result set is never truncated into invalid JSON.
 _OUTPUT_LIMIT = 8000
 # Empty-result honesty: queries with more than this many whitespace-separated
-# tokens get an explicit "split to 2–3 core words" tip (mirrors debate SEARCH_QUERY_RULE).
+# tokens get an explicit "split to 2–3 core words" tip (schema owns the word-count hint).
 _VERBOSE_QUERY_WORD_THRESHOLD = 4
 
 # A3 query contract (检索与交付约束前置提案): mechanical limits at the tool boundary.

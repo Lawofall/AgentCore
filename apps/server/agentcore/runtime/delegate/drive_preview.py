@@ -47,7 +47,7 @@ async def team_preview_before_workers(
         and axes.auto_executes
     ):
         tool._auto_grant_pending = True  # type: ignore[attr-defined]
-    if playbook_name == "multi_lens_research":
+    if playbook_name == "lens_crosscheck":
         from agentcore.runtime.kickoff.stage_card import mark_turn_keeps_stage_card
 
         mark_turn_keeps_stage_card()

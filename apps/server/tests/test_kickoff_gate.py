@@ -32,7 +32,7 @@ from agentcore.runtime.kickoff import (
 )
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunSpec
-from agentcore.runtime.suspension import TeamPreviewSuspension, captain_transcript
+from agentcore.runtime.suspension import captain_transcript
 from agentcore.tools.builtin.ask_user import AskUserTool
 from agentcore.tools.builtin.debate import DebateTool
 from agentcore.tools.protocol import ToolContext
@@ -152,7 +152,7 @@ async def test_confirmed_ask_does_not_skip_delegate_team_preview():
             },
         ]
     )
-    saved: list[TeamPreviewSuspension] = []
+    saved: list = []
 
     async def _save(frame):
         saved.append(frame)
@@ -215,7 +215,7 @@ async def test_confirmed_ask_does_not_skip_debate_team_preview():
             },
         ]
     )
-    saved: list[TeamPreviewSuspension] = []
+    saved: list = []
 
     async def _save(frame):
         saved.append(frame)
@@ -380,7 +380,7 @@ async def test_debate_top_level_must_kickoff():
     """顶层 debate 不再 await team_preview；直接开跑。"""
     registry = InteractionRegistry()
     sink = EventSink()
-    saved: list[TeamPreviewSuspension] = []
+    saved: list = []
 
     async def _save(frame):
         saved.append(frame)
@@ -617,7 +617,7 @@ async def test_unfulfilled_adjust_solo_still_hangs_card():
             },
         ]
     )
-    saved: list[TeamPreviewSuspension] = []
+    saved: list = []
 
     async def _save(frame):
         saved.append(frame)

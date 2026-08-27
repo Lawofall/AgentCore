@@ -190,7 +190,7 @@ describe("attach 游标回放 · 耐久卡绑定", () => {
     ).toBeUndefined();
     expect(
       (assistants().at(-1)?.process ?? []).some(
-        (s) => s.kind === "team_preview",
+        (s) => (s as { kind: string }).kind === "team_preview",
       ),
     ).toBe(false);
     expect(pendingCards()).toHaveLength(0);

@@ -778,15 +778,18 @@ def test_task_description_matches_what_worker_actually_receives():
 
 async def test_playbook_instantiates_whole_team_and_runs():
     # 拆·playbook 固化 (§2.1): naming a固化形状 + slots expands to a full team and flows through the
-    # SAME pipeline as a hand-written tasks array (compare_options → 2 evaluators + 1 summary).
+    # SAME pipeline as a hand-written tasks array (map_fanout → N 方向专员).
     t = tool(Provider([]))
     result = await t.execute(
-        {"playbook": "compare_options", "playbook_args": {"question": "选 A 还是 B", "options": ["A", "B"]}},
+        {
+            "playbook": "map_fanout",
+            "playbook_args": {"topic": "主题 X", "angles": ["方向 A", "方向 B"]},
+        },
         ctx(),
     )
     assert result.success is True
     assert result.is_terminal is False
-    assert "汇总分析师" in result.output  # the summary role the playbook minted
+    assert "方向专员" in result.output  # the role the playbook minted
 
 
 async def test_playbook_unknown_name_rejected():
@@ -798,7 +801,7 @@ async def test_playbook_unknown_name_rejected():
 
 async def test_playbook_missing_required_slot_rejected():
     t = tool(Provider([]))
-    result = await t.execute({"playbook": "research_report", "playbook_args": {}}, ctx())
+    result = await t.execute({"playbook": "cite_write_review", "playbook_args": {}}, ctx())
     assert result.success is False
     assert "topic" in (result.error or "")
 
@@ -807,7 +810,7 @@ async def test_playbook_and_tasks_are_mutually_exclusive():
     t = tool(Provider([]))
     result = await t.execute(
         {
-            "playbook": "research_report",
+            "playbook": "cite_write_review",
             "playbook_args": {"topic": "X"},
             "tasks": [{"role": "a", "task": "b"}],
         },
@@ -826,8 +829,8 @@ async def test_playbook_xor_and_hoist_conflict_skip_circuit_breaker():
     t = tool(Provider([]))
     xor = await t.execute(
         {
-            "playbook": "build_feature",
-            "playbook_args": {"feature": "CLI"},
+            "playbook": "cite_write_review",
+            "playbook_args": {"topic": "X"},
             "tasks": [
                 {"role": "实现", "task": "写 CLI"},
                 {"role": "测试", "task": "写测试"},

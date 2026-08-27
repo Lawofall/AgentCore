@@ -88,7 +88,8 @@ class WaitTool:
                 "无副作用、立即返回；比空响应更稳（模型被迫发工具时优先用本工具）。"
                 "【禁止】用 delegate / update_synthesis 占位等待；"
                 "同构再派会被拒绝。有真实动作时改调对应工具，勿调 wait。"
-                "有待用户审批/授权时勿调 wait（队员在等用户，空 wait 假装推进会被拒绝）。"
+                "有待用户审批/授权时禁止空 wait 假装推进；正确姿势是向用户"
+                "报告阻塞（等你允许）后 wait 听团——队还在，禁止整队收场。"
             ),
             parameters={
                 "type": "object",
@@ -113,19 +114,30 @@ class WaitTool:
                 output="",
                 error="当前不在协调模式——仅在协调模式启动团队后可用。",
             )
-        from agentcore.runtime.interaction_orphan import has_hot_user_pending
+        from agentcore.runtime.interaction_orphan import (
+            format_hot_pending_hold_line,
+            has_hot_user_pending,
+        )
 
         conversation_id = (
             getattr(session, "conversation_id", None) or context.conversation_id or ""
         )
         if has_hot_user_pending(conversation_id):
+            hold = format_hot_pending_hold_line(conversation_id)
+            logger.info(
+                "coordination.wait",
+                execution_id=session.execution_id,
+                completed=len(session.completed_run_ids),
+                total=session.total_workers,
+                reason="hot_pending_listen",
+            )
             return ToolResult(
                 tool_call_id="",
-                success=False,
-                output="",
-                error=(
-                    "队员在等用户审批/授权，禁止空 wait 假装推进。"
-                    "请保持静默，或引导用户查看审批卡；勿再调用 wait。"
+                success=True,
+                output=(
+                    f"{hold}\n"
+                    "本 wait 视为听团，不是推进。请先向用户报告阻塞（等你允许）；"
+                    "队还在，勿整队收场。"
                 ),
             )
         reason = str(arguments.get("reason") or "").strip()
@@ -361,6 +373,11 @@ class CancelWorkerTool:
             if pending.run_id is not None:
                 pending_id = pending.run_id
                 session.vacate_pending_worker(pending_id)
+                from agentcore.runtime.coordination.cancel_close import (
+                    note_cancel_worker_success,
+                )
+
+                note_cancel_worker_success(session, pending_id, started=False)
                 from agentcore.runtime.coordination.journal import (
                     record_coordination_snapshot,
                 )
@@ -427,6 +444,14 @@ class CancelWorkerTool:
 
         run_id = resolution.run_id
         session.request_cancel(run_id)
+        from agentcore.runtime.coordination.cancel_close import (
+            note_cancel_worker_success,
+            worker_was_started,
+        )
+
+        note_cancel_worker_success(
+            session, run_id, started=worker_was_started(session, run_id)
+        )
         from agentcore.runtime.coordination.journal import record_coordination_snapshot
 
         record_coordination_snapshot(session)

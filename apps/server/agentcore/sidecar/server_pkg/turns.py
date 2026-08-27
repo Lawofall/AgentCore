@@ -754,9 +754,6 @@ class TurnExecutionMixin:
         user_message_id: str = "",
         external_mounts: list | dict | None = None,
         *,
-        excluded_run_ids: list[str] | None = None,
-        write_capability_overrides: list[dict[str, str]] | None = None,
-        model_overrides: dict[str, dict[str, str]] | None = None,
         settlement_prewritten: bool = False,
         reply_ids: list[Any] | None = None,
     ) -> None:
@@ -772,10 +769,6 @@ class TurnExecutionMixin:
 
         ``reply_ids``: deferred same-id joiners share this live list so every RPC
         receives the same final result/error (wire contract unchanged).
-
-        ``excluded_run_ids`` / ``write_capability_overrides`` / ``model_overrides``
-        mirror cloud POST resume (开工组队有限否决 + 人盖模型) through settlement
-        prewrite → resume pipeline.
         """
         assert self._root is not None  # guarded by _on_resume
         turn_id = suspension.message_id
@@ -788,9 +781,6 @@ class TurnExecutionMixin:
             getattr(suspension, "user_message_id", None),
         )
         decision_value = decision.value if hasattr(decision, "value") else str(decision)
-        excluded = list(excluded_run_ids or [])
-        overrides = list(write_capability_overrides or [])
-        models = dict(model_overrides or {})
         # Resolved once so the pipeline runs on it AND the reply surfaces the same model.
         resume_creds = self._creds_for(conversation_id, trace_id, turn_id)
         if resume_creds is None:
@@ -871,9 +861,6 @@ class TurnExecutionMixin:
                     selected=selected,
                     user_message_id=umid,
                     trace_id=trace_id,
-                    excluded_run_ids=excluded,
-                    write_capability_overrides=overrides,
-                    model_overrides=models,
                 )
             except Exception as e:
                 err_msg = f"settlement prewrite failed: {e}"
@@ -958,9 +945,6 @@ class TurnExecutionMixin:
                             permission_axes=self.permission_axes_for(conversation_id),
                             # Same desktop channel as fresh turns — omit ⇒ resume drops MCP/Host.
                             x_client_platform="desktop",
-                            excluded_run_ids=excluded,
-                            write_capability_overrides=overrides,
-                            model_overrides=models,
                         )
                         # Same D1 hold as _run_turn: delay close while detached drive lives.
                         from agentcore.runtime.coordination import await_live_detached_drive

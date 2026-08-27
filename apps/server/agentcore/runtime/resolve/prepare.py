@@ -18,6 +18,7 @@ from agentcore.memory import (
 )
 from agentcore.runtime.resolve.attachment_context import (
     _build_attachment_context,  # noqa: F401 — public prepare / pipeline seam
+    _build_attachment_prompt,  # noqa: F401
 )
 from agentcore.tools.builtin.read_conversation import ReadConversationTool
 from agentcore.tools.builtin.search_conversations import SearchConversationsTool

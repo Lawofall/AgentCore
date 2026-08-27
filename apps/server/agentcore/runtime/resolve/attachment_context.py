@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agentcore.core.logging import get_logger
@@ -44,6 +45,19 @@ _ATTACH_THIS_MESSAGE_FRAME = (
     "以下是本条消息的附件。attachments/ 同名跨轮复用同一路径，最新上传覆盖旧字节；"
     "工作区索引里其它 attachments/ 条目属历史轮。"
 )
+
+_INLINE_ORDER_FACT = (
+    "Materials are inlined in the user message in the order the user placed them."
+)
+
+
+@dataclass(frozen=True)
+class AttachmentPrompt:
+    """Per-turn attachment prompt: full envelope, per-file blocks, slim envelope."""
+
+    envelope: str | None
+    file_blocks: tuple[str, ...]
+    slim_envelope: str | None
 
 # Unconditional: office/PDF extract is never a product-grade table source.
 _OFFICE_TABLE_LOSSY = (
@@ -125,7 +139,41 @@ async def _resolve_table_preview(
     return None
 
 
-async def _build_attachment_context(
+def _attached_files_envelope(
+    body: str,
+    *,
+    conversation_note: str,
+    resident_note: str,
+    table_note: str,
+    binary_note: str,
+    office_note: str,
+    preparsed_note: str,
+    missing_note: str,
+    image_note: str,
+    inline_in_user_message: bool = False,
+) -> str:
+    inline_note = f" {_INLINE_ORDER_FACT}" if inline_in_user_message else ""
+    inner = f"{body}\n" if body else ""
+    return (
+        "<attached_files>\n"
+        f"{_ATTACH_THIS_MESSAGE_FRAME} "
+        "The user attached the following files, directories and past "
+        "conversations as actionable inputs for this turn—not mere optional "
+        "reference. When the user narrows scope to these materials and/or "
+        "existing workspace products, start from them (gap analysis or a "
+        "revision); do not idle solely because a full repo is missing. Cite "
+        "them by name when relevant. Directory entries list file paths only "
+        "(file contents are not included)."
+        f"{inline_note}"
+        f"{conversation_note}"
+        f"{resident_note}{table_note}{binary_note}{office_note}{preparsed_note}"
+        f"{missing_note}{image_note}\n\n"
+        f"{inner}"
+        "</attached_files>"
+    )
+
+
+async def _build_attachment_prompt(
     attachments: list[dict] | None,
     *,
     user_id: str | None = None,
@@ -137,7 +185,7 @@ async def _build_attachment_context(
     main_native_vision: bool = False,
     native_image_parts: list[dict] | None = None,
     available_tools: Collection[str] | None = None,
-) -> str | None:
+) -> AttachmentPrompt:
     """Render user-referenced files / dirs / conversations into a prompt block.
 
     Text files carry pre-extracted text; pre-parsed binaries (docx/pdf/…) carry
@@ -156,11 +204,11 @@ async def _build_attachment_context(
     ``kind=conversation`` is **server deep-read** via ``log_export``
     (client shallow ``text`` is ignored). A file with a ``workspace_path``
     was persisted into the workspace, so the header points the agent at that
-    durable path. Returns None when there is nothing to inject so the base
+    durable path. Empty prompt when there is nothing to inject so the base
     prompt stays unchanged.
     """
     if not attachments:
-        return None
+        return AttachmentPrompt(None, (), None)
 
     blocks: list[str] = []
     resident = False
@@ -353,82 +401,103 @@ async def _build_attachment_context(
             blocks.append(f"--- File: {name} ({path}){note} ---\n{text}")
 
     if not blocks:
-        return None
+        return AttachmentPrompt(None, (), None)
 
+    notes = dict(
+        conversation_note=(
+            " A Conversation block is a server-rendered deep transcript (messages +"
+            " process layer); when truncated, delegate a Worker with"
+            " ``read_conversation`` to continue — do not treat a truncated block as"
+            " the full log."
+            if has_conversation
+            else ""
+        ),
+        resident_note=(
+            " Files shown with an in-workspace path have been saved into your "
+            "workspace — read or edit them with the file tools by that path rather "
+            "than trusting only the (possibly truncated) text below."
+            if resident
+            else ""
+        ),
+        table_note=(
+            " Spreadsheet / delimited attachments include a structure preview only "
+            "(columns, row count, inferred types, sample rows). Full data stays in "
+            "the workspace file and is not inlined."
+            if has_table
+            else ""
+        ),
+        binary_note=(
+            (
+                " Unknown binary attachments have no inline body. "
+                + _code_execute_steer(
+                    has_code_execute=has_code_execute, spreadsheet=False
+                )
+            )
+            if has_binary
+            else ""
+        ),
+        office_note=(
+            " Office/PDF attachments without inline text: use file_read on the "
+            "workspace path (automatic text extract); do not default to code_execute."
+            if has_office_unparsed
+            else ""
+        ),
+        preparsed_note=(
+            (
+                " Some office/PDF attachments were pre-parsed at upload: inline text may "
+                "be truncated — use the ``*.md`` workspace copy (or the original path) "
+                "with file tools for the full extract."
+                + (f" {_OFFICE_TABLE_LOSSY}" if has_office_inline else "")
+            )
+            if has_preparsed
+            else ""
+        ),
+        missing_note=(
+            " A [resident missing] block means chip/metadata claimed a workspace "
+            "path but bytes are absent — ask_user to re-upload; never dispatch "
+            "unzip/remediation as if the file were already delivered."
+            if has_resident_missing
+            else ""
+        ),
+        image_note=(
+            " Image attachments are eye→text when识图 is configured (profile vision "
+            "slot or platform VISION_*); without a reader, the block states that "
+            "honestly — do not treat a bare path as a reading, and do not default to "
+            "code_execute to open images."
+            if has_image_unconfigured
+            else ""
+        ),
+    )
     body = "\n\n".join(blocks)
-    resident_note = (
-        " Files shown with an in-workspace path have been saved into your "
-        "workspace — read or edit them with the file tools by that path rather "
-        "than trusting only the (possibly truncated) text below."
-        if resident
-        else ""
+    envelope = _attached_files_envelope(body, inline_in_user_message=False, **notes)
+    slim = _attached_files_envelope("", inline_in_user_message=True, **notes)
+    return AttachmentPrompt(envelope, tuple(blocks), slim)
+
+
+async def _build_attachment_context(
+    attachments: list[dict] | None,
+    *,
+    user_id: str | None = None,
+    host_conversation_id: str | None = None,
+    vision_reader: VisionReader | None = None,
+    backend: WorkspaceBackend | None = None,
+    cost_sink: list[RunCost] | None = None,
+    vision_parent_run_id: str | None = None,
+    main_native_vision: bool = False,
+    native_image_parts: list[dict] | None = None,
+    available_tools: Collection[str] | None = None,
+) -> str | None:
+    """Render user-referenced files into ``<attached_files>`` (tests / legacy seam)."""
+    prompt = await _build_attachment_prompt(
+        attachments,
+        user_id=user_id,
+        host_conversation_id=host_conversation_id,
+        vision_reader=vision_reader,
+        backend=backend,
+        cost_sink=cost_sink,
+        vision_parent_run_id=vision_parent_run_id,
+        main_native_vision=main_native_vision,
+        native_image_parts=native_image_parts,
+        available_tools=available_tools,
     )
-    table_note = (
-        " Spreadsheet / delimited attachments include a structure preview only "
-        "(columns, row count, inferred types, sample rows). Full data stays in "
-        "the workspace file and is not inlined."
-        if has_table
-        else ""
-    )
-    if has_binary:
-        binary_note = (
-            " Unknown binary attachments have no inline body. "
-            + _code_execute_steer(has_code_execute=has_code_execute, spreadsheet=False)
-        )
-    else:
-        binary_note = ""
-    office_note = (
-        " Office/PDF attachments without inline text: use file_read on the "
-        "workspace path (automatic text extract); do not default to code_execute."
-        if has_office_unparsed
-        else ""
-    )
-    if has_preparsed:
-        preparsed_note = (
-            " Some office/PDF attachments were pre-parsed at upload: inline text may "
-            "be truncated — use the ``*.md`` workspace copy (or the original path) "
-            "with file tools for the full extract."
-        )
-        if has_office_inline:
-            preparsed_note += f" {_OFFICE_TABLE_LOSSY}"
-    else:
-        preparsed_note = ""
-    conversation_note = (
-        " A Conversation block is a server-rendered deep transcript (messages +"
-        " process layer); when truncated, delegate a Worker with"
-        " ``read_conversation`` to continue — do not treat a truncated block as"
-        " the full log."
-        if has_conversation
-        else ""
-    )
-    missing_note = (
-        " A [resident missing] block means chip/metadata claimed a workspace "
-        "path but bytes are absent — ask_user to re-upload; never dispatch "
-        "unzip/remediation as if the file were already delivered."
-        if has_resident_missing
-        else ""
-    )
-    image_note = (
-        " Image attachments are eye→text when识图 is configured (profile vision "
-        "slot or platform VISION_*); without a reader, the block states that "
-        "honestly — do not treat a bare path as a reading, and do not default to "
-        "code_execute to open images."
-        if has_image_unconfigured
-        else ""
-    )
-    return (
-        "<attached_files>\n"
-        f"{_ATTACH_THIS_MESSAGE_FRAME} "
-        "The user attached the following files, directories and past "
-        "conversations as actionable inputs for this turn—not mere optional "
-        "reference. When the user narrows scope to these materials and/or "
-        "existing workspace products, start from them (gap analysis or a "
-        "revision); do not idle solely because a full repo is missing. Cite "
-        "them by name when relevant. Directory entries list file paths only "
-        "(file contents are not included)."
-        f"{conversation_note}"
-        f"{resident_note}{table_note}{binary_note}{office_note}{preparsed_note}"
-        f"{missing_note}{image_note}\n\n"
-        f"{body}\n"
-        "</attached_files>"
-    )
+    return prompt.envelope

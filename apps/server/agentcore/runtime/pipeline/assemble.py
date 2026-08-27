@@ -328,6 +328,7 @@ async def assemble_ceo_turn(
         ceo_offered_names=ceo_offered_names,
         on_demand_entries=on_demand_entries,
         folder_catalog=prepared.folder_catalog,
+        current_folder_id=folder_id,
         workspace_context=prepared.workspace_facts,
         cold_start_explore=explore_reason or False,
         folder_nav_stale=folder_nav_stale,

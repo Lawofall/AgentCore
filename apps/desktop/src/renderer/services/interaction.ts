@@ -49,7 +49,7 @@ export type ResolveInteractionBody =
  * Settle a paused hot-path interaction over the transport that owns the awaiter.
  *
  * The single choke point for live resolve kinds (approval / client_tool / escalation) —
- * NOT ask_user / plan_review / team_preview (cold resume).
+ * NOT ask_user / plan_review (cold resume).
  *
  * - **`origin: "sidecar"`** → `window.sidecarApi.respond` (in-process sidecar registry).
  * - **`origin: "cloud"`** → POST the unified resolve endpoint (cloud InteractionRegistry,

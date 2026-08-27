@@ -5,7 +5,6 @@ const KIND_LABEL: Record<string, string> = {
   approval: "审批",
   ask_user: "提问",
   plan_review: "计划复核",
-  team_preview: "开工卡（已退役）",
   escalation: "升级",
   stage_card: "推进卡",
 };

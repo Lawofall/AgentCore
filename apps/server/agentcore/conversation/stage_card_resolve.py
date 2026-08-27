@@ -322,7 +322,7 @@ async def run_stage_card_research_first(
 ) -> None:
     """Start a CEO turn with research_first imperative bootstrap (v1 不机制直起 MLR).
 
-    决议即授权：当次 ``multi_lens_research`` 派单免二次 team_preview（一次性 pre-auth）。
+    决议即授权：当次 ``lens_crosscheck`` 派单免二次 team_preview（一次性 pre-auth）。
     """
     from agentcore.runtime.kickoff.stage_card import discard_mlr_preauth, grant_mlr_preauth
 

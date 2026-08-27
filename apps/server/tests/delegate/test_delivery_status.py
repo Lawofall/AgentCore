@@ -2010,7 +2010,7 @@ def test_two_phase_predicate_and_playbook_stamp():
         )
     )
 
-    tasks, errs = PLAYBOOKS["research_report"].build({"topic": "测试主题", "angles": ["甲", "乙"]})
+    tasks, errs = PLAYBOOKS["cite_write_review"].build({"topic": "测试主题", "angles": ["甲", "乙"]})
     assert not errs
     research_tasks = [t for t in tasks if str(t.get("id", "")).startswith("research_")]
     assert research_tasks
@@ -2019,12 +2019,12 @@ def test_two_phase_predicate_and_playbook_stamp():
     write = next(t for t in tasks if t.get("id") == "write")
     assert write["deliverable"].get("citation_mode") == "two_phase"
 
-    ml_tasks, ml_errs = PLAYBOOKS["multi_lens_research"].build({"topic": "测试事件"})
+    ml_tasks, ml_errs = PLAYBOOKS["lens_crosscheck"].build({"topic": "测试事件"})
     assert not ml_errs
     for t in ml_tasks:
         assert t["deliverable"].get("citation_mode") == "two_phase"
 
-    brief, brief_errs = PLAYBOOKS["parallel_brief"].build(
+    brief, brief_errs = PLAYBOOKS["map_fanout"].build(
         {"topic": "测试主题", "angles": ["甲", "乙"]}
     )
     assert not brief_errs
@@ -2033,7 +2033,7 @@ def test_two_phase_predicate_and_playbook_stamp():
 
 
 def _literature_report_plan() -> RunPlan:
-    """Minimal research_report-shaped plan: writer + review + two_phase main file."""
+    """Minimal cite_write_review-shaped plan: writer + review + two_phase main file."""
     from agentcore.runtime.runs.types import Deliverable
     from agentcore.workspace.stage_dirs import RESEARCH_PREFIX, REVIEWS_PREFIX
 
@@ -2063,7 +2063,7 @@ def _literature_report_plan() -> RunPlan:
 
 
 def test_literature_evidence_deficit_depresses_delivered():
-    """证据不足（几乎无学术源）→ research_report 形对账不得 delivered。"""
+    """证据不足（几乎无学术源）→ cite_write_review 形对账不得 delivered。"""
     from agentcore.workspace.stage_dirs import RESEARCH_PREFIX
 
     main = f"{RESEARCH_PREFIX}报告.md"
@@ -2232,8 +2232,8 @@ def test_literature_adequate_evidence_stays_delivered():
     assert all(g.get("reason") != "thin_review" for g in payload["gaps"])
 
 
-def test_parallel_brief_junk_citations_not_evidence_deficit():
-    """parallel_brief 默认不套证据降档（即使 citation 全是水站）。"""
+def test_map_fanout_junk_citations_not_evidence_deficit():
+    """map_fanout 默认不套证据降档（即使 citation 全是水站）。"""
     from agentcore.runtime.runs.types import Deliverable
     from agentcore.workspace.stage_dirs import RESEARCH_PREFIX
 

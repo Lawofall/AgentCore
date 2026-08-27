@@ -187,6 +187,10 @@ export async function submitInteraction(args: {
     }
   }
 
+  if (path !== "cold") {
+    throw new Error(`no submit path for interaction kind ${args.kind}`);
+  }
+
   // cold — never gate on interactions presence
   if (!args.cold) {
     throw new Error("缺少冷路提交参数");

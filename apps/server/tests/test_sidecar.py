@@ -201,7 +201,7 @@ def test_sidecar_runs_a_turn_on_the_local_dir(tmp_path, monkeypatch):
                             index=0,
                             id="call_ls",
                             function_name="file_list",
-                            arguments_delta='{"directory": ".", "pattern": "*"}',
+                            arguments_delta='{"directory": "."}',
                         )
                     ]
                 ),

@@ -32,11 +32,11 @@ blocked 抬成 partial（空交/零声明清单 ≠ 整轮失败）。
 ``asyncio.create_task(_background_drive)`` 的 ``set`` 到不了 CEO 父任务的
 ``finish_guard``。禁止改去查 turn_journal。
 
-文献成文（``research_report`` / 同等成文综述）：证据不足时注入
+文献成文（``cite_write_review`` / 同等成文综述）：证据不足时注入
 ``reason=evidence_deficit`` blocking gap → state 不得 ``delivered``（见
 ``research_quality.collect_evidence_deficit_gaps``）；消费搜索真源
 ``evidence_gap`` + ``search_policy=academic_literature``（兼容旧
-``evidence_deficit`` 戳）；不扫完成话术词，不套 ``parallel_brief``。
+``evidence_deficit`` 戳）；不扫完成话术词，不套 ``map_fanout``。
 
 已声明复核落盘（``form=files`` + ``reviews/``）：声明路径未 accepted / 拒收 /
 空壳 → ``reason=thin_review`` blocking（见
@@ -1010,8 +1010,8 @@ def build_delivery_status(
                 continue
             reason = str(row.get("reason") or REASON_VERIFY_FAILED).strip()
             raw_gaps.append(_annotate_gap(role, text, reason=reason or REASON_VERIFY_FAILED))
-    # ①c 文献成文证据不足（学术综述诚实性）——仅 research_report / 同等成文综述；
-    # parallel_brief 不套。blocking → 不得 delivered（partial/blocked）；不扫完成话术词。
+    # ①c 文献成文证据不足（学术综述诚实性）——仅 cite_write_review / 同等成文综述；
+    # map_fanout 不套。blocking → 不得 delivered（partial/blocked）；不扫完成话术词。
     # 接缝真源：web_search / RunState.evidence_gap（academic_literature）；gap reason
     # 仍为 evidence_deficit（交付卡契约）。
     from agentcore.runtime.runs.research_quality import (
@@ -1083,8 +1083,8 @@ def build_delivery_status(
         )
     # 刀1 / 方案 A：有落盘时 degraded_handoff 降为 warning 备注。
     gaps = _soften_landed_degraded_gaps(gaps, files_landed=files_landed)
-    # 文献证据降档仅绑 research_report / 同等成文综述；非该形态丢弃误入的
-    # evidence_deficit（parallel_brief 等不得因此离开 delivered）。
+    # 文献证据降档仅绑 cite_write_review / 同等成文综述；非该形态丢弃误入的
+    # evidence_deficit（map_fanout 等不得因此离开 delivered）。
     from agentcore.runtime.runs.research_quality import plan_is_literature_report_delivery
 
     if not plan_is_literature_report_delivery(plan.nodes):

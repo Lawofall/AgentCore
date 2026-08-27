@@ -230,7 +230,7 @@ class PausedTurnOutcomeRow(Base):
     conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
     # PAUSED_TURN_SETTLED (someone continued the turn) | PAUSED_TURN_EXPIRED (TTL swept).
     outcome: Mapped[str] = mapped_column(String(16))
-    # The suspension kind the card was (ask_user / plan_review / team_preview), taken
+    # The suspension kind the card was (ask_user / plan_review), taken
     # off the consumed frame — the wire ``resume_settled.kind``.
     card_kind: Mapped[str] = mapped_column(String(32), server_default=text("''"))
     # The consumed frame's interaction id. Never blank on a settled row (see the check).

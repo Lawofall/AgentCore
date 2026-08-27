@@ -1,9 +1,14 @@
-"""Process-wide 429 cooldown, keyed by provider + credential.
+"""Process-wide 429 cooldown, keyed by provider + credential + lane.
 
 After an upstream 429 the leaf arms a slot until ``recovery_at``. Later calls on
 the same key refuse immediately (no sleep, no upstream probe) instead of each
 independently slamming the same window. The call that received an attested
 short ``Retry-After`` may still sit that wait out in-place; siblings do not.
+
+Interactive chat / agent share one lane (worker 429 must still stop the CEO
+slamming the same window). Each background scenario (title, compaction, …) has
+its own lane so a title day-reset Retry-After cannot make compaction refuse
+before it probes.
 
 In-process only — the same posture as compaction's failure cooldown. Multi-worker
 skew is accepted: two API processes may each probe once, which is still fewer
@@ -16,6 +21,12 @@ import hashlib
 import os
 import time
 from dataclasses import dataclass
+
+from agentcore.llm.provider.protocol import TURN_SCALE_SCENARIOS
+
+# Interactive chat / agent share this lane. Background one-shots use the scenario
+# name so a title day-reset cannot occupy compaction's slot.
+TURN_COOLDOWN_LANE = "turn"
 
 # Short cooldowns the interactive leaf sits out silently (chat / agent). Past
 # this, the call fails immediately and the layer above reads ``failure_class``
@@ -56,6 +67,19 @@ def cooldown_key(provider: str, credential: str, base_url: str) -> str:
     material = f"{provider}\0{base_url}\0{credential}".encode()
     digest = hashlib.sha256(material).hexdigest()[:16]
     return f"{provider}:{digest}"
+
+
+def cooldown_lane(scenario: str) -> str:
+    """Lane for ``scenario``: one shared turn slot, otherwise the scenario name."""
+    if scenario in TURN_SCALE_SCENARIOS:
+        return TURN_COOLDOWN_LANE
+    name = (scenario or "").strip()
+    return name or "unknown"
+
+
+def cooldown_slot_key(provider_key: str, scenario: str) -> str:
+    """Process slot id: credential key plus :func:`cooldown_lane`."""
+    return f"{provider_key}:{cooldown_lane(scenario)}"
 
 
 def peek_cooldown(key: str, *, now: float | None = None) -> CooldownSlot | None:

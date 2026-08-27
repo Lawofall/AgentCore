@@ -534,6 +534,40 @@ describe("attachConversation (实时重连续看 1b)", () => {
       "message_end",
     ]);
   });
+
+  it("does not fold catch-up if the stream ends before attach-caught-up", async () => {
+    const seen: string[] = [];
+    vi.spyOn(dispatchMod, "dispatchSSEEvent").mockImplementation((event) => {
+      seen.push(event.type);
+    });
+    vi.spyOn(dispatchMod, "flushPendingContent").mockImplementation(() => {});
+    vi.spyOn(dispatchMod, "flushPendingFrames").mockImplementation(() => {});
+
+    const body = [
+      'data: {"type":"run_started","timestamp":"t","payload":{"run_id":"w1","agent_id":"a","kind":"agent"}}\n\n',
+      'data: {"type":"run_completed","timestamp":"t","payload":{"run_id":"w1","agent_id":"a"}}\n\n',
+    ].join("");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        ),
+      ),
+    );
+    useConversationStore.getState().switchConversation("c1");
+    useConversationStore.getState().createAssistantMessage("c1");
+
+    const err = await attachConversation("c1").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StreamError);
+    expect((err as StreamError).kind).toBe("network");
+    expect(seen).toEqual([]);
+    expect(peekLastEventId("c1")).toBeUndefined();
+  });
 });
 
 describe("pumpSseBody comments", () => {

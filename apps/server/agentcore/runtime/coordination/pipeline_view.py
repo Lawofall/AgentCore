@@ -217,16 +217,29 @@ def format_idle_yield_brief(session: CoordinationSession) -> str:
     progress = format_pipeline_progress(session)
     healthy = is_pipeline_healthy(session)
     lines = ["【团队协调·空转让出】", progress, ""]
-    from agentcore.runtime.interaction_orphan import has_hot_user_pending
+    from agentcore.workspace.limits import capability_dead_inject_lines
+
+    lines.extend(
+        capability_dead_inject_lines(
+            workspace_channel_dead=bool(
+                getattr(session, "workspace_channel_dead", False)
+            ),
+            exec_env_dead=bool(getattr(session, "exec_env_dead", False)),
+        )
+    )
+    from agentcore.runtime.interaction_orphan import (
+        format_hot_pending_hold_line,
+        has_hot_user_pending,
+    )
 
     conversation_id = getattr(session, "conversation_id", None) or ""
     if has_hot_user_pending(conversation_id):
+        hold = format_hot_pending_hold_line(conversation_id)
         lines.append(
-            "流水线状态：队员等待用户审批/授权。"
-            "【禁止】调用 wait 或再派；引导用户查看审批卡后再继续。"
-            "对用户开口属【报告阻塞】：须说明有队员在等审批、处理完后会继续；"
+            f"流水线状态：{hold}"
+            "对用户开口属【报告阻塞】：须说明有队员在等你允许、处理完后会继续；"
             "禁止只回「保持等待/保持静默」而无下文；禁止用进度旁白代替对审批等待的说明。"
-            "勿用空 wait 假装推进，勿 delegate 与现有计划重叠的队员。"
+            "报告阻塞后可 wait 听团（队还在）；勿 delegate 与现有计划重叠的队员。"
         )
     elif healthy:
         lines.append(

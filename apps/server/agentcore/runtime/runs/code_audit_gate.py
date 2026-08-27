@@ -1,6 +1,6 @@
 """``code_audit`` 报告结构闸（L2b）：校验 ``*.audit.json`` 字段语义。
 
-与成篇审计硬门（``research_report`` 独立审校）正交；与协议 ``ProjectedTurn`` 无关。
+与成篇审计硬门（``cite_write_review`` 独立审校）正交；与协议 ``ProjectedTurn`` 无关。
 由 :class:`~agentcore.runtime.runs.types.Deliverable` 的 ``code_audit_gate`` 盖戳触发，
 挂在 :func:`~agentcore.runtime.runs.contract.check_contract`。
 

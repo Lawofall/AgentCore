@@ -10,6 +10,8 @@ import pytest
 
 from agentcore.core.net import abort_httpx_response
 from agentcore.core.task_cancel import (
+    cancel_reason_from_done_task,
+    cancel_task,
     is_task_cancelled,
     raise_if_task_cancelled,
     task_is_cancelling,
@@ -40,6 +42,21 @@ def test_raise_if_task_cancelled_ignores_plain_error():
 
 def test_task_is_cancelling_without_running_loop():
     assert task_is_cancelling() is False
+
+
+async def test_cancel_task_roundtrips_reason_on_done_task():
+    started = asyncio.Event()
+
+    async def body() -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(body())
+    await started.wait()
+    cancel_task(task, "user_stop")
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cancel_reason_from_done_task(task) == "user_stop"
 
 
 async def test_raise_if_task_cancelled_while_handling_cancel():

@@ -84,6 +84,32 @@ const PEEK_SUPPRESSED = new Set([
   "test_run",
   "file_read",
   "file_list",
+  "glob",
+  // 文件夹指挥面 + 同类漏网：折叠一行，结果只在展开。
+  "list_folders",
+  "resolve_folder",
+  "create_folder",
+  "delete_folder",
+  "list_folder_dir",
+  "read_folder_file",
+  "remember",
+  "update_folder_profile",
+  "write_section",
+  "file_batch",
+  "md_to_docx",
+  "md_to_pdf",
+  "archive_extract",
+  "download_url",
+  "read_image",
+  "read_notes",
+  "board_ops",
+  "board_read",
+  "code_search",
+  "git",
+  "code_diagnostics",
+  "external_mount_readonly",
+  // 派出回执不是过程信息；折叠会贴「已派出…」。
+  "delegate",
   // 写盘家族：标题已有 path / source→destination；成功 ack 与路径重复。
   // 类型诊断不走第二行，折叠态并进标题（见 writeFamilyDiagnosticPeek）。
   "file_write",
@@ -371,7 +397,8 @@ export function ToolLine({
   const elapsed = useRunningElapsed(running, startedAt);
   const phaseText = running ? toolPhaseText(step.phase) : null;
   // 完成态元信息并进标题行、不另起 peek：web_search「N results」、grep 匹配计数、
-  // write 家族类型诊断、browser_* detail。handoff summary 走 inlineBody。
+  // list_folders「N folders」、write 家族 / code_diagnostics 类型诊断、browser_* detail。
+  // handoff summary 走 inlineBody。
   const writeDiagPeek =
     status === "success" && WRITE_FAMILY.has(step.tool_name)
       ? writeFamilyDiagnosticPeek(data)
@@ -383,6 +410,17 @@ export function ToolLine({
       if (!nested && step.tool_name === "web_search" && hasBody)
         return peek || null;
       if (step.tool_name === "grep") return peek || null;
+      if (step.tool_name === "list_folders") return peek || null;
+      if (step.tool_name === "code_diagnostics") {
+        const diag = extractCodeDiagnostics(data.display);
+        if (diag) {
+          const text = codeDiagnosticsPeek(diag);
+          if (diag.status === "unavailable" || text !== "未发现类型错误") {
+            inlineMetaWarning = true;
+          }
+        }
+        return peek || null;
+      }
       if (writeDiagPeek) {
         inlineMetaWarning = true;
         return writeDiagPeek;

@@ -25,7 +25,7 @@ export type TurnTerminalOutcome = "stopped" | "completed" | "failed";
 
 /**
  * User-facing interaction `*_required` events from {@link INTERACTION_KIND_WIRE}.
- * Cold pause cards (ask_user / plan_review / team_preview) may arrive on the
+ * Cold pause cards (ask_user / plan_review) may arrive on the
  * same connection after `message_end` has already moved turnPhase to terminal;
  * dropping them leaves live UI without ResumePrompt until hard refresh.
  * Hot `*_required` (approval / escalation / …) share the same wire shape and

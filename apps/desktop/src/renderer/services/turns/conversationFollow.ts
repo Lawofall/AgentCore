@@ -303,10 +303,8 @@ async function pumpFollowBody(
         }
       },
     );
-    // 断流时仍压着未折的段（老服务端无边界注释 / 中途掉线）：折掉再走重连。
-    if (buffering && !releasing && buffer.length > 0) {
-      releaseBuffer();
-    }
+    // 边界注释前断流：丢未折缓冲（游标未推进），外层重连拿完整重放。
+    // 不得把半段当完成折——那会推游标，下一趟变成残缺增量。
   } finally {
     // 折是异步的（要先拉消息窗）。不等它落地就回到外层重连，两条连接会交叉折同一回合。
     await releasePending;
@@ -329,7 +327,8 @@ async function runFollowConnection(
       if (response.status === 401) return "stop";
     }
     if (response.status === 204) {
-      // 服务端不认 ``follow``（旧版）：退回回合级语义，别把 204 当心跳空转重连。
+      // follow 契约是 200 + SSE（空闲心跳）。204 是回合级空闲，不是跟播；
+      // 当 ok 空 body 会退避空转打 204。
       logEvent("warn", "conversation.follow_unsupported", {
         conversation_id: conversationId,
       });

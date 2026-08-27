@@ -2,6 +2,7 @@ import { getConversations } from "@/hooks/useConversations";
 import { getFolders } from "@/hooks/useFolders";
 import type { EntryKind, IndexedEntry } from "@/lib/fileIndex";
 import type { FileSource } from "@/lib/fileSource";
+import { hasInlineMarkers, plainText } from "@/lib/inlineBody";
 import {
   buildLocalMentionPicks,
   collectRootUseEvents,
@@ -69,12 +70,18 @@ export const MAX_AGENT_MENTIONS = 10;
 /** 空 `@` 时各索引分区默认条数。 */
 export const EMPTY_MENTION_INDEX_LIMIT = 6;
 
-/** True when the composer can send: non-blank text, or at least one attachment. */
+/** True when the composer can send: non-blank text, or at least one pill. */
 export function composerHasSendableDraft(
   value: string,
   attachments: ReadonlyArray<unknown>,
+  agentMentions: ReadonlyArray<unknown> = [],
 ): boolean {
-  return Boolean(value.trim()) || attachments.length > 0;
+  return (
+    Boolean(plainText(value).trim()) ||
+    attachments.length > 0 ||
+    agentMentions.length > 0 ||
+    hasInlineMarkers(value)
+  );
 }
 
 export function formatConversationContext(
@@ -107,11 +114,12 @@ export function detectMention(
       at = i;
       break;
     }
-    if (ch === " " || ch === "\n" || ch === "\t") return null;
+    if (ch === " " || ch === "\n" || ch === "\t" || ch === "\uFFFC")
+      return null;
   }
   if (at === -1) return null;
   const before = at === 0 ? "" : text[at - 1];
-  if (before && !/\s/.test(before)) return null;
+  if (before && !/\s/.test(before) && before !== "\uFFFC") return null;
   return { start: at, query: text.slice(at + 1, caret) };
 }
 

@@ -31,8 +31,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='account.rules_memory_cache_miss',
         description=(
-            'prepare rules/memory 只读缓存未命中（空注入；不 await 云；origin=execution_harvest 时'
-            '为收口空注入）'
+            'prepare rules/memory 只读缓存未命中（空注入；不 await 云；origin 可标历史 execution_ha'
+            'rvest 行）'
         ),
         fields={
             'folder_id': FieldType('str'),
@@ -606,36 +606,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.execution_adopted'),
     EventSpec(name='coordination.execution_completed_emitted'),
     EventSpec(name='coordination.execution_detached_emitted'),
-    EventSpec(name='coordination.execution_reopened_for_harvest'),
     EventSpec(name='coordination.file_ownership_snapshot_failed'),
-    EventSpec(name='coordination.harvest_armed_while_attached'),
-    EventSpec(name='coordination.harvest_attach_cleared'),
-    EventSpec(name='coordination.harvest_attach_waiting_live_occupant'),
-    EventSpec(name='coordination.harvest_cancelled'),
-    EventSpec(name='coordination.harvest_channel_dead_after_turn'),
-    EventSpec(name='coordination.harvest_channel_dead_skip_llm'),
-    EventSpec(name='coordination.harvest_chat_context_unavailable'),
-    EventSpec(name='coordination.harvest_claim_continue'),
-    EventSpec(name='coordination.harvest_closing_turn_done'),
-    EventSpec(name='coordination.harvest_closing_turn_failed'),
-    EventSpec(name='coordination.harvest_conversation_missing'),
-    EventSpec(name='coordination.harvest_credentials_unavailable'),
-    EventSpec(name='coordination.harvest_deferred_exhausted'),
-    EventSpec(name='coordination.harvest_deferred_live_turn'),
-    EventSpec(name='coordination.harvest_deferred_retry'),
-    EventSpec(name='coordination.harvest_detached_started'),
-    EventSpec(name='coordination.harvest_failed'),
-    EventSpec(name='coordination.harvest_fallback_persisted'),
-    EventSpec(name='coordination.harvest_giving_up'),
-    EventSpec(name='coordination.harvest_idempotent_skip'),
-    EventSpec(name='coordination.harvest_missing_conversation'),
-    EventSpec(name='coordination.harvest_no_session'),
-    EventSpec(name='coordination.harvest_not_ready'),
-    EventSpec(name='coordination.harvest_skipped_attached_visible_close'),
-    EventSpec(name='coordination.harvest_skipped_host_paused'),
-    EventSpec(name='coordination.harvest_skipped_reattached'),
-    EventSpec(name='coordination.harvest_stale_attach_forcing'),
-    EventSpec(name='coordination.harvest_user_missing'),
     EventSpec(name='coordination.idle_patrol_deferred'),
     EventSpec(name='coordination.idle_yield_held_inflight'),
     EventSpec(name='coordination.idle_yield_held_wall_zero'),
@@ -652,10 +623,24 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.nested_declare_conflicts'),
     EventSpec(name='coordination.ownership_transferred'),
     EventSpec(name='coordination.progress_budget_floor'),
-    EventSpec(name='coordination.release_prefers_harvest'),
+    EventSpec(name='coordination.release_prefers_settle'),
     EventSpec(name='coordination.scope_proceed'),
     EventSpec(name='coordination.set_active_missing_execution_id'),
     EventSpec(name='coordination.set_active_overwrite_while_live'),
+    EventSpec(name='coordination.settle_armed_while_attached'),
+    EventSpec(name='coordination.settle_attach_cleared'),
+    EventSpec(name='coordination.settle_attach_waiting_live_occupant'),
+    EventSpec(name='coordination.settle_cancelled'),
+    EventSpec(name='coordination.settle_detached_started'),
+    EventSpec(name='coordination.settle_failed'),
+    EventSpec(name='coordination.settle_held_hot_pending'),
+    EventSpec(name='coordination.settle_missing_conversation'),
+    EventSpec(name='coordination.settle_notified'),
+    EventSpec(name='coordination.settle_notify_skipped'),
+    EventSpec(name='coordination.settle_skipped_host_paused'),
+    EventSpec(name='coordination.settle_skipped_reattached'),
+    EventSpec(name='coordination.settle_skipped_visible_close'),
+    EventSpec(name='coordination.settle_stale_attach_forcing'),
     EventSpec(name='coordination.settled_via_replaced'),
     EventSpec(name='coordination.sibling_artifact_rejected'),
     EventSpec(name='coordination.skipped'),
@@ -670,7 +655,18 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.user_interjection_failed'),
     EventSpec(name='coordination.user_interjection_promoted_on_close'),
     EventSpec(name='coordination.user_interjection_queued'),
-    EventSpec(name='coordination.user_stop_cancelled'),
+    EventSpec(
+        name='coordination.user_stop_cancelled',
+        description='显式 Stop 级联取消协调；reason 恒为 user_stop，与 drive 任务戳对齐',
+        fields={
+            'cancelled_workers': FieldType('int'),
+            'completed': FieldType('int'),
+            'conversation_id': FieldType('str'),
+            'execution_id': FieldType('str'),
+            'reason': FieldType('str'),
+            'total': FieldType('int'),
+        },
+    ),
     EventSpec(name='coordination.user_stop_released'),
     EventSpec(name='coordination.verify_cache_invalidated'),
     EventSpec(name='coordination.wait'),
@@ -922,7 +918,14 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(name='delegate.coord_pause_signal'),
-    EventSpec(name='delegate.coordinate_cancelled'),
+    EventSpec(
+        name='delegate.coordinate_cancelled',
+        description='后台 drive 被取消；reason 为取消指纹（无指纹=cancelled_without_rpc）',
+        fields={
+            'execution_id': FieldType('str'),
+            'reason': FieldType('str'),
+        },
+    ),
     EventSpec(name='delegate.coordinate_failed'),
     EventSpec(name='delegate.coordinate_merged'),
     EventSpec(name='delegate.coordinate_started'),
@@ -1088,8 +1091,8 @@ EVENTS: list[EventSpec] = [
     EventSpec(
         name='desktop.mcp_list_cache_miss',
         description=(
-            'MCP list 只读缓存未命中（prepare/resume；不发 ClientTool；origin=execution_harvest 时'
-            '为收口空装配）'
+            'MCP list 只读缓存未命中（prepare/resume；不发 ClientTool；origin 可标历史 execution_ha'
+            'rvest 行）'
         ),
         fields={
             'cache_scope': FieldType('str'),
@@ -2682,6 +2685,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='wave.bad_topology'),
     EventSpec(name='wave.bind_proceed_no_progress'),
     EventSpec(name='wave.cancel_cascade_skip'),
+    EventSpec(name='wave.hold_inflight_hot_pending'),
     EventSpec(name='wave.width_recomputed'),
     EventSpec(name='web_seam.final_check'),
     EventSpec(name='web_seam.skip_external'),

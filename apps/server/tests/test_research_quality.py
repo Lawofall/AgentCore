@@ -131,7 +131,7 @@ def test_paper_parallel_merge_discipline_constant():
 
 
 def test_research_handwritten_ok_without_declaration():
-    """调研意图手写 tasks：可不声明 playbook；不再强推 research_report / 收紧预算。"""
+    """调研意图手写 tasks：可不声明 playbook；不再强推 cite_write_review / 收紧预算。"""
     name, err = resolve_playbook_declaration(
         {
             "tasks": [{"role": "调研员", "task": "写实务研究报告"}],
@@ -144,12 +144,12 @@ def test_research_handwritten_ok_without_declaration():
 def test_resolve_optional_research_report_still_expands():
     name, err = resolve_playbook_declaration(
         {
-            "playbook": "research_report",
+            "playbook": "cite_write_review",
             "playbook_args": {"topic": "立案实务"},
         }
     )
     assert err is None
-    assert name == "research_report"
+    assert name == "cite_write_review"
 
 
 def test_annotate_batch_meta_audit_flags():
@@ -158,21 +158,21 @@ def test_annotate_batch_meta_audit_flags():
         result,
         node_count=5,
         has_deps=True,
-        playbook="research_report",
+        playbook="cite_write_review",
         audit_hard=True,
         includes_review=True)
-    assert stamped.metadata["batch_playbook"] == "research_report"
+    assert stamped.metadata["batch_playbook"] == "cite_write_review"
     assert stamped.metadata["audit_hard"] is True
     assert stamped.metadata["batch_includes_review"] is True
 
 
 def test_parallel_brief_does_not_signal_long_form_audit():
-    """A 档摸底批：硬门只认 research_report；min_length 腿已撤。"""
+    """A 档摸底批：硬门只认 cite_write_review；min_length 腿已撤。"""
     from agentcore.runtime.runs.playbooks import expand_playbook
     from agentcore.runtime.runs.research_quality import plan_signals_long_form_audit
 
     tasks, errors = expand_playbook(
-        "parallel_brief",
+        "map_fanout",
         {"topic": "开源选型", "angles": ["兼容", "闭源风险", "生态"]})
     assert errors == []
     assert plan_signals_long_form_audit(tasks) is False
@@ -202,6 +202,7 @@ def test_audit_hard_block_after_soft_nudge():
         c, messages=msgs, run_id="r", round_idx=1, role="captain"
     )
     assert any("硬门" in (m.content or "") for m in msgs)
+    assert any("playbook=cite_write_review" in (m.content or "") for m in msgs)
     # Second delegate satisfies.
     c.mark_post_delegate(node_count=1, has_deps=False, includes_review=True)
     assert should_audit_hard_block(c, role="captain") is False
@@ -563,7 +564,7 @@ def test_retrieval_empty_streak_helpers():
 def test_research_report_write_task_has_chapter_discipline():
     from agentcore.runtime.runs.playbooks import expand_playbook
 
-    tasks, errors = expand_playbook("research_report", {"topic": "X", "angles": ["甲", "乙"]})
+    tasks, errors = expand_playbook("cite_write_review", {"topic": "X", "angles": ["甲", "乙"]})
     assert not errors
     write = next(t for t in tasks if t["id"] == "write")
     assert "按章" in write["task"]
@@ -587,13 +588,13 @@ def test_plan_is_literature_report_delivery_binds_research_report_not_brief():
     from agentcore.runtime.runs.playbooks import expand_playbook
 
     rr, errs = expand_playbook(
-        "research_report", {"topic": "医学文献", "angles": ["成像", "生成"]}
+        "cite_write_review", {"topic": "医学文献", "angles": ["成像", "生成"]}
     )
     assert not errs
     assert plan_is_literature_report_delivery(rr) is True
 
     brief, b_errs = expand_playbook(
-        "parallel_brief", {"topic": "开源选型", "angles": ["兼容", "生态"]}
+        "map_fanout", {"topic": "开源选型", "angles": ["兼容", "生态"]}
     )
     assert not b_errs
     assert plan_is_literature_report_delivery(brief) is False
@@ -884,7 +885,7 @@ def test_named_review_without_files_not_elevated_playbook_review_lands():
 
     # playbook 审校默认落盘仍成立
     tasks, pb_errs = expand_playbook(
-        "research_report", {"topic": "X", "angles": ["甲", "乙"]}
+        "cite_write_review", {"topic": "X", "angles": ["甲", "乙"]}
     )
     assert not pb_errs
     pb_review = next(t for t in tasks if t["id"] == "review")

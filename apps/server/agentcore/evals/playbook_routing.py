@@ -113,7 +113,7 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="research_brief_parallel",
         phrasing="textbook",
         category="research_brief",
-        expect_playbook="parallel_brief",
+        expect_playbook="map_fanout",
         user_message=(
             "帮我调研一下开源协议选型，多 Agent 对比摸清许可证兼容和商业闭源风险，"
             "先不要写成正式报告。"
@@ -141,7 +141,7 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="research_mit_vs_gpl_chat",
         phrasing="colloquial",
         category="research_brief",
-        expect_playbook="parallel_brief",
+        expect_playbook="map_fanout",
         user_message=(
             "我们公司项目准备开源，我纠结该用 MIT 还是 GPL，"
             "你帮我把各自限制和风险讲清楚就行，先别写成文档。"
@@ -152,7 +152,7 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="research_knowledge_base_chat",
         phrasing="colloquial",
         category="research_brief",
-        expect_playbook="parallel_brief",
+        expect_playbook="map_fanout",
         user_message=(
             "我想先搞明白现在做个人知识库的几个主流产品和我们差在哪，"
             "先不用出报告，跟我对着聊。"
@@ -202,12 +202,12 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         workspace="empty",
         code_execute=True,
     ),
-    # 讨论未声明免文档：允许 DIRECT / ASK 桌上结果 / parallel_brief；禁止双人 files 成文。
+    # 讨论未声明免文档：允许 DIRECT / ASK 桌上结果 / map_fanout；禁止双人 files 成文。
     RoutingScenario(
         key="discuss_license_no_doc_waiver",
         phrasing="colloquial",
         category="research_brief",
-        expect_playbook="parallel_brief",
+        expect_playbook="map_fanout",
         user_message=(
             "我们公司项目准备开源，我纠结该用 MIT 还是 GPL，"
             "你帮我把各自限制和风险讲清楚就行。"
@@ -219,7 +219,7 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="discuss_license_round2_short_answers",
         phrasing="colloquial",
         category="research_brief",
-        expect_playbook="parallel_brief",
+        expect_playbook="map_fanout",
         user_message="1. 给社区贡献\n2. 没有\n3. 更在意传染性",
         workspace="empty",
         expect_action="DIRECT|ASK",
@@ -253,8 +253,8 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         expect_max_workers=1,
         expect_form="files",
     ),
-    # 绑大仓「讨论」优化参数：编制自选（直答 / 1 人 / brief 均可），禁止金标绑死 ≥2 路
-    # brief；仍禁老板多轮自搜。
+    # 绑大仓「讨论+盘点/对照行业」：必须派（一人算过）；摸底 form=prose；禁老板多轮自搜。
+    # 空桌许可证讨论仍允许 DIRECT|ASK（见 discuss_license_*）。
     RoutingScenario(
         key="discuss_worker_params_industry",
         phrasing="colloquial",
@@ -264,8 +264,37 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
             "讨论删除worker的一些参数、需要参考行业实践的标准设计进行优化、有些参数实际没有多大用"
         ),
         workspace="codebase",
-        expect_action="DELEGATE|DIRECT|ASK",
+        expect_action="DELEGATE",
+        expect_min_workers=1,
+        expect_form="prose",
         expect_max_recon_rounds=1,
+    ),
+    # 第 19 步：同一讨论的多个切面 ≠ N 个对比对象；本产品架构/查错/维护默认自己做。
+    RoutingScenario(
+        key="discuss_arch_bug_maintain_facets",
+        phrasing="colloquial",
+        category="research_brief",
+        expect_playbook="",
+        user_message=(
+            "帮我讨论一下这个产品：架构怎么优化、怎么查常见错误、日常怎么维护。"
+            "这三块你一起帮我想想，先不用写成文档。"
+        ),
+        workspace="empty",
+        expect_action="DIRECT|ASK",
+        expect_max_workers=1,
+    ),
+    # 第 19 步：点名对比 N 个对象 → tasks 至少 N 人。
+    RoutingScenario(
+        key="compare_three_js_frameworks",
+        phrasing="colloquial",
+        category="research_brief",
+        expect_playbook="",
+        user_message=(
+            "帮我对比 React、Vue 和 Svelte 三个框架，各自适不适合做后台，把差别讲清楚。"
+        ),
+        workspace="empty",
+        expect_action="DELEGATE",
+        expect_min_workers=3,
     ),
 )
 

@@ -113,19 +113,19 @@ def validate_repair_how_fixed(
     playbook: str | None = None,
     playbook_args: Any = None,
 ) -> str | None:
-    """Reject ``repair_code`` playbooks that omit structured「怎么算修好」.
+    """Reject ``diagnose_fix_verify`` playbooks that omit structured「怎么算修好」.
 
     S3: no longer tied to ``completion_criteria`` / ``code_verified`` kind.
     How-fixed comes from ``playbook_args.verify`` / ``verify_command`` / ``acceptance``.
     """
     pb = (playbook or "").strip()
-    if pb != "repair_code":
+    if pb != "diagnose_fix_verify":
         return None
     how = extract_playbook_how_fixed(playbook_args)
     if how:
         return None
     return (
-        "修码收口契约：playbook=repair_code 须写清「怎么算修好」。"
+        "修码收口契约：playbook=diagnose_fix_verify 须写清「怎么算修好」。"
         "在 playbook_args 填 verify（或 verify_command / acceptance），"
         '例如 verify="pytest tests/test_foo.py -q"、'
         "verify=\"python -c 'from app import foo; assert foo()'\"、或 "

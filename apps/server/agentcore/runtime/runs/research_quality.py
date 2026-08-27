@@ -2,12 +2,12 @@
 
 定案：大纲按章落盘 / 空检索换策略 / 空 handoff 挡写作 /
 成篇审计硬门 / 论文并行拆章须单主文件合并门禁。
-结局分层：``parallel_brief`` = 对齐推进（不进成篇硬门）；
-``research_report`` = 成文专线（进硬门）。本模块只放纯谓词与文案常量，
+结局分层：``map_fanout`` = 对齐推进（不进成篇硬门）；
+``cite_write_review`` = 成文专线（进硬门）。本模块只放纯谓词与文案常量，
 供 playbook 声明、skill、检索预算、audit gate、delivery_status 复用——不新建子系统。
 
-成篇硬审计**只认** ``playbook=="research_report"``（入口另判）。不扫 task/角色自由文猜意图；
-不认已删字数字段腿。``parallel_brief`` / 普通多角摸底**不**因多人而进硬门。审校落盘**不**靠角色名
+成篇硬审计**只认** ``playbook=="cite_write_review"``（入口另判）。不扫 task/角色自由文猜意图；
+不认已删字数字段腿。``map_fanout`` / 普通多角摸底**不**因多人而进硬门。审校落盘**不**靠角色名
 抬 files——只认 playbook / 已声明的 ``form=files``·``reviews/`` artifacts。
 
 调研两阶段引用（块 2）：**只认** ``citation_mode=="two_phase"``（playbook / CEO 盖戳）
@@ -16,10 +16,10 @@ draft 不进 ``file_acceptance`` / artifacts 主清单。路径入口（声明�
 ``research/`` · ``reviews/`` 下即算调研类）已撤——那个落点由扫 role·task 的正则填出，
 是隔一层的自由文推断；即兴委派要成稿级引用验收须自报 ``citation_mode``。
 
-文献成文证据降档（学术综述诚实性）：``research_report`` / 同等成文综述在证据不足时
+文献成文证据降档（学术综述诚实性）：``cite_write_review`` / 同等成文综述在证据不足时
 由 ``delivery_status`` 注入 ``reason=evidence_deficit`` blocking gap → state 不得
 ``delivered``（仅 partial/blocked）。**不**扫「综述已完成」等完成话术词；**不**套
-``parallel_brief``。消费学术搜索块真源 ``evidence_gap``（见接缝常量；
+``map_fanout``。消费学术搜索块真源 ``evidence_gap``（见接缝常量；
 ``evidence_deficit`` 仍兼容）。
 
 已声明复核落盘对账（案 thin-review A′）：``form=files`` + ``reviews/`` artifacts
@@ -63,7 +63,7 @@ MD_EXPORT_DISCIPLINE = (
     "（确定性 `md_to_pdf` / `md_to_docx` 才是主路径）。"
 )
 
-# research_report 成篇主文件权威默认（可被 playbook_args.output_path 覆盖）。
+# cite_write_review 成篇主文件权威默认（可被 playbook_args.output_path 覆盖）。
 # 单角调研中间产物见 playbooks.research ``调研要点.md``，勿与本路径抢名。
 DEFAULT_RESEARCH_REPORT_ARTIFACT = f"{RESEARCH_DIR}/报告.md"
 
@@ -78,7 +78,7 @@ INDEPENDENT_REVIEW_REPORT_DISCIPLINE = (
     "禁止仅用十余字 handoff 冒充过闸；handoff 只作速览+路径。"
 )
 
-# Playbook 显式声明上游 prose 地板时的默认值（如 repair_code 诊断员）。
+# Playbook 显式声明上游 prose 地板时的默认值（如 diagnose_fix_verify 诊断员）。
 # 不再作为「有下游 → 一律抬 min」的拓扑常量；运行时交接地板固定非空。
 MIN_UPSTREAM_BODY_CHARS = 80
 
@@ -274,7 +274,7 @@ def deliverable_signals_long_form(deliverable: Any) -> bool:
 
 
 def plan_signals_long_form_audit(plan_nodes: object) -> bool:
-    """Retired: hard audit entry is ``playbook==research_report`` only.
+    """Retired: hard audit entry is ``playbook==cite_write_review`` only.
 
     Does **not** scan free-text ``task`` / ``role`` or deleted length fields.
     """
@@ -283,7 +283,7 @@ def plan_signals_long_form_audit(plan_nodes: object) -> bool:
 
 
 def research_report_main_artifact(output_path: str | None = None) -> str:
-    """Single main-file path for research_report acceptance (merge gate)."""
+    """Single main-file path for cite_write_review acceptance (merge gate)."""
     cleaned = (output_path or "").strip().replace("\\", "/")
     if cleaned:
         return cleaned.lstrip("/")
@@ -332,7 +332,7 @@ REASON_EVIDENCE_DEFICIT = "evidence_deficit"
 #    - 既有：``low_relevance`` / ``empty`` / ``empty_streak``（有 academic policy 时计）
 #
 # 降档仍可由「几乎无学术可用源」与「无参考文献·靠先验」可观测缺口触发。
-# 非文献形态（parallel_brief）会在 delivery_status 丢弃误入的 evidence_deficit。
+# 非文献形态（map_fanout）会在 delivery_status 丢弃误入的 evidence_deficit。
 
 EVIDENCE_GAP_KEY = "evidence_gap"
 EVIDENCE_DEFICIT_KEY = "evidence_deficit"
@@ -423,11 +423,11 @@ def _node_role(node: Any) -> str:
 
 
 def plan_is_literature_report_delivery(plan_nodes: object) -> bool:
-    """True for ``research_report`` / 同等成文综述；``parallel_brief`` 默认 False.
+    """True for ``cite_write_review`` / 同等成文综述；``map_fanout`` 默认 False.
 
     判定（结构字段，不扫 task/角色自由文；不认已删字数字段）：
     - 批内已声明 reviews/ files 审校座 **且** 存在显式 ``citation_mode=two_phase``
-      deliverable（``research_report`` 与手写同构；``parallel_brief`` 无审校落盘 → 不进）。
+      deliverable（``cite_write_review`` 与手写同构；``map_fanout`` 无审校落盘 → 不进）。
       成稿座只按落盘路径推断的旧腿随两阶段路径入口一并撤。
     """
     if not isinstance(plan_nodes, (list, tuple)) or not plan_nodes:

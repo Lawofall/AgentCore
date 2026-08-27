@@ -176,7 +176,7 @@ def test_reconcile_drops_dispatch_kickoff_pre_pause():
     from agentcore.runtime.closing_posture import is_process_dispatch_preamble
 
     pre = (
-        "方向：派团队 — 用户明示 research_report 成文落盘，"
+        "方向：派团队 — 用户明示 cite_write_review 成文落盘，"
         "主体（医学报告生成近三年文献）已点名，直接开委派。"
     )
     new = (

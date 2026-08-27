@@ -961,7 +961,6 @@ async def test_close_turn_interrupted_ensures_turn_end_when_merge_persist_drops_
 
 def test_inject_cancelled_all_completed_copy():
     session = CoordinationSession(execution_id="e1", total_workers=2)
-    session.harvest_closing = True
     text = format_coordination_events(
         session,
         [
@@ -971,7 +970,8 @@ def test_inject_cancelled_all_completed_copy():
             )
         ],
     )
-    assert "调度中断，基于已完成部分收口" in text
+    assert "任务已取消，基于已完成部分收口" in text
+    assert "调度中断" not in text
     assert "团队已全部结束" not in text
 
 
@@ -987,7 +987,9 @@ def test_inject_drive_cancelled_copy():
         ],
     )
     assert "drive_cancelled" in text
-    assert "调度中断，基于已完成部分收口" in text
+    assert "协调被打断，基于已完成部分收口" in text
+    assert "调度中断" not in text
+    assert "已开工队员禁止说成「没启动 / 没跑起来 / 一直未被启动」" in text
 
 
 @pytest.mark.parametrize(

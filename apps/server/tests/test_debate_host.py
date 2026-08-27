@@ -29,12 +29,23 @@ def test_research_chain_evidence_mirrors_research_first_inverse():
             "kind": "tool_call",
             "payload": {
                 "name": "delegate",
-                "arguments": '{"playbook": "multi_lens_research"}',
+                "arguments": '{"playbook": "lens_crosscheck"}',
                 "success": True,
             },
         }
     ]
     assert research_chain_evidence(entries) is True
+    old_id = [
+        {
+            "kind": "tool_call",
+            "payload": {
+                "name": "delegate",
+                "arguments": '{"playbook": "multi_lens_research"}',
+                "success": True,
+            },
+        }
+    ]
+    assert research_chain_evidence(old_id) is False
 
 
 def test_next_act_id_defaults_and_increments():

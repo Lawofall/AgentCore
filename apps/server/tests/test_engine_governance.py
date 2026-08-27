@@ -647,10 +647,10 @@ async def test_attached_inject_closing_round_keeps_body_despite_successful_tool(
         assert [e for e in sink.emitted if e.type == EventType.CONTENT_RESET] == []
 
         with (
-            patch.object(session_mod, "_HARVEST_ATTACH_GRACE_S", 2.0),
-            patch.object(session_mod, "_HARVEST_ATTACH_POLL_S", 0.02),
+            patch.object(session_mod, "_SETTLE_ATTACH_GRACE_S", 2.0),
+            patch.object(session_mod, "_SETTLE_ATTACH_POLL_S", 0.02),
             patch(
-                "agentcore.runtime.coordination.harvest.harvest_detached_execution",
+                "agentcore.runtime.coordination.harvest.settle_detached_execution",
                 new_callable=AsyncMock,
             ) as harvest,
             capture_logs() as logs,
@@ -664,7 +664,7 @@ async def test_attached_inject_closing_round_keeps_body_despite_successful_tool(
             assert session.harvest_scheduled is False
             assert session.settled_via == "attached_inject"
             assert any(
-                e.get("event") == "coordination.harvest_skipped_attached_visible_close"
+                e.get("event") == "coordination.settle_skipped_visible_close"
                 for e in logs
             )
             assert any(e.get("kind") == "execution_completed" for e in writer.entries)

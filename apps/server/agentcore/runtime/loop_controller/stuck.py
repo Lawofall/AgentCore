@@ -110,7 +110,7 @@ class StuckInterventionMixin:
 
     @property
     def local_recon_calls(self) -> int:
-        """Cumulative local peek calls (file_list / file_read / grep) this run."""
+        """Cumulative local peek calls (file_list / glob / file_read / grep) this run."""
         return self._local_recon_calls
 
     @property

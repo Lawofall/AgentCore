@@ -1,14 +1,12 @@
-"""调研类 playbook：parallel_brief / research_report / multi_lens_research."""
+"""调研类 playbook：map_fanout / cite_write_review / lens_crosscheck."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from agentcore.runtime.runs.playbooks._common import (
-    DIRECTED_SEARCH_TASK_HINT,
     RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE,
     RESEARCHER_NOTE_GUIDANCE,
-    RESEARCHER_SEARCH_DISCIPLINE,
     USER_MESSAGE_MECH_KEY,
     clean_str,
     clean_str_list,
@@ -47,14 +45,14 @@ _SYNTHESIZER_MOTION_CARD_GUIDANCE = (
 
 
 def _research_angle_artifact(label: str) -> str:
-    """Workspace-relative path for one research_report angle dossier (angle in filename)."""
+    """Workspace-relative path for one cite_write_review angle dossier (angle in filename)."""
     from agentcore.workspace._paths import truncate_filename_utf8
 
     return f"{RESEARCH_DIR}/{truncate_filename_utf8(f'{label}调研报告.md')}"
 
 
 def _brief_angle_artifact(label: str) -> str:
-    """Workspace-relative path for one parallel_brief direction note (angle in filename)."""
+    """Workspace-relative path for one map_fanout direction note (angle in filename)."""
     from agentcore.workspace._paths import truncate_filename_utf8
 
     return f"{RESEARCH_DIR}/{truncate_filename_utf8(f'{label}方向笔记.md')}"
@@ -114,13 +112,10 @@ def _user_request_anchor_block(user_message: str) -> str:
     )
 
 
-# A 档摸底验收：写进 parallel_brief task（提示词纪律，非完成硬闸）。
+# A 档摸底验收：写进 map_fanout task（提示词纪律，非完成硬闸）。
 _BRIEF_ACCEPTANCE = (
     "【摸底验收·够用即停】"
-    "本任务是方向摸底、不是整座成果：默认自己交一页地图；"
-    "【禁止】开局先招人再通读；"
-    "仅当本方向内仍有互不影响、可同时查的独立块才 delegate；"
-    "【禁止】因为已经做了很久再招人。"
+    "本任务是方向摸底、不是整座成果：默认自己交一页地图。"
     "目标：本方向能讲清「定位 / 技术栈或手段 / 进度或开放问题」即算够"
     "（非工程主题则对应本方向的是什么 / 怎么做 / 到哪了）。"
     "笔记只交一页地图：入口路径（文档 + 代码目录）、模块边界、三到五个开放问题。"
@@ -136,21 +131,21 @@ _BRIEF_ACCEPTANCE = (
 )
 
 
-def parallel_brief(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+def map_fanout(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     """A 档·对齐推进：N 路并行摸底 → 方向笔记落盘；无提纲/撰稿/审校（交回 CEO 对话综述）.
 
-    与 ``research_report``（B/重成文专线）划界：本形状是默认——一起弄懂 / 多路摸清 /
-    讨论对齐；未明示成文勿升 ``research_report``。仅确有 ≥2 独立缝才用；人数跟缝走。
+    与 ``cite_write_review``（B/重成文专线）划界：本形状是默认——一起弄懂 / 多路摸清 /
+    讨论对齐；未明示成文勿升 ``cite_write_review``。仅确有 ≥2 独立缝才用；人数跟缝走。
     验收口径见 ``_BRIEF_ACCEPTANCE``（一页地图 + 够用即停 + handoff 必交；非完成硬闸）。
     """
     topic = clean_str(args.get("topic"))
     if not topic:
-        return [], ["parallel_brief 需要 slot『topic』（要摸底对齐的主题）"]
+        return [], ["map_fanout 需要 slot『topic』（要摸底对齐的主题）"]
     angles_raw = clean_str_list(args.get("angles"), cap=None)
     if len(angles_raw) < 2:
         return [], [
-            "parallel_brief 需要 slot『angles』且 ≥2 个可并行方向"
-            "（单方向请手写 1 人 task，或明示成文走 research_report）"
+            "map_fanout 需要 slot『angles』且 ≥2 个可并行方向"
+            "（单方向请手写 1 人 task，或明示成文走 cite_write_review）"
         ]
     angle_slots, angle_fold_note = fold_fanout_slots(angles_raw, label="摸底方向")
     fold_hint = f" {angle_fold_note}" if angle_fold_note else ""
@@ -193,11 +188,11 @@ def parallel_brief(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str
     return tasks, []
 
 
-def research_report(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     """B/重成文专线：N×并行调研 → 提纲（默认 checkpoint）→ 写作 → 学术审校.
 
     仅用户明示成文且需正式长文/可提交（或已确认要审校满编）时用；讨论/形态未定勿首派；
-    普通构想勿默认学术审校。一起弄懂/多路摸清/仅提论文开源当资料默认 ``parallel_brief``。
+    普通构想勿默认学术审校。一起弄懂/多路摸清/仅提论文开源当资料默认 ``map_fanout``。
 
     中间环（各路调研 + 提纲）与终稿同走约定文档契约：``form=files`` + 钉死
     ``AgentCore/文档/research/`` 下路径（角度名入文件名，对齐 MLR ``{透镜}透镜报告.md``；
@@ -215,7 +210,7 @@ def research_report(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[st
 
     topic = clean_str(args.get("topic"))
     if not topic:
-        return [], ["research_report 需要 slot『topic』（要调研并成文的主题）"]
+        return [], ["cite_write_review 需要 slot『topic』（要调研并成文的主题）"]
     angles_raw = clean_str_list(args.get("angles"), cap=None)
     angle_slots, angle_fold_note = fold_fanout_slots(angles_raw, label="调研子方向")
     checkpoint = bool(args.get("checkpoint", True))
@@ -245,17 +240,12 @@ def research_report(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[st
                 "search_policy": "academic_literature",
                 "task": (
                     f"围绕主题【{topic}】，{scope}"
-                    "给出该子方向的关键事实 / 现状 / 证据；关键数字 / 关键结论旁须就地标"
-                    "台账 id（#rN，与工具「[已登记来源]」一致）或显式待核实语，"
-                    "勿裸写无出处主张；"
+                    "给出该子方向的关键事实 / 现状 / 证据；"
                     "附来源（文件:行 或 链接）。"
-                    "对关键法条、司法解释、判例等权威出处，须用 read_url 核对原文后再引用，"
-                    "勿仅凭搜索摘要断言条文或裁判要旨。"
                     "聚焦本子方向、回报精炼结论而非整段原文，别铺开到其它角度。"
                     f"完整调研要点须用 file_write 落盘到 `{artifact}`"
                     "（内容=本子方向完整要点 + 来源，不是 handoff 摘要的复制）；"
                     "handoff 结构化简报照旧，落盘是叠加、不得替代 handoff。"
-                    f"{RESEARCHER_SEARCH_DISCIPLINE}"
                     f"{RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE}"
                     f"{RESEARCHER_NOTE_GUIDANCE}"
                     f"{fold_hint}"
@@ -279,15 +269,11 @@ def research_report(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[st
                 "search_policy": "academic_literature",
                 "task": (
                     f"调研主题【{topic}】：覆盖关键事实 / 现状 / 主要观点与证据；"
-                    "关键数字 / 关键结论旁须就地标台账 id（#rN，与工具「[已登记来源]」一致）"
-                    "或显式待核实语，勿裸写无出处主张；附来源。"
-                    "对关键法条、司法解释、判例等权威出处，须用 read_url 核对原文后再引用，"
-                    "勿仅凭搜索摘要断言条文或裁判要旨。"
+                    "附来源。"
                     "回报精炼结论 + 关键证据指引，别回贴整段原文。"
                     f"完整调研要点须用 file_write 落盘到 `{artifact}`"
                     "（内容=本主题完整要点 + 来源，不是 handoff 摘要的复制）；"
                     "handoff 结构化简报照旧，落盘是叠加、不得替代 handoff。"
-                    f"{RESEARCHER_SEARCH_DISCIPLINE}"
                     f"{RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE}"
                     f"{RESEARCHER_NOTE_GUIDANCE}"
                 ),
@@ -361,12 +347,9 @@ def research_report(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[st
             "task": (
                 f"对上游成稿（主文件 `{main_path}`）做学术审校（{deliverable}）："
                 "核查学术准确性、逻辑完整性与引用规范；"
-                "对成稿中的关键法条、司法解释、判例引用，须用 read_url 核对原文后再确认或指出问题，"
-                "勿仅凭搜索摘要放行；"
                 "指出具体问题并给出可操作的修改建议，不重写全文。"
                 f"【主文件】审校短报告落盘到 `{_RESEARCH_REPORT_REVIEW_ARTIFACT}`；"
                 f"{INDEPENDENT_REVIEW_REPORT_DISCIPLINE}"
-                f"{DIRECTED_SEARCH_TASK_HINT}"
             ),
             "depends_on": ["write"],
             "deliverable": {
@@ -374,15 +357,14 @@ def research_report(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[st
                 "artifacts": [_RESEARCH_REPORT_REVIEW_ARTIFACT],
             },
             # 审校为依赖写作的收尾节点：通读长稿 + 核对出处。墙钟显式 300s（优先于统一
-            # backstop）；token 顶走 worker_budget 统一回填。真纯丙：不再靠显式 tools
-            # 名单收窄；定向检索纪律写在 task 正文（见 DIRECTED_SEARCH_TASK_HINT）。
+            # backstop）；token 顶走 worker_budget 统一回填。
             "timeout_ms": 300_000,
         }
     )
     return tasks, []
 
 
-def multi_lens_research(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+def lens_crosscheck(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     """N×异质透镜并行调研 → 汇总分析师 depends_on 全部透镜做交叉验证（可产 motion_card）.
 
     Companion shape for ``deep_multi_lens_research`` skill: parallel heterogeneous lenses
@@ -397,7 +379,7 @@ def multi_lens_research(args: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
     """
     topic = clean_str(args.get("topic"))
     if not topic:
-        return [], ["multi_lens_research 需要 slot『topic』（要多视角调研的主题 / 事件）"]
+        return [], ["lens_crosscheck 需要 slot『topic』（要多视角调研的主题 / 事件）"]
     lenses_raw = clean_str_list(args.get("lenses"), cap=None)
     if not lenses_raw:
         lenses_raw = list(_DEFAULT_MULTI_LENSES)
@@ -433,10 +415,6 @@ def multi_lens_research(args: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
                 f"{division}"
                 f"完整调研报告须用 file_write 落盘到 `{artifact}`"
                 "（内容=本透镜完整报告正文，不是 handoff 摘要的复制；勿只写提纲）。"
-                "正文引用检索来源时须就地标本回合台账 id（如 #r1，与工具结果末尾"
-                "「[已登记来源]」号一致）——落盘文件必须可溯源到调研台账，勿只写自由出处。"
-                "关键数字 / 关键结论旁须有 #rN 或显式待核实语，勿裸写无出处主张；"
-                "不强迫辩词式【已核实·#eN】二分格式。"
                 "handoff 结构化简报照旧（精炼结论 + 证据指针），落盘是叠加、不得替代 handoff。"
                 f"{RESEARCHER_NOTE_GUIDANCE}"
                 f"{fold_hint}"
@@ -461,9 +439,6 @@ def multi_lens_research(args: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
                 f"完整综述须用 file_write 落盘到 `{_SYNTHESIZER_ARTIFACT}`"
                 "（含交叉验证全文；若产命题卡则把命题 / 双方薄立场 / rationale 一并写入该文件；"
                 "内容是完整约定文档，不是 handoff 摘要复制）。"
-                "沿用上游透镜报告中的 #rN 台账锚（或工具结果给出的本回合 id）；"
-                "落盘综述须保留可解析的 #rN，勿抹成自由出处。"
-                "继承上游关键数字 / 关键结论时须带上 #rN 或保留待核实语，勿抹成既定事实。"
                 "handoff 结构化简报与 motion_card 对象照旧，落盘是叠加、不得替代。"
                 f"{user_anchor}"
                 f"{_SYNTHESIZER_MOTION_CARD_GUIDANCE}"

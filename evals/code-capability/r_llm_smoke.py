@@ -52,7 +52,7 @@ _DEFAULT_CARD_STEMS = (
 # 可用 --no-prefix 关掉。禁幽灵工具名；不平行造 worker 直装。
 _FIX_PROMPT_PREFIX = (
     "[eval smoke] Product path: CEO coordinates then delegate "
-    "(light for single-file one-shot; repair_code when symptoms/verify needed). "
+    "(light for single-file one-shot; diagnose_fix_verify when symptoms/verify needed). "
     "Worker mutates with str_replace (not CEO). Prefer file_read / grep; "
     "verify once with the card's pytest command, then stop. "
     "Avoid repeated code_execute or terminal loops; forbid handwritten (omit playbook) as repair default."

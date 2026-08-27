@@ -788,9 +788,26 @@ class MessageRepository:
         )
         return result.scalar_one_or_none()
 
-    async def update_content(self, message_id: str, content: str, *, commit: bool = True) -> None:
+    async def update_content(
+        self,
+        message_id: str,
+        content: str | None = None,
+        *,
+        attachments: list | None = None,
+        agent_mentions: list | None = None,
+        commit: bool = True,
+    ) -> None:
+        values: dict = {}
+        if content is not None:
+            values["content"] = content
+        if attachments is not None:
+            values["attachments"] = strip_nul(attachments)
+        if agent_mentions is not None:
+            values["agent_mentions"] = strip_nul(agent_mentions)
+        if not values:
+            return
         await self._session.execute(
-            update(Message).where(Message.id == message_id).values(content=content)
+            update(Message).where(Message.id == message_id).values(**values)
         )
         await commit_or_flush(self._session, commit=commit)
 

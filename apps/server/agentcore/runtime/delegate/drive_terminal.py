@@ -108,6 +108,10 @@ def post_session_all_completed(
         "total": total_n,
         "output": composed,
     }
+    from agentcore.runtime.coordination.cancel_close import classify_cancel_close
+
+    if classify_cancel_close(session) is not None:
+        payload["cancelled"] = True
     if criteria_met is False:
         payload["criteria_met"] = False
     if failed is not None:

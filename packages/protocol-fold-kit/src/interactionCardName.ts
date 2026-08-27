@@ -12,7 +12,6 @@ export const INTERACTION_CARD_NAME = {
   escalation: "拍板请求",
   ask_user: "提问确认",
   plan_review: "计划复核",
-  team_preview: "开工确认",
   stage_card: "推进卡",
 } as const satisfies Record<UserInteractionKind, string>;
 

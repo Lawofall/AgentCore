@@ -358,7 +358,6 @@ export function ProcessTimeline({
     if (
       node.kind === "checkpoint" ||
       node.kind === "plan_review" ||
-      node.kind === "team_preview" ||
       node.kind === "escalation" ||
       node.kind === "approval" ||
       node.kind === "stage_card"

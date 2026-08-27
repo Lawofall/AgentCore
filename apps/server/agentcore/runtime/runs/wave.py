@@ -67,6 +67,24 @@ from agentcore.runtime.runs.types import (
 
 logger = get_logger(__name__)
 
+
+def _hold_inflight_for_hot_user() -> bool:
+    """Keep in-flight workers while a user-side hot card is up.
+
+    ``user_stopped`` / ask_user ``soft_stop`` still take the kill-children path.
+    Lookup failure fails closed (kill) so stop/crash unwind is not skipped.
+    """
+    try:
+        from agentcore.runtime.coordination.session import active_coordination
+        from agentcore.runtime.interaction_orphan import holds_for_hot_user
+
+        sess = active_coordination()
+    except Exception:  # noqa: BLE001 — cancel path must not skip kill on import miss
+        return False
+    if sess is None or bool(getattr(sess, "soft_stop", False)):
+        return False
+    return holds_for_hot_user(sess)
+
 # Host progress hook: sync (legacy tests) or async (drive hot-continue).
 OnProgress = Callable[[Mapping[str, RunState]], None | Awaitable[None]]
 # Optional per-node completion hook (additive): fires once when an executed node
@@ -525,11 +543,26 @@ class WaveScheduler:
                             ):
                                 cancelled_absorb_msg[rid] = msg
 
-                done, _ = await asyncio.wait(
-                    set(running),
-                    timeout=0.05 if cancel_run_ids is not None else None,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
+                try:
+                    done, _ = await asyncio.wait(
+                        set(running),
+                        timeout=0.05 if cancel_run_ids is not None else None,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                except asyncio.CancelledError:
+                    # Outer drive/wave cancel while a user card is up: uncancel and
+                    # keep waiting. Killing children would discard the card in
+                    # ``InteractionRegistry.suspend`` finally.
+                    if running and _hold_inflight_for_hot_user():
+                        me = asyncio.current_task()
+                        if me is not None:
+                            me.uncancel()
+                        logger.info(
+                            "wave.hold_inflight_hot_pending",
+                            in_flight=len(running),
+                        )
+                        continue
+                    raise
                 if not done:
                     continue
                 for task in done:
@@ -561,7 +594,12 @@ class WaveScheduler:
                         if state is None:
                             state = RunState(phase=RunPhase.CANCELLED)
                     elif task.cancelled():
-                        raise asyncio.CancelledError  # external cancel, propagate
+                        from agentcore.runtime.coordination.drive_cancel import (
+                            note_child_cancel_overflow,
+                        )
+
+                        overflow = note_child_cancel_overflow(task)
+                        raise asyncio.CancelledError(overflow)
                     else:
                         state = task.result()
                     completed[run_id] = state
@@ -659,25 +697,33 @@ class WaveScheduler:
             # executor.agent's triple-reason contract (redirect / user_stop vs stop); ``shield`` is
             # required because this except often runs under an already-cancelled wave
             # task — a bare await would be interrupted before children emit.
-            for task in running:
-                task.cancel("stop")
-            if running:
-                await asyncio.shield(asyncio.gather(*running, return_exceptions=True))
-            # 1B: terminal cancel must not silently LEFT OUT never-dispatched plan
-            # nodes (nested parent force_cancel / user_stop / crash). Emit
-            # on_skipped(abort) so the graph closes as「未执行」. ask_user soft_stop
-            # cancels the drive so resume can re-drive the journal seed — skip
-            # durable skips there or resume would see false terminals.
-            soft_resume = False
-            try:
-                from agentcore.runtime.coordination.session import active_coordination
-
-                sess = active_coordination()
-                soft_resume = sess is not None and bool(sess.soft_stop)
-            except Exception:  # noqa: BLE001 — cancel path must still re-raise
+            # Hot user card (not user_stop / soft_stop): do not cancel children —
+            # suspend finally would discard the card.
+            hold = bool(running) and _hold_inflight_for_hot_user()
+            if not hold:
+                for task in running:
+                    task.cancel("stop")
+                if running:
+                    await asyncio.shield(
+                        asyncio.gather(*running, return_exceptions=True)
+                    )
+                # 1B: terminal cancel must not silently LEFT OUT never-dispatched plan
+                # nodes (nested parent force_cancel / user_stop / crash). Emit
+                # on_skipped(abort) so the graph closes as「未执行」. ask_user soft_stop
+                # cancels the drive so resume can re-drive the journal seed — skip
+                # durable skips there or resume would see false terminals.
                 soft_resume = False
-            if not soft_resume:
-                _materialise_undispatched_tails(abort_reason="abort")
+                try:
+                    from agentcore.runtime.coordination.session import (
+                        active_coordination,
+                    )
+
+                    sess = active_coordination()
+                    soft_resume = sess is not None and bool(sess.soft_stop)
+                except Exception:  # noqa: BLE001 — cancel path must still re-raise
+                    soft_resume = False
+                if not soft_resume:
+                    _materialise_undispatched_tails(abort_reason="abort")
             raise
 
         # Materialise cascade-skipped nodes (never ran) as SKIPPED + emit run_skipped

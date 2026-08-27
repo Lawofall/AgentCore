@@ -103,23 +103,25 @@ async def test_cold_start_pending_allows_single_worker_delegate():
 
 
 def test_repair_how_fixed_playbook_only():
-    assert validate_repair_how_fixed(playbook="repair_code", playbook_args={}) is not None
+    assert validate_repair_how_fixed(playbook="diagnose_fix_verify", playbook_args={}) is not None
     assert (
         validate_repair_how_fixed(
-            playbook="repair_code", playbook_args={"verify": "pytest -q"}
+            playbook="diagnose_fix_verify", playbook_args={"verify": "pytest -q"}
         )
         is None
     )
     assert (
         validate_repair_how_fixed(
-            playbook="repair_code",
+            playbook="diagnose_fix_verify",
             playbook_args={"verify": "打开 /app 白屏消失+snapshot 可见主内容"},
         )
         is None
     )
     assert validate_repair_how_fixed(playbook=None, playbook_args={}) is None
-    missing = validate_repair_how_fixed(playbook="repair_code", playbook_args={})
+    assert validate_repair_how_fixed(playbook="repair_code", playbook_args={}) is None
+    missing = validate_repair_how_fixed(playbook="diagnose_fix_verify", playbook_args={})
     assert missing is not None
+    assert "diagnose_fix_verify" in missing
     assert "白屏" in missing or "snapshot" in missing
 
 

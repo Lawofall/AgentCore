@@ -53,11 +53,11 @@ const WORKER_TERMINAL = new Set<string>([
 export function deriveCaptainStatus(
   execution: Execution,
   captainId: string,
-  opts?: { turnTerminal?: boolean },
+  opts?: { turnTerminal?: boolean; detached?: boolean },
 ): RunStatus {
   if (execution.status === "cancelled") return "cancelled";
   // Cold pause (ask_user / plan_review / …): workers may all be done, but CEO
-  // is waiting on the user — never paint the sink as「正在生成汇总」.
+  // is waiting on the user — never paint the sink as「正在收尾」.
   // RunStatus has no `paused`; `pending` clears the synthesis spinner.
   if (execution.status === "paused") return "pending";
   // Captain paints failed only from its own run_failed — whole-graph
@@ -74,8 +74,12 @@ export function deriveCaptainStatus(
   if (execution.status === "completed") return "completed";
   // Workers all terminal but captain never failed: not synthesizing, not 失败.
   if (execution.status === "failed") return "pending";
-  // Workers all terminal, execution still live — harvest / in-turn synthesis.
-  if (workers.length > 0) return "running";
+  // Workers all terminal, execution still live: same-turn CEO writing the close.
+  // Captain already left (detached) — no second close; don't paint「正在收尾」.
+  if (workers.length > 0) {
+    if (opts?.detached) return "pending";
+    return "running";
+  }
   // No workers: message_end still means this captain-only turn closed.
   if (opts?.turnTerminal) return "completed";
   return "pending";
@@ -87,7 +91,7 @@ export function deriveCaptainStatus(
  * 待汇总（工人未齐）：派单正文不是成果，不摘「人已派出 / 还在等」。
  * 有中间草稿才显示草稿；等待条走 statusCaption（face 正文最多两行），
  * preview 留空以免两行打架。
- * 人齐之后仍用派单泡开头（图挂在派单泡上，收口另泡不在这刀）。
+ * 人齐之后仍用派单泡开头（图挂在派单泡上；后台散了不再另开收口泡）。
  */
 export function captainSinkPreview(opts: {
   captainStatus: RunStatus;

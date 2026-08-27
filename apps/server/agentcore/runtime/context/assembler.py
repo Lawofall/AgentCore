@@ -10,7 +10,8 @@ so:
 - ordering is DECLARATIVE (each contributor's :class:`SectionOrder`), not implicit in the
   ``.add()`` call sequence — the render order is the same no matter what sequence a site
   contributes in, and
-- the future levers (priority / token budget — 文档「扳机 B」) get ONE place to plug into.
+- contributor ``budget`` is unused metadata (carried, not enforced); the assembler
+  never trims. Write-side always-on quota lives in ``memory/always_quota.py``.
 
 Behavior-preserving today: with the ``SectionOrder`` values the call sites pass, the
 sorted render reproduces the prior inline order exactly, joined with ``"\\n"`` —

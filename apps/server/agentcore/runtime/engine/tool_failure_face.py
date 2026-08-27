@@ -63,7 +63,9 @@ _CURATED_BY_CODE: dict[str, str] = {
     ErrorCode.NOT_FOUND: "未找到所需资源，请换一种方式继续。",
     ErrorCode.RATE_LIMITED: "请求过于频繁，请稍后再试。",
     ErrorCode.QUOTA_EXCEEDED: "用量已达上限，请稍后再试或调整配额。",
-    ErrorCode.STREAM_ERROR: "工作区通道暂时不可用，请稍后重试。",
+    ErrorCode.STREAM_ERROR: (
+        "工作区/本地文件连不上，请稍后重试或重开桌面，我会基于已经拿到的内容继续。"
+    ),
     ErrorCode.DATABASE_UNAVAILABLE: "AgentCore 服务暂时不可用，请稍后重试",
     "database_unavailable": "AgentCore 服务暂时不可用，请稍后重试",
     # Engine meta codes (not ErrorCode members) — still stable on the wire.
@@ -98,7 +100,9 @@ _CURATED_BY_CODE: dict[str, str] = {
     ),
     "timeout": "这一步等了很久都没有响应，已经中止。可以让我缩小范围或换个方式再试一次。",
     "liveness_timeout": "这一步等了很久都没有响应，已经中止。可以让我缩小范围或换个方式再试一次。",
-    "workspace_channel_dead": "工作区通道暂时不可用，请稍后重试。",
+    "workspace_channel_dead": (
+        "工作区/本地文件连不上，请稍后重试或重开桌面，我会基于已经拿到的内容继续。"
+    ),
     "landed_status_name": _TOOL_NAME_UNRESOLVED,
     "host_unavailable": "浏览器宿主暂时不可用，请稍后重试。",
     "searxng_unreachable": "本地搜索服务不可用，请稍后重试",

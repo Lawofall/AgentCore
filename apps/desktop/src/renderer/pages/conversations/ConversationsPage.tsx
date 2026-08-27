@@ -327,9 +327,7 @@ export function ConversationsPage() {
               {bulk.selectMode && bulk.selectedIds.size > 0 && (
                 <Card className="sticky bottom-0 mt-3 flex flex-wrap items-center gap-2 px-3 py-2 shadow-sm">
                   <span className="text-sm text-muted-foreground">
-                    {bulk.confirmBulkDelete
-                      ? `删除 ${bulk.selectedIds.size} 项？可在「最近删除」里恢复`
-                      : `已选 ${bulk.selectedIds.size} 项`}
+                    已选 {bulk.selectedIds.size} 项
                   </span>
                   <span className="flex-1" />
                   {isArchivedView ? (
@@ -349,30 +347,13 @@ export function ConversationsPage() {
                       批量归档
                     </Button>
                   )}
-                  {bulk.confirmBulkDelete ? (
-                    <>
-                      <Button
-                        variant="danger"
-                        onClick={() => void bulk.handleBulkDelete()}
-                      >
-                        确认删除
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => bulk.setConfirmBulkDelete(false)}
-                      >
-                        取消
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="danger"
-                      onClick={() => bulk.setConfirmBulkDelete(true)}
-                      icon={<Trash2 size={14} className="shrink-0" />}
-                    >
-                      删除
-                    </Button>
-                  )}
+                  <Button
+                    variant="danger"
+                    onClick={() => void bulk.handleBulkDelete()}
+                    icon={<Trash2 size={14} className="shrink-0" />}
+                  >
+                    删除
+                  </Button>
                 </Card>
               )}
             </div>

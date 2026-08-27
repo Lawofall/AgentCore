@@ -1,6 +1,6 @@
 """Shared capture skeleton for durable suspension frames.
 
-The three suspending faces (ask_user / plan_review / team_preview) share one capture
+The two suspending faces (ask_user / plan_review) share one capture
 shape: read the CEO transcript, fold the about-to-emit ``*_required`` into the fact-log
 snapshot (the §8.3 唯一权威载体), assemble a ``turn_paused`` trailing snapshot of the
 resumable turn state, then hand the pieces to a kind-specific frame builder + saver.

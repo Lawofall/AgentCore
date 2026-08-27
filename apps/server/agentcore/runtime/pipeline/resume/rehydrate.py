@@ -18,7 +18,6 @@ from agentcore.runtime.journal.entries import _PROCESS_PREFIX, _RUN_PROCESS_PREF
 from agentcore.runtime.loop_controller import LoopController
 from agentcore.runtime.suspension import (
     PlanReviewSuspension,
-    TeamPreviewSuspension,
     TurnSuspension,
 )
 
@@ -181,20 +180,10 @@ def batch_shape_for_settled_suspension(
     suspension: TurnSuspension,
 ) -> tuple[int, bool]:
     """``(node_count, has_deps)`` for settle-side ``mark_post_delegate`` (G5)."""
-    if isinstance(suspension, TeamPreviewSuspension) and suspension.primitive == "debate":
-        # Live debate returns without batch meta → note_delegate_batches uses (0, False).
-        return 0, False
-
     plan = getattr(suspension, "plan", None)
     nodes = getattr(plan, "nodes", None) if plan is not None else None
     if isinstance(nodes, list) and nodes:
         return len(nodes), any(bool(getattr(n, "depends_on", None)) for n in nodes)
-
-    if isinstance(suspension, TeamPreviewSuspension) and suspension.workers:
-        return (
-            len(suspension.workers),
-            any(bool(w.get("depends_on")) for w in suspension.workers if isinstance(w, dict)),
-        )
 
     return 0, False
 
@@ -203,13 +192,13 @@ def mark_controller_after_settle(
     controller_seed: dict[str, Any] | None,
     suspension: TurnSuspension,
 ) -> dict[str, Any] | None:
-    """After plan_review / team_preview settle, latch post_delegate with batch shape.
+    """After plan_review settle, latch post_delegate with batch shape.
 
     Only meaningful on the ``turn_paused`` path (caller gates on ``from_turn_paused``):
     the snapshot's ``post_delegate`` is False because the pause happened before the
     delegate/debate tool returned. Ask-user settles leave the seed unchanged.
     """
-    if not isinstance(suspension, (PlanReviewSuspension, TeamPreviewSuspension)):
+    if not isinstance(suspension, PlanReviewSuspension):
         return controller_seed
 
     controller = LoopController()

@@ -295,7 +295,7 @@ def test_runsc_cmd_desk_is_non_rootless_sandbox(tmp_path: Path):
     assert "--network=sandbox" in cmd[:run_idx]
     assert "--ignore-cgroups" in cmd[:run_idx]
     assert "--network=host" not in cmd[:run_idx]
-    assert cmd[run_idx + 1] == "-d"
+    assert cmd[run_idx + 1] == "-detach"
 
 
 def test_desk_oci_binds_cache_and_netns_path(tmp_path: Path):

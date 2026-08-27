@@ -4,7 +4,9 @@ from agentcore.memory.store import CORE_MEMORY_FILE, FileMemoryStore
 from agentcore.runtime.context.folder_catalog import (
     FolderCatalogEntry,
     build_folder_catalog_entries,
+    catalog_label_for,
     load_folder_catalog,
+    prioritize_current_folder,
     render_folder_catalog,
 )
 from agentcore.runtime.resolve.prompt import (
@@ -28,9 +30,12 @@ def test_render_folder_catalog_one_line_per_folder():
     )
     assert text.startswith("<文件夹清单>")
     assert text.endswith("</文件夹清单>")
-    assert "- 支付网关：处理 Stripe 回调的结算服务" in text
-    assert "- 空壳" in text
-    assert "- 空壳：" not in text
+    assert "- 支付网关（id=`f1`）：处理 Stripe 回调的结算服务" in text
+    assert "- 空壳（id=`f2`）" in text
+    assert "- 空壳（id=`f2`）：" not in text
+    assert "list_folders" not in text
+    assert "resolve_folder" not in text
+    assert "target_folder_id" not in text
 
 
 def test_render_uses_full_path_so_resolve_can_disambiguate():
@@ -41,8 +46,8 @@ def test_render_uses_full_path_so_resolve_can_disambiguate():
             FolderCatalogEntry("f2", "图标", "旧版存档", rel_path="归档/图标"),
         ]
     )
-    assert "- 设计/图标：线上图标库" in text
-    assert "- 归档/图标：旧版存档" in text
+    assert "- 设计/图标（id=`f1`）：线上图标库" in text
+    assert "- 归档/图标（id=`f2`）：旧版存档" in text
 
 
 def test_build_sort_preserved_and_hard_limit_truncates():
@@ -94,7 +99,7 @@ def test_derived_rename_and_profile_update_reflected_immediately():
     profiles_v2 = {"f1": "## 关于\n- 新定位：支付结算\n"}
     v2 = build_folder_catalog_entries(folders_v2, profiles_v2, limit=12)
     text = render_folder_catalog(v2)
-    assert "新名：新定位：支付结算" in text
+    assert "新名（id=`f1`）：新定位：支付结算" in text
     assert "旧名" not in text
     assert "旧定位" not in text
 
@@ -109,9 +114,10 @@ def test_compose_ceo_includes_catalog_outside_rules():
         skill_registry=build_system_skill_registry(),
         ceo_tool_names={"delegate", "consult"},
         folder_catalog=catalog,
+        current_folder_id="f1",
     )
     assert "<文件夹清单>" in ceo
-    assert "- 支付网关：结算服务" in ceo
+    assert "- 支付网关（id=`f1`，当前出生桌）：结算服务" in ceo
     # Always memory stays in <rules>; catalog is a sibling section.
     assert "<rules>" in ceo
     assert "用中文" in ceo
@@ -168,6 +174,12 @@ async def test_load_folder_catalog_wires_folder_repo_and_profiles(
             ]
             return rows[:limit]
 
+        async def get_by_id(self, folder_id: str, *, user_id: str):
+            assert user_id == "u1"
+            if folder_id == "fid-old":
+                return _Folder("fid-old", "遗留")
+            return None
+
     class _CM:
         async def __aenter__(self):
             return object()
@@ -187,7 +199,11 @@ async def test_load_folder_catalog_wires_folder_repo_and_profiles(
     assert entries[0].summary == "支付结算服务"
     assert entries[1].summary == "个人博客"
     assert render_folder_catalog(entries)
-    assert render_folder_catalog([]) == ""
+
+    pinned = await load_folder_catalog(
+        store, "u1", limit=2, current_folder_id="fid-old"
+    )
+    assert [e.folder_id for e in pinned] == ["fid-old", "fid-pay"]
 
 
 async def test_load_folder_catalog_no_folders_returns_empty(tmp_path, monkeypatch):
@@ -212,3 +228,46 @@ async def test_load_folder_catalog_no_folders_returns_empty(tmp_path, monkeypatc
 
     store = FileMemoryStore(tmp_path)
     assert await load_folder_catalog(store, "u1") == []
+
+
+def test_render_marks_current_birth_desk_and_omits_tool_how():
+    text = render_folder_catalog(
+        [
+            FolderCatalogEntry("f1", "白板", "", rel_path="白板"),
+            FolderCatalogEntry("f2", "图标", "线上图标库", rel_path="设计/图标"),
+        ],
+        current_folder_id="f1",
+    )
+    assert "当前出生桌已在行内标出" in text
+    assert "- 白板（id=`f1`，当前出生桌）" in text
+    assert "- 设计/图标（id=`f2`）：线上图标库" in text
+    assert "list_folders" not in text
+    assert "resolve_folder" not in text
+    assert "file_list" not in text
+    assert "target_folder_id" not in text
+
+
+def test_catalog_label_for_and_prioritize_current_folder():
+    entries = [
+        FolderCatalogEntry("fid-pay", "支付", "", rel_path="工作/支付"),
+        FolderCatalogEntry("fid-blog", "博客"),
+    ]
+    assert catalog_label_for(entries, "fid-pay") == "工作/支付"
+    assert catalog_label_for(entries, "missing") is None
+    assert catalog_label_for(entries, None) is None
+
+    class _Row:
+        def __init__(self, fid: str) -> None:
+            self.id = fid
+
+    recent = [_Row("a"), _Row("b"), _Row("c")]
+    pinned = prioritize_current_folder(
+        recent, current_id="c", current_row=None, limit=2
+    )
+    assert [row.id for row in pinned] == ["c", "a"]
+
+    extra = _Row("z")
+    inserted = prioritize_current_folder(
+        recent, current_id="z", current_row=extra, limit=2
+    )
+    assert [row.id for row in inserted] == ["z", "a"]

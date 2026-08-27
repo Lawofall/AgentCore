@@ -5,7 +5,7 @@
   "user_message": "前面你列了四个切入方向：理解难度、后果推演、具体问题下界、构造证明思路。都有，通过多 Agent 协作来完成这些内容。",
   "path": "team",
   "mode": "economy",
-  "_note": "探索菜单「都有+多Agent」→ A parallel_brief 形态；禁止默认 research_report（无提纲撰稿审校汇入）。",
+  "_note": "探索菜单「都有+多Agent」→ A map_fanout 形态；禁止默认 cite_write_review（无提纲撰稿审校汇入）。",
   "checks": [
     { "name": "FinishReason" },
     { "name": "Delegated" },

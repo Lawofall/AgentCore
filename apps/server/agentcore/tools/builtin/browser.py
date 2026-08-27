@@ -665,6 +665,8 @@ BROWSER_TOOL_PARAMETERS: dict[str, Any] = {
                 "navigate/click/type/scroll/snapshot/console：CEO+worker；"
                 "screenshot：仅 worker（CEO 须 delegate）。"
                 "打开网页必须先 navigate；空白页也必须先 navigate。"
+                + _MUTATION_VERIFY_TAIL
+                + "click 验收看 clicked.was_disabled；type 验收看 typed.matched。"
             ),
         },
         "url": {
@@ -682,7 +684,12 @@ BROWSER_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "text": {
             "type": "string",
-            "description": "type：要填入的文本（替换该输入框已有内容）",
+            "description": (
+                "type：要填入的文本（替换该输入框已有内容）。"
+                "遇 password 角色输入框硬拒（metadata.code=password_blocked）："
+                "worker 用 escalate(blocking=true, browser_login=true)；"
+                "CEO 用 ask_user(browser_login=true)。"
+            ),
         },
         "snapshot_version": {
             "type": "integer",
@@ -706,16 +713,11 @@ class BrowserTool(_BrowserToolBase):
             name="browser",
             description=(
                 "右坞真实 Chromium（本机 Local Bridge 或云端沙箱）。"
-                "按 action 分流：navigate 打开网页（唯一开页路径，禁止编造 browser_open）；"
-                "click/type/scroll 操作已打开的页；snapshot 取 ref 表与 ARIA；"
-                "console 读页内日志/未捕获异常；screenshot 截关键帧给人看（仅队员）。"
-                "相对 HTML 路径仅桌面 Local Bridge 可用，云端沙箱会诚实失败（引导「完整预览」）。"
-                + _MUTATION_VERIFY_TAIL
-                + "click 验收看 clicked.was_disabled；type 验收看 typed.matched。"
-                "遇 password 角色输入框硬拒（metadata.code=password_blocked）："
-                "worker 用 escalate(blocking=true, browser_login=true)；"
-                "CEO 用 ask_user(browser_login=true)。"
-                "静态正文摘录仍可用 read_url（非右坞直播）。"
+                "navigate/click/type/scroll/snapshot/console：CEO+worker；"
+                "screenshot 仅队员。"
+                "开页必须 navigate，禁编造 browser_open。"
+                "静态摘录用 read_url（非右坞直播）。"
+                "HOW→consult(browser)。"
             ),
             parameters=BROWSER_TOOL_PARAMETERS,
             category=ToolCategory.EXECUTION,

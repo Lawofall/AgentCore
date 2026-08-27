@@ -131,7 +131,7 @@ def test_mark_host_turn_paused_sets_live_session(monkeypatch):
 
 @pytest.mark.anyio
 async def test_harvest_detached_skips_closing_when_host_paused():
-    from agentcore.runtime.coordination.harvest import harvest_detached_execution
+    from agentcore.runtime.coordination.harvest import settle_detached_execution
     from agentcore.runtime.coordination.session import (
         CoordinationSession,
         active_coordination,
@@ -145,7 +145,7 @@ async def test_harvest_detached_skips_closing_when_host_paused():
     )
     session.host_turn_paused = True
     set_active_coordination(session)
-    await harvest_detached_execution(session)
+    await settle_detached_execution(session)
     assert active_coordination("e-pause") is None
 
 

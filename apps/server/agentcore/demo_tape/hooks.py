@@ -11,13 +11,12 @@ from agentcore.runtime.events import EventSink
 from agentcore.runtime.suspension import (
     AskUserSuspension,
     PlanReviewSuspension,
-    TeamPreviewSuspension,
     TurnSuspension,
 )
 
 logger = get_logger(__name__)
 
-_TAPE_RESUME_KINDS = (TeamPreviewSuspension, AskUserSuspension, PlanReviewSuspension)
+_TAPE_RESUME_KINDS = (AskUserSuspension, PlanReviewSuspension)
 
 
 def try_resolve_tape_binding(conversation_id: str):

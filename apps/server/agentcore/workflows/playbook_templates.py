@@ -24,13 +24,12 @@ from agentcore.workflows.definition import (
 )
 
 # Desktop template UI only has string textareas; builders expect list for
-# parallel_brief.angles / compare_options.options.
+# map_fanout.angles.
 _LIST_SLOT_SPLIT = re.compile(r"[,，、\n]+")
 
 # playbook → slot key that UI may send as a single string.
 _LIST_SLOTS: dict[str, str] = {
-    "parallel_brief": "angles",
-    "compare_options": "options",
+    "map_fanout": "angles",
 }
 
 
@@ -75,7 +74,7 @@ class PlaybookTemplateSlot:
 # asks for. Other PLAYBOOKS names → explicit reject; intentionally NOT 1:1 with
 # PLAYBOOKS — see module docstring. Builders may accept more slots than listed here.
 _SLOT_DEFS: dict[str, tuple[PlaybookTemplateSlot, ...]] = {
-    "parallel_brief": (
+    "map_fanout": (
         PlaybookTemplateSlot(
             key="topic", label="主题", required=True, hint="要摸底对齐的主题"
         ),
@@ -86,7 +85,7 @@ _SLOT_DEFS: dict[str, tuple[PlaybookTemplateSlot, ...]] = {
             hint="≥2 个可并行方向；数组或逗号/顿号分隔，如：法律、品牌、舆情",
         ),
     ),
-    "research_report": (
+    "cite_write_review": (
         PlaybookTemplateSlot(
             key="topic", label="主题", required=True, hint="调研 / 报告主题"
         ),
@@ -94,20 +93,6 @@ _SLOT_DEFS: dict[str, tuple[PlaybookTemplateSlot, ...]] = {
     "build_app": (
         PlaybookTemplateSlot(
             key="app", label="应用", required=True, hint="要搭建的应用 / SPA 简述"
-        ),
-    ),
-    "compare_options": (
-        PlaybookTemplateSlot(
-            key="question",
-            label="问题",
-            required=True,
-            hint="要决策的问题，如：选 Postgres 还是 MySQL",
-        ),
-        PlaybookTemplateSlot(
-            key="options",
-            label="选项",
-            required=True,
-            hint="≥2 个待比较选项；数组或逗号/顿号分隔",
         ),
     ),
 }
@@ -124,32 +109,27 @@ PRIMARY_SLOTS: dict[str, tuple[str, ...]] = {
 # Soft optional defaults merged under user slots (user wins). Builders already default
 # many optionals when omitted; these only make the snapshot more explicit / stable.
 _DEFAULT_OPTIONAL_SLOTS: dict[str, dict[str, Any]] = {
-    "research_report": {"checkpoint": True},
+    "cite_write_review": {"checkpoint": True},
 }
 
 _TITLE: dict[str, str] = {
-    "parallel_brief": "多角摸底",
-    "research_report": "调研报告成文",
+    "map_fanout": "多角摸底",
+    "cite_write_review": "调研报告成文",
     "build_app": "从零搭应用",
-    "compare_options": "方案对比选型",
 }
 
 # User-facing blurbs (not raw CEO/runtime summaries).
 _SUMMARY: dict[str, str] = {
-    "parallel_brief": (
+    "map_fanout": (
         "多人并行摸清议题并写一页方向笔记；适合「先弄懂」。"
         "要交长文/落盘报告请用「调研报告成文」。"
     ),
-    "research_report": (
+    "cite_write_review": (
         "调研→提纲→写作→审校；仅当你明确要落盘成文或交报告时用。"
         "只想弄懂议题请用「多角摸底」。"
     ),
     "build_app": (
         "从零搭一个小应用：脚手架→模块→联调→冒烟；默认瘦启动。"
-    ),
-    "compare_options": (
-        "多路并行评估各选项再汇总对比推荐；适合「选哪个 / A 还是 B」。"
-        "只想摸清议题请用「多角摸底」。"
     ),
 }
 

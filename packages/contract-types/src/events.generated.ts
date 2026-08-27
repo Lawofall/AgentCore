@@ -141,7 +141,6 @@ export type ProcessStep =
   | { kind: "graph_append"; execution_id: string; host_message_id: string; added_count: number }
   | { kind: "checkpoint"; checkpoint_id: string }
   | { kind: "plan_review"; checkpoint_id: string }
-  | { kind: "team_preview"; checkpoint_id: string }
   | { kind: "escalation"; escalation_id: string }
   | { kind: "approval"; approval_id: string }
   | { kind: "stage_card"; stage_card_id: string }
@@ -190,12 +189,8 @@ export interface AskAssumption {
  * (NOT a pre-selection). `action` marks an option that the desktop client fulfils with a
  * native client action instead of a plain text answer (unknown/absent → plain option):
  * `open_local_project` / `register_local_project` / `bind_local_folder` are
- * **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云 / 连接 Git」；≠离线；
+ * **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云」；远程仓「从 Git 克隆」；≠离线；
  * 勿当默认主推；``create_folder`` 仍只建云）；
- * `grant_readonly_folder` is a **legacy** session read-only mount under
- * ``external/<alias>/`` (orthogonal to binding); **new** read-only mounts use the
- * ``external_mount_readonly`` tool instead — do not newly emit this action for
- * read-only;
  * `grant_organize_folder` confirms organize-mode (move/copy/mkdir/trash-delete);
  * still requires explicit user confirm (not silent).
  * For ``grant_*`` only: optional ``well_known`` (``desktop`` / ``downloads`` /
@@ -212,7 +207,7 @@ export interface AskOption {
   label: string;
   detail?: string;
   recommended?: boolean;
-  action?: "open_local_project" | "register_local_project" | "bind_local_folder" | "grant_readonly_folder" | "grant_organize_folder";
+  action?: "open_local_project" | "register_local_project" | "bind_local_folder" | "grant_organize_folder";
   /** 仅 grant_*：常见目录提示；桌面解析直授，失败明确报错（无 picker 兜底）。 */
   well_known?: "desktop" | "downloads" | "documents";
   /** 仅 grant_*：子目录名模糊词（无路径分隔符）；与 well_known 合用尽量唯一匹配。 */
@@ -297,132 +292,6 @@ export interface PlanReviewResolvedPayload {
   checkpoint_id: string;
   decision: CheckpointDecision;
   note: string;
-}
-
-/** One upcoming worker row on the thin team-preview card (团队预审). */
-export interface TeamPreviewWorker {
-  run_id: string;
-  role: string;
-  task: string;
-  depends_on: string[];
-  /** 交付形态 prose/files 等；缺省=旧帧。 */
-  form?: string;
-  /** 写盘能力判别；由 form 推导。 */
-  write_capability?: "text_only" | "can_write_files";
-  /** 写盘能力展示文案（可改文件 / 仅文字报告）。 */
-  write_capability_label?: string;
-  /** 该队员模型 id（可展示裸 id）。 */
-  model?: string;
-  /** 付款来源（行属性）；旧帧缺省。 */
-  origin?: "platform" | "byok";
-  /** BYOK 服务商 id；platform 缺省。 */
-  provider_id?: string;
-  /** 该队员落座 Folder id（显式 target 或本会话工作区）；裸聊 scratch 缺省。 */
-  target_folder_id?: string;
-  /** 服务端解析的工作区显示名；无 Folder 时为「本会话工作区」。缺省=旧帧。 */
-  target_folder_name?: string;
-}
-
-/** One debate participant on the debate kickoff card. */
-export interface TeamPreviewSide {
-  key: string;
-  name: string;
-  stance: string;
-  is_subject?: boolean;
-  /** 开赛前预分配稳定 id；人盖 model_overrides 键。 */
-  run_id?: string;
-  /** 该方辩手模型 id。 */
-  model?: string;
-  /** 付款来源（行属性）。 */
-  origin?: "platform" | "byok";
-  /** BYOK 服务商 id；platform 缺省。 */
-  provider_id?: string;
-}
-
-/** §7.5 D：消歧零/多候选时开赛卡 / 错误载荷中的目录行。 */
-export interface ModelCandidate {
-  model: string;
-  origin: "platform" | "byok";
-  provider_id?: string;
-  label?: string;
-  /** 触发消歧的参与方 key；缺省=整场。 */
-  side_key?: string;
-  /** 目录身份 @platform/… 或 @byok/…；旧帧缺省。 */
-  ref?: string;
-}
-
-/** 开工卡：计划预览 + 能力授权（两卡合一）。
- * 
- * ``primitive`` discriminates ``delegate`` (workers 分工表) vs ``debate``
- * (motion / sides / max_rounds). ``tools`` may be empty under full_auto /
- * always_ask / debate read-only debaters. */
-export interface TeamPreviewRequiredPayload {
-  checkpoint_id: string;
-  conversation_id: string;
-  workers: TeamPreviewWorker[];
-  tools?: string[];
-  /** 编排原语判别；缺省按 delegate（旧 journal / 向量兼容）。 */
-  primitive?: "delegate" | "debate";
-  /** 辩论辩题；仅 primitive=debate。 */
-  motion?: string;
-  /** 辩论形态 debate/red_team/roundtable。 */
-  form?: string;
-  /** 辩论各方立场。 */
-  sides?: TeamPreviewSide[];
-  /** 辩论轮次安全上限（预算展示）。 */
-  max_rounds?: number;
-  /** 辩论认真辩透 vs 快速对碰。 */
-  thorough?: boolean;
-  /** 开赛前预分配主持人 run_id；人盖 model_overrides 键。 */
-  moderator_run_id?: string;
-  /** 裁判 / 主持人模型 id。 */
-  moderator_model?: string;
-  /** 裁判模型来源。 */
-  moderator_origin?: "platform" | "byok";
-  /** 裁判 BYOK provider_id。 */
-  moderator_provider_id?: string;
-  /** 目录只剩一模型时为 true，开赛卡明示同模型降级。 */
-  same_model_debate?: boolean;
-  /** 模型消歧候选（ref + model/origin/provider_id/label）；旧帧缺省。 */
-  model_candidates?: ModelCandidate[];
-  /** 开工卡主导语（如「MVP主流程 · 预计 3 人」）；旧帧缺省。 */
-  headline?: string;
-  /** 修订代数；首版 1。旧帧缺省（前端按 1）。 */
-  revision?: number;
-  /** 上一张开工卡 checkpoint_id；首版缺省。 */
-  revised_from?: string;
-  /** 触发本次修订的用户意见原文；首版缺省。 */
-  revision_note?: string;
-}
-
-/** 开工卡 continue 修正 / resolved 对账：单向收紧写盘（同效 form=prose）。仅允许 text_only。 */
-export interface WriteCapabilityOverride {
-  run_id: string;
-  capability: "text_only";
-}
-
-/** 开工卡 continue 人盖：按 run_id 覆盖队员 / 辩手 / 主持人目录身份。
- * 
- * ``model`` 填 ``@platform/{id}`` / ``@byok/{provider_id}/{id}``。
- * 空 model = 该项不改。非法身份 → 422。库存 leftover 仍可带 origin/provider_id。 */
-export interface ModelOverride {
-  model: string;
-  /** 库存 leftover；新调用不必填。 */
-  origin?: "platform" | "byok";
-  /** 库存 leftover；新调用不必填。 */
-  provider_id?: string;
-}
-
-export interface TeamPreviewResolvedPayload {
-  checkpoint_id: string;
-  decision: CheckpointDecision;
-  note: string;
-  /** 用户关闭的 run_id；缺省/空=全员开工。 */
-  excluded_run_ids?: string[];
-  /** 写盘单向收紧；仅 capability=text_only；未知 run_id / 升权 → 422（引擎侧）。 */
-  write_capability_overrides?: WriteCapabilityOverride[];
-  /** 人确认盖 CEO：run_id → {model}（目录身份 @platform/… 或 @byok/…）；delegate=队员；debate=sides[].run_id / moderator_run_id；空/缺=不改。 */
-  model_overrides?: Record<string, ModelOverride>;
 }
 
 /** 阶段推进卡（批 B）：命题卡升级为可操作交互；幕 1 收尾后耐久展示。
@@ -792,7 +661,8 @@ export interface DeliveryGap {
 /** One user action that would close a delivery gap. ``kind`` is a widened string
  * on the wire (like ``ToolPhase``) so the backend can add kinds without a client
  * bump — known: ``bind_local_folder`` (wire kind；产品文案按会话分流：
- * 工程尚在本机 → 云协作「导入到云 / 连接 Git」优先；**已是云端会话但沙箱未装配** →
+ * 工程尚在本机 → 云协作「导入到云」优先；远程仓进当前云桌走 git clone /
+ * Composer「从 Git 克隆」；**已是云端会话但沙箱未装配** →
  * 禁止再导「导入到云」，改稍后重试 / export_to_local / 本机传统；
  * 本机传统合法非默认，≠离线)；
  * ``export_to_local`` (云端已有 delivered_files → 导出到本机文件夹后即可 npm install / 本地运行；
@@ -986,7 +856,7 @@ export interface ResumeDeferredPayload {
 export interface ResumeSettledPayload {
   message_id: string;
   conversation_id: string;
-  kind: "ask_user" | "plan_review" | "team_preview";
+  kind: "ask_user" | "plan_review";
   checkpoint_id: string;
   decision: string;
   decided_at: string;

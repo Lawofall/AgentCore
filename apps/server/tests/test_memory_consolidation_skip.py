@@ -70,8 +70,7 @@ def test_episodic_prompt_forbids_inferring_preference_from_task_genre():
     text = _EPISODIC_SYSTEM
     assert "explicit statements" in text or "explicit" in text.lower()
     assert "must NOT" in text or "Do NOT infer" in text
-    assert "mock trial" in text or "模拟法庭" in text
-    assert "法律分析" in text or "legal" in text.lower()
+    assert "禁止从本场任务题材、体裁、一次性诉求形状推断沟通偏好" in text
 
 
 def test_semantic_prompt_tightens_preferences_promotion():
@@ -79,7 +78,7 @@ def test_semantic_prompt_tightens_preferences_promotion():
     assert "Preference promotion rule" in text
     assert "explicit user" in text.lower() or "explicit" in text.lower()
     assert "NEVER promote task topics" in text or "never promote" in text.lower()
-    assert "偏好法律" in text or "legal" in text.lower()
+    assert "禁止从本场任务题材、体裁、一次性诉求形状推断沟通偏好" in text
 
 
 def test_semantic_prompt_domain_split_keeps_genre_out_of_preferences():
@@ -89,4 +88,3 @@ def test_semantic_prompt_domain_split_keeps_genre_out_of_preferences():
     assert "communication style" in text.lower() or "工作习惯" in text
     assert "主题/<slug>.md" in text or "主题/" in text
     assert "must NOT stay in 偏好.md" in text or "不得" in text
-    assert "偏好法律分析" in text

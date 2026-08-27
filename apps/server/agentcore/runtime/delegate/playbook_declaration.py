@@ -20,8 +20,8 @@ DeclarationRejectGate = Literal[
     "xor",
 ]
 
-# Runtime no longer treats these as named shortcuts (hand-write tasks instead).
-RETIRED_NAMED_SHORTCUTS = frozenset({"build_website", "build_website_verify"})
+# 建站具名套餐已撤：未知名走通用 catalog 拒文；这两名额外给「手写一人一页」指引。
+_WEBSITE_RETIRED_SHORTCUTS = frozenset({"build_website", "build_website_verify"})
 
 PLAYBOOK_TASKS_XOR_MSG = (
     "playbook 与 tasks 二选一，不可同时传。"
@@ -102,20 +102,15 @@ def resolve_playbook_declaration(
         if has_tasks:
             # playbook XOR tasks — reject before expand / fanout (避免半跑).
             return None, PLAYBOOK_TASKS_XOR_MSG
-        if named in RETIRED_NAMED_SHORTCUTS:
+        if named in _WEBSITE_RETIRED_SHORTCUTS:
             return None, (
                 f"未知 playbook『{named}』。"
                 "建站请手写 `tasks`：一人一页完整 HTML（导航和页脚写进同一页）；"
                 "不要找内部模板；不要再传该 playbook 名。"
             )
         if named not in PLAYBOOKS:
-            catalog = "；".join(
-                f"{p.name}（{p.summary}）"
-                for p in PLAYBOOKS.values()
-                if p.name not in RETIRED_NAMED_SHORTCUTS
-            ) or available_playbooks()
             return None, (
-                f"未知 playbook『{named}』；可用：{catalog}。"
+                f"未知 playbook『{named}』；可用：{available_playbooks()}。"
                 "或手写 `tasks`（可不声明 playbook）；"
                 "绿场软件推荐具名 `build_app`。"
             )

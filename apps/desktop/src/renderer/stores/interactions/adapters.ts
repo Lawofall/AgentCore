@@ -18,7 +18,6 @@ import {
   COLD_RESUME_KINDS,
   type InteractionEntry,
   isColdResumeKind,
-  isRetiredKickoffKind,
 } from "./types";
 
 function str(v: unknown, fallback = ""): string {
@@ -136,7 +135,6 @@ export function isToolGranted(
 
 /**
  * Build a ResumePrompt view-model from an InteractionStore cold pending entry.
- * Retired kickoff kinds return null (kind stays recognizable; no operable VM).
  * Caller supplies the stamped resume key + user context + routing origin.
  */
 export function entryToColdResume(
@@ -150,7 +148,6 @@ export function entryToColdResume(
 ): PendingResume | null {
   if (!isColdResumeKind(e.kind)) return null;
   const kind = e.kind;
-  if (isRetiredKickoffKind(kind)) return null;
   const base = {
     messageId: opts.resumeMessageId,
     conversationId: e.conversationId,
@@ -167,14 +164,6 @@ export function entryToColdResume(
       kind,
       steps: [],
       pending: [],
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: cp.question,
       assumptions: cp.assumptions,
       questions: cp.questions,
@@ -191,14 +180,6 @@ export function entryToColdResume(
       steps: pr.steps,
       pending: pr.pending,
       ceoReview: pr.ceoReview,
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: "",
       assumptions: [],
       questions: [],

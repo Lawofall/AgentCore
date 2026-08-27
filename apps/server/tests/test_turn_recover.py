@@ -199,49 +199,29 @@ async def test_recover_turn_plan_review_forwards_batch_coordination():
     assert seen["team_brief"] == "口径按 v2"
 
 
-async def test_recover_turn_team_preview_refuses_without_drive():
-    """Leftover team_preview frames fail honestly — no resume_plan / resolved emit."""
+async def test_leftover_team_preview_from_json_refuses():
+    """Leftover team_preview frames fail at from_json — never recover_turn."""
     import pytest
 
     from agentcore.core.errors import GoneError
     from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
-    from agentcore.runtime.suspension import TeamPreviewSuspension
+    from agentcore.runtime.suspension import suspension_from_json
 
-    state = TurnState.from_journal(_partial_journal())
-    sink = EventSink()
-    delegate = MagicMock()
-
-    async def _resume_plan(*_a, **_k):
-        raise AssertionError("resume_plan must not run for retired team_preview")
-
-    delegate.resume_plan = _resume_plan
-    suspension = TeamPreviewSuspension(
-        message_id="m1",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="cap1",
-        checkpoint_id="cp1",
-        tool_call_id="tc1",
-        user_message="task",
-        base_system_prompt="sys",
-        journal_entries=_partial_journal(),
-        plan=state.plan or _plan_two_nodes(),
-        workers=[{"run_id": "w1", "role": "研究员", "task": "调研"}],
-        coordination="wall",
-        team_brief="统一用中文",
-        seed_notes=[{"kind": "heads_up", "text": "接口用 REST"}],
-    )
     with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
-        await recover_turn(
-            state=state,
-            sink=sink,
-            delegate_tool=delegate,
-            execution_id="x",
-            suspension=suspension,
-            decision=CheckpointDecision.CONTINUE,
-            note="",
+        suspension_from_json(
+            {
+                "kind": "team_preview",
+                "message_id": "m1",
+                "conversation_id": "c1",
+                "user_id": "u1",
+                "captain_run_id": "cap1",
+                "checkpoint_id": "cp1",
+                "tool_call_id": "tc1",
+                "base_system_prompt": "sys",
+                "user_message": "task",
+                "coordination": "wall",
+            }
         )
-    assert sink._history == []
 
 
 async def test_recover_turn_plan_review_suspend_preserves_effect():

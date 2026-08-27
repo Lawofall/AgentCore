@@ -17,6 +17,7 @@ from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.captain_profile import apply_captain_max_rounds
 from agentcore.runtime.engine import react_loop
 from agentcore.runtime.engine.governance import (
+    audit_gate_hard_prompt,
     audit_gate_nudge_prompt,
     coordination_injection_has_all_completed,
 )
@@ -164,6 +165,14 @@ def test_nudge_copy_cites_audit_keywords():
     assert "成文专线" in text or "结构长文" in text
 
 
+def test_hard_prompt_cites_new_playbook_ids():
+    text = audit_gate_hard_prompt()
+    assert "playbook=cite_write_review" in text
+    assert "playbook=map_fanout" in text
+    assert "research_report" not in text
+    assert "parallel_brief" not in text
+
+
 def test_coordination_injection_has_all_completed():
     assert coordination_injection_has_all_completed(
         [LLMMessage(role="user", content="- all_completed：团队已全部结束")]
@@ -199,7 +208,7 @@ class _AuditHardStubTool(_StubTool):
     """Delegate stub that stamps audit_hard so soft gate can fire in integration tests.
 
     Also stamps includes_review so the hard block does not discard the post-nudge
-    wrap-up (mirrors research_report playbook with built-in review).
+    wrap-up (mirrors cite_write_review playbook with built-in review).
     """
 
     async def execute(self, arguments, context) -> ToolResult:  # noqa: ANN001
@@ -292,7 +301,7 @@ async def test_hard_required_without_review_blocks_then_second_delegate_delivers
 
 @pytest.mark.asyncio
 async def test_substantial_without_audit_hard_skips_soft_gate():
-    """parallel_brief / ordinary multi-angle: substantial but no hard → no soft nudge."""
+    """map_fanout / ordinary multi-angle: substantial but no hard → no soft nudge."""
     delegate = _StubTool(name="delegate", category=ToolCategory.ORCHESTRATION)
     provider = _ScriptedProvider(
         [

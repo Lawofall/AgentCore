@@ -14,7 +14,9 @@ from agentcore.runtime.resolve.prompt.ceo_core import _CEO_CORE_HINT
 from agentcore.runtime.resolve.prompt.compose import _on_demand_preamble
 from agentcore.runtime.runs.executor.shared import _registry_without
 from agentcore.tools.builtin import build_builtin_registry
+from agentcore.tools.builtin.browser import BrowserTool
 from agentcore.tools.builtin.consult import ConsultTool
+from agentcore.tools.builtin.external_mount_readonly import ExternalMountReadonlyTool
 from agentcore.tools.builtin.file_ops.mutate import WriteSectionTool
 from agentcore.tools.builtin.file_ops.read import FileReadTool
 from agentcore.tools.builtin.host import HostTool
@@ -149,7 +151,22 @@ async def test_host_consult_returns_how():
     assert "已启用工具 `host`" in body
     assert "本回合下一模型轮" in body
     assert "【本机 Host】" in body
+    assert "通识长文当交付" in body
+    assert "schema 免批" not in body  # schema reprint belongs on the next FC table
     assert _def_names(reg) == {"host"}
+
+
+async def test_host_consult_worker_gets_schema_not_ceo_how():
+    """Workers have no CEO routing manuals; schema stays the consult trigger until step 6."""
+    reg = ToolRegistry()
+    reg.register(HostTool())
+    src = ToolConsultSource(registry=reg, audience="worker")
+    body = await src.fetch_by_name("u", "host")
+    assert body is not None
+    assert "已启用工具 `host`" in body
+    assert "schema 免批" in body
+    assert "【本机 Host】" not in body
+    assert "通识长文当交付" not in body
 
 
 async def test_consult_unknown_or_unassembled_is_miss():
@@ -229,6 +246,27 @@ async def test_terminal_consult_returns_runtime_how():
     assert "wait_for" in body
     assert "【本机运行态】" in body
     assert "云桌" in body
+    assert "uvicorn --reload" not in body  # schema reprint belongs on the next FC table
+
+
+async def test_browser_and_grant_consult_how_without_schema_reprint():
+    browser_reg = ToolRegistry()
+    browser_reg.register(BrowserTool())
+    browser = await ToolConsultSource(registry=browser_reg, audience="ceo").fetch_by_name(
+        "u", "browser"
+    )
+    assert browser is not None
+    assert "ask_user(browser_login=true)" in browser
+    assert "password_blocked" not in browser
+
+    grant_reg = ToolRegistry()
+    grant_reg.register(ExternalMountReadonlyTool())
+    grant = await ToolConsultSource(registry=grant_reg, audience="ceo").fetch_by_name(
+        "u", "external_mount_readonly"
+    )
+    assert grant is not None
+    assert "授权后发现" in grant
+    assert "not_found/not_directory/ambiguous" not in grant
 
 
 async def test_write_section_consult_promotes_onto_table():
@@ -257,6 +295,7 @@ _STUFFED_WORKER_RESIDENT = frozenset(
         "file_append",
         "str_replace",
         "file_list",
+        "glob",
         "file_delete",
         "file_move",
         "file_copy",
@@ -296,17 +335,16 @@ def _stuffed_worker() -> ToolRegistry:
 
 
 def test_stuffed_worker_opening_table_omits_on_demand_tools():
-    """Locks the opening FC win: 33 registered; consult 另 wire，不在此表."""
+    """Locks the opening FC win: 34 registered; consult 另 wire，不在此表."""
     registry = _stuffed_worker()
-    assert registry.count == 33
+    assert registry.count == 34
     offered = _def_names(registry)
     assert offered == _STUFFED_WORKER_RESIDENT
     chars = sum(
         len(json.dumps(d, ensure_ascii=False)) for d in registry.get_openai_definitions()
     )
-    # 2026-08-26：实测 22834（云端 terminal 走云桌后，code_execute 长驻改道不再写「仅本地」）。
-    # worker 常驻钮已顶各自 per-tool 帽。锁回实测整十。
-    assert chars <= 22840, f"队员开场工具表变胖：{chars}"
+    # 2026-08-27 第 6 步后实测 22967（git clone 入常驻 git 描述）。锁回实测整十。
+    assert chars <= 22970, f"队员开场工具表变胖：{chars}"
     deferred = set(registry.deferred_names)
     assert deferred <= ON_DEMAND_TOOL_NAMES
     assert "terminal" in deferred and "browser" in deferred
@@ -341,12 +379,12 @@ async def test_stuffed_worker_opening_table_omits_mcp_tools():
     registry = _stuffed_worker()
     opening_before = _def_names(registry)
     count_before = registry.count
-    assert count_before == 33
+    assert count_before == 34
     assert opening_before == _STUFFED_WORKER_RESIDENT
 
     registered = register_mcp_tools(registry, _playwright_mcp_result(tool_count=24))
     assert registered == 24
-    assert registry.count == 57
+    assert registry.count == 58
     offered = _def_names(registry)
     assert offered == opening_before
     mcp_names = {n for n in registry.names if n.startswith("mcp_")}

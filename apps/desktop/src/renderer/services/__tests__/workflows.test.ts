@@ -194,12 +194,12 @@ describe("runWorkflow · 槽位覆盖", () => {
 describe("workflow templates / from-playbook (§10.8)", () => {
   it("maps template wire with slots", () => {
     const t = toWorkflowTemplate({
-      id: "research_report",
+      id: "cite_write_review",
       title: "调研报告",
       summary: "成文专线",
       slots: [{ key: "topic", label: "主题", required: true, hint: "议题" }],
     });
-    expect(t.id).toBe("research_report");
+    expect(t.id).toBe("cite_write_review");
     expect(t.title).toBe("调研报告");
     expect(t.slots).toEqual([
       {
@@ -241,10 +241,10 @@ describe("workflow templates / from-playbook (§10.8)", () => {
 
   it("has no local slot replica: prose-only payload yields no slots", () => {
     const t = toWorkflowTemplate({
-      id: "compare_options",
-      title: "方案对比选型",
-      summary: "并行评估再汇总",
-      primary_slots: "question（必填）；options（必填）",
+      id: "cite_write_review",
+      title: "调研报告成文",
+      summary: "成文专线",
+      primary_slots: "topic（必填）",
     });
     expect(t.slots).toEqual([]);
   });
@@ -258,7 +258,7 @@ describe("workflow templates / from-playbook (§10.8)", () => {
   it("listWorkflowTemplates maps remote catalog", async () => {
     apiGet.mockResolvedValueOnce([
       {
-        id: "parallel_brief",
+        id: "map_fanout",
         title: "多角对齐摸底",
         summary: "N 路并行摸底",
         slots: [
@@ -267,22 +267,16 @@ describe("workflow templates / from-playbook (§10.8)", () => {
         ],
       },
       {
-        id: "compare_options",
-        title: "方案对比选型",
-        summary: "并行评估再汇总",
-        slots: [
-          { key: "question", label: "问题", required: true },
-          { key: "options", label: "选项", required: true },
-        ],
+        id: "build_app",
+        title: "从零搭应用",
+        summary: "脚手架→模块→联调",
+        slots: [{ key: "app", label: "应用", required: true }],
       },
     ]);
     const list = await listWorkflowTemplates();
-    expect(list.map((t) => t.id)).toEqual([
-      "parallel_brief",
-      "compare_options",
-    ]);
+    expect(list.map((t) => t.id)).toEqual(["map_fanout", "build_app"]);
     expect(list[0]?.slots.map((s) => s.key)).toEqual(["topic", "angles"]);
-    expect(list[1]?.slots.map((s) => s.key)).toEqual(["question", "options"]);
+    expect(list[1]?.slots.map((s) => s.key)).toEqual(["app"]);
   });
 
   it("createWorkflowFromPlaybook posts playbook + slots", async () => {
@@ -312,7 +306,7 @@ describe("workflow templates / from-playbook (§10.8)", () => {
     apiPost.mockRejectedValueOnce(new ApiError(404, "not found"));
     await expect(
       createWorkflowFromPlaybook({
-        playbook: "research_report",
+        playbook: "cite_write_review",
         slots: { topic: "AI 监管" },
       }),
     ).rejects.toBeInstanceOf(ApiError);

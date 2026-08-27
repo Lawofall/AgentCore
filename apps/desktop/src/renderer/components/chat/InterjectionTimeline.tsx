@@ -9,8 +9,13 @@ import {
   isInterjectionTurnTerminal,
   showInterjectionStatusChrome,
 } from "@/components/chat/interjectionStatus";
-import { AgentMentionChip } from "@/components/chat/message-bubble/AgentMentionChip";
 import {
+  UserChipTray,
+  UserInlineBody,
+} from "@/components/chat/message-bubble/UserInlineBody";
+import { hasInlineMarkers } from "@/lib/inlineBody";
+import {
+  type MessageAttachmentMeta,
   activeRuntime,
   assistantProjectionId,
   useConversationStore,
@@ -121,6 +126,16 @@ function InterjectionQueuedAnchor({ item }: { item: UserInterjection }) {
   );
 }
 
+function interjectionAtts(item: UserInterjection): MessageAttachmentMeta[] {
+  return (item.attachments ?? []).map((a, i) => ({
+    id: `${item.interjectionId}:${i}:${a.name}`,
+    name: a.name,
+    path: a.workspacePath ?? a.name,
+    truncated: false,
+    workspacePath: a.workspacePath,
+  }));
+}
+
 function InterjectionUserBubble({
   item,
   turnTerminal,
@@ -128,30 +143,23 @@ function InterjectionUserBubble({
   item: UserInterjection;
   turnTerminal: boolean;
 }) {
+  const conversationId = useConversationStore((s) => s.currentConversationId);
   const tone = interjectionStatusTone(item.status);
   const showChrome = showInterjectionStatusChrome(item.status);
-  const atts = item.attachments ?? [];
+  const attachments = interjectionAtts(item);
   const mentions = item.agentMentions ?? [];
+  const marked = hasInlineMarkers(item.content);
   return (
     <div
       className="flex flex-col items-end gap-1.5"
       data-testid={`interjection-bubble-${item.interjectionId}`}
     >
-      {(mentions.length > 0 || atts.length > 0) && (
-        <div className="flex max-w-[80%] flex-wrap justify-end gap-1.5">
-          {mentions.map((a) => (
-            <AgentMentionChip key={a.agentId} role={a.role} />
-          ))}
-          {atts.map((a) => (
-            <span
-              key={`${item.interjectionId}:${a.name}`}
-              className="max-w-full truncate rounded-lg border border-border/70 bg-muted/60 px-2 py-1 text-xs text-muted-foreground"
-              title={a.workspacePath ?? a.name}
-            >
-              {a.name}
-            </span>
-          ))}
-        </div>
+      {!marked && (
+        <UserChipTray
+          attachments={attachments}
+          mentions={mentions}
+          conversationId={conversationId}
+        />
       )}
       <div className="max-w-[80%] rounded-xl rounded-br-none bg-muted px-4 py-3 text-sm text-foreground">
         <CollapsibleSpeech
@@ -160,7 +168,16 @@ function InterjectionUserBubble({
           collapsedMaxH={USER_BUBBLE_COLLAPSED_MAX_H}
           sceneKey={`interjection:${item.interjectionId}`}
         >
-          <p className="whitespace-pre-wrap break-words">{item.content}</p>
+          {marked ? (
+            <UserInlineBody
+              content={item.content}
+              attachments={attachments}
+              mentions={mentions}
+              conversationId={conversationId}
+            />
+          ) : (
+            <p className="whitespace-pre-wrap break-words">{item.content}</p>
+          )}
         </CollapsibleSpeech>
       </div>
       {showChrome ? (

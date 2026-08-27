@@ -37,30 +37,50 @@ from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_DESCRIPTION,
     DELEGATE_PARAMETERS,
 )
+from agentcore.tools.builtin.folders import (
+    CreateFolderTool,
+    ListFoldersTool,
+    ResolveFolderTool,
+)
 from agentcore.tools.builtin.git_ops.policy import GIT_TOOL_PARAMETERS
 from agentcore.tools.builtin.git_ops.tool import GitTool
+from agentcore.tools.builtin.host import HostTool
 from agentcore.tools.builtin.replan import _REPLAN_DESCRIPTION, _REPLAN_PARAMETERS
 from agentcore.tools.builtin.terminal import TerminalTool
 from agentcore.tools.protocol import ToolSchema
 
 # 桌面 CEO 回合会同时挂上的那一份（ask_user 取桌面态——它比 web 态更胖）。
+# host / terminal / browser 按需进表后仍每轮重发，钉住第 6 步短触发。
+# 2026-08-27 第 6 步：browser 1750→1670、terminal 1460→1420；host 新入棘轮 2840。
+# 同树 git `clone` 入描述（非本步）：2400→2530。
+# 2026-08-27 第 9 步：delegate 3320→2980（实测 2978）；list/resolve/create_folder
+# 短触发新入棘轮 240/380/550（实测 235/376/544）。
+# 2026-08-27 第二轮：ask_user 桌面尾巴收分流一句 2750→2710（实测 2704）；
+# web 1940→1930（实测 1929）；file_write 硬拒收一句 910→610（实测 604）。
+# 2026-08-27 第 26 步：default 预填从核迁入 ask_user schema；delegate 用/不用对齐③④。
+# ask_user 桌面实测 2696 cap 2700；web 1921 cap 1930。
+# 2026-08-27 删 compare_options / build_feature：delegate 2980→2890（实测 2888）。
 _CAPS: dict[str, int] = {
-    "browser": 1750,
-    "git": 2400,
-    "terminal": 1460,
-    "delegate": 3320,
-    "ask_user": 2750,
+    "browser": 1670,
+    "git": 2530,
+    "host": 2840,
+    "terminal": 1420,
+    "delegate": 2890,
+    "ask_user": 2700,
+    "list_folders": 240,
+    "resolve_folder": 380,
+    "create_folder": 550,
 }
 _TOTAL_CAP = sum(_CAPS.values())
 
 # 非桌面（web）态 ask_user：桌面独有的 action / well_known 等选项不装配。
-_ASK_USER_WEB_CAP = 1940
+_ASK_USER_WEB_CAP = 1930
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
 _WORKER_CAPS: dict[str, int] = {
     "escalate": 1690,
     "handoff": 1660,
-    "file_write": 910,
+    "file_write": 610,
     "file_append": 510,
     "str_replace": 840,
 }
@@ -92,9 +112,13 @@ def _measured() -> dict[str, int]:
         for cls in BROWSER_TOOL_CLASSES
     }
     sizes["git"] = measure_openai_tool_chars(GitTool().schema)
+    sizes["host"] = measure_openai_tool_chars(HostTool().schema)
     sizes["terminal"] = measure_openai_tool_chars(TerminalTool().schema)
     sizes["delegate"] = measure_openai_tool_chars(_delegate_schema())
     sizes["ask_user"] = measure_openai_tool_chars(_ask_user_schema(desktop=True))
+    sizes["list_folders"] = measure_openai_tool_chars(ListFoldersTool().schema)
+    sizes["resolve_folder"] = measure_openai_tool_chars(ResolveFolderTool().schema)
+    sizes["create_folder"] = measure_openai_tool_chars(CreateFolderTool().schema)
     return sizes
 
 
@@ -179,9 +203,9 @@ def test_shared_mutation_tail_does_not_repeat_per_tool_receipts():
     """四个 mutation 工具共用的尾巴不再逐个点名 typed / clicked——各自那行自己说。"""
     assert "typed.matched" not in _MUTATION_VERIFY_TAIL
     assert "clicked.was_disabled" not in _MUTATION_VERIFY_TAIL
-    desc = BrowserTool().schema.description
-    assert "typed.matched" in desc
-    assert "clicked.was_disabled" in desc
+    action_desc = BrowserTool().schema.parameters["properties"]["action"]["description"]
+    assert "typed.matched" in action_desc
+    assert "clicked.was_disabled" in action_desc
 
 
 def test_git_policy_matrix_lives_only_in_tool_description():
@@ -205,6 +229,24 @@ def test_terminal_description_routes_without_restating_subcommands():
     sub_desc = TERMINAL_TOOL_PARAMETERS["properties"]["subcommand"]["description"]
     for sub in ("start", "read", "stop", "list"):
         assert f"{sub}：" in sub_desc
+
+
+def test_on_demand_faces_point_how_to_consult():
+    """host / terminal / browser 工具描述短触发，手册走 consult。"""
+    assert "HOW→consult(host)" in HostTool().schema.description
+    assert "HOW→consult(terminal)" in TerminalTool().schema.description
+    assert "HOW→consult(browser)" in BrowserTool().schema.description
+    host_action = HostTool().schema.parameters["properties"]["action"]["description"]
+    assert "Get-WinEvent" in host_action
+    assert "password_blocked" not in BrowserTool().schema.description
+    assert (
+        "password_blocked"
+        in BrowserTool().schema.parameters["properties"]["text"]["description"]
+    )
+    assert "uvicorn --reload" not in TerminalTool().schema.description
+    from agentcore.tools.builtin.terminal import TERMINAL_TOOL_PARAMETERS
+
+    assert "uvicorn --reload" in TERMINAL_TOOL_PARAMETERS["properties"]["wait_for"]["description"]
 
 
 def test_worker_tool_schema_chars_within_cap():

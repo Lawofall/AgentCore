@@ -1,8 +1,10 @@
 import {
   useArchiveConversation,
   useDeleteConversation,
+  useRestoreConversation,
   useUnarchiveConversation,
 } from "@/hooks/useConversations";
+import { notifyConversationDeleted } from "@/lib/conversationDeleteCopy";
 import { notifyError } from "@/lib/toast";
 import type { Conversation } from "@/stores/conversation";
 import { useConversationStore } from "@/stores/conversation";
@@ -17,10 +19,10 @@ export function useConversationBulkSelect(
   const navigate = useNavigate();
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const archiveMutation = useArchiveConversation();
   const deleteMutation = useDeleteConversation();
+  const restoreMutation = useRestoreConversation();
   const unarchiveMutation = useUnarchiveConversation();
   const dropConversationRuntime = useConversationStore(
     (s) => s.dropConversationRuntime,
@@ -30,7 +32,6 @@ export function useConversationBulkSelect(
   // biome-ignore lint/correctness/useExhaustiveDependencies: `selectedFilter` is the intentional re-run key.
   useEffect(() => {
     setSelectedIds(new Set());
-    setConfirmBulkDelete(false);
   }, [selectedFilter]);
 
   const allVisibleSelected =
@@ -56,7 +57,14 @@ export function useConversationBulkSelect(
   const exitSelectMode = () => {
     setSelectMode(false);
     setSelectedIds(new Set());
-    setConfirmBulkDelete(false);
+  };
+
+  const notifyUndoForDeleted = (deletedIds: string[]) => {
+    if (deletedIds.length === 0) return;
+    const ids = [...deletedIds];
+    notifyConversationDeleted(`${ids.length} 条`, () => {
+      for (const id of ids) restoreMutation.mutate(id);
+    });
   };
 
   const handleBulkArchive = async () => {
@@ -84,18 +92,28 @@ export function useConversationBulkSelect(
   };
 
   const handleBulkDelete = async () => {
-    setConfirmBulkDelete(false);
     const ids = [...selectedIds];
+    const deletedIds: string[] = [];
     for (const id of ids) {
       try {
         await deleteMutation.mutateAsync(id);
         dropConversationRuntime(id);
         if (id === currentId) navigate("/");
+        deletedIds.push(id);
       } catch (err) {
         notifyError(err, "批量删除失败");
+        notifyUndoForDeleted(deletedIds);
+        if (deletedIds.length > 0) {
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            for (const deleted of deletedIds) next.delete(deleted);
+            return next;
+          });
+        }
         return;
       }
     }
+    notifyUndoForDeleted(deletedIds);
     exitSelectMode();
   };
 
@@ -103,8 +121,6 @@ export function useConversationBulkSelect(
     selectMode,
     setSelectMode,
     selectedIds,
-    confirmBulkDelete,
-    setConfirmBulkDelete,
     allVisibleSelected,
     toggleSelectAll,
     toggleSelected,

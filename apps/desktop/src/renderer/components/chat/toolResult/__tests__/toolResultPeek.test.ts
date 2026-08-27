@@ -131,6 +131,69 @@ describe("toolResultPeek", () => {
     ).toBe("部署流程");
   });
 
+  it("summarizes list_folders display.count as N folders", () => {
+    expect(
+      toolResultPeek(
+        data({
+          toolName: "list_folders",
+          display: { count: 3 },
+          result: "共 3 个文件夹：\n[...]",
+        }),
+      ),
+    ).toBe("3 folders");
+    expect(
+      toolResultPeek(data({ toolName: "list_folders", display: { count: 1 } })),
+    ).toBe("1 folder");
+    expect(
+      toolResultPeek(data({ toolName: "list_folders", display: { count: 0 } })),
+    ).toBe("0 folders");
+  });
+
+  it("does not treat folder-command display.name as consult peek", () => {
+    expect(
+      toolResultPeek(
+        data({
+          toolName: "resolve_folder",
+          display: {
+            status: "resolved",
+            folder_id: "550e8400-e29b-41d4-a716-446655440000",
+            name: "白板",
+            rel_path: "白板",
+          },
+          result: "唯一命中，可直接用于后续派工：\n{}",
+        }),
+      ),
+    ).not.toBe("白板");
+    expect(
+      toolResultPeek(
+        data({
+          toolName: "create_folder",
+          display: {
+            status: "created",
+            folder_id: "550e8400-e29b-41d4-a716-446655440000",
+            name: "白板",
+            rel_path: "白板",
+          },
+          result: "已创建云文件夹",
+        }),
+      ),
+    ).not.toBe("白板");
+    expect(
+      toolResultPeek(
+        data({
+          toolName: "delete_folder",
+          display: {
+            status: "deleted",
+            folder_id: "550e8400-e29b-41d4-a716-446655440000",
+            name: "白板",
+            rel_path: "白板",
+          },
+          result: "已删除文件夹「白板」",
+        }),
+      ),
+    ).not.toBe("白板");
+  });
+
   it("names the rule for historical consult_rule", () => {
     expect(
       toolResultPeek(

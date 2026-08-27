@@ -27,6 +27,7 @@ from agentcore.llm.provider.cooldown_gate import (
     clear_cooldown,
     cooldown_key,
     cooldown_remaining,
+    cooldown_slot_key,
     peek_cooldown,
     reset_cooldown_gate,
     silent_cooldown_seconds,
@@ -82,6 +83,16 @@ def test_cooldown_key_is_stable_and_hides_the_secret():
     assert a == b
     assert a != c
     assert "sk-secret" not in a
+
+
+def test_chat_and_agent_share_a_lane_title_and_compaction_do_not():
+    from agentcore.llm.provider.cooldown_gate import cooldown_lane
+
+    key = cooldown_key("user", "k", "http://x")
+    assert cooldown_lane("chat") == cooldown_lane("agent") == "turn"
+    assert cooldown_slot_key(key, "chat") == cooldown_slot_key(key, "agent")
+    assert cooldown_slot_key(key, "title") != cooldown_slot_key(key, "compaction")
+    assert cooldown_slot_key(key, "title") != cooldown_slot_key(key, "chat")
 
 
 def test_arm_extends_never_shortens(monkeypatch):
@@ -220,7 +231,7 @@ async def test_later_callers_refuse_an_armed_slot_without_sleeping(monkeypatch):
     first = await _mock_provider(handler, api_key="shared-key")
     second = await _mock_provider(handler, api_key="shared-key")
     try:
-        arm_cooldown(first._cooldown_key, 2.0, RETRY_AFTER_FROM_BACKOFF)
+        arm_cooldown(cooldown_slot_key(first._cooldown_key, "agent"), 2.0, RETRY_AFTER_FROM_BACKOFF)
         with pytest.raises(LLMRateLimitError) as first_err:
             await first.complete(_req("agent"))
         with pytest.raises(LLMRateLimitError) as second_err:
@@ -264,7 +275,7 @@ async def test_in_place_retry_clears_the_gate_on_success(monkeypatch):
         assert result.content == "ok"
         assert calls["n"] == 2
         assert sleeps == [2.0]
-        assert peek_cooldown(provider._cooldown_key) is None
+        assert peek_cooldown(cooldown_slot_key(provider._cooldown_key, "chat")) is None
         later = await other.complete(_req("chat"))
         assert later.content == "ok"
         assert calls["n"] == 3
@@ -341,6 +352,80 @@ async def test_long_cooldown_does_not_silent_wait_and_blocks_siblings(monkeypatc
     finally:
         await first.close()
         await sibling.close()
+
+
+async def test_title_day_reset_does_not_block_compaction(monkeypatch):
+    """Title Retry-After of ~4.8 days must not make compaction refuse before probing."""
+    sleeps: list[float] = []
+
+    async def fake_sleep(sec: float) -> None:
+        sleeps.append(sec)
+
+    monkeypatch.setattr(
+        "agentcore.llm.provider.openai_compatible.asyncio.sleep", fake_sleep
+    )
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(
+                429,
+                headers={"retry-after": "416526"},
+                content=b'{"error":"rate_limited"}',
+            )
+        return httpx.Response(200, json=_ok_body())
+
+    title = await _mock_provider(handler, api_key="shared-key")
+    fold = await _mock_provider(handler, api_key="shared-key")
+    try:
+        with pytest.raises(LLMRateLimitError):
+            await title.complete(_req("title"))
+        assert calls["n"] == 1
+        result = await fold.complete(_req("compaction"))
+        assert result.content == "ok"
+        assert calls["n"] == 2
+        assert sleeps == []
+        with pytest.raises(LLMRateLimitError):
+            await title.complete(_req("title"))
+        assert calls["n"] == 2
+    finally:
+        await title.close()
+        await fold.close()
+
+
+async def test_compaction_probes_even_when_platform_member_is_cooling(monkeypatch):
+    """Turn-scale still consults pool remaining; compaction does not inherit it."""
+    monkeypatch.setattr(
+        OpenAICompatibleProvider,
+        "_platform_account_remaining",
+        lambda self: 416526.0,
+    )
+
+    async def fake_sleep(sec: float) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "agentcore.llm.provider.openai_compatible.asyncio.sleep", fake_sleep
+    )
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json=_ok_body())
+
+    fold = await _mock_provider(handler, api_key="shared-key")
+    chat = await _mock_provider(handler, api_key="shared-key")
+    try:
+        result = await fold.complete(_req("compaction"))
+        assert result.content == "ok"
+        assert calls["n"] == 1
+        with pytest.raises(LLMRateLimitError):
+            await chat.complete(_req("chat"))
+        assert calls["n"] == 1
+    finally:
+        await fold.close()
+        await chat.close()
 
 
 def test_reset_drops_every_slot():

@@ -43,7 +43,6 @@ from agentcore.runtime.interaction_orphan import orphan_live_turn_hot_pending
 from agentcore.runtime.journal.pending_interactions import fold_pending_interactions
 from agentcore.runtime.settlement import prewrite_cold_resume_settlement
 from agentcore.runtime.suspension import (
-    TeamPreviewSuspension,
     TurnSuspension,
     suspension_summary_fields,
 )
@@ -181,6 +180,8 @@ async def regenerate_message(
             user_id=user.user_id,
             sink=sink,
             edited_content=body.content,
+            edited_attachments=body.attachments,
+            edited_agent_mentions=body.agent_mentions,
             llm_credentials=preflight.credentials,
             llm_supports_tools=preflight.supports_tools,
         )
@@ -336,25 +337,6 @@ async def resume_message(
     )
 
     decision = body.decision.value if hasattr(body.decision, "value") else str(body.decision)
-    excluded = list(body.excluded_run_ids or [])
-    overrides = [
-        {"run_id": o.run_id, "capability": o.capability}
-        for o in (body.write_capability_overrides or [])
-    ]
-    model_overrides = {
-        rid: {
-            "model": ov.model,
-            **({"origin": ov.origin} if ov.origin else {}),
-            **({"provider_id": ov.provider_id} if ov.provider_id else {}),
-        }
-        for rid, ov in (body.model_overrides or {}).items()
-        if ov.model
-    }
-    if isinstance(peeked, TeamPreviewSuspension):
-        from agentcore.runtime.kickoff.retired import refuse_team_preview_resume
-
-        refuse_team_preview_resume()
-
     if not joining_deferred:
         try:
             await prewrite_cold_resume_settlement(
@@ -362,9 +344,6 @@ async def resume_message(
                 decision=decision,
                 note=body.note or "",
                 selected=list(body.selected or []),
-                excluded_run_ids=excluded,
-                write_capability_overrides=overrides,
-                model_overrides=model_overrides,
             )
         except Exception as e:  # noqa: BLE001
             logger.warning(
@@ -381,9 +360,6 @@ async def resume_message(
         decision=body.decision,
         note=body.note,
         selected=body.selected,
-        excluded_run_ids=excluded,
-        write_capability_overrides=overrides,
-        model_overrides=model_overrides,
     )
 
     if busy_reason is not None:

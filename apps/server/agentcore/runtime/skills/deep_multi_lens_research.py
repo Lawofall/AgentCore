@@ -19,9 +19,9 @@ _DEEP_MULTI_LENS_RESEARCH = """\
 【入口分流·按意图】正文分流前置：本 skill 服务【公共事件多维研判】——跨维度深度研究 / 多方争议\
 公共事件（法律 · 商业 · 舆论 · 文化交织）：【先平行取证 → 汇总交叉验证 → 必要时产命题卡 → \
 用户批准后再辩】。一起弄懂/学术多切口/未明示成文的多路摸清 → 【勿】用本 skill，改 \
-`playbook="parallel_brief"`；用户明示要报告/论文/落盘成文 → `research_report`。\
+`playbook="map_fanout"`；用户明示要报告/论文/落盘成文 → `cite_write_review`。\
 用户明确点名开辩 / 模拟庭审 / 终局对抗（含【""" + _MULTI_LENS_COURTROOM_TRIGGERS_JOINED + """】等）→ \
-【勿】用本 skill 拦截，改 `consult(debate_and_review)` 直调 `debate`（取证前提由辩论机制保证：约定文档桥 / Evidence Pack / 发言期台账，非调查员舰队）。\
+【勿】用本 skill 拦截，改 `consult(debate_and_review)` 直调 `debate`（取证前提由辩论机制保证：约定文档桥 / Evidence Pack / 发言期台账）。\
 意图模糊（既像公共研判又像开辩）→ 保守缺省走本 skill，并在回复里说明「也可直接开辩」。\
 这与律师作业（接案 / 文书 / 诉讼策略、先对抗后研判）不同：本域是公共事件多维取证，不是替律师打官司。
 
@@ -30,7 +30,7 @@ _DEEP_MULTI_LENS_RESEARCH = """\
 ① 识别为需多维取证的公共议题后，【先】用 `ask_user` 确认是否启动多视角深度调研\
 （建议说明：四透镜并行 + 汇总交叉验证；调研后若有真争议再建议开辩）——【禁止】未确认就\
 直接铺四路阵仗或直接开辩。② 用户确认启动后：未点名视角则默认四透镜 + 汇总；默认手写 tasks，\
-固化四透镜时可快捷选用 `playbook="multi_lens_research"` + `playbook_args`（槽位 topic / lenses）。\
+固化四透镜时可快捷选用 `playbook="lens_crosscheck"` + `playbook_args`（槽位 topic / lenses）。\
 ③ 用户明确拒绝调研 → 按 ta 的改口意图走，勿强行挂本 playbook。\
 **【缺主体】**若题材/事件/对象本身未点名（只有「分三路调研 / 决策简报」类模板）→ \
 **必须** `ask_user` 问清主体且预填可确认 `default`；continue = 确认该 default，\
@@ -53,7 +53,7 @@ _DEEP_MULTI_LENS_RESEARCH = """\
 完整综述落盘 `""" + f"{RESEARCH_DIR}/汇总与命题卡.md" + """`（可先 file_read 各透镜报告）；\
 继承上游关键数字 / 结论须保留 #rN 或待核实语，勿抹成既定事实；\
 `motion_card` 仍走 handoff 结构化字段（见第三节），落盘不替代该对象。
-默认手写 tasks；固化四透镜时可快捷选用 `playbook="multi_lens_research"` + `playbook_args`（槽位 topic / lenses）；\
+默认手写 tasks；固化四透镜时可快捷选用 `playbook="lens_crosscheck"` + `playbook_args`（槽位 topic / lenses）；\
 手写 tasks 时须把下方「命题卡」纪律、`""" + f"{RESEARCH_DIR}/" + """` 落盘契约与上条检索分工写进各路任务书\
 （`deliverable.form=files` + `artifacts`）。
 
@@ -84,7 +84,7 @@ Followups 芯片」却不点名该字段——正文 markdown 表与 key_points 
 旁路冒充「已有命题卡」——若上游未交回「建议开辩」专节，说明无合规卡，应综述缺口而非假装有卡。
 
 【相容约束·禁止默认冲突即开辩】见分歧 ≠ 建议开辩。仅事实缺口 → 补派透镜或写进收尾缺口，\
-【不要】产卡；仅并列观点、无真对立轴 → 对比综述即可（类 compare_options，不出辩题）。\
+【不要】产卡；仅并列观点、无真对立轴 → 对比综述即可（不出辩题）。\
 产品纪律：对抗辩论留给真冲突（见 team_orchestration_advanced「勿默认冲突即辩」）——本 skill \
 把「真冲突」收紧为「存在真对立轴、继续取证无效、必须交锋」才产卡。
 

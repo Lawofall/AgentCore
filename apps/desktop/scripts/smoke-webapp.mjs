@@ -162,11 +162,12 @@ async function main() {
       // (3) The auth gate resolved to one of its real terminal states — each proves
       // the web entry mounted and the REAL auth flow ran (not stuck on "加载中…",
       // not the offline-preview bypass):
-      //   • composer (输入消息)    → authenticated (existing cookie)
-      //   • login form (用户名)    → unauthenticated (backend up, no cookie)
-      //   • 服务暂时不可用 + 重试   → backend unreachable (the CI / no-backend state)
+      //   • composer (role=textbox 输入消息) → authenticated (cookie / dev auto-login)
+      //   • login form (用户名)              → unauthenticated (backend up, no cookie)
+      //   • 服务暂时不可用 + 重试             → backend unreachable (the CI / no-backend state)
+      // Composer is contentEditable + aria-label, not an input placeholder.
       const userBox = page.getByPlaceholder("邮箱或用户名");
-      const composer = page.getByPlaceholder(/输入消息/);
+      const composer = page.getByTestId("composer-body");
       const outage = page.getByText("服务暂时不可用");
       await Promise.race([
         userBox.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {}),

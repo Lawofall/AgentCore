@@ -2363,7 +2363,8 @@ export interface paths {
          *     ``stage_card``：跨回合耐久卡 → 校验后起新回合 SSE（机制直起辩论或回灌调研）。
          *     其它 kind（approval / delegation / client_tool / escalation）：Settlement 预写 (D8)
          *     后 settle Future；journal 有 required、无 Future → 410。
-         *     Cold-path ``ask_user`` / ``plan_review`` / ``team_preview`` 不在此 endpoint。
+         *     Cold-path ``ask_user`` / ``plan_review`` 不在此 endpoint。
+         *     Leftover ``team_preview`` resume is 410 on ``POST …/resume``.
          */
         post: operations["resolve_interaction_v1_conversations__conversation_id__interactions__interaction_id__post"];
         delete?: never;
@@ -8480,15 +8481,10 @@ export interface components {
          * CheckpointDecision
          * @description How the user (or a timeout / orphan) settled a checkpoint the CEO raised.
          *
-         *     ``CONTINUE`` / ``ADJUST`` / ``STOP`` are shared by ask_user / plan_review /
-         *     team_preview (开工卡). On the kickoff card, ``CONTINUE`` means grant + start
-         *     (non-empty ``note`` steers all unrun workers — 嘱咐, **not** a substitute
-         *     for ``ADJUST``). ``ADJUST`` on team_preview does **not** grant or start:
-         *     user ``note`` (required, non-empty on resume) is fed back so the CEO
-         *     revises and resubmits through the kickoff gate (可多轮). ``ADJUST`` on
-         *     plan_review still steers then continues. ask_user rejects ``ADJUST``.
-         *     ``RESEARCH_FIRST`` is debate kickoff only: 不开赛，回灌固定文案令 CEO 立即挂
-         *     ``multi_lens_research``（与 STOP 同构的恢复分支；非辩论开工卡须拒绝/降级）。
+         *     ``CONTINUE`` / ``ADJUST`` / ``STOP`` are shared by ask_user / plan_review.
+         *     ``ADJUST`` on plan_review steers then continues. ask_user rejects ``ADJUST``.
+         *     ``RESEARCH_FIRST`` is debate stage_card only: 不开赛，回灌固定文案令 CEO 立即挂
+         *     ``lens_crosscheck``（与 STOP 同构的恢复分支）。
          * @enum {string}
          */
         CheckpointDecision: "continue" | "adjust" | "stop" | "research_first" | "timeout" | "orphaned";
@@ -11361,20 +11357,6 @@ export interface components {
             tokens_total: number;
         };
         /**
-         * ModelOverride
-         * @description Leftover debate ``team_preview`` continue field (开工卡已退役).
-         *
-         *     New cards are not emitted; leftover resume is 410. Shape kept for old clients.
-         */
-        ModelOverride: {
-            /** Model */
-            model: string;
-            /** Origin */
-            origin?: ("platform" | "byok") | null;
-            /** Provider Id */
-            provider_id?: string | null;
-        };
-        /**
          * ModelPriceCard
          * @description Reused price card — USD per 1M tokens as decimal strings (money is never float).
          */
@@ -11578,11 +11560,10 @@ export interface components {
          *     ``message_id`` is both the pause key and the id the resumed assistant message will
          *     reuse, so an optimistic bubble reconciles cleanly.
          *
-         *     Leftover ``team_preview`` (开工卡) frames still serialize here if hung in the DB,
-         *     but resume is 410 Gone and the client must not offer continue / cancel.
+         *     Leftover ``team_preview`` (开工卡) frames are skipped on list (not serialized);
+         *     resume of a leftover frame is 410 Gone.
          *     plan_review carries ``steps`` (the reviewed checkpoint nodes) + ``pending`` (the
-         *     gated downstream); leftover team_preview may still carry ``primitive`` /
-         *     ``workers`` / debate fields; ask_user carries the unified card payload
+         *     gated downstream); ask_user carries the unified card payload
          *     ``question`` (the framing / opening line) + the optional opening
          *     content ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The
          *     unused set is empty for the other kinds.
@@ -11599,40 +11580,15 @@ export interface components {
             browser_login: boolean;
             /** Checkpoint Id */
             checkpoint_id: string;
-            /**
-             * Form
-             * @default
-             */
-            form: string;
-            /**
-             * Headline
-             * @default
-             */
-            headline: string;
             /** Intent */
             intent?: ("kickoff" | "decision" | "proposal_pick" | "risk_ack" | "organize_plan" | "daily_review") | null;
             kind: components["schemas"]["SuspensionKind"];
-            /**
-             * Max Rounds
-             * @default 0
-             */
-            max_rounds: number;
             /** Message Id */
             message_id: string;
-            /**
-             * Motion
-             * @default
-             */
-            motion: string;
             /** Pending */
             pending?: {
                 [key: string]: unknown;
             }[];
-            /**
-             * Primitive
-             * @default delegate
-             */
-            primitive: string;
             /**
              * Question
              * @default
@@ -11642,27 +11598,10 @@ export interface components {
             questions?: {
                 [key: string]: unknown;
             }[];
-            /** Revised From */
-            revised_from?: string | null;
-            /** Revision */
-            revision?: number | null;
-            /** Revision Note */
-            revision_note?: string | null;
-            /** Sides */
-            sides?: {
-                [key: string]: unknown;
-            }[];
             /** Steps */
             steps?: {
                 [key: string]: unknown;
             }[];
-            /**
-             * Thorough
-             * @default true
-             */
-            thorough: boolean;
-            /** Tools */
-            tools?: string[];
             /**
              * User Message
              * @default
@@ -11673,10 +11612,6 @@ export interface components {
              * @default
              */
             user_message_id: string;
-            /** Workers */
-            workers?: {
-                [key: string]: unknown;
-            }[];
         };
         /**
          * PendingInteractionSummary
@@ -11986,8 +11921,16 @@ export interface components {
          *     user message is edited in place first (edit-and-resend); otherwise the stored
          *     text is reused as-is (plain regenerate). Either way, every message after that
          *     user turn is dropped and the assistant reply is produced anew.
+         *
+         *     ``attachments`` / ``agent_mentions``: omit to keep stored materials; send a
+         *     list (including empty) to replace them on edit-and-resend. Dropped chips must
+         *     not stay on the row.
          */
         RegenerateMessageRequest: {
+            /** Agent Mentions */
+            agent_mentions?: components["schemas"]["AgentMention"][] | null;
+            /** Attachments */
+            attachments?: components["schemas"]["MessageAttachment"][] | null;
             /** Content */
             content?: string | null;
         };
@@ -12348,21 +12291,12 @@ export interface components {
          *     ``timeout`` is never sent by a client.
          *
          *     Leftover ``team_preview`` resume is 410 Gone (new cards are not emitted).
-         *     ``excluded_run_ids`` / ``write_capability_overrides`` / ``model_overrides``
-         *     are ignored on ask / plan_review / stop (no 422). Hot-path
-         *     ``ResolveInteraction`` is not extended.
+         *     Extra leftover kickoff keys from old clients (``excluded_run_ids`` /
+         *     ``write_capability_overrides`` / ``model_overrides``) are not in this schema
+         *     and 422. Hot-path ``ResolveInteraction`` is not extended.
          */
         ResumeTurnRequest: {
             decision: components["schemas"]["CheckpointDecision"];
-            /** Excluded Run Ids */
-            excluded_run_ids?: string[];
-            /**
-             * Model Overrides
-             * @description run_id → {model, origin?, provider_id?}；空/缺键=不改该节点。
-             */
-            model_overrides?: {
-                [key: string]: components["schemas"]["ModelOverride"];
-            };
             /**
              * Note
              * @description adjust 必须非空（修订意见）。ask continue 上非空=补充说明。stop 可选收场。
@@ -12371,8 +12305,6 @@ export interface components {
             note: string;
             /** Selected */
             selected?: string[];
-            /** Write Capability Overrides */
-            write_capability_overrides?: components["schemas"]["WriteCapabilityOverride"][];
         };
         /**
          * RewriteRequest
@@ -13460,11 +13392,11 @@ export interface components {
          * SuspensionKind
          * @description Which suspend point a durable frame captured (the JSON discriminator).
          *
-         *     Interaction kinds (plan_review / ask_user / team_preview) mirror
+         *     Interaction kinds (plan_review / ask_user) mirror
          *     :data:`DURABLE_INTERACTION_KINDS`.
          * @enum {string}
          */
-        SuspensionKind: "plan_review" | "ask_user" | "team_preview";
+        SuspensionKind: "plan_review" | "ask_user";
         /**
          * TeamBatchInFlight
          * @description 本波 kickoff 编制已派出、尚未全部收工。``worker_count`` 不含 captain / 历史队员。
@@ -14695,22 +14627,6 @@ export interface components {
              * @default false
              */
             storm_active: boolean;
-        };
-        /**
-         * WriteCapabilityOverride
-         * @description Leftover ``team_preview`` continue field (开工卡已退役).
-         *
-         *     New cards are not emitted; leftover resume is 410 and never applies this.
-         *     Shape kept so old clients sending extra keys do not 422 on ask / plan_review.
-         */
-        WriteCapabilityOverride: {
-            /**
-             * Capability
-             * @constant
-             */
-            capability: "text_only";
-            /** Run Id */
-            run_id: string;
         };
     };
     responses: never;

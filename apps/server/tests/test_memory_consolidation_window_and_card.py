@@ -9,7 +9,7 @@ Three production bugs pinned here, all on the same pass:
    window it covers, so ``created_at`` cannot place it; ``anchor_at`` carries the last
    consolidated message's timestamp instead.
 3. When the summarizer timed out, the fallback pasted the user's first turns back into
-   the thread as a「已记下本场摘要」card — verbatim PII in the real incident. No summary
+   the thread as an episodic card — verbatim PII in the real incident. No summary
    now means no card, while the episode still lands for the semantic layer.
 
 The runner is wired to in-memory fakes; the loader under test is the real

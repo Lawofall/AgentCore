@@ -20,7 +20,7 @@ from agentcore.runtime.engine.governance import (
     create_loop_controller,
 )
 
-_RECON = frozenset({"file_read", "file_list", "grep", "web_search", "read_url", "git"})
+_RECON = frozenset({"file_read", "file_list", "glob", "grep", "web_search", "read_url", "git"})
 _TERMINAL = frozenset({"ask_user", "delegate", "debate", "replan"})
 _CONSULT = frozenset({"consult", "consult_skill"})
 

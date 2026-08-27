@@ -259,8 +259,11 @@ def test_playbook_template_catalog():
     items = list_playbook_templates()
     ids = [i.id for i in items]
     assert ids == list(WORKFLOW_PLAYBOOK_IDS)
+    assert ids == ["map_fanout", "cite_write_review", "build_app"]
     assert set(ids) <= set(PLAYBOOKS)
     assert "build_website" not in ids
+    assert "compare_options" not in ids
+    assert "build_feature" not in ids
     assert is_workflow_playbook("build_website") is False
     for item in items:
         assert item.title
@@ -277,26 +280,24 @@ def test_playbook_template_catalog():
 def test_playbook_template_slots_are_required_text():
     by_id = {i.id: i for i in list_playbook_templates()}
     assert "build_website" not in by_id
-
-    compare = by_id["compare_options"]
-    assert [s.key for s in compare.slots] == ["question", "options"]
-    assert all(s.required for s in compare.slots)
-    assert all(not s.choices for s in compare.slots)
+    assert "compare_options" not in by_id
+    assert "build_feature" not in by_id
+    assert set(by_id) == {"map_fanout", "cite_write_review", "build_app"}
 
     app = by_id["build_app"]
     assert [s.key for s in app.slots] == ["app"]
     assert all(not s.choices for item in by_id.values() for s in item.slots)
 
 
-def test_from_playbook_success_research_report():
+def test_from_playbook_success_cite_write_review():
     name, description, definition = instantiate_from_playbook(
-        "research_report",
+        "cite_write_review",
         {"topic": "量子计算"},
         name=None,
     )
     assert "调研报告" in name
     assert "量子计算" in name
-    assert description and "research_report" in description
+    assert description and "cite_write_review" in description
     tasks = expand_workflow_to_tasks(definition)
     by_id = {t["id"]: t for t in tasks}
     assert "outline" in by_id
@@ -310,23 +311,54 @@ def test_from_playbook_success_research_report():
 
 
 def test_from_playbook_rejects_not_in_catalog():
+    # Non-catalog CEO books stay 暂未列入 (in PLAYBOOKS, not toolbox templates).
     with pytest.raises(PlaybookTemplateError) as ei:
-        merge_playbook_slots("repair_code", {"problem": "x", "verify": "pytest"})
+        merge_playbook_slots("diagnose_fix_verify", {"problem": "x", "verify": "pytest"})
     assert "暂未列入" in str(ei.value)
+    assert "diagnose_fix_verify" in PLAYBOOKS
 
     with pytest.raises(PlaybookTemplateError) as ei2:
-        instantiate_from_playbook("repair_code", {"problem": "x", "verify": "pytest"})
+        instantiate_from_playbook(
+            "diagnose_fix_verify", {"problem": "x", "verify": "pytest"}
+        )
     assert "暂未列入" in str(ei2.value)
 
-    # Curated catalog: still in PLAYBOOKS / CEO shapes, not toolbox templates.
+    with pytest.raises(PlaybookTemplateError) as ei_ml:
+        merge_playbook_slots("lens_crosscheck", {"topic": "x"})
+    assert "暂未列入" in str(ei_ml.value)
+    assert "lens_crosscheck" in PLAYBOOKS
+
+    # Old four names: unknown (not 暂未列入) — no aliases.
     for pid, slots in (
-        ("build_feature", {"feature": "x"}),
+        ("parallel_brief", {"topic": "T", "angles": ["甲", "乙"]}),
+        ("research_report", {"topic": "x"}),
         ("multi_lens_research", {"topic": "x"}),
+        ("repair_code", {"problem": "x", "verify": "pytest"}),
+    ):
+        with pytest.raises(PlaybookTemplateError) as ei_old:
+            merge_playbook_slots(pid, slots)
+        assert "未知" in str(ei_old.value)
+        assert "暂未列入" not in str(ei_old.value)
+        assert pid not in PLAYBOOKS
+        with pytest.raises(PlaybookTemplateError) as ei_old_b:
+            instantiate_from_playbook(pid, slots)
+        assert "未知" in str(ei_old_b.value)
+        assert "暂未列入" not in str(ei_old_b.value)
+
+    # Dropped from PLAYBOOKS → 未知（非「暂未列入」）.
+    for pid, slots in (
+        ("compare_options", {"question": "选哪个", "options": ["A", "B"]}),
+        ("build_feature", {"feature": "x"}),
     ):
         with pytest.raises(PlaybookTemplateError) as ei3:
             merge_playbook_slots(pid, slots)
-        assert "暂未列入" in str(ei3.value)
-        assert pid in PLAYBOOKS
+        assert "未知" in str(ei3.value)
+        assert "暂未列入" not in str(ei3.value)
+        assert pid not in PLAYBOOKS
+        with pytest.raises(PlaybookTemplateError) as ei3b:
+            instantiate_from_playbook(pid, slots)
+        assert "未知" in str(ei3b.value)
+        assert "暂未列入" not in str(ei3b.value)
 
     # 旧独立 toolshed / 已废建站套餐已从 PLAYBOOKS 删除 → 未知（非「暂未列入」）。
     with pytest.raises(PlaybookTemplateError) as ei_gone:
@@ -347,27 +379,17 @@ def test_from_playbook_rejects_unknown_and_missing_slot():
     assert "未知" in str(ei.value)
 
     with pytest.raises(PlaybookTemplateError) as ei2:
-        merge_playbook_slots("research_report", {})
+        merge_playbook_slots("cite_write_review", {})
     assert "topic" in str(ei2.value)
 
     with pytest.raises(PlaybookTemplateError) as ei3:
-        merge_playbook_slots("parallel_brief", {"topic": "T", "angles": []})
+        merge_playbook_slots("map_fanout", {"topic": "T", "angles": []})
     assert "angles" in str(ei3.value)
-
-    with pytest.raises(PlaybookTemplateError) as ei4:
-        merge_playbook_slots("compare_options", {"options": ["A", "B"]})
-    assert "question" in str(ei4.value)
-
-    with pytest.raises(PlaybookTemplateError) as ei5:
-        merge_playbook_slots(
-            "compare_options", {"question": "选哪个", "options": []}
-        )
-    assert "options" in str(ei5.value)
 
 
 def test_from_playbook_optional_name_and_defaults():
     name, _, definition = instantiate_from_playbook(
-        "parallel_brief",
+        "map_fanout",
         {"topic": "量子计算", "angles": ["法律", "品牌"]},
         name="我的对齐流",
     )
@@ -375,49 +397,29 @@ def test_from_playbook_optional_name_and_defaults():
     tasks = expand_workflow_to_tasks(definition)
     assert len(tasks) == 2
     assert tasks[0]["id"] == "brief_0"
-    # Default optional checkpoint on research_report is applied via soft merge
-    pb_tasks, err = expand_playbook("research_report", {"topic": "X"})
+    # Default optional checkpoint on cite_write_review is applied via soft merge
+    pb_tasks, err = expand_playbook("cite_write_review", {"topic": "X"})
     assert err == []
-    _, _, defn = instantiate_from_playbook("research_report", {"topic": "X"})
+    _, _, defn = instantiate_from_playbook("cite_write_review", {"topic": "X"})
     round_tasks = expand_workflow_to_tasks(defn)
     assert [_structural_task(t) for t in round_tasks] == [
         _structural_task(t) for t in pb_tasks
     ]
 
 
-def test_from_playbook_parallel_brief_coerces_angles_string():
+def test_from_playbook_map_fanout_coerces_angles_string():
     merged = merge_playbook_slots(
-        "parallel_brief", {"topic": "T", "angles": "法律,品牌,舆情"}
+        "map_fanout", {"topic": "T", "angles": "法律,品牌,舆情"}
     )
     assert merged["angles"] == ["法律", "品牌", "舆情"]
     name, _, definition = instantiate_from_playbook(
-        "parallel_brief",
+        "map_fanout",
         {"topic": "议题", "angles": "甲、乙"},
     )
     assert "多角摸底" in name
     assert "议题" in name
     tasks = expand_workflow_to_tasks(definition)
     assert len(tasks) == 2
-
-
-def test_from_playbook_compare_options_success_and_coerce():
-    merged = merge_playbook_slots(
-        "compare_options",
-        {"question": "选库", "options": "Postgres,MySQL,SQLite"},
-    )
-    assert merged["options"] == ["Postgres", "MySQL", "SQLite"]
-
-    name, description, definition = instantiate_from_playbook(
-        "compare_options",
-        {"question": "选 Postgres 还是 MySQL", "options": "Postgres、MySQL"},
-    )
-    assert "方案对比选型" in name
-    assert "选 Postgres 还是 MySQL" in name
-    assert description and "compare_options" in description
-    tasks = expand_workflow_to_tasks(definition)
-    by_id = {t["id"]: t for t in tasks}
-    assert {"eval_0", "eval_1", "summary"} == set(by_id)
-    assert set(by_id["summary"]["depends_on"]) == {"eval_0", "eval_1"}
 
 
 def test_topology_lock_serializes():

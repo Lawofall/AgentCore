@@ -19,6 +19,7 @@ def _msg(
     finish_reason=None,
     error_message=None,
     attachments=None,
+    agent_mentions=None,
     origin=None,
     harvest_kind=None,
 ):
@@ -36,7 +37,11 @@ def _msg(
     if harvest_kind is not None:
         usage["harvest_kind"] = harvest_kind
     return SimpleNamespace(
-        role=role, content=content, usage=usage or None, attachments=attachments
+        role=role,
+        content=content,
+        usage=usage or None,
+        attachments=attachments,
+        agent_mentions=agent_mentions,
     )
 
 
@@ -136,6 +141,25 @@ def test_fold_empty_user_without_attachments_still_dropped():
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "ok"},
         {"role": "assistant", "content": "later"},
+    ]
+
+
+def test_fold_user_inline_markers_become_labels_not_bodies():
+    from agentcore.conversation.inline_body import token
+
+    raw = f"按这个{token('A', 0)}请{token('M', 0)}看"
+    out = _fold_history_messages(
+        [
+            _msg(
+                "user",
+                raw,
+                attachments=[{"name": "现行信息.md", "kind": "file"}],
+                agent_mentions=[{"role": "研究员"}],
+            )
+        ]
+    )
+    assert out == [
+        {"role": "user", "content": "按这个[文件 现行信息.md]请[点名 研究员]看"}
     ]
 
 

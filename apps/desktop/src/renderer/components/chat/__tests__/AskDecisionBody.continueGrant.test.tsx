@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 /**
  * Continue 不得把预选 grant_* 退化成口头「已授权」。
- * 旧 `grant_readonly_folder` 停履约：卡面诚实失败（不调 helper / 不授权）。
+ * 已删的只读 Ask action 当普通选项（不履约、也不停提交）。
  * `grant_organize_folder` 仍须先解析履约（无 picker）；找不到 → 卡面失败（≠ cancelled 静默）。
  */
 import { AskDecisionBody } from "@/components/chat/ask/AskDecisionBody";
 import {
   ASK_NOTE_PLACEHOLDER,
   type AskUserContent,
-  GRANT_READONLY_FOLDER_RETIRED,
   useAskAnswer,
 } from "@/components/chat/ask/AskUserFields";
 import { hasLocalFiles } from "@/lib/capabilities";
 import { DESKTOP_REQUIRED_HINT } from "@/lib/desktopDownload";
+import type { AskOption } from "@/types/events";
 import {
   cleanup,
   fireEvent,
@@ -22,22 +22,11 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const pickAndGrantReadonlyFolder = vi.fn();
 const pickAndGrantOrganizeFolder = vi.fn();
 
 vi.mock("@/lib/capabilities", () => ({
   hasLocalFiles: vi.fn(() => true),
 }));
-
-vi.mock("@/lib/grantReadonlyFolder", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/grantReadonlyFolder")>();
-  return {
-    ...actual,
-    pickAndGrantReadonlyFolder: (...args: unknown[]) =>
-      pickAndGrantReadonlyFolder(...args),
-  };
-});
 
 vi.mock("@/lib/grantOrganizeFolder", async (importOriginal) => {
   const actual =
@@ -58,6 +47,12 @@ vi.mock("@/components/ManualHelpLink", () => ({
   ManualHelpLink: () => null,
 }));
 
+/** Leftover wire from a deleted Ask action — runtime string, not in the union. */
+const staleReadonlyOption = {
+  label: "授权访问本机目录",
+  action: "grant_readonly_folder",
+} as unknown as AskOption;
+
 const grantDefaultContent: AskUserContent = {
   question: "需要本机目录吗？",
   assumptions: [],
@@ -66,10 +61,7 @@ const grantDefaultContent: AskUserContent = {
       id: "q0",
       prompt: "授权",
       kind: "choice",
-      options: [
-        { label: "授权访问本机目录", action: "grant_readonly_folder" },
-        { label: "继续用云端" },
-      ],
+      options: [staleReadonlyOption, { label: "继续用云端" }],
       multiple: false,
       default: "授权访问本机目录",
     },
@@ -100,12 +92,10 @@ function Harness({
   );
 }
 
-describe("AskDecisionBody Continue + retired grant_readonly_folder", () => {
+describe("AskDecisionBody Continue + unknown deleted folder action", () => {
   beforeEach(() => {
-    pickAndGrantReadonlyFolder.mockReset();
     pickAndGrantOrganizeFolder.mockReset();
     vi.mocked(hasLocalFiles).mockReturnValue(true);
-    // canLocalFs 需要 fsApi；旧 grant 已停履约，不得走到 helper。
     window.fsApi = {
       grantSessionReadonlyRoot: vi.fn(),
     } as unknown as typeof window.fsApi;
@@ -118,81 +108,30 @@ describe("AskDecisionBody Continue + retired grant_readonly_folder", () => {
     delete (window as { fsApi?: unknown }).fsApi;
   });
 
-  it("preselected grant default + Continue is honest fail — no helper / no onContinue", () => {
+  it("preselected stale action + Continue is ordinary submit", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
 
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
-    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
     expect(window.fsApi?.grantSessionReadonlyRoot).not.toHaveBeenCalled();
-    expect(onContinue).not.toHaveBeenCalled();
+    expect(onContinue).toHaveBeenCalledTimes(1);
     expect(onBindResolve).not.toHaveBeenCalled();
-    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
-  });
-
-  it("ignores well_known / target_name hints — does not call grant helper", () => {
-    const onBindResolve = vi.fn(async () => {});
-    const content: AskUserContent = {
-      ...grantDefaultContent,
-      questions: [
-        {
-          ...grantDefaultContent.questions[0],
-          options: [
-            {
-              label: "授权桌面报表",
-              action: "grant_readonly_folder",
-              well_known: "desktop",
-              target_name: "报表",
-            },
-          ],
-          default: "授权桌面报表",
-        },
-      ],
-    };
-    render(<Harness content={content} onBindResolve={onBindResolve} />);
-    fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
-
-    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
-    expect(onBindResolve).not.toHaveBeenCalled();
-    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
-  });
-
-  it("retired grant stays on card with muted fail — no resume / no bare grant", () => {
-    const onContinue = vi.fn();
-    const onBindResolve = vi.fn(async () => {});
-
-    render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
-    fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
-
-    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
-    expect(onContinue).not.toHaveBeenCalled();
-    expect(onBindResolve).not.toHaveBeenCalled();
-    const bindFail = screen.getByText(GRANT_READONLY_FOLDER_RETIRED);
-    expect(bindFail.className).toContain("text-muted-foreground");
-    expect(bindFail.className).not.toContain("destructive");
-    expect(screen.getByRole("button", { name: /^提交$/ })).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: /^提交$/ }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
   });
 
   it("normal non-folder selection still uses onContinue", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
-    // 改选普通选项（会清掉预选 grant）
     fireEvent.click(screen.getByRole("button", { name: /继续用云端/ }));
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
-    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
     expect(onContinue).toHaveBeenCalledTimes(1);
     expect(onBindResolve).not.toHaveBeenCalled();
   });
 
-  it("option-row grant click is honest fail — no picker / no helper", () => {
+  it("option-row stale action click is ordinary toggle", () => {
     const onBindResolve = vi.fn(async () => {});
 
     const content: AskUserContent = {
@@ -205,18 +144,17 @@ describe("AskDecisionBody Continue + retired grant_readonly_folder", () => {
       ],
     };
     render(<Harness content={content} onBindResolve={onBindResolve} />);
-    fireEvent.click(screen.getByRole("button", { name: /授权访问本机目录/ }));
+    const staleBtn = screen.getByRole("button", { name: /授权访问本机目录/ });
+    fireEvent.click(staleBtn);
 
-    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
     expect(window.fsApi?.grantSessionReadonlyRoot).not.toHaveBeenCalled();
     expect(onBindResolve).not.toHaveBeenCalled();
-    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
+    expect(staleBtn.getAttribute("aria-pressed")).toBe("true");
   });
 });
 
 describe("AskDecisionBody organize confirm card", () => {
   beforeEach(() => {
-    pickAndGrantReadonlyFolder.mockReset();
     pickAndGrantOrganizeFolder.mockReset();
     vi.mocked(hasLocalFiles).mockReturnValue(true);
     window.fsApi = {
@@ -543,7 +481,7 @@ describe("AskDecisionBody question stems", () => {
   });
 });
 
-describe("AskDecisionBody Continue + grant on Web", () => {
+describe("AskDecisionBody Continue + deleted action on Web", () => {
   beforeEach(async () => {
     const { hasLocalFiles } = await import("@/lib/capabilities");
     vi.mocked(hasLocalFiles).mockReturnValue(false);
@@ -557,17 +495,15 @@ describe("AskDecisionBody Continue + grant on Web", () => {
     window.__WEB__ = undefined;
   });
 
-  it("Continue with grant default shows retired fail — no download / no onContinue", () => {
+  it("Continue with stale action default is ordinary submit — no download", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
-    expect(onContinue).not.toHaveBeenCalled();
+    expect(onContinue).toHaveBeenCalledTimes(1);
     expect(onBindResolve).not.toHaveBeenCalled();
-    expect(pickAndGrantReadonlyFolder).not.toHaveBeenCalled();
     expect(window.open).not.toHaveBeenCalled();
-    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
     expect(screen.queryByText(new RegExp(DESKTOP_REQUIRED_HINT))).toBeNull();
   });
 });

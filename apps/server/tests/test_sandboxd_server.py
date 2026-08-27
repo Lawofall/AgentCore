@@ -68,7 +68,7 @@ async def _running(
             if cfg_path.is_file():
                 bundles.append(json.loads(cfg_path.read_text(encoding="utf-8")))
         script = "raise SystemExit(0)"
-        if "-d" in argv_s or "--detach" in argv_s:
+        if "-detach" in argv_s or "--detach" in argv_s:
             script = "raise SystemExit(0)"
         elif "exec" in argv_s or "run" in argv_s:
             script = run_script
@@ -155,7 +155,7 @@ async def test_ping_and_start_detach_uses_net_argv(tmp_path, monkeypatch):
             detach=True,
         )
         assert "--rootless" not in run
-        assert "-d" in run
+        assert "-detach" in run
 
 
 @pytest.mark.asyncio
@@ -312,7 +312,7 @@ async def test_start_detach_then_exec(tmp_path, monkeypatch):
         )
         assert "out-chunk" in stdout
         assert "err-chunk" in stderr
-        detach = next(a for a in captured if "-d" in a)
+        detach = next(a for a in captured if "-detach" in a)
         assert "--network=sandbox" in detach
         assert "--rootless" not in detach
         exec_cmd = next(a for a in captured if "exec" in a)

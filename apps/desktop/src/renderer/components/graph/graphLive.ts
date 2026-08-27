@@ -216,14 +216,18 @@ export function captainEndpointLiveSig(
   execution: Execution | null,
   captainRunId: string,
   turnTerminal: boolean,
+  detached = false,
 ): string {
   if (!execution) return "";
-  const cap = deriveCaptainStatus(execution, captainRunId, { turnTerminal });
+  const cap = deriveCaptainStatus(execution, captainRunId, {
+    turnTerminal,
+    detached,
+  });
   const workers = execution.runs
     .filter((r) => r.id !== captainRunId)
     .map((r) => `${r.id}:${r.status}`)
     .join(",");
-  return `${execution.status}|${cap}|${turnTerminal ? 1 : 0}|${workers}`;
+  return `${execution.status}|${cap}|${turnTerminal ? 1 : 0}|${detached ? 1 : 0}|${workers}`;
 }
 
 /** Act card Live signature — status / decisions / duration, not stream text. */
@@ -241,11 +245,14 @@ export function stepEdgeAnimatedSig(
   bareTarget: string,
   captainRunId: string | null,
   turnTerminal: boolean,
+  detached = false,
 ): string {
   if (!execution) return "0";
   if (captainRunId && bareTarget === captainRunId) {
-    return deriveCaptainStatus(execution, captainRunId, { turnTerminal }) ===
-      "running"
+    return deriveCaptainStatus(execution, captainRunId, {
+      turnTerminal,
+      detached,
+    }) === "running"
       ? "1"
       : "0";
   }
@@ -609,7 +616,13 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
   const answer = useContext(GraphCaptainAnswerContext);
   const liveSig = useActiveExecField((rt) => {
     const exec = projectRuntime(rt);
-    const base = captainEndpointLiveSig(exec, runId, actions.turnTerminal);
+    const detached = rt.executionDetached != null;
+    const base = captainEndpointLiveSig(
+      exec,
+      runId,
+      actions.turnTerminal,
+      detached,
+    );
     const preview = rt.teamSynthesisPreview;
     const previewSig = preview
       ? `${preview.headline.length}:${preview.text.length}:${preview.workers.length}`
@@ -619,6 +632,7 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
     return `${base}|${previewSig}|${waitSig}`;
   });
   const wait = useActiveExecField((rt) => rt.coordinationWait);
+  const detached = Boolean(useActiveExecField((rt) => rt.executionDetached));
   const teamSynthesisPreview = useActiveExecField(
     (rt) => rt.teamSynthesisPreview,
   );
@@ -630,13 +644,15 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
     const captainStatus = execution
       ? deriveCaptainStatus(execution, runId, {
           turnTerminal: actions.turnTerminal,
+          detached,
         })
       : ("pending" as RunStatus);
     const waitingRoles = execution ? waitingWorkerRoles(execution) : [];
     const waitCaption = (
       coordinationWaitCaptainCaption(wait, { waitingRoles }) ?? ""
     ).trim();
-    const sinkStatus: RunStatus = waitCaption ? "running" : captainStatus;
+    const sinkStatus: RunStatus =
+      waitCaption && !detached ? "running" : captainStatus;
     const preview = captainSinkPreview({
       captainStatus,
       answerPreview: answer?.content ? headText(answer.content) : "",
@@ -661,6 +677,7 @@ export function useCaptainEndpointLive(runId: string): EndpointLive {
     actions,
     answer,
     wait,
+    detached,
     teamSynthesisPreview,
     getExecution,
   ]);
@@ -718,6 +735,7 @@ export function useStepEdgeAnimated(
       bareTarget,
       captainRunId,
       turnTerminal,
+      rt.executionDetached != null,
     );
   });
   return liveSig === "1";

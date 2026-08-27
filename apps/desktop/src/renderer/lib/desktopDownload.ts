@@ -24,13 +24,11 @@ export function isDesktopFolderAction(
   | "open_local_project"
   | "register_local_project"
   | "bind_local_folder"
-  | "grant_readonly_folder"
   | "grant_organize_folder" {
   return (
     action === "open_local_project" ||
     action === "register_local_project" ||
     action === "bind_local_folder" ||
-    action === "grant_readonly_folder" ||
     action === "grant_organize_folder"
   );
 }

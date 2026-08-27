@@ -14,6 +14,7 @@ import pytest
 
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.context.workspace_profile import WorkspaceProfile
+from agentcore.tools.builtin.package_install import is_install_shaped_argv
 from agentcore.tools.builtin.test_run import (
     _ALLOWED_PREFIXES,
     _VERIFY_BUDGET_HEAVY_SECONDS,
@@ -181,6 +182,10 @@ def test_allowed_prefixes_cover_supported_runners():
         ["npm", "--prefix", "apps/web", "install"],
         ["pnpm", "--dir", "packages/ui", "install"],
         ["yarn", "--cwd", "frontend", "install"],
+        ["node", "--test"],
+        ["node", "--test", "test/foo.test.js"],
+        ["npm", "--prefix", "_verify/repo", "test"],
+        ["npm", "--prefix", "_verify/repo", "run", "test"],
     ],
 )
 def test_is_allowed_command_accepts_whitelisted_prefixes(argv: list[str]):
@@ -204,10 +209,36 @@ def test_is_allowed_command_accepts_whitelisted_prefixes(argv: list[str]):
         ["npm", "install", "--registry", "https://evil.example/"],
         ["npm", "--prefix", "../escape", "install"],
         ["npm", "--prefix", "/etc", "install"],
+        ["npm", "--prefix", "_verify/repo", "run", "start"],  # arbitrary script
+        ["node", "--test", "/tmp/x.test.js"],  # absolute path
+        ["node", "--test", "../escape.test.js"],
+        ["npm", "--prefix", "/etc", "test"],
+        ["git", "apply", "p.patch"],
     ],
 )
 def test_is_allowed_command_rejects_non_whitelisted(argv: list[str]):
     assert _is_allowed_command(argv) is False
+
+
+def test_npm_prefix_test_is_not_install_shaped():
+    """``--prefix`` + test must not be classified as the install channel."""
+    argv = ["npm", "--prefix", "_verify/repo", "test"]
+    assert is_install_shaped_argv(argv) is False
+    assert _is_allowed_command(argv) is True
+    assert _is_allowed_verify_argv(argv) is True
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["npm", "--prefix", "_verify/repo", "run", "start"],
+        ["node", "--test", "/tmp/x.test.js"],
+        ["git", "apply", "p.patch"],
+    ],
+)
+def test_node_and_prefix_test_still_reject_unsafe(argv: list[str]):
+    assert _is_allowed_command(argv) is False
+    assert _is_allowed_verify_argv(argv) is False
 
 
 def test_base_command_always_produces_allowed_argv():

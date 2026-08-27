@@ -42,7 +42,6 @@ export const PROCESS_STEP_KIND: Record<ProcessStep["kind"], true> = {
   graph_append: true,
   checkpoint: true,
   plan_review: true,
-  team_preview: true,
   escalation: true,
   approval: true,
   stage_card: true,
@@ -477,30 +476,6 @@ export function appendPlanReviewStep(
   ];
 }
 
-/** Legacy: drop a persisted `team_preview` marker (开工卡已退役 — 现行编制到即出协作图).
- * Old journals / process may still carry this kind; insert-before-last-`team` keeps
- * historical timeline order. Dedupes by checkpoint_id. New events no longer insert
- * team_preview markers. */
-export function appendTeamPreviewStep(
-  process: ProcessStep[] | undefined,
-  checkpointId: string,
-): ProcessStep[] {
-  if (!checkpointId) return process ?? [];
-  if (hasMarker(process, "team_preview", "checkpoint_id", checkpointId))
-    return process ?? [];
-  const steps = process ?? [];
-  const marker: ProcessStep = {
-    kind: "team_preview",
-    checkpoint_id: checkpointId,
-  };
-  for (let i = steps.length - 1; i >= 0; i--) {
-    if (steps[i].kind === "team") {
-      return [...steps.slice(0, i), marker, ...steps.slice(i)];
-    }
-  }
-  return [...steps, marker];
-}
-
 /** Drop an `escalation` marker (blocking required or non-blocking raised). */
 export function appendEscalationStep(
   process: ProcessStep[] | undefined,
@@ -645,8 +620,8 @@ export function omitCoordinationIdleSteps(
 /**
  * Stable render keys for timeline nodes (时间线一期 · 流式 key 稳定化).
  *
- * Index-based keys break when legacy `team_preview` markers are inserted mid-array
- * (insertBeforeTeam hydrate) → every later node's index shifts → React unmounts/remounts
+ * Index-based keys break when markers are inserted mid-array
+ * → every later node's index shifts → React unmounts/remounts
  * them (flicker,
  * lost disclosure state). Identity-bearing nodes key by their own id; text nodes
  * (`reasoning`/`content`/`rework`) key by same-kind ordinal — marker insertion never
@@ -665,8 +640,6 @@ export function timelineNodeKeys(nodes: TimelineNode[]): string[] {
         return `team-${node.execution_id}`;
       case "graph_append":
         return `gappend-${node.execution_id}-${node.host_message_id}`;
-      case "team_preview":
-        return `tp-${node.checkpoint_id}`;
       case "checkpoint":
         return `cp-${node.checkpoint_id}`;
       case "user_interjection":
@@ -721,13 +694,14 @@ export function groupToolRuns(process: ProcessStep[]): TimelineNode[] {
     run = [];
   };
   for (const step of process) {
-    // Old journals may still carry retired `{kind:"ask"}` markers.
-    if ((step as { kind: string }).kind === "ask") continue;
+    // Old journals may still carry retired `{kind:"ask"}` / `{kind:"team_preview"}`.
+    const retired = (step as { kind: string }).kind;
+    if (retired === "ask" || retired === "team_preview") continue;
     if (step.kind === "tool") {
       run.push(step);
     } else {
       flush();
-      nodes.push(step);
+      nodes.push(step as Exclude<ProcessStep, { kind: "tool" }>);
     }
   }
   flush();

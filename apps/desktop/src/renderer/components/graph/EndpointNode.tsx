@@ -273,9 +273,9 @@ export function endpointBodyText(opts: {
 
 function sinkLabel(status: RunStatus): string {
   const labels: Record<RunStatus, string> = {
-    pending: "待汇总",
-    running: "正在生成汇总…",
-    completed: "已汇总",
+    pending: "待收尾",
+    running: "正在收尾…",
+    completed: "已收尾",
     failed: "失败",
     cancelled: "已停止",
     skipped: "未执行",

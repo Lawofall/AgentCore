@@ -347,9 +347,8 @@ verified-facts section (and only when verified).
 Preference / habit rule (strict):
 - User preferences and work habits may ONLY come from the user's explicit statements
   or corrections (e.g. "请用中文", "以后别用表格", "我说的是 pnpm 不是 npm").
-- Do NOT infer preferences from the task topic, request genre, or one-off ask shape
-  (e.g. asking for a mock trial / legal debate / multi-lens research does NOT mean
-  "用户偏好法律分析" or "偏好法律对抗形式").
+- Do NOT infer preferences from the task topic, request genre, or one-off ask shape.
+  禁止从本场任务题材、体裁、一次性诉求形状推断沟通偏好.
 - If no explicit preference/correction appeared, omit preference wording entirely —
   summarize the request only.
 """
@@ -428,7 +427,7 @@ def fallback_episode_summary(
     """Deterministic fallback when the LLM summary is empty: first user turns, clamped.
 
     This is the user's raw wording, not a summary, so it is only ever stored as episode
-    material for the semantic pass to read — the caller suppresses the「已记下本场摘要」
+    material for the semantic pass to read — the caller suppresses the episodic
     card when it lands here (see ``consolidation._EpisodicDigest``).
     """
     bits: list[str] = []

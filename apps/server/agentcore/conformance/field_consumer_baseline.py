@@ -122,6 +122,14 @@ FIELD_CONSUMER_BASELINE: tuple[FieldConsumerBaselineGroup, ...] = (
         ),
         leaves=frozenset({"gaps"}),
     ),
+    FieldConsumerBaselineGroup(
+        id="debate.moderator_provider_id",
+        reason=(
+            "辩论裁判选型：UI 读 moderator_model / moderator_origin / moderator_run_id；"
+            "BYOK provider_id 是机制字段，契约注明旧客户端忽略。"
+        ),
+        leaves=frozenset({"moderator_provider_id"}),
+    ),
 )
 
 

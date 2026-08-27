@@ -148,7 +148,7 @@ describe("message_end · detached-hosted graph keeps running", () => {
 
   it("marks completed at message_end when only captain is still pending", () => {
     // finalize HANDOFF / pre-plan captain run_started drop: workers terminal,
-    // captain never folded — must not pin「正在生成汇总」after end_turn.
+    // captain never folded — must not pin「正在收尾」after end_turn.
     seedTurn();
     const withCaptain: ExecutionPlan = {
       id: "exec-cap",

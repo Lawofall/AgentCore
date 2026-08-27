@@ -266,8 +266,8 @@ export function handleExecutionEvent(
       return true;
     }
     // 后台执行终态：清后台 chrome、按 payload.status 落 execution 终态（缺省 completed），
-    // 再刷新对话以拉入 harvest 终稿。禁止无条件 setStatus("completed")——cancel/fail
-    // 须忠实跟契约，否则顶栏会绿勾而图上仍 running。
+    // 再补一次对话窗口（live 已有 execution_completed；不另等收口泡）。禁止无条件
+    // setStatus("completed")——cancel/fail 须忠实跟契约，否则顶栏会绿勾而图上仍 running。
     case "execution_completed": {
       const mid = execMessageId(
         conversationId,

@@ -25,6 +25,7 @@ vi.mock("../resideAttachment", async (importOriginal) => {
   };
 });
 
+import type { ComposerBodyHandle } from "../ComposerBodyEditor";
 import { __clearAttachmentUploadsForTests } from "../attachmentUploads";
 import type {
   PendingAgentMention,
@@ -80,7 +81,17 @@ function useMentionHarness(conversationId: string | null) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [agentMentions, setAgentMentions] = useState<PendingAgentMention[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const caretRef = useRef(0);
+  const bodyRef = useRef<ComposerBodyHandle | null>(null);
+  if (bodyRef.current === null) {
+    bodyRef.current = {
+      focus: () => {},
+      getCaret: () => caretRef.current,
+      setCaret: (offset: number) => {
+        caretRef.current = offset;
+      },
+    };
+  }
   const mention = useMentionMenu({
     conversationId,
     value,
@@ -89,9 +100,9 @@ function useMentionHarness(conversationId: string | null) {
     setAttachments,
     agentMentions,
     setAgentMentions,
-    textareaRef,
+    bodyRef,
   });
-  return { attachments, mention };
+  return { attachments, mention, value };
 }
 
 beforeEach(() => {
@@ -112,6 +123,7 @@ describe("回形针附加即上传", () => {
     });
 
     expect(result.current.attachments).toHaveLength(1);
+    expect(result.current.value).toContain("\uFFFC");
     expect(result.current.attachments[0]).toMatchObject({
       name: "report.xlsx",
       uploadState: "uploading",

@@ -44,12 +44,8 @@ class AskOption(WirePayload):
     (NOT a pre-selection). `action` marks an option that the desktop client fulfils with a
     native client action instead of a plain text answer (unknown/absent → plain option):
     `open_local_project` / `register_local_project` / `bind_local_folder` are
-    **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云 / 连接 Git」；≠离线；
+    **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云」；远程仓「从 Git 克隆」；≠离线；
     勿当默认主推；``create_folder`` 仍只建云）；
-    `grant_readonly_folder` is a **legacy** session read-only mount under
-    ``external/<alias>/`` (orthogonal to binding); **new** read-only mounts use the
-    ``external_mount_readonly`` tool instead — do not newly emit this action for
-    read-only;
     `grant_organize_folder` confirms organize-mode (move/copy/mkdir/trash-delete);
     still requires explicit user confirm (not silent).
     For ``grant_*`` only: optional ``well_known`` (``desktop`` / ``downloads`` /
@@ -71,7 +67,6 @@ class AskOption(WirePayload):
             "open_local_project",
             "register_local_project",
             "bind_local_folder",
-            "grant_readonly_folder",
             "grant_organize_folder",
         ]
         | None
@@ -162,140 +157,6 @@ class PlanReviewResolvedPayload(WirePayload):
     checkpoint_id: str
     decision: CheckpointDecision
     note: str
-
-
-class TeamPreviewWorker(WirePayload):
-    """One upcoming worker row on the thin team-preview card (团队预审)."""
-
-    run_id: str
-    role: str
-    task: str
-    depends_on: list[str]
-    # D4：与 kickoff/summary.worker_rows 对齐；旧 journal 缺字段 → 前端不展示。
-    form: str | None = absent("交付形态 prose/files 等；缺省=旧帧。")
-    write_capability: Literal["text_only", "can_write_files"] | None = absent(
-        "写盘能力判别；由 form 推导。"
-    )
-    write_capability_label: str | None = absent(
-        "写盘能力展示文案（可改文件 / 仅文字报告）。"
-    )
-    # Per-worker 已消歧目录行属性（产品身份见 catalog ``ref``）；缺字段=跟槽。
-    model: str | None = absent("该队员模型 id（可展示裸 id）。")
-    origin: Literal["platform", "byok"] | None = absent("付款来源（行属性）；旧帧缺省。")
-    provider_id: str | None = absent("BYOK 服务商 id；platform 缺省。")
-    # 落座桌：有效 Folder id（节点 target 优先，否则本会话工作区）；无 Folder 的裸聊
-    # scratch 仅透出 target_folder_name=本会话工作区。缺字段=旧帧，前端不展示桌列。
-    target_folder_id: str | None = absent(
-        "该队员落座 Folder id（显式 target 或本会话工作区）；裸聊 scratch 缺省。"
-    )
-    target_folder_name: str | None = absent(
-        "服务端解析的工作区显示名；无 Folder 时为「本会话工作区」。缺省=旧帧。"
-    )
-
-
-class TeamPreviewSide(WirePayload):
-    """One debate participant on the debate kickoff card."""
-
-    key: str
-    name: str
-    stance: str
-    is_subject: bool | None = absent()
-    # 开赛前预分配稳定槽位；人盖 ``model_overrides`` 键（≠ 各拍发言 run）。旧帧缺省。
-    run_id: str | None = absent("开赛前预分配稳定 id；人盖 model_overrides 键。")
-    # §7.5 真·多模型：已消歧行属性；缺字段（老 journal / 同模型场）→ 前端跟 turn 主模型。
-    model: str | None = absent("该方辩手模型 id。")
-    origin: Literal["platform", "byok"] | None = absent("付款来源（行属性）。")
-    provider_id: str | None = absent("BYOK 服务商 id；platform 缺省。")
-
-
-class ModelCandidate(WirePayload):
-    """§7.5 D：消歧零/多候选时开赛卡 / 错误载荷中的目录行。"""
-
-    model: str
-    origin: Literal["platform", "byok"]
-    provider_id: str | None = absent()
-    label: str | None = absent()
-    side_key: str | None = absent("触发消歧的参与方 key；缺省=整场。")
-    ref: str | None = absent("目录身份 @platform/… 或 @byok/…；旧帧缺省。")
-
-
-class TeamPreviewRequiredPayload(WirePayload):
-    """开工卡：计划预览 + 能力授权（两卡合一）。
-
-    ``primitive`` discriminates ``delegate`` (workers 分工表) vs ``debate``
-    (motion / sides / max_rounds). ``tools`` may be empty under full_auto /
-    always_ask / debate read-only debaters.
-    """
-
-    checkpoint_id: str
-    conversation_id: str
-    workers: list[TeamPreviewWorker]
-    tools: list[str] = Field(default_factory=list)
-    primitive: Literal["delegate", "debate"] | None = absent(
-        "编排原语判别；缺省按 delegate（旧 journal / 向量兼容）。"
-    )
-    motion: str | None = absent("辩论辩题；仅 primitive=debate。")
-    form: str | None = absent("辩论形态 debate/red_team/roundtable。")
-    sides: list[TeamPreviewSide] | None = absent("辩论各方立场。")
-    max_rounds: int | None = absent("辩论轮次安全上限（预算展示）。")
-    thorough: bool | None = absent("辩论认真辩透 vs 快速对碰。")
-    # 开赛前预分配主持人稳定 id；人盖 ``model_overrides`` 键。旧帧缺省。
-    moderator_run_id: str | None = absent("开赛前预分配主持人 run_id；人盖 model_overrides 键。")
-    # §7.5 裁判选型；缺字段（老 journal）→ 前端不展示裁判行。
-    moderator_model: str | None = absent("裁判 / 主持人模型 id。")
-    moderator_origin: Literal["platform", "byok"] | None = absent("裁判模型来源。")
-    moderator_provider_id: str | None = absent("裁判 BYOK provider_id。")
-    same_model_debate: bool | None = absent(
-        "目录只剩一模型时为 true，开赛卡明示同模型降级。"
-    )
-    # §7.5 D：消歧零/多候选目录行；缺字段（老 journal）→ 前端不展示候选区。
-    model_candidates: list[ModelCandidate] | None = absent(
-        "模型消歧候选（ref + model/origin/provider_id/label）；旧帧缺省。"
-    )
-    # 主文案：交付档短标 + 预计人数；缺字段（老 journal）→ 前端按人数本地回退。
-    headline: str | None = absent(
-        "开工卡主导语（如「MVP主流程 · 预计 3 人」）；旧帧缺省。"
-    )
-    revision: int | None = absent("修订代数；首版 1。旧帧缺省（前端按 1）。")
-    revised_from: str | None = absent("上一张开工卡 checkpoint_id；首版缺省。")
-    revision_note: str | None = absent("触发本次修订的用户意见原文；首版缺省。")
-
-
-class WriteCapabilityOverride(WirePayload):
-    """开工卡 continue 修正 / resolved 对账：单向收紧写盘（同效 form=prose）。仅允许 text_only。"""
-
-    run_id: str
-    capability: Literal["text_only"]
-
-
-class ModelOverride(WirePayload):
-    """开工卡 continue 人盖：按 run_id 覆盖队员 / 辩手 / 主持人目录身份。
-
-    ``model`` 填 ``@platform/{id}`` / ``@byok/{provider_id}/{id}``。
-    空 model = 该项不改。非法身份 → 422。库存 leftover 仍可带 origin/provider_id。
-    """
-
-    model: str
-    origin: Literal["platform", "byok"] | None = absent("库存 leftover；新调用不必填。")
-    provider_id: str | None = absent("库存 leftover；新调用不必填。")
-
-
-class TeamPreviewResolvedPayload(WirePayload):
-    checkpoint_id: str
-    # continue(=grant[+steer]) / adjust(=no grant, feed CEO) / stop / research_first / …
-    decision: CheckpointDecision
-    note: str
-    # 开工组队有限否决：缺省 / 空 = 全员开工、无写盘收紧（旧客户端兼容）。
-    excluded_run_ids: list[str] | None = absent(
-        "用户关闭的 run_id；缺省/空=全员开工。"
-    )
-    write_capability_overrides: list[WriteCapabilityOverride] | None = absent(
-        "写盘单向收紧；仅 capability=text_only；未知 run_id / 升权 → 422（引擎侧）。"
-    )
-    model_overrides: dict[str, ModelOverride] | None = absent(
-        "人确认盖 CEO：run_id → {model}（目录身份 @platform/… 或 @byok/…）；"
-        "delegate=队员；debate=sides[].run_id / moderator_run_id；空/缺=不改。"
-    )
 
 
 class StageCardRequiredPayload(WirePayload):

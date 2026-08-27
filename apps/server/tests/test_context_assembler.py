@@ -61,7 +61,7 @@ def test_contributors_returns_kept_in_render_order():
 
 
 def test_budget_is_carried_but_not_enforced_today():
-    # 扳机 B 预留：budget rides on the contributor; nothing trims yet.
+    # budget rides on the contributor; assembler does not trim.
     asm = ContextAssembler().add("base", "x" * 100, SectionOrder.BASE, budget=10)
     assert asm.render() == "x" * 100
     assert asm.contributors()[0].budget == 10

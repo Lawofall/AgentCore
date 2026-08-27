@@ -6,10 +6,10 @@ _DEBATE_AND_REVIEW = """\
 <debate_and_review>
 【入口分流·按意图】正文分流前置：① 用户明确点名开辩 / 模拟庭审 / 终局对抗（含模拟法庭 / 庭审对抗 / \
 对簿公堂等）→ 本 skill，直调 `debate`——取证作为质量前提由辩论机制保证（约定文档桥 / 可选 Evidence Pack / \
-发言期对称有界检索入台账；**非**庭前调查员舰队、**非**开工前先拦调研），【勿】再先拦去 \
+发言期对称有界检索入台账；**非**开工前先拦调研），【勿】再先拦去 \
 `deep_multi_lens_research`；② 公共事件跨域研判 → `consult(deep_multi_lens_research)` \
-（MLR → 命题卡 → 推进卡）；③ 一起弄懂/多路摸清（未明示成文）→ `parallel_brief`；明示成文 → \
-`research_report`；④ 意图模糊（既像公共研判又像开辩）→ 保守缺省走 MLR，并在回复里说明\
+（MLR → 命题卡 → 推进卡）；③ 一起弄懂/多路摸清（未明示成文）→ `map_fanout`；明示成文 → \
+`cite_write_review`；④ 意图模糊（既像公共研判又像开辩）→ 保守缺省走 MLR，并在回复里说明\
 「也可直接开辩」。
 
 当问题需要【对抗性多视角思考】、而非各角度独立的并行调研时，用 `debate` 工具发起一场由主持人\
@@ -42,9 +42,9 @@ _DEBATE_AND_REVIEW = """\
 
 【真·多模型辩手】正反 `debate`×2 方可填各方模型。用户【点名】双方模型（如「正方平台 glm-5.2、\
 反方 DeepSeek」）→ 各方 `model` 填人类可读提及或目录身份（「glm-5.2」/「平台 glm-5.2」/\
-「DeepSeek」/ `@platform/glm-5.2` / `@byok/{provider_id}/deepseek-v4-flash`）。\
+「DeepSeek」/ `@platform/glm-5.2` / `@byok/…/deepseek-v4-flash`）。\
 【禁止】把未加 `@` 的路由键（`platform/xxx`）写入 `model`。\
-`origin` / `provider_id` 已从工具参数撤掉——开赛前 runtime 把提及消歧成目录行后【直开】。\
+开赛前 runtime 把提及消歧成目录行后【直开】。\
 用户话已含「平台的 / 用平台」等偏好时，提及可省略「平台」前缀——runtime 从用户原文取 prefer。\
 【禁止】再 `ask_user` 元问题（如「是不是当前主模型？」/「选 A 还是 B？」）；消歧多候选 / \
 零匹配时工具错误会列出候选的目录身份（`@platform/…` 或 `@byok/…`），\
@@ -53,7 +53,7 @@ _DEBATE_AND_REVIEW = """\
 runtime 真调默认对阵（平台 allowlist 前两名 `PLATFORM_MODELS[0]` vs `[1]`，或\
 「1 平台 + 已配 BYOK DeepSeek」）；凑不齐则失败并提示去配模型。\
 留空且【无】`cross_model` = 同模型场（跟本 turn 主模型），【不是】跨模型。\
-目录身份（`@platform/{id}` 或 `@byok/{provider_id}/{id}`）可直通。\
+目录身份（`@platform/…` 或 `@byok/…`）可直通。\
 用户点名裁判 → 填 `moderator_model` 提及或目录身份（同辩手消歧）；未点名 → 系统默认（可与辩手同模）。\
 红队 / 圆桌本阶段可不填 per-side。
 

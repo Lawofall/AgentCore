@@ -164,24 +164,26 @@ Scope routing (profile vs folder_profile — position = scope):
 Preference promotion rule (strict — 偏好.md only):
 - Add or keep a 偏好.md bullet ONLY when a session summary records an explicit user
   statement or correction about how to work with them (communication / habits).
-- NEVER promote task topics, request formats, or one-off ask shapes into preferences
-  (e.g. mock trial / 模拟法庭 / legal debate / multi-lens research must NOT become
-  "偏好法律分析" or "偏好法律对抗形式进行讨论").
+- NEVER promote task topics, request formats, or one-off ask shapes into preferences.
+  禁止从本场任务题材、体裁、一次性诉求形状推断沟通偏好.
 - If a summary merely describes what the user asked this session to do, leave
   preferences null (or unchanged) — do not invent durable habits from the genre.
 
 Domain split (write-side — 偏好.md vs 主题/*.md):
 - 偏好.md is LIMITED to communication style and work habits only (language, brevity,
   interaction cadence, review style, etc.).
-- Topic / domain / genre preferences (preference for a field, play-style, content type,
-  e.g. "偏好法律分析", "喜欢模拟法庭", "偏好多透镜调研") must NOT stay in 偏好.md —
-  move them into the matching 主题/<slug>.md via ops (on_demand; consult only).
+- Topic / domain / genre preferences must NOT stay in 偏好.md — durable topic
+  knowledge that will change later action goes to the matching 主题/<slug>.md via
+  ops (on_demand; consult only).
 - When CURRENT preferences still contain such genre/domain bullets, REWRITE preferences
-  without them and ADD/UPDATE the durable bits into the appropriate 主题/*.md op(s).
+  without them and ADD/UPDATE only still-actionable bits into the appropriate
+  主题/*.md op(s).
 
 Topic ops (ops array) — ONLY for 主题/<slug>.md notes:
   {"action":"add|remove|update","file":"主题/<slug>.md","scope":"global|folder",
    "section":"<optional>","content":"...","match":"..."}
+Record only content that will change later action (以后行动): durable facts and
+one-line vetoes (方案 + 为何否). No process diary or completed steps.
 Do NOT put 偏好.md / 画像.md / 导航.md changes into ops — those go in the rewrite fields above.
 
 Privacy: never record government IDs, passwords/keys, precise home address, payment,

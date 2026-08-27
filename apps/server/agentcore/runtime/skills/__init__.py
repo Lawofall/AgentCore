@@ -31,23 +31,19 @@ from agentcore.runtime.skills.catalog import (
     render_skill_directory,
 )
 from agentcore.runtime.skills.deep_multi_lens_research import MULTI_LENS_COURTROOM_TRIGGERS
-from agentcore.runtime.skills.product_help import (
-    CONSULT_PRODUCT_BUG_TRIAGE_BY_SCENE,
-    CONSULT_PRODUCT_HELP_BY_SCENE,
-)
 from agentcore.runtime.skills.registry import SkillRegistry, SystemSkill
+from agentcore.runtime.skills.team_cross_folder import _TEAM_CROSS_FOLDER
+from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
 from agentcore.runtime.skills.team_orchestration import (
     _TEAM_ORCHESTRATION_ADVANCED,
-    CONSULT_TEAM_ORCH_BY_SCENE,
 )
 
 __all__ = [
-    "CONSULT_PRODUCT_BUG_TRIAGE_BY_SCENE",
-    "CONSULT_PRODUCT_HELP_BY_SCENE",
-    "CONSULT_TEAM_ORCH_BY_SCENE",
     "MULTI_LENS_COURTROOM_TRIGGERS",
     "SkillRegistry",
     "SystemSkill",
+    "_TEAM_CROSS_FOLDER",
+    "_TEAM_DELIVERY_ENV",
     "_TEAM_ORCHESTRATION_ADVANCED",
     "build_system_skill_registry",
     "render_skill_directory",

@@ -252,12 +252,14 @@ async def run_chat_pipeline(
                 folder_binding_injected=folder_binding_injected,
                 folder_local_root_id=folder_local_root_id,
                 folder_local_subpath=folder_local_subpath,
+                user_message=user_message,
             )
             if latency_probe is not None:
                 latency_probe.mark_prepare(int((time.monotonic() - prepare_t0) * 1000))
             llm = prepared.llm
             bound_execution_id = prepared.bound_execution_id
             execution_id_token = prepared.execution_id_token
+            user_message = prepared.user_message
             # Bare+auto_desk may remount CEO onto the landing Folder inside prepare.
             assemble_backend = prepared.base_tool_context.backend
 

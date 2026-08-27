@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueuedTurnsBar } from "@/components/chat/QueuedTurnsBar";
+import { inlineToken } from "@/lib/inlineBody";
 import { ApiError, api } from "@/services/api";
 import { useQueuedTurnsStore } from "@/stores/queuedTurns";
 import {
@@ -59,6 +60,7 @@ describe("QueuedTurnsBar", () => {
     expect(row.getAttribute("data-from-interjection")).toBe("true");
     expect(row.textContent).toContain("来自你的插话");
     expect(row.textContent).toContain("协调升格的话");
+    expect(row.textContent).not.toContain("\uFFFC");
 
     fireEvent.click(screen.getByTestId("queued-turn-cancel"));
     await waitFor(() => {
@@ -70,6 +72,30 @@ describe("QueuedTurnsBar", () => {
     await waitFor(() => {
       expect(useQueuedTurnsStore.getState().list(CID)).toEqual([]);
     });
+  });
+
+  it("queued preview strips inline markers", () => {
+    useQueuedTurnsStore.getState().upsert({
+      queueId: "q-mark",
+      conversationId: CID,
+      content: `协调${inlineToken("A", 0)}升格的话`,
+      attachments: [
+        {
+          name: "brief.md",
+          path: "brief.md",
+          text: "",
+          truncated: false,
+          kind: "file",
+        },
+      ],
+      position: 1,
+      queueDepth: 1,
+    });
+
+    render(<QueuedTurnsBar conversationId={CID} />);
+    const row = screen.getByTestId("queued-turn-row");
+    expect(row.textContent).toContain("协调[文件 brief.md]升格的话");
+    expect(row.textContent).not.toContain("\uFFFC");
   });
 
   it("404 取消亦清条（插话升队项）", async () => {

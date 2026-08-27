@@ -49,7 +49,6 @@ from agentcore.runtime.settlement import prewrite_cold_resume_settlement
 from agentcore.runtime.suspension import (
     AskUserSuspension,
     PlanReviewSuspension,
-    TeamPreviewSuspension,
 )
 from agentcore.runtime.suspension.persistence import (
     claim_paused_turn,
@@ -63,7 +62,7 @@ logger = get_logger(__name__)
 
 SinkSetup = Callable[[EventSink], None]
 
-_TAPE_DURABLE_KINDS = (TeamPreviewSuspension, AskUserSuspension, PlanReviewSuspension)
+_TAPE_DURABLE_KINDS = (AskUserSuspension, PlanReviewSuspension)
 
 
 def _tape_id_for(path: Path) -> str:

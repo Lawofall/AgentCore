@@ -27,8 +27,8 @@ from .outcome import RoundOutcome
 
 logger = get_logger(__name__)
 
-# Local file peeks (file_list / file_read / grep) — diagnostics / eval probe only.
-LOCAL_RECON_TOOLS = frozenset({"file_list", "file_read", "grep"})
+# Local file peeks (file_list / glob / file_read / grep) — diagnostics / eval probe only.
+LOCAL_RECON_TOOLS = frozenset({"file_list", "glob", "file_read", "grep"})
 
 
 def _user_intent_chunks(messages: list[LLMMessage]) -> list[str]:
@@ -172,12 +172,12 @@ def audit_gate_nudge_prompt() -> str:
 
 
 def audit_gate_hard_prompt() -> str:
-    """Hard audit gate for research_report (playbook stamp only)."""
+    """Hard audit gate for cite_write_review (playbook stamp only)."""
     return (
-        "[系统提示] 成篇审计硬门：本回合含成文专线 playbook=research_report，"
+        "[系统提示] 成篇审计硬门：本回合含成文专线 playbook=cite_write_review，"
         "收尾前【必须】派独立审计员（审计者≠作者）审校落盘成稿，"
-        "或用 playbook=research_report（内含审校）完成路径。"
-        "对齐推进 playbook=parallel_brief / 普通多角摸底不进本门（软闸亦同）。"
+        "或用 playbook=cite_write_review（内含审校）完成路径。"
+        "对齐推进 playbook=map_fanout / 普通多角摸底不进本门（软闸亦同）。"
         "禁止在仅收到软提示后直接 end_turn 把半残稿当完结。"
         "审后默认向用户收口；continue_from_run_id 修订非默认路径。"
         "若本批已含审校节点或你已另派审计，请继续交付；"
@@ -189,8 +189,8 @@ def audit_gate_hard_prompt() -> str:
 def should_audit_gate(controller: LoopController, *, role: str) -> bool:
     """Whether the soft audit gate should fire (wrap-up or all_completed path).
 
-    Soft nudge aligns with the hard gate: only research_report
-    (``audit_hard_required``). ``parallel_brief`` / ordinary multi-angle
+    Soft nudge aligns with the hard gate: only cite_write_review
+    (``audit_hard_required``). ``map_fanout`` / ordinary multi-angle
     scouting never enter the soft gate.
     """
     if role != "captain" or controller.audit_gate_fired:
@@ -244,7 +244,7 @@ def maybe_inject_audit_gate(
         return False
 
     controller.mark_audit_gate_fired()
-    # research_report 自带审校 → 软提示后即视为审校满足，不进入硬门死循环。
+    # cite_write_review 自带审校 → 软提示后即视为审校满足，不进入硬门死循环。
     if controller.audit_includes_review:
         nudge = audit_gate_nudge_prompt()
     elif controller.audit_hard_required:
@@ -636,6 +636,56 @@ def is_workspace_channel_sticky_dead(tool_context: Any | None = None) -> bool:
         return True
     wc = getattr(tool_context, "workspace_channel", None)
     return isinstance(wc, WorkspaceChannel) and wc.is_dead
+
+
+def is_exec_env_sticky_dead() -> bool:
+    """True when the coordination session has latched ``exec_env_dead``.
+
+    Session flag covers teammates that never hit an exec-env retire envelope
+    themselves. No backend-channel twin (unlike workspace channel-dead).
+    """
+    from agentcore.runtime.coordination.session import active_coordination
+
+    session = active_coordination()
+    return session is not None and bool(getattr(session, "exec_env_dead", False))
+
+
+def apply_exec_env_dead_retire(
+    *,
+    disabled_tools: set[str],
+    controller: LoopController | None = None,
+) -> bool:
+    """Seed ``EXEC_ENV_TIMEOUT_FAMILY`` into ``disabled_tools`` when sticky-dead.
+
+    Called at ``react_loop`` entry and before each LLM round so newly dispatched
+    workers stop seeing ``code_execute`` / ``test_run`` without having hung
+    themselves. Does **not** retire ``terminal`` (not in the family). Idempotent;
+    does not auto-DENY. ``controller`` is accepted for signature parity with
+    :func:`apply_workspace_channel_dead_retire` (no extra latch).
+    """
+    _ = controller
+    if not is_exec_env_sticky_dead():
+        return False
+
+    from agentcore.runtime.loop_controller.types import EXEC_ENV_TIMEOUT_FAMILY
+
+    before = len(disabled_tools)
+    disabled_tools.update(EXEC_ENV_TIMEOUT_FAMILY)
+    return len(disabled_tools) > before
+
+
+def registry_can_execute(tools: ToolRegistry) -> bool:
+    """Whether this worker may claim / use ``code_execute``.
+
+    Must run **after** :func:`apply_exec_env_dead_retire` would seed the family:
+    sticky ``session.exec_env_dead`` makes this False even when the tool is
+    still registered. Cloud-without-sandbox (tool absent) is the other False.
+    """
+    retired: set[str] = set()
+    apply_exec_env_dead_retire(disabled_tools=retired)
+    if "code_execute" in retired:
+        return False
+    return tools.get_optional("code_execute") is not None
 
 
 def apply_workspace_channel_dead_retire(

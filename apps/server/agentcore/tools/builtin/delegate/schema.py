@@ -1,7 +1,8 @@
 """Delegate tool schema and constants.
 
-Schema layer (工具面瘦身): short trigger + key param cues only. Routing judgment
-lives in the CEO core; advanced HOW lives in ``consult(team_orchestration_advanced)``.
+Schema layer (工具面瘦身): short trigger + firing when/not + key param cues.
+编制自选 / 结局分层 lives in the CEO core; advanced HOW lives in
+``consult(team_orchestration_advanced)``.
 """
 
 from __future__ import annotations
@@ -38,19 +39,13 @@ TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
     },
 }
 
-# Trigger + short cues. Long HOW → CEO core / team_orchestration_advanced.
+# Trigger + firing when/not + structure contract. HOW → consult(team_orchestration_advanced).
 DELEGATE_DESCRIPTION = (
     f"拆任务给临时团队（默认手写顶层 tasks：role+task，≤{MAX_DELEGATION_TASKS}；非终结）。"
-    f"默认可抄：{HANDWRITTEN_TASKS_SKELETON}（deliverable 可选）。"
-    "具名 playbook 仅当走固化流水线时用（快捷进阶），且勿同时传 tasks。"
-    "【看】→form=prose；【存文档】→files（默认，落工作稿）；【改工程】→workspace。漏填=files。"
-    "多任务先判生产者→消费者；互不依赖才平铺并行。"
-    "≥1 worker 默认协调（立即返回、可同回合追加同一张图；含单 worker）。"
-    "跨回合再派人＝新开一队、接续上一张图（append_to_execution_id 只填 latest）。"
-    "动【同一支团队】（含批次已收口后补跑/接着干）＝ tasks[] 上填 "
-    "continue_from_run_id（续派，不限条数）/ replaces_run_id（补缺口），不是冷派整团。"
-    "playbook 与 tasks 二选一：禁止二者同时有内容（反例：既填 code_audit 又传 tasks）。"
-    "绿场必填 playbook_args.app。"
+    "用：改产物、成规模取证、点名对比、跨模块摸底。"
+    "不用：讨论/判断/闲聊、已知一两处文件、单符号。"
+    "playbook 与 tasks 二选一（具名 playbook 仅固化流水线快捷进阶）："
+    "禁止二者同时有内容（反例：既填 code_audit 又传 tasks）；绿场必填 playbook_args.app。"
     "HOW→consult(team_orchestration_advanced)。"
 )
 
@@ -62,6 +57,7 @@ DELEGATE_PARAMETERS = {
             "description": (
                 f"默认主路（≤{MAX_DELEGATION_TASKS}）。"
                 f"顶层非空数组可抄：{HANDWRITTEN_TASKS_SKELETON}（deliverable 可选）。"
+                "摸底抄骨架 form=prose。"
                 "手写此数组时勿填 playbook；与具名 playbook 互斥。"
             ),
             "items": {
@@ -97,7 +93,7 @@ DELEGATE_PARAMETERS = {
                     },
                     "continue_from_run_id": {
                         "type": "string",
-                        # 「动同一支团队的正式入口 / 不限条数 / 勿冷派整团」在工具描述里已写，
+                        # 「动同一支团队 / 不限条数 / 勿冷派整团」HOW → team_orchestration_advanced。
                         # 这里只留本字段自己的填法。
                         "description": (
                             "同人续派（调查后确认修 / 改稿 / 收口后接着干）；填已完成 run_id。"

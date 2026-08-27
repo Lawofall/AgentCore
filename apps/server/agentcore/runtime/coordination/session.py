@@ -84,7 +84,7 @@ class CoordinationSession(
     # C3: session birth desk (conversation folder_id). Ownership keys use
     # ``target_folder_id or birth_desk_id``; process-local (re-armed from tool).
     birth_desk_id: str | None = None
-    # Sidecar startTurn stamps local folder bind so harvest can rebuild the
+    # Sidecar startTurn stamps local folder bind so settle can rebuild the
     # workspace without ``resolve_local_binding(db)``. Process-local; not snapshotted.
     folder_binding_injected: bool = False
     folder_local_root_id: str | None = None
@@ -99,31 +99,26 @@ class CoordinationSession(
     # block. Not snapshotted — restore seeds it to current completed (no re-dump).
     progress_reported_completed: set[str] = field(default_factory=set)
     cancel_ids: set[str] = field(default_factory=set)
+    # CEO cancel_worker successes (close wording). Unsettled leftover-clear and
+    # timeout force-cancel do not stamp. Snapshotted; old snapshots missing the
+    # key restore as empty.
+    ceo_cancel_worker_ids: set[str] = field(default_factory=set)
+    ceo_cancel_started_ids: set[str] = field(default_factory=set)
     active: bool = True
-    # True after ALL_COMPLETED was injected into a live CEO wait. Inject itself
-    # is not a user-visible close — harvest still runs unless
-    # ``attached_inject_visible_close`` is already True.
+    # True after ALL_COMPLETED was injected into a live CEO wait.
     all_completed_injected: bool = False
     # Process-local: captain bubble *currently* has non-empty prose after
     # attached ALL_COMPLETED inject. ``content_delta`` sets it; ``content_reset``
-    # clears it (终态，不是流式锁存). Harvest skip requires this True at arm
-    # time — never cancel at inject time. Not snapshotted (restore → harvest).
+    # clears it. Used to skip an away-user push when the user already saw a close.
+    # Not snapshotted.
     attached_inject_visible_close: bool = False
-    # True while the system harvest closing turn is the attached CEO (最终合成).
-    harvest_closing: bool = False
-    # ALL_COMPLETED.output already inlined into the synthetic harvest user row
-    # (落库可查). Harvest-closing inject must not repeat that 团队成品.
-    # Process-local; not snapshotted — ``format_harvest_user_text`` restamps.
-    harvest_user_embedded_output: str = ""
     # Structured user-audience facts (nodes / files / outstanding tool failures)
-    # stamped at drive close, so the no-LLM harvest fallback renders its own
-    # user-facing close instead of reusing the CEO-facing brief.
+    # stamped at drive close — inject names accepted paths from this, not a
+    # second CEO turn.
     harvest_user_facts: dict[str, Any] | None = None
-    # Terminal events parked across first-turn close() so harvest can re-queue them.
-    _harvest_stash: list[CoordinationEvent] = field(default_factory=list, repr=False)
-    # Strong refs for fire-and-forget harvest tasks (bare create_task is a weak
+    # Strong refs for fire-and-forget settle tasks (bare create_task is a weak
     # ref; the loop may destroy a pending task before it runs).
-    _harvest_tasks: set[asyncio.Task[Any]] = field(default_factory=set, repr=False)
+    _settle_tasks: set[asyncio.Task[Any]] = field(default_factory=set, repr=False)
     # Background WaveScheduler task (owned by drive); None until started.
     drive_task: asyncio.Task[Any] | None = None
     # ask_user soft-stop sets this before cancelling drive_task so the cancel
@@ -142,20 +137,21 @@ class CoordinationSession(
     # still contains run terminals that arrived after ContextVar teardown.
     host_fact_log: Any | None = field(default=None, repr=False)
     host_turn_id: str = ""
-    # Set by crash redrive (``recover_turn``) to the ORIGINAL turn's message_id:
-    # this drive continues that turn, so its closing belongs there instead of a
-    # fresh assistant message (Resume 身份不变量 — 崩溃重驱亦不新开 turn).
+    # Set by crash redrive (``recover_turn``) to the ORIGINAL turn's message_id.
     # Deliberately NOT snapshotted: a soft-stop/resume hands the turn back to the
     # resume pipeline, which already reuses the original id on its own.
     recovered_turn_id: str = ""
-    # Process-local: CEO rate-limit continue pause. Not snapshotted — harvest
-    # also checks persisted ``outcome=paused`` / the ``ceo_continue`` lock.
+    # Process-local: CEO rate-limit continue pause. Not snapshotted.
     host_turn_paused: bool = False
-    # Set when a harvest closing turn has been scheduled (idempotent).
+    # Set when post-drive settlement has been armed (idempotent).
     harvest_scheduled: bool = False
     # Drive posted ALL_COMPLETED / DRIVE_CANCELLED (终态对账前置条件).
     terminal_posted: bool = False
-    # 终态收敛路径：attached_inject | harvest | user_stop；清空前未收敛 → error 告警.
+    # True after ``DRIVE_CANCELLED`` was posted (survives inject consuming the event).
+    drive_cancelled: bool = False
+    # Why ``drive_task`` was cancelled (in-process; not snapshotted).
+    drive_cancel_reason: str | None = None
+    # 终态收敛路径：attached_inject | detached | user_stop；清空前未收敛 → error 告警.
     settled_via: str | None = None
     # Live RunPlan owned by the active drive — mid-coordination secondary
     # ``delegate`` appends workers here (same graph / same session).
@@ -200,14 +196,14 @@ class CoordinationSession(
     # Explicit user /stop cascaded cancel — release_turn_coordination must clear
     # (not detach) so the background drive does not outlive the stopped turn.
     user_stopped: bool = False
-    # Sticky local workspace channel dead (process-local; harvest fallback / A2).
+    # Sticky local workspace channel dead (process-local).
     workspace_channel_dead: bool = False
     # One-shot host content_delta for CHANNEL_DEAD_USER_VISIBLE already emitted.
     channel_dead_user_notice_emitted: bool = False
     # Sticky: code_execute/test_run family retired on exec-env hangs / probe fail.
     exec_env_dead: bool = False
     # Classified probe reason (``exec_env_no_interpreter`` / ``…_probe_timeout`` /
-    # ``…_spawn_denied``), so the harvest fallback repeats the same honest cause
+    # ``…_spawn_denied``), so CEO inject repeats the same honest cause
     # the live notice gave. None = unclassified (idle hang / unreadable probe).
     exec_env_dead_reason: str | None = None
     # One-shot host content_delta for EXEC_ENV_DEAD_USER_VISIBLE already emitted.
@@ -225,7 +221,7 @@ class CoordinationSession(
     _timeout_wind_down_entered: set[str] = field(default_factory=set, repr=False)
     # Hard-timeout force-cancel via cancel_ids (宽限耗尽 / 宽限墙钟)。不快照。
     _timeout_force_cancelled: set[str] = field(default_factory=set, repr=False)
-    # Dedupe escalation injections (live escalate + completion harvest + SCOPE boundary).
+    # Dedupe escalation injections (live escalate + completion inject + SCOPE boundary).
     _escalation_keys: set[str] = field(default_factory=set, repr=False)
     # D1: blocking escalate → CEO arbitration. run_id → live bridge metadata.
     pending_arbitrations: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -295,10 +291,10 @@ def resolve_coordination_session(
 def registered_coordination_for_conversation(
     conversation_id: str,
 ) -> CoordinationSession | None:
-    """Registry session for ``conversation_id``, including closed harvest-awaiting ones.
+    """Registry session for ``conversation_id`` (active or still settling).
 
     Mid-flight user routing still uses :func:`active_coordination_for_conversation`
-    (active only). Harvest adopt needs the closed-but-registered session.
+    (active only).
     """
     cid = (conversation_id or "").strip()
     if not cid:
@@ -313,23 +309,19 @@ def adopt_active_execution(
     conversation_id: str,
     *,
     event_sink: Any | None = None,
-    reopen_harvest: bool = False,
 ) -> CoordinationSession | None:
     """Re-attach the conversation's live execution to the calling turn (pillar B).
 
     Binds :data:`current_execution_id` to the registry session so the CEO wait path
     finds it even when this turn minted a different id. Sets ``turn_attached=True``
-    and optionally refreshes ``event_sink``. Closed harvest-awaiting sessions are
-    reopened only when ``reopen_harvest=True`` (system closing turn). Ordinary
-    user turns must not steal that session. Returns the adopted session or ``None``.
+    and optionally refreshes ``event_sink``. Closed sessions are not reopened —
+    there is no system closing turn. Returns the adopted session or ``None``.
     """
     session = registered_coordination_for_conversation(conversation_id)
     if session is None or session.user_stopped or session.soft_stop:
         return None
     if not session.active:
-        if not reopen_harvest:
-            return None
-        session.reopen_for_harvest()
+        return None
     current_execution_id.set(session.execution_id)
     session.turn_attached = True
     if event_sink is not None:
@@ -340,7 +332,6 @@ def adopt_active_execution(
         execution_id=session.execution_id,
         completed=len(session.completed_run_ids),
         total=session.total_workers,
-        harvest_closing=session.harvest_closing,
     )
     return session
 
@@ -435,7 +426,7 @@ def release_turn_coordination(
     Coordination lifecycle is decoupled from the chat turn — when a background
     drive is still running (typical cross-turn append / SSE disconnect), detach
     turn ownership and leave the registry entry for the drive's finally to
-    harvest+clear. Idle / already-closed sessions are cleared here as before.
+    settle+clear. Idle / already-closed sessions are cleared here as before.
 
     Explicit user /stop is different: :func:`cancel_coordination_on_user_stop`
     marks ``user_stopped`` and cancels the drive; this path then clears instead
@@ -506,19 +497,18 @@ def _release_turn_one(eid: str, session: CoordinationSession | None) -> None:
         )
         return
     # Drive finished (or never armed). Always detach so attach-grace can proceed.
-    # Inject ≠ 用户可见收口：CEO 可能已 end_turn 并留下「人已派出」气泡，
-    # 仍须 harvest 再出一条新消息。已在飞的 harvest 只交还附着、勿裸 clear。
+    # Already-armed settle only hands back attach; do not bare-clear.
     session.turn_attached = False
     if session.harvest_scheduled:
         return
     if (
         session.terminal_posted
         and not session.user_stopped
-        and session.settled_via != "harvest"
+        and session.settled_via != "detached"
         and (session.conversation_id or "").strip()
     ):
         logger.info(
-            "coordination.release_prefers_harvest",
+            "coordination.release_prefers_settle",
             execution_id=eid,
             completed=len(session.completed_run_ids),
             total=session.total_workers,
@@ -531,13 +521,13 @@ def _release_turn_one(eid: str, session: CoordinationSession | None) -> None:
 
 
 # After drive finally: wait this long for release_turn detach before
-# force-harvesting an *empty* slot. Covers fire-and-forget and the
+# force-settling an *empty* slot. Covers fire-and-forget and the
 # cross-turn append ContextVar miss (gather child wrote host eid; parent
 # teardown released the mint id → turn_attached stuck True). A still-live
 # occupant is not stale — keep waiting for it; do not stretch this grace
 # to "cover one LLM round". Inject does not cancel this wait.
-_HARVEST_ATTACH_GRACE_S = 5.0
-_HARVEST_ATTACH_POLL_S = 0.05
+_SETTLE_ATTACH_GRACE_S = 5.0
+_SETTLE_ATTACH_POLL_S = 0.05
 # After terminal_posted: bound ``await_live_detached_drive`` so sidecar/cloud
 # owners can finalize outbox even if the drive task never unwinds. Same order of
 # magnitude as attach grace; does not cancel the drive.
@@ -545,17 +535,14 @@ _AWAIT_DETACHED_DRIVE_GRACE_S = 5.0
 
 
 def finish_detached_coordination(session: CoordinationSession) -> None:
-    """Background drive finally: arm harvest for unsettled terminals (pillar C).
+    """Background drive finally: emit ``execution_completed`` and close (no new turn).
 
     ``turn_attached=True`` must **not** silently no-op. The arming turn may have
     fire-and-forget ``end_turn``'d without waiting, or turn teardown may have
     released a different ContextVar eid after cross-turn append — leaving this
     session flagged attached forever. Defer briefly so a still-live CEO turn can
-    finish (harvest defers while the slot is busy); then harvest unless the
-    attached turn already streamed a visible close. Grace expiry force-detaches
-    only when the conversation slot has no live occupant. Same-turn ``wait``
-    inject does **not** cancel harvest — inject is not a user-visible closing
-    appearance.
+    finish writing the current bubble; then settle. Grace expiry force-detaches
+    only when the conversation slot has no live occupant.
     """
     if session.user_stopped:
         if session.active:
@@ -565,16 +552,14 @@ def finish_detached_coordination(session: CoordinationSession) -> None:
             clear_active_coordination(session.execution_id)
         return
     # ask_user soft-stop cancels the drive on purpose; resume re-drives from the
-    # journal. Arming harvest here races mid-pause (attached grace + Task destroyed
-    # pending under xdist teardown) and can seal a fake closing turn.
+    # journal. Arming settle here races mid-pause (attached grace + Task destroyed
+    # pending under xdist teardown).
     if session.soft_stop:
+        return
+    if _schedule_settle_hold_if_hot_pending(session):
         return
     if session.harvest_scheduled:
         return
-    # all_completed_injected ≠ 可见收口。同回合 wait 吃到终态后 CEO 仍可能
-    # 留下等待气泡并 end_turn；清 session / 取消 harvest 会让用户再也看不到
-    # 第二条 CEO 消息。注入不在这里短路——跳过只发生在 ``_arm_harvest_now``，
-    # 且要求 ``attached_inject_visible_close`` 已为真。
     # Empty conversation_id: orphan / unit sessions sync-clear only when already
     # detached. turn_attached=True must keep attach-grace semantics (same as with
     # a cid) so same-turn CEO wait can inject — never sync-clear into a false
@@ -591,7 +576,7 @@ def finish_detached_coordination(session: CoordinationSession) -> None:
     session.harvest_scheduled = True
     if session.turn_attached:
         logger.info(
-            "coordination.harvest_armed_while_attached",
+            "coordination.settle_armed_while_attached",
             execution_id=session.execution_id,
             conversation_id=session.conversation_id or "",
             terminal_posted=session.terminal_posted,
@@ -599,39 +584,39 @@ def finish_detached_coordination(session: CoordinationSession) -> None:
             total=session.total_workers,
         )
         task = loop.create_task(
-            _run_harvest_after_attach_grace(session),
-            name=f"coord-harvest-grace-{session.execution_id[:8]}",
+            _run_settle_after_attach_grace(session),
+            name=f"coord-settle-grace-{session.execution_id[:8]}",
         )
-        _retain_harvest_task(session, task)
+        _retain_settle_task(session, task)
         return
-    _arm_harvest_now(session)
+    _arm_settle_now(session)
 
 
-_HARVEST_CANCEL_LOGGED = "_harvest_cancel_logged"
+_SETTLE_CANCEL_LOGGED = "_settle_cancel_logged"
 
 
-def _log_harvest_cancelled(session: CoordinationSession, task: asyncio.Task[Any]) -> None:
+def _log_settle_cancelled(session: CoordinationSession, task: asyncio.Task[Any]) -> None:
     """Emit at most one cancel event (3.13 may never enter the coroutine)."""
-    if getattr(task, _HARVEST_CANCEL_LOGGED, False):
+    if getattr(task, _SETTLE_CANCEL_LOGGED, False):
         return
-    setattr(task, _HARVEST_CANCEL_LOGGED, True)
+    setattr(task, _SETTLE_CANCEL_LOGGED, True)
     logger.warning(
-        "coordination.harvest_cancelled",
+        "coordination.settle_cancelled",
         execution_id=session.execution_id,
         conversation_id=session.conversation_id or "",
     )
 
 
-def _retain_harvest_task(
+def _retain_settle_task(
     session: CoordinationSession, task: asyncio.Task[Any]
 ) -> None:
     """Keep a strong ref until the task finishes (loop only holds weak refs)."""
-    session._harvest_tasks.add(task)
+    session._settle_tasks.add(task)
 
     def _on_done(done: asyncio.Task[Any]) -> None:
-        session._harvest_tasks.discard(done)
+        session._settle_tasks.discard(done)
         if done.cancelled():
-            _log_harvest_cancelled(session, done)
+            _log_settle_cancelled(session, done)
 
     task.add_done_callback(_on_done)
 
@@ -641,16 +626,111 @@ def attached_inject_closed_visibly(session: CoordinationSession) -> bool:
     return (
         session.settled_via == "attached_inject"
         and session.all_completed_injected
-        and not session.harvest_closing
         and session.attached_inject_visible_close
     )
 
 
-def _arm_harvest_now(session: CoordinationSession) -> None:
-    """Mark settled, emit execution_completed, schedule async closing turn."""
+_HOT_PENDING_HOLD_ARMED = "_hot_pending_hold_armed"
+
+
+def _schedule_settle_hold_if_hot_pending(session: CoordinationSession) -> bool:
+    """Defer settle while a user-side hot card is up. Session stays recoverable."""
+    from agentcore.runtime.interaction_orphan import holds_for_hot_user
+
+    if not holds_for_hot_user(session):
+        return False
+    if getattr(session, _HOT_PENDING_HOLD_ARMED, False):
+        session.harvest_scheduled = True
+        return True
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        logger.info(
+            "coordination.settle_held_hot_pending",
+            execution_id=session.execution_id,
+            conversation_id=session.conversation_id or "",
+            stage="finish_detached_no_loop",
+        )
+        return True
+    setattr(session, _HOT_PENDING_HOLD_ARMED, True)
+    session.harvest_scheduled = True
+    logger.info(
+        "coordination.settle_held_hot_pending",
+        execution_id=session.execution_id,
+        conversation_id=session.conversation_id or "",
+        stage="finish_detached",
+    )
+    task = loop.create_task(
+        _hold_settle_until_hot_pending_clears(session),
+        name=f"coord-settle-hold-{session.execution_id[:8]}",
+    )
+    _retain_settle_task(session, task)
+    return True
+
+
+async def _hold_settle_until_hot_pending_clears(session: CoordinationSession) -> None:
+    """Resume settle after the user card clears, or user_stop close."""
+    from agentcore.runtime.interaction_orphan import (
+        holds_for_hot_user,
+        wait_hot_user_pending_change,
+    )
+
+    cid = session.conversation_id or ""
+    try:
+        while holds_for_hot_user(session) and not session.user_stopped:
+            await wait_hot_user_pending_change(cid, timeout=1.0)
+        if session.user_stopped:
+            setattr(session, _HOT_PENDING_HOLD_ARMED, False)
+            session.harvest_scheduled = False
+            if session.active:
+                session.close()
+            current = _sessions.get(session.execution_id)
+            if current is session:
+                clear_active_coordination(session.execution_id)
+            return
+        if session.soft_stop:
+            setattr(session, _HOT_PENDING_HOLD_ARMED, False)
+            session.harvest_scheduled = False
+            return
+        if _drive_live(session):
+            setattr(session, _HOT_PENDING_HOLD_ARMED, False)
+            session.harvest_scheduled = False
+            return
+        # Pending cleared but members still in flight (just allowed): wait, do
+        # not settle/cancel the newly unblocked workers.
+        while session.running_workers() and not session.user_stopped:
+            await asyncio.sleep(0.2)
+            if _drive_live(session):
+                setattr(session, _HOT_PENDING_HOLD_ARMED, False)
+                session.harvest_scheduled = False
+                return
+        setattr(session, _HOT_PENDING_HOLD_ARMED, False)
+        session.harvest_scheduled = False
+        if session.user_stopped:
+            if session.active:
+                session.close()
+            current = _sessions.get(session.execution_id)
+            if current is session:
+                clear_active_coordination(session.execution_id)
+            return
+        if session.soft_stop:
+            return
+        if _drive_live(session):
+            return
+        finish_detached_coordination(session)
+    except asyncio.CancelledError:
+        setattr(session, _HOT_PENDING_HOLD_ARMED, False)
+        session.harvest_scheduled = False
+        raise
+
+
+def _arm_settle_now(session: CoordinationSession) -> None:
+    """Mark settled, emit execution_completed, schedule async notify+close."""
+    if _schedule_settle_hold_if_hot_pending(session):
+        return
     if attached_inject_closed_visibly(session):
         logger.info(
-            "coordination.harvest_skipped_attached_visible_close",
+            "coordination.settle_skipped_visible_close",
             execution_id=session.execution_id,
             conversation_id=session.conversation_id or "",
             completed=len(session.completed_run_ids),
@@ -662,11 +742,11 @@ def _arm_harvest_now(session: CoordinationSession) -> None:
         emit_execution_completed(session)
         _close_detached_session(session)
         return
-    session.mark_settled("harvest")
-    # Emit *before* scheduling the async harvest so owners that
+    if session.settled_via != "attached_inject":
+        session.mark_settled("detached")
+    # Emit *before* scheduling the async settle so owners that
     # ``await_live_detached_drive`` still have the turn sink open and can push
-    # ``execution_completed`` live (and into outbox before READY). The closing
-    # turn itself stays async in ``_run_harvest``.
+    # ``execution_completed`` live (and into outbox before READY).
     from agentcore.runtime.coordination.harvest import emit_execution_completed
 
     emit_execution_completed(session)
@@ -676,17 +756,17 @@ def _arm_harvest_now(session: CoordinationSession) -> None:
         _close_detached_session(session)
         return
     task = loop.create_task(
-        _run_harvest(session),
-        name=f"coord-harvest-{session.execution_id[:8]}",
+        _run_settle(session),
+        name=f"coord-settle-{session.execution_id[:8]}",
     )
-    _retain_harvest_task(session, task)
+    _retain_settle_task(session, task)
 
 
 def _conversation_slot_has_live_occupant(conversation_id: str) -> bool:
     """True when ``turn_runs`` or sidecar still holds a live turn for this conversation.
 
-    Stale attach is ``turn_attached`` with an empty slot. Occupancy matches
-    ``harvest._wait_slot_or_backoff`` — do not inspect host prose.
+    Stale attach is ``turn_attached`` with an empty slot. Occupancy is
+    ``turn_runs`` / sidecar live task — do not inspect host prose.
     """
     cid = (conversation_id or "").strip()
     if not cid:
@@ -705,17 +785,16 @@ def _conversation_slot_has_live_occupant(conversation_id: str) -> bool:
     return live is not None and not live.done()
 
 
-async def _run_harvest_after_attach_grace(session: CoordinationSession) -> None:
-    """Wait for detach; force-harvest only empty-slot stale attach.
+async def _run_settle_after_attach_grace(session: CoordinationSession) -> None:
+    """Wait for detach; force-settle only empty-slot stale attach.
 
-    ``all_completed_injected`` is ignored here: the live turn may still be the
-    waiting bubble. After detach (or stale-attach force), ``_arm_harvest_now``
-    skips only when ``attached_inject_visible_close`` already happened.
+    The live turn may still be the waiting/writing bubble. After detach (or
+    stale-attach force), ``_arm_settle_now`` emits ``execution_completed``.
     Grace expiry with a live occupant keeps waiting — the occupant is still
     the attached turn, not a stuck flag.
     """
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + _HARVEST_ATTACH_GRACE_S
+    deadline = loop.time() + _SETTLE_ATTACH_GRACE_S
     logged_live_wait = False
     while True:
         if session.user_stopped:
@@ -731,7 +810,7 @@ async def _run_harvest_after_attach_grace(session: CoordinationSession) -> None:
             return
         if not session.turn_attached:
             logger.info(
-                "coordination.harvest_attach_cleared",
+                "coordination.settle_attach_cleared",
                 execution_id=session.execution_id,
             )
             break
@@ -740,28 +819,28 @@ async def _run_harvest_after_attach_grace(session: CoordinationSession) -> None:
                 if not logged_live_wait:
                     logged_live_wait = True
                     logger.info(
-                        "coordination.harvest_attach_waiting_live_occupant",
+                        "coordination.settle_attach_waiting_live_occupant",
                         execution_id=session.execution_id,
                         conversation_id=session.conversation_id or "",
-                        grace_s=_HARVEST_ATTACH_GRACE_S,
+                        grace_s=_SETTLE_ATTACH_GRACE_S,
                         terminal_posted=session.terminal_posted,
                     )
             else:
                 logger.warning(
-                    "coordination.harvest_stale_attach_forcing",
+                    "coordination.settle_stale_attach_forcing",
                     execution_id=session.execution_id,
                     conversation_id=session.conversation_id or "",
-                    grace_s=_HARVEST_ATTACH_GRACE_S,
+                    grace_s=_SETTLE_ATTACH_GRACE_S,
                     terminal_posted=session.terminal_posted,
                 )
                 session.turn_attached = False
                 break
-        await asyncio.sleep(_HARVEST_ATTACH_POLL_S)
+        await asyncio.sleep(_SETTLE_ATTACH_POLL_S)
 
     if session.user_stopped or session.soft_stop:
         session.harvest_scheduled = False
         return
-    _arm_harvest_now(session)
+    _arm_settle_now(session)
 
 
 def _close_detached_session(session: CoordinationSession) -> None:
@@ -779,26 +858,24 @@ def _close_detached_session(session: CoordinationSession) -> None:
         )
 
 
-async def _run_harvest(session: CoordinationSession) -> None:
+async def _run_settle(session: CoordinationSession) -> None:
     try:
-        from agentcore.runtime.coordination.harvest import harvest_detached_execution
+        from agentcore.runtime.coordination.harvest import settle_detached_execution
 
-        await harvest_detached_execution(session)
+        await settle_detached_execution(session)
     except asyncio.CancelledError:
         # BaseException since 3.9: ``except Exception`` does not catch this.
         # 3.13 may also cancel a never-started task without entering this body;
         # the retain done-callback logs that case.
         task = asyncio.current_task()
         if task is not None:
-            _log_harvest_cancelled(session, task)
+            _log_settle_cancelled(session, task)
         raise
-    except Exception:  # noqa: BLE001 — harvest must never leak into drive task
+    except Exception:  # noqa: BLE001 — settle must never leak into drive task
         logger.exception(
-            "coordination.harvest_failed",
+            "coordination.settle_failed",
             execution_id=session.execution_id,
         )
-        # Keep registry on unexpected failure so harvest remains observable /
-        # re-adoptable — do not silently unregister without a closing turn.
 
 
 def active_coordination_for_conversation(
@@ -910,7 +987,7 @@ async def await_live_detached_drive(conversation_id: str) -> bool:
     live drive so finally-block terminal frames are not dropped by an early
     sink close. Drive-task cancel/failure does not raise; caller cancellation does.
     """
-    # Registered (not only ``active``): harvest may have closed the session
+    # Registered (not only ``active``): settle may have closed the session
     # after the drive finished, but post-detach journal 对账 still needs the
     # host_fact_log that remains on the registry object.
     session = registered_coordination_for_conversation(conversation_id)
@@ -926,7 +1003,7 @@ async def await_live_detached_drive(conversation_id: str) -> bool:
     # propagates so turn cancel paths close the sink immediately.
     # Already-done drives still flush + journal-terminal 对账: CEO persist can
     # race the last workers, so this is the first place that sees post-detach
-    # host_fact_log (harvest's settled_via stamp cannot).
+    # host_fact_log (``settled_via`` stamp cannot).
     if not task.done():
         if session.terminal_posted:
             done, pending = await asyncio.wait(
@@ -1013,9 +1090,9 @@ def cancel_coordination_on_user_stop(
     running = list(session.running_workers())
     for run_id, _role in running:
         session.request_cancel(run_id)
-    task = session.drive_task
-    if task is not None and not task.done():
-        task.cancel()
+    from agentcore.runtime.coordination.drive_cancel import cancel_drive_task
+
+    cancel_drive_task(session, "user_stop")
     logger.info(
         "coordination.user_stop_cancelled",
         execution_id=session.execution_id,
@@ -1023,5 +1100,6 @@ def cancel_coordination_on_user_stop(
         cancelled_workers=len(running),
         completed=len(session.completed_run_ids),
         total=session.total_workers,
+        reason="user_stop",
     )
     return True

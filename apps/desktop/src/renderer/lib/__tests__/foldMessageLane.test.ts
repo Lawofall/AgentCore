@@ -382,7 +382,10 @@ describe("ensureTimelineMarkersFromJournal", () => {
     const process = ensureTimelineMarkersFromJournal(
       [
         { kind: "content", text: "我来安排团队。" },
-        { kind: "team_preview", checkpoint_id: "tp1" },
+        {
+          kind: "team_preview",
+          checkpoint_id: "tp1",
+        } as unknown as ProcessStep,
         { kind: "content", text: "终稿。" },
       ],
       [

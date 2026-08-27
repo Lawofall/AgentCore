@@ -19,6 +19,7 @@ from agentcore.memory import assemble_turn_rules
 from agentcore.runtime.context import (
     FolderCatalogEntry,
     build_workspace_context,
+    catalog_label_for,
     collect_outlet_inventory,
     detect_workspace_git,
     load_folder_catalog,
@@ -28,7 +29,7 @@ from agentcore.runtime.costing import RunCost
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.runtime.resolve.prepare import (
-    _build_attachment_context,
+    _build_attachment_prompt,
     _wire_worker_conversation_log_tools,
     merge_attachment_and_mention_context,
 )
@@ -75,6 +76,7 @@ class PreparedTurn:
     base_tool_context: ToolContext
     vision_cost_sink: list[RunCost]
     attachment_context: str
+    user_message: str
     native_image_parts: list[dict]
     folder_catalog: list[FolderCatalogEntry]
     bound_execution_id: str
@@ -98,6 +100,7 @@ async def prepare_fresh_turn(
     folder_binding_injected: bool = False,
     folder_local_root_id: str | None = None,
     folder_local_subpath: str | None = None,
+    user_message: str = "",
 ) -> PreparedTurn:
     """Build the stable base prompt, worker tools, channels, and tool context."""
     # 记忆作用域 (§5.2): the always-injected core spans global 偏好.md + 画像.md and — when
@@ -125,7 +128,7 @@ async def prepare_fresh_turn(
     # evicts always memory. Empty when the user has no folders.
     folder_catalog = await _timed_phase(
         "folder_catalog",
-        load_folder_catalog(memory_store, user_id),
+        load_folder_catalog(memory_store, user_id, current_folder_id=folder_id),
     )
     # Clean, stable base (base + date + workspace facts + memory): NO attachments,
     # NO CEO hints. This is the cacheable prefix shared by the CEO and reused
@@ -199,6 +202,9 @@ async def prepare_fresh_turn(
         mcp_label=mcp_label,
         git_fact=git_fact,
         outlet_inventory=outlet_inventory,
+        desk_folder_id=folder_id,
+        desk_folder_label=catalog_label_for(folder_catalog, folder_id),
+        desk_is_birth=True,
     )
     system_prompt = assemble_system_prompt(
         rules_markdown=rules_markdown,
@@ -228,9 +234,9 @@ async def prepare_fresh_turn(
         languages=exec_languages if backend.location == "local" else None,
         desktop_online=desktop_online,
     )
-    attachment_context = await _timed_phase(
+    attachment_prompt = await _timed_phase(
         "attachments",
-        _build_attachment_context(
+        _build_attachment_prompt(
             attachments,
             user_id=user_id,
             host_conversation_id=conversation_id,
@@ -243,8 +249,21 @@ async def prepare_fresh_turn(
         ),
     )
     attachment_context = merge_attachment_and_mention_context(
-        attachment_context, agent_mentions
+        attachment_prompt.envelope, agent_mentions
     )
+    attachment_slim = merge_attachment_and_mention_context(
+        attachment_prompt.slim_envelope, agent_mentions
+    )
+    from agentcore.conversation.inline_body import apply_inline_body
+
+    user_message, attachment_context = apply_inline_body(
+        user_message,
+        attachment_prompt.file_blocks,
+        agent_mentions,
+        attachment_context,
+        attachment_slim,
+    )
+    attachment_context = attachment_context or ""
     # Workers hold no CEO hints; their base is the shared base + the same
     # ``<按需目录>`` (name＋摘要) + workspace facts (after the directory, same
     # SectionOrder as the CEO) + the same attachment block at the end.
@@ -402,6 +421,7 @@ async def prepare_fresh_turn(
         base_tool_context=base_tool_context,
         vision_cost_sink=vision_cost_sink,
         attachment_context=attachment_context,
+        user_message=user_message,
         native_image_parts=native_image_parts,
         folder_catalog=folder_catalog,
         bound_execution_id=bound_execution_id,

@@ -27,7 +27,6 @@ from agentcore.runtime.suspension import (
     AskUserSuspension,
     PlanReviewSuspension,
     SuspensionKind,
-    TeamPreviewSuspension,
     find_tool_call_id,
     suspension_from_json,
 )
@@ -252,55 +251,27 @@ def test_ask_user_suspension_round_trips():
     assert restored.journal == []
 
 
-def _minimal_team_preview(**overrides) -> TeamPreviewSuspension:
-    base: dict = {
-        "message_id": "m1",
-        "conversation_id": "c1",
-        "user_id": "u1",
-        "captain_run_id": "cap1",
-        "checkpoint_id": "ck1",
-        "tool_call_id": "call_del_1",
-        "base_system_prompt": "sys",
-        "user_message": "组个团队",
-        "plan": RunPlan(),
-        "workers": [{"run_id": "w1", "role": "研究员", "task": "调研"}],
-    }
-    base.update(overrides)
-    return TeamPreviewSuspension(**base)
+def test_leftover_team_preview_from_json_is_gone():
+    """存量 kind=team_preview 帧：无 codec、from_json → 410。"""
+    from agentcore.core.errors import GoneError
+    from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
 
-
-def test_team_preview_frame_round_trips_batch_coordination():
-    """开工卡帧携带批次协作参数（coordination / team_brief / seed_notes）。
-
-    挂起点在 setup_note_wall 之前，这三样只活在 DelegateTool 实例上；不落帧则耐久恢复
-    （全新工具实例，_coordination 缺省 none）后 wall 批降级 → worker 被剥便签三件套、
-    CEO 预贴便签永久丢失（2026-07-20 P2 手驱真跑抓获的真 bug）。
-    """
-    frame = _minimal_team_preview(
-        coordination="wall",
-        team_brief="统一用中文交付",
-        seed_notes=[{"kind": "heads_up", "text": "接口用 REST"}],
-    )
-    restored = suspension_from_json(frame.to_json())
-    assert isinstance(restored, TeamPreviewSuspension)
-    assert restored.coordination == "wall"
-    assert restored.team_brief == "统一用中文交付"
-    assert restored.seed_notes == [{"kind": "heads_up", "text": "接口用 REST"}]
-
-
-def test_team_preview_frame_defaults_stay_compact_and_legacy_safe():
-    # 缺省批（none / 无简报 / 无种子）不写键 —— 帧紧凑，且与旧帧字节口径一致。
-    frame = _minimal_team_preview()
-    data = frame.to_json()
-    assert "coordination" not in data
-    assert "team_brief" not in data
-    assert "seed_notes" not in data
-    # 旧帧（无这些键）读回走缺省 —— 行为与修复前逐字节等价。
-    restored = suspension_from_json(data)
-    assert isinstance(restored, TeamPreviewSuspension)
-    assert restored.coordination == "none"
-    assert restored.team_brief is None
-    assert restored.seed_notes == []
+    with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
+        suspension_from_json(
+            {
+                "kind": "team_preview",
+                "message_id": "m1",
+                "conversation_id": "c1",
+                "user_id": "u1",
+                "captain_run_id": "cap1",
+                "checkpoint_id": "ck1",
+                "tool_call_id": "call_del_1",
+                "base_system_prompt": "sys",
+                "user_message": "组个团队",
+                "coordination": "wall",
+                "team_brief": "统一用中文交付",
+            }
+        )
 
 
 def test_plan_review_frame_round_trips_batch_coordination():

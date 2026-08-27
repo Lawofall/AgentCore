@@ -12,6 +12,7 @@ opening a folder in an editor (双模式工作区 §5.4). Write / heavy work sta
 
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 from typing import Any
 
@@ -23,6 +24,7 @@ from agentcore.runtime.delegate.target_desktop import (
     load_target_folder_binding,
 )
 from agentcore.runtime.events import EventSink
+from agentcore.tools.builtin.file_ops.listing import folder_dir_leftover_error
 from agentcore.tools.builtin.file_ops.read import FileListTool, FileReadTool
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -41,7 +43,7 @@ READ_FOLDER_FILE_TOOL_NAME = "read_folder_file"
 # inject this before delegating so cross-desk sampling cannot inherit that cap.
 _READ_FOLDER_SAMPLE_LINES = 500
 
-_MISSING_FOLDER_ID = "缺少 folder_id（目标文件夹 id；先 list_folders / resolve_folder）。"
+_MISSING_FOLDER_ID = "缺少 folder_id（目标文件夹 id；见文件夹清单行内 id / resolve_folder）。"
 _DENIED_MSG = (
     "目标文件夹 `{folder_id}` 不存在或无权访问；请重新列/解析文件夹后再读。"
 )
@@ -168,23 +170,23 @@ class ListFolderDirTool:
         return ToolSchema(
             name=LIST_FOLDER_DIR_TOOL_NAME,
             description=(
-                "只读跨文件夹：列出【某个已有文件夹】里某目录下的文件/子目录"
-                "（参数含 folder_id）。范围 = 该文件夹**及其子文件夹**（真嵌套，"
-                "像编辑器打开一个文件夹）。"
-                "按次指定目标，不改本会话 conversation.folder_id / 出生桌，不写目标桌记忆。"
-                "通用 file_list 只绑出生桌。"
-                "用途：派单前轻量认桌/抽样；成规模跨文件夹摸底/推进请同次 "
-                "delegate 各填 target_folder_id（队员坐那个文件夹用 file_*；"
-                "本工具队员拿不到）。"
-                "folder_id 来自 list_folders / resolve_folder / create_folder。"
-                "失败语义同目标桌绑定：无权/不存在、库不可达、本地通道问题。"
+                "只读跨文件夹：列出【另一张已有桌】某目录当前层（须 folder_id）。"
+                "当前出生桌用 file_list（无 folder_id）。范围=该文件夹及其子文件夹。"
+                "按次指定，不改本会话出生桌，不写目标桌记忆。"
+                "派单前轻量认桌/抽样；成规模跨桌摸底请 delegate 填 target_folder_id"
+                "（队员拿不到本工具）。"
+                "folder_id 来自文件夹清单行内 id / resolve_folder / create_folder。"
+                "HOW→consult(team_cross_folder)。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "folder_id": {
                         "type": "string",
-                        "description": "目标文件夹 id（账号名册已登记）。",
+                        "description": (
+                            "目标文件夹 id（文件夹清单行内 id / resolve_folder / "
+                            "create_folder）。当前出生桌勿用本工具。"
+                        ),
                     },
                     "directory": {
                         "type": "string",
@@ -194,26 +196,6 @@ class ListFolderDirTool:
                         ),
                         "default": ".",
                     },
-                    "pattern": {
-                        "type": "string",
-                        "description": (
-                            "过滤 glob（如 '*.py'、'*.{ts,tsx}'）。"
-                            "非递归时只匹配当前层文件名。"
-                        ),
-                        "default": "*",
-                    },
-                    "recursive": {
-                        "type": "boolean",
-                        "description": "递归列出子目录（树形）。默认 false。",
-                        "default": False,
-                    },
-                    "max_depth": {
-                        "type": "integer",
-                        "description": "递归最大深度（仅 recursive=true）。默认 3，上限 8。",
-                        "default": 3,
-                        "minimum": 1,
-                        "maximum": 8,
-                    },
                 },
                 "required": ["folder_id"],
             },
@@ -222,6 +204,10 @@ class ListFolderDirTool:
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+        start = time.monotonic()
+        leftover = folder_dir_leftover_error(arguments, start)
+        if leftover is not None:
+            return leftover
         folder_id = str(arguments.get("folder_id") or "")
         target_ctx, err = await _open_target_folder(folder_id=folder_id, context=context)
         if err is not None:
@@ -244,22 +230,24 @@ class ReadFolderFileTool:
         return ToolSchema(
             name=READ_FOLDER_FILE_TOOL_NAME,
             description=(
-                "只读跨文件夹：读取【某个已有文件夹】内某文件（参数含 folder_id + path）。"
-                "范围 = 该文件夹**及其子文件夹**。"
-                "按次指定目标，不改本会话归属/出生桌，不写目标桌记忆。"
-                "通用 file_read 只绑出生桌。"
-                "用途：派单前轻量认桌/抽样；成规模跨文件夹摸底/推进请同次 "
-                "delegate 各填 target_folder_id（队员坐那个文件夹用 file_*；"
-                "本工具队员拿不到）。"
-                "支持 offset/limit 行窗；Office/PDF 透明抽文本规则同 file_read。"
-                "失败语义同目标桌绑定：无权/不存在、库不可达、本地通道问题。"
+                "只读跨文件夹：读取【另一张已有桌】内某文件（folder_id + path）。"
+                "当前出生桌用 file_read。范围=该文件夹及其子文件夹。"
+                "按次指定，不改本会话出生桌，不写目标桌记忆。"
+                "派单前轻量认桌/抽样；成规模跨桌摸底请 delegate 填 target_folder_id"
+                "（队员拿不到本工具）。"
+                "folder_id 来自文件夹清单行内 id / resolve_folder / create_folder。"
+                "支持 offset/limit 行窗；Office/PDF 抽文本同 file_read。"
+                "HOW→consult(team_cross_folder)。"
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "folder_id": {
                         "type": "string",
-                        "description": "目标文件夹 id（账号名册已登记）。",
+                        "description": (
+                            "目标文件夹 id（文件夹清单行内 id / resolve_folder / "
+                            "create_folder）。当前出生桌勿用本工具。"
+                        ),
                     },
                     "path": {
                         "type": "string",

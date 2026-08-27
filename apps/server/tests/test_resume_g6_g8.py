@@ -78,7 +78,7 @@ def test_compose_salvage_empty_live_keeps_pre_pause():
 
 
 def test_compose_salvage_drops_dispatch_kickoff_when_live():
-    kickoff = "方向：派团队 — 用户明示 research_report，直接开委派。"
+    kickoff = "方向：派团队 — 用户明示 cite_write_review，直接开委派。"
     live = "修订说明：已按反馈收口文件路径。"
     assert compose_salvage_content(live, [_paused_entry(kickoff)]) == live
 
@@ -287,7 +287,7 @@ def test_arm_content_reset_skips_dispatch_kickoff_preamble():
     sink = EventSink(message_id="m1", conversation_id="c1")
     arm_content_reset_reinjection(
         sink,
-        "方向：派团队 — 用户明示 research_report，直接开委派。",
+        "方向：派团队 — 用户明示 cite_write_review，直接开委派。",
     )
     assert sink._content_reset_reinjection is None
 

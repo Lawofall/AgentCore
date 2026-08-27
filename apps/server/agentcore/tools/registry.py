@@ -38,6 +38,8 @@ _KNOWN_TOOL_ALIASES: dict[str, str] = {
     "shell": "terminal",
     "ls": "file_list",
     "list_dir": "file_list",
+    "glob_file_search": "glob",
+    "find": "glob",
     "delete": "file_delete",
     "rm": "file_delete",
     "mv": "file_move",

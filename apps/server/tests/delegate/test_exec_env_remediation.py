@@ -49,7 +49,7 @@ def test_cloud_delivery_action_forbids_reimport():
 
 def test_local_delivery_action_may_suggest_import():
     desc = exec_env_remediation_zh(backend=LocalBackend(), kind="delivery_action")
-    assert "导入到云" in desc or "连接 Git" in desc
+    assert "导入到云" in desc
 
 
 def test_cloud_capability_warning_forbids_reimport():

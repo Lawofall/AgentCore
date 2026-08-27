@@ -514,11 +514,12 @@ Three kinds of notes (route each fact via the "file" field; route its scope via 
     "AI曾认为X，实际应为Y". ALWAYS global (scope "global"); corrections apply across folders.
   - 项目约束: hard constraints the user declares for THIS folder — "不能用X",
     "必须兼容Y", "禁止Z". ALWAYS folder scope when a folder exists (scope "folder").
-- TOPIC notes (file "主题/<slug>.md"): knowledge ABOUT A TOPIC OR A FOLDER — what was tried
-  and why it failed (经验教训), how to do something here (操作流程/部署流程), or durable
-  topic/folder facts. Use a short descriptive slug, e.g. "主题/部署流程.md". Add to an
-  EXISTING topic when one fits (see the lists below); only start a new one for a genuinely
-  new topic. "section" is optional for topic notes.
+- TOPIC notes (file "主题/<slug>.md"): knowledge ABOUT A TOPIC OR A FOLDER that will
+  still change later action (以后行动) — durable facts, and one-line vetoes
+  (方案 + 为何否). Never a process diary or completed steps; do not write 经验教训
+  or 操作流程 as a construction sequence. Use a short descriptive slug, e.g.
+  "主题/部署流程.md". Add to an EXISTING topic when one fits (see the lists below);
+  only start a new one for a genuinely new topic. "section" is optional for topic notes.
 
 SCOPE routing (only when there IS a current folder; otherwise everything is global):
 - "scope": "global" — true of the user everywhere (e.g. a personal fact, cross-folder habit).
@@ -565,6 +566,8 @@ Rules:
   - 已有记忆：只记持久、高价值知识，忽略一次性任务细节和短暂上下文。不要为随口
     一提就新建主题笔记——优先补充已有笔记，仅当话题会反复出现时才新建。
   - 任务细节本身不写，但其中暴露的工具链/语言/工作习惯要提取写入。
+- 主题笔记只记仍会改变以后行动的事实，以及一行否决（方案+为何否）。禁止过程日记、
+  已完成步骤；不要把经验教训/操作流程写成施工顺序。
 - PRIVACY: do not record sensitive personal data — government IDs, passwords/keys,
   precise home address, payment details, health, religion, sexual orientation,
   political affiliation — unless the user EXPLICITLY asks you to remember it.

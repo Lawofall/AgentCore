@@ -1,9 +1,10 @@
 """Built-in tool: grep — regex search over workspace file CONTENTS.
 
-Complements the rest of the file family: ``file_list`` finds files by NAME and
-``file_read`` opens one file, while ``grep`` finds WHERE a string / symbol /
-pattern appears across many files, returning ripgrep-style ``path:line: text``
-hits the model can then open with ``file_read``.
+Complements the rest of the file family: ``glob`` finds files by NAME,
+``file_list`` lists one known-directory layer, and ``file_read`` opens one
+file, while ``grep`` finds WHERE a string / symbol / pattern appears across
+many files, returning ripgrep-style ``path:line: text`` hits the model can
+then open with ``file_read``.
 
 Thin shell over ``ToolContext.backend``: this tool builds a ``GrepQuery`` and
 renders the bounded ``GrepResult`` the backend returns. Search itself is
@@ -66,7 +67,7 @@ class GrepTool:
                 "返回 `path:line: text`，命中后单文件默认 file_read 整读；"
                 "仅页脚已截断或已有行号时开窗，禁止整目录通读。"
                 "概念/意图定位请用 code_search——两工具并存。"
-                "按【文件名】找文件用 `file_list`（传 pattern，勿先猜目录）。"
+                "按【文件名】找文件用 `glob`（勿先猜目录）。"
                 "不确定位置时省略 path（默认整仓）；禁止猜测 src/、@scope、app/。"
                 "仅本回合已证实存在的目录或文件才填 path。"
                 "跳过二进制与噪音目录。"
@@ -281,7 +282,7 @@ def _empty_result_note(*, pattern: str, rel_dir: str, glob: str) -> str:
         "可执行下一步：① 不确定位置则省略 path 从根再搜，勿猜 src/@scope；"
         "② 换更短/同义的 pattern，或开 case_insensitive；"
         "③ 若是概念/意图而非确切字符串，改用 code_search；"
-        "④ 按文件名找用 file_list(pattern)。"
+        "④ 按文件名找用 glob。"
     )
     return f"本次 grep 未匹配 /{pattern}/{scope}{glob_note}。不要据此断定代码不存在。{tips}"
 

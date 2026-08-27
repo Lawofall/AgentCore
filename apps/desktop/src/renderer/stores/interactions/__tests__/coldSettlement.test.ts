@@ -19,7 +19,7 @@ describe("coldSettlement criterion", () => {
       checkpointIdIfColdResolved(leftoverResolved, {
         checkpoint_id: "tp1",
       }),
-    ).toBe("tp1");
+    ).toBeNull();
     expect(
       checkpointIdIfColdResolved("plan_review_resolved", {
         checkpoint_id: "pr1",
@@ -43,7 +43,7 @@ describe("coldSettlement criterion", () => {
       { type: "plan_review_resolved", payload: { checkpoint_id: "pr1" } },
       { type: "approval_resolved", payload: { approval_id: "a1" } },
     ]);
-    expect([...ids].sort()).toEqual(["pr1", "tp1"]);
+    expect([...ids].sort()).toEqual(["pr1"]);
   });
 
   it("collects journal events across messages", () => {

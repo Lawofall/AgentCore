@@ -29,7 +29,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const TIMELINE_KINDS: InteractionKind[] = [
   "ask_user",
   "plan_review",
-  "team_preview",
   "escalation",
 ];
 

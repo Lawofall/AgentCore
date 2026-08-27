@@ -351,7 +351,7 @@ export function execRuntime(
  * cross-turn append).
  *
  * Captain is excluded: its early `run_started` is often dropped (no plan yet), so
- * a still-pending captain after `end_turn` must not pin「正在生成汇总」forever when
+ * a still-pending captain after `end_turn` must not pin「正在收尾」forever when
  * every worker is already terminal. Extra append-turn captains are also ignored.
  * No plan or no worker runs → false (nothing in flight to wait on, so message_end
  * 照常收口). Sibling of the private `runsAllSettled` reconcile check — NOT its

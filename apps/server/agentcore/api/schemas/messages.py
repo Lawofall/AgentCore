@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agentcore.api.schemas.usage import CostBreakdown, UsageBreakdown
 from agentcore.llm.pricing import project_cache_miss_tokens
@@ -119,9 +119,15 @@ class RegenerateMessageRequest(BaseModel):
     user message is edited in place first (edit-and-resend); otherwise the stored
     text is reused as-is (plain regenerate). Either way, every message after that
     user turn is dropped and the assistant reply is produced anew.
+
+    ``attachments`` / ``agent_mentions``: omit to keep stored materials; send a
+    list (including empty) to replace them on edit-and-resend. Dropped chips must
+    not stay on the row.
     """
 
     content: str | None = Field(None, min_length=1, max_length=32000)
+    attachments: list[MessageAttachment] | None = None
+    agent_mentions: list[AgentMention] | None = None
 
 
 class SetMessageFeedbackRequest(BaseModel):
@@ -404,28 +410,6 @@ class AcceptRunOutcomeResponse(BaseModel):
     action: str = "run.outcome_accepted"
 
 
-class WriteCapabilityOverride(BaseModel):
-    """Leftover ``team_preview`` continue field (开工卡已退役).
-
-    New cards are not emitted; leftover resume is 410 and never applies this.
-    Shape kept so old clients sending extra keys do not 422 on ask / plan_review.
-    """
-
-    run_id: str = Field(..., min_length=1, max_length=128)
-    capability: Literal["text_only"]
-
-
-class ModelOverride(BaseModel):
-    """Leftover debate ``team_preview`` continue field (开工卡已退役).
-
-    New cards are not emitted; leftover resume is 410. Shape kept for old clients.
-    """
-
-    model: str = Field(..., min_length=1, max_length=256)
-    origin: Literal["platform", "byok"] | None = None
-    provider_id: str | None = Field(None, max_length=128)
-
-
 class ResumeTurnRequest(BaseModel):
     """Body for ``POST .../messages/{message_id}/resume`` (结构化挂起 2b).
 
@@ -442,10 +426,12 @@ class ResumeTurnRequest(BaseModel):
     ``timeout`` is never sent by a client.
 
     Leftover ``team_preview`` resume is 410 Gone (new cards are not emitted).
-    ``excluded_run_ids`` / ``write_capability_overrides`` / ``model_overrides``
-    are ignored on ask / plan_review / stop (no 422). Hot-path
-    ``ResolveInteraction`` is not extended.
+    Extra leftover kickoff keys from old clients (``excluded_run_ids`` /
+    ``write_capability_overrides`` / ``model_overrides``) are not in this schema
+    and 422. Hot-path ``ResolveInteraction`` is not extended.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     decision: CheckpointDecision
     note: str = Field(
@@ -457,14 +443,6 @@ class ResumeTurnRequest(BaseModel):
         ),
     )
     selected: list[str] = Field(default_factory=list, max_length=50)
-    excluded_run_ids: list[str] = Field(default_factory=list, max_length=50)
-    write_capability_overrides: list[WriteCapabilityOverride] = Field(
-        default_factory=list, max_length=50
-    )
-    model_overrides: dict[str, ModelOverride] = Field(
-        default_factory=dict,
-        description="run_id → {model, origin?, provider_id?}；空/缺键=不改该节点。",
-    )
 
     @model_validator(mode="after")
     def _adjust_requires_note(self) -> "ResumeTurnRequest":
@@ -500,11 +478,10 @@ class PausedTurnSummary(BaseModel):
     ``message_id`` is both the pause key and the id the resumed assistant message will
     reuse, so an optimistic bubble reconciles cleanly.
 
-    Leftover ``team_preview`` (开工卡) frames still serialize here if hung in the DB,
-    but resume is 410 Gone and the client must not offer continue / cancel.
+    Leftover ``team_preview`` (开工卡) frames are skipped on list (not serialized);
+    resume of a leftover frame is 410 Gone.
     plan_review carries ``steps`` (the reviewed checkpoint nodes) + ``pending`` (the
-    gated downstream); leftover team_preview may still carry ``primitive`` /
-    ``workers`` / debate fields; ask_user carries the unified card payload
+    gated downstream); ask_user carries the unified card payload
     ``question`` (the framing / opening line) + the optional opening
     content ``assumptions`` / ``questions`` (empty for a compact mid-task fork). The
     unused set is empty for the other kinds.
@@ -519,21 +496,6 @@ class PausedTurnSummary(BaseModel):
     # plan_review
     steps: list[dict[str, Any]] = Field(default_factory=list)
     pending: list[dict[str, Any]] = Field(default_factory=list)
-    # team_preview (开工卡)
-    workers: list[dict[str, Any]] = Field(default_factory=list)
-    tools: list[str] = Field(default_factory=list)
-    primitive: str = "delegate"
-    motion: str = ""
-    form: str = ""
-    sides: list[dict[str, Any]] = Field(default_factory=list)
-    max_rounds: int = 0
-    thorough: bool = True
-    # 主导语（交付档 + 人数）；缺省空 = 旧帧 / 前端本地回退。
-    headline: str = ""
-    # 开工卡修订谱系；非 team_preview 缺省空。
-    revision: int | None = None
-    revised_from: str | None = None
-    revision_note: str | None = None
     # ask_user
     question: str = ""
     assumptions: list[dict[str, Any]] = Field(default_factory=list)

@@ -227,7 +227,7 @@ def test_sealed_overflow_without_loop_logs_drop_and_skips_fact_log() -> None:
         session = CoordinationSession(execution_id="e1", total_workers=1)
         session.turn_attached = False
         session.completed_run_ids.add("w1")
-        session.mark_settled("harvest")
+        session.mark_settled("detached")
         with capture_logs() as settle_logs:
             session.check_terminal_settlement(journal_entries=log.entries())
         assert any(

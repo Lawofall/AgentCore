@@ -2,6 +2,7 @@ import { hasActiveRunningWorkers } from "@/components/graph/helpers";
 import { discardAllPendingChunks } from "@/services/sse/contentBuffer";
 import { flushPendingFrames } from "@/services/sse/execFrameBuffer";
 import { stopConversation } from "@/services/stopTurn";
+import { armStopHydrateWatchdog } from "@/services/turns/stopHydrate";
 import {
   execRuntime,
   projectExecution,
@@ -130,6 +131,7 @@ export function createTurnLifecycleActions(
         .then(() => {
           if (get().byId[key]?.turnPhase === "stopping") {
             get().clearError(conversationId);
+            armStopHydrateWatchdog(conversationId);
           }
         })
         .catch(() => {

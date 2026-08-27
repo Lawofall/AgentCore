@@ -34,10 +34,26 @@ _WELL_KNOWN = frozenset({"desktop", "downloads", "documents"})
 _RESOLVE_REASONS = frozenset({"not_found", "not_directory", "ambiguous", "invalid"})
 
 
+# Authored copy keyed on desktop ``reason`` — do not scan the user's original
+# request (or the path) to guess "installer vs folder".
+_MOUNT_NOT_DIRECTORY = (
+    "这是文件不是文件夹；请选它所在的目录，或把内容放进当前工作区。"
+)
+_MOUNT_NOT_FOUND = (
+    "找不到该目录，无法挂载。"
+    "挂载只接受文件夹；若给的是安装包/文件，请改选它所在目录或放进工作区。"
+)
+
+
 def format_external_mount_error(exc: ExternalMountError) -> str:
-    """Model-facing error: human detail + stable reason when present."""
-    detail = str(exc).strip() or "找不到该目录，无法挂载"
+    """Model-facing error: stable reason copy + reason tag when present."""
     reason = (exc.reason or "").strip() or None
+    if reason == "not_directory":
+        detail = _MOUNT_NOT_DIRECTORY
+    elif reason == "not_found":
+        detail = _MOUNT_NOT_FOUND
+    else:
+        detail = str(exc).strip() or "找不到该目录，无法挂载"
     if not reason:
         return detail
     parts = [f"{detail}（reason={reason}）"]
@@ -68,7 +84,6 @@ class ExternalMountReadonlyTool:
                 "成功返回 namespace（无绝对路径）；失败带稳定 reason"
                 "（not_found/not_directory/ambiguous 等）——"
                 "勿用相同参数盲重试；成功后勿乱猜其他 well_known。"
-                "【禁止】为此再发 grant_readonly_folder 决策卡；"
                 "【禁止】整理/写回用本工具（整理仍 ask_user + grant_organize_folder）；"
                 "只读挂载过 ≠ 已授写，同目录升整理须再确认。"
             ),
@@ -127,8 +142,7 @@ class ExternalMountReadonlyTool:
                 output="",
                 error=(
                     "external_mount_readonly 需要 path 和/或 well_known"
-                    "（desktop|downloads|documents）；找不到目录时明确失败，"
-                    "勿改发 grant_readonly_folder 卡。"
+                    "（desktop|downloads|documents）；找不到目录时明确失败。"
                 ),
             )
 

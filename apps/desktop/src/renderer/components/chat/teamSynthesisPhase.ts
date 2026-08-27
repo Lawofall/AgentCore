@@ -112,20 +112,22 @@ export function coordinationWaitCaptainCaption(
 }
 
 /**
- * All workers finished while execution is still running — CEO synthesis /
- * harvest closing gap. Matches {@link deriveCaptainStatus}'s "running" sink.
+ * All workers finished while execution is still running — CEO writing the
+ * same-turn close. Matches {@link deriveCaptainStatus}'s "running" sink.
  *
- * ``turnTerminal`` is ignored: CEO may have ``end_turn``'d while the team
- * (or harvest) is still live. Hiding the spinner here painted a false「已汇总」.
+ * ``detached``: captain already left; background settle does not write a close.
+ * ``turnTerminal`` without detach is still the same-turn writing window
+ * (attach grace). Hiding the spinner while attached painted a false「已汇总」.
  *
  * ``paused``: cold ask / plan_review hang — workers may be 2/2, but CEO is
  * waiting on the user (same invariant as deriveCaptainStatus).
  */
 export function isTeamSynthesizing(
   execution: Execution,
-  opts?: { turnTerminal?: boolean },
+  opts?: { turnTerminal?: boolean; detached?: boolean },
 ): boolean {
   void opts?.turnTerminal;
+  if (opts?.detached) return false;
   if (execution.status === "paused") return false;
   if (execution.status !== "running") return false;
   const { total } = workerProgress(execution);
@@ -135,7 +137,7 @@ export function isTeamSynthesizing(
 /** Deterministic strip / indicator copy for the synthesis empty window. */
 export function teamSynthesisPhaseLabel(execution: Execution): string {
   const { completed, total } = workerProgress(execution);
-  return `${completed}/${total} 已完成，正在生成汇总`;
+  return `${completed}/${total} 已完成，正在收尾`;
 }
 
 /**

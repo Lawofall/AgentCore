@@ -65,12 +65,26 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   file_write: { Icon: FileText, label: "Write file" },
   file_append: { Icon: FileText, label: "Append file" },
   file_list: { Icon: Folder, label: "List dir" },
+  glob: { Icon: Folder, label: "Glob" },
+  list_folders: { Icon: Folder, label: "List folders" },
+  resolve_folder: { Icon: Folder, label: "Resolve folder" },
+  create_folder: { Icon: Folder, label: "Create folder" },
+  delete_folder: { Icon: Trash2, label: "Delete folder" },
+  list_folder_dir: { Icon: Folder, label: "List folder dir" },
+  read_folder_file: { Icon: FileText, label: "Read folder file" },
   str_replace: { Icon: Pencil, label: "Edit file" },
   file_delete: { Icon: Trash2, label: "Delete file" },
   file_move: { Icon: FileText, label: "Move file" },
   file_copy: { Icon: FileText, label: "Copy file" },
   mkdir: { Icon: FileText, label: "Make dir" },
   file_batch: { Icon: FileText, label: "Batch files" },
+  write_section: { Icon: Pencil, label: "Write section" },
+  md_to_docx: { Icon: FileText, label: "Export Word" },
+  md_to_pdf: { Icon: FileText, label: "Export PDF" },
+  archive_extract: { Icon: Package, label: "Extract archive" },
+  download_url: { Icon: Globe, label: "Download file" },
+  read_image: { Icon: ScanText, label: "Read image" },
+  code_diagnostics: { Icon: Code2, label: "Check types" },
   delegate: { Icon: Users, label: "Delegate" },
   replan: { Icon: ListRestart, label: "Replan" },
   // CEO 编排原语（组队辩论）：气泡侧只在「正在组装 …」参数组装心跳时露出，
@@ -82,6 +96,8 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   consult_rule: { Icon: BookOpen, label: "Consult rule" },
   // 按需三合一：新会话走单一 consult；旧三名上表仍保留供历史回放。
   consult: { Icon: Brain, label: "Consult" },
+  remember: { Icon: BookOpen, label: "Remember" },
+  update_folder_profile: { Icon: NotebookPen, label: "Update folder profile" },
   // Worker-only 跨会话对话日志（CEO 经 delegate 派查阅员）。
   search_conversations: { Icon: MessagesSquare, label: "Search conversations" },
   read_conversation: { Icon: MessagesSquare, label: "Read conversation" },
@@ -241,10 +257,23 @@ const TOOL_DETAIL_KEYS = [
   "url",
   "pattern",
   "path",
+  "directory",
   "command",
   "q",
-  "name", // consult / consult_skill / consult_memory / consult_rule
+  "name", // consult / consult_skill / consult_memory / consult_rule / create_folder
 ];
+
+/** Full UUID — folder_id 等内部标识，不上过程行标题。 */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function skipTitleChip(key: string, raw: string): boolean {
+  const v = raw.trim();
+  if (!v || v === ".") return true;
+  if (key === "folder_id" || key.endsWith("_id")) return true;
+  if (UUID_RE.test(v)) return true;
+  return false;
+}
 
 /** 拿 `run_id` 指人的 CEO 处置工具——标题上要显示的是那名队员的角色名。 */
 export const RUN_TARGET_ARG_TOOLS = new Set([
@@ -312,6 +341,12 @@ export function browserToolDetail(args: Record<string, unknown>): string {
   return asTitleDetail(typeof args.url === "string" ? args.url : "");
 }
 
+/** `git` 过程行芯片 = subcommand，同构 host 的 action；不要搬 ApprovalPrompt 长 headline。 */
+export function gitToolDetail(args: Record<string, unknown>): string {
+  const sub = typeof args.subcommand === "string" ? args.subcommand.trim() : "";
+  return asTitleDetail(sub);
+}
+
 /** `host` 过程行 / 组摘要的 action 细节（同构 git 的 subcommand 芯片）。 */
 export function hostToolDetail(args: Record<string, unknown>): string {
   const action = hostActionOf(args);
@@ -374,6 +409,7 @@ export function toolDetail(
 ): string {
   if (toolName === "browser") return browserToolDetail(args);
   if (toolName === "host") return hostToolDetail(args);
+  if (toolName === "git") return gitToolDetail(args);
   if (toolName === "code_execute") {
     const lang = typeof args.language === "string" ? args.language.trim() : "";
     if (lang) return asTitleDetail(lang);
@@ -387,7 +423,9 @@ export function toolDetail(
   if (transfer) return transfer;
   for (const k of TOOL_DETAIL_KEYS) {
     const v = args[k];
-    if (typeof v === "string" && v.trim()) return asTitleDetail(v);
+    if (typeof v === "string" && v.trim() && !skipTitleChip(k, v)) {
+      return asTitleDetail(v);
+    }
   }
   for (const k of TOOL_DETAIL_SHORT_BODY_KEYS) {
     const v = args[k];

@@ -1,5 +1,8 @@
 import { useConversationStore } from "@/stores/conversation";
-import { useInteractionStore } from "@/stores/interactions";
+import {
+  applyInteractionWireEvent,
+  useInteractionStore,
+} from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -46,14 +49,6 @@ describe("composerPendingHint", () => {
       userMessageId: "u1",
       steps: [],
       pending: [],
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: "怎么推进？",
       assumptions: [],
       questions: [],
@@ -69,19 +64,11 @@ describe("composerPendingHint", () => {
       messageId: "m1",
       conversationId: CID,
       checkpointId: "cp1",
-      kind: "team_preview",
+      kind: "team_preview" as never,
       userMessage: "开工",
       userMessageId: "u1",
       steps: [],
       pending: [],
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: "",
       assumptions: [],
       questions: [],
@@ -146,21 +133,18 @@ describe("composerPendingHint", () => {
       isStreaming: true,
       serverMessageId: "m-tp",
     });
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
-      conversationId: CID,
-      messageId: "m-tp",
-      origin: "server",
-      payload: {
+    applyInteractionWireEvent(
+      "team_preview_required" as string,
+      {
         checkpoint_id: "tp-hint",
         conversation_id: CID,
-        primitive: "delegate",
-        workers: [],
-        tools: [],
       },
-    });
+      CID,
+      "m-tp",
+    );
     expect(conversationHasPendingDecision(CID)).toBe(false);
     expect(usePausedTurnStore.getState().pending).toHaveLength(0);
+    expect(useInteractionStore.getState().get("tp-hint")).toBeUndefined();
   });
 
   it("ignores cold pending until assistant has a server stamp", () => {
@@ -226,14 +210,6 @@ describe("composerPendingHint", () => {
       userMessageId: "u1",
       steps: [],
       pending: [],
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: "q",
       assumptions: [],
       questions: [],
@@ -255,14 +231,6 @@ describe("composerPendingHint", () => {
       userMessageId: "u1",
       steps: [],
       pending: [],
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: "",
       assumptions: [],
       questions: [],

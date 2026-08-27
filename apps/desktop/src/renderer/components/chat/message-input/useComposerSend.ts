@@ -13,6 +13,7 @@ import {
   pinDraftRequestId,
   resolveDraftRequestId,
 } from "@/lib/draftRequestId";
+import { plainText } from "@/lib/inlineBody";
 import { isReadOnlyOffline } from "@/lib/offlineMode";
 import type { SupportDiagnosticIds } from "@/lib/supportDiagnostics";
 import { notifyError } from "@/lib/toast";
@@ -64,7 +65,10 @@ import type {
   PendingAgentMention,
   PendingAttachment,
 } from "./composerAttachments";
-import { MAX_AGENT_MENTIONS } from "./composerAttachments";
+import {
+  MAX_AGENT_MENTIONS,
+  composerHasSendableDraft,
+} from "./composerAttachments";
 import { dispatchBackgroundTask } from "./dispatchBackgroundTask";
 import { settleAttachments } from "./settleAttachments";
 
@@ -230,8 +234,9 @@ export function useComposerSend({
   // biome-ignore lint/correctness/useExhaustiveDependencies: closeMenu/setValue/setAgentMentions kept for stable identity when clearComposer path is not taken
   const handleSend = useCallback(
     async (opts?: { delivery?: MessageDelivery }) => {
-      const trimmed = value.trim();
-      if (!trimmed && attachments.length === 0) return;
+      const content = value.trim();
+      const preview = plainText(value).trim();
+      if (!composerHasSendableDraft(value, attachments, agentMentions)) return;
 
       // N4-A：只读离线硬禁用（按钮已 disabled；此处兜底防键盘/程序化触发）。
       if (isReadOnlyOffline()) {
@@ -278,7 +283,7 @@ export function useComposerSend({
 
           const result = await sendMidFlightMessage(
             activeConvId,
-            trimmed,
+            content,
             settled.outgoing.length > 0 ? settled.outgoing : undefined,
             delivery,
             outgoingMentions.length > 0 ? outgoingMentions : undefined,
@@ -299,7 +304,7 @@ export function useComposerSend({
 
       if (backgroundMode && isLocal && activeConvId) {
         clearComposerSendError(draftKey);
-        dispatchBackgroundTask(activeConvId, trimmed);
+        dispatchBackgroundTask(activeConvId, content);
         // 后台任务只带正文；随草稿一起丢掉的附件也要注销，别让在途上传攥着 File。
         for (const a of attachments) forgetAttachmentUpload(a.id);
         clearComposer();
@@ -372,7 +377,7 @@ export function useComposerSend({
             setComposerDraftAxes(null);
             upsertConversationFront({
               id: conv.id,
-              title: provisionalConversationTitle(trimmed),
+              title: provisionalConversationTitle(preview),
               updatedAt: new Date().toISOString(),
               messageCount: 0,
               lastMessagePreview: null,
@@ -398,7 +403,7 @@ export function useComposerSend({
             // 建会话失败：仍是草稿态，把先前清掉的草稿原样还给用户（参照下面附件驻留
             // 失败的回滚），并把这次的幂等键钉回草稿——重试要复用它才命中服务端幂等。
             restoreComposerDraft(null, {
-              value: trimmed,
+              value: content,
               attachments: pending,
               agentMentions,
             });
@@ -422,7 +427,7 @@ export function useComposerSend({
         addMessage({
           id: userMsgId,
           role: "user",
-          content: trimmed,
+          content,
           createdAt: new Date().toISOString(),
           executionId: null,
           isStreaming: false,
@@ -448,11 +453,11 @@ export function useComposerSend({
 
         if (isFirstMessage) {
           patchConversationCache(conversationId, {
-            title: provisionalConversationTitle(trimmed),
+            title: provisionalConversationTitle(preview),
           });
           // Local sidecar has no cloud SSE title_generated — mint in parallel with
           // the turn (same core as cloud schedule_title_generation).
-          scheduleLocalAutoTitle(conversationId, trimmed);
+          scheduleLocalAutoTitle(conversationId, preview);
         }
 
         if (createdNew) {
@@ -471,7 +476,7 @@ export function useComposerSend({
             .getState()
             .removeMessage(userMsgId, conversationId);
           restoreComposerDraft(conversationId, {
-            value: trimmed,
+            value: content,
             attachments: pending.filter(
               (a) => !settled.staleIds.includes(a.id),
             ),
@@ -508,7 +513,7 @@ export function useComposerSend({
         try {
           const sent = await sendTurn({
             conversationId,
-            content: trimmed,
+            content,
             attachments: settled.outgoing,
             agentMentions: outgoingMentions,
             optimisticUserId: userMsgId,
@@ -521,7 +526,7 @@ export function useComposerSend({
               createdNew,
               createdFolderId,
               draft: {
-                value: trimmed,
+                value: content,
                 attachments: pending,
                 agentMentions,
               },

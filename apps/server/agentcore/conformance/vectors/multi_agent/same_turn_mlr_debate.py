@@ -140,7 +140,7 @@ def _multi_agent_same_turn_mlr_debate() -> list[SSEEvent]:
             "dc1",
             "delegate",
             {
-                "playbook": "multi_lens_research",
+                "playbook": "lens_crosscheck",
                 "playbook_args": {"topic": _TOPIC},
                 "coordinate": False,
             },

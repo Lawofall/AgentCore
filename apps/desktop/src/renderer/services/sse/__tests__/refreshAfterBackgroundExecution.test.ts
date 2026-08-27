@@ -74,22 +74,14 @@ describe("refreshAfterBackgroundExecution", () => {
     expect(callsNamed("conversation.bg_refresh_failed")[1]?.[2]).toEqual(
       expect.objectContaining({ attempt: 2, delay_ms: 1500 }),
     );
-    expect(callsNamed("conversation.bg_refresh_exhausted")).toHaveLength(0);
-
-    await vi.advanceTimersByTimeAsync(4500);
-    expect(loadLatestWindow).toHaveBeenCalledTimes(3);
-    expect(callsNamed("conversation.bg_refresh_failed")).toHaveLength(3);
-    expect(callsNamed("conversation.bg_refresh_failed")[2]?.[2]).toEqual(
-      expect.objectContaining({ attempt: 3, delay_ms: 6000 }),
-    );
     expect(callsNamed("conversation.bg_refresh_exhausted")).toEqual([
       [
         "warn",
         "conversation.bg_refresh_exhausted",
         {
           conversation_id: CID,
-          attempts: 3,
-          failed: 3,
+          attempts: 2,
+          failed: 2,
         },
       ],
     ]);
@@ -106,8 +98,7 @@ describe("refreshAfterBackgroundExecution", () => {
     expect(callsNamed("conversation.bg_refresh_exhausted")).toHaveLength(0);
 
     await vi.advanceTimersByTimeAsync(1500);
-    await vi.advanceTimersByTimeAsync(4500);
-    expect(loadLatestWindow).toHaveBeenCalledTimes(3);
+    expect(loadLatestWindow).toHaveBeenCalledTimes(2);
     expect(callsNamed("conversation.bg_refresh_failed")).toHaveLength(1);
     expect(callsNamed("conversation.bg_refresh_exhausted")).toHaveLength(0);
   });
@@ -116,9 +107,9 @@ describe("refreshAfterBackgroundExecution", () => {
     loadLatestWindow.mockResolvedValue(true);
 
     refreshAfterBackgroundExecution(CID);
-    await vi.advanceTimersByTimeAsync(6000);
+    await vi.advanceTimersByTimeAsync(1500);
 
-    expect(loadLatestWindow).toHaveBeenCalledTimes(3);
+    expect(loadLatestWindow).toHaveBeenCalledTimes(2);
     expect(logEventMock).not.toHaveBeenCalled();
   });
 
@@ -126,9 +117,9 @@ describe("refreshAfterBackgroundExecution", () => {
     loadLatestWindow.mockResolvedValue(false);
 
     refreshAfterBackgroundExecution(CID);
-    await vi.advanceTimersByTimeAsync(6000);
+    await vi.advanceTimersByTimeAsync(1500);
 
-    expect(loadLatestWindow).toHaveBeenCalledTimes(3);
+    expect(loadLatestWindow).toHaveBeenCalledTimes(2);
     expect(callsNamed("conversation.bg_refresh_failed")).toHaveLength(0);
     expect(callsNamed("conversation.bg_refresh_exhausted")).toHaveLength(0);
   });

@@ -221,25 +221,49 @@ def test_schema_exposes_form_enum():
     assert props["form"]["enum"] == ["prose", "files", "workspace"]
     assert "workspace" in props["form"]["description"]
     assert "prose" in props["form"]["description"]
+    assert "【看】" in props["form"]["description"]
+    assert "【看】" not in DELEGATE_DESCRIPTION
+    assert "【存文档】" not in DELEGATE_DESCRIPTION
+    assert "【改工程】" not in DELEGATE_DESCRIPTION
     assert "才用本工具" not in DELEGATE_DESCRIPTION
-    # 纠正「一次只能 / 同步阻塞到全队完成」误述（协调默认立即返回、可同回合追加）
-    assert "立即返回" in DELEGATE_DESCRIPTION
-    assert "一张图" in DELEGATE_DESCRIPTION
+    assert "用：" in DELEGATE_DESCRIPTION and "不用：" in DELEGATE_DESCRIPTION
+    assert "跨模块" in DELEGATE_DESCRIPTION
+    assert "点名对比" in DELEGATE_DESCRIPTION
+    assert "改产物" in DELEGATE_DESCRIPTION
+    assert "成规模取证" in DELEGATE_DESCRIPTION
+    assert "盘点" not in DELEGATE_DESCRIPTION
+    assert "讨论" in DELEGATE_DESCRIPTION and "判断" in DELEGATE_DESCRIPTION
+    assert "闲聊" in DELEGATE_DESCRIPTION
+    assert "编制自选" not in DELEGATE_DESCRIPTION
+    assert "结局分层" not in DELEGATE_DESCRIPTION
     # 绿场常驻路径勿先 consult：schema 必须带 playbook_args.app，否则缺 slot 全失败。
     assert "playbook_args.app" in DELEGATE_DESCRIPTION
     assert "建站→build_website" not in DELEGATE_DESCRIPTION
     assert "建站→build_website" not in DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
     assert "禁止二者同时有内容" in DELEGATE_DESCRIPTION
     assert "既填 code_audit 又传 tasks" in DELEGATE_DESCRIPTION
-    # 弱模型空失败可抄：顶层非空 tasks 三件套骨架（与 empty 拒收同源）。
+    assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
+    # 协调 / 一张图 / 续派 HOW 的唯一所有者是 skill，不在工具 description。
+    from agentcore.runtime.skills import build_system_skill_registry
+
+    orch = build_system_skill_registry().get("team_orchestration_advanced")
+    assert orch is not None
+    orch_body = orch.body
+    assert "立即返回" in orch_body
+    assert "立即返回" not in DELEGATE_DESCRIPTION
+    assert "一回合一张协作图" in orch_body or "同一张图" in orch_body
+    assert "一张图" not in DELEGATE_DESCRIPTION
+    # 弱模型空失败可抄：顶层非空 tasks 三件套骨架（与 empty 拒收同源）只留参数面。
     from agentcore.runtime.delegate.playbook_declaration import HANDWRITTEN_TASKS_SKELETON
 
-    assert HANDWRITTEN_TASKS_SKELETON in DELEGATE_DESCRIPTION
+    assert HANDWRITTEN_TASKS_SKELETON not in DELEGATE_DESCRIPTION
     assert "默认" in DELEGATE_DESCRIPTION
     assert "手写顶层 tasks" in DELEGATE_DESCRIPTION or "默认手写" in DELEGATE_DESCRIPTION
     assert "快捷进阶" in DELEGATE_DESCRIPTION or "固化流水线" in DELEGATE_DESCRIPTION
     tasks_desc = DELEGATE_PARAMETERS["properties"]["tasks"]["description"]
     assert HANDWRITTEN_TASKS_SKELETON in tasks_desc
+    assert "摸底抄骨架" in tasks_desc
+    assert "摸底抄骨架" not in DELEGATE_DESCRIPTION
     assert "默认主路" in tasks_desc
     assert "手写" in tasks_desc and "互斥" in tasks_desc
     playbook_desc = DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
@@ -307,21 +331,29 @@ def test_schema_exposes_form_enum():
         assert banned not in props
 
 def test_schema_depends_on_teaches_when_to_declare_dependency():
-    # 工具面瘦身：【何时填】长引导（生产者→消费者 + 正反例）已迁入 CEO core
-    # （见 test_core_teaches_dependency_judgment_before_delegating）；schema 只留
-    # 「怎么填」约束 + 顶层短线索，避免与系统提示重复烧 input tokens。
+    # 工具面瘦身：【何时填】长引导（生产者→消费者 + 正反例）在 skill；
+    # 参数只留「怎么填」短指针，工具 description 不再抄 HOW。
     deps = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]["depends_on"][
         "description"
     ]
     assert "本批 id" in deps and "del_*" in deps
     assert "角色名" in deps or "role" in deps
-    assert "生产者→消费者" in deps  # 短指针，细节在 core
+    assert "生产者→消费者" in deps  # 短指针，细节在 skill
     assert "新开一队" in deps
     assert "append_to_execution_id" not in deps
-    # 顶层工具描述仍钉判断线索（勿默认全平铺）。
-    assert "生产者→消费者" in DELEGATE_DESCRIPTION
-    assert "平铺并行" in DELEGATE_DESCRIPTION
-    assert "新开一队、接续上一张图" in DELEGATE_DESCRIPTION
+    from agentcore.runtime.skills import build_system_skill_registry
+
+    orch = build_system_skill_registry().get("team_orchestration_advanced")
+    assert orch is not None
+    orch_body = orch.body
+    assert "生产者→消费者" in orch_body
+    assert "平铺并行" in orch_body
+    assert "新开一队、接续上一张图" in orch_body
+    assert "生产者→消费者" not in DELEGATE_DESCRIPTION
+    assert "平铺并行" not in DELEGATE_DESCRIPTION
+    assert "新开一队、接续上一张图" not in DELEGATE_DESCRIPTION
+    append = DELEGATE_PARAMETERS["properties"]["append_to_execution_id"]["description"]
+    assert "latest" in append and "一张图" in append
 
 async def test_prose_worker_still_offered_write_tools():
     """真纯丙·H2：form=prose 仍装配写盘工具；identity 仍提示正文交付。"""

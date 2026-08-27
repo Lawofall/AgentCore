@@ -88,6 +88,25 @@ describe("ToolResultView · consult (unified)", () => {
     expect(screen.getByText("部署流程")).toBeTruthy();
     expect(screen.getByText(/用 pnpm dev 起前端/)).toBeTruthy();
   });
+
+  it("does not paint resolve_folder display.name as a consult memory card", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "resolve_folder",
+          display: {
+            status: "resolved",
+            folder_id: "550e8400-e29b-41d4-a716-446655440000",
+            name: "白板",
+            rel_path: "白板",
+          },
+          result: "唯一命中，可直接用于后续派工",
+        })}
+      />,
+    );
+    expect(screen.queryByText("查阅记忆：")).toBeNull();
+    expect(screen.getByText(/唯一命中，可直接用于后续派工/)).toBeTruthy();
+  });
 });
 
 describe("ToolResultView · consult_rule (historical)", () => {

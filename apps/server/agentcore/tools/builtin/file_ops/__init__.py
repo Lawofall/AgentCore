@@ -10,7 +10,8 @@ local (desktop) workspace.
 Split axes (implementation modules):
 - ``integrity`` — integrity & write-scope policy
 - ``errors`` — error / result mapping
-- ``read`` — file_read + file_list + tree
+- ``read`` — file_read / file_list (one-layer LS; FileListTool still in read.py)
+- ``listing`` / ``glob`` — listing helpers + glob (basename search)
 - ``mutate`` — write / append / str_replace / write_section
 - ``meta`` — delete / move / copy / mkdir
 - ``batch`` — file_batch
@@ -20,6 +21,7 @@ Public import path stays ``agentcore.tools.builtin.file_ops``.
 
 from agentcore.tools.builtin.file_ops.batch import FileBatchTool
 from agentcore.tools.builtin.file_ops.errors import _outside_workspace_msg
+from agentcore.tools.builtin.file_ops.glob import GlobTool
 from agentcore.tools.builtin.file_ops.integrity import (
     _mark_landed_files,
     _prepare_write_relpath,
@@ -41,6 +43,7 @@ from agentcore.tools.builtin.file_ops.integrity import (
     substantial_delete_rejection,
     write_scope_rejection,
 )
+from agentcore.tools.builtin.file_ops.listing import expand_brace_globs
 from agentcore.tools.builtin.file_ops.meta import (
     FileCopyTool,
     FileDeleteTool,
@@ -59,7 +62,6 @@ from agentcore.tools.builtin.file_ops.read import (
     FILE_READ_SAFETY_LINE_CAP,
     FileListTool,
     FileReadTool,
-    expand_brace_globs,
 )
 
 __all__ = [
@@ -71,6 +73,7 @@ __all__ = [
     "FileMoveTool",
     "FileReadTool",
     "FileWriteTool",
+    "GlobTool",
     "MkdirTool",
     "StrReplaceTool",
     "WriteSectionTool",

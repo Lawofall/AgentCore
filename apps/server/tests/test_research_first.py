@@ -5,14 +5,11 @@ from __future__ import annotations
 
 import pytest
 
-from agentcore.runtime.checkpoints import CheckpointDecision
 from agentcore.runtime.kickoff.research_first import (
     has_research_chain_evidence,
     research_first_tool_result,
 )
-from agentcore.runtime.recover import recover_turn
-from agentcore.runtime.suspension import TeamPreviewSuspension
-from agentcore.runtime.turn.state import TurnState
+from agentcore.runtime.suspension import suspension_from_json
 from agentcore.tools.builtin.motion_card import parse_motion_card
 
 
@@ -51,7 +48,7 @@ def test_has_research_chain_evidence_preserves_old_offer_sources():
             "payload": {
                 "name": "delegate",
                 "arguments": (
-                    '{"playbook": "multi_lens_research", "playbook_args": {"topic": "T"}}'
+                    '{"playbook": "lens_crosscheck", "playbook_args": {"topic": "T"}}'
                 ),
                 "success": True,
                 "result": "done",
@@ -66,7 +63,7 @@ def test_has_research_chain_evidence_preserves_old_offer_sources():
             "kind": "tool_call",
             "payload": {
                 "name": "delegate",
-                "arguments": '{"playbook": "multi_lens_research"}',
+                "arguments": '{"playbook": "lens_crosscheck"}',
                 "success": False,
                 "result": "err",
                 "tool_call_id": "dc1",
@@ -75,13 +72,27 @@ def test_has_research_chain_evidence_preserves_old_offer_sources():
         }
     ]
     assert has_research_chain_evidence(failed) is False
+    old_id = [
+        {
+            "kind": "tool_call",
+            "payload": {
+                "name": "delegate",
+                "arguments": '{"playbook": "multi_lens_research"}',
+                "success": True,
+                "result": "done",
+                "tool_call_id": "dc-old",
+                "run_id": "captain",
+            },
+        }
+    ]
+    assert has_research_chain_evidence(old_id) is False
 
 
 def test_research_first_tool_result_fills_motion_topic():
     text = research_first_tool_result(motion="该不该上四天工作制？", user_message="忽略我")
     assert "先多视角调研再辩" in text
     assert "请勿再次调用 debate" in text
-    assert 'playbook="multi_lens_research"' in text
+    assert 'playbook="lens_crosscheck"' in text
     assert '"topic": "该不该上四天工作制？"' in text
     assert "忽略我" not in text
 
@@ -91,50 +102,23 @@ def test_research_first_tool_result_falls_back_to_user_message():
     assert '"topic": "帮我分析 LV 案"' in text
 
 
-@pytest.mark.asyncio
-async def test_recover_research_first_on_delegate_kickoff_refuses():
-    """非辩论开工卡 research_first：卡已退役，不降级 STOP、不开做。"""
+def test_leftover_team_preview_frame_refuses_hydrate():
+    """存量开工卡：from_json 走 410，不进 recover。"""
     from agentcore.core.errors import GoneError
-    from agentcore.runtime.events import EventSink
     from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
-    from agentcore.runtime.runs.plan import RunPlan
-
-    sink = EventSink()
-    suspension = TeamPreviewSuspension(
-        message_id="m1",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="cap",
-        checkpoint_id="tp1",
-        tool_call_id="dc1",
-        base_system_prompt="",
-        user_message="调研一下",
-        plan=RunPlan(),
-        workers=[
-            {
-                "run_id": "w1",
-                "role": "调研",
-                "task": "做A",
-                "depends_on": [],
-            }
-        ],
-        tools=[],
-        primitive="delegate",
-    )
-    state = TurnState.from_journal([])
-
-    class _FakeDelegate:
-        async def resume_plan(self, *_a, **_k):
-            raise AssertionError("resume_plan must not run")
 
     with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
-        await recover_turn(
-            state=state,
-            sink=sink,
-            delegate_tool=_FakeDelegate(),  # type: ignore[arg-type]
-            execution_id="e1",
-            suspension=suspension,
-            decision=CheckpointDecision.RESEARCH_FIRST,
-            note="",
+        suspension_from_json(
+            {
+                "kind": "team_preview",
+                "message_id": "m1",
+                "conversation_id": "c1",
+                "user_id": "u1",
+                "captain_run_id": "cap",
+                "checkpoint_id": "tp1",
+                "tool_call_id": "dc1",
+                "base_system_prompt": "",
+                "user_message": "调研一下",
+                "primitive": "delegate",
+            }
         )
-    assert sink._history == []

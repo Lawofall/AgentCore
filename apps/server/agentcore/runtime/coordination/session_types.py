@@ -145,6 +145,9 @@ class CoordinationSnapshot:
     total_workers: int = 0
     active: bool = True
     cancel_run_ids: list[str] = field(default_factory=list)
+    # CEO cancel_worker stamps (wording). Missing on old snapshots → empty.
+    ceo_cancel_worker_ids: list[str] = field(default_factory=list)
+    ceo_cancel_started_ids: list[str] = field(default_factory=list)
     pending_events: list[dict[str, Any]] = field(default_factory=list)
     # D1: blocking escalate awaiting CEO — survives ask_user soft-stop so resume can
     # resolve_escalation (or re-armed workers pick up a stashed answer).
@@ -156,12 +159,11 @@ class CoordinationSnapshot:
     all_completed_injected: bool = False
     harvest_scheduled: bool = False
     terminal_posted: bool = False
+    drive_cancelled: bool = False
     settled_via: str | None = None
     turn_attached: bool = True
     user_stopped: bool = False
     saw_first_completion: bool = False
-    # Terminal events + artifacts parked for harvest after first-turn inject+close.
-    harvest_stash: list[dict[str, Any]] = field(default_factory=list)
     # C3: ownership ledger snapshot — v3 nested ``{_v, owners, written, …}``
     # (desk×path keys); v≤2 lazy-migrated on restore.
     file_ownership: dict[str, Any] = field(default_factory=dict)
@@ -182,6 +184,8 @@ class CoordinationSnapshot:
             "total_workers": self.total_workers,
             "active": self.active,
             "cancel_run_ids": list(self.cancel_run_ids),
+            "ceo_cancel_worker_ids": list(self.ceo_cancel_worker_ids),
+            "ceo_cancel_started_ids": list(self.ceo_cancel_started_ids),
             "pending_events": list(self.pending_events),
             "pending_arbitrations": list(self.pending_arbitrations),
             "resolved_arbitrations": list(self.resolved_arbitrations),
@@ -190,11 +194,11 @@ class CoordinationSnapshot:
             "all_completed_injected": self.all_completed_injected,
             "harvest_scheduled": self.harvest_scheduled,
             "terminal_posted": self.terminal_posted,
+            "drive_cancelled": self.drive_cancelled,
             "settled_via": self.settled_via,
             "turn_attached": self.turn_attached,
             "user_stopped": self.user_stopped,
             "saw_first_completion": self.saw_first_completion,
-            "harvest_stash": list(self.harvest_stash),
             "file_ownership": dict(self.file_ownership),
         }
 
@@ -215,6 +219,8 @@ class CoordinationSnapshot:
         settled_via = data.get("settled_via")
         if settled_via is not None:
             settled_via = str(settled_via).strip() or None
+        if settled_via == "harvest":
+            settled_via = "detached"
         raw_own = data.get("file_ownership")
         file_ownership: dict[str, Any] = {}
         if isinstance(raw_own, dict) and (
@@ -231,6 +237,12 @@ class CoordinationSnapshot:
             total_workers=int(data.get("total_workers") or 0),
             active=bool(data.get("active", True)),
             cancel_run_ids=[str(x) for x in (data.get("cancel_run_ids") or [])],
+            ceo_cancel_worker_ids=[
+                str(x) for x in (data.get("ceo_cancel_worker_ids") or [])
+            ],
+            ceo_cancel_started_ids=[
+                str(x) for x in (data.get("ceo_cancel_started_ids") or [])
+            ],
             pending_events=list(data.get("pending_events") or []),
             pending_arbitrations=list(data.get("pending_arbitrations") or []),
             resolved_arbitrations=list(data.get("resolved_arbitrations") or []),
@@ -241,13 +253,11 @@ class CoordinationSnapshot:
             all_completed_injected=bool(data.get("all_completed_injected", False)),
             harvest_scheduled=bool(data.get("harvest_scheduled", False)),
             terminal_posted=bool(data.get("terminal_posted", False)),
+            drive_cancelled=bool(data.get("drive_cancelled", False)),
             settled_via=settled_via,
             turn_attached=bool(data.get("turn_attached", True)),
             user_stopped=bool(data.get("user_stopped", False)),
             saw_first_completion=bool(data.get("saw_first_completion", False)),
-            harvest_stash=[
-                dict(x) for x in (data.get("harvest_stash") or []) if isinstance(x, dict)
-            ],
             file_ownership=file_ownership,
         )
 

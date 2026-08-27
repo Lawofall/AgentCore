@@ -149,6 +149,40 @@ describe("syncConversationFollow (对话级订阅)", () => {
     close();
   });
 
+  it("follow 收到 204 停订，不把空 body 当传输失败空转", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    syncConversationFollow(CID);
+    await tick();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(followedConversationIds()).toEqual([]);
+  });
+
+  it("边界注释前断流：未折段丢弃，不推游标", async () => {
+    const { response, push, close } = sseStream();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(response)),
+    );
+
+    syncConversationFollow(CID);
+    await tick();
+
+    push(frame("message_start", { message_id: "srv-1", full_replay: true }));
+    push(frame("content_delta", { delta: "你" }));
+    await tick();
+    expect(dispatched).toEqual([]);
+
+    close();
+    await tick();
+    expect(dispatched).toEqual([]);
+    expect(peekLastEventId(CID)).toBeUndefined();
+  });
+
   it("另一端开跑：先拉齐消息窗（SSE 不带用户提问），再整段折一次并跟播", async () => {
     const { response, push, close } = sseStream();
     vi.stubGlobal(

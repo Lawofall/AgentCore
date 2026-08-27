@@ -50,7 +50,7 @@ def pointer_body(content: str, files: list[str]) -> str:
     parts.append(
         "已写入共享工作区的文件（下列是磁盘真实路径；约定文档会把子文件夹压进文件名。"
         "先 file_read 这些路径再写你的交付物，勿用任务书里带一层子目录的旧写法；"
-        "不要凭空臆测，也勿全仓 file_list / grep 重搜）：\n" + lines + more
+        "不要凭空臆测，也勿全仓 glob / grep 重搜）：\n" + lines + more
     )
     return "\n\n".join(parts)
 

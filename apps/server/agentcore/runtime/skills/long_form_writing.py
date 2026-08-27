@@ -12,9 +12,9 @@ _LONG_FORM_WRITING = """\
 【可选】防截断 / 超大风险时，可先短骨架再按节 `file_append` / `str_replace` 填空——非硬教条。\
 短笔记 / 小配置 / 小片段仍一次写完。
 
-【与多角协作划界】先看结局：一起弄懂/多路摸清（未明示成文）→ 编制自选（自己聊 / 1 人 / 真并行才 `parallel_brief`），\
-**不要**本 skill 单写手、也**不要**直接套 `research_report`。仅提「论文/开源」当资料 ≠ 成文。\
-用户**明示**要落盘成文且尚需广度取证、可拆 ≥2 独立角 → 先走 `research_report`（或同构 N 角\
+【与多角协作划界】先看结局：一起弄懂/多路摸清（未明示成文）→ 编制自选（1 人 / 真并行才 `map_fanout`），\
+**不要**本 skill 单写手、也**不要**直接套 `cite_write_review`。仅提「论文/开源」当资料 ≠ 成文。\
+用户**明示**要落盘成文且尚需广度取证、可拆 ≥2 独立角 → 先走 `cite_write_review`（或同构 N 角\
 笔记→提纲→撰稿；各角与主笔均 `form=files`+`artifacts`，【禁止】角 prose、仅主笔落盘），\
 **不要**用本 skill 单写手一人包办自搜+成文。本 skill 单写手留给：材料已齐只扩写、用户已给大纲、\
 改稿续写、短中篇无多角取证。
@@ -32,10 +32,7 @@ _LONG_FORM_WRITING = """\
 task 里只要求写正文本身；核对提醒、假设、待补项、格式说明写进**你的回复**（或让队员写进 handoff），\
 【禁止】要求把「使用前请核对」这类给用户看的元信息写进交付文件——那份文件会被原样打印 / 提交出去。
 
-【主交付·MD → PDF/Word】主交付永远是 `.md`。用户要 PDF / Word / 可分享文件时：顺序 = \
-成篇 `.md` → 调用 `md_to_pdf` 或 `md_to_docx`（对主文件）→ handoff。两者都是确定性导出、\
-与执行沙箱无关，`code_execute=未装配` 也照样能交真 PDF/Word。【禁止】用多份 HTML 顶替 PDF；\
-【禁止】把 code_execute + reportlab / python-docx 当主路径（确定性导出工具才是主路径）。
+【主交付】用户要 PDF / Word / 可分享文件 → `consult(team_delivery_env)`。
 
 【单写手超长·跨 delegate 分波】材料已齐、仍走单写手，但预估很长（多章手册 / 合并大规格 /\
 十余章以上）→ **勿**默认一人一次写完全文。按章跨多次 `delegate` 分波：第一波 task \
@@ -44,12 +41,12 @@ task 里只要求写正文本身；核对提醒、假设、待补项、格式说
 
 【成篇未写完·续作】预算触顶 / 诚实「成篇未写完」/ 用户要接着写同一交付物 → 下一刀 \
 `delegate` **优先**设 `continue_from_run_id`（同人带现场续写同一主文件）；task 写清续填\
-缺口章节。【禁止】并行再派同角色抢同一主路径。【禁止】复活 `continue_writing` 一键 CTA。\
+缺口章节。【禁止】并行再派同角色抢同一主路径。\
 `replaces_run_id` **仅**冷接手 / 替换失败节点（现场已淘汰、真换职能等，见 \
 `revising_a_product`）——同交付物续写勿默认 replaces。
 
 推荐编排：
-1. 确认大纲（章节标题 + 每节要点）：用户明文要求把关 → `playbook=research_report`（套餐提纲步引擎会停）\
+1. 确认大纲（章节标题 + 每节要点）：用户明文要求把关 → `playbook=cite_write_review`（套餐提纲步引擎会停）\
 或先只派提纲、收回后 `ask_user`、再派撰稿，走结构化把关，勿纯聊天代卡；\
 自主确认场景（用户未明文 / 任务轻量）才可对话式或自确认，必要时 ask_user。
 2. 单写手：【主路径】一次 `file_write` 落【主文件】**完整正文**；成篇后只用 `str_replace` \
@@ -65,7 +62,7 @@ task 里只要求写正文本身；核对提醒、假设、待补项、格式说
 4. 写/append 成功回执即 artifact manifest（path / chars / lines / hash / 标题树 / 末段预览）\
 ——以此验真，禁止为质检再 code_execute / file_read 回读正文；下一步仅 str_replace \
 （局部改）或同轮 handoff；成篇后勿再用 file_append，整文件覆盖须完整正文。用户要 PDF / Word \
-时在 handoff 前对主文件调 `md_to_pdf` / `md_to_docx`。\
+→ `consult(team_delivery_env)`。\
 【例外】≠ 为验真空转回读（仍认 artifact manifest）；清参后改稿才可先 `file_read`——\
 写参被收成已落盘短状态后须先读盘上真文，再 `str_replace`（优先）或按真文写，\
 【禁止】把短状态当正文重发。
@@ -87,17 +84,16 @@ _LONG_FORM_LANDING = """\
 【主路径】一次 `file_write` 写入**完整正文**（含超长、无省略标记）；成篇后修订**只用** \
 `str_replace`。`file_append` **仅**骨架填空路径（本 run 已成篇 prose 则禁 append）。\
 【可选】防截断 / 超大风险时，可先短骨架再按节 `file_append` / `str_replace` 填空——非硬教条。\
-短笔记 / 小配置 / 小片段仍一次写完。
+短笔记 / 小配置 / 小片段仍一次写完。\
+【引擎硬拒】成篇含省略标记（反例：「……（中间省略，已保留首尾）……」）、\
+覆盖成篇缩水低于旧稿 50% 且绝对减少 ≥800 字、代码括号不完整或含省略 → 硬拒绝；\
+用户明确要求大幅删减时传 `allow_shrink=true`。
 
-【主交付·MD → PDF/Word】主交付永远是 `.md`。用户要 PDF / Word / 可分享文件时：顺序 = \
-成篇 `.md` → 调用 `md_to_pdf` 或 `md_to_docx`（对主文件）→ handoff。两者都是确定性导出、\
-与执行沙箱无关，`code_execute=未装配` 也照样能交真 PDF/Word。【禁止】用多份 HTML 顶替 PDF；\
-【禁止】把 code_execute + reportlab / python-docx 当主路径。
+【主交付】用户要 PDF / Word：handoff 前对主文件调 `md_to_pdf` / `md_to_docx`。
 
 写/append 成功回执即 artifact manifest（path / chars / lines / hash / 标题树 / 末段预览）\
 ——以此验真，禁止为质检再 code_execute / file_read 回读正文；下一步仅 str_replace \
-（局部改）或同轮 handoff；成篇后勿再用 file_append，整文件覆盖须完整正文。用户要 PDF / Word \
-时在 handoff 前对主文件调 `md_to_pdf` / `md_to_docx`。\
+（局部改）或同轮 handoff；成篇后勿再用 file_append，整文件覆盖须完整正文。\
 【例外】≠ 为验真空转回读（仍认 artifact manifest）；清参后改稿才可先 `file_read`——\
 写参被收成已落盘短状态后须先读盘上真文，再 `str_replace`（优先）或按真文写，\
 【禁止】把短状态当正文重发。

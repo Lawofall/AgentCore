@@ -209,6 +209,8 @@ async def test_coordinate_cancelled_posts_terminal_to_wake_host(monkeypatch):
     events = session.drain_nowait()
     terminals = [e for e in events if e.kind is CoordinationEventKind.DRIVE_CANCELLED]
     assert terminals, f"expected DRIVE_CANCELLED wake, got {[e.kind for e in events]}"
+    assert terminals[0].payload.get("reason") == "cancelled_without_rpc"
+    assert "进程关闭或回合中断" not in (terminals[0].payload.get("error") or "")
     assert not any(e.kind is CoordinationEventKind.ALL_COMPLETED for e in events)
 
 

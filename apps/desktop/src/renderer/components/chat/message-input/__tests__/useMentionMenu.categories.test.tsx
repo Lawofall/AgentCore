@@ -47,7 +47,9 @@ vi.mock("../resideAttachment", async (importOriginal) => {
 });
 
 import { loadFileIndex } from "@/lib/fileIndex";
+import { insertInlineToken } from "@/lib/inlineBody";
 import { logEvent } from "@/lib/log";
+import type { ComposerBodyHandle } from "../ComposerBodyEditor";
 import type {
   PendingAgentMention,
   PendingAttachment,
@@ -63,7 +65,17 @@ function useMentionHarness(conversationId: string | null, initial = "@") {
   const [value, setValue] = useState(initial);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [agentMentions, setAgentMentions] = useState<PendingAgentMention[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const caretRef = useRef(initial.length);
+  const bodyRef = useRef<ComposerBodyHandle | null>(null);
+  if (bodyRef.current === null) {
+    bodyRef.current = {
+      focus: () => {},
+      getCaret: () => caretRef.current,
+      setCaret: (offset: number) => {
+        caretRef.current = offset;
+      },
+    };
+  }
   const mention = useMentionMenu({
     conversationId,
     value,
@@ -72,7 +84,7 @@ function useMentionHarness(conversationId: string | null, initial = "@") {
     setAttachments,
     agentMentions,
     setAgentMentions,
-    textareaRef,
+    bodyRef,
   });
   return { mention, value };
 }
@@ -251,7 +263,7 @@ describe("useMentionMenu 二级目录", () => {
     await act(async () => {
       await pick.mock.results[0]?.value;
     });
-    expect(result.current.value).toBe("");
+    expect(result.current.value).toBe(insertInlineToken("", 0, "A", 0).value);
     expect(result.current.mention.menuMode).toBeNull();
     expect(logged).toHaveBeenCalledWith("info", "mention.select", {
       category: "attach",

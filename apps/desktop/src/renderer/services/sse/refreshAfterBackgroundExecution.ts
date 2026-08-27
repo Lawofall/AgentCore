@@ -1,24 +1,21 @@
 import { logEvent } from "@/lib/log";
 import { loadLatestWindow } from "@/services/messages";
 
-/** Immediate + delayed catch-up after harvest / detach may still be writing. */
-export const BG_REFRESH_DELAYS_MS = [0, 1500, 6000] as const;
+/** Immediate + one short retry: live may drop a worker `run_completed`. */
+export const BG_REFRESH_DELAYS_MS = [0, 1500] as const;
 
 /**
- * Soft-reload the latest message window so journal `runs` (and harvest copy)
- * catch up with a background coordination drive.
+ * Soft-reload the latest message window so journal `runs` catch up with a
+ * background coordination drive.
  *
  * Used after:
- * - `execution_completed` — harvest 终稿 / 合成用户消息
- * - `execution_detached` — captain 已收口、工人仍跑；live 若丢 `run_completed`，
+ * - `execution_detached` — captain 已离开、工人仍跑；live 若丢 `run_completed`，
  *   InlineTeamGraph 靠更新后的 `message.runs` + hydrate 终态优先自愈翻绿
+ * - `execution_completed` — 图终态已在 live；补一次窗口以免 REST 滞后
  *
- * `execution_completed` 可早于 harvest 落库；同连接内 terminal phase 会挡住
- * attach，故用短延迟重试覆盖收口回合写完窗口（离开再回来仍走 ConversationPage
- * 正常加载）。
- *
- * 抛错不再静默：每次失败写 `conversation.bg_refresh_failed`，三次都没 apply
- * 再写 `conversation.bg_refresh_exhausted`（产品日志，不弹窗——卡住的 running
+ * 不再为第二条收口气泡等 6s。抛错不再静默：每次失败写
+ * `conversation.bg_refresh_failed`，计划次数都没 apply 再写
+ * `conversation.bg_refresh_exhausted`（产品日志，不弹窗——卡住的 running
  * 节点本身就是 UI 信号；toast 帮不了用户解开）。
  */
 export function refreshAfterBackgroundExecution(conversationId: string): void {

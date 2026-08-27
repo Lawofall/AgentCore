@@ -678,13 +678,13 @@ def test_settlement_fact_log_phantom_no_longer_duplicates_trailing_process_conte
     from agentcore.runtime.settlement import seed_settlement_dedupe_from_entries
 
     resolved = {
-        "kind": "team_preview_resolved",
+        "kind": "checkpoint_resolved",
         "payload": {"checkpoint_id": "ck1", "decision": "continue", "note": ""},
         "ts": "t3",
     }
     inherited = [
         {"kind": "turn_started", "payload": {}, "ts": "t0"},
-        {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck1"}, "ts": "t1"},
+        {"kind": "checkpoint_required", "payload": {"checkpoint_id": "ck1"}, "ts": "t1"},
         {"kind": "turn_paused", "payload": {}, "ts": "t2"},
         resolved,
     ]
@@ -701,12 +701,12 @@ def test_settlement_fact_log_phantom_no_longer_duplicates_trailing_process_conte
         # Recover-path leftover re-emit must not phantom the log.
         record_turn_fact(
             Fact(
-                kind="team_preview_resolved",
+                kind="checkpoint_resolved",
                 payload=dict(resolved["payload"]),
                 ts=resolved["ts"],
             )
         )
-        assert sum(1 for e in log.entries() if e.get("kind") == "team_preview_resolved") == 1
+        assert sum(1 for e in log.entries() if e.get("kind") == "checkpoint_resolved") == 1
 
         closing = "团队已全部收束。\n\n**本轮完成**\n说明：落盘完成。"
         sink.emit(content_delta(closing))

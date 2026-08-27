@@ -495,8 +495,8 @@ async def test_wait_tool_finds_adopted_live_when_context_is_mint():
         clear_active_coordination()
 
 
-async def test_wait_tool_rejects_when_hot_user_pending(monkeypatch):
-    """有 pending 热审批时禁止 CEO 空 wait。"""
+async def test_wait_tool_listens_when_hot_user_pending(monkeypatch):
+    """热审批未点时 wait 是听团（等你允许），不是推进，也不整队收场。"""
     clear_active_coordination()
     session = CoordinationSession(
         execution_id="e", total_workers=2, conversation_id="c-wait"
@@ -506,7 +506,9 @@ async def test_wait_tool_rejects_when_hot_user_pending(monkeypatch):
     from agentcore.runtime.interaction import InteractionKind, InteractionRegistry
 
     reg = InteractionRegistry()
-    reg.create("a1", "c-wait", kind=InteractionKind.APPROVAL, payload={"tool_name": "x"})
+    reg.create(
+        "a1", "c-wait", kind=InteractionKind.APPROVAL, payload={"tool_name": "file_write"}
+    )
     monkeypatch.setattr(
         "agentcore.runtime.interaction_orphan.default_interaction_registry",
         lambda: reg,
@@ -514,9 +516,15 @@ async def test_wait_tool_rejects_when_hot_user_pending(monkeypatch):
     set_active_coordination(session)
     try:
         result = await WaitTool().execute({}, ctx())
-        assert result.success is False
-        assert "审批" in (result.error or "")
-        assert "wait" in (result.error or "").lower() or "禁止" in (result.error or "")
+        text = result.output or ""
+        assert result.success is True
+        assert result.error is None
+        assert "等你允许" in text
+        assert "file_write" in text
+        assert "听团" in text
+        assert "无需处置" not in text
+        assert "团队已取消" not in text
+        assert "调度已停" not in text
     finally:
         clear_active_coordination()
 
@@ -542,6 +550,8 @@ async def test_cancel_worker_requests_cancel():
     result = await cancel.execute({"run_id": "w1", "reason": "重复"}, ctx())
     assert result.success is True
     assert "w1" in session.cancel_run_ids()
+    assert "w1" in session.ceo_cancel_worker_ids
+    assert "w1" in session.ceo_cancel_started_ids
     session.close()
     await asyncio.sleep(0)
     clear_active_coordination()
@@ -772,6 +782,8 @@ async def test_cancel_worker_pending_withdraws_from_queue():
     assert "del_wave_n5" in session.completed_run_ids
     assert "del_wave_n5" in session.vacated_run_ids
     assert "del_wave_n5" in session.cancel_run_ids()
+    assert "del_wave_n5" in session.ceo_cancel_worker_ids
+    assert "del_wave_n5" not in session.ceo_cancel_started_ids
     # Same-role runner must not be auto-cancelled.
     assert "del_wave_n4b" not in session.cancel_run_ids()
     assert "del_wave_n4b" in dict(session.running_workers())
@@ -1626,10 +1638,13 @@ def test_first_turn_all_completed_inject_asks_final_synthesis():
     assert "本波结果按终稿纪律向用户交代" in text
     assert "团队成品" in text
     assert product in text
+    assert "团队已全部结束" in text
+    assert "已开工队员禁止说成" not in text
+    assert "调度中断" not in text
 
 
 def test_note_attached_inject_visible_close_is_structural():
-    """只认非空 content_delta + attached_inject；空串 / harvest 收口不得打标。"""
+    """只认非空 content_delta + attached_inject；空串 / 后台结算不得打标。"""
     session = CoordinationSession(execution_id="e-note", total_workers=1)
     session.note_attached_inject_visible_close("终稿")
     assert session.attached_inject_visible_close is False
@@ -1647,8 +1662,7 @@ def test_note_attached_inject_visible_close_is_structural():
 
     harvest = CoordinationSession(execution_id="e-h", total_workers=1)
     harvest.all_completed_injected = True
-    harvest.harvest_closing = True
-    harvest.mark_settled("harvest")
+    harvest.mark_settled("detached")
     harvest.note_attached_inject_visible_close("收口正文")
     assert harvest.attached_inject_visible_close is False
 
@@ -1657,7 +1671,6 @@ def test_all_completed_inject_carries_output_without_unconditional_audit():
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     session = CoordinationSession(execution_id="e", total_workers=3)
-    session.harvest_closing = True
     product = "【队员成品】调研报告正文……"
     text = format_coordination_events(
         session,
@@ -1674,14 +1687,12 @@ def test_all_completed_inject_carries_output_without_unconditional_audit():
 
 
 def test_all_completed_inject_names_accepted_files():
-    from agentcore.conversation.execution_harvest import format_harvest_user_text
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     paths = ["工作稿/报告.md", "工作稿/附录.md"]
     facts = {"nodes": [], "files": paths, "outstanding_tool_failures": []}
     product = "【队员成品】调研报告正文……"
     session = CoordinationSession(execution_id="e", total_workers=2)
-    session.harvest_closing = True
     session.harvest_user_facts = facts
     payload = {
         "completed": 2,
@@ -1698,13 +1709,6 @@ def test_all_completed_inject_names_accepted_files():
     assert "`工作稿/附录.md`" in text
     assert "禁止整段粘贴本清单当产物卡" in text
 
-    session._harvest_stash.append(
-        CoordinationEvent(kind=CoordinationEventKind.ALL_COMPLETED, payload=payload)
-    )
-    user_text = format_harvest_user_text(session)
-    assert "已接受落盘" not in user_text
-    assert "禁止整段粘贴本清单当产物卡" not in user_text
-
 
 def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
     from agentcore.runtime.coordination.inject import format_coordination_events
@@ -1712,7 +1716,6 @@ def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
     from agentcore.runtime.runs.types import Deliverable, RunSpec
 
     brief = CoordinationSession(execution_id="e-brief", total_workers=2)
-    brief.harvest_closing = True
     brief.live_plan = RunPlan(
         nodes=[
             RunSpec(
@@ -1740,14 +1743,13 @@ def test_all_completed_inject_skips_audit_nudge_for_brief_and_writing():
         [
             CoordinationEvent(
                 kind=CoordinationEventKind.ALL_COMPLETED,
-                payload={"completed": 2, "total": 2, "playbook": "parallel_brief"},
+                payload={"completed": 2, "total": 2, "playbook": "map_fanout"},
             )
         ],
     )
     assert "先派审计再收尾" not in brief_text
 
     writing = CoordinationSession(execution_id="e-write", total_workers=1)
-    writing.harvest_closing = True
     writing.live_plan = RunPlan(
         nodes=[
             RunSpec(
@@ -1779,7 +1781,6 @@ def test_all_completed_inject_keeps_audit_nudge_for_audit_wave():
     from agentcore.runtime.runs.types import Deliverable, RunSpec
 
     session = CoordinationSession(execution_id="e-audit", total_workers=1)
-    session.harvest_closing = True
     session.live_plan = RunPlan(
         nodes=[
             RunSpec(
@@ -1807,13 +1808,12 @@ def test_all_completed_inject_keeps_audit_nudge_for_audit_wave():
     assert "先派审计再收尾" in text
 
     by_playbook = CoordinationSession(execution_id="e-rr", total_workers=1)
-    by_playbook.harvest_closing = True
     rr_text = format_coordination_events(
         by_playbook,
         [
             CoordinationEvent(
                 kind=CoordinationEventKind.ALL_COMPLETED,
-                payload={"completed": 1, "total": 1, "playbook": "research_report"},
+                payload={"completed": 1, "total": 1, "playbook": "cite_write_review"},
             )
         ],
     )
@@ -1826,7 +1826,6 @@ def test_inject_carries_final_synthesis_discipline():
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     session = CoordinationSession(execution_id="e", total_workers=2)
-    session.harvest_closing = True
     text = format_coordination_events(
         session,
         [
@@ -1854,7 +1853,6 @@ def test_all_completed_inject_without_output_skips_audit_unless_review_wave():
     from agentcore.runtime.runs.types import RunSpec
 
     session = CoordinationSession(execution_id="e", total_workers=2)
-    session.harvest_closing = True
     text = format_coordination_events(
         session,
         [
@@ -1867,9 +1865,9 @@ def test_all_completed_inject_without_output_skips_audit_unless_review_wave():
     assert "团队已全部结束" in text
     assert "先派审计再收尾" not in text
     assert "团队成品" not in text
+    assert "已开工队员禁止说成" not in text
 
     review = CoordinationSession(execution_id="e-rev", total_workers=2)
-    review.harvest_closing = True
     review.live_plan = RunPlan(
         nodes=[
             RunSpec(run_id="w", task="写", role="撰稿人"),
@@ -1892,7 +1890,6 @@ def test_all_completed_criteria_unmet_inject_steers_reuse_not_respawn():
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     session = CoordinationSession(execution_id="e", total_workers=2)
-    session.harvest_closing = True
     text = format_coordination_events(
         session,
         [
@@ -1907,10 +1904,13 @@ def test_all_completed_criteria_unmet_inject_steers_reuse_not_respawn():
             )
         ],
     )
-    assert "批次验收未满足" in text
+    assert "有队员失败则不得视为成功交付" in text
+    assert "勿向用户宣称全部完成" in text
     assert "调度已结束" in text
     assert "勿再启同服" in text
     assert "复用" in text or "只补浏览器" in text
+    assert "批次验收" not in text
+    assert "completion_criteria" not in text
     assert "团队已全部结束" not in text
     assert "活没干完就接着干" not in text
 
@@ -1919,7 +1919,6 @@ def test_harvest_inject_close_line_differs_by_outcome():
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     ok = CoordinationSession(execution_id="e-ok", total_workers=1)
-    ok.harvest_closing = True
     ok_text = format_coordination_events(
         ok,
         [
@@ -1933,7 +1932,6 @@ def test_harvest_inject_close_line_differs_by_outcome():
     assert "然后退出协调" not in ok_text
 
     fail = CoordinationSession(execution_id="e-fail", total_workers=2)
-    fail.harvest_closing = True
     fail.failed_run_ids = {"b"}
     fail_text = format_coordination_events(
         fail,
@@ -1948,7 +1946,6 @@ def test_harvest_inject_close_line_differs_by_outcome():
     assert "活没干完就接着干" not in fail_text
 
     cancelled = CoordinationSession(execution_id="e-c", total_workers=1)
-    cancelled.harvest_closing = True
     cancelled_text = format_coordination_events(
         cancelled,
         [
@@ -1962,7 +1959,6 @@ def test_harvest_inject_close_line_differs_by_outcome():
     assert "活没干完就接着干" not in cancelled_text
 
     paused = CoordinationSession(execution_id="e-soft", total_workers=1)
-    paused.harvest_closing = True
     paused.soft_stop = True
     paused_text = format_coordination_events(
         paused,
@@ -2080,8 +2076,40 @@ async def test_wait_shortcircuit_guard_when_terminal_missing(monkeypatch):
     assert "团队已全部结束" in (msgs[0].content or "")
     assert "报告本波结果" in (msgs[0].content or "")
     assert "勿做最终合成" not in (msgs[0].content or "")
+    assert "已开工队员禁止说成" not in (msgs[0].content or "")
+    assert "尚未启动" not in (msgs[0].content or "")
     assert session.active is False
     assert session.all_completed_injected is True
+
+
+async def test_wait_shortcircuit_cancelled_does_not_say_all_completed(monkeypatch):
+    import agentcore.runtime.coordination.wait as coord_wait
+    from agentcore.runtime.coordination.session import (
+        current_execution_id,
+        set_active_coordination,
+    )
+    from agentcore.runtime.coordination.wait import await_coordination_injection
+
+    monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 30.0)
+    clear_active_coordination()
+    session = CoordinationSession(execution_id="exec-short-c", total_workers=2)
+    session.completed_run_ids = {"w1", "w2"}
+    session.cancel_ids = {"w1", "w2"}
+    session.drive_task = asyncio.get_running_loop().create_future()
+    session.drive_task.set_result(None)
+    set_active_coordination(session)
+    token = current_execution_id.set("exec-short-c")
+    try:
+        msgs = await asyncio.wait_for(await_coordination_injection([]), timeout=2.0)
+    finally:
+        current_execution_id.reset(token)
+        clear_active_coordination()
+
+    text = msgs[0].content or ""
+    assert "all_completed：" not in text
+    assert "团队已全部结束" not in text
+    assert "team_cancelled" in text
+    assert "任务已取消" in text
 
 
 def test_synthetic_all_completed_stamps_cancel_and_fail_flags():
@@ -2131,7 +2159,6 @@ async def test_wait_shortcircuit_cancelled_bag_does_not_claim_all_done(monkeypat
     session = CoordinationSession(execution_id="exec-short-cancel-wait", total_workers=1)
     session.completed_run_ids = {"never-ran"}
     session.cancel_ids = {"never-ran"}
-    session.harvest_closing = True
     session.drive_task = asyncio.get_running_loop().create_future()
     session.drive_task.set_result(None)
     set_active_coordination(session)
@@ -2143,8 +2170,10 @@ async def test_wait_shortcircuit_cancelled_bag_does_not_claim_all_done(monkeypat
         clear_active_coordination()
 
     text = msgs[0].content or ""
-    assert "all_completed" in text
-    assert "调度中断" in text
+    assert "team_cancelled" in text
+    assert "任务已取消" in text
+    assert "all_completed" not in text
+    assert "调度中断" not in text
     assert "团队已全部结束" not in text
     assert session.active is False
     assert session.all_completed_injected is True
@@ -2164,7 +2193,6 @@ async def test_wait_shortcircuit_failed_bag_does_not_claim_all_done(monkeypatch)
     session = CoordinationSession(execution_id="exec-short-fail-wait", total_workers=2)
     session.completed_run_ids = {"ok", "boom"}
     session.failed_run_ids = {"boom"}
-    session.harvest_closing = True
     session.drive_task = asyncio.get_running_loop().create_future()
     session.drive_task.set_result(None)
     set_active_coordination(session)
@@ -2473,8 +2501,8 @@ async def test_merge_rearm_wakes_ceo_wait_promptly(monkeypatch):
     assert session.all_completed_injected is True
 
 
-def test_release_prefers_harvest_after_attached_inject(monkeypatch):
-    """注入已 settle 仍须 harvest：等待气泡不是用户可见收口。"""
+def test_release_prefers_settle_after_attached_inject(monkeypatch):
+    """注入已 settle 仍须结算：等待气泡不是用户可见收口。"""
     from structlog.testing import capture_logs
 
     session = CoordinationSession(
@@ -2497,7 +2525,7 @@ def test_release_prefers_harvest_after_attached_inject(monkeypatch):
     def _fake_finish(s: CoordinationSession) -> None:
         called["session"] = s
         s.harvest_scheduled = True
-        s.mark_settled("harvest")
+        s.mark_settled("detached")
 
     monkeypatch.setattr(
         "agentcore.runtime.coordination.session.finish_detached_coordination",
@@ -2509,12 +2537,12 @@ def test_release_prefers_harvest_after_attached_inject(monkeypatch):
     assert called.get("session") is session
     assert session.turn_attached is False
     assert session.harvest_scheduled is True
-    assert session.settled_via == "harvest"
-    assert any(e.get("event") == "coordination.release_prefers_harvest" for e in logs)
+    assert session.settled_via == "detached"
+    assert any(e.get("event") == "coordination.release_prefers_settle" for e in logs)
 
 
-def test_release_keeps_session_when_harvest_already_scheduled():
-    """harvest 已在飞：release 只交还附着，禁止裸 clear 掉收口。"""
+def test_release_keeps_session_when_settle_already_scheduled():
+    """结算已在飞：release 只交还附着，禁止裸 clear。"""
     session = CoordinationSession(
         execution_id="e-harv-inflight",
         total_workers=1,
@@ -2537,8 +2565,8 @@ def test_release_keeps_session_when_harvest_already_scheduled():
     assert session.harvest_scheduled is True
 
 
-def test_release_prefers_harvest_when_terminal_unsettled(monkeypatch):
-    """drive 已结束 + terminal_posted 未 settle → release 走 harvest，不裸 clear。"""
+def test_release_prefers_settle_when_terminal_unsettled(monkeypatch):
+    """drive 已结束 + terminal_posted 未 settle → release 走结算，不裸 clear。"""
     from structlog.testing import capture_logs
 
     session = CoordinationSession(
@@ -2560,7 +2588,7 @@ def test_release_prefers_harvest_when_terminal_unsettled(monkeypatch):
     def _fake_finish(s: CoordinationSession) -> None:
         called["session"] = s
         s.harvest_scheduled = True
-        s.mark_settled("harvest")
+        s.mark_settled("detached")
 
     monkeypatch.setattr(
         "agentcore.runtime.coordination.session.finish_detached_coordination",
@@ -2572,12 +2600,12 @@ def test_release_prefers_harvest_when_terminal_unsettled(monkeypatch):
     assert called.get("session") is session
     assert session.turn_attached is False
     assert session.harvest_scheduled is True
-    assert session.settled_via == "harvest"
-    assert any(e.get("event") == "coordination.release_prefers_harvest" for e in logs)
+    assert session.settled_via == "detached"
+    assert any(e.get("event") == "coordination.release_prefers_settle" for e in logs)
 
 
 def test_check_terminal_settlement_logs_unsettled():
-    """终态未 inject/harvest 时 clear 路径打 coordination.terminal_unsettled。"""
+    """终态未 inject/settle 时 clear 路径打 coordination.terminal_unsettled。"""
     from structlog.testing import capture_logs
 
     session = CoordinationSession(execution_id="e-unsettle", total_workers=1)
@@ -2594,7 +2622,7 @@ def test_check_terminal_settlement_logs_unsettled():
 
 
 def test_terminal_unsettled_post_detach_missing_durable_run_terminal():
-    """detach 后 harvest 已 stamp settled_via，但宿主 journal 缺 worker 终态 → 仍告警。"""
+    """detach 后已 stamp settled_via，但宿主 journal 缺 worker 终态 → 仍告警。"""
     from structlog.testing import capture_logs
 
     session = CoordinationSession(
@@ -2604,7 +2632,7 @@ def test_terminal_unsettled_post_detach_missing_durable_run_terminal():
     )
     session.turn_attached = False
     session.completed_run_ids.update({"w1", "w2"})
-    session.mark_settled("harvest")
+    session.mark_settled("detached")
     session.post(
         CoordinationEvent(
             kind=CoordinationEventKind.ALL_COMPLETED,
@@ -2625,7 +2653,7 @@ def test_terminal_unsettled_post_detach_missing_durable_run_terminal():
 
 
 def test_terminal_settlement_ok_when_post_detach_journal_has_all_terminals():
-    """post-detach journal 终态齐全时，即使已 harvest 也不再打 terminal_unsettled。"""
+    """post-detach journal 终态齐全时，即使已结算也不再打 terminal_unsettled。"""
     from structlog.testing import capture_logs
 
     session = CoordinationSession(
@@ -2635,7 +2663,7 @@ def test_terminal_settlement_ok_when_post_detach_journal_has_all_terminals():
     )
     session.turn_attached = False
     session.completed_run_ids.update({"w1", "w2"})
-    session.mark_settled("harvest")
+    session.mark_settled("detached")
     complete = [
         {"kind": "run_failed", "payload": {"run_id": "w1"}},
         {"kind": "run_failed", "payload": {"run_id": "w2"}},

@@ -96,7 +96,7 @@ class AutomationDeliveryConfirmedFact:
 def automation_toolshed_rejected_message() -> str:
     return (
         "当前记账交付形态与所选控制台原型气质不符："
-        "可运行自动化请自由组队 / `build_feature`；仅方案请手写 tasks 交方案文档。"
+        "可运行自动化请手写组队；仅方案请手写 tasks 交方案文档。"
         "若要做控制台原型，请先经 ask_user 重选「控制台原型」。"
     )
 

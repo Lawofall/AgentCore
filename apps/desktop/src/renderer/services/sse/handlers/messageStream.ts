@@ -10,6 +10,7 @@ import { clearQueuedTurnLocally } from "@/services/turns/cancelQueuedTurn";
 import { settleConsumedResume } from "@/services/turns/consumedResume";
 import { notifySteerDegradedToQueue } from "@/services/turns/queuedNotify";
 import { insertQueuedTurnUserBubble } from "@/services/turns/queuedTurnLocal";
+import { clearStopHydrateWatchdog } from "@/services/turns/stopHydrate";
 import {
   completeTurnPhase,
   getRuntime,
@@ -310,7 +311,7 @@ export function handleMessageStreamEvent(
           // running，交由 recordFrame(s) 的 run 终态 reconcile 在最后一个托管 worker
           // 终态帧落时收口（经重连回放 / 跨回合追加送达）。paused 收口与「工人已终态」
           // 两条路径不变。Captain 假 pending（pre-plan run_started 被丢）不参与 hold，
-          // 否则 end_turn 后会永久钉在「正在生成汇总」。
+          // 否则 end_turn 后会永久钉在「正在收尾」。
           // cancelled/interrupted：后端终态权威，立刻定格（finalizeFold 冻残留 running）。
           // attested/finish paused wins over a preceding error event's failed stamp
           // so CEO 汇总 stays pending, not a second red failure.
@@ -347,6 +348,7 @@ export function handleMessageStreamEvent(
       // preceding error event's failed phase so continue can open a stream.
       const phase = getTurnPhase(conversationId);
       if (phase === "stopping") {
+        clearStopHydrateWatchdog(conversationId);
         completeTurnPhase(conversationId, "stopped");
       } else if (paused || parseTurnOutcomeKind(payload.outcome) === "paused") {
         if (phase !== "stopped") {
@@ -387,6 +389,9 @@ export function handleMessageStreamEvent(
       }
       // Same as message_end: keep the complete window; idle prune is LRU-only.
       finalizeTurnTrace(conversationId);
+      if (getTurnPhase(conversationId) === "stopping") {
+        clearStopHydrateWatchdog(conversationId);
+      }
       completeTurnPhase(
         conversationId,
         getTurnPhase(conversationId) === "stopping" ? "stopped" : "failed",

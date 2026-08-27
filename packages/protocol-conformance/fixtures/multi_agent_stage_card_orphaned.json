@@ -16,7 +16,7 @@
         "tool_call_id": "dc1",
         "tool_name": "delegate",
         "arguments": {
-          "playbook": "multi_lens_research"
+          "playbook": "lens_crosscheck"
         }
       },
       "timestamp": "2026-01-01T00:00:00.002Z"

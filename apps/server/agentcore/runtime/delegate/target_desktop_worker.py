@@ -81,6 +81,9 @@ async def rebuild_worker_prompt_for_target(
         permission_axes=permission_axes,
         git_fact=git_fact,
         outlet_inventory=await collect_outlet_inventory(backend),
+        desk_folder_id=folder_id,
+        desk_folder_label=(getattr(backend, "root_label", None) or "").strip() or None,
+        desk_is_birth=False,
     )
     shared_base = assemble_system_prompt(
         rules_markdown=rules_markdown,

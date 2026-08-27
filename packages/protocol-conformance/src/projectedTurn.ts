@@ -307,16 +307,14 @@ export type InteractionStatus = "pending" | "resolved" | "orphaned";
 /**
  * Kinds that pause the turn when status=pending (gate surface).
  *
- * Derived from the spec's `pausesTurn` so a new gating kind cannot land here
- * while mobile (which already derives) picks it up — that split is exactly the
- * desktop/mobile gate divergence this judge exists to catch.
+ * Derived from the spec's `pausesTurn`.
  */
 export const GATE_INTERACTION_KINDS = USER_INTERACTION_KIND_VALUES.filter(
   (kind) => INTERACTION_KIND_WIRE[kind].pausesTurn,
 );
 
 /** One user-facing interaction across its lifecycle — replaces the old single-slot
- * `pendingInteraction`. All 7 kinds appear (`client_tool` is fulfill-channel-only, not
+ * `pendingInteraction`. Live kinds appear (`client_tool` is fulfill-channel-only, not
  * in this union); status tracks pending|resolved|orphaned so reload after settle never
  * re-renders a false pending card. Multi-approval concurrency is first-class (array, not
  * last-write-wins). */
@@ -340,24 +338,6 @@ export type ProjectedInteraction =
       id: string;
       status: InteractionStatus;
       runIds: string[];
-    }
-  | {
-      kind: "team_preview";
-      id: string;
-      status: InteractionStatus;
-      workerIds: string[];
-      /** Resolved 修正：用户关闭的 run_id；缺省=无排除。 */
-      excludedRunIds?: string[];
-      /** Resolved 修正：写盘单向收紧（capability 仅 text_only）。 */
-      writeCapabilityOverrides?: Array<{
-        runId: string;
-        capability: "text_only";
-      }>;
-      /** Resolved 修正：人盖 CEO 的队员模型（run_id → 三元组）。 */
-      modelOverrides?: Record<
-        string,
-        { model: string; origin?: string; provider_id?: string }
-      >;
     }
   | {
       kind: "escalation";

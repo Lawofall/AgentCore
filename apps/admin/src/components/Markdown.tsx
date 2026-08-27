@@ -39,9 +39,22 @@ const components: Components = {
   },
 };
 
-export const Markdown = memo(function Markdown({ content }: { content: string }) {
+export const Markdown = memo(function Markdown({
+  content,
+  muted = false,
+}: {
+  content: string;
+  /** Secondary tone for thought — headings inherit, unlike a parent text-* wrap. */
+  muted?: boolean;
+}) {
   return (
-    <div className="markdown-body min-w-0 max-w-full">
+    <div
+      className={
+        muted
+          ? "markdown-body markdown-body--muted min-w-0 max-w-full"
+          : "markdown-body min-w-0 max-w-full"
+      }
+    >
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}

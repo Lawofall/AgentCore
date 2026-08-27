@@ -1426,6 +1426,45 @@ describe("toolDetail · title chip", () => {
     expect(toolDetail({ source: "only-src.md" })).toBe("");
     expect(toolDetail({ destination: "only-dest.md" })).toBe("");
   });
+
+  it("chips directory for file_list / list_folder_dir; skips '.' and folder_id UUID", () => {
+    expect(toolDetail({ directory: "src/app" }, "file_list")).toBe("src/app");
+    expect(toolDetail({ directory: "." }, "file_list")).toBe("");
+    expect(
+      toolDetail(
+        {
+          directory: "docs",
+          folder_id: "550e8400-e29b-41d4-a716-446655440000",
+        },
+        "list_folder_dir",
+      ),
+    ).toBe("docs");
+    expect(
+      toolDetail(
+        { folder_id: "550e8400-e29b-41d4-a716-446655440000" },
+        "delete_folder",
+      ),
+    ).toBe("");
+    expect(
+      toolDetail({ path: "550e8400-e29b-41d4-a716-446655440000" }, "file_read"),
+    ).toBe("");
+  });
+
+  it("git title chip is subcommand, not ApprovalPrompt headline", () => {
+    expect(
+      toolDetail(
+        {
+          subcommand: "commit",
+          message: "feat: fold process tools into one line",
+        },
+        "git",
+      ),
+    ).toBe("commit");
+    expect(toolDetail({ subcommand: "push", remote: "origin" }, "git")).toBe(
+      "push",
+    );
+    expect(toolDetail({ subcommand: "status" }, "git")).toBe("status");
+  });
 });
 
 describe("toolGroupSummary · read_url", () => {

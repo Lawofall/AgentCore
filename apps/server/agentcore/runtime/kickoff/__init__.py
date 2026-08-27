@@ -25,7 +25,10 @@ from agentcore.runtime.kickoff.debate_host import (
 from agentcore.runtime.kickoff.gate import is_short_affirmation
 from agentcore.runtime.kickoff.research_first import research_first_tool_result
 from agentcore.runtime.kickoff.retired import (
+    LEFTOVER_TEAM_PREVIEW_KIND,
     TEAM_PREVIEW_UNRECOVERABLE,
+    is_leftover_team_preview_frame,
+    refuse_if_leftover_team_preview,
     refuse_team_preview_resume,
 )
 from agentcore.runtime.kickoff.revision import (
@@ -57,29 +60,17 @@ from agentcore.runtime.kickoff.summary import (
     intensity_short_label,
     worker_rows,
 )
-from agentcore.runtime.kickoff.team_veto import (
-    WriteCapabilityOverride,
-    apply_debate_model_overrides,
-    apply_team_preview_veto,
-    should_apply_debate_model_overrides,
-    should_apply_team_veto,
-    validate_debate_model_overrides,
-    validate_team_preview_veto,
-    validate_team_preview_veto_workers,
-)
 
 __all__ = [
     "DebateHostAttach",
     "KickoffAdjustState",
     "KickoffPrimitive",
     "KickoffSummary",
+    "LEFTOVER_TEAM_PREVIEW_KIND",
     "SESSION_DESK_LABEL",
     "TEAM_PREVIEW_UNRECOVERABLE",
     "UNNAMED_DESK_LABEL",
-    "WriteCapabilityOverride",
-    "apply_debate_model_overrides",
     "apply_motion_override",
-    "apply_team_preview_veto",
     "build_stage_card_payload",
     "clear_turn_keeps_stage_card",
     "consume_mlr_preauth",
@@ -103,14 +94,11 @@ __all__ = [
     "KICKOFF_TIMEOUT_GUIDANCE",
     "worker_rows",
     "mark_turn_keeps_stage_card",
+    "is_leftover_team_preview_frame",
     "is_short_affirmation",
+    "refuse_if_leftover_team_preview",
     "refuse_team_preview_resume",
     "research_first_tool_result",
     "resolve_debate_host_attach",
-    "should_apply_debate_model_overrides",
-    "should_apply_team_veto",
     "turn_keeps_stage_card",
-    "validate_debate_model_overrides",
-    "validate_team_preview_veto",
-    "validate_team_preview_veto_workers",
 ]

@@ -35,7 +35,7 @@ def test_normalize_options_preserves_bind_local_folder_action():
     assert "action" not in out[3]
     assert "detail" not in out[3]  # 普通短问丢掉第二句
     assert "action" not in out[4]  # unknown actions drop
-    assert out[5]["action"] == "grant_readonly_folder"
+    assert "action" not in out[5]  # grant_readonly_folder dropped
     assert out[6]["action"] == "grant_organize_folder"
 
 
@@ -44,7 +44,7 @@ def test_normalize_options_passthrough_well_known_and_target_name():
         [
             {
                 "label": "授权桌面",
-                "action": "grant_readonly_folder",
+                "action": "grant_organize_folder",
                 "well_known": "desktop",
                 "target_name": "咨询报告",
             },
@@ -56,13 +56,13 @@ def test_normalize_options_passthrough_well_known_and_target_name():
             },
             {
                 "label": "坏路径名",
-                "action": "grant_readonly_folder",
+                "action": "grant_organize_folder",
                 "well_known": "documents",
                 "target_name": "a/b",
             },
             {
                 "label": "未知 well_known",
-                "action": "grant_readonly_folder",
+                "action": "grant_organize_folder",
                 "well_known": "home",
                 "target_name": "ok",
             },
@@ -74,7 +74,7 @@ def test_normalize_options_passthrough_well_known_and_target_name():
             },
             {
                 "label": "反斜杠拒绝",
-                "action": "grant_readonly_folder",
+                "action": "grant_organize_folder",
                 "well_known": "desktop",
                 "target_name": r"a\b",
             },
@@ -104,6 +104,21 @@ def test_normalize_options_passthrough_well_known_and_target_name():
     assert "target_name" not in out[5]
     assert out[6]["path"] == r"D:\新建文件夹\资料"
     assert "path" not in out[7]
+
+
+def test_normalize_options_drops_grant_readonly_folder_and_hints():
+    out = normalize_options(
+        [
+            {
+                "label": "授权只读目录",
+                "action": "grant_readonly_folder",
+                "well_known": "desktop",
+                "target_name": "咨询报告",
+                "path": r"D:\新建文件夹\资料",
+            },
+        ]
+    )
+    assert out == [{"label": "授权只读目录"}]
 
 
 def test_normalize_options_drops_detail_by_default():
@@ -496,7 +511,6 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
         "open_local_project",
         "register_local_project",
         "bind_local_folder",
-        "grant_readonly_folder",
         "grant_organize_folder",
     ]
     assert props2["well_known"]["enum"] == ["desktop", "downloads", "documents"]
@@ -505,22 +519,29 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert "open_local_project" in advertised.schema.description or "open/register/bind" in advertised.schema.description
     assert "register_local_project" in advertised.schema.description or "open/register/bind" in advertised.schema.description
     assert "bind_local_folder" in advertised.schema.description or "bind_local_*" in advertised.schema.description
-    assert "grant_readonly_folder" in advertised.schema.description
+    assert "grant_readonly_folder" not in advertised.schema.description
     assert "grant_organize_folder" in advertised.schema.description
     assert "external_mount_readonly" in advertised.schema.description
-    assert "禁止" in advertised.schema.description  # grant_readonly 仍禁新发
+    assert "HOW→consult(ask_user_kickoff" in advertised.schema.description
+    assert "整理要发卡" in advertised.schema.description
+    assert "只读用" in advertised.schema.description
     assert "改导" not in advertised.schema.description
-    # 允许多 organize choice：口头同意立刻发卡；歧义 2～3
-    assert "口头同意" in advertised.schema.description or "2～3" in advertised.schema.description
-    assert "2～3" in advertised.schema.description or "2-3" in advertised.schema.description
+    # 口头同意闭环 / 歧义 2～3 候选怎么填：HOW 在 skill，不进工具 description。
+    assert "口头同意" not in advertised.schema.description
+    assert "2～3" not in advertised.schema.description
+    assert "2-3" not in advertised.schema.description
     action_desc = props2["action"]["description"]
     assert "open_local_project" in action_desc or "open/register/bind" in action_desc
     assert "register_local_project" in action_desc or "open/register/bind" in action_desc
     assert "本机传统" in action_desc or "非默认" in action_desc
     assert "改导" not in action_desc
     assert "bind_local_folder" in action_desc or "open/register/bind" in action_desc
-    assert "external_mount_readonly" in action_desc or "禁止" in action_desc
-    assert "2～3" in action_desc or "口头同意" in action_desc
+    assert "grant_readonly_folder" not in action_desc
+    assert "grant_readonly_folder" not in props2["action"]["enum"]
+    assert "整理要发卡" in action_desc
+    assert "口头同意" not in action_desc
+    assert "2～3" not in action_desc
+    assert "2-3" not in action_desc
     assert "选择器兜底" not in props2["well_known"]["description"]
     assert "picker" not in props2["target_name"]["description"].lower()
     # Desktop advertise must stay compact (dogfood ~3796 before slim); HOW → skill.
@@ -533,3 +554,21 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert len(adv_blob) < 3600, f"desktop ask_user schema too fat: {len(adv_blob)}"
     assert len(plain_blob) < len(adv_blob)
     assert abs(len(plain_blob) - 1845) < 80  # non-desktop path must not inflate
+
+
+def test_ask_user_organize_how_lives_in_skill():
+    """口头同意闭环 / 歧义 2～3 候选：HOW 钉 consult skill，不进工具 description。"""
+    from agentcore.runtime.skills import build_system_skill_registry
+
+    registry = build_system_skill_registry()
+    kickoff = registry.get("ask_user_kickoff")
+    mid = registry.get("ask_user_midtask")
+    assert kickoff is not None
+    assert mid is not None
+    from agentcore.runtime.resolve.prompt import capability_how_suffix
+
+    granted = capability_how_suffix({"external_mount_readonly"})
+    assert "口头同意" in granted
+    assert "2～3" in granted or "2-3" in granted
+    assert "grant_organize_folder" in mid.body
+    assert "consult(external_mount_readonly)" in mid.body

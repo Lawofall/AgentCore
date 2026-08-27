@@ -63,6 +63,38 @@ describe("formatProcessExport", () => {
     ).toBe("· Wait");
   });
 
+  it("uses English chrome for list_folders / git subcommand, not snake_case or commit headline", () => {
+    expect(
+      formatProcessExport([
+        {
+          kind: "tool",
+          id: "t1",
+          tool_name: "list_folders",
+          arguments: {},
+          result: "ok",
+          status: "success",
+        },
+      ]),
+    ).toBe("· List folders");
+    const git = formatProcessExport([
+      {
+        kind: "tool",
+        id: "t2",
+        tool_name: "git",
+        arguments: {
+          subcommand: "commit",
+          message: "feat: fold process tools into one line",
+        },
+        result: "ok",
+        status: "success",
+      },
+    ]);
+    expect(git).toContain("Git");
+    expect(git).toContain("commit");
+    expect(git).not.toContain("feat: fold process tools");
+    expect(git).not.toContain("list_folders");
+  });
+
   it("rework chip: in-progress while streaming with empty body after reset", () => {
     const reworking: ProcessStep[] = [
       { kind: "reasoning", text: "核验未过" },

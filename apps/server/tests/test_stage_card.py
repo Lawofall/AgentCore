@@ -314,7 +314,7 @@ def test_turn_advanced_stage_from_entries_detects_debate_and_mlr():
                 "type": "tool_use_start",
                 "payload": {
                     "tool_name": "delegate",
-                    "arguments": {"playbook": "multi_lens_research"},
+                    "arguments": {"playbook": "lens_crosscheck"},
                 },
             }
         ]
@@ -503,7 +503,7 @@ async def test_drive_mlr_preauth_skips_team_preview(monkeypatch):
     class _Tool:
         _depth = 0
         _permission_axes = AutonomyPolicy.LESS_INTERRUPT
-        _active_playbook = "multi_lens_research"
+        _active_playbook = "lens_crosscheck"
         _pending_pause = False
         _base_tool_context = type("C", (), {"backend": None})()
         _approval_gate = None
@@ -669,7 +669,7 @@ async def test_mlr_stop_clears_keep_flag(monkeypatch):
     class _Tool:
         _depth = 0
         _permission_axes = AutonomyPolicy.LESS_INTERRUPT
-        _active_playbook = "multi_lens_research"
+        _active_playbook = "lens_crosscheck"
         _pending_pause = False
         _base_tool_context = type("C", (), {"backend": None})()
         _approval_gate = None

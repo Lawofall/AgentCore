@@ -48,7 +48,7 @@
         "tool_call_id": "db1",
         "tool_name": "debate",
         "status": "success",
-        "result": "用户在开赛确认中选择「先多视角调研再辩」。本场辩论未授权，请勿再次调用 debate。本回合必须立即调用 delegate(playbook=\"multi_lens_research\", playbook_args={\"topic\": \"该不该上四天工作制？\"})；调研与呈报完成、用户拍板后再开辩。"
+        "result": "用户在开赛确认中选择「先多视角调研再辩」。本场辩论未授权，请勿再次调用 debate。本回合必须立即调用 delegate(playbook=\"lens_crosscheck\", playbook_args={\"topic\": \"该不该上四天工作制？\"})；调研与呈报完成、用户拍板后再开辩。"
       },
       "timestamp": "2026-01-01T00:00:00.004Z"
     },

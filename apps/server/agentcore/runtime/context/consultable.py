@@ -1,6 +1,6 @@
-"""Small shared shape for「目录 + 按名取文」consult sources (上下文工程 · 扳机 A).
+"""Small shared shape for「目录 + 按名取文」consult sources (上下文工程 · 按需与写侧配额).
 
-步 1 已落地：skill / rule / memory 均适配本 Protocol；低频工具另走
+skill / rule / memory 均适配本 Protocol；低频工具另走
 :class:`~agentcore.runtime.context.consult_sources.ToolConsultSource`（不共享 Tool 基类）。
 四源经 :class:`~agentcore.runtime.context.consult_sources.MergedConsultSource` 聚合，
 供 ``consult`` 与提示词 ``<按需目录>`` 共用（目录与按名拉取不可漂移）。

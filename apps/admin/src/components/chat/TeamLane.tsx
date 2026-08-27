@@ -1,6 +1,6 @@
 import type { NormalizedRun } from "@/components/chat/chatTurn";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Circle, Loader2, Users, XCircle } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, Square, XCircle } from "lucide-react";
 import { useMemo } from "react";
 
 const STATUS_DOT: Record<string, string> = {
@@ -21,35 +21,47 @@ const STATUS_LABEL: Record<string, string> = {
   skipped: "未执行",
 };
 
-function teamLifecycleLabel(runs: NormalizedRun[]): {
-  text: string;
+function teamLifecycle(runs: NormalizedRun[]): {
+  label: string;
   tone: "success" | "primary" | "destructive" | "warning" | "neutral";
 } {
-  if (runs.length === 0) return { text: "无协作", tone: "neutral" };
+  if (runs.length === 0) return { label: "协作", tone: "neutral" };
   const statuses = runs.map((r) => r.status);
   if (statuses.every((s) => s === "completed"))
-    return { text: "协作已完成", tone: "success" };
+    return { label: "完成", tone: "success" };
   if (statuses.some((s) => s === "failed"))
-    return { text: "部分失败", tone: "destructive" };
+    return { label: "失败", tone: "destructive" };
   if (statuses.some((s) => s === "cancelled"))
-    return { text: "已停止", tone: "warning" };
+    return { label: "已停止", tone: "warning" };
   if (statuses.some((s) => s === "running"))
-    return { text: "执行中", tone: "primary" };
-  return { text: "协作", tone: "neutral" };
+    return { label: "执行中", tone: "primary" };
+  return { label: "协作", tone: "neutral" };
 }
 
 function LifecycleIcon({
   tone,
+  label,
 }: {
   tone: "success" | "primary" | "destructive" | "warning" | "neutral";
+  label: string;
 }) {
-  if (tone === "success")
-    return <CheckCircle2 size={14} className="shrink-0 text-success" aria-hidden />;
-  if (tone === "primary")
-    return <Loader2 size={14} className="shrink-0 animate-spin text-primary" aria-hidden />;
-  if (tone === "destructive")
-    return <XCircle size={14} className="shrink-0 text-destructive" aria-hidden />;
-  return <Circle size={14} className="shrink-0 text-muted-foreground" aria-hidden />;
+  const icon =
+    tone === "success" ? (
+      <CheckCircle2 size={14} className="shrink-0 text-success" aria-hidden />
+    ) : tone === "primary" ? (
+      <Loader2 size={14} className="shrink-0 animate-spin text-primary" aria-hidden />
+    ) : tone === "destructive" ? (
+      <XCircle size={14} className="shrink-0 text-destructive" aria-hidden />
+    ) : tone === "warning" ? (
+      <Square size={14} className="shrink-0 text-muted-foreground" aria-hidden />
+    ) : (
+      <Circle size={14} className="shrink-0 text-muted-foreground" aria-hidden />
+    );
+  return (
+    <span className="inline-flex shrink-0" role="img" aria-label={label} title={label}>
+      {icon}
+    </span>
+  );
 }
 
 /**
@@ -91,19 +103,13 @@ export function TeamLane({
   if (runs.length === 0) return null;
   const completed = progress.completed;
   const total = progress.total || runs.length;
-  const lifecycle = teamLifecycleLabel(runs);
+  const lifecycle = teamLifecycle(runs);
 
   return (
     <section aria-label="团队" className="min-w-0 max-w-full space-y-2">
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs">
-        <Users size={14} className="shrink-0 text-primary" aria-hidden />
-        <LifecycleIcon tone={lifecycle.tone} />
-        <span className="font-medium text-foreground">{lifecycle.text}</span>
-        <span className="text-muted-foreground">
-          <span className="tabular-nums text-foreground">{completed}</span>
-          <span className="text-muted-foreground">/{total}</span>
-          <span className="ml-0.5">完成</span>
-        </span>
+        <LifecycleIcon tone={lifecycle.tone} label={lifecycle.label} />
+        <span className="tabular-nums text-muted-foreground">{`${completed}/${total}`}</span>
       </div>
       <ul className="space-y-1">
         {roots.map((run) => (

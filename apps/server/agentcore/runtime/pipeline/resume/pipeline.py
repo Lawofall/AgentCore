@@ -76,9 +76,6 @@ async def resume_chat_pipeline(
     llm_supports_tools: bool | None = None,
     permission_axes: PermissionAxes | None = None,
     x_client_platform: str | None = None,
-    excluded_run_ids: list[str] | None = None,
-    write_capability_overrides: list[dict[str, str]] | None = None,
-    model_overrides: dict[str, dict[str, str]] | None = None,
 ) -> dict:
     """Continue a turn paused at a plan_review / ask_user checkpoint (结构化挂起 2b resume).
 
@@ -302,9 +299,6 @@ async def resume_chat_pipeline(
             execution_id=wired.base_tool_context.execution_id,
             captain_run_id=captain_run_id,
             pre_pause_override=hydrated.pre_pause_content,
-            excluded_run_ids=excluded_run_ids,
-            write_capability_overrides=write_capability_overrides,
-            model_overrides=model_overrides,
             suspension_saver=suspension_saver,
         )
         pre_pause = recovered.pre_pause

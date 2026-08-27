@@ -97,26 +97,30 @@ function isRuleConsultDisplay(d: unknown): d is RuleConsultDisplay {
   return !!d && typeof (d as { rule?: unknown }).rule === "string";
 }
 
-/** Unified `consult` display: `{name}` (+ optional `reused`). */
+/** Unified `consult` display: `{name}` (+ optional `reused` / source `kind`).
+ * Folder-command displays also carry `name` (resolve/create/delete_folder) —
+ * only genuine consult keys may match. */
+const CONSULT_DISPLAY_KEYS = new Set(["name", "reused", "kind"]);
+
 function isUnifiedConsultDisplay(d: unknown): d is UnifiedConsultDisplay {
   if (!d || typeof d !== "object") return false;
   const x = d as Record<string, unknown>;
   if (typeof x.name !== "string") return false;
-  // Exclude sibling rich displays that share open-dict `display`.
-  if (
-    "topic" in x ||
-    "skill_name" in x ||
-    "rule" in x ||
-    "results" in x ||
-    "url" in x ||
-    "stdout" in x ||
-    "conversation_id" in x ||
-    "result_count" in x
-  ) {
-    return false;
+  for (const k of Object.keys(x)) {
+    if (!CONSULT_DISPLAY_KEYS.has(k)) return false;
   }
-  if (x.kind === "browser") return false;
+  if (typeof x.kind === "string") {
+    if (x.kind !== "memory" && x.kind !== "skill" && x.kind !== "rule") {
+      return false;
+    }
+  }
   return true;
+}
+
+function isListFoldersCountDisplay(d: unknown): d is { count: number } {
+  if (!d || typeof d !== "object") return false;
+  const x = d as Record<string, unknown>;
+  return typeof x.count === "number" && Number.isFinite(x.count);
 }
 
 /** `search_conversations` / `read_conversation` display — metadata only (body in result). */
@@ -194,6 +198,10 @@ export function toolResultPeek(d: ToolResultData): string {
     const n = d.display.results.length;
     return n > 0 ? `${n} result${n === 1 ? "" : "s"}` : "No results";
   }
+  if (d.toolName === "list_folders" && isListFoldersCountDisplay(d.display)) {
+    const n = d.display.count;
+    return `${n} folder${n === 1 ? "" : "s"}`;
+  }
   if (isReadUrlDisplay(d.display)) {
     const title =
       cleanSourceTitle(d.display.title) || d.display.site || d.display.url;
@@ -217,7 +225,7 @@ export function toolResultPeek(d: ToolResultData): string {
   if (isRuleConsultDisplay(d.display)) {
     return clampLine(d.display.rule || "已查阅规则");
   }
-  if (isUnifiedConsultDisplay(d.display)) {
+  if (d.toolName === "consult" && isUnifiedConsultDisplay(d.display)) {
     return clampLine(d.display.name || "已查阅");
   }
   if (isConversationLogDisplay(d.display)) {
@@ -786,7 +794,7 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
       />
     );
   }
-  if (isUnifiedConsultDisplay(data.display)) {
+  if (data.toolName === "consult" && isUnifiedConsultDisplay(data.display)) {
     // Unified consult: same card as consult_memory (条目名 + 正文).
     return (
       <MemoryConsultResult

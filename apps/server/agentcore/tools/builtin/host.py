@@ -163,6 +163,9 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
                 "status/os_log/shell：CEO+worker；"
                 "open_settings/set_audio/restart_service/"
                 "install_package：仅 worker（CEO 须 delegate）。"
+                "status=有界探测（OS/磁盘/电源/网卡/音频/应用抽样），不做全盘枚举/扫端口。"
+                "os_log=有界 OS 事件摘要（Win=Get-WinEvent / Linux=journalctl；"
+                "禁整机倾倒；禁用 shell 倒 Event Log/journalctl）。"
                 "审批见工具说明。"
             ),
         },
@@ -215,9 +218,11 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         "command": {
             "type": "string",
             "description": (
-                "shell 本机短时命令（非空）。"
+                "shell 本机短时命令（非空）；无 cwd（home/默认 shell cwd）。"
                 "Windows 写 PowerShell（$env:APPDATA、'; if；禁 %VAR%/||/&&）；"
-                "Unix 写 POSIX shell。"
+                "Unix 写 POSIX（$SHELL -lc）。"
+                "长驻改 terminal；装软件改 install_package；"
+                "毁灭性+静默安装启发式硬拒（非完整边界）。"
             ),
         },
         "timeout_seconds": {
@@ -234,7 +239,10 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         },
         "device_id": {
             "type": "string",
-            "description": "set_audio：设备 id（与 status 音频设备返回的 id 一致）。",
+            "description": (
+                "set_audio：设备 id（与 status 音频设备返回的 id 一致）。"
+                "须先 status 观测设备。"
+            ),
         },
         "device_name": {
             "type": "string",
@@ -758,21 +766,11 @@ class HostTool:
             name="host",
             description=(
                 "本机 Host（仅桌面回填通道；与 folder/bind 正交）。"
-                "schema 免批；status/os_log 运行时免批；shell/open_settings/"
-                "set_audio/restart_service 走 host 轴；install_package 按参数恒确认"
-                "（host=session / kickoff / turn grant 不覆盖）。不吃 kickoff/"
-                "command=auto 静默授。"
-                "CEO 可调 status/os_log/shell；其余仅 worker，CEO 须 delegate。"
-                "status=并行拼装 OS/磁盘/电源/网卡/音频设备/应用抽样（可选 facets，"
-                "默认全要；有界探测，不做全盘枚举/扫端口）。"
-                "os_log=有界 OS 事件摘要（Win=Get-WinEvent / Linux=journalctl；"
-                "禁整机倾倒；禁用 shell 倒 Event Log/journalctl）。"
-                "shell=短时本机命令，无 cwd（home/默认 shell cwd）；Win=PowerShell"
-                "（禁 %VAR%/||/&&）；Unix=$SHELL -lc；长驻改 terminal；"
-                "装软件改 install_package；毁灭性+静默安装启发式硬拒（非完整边界）。"
-                "open_settings 面板白名单 sound|display|network|apps|about；"
-                "set_audio 须先 status 观测设备；restart_service 起步仅 Audiosrv；"
-                "install_package=manager∈{winget,brew,apt}+package_id，brew 可选 cask。"
+                "status/os_log/shell：CEO+worker；面板/音频/服务/装包仅队员。"
+                "schema 免批；status/os_log 运行时免批；其余走 host 轴；"
+                "install_package 恒确认（session/kickoff/turn grant 不覆盖；"
+                "不吃 kickoff/command=auto）。"
+                "HOW→consult(host)。"
             ),
             parameters=HOST_TOOL_PARAMETERS,
             category=ToolCategory.INTERACTION,

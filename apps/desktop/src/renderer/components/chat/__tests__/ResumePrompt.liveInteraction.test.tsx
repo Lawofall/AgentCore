@@ -140,12 +140,9 @@ describe("ResumePrompt · live InteractionStore authority", () => {
   it("team_preview_required with stamp does not paint a clickable kickoff shell", () => {
     expect(usePausedTurnStore.getState().pending).toHaveLength(0);
 
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+    handleInteractionEvent(leftoverPreviewRequired("tp-live"), {
       conversationId: CID,
-      messageId: "m-server-tp",
-      origin: "server",
-      payload: tpPayload("tp-live"),
+      source: "server",
     });
 
     const { container } = renderResume();
@@ -155,9 +152,7 @@ describe("ResumePrompt · live InteractionStore authority", () => {
     expect(screen.queryByRole("button", { name: "继续" })).toBeNull();
     expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
     expect(usePausedTurnStore.getState().pending).toHaveLength(0);
-    expect(
-      useInteractionStore.getState().listPending(CID, ["team_preview"]),
-    ).toHaveLength(1);
+    expect(useInteractionStore.getState().get("tp-live")).toBeUndefined();
   });
 
   it("does not paint clickable card before serverMessageId stamp", () => {
@@ -180,12 +175,9 @@ describe("ResumePrompt · live InteractionStore authority", () => {
       isStreaming: true,
     });
 
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+    handleInteractionEvent(leftoverPreviewRequired("tp-nostamp"), {
       conversationId: CID,
-      messageId: "client-only",
-      origin: "sidecar",
-      payload: tpPayload("tp-nostamp"),
+      source: "sidecar",
     });
 
     const { container } = renderResume();
@@ -213,12 +205,9 @@ describe("ResumePrompt · live InteractionStore authority", () => {
       isStreaming: true,
     });
 
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+    handleInteractionEvent(leftoverPreviewRequired("tp-late-stamp"), {
       conversationId: CID,
-      messageId: "client-late",
-      origin: "server",
-      payload: tpPayload("tp-late-stamp"),
+      source: "server",
     });
 
     renderResume();
@@ -232,9 +221,7 @@ describe("ResumePrompt · live InteractionStore authority", () => {
 
     expect(screen.queryByText("继续")).toBeNull();
     expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
-    expect(
-      useInteractionStore.getState().byId.get("tp-late-stamp")?.messageId,
-    ).toBe("m-server-late");
+    expect(useInteractionStore.getState().get("tp-late-stamp")).toBeUndefined();
   });
 
   it("paints after stamp when pending arrived unbound (empty messageId)", () => {
@@ -287,17 +274,9 @@ describe("ResumePrompt · live InteractionStore authority", () => {
   });
 
   it("second-round leftover team_preview still does not paint", () => {
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+    handleInteractionEvent(leftoverPreviewRequired("tp-round1"), {
       conversationId: CID,
-      messageId: "m-server-tp",
-      origin: "server",
-      payload: tpPayload("tp-round1"),
-    });
-    useInteractionStore.getState().markResolved({
-      kind: "team_preview",
-      id: "tp-round1",
-      resolution: { decision: "continue" },
+      source: "server",
     });
 
     useConversationStore.getState().addMessage({
@@ -320,22 +299,15 @@ describe("ResumePrompt · live InteractionStore authority", () => {
       .getState()
       .setServerMessageIdOnLastMessage("m-server-tp-r2", CID);
 
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+    handleInteractionEvent(leftoverPreviewRequired("tp-round2"), {
       conversationId: CID,
-      messageId: "m-server-tp-r2",
-      origin: "server",
-      payload: tpPayload("tp-round2", {
-        workers: [{ run_id: "r2", role: "写", task: "写", depends_on: [] }],
-      }),
+      source: "server",
     });
 
     renderResume();
     expect(screen.queryByText("继续")).toBeNull();
     expect(screen.queryByText("此回合还停在开工确认")).toBeNull();
-    expect(
-      useInteractionStore.getState().listPending(CID, ["team_preview"]),
-    ).toHaveLength(1);
+    expect(useInteractionStore.getState().get("tp-round2")).toBeUndefined();
   });
 
   it("second-round ask_user paints after first ask resolved", () => {
@@ -397,19 +369,15 @@ describe("ResumePrompt · live InteractionStore authority", () => {
     expect(screen.queryByText("第一轮？")).toBeNull();
   });
 
-  it("keeps origin=sidecar on Interaction entry for submit routing", () => {
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+  it("leftover team_preview SSE is skipped (no IX / no origin stamp)", () => {
+    handleInteractionEvent(leftoverPreviewRequired("tp-side"), {
       conversationId: CID,
-      messageId: "m-server-tp",
-      origin: "sidecar",
-      payload: tpPayload("tp-side"),
+      source: "sidecar",
     });
 
     renderResume();
-    expect(useInteractionStore.getState().byId.get("tp-side")?.origin).toBe(
-      "sidecar",
-    );
+    expect(useInteractionStore.getState().get("tp-side")).toBeUndefined();
+    expect(screen.queryByText("继续")).toBeNull();
   });
 
   it("leftover team_preview does not paint; other cold cards still do", () => {
@@ -443,39 +411,24 @@ describe("ResumePrompt · live InteractionStore authority", () => {
       messageId: "m-server-tp",
       conversationId: CID,
       checkpointId: "tp-paused-old",
-      kind: "team_preview",
+      kind: "team_preview" as never,
       userMessage: "组团做定价",
       userMessageId: "u1",
       steps: [],
       pending: [],
-      workers: [{ run_id: "old", role: "旧", task: "旧", depends_on: [] }],
-      tools: [],
-      primitive: "delegate",
-      headline: "旧开工卡 · 预计 1 人",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: "",
       assumptions: [],
       questions: [],
       intent: "kickoff",
       origin: "server",
     });
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+    handleInteractionEvent(leftoverPreviewRequired("tp-old-ix"), {
       conversationId: CID,
-      messageId: "m-server-tp",
-      origin: "server",
-      payload: tpPayload("tp-old-ix", { headline: "旧 IX 开工卡" }),
+      source: "server",
     });
-    useInteractionStore.getState().upsertRequired({
-      kind: "team_preview",
+    handleInteractionEvent(leftoverPreviewRequired("tp-latest"), {
       conversationId: CID,
-      messageId: "m-server-tp",
-      origin: "server",
-      payload: tpPayload("tp-latest", { headline: "最新开工卡" }),
+      source: "server",
     });
 
     const visible = selectVisibleColdResumes({
@@ -488,7 +441,6 @@ describe("ResumePrompt · live InteractionStore authority", () => {
       "ask_user",
       "plan_review",
     ]);
-    expect(visible.filter((v) => v.kind === "team_preview")).toHaveLength(0);
 
     renderResume();
     expect(screen.getByText("这次讨论怎么推进？")).toBeTruthy();
@@ -702,14 +654,6 @@ describe("ResumePrompt · ask continue → leftover team_preview SSE skip", () =
       userMessageId: "u1",
       steps: [],
       pending: [],
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: "怎么推进？",
       assumptions: [],
       questions: [],

@@ -203,7 +203,7 @@ class DelegateTool:
         from agentcore.runtime.delegate.force_scopes import EMPTY_FORCE_SCOPES
 
         self._force_scopes = EMPTY_FORCE_SCOPES
-        # Turn user-message provenance (harvest closing stamps execution_harvest).
+        # Turn user-message provenance (historical ``execution_harvest`` origin).
         from agentcore.runtime.delegate.post_close_gate import current_user_message_origin
 
         self._user_message_origin: str = current_user_message_origin()
@@ -510,10 +510,10 @@ class DelegateTool:
         await apply_continuation_tool_merges(plan, self)
 
         batch_includes_review = (
-            playbook == "research_report" or batch_declares_review_files(tasks_raw)
+            playbook == "cite_write_review" or batch_declares_review_files(tasks_raw)
         )
-        # 成篇硬门只认 playbook==research_report（及既有非字数结构腿由 includes_review 覆盖）。
-        batch_audit_hard = playbook == "research_report"
+        # 成篇硬门只认 playbook==cite_write_review（及既有非字数结构腿由 includes_review 覆盖）。
+        batch_audit_hard = playbook == "cite_write_review"
         from agentcore.runtime.delegate.completion import (
             execution_capability_warning,
             validate_repair_how_fixed,

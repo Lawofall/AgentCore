@@ -13,7 +13,13 @@ from agentcore.runtime.tool_deadline import (
     reset_tool_deadline,
     set_tool_deadline,
 )
-from agentcore.tools.builtin.file_ops import FileListTool, FileReadTool, FileWriteTool, MkdirTool
+from agentcore.tools.builtin.file_ops import (
+    FileListTool,
+    FileReadTool,
+    FileWriteTool,
+    GlobTool,
+    MkdirTool,
+)
 from agentcore.tools.builtin.grep import GrepTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -386,6 +392,7 @@ async def test_file_read_channel_dead_stamps_family_retire(tmp_path: Path):
     ("tool", "args", "method"),
     [
         (FileListTool(), {"directory": "."}, "list"),
+        (GlobTool(), {"pattern": "*.py"}, "list_tree"),
         (FileWriteTool(), {"path": "a.txt", "content": "x"}, "write"),
         (MkdirTool(), {"path": "nested/d"}, "mkdir"),
         (GrepTool(), {"pattern": "x"}, "grep"),
@@ -398,6 +405,9 @@ async def test_filesystem_tools_single_timeout_no_family_retire(
 
     class _HangBackend(ServerWorkspace):
         async def list(self, *a, **k):  # noqa: ANN002, ANN003
+            raise WorkspaceIOError(f"local workspace op '{method}' timed out（活性挂起）")
+
+        async def list_tree(self, *a, **k):  # noqa: ANN002, ANN003
             raise WorkspaceIOError(f"local workspace op '{method}' timed out（活性挂起）")
 
         async def write(self, *a, **k):  # noqa: ANN002, ANN003
@@ -425,6 +435,7 @@ async def test_filesystem_tools_single_timeout_no_family_retire(
     ("tool", "args", "method"),
     [
         (FileListTool(), {"directory": "."}, "list"),
+        (GlobTool(), {"pattern": "*.py"}, "list_tree"),
         (FileWriteTool(), {"path": "a.txt", "content": "x"}, "write"),
         (MkdirTool(), {"path": "nested/d"}, "mkdir"),
         (GrepTool(), {"pattern": "x"}, "grep"),
@@ -433,10 +444,15 @@ async def test_filesystem_tools_single_timeout_no_family_retire(
 async def test_filesystem_tools_channel_dead_stamps_retire(
     tmp_path: Path, tool, args, method: str
 ):
-    """B2: list / write / mkdir / grep stamp channel-dead retire meta on sticky-dead."""
+    """B2: list / write / mkdir / grep / glob stamp channel-dead retire meta on sticky-dead."""
 
     class _HangBackend(ServerWorkspace):
         async def list(self, *a, **k):  # noqa: ANN002, ANN003
+            raise WorkspaceIOError(
+                f"local workspace op '{method}' timed out; channel dead（活性挂起）"
+            )
+
+        async def list_tree(self, *a, **k):  # noqa: ANN002, ANN003
             raise WorkspaceIOError(
                 f"local workspace op '{method}' timed out; channel dead（活性挂起）"
             )

@@ -36,7 +36,7 @@ _turn_keeps_stage_card: ContextVar[bool] = ContextVar(
 
 
 def grant_mlr_preauth() -> None:
-    """Mark this turn's next ``multi_lens_research`` delegate as pre-authorized."""
+    """Mark this turn's next ``lens_crosscheck`` delegate as pre-authorized."""
     _mlr_preauth.set(True)
 
 
@@ -454,7 +454,7 @@ def turn_advanced_stage_from_entries(
             if name == "delegate":
                 args = payload.get("arguments")
                 if isinstance(args, Mapping) and str(args.get("playbook") or "") == (
-                    "multi_lens_research"
+                    "lens_crosscheck"
                 ):
                     return True
         if kind == "stage_card_resolved" and str(payload.get("decision") or "") == (

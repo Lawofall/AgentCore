@@ -688,7 +688,7 @@ const USER_WORKFLOWS = [
 /** ids must match OfficialTemplateGuide's PICK_WHEN keys for the guide box to render. */
 const WORKFLOW_TEMPLATES = [
   {
-    id: "parallel_brief",
+    id: "map_fanout",
     title: "并行摸底",
     summary: "几名队员同时从不同角度摸一遍议题，快速拿到全貌。",
     primary_slots: "topic",
@@ -697,7 +697,7 @@ const WORKFLOW_TEMPLATES = [
     ],
   },
   {
-    id: "research_report",
+    id: "cite_write_review",
     title: "深度研究报告",
     summary: "检索 → 交叉验证 → 成稿，产出一份带出处的长文报告。",
     primary_slots: "topic",
@@ -707,12 +707,12 @@ const WORKFLOW_TEMPLATES = [
     ],
   },
   {
-    id: "compare_options",
-    title: "选项对比",
-    summary: "把候选项拉成同一张表逐维度打分，最后给推荐与放弃理由。",
-    primary_slots: "options",
+    id: "build_app",
+    title: "从零搭应用",
+    summary: "从零搭一个小应用：脚手架→模块→联调→冒烟。",
+    primary_slots: "app",
     slots: [
-      { key: "options", label: "候选项", required: true, hint: "用顿号分隔" },
+      { key: "app", label: "应用", required: true, hint: "要搭建的应用 / SPA 简述" },
     ],
   },
 ];

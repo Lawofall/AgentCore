@@ -95,38 +95,11 @@ function syncRecoveryFromEvents(
         },
       ];
     }
-    if (ev.type === "team_preview_required") {
-      const checkpointId = String(payload.checkpoint_id ?? "");
-      if (!checkpointId) continue;
-      recovery.paused = [
-        {
-          checkpoint_id: checkpointId,
-          kind: "team_preview",
-          message_id: "m1",
-          user_message: "",
-          user_message_id: "",
-          question: "",
-          assumptions: [],
-          questions: [],
-          steps: [],
-          pending: [],
-          workers: Array.isArray(payload.workers)
-            ? (payload.workers as Record<string, unknown>[])
-            : [],
-          tools: Array.isArray(payload.tools)
-            ? (payload.tools as string[])
-            : [],
-          primitive: String(payload.primitive ?? "delegate"),
-          motion: String(payload.motion ?? ""),
-          form: String(payload.form ?? ""),
-          sides: Array.isArray(payload.sides)
-            ? (payload.sides as Record<string, unknown>[])
-            : [],
-          max_rounds: Number(payload.max_rounds ?? 0),
-          thorough: payload.thorough !== false,
-          intent: "kickoff",
-        },
-      ];
+    if (
+      ev.type === "team_preview_required" ||
+      ev.type === "team_preview_resolved"
+    ) {
+      continue;
     }
     if (ev.type === "message_end") {
       const reason = String(

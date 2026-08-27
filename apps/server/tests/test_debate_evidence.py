@@ -48,6 +48,7 @@ from agentcore.runtime.debate.prompt import (
     side_system,
 )
 from agentcore.tools.builtin.debate.schema import DEBATE_DESCRIPTION, DEBATE_PARAMETERS
+from agentcore.tools.builtin.web.search import WebSearchTool
 
 # --- 共用夹具 ---------------------------------------------------------------
 
@@ -121,17 +122,46 @@ def test_evidence_rule_constant_is_the_single_source():
 
 
 def test_side_system_carries_search_query_rule():
-    """查询构造铁律进【系统提示】（会话 7e1baca0 复盘 §1.6）：短查询 + 空结果删词重搜。
+    """查询取证原则进【系统提示】：当事方/案由、禁抽象文化词、空结果删词重搜。
 
-    治的是「辩手把 web_search 写成 6–8 词长句 → 健康引擎也返 0 结果 → 回落无法核实」。断言约束
-    在场（是否注入是可无 LLM 验的 prompt 契约；命中率本身留 evals/nightly）。"""
+    词数不在辩论常驻复述（唯一所有者 = web_search schema）；个案 query 不出常驻。
+    """
     text = side_system(_config(), _two_sides()[0])
     assert SEARCH_QUERY_RULE in text  # 来自共享常量、口径单一
-    assert "2–4 个核心词" in text  # 短查询铁律
-    # A3 与工具对齐：超限先规范化/截断并明示（不再硬钉旧「超过 8 词」文案）
-    assert "规范化或截断" in text and "明示" in text
+    assert "schema" not in SEARCH_QUERY_RULE
+    assert "见 web_search" not in SEARCH_QUERY_RULE
+    assert "2–4 个核心词" not in text
+    assert "2–4 核心词" not in SEARCH_QUERY_RULE
+    assert "2–3 个核心词" not in SEARCH_QUERY_RULE
+    assert "茉莉奶白" not in SEARCH_QUERY_RULE
+    assert "当事方" in text or "案由" in text
+    assert "抽象文化词" in text
     assert "空结果" in text and "再搜一次" in text  # 空→删词重搜，别当「不存在」
-    assert "案件主体" in text or "当事方" in text  # 禁抽象文化词裸搜
+    schema = WebSearchTool().schema
+    blob = schema.description + schema.parameters["properties"]["query"]["description"]
+    assert "2–3" in blob  # 词数唯一所有者 = 工具 schema
+
+
+def test_red_team_brief_omits_retired_risk_severities_name():
+    """红队简报提示不再点名已退役的按方 risk_severities。"""
+    from agentcore.runtime.debate.moderator_brief import _brief_form_hint
+
+    hint = _brief_form_hint(DebateForm.RED_TEAM)
+    assert "risk_severities" not in hint
+    assert "conditional_pass" in hint
+
+
+def test_witness_answer_keeps_unknown_without_fabrication_ban():
+    """证人留不知就说不知；编造禁令归基座，答问纪律不再抄。"""
+    from agentcore.runtime.debate.witness import witness_answer_feedback
+
+    class _Seat:
+        display_name = "证人·法律"
+        origin_caption = "来自幕1·法律"
+
+    text = witness_answer_feedback(_Seat(), round_no=1, focus="焦点", questions=["何时立案？"])
+    assert "不知就说不知" in text
+    assert "禁止编造" not in text
 
 
 def test_side_system_omits_preamble_and_skeleton():

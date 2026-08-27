@@ -28,10 +28,18 @@ export function useComposerDrop(
   attachments: PendingAttachment[],
   setAttachments: Dispatch<SetStateAction<PendingAttachment[]>>,
   conversationId: string | null = null,
+  onAttached?: (index: number) => void,
 ) {
   const [dragOver, setDragOver] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
   const dropErrorTimer = useRef<number | null>(null);
+  const countRef = useRef(attachments.length);
+  const inflightKeysRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    countRef.current = attachments.length;
+    inflightKeysRef.current = new Set(attachments.map((a) => a.key));
+  }, [attachments]);
 
   const clearDropError = useCallback(() => {
     if (dropErrorTimer.current) {
@@ -75,7 +83,12 @@ export function useComposerDrop(
   const attachDroppedFile = useCallback(
     async (file: File) => {
       const key = `dropped:${file.name}:${file.size}`;
-      if (attachments.some((a) => a.key === key)) return;
+      if (
+        inflightKeysRef.current.has(key) ||
+        attachments.some((a) => a.key === key)
+      ) {
+        return;
+      }
       if (file.size > ATTACH_MAX_BYTES) {
         flashDropError(OVERSIZE_REASON);
         return;
@@ -83,22 +96,29 @@ export function useComposerDrop(
 
       const id = crypto.randomUUID();
       const name = safeBrowserFileName(file.name);
-      setAttachments((prev) => [
-        ...prev,
-        {
-          id,
-          key,
-          name,
-          path: name,
-          text: "",
-          truncated: false,
-          kind: "file",
-          // 先按 MIME 猜；读过头部字节后由 describeFileAttachment 修正。
-          binary: file.type.startsWith("image/"),
-          fileBlob: file,
-          uploadState: "uploading",
-        },
-      ]);
+      inflightKeysRef.current.add(key);
+      const index = countRef.current;
+      countRef.current += 1;
+      setAttachments((prev) => {
+        if (prev.some((a) => a.key === key)) return prev;
+        return [
+          ...prev,
+          {
+            id,
+            key,
+            name,
+            path: name,
+            text: "",
+            truncated: false,
+            kind: "file",
+            // 先按 MIME 猜；读过头部字节后由 describeFileAttachment 修正。
+            binary: file.type.startsWith("image/"),
+            fileBlob: file,
+            uploadState: "uploading",
+          },
+        ];
+      });
+      onAttached?.(index);
 
       // 预览元信息只读头部，先落到 chip 上——这样即便上传失败，发送时的重试也拿得到
       // 正确的正文 / 二进制判定，不会把 docx 当空文本发出去。
@@ -139,6 +159,7 @@ export function useComposerDrop(
       attachments,
       conversationId,
       flashDropError,
+      onAttached,
       patchAttachment,
       setAttachments,
     ],

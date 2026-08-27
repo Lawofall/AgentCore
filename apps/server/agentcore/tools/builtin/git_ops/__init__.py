@@ -4,10 +4,11 @@ ServerWorkspace / Sidecar: thin shell over subprocess git under ``backend.root``
 LocalWorkspace (no Path.root): same allowlisted surface via desktop ``git_run``.
 Read subcommands (status / diff / log / fetch / show / blame; stash/tag/remote
 ``action=list``) run without approval; write subcommands (add / commit / branch /
-checkout / push / pull / init_baseline / merge / rebase / cherry-pick /
+checkout / push / pull / init_baseline / clone / merge / rebase / cherry-pick /
 create_pr; stash push/pop; tag create; remote add) are refused on the CEO path
-except ``init_baseline`` (one-shot first baseline; still approval-gated) and
-executed on delegated workers (mutating ops require user authorization).
+except ``init_baseline`` / ``clone`` (first baseline or shallow clone into dest;
+still approval-gated, not always-confirm) and executed on delegated workers
+(mutating ops require user authorization).
 Hard-banned at the breaker (``reset`` / ``clean``); force push /
 protected-branch targets stay DENY. Push itself is allowlisted but never force;
 ``create_pr`` is GitHub-only via API (not free ``gh`` shell); pull is always

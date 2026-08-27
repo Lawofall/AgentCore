@@ -14,8 +14,8 @@
   散文断言「``md_to_docx`` / ``md_to_pdf`` 无条件装配」，而 CEO 并不持这两把工具、在自己的
   工具列表里看不见它们，模型于是花了整段思考链猜「队员到底有没有」，最后把用户的三个选项
   连同提问一起丢了。**下面那条 assembly-claim 测试就是这个 bug 的回归守卫。**
-- 可履约的操作手册 = 跟**装配门**走（``capability_how_suffix``）。通道/工具不在的回合，
-  手册是一份证明履行不了的说明书。
+- 可履约的操作手册 = **consult 正文**（``capability_how_suffix`` 只给 consult 拼，不挂冻结核）。
+  通道不在的回合，手册是一份证明履行不了的说明书。
 - **诚实底线双向且常驻**：未装配不许假装用过（缺失那一回合才用到）；已装配不许假装没有
   （按需工具未进开场表的那一回合才用到）。都不许按可用性下线。
   「禁止把仅结构自检说成跑绿」「禁止称不可产的工具已装配」这类留在核里是对的。
@@ -40,8 +40,9 @@ import pytest
 
 from agentcore.runtime.resolve.prompt import (
     _CEO_CORE_HINT,
-    assemble_ceo_core,
     assemble_system_prompt,
+    capability_how_suffix,
+    compose_ceo_chat_prompt,
 )
 
 # 2026-08-19 跨界搬迁：交付验收对照 / 可用性短问 / 概览契约从共享基座迁入核
@@ -70,12 +71,64 @@ from agentcore.runtime.resolve.prompt import (
 # 当次实测 19731。cap 降到 19740。
 # 2026-08-26 编制自选进核：取消「讨论/盘点默认两路 brief」，人数由 CEO 按缝选。
 # 当次实测 19859。cap 提到 19860。
-_RESIDENT_CAP = 19860
+# 2026-08-26 问面广度开火：讨论/盘点/架构不再并列自己聊；对话本身=不发卡不写盘+队员结论开口。
+# 当次实测 19855。cap 保持 19860。
+# 2026-08-27 第 3 步：Windows .bat 出共享基座，HOW 进 work_discipline。当次实测 19655。
+# cap 降到 19660。
+# 2026-08-27 第 7 步：CEO 核判例→原则；ask_user 百科去双写；事故话术出核。
+# 当次实测 18859。cap 降到 18860。
+# 同步补回点名载体短钩触发句（过压后脊柱不全：盖不住/次优 → 先短问）。当次实测 18912。
+# cap 18920。
+# 2026-08-27 第二轮 1–3 步：核从场面汇编收到宪法；场面 HOW 一句 consult 钩；
+# 诚实禁语表收成一条元规则。当次实测 15019。cap 降到 15020。
+# 短改稿开工模板出核（HOW 只在 ask_user_kickoff）。当次实测 14911。cap 降到 14920。
+# 2026-08-27 第三轮：编制自选吞拆几个人；已确认约束/明示确认收成钩；
+# 勿推销并进主张对照。当次实测 14752。cap 降到 14760。
+# 明示确认钩补回「落盘前须 ask_user」（常见路勿先 consult）。当次实测 14791。cap 14800。
+# 2026-08-27 第四轮：核按场面钩改成三本名字（跨文件夹 / 交付边界）。当次实测 14828。cap 14840。
+# 2026-08-27 统一路由脊柱：how_you_work 收成 CEO 自判一棵树（讨论自己做、改产物必须派）。
+# 当次实测 13744。cap 降到 13750。
+# 2026-08-27 第 20 步：⑥ 后尾巴收钩（判例出核、与基座/skill 重复 HOW 删核内副本）。
+# 当次实测 13484。cap 降到 13490。
+# 2026-08-27 第 21 步：① 短问收脊柱（跨产品出 how_you_work；穿插/细则出核）。
+# 当次实测 13353。cap 降到 13360。
+# 2026-08-27 第 22 步：④ 绿场/假两段收 consult 钩。当次实测 13255。cap 降到 13260。
+# 2026-08-27 第 23 步：⑤ 结局分层收钩。当次实测 13132。cap 降到 13140。
+# 2026-08-27 第 24 步：how_you_act 第二棵树（甲–戊）；两分路由去撞号。当次实测 13095。
+# cap 降到 13100。
+# 2026-08-27 第 25 步：③④ 按问句拆（要不要 / 拉几人）；必须与应该分写不合并。
+# 当次实测 13094。cap 保持 13100。
+# 2026-08-27 第 26 步：核内自抄清掉（③/戊免查表、甲禁派空跑、两分路由并进②、
+# ⑥后 schema/目录钩出核、①收脊柱、default 归 schema、delegate 用/不用对齐）。
+# 当次实测 11775。cap 降到 11780。
+# 2026-08-27 第 27 步：拆 <platform_knowledge>；品类+官网并进 <role>；产品强度串出核。
+# 当次实测 11064。cap 降到 11070。
+# 2026-08-27 第 28 步：甲乙能力手册出核（三分日志/启服报 URL/右坞 HOW → consult）。
+# 当次实测 10729。cap 降到 10730。
+# 2026-08-27 第 29 步：④ 编排强度串出核；场面 WHEN 归目录摘要。
+# 当次实测 10577。cap 降到 10580。
+# 2026-08-27 第 30 步：⑥ 后钩子收脊柱（主拍板/审查同字面/未定案·窄出核）。
+# 当次实测 10352。cap 降到 10360。
+# 2026-08-27 第 31 步：丙继续项目出核；误读地板并进基座 work_authority。
+# 当次实测 10287。cap 降到 10290。
+# 2026-08-27 现行信息清废名：核/基座去掉已死对照（两路 brief、format_options、
+# M0、用户硬/AI软、辩词式 #eN、暂靠提醒、引擎不剥、日历门槛、甲–戊不同套等）。
+# 当次实测 10107。cap 降到 10110。
+# 2026-08-27 playbook 更名进核 ⑤（research_report→cite_write_review、
+# parallel_brief→map_fanout）。场面 WHEN 下沉目录 / consult。当次实测 9560。cap 降到 9560。
+# 2026-08-27 第三刀：身份/问方法收成原则（查询词出核）。当次实测 9482。cap 降到 9490。
+# 2026-08-27 落盘前对齐/点名载体去查询词；当场缺口尾收一句姿势。当次实测 9412。cap 降到 9420。
+# 2026-08-27 讨论开场去共创/审美举例。当次实测 9369。cap 降到 9370。
+# 2026-08-27 A：戊对照变体表收成底线；点名载体防吞并进①。当次实测 9196。cap 降到 9200。
+# 2026-08-27 窄 B：①开口 / ④编制 / ⑤成文 同义复读。当次实测 9155。cap 降到 9160。
+_RESIDENT_CAP = 9160
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 _GATED_MANUALS: tuple[tuple[str, str], ...] = (
     ("terminal", "wait_for"),
+    ("terminal", "报 URL"),
     ("host", "通识长文当交付"),
+    ("host", "【三分日志】"),
     ("browser", "ask_user(browser_login=true)"),
     ("external_mount_readonly", "【授权后发现】"),
     ("external_mount_readonly", "先写工作区"),
@@ -123,12 +176,27 @@ def test_core_does_not_restate_computed_workspace_facts():
 
 @pytest.mark.parametrize(("gate_tool", "signature"), _GATED_MANUALS)
 def test_gated_manuals_do_not_ride_the_resident_core(gate_tool: str, signature: str):
-    """可履约手册跟装配门走：门关时不出现，门开时才挂上。"""
+    """可履约手册唯一所有者 = consult：核与 compose 开场都不挂，consult 正文才有。"""
     assert signature not in _CEO_CORE_HINT, (
-        f"{signature} 属于 {gate_tool} 的手册，不该常驻——挂到 capability_how_suffix 上"
+        f"{signature} 属于 {gate_tool} 的手册，不该常驻——交给 consult"
     )
-    assert signature in assemble_ceo_core({gate_tool}), (
-        f"{gate_tool} 已装配却没挂上手册（{signature} 丢了）"
+    assert signature in capability_how_suffix({gate_tool}), (
+        f"{gate_tool} 的 consult 手册丢了签名 {signature}"
+    )
+    catalog_like = compose_ceo_chat_prompt(
+        assemble_system_prompt(),
+        ceo_tool_names={"delegate", gate_tool},
+    )
+    offered = compose_ceo_chat_prompt(
+        assemble_system_prompt(),
+        ceo_tool_names={"delegate", gate_tool},
+        ceo_offered_names={"delegate", gate_tool},
+    )
+    assert signature not in catalog_like, (
+        f"{signature} 不应因图鉴漏传 offered 挂回核（{gate_tool}）"
+    )
+    assert signature not in offered, (
+        f"{signature} 不应在工具已进表时再挂进冻结核（{gate_tool}）"
     )
 
 
@@ -136,8 +204,8 @@ def test_honesty_floors_stay_resident():
     """诚实底线不跟门走——缺失回合与已装配-未进表回合都要，按可用性下线就是删错。"""
     hint = _CEO_CORE_HINT
     base = assemble_system_prompt()
-    # 装包/验绿：未装配时才需要这几条。
-    assert "跑绿" in hint or "单测已绿" in hint
+    # 装包/验绿：未装配时才需要。探针用核里已有的原则切片，不钉事故禁语原话。
+    assert "结构自检" in hint
     assert "全绿" in hint
     # 格式：标不可产时才需要。
     assert "不可产" in hint and "等效替代" in hint

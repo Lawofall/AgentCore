@@ -232,7 +232,7 @@ async def _resolve_pr_token(
 
 
 async def _cloud_network_extra_env(context: ToolContext) -> dict[str, str] | None:
-    """Credential helper env for cloud push/fetch/pull when an account PAT exists."""
+    """Credential helper env for cloud push/fetch/pull/clone when an account PAT exists."""
     if not _is_cloud_backend(context) or not context.user_id:
         return None
     # After the guards: a local workspace inherits OS / gh auth and looks nothing up,

@@ -10,8 +10,8 @@ entries use a shorter negative TTL.
 Entries lapse, and a lapsed entry injects **nothing** (no cloud fallback), so the
 warmer owns renewal: the warm RPC hands back this entry's remaining life
 (``account_rules_memory_ttl_remaining``) and the desktop re-warms before it runs
-out — including on a TTL cadence while an execution is still in flight, so
-sidecar-internal harvest turns still hit. Never let a caller assume "warmed once"
+out — including on a TTL cadence while an execution is still in flight, so a
+follow-up user turn still hits. Never let a caller assume "warmed once"
 means "warm forever".
 
 During prepare→assemble, ``prepare_reads_cache_only`` is bound so
@@ -93,7 +93,7 @@ _cache: dict[tuple[str, str | None], _CacheEntry] = {}
 
 
 def _cache_miss_origin_fields() -> dict[str, str]:
-    """Searchable origin on empty injection (harvest turns bind ``execution_harvest``)."""
+    """Searchable origin on empty injection (historical ``execution_harvest``)."""
     from agentcore.runtime.delegate.post_close_gate import current_user_message_origin
 
     origin = current_user_message_origin()

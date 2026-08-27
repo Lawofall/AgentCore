@@ -39,7 +39,12 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from agentcore.core.errors import GoneError
 from agentcore.core.logging import get_logger
+from agentcore.runtime.kickoff.retired import (
+    is_leftover_team_preview_frame,
+    refuse_if_leftover_team_preview,
+)
 from agentcore.runtime.suspension import (
     TurnSuspension,
     suspension_from_json,
@@ -325,6 +330,7 @@ class LocalPausedTurnStore:
             return None
         if record is None:
             return None
+        refuse_if_leftover_team_preview(record.get("frame") or {})
         return _suspension_from_record(record)
 
     def _load_sync(
@@ -366,7 +372,12 @@ class LocalPausedTurnStore:
             return None
         if record is None:
             return None
-        return _suspension_from_record(record)
+        try:
+            refuse_if_leftover_team_preview(record.get("frame") or {})
+            return _suspension_from_record(record)
+        except GoneError:
+            await self.rollback_claim(message_id)
+            raise
 
     def _claim_sync(self, message_id: str, conversation_id: str | None) -> dict[str, Any] | None:
         target = self._path(message_id)
@@ -480,7 +491,13 @@ class LocalPausedTurnStore:
         list so reopening never fails on a paused-turn lookup.
         """
         records = await self._records(conversation_id)
-        return [_suspension_from_record(r) for r in records]
+        out: list[TurnSuspension] = []
+        for r in records:
+            frame = r.get("frame") or {}
+            if is_leftover_team_preview_frame(frame):
+                continue
+            out.append(_suspension_from_record(r))
+        return out
 
     async def list_summaries(self, conversation_id: str) -> list[dict[str, Any]]:
         """A conversation's pending pauses as stored resume-card summaries (wire shape).
@@ -490,7 +507,12 @@ class LocalPausedTurnStore:
         directly on reopen (no process spawn for a read-only list).
         """
         records = await self._records(conversation_id)
-        return [r.get("summary") or {} for r in records]
+        summaries: list[dict[str, Any]] = []
+        for r in records:
+            if is_leftover_team_preview_frame(r.get("frame") or {}):
+                continue
+            summaries.append(r.get("summary") or {})
+        return summaries
 
     async def _records(self, conversation_id: str) -> list[dict[str, Any]]:
         try:

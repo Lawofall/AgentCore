@@ -1,9 +1,7 @@
 /**
  * Shared decision-card meta for ask_user presentation.
  *
- * team_preview 开工卡已退役；本表只服务 ask_user。
- *
- * One table per family variant (intent / primitive) — replaces the former parallel
+ * One table per family variant (intent) — replaces the former parallel
  * INTENT_CONFIG (CheckpointCard). Kind / wire
  * contracts stay untouched; this is display copy + icons only.
  */

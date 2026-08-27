@@ -26,7 +26,6 @@ from agentcore.runtime.recover_lease import bind_recovered_turn, recover_expired
 from agentcore.runtime.suspension import (
     AskUserSuspension,
     PlanReviewSuspension,
-    TeamPreviewSuspension,
     TurnSuspension,
 )
 from agentcore.runtime.turn.state import TurnState
@@ -69,18 +68,13 @@ async def recover_turn(
     note: str = "",
     selected: list[str] | None = None,
     debate_tool: DebateTool | None = None,
-    excluded_run_ids: list[str] | None = None,
-    write_capability_overrides: list[dict[str, str]] | None = None,
-    model_overrides: dict[str, dict[str, str]] | None = None,
 ) -> SettledSuspension:
     """Settle a resume decision or CONTINUE-redrive unfinished DAG from ``state``.
 
     - With ``suspension`` + ``decision``: resume ask_user / plan_review.
-      Leftover ``team_preview`` raises :class:`~agentcore.core.errors.GoneError`.
+      Leftover ``team_preview`` frames never reach here (from_json / peek 410).
     - Without suspension (crash): ``decision`` defaults to CONTINUE; redrives unfinished
       plan nodes with ``seed_completed=state.completed`` (completed nodes skipped).
-    - ``excluded_run_ids`` / ``write_capability_overrides`` / ``model_overrides``
-      are ignored for leftover ``team_preview`` (refused before apply).
     """
     if suspension is not None:
         if decision is None:
@@ -95,9 +89,6 @@ async def recover_turn(
             delegate_tool=delegate_tool,
             debate_tool=debate_tool,
             execution_id=execution_id,
-            excluded_run_ids=excluded_run_ids or [],
-            write_capability_overrides=write_capability_overrides or [],
-            model_overrides=model_overrides or {},
         )
 
     decision = decision or CheckpointDecision.CONTINUE
@@ -143,9 +134,6 @@ async def _settle_resume(
     delegate_tool: DelegateTool,
     debate_tool: DebateTool | None,
     execution_id: str,
-    excluded_run_ids: list[str] | None = None,
-    write_capability_overrides: list[dict[str, str]] | None = None,
-    model_overrides: dict[str, dict[str, str]] | None = None,
 ) -> SettledSuspension:
     """Kind-specific resume settle, projecting exclusively via ``state``."""
     from agentcore.runtime.checkpoint_stop_streak import (
@@ -154,11 +142,7 @@ async def _settle_resume(
         is_repeated_checkpoint_stop,
     )
 
-    _ = (debate_tool, excluded_run_ids, write_capability_overrides, model_overrides)
-    if isinstance(suspension, TeamPreviewSuspension):
-        from agentcore.runtime.kickoff.retired import refuse_team_preview_resume
-
-        refuse_team_preview_resume()
+    _ = debate_tool
 
     # research_first 仅辩论开工卡合法；开工卡已退役，其它挂起点降级为 STOP。
     if decision is CheckpointDecision.RESEARCH_FIRST:
@@ -171,7 +155,7 @@ async def _settle_resume(
 
     # Same-turn consecutive STOP → terminal INTERACT (no further CEO round).
     # Streak is journal-derived so it survives suspend/resume; first STOP unchanged.
-    # ADJUST is excluded inside the helper (team_preview revise can repeat).
+    # ADJUST is excluded inside the helper (plan_review revise can repeat).
     # Ignore the card being settled — cold-path prewrite of this checkpoint_id
     # must not count as a prior STOP (first cancel would otherwise INTERACT).
     force_close = is_repeated_checkpoint_stop(

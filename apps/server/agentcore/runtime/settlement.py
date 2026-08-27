@@ -199,9 +199,6 @@ def cold_resume_settlement_event(
     decision: str,
     note: str = "",
     selected: list[str] | None = None,
-    excluded_run_ids: list[str] | None = None,
-    write_capability_overrides: list[dict[str, str]] | None = None,
-    model_overrides: dict[str, dict[str, str]] | None = None,
 ) -> SSEEvent:
     """Build the same ``*_resolved`` SSE recover will emit (D8 同形)."""
     from agentcore.runtime.events import (
@@ -211,7 +208,6 @@ def cold_resume_settlement_event(
     from agentcore.runtime.suspension import (
         AskUserSuspension,
         PlanReviewSuspension,
-        TeamPreviewSuspension,
     )
     from agentcore.tools.builtin.ask_user.schema import option_label
 
@@ -230,10 +226,6 @@ def cold_resume_settlement_event(
             decision=decision,
             note=note,
         )
-    if isinstance(suspension, TeamPreviewSuspension):
-        from agentcore.runtime.kickoff.retired import refuse_team_preview_resume
-
-        refuse_team_preview_resume()
     raise ValueError(f"unknown suspension kind for cold settlement: {type(suspension)!r}")
 
 
@@ -243,9 +235,6 @@ async def prewrite_cold_resume_settlement(
     decision: str,
     note: str = "",
     selected: list[str] | None = None,
-    excluded_run_ids: list[str] | None = None,
-    write_capability_overrides: list[dict[str, str]] | None = None,
-    model_overrides: dict[str, dict[str, str]] | None = None,
 ) -> None:
     """Cold-path D8: durable-write ``*_resolved`` before ``claim_paused_turn``.
 
@@ -257,9 +246,6 @@ async def prewrite_cold_resume_settlement(
         decision=decision,
         note=note,
         selected=selected,
-        excluded_run_ids=excluded_run_ids,
-        write_capability_overrides=write_capability_overrides,
-        model_overrides=model_overrides,
     )
     written = await prewrite_settlement(event)
     if written:

@@ -70,16 +70,9 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
       { baseUrl: "https://api.example.com", apiKey: "folders-tok" },
       { baseUrl: "https://api.example.com/v1/account", apiKey: "account-tok" },
     );
-    // Optional team_preview veto keys are omitted when empty (same as absent
-    // inference / browserBridge / foldersAuth / accountAuth) — exact-key sample excludes them.
+    // Optional auth keys omitted when empty — exact-key sample excludes userId.
     assertExactKeys(withInference, [
-      ...sidecarIpc.resumeRpcParams.keys.filter(
-        (k) =>
-          k !== "excluded_run_ids" &&
-          k !== "write_capability_overrides" &&
-          k !== "model_overrides" &&
-          k !== "userId",
-      ),
+      ...sidecarIpc.resumeRpcParams.keys.filter((k) => k !== "userId"),
     ]);
     expect(withInference.browserBridge).toEqual({
       baseUrl: "http://127.0.0.1:9",
@@ -102,9 +95,6 @@ describe("sidecar IPC contract (TS ↔ Python single source)", () => {
           k !== "foldersAuth" &&
           k !== "accountAuth" &&
           k !== "browserBridge" &&
-          k !== "excluded_run_ids" &&
-          k !== "write_capability_overrides" &&
-          k !== "model_overrides" &&
           k !== "userId",
       ),
     ]);

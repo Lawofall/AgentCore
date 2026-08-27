@@ -51,6 +51,9 @@ async def rebuild_fresh_worker_base_prompt(
         permission_axes=permission_axes,
         git_fact=await detect_workspace_git(backend),
         outlet_inventory=await collect_outlet_inventory(backend),
+        desk_folder_id=folder_id,
+        desk_folder_label=(getattr(backend, "root_label", None) or "").strip() or None,
+        desk_is_birth=True,
     )
     system_prompt = assemble_system_prompt(
         rules_markdown=rules_markdown,

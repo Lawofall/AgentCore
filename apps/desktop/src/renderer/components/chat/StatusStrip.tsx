@@ -120,6 +120,7 @@ export function StatusStrip(props: StatusStripProps) {
     }));
   const runs = fromFrames.length > 0 ? fromFrames : fromExec;
   const attestedKind = useActiveExecField((rt) => rt.attestedOutcome);
+  const detached = Boolean(useActiveExecField((rt) => rt.executionDetached));
   const scopeId = useExecutionScope();
   const conversationId = useConversationStore((s) => s.currentConversationId);
   const scopedAssistant = useConversationStore((s) => {
@@ -218,9 +219,12 @@ export function StatusStrip(props: StatusStripProps) {
   ) {
     return <CompletedStrip {...props} stopped />;
   }
+  // Detached + workers done is not「已汇总」: captain already left, settle
+  // has not stamped execution_completed yet. Stay on the 后台 strip.
   if (
+    !detached &&
     canPaintTeamCompleted(props.execution) &&
-    !isTeamSynthesizing(props.execution)
+    !isTeamSynthesizing(props.execution, { detached })
   ) {
     return <CompletedStrip {...props} />;
   }
@@ -365,6 +369,7 @@ function RunningStrip({
     !liveWait &&
     isTeamSynthesizing(execution, {
       turnTerminal: isTerminalPhase(turnPhase),
+      detached: Boolean(backgroundBadge),
     });
   const workers = workerProgress(execution);
   const { completed, total } = execution.progress;
@@ -434,7 +439,7 @@ function RunningStrip({
 }
 
 /**
- * Mid-turn pause (e.g. plan_review / team_preview gate) while the graph stays visible.
+ * Mid-turn pause (e.g. plan_review gate) while the graph stays visible.
  * Static — no spinner — so pause is not painted as「正在协作 / 卡住」。
  */
 function PausedStrip({

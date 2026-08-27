@@ -89,6 +89,10 @@ HOPELESS_RETRY_AFTER = 60.0
 # 429s are the header-less kind that a budget cannot rescue anyway — the interactive
 # ceiling already refuses them at the same attempt, and the sweep's own cooldown is
 # what governs the retry.
+#
+# Title and compaction share this set but **not** the process 429 slot
+# (``cooldown_gate.cooldown_lane``): a title day-reset Retry-After must not make
+# compaction refuse before it probes.
 SILENT_DEGRADE_SCENARIOS = frozenset({"title", "compaction"})
 
 

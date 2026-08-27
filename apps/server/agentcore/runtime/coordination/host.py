@@ -32,6 +32,7 @@ from agentcore.runtime.coordination.session import (
     split_coordination_budget,
 )
 from agentcore.runtime.delegate.team_synthesis import worker_output_blurb
+from agentcore.runtime.interaction_orphan import suppress_drive_cancelled_wake
 from agentcore.tools.protocol import TOOL_AUDIENCE_CEO, ToolResult
 
 if TYPE_CHECKING:
@@ -460,6 +461,10 @@ def _ensure_terminal_all_completed(
         "completed": len(session.completed_run_ids),
         "total": session.total_workers,
     }
+    from agentcore.runtime.coordination.cancel_close import classify_cancel_close
+
+    if classify_cancel_close(session) is not None:
+        payload["cancelled"] = True
     if output.strip():
         from agentcore.runtime.delegate.terminal_output import cap_all_completed_output
 
@@ -1051,14 +1056,26 @@ async def _background_drive(
                 nodes=len(plan.nodes),
                 call=call_idx,
             )
-    except asyncio.CancelledError:
-        logger.info("delegate.coordinate_cancelled", execution_id=execution_id)
+    except asyncio.CancelledError as exc:
+        from agentcore.runtime.coordination.drive_cancel import (
+            drive_cancel_error_copy,
+            resolve_drive_cancel_reason,
+        )
+
+        reason = resolve_drive_cancel_reason(session, exc)
+        logger.info(
+            "delegate.coordinate_cancelled",
+            execution_id=execution_id,
+            reason=reason,
+        )
         # Soft-stop (ask_user hang-frame): do NOT wake with ALL_COMPLETED — that
         # would seal a fake「全员完成」into the pause snapshot. Resume re-drives
         # unfinished workers from the journal seed.
         # Process kill / turn interrupt while host is still waiting: wake with
         # DRIVE_CANCELLED (not ALL_COMPLETED) so inject/wait never imply success.
-        if not session.soft_stop:
+        # Hot user card (not user_stopped): same as soft_stop — do not wake as
+        # 「调度中断」close.
+        if not suppress_drive_cancelled_wake(session):
             with contextlib.suppress(Exception):
                 session.post(
                     CoordinationEvent(
@@ -1066,7 +1083,8 @@ async def _background_drive(
                         payload={
                             "completed": len(session.completed_run_ids),
                             "total": session.total_workers,
-                            "error": "协调调度被取消（进程关闭或回合中断）。",
+                            "reason": reason,
+                            "error": drive_cancel_error_copy(reason),
                         },
                     )
                 )
@@ -1075,17 +1093,18 @@ async def _background_drive(
         logger.exception("delegate.coordinate_failed", execution_id=execution_id)
         # Align with CancelledError non-soft_stop: scheduling crash is not success.
         # ALL_COMPLETED would seal a fake「全员完成」into inject/wait.
-        with contextlib.suppress(Exception):
-            session.post(
-                CoordinationEvent(
-                    kind=CoordinationEventKind.DRIVE_CANCELLED,
-                    payload={
-                        "completed": len(session.completed_run_ids),
-                        "total": session.total_workers,
-                        "error": "协调后台调度异常结束，请基于已有结果收口。",
-                    },
+        if not suppress_drive_cancelled_wake(session):
+            with contextlib.suppress(Exception):
+                session.post(
+                    CoordinationEvent(
+                        kind=CoordinationEventKind.DRIVE_CANCELLED,
+                        payload={
+                            "completed": len(session.completed_run_ids),
+                            "total": session.total_workers,
+                            "error": "协调后台调度异常结束，请基于已有结果收口。",
+                        },
+                    )
                 )
-            )
     finally:
         tool._llm = prior_llm
         if owns_llm:

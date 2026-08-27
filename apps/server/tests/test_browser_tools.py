@@ -732,39 +732,33 @@ async def test_type_password_blocked_maps_to_tool_result(tmp_path):
 
 
 def test_browser_type_schema_guides_password_login():
-    desc = BrowserTypeTool().schema.description
-    assert "password_blocked" in desc or "password" in desc.lower()
-    assert "browser_login" in desc
-    assert "ask_user" in desc
-    assert "escalate" in desc
-    assert "M0 不支持登录" not in desc
+    text_desc = BrowserTypeTool().schema.parameters["properties"]["text"]["description"]
+    assert "password_blocked" in text_desc or "password" in text_desc.lower()
+    assert "browser_login" in text_desc
+    assert "ask_user" in text_desc
+    assert "escalate" in text_desc
+    assert "M0 不支持登录" not in text_desc
+    assert "M0 不支持登录" not in BrowserTypeTool().schema.description
 
 
 def test_mutation_schemas_require_receipt_verification():
     """click/type/scroll/navigate: ref table + must verify typed/clicked; snapshot when needed."""
-    for tool in (
-        BrowserNavigateTool(),
-        BrowserClickTool(),
-        BrowserTypeTool(),
-        BrowserScrollTool(),
-    ):
-        desc = tool.schema.description
-        assert "elements" in desc
-        assert "visible_text" in desc
-        assert "browser(action=snapshot)" in desc
-        assert "验收" in desc or "matched" in desc or "was_disabled" in desc
-        # Old "only snapshot when needed / success already enough" framing is gone.
-        assert "仅必要" not in desc
-        assert "可直接用于下一步；仅当" not in desc
+    blob = json.dumps(BrowserTool().schema.parameters, ensure_ascii=False)
+    assert "elements" in blob
+    assert "visible_text" in blob
+    assert "browser(action=snapshot)" in blob
+    assert "验收" in blob or "matched" in blob or "was_disabled" in blob
+    # Old "only snapshot when needed / success already enough" framing is gone.
+    assert "仅必要" not in blob
+    assert "可直接用于下一步；仅当" not in blob
 
 
 # -- 甲/乙：本会话 HTML 相对路径 ------------------------------------------------
 def test_navigate_schema_mentions_workspace_relative_path():
     schema = BrowserNavigateTool().schema
-    assert "相对" in schema.description or "site/index.html" in schema.description
     url_desc = schema.parameters["properties"]["url"]["description"]
     assert "相对" in url_desc or "site/index.html" in url_desc
-    assert "file://" in url_desc or "file://" in schema.description
+    assert "file://" in url_desc
 
 
 @pytest.mark.asyncio

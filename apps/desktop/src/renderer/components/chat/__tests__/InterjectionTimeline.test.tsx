@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { InterjectionTimeline } from "@/components/chat/InterjectionTimeline";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { inlineToken } from "@/lib/inlineBody";
 import { DRAFT_KEY, useConversationStore } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -327,6 +328,45 @@ describe("InterjectionTimeline", () => {
     expect(screen.getByText("研究员")).toBeTruthy();
     expect(screen.getByText("点名")).toBeTruthy();
     expect(screen.getByText("请让研究员再核一遍成本。")).toBeTruthy();
+    expect(screen.getByTestId("user-chip-tray")).toBeTruthy();
+    expect(screen.queryByTestId("user-inline-body")).toBeNull();
+  });
+
+  it("renders marked @ chips inline and skips the tray", () => {
+    seedStreamingAssistant();
+    const content = `请让${inlineToken("M", 0)}再核一遍成本。`;
+    useExecutionStore.setState({
+      byId: {
+        m1: {
+          userInterjections: [
+            {
+              interjectionId: "ij-inline",
+              executionId: "e1",
+              content,
+              status: "received",
+              note: null,
+              agentMentions: [{ agentId: "agent_research", role: "研究员" }],
+            },
+          ],
+        },
+      },
+    } as never);
+
+    render(
+      <TooltipProvider>
+        <InterjectionTimeline messageId="m1" interjectionId="ij-inline" />
+      </TooltipProvider>,
+    );
+    expect(screen.getByTestId("interjection-bubble-ij-inline")).toBeTruthy();
+    expect(screen.getByTestId("user-inline-body")).toBeTruthy();
+    expect(screen.queryByTestId("user-chip-tray")).toBeNull();
+    expect(screen.getAllByText("研究员")).toHaveLength(1);
+    expect(screen.getByTestId("user-inline-body").textContent).toContain(
+      "请让",
+    );
+    expect(screen.getByTestId("user-inline-body").textContent).not.toContain(
+      "\uFFFC",
+    );
   });
 
   it("renders unread copy when turn closed and status stays received", () => {

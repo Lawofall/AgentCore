@@ -16,7 +16,6 @@
 
 import {
   INTERACTION_KIND_WIRE,
-  USER_INTERACTION_KIND_VALUES,
   type UserInteractionKind,
 } from "@agentcore/contract-types";
 import { INTERACTION_CARD_NAME } from "@agentcore/protocol-fold-kit";
@@ -41,10 +40,110 @@ export function submitPathOf(kind: InteractionKind): InteractionSubmitPath {
   throw new Error(`no submit path for interaction kind ${kind}`);
 }
 
+/** Process-step discriminant stamped into the CEO message lane. */
+export type TimelineProcessKind =
+  | "checkpoint"
+  | "plan_review"
+  | "escalation"
+  | "approval"
+  | "stage_card";
+
+export interface TimelineMarkerDef {
+  processKind: TimelineProcessKind;
+  /** Id field on the ProcessStep wire shape. */
+  stepIdField:
+    | "checkpoint_id"
+    | "escalation_id"
+    | "approval_id"
+    | "stage_card_id";
+}
+
+export interface InteractionSseRequiredEffects {
+  flushBuffers?: boolean;
+  recordExecFrame?: boolean;
+}
+
+export interface InteractionSseResolvedEffects {
+  removePausedTurn?: boolean;
+  flushFrames?: boolean;
+  recordExecFrame?: boolean;
+}
+
+/**
+ * Where the live SSE pair is dispatched. Escalation frames ride the execution
+ * handler (team projection); everything else uses the interaction handler.
+ */
+export type InteractionSseVia = "interaction" | "execution";
+
+export interface InteractionKindDef {
+  kind: InteractionKind;
+  timeline?: TimelineMarkerDef;
+  sseVia?: InteractionSseVia;
+  sseRequired?: InteractionSseRequiredEffects;
+  sseResolved?: InteractionSseResolvedEffects;
+}
+
+/** The registry — one row per live user-facing interaction kind. */
+export const INTERACTION_REGISTRY: readonly InteractionKindDef[] = [
+  {
+    kind: "approval",
+    timeline: {
+      processKind: "approval",
+      stepIdField: "approval_id",
+    },
+    // Flush rAF-buffered CEO prose BEFORE stamping so the 痕迹 marker lands after
+    // the same-round lead-in (mirrors the golden's [content, approval] order).
+    sseRequired: { flushBuffers: true },
+  },
+  {
+    kind: "escalation",
+    sseVia: "execution",
+    timeline: {
+      processKind: "escalation",
+      stepIdField: "escalation_id",
+    },
+  },
+  {
+    kind: "ask_user",
+    timeline: {
+      processKind: "checkpoint",
+      stepIdField: "checkpoint_id",
+    },
+    sseRequired: { flushBuffers: true },
+    sseResolved: { removePausedTurn: true },
+  },
+  {
+    kind: "plan_review",
+    timeline: {
+      processKind: "plan_review",
+      stepIdField: "checkpoint_id",
+    },
+    sseRequired: { flushBuffers: true, recordExecFrame: true },
+    sseResolved: {
+      removePausedTurn: true,
+      flushFrames: true,
+      recordExecFrame: true,
+    },
+  },
+  {
+    kind: "stage_card",
+    // 跨回合耐久卡：resolve 起新回合 SSE（非 cold resume / 非 hot Future）。
+    timeline: {
+      processKind: "stage_card",
+      stepIdField: "stage_card_id",
+    },
+    sseRequired: { flushBuffers: true },
+  },
+];
+
+function registeredKinds(): InteractionKind[] {
+  return INTERACTION_REGISTRY.map((d) => d.kind);
+}
+
 function kindsWhere(
   pred: (kind: InteractionKind) => boolean,
 ): InteractionKind[] {
-  return USER_INTERACTION_KIND_VALUES.filter(pred);
+  return registeredKinds().filter(pred);
 }
 
 /** In-process Future kinds (`hot`). */
@@ -59,11 +158,6 @@ export const COLD_RESUME_KINDS = kindsWhere((kind) => {
 });
 
 export type ColdResumeKind = (typeof COLD_RESUME_KINDS)[number];
-
-/** Retired kickoff kinds — wire kind remains; no operable desktop surface. */
-export function isRetiredKickoffKind(kind: string): kind is "team_preview" {
-  return kind === "team_preview";
-}
 
 /** Live turn blocked on the user (`hot && pausesTurn`). Today: approval. */
 export const HOT_GATE_INTERACTION_KINDS = kindsWhere((kind) => {
@@ -118,115 +212,6 @@ export function isStageInteractionKind(
   return STAGE_KIND_SET.has(kind);
 }
 
-/** Process-step discriminant stamped into the CEO message lane. */
-export type TimelineProcessKind =
-  | "checkpoint"
-  | "plan_review"
-  | "team_preview"
-  | "escalation"
-  | "approval"
-  | "stage_card";
-
-export interface TimelineMarkerDef {
-  processKind: TimelineProcessKind;
-  /** Id field on the ProcessStep wire shape. */
-  stepIdField:
-    | "checkpoint_id"
-    | "escalation_id"
-    | "approval_id"
-    | "stage_card_id";
-  /** Historical marker order (before final `team`); not the current kickoff card. */
-  insertBeforeTeam?: boolean;
-}
-
-export interface InteractionSseRequiredEffects {
-  flushBuffers?: boolean;
-  recordExecFrame?: boolean;
-}
-
-export interface InteractionSseResolvedEffects {
-  removePausedTurn?: boolean;
-  flushFrames?: boolean;
-  recordExecFrame?: boolean;
-}
-
-/**
- * Where the live SSE pair is dispatched. Escalation frames ride the execution
- * handler (team projection); everything else uses the interaction handler.
- */
-export type InteractionSseVia = "interaction" | "execution";
-
-export interface InteractionKindDef {
-  kind: InteractionKind;
-  timeline?: TimelineMarkerDef;
-  sseVia?: InteractionSseVia;
-  sseRequired?: InteractionSseRequiredEffects;
-  sseResolved?: InteractionSseResolvedEffects;
-}
-
-/** The registry — one row per UserInteractionKind. */
-export const INTERACTION_REGISTRY: readonly InteractionKindDef[] = [
-  {
-    kind: "approval",
-    timeline: {
-      processKind: "approval",
-      stepIdField: "approval_id",
-    },
-    // Flush rAF-buffered CEO prose BEFORE stamping so the 痕迹 marker lands after
-    // the same-round lead-in (mirrors the golden's [content, approval] order).
-    sseRequired: { flushBuffers: true },
-  },
-  {
-    kind: "escalation",
-    sseVia: "execution",
-    timeline: {
-      processKind: "escalation",
-      stepIdField: "escalation_id",
-    },
-  },
-  {
-    kind: "ask_user",
-    timeline: {
-      processKind: "checkpoint",
-      stepIdField: "checkpoint_id",
-    },
-    sseRequired: { flushBuffers: true },
-    sseResolved: { removePausedTurn: true },
-  },
-  {
-    kind: "plan_review",
-    timeline: {
-      processKind: "plan_review",
-      stepIdField: "checkpoint_id",
-    },
-    sseRequired: { flushBuffers: true, recordExecFrame: true },
-    sseResolved: {
-      removePausedTurn: true,
-      flushFrames: true,
-      recordExecFrame: true,
-    },
-  },
-  {
-    kind: "team_preview",
-    timeline: {
-      processKind: "team_preview",
-      stepIdField: "checkpoint_id",
-      insertBeforeTeam: true,
-    },
-    sseRequired: { flushBuffers: true },
-    sseResolved: { removePausedTurn: true },
-  },
-  {
-    kind: "stage_card",
-    // 跨回合耐久卡：resolve 起新回合 SSE（非 cold resume / 非 hot Future）。
-    timeline: {
-      processKind: "stage_card",
-      stepIdField: "stage_card_id",
-    },
-    sseRequired: { flushBuffers: true },
-  },
-];
-
 // ── Derived indexes (no parallel hand maps) ─────────────────────────────
 
 function buildByKind(): Record<InteractionKind, InteractionKindDef> {
@@ -244,16 +229,15 @@ export const INTERACTION_SUBMIT_PATH: Record<
   InteractionKind,
   InteractionSubmitPath
 > = Object.fromEntries(
-  USER_INTERACTION_KIND_VALUES.map((kind) => [kind, submitPathOf(kind)]),
+  INTERACTION_REGISTRY.map((d) => [d.kind, submitPathOf(d.kind)]),
 ) as Record<InteractionKind, InteractionSubmitPath>;
 
 export const INTERACTION_ID_FIELD: Record<InteractionKind, string> =
   Object.fromEntries(
-    (
-      Object.entries(INTERACTION_KIND_WIRE) as Array<
-        [InteractionKind, { idField: string }]
-      >
-    ).map(([kind, wire]) => [kind, wire.idField]),
+    INTERACTION_REGISTRY.map((d) => [
+      d.kind,
+      INTERACTION_KIND_WIRE[d.kind].idField,
+    ]),
   ) as Record<InteractionKind, string>;
 
 const REQUIRED_EVENT_TO_KIND = new Map<string, InteractionKind>();

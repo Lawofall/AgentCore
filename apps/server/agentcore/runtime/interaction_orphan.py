@@ -45,6 +45,80 @@ def has_hot_user_pending(conversation_id: str | None) -> bool:
     return False
 
 
+def holds_for_hot_user(session: Any) -> bool:
+    """Harvest / DRIVE_CANCELLED close must wait while a user-side hot card is up.
+
+    ``user_stopped`` is excluded so Stop / regenerate still cancel + harvest.
+    """
+    if getattr(session, "user_stopped", False):
+        return False
+    return has_hot_user_pending(getattr(session, "conversation_id", None))
+
+
+def suppress_drive_cancelled_wake(session: Any) -> bool:
+    """Skip posting DRIVE_CANCELLED (soft_stop hang-frame, or hot user card)."""
+    if getattr(session, "soft_stop", False):
+        return True
+    return holds_for_hot_user(session)
+
+
+def hot_pending_card_labels(conversation_id: str | None) -> list[str]:
+    """``tool_name`` when present, else interaction kind. Stable, de-duplicated."""
+    cid = (conversation_id or "").strip()
+    if not cid:
+        return []
+    labels: list[str] = []
+    seen: set[str] = set()
+    registry = default_interaction_registry()
+    for req in registry.list_pending(cid):
+        if not is_hot_user_pending_kind(req.kind.value, req.payload):
+            continue
+        tool = str((req.payload or {}).get("tool_name") or "").strip()
+        label = tool or req.kind.value
+        if label in seen:
+            continue
+        seen.add(label)
+        labels.append(label)
+    return labels
+
+
+def format_hot_pending_hold_line(conversation_id: str | None) -> str:
+    """CEO brief: 等你允许, name the card, team still live, do not wrap up."""
+    labels = hot_pending_card_labels(conversation_id)
+    if labels:
+        named = "、".join(f"`{n}`" for n in labels)
+        where = f"卡在 {named}"
+    else:
+        where = "有队员在等用户审批/授权"
+    return (
+        f"状态：等你允许（{where}）。队还在，不是收场。"
+        "向用户报告阻塞后可 wait 听团；禁止空 wait 假装推进；"
+        "禁止把团队说成已结束或调度中断。"
+    )
+
+
+async def wait_hot_user_pending_change(
+    conversation_id: str | None, *, timeout: float = 1.0
+) -> None:
+    """Wait until a hot pending future settles, or ``timeout`` to recheck flags."""
+    import asyncio
+
+    cid = (conversation_id or "").strip()
+    if not cid:
+        await asyncio.sleep(timeout)
+        return
+    registry = default_interaction_registry()
+    futs = [
+        req.future
+        for req in registry.list_pending(cid)
+        if is_hot_user_pending_kind(req.kind.value, req.payload) and not req.future.done()
+    ]
+    if not futs:
+        await asyncio.sleep(min(0.2, timeout))
+        return
+    await asyncio.wait(futs, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+
+
 async def emit_orphan_fact(
     *,
     interaction_id: str,

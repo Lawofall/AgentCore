@@ -85,7 +85,7 @@ describe("deriveCaptainStatus", () => {
         run({ id: "w2", status: "completed" }),
       ],
     });
-    // Clears「正在生成汇总」sink; RunStatus has no paused.
+    // Clears「正在收尾」sink; RunStatus has no paused.
     expect(deriveCaptainStatus(e, "cap")).toBe("pending");
   });
 
@@ -117,7 +117,7 @@ describe("deriveCaptainStatus", () => {
     );
   });
 
-  it("stays running after CEO turn ended while harvest/synthesis is live", () => {
+  it("stays running after CEO turn ended while still attached (same-turn close)", () => {
     const e = exec({
       status: "running",
       runs: [
@@ -129,6 +129,20 @@ describe("deriveCaptainStatus", () => {
     expect(deriveCaptainStatus(e, "cap", { turnTerminal: true })).toBe(
       "running",
     );
+  });
+
+  it("does not paint synthesizing sink after captain detached", () => {
+    const e = exec({
+      status: "running",
+      runs: [
+        run({ id: "cap", status: "pending", kind: "captain" }),
+        run({ id: "w1", status: "completed" }),
+        run({ id: "w2", status: "completed" }),
+      ],
+    });
+    expect(
+      deriveCaptainStatus(e, "cap", { turnTerminal: true, detached: true }),
+    ).toBe("pending");
   });
 
   it("returns completed when execution completed and all workers terminal", () => {

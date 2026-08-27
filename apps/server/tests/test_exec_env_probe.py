@@ -1331,34 +1331,3 @@ def test_exec_env_dead_notice_speaks_the_classified_cause():
     finally:
         clear_active_coordination()
 
-
-def test_harvest_fallback_repeats_the_classified_cause():
-    from agentcore.conversation.execution_harvest import build_harvest_fallback_content
-    from agentcore.runtime.coordination.session import CoordinationSession
-
-    session = CoordinationSession(
-        execution_id="exec-env-harvest",
-        total_workers=1,
-        conversation_id="conv-env-harvest",
-    )
-    session.exec_env_dead = True
-    session.exec_env_dead_reason = EXEC_ENV_SPAWN_DENIED_CODE
-    content = build_harvest_fallback_content(session, kind="failure")
-    assert EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE[EXEC_ENV_SPAWN_DENIED_CODE] in content
-
-    session.exec_env_dead_reason = None
-    assert EXEC_ENV_DEAD_USER_VISIBLE in build_harvest_fallback_content(
-        session, kind="failure"
-    )
-
-    session.exec_env_dead_reason = EXEC_ENV_NOT_LINUX_CODE
-    cloud = build_harvest_fallback_content(session, kind="failure")
-    assert EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE[EXEC_ENV_NOT_LINUX_CODE] in cloud
-    assert "本机暂时跑不了命令" not in cloud
-
-    session.exec_env_dead = False
-    session.exec_env_dead_reason = None
-    session.draft = "云端隔离执行当前不可用，我改读文件。"
-    from_draft = build_harvest_fallback_content(session, kind="failure")
-    assert EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE[EXEC_ENV_SANDBOX_UNAVAILABLE_CODE] in from_draft
-    assert "本机暂时跑不了命令" not in from_draft

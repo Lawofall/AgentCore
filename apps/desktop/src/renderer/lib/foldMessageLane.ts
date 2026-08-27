@@ -228,8 +228,6 @@ function appendMarkerStep(
       return appendCheckpointStep(process, id);
     case "plan_review":
       return appendPlanReviewStep(process, id);
-    case "team_preview":
-      return process ?? [];
     case "escalation":
       return appendEscalationStep(process, id);
     case "approval":
@@ -275,14 +273,6 @@ export function foldPlanReviewMarker(
   );
 }
 
-/** Retired kickoff marker — do not insert timeline steps. */
-export function foldTeamPreviewMarker(
-  state: MessageLaneState,
-  _checkpointId: string,
-): MessageLaneState {
-  return state;
-}
-
 /** Fold a `user_interjection` into the timeline as a zero-width positional marker.
  * Body / 五态 stay on the execution bypass; marker only pins chronology. Dedupes by id. */
 export function foldUserInterjectionMarker(
@@ -303,10 +293,9 @@ function isSettledProcessStep(step: ProcessStep): boolean {
   );
 }
 
-/** Legacy markers that historically sat before `team` (insertBeforeTeam) — only
- * `team_preview` (开工卡已退役). Skip/insert paths remain for old journal data. */
+/** Leftover process markers that historically sat before `team`. */
 function isBeforeTeamMarker(step: ProcessStep): boolean {
-  return step.kind === "team_preview";
+  return (step as { kind: string }).kind === "team_preview";
 }
 
 /**
@@ -378,8 +367,8 @@ function foldSettledPrefix(
  * the journal slice has no settled events but process already carries content
  * (minimal test / truncated events), falls back to append — same as legacy.
  *
- * `advancePastBeforeTeam`: after the settled prefix, skip legacy `team_preview`
- * markers so hydrate inserts `team` after them (old journals). Current product no
+ * `advancePastBeforeTeam`: after the settled prefix, skip leftover `team_preview`
+ * process steps so hydrate inserts `team` after them (old journals). Current product no
  * longer emits kickoff cards — the graph appears when `run_plan` lands.
  */
 function journalMarkerInsertIndex(
@@ -422,8 +411,7 @@ function journalMarkerInsertIndex(
 
 /** Reload 补标记（时间线一期）: backfill every positional marker the journal implies
  * into a persisted `process[]` — `run_plan` → `team`，`*_required` → registry marker
- * （`team_preview` 已退役：journal 不再补；存量 process 若已有该标记，insert-before-team
- * 语义仍由 appendTeamPreviewStep 保留）。保证不变量「有交互卡必有时间线
+ * （开工卡 journal 事件 skip，不补标记）。保证不变量「有交互卡必有时间线
  * 标记」在重载后成立（底部堆叠回退已废除，缺标记的卡会整段消失）。
  *
  * 纯补标记：绝不吞正文。absorb 只走 ``content_reset``；重载的 process 是终态，

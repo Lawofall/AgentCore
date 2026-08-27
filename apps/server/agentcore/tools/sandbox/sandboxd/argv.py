@@ -3,8 +3,9 @@
 API cannot pass extra flags. Shape ``net`` always includes ``--ignore-cgroups``
 (Docker overlay: session OCI cgroup is not a supported surface).
 
-``run -d`` starts a long-lived guest (cloud desk). ``exec`` runs a command inside
-an already-running guest.
+``run -detach`` starts a long-lived guest (cloud desk). ``exec`` runs a command
+inside an already-running guest. gVisor ``runsc`` (release-20260817+) accepts
+``-detach`` on the ``run`` subcommand, not Docker-style ``-d``.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ def build_runsc_cmd(
         "run",
     ]
     if detach:
-        cmd.append("-d")
+        cmd.append("-detach")
     cmd.extend([f"--bundle={bundle_dir}", container_id])
     return cmd
 

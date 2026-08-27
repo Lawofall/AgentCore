@@ -81,17 +81,35 @@ def test_list_folder_dir_schema_and_registration():
     props = tool.schema.parameters["properties"]
     assert "folder_id" in props
     assert "directory" in props
-    assert "pattern" in props
-    assert "recursive" in props
-    assert "max_depth" in props
+    assert "pattern" not in props
+    assert "recursive" not in props
+    assert "max_depth" not in props
     assert "target_folder_id" not in props
     assert tool.schema.parameters["required"] == ["folder_id"]
     # Nesting: the reach is the folder plus everything under it.
     assert "子文件夹" in tool.schema.description
+    assert "file_list" in tool.schema.description
+    assert "list_folders" not in tool.schema.description
+    assert "轻量认桌" in tool.schema.description
     reg = tool_registration(ListFolderDirTool)
     assert reg.surface is ToolSurface.CEO_ORCHESTRATION
     assert reg.audience == (AUDIENCE_CEO,)
     assert reg.ceo_wire is CeoWire.ALWAYS
+
+
+@pytest.mark.asyncio
+async def test_list_folder_dir_leftover_pattern_does_not_point_at_glob(tmp_path: Path):
+    tool = ListFolderDirTool()
+    result = await tool.execute(
+        {"folder_id": "folder_local", "directory": ".", "pattern": "*.py"},
+        _ctx(tmp_path),
+    )
+    assert result.success is False
+    assert result.contract_failure is True
+    text = result.error or result.output or ""
+    assert "delegate" in text
+    assert "出生桌" in text
+    assert "请用 glob" not in text
 
 
 def test_read_folder_file_schema_and_registration():

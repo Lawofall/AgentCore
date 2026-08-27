@@ -98,6 +98,7 @@ def test_read_only_builtins_are_shared_with_ceo():
         "read_url",
         "file_read",
         "file_list",
+        "glob",
         "grep",
         "code_search",
         "code_diagnostics",

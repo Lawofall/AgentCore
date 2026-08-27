@@ -48,7 +48,7 @@ class FileProductsContract(StrEnum):
     # 迁移中：会落盘、自报还没接。待接清单**只减不增**（棘轮用真跑用例证明它确实还没自报），
     # 现已清空——再用这一档要先推翻棘轮里那条「下界是空」的断言。
     SELF_REPORT_PENDING = "self_report_pending"
-    # 不往工作区写任何字节（file_read / file_list / grep / code_search / code_diagnostics）。
+    # 不往工作区写任何字节（file_read / file_list / glob / grep / code_search / code_diagnostics）。
     # 与审批面互锁：FILESYSTEM 类里只有 ``ToolApproval.NEVER`` 才配声明只读——要写盘授权
     # 又自称只读的组合会被棘轮拦下。
     READ_ONLY = "read_only"

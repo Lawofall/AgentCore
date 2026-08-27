@@ -23,8 +23,7 @@ export function teamHasStartedRuns(runs: readonly TeamGraphRun[]): boolean {
 }
 
 /**
- * Inline graph visibility. Kickoff card retired — graph is not gated on
- * leftover `team_preview` IX / pending previews; pending worker roster is enough.
+ * Inline graph visibility. Graph is not gated on leftover kickoff IX;
  */
 export function shouldShowTeamGraph(
   runs: readonly TeamGraphRun[] | null | undefined,

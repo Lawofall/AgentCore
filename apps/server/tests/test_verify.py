@@ -104,8 +104,8 @@ def test_format_steer_empty_when_clean():
 
 
 def test_format_steer_marks_automated_and_suppresses_acknowledgement():
-    # 这条 steer 以 role=user 进窗口，模型易把它当用户纠错而回「谢谢指正」——那句寒暄会漏进
-    # 可见交付（真实事故）。文案须自证是系统自动核验、非用户，并禁止致谢/复述/寒暄。
+    # 这条 steer 以 role=user 进窗口，模型易把它当用户纠错而寒暄致谢——那句会漏进
+    # 可见交付。文案须自证是系统自动核验、非用户，并禁止致谢/复述/寒暄。
     steer = format_guard_steer(["问题甲"])
     assert "自动核验" in steer
     assert "非用户" in steer

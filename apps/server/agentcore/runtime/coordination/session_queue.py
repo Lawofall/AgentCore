@@ -1,4 +1,4 @@
-"""Coordination event queue, wait/coalesce, close, and harvest terminal stash.
+"""Coordination event queue, wait/coalesce, and close.
 
 Split from ``session.py`` — pure move. Worker / timeout / snapshot stay on
 their mixins; this mixin is the in-process event pipe.
@@ -25,7 +25,7 @@ logger = get_logger("agentcore.runtime.coordination.session")
 
 
 class SessionQueueMixin:
-    """Post / wait / drain the coordination event queue; close + harvest stash."""
+    """Post / wait / drain the coordination event queue; close."""
 
     _pending: list[CoordinationEvent]
 
@@ -50,6 +50,8 @@ class SessionQueueMixin:
             CoordinationEventKind.DRIVE_CANCELLED,
         ):
             self.terminal_posted = True
+        if event.kind is CoordinationEventKind.DRIVE_CANCELLED:
+            self.drive_cancelled = True
         self._queue.put_nowait(event)
         logger.debug(
             "coordination.event_posted",
@@ -161,79 +163,11 @@ class SessionQueueMixin:
             self._wake.set()
         return list(drained)
 
-    def stash_terminal_for_harvest(
-        self: CoordinationSession, events: list[CoordinationEvent] | None = None
-    ) -> None:
-        """Park ALL_COMPLETED / DRIVE_CANCELLED (and leftover queue) for harvest.
-
-        First-turn wait consumes these events then ``close()``; harvest re-queues
-        the stash after ``reopen_for_harvest``.
-        """
-        batch = list(events or [])
-        if events is None:
-            batch.extend(self._pending)
-            while True:
-                try:
-                    batch.append(self._queue.get_nowait())
-                except asyncio.QueueEmpty:
-                    break
-        kept: list[CoordinationEvent] = []
-        seen: set[CoordinationEventKind] = set()
-        for ev in (*self._harvest_stash, *batch):
-            if ev.kind not in (
-                CoordinationEventKind.ALL_COMPLETED,
-                CoordinationEventKind.DRIVE_CANCELLED,
-            ):
-                continue
-            if ev.kind in seen:
-                kept = [e for e in kept if e.kind is not ev.kind]
-            seen.add(ev.kind)
-            kept.append(
-                CoordinationEvent(kind=ev.kind, payload=dict(ev.payload or {}))
-            )
-        self._harvest_stash = kept
-
-    def reopen_for_harvest(self: CoordinationSession) -> None:
-        """Re-activate a closed session and re-queue stashed terminal events."""
-        self.active = True
-        self.harvest_closing = True
-        if self._harvest_stash:
-            self._pending.extend(
-                CoordinationEvent(kind=e.kind, payload=dict(e.payload or {}))
-                for e in self._harvest_stash
-            )
-            self._harvest_stash = []
-            self._wake.set()
-        logger.info(
-            "coordination.execution_reopened_for_harvest",
-            execution_id=self.execution_id,
-            conversation_id=self.conversation_id or "",
-            pending=len(self._pending),
-        )
-
     def close(self: CoordinationSession) -> None:
         was_active = self.active
-        if was_active and not self.harvest_closing:
-            leftover = list(self._pending)
-            while True:
-                try:
-                    leftover.append(self._queue.get_nowait())
-                except asyncio.QueueEmpty:
-                    break
-            if leftover:
-                self.stash_terminal_for_harvest(leftover)
-                self._pending = [
-                    ev
-                    for ev in leftover
-                    if ev.kind
-                    not in (
-                        CoordinationEventKind.ALL_COMPLETED,
-                        CoordinationEventKind.DRIVE_CANCELLED,
-                    )
-                ]
         self.active = False
         self.cancel_all_timeouts()
-        # 收口：未消化插话升格对话 FIFO（或终局已答 → addressed）。仅从 active→inactive
+        # 未消化插话升格对话 FIFO（或终局已答 → addressed）。仅从 active→inactive
         # 触发一次，避免重复 close 双入队。
         if was_active and self.pending_interjections:
             from agentcore.runtime.coordination.interjections import (

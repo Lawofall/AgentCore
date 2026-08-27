@@ -167,7 +167,7 @@ class LoopController(
         # rounds gather no intel → do not spend breadth budget). Calls still feed diagnostics.
         self._investigation_calls = 0
         self._investigation_rounds = 0
-        # Local file peeks only (file_list / file_read / grep) — diagnostics / eval probe.
+        # Local file peeks only (file_list / glob / file_read / grep) — diagnostics / eval probe.
         self._local_recon_calls = 0
         # Over-investigation safety net (收敛治理, 保险丝): absolute round ceiling plus
         # progress-aware spinning on repeated same-target reads. ``finalize_rounds <= 0``
@@ -242,7 +242,7 @@ class LoopController(
         self._post_delegate_investigation_count: int = 0
         # Soft audit-gate nudge (协作优先阶段 3 返工环): at most once per run, captain-only.
         self._audit_gate_fired: bool = False
-        # 成篇硬门：research_report / deliverable 结构信号 — nudge 后仍不可直接 end_turn。
+        # 成篇硬门：cite_write_review / deliverable 结构信号 — nudge 后仍不可直接 end_turn。
         self._audit_hard_required: bool = False
         self._audit_includes_review: bool = False
         # Soft debate-commitment nudge: user picked a debate form on kickoff; at most once.
@@ -265,7 +265,7 @@ class LoopController(
 
         ``node_count`` / ``has_deps`` describe this batch so the audit gate can tell
         a substantial first batch (nodes ≥3 or any depends_on) from a light one.
-        ``audit_hard`` / ``includes_review`` stamp成篇硬门（research_report playbook）.
+        ``audit_hard`` / ``includes_review`` stamp成篇硬门（cite_write_review playbook）.
         """
         self._post_delegate = True
         self._post_delegate_investigation_count = 0
@@ -297,7 +297,7 @@ class LoopController(
 
     @property
     def audit_hard_required(self) -> bool:
-        """True when long-form / research_report batches require audit before end_turn."""
+        """True when long-form / cite_write_review batches require audit before end_turn."""
         return self._audit_hard_required
 
     @property
@@ -682,7 +682,7 @@ class LoopController(
                 if attempt.success:
                     round_investigation_success = True
                 inv_fps.add(attempt.fingerprint)
-                if attempt.tool_name in {"file_list", "file_read", "grep"}:
+                if attempt.tool_name in {"file_list", "glob", "file_read", "grep"}:
                     self._local_recon_calls += 1
         # Rounds, not raw calls, drive the safety net: a parallel batch of N reads in one
         # round bumps this once, so fanning out can't guillotine the worker.

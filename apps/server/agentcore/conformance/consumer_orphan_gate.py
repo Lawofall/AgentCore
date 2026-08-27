@@ -37,8 +37,10 @@ from agentcore.conformance.consumer_orphan_allowlist import (
     CONSUMER_ORPHAN_ALLOWLIST,
     PRODUCER_ORPHAN_ALLOWLIST,
 )
-from agentcore.runtime.events.types import EventType
+from agentcore.runtime.events.payloads.process import RETIRED_PROCESS_STEP_KINDS
+from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES, EventType
 from agentcore.runtime.interaction import INTERACTION_KIND_SPECS, InteractionKind
+from agentcore.runtime.kickoff.retired import LEFTOVER_TEAM_PREVIEW_KIND
 
 SurfaceKind = Literal["sse", "interaction", "process_step"]
 
@@ -778,6 +780,8 @@ def run_consumer_orphan_gate() -> ConsumerOrphanResult:
     for wire in sorted(sse_registered):
         if _allowlisted_consumer("sse", wire):
             continue
+        if wire in RETIRED_EVENT_TYPE_VALUES:
+            continue
         if wire in sse_producers:
             continue
         orphans.append(
@@ -801,6 +805,8 @@ def run_consumer_orphan_gate() -> ConsumerOrphanResult:
     for kind in sorted(interaction_registered):
         if _allowlisted_consumer("interaction", kind):
             continue
+        if kind == LEFTOVER_TEAM_PREVIEW_KIND and kind not in live_interaction_kinds:
+            continue
         if kind in live_interaction_kinds and (
             kind in spec_interaction_kinds or kind in _BRIDGE_ONLY_INTERACTION_KINDS
         ):
@@ -822,6 +828,8 @@ def run_consumer_orphan_gate() -> ConsumerOrphanResult:
 
     for kind in sorted(process_registered):
         if _allowlisted_consumer("process_step", kind):
+            continue
+        if kind in RETIRED_PROCESS_STEP_KINDS:
             continue
         if kind in process_producers:
             continue

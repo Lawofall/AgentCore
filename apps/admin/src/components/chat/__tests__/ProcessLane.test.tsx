@@ -1,8 +1,5 @@
 // @vitest-environment jsdom
-import {
-  ProcessLane,
-  reasoningPlainPreview,
-} from "@/components/chat/ProcessLane";
+import { ProcessLane } from "@/components/chat/ProcessLane";
 import type { ProcessStep } from "@agentcore/protocol-conformance";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -21,15 +18,14 @@ const tool = (
   status: "success",
 });
 
-describe("reasoningPlainPreview", () => {
-  it("strips markdown from the first line", () => {
-    expect(reasoningPlainPreview("**粗体** 与 `代码`")).toBe("粗体 与 代码");
-    expect(reasoningPlainPreview("# 标题行\n第二行")).toBe("标题行");
-  });
-});
+function expectMutedThought(text: string) {
+  const wrap = screen.getByText(text).closest(".overflow-auto");
+  expect(wrap?.classList.contains("text-muted-foreground")).toBe(true);
+  expect(wrap?.classList.contains("text-foreground")).toBe(false);
+}
 
 describe("ProcessLane", () => {
-  it("shows outer summary with thought preview when collapsed", () => {
+  it("shows outer summary without thought body when collapsed", () => {
     render(
       <ProcessLane
         steps={[
@@ -39,14 +35,14 @@ describe("ProcessLane", () => {
       />,
     );
     expect(screen.getByText("思考 1 步 · 使用 1 个工具")).toBeTruthy();
-    expect(screen.getByText("先查资料。")).toBeTruthy();
+    expect(screen.queryByText("先查资料。")).toBeNull();
     expect(screen.queryByText("web_search")).toBeNull();
     expect(screen.queryByRole("button", { name: /^思考$/ })).toBeNull();
 
     fireEvent.click(screen.getByText("思考 1 步 · 使用 1 个工具"));
     expect(screen.getByRole("button", { name: /^思考$/ })).toBeTruthy();
     expect(screen.getByText("web_search")).toBeTruthy();
-    expect(screen.getByText("先查资料。")).toBeTruthy();
+    expect(screen.queryByText("先查资料。")).toBeNull();
     expect(screen.queryByLabelText("工具参数")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
@@ -54,9 +50,10 @@ describe("ProcessLane", () => {
       "true",
     );
     expect(screen.getByText("先查资料。")).toBeTruthy();
+    expectMutedThought("先查资料。");
   });
 
-  it("shows inner thought preview for a single pure thought without outer summary", () => {
+  it("shows only the thought button for a single pure thought until opened", () => {
     render(
       <ProcessLane
         steps={[{ kind: "reasoning", text: "完整思考" }]}
@@ -64,10 +61,11 @@ describe("ProcessLane", () => {
     );
     expect(screen.queryByText(/思考 \d+ 步/)).toBeNull();
     expect(screen.getByRole("button", { name: /^思考$/ })).toBeTruthy();
-    expect(screen.getByText("完整思考")).toBeTruthy();
+    expect(screen.queryByText("完整思考")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
-    expect(screen.getAllByText("完整思考").length).toBeGreaterThan(0);
+    expect(screen.getByText("完整思考")).toBeTruthy();
+    expectMutedThought("完整思考");
   });
 
   it("groups consecutive tools and hides names until the group opens", () => {
@@ -107,6 +105,7 @@ describe("ProcessLane", () => {
         ]}
       />,
     );
+    expect(screen.queryByText("中间思考")).toBeNull();
     fireEvent.click(screen.getByText("思考 1 步 · 使用 3 个工具"));
     expect(screen.getByText("使用 2 个工具")).toBeTruthy();
     expect(screen.getByText("c")).toBeTruthy();
@@ -124,7 +123,11 @@ describe("ProcessLane", () => {
     );
     expect(screen.queryByText(/思考 \d+ 步/)).toBeNull();
     expect(screen.getByText("队员过程正文")).toBeTruthy();
+    expectMutedThought("队员过程正文");
     expect(screen.getByText("web_search")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
+    expect(screen.queryByText("队员过程正文")).toBeNull();
   });
 
   it("marks a channel redirect as 改道, not a fault X", () => {

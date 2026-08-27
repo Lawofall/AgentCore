@@ -1,18 +1,13 @@
-"""拆·playbook 固化 (docs/03-AI核心/编排器与CEO主Agent.md §playbook): a tiny registry of
-high-frequency, high-variance team SHAPES promoted from prose guidance to instantiable
-deterministic DAG skeletons — the CEO names one + fills a few slots instead of
-hand-crafting the ``tasks`` array every time
-(像 `debate` 的确定性骨架, [辩论编排设计](docs/03-AI核心/辩论编排设计.md)).
+"""具名 playbook 登记表 — 权威 docs/03-AI核心/编排器与CEO主Agent.md 「具名 playbook」。
 
-Each playbook is a PURE ``slots -> (tasks, errors)`` builder whose output is exactly the
-``tasks`` dict-list :func:`agentcore.runtime.runs.builder.build_run_plan` already consumes, so an
-instantiated playbook flows through the SAME pipeline (build_run_plan → drive → executor →
-ceo_format) as a hand-written delegation — 纯加法、不加新子系统、零行为变化（不传 playbook 即如常）.
+Default path is handwritten top-level ``tasks``. Named playbook is an XOR shortcut:
+the CEO names one + fills slots; the builder emits the same ``tasks`` dict-list
+``build_run_plan`` already consumes (build_run_plan → drive → executor → ceo_format).
+Not a template engine; not a boss-facing menu.
 
-Deliberately SMALL. A playbook 固化 is for the few recurring, worth-codifying shapes,
-NOT a general template engine (守 [dev-process](.cursor/rules/dev-process.mdc) 防僵化绊线): the
-moment a "playbook" needs branching / conditionals / per-call structural choices it is no longer a
-固定形状 and should stay a hand-written ``tasks`` array.
+Deliberately SMALL. A name is a frozen pipeline shape, not a scene label.
+``build_app.intensity=lean|full`` is the one allowed greenfield structural slot
+(this round: do not split into two names); other forks stay handwritten.
 """
 
 from __future__ import annotations
@@ -32,14 +27,12 @@ from agentcore.runtime.runs.playbooks._common import (
 from agentcore.runtime.runs.playbooks.audit import code_audit
 from agentcore.runtime.runs.playbooks.build_soft import (
     build_app,
-    build_feature,
-    repair_code,
+    diagnose_fix_verify,
 )
-from agentcore.runtime.runs.playbooks.decide import compare_options
 from agentcore.runtime.runs.playbooks.research import (
-    multi_lens_research,
-    parallel_brief,
-    research_report,
+    cite_write_review,
+    lens_crosscheck,
+    map_fanout,
 )
 
 PLAYBOOKS: dict[str, Playbook] = {
@@ -51,7 +44,8 @@ PLAYBOOKS: dict[str, Playbook] = {
             f"先按产品缝 2–3、能少则少；目录细拆仅当探路证明真并行且单缝扛不住；"
             f"上限 {CODE_AUDIT_FANOUT}）；"
             "2 路并行交 CEO 收口；≥3 路才加主管速览；"
-            "正交于 parallel_brief（摸底）/ research_report（成文审校）/ repair_code（按症状修）"
+            "正交于 map_fanout（摸底）/ cite_write_review（成文审校）/"
+            " diagnose_fix_verify（按症状修）"
         ),
         slots=(
             "scope(必填,审计范围路径或子系统;亦接受 topic/target) / "
@@ -67,12 +61,12 @@ PLAYBOOKS: dict[str, Playbook] = {
         ),
         build=code_audit,
     ),
-    "parallel_brief": Playbook(
-        name="parallel_brief",
+    "map_fanout": Playbook(
+        name="map_fanout",
         summary=(
             "【对齐推进·A 摸清】一起弄懂/多路摸清/讨论对齐且确有 ≥2 独立缝时："
             "N 路并行摸底→方向笔记落盘→交回 CEO 对话综述；无提纲/撰稿/审校"
-            "（未明示成文勿升 research_report；仅确有 ≥2 独立缝才用本套餐，人数跟缝走、能少则少；"
+            "（未明示成文勿升 cite_write_review；仅确有 ≥2 独立缝才用本套餐，人数跟缝走、能少则少；"
             "够用即停：一页地图（定位/技术栈或手段/进度/开放问题）；"
             "默认自己干、禁开局长通读再招人；handoff 短摘要必交；"
             "笔记 file_write（过长分段），禁写进用户可见回复；"
@@ -85,21 +79,20 @@ PLAYBOOKS: dict[str, Playbook] = {
             "每条一句目标；讨论对齐/摸清用本槽，勿当成长文大纲或必读书单扇出；"
             "超过扇出上限时末尾自动折叠到最后一节点并标注、不丢弃)"
         ),
-        build=parallel_brief,
+        build=map_fanout,
     ),
-    "research_report": Playbook(
-        name="research_report",
+    "cite_write_review": Playbook(
+        name="cite_write_review",
         summary=(
             "【成文专线·B/重】仅用户明示成文且需正式长文/可提交"
             "（或已确认要审校满编）时用：调研→提纲→写作→审校"
             "（N 路并行调研汇拢成纲再成文；成篇验收钉死单一主文件 `.md`；"
-            "要 PDF/Word/可分享则 md→md_to_pdf|md_to_docx→handoff，"
-            "禁 HTML 顶替/禁 reportlab·python-docx 主路径）。"
+            "PDF/Word → consult(team_delivery_env)）。"
             "讨论/形态未定勿首派；普通构想勿默认学术审校；"
-            "一起弄懂/多路摸清/仅提论文开源当资料请用 parallel_brief"
+            "一起弄懂/多路摸清/仅提论文开源当资料请用 map_fanout"
         ),
         slots=(
-            "topic(必填,正式长文/可提交主题;讨论或形态未定请先 parallel_brief) / "
+            "topic(必填,正式长文/可提交主题;讨论或形态未定请先 map_fanout) / "
             "angles(可选,调研子方向数组,各派一名调研员;"
             "仅明示成文且走本专线后再扇出；宜少；"
             "超过扇出上限时末尾自动折叠到最后一节点并标注、不丢弃) / "
@@ -107,19 +100,10 @@ PLAYBOOKS: dict[str, Playbook] = {
             "deliverable(可选,产出形态) / "
             "output_path(可选,成篇主文件路径,默认 AgentCore/文档/research/报告.md；验收只认此路径)"
         ),
-        build=research_report,
+        build=cite_write_review,
     ),
-    "build_feature": Playbook(
-        name="build_feature",
-        summary="后端接口→（前端页面 ‖ 测试）并行的功能交付（接口契约经便签墙对齐）",
-        slots=(
-            "feature(必填,要实现的功能) / stack(可选,技术栈) / "
-            "include(可选,['ui','test'] 子集,默认两者都要)"
-        ),
-        build=build_feature,
-    ),
-    "repair_code": Playbook(
-        name="repair_code",
+    "diagnose_fix_verify": Playbook(
+        name="diagnose_fix_verify",
         summary=(
             "【无先验调查批】诊断(短)→修补→验证的单症状修码（runtime 错 / 缺 export / "
             "白屏挂载；短轮次；禁触顶后换马甲；playbook_args 须 verify="
@@ -133,7 +117,7 @@ PLAYBOOKS: dict[str, Playbook] = {
             "亦接受 verify_command/acceptance) / "
             "target(可选,优先文件路径) / artifacts(可选,落盘路径数组)"
         ),
-        build=repair_code,
+        build=diagnose_fix_verify,
     ),
     "build_app": Playbook(
         name="build_app",
@@ -155,18 +139,8 @@ PLAYBOOKS: dict[str, Playbook] = {
         ),
         build=build_app,
     ),
-    "compare_options": Playbook(
-        name="compare_options",
-        summary="N 路并行评估各选项→汇总对比推荐的决策支持",
-        slots=(
-            "question(必填,要决策的问题) / options(必填,>=2 且≤扇出上限个待比较选项;"
-            "超上限显式拒绝、不折叠不截断) / "
-            "criteria(可选,评估维度数组)"
-        ),
-        build=compare_options,
-    ),
-    "multi_lens_research": Playbook(
-        name="multi_lens_research",
+    "lens_crosscheck": Playbook(
+        name="lens_crosscheck",
         summary=(
             "异质透镜并行调研→汇总交叉验证（可产 motion_card 建议开辩；"
             "调研报告落盘 AgentCore/文档/research/；默认法律/品牌商业/舆情公关/文化社会）"
@@ -176,7 +150,7 @@ PLAYBOOKS: dict[str, Playbook] = {
             "超过扇出上限时末尾自动折叠到最后一节点并标注、不丢弃；"
             "默认法律·品牌商业·舆情公关·文化社会)"
         ),
-        build=multi_lens_research,
+        build=lens_crosscheck,
     ),
 }
 
@@ -205,7 +179,7 @@ def playbook_args_schema_description() -> str:
         "绿场必填 app——勿空对象。"
         f"必填槽：{required_cues}。"
         "code_audit modules：整仓按产品缝扇出（先 2–3，不从 scope 自动拆；勿按目录填满上限）。"
-        "其余可选槽与细节→consult(team_orchestration_advanced)。"
+        "其余可选槽→consult(team_orchestration_advanced)。"
     )
 
 
@@ -234,7 +208,7 @@ def expand_playbook(
     """Expand a named playbook + slot args into a ``tasks`` dict-list for ``build_run_plan``.
 
     ``user_message`` is the turn's raw user line (from DelegateTool), injected as a
-    mechanism-only key for playbooks that need proposition fidelity (e.g. multi_lens
+    mechanism-only key for playbooks that need proposition fidelity (e.g. lens_crosscheck
     synthesizer). Not a CEO-facing slot.
 
     ``conversation_id`` is accepted for call-site compatibility. Website DESIGN

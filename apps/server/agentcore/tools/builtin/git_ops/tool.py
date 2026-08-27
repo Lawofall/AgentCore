@@ -46,6 +46,11 @@ async def _dispatch(
     report_phase(PHASE_LOCAL)
     if subcommand == "init_baseline":
         return await cmds_local.cmd_init_baseline(cwd, start, meta=base_meta)
+    if subcommand == "clone":
+        # No existing repo to probe — dest is a new tree under the tool cwd.
+        return await cmds_remote.cmd_clone(
+            cwd, arguments, start=start, meta=base_meta, context=context
+        )
 
     is_write = git_call_is_write(arguments)
     # Root ``.git`` fork only (no subprocess); a present-but-broken repo
@@ -173,11 +178,12 @@ class GitTool:
             description=(
                 # 审批 / 无仓 / CEO 写入这三条策略只在这里写一遍——
                 # subcommand 与各参数说明只描述自己的取值语义。
-                "工作区根结构化 Git（仅根 `.git`；探路优先 file_list/grep）。"
+                "工作区根结构化 Git（仅根 `.git`；探路优先 glob/grep）。"
                 "只读免批；写入与 stash push/pop、tag create、remote add 须审批；"
-                "CEO 拒写须 delegate（例外 init_baseline 仍须授权）。"
+                "CEO 拒写须 delegate（例外 init_baseline/clone 仍须授权）。"
                 "无仓：只读→success+no_repo（勿当干净仓）；写硬错；"
-                "init_baseline=无仓则 init+首提交，脏仓→dirty_skip。"
+                "init_baseline=无仓则 init+首提交，脏仓→dirty_skip；"
+                "clone=无仓可浅克隆。"
                 "pull=--ff-only；冲突诚实失败；"
                 "push/create_pr 恒确认（create_pr 仅 GitHub API）；"
                 "force/保护分支/reset|clean 硬拒，其余禁项见 action。"

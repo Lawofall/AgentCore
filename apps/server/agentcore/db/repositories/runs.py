@@ -1139,7 +1139,7 @@ class TurnJournalRepository:
     async def find_latest_mlr_execution(self, *, conversation_id: str) -> str | None:
         """Newest MLR-shaped team graph: ``multi_agent`` ``run_plan`` containing a synthesizer run.
 
-        批 A2 辩论进宿主图：playbook ``multi_lens_research`` 汇总员 raw id ``synthesizer``，
+        批 A2 辩论进宿主图：playbook ``lens_crosscheck`` 汇总员 raw id ``synthesizer``，
         经 DAG 铸造后为 ``{del_<uuid>|add_<uuid>}_synthesizer``——须同时匹配二者。
         Does **not** exclude the current turn (same-turn MLR → debate must resolve the host).
         """

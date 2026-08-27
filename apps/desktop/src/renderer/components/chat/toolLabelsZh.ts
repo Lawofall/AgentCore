@@ -1,5 +1,5 @@
 /**
- * 中文工具展示名 —— 审批卡 / 委派授权 / team_preview 开工卡共用。
+ * 中文工具展示名 —— 审批卡 / 委派授权共用。
  * 与 stores/execution/types.toolLabel（英文图节点进度文案）分表维护，勿混成一套。
  */
 export const TOOL_LABELS_ZH: Record<string, string> = {

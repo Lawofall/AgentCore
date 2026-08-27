@@ -27,7 +27,6 @@ from agentcore.runtime.runs.types import RunSpec
 from agentcore.runtime.suspension import (
     AskUserSuspension,
     PlanReviewSuspension,
-    TeamPreviewSuspension,
     turn_citations,
 )
 from tests.llm_helpers import make_profile_params
@@ -49,32 +48,6 @@ def _ask_frame(**kwargs) -> AskUserSuspension:
     )
     defaults.update(kwargs)
     return AskUserSuspension(**defaults)
-
-
-def _team_frame(*, nodes: list[RunSpec] | None = None, **kwargs) -> TeamPreviewSuspension:
-    plan_nodes = nodes or [
-        RunSpec(run_id="w1", agent_id="w1", role="A", task="t1"),
-        RunSpec(run_id="w2", agent_id="w2", role="B", task="t2"),
-        RunSpec(run_id="w3", agent_id="w3", role="C", task="t3", depends_on=["w1"]),
-    ]
-    defaults = dict(
-        message_id="m1",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="cap1",
-        checkpoint_id="ck1",
-        tool_call_id="call_del",
-        base_system_prompt="sys",
-        user_message="go",
-        plan=RunPlan(nodes=plan_nodes),
-        workers=[
-            {"run_id": n.run_id, "role": n.role, "task": n.task, "depends_on": list(n.depends_on)}
-            for n in plan_nodes
-        ],
-        primitive="delegate",
-    )
-    defaults.update(kwargs)
-    return TeamPreviewSuspension(**defaults)
 
 
 def _plan_review_frame(*, nodes: list[RunSpec] | None = None, **kwargs) -> PlanReviewSuspension:
@@ -208,26 +181,37 @@ def test_rehydrate_legacy_frame_no_turn_paused():
 
 
 def test_batch_shape_from_plan_nodes():
-    frame = _team_frame()
+    frame = _plan_review_frame(
+        nodes=[
+            RunSpec(run_id="w1", agent_id="w1", role="A", task="t1"),
+            RunSpec(run_id="w2", agent_id="w2", role="B", task="t2"),
+            RunSpec(run_id="w3", agent_id="w3", role="C", task="t3", depends_on=["w1"]),
+        ]
+    )
     nodes, has_deps = batch_shape_for_settled_suspension(frame)
     assert nodes == 3
     assert has_deps is True
 
 
-def test_batch_shape_debate_is_zero():
-    frame = _team_frame(primitive="debate", plan=RunPlan(nodes=[]), workers=[], sides=[{}])
-    assert batch_shape_for_settled_suspension(frame) == (0, False)
+def test_batch_shape_ask_user_is_zero():
+    assert batch_shape_for_settled_suspension(_ask_frame()) == (0, False)
 
 
 def test_settle_mark_sets_post_delegate_with_substantial_shape():
-    """team_preview snapshot has post_delegate=False; settle 补标 must set shape."""
+    """plan_review snapshot has post_delegate=False; settle 补标 must set shape."""
     seed = {
         "post_delegate": False,
         "delegate_count": 0,
         "audit_gate_fired": False,
         "first_batch_substantial": False,
     }
-    frame = _team_frame()
+    frame = _plan_review_frame(
+        nodes=[
+            RunSpec(run_id="w1", agent_id="w1", role="A", task="t1"),
+            RunSpec(run_id="w2", agent_id="w2", role="B", task="t2"),
+            RunSpec(run_id="w3", agent_id="w3", role="C", task="t3", depends_on=["w1"]),
+        ]
+    )
     marked = mark_controller_after_settle(seed, frame)
     assert marked is not None
     assert marked["post_delegate"] is True
@@ -265,7 +249,7 @@ def test_settle_mark_without_shape_would_leave_substantial_false():
     assert c.has_delegated is True
     assert c.first_batch_substantial is False
     # With shape from settle helper — substantial for 3-node DAG.
-    marked = mark_controller_after_settle(c.export_seed(), _team_frame())
+    marked = mark_controller_after_settle(c.export_seed(), _plan_review_frame())
     # delegate_count increments again (second batch); first_batch_substantial stays
     # from the first mark (False) — so seed from turn_paused must start clean.
     assert marked["delegate_count"] == 2
@@ -279,7 +263,13 @@ def test_settle_mark_without_shape_would_leave_substantial_false():
             "audit_gate_fired": False,
             "first_batch_substantial": False,
         },
-        _team_frame(),
+        _plan_review_frame(
+            nodes=[
+                RunSpec(run_id="w1", agent_id="w1", role="A", task="t1"),
+                RunSpec(run_id="w2", agent_id="w2", role="B", task="t2"),
+                RunSpec(run_id="w3", agent_id="w3", role="C", task="t3", depends_on=["w1"]),
+            ]
+        ),
     )
     assert clean["first_batch_substantial"] is True
 

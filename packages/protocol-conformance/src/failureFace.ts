@@ -8,7 +8,6 @@ import type { ProjectedTurn } from "./projectedTurn";
 const DEDICATED_PAUSE_ASK_KINDS = new Set([
   "checkpoint",
   "plan_review",
-  "team_preview",
   "approval",
   "stage_card",
 ]);

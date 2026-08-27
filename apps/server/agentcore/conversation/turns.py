@@ -17,6 +17,7 @@ from agentcore.conversation.common import (
 )
 from agentcore.conversation.compaction import maybe_compact_near_ceiling
 from agentcore.conversation.history import load_chat_context
+from agentcore.conversation.inline_body import plain_text
 from agentcore.conversation.mentions import to_stored_agent_mentions
 from agentcore.conversation.turn_backend import build_turn_backend
 from agentcore.conversation.turn_persistence import (
@@ -183,7 +184,7 @@ async def stream_chat(
             schedule_title_generation(
                 conversation_id=conversation_id,
                 user_id=user_id,
-                user_message=user_message,
+                user_message=plain_text(user_message),
                 sink=sink,
                 trace_id=turn_trace_id,
             )
@@ -247,6 +248,8 @@ async def regenerate_chat(
     user_id: str,
     sink: EventSink,
     edited_content: str | None = None,
+    edited_attachments: list | None = None,
+    edited_agent_mentions: list | None = None,
     llm_credentials: LLMCredentials | None = None,
     llm_supports_tools: bool | None = None,
 ) -> None:
@@ -292,9 +295,23 @@ async def regenerate_chat(
             user_message = (
                 edited_content if edited_content is not None else (target.content or "")
             )
-            stored_mentions = to_stored_agent_mentions(
-                list(getattr(target, "agent_mentions", None) or [])
-            )
+            if edited_agent_mentions is not None:
+                stored_mentions = to_stored_agent_mentions(
+                    [
+                        item.model_dump() if hasattr(item, "model_dump") else item
+                        for item in edited_agent_mentions
+                    ]
+                )
+            else:
+                stored_mentions = to_stored_agent_mentions(
+                    list(getattr(target, "agent_mentions", None) or [])
+                )
+            stored_attachments = None
+            if edited_attachments is not None:
+                stored_attachments = [
+                    item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+                    for item in edited_attachments
+                ]
             target_created_at = target.created_at
             folder_id = conv.folder_id
             auto_desk_raw = getattr(conv, "auto_desk_folder_id", None)
@@ -315,8 +332,20 @@ async def regenerate_chat(
             )
             board_id = board.id if board else None
 
-            if edited_content is not None:
-                await msg_repo.update_content(message_id, edited_content, commit=False)
+            if (
+                edited_content is not None
+                or stored_attachments is not None
+                or edited_agent_mentions is not None
+            ):
+                await msg_repo.update_content(
+                    message_id,
+                    edited_content if edited_content is not None else None,
+                    attachments=stored_attachments,
+                    agent_mentions=(
+                        stored_mentions if edited_agent_mentions is not None else None
+                    ),
+                    commit=False,
+                )
 
             await msg_repo.delete_after(
                 conversation_id, after_created_at=target_created_at, commit=False
@@ -548,11 +577,6 @@ async def resume_chat(
                             llm_supports_tools=llm_supports_tools,
                             permission_axes=permission_axes,
                             x_client_platform=x_client_platform,
-                            excluded_run_ids=list(response.excluded_run_ids or []),
-                            write_capability_overrides=list(
-                                response.write_capability_overrides or []
-                            ),
-                            model_overrides=dict(response.model_overrides or {}),
                         )
                 except asyncio.CancelledError:
                     # Hard cancel / lifespan / hard kill.

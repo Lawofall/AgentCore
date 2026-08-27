@@ -685,11 +685,16 @@ class ReadUrlTool:
                 follow_redirects=False,
                 transport=PinnedIPTransport(verify=False),
             ) as client:
+                # github.com/{owner} (profile / ?tab=repositories) and
                 # github.com/{owner}/{repo} (root/tree/blob): prefer api.github.com so a
-                # HTML connect timeout is not misread as "private repo". Match miss or
-                # API failure → fall through to the HTML path below (same SSRF/breaker).
+                # HTML JS shell / connect timeout is not misread as "private repo".
+                # Match miss or API failure → HTML path below (same SSRF/breaker).
                 github_page = await try_fetch_github_page(
-                    client, url, max_chars, safe_request=_safe_request
+                    client,
+                    url,
+                    max_chars,
+                    safe_request=_safe_request,
+                    user_id=context.user_id,
                 )
                 if github_page is not None:
                     title, text, description = github_page

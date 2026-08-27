@@ -1,5 +1,6 @@
 import { useConversationStore } from "@/stores/conversation";
 import {
+  applyInteractionWireEvent,
   hydrateInteractionsFromJournal,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -100,26 +101,6 @@ function upsertPlanReview(messageId = "client-uuid"): void {
   });
 }
 
-function upsertTeamPreview(messageId = "client-uuid"): void {
-  ix().upsertRequired({
-    kind: "team_preview",
-    conversationId: CID,
-    messageId,
-    payload: {
-      checkpoint_id: "tp1",
-      conversation_id: CID,
-      primitive: "delegate",
-      workers: [{ run_id: "r1", role: "调研", task: "做调研", depends_on: [] }],
-      tools: ["file_write"],
-      motion: "",
-      form: "",
-      sides: [],
-      max_rounds: 0,
-      thorough: true,
-    },
-  });
-}
-
 describe("surfaceResumeFromLiveTurn", () => {
   it("surfaces one ask_user resume entry keyed by the SERVER message_id", () => {
     seedTurn("m-server-1");
@@ -188,12 +169,21 @@ describe("surfaceResumeFromLiveTurn", () => {
 
   it("does not surface leftover team_preview unstick shell", () => {
     seedTurn("m-server-tp");
-    upsertTeamPreview();
+    applyInteractionWireEvent(
+      "team_preview_required" as string,
+      {
+        checkpoint_id: "tp1",
+        conversation_id: CID,
+      },
+      CID,
+      "m-server-tp",
+    );
 
     surfaceResumeFromLiveTurn(CID, "server");
 
     expect(paused().pending).toHaveLength(0);
     expect(listVisibleColdResumes(CID)).toHaveLength(0);
+    expect(ix().get("tp1")).toBeUndefined();
   });
 
   it("画卡后清 isGenerating / isStreaming（冷挂起不变量）", () => {
@@ -302,30 +292,19 @@ describe("surfaceResumeFromLiveTurn", () => {
 describe("listVisibleColdResumes (InteractionStore authority)", () => {
   it("leftover team_preview IX pending does not paint a clickable card", () => {
     seedTurn("m-server-tp");
-    ix().upsertRequired({
-      kind: "team_preview",
-      conversationId: CID,
-      messageId: "m-server-tp",
-      origin: "server",
-      payload: {
+    applyInteractionWireEvent(
+      "team_preview_required" as string,
+      {
         checkpoint_id: "tp1",
         conversation_id: CID,
-        primitive: "delegate",
-        workers: [
-          { run_id: "r1", role: "调研", task: "做调研", depends_on: [] },
-        ],
-        tools: ["file_write"],
-        motion: "",
-        form: "",
-        sides: [],
-        max_rounds: 0,
-        thorough: true,
       },
-    });
+      CID,
+      "m-server-tp",
+    );
 
     expect(listVisibleColdResumes(CID)).toHaveLength(0);
     expect(paused().pending).toHaveLength(0);
-    expect(ix().listPending(CID, ["team_preview"])).toHaveLength(1);
+    expect(ix().get("tp1")).toBeUndefined();
   });
 
   it("paints ask_user from IX cold pending without pausedTurns surface", () => {
@@ -391,7 +370,15 @@ describe("listVisibleColdResumes (InteractionStore authority)", () => {
 
   it("stamp from none → leftover team_preview still does not paint", () => {
     seedTurn(); // client-uuid, no stamp
-    upsertTeamPreview("client-uuid");
+    applyInteractionWireEvent(
+      "team_preview_required" as string,
+      {
+        checkpoint_id: "tp1",
+        conversation_id: CID,
+      },
+      CID,
+      "client-uuid",
+    );
     expect(listVisibleColdResumes(CID)).toHaveLength(0);
 
     conv().setServerMessageIdOnLastMessage("m-server-stamp", CID);
@@ -458,54 +445,48 @@ describe("cold checkpoint terminal authority", () => {
   }
 
   it("POST drop reopen keeps submitting when journal already has *_resolved", () => {
-    seedTurn("m-server-tp");
-    upsertTeamPreview("m-server-tp");
-    expect(ix().beginSubmit("tp1")).toBe(true);
-    stampJournalResolved("tp1");
+    seedTurn("m-server-pr");
+    upsertPlanReview("m-server-pr");
+    expect(ix().beginSubmit("pr1")).toBe(true);
+    stampJournalResolved("pr1", "plan_review_resolved");
 
-    ix().reopen("tp1");
+    ix().reopen("pr1");
 
-    expect(ix().get("tp1")?.status).toBe("submitting");
+    expect(ix().get("pr1")?.status).toBe("submitting");
     expect(listVisibleColdResumes(CID)).toHaveLength(0);
     expect(conversationHasColdPending(CID)).toBe(false);
   });
 
-  it("attach replay of required after journal resolved does not paint a clickable card", () => {
+  it("attach replay of leftover kickoff required after journal resolved does not paint", () => {
     seedTurn("5e78ddbf-turn");
-    upsertTeamPreview("5e78ddbf-turn");
-    expect(ix().beginSubmit("tp1")).toBe(true);
     stampJournalResolved("tp1");
-    ix().reopen("tp1");
-    expect(ix().get("tp1")?.status).toBe("submitting");
-
-    ix().upsertRequired({
-      kind: "team_preview",
-      conversationId: CID,
-      messageId: "5e78ddbf-turn",
-      payload: {
+    applyInteractionWireEvent(
+      "team_preview_required" as string,
+      {
         checkpoint_id: "tp1",
         conversation_id: CID,
-        primitive: "delegate",
-        workers: [
-          { run_id: "r1", role: "调研", task: "做调研", depends_on: [] },
-        ],
-        tools: ["file_write"],
-        motion: "",
-        form: "",
-        sides: [],
-        max_rounds: 0,
-        thorough: true,
       },
-    });
+      CID,
+      "5e78ddbf-turn",
+    );
     surfaceResumeFromLiveTurn(CID, "server");
 
+    expect(ix().get("tp1")).toBeUndefined();
     expect(listVisibleColdResumes(CID)).toHaveLength(0);
   });
 
-  it("message_end(paused) shell is not clickable when journal has *_resolved", () => {
+  it("message_end(paused) leftover kickoff shell is not clickable when journal has *_resolved", () => {
     seedTurn("m-server-tp");
-    upsertTeamPreview("m-server-tp");
     stampJournalResolved("tp1");
+    applyInteractionWireEvent(
+      "team_preview_required" as string,
+      {
+        checkpoint_id: "tp1",
+        conversation_id: CID,
+      },
+      CID,
+      "m-server-tp",
+    );
     surfaceResumeFromLiveTurn(CID, "server");
 
     expect(paused().pending).toHaveLength(0);
@@ -580,14 +561,6 @@ describe("resolveResumeMessageId", () => {
       origin: "server",
       steps: [],
       pending: [],
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: "先做 A 还是 B?",
       assumptions: [],
       questions: [],

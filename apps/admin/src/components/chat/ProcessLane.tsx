@@ -44,22 +44,6 @@ function formatLaneSummary(reasoningCount: number, toolCount: number): string {
   return parts.join(" · ");
 }
 
-/** First non-empty line of thought, stripped of common markdown — for collapsed previews. */
-export function reasoningPlainPreview(text: string): string {
-  const line =
-    text
-      .trim()
-      .split(/\r?\n/)
-      .find((l) => l.trim()) ?? "";
-  return line
-    .replace(/^#{1,6}\s+/, "")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .trim();
-}
-
 type LaneRow =
   | { key: string; folded: true; kind: "reasoning"; text: string }
   | { key: string; folded: true; kind: "tool"; step: ToolStep }
@@ -140,7 +124,7 @@ function countTools(rows: LaneRow[]): number {
 /**
  * CEO process lane: settled fold matches the desktop bubble.
  * Reasoning/tools collapse to a one-line summary (except a single pure thought);
- * collapsed state still shows a one-line thought preview. Content steps that
+ * collapsed thought shows the button only — no body preview. Content steps that
  * duplicate the deliverable are omitted by the caller.
  */
 export function ProcessLane({
@@ -173,10 +157,6 @@ export function ProcessLane({
     !(reasoningCount === 1 && toolCount === 0);
   const [expanded, setExpanded] = useState(false);
   const reasoningDefaultExpanded = !collapse;
-  const firstReasoningPreview = rows
-    .filter((r) => r.kind === "reasoning")
-    .map((r) => reasoningPlainPreview(r.text))
-    .find((p) => p.length > 0);
   const hasTeamSlot = rows.some(
     (r) => r.kind === "slot" && r.step.kind === "team",
   );
@@ -204,16 +184,6 @@ export function ProcessLane({
       )}
     </button>
   ) : null;
-
-  const outerPreview =
-    shouldCollapse && !expanded && firstReasoningPreview ? (
-      <p
-        className="line-clamp-1 min-w-0 break-words text-sm text-muted-foreground"
-        title={firstReasoningPreview}
-      >
-        {firstReasoningPreview}
-      </p>
-    ) : null;
 
   return (
     <div
@@ -247,14 +217,7 @@ export function ProcessLane({
           const isFirstFolded = rows.slice(0, i).every((r) => !r.folded);
           if (!expanded) {
             if (!isFirstFolded) return null;
-            return (
-              <Fragment key={`sum-${row.key}`}>
-                <div className="min-w-0 space-y-1">
-                  {summaryButton}
-                  {outerPreview}
-                </div>
-              </Fragment>
-            );
+            return <Fragment key={`sum-${row.key}`}>{summaryButton}</Fragment>;
           }
           if (isFirstFolded) {
             return (
@@ -398,7 +361,6 @@ function InlineReasoning({
   defaultExpanded: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const preview = reasoningPlainPreview(text);
   return (
     <div className="min-w-0">
       <button
@@ -418,16 +380,9 @@ function InlineReasoning({
         )}
       </button>
       {expanded ? (
-        <div className="mt-1.5 max-h-64 max-w-full overflow-auto text-foreground">
-          <Markdown content={text} />
+        <div className="mt-1.5 max-h-64 max-w-full overflow-auto text-muted-foreground">
+          <Markdown content={text} muted />
         </div>
-      ) : preview ? (
-        <p
-          className="mt-1 line-clamp-1 min-w-0 break-words text-sm text-muted-foreground"
-          title={preview}
-        >
-          {preview}
-        </p>
       ) : null}
     </div>
   );

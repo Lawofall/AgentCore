@@ -94,7 +94,7 @@ describe("organizeConfirmDetail", () => {
   it("does not pass through model detail for non-organize options", () => {
     expect(
       organizeConfirmDetail({
-        action: "grant_readonly_folder",
+        action: "bind_local_folder",
         detail: "只读说明",
       }),
     ).toBeUndefined();

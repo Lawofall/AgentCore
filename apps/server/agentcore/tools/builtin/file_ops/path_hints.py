@@ -16,7 +16,7 @@ from agentcore.workspace.sparse_listing import should_hide_ai_noise_from_list
 # Do not accuse "generic names" (src/shared/lib/app): those rarely match the miss.
 _MISSING_PATH_ROOT_TIP = (
     "（上级目录也找不到。"
-    "请从工作区根用 file_list / code_search / grep 定位真实路径；"
+    "请从工作区根用 glob / code_search / grep 定位真实路径；"
     "若此路径确实不存在，请换真实路径，勿对同一路径反复重试。）"
 )
 
@@ -34,7 +34,7 @@ def missing_path_landmark_suffix(*, parent: str, bare_entries: list) -> str:
     """Sibling samples + wider-search tip when parent exists."""
     root = "./" if parent in (".", "") else f"{parent.rstrip('/')}/"
     tips = (
-        "可换 file_list(pattern)/grep/code_search 更宽查找后再读"
+        "可换 glob/grep/code_search 更宽查找后再读"
         "（已知路径仍可直接读）；若此路径确实不存在，请换真实路径，勿对同一路径反复重试"
     )
     if not bare_entries:

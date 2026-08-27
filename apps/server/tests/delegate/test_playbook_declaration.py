@@ -31,7 +31,7 @@ def test_resolve_playbook_xor_tasks_rejected():
 
     name, err = resolve_playbook_declaration(
         {
-            "playbook": "multi_lens_research",
+            "playbook": "lens_crosscheck",
             "playbook_args": {"topic": "X"},
             "tasks": [{"role": "a", "task": "b"}],
         }
@@ -306,7 +306,7 @@ def test_non_website_none_still_ok():
 
 
 def test_research_handwritten_no_prefer_pressure():
-    """调研意图手写 tasks：可过；拒文/路径不再强推 research_report。"""
+    """调研意图手写 tasks：可过；拒文/路径不再强推 cite_write_review。"""
     name, err = resolve_playbook_declaration(
         {
             "tasks": [
@@ -319,12 +319,28 @@ def test_research_handwritten_no_prefer_pressure():
     assert name is None
     name2, err2 = resolve_playbook_declaration(
         {
-            "playbook": "research_report",
+            "playbook": "cite_write_review",
             "playbook_args": {"topic": "起诉第三者立案"},
         },
     )
     assert err2 is None
-    assert name2 == "research_report"
+    assert name2 == "cite_write_review"
+
+
+def test_legacy_playbook_ids_are_unknown():
+    """旧四名直接未知——无别名 / 静默改写。"""
+    for pid, args in (
+        ("parallel_brief", {"topic": "X", "angles": ["甲", "乙"]}),
+        ("research_report", {"topic": "X"}),
+        ("multi_lens_research", {"topic": "X"}),
+        ("repair_code", {"problem": "x", "verify": "pytest"}),
+    ):
+        name, err = resolve_playbook_declaration({"playbook": pid, "playbook_args": args})
+        assert name is None
+        assert err is not None
+        assert "未知" in err
+        assert "暂未列入" not in err
+        assert declaration_reject_gate(err) == "unknown"
 
 
 def test_website_followup_audit_none_ok():
@@ -525,15 +541,18 @@ def test_non_greenfield_free_teaming_still_ok():
     assert name is None
 
 
-def test_software_intent_named_build_feature_ok():
+def test_software_intent_named_build_feature_unknown():
+    """具名 build_feature 已撤：走未知 playbook（手写多角色仍可）。"""
     name, err = resolve_playbook_declaration(
         {
             "playbook": "build_feature",
             "playbook_args": {"feature": "思维导图编辑器", "stack": "FastAPI+React"},
         },
     )
-    assert err is None
-    assert name == "build_feature"
+    assert name is None
+    assert err is not None
+    assert "未知" in err
+    assert declaration_reject_gate(err) == "unknown"
 
 
 def test_software_intent_none_multi_role_ok():
@@ -571,9 +590,9 @@ async def test_execute_allows_software_thin_html_none():
         },
         ctx(),
     )
+    assert "build_feature" not in (result.error or "")
     assert not (
         result.contract_failure
         and result.error
         and "单前端" in result.error
-        and "build_feature" in result.error
     )

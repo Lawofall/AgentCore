@@ -20,7 +20,7 @@ import { DRAFT_KEY, useConversationStore } from "@/stores/conversation";
 import {
   type InteractionEntry,
   isAwaitingUserEntry,
-  isRetiredKickoffKind,
+  isColdResumeKind,
   isStageInteractionKind,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -208,8 +208,7 @@ function conversationHasPausedTurn(conversationId: string): boolean {
   return usePausedTurnStore
     .getState()
     .pending.some(
-      (p) =>
-        p.conversationId === conversationId && !isRetiredKickoffKind(p.kind),
+      (p) => p.conversationId === conversationId && isColdResumeKind(p.kind),
     );
 }
 
@@ -298,7 +297,7 @@ export function startTeamActivityNotifications(): () => void {
 
   const unsubPaused = usePausedTurnStore.subscribe((state) => {
     for (const p of state.pending) {
-      if (isRetiredKickoffKind(p.kind)) continue;
+      if (!isColdResumeKind(p.kind)) continue;
       if (!claim(p.checkpointId)) continue;
       notifyAwaitingDecision(p.conversationId);
     }

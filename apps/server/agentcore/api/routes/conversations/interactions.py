@@ -230,7 +230,8 @@ async def resolve_interaction(
     ``stage_card``：跨回合耐久卡 → 校验后起新回合 SSE（机制直起辩论或回灌调研）。
     其它 kind（approval / delegation / client_tool / escalation）：Settlement 预写 (D8)
     后 settle Future；journal 有 required、无 Future → 410。
-    Cold-path ``ask_user`` / ``plan_review`` / ``team_preview`` 不在此 endpoint。
+    Cold-path ``ask_user`` / ``plan_review`` 不在此 endpoint。
+    Leftover ``team_preview`` resume is 410 on ``POST …/resume``.
     """
     await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
 

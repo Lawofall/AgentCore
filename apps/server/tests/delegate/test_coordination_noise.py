@@ -377,7 +377,6 @@ def test_inject_footer_teaches_milestone_synthesis():
     assert "三选一" in text
     assert "纯进度播报" in text
     assert "进度旁白不得焊进终稿" in text or "焊进终稿" in text
-    assert "还在等" in text and "你不用管" in text
     assert "谁在后台、完成后会再汇报" not in text
 
 

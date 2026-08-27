@@ -99,7 +99,7 @@ _NOT_FOUND_HINT = (
     "裸聊写盘缺桌由运行时自动建云文件夹。"
     "仅当用户明确要求新建云文件夹（可带名）或显式多线先建时，才用 create_folder"
     "（同指挥面登记，不改本会话归属、不新开会话）；"
-    "本机目录进桌：**推荐** Composer「导入到云 / 连接 Git」；"
+    "本机目录进桌：**推荐** Composer「导入到云」；"
     "本机传统 open_local_project / register_local_project / bind_local_folder "
     "合法非默认（≠离线），勿与云平级主推；"
     "禁止静默猜「最近」。"
@@ -110,18 +110,16 @@ _EMPTY_LIST_HINT = (
     "裸聊写盘缺桌由运行时自动建云文件夹。"
     "仅当用户明确要求新建云文件夹（可带名）或显式多线先建时，才用 create_folder"
     "（同指挥面）；"
-    "本机目录进桌：**推荐** Composer「导入到云 / 连接 Git」——"
+    "本机目录进桌：**推荐** Composer「导入到云」——"
     "勿默认催 open_local_project / register_local_project"
     "（本机传统合法非默认，≠离线）。"
-    "多个文件夹同时开工须先有名册项再 resolve→同次 delegate(target_folder_id)；"
-    "开发双仓≠external_mount_readonly。"
+    "HOW→consult(team_cross_folder)。"
 )
 _RESOLVED_TIP = (
     "空/近空先 ask_user 钉目标，勿连续 file_list 确认空；"
-    "多个文件夹同次 delegate 各填 target_folder_id；"
     "裸聊同回合仅此唯一目标时可省略 target（运行时继承）；"
     "队员坐该文件夹时读写范围 = 该层**及其子文件夹**；"
-    "开发双仓≠external_mount_readonly。"
+    "HOW→consult(team_cross_folder)。"
 )
 
 
@@ -378,17 +376,8 @@ class ListFoldersTool:
         return ToolSchema(
             name=LIST_FOLDERS_TOOL_NAME,
             description=(
-                "列出当前用户账号下的全部【已有文件夹】（与侧栏「我的文件」/ GET /folders "
-                "同名册：id、name、rel_path=树中完整路径、parent_rel_path、"
-                "mode=local|cloud、local_root_id、local_subpath、时间戳；无本机绝对路径）。"
-                "文件夹可嵌套：`rel_path` 才是唯一坐标，同名可以出现在不同层"
-                "（`设计/图标` 与 `归档/图标`）。跨文件夹指挥前先查名册；"
-                "按路径定位请用 resolve_folder；"
-                "create_folder 仅用户明确要求新建云文件夹（可带名）或显式多线先建时使用，"
-                "禁止为过写盘闸而建（裸聊写盘缺桌由运行时自动建云文件夹）；"
-                "多个文件夹并行派工：resolve 后空/近空先 ask_user，确认后同次 "
-                "delegate 各填 target_folder_id（开发双仓≠external_mount_readonly）。"
-                "【禁止】用 open_local_project 代替本工具——那会新建会话，不是列已有。"
+                "文件夹名册（rel_path）。清单已有 id 勿列；当前桌→file_list。"
+                "按路径定位→resolve_folder。HOW→consult(team_cross_folder)。"
             ),
             parameters={"type": "object", "properties": {}, "required": []},
             category=ToolCategory.ORCHESTRATION,
@@ -463,21 +452,8 @@ class ResolveFolderTool:
         return ToolSchema(
             name=RESOLVE_FOLDER_TOOL_NAME,
             description=(
-                "按【路径】解析已有文件夹（与 GET /folders 同形字段，含 rel_path）。"
-                "文件夹可嵌套，所以匹配顺序是：完整路径精确命中 → 路径后缀命中"
-                "（`图标` 命中 `设计/图标`）→ 单段名子串。用户说清层级时**请传完整路径**"
-                "（`设计/图标`），只传末段在同名多层的账号上会变成多命中。"
-                "唯一命中 → 返回该文件夹（可静默供后续派工使用；空/近空先 ask_user，"
-                "勿连续 file_list 确认空；多个文件夹同次 delegate 各填 target_folder_id；"
-                "开发双仓≠external_mount_readonly）；"
-                "零命中或多命中 → 返回候选并提示用 ask_user kind=choice 让用户选"
-                "（选项须带完整 rel_path；禁止静默猜「最近」）。"
-                "【勿】零命中就为过写盘闸而 create_folder——"
-                "裸聊写盘缺桌由运行时自动建云文件夹；"
-                "仅用户明确要求新建云文件夹（可带名）或显式多线先建时才 create_folder；"
-                "本机目录进桌 → **推荐** Composer「导入到云 / 连接 Git」；"
-                "本机传统 register/open/bind 合法非默认（≠离线）。"
-                "【禁止】用 open_local_project 代替本工具选已有文件夹（那会新会话）。"
+                "按路径解析已有文件夹为 id。嵌套同名须传完整路径。"
+                "HOW→consult(team_cross_folder)。"
             ),
             parameters={
                 "type": "object",
@@ -487,6 +463,8 @@ class ResolveFolderTool:
                         "description": (
                             "文件夹路径（POSIX、相对云盘树根，如 `设计/图标`）"
                             "或用户口述的单个名字（精确或可唯一子串）。"
+                            "匹配顺序：完整路径精确命中 → 路径后缀"
+                            "（`图标` 命中 `设计/图标`）→ 单段名子串。"
                             "已知层级时传完整路径，歧义最少。"
                         ),
                     },
@@ -627,22 +605,10 @@ class CreateFolderTool:
         return ToolSchema(
             name=CREATE_FOLDER_TOOL_NAME,
             description=(
-                "仅当用户明确要求新建云文件夹（可带名）或显式多线先建时使用；"
-                "禁止为过写盘闸而建——裸聊写盘缺桌由运行时自动建云文件夹，"
-                "勿先 ask_user/create。"
-                "在当前用户账号的云盘「我的文件」里新建一个【文件夹】（空工作区；等同 "
-                "POST /folders mode=cloud），可用 parent_path 挂在已有文件夹下面。"
-                "建完返回 FolderSummary 同形字段（id/name/rel_path/mode=cloud/…），"
-                "可供随后 resolve_folder 或 delegate(target_folder_id=…) 使用。"
-                "【与 mkdir 的区别】本工具建的是**可派工的容器**（有 id、能当 "
-                "target_folder_id、有自己的记忆与会话分组、在侧栏可见）；"
-                "要在**当前工作区内部**建普通子目录请用 mkdir，别用本工具。"
-                "【不变式】不改本会话 conversation.folder_id / 出生 / 默认桌；不新开会话；"
-                "≠ 写盘改代码（CEO 仍无 file mutation）。"
-                "【禁止】用 open_local_project 冒充本能力——那是本机传统「打开当出生」、"
-                "会新会话。"
-                "本机目录进桌：**推荐** Composer「导入到云 / 连接 Git」；"
-                "本机传统合法非默认（≠离线）；本工具只建云。"
+                "仅用户明确新建云文件夹或显式多线先建时用；mode=cloud 可派工容器≠mkdir。"
+                "禁止为过写盘闸而建（裸聊写盘缺桌由运行时自动建云文件夹）。"
+                "≠open_local_project（会新会话）。"
+                "HOW→consult(team_cross_folder)。"
             ),
             parameters={
                 "type": "object",

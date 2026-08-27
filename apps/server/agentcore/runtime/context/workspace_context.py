@@ -5,9 +5,9 @@
 
 **只陈述本回合事实**（位置 / 能力行 / 产物格式 / 挂载 / 产物出口路径 /
 某能力装没装配、宿主是哪种）。
-「该怎么做 / 禁止什么」的 HOW 不在这里——往本文件加禁令前，先确认它不在
-``resolve/prompt/ceo_core.py`` / ``resolve/prompt/base.py`` / 工具 schema 里。
-分层与理由 → docs/03-AI核心/上下文工程.md「分层边界」。
+「该怎么做 / 禁止什么」的 HOW 不在这里（空桌 / 不可解析源数据 → ``team_delivery_env``）。
+往本文件加禁令前，先确认它不在 ``resolve/prompt/base.py`` / 工具 schema / 对应 skill 里。
+分层与理由 → docs/03-AI核心/上下文工程.md「提示词设计原则」。
 """
 
 from __future__ import annotations
@@ -115,8 +115,8 @@ async def detect_workspace_git(backend: WorkspaceBackend | None) -> WorkspaceGit
 
 
 _GIT_UNASSEMBLED_LINE = (
-    "版本控制：本回合未装配 `git` 工具——本机工作区的 Git 只能经桌面回填通道在用户机器上跑，"
-    "而本会话通道未连接，跑不了。"
+    "版本控制：本回合未装配 `git` 工具——"
+    "本机工作区的 Git 只能经桌面回填通道在用户机器上跑，而本会话通道未连接。"
     "装配启用：在桌面客户端打开【本对话】（通道连上即装配），"
     "或改用云端工作区 / 桌面 sidecar 会话。"
     "文件读写与其它已装配工具不受影响。"
@@ -130,12 +130,8 @@ _NO_EXEC_TABLE_FACT = (
 )
 
 # Same structural premise as ``no_exec_table`` (this-turn attachments / workspace
-# type signal — not a body scan). Next-step HOW rides the exec-fact line so
-# data-file landing does not inherit the engineering bind_local / 本机跑 path.
-_OPAQUE_SOURCE_NEXT_STEP = (
-    "源数据文件下一步：只给稍后重试（环境恢复后可代跑）；"
-    "禁止绑本机文件夹、本机终端跑脚本、把 export_to_local 当运行路径。"
-)
+# type signal — not a body scan). Next-step HOW lives in team_delivery_env.
+_OPAQUE_SOURCE_FACT = "本回合有无法可靠解析的源数据文件。"
 
 
 def _opaque_source_data_present(
@@ -157,11 +153,11 @@ def _opaque_source_data_present(
 def format_workspace_git_line(
     fact: WorkspaceGitFact, *, tool_enabled: bool = True
 ) -> str:
-    """Single git fact line for ``<workspace_context>`` (soft tip; never a kickoff gate).
+    """Single git fact line for ``<workspace_context>`` (never a kickoff gate).
 
     ``tool_enabled`` is the same verdict the registries use
     (``tools.builtin.git_execution_enabled_for``): when the tool is not assembled the
-    repo-presence tip is replaced outright, so the block never advises ``init_baseline``
+    repo-presence tip is replaced outright, so the block never names ``init_baseline``
     on a turn where ``git`` is absent from the model's tool table.
     """
     if not tool_enabled:
@@ -175,18 +171,8 @@ def format_workspace_git_line(
             f"{readonly}。"
         )
     if fact.present is False:
-        return (
-            f"版本控制：工作区根无 Git（{scope}）。"
-            "写码/改工程时建议先建可回滚基线：可调 `git` 的 `init_baseline`"
-            "（初始化并首提交；需用户授权；已有仓且工作区脏则不代 commit）。"
-            "此提示不挡派工/开工卡。"
-            f"{readonly}。"
-        )
-    return (
-        f"版本控制：未能确认根 `.git`（{scope}）。"
-        "写码时若确认无仓，可请用户授权 `git.init_baseline` 建首基线；不挡派工/开工卡。"
-        f"{readonly}。"
-    )
+        return f"版本控制：工作区根无 Git（{scope}）。{readonly}。"
+    return f"版本控制：未能确认根 `.git`（{scope}）。{readonly}。"
 
 _WEB_SURFACES: frozenset[str] = frozenset({"web", "mobile-web"})
 _MOBILE_SURFACES: frozenset[str] = frozenset({"mobile", "android", "ios"})
@@ -260,6 +246,30 @@ def _is_cloud_folder_desk(backend: WorkspaceBackend) -> bool:
     return False
 
 
+def _format_desk_line(
+    *,
+    desk_folder_id: str | None,
+    desk_folder_label: str | None,
+    root_label: str,
+    desk_is_birth: bool,
+) -> str:
+    """One fact line: which folder ``file_*`` bind to this turn."""
+    fid = (desk_folder_id or "").strip()
+    label = (desk_folder_label or "").strip() or (root_label if fid else "")
+    if fid:
+        shown = label or fid
+        if desk_is_birth:
+            return (
+                f"工作台：本会话出生桌=`{shown}`（folder_id=`{fid}`）。"
+                "通用 `file_*` 只绑这张桌。"
+            )
+        return (
+            f"工作台：默认工作区=`{shown}`（folder_id=`{fid}`）。"
+            "通用 `file_*` 只绑这张桌。"
+        )
+    return "工作台：默认工作区=本会话出生桌（通用 `file_*` 只绑出生桌）。"
+
+
 def desktop_client_can_bind(x_client_platform: str | None) -> bool:
     """Thin fail-closed wrapper: folder AskOption actions need a desktop client.
 
@@ -287,6 +297,9 @@ def build_workspace_context(
     git_fact: WorkspaceGitFact | None = None,
     opaque_source_data_paths: Sequence[str] | None = None,
     outlet_inventory: Mapping[str, OutletDirListing] | None = None,
+    desk_folder_id: str | None = None,
+    desk_folder_label: str | None = None,
+    desk_is_birth: bool = True,
 ) -> str:
     """Render the ``<workspace_context>`` block for this turn's backend + client.
 
@@ -326,6 +339,11 @@ def build_workspace_context(
     ``outlet_inventory`` is the live basename listing for the four 约定文档出口
     dirs (from :func:`collect_outlet_inventory`). ``None`` omits the suffix
     (tests); production callers pass the probe so empty dirs say 当前为空.
+
+    ``desk_folder_id`` / ``desk_folder_label`` name the folder this agent is
+    sitting on (conversation birth desk, or a worker's ``target_folder_id``).
+    Facts only — no tool HOW. ``desk_is_birth`` distinguishes the conversation's
+    birth desk from a per-call target desk.
     """
     if backend is None:
         return ""
@@ -367,7 +385,7 @@ def build_workspace_context(
                 "不是用户本机目录，也不是用户本机已打开的仓库或工程工作区。"
             )
             empty_tree_clause = (
-                "空树只表示本文件夹尚无用户文件，勿当成「本机空工程」"
+                "空树只表示本文件夹尚无用户文件，不是本机空工程"
                 "或宿主机器上的 Git 仓库。"
             )
         else:
@@ -376,7 +394,7 @@ def build_workspace_context(
                 "不是用户本机目录，也不是用户本机已打开的仓库或工程工作区。"
             )
             empty_tree_clause = (
-                "空树只表示本会话云端草稿尚无文件，勿当成「本机空工程」"
+                "空树只表示本会话云端草稿尚无文件，不是本机空工程"
                 "或宿主机器上的 Git 仓库。"
             )
         # Host 定案 §3.4: 云 reach 与 host= 正交——工作区在云；本机 Host 以能力行为准。
@@ -401,67 +419,28 @@ def build_workspace_context(
         )
 
     if desktop_online:
-        # 事实面：授权通道通不通 + 两种授权形态各自的工具名与访问路径。
-        # 何时用哪种、口头同意闭环、失败分型、well_known 选点等 HOW 归 ceo_core。
+        # 事实面：授权通道通不通 + 两种授权形态的工具名与访问路径。
+        # 何时用哪种、口头同意、失败分型、先写再 copy → consult / ask_user_midtask。
         grant_line = (
-            "区外目录：桌面在线，本机区外目录可授权——只读走工具 "
-            "`external_mount_readonly`（静默、无决策卡），"
-            "整理走 ask_user 选项 `action=grant_organize_folder`（仍须确认）；"
+            "区外目录：桌面在线，本机区外目录可授权——"
+            "只读工具 `external_mount_readonly`，"
+            "整理工具 `grant_organize_folder`；"
             "授权后以 `external/<别名>/…` 访问（经桌面通道、仅本次对话、可撤销），"
-            "与工作区绑定正交。交付：先写工作区，再 `file_copy` 到该路径。"
+            "与工作区绑定正交。"
         )
         if is_local:
-            desktop_line = (
-                "客户端通道：桌面端在线（本机执行通道可用）。"
-                "本机传统/已绑工程会话：「打开项目 / 跑起来看一下」=跑**当前**工作区"
-                "（terminal 启服报 URL），勿再弹 open_local_project 建新本地工作区；"
-                "换工程优先引导 Composer「导入到云 / 连接 Git」"
-                "（勿默认催 create_folder 过写盘闸；裸聊写盘缺桌由运行时自动建云文件夹）；"
-                "本机传统换开合法非默认（≠离线）。"
-            )
+            desktop_line = "客户端通道：桌面端在线（本机执行通道可用）。"
         else:
-            desktop_line = (
-                "客户端通道：桌面端在线——本机相关出路按意图分流（立即发 ask_user 卡，"
-                "勿用纯文本解释或询问；完成前不要委派本机任务）："
-                "① 【新产品路径·云协作推荐】要本机目录进工作区 → **优先**引导 Composer"
-                "「导入到云 / 连接 Git」后再派；"
-                "同指挥面云 `create_folder` 仅用户明确要求新建或显式多线先建"
-                "（禁止为过写盘闸而建；裸聊写盘缺桌由运行时自动建云文件夹）；"
-                "本机传统（合法非默认，≠离线）→ 可发 `open_local_project` / "
-                "`register_local_project` / `bind_local_folder`，勿当默认推荐、"
-                "勿与云平级主推；"
-                "② 看/分析或整理本机某目录 → 走上面「区外目录」行（与①正交，勿改绑冒充）；"
-                "③ 「优化/改项目」≠默认开文件夹卡；"
-                "「在哪工作」仅新建会话可选（云协作推荐：快速对话/云端文件夹/导入·连 Git；"
-                "本机传统可选非默认），"
-                "勿引导用户去设置改模式、勿推销本机草稿当默认。"
-            )
+            desktop_line = "客户端通道：桌面端在线。"
     else:
         # desktop_online=False covers missing header, unknown surface, and true
         # non-desktop clients — never accuse a device form (Web/手机) by default.
-        # 案 20260803-cloud-local-root-auth-where A：用户自称已在桌面时仍以通道事实
-        # 复检（对照 b0a9）；禁「就好办了」与臆造设置/Folders 路径。
+        # 通道复检 / 勿发卡冒充 / 禁臆造入口 → ask_user_midtask；此处只报通道事实。
         desktop_line = (
             "客户端通道：桌面回填通道未连接——"
             "打开本机文件夹、本机文件夹绑定、区外目录授权均须官方桌面客户端且通道已连接，"
-            "当前会话无法履约；请引导用户在桌面客户端打开本对话，或前往 "
-            "https://fashitianxia.xyz/download 下载安装桌面端后再操作；"
-            "勿发 grant_* / bind_local_folder / open_local_project / "
-            "register_local_project 选项卡冒充可授权。"
-            "【通道复检铁律】用户自称「已装桌面 / 正在用客户端 / 现在用的就是」时："
-            "必须以本回合能力行 `host`/`local_open` 与本通道行为准复检，口述不得覆盖结构化事实；"
-            "`host=未装配` 或 `local_open=未装配` 时禁止「就好办了 / 桌面就好办 / "
-            "现在用的是桌面就好办」类话术；应诊断通道仍未接通"
-            "（可能仍在网页、或桌面未打开【本对话】、或状态栏通道未连），并复述固定步骤："
-            "① 官网下载安装桌面端（若尚未）→ ② 在桌面客户端打开【本对话】→ "
-            "③ 确认状态栏桌面回填通道已连接（host/local_open=已装配）→ "
-            "④ 用 Composer「导入到云 / 连接 Git」（云协作推荐），"
-            "或用户明确要求新建时云 `create_folder`（禁止为过写盘闸而建；"
-            "裸聊写盘缺桌由运行时自动建云文件夹），"
-            "或本机传统 open/register/bind（合法非默认，≠离线），"
-            "或按意图 grant_organize / external_mount_readonly；"
-            "禁止臆造「设置→Folders / 侧栏授权页」等非产品真源入口路径——"
-            "只指真源入口名（Composer 导入·连 Git / 云新建 / 本机传统）与官网下载链。"
+            "当前会话无法履约。"
+            "装配启用：在桌面客户端打开本对话。"
         )
         grant_line = "区外目录：授权仅桌面端可用；当前客户端无法履行。"
 
@@ -478,10 +457,7 @@ def build_workspace_context(
             )
         mounts_line = "本对话已授权区外目录：" + "；".join(parts) + "。"
     else:
-        mounts_line = (
-            "本对话尚无会话级区外目录授权。"
-            "（未见「本对话已授权区外目录…」则禁止声称授权已确认或可访问本机目录。）"
-        )
+        mounts_line = "本对话尚无会话级区外目录授权。"
 
     if code_execute_enabled is not None:
         exec_on = code_execute_enabled
@@ -549,8 +525,8 @@ def build_workspace_context(
         if pkg_on:
             package_guide_line = (
                 "装包事实：package_install=已装配（本机执行环境；钉源 env，"
-                "不吃主机 registry_egress）——`test_run` check=install 可装项目依赖；"
-                "装本机软件另须 host=已装配 + host(action=install_package)。"
+                "不吃主机 registry_egress）。"
+                "装本机软件另须 host=已装配。"
             )
         else:
             package_guide_line = (
@@ -559,14 +535,13 @@ def build_workspace_context(
     elif pkg_on:
         package_guide_line = (
             "装包事实：package_install=已装配（云桌 guest 健康 + 包装源 allowlist "
-            "chokepoint）——`test_run` check=install 可装依赖；≠通用 HTTPS 出网"
-            "（对照「出站网络」行）；任意 URL 落盘用 download_url。"
+            "chokepoint）——可装依赖；≠通用 HTTPS 出网"
+            "（对照「出站网络」行）。"
         )
     else:
         package_guide_line = (
             "装包事实：package_install=未装配（云桌 guest 未起，与 code_execute= "
-            "同一谓词；装包腿随执行类一并不可用）——可走结构自检 / "
-            "export_to_local / 本机命令。"
+            "同一谓词；装包腿随执行类一并不可用）。"
         )
     if exec_on:
         exec_guide_line = None
@@ -578,13 +553,12 @@ def build_workspace_context(
             if has_opaque_source:
                 exec_guide_line = (
                     "执行事实：code_execute=未装配（本机执行类未开）。"
-                    + _OPAQUE_SOURCE_NEXT_STEP
+                    + _OPAQUE_SOURCE_FACT
                     + _NO_EXEC_TABLE_FACT
                 )
             else:
                 exec_guide_line = (
-                    "执行事实：code_execute=未装配（本机执行类未开）；"
-                    "本机传统 open/bind 合法非默认（≠离线）。"
+                    "执行事实：code_execute=未装配（本机执行类未开）。"
                     + _NO_EXEC_TABLE_FACT
                 )
         else:
@@ -597,17 +571,16 @@ def build_workspace_context(
             if has_opaque_source:
                 exec_guide_line = (
                     "执行事实：code_execute=未装配——已是云端会话、沙箱不可用"
-                    f"{failure_clause}，"
-                    "故「导入到云 / 连接 Git」修不好这条腿。"
-                    + _OPAQUE_SOURCE_NEXT_STEP
+                    f"{failure_clause}。"
+                    "本机目录导入或远程仓克隆进这张桌，都不会让沙箱变为可用。"
+                    + _OPAQUE_SOURCE_FACT
                     + _NO_EXEC_TABLE_FACT
                 )
             else:
                 exec_guide_line = (
                     "执行事实：code_execute=未装配——已是云端会话、沙箱不可用"
-                    f"{failure_clause}，"
-                    "故「导入到云 / 连接 Git」修不好这条腿；可选稍后重试 / export_to_local "
-                    "本机跑 / 本机传统（合法非默认）。"
+                    f"{failure_clause}。"
+                    "本机目录导入或远程仓克隆进这张桌，都不会让沙箱变为可用。"
                     + _NO_EXEC_TABLE_FACT
                 )
 
@@ -655,12 +628,11 @@ def build_workspace_context(
                 "宿主为桌面 Local Bridge：可打开本会话工作区相对 HTML 路径"
                 "（如 `site/index.html`，与用户「完整预览」同源 workspace://）；"
                 "公网仍用完整 http(s)；不支持 file://。"
-                "打开后可继续 click/type/snapshot。"
             )
         else:
             path_capability = (
                 "宿主为云端沙箱浏览器：仅支持公网 http(s)，"
-                "本会话 HTML 相对路径**打不开**（该走产物「完整预览」）。"
+                "本会话 HTML 相对路径**打不开**。"
             )
         browser_guide_line = (
             "浏览器事实：本回合已装配 browser"
@@ -680,9 +652,8 @@ def build_workspace_context(
             browser_base = "浏览器事实：本回合 browser=未装配（无云端隔离浏览器）——"
             how_enable = (
                 "装配启用：云端路径需云桌 guest 健康；"
-                "本机传统/已绑会话可走本机 Bridge"
-                "（或过桥会话在云侧沙箱健康时装配 sandbox）；"
-                "云协作仍推荐；本机传统 open/bind 合法非默认（≠离线）。"
+                "本机已绑/本机传统会话可走本机 Bridge"
+                "（过桥且云侧沙箱健康时装配 sandbox）。"
             )
         else:
             browser_base = "浏览器事实：本回合 browser=未装配（无云端隔离浏览器）——"
@@ -721,16 +692,21 @@ def build_workspace_context(
         "用户工程源码仍写业务路径。"
     )
     # Git fact: prefer caller probe (async Local); else sync root; never gates kickoff.
-    # Repo presence and tool assembly are separate facts — an unassembled turn drops
-    # the init_baseline tip rather than advising a tool the model does not hold.
+    # Repo presence and tool assembly are separate facts — an unassembled turn must
+    # not name ``init_baseline`` (the model does not hold the tool).
     resolved_git = git_fact if git_fact is not None else detect_workspace_git_sync(backend)
     git_line = format_workspace_git_line(resolved_git, tool_enabled=git_on)
 
-    # 跨文件夹指挥整条 HOW 归 ceo_core 的【跨文件夹 / 空壳 kickoff】（工具面机制另在
+    # 跨文件夹指挥 HOW 归 team_cross_folder（工具面机制另在
     # delegate / list_folders / resolve_folder / create_folder / folder_fs 的 schema 里，
-    # 队员持哪把工具就看哪条 schema）；此处只留一行事实：默认坐哪张桌。
-    desk_line = "工作台：默认工作区=本会话出生桌（通用 `file_*` 只绑出生桌）。"
-    # 事实句，不是禁令。空桌勿套工程壳的 HOW 归 ceo_core / 编排 skill。
+    # 队员持哪把工具就看哪条 schema）；此处只留一行事实：这张桌的路径和 id。
+    desk_line = _format_desk_line(
+        desk_folder_id=desk_folder_id,
+        desk_folder_label=desk_folder_label,
+        root_label=root_label,
+        desk_is_birth=desk_is_birth,
+    )
+    # 事实句，不是禁令。空桌勿套工程壳的 HOW 归 team_delivery_env。
     root_scope_line = "工作区根：本文件夹根即工作区根。"
 
     body_lines = [

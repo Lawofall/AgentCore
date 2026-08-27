@@ -37,6 +37,7 @@ from agentcore.attention import (
     signal_attention_required,
     signal_attention_resolved,
 )
+from agentcore.core.errors import GoneError
 from agentcore.core.log_context import get_log_value
 from agentcore.core.logging import get_logger
 from agentcore.db.base import async_session_factory
@@ -44,6 +45,10 @@ from agentcore.db.repositories import PausedTurnRepository, TurnJournalRepositor
 from agentcore.fulfill.user_signal import push_paused_card_settled
 from agentcore.push import PushNotification, notify_user
 from agentcore.runtime.journal.writer import current_journal_writer
+from agentcore.runtime.kickoff.retired import (
+    is_leftover_team_preview_frame,
+    refuse_if_leftover_team_preview,
+)
 from agentcore.runtime.settlement import align_cold_resume_resolved_to_winner
 from agentcore.runtime.suspension import (
     SuspensionKind,
@@ -321,7 +326,10 @@ async def load_paused_turn(
                 return None
             if is_ceo_continue_frame(row.frame):
                 return None
+            refuse_if_leftover_team_preview(row.frame)
             return suspension_from_json(row.frame)
+    except GoneError:
+        raise
     except Exception as e:  # noqa: BLE001 — peek failure reads as "not resumable"
         logger.warning("suspension.load_failed", message_id=message_id, error=str(e))
         return None
@@ -420,6 +428,7 @@ async def claim_paused_turn(
         from agentcore.runtime.journal.seq_space import split_live_and_overflow_rows
 
         live, overflow = split_live_and_overflow_rows(rows)
+        refuse_if_leftover_team_preview(claimed["frame"])
         suspension = suspension_from_json(claimed["frame"])
     except Exception as e:
         logger.error(
@@ -563,6 +572,8 @@ async def list_paused_turns(conversation_id: str) -> list[TurnSuspension]:
     out: list[TurnSuspension] = []
     for r in rows:
         if is_ceo_continue_frame(r.frame):
+            continue
+        if is_leftover_team_preview_frame(r.frame):
             continue
         out.append(suspension_from_json(r.frame))
     return out

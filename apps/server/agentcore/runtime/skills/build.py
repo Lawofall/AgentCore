@@ -12,18 +12,18 @@ _BUILD_APP = f"""\
 → 可进本 playbook；满档须 `intensity=full` + 显式 `modules`。\
 方向已定但本轮边界未钉（讨论形态 / 先 MVP）→ **禁止**首派本形状满编（五波脚手架不当讨论落点）；\
 改首派轻切片（宜 `intensity=lean`）、手写少节点，或单 lead 嵌套再拆，再 `replan`。\
-局部单功能 → 手写或可选 `build_feature`。\
+局部单功能 → 手写或 `diagnose_fix_verify`。\
 绿场仍走 `intensity` / playbook，**勿**改成临时交成果组长。\
 做**软件**时**【禁止】**单前端单 HTML 薄旁路交差。
 
 【交付档 → intensity】结构槽（非意图分类器）：`intensity=lean|full`。\
 MVP 主流程可点 → `intensity=lean`；模块流水线一次做完 → `intensity=full` + **显式** `modules`；\
-只改一处 → **勿**进本 playbook，改 `build_feature` / 手写 / `repair_code`。\
+只改一处 → **勿**进本 playbook，改手写 / `diagnose_fix_verify`。\
 已确认 MVP / 「先…以后再说」→ **禁止**默认 `intensity=full` 或多 `modules` 满编。
 
 【推荐】绿场软件 / SPA 完整交付（Vue·React·Vite·SPA / 数据看板等）用 \
 `delegate(playbook="build_app", playbook_args={{...}})`\
-（scaffold-first 多波更稳；手写 / `none` 仍可用，**不硬拒**）。\
+（scaffold-first 多波更稳；手写可用）。\
 营销落地页 / 官网 / 控制台【勿】进本 playbook。单页一人做完；控制台别套营销皮；\
 HTML 落盘即自动静态质检。
 

@@ -311,16 +311,17 @@ async def _prepare_agent_node(
     # 「有增量才写」. form=prose/files/workspace selects the landing block
     # (omit = files). Non-empty artifacts with form omitted → files block.
     deliverable_form = deliverable.form if deliverable is not None else "files"
+    from agentcore.runtime.engine.governance import registry_can_execute
+
     identity = build_worker_identity(
         has_dependents=node_has_dependents(env.plan, spec.run_id),
         captain=is_captain,
         depth=spec.depth,
         form=deliverable_form,
         artifacts=list(deliverable.artifacts) if deliverable else None,
-        # 能写≠能跑 (能力闸门与交付诚实性): the registry is the capability truth —
-        # execution class absent (cloud without sandbox) ⇒ the identity says so,
-        # instead of the generic wording implying the worker can run code.
-        can_execute=worker_tools.get_optional("code_execute") is not None,
+        # 能写≠能跑: retire EXEC_ENV_TIMEOUT_FAMILY first (session.exec_env_dead),
+        # then this flag — identity must not claim it can run after the family is gone.
+        can_execute=registry_can_execute(worker_tools),
     )
     if not env.collaboration:
         identity = identity.replace(_WORKER_TEAM_NOTE_POLICY, "").replace("\n\n\n", "\n\n")
@@ -330,7 +331,7 @@ async def _prepare_agent_node(
         identity = f"{identity.rstrip()}\n\n{SCRATCH_NO_WRITE_IDENTITY_HINT}"
     # 真纯丙·H2：form=prose 不再硬卸写盘工具；形态靠 identity 提示自觉守岗。
     # Short-round repair posture tool strip retired (no-op kept for compat).
-    # CEO / repair_code may still stamp max_rounds; tools stay full surface.
+    # CEO / diagnose_fix_verify may still stamp max_rounds; tools stay full surface.
     files_expected = _files_expected(deliverable)
     from agentcore.runtime.runs.research_quality import deliverable_is_report_delivery
 

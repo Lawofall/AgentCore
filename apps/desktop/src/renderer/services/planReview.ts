@@ -1,8 +1,6 @@
-/** Decisions a user can actively make on a plan_review / kickoff card.
+/** Decisions a user can actively make on a plan_review card.
  * plan_review: `continue` / `adjust` / `stop`.
- * team_preview (开工卡): `continue` (= grant + start; note → steer) /
- *   `adjust` (= 不开工、回灌 CEO；note 必填) / `stop`；
- *   debate may still settle `research_first` from old clients / StageCard.
+ * `research_first` is stage_card (先调研)；cold resume does not send kickoff veto fields.
  * `timeout` is engine-only and never sent by the client.
  *
  * Settlement is cold `POST .../resume` (services/turns.ts `runResume`). */

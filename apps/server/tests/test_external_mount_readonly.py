@@ -74,6 +74,7 @@ async def test_maps_not_found_error():
     )
     assert result.success is False
     assert "找不到" in (result.error or "")
+    assert "挂载只接受文件夹" in (result.error or "")
     assert "reason=not_found" in (result.error or "")
     assert "盲重试" in (result.error or "")
     assert result.metadata.get("code") == "not_found"
@@ -102,6 +103,19 @@ def test_format_external_mount_error_preserves_reason():
     text = format_external_mount_error(exc)
     assert "reason=not_directory" in text
     assert "盲重试" in text
+    assert "这是文件不是文件夹" in text
+    assert "请选它所在的目录" in text
+    assert "工作区" in text
+    assert "找不到" not in text
+
+
+def test_format_external_mount_not_found_names_folder_only():
+    exc = ExternalMountError("找不到该目录", reason="not_found")
+    text = format_external_mount_error(exc)
+    assert "找不到" in text
+    assert "挂载只接受文件夹" in text
+    assert "安装包/文件" in text
+    assert "reason=not_found" in text
 
 
 def test_schema_mentions_reason_and_soft_recovery():

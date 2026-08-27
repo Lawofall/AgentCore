@@ -1,3 +1,4 @@
+import { renderInlineLabels } from "@/lib/inlineBody";
 import { notifyError } from "@/lib/toast";
 import {
   cancelQueuedTurn,
@@ -41,8 +42,13 @@ export function QueuedTurnsBar({
 
 function QueuedTurnRow({ item }: { item: QueuedTurnEntry }) {
   const [busy, setBusy] = useState(false);
+  const previewText = renderInlineLabels(
+    item.content,
+    item.attachments ?? [],
+    item.agentMentions ?? [],
+  );
   const preview =
-    item.content.length > 48 ? `${item.content.slice(0, 48)}…` : item.content;
+    previewText.length > 48 ? `${previewText.slice(0, 48)}…` : previewText;
   const fromInterjection = Boolean(item.interjectionId);
 
   const onCancel = async () => {

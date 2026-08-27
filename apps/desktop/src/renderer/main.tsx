@@ -9,7 +9,6 @@ import { installAccountStateIngress } from "./services/accountStateIngress";
 import { installClientToolIngress } from "./services/clientToolIngress";
 import { startOutboxReconcile } from "./services/outboxReconcile";
 import { installSidecarEventPump } from "./services/sidecarEventPump";
-import { installSidecarHarvestClaim } from "./services/sidecarHarvestClaim";
 import { installSidecarStatusListener } from "./services/sidecarStatus";
 import { liveStagingIds } from "./stores/composer";
 import { useUIStore } from "./stores/ui";
@@ -23,8 +22,6 @@ installSidecarStatusListener();
 // Single App-lifetime `sidecar:event` subscription; turns claim sinks (叠字根因：
 // 多 onEvent listener). See services/sidecarEventPump.
 installSidecarEventPump();
-// 自发 harvest `turn/event`（新 turnId）认领进当前对话；本机流占用时不抢。
-installSidecarHarvestClaim();
 // Fulfill channels (云 device stream + 本机 sidecar push) → CLIENT_TOOL
 // perform/settle; the cloud transport itself is started in AppShell.
 installClientToolIngress();

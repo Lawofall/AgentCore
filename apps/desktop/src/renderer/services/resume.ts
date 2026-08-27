@@ -11,7 +11,6 @@ import {
   entryToPlanReview,
   isColdCheckpointSettled,
   isColdResumeKind,
-  isRetiredKickoffKind,
   settledColdIdsFromEvents,
   useInteractionStore,
 } from "@/stores/interactions";
@@ -435,14 +434,6 @@ export function surfaceResumeFromAssistant(
       kind: "ask_user",
       steps: [],
       pending: [],
-      workers: [],
-      tools: [],
-      primitive: "delegate",
-      motion: "",
-      form: "",
-      sides: [],
-      maxRounds: 0,
-      thorough: true,
       question: cp.question,
       assumptions: cp.assumptions,
       questions: cp.questions,
@@ -461,14 +452,6 @@ export function surfaceResumeFromAssistant(
         steps: pr.steps,
         pending: pr.pending,
         ceoReview: pr.ceoReview,
-        workers: [],
-        tools: [],
-        primitive: "delegate",
-        motion: "",
-        form: "",
-        sides: [],
-        maxRounds: 0,
-        thorough: true,
         question: "",
         assumptions: [],
         questions: [],
@@ -476,7 +459,6 @@ export function surfaceResumeFromAssistant(
       });
       painted = true;
     }
-    // leftover team_preview: fold / IX still recognize the kind; no unstick shell.
   }
   if (!painted) {
     // Stop = hard cancel: no Interaction ``*_required`` → no Resume card.
@@ -543,7 +525,6 @@ registerColdJournalReader((conversationId) =>
  * Pure paint selector: InteractionStore cold pending is live authority;
  * pausedTurns covers recovery/`setForConversation` shells not covered by IX.
  * Clickability uses {@link isColdCheckpointSettled} — the only terminal gate.
- * leftover `team_preview` is never painted (开工卡已退役；解挂壳一并作废).
  */
 export function selectVisibleColdResumes(args: {
   conversationId: string;
@@ -572,7 +553,7 @@ export function selectVisibleColdResumes(args: {
   for (const entry of byId.values()) {
     if (entry.conversationId !== conversationId) continue;
     if (entry.status !== "pending" && entry.status !== "submitting") continue;
-    if (!isColdResumeKind(entry.kind) || isRetiredKickoffKind(entry.kind)) {
+    if (!isColdResumeKind(entry.kind)) {
       continue;
     }
     if (!entry.id || !entry.payload) continue;
@@ -610,7 +591,7 @@ export function selectVisibleColdResumes(args: {
   }
 
   for (const p of pausedForConv) {
-    if (isRetiredKickoffKind(p.kind)) continue;
+    if (!isColdResumeKind(p.kind)) continue;
     if (covered.has(p.checkpointId)) continue;
     if (
       isColdCheckpointSettled({

@@ -20,6 +20,7 @@ from agentcore.runtime.resolve.prompt.ceo_core import (
     _attachment_material_block,
     assemble_ceo_core,
     attachment_material_scene,
+    capability_how_suffix,
 )
 from agentcore.runtime.resolve.prompt.citation import CHAT_CITATION_HINT
 from agentcore.runtime.resolve.prompt.cold_start import (
@@ -28,7 +29,6 @@ from agentcore.runtime.resolve.prompt.cold_start import (
     _COLD_START_EXPLORE_HINT_REFRESH,
     _FOLDER_NAV_STALE_HINT,
     _FOLDER_PROFILE_EMPTY_SOFT_HINT,
-    _FOLDER_PROFILE_TOOL_HINT,
     _explore_act_block,
 )
 from agentcore.runtime.resolve.prompt.compose import (
@@ -58,7 +58,6 @@ __all__ = [
     "_DEFAULT_SYSTEM_PROMPT",
     "_FOLDER_NAV_STALE_HINT",
     "_FOLDER_PROFILE_EMPTY_SOFT_HINT",
-    "_FOLDER_PROFILE_TOOL_HINT",
     "_MEMORY_ROUTING_FENCE",
     "_RULES_ROUTING_FENCE",
     "_RULES_TEMPLATE",
@@ -69,6 +68,7 @@ __all__ = [
     "assemble_ceo_core",
     "assemble_system_prompt",
     "attachment_material_scene",
+    "capability_how_suffix",
     "compose_ceo_chat_prompt",
     "compose_worker_base_prompt",
     "derive_ceo_addon",

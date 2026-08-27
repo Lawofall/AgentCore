@@ -91,23 +91,6 @@ describe("classifyTimelineInteractionCard", () => {
       ),
     ).toEqual({ kind: "card" });
   });
-
-  it("team_preview 永远是有意为空（开工卡已退役）", () => {
-    expect(
-      classifyTimelineInteractionCard(
-        "team_preview",
-        { checkpoint_id: "tp-1" },
-        emptyBags,
-      ),
-    ).toEqual({ kind: "intentionalEmpty" });
-    expect(
-      classifyTimelineInteractionCard(
-        "team_preview",
-        { checkpoint_id: "tp-gone" },
-        emptyBags,
-      ),
-    ).toEqual({ kind: "intentionalEmpty" });
-  });
 });
 
 describe("missingTimelineCardNode", () => {
@@ -132,18 +115,6 @@ describe("renderTimelineInteractionCard", () => {
     const el = screen.getByTestId(TIMELINE_MISSING_CARD_TEST_ID);
     expect(el.getAttribute("data-process-kind")).toBe("checkpoint");
     expect(el.getAttribute("data-card-id")).toBe("cp-gone");
-  });
-
-  it("team_preview 有意为空：不出现 missing 占位", () => {
-    const node = renderTimelineInteractionCard(
-      "team_preview",
-      { checkpoint_id: "tp-1" },
-      emptyBags,
-    );
-    expect(node).toBeNull();
-    const { container } = render(node);
-    expect(screen.queryByTestId(TIMELINE_MISSING_CARD_TEST_ID)).toBeNull();
-    expect(container.textContent).toBe("");
   });
 
   it("plan_review 有意为空：不出现 missing 占位", () => {
@@ -190,7 +161,12 @@ describe("ProcessTimeline · 有标记无实体", () => {
   it("team_preview 标记不画卡、也不报 missing", () => {
     render(
       <ProcessTimeline
-        process={[{ kind: "team_preview", checkpoint_id: "tp-1" }]}
+        process={[
+          {
+            kind: "team_preview",
+            checkpoint_id: "tp-1",
+          } as unknown as import("@/types/events").ProcessStep,
+        ]}
         isStreaming={false}
         citations={[]}
         composingTool={null}

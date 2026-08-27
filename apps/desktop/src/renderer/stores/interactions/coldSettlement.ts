@@ -1,7 +1,7 @@
 /**
- * 冷卡服务端终态判据（检查点与开工卡 · 冷卡终态权威）。
+ * 冷卡服务端终态判据（ask_user / plan_review）。
  *
- * 可点性只认这一份：checkpoint 一旦在服务端结算（journal 已有 `*_resolved`，
+ * 可点性只认这一份：checkpoint 一旦在服务端结算（journal 已有 live `*_resolved`，
  * 或本会话已观察过该终态），任何路径都不得再把它当待答卡画出来。
  * `reopen` 与 `selectVisibleColdResumes` 共用，禁止在复活路径上各写一道 if。
  */

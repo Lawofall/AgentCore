@@ -19,7 +19,6 @@ vi.mock("@/hooks/useConversations", () => ({
 import { applyOutboxSynced } from "../outboxReconcile";
 import {
   beginLocalConversationStream,
-  hasLocalConversationStream,
   resetStreamOwnershipForTests,
 } from "../turns/streamOwnership";
 
@@ -57,25 +56,18 @@ afterEach(() => {
   resetStreamOwnershipForTests();
 });
 
-describe("applyOutboxSynced harvest write-back", () => {
-  it("softRefresh after harvest write-back", () => {
+describe("applyOutboxSynced write-back", () => {
+  it("does not extra-refresh after leftover harvest write-back", () => {
     applyOutboxSynced(harvestAck());
-    expect(loadLatestWindow).toHaveBeenCalledTimes(1);
-    expect(loadLatestWindow).toHaveBeenCalledWith(CID, { softRefresh: true });
+    expect(loadLatestWindow).not.toHaveBeenCalled();
   });
 
-  it("defers softRefresh until the later local stream releases (no forceRelease)", () => {
+  it("does not extra-refresh while a later local stream is live", () => {
     const release = beginLocalConversationStream(CID);
-    expect(hasLocalConversationStream(CID)).toBe(true);
-
     applyOutboxSynced(harvestAck());
-
-    expect(hasLocalConversationStream(CID)).toBe(true);
     expect(loadLatestWindow).not.toHaveBeenCalled();
-
     release();
-    expect(loadLatestWindow).toHaveBeenCalledTimes(1);
-    expect(loadLatestWindow).toHaveBeenCalledWith(CID, { softRefresh: true });
+    expect(loadLatestWindow).not.toHaveBeenCalled();
   });
 
   it("ordinary write-back does not softRefresh", () => {

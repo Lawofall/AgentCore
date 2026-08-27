@@ -42,11 +42,7 @@ import { AskCardFooter, AskCardShell, AskSectionLabel } from "./AskCardShell";
 import { CommenceNote } from "./AskCommenceParts";
 import { type AskRow, AskRowGroup } from "./AskOptionRow";
 import { AskQuestionPager } from "./AskQuestionPager";
-import {
-  type AskUserContent,
-  GRANT_READONLY_FOLDER_RETIRED,
-  type useAskAnswer,
-} from "./AskUserFields";
+import type { AskUserContent, useAskAnswer } from "./AskUserFields";
 import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
 
 const META = ASK_INTENT_META.decision;
@@ -147,18 +143,8 @@ export function AskDecisionBody({
     return null;
   };
 
-  const rejectRetiredReadonlyGrant = () => {
-    setPickerFailure(null);
-    setBindError(GRANT_READONLY_FOLDER_RETIRED);
-  };
-
   const handleBindOption = async (q: AskQuestion, opt: AskOption) => {
     if (busy || bindBusyLabel) return;
-
-    if (opt.action === "grant_readonly_folder") {
-      rejectRetiredReadonlyGrant();
-      return;
-    }
 
     if (opt.action === "open_local_project") {
       if (!canLocalFs) return;
@@ -263,8 +249,7 @@ export function AskDecisionBody({
 
   /**
    * 继续：普通选项 → 原 onContinue；选中 grant_organize / bind_* / open_local_project /
-   * register_local_project → 一键履约（对齐点选项行）。旧 `grant_readonly_folder`
-   * 停履约：卡面诚实失败，不调选择器、不授权、不提交口头「已授权」。
+   * register_local_project → 一键履约（对齐点选项行）。未知已删 action 当普通选项。
    * grant_organize 无系统选文件夹；找不到则卡面失败。同 root 只读已挂仍须点允许走
    * organize 履约（禁止静默升写）。人话框命中整理短允许表且 listed 未勾选 → 同真
    * grant（非纯文本冒充已授权）。register 履约后 resume 本对话；open 开新会话不 resume。
@@ -277,10 +262,6 @@ export function AskDecisionBody({
       return;
     }
     const { q, opt } = pending;
-    if (opt.action === "grant_readonly_folder") {
-      rejectRetiredReadonlyGrant();
-      return;
-    }
     if (!hasLocalFiles()) {
       setBindError(guideDesktopDownload());
       setPickerFailure(null);
@@ -345,10 +326,6 @@ export function AskDecisionBody({
         onSelect: () => {
           if (!desktopFolder) {
             answer.toggleChoice(q, opt.label);
-            return;
-          }
-          if (opt.action === "grant_readonly_folder") {
-            rejectRetiredReadonlyGrant();
             return;
           }
           // Web / 无本地文件：禁止退化成 toggleChoice（假确认）。

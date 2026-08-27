@@ -402,8 +402,9 @@ def _multi_agent_team_notes_ceo_seed() -> list[SSEEvent]:
 def _multi_agent_team_notes_empty_wall() -> list[SSEEvent]:
     """多 Agent·通·便签墙已升、尚无便签：``run_plan.note_wall`` 让看面画空态。
 
-    ``build_feature`` / 升墙但 brief 未物化出字时，墙在开跑就存在。缺字段的旧 journal 仍当无墙，
-    不对所有空 ``teamNotes`` 画空态。本向量钉 fold：``teamNotes=[]`` 且 ``noteWall=true``。
+    手写 tasks 并行且 ``run_plan.note_wall=true`` 时，墙在开跑就存在（尚无便签）。缺字段的旧
+    journal 仍当无墙，不对所有空 ``teamNotes`` 画空态。本向量钉 fold：``teamNotes=[]`` 且
+    ``noteWall=true``。
     """
     agents = [
         {
@@ -427,7 +428,7 @@ def _multi_agent_team_notes_empty_wall() -> list[SSEEvent]:
         tool_use_start(
             "dc1",
             "delegate",
-            {"tasks": [{"role": "后端"}, {"role": "前端"}], "playbook": "build_feature"},
+            {"tasks": [{"role": "后端"}, {"role": "前端"}]},
         ),
         run_plan(
             execution_id="exec1",

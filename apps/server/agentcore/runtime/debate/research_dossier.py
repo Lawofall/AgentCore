@@ -1,6 +1,6 @@
 """工作区幕 1 调研约定文档（``AgentCore/文档/research/``）——辩论开工探测、台账锚与索引文案。
 
-约定文档由 ``multi_lens_research`` playbook 落盘；辩论侧只读索引（文件列表 + 一行说明），
+约定文档由 ``lens_crosscheck`` playbook 落盘；辩论侧只读索引（文件列表 + 一行说明），
 全文由辩手 ``file_read`` 自取。开赛时把约定文档内 ``#rN`` 锚预登记进场级 ``#eN`` 台账
 （对齐底料 ``preregister_background``）。不碰 persist / 轮次原语。
 """

@@ -282,25 +282,24 @@ def test_resolve_coordination_team_brief_upgrades_none():
     )
 
 
-def test_resolve_coordination_build_feature_playbook_defaults_wall():
+def test_resolve_coordination_no_playbook_name_raises_wall():
     assert (
         resolve_coordination(
             raw=None,
             complexity_hint="standard",
             seed_notes=None,
             team_brief=None,
-            playbook="build_feature",
+            playbook="map_fanout",
         )
-        == "wall"
+        == "none"
     )
-    # Explicit none is respected when there is no seed/brief upgrade.
     assert (
         resolve_coordination(
             raw="none",
             complexity_hint="standard",
             seed_notes=None,
             team_brief=None,
-            playbook="build_feature",
+            playbook="cite_write_review",
         )
         == "none"
     )

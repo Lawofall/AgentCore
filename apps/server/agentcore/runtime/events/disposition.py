@@ -156,7 +156,7 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
     ),
     EventType.EXECUTION_COMPLETED: (
         Disposition.DURABLE,
-        "后台执行终态——重放完成态；收割者据此发起系统收口回合",
+        "后台执行终态——重放完成态；不再自动新开思考轮",
     ),
     # ---- DERIVED：经专用列 / 其它投影持久化，reload 时重建（非 journal allow-list） ----
     EventType.CONTENT_DELTA: (Disposition.DERIVED, "正文流——最终态落 Message.content 列"),

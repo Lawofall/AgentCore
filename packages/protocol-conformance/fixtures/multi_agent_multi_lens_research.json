@@ -23,7 +23,7 @@
         "tool_call_id": "dc1",
         "tool_name": "delegate",
         "arguments": {
-          "playbook": "multi_lens_research",
+          "playbook": "lens_crosscheck",
           "playbook_args": {
             "topic": "某消费品牌是否应在争议代言人事件后继续联名"
           },

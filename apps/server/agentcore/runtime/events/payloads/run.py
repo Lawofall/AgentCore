@@ -342,7 +342,8 @@ class DeliveryAction(WirePayload):
     """One user action that would close a delivery gap. ``kind`` is a widened string
     on the wire (like ``ToolPhase``) so the backend can add kinds without a client
     bump — known: ``bind_local_folder`` (wire kind；产品文案按会话分流：
-    工程尚在本机 → 云协作「导入到云 / 连接 Git」优先；**已是云端会话但沙箱未装配** →
+    工程尚在本机 → 云协作「导入到云」优先；远程仓进当前云桌走 git clone /
+    Composer「从 Git 克隆」；**已是云端会话但沙箱未装配** →
     禁止再导「导入到云」，改稍后重试 / export_to_local / 本机传统；
     本机传统合法非默认，≠离线)；
     ``export_to_local`` (云端已有 delivered_files → 导出到本机文件夹后即可 npm install / 本地运行；
@@ -555,7 +556,7 @@ class ResumeSettledPayload(WirePayload):
 
     message_id: str
     conversation_id: str
-    kind: Literal["ask_user", "plan_review", "team_preview"]
+    kind: Literal["ask_user", "plan_review"]
     checkpoint_id: str
     decision: str
     decided_at: str

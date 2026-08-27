@@ -20,7 +20,6 @@ _ALLOWED_OPTION_ACTIONS = frozenset(
         "open_local_project",
         "register_local_project",
         "bind_local_folder",
-        "grant_readonly_folder",
         "grant_organize_folder",
     }
 )
@@ -155,7 +154,7 @@ def normalize_options(
     under the label) is kept only when ``keep_detail`` is true — dedicated cards
     ``proposal_pick`` / ``risk_ack`` / ``organize_plan`` / ``daily_review``. Ordinary
     short asks and escalate drop it even if the model filled it; put the trade-off
-    in ``label``. For ``grant_*`` actions only,
+    in ``label``. For ``grant_organize_folder`` only,
     ``well_known`` (``desktop`` / ``downloads`` / ``documents``), ``target_name``
     (basename fuzzy token; path separators rejected; truncated ≤120), and absolute
     ``path`` (C1 mount transport; non-absolute dropped) pass through — dropping
@@ -185,8 +184,9 @@ def normalize_options(
             action = str(it.get("action") or "").strip()
             if action in _ALLOWED_OPTION_ACTIONS:
                 opt["action"] = action
-            # grant_* hints for desktop one-click / resolve-then-grant (drop otherwise).
-            if action in ("grant_readonly_folder", "grant_organize_folder"):
+            # grant_organize_folder hints for desktop one-click / resolve-then-grant
+            # (drop otherwise; unknown actions already omitted above).
+            if action == "grant_organize_folder":
                 well_known = str(it.get("well_known") or "").strip().lower()
                 if well_known in _WELL_KNOWN_DIRS:
                     opt["well_known"] = well_known

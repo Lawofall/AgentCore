@@ -1,10 +1,15 @@
-"""Network git subcommands: push / pull / create_pr."""
+"""Network git subcommands: push / pull / clone / create_pr."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from agentcore.tools.protocol import ToolContext, ToolResult
+from agentcore.workspace._paths import resolve_safe_path
+from agentcore.workspace.git import _derive_dest_name, _reject_ssrf, _validate_url
+from agentcore.workspace.github_pr import parse_github_remote_url
 
 from . import spawn as spawn_mod
 from .phases import PHASE_CREDENTIALS, PHASE_REMOTE, report_phase
@@ -17,6 +22,124 @@ from .policy import (
 )
 from .results import _error, _git_failure, _ok
 from .spawn import _cloud_network_extra_env, _current_branch, _resolve_pr_token
+
+_CLONE_PASSWORD_KEYS = frozenset(
+    {"password", "token", "pat", "credential", "access_token", "secret"}
+)
+
+
+async def _clone_url_policy_error(repo_url: str, start: float) -> ToolResult | None:
+    """Scheme / GitHub host / SSRF — tool ``git clone`` is GitHub http(s) only.
+
+    UI ``clone_repo`` (``workspace.git``) accepts any http(s)+SSRF; the two
+    are not the same policy. ``create_pr`` stays GitHub-only.
+    """
+    if not repo_url:
+        return _error("clone 需要 url 参数", start)
+    try:
+        _validate_url(repo_url)
+    except ValueError as e:
+        return _error(str(e), start)
+    parsed = urlparse(repo_url)
+    if parsed.username or parsed.password:
+        return _error(
+            "clone 不接受 URL 内嵌用户名/密码；凭据走账户 PAT（设置 → Git 凭据）"
+            "或本机 OS/gh。",
+            start,
+        )
+    if parse_github_remote_url(repo_url) is None:
+        return _error("clone 仅支持 GitHub 的 http(s) 仓库地址", start)
+    try:
+        await _reject_ssrf(repo_url)
+    except ValueError as e:
+        return _error(str(e), start)
+    return None
+
+
+def _dest_rel_token_error(dest_rel: str, start: float) -> ToolResult | None:
+    if dest_rel.startswith("-"):
+        return _error(
+            "clone dest 不能以 '-' 开头（防止被 git 解析为选项）",
+            start,
+        )
+    if any(ch.isspace() for ch in dest_rel):
+        return _error("clone dest 不能包含空白", start)
+    unified = dest_rel.replace("\\", "/")
+    if (
+        unified == ".."
+        or unified.startswith("../")
+        or "/../" in f"/{unified}/"
+        or Path(unified).is_absolute()
+    ):
+        return _error("目标路径无效", start)
+    return None
+
+
+def _resolve_clone_dest(
+    cwd: str, dest_rel: str, start: float
+) -> tuple[str, ToolResult | None]:
+    """Dest is under the tool cwd (workspace root) — never a second folder root."""
+    token_err = _dest_rel_token_error(dest_rel, start)
+    if token_err is not None:
+        return "", token_err
+    if not cwd:
+        return dest_rel.replace("\\", "/"), None
+    target = resolve_safe_path(Path(cwd), dest_rel)
+    if target is None:
+        return "", _error("目标路径无效", start)
+    if target.exists() and (not target.is_dir() or any(target.iterdir())):
+        return "", _error("目标目录已存在且非空", start)
+    dest_for_git = target.relative_to(Path(cwd).resolve()).as_posix()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return dest_for_git, None
+
+
+async def cmd_clone(
+    cwd: str,
+    arguments: dict[str, Any],
+    *,
+    start: float,
+    meta: dict[str, Any],
+    context: ToolContext,
+) -> ToolResult:
+    """Shallow-clone a GitHub http(s) repo into dest under the current tool cwd."""
+    if any(k in arguments for k in _CLONE_PASSWORD_KEYS):
+        return _error(
+            "clone 不接受密码/凭据参数；凭据走账户 PAT（设置 → Git 凭据）"
+            "或本机 OS/gh。",
+            start,
+        )
+
+    repo_url = str(arguments.get("url") or "").strip()
+    url_err = await _clone_url_policy_error(repo_url, start)
+    if url_err is not None:
+        return url_err
+
+    dest_arg = str(arguments.get("dest") or "").strip()
+    dest_rel = dest_arg or _derive_dest_name(repo_url)
+    dest_for_git, dest_err = _resolve_clone_dest(cwd, dest_rel, start)
+    if dest_err is not None:
+        return dest_err
+
+    extra = await _cloud_network_extra_env(context)
+    stdout, stderr, code = await spawn_mod._run_git(
+        ["clone", "--single-branch", "--depth", "1", "--", repo_url, dest_for_git],
+        cwd=cwd,
+        timeout=_GIT_NETWORK_TIMEOUT,
+        extra_env=extra,
+        phase=PHASE_REMOTE,
+    )
+    if code != 0:
+        return await _git_failure(stdout, stderr, code, start, metadata=meta)
+    detail = (stdout or stderr).strip()
+    output = f"已浅克隆到 {dest_for_git}"
+    if detail:
+        output += f"\n{detail}"
+    return _ok(
+        output,
+        start,
+        metadata={**meta, "dest": dest_for_git, "shallow": True, "depth": 1},
+    )
 
 
 async def cmd_push(

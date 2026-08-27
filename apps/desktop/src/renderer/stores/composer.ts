@@ -2,6 +2,7 @@ import type {
   PendingAgentMention,
   PendingAttachment,
 } from "@/components/chat/message-input/composerAttachments";
+import { migrateLegacyDraft } from "@/lib/inlineBody";
 import { registerConversationUiClearer, uiGet, uiSet } from "@/lib/uiStorage";
 import { useConversationStore } from "@/stores/conversation";
 import type { SetStateAction } from "react";
@@ -172,7 +173,11 @@ function loadDrafts(): Record<string, ComposerDraft> {
     if (!valueStr && attachments.length === 0 && agentMentions.length === 0)
       continue;
     out[key] = {
-      value: valueStr,
+      value: migrateLegacyDraft(
+        valueStr,
+        attachments.length,
+        agentMentions.length,
+      ),
       attachments,
       agentMentions,
       updatedAt: typeof updatedAt === "number" ? updatedAt : 0,

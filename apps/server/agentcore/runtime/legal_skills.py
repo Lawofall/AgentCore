@@ -91,7 +91,7 @@ _LEGAL_CASE_ANALYSIS = """\
 【分流·公共终局对抗不走本 skill】
 用户点名模拟法庭 / 庭审对抗 / 对簿公堂，且命题是公共品牌 / 舆论 / 商标等需法律·商业·舆论·文化多维取证的议题\
 （用户不是带着约定文档来做律师接案评估）时：【停止】按本 skill 编排，立即改 `consult(deep_multi_lens_research)` \
-并按其指引走四路调研（默认手写 tasks；固化时可快捷 playbook=\"multi_lens_research\"）。本 skill 只服务律师作业的接案评估 /\
+并按其指引走四路调研（默认手写 tasks；固化时可快捷 playbook=\"lens_crosscheck\"）。本 skill 只服务律师作业的接案评估 /\
 诉讼策略——商标舆情类「要开庭」≠ 律师接案。
 
 【零、先分流：接案评估 还是 诉讼策略】

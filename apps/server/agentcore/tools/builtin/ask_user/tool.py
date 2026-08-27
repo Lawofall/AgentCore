@@ -83,7 +83,7 @@ class AskUserTool:
     # project (Agent记忆与知识系统 §二). ``None`` for 裸聊 / local. Capture-only (unused live).
     folder_id: str | None = None
     # Advertise desktop-only ask_user option actions (open_local_project /
-    # register_local_project / bind_local_folder / grant_readonly_folder /
+    # register_local_project / bind_local_folder /
     # grant_organize_folder) when the desktop client can fulfil them.
     advertise_bind_local_folder: bool = False
 
@@ -111,7 +111,7 @@ class AskUserTool:
         }
         # Schema: short trigger. HOW → ask_user_kickoff / ask_user_midtask skills.
         questions_desc = (
-            "可选：问句写 prompt（最多 5）。关键岔路通常预填或省略 default。"
+            "可选：问句写 prompt（最多 5）。须预填可确认 default。"
             "choice 可配 recommended。detail 仅专用 card。"
         )
         tool_desc = (
@@ -129,13 +129,11 @@ class AskUserTool:
                     "open_local_project",
                     "register_local_project",
                     "bind_local_folder",
-                    "grant_readonly_folder",
                     "grant_organize_folder",
                 ],
                 "description": (
                     "可选。open/register/bind_local_*=本机传统（合法非默认，云仍推荐）；"
-                    "grant_organize_folder=区外整理授权（口头同意须立刻发卡）；"
-                    "grant_readonly_folder 禁止新发（只读用 external_mount_readonly）。"
+                    "grant_organize_folder=整理要发卡。"
                 ),
             }
             option_properties["well_known"] = {
@@ -154,16 +152,14 @@ class AskUserTool:
             option_properties["path"] = {
                 "type": "string",
                 "description": (
-                    "仅 grant_*。已知运输 path（与 well_known/target_name 互补；"
-                    "歧义候选宜各不同）。"
+                    "仅 grant_*。已知运输 path（与 well_known/target_name 互补）。"
                 ),
             }
             # Discriminators stay on the tool description so the model sees them
             # without opening options.action; HOW still lives in ask_user_* skills.
             tool_desc += (
-                " 桌面 options.action：open/register/bind_local_*（本机传统）/"
-                "grant_organize_folder（口头同意须立刻发卡；歧义 2～3）/"
-                "grant_readonly_folder 禁止新发（只读用 external_mount_readonly）。"
+                " 桌面：整理要发卡 grant_organize_folder；"
+                "只读用 external_mount_readonly；open/register/bind_local_* 本机传统。"
             )
 
         return ToolSchema(
@@ -229,7 +225,7 @@ class AskUserTool:
                                 },
                                 "default": {
                                     "type": "string",
-                                    "description": "可选默认答案（choice=某 label）。",
+                                    "description": "可确认默认；空 continue=确认。",
                                 },
                             },
                             "required": ["prompt"],
@@ -386,7 +382,11 @@ class AskUserTool:
             # events (no ALL_COMPLETED / DRIVE_CANCELLED in the hang-frame snapshot).
             if coord.drive_task is not None and not coord.drive_task.done():
                 coord.soft_stop = True
-                coord.drive_task.cancel()
+                from agentcore.runtime.coordination.drive_cancel import (
+                    cancel_drive_task,
+                )
+
+                cancel_drive_task(coord, "soft_stop")
         try:
             saved = await persist_suspension(
                 self,

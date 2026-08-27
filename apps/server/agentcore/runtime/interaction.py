@@ -3,7 +3,7 @@
 Hot-path kinds (approval / escalation / client_tool) share
 ONE in-process :class:`InteractionRegistry`: the engine task awaits an
 :class:`asyncio.Future`; a separate HTTP request (the unified resolve endpoint) settles
-it. Cold-path kinds (``ask_user`` / ``plan_review`` / ``team_preview``) do **not** await
+it. Cold-path kinds (``ask_user`` / ``plan_review``) do **not** await
 here — they finalize the turn onto a durable frame and continue via ``POST .../resume``.
 ``stage_card`` is a journaled surface without a bridge Future.
 
@@ -49,10 +49,6 @@ class InteractionKind(StrEnum):
     # DAG structured checkpoint (结构化挂起 2a): the WaveScheduler paused after a
     # ``checkpoint_after`` step → result: CheckpointResponse (continue / stop).
     PLAN_REVIEW = "plan_review"
-    # 团队预审薄预览: first ``delegate`` wave paused BEFORE workers start → result:
-    # CheckpointResponse (continue / adjust / stop). Durable like plan_review; distinct
-    # kind so it never collides with 波间 plan_review.
-    TEAM_PREVIEW = "team_preview"
     # 阻塞式求决策 (escalate blocking=true): a delegated worker hit a「猜错就作废」fork and
     # suspended. Classic path asks the user directly; coordination-active path awaits CEO
     # ``resolve_escalation`` (awaiting=ceo, not user-answerable) →
@@ -130,16 +126,6 @@ INTERACTION_KIND_SPECS: Mapping[InteractionKind, InteractionKindSpec] = {
     InteractionKind.PLAN_REVIEW: InteractionKindSpec(
         "plan_review_required",
         "plan_review_resolved",
-        "checkpoint_id",
-        hot=False,
-        pauses_turn=True,
-        reconnect_answerable=False,
-        journal_surface=True,
-        attention=True,
-    ),
-    InteractionKind.TEAM_PREVIEW: InteractionKindSpec(
-        "team_preview_required",
-        "team_preview_resolved",
         "checkpoint_id",
         hot=False,
         pauses_turn=True,

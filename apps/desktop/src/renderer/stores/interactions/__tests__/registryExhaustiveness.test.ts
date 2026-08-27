@@ -1,17 +1,9 @@
 /**
- * Desktop INTERACTION_REGISTRY ⊇ wire UserInteractionKind exhaustiveness.
+ * Desktop INTERACTION_REGISTRY live-kind bags.
  *
- * Adding a wire kind without a registry row = silent missing card. Compile-time
- * Record typing does not fail the build when a kind is omitted from the array.
- *
- * Kind bags are derived from INTERACTION_KIND_WIRE flags (not hand-copied names).
- * The expected-member locks below match current specs — flag changes must update
- * callers, not silently widen a bag.
+ * Kind bags are derived from registered rows × INTERACTION_KIND_WIRE flags.
  */
-import {
-  INTERACTION_KIND_WIRE,
-  USER_INTERACTION_KIND_VALUES,
-} from "@agentcore/contract-types";
+import { INTERACTION_KIND_WIRE } from "@agentcore/contract-types";
 import { INTERACTION_CARD_NAME as SHARED_INTERACTION_CARD_NAME } from "@agentcore/protocol-fold-kit";
 import { describe, expect, it } from "vitest";
 import {
@@ -25,18 +17,25 @@ import {
   isColdResumeKind,
   isHotGateInteractionKind,
   isHotInteractionKind,
-  isRetiredKickoffKind,
   isStageInteractionKind,
   submitPathOf,
 } from "../registry";
 
-describe("INTERACTION_REGISTRY wire exhaustiveness", () => {
-  it("registers every UserInteractionKind from codegen wire", () => {
-    const registered = new Set(INTERACTION_REGISTRY.map((d) => d.kind));
-    const wireKinds = new Set(USER_INTERACTION_KIND_VALUES);
+const REGISTERED = INTERACTION_REGISTRY.map((d) => d.kind);
 
-    expect(registered).toEqual(wireKinds);
-    for (const kind of USER_INTERACTION_KIND_VALUES) {
+describe("INTERACTION_REGISTRY live kinds", () => {
+  it("registers live UserInteractionKind rows (no kickoff card)", () => {
+    expect([...new Set(REGISTERED)].sort()).toEqual(
+      [
+        "approval",
+        "ask_user",
+        "escalation",
+        "plan_review",
+        "stage_card",
+      ].sort(),
+    );
+    expect(REGISTERED).not.toContain("team_preview");
+    for (const kind of REGISTERED) {
       expect(INTERACTION_KIND_WIRE[kind]).toBeDefined();
     }
   });
@@ -45,26 +44,23 @@ describe("INTERACTION_REGISTRY wire exhaustiveness", () => {
 describe("kind bags derived from INTERACTION_KIND_WIRE flags", () => {
   it("HOT_INTERACTION_KINDS = hot (current: approval / escalation)", () => {
     expect(HOT_INTERACTION_KINDS).toEqual(["approval", "escalation"]);
-    for (const kind of USER_INTERACTION_KIND_VALUES) {
+    for (const kind of REGISTERED) {
       expect(isHotInteractionKind(kind)).toBe(INTERACTION_KIND_WIRE[kind].hot);
     }
   });
 
-  it("COLD_RESUME_KINDS = pausesTurn && !hot (current: ask_user / plan_review / team_preview)", () => {
-    expect(COLD_RESUME_KINDS).toEqual([
-      "ask_user",
-      "plan_review",
-      "team_preview",
-    ]);
-    for (const kind of USER_INTERACTION_KIND_VALUES) {
+  it("COLD_RESUME_KINDS = pausesTurn && !hot (current: ask_user / plan_review)", () => {
+    expect(COLD_RESUME_KINDS).toEqual(["ask_user", "plan_review"]);
+    for (const kind of REGISTERED) {
       const w = INTERACTION_KIND_WIRE[kind];
       expect(isColdResumeKind(kind)).toBe(w.pausesTurn && !w.hot);
     }
+    expect(isColdResumeKind("team_preview")).toBe(false);
   });
 
   it("HOT_GATE_INTERACTION_KINDS = hot && pausesTurn (current: approval)", () => {
     expect(HOT_GATE_INTERACTION_KINDS).toEqual(["approval"]);
-    for (const kind of USER_INTERACTION_KIND_VALUES) {
+    for (const kind of REGISTERED) {
       const w = INTERACTION_KIND_WIRE[kind];
       expect(isHotGateInteractionKind(kind)).toBe(w.hot && w.pausesTurn);
     }
@@ -81,19 +77,11 @@ describe("kind bags derived from INTERACTION_KIND_WIRE flags", () => {
 
   it("STAGE_INTERACTION_KINDS = reconnectAnswerable && !hot && !pausesTurn (current: stage_card)", () => {
     expect(STAGE_INTERACTION_KINDS).toEqual(["stage_card"]);
-    for (const kind of USER_INTERACTION_KIND_VALUES) {
+    for (const kind of REGISTERED) {
       const w = INTERACTION_KIND_WIRE[kind];
       expect(isStageInteractionKind(kind)).toBe(
         w.reconnectAnswerable && !w.hot && !w.pausesTurn,
       );
-    }
-  });
-
-  it("isRetiredKickoffKind: only team_preview is retired", () => {
-    expect(isRetiredKickoffKind("team_preview")).toBe(true);
-    for (const kind of USER_INTERACTION_KIND_VALUES) {
-      if (kind === "team_preview") continue;
-      expect(isRetiredKickoffKind(kind)).toBe(false);
     }
   });
 
@@ -102,9 +90,8 @@ describe("kind bags derived from INTERACTION_KIND_WIRE flags", () => {
     expect(submitPathOf("escalation")).toBe("hot");
     expect(submitPathOf("ask_user")).toBe("cold");
     expect(submitPathOf("plan_review")).toBe("cold");
-    expect(submitPathOf("team_preview")).toBe("cold");
     expect(submitPathOf("stage_card")).toBe("stage");
-    for (const kind of USER_INTERACTION_KIND_VALUES) {
+    for (const kind of REGISTERED) {
       const w = INTERACTION_KIND_WIRE[kind];
       const path = submitPathOf(kind);
       if (w.hot) expect(path).toBe("hot");

@@ -5,7 +5,7 @@
 
 export const EXECUTION_HARVEST_ORIGIN = "execution_harvest";
 
-/** 后端落库的合成用户消息正文前缀（execution_harvest.py `_HARVEST_USER_TEXT`）。 */
+/** 后端落库的合成用户消息正文前缀（history.py `_HARVEST_USER_PREFIX`）。 */
 export const HARVEST_USER_CONTENT_PREFIX = "【系统收口】";
 
 export function isExecutionHarvestMessage(msg: {

@@ -26,7 +26,6 @@ import {
 import { useFolders } from "@/hooks/useFolders";
 import {
   DELETE_CONVERSATION_LABEL,
-  deleteConversationConfirmLabel,
   notifyConversationDeleted,
 } from "@/lib/conversationDeleteCopy";
 import { timeAgo } from "@/lib/format";
@@ -43,14 +42,13 @@ import {
 } from "@/stores/conversation";
 import {
   isAwaitingUserEntry,
-  isRetiredKickoffKind,
+  isColdResumeKind,
   useInteractionStore,
 } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useShareStore } from "@/stores/share";
 import {
   Archive,
-  Check,
   Copy,
   Download,
   FileJson,
@@ -60,7 +58,6 @@ import {
   PinOff,
   Share2,
   Trash2,
-  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -83,7 +80,6 @@ export function ConversationManageRow({
   const [hovered, setHovered] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [draft, setDraft] = useState(conversation.title);
   const inputRef = useRef<HTMLInputElement>(null);
   const skipBlurRef = useRef(false);
@@ -112,8 +108,7 @@ export function ConversationManageRow({
   );
   const awaitingResume = usePausedTurnStore((s) =>
     s.pending.some(
-      (p) =>
-        p.conversationId === conversation.id && !isRetiredKickoffKind(p.kind),
+      (p) => p.conversationId === conversation.id && isColdResumeKind(p.kind),
     ),
   );
   // firehose `ai_attention`：另一端起的回合也亮灯（本端从未流过该对话时唯一的来源）。
@@ -130,12 +125,9 @@ export function ConversationManageRow({
     conversation.folderId != null
       ? (folders.find((f) => f.id === conversation.folderId) ?? null)
       : null;
-  const showActions = hovered || confirmingDelete || moreOpen;
+  const showActions = hovered || moreOpen;
   const preview = conversation.lastMessagePreview?.replace(/\s+/g, " ").trim();
   const relative = timeAgo(conversation.updatedAt);
-  const deleteConfirmLabel = deleteConversationConfirmLabel(
-    conversation.folderId ? "folder" : undefined,
-  );
 
   useEffect(() => {
     if (editing) {
@@ -150,7 +142,6 @@ export function ConversationManageRow({
   };
 
   const startEdit = () => {
-    setConfirmingDelete(false);
     setDraft(conversation.title);
     setEditing(true);
   };
@@ -198,7 +189,6 @@ export function ConversationManageRow({
   };
 
   const handleDelete = async () => {
-    setConfirmingDelete(false);
     const wasActive = conversation.id === currentId;
     const title = conversation.title;
     try {
@@ -268,10 +258,7 @@ export function ConversationManageRow({
       <ContextMenuTrigger asChild>
         <SurfaceRow
           onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => {
-            setHovered(false);
-            if (!moreOpen) setConfirmingDelete(false);
-          }}
+          onMouseLeave={() => setHovered(false)}
           className="group relative min-h-14 items-stretch gap-3 px-3 py-2.5 hover:bg-accent/60"
         >
           {/* biome-ignore lint/a11y/useSemanticElements: 行内有 DropdownMenuTrigger 真 button，可点击区不可再套 button。 */}
@@ -347,34 +334,7 @@ export function ConversationManageRow({
 
           <div className="flex shrink-0 flex-col items-end justify-between gap-1 py-0.5">
             <div className="flex h-6 items-center gap-1">
-              {confirmingDelete ? (
-                <span className="flex items-center gap-0.5">
-                  <SimpleTooltip label={deleteConfirmLabel}>
-                    <IconButton
-                      aria-label={deleteConfirmLabel}
-                      className="size-6 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleDelete();
-                      }}
-                    >
-                      <Check size={13} />
-                    </IconButton>
-                  </SimpleTooltip>
-                  <SimpleTooltip label="取消">
-                    <IconButton
-                      aria-label="取消"
-                      className="size-6"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmingDelete(false);
-                      }}
-                    >
-                      <X size={13} />
-                    </IconButton>
-                  </SimpleTooltip>
-                </span>
-              ) : showActions ? (
+              {showActions ? (
                 <span className="flex items-center gap-0.5">
                   <SimpleTooltip
                     label={conversation.pinned ? "取消置顶" : "置顶"}
@@ -456,7 +416,7 @@ export function ConversationManageRow({
                         variant="danger"
                         onSelect={() => {
                           setMoreOpen(false);
-                          setConfirmingDelete(true);
+                          void handleDelete();
                         }}
                       >
                         <Trash2 size={14} className="shrink-0" />
@@ -520,10 +480,7 @@ export function ConversationManageRow({
           <span className="flex-1 truncate">导出 JSON</span>
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="danger"
-          onSelect={() => setConfirmingDelete(true)}
-        >
+        <ContextMenuItem variant="danger" onSelect={() => void handleDelete()}>
           <Trash2 size={14} className="shrink-0" />
           <span className="flex-1 truncate">{DELETE_CONVERSATION_LABEL}</span>
         </ContextMenuItem>

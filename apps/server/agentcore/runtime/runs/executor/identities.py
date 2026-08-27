@@ -123,12 +123,11 @@ escalate 是「缺了它整件事会走偏、需要现在有人拍板」，交�
 提示个后续方向」。
 调用 handoff 即代表你这次的活已完成；别把简报重复写进交付正文，也别在还没产出交付时就调它。"""
 
-# 巡检定案 B：worker 交付各一句，防 CEO 综收把「已修复 / 已就绪 / 中途绿」回灌成用户症状已消。
-# 不扩姿势 A 词表、不加闸。
+# 队员合同：防 CEO 综收把队员话回灌成用户症状已消。对照本节点结构真相；不加闸。
 _WORKER_DELIVERY_HONESTY = """\
-【交接勿回灌】正文与 handoff：用户报了可见症状时勿写「修复完成 / 已修复 / 现象已消除 / 已全部落地」——写改了什么、请对照看一眼；\
-勿把提示词包 / 脚本 / 说明书说成「系统已就绪」——没改用户打开的文件就写界面没改；\
-说测试通过以最后一次同命令退出码为准，中途绿最后红报红的，分项分开写。"""
+【交接勿回灌】正文与 handoff 对照本节点结构真相：可见症状下写改了什么并请对照（改文件 ≠ 症状消失）；\
+没改用户打开的文件就写界面没改；勿把说明书说成系统已就绪；\
+测试通过以最后一次同命令退出码为准，分项分开写。"""
 
 
 def _handoff_field_guide_leaf(form: DeliverableForm | None) -> str:
@@ -283,18 +282,19 @@ _WORKER_TEAM_NOTE_POLICY = """\
 # 环境能力自述（能写 ≠ 能跑）: appended ONLY when the turn's worker registry carries no
 # execution class (cloud location=server without sandbox — see
 # ``tools.builtin.code_execution_enabled_for``). Distinguishes「能写脚本落盘」from「能运行」
-# so a worker in a no-exec workspace neither fabricates「已运行 / 已生成」nor burns rounds
-# escalating for a tool that will never appear this turn. Kept OFF the local / sandboxed
-# paths (byte-identical identities there).
+# so a worker in a no-exec workspace does not over-claim a runnable
+# ``code_execute`` the turn withheld, nor burns rounds escalating for a tool
+# that will never appear. Kept OFF the local / sandboxed paths
+# (byte-identical identities there).
 _WORKER_NO_EXECUTION_POLICY = """\
 【本回合执行环境未装配】你没有 code_execute / test_run / terminal 这类执行工具：\
 你【能】用写文件工具把脚本 / 源码 / 配置 / 文档落盘，但【不能】运行它们，也无法生成\
 需要运行程序才能产出的二进制 / 可播放文件（如 .pptx / .xlsx / 图片 / 可执行文件）。\
-不要为等一个本回合不会出现的执行工具反复升级或空转；也绝不要谎称「已运行 / 已验证 / 已生成」。\
+不要为等一个本回合不会出现的执行工具反复升级或空转。\
 如实交付你真正落盘的内容，并在正文与交接简报里注明「未运行验证，需在有执行环境的机器上运行生成」。\
 【表格/数据】没有代码执行时，完整交付是原件结构报告（只写附件结构面已给的列名/行数/类型/样例，\
 或抽出文本里能看见的形态）+ 待跑变换脚本 + 一句「运算环境暂时不可用，稍后再试」。\
-这就是完成，不是缺口。【禁止】手抄单元格交差、禁止谎称已生成/已校验。你本 run 刚 file_write \
+这就是完成，不是缺口。【禁止】手抄单元格交差。你本 run 刚 file_write \
 落盘的表格可以 file_read 回读自检，但不能替代对用户原表的解析。"""
 
 # Shared by every delegated worker (leaf + captain): the environment-mutation caution
@@ -321,8 +321,7 @@ _WORKER_PROBLEM_HANDLING = """\
 - 中等问题（测试挂了、需要多改一个文件、某个依赖的接口和预期不一致）：尝试修一轮；\
 修好了继续交付，修不好就用 escalate 上报原因和你尝试过的方案。
 - 大问题（方案根本走不通、需要改接口设计、任务范围明显超出你的职责、缺少关键信息\
-无法合理假设、权威文档冲突——用户点名为准或已写入 task 的设计稿与代码/其它权威稿不一致）：\
-立即用 escalate 上报，不要自行决定方向（含勿静默改权威稿）。
+无法合理假设）：立即用 escalate 上报，不要自行决定方向。
 默认原则：信息不足时做出最合理的假设、简短说明，然后照常交付——不要为小事停下。\
 有把握就报一声继续做；猜错会作废、或只有上级能定的关键岔路，就停下来等。"""
 
@@ -330,11 +329,10 @@ _WORKER_PROBLEM_HANDLING = """\
 # Inserted in build_worker_identity — not inside captain nesting preamble (P3 surface).
 _WORKER_PATH_FIND_NUDGE = """\
 【找路径】「前置结果」已列出具体相对路径 → 直接 file_read 那些路径，【禁止】再全仓 \
-file_list / grep 当开工。笔记、墙上或前置结果已有入口/结论 → 接着补缺口；\
-【禁止】把已覆盖的面再整仓 file_list / 通读一遍。仅路径含糊（「根」/ `.` / 仅根标签）或列表缺文件时：先 \
-file_list(pattern)（非 * 即整仓按名查找）/\
- grep（不确定则省略 path）/code_search 钉真实文件再 \
-file_read；磁盘上已有的具体相对路径可直接读。看已有源码正文用 file_read（可分页）；搜/计符号用 grep / \
+glob / grep 当开工。笔记、墙上或前置结果已有入口/结论 → 接着补缺口；\
+【禁止】把已覆盖的面再整仓 glob / 通读一遍。仅路径含糊（「根」/ `.` / 仅根标签）或列表缺文件时：先 \
+glob / grep（不确定则省略 path）/code_search 钉真实文件再 \
+file_read；已知目录一层用 file_list。磁盘上已有的具体相对路径可直接读。看已有源码正文用 file_read（可分页）；搜/计符号用 grep / \
 code_search。【禁止】为看内容用 code_execute print / 整文件 dump，也【禁止】open 源码再正则扫描。\
 约定文档出口是写入落点（见 `<workspace_context>` \
 该行「现有」/「当前为空」），勿按话题拼接文件名；清单没有的先 file_list 该目录。工具报路径不存在时按回报里的\
@@ -404,9 +402,10 @@ def build_worker_identity(
     ``depth`` (when captain) picks honest child-nesting copy vs ``MAX_DELEGATION_DEPTH``.
     ``form`` selects the deliverable-form block (omit = files).
     Non-empty ``artifacts`` still select the files-form prompt.
-    ``can_execute`` mirrors whether the execution class (code_execute / test_run) is in
-    this turn's worker registry — False layers the 能写≠能跑 self-description in so the
-    prompt never over-claims capability the toolset withheld (能力闸门与交付诚实性).
+    ``can_execute`` is computed after exec-env sticky retire (and after the
+    execution class is absent from the registry, e.g. cloud without sandbox):
+    False layers the 能写≠能跑 self-description so the prompt never over-claims
+    a callable ``code_execute`` the turn withheld (能力闸门与交付诚实性).
     """
     effective_form = resolve_identity_form(form, artifacts=artifacts)
     intro = _worker_captain_intro(depth=depth) if captain else _WORKER_LEAF_INTRO

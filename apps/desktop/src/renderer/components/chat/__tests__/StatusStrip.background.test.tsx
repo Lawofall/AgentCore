@@ -159,6 +159,39 @@ describe("StatusStrip · execution_detached 后台运行", () => {
     expect(screen.queryByTestId("status-strip-coordination-wait")).toBeNull();
   });
 
+  it("工人已齐但已 detached：保持后台，不进正在收尾", () => {
+    useExecutionStore.getState().startExecution(plan, MID);
+    useExecutionStore.getState().setExecutionDetached(
+      {
+        execution_id: "exec-bg",
+        conversation_id: "c1",
+        completed: 2,
+        total: 2,
+        host_turn_id: MID,
+      },
+      MID,
+    );
+    const bothDone: RunFrame[] = [
+      ...runningFrames,
+      {
+        t: 4,
+        kind: "run_completed",
+        runId: "r2",
+        agentId: "w2",
+        outputSummary: "撰写完成",
+        durationMs: 120,
+      },
+    ];
+    renderStrip(projectExecution(plan, bothDone, "running"));
+
+    expect(screen.getByTestId("status-strip-background")).toBeTruthy();
+    expect(
+      screen.getByTestId("status-strip-background-title").textContent,
+    ).toBe("后台");
+    expect(screen.queryByTestId("status-strip-synthesizing")).toBeNull();
+    expect(screen.getByText("2/2")).toBeTruthy();
+  });
+
   it("未 stamp detached 时保持旧 hold 转圈（兼容）", () => {
     const exec = projectExecution(plan, runningFrames, "running");
     const { container } = renderStrip(exec);

@@ -13,8 +13,8 @@ import type { SidecarEventPush } from "@shared/sidecar-contract";
  * - **不同具体 turnId**：D9 冷 resume × live 共存——两路各收各的事件，互不驱逐。
  * - `resume_deferred`：会话级 EPHEMERAL，扇出到该会话全部 owner（turnId 不一致也能进
  *   `dispatchSSEEvent` → `markResumeDeferred`）。
- * - **未认领 turnId**：交给 `setUnclaimedSidecarTurnHandler`（harvest 认领），
- *   禁止在泵内新造 SSE。
+ * - **未认领 turnId**：交给 `setUnclaimedSidecarTurnHandler`（若已注册）；
+ *   无 handler 则丢弃。禁止在泵内新造 SSE。
  *
  * 禁止在 fold/contentBuffer 对相同 delta 去重。
  */
@@ -86,8 +86,8 @@ type UnclaimedSidecarTurnHandler = (push: SidecarEventPush) => boolean;
 let unclaimedHandler: UnclaimedSidecarTurnHandler | null = null;
 
 /**
- * 未认领 turnId 的兜底（harvest 自发回合）。返回 true 表示已 claim，泵应再投递本帧。
- * 由 harvest claim 模块注册；测试 reset 会清掉。
+ * 未认领 turnId 的可选兜底。返回 true 表示已 claim，泵应再投递本帧。
+ * 测试 reset 会清掉。
  */
 export function setUnclaimedSidecarTurnHandler(
   handler: UnclaimedSidecarTurnHandler | null,

@@ -31,7 +31,7 @@ class SessionSnapshotMixin:
     settled_via: str | None
 
     def mark_settled(self: CoordinationSession, via: str) -> None:
-        """Record which path consumed the terminal (attached inject / harvest / stop)."""
+        """Record which path consumed the terminal (attached inject / detached / stop)."""
         label = (via or "").strip()
         if not label:
             return
@@ -55,14 +55,14 @@ class SessionSnapshotMixin:
         """
         if not (delta or "").strip():
             return
-        if self.harvest_closing or not self.all_completed_injected:
+        if not self.all_completed_injected:
             return
         if self.settled_via != "attached_inject":
             return
         self.attached_inject_visible_close = True
 
     def clear_attached_inject_visible_close(self: CoordinationSession) -> None:
-        """``content_reset`` emptied the captain bubble; harvest skip is invalid
+        """``content_reset`` emptied the captain bubble; visible-close skip is invalid
         until it fills again."""
         self.attached_inject_visible_close = False
 
@@ -70,10 +70,10 @@ class SessionSnapshotMixin:
         self: CoordinationSession,
         journal_entries: list[dict[str, Any]] | None = None,
     ) -> None:
-        """终态对账：terminal 必须收敛到附着注入或收口 harvest（user_stop 豁免）。
+        """终态对账：terminal 必须收敛到附着注入或 detached 结算（user_stop 豁免）。
 
         When ``journal_entries`` is the host journal after detach, missing durable
-        run terminals fire even if inject/harvest already stamped ``settled_via`` —
+        run terminals fire even if inject/settle already stamped ``settled_via`` —
         that stamp cannot see frames lost after the arming-turn snapshot.
         """
         if journal_entries is not None and self.completed_run_ids:
@@ -104,7 +104,7 @@ class SessionSnapshotMixin:
             self.settled_via = "attached_inject"
             return
         if self.harvest_scheduled:
-            self.settled_via = "harvest"
+            self.settled_via = "detached"
             return
         if not self.terminal_posted:
             return
@@ -117,7 +117,7 @@ class SessionSnapshotMixin:
             turn_attached=self.turn_attached,
             harvest_scheduled=self.harvest_scheduled,
             all_completed_injected=self.all_completed_injected,
-            detail=("终态对账失败：execution 已投递终态，但未收敛到附着回合注入或收口 harvest。"),
+            detail=("终态对账失败：execution 已投递终态，但未收敛到附着回合注入或 detached 结算。"),
         )
 
     def snapshot(self: CoordinationSession) -> CoordinationSnapshot:
@@ -168,18 +168,17 @@ class SessionSnapshotMixin:
             total_workers=self.total_workers,
             active=self.active,
             cancel_run_ids=sorted(self.cancel_ids),
+            ceo_cancel_worker_ids=sorted(self.ceo_cancel_worker_ids),
+            ceo_cancel_started_ids=sorted(self.ceo_cancel_started_ids),
             pending_events=pending,
             pending_arbitrations=[dict(v) for v in self.pending_arbitrations.values()],
             resolved_arbitrations=[dict(v) for v in self.resolved_arbitrations.values()],
             live_plan=live_plan_json,
             pending_interjections=interjections,
             all_completed_injected=self.all_completed_injected,
-            harvest_stash=[
-                {"kind": e.kind.value, "payload": dict(e.payload)}
-                for e in self._harvest_stash
-            ],
             harvest_scheduled=self.harvest_scheduled,
             terminal_posted=self.terminal_posted,
+            drive_cancelled=self.drive_cancelled,
             settled_via=self.settled_via,
             turn_attached=self.turn_attached,
             user_stopped=self.user_stopped,
@@ -203,10 +202,13 @@ class SessionSnapshotMixin:
             # whole roster as「本轮新完成」on the first post-resume inject.
             progress_reported_completed=set(snap.completed_run_ids),
             cancel_ids=set(snap.cancel_run_ids),
+            ceo_cancel_worker_ids=set(snap.ceo_cancel_worker_ids),
+            ceo_cancel_started_ids=set(snap.ceo_cancel_started_ids),
             active=snap.active,
             all_completed_injected=snap.all_completed_injected,
             harvest_scheduled=snap.harvest_scheduled,
             terminal_posted=snap.terminal_posted,
+            drive_cancelled=snap.drive_cancelled,
             settled_via=snap.settled_via,
             turn_attached=snap.turn_attached,
             user_stopped=snap.user_stopped,
@@ -229,20 +231,6 @@ class SessionSnapshotMixin:
             except ValueError:
                 continue
             session._pending.append(
-                CoordinationEvent(kind=kind, payload=dict(raw.get("payload") or {}))
-            )
-        for raw in snap.harvest_stash:
-            kind_raw = str(raw.get("kind") or "")
-            try:
-                kind = CoordinationEventKind(kind_raw)
-            except ValueError:
-                continue
-            if kind not in (
-                CoordinationEventKind.ALL_COMPLETED,
-                CoordinationEventKind.DRIVE_CANCELLED,
-            ):
-                continue
-            session._harvest_stash.append(
                 CoordinationEvent(kind=kind, payload=dict(raw.get("payload") or {}))
             )
         for raw in snap.pending_arbitrations:

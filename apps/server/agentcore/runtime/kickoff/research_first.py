@@ -13,7 +13,7 @@ from typing import Any
 
 from agentcore.memory.followups import select_motion_card_from_journal
 
-_MLR_PLAYBOOK = "multi_lens_research"
+_MLR_PLAYBOOK = "lens_crosscheck"
 
 
 def has_research_chain_evidence(
@@ -36,7 +36,7 @@ def research_first_tool_result(*, motion: str = "", user_message: str = "") -> s
     topic = topic.replace('"', "'")
     return (
         "用户在开赛确认中选择「先多视角调研再辩」。本场辩论未授权，请勿再次调用 debate。"
-        f'本回合必须立即调用 delegate(playbook="multi_lens_research", '
+        f'本回合必须立即调用 delegate(playbook="lens_crosscheck", '
         f'playbook_args={{"topic": "{topic}"}})；调研与呈报完成、用户拍板后再开辩。'
     )
 

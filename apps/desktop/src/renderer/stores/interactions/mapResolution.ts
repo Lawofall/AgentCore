@@ -20,8 +20,7 @@ function parseDecision(v: unknown): CheckpointDecision | null {
 }
 
 /**
- * Shared settlement fields for cold decision families (ask_user / team_preview /
- * plan_review). Replaces the duplicated status/decision/note branches that used
+ * Shared settlement fields for cold decision families (ask_user / plan_review). Replaces the duplicated status/decision/note branches that used
  * to live in parallel entryTo* adapters.
  */
 export function mapEntryResolution(e: InteractionEntry): {

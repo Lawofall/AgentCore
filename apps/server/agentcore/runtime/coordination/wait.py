@@ -71,9 +71,11 @@ def _synthetic_all_completed(session: CoordinationSession) -> CoordinationEvent:
     """Race fallback when the bag is full and drive is gone but no terminal posted.
 
     Keep ``ALL_COMPLETED`` so wait still closes / stashes (``DRIVE_CANCELLED``
-    would not). Bag-full only means the terminal count filled — cancel into the
-    bag is intentional — so stamp cancel / fail flags. A flag-less
-    ``ALL_COMPLETED`` is the path host.py already rejected (fake「全员完成」).
+    would not close the session). Bag-full only means the terminal count filled
+    — cancel into the bag is intentional — so stamp cancel / fail flags. Inject
+    must not use the ``all_completed：`` prefix when cancelled (that reads as
+    全员成功). A flag-less ``ALL_COMPLETED`` is the path host.py already
+    rejected (fake「全员完成」).
     """
     cancelled = (session.cancel_ids & session.completed_run_ids) - session.failed_run_ids
     failed_n = len(session.failed_run_ids)
@@ -197,6 +199,17 @@ async def _coalesce_cascade(
     if extra:
         events = events + extra
     return events
+
+
+def _drop_drive_cancelled_while_hot_pending(
+    session: CoordinationSession, events: list[CoordinationEvent]
+) -> list[CoordinationEvent]:
+    """Hot user card: DRIVE_CANCELLED must not wake a 调度中断 close."""
+    from agentcore.runtime.interaction_orphan import holds_for_hot_user
+
+    if not holds_for_hot_user(session):
+        return events
+    return [e for e in events if e.kind is not CoordinationEventKind.DRIVE_CANCELLED]
 
 
 async def await_coordination_injection(
@@ -344,6 +357,9 @@ async def await_coordination_injection(
 
         if events:
             events = session.take_deferred_progress() + events
+            events = _drop_drive_cancelled_while_hot_pending(session, events)
+            if not events:
+                continue
 
         # 失败后短暂收口级联 skip/cancel，合成一次注入。
         if (
@@ -415,8 +431,6 @@ async def await_coordination_injection(
     has_all = any(e.kind is CoordinationEventKind.ALL_COMPLETED for e in events)
     if has_all:
         session.all_completed_injected = True
-        if not session.harvest_closing:
-            session.stash_terminal_for_harvest(events)
         session.close()
         logger.info(
             "coordination.all_completed",

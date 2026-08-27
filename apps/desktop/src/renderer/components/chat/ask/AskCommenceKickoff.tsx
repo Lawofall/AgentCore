@@ -29,11 +29,7 @@ import {
   PlanChips,
   splitBriefContext,
 } from "./AskCommenceParts";
-import {
-  type AskUserContent,
-  GRANT_READONLY_FOLDER_RETIRED,
-  type useAskAnswer,
-} from "./AskUserFields";
+import type { AskUserContent, useAskAnswer } from "./AskUserFields";
 
 export function AskCommenceKickoffBody({
   content,
@@ -63,10 +59,6 @@ export function AskCommenceKickoffBody({
 
   const handleBindOption = async (q: AskQuestion, opt: AskOption) => {
     if (busy || bindBusyLabel) return;
-    if (opt.action === "grant_readonly_folder") {
-      setBindError(GRANT_READONLY_FOLDER_RETIRED);
-      return;
-    }
     if (opt.action === "open_local_project") {
       setBindBusyLabel(opt.label);
       setBindError(null);

@@ -76,69 +76,6 @@ export interface PendingResume {
   pending: PlanReviewPending[];
   /** plan_review: 主 Agent 暂停前的把关摘要（absent = 旧帧 / 无摘要 → 不渲染）。 */
   ceoReview?: CeoReviewSummary;
-  /** team_preview: upcoming workers before the first wave. */
-  workers: Array<{
-    run_id: string;
-    role: string;
-    task: string;
-    depends_on: string[];
-    form?: string;
-    write_capability?: "text_only" | "can_write_files";
-    write_capability_label?: string;
-    /** CEO 提案模型身份（人确认面可盖）。 */
-    model?: string;
-    origin?: "platform" | "byok";
-    provider_id?: string;
-    /** 该队员落座 Folder id；裸聊 scratch 缺省。 */
-    target_folder_id?: string;
-    /** 服务端解析的工作区显示名；旧帧 absent → 不展示。 */
-    target_folder_name?: string;
-  }>;
-  /** team_preview (开工卡): grantable tools listed for capability auth. */
-  tools: string[];
-  /** team_preview: orchestration primitive discriminant. */
-  primitive: "delegate" | "debate";
-  /** team_preview lead（交付档 + 人数）；旧帧 absent → 前端按人数回退. */
-  headline?: string;
-  /** team_preview 修订代数；首版 1 / 旧帧缺省。 */
-  revision?: number;
-  /** 上一张开工卡 checkpoint_id；首版缺省。 */
-  revisedFrom?: string;
-  /** 触发本次修订的用户意见原文；首版缺省。 */
-  revisionNote?: string;
-  /** debate kickoff: motion / form / sides / budget. */
-  motion: string;
-  form: string;
-  sides: Array<{
-    key: string;
-    name: string;
-    stance: string;
-    is_subject?: boolean;
-    /** 开赛前预分配；缺省 = 旧帧，不展示改模。 */
-    run_id?: string;
-    model?: string;
-    origin?: "platform" | "byok";
-    provider_id?: string;
-  }>;
-  maxRounds: number;
-  thorough: boolean;
-  /** 裁判预分配 run_id；缺省 = 旧帧，不展示改模。 */
-  moderatorRunId?: string;
-  /** Phase 3：裁判模型；缺省不展示跨模型署名。 */
-  moderatorModel?: string;
-  moderatorOrigin?: "platform" | "byok";
-  moderatorProviderId?: string;
-  /** Phase 3：同模型降级明示。 */
-  sameModelDebate?: boolean;
-  /** §7.5 D：消歧候选目录行。 */
-  modelCandidates?: Array<{
-    model: string;
-    origin: "platform" | "byok";
-    provider_id?: string;
-    label?: string;
-    side_key?: string;
-    ref?: string;
-  }>;
   /** ask_user: the framing / opening line (always shown). */
   question: string;
   /** ask_user: 起步计划 read-only chips (低影响决策，开场常见). */
@@ -170,79 +107,6 @@ const toPending = (raw: PausedTurnSummary["pending"]): PlanReviewPending[] =>
     run_id: String(p.run_id ?? ""),
     role: String(p.role ?? ""),
   }));
-
-const toWorkers = (
-  raw: PausedTurnSummary["workers"] | undefined,
-): PendingResume["workers"] =>
-  (raw ?? []).map((w) => {
-    const row = (w ?? {}) as Record<string, unknown>;
-    return {
-      run_id: String(row.run_id ?? ""),
-      role: String(row.role ?? ""),
-      task: String(row.task ?? ""),
-      depends_on: Array.isArray(row.depends_on)
-        ? row.depends_on.map(String)
-        : [],
-      ...(typeof row.form === "string" && row.form ? { form: row.form } : {}),
-      ...(row.write_capability === "text_only" ||
-      row.write_capability === "can_write_files"
-        ? {
-            write_capability: row.write_capability as
-              | "text_only"
-              | "can_write_files",
-          }
-        : {}),
-      ...(typeof row.write_capability_label === "string" &&
-      row.write_capability_label
-        ? { write_capability_label: row.write_capability_label }
-        : {}),
-      ...(typeof row.model === "string" && row.model.trim()
-        ? { model: row.model.trim() }
-        : {}),
-      ...(row.origin === "platform" || row.origin === "byok"
-        ? { origin: row.origin as "platform" | "byok" }
-        : {}),
-      ...(typeof row.provider_id === "string" && row.provider_id
-        ? { provider_id: row.provider_id }
-        : {}),
-      ...(typeof row.target_folder_id === "string" &&
-      row.target_folder_id.trim()
-        ? { target_folder_id: row.target_folder_id.trim() }
-        : {}),
-      ...(typeof row.target_folder_name === "string" &&
-      row.target_folder_name.trim()
-        ? { target_folder_name: row.target_folder_name.trim() }
-        : {}),
-    };
-  });
-
-const toSides = (raw: unknown): PendingResume["sides"] =>
-  Array.isArray(raw)
-    ? raw.map((s) => {
-        const row = (s ?? {}) as Record<string, unknown>;
-        return {
-          key: String(row.key ?? ""),
-          name: String(row.name ?? ""),
-          stance: String(row.stance ?? ""),
-          ...(row.is_subject ? { is_subject: true as const } : {}),
-          ...(typeof row.run_id === "string" && row.run_id.trim()
-            ? { run_id: row.run_id.trim() }
-            : {}),
-          ...(typeof row.model === "string" && row.model.trim()
-            ? { model: row.model }
-            : {}),
-          ...(row.origin === "platform" || row.origin === "byok"
-            ? { origin: row.origin as "platform" | "byok" }
-            : {}),
-          ...(typeof row.provider_id === "string" && row.provider_id
-            ? { provider_id: row.provider_id }
-            : {}),
-        };
-      })
-    : [];
-
-const toPrimitive = (raw: unknown): PendingResume["primitive"] =>
-  raw === "debate" ? "debate" : "delegate";
 
 /** ask_user rich fields arrive as loose JSON dicts (backend ``list[dict]``); map
  * them to the typed display shapes the unified card reads, tolerating missing keys.
@@ -278,14 +142,12 @@ const toOptions = (raw: unknown): AskOption[] =>
           ...(obj.action === "open_local_project" ||
           obj.action === "register_local_project" ||
           obj.action === "bind_local_folder" ||
-          obj.action === "grant_readonly_folder" ||
           obj.action === "grant_organize_folder"
             ? {
                 action: obj.action as
                   | "open_local_project"
                   | "register_local_project"
                   | "bind_local_folder"
-                  | "grant_readonly_folder"
                   | "grant_organize_folder",
               }
             : {}),
@@ -362,13 +224,6 @@ function entryFromSummary(
   s: PausedTurnSummary,
   origin: ResumeOrigin,
 ): PendingResume {
-  // REST 快照尚未列 moderator_* 进 schema；可选字段宽松读（absent → 不透传）。
-  const moderatorRunId = (s as { moderator_run_id?: unknown }).moderator_run_id;
-  const moderatorModel = (s as { moderator_model?: unknown }).moderator_model;
-  const moderatorOrigin = (s as { moderator_origin?: unknown })
-    .moderator_origin;
-  const moderatorProviderId = (s as { moderator_provider_id?: unknown })
-    .moderator_provider_id;
   return {
     messageId: s.message_id,
     conversationId,
@@ -380,84 +235,6 @@ function entryFromSummary(
     pending: toPending(s.pending),
     // REST 快照尚未列该字段进 schema；宽松读，后端带了就透传（absent → undefined）。
     ceoReview: toCeoReview((s as { ceo_review?: unknown }).ceo_review),
-    workers: toWorkers(s.workers),
-    tools: Array.isArray((s as { tools?: unknown }).tools)
-      ? ((s as { tools: unknown[] }).tools.filter(
-          (t): t is string => typeof t === "string",
-        ) as string[])
-      : [],
-    primitive: toPrimitive((s as { primitive?: unknown }).primitive),
-    ...(() => {
-      const h = (s as { headline?: unknown }).headline;
-      return typeof h === "string" && h.trim() ? { headline: h.trim() } : {};
-    })(),
-    ...(() => {
-      const n = Number((s as { revision?: unknown }).revision);
-      const revision = Number.isFinite(n) && n >= 1 ? Math.floor(n) : undefined;
-      const from = (s as { revised_from?: unknown }).revised_from;
-      const note = (s as { revision_note?: unknown }).revision_note;
-      return {
-        ...(revision != null ? { revision } : {}),
-        ...(typeof from === "string" && from.trim()
-          ? { revisedFrom: from.trim() }
-          : {}),
-        ...(typeof note === "string" && note.trim()
-          ? { revisionNote: note.trim() }
-          : {}),
-      };
-    })(),
-    motion: String((s as { motion?: unknown }).motion ?? ""),
-    form: String((s as { form?: unknown }).form ?? ""),
-    sides: toSides((s as { sides?: unknown }).sides),
-    maxRounds: Number((s as { max_rounds?: unknown }).max_rounds ?? 0),
-    thorough: (s as { thorough?: unknown }).thorough !== false,
-    ...(typeof moderatorRunId === "string" && moderatorRunId.trim()
-      ? { moderatorRunId: moderatorRunId.trim() }
-      : {}),
-    ...(typeof moderatorModel === "string" && moderatorModel.trim()
-      ? { moderatorModel }
-      : {}),
-    ...(moderatorOrigin === "platform" || moderatorOrigin === "byok"
-      ? { moderatorOrigin }
-      : {}),
-    ...(typeof moderatorProviderId === "string" && moderatorProviderId
-      ? { moderatorProviderId }
-      : {}),
-    ...((s as { same_model_debate?: unknown }).same_model_debate
-      ? { sameModelDebate: true }
-      : {}),
-    ...(() => {
-      const raw = (s as { model_candidates?: unknown }).model_candidates;
-      if (!Array.isArray(raw) || raw.length === 0) return {};
-      const modelCandidates = raw
-        .filter(
-          (c): c is Record<string, unknown> =>
-            !!c &&
-            typeof c === "object" &&
-            typeof (c as { model?: unknown }).model === "string",
-        )
-        .map((c) => {
-          const origin =
-            c.origin === "platform" || c.origin === "byok"
-              ? c.origin
-              : ("platform" as const);
-          return {
-            model: String(c.model),
-            origin: origin as "platform" | "byok",
-            ...(typeof c.provider_id === "string" && c.provider_id
-              ? { provider_id: c.provider_id }
-              : {}),
-            ...(typeof c.label === "string" && c.label
-              ? { label: c.label }
-              : {}),
-            ...(typeof c.side_key === "string" && c.side_key
-              ? { side_key: c.side_key }
-              : {}),
-            ...(typeof c.ref === "string" && c.ref ? { ref: c.ref } : {}),
-          };
-        });
-      return modelCandidates.length > 0 ? { modelCandidates } : {};
-    })(),
     question: s.question ?? "",
     assumptions: toAssumptions(s.assumptions),
     questions: toQuestions(s.questions),

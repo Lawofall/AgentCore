@@ -327,3 +327,61 @@ async def test_apply_replan_rejects_files_add_when_channel_dead():
         assert any("channel dead" in e.lower() for e in err)
     finally:
         clear_active_coordination("exec-cd")
+
+
+def test_ceo_inject_names_workspace_channel_dead():
+    from agentcore.runtime.coordination.inject import format_coordination_events
+    from agentcore.runtime.coordination.session import (
+        CoordinationEvent,
+        CoordinationEventKind,
+        CoordinationSession,
+    )
+    from agentcore.workspace.limits import CHANNEL_DEAD_CEO_INJECT, CHANNEL_DEAD_USER_VISIBLE
+
+    session = CoordinationSession(execution_id="exec-cd-inj", total_workers=1)
+    session.workspace_channel_dead = True
+    text = format_coordination_events(
+        session,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.WORKER_COMPLETED,
+                payload={
+                    "run_id": "w1",
+                    "role": "写手",
+                    "status": "completed",
+                    "summary": "ok",
+                },
+            )
+        ],
+    )
+    assert CHANNEL_DEAD_CEO_INJECT in text
+    assert CHANNEL_DEAD_USER_VISIBLE in text
+    for token in ("工作区/本地文件连不上", "稍后重试", "重开桌面", "已有材料收口"):
+        assert token in text
+    assert "禁止再派需要写盘的队员" in text
+
+
+def test_ceo_inject_user_stop_unchanged_when_channel_dead():
+    from agentcore.runtime.coordination.cancel_close import USER_STOPPED_MARK
+    from agentcore.runtime.coordination.inject import format_coordination_events
+    from agentcore.runtime.coordination.session import (
+        CoordinationEvent,
+        CoordinationEventKind,
+        CoordinationSession,
+    )
+
+    session = CoordinationSession(execution_id="exec-cd-stop", total_workers=2)
+    session.user_stopped = True
+    session.workspace_channel_dead = True
+    session._worker_started_at["w1"] = 1.0  # noqa: SLF001
+    text = format_coordination_events(
+        session,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 1, "total": 2, "cancelled": True},
+            )
+        ],
+    )
+    assert USER_STOPPED_MARK in text
+    assert "调度中断" not in text

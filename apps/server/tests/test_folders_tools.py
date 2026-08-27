@@ -32,6 +32,23 @@ from agentcore.tools.registration import (
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
+_FOLDER_HOW_CONSULT = "HOW→consult(team_cross_folder)"
+# 跨文件夹百科（先建后派、导入到云、开发双仓、禁猜最近、Composer）钉在 skill，
+# 存在性见 test_skills.test_team_cross_folder_skill_teaches_parallel_command。
+_SCHEMA_ENCYCLOPEDIA_FORBIDDEN = (
+    "先建后派",
+    "导入到云",
+    "开发双仓",
+    "静默猜",
+    "Composer",
+)
+
+
+def _assert_short_trigger(description: str) -> None:
+    assert _FOLDER_HOW_CONSULT in description
+    for phrase in _SCHEMA_ENCYCLOPEDIA_FORBIDDEN:
+        assert phrase not in description, f"schema 勿抄 skill 百科：{phrase}"
+
 
 def _ctx(user_id: str = "u1", *, conversation_id: str = "") -> ToolContext:
     return ToolContext.create(
@@ -188,7 +205,12 @@ def test_list_folders_schema_and_registration():
     assert tool.schema.name == "list_folders"
     assert tool.schema.category is ToolCategory.ORCHESTRATION
     assert tool.schema.approval is ToolApproval.NEVER
-    assert "rel_path" in tool.schema.description
+    desc = tool.schema.description
+    _assert_short_trigger(desc)
+    assert "rel_path" in desc
+    assert "resolve_folder" in desc
+    assert "file_list" in desc
+    assert "清单" in desc
     reg = tool_registration(ListFoldersTool)
     assert reg.surface is ToolSurface.CEO_ORCHESTRATION
     assert reg.audience == (AUDIENCE_CEO,)
@@ -204,6 +226,17 @@ def test_resolve_folder_schema_and_registration():
     assert "name" not in props
     assert tool.schema.parameters["required"] == ["path"]
     assert tool.schema.approval is ToolApproval.NEVER
+    desc = tool.schema.description
+    _assert_short_trigger(desc)
+    assert "路径" in desc and "id" in desc
+    assert "完整路径" in desc
+    # 匹配顺序是 path 取值语义，不堆工具 description。
+    assert "路径后缀" not in desc
+    assert "子串" not in desc
+    path_desc = props["path"]["description"]
+    assert "精确" in path_desc
+    assert "后缀" in path_desc
+    assert "子串" in path_desc
     reg = tool_registration(ResolveFolderTool)
     assert reg.surface is ToolSurface.CEO_ORCHESTRATION
     assert AUDIENCE_CEO in reg.audience
@@ -225,13 +258,18 @@ def test_create_folder_schema_and_registration():
     # Cloud-only surface: no local_root_id / mode param (local = 桶 D).
     assert "local_root_id" not in props
     assert "mode" not in props
-    assert "mode=cloud" in tool.schema.description
-    assert "open_local_project" in tool.schema.description
+    desc = tool.schema.description
+    _assert_short_trigger(desc)
+    assert "mode=cloud" in desc
+    assert "open_local_project" in desc
     # Must not read as "make a subdirectory" — that is mkdir.
-    assert "mkdir" in tool.schema.description
-    assert "用户明确" in tool.schema.description or "明确要求" in tool.schema.description
-    assert "禁止为过写盘闸" in tool.schema.description
-    assert "自动建云文件夹" in tool.schema.description
+    assert "mkdir" in desc
+    assert "用户明确" in desc or "明确要求" in desc
+    assert "禁止为过写盘闸" in desc
+    assert "自动建云文件夹" in desc
+    parent_desc = props["parent_path"]["description"]
+    assert "resolve_folder" in parent_desc
+    assert "顶层" in parent_desc
     reg = tool_registration(CreateFolderTool)
     assert reg.surface is ToolSurface.CEO_ORCHESTRATION
     assert reg.audience == (AUDIENCE_CEO,)
@@ -392,8 +430,8 @@ async def test_list_folders_empty(monkeypatch: pytest.MonkeyPatch):
     assert "过写盘闸" in result.output or "勿" in result.output
     # Empty roster must not default-nudge open_local_project as the create path.
     assert "勿默认催 open_local_project" in result.output or "导入到云" in result.output
-    assert "target_folder_id" in result.output
-    assert "external_mount_readonly" in result.output
+    assert _FOLDER_HOW_CONSULT in result.output
+    assert "开发双仓" not in result.output
 
 
 async def test_resolve_unique(monkeypatch: pytest.MonkeyPatch):
@@ -412,8 +450,8 @@ async def test_resolve_unique(monkeypatch: pytest.MonkeyPatch):
     assert "唯一命中" in result.output
     # Tip encourages early ask on empty/near-empty; not a hard ask_user gate.
     assert "file_list" in result.output
-    assert "target_folder_id" in result.output
-    assert "external_mount_readonly" in result.output
+    assert _FOLDER_HOW_CONSULT in result.output
+    assert "开发双仓" not in result.output
 
 
 async def test_resolve_nested_path(monkeypatch: pytest.MonkeyPatch):

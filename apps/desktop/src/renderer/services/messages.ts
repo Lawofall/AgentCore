@@ -263,7 +263,7 @@ export function toMessage(m: BackendMessage): Message {
       ? [{ kind: "reasoning", text: m.reasoning_content }]
       : undefined);
   // 补标记（时间线一期）: backfill positional markers the journal implies (`team` /
-  // `team_preview` / `checkpoint` / `ask` / `plan_review`) so the invariant「有交互卡
+  // `checkpoint` / `ask` / `plan_review`) so the invariant「有交互卡
   // 必有时间线标记」holds on reload — the bottom-stack fallback is gone, an unmarked
   // card would silently vanish. Dedup no-ops when the persisted process already
   // carries them (the normal case).

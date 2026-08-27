@@ -113,65 +113,27 @@ async def test_sidecar_settlement_prewrite_embeds_resume_frame(tmp_path) -> None
     assert sum(1 for e in entries2 if e.get("kind") == "process_reasoning") == 1
 
 
-def _team_preview() -> Any:
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.suspension import TeamPreviewSuspension
-
-    susp = TeamPreviewSuspension(
-        message_id="m-tp",
-        conversation_id="c1",
-        user_id="u1",
-        captain_run_id="r1",
-        checkpoint_id="ck-tp",
-        tool_call_id="tc1",
-        base_system_prompt="sys",
-        user_message="开工",
-        transcript=[],
-        history=[],
-        plan=RunPlan(),
-        workers=[
-            {"run_id": "a", "depends_on": []},
-            {"run_id": "b", "depends_on": []},
-        ],
-        primitive="delegate",
-    )
-    susp.journal_entries = [
-        {"kind": "team_preview_required", "payload": {"checkpoint_id": "ck-tp"}, "ts": None},
-    ]
-    return susp
-
-
-@pytest.mark.asyncio
-async def test_sidecar_settlement_prewrite_refuses_team_preview(tmp_path) -> None:
-    """存量开工卡不得预写 team_preview_resolved。"""
+def test_sidecar_settlement_prewrite_refuses_team_preview() -> None:
+    """存量开工卡不得 hydrate，因此不能预写 team_preview_resolved。"""
     from agentcore.core.errors import GoneError
     from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
+    from agentcore.runtime.suspension import suspension_from_json
 
-    outbox = OutboxStore(tmp_path / "outbox")
-    outbox.bind_turn(
-        conversation_id="c1",
-        user_message_id="u1",
-        user_message="开工",
-        message_id="m-tp",
-        trace_id="a" * 32,
-    )
-    await outbox.begin_turn(conversation_id="c1", message_id="m-tp", trace_id="a" * 32)
-    susp = _team_preview()
     with pytest.raises(GoneError, match=TEAM_PREVIEW_UNRECOVERABLE):
-        await prewrite_sidecar_resume_settlement(
-            outbox,
-            susp,
-            decision="continue",
-            note="",
-            selected=[],
-            user_message_id="u1",
-            trace_id="a" * 32,
-            excluded_run_ids=["b"],
-            write_capability_overrides=[{"run_id": "a", "capability": "text_only"}],
+        suspension_from_json(
+            {
+                "kind": "team_preview",
+                "message_id": "m-tp",
+                "conversation_id": "c1",
+                "user_id": "u1",
+                "captain_run_id": "r1",
+                "checkpoint_id": "ck-tp",
+                "tool_call_id": "tc1",
+                "base_system_prompt": "sys",
+                "user_message": "开工",
+                "primitive": "delegate",
+            }
         )
-    record = outbox.find_record_by_message_id("m-tp")
-    entries = journal_entries_from_map((record or {}).get("journal")) or []
-    assert not any(e.get("kind") == "team_preview_resolved" for e in entries)
 
 
 @pytest.mark.asyncio

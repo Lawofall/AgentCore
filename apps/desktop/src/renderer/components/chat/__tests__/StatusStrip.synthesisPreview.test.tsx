@@ -140,7 +140,7 @@ describe("StatusStrip · 不挂合成草稿行", () => {
     expect(screen.getByTestId("status-strip-synthesizing")).toBeTruthy();
     expect(screen.getByText("2/2")).toBeTruthy();
     expect(screen.queryByTestId("status-strip-running-title")).toBeNull();
-    expect(screen.queryByText("2/2 已完成，正在生成汇总")).toBeNull();
+    expect(screen.queryByText("2/2 已完成，正在收尾")).toBeNull();
     expect(screen.queryByTestId("team-synthesis-preview")).toBeNull();
     expect(screen.queryByText("生成汇总")).toBeNull();
   });

@@ -90,7 +90,6 @@ def test_waiting_kinds_map_to_an_attention_kind():
         "escalation",
         "ask_user",
         "plan_review",
-        "team_preview",
     ):
         assert attention_kind_of(waiting) is AttentionKind(waiting)
 

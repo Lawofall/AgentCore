@@ -636,39 +636,42 @@ def test_resume_claims_frame_and_drives_resume_pipeline(tmp_path, monkeypatch):
     assert remaining == []  # the frame was claimed (one-shot), so nothing is left
 
 
-def _team_preview_suspension(
-    message_id: str,
-    conversation_id: str,
-) -> Any:
-    from agentcore.runtime.runs.plan import RunPlan
-    from agentcore.runtime.suspension import TeamPreviewSuspension
+def _write_leftover_team_preview(
+    store: LocalPausedTurnStore, message_id: str, conversation_id: str
+) -> None:
+    """Seed a leftover kind=team_preview JSON file (no live subclass)."""
+    import time
 
-    susp = TeamPreviewSuspension(
-        message_id=message_id,
-        conversation_id=conversation_id,
-        user_id="u1",
-        captain_run_id="r1",
-        checkpoint_id=f"ck-{message_id}",
-        tool_call_id="tc1",
-        base_system_prompt="sys",
-        user_message="开工",
-        transcript=[],
-        history=[],
-        plan=RunPlan(),
-        workers=[
-            {"run_id": "a", "depends_on": []},
-            {"run_id": "b", "depends_on": []},
-        ],
-        primitive="delegate",
-    )
-    susp.journal_entries = [
+    frame = {
+        "kind": "team_preview",
+        "message_id": message_id,
+        "conversation_id": conversation_id,
+        "user_id": "u1",
+        "captain_run_id": "r1",
+        "checkpoint_id": f"ck-{message_id}",
+        "tool_call_id": "tc1",
+        "base_system_prompt": "sys",
+        "user_message": "开工",
+    }
+    store._write_sync(
+        message_id,
         {
-            "kind": "team_preview_required",
-            "payload": {"checkpoint_id": f"ck-{message_id}"},
-            "ts": None,
-        }
-    ]
-    return susp
+            "message_id": message_id,
+            "conversation_id": conversation_id,
+            "user_id": "u1",
+            "frame": frame,
+            "journal_entries": [
+                {
+                    "kind": "team_preview_required",
+                    "payload": {"checkpoint_id": f"ck-{message_id}"},
+                    "ts": None,
+                }
+            ],
+            "history": [],
+            "summary": {"message_id": message_id, "kind": "team_preview"},
+            "created_at": time.time(),
+        },
+    )
 
 
 def test_resume_refuses_retired_team_preview(tmp_path, monkeypatch):
@@ -686,7 +689,7 @@ def test_resume_refuses_retired_team_preview(tmp_path, monkeypatch):
 
     async def drive() -> list[Any]:
         await _initialize(server, tmp_path, data_dir=str(tmp_path / "data"))
-        await store.save(_team_preview_suspension("m-tp", "c1"))
+        _write_leftover_team_preview(store, "m-tp", "c1")
         await server.handle_line(
             json.dumps(
                 {
@@ -698,10 +701,6 @@ def test_resume_refuses_retired_team_preview(tmp_path, monkeypatch):
                         "conversationId": "c1",
                         "decision": "continue",
                         "note": "",
-                        "excluded_run_ids": ["b"],
-                        "write_capability_overrides": [
-                            {"run_id": "a", "capability": "text_only"}
-                        ],
                     },
                 }
             )
@@ -713,8 +712,8 @@ def test_resume_refuses_retired_team_preview(tmp_path, monkeypatch):
     assert "error" in err
     assert err["error"]["code"] == protocol.INVALID_PARAMS
     assert TEAM_PREVIEW_UNRECOVERABLE in err["error"]["message"]
-    assert remaining
-    assert remaining[0].message_id == "m-tp"
+    assert remaining == []
+    assert (tmp_path / "data" / "paused" / "m-tp.json").exists()
 
 
 def test_resume_rejects_illegal_team_preview_veto(tmp_path, monkeypatch):
@@ -731,7 +730,7 @@ def test_resume_rejects_illegal_team_preview_veto(tmp_path, monkeypatch):
 
     async def drive() -> list[Any]:
         await _initialize(server, tmp_path, data_dir=str(tmp_path / "data"))
-        await store.save(_team_preview_suspension("m-bad", "c1"))
+        _write_leftover_team_preview(store, "m-bad", "c1")
         await server.handle_line(
             json.dumps(
                 {
@@ -757,8 +756,8 @@ def test_resume_rejects_illegal_team_preview_veto(tmp_path, monkeypatch):
     from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
 
     assert TEAM_PREVIEW_UNRECOVERABLE in err["error"]["message"]
-    assert remaining  # frame restored (retired refuse rolls back claim)
-    assert remaining[0].message_id == "m-bad"
+    assert remaining == []
+    assert (tmp_path / "data" / "paused" / "m-bad.json").exists()
     scope = server.folder_scope_for("c1")
     assert scope is None or scope.folder_id != "should-not-stick"
 
@@ -784,7 +783,7 @@ def test_resume_veto_rolls_back_stamped_folder(tmp_path, monkeypatch):
             local_root_id="root-prior",
             local_subpath="sub",
         )
-        await store.save(_team_preview_suspension("m-bad", "c1"))
+        _write_leftover_team_preview(store, "m-bad", "c1")
         await server.handle_line(
             json.dumps(
                 {

@@ -380,7 +380,6 @@ def test_coordination_period_hint_allows_append_forbids_isomorphic():
     assert "三选一" in COORDINATION_PERIOD_HINT
     assert "先" in COORDINATION_PERIOD_HINT and "响应该句" in COORDINATION_PERIOD_HINT
     assert "纯进度播报" in COORDINATION_PERIOD_HINT
-    assert "还在等" in COORDINATION_PERIOD_HINT and "你不用管" in COORDINATION_PERIOD_HINT
     assert "短说谁在后台" not in COORDINATION_PERIOD_HINT
     assert "谁在后台、完成后会再汇报" not in COORDINATION_PERIOD_HINT
     assert "人已派出" not in COORDINATION_PERIOD_HINT  # 派完收束在 host/core，不在协调期 hint

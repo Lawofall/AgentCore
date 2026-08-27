@@ -81,11 +81,6 @@ class ProcessPlanReviewStep(WirePayload):
     checkpoint_id: str
 
 
-class ProcessTeamPreviewStep(WirePayload):
-    kind: Literal["team_preview"]
-    checkpoint_id: str
-
-
 class ProcessEscalationStep(WirePayload):
     """升级卡时间线落点 (统一时间线二期 D1/D2): one escalation's own slot in the CEO
     timeline — required 系三态落于 ``escalation_required``，非阻塞 raised 落于
@@ -129,7 +124,6 @@ PROCESS_STEP_MEMBERS: tuple[type[WirePayload], ...] = (
     ProcessGraphAppendStep,
     ProcessCheckpointStep,
     ProcessPlanReviewStep,
-    ProcessTeamPreviewStep,
     ProcessEscalationStep,
     ProcessApprovalStep,
     ProcessStageCardStep,

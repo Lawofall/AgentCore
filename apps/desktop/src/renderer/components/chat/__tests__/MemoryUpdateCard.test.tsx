@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  EPISODIC_CARD_HEADING,
   EPISODIC_SUMMARY_CLAMP_CHARS,
   MemoryUpdateCard,
 } from "../MemoryUpdateCard";
@@ -74,7 +75,7 @@ describe("MemoryUpdateCard", () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByText("已记下本场摘要")).toBeTruthy();
+    expect(screen.getByText(EPISODIC_CARD_HEADING)).toBeTruthy();
     expect(screen.getByText(/pnpm/)).toBeTruthy();
   });
 

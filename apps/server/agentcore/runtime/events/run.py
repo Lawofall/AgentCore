@@ -764,9 +764,9 @@ def execution_completed(
     host_turn_id: str | None = None,
     error: str | None = None,
 ) -> SSEEvent:
-    """后台执行终态：drive 到齐，收割者可发起系统收口回合。
+    """后台执行终态：drive 到齐，图与状态条收成完成/失败/取消。
 
-    ``status`` mirrors harvest closing kind (success→completed / failure→failed /
+    ``status`` mirrors ``execution_terminal_kind`` (success→completed / failure→failed /
     cancelled→cancelled) so clients fold UI to cancelled/failed instead of
     「团队完成」when the batch was stopped or failed.
     """

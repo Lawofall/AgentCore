@@ -145,7 +145,7 @@ def test_capability_line_git_unassembled_when_desktop_offline():
 
     assert "同轮可开工" in _DEFAULT_SYSTEM_PROMPT
     assert "git…）" in _DEFAULT_SYSTEM_PROMPT  # 统一姿势覆盖 git
-    assert "已提交 Git" in _DEFAULT_SYSTEM_PROMPT  # 未装配禁称已提交
+    assert "勿声称已用未装配能力" in _DEFAULT_SYSTEM_PROMPT
     assert "把该能力的动作写进给队员的任务" in _CEO_CORE_HINT  # 核只留禁派
     # An unassembled turn must not advise a tool the model does not hold.
     assert "init_baseline" not in out

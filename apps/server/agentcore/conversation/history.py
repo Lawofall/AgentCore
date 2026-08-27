@@ -13,8 +13,7 @@ Synthetic harvest user rows (``usage.origin=execution_harvest``, or the
 ``【系统收口】`` prefix on legacy rows) become a short user-role system note.
 The CEO still sees extras (draft / 团队成品) when present; the template lead
 that says the wave "already finished" does not re-enter later windows as a
-bare user utterance. Current-turn harvest still passes the full synthetic
-text as ``user_message``.
+bare user utterance. New turns do not mint these rows.
 
 Empty user turns that carry attachment metadata become a short system note
 listing names / workspace paths, so later turns still see that files were sent.
@@ -32,6 +31,10 @@ from agentcore.conversation.failure_visible import (
     failure_category_label,
     is_failed_empty_assistant,
     usage_of,
+)
+from agentcore.conversation.inline_body import (
+    has_inline_markers,
+    render_inline_labels,
 )
 from agentcore.db.repositories import ConversationRepository, MessageRepository
 
@@ -113,6 +116,19 @@ def _failure_note(categories: list[str], details: list[str] | None = None) -> di
 def _attachments_of(msg: Any) -> list[Any]:
     raw = getattr(msg, "attachments", None)
     return raw if isinstance(raw, list) else []
+
+
+def _mentions_of(msg: Any) -> list[Any]:
+    raw = getattr(msg, "agent_mentions", None)
+    return raw if isinstance(raw, list) else []
+
+
+def _user_content_for_history(msg: Any) -> str:
+    """Past turns: expand pills to labels. Never re-inject file bodies."""
+    content = getattr(msg, "content", None) or ""
+    if has_inline_markers(content):
+        return render_inline_labels(content, _attachments_of(msg), _mentions_of(msg))
+    return content
 
 
 def _attachment_label(att: Any) -> str | None:
@@ -209,7 +225,11 @@ def _fold_history_messages(messages: list[Any]) -> list[dict]:
 
     for msg in messages:
         role = getattr(msg, "role", None)
-        content = getattr(msg, "content", None) or ""
+        content = (
+            _user_content_for_history(msg)
+            if role == "user"
+            else (getattr(msg, "content", None) or "")
+        )
         atts = _attachments_of(msg) if role == "user" else []
         if role == "user" and content:
             flush_failures()
@@ -279,7 +299,12 @@ async def load_recent_history(
     history = []
     for msg in messages:
         if msg.role in ("user", "assistant") and msg.content:
-            item: dict[str, Any] = {"role": msg.role, "content": msg.content}
+            body = (
+                _user_content_for_history(msg)
+                if msg.role == "user"
+                else msg.content
+            )
+            item: dict[str, Any] = {"role": msg.role, "content": body}
             if msg.role == "assistant":
                 ledger = getattr(msg, "evidence_ledger", None)
                 if isinstance(ledger, list) and ledger:

@@ -672,7 +672,7 @@ class SandboxdServer:
             detail = (stderr or b"").decode("utf-8", errors="replace").strip()[:200]
             await self._runsc_aux("delete", "--force", container_id)
             raise RpcDeniedError(
-                detail or "runsc run -d failed",
+                detail or "runsc run -detach failed",
                 code="sandboxd_rpc",
             )
         self._detached.add(container_id)

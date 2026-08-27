@@ -45,7 +45,7 @@ const graphAppend: ProcessStep = {
   host_message_id: "m1",
   added_count: 2,
 };
-const preview: ProcessStep = { kind: "team_preview", checkpoint_id: "tp1" };
+const planReview: ProcessStep = { kind: "plan_review", checkpoint_id: "pr1" };
 
 const live = {
   isStreaming: true,
@@ -63,7 +63,7 @@ describe("graphSlotExecutionId", () => {
   it("resolves nothing for non-slot tails", () => {
     expect(graphSlotExecutionId(undefined)).toBeNull();
     expect(graphSlotExecutionId(toolDone)).toBeNull();
-    expect(graphSlotExecutionId(preview)).toBeNull();
+    expect(graphSlotExecutionId(planReview)).toBeNull();
   });
 });
 
@@ -138,7 +138,7 @@ describe("shouldShowThinkingTail", () => {
     expect(shouldShowThinkingTail({ ...live, last: toolDone })).toBe(true);
     expect(shouldShowThinkingTail({ ...live, last: toolError })).toBe(true);
     expect(shouldShowThinkingTail({ ...live, last: undefined })).toBe(true);
-    expect(shouldShowThinkingTail({ ...live, last: preview })).toBe(true);
+    expect(shouldShowThinkingTail({ ...live, last: planReview })).toBe(true);
   });
 });
 

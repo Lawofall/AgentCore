@@ -1,9 +1,8 @@
-"""file_read / file_list (+ tree rendering) tools."""
+"""file_read / file_list (one-layer LS) tools."""
 
 from __future__ import annotations
 
 import json
-import re
 import time
 from typing import Any
 
@@ -15,7 +14,6 @@ from agentcore.tools.registration import (
     ToolRegistration,
     ToolSurface,
 )
-from agentcore.workspace._paths import AI_ARCHIVE_FILE_SUFFIXES
 from agentcore.workspace.attachment_parse import (
     MARKITDOWN_EXTENSIONS,
     SCAN_NOTICE,
@@ -24,11 +22,6 @@ from agentcore.workspace.attachment_parse import (
     extension_of,
     parsed_copy_path,
 )
-from agentcore.workspace.declared_dirs import (
-    LATENT_EMPTY_LIST_MESSAGE,
-    is_declared_latent_dir,
-)
-from agentcore.workspace.external_mounts import EXTERNAL_PREFIX, parse_external_path
 from agentcore.workspace.file_kind import (
     OLE_WORD_EXTENSIONS,
     decode_text_bytes,
@@ -41,17 +34,13 @@ from agentcore.workspace.limits import (
     is_file_too_large_detail,
 )
 from agentcore.workspace.protocol import (
-    DirEntry,
-    NotADirectory,
     NotAFile,
     OutsideWorkspace,
     PathNotFound,
     ReadHeadResult,
-    TreeEntry,
     WorkspaceError,
     WorkspaceIOError,
 )
-from agentcore.workspace.sparse_listing import should_hide_ai_noise_from_list
 
 from .errors import (
     _error,
@@ -62,6 +51,16 @@ from .errors import (
     _path_missing_error,
     _url_not_workspace_path_error,
     looks_like_http_url,
+)
+from .listing import (
+    LIST_TRUNCATED_NOTE,
+    bare_external_error,
+    empty_list_message,
+    format_ls_lines,
+    is_bare_external_directory,
+    ls_leftover_error,
+    map_listing_failure,
+    visible_list_entries,
 )
 from .observe import (
     binary_next,
@@ -81,22 +80,6 @@ FILE_READ_SAFETY_LINE_CAP = 2000
 FILE_READ_SAFETY_CHAR_CAP = 80_000
 # Alias: folder_fs tests patch this name; value tracks the line cap.
 _DEFAULT_READ_LINES = FILE_READ_SAFETY_LINE_CAP
-
-# Non-recursive ``file_list`` hit the backend's entry ceiling. The recursive branch
-# already footers its own elision through ``_render_file_tree``; this is the flat
-# branch's equivalent — a bounded listing is fine, a silent one is not.
-_LIST_TRUNCATED_NOTE = (
-    "（本层条目已达单次列举上限，还有更多未列出：可用 pattern 收窄，"
-    "或 recursive=true 配合 max_depth 逐层查看。）"
-)
-
-
-def _empty_list_message(directory: str) -> str:
-    """Empty ``file_list`` body — latent declared dirs get auto-create copy."""
-    if is_declared_latent_dir(directory):
-        return LATENT_EMPTY_LIST_MESSAGE
-    return "（空目录）"
-
 
 def _format_numbered_lines(lines: list[str], start_line: int) -> str:
     return "\n".join(
@@ -503,152 +486,6 @@ def _observe_ok(
     )
 
 
-class _TreeNode:
-    __slots__ = ("children", "is_dir", "name")
-
-    def __init__(self, name: str, is_dir: bool) -> None:
-        self.name = name
-        self.is_dir = is_dir
-        self.children: list[_TreeNode] = []
-
-
-_BRACE_GLOB_RE = re.compile(r"\{([^{}]+)\}")
-
-
-def expand_brace_globs(pattern: str) -> list[str]:
-    """Expand one level of ``{a,b}`` alternatives (pathlib globs do not).
-
-    ``*.{ts,tsx}`` → ``['*.ts', '*.tsx']``. Nested / empty braces are left as-is
-    (single-element list). Order is stable; duplicates are dropped.
-    """
-    raw = (pattern or "*").strip() or "*"
-    match = _BRACE_GLOB_RE.search(raw)
-    if match is None:
-        return [raw]
-    alternatives = [part.strip() for part in match.group(1).split(",") if part.strip()]
-    if not alternatives:
-        return [raw]
-    prefix = raw[: match.start()]
-    suffix = raw[match.end() :]
-    expanded: list[str] = []
-    seen: set[str] = set()
-    for alt in alternatives:
-        item = f"{prefix}{alt}{suffix}"
-        if item not in seen:
-            seen.add(item)
-            expanded.append(item)
-    return expanded or [raw]
-
-
-def _pattern_filters(pattern: str) -> bool:
-    """True when ``pattern`` is narrower than「列全部」."""
-    p = (pattern or "*").strip() or "*"
-    return p != "*"
-
-
-_MISSING = object()
-_FILE_LIST_TREE_DEPTH = 3
-_FILE_LIST_NAME_SEARCH_DEPTH = 8
-_FILE_LIST_DEPTH_CAP = 8
-
-
-def _resolve_file_list_walk(arguments: dict[str, Any]) -> tuple[str, bool, int]:
-    """``(pattern, recursive, max_depth)`` — Glob vs ls, explicit args win.
-
-    Omitted ``recursive``: name filter → recurse; ``*`` → current layer only.
-    Omitted ``max_depth``: name-search recurse → 8; tree listing → 3.
-    """
-    pattern = str(arguments.get("pattern", "*") or "*")
-    filtered = _pattern_filters(pattern)
-    raw_recursive = arguments.get("recursive", _MISSING)
-    if raw_recursive is _MISSING or raw_recursive is None:
-        recursive = filtered
-    else:
-        recursive = bool(raw_recursive)
-    raw_depth = arguments.get("max_depth", _MISSING)
-    if raw_depth is _MISSING or raw_depth is None:
-        max_depth = (
-            _FILE_LIST_NAME_SEARCH_DEPTH if (recursive and filtered) else _FILE_LIST_TREE_DEPTH
-        )
-    else:
-        try:
-            max_depth = int(raw_depth)
-        except (TypeError, ValueError):
-            max_depth = (
-                _FILE_LIST_NAME_SEARCH_DEPTH
-                if (recursive and filtered)
-                else _FILE_LIST_TREE_DEPTH
-            )
-    max_depth = max(1, min(max_depth, _FILE_LIST_DEPTH_CAP))
-    return pattern, recursive, max_depth
-
-
-def _pattern_targets_archives(pattern: str) -> bool:
-    """True when glob(s) end with an AI-archive suffix (``*.zip``, ``*.{rar,7z}``…)."""
-    for pat in expand_brace_globs(pattern):
-        lower = (pat or "").lower().rstrip("/")
-        if any(lower.endswith(suf) for suf in AI_ARCHIVE_FILE_SUFFIXES):
-            return True
-    return False
-
-
-def _is_bare_external_directory(directory: str) -> bool:
-    """True for ``external`` / ``external/`` (no alias) — not a listable mount path."""
-    raw = (directory or "").strip().replace("\\", "/").strip("/")
-    return raw == EXTERNAL_PREFIX.rstrip("/")
-
-
-def _looks_like_external_directory(directory: str) -> bool:
-    """Bare ``external`` or any ``external/<alias>/…`` shape (even unknown alias)."""
-    raw = (directory or "").strip().replace("\\", "/").strip("/")
-    if raw == EXTERNAL_PREFIX.rstrip("/") or raw.startswith(EXTERNAL_PREFIX):
-        return True
-    return parse_external_path(directory) is not None
-
-
-def _external_directory_hint(backend: Any) -> str:
-    """Actionable mounts guidance for bare / failed ``external`` list attempts."""
-    guide = (
-        "须使用 `external/<别名>/`（例如 `external/desktop/`）访问已授权区外目录"
-    )
-    mounts = getattr(backend, "_mounts", None) or {}
-    if not mounts:
-        return (
-            f"{guide}；本对话尚无会话级区外目录授权"
-            "（用户经 ask_user grant_* 确认后才会出现 mounts）。"
-        )
-    parts = [f"`external/{a}/`" for a in mounts]
-    return f"{guide}；当前 mounts：{'；'.join(parts)}。"
-
-
-def _no_match_hint(
-    *,
-    pattern: str,
-    directory: str,
-    bare_entries: list,
-    recursive: bool,
-) -> str:
-    """Actionable message when a glob matched nothing in a non-empty directory."""
-    sample_parts: list[str] = []
-    for entry in bare_entries[:8]:
-        sample_parts.append(f"{'d ' if entry.is_dir else 'f '}{entry.path}")
-    sample = "；".join(sample_parts)
-    more = (
-        f" 等共 {len(bare_entries)} 项"
-        if len(bare_entries) > 8
-        else f"（共 {len(bare_entries)} 项）"
-    )
-    tips = ["去掉 pattern", "换更宽的 glob"]
-    if not recursive:
-        tips.insert(0, "设 recursive=true 以搜索子目录")
-    tip_text = "、".join(tips)
-    root = "./" if directory in (".", "") else f"{directory.rstrip('/')}/"
-    return (
-        f"（在 {root} 下无匹配 pattern={pattern!r} 的条目；目录非空{more}。"
-        f"可见顶层示例：{sample}。可{tip_text}。）"
-    )
-
-
 async def _file_not_found_error(
     rel_path: str,
     *,
@@ -662,74 +499,6 @@ async def _file_not_found_error(
         start,
     )
 
-
-def _render_file_tree(
-    entries: list[TreeEntry],
-    directory: str,
-    max_depth: int,
-    truncated: bool,
-    elided_count: int,
-    *,
-    empty_message: str | None = None,
-    warnings: list[str] | None = None,
-) -> str:
-    """Render ``list_tree`` entries as an ASCII tree (``├──`` / ``└──`` / ``│``)."""
-    root_label = "./" if directory == "." else f"{directory.rstrip('/')}/"
-    lines: list[str] = [root_label]
-
-    if not entries:
-        empty = empty_message or "（空目录）"
-        body = f"{root_label}\n{empty}\n\n（{max_depth} 层深度，共 0 条目）"
-        if warnings:
-            body += "\n" + "\n".join(f"⚠ {w}" for w in warnings)
-        return body
-
-    dir_base = "" if directory == "." else directory.rstrip("/")
-    root_name = "." if directory == "." else directory.rstrip("/").split("/")[-1]
-    root = _TreeNode(root_name, True)
-
-    for entry in sorted(entries, key=lambda e: e.path.lower()):
-        parts = entry.path.split("/")
-        if dir_base:
-            base_parts = dir_base.split("/")
-            if parts[: len(base_parts)] != base_parts:
-                continue
-            parts = parts[len(base_parts) :]
-        if not parts:
-            continue
-
-        current = root
-        for i, part in enumerate(parts):
-            is_last = i == len(parts) - 1
-            child = next((c for c in current.children if c.name == part), None)
-            if child is None:
-                child = _TreeNode(part, entry.is_dir if is_last else True)
-                current.children.append(child)
-            elif is_last:
-                child.is_dir = entry.is_dir
-            current = child
-
-    def emit(children: list[_TreeNode], prefix: str) -> None:
-        ordered = sorted(children, key=lambda n: (not n.is_dir, n.name.lower()))
-        for i, child in enumerate(ordered):
-            is_last = i == len(ordered) - 1
-            branch = "└── " if is_last else "├── "
-            extension = "    " if is_last else "│   "
-            name = f"{child.name}/" if child.is_dir else child.name
-            lines.append(prefix + branch + name)
-            if child.children:
-                emit(child.children, prefix + extension)
-
-    emit(root.children, "")
-
-    footer = f"\n\n（{max_depth} 层深度，共 {len(entries)} 条目"
-    if truncated and elided_count:
-        footer += f"；另有 {elided_count} 个条目因深度/预算未展开"
-    footer += "）"
-    out = "\n".join(lines) + footer
-    if warnings:
-        out += "\n" + "\n".join(f"⚠ {w}" for w in warnings)
-    return out
 
 def _note_file_read_success(
     context: ToolContext,
@@ -842,7 +611,7 @@ class FileReadTool:
                 "PDF 每窗约 40 页；后面的页用 start_page 再读（offset/limit 仍是抽出文本的行号）。"
                 "禁止无目标地整目录逐文件通读。"
                 "看源码正文用本工具，勿改走 code_execute print/dump。"
-                "含糊「根」/ `.` / 仅根标签勿当文件整读——先 file_list/grep 钉真实路径。"
+                "含糊「根」/ `.` / 仅根标签勿当文件整读——先 glob/grep 钉真实路径。"
                 "回执为编号行；未截断页脚「全文 N 行」，截断为「第 a–b 行，共 N 行」"
                 "并标明行顶或字符顶（视图截断非磁盘残缺，勿把页脚当正文去 str_replace）。"
                 "同一相对路径本 run 对成功 file_read 有次数上限（从第 1 行要满安全顶的整读计次；"
@@ -1335,7 +1104,7 @@ class FileReadTool:
 
 
 class FileListTool:
-    """List files in a directory within the workspace."""
+    """List the current layer of a known workspace directory (never glob)."""
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
@@ -1348,14 +1117,9 @@ class FileListTool:
         return ToolSchema(
             name="file_list",
             description=(
-                "按【文件名】查找（主用法）：省略 directory，传入 pattern（如 `*.tsx`、"
-                "`*Message*`）。pattern 不是 `*` 时默认递归整棵树（深度顶 8），只列出"
-                "匹配的名字——不要为了找文件先猜目录。"
-                "pattern 省略或 `*`：只列 directory 当前层（默认 `.`）。"
-                "显式 recursive / max_depth 覆盖上述默认。"
-                "支持 `{ts,tsx}` 花括号二选一。"
-                "区外目录须 `external/<别名>/`（勿传裸 `external`）；"
-                "大 zip 持久展开请用 archive_extract，勿假定仅靠 code_execute 解压即工作区可见。"
+                "列出一个已知目录的当前层（默认工作区根）。"
+                "按文件名在整棵树上查找请用 glob。"
+                "区外目录须 `external/<别名>/`（勿传裸 `external`）。"
             ),
             parameters={
                 "type": "object",
@@ -1366,33 +1130,9 @@ class FileListTool:
                             "工作区相对 POSIX 目录（默认 `.`=整仓根；`/<根标签>/…` 与裸 `/`、"
                             "`\\` 视为根；区外授权目录用 `external/<别名>/`，禁止裸 `external`；"
                             "其它绝对路径拒绝。）"
-                            "按名查找时省略本参数，不要猜测 src/、@scope、app/。"
+                            "只填本回合已证实存在的目录。"
                         ),
                         "default": ".",
-                    },
-                    "pattern": {
-                        "type": "string",
-                        "description": (
-                            "按文件名过滤的 glob（如 '*.py'、'*.{ts,tsx}'）。"
-                            "非 `*` 时默认递归查找；省略或 `*` 只列当前层。"
-                        ),
-                        "default": "*",
-                    },
-                    "recursive": {
-                        "type": "boolean",
-                        "description": (
-                            "是否递归子目录。省略时：pattern 非 `*` 则递归；"
-                            "pattern 为 `*` 则只列当前层。显式 true/false 始终生效。"
-                        ),
-                    },
-                    "max_depth": {
-                        "type": "integer",
-                        "description": (
-                            "递归最大深度（仅递归时生效）。省略时：按名查找默认 8，"
-                            "列树默认 3。上限 8。"
-                        ),
-                        "minimum": 1,
-                        "maximum": 8,
                     },
                 },
                 "required": [],
@@ -1403,191 +1143,37 @@ class FileListTool:
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         start = time.monotonic()
-        directory = arguments.get("directory", ".")
-        pattern, recursive, max_depth = _resolve_file_list_walk(arguments)
-        patterns = expand_brace_globs(str(pattern))
-        reveal_archives = _pattern_targets_archives(str(pattern))
+        leftover = ls_leftover_error(arguments, start)
+        if leftover is not None:
+            return leftover
 
-        if _is_bare_external_directory(str(directory)):
-            return _error(
-                f"directory={directory!r} 无效：裸 `external` 不是可列目录。"
-                + _external_directory_hint(context.backend),
-                start,
-            )
+        directory = str(arguments.get("directory") or ".").strip() or "."
+        if is_bare_external_directory(directory):
+            return bare_external_error(directory, context.backend, start)
 
         from agentcore.workspace.project_shell import rewrite_project_shell_relpath
 
         directory, _shell_note = await rewrite_project_shell_relpath(
-            str(directory or "."), context, register=False
+            directory, context, register=False
         )
         if not directory:
             directory = "."
 
-        prev_reveal = getattr(context.backend, "ai_list_reveal_archives", False)
-        if reveal_archives:
-            context.backend.ai_list_reveal_archives = True
         try:
-            if recursive:
-                merged: dict[str, TreeEntry] = {}
-                truncated = False
-                elided_count = 0
-                soft_warnings: list[str] = []
-                for pat in patterns:
-                    tree = await context.backend.list_tree(
-                        directory, pattern=pat, max_depth=max_depth
-                    )
-                    for entry in tree.entries:
-                        merged[entry.path] = entry
-                    truncated = truncated or tree.truncated
-                    elided_count += tree.elided_count
-                    soft_warnings.extend(tree.warnings)
-                entries_tree = list(merged.values())
-                empty_message = None
-                if not entries_tree and _pattern_filters(str(pattern)):
-                    bare = [
-                        e
-                        for e in await context.backend.list(directory, "*")
-                        if e.is_dir
-                        or not should_hide_ai_noise_from_list(
-                            e.path,
-                            materials=context.material_paths,
-                            reveal_archives=reveal_archives,
-                        )
-                    ]
-                    if bare:
-                        empty_message = _no_match_hint(
-                            pattern=str(pattern),
-                            directory=str(directory),
-                            bare_entries=bare,
-                            recursive=True,
-                        )
-                if empty_message is None and not entries_tree:
-                    empty_message = _empty_list_message(str(directory))
-                # Dedupe soft warnings while preserving order.
-                uniq_warnings: list[str] = []
-                seen_w: set[str] = set()
-                for w in soft_warnings:
-                    if w in seen_w:
-                        continue
-                    seen_w.add(w)
-                    uniq_warnings.append(w)
-                output = _render_file_tree(
-                    entries_tree,
-                    directory,
-                    max_depth,
-                    truncated,
-                    elided_count,
-                    empty_message=empty_message,
-                    warnings=uniq_warnings,
-                )
-            else:
-                # ``list`` is shared with user UI (system-noise only); strip AI
-                # noise here so media/archives don't pollute the agent view —
-                # except under ``attachments/``, this-turn ``material_paths``,
-                # ``external/<alias>/`` archives, or pattern-targeted archives.
-                seen: set[str] = set()
-                entries: list[DirEntry] = []
-                list_truncated = False
-                for pat in patterns:
-                    listing = await context.backend.list(directory, pat)
-                    list_truncated = list_truncated or listing.truncated
-                    for dir_entry in listing.entries:
-                        if dir_entry.path in seen:
-                            continue
-                        if dir_entry.is_dir or not should_hide_ai_noise_from_list(
-                            dir_entry.path,
-                            materials=context.material_paths,
-                            reveal_archives=reveal_archives,
-                        ):
-                            seen.add(dir_entry.path)
-                            entries.append(dir_entry)
-                if entries:
-                    output = "\n".join(
-                        f"{'d ' if e.is_dir else 'f '}{e.path}" for e in entries
-                    )
-                elif _pattern_filters(str(pattern)):
-                    bare = [
-                        e
-                        for e in await context.backend.list(directory, "*")
-                        if e.is_dir
-                        or not should_hide_ai_noise_from_list(
-                            e.path,
-                            materials=context.material_paths,
-                            reveal_archives=reveal_archives,
-                        )
-                    ]
-                    if bare:
-                        output = _no_match_hint(
-                            pattern=str(pattern),
-                            directory=str(directory),
-                            bare_entries=bare,
-                            recursive=False,
-                        )
-                    else:
-                        output = _empty_list_message(str(directory))
-                else:
-                    output = _empty_list_message(str(directory))
-                # A capped listing must say so even when every surviving entry was
-                # AI noise — otherwise「空目录」is a flat lie about a full directory.
-                if list_truncated:
-                    output += f"\n\n{_LIST_TRUNCATED_NOTE}"
-        except OutsideWorkspace as e:
-            return _outside_workspace_error(
-                directory, start, location=context.backend.location, reason=str(e)
+            listing = await context.backend.list(directory, "*")
+            entries = visible_list_entries(
+                list(listing.entries),
+                materials=context.material_paths,
             )
-        except NotADirectory:
-            if _looks_like_external_directory(str(directory)):
-                return _error(
-                    f"不是可列的区外目录：{directory}。"
-                    + _external_directory_hint(context.backend),
-                    start,
-                )
-            # Local/channel backends may still raise for missing declared dirs.
-            if is_declared_latent_dir(str(directory)):
-                return ToolResult(
-                    tool_call_id="",
-                    success=True,
-                    output=_empty_list_message(str(directory)),
-                    duration_ms=int((time.monotonic() - start) * 1000),
-                )
-            # ServerWorkspace.list maps missing paths to NotADirectory (not PathNotFound).
-            base = f"不是目录：{directory}"
-            return _path_missing_error(
-                await enrich_missing_path_message(context, str(directory), base=base),
-                start,
+            output = (
+                format_ls_lines(entries) if entries else empty_list_message(directory)
             )
-        except PathNotFound:
-            if _looks_like_external_directory(str(directory)):
-                return _path_missing_error(
-                    f"区外路径不存在或未授权：{directory}。"
-                    + _external_directory_hint(context.backend),
-                    start,
-                )
-            if is_declared_latent_dir(str(directory)):
-                return ToolResult(
-                    tool_call_id="",
-                    success=True,
-                    output=_empty_list_message(str(directory)),
-                    duration_ms=int((time.monotonic() - start) * 1000),
-                )
-            base = f"列目录失败：路径不存在：{directory}"
-            return _path_missing_error(
-                await enrich_missing_path_message(context, str(directory), base=base),
-                start,
-            )
+            if listing.truncated:
+                output += f"\n\n{LIST_TRUNCATED_NOTE}"
         except WorkspaceError as e:
-            dead = _maybe_channel_dead_error(e, start)
-            if dead is not None:
-                return dead
-            if _looks_like_external_directory(str(directory)):
-                return _error(
-                    f"列目录失败：{e}。" + _external_directory_hint(context.backend),
-                    start,
-                    user_face=False,
-                )
-            return _error(f"列目录失败：{e}", start, user_face=False)
-        finally:
-            context.backend.ai_list_reveal_archives = prev_reveal
+            return await map_listing_failure(
+                e, directory=directory, context=context, start=start
+            )
 
         return ToolResult(
             tool_call_id="",

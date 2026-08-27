@@ -590,7 +590,7 @@ def test_audit_and_debate_gates_suppressed_when_ceiling_hit(monkeypatch):
 
 
 def test_should_audit_gate_skips_without_hard_when_ceiling_off(monkeypatch):
-    """Substantial parallel_brief-style batch must not soft-nudge without audit_hard."""
+    """Substantial map_fanout-style batch must not soft-nudge without audit_hard."""
     from agentcore.runtime.engine.governance import should_audit_gate
     from agentcore.runtime.loop_controller import LoopController
 

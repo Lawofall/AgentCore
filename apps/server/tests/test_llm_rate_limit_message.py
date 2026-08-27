@@ -66,6 +66,18 @@ def test_rate_limit_error_zh_message_short_retry_unattested():
     assert ctx is None or ctx.get("retry_after") is None
 
 
+def test_rate_limit_error_zh_message_short_retry_unattested_byok():
+    """无头短 429 + 用户 Key：点名服务商，仍不报秒数、不编恢复时刻。"""
+    e = LLMRateLimitError(retry_after=12, credential_source="user")
+    assert e.code == ErrorCode.LLM_RATE_LIMIT
+    assert e.message == "你接入的服务商暂时限流，本回合无法继续。请稍后再试。"
+    assert "12" not in e.message
+    assert "额度" not in e.message
+    assert "恢复" not in e.message
+    ctx = error_context_from(e)
+    assert ctx is None or ctx.get("retry_after") is None
+
+
 def test_rate_limit_error_zh_message_short_retry_attested():
     e = LLMRateLimitError(retry_after=12, retry_after_source=RETRY_AFTER_FROM_HEADER)
     assert e.code == ErrorCode.LLM_RATE_LIMIT
@@ -123,12 +135,19 @@ def test_exactly_at_ceiling_keeps_the_retryable_seconds_copy(source):
     assert "点重试" not in err.message
 
 
-@pytest.mark.parametrize("source", [None, "user", "platform"])
-def test_exactly_at_ceiling_unattested_does_not_invent_seconds(source):
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (None, "上游限流，暂时无法继续本回合。请稍后再试。"),
+        ("platform", "上游限流，暂时无法继续本回合。请稍后再试。"),
+        ("user", "你接入的服务商暂时限流，本回合无法继续。请稍后再试。"),
+    ],
+)
+def test_exactly_at_ceiling_unattested_does_not_invent_seconds(source, expected):
     err = upstream_rate_limit_error(MAX_RETRY_AFTER, credential_source=source, now=_NOW)
     assert isinstance(err, LLMRateLimitError)
     assert err.retryable is True
-    assert err.message == "上游限流，暂时无法继续本回合。请稍后再试。"
+    assert err.message == expected
     assert "30" not in err.message
 
 

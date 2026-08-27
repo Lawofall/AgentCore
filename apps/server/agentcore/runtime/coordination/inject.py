@@ -7,6 +7,12 @@ from agentcore.conversation.mentions import (
     resolve_interjection_mentions,
 )
 from agentcore.llm.provider.protocol import LLMMessage
+from agentcore.runtime.coordination.cancel_close import (
+    cancel_close_line,
+    cancel_discipline_sentence,
+    cancel_event_headline,
+    classify_cancel_close,
+)
 from agentcore.runtime.coordination.pipeline_view import (
     format_idle_yield_brief,
     format_pipeline_progress,
@@ -22,13 +28,13 @@ _COORD_HINT_CLOSED_TAIL = "全部完成后做最终合成（正文），然后�
 
 # Independent-review / audit-package roles (playbook stamps). Not 调研/方向专员.
 _AUDIT_REVIEW_ROLE_MARKERS = ("审校", "审计")
-# code_audit = 审计套餐; research_report = 成文专线（用户点名审校的结构戳）.
-_AUDIT_PLAYBOOKS = frozenset({"code_audit", "research_report"})
+# code_audit = 审计套餐; cite_write_review = 成文专线（用户点名审校的结构戳）.
+_AUDIT_PLAYBOOKS = frozenset({"code_audit", "cite_write_review"})
 _AUDIT_NUDGE = (
     "质量面敏感成品（成篇/构建/审查类）若未经独立审计，先派审计再收尾。"
 )
 
-_HARVEST_CLOSE_LINE = {
+_TEAM_CLOSE_LINE = {
     "success": (
         "本波结果按终稿纪律向用户交代（走 content_delta）；"
         "活没干完就接着干，不需要后续动作则按终稿交付即可。"
@@ -40,7 +46,7 @@ _HARVEST_CLOSE_LINE = {
     "cancelled": (
         "按终稿纪律基于已完成部分向用户交代（走 content_delta）；"
         "说明已取消，调度已停，不要接着派活。"
-    ),
+    ),  # fallback; live cancel close_line uses classify_cancel_close
     "soft_stop": (
         "按终稿纪律向用户交代当前进展与待决问题（走 content_delta）；"
         "等用户拍板后再继续，不要自行接着干。"
@@ -57,7 +63,7 @@ def _user_facts_dict(session: CoordinationSession, payload: dict) -> dict:
 
 
 def _accepted_landing_paths(session: CoordinationSession, payload: dict) -> list[str]:
-    """Accepted relative paths from harvest user_facts (CEO inject only)."""
+    """Accepted relative paths from execution user_facts (CEO inject only)."""
     facts = _user_facts_dict(session, payload)
     files = facts.get("files") or []
     if not isinstance(files, list):
@@ -101,7 +107,7 @@ def _playbook_is_audit_package(payload: dict, facts: dict) -> bool:
 def _wave_wants_audit_nudge(session: CoordinationSession, payload: dict) -> bool:
     """True when this wave is audit-shaped (playbook / form / review role).
 
-    Does not scan user prose or wrap-up wording. parallel_brief and ordinary
+    Does not scan user prose or wrap-up wording. map_fanout and ordinary
     writing (no review node / audit playbook / reviews/ form) stay off.
     """
     facts = _user_facts_dict(session, payload)
@@ -127,13 +133,15 @@ def _wave_wants_audit_nudge(session: CoordinationSession, payload: dict) -> bool
     return False
 
 
-def _harvest_close_kind(
+def _team_close_kind(
     session: CoordinationSession,
     events: list[CoordinationEvent],
 ) -> str:
-    """Wording key for harvest inject close_line. Not a persisted harvest_kind."""
+    """Wording key for inject close_line after ALL_COMPLETED / cancel."""
     if session.soft_stop:
         return "soft_stop"
+    if session.user_stopped:
+        return "cancelled"
     if any(ev.kind is CoordinationEventKind.DRIVE_CANCELLED for ev in events):
         return "cancelled"
     for ev in events:
@@ -196,6 +204,20 @@ def _format_ownership_escalation_hint(payload: dict) -> str:
     return "；" + "；".join(bits) + "。"
 
 
+def _capability_dead_inject_lines(session: CoordinationSession) -> list[str]:
+    """Sticky capability-missing facts for CEO inject (soft steer, not a new hard gate).
+
+    Mirrors channel_dead / exec_env_dead user-visible copy. Does not scan task
+    prose. user_stop close wording is independent and stays on cancel_close.
+    """
+    from agentcore.workspace.limits import capability_dead_inject_lines
+
+    return capability_dead_inject_lines(
+        workspace_channel_dead=bool(getattr(session, "workspace_channel_dead", False)),
+        exec_env_dead=bool(getattr(session, "exec_env_dead", False)),
+    )
+
+
 def format_coordination_events(
     session: CoordinationSession,
     events: list[CoordinationEvent],
@@ -206,8 +228,9 @@ def format_coordination_events(
     if session.live_plan is not None or session.total_workers > 0:
         lines.append(format_pipeline_progress(session))
         lines.append("")
+    lines.extend(_capability_dead_inject_lines(session))
     for ev in events:
-        lines.append(_format_one(session, ev))
+        lines.append(_format_one(session, ev, events))
     # 疑似缺依赖提示（builder.suspect_missing_dep 搭车）：随本批事件一并呈现，不新增唤醒。
     if session.dep_advisories:
         lines.append("")
@@ -219,20 +242,53 @@ def format_coordination_events(
     lines.append("")
     from agentcore.runtime.resolve.ceo_surface import COORDINATION_PERIOD_HINT
 
-    first_turn_all_completed = (not session.harvest_closing) and any(
-        ev.kind is CoordinationEventKind.ALL_COMPLETED for ev in events
+    closing_now = any(
+        ev.kind
+        in (
+            CoordinationEventKind.ALL_COMPLETED,
+            CoordinationEventKind.DRIVE_CANCELLED,
+        )
+        for ev in events
     )
-    # 首回合 ALL_COMPLETED 与 harvest 收口同为「现在写终稿」：剥掉未来时尾巴，
-    # 避免与 close_line 自相矛盾（旧文案曾一边说合成、一边说本回合勿做）。
-    closing_now = session.harvest_closing or first_turn_all_completed
+    # 终态：现在写终稿，剥掉未来时尾巴，避免与 close_line 自相矛盾。
     hint = COORDINATION_PERIOD_HINT
     if closing_now and hint.endswith(_COORD_HINT_CLOSED_TAIL):
         hint = hint[: -len(_COORD_HINT_CLOSED_TAIL)].rstrip()
     lines.append(hint)
-    if closing_now:
-        close_line = _HARVEST_CLOSE_LINE[_harvest_close_kind(session, events)]
+    from agentcore.runtime.interaction_orphan import (
+        format_hot_pending_hold_line,
+        holds_for_hot_user,
+    )
+
+    cancel_kind = classify_cancel_close(session, events)
+    if holds_for_hot_user(session):
+        close_line = format_hot_pending_hold_line(session.conversation_id)
+    elif closing_now:
+        terminal_kind = _team_close_kind(session, events)
+        if terminal_kind == "cancelled" and cancel_kind is not None:
+            close_line = cancel_close_line(cancel_kind)
+        else:
+            close_line = _TEAM_CLOSE_LINE[terminal_kind]
     else:
         close_line = "全部完成后做最终合成（走 content_delta），然后退出协调。"
+    discipline = (
+        "【终稿纪律】最终合成是给用户的交付、不是协调日志：交付物在前，过程简述从简；"
+        "协调态进度旁白不得焊进终稿 content；以上协调事件、队员终态名册、escalation 原文"
+        "与合成草稿是你的工作输入，禁止整段粘进终稿——草稿要用也须重写成交付口吻；"
+        "未交付的承诺产物须显式列出，不得含糊带过。"
+    )
+    extra = ""
+    if (
+        not holds_for_hot_user(session)
+        and cancel_kind is not None
+        and (
+            closing_now
+            or any(ev.kind is CoordinationEventKind.DRIVE_CANCELLED for ev in events)
+        )
+    ):
+        extra = cancel_discipline_sentence(cancel_kind, session)
+    if extra:
+        discipline += extra
     lines.append(
         "先判断本批事件要不要你出手：带指令的事件"
         "（阻塞仲裁 / 边界让出 / 插话 / 全部完成 / 队员失败）"
@@ -242,7 +298,6 @@ def format_coordination_events(
         "也勿用用户可见正文复述进度（【可静默】）。"
         "无需处置时调 wait（或空响应、不写正文），等下一批事件即可——"
         "禁止用 delegate / update_synthesis 占位等待。"
-        "禁止「还在等/你不用管」当终稿。"
         "对用户开口仅三选一：请示用户 / 报告阻塞与选项 / 宣布阶段结论（非纯进度）。"
         "可用工具：wait 确认等待；cancel_worker(run_id, reason) 终止队员；"
         "delegate 再派【全新角色/任务】队员（同回合追加进同一张协作图，不必等全队完成；"
@@ -255,10 +310,7 @@ def format_coordination_events(
         "一波/一阶段收束、终稿收束；禁止纯进度播报；例行的单个 worker 完成【不写】"
         "（进度已由系统自动呈现），微调措辞更不算里程碑。"
         f"{close_line}"
-        "【终稿纪律】最终合成是给用户的交付、不是协调日志：交付物在前，过程简述从简；"
-        "协调态进度旁白不得焊进终稿 content；以上协调事件、队员终态名册、escalation 原文"
-        "与合成草稿是你的工作输入，禁止整段粘进终稿——草稿要用也须重写成交付口吻；"
-        "未交付的承诺产物须显式列出，不得含糊带过。"
+        f"{discipline}"
     )
     return "\n".join(lines)
 
@@ -286,7 +338,11 @@ def idle_yield_messages(session: CoordinationSession) -> list[LLMMessage]:
     return [LLMMessage(role="user", content=format_idle_yield_brief(session))]
 
 
-def _format_one(session: CoordinationSession, ev: CoordinationEvent) -> str:
+def _format_one(
+    session: CoordinationSession,
+    ev: CoordinationEvent,
+    events: list[CoordinationEvent] | None = None,
+) -> str:
     p = ev.payload
     if ev.kind is CoordinationEventKind.WORKER_COMPLETED:
         role = p.get("role") or p.get("run_id") or "?"
@@ -348,15 +404,20 @@ def _format_one(session: CoordinationSession, ev: CoordinationEvent) -> str:
         done = p.get("completed", 0)
         total = p.get("total", session.total_workers)
         failed = p.get("failed")
-        if p.get("cancelled") or p.get("error"):
+        # Live drive may omit payload.cancelled; session stamps are the source.
+        cancel_kind = classify_cancel_close(session, events)
+        if cancel_kind or p.get("cancelled") or p.get("error"):
+            kind = cancel_kind or "cancelled"
             lines = [
-                f"- all_completed：调度中断，基于已完成部分收口（{done}/{total}）。"
+                cancel_event_headline(
+                    kind, prefix="team_cancelled", done=done, total=total
+                )
             ]
         elif p.get("criteria_met") is False:
             failed_n = failed if isinstance(failed, int) else 0
             lines = [
                 f"- all_completed：团队调度结束（完成 {done}/{total}，失败 {failed_n}），"
-                "但批次验收未满足——不得视为成功交付；请按缺口说明处理，"
+                "有队员失败则不得视为成功交付；请按缺口说明处理，"
                 "勿向用户宣称全部完成。"
                 "调度已结束：勿再启同服，优先复用已有进程或只补浏览器。"
             ]
@@ -371,17 +432,7 @@ def _format_one(session: CoordinationSession, ev: CoordinationEvent) -> str:
                 "请按终稿纪律报告本波结果。"
             ]
         output = p.get("output")
-        embedded = (session.harvest_user_embedded_output or "").strip()
-        # Same ALL_COMPLETED.output already sits in the synthetic harvest user row
-        # (落库可查). Re-inject only when the user text did not embed it (empty
-        # output at format time, output == draft, later new product).
-        already_embedded = bool(
-            session.harvest_closing
-            and embedded
-            and isinstance(output, str)
-            and output.strip() == embedded
-        )
-        if isinstance(output, str) and output.strip() and not already_embedded:
+        if isinstance(output, str) and output.strip():
             lines.append(f"团队成品：\n{output.strip()}")
         landing = _accepted_landing_paths(session, p)
         if landing:
@@ -390,25 +441,35 @@ def _format_one(session: CoordinationSession, ev: CoordinationEvent) -> str:
                 f"已接受落盘：{listed}。"
                 "概览须点名这些工作区相对路径；禁止整段粘贴本清单当产物卡。"
             )
-        if not (p.get("cancelled") or p.get("error")) and _wave_wants_audit_nudge(
-            session, p
+        if (
+            not cancel_kind
+            and not p.get("cancelled")
+            and not p.get("error")
+            and _wave_wants_audit_nudge(session, p)
         ):
             lines.append(_AUDIT_NUDGE)
-        if not already_embedded:
-            # The synthesis package ends with its own【终稿纪律】; only restate it
-            # when that package is not already in front of the model.
-            lines.append(
-                "最终合成按【终稿纪律】写：交付物在前、过程简述从简，"
-                "不粘贴协调事件 / 队员终态名册 / escalation 原文 / 中间合成草稿；"
-                "未交付的承诺产物显式列出。"
-            )
+        lines.append(
+            "最终合成按【终稿纪律】写：交付物在前、过程简述从简，"
+            "不粘贴协调事件 / 队员终态名册 / escalation 原文 / 中间合成草稿；"
+            "未交付的承诺产物显式列出。"
+        )
         return "\n".join(lines)
     if ev.kind is CoordinationEventKind.DRIVE_CANCELLED:
+        from agentcore.runtime.interaction_orphan import (
+            format_hot_pending_hold_line,
+            holds_for_hot_user,
+        )
+
+        if holds_for_hot_user(session):
+            return f"- {format_hot_pending_hold_line(session.conversation_id)}"
         done = p.get("completed", 0)
         total = p.get("total", session.total_workers)
+        kind = classify_cancel_close(session, events) or "drive_cancelled"
         return (
-            f"- drive_cancelled：调度中断，基于已完成部分收口（{done}/{total}）。"
-            "请基于已完成队员产出做最终合成并收口；未完成部分勿当作已交付。"
+            cancel_event_headline(
+                kind, prefix="drive_cancelled", done=done, total=total
+            )
+            + "请基于已完成队员产出做最终合成并收口；未完成部分勿当作已交付。"
         )
     if ev.kind is CoordinationEventKind.BOUNDARY_YIELD:
         reason = p.get("reason") or "?"

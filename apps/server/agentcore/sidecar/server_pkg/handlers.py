@@ -785,7 +785,20 @@ class HandlerMixin:
         if await self._reject_if_missing_inference(request_id, op="resume"):
             return
 
-        suspension = await self._paused_store.claim(message_id, conversation_id=conversation_id)
+        from agentcore.core.errors import GoneError
+        from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
+
+        try:
+            suspension = await self._paused_store.claim(
+                message_id, conversation_id=conversation_id
+            )
+        except GoneError:
+            await self._send(
+                protocol.make_error(
+                    request_id, protocol.INVALID_PARAMS, TEAM_PREVIEW_UNRECOVERABLE
+                )
+            )
+            return
         if suspension is None:
             await self._send(
                 protocol.make_error(
@@ -798,9 +811,6 @@ class HandlerMixin:
         decision = parsed["decision"]
         note = parsed["note"]
         selected = parsed["selected"]
-        excluded_run_ids = parsed["excluded_run_ids"]
-        write_capability_overrides = parsed["write_capability_overrides"]
-        model_overrides = parsed["model_overrides"]
         trace_id = parsed["trace_id"]
         user_message_id = parsed["user_message_id"]
         # Per-turn account id wins over the freeze-in-frame value (probe may have
@@ -812,40 +822,14 @@ class HandlerMixin:
         from agentcore.sidecar.server_pkg.turns import apply_rpc_folder_binding_to_suspension
 
         apply_rpc_folder_binding_to_suspension(suspension, params)
-        from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
-        from agentcore.runtime.suspension import TeamPreviewSuspension
-
-        if isinstance(suspension, TeamPreviewSuspension):
-            await self._paused_store.rollback_claim(message_id)
-            await self._send(
-                protocol.make_error(
-                    request_id, protocol.INVALID_PARAMS, TEAM_PREVIEW_UNRECOVERABLE
-                )
-            )
-            return
         folder_cid = str(getattr(suspension, "conversation_id", "") or "")
-        prior_folder = self.stamp_folder_scope(
+        self.stamp_folder_scope(
             folder_cid,
             folder_id=getattr(suspension, "folder_id", None),
             binding_injected=bool(getattr(suspension, "folder_binding_injected", False)),
             local_root_id=getattr(suspension, "folder_local_root_id", None),
             local_subpath=str(getattr(suspension, "folder_local_subpath", "") or ""),
         )
-
-        veto_err = self._validate_resume_team_veto(
-            suspension,
-            decision,
-            excluded_run_ids=excluded_run_ids,
-            write_capability_overrides=write_capability_overrides,
-            model_overrides=model_overrides,
-        )
-        if veto_err is not None:
-            self.restore_folder_scope(folder_cid, prior_folder)
-            await self._paused_store.rollback_claim(message_id)
-            await self._send(
-                protocol.make_error(request_id, protocol.INVALID_PARAMS, veto_err)
-            )
-            return
 
         task = asyncio.create_task(
             self._run_resume(
@@ -857,9 +841,6 @@ class HandlerMixin:
                 trace_id,
                 user_message_id,
                 params.get("externalMounts"),
-                excluded_run_ids=excluded_run_ids,
-                write_capability_overrides=write_capability_overrides,
-                model_overrides=model_overrides,
             )
         )
         self._register_turn(message_id, task, conversation_id=conversation_id)
@@ -868,92 +849,13 @@ class HandlerMixin:
         decision = parse_decision(params.get("decision"))
         note = str(params.get("note") or "")
         selected = [str(s) for s in (params.get("selected") or [])]
-        # 开工组队有限否决（对齐云 POST resume）：仅 delegate team_preview continue 生效。
-        excluded_run_ids = [
-            str(x).strip()
-            for x in (params.get("excluded_run_ids") or [])
-            if str(x).strip()
-        ]
-        write_capability_overrides: list[dict[str, str]] = []
-        for raw in params.get("write_capability_overrides") or []:
-            if not isinstance(raw, dict):
-                continue
-            rid = str(raw.get("run_id") or "").strip()
-            cap = str(raw.get("capability") or "").strip()
-            if rid:
-                write_capability_overrides.append({"run_id": rid, "capability": cap})
-        model_overrides: dict[str, dict[str, str]] = {}
-        raw_models = params.get("model_overrides") or {}
-        if isinstance(raw_models, dict):
-            for rid, row in raw_models.items():
-                key = str(rid or "").strip()
-                if not key or not isinstance(row, dict):
-                    continue
-                model = str(row.get("model") or "").strip()
-                if not model:
-                    continue
-                entry: dict[str, str] = {"model": model}
-                origin = str(row.get("origin") or "").strip().lower()
-                if origin in ("platform", "byok"):
-                    entry["origin"] = origin
-                provider_id = str(row.get("provider_id") or "").strip()
-                if provider_id:
-                    entry["provider_id"] = provider_id
-                model_overrides[key] = entry
         return {
             "decision": decision,
             "note": note,
             "selected": selected,
-            "excluded_run_ids": excluded_run_ids,
-            "write_capability_overrides": write_capability_overrides,
-            "model_overrides": model_overrides,
             "trace_id": str(params.get("traceId") or ""),
             "user_message_id": str(params.get("userMessageId") or "").strip(),
         }
-
-    @staticmethod
-    def _validate_resume_team_veto(
-        suspension: Any,
-        decision: Any,
-        *,
-        excluded_run_ids: list[str],
-        write_capability_overrides: list[dict[str, str]],
-        model_overrides: dict[str, dict[str, str]],
-    ) -> str | None:
-        """Return an error message when team veto / debate overrides are illegal."""
-        from agentcore.core.errors import ValidationError as CoreValidationError
-        from agentcore.runtime.kickoff.team_veto import (
-            should_apply_debate_model_overrides,
-            should_apply_team_veto,
-            validate_debate_model_overrides,
-            validate_team_preview_veto_workers,
-        )
-        from agentcore.runtime.suspension import TeamPreviewSuspension
-
-        if should_apply_team_veto(suspension, decision) and isinstance(
-            suspension, TeamPreviewSuspension
-        ):
-            try:
-                validate_team_preview_veto_workers(
-                    suspension.workers,
-                    excluded_run_ids=excluded_run_ids,
-                    write_capability_overrides=write_capability_overrides,
-                    model_overrides=model_overrides,
-                )
-            except CoreValidationError as e:
-                return str(e)
-        elif isinstance(suspension, TeamPreviewSuspension) and should_apply_debate_model_overrides(
-            suspension, decision
-        ):
-            try:
-                validate_debate_model_overrides(
-                    suspension.sides,
-                    debate_arguments=suspension.debate_arguments,
-                    model_overrides=model_overrides,
-                )
-            except CoreValidationError as e:
-                return str(e)
-        return None
 
     async def _on_resume_when_busy(
         self,
@@ -1002,7 +904,20 @@ class HandlerMixin:
             )
             return
 
-        peeked = await self._paused_store.load(message_id, conversation_id=conversation_id)
+        from agentcore.core.errors import GoneError
+        from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
+
+        try:
+            peeked = await self._paused_store.load(
+                message_id, conversation_id=conversation_id
+            )
+        except GoneError:
+            await self._send(
+                protocol.make_error(
+                    request_id, protocol.INVALID_PARAMS, TEAM_PREVIEW_UNRECOVERABLE
+                )
+            )
+            return
         if peeked is None:
             await self._send(
                 protocol.make_error(
@@ -1015,9 +930,6 @@ class HandlerMixin:
         decision = parsed["decision"]
         note = parsed["note"]
         selected = parsed["selected"]
-        excluded_run_ids = parsed["excluded_run_ids"]
-        write_capability_overrides = parsed["write_capability_overrides"]
-        model_overrides = parsed["model_overrides"]
         trace_id = parsed["trace_id"]
         user_message_id = parsed["user_message_id"]
 
@@ -1029,37 +941,13 @@ class HandlerMixin:
             return
         peeked.user_id = self._user_id
         apply_rpc_folder_binding_to_suspension(peeked, params)
-        from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
-        from agentcore.runtime.suspension import TeamPreviewSuspension
-
-        if isinstance(peeked, TeamPreviewSuspension):
-            await self._send(
-                protocol.make_error(
-                    request_id, protocol.INVALID_PARAMS, TEAM_PREVIEW_UNRECOVERABLE
-                )
-            )
-            return
-        prior_folder = self.stamp_folder_scope(
+        self.stamp_folder_scope(
             conversation_id,
             folder_id=getattr(peeked, "folder_id", None),
             binding_injected=bool(getattr(peeked, "folder_binding_injected", False)),
             local_root_id=getattr(peeked, "folder_local_root_id", None),
             local_subpath=str(getattr(peeked, "folder_local_subpath", "") or ""),
         )
-
-        veto_err = self._validate_resume_team_veto(
-            peeked,
-            decision,
-            excluded_run_ids=excluded_run_ids,
-            write_capability_overrides=write_capability_overrides,
-            model_overrides=model_overrides,
-        )
-        if veto_err is not None:
-            self.restore_folder_scope(conversation_id, prior_folder)
-            await self._send(
-                protocol.make_error(request_id, protocol.INVALID_PARAMS, veto_err)
-            )
-            return
 
         umid = resolve_resume_user_message_id(
             user_message_id,
@@ -1087,9 +975,6 @@ class HandlerMixin:
                     selected=selected,
                     user_message_id=umid,
                     trace_id=trace_id,
-                    excluded_run_ids=excluded_run_ids,
-                    write_capability_overrides=write_capability_overrides,
-                    model_overrides=model_overrides,
                 )
             except Exception as e:
                 logger.warning(
@@ -1203,9 +1088,6 @@ class HandlerMixin:
                         trace_id,
                         umid,
                         params.get("externalMounts"),
-                        excluded_run_ids=excluded_run_ids,
-                        write_capability_overrides=write_capability_overrides,
-                        model_overrides=model_overrides,
                         settlement_prewritten=outbox is not None,
                         reply_ids=waiter.reply_ids,
                     )
@@ -1250,10 +1132,8 @@ class HandlerMixin:
         Cascade-cancels live coordination then cancels the turn task. ``mode`` /
         ``reason`` only fingerprint the salvage log (``user_stop`` / abort tags).
         """
-        from agentcore.sidecar.server_pkg.cancel_mark import (
-            CANCEL_REASON_ATTR,
-            normalize_cancel_reason,
-        )
+        from agentcore.core.task_cancel import cancel_task
+        from agentcore.sidecar.server_pkg.cancel_mark import normalize_cancel_reason
 
         turn_id = str(params.get("turnId") or "")
         reason = normalize_cancel_reason(params.get("reason"))
@@ -1288,9 +1168,7 @@ class HandlerMixin:
         task_cancelled = False
         tombstoned = False
         if task is not None and not task.done():
-            setattr(task, CANCEL_REASON_ATTR, reason)
-            task.cancel()
-            task_cancelled = True
+            task_cancelled = cancel_task(task, reason)
             await self._reply(request_id, {"cancelled": True, "mode": "cancel"})
         else:
             if not task_found and turn_id.strip():

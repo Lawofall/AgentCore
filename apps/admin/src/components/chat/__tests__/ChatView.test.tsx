@@ -87,6 +87,8 @@ describe("ChatView", () => {
     render(<ChatView content="终态正文" projected={turn()} />);
     expect(screen.getByLabelText("对话终态")).toBeTruthy();
     expect(screen.getAllByText("终态正文").length).toBeGreaterThan(0);
+    expect(screen.queryByText("协作已完成")).toBeNull();
+    expect(screen.getByText("1/1")).toBeTruthy();
     expect(screen.getByText("调研员")).toBeTruthy();
     expect(screen.getByText("查资料")).toBeTruthy();
     expect(screen.getByText("审批")).toBeTruthy();
@@ -110,9 +112,12 @@ describe("ChatView", () => {
         runsPayload={{ process: [] }}
       />,
     );
-    expect(screen.getByText("完整思考")).toBeTruthy();
+    expect(screen.queryByText("完整思考")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
-    expect(screen.getAllByText("完整思考").length).toBeGreaterThan(0);
+    expect(screen.getByText("完整思考")).toBeTruthy();
+    expect(screen.getByText("完整思考").closest(".overflow-auto")?.className).toMatch(
+      /text-muted-foreground/,
+    );
   });
 
   it("does not crash on a sparse production projected dict", () => {
@@ -169,7 +174,7 @@ describe("ChatView", () => {
       />,
     );
     expect(screen.getByText("思考 1 步 · 使用 1 个工具")).toBeTruthy();
-    expect(screen.getByText("先查资料。")).toBeTruthy();
+    expect(screen.queryByText("先查资料。")).toBeNull();
     expect(screen.queryByText("web_search")).toBeNull();
     expect(screen.queryByLabelText("工具参数")).toBeNull();
     expect(screen.queryByText("片段 A")).toBeNull();
@@ -185,10 +190,14 @@ describe("ChatView", () => {
     fireEvent.click(screen.getByText("思考 1 步 · 使用 1 个工具"));
     expect(screen.getByText("web_search")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^思考$/ })).toBeTruthy();
+    expect(screen.queryByText("先查资料。")).toBeNull();
     expect(screen.queryByLabelText("工具参数")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /^思考$/ }));
-    expect(screen.getAllByText("先查资料。").length).toBeGreaterThan(0);
+    expect(screen.getByText("先查资料。")).toBeTruthy();
+    expect(screen.getByText("先查资料。").closest(".overflow-auto")?.className).toMatch(
+      /text-muted-foreground/,
+    );
 
     fireEvent.click(screen.getByText("web_search"));
     expect(screen.getByLabelText("工具参数").textContent).toContain(

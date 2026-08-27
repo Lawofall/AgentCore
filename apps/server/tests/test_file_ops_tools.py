@@ -22,11 +22,12 @@ from agentcore.tools.builtin.file_ops import (
     FileMoveTool,
     FileReadTool,
     FileWriteTool,
+    GlobTool,
     MkdirTool,
     StrReplaceTool,
     expand_brace_globs,
 )
-from agentcore.tools.builtin.file_ops.read import _resolve_file_list_walk
+from agentcore.tools.builtin.file_ops.listing import glob_name_filters
 from agentcore.tools.protocol import ToolContext, isolate_file_read_ceiling
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -286,7 +287,7 @@ async def test_outside_workspace_error_is_actionable(tmp_path: Path):
     assert "AgentCore/文档/research/report.md" in result.error
     assert "bind_local_folder" in result.error or "open_local_project" in result.error
     assert "open_local_project" in result.error or "本机传统" in result.error
-    assert "导入到云" in result.error or "连接 Git" in result.error
+    assert "导入到云" in result.error
     assert "合法非默认" in result.error or "非默认" in result.error
     assert "推荐" in result.error or "导入到云" in result.error
 
@@ -1109,6 +1110,7 @@ def test_file_read_schema_teaches_default_full_read():
     assert "超安全顶截断" in limit["description"]
     desc = schema.description
     assert "默认整读" in desc
+    assert "glob" in desc
     assert "grep" in desc or "code_search" in desc
     assert "开窗" in desc
     assert "默认不抽文本" in desc
@@ -1680,33 +1682,32 @@ async def test_write_then_append_segmented_path(tmp_path: Path):
 
 
 def test_write_schema_teaches_hard_rejects():
-    """硬拒留在按钮上；Artifact-first HOW 在 identity / consult(long_form_landing)。"""
+    """硬拒留一句在按钮上；反例 / 清参 HOW → consult(long_form_landing)。"""
     write_desc = FileWriteTool().schema.description
     assert "主路径" in write_desc and "完整正文" in write_desc
-    assert "短骨架" in write_desc or "骨架" in write_desc
-    assert "可选" in write_desc or "按节" in write_desc or "分段" in write_desc
     assert "不硬拒字数" in write_desc
-    assert "成篇省略硬拒" in write_desc or "省略标记" in write_desc
-    assert "硬拒绝" in write_desc
-    assert "中间省略" in write_desc
     assert "优先" in write_desc and "str_replace" in write_desc
-    assert "整文件覆盖亦允许" in write_desc or "整盖" in write_desc
+    assert "省略标记" in write_desc
+    assert "50%" in write_desc and "800" in write_desc
+    assert "括号" in write_desc
+    assert "硬拒" in write_desc
+    assert "HOW→consult(long_form_landing)" in write_desc
+    assert "中间省略" not in write_desc
+    assert "清参后改稿" not in write_desc
     assert "禁止整篇一次" not in write_desc and "仍建议分段" not in write_desc
     assert "_landed_summary" not in write_desc
-    assert "已落盘短状态" in write_desc
-    assert "清参后改稿" in write_desc
-    assert "写盘参数" in write_desc or "重发" in write_desc
-    assert "真文" in write_desc
-    assert "file_read" in write_desc and "str_replace" in write_desc
     # HOW / 回执百科不在按钮上（身份段 + consult 已有）。
     assert "Artifact-first" not in write_desc
     assert "次数上限" not in write_desc
     assert "NoMatch" not in write_desc
     content_desc = FileWriteTool().schema.parameters["properties"]["content"]["description"]
-    assert "一次写完" in content_desc or "完整正文" in content_desc
-    assert "骨架" in content_desc
+    assert "完整正文" in content_desc
+    assert "省略标记" in content_desc
+    assert "硬拒" in content_desc
     assert "_landed_summary" not in content_desc
-    assert "已落盘短状态" in content_desc or "清理占位" in content_desc
+    assert "不硬拒字数" not in content_desc
+    assert "已落盘短状态" not in content_desc
+    assert "骨架" not in content_desc
 
     append_desc = FileAppendTool().schema.description
     assert "骨架" in append_desc
@@ -2023,7 +2024,7 @@ async def test_file_batch_partial_failure_continues(tmp_path: Path):
     assert result.metadata["fail"] >= 1
 
 
-# --- file_list ---
+# --- file_list / glob ---
 
 
 def test_expand_brace_globs_basic():
@@ -2033,64 +2034,83 @@ def test_expand_brace_globs_basic():
     assert expand_brace_globs("*") == ["*"]
 
 
-def test_resolve_file_list_walk_name_search_defaults():
-    assert _resolve_file_list_walk({"pattern": "*.py"}) == ("*.py", True, 8)
-    assert _resolve_file_list_walk({}) == ("*", False, 3)
-    assert _resolve_file_list_walk({"pattern": "*"}) == ("*", False, 3)
-    assert _resolve_file_list_walk({"pattern": "*.py", "recursive": False}) == (
-        "*.py",
-        False,
-        3,
-    )
-    assert _resolve_file_list_walk({"pattern": "*", "recursive": True}) == ("*", True, 3)
-    assert _resolve_file_list_walk({"pattern": "*.tsx", "max_depth": 2}) == (
-        "*.tsx",
-        True,
-        2,
-    )
+def test_glob_name_filters_strips_recursive_prefix():
+    assert glob_name_filters("*.py") == ["*.py"]
+    assert glob_name_filters("**/*.py") == ["*.py"]
+    assert glob_name_filters("*.{ts,tsx}") == ["*.ts", "*.tsx"]
+    assert glob_name_filters("*") is None
+    assert glob_name_filters("**/*") is None
+    assert glob_name_filters("src/*.py") is None
+    assert glob_name_filters("") is None
 
 
-def test_file_list_schema_teaches_name_search_default():
+def test_file_list_schema_is_one_layer_ls():
     schema = FileListTool().schema
-    assert "按【文件名】" in schema.description
-    assert "不要为了找文件先猜目录" in schema.description
-    rec = schema.parameters["properties"]["recursive"]
-    assert "default" not in rec
-    depth = schema.parameters["properties"]["max_depth"]
-    assert "default" not in depth
-    assert "按名查找默认 8" in depth["description"]
+    props = schema.parameters["properties"]
+    assert "directory" in props
+    assert "pattern" not in props
+    assert "recursive" not in props
+    assert "max_depth" not in props
+    assert "glob" in schema.description
 
 
-async def test_file_list_name_pattern_defaults_to_recursive(tmp_path: Path):
-    """Name glob from root finds nested files — no recursive flag required."""
+def test_glob_schema_requires_pattern():
+    schema = GlobTool().schema
+    assert schema.parameters["required"] == ["pattern"]
+    props = schema.parameters["properties"]
+    assert "pattern" in props
+    assert "path" in props
+    assert "directory" not in props
+    assert "recursive" not in props
+
+
+async def test_glob_finds_nested_files_from_root(tmp_path: Path):
     (tmp_path / "server").mkdir()
     (tmp_path / "server" / "main.py").write_text("x", encoding="utf-8")
     (tmp_path / "client").mkdir()
     (tmp_path / "package.json").write_text("{}", encoding="utf-8")
 
-    result = await FileListTool().execute(
-        {"directory": ".", "pattern": "*.py"}, _ctx(tmp_path)
-    )
+    result = await GlobTool().execute({"pattern": "*.py"}, _ctx(tmp_path))
     assert result.success is True
-    assert "空目录" not in result.output
-    assert "main.py" in result.output
-    assert "无匹配 pattern='*.py'" not in result.output
+    assert "空目录" not in (result.output or "")
+    assert "server/main.py" in (result.output or "")
+    assert "├──" not in (result.output or "")
 
 
-async def test_file_list_explicit_nonrecursive_filter_stays_one_layer(tmp_path: Path):
-    (tmp_path / "server").mkdir()
-    (tmp_path / "server" / "main.py").write_text("x", encoding="utf-8")
-    (tmp_path / "client").mkdir()
-    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+@pytest.mark.parametrize(
+    "extra",
+    [{"pattern": "*.py"}, {"recursive": True}, {"max_depth": 4}],
+)
+async def test_file_list_leftover_fails_to_glob(tmp_path: Path, extra: dict):
+    result = await FileListTool().execute({"directory": ".", **extra}, _ctx(tmp_path))
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "glob" in (result.error or "")
+    for key in extra:
+        assert key in (result.error or "")
 
-    result = await FileListTool().execute(
-        {"directory": ".", "pattern": "*.py", "recursive": False}, _ctx(tmp_path)
+
+async def test_glob_star_rejected(tmp_path: Path):
+    result = await GlobTool().execute({"pattern": "*"}, _ctx(tmp_path))
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "file_list" in (result.error or "")
+
+
+async def test_glob_pathy_pattern_rejected(tmp_path: Path):
+    result = await GlobTool().execute({"pattern": "src/*.py"}, _ctx(tmp_path))
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "path" in (result.error or "")
+
+
+async def test_glob_leftover_directory_rejected(tmp_path: Path):
+    result = await GlobTool().execute(
+        {"pattern": "*.py", "directory": "src"}, _ctx(tmp_path)
     )
-    assert result.success is True
-    assert "main.py" not in result.output
-    assert "无匹配 pattern='*.py'" in result.output
-    assert "recursive=true" in result.output
-    assert "server" in result.output or "client" in result.output
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "directory" in (result.error or "")
 
 
 async def test_file_list_star_stays_one_layer(tmp_path: Path):
@@ -2108,46 +2128,43 @@ async def test_file_list_star_stays_one_layer(tmp_path: Path):
 async def test_file_list_truly_empty_dir_still_says_empty(tmp_path: Path):
     empty = tmp_path / "blank"
     empty.mkdir()
-    result = await FileListTool().execute(
-        {"directory": "blank", "pattern": "*.py"}, _ctx(tmp_path)
-    )
+    result = await FileListTool().execute({"directory": "blank"}, _ctx(tmp_path))
     assert result.success is True
     assert "空目录" in result.output
     assert "无匹配" not in result.output
 
 
-async def test_file_list_brace_glob_matches_either_extension(tmp_path: Path):
-    """pathlib does not expand `{a,b}` — without help, `*.{ts,tsx}` falsely empties."""
+async def test_glob_brace_matches_either_extension(tmp_path: Path):
     src = tmp_path / "client" / "src"
     src.mkdir(parents=True)
     (src / "App.tsx").write_text("export {}", encoding="utf-8")
     (src / "api.ts").write_text("export {}", encoding="utf-8")
     (src / "readme.md").write_text("x", encoding="utf-8")
 
-    result = await FileListTool().execute(
-        {"directory": "client/src", "pattern": "*.{ts,tsx}"}, _ctx(tmp_path)
+    result = await GlobTool().execute(
+        {"path": "client/src", "pattern": "*.{ts,tsx}"}, _ctx(tmp_path)
     )
     assert result.success is True
-    assert "空目录" not in result.output
-    assert "App.tsx" in result.output
-    assert "api.ts" in result.output
-    assert "readme.md" not in result.output
+    assert "空目录" not in (result.output or "")
+    assert "App.tsx" in (result.output or "")
+    assert "api.ts" in (result.output or "")
+    assert "readme.md" not in (result.output or "")
 
 
-async def test_file_list_recursive_pattern_miss_hint(tmp_path: Path):
+async def test_glob_miss_hint_does_not_claim_empty(tmp_path: Path):
     (tmp_path / "pkg").mkdir()
     (tmp_path / "pkg" / "a.py").write_text("x", encoding="utf-8")
-    result = await FileListTool().execute(
-        {"directory": "pkg", "pattern": "*.rs", "recursive": True}, _ctx(tmp_path)
+    result = await GlobTool().execute(
+        {"path": "pkg", "pattern": "*.rs"}, _ctx(tmp_path)
     )
     assert result.success is True
-    assert "空目录" not in result.output
-    assert "无匹配 pattern='*.rs'" in result.output
-    assert "a.py" in result.output or "目录非空" in result.output
+    assert "空目录" not in (result.output or "")
+    assert "无匹配 pattern='*.rs'" in (result.output or "")
+    assert "a.py" in (result.output or "") or "目录非空" in (result.output or "")
 
 
 async def test_file_read_missing_with_parent_gives_landmark(tmp_path: Path):
-    """父目录存在时：同层样本 + 更宽查找建议（对齐 file_list 空匹配 hint）。"""
+    """父目录存在时：同层样本 + 更宽查找建议（按名走 glob）。"""
     app = tmp_path / "apps" / "desktop"
     app.mkdir(parents=True)
     (app / "README.md").write_text("# desk", encoding="utf-8")
@@ -2167,7 +2184,8 @@ async def test_file_read_missing_with_parent_gives_landmark(tmp_path: Path):
     assert "apps/desktop/" in result.error
     assert "可见同层示例" in result.error
     assert "README.md" in result.error or "src" in result.error
-    assert "file_list" in result.error
+    assert "glob" in result.error
+    assert "file_list(pattern)" not in result.error
     assert "更宽查找" in result.error
     assert "已知路径" in result.error
     assert "反复重试" in result.error
@@ -2180,7 +2198,7 @@ async def test_file_list_missing_with_parent_gives_landmark(tmp_path: Path):
     (server / "agentcore").mkdir()
     (server / "README.md").write_text("x", encoding="utf-8")
     result = await FileListTool().execute(
-        {"directory": "apps/server/src", "pattern": "*"}, _ctx(tmp_path)
+        {"directory": "apps/server/src"}, _ctx(tmp_path)
     )
     assert result.success is False
     assert result.error is not None
@@ -2207,6 +2225,8 @@ async def test_file_read_missing_parent_gives_root_tip(tmp_path: Path):
     assert "禁止凭通用目录名" not in result.error
     assert "反复重试" in result.error
     assert "可见同层示例" not in result.error
+    assert "glob" in result.error
+    assert "file_list(pattern)" not in result.error
 
 
 async def test_file_list_latent_stage_dir_returns_empty_not_error(tmp_path: Path):
@@ -2215,7 +2235,7 @@ async def test_file_list_latent_stage_dir_returns_empty_not_error(tmp_path: Path
 
     assert not (tmp_path / "AgentCore").exists()
     result = await FileListTool().execute(
-        {"directory": RESEARCH_DIR, "pattern": "*"}, _ctx(tmp_path)
+        {"directory": RESEARCH_DIR}, _ctx(tmp_path)
     )
     assert result.success is True
     assert result.error is None
@@ -2227,7 +2247,7 @@ async def test_file_list_latent_stage_dir_returns_empty_not_error(tmp_path: Path
 async def test_file_list_latent_attachments_returns_empty_not_error(tmp_path: Path):
     """attachments/ 尚未创建：列目录空态成功。"""
     result = await FileListTool().execute(
-        {"directory": "attachments", "pattern": "*"}, _ctx(tmp_path)
+        {"directory": "attachments"}, _ctx(tmp_path)
     )
     assert result.success is True
     assert "写入时会自动创建" in (result.output or "")
@@ -2237,7 +2257,7 @@ async def test_file_list_latent_attachments_returns_empty_not_error(tmp_path: Pa
 async def test_file_list_guessed_missing_path_still_errors(tmp_path: Path):
     """真·乱猜路径仍报错（不得因 latent 口径放成空目录）。"""
     result = await FileListTool().execute(
-        {"directory": "apps/server/src", "pattern": "*"}, _ctx(tmp_path)
+        {"directory": "apps/server/src"}, _ctx(tmp_path)
     )
     assert result.success is False
     assert result.error is not None
@@ -2259,7 +2279,8 @@ async def test_file_read_missing_top_level_uses_root_landmark(tmp_path: Path):
     assert "父目录 ./" in result.error
     assert "可见同层示例" in result.error
     assert "README.md" in result.error or "src" in result.error
-    assert "file_list" in result.error
+    assert "glob" in result.error
+    assert "file_list(pattern)" not in result.error
 
 
 async def test_file_list_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
@@ -2269,26 +2290,22 @@ async def test_file_list_shows_attachment_zip_hides_elsewhere(tmp_path: Path):
     (tmp_path / "noise.zip").write_bytes(b"PK\x03\x04")
 
     att = await FileListTool().execute(
-        {"directory": "attachments", "pattern": "*"}, _ctx(tmp_path)
+        {"directory": "attachments"}, _ctx(tmp_path)
     )
     assert att.success is True
     assert "空目录" not in att.output
     assert "pack.zip" in att.output
 
-    root = await FileListTool().execute(
-        {"directory": ".", "pattern": "*"}, _ctx(tmp_path)
-    )
+    root = await FileListTool().execute({"directory": "."}, _ctx(tmp_path))
     assert root.success is True
     assert "noise.zip" not in root.output
     assert "attachments" in root.output
 
-    tree = await FileListTool().execute(
-        {"directory": ".", "pattern": "*", "recursive": True, "max_depth": 2},
-        _ctx(tmp_path),
-    )
-    assert tree.success is True
-    assert "pack.zip" in tree.output
-    assert "noise.zip" not in tree.output
+    found = await GlobTool().execute({"pattern": "*.zip"}, _ctx(tmp_path))
+    assert found.success is True
+    assert "attachments/pack.zip" in (found.output or "")
+    assert "noise.zip" in (found.output or "")
+
 
 
 async def test_file_list_reveals_material_png(tmp_path: Path):
@@ -2303,26 +2320,22 @@ async def test_file_list_reveals_material_png(tmp_path: Path):
     ctx.material_paths = frozenset({"src/shot.png"})
     ctx.backend.ai_list_materials = ctx.material_paths
 
-    listed = await FileListTool().execute(
-        {"directory": "src", "pattern": "*"}, ctx
-    )
+    listed = await FileListTool().execute({"directory": "src"}, ctx)
     assert listed.success is True
     assert "shot.png" in listed.output
     assert "other.png" not in listed.output
 
-    tree = await FileListTool().execute(
-        {"directory": ".", "pattern": "*", "recursive": True, "max_depth": 2},
-        ctx,
-    )
-    assert tree.success is True
-    assert "shot.png" in tree.output
-    assert "other.png" not in tree.output
-    assert "pack.zip" in tree.output  # attachments/ still exempt
+    found = await GlobTool().execute({"pattern": "*.png"}, ctx)
+    assert found.success is True
+    assert "src/shot.png" in (found.output or "")
+    assert "other.png" not in (found.output or "")
+
+    att = await FileListTool().execute({"directory": "attachments"}, ctx)
+    assert att.success is True
+    assert "pack.zip" in (att.output or "")
 
     # Without materials, same png stays hidden
-    bare = await FileListTool().execute(
-        {"directory": "src", "pattern": "*"}, _ctx(tmp_path)
-    )
+    bare = await FileListTool().execute({"directory": "src"}, _ctx(tmp_path))
     assert bare.success is True
     assert "shot.png" not in bare.output
     assert "空目录" in bare.output or bare.output.strip() == "" or "shot" not in bare.output
@@ -2352,27 +2365,13 @@ async def test_file_list_external_mount_shows_archive_zip(tmp_path: Path):
     )
 
     listed = await FileListTool().execute(
-        {"directory": "external/desk", "pattern": "*"}, ctx
+        {"directory": "external/desk"}, ctx
     )
     assert listed.success is True
     assert "咨询.sy.zip" in listed.output
     assert "note.txt" in listed.output
 
-    tree = await FileListTool().execute(
-        {
-            "directory": "external/desk",
-            "pattern": "*",
-            "recursive": True,
-            "max_depth": 2,
-        },
-        ctx,
-    )
-    assert tree.success is True
-    assert "咨询.sy.zip" in tree.output
-
-    root = await FileListTool().execute(
-        {"directory": ".", "pattern": "*"}, ctx
-    )
+    root = await FileListTool().execute({"directory": "."}, ctx)
     assert root.success is True
     assert "noise.zip" not in root.output
 
@@ -2382,17 +2381,13 @@ async def test_file_list_pattern_zip_reveals_workspace_archive(tmp_path: Path):
     (tmp_path / "pack.zip").write_bytes(b"PK\x03\x04")
     (tmp_path / "readme.md").write_text("x", encoding="utf-8")
 
-    hidden = await FileListTool().execute(
-        {"directory": ".", "pattern": "*"}, _ctx(tmp_path)
-    )
+    hidden = await FileListTool().execute({"directory": "."}, _ctx(tmp_path))
     assert hidden.success is True
     assert "pack.zip" not in hidden.output
 
-    revealed = await FileListTool().execute(
-        {"directory": ".", "pattern": "*.zip"}, _ctx(tmp_path)
-    )
+    revealed = await GlobTool().execute({"pattern": "*.zip"}, _ctx(tmp_path))
     assert revealed.success is True
-    assert "pack.zip" in revealed.output
+    assert "pack.zip" in (revealed.output or "")
 
 
 async def test_file_list_bare_external_actionable_hint_no_mounts(tmp_path: Path):

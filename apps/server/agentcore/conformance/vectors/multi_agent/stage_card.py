@@ -119,7 +119,7 @@ def _multi_agent_stage_card_start_debate() -> list[SSEEvent]:
         tool_use_start(
             "dc1",
             "delegate",
-            {"playbook": "multi_lens_research", "playbook_args": {"topic": _TOPIC}},
+            {"playbook": "lens_crosscheck", "playbook_args": {"topic": _TOPIC}},
         ),
         run_plan(
             execution_id=_EXEC,
@@ -263,7 +263,7 @@ def _multi_agent_stage_card_orphaned() -> list[SSEEvent]:
     mlr_agents, mlr_runs = _mlr_agents_runs()
     return [
         message_start("m1", conversation_id=_CONV),
-        tool_use_start("dc1", "delegate", {"playbook": "multi_lens_research"}),
+        tool_use_start("dc1", "delegate", {"playbook": "lens_crosscheck"}),
         run_plan(
             execution_id=_EXEC_DEBATE,
             plan_type="multi_agent",

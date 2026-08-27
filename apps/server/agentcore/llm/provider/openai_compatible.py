@@ -64,6 +64,7 @@ from agentcore.llm.provider.cooldown_gate import (
     clear_cooldown,
     cooldown_key,
     cooldown_remaining,
+    cooldown_slot_key,
     peek_cooldown,
     silent_cooldown_seconds,
 )
@@ -415,6 +416,10 @@ class OpenAICompatibleProvider:
         )
         self._cooldown_key = cooldown_key(self._name, self._api_key, self._base_url)
 
+    def _cooldown_slot(self, scenario: str) -> str:
+        """Credential key plus scenario lane (turn vs title vs compaction)."""
+        return cooldown_slot_key(self._cooldown_key, scenario)
+
     @property
     def name(self) -> str:
         return self._name
@@ -474,15 +479,21 @@ class OpenAICompatibleProvider:
     async def _await_shared_cooldown(
         self, *, scenario: str, ceiling: float, attempt: int, stream: bool
     ) -> None:
-        """If a sibling armed a slot, raise immediately — do not sleep or probe."""
-        remaining = cooldown_remaining(self._cooldown_key)
-        if remaining <= 0:
+        """If a sibling on this lane armed a slot, raise immediately — do not sleep or probe.
+
+        Turn-scale chat/agent also consult the platform-pool member remaining.
+        Background one-shots (title / compaction / …) do not: a title day-reset
+        must not skip compaction's own probe via the pool cooling stamp.
+        """
+        slot_key = self._cooldown_slot(scenario)
+        remaining = cooldown_remaining(slot_key)
+        if remaining <= 0 and scenario in TURN_SCALE_SCENARIOS:
             remaining = self._platform_account_remaining()
         if remaining <= 0:
             return
         if await self._try_platform_pool_failover():
             return
-        slot = peek_cooldown(self._cooldown_key)
+        slot = peek_cooldown(slot_key)
         source = slot.source if slot is not None else RETRY_AFTER_UNKNOWN
         seconds = slot.seconds if slot is not None else remaining
         logger.info(
@@ -623,7 +634,7 @@ class OpenAICompatibleProvider:
         retry_after, cooldown_source = _error_cooldown(error)
         if retry_after is not None and retry_after > 0:
             arm_cooldown(
-                self._cooldown_key,
+                self._cooldown_slot(scenario),
                 retry_after,
                 cooldown_source or RETRY_AFTER_UNKNOWN,
             )
@@ -858,7 +869,7 @@ class OpenAICompatibleProvider:
                         retry_ceiling=ceiling,
                         payload=payload,
                     )
-                    clear_cooldown(self._cooldown_key)
+                    clear_cooldown(self._cooldown_slot(request.scenario))
                     async for line in response.aiter_lines():
                         lines_seen += 1
                         if len(last_lines) >= 5:
@@ -1037,7 +1048,7 @@ class OpenAICompatibleProvider:
                     yield LLMChunk(stream_reset=True)
                     yielded_ephemeral = False
                 await asyncio.sleep(wait)
-                clear_cooldown(self._cooldown_key)
+                clear_cooldown(self._cooldown_slot(request.scenario))
                 backoff *= _BACKOFF_MULTIPLIER
             except httpx.TimeoutException as e:
                 raise_if_task_cancelled(e)
@@ -1556,7 +1567,7 @@ class OpenAICompatibleProvider:
                     retry_ceiling=ceiling,
                     payload=payload,
                 )
-                clear_cooldown(self._cooldown_key)
+                clear_cooldown(self._cooldown_slot(scenario))
                 try:
                     return response.json()
                 except ValueError as e:
@@ -1592,7 +1603,7 @@ class OpenAICompatibleProvider:
                     stream=False,
                 )
                 await asyncio.sleep(wait)
-                clear_cooldown(self._cooldown_key)
+                clear_cooldown(self._cooldown_slot(scenario))
                 backoff *= _BACKOFF_MULTIPLIER
             except RuntimeError as e:
                 translated = self._translate_closed_client(e)

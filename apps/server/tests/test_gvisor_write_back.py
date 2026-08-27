@@ -71,7 +71,7 @@ def _install_fake_runsc(
 ) -> str:
     """Install a cross-platform fake ``runsc``.
 
-    ``-d`` / ``--detach`` → exit 0 (desk start). Otherwise write ``artifact_rel``
+    ``-detach`` → exit 0 (desk start). Otherwise write ``artifact_rel``
     into the ``/workspace`` rw-bind (exec / one-shot).
     """
     impl = tmp_path / "fake_runsc_impl.py"
@@ -88,7 +88,7 @@ def _install_fake_runsc(
                 raise SystemExit(0)
             if args[:1] in (["kill"], ["delete"]):
                 raise SystemExit(0)
-            if "-d" in args or "--detach" in args:
+            if "-detach" in args or "--detach" in args:
                 raise SystemExit(0)
 
             bundle = None
@@ -348,7 +348,7 @@ def test_runsc_run_cmd_is_shape_net_detach(tmp_path: Path):
     assert "--platform=systrap" in cmd[:run_idx]
     assert "--network=sandbox" in cmd[:run_idx]
     assert "--ignore-cgroups" in cmd[:run_idx]
-    assert cmd[run_idx + 1] == "-d"
+    assert cmd[run_idx + 1] == "-detach"
     assert cmd[run_idx + 2] == "--bundle=/tmp/bundle"
     assert cmd[run_idx + 3] == "agentcore-test"
 

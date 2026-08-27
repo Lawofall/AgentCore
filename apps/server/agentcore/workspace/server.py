@@ -414,7 +414,7 @@ class ServerWorkspace:
         # Set by prepare/wire from ``collect_turn_material_paths``; default empty.
         self.ai_list_materials: frozenset[str] = frozenset()
         # When True, AI list_tree / channel list keep archive suffixes visible
-        # (file_list pattern targets zip/rar/…). Default False.
+        # (glob pattern targets zip/rar/…). Default False.
         self.ai_list_reveal_archives: bool = False
         # gVisor: once-per-backend runsc smoke. Sidecar: sticky hard-evidence
         # deaths from a real run (missing interpreter / refused spawn), keyed

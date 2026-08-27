@@ -221,8 +221,14 @@ class LLMRateLimitError(LLMError):
             )
         else:
             # Unattested short cooldown (local backoff / unknown): we know we
-            # stopped, not when the vendor will take us back.
-            message = "上游限流，暂时无法继续本回合。请稍后再试。"
+            # stopped, not when the vendor will take us back. BYOK still names
+            # the payer so a user's own free-tier 429 is not read as a platform
+            # outage; no seconds, no recovery moment (vendor stated none).
+            message = (
+                "你接入的服务商暂时限流，本回合无法继续。请稍后再试。"
+                if kwargs.get("credential_source") == "user"
+                else "上游限流，暂时无法继续本回合。请稍后再试。"
+            )
         # Wire ``retry_after`` is the attested header only — ErrorContext documents
         # it as 上游 Retry-After. The engine still has ``self.retry_after``.
         kwargs.pop("retry_after", None)

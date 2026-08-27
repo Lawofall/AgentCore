@@ -15,6 +15,12 @@ vi.mock("@/services/api", () => ({
   api: { post: vi.fn() },
 }));
 
+vi.mock("@/services/turns/stopHydrate", () => ({
+  armStopHydrateWatchdog: vi.fn(),
+  clearStopHydrateWatchdog: vi.fn(),
+  resetStopHydrateWatchdogForTests: vi.fn(),
+}));
+
 vi.mock("@/lib/toast", () => ({
   notifyError: vi.fn(),
   notifyInfo: vi.fn(),

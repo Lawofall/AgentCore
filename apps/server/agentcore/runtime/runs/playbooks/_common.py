@@ -6,13 +6,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from agentcore.tools.builtin.web.search import (
-    _QUERY_CJK_CHAR_LIMIT as _WS_CJK_LIMIT,
-)
-from agentcore.tools.builtin.web.search import (
-    _QUERY_LATIN_WORD_LIMIT as _WS_LATIN_LIMIT,
-)
-
 # Cap the slot-driven fan-out (调研子方向 / 待比较选项) so a playbook can't silently balloon a
 # batch;
 # build_run_plan still enforces the global MAX_DELEGATION_TASKS on the expanded result as the real
@@ -94,36 +87,14 @@ def fold_fanout_slots(
 # Not a CEO-facing playbook slot — CEO must not be required to re-state the user line in topic.
 USER_MESSAGE_MECH_KEY = "__user_message__"
 
-# 调研员便签协作提示（parallel_brief / research_report / multi_lens 共用）.
-RESEARCHER_NOTE_GUIDANCE = (
-    "开始本子方向前先 read_notes 检查队友是否已覆盖；"
-    "并行摸底/调研时，入口与关键结论可贴一行 post_note(kind=decision 或 heads_up)，"
-    "避免队友重复通读；不是聊天、不要求回复；墙上已有的不必复读；完工别贴。"
-)
+# 调研员便签协作提示（map_fanout / cite_write_review / lens_crosscheck 共用）。
+# 何时贴墙归队员身份；此处只留开工前读墙。
+RESEARCHER_NOTE_GUIDANCE = "开始本子方向前先 read_notes 检查队友是否已覆盖。"
 
-# 调研员检索纪律（通用；A3 查询契约 + 连续空结果换策略 + 少搜多读；暂不做无引用不得交卷）。
-# 词/字上限与 tools.builtin.web.search 常量对齐，避免提示与工具契约漂移。
-RESEARCHER_SEARCH_DISCIPLINE = (
-    f"【检索纪律】web_search 查询须精简：纯拉丁未加引号≤{_WS_LATIN_LIMIT} 词（建议 2–3 核心词），"
-    f"含中文加权≤{_WS_CJK_LIMIT} 字；超限会自动规范化或截断并明示实搜词，仅极端过长才拒绝；"
-    "专名用引号/书名号可豁免。"
-    "少搜多读：有命中后优先 read_url 深读核对再开新搜；"
-    "连续空结果必须换策略（缩短/同义改写 query、换权威域名/来源类型，或改读已有命中），"
-    "禁止同一空转 query 反复烧预算；权威出处须 read_url 核对原文后再引用。"
-)
-
-# 成文综述学术检索加句（仅 research_report 调研员；parallel_brief 不盖）。
+# 成文综述学术检索加句（仅 cite_write_review 调研员；map_fanout 不盖）。
 # 与 search_policy=academic_literature 配套：先论文库、搜废报缺口、禁脑补全面综述。
 RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE = (
     "【学术检索】优先论文库 / 预印本 / DOI（arxiv、PubMed、doi.org、CNKI 等）；"
     "百科 / 词典 / 门户命中过多视为搜废——须报告证据缺口并换论文站策略，"
     "禁止脑补成全面综述。"
-)
-
-# 审查 / 调查类 playbook 任务书检索纪律（与 worker_budget.DIRECTED_SEARCH_DISCIPLINE 同义；
-# playbook 内联避免循环 import，测试可对 task 文案断言）。
-DIRECTED_SEARCH_TASK_HINT = (
-    "【检索纪律】概念/意图先用 code_search，精确符号或字符串用 grep；"
-    "命中后单文件默认 file_read 整读；仅页脚已截断或已有行号时开窗；"
-    "禁止无目标地整目录逐文件通读。"
 )

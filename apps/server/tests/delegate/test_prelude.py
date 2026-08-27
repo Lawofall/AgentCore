@@ -129,7 +129,7 @@ def test_unknown_playbook_rejected(monkeypatch):
 
 def test_playbook_xor_tasks_defense_in_depth():
     """`tasks` 非 list（声明闸看不见）但真值 → 前奏兜住 XOR，不半跑。"""
-    out = rejected({"playbook": "research_report", "tasks": "写点东西"})
+    out = rejected({"playbook": "cite_write_review", "tasks": "写点东西"})
     assert "二选一" in (out.result.error or "")
     assert out.result.contract_failure is True
     # XOR 发生在写 _active_playbook 之前。
@@ -139,11 +139,11 @@ def test_playbook_xor_tasks_defense_in_depth():
 def test_playbook_expand_errors_rejected(monkeypatch):
     spy = LogSpy()
     monkeypatch.setattr(prelude_mod, "logger", spy)
-    out = rejected({"playbook": "research_report"})
+    out = rejected({"playbook": "cite_write_review"})
     assert (out.result.error or "").startswith("playbook 实例化失败：")
     assert out.result.contract_failure is True
     assert out.flags is None
-    assert spy.get("delegate.playbook_rejected")["playbook"] == "research_report"
+    assert spy.get("delegate.playbook_rejected")["playbook"] == "cite_write_review"
 
 
 def test_empty_tasks_rejected_and_clears_playbook_marks():
@@ -195,10 +195,10 @@ def test_playbook_expands_tasks_and_carries_marks(monkeypatch):
     spy = LogSpy()
     monkeypatch.setattr(prelude_mod, "logger", spy)
     args = {"topic": "GEO 官网"}
-    out = accepted({"playbook": "research_report", "playbook_args": args})
-    assert out.playbook == "research_report"
+    out = accepted({"playbook": "cite_write_review", "playbook_args": args})
+    assert out.playbook == "cite_write_review"
     assert len(out.tasks_raw) > 1
-    assert out.flags.playbook == "research_report"
+    assert out.flags.playbook == "cite_write_review"
     assert out.flags.playbook_args == args
     # 拷贝而非引用：CEO 传进来的 dict 不该被下游改写。
     assert out.flags.playbook_args is not args

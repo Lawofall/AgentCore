@@ -161,7 +161,15 @@ def test_curated_copy_stays_synced_with_tool_sources():
         == EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
     )
     assert _CURATED_BY_CODE["searxng_unreachable"] == "本地搜索服务不可用，请稍后重试"
-    assert _CURATED_BY_CODE["workspace_channel_dead"] == _CURATED_BY_CODE[ErrorCode.STREAM_ERROR]
+    from agentcore.workspace.limits import CHANNEL_DEAD_USER_VISIBLE
+
+    face = _CURATED_BY_CODE["workspace_channel_dead"]
+    assert face == _CURATED_BY_CODE[ErrorCode.STREAM_ERROR]
+    for token in ("工作区/本地文件连不上", "稍后重试", "重开桌面"):
+        assert token in face
+        assert token in CHANNEL_DEAD_USER_VISIBLE
+    assert "收口" in CHANNEL_DEAD_USER_VISIBLE
+    assert "已经拿到的内容继续" in face
 
 
 def test_tool_use_end_omits_failure_on_success():

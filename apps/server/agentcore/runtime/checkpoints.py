@@ -34,22 +34,17 @@ AskCheckpointIntent = Literal[
 class CheckpointDecision(StrEnum):
     """How the user (or a timeout / orphan) settled a checkpoint the CEO raised.
 
-    ``CONTINUE`` / ``ADJUST`` / ``STOP`` are shared by ask_user / plan_review /
-    team_preview (开工卡). On the kickoff card, ``CONTINUE`` means grant + start
-    (non-empty ``note`` steers all unrun workers — 嘱咐, **not** a substitute
-    for ``ADJUST``). ``ADJUST`` on team_preview does **not** grant or start:
-    user ``note`` (required, non-empty on resume) is fed back so the CEO
-    revises and resubmits through the kickoff gate (可多轮). ``ADJUST`` on
-    plan_review still steers then continues. ask_user rejects ``ADJUST``.
-    ``RESEARCH_FIRST`` is debate kickoff only: 不开赛，回灌固定文案令 CEO 立即挂
-    ``multi_lens_research``（与 STOP 同构的恢复分支；非辩论开工卡须拒绝/降级）。
+    ``CONTINUE`` / ``ADJUST`` / ``STOP`` are shared by ask_user / plan_review.
+    ``ADJUST`` on plan_review steers then continues. ask_user rejects ``ADJUST``.
+    ``RESEARCH_FIRST`` is debate stage_card only: 不开赛，回灌固定文案令 CEO 立即挂
+    ``lens_crosscheck``（与 STOP 同构的恢复分支）。
     """
 
-    CONTINUE = "continue"  # proceed (kickoff: grant + start; note → steer)
-    ADJUST = "adjust"  # plan_review: steer then continue; kickoff: no grant, feed CEO
+    CONTINUE = "continue"  # proceed (plan_review: run gated downstream)
+    ADJUST = "adjust"  # plan_review: steer then continue
     STOP = "stop"  # end this turn gracefully
-    RESEARCH_FIRST = "research_first"  # debate kickoff only: 先多视角调研再辩
-    TIMEOUT = "timeout"  # 运维上限触发；开工卡不 grant / 不开工，回灌 CEO 收尾（对齐 ask）
+    RESEARCH_FIRST = "research_first"  # debate stage_card: 先多视角调研再辩
+    TIMEOUT = "timeout"  # 运维上限触发；回灌 CEO 收尾（对齐 ask）
     ORPHANED = "orphaned"  # 热路失效终态（冷路检查点一般不走 orphan；枚举公共尾部对齐）
 
 
@@ -57,28 +52,14 @@ class CheckpointDecision(StrEnum):
 class CheckpointResponse:
     """The settled outcome of a checkpoint: a decision + an optional note + picks.
 
-    ``note`` carries the user's steer for plan_review ``ADJUST``, the revise
-    opinion on kickoff ``ADJUST`` (fed back to the CEO; no grant), an optional
-    嘱咐 on kickoff ``CONTINUE`` (steers unrun workers), and an optional closing
-    remark for ``STOP``; it is empty for ``TIMEOUT``. ``selected`` holds the option(s) the
+    ``note`` carries the user's steer for plan_review ``ADJUST`` and an optional
+    closing remark for ``STOP``; it is empty for ``TIMEOUT``. ``selected`` holds the option(s) the
     user picked from the CEO's ``options`` menu — one for a single-select ask,
     several when the ask is ``multiple`` — and is a first-class part of the
     answer (no longer folded into ``note``), so ``CONTINUE`` carries the pick
     too. Empty when the ask offered no options or the user chose none.
-
-    ``excluded_run_ids`` / ``write_capability_overrides`` are
-    delegate ``team_preview`` continue corrections (开工组队有限否决).
-    ``model_overrides`` apply to delegate continue (人盖队员) and debate continue
-    (人盖辩手 / 主持人 → debate_arguments). Ignored for ask_user / plan_review / stop
-    and for debate excluded/write fields. Write override shape:
-    ``{run_id, capability: "text_only"}`` only (tighten write → ``form=prose``;
-    never hard-strip tools). ``model_overrides``: ``run_id → {model}`` 目录身份
-    (``@platform/…`` / ``@byok/…``；空/缺=不改；非法身份硬失败).
     """
 
     decision: CheckpointDecision
     note: str = ""
     selected: list[str] = field(default_factory=list)
-    excluded_run_ids: list[str] = field(default_factory=list)
-    write_capability_overrides: list[dict[str, str]] = field(default_factory=list)
-    model_overrides: dict[str, dict[str, str]] = field(default_factory=dict)

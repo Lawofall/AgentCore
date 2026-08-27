@@ -468,7 +468,7 @@ async def test_cold_resume_settlement_redemit_does_not_phantom_fact_log() -> Non
     from agentcore.runtime.facts import Fact, TurnFactLog, current_fact_log, record_turn_fact
 
     entry = {
-        "kind": "team_preview_resolved",
+        "kind": "checkpoint_resolved",
         "payload": {"checkpoint_id": "ck1", "decision": "continue", "note": ""},
         "ts": "t1",
     }
@@ -486,12 +486,12 @@ async def test_cold_resume_settlement_redemit_does_not_phantom_fact_log() -> Non
         before = len(log.entries())
         assert writer.would_dedupe_settlement(entry)
         fut = record_turn_fact(
-            Fact(kind="team_preview_resolved", payload=dict(entry["payload"]), ts=entry["ts"])
+            Fact(kind="checkpoint_resolved", payload=dict(entry["payload"]), ts=entry["ts"])
         )
         if fut is not None:
             await fut
         assert len(log.entries()) == before
-        assert sum(1 for e in log.entries() if e.get("kind") == "team_preview_resolved") == 1
+        assert sum(1 for e in log.entries() if e.get("kind") == "checkpoint_resolved") == 1
     finally:
         current_journal_writer.reset(wt)
         current_fact_log.reset(fl)

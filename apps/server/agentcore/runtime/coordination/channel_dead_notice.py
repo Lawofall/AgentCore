@@ -1,7 +1,7 @@
 """Force a user-visible honest sentence when the local workspace channel dies.
 
 Retire / circuit-breaker soft steers are model-facing only. Detached harvest and
-silent CEO wait both left users without「本地文件暂时连不上」. This module stamps
+silent CEO wait both left users without the channel-dead user-visible line. This module stamps
 the live coordination session and, when a host sink is still open, emits a short
 ``content_delta`` once.
 """

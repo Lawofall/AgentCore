@@ -187,8 +187,6 @@ async def settle_resumed_suspension(
     delegate_tool: DelegateTool,
     execution_id: str,
     debate_tool: DebateTool | None = None,
-    excluded_run_ids: list[str] | None = None,
-    write_capability_overrides: list[dict[str, str]] | None = None,
 ) -> SettledSuspension:
     """Façade: project via ``TurnState.from_journal``, then ``recover_turn``."""
     from agentcore.runtime.recover import recover_turn
@@ -207,6 +205,4 @@ async def settle_resumed_suspension(
         decision=decision,
         note=note,
         selected=selected,
-        excluded_run_ids=excluded_run_ids,
-        write_capability_overrides=write_capability_overrides,
     )

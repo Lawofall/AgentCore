@@ -339,24 +339,16 @@ class FileWriteTool:
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer (工具面瘦身): hard-rejects + 不硬拒字数 stay on the
-        # button. Artifact-first HOW / manifest 验真 → identity +
-        # consult(long_form_landing).
+        # Schema layer (工具面瘦身): 主路径 + 不硬拒字数 + 引擎硬拒一句。
+        # 反例 / 清参 HOW → consult(long_form_landing)。
         return ToolSchema(
             name="file_write",
             description=(
                 "把内容写入文件：创建（含上级目录）或整体覆盖已有文件。"
                 "路径须相对工作区。【主路径】一次写入完整正文（含超长；不硬拒字数）。"
-                "成篇后修订【优先】str_replace；整文件覆盖亦允许（须完整正文）。\n"
-                "【成篇省略硬拒】成篇体量若含省略标记（反例："
-                "「……（中间省略，已保留首尾）……」）→ 硬拒绝。"
-                "须一次写完或短骨架+SECTION 按节填，禁止省略标记交差。\n"
-                "【成篇缩水硬拒】覆盖已有成篇且新稿低于旧稿 50% 且绝对减少 ≥800 字 → "
-                "硬拒绝；请改 str_replace。用户明确要求大幅删减时传 allow_shrink=true。\n"
-                "【代码完整性】.ts/.tsx/.js 等无 SECTION 时，括号不完整或含省略标记 → "
-                "硬拒绝。\n"
-                "【清参后改稿】只见已落盘短状态时禁止当写盘参数重发；"
-                "先 file_read 取真文，再 str_replace（优先）或重填完整 content。"
+                "成篇后修订【优先】str_replace。"
+                "引擎硬拒：省略标记、覆盖成篇缩水 50% 且 ≥800 字、代码括号不完整/含省略。"
+                "HOW→consult(long_form_landing)。"
             ),
             parameters={
                 "type": "object",
@@ -370,11 +362,7 @@ class FileWriteTool:
                     },
                     "content": {
                         "type": "string",
-                        "description": (
-                            "要写入的内容。主路径一次写完完整正文（不硬拒字数）；"
-                            "可选短骨架 + 按节填空。成篇体量含省略标记则硬拒。"
-                            "禁止把已落盘短状态/清理占位原样当 content。"
-                        ),
+                        "description": "要写入的完整正文；含省略标记会硬拒。",
                     },
                     "allow_shrink": {
                         "type": "boolean",

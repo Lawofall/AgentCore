@@ -179,7 +179,8 @@ _ALLOWED_PREFIXES: tuple[tuple[str, ...], ...] = (
     ("pnpm", "add"),
     ("yarn", "install"),
     ("yarn", "ci"),
-    # npm/pnpm/yarn with safe --prefix/--dir/--cwd before verb (matched via helper)
+    # npm/pnpm/yarn with safe --prefix/--dir/--cwd before *install* verb
+    # (test / run test after --prefix is handled in ``_is_allowed_command``).
     ("npm", "--prefix"),
     ("pnpm", "--dir"),
     ("pnpm", "-C"),
@@ -305,6 +306,54 @@ def _make_output_callback(context: ToolContext):
     return callback
 
 
+def _is_node_test_argv(argv: list[str]) -> bool:
+    """Allow ``node --test`` plus optional workspace-relative test paths."""
+    if len(argv) < 2 or argv[0].lower() != "node" or argv[1] != "--test":
+        return False
+    for token in argv[2:]:
+        if token == "--":
+            continue
+        # Block ``-e`` / ``--eval`` / ``--require`` and other node flags.
+        if token.startswith("-") or not is_safe_relpath(token):
+            return False
+    return True
+
+
+def _is_npm_prefix_test_argv(argv: list[str]) -> bool:
+    """Allow ``npm --prefix <workspace-rel> test`` and ``… run test`` only.
+
+    Does not open arbitrary ``npm run <script>``. Install verbs stay on
+    ``validate_install_argv`` (this helper never treats ``test`` as install).
+    """
+    if not argv or argv[0].lower() != "npm":
+        return False
+    i = 1
+    saw_prefix = False
+    while i < len(argv):
+        tok = argv[i]
+        low = tok.lower()
+        if low == "--prefix" and i + 1 < len(argv):
+            if not is_safe_relpath(argv[i + 1]):
+                return False
+            saw_prefix = True
+            i += 2
+            continue
+        if low.startswith("--prefix="):
+            _, _, val = tok.partition("=")
+            if not is_safe_relpath(val):
+                return False
+            saw_prefix = True
+            i += 1
+            continue
+        break
+    if not saw_prefix or i >= len(argv):
+        return False
+    verb = argv[i].lower()
+    if verb == "test":
+        return True
+    return verb == "run" and i + 1 < len(argv) and argv[i + 1].lower() == "test"
+
+
 def _is_allowed_command(argv: list[str]) -> bool:
     if not argv:
         return False
@@ -312,6 +361,10 @@ def _is_allowed_command(argv: list[str]) -> bool:
     # alone is insufficient (variable path token); validate via package_install.
     if install_prefix_allowed(argv):
         return validate_install_argv(argv) is None
+    # ``node --test`` is not a prefix-table shape; ``npm --prefix … test`` must
+    # not be forced through the install-only dir-flag channel.
+    if _is_node_test_argv(argv) or _is_npm_prefix_test_argv(argv):
+        return True
     for prefix in _ALLOWED_PREFIXES:
         if len(argv) >= len(prefix) and tuple(argv[: len(prefix)]) == prefix:
             # Bare ``npm --prefix`` without a following install verb is not enough.

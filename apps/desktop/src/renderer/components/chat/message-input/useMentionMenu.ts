@@ -12,6 +12,7 @@ import {
   mentionFilterTotal,
 } from "@/lib/fileIndex";
 import type { FileSource } from "@/lib/fileSource";
+import { insertInlineToken } from "@/lib/inlineBody";
 import { logEvent } from "@/lib/log";
 import { fetchMessageWindow } from "@/services/messages";
 import { useConversationStore } from "@/stores/conversation";
@@ -27,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { ComposerBodyHandle } from "./ComposerBodyEditor";
 import { startStagedAttachmentUpload } from "./attachmentUploads";
 import {
   CONV_MENTION_MSG_LIMIT,
@@ -96,7 +98,7 @@ export function useMentionMenu({
   setAttachments,
   agentMentions,
   setAgentMentions,
-  textareaRef,
+  bodyRef,
   onAttachmentFolderHint,
   onBrowserFilePick,
 }: {
@@ -107,7 +109,7 @@ export function useMentionMenu({
   setAttachments: Dispatch<SetStateAction<PendingAttachment[]>>;
   agentMentions: PendingAgentMention[];
   setAgentMentions: Dispatch<SetStateAction<PendingAgentMention[]>>;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  bodyRef: RefObject<ComposerBodyHandle | null>;
   /** Draft-only: @ / browse attach from a folder → suggest filing into it (B4). */
   onAttachmentFolderHint?: (hint: AttachmentFolderHint) => void;
   /** Web：无本机选择器时点「附件」走 hidden file input。 */
@@ -435,22 +437,56 @@ export function useMentionMenu({
     [conversationId, setAttachments],
   );
 
+  const focusCaret = useCallback(
+    (offset: number) => {
+      bodyRef.current?.focus();
+      bodyRef.current?.setCaret(offset);
+      requestAnimationFrame(() => {
+        bodyRef.current?.focus();
+        bodyRef.current?.setCaret(offset);
+      });
+    },
+    [bodyRef],
+  );
+
+  const consumeMentionQuery = useCallback((): {
+    content: string;
+    caret: number;
+  } => {
+    const range = mentionRangeRef.current;
+    if (menuMode === "mention" && range) {
+      return {
+        content: value.slice(0, range.start) + value.slice(range.end),
+        caret: range.start,
+      };
+    }
+    return {
+      content: value,
+      caret: bodyRef.current?.getCaret() ?? value.length,
+    };
+  }, [menuMode, value, bodyRef]);
+
+  const commitInline = useCallback(
+    (kind: "A" | "M", index: number) => {
+      const { content, caret } = consumeMentionQuery();
+      const ins = insertInlineToken(content, caret, kind, index);
+      setValue(ins.value);
+      focusCaret(ins.caret);
+      closeMenu();
+    },
+    [consumeMentionQuery, setValue, focusCaret, closeMenu],
+  );
+
   const stripMentionQuery = useCallback(() => {
     const range = mentionRangeRef.current;
     if (menuMode === "mention" && range) {
       const updated = value.slice(0, range.start) + value.slice(range.end);
       setValue(updated);
-      requestAnimationFrame(() => {
-        const el = textareaRef.current;
-        if (el) {
-          el.focus();
-          el.selectionStart = el.selectionEnd = range.start;
-        }
-      });
+      focusCaret(range.start);
     } else {
-      textareaRef.current?.focus();
+      bodyRef.current?.focus();
     }
-  }, [menuMode, value, setValue, textareaRef]);
+  }, [menuMode, value, setValue, bodyRef, focusCaret]);
 
   const openMention = useCallback(
     (
@@ -484,31 +520,24 @@ export function useMentionMenu({
   const toggleAtMention = useCallback(() => {
     if (menuMode) {
       closeMenu();
-      textareaRef.current?.focus();
+      bodyRef.current?.focus();
       return;
     }
-    const el = textareaRef.current;
-    const caret = el?.selectionStart ?? value.length;
-    const selEnd = el?.selectionEnd ?? caret;
+    const caret = bodyRef.current?.getCaret() ?? value.length;
     const existing = detectMention(value, caret);
     if (existing) {
       openMention(existing.start, caret, existing.query, "attach");
-      el?.focus();
+      bodyRef.current?.focus();
       return;
     }
     const needsSpace = caret > 0 && !/\s/.test(value[caret - 1] ?? "");
     const insert = `${needsSpace ? " " : ""}@`;
-    const next = value.slice(0, caret) + insert + value.slice(selEnd);
+    const next = value.slice(0, caret) + insert + value.slice(caret);
     const atPos = caret + (needsSpace ? 1 : 0);
     setValue(next);
     openMention(atPos, atPos + 1, "", "attach");
-    requestAnimationFrame(() => {
-      const box = textareaRef.current;
-      if (!box) return;
-      box.focus();
-      box.selectionStart = box.selectionEnd = atPos + 1;
-    });
-  }, [menuMode, closeMenu, value, setValue, openMention, textareaRef]);
+    focusCaret(atPos + 1);
+  }, [menuMode, closeMenu, value, setValue, openMention, bodyRef, focusCaret]);
 
   const openBrowse = useCallback(() => {
     if (menuMode === "browse") {
@@ -548,15 +577,21 @@ export function useMentionMenu({
         setMenuError(`最多点名 ${MAX_AGENT_MENTIONS} 个角色`);
         return;
       }
+      const index = agentMentions.length;
       setAgentMentions((prev) => [
         ...prev,
         { id: crypto.randomUUID(), agentId, role },
       ]);
       logEvent("info", "mention.select", { category: "team" });
-      stripMentionQuery();
-      closeMenu();
+      commitInline("M", index);
     },
-    [agentMentions, setAgentMentions, stripMentionQuery, closeMenu],
+    [
+      agentMentions,
+      setAgentMentions,
+      stripMentionQuery,
+      closeMenu,
+      commitInline,
+    ],
   );
 
   const attachEntry = useCallback(
@@ -682,6 +717,7 @@ export function useMentionMenu({
             ? "conversation"
             : "file";
       logEvent("info", "mention.select", { category });
+      const index = attachments.length;
       setAttachments((prev) => [...prev, attachment]);
       startCloudUpload(attachment);
 
@@ -690,8 +726,7 @@ export function useMentionMenu({
         if (resolved) onAttachmentFolderHint(resolved);
       }
 
-      stripMentionQuery();
-      closeMenu();
+      commitInline("A", index);
     },
     [
       attachments,
@@ -702,6 +737,7 @@ export function useMentionMenu({
       setAttachments,
       startCloudUpload,
       stripMentionQuery,
+      commitInline,
     ],
   );
 
@@ -757,13 +793,15 @@ export function useMentionMenu({
       stagingId: res.stagingId,
       binary: res.binary,
     };
+    const index = attachments.length;
     setAttachments((prev) => [...prev, attachment]);
     startCloudUpload(attachment);
     logEvent("info", "mention.select", { category: "attach" });
-    clearActiveMention();
+    commitInline("A", index);
   }, [
     attachments,
     clearActiveMention,
+    commitInline,
     conversationId,
     menuMode,
     onBrowserFilePick,
@@ -859,7 +897,7 @@ export function useMentionMenu({
         case "close":
           e.preventDefault();
           closeMenu();
-          textareaRef.current?.focus();
+          bodyRef.current?.focus();
           return true;
         case "consume":
           e.preventDefault();
@@ -880,7 +918,7 @@ export function useMentionMenu({
       selectItem,
       pickLocalFile,
       closeMenu,
-      textareaRef,
+      bodyRef,
     ],
   );
 

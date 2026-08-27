@@ -442,10 +442,10 @@ async def test_recover_window_skips_tool_result_on_suspend(monkeypatch):
     from agentcore.runtime.pipeline.resume import recover_path as rp
     from agentcore.runtime.recover import SettledSuspension
     from agentcore.runtime.runs import RunPlan, RunSpec
-    from agentcore.runtime.suspension import TeamPreviewSuspension
+    from agentcore.runtime.suspension import PlanReviewSuspension
 
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="t", role="研究员")])
-    suspension = TeamPreviewSuspension(
+    suspension = PlanReviewSuspension(
         message_id="m1",
         conversation_id="c1",
         user_id="u1",
@@ -456,7 +456,8 @@ async def test_recover_window_skips_tool_result_on_suspend(monkeypatch):
         base_system_prompt="sys",
         journal_entries=[],
         plan=plan,
-        workers=[{"run_id": "w1", "role": "研究员", "task": "t"}],
+        steps=[{"run_id": "w1", "role": "研究员", "summary": "t"}],
+        pending=[],
         transcript=[
             LLMMessage(role="user", content="task"),
             LLMMessage(
@@ -577,7 +578,7 @@ async def test_recover_window_stop_skips_continuity_steer(monkeypatch):
 
 
 async def test_resume_pipeline_suspend_skips_ceo(monkeypatch):
-    """team_preview settle → SUSPEND must PAUSED-finish without arming the CEO loop."""
+    """plan_review settle → SUSPEND must PAUSED-finish without arming the CEO loop."""
     from types import SimpleNamespace
 
     from agentcore.runtime.events import FinishReason
@@ -586,11 +587,11 @@ async def test_resume_pipeline_suspend_skips_ceo(monkeypatch):
     from agentcore.runtime.pipeline.resume.rehydrate import RehydratedTurnState
     from agentcore.runtime.recover import SettledSuspension
     from agentcore.runtime.runs import RunPlan, RunSpec
-    from agentcore.runtime.suspension import TeamPreviewSuspension
+    from agentcore.runtime.suspension import PlanReviewSuspension
     from agentcore.workspace.protocol import WorkspaceBackend
 
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="t", role="研究员")])
-    suspension = TeamPreviewSuspension(
+    suspension = PlanReviewSuspension(
         message_id="m1",
         conversation_id="c1",
         user_id="u1",
@@ -601,7 +602,8 @@ async def test_resume_pipeline_suspend_skips_ceo(monkeypatch):
         base_system_prompt="sys",
         journal_entries=[],
         plan=plan,
-        workers=[{"run_id": "w1", "role": "研究员", "task": "t"}],
+        steps=[{"run_id": "w1", "role": "研究员", "summary": "t"}],
+        pending=[],
     )
     sink = EventSink()
     llm = MagicMock()

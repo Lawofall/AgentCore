@@ -25,9 +25,10 @@ def test_runsc_cmd_is_fixed_systrap_sandbox_ignore_cgroups():
         "--ignore-cgroups",
     ]
     assert "-d" not in cmd
+    assert "-detach" not in cmd
 
 
-def test_runsc_cmd_detach_inserts_dash_d():
+def test_runsc_cmd_detach_inserts_dash_detach():
     cmd = build_runsc_cmd(
         runsc_path="runsc",
         runtime_root="/data/sandbox",
@@ -36,7 +37,8 @@ def test_runsc_cmd_detach_inserts_dash_d():
         detach=True,
     )
     run_idx = cmd.index("run")
-    assert cmd[run_idx + 1] == "-d"
+    assert cmd[run_idx + 1] == "-detach"
+    assert "-d" not in cmd
     assert cmd[run_idx + 2] == "--bundle=/data/sandbox/b"
     assert cmd[run_idx + 3] == "agentcore-desk"
     assert "--rootless" not in cmd

@@ -329,10 +329,8 @@ export type AttachOutcome = "attached" | "none";
  * Catch-up: buffer journal replay (+ hot re-hang) until ``: attach-caught-up``, then
  * one-shot fold through {@link foldAttachSegment} — the段首 decides whether that fold
  * clears this turn's local state first. **调用方不得抢在 attach 之前清屏**：段是不是
- * 全量只有服务端知道，抢清后若来的是增量段，本回合上半场就永久没了。
- *
- * Older servers without the comment flush the buffer when the stream ends
- * (degraded: still one paint, no live boundary).
+ * 全量只有服务端知道，抢清后若来的是增量段，本回合上半场就永久没了。边界注释前断流
+ * = 传输失败（缓冲丢弃、游标未推进），由调用方重试；不得把半段当完成折。
  *
  * **回合级** attach（不带 ``follow``）：无 live run 时服务端回 204 → ``"none"``，回合
  * 收口即断流。调用方（``rejoinLiveTurn``）靠这个 204 判「回合已结束、去读持久化」，
@@ -412,9 +410,8 @@ export async function attachConversation(
         catchUp.length = 0;
       },
     );
-    // Legacy server: no caught-up comment — flush whatever we buffered (whole stream).
-    if (catchingUp && catchUp.length > 0) {
-      foldAttachSegment(conversationId, catchUp);
+    if (catchingUp) {
+      throw new StreamError("network");
     }
 
     if (getRuntime(conversationId).isGenerating) {
@@ -623,6 +620,10 @@ export interface RegenerateConversationOptions {
   conversationId: string;
   messageId: string;
   content?: string;
+  attachments?: OutgoingAttachment[];
+  agentMentions?: OutgoingAgentMention[];
+  /** When true, send materials arrays (including empty) so dropped chips persist. */
+  replaceMaterials?: boolean;
   signal?: AbortSignal;
 }
 
@@ -630,9 +631,18 @@ export async function regenerateConversation({
   conversationId,
   messageId,
   content,
+  attachments,
+  agentMentions,
+  replaceMaterials,
   signal,
 }: RegenerateConversationOptions): Promise<void> {
-  const body = JSON.stringify(content !== undefined ? { content } : {});
+  const payload: Record<string, unknown> = {};
+  if (content !== undefined) payload.content = content;
+  if (replaceMaterials) {
+    payload.attachments = attachments ?? [];
+    payload.agent_mentions = agentMentions ?? [];
+  }
+  const body = JSON.stringify(payload);
   await runMessageStream(
     `/v1/conversations/${conversationId}/messages/${messageId}/regenerate`,
     body,

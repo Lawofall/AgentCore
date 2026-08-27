@@ -31,10 +31,7 @@ import {
   useUpdateFolder,
 } from "@/hooks/useFolders";
 import { removeConversationScratch } from "@/hooks/useWorkspaces";
-import {
-  deleteConversationConfirmLabel,
-  notifyConversationDeleted,
-} from "@/lib/conversationDeleteCopy";
+import { notifyConversationDeleted } from "@/lib/conversationDeleteCopy";
 import { deriveGroupWorkspaceIsLocal } from "@/lib/conversationWorkspaceMode";
 import type { FileSource } from "@/lib/fileSource";
 import { queryClient } from "@/lib/queryClient";
@@ -47,7 +44,6 @@ import {
   useConversationStore,
 } from "@/stores/conversation";
 import {
-  Check,
   ChevronDown,
   ChevronRight,
   Cloud,
@@ -67,7 +63,6 @@ import {
   Pencil,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -158,7 +153,6 @@ export function WorkspaceSection({
   const inputRef = useRef<HTMLInputElement>(null);
   const skipBlurRef = useRef(false);
   const [pendingAction, setPendingAction] = useState<TreeAction | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteFolderOpen, setDeleteFolderOpen] = useState(false);
   const [clearScratchOpen, setClearScratchOpen] = useState(false);
   const [clearingScratch, setClearingScratch] = useState(false);
@@ -206,10 +200,6 @@ export function WorkspaceSection({
 
   const liveFolderConvs = () =>
     folderId ? getConversations().filter((c) => c.folderId === folderId) : [];
-
-  const deleteConfirmLabel = deleteConversationConfirmLabel(
-    isLocal ? "local" : undefined,
-  );
 
   useEffect(() => {
     if (flashing) rootRef.current?.scrollIntoView({ block: "nearest" });
@@ -280,7 +270,6 @@ export function WorkspaceSection({
 
   const startEdit = () => {
     if (!canRename) return;
-    setConfirmingDelete(false);
     setDraft(ws.name);
     setEditing(true);
   };
@@ -302,15 +291,8 @@ export function WorkspaceSection({
     }
   };
 
-  const requestDeleteConversation = () => {
-    if (!conversationId) return;
-    setEditing(false);
-    setConfirmingDelete(true);
-  };
-
   const handleDeleteConversation = async () => {
     if (!conversationId) return;
-    setConfirmingDelete(false);
     const wasActive = conversationId === currentId;
     const title = ws.name;
     try {
@@ -451,35 +433,21 @@ export function WorkspaceSection({
         )}
         <span className="min-w-0 flex-1 truncate font-medium">{ws.name}</span>
       </Button>
-      {confirmingDelete ? (
-        <div className="flex shrink-0 items-center">
+      {source?.caps.edit && (
+        <div className="hidden shrink-0 items-center group-hover:flex">
           <IconButton
-            title={deleteConfirmLabel}
-            onClick={() => void handleDeleteConversation()}
+            title="新建文件"
+            onClick={() => requestTreeAction("file")}
           >
-            <Check size={14} className="text-destructive" />
+            <FilePlus size={14} />
           </IconButton>
-          <IconButton title="取消" onClick={() => setConfirmingDelete(false)}>
-            <X size={14} />
+          <IconButton
+            title={onCreateSubfolder ? "在此新建文件夹" : "新建文件夹"}
+            onClick={(e) => requestTreeAction("dir", e.currentTarget)}
+          >
+            <FolderPlus size={14} />
           </IconButton>
         </div>
-      ) : (
-        source?.caps.edit && (
-          <div className="hidden shrink-0 items-center group-hover:flex">
-            <IconButton
-              title="新建文件"
-              onClick={() => requestTreeAction("file")}
-            >
-              <FilePlus size={14} />
-            </IconButton>
-            <IconButton
-              title={onCreateSubfolder ? "在此新建文件夹" : "新建文件夹"}
-              onClick={(e) => requestTreeAction("dir", e.currentTarget)}
-            >
-              <FolderPlus size={14} />
-            </IconButton>
-          </div>
-        )
       )}
       {showLocationBadge && (
         <span
@@ -533,11 +501,7 @@ export function WorkspaceSection({
       {editing ? (
         header
       ) : (
-        <ContextMenu
-          onOpenChange={(open) => {
-            if (open) setConfirmingDelete(false);
-          }}
-        >
+        <ContextMenu>
           <ContextMenuTrigger asChild>{header}</ContextMenuTrigger>
           <ContextMenuContent className="min-w-44">
             {!localUnavailable && !offlineCloud && source?.caps.edit && (
@@ -642,7 +606,7 @@ export function WorkspaceSection({
             {conversationId && (
               <ContextMenuItem
                 variant="danger"
-                onSelect={requestDeleteConversation}
+                onSelect={() => void handleDeleteConversation()}
               >
                 <Trash2 size={14} className="shrink-0" />
                 <span className="flex-1 truncate">删除对话</span>

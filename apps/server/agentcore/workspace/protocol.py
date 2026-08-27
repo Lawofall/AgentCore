@@ -281,7 +281,7 @@ class WorkspaceBackend(Protocol):
     # Implementations default to empty; prepare/resume stamp before tools run.
     ai_list_materials: frozenset[str]
     # When True, AI list/tree may reveal archive suffixes (zip/rar/…) that are
-    # otherwise noise-hidden — set briefly by file_list when the pattern targets
+    # otherwise noise-hidden — set briefly by glob when the pattern targets
     # archives; implementations default False.
     ai_list_reveal_archives: bool
 

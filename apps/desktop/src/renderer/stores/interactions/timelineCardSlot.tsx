@@ -70,9 +70,9 @@ export function timelineMissingCard(
  * 时间线标记先分类再决定画不画。
  *
  * 走袋子的 kind（`checkpoint`）id 不在 {@link TimelineCardBags} 里就是 missing。
- * `plan_review` / `team_preview` 永远有意为空（开工卡已退役；plan_review 操作面只在
- * ResumePrompt）。热痕迹（`approval` / `stage_card` / `escalation`）标记带 id 即
- * `card`，挂上的组件再拆 pending（有意为空）vs store 未命中（missing）。
+ * `plan_review` 永远有意为空（操作面只在 ResumePrompt）。热痕迹（`approval` /
+ * `stage_card` / `escalation`）标记带 id 即 `card`，挂上的组件再拆 pending（有意为空）
+ * vs store 未命中（missing）。
  */
 export function classifyTimelineInteractionCard(
   processKind: TimelineProcessKind,
@@ -82,7 +82,6 @@ export function classifyTimelineInteractionCard(
 ): TimelineCardSlot {
   switch (processKind) {
     case "plan_review":
-    case "team_preview":
       return { kind: "intentionalEmpty" };
     case "checkpoint": {
       const id = node.checkpoint_id;

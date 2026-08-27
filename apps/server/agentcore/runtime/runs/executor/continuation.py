@@ -306,7 +306,9 @@ async def _continue_run_scoped(
             worker_tools = _registry_without(worker_tools, *RETRIEVAL_TOOL_NAMES)
             if allowed_tools is not None:
                 allowed_tools = [t for t in allowed_tools if t not in RETRIEVAL_TOOL_NAMES]
-        can_execute = worker_tools.get_optional("code_execute") is not None
+        from agentcore.runtime.engine.governance import registry_can_execute
+
+        can_execute = registry_can_execute(worker_tools)
         # Same as executor.node: restricted allow-list must still keep handoff.
         if allowed_tools is not None and HANDOFF_TOOL_NAME not in allowed_tools:
             allowed_tools = [*allowed_tools, HANDOFF_TOOL_NAME]

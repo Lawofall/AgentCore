@@ -107,9 +107,9 @@ describe("shouldShowThinkingTail", () => {
   const toolRunning: ProcessStep = { ...toolDone, status: "running" };
   const waitDone: ProcessStep = { ...toolDone, tool_name: "wait" };
   const team: ProcessStep = { kind: "team", execution_id: "e1" };
-  const preview: ProcessStep = {
-    kind: "team_preview",
-    checkpoint_id: "tp1",
+  const planReview: ProcessStep = {
+    kind: "plan_review",
+    checkpoint_id: "pr1",
   };
 
   const live = {
@@ -127,7 +127,7 @@ describe("shouldShowThinkingTail", () => {
 
   it("treats marker tails as no-live-node (orchestration stand-in)", () => {
     expect(shouldShowThinkingTail({ ...live, last: team })).toBe(true);
-    expect(shouldShowThinkingTail({ ...live, last: preview })).toBe(true);
+    expect(shouldShowThinkingTail({ ...live, last: planReview })).toBe(true);
   });
 
   it("does not stack on live reasoning/content/rework or composing", () => {

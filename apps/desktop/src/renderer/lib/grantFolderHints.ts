@@ -59,7 +59,7 @@ export function isOrganizeOralConsent(text: string): boolean {
 
 /**
  * Map AskOption grant_* wire fields to IPC camelCase hints.
- * Callers only invoke this for `grant_readonly_folder` / `grant_organize_folder`
+ * Callers only invoke this for `grant_organize_folder`
  * (not organize_plan rows): optional `path` is the C1 mount-only abs transport
  * and must match card preview — forward it with well_known / target_name.
  * Returns undefined when no resolve hint is present (blank grant → not_found).

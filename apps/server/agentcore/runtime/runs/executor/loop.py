@@ -125,7 +125,9 @@ async def run_contract_loop(
     request_model = prepared.request_model
     tool_ctx = prepared.tool_ctx
     worker_tools = prepared.worker_tools
-    can_execute = worker_tools.get_optional("code_execute") is not None
+    from agentcore.runtime.engine.governance import registry_can_execute
+
+    can_execute = registry_can_execute(worker_tools)
     allowed_tools = prepared.allowed_tools
     files_expected = prepared.files_expected
     report_delivery = prepared.report_delivery

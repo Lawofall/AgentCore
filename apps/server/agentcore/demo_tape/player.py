@@ -64,7 +64,6 @@ from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.suspension import (
     AskUserSuspension,
     PlanReviewSuspension,
-    TeamPreviewSuspension,
     TurnSuspension,
     captain_transcript,
 )
@@ -342,8 +341,6 @@ def _emit_resolved_for_kind(
 
 
 def _suspension_kind_of(suspension: TurnSuspension) -> str:
-    if isinstance(suspension, TeamPreviewSuspension):
-        return "team_preview"
     if isinstance(suspension, AskUserSuspension):
         return "ask_user"
     if isinstance(suspension, PlanReviewSuspension):
@@ -549,29 +546,6 @@ def _build_tape_frame(
         citations=capture.citations,
         trace_id=capture.trace_id,
     )
-    if kind == "team_preview":
-        return TeamPreviewSuspension(
-            **common,
-            tool_call_id=f"tape_debate_{checkpoint_id[:8]}",
-            plan=RunPlan(),
-            completed={},
-            workers=list(payload.get("workers") or []),
-            tools=list(payload.get("tools") or []),
-            primitive=str(payload.get("primitive") or "debate"),
-            motion=str(payload.get("motion") or ""),
-            form=str(payload.get("form") or ""),
-            sides=list(payload.get("sides") or []),
-            max_rounds=int(payload.get("max_rounds") or 0),
-            thorough=bool(payload.get("thorough", True)),
-            # Divert marker mirror — content lives on turn_paused; cursor also on extras.
-            debate_arguments={
-                DEMO_TAPE_FRAME_KEY: dict(tape_meta),
-                "motion": payload.get("motion") or "",
-                "form": payload.get("form") or "",
-                "sides": list(payload.get("sides") or []),
-                "thorough": bool(payload.get("thorough", True)),
-            },
-        )
     if kind == "ask_user":
         intent = payload.get("intent") or "decision"
         return AskUserSuspension(

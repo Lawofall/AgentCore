@@ -58,7 +58,7 @@ def _stub_prepare_io(monkeypatch, *, on_attach, on_registry) -> None:
         on_registry,
     )
     monkeypatch.setattr(
-        "agentcore.runtime.pipeline.prepare._build_attachment_context",
+        "agentcore.runtime.pipeline.prepare._build_attachment_prompt",
         on_attach,
     )
 

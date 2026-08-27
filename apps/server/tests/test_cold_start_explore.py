@@ -33,6 +33,14 @@ from agentcore.memory.explore_profile import (
 )
 from agentcore.memory.store import CORE_MEMORY_FILE, NAVIGATION_MEMORY_FILE, FileMemoryStore
 from agentcore.runtime.resolve.prompt import compose_ceo_chat_prompt
+from agentcore.runtime.resolve.prompt.cold_start import (
+    _COLD_START_EXPLORE_HINT_EMPTY,
+    _COLD_START_EXPLORE_HINT_REBIND,
+    _COLD_START_EXPLORE_HINT_REFRESH,
+    _COLD_START_EXPLORE_REASON_EMPTY,
+    _COLD_START_EXPLORE_REASON_REBIND,
+    _COLD_START_EXPLORE_REASON_REFRESH,
+)
 from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin.remember import RememberTool
 from agentcore.tools.builtin.update_folder_profile import UpdateFolderProfileTool
@@ -449,8 +457,7 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
     assert "假画像" in with_flag
     assert "update_folder_profile" in with_flag
     assert "remember" in with_flag
-    assert "需要我继续吗" in with_flag
-    assert "topics" in with_flag
+    assert "立刻继续" in with_flag
     assert "重新了解" in with_flag
     assert "≥2" in with_flag or "至少两" in with_flag
     assert "1 人" in with_flag or "包办" in with_flag
@@ -461,6 +468,20 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
     ]
     assert "team_preview" not in block
     assert "同其它委派直接开跑" in block
+
+
+def test_hard_explore_three_reasons_share_one_principle():
+    """硬挡三因共用一条原则，只用 reason_line 区分。"""
+
+    def body(hint: str, reason: str) -> str:
+        assert reason in hint
+        return hint.replace(reason, "", 1)
+
+    empty = body(_COLD_START_EXPLORE_HINT_EMPTY, _COLD_START_EXPLORE_REASON_EMPTY)
+    rebind = body(_COLD_START_EXPLORE_HINT_REBIND, _COLD_START_EXPLORE_REASON_REBIND)
+    refresh = body(_COLD_START_EXPLORE_HINT_REFRESH, _COLD_START_EXPLORE_REASON_REFRESH)
+    assert empty == rebind == refresh
+    assert "【冷启动探索幕 · " not in empty
 
 
 def test_compose_prompt_rebind_gate():
@@ -493,9 +514,7 @@ def test_compose_prompt_refresh_gate():
     assert "【冷启动探索幕 · 绑定已变】" not in text
     assert "写盘不得出 AgentCore/" in text
     assert "create_folder 新建的云文件夹除外" in text
-    # 步 3：厚背景资料是按需条目，不再有「勿写 文档/项目/」这类路径禁令。
     assert "文档/项目" not in text
-    assert "厚背景资料" in text
     assert "勿让 worker 以 form=files" not in text
 
 
@@ -548,7 +567,8 @@ def test_compose_prompt_without_profile_tool_skips_write_hint():
     assert "【文件夹画像写入】" not in text
 
 
-def test_compose_prompt_profile_tool_hint_covers_continue_and_topics():
+def test_compose_prompt_profile_write_how_lives_on_tool_schema():
+    """画像写入 HOW 在工具 schema；有工具也不挂冻结核。"""
     skills = build_system_skill_registry()
     text = compose_ceo_chat_prompt(
         "BASE",
@@ -556,9 +576,10 @@ def test_compose_prompt_profile_tool_hint_covers_continue_and_topics():
         ceo_tool_names={"update_folder_profile", "delegate"},
         cold_start_explore=False,
     )
-    assert "【文件夹画像写入】" in text
-    assert "topics" in text
-    assert "立刻继续" in text
+    assert "【文件夹画像写入】" not in text
+    desc = UpdateFolderProfileTool().schema.description
+    assert "topics" in desc
+    assert "立刻继续" in desc
 
 
 # --- P1：主题拆分 -----------------------------------------------------------------
@@ -736,8 +757,6 @@ def test_compose_prompt_folder_profile_empty_soft_hint():
     assert "不挡" in soft
     assert "</cold_start_explore>" not in soft
     assert "写盘不得出 AgentCore/" not in soft
-    # 软空：禁连续 file_list；硬幕非空不可跳过
-    assert "file_list" in soft
     assert "不可当跳过" in soft or "≥2" in soft
     # Hard empty wins over soft empty.
     hard = compose_ceo_chat_prompt(
@@ -750,7 +769,6 @@ def test_compose_prompt_folder_profile_empty_soft_hint():
     assert "</cold_start_explore>" in hard
     assert "</folder_profile_empty>" not in hard
     assert "写盘不得出 AgentCore/" in hard
-    assert "file_list" in hard
     assert "不可跳过" in hard or "≥2" in hard
 
 

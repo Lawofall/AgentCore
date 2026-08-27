@@ -108,7 +108,7 @@ describe("StatusStrip · paused", () => {
     expect(container.querySelector(".animate-spin")).toBeNull();
   });
 
-  it("team_preview 开工挂起（paused + 全 pending）同样静态暂停条，不转圈", () => {
+  it("plan_review 全 pending 挂起同样静态暂停条，不转圈", () => {
     const exec = projectExecution(plan, [], "paused");
     expect(exec.runs.every((r) => r.status === "pending")).toBe(true);
 

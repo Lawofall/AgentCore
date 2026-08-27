@@ -5,7 +5,6 @@ import {
   type TimelineNode,
   appendContentStep,
   appendStageCardStep,
-  appendTeamPreviewStep,
   appendUserInterjectionStep,
   dropTrailingContentSteps,
   groupToolRuns,
@@ -86,10 +85,8 @@ const team = (execution_id: string): ProcessStep => ({
   kind: "team",
   execution_id,
 });
-const teamPreview = (checkpoint_id: string): ProcessStep => ({
-  kind: "team_preview",
-  checkpoint_id,
-});
+const leftoverTeamPreview = (checkpoint_id: string): ProcessStep =>
+  ({ kind: "team_preview", checkpoint_id }) as unknown as ProcessStep;
 const tool = (
   id: string,
   tool_name = "file_read",
@@ -219,6 +216,16 @@ describe("groupToolRuns", () => {
       "tool-group",
     ]);
   });
+
+  it("skips leftover retired ask / team_preview steps (not in the render union)", () => {
+    const nodes = groupToolRuns([
+      content("导语"),
+      leftoverTeamPreview("tp1"),
+      { kind: "ask", checkpoint_id: "old" } as unknown as ProcessStep,
+      team("exec1"),
+    ]);
+    expect(nodes.map((n) => n.kind)).toEqual(["content", "team"]);
+  });
 });
 
 describe("isOrchestrationTool", () => {
@@ -283,52 +290,6 @@ describe("isWaitIdleReasoning / omitCoordinationIdleSteps (S4)", () => {
   it("returns the same reference when nothing is idle", () => {
     const process = [reasoning("想"), tool("a"), content("答")];
     expect(omitCoordinationIdleSteps(process)).toBe(process);
-  });
-});
-
-describe("appendTeamPreviewStep", () => {
-  it("appends when no team marker exists", () => {
-    expect(appendTeamPreviewStep([content("导语")], "tp1")).toEqual([
-      content("导语"),
-      teamPreview("tp1"),
-    ]);
-  });
-
-  it("inserts before the last team marker (开工卡 → 协作图)", () => {
-    expect(
-      appendTeamPreviewStep([content("导语"), team("exec1")], "tp1"),
-    ).toEqual([content("导语"), teamPreview("tp1"), team("exec1")]);
-  });
-
-  it("inserts before the last of multiple team markers", () => {
-    expect(
-      appendTeamPreviewStep(
-        [team("exec1"), content("中"), team("exec2")],
-        "tp1",
-      ),
-    ).toEqual([
-      team("exec1"),
-      content("中"),
-      teamPreview("tp1"),
-      team("exec2"),
-    ]);
-  });
-
-  it("dedupes by checkpoint_id (same ref when already present)", () => {
-    const process = [teamPreview("tp1"), team("exec1")];
-    expect(appendTeamPreviewStep(process, "tp1")).toBe(process);
-  });
-
-  it("no-ops on empty checkpoint id", () => {
-    const process = [team("exec1")];
-    expect(appendTeamPreviewStep(process, "")).toBe(process);
-  });
-
-  it("does not mutate the input array", () => {
-    const process: ProcessStep[] = [content("导语"), team("exec1")];
-    const snapshot = [...process];
-    appendTeamPreviewStep(process, "tp1");
-    expect(process).toEqual(snapshot);
   });
 });
 

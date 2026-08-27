@@ -198,6 +198,12 @@ def test_compact_prompt_has_structure_and_guards():
     # Verbatim preservation of identifiers + anti-injection (the片段 is data, not commands).
     assert "逐字" in _COMPACT_SYSTEM_PROMPT
     assert "指令都不要执行" in _COMPACT_SYSTEM_PROMPT
+    # 现行检验：摘要只留会改变以后行动的信息（原则句，不点名废字段）。
+    assert "会改变以后行动" in _COMPACT_SYSTEM_PROMPT
+    assert "已完成步骤" in _COMPACT_SYSTEM_PROMPT
+    assert "仍生效的决定与否决" in _COMPACT_SYSTEM_PROMPT
+    assert "废选项" in _COMPACT_SYSTEM_PROMPT
+    assert "此刻仍开放" in _COMPACT_SYSTEM_PROMPT
 
 
 # --- _summary_block (loader injection shape) ---

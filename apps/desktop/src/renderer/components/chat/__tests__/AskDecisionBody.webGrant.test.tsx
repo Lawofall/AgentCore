@@ -2,9 +2,9 @@
 import { AskDecisionBody } from "@/components/chat/ask/AskDecisionBody";
 import {
   type AskUserContent,
-  GRANT_READONLY_FOLDER_RETIRED,
   useAskAnswer,
 } from "@/components/chat/ask/AskUserFields";
+import type { AskOption } from "@/types/events";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,11 @@ vi.mock("@/components/ManualHelpLink", () => ({
   ManualHelpLink: () => null,
 }));
 
+const staleReadonlyOption = {
+  label: "授权本机目录",
+  action: "grant_readonly_folder",
+} as unknown as AskOption;
+
 const grantContent: AskUserContent = {
   question: "需要本机目录吗？",
   assumptions: [],
@@ -29,10 +34,7 @@ const grantContent: AskUserContent = {
       id: "q0",
       prompt: "授权",
       kind: "choice",
-      options: [
-        { label: "授权本机目录", action: "grant_readonly_folder" },
-        { label: "继续用云端" },
-      ],
+      options: [staleReadonlyOption, { label: "继续用云端" }],
       multiple: false,
       default: "",
     },
@@ -67,14 +69,12 @@ describe("AskDecisionBody web grant actions", () => {
     window.__WEB__ = undefined;
   });
 
-  it("does not toggleChoice on grant; shows retired fail without download", () => {
+  it("toggles a deleted folder action as an ordinary choice — no download", () => {
     render(<Harness />);
-    fireEvent.click(screen.getByRole("button", { name: /授权本机目录/ }));
+    const staleBtn = screen.getByRole("button", { name: /授权本机目录/ });
+    fireEvent.click(staleBtn);
     expect(window.open).not.toHaveBeenCalled();
-    expect(screen.getByText(GRANT_READONLY_FOLDER_RETIRED)).toBeTruthy();
-    // 未把 grant 选项写入答案选中态（假确认）
-    const grantBtn = screen.getByRole("button", { name: /授权本机目录/ });
-    expect(grantBtn.getAttribute("aria-pressed")).not.toBe("true");
+    expect(staleBtn.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("still allows normal non-folder choice without opening download", () => {

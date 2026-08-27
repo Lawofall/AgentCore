@@ -37,6 +37,7 @@ from .ceiling import ceiling_finalize
 from .directive import LoopDirective
 from .directive_apply import apply_loop_directive
 from .governance import (
+    apply_exec_env_dead_retire,
     apply_workspace_channel_dead_retire,
     classify_investigation_tools,
     coordination_injection_has_all_completed,
@@ -360,8 +361,18 @@ async def react_loop(
         ):
             tool_defs = _resolve_tool_defs()
 
-    # Entry: teammates that never hit a dead envelope still inherit session/channel sticky.
+    def _maybe_retire_exec_env_dead() -> None:
+        """Session sticky exec-env-dead → strip code_execute/test_run (not terminal)."""
+        nonlocal tool_defs
+        if apply_exec_env_dead_retire(
+            disabled_tools=disabled_tools,
+            controller=controller,
+        ):
+            tool_defs = _resolve_tool_defs()
+
+    # Entry: teammates that never hit a dead envelope still inherit session sticky.
     _maybe_retire_workspace_channel_dead()
+    _maybe_retire_exec_env_dead()
     # Nested worker lead may resume with _supervised already set (new react_loop).
     # Promote before the opening observe / first LLM so replan is on the menu
     # (CEO wait 套件 still gated on depth==0 + live session inside promote).
@@ -622,9 +633,11 @@ async def react_loop(
 
             if ensure_coordination_surface_before_llm(tools):
                 tool_defs = _resolve_tool_defs()
-            # Sticky channel-dead poll immediately before LLM (session-read posture like
-            # timeout wind_down): sibling may have stamped after prior round / on_round_begin.
+            # Sticky channel-dead / exec-env-dead poll immediately before LLM
+            # (session-read posture like timeout wind_down): sibling may have
+            # stamped after prior round / on_round_begin.
             _maybe_retire_workspace_channel_dead()
+            _maybe_retire_exec_env_dead()
             try:
                 round_result = await run_llm_round(
                     llm=llm,

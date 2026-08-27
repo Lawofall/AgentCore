@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# 透镜 run_id：playbook ``multi_lens_research`` 铸 ``lens_0``…``lens_N``。
+# 透镜 run_id：playbook ``lens_crosscheck`` 铸 ``lens_0``…``lens_N``。
 _LENS_RUN_ID_RE = re.compile(r"^lens_\d+$")
 # 角色名启发式（兼容非标准 id 的透镜）：``法律视角`` / ``品牌商业视角``。
 _LENS_ROLE_RE = re.compile(r".+视角$")
@@ -324,7 +324,7 @@ def witness_answer_feedback(
         f"你是【{seat.display_name}】（{seat.origin_caption}）。"
         "你不占辩席、不写辩词，只根据幕1 调研现场记忆回答主持人的【事实性问题】。\n\n"
         "纪律：\n"
-        "- 只答事实：时间线 / 主体 / 条款原文 / 已查到来源；不知就说不知，禁止编造；\n"
+        "- 只答事实：时间线 / 主体 / 条款原文 / 已查到来源；不知就说不知；\n"
         "- 可检索 / 读文件核对；职责是答事实，勿写盘 / handoff / 委派；\n"
         "- 不要站队、不要评价辩手策略、不要写立论。\n\n"
         f"问题列表（共 {n} 条）：\n{numbered}"

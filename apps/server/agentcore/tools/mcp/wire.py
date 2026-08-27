@@ -255,7 +255,7 @@ def _duration_ms(started: float) -> int:
 
 
 def _cache_miss_origin_fields() -> dict[str, str]:
-    """Searchable origin on empty MCP injection (harvest binds ``execution_harvest``)."""
+    """Searchable origin on empty MCP injection (historical ``execution_harvest``)."""
     from agentcore.runtime.delegate.post_close_gate import current_user_message_origin
 
     origin = current_user_message_origin()

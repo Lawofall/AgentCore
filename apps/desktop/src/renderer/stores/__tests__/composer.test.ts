@@ -1,3 +1,4 @@
+import { inlineToken } from "@/lib/inlineBody";
 // @vitest-environment jsdom
 import { uiGet, uiSet } from "@/lib/uiStorage";
 import {
@@ -128,7 +129,7 @@ describe("composer draft store", () => {
     });
     __reloadComposerDraftsForTests();
     const restored = useComposerDraftStore.getState().drafts.c1;
-    expect(restored?.value).toBe("重启后还在");
+    expect(restored?.value).toBe(`重启后还在${inlineToken("A", 0)}`);
     expect(restored?.attachments).toEqual([
       expect.objectContaining({
         id: "a1",

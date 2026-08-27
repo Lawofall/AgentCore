@@ -80,6 +80,7 @@ LIVENESS_TIMEOUT_DETAIL_MARKERS = (
 WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS: tuple[str, ...] = (
     "file_read",
     "file_list",
+    "glob",
     "file_write",
     "file_append",
     "str_replace",
@@ -110,8 +111,26 @@ WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS: tuple[str, ...] = (
 
 # Short user-visible honest sentence (chat bubble / harvest fallback). Soft steer
 # still tells the model to say this; A2 also pushes it without waiting on LLM.
+# Tool-row twin (no engine word「收口」) lives in ``tool_failure_face``.
 CHANNEL_DEAD_USER_VISIBLE = (
-    "本地文件暂时连不上。请检查桌面连接后重试；我将基于已有材料收口。"
+    "工作区/本地文件连不上，请稍后重试或重开桌面，基于已有材料收口。"
+)
+
+# CEO coordination inject: same fact as CHANNEL_DEAD_USER_VISIBLE, plus a
+# dispatch nail. The write-desk hard gate already rejects form=files; this
+# only names the constraint so the captain does not pretend files can still
+# be edited.
+CHANNEL_DEAD_CEO_INJECT = (
+    "工作区/本地文件连不上，请稍后重试或重开桌面，基于已有材料收口。"
+    "禁止再派需要写盘的队员。"
+)
+
+# CEO coordination inject when the local exec env is sticky-dead. Soft steer
+# only — no new delegate hard gate (no form=files-shaped predicate for
+# "this task needs code_execute").
+EXEC_ENV_DEAD_CEO_INJECT = (
+    "这台电脑此刻跑不了命令，基于已有材料收口；"
+    "禁止再派需要 code_execute/test_run 的队员；只读/只写文档可以。"
 )
 
 # Quiet user-visible line when code_execute/test_run family retires on hangs
@@ -179,7 +198,7 @@ LOCAL_ROOT_NOT_HELD = (
 
 WORKSPACE_CHANNEL_DEAD_RETIRE_STEER = (
     "本地工作区文件通道已挂起（活性无响应）：本回合起停用全部本地文件读写工具。"
-    "请向用户说明「本地文件暂时连不上」，基于已有信息收口或请用户检查桌面连接后重试；"
+    "请向用户说明「工作区/本地文件连不上，请稍后重试或重开桌面」，基于已有材料收口；"
     "禁止再调用文件工具，也禁止再派需要读写本地文件的队员。"
 )
 
@@ -193,6 +212,20 @@ def exec_env_dead_user_visible(code: str | None = None) -> str:
     return EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE.get(
         (code or "").strip(), EXEC_ENV_DEAD_USER_VISIBLE
     )
+
+
+def capability_dead_inject_lines(
+    *,
+    workspace_channel_dead: bool = False,
+    exec_env_dead: bool = False,
+) -> list[str]:
+    """CEO inject nails for sticky capability-missing flags (soft steer only)."""
+    lines: list[str] = []
+    if workspace_channel_dead:
+        lines.append(CHANNEL_DEAD_CEO_INJECT)
+    if exec_env_dead:
+        lines.append(EXEC_ENV_DEAD_CEO_INJECT)
+    return lines
 
 
 def is_file_too_large_detail(detail: str | None) -> bool:

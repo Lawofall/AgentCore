@@ -24,13 +24,11 @@ from agentcore.runtime.resolve.prompt.base import (
 from agentcore.runtime.resolve.prompt.ceo_core import (
     _CEO_CORE_HINT,
     _attachment_material_block,
-    capability_how_suffix,
 )
 from agentcore.runtime.resolve.prompt.citation import CHAT_CITATION_HINT
 from agentcore.runtime.resolve.prompt.cold_start import (
     _FOLDER_NAV_STALE_HINT,
     _FOLDER_PROFILE_EMPTY_SOFT_HINT,
-    _FOLDER_PROFILE_TOOL_HINT,
     _explore_act_block,
 )
 from agentcore.runtime.resolve.prompt.memory_rules import _format_rules
@@ -89,10 +87,10 @@ def assemble_system_prompt(
 def _on_demand_preamble(*, with_summaries: bool) -> list[str]:
     """Shared intro lines for ``<按需目录>`` (CEO and worker both get name＋摘要).
 
-    The preamble states ONLY what the directory is and how to pull from it. Routing
-    ("which scene must consult what", 交付档 / intensity / playbook / 绿场准入) belongs to
-    the resident core — restating it here made the same rule land three times in one
-    assembled prompt (核 + 前言 + 条目摘要). 每条纪律只留一个权威位置.
+    The preamble states ONLY what the directory is and how to pull from it.
+    Product and orch scene WHEN are catalog summaries (L1). Must-not-consult
+    on common paths stays in the resident core (④). Restating either here
+    made the same rule land three times (核 + 前言 + 条目摘要).
     """
     detail = "name＋一行摘要" if with_summaries else "name"
     return [
@@ -102,7 +100,7 @@ def _on_demand_preamble(*, with_summaries: bool) -> list[str]:
         "低频工具：能力行已装配仍可能未进开场表；consult 之后本回合下一模型轮即可调（不必等用户再发一条）；"
         "常驻内容已在 ``<rules>``，常驻工具已在工具表，无需查阅。"
         "何时该拉哪条，按条目自身说明判断；"
-        "「必查 / 不必先查」的路由口径以常驻正文为准，本目录不另立一套：",
+        "常见路不必先查的口径以常驻正文为准，本目录不另立一套：",
     ]
 
 
@@ -180,6 +178,7 @@ def compose_ceo_chat_prompt(
     ceo_tool_names: set[str],
     on_demand_entries: Sequence[ConsultDirectoryEntry] = (),
     folder_catalog: Sequence[FolderCatalogEntry] = (),
+    current_folder_id: str | None = None,
     workspace_context: str | None = None,
     cold_start_explore: bool | str | None = False,
     folder_nav_stale: bool = False,
@@ -199,15 +198,12 @@ def compose_ceo_chat_prompt(
     :data:`SectionOrder.WORKSPACE_FACTS` workers use, after the core). ``on_demand_entries``
     must match the tool's merged source.
     ``ceo_offered_names`` is the OpenAI table this turn (on-demand tools omitted until
-    consult); HOW manuals follow that set, not the full registry.
+    consult). Host / terminal / browser / grant HOW is consult-owned and must not
+    hang on this frozen prompt — even when catalog/eval omit ``offered`` or a
+    later round already has the tool on the table.
     """
-    offered = ceo_offered_names if ceo_offered_names is not None else ceo_tool_names
+    del ceo_offered_names
     ceo_core = resolve(FRAGMENT_CEO_CORE, _CEO_CORE_HINT)
-    how_suffix = capability_how_suffix(offered)
-    if how_suffix:
-        ceo_core = f"{ceo_core.rstrip()}\n{how_suffix}\n"
-    if "update_folder_profile" in ceo_tool_names:
-        ceo_core = f"{ceo_core.rstrip()}\n{_FOLDER_PROFILE_TOOL_HINT.strip()}\n"
     reason: str | None
     if cold_start_explore is True:
         reason = "empty"
@@ -259,7 +255,9 @@ def compose_ceo_chat_prompt(
         .add("on_demand_directory", on_demand_block, SectionOrder.SKILL_DIRECTORY)
         .add(
             "folder_catalog",
-            render_folder_catalog(folder_catalog),
+            render_folder_catalog(
+                folder_catalog, current_folder_id=current_folder_id
+            ),
             SectionOrder.FOLDER_CATALOG,
         )
         .add("citation", resolve(FRAGMENT_CITATION, CHAT_CITATION_HINT), SectionOrder.CITATION)

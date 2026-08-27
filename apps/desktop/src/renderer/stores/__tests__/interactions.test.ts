@@ -87,32 +87,32 @@ describe("InteractionStore", () => {
 
   it("cold required on a new host messageId replaces a prior resolved entry", () => {
     store().upsertRequired({
-      kind: "team_preview",
+      kind: "plan_review",
       conversationId: "c1",
       messageId: "m-turn1",
       payload: {
-        checkpoint_id: "tp-reuse",
-        primitive: "delegate",
-        workers: [],
+        checkpoint_id: "pr-reuse",
+        steps: [],
+        pending: [],
       },
     });
     store().markResolved({
-      kind: "team_preview",
-      id: "tp-reuse",
+      kind: "plan_review",
+      id: "pr-reuse",
       resolution: { decision: "continue" },
     });
     store().upsertRequired({
-      kind: "team_preview",
+      kind: "plan_review",
       conversationId: "c1",
       messageId: "m-turn2",
       payload: {
-        checkpoint_id: "tp-reuse",
-        primitive: "delegate",
-        workers: [{ run_id: "r2", role: "研", task: "t", depends_on: [] }],
+        checkpoint_id: "pr-reuse",
+        steps: [{ run_id: "r2", role: "研", summary: "t" }],
+        pending: [],
       },
     });
-    expect(store().get("tp-reuse")?.status).toBe("pending");
-    expect(store().get("tp-reuse")?.messageId).toBe("m-turn2");
+    expect(store().get("pr-reuse")?.status).toBe("pending");
+    expect(store().get("pr-reuse")?.messageId).toBe("m-turn2");
   });
 
   it("status:pending force replaces a resolved cold entry (recovery)", () => {
@@ -177,35 +177,35 @@ describe("InteractionStore", () => {
 
   it("reopen does not flip a server-settled cold card back to pending", () => {
     store().upsertRequired({
-      kind: "team_preview",
+      kind: "plan_review",
       conversationId: "c1",
       messageId: "m1",
       payload: {
-        checkpoint_id: "tp-settled",
-        primitive: "delegate",
-        workers: [],
+        checkpoint_id: "pr-settled",
+        steps: [],
+        pending: [],
       },
     });
-    expect(store().beginSubmit("tp-settled")).toBe(true);
-    noteColdServerSettled("tp-settled");
-    store().reopen("tp-settled");
-    expect(store().get("tp-settled")?.status).toBe("submitting");
+    expect(store().beginSubmit("pr-settled")).toBe(true);
+    noteColdServerSettled("pr-settled");
+    store().reopen("pr-settled");
+    expect(store().get("pr-settled")?.status).toBe("submitting");
   });
 
   it("reopen still returns an unsettled cold card to pending", () => {
     store().upsertRequired({
-      kind: "team_preview",
+      kind: "plan_review",
       conversationId: "c1",
       messageId: "m1",
       payload: {
-        checkpoint_id: "tp-live",
-        primitive: "delegate",
-        workers: [],
+        checkpoint_id: "pr-live",
+        steps: [],
+        pending: [],
       },
     });
-    expect(store().beginSubmit("tp-live")).toBe(true);
-    store().reopen("tp-live");
-    expect(store().get("tp-live")?.status).toBe("pending");
+    expect(store().beginSubmit("pr-live")).toBe(true);
+    store().reopen("pr-live");
+    expect(store().get("pr-live")?.status).toBe("pending");
   });
 
   it("orphanConversation flips only hot pending cards", () => {
@@ -349,14 +349,14 @@ describe("InteractionStore", () => {
       payload: { checkpoint_id: "cp1", question: "继续吗？" },
     });
     store().upsertRequired({
-      kind: "team_preview",
+      kind: "plan_review",
       conversationId: "c1",
       messageId: "m1",
       origin: "server",
       payload: {
-        checkpoint_id: "tp1",
-        primitive: "delegate",
-        workers: [],
+        checkpoint_id: "pr1",
+        steps: [],
+        pending: [],
       },
     });
     store().upsertRequired({
@@ -368,7 +368,7 @@ describe("InteractionStore", () => {
     });
     store().hydratePending("c1", [], { confirmed: ["server"] });
     expect(store().get("cp1")?.status).toBe("pending");
-    expect(store().get("tp1")?.status).toBe("pending");
+    expect(store().get("pr1")?.status).toBe("pending");
     expect(store().get("a1")?.status).toBe("resolved");
   });
 
@@ -598,7 +598,6 @@ describe("isAwaitingUserEntry (侧栏「等你」灯判定)", () => {
   it("excludes cold kinds (pausedTurns 帧是权威)", () => {
     expect(isAwaitingUserEntry(entry({ kind: "ask_user" }))).toBe(false);
     expect(isAwaitingUserEntry(entry({ kind: "plan_review" }))).toBe(false);
-    expect(isAwaitingUserEntry(entry({ kind: "team_preview" }))).toBe(false);
   });
 });
 

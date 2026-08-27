@@ -27,11 +27,11 @@ from agentcore.evals.playbook_routing import (
 from agentcore.evals.types import EvalConfigError
 
 _LEGACY_EXPECT = {
-    "research_brief_parallel": "parallel_brief",
+    "research_brief_parallel": "map_fanout",
     "code_audit_report": "code_audit",
     "greenfield_spa_build_app": "build_app",
-    "research_mit_vs_gpl_chat": "parallel_brief",
-    "research_knowledge_base_chat": "parallel_brief",
+    "research_mit_vs_gpl_chat": "map_fanout",
+    "research_knowledge_base_chat": "map_fanout",
     "audit_check_bugs_save_file": "code_audit",
     "audit_find_issues_workspace_doc": "code_audit",
     "app_todo_website_usable": "build_app",
@@ -50,6 +50,8 @@ def test_scenarios_lint_ok():
     assert "discuss_license_round2_short_answers" in keys
     assert "write_prd_save_file" in keys
     assert "discuss_worker_params_industry" in keys
+    assert "discuss_arch_bug_maintain_facets" in keys
+    assert "compare_three_js_frameworks" in keys
 
 
 def test_legacy_named_playbook_scenarios_unchanged():
@@ -70,7 +72,7 @@ def test_legacy_named_playbook_scenarios_unchanged():
 def test_discuss_and_prd_fixture_fields():
     by_key = {s.key: s for s in SCENARIOS}
     discuss = by_key["discuss_license_no_doc_waiver"]
-    assert discuss.expect_playbook == "parallel_brief"
+    assert discuss.expect_playbook == "map_fanout"
     assert "DIRECT" in discuss.expect_action and "ASK" in discuss.expect_action
     round2 = by_key["discuss_license_round2_short_answers"]
     assert round2.prior_turns
@@ -84,10 +86,22 @@ def test_discuss_and_prd_fixture_fields():
     bound = by_key["discuss_worker_params_industry"]
     assert bound.workspace == "codebase"
     assert bound.expect_playbook == ""
-    assert "DELEGATE" in bound.expect_action and "DIRECT" in bound.expect_action
-    assert bound.expect_form is None
-    assert bound.expect_min_workers is None
+    assert bound.expect_action == "DELEGATE"
+    assert bound.expect_form == "prose"
+    assert bound.expect_min_workers == 1
     assert bound.expect_max_recon_rounds == 1
+    facets = by_key["discuss_arch_bug_maintain_facets"]
+    assert facets.workspace == "empty"
+    assert facets.expect_playbook == ""
+    assert "DIRECT" in facets.expect_action and "ASK" in facets.expect_action
+    assert facets.expect_max_workers == 1
+    assert "写成文档" in facets.user_message
+    compare = by_key["compare_three_js_frameworks"]
+    assert compare.expect_playbook == ""
+    assert compare.expect_action == "DELEGATE"
+    assert compare.expect_min_workers == 3
+    assert "React" in compare.user_message and "Vue" in compare.user_message
+    assert "Svelte" in compare.user_message
     assert "讨论删除worker" in bound.user_message
     assert "行业实践" in bound.user_message
 
@@ -189,7 +203,7 @@ def test_classify_landing_variants():
     )
     assert expected["landing"] == "selected_expected"
     other = classify_landing(
-        action="DELEGATE", playbook="research_report", expect="build_app", offered=offered, task_count=0
+        action="DELEGATE", playbook="cite_write_review", expect="build_app", offered=offered, task_count=0
     )
     assert other["landing"] == "selected_other"
     hand = classify_landing(
@@ -207,7 +221,7 @@ def test_classify_landing_extended_observation():
     allowed = classify_landing(
         action="DIRECT",
         playbook=None,
-        expect="parallel_brief",
+        expect="map_fanout",
         offered=offered,
         task_count=0,
         expect_action="DIRECT|ASK",
@@ -216,7 +230,7 @@ def test_classify_landing_extended_observation():
     duo = classify_landing(
         action="DELEGATE",
         playbook=None,
-        expect="parallel_brief",
+        expect="map_fanout",
         offered=offered,
         task_count=2,
         form="files",
@@ -262,8 +276,8 @@ def test_classify_landing_extended_observation():
     assert mismatch["landing"] == "form_mismatch"
     recon = classify_landing(
         action="DELEGATE",
-        playbook="parallel_brief",
-        expect="parallel_brief",
+        playbook="map_fanout",
+        expect="map_fanout",
         offered=offered,
         task_count=0,
         expect_action="DELEGATE",
@@ -276,7 +290,7 @@ def test_classify_landing_extended_observation():
     under = classify_landing(
         action="DELEGATE",
         playbook=None,
-        expect="parallel_brief",
+        expect="map_fanout",
         offered=offered,
         task_count=1,
         form="prose",
@@ -289,7 +303,7 @@ def test_classify_landing_extended_observation():
     brief_hand = classify_landing(
         action="DELEGATE",
         playbook=None,
-        expect="parallel_brief",
+        expect="map_fanout",
         offered=offered,
         task_count=2,
         form="prose",
@@ -302,8 +316,8 @@ def test_classify_landing_extended_observation():
     assert brief_hand["landing"] == "handwritten_expected"
     brief_named = classify_landing(
         action="DELEGATE",
-        playbook="parallel_brief",
-        expect="parallel_brief",
+        playbook="map_fanout",
+        expect="map_fanout",
         offered=offered,
         task_count=0,
         expect_action="DELEGATE",
@@ -346,16 +360,16 @@ def test_think_act_on_recorded_colloquial_excerpt():
 
 
 def test_think_act_ignores_negated_playbook():
-    reasoning = "不要用 playbook=research_report，改走对话对齐。"
+    reasoning = "不要用 playbook=cite_write_review，改走对话对齐。"
     mentions = extract_think_mentions(reasoning)
-    assert "research_report" not in mentions["playbooks"]
+    assert "cite_write_review" not in mentions["playbooks"]
     assert think_act_divergences(mentions, action="DIRECT", playbook=None, intensity=None) == []
 
 
 def test_aggregate_expresses_distribution():
     samples = []
     for i, action in enumerate(["DELEGATE", "DELEGATE", "DELEGATE", "ASK", "DIRECT"]):
-        pb = "parallel_brief" if action == "DELEGATE" else None
+        pb = "map_fanout" if action == "DELEGATE" else None
         landing = "selected_expected" if pb else "no_delegate"
         samples.append(
             {
@@ -376,7 +390,7 @@ def test_aggregate_expresses_distribution():
     assert agg["card_issued"] == "1/5"
     assert agg["expected_playbook"] == "3/5"
     assert agg["think_act_divergence"] == "1/5"
-    assert agg["playbook_counts"]["parallel_brief"] == 3
+    assert agg["playbook_counts"]["map_fanout"] == 3
 
 
 def test_diff_fingerprints_reports_changed_scenario():

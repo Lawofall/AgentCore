@@ -18,11 +18,18 @@ import {
   resolveConversationLocalTarget,
 } from "@/services/sidecarRouting";
 import {
+  type OutgoingAgentMention,
+  type OutgoingAttachment,
   regenerateConversation,
   resumeConversation,
 } from "@/services/streamConversation";
 import { resumeConversationViaSidecar } from "@/services/streamConversationViaSidecar";
-import { getRuntime, useConversationStore } from "@/stores/conversation";
+import {
+  type AgentMentionMeta,
+  type MessageAttachmentMeta,
+  getRuntime,
+  useConversationStore,
+} from "@/stores/conversation";
 import { beginTurnPreflight } from "@/stores/conversation/turnPhaseActions";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
@@ -97,6 +104,31 @@ export function isPausedFrameGone(err: unknown): boolean {
   return code === "not_found" || code === "paused_turn_not_found";
 }
 
+function toOutgoingAttachments(
+  atts: readonly MessageAttachmentMeta[],
+): OutgoingAttachment[] {
+  return atts.map((a) => ({
+    name: a.name,
+    path: a.path,
+    text: "",
+    truncated: a.truncated,
+    kind: a.kind ?? "file",
+    conversation_id: a.conversationId,
+    workspace_path: a.workspacePath,
+  }));
+}
+
+function toOutgoingMentions(
+  ments: readonly AgentMentionMeta[],
+): OutgoingAgentMention[] {
+  return ments.map((m) => ({ agent_id: m.agentId, role: m.role }));
+}
+
+export type RegenerateMaterials = {
+  attachments: readonly MessageAttachmentMeta[];
+  agentMentions: readonly AgentMentionMeta[];
+};
+
 /**
  * Re-run a turn from an existing (persisted) user message.
  *
@@ -109,6 +141,7 @@ export function isPausedFrameGone(err: unknown): boolean {
 export async function runRegenerate(
   userMessageId: string,
   content?: string,
+  materials?: RegenerateMaterials,
 ): Promise<void> {
   const store = useConversationStore.getState();
   const conversationId = store.currentConversationId;
@@ -131,6 +164,13 @@ export async function runRegenerate(
       conversationId,
       messageId: userMessageId,
       content,
+      attachments: materials
+        ? toOutgoingAttachments(materials.attachments)
+        : undefined,
+      agentMentions: materials
+        ? toOutgoingMentions(materials.agentMentions)
+        : undefined,
+      replaceMaterials: materials !== undefined,
       signal: ac.signal,
     });
   } catch (err) {

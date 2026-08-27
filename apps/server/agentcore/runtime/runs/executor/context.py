@@ -507,7 +507,7 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
             f"你的位置：你是这条流水线的【终端环】。上游【{joined}】的产出已在下方「前置结果」"
             "交给你，你的职责是据此整合、产出团队交给老板的【最终交付物】。"
             "「前置结果」若已列出工作区路径：先 file_read 这些路径再写总稿；"
-            "【禁止】把开工做成全仓 file_list / grep / 再调研一遍。"
+            "【禁止】把开工做成全仓 glob / grep / 再调研一遍。"
             "路径含糊或列表缺文件时才按【找路径】补钉。"
         )
     if not parts:

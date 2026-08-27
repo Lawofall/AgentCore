@@ -21,11 +21,6 @@ if TYPE_CHECKING:
 # Product-bearing close frames (completed / failed). Occupancy also includes
 # cancelled / skipped — those live on RUN_CLOSE_EVENT_TYPES, not here.
 
-# ``before_last_team`` process markers (开工卡 / 委派授权): product narrative is
-# 放行 → 协作图. ``run_plan`` may journal ``process_team`` first; fold still inserts
-# these ahead of the last ``team`` so reload order matches live EventSink.
-_BEFORE_LAST_TEAM_PROCESS_KINDS = frozenset({"team_preview"})
-
 
 def _normalize_process_lane(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Journal compat: pre-redirect tool rows stored channel steers as ``status=error``."""
@@ -68,7 +63,7 @@ def _has_team_marker(steps: list[dict[str, Any]], execution_id: str) -> bool:
 
 
 def _append_process_step(steps: list[dict[str, Any]], step: dict[str, Any]) -> None:
-    """Append a non-tool process step, applying ``before_last_team`` when needed."""
+    """Append a non-tool process step (retired kinds skipped)."""
     kind = step.get("kind")
     if kind in RETIRED_PROCESS_STEP_KINDS:
         return
@@ -78,11 +73,6 @@ def _append_process_step(steps: list[dict[str, Any]], step: dict[str, Any]) -> N
             return
         steps.append(step)
         return
-    if kind in _BEFORE_LAST_TEAM_PROCESS_KINDS:
-        for i in range(len(steps) - 1, -1, -1):
-            if steps[i].get("kind") == "team":
-                steps.insert(i, step)
-                return
     steps.append(step)
 
 
@@ -116,22 +106,6 @@ def _apply_team_slots_from_run_plans(
             continue
         idx = max(0, min(at, len(process)))
         process.insert(idx, {"kind": "team", "execution_id": eid})
-
-
-def _reorder_before_last_team_markers(process: list[dict[str, Any]]) -> None:
-    """After deferred ``team`` insert, keep 开工卡 / 授权 ahead of the last team."""
-    markers = [s for s in process if s.get("kind") in _BEFORE_LAST_TEAM_PROCESS_KINDS]
-    if not markers:
-        return
-    rest = [s for s in process if s.get("kind") not in _BEFORE_LAST_TEAM_PROCESS_KINDS]
-    team_idx = next(
-        (i for i in range(len(rest) - 1, -1, -1) if rest[i].get("kind") == "team"),
-        None,
-    )
-    if team_idx is None:
-        process[:] = rest + markers
-        return
-    process[:] = [*rest[:team_idx], *markers, *rest[team_idx:]]
 
 
 def _splice_synthetic_deltas(
@@ -347,7 +321,6 @@ def runs_from_entries(entries: list[dict[str, Any]] | None) -> dict[str, Any] | 
                     rid: list(steps) for rid, steps in snap.run_processes.items()
                 }
     _apply_team_slots_from_run_plans(process, team_slots_from_run_plan)
-    _reorder_before_last_team_markers(process)
     if final_outputs:
         events = _splice_synthetic_deltas(events, final_outputs, agent_run_ids)
     # Surface gate (parity with EventSink.execution_journal): idempotent on journals
