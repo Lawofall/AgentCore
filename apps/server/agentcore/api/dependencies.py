@@ -46,7 +46,6 @@ from agentcore.db.repositories import (
     ProductNoticeRepository,
     PushDeviceRepository,
     RefreshTokenRepository,
-    SimulationRepository,
     StandingTaskRepository,
     StandingTaskRunRepository,
     TurnJournalRepository,
@@ -212,10 +211,6 @@ def get_memory_store(session: AsyncSession = Depends(get_db)) -> "DocumentMemory
 
 def get_board_repo(session: AsyncSession = Depends(get_db)) -> BoardRepository:
     return BoardRepository(session)
-
-
-def get_simulation_repo(session: AsyncSession = Depends(get_db)) -> SimulationRepository:
-    return SimulationRepository(session)
 
 
 def get_message_repo(session: AsyncSession = Depends(get_db)) -> MessageRepository:

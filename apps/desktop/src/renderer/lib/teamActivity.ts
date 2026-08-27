@@ -31,9 +31,9 @@ export function conversationIdFromHash(hash: string): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** 开发 / 回放态路由（#/preview、#/simulation）跑的是合成回合，不弹跨对话通知，让离线预览
+/** 开发 / 回放态路由（#/preview）跑的是合成回合，不弹跨对话通知，让离线预览
  * 自检（frontend-preview）保持安静。 */
 export function isTransientRoute(hash: string): boolean {
   const path = hash.replace(/^#/, "");
-  return path.startsWith("/preview") || path.startsWith("/simulation");
+  return path.startsWith("/preview");
 }

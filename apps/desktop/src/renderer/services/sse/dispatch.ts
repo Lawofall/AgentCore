@@ -14,19 +14,7 @@ import { handleMetaEvent } from "./handlers/meta";
 import { handleWorkspaceEvent } from "./handlers/workspace";
 import type { DispatchContext } from "./types";
 
-/**
- * sim.* rides a dedicated AgentTown stream — Desktop no longer projects them.
- * Keep a no-op sink so conversation-bus exhaustiveness does not trip on stray sim frames.
- */
-function ignoreSimulationEvent(
-  event: SSEEvent,
-  _ctx: DispatchContext,
-): boolean {
-  return event.type.startsWith("sim.");
-}
-
 const HANDLERS = [
-  ignoreSimulationEvent,
   handleMessageStreamEvent,
   handleInteractionEvent,
   handleMetaEvent,

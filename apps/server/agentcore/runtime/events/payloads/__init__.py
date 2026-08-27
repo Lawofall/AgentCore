@@ -25,7 +25,6 @@ from agentcore.runtime.events.payloads import (
     process,
     run,
     shared,
-    sim,
     workspace,
 )
 from agentcore.runtime.events.payloads._base import (
@@ -254,65 +253,6 @@ TS_EXPORTS: tuple[TsExport, ...] = (
     TsInterface(chat.ErrorPayload),
     TsInterface(chat.TitleGeneratedPayload),
     TsInterface(chat.TurnWarningPayload),
-    TsInterface(sim.Vec3, force_required=frozenset({"x", "y", "z"})),
-    TsInterface(
-        sim.SimAgentState,
-        force_required=frozenset({"activity", "mood", "goal", "last_thought"}),
-        doc="Per-agent snapshot on `sim.agent_state` and in tick snapshots.",
-    ),
-    TsInterface(
-        sim.SimAgentAction,
-        force_required=frozenset({"thought", "success", "detail"}),
-        doc="One agent decision within a tick (`sim.agent_action`).",
-    ),
-    TsInterface(sim.SimTickStartedPayload),
-    TsInterface(
-        sim.TickMetrics,
-        name="SimTickMetrics",
-        force_required=frozenset(
-            {
-                "avg_mood",
-                "trade_count",
-                "trade_total_amount",
-                "positive_relation_ratio",
-                "population_by_region",
-            }
-        ),
-        doc=(
-            "Macro indicators for one simulation tick (backend `TickMetrics`), carried on\n"
-            "`sim.tick_ended` for the 观测面板. `population_by_region` maps a region name →\n"
-            "head count."
-        ),
-    ),
-    TsInterface(sim.SimTickEndedPayload),
-    TsInterface(sim.SimTickFramePayload),
-    TsInterface(sim.SimAgentStatePayload),
-    TsInterface(sim.SimAgentActionPayload),
-    TsInterface(sim.InteractionTranscriptLine, force_required=frozenset({"round"})),
-    TsInterface(
-        sim.InteractionStateChange,
-        doc="Summary of world mutations applied by an interaction.",
-    ),
-    TsInterface(sim.InteractionResult),
-    TsInterface(sim.SimInteractionPayload),
-    TsInterface(
-        sim.WorldModifiersWire,
-        force_required=frozenset(
-            {
-                "market_price_multiplier",
-                "storm_active",
-                "festival_active",
-                "square_attraction_boost",
-            }
-        ),
-        doc="World-level knobs affected by scheduled events.",
-    ),
-    TsInterface(
-        sim.WorldEventWire,
-        force_required=frozenset({"duration_ticks", "source"}),
-        doc="One active world event in tick snapshots.",
-    ),
-    TsInterface(sim.SimWorldEventPayload, force_required=frozenset({"modifiers"})),
     TsAlias(
         "BrowserLiveState",
         browser.BrowserLiveState,
@@ -409,13 +349,6 @@ EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.ERROR: chat.ErrorPayload,
     EventType.TITLE_GENERATED: chat.TitleGeneratedPayload,
     EventType.TURN_WARNING: chat.TurnWarningPayload,
-    EventType.SIM_TICK_STARTED: sim.SimTickStartedPayload,
-    EventType.SIM_TICK_ENDED: sim.SimTickEndedPayload,
-    EventType.SIM_TICK_FRAME: sim.SimTickFramePayload,
-    EventType.SIM_AGENT_ACTION: sim.SimAgentActionPayload,
-    EventType.SIM_AGENT_STATE: sim.SimAgentStatePayload,
-    EventType.SIM_INTERACTION: sim.SimInteractionPayload,
-    EventType.SIM_WORLD_EVENT: sim.SimWorldEventPayload,
     EventType.BROWSER_LIVE_FRAME: browser.BrowserLiveFramePayload,
     EventType.BROWSER_LIVE_STATUS: browser.BrowserLiveStatusPayload,
     EventType.TURN_SAVED: chat.TurnSavedPayload,

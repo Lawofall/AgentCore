@@ -148,16 +148,6 @@ def test_unknown_event_type_raises():
         durable_face([{"type": "made_up_event", "payload": {}}])
 
 
-def test_retired_sim_show_event_types_are_dropped():
-    face = durable_face(
-        [
-            {"type": "sim.show.heart_pick", "payload": {"run_id": "r", "tick": 0}},
-            {"type": "message_start", "payload": {"message_id": "m"}},
-        ]
-    )
-    assert [ev["type"] for ev in face] == ["message_start"]
-
-
 def test_retired_question_posted_event_types_are_dropped():
     from agentcore.runtime.events.types import RETIRED_EVENT_TYPE_VALUES
 
@@ -356,7 +346,6 @@ def test_export_sweep_preserves_recorded_fixtures(tmp_path: Path, monkeypatch):
     assert recorded.exists(), "export 清盘误删了录制裁切向量"
     assert not stale.exists(), "export 清盘应删掉它拥有的过期手写向量"
     assert (tmp_path / "single_agent_text.json").exists()
-    assert (tmp_path / "simulation-region-positions.json").exists()
 
 
 def test_hand_vectors_never_use_recorded_prefix():

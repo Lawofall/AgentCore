@@ -110,9 +110,6 @@ jobs:
         working-directory: apps/server
         run: uv run python -m agentcore.conformance.export
 
-      - name: Check town story-pack materialization (canonical ↔ Unity ↔ backend)
-        run: node scripts/sync-story-packs.mjs --check
-
       - name: Check legal Markdown mirror (desktop content.ts ↔ TERMS/PRIVACY)
         run: node scripts/sync-legal-md.mjs --check
 

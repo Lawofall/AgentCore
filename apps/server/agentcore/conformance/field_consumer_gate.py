@@ -13,11 +13,10 @@ Hits are token-level after string-aware comment stripping, so these reads count:
 * property access ``.x`` and quoted ``"x"`` / ``'x'``
 * destructuring ``const { x } = p``
 * rename copies ``{ x: renamed }``
-* C# ``[JsonProperty("x")]``
 * whole-payload store later read as ``p.x`` elsewhere in the scan surface
 * ``INTERACTION_KIND_WIRE.idField`` values (dynamic ``payload[wire.idField]``)
 
-Scan surface: desktop / mobile / admin ``src``, town ``Assets/Scripts``,
+Scan surface: desktop / mobile / admin ``src``,
 ``protocol-fold-kit/src``. Tests and JSON fixtures are excluded.
 
 Stock unread names are grouped in ``field_consumer_baseline.py``. The gate only
@@ -44,11 +43,10 @@ _SCAN_ROOTS: Final[tuple[str, ...]] = (
     "apps/desktop/src",
     "apps/mobile/src",
     "apps/admin/src",
-    "apps/town/Assets/Scripts",
     "packages/protocol-fold-kit/src",
 )
 _SCAN_EXTS: Final[frozenset[str]] = frozenset(
-    {".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".cs"}
+    {".ts", ".tsx", ".js", ".jsx", ".mts", ".cts"}
 )
 _TEST_DIR_NAMES: Final[frozenset[str]] = frozenset({"__tests__", "__test__"})
 _SKIP_NAME_MARKERS: Final[tuple[str, ...]] = (".test.", ".spec.", ".stories.")
@@ -73,7 +71,7 @@ _IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _QUOTED_RE = re.compile(r"""(?<!\\)(["'])(?:\\.|(?!\1).)*\1""")
 
 _WORKFLOW_HINT = (
-    "  Next: read this leaf in desktop/mobile/admin/town/fold-kit production code, "
+    "  Next: read this leaf in desktop/mobile/admin/fold-kit production code, "
     "or add a baseline group with a factual reason in "
     "agentcore/conformance/field_consumer_baseline.py. "
     "Do not delete the contract field without a human decision."

@@ -411,8 +411,6 @@ importers:
         specifier: ^3.2.6
         version: 3.2.6(@types/debug@4.1.13)(@types/node@25.9.5)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.2.0))(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.22.4)(yaml@2.9.0)
 
-  packages/town-story-packs: {}
-
 packages:
 
   '@alloc/quick-lru@5.2.0':

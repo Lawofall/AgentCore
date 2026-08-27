@@ -63,10 +63,9 @@ describe("conversationIdFromHash", () => {
 });
 
 describe("isTransientRoute", () => {
-  it("flags preview and simulation surfaces", () => {
+  it("flags preview surfaces", () => {
     expect(isTransientRoute("#/preview")).toBe(true);
     expect(isTransientRoute("#/preview/whiteboard")).toBe(true);
-    expect(isTransientRoute("#/simulation/town")).toBe(true);
   });
 
   it("is false for real app routes", () => {

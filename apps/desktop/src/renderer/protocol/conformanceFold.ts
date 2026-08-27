@@ -505,14 +505,6 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
         }
         break;
       }
-      case "sim.agent_action":
-      case "sim.agent_state":
-      case "sim.interaction":
-      case "sim.tick_started":
-      case "sim.tick_ended":
-      case "sim.tick_frame":
-      case "sim.world_event":
-        break;
       case "turn_warning": {
         turnWarning = (ev.payload as TurnWarningPayload).message;
         break;

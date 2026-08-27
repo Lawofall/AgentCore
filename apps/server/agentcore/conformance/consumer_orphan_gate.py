@@ -142,7 +142,6 @@ _PROCESS_STEP_BLOCK_RE = re.compile(
     r"export type ProcessStep\s*=([\s\S]*?);\n\n",
 )
 _SSE_EVENT_CTOR_RE = re.compile(r'SSEEvent\s*\([^)]*type\s*=\s*"([^"]+)"')
-_SIM_WIRE_RE = re.compile(r'"(sim\.[a-z0-9_.]+)"')
 _EVENTTYPE_MEMBER_RE = re.compile(r"EventType\.([A-Z0-9_]+)")
 _BRIDGE_ONLY_INTERACTION_KINDS = frozenset({"client_tool"})
 
@@ -195,7 +194,6 @@ _EVENTTYPE_EQ_RE = re.compile(
 _TYPE_PROP_RE = re.compile(r"\btype:\s*['\"]([^'\"]+)['\"]")
 _KIND_RE = re.compile(r"kind:\s*['\"]([^'\"]+)['\"]")
 _QUOTED_IDENT_RE = re.compile(r"['\"]([a-z][a-z0-9_.]*)['\"]")
-_SIM_PREFIX_RE = re.compile(r"""startsWith\(\s*['\"]sim\.['\"]\s*\)""")
 _KIND_WIRE_RE = re.compile(
     r'"([^"]+)":\s*\{\s*requiredEvent:\s*"([^"]+)",\s*'
     r'resolvedEvent:\s*(?:"([^"]+)"|null)',
@@ -488,8 +486,6 @@ def _scan_sse_producers(
                     add(enum_map[enum_name], rel_path, line_no)
             for m in _SSE_EVENT_CTOR_RE.finditer(line):
                 add(m.group(1), rel_path, line_no)
-            for m in _SIM_WIRE_RE.finditer(line):
-                add(m.group(1), rel_path, line_no)
             for m in _EMIT_EVENTS_RE.finditer(line):
                 add(m.group(1), rel_path, line_no)
             if "persist_and_emit" in line or ".emit(" in line or "emit_sse" in line:
@@ -648,14 +644,11 @@ def _scan_sse_ui_consumers(
     files = [
         (rel, label) for rel, label in _listed_ui_files(root) if rel not in process_rels
     ]
-    sim_prefix_hit = False
     for rel, label in files:
         path = root / rel
         if not path.is_file():
             continue
         text = _read_text_cached(cache, path)
-        if _SIM_PREFIX_RE.search(text):
-            sim_prefix_hit = True
         for line_no, line in enumerate(text.splitlines(), 1):
             for m in _CASE_RE.finditer(line):
                 _add_ui_hit(consumers, known, m.group(1), rel, line_no, label)
@@ -665,13 +658,6 @@ def _scan_sse_ui_consumers(
                 _add_ui_hit(consumers, known, m.group(1), rel, line_no, label)
             for m in _QUOTED_IDENT_RE.finditer(line):
                 _add_ui_hit(consumers, known, m.group(1), rel, line_no, label)
-    if sim_prefix_hit:
-        dispatch_rel = "apps/desktop/src/renderer/services/sse/dispatch.ts"
-        for key in known:
-            if key.startswith("sim."):
-                _add_ui_hit(
-                    consumers, known, key, dispatch_rel, 0, "desktop sse dispatch sim.*"
-                )
     registry_kinds = _interaction_registry_kinds(root, cache)
     for key, refs in _interaction_wire_events(root, cache, registry_kinds).items():
         for ui_rel, ui_line, ui_label in refs:

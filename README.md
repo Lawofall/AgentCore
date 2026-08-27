@@ -39,9 +39,9 @@
 │ contract / UI   │                     └──────────────────────────┘
 └────────┬────────┘
          │
-    ┌────┴────┬──────────────┐
-    ▼         ▼              ▼
- apps/mobile  apps/admin   apps/town（可选 Unity）
+    ┌────┴────┬──────────┐
+    ▼         ▼          ▼
+ apps/mobile  apps/admin
 ```
 
 权威归属与读序 → [`docs/02-架构/架构地图.md`](docs/02-架构/架构地图.md)  
@@ -60,7 +60,6 @@ AI 运行时入口 → [`docs/03-AI核心/运行时总览.md`](docs/03-AI核心/
 | `conformance/` | 核心 | SSE / fold 协议对账向量 |
 | `deploy/` | 核心 | Docker Compose、部署脚本与环境模板 |
 | `docs/` | 核心 | 设计文档（What / Why，中文）；总入口见下 |
-| [`apps/town`](apps/town/README.md) | 实验 | AI 小镇（Unity / AgentTown）观测客户端；独立于对话编排，不在产品主循环内 |
 | `demos/` | 可选 | 产品磁带录制与可控回放 |
 | `evals/` | 可选 | 能力评估与合成场景 |
 | [`apps/website`](apps/website/README.md) | 品牌 | 官网 |
@@ -90,7 +89,7 @@ AI 运行时入口 → [`docs/03-AI核心/运行时总览.md`](docs/03-AI核心/
 
 ## 快速开始
 
-完整步骤（环境变量、账号、Windows 清树重启、小镇等）见 **[`docs/02-架构/本地开发.md`](docs/02-架构/本地开发.md)**。
+完整步骤（环境变量、账号、Windows 清树重启）见 **[`docs/02-架构/本地开发.md`](docs/02-架构/本地开发.md)**。
 
 前置环境（与根 `package.json` `engines` / `packageManager` 对齐）：
 
@@ -162,8 +161,3 @@ pnpm -C apps/desktop dev
 - 用户服务协议：[TERMS.md](./TERMS.md) · 隐私政策：[PRIVACY.md](./PRIVACY.md)（与应用内法律文案同源；正式上线前须法务审阅）
 
 公开切分前的开发历史已私有归档；请对本仓库提 Issue / PR。
-
-## 第三方资产
-
-AgentTown 3D 资产来源、许可与 Mixamo 再分发警示见  
-[`apps/town/Assets/TownAssets/README.md`](apps/town/Assets/TownAssets/README.md)。

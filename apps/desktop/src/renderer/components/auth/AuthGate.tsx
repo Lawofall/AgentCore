@@ -5,12 +5,7 @@ import { clearBearerTokens } from "@/lib/sessionAuth";
 import { LoginPage } from "@/pages/LoginPage";
 import { ServiceUnavailablePage } from "@/pages/ServiceUnavailablePage";
 import {
-  clearAgentTownSession,
-  persistAgentTownSession,
-} from "@/services/agentTownSession";
-import {
   setServiceUnavailableHandler,
-  setSessionRenewedHandler,
   setUnauthorizedHandler,
 } from "@/services/api";
 import { bootstrapAuth, diagnoseOutage } from "@/services/auth";
@@ -87,7 +82,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
           case "authenticated":
             store.setAuthenticated(result.user);
             useServerHealthStore.getState().markOnline();
-            void persistAgentTownSession();
             void cacheShellMeta({ user: result.user });
             void enablePush();
             break;
@@ -97,7 +91,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
             break;
           }
           case "unauthenticated":
-            void clearAgentTownSession();
             store.setUnauthenticated();
             break;
         }
@@ -119,11 +112,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
       void disablePush().finally(() => {
         clearBearerTokens();
       });
-      void clearAgentTownSession();
       void clearOfflineCache();
       useAuthStore.getState().setUnauthenticated();
     });
-    setSessionRenewedHandler(() => void persistAgentTownSession());
     // Mid-session outage (N4-A): stay inside the shell with a soft banner when
     // already authenticated (or already offline-readonly). Confirm via /readyz
     // before markOffline — a healthy probe means ignore the transient API blip
@@ -144,7 +135,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
     void runBootstrap();
     return () => {
       setUnauthorizedHandler(null);
-      setSessionRenewedHandler(null);
       setServiceUnavailableHandler(null);
     };
   }, [runBootstrap]);

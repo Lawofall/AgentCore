@@ -2,7 +2,7 @@
 """CLI: field-level event payload consumer ratchet.
 
 Fails when ``events.generated.ts`` grows a leaf field name that no production
-consumer (desktop / mobile / admin / town / protocol-fold-kit) reads, and that
+consumer (desktop / mobile / admin / protocol-fold-kit) reads, and that
 name is not in the grouped baseline.
 
 Usage (from apps/server)::

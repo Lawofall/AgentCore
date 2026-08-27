@@ -1,9 +1,0 @@
-{
-  "name": "@agentcore/town-story-packs",
-  "version": "0.0.0",
-  "private": true,
-  "description": "AI 小镇 Offline/scripted 故事剧本包单一真相源（内容+表现+机制）。物化：pnpm gen:story-packs → Unity StreamingAssets + 后端 simulation/data。",
-  "exports": {
-    "./demo-story-packs.json": "./demo-story-packs.json"
-  }
-}

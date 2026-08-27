@@ -340,7 +340,6 @@ function runSectionChild(only, { lite = false, contractBaselinePath = null } = {
 async function runContractsSection(baseline) {
   section("contracts");
   regenContracts();
-  run("story-packs check", "pnpm", ["gen:story-packs:check"]);
   run("legal md check", "pnpm", ["sync:legal:check"]);
   run("doc section pointers", "node", [
     "scripts/check-doc-section-pointers.mjs",

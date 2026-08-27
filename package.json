@@ -9,8 +9,6 @@
   "scripts": {
     "conformance": "pnpm -r run conformance",
     "gen:types": "node scripts/gen-types.mjs",
-    "gen:story-packs": "node scripts/sync-story-packs.mjs",
-    "gen:story-packs:check": "node scripts/sync-story-packs.mjs --check",
     "sync:legal": "node scripts/sync-legal-md.mjs",
     "sync:legal:check": "node scripts/sync-legal-md.mjs --check",
     "check:doc-sections": "node scripts/check-doc-section-pointers.mjs",
@@ -34,15 +32,7 @@
     "sync:release-cdn": "node deploy/scripts/sync-release-cdn.mjs",
     "probe:updater-cdn": "node deploy/scripts/probe-updater-cdn.mjs",
     "check:capacitor-cors": "node deploy/scripts/check-capacitor-cors.mjs",
-    "sync:logs": "node scripts/sync-prod-logs.mjs",
-    "town:build": "powershell -ExecutionPolicy Bypass -File apps/town/scripts/build-unity.ps1",
-    "town:build:webgl": "powershell -ExecutionPolicy Bypass -File apps/town/scripts/build-unity.ps1 -Target WebGL",
-    "town:spike:webgl": "powershell -ExecutionPolicy Bypass -File apps/town/scripts/spike-webgl-sse.ps1",
-    "town:serve:webgl": "node apps/town/scripts/serve-webgl.mjs",
-    "town:shoot:webgl": "node apps/town/scripts/shoot-webgl-demo.mjs",
-    "town:verify": "powershell -ExecutionPolicy Bypass -File apps/town/scripts/verify-unity.ps1",
-    "town:perf": "powershell -ExecutionPolicy Bypass -File apps/town/scripts/perf-unity.ps1",
-    "town:open": "powershell -ExecutionPolicy Bypass -File apps/town/scripts/open-unity.ps1"
+    "sync:logs": "node scripts/sync-prod-logs.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

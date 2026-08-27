@@ -6,11 +6,10 @@ import {
 } from "../narrowProduct";
 
 describe("isNarrowBlockedPath", () => {
-  it("blocks toolbox / whiteboard / town / conversation admin", () => {
+  it("blocks toolbox / whiteboard / conversation admin", () => {
     expect(isNarrowBlockedPath("/toolbox")).toBe(true);
     expect(isNarrowBlockedPath("/toolbox/manual/intro")).toBe(true);
     expect(isNarrowBlockedPath("/whiteboard/abc")).toBe(true);
-    expect(isNarrowBlockedPath("/simulation/town")).toBe(true);
     expect(isNarrowBlockedPath("/conversations")).toBe(true);
     expect(isNarrowBlockedPath("/more/shortcuts")).toBe(true);
   });

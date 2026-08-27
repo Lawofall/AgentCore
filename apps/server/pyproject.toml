@@ -138,8 +138,6 @@ ignore = ["B008", "A002", "E402"]
 "agentcore/runtime/skills/**" = ["E501"]
 "agentcore/runtime/events/disposition.py" = ["E501"]
 "agentcore/runtime/runs/executor/identities.py" = ["E501"]
-"agentcore/evals/spikes/**" = ["E501", "B007", "SIM103", "N818"]
-"agentcore/simulation/**" = ["E501", "N818"]
 "agentcore/conformance/vectors/__init__.py" = ["F401"]
 "agentcore/api/routes/conversations/crud.py" = ["E501"]
 "agentcore/api/routes/inference/proxy.py" = ["E501"]
@@ -283,8 +281,6 @@ module = [
     "agentcore.evals.harness",
     "agentcore.evals.judge",
     "agentcore.evals.seed_lint",
-    "agentcore.evals.spikes.sim.__main__",
-    "agentcore.evals.spikes.sim.harness",
     "agentcore.folders.collaboration_timeline",
     "agentcore.llm.catalog",
     "agentcore.llm.factory",
@@ -345,11 +341,6 @@ module = [
     "agentcore.sidecar.server_pkg.handlers",
     "agentcore.sidecar.server_pkg.result",
     "agentcore.sidecar.server_pkg.turns",
-    "agentcore.simulation.agents.social",
-    "agentcore.simulation.agents.tick_runner",
-    "agentcore.simulation.llm",
-    "agentcore.simulation.service",
-    "agentcore.simulation.show.orchestrator",
     "agentcore.tools.builtin.ask_user.card",
     "agentcore.tools.builtin.ask_user.tool",
     "agentcore.tools.builtin.debate.tool",

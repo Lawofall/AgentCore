@@ -25,10 +25,6 @@ vi.mock("@/services/auth", () => ({
   resetPassword: (...args: unknown[]) => resetPassword(...args),
 }));
 
-vi.mock("@/services/agentTownSession", () => ({
-  persistAgentTownSession: vi.fn(),
-}));
-
 vi.mock("@/services/offlineCache", () => ({
   cacheShellMeta: vi.fn(),
 }));

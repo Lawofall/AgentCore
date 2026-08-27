@@ -31,7 +31,6 @@ import { ProviderSettings } from "@/pages/more/ProviderSettings";
 import { RedirectToOfficialChat } from "@/pages/more/RedirectToOfficialChat";
 import { ShortcutsSettings } from "@/pages/more/ShortcutsSettings";
 import { UsageSettings } from "@/pages/more/UsageSettings";
-import { TownLauncherPage } from "@/pages/simulation/TownLauncherPage";
 import { ConnectorsPage } from "@/pages/toolbox/ConnectorsPage";
 import { GuidelinesPage } from "@/pages/toolbox/GuidelinesPage";
 import { ToolsPage } from "@/pages/toolbox/ToolsPage";
@@ -214,15 +213,6 @@ export const router = createHashRouter([
       {
         path: "preview/capability-packs",
         element: <CapabilityPacksPreviewPage />,
-      },
-      // DT-01: Desktop launcher only (spawn AgentTown.exe + session.json).
-      {
-        path: "simulation/town",
-        element: (
-          <NarrowBlockedPage>
-            <TownLauncherPage />
-          </NarrowBlockedPage>
-        ),
       },
       {
         path: "more",

@@ -1,8 +1,4 @@
 import {
-  AGENTTOWN_CHANNELS,
-  type AgentTownApi,
-} from "@shared/agenttown-contract";
-import {
   BROWSER_CHANNELS,
   type BrowserApi,
   type BrowserNavState,
@@ -72,13 +68,6 @@ import {
   type WindowFramePreset,
 } from "@shared/window-contract";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-
-const agentTownApi: AgentTownApi = {
-  writeSession: (input) =>
-    ipcRenderer.invoke(AGENTTOWN_CHANNELS.writeSession, input),
-  clearSession: () => ipcRenderer.invoke(AGENTTOWN_CHANNELS.clearSession),
-  launch: (opts) => ipcRenderer.invoke(AGENTTOWN_CHANNELS.launch, opts),
-};
 
 const deviceIdentityApi: DeviceIdentityApi = {
   getDeviceId: () => ipcRenderer.invoke(DEVICE_IDENTITY_CHANNELS.getDeviceId),
@@ -478,7 +467,6 @@ if (!process.contextIsolated) {
 }
 
 try {
-  contextBridge.exposeInMainWorld("agentTownApi", agentTownApi);
   contextBridge.exposeInMainWorld("deviceIdentityApi", deviceIdentityApi);
   contextBridge.exposeInMainWorld("fsApi", fsApi);
   contextBridge.exposeInMainWorld("sidecarApi", sidecarApi);

@@ -83,10 +83,6 @@ pnpm -C apps/desktop shoot:graph-perf-live
 
 改 SSE 载荷、fold、InteractionKind 后：根目录 `pnpm gen:types` **与** `pnpm conformance`。
 
-## 与 AgentTown
-
-桌面 `#/simulation/town` 仅为**启动器**，3D 在独立 Unity 工程 [`apps/town`](../town/README.md)。连后端 scripted 冒烟见本地开发 §4。
-
 ## 贡献
 
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) · 门禁 `pnpm release:gate`（可 `--only desktop`）。

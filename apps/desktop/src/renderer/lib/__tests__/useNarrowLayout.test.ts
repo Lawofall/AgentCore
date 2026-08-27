@@ -22,7 +22,6 @@ describe("shouldHideNarrowChrome", () => {
     for (const path of [
       "/preview",
       "/preview/foo",
-      "/simulation/town",
       "/conversations/abc/turn/t1",
       "/messages/chat1",
       "/more/account",

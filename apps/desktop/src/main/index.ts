@@ -17,7 +17,6 @@ import iconBeta from "../../resources/icon-beta.png?asset";
 // （resources/icon.png = rounded squircle；测试轨用 icon-beta.png。打包 exe/.app 图标另由
 // electron-builder 按平台分源：build/icon-win|mac.png 或 resources/channel-icons/*-beta.png）。
 import iconStable from "../../resources/icon.png?asset";
-import { registerAgentTownIpc } from "./agenttown-service";
 import {
   apiOriginForCsp,
   connectSrcForCsp,
@@ -361,7 +360,6 @@ app.whenReady().then(async () => {
   registerTerminalIpc();
   registerProcessIpc();
   registerPtyIpc();
-  registerAgentTownIpc();
   registerNotificationIpc();
   registerHostIpc();
   registerMcpIpc();

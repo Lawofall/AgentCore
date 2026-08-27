@@ -23,7 +23,6 @@ import {
   BookOpen,
   Bookmark,
   Bug,
-  Building2,
   Clapperboard,
   CloudUpload,
   Cpu,
@@ -657,46 +656,28 @@ export function buildPaletteCommands(ctx: CommandContext): PaletteCommand[] {
     },
   ];
 
-  // Dev-only doorways: 前端预览 harness + AI 小镇启动器（均无侧栏一级入口）。
+  // Dev-only doorway: 前端预览 harness（无侧栏一级入口）。
   if (import.meta.env.DEV) {
-    commands.push(
-      {
-        id: "nav-preview",
-        title: "前端预览（开发）",
-        category: "前往",
-        icon: FlaskConical,
-        keywords: [
-          "preview",
-          "fixtures",
-          "yulan",
-          "qianduan",
-          "dev",
-          "harness",
-          "ai",
-          "xunjian",
-          "巡检",
-          "截图",
-        ],
-        hint: "离线回放 AI 态",
-        run: go("/preview"),
-      },
-      {
-        id: "nav-ai-town",
-        title: "AI 小镇",
-        category: "前往",
-        icon: Building2,
-        keywords: [
-          "town",
-          "simulation",
-          "agenttown",
-          "xiaozhen",
-          "shiyan",
-          "dev",
-        ],
-        hint: "工具箱 · 实验",
-        run: go("/simulation/town"),
-      },
-    );
+    commands.push({
+      id: "nav-preview",
+      title: "前端预览（开发）",
+      category: "前往",
+      icon: FlaskConical,
+      keywords: [
+        "preview",
+        "fixtures",
+        "yulan",
+        "qianduan",
+        "dev",
+        "harness",
+        "ai",
+        "xunjian",
+        "巡检",
+        "截图",
+      ],
+      hint: "离线回放 AI 态",
+      run: go("/preview"),
+    });
   }
 
   return commands.filter(

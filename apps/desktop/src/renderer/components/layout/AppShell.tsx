@@ -155,9 +155,7 @@ function AppShellFrame() {
   // view especially — the full window width.
   const { pathname } = useLocation();
   const hideSidebar =
-    pathname === "/preview" ||
-    pathname.startsWith("/preview/") ||
-    pathname.startsWith("/simulation");
+    pathname === "/preview" || pathname.startsWith("/preview/");
 
   // 生产 web 客户端不画桌面窗口顶栏（浏览器自带窗口 chrome）——品牌/折叠改由侧栏顶部
   // 承载（见 Sidebar）。搜索假入口两端都在侧栏。桌面 Electron 外壳与离线预览 #/preview 仍保留顶栏。

@@ -209,7 +209,7 @@ export function setServiceUnavailableHandler(
   onServiceUnavailable = handler;
 }
 
-/** Invoked after a successful silent token refresh (for AgentTown session sync). */
+/** Invoked after a successful silent token refresh. */
 let onSessionRenewed: (() => void) | null = null;
 
 export function setSessionRenewedHandler(handler: (() => void) | null): void {

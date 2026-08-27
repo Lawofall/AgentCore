@@ -24,7 +24,6 @@ import {
   checkClass,
   inputClass,
 } from "@/pages/login/AuthBits";
-import { persistAgentTownSession } from "@/services/agentTownSession";
 import { ApiError } from "@/services/api";
 import {
   forgotPassword,
@@ -209,7 +208,6 @@ export function LoginPage() {
   ) => {
     saveRememberedUsername(remembered.trim());
     setAuthenticated(user);
-    void persistAgentTownSession();
     void cacheShellMeta({ user });
   };
 

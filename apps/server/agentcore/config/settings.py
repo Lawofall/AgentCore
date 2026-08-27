@@ -15,7 +15,6 @@ from agentcore.config.platform import PlatformSettings
 from agentcore.config.quota import QuotaSettings
 from agentcore.config.search import SearchSettings
 from agentcore.config.server import ServerSettings
-from agentcore.config.simulation import SimulationSettings
 from agentcore.config.workspace import WorkspaceSettings
 
 
@@ -31,7 +30,6 @@ class Settings(
     PersistenceSettings,
     QuotaSettings,
     ServerSettings,
-    SimulationSettings,
     WorkspaceSettings,
     DemoTapeSettings,
     BaseSettings,

@@ -25,7 +25,6 @@ const forgotPassword = vi.fn();
 const resetPassword = vi.fn();
 const setAuthenticated = vi.fn();
 const cacheShellMeta = vi.fn();
-const persistAgentTownSession = vi.fn();
 
 vi.mock("@/services/auth", () => ({
   login: (...args: unknown[]) => login(...args),
@@ -33,11 +32,6 @@ vi.mock("@/services/auth", () => ({
   verifyRegister: (...args: unknown[]) => verifyRegister(...args),
   forgotPassword: (...args: unknown[]) => forgotPassword(...args),
   resetPassword: (...args: unknown[]) => resetPassword(...args),
-}));
-
-vi.mock("@/services/agentTownSession", () => ({
-  persistAgentTownSession: (...args: unknown[]) =>
-    persistAgentTownSession(...args),
 }));
 
 vi.mock("@/services/offlineCache", () => ({

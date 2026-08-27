@@ -85,14 +85,6 @@ FIELD_CONSUMER_BASELINE: tuple[FieldConsumerBaselineGroup, ...] = (
         leaves=frozenset({"in_progress"}),
     ),
     FieldConsumerBaselineGroup(
-        id="sim.interaction.relation_deltas",
-        reason=(
-            "Town InteractionStateChanges 映射了 mood/money/inventory/governance，"
-            "没有 relation_deltas 的 JsonProperty。"
-        ),
-        leaves=frozenset({"relation_deltas"}),
-    ),
-    FieldConsumerBaselineGroup(
         id="turn_queue_started.remaining_depth",
         reason="排队出队帧用来清 queue_id 轻态；remaining_depth 未读。",
         leaves=frozenset({"remaining_depth"}),
@@ -100,11 +92,12 @@ FIELD_CONSUMER_BASELINE: tuple[FieldConsumerBaselineGroup, ...] = (
     FieldConsumerBaselineGroup(
         id="run_escalation_gate.signals",
         reason=(
-            "Phase 1 有意不给 Gate 独立 UI：两端 fold 是穷尽用的空 case，不读 payload。"
+            "Phase 1 有意不给 Gate 独立 UI：两端 fold 是穷尽用的空 case，不读 payload"
+            "（signals / layer）。"
             "且 evaluate_after_tools 恒返回 continue，该事件当前 emit 不可达；"
             "耐久升级走 run_escalation / escalate 通道。"
         ),
-        leaves=frozenset({"signals"}),
+        leaves=frozenset({"signals", "layer"}),
     ),
     FieldConsumerBaselineGroup(
         id="message_end.team_batch.worker_count",

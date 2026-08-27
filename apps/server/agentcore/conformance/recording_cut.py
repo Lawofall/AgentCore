@@ -96,10 +96,7 @@ def _keep(event_type_value: str) -> bool:
     if disposition is None:
         # Retired names may still appear on old recordings; drop them
         # rather than treating version skew as a hard cut failure.
-        if (
-            event_type_value.startswith("sim.show.")
-            or event_type_value in RETIRED_EVENT_TYPE_VALUES
-        ):
+        if event_type_value in RETIRED_EVENT_TYPE_VALUES:
             return False
         raise ValueError(
             f"recording event type {event_type_value!r} is not a known EventType — "

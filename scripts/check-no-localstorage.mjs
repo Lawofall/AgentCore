@@ -19,8 +19,6 @@ const ALLOWLIST = new Set([
   // Dev-only console probes (explicitly left on raw localStorage).
   "services/sseTrace.ts",
   "services/turnTrace.ts",
-  // Simulation scratch (not product UI prefs).
-  "simulation/runHistory.ts",
 ]);
 
 const USAGE_RE = /\blocalStorage\b/;

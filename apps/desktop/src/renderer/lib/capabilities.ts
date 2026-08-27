@@ -59,13 +59,6 @@ export function hasAutoUpdater(): boolean {
   return !isWebRuntime();
 }
 
-/** AgentTown 独立客户端启动器（写 session.json + spawn）——仅 Electron 外壳。 */
-export function hasAgentTownLauncher(): boolean {
-  return (
-    typeof window !== "undefined" && !!window.agentTownApi && !isWebRuntime()
-  );
-}
-
 /** 应用内「完整预览」（workspace:// 代理会话工作区字节，右坞 BrowserPanel 本机页）——
  *  仅 Electron 外壳（需 browserApi.openWorkspaceHtml）；web 降级不暴露。云端会话工作区专属。 */
 export function hasInAppPreview(): boolean {

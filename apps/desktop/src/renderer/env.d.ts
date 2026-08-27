@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 
-import type { AgentTownApi } from "@shared/agenttown-contract";
 import type { BrowserApi } from "@shared/browser-contract";
 import type { DeviceIdentityApi } from "@shared/device-identity-contract";
 import type { FloatWindowApi } from "@shared/float-window-contract";
@@ -29,7 +28,6 @@ declare global {
   }
 
   interface Window {
-    agentTownApi?: AgentTownApi;
     /** 履约通道 device_id（userData 持久化）；仅 Electron。 */
     deviceIdentityApi?: DeviceIdentityApi;
     fsApi: FsApi;

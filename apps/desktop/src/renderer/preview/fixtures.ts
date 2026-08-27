@@ -15,7 +15,7 @@ export interface PreviewFixture {
 }
 
 // Every committed turn-fold conformance vector doubles as a preview scenario.
-// Auxiliary blobs (region positions, simulation fold goldens) are excluded — same
+// Auxiliary blobs (non-turn fixtures) are excluded — same
 // contract as protocol-conformance harness `isTurnFixture`. Documents are opened
 // through the shared supersets source adapter so tape/recording-shaped inputs
 // (and legacy kind/ts dialect) can feed the same replay path.

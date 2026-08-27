@@ -15,7 +15,6 @@ const NARROW_BLOCKED_PREFIXES = [
   "/whiteboard",
   "/toolbox",
   "/explore",
-  "/simulation",
 ] as const;
 
 export const NARROW_HIDDEN_PALETTE_IDS = new Set([
@@ -41,7 +40,6 @@ export const NARROW_HIDDEN_PALETTE_IDS = new Set([
   "nav-settings-general",
   "nav-settings-shortcuts",
   "nav-preview",
-  "nav-ai-town",
 ]);
 
 const NARROW_HIDDEN_THEME_IDS = new Set(["theme-dark", "theme-system"]);

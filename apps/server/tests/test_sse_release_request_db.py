@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from starlette.requests import Request
@@ -17,7 +17,6 @@ from starlette.requests import Request
 from agentcore.api.routes import realtime as realtime_mod
 from agentcore.api.routes.conversations import messages as messages_mod
 from agentcore.api.routes.inference import proxy as inference_proxy
-from agentcore.api.routes.simulation import runs as sim_runs
 from agentcore.llm.provider.protocol import LLMChunk, LLMRequest, TokenUsage
 from agentcore.llm.resolve import ModelConfig
 from agentcore.runtime.events import EventSink
@@ -159,60 +158,4 @@ async def test_inference_stream_releases_db_before_first_upstream_token(monkeypa
     assert "first_token" in order
     assert order.index("close") < order.index("first_token")
     assert resp.media_type == "text/event-stream"
-    await resp.body_iterator.aclose()
-
-
-async def test_simulation_stream_releases_db_before_sse(monkeypatch):
-    session, order = _tracking_session()
-    user = SimpleNamespace(user_id="u-sim")
-    repo = AsyncMock()
-    repo.get_run = AsyncMock(return_value=SimpleNamespace(id="run-1"))
-
-    sink = EventSink()
-    monkeypatch.setattr(sim_runs, "_require_simulation_enabled", lambda: None)
-    monkeypatch.setattr(
-        sim_runs.default_sim_stream_registry,
-        "get_or_create",
-        AsyncMock(return_value=sink),
-    )
-
-    resp = await sim_runs.stream_run(
-        run_id="run-1",
-        user=user,
-        session=session,
-        repo=repo,
-    )
-    assert order == ["close"]
-    assert resp.media_type == "text/event-stream"
-    await resp.body_iterator.aclose()
-
-
-async def test_simulation_replay_releases_db_before_sse(monkeypatch):
-    session, order = _tracking_session()
-    user = SimpleNamespace(user_id="u-sim")
-    repo = MagicMock()
-
-    class _Evt:
-        type = "sim.tick"
-        timestamp = "t"
-        payload = {}
-        seq = None
-
-    service = MagicMock()
-    service.replay_ticks = AsyncMock(return_value=[_Evt()])
-    monkeypatch.setattr(sim_runs, "_require_simulation_enabled", lambda: None)
-    monkeypatch.setattr(sim_runs, "_service", lambda _repo: service)
-
-    resp = await sim_runs.replay_run(
-        run_id="run-1",
-        user=user,
-        from_tick=1,
-        to_tick=1,
-        session=session,
-        repo=repo,
-    )
-    assert order == ["close"]
-    assert resp.media_type == "text/event-stream"
-    first = await resp.body_iterator.__anext__()
-    assert "sim.tick" in first
     await resp.body_iterator.aclose()

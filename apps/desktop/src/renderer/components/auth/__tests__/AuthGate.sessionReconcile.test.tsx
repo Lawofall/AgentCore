@@ -22,14 +22,8 @@ vi.mock("@/services/offlineCache", () => ({
   hydrateOfflineShell: (...args: unknown[]) => hydrateOfflineShell(...args),
 }));
 
-vi.mock("@/services/agentTownSession", () => ({
-  clearAgentTownSession: vi.fn(),
-  persistAgentTownSession: vi.fn(),
-}));
-
 vi.mock("@/services/api", () => ({
   setServiceUnavailableHandler: vi.fn(),
-  setSessionRenewedHandler: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
 }));
 

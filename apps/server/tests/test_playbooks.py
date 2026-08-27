@@ -138,7 +138,7 @@ def test_code_audit_two_modules_parallel_no_synth():
 def test_code_audit_multi_module_parallel_plus_synth():
     tasks, errors = expand_playbook(
         "code_audit",
-        {"scope": "AgentCore monorepo", "modules": ["server", "desktop", "town"]},
+        {"scope": "AgentCore monorepo", "modules": ["server", "desktop", "admin"]},
     )
     assert errors == []
     by_id = _by_id(tasks)

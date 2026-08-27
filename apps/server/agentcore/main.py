@@ -39,7 +39,6 @@ from agentcore.api.routes import (
     search,
     shared_spaces,
     sharing,
-    simulation,
     standing_tasks,
     system,
     usage,
@@ -645,7 +644,6 @@ app.include_router(model_catalog.router, prefix="/v1")
 app.include_router(realtime.router, prefix="/v1")
 app.include_router(search.router, prefix="/v1")
 app.include_router(shared_spaces.router, prefix="/v1")
-app.include_router(simulation.router, prefix="/v1")
 # Conversation sharing (分享对话): owner-only manage under /v1, plus the public
 # read-only page at the root (/shared/{token}, no /v1, no auth).
 app.include_router(sharing.router, prefix="/v1")

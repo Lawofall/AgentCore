@@ -1,7 +1,7 @@
 # AgentCore 工作区（项目结构 §三 · packages + 跨端应用）
 #
 # 纳入：packages/* + apps/desktop + apps/mobile + apps/admin。
-# 不纳入：apps/server（uv）、apps/town（Unity）、apps/website / apps/promo
+# 不纳入：apps/server（uv）、apps/website / apps/promo
 #（各自独立 lockfile，避免根 lockfile 重解析）。
 packages:
   - "packages/*"

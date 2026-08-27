@@ -1,5 +1,5 @@
 ---
-description: 改桌面前端组件/样式/布局后想自检渲染效果、或想离线查看某个 AI 态（辩论/派单/升级/审批/计划复核/工具/引用…）时读——#/preview 离线回放 conformance 向量、帧滑块逐帧看流式中间态、pnpm dev:web 纯浏览器跑渲染层、pnpm shoot 无头截图自检、协作图两入口视口探针 shoot:graph-probe、CI 渲染冒烟门禁。别再靠跑真实 AI 看前端效果。改 AI 小镇 3D（apps/town Unity）自检见文末——用 Offline Demo + pnpm town:shoot:webgl，别问用户能否跑 Unity。
+description: 改桌面前端组件/样式/布局后想自检渲染效果、或想离线查看某个 AI 态（辩论/派单/升级/审批/计划复核/工具/引用…）时读——#/preview 离线回放 conformance 向量、帧滑块逐帧看流式中间态、pnpm dev:web 纯浏览器跑渲染层、pnpm shoot 无头截图自检、协作图两入口视口探针 shoot:graph-probe、CI 渲染冒烟门禁。别再靠跑真实 AI 看前端效果。
 alwaysApply: false
 ---
 
@@ -27,15 +27,5 @@ alwaysApply: false
 - **滚动条占位类 bug（内容被切一截 / 行「上浮」留白）测不出**：`pnpm shoot` 与任何 headless Chromium 用 overlay 滚动条、不占位，必假绿。症状对得上就改用 `chromium.launch({ headless: false })`（或真实 Electron）复现——全局 `globals.css` 给每个滚动容器留 10px 槽，固定高的 chrome 行（tab 条）会被切。
 - 新 AI 态补向量：后端 `conformance/vectors/` 加场景 → `cd apps/server && uv run python -m agentcore.conformance.export` 重导 fixture → `#/preview` 与 `pnpm conformance` 同步刷新。**改 UI 时别忘了向量的 `description` 也是文本**：曾出现 `multi_agent_coordination_wait` 的 description 还在描述早已删掉的 StatusStrip 分支，测试才是准的那一侧。
 - **「否决手写 mock 态」只管 `#/preview` 回放面，别推广到组件单测。** `components/chat/__tests__/StatusStrip.*` 那批手搓 `ExecutionPlan` + `RunFrame` 的用例是**已定案例外**，**禁止**改成 `loadFixtures` 回放：约半数断言是负向 chrome（「条上不准出现 X」），向量不编码这类事实，改回放后断言照样手写；而 payload 形状已由 TS 类型守住，换来的只是把组件单测耦到数百行向量上、失败定位变差。既有回放先例（`debatePreviewMount.fixture.test.ts` 等）针对的是「整回合 fold 后的呈现」，不是状态条的负向断言。
-
-## AI 小镇 3D（`apps/town` Unity，不走 #/preview）
-
-小镇观测层是**独立 Unity 客户端**，有自己的离线自检链（无后端 / 无 LLM），**别用 #/preview**：
-
-- Offline Demo：Play 点左侧「离线 Demo」/ `AgentTown.exe --demo` / WebGL `?demo=1`（本地合成帧）
-- 截图自检 `pnpm town:shoot:webgl` → `apps/town/shoot-out/*.png`（须先 `town:build:webgl`）；逻辑冒烟 `pnpm town:verify`
-- 无 DeepSeek 连后端走 scripted（`SIMULATION_SCRIPTED=true` 或建 run `scripted:true`）
-
-**开发机已装 Unity 6，别再问用户能否跑 Unity**——按上面自检。命令/前置详见 [`apps/town/README.md`](/apps/town/README.md)。
 
 完整机制 / 浏览器打桩 / AuthGate 离线旁路 / 被否决方案（Storybook、手写 mock 态）→ [`前端技术与架构.md` §十 SSE 与协议一致性](/docs/04-前端/前端技术与架构.md)。

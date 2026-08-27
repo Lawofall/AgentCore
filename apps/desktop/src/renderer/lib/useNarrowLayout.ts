@@ -30,7 +30,6 @@ export function useNarrowLayout(): boolean {
 /** IM 线程 / 设置子页 / 全屏图 / 预览：藏窄屏底栏与顶栏。 */
 export function shouldHideNarrowChrome(pathname: string): boolean {
   if (pathname === "/preview" || pathname.startsWith("/preview/")) return true;
-  if (pathname.startsWith("/simulation")) return true;
   if (pathname === "/float" || pathname.startsWith("/float")) return true;
   if (pathname.includes("/turn/")) return true;
   if (/^\/messages\/[^/]+/.test(pathname)) return true;

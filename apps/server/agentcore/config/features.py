@@ -9,5 +9,3 @@ class FeatureSettings(BaseModel):
     # When on, the pack appears in GET /v1/capabilities packs[] and its skills are
     # registered into every user's runtime (no per-user toggle).
     legal_vertical_enabled: bool = False
-    # AI Town simulation (M1). When off, simulation REST routes return 404.
-    simulation_enabled: bool = True

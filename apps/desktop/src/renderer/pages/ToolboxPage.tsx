@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
 import {
   BookOpen,
-  Building2,
   ChevronRight,
   type LucideIcon,
   Palette,
@@ -101,20 +100,6 @@ const CAPABILITIES: ToolboxEntry[] = [
     to: APP_PATHS.toolbox.connectors,
   },
 ];
-
-/** DEV-only 实验入口：MVP 观测面暂不占侧栏一级导航，收纳于此。生产构建整组剥离。 */
-const EXPERIMENTS: ToolboxEntry[] = import.meta.env.DEV
-  ? [
-      {
-        id: "ai-town",
-        title: "AI 小镇",
-        description: "启动 AgentTown 3D 观测客户端",
-        icon: Building2,
-        color: "app",
-        to: "/simulation/town",
-      },
-    ]
-  : [];
 
 const TOOLBOX_TILE_GRID =
   "grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4";
@@ -243,15 +228,6 @@ export function ToolboxPage() {
             comingSoon={!entry.to}
           />
         ))}
-
-        {EXPERIMENTS.length > 0 ? (
-          <>
-            <ToolboxSectionHeader className="mt-6" label="实验" meta="开发期" />
-            {EXPERIMENTS.map((entry) => (
-              <ToolboxTileCard key={entry.id} entry={entry} />
-            ))}
-          </>
-        ) : null}
       </div>
     </PageContainer>
   );

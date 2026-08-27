@@ -175,15 +175,6 @@ class EventType(StrEnum):
     # BYOK soft gate (开放主流AI模型接入 §4.5): preflight hint when probe says the
     # user's model may lack tool calling. DURABLE（P2）——落 journal；runs 投影 → 横幅。
     TURN_WARNING = "turn_warning"
-    # AI Town simulation (M1): tick lifecycle + agent snapshots. Persisted in sim_event,
-    # not turn_journal — EPHEMERAL disposition (see disposition.py).
-    SIM_TICK_STARTED = "sim.tick_started"
-    SIM_TICK_ENDED = "sim.tick_ended"
-    SIM_AGENT_ACTION = "sim.agent_action"
-    SIM_AGENT_STATE = "sim.agent_state"
-    SIM_INTERACTION = "sim.interaction"
-    SIM_WORLD_EVENT = "sim.world_event"
-    SIM_TICK_FRAME = "sim.tick_frame"
     # L3 团队浏览器 M1 直播 (内置浏览器与Agent浏览器提案.md · D13–D14): live screencast
     # frames + coarse status ride a per-conversation SSE bypass (GET …/browser/live), NOT the
     # turn journal. Both EPHEMERAL (disposition.py) — base64 jpeg frames + status never persist.

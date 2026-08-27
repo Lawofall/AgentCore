@@ -10,7 +10,6 @@ import {
   setBearerTokens,
 } from "@/lib/sessionAuth";
 import { clearSidecarAccountAuth } from "@/services/accountToken";
-import { clearAgentTownSession } from "@/services/agentTownSession";
 import {
   ApiError,
   BASE_URL,
@@ -211,8 +210,8 @@ export async function verifyEmail(
  * The local wipe is deliberately NOT conditional on the server call. It used to
  * sit behind a bare `await`, so a refused logout (403 CSRF was the biggest single
  * cluster in production logs) skipped all of it and left the app holding the
- * previous user's CSRF token, sidecar credentials, permission cache and
- * AgentTown session — while the UI still dropped to the login screen, so the
+ * previous user's CSRF token, sidecar credentials and permission cache —
+ * while the UI still dropped to the login screen, so the
  * next account silently inherited them. Server-side revocation is best-effort
  * from here; the local state is the part this process actually owns.
  */
@@ -245,7 +244,6 @@ export async function logout(): Promise<void> {
     clearSidecarFoldersAuth();
     clearSidecarAccountAuth();
     clearDefaultPermissionAxesCache();
-    void clearAgentTownSession();
   }
 }
 

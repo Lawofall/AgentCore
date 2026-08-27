@@ -236,34 +236,6 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
         Disposition.EPHEMERAL,
         "回合后自动备份失败——传输态 toast/横幅，不挡回合",
     ),
-    EventType.SIM_TICK_STARTED: (
-        Disposition.EPHEMERAL,
-        "模拟 tick 开始——持久化走 sim_event 表，不进 turn_journal",
-    ),
-    EventType.SIM_TICK_ENDED: (
-        Disposition.EPHEMERAL,
-        "模拟 tick 结束——持久化走 sim_event 表，不进 turn_journal",
-    ),
-    EventType.SIM_AGENT_ACTION: (
-        Disposition.EPHEMERAL,
-        "模拟居民行动——持久化走 sim_event 表，不进 turn_journal",
-    ),
-    EventType.SIM_AGENT_STATE: (
-        Disposition.EPHEMERAL,
-        "模拟居民状态快照——持久化走 sim_event 表，不进 turn_journal",
-    ),
-    EventType.SIM_INTERACTION: (
-        Disposition.EPHEMERAL,
-        "模拟结构化交互——SSE sim.interaction；sim_event 表用 conversation/trade/vote 分类",
-    ),
-    EventType.SIM_WORLD_EVENT: (
-        Disposition.EPHEMERAL,
-        "模拟世界事件——SSE sim.world_event；持久化走 sim_event 表",
-    ),
-    EventType.SIM_TICK_FRAME: (
-        Disposition.EPHEMERAL,
-        "模拟 tick 快照帧——仅回放 SSE 推送，不落 sim_event",
-    ),
     EventType.BROWSER_LIVE_FRAME: (
         Disposition.EPHEMERAL,
         "团队浏览器直播帧（base64 jpeg）——D13 旁路 SSE 通道推送，永不落 journal/history",

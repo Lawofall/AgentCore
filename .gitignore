@@ -50,13 +50,6 @@ apps/desktop/shoot-room/
 apps/desktop/e2e-shots/
 apps/desktop/verdict-shots/
 apps/desktop/.lint-out.txt
-# UE AgentTown 截图自检产物（pnpm town:ue:shoot）及对比基线目录
-apps/town/shoot-out/
-apps/town/shoot-out-before/
-# Unity AgentTown player builds（Windows / WebGL）
-apps/town/Builds/
-# AgentTown 3D 资产（Kenney/Quaternius 等 CC0，vendored）：源 mesh/纹理 + Import 生成的
-# prefab/catalog 连 .meta 入库。勿入库 Mixamo 等禁止再分发的 raw 角色。见 TownAssets/README.md。
 # website 预览自检截图（.shots + shoot 矩阵产物，不入仓）
 apps/website/.shots/
 apps/website/shoot-out*/
@@ -185,9 +178,9 @@ _*_timeline.txt
 # Server local data (MVP long-term memory files, see apps/server/agentcore/memory/store.py)
 apps/server/data/
 data/
-# Packaged town story-packs (gen:story-packs) — not runtime data/; CI --check needs them tracked
-!apps/server/agentcore/simulation/data/
-!apps/server/agentcore/simulation/data/demo-story-packs.json
+
+# Retired AI Town: Unity Library cache may remain on old checkouts
+/apps/town/
 
 # Eval fixture workspaces may grow AgentCore/ trash when a probe mutates them
 apps/server/agentcore/evals/fixtures/**/.agentcore/

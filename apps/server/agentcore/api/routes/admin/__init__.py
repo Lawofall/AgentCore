@@ -20,7 +20,6 @@ from . import (
     observability,
     overview,
     platform_credentials,
-    simulation_show,
     system,
     usage,
     users,
@@ -42,6 +41,5 @@ router.include_router(observability.router)
 router.include_router(feedback.router)
 router.include_router(notices.router)
 router.include_router(beta_group.router)
-router.include_router(simulation_show.router)
 
 __all__ = ["router"]
