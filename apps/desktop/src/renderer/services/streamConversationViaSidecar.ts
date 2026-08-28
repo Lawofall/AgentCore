@@ -34,6 +34,7 @@ import {
 import { takeRecentSidecarFailure } from "@/services/sidecarStatus";
 import {
   type OutgoingAgentMention,
+  type OutgoingAttachment,
   type TurnCommitReport,
   dispatchSSEEvent,
   flushPendingContent,
@@ -55,6 +56,7 @@ import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import type { SSEEvent } from "@/types/events";
 import type {
   SidecarHistoryEntry,
+  SidecarQueuedAttachment,
   SidecarTurnResult,
 } from "@shared/sidecar-contract";
 
@@ -93,6 +95,15 @@ export interface StreamViaSidecarOptions {
   turnCommit?: TurnCommitReport;
   /** Soft @Agent chips — prompt hint only; forwarded to startTurn. Empty / omit = none. */
   agentMentions?: OutgoingAgentMention[];
+  /** Desktop-settled attachments (citation or attachments/ copy). Forwarded to startTurn. */
+  attachments?: OutgoingAttachment[];
+  /**
+   * 编辑后重发 / 重新生成：占用截断后再开本机回合。此时禁止带截断前的 cookie 窗
+   * （``history`` 必须缺省，让 sidecar 在 occupy 之后拉）。
+   */
+  regenerate?: boolean;
+  /** 占用时覆盖用户行材料；与云端 regenerate ``replaceMaterials`` 同形。 */
+  replaceMaterials?: boolean;
   signal?: AbortSignal;
 }
 
@@ -114,6 +125,24 @@ export interface ResumeViaSidecarOptions {
    *  续跑不再注入新气泡。 */
   userMessageId: string;
   signal?: AbortSignal;
+}
+
+function toSidecarAttachments(
+  attachments: OutgoingAttachment[] | undefined,
+  keepEmpty = false,
+): SidecarQueuedAttachment[] | undefined {
+  if (!attachments) return keepEmpty ? [] : undefined;
+  if (!attachments.length) return keepEmpty ? [] : undefined;
+  return attachments.map((a) => ({
+    name: a.name,
+    path: a.path,
+    text: a.text,
+    truncated: a.truncated,
+    ...(a.kind ? { kind: a.kind } : {}),
+    ...(a.conversation_id ? { conversation_id: a.conversation_id } : {}),
+    ...(a.binary ? { binary: a.binary } : {}),
+    ...(a.workspace_path ? { workspace_path: a.workspace_path } : {}),
+  }));
 }
 
 /** 一个轻量 turnId（cancel 的寻址键）。crypto.randomUUID 在 Electron renderer 可用。 */
@@ -239,8 +268,11 @@ export async function streamConversationViaSidecar({
   history: historyArg,
   optimisticUserId,
   agentMentions,
+  attachments,
   signal,
   turnCommit,
+  regenerate,
+  replaceMaterials,
 }: StreamViaSidecarOptions): Promise<SidecarTurnResult> {
   const turnId = newTurnId();
   // 本回合 trace_id：贯穿云代理推理调用 + 回写落库，使推理日志↔气泡同 trace（打通气泡↔日志）。
@@ -251,8 +283,8 @@ export async function streamConversationViaSidecar({
   // 推理票：开跑前无票 → force remint 一次 → 仍无则 INFERENCE_TOKEN_EXPIRED、不发 RPC
   // （引擎硬拒空凭据；无本机平台模型回退）。folders / account 缺票仍可下发，工具侧诚实失败。
   // 开跑前鉴权失败（尚无事件）可对各票 force remint 一次，不对每回合 force。
-  // 调用方已确认（含空窗）则不再拉；否则 cookie 与窄票并行，拉到即下发、sidecar 不打云。
-  const needCookieWindow = historyArg === undefined;
+  // 调用方已确认（含空窗）则不再拉；regenerate 必须等 occupy 截断后再由 sidecar 拉。
+  const needCookieWindow = historyArg === undefined && !regenerate;
   const [inferenceRaw, foldersAuthRaw, accountAuthRaw, cookieWindow] =
     await Promise.all([
       resolveSidecarInference({ conversationId }),
@@ -286,6 +318,10 @@ export async function streamConversationViaSidecar({
       recoverable: false,
     });
   }
+  const sidecarAttachments = toSidecarAttachments(
+    attachments,
+    Boolean(replaceMaterials),
+  );
   return runSidecarTurn({
     conversationId,
     rootId,
@@ -307,8 +343,13 @@ export async function streamConversationViaSidecar({
         userMessage: content,
         userMessageId: optimisticUserId,
         messageId,
-        history,
-        ...(agentMentions && agentMentions.length > 0 ? { agentMentions } : {}),
+        ...(history !== undefined ? { history } : {}),
+        ...(regenerate ? { regenerate: true } : {}),
+        ...(replaceMaterials ? { replaceMaterials: true } : {}),
+        ...(agentMentions && (replaceMaterials || agentMentions.length > 0)
+          ? { agentMentions }
+          : {}),
+        ...(sidecarAttachments ? { attachments: sidecarAttachments } : {}),
         inference,
         foldersAuth,
         accountAuth,

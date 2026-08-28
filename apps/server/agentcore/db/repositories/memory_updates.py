@@ -37,14 +37,13 @@ class MemoryUpdateRepository:
     ) -> MemoryUpdateRow:
         """Persist one memory-write notice and return the stored row (with id/created_at).
 
-        ``kind`` is ``episodic`` (session summary tip), ``semantic`` (diff card / explicit
-        remember), or ``quota`` (always-pool / billing skip). Records ONLY real writes —
-        callers never invent empty notices. Commits
+        ``kind`` is ``semantic`` (diff card) or ``quota`` (always-pool / billing skip).
+        Records ONLY real writes — callers never invent empty notices. Commits
         its own unit of work (offline pass / tool path, not a request transaction).
 
         ``anchor_at`` is the last consolidated message's ``created_at`` — where the card
         belongs in the thread, which ``created_at`` cannot say for a debounced pass.
-        Callers with no message window (semantic sweep, quota) leave it None.
+        Callers with no message window (leak-scan, quota) leave it None.
         """
         row = MemoryUpdateRow(
             conversation_id=conversation_id,

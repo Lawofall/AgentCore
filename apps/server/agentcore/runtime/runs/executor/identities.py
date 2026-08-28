@@ -99,106 +99,70 @@ _WORKER_DELIVERABLE_FORM_FILES = f"""\
 
 {_WORKER_STRUCTURE_OWNERSHIP}"""
 
-_HANDOFF_FIELD_GUIDE_PROSE = """\
-先把交付正文写完，再在【同一轮】调用 handoff：
-- summary（结论）：一句话说清你这次做出了什么 / 核心结论。
-- key_points（关键要点）：下游或主管最该知道的 2-4 条（具体数字 / 关键决定，别空泛）。
-- assumptions（关键假设）：信息不足时你采用的关键假设（没有就省略此条）。
-- next_steps（建议下一步）：基于你这一环的发现，团队 / 用户接下来值得考虑做什么（没有就省略）。\
-这只是顺带给主管的建议、供其与用户定夺，不替谁拍板、也不是停工理由——它与 escalate 不同：\
-escalate 是「缺了它整件事会走偏、需要现在有人拍板」，交接简报里的建议是「我已做完、\
-提示个后续方向」。
-调用 handoff 即代表你这次的活已完成；别把简报重复写进交付正文，也别在还没产出交付时就调它。"""
-
-_HANDOFF_FIELD_GUIDE_FILES = """\
-先用 file_write 把产物落盘（可一次写完完整正文，或超长时先短骨架再按节 file_append / \
-str_replace 填空），\
-再在【同一轮】调用 handoff：
-- summary（结论）：一句话说清你这次做出了什么 / 核心结论。
-- key_points（关键要点）：下游或主管最该知道的 2-4 条（具体路径 / 怎么运行 / 关键决定，别空泛）。
-- assumptions（关键假设）：信息不足时你采用的关键假设（没有就省略此条）。
-- next_steps（建议下一步）：基于你这一环的发现，团队 / 用户接下来值得考虑做什么（没有就省略）。\
-这只是顺带给主管的建议、供其与用户定夺，不替谁拍板、也不是停工理由——它与 escalate 不同：\
-escalate 是「缺了它整件事会走偏、需要现在有人拍板」，交接简报里的建议是「我已做完、\
-提示个后续方向」。
-调用 handoff 即代表你这次的活已完成；别把简报重复写进交付正文，也别在还没产出交付时就调它。"""
-
 # 队员合同：防 CEO 综收把队员话回灌成用户症状已消。对照本节点结构真相；不加闸。
 _WORKER_DELIVERY_HONESTY = """\
 【交接勿回灌】正文与 handoff 对照本节点结构真相：可见症状下写改了什么并请对照（改文件 ≠ 症状消失）；\
 没改用户打开的文件就写界面没改；勿把说明书说成系统已就绪；\
 测试通过以最后一次同命令退出码为准，分项分开写。"""
 
+# Field checklist 唯一所有者：拓扑差只在 summary 形状 / 去结论；字段尾与 escalate 对照只写一次。
+_HANDOFF_FIELDS_TAIL = (
+    "- assumptions（关键假设）：信息不足时你采用的关键假设（没有就省略此条）。\n"
+    "- next_steps（建议下一步）：基于你这一环的发现，团队 / 用户接下来值得考虑做什么"
+    "（没有就省略）。"
+    "这只是顺带给主管的建议、供其与用户定夺，不替谁拍板、也不是停工理由——"
+    "它与 escalate 不同：escalate 是「缺了它整件事会走偏、需要现在有人拍板」，"
+    "交接简报里的建议是「我已做完、提示个后续方向」。\n"
+    "调用 handoff 即代表你这次的活已完成；别把简报重复写进交付正文，"
+    "也别在还没产出交付时就调它。"
+)
 
-def _handoff_field_guide_leaf(form: DeliverableForm | None) -> str:
-    """Leaf field guide. De-conclusion only when form=prose (CEO reads the body)."""
+
+def _handoff_field_guide(form: DeliverableForm | None, *, leaf: bool = False) -> str:
+    """Handoff field checklist. Leaf vs upstream only differs in summary shape / 去结论."""
     if form == "prose":
         write_first = "先把交付正文写完"
-        body_audience = (
-            "正文是给人读的说明：结论、根因、关键取舍、意外、怎么用。"
-        )
         kp = "下游或主管最该知道的 2-4 条（具体数字 / 关键决定，别空泛）"
-        summary_line = "- summary（一行标题式）：点出这次交付是什么，勿写成结论段。"
-        deconclude = (
-            "简报只写接力状态（完成边界、明确没做什么、未决项/阻塞、指回产出的指针）；"
-            "正文里已经写过的结论不要在简报里再说一遍。\n"
-        )
-    elif form in ("files", "workspace"):
+        if leaf:
+            body_audience = "正文是给人读的说明：结论、根因、关键取舍、意外、怎么用。"
+            summary_line = "- summary（一行标题式）：点出这次交付是什么，勿写成结论段。"
+            deconclude = (
+                "简报只写接力状态（完成边界、明确没做什么、未决项/阻塞、指回产出的指针）；"
+                "正文里已经写过的结论不要在简报里再说一遍。\n"
+            )
+        else:
+            body_audience = ""
+            summary_line = "- summary（结论）：一句话说清你这次做出了什么 / 核心结论。"
+            deconclude = ""
+    else:
         write_first = (
             "先用 file_write 把产物落盘（可一次写完完整正文，或超长时先短骨架再按节 "
             "file_append / str_replace 填空）"
         )
-        if form == "workspace":
+        kp = "下游或主管最该知道的 2-4 条（具体路径 / 怎么运行 / 关键决定，别空泛）"
+        summary_line = "- summary（结论）：一句话说清你这次做出了什么 / 核心结论。"
+        deconclude = ""
+        if leaf and form == "workspace":
             body_audience = (
                 "就地改工程：落盘产物写在工作区里它本该在的位置，不要落进 `AgentCore/文档/`；"
                 "聊天正文只交代路径、怎么运行、关键取舍。"
             )
-        else:
+        elif leaf:
             body_audience = (
                 "落盘产物是给人读的完整说明：结论、根因、关键取舍、意外、怎么用；"
                 "聊天正文只交代路径、怎么运行、关键取舍。"
             )
-        kp = "下游或主管最该知道的 2-4 条（具体路径 / 怎么运行 / 关键决定，别空泛）"
-        summary_line = "- summary（结论）：一句话说清你这次做出了什么 / 核心结论。"
-        deconclude = ""
-    else:
-        # omit → files (resolved before this helper; keep files copy as fallback)
-        write_first = (
-            "先用 file_write 把产物落盘（可一次写完完整正文，或超长时先短骨架再按节 "
-            "file_append / str_replace 填空）"
-        )
-        body_audience = (
-            "落盘产物是给人读的完整说明：结论、根因、关键取舍、意外、怎么用；"
-            "聊天正文只交代路径、怎么运行、关键取舍。"
-        )
-        kp = "下游或主管最该知道的 2-4 条（具体路径 / 怎么运行 / 关键决定，别空泛）"
-        summary_line = "- summary（结论）：一句话说清你这次做出了什么 / 核心结论。"
-        deconclude = ""
+        else:
+            body_audience = ""
+    audience_block = f"{body_audience}\n" if body_audience else ""
     return (
         f"{write_first}，再在【同一轮】调用 handoff：\n"
-        f"{body_audience}\n"
+        f"{audience_block}"
         f"{deconclude}"
         f"{summary_line}\n"
         f"- key_points（关键要点）：{kp}。\n"
-        "- assumptions（关键假设）：信息不足时你采用的关键假设（没有就省略此条）。\n"
-        "- next_steps（建议下一步）：基于你这一环的发现，团队 / 用户接下来值得考虑做什么"
-        "（没有就省略）。"
-        "这只是顺带给主管的建议、供其与用户定夺，不替谁拍板、也不是停工理由——"
-        "它与 escalate 不同：escalate 是「缺了它整件事会走偏、需要现在有人拍板」，"
-        "交接简报里的建议是「我已做完、提示个后续方向」。\n"
-        "调用 handoff 即代表你这次的活已完成；别把简报重复写进交付正文，"
-        "也别在还没产出交付时就调它。"
+        f"{_HANDOFF_FIELDS_TAIL}"
     )
-
-
-def _handoff_field_guide(form: DeliverableForm | None, *, leaf: bool = False) -> str:
-    if leaf:
-        return _handoff_field_guide_leaf(form)
-    if form == "prose":
-        return _HANDOFF_FIELD_GUIDE_PROSE
-    if form == "workspace":
-        return _HANDOFF_FIELD_GUIDE_FILES
-    return _HANDOFF_FIELD_GUIDE_FILES
 
 
 def _handoff_policy_with_dependents(form: DeliverableForm | None) -> str:
@@ -347,8 +311,8 @@ _WORKER_LEAF_INTRO = f"""\
 你不能再向下委派。{_WORKER_PROBLEM_HANDLING}"""
 
 # Captain intro for any worker within the depth cap (delegation is on by default —
-# there is no per-node opt-in flag). WHEN 短判决 + 嵌套 lead 编排 HOW（怎么拆 /
-# 何时不该拆 / 控制权交回后怎么续跑）都住 identity——共享目录不列编排手册，以保住
+# there is no per-node opt-in flag). WHEN 短判决 + 嵌套 lead 编排 HOW（开局自己干 vs 招人 /
+# 怎么拆 / 控制权交回）都住 identity——共享目录不列编排手册，以保住
 # 全体队员前缀一致。Nesting honesty branches on ``depth`` vs
 # ``MAX_DELEGATION_DEPTH``: children of a near-cap captain are leaves; shallower
 # captains' children may still nest. Workers at the cap get the leaf intro.
@@ -369,17 +333,17 @@ def _worker_captain_intro(*, depth: int) -> str:
     return f"""\
 你是团队中的一名专家 worker，除了自己干活，你还可以再向下委派一层子团队来分担。你负责一个划定\
 好的任务，外加完成它所需的上下文；你够不到用户、不会有人实时答疑。\
-【开局】摸底一页地图 / 已钉薄切片 / 小修 → 默认自己干，禁止开局先招人再通读；禁止因为已经做了很久再招人。\
+【开局】摸底一页地图 / 已钉薄切片 / 小修 / 单文件 → 默认自己干：禁止开局先招人再通读，禁止为显得主动而再招人，禁止因为已经做了很久再招人。\
 接到（整座成果 / 多模块工程 / 完整可跑壳）且任务未钉成单切片 → 先招人再整合（不是先深读再招）。\
 优先把能独立的块交出去；不要先通读长文档、不要在思考里先做完整设计来代替招人。\
 拆得清也可以本层一次做完；缝不清可以先短摸底再招——不是必须第一下就招人。\
 任务写成「你去把整座做完」仍算未拆编制。有 delegate 就可以招，不看任务里有没有「先组队」。\
 接到的已是薄切片、读仓后发现是整座仓 → escalate（范围），禁止默默扩编。\
-「不要为委派而委派」只约束本来就小的活，不授权一个人扛里程碑。
+「不要为委派而委派」只约束本来就小的活，不授权一个人扛里程碑。\
 怎么拆：按活的自然缝，不按工种凑人。一块够大、够独立 → delegate 交子成员，task 只写目标·约束·验收；\
 细粒度已清楚 → 本层一次拆完。同一摊只走一条路，勿自己带队同时又平级再派同职责。\
+仅当本方向内仍有互不影响、可同时查的独立块才拆。\
 【假两段·禁】两个阶段写进同一 task 不算两段——须拆成不同 task，或等控制权交回后再派下一波。\
-何时不该拆：单文件 / 已钉薄壳 / 小修 / 摸底一页地图 → 默认自己干；仅当本方向内仍有互不影响、可同时查的独立块才拆。禁止为显得主动而再招人。禁止因为已经做了很久再招人。\
 控制权交回（delegate 返回『计划已让出』）后用 replan 把未跑步骤定稿，或不续跑则 stop；\
 replan 只在已有子计划后出现，开场只有 delegate。
 {nest_honesty}{_WORKER_PROBLEM_HANDLING}"""

@@ -3,11 +3,7 @@ import { formatMemoryTime } from "@/components/memory/MemoryUpdateItemRow";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  EPISODIC_CARD_HEADING,
-  EPISODIC_SUMMARY_CLAMP_CHARS,
-  MemoryUpdateCard,
-} from "../MemoryUpdateCard";
+import { MemoryUpdateCard } from "../MemoryUpdateCard";
 
 const navigate = vi.fn();
 
@@ -61,24 +57,6 @@ describe("MemoryUpdateCard", () => {
     setDisclosureOpen.mockClear();
   });
 
-  it("renders episodic light tip from summary", () => {
-    render(
-      <MemoryRouter>
-        <MemoryUpdateCard
-          update={{
-            id: "e1",
-            createdAt: "2026-07-19T12:00:00Z",
-            kind: "episodic",
-            summary: "本场讨论了用 pnpm 管理依赖。",
-            items: [],
-          }}
-        />
-      </MemoryRouter>,
-    );
-    expect(screen.getByText(EPISODIC_CARD_HEADING)).toBeTruthy();
-    expect(screen.getByText(/pnpm/)).toBeTruthy();
-  });
-
   it("labels the card with its anchor time, not the (later) consolidation write time", () => {
     const anchorAt = "2026-07-19T12:00:00Z";
     const createdAt = "2026-07-19T12:05:00Z";
@@ -86,12 +64,20 @@ describe("MemoryUpdateCard", () => {
       <MemoryRouter>
         <MemoryUpdateCard
           update={{
-            id: "e-anchored",
+            id: "s-anchored",
             createdAt,
             anchorAt,
-            kind: "episodic",
-            summary: "短摘要。",
-            items: [],
+            kind: "semantic",
+            items: [
+              {
+                action: "add",
+                file: "画像",
+                section: "关于用户的事实",
+                scope: "global",
+                content: "倾向使用 bun",
+                target: "global/profile",
+              },
+            ],
           }}
         />
       </MemoryRouter>,
@@ -99,74 +85,6 @@ describe("MemoryUpdateCard", () => {
     // 卡片插在 anchorAt 那一轮末尾，显示落库时刻会比它下方的消息还晚，读起来是乱序。
     expect(screen.getByText(formatMemoryTime(anchorAt))).toBeTruthy();
     expect(screen.queryByText(formatMemoryTime(createdAt))).toBeNull();
-  });
-
-  it("short episodic summary has no clamp controls", () => {
-    render(
-      <MemoryRouter>
-        <MemoryUpdateCard
-          update={{
-            id: "e-short",
-            createdAt: "2026-07-19T12:00:00Z",
-            kind: "episodic",
-            summary: "短摘要。",
-            items: [],
-          }}
-        />
-      </MemoryRouter>,
-    );
-    expect(screen.queryByTestId("episodic-summary-toggle")).toBeNull();
-    const tip = screen.getByText("短摘要。");
-    expect(tip.className).not.toContain("line-clamp-2");
-  });
-
-  it("long episodic summary clamps by default and expands on title click", () => {
-    disclosureOpen = false;
-    const summary = "本场".repeat(EPISODIC_SUMMARY_CLAMP_CHARS);
-    expect(summary.length).toBeGreaterThan(EPISODIC_SUMMARY_CLAMP_CHARS);
-
-    const { rerender } = render(
-      <MemoryRouter>
-        <MemoryUpdateCard
-          update={{
-            id: "e-long",
-            createdAt: "2026-07-19T12:00:00Z",
-            kind: "episodic",
-            summary,
-            items: [],
-          }}
-        />
-      </MemoryRouter>,
-    );
-
-    const toggle = screen.getByTestId("episodic-summary-toggle");
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    const tip = screen.getByText(summary);
-    expect(tip.className).toContain("line-clamp-2");
-
-    fireEvent.click(toggle);
-    expect(setDisclosureOpen).toHaveBeenCalled();
-
-    disclosureOpen = true;
-    rerender(
-      <MemoryRouter>
-        <MemoryUpdateCard
-          update={{
-            id: "e-long",
-            createdAt: "2026-07-19T12:00:00Z",
-            kind: "episodic",
-            summary,
-            items: [],
-          }}
-        />
-      </MemoryRouter>,
-    );
-    expect(
-      screen
-        .getByTestId("episodic-summary-toggle")
-        .getAttribute("aria-expanded"),
-    ).toBe("true");
-    expect(screen.getByText(summary).className).not.toContain("line-clamp-2");
   });
 
   it("renders semantic diff card with scope overview and project pill", () => {

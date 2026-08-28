@@ -713,9 +713,7 @@ class BrowserTool(_BrowserToolBase):
             name="browser",
             description=(
                 "右坞真实 Chromium（本机 Local Bridge 或云端沙箱）。"
-                "navigate/click/type/scroll/snapshot/console：CEO+worker；"
-                "screenshot 仅队员。"
-                "开页必须 navigate，禁编造 browser_open。"
+                "禁编造 browser_open。"
                 "静态摘录用 read_url（非右坞直播）。"
                 "HOW→consult(browser)。"
             ),

@@ -787,6 +787,27 @@ async def test_read_url_fetch_failures_carry_distinct_codes(monkeypatch, exc, co
     assert result.metadata.get("policy_failure") is not True
 
 
+async def test_read_url_connect_timeout_internal_cancel_is_tool_failure(monkeypatch):
+    """httpx connect timeout wraps CancelledError in context; must not abort the turn."""
+
+    inner = TimeoutError()
+    inner.__context__ = asyncio.CancelledError()
+    exc = httpx.ConnectTimeout("connect timed out")
+    exc.__context__ = inner
+
+    async def _allow(_url: str):
+        return None
+
+    async def _raise(_client, _method, _url, **_kwargs):
+        raise exc
+
+    monkeypatch.setattr(read_url_mod, "_classify_url", _allow)
+    monkeypatch.setattr(read_url_mod, "_safe_request", _raise)
+    result = await ReadUrlTool().execute({"url": "https://example.com/x"}, _ctx())
+    assert result.success is False
+    assert result.metadata.get("code") == "site_unreachable"
+
+
 async def test_safe_request_redirect_block_keeps_value_error_contract(monkeypatch):
     """逐跳拦截仍是 ValueError（download_url 按前缀分支），但带上了拒绝原因。"""
     from agentcore.tools.builtin.web.read_url import BlockedRedirectError, _safe_request

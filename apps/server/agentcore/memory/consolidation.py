@@ -1,18 +1,20 @@
-"""Two-layer memory orchestration (episodic session digests → semantic consolidation).
+"""Two-layer memory orchestration (session digests → semantic consolidation).
 
-Episodic (live path): each finished turn arms a per-conversation idle debounce /
-turn-cap. When it fires, a ≤200-char session summary of everything since the
+Live path: each finished turn arms a per-conversation idle debounce / turn-cap.
+When it fires, a ≤200-char session summary of everything since the
 ``memory_synced_at`` watermark (plus optional verified folder facts; action inventory
-from turn_journal) is appended to ``memory_episodes`` and a light ``memory_updated`` tip
-is pushed — never a direct preference/profile write. The tip is pushed only when the LLM
-really summarized the window; a timed-out pass still stores its episode for the semantic
-layer but shows no card.
+from turn_journal) is appended to ``memory_episodes`` — never a preference/profile
+write, and never a conversation-tail card. A timed-out or empty summarizer still
+stores its episode (fallback text is raw material only) and advances the watermark;
+that wording must NEVER enter the conversation stream.
 
-Semantic (batch): after an episodic write (and on the periodic sweeper), if undigested
-episodes ≥ ``memory_semantic_min_episodes`` OR age since last success ≥
-``memory_semantic_max_age_hours``, one consolidator pass rewrites always-files
-(including folder ``导航.md`` incremental merge) and applies topic ops, then pushes a
-diff card. Digested episodes older than 30 days are purged on each sweeper pass.
+Semantic: after each **summarized** episode write, one consolidator pass runs
+immediately (eager — bypasses the 3-episode / 24h gate). Timeout/empty fallback
+still stores an episode and advances the watermark, but does not eager-run
+(raw user wording is not 「有料」). No add/update/remove → no card, still mark
+digested. Parse/timeout/exception → leave undigested. The 3-episode / 24h gate
+is only the non-eager leak scan (undigested leftovers after a live miss, user gone
+quiet). Digested episodes older than 30 days are purged on each sweeper pass.
 
 Open-turn deferral, per-user locks, and ``memory_synced_at`` watermarks are unchanged.
 """
@@ -41,6 +43,7 @@ from agentcore.db.base import async_session_factory
 from agentcore.db.errors import is_pool_timeout_error, is_schema_error
 from agentcore.db.repositories import (
     ConversationRepository,
+    MemoryPipelineRepository,
     MemoryUpdateRepository,
     MessageRepository,
     PausedTurnRepository,
@@ -188,9 +191,14 @@ async def conversation_turn_open(session, conversation_id: str) -> bool:
     if await PausedTurnRepository(session).exists_for_conversation(conversation_id):
         return True
     fresh_after = datetime.now(UTC) - timedelta(seconds=settings.turn_lease_ttl_seconds)
-    return await TurnLeaseRepository(session).exists_fresh_for_conversation(
+    if await TurnLeaseRepository(session).exists_fresh_for_conversation(
         conversation_id, after=fresh_after
-    )
+    ):
+        return True
+    # Sidecar pause does not write ``paused_turns``; the local-turns snapshot
+    # already latches ``usage.paused`` on the assistant row.
+    usage, _content, has_assistant = await _latest_assistant_row(session, conversation_id)
+    return bool(has_assistant and isinstance(usage, dict) and usage.get("paused"))
 
 
 async def _latest_assistant_row(
@@ -212,7 +220,7 @@ async def _publish_memory_updated(
     kind: str,
     update_payload: dict | None,
 ) -> None:
-    """Best-effort firehose nudge — both layers require a visible notice (no silent writes)."""
+    """Best-effort firehose nudge for a persisted ``memory_updates`` card."""
     with contextlib.suppress(Exception):
         event: dict = {
             "type": "memory_updated",
@@ -260,6 +268,32 @@ async def _record_and_publish(
     )
 
 
+@dataclass(frozen=True)
+class _EpisodicDigest:
+    """One episodic pass's text plus whether the LLM actually produced it.
+
+    ``summarized=False`` means timeout/empty and ``fallback_episode_summary``
+    stitched the window's first user turns. Fine as raw material for a later
+    semantic pass; not a reason to eager-consolidate, and never a card.
+    """
+
+    summary: str
+    summarized: bool
+
+
+def _oldest_episode_at(undigested: list) -> datetime | None:
+    """``created_at`` of the oldest undigested episode, or None if missing/unparseable."""
+    if not undigested:
+        return None
+    try:
+        oldest = datetime.fromisoformat(undigested[0].created_at.replace("Z", "+00:00"))
+        if oldest.tzinfo is None:
+            oldest = oldest.replace(tzinfo=UTC)
+        return oldest
+    except ValueError:
+        return None
+
+
 async def run_semantic_for_scope(
     *,
     user_id: str,
@@ -268,28 +302,31 @@ async def run_semantic_for_scope(
     store: MemoryStore,
     credentials,
     episode_store: EpisodeStore | None = None,
+    eager: bool = False,
+    anchor_at: datetime | None = None,
 ) -> bool:
-    """Run one semantic consolidation for a (user, scope) when trigger conditions hold."""
+    """Run one semantic consolidation for a (user, scope).
+
+    ``eager=True`` (live path, right after an episode write) bypasses the 3-episode /
+    24h gate. ``eager=False`` is the leak-scan backstop and keeps
+    :func:`should_run_semantic` unchanged. Success with no add/update/remove still
+    marks digested and publishes nothing. Parse/timeout/exception leaves undigested.
+    """
     scope = folder_id
     ep_store = episode_store or default_episode_store()
     undigested = await list_undigested_episodes(ep_store, user_id, scope=scope)
-    meta = await load_scope_meta(ep_store, user_id, scope=scope)
-    oldest: datetime | None = None
-    if undigested:
-        try:
-            oldest = datetime.fromisoformat(undigested[0].created_at.replace("Z", "+00:00"))
-            if oldest.tzinfo is None:
-                oldest = oldest.replace(tzinfo=UTC)
-        except ValueError:
-            oldest = None
-    if not should_run_semantic(
-        undigested_count=len(undigested),
-        last_semantic_at=meta.last_semantic_at,
-        min_episodes=settings.memory_semantic_min_episodes,
-        max_age_hours=settings.memory_semantic_max_age_hours,
-        oldest_undigested_at=oldest,
-    ):
+    if not undigested:
         return False
+    if not eager:
+        meta = await load_scope_meta(ep_store, user_id, scope=scope)
+        if not should_run_semantic(
+            undigested_count=len(undigested),
+            last_semantic_at=meta.last_semantic_at,
+            min_episodes=settings.memory_semantic_min_episodes,
+            max_age_hours=settings.memory_semantic_max_age_hours,
+            oldest_undigested_at=_oldest_episode_at(undigested),
+        ):
+            return False
     if credentials is None:
         logger.info(
             "memory.consolidation_skipped_no_credentials",
@@ -332,13 +369,14 @@ async def run_semantic_for_scope(
         scope=scope,
         consolidated_at=datetime.now(UTC),
     )
-    if outcome:
+    if collected:
         await _record_and_publish(
             conversation_id=conversation_id,
             user_id=user_id,
             kind="semantic",
             items=collected,
-            summary=None if collected else "记忆已整理",
+            summary=None,
+            anchor_at=anchor_at,
         )
     logger.info(
         "memory.semantic_consolidated",
@@ -347,7 +385,7 @@ async def run_semantic_for_scope(
         episodes=len(undigested),
         changed=outcome,
     )
-    return outcome
+    return bool(outcome)
 
 
 async def _load_conversation_action_inventory(
@@ -373,23 +411,6 @@ async def _load_conversation_action_inventory(
         entries = await repo.load(turn_id)
         parts.append(inventory_from_journal_entries(entries))
     return merge_inventories(parts)
-
-
-@dataclass(frozen=True)
-class _EpisodicDigest:
-    """One episodic pass's text plus whether the LLM actually produced it.
-
-    ``summarized=False`` means the summarizer timed out or came back empty and
-    ``fallback_episode_summary`` stitched the window's first user turns together. That
-    text is fine as raw material for the semantic pass (which reads episodes as input
-    and decides for itself what is durable), but it must NEVER surface as a card: it is
-    the user's own words verbatim, and a chat that opened with an ID number, a phone
-    number and an address would have all three re-posted into the thread under the
-    episodic card heading. No summary ⇒ no card.
-    """
-
-    summary: str
-    summarized: bool
 
 
 def _consolidation_failure_retryable(exc: BaseException) -> bool:
@@ -594,10 +615,10 @@ def _reset_failure_cooldowns_for_tests() -> None:
 async def consolidate_conversation(
     conversation_id: str, *, store: MemoryStore | None = None
 ) -> bool:
-    """Write one episodic session summary for a settled conversation; maybe semantic.
+    """Write one session digest for a settled conversation; then eager-semantic.
 
-    Returns True when an episodic summary was written (semantic may or may not follow).
-    Never raises.
+    Returns True when an episode was written (semantic may or may not follow).
+    Never raises. Does not publish an episodic card.
     """
     if _in_shared_failure_cooldown() or _in_conversation_failure_cooldown(conversation_id):
         return False
@@ -649,9 +670,8 @@ async def consolidate_conversation(
                     return False
                 folder_id = conv.folder_id
                 # Only what arrived since the last pass. Re-reading a fixed recent tail
-                # made adjacent episodes overlap — in the worst observed case the second
-                # card restated the whole first one, because both summarized the same
-                # messages. The 40-message cap still bounds a long unconsolidated gap.
+                # made adjacent episodes overlap — the second digest restated the first.
+                # The 40-message cap still bounds a long unconsolidated gap.
                 window = await load_recent_history(
                     session,
                     conversation_id,
@@ -667,6 +687,7 @@ async def consolidate_conversation(
 
             credentials: LLMCredentials | None = None
             wrote_episodic = False
+            digest: _EpisodicDigest | None = None
             if window:
 
                 async def _episodic_runner(creds: LLMCredentials) -> _EpisodicDigest:
@@ -681,6 +702,9 @@ async def consolidate_conversation(
                         )
                         if summary.strip():
                             return _EpisodicDigest(summary=summary, summarized=True)
+                        # Timeout / empty: still store an episode so semantic can read it.
+                        # This is the user's raw wording — never a card, never the stream,
+                        # and not eager-consolidating (not 「有料」).
                         return _EpisodicDigest(
                             summary=fallback_episode_summary(
                                 window, max_chars=settings.memory_episodic_summary_max_chars
@@ -709,7 +733,7 @@ async def consolidate_conversation(
                     return False
                 credentials = bg.credentials
                 digest = bg.value
-                episode = await append_episode(
+                await append_episode(
                     ep_store,
                     user_id=user_id,
                     conversation_id=conversation_id,
@@ -719,28 +743,11 @@ async def consolidate_conversation(
                     actions=actions,
                 )
                 wrote_episodic = True
-                if digest.summarized:
-                    await _record_and_publish(
-                        conversation_id=conversation_id,
-                        user_id=user_id,
-                        kind="episodic",
-                        items=[],
-                        summary=episode.summary,
-                        anchor_at=latest,
-                    )
-                else:
-                    logger.warning(
-                        "memory.episodic_card_suppressed",
-                        conversation_id=conversation_id,
-                        user_id=user_id,
-                        episode_id=episode.id,
-                        reason="no_llm_summary",
-                    )
 
             async with async_session_factory() as session:
                 await ConversationRepository(session).set_memory_synced_at(conversation_id, latest)
 
-            if wrote_episodic:
+            if wrote_episodic and digest is not None and digest.summarized:
                 with contextlib.suppress(Exception):
                     await run_semantic_for_scope(
                         user_id=user_id,
@@ -749,6 +756,8 @@ async def consolidate_conversation(
                         store=store,
                         credentials=credentials,
                         episode_store=ep_store,
+                        eager=True,
+                        anchor_at=latest,
                     )
 
             _clear_conversation_failure_cooldown(conversation_id)
@@ -840,13 +849,13 @@ def user_memory_lock_for(conversation_id: str) -> _UserLockForConversation:
     return _UserLockForConversation(conversation_id)
 
 
-# --- Debounce scheduler (live path → episodic) --------------------------------
+# --- Debounce scheduler (live path → episode write) --------------------------------
 
 Runner = Callable[[str], Awaitable[object]]
 
 
 class MemoryConsolidationScheduler:
-    """Per-conversation debounce + turn-cap trigger for episodic summary writes."""
+    """Per-conversation debounce + turn-cap trigger for session-digest writes."""
 
     def __init__(self, *, idle_seconds: float, turn_cap: int, runner: Runner) -> None:
         self._idle = idle_seconds
@@ -930,12 +939,74 @@ async def shutdown_scheduler() -> None:
 # --- Periodic sweeper (backstop) ---------------------------------------------
 
 
+async def _semantic_leak_scan(*, skip_conversation_ids: set[str]) -> None:
+    """Non-eager semantic backstop: undigested leftovers after a live miss.
+
+    Conversations that just wrote an episode this sweep already ran eager semantic;
+    skip those so a failed eager pass is not immediately retried. Remaining scopes
+    still go through :func:`should_run_semantic` (3 episodes or 24h).
+    """
+    if _in_shared_failure_cooldown():
+        return
+    try:
+        async with async_session_factory() as session:
+            targets = await MemoryPipelineRepository(session).list_undigested_scope_targets(
+                limit=settings.memory_consolidation_sweep_batch_limit,
+            )
+    except Exception as e:
+        logger.warning("memory.semantic_leak_scan_failed", error=str(e))
+        return
+    store = default_memory_store()
+    ep_store = default_episode_store()
+    for user_id, folder_id, conversation_id in targets:
+        if conversation_id in skip_conversation_ids:
+            continue
+        if _in_shared_failure_cooldown():
+            break
+        if _in_conversation_failure_cooldown(conversation_id):
+            continue
+        with log_context(conversation_id=conversation_id), contextlib.suppress(Exception):
+            undigested = await list_undigested_episodes(ep_store, user_id, scope=folder_id)
+            meta = await load_scope_meta(ep_store, user_id, scope=folder_id)
+            if not should_run_semantic(
+                undigested_count=len(undigested),
+                last_semantic_at=meta.last_semantic_at,
+                min_episodes=settings.memory_semantic_min_episodes,
+                max_age_hours=settings.memory_semantic_max_age_hours,
+                oldest_undigested_at=_oldest_episode_at(undigested),
+            ):
+                continue
+
+            async def _runner(
+                creds: LLMCredentials,
+                *,
+                _uid=user_id,
+                _cid=conversation_id,
+                _fid=folder_id,
+            ):
+                return await run_semantic_for_scope(
+                    user_id=_uid,
+                    conversation_id=_cid,
+                    folder_id=_fid,
+                    store=store,
+                    credentials=creds,
+                    episode_store=ep_store,
+                    eager=False,
+                )
+
+            async with user_memory_lock(user_id):
+                bg = await run_background_llm(user_id, purpose="memory", runner=_runner)
+                if isinstance(bg, BackgroundLlmSkip):
+                    _mark_skip_cooldown(conversation_id, skip=bg)
+
+
 async def consolidation_sweep_once() -> int:
-    """One backstop sweep: episodic-write settled chats with un-synced messages.
+    """One backstop sweep: write episodes for settled chats with un-synced messages.
 
     Shared-upstream cooldown aborts the rest of the batch (and skips the sweep when
     already armed). Per-conversation cooldown skips that id without stopping others.
-    Also purges digested episodes past the retention window (no separate GC loop).
+    Also purges digested episodes past the retention window (no separate GC loop),
+    then non-eager-scans leftover undigested scopes.
     """
     with contextlib.suppress(Exception):
         purged = await purge_digested_episodes(
@@ -952,6 +1023,7 @@ async def consolidation_sweep_once() -> int:
             limit=settings.memory_consolidation_sweep_batch_limit,
         )
     attempted = 0
+    pending_set = set(pending)
     for conversation_id in pending:
         if _in_shared_failure_cooldown():
             break
@@ -960,6 +1032,7 @@ async def consolidation_sweep_once() -> int:
         with log_context(conversation_id=conversation_id):
             await consolidate_conversation(conversation_id)
             attempted += 1
+    await _semantic_leak_scan(skip_conversation_ids=pending_set)
     return attempted
 
 

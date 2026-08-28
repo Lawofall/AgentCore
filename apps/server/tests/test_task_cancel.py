@@ -25,10 +25,26 @@ def _http_error_from_cancel() -> httpx.ConnectError:
     return err
 
 
+def _connect_timeout_from_internal_cancel() -> httpx.ConnectTimeout:
+    """httpx connect timeout: anyio cancel scope leaks CancelledError on context."""
+    inner = TimeoutError()
+    inner.__context__ = asyncio.CancelledError()
+    err = httpx.ConnectTimeout("connect timed out")
+    err.__context__ = inner
+    return err
+
+
 def test_is_task_cancelled_bare_and_wrapped():
     assert is_task_cancelled(asyncio.CancelledError()) is True
     assert is_task_cancelled(_http_error_from_cancel()) is True
     assert is_task_cancelled(httpx.ConnectError("plain")) is False
+
+
+def test_is_task_cancelled_ignores_httpx_timeout_internal_cancel():
+    err = _connect_timeout_from_internal_cancel()
+    assert is_task_cancelled(err) is False
+    raise_if_task_cancelled(err)
+    assert is_task_cancelled(httpx.ReadTimeout("slow")) is False
 
 
 def test_raise_if_task_cancelled_unwraps_http_error():

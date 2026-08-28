@@ -74,6 +74,38 @@ class MemoryPipelineRepository:
         )
         return list(result.scalars().all())
 
+    async def list_undigested_scope_targets(
+        self, *, limit: int = 100
+    ) -> list[tuple[str, str | None, str]]:
+        """Distinct (user_id, folder_id, latest-episode conversation_id) still undigested.
+
+        Newest episode per scope wins so the leak-scan card (if any) lands on the
+        conversation the user last settled. First-seen after ``created_at DESC``.
+        """
+        if limit <= 0:
+            return []
+        result = await self._session.execute(
+            select(
+                MemoryEpisode.user_id,
+                MemoryEpisode.folder_id,
+                MemoryEpisode.conversation_id,
+            )
+            .where(MemoryEpisode.digested_at.is_(None))
+            .order_by(MemoryEpisode.created_at.desc())
+            .limit(max(limit * 8, limit))
+        )
+        seen: set[tuple[str, str | None]] = set()
+        out: list[tuple[str, str | None, str]] = []
+        for user_id, folder_id, conversation_id in result.all():
+            key = (user_id, folder_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append((user_id, folder_id, conversation_id))
+            if len(out) >= limit:
+                break
+        return out
+
     async def mark_digested(
         self,
         user_id: str,

@@ -1,5 +1,6 @@
 import { DirTypeIcon, FileTypeIcon } from "@/components/files/FileTypeIcon";
 import { IconButton } from "@/components/ui";
+import { handlePlainPaste } from "@/lib/clipboardPlain";
 import {
   INLINE_OBJECT,
   hasInlineMarkers,
@@ -26,12 +27,6 @@ import type {
   PendingAgentMention,
   PendingAttachment,
 } from "./composerAttachments";
-
-const KIND_LABEL: Record<PendingAttachment["kind"], string> = {
-  file: "文件",
-  dir: "文件夹",
-  conversation: "对话",
-};
 
 export type ComposerBodyHandle = {
   focus: () => void;
@@ -281,6 +276,7 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
         tabIndex={0}
         suppressContentEditableWarning
         data-testid="composer-body"
+        data-copy-plain=""
         className={cn(
           "block w-full resize-none overflow-y-auto bg-transparent text-sm text-foreground focus:outline-none whitespace-pre-wrap break-words",
           className,
@@ -296,13 +292,32 @@ export const ComposerBodyEditor = forwardRef(function ComposerBodyEditor(
           emitFromDom();
         }}
         onKeyDown={onKeyDown}
-        onPaste={onPaste}
+        onPaste={(e) => {
+          onPaste(e);
+          if (e.defaultPrevented) return;
+          const selectedLength = selectedSerializedLength(rootRef.current);
+          handlePlainPaste(e, {
+            maxLength,
+            currentLength: value.length,
+            selectedLength,
+          });
+        }}
         onMouseUp={() => onCaret(getCaretFromDom())}
         onKeyUp={() => onCaret(getCaretFromDom())}
       />
     </div>
   );
 });
+
+function selectedSerializedLength(root: HTMLElement | null): number {
+  if (!root) return 0;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return 0;
+  if (!root.contains(sel.anchorNode) || !root.contains(sel.focusNode)) return 0;
+  const probe = document.createElement("div");
+  probe.appendChild(sel.getRangeAt(0).cloneContents());
+  return serializeFromClone(probe);
+}
 
 function serializeFromClone(probe: HTMLElement): number {
   let n = 0;
@@ -420,9 +435,11 @@ function EditorAttachmentPill({
       ) : (
         <FileTypeIcon name={att.name} path={att.path} size={12} />
       )}
-      <span className="shrink-0 text-muted-foreground">
-        {uploading ? "上传中" : failed ? "上传失败" : KIND_LABEL[att.kind]}
-      </span>
+      {(uploading || failed) && (
+        <span className="shrink-0 text-muted-foreground">
+          {uploading ? "上传中" : "上传失败"}
+        </span>
+      )}
       <span className="truncate">
         {att.name}
         {att.kind === "dir" ? "/" : ""}

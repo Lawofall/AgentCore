@@ -6,6 +6,8 @@ bytes back to assert the on-disk result, including line-ending fidelity.
 
 from pathlib import Path
 
+import pytest
+
 from agentcore.tools.builtin.file_ops import StrReplaceTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
@@ -178,8 +180,30 @@ async def test_rejects_path_outside_workspace(tmp_path: Path):
     )
     assert result.success is False
     assert "超出了工作区范围" in result.error
+    assert result.failure_code == "outside_workspace"
     # the out-of-tree file must be untouched
     assert (tmp_path / "secret.txt").read_text(encoding="utf-8") == "top secret"
+
+
+async def test_access_denied_is_lock_not_grant(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from agentcore.workspace.protocol import WorkspaceIOError
+
+    (tmp_path / "f.txt").write_text("hello", encoding="utf-8")
+    ctx = _ctx(tmp_path)
+
+    async def locked(*_a, **_k):  # noqa: ANN001
+        raise WorkspaceIOError("[WinError 5] 拒绝访问: 'f.txt'")
+
+    monkeypatch.setattr(ctx.backend, "replace", locked)
+    result = await StrReplaceTool().execute(
+        {"path": "f.txt", "old_string": "hello", "new_string": "world"},
+        ctx,
+    )
+    assert result.success is False
+    assert result.failure_code == "access_denied"
+    assert "写入被占用" in result.error
+    assert "超出了工作区范围" not in result.error
+    assert "没授权" not in result.error or "不是没授权" in result.error
 
 
 async def test_file_not_found(tmp_path: Path):

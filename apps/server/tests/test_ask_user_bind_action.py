@@ -25,6 +25,7 @@ def test_normalize_options_preserves_bind_local_folder_action():
             {"label": "坏动作", "action": "hack_the_planet"},
             {"label": "授权只读目录", "action": "grant_readonly_folder"},
             {"label": "授权整理目录", "action": "grant_organize_folder"},
+            {"label": "加入可读写", "action": "grant_attach_folder"},
         ],
         max_options=10,
     )
@@ -37,6 +38,7 @@ def test_normalize_options_preserves_bind_local_folder_action():
     assert "action" not in out[4]  # unknown actions drop
     assert "action" not in out[5]  # grant_readonly_folder dropped
     assert out[6]["action"] == "grant_organize_folder"
+    assert out[7]["action"] == "grant_attach_folder"
 
 
 def test_normalize_options_passthrough_well_known_and_target_name():
@@ -512,6 +514,7 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
         "register_local_project",
         "bind_local_folder",
         "grant_organize_folder",
+        "grant_attach_folder",
     ]
     assert props2["well_known"]["enum"] == ["desktop", "downloads", "documents"]
     assert "target_name" in props2
@@ -523,7 +526,7 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert "grant_organize_folder" in advertised.schema.description
     assert "external_mount_readonly" in advertised.schema.description
     assert "HOW→consult(ask_user_kickoff" in advertised.schema.description
-    assert "整理要发卡" in advertised.schema.description
+    assert "grant_attach_folder" in advertised.schema.description
     assert "只读用" in advertised.schema.description
     assert "改导" not in advertised.schema.description
     # 口头同意闭环 / 歧义 2～3 候选怎么填：HOW 在 skill，不进工具 description。
@@ -538,7 +541,8 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert "bind_local_folder" in action_desc or "open/register/bind" in action_desc
     assert "grant_readonly_folder" not in action_desc
     assert "grant_readonly_folder" not in props2["action"]["enum"]
-    assert "整理要发卡" in action_desc
+    assert "grant_organize_folder=整理" in action_desc
+    assert "grant_attach_folder=本机可写" in action_desc
     assert "口头同意" not in action_desc
     assert "2～3" not in action_desc
     assert "2-3" not in action_desc

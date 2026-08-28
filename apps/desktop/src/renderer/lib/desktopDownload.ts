@@ -24,12 +24,23 @@ export function isDesktopFolderAction(
   | "open_local_project"
   | "register_local_project"
   | "bind_local_folder"
-  | "grant_organize_folder" {
+  | "grant_organize_folder"
+  | "grant_attach_folder" {
   return (
     action === "open_local_project" ||
     action === "register_local_project" ||
     action === "bind_local_folder" ||
-    action === "grant_organize_folder"
+    action === "grant_organize_folder" ||
+    action === "grant_attach_folder"
+  );
+}
+
+/** Organize / attach_rw 都走桌面解析履约（无 picker）。 */
+export function isGrantFolderAction(
+  action: string | undefined,
+): action is "grant_organize_folder" | "grant_attach_folder" {
+  return (
+    action === "grant_organize_folder" || action === "grant_attach_folder"
   );
 }
 

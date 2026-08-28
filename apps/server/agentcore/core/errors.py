@@ -687,6 +687,18 @@ class ValidationError(AgentCoreError):
     status_code = 422
 
 
+class ContextOverflowError(AgentCoreError):
+    """Conversation is near the model window and the fold did not write (HTTP 413).
+
+    Distinct from ``LLMError`` so clients do not offer retry or escalate to
+    Base URL / API Key. Distinct from ``PayloadTooLargeError`` (file-byte ceiling).
+    """
+
+    code = ErrorCode.CONTEXT_OVERFLOW
+    status_code = 413
+    retryable = False
+
+
 class PayloadTooLargeError(ValidationError):
     """Request / download payload exceeds a configured byte ceiling (HTTP 413).
 

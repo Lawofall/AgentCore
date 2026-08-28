@@ -10,6 +10,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -63,6 +64,7 @@ vi.mock("@/hooks/useLlmModelProfiles", () => ({
 }));
 vi.mock("@/hooks/useFolders", () => ({
   useFolders: () => [],
+  getFolders: () => [],
   useCreateFolder: () => ({ mutateAsync: vi.fn() }),
 }));
 vi.mock("@/hooks/useConversations", () => ({
@@ -592,6 +594,28 @@ describe("TurnComposer variants", () => {
     expect(useComposerDraftStore.getState().drafts.__draft__?.value).toContain(
       "\uFFFC",
     );
+  });
+
+  it("file pill shows the filename without a 文件 kind label", async () => {
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue("__draft__", "");
+    useComposerDraftStore.getState().setAttachments("__draft__", [
+      {
+        id: "a1",
+        key: "file:local:现行信息.md",
+        name: "现行信息.md",
+        path: "docs/01-产品/现行信息.md",
+        text: "",
+        truncated: false,
+        kind: "file",
+      },
+    ]);
+    renderComposer("bar");
+    const body = screen.getByTestId("composer-body");
+    await waitFor(() => {
+      expect(body.textContent).toContain("现行信息.md");
+    });
+    expect(body.textContent).not.toContain("文件");
   });
 
   it("empty draft: composer send error is on the card, not in the body", () => {

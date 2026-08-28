@@ -15,7 +15,7 @@ from agentcore.conversation.common import (
     resolve_turn_file_workspace,
     schedule_title_generation,
 )
-from agentcore.conversation.compaction import maybe_compact_near_ceiling
+from agentcore.conversation.compaction import compact_before_turn
 from agentcore.conversation.history import load_chat_context
 from agentcore.conversation.inline_body import plain_text
 from agentcore.conversation.mentions import to_stored_agent_mentions
@@ -159,7 +159,7 @@ async def stream_chat(
         # 不得静默等锁：kickoff 不握 folder 锁；写路径短等经 workspace_lock_wait SSE。
         resident_attachments = await persist_attachments(backend, attachments)
 
-        await maybe_compact_near_ceiling(
+        await compact_before_turn(
             conversation_id,
             model_id=resolve_turn_model(llm_credentials),
         )
@@ -352,7 +352,7 @@ async def regenerate_chat(
             )
             await session.commit()
 
-        await maybe_compact_near_ceiling(
+        await compact_before_turn(
             conversation_id,
             model_id=resolve_turn_model(llm_credentials),
         )
@@ -467,7 +467,7 @@ async def resume_chat(
             # switch applies to the resumed continuation.
             permission_axes = await resolve_permission_axes(session, conversation_id)
 
-        await maybe_compact_near_ceiling(
+        await compact_before_turn(
             conversation_id,
             model_id=resolve_turn_model(llm_credentials),
         )
@@ -787,7 +787,7 @@ async def continue_chat(
         user_message, _ceo_chat_prompt = _turn_started_fields(entries)
         captain_run_id = _captain_run_id_from_journal(entries)
 
-        await maybe_compact_near_ceiling(
+        await compact_before_turn(
             conversation_id,
             model_id=resolve_turn_model(llm_credentials),
         )

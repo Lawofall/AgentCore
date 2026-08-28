@@ -84,7 +84,7 @@ class AskUserTool:
     folder_id: str | None = None
     # Advertise desktop-only ask_user option actions (open_local_project /
     # register_local_project / bind_local_folder /
-    # grant_organize_folder) when the desktop client can fulfil them.
+    # grant_organize_folder / grant_attach_folder) when the desktop client can fulfil them.
     advertise_bind_local_folder: bool = False
 
     @property
@@ -118,7 +118,6 @@ class AskUserTool:
             "向用户发问（唯一问用户原语）。暂停回合等人答复。"
             "登录拦截：browser_login=true。"
             "问句写 questions[].prompt。"
-            "挡路才问；能按默认推进则不当检查点，在回复里写明假设即可。"
             "HOW→consult(ask_user_kickoff / ask_user_midtask)。"
         )
         if self.advertise_bind_local_folder:
@@ -130,10 +129,11 @@ class AskUserTool:
                     "register_local_project",
                     "bind_local_folder",
                     "grant_organize_folder",
+                    "grant_attach_folder",
                 ],
                 "description": (
                     "可选。open/register/bind_local_*=本机传统（合法非默认，云仍推荐）；"
-                    "grant_organize_folder=整理要发卡。"
+                    "grant_organize_folder=整理；grant_attach_folder=本机可写。"
                 ),
             }
             option_properties["well_known"] = {
@@ -158,8 +158,10 @@ class AskUserTool:
             # Discriminators stay on the tool description so the model sees them
             # without opening options.action; HOW still lives in ask_user_* skills.
             tool_desc += (
-                " 桌面：整理要发卡 grant_organize_folder；"
-                "只读用 external_mount_readonly；open/register/bind_local_* 本机传统。"
+                " 桌面分流：整理 grant_organize_folder；本机可写 grant_attach_folder；"
+                "只读用 external_mount_readonly。"
+                "HOW→consult(external_mount_readonly)；"
+                "open/register/bind_local_* 本机传统。"
             )
 
         return ToolSchema(

@@ -187,6 +187,39 @@ describe("SidecarManager local-turn occupy", () => {
     expect(start?.params?.messageId).toBe(START_REQ.messageId);
     expect(start?.params?.traceId).toBe(TRACE);
     expect(start?.params?.userMessageId).toBe(START_REQ.userMessageId);
+    expect(h.bearerPostJson.mock.calls[0]?.[1]).toEqual(
+      expect.not.objectContaining({ regenerate: true }),
+    );
+  });
+
+  it("regenerate occupy POSTs truncate flag and empty materials", async () => {
+    const t = capturingTransport();
+    const manager = new SidecarManager(() => t.transport);
+    h.bearerPostJson.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
+    await manager.startTurn(
+      { isDestroyed: () => false, send: vi.fn() } as never,
+      {
+        ...START_REQ,
+        regenerate: true,
+        replaceMaterials: true,
+        attachments: [],
+        agentMentions: [],
+      },
+      "/tmp/ws-occupy",
+    );
+    expect(h.bearerPostJson.mock.calls[0]?.[1]).toEqual({
+      user_message: "hello",
+      user_message_id: START_REQ.userMessageId,
+      message_id: START_REQ.messageId,
+      trace_id: TRACE,
+      regenerate: true,
+      agent_mentions: [],
+      attachments: [],
+    });
   });
 
   it("begin failure does not send startTurn RPC", async () => {

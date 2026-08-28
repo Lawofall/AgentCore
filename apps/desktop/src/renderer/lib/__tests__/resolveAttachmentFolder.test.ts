@@ -1,4 +1,8 @@
-import { resolveFolderFromIndexedEntry } from "@/components/chat/message-input/resolveAttachmentFolder";
+import {
+  decideDraftFolderAssign,
+  resolveFolderFromCitedRoot,
+  resolveFolderFromIndexedEntry,
+} from "@/components/chat/message-input/resolveAttachmentFolder";
 import { getConversations } from "@/hooks/useConversations";
 import { getFolders } from "@/hooks/useFolders";
 import type { IndexedEntry } from "@/lib/fileIndex";
@@ -92,5 +96,54 @@ describe("resolveFolderFromIndexedEntry", () => {
     expect(
       resolveFolderFromIndexedEntry(entry({ sourceId: "local:orphan" })),
     ).toBeNull();
+  });
+
+  it("picks the longest localSubpath prefix on the same root", () => {
+    vi.mocked(getFolders).mockReturnValue([
+      folder("f-root", "整仓", {
+        mode: "local",
+        localRootId: "root-9",
+        localSubpath: null,
+      }),
+      folder("f-docs", "文档", {
+        mode: "local",
+        localRootId: "root-9",
+        localSubpath: "docs",
+      }),
+    ]);
+    expect(
+      resolveFolderFromCitedRoot("root-9", "docs/guide.md"),
+    ).toEqual({ folderId: "f-docs", folderName: "文档" });
+    expect(resolveFolderFromCitedRoot("root-9", "src/a.ts")).toEqual({
+      folderId: "f-root",
+      folderName: "整仓",
+    });
+  });
+});
+
+describe("decideDraftFolderAssign", () => {
+  const hint = { folderId: "f-docs", folderName: "文档" };
+
+  it("auto-assigns from quick cloud or leftover quick local", () => {
+    expect(decideDraftFolderAssign(hint, { kind: "quick_cloud" })).toEqual({
+      action: "auto",
+      ...hint,
+    });
+    expect(decideDraftFolderAssign(hint, { kind: "quick_local" })).toEqual({
+      action: "auto",
+      ...hint,
+    });
+  });
+
+  it("prompts when the draft already uses another folder", () => {
+    expect(
+      decideDraftFolderAssign(hint, { kind: "folder", folderId: "f-other" }),
+    ).toEqual({ action: "prompt", ...hint });
+  });
+
+  it("is a no-op when the draft is already that folder", () => {
+    expect(
+      decideDraftFolderAssign(hint, { kind: "folder", folderId: "f-docs" }),
+    ).toEqual({ action: "none" });
   });
 });

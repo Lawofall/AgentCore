@@ -22,7 +22,7 @@ export const DEFAULT_PERMISSION_AXES: PermissionAxes = {
   host: "session",
 };
 
-/** Built-in recipes → exact axis tuples (含 host). 少打断与托管同轴。 */
+/** Built-in recipes → exact axis tuples (含 host). 全放行与托管同轴。 */
 export const RECIPE_AXES: Record<AutonomyRecipe, PermissionAxes> = {
   cautious: {
     file_write: "ask",
@@ -48,12 +48,12 @@ export const RECIPE_LABELS: Record<
     description: "改文件每次问 · 执行每次确认 · 本机关闭",
   },
   less_interrupt: {
-    short: "少打断",
-    description: "改文件本会话信任 · 自动执行 · 本机会话信任",
+    short: "全放行",
+    description: "授权根内改文件/执行免逐次确认；未授权目录仍不能改",
   },
   managed: {
     short: "托管",
-    description: "改文件本会话信任 · 自动执行 · 本机会话信任",
+    description: "授权根内免审（全放行边界：未授权目录仍不能改；装软件/私钥/危险删除仍拦）",
   },
 };
 
@@ -232,10 +232,10 @@ export function permissionAxesShortLabel(raw: unknown): string | null {
     // Legacy three-tier ids (old audit rows).
     const legacy: Record<string, string> = {
       observe: "谨慎",
-      workspace: "少打断",
+      workspace: "全放行",
       full_trust: "托管",
       always_ask: "谨慎",
-      first_grant: "少打断",
+      first_grant: "全放行",
       full_auto: "托管",
     };
     if (trimmed in legacy) return legacy[trimmed];
@@ -270,7 +270,9 @@ export function needsAutoCommandConfirm(
 }
 
 const AUTO_CONFIRM =
-  "切换到「免审执行」后，执行类（代码/终端/浏览器等）与桌面提醒将免审；Host/MCP 仍按本机轴。确定继续？";
+  "切换到全放行/托管后，已授权目录里改文件和跑命令不再每次问你。"
+  + "没加入本对话的目录仍然改不了。"
+  + "删盘、读私钥、装软件仍会拦住。确定继续？";
 
 export function confirmAutoCommandIfNeeded(
   current: PermissionAxes,

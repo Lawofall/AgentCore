@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
+from agentcore.config import settings
 from agentcore.conversation.mentions import to_stored_agent_mentions
 from agentcore.conversation.store import MESSAGE_STATUS_RUNNING, get_cloud_store
 from agentcore.conversation.zero_output_rollback import (
@@ -13,16 +14,124 @@ from agentcore.conversation.zero_output_rollback import (
     result_from_local_turn_writeback,
     should_delete_zero_output_send_result,
 )
+from agentcore.core.errors import ValidationError
 from agentcore.core.log_context import log_context
 from agentcore.core.logging import get_logger
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import MessageRepository
 from agentcore.llm.resolve import LLMCredentials
+from agentcore.runtime.leases import (
+    acquire_turn_lease,
+    heartbeat_turn_lease,
+    local_turn_lease_owner_id,
+    release_turn_lease,
+)
 
 logger = get_logger(__name__)
 
 
+async def _acquire_local_turn_lease(
+    *,
+    message_id: str,
+    conversation_id: str,
+    user_id: str,
+    trace_id: str,
+) -> None:
+    """Best-effort occupy lease so consolidation sees a live sidecar turn."""
+    if not settings.turn_lease_enabled:
+        return
+    await acquire_turn_lease(
+        message_id=message_id,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        owner_id=local_turn_lease_owner_id(message_id),
+        meta={"source": "local", "trace_id": trace_id},
+    )
+
+
+async def _release_local_turn_lease(message_id: str | None) -> None:
+    if not message_id or not settings.turn_lease_enabled:
+        return
+    await release_turn_lease(message_id, owner_id=local_turn_lease_owner_id(message_id))
+
+
+async def heartbeat_local_turn(*, conversation_id: str, message_id: str) -> bool:
+    """Bump the sidecar occupy lease. Does not steal a cloud turn's owner."""
+    if not settings.turn_lease_enabled:
+        return True
+    with log_context(conversation_id=conversation_id):
+        return await heartbeat_turn_lease(
+            message_id,
+            owner_id=local_turn_lease_owner_id(message_id),
+            conversation_id=conversation_id,
+        )
+
+
 async def record_local_turn(
+    *,
+    conversation_id: str,
+    user_id: str,
+    user_message: str,
+    assistant_content: str,
+    assistant_reasoning: str | None = None,
+    citations: list[dict] | None = None,
+    evidence_ledger: list[dict] | None = None,
+    runs: dict | None = None,
+    journal: list[dict] | None = None,
+    tool_failures: Sequence[dict[str, Any]] | None = None,
+    user_message_id: str,
+    message_id: str | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    reasoning_tokens: int = 0,
+    cache_hit_tokens: int = 0,
+    cache_miss_tokens: int = 0,
+    rounds: int = 0,
+    trace_id: str,
+    finish_reason: str | None = None,
+    llm_credentials: LLMCredentials | None = None,
+    origin: str | None = None,
+    execution_id: str | None = None,
+    harvest_kind: str | None = None,
+    agent_mentions: list[dict] | None = None,
+) -> dict:
+    """Persist a turn that ran on the user's machine via the sidecar.
+
+    Releases the occupy lease after settle / zero-output skip (pause included).
+    """
+    try:
+        return await _persist_local_turn(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            user_message=user_message,
+            assistant_content=assistant_content,
+            assistant_reasoning=assistant_reasoning,
+            citations=citations,
+            evidence_ledger=evidence_ledger,
+            runs=runs,
+            journal=journal,
+            tool_failures=tool_failures,
+            user_message_id=user_message_id,
+            message_id=message_id,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cache_hit_tokens=cache_hit_tokens,
+            cache_miss_tokens=cache_miss_tokens,
+            rounds=rounds,
+            trace_id=trace_id,
+            finish_reason=finish_reason,
+            llm_credentials=llm_credentials,
+            origin=origin,
+            execution_id=execution_id,
+            harvest_kind=harvest_kind,
+            agent_mentions=agent_mentions,
+        )
+    finally:
+        await _release_local_turn_lease(message_id)
+
+
+async def _persist_local_turn(
     *,
     conversation_id: str,
     user_id: str,
@@ -178,6 +287,38 @@ async def _insert_user_idempotent(
         raise
 
 
+async def _prepare_local_regenerate(
+    *,
+    conversation_id: str,
+    user_message: str,
+    user_message_id: str,
+    agent_mentions: list[dict] | None,
+    attachments: list[dict] | None,
+) -> None:
+    """Patch the user row and drop later messages (cloud regenerate surgery)."""
+    async with async_session_factory() as session:
+        repo = MessageRepository(session)
+        target = await repo.get_by_id(
+            user_message_id, conversation_id=conversation_id
+        )
+        if not target or getattr(target, "role", None) != "user":
+            raise ValidationError("只能从用户消息重新生成")
+        stored_mentions = to_stored_agent_mentions(agent_mentions)
+        await repo.update_content(
+            user_message_id,
+            user_message,
+            attachments=attachments,
+            agent_mentions=(
+                stored_mentions if agent_mentions is not None else None
+            ),
+            commit=False,
+        )
+        await repo.delete_after(
+            conversation_id, after_created_at=target.created_at, commit=False
+        )
+        await session.commit()
+
+
 async def begin_local_turn(
     *,
     conversation_id: str,
@@ -187,18 +328,39 @@ async def begin_local_turn(
     message_id: str,
     trace_id: str,
     agent_mentions: list[dict] | None = None,
+    regenerate: bool = False,
+    attachments: list[dict] | None = None,
 ) -> dict[str, str]:
-    """Idempotent user row + running assistant placeholder. No cloud turn / title."""
+    """Idempotent user row + running assistant placeholder + occupy lease.
+
+    ``regenerate=True`` patches the existing user row, deletes later messages
+    (same surgery as cloud ``regenerate_chat``), then pins a new assistant.
+    """
     with log_context(trace_id=trace_id, conversation_id=conversation_id, user_id=user_id):
-        await _insert_user_idempotent(
-            conversation_id=conversation_id,
-            user_message=user_message,
-            user_message_id=user_message_id,
-            agent_mentions=agent_mentions,
-        )
+        if regenerate:
+            await _prepare_local_regenerate(
+                conversation_id=conversation_id,
+                user_message=user_message,
+                user_message_id=user_message_id,
+                agent_mentions=agent_mentions,
+                attachments=attachments,
+            )
+        else:
+            await _insert_user_idempotent(
+                conversation_id=conversation_id,
+                user_message=user_message,
+                user_message_id=user_message_id,
+                agent_mentions=agent_mentions,
+            )
         await get_cloud_store().begin_turn(
             conversation_id=conversation_id,
             message_id=message_id,
+            trace_id=trace_id,
+        )
+        await _acquire_local_turn_lease(
+            message_id=message_id,
+            conversation_id=conversation_id,
+            user_id=user_id,
             trace_id=trace_id,
         )
         logger.info(
@@ -266,35 +428,38 @@ async def abort_local_turn(
 ) -> dict[str, bool]:
     """Delete a still-running assistant + paired user. Settled rows are a no-op."""
     with log_context(conversation_id=conversation_id, user_id=user_id):
-        async with async_session_factory() as session:
-            assistant = await MessageRepository(session).get_by_id(
-                message_id, conversation_id=conversation_id
+        try:
+            async with async_session_factory() as session:
+                assistant = await MessageRepository(session).get_by_id(
+                    message_id, conversation_id=conversation_id
+                )
+            if assistant is None or getattr(assistant, "role", None) != "assistant":
+                logger.info(
+                    "chat.local_turn_abort_noop",
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    reason="missing",
+                )
+                return {"aborted": False}
+            if not _assistant_is_in_flight(getattr(assistant, "usage", None)):
+                logger.info(
+                    "chat.local_turn_abort_noop",
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    reason="settled",
+                )
+                return {"aborted": False}
+            await delete_assistant_and_paired_user(
+                conversation_id=conversation_id,
+                assistant_message_id=message_id,
+                user_message_id=user_message_id,
             )
-        if assistant is None or getattr(assistant, "role", None) != "assistant":
             logger.info(
-                "chat.local_turn_abort_noop",
+                "chat.local_turn_aborted",
                 conversation_id=conversation_id,
                 message_id=message_id,
-                reason="missing",
+                user_message_id=user_message_id,
             )
-            return {"aborted": False}
-        if not _assistant_is_in_flight(getattr(assistant, "usage", None)):
-            logger.info(
-                "chat.local_turn_abort_noop",
-                conversation_id=conversation_id,
-                message_id=message_id,
-                reason="settled",
-            )
-            return {"aborted": False}
-        await delete_assistant_and_paired_user(
-            conversation_id=conversation_id,
-            assistant_message_id=message_id,
-            user_message_id=user_message_id,
-        )
-        logger.info(
-            "chat.local_turn_aborted",
-            conversation_id=conversation_id,
-            message_id=message_id,
-            user_message_id=user_message_id,
-        )
-        return {"aborted": True}
+            return {"aborted": True}
+        finally:
+            await _release_local_turn_lease(message_id)

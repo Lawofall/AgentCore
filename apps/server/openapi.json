@@ -2990,21 +2990,47 @@
         "type": "object"
       },
       "BeginLocalTurnRequest": {
-        "description": "Open a local-turn projection: pin the user row and a running assistant.\n\nDoes not start a cloud SSE turn, mint a title, or compact. Same\n``user_message_id`` / ``message_id`` retry is success.",
+        "description": "Open a local-turn projection: pin the user row and a running assistant.\n\nDoes not start a cloud SSE turn, mint a title, or compact. Same\n``user_message_id`` / ``message_id`` retry is success.\n\n``regenerate=True`` patches that user row and deletes later messages\n(same surgery as ``RegenerateMessageRequest``), then pins a new assistant.\n``attachments`` / ``agent_mentions``: omit to keep stored materials; send a\nlist (including empty) to replace them.",
         "properties": {
           "agent_mentions": {
-            "items": {
-              "$ref": "#/components/schemas/AgentMention"
-            },
-            "maxItems": 10,
-            "title": "Agent Mentions",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentMention"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Mentions"
+          },
+          "attachments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MessageAttachment"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachments"
           },
           "message_id": {
             "maxLength": 64,
             "minLength": 1,
             "title": "Message Id",
             "type": "string"
+          },
+          "regenerate": {
+            "default": false,
+            "title": "Regenerate",
+            "type": "boolean"
           },
           "trace_id": {
             "maxLength": 32,
@@ -7869,7 +7895,8 @@
             "default": "readonly",
             "enum": [
               "readonly",
-              "organize"
+              "organize",
+              "attach_rw"
             ],
             "title": "Mode",
             "type": "string"
@@ -8413,7 +8440,7 @@
         "type": "object"
       },
       "GrantExternalReadonlyRequest": {
-        "description": "Register a session-scoped desktop root for this conversation.\n\nDoes **not** change workspace binding. ``root_id`` is the desktop-minted handle;\nabsolute paths never appear on the wire. ``mode`` is ``readonly`` (W3) or\n``organize`` (P1: move/copy/mkdir/trash-delete).",
+        "description": "Register a session-scoped desktop root for this conversation.\n\nDoes **not** change workspace binding. ``root_id`` is the desktop-minted handle;\nabsolute paths never appear on the wire. ``mode`` is ``readonly`` (W3),\n``organize`` (move/copy/mkdir/trash-delete), or ``attach_rw`` (本机传统附加可写；\n云协作拒绝该 mode).",
         "properties": {
           "alias_hint": {
             "anyOf": [
@@ -8437,7 +8464,8 @@
             "default": "readonly",
             "enum": [
               "readonly",
-              "organize"
+              "organize",
+              "attach_rw"
             ],
             "title": "Mode",
             "type": "string"
@@ -9366,6 +9394,35 @@
         "title": "LlmWindowToolCallFunction",
         "type": "object"
       },
+      "LocalTurnHeartbeatRequest": {
+        "description": "Keep the sidecar occupy lease fresh (desktop, ~20s). Same owner as begin.",
+        "properties": {
+          "message_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id"
+        ],
+        "title": "LocalTurnHeartbeatRequest",
+        "type": "object"
+      },
+      "LocalTurnHeartbeatResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "LocalTurnHeartbeatResponse",
+        "type": "object"
+      },
       "LocalTurnJournalFact": {
         "properties": {
           "entry": {
@@ -10096,7 +10153,6 @@
           "kind": {
             "default": "semantic",
             "enum": [
-              "episodic",
               "semantic",
               "quota"
             ],
@@ -10182,7 +10238,7 @@
         "type": "object"
       },
       "MemoryUpdateView": {
-        "description": "One memory-write notice for the conversation-tail card (two-layer memory).\n\nProjected from a ``memory_updates`` row. ``kind`` is the closed ``MemoryUpdateKind``\nset and selects the UI:\n- ``episodic``: light tip; ``summary`` is the ≤200-char session digest; ``items`` empty.\n- ``semantic``: diff card; ``items`` lists add/update/remove bullets.\n- ``quota``: always-pool / billing skip; ``summary`` says why; ``items`` name the\n  fingerprint row (``quota``) plus denied / holder rows.\n\nReturned only with the LATEST messages window, and pushed live on the per-user firehose.\n\n``anchor_at`` is the last consolidated message's ``created_at`` — the thread position\nthe card describes, which ``created_at`` (when the debounced pass happened to run) does\nnot give. Null on older rows and on writes with no message window.",
+        "description": "One memory-write notice for the conversation-tail card.\n\nProjected from a ``memory_updates`` row. ``kind`` is the closed ``MemoryUpdateKind``\nset and selects the UI:\n- ``semantic``: diff card; ``items`` lists add/update/remove bullets.\n- ``quota``: always-pool / billing skip; ``summary`` says why; ``items`` name the\n  fingerprint row (``quota``) plus denied / holder rows.\n\nSession digests are not cards. Returned only with the LATEST messages window, and\npushed live on the per-user firehose.\n\n``anchor_at`` is the last consolidated message's ``created_at`` — the thread position\nthe card describes, which ``created_at`` (when the debounced pass happened to run) does\nnot give. Live semantic writes set it; null on older rows and on writes with no\nmessage window (leak-scan / quota).",
         "properties": {
           "anchor_at": {
             "anyOf": [
@@ -10215,7 +10271,6 @@
           "kind": {
             "default": "semantic",
             "enum": [
-              "episodic",
               "semantic",
               "quota"
             ],
@@ -17535,7 +17590,7 @@
   "info": {
     "description": "Multi-Agent AI Workspace API",
     "title": "AgentCore",
-    "version": "0.7.7"
+    "version": "0.7.8"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -26991,6 +27046,91 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/local-turns/heartbeat": {
+      "post": {
+        "description": "Refresh the sidecar occupy lease. Owner Bearer; never steals a cloud lease.",
+        "operationId": "heartbeat_local_turn_endpoint_v1_conversations__conversation_id__local_turns_heartbeat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalTurnHeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalTurnHeartbeatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heartbeat Local Turn Endpoint",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/local-turns/journal": {
       "post": {
         "description": "Append journal facts with required ``seq`` (replace=False). Failures are 4xx/5xx.",
@@ -30632,7 +30772,7 @@
         ]
       },
       "post": {
-        "description": "Register a conversation external mount (readonly or organize).\n\nCalled after desktop mint (silent ``external_mount_readonly`` or user-confirmed\norganize grant). Body carries ``root_id`` / label / mode only — never absolute paths.\n\nThe response doubles as the device's declaration for this root: the caller's\n``X-Client-Device`` is bound onto its live fulfill session *and* stored on the\ngrant (``fulfill/declare.py``), so the very first ``external/<alias>/`` op of\nthe resuming turn has a machine to route to.",
+        "description": "Register a conversation external mount (readonly, organize, or attach_rw).\n\nCalled after desktop mint (silent ``external_mount_readonly`` or user-confirmed\norganize / attach_rw grant). Body carries ``root_id`` / label / mode only — never\nabsolute paths. ``attach_rw`` is local-traditional only.\n\nThe response doubles as the device's declaration for this root: the caller's\n``X-Client-Device`` is bound onto its live fulfill session *and* stored on the\ngrant (``fulfill/declare.py``), so the very first ``external/<alias>/`` op of\nthe resuming turn has a machine to route to.",
         "operationId": "grant_external_folder_v1_conversations__conversation_id__workspace_external_grants_post",
         "parameters": [
           {

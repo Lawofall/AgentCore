@@ -11,11 +11,9 @@ so executed code sees the workspace files — fixing the long-standing bug where
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import fnmatch
 import os
 import shutil
-import tempfile
 from collections import deque
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -181,18 +179,12 @@ def _collect_index_files_sync(
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     """Write ``data`` to ``path`` atomically (temp file in the same dir + rename).
 
-    Avoids leaving a half-written or truncated file if the process dies mid-write
-    — the whole point of an edit tool is to never corrupt the user's file.
+    Windows: ``os.replace`` retries transient WinError 5/32 then falls back to
+    in-place write (same durability as :meth:`ServerWorkspace.write`).
     """
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp_str_replace_", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-        os.replace(tmp, path)
-    except Exception:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp)
-        raise
+    from agentcore.workspace.fs_replace import atomic_write_bytes
+
+    atomic_write_bytes(path, data)
 
 
 def _write_bytes_sync(path: Path, data: bytes) -> None:

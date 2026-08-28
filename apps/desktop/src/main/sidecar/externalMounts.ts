@@ -6,7 +6,7 @@ export interface SidecarExternalMount {
   rootId: string;
   label: string;
   absPath: string;
-  mode: "readonly" | "organize";
+  mode: "readonly" | "organize" | "attach_rw";
 }
 
 /**
@@ -27,6 +27,7 @@ export function buildExternalMounts(
       rootId: r.id,
       label: r.name,
       absPath: r.absPath,
-      mode: r.mode === "organize" ? "organize" : "readonly",
+      mode:
+        r.mode === "organize" || r.mode === "attach_rw" ? r.mode : "readonly",
     }));
 }

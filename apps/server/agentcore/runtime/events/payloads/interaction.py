@@ -47,6 +47,7 @@ class AskOption(WirePayload):
     **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云」；远程仓「从 Git 克隆」；≠离线；
     勿当默认主推；``create_folder`` 仍只建云）；
     `grant_organize_folder` confirms organize-mode (move/copy/mkdir/trash-delete);
+    `grant_attach_folder` confirms attach_rw (本机传统：该根可写可覆盖);
     still requires explicit user confirm (not silent).
     For ``grant_*`` only: optional ``well_known`` (``desktop`` / ``downloads`` /
     ``documents``) and optional ``target_name`` (short basename, no path separators)
@@ -68,6 +69,7 @@ class AskOption(WirePayload):
             "register_local_project",
             "bind_local_folder",
             "grant_organize_folder",
+            "grant_attach_folder",
         ]
         | None
     ) = absent()

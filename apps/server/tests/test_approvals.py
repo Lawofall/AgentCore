@@ -475,6 +475,30 @@ async def test_gate_code_execute_code_preview_allows_20k():
     assert len(args["purpose"]) < len(purpose)
 
 
+async def test_gate_code_execute_env_values_are_redacted():
+    from agentcore.core.secrets import REDACTED
+
+    reg = InteractionRegistry()
+    sink = EventSink()
+    gate = _gate(sink, reg)
+
+    resolver = asyncio.create_task(_resolve_when_ready(reg, "id1", ApprovalDecision.DENY, "conv-1"))
+    await gate.authorize(
+        tool_name="code_execute",
+        tool_call_id="id1",
+        arguments={
+            "code": "print(1)",
+            "purpose": "call api",
+            "env": {"AGNES_API_KEY": "opaque-secret-value-here"},
+        },
+    )
+    await resolver
+
+    required = next(e for e in _drain(sink) if e.type is EventType.APPROVAL_REQUIRED)
+    env = required.payload["arguments"]["env"]
+    assert env == {"AGNES_API_KEY": REDACTED}
+
+
 # --- react_loop integration ------------------------------------------------
 
 

@@ -458,7 +458,11 @@ async def finalize_stopped(
     # 同值），空值只出现在裸测试装配——同样跳过。
     if seed_completed and getattr(tool._base_tool_context, "execution_id", ""):
         from agentcore.runtime.delegate.delivery_status import maybe_emit_delivery_status
+        from agentcore.runtime.runs.disk_truth import stamp_results_disk_truth
 
+        await stamp_results_disk_truth(
+            results, tool._base_tool_context.backend
+        )
         maybe_emit_delivery_status(
             tool._sink,
             plan,

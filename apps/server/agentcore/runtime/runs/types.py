@@ -494,13 +494,9 @@ class RunState:
     # are the common cases. ``None`` = normal finish. Worker runs leave it None (their
     # emptiness is handled by the contract retry / soft-fail path, not the turn finish).
     finish_override: FinishReason | None = None
-    # Workspace paths this worker landed, harvested from the transcript when the run
-    # completes — the tools' OWN self-reports (``ToolResult.file_products``), so an
-    # indirect landing (a ``code_execute`` script's copy-out) counts exactly like a
-    # ``file_write``, and a new file-producing tool is on the ledger the day it reports.
-    # The DelegateTool surfaces these in the CEO-facing aggregate as a「文件产出」manifest
-    # so the CEO knows what landed WITHOUT re-listing the workspace (省掉收敛阶段的冗余
-    # file_list 轮).
+    # Workspace paths this worker *claimed* via tool self-report
+    # (``ToolResult.file_products``). User-facing「已交付 / 路径已核」follows
+    # ``file_acceptance`` after a disk exists check — not this list alone.
     files_touched: list[str] = field(default_factory=list)
     # Path-level acceptance for ``files_touched`` (块 1)：``[{path, status, kind?,
     # derived_from?, reason?, detail?}]`` with status ∈ accepted|rejected. ``kind`` /

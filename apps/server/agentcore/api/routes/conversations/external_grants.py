@@ -1,4 +1,4 @@
-"""W3 conversation-scoped external directory grants (readonly | organize).
+"""W3 conversation-scoped external directory grants (readonly | organize | attach_rw).
 
 Separate from workspace binding — grants add ``external/<alias>/`` mounts for
 file tools within one conversation; they never replace the bound workspace root.
@@ -15,7 +15,8 @@ from agentcore.api.schemas import (
     GrantExternalReadonlyRequest,
     StatusResponse,
 )
-from agentcore.core.errors import NotFoundError
+from agentcore.conversation.common import resolve_local_binding
+from agentcore.core.errors import NotFoundError, ValidationError
 from agentcore.db.repositories import ConversationRepository
 from agentcore.fulfill.declare import declare_receipt_root
 from agentcore.workspace import grant_store
@@ -62,17 +63,22 @@ async def grant_external_folder(
     user: AuthUser,
     conv_repo: ConversationRepository = Depends(get_conversation_repo),
 ):
-    """Register a conversation external mount (readonly or organize).
+    """Register a conversation external mount (readonly, organize, or attach_rw).
 
     Called after desktop mint (silent ``external_mount_readonly`` or user-confirmed
-    organize grant). Body carries ``root_id`` / label / mode only — never absolute paths.
+    organize / attach_rw grant). Body carries ``root_id`` / label / mode only — never
+    absolute paths. ``attach_rw`` is local-traditional only.
 
     The response doubles as the device's declaration for this root: the caller's
     ``X-Client-Device`` is bound onto its live fulfill session *and* stored on the
     grant (``fulfill/declare.py``), so the very first ``external/<alias>/`` op of
     the resuming turn has a machine to route to.
     """
-    await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    if body.mode == "attach_rw":
+        binding = await resolve_local_binding(conv_repo._session, conv)
+        if binding is None:
+            raise ValidationError("附加可写根仅本机传统对话可用")
     device_id = declare_receipt_root(user.user_id, body.root_id)
     mount = await grant_store.add_grant(
         conversation_id,

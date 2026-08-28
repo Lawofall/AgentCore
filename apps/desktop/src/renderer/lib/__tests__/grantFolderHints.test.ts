@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ATTACH_CONFIRM_CTA,
   grantHintsFromAskOption,
+  isAttachOralConsent,
   isOrganizeOralConsent,
   organizeConfirmDetail,
+  pickOralGrantOption,
   previewOrganizeTargetLabel,
 } from "../grantFolderHints";
 
@@ -133,5 +136,51 @@ describe("isOrganizeOralConsent", () => {
     expect(isOrganizeOralConsent("不可以")).toBe(false);
     expect(isOrganizeOralConsent("可以整理一下桌面上的咨询文件夹")).toBe(false);
     expect(isOrganizeOralConsent("")).toBe(false);
+  });
+});
+
+describe("isAttachOralConsent", () => {
+  it("hits attach-specific phrases only (not 可以/允许)", () => {
+    for (const phrase of [
+      "可以改",
+      "允许改",
+      "可以覆盖",
+      ATTACH_CONFIRM_CTA,
+    ]) {
+      expect(isAttachOralConsent(phrase)).toBe(true);
+    }
+    expect(isAttachOralConsent("可以")).toBe(false);
+    expect(isAttachOralConsent("允许")).toBe(false);
+    expect(isAttachOralConsent("好的")).toBe(false);
+  });
+});
+
+describe("pickOralGrantOption", () => {
+  const organize = { label: "整理", action: "grant_organize_folder" };
+  const attach = { label: "可写", action: "grant_attach_folder" };
+
+  it("generic 可以 on a mixed card picks organize, not attach", () => {
+    expect(pickOralGrantOption([attach, organize], "可以")).toEqual(organize);
+    expect(pickOralGrantOption([organize, attach], "可以")).toEqual(organize);
+  });
+
+  it("attach-specific phrase on a mixed card picks attach", () => {
+    expect(pickOralGrantOption([attach, organize], "可以改")).toEqual(attach);
+  });
+
+  it("generic 可以 on attach-only does not auto-grant", () => {
+    expect(pickOralGrantOption([attach], "可以")).toBeUndefined();
+  });
+
+  it("does not pick when two options would both match", () => {
+    expect(
+      pickOralGrantOption(
+        [
+          { action: "grant_organize_folder" },
+          { action: "grant_organize_folder" },
+        ],
+        "可以",
+      ),
+    ).toBeUndefined();
   });
 });

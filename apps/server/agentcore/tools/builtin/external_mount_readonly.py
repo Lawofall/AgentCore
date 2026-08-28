@@ -76,16 +76,11 @@ class ExternalMountReadonlyTool:
         return ToolSchema(
             name=EXTERNAL_MOUNT_READONLY_TOOL_NAME,
             description=(
-                "静默挂载用户本机某个目录为只读（仅桌面在线可用）。"
-                "用户自然语言点到本机目录、要看/分析时调用；成功后立刻可用 "
-                "`external/<别名>/…` 做 file_list / file_read。"
-                "参数：可选 path（本机绝对路径提示）与/或 well_known"
-                "（desktop|downloads|documents）+ target_name（子目录名）。"
-                "成功返回 namespace（无绝对路径）；失败带稳定 reason"
-                "（not_found/not_directory/ambiguous 等）——"
-                "勿用相同参数盲重试；成功后勿乱猜其他 well_known。"
-                "【禁止】整理/写回用本工具（整理仍 ask_user + grant_organize_folder）；"
-                "只读挂载过 ≠ 已授写，同目录升整理须再确认。"
+                "静默挂载用户本机某个目录为只读（仅桌面在线）。"
+                "用户点到本机目录要看/分析时调用；成功后立刻 `external/<别名>/…`。"
+                "可选 path 与/或 well_known+target_name；失败带 reason，勿同参盲重试。"
+                "整理/写回勿用本工具。"
+                "HOW→consult(external_mount_readonly)。"
             ),
             parameters={
                 "type": "object",

@@ -516,8 +516,6 @@ class ReadUrlTool:
                 "不要把路径传给本工具，也不要补 https:// 冒充网页。"
                 "获取指定网页的正文文本（比 web_search 摘要更完整，但长页面会按 "
                 "max_chars 截断），用于在 web_search 摘要不足、确需深读某条结果时。"
-                "成稿挂 #rN 须先对本工具深读（或来源已 selected）；仅 search 命中不可挂号——"
-                "没读过用文字概括，勿整篇标 search 命中。"
                 "默认摘要优先：多数问题先用 web_search 摘要作答；"
                 "任务要求核对原文或需要正文细节时再调用本工具深读。"
                 "要把 URL 的原始文件/二进制写入工作区时用 download_url，不要用本工具。"
@@ -711,7 +709,15 @@ class ReadUrlTool:
         except Exception as e:
             raise_if_task_cancelled(e)
             reason = describe_net_error(e)
-            logger.warning("tool.read_url_error", url=url, error=reason, error_repr=repr(e))
+            err_fields: dict[str, Any] = {
+                "url": url,
+                "error": reason,
+                "error_repr": repr(e),
+            }
+            host = site_of(url)
+            if host:
+                err_fields["host"] = host
+            logger.warning("tool.read_url_error", **err_fields)
             # A rebind / redirect that lands on the user's own machine is the same
             # situation as the pre-flight loopback refusal — reroute, do not close.
             if _is_loopback_refusal(e):

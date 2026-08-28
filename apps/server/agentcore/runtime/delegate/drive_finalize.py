@@ -197,7 +197,7 @@ def handle_pending_boundary(
     )
 
 
-def handle_partial_failure(
+async def handle_partial_failure(
     tool: DelegateTool,
     plan: RunPlan,
     results: dict[str, RunState],
@@ -240,12 +240,16 @@ def handle_partial_failure(
     )
     # 交付状态（诚实对账）：部分失败也是一次收尾——把已落盘 / 缺口如实发给用户；
     # CEO 若 replan 补跑，同 execution_id 再发对账：artifacts 与台账并集（同 path 后写）。
+    from agentcore.runtime.runs.disk_truth import stamp_results_disk_truth
+
+    backend = tool._base_tool_context.backend
+    await stamp_results_disk_truth(results, backend)
     maybe_emit_delivery_status(
         tool._sink,
         plan,
         results,
         execution_id=execution_id,
-        backend=tool._base_tool_context.backend,
+        backend=backend,
         promotion_ledger=tool._base_tool_context.promotion_ledger,
     )
     synthesis = build_ceo_synthesis(tool, plan, results, call_idx=call_idx)
@@ -324,6 +328,9 @@ async def finalize_successful_drive(
     # Soft overlays (D2 / import-graph): preload source texts when TS/Vue landed.
     file_map: dict[str, str] = {}
     backend = tool._base_tool_context.backend
+    from agentcore.runtime.runs.disk_truth import stamp_results_disk_truth
+
+    await stamp_results_disk_truth(results, backend)
     if backend is not None:
         from agentcore.runtime.delegate.completion import (
             _batch_landed_graph_sources,
@@ -417,7 +424,7 @@ async def finalize_drive(
     )
     if boundary is not None:
         return boundary
-    partial = handle_partial_failure(
+    partial = await handle_partial_failure(
         tool,
         plan,
         results,

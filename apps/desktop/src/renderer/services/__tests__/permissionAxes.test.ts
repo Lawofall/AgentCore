@@ -96,8 +96,8 @@ describe("permissionAxes mapping", () => {
 
   it("resolves short labels for chip / 系统行", () => {
     expect(axesShortLabel(RECIPE_AXES.cautious)).toBe("谨慎");
-    expect(axesShortLabel(RECIPE_AXES.less_interrupt)).toBe("少打断");
-    expect(axesShortLabel(RECIPE_AXES.managed)).toBe("少打断");
+    expect(axesShortLabel(RECIPE_AXES.less_interrupt)).toBe("全放行");
+    expect(axesShortLabel(RECIPE_AXES.managed)).toBe("全放行");
     expect(
       axesShortLabel({
         file_write: "session",
@@ -112,20 +112,20 @@ describe("permissionAxes mapping", () => {
         host: "ask",
       }),
     ).toBe("信任 · 每次 · 本机问");
-    expect(permissionAxesShortLabel(RECIPE_AXES.less_interrupt)).toBe("少打断");
-    expect(permissionAxesShortLabel("less_interrupt")).toBe("少打断");
-    expect(permissionAxesShortLabel("workspace")).toBe("少打断");
-    expect(permissionAxesShortLabel("first_grant")).toBe("少打断");
+    expect(permissionAxesShortLabel(RECIPE_AXES.less_interrupt)).toBe("全放行");
+    expect(permissionAxesShortLabel("less_interrupt")).toBe("全放行");
+    expect(permissionAxesShortLabel("workspace")).toBe("全放行");
+    expect(permissionAxesShortLabel("first_grant")).toBe("全放行");
     expect(
       permissionAxesShortLabel(
         '{"file_write":"session","command":"auto","team_kickoff":"skip","host":"session"}',
       ),
-    ).toBe("少打断");
+    ).toBe("全放行");
     expect(
       permissionAxesShortLabel(
         '{"file_write":"session","command":"auto","team_kickoff":"rules","host":"session"}',
       ),
-    ).toBe("少打断");
+    ).toBe("全放行");
     expect(
       permissionAxesShortLabel(
         '{"file_write":"session","command":"auto","team_kickoff":"rules","host":"ask"}',

@@ -23,6 +23,7 @@ from agentcore.workspace.limits import (
     is_liveness_timeout_detail,
     op_liveness_timeout_metadata,
 )
+from agentcore.workspace._paths import is_access_denied_oserror
 from agentcore.workspace.protocol import WorkspaceError
 
 
@@ -289,7 +290,12 @@ def _outside_workspace_msg(
             "bind_local_folder 合法非默认（≠离线）。"
             f"若本意是工作区内文件：{relative_fix}"
         )
-    return f"路径 '{path}' 超出了工作区范围。{relative_fix}"
+    return (
+        f"路径 '{path}' 超出了工作区范围。"
+        "若要把该本机目录加入本对话可改可覆盖：请让用户确认 `grant_attach_folder`。"
+        "不要去改权限徽章。"
+        f"{relative_fix}"
+    )
 
 
 def _outside_workspace_error(
@@ -300,9 +306,53 @@ def _outside_workspace_error(
     reason: str | None = None,
 ) -> ToolResult:
     """OutsideWorkspace / mount-policy deny — same action next turn is futile."""
+    msg = _outside_workspace_msg(path, location=location, reason=reason)
+    true_outside = "超出了工作区范围" in msg
     return _error(
-        _outside_workspace_msg(path, location=location, reason=reason),
+        msg,
         start,
         cross_turn_retry=CrossTurnRetry.FUTILE,
+        failure_code="outside_workspace" if true_outside else None,
+        product_face=msg,
     )
+
+
+# Model-facing: lock ≠ missing grant ≠ out of workspace. User face stays advice-light.
+_ACCESS_DENIED_MODEL_MSG = (
+    "写入被占用（杀毒/索引/其他程序正打开该文件），不是没授权、也不是路径在工作区外。"
+    "请关闭占用后重试同一相对路径；勿改权限徽章、勿改成绝对路径。"
+)
+_ACCESS_DENIED_USER_MSG = "这个文件正被其他程序占用，没能写入。关掉占用它的程序后我可以再试。"
+
+
+def _looks_like_access_denied(exc: BaseException) -> bool:
+    if is_access_denied_oserror(exc):
+        return True
+    text = str(exc)
+    lowered = text.lower()
+    return any(
+        needle in lowered
+        for needle in (
+            "winerror 5",
+            "winerror 32",
+            "access is denied",
+            "access denied",
+            "sharing violation",
+            "拒绝访问",
+        )
+    )
+
+
+def _write_io_error(exc: BaseException, start: float, *, action: str = "写入") -> ToolResult:
+    """Map truncating/atomic write OS failures; access-denied is a lock, not a grant miss."""
+    if _looks_like_access_denied(exc):
+        return _error(
+            _ACCESS_DENIED_MODEL_MSG,
+            start,
+            failure_code="access_denied",
+            product_face=_ACCESS_DENIED_USER_MSG,
+            contract_failure=True,
+            cross_turn_retry=CrossTurnRetry.NOT_FUTILE,
+        )
+    return _error(f"{action}文件失败：{exc}", start, user_face=False)
 

@@ -453,6 +453,10 @@ class TurnMetricsRow(Base):
     workers: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # Largest single-request prompt this turn (fit-check / near-ceiling). Distinct
+    # from ``input_tokens`` which sums every round for billing. 0 = unknown / empty
+    # fail — readers skip zeros rather than treating them as a fresh watermark.
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     # 协作质量 (学·度量, docs/05-平台与运维/管理员后台.md §四): per-turn orchestration signals,
     # the operator面 counterpart of the offline log_stats 方向盘. ``boundary_yields`` = 受监督边界
     # 让出次数 (首计划存活率 = delegated turns whose boundary_yields==0); ``scope_signals`` =

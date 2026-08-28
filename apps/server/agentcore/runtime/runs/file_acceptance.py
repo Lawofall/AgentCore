@@ -1,7 +1,9 @@
 """Path-level delivery acceptance for files_touched (验收态 · 块 1 / 块 2).
 
 At run wrap-up each landed path gets ``accepted`` or ``rejected`` (+ reason).
-``delivery_status.delivered_files`` / CEO「已交付」only count ``accepted``.
+``delivery_status.delivered_files`` / CEO「已交付」only count ``accepted``
+that still exist on disk (tool self-report is not enough; see
+``reject_absent_paths`` / ``stamp_results_disk_truth``).
 Cite-tier / contract failures that name a path reject that path even when the
 run soft-COMPLETEDs — so soft-COMPLETED must not smuggle those paths into the
 delivered list. Declared artifact / ``artifact_dir`` vs landed path: exact / dir / glob after
@@ -31,6 +33,9 @@ REASON_RUN_FAILED = "run_failed"
 # Gap reason when a declared path did not land (delivery_status); no longer
 # stamped on extra-file artifact rows.
 REASON_PATH_MISMATCH = "path_mismatch"
+# Claimed in file_products / acceptance but workspace.exists is false.
+REASON_NOT_ON_DISK = "not_on_disk"
+_NOT_ON_DISK_DETAIL = "工作区没有该文件（工具自报不算落盘）"
 
 # Citation / bibliography failures from ``_artifact_citation_failures``.
 _CITE_PATH_RE = re.compile(r"^`([^`]+)`\s*[：:]\s*(.*)$", re.DOTALL)
@@ -210,6 +215,37 @@ def build_file_acceptance(
         else:
             row["status"] = "accepted"
         out.append(row)
+    return out
+
+
+def reject_absent_paths(
+    file_acceptance: list[dict[str, Any]] | None,
+    absent: set[str],
+) -> list[dict[str, Any]]:
+    """Mark accepted rows whose path is not on disk as ``rejected(not_on_disk)``.
+
+    Worker phase is unchanged. User-facing delivered_files follow the new status.
+    """
+    if not file_acceptance:
+        return list(file_acceptance or [])
+    if not absent:
+        return [dict(row) for row in file_acceptance if isinstance(row, dict)]
+    normalized_absent = {normalize_delivery_relpath(p) for p in absent if str(p).strip()}
+    out: list[dict[str, Any]] = []
+    for row in file_acceptance:
+        if not isinstance(row, dict):
+            continue
+        copied = dict(row)
+        path = str(copied.get("path") or "").strip()
+        if (
+            path
+            and copied.get("status") == "accepted"
+            and normalize_delivery_relpath(path) in normalized_absent
+        ):
+            copied["status"] = "rejected"
+            copied["reason"] = REASON_NOT_ON_DISK
+            copied["detail"] = _NOT_ON_DISK_DETAIL
+        out.append(copied)
     return out
 
 

@@ -50,4 +50,5 @@ export {
   startOutboxProjectionWatch,
   stopOutboxProjectionWatch,
   withUmidLock,
+  LOCAL_TURN_LEASE_HEARTBEAT_MS,
 } from "./outbox";

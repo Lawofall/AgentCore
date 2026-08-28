@@ -160,15 +160,13 @@ async def test_persist_rejects_traversal_in_client_workspace_path(tmp_path: Path
     assert "workspace_path" not in out[0] or out[0].get("workspace_path") is None
 
 
-async def test_persist_rejects_workspace_path_outside_attachments(tmp_path: Path):
-    """Client workspace_path must be a single segment under attachments/."""
+async def test_persist_rejects_workspace_path_traversal_and_empty(tmp_path: Path):
+    """Traversal / empty claims never become workspace_path, even if similar files exist."""
     ws = _ws(tmp_path)
     cases = [
-        "src/notes.md",
-        "attachments/sub/nested.md",
         "attachments/",
         "..\\attachments\\x.md",
-        "evil/attachments/x.md",
+        "C:/windows/x.md",
     ]
     for raw in cases:
         out = await persist_attachments(
@@ -184,6 +182,51 @@ async def test_persist_rejects_workspace_path_outside_attachments(tmp_path: Path
             ],
         )
         assert out[0].get("workspace_path") is None, raw
+
+
+async def test_persist_keeps_existing_in_workspace_citation(tmp_path: Path):
+    """区内引用：验盘通过则保留原路径，不复制进 attachments/。"""
+    ws = _ws(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "guide.md").write_text("# hi\n", encoding="utf-8")
+    out = await persist_attachments(
+        ws,
+        [
+            {
+                "name": "guide.md",
+                "path": "docs/guide.md",
+                "text": "# hi",
+                "workspace_path": "docs/guide.md",
+            }
+        ],
+    )
+    assert out[0]["workspace_path"] == "docs/guide.md"
+    assert not (tmp_path / ATTACHMENTS_DIR).exists()
+    assert (docs / "guide.md").read_text(encoding="utf-8") == "# hi\n"
+    assert out[0].get("resident_missing") is None
+
+
+async def test_persist_citation_does_not_write_office_sidecar(tmp_path: Path):
+    """区内引用不得在用户树旁写 *.md 预解析副本。"""
+    ws = _ws(tmp_path)
+    src = tmp_path / "brief.docx"
+    src.write_bytes(b"PK\x03\x04fake")
+    out = await persist_attachments(
+        ws,
+        [
+            {
+                "name": "brief.docx",
+                "path": "brief.docx",
+                "text": "",
+                "binary": True,
+                "workspace_path": "brief.docx",
+            }
+        ],
+    )
+    assert out[0]["workspace_path"] == "brief.docx"
+    assert not (tmp_path / "brief.docx.md").exists()
+    assert out[0].get("parsed_workspace_path") is None
 
 
 async def test_persist_binary_without_workspace_path_stays_unresident(tmp_path: Path):
@@ -204,14 +247,22 @@ async def test_persist_binary_without_workspace_path_stays_unresident(tmp_path: 
 
 
 def test_normalize_client_workspace_path():
-    from agentcore.workspace.attachments import _normalize_client_workspace_path
+    from agentcore.workspace.attachments import (
+        _is_copied_attachment_rel,
+        _normalize_client_workspace_path,
+    )
 
     assert _normalize_client_workspace_path("attachments/a.xlsx") == "attachments/a.xlsx"
     assert _normalize_client_workspace_path("attachments\\b.txt") == "attachments/b.txt"
+    assert _normalize_client_workspace_path("docs/guide.md") == "docs/guide.md"
+    assert _normalize_client_workspace_path("notes.md") == "notes.md"
+    assert _normalize_client_workspace_path("attachments/foo/bar") == "attachments/foo/bar"
     assert _normalize_client_workspace_path("attachments/../evil") is None
-    assert _normalize_client_workspace_path("attachments/foo/bar") is None
-    assert _normalize_client_workspace_path("notes.md") is None
+    assert _normalize_client_workspace_path("C:/windows/x") is None
     assert _normalize_client_workspace_path(None) is None
+    assert _is_copied_attachment_rel("attachments/a.xlsx") is True
+    assert _is_copied_attachment_rel("docs/guide.md") is False
+    assert _is_copied_attachment_rel("attachments/sub/nested.md") is False
 
 
 async def test_persist_skips_directory(tmp_path: Path):

@@ -166,6 +166,8 @@ body {
   color: var(--foreground);
   font-size: 0.9375rem;
   line-height: 1.65;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .markdown-body.markdown-body--muted,
@@ -176,9 +178,6 @@ body {
 .markdown-body.markdown-body--muted h5,
 .markdown-body.markdown-body--muted h6 {
   color: var(--muted-foreground);
-}
-  word-break: break-word;
-  overflow-wrap: anywhere;
 }
 
 .markdown-body > :first-child {

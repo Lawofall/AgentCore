@@ -214,7 +214,7 @@ async def test_regenerate_does_not_touch_orm_after_expire(monkeypatch):
     monkeypatch.setattr(turns_mod, "resolve_profile_set", AsyncMock(return_value=None))
 
     monkeypatch.setattr(turns_mod, "resolve_permission_axes", AsyncMock(return_value=None))
-    monkeypatch.setattr(turns_mod, "maybe_compact_near_ceiling", AsyncMock(return_value=False))
+    monkeypatch.setattr(turns_mod, "compact_before_turn", AsyncMock(return_value=None))
     monkeypatch.setattr(
         turns_mod,
         "load_chat_context",

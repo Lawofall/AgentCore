@@ -35,7 +35,14 @@ export async function runHostOp(input: HostOpInput): Promise<HostOpResult> {
     case "host_shell": {
       const command = String(args.command ?? "");
       const timeoutSeconds = clampShellTimeout(args.timeout_seconds);
-      return hostShell(command, timeoutSeconds);
+      return hostShell(command, timeoutSeconds, {
+        cwd: typeof args.cwd === "string" ? args.cwd : undefined,
+        conversationId:
+          typeof args.conversation_id === "string"
+            ? args.conversation_id
+            : undefined,
+        rootId: typeof args.root_id === "string" ? args.root_id : undefined,
+      });
     }
     case "host_open_settings": {
       const panel = String(args.panel ?? "")

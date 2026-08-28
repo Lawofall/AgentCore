@@ -522,7 +522,10 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
             location="local",
         )
         if external_mounts:
-            from agentcore.workspace.external_mounts import ExternalMount
+            from agentcore.workspace.external_mounts import (
+                ExternalMount,
+                normalize_mount_mode,
+            )
 
             items: list[dict] = []
             if isinstance(external_mounts, list):
@@ -543,11 +546,7 @@ class SidecarServer(HandlerMixin, DeliveryMixin, TurnExecutionMixin):
                     root_id=str(m.get("rootId") or m.get("root_id") or ""),
                     label=str(m.get("label") or alias),
                     abs_path=abs_path,
-                    mode=(
-                        "organize"
-                        if str(m.get("mode") or "").strip().lower() == "organize"
-                        else "readonly"
-                    ),
+                    mode=normalize_mount_mode(str(m.get("mode") or "")),
                 )
             if mounts:
                 backend.attach_external_mounts(mounts)

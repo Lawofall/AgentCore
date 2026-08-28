@@ -14,6 +14,8 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 import agentcore.conversation.compaction as compaction
 from agentcore.conversation.compaction import (
     _COMPACT_SYSTEM_PROMPT,
@@ -709,7 +711,7 @@ async def test_maybe_compact_near_ceiling_uses_metrics_and_model(monkeypatch):
         def __init__(self, _s):
             pass
 
-        async def latest_input_tokens(self, _cid):
+        async def latest_prompt_tokens(self, _cid):
             return 900_000
 
     monkeypatch.setattr(compaction, "async_session_factory", lambda: _CM())
@@ -916,7 +918,7 @@ def _wire_runner(monkeypatch, *, conv, messages, provider, credentials=...) -> d
         async def list_after(self, conversation_id, *, after, limit):
             return ([m for m in messages if m.created_at > after], False)
 
-    async def _run_bg(user_id, *, purpose="compaction", runner):
+    async def _run_bg(user_id, conversation_id, *, runner):
         from agentcore.billing.gate import (
             BackgroundLlmResult,
             BackgroundLlmSkip,
@@ -934,7 +936,7 @@ def _wire_runner(monkeypatch, *, conv, messages, provider, credentials=...) -> d
 
     monkeypatch.setattr(compaction, "ConversationRepository", _FakeConvRepo)
     monkeypatch.setattr(compaction, "MessageRepository", _FakeMsgRepo)
-    monkeypatch.setattr(compaction, "run_background_llm", _run_bg)
+    monkeypatch.setattr(compaction, "run_compaction_llm", _run_bg)
     monkeypatch.setattr(compaction, "build_provider", _build)
     monkeypatch.setattr(compaction.settings, "compaction_enabled", True, raising=True)
     monkeypatch.setattr(compaction.settings, "billing_mode", "platform", raising=True)
@@ -1469,11 +1471,11 @@ async def test_platform_day_reset_dates_the_wall_through_the_real_gate(monkeypat
     provider = _RaisingProvider(day_reset)
     rec = _wire_runner(monkeypatch, conv=conv, messages=messages, provider=provider)
     # Real gate: the resolve step admits the call, the upstream call then refuses it.
-    monkeypatch.setattr(compaction, "run_background_llm", gate_mod.run_background_llm)
+    monkeypatch.setattr(compaction, "run_compaction_llm", gate_mod.run_compaction_llm)
     monkeypatch.setattr(gate_mod, "async_session_factory", lambda: _FakeSession())
     monkeypatch.setattr(
         gate_mod,
-        "resolve_and_gate_background",
+        "resolve_and_gate_compaction",
         AsyncMock(
             return_value=BackgroundGateResolve(
                 credentials=LLMCredentials(
@@ -1726,3 +1728,87 @@ async def test_shutdown_compaction_abandons_after_timeout():
 async def test_shutdown_compaction_noop_without_tasks():
     assert not compaction._tasks
     await compaction.shutdown_compaction(timeout=0.01)
+
+
+async def test_compact_before_turn_refuses_when_near_and_unfolded(monkeypatch):
+    from agentcore.core.errors import ContextOverflowError
+    from agentcore.core.error_codes import ErrorCode
+    from agentcore.llm.errors import CONTEXT_OVERFLOW_PRODUCT
+
+    monkeypatch.setattr(compaction.settings, "compaction_enabled", True, raising=True)
+
+    async def _load(_cid, _model_id):
+        return 90_000, 100_000
+
+    async def _ensure(_cid, *, input_tokens, context_length=None):
+        return False
+
+    monkeypatch.setattr(compaction, "_load_fit_watermark", _load)
+    monkeypatch.setattr(compaction, "ensure_compaction_before_turn", _ensure)
+    with pytest.raises(ContextOverflowError) as ei:
+        await compaction.compact_before_turn("c1", model_id="m")
+    assert ei.value.message == CONTEXT_OVERFLOW_PRODUCT
+    assert ei.value.status_code == 413
+    assert ei.value.code == ErrorCode.CONTEXT_OVERFLOW
+    assert "压缩" not in ei.value.message
+
+
+async def test_compact_before_turn_proceeds_when_fold_wrote(monkeypatch):
+    monkeypatch.setattr(compaction.settings, "compaction_enabled", True, raising=True)
+
+    async def _load(_cid, _model_id):
+        return 90_000, 100_000
+
+    async def _ensure(_cid, *, input_tokens, context_length=None):
+        return True
+
+    monkeypatch.setattr(compaction, "_load_fit_watermark", _load)
+    monkeypatch.setattr(compaction, "ensure_compaction_before_turn", _ensure)
+    await compaction.compact_before_turn("c1", model_id="m")
+
+
+async def test_compact_before_turn_skips_fold_when_not_near(monkeypatch):
+    monkeypatch.setattr(compaction.settings, "compaction_enabled", True, raising=True)
+    called: list[int] = []
+
+    async def _load(_cid, _model_id):
+        return 10_000, 100_000
+
+    async def _ensure(_cid, *, input_tokens, context_length=None):
+        called.append(1)
+        return False
+
+    monkeypatch.setattr(compaction, "_load_fit_watermark", _load)
+    monkeypatch.setattr(compaction, "ensure_compaction_before_turn", _ensure)
+    await compaction.compact_before_turn("c1", model_id="m")
+    assert called == []
+
+
+def test_max_prompt_tokens_from_journal_skips_empty_and_keeps_max():
+    from agentcore.conversation.prompt_tokens import max_prompt_tokens_from_journal
+
+    assert max_prompt_tokens_from_journal([]) == 0
+    assert (
+        max_prompt_tokens_from_journal(
+            [
+                {"kind": "llm_call", "payload": {"usage": {"input": 0}}},
+                {"kind": "tool_call", "payload": {"usage": {"input": 99999}}},
+                {"kind": "llm_call", "payload": {"usage": {"input": 1200}}},
+                {"kind": "llm_call", "payload": {"usage": {"last_prompt": 800, "input": 800}}},
+            ]
+        )
+        == 1200
+    )
+
+
+def test_token_usage_add_keeps_max_last_prompt():
+    from agentcore.llm.provider.protocol import TokenUsage
+
+    a = TokenUsage.from_openai_wire({"prompt_tokens": 100, "completion_tokens": 1})
+    b = TokenUsage.from_openai_wire({"prompt_tokens": 40, "completion_tokens": 2})
+    summed = a + b
+    assert summed.input_tokens == 140
+    assert summed.last_prompt_tokens == 100
+    zero = TokenUsage() + a
+    assert zero.last_prompt_tokens == 100
+    assert TokenUsage.from_usage_dict(a.as_dict()).last_prompt_tokens == 100

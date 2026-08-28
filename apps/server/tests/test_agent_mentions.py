@@ -295,7 +295,7 @@ async def test_stream_chat_persists_agent_mentions(monkeypatch):
         "load_chat_context",
         AsyncMock(return_value=[{"role": "user", "content": "hi"}]),
     )
-    monkeypatch.setattr(turns_mod, "maybe_compact_near_ceiling", AsyncMock())
+    monkeypatch.setattr(turns_mod, "compact_before_turn", AsyncMock())
     monkeypatch.setattr(turns_mod, "maybe_delete_zero_output_send", AsyncMock())
     monkeypatch.setattr(turns_mod, "run_and_persist", AsyncMock())
     monkeypatch.setattr(turns_mod, "schedule_title_generation", lambda **_k: None)
@@ -396,7 +396,7 @@ async def test_regenerate_forwards_stored_agent_mentions(monkeypatch):
         "load_chat_context",
         AsyncMock(return_value=[{"role": "user", "content": "帮我写"}]),
     )
-    monkeypatch.setattr(turns_mod, "maybe_compact_near_ceiling", AsyncMock())
+    monkeypatch.setattr(turns_mod, "compact_before_turn", AsyncMock())
     monkeypatch.setattr(turns_mod, "run_and_persist", _run)
     monkeypatch.setattr(
         "agentcore.runtime.coordination.await_live_detached_drive",
@@ -493,7 +493,7 @@ async def test_regenerate_replaces_agent_mentions_when_edit_sends_empty(monkeypa
         "load_chat_context",
         AsyncMock(return_value=[{"role": "user", "content": "帮我写"}]),
     )
-    monkeypatch.setattr(turns_mod, "maybe_compact_near_ceiling", AsyncMock())
+    monkeypatch.setattr(turns_mod, "compact_before_turn", AsyncMock())
     monkeypatch.setattr(turns_mod, "run_and_persist", _run)
     monkeypatch.setattr(
         "agentcore.runtime.coordination.await_live_detached_drive",

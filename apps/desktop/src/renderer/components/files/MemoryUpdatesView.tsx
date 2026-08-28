@@ -43,6 +43,7 @@ export function MemoryUpdatesView({
     queryFn: () => listMemoryUpdates(),
     staleTime: 30_000,
   });
+  const entries = updates.data ?? [];
 
   return (
     <div className="flex h-full flex-col">
@@ -70,7 +71,7 @@ export function MemoryUpdatesView({
           </Centered>
         ) : updates.isError ? (
           <InlineError onRetry={() => void updates.refetch()} />
-        ) : (updates.data ?? []).length === 0 ? (
+        ) : entries.length === 0 ? (
           <EmptyHint
             inline
             icon={<Brain size={26} className="text-muted-foreground/40" />}
@@ -79,7 +80,7 @@ export function MemoryUpdatesView({
           />
         ) : (
           <div className="mx-auto max-w-3xl space-y-3 px-6 py-4">
-            {(updates.data ?? []).map((entry) => (
+            {entries.map((entry) => (
               <section
                 key={entry.id}
                 className="rounded-xl border border-border bg-card/60 p-3"
@@ -89,11 +90,7 @@ export function MemoryUpdatesView({
                     {formatMemoryTime(entry.createdAt)}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {entry.kind === "episodic"
-                      ? "本场摘要"
-                      : entry.kind === "quota"
-                        ? "常驻已满"
-                        : "画像更新"}
+                    {entry.kind === "quota" ? "常驻已满" : "画像更新"}
                   </span>
                   <button
                     type="button"
@@ -105,40 +102,34 @@ export function MemoryUpdatesView({
                     查看来源对话
                   </button>
                 </div>
-                {entry.kind === "episodic" && entry.summary ? (
-                  <p className="mt-1.5 px-1.5 text-xs text-muted-foreground">
-                    {entry.summary}
-                  </p>
-                ) : (
-                  <ul className="mt-1.5 space-y-0.5">
-                    {entry.kind === "quota" && entry.summary ? (
-                      <li className="px-1.5 pb-1 text-xs text-muted-foreground">
-                        {entry.summary}
-                      </li>
-                    ) : null}
-                    {visibleMemoryUpdateItems(entry.items).map((item, i) => (
-                      <MemoryUpdateItemRow
-                        key={`${item.action}:${item.file}:${item.section}:${i}`}
-                        item={item}
-                        projectFolderId={item.projectId}
-                        onMemoryChanged={() => {
-                          void updates.refetch();
-                          // A row's「这条不对」lands in the rejected list too.
-                          void queryClient.invalidateQueries({
-                            queryKey: MEMORY_DISPUTED_LINES_KEY,
-                          });
-                        }}
-                        onOpenLeaf={(target, projectId) =>
-                          onOpenLeaf(
-                            target,
-                            memoryLeafTabName(target),
-                            projectId,
-                          )
-                        }
-                      />
-                    ))}
-                  </ul>
-                )}
+                <ul className="mt-1.5 space-y-0.5">
+                  {entry.kind === "quota" && entry.summary ? (
+                    <li className="px-1.5 pb-1 text-xs text-muted-foreground">
+                      {entry.summary}
+                    </li>
+                  ) : null}
+                  {visibleMemoryUpdateItems(entry.items).map((item, i) => (
+                    <MemoryUpdateItemRow
+                      key={`${item.action}:${item.file}:${item.section}:${i}`}
+                      item={item}
+                      projectFolderId={item.projectId}
+                      onMemoryChanged={() => {
+                        void updates.refetch();
+                        // A row's「这条不对」lands in the rejected list too.
+                        void queryClient.invalidateQueries({
+                          queryKey: MEMORY_DISPUTED_LINES_KEY,
+                        });
+                      }}
+                      onOpenLeaf={(target, projectId) =>
+                        onOpenLeaf(
+                          target,
+                          memoryLeafTabName(target),
+                          projectId,
+                        )
+                      }
+                    />
+                  ))}
+                </ul>
               </section>
             ))}
           </div>

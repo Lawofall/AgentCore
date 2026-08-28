@@ -11,9 +11,10 @@ export interface StoredRoot {
   conversationId?: string;
   /**
    * Session access mode.
-   * ``readonly`` = W3 read-only; ``organize`` = move/copy/mkdir/trash-delete.
+   * ``readonly`` = W3 read-only; ``organize`` = move/copy/mkdir/trash-delete;
+   * ``attach_rw`` = 本机传统附加可写（可覆盖）。
    */
-  mode?: "readonly" | "organize";
+  mode?: "readonly" | "organize" | "attach_rw";
   /** Model-facing alias under ``external/<alias>/``. */
   alias?: string;
 }
@@ -48,8 +49,9 @@ function sessionGrantsFilePath(): string {
 function coerceSessionMode(
   mode: unknown,
   legacyReadonly: unknown,
-): "readonly" | "organize" {
-  if (mode === "organize" || mode === "readonly") return mode;
+): "readonly" | "organize" | "attach_rw" {
+  if (mode === "organize" || mode === "readonly" || mode === "attach_rw")
+    return mode;
   if (legacyReadonly === false) return "organize";
   return "readonly";
 }

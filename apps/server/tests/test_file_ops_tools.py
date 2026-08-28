@@ -283,6 +283,7 @@ async def test_outside_workspace_error_is_actionable(tmp_path: Path):
     result = await FileWriteTool().execute({"path": "../escaped.md", "content": "x"}, _ctx(ws))
     assert result.success is False
     assert "超出了工作区范围" in result.error
+    assert result.failure_code == "outside_workspace"
     assert "相对路径" in result.error
     assert "AgentCore/文档/research/report.md" in result.error
     assert "bind_local_folder" in result.error or "open_local_project" in result.error

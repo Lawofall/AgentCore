@@ -299,13 +299,7 @@ async def apply_loop_directive(
                     )
                 if terminal is not None:
                     usage_meta = terminal.metadata or {}
-                    total_usage = total_usage + TokenUsage(
-                        input_tokens=usage_meta.get("input_tokens", 0),
-                        output_tokens=usage_meta.get("output_tokens", 0),
-                        reasoning_tokens=usage_meta.get("reasoning_tokens", 0),
-                        cache_hit_tokens=usage_meta.get("cache_hit_tokens", 0),
-                        cache_miss_tokens=usage_meta.get("cache_miss_tokens", 0),
-                    )
+                    total_usage = total_usage + TokenUsage.from_call_meta(usage_meta)
                     if terminal.effect is ToolEffect.SUSPEND and finish_override_sink is not None:
                         finish_override_sink.append(FinishReason.PAUSED)
                     return DirectiveApplyResult(

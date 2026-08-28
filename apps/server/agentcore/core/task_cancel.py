@@ -2,15 +2,20 @@
 
 A run's in-flight HTTP (LLM streams, tool fetches) belongs to the same cancel
 scope as the worker task. ``asyncio.CancelledError`` is terminal: abort the
-request and never enter a retry loop. httpx/httpcore may wrap the cancel in
-``HTTPError``; walk ``__cause__`` / ``__context__``. ``Task.cancelling()``
-(3.11+) covers the window where the wrapper already replaced the exception.
+request and never enter a retry loop. httpx/httpcore may wrap a *task* cancel in
+``HTTPError``; walk ``__cause__`` / ``__context__``. Timeouts also cancel an
+internal anyio scope and leave ``CancelledError`` on ``__context__`` — that is
+not a task-level cancel (the page failed; the turn must continue).
+``Task.cancelling()`` (3.11+) covers the window where the wrapper already
+replaced the exception.
 """
 
 from __future__ import annotations
 
 import asyncio
 from typing import Any
+
+import httpx
 
 # Set on an ``asyncio.Task`` before ``task.cancel()`` so salvage logs can read
 # a reason after the exception has lost its message.
@@ -100,6 +105,11 @@ def task_is_cancelling() -> bool:
     return cancelling() > 0
 
 
+def _is_timeout_exception(exc: BaseException) -> bool:
+    """True for stdlib / httpx timeouts (internal cancel scope, not task cancel)."""
+    return isinstance(exc, (TimeoutError, httpx.TimeoutException))
+
+
 def is_task_cancelled(exc: BaseException) -> bool:
     if isinstance(exc, asyncio.CancelledError):
         return True
@@ -109,6 +119,8 @@ def is_task_cancelled(exc: BaseException) -> bool:
         seen.add(id(cur))
         if isinstance(cur, asyncio.CancelledError):
             return True
+        if _is_timeout_exception(cur):
+            return False
         cur = cur.__cause__ or cur.__context__
     return False
 

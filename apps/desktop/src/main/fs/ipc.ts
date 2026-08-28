@@ -117,7 +117,7 @@ async function realpathOrSelf(absPath: string): Promise<string> {
 async function createOrUpgradeSessionRoot(
   conversationId: string,
   absPathIn: string,
-  mode: "readonly" | "organize",
+  mode: "readonly" | "organize" | "attach_rw",
 ): Promise<FsRoot> {
   const absPath = await realpathOrSelf(absPathIn);
   const name = basename(absPath) || absPath;
@@ -352,8 +352,12 @@ export function registerFsIpc(): void {
         p && typeof p === "object" && "mode" in p
           ? String((p as { mode?: unknown }).mode ?? "readonly")
           : "readonly";
-      const mode: "readonly" | "organize" =
-        modeRaw === "organize" ? "organize" : "readonly";
+      const mode: "readonly" | "organize" | "attach_rw" =
+        modeRaw === "organize"
+          ? "organize"
+          : modeRaw === "attach_rw"
+            ? "attach_rw"
+            : "readonly";
       const wellKnown = parseWellKnown(p);
       const targetName = parseTargetName(p);
       const pathHint = parseGrantPath(p);
@@ -395,7 +399,10 @@ export function registerFsIpc(): void {
         id: r.id,
         name: r.name,
         alias: r.alias,
-        mode: r.mode === "organize" ? "organize" : "readonly",
+        mode:
+          r.mode === "organize" || r.mode === "attach_rw"
+            ? r.mode
+            : "readonly",
         sessionOnly: true,
       }));
     },

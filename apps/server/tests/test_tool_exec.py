@@ -1,5 +1,6 @@
 """Tests for parallel tool execution and per-tool exception firewall (audit/05 P2-1)."""
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -73,6 +74,45 @@ class _CrashTool:
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         self.executed = True
         raise SandboxError("sandbox blew up")
+
+
+class _CancelLeakTool:
+    """Raises CancelledError without the parent task cancelling (timeout wrap leak)."""
+
+    def __init__(self, name: str = "cancel_leak") -> None:
+        self._name = name
+        self.executed = False
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name=self._name,
+            description="stub",
+            parameters={"type": "object", "properties": {}},
+            category=ToolCategory.SEARCH,
+        )
+
+    async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+        self.executed = True
+        raise asyncio.CancelledError()
+
+
+class _HangTool:
+    def __init__(self, name: str = "hang") -> None:
+        self._name = name
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name=self._name,
+            description="stub",
+            parameters={"type": "object", "properties": {}},
+            category=ToolCategory.SEARCH,
+        )
+
+    async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+        await asyncio.Event().wait()
+        return ToolResult(tool_call_id="", success=True, output="never")
 
 
 class _SuspendTool:
@@ -169,6 +209,8 @@ def registry() -> tuple[ToolRegistry, _OkTool]:
     reg.register(_OkTool("ok_a", output="alpha"))
     reg.register(ok_b)
     reg.register(_CrashTool())
+    reg.register(_CancelLeakTool())
+    reg.register(_HangTool())
     reg.register(_SuspendTool())
     return reg, ok_b
 
@@ -195,6 +237,87 @@ async def test_parallel_crash_does_not_cancel_sibling(registry: tuple[ToolRegist
     ok_msg = next(m for m in messages if m.tool_call_id == "c2")
     assert "内部错误" in (crash_msg.content or "")
     assert ok_msg.content == "beta"
+
+
+async def test_parallel_cancellederror_does_not_cancel_sibling(
+    registry: tuple[ToolRegistry, _OkTool],
+):
+    reg, ok_b = registry
+    sink = EventSink()
+    messages, terminal, attempts = await execute_tools(
+        [_call("c1", "cancel_leak"), _call("c2", "ok_b")],
+        reg,
+        _ctx(),
+        sink,
+        approval_gate=None,
+        run_id="r1",
+    )
+
+    assert ok_b.executed is True
+    assert terminal is None
+    assert len(messages) == 2
+    assert attempts[0].success is False
+    assert attempts[1].success is True
+    leak_msg = next(m for m in messages if m.tool_call_id == "c1")
+    assert "执行被中止" in (leak_msg.content or "")
+    ends = [e for e in sink._history if e.type == EventType.TOOL_USE_END]  # noqa: SLF001
+    leak_end = next(e for e in ends if e.payload.get("tool_call_id") == "c1")
+    assert leak_end.payload.get("failure", {}).get("code") == "TOOL_ERROR"
+
+
+async def test_parent_cancel_still_propagates_through_tool_exec(
+    registry: tuple[ToolRegistry, _OkTool],
+):
+    reg, _ok_b = registry
+
+    async def _run() -> None:
+        await execute_tools(
+            [_call("h1", "hang")],
+            reg,
+            _ctx(),
+            EventSink(),
+            approval_gate=None,
+            run_id="r1",
+        )
+
+    task = asyncio.create_task(_run())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_execute_start_logs_read_url_host():
+    class _ReadUrlStub:
+        @property
+        def schema(self) -> ToolSchema:
+            return ToolSchema(
+                name="read_url",
+                description="stub",
+                parameters={"type": "object", "properties": {"url": {"type": "string"}}},
+                category=ToolCategory.RESEARCH,
+            )
+
+        async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+            return ToolResult(tool_call_id="", success=True, output="ok")
+
+    reg = ToolRegistry()
+    reg.register(_ReadUrlStub())
+    with capture_logs() as logs:
+        await execute_tools(
+            [_call("c1", "read_url", '{"url": "https://tldraw.dev/community/license"}')],
+            reg,
+            _ctx(),
+            EventSink(),
+            approval_gate=None,
+            run_id="r1",
+        )
+    starts = [e for e in logs if e.get("event") == "tool.execute_start"]
+    assert len(starts) == 1
+    assert starts[0]["host"] == "tldraw.dev"
+    assert "tldraw.dev" in starts[0]["url"]
+    ends = [e for e in logs if e.get("event") == "tool.execute_end"]
+    assert ends[0]["host"] == "tldraw.dev"
 
 
 async def test_crash_emits_failed_tool_use_end(registry: tuple[ToolRegistry, _OkTool]):
@@ -1218,6 +1341,15 @@ def test_shell_observe_log_fields_records_facts_not_write_guess():
     assert _shell_observe_log_fields("code_execute", {"command": long_cmd}) == {}
     assert _shell_observe_log_fields("file_write", {"path": "a.py", "command": "x"}) == {}
     assert _shell_observe_log_fields("terminal", "not-a-dict") == {}
+    license_url = "https://www.tldraw.dev/community/license"
+    url_fields = _shell_observe_log_fields("read_url", {"url": license_url})
+    assert url_fields["host"] == "tldraw.dev"
+    assert url_fields["url"].startswith("https://")
+    assert "license" in url_fields["url"]
+    key_url = "https://example.com/x?OPENAI_API_KEY=sk-abcdefgh12345678"
+    redacted_url = _shell_observe_log_fields("read_url", {"url": key_url})
+    assert "sk-abcdefgh12345678" not in redacted_url["url"]
+    assert redacted_url["host"] == "example.com"
 
 
 def test_shell_observe_redacts_secret_shapes_clipping_would_keep():

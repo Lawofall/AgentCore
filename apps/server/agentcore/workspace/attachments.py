@@ -1,10 +1,15 @@
-"""Persist user attachments into the conversation's workspace (附件驻留 / 引用即驻留).
+"""Persist user attachments into the conversation's workspace.
 
-Upgrades an @-mention / paperclip attachment from one-shot prompt context into a
-durable project-space file under ``attachments/``. Text attachments may still be
-written here from the client-extracted body; binary attachments are expected to
-arrive already resident (``workspace_path`` set by the desktop main-process copy)
-with ``binary=True`` and empty ``text``.
+Two shapes:
+
+* **Citation** — file already in the current workspace (project path). Client
+  sends a workspace-relative ``workspace_path``; we verify it exists and do
+  **not** copy or write a sibling ``*.md``.
+* **Transfer** — file from outside the home. Bytes land under ``attachments/``
+  (client-pre-resident copy, or we write from extracted text).
+
+Absolute paths never appear here. Traversal / empty / drive-letter claims are
+dropped before the exists check.
 
 Text-like binaries (docx/pdf/pptx/txt …) are **pre-parsed** after residency
 (``attachment_parse``): a readable ``*.md`` copy is written beside the original
@@ -93,16 +98,32 @@ def _dedup(name: str, used: set[str]) -> str:
 
 
 def _normalize_client_workspace_path(raw: str | None) -> str | None:
-    """Accept only a single-segment path under ``attachments/`` from the client."""
+    """Accept a workspace-relative POSIX file path; reject traversal / abs / empty.
+
+    Citations may be nested (``docs/guide.md``). Copies still live at
+    ``attachments/<name>``; that single-segment form remains valid here.
+    Existence is checked by the caller — this only sanitizes the claim.
+    """
     if not raw or not isinstance(raw, str):
         return None
     cleaned = raw.replace("\\", "/").strip().lstrip("/")
-    if not cleaned.startswith(f"{ATTACHMENTS_DIR}/"):
+    if not cleaned or cleaned in (".", ".."):
         return None
-    rest = cleaned[len(ATTACHMENTS_DIR) + 1 :]
-    if not rest or "/" in rest or ".." in rest:
+    if len(cleaned) >= 2 and cleaned[1] == ":":
         return None
-    return f"{ATTACHMENTS_DIR}/{_safe_attachment_name(rest)}"
+    parts = [p for p in cleaned.split("/") if p and p != "."]
+    if not parts or any(p == ".." for p in parts):
+        return None
+    return "/".join(parts)
+
+
+def _is_copied_attachment_rel(rel: str) -> bool:
+    """True when ``rel`` is a transfer copy ``attachments/<single file>``."""
+    prefix = f"{ATTACHMENTS_DIR}/"
+    if not rel.startswith(prefix):
+        return False
+    rest = rel[len(prefix) :]
+    return bool(rest) and "/" not in rest and ".." not in rest
 
 
 def _apply_table_preview(item: dict, result: TablePreviewResult) -> None:
@@ -149,10 +170,13 @@ async def persist_attachments(
     """Write file attachments into the workspace; return them enriched in order.
 
     Each returned dict is the input dict plus a ``workspace_path`` key for every
-    file actually written or client-pre-resident **and verified on disk**
-    (``attachments/<name>``). Client-claimed paths that fail the residency check
-    clear ``workspace_path``, set ``resident_missing`` + ``claimed_workspace_path``,
-    and log ``attachment.resident_missing`` so prompt assembly stays honest.
+    file actually written or client-claimed **and verified on disk** (citation
+    of an in-workspace path, or a copy under ``attachments/<name>``).
+    Client-claimed paths that fail the residency check clear ``workspace_path``,
+    set ``resident_missing`` + ``claimed_workspace_path``, and log
+    ``attachment.resident_missing`` so prompt assembly stays honest.
+    Office pre-parse (sibling ``*.md``) runs only for transfer copies under
+    ``attachments/`` — citations must not mutate the user's tree.
     Only ``kind="file"`` is persisted; directory listings, conversation references
     and empty-text non-binary files are passed through untouched. A per-file write
     failure is logged and skipped — a bad attachment must never break the turn.
@@ -175,7 +199,7 @@ async def persist_attachments(
         pre = _normalize_client_workspace_path(att.get("workspace_path"))
 
         if kind == "file" and pre:
-            # 引用即驻留：桌面（或云端 PUT）声称已写入；写进提示前先验盘，缺则诚实降级。
+            # 桌面声称路径已在工作区（区内引用或 attachments/ 副本）；写进提示前先验盘。
             if not await _workspace_file_present(backend, pre):
                 logger.warning(
                     "attachment.resident_missing",
@@ -192,7 +216,9 @@ async def persist_attachments(
                 item["binary"] = binary
                 item.pop("resident_missing", None)
                 item.pop("claimed_workspace_path", None)
-                if binary or should_preview_table(item.get("name"), pre):
+                if _is_copied_attachment_rel(pre) and (
+                    binary or should_preview_table(item.get("name"), pre)
+                ):
                     await _enrich_with_preparse(backend, item, workspace_path=pre)
         elif kind == "file" and text.strip() and not binary:
             item.pop("workspace_path", None)

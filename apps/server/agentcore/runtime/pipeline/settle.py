@@ -244,6 +244,7 @@ async def settle_successful_turn(
         "reasoning_content": final_reasoning,
         "input_tokens": turn_usage.input_tokens,
         "output_tokens": turn_usage.output_tokens,
+        "prompt_tokens": TokenUsage.from_usage_dict(captain_state.usage).last_prompt_tokens,
         "reasoning_tokens": turn_usage.reasoning_tokens,
         "cache_hit_tokens": turn_usage.cache_hit_tokens,
         "cache_miss_tokens": turn_usage.cache_miss_tokens,
@@ -345,6 +346,9 @@ async def salvage_failed_captain(
         "error": message,
         "error_code": code,
         "finish_reason": FinishReason.ERROR,
+        "prompt_tokens": TokenUsage.from_usage_dict(
+            captain_state.usage or {}
+        ).last_prompt_tokens,
         "cost_runs": cost_runs,
         "audit_drops": audit_recorder.drops,
         "outcome": outcome,

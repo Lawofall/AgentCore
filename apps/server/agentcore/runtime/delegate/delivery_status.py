@@ -21,11 +21,14 @@
 blocked 抬成 partial（空交/零声明清单 ≠ 整轮失败）。
 
 ``degraded_handoff`` 一律 warning。空交接风暴 / 取消零落盘附加缺口 **已撤**。
-甲⁺：真无落盘 soft（``files_not_landed`` → notes），不挡整批收工。
-同图已有 continue_from / replaces 补派已跑时，收掉并排「计划收口时跳过」。
+甲⁺：**队员** ``COMPLETED`` 不因零落盘改 FAILED。用户面正式完成只认磁盘上
+``accepted`` 路径：写盘形态（``form=files`` / ``workspace`` / 非空 ``artifacts``，
+漏填=files）的 ``files_not_landed`` **blocking**，不得 ``delivered``；全员
+``form=prose`` 仍 soft（warning/notes）。同图已有 continue_from / replaces
+补派已跑时，收掉并排「计划收口时跳过」。
 
-用户面零落盘缺口投影为 ``files_not_landed`` soft（甲⁺：warning/notes，不挡整批）：
-有队员归因时按角色保留「本队员本波未交卷」（定案 B）；仅批次谓词时仍可落「本批未见落盘」。
+用户面零落盘按队员投影「本队员本波未交卷」（定案 B）；仅批次谓词时仍可落
+「本批未见落盘」。写盘形态下这些行不再 warning。
 发射时写入回合 :data:`current_delivery_verdict` **以及** ``promotion_ledger.delivery_verdict``
 （跨 Task 共享槽，与 ``TurnPromotionLedger`` 同一对象——现只挂
 ``delivery_verdict`` 与历史 ``promotions`` 重放）。只写 ContextVar 时，后台
@@ -116,7 +119,8 @@ _WRITING_CUTOFF_REASONS = frozenset(
 )
 _SOFT_GAP_REASONS = frozenset({REASON_UNVERIFIED_NOTE, REASON_FILES_NOT_LANDED})
 # Gaps that latch finish_guard draft acknowledgment (扩出文献 evidence_deficit /
-# 能力4：契约硬失败 / 节点 FAILED / rejected 产物 —— 不扩姿势 A 词表).
+# 能力4：契约硬失败 / 节点 FAILED / rejected 产物 / 声明路径未落盘 —— 不扩姿势 A 词表).
+# ``files_not_landed`` latches only when blocking (写盘形态); soft 甲⁺ prose 不闩.
 _DRAFT_ACK_GAP_REASONS = frozenset(
     {
         REASON_EVIDENCE_DEFICIT,
@@ -125,6 +129,7 @@ _DRAFT_ACK_GAP_REASONS = frozenset(
         REASON_VERIFY_BUDGET,
         REASON_NODE_FAILED,
         REASON_ARTIFACT_REJECTED,
+        REASON_PATH_MISMATCH,
         REASON_CANCELLED,
         REASON_OVER_SEAT,
     }
@@ -150,19 +155,29 @@ class DeliveryVerdict:
     delivered_files: tuple[str, ...]
     execution_id: str
     # True when gaps include evidence_deficit / thin_review / verify_failed /
-    # node_failed / artifact_rejected (draft / gap acknowledgment required).
+    # node_failed / artifact_rejected / path_mismatch / blocking files_not_landed
+    # (draft / gap acknowledgment required).
     requires_draft_ack: bool = False
     # Structured gap reasons from the same delivery_status payload (no prose).
     # Shadow honesty logs read this; path reconciliation does not.
     gap_reasons: tuple[str, ...] = ()
+    # Declared artifacts / artifact_dir with no accepted on-disk match.
+    missing_declared: tuple[str, ...] = ()
+    # Claimed accepted paths rejected because workspace.exists is false.
+    absent_claimed: tuple[str, ...] = ()
 
 
 def _gaps_require_draft_ack(gaps: list[Any] | tuple[Any, ...] | None) -> bool:
     """True when any gap reason latches requires_draft_ack."""
-    return any(
-        isinstance(g, dict) and str(g.get("reason") or "") in _DRAFT_ACK_GAP_REASONS
-        for g in (gaps or [])
-    )
+    for gap in gaps or []:
+        if not isinstance(gap, dict):
+            continue
+        reason = str(gap.get("reason") or "")
+        if reason in _DRAFT_ACK_GAP_REASONS:
+            return True
+        if reason == REASON_FILES_NOT_LANDED and gap.get("severity") != "warning":
+            return True
+    return False
 
 
 def acceptance_counts(
@@ -473,49 +488,131 @@ def _path_declaration_of(node: Any) -> tuple[list[str], str]:
     return artifacts, artifact_dir
 
 
+def _accepted_declared_paths(
+    state: RunState,
+    *,
+    artifacts: list[str],
+    artifact_dir: str,
+) -> list[str]:
+    """Accepted rows that satisfy this node's path declaration."""
+    from agentcore.runtime.runs.file_acceptance import (
+        apply_declared_path_acceptance,
+        normalize_acceptance_row,
+    )
+
+    accepted: list[str] = []
+    for raw in _acceptance_rows_for_state(state):
+        row = normalize_acceptance_row(raw)
+        if row is None:
+            continue
+        row = apply_declared_path_acceptance(
+            row, artifacts=artifacts, artifact_dir=artifact_dir
+        )
+        if row is None:
+            continue
+        if row.get("status") == "accepted" and row.get("path"):
+            accepted.append(str(row["path"]))
+    return accepted
+
+
+def _missing_declared_for_node(node: Any, state: RunState) -> list[str]:
+    """Declared patterns with no accepted on-disk (acceptance) match."""
+    from agentcore.runtime.runs.file_acceptance import (
+        declaration_allows_landed,
+        landed_matches_declared,
+    )
+
+    artifacts, artifact_dir = _path_declaration_of(node)
+    if not artifacts and not artifact_dir:
+        return []
+    accepted = _accepted_declared_paths(
+        state, artifacts=artifacts, artifact_dir=artifact_dir
+    )
+    if artifacts:
+        return [
+            pat
+            for pat in artifacts
+            if not any(landed_matches_declared(p, pat) for p in accepted)
+        ]
+    if not any(
+        declaration_allows_landed(p, artifacts=[], artifact_dir=artifact_dir) for p in accepted
+    ):
+        return [f"{artifact_dir.rstrip('/')}/"]
+    return []
+
+
+def _missing_declared_paths(
+    plan: RunPlan,
+    results: dict[str, RunState],
+) -> tuple[str, ...]:
+    """Unique declared paths that have no accepted match (order preserved)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for node in plan.nodes:
+        state = results.get(node.run_id)
+        if state is None:
+            continue
+        for path in _missing_declared_for_node(node, state):
+            if path not in seen:
+                seen.add(path)
+                out.append(path)
+    return tuple(out)
+
+
+def _absent_claimed_paths(artifacts: list[dict[str, Any]]) -> tuple[str, ...]:
+    """Paths rejected because they were not on disk."""
+    from agentcore.runtime.runs.file_acceptance import REASON_NOT_ON_DISK
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for row in artifacts:
+        if not isinstance(row, dict):
+            continue
+        if row.get("status") != "rejected":
+            continue
+        if str(row.get("reason") or "") != REASON_NOT_ON_DISK:
+            continue
+        path = str(row.get("path") or "").strip()
+        if path and path not in seen:
+            seen.add(path)
+            out.append(path)
+    return tuple(out)
+
+
+def _harden_expected_landing_gaps(
+    gaps: list[dict[str, Any]],
+    plan: RunPlan,
+) -> list[dict[str, Any]]:
+    """写盘形态：``files_not_landed`` 不得 warning（用户面不得 delivered）。
+
+    全员 ``form=prose`` 保持甲⁺ soft。队员 phase 仍是 COMPLETED。
+    """
+    from agentcore.runtime.delegate.completion import plan_has_writable_worker
+
+    if not plan_has_writable_worker(plan):
+        return gaps
+    out: list[dict[str, Any]] = []
+    for gap in gaps:
+        if str(gap.get("reason") or "") != REASON_FILES_NOT_LANDED:
+            out.append(gap)
+            continue
+        hardened = dict(gap)
+        hardened.pop("severity", None)
+        out.append(hardened)
+    return out
+
+
 def _declared_path_mismatch_gaps(
     plan: RunPlan,
     results: dict[str, RunState],
 ) -> list[dict[str, Any]]:
     """Blocking gaps when declared artifacts / artifact_dir have no accepted match."""
-    from agentcore.runtime.runs.file_acceptance import (
-        apply_declared_path_acceptance,
-        declaration_allows_landed,
-        landed_matches_declared,
-        normalize_acceptance_row,
-    )
-
     gaps: list[dict[str, Any]] = []
     for node in plan.nodes:
-        artifacts, artifact_dir = _path_declaration_of(node)
-        if not artifacts and not artifact_dir:
-            continue
         state = results.get(node.run_id)
         if state is None:
             continue
-        accepted: list[str] = []
-        for raw in _acceptance_rows_for_state(state):
-            row = normalize_acceptance_row(raw)
-            if row is None:
-                continue
-            row = apply_declared_path_acceptance(
-                row, artifacts=artifacts, artifact_dir=artifact_dir
-            )
-            if row is None:
-                continue
-            if row.get("status") == "accepted" and row.get("path"):
-                accepted.append(str(row["path"]))
-        missing: list[str] = []
-        if artifacts:
-            missing = [
-                pat
-                for pat in artifacts
-                if not any(landed_matches_declared(p, pat) for p in accepted)
-            ]
-        elif not any(
-            declaration_allows_landed(p, artifacts=[], artifact_dir=artifact_dir) for p in accepted
-        ):
-            missing = [f"{artifact_dir.rstrip('/')}/"]
+        missing = _missing_declared_for_node(node, state)
         if not missing:
             continue
         role = node.role or node.agent_name or node.run_id
@@ -759,9 +856,10 @@ def _landing_failure_kind_from_results(results: dict[str, RunState]) -> str | No
 
 
 def _files_not_landed_gap(results: dict[str, RunState]) -> dict[str, Any]:
-    """Batch-only soft note when no worker-attributed zero-landing row exists.
+    """Batch-only note when no worker-attributed zero-landing row exists.
 
-    甲⁺：severity=warning → state=notes，不挡整批 / CEO finish。
+    Default severity=warning; write-form waves strip it in
+    ``_harden_expected_landing_gaps``.
     """
     failure_kind = _landing_failure_kind_from_results(results)
     if failure_kind == "channel_dead":
@@ -835,10 +933,11 @@ def _project_user_gaps(
     raw_gaps: list[dict[str, Any]],
     results: dict[str, RunState],
 ) -> list[dict[str, Any]]:
-    """Project zero-landing rows to soft ``files_not_landed`` (per-worker when possible).
+    """Project zero-landing rows to ``files_not_landed`` (per-worker when possible).
 
     定案 B：有队员角色归因时按人保留「本队员本波未交卷」；仅批次谓词时合并为
-    一条「本批未见落盘」。甲⁺：一律 warning，不挡整批。
+    一条「本批未见落盘」。默认 warning；写盘形态由
+    ``_harden_expected_landing_gaps`` 升 blocking。
     """
     zero_by_role: dict[str, dict[str, Any]] = {}
     role_order: list[str] = []
@@ -950,8 +1049,8 @@ def build_delivery_status(
 
     Emission gate: at least one accepted file, one gap, or one rejected artifact —
     a pure-prose successful batch stays silent (研究 / 分析类委派不该弹交付卡).
-    All inputs are the wrap-up signals the engine already computed; nothing here
-    re-verifies the workspace. ``delivered_files`` = accepted only;
+Callers stamp disk truth (``stamp_results_disk_truth``) before emit; this
+builder does not I/O. ``delivered_files`` = accepted only;
     ``artifacts`` carries path-level acceptance (accepted + rejected).
 
     ``promotion_ledger`` (回合共享台账): 历史 ``promoted`` 路径在这里被重映射；
@@ -1069,8 +1168,10 @@ def build_delivery_status(
     # 与 delivered_files / synthesis「路径已核」同源；不扫盘上「缺席」散文。
     raw_gaps.extend(_artifact_rejected_gaps(artifacts))
     raw_gaps = _dedupe_gap_rows(raw_gaps)
-    # 用户面：零落盘按队员 soft 投影（本队员本波未交卷）；仅批次谓词时合并。
-    projected = _project_user_gaps(raw_gaps, results)
+    # 用户面：零落盘按队员投影（本队员本波未交卷）；写盘形态下 hardening 为 blocking。
+    projected = _harden_expected_landing_gaps(
+        _project_user_gaps(raw_gaps, results), plan
+    )
     gaps = projected[:_MAX_GAPS]
     if len(projected) > _MAX_GAPS:
         from agentcore.runtime.context_cap import log_context_capped
@@ -1245,6 +1346,10 @@ def maybe_emit_delivery_status(
                 execution_id=execution_id,
                 requires_draft_ack=_gaps_require_draft_ack(gaps),
                 gap_reasons=_gap_reasons_from(gaps),
+                missing_declared=_missing_declared_paths(plan, results),
+                absent_claimed=_absent_claimed_paths(
+                    list(payload.get("artifacts") or [])
+                ),
             ),
             promotion_ledger=promotion_ledger,
         )

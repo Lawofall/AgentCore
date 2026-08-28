@@ -243,7 +243,42 @@ def test_blocked_empty_delivery_rejects_false_completion_claim():
     assert "不得宣称" in reworks[0]
 
 
-def test_blocked_empty_delivery_allows_honest_acknowledgment():
+def test_named_absent_declared_path_with_landed_claim_reworks():
+    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+
+    verdict = DeliveryVerdict(
+        state="partial",
+        delivered_files=("src/a.ts",),
+        execution_id="e-icon",
+        missing_declared=("build/icon.ico",),
+    )
+    reworks = finish_guard(
+        "图标已落盘：`build/icon.ico` 已写入工作区。",
+        citation_count=0,
+        delivery_verdict=verdict,
+    )
+    assert reworks
+    assert "build/icon.ico" in reworks[0]
+    assert "不是用户交付" in reworks[0]
+
+
+def test_named_absent_path_honest_gap_passes():
+    from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
+
+    verdict = DeliveryVerdict(
+        state="partial",
+        delivered_files=("src/a.ts",),
+        execution_id="e-icon",
+        missing_declared=("build/icon.ico",),
+    )
+    assert (
+        finish_guard(
+            "工作区没有 `build/icon.ico`，其余源码已在 `src/a.ts`。",
+            citation_count=0,
+            delivery_verdict=verdict,
+        )
+        == []
+    )
     from agentcore.runtime.delegate.delivery_status import DeliveryVerdict
 
     verdict = DeliveryVerdict(

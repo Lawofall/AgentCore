@@ -2,7 +2,7 @@
 
 Model-facing paths use the relative namespace ``external/<alias>/…`` — absolute
 OS paths never enter prompts. File tools route through these mounts; access is
-gated by per-alias ``mode`` (readonly | organize). ``resolve_safe_path`` /
+gated by per-alias ``mode`` (readonly | organize | attach_rw). ``resolve_safe_path`` /
 pathGuard algorithms are unchanged: each mount is a separate root passed into
 the same guard.
 """
@@ -27,7 +27,7 @@ _ORGANIZE_DENY_MSG = (
 )
 _PERMANENT_EXTERNAL_MSG = "区外目录禁止永久删除；请使用可逆删除（进回收站）"
 
-ExternalMountMode = Literal["readonly", "organize"]
+ExternalMountMode = Literal["readonly", "organize", "attach_rw"]
 
 # Op policy for session external mounts. These three sets are the single source of
 # truth mirrored by the desktop dispatch gate
@@ -237,6 +237,8 @@ def normalize_mount_mode(raw: str | None) -> ExternalMountMode:
     text = (raw or "readonly").strip().lower()
     if text == "organize":
         return "organize"
+    if text == "attach_rw":
+        return "attach_rw"
     return "readonly"
 
 
@@ -284,6 +286,7 @@ def external_mutation_allowed(
     Routing-layer rules:
     - readonly → all mutations denied
     - permanent delete on any external mount → always denied (stricter than workspace)
+    - attach_rw → all non-permanent mutations allowed (本机传统附加可写根)
     - organize → only move / copy / mkdir / non-permanent delete
     """
     label = path or external_ns(mount.alias)
@@ -291,6 +294,13 @@ def external_mutation_allowed(
         return permanent_external_error(label)
     if mount.mode == "readonly":
         return readonly_write_error(label)
+    if mount.mode == "attach_rw":
+        known = (
+            op in READONLY_ALLOWED_OPS
+            or op in ORGANIZE_MUTATION_OPS
+            or op in ORGANIZE_DENIED_OPS
+        )
+        return None if known else organize_deny_error(label, op)
     if op in ORGANIZE_DENIED_OPS or op not in ORGANIZE_MUTATION_OPS:
         return organize_deny_error(label, op)
     return None
@@ -306,7 +316,8 @@ def build_external_env(mounts: dict[str, ExternalMount]) -> dict[str, str]:
     """Map alias → abs path for code_execute env injection.
 
     Organize mounts are **excluded** (proposal §五): file tools are the only
-    supported external write path under organize. Skips missing abs.
+    supported external write path under organize. ``attach_rw`` injects (本机
+    附加可写根上的 ``code_execute`` 靠环境变量找到目录). Skips missing abs.
     """
     out: dict[str, str] = {}
     for alias, m in mounts.items():

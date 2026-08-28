@@ -548,7 +548,9 @@ export function ApprovalCard({
     if (trustBusy || !approval.conversationId) return;
     if (
       !window.confirm(
-        "切换到「托管」后，执行类（代码/终端/浏览器等）与桌面提醒将免审；本机 Host 本会话信任。确定继续？",
+        "切换到「全放行」后，已授权目录里改文件和跑命令不再每次问你。"
+        + "没加入本对话的目录仍然改不了。"
+        + "删盘、读私钥、装软件仍会拦住。确定继续？",
       )
     ) {
       return;
@@ -679,7 +681,7 @@ export function ApprovalCard({
                 disabled={trustBusy}
                 onClick={switchManaged}
               >
-                托管
+                全放行
               </button>
               （下一回合生效；熔断仍在）。
             </p>

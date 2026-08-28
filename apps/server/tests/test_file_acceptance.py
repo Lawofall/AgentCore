@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from agentcore.runtime.runs.file_acceptance import (
+    REASON_NOT_ON_DISK,
     apply_declared_path_acceptance,
     declaration_allows_landed,
     landed_matches_declared,
+    reject_absent_paths,
 )
 
 
@@ -100,3 +102,17 @@ def test_apply_declared_path_acceptance_omits_extras():
         artifact_dir="",
     )
     assert unconstrained["status"] == "accepted"
+
+
+def test_reject_absent_paths_marks_accepted_missing_not_already_rejected():
+    rows = [
+        {"path": "build/icon.ico", "status": "accepted"},
+        {"path": "src/main.ts", "status": "accepted"},
+        {"path": "bad.md", "status": "rejected", "reason": "run_failed"},
+    ]
+    out = reject_absent_paths(rows, {"build/icon.ico"})
+    by_path = {r["path"]: r for r in out}
+    assert by_path["build/icon.ico"]["status"] == "rejected"
+    assert by_path["build/icon.ico"]["reason"] == REASON_NOT_ON_DISK
+    assert by_path["src/main.ts"]["status"] == "accepted"
+    assert by_path["bad.md"]["reason"] == "run_failed"

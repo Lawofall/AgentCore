@@ -195,7 +195,7 @@ def test_cloud_scratch_facts():
     assert "合法非默认" in mid or "非默认" in mid
     assert "本机传统" in mid
     assert "改导" not in out  # skill/context 不得写 Ask 改导导入
-    # 跨文件夹：事实层只留「默认坐哪张桌」；核留一句钩；整条 HOW 归 team_cross_folder
+    # 跨文件夹：事实层只留「默认坐哪张桌」；整条 HOW 归 team_cross_folder（核不常驻钩）
     assert "出生桌" in out
     assert "跨文件夹指挥" not in out
     assert "target_folder_id" not in out
@@ -203,8 +203,8 @@ def test_cloud_scratch_facts():
     assert "file_list" not in out
     assert "可能降级" not in out
     hint = _CEO_CORE_HINT
-    assert "【跨文件夹】" in hint
-    assert "team_cross_folder" in hint
+    assert "【跨文件夹】" not in hint
+    assert "team_cross_folder" not in hint
     assert "list_folder_dir" not in hint
     assert "禁猜最近" not in hint
     delivery = _TEAM_DELIVERY_ENV
@@ -228,6 +228,7 @@ def test_cloud_scratch_facts():
     # 区外授权：事实层留通道与工具名；姿势归 consult / ask_user_midtask
     assert "external_mount_readonly" in out
     assert "grant_organize_folder" in out
+    assert "grant_attach_folder" in out
     assert "与工作区绑定正交" in out
     assert "先写工作区" not in out
     assert "file_copy" not in out
@@ -295,8 +296,12 @@ def test_cloud_scratch_facts():
     assert "浏览器事实" in out
     assert "browser=未装配" in out
     assert "本机 Host 事实" in out
-    assert "host(action=status/os_log/shell)" in out
-    assert "install_package" in out
+    assert "host=已装配" in out
+    host_fact = next(
+        line for line in out.splitlines() if line.startswith("本机 Host 事实：")
+    )
+    assert "host(action=status/os_log/shell)" not in host_fact
+    assert "install_package" not in host_fact
     assert "host_info" not in out
     assert "host_ping" not in out
     assert "host_package_install" not in out
@@ -439,9 +444,10 @@ def test_browser_capability_override():
     )
     assert "browser=已装配" in out
     assert "local_open=未装配" in out
-    # 事实层：谁能直持、宿主是哪种、能不能开相对路径
-    assert "CEO 可直持" in out
-    assert "仅 worker" in out
+    # 事实层：装没装配、宿主是哪种、能不能开相对路径；谁可调哪些 action 不在此
+    assert "CEO 可直持" not in out
+    assert "仅 worker" not in out
+    assert "宿主" in out
     assert "相对" in out or "完整预览" in out
     assert "http(s)" in out or "公网" in out
     # HOW 归 consult（登录接管 / 禁编造工具名 / 禁 read_url 冒充 / 意图梯度），事实层不复述
@@ -474,8 +480,8 @@ def test_local_browser_guide_mentions_workspace_relative_path():
     assert "site/index.html" in out or "相对" in out
     assert "完整预览" in out or "workspace://" in out
     assert "file://" in out  # 明示不支持
-    assert "console" in out  # 能力清单里的 browser_* 之一
-    # 「异常先取 JS 错误」是 HOW，随 browser consult 注入
+    # 「异常先取 JS 错误」是 HOW，随 browser consult 注入；事实层不列 action
+    assert "console" not in out
     assert "browser(action=console)" in capability_how_suffix({"browser"})
 
 
@@ -583,6 +589,22 @@ def test_host_mcp_unassembled_states_facts_and_defers_posture_to_core():
     assert "多轮复读" in base
     assert "不得声称本回合已经用过" in base  # 未装配禁称已用
     assert "把该能力的动作写进给队员的任务" in hint  # 未装配禁派空跑
+
+
+def test_mcp_assembled_states_channel_not_who_holds():
+    """mcp 已装配：只报通道事实与工具名形；谁可持不在事实层。"""
+    out = build_workspace_context(
+        _FakeBackend("server"),
+        desktop_online=True,
+        code_execute_enabled=False,
+        terminal_enabled=False,
+        mcp_enabled=True,
+    )
+    assert "mcp=已装配" in out
+    assert "经桌面 stdio 回填" in out
+    assert "mcp_<server>_<tool>" in out
+    assert "CEO 不直持" not in out
+    assert "仅 worker 持 MCP" not in out
 
 
 def test_sidecar_local_without_channel():

@@ -15,9 +15,7 @@ finalize is once per seal (resume unseals first). Mid-turn prose durability is
 from __future__ import annotations
 
 import asyncio
-import errno
 import json
-import os
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -33,6 +31,10 @@ from agentcore.conversation.store.merge import (
 )
 from agentcore.core.logging import get_logger
 from agentcore.db.repositories.stream_state import resolve_stream_upsert
+from agentcore.workspace.fs_replace import (
+    REPLACE_RETRY_DELAYS_S as _REPLACE_RETRY_DELAYS_S,
+    replace_with_retry as _shared_replace_with_retry,
+)
 
 logger = get_logger(__name__)
 
@@ -51,28 +53,6 @@ def _is_safe_id(value: str) -> bool:
     return "/" not in value and "\\" not in value
 
 
-def _is_transient_replace_error(exc: BaseException) -> bool:
-    """Windows file-lock noise on ``os.replace`` (AV / writebacker holding ``.json``).
-
-    WinError 5 (ACCESS_DENIED) and 32 (SHARING_VIOLATION) are the observed forms;
-    POSIX cousins ``EACCES`` / ``EPERM`` / ``EBUSY`` get the same treatment.
-    """
-    if not isinstance(exc, OSError):
-        return False
-    winerror = getattr(exc, "winerror", None)
-    if winerror in (5, 32):
-        return True
-    if isinstance(exc, PermissionError):
-        return True
-    transient_errnos = {errno.EACCES, errno.EPERM}
-    if hasattr(errno, "EBUSY"):
-        transient_errnos.add(errno.EBUSY)
-    return getattr(exc, "errno", None) in transient_errnos
-
-
-# Backoff between replace attempts when the destination is briefly locked.
-_REPLACE_RETRY_DELAYS_S = (0.0, 0.05, 0.15, 0.35, 0.75)
-
 # Short retry when an existing outbox file cannot be read/parsed (AV / torn write).
 _READ_RETRY_DELAYS_S = (0.0, 0.05, 0.15)
 
@@ -88,32 +68,12 @@ class OutboxReadError(OSError):
 
 def _replace_with_retry(tmp: Path, target: Path) -> None:
     """``os.replace`` with limited retry for transient Windows locks; re-raises if exhausted."""
-    last: OSError | None = None
-    for attempt, delay in enumerate(_REPLACE_RETRY_DELAYS_S):
-        if delay:
-            time.sleep(delay)
-        try:
-            os.replace(tmp, target)
-            if attempt > 0:
-                logger.warning(
-                    "sidecar.outbox_replace_recovered",
-                    target=str(target),
-                    attempts=attempt + 1,
-                )
-            return
-        except OSError as e:
-            if not _is_transient_replace_error(e):
-                raise
-            last = e
-            logger.warning(
-                "sidecar.outbox_replace_retry",
-                target=str(target),
-                attempt=attempt + 1,
-                max_attempts=len(_REPLACE_RETRY_DELAYS_S),
-                error=str(e),
-            )
-    assert last is not None
-    raise last
+    _shared_replace_with_retry(
+        tmp,
+        target,
+        family="outbox",
+        delays=_REPLACE_RETRY_DELAYS_S,
+    )
 
 
 class OutboxStore:

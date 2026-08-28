@@ -30,6 +30,7 @@ export const NON_RETRIABLE_ERROR_CODES: readonly ErrorCode[] = [
   "LLM_INSUFFICIENT_BALANCE",
   "KEY_STORAGE_UNAVAILABLE",
   "PLATFORM_BILLING_UNAVAILABLE",
+  "CONTEXT_OVERFLOW",
 ];
 
 /** Type guard: whether `code` is a code the clients recognize (typed against the
@@ -51,6 +52,7 @@ export const UNSTARTED_SEND_REFUSAL_CODES: readonly ErrorCode[] = [
   "QUOTA_EXCEEDED",
   "RATE_LIMITED",
   "PLATFORM_BILLING_UNAVAILABLE",
+  "CONTEXT_OVERFLOW",
 ];
 
 export function isUnstartedSendRefusalCode(

@@ -8,6 +8,7 @@ import { hasLocalFiles } from "@/lib/capabilities";
 import {
   guideDesktopDownload,
   isDesktopFolderAction,
+  isGrantFolderAction,
 } from "@/lib/desktopDownload";
 import { organizeConfirmDetail } from "@/lib/grantFolderHints";
 import type { AskAssumption, AskOption, AskQuestion } from "@/types/events";
@@ -354,7 +355,7 @@ export function ChoiceQuestion({
             >
               {question.options.map((opt) => {
                 const desktopFolder = isDesktopFolderAction(opt.action);
-                const organizeGrant = opt.action === "grant_organize_folder";
+                const organizeGrant = isGrantFolderAction(opt.action);
                 const canRunFolder =
                   desktopFolder &&
                   (opt.action === "open_local_project"

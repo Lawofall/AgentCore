@@ -1467,7 +1467,7 @@ def test_client_error_message_temperature_deprecated_product_copy():
 
 def test_client_error_message_context_overflow_product_copy_aa519_shape():
     """⑦A: aa519-style upstream wall must not reach the user bubble."""
-    from agentcore.llm.errors import client_error_message
+    from agentcore.llm.errors import CONTEXT_OVERFLOW_PRODUCT, client_error_message
 
     body = (
         b'{"error":{"message":"user This model\'s maximum context length is 1048576 '
@@ -1475,27 +1475,31 @@ def test_client_error_message_context_overflow_product_copy_aa519_shape():
         b'Please reduce the length of the messages.","code":"invalid_request_error"}}'
     )
     msg = client_error_message("DeepSeek", 400, body)
-    assert msg == "对话上下文过长，本轮无法继续。请压缩较早对话后重试"
+    assert msg == CONTEXT_OVERFLOW_PRODUCT
     assert "maximum context length" not in msg
     assert "1108450" not in msg
     assert "1048576" not in msg
 
 
 def test_client_error_message_context_overflow_by_code():
-    from agentcore.llm.errors import client_error_message, is_context_overflow
+    from agentcore.llm.errors import (
+        CONTEXT_OVERFLOW_PRODUCT,
+        client_error_message,
+        is_context_overflow,
+    )
 
     body = b'{"error":{"message":"too long","code":"context_length_exceeded"}}'
     assert is_context_overflow(body) is True
     msg = client_error_message("平台", 400, body)
-    assert msg == "对话上下文过长，本轮无法继续。请压缩较早对话后重试"
+    assert msg == CONTEXT_OVERFLOW_PRODUCT
     assert "too long" not in msg
 
 
 def test_client_error_message_413_is_context_overflow_product_copy():
-    from agentcore.llm.errors import client_error_message
+    from agentcore.llm.errors import CONTEXT_OVERFLOW_PRODUCT, client_error_message
 
     msg = client_error_message("平台", 413, b"")
-    assert msg == "对话上下文过长，本轮无法继续。请压缩较早对话后重试"
+    assert msg == CONTEXT_OVERFLOW_PRODUCT
 
 
 def test_client_error_message_400_unrelated_still_passthrough():

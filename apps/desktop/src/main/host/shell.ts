@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import os from "node:os";
 import type { HostOpResult } from "@shared/host-contract";
 import {
   buildHostShellEnv,
@@ -9,6 +8,10 @@ import {
 } from "../host-shell-obs";
 import { logDesktop } from "../log-service";
 import { killProcessTree, treeSpawnOptions } from "../proc-tree";
+import {
+  type HostShellCwdHint,
+  resolveHostShellCwd,
+} from "./cwd";
 import { err, ok } from "./result";
 
 /** P3 host_shell timeout clamp (seconds). */
@@ -118,6 +121,7 @@ function truncateOut(s: string): string {
 export async function hostShell(
   command: string,
   timeoutSeconds: number,
+  hint: HostShellCwdHint = {},
 ): Promise<HostOpResult> {
   const cmd = command.trim();
   if (!cmd) {
@@ -135,7 +139,11 @@ export async function hostShell(
   if (idiom) {
     return err(idiom, "HostShellIdiom");
   }
-  const cwd = os.homedir();
+  const cwdPick = await resolveHostShellCwd(hint);
+  if (!cwdPick.ok) {
+    return err(cwdPick.error, "HostShellCwdDenied");
+  }
+  const cwd = cwdPick.cwd;
   const timeoutMs = timeoutSeconds * 1000;
 
   let file: string;

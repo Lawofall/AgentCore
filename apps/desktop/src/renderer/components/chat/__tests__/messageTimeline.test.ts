@@ -145,7 +145,7 @@ describe("mergeTimeline", () => {
       "m:u2",
     ]);
 
-    // 同一张卡没有 anchor_at 时（semantic / quota / 老数据）仍按落库时刻走 —— 也正是被修掉的旧行为。
+    // 同一张卡没有 anchor_at 时（老数据）仍按落库时刻走。
     const fallback = mergeTimeline(
       messages,
       [],

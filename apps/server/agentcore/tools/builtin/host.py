@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from agentcore.core.logging import get_logger
@@ -218,7 +219,7 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
         "command": {
             "type": "string",
             "description": (
-                "shell 本机短时命令（非空）；无 cwd（home/默认 shell cwd）。"
+                "shell 本机短时命令（非空）；cwd 由运行时设为已授权根（默认工作区根）。"
                 "Windows 写 PowerShell（$env:APPDATA、'; if；禁 %VAR%/||/&&）；"
                 "Unix 写 POSIX（$SHELL -lc）。"
                 "长驻改 terminal；装软件改 install_package；"
@@ -595,6 +596,30 @@ async def _execute_os_log(
     )
 
 
+def _host_shell_transport_args(
+    command: str, timeout_seconds: int, context: ToolContext
+) -> dict[str, Any]:
+    """cwd is runtime-injected; never forward a model-supplied abs path."""
+    payload: dict[str, Any] = {
+        "command": command,
+        "timeout_seconds": timeout_seconds,
+        "conversation_id": context.conversation_id or "",
+    }
+    backend = context.backend
+    if getattr(backend, "location", None) != "local":
+        return payload
+    root = getattr(backend, "root", None)
+    if isinstance(root, Path):
+        payload["cwd"] = str(root)
+    elif isinstance(root, str) and root.strip():
+        payload["cwd"] = root.strip()
+    channel = getattr(backend, "_channel", None)
+    rid = getattr(channel, "root_id", None) if channel is not None else None
+    if isinstance(rid, str) and rid:
+        payload["root_id"] = rid
+    return payload
+
+
 async def _execute_shell(
     arguments: dict[str, Any], context: ToolContext
 ) -> ToolResult:
@@ -633,7 +658,7 @@ async def _execute_shell(
     try:
         value = await channel.request_host(
             HostOp.SHELL,
-            {"command": command, "timeout_seconds": timeout_seconds},
+            _host_shell_transport_args(command, timeout_seconds, context),
             timeout=float(timeout_seconds) + _SHELL_CHANNEL_SLACK_SECONDS,
         )
     except HostOpError as e:
@@ -766,7 +791,6 @@ class HostTool:
             name="host",
             description=(
                 "本机 Host（仅桌面回填通道；与 folder/bind 正交）。"
-                "status/os_log/shell：CEO+worker；面板/音频/服务/装包仅队员。"
                 "schema 免批；status/os_log 运行时免批；其余走 host 轴；"
                 "install_package 恒确认（session/kickoff/turn grant 不覆盖；"
                 "不吃 kickoff/command=auto）。"

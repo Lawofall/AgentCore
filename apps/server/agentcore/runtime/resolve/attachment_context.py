@@ -42,7 +42,8 @@ logger = get_logger(__name__)
 # 本条 vs 工作区历轮 attachments/：同名跨轮复用同一路径是故意设计，缺判别位会让模型
 # 把上一轮同名文件当成本条、或把「无 [resident missing]」误读成「本条没传文件」。
 _ATTACH_THIS_MESSAGE_FRAME = (
-    "以下是本条消息的附件。attachments/ 同名跨轮复用同一路径，最新上传覆盖旧字节；"
+    "以下是本条消息的附件。工作区内已有文件按原路径引用（不另复制）；"
+    "复制进 attachments/ 的同名跨轮复用同一路径，最新上传覆盖旧字节；"
     "工作区索引里其它 attachments/ 条目属历史轮。"
 )
 
@@ -413,9 +414,10 @@ async def _build_attachment_prompt(
             else ""
         ),
         resident_note=(
-            " Files shown with an in-workspace path have been saved into your "
-            "workspace — read or edit them with the file tools by that path rather "
-            "than trusting only the (possibly truncated) text below."
+            " Files shown with an in-workspace path are in your workspace at that "
+            "path (cited in place, or copied under attachments/) — read or edit "
+            "them with the file tools by that path rather than trusting only the "
+            "(possibly truncated) text below."
             if resident
             else ""
         ),

@@ -19,10 +19,29 @@ logger = get_logger(__name__)
 # Minted once per process — durable leases identify this worker.
 _OWNER_ID: str = new_id()
 
+# Sidecar occupy heartbeats from the desktop across API workers, so the owner
+# must be deterministic from ``message_id`` (not this process's ``_OWNER_ID``).
+# Prefix also tells the crash sweeper not to redrive on the cloud.
+LOCAL_TURN_LEASE_OWNER_PREFIX = "local-turn:"
+
 
 def lease_owner_id() -> str:
     """This process's lease owner id (stable for the process lifetime)."""
     return _OWNER_ID
+
+
+def local_turn_lease_owner_id(message_id: str) -> str:
+    """Stable lease owner for a sidecar occupy (any API worker can heartbeat)."""
+    return f"{LOCAL_TURN_LEASE_OWNER_PREFIX}{message_id}"
+
+
+def is_local_turn_lease(row: object) -> bool:
+    """True when this lease belongs to a desktop sidecar occupy (not a cloud turn)."""
+    owner = str(getattr(row, "owner_id", None) or "")
+    if owner.startswith(LOCAL_TURN_LEASE_OWNER_PREFIX):
+        return True
+    meta = getattr(row, "meta", None)
+    return isinstance(meta, dict) and meta.get("source") == "local"
 
 
 async def list_fresh_conversation_ids_for_user(
@@ -66,9 +85,10 @@ async def acquire_turn_lease(
     user_id: str,
     phase: str = "running",
     meta: dict[str, Any] | None = None,
+    owner_id: str | None = None,
 ) -> str:
     """Write / refresh the durable RUNNING lease; returns owner_id."""
-    owner = _OWNER_ID
+    owner = owner_id or _OWNER_ID
     try:
         async with async_session_factory() as session:
             await TurnLeaseRepository(session).upsert(
@@ -93,13 +113,17 @@ async def heartbeat_turn_lease(
     *,
     owner_id: str | None = None,
     phase: str | None = None,
+    conversation_id: str | None = None,
 ) -> bool:
     """Bump the lease heartbeat; returns False if ownership was lost."""
     owner = owner_id or _OWNER_ID
     try:
         async with async_session_factory() as session:
             return await TurnLeaseRepository(session).heartbeat(
-                message_id, owner_id=owner, phase=phase
+                message_id,
+                owner_id=owner,
+                phase=phase,
+                conversation_id=conversation_id,
             )
     except Exception as e:  # noqa: BLE001
         logger.warning(

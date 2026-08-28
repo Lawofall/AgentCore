@@ -130,7 +130,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     # other ask_* skills) so it never advertises on the autonomous path.
     SystemSkill(
         name="delegate_checkpoint",
-        summary="用户明文要看提纲再继续（套餐提纲步或先派提纲再问）",
+        summary="用户明文要看提纲再继续 → 本条",
         body=_DELEGATE_CHECKPOINT,
         requires_tools=("ask_user",),
     ),
@@ -167,7 +167,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="deep_multi_lens_research",
-        summary="多维公共事件调研 → 本条；点名开辩/模拟法庭 → debate_and_review勿抢拦",
+        summary="多维公共事件调研 → 本条",
         body=_DEEP_MULTI_LENS_RESEARCH,
         requires_tools=("delegate",),
         audience=AUDIENCE_CEO_ONLY,

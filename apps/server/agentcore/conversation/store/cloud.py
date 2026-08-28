@@ -309,7 +309,10 @@ async def _record_local_turn_metrics(
     the journal (no ``cost_runs`` on local write-back — same journal-half
     fallback cloud uses when pause defers ledger fold). ``turn_id`` is the
     assistant message id: local write-back has no engine ``attempt_id``.
+    ``prompt_tokens`` is the largest single ``llm_call`` prompt in the journal.
     """
+    from agentcore.conversation.prompt_tokens import max_prompt_tokens_from_journal
+
     delegated, workers = turn_worker_stats({"journal_entries": durable or []})
     try:
         await TurnMetricsRepository(session).record(  # type: ignore[arg-type]
@@ -329,6 +332,7 @@ async def _record_local_turn_metrics(
             workers=workers,
             input_tokens=int(input_tokens or 0),
             output_tokens=int(output_tokens or 0),
+            prompt_tokens=max_prompt_tokens_from_journal(durable),
         )
     except Exception as e:
         with contextlib.suppress(Exception):
@@ -834,6 +838,7 @@ class CloudStore:
                     workers=workers,
                     input_tokens=int(result.get("input_tokens", 0) or 0),
                     output_tokens=int(result.get("output_tokens", 0) or 0),
+                    prompt_tokens=int(result.get("prompt_tokens", 0) or 0),
                     boundary_yields=int(collab.get("boundary_yields", 0) or 0),
                     scope_signals=int(collab.get("scope_signals", 0) or 0),
                     revises=int(collab.get("revises", 0) or 0),
@@ -991,6 +996,7 @@ class CloudStore:
                         workers=workers,
                         input_tokens=int(result.get("input_tokens", 0) or 0),
                         output_tokens=int(result.get("output_tokens", 0) or 0),
+                        prompt_tokens=int(result.get("prompt_tokens", 0) or 0),
                         boundary_yields=int(collab.get("boundary_yields", 0) or 0),
                         scope_signals=int(collab.get("scope_signals", 0) or 0),
                         revises=int(collab.get("revises", 0) or 0),

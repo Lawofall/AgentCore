@@ -31,6 +31,16 @@ from agentcore.core.errors import (
 # ``db.errors`` here (llm → db → repositories → llm.profiles cycle).
 _OUR_SERVICE_UNAVAILABLE_MESSAGE = "AgentCore 服务暂时不可用，请稍后重试"
 
+# Vendor / origin 530 (and a relayed 「（530）」sentence): the selected model, not us.
+# Keep in sync with desktop ``SELECTED_MODEL_UNAVAILABLE_MESSAGE``.
+SELECTED_MODEL_UNAVAILABLE_MESSAGE = (
+    "你选的模型暂时不可用，请稍后再试或换一个模型。"
+)
+
+# Tools already ran this turn, then the vendor rejected the next request (4xx).
+# Process stays on the timeline; this sentence is the bubble face. Not a Class B delete.
+HALFWAY_VENDOR_REJECT_MESSAGE = "做到一半，对方拒绝了这次请求。"
+
 # Our-cloud faults a retry cannot clear (server misconfiguration, not pressure).
 _OUR_SERVICE_PERMANENT_CODES = frozenset(
     {ErrorCode.KEY_STORAGE_UNAVAILABLE, ErrorCode.PLATFORM_BILLING_UNAVAILABLE}
@@ -304,6 +314,15 @@ class AgentCoreErrorEnvelope:
     context: dict | None = None
 
 
+def _envelope_raw_text(body: bytes | str | None) -> str | None:
+    """Full wire body for envelope JSON. Never the log ``body_preview`` truncation."""
+    if body is None:
+        return None
+    text = body.decode("utf-8", errors="replace") if isinstance(body, bytes) else body
+    text = text.strip()
+    return text or None
+
+
 def parse_agentcore_error_envelope(
     body: bytes | str | None,
 ) -> AgentCoreErrorEnvelope | None:
@@ -311,12 +330,16 @@ def parse_agentcore_error_envelope(
 
     Only trusts ``{"error":{"code": <ErrorCode>, "message": ...}}``. Does not
     sniff free text or vendor gateway tutorials (CC Switch, etc.).
+
+    Parses the **full** body. ``body_preview`` is a log cap (500 chars); feeding
+    it here truncates a legal envelope that carries ``context.upstream_body_preview``
+    and the sidecar then brands a vendor 530 as AgentCore.
     """
-    preview = body_preview(body)
-    if not preview:
+    raw = _envelope_raw_text(body)
+    if not raw:
         return None
     try:
-        data = json.loads(preview)
+        data = json.loads(raw)
     except json.JSONDecodeError:
         return None
     if not isinstance(data, dict):
@@ -447,6 +470,59 @@ def inference_envelope_error(
     return leaf(envelope.message, **details)
 
 
+def upstream_unavailable_message(status: int) -> str:
+    """Product sentence for a vendor 5xx (direct hop or relayed after LLM_* envelope)."""
+    if status == 530:
+        return SELECTED_MODEL_UNAVAILABLE_MESSAGE
+    return f"上游模型服务暂时不可用（{status}），请稍后再试"
+
+
+def vendor_5xx_product_message(
+    *,
+    http_status: int,
+    relayed: str | None,
+    envelope: AgentCoreErrorEnvelope | None,
+) -> str:
+    """Bubble copy for vendor 5xx: 530 names the selected model, never AgentCore."""
+    status = http_status
+    if envelope is not None and isinstance(envelope.context, dict):
+        raw = envelope.context.get("upstream_status")
+        if isinstance(raw, int):
+            status = raw
+    if status == 530 or (relayed and "（530）" in relayed):
+        return SELECTED_MODEL_UNAVAILABLE_MESSAGE
+    return relayed or upstream_unavailable_message(status)
+
+
+def overlay_progress_failure_message(
+    *,
+    code: str | None,
+    message: str | None,
+    context: dict | None,
+) -> str:
+    """When tools already ran and the next LLM call died: keep a face, not an empty bubble.
+
+    4xx → halfway reject. 530 → selected model down. Other copy passes through.
+    ``code`` is accepted for call-site symmetry; status on ``context`` is the gate.
+    """
+    _ = code
+    status = None
+    if isinstance(context, dict):
+        raw = context.get("upstream_status")
+        if isinstance(raw, int):
+            status = raw
+    if status == 530:
+        return SELECTED_MODEL_UNAVAILABLE_MESSAGE
+    if status is not None and 400 <= status < 500:
+        return HALFWAY_VENDOR_REJECT_MESSAGE
+    text = (message or "").strip()
+    if text:
+        return text
+    if status is not None and status >= 500:
+        return upstream_unavailable_message(status)
+    return message or ""
+
+
 def our_inference_service_5xx_error(
     *,
     status: int,
@@ -456,11 +532,17 @@ def our_inference_service_5xx_error(
 
     Returns ``None`` when the body is our envelope with an LLM_* code — that
     means the problem is truly upstream and the caller should keep upstream
-    semantics. Any other 5xx on this hop (pool exhaustion, internal fault,
-    missing catalog envelope, …) is our cloud, not the vendor.
+    semantics. Bare **530** without an our-cloud envelope is also ``None``:
+    Cloudflare/origin 530 is not proof our process died, and a truncated
+    LLM_* envelope used to take this path and say AgentCore.
+
+    Any other 5xx on this hop (pool exhaustion, internal fault, missing
+    catalog envelope, bare 502/503 gateway page) is our cloud, not the vendor.
     """
     envelope = parse_agentcore_error_envelope(body)
     if envelope is not None and is_llm_family_error_code(envelope.code):
+        return None
+    if status == 530 and envelope is None:
         return None
 
     # No envelope (bare gateway page, reverse-proxy 502/503) stays INTERNAL_ERROR:
@@ -572,7 +654,10 @@ _CONTEXT_OVERFLOW_MARKERS = re.compile(
     re.IGNORECASE,
 )
 # Product face — short Chinese; upstream body stays in preview / logs only.
-_CONTEXT_OVERFLOW_PRODUCT = "对话上下文过长，本轮无法继续。请压缩较早对话后重试"
+CONTEXT_OVERFLOW_PRODUCT = (
+    "这条对话对当前模型太长了。请开新对话，或换一个更能装长对话的模型。"
+)
+_CONTEXT_OVERFLOW_PRODUCT = CONTEXT_OVERFLOW_PRODUCT
 
 # OpenCode Go tool-schema 400 (entry reject, 0 token). Honest: upstream limit,
 # no charge. Do not promise auto-retry or auto-trim — we have neither.

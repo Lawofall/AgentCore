@@ -1,9 +1,10 @@
 import { StreamError } from "@/lib/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// 隔离断言 sendTurn / runResume「探活 → 路由 / 降级收敛」这一段的可观察契约：
+// 隔离断言 sendTurn / runRegenerate / runResume「探活 → 路由 / 降级收敛」这一段的可观察契约：
 // sendTurn——探活 ok 走 sidecar、首探失败(probed)走云+写 cloud_bridge、bad 缓存命中(!probed)走云、
 // 回合启动期失败(recoverable)降级并标坏、中途失败(!recoverable)不自动降级；
+// runRegenerate——与 sendTurn 同形（本机占用截断，禁止永远走云 regenerate）；
 // runResume——探活 ok 走 sidecar 续跑、探活失败保留续跑卡 + 出横幅（无 banner retry）、
 // 404/PAUSED_TURN_NOT_FOUND 丢卡、绝不降级走云（本机帧云端没有）。
 // 协作者全 mock；conversation / pausedTurn store 用真实，使 stillOptimistic / 截断 / 帧认领忠实。
@@ -59,6 +60,7 @@ import {
   resolveSidecarRoot,
 } from "@/services/sidecarRouting";
 import {
+  regenerateConversation,
   resumeConversation,
   streamConversation,
 } from "@/services/streamConversation";
@@ -68,7 +70,7 @@ import {
 } from "@/services/streamConversationViaSidecar";
 import { useConversationStore } from "@/stores/conversation";
 import { type PendingResume, usePausedTurnStore } from "@/stores/pausedTurns";
-import { runResume, sendTurn } from "../turns";
+import { runRegenerate, runResume, sendTurn } from "../turns";
 
 const resolveSidecarRootMock = vi.mocked(resolveSidecarRoot);
 const resolveLocalTargetMock = vi.mocked(resolveConversationLocalTarget);
@@ -81,6 +83,7 @@ const markSidecarUnhealthyMock = vi.mocked(markSidecarUnhealthy);
 const clearSidecarHealthMock = vi.mocked(clearSidecarHealth);
 const streamConversationMock = vi.mocked(streamConversation);
 const streamViaSidecarMock = vi.mocked(streamConversationViaSidecar);
+const regenerateConversationMock = vi.mocked(regenerateConversation);
 const resumeConversationMock = vi.mocked(resumeConversation);
 const resumeViaSidecarMock = vi.mocked(resumeConversationViaSidecar);
 const notifyInfoMock = vi.mocked(notifyInfo);
@@ -117,6 +120,7 @@ beforeEach(() => {
   usePausedTurnStore.setState({ pending: [] });
   vi.clearAllMocks();
   streamConversationMock.mockResolvedValue(undefined);
+  regenerateConversationMock.mockResolvedValue(undefined);
   resolveLocalTargetMock.mockResolvedValue(null);
   getActiveSidecarTargetMock.mockReturnValue(null);
   isSidecarEnabledMock.mockReturnValue(true);
@@ -298,78 +302,81 @@ describe("sendTurn — 探活路由 / 降级收敛（探活增强）", () => {
     );
   });
 
-  it("附件退云 + 绑本机 → cloud_bridge，并提示改走云端", async () => {
-    resolveSidecarRootMock.mockResolvedValue(null);
-    resolveLocalTargetMock.mockResolvedValue(TARGET);
+  it("绑本机 + 附件仍走 sidecar，并把附件转给本机链路", async () => {
+    resolveSidecarRootMock.mockResolvedValue(TARGET);
+    probeSidecarMock.mockResolvedValue({
+      healthy: true,
+      probed: true,
+      detail: null,
+    });
+    streamViaSidecarMock.mockResolvedValue(undefined as never);
+    const attachments = [
+      {
+        name: "f.txt",
+        path: "docs/f.txt",
+        text: "x",
+        truncated: false,
+        kind: "file" as const,
+        workspace_path: "docs/f.txt",
+      },
+    ];
 
     await sendTurn({
       ...spec(),
-      attachments: [
-        {
-          name: "f.txt",
-          path: "/tmp/f.txt",
-          text: "x",
-          truncated: false,
-          kind: "file",
-        },
-      ],
+      attachments,
     });
 
-    expect(resolveSidecarRootMock).not.toHaveBeenCalled();
-    expect(probeSidecarMock).not.toHaveBeenCalled();
-    expect(streamViaSidecarMock).not.toHaveBeenCalled();
-    expect(streamConversationMock).toHaveBeenCalledTimes(1);
+    expect(resolveSidecarRootMock).toHaveBeenCalled();
+    expect(probeSidecarMock).toHaveBeenCalledTimes(1);
+    expect(streamViaSidecarMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "c1",
+        rootId: "r1",
+        attachments,
+      }),
+    );
+    expect(streamConversationMock).not.toHaveBeenCalled();
     expect(useConversationStore.getState().byId.c1?.executionVia).toBe(
-      "cloud_bridge",
+      "sidecar",
     );
-    expect(notifyInfoMock).toHaveBeenCalledWith(
-      "本轮因附件改走云端，未使用本机引擎",
-    );
+    expect(notifyInfoMock).not.toHaveBeenCalled();
     expect(logEventMock).toHaveBeenCalledWith(
       "info",
       "turn.stream_path",
-      expect.objectContaining({
-        via: "cloud",
-        reason: "attachments",
-        bridging: true,
-      }),
+      expect.objectContaining({ via: "sidecar", reason: "probe_ok" }),
     );
   });
 
-  it("附件+点名仍只因附件退云（点名不改路、不进退云文案）", async () => {
-    resolveSidecarRootMock.mockResolvedValue(null);
-    resolveLocalTargetMock.mockResolvedValue(TARGET);
+  it("附件+点名仍走 sidecar（点名不改路）", async () => {
+    resolveSidecarRootMock.mockResolvedValue(TARGET);
+    probeSidecarMock.mockResolvedValue({
+      healthy: true,
+      probed: true,
+      detail: null,
+    });
+    streamViaSidecarMock.mockResolvedValue(undefined as never);
+    const attachments = [
+      {
+        name: "f.txt",
+        path: "docs/f.txt",
+        text: "x",
+        truncated: false,
+        kind: "file" as const,
+      },
+    ];
+    const agentMentions = [{ agent_id: "a1", role: "研究员" }];
 
     await sendTurn({
       ...spec(),
-      attachments: [
-        {
-          name: "f.txt",
-          path: "/tmp/f.txt",
-          text: "x",
-          truncated: false,
-          kind: "file",
-        },
-      ],
-      agentMentions: [{ agent_id: "a1", role: "研究员" }],
+      attachments,
+      agentMentions,
     });
 
-    expect(streamViaSidecarMock).not.toHaveBeenCalled();
-    expect(streamConversationMock).toHaveBeenCalledTimes(1);
-    expect(notifyInfoMock).toHaveBeenCalledWith(
-      "本轮因附件改走云端，未使用本机引擎",
+    expect(streamViaSidecarMock).toHaveBeenCalledWith(
+      expect.objectContaining({ attachments, agentMentions }),
     );
-    expect(notifyInfoMock).not.toHaveBeenCalledWith(
-      expect.stringContaining("点名"),
-    );
-    expect(logEventMock).toHaveBeenCalledWith(
-      "info",
-      "turn.stream_path",
-      expect.objectContaining({
-        via: "cloud",
-        reason: "attachments",
-      }),
-    );
+    expect(streamConversationMock).not.toHaveBeenCalled();
+    expect(notifyInfoMock).not.toHaveBeenCalled();
   });
 
   it("点名不退云：绑本机 → 走 sidecar，并把点名转给本机链路", async () => {
@@ -417,6 +424,127 @@ describe("sendTurn — 探活路由 / 降级收敛（探活增强）", () => {
     expect(streamConversationMock).toHaveBeenCalledTimes(1);
     expect(useConversationStore.getState().byId.c1?.executionVia).toBeNull();
     expect(notifyInfoMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("runRegenerate — 探活路由 / 降级收敛（与 sendTurn 同形）", () => {
+  function seedPersistedTurn(): void {
+    useConversationStore.setState({ currentConversationId: "c1", byId: {} });
+    const conv = useConversationStore.getState();
+    conv.addMessage(
+      {
+        id: "u1",
+        role: "user",
+        content: "hi",
+        createdAt: "",
+        executionId: null,
+        isStreaming: false,
+      },
+      "c1",
+    );
+    conv.addMessage(
+      {
+        id: "a1",
+        role: "assistant",
+        content: "old",
+        createdAt: "",
+        executionId: null,
+        isStreaming: false,
+      },
+      "c1",
+    );
+  }
+
+  beforeEach(() => {
+    seedPersistedTurn();
+  });
+
+  it("探活通过 → 走本地 sidecar regenerate，不碰云端 regenerate", async () => {
+    resolveSidecarRootMock.mockResolvedValue(TARGET);
+    probeSidecarMock.mockResolvedValue({
+      healthy: true,
+      probed: true,
+      detail: null,
+    });
+    streamViaSidecarMock.mockResolvedValue(undefined as never);
+
+    await runRegenerate("u1");
+
+    expect(streamViaSidecarMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "c1",
+        rootId: "r1",
+        regenerate: true,
+        optimisticUserId: "u1",
+        content: "hi",
+      }),
+    );
+    expect(regenerateConversationMock).not.toHaveBeenCalled();
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBe(
+      "sidecar",
+    );
+  });
+
+  it("探活失败 → 写 cloud_bridge 并走云端 regenerate", async () => {
+    resolveSidecarRootMock.mockResolvedValue(TARGET);
+    probeSidecarMock.mockResolvedValue({
+      healthy: false,
+      probed: true,
+      detail: "env down",
+    });
+
+    await runRegenerate("u1");
+
+    expect(streamViaSidecarMock).not.toHaveBeenCalled();
+    expect(regenerateConversationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "c1",
+        messageId: "u1",
+      }),
+    );
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBe(
+      "cloud_bridge",
+    );
+  });
+
+  it("探活通过但回合启动期失败(recoverable) → 标坏 + 降级走云 regenerate", async () => {
+    resolveSidecarRootMock.mockResolvedValue(TARGET);
+    probeSidecarMock.mockResolvedValue({
+      healthy: true,
+      probed: true,
+      detail: null,
+    });
+    streamViaSidecarMock.mockRejectedValue(
+      new StreamError("sidecar", undefined, {
+        recoverable: true,
+        serverMessage: "handshake failed",
+      }),
+    );
+
+    await runRegenerate("u1");
+
+    expect(markSidecarUnhealthyMock).toHaveBeenCalled();
+    expect(regenerateConversationMock).toHaveBeenCalledTimes(1);
+    expect(useConversationStore.getState().byId.c1?.executionVia).toBe(
+      "cloud_bridge",
+    );
+  });
+
+  it("中途失败(!recoverable) → 不自动降级走云", async () => {
+    resolveSidecarRootMock.mockResolvedValue(TARGET);
+    probeSidecarMock.mockResolvedValue({
+      healthy: true,
+      probed: true,
+      detail: null,
+    });
+    streamViaSidecarMock.mockRejectedValue(
+      new StreamError("sidecar", undefined, { recoverable: false }),
+    );
+
+    await runRegenerate("u1");
+
+    expect(regenerateConversationMock).not.toHaveBeenCalled();
+    expect(markSidecarUnhealthyMock).not.toHaveBeenCalled();
   });
 });
 

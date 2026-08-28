@@ -621,3 +621,86 @@ async def test_resolve_model_config_background_dormant_skips_platform(monkeypatc
     )
     cfg = await resolve_model_config(MagicMock(), "u1", "title")
     assert cfg is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_and_gate_compaction_follows_conversation_byok():
+    from agentcore.billing.gate import resolve_and_gate_compaction
+
+    byok = LLMCredentials(
+        api_key="sk-user",
+        base_url="https://u.example/v1",
+        default_model="flash",
+        source="user",
+        provider_id="p1",
+    )
+    selection = SimpleNamespace(origin="byok", provider_id="p1", model="flash")
+    with (
+        patch(
+            "agentcore.billing.gate.resolve_explicit_background_byok",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "agentcore.billing.gate.ConversationRepository",
+            lambda _s: SimpleNamespace(
+                get_by_id_unscoped=AsyncMock(
+                    return_value=SimpleNamespace(id="c1", user_id="u1")
+                )
+            ),
+        ),
+        patch(
+            "agentcore.billing.gate.resolve_conversation_model_selection",
+            AsyncMock(return_value=selection),
+        ),
+        patch(
+            "agentcore.billing.gate.UserRepository",
+            lambda _s: SimpleNamespace(get_by_id=AsyncMock(return_value=_user())),
+        ),
+        patch(
+            "agentcore.billing.gate.preflight_resolved_llm_credentials",
+            AsyncMock(return_value=byok),
+        ),
+        patch("agentcore.billing.gate.enforce_quota", AsyncMock()) as enforce,
+    ):
+        result = await resolve_and_gate_compaction(MagicMock(), "u1", "c1")
+    assert result.credentials is byok
+    assert result.quota_skipped_at_admission is False
+    enforce.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_and_gate_compaction_platform_quota_skips():
+    from agentcore.billing.gate import resolve_and_gate_compaction
+    from agentcore.core.errors import QuotaExceededError
+
+    selection = SimpleNamespace(origin="platform", provider_id=None, model="flash")
+    with (
+        patch(
+            "agentcore.billing.gate.resolve_explicit_background_byok",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "agentcore.billing.gate.ConversationRepository",
+            lambda _s: SimpleNamespace(
+                get_by_id_unscoped=AsyncMock(
+                    return_value=SimpleNamespace(id="c1", user_id="u1")
+                )
+            ),
+        ),
+        patch(
+            "agentcore.billing.gate.resolve_conversation_model_selection",
+            AsyncMock(return_value=selection),
+        ),
+        patch(
+            "agentcore.billing.gate.UserRepository",
+            lambda _s: SimpleNamespace(get_by_id=AsyncMock(return_value=_user())),
+        ),
+        patch(
+            "agentcore.billing.gate.preflight_resolved_llm_credentials",
+            AsyncMock(side_effect=QuotaExceededError("exhausted")),
+        ),
+    ):
+        result = await resolve_and_gate_compaction(MagicMock(), "u1", "c1")
+    assert result.credentials is None
+    assert result.quota_skipped_at_admission is True
+

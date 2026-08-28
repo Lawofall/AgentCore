@@ -15,6 +15,7 @@ from agentcore.api.routes.conversations import messages as messages_route
 from agentcore.api.schemas.messages import (
     AbortLocalTurnRequest,
     BeginLocalTurnRequest,
+    LocalTurnHeartbeatRequest,
     LocalTurnJournalRequest,
     LocalTurnStreamSegmentsRequest,
 )
@@ -25,9 +26,16 @@ from agentcore.conversation.local_turn import (
     begin_local_turn,
     upsert_local_turn_stream_segments,
 )
+from agentcore.core.errors import ValidationError
 from agentcore.runtime.events.stream_checkpointer import CHANNEL_CAPTAIN_CONTENT
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture(autouse=True)
+def _stub_local_turn_lease(monkeypatch):
+    monkeypatch.setattr(local_turn_mod, "_acquire_local_turn_lease", AsyncMock())
+    monkeypatch.setattr(local_turn_mod, "_release_local_turn_lease", AsyncMock())
 
 _TRACE = "0123456789abcdef0123456789abcdef"
 _UMID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -36,7 +44,7 @@ _MID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 class _FakeSessionCM:
     async def __aenter__(self):
-        return object()
+        return SimpleNamespace(commit=AsyncMock())
 
     async def __aexit__(self, *_exc):
         return False
@@ -143,6 +151,93 @@ async def test_begin_user_id_collision_with_assistant_raises(monkeypatch):
             user_message_id=_UMID,
             message_id=_MID,
             trace_id=_TRACE,
+        )
+
+
+async def test_begin_regenerate_patches_user_and_truncates(monkeypatch):
+    updates: list[dict] = []
+    deletes: list[dict] = []
+    created_at = datetime(2026, 1, 2, tzinfo=UTC)
+
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def create(self, **_kw):
+            raise AssertionError("regenerate must not insert a new user row")
+
+        async def get_by_id(self, message_id, *, conversation_id):
+            assert message_id == _UMID
+            assert conversation_id == "c1"
+            return SimpleNamespace(id=_UMID, role="user", created_at=created_at)
+
+        async def update_content(self, message_id, content=None, **kwargs):
+            updates.append({"message_id": message_id, "content": content, **kwargs})
+
+        async def delete_after(self, conversation_id, *, after_created_at, commit=True):
+            deletes.append(
+                {
+                    "conversation_id": conversation_id,
+                    "after_created_at": after_created_at,
+                    "commit": commit,
+                }
+            )
+            return 1
+
+    monkeypatch.setattr(local_turn_mod, "async_session_factory", lambda: _FakeSessionCM())
+    monkeypatch.setattr(local_turn_mod, "MessageRepository", Repo)
+    begin_calls: list[dict] = []
+    monkeypatch.setattr(
+        local_turn_mod,
+        "get_cloud_store",
+        lambda: SimpleNamespace(
+            begin_turn=AsyncMock(side_effect=lambda **kw: begin_calls.append(kw))
+        ),
+    )
+
+    result = await begin_local_turn(
+        conversation_id="c1",
+        user_id="u1",
+        user_message="edited",
+        user_message_id=_UMID,
+        message_id=_MID,
+        trace_id=_TRACE,
+        regenerate=True,
+        attachments=[{"name": "a.txt", "path": "a.txt"}],
+        agent_mentions=[],
+    )
+    assert result["assistant_message_id"] == _MID
+    assert updates[0]["content"] == "edited"
+    assert updates[0]["attachments"] == [{"name": "a.txt", "path": "a.txt"}]
+    assert updates[0]["agent_mentions"] == []
+    assert deletes[0]["after_created_at"] == created_at
+    assert begin_calls[0]["message_id"] == _MID
+
+
+async def test_begin_regenerate_rejects_missing_user(monkeypatch):
+    class Repo:
+        def __init__(self, _s):
+            pass
+
+        async def get_by_id(self, *_a, **_k):
+            return None
+
+    monkeypatch.setattr(local_turn_mod, "async_session_factory", lambda: _FakeSessionCM())
+    monkeypatch.setattr(local_turn_mod, "MessageRepository", Repo)
+    monkeypatch.setattr(
+        local_turn_mod,
+        "get_cloud_store",
+        lambda: SimpleNamespace(begin_turn=AsyncMock()),
+    )
+    with pytest.raises(ValidationError, match="只能从用户消息重新生成"):
+        await begin_local_turn(
+            conversation_id="c1",
+            user_id="u1",
+            user_message="hello",
+            user_message_id=_UMID,
+            message_id=_MID,
+            trace_id=_TRACE,
+            regenerate=True,
         )
 
 
@@ -341,6 +436,8 @@ async def test_new_endpoints_do_not_write_paused_or_empty_complete():
         }
     )
     assert segs.segments[0].generation == 0
+    beat = LocalTurnHeartbeatRequest.model_validate({"message_id": _MID})
+    assert beat.message_id == _MID
 
 
 async def test_abort_deletes_running_pair(monkeypatch):

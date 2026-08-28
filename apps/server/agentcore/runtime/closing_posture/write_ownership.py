@@ -223,6 +223,8 @@ def downgrade_verdict_for_unresolved_write_ownership(
             execution_id=verdict.execution_id,
             requires_draft_ack=verdict.requires_draft_ack,
             gap_reasons=getattr(verdict, "gap_reasons", ()),
+            missing_declared=getattr(verdict, "missing_declared", ()),
+            absent_claimed=getattr(verdict, "absent_claimed", ()),
         ),
         promotion_ledger=promotion_ledger,
     )

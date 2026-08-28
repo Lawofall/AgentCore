@@ -119,12 +119,69 @@ function resolveLangCmd(
 const REGISTRY_ENV_KEY =
   /^(NPM_CONFIG_|npm_config_|YARN_|PNPM_|PIP_|UV_|POETRY_|HTTPS_PROXY|HTTP_PROXY|ALL_PROXY|NO_PROXY|https_proxy|http_proxy|all_proxy|no_proxy)/;
 
+const USER_ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const USER_ENV_DENIED = new Set([
+  "PATH",
+  "PATHEXT",
+  "PYTHONHOME",
+  "PYTHONPATH",
+  "PYTHONSTARTUP",
+  "PYTHONEXECUTABLE",
+  "NODE_OPTIONS",
+  "NODE_DEBUG",
+  "BASH_ENV",
+  "ENV",
+  "IFS",
+  "SHELLOPTS",
+  "PERL5OPT",
+  "PERL5LIB",
+  "RUBYOPT",
+  "RUBYLIB",
+  "WINDIR",
+  "COMSPEC",
+  "SYSTEMROOT",
+  "PSMODULEPATH",
+  "LD_PRELOAD",
+  "LD_LIBRARY_PATH",
+  "LD_AUDIT",
+  "DYLD_INSERT_LIBRARIES",
+  "DYLD_LIBRARY_PATH",
+  "DYLD_FORCE_FLAT_NAMESPACE",
+]);
+const USER_ENV_MAX_KEYS = 32;
+const USER_ENV_MAX_VALUE = 8192;
+
+function userEnvDenied(key: string): boolean {
+  const upper = key.toUpperCase();
+  if (USER_ENV_DENIED.has(upper)) return true;
+  if (upper.startsWith("LD_") || upper.startsWith("DYLD_")) return true;
+  if (upper.startsWith("AGENTCORE_")) return true;
+  return false;
+}
+
 export function pickRegistryEnv(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!REGISTRY_ENV_KEY.test(key)) continue;
     if (typeof value !== "string") continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Ephemeral user env (API keys for this execute). Keep in sync with
+ * ``agentcore.core.ephemeral_env``: drop PATH / linker hijacks, keep ``*_API_KEY``.
+ */
+export function pickUserExecEnv(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (Object.keys(out).length >= USER_ENV_MAX_KEYS) break;
+    if (!USER_ENV_KEY.test(key) || key.length > 128) continue;
+    if (userEnvDenied(key)) continue;
+    if (typeof value !== "string" || value.length > USER_ENV_MAX_VALUE) continue;
     out[key] = value;
   }
   return out;
@@ -355,12 +412,14 @@ export async function opExecute(
     // W3: inject AGENTCORE_EXTERNAL_* + D11′ PYTHONPATH (. + src/lib) so local
     // code_execute can import src-layout packages the same way TestExitCode does.
     // Registry/cache pins from server (test_run install) are whitelist-merged only.
+    // Ephemeral user env (API keys) is denylist-merged: PATH / LD_* still dropped.
     const envExtra: Record<string, string> = {
       ...buildExternalEnvFromRoots(
         args.external_roots as Record<string, unknown> | undefined,
         String(args.conversation_id ?? ""),
       ),
       ...pickRegistryEnv(args.env),
+      ...pickUserExecEnv(args.env),
     };
     if (language === "python") {
       Object.assign(envExtra, buildWorkspacePythonpathEnv(cwdAbs));

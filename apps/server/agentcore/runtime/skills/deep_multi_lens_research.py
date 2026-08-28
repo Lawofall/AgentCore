@@ -21,7 +21,7 @@ _DEEP_MULTI_LENS_RESEARCH = """\
 用户批准后再辩】。一起弄懂/学术多切口/未明示成文的多路摸清 → 【勿】用本 skill，改 \
 `playbook="map_fanout"`；用户明示要报告/论文/落盘成文 → `cite_write_review`。\
 用户明确点名开辩 / 模拟庭审 / 终局对抗（含【""" + _MULTI_LENS_COURTROOM_TRIGGERS_JOINED + """】等）→ \
-【勿】用本 skill 拦截，改 `consult(debate_and_review)` 直调 `debate`（取证前提由辩论机制保证：约定文档桥 / Evidence Pack / 发言期台账）。\
+【勿抢拦】，改 `consult(debate_and_review)` 直调 `debate`（取证前提由辩论机制保证：约定文档桥 / Evidence Pack / 发言期台账）。\
 意图模糊（既像公共研判又像开辩）→ 保守缺省走本 skill，并在回复里说明「也可直接开辩」。\
 这与律师作业（接案 / 文书 / 诉讼策略、先对抗后研判）不同：本域是公共事件多维取证，不是替律师打官司。
 
@@ -59,8 +59,7 @@ _DEEP_MULTI_LENS_RESEARCH = """\
 
 【二、CEO 纪律：禁止自搜替代四路】
 你【禁止】用自己的 `web_search` / 长检索串把四路调研做完再假装组队——那是 solo 塌缩。\
-探路检索默认 0～1 轮：只为写清各路入口 / 边界（关键词 / 忌重叠），禁止自己取证；每次 web_search 须精简到\
-建议 2–3 核心词；超限会自动规范化或截断并明示实搜词，仅极端过长才拒绝。取证与交叉验证交给队员。\
+探路检索默认 0～1 轮：只为写清各路入口 / 边界（关键词 / 忌重叠），禁止自己取证。取证与交叉验证交给队员。\
 广度调查归团队（见 team_orchestration_advanced）。
 
 【三、命题卡 `motion_card`（真对立轴须产卡；非见分歧就开辩）】

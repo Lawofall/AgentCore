@@ -1,6 +1,6 @@
 /**
- * 引用即驻留：把用户选中的文件落到对话工作区 ``attachments/``（本地直写 /
- * 云端 PUT），返回可塞进 PendingAttachment 的字段。绝对路径不进本模块状态。
+ * 附加文件：区内引用原路径；区外才复制进对话工作区 ``attachments/``
+ *（本地直写 / 云端 PUT），返回可塞进 PendingAttachment 的字段。绝对路径不进本模块状态。
  *
  * 云端会话的上传发生在**附加那一刻**（见 {@link residentAttachmentForFile}），不再
  * 推迟到点发送——推迟意味着用户点发送后才开始读盘 + 跨 IPC 搬字节 + PUT，点击看起来
@@ -12,6 +12,7 @@ import { hasLocalFiles } from "@/lib/capabilities";
 import { resolveConversationLocalTarget } from "@/services/sidecarRouting";
 import { uploadWorkspaceFile } from "@/services/workspace";
 import { getWorkspaceBinding } from "@/services/workspaceBinding";
+import { workspaceRelFromCite } from "@shared/citeWorkspacePath";
 import type {
   StageAttachmentDest,
   StagedAttachment,
@@ -25,13 +26,15 @@ export type ResideResult =
   | {
       ok: true;
       name: string;
-      /** 展示用相对路径（工作区 ``attachments/…`` 或文件名）。 */
+      /** 展示用相对路径（工作区原路径 / ``attachments/…`` / 文件名）。 */
       path: string;
       text: string;
       truncated: boolean;
       binary: boolean;
       workspacePath?: string;
       stagingId?: string;
+      citedRootId?: string;
+      citedRelPath?: string;
       /** 浏览器草稿：无会话时持 File，发送时再 PUT。 */
       fileBlob?: File;
     }
@@ -92,6 +95,9 @@ function fromStaged(s: StagedAttachment): ResideResult {
     binary: s.binary,
     workspacePath: s.workspacePath,
     stagingId: s.stagingId,
+    ...(s.citedRootId && s.citedRelPath
+      ? { citedRootId: s.citedRootId, citedRelPath: s.citedRelPath }
+      : {}),
   };
 }
 
@@ -229,10 +235,10 @@ export async function prepareBrowserFileAttachment(
 /**
  * 附加即驻留（拖 / 贴 / 浏览器选择）——调用方先把 chip 画出来，再 await 这里。
  *
- * - 本机工作区：交主进程从磁盘复制进 ``attachments/``，渲染进程完全不碰字节。
+ * - 本机工作区：区内引用原路径；区外才交主进程复制进 ``attachments/``。
  * - 云端会话：渲染进程手里就是 File，直接 PUT。
- * - 桌面草稿（尚无会话）：主进程暂存留底（重启可恢复；建会话后若落进本机项目仍能
- *   finalize），同时把 File 留在内存，发送时直传云端而不必跨 IPC 把字节读回来。
+ * - 桌面草稿（尚无会话）：主进程暂存留底（重启可恢复；建会话后若仍在该根则引用，
+ *   否则 finalize），同时把 File 留在内存，发送时直传云端而不必跨 IPC 把字节读回来。
  */
 export async function residentAttachmentForFile(
   conversationId: string | null,
@@ -272,6 +278,8 @@ export interface ResidentAttachmentInput {
   name: string;
   stagingId?: string;
   workspacePath?: string;
+  citedRootId?: string;
+  citedRelPath?: string;
   binary?: boolean;
   text: string;
   truncated: boolean;
@@ -341,7 +349,8 @@ async function restageFileBlobLocal(
 
 /**
  * 兜底驻留：把还没落地的附件写入本地工作区或上传到云端工作区。
- * 已有 ``workspacePath`` **且没有可再拷的字节** 才跳过。失败返回 reason。
+ * 已有 ``workspacePath`` **且没有可再拷的字节** 才跳过。区内引用（``citedRootId``
+ * 仍落在当前 dest 树内）不 ``finalize`` 进 ``attachments/``。失败返回 reason。
  *
  * 正常路径上附件在附加时就已驻留完（{@link residentAttachmentForFile}），这里只兜
  * 三种情形：重启后从草稿恢复的暂存件、附加时上传失败后的发送重试、以及历史纯文本引用。
@@ -358,6 +367,17 @@ export async function ensureAttachmentResident(
 ): Promise<ResidentAttachment> {
   if (att.workspacePath && !att.fileBlob && !att.stagingId) {
     return residentOk(att.workspacePath, att);
+  }
+
+  if (att.citedRootId && att.citedRelPath) {
+    const dest = await resolveAttachDest(conversationId);
+    if (dest) {
+      const rel = workspaceRelFromCite(dest, {
+        rootId: att.citedRootId,
+        relPath: att.citedRelPath,
+      });
+      if (rel) return residentOk(rel, att);
+    }
   }
 
   if (att.stagingId && window.fsApi?.finalizeStagedAttachment) {

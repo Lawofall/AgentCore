@@ -391,7 +391,7 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "question": "str",
         "assumption": "str",
     },
-    "tool.execute_start": {"tool": "str"},
+    "tool.execute_start": {"tool": "str", "url": "str", "host": "str"},
     "tool.execute_end": {
         "tool": "str",
         "status": "str",
@@ -401,6 +401,8 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
         "subcommand": "str",
         "command_preview": "str",
         "cwd_preview": "str",
+        "url": "str",
+        "host": "str",
     },
     "tool.args_parse_failed": {
         "pos": "int",
@@ -410,6 +412,7 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
     },
     "tool.args_salvaged": {"args_preview": "str"},
     "tool.web_search": {"query": "str", "hosts": "list"},
+    "tool.read_url_error": {"url": "str", "host": "str", "error": "str"},
     "worker.handoff": {
         "run_id": "str",
         "has_summary": "bool",
@@ -530,6 +533,14 @@ KEY_FIELDS: dict[str, dict[str, str]] = {
     "cost.ledger_write_failed": {"error": "str"},
     "cost.ledger_drain_before_reconcile_failed": {},
     "cost.currency_mixed": {"bucket": "str", "currencies": "list", "kept": "str"},
+    "workspace.atomic_replace_recovered": {"target": "str", "attempts": "int"},
+    "workspace.atomic_replace_retry": {
+        "target": "str",
+        "attempt": "int",
+        "max_attempts": "int",
+        "error": "str",
+    },
+    "workspace.atomic_write_inplace_fallback": {"target": "str", "error": "str"},
     "workspace.snapshot_created": {},
     "workspace.snapshot_failed": {"error": "str"},
     "workspace.system_snapshot_prune_failed": {"error": "str"},
@@ -999,7 +1010,9 @@ KEY_DESC: dict[str, str] = {
         "交付卡已发射（state + artifacts/accepted/rejected/gaps 计数）"
     ),
     "worker.escalate": "worker 升级求决策",
-    "tool.execute_end": "工具执行结束（status/duration_ms；error 时带 reason）",
+    "tool.execute_start": "工具开始执行（read_url/download_url 带 url/host）",
+    "tool.execute_end": "工具执行结束（status/duration_ms；error 时带 reason；URL 工具带 url/host）",
+    "tool.read_url_error": "read_url 抓取失败（url/host/error）",
     "tool.args_salvaged": "handoff 参数 JSON 窄 salvage 成功（裸字符串字段 / 截断闭合）",
     "worker.handoff": "worker 交接（chars=summary 长；body_chars=交付正文长）",
     "worker.prepare_phase": "worker 冷开分段耗时（phase + ms；每 phase 一行）",
@@ -1153,6 +1166,15 @@ KEY_DESC: dict[str, str] = {
     "event_loop.lag_summary": "事件环 60s 摘要（max_lag_ms / over_threshold；沉默≠没探针）",
     "event_sink.close": (
         "EventSink 真 close（开→关仅一条）；was_detached 区分先前仅断线 vs 仍附着收口"
+    ),
+    "workspace.atomic_replace_recovered": (
+        "工作区原子写 os.replace 在短暂占用后成功（WinError 5/32 重试）"
+    ),
+    "workspace.atomic_replace_retry": (
+        "工作区原子写 os.replace 遇到短暂占用，按退避重试"
+    ),
+    "workspace.atomic_write_inplace_fallback": (
+        "工作区原子写 replace 重试耗尽后降级原地 write_bytes（与 file_write 同档）"
     ),
     "workspace.index_build_start": "后台代码索引 ensure 开始（IndexMaintainer）",
     "workspace.index_build_complete": (

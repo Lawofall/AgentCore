@@ -78,7 +78,8 @@ describe("AttachmentChips 上传态", () => {
     const { container } = renderChips([
       chip({ workspacePath: "attachments/shot.png" }),
     ]);
-    expect(screen.getByText("文件")).toBeTruthy();
+    expect(screen.getByText("shot.png")).toBeTruthy();
+    expect(screen.queryByText("文件")).toBeNull();
     expect(screen.queryByText("上传中")).toBeNull();
     expect(container.querySelector("[data-upload-state]")).toBeNull();
   });

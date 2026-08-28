@@ -5,11 +5,6 @@ describe("memoryUpdatedToastCopy", () => {
   it("skips when the inline card is already on screen", () => {
     expect(memoryUpdatedToastCopy("semantic", true)).toBeNull();
     expect(memoryUpdatedToastCopy("quota", true)).toBeNull();
-    expect(memoryUpdatedToastCopy("episodic", true)).toBeNull();
-  });
-
-  it("skips episodic session digests even when the user is away", () => {
-    expect(memoryUpdatedToastCopy("episodic", false)).toBeNull();
   });
 
   it("heads-up semantic writes when away", () => {

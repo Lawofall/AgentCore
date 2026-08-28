@@ -2430,6 +2430,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/local-turns/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Heartbeat Local Turn Endpoint
+         * @description Refresh the sidecar occupy lease. Owner Bearer; never steals a cloud lease.
+         */
+        post: operations["heartbeat_local_turn_endpoint_v1_conversations__conversation_id__local_turns_heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/local-turns/journal": {
         parameters: {
             query?: never;
@@ -3351,10 +3371,11 @@ export interface paths {
         put?: never;
         /**
          * Grant External Folder
-         * @description Register a conversation external mount (readonly or organize).
+         * @description Register a conversation external mount (readonly, organize, or attach_rw).
          *
          *     Called after desktop mint (silent ``external_mount_readonly`` or user-confirmed
-         *     organize grant). Body carries ``root_id`` / label / mode only — never absolute paths.
+         *     organize / attach_rw grant). Body carries ``root_id`` / label / mode only — never
+         *     absolute paths. ``attach_rw`` is local-traditional only.
          *
          *     The response doubles as the device's declaration for this root: the caller's
          *     ``X-Client-Device`` is bound onto its live fulfill session *and* stored on the
@@ -7526,12 +7547,24 @@ export interface components {
          *
          *     Does not start a cloud SSE turn, mint a title, or compact. Same
          *     ``user_message_id`` / ``message_id`` retry is success.
+         *
+         *     ``regenerate=True`` patches that user row and deletes later messages
+         *     (same surgery as ``RegenerateMessageRequest``), then pins a new assistant.
+         *     ``attachments`` / ``agent_mentions``: omit to keep stored materials; send a
+         *     list (including empty) to replace them.
          */
         BeginLocalTurnRequest: {
             /** Agent Mentions */
-            agent_mentions?: components["schemas"]["AgentMention"][];
+            agent_mentions?: components["schemas"]["AgentMention"][] | null;
+            /** Attachments */
+            attachments?: components["schemas"]["MessageAttachment"][] | null;
             /** Message Id */
             message_id: string;
+            /**
+             * Regenerate
+             * @default false
+             */
+            regenerate: boolean;
             /** Trace Id */
             trace_id: string;
             /**
@@ -9636,7 +9669,7 @@ export interface components {
              * @default readonly
              * @enum {string}
              */
-            mode: "readonly" | "organize";
+            mode: "readonly" | "organize" | "attach_rw";
             /** Namespace */
             namespace: string;
             /** Root Id */
@@ -9834,8 +9867,9 @@ export interface components {
          * @description Register a session-scoped desktop root for this conversation.
          *
          *     Does **not** change workspace binding. ``root_id`` is the desktop-minted handle;
-         *     absolute paths never appear on the wire. ``mode`` is ``readonly`` (W3) or
-         *     ``organize`` (P1: move/copy/mkdir/trash-delete).
+         *     absolute paths never appear on the wire. ``mode`` is ``readonly`` (W3),
+         *     ``organize`` (move/copy/mkdir/trash-delete), or ``attach_rw`` (本机传统附加可写；
+         *     云协作拒绝该 mode).
          */
         GrantExternalReadonlyRequest: {
             /** Alias Hint */
@@ -9847,7 +9881,7 @@ export interface components {
              * @default readonly
              * @enum {string}
              */
-            mode: "readonly" | "organize";
+            mode: "readonly" | "organize" | "attach_rw";
             /** Root Id */
             root_id: string;
         };
@@ -10220,6 +10254,19 @@ export interface components {
             arguments: string;
             /** Name */
             name: string;
+        };
+        /**
+         * LocalTurnHeartbeatRequest
+         * @description Keep the sidecar occupy lease fresh (desktop, ~20s). Same owner as begin.
+         */
+        LocalTurnHeartbeatRequest: {
+            /** Message Id */
+            message_id: string;
+        };
+        /** LocalTurnHeartbeatResponse */
+        LocalTurnHeartbeatResponse: {
+            /** Ok */
+            ok: boolean;
         };
         /** LocalTurnJournalFact */
         LocalTurnJournalFact: {
@@ -10596,7 +10643,7 @@ export interface components {
              * @default semantic
              * @enum {string}
              */
-            kind: "episodic" | "semantic" | "quota";
+            kind: "semantic" | "quota";
             /** Summary */
             summary?: string | null;
         };
@@ -10645,20 +10692,21 @@ export interface components {
         };
         /**
          * MemoryUpdateView
-         * @description One memory-write notice for the conversation-tail card (two-layer memory).
+         * @description One memory-write notice for the conversation-tail card.
          *
          *     Projected from a ``memory_updates`` row. ``kind`` is the closed ``MemoryUpdateKind``
          *     set and selects the UI:
-         *     - ``episodic``: light tip; ``summary`` is the ≤200-char session digest; ``items`` empty.
          *     - ``semantic``: diff card; ``items`` lists add/update/remove bullets.
          *     - ``quota``: always-pool / billing skip; ``summary`` says why; ``items`` name the
          *       fingerprint row (``quota``) plus denied / holder rows.
          *
-         *     Returned only with the LATEST messages window, and pushed live on the per-user firehose.
+         *     Session digests are not cards. Returned only with the LATEST messages window, and
+         *     pushed live on the per-user firehose.
          *
          *     ``anchor_at`` is the last consolidated message's ``created_at`` — the thread position
          *     the card describes, which ``created_at`` (when the debounced pass happened to run) does
-         *     not give. Null on older rows and on writes with no message window.
+         *     not give. Live semantic writes set it; null on older rows and on writes with no
+         *     message window (leak-scan / quota).
          */
         MemoryUpdateView: {
             /** Anchor At */
@@ -10677,7 +10725,7 @@ export interface components {
              * @default semantic
              * @enum {string}
              */
-            kind: "episodic" | "semantic" | "quota";
+            kind: "semantic" | "quota";
             /** Summary */
             summary?: string | null;
         };
@@ -18231,6 +18279,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BeginLocalTurnResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    heartbeat_local_turn_endpoint_v1_conversations__conversation_id__local_turns_heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalTurnHeartbeatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalTurnHeartbeatResponse"];
                 };
             };
             /** @description Validation Error */

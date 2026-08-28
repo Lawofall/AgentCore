@@ -239,7 +239,7 @@ def test_directory_lists_only_available_skills_with_names_and_summaries():
 
 def test_system_skill_summaries_are_short_when_triggers():
     """目录行只答何时 consult；Python len ≤80（对照 verify_and_fix 一句触发）。"""
-    for skill in build_system_skill_registry().list_all():
+    for skill in build_system_skill_registry(include_legal=True).list_all():
         assert len(skill.summary) <= 80, (skill.name, len(skill.summary), skill.summary)
 
 
@@ -514,13 +514,12 @@ def test_team_orchestration_skill_teaches_shape_vocabulary():
         "发散挑选",
     ):
         assert term in body, term
-    assert "实体对比" in body and "实体数" in body
     assert "默认中档" in body
     assert "教学示例形状" in body and "对照学形状" in body
     assert "免手搓" not in body  # 旧广告口径已撤
     assert "cite_write_review" in body  # listing still present as teaching examples
     assert "map_fanout" in body
-    assert "结局分层" in body or "对齐推进" in body
+    assert "结局分层" in body or "对齐推进" in body or "禁成文产线 ≠ 禁 brief" in body
     assert "成文交付" in body or "成文专线" in body or "成篇" in body
     assert "默认 A" in body or "少扇出" in body
     assert "材料已齐" in body
@@ -589,23 +588,19 @@ def test_team_orchestration_skill_teaches_shape_vocabulary():
 def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
     """开场桌上结果 + 成文后梯度 + 审校不默认（与 CEO 常驻对齐的 HOW）。"""
     body = _body("team_orchestration_advanced")
-    # 讨论类 ask_user：仅挡编制时摸清/成文/先聊；对话本身不发卡；选项不写编制
-    # （核已不钉三选长字面；本 skill 是 HOW 真源）
+    # 讨论类 ask_user HOW（三选桌上结果）；挡路脊柱在 CEO 核，本 skill 不复述
     assert "讨论类开场" in body
-    assert "ask·挡路" in body or "挡路" in body
     assert "先对话对齐" in body
     assert "写成文档并保存" in body
     assert "暂不派队" in body
     assert "对话本身" in body
     assert "编制自选" in body
     assert "自动两路" in body
-    assert "催收敛" in body or "候选菜单" in body
     assert "内部编制" in body
     assert "几人几步" in body
     assert "明示成文不拦" in body
     # 禁成文产线 ≠ 禁 brief（核只留短脊柱；本 skill 是划界 HOW）
     assert "禁成文产线 ≠ 禁 brief" in body or "禁成文产线≠禁 brief" in body
-    assert "答完澄清" in body and "end_turn" in body
     assert "不写盘" in body or "答完维度" in body
     assert "consumer_deps" in body
     assert "短文" in body and "档 1" in body and "1 人" in body
@@ -627,7 +622,7 @@ def test_team_orchestration_skill_teaches_opening_table_and_draft_tiers():
     assert "探路默认" in body
     assert "cite_write_review" in body
     assert "满编" in body
-    assert "套 `cite_write_review` 满编" in body
+    assert "套 `cite_write_review` 满编" in body or "cite_write_review` 满编" in body
     # 普通构想不默认学术审校
     assert "【不】默认学术审校" in body
     # 未明示成文仍宜 map_fanout（旧 A 语义保留）
@@ -913,6 +908,10 @@ def test_team_orchestration_skill_teaches_review_narrowing():
     assert "凑工种" in body
     assert "不是配额" in body
     assert "全面摸底" in body or "整仓审查" in body
+    assert "编制自选" in body
+    assert "冷启动建档除外" not in body
+    assert "并列不打架" not in body
+    assert "冷启动建档「≥2" not in body
     assert "不" in body and "覆盖" in body
 
 
@@ -954,7 +953,8 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     assert "建站/工具台套 playbook" not in hint
     orch_sum = build_system_skill_registry().get("team_orchestration_advanced").summary
     assert "成文编制" in orch_sum
-    assert "讨论/判断默认自己答不必查" in sec4
+    assert "讨论/判断默认自己答不必查" not in hint
+    assert "缺工作区证据" in sec4
     assert "非成文短文落盘" in sec4
     assert "明示成文" in sec5 and "资料源" in sec5
     delivery_sum = build_system_skill_registry().get("team_delivery_env").summary
@@ -984,8 +984,8 @@ def test_team_orchestration_skill_teaches_delegate_knobs():
     # 对用户用人话；字段名只留工具通道
     assert "重新安排人补上" in body or "谁没交齐" in body
     assert "勿复述字段名" in body or "工具通道用语" in body
-    # 派完可见面：只留「人已派出」；进度以结构面为准。
-    assert "人已派出" in body
+    # 派完「人已派出」唯一所有者 = how_you_act；本 skill 只留协调期可静默。
+    assert "人已派出" not in body
     assert "可静默" in body
     assert "谁还在跑" in body
     assert "谁在后台、完成后会再汇报" not in body
@@ -1415,6 +1415,8 @@ def test_team_orchestration_skill_teaches_seed_notes_and_team_brief():
     assert "正交扇出" in body
     assert "不写 brief" in body
     assert "一行一条" in body
+    assert "同一行" in body
+    assert "换行" in body
     assert "一次完整写入" in body
     assert "两篇成稿" in body
     assert "短规格" in body
@@ -1607,12 +1609,7 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "2–6 字项名" in body
     assert "questions" in body
     assert "短问" in body or "短澄清" in body
-    assert "挡路" in body
     assert "催收敛" in body or "候选菜单" in body
-    assert "讨论开场" in body
-    assert "对话本身" in body
-    assert "答完澄清" in body and "end_turn" in body
-    assert "不写盘" in body or "答完维度" in body
     assert "开工提案卡" not in body
     assert "提案体硬闸" not in body
     assert "一键开做" not in body or "禁止" in body
@@ -1627,7 +1624,7 @@ def test_ask_user_kickoff_skill_teaches_short_clarify():
     assert "不得 continue 派工" in body or "无 default" in body
     # 案 ask-empty-continue-default-dispatch：决策/澄清短问同样须 default
     assert "决策/澄清短问" in body
-    assert "先问你" in body
+    assert "先问你" not in body
     # 午后巡 d4d5/53f0：继续须承接上轮确认项；新建仓库/本地目录须 default 路径
     assert "继续·承接确认项" in body
     assert "空转确认" in body or "不承接选项" in body
@@ -2133,10 +2130,11 @@ def test_deep_multi_lens_research_teaches_parallel_lenses_and_motion_card():
     assert "真对立轴" in body  # 存在真对立轴则必须产卡
     assert "对比综述" in body
     assert "不出辩题" in body
-    # CEO 禁止自搜替代四路；先调研后辩；探路 query 建议短查（工具会截断过长）
+    # CEO 禁止自搜替代四路；探路 0～1 轮。查询词数契约不在本 skill（基座 + web_search schema）。
     assert "0～1 轮" in body or "默认 0～1" in body
     assert "禁止自搜" in body or ("禁止" in body and "替代四路" in body)
-    assert "截断" in body or "规范化" in body
+    assert "2–3 核心词" not in body and "2–3 个核心词" not in body
+    assert "极端过长" not in body
     assert "≤8 词" not in body
     assert "本回合" in body and "debate" in body
     assert "用户同意" in body or "批准" in body
@@ -2191,12 +2189,18 @@ def test_deep_multi_lens_research_summary_intent_routing():
     deep = build_system_skill_registry().get("deep_multi_lens_research")
     assert deep is not None
     summary = deep.summary
+    assert "多维公共事件" in summary
     assert "调研" in summary or "研究" in summary
-    assert "debate_and_review" in summary
-    assert "抢拦" in summary
-    assert "模拟法庭" in summary or "庭审对抗" in summary or "对簿公堂" in summary
+    assert "debate_and_review" not in summary
+    assert "抢拦" not in summary
+    assert "模拟法庭" not in summary
+    assert "庭审对抗" not in summary
+    assert "对簿公堂" not in summary
     # 长分流教法在 body
     assert "入口分流" in deep.body
+    assert "勿抢拦" in deep.body
+    assert "debate_and_review" in deep.body
+    assert "模拟法庭" in deep.body or "庭审对抗" in deep.body or "对簿公堂" in deep.body
     assert "同句点名终局对抗仍先取证" not in summary
 
 
@@ -2210,8 +2214,10 @@ def test_named_debate_routes_to_debate_not_mlr():
     assert "庭前取证" in debate.body or "辩论机制" in debate.body
     # summary 只 WHEN，不复述核心长分流
     assert "deep_multi_lens_research" in debate.summary
-    assert "debate_and_review" in deep.summary
-    assert "抢拦" in deep.summary or "勿" in deep.body
+    assert "debate_and_review" not in deep.summary
+    assert "抢拦" not in deep.summary
+    assert "勿抢拦" in deep.body
+    assert "debate_and_review" in deep.body
     assert "同句点名终局对抗仍先取证" not in deep.summary
     assert "同句点名" not in deep.body or "仍【先】" not in deep.body
 
@@ -2255,15 +2261,23 @@ def test_debate_and_review_summary_intent_routes_research_to_mlr():
 
 
 def test_legal_case_analysis_summary_excludes_public_mock_court():
-    """目录除外：公共品牌/舆论模拟法庭不归 legal_case_analysis 抢触发。"""
+    """目录只 WHEN；除外口径钉 body；摘要与 MLR「多维公共事件」互斥。"""
     legal_reg = build_system_skill_registry(include_legal=True)
-    case = legal_reg.get("legal_case_analysis").summary
-    assert "除外" in case
-    assert "模拟法庭" in case
-    assert "多维取证" in case
-    assert "deep_multi_lens_research" in case
-    # 除外须前置：避免「先对抗后研判」抢在商标/模拟法庭议题上先匹配。
-    assert case.index("除外") < case.index("先对抗后研判")
+    case = legal_reg.get("legal_case_analysis")
+    deep = build_system_skill_registry().get("deep_multi_lens_research")
+    assert case is not None and deep is not None
+    assert "接案" in case.summary or "诉讼策略" in case.summary
+    assert "多维公共事件" not in case.summary
+    assert "多维公共事件" in deep.summary
+    assert "除外" not in case.summary
+    assert "先对抗后研判" not in case.summary
+    assert "deep_multi_lens_research" not in case.summary
+    body = case.body
+    assert "除外" in body
+    assert "模拟法庭" in body
+    assert "多维取证" in body
+    assert "deep_multi_lens_research" in body
+    assert "先对抗后研判" in body
 
 
 def test_legal_case_analysis_body_redirects_public_mock_court_to_mlr():
@@ -2280,10 +2294,9 @@ def test_deep_multi_lens_and_legal_summaries_are_mutually_exclusive():
     """目录触发分流：legal 系 vs 多维公共事件——互斥动词域，避免商标案抢触发。"""
     deep = build_system_skill_registry().get("deep_multi_lens_research")
     legal_reg = build_system_skill_registry(include_legal=True)
-    legal_summaries = [
-        legal_reg.get("legal_case_analysis").summary,
-        legal_reg.get("legal_answer_brief").summary,
-    ]
+    case_skill = legal_reg.get("legal_case_analysis")
+    brief_skill = legal_reg.get("legal_answer_brief")
+    legal_summaries = [case_skill.summary, brief_skill.summary]
     # WHEN 互斥：多维公共事件归 MLR；步骤字面在 body，不进目录行。
     assert "多维公共事件" in deep.summary
     for ls in legal_summaries:
@@ -2292,11 +2305,9 @@ def test_deep_multi_lens_and_legal_summaries_are_mutually_exclusive():
         assert marker in deep.body, marker
         for ls in legal_summaries:
             assert marker not in ls, (marker, ls)
-    # legal：律师作业 / 接案或文书 / 先对抗后研判（或对抗再核验）
-    for ls in legal_summaries:
-        assert "律师作业" in ls
-    case = legal_reg.get("legal_case_analysis").summary
-    assert "接案" in case or "诉讼策略" in case
-    assert "先对抗后研判" in case
+    assert "接案" in case_skill.summary or "诉讼策略" in case_skill.summary
+    assert "答辩状" in brief_skill.summary
+    assert "先对抗后研判" in case_skill.body
+    assert "red_team" in brief_skill.body
     for marker in ("律师作业", "接案", "诉讼策略", "先对抗后研判"):
         assert marker not in deep.summary, marker

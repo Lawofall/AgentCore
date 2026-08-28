@@ -120,14 +120,11 @@ def test_resume_continuity_steer_for_confirm_pre_pause():
     steer = resume_continuity_steer(
         prior_deliverable="需要先确认一个关键信息：调研对象是什么？"
     )
-    assert "禁止" in steer
-    assert "请确认" in steer
+    assert "先问你" not in steer
+    assert "请确认" not in steer
     assert "档位" in steer
     assert "按确认默认" in steer
-    assert "先问你" in steer
-    assert "复述" in steer or "沿用" in steer
-    assert "路径" in steer
-    assert "空转确认" in steer or "不承接选项" in steer
+    assert "空转确认" in steer or "承接选项" in steer
 
 
 def test_reconcile_drops_confirm_pre_pause_when_new_delivers():
@@ -195,6 +192,8 @@ def test_resume_continuity_steer_for_dispatch_kickoff():
     assert "交付说明" in steer
     assert "自然衔接续写" not in steer
     assert "已交付前文如下" not in steer
+    assert "方向：派团队" not in steer
+    assert "开委派" not in steer
 
 
 def test_partial_verdict_rejects_posture_a():
@@ -838,7 +837,8 @@ def test_b1_ceiling_bans_hollow_teach_invite():
     assert claims_hollow_teach_invite(hollow)
     steer = ceiling_honesty_steer(reason="token_budget")
     assert steer is not None
-    assert "请开讲" in steer or "请讲" in steer
+    assert "请开讲" not in steer and "请讲" not in steer and "我在听" not in steer
+    assert "姿势 A" in steer
     assert "continue_from_run_id" in steer
     out = enforce_ceiling_closing_honesty(hollow, reason="token_budget")
     assert out == hollow

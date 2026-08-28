@@ -1,7 +1,7 @@
 """Delegate tool schema and constants.
 
-Schema layer (工具面瘦身): short trigger + firing when/not + key param cues.
-编制自选 / 结局分层 lives in the CEO core; advanced HOW lives in
+Schema layer (工具面瘦身): short trigger + 拆任务合同 + playbook/tasks 互斥.
+用/不用路由与编制自选 / 结局分层 live in the CEO core; advanced HOW lives in
 ``consult(team_orchestration_advanced)``.
 """
 
@@ -39,11 +39,9 @@ TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
     },
 }
 
-# Trigger + firing when/not + structure contract. HOW → consult(team_orchestration_advanced).
+# Trigger + 拆任务合同 + playbook/tasks 互斥. HOW → consult(team_orchestration_advanced).
 DELEGATE_DESCRIPTION = (
     f"拆任务给临时团队（默认手写顶层 tasks：role+task，≤{MAX_DELEGATION_TASKS}；非终结）。"
-    "用：改产物、成规模取证、点名对比、跨模块摸底。"
-    "不用：讨论/判断/闲聊、已知一两处文件、单符号。"
     "playbook 与 tasks 二选一（具名 playbook 仅固化流水线快捷进阶）："
     "禁止二者同时有内容（反例：既填 code_audit 又传 tasks）；绿场必填 playbook_args.app。"
     "HOW→consult(team_orchestration_advanced)。"
@@ -138,8 +136,8 @@ DELEGATE_PARAMETERS = {
         "team_brief": {
             "type": "string",
             "description": (
-                "全队共识（含「已确认约束」）；各 worker 开局可见；"
-                "约束块优先于附件旧角色表。非空会建便签墙并按行贴。"
+                "全队共识（含「已确认约束」同一行）；各 worker 开局可见；"
+                "约束块优先于附件旧角色表。非空会建便签墙；换行=一张便签。"
             ),
         },
     },

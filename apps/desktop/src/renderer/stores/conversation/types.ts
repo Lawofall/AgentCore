@@ -126,8 +126,8 @@ export interface MemoryUpdateItem {
   projectId?: string | null;
 }
 
-/** One memory-write notice on the conversation timeline (two-layer memory).
- * `kind: "episodic"` → light tip (`summary`); `kind: "semantic"` → diff card (`items`);
+/** One memory-write notice on the conversation timeline.
+ * `kind: "semantic"` → diff card (`items`);
  * `kind: "quota"` → the always pool is full: `summary` says so and `items` name what could
  * not be written plus the entries holding the pool (审计 CTX-A2).
  * Loaded with the latest messages window + pushed live on the firehose (`memory_updated`). */
@@ -136,7 +136,7 @@ export interface MemoryUpdate {
   createdAt: string;
   /**
    * 被总结的那一轮的末尾 —— 本次固化窗口最后一条消息的 `created_at`（`memory_updates.anchor_at`）。
-   * episodic 卡才有；semantic / quota 为 null。固化是回合结束后异步跑的，`createdAt`（落库时刻）
+   * live 语义卡带锚点。固化是回合结束后异步跑的，`createdAt`（落库时刻）
    * 比它总结的那一轮晚一两分钟，那时用户往往已经发出下一条消息，按 `createdAt` 锚定就会把卡片
    * 挤到后面去。时间线锚定与卡片时间戳一律走
    * {@link import("@/components/chat/messageTimeline").memoryAnchorTime}。
@@ -287,7 +287,7 @@ export interface ConversationRuntime {
   toolStartedMs: Record<string, number>;
   /**
    * 桌面：本会话最近一回合的执行路径（绑本机工作区时有意义）。
-   * `sidecar` = 本地引擎；`cloud_bridge` = 云端过桥（含探活失败 / 显式强制关 / 附件退云）；
+   * `sidecar` = 本地引擎；`cloud_bridge` = 云端过桥（含探活失败 / 显式强制关）；
    * `null` = 纯云会话或尚未判定。不落盘；驱动 Composer 弱状态（非引擎切换器）。
    */
   executionVia: "sidecar" | "cloud_bridge" | null;

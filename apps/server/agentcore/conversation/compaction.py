@@ -18,18 +18,21 @@ Design (mirrors the offline memory consolidation pattern):
   (``compaction_failure_cooldown_seconds``, or the failure's own ``retry_after`` when
   it is longer) so neither trigger re-schedules until it expires (``_inflight_tasks``
   still dedupes in-flight).
-- **Near-ceiling (pre-turn, 定案⑦A)** — when last-turn ``input_tokens`` are near the
-  model window (``compaction_near_context_ratio`` of ``context_length``, or absolute
-  ``compaction_near_context_tokens`` when length is unknown), ``maybe_compact_near_ceiling``
-  **awaits** fold pass(es) before history assemble so the upcoming turn sees the new
-  summary. Does not wait for the user to type ``/compact``. This is the one path with
-  a human blocked on it, so its passes run ``user_waiting``: a 429 fails on the spot
-  rather than being slept off (``llm.provider.call_budget``). Bypasses the *guessed*
-  failure cooldown (a retry might work, and a context at the ceiling is urgent) but
-  not an upstream-declared one (``_in_declared_cooldown``): a 429 that names the
-  moment its allowance returns has already answered「重试会不会成功」with no. Honesty:
-  rolling summary may drop process detail — hard identifiers are kept best-effort;
-  near-ceiling cannot shrink an already-mined recency window of huge verbatim turns.
+- **Near-ceiling (pre-turn, 定案⑦A)** — when last-turn **single-request**
+  ``prompt_tokens`` are near **this turn's** model window (``compaction_near_context_ratio``
+  of ``context_length``, or absolute ``compaction_near_context_tokens`` when length
+  is unknown), ``compact_before_turn`` **awaits** fold pass(es) before history assemble.
+  A successful fold proceeds even if the stored watermark still looks near. If the
+  watermark is near **and** the fold did not write, the send is refused (product
+  overflow copy) so the turn never spends an upstream 413. Does not wait for the
+  user to type ``/compact``. This is the one path with a human blocked on it, so
+  its passes run ``user_waiting``: a 429 fails on the spot rather than being slept
+  off (``llm.provider.call_budget``). Bypasses the *guessed* failure cooldown (a
+  retry might work, and a context at the ceiling is urgent) but not an upstream-declared
+  one (``_in_declared_cooldown``): a 429 that names the moment its allowance returns
+  has already answered「重试会不会成功」with no. Honesty: rolling summary may drop
+  process detail — hard identifiers are kept best-effort; near-ceiling cannot shrink
+  an already-mined recency window of huge verbatim turns.
 - **Cooldowns expire on their own terms** — a declared one is capped at
   ``DECLARED_COOLDOWN_CAP_SECONDS`` (an upstream day reset must not freeze folding
   for half a day while the chat keeps growing) and is void as soon as the account's
@@ -44,12 +47,13 @@ Design (mirrors the offline memory consolidation pattern):
   turns. Recomputing it every turn would rewrite the prompt prefix and bust DeepSeek's
   exact-prefix cache (runtime/resolve/prompt.py) — the one thing this must never do.
 
-Robust by construction: credentials resolve platform-first via
-``run_background_llm`` (quota-gated + one BYOK retry on platform auth reject),
-the pass is gated so a trivial fold never spends an LLM call, and ANY failure
-(LLM down, timeout, empty output, quota skip) leaves the stored state untouched
-and returns without raising — post-turn compaction is best-effort enrichment;
-near-ceiling is best-effort too (turn still proceeds if fold cannot run).
+Robust by construction: credentials follow this conversation's chat payer via
+``run_compaction_llm`` (explicit background-slot BYOK still wins; platform chat
+still quota-gated + one BYOK retry on platform auth reject), the pass is gated
+so a trivial fold never spends an LLM call, and ANY failure (LLM down, timeout,
+empty output, quota skip) leaves the stored state untouched and returns without
+raising — post-turn compaction is best-effort enrichment. Near-ceiling that
+cannot write **refuses the send** instead of hitting upstream 413.
 
 Best-effort is not the same as unsaid. Once a chat outgrows the loader's fallback
 window, a fold that keeps failing stops being an unspent optimisation and starts
@@ -66,7 +70,7 @@ import time
 from collections.abc import Sequence
 
 from agentcore.billing.allowance import allowance_epoch
-from agentcore.billing.gate import BackgroundLlmSkip, run_background_llm
+from agentcore.billing.gate import BackgroundLlmSkip, run_compaction_llm
 from agentcore.config import settings
 from agentcore.conversation.failure_visible import export_visible_text
 from agentcore.core.errors import recovery_at_iso
@@ -353,7 +357,7 @@ async def compact_conversation(
         # sides: skip WITHOUT advancing the watermark so a later pass can retry. A
         # refusal that dated its own recovery hands that date over here rather than
         # leaving us to guess 90 seconds at a wall upstream measured in hours.
-        bg = await run_background_llm(user_id, purpose="compaction", runner=_runner)
+        bg = await run_compaction_llm(user_id, conversation_id, runner=_runner)
         if isinstance(bg, BackgroundLlmSkip):
             _mark_failure_cooldown(
                 conversation_id,
@@ -706,30 +710,68 @@ async def ensure_compaction_before_turn(
         return False
 
 
+async def _load_fit_watermark(
+    conversation_id: str, model_id: str | None
+) -> tuple[int, int | None]:
+    """Last positive single-request prompt + this turn's model window.
+
+    Metrics read failures return ``(0, window)`` so a telemetry blip cannot
+    refuse a send. Empty-fail zeros are skipped inside ``latest_prompt_tokens``.
+    """
+    tokens = 0
+    try:
+        async with async_session_factory() as session:
+            loaded = await TurnMetricsRepository(session).latest_prompt_tokens(
+                conversation_id
+            )
+            if loaded is None:
+                conv = await ConversationRepository(session).get_by_id_unscoped(
+                    conversation_id
+                )
+                loaded = (
+                    int(getattr(conv, "compaction_input_tokens", None) or 0)
+                    if conv
+                    else 0
+                )
+            tokens = int(loaded or 0)
+    except Exception as e:
+        logger.warning(
+            "compaction.near_ceiling_failed",
+            conversation_id=conversation_id,
+            error=str(e),
+        )
+        tokens = 0
+    context_length: int | None = None
+    if model_id:
+        context_length = model_metadata_for(model_id).context_length
+    return tokens, context_length
+
+
+def _overflow_error() -> Exception:
+    from agentcore.core.errors import ContextOverflowError
+    from agentcore.llm.errors import CONTEXT_OVERFLOW_PRODUCT
+
+    return ContextOverflowError(CONTEXT_OVERFLOW_PRODUCT)
+
+
 async def maybe_compact_near_ceiling(
     conversation_id: str,
     *,
     model_id: str | None = None,
 ) -> bool:
-    """Pre-turn facade: load last input tokens + model window, then maybe await fold.
+    """Pre-turn facade: load last prompt tokens + model window, then maybe await fold.
 
-    Token source: latest ``turn_metrics.input_tokens``, else
-    ``conversations.compaction_input_tokens``. Best-effort; never raises.
+    Token source: latest positive ``turn_metrics.prompt_tokens`` (legacy fallback
+    ``input_tokens``), else ``conversations.compaction_input_tokens``. Best-effort;
+    never raises.
     """
     if not settings.compaction_enabled:
         return False
     try:
-        async with async_session_factory() as session:
-            tokens = await TurnMetricsRepository(session).latest_input_tokens(conversation_id)
-            if tokens is None:
-                conv = await ConversationRepository(session).get_by_id_unscoped(conversation_id)
-                tokens = int(getattr(conv, "compaction_input_tokens", None) or 0) if conv else 0
-        context_length: int | None = None
-        if model_id:
-            context_length = model_metadata_for(model_id).context_length
+        tokens, context_length = await _load_fit_watermark(conversation_id, model_id)
         return await ensure_compaction_before_turn(
             conversation_id,
-            input_tokens=int(tokens or 0),
+            input_tokens=tokens,
             context_length=context_length,
         )
     except Exception as e:
@@ -739,6 +781,29 @@ async def maybe_compact_near_ceiling(
             error=str(e),
         )
         return False
+
+
+async def compact_before_turn(
+    conversation_id: str,
+    *,
+    model_id: str | None = None,
+) -> None:
+    """Fold if near this model's window; refuse the send when near and nothing wrote.
+
+    A successful fold proceeds even if the stored watermark still looks near.
+    Post-turn ``schedule_compaction_if_due`` stays best-effort skip.
+    """
+    tokens, context_length = await _load_fit_watermark(conversation_id, model_id)
+    near = near_context_ceiling(tokens, context_length)
+    wrote = False
+    if near and settings.compaction_enabled:
+        wrote = await ensure_compaction_before_turn(
+            conversation_id,
+            input_tokens=tokens,
+            context_length=context_length,
+        )
+    if near and not wrote:
+        raise _overflow_error()
 
 
 async def _run(

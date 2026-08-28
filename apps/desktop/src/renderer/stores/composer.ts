@@ -88,6 +88,8 @@ function sanitizeAttachment(raw: unknown): PendingAttachment | null {
     out.conversationId = a.conversationId;
   if (typeof a.workspacePath === "string") out.workspacePath = a.workspacePath;
   if (typeof a.stagingId === "string") out.stagingId = a.stagingId;
+  if (typeof a.citedRootId === "string") out.citedRootId = a.citedRootId;
+  if (typeof a.citedRelPath === "string") out.citedRelPath = a.citedRelPath;
   if (typeof a.binary === "boolean") out.binary = a.binary;
   return out;
 }
@@ -125,6 +127,8 @@ function serializeAttachments(
       if (a.conversationId) out.conversationId = a.conversationId;
       if (a.workspacePath) out.workspacePath = a.workspacePath;
       if (a.stagingId) out.stagingId = a.stagingId;
+      if (a.citedRootId) out.citedRootId = a.citedRootId;
+      if (a.citedRelPath) out.citedRelPath = a.citedRelPath;
       if (a.binary) out.binary = a.binary;
       return out;
     });

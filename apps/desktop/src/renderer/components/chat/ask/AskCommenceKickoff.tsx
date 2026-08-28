@@ -10,7 +10,9 @@ import {
 } from "@/lib/bindLocalFolder";
 import { grantHintsFromAskOption } from "@/lib/grantFolderHints";
 import {
+  formatGrantAttachFolderAnswer,
   formatGrantOrganizeFolderAnswer,
+  pickAndGrantAttachFolder,
   pickAndGrantOrganizeFolder,
 } from "@/lib/grantOrganizeFolder";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
@@ -94,23 +96,37 @@ export function AskCommenceKickoffBody({
       return;
     }
 
-    if (opt.action === "grant_organize_folder") {
+    if (opt.action === "grant_organize_folder" || opt.action === "grant_attach_folder") {
       const hints = grantHintsFromAskOption(opt);
-      const result = await pickAndGrantOrganizeFolder(conversationId, hints);
+      const result =
+        opt.action === "grant_attach_folder"
+          ? await pickAndGrantAttachFolder(conversationId, hints)
+          : await pickAndGrantOrganizeFolder(conversationId, hints);
       if (!result.ok) {
         if (result.reason === "unavailable") {
-          setBindError("整理授权仅桌面端可用");
+          setBindError(
+            opt.action === "grant_attach_folder"
+              ? "附加可写授权仅桌面端可用"
+              : "整理授权仅桌面端可用",
+          );
         } else {
           setBindError(result.message);
         }
         setBindBusyLabel(null);
         return;
       }
-      const value = formatGrantOrganizeFolderAnswer(
-        opt.label,
-        result.displayLabel ?? result.root.name,
-        result.namespace,
-      );
+      const value =
+        opt.action === "grant_attach_folder"
+          ? formatGrantAttachFolderAnswer(
+              opt.label,
+              result.displayLabel ?? result.root.name,
+              result.namespace,
+            )
+          : formatGrantOrganizeFolderAnswer(
+              opt.label,
+              result.displayLabel ?? result.root.name,
+              result.namespace,
+            );
       try {
         await onBindResolve(answer.composeWithAnswer("kickoff", q.id, value));
       } catch {

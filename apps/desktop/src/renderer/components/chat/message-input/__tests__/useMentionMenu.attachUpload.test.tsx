@@ -9,7 +9,7 @@ import { useRef, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/useConversations", () => ({ getConversations: () => [] }));
-vi.mock("@/hooks/useFolders", () => ({ getFolders: () => [] }));
+vi.mock("@/hooks/useFolders", () => ({ getFolders: vi.fn(() => []) }));
 vi.mock("@/services/messages", () => ({ fetchMessageWindow: vi.fn() }));
 vi.mock("@/services/workspaceBinding", () => ({
   getWorkspaceBinding: vi.fn(),
@@ -25,6 +25,7 @@ vi.mock("../resideAttachment", async (importOriginal) => {
   };
 });
 
+import { getFolders } from "@/hooks/useFolders";
 import type { ComposerBodyHandle } from "../ComposerBodyEditor";
 import { __clearAttachmentUploadsForTests } from "../attachmentUploads";
 import type {
@@ -77,7 +78,13 @@ function deferred() {
 }
 
 /** 真 React state：chip 的函数式 patch 才观察得到。 */
-function useMentionHarness(conversationId: string | null) {
+function useMentionHarness(
+  conversationId: string | null,
+  onAttachmentFolderHint?: (hint: {
+    folderId: string;
+    folderName: string;
+  }) => void,
+) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [agentMentions, setAgentMentions] = useState<PendingAgentMention[]>([]);
@@ -101,6 +108,7 @@ function useMentionHarness(conversationId: string | null) {
     agentMentions,
     setAgentMentions,
     bodyRef,
+    onAttachmentFolderHint,
   });
   return { attachments, mention, value };
 }
@@ -109,6 +117,7 @@ beforeEach(() => {
   __clearAttachmentUploadsForTests();
   pick.mockReset();
   ensure.mockReset();
+  vi.mocked(getFolders).mockReturnValue([]);
 });
 
 describe("回形针附加即上传", () => {
@@ -215,5 +224,37 @@ describe("回形针附加即上传", () => {
     expect(result.current.attachments).toHaveLength(1);
     expect(result.current.attachments[0].uploadState).toBeUndefined();
     expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it("草稿回形针：已登记本机根内的文件 → 提示跟来源文件夹", async () => {
+    vi.mocked(getFolders).mockReturnValue([
+      {
+        id: "f-docs",
+        name: "文档",
+        mode: "local",
+        localRootId: "root-1",
+        localSubpath: null,
+      },
+    ]);
+    pick.mockResolvedValue({
+      ...stagedPick(),
+      citedRootId: "root-1",
+      citedRelPath: "docs/report.xlsx",
+    });
+    const onHint = vi.fn();
+    const { result } = renderHook(() => useMentionHarness(null, onHint));
+
+    await act(async () => {
+      await result.current.mention.pickLocalFile();
+    });
+
+    expect(result.current.attachments[0]).toMatchObject({
+      citedRootId: "root-1",
+      citedRelPath: "docs/report.xlsx",
+    });
+    expect(onHint).toHaveBeenCalledWith({
+      folderId: "f-docs",
+      folderName: "文档",
+    });
   });
 });

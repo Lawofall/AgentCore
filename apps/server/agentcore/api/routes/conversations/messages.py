@@ -27,6 +27,8 @@ from agentcore.api.schemas import (
     AgentMention,
     BeginLocalTurnRequest,
     BeginLocalTurnResponse,
+    LocalTurnHeartbeatRequest,
+    LocalTurnHeartbeatResponse,
     LocalTurnJournalRequest,
     LocalTurnStreamSegmentsRequest,
     MemoryUpdateView,
@@ -57,6 +59,7 @@ from agentcore.conversation.service import (
     abort_local_turn,
     append_local_turn_journal,
     begin_local_turn,
+    heartbeat_local_turn,
     record_local_turn,
     stream_chat,
     upsert_local_turn_stream_segments,
@@ -810,9 +813,38 @@ async def begin_local_turn_endpoint(
         user_message_id=body.user_message_id,
         message_id=body.message_id,
         trace_id=body.trace_id,
-        agent_mentions=[m.model_dump() for m in body.agent_mentions] or None,
+        agent_mentions=(
+            None
+            if body.agent_mentions is None
+            else [m.model_dump() for m in body.agent_mentions]
+        ),
+        regenerate=body.regenerate,
+        attachments=(
+            [a.model_dump(mode="json") for a in body.attachments]
+            if body.attachments is not None
+            else None
+        ),
     )
     return BeginLocalTurnResponse(**result)
+
+
+@router.post(
+    "/{conversation_id}/local-turns/heartbeat",
+    response_model=LocalTurnHeartbeatResponse,
+)
+async def heartbeat_local_turn_endpoint(
+    conversation_id: str,
+    body: LocalTurnHeartbeatRequest,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+):
+    """Refresh the sidecar occupy lease. Owner Bearer; never steals a cloud lease."""
+    await _require_owned_conversation(conversation_id, user.user_id, conv_repo)
+    ok = await heartbeat_local_turn(
+        conversation_id=conversation_id,
+        message_id=body.message_id,
+    )
+    return LocalTurnHeartbeatResponse(ok=ok)
 
 
 @router.post("/{conversation_id}/local-turns/journal", response_model=StatusResponse)

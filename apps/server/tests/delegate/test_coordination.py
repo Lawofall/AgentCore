@@ -1686,7 +1686,38 @@ def test_all_completed_inject_carries_output_without_unconditional_audit():
     assert "先派审计再收尾" not in text
 
 
-def test_all_completed_inject_names_accepted_files():
+def test_all_completed_inject_write_form_without_files_is_not_delivery():
+    from agentcore.runtime.coordination.inject import format_coordination_events
+    from agentcore.runtime.runs.plan import RunPlan
+    from agentcore.runtime.runs.types import Deliverable, RunSpec
+
+    session = CoordinationSession(execution_id="e-icon", total_workers=1)
+    session.live_plan = RunPlan(
+        nodes=[
+            RunSpec(
+                run_id="w1",
+                role="工程师",
+                task="做图标",
+                deliverable=Deliverable(form="workspace", artifacts=["build/icon.ico"]),
+            )
+        ]
+    )
+    session.harvest_user_facts = {"nodes": [], "files": [], "outstanding_tool_failures": []}
+    text = format_coordination_events(
+        session,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.ALL_COMPLETED,
+                payload={"completed": 1, "total": 1, "user_facts": session.harvest_user_facts},
+            )
+        ],
+    )
+    assert "队员回合结束不是用户交付" in text
+    assert "不得向用户宣称完成" in text
+    assert "不得宣称已交付" in text
+    assert "不要把队员回合结束当成用户交付" in text
+    assert "已接受落盘" not in text
+    assert "活没干完就接着干" not in text
     from agentcore.runtime.coordination.inject import format_coordination_events
 
     paths = ["工作稿/报告.md", "工作稿/附录.md"]

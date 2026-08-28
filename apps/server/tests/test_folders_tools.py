@@ -265,8 +265,9 @@ def test_create_folder_schema_and_registration():
     # Must not read as "make a subdirectory" — that is mkdir.
     assert "mkdir" in desc
     assert "用户明确" in desc or "明确要求" in desc
-    assert "禁止为过写盘闸" in desc
-    assert "自动建云文件夹" in desc
+    # 过闸/裸聊写盘禁令在 team_cross_folder skill，schema 不复述。
+    assert "禁止为过写盘闸" not in desc
+    assert "自动建云文件夹" not in desc
     parent_desc = props["parent_path"]["description"]
     assert "resolve_folder" in parent_desc
     assert "顶层" in parent_desc

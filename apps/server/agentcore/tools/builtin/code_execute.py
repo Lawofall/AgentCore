@@ -89,8 +89,8 @@ _USAGE_TAIL = (
     "工作区文件请用相对路径（如 fib.py），不要假设 /workspace 之类的绝对路径。"
     "会话授权的区外目录以 `external/<别名>/…` 走文件工具；若代码需真实 OS 路径，"
     "读环境变量 `AGENTCORE_EXTERNAL_<别名大写>`（由执行环境注入，勿把绝对路径"
-    "写进回复）。④ 抓取网页或调用公开 HTTP API 优先用 read_url / web_search "
-    "工具，不要在代码里发网络请求。⑤ 大 zip 持久解压到工作区请用 archive_extract；"
+    "写进回复）。④ 公开网页摘录用 read_url / web_search；勿把爬虫写进本工具。"
+    "⑤ 大 zip 持久解压到工作区请用 archive_extract；"
     "勿只靠本工具解压后假定内容已在 canonical 工作区树可见。⑥ 看已有源码 / 翻文件请用 "
     "file_read（可分页）；在源码里搜符号、计数请用 grep / code_search。"
     "【禁止】为看正文写脚本 print / 整文件 dump 到 stdout，也【禁止】open 源码再正则扫描当检索。"
@@ -153,14 +153,20 @@ def code_execute_description(
     return where + tail
 
 
-def _make_output_callback(context: ToolContext):
+def _make_output_callback(
+    context: ToolContext, env: dict[str, str] | None = None
+):
     """Forward sandbox output chunks via ``on_progress`` when a live sink is wired."""
     on_progress = context.on_progress
     if on_progress is None:
         return None
 
     def callback(stream: str, chunk: str) -> None:
-        on_progress("output", {"stream": stream, "chunk": chunk})
+        from agentcore.core.ephemeral_env import scrub_env_values
+
+        on_progress(
+            "output", {"stream": stream, "chunk": scrub_env_values(chunk, env)}
+        )
 
     return callback
 
@@ -232,6 +238,14 @@ class CodeExecuteTool:
                             "执行时忽略"
                         ),
                     },
+                    "env": {
+                        "type": "object",
+                        "additionalProperties": {"type": "string"},
+                        "description": (
+                            "当次进程环境变量。凭据走这里，勿写入 code / 工作区；"
+                            "值不落盘。禁覆盖 PATH 等。"
+                        ),
+                    },
                 },
                 "required": ["code"],
             },
@@ -267,6 +281,22 @@ class CodeExecuteTool:
                 error=msg,
                 duration_ms=int((time.monotonic() - start) * 1000),
                 metadata={"code": "language_unavailable"},
+                contract_failure=True,
+            )
+
+        from agentcore.core.ephemeral_env import EnvParseError, parse_ephemeral_env
+
+        try:
+            exec_env = parse_ephemeral_env(arguments.get("env"))
+        except EnvParseError as exc:
+            msg = exc.message
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output=msg,
+                error=msg,
+                duration_ms=int((time.monotonic() - start) * 1000),
+                metadata={"code": "env_invalid"},
                 contract_failure=True,
             )
 
@@ -329,7 +359,8 @@ class CodeExecuteTool:
             timeout_seconds=timeout,
             # Primary hang kill: silence; wall remains the short hard cap (≤60s).
             idle_timeout_seconds=min(int(timeout), EXEC_IDLE_TIMEOUT_DEFAULT_S),
-            on_output=_make_output_callback(context),
+            env=exec_env,
+            on_output=_make_output_callback(context, exec_env),
             network_mode=(
                 "restricted"
                 if _permission_allows_restricted_network(context.permission_axes)
@@ -364,11 +395,16 @@ class CodeExecuteTool:
             )
         duration_ms = int((time.monotonic() - start) * 1000)
 
+        from agentcore.core.ephemeral_env import scrub_env_values
+
+        stdout = scrub_env_values(result.stdout or "", exec_env)
+        stderr = scrub_env_values(result.stderr or "", exec_env)
+
         output_parts = []
-        if result.stdout:
-            output_parts.append(f"stdout:\n{result.stdout}")
-        if result.stderr:
-            output_parts.append(f"stderr:\n{result.stderr}")
+        if stdout:
+            output_parts.append(f"stdout:\n{stdout}")
+        if stderr:
+            output_parts.append(f"stderr:\n{stderr}")
         if not output_parts:
             output_parts.append("（无输出）")
 
@@ -384,8 +420,8 @@ class CodeExecuteTool:
         # the flattened "stdout:\n…\nstderr:\n…" text. Kept structured so failures
         # (non-zero exit) surface stderr distinctly.
         display = {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
+            "stdout": stdout,
+            "stderr": stderr,
             "exit_code": result.exit_code,
             "language": language,
         }

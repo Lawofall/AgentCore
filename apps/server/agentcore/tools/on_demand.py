@@ -53,19 +53,19 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
 )
 
 ON_DEMAND_SUMMARIES: dict[str, str] = {
-    "host": "本机 Host（status/os_log/shell；面板/音频/服务/装包仅队员）",
-    "browser": "右坞浏览器（navigate/click/type/scroll/snapshot/console；screenshot 仅队员）",
-    "terminal": "长驻进程启/停/读（dev server；云桌 guest / 本机桌面；禁改走 code_execute）",
+    "host": "本机排查 / 修理 / 查看这台电脑",
+    "browser": "右坞打开网页 / 直播 / 页面短操作",
+    "terminal": "长驻进程启停读 / 启开发服务器",
     "external_mount_readonly": "静默只读挂载本机目录为 external/<别名>/",
     "md_to_docx": "工作区 .md 导出为同名 .docx",
     "md_to_pdf": "工作区 .md 导出为同名 .pdf",
     "archive_extract": "工作区 zip 解压到指定目录",
     "download_url": "HTTP(S) URL 落盘到工作区相对路径",
-    "write_section": "建站 HTML 分区注入（SECTION 标记对；非 Markdown）",
+    "write_section": "建站 HTML 分区注入",
     "search_conversations": "检索用户历史对话目录",
     "read_conversation": "深读一条历史对话全文",
-    "create_folder": "新建云文件夹（先建后派；勿为裸聊写盘过闸）",
-    "delete_folder": "按 folder_id 软删一个文件夹（恒确认）",
+    "create_folder": "新建云文件夹",
+    "delete_folder": "按 folder_id 软删一个文件夹",
     "desktop_notify": "向本机桌面发一条通知",
 }
 
@@ -135,8 +135,9 @@ def render_tool_consult_body(
     """Enable-ack + one HOW owner. Full JSON stays on the next FC table.
 
     CEO + host/terminal/browser/grant: consult HOW only (no schema reprint).
-    Everyone else: schema description as the trigger until that face has a HOW.
+    No HOW: enable-ack only — do not paste the schema description a second time.
     """
+    del description
     siblings = [n for n in enabled if n != name]
     lines = [
         (
@@ -147,13 +148,9 @@ def render_tool_consult_body(
     if siblings:
         lines.append("同族已一并启用：" + "、".join(siblings) + "。")
     how = _ceo_how_for(name) if audience == "ceo" else ""
-    desc = (description or "").strip()
     if how:
         lines.append("")
         lines.append(how)
-    elif desc:
-        lines.append("")
-        lines.append(desc)
     return "\n".join(lines)
 
 

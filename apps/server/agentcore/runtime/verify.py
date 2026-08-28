@@ -27,7 +27,8 @@
        （完整交付 / 收卷收齐 / 完整可用 / 修好验绿闭集；**禁止**案面加完成话术词修案）。
        无对账卡 / 本轮 ``no_batch`` 不拦正文。另：**产物结构**窄闸——``blocked``
        且无落盘时不得「已生成 / 请下载」；有落盘但无 ``.pptx`` 时不得宣称 PPT
-       可打开。有交付卡时终稿超 ``engine_ceo_overview_max_chars`` → 只打
+       可打开；正文点名声明/自报但磁盘没有的路径且夹「已生成/已落盘」同类宣称时回炉
+       （队员 COMPLETED ≠ 用户交付）。有交付卡时终稿超 ``engine_ceo_overview_max_chars`` → 只打
        ``engine.finish_guard_honesty_shadow``（``hit=overview_length``），
        不回炉、不改写终稿。
 
@@ -387,7 +388,7 @@ def _delivery_structure_reworks(
     content: str,
     delivery_verdict: DeliveryVerdict | None,
 ) -> list[str]:
-    """产物类型/落盘结构窄闸（非完成话术词表）：空盘下载宣称、无 pptx 说 PPT。"""
+    """产物类型/落盘结构窄闸（非完成话术词表）：空盘下载宣称、无 pptx 说 PPT、点名缺席路径。"""
     if delivery_verdict is None:
         return []
     if not content or not content.strip():
@@ -412,7 +413,7 @@ def _delivery_structure_reworks(
             "不要用「PPT 已就绪」话术盖过部分交付。"
         )
 
-    # Narrow: blocked + zero files → no「已生成/请下载」file-delivery claims.
+    # Narrow: blocked + zero files → no「已生成 / 请下载」file-delivery claims.
     if (
         state == "blocked"
         and not delivery_verdict.delivered_files
@@ -424,7 +425,65 @@ def _delivery_structure_reworks(
             "请改为承认未交付，说明缺口，并给出用户可采取的下一步"
             "（例如绑定本地目录、或继续让团队用写文件工具落盘）；不要用完成话术盖过红卡。"
         )
+
+    # Disk truth: named a declared/claimed path that is not on disk.
+    reworks.extend(_absent_path_claim_reworks(content, delivery_verdict))
     return reworks
+
+
+def _path_mention_is_negated(content: str, index: int) -> bool:
+    prefix = content[max(0, index - 2) : index]
+    if any(prefix.endswith(neg) for neg in _GAP_NEGATION_PREFIXES):
+        return True
+    window = content[max(0, index - 16) : index]
+    return any(
+        token in window
+        for token in ("尚未", "没有", "并未", "未落盘", "未见", "未写入", "不在工作区")
+    )
+
+
+def _content_asserts_path_present(content: str, path: str) -> bool:
+    """True when prose names ``path`` without a nearby gap negation."""
+    if not path or path not in content:
+        return False
+    start = 0
+    while True:
+        idx = content.find(path, start)
+        if idx < 0:
+            return False
+        if not _path_mention_is_negated(content, idx):
+            return True
+        start = idx + 1
+
+
+def _absent_path_claim_reworks(
+    content: str,
+    delivery_verdict: DeliveryVerdict,
+) -> list[str]:
+    """True finish_guard: naming a not-on-disk path as present (not posture A)."""
+    missing = tuple(getattr(delivery_verdict, "missing_declared", ()) or ())
+    absent = tuple(getattr(delivery_verdict, "absent_claimed", ()) or ())
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for path in (*missing, *absent):
+        text = str(path or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        candidates.append(text)
+    if not candidates:
+        return []
+    named = [p for p in candidates if _content_asserts_path_present(content, p)]
+    if not named:
+        return []
+    if not _BLOCKED_EMPTY_DELIVERY_CLAIMS.search(content):
+        return []
+    listed = "、".join(f"`{p}`" for p in named[:6])
+    return [
+        "工作区没有这些声明/自报路径："
+        f"{listed}（队员回合结束不是用户交付）。"
+        "请先按工作区真实文件列表交代，不得把未落盘文件说成已生成 / 已写入 / 请下载。"
+    ]
 
 
 def _code_fence_reworks(content: str) -> list[str]:

@@ -1,16 +1,15 @@
-"""Episodic consolidation: watermark-cut window, anchored card, no card without a summary.
+"""Session digest: watermark-cut window, no episodic card, eager semantic + anchor.
 
-Three production bugs pinned here, all on the same pass:
+Production bugs pinned here, all on the same pass:
 
-1. Every pass re-read a fixed 40-message tail, so adjacent episodes overlapped — the
-   second card could restate the whole first one. The window is now cut at
-   ``memory_synced_at``.
-2. The card had no thread position. It is written on an idle debounce, minutes after the
-   window it covers, so ``created_at`` cannot place it; ``anchor_at`` carries the last
-   consolidated message's timestamp instead.
-3. When the summarizer timed out, the fallback pasted the user's first turns back into
-   the thread as an episodic card — verbatim PII in the real incident. No summary
-   now means no card, while the episode still lands for the semantic layer.
+1. Every pass re-read a fixed 40-message tail, so adjacent episodes overlapped.
+   The window is now cut at ``memory_synced_at``.
+2. Live semantic cards need a thread position. Consolidation is written on an idle
+   debounce, minutes after the window it covers, so ``created_at`` cannot place it;
+   ``anchor_at`` carries the last consolidated message's timestamp instead.
+3. When the summarizer timed out, the fallback used to paste the user's first turns
+   back into the thread as a card — verbatim PII. Session digests never become cards;
+   timeout/empty still writes the episode and advances the watermark.
 
 The runner is wired to in-memory fakes; the loader under test is the real
 ``load_recent_history`` so the watermark→``list_recent_after`` seam is covered too.
@@ -105,6 +104,7 @@ def _wire(monkeypatch, store: _FakeMessageStore) -> dict:
         "conv_id": "c-window",
         "cards": [],
         "episodes": [],
+        "semantic_calls": [],
     }
 
     @asynccontextmanager
@@ -151,6 +151,7 @@ def _wire(monkeypatch, store: _FakeMessageStore) -> dict:
         state["cards"].append(kwargs)
 
     async def _semantic(**kwargs):
+        state["semantic_calls"].append(kwargs)
         return False
 
     monkeypatch.setattr(consolidation, "user_memory_lock_for", _lock)
@@ -238,19 +239,20 @@ async def test_action_inventory_uses_the_same_watermark(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_card_carries_anchor_at_of_last_consolidated_message(monkeypatch):
+async def test_eager_semantic_called_with_anchor_at_after_episode(monkeypatch):
+    """Live path: no episodic card; eager semantic gets the window's last message time."""
     store = _FakeMessageStore()
     store.add_turn("问题", "回答", at=_T0)
     state = _wire(monkeypatch, store)
 
     await consolidation.consolidate_conversation("c-window")
 
-    assert len(state["cards"]) == 1
-    card = state["cards"][0]
-    assert card["kind"] == "episodic"
-    assert card["anchor_at"] == store.latest_created_at
-    # Anchored to the window, not to the (debounced, later) moment the card was written.
-    assert card["anchor_at"] == state["synced_at"]
+    assert state["cards"] == []
+    assert len(state["semantic_calls"]) == 1
+    call = state["semantic_calls"][0]
+    assert call["eager"] is True
+    assert call["anchor_at"] == store.latest_created_at
+    assert call["anchor_at"] == state["synced_at"]
 
 
 @pytest.mark.asyncio
@@ -267,6 +269,7 @@ async def test_summarizer_timeout_writes_episode_but_no_card(monkeypatch):
     assert len(state["episodes"]) == 1
     assert state["cards"] == []  # …but nothing is posted back into the thread
     assert state["synced_at"] == store.latest_created_at  # watermark advances: no retry storm
+    assert state["semantic_calls"] == []  # raw fallback is not 「有料」; leak-scan later
 
 
 @pytest.mark.asyncio
@@ -282,10 +285,11 @@ async def test_suppressed_card_does_not_leak_user_text_into_the_episode_card(mon
 
     assert secret in state["episodes"][0]
     assert state["cards"] == []
+    assert state["semantic_calls"] == []
 
 
 @pytest.mark.asyncio
-async def test_real_summary_still_publishes_a_card(monkeypatch):
+async def test_real_summary_writes_episode_not_card(monkeypatch):
     store = _FakeMessageStore()
     store.add_turn("帮我查天气", "今天晴", at=_T0)
     state = _wire(monkeypatch, store)
@@ -293,7 +297,9 @@ async def test_real_summary_still_publishes_a_card(monkeypatch):
 
     await consolidation.consolidate_conversation("c-window")
 
-    assert [c["summary"] for c in state["cards"]] == ["用户询问天气。"]
+    assert state["episodes"] == ["用户询问天气。"]
+    assert state["cards"] == []
+    assert state["semantic_calls"][0]["eager"] is True
 
 
 @pytest.mark.asyncio
@@ -322,9 +328,9 @@ async def test_record_and_publish_threads_anchor_at_to_row_and_firehose(monkeypa
     await consolidation._record_and_publish(
         conversation_id="c-window",
         user_id="u-window",
-        kind="episodic",
+        kind="semantic",
         items=[],
-        summary="本场摘要",
+        summary=None,
         anchor_at=anchor,
     )
 
@@ -385,8 +391,8 @@ def test_memory_update_view_exposes_anchor_at():
     view = MemoryUpdateView.model_validate(
         SimpleNamespace(
             id="row-1",
-            kind="episodic",
-            summary="本场摘要",
+            kind="semantic",
+            summary=None,
             items=[],
             anchor_at=_T0,
             created_at=_T0 + timedelta(minutes=9),
@@ -409,6 +415,8 @@ def test_memory_update_view_closed_kind_and_action():
     with pytest.raises(ValidationError):
         MemoryUpdateView(id="row-x", created_at=_T0, kind="future_kind")
     with pytest.raises(ValidationError):
+        MemoryUpdateView(id="row-e", created_at=_T0, kind="episodic")
+    with pytest.raises(ValidationError):
         MemoryUpdateItemView(action="upsert", file="画像")
 
 
@@ -417,3 +425,174 @@ def test_episodic_timeout_ceiling_clears_observed_latency():
     from agentcore.memory.episodic import _EPISODIC_TIMEOUT_SECONDS
 
     assert _EPISODIC_TIMEOUT_SECONDS >= 60.0
+
+
+def _item() -> object:
+    from agentcore.memory.maintenance import MemoryUpdateItem
+
+    return MemoryUpdateItem(
+        action="add",
+        file="画像",
+        section="关于用户的事实",
+        scope="global",
+        content="用 bun",
+        target="global/profile",
+    )
+
+
+async def _seed_episodes(n: int):
+    from agentcore.memory.episode_store import InMemoryEpisodeStore
+    from agentcore.memory.episodic import append_episode
+
+    ep_store = InMemoryEpisodeStore()
+    for i in range(n):
+        await append_episode(
+            ep_store,
+            user_id="u-sem",
+            conversation_id=f"c-{i}",
+            summary=f"摘要{i}",
+            max_chars=200,
+        )
+    return ep_store
+
+
+def _wire_semantic(monkeypatch, *, outcome, fill_item: bool = False) -> dict:
+    state: dict = {"cards": [], "consolidate_calls": 0}
+
+    class _Prov:
+        async def close(self) -> None:
+            return None
+
+    async def _consolidate(**kwargs):
+        state["consolidate_calls"] += 1
+        items = kwargs.get("collect_items")
+        if fill_item and items is not None:
+            items.append(_item())
+        return outcome
+
+    async def _record(**kwargs):
+        state["cards"].append(kwargs)
+
+    monkeypatch.setattr(consolidation, "consolidate_semantic_memory", _consolidate)
+    monkeypatch.setattr(consolidation, "_record_and_publish", _record)
+    monkeypatch.setattr(consolidation, "build_provider", lambda *a, **k: _Prov())
+    monkeypatch.setattr(consolidation, "resolve_user_model", lambda _c: "m")
+    return state
+
+
+@pytest.mark.asyncio
+async def test_eager_semantic_bypasses_count_gate(monkeypatch):
+    """One undigested episode is enough when eager=True (live path)."""
+    ep_store = await _seed_episodes(1)
+    state = _wire_semantic(monkeypatch, outcome=True, fill_item=True)
+    monkeypatch.setattr(consolidation, "should_run_semantic", lambda **k: False)
+
+    changed = await consolidation.run_semantic_for_scope(
+        user_id="u-sem",
+        conversation_id="c-0",
+        folder_id=None,
+        store=object(),
+        credentials=SimpleNamespace(source="platform"),
+        episode_store=ep_store,
+        eager=True,
+        anchor_at=_T0,
+    )
+
+    assert changed is True
+    assert state["consolidate_calls"] == 1
+    assert state["cards"][0]["kind"] == "semantic"
+    assert state["cards"][0]["anchor_at"] == _T0
+    from agentcore.memory.episodic import list_undigested_episodes
+
+    assert await list_undigested_episodes(ep_store, "u-sem") == []
+
+
+@pytest.mark.asyncio
+async def test_non_eager_one_episode_does_not_run_semantic(monkeypatch):
+    ep_store = await _seed_episodes(1)
+    state = _wire_semantic(monkeypatch, outcome=True, fill_item=True)
+
+    changed = await consolidation.run_semantic_for_scope(
+        user_id="u-sem",
+        conversation_id="c-0",
+        folder_id=None,
+        store=object(),
+        credentials=SimpleNamespace(source="platform"),
+        episode_store=ep_store,
+        eager=False,
+    )
+
+    assert changed is False
+    assert state["consolidate_calls"] == 0
+    assert state["cards"] == []
+    from agentcore.memory.episodic import list_undigested_episodes
+
+    assert len(await list_undigested_episodes(ep_store, "u-sem")) == 1
+
+
+@pytest.mark.asyncio
+async def test_non_eager_three_episodes_runs_semantic(monkeypatch):
+    ep_store = await _seed_episodes(3)
+    state = _wire_semantic(monkeypatch, outcome=True, fill_item=True)
+
+    changed = await consolidation.run_semantic_for_scope(
+        user_id="u-sem",
+        conversation_id="c-2",
+        folder_id=None,
+        store=object(),
+        credentials=SimpleNamespace(source="platform"),
+        episode_store=ep_store,
+        eager=False,
+    )
+
+    assert changed is True
+    assert state["consolidate_calls"] == 1
+    from agentcore.memory.episodic import list_undigested_episodes
+
+    assert await list_undigested_episodes(ep_store, "u-sem") == []
+
+
+@pytest.mark.asyncio
+async def test_semantic_noop_digests_without_card(monkeypatch):
+    ep_store = await _seed_episodes(1)
+    state = _wire_semantic(monkeypatch, outcome=False)
+
+    changed = await consolidation.run_semantic_for_scope(
+        user_id="u-sem",
+        conversation_id="c-0",
+        folder_id=None,
+        store=object(),
+        credentials=SimpleNamespace(source="platform"),
+        episode_store=ep_store,
+        eager=True,
+        anchor_at=_T0,
+    )
+
+    assert changed is False
+    assert state["cards"] == []
+    from agentcore.memory.episodic import list_undigested_episodes
+
+    assert await list_undigested_episodes(ep_store, "u-sem") == []
+
+
+@pytest.mark.asyncio
+async def test_semantic_failure_does_not_digest(monkeypatch):
+    ep_store = await _seed_episodes(1)
+    state = _wire_semantic(monkeypatch, outcome=None)
+
+    changed = await consolidation.run_semantic_for_scope(
+        user_id="u-sem",
+        conversation_id="c-0",
+        folder_id=None,
+        store=object(),
+        credentials=SimpleNamespace(source="platform"),
+        episode_store=ep_store,
+        eager=True,
+        anchor_at=_T0,
+    )
+
+    assert changed is False
+    assert state["cards"] == []
+    from agentcore.memory.episodic import list_undigested_episodes
+
+    assert len(await list_undigested_episodes(ep_store, "u-sem")) == 1

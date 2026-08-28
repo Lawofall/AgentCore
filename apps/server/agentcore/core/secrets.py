@@ -25,8 +25,7 @@ REDACTED = "[REDACTED]"
 # Honest copy for write / replace denies (案 20260803-image-gen-byok-egress-boundary B).
 SECRET_WRITE_DENY_REASON = (
     "拒绝写入：内容疑似含 API Key / Bearer 等凭据明文（启发式兜底，并非完整拦截）。"
-    "【禁止】把用户粘贴的第三方 Key 写入工作区文件；请改用不含密钥的脚本脚手架，"
-    "让用户在本机用环境变量或设置页凭据自备，工具回显也不会再打出完整 Key。"
+    "【禁止】把第三方 Key 写入工作区；请改用执行工具 env 带入当次进程（不落盘、不回显）。"
 )
 
 

@@ -304,6 +304,7 @@ def _patch_persistence(
     monkeypatch.setattr(cloud_mod, "mint_title", _fake_title)
     # Keep local_turn import path stable for any residual patches.
     monkeypatch.setattr(local_turn_mod, "get_cloud_store", cloud_mod.get_cloud_store)
+    monkeypatch.setattr(local_turn_mod, "_release_local_turn_lease", AsyncMock())
     monkeypatch.setattr(
         "agentcore.runtime.kickoff.stage_card.emit_stage_card_for_motion",
         AsyncMock(return_value=None),

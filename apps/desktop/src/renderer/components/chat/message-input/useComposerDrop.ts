@@ -16,6 +16,10 @@ import {
   residentAttachmentForFile,
   safeBrowserFileName,
 } from "./resideAttachment";
+import {
+  type AttachmentFolderHint,
+  resolveFolderFromCitedRoot,
+} from "./resolveAttachmentFolder";
 
 /** Soft attach errors: auto-dismiss (Slack / Linear style), not sticky form validation. */
 const DROP_ERROR_MS = 4000;
@@ -29,6 +33,7 @@ export function useComposerDrop(
   setAttachments: Dispatch<SetStateAction<PendingAttachment[]>>,
   conversationId: string | null = null,
   onAttached?: (index: number) => void,
+  onAttachmentFolderHint?: (hint: AttachmentFolderHint) => void,
 ) {
   const [dragOver, setDragOver] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
@@ -149,17 +154,27 @@ export function useComposerDrop(
         binary: res.binary,
         workspacePath: res.workspacePath,
         stagingId: res.stagingId,
+        citedRootId: res.citedRootId,
+        citedRelPath: res.citedRelPath,
         // 已落地就放掉 File；只有还需发送时再传的草稿才继续持有。
         fileBlob: res.fileBlob,
         uploadState: undefined,
         uploadError: undefined,
       });
+      if (!conversationId && onAttachmentFolderHint) {
+        const cited =
+          res.citedRootId && res.citedRelPath
+            ? resolveFolderFromCitedRoot(res.citedRootId, res.citedRelPath)
+            : null;
+        if (cited) onAttachmentFolderHint(cited);
+      }
     },
     [
       attachments,
       conversationId,
       flashDropError,
       onAttached,
+      onAttachmentFolderHint,
       patchAttachment,
       setAttachments,
     ],

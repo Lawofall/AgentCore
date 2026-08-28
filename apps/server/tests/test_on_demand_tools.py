@@ -10,6 +10,7 @@ from agentcore.runtime.context.consult_sources import (
     build_merged_consult_source,
 )
 from agentcore.runtime.memory_consult_cache import consulted_memory_cache, remember_consult
+from agentcore.runtime.resolve.prompt.base import _DEFAULT_SYSTEM_PROMPT
 from agentcore.runtime.resolve.prompt.ceo_core import _CEO_CORE_HINT
 from agentcore.runtime.resolve.prompt.compose import _on_demand_preamble
 from agentcore.runtime.runs.executor.shared import _registry_without
@@ -156,15 +157,16 @@ async def test_host_consult_returns_how():
     assert _def_names(reg) == {"host"}
 
 
-async def test_host_consult_worker_gets_schema_not_ceo_how():
-    """Workers have no CEO routing manuals; schema stays the consult trigger until step 6."""
+async def test_host_consult_worker_gets_enable_ack_not_ceo_how():
+    """Workers have no CEO routing manuals; consult body is enable-ack only."""
     reg = ToolRegistry()
     reg.register(HostTool())
     src = ToolConsultSource(registry=reg, audience="worker")
     body = await src.fetch_by_name("u", "host")
     assert body is not None
     assert "已启用工具 `host`" in body
-    assert "schema 免批" in body
+    assert "本回合下一模型轮" in body
+    assert "schema 免批" not in body
     assert "【本机 Host】" not in body
     assert "通识长文当交付" not in body
 
@@ -218,8 +220,9 @@ def test_preamble_and_core_make_consult_discoverable():
     preamble = "\n".join(_on_demand_preamble(with_summaries=True))
     assert "低频工具" in preamble
     assert "consult(name)" in preamble
-    assert "下一模型轮" in preamble
-    assert "不必等用户再发一条" in preamble
+    assert "下一模型轮" not in preamble
+    assert "不必等用户再发一条" not in preamble
+    assert "下一模型轮" in _DEFAULT_SYSTEM_PROMPT
     assert "consult(terminal)" in _CEO_CORE_HINT
     assert "consult(browser)" in _CEO_CORE_HINT
 
@@ -282,7 +285,6 @@ async def test_write_section_consult_promotes_onto_table():
     body = await src.fetch_by_name("u", "write_section")
     assert body is not None
     assert "已启用工具 `write_section`" in body
-    assert "SECTION" in body
     assert _def_names(reg) == {"write_section"}
 
 

@@ -567,7 +567,7 @@ export interface OutgoingAttachment {
   conversation_id?: string;
   /** 二进制驻留：无 UTF-8 正文。 */
   binary?: boolean;
-  /** 客户端已写入工作区时的相对路径（``attachments/…``）。 */
+  /** 客户端已写入工作区或区内引用时的相对路径。 */
   workspace_path?: string;
 }
 

@@ -46,7 +46,6 @@ def ceiling_honesty_steer(*, reason: str) -> str | None:
     return (
         f"[系统提示] {lead}"
         "【禁止】无条件宣称验证通过 / 已修好 / 已全部完成 / 已完整可用等姿势 A；"
-        "【禁止】空心邀请用户「请开讲 / 请讲 / 我在听」——须点名硬顶未闭合项；"
         "须按「部分落地 + 未闭合项」收口：点名已落地与未闭合，勿假装验收过关。"
         f"{_CEILING_CONTINUE_TEACH}"
         "有交付对账卡时以档位为准；非正式完成不得姿势 A。"
@@ -98,6 +97,8 @@ def downgrade_verdict_for_ceiling(
             execution_id=verdict.execution_id,
             requires_draft_ack=verdict.requires_draft_ack,
             gap_reasons=getattr(verdict, "gap_reasons", ()),
+            missing_declared=getattr(verdict, "missing_declared", ()),
+            absent_claimed=getattr(verdict, "absent_claimed", ()),
         ),
         promotion_ledger=promotion_ledger,
     )

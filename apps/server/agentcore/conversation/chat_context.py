@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agentcore.conversation.compaction import maybe_compact_near_ceiling
+from agentcore.conversation.compaction import compact_before_turn
 from agentcore.conversation.history import load_chat_context
 from agentcore.core.errors import NotFoundError
 from agentcore.core.logging import get_logger
@@ -27,10 +27,12 @@ async def assemble_owned_chat_context(
     *,
     user_id: str,
 ) -> list[dict[str, Any]]:
-    """Near-ceiling compact (best-effort) then ``load_chat_context`` for the owner.
+    """Near-ceiling compact then ``load_chat_context`` for the owner.
 
     Same pre-turn order as cloud send / regenerate / resume. Raises
     :class:`NotFoundError` when the conversation is missing, not owned, or handoff.
+    Raises :class:`~agentcore.core.errors.ContextOverflowError` when the fit-check
+    is near the model window and the fold did not write.
     """
     conv = await ConversationRepository(session).get_by_id(
         conversation_id, user_id=user_id
@@ -46,6 +48,6 @@ async def assemble_owned_chat_context(
             "chat_context.model_resolve_failed",
             conversation_id=conversation_id,
         )
-    await maybe_compact_near_ceiling(conversation_id, model_id=model_id)
+    await compact_before_turn(conversation_id, model_id=model_id)
     async with async_session_factory() as fresh:
         return await load_chat_context(fresh, conversation_id)

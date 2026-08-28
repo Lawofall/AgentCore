@@ -148,6 +148,10 @@ class TokenUsage:
     reasoning_tokens: int = 0
     cache_hit_tokens: int = 0
     cache_miss_tokens: int = 0
+    # Largest single-request prompt this accumulator has seen. ``input_tokens``
+    # sums every round (billing); fit-check / near-ceiling compare this field
+    # to the model's window. ``__add__`` keeps the max, never sums.
+    last_prompt_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
@@ -160,6 +164,7 @@ class TokenUsage:
             reasoning_tokens=self.reasoning_tokens + other.reasoning_tokens,
             cache_hit_tokens=self.cache_hit_tokens + other.cache_hit_tokens,
             cache_miss_tokens=self.cache_miss_tokens + other.cache_miss_tokens,
+            last_prompt_tokens=max(self.last_prompt_tokens, other.last_prompt_tokens),
         )
 
     def as_dict(self) -> dict[str, int]:
@@ -169,6 +174,7 @@ class TokenUsage:
             "reasoning": self.reasoning_tokens,
             "cache_hit": self.cache_hit_tokens,
             "cache_miss": self.cache_miss_tokens,
+            "last_prompt": self.last_prompt_tokens,
         }
 
     @classmethod
@@ -179,6 +185,21 @@ class TokenUsage:
             reasoning_tokens=usage.get("reasoning", 0),
             cache_hit_tokens=usage.get("cache_hit", 0),
             cache_miss_tokens=usage.get("cache_miss", 0),
+            last_prompt_tokens=int(usage.get("last_prompt", 0) or 0),
+        )
+
+    @classmethod
+    def from_call_meta(cls, usage_meta: Mapping[str, Any] | None) -> "TokenUsage":
+        """One upstream call's usage block (``input_tokens`` keys, not short keys)."""
+        meta = usage_meta or {}
+        inp = int(meta.get("input_tokens", 0) or 0)
+        return cls(
+            input_tokens=inp,
+            output_tokens=int(meta.get("output_tokens", 0) or 0),
+            reasoning_tokens=int(meta.get("reasoning_tokens", 0) or 0),
+            cache_hit_tokens=int(meta.get("cache_hit_tokens", 0) or 0),
+            cache_miss_tokens=int(meta.get("cache_miss_tokens", 0) or 0),
+            last_prompt_tokens=inp,
         )
 
     @classmethod
@@ -217,6 +238,7 @@ class TokenUsage:
             reasoning_tokens=int(completion_details.get("reasoning_tokens", 0) or 0),
             cache_hit_tokens=cache_hit,
             cache_miss_tokens=cache_miss,
+            last_prompt_tokens=input_tokens,
         )
 
 

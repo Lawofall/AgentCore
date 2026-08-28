@@ -169,17 +169,19 @@ def test_tool_use_block_teaches_parallel_calls():
 
 
 def test_tool_use_block_documents_web_search_query_contract():
-    # A3 查询契约须进共享 system prompt（schema alone 不够）：模型在研究压力下常倾倒长关键词串。
+    # tool_use 只留短钩；2–3 词全文 / 挂号契约归 schema 与 delivery_baseline。
     out = assemble_system_prompt()
-    assert "web_search" in out and ("精简" in out or "核心词" in out)
-    assert "截断" in out or "规范化" in out
-    assert "明示" in out
+    tool = out.split("<tool_use>", 1)[1].split("</tool_use>", 1)[0]
+    baseline = out.split("<delivery_baseline>", 1)[1].split("</delivery_baseline>", 1)[0]
+    assert "web_search" in tool and "精简" in tool
+    assert "截断" in tool and "明示" in tool
+    assert "2–3" not in tool and "核心词" not in tool
+    assert "download_url" not in tool
     assert "无法规范化才拒绝" not in out
     assert "≤8 词" not in out
-    # 可信优先：搜到 ≠ 可挂 #rN；成稿挂号须先深读
-    assert "搜到" in out and ("可挂来源号" in out or "可挂 #rN" in out)
-    assert "read_url" in out
-    assert "文字概括" in out
+    assert "搜到" in baseline and ("可挂来源号" in baseline or "可挂 #rN" in baseline)
+    assert "read_url" in baseline
+    assert "文字概括" in baseline
 
 
 def test_runtime_context_uses_date_granularity_for_cache_stability():
@@ -351,7 +353,7 @@ def test_capability_how_gated_on_ceo_tool_names():
 
 
 def test_core_teaches_split_criterion_over_count():
-    # 路由脊柱：CEO 自判（Cursor 式）；讨论自己做；改产物必须派；真并行才多人。
+    # 路由脊柱：CEO 自判（Cursor 式）；先取证再开口；改产物必须派；真并行才多人。
     hint = _CEO_CORE_HINT
     assert "要不要拉人由你判" in hint
     assert "开子代理" in hint
@@ -385,7 +387,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "内部编制" in hint
     assert "明示成文不拦" in hint
     assert "map_fanout" in hint
-    assert "默认 A" in hint or "对齐推进" in hint or "默认走 A" in hint
+    assert "默认 A" not in hint
     assert "不是默认两路" not in hint
     assert "两路 brief" not in hint
     assert "cite_write_review" in hint
@@ -436,7 +438,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "【短确认·只补缺口】" in kickoff
     assert "缺主体" in kickoff and "静默自拟" in kickoff
     assert "决策/澄清短问" in kickoff
-    assert "先问你" in kickoff
+    assert "先问你" not in kickoff
     assert "prior_delivery_gaps" in kickoff
     assert "整锅重派" in kickoff
     assert "默认路径" in kickoff
@@ -592,16 +594,19 @@ def test_core_teaches_split_criterion_over_count():
     assert "先给用户一句可见打算" in hint
     assert "不固定句式" in hint
     assert "只有工具调用" in hint or "用户面前空白" in hint
-    # 派完若结束本回合：可见正文只留「人已派出」；进度以结构面为准。
-    assert "派完·可见面" in hint
+    # 派完收束并进团队状态：可见正文只留「人已派出」；进度以结构面为准。不另立「派完」段。
+    assert "派完·可见面" not in hint
     assert "人已派出" in hint
     assert "谁还在跑" in hint
+    assert hint.count("人已派出") == 1
     assert "谁在后台、完成后会再汇报" not in hint
     assert "至少 N 人" in hint or "tasks 至少" in hint
     # ④ must-not-consult 留核；场面 WHEN 归目录摘要（禁「可选 vs 必先查」对打）。
     work = hint.split("<how_you_work>", 1)[1].split("</how_you_work>", 1)[0]
     sec4 = work.split("④ 拉几人", 1)[1].split("⑤ 不要拉人", 1)[0]
-    assert "讨论/判断默认自己答不必查" in sec4
+    assert "讨论/判断默认自己答不必查" not in hint
+    assert "缺工作区证据" in sec4
+    assert "先取证不必先 consult" in sec4
     assert "规格已齐建站" in sec4
     assert "非成文短文落盘" in sec4
     assert "收口仍回 CEO" in sec4
@@ -639,7 +644,7 @@ def test_core_teaches_split_criterion_over_count():
     assert "playbook_id" not in skill
     assert "可跑闭环" in skill or "核心运行时" in skill
     assert "根委派切片诚实" in skill or "嵌套扇出" in skill
-    assert "人已派出" in skill
+    assert "人已派出" not in skill  # 唯一所有者 how_you_act
     assert "谁在后台、完成后会再汇报" not in skill
 
 
@@ -669,7 +674,9 @@ def test_consult_intensity_lives_only_in_the_core():
     hint = _CEO_CORE_HINT
     work = hint.split("<how_you_work>", 1)[1].split("</how_you_work>", 1)[0]
     sec4 = work.split("④ 拉几人", 1)[1].split("⑤ 不要拉人", 1)[0]
-    assert "讨论/判断默认自己答不必查" in sec4
+    assert "讨论/判断默认自己答不必查" not in hint
+    assert "缺工作区证据" in sec4
+    assert "先取证不必先 consult" in sec4
     assert "规格已齐建站" in sec4
     assert "直接派不必查" in sec4
     assert "按场面：拿不准怎么拆" not in hint
@@ -812,14 +819,16 @@ def test_prompt_investigation_discipline_follows_settings():
     assert "成规模取证" in _CEO_CORE_HINT
     assert "【探路 ≠ 摸底】" in _CEO_CORE_HINT
     assert "不派仅限" not in _CEO_CORE_HINT
-    assert "0～1" in _COLD_START_EXPLORE_HINT_EMPTY
-    assert "0～1" in _COLD_START_EXPLORE_HINT_REBIND
-    assert "0～1" in _COLD_START_EXPLORE_HINT_REFRESH
+    assert "0～1" in _CEO_CORE_HINT
+    assert "0～1" not in _COLD_START_EXPLORE_HINT_EMPTY
+    assert "0～1" not in _COLD_START_EXPLORE_HINT_REBIND
+    assert "0～1" not in _COLD_START_EXPLORE_HINT_REFRESH
     assert "探路 0～1 轮" in _TEAM_ORCHESTRATION_ADVANCED
     assert "探路检索默认 0～1 轮" in _DEEP_MULTI_LENS_RESEARCH
-    assert "只定位入口" in _COLD_START_EXPLORE_HINT_EMPTY
-    assert "只定位入口" in _COLD_START_EXPLORE_HINT_REBIND
-    assert "只定位入口" in _COLD_START_EXPLORE_HINT_REFRESH
+    assert "定位入口" in _COLD_START_EXPLORE_HINT_EMPTY
+    assert "定位入口" in _COLD_START_EXPLORE_HINT_REBIND
+    assert "定位入口" in _COLD_START_EXPLORE_HINT_REFRESH
+    assert "只定位入口" not in _COLD_START_EXPLORE_HINT_EMPTY
     assert "定位入口" in _TEAM_ORCHESTRATION_ADVANCED
     assert "禁止自己取证" in _DEEP_MULTI_LENS_RESEARCH
 
@@ -865,6 +874,7 @@ def test_core_teaches_confirmed_constraints_block_on_delegate():
     assert "已确认约束" in deliverable_desc or "已确认约束" in task_desc
     skill = _TEAM_ORCHESTRATION_ADVANCED
     assert "已确认约束" in skill
+    assert "同一行" in skill
     assert "自由文" in skill
     assert "意图分类" in skill
     assert "约束块优先" in skill
@@ -904,10 +914,11 @@ def test_core_teaches_unsettled_ask_user_stops_without_done():
     assert "promote_product" not in pin
     assert "不得当已办完" in pin
     assert "并停" in pin
-    # 空 continue 真确认路径仍在「假设≠用户确认」，未结算不得吞掉
+    # 「按确认默认」原则留在假设≠确认；空 continue 操作教程出核
     assumption = hint.split("【假设≠用户确认】", 1)[1].split("【ask 未结算】", 1)[0]
     assert "按确认默认" in assumption
-    assert "按确认默认" in pin
+    assert "空 continue" not in assumption
+    assert "空 continue" not in pin
     # 不改 pause 契约；提示层，禁硬/软闸
     assert "pause" not in pin.lower()
     assert "finish_reason" not in pin
@@ -915,28 +926,27 @@ def test_core_teaches_unsettled_ask_user_stops_without_done():
     worker = compose_worker_base_prompt(assemble_system_prompt())
     assert "【ask 未结算】" not in worker
     kickoff = build_system_skill_registry().get("ask_user_kickoff").body
-    assert "未结算" in kickoff
     assert "promote_product" not in kickoff
-    assert "不得当已办完" in kickoff
     assert "按确认默认" in kickoff
+    assert "未结算" not in kickoff
+    assert "不得当已办完" not in kickoff
 
 
 def test_shared_base_teaches_howto_stale_path_honesty():
-    """howto 过时路径 A′：无现行可核 → 易变/待实测；覆盖零工具；收口≠伪精确菜单。"""
-    from agentcore.runtime.resolve.prompt import _DEFAULT_SYSTEM_PROMPT
-
-    assert "易变/待实测" in _DEFAULT_SYSTEM_PROMPT or "易变" in _DEFAULT_SYSTEM_PROMPT
-    assert "待实测" in _DEFAULT_SYSTEM_PROMPT
-    assert "零工具" in _DEFAULT_SYSTEM_PROMPT
-    assert "逐步菜单" in _DEFAULT_SYSTEM_PROMPT or "逐步点击" in _DEFAULT_SYSTEM_PROMPT
-    assert "现行可核" in _DEFAULT_SYSTEM_PROMPT
-    assert "当日" not in _DEFAULT_SYSTEM_PROMPT
-    assert "日历门槛" not in _DEFAULT_SYSTEM_PROMPT
-    assert "摘要收口" in _DEFAULT_SYSTEM_PROMPT
-    assert "伪精确" in _DEFAULT_SYSTEM_PROMPT
-    # claim_evidence 旁对齐路径主张
-    assert "后台路径" in _DEFAULT_SYSTEM_PROMPT or "逐步点击" in _DEFAULT_SYSTEM_PROMPT
-    assert "<claim_evidence>" in _DEFAULT_SYSTEM_PROMPT
+    """路径/逐步点击主张与关键数字同档：无现行可核 → 易变档；零工具也适用。唯一所有者 claim_evidence。"""
+    base = _DEFAULT_SYSTEM_PROMPT
+    claim = base.split("<claim_evidence>", 1)[1].split("</claim_evidence>", 1)[0]
+    tool = base.split("<tool_use>", 1)[1].split("</tool_use>", 1)[0]
+    assert "现行可核" in claim
+    assert "易变" in claim and "待实测" in claim
+    assert "零工具" in claim
+    assert "逐步点击" in claim or "逐步菜单" in claim
+    assert "摘要收口" in claim
+    assert "伪精确" in claim
+    assert base.count("易变/待实测") == 1
+    assert "易变/待实测" not in tool
+    assert "当日" not in base
+    assert "日历门槛" not in base
 
 
 def test_skill_teaches_constraint_vs_solution_boundary():
@@ -1063,7 +1073,8 @@ def test_core_worker_capability_follows_workspace_facts():
     assert "持全套工具" not in hint
     assert "本回合执行能力" in hint
     assert "code_execute=未装配" in hint
-    assert "能写文件、不能运行" in hint
+    assert "能写文件、不能运行" not in hint
+    assert "可播放文件" not in hint
     delivery = _TEAM_DELIVERY_ENV
     assert "data_file_landing" not in hint
     catalog_data = build_system_skill_registry().get("data_file_landing")
@@ -1193,6 +1204,17 @@ def test_core_teaches_delivery_path_by_workspace_type():
     assert "口头假验收" in how or "已打开即可" in how
     assert "read_url" in how
     assert "ask_user(browser_login=true)" in how
+
+
+def test_shared_base_capability_honesty_does_not_share_circled_numbers():
+    """基座能力姿势不用 ①–⑤，避免与 CEO how_you_work 撞号。"""
+    honesty = _DEFAULT_SYSTEM_PROMPT.split("<capability_honesty>", 1)[1].split(
+        "</capability_honesty>", 1
+    )[0]
+    for mark in ("①", "②", "③", "④", "⑤"):
+        assert mark not in honesty
+    assert "手脑" in honesty
+    assert "同轮可开工" in honesty
 
 
 def test_shared_base_teaches_unassembled_capability_honesty():
@@ -1389,14 +1411,17 @@ def test_core_teaches_image_gen_egress_and_key_boundary():
     shared = assemble_system_prompt()
     assert "<credential_hygiene>" in shared
     assert "API Key" in shared and "明文" in shared
-    assert "环境变量占位" in shared
-    # 共享基座会进桌面/手机/web；说动作（已接入的凭据），不点名某一端的设置页。
-    assert "已接入" in shared and "凭据" in shared
+    assert "带入当次进程" in shared
+    assert "自己开终端" in shared
+    assert "自己开终端" not in hint
+    assert "自己机器上自备" not in shared
+    assert "curl / 脚本自测" not in shared
+    assert "环境变量占位" not in shared
+    # 共享基座不点名某一端的设置页。
     assert "设置 · 服务商" not in shared
     assert "设置 · 模型" not in shared
-    # 案 47ae：跨会话进度摘要禁回显密码/token（扩既有 Key 族，非新硬闸）
-    assert "跨窗续作" in shared and "handoff" in shared
-    assert "密码" in shared and "原会话" in shared
+    assert "handoff" in shared and "跨窗" in shared
+    assert "密码" in shared
     # 凭据禁令不得在核里第二次落地
     assert "API Key" not in hint and "明文" not in hint
     assert "跨会话凭据脱敏" not in delivery
@@ -1423,6 +1448,7 @@ def test_core_teaches_short_clarify_not_scene_ledger():
     hint = _CEO_CORE_HINT
     assert "短问" in hint or "短澄清" in hint
     assert "提案墙" in hint
+    assert "可只带" not in hint
     kickoff = build_system_skill_registry().get("ask_user_kickoff").body
     assert "短问" in kickoff or "短澄清" in kickoff
     assert "开工提案卡" not in kickoff
@@ -1435,7 +1461,7 @@ def test_skill_teaches_environment_capability_constraint():
     skill = _TEAM_ORCHESTRATION_ADVANCED
     delivery = _TEAM_DELIVERY_ENV
     assert "环境能力约束" in skill
-    assert "code_execute=未装配" in skill
+    assert "code_execute=未装配" in delivery
     assert "交付缺口" in delivery
     assert "bind_local_folder" in _TEAM_CROSS_FOLDER
     assert "导入到云" in delivery
@@ -1586,10 +1612,10 @@ def test_ceo_core_workspace_outranks_global_current_project_memory():
 
 
 def test_ceo_core_teaches_empty_shell_dual_folder_kickoff():
-    """跨文件夹：核留 consult 钩；十步 HOW 在 team_cross_folder。"""
+    """跨文件夹：场面 WHEN 在目录摘要；十步 HOW 在 team_cross_folder；核不复述。"""
     hint = _CEO_CORE_HINT
-    assert "【跨文件夹】" in hint
-    assert "team_cross_folder" in hint
+    assert "【跨文件夹】" not in hint
+    assert "team_cross_folder" not in hint
     assert "写仍派工换桌" not in hint
     assert "摸已登记文件夹用只读跨桌" not in hint
     cross = _TEAM_CROSS_FOLDER
@@ -1626,6 +1652,7 @@ def test_core_guides_out_of_workspace_absolute_paths():
     granted = capability_how_suffix({"external_mount_readonly"})
     assert "external_mount_readonly" in granted
     assert "grant_organize_folder" in granted
+    assert "grant_attach_folder" in granted
     assert "禁止" in granted and "文件名" in granted
     assert "手填" in granted
     assert "授权后发现" in granted
@@ -1667,10 +1694,10 @@ def test_core_teaches_narrowed_attachment_scope_must_start():
     assert "open_local_project" not in gated
     assert "退役" not in gated
     assert "[resident missing]" in gated
-    assert "重传" in gated
-    assert "ask_user" in gated
-    assert "file_list" in gated  # 须点名禁止，不是教用它验盘
-    assert "推断" in gated or "≠ 缺件" in gated or "浏览过滤" in gated
+    assert "先读" in gated and "已给材料" in gated
+    assert "重传" not in gated
+    assert "ask_user" not in gated
+    assert "file_list" not in gated
     assert "[binary]" in gated and "≠ 缺件" in gated
     # 禁止旧契约：用 file_list/exists「证实」路径不在当缺件触发条件。
     assert "file_list / exists 证实" not in gated
@@ -1764,6 +1791,8 @@ def test_memory_rules_fence_blocks_routing_by_topic_preference():
     assert "题材/领域偏好与历史任务" in out
     assert "不得改变本回合路由" in out
     assert "直答/委派/调研/辩论以用户当前话为准" in out
+    assert "与本回合用户直接指令冲突时" not in out
+    assert "本回合用户直接指令优先于常驻" in out
 
 
 def test_ceo_core_teaches_memory_must_not_override_routing():
@@ -1859,8 +1888,26 @@ def test_ceo_core_whether_and_headcount_are_separate_owners():
     assert "编制自选" not in sec5
 
 
+def test_ceo_core_gathers_evidence_before_workspace_judgment():
+    """工作区课题先取证再开口；「讨论」不是免探场面。废名缺席，不守判例字面。"""
+    hint = _CEO_CORE_HINT
+    work = hint.split("<how_you_work>", 1)[1].split("</how_you_work>", 1)[0]
+    sec2 = work.split("② 自己做", 1)[1].split("③ 要不要拉人", 1)[0]
+    sec3 = work.split("③ 要不要拉人", 1)[1].split("④ 拉几人", 1)[0]
+    assert "先取证再开口" in sec2
+    assert hint.count("先取证再开口") == 1
+    assert "用户说「讨论」不改变" in sec2
+    assert "取证≠必须开组" in sec2
+    assert "只凭系统提示" in sec2
+    assert "讨论/判断默认自己答不必查" not in hint
+    assert "讨论对齐时读设计文档" not in hint
+    assert "用户项目整仓摸底" not in hint
+    assert "开口前读几份相关文件" in sec3
+    assert "讨论也必须派" in sec3  # 禁止语境仍在：取证≠必须派
+
+
 def test_ceo_core_platform_knowledge_two_way_routing():
-    """检索政策在②：机制走系统提示+workspace；用法走 product_help。百科不常驻。"""
+    """检索政策在②：FAQ 走 product_help；工作区课题先取证。百科不常驻。"""
     hint = _CEO_CORE_HINT
     assert "<platform_knowledge>" not in hint
     role = hint.split("<role>", 1)[1].split("</role>", 1)[0]
@@ -1876,7 +1923,10 @@ def test_ceo_core_platform_knowledge_two_way_routing():
     assert "机制" in sec2 and "架构" in sec2 and "记忆" in sec2 and "能力边界" in sec2
     assert "系统提示" in sec2 and "workspace_context" in sec2
     assert "capability_honesty" in sec2
-    assert "否决论文" in sec2
+    assert "先取证再开口" in sec2
+    assert "走取证" in sec2 and "不走 FAQ" in sec2
+    assert "否决论文" not in sec2
+    assert "否决论文" in assemble_system_prompt()
     assert "怎么用" in sec2 or "功能介绍" in sec2 or "产品 FAQ" in sec2
     assert "consult(product_help)" in sec2
     assert "web_search" in sec2
@@ -2011,8 +2061,9 @@ def test_ceo_prompt_with_legal_pack_keeps_intent_adversarial_routing():
     debate_line = next(
         line for line in directory.splitlines() if line.startswith("- debate_and_review：")
     )
-    assert any(t in deep_line for t in MULTI_LENS_COURTROOM_TRIGGERS)
-    assert "debate_and_review" in deep_line
+    assert not any(t in deep_line for t in MULTI_LENS_COURTROOM_TRIGGERS)
+    deep_body = reg.get("deep_multi_lens_research").body
+    assert any(t in deep_body for t in MULTI_LENS_COURTROOM_TRIGGERS)
     assert "deep_multi_lens_research" in debate_line
     assert "deep_multi_lens_research" in ceo
     assert "debate_and_review" in ceo

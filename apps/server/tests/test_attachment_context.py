@@ -50,7 +50,7 @@ async def test_unresident_file_uses_local_path_no_hint():
     assert out is not None
     assert "--- File: a.py (/local/a.py) ---" in out
     assert "print(1)" in out
-    assert "saved into your workspace" not in out
+    assert "are in your workspace" not in out
     # 定案 A：附件是本轮可开工输入，勿写成「仅参考」。
     assert "actionable inputs" in out
     assert "reference material" not in out
@@ -72,7 +72,7 @@ async def test_resident_file_uses_workspace_path_and_hint():
     assert out is not None
     # The header points at the durable path, not the local one.
     assert "--- File: a.py (attachments/a.py) ---" in out
-    assert "saved into your workspace" in out
+    assert "are in your workspace" in out
     assert "edit them with the file tools" in out
 
 
@@ -96,7 +96,7 @@ async def test_spreadsheet_without_preview_omits_code_execute_when_unassembled()
     assert "with code_execute" not in out
     assert "Do NOT use an OS absolute path" in out
     assert "Do NOT treat file_list emptiness as missing" in out
-    assert "saved into your workspace" in out
+    assert "are in your workspace" in out
     assert "C:\\" not in out
     assert "/Users/" not in out
 
@@ -148,7 +148,7 @@ async def test_resident_missing_honest_block_no_saved_claim():
     assert "NOT in the workspace" in out or "bytes are NOT" in out
     assert "ask_user" in out and "re-upload" in out
     assert "Do NOT delegate unzip" in out or "Do NOT treat this as delivered" in out
-    assert "saved into your workspace" not in out
+    assert "are in your workspace" not in out
     assert "ask_user to re-upload" in out or "never dispatch unzip" in out
 
 
@@ -281,7 +281,7 @@ async def test_conversation_deep_read_success(monkeypatch):
     assert "在的" in out
     assert "CLIENT_SHALLOW_SHOULD_NOT_APPEAR" not in out
     assert "read_conversation" in out  # guidance mentions continuation path
-    assert "saved into your workspace" not in out
+    assert "are in your workspace" not in out
 
 
 @pytest.mark.asyncio

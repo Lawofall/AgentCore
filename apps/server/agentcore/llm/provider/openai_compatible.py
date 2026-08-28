@@ -57,6 +57,7 @@ from agentcore.llm.errors import (
     unsupported_tool_schema_error_details,
     upstream_client_error,
     upstream_error,
+    vendor_5xx_product_message,
 )
 from agentcore.llm.provider.call_budget import provider_retry_ceiling
 from agentcore.llm.provider.cooldown_gate import (
@@ -1370,10 +1371,20 @@ class OpenAICompatibleProvider:
             # Product face (A′ · 2026-08-04): never put credential leaf names
             # (``platform`` / BYOK ``user`` / vendor) or「服务端错误」on the bubble —
             # those read as AgentCore itself failing. Upstream body stays in preview.
-            message = relayed or f"上游模型服务暂时不可用（{status_code}），请稍后再试"
+            # 530 names the selected model, not us (even when the hop HTTP is 502).
+            message = vendor_5xx_product_message(
+                http_status=status_code,
+                relayed=relayed,
+                envelope=envelope,
+            )
+            vendor_status = status_code
+            if envelope is not None and isinstance(envelope.context, dict):
+                raw = envelope.context.get("upstream_status")
+                if isinstance(raw, int):
+                    vendor_status = raw
             err = upstream_error(
                 message,
-                status=status_code,
+                status=vendor_status,
                 body=body,
                 retry_attempts=attempt,
             )

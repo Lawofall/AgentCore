@@ -172,13 +172,19 @@ export function formatAssistantErrorMessage(error: {
   code?: string;
   context?: DescribedError["context"];
 }): string {
+  const selected = selectedModelOutageFace({
+    code: error.code,
+    message: error.message,
+    context: error.context,
+  });
   const { message, context, code } = error;
   // Old journals may still carry English "Rate limited…" — normalize to product copy.
   let text =
-    code === "LLM_RATE_LIMIT" &&
+    selected?.message ??
+    (code === "LLM_RATE_LIMIT" &&
     (!message || /rate limited/i.test(message) || !message.includes("上游限流"))
       ? LLM_RATE_LIMIT_MESSAGE
-      : message;
+      : message);
   // 后端句子里已不含时刻，只在 context 上给绝对瞬间——这里按本机时区补一句。
   text = withRecoveryMoment(text, context);
   if (import.meta.env.DEV && context?.upstream_body_preview) {
@@ -218,6 +224,11 @@ const OUR_SERVICE_ERROR_CODES: readonly string[] = [
 /** Product copy when our cloud (not the vendor) is busy / unavailable. */
 export const OUR_SERVICE_UNAVAILABLE_MESSAGE =
   "AgentCore 服务暂时不可用，请稍后重试";
+
+/** Vendor / origin 530 — the selected model, not AgentCore. Keep in sync with
+ * ``llm/errors.py::SELECTED_MODEL_UNAVAILABLE_MESSAGE``. */
+export const SELECTED_MODEL_UNAVAILABLE_MESSAGE =
+  "你选的模型暂时不可用，请稍后再试或换一个模型。";
 
 /**
  * Connectivity failure counts for the conversation currently on screen.
@@ -265,6 +276,30 @@ export function isOurServiceErrorCode(code: string | undefined): boolean {
     code !== undefined &&
     (OUR_SERVICE_ERROR_CODES as readonly string[]).includes(code)
   );
+}
+
+/**
+ * Vendor / origin 530 must not read as AgentCore. Proven our-cloud codes
+ * (DB / key storage / billing) stay our-service even if the hop status is 530.
+ */
+function selectedModelOutageFace(input: {
+  code?: string;
+  message?: string;
+  status?: number;
+  context?: { upstream_status?: number } | null;
+}): AssistantFailureFace | null {
+  const code = (input.code ?? "").trim();
+  if (
+    code === "DATABASE_UNAVAILABLE" ||
+    code === "KEY_STORAGE_UNAVAILABLE" ||
+    code === "PLATFORM_BILLING_UNAVAILABLE"
+  ) {
+    return null;
+  }
+  const status = input.context?.upstream_status ?? input.status;
+  const fromCopy = (input.message ?? "").includes("（530）");
+  if (status !== 530 && !fromCopy) return null;
+  return { code: "LLM_ERROR", message: SELECTED_MODEL_UNAVAILABLE_MESSAGE };
 }
 
 /** Increment once per message id; return the count for that code in this chat. */
@@ -392,6 +427,7 @@ type StructuredErr =
   | {
       code?: string | null;
       message?: string | null;
+      context?: { upstream_status?: number } | null;
     }
   | null
   | undefined;
@@ -481,18 +517,26 @@ export function resolveAssistantFailureFace(input: {
 
 function coalesceStructured(
   err: StructuredErr,
-): { code: string; message: string } | null {
+): { code: string; message: string; context?: { upstream_status?: number } } | null {
   if (!err) return null;
   const code = (err.code ?? "").trim();
   const message = (err.message ?? "").trim();
   if (!code && !message) return null;
-  return { code: code || "LLM_ERROR", message };
+  const status = err.context?.upstream_status;
+  return {
+    code: code || "LLM_ERROR",
+    message,
+    ...(typeof status === "number" ? { context: { upstream_status: status } } : {}),
+  };
 }
 
 function faceFromStructured(err: {
   code: string;
   message: string;
+  context?: { upstream_status?: number };
 }): AssistantFailureFace {
+  const selected = selectedModelOutageFace(err);
+  if (selected) return selected;
   const code = err.code || "LLM_ERROR";
   if (err.message.trim()) {
     // Prefer upstream/product message; normalize known rate-limit English.
@@ -776,6 +820,15 @@ function resolveMessage(f: ErrorFacts): string {
       f.serverMessage ??
       "本地与云端的推理凭证已失效或过期。请稍后再试（将自动换新凭证）；仍失败请重新登录后再试。"
     );
+  }
+  const selected = selectedModelOutageFace({
+    code: f.code,
+    message: f.serverMessage,
+    status: f.status,
+    context: f.context,
+  });
+  if (selected) {
+    return selected.message;
   }
   if (isOurServiceErrorCode(f.code)) {
     return f.serverMessage ?? OUR_SERVICE_UNAVAILABLE_MESSAGE;

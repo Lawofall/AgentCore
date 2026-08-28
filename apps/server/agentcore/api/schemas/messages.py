@@ -832,12 +832,13 @@ class MessageDetail(BaseModel):
 
 # Closed sets for persisted ``memory_updates`` JSONB (kind + items[].action).
 # Removing / renaming a member is a backfill — do not drop a historical value to
-# tidy the type. Write-site inventory: consolidation.py (episodic / semantic +
+# tidy the type. Write-site inventory: consolidation.py (semantic +
 # add/update/remove via MemoryAction), always_quota.py + billing_quota_card.py
-# (kind=quota; action quota / quota_denied / quota_holder).
+# (kind=quota; action quota / quota_denied / quota_holder). Session digests live
+# in ``memory_episodes`` and never get a ``memory_updates`` row.
 # Production value-domain check (pre-deploy, human): Agent记忆与知识系统.md
 # 「memory_updates 闭集 · 上线前生产库查询」.
-MemoryUpdateKind = Literal["episodic", "semantic", "quota"]
+MemoryUpdateKind = Literal["semantic", "quota"]
 MemoryUpdateAction = Literal[
     "add",
     "update",
@@ -870,20 +871,21 @@ class MemoryUpdateItemView(BaseModel):
 
 
 class MemoryUpdateView(BaseModel):
-    """One memory-write notice for the conversation-tail card (two-layer memory).
+    """One memory-write notice for the conversation-tail card.
 
     Projected from a ``memory_updates`` row. ``kind`` is the closed ``MemoryUpdateKind``
     set and selects the UI:
-    - ``episodic``: light tip; ``summary`` is the ≤200-char session digest; ``items`` empty.
     - ``semantic``: diff card; ``items`` lists add/update/remove bullets.
     - ``quota``: always-pool / billing skip; ``summary`` says why; ``items`` name the
       fingerprint row (``quota``) plus denied / holder rows.
 
-    Returned only with the LATEST messages window, and pushed live on the per-user firehose.
+    Session digests are not cards. Returned only with the LATEST messages window, and
+    pushed live on the per-user firehose.
 
     ``anchor_at`` is the last consolidated message's ``created_at`` — the thread position
     the card describes, which ``created_at`` (when the debounced pass happened to run) does
-    not give. Null on older rows and on writes with no message window.
+    not give. Live semantic writes set it; null on older rows and on writes with no
+    message window (leak-scan / quota).
     """
 
     id: str
@@ -959,6 +961,8 @@ LOCAL_TURN_TOOL_FAILURE_CODES = frozenset(
         "source_dump_redirect",
         "long_running_redirect",
         "loopback_host",
+        "access_denied",
+        "outside_workspace",
         "other",
         "too_large",
     }
@@ -993,6 +997,21 @@ def _remap_path_or_verify_failure(message: str) -> str | None:
         )
     ):
         return "not_found"
+    lowered = raw.lower()
+    if any(
+        needle in lowered
+        for needle in (
+            "winerror 5",
+            "winerror 32",
+            "access is denied",
+            "access denied",
+            "sharing violation",
+            "拒绝访问",
+        )
+    ) or "写入被占用" in raw:
+        return "access_denied"
+    if "超出了工作区范围" in raw:
+        return "outside_workspace"
     return None
 
 
@@ -1197,13 +1216,21 @@ class BeginLocalTurnRequest(BaseModel):
 
     Does not start a cloud SSE turn, mint a title, or compact. Same
     ``user_message_id`` / ``message_id`` retry is success.
+
+    ``regenerate=True`` patches that user row and deletes later messages
+    (same surgery as ``RegenerateMessageRequest``), then pins a new assistant.
+    ``attachments`` / ``agent_mentions``: omit to keep stored materials; send a
+    list (including empty) to replace them.
     """
 
     user_message: str = Field("", max_length=32000)
     user_message_id: str = Field(..., min_length=1, max_length=64)
     message_id: str = Field(..., min_length=1, max_length=64)
     trace_id: str = Field(..., min_length=32, max_length=32)
-    agent_mentions: list[AgentMention] = Field(default_factory=list, max_length=10)
+    # Omit = keep stored chips on regenerate; send a list (including empty) to replace.
+    agent_mentions: list[AgentMention] | None = Field(default=None, max_length=10)
+    regenerate: bool = False
+    attachments: list[MessageAttachment] | None = None
 
     @field_validator("user_message_id", "message_id")
     @classmethod
@@ -1266,6 +1293,21 @@ class AbortLocalTurnRequest(BaseModel):
 
 class AbortLocalTurnResponse(BaseModel):
     aborted: bool
+
+
+class LocalTurnHeartbeatRequest(BaseModel):
+    """Keep the sidecar occupy lease fresh (desktop, ~20s). Same owner as begin."""
+
+    message_id: str = Field(..., min_length=1, max_length=64)
+
+    @field_validator("message_id")
+    @classmethod
+    def _uuid_message_id(cls, value: str) -> str:
+        return _require_message_uuid(value)
+
+
+class LocalTurnHeartbeatResponse(BaseModel):
+    ok: bool
 
 
 class StopTurnResponse(BaseModel):

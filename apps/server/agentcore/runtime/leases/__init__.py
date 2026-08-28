@@ -10,11 +10,14 @@ from typing import Any
 from agentcore.db.models.runs import TurnLeaseRow
 from agentcore.runtime.leases.repo import TurnLeaseRepository
 from agentcore.runtime.leases.service import (
+    LOCAL_TURN_LEASE_OWNER_PREFIX,
     acquire_turn_lease,
     heartbeat_turn_lease,
+    is_local_turn_lease,
     lease_heartbeat_loop,
     lease_owner_id,
     list_fresh_conversation_ids_for_user,
+    local_turn_lease_owner_id,
     orphan_turn_lease,
     release_turn_lease,
 )
@@ -30,11 +33,14 @@ _SWEEPER_EXPORTS = frozenset(
 __all__ = [
     "TurnLeaseRow",
     "TurnLeaseRepository",
+    "LOCAL_TURN_LEASE_OWNER_PREFIX",
     "acquire_turn_lease",
     "heartbeat_turn_lease",
+    "is_local_turn_lease",
     "lease_heartbeat_loop",
     "lease_owner_id",
     "list_fresh_conversation_ids_for_user",
+    "local_turn_lease_owner_id",
     "orphan_turn_lease",
     "release_turn_lease",
     "run_turn_lease_sweep",

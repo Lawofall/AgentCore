@@ -9,6 +9,7 @@ from agentcore.conversation.local_turn import (
     abort_local_turn,
     append_local_turn_journal,
     begin_local_turn,
+    heartbeat_local_turn,
     record_local_turn,
     upsert_local_turn_stream_segments,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "begin_local_turn",
     "continue_chat",
     "dispatch_handoff",
+    "heartbeat_local_turn",
     "record_local_turn",
     "regenerate_chat",
     "resume_chat",

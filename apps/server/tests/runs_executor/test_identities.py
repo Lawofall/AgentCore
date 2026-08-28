@@ -236,9 +236,11 @@ async def test_captain_identity_carries_when_to_split_guidance():
     # 嵌套 lead 编排 HOW 住 identity（已有 captain 分叉），不进共享目录。
     assert "怎么拆" in sys
     assert "假两段" in sys
-    assert "何时不该拆" in sys
+    assert "何时不该拆" not in sys
     assert "摸底一页地图" in sys
+    assert sys.count("摸底一页地图") == 1
     assert "已经做了很久" in sys
+    assert sys.count("已经做了很久") == 1
     assert "禁止开局先招人" in sys
     assert "已覆盖" in sys
     assert "再整仓" in sys
@@ -373,6 +375,8 @@ async def test_handoff_prompt_splits_by_topology():
     assert "summary（结论）" in upstream
     assert "一句话说清你这次做出了什么" in upstream
     assert "一行标题" not in upstream
+    assert leaf.count("它与 escalate 不同") == 1
+    assert upstream.count("它与 escalate 不同") == 1
     # 队员合同：原则标题 + 结构真相；不守卫完成话术近义词必须在场
     assert "交接勿回灌" in leaf and "交接勿回灌" in upstream
     assert "改文件" in leaf and "症状消失" in leaf

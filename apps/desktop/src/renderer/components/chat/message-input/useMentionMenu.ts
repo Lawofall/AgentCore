@@ -56,13 +56,14 @@ import {
   pickLocalFileAttachment,
   stageRootFileAttachment,
 } from "./resideAttachment";
-import { resolveFolderFromIndexedEntry } from "./resolveAttachmentFolder";
+import {
+  type AttachmentFolderHint,
+  resolveFolderFromCitedRoot,
+  resolveFolderFromIndexedEntry,
+} from "./resolveAttachmentFolder";
 import type { MenuMode } from "./types";
 
-export type AttachmentFolderHint = {
-  folderId: string;
-  folderName: string;
-};
+export type { AttachmentFolderHint };
 
 function isAgentItem(
   item: MentionMenuSelectable,
@@ -388,11 +389,11 @@ export function useMentionMenu({
     mentionRangeRef.current = null;
   }, []);
 
-  /**
-   * 回形针 / @ 本机文件在云端会话下的上传也前移到附加时——主进程已经把字节暂存好了，
-   * 没道理等用户点发送才开始「读回字节 → PUT」。本机工作区下 stage 已直接写进
-   * ``attachments/``（带 workspacePath），不必再来一趟。
-   */
+    /**
+     * 回形针 / @ 本机文件在云端会话下的上传也前移到附加时——主进程已经把字节暂存好了，
+     * 没道理等用户点发送才开始「读回字节 → PUT」。已有 workspacePath（区内引用或
+     * 已写入 ``attachments/``）不必再来一趟。
+     */
   const startCloudUpload = useCallback(
     (attachment: PendingAttachment) => {
       if (!conversationId) return;
@@ -645,7 +646,7 @@ export function useMentionMenu({
           kind: "dir",
         };
       } else {
-        // 文件：引用即驻留——主进程复制进工作区 attachments/（含二进制 xlsx）。
+        // 文件：区内引用原路径；区外才复制进 attachments/（含二进制 xlsx）。
         // 本地根 sourceId = ``local:<rootId>`` 或 ``local:<rootId>:<subpath>``。
         const localMatch = /^local:([^:]+)(?::(.*))?$/.exec(entry.sourceId);
         if (localMatch && hasLocalFiles()) {
@@ -674,6 +675,8 @@ export function useMentionMenu({
             workspacePath: staged.workspacePath,
             stagingId: staged.stagingId,
             binary: staged.binary,
+            citedRootId: staged.citedRootId,
+            citedRelPath: staged.citedRelPath,
           };
         } else {
           const source = sourcesRef.current.get(entry.sourceId);
@@ -704,6 +707,7 @@ export function useMentionMenu({
             text: res.text,
             truncated: res.truncated,
             kind: "file",
+            workspacePath: entry.relPath.replace(/\\/g, "/"),
           };
         }
       }
@@ -792,10 +796,19 @@ export function useMentionMenu({
       workspacePath: res.workspacePath,
       stagingId: res.stagingId,
       binary: res.binary,
+      citedRootId: res.citedRootId,
+      citedRelPath: res.citedRelPath,
     };
     const index = attachments.length;
     setAttachments((prev) => [...prev, attachment]);
     startCloudUpload(attachment);
+    if (!conversationId && onAttachmentFolderHint) {
+      const cited =
+        res.citedRootId && res.citedRelPath
+          ? resolveFolderFromCitedRoot(res.citedRootId, res.citedRelPath)
+          : null;
+      if (cited) onAttachmentFolderHint(cited);
+    }
     logEvent("info", "mention.select", { category: "attach" });
     commitInline("A", index);
   }, [
@@ -804,6 +817,7 @@ export function useMentionMenu({
     commitInline,
     conversationId,
     menuMode,
+    onAttachmentFolderHint,
     onBrowserFilePick,
     setAttachments,
     startCloudUpload,

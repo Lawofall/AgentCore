@@ -29,6 +29,21 @@ describe("sidecar externalMounts mode", () => {
     ]);
   });
 
+  it("preserves attach_rw mode on mapped mounts", () => {
+    const mounts = buildExternalMounts([
+      {
+        id: "r3",
+        name: "Trade",
+        absPath: "C:\\trade",
+        sessionOnly: true,
+        conversationId: "c1",
+        mode: "attach_rw",
+        alias: "trade",
+      },
+    ]);
+    expect(mounts[0]?.mode).toBe("attach_rw");
+  });
+
   it("defaults missing mode to readonly", () => {
     const mounts = buildExternalMounts([
       {

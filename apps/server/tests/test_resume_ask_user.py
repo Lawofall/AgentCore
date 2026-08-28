@@ -91,7 +91,7 @@ def test_result_continue_empty_injects_confirmed_defaults():
     assert res.effect is ToolEffect.CONTINUE
     assert res.output.startswith("用户确认默认：")
     assert "按确认默认" in res.output
-    assert "先问你" in res.output  # 禁表出现在注入文案里
+    assert "先问你" not in res.output
     assert "上班族 + 半天块通用模板" in res.output
 
 

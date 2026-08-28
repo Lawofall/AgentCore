@@ -162,6 +162,28 @@ async def test_fresh_lease_blocks_but_stale_lease_does_not(session_factory):
         assert not await consolidation.conversation_turn_open(session, conv_id)
 
 
+async def test_paused_usage_without_pause_row_defers_without_watermark(
+    session_factory, episodic_calls
+):
+    """Sidecar pause latches ``usage.paused`` and never writes ``paused_turns``."""
+    _user_id, conv_id, msg_id = await _seed_turn(session_factory)
+    await _mark_assistant_usage(
+        session_factory,
+        msg_id,
+        {"status": "running", "paused": True, "finish_reason": "paused"},
+    )
+
+    async with session_factory() as session:
+        assert await consolidation.conversation_turn_open(session, conv_id)
+
+    changed = await consolidation.consolidate_conversation(conv_id)
+    assert changed is False
+    assert episodic_calls == []
+    async with session_factory() as session:
+        conv = await ConversationRepository(session).get_by_id_unscoped(conv_id)
+        assert conv.memory_synced_at is None
+
+
 async def _mark_assistant_usage(session_factory, msg_id: str, usage: dict) -> None:
     from sqlalchemy import select
 

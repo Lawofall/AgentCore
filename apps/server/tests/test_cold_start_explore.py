@@ -459,15 +459,13 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
     assert "remember" in with_flag
     assert "立刻继续" in with_flag
     assert "重新了解" in with_flag
-    assert "≥2" in with_flag or "至少两" in with_flag
-    assert "1 人" in with_flag or "包办" in with_flag
-    assert "轮" in with_flag
+    assert "轻探" in with_flag
+    assert "摸完整仓" in with_flag
     assert "与巩固侧「冷启动」无关" in with_flag
     block = with_flag[
         with_flag.find("<cold_start_explore>") : with_flag.find("</cold_start_explore>")
     ]
     assert "team_preview" not in block
-    assert "同其它委派直接开跑" in block
 
 
 def test_hard_explore_three_reasons_share_one_principle():
@@ -493,7 +491,7 @@ def test_compose_prompt_rebind_gate():
         cold_start_explore="rebind",
     )
     assert "绑定已变" in text
-    assert "≥2" in text or "包办" in text
+    assert "轻探" in text
     assert "合并更新" in text
     assert "<cold_start_explore>" in text
     assert "画像.md」为空" not in text
@@ -757,7 +755,7 @@ def test_compose_prompt_folder_profile_empty_soft_hint():
     assert "不挡" in soft
     assert "</cold_start_explore>" not in soft
     assert "写盘不得出 AgentCore/" not in soft
-    assert "不可当跳过" in soft or "≥2" in soft
+    assert "不可当跳过" in soft
     # Hard empty wins over soft empty.
     hard = compose_ceo_chat_prompt(
         "BASE",
@@ -769,7 +767,7 @@ def test_compose_prompt_folder_profile_empty_soft_hint():
     assert "</cold_start_explore>" in hard
     assert "</folder_profile_empty>" not in hard
     assert "写盘不得出 AgentCore/" in hard
-    assert "不可跳过" in hard or "≥2" in hard
+    assert "不可跳过" in hard
 
 
 @pytest.mark.asyncio

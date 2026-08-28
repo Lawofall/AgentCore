@@ -4,7 +4,7 @@ turns, the turn journal (唯一事实源) and per-turn metrics (观测看板).""
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, case, delete, distinct, func, select, type_coerce, update
+from sqlalchemy import and_, case, delete, distinct, func, or_, select, type_coerce, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import Insert as PgInsert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -1290,6 +1290,7 @@ class TurnMetricsRepository:
         workers: int,
         input_tokens: int,
         output_tokens: int,
+        prompt_tokens: int = 0,
         boundary_yields: int = 0,
         scope_signals: int = 0,
         revises: int = 0,
@@ -1326,6 +1327,7 @@ class TurnMetricsRepository:
                 workers=workers,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                prompt_tokens=int(prompt_tokens or 0),
                 boundary_yields=boundary_yields,
                 scope_signals=scope_signals,
                 revises=revises,
@@ -1458,10 +1460,10 @@ class TurnMetricsRepository:
         return result.scalars().all()
 
     async def latest_input_tokens(self, conversation_id: str) -> int | None:
-        """Most recent turn's ``input_tokens`` for this conversation, or ``None``.
+        """Most recent turn's summed ``input_tokens``, or ``None``.
 
-        Used by near-ceiling pre-turn compaction (定案⑦A) to decide whether the
-        next send must await a fold before assembling history. Hits
+        Billing / post-turn dual-trigger still read this. Near-ceiling fit-check
+        uses :meth:`latest_prompt_tokens`. Hits
         ``ix_turn_metrics_conversation_created``.
         """
         result = await self._session.execute(
@@ -1474,6 +1476,32 @@ class TurnMetricsRepository:
         if row is None:
             return None
         return int(row)
+
+    async def latest_prompt_tokens(self, conversation_id: str) -> int | None:
+        """Newest positive fit-check watermark for this conversation, or ``None``.
+
+        Prefers ``prompt_tokens`` (largest single-request prompt). Empty-fail rows
+        that wrote 0 are skipped so they cannot clobber the previous watermark.
+        Legacy rows with ``prompt_tokens=0`` but a positive summed ``input_tokens``
+        fall back to that sum. Hits ``ix_turn_metrics_conversation_created``.
+        """
+        result = await self._session.execute(
+            select(TurnMetricsRow.prompt_tokens, TurnMetricsRow.input_tokens)
+            .where(TurnMetricsRow.conversation_id == conversation_id)
+            .where(
+                or_(
+                    TurnMetricsRow.prompt_tokens > 0,
+                    TurnMetricsRow.input_tokens > 0,
+                )
+            )
+            .order_by(TurnMetricsRow.created_at.desc())
+            .limit(1)
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        prompt, inp = int(row[0] or 0), int(row[1] or 0)
+        return prompt if prompt > 0 else inp
 
     async def list_recent_for_user(
         self, user_id: str, *, limit: int = 20

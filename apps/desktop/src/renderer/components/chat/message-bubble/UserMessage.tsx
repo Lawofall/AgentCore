@@ -99,7 +99,11 @@ export function UserMessage({ message }: MessageBubbleProps) {
 
   if (editing) {
     return (
-      <div className="flex flex-col items-end gap-2">
+      <div
+        className="flex flex-col items-end gap-2"
+        data-testid="user-message"
+        data-copy-plain=""
+      >
         <div className="w-full max-w-[80%] rounded-xl rounded-br-none border border-border bg-card p-2">
           {marked ? (
             <UserInlineDraft
@@ -147,7 +151,11 @@ export function UserMessage({ message }: MessageBubbleProps) {
   }
 
   return (
-    <div className="group flex flex-col items-end gap-1.5">
+    <div
+      className="group flex flex-col items-end gap-1.5"
+      data-testid="user-message"
+      data-copy-plain=""
+    >
       {!hasInlineMarkers(message.content) && (
         <UserChipTray
           attachments={attachments}

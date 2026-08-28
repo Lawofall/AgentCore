@@ -1,15 +1,16 @@
 /**
- * 引用即驻留：把用户选中的本机文件（含区外 / 二进制）复制进对话工作区 ``attachments/``。
+ * 附加文件：区内引用原路径；区外才复制进对话工作区 ``attachments/``。
  *
- * 绝对路径只在主进程出现；renderer 只拿到 ``name`` / ``workspacePath`` / 可选文本预览。
- * 云占位（OneDrive 按需下载等）**不做前置检测**：读/复制各带短超时，失败之后才回头诊断，
- * 免得每附加一个文件都先为一次 powershell 探测付秒级延迟。
+ * 绝对路径只在主进程出现；renderer 只拿到 ``name`` / ``workspacePath`` / 可选文本预览 /
+ * ``citedRootId``+``citedRelPath``。云占位（OneDrive 按需下载等）**不做前置检测**：
+ * 读/复制各带短超时，失败之后才回头诊断，免得每附加一个文件都先为一次 powershell
+ * 探测付秒级延迟。
  */
 
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promises as fs, createReadStream, createWriteStream } from "node:fs";
-import { basename, extname, join } from "node:path";
+import { basename, extname, isAbsolute, join, relative } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import type { FsErrorCode, FsResult } from "@shared/ipc-contract";
@@ -17,7 +18,7 @@ import { BrowserWindow, app, dialog } from "electron";
 import { IMAGE_MIME, TEXT_PREVIEW_CAP } from "./constants";
 import { locate, realInside } from "./pathGuard";
 import { sniffBinary } from "./preview";
-import { ensureReady, getRoot } from "./roots";
+import { ensureReady, getAllRoots, getRoot } from "./roots";
 
 const execFileAsync = promisify(execFile);
 
@@ -37,7 +38,7 @@ export interface StageDest {
 
 export interface StagedAttachmentData {
   name: string;
-  /** 已写入对话工作区时的相对路径（``attachments/<name>``）。 */
+  /** 已在对话工作区时的相对路径（区内原路径，或 ``attachments/<name>``）。 */
   workspacePath?: string;
   /** 尚未落工作区时的暂存 id（草稿 / 云端待上传）。 */
   stagingId?: string;
@@ -46,6 +47,8 @@ export interface StagedAttachmentData {
   text: string;
   truncated: boolean;
   sizeBytes: number;
+  citedRootId?: string;
+  citedRelPath?: string;
 }
 
 interface StagingEntry {
@@ -536,6 +539,85 @@ async function stageToTemp(
   };
 }
 
+function toPosixRel(fromAbs: string, fileAbs: string): string | null {
+  const rel = relative(fromAbs, fileAbs);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return null;
+  return rel.replace(/\\/g, "/");
+}
+
+async function realPathOrNull(abs: string): Promise<string | null> {
+  try {
+    return await fs.realpath(abs);
+  } catch {
+    return null;
+  }
+}
+
+/** 文件已在 dest 工作区树内 → 引用原路径，不复制。 */
+async function citeIfInsideDest(
+  fileAbs: string,
+  dest: StageDest,
+  entry: StagingEntry,
+): Promise<FsResult<StagedAttachmentData> | null> {
+  await ensureReady();
+  const root = getRoot(dest.rootId);
+  if (!root) return null;
+  const sub = (dest.subpath || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "");
+  const destAbs = sub ? join(root.absPath, ...sub.split("/")) : root.absPath;
+  const destReal = await realPathOrNull(destAbs);
+  const fileReal = await realPathOrNull(fileAbs);
+  if (!destReal || !fileReal) return null;
+  const posix = toPosixRel(destReal, fileReal);
+  if (!posix) return null;
+  const citedRel = sub ? `${sub}/${posix}` : posix;
+  return {
+    ok: true,
+    data: {
+      name: entry.name,
+      workspacePath: posix,
+      binary: entry.binary,
+      text: entry.text,
+      truncated: entry.truncated,
+      sizeBytes: entry.sizeBytes,
+      citedRootId: dest.rootId,
+      citedRelPath: citedRel,
+    },
+  };
+}
+
+async function findContainingRoot(
+  fileAbs: string,
+): Promise<{ rootId: string; relPath: string } | null> {
+  await ensureReady();
+  const fileReal = await realPathOrNull(fileAbs);
+  if (!fileReal) return null;
+  const ranked = [...getAllRoots()].sort(
+    (a, b) => b.absPath.length - a.absPath.length,
+  );
+  for (const root of ranked) {
+    const rootReal = await realPathOrNull(root.absPath);
+    if (!rootReal) continue;
+    const posix = toPosixRel(rootReal, fileReal);
+    if (posix) return { rootId: root.id, relPath: posix };
+  }
+  return null;
+}
+
+async function annotateDraftCite(
+  staged: FsResult<StagedAttachmentData>,
+  fileAbs: string,
+): Promise<FsResult<StagedAttachmentData>> {
+  if (!staged.ok) return staged;
+  const found = await findContainingRoot(fileAbs);
+  if (!found) return staged;
+  return {
+    ok: true,
+    data: { ...staged.data, citedRootId: found.rootId, citedRelPath: found.relPath },
+  };
+}
+
 async function stageFromAbs(
   absPath: string,
   dest?: StageDest,
@@ -548,8 +630,12 @@ async function stageFromAbs(
   }
   const mat = await materializeSource(resolved, "user");
   if (!mat.ok) return mat;
-  if (dest) return writeToDest(mat.data, dest, "user");
-  return stageToTemp(mat.data);
+  if (dest) {
+    const cited = await citeIfInsideDest(resolved, dest, mat.data);
+    if (cited) return cited;
+    return writeToDest(mat.data, dest, "user");
+  }
+  return annotateDraftCite(await stageToTemp(mat.data), resolved);
 }
 
 /** 系统文件选择器 → 驻留（有 dest）或暂存。 */

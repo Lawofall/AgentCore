@@ -61,6 +61,9 @@ class ErrorCode(StrEnum):
     # Empty-response ladder → finish_reason=degraded; dedicated code so clients
     # do not treat it as transport failure (Base URL / API Key escalation).
     LLM_EMPTY_RESPONSE = "LLM_EMPTY_RESPONSE"
+    # Near-ceiling fold did not write — refuse the send (HTTP 413). Not LLM_ERROR:
+    # retry / Base URL / API Key escalation cannot shorten the conversation.
+    CONTEXT_OVERFLOW = "CONTEXT_OVERFLOW"
     LLM_RATE_LIMIT = "LLM_RATE_LIMIT"
     LLM_TIMEOUT = "LLM_TIMEOUT"
     LLM_INSUFFICIENT_BALANCE = "LLM_INSUFFICIENT_BALANCE"  # valid key, empty wallet (402)

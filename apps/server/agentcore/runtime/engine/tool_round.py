@@ -152,13 +152,7 @@ async def handle_tool_calls_round(
             # Do not engine-inject wait-confirm copy — the card is the pause face.
             final_content = content_before_round
         usage_meta = terminal.metadata or {}
-        total_usage = total_usage + TokenUsage(
-            input_tokens=usage_meta.get("input_tokens", 0),
-            output_tokens=usage_meta.get("output_tokens", 0),
-            reasoning_tokens=usage_meta.get("reasoning_tokens", 0),
-            cache_hit_tokens=usage_meta.get("cache_hit_tokens", 0),
-            cache_miss_tokens=usage_meta.get("cache_miss_tokens", 0),
-        )
+        total_usage = total_usage + TokenUsage.from_call_meta(usage_meta)
         # 挂起即收口 (②): a SUSPEND terminal ended the turn at a durable
         # checkpoint awaiting /resume — NOT because an answer was produced.
         # Stamp FinishReason.PAUSED (via finish_override_sink) so the pipeline

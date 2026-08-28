@@ -118,6 +118,8 @@ function residencyInput(
     name: a.name,
     stagingId: a.stagingId,
     workspacePath,
+    citedRootId: a.citedRootId,
+    citedRelPath: a.citedRelPath,
     binary: a.binary,
     text: a.text,
     truncated: a.truncated,

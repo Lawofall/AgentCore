@@ -61,13 +61,22 @@ export function formatGrantOrganizeFolderAnswer(
   return `${optionLabel}（${folderName} → ${namespace}；可移动/重命名/复制/删除进回收站、仅本次对话、可撤销）`;
 }
 
+export function formatGrantAttachFolderAnswer(
+  optionLabel: string,
+  folderName: string,
+  namespace: string,
+): string {
+  return `${optionLabel}（${folderName} → ${namespace}；本对话可改可覆盖、仅本次对话、可撤销）`;
+}
+
 /**
  * Resolve grant hints → session organize root → POST grant.
  * Never opens a folder picker; unresolved → not_found (≠ cancelled).
  * Same root upgrading from readonly still requires this fresh confirm card.
  */
-export async function pickAndGrantOrganizeFolder(
+export async function pickAndGrantSessionFolder(
   conversationId: string,
+  mode: "organize" | "attach_rw",
   hints?: GrantFolderHints,
 ): Promise<GrantOrganizeResult> {
   if (!hasLocalFiles() || !window.fsApi?.grantSessionReadonlyRoot) {
@@ -76,7 +85,7 @@ export async function pickAndGrantOrganizeFolder(
   try {
     const granted = await window.fsApi.grantSessionReadonlyRoot({
       conversationId,
-      mode: "organize",
+      mode,
       ...(hints?.path ? { path: hints.path } : {}),
       ...(hints?.wellKnown ? { wellKnown: hints.wellKnown } : {}),
       ...(hints?.targetName ? { targetName: hints.targetName } : {}),
@@ -106,7 +115,7 @@ export async function pickAndGrantOrganizeFolder(
         {
           root_id: root.id,
           label: root.name,
-          mode: "organize",
+          mode,
         },
       );
     } catch (e) {
@@ -129,4 +138,18 @@ export async function pickAndGrantOrganizeFolder(
   } catch (e) {
     return { ok: false, reason: "error", message: describeGrantError(e) };
   }
+}
+
+export async function pickAndGrantOrganizeFolder(
+  conversationId: string,
+  hints?: GrantFolderHints,
+): Promise<GrantOrganizeResult> {
+  return pickAndGrantSessionFolder(conversationId, "organize", hints);
+}
+
+export async function pickAndGrantAttachFolder(
+  conversationId: string,
+  hints?: GrantFolderHints,
+): Promise<GrantOrganizeResult> {
+  return pickAndGrantSessionFolder(conversationId, "attach_rw", hints);
 }

@@ -8,12 +8,6 @@ import type {
   PendingAttachment,
 } from "./composerAttachments";
 
-const KIND_LABEL: Record<PendingAttachment["kind"], string> = {
-  file: "文件",
-  dir: "文件夹",
-  conversation: "对话",
-};
-
 export function AttachmentChips({
   attachments,
   agentMentions = [],
@@ -79,9 +73,11 @@ export function AttachmentChips({
             ) : (
               <FileTypeIcon name={a.name} path={a.path} size={12} />
             )}
-            <span className="shrink-0 text-muted-foreground">
-              {uploading ? "上传中" : failed ? "上传失败" : KIND_LABEL[a.kind]}
-            </span>
+            {(uploading || failed) && (
+              <span className="shrink-0 text-muted-foreground">
+                {uploading ? "上传中" : "上传失败"}
+              </span>
+            )}
             <SimpleTooltip
               label={
                 failed

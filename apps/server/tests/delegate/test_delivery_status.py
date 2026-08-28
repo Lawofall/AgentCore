@@ -230,8 +230,8 @@ def test_blocked_with_criteria_gap_and_bind_action_on_cloud():
     assert "勿再绑" not in desc
 
 
-def test_zero_landing_worker_keeps_role_soft_gap():
-    # 定案 B：per-worker soft「本队员本波未交卷」；批次 criteria soft 不盖掉角色；notes 不 blocked。
+def test_zero_landing_worker_keeps_role_blocking_gap():
+    # 定案 B：per-worker「本队员本波未交卷」；写盘形态 blocking，不得 delivered。
     from agentcore.runtime.runs.serialize import format_file_landing_tools_slash
     from agentcore.runtime.runs.types import Deliverable
 
@@ -268,23 +268,22 @@ def test_zero_landing_worker_keeps_role_soft_gap():
         criteria_gaps=[f"提醒（不阻断验收）：本批未见落盘（需要 {tools}）"],
     )
     assert payload is not None
-    assert payload["state"] == "notes"
-    assert payload["state"] != "blocked"
+    assert payload["state"] == "blocked"
+    assert payload["state"] != "delivered"
     zero_gaps = [g for g in payload["gaps"] if g.get("reason") == "files_not_landed"]
     assert len(zero_gaps) == 1
     gap = zero_gaps[0]
     assert gap["role"] == "执行工程师"
-    assert gap["severity"] == "warning"
+    assert gap.get("severity") != "warning"
     assert "本队员本波未交卷" in gap["description"]
     assert "未把产物写入工作区" in gap["description"]
-    # Batch criteria soft must not replace the worker-attributed row.
     assert not any(
         g.get("role") == "验收" and g.get("reason") == "files_not_landed" for g in payload["gaps"]
     )
 
 
 def test_zero_landing_mixed_batch_attributes_empty_worker_only():
-    """一人落盘、一人空转 → 仅空转队员 soft 可见；整场 notes，不 hard fail。"""
+    """一人落盘、一人空转 → 仅空转队员可见；整场 partial，不得 delivered。"""
     from agentcore.runtime.runs.types import Deliverable
 
     plan = _plan(
@@ -325,13 +324,14 @@ def test_zero_landing_mixed_batch_attributes_empty_worker_only():
     }
     payload = build_delivery_status(plan, results, execution_id="e-mixed-wave")
     assert payload is not None
-    assert payload["state"] == "notes"
+    assert payload["state"] == "partial"
+    assert payload["state"] != "delivered"
     assert "a.ts" in payload["delivered_files"]
     zero_gaps = [g for g in payload["gaps"] if g.get("reason") == "files_not_landed"]
     assert len(zero_gaps) == 1
     assert zero_gaps[0]["role"] == "前端工程师"
     assert "本队员本波未交卷" in zero_gaps[0]["description"]
-    assert zero_gaps[0]["severity"] == "warning"
+    assert zero_gaps[0].get("severity") != "warning"
     assert not any(g.get("role") == "修码员" for g in zero_gaps)
 
 
@@ -2840,3 +2840,59 @@ def test_maybe_emit_notes_reconciliation_for_the_accepted_gate():
         if isinstance(a, dict) and a.get("status") == "accepted"
     ]
     assert accepted == ["good.md"]
+
+
+def test_prose_wave_keeps_files_not_landed_soft():
+    """全员 form=prose：甲⁺ 仍 notes，不挡用户面收工。"""
+    plan = _plan(
+        RunSpec(
+            run_id="w1",
+            task="口头结论",
+            role="研究员",
+            deliverable=Deliverable(form="prose"),
+        )
+    )
+    results = {
+        "w1": RunState(
+            phase=RunPhase.COMPLETED,
+            content="结论在正文",
+            delivery_gaps=[
+                {
+                    "description": "本队员本波未交卷：未把产物写入工作区",
+                    "severity": "warning",
+                    "reason": "files_not_landed",
+                }
+            ],
+        )
+    }
+    payload = build_delivery_status(plan, results, execution_id="e-prose-soft")
+    assert payload is not None
+    assert payload["state"] == "notes"
+    gap = payload["gaps"][0]
+    assert gap["reason"] == "files_not_landed"
+    assert gap.get("severity") == "warning"
+
+
+def test_path_mismatch_latches_draft_ack():
+    from agentcore.runtime.delegate.delivery_status import current_delivery_verdict
+
+    declared = "build/icon.ico"
+    plan = _plan(
+        RunSpec(
+            run_id="w1",
+            task="做图标",
+            role="工程师",
+            deliverable=Deliverable(form="workspace", artifacts=[declared]),
+        )
+    )
+    results = {
+        "w1": RunState(phase=RunPhase.COMPLETED, content="做好了"),
+    }
+    current_delivery_verdict.set(None)
+    maybe_emit_delivery_status(EventSink(), plan, results, execution_id="e-icon-miss")
+    verdict = current_delivery_verdict.get()
+    assert verdict is not None
+    assert verdict.state != "delivered"
+    assert verdict.requires_draft_ack is True
+    assert declared in verdict.missing_declared
+    current_delivery_verdict.set(None)

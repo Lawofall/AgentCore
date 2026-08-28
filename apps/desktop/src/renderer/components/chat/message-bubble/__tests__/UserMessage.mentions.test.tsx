@@ -117,6 +117,13 @@ describe("UserMessage agent mention chips", () => {
     );
   });
 
+  it("marks the bubble as a plain-copy island", () => {
+    renderUser(userMsg());
+    expect(
+      screen.getByTestId("user-message").hasAttribute("data-copy-plain"),
+    ).toBe(true);
+  });
+
   it("copies human labels, not U+FFFC markers", async () => {
     const content = `按这个${inlineToken("A", 0)}请${inlineToken("M", 0)}看`;
     const attachments = [

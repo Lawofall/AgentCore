@@ -129,7 +129,7 @@ def ask_user_tool_result(
                 output = (
                     f"用户确认默认：{defaults}。"
                     "请按确认默认推进派工/正文，并在正文标「按确认默认」；"
-                    "【禁止】借继续另拟一套，也【禁止】再写「先问你 / 请选择 / 方向：先问你」。"
+                    "【禁止】借继续另拟一套，也【禁止】叠已结算的确认话术。"
                 )
             else:
                 options = structured_options_summary(questions)
@@ -137,7 +137,7 @@ def ask_user_tool_result(
                     output = (
                         f"用户确认继续。请复述并沿用上轮确认选项：{options}。"
                         "【禁止】空转确认、不承接选项；"
-                        "【禁止】另拟一套还叠「先问你 / 请选择」。"
+                        "【禁止】另拟一套，也【禁止】叠已结算的确认话术。"
                     )
                 else:
                     output = "用户确认：按你提出的方向继续。"

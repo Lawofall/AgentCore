@@ -119,6 +119,7 @@ _CURATED_BY_CODE: dict[str, str] = {
     "language_unavailable": (
         "运行这段代码需要的语言当前用不了，代码没有执行。我会换用可用的语言继续。"
     ),
+    "env_invalid": "这次带上的环境变量格式不对，命令没有执行。",
     "exec_env_no_interpreter": (
         "这台电脑上没找到运行这条命令的解释器，命令没有执行。"
         "装好之后我可以再试，也可以换一种语言继续。"
@@ -325,6 +326,8 @@ _CURATED_BY_CODE: dict[str, str] = {
     ),
     "workspace_io_error": "读写工作区文件时出错，这一步没能完成。我会换个方式再试。",
     "too_large": "这份文件太大，没法一次读完。我会换办法继续。",
+    "access_denied": "这个文件正被其他程序占用，没能写入。关掉占用它的程序后我可以再试。",
+    "outside_workspace": "这个路径不在当前工作区里，没能读写。",
 }
 
 

@@ -16,16 +16,21 @@ import { hasLocalFiles } from "@/lib/capabilities";
 import {
   guideDesktopDownload,
   isDesktopFolderAction,
+  isGrantFolderAction,
 } from "@/lib/desktopDownload";
 import {
+  ATTACH_CONFIRM_CAPTION,
+  ATTACH_CONFIRM_CTA,
   ORGANIZE_CONFIRM_CAPTION,
   ORGANIZE_CONFIRM_CTA,
   grantHintsFromAskOption,
-  isOrganizeOralConsent,
+  pickOralGrantOption,
   organizeConfirmDetail,
 } from "@/lib/grantFolderHints";
 import {
+  formatGrantAttachFolderAnswer,
   formatGrantOrganizeFolderAnswer,
+  pickAndGrantAttachFolder,
   pickAndGrantOrganizeFolder,
 } from "@/lib/grantOrganizeFolder";
 import { pickAndOpenLocalFolder } from "@/lib/openLocalFolder";
@@ -92,6 +97,9 @@ export function AskDecisionBody({
   const hasOrganizeGrantOption = content.questions.some((q) =>
     q.options.some((o) => o.action === "grant_organize_folder"),
   );
+  const hasAttachGrantOption = content.questions.some((q) =>
+    q.options.some((o) => o.action === "grant_attach_folder"),
+  );
 
   const clearPickerFeedback = () => {
     setBindError(null);
@@ -125,7 +133,7 @@ export function AskDecisionBody({
   };
 
   /**
-   * 人话框短允许表口头同意 → 同题 pending `grant_organize_folder`（hints 取自该选项）。
+   * 人话框短允许表口头同意 → 同题 pending grant_*（hints 取自该选项）。
    * 仅当该题 listed 未勾选；已勾选 grant 仍走 {@link findPendingFolderOption}。
    * 禁对长文意图分类；未命中返回 null，Continue 走原 compose。
    */
@@ -133,11 +141,10 @@ export function AskDecisionBody({
     q: AskQuestion;
     opt: AskOption;
   } | null => {
-    if (!isOrganizeOralConsent(answer.note)) return null;
     for (const q of content.questions) {
       if (q.kind === "text") continue;
       if ((answer.answers[q.id] ?? []).length > 0) continue;
-      const opt = q.options.find((o) => o.action === "grant_organize_folder");
+      const opt = pickOralGrantOption(q.options, answer.note);
       if (opt) return { q, opt };
     }
     return null;
@@ -201,23 +208,37 @@ export function AskDecisionBody({
       return;
     }
 
-    if (opt.action === "grant_organize_folder") {
+    if (opt.action === "grant_organize_folder" || opt.action === "grant_attach_folder") {
       const hints = grantHintsFromAskOption(opt);
-      const result = await pickAndGrantOrganizeFolder(conversationId, hints);
+      const result =
+        opt.action === "grant_attach_folder"
+          ? await pickAndGrantAttachFolder(conversationId, hints)
+          : await pickAndGrantOrganizeFolder(conversationId, hints);
       if (!result.ok) {
         if (result.reason === "unavailable") {
-          setBindError("整理授权仅桌面端可用");
+          setBindError(
+            opt.action === "grant_attach_folder"
+              ? "附加可写授权仅桌面端可用"
+              : "整理授权仅桌面端可用",
+          );
         } else {
           setBindError(result.message);
         }
         setBindBusyLabel(null);
         return;
       }
-      const value = formatGrantOrganizeFolderAnswer(
-        opt.label,
-        result.displayLabel ?? result.root.name,
-        result.namespace,
-      );
+      const value =
+        opt.action === "grant_attach_folder"
+          ? formatGrantAttachFolderAnswer(
+              opt.label,
+              result.displayLabel ?? result.root.name,
+              result.namespace,
+            )
+          : formatGrantOrganizeFolderAnswer(
+              opt.label,
+              result.displayLabel ?? result.root.name,
+              result.namespace,
+            );
       try {
         await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
       } catch {
@@ -276,14 +297,27 @@ export function AskDecisionBody({
     void handleBindOption(q, opt);
   };
 
-  const organizePending =
-    findPendingFolderOption()?.opt.action === "grant_organize_folder";
-  const shellCaption = hasOrganizeGrantOption
-    ? ORGANIZE_CONFIRM_CAPTION
-    : (caption ?? META.activeCaption);
-  const shellIcon = hasOrganizeGrantOption ? FolderTree : META.icon;
-  const shellCta = organizePending ? ORGANIZE_CONFIRM_CTA : META.cta;
-  const shellCtaIcon = organizePending ? FolderTree : META.ctaIcon;
+  const grantPending = findPendingFolderOption()?.opt.action;
+  const hasFolderGrant = hasOrganizeGrantOption || hasAttachGrantOption;
+  const shellCaption =
+    grantPending === "grant_attach_folder" ||
+    (hasAttachGrantOption && !hasOrganizeGrantOption)
+      ? ATTACH_CONFIRM_CAPTION
+      : hasFolderGrant
+        ? ORGANIZE_CONFIRM_CAPTION
+        : (caption ?? META.activeCaption);
+  const shellIcon = hasFolderGrant ? FolderTree : META.icon;
+  const shellCta =
+    grantPending === "grant_attach_folder"
+      ? ATTACH_CONFIRM_CTA
+      : grantPending === "grant_organize_folder"
+        ? ORGANIZE_CONFIRM_CTA
+        : META.cta;
+  const shellCtaIcon =
+    grantPending === "grant_organize_folder" ||
+    grantPending === "grant_attach_folder"
+      ? FolderTree
+      : META.ctaIcon;
   const hasQuestions = content.questions.length > 0;
   /** 无题：message 当唯一题干进壳标题。有题：不画总标题，题干在体内。 */
   const shellTitle = hasQuestions ? undefined : content.question;
@@ -297,7 +331,7 @@ export function AskDecisionBody({
     const picked = answer.answers[q.id] ?? [];
     const rows: AskRow[] = q.options.map((opt) => {
       const desktopFolder = isDesktopFolderAction(opt.action);
-      const organizeGrant = opt.action === "grant_organize_folder";
+      const organizeGrant = isGrantFolderAction(opt.action);
       const canRunFolder =
         desktopFolder &&
         (opt.action === "open_local_project" ? canLocalFs : canBindAction);

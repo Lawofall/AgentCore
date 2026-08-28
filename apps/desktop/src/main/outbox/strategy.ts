@@ -283,6 +283,8 @@ const LOCAL_TURN_TOOL_FAILURE_CODES = new Set([
   "source_dump_redirect",
   "long_running_redirect",
   "loopback_host",
+  "access_denied",
+  "outside_workspace",
   "other",
   "too_large",
 ]);
@@ -321,6 +323,23 @@ function remapPathOrVerifyFailure(raw: string): string | null {
     ].some((n) => raw.includes(n))
   ) {
     return "not_found";
+  }
+  const lowered = raw.toLowerCase();
+  if (
+    [
+      "winerror 5",
+      "winerror 32",
+      "access is denied",
+      "access denied",
+      "sharing violation",
+      "拒绝访问",
+    ].some((n) => lowered.includes(n)) ||
+    raw.includes("写入被占用")
+  ) {
+    return "access_denied";
+  }
+  if (raw.includes("超出了工作区范围")) {
+    return "outside_workspace";
   }
   return null;
 }

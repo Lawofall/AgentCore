@@ -395,6 +395,7 @@ async def _check_safety_and_approval_gates(
             tool_call_id=tc.id,
             run_id=run_id or "",
             awaiting_approval=awaiting_approval,
+            **_shell_observe_log_fields(name, args),
         )
         if auto_pass:
             logger.info("approval.sandbox_auto_pass", tool=name)
@@ -465,5 +466,6 @@ async def _check_safety_and_approval_gates(
             tool_call_id=tc.id,
             run_id=run_id or "",
             awaiting_approval=False,
+            **_shell_observe_log_fields(name, args),
         )
     return None

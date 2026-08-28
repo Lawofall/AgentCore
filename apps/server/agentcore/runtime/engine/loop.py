@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.logging import get_logger
+from agentcore.llm.errors import overlay_progress_failure_message
 from agentcore.llm.profiles import ProfileParams, get_profile
 from agentcore.llm.provider.openai_compatible import OpenAICompatibleProvider
 from agentcore.llm.provider.protocol import LLMMessage, TokenUsage
@@ -91,6 +92,13 @@ class ReactLoopOut:
     cutoff_reasons: list[str] | None = None
     tool_failures: list[dict[str, Any]] | None = None
     controller_seed_out: list[dict[str, Any]] | None = None
+
+
+def _messages_have_tool_progress(messages: list[LLMMessage]) -> bool:
+    """True when this turn already issued or completed a tool call (process exists)."""
+    return any(
+        m.role == "tool" or (m.role == "assistant" and m.tool_calls) for m in messages
+    )
 
 
 async def react_loop(
@@ -665,17 +673,26 @@ async def react_loop(
             if isinstance(round_result, LlmRoundFailure):
                 # Hard LLM failure (non-raising path): the provider already exhausted its
                 # network retries. End on ERROR/DEGRADED (error surfaced in the Return arm).
+                final_content = maybe_salvage_captain_reply(
+                    final_content=final_content, messages=messages, role=role
+                )
+                error_message = round_result.error_message
+                if not (final_content or "").strip() and _messages_have_tool_progress(
+                    messages
+                ):
+                    error_message = overlay_progress_failure_message(
+                        code=round_result.error_code,
+                        message=error_message,
+                        context=round_result.error_context,
+                    )
                 outcome = RoundOutcome(
                     content="",
                     reasoning="",
                     usage=None,
                     llm_failed=True,
                     error_code=round_result.error_code,
-                    error_message=round_result.error_message,
+                    error_message=error_message,
                     error_context=round_result.error_context,
-                )
-                final_content = maybe_salvage_captain_reply(
-                    final_content=final_content, messages=messages, role=role
                 )
                 directive: LoopDirective = decide_llm_failure(
                     final_content=final_content,

@@ -33,7 +33,8 @@ skip_if:
 `llm/resolve.py` 单点：
 
 - **主对话**：用户 key 优先；无 key 才 platform。
-- **后台档**（title/memory/compaction/workflow.slots）：用户**显式**把组合的 background 槽指向自带 Key 时 **该槽优先**（自己的钱，无「白嫖」可防；不过 `enforce_quota`，model id 原样透传不降档）；槽空（跟随主模型）/ 指向平台模型时才 **平台优先** + 必过 `enforce_quota`（防白嫖），平台不可用（配置缺失 **或** 上游 auth 拒绝）才回落用户 BYOK。统一入口 `billing/gate.py::run_background_llm`（`resolve_and_gate_background` 解析 + 一次 auth→BYOK；耗尽 / 两边都失败 → `None`，不 429 主回合）。禁止调用点各自 try/except 拼回落、禁止进程内 auth 熔断缓存。原 followups（「下一步」chips）已下线，不再走后台档。
+- **长对话压缩**（连续性，不是 chrome）：跟 **这条对话** 的聊天付款方走（会话钉住的组合）。用户**显式**把组合的 background 槽指向自带 Key 时该槽仍优先。平台对话 → 平台 key + `enforce_quota`；自带 Key 对话 → 用户 key，**不**吃平台 ¥ 帽。入口 `billing/gate.py::run_compaction_llm`。回合后压缩仍 skip（不 429 刚结束的回合）；近顶折不进去 → 拒发。
+- **后台档**（title/memory/workflow.slots）：用户**显式**把组合的 background 槽指向自带 Key 时 **该槽优先**（自己的钱，无「白嫖」可防；不过 `enforce_quota`，model id 原样透传不降档）；槽空（跟随主模型）/ 指向平台模型时才 **平台优先** + 必过 `enforce_quota`（防白嫖），平台不可用（配置缺失 **或** 上游 auth 拒绝）才回落用户 BYOK。统一入口 `billing/gate.py::run_background_llm`（`resolve_and_gate_background` 解析 + 一次 auth→BYOK；耗尽 / 两边都失败 → `None`，不 429 主回合）。禁止调用点各自 try/except 拼回落、禁止进程内 auth 熔断缓存。原 followups（「下一步」chips）已下线，不再走后台档。
 - **回合内鉴权死短路（甲+乙）**：同一用户回合、同一付款方（`credential_source`）首次确认真 API Key `LLMAuthError`（不含 `INFERENCE_TOKEN_EXPIRED`）或余额不足后，`llm/turn_auth_dead.py` 按来源闩死后续未启动的同源 LLM（主聊后续轮 / 未开跑 worker / 本回合 chrome）；另一付款方不受影响（平台 chrome 死亡不得短路同回合 BYOK chat，反之亦然）。已在飞可自然失败。**不做**跨回合 TTL 负缓存（丙暂缓）。用户文案 / CTA 按 `credential_source` 分流（BYOK→去设置；平台→改用自己的 Key / 联系管理员）。
 - **`platform_billing_selectable`**：仅 `billing_mode=platform` 时可选；BYOK 部署不开放平台代付。
 - **Worker 槽**：空 = 跟随主模型；跨 origin 时 `build_turn_router` 注入 extras。Sidecar `cost_role=member`：请求 body `model` 为目录路由键（`platform/{id}` / `{provider_id}/{id}`）且合法 → **按该身份重解析凭据/model**；裸 mint/chat id 或未带显式 → 仍跟本槽。非法路由键 **硬失败**（`VALIDATION_ERROR`），禁 silent 回退野模型。→ [编排器 · Per-worker](/docs/03-AI核心/编排器与CEO主Agent.md#per-worker-模型覆盖abc-同一功能)。
@@ -47,7 +48,7 @@ skip_if:
 
 **令牌 TTL**：默认 `inference_token_expire_minutes=720`（12h）。桌面按**会话**缓存复用，仅临近过期（skew 1min）/ 换会话 / 显式 force 才重铸；开跑前若代理拒票则清缓存换票再 RPC 一次。代理 401/403 映射为 `INFERENCE_TOKEN_EXPIRED`（可重试、勿引导「去设置 · 服务商」），与 BYOK 的 `LLM_KEY_INVALID` 区分。
 
-**错误契约 = 信封优先**：代理把所有类型化错误压平到 402 / 429 / 502，故本机叶子先按 AgentCore 错误信封的 `code` 还原错误类型（`llm/errors.py::inference_envelope_error`），厂商状态码启发式退为**无信封时**的回落（网关页、裸 401 拒票）。按状态码判会三重误译：额度用尽读成上游限流（白等一分钟重试预算）、未配 Key 读成余额不足（引导去充值）、502 上的 `LLM_KEY_INVALID` 压成 `LLM_ERROR`（§二「回合内鉴权死短路」不触发，扇出里每个 worker 各撞一遍坏 key）。信封只认客户端会分流的码（key-config CTA / 重试可用性 / 换票），其余仍走状态码路径。**否决**：在叶子里按状态码逐个加 `/inference/` 特例分支。**直连厂商路径不变**——那条路上厂商状态码仍是唯一信息源。
+**错误契约 = 信封优先**：代理把所有类型化错误压平到 402 / 429 / 502，故本机叶子先按 AgentCore 错误信封的 `code` 还原错误类型（`llm/errors.py::inference_envelope_error`），厂商状态码启发式退为**无信封时**的回落（网关页、裸 401 拒票）。解析信封必须吃**完整 body**，禁止用日志 `body_preview`（500 字）当 JSON 输入——截断后叶子会把厂商 530 说成 AgentCore 挂了。裸 HTTP 530 无我方故障信封时按「你选的模型暂时不可用」，不按我方故障。按状态码判会三重误译：额度用尽读成上游限流（白等一分钟重试预算）、未配 Key 读成余额不足（引导去充值）、502 上的 `LLM_KEY_INVALID` 压成 `LLM_ERROR`（§二「回合内鉴权死短路」不触发，扇出里每个 worker 各撞一遍坏 key）。信封只认客户端会分流的码（key-config CTA / 重试可用性 / 换票），其余仍走状态码路径。**否决**：在叶子里按状态码逐个加 `/inference/` 特例分支。**直连厂商路径不变**——那条路上厂商状态码仍是唯一信息源。
 
 **无票 = 不开跑（无本机平台模型回退）**：铸不出票时先 force 换一次；仍无票则以 `INFERENCE_TOKEN_EXPIRED` 诚实失败、**不发** `startTurn` / `resume`。sidecar 对空凭据在两个 RPC 入口同样早拒——调用方不止当前版本桌面（旧桌面、探活拉起的长活进程都可能无票接单），服务层是文案统一的唯一保证；`build_turn_router` 硬拒空凭据是最终兜底。**已删除的承诺**：「无票回落 sidecar 自身 `.env` 平台模型」——平台 key 不下放本机，dev 亦走 BYOK（见 `local-llm-dogfood.mdc`）；该承诺失效后曾把引擎内部英文异常当文案抛给线上用户。**否决**：无票时降级回云端链路——本机工作区回合的云端链路同样依赖 workspace channel，二者常一并不可用。
 

@@ -82,7 +82,7 @@ function renderCard(approval: ApprovalView) {
   );
 }
 
-/** Seed enough same-tool approvals so the「托管」nudge appears. */
+/** Seed enough same-tool approvals so the「全放行」nudge appears. */
 function seedSameToolApprovals(n: number, toolName = "terminal") {
   const byId = new Map();
   for (let i = 0; i < n; i++) {
@@ -430,7 +430,7 @@ describe("ApprovalCard CTA (工具审批 A+B)", () => {
     expect(screen.queryByTestId("turn-grant-scope-notice")).toBeNull();
   });
 
-  it("switching to 托管 patches cache and reloads permission change lines", async () => {
+  it("switching to 全放行 patches cache and reloads permission change lines", async () => {
     seedSameToolApprovals(3);
     const managed = {
       file_write: "session" as const,
@@ -443,7 +443,7 @@ describe("ApprovalCard CTA (工具审批 A+B)", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
     renderCard(card());
-    fireEvent.click(screen.getByRole("button", { name: "托管" }));
+    fireEvent.click(screen.getByRole("button", { name: "全放行" }));
 
     await waitFor(() => {
       expect(setConversationPermissionAxes).toHaveBeenCalledWith("c1", managed);

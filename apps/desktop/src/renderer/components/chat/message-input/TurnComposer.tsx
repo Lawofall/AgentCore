@@ -69,6 +69,7 @@ import type {
   PendingAttachment,
 } from "./composerAttachments";
 import { composerHasSendableDraft } from "./composerAttachments";
+import { decideDraftFolderAssign } from "./resolveAttachmentFolder";
 import { useComposerDrop } from "./useComposerDrop";
 import { useComposerSend } from "./useComposerSend";
 import type { AttachmentFolderHint } from "./useMentionMenu";
@@ -246,16 +247,16 @@ export function TurnComposer({
   const handleAttachmentFolderHint = useCallback(
     (hint: AttachmentFolderHint) => {
       const store = useFoldersStore.getState();
-      const intent = store.draftWorkspaceIntent;
-      if (intent.kind === "folder" && intent.folderId === hint.folderId) {
+      const decision = decideDraftFolderAssign(hint, store.draftWorkspaceIntent);
+      if (decision.action === "none") return;
+      if (decision.action === "auto") {
+        store.setDraftWorkspaceIntent({
+          kind: "folder",
+          folderId: decision.folderId,
+        });
         return;
       }
-      if (
-        intent.kind !== "folder" &&
-        dismissedAssignRef.current.has(hint.folderId)
-      ) {
-        return;
-      }
+      if (dismissedAssignRef.current.has(hint.folderId)) return;
       setAssignHint(hint);
     },
     [],
@@ -313,6 +314,7 @@ export function TurnComposer({
     setAttachments,
     conversationId,
     onAttachmentInserted,
+    conversationId ? undefined : handleAttachmentFolderHint,
   );
 
   const onBrowserFilesSelected = useCallback(

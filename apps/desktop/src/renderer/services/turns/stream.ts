@@ -12,7 +12,6 @@ import {
 } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
 import type { SupportDiagnosticIds } from "@/lib/supportDiagnostics";
-import { notifyInfo } from "@/lib/toast";
 import { markSidecarUnhealthy, probeSidecar } from "@/services/sidecarHealth";
 import {
   isSidecarEnabled,
@@ -71,7 +70,6 @@ function setExecutionVia(
 
 /** 云端分支原因——写入 turnTrace + desktop.jsonl，对照服务端 via=cloud。 */
 type CloudPathReason =
-  | "attachments"
   | "switch_off"
   | "no_local_engine"
   | "probe_unhealthy"
@@ -80,23 +78,16 @@ type CloudPathReason =
   | "sidecar_fallback";
 
 function resolveCloudPathReason(args: {
-  attachments: number;
   hadSidecarTarget: boolean;
   probeHealthy: boolean | null;
   probeProbed: boolean | null;
 }): CloudPathReason {
-  if (args.attachments > 0) return "attachments";
   if (!hasLocalEngine()) return "no_local_engine";
   if (!isSidecarEnabled()) return "switch_off";
   if (args.hadSidecarTarget && args.probeHealthy === false) {
     return args.probeProbed ? "probe_unhealthy" : "probe_cache_bad";
   }
   return "no_local_target";
-}
-
-function cloudFallbackHint(attachments: number): string | null {
-  if (attachments > 0) return "本轮因附件改走云端，未使用本机引擎";
-  return null;
 }
 
 function logStreamPath(
@@ -230,14 +221,12 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
   try {
     traceTurnMilestone(conversationId, "send_start");
     // 路由（双模式工作区 §7.2）：本机传统默认同侧 sidecar =
-    //   有本地引擎 + 未显式强制关（sidecarPreference!=="off"；unset 不挡）+ 会话绑本机根 + 无附件。
-    // 云链路：纯云会话 / 显式强制关 / 探活失败 / 附件退云。点名是 prompt 软提示，不挡本机。
+    //   有本地引擎 + 未显式强制关（sidecarPreference!=="off"；unset 不挡）+ 会话绑本机根。
+    // 贴文件不改场地：区内引用 / 区外复制进 attachments/ 都跟绑定走。
+    // 云链路：纯云会话 / 显式强制关 / 探活失败。点名是 prompt 软提示，不挡本机。
     // 勿把 unset→SIDECAR_DEFAULT_ENABLED 误读成「整段过桥」。resolveSidecarRoot 早退不 probe；
     // 健康由下方 probe 仅在有 target 时收敛。
-    const sidecarTarget =
-      attachments.length === 0
-        ? await resolveSidecarRoot(conversationId)
-        : null;
+    const sidecarTarget = await resolveSidecarRoot(conversationId);
     throwIfCannotOpenStream(conversationId, ac.signal);
     traceTurnMilestone(conversationId, "sidecar_resolve", {
       target: sidecarTarget
@@ -270,6 +259,7 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
           subpath: sidecarTarget.subpath,
           content,
           optimisticUserId,
+          attachments,
           agentMentions,
           signal: ac.signal,
           turnCommit,
@@ -311,15 +301,13 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
         });
       }
     } else {
-      // 云链路：探活失败 / bad 缓存 / 显式强制关 / 附件退云 / 纯云会话。
+      // 云链路：探活失败 / bad 缓存 / 显式强制关 / 纯云会话。
       // 绑本机工作区却走云 = 云端过桥 → 写 executionVia（ComposerCloudBridgeHint）。
-      // 附件退云另给 info 提示，避免静默改路。
       const bridging =
         sidecarTarget !== null ||
         (await resolveConversationLocalTarget(conversationId)) !== null;
       setExecutionVia(conversationId, bridging ? "cloud_bridge" : null);
       const reason = resolveCloudPathReason({
-        attachments: attachments.length,
         hadSidecarTarget: sidecarTarget !== null,
         probeHealthy: probe ? probe.healthy : null,
         probeProbed: probe ? probe.probed : null,
@@ -329,10 +317,6 @@ export async function sendTurn(spec: SendTurnSpec): Promise<SendTurnResult> {
         root_id: sidecarTarget?.rootId ?? null,
         probe_detail: probe?.detail ?? null,
       });
-      if (bridging) {
-        const hint = cloudFallbackHint(attachments.length);
-        if (hint) notifyInfo(hint);
-      }
       // 本地意向已是会话状态（Conversation.local_container_root_id，建会话时定型，
       // 工作区对称化 D1a），服务端据此在裸聊首次产文件时懒建本地 / 云端文件夹——
       // 回合不再携带容器根。

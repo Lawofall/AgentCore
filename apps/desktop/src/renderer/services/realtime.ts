@@ -101,7 +101,7 @@ interface ChatChangedEvent {
  * file. `update` (the conversation-tail card payload) is present whenever the pass
  * recorded a row; its shape mirrors the REST `MemoryUpdateView` so {@link toMemoryUpdate}
  * maps it. Absent on older/edge passes — semantic / quota still fall back to a
- * heads-up toast; episodic never toasts. */
+ * heads-up toast. */
 interface MemoryUpdatedEvent {
   type: "memory_updated";
   conversation_id: string;
@@ -115,12 +115,12 @@ type MemoryUpdateKind = components["schemas"]["MemoryUpdateView"]["kind"];
 
 /** Cross-conversation heads-up for `memory_updated`. `null` = no toast: the inline
  * card (if this conversation is open) and the 记忆动态 feed already cover it.
- * Episodic session digests never toast — one-line "记下了本场摘要" is noise. */
+ * Toast only when the user is away from the source conversation. */
 export function memoryUpdatedToastCopy(
   kind: MemoryUpdateKind,
   cardShown: boolean,
 ): string | null {
-  if (cardShown || kind === "episodic") return null;
+  if (cardShown) return null;
   if (kind === "quota") {
     // Never claim a write that was refused (审计 CTX-A2).
     return "常驻条目已满，有内容没能记下";
@@ -157,7 +157,7 @@ function handleFrame(frame: string): void {
     } else if (event.type === "memory_updated") {
       // Offline consolidation nudge (off the turn path). 记忆更新对话内可见 (§1.6):
       // live-append the card to the source conversation (no-op if unloaded — fetched on
-      // next open). Episodic = session digest only; semantic = 偏好/画像/主题 rewrite.
+      // next open). semantic = 偏好/画像/主题 rewrite; quota = always-pool refusal.
       const e = event as MemoryUpdatedEvent;
       const conv = useConversationStore.getState();
       const kind = e.update?.kind ?? e.kind ?? "semantic";
@@ -172,7 +172,7 @@ function handleFrame(frame: string): void {
       }
       // 记忆动态 feed live-refresh: mark the cross-conversation「最近更新」query stale so an
       // OPEN MemoryUpdatesView refetches at once (a closed one just refetches on next open —
-      // free). Episodic has no toast, so without this an open feed stays silently stale.
+      // free).
       void queryClient.invalidateQueries({ queryKey: ["memory-updates"] });
       const cardShown =
         !!(e.update && e.conversation_id) &&

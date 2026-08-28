@@ -42,6 +42,8 @@ _TOOL_ERROR_REASON_MAX = 200
 _SHELL_OBSERVE_TOOLS = frozenset({"terminal", "host"})
 _SHELL_COMMAND_PREVIEW_MAX = 160
 _SHELL_CWD_PREVIEW_MAX = 80
+_URL_OBSERVE_TOOLS = frozenset({"read_url", "download_url"})
+_URL_PREVIEW_MAX = 200
 
 
 def _attempt_meta_with_landing_path(
@@ -83,32 +85,55 @@ def _short_tool_error_reason(text: str, *, limit: int = _TOOL_ERROR_REASON_MAX) 
     return collapsed[: max(0, limit - 1)].rstrip() + "…"
 
 
-def _shell_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
-    """Facts for ``tool.execute_end`` on terminal / host. No write-intent guess.
+def _url_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
+    """``url`` / ``host`` for read_url / download_url execute_* logs."""
+    if name not in _URL_OBSERVE_TOOLS or not isinstance(args, dict):
+        return {}
+    raw = args.get("url")
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    from agentcore.core.net import site_of
 
-    CEO 可持这两条工具，落盘不进 ``file_products``；查询时靠 preview + subcommand
+    url = redact_secrets(raw.strip())
+    fields: dict[str, Any] = {}
+    preview = clip_preview(url, _URL_PREVIEW_MAX)
+    if preview:
+        fields["url"] = preview
+    host = site_of(url)
+    if host:
+        fields["host"] = host
+    return fields
+
+
+def _shell_observe_log_fields(name: str, args: Any) -> dict[str, Any]:
+    """Facts for ``tool.execute_*`` on terminal / host / URL tools. No write-intent guess.
+
+    CEO 可持 terminal/host，落盘不进 ``file_products``；查询时靠 preview + subcommand
     由人判断是否写了工作区。命令可能含 token / key，故先 ``redact_secrets`` 再 clip。
+    ``read_url`` / ``download_url`` 带 url/host，对照 in_flight 挂起用。
     """
-    if name not in _SHELL_OBSERVE_TOOLS or not isinstance(args, dict):
+    if not isinstance(args, dict):
         return {}
     fields: dict[str, Any] = {}
-    command = args.get("command")
-    if isinstance(command, str):
-        # Redact BEFORE clipping: clipping first can cut a secret's recognizable
-        # prefix and leave the tail in the log.
-        preview = clip_preview(redact_secrets(command), _SHELL_COMMAND_PREVIEW_MAX)
-        if preview:
-            fields["command_preview"] = preview
-    subcommand = args.get("subcommand")
-    if isinstance(subcommand, str):
-        sub = subcommand.strip()
-        if sub:
-            fields["subcommand"] = sub
-    cwd = args.get("cwd")
-    if isinstance(cwd, str):
-        cwd_preview = clip_preview(cwd, _SHELL_CWD_PREVIEW_MAX)
-        if cwd_preview:
-            fields["cwd_preview"] = cwd_preview
+    if name in _SHELL_OBSERVE_TOOLS:
+        command = args.get("command")
+        if isinstance(command, str):
+            # Redact BEFORE clipping: clipping first can cut a secret's recognizable
+            # prefix and leave the tail in the log.
+            preview = clip_preview(redact_secrets(command), _SHELL_COMMAND_PREVIEW_MAX)
+            if preview:
+                fields["command_preview"] = preview
+        subcommand = args.get("subcommand")
+        if isinstance(subcommand, str):
+            sub = subcommand.strip()
+            if sub:
+                fields["subcommand"] = sub
+        cwd = args.get("cwd")
+        if isinstance(cwd, str):
+            cwd_preview = clip_preview(cwd, _SHELL_CWD_PREVIEW_MAX)
+            if cwd_preview:
+                fields["cwd_preview"] = cwd_preview
+    fields.update(_url_observe_log_fields(name, args))
     return fields
 
 

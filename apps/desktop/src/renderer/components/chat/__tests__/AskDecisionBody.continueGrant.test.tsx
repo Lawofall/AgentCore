@@ -23,6 +23,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const pickAndGrantOrganizeFolder = vi.fn();
+const pickAndGrantAttachFolder = vi.fn();
 
 vi.mock("@/lib/capabilities", () => ({
   hasLocalFiles: vi.fn(() => true),
@@ -35,6 +36,8 @@ vi.mock("@/lib/grantOrganizeFolder", async (importOriginal) => {
     ...actual,
     pickAndGrantOrganizeFolder: (...args: unknown[]) =>
       pickAndGrantOrganizeFolder(...args),
+    pickAndGrantAttachFolder: (...args: unknown[]) =>
+      pickAndGrantAttachFolder(...args),
   };
 });
 
@@ -95,6 +98,7 @@ function Harness({
 describe("AskDecisionBody Continue + unknown deleted folder action", () => {
   beforeEach(() => {
     pickAndGrantOrganizeFolder.mockReset();
+    pickAndGrantAttachFolder.mockReset();
     vi.mocked(hasLocalFiles).mockReturnValue(true);
     window.fsApi = {
       grantSessionReadonlyRoot: vi.fn(),
@@ -156,6 +160,7 @@ describe("AskDecisionBody Continue + unknown deleted folder action", () => {
 describe("AskDecisionBody organize confirm card", () => {
   beforeEach(() => {
     pickAndGrantOrganizeFolder.mockReset();
+    pickAndGrantAttachFolder.mockReset();
     vi.mocked(hasLocalFiles).mockReturnValue(true);
     window.fsApi = {
       grantSessionReadonlyRoot: vi.fn(),
@@ -285,6 +290,51 @@ describe("AskDecisionBody organize confirm card", () => {
     });
     const composed = onBindResolve.mock.calls[0]?.[0] ?? "";
     expect(composed).toContain("授权整理该目录");
+  });
+
+  it("note 可以 on mixed organize+attach card fulfills organize, not attach", async () => {
+    const mixed: AskUserContent = {
+      question: "授权哪个？",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "授权",
+          kind: "choice",
+          options: [
+            {
+              label: "加入可读写",
+              action: "grant_attach_folder",
+              well_known: "desktop",
+              target_name: "咨询",
+            },
+            {
+              label: "授权整理该目录",
+              action: "grant_organize_folder",
+              well_known: "desktop",
+              target_name: "咨询",
+            },
+            { label: "先不整理" },
+          ],
+          multiple: false,
+          default: "加入可读写",
+        },
+      ],
+    };
+    pickAndGrantOrganizeFolder.mockResolvedValue({
+      ok: true,
+      root: { id: "r1", name: "咨询", alias: "咨询", mode: "organize" },
+      alias: "咨询",
+      namespace: "external/咨询",
+      displayLabel: "桌面 › 咨询",
+    });
+    render(<Harness content={mixed} />);
+    clearListedThenTypeNote("可以");
+    fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
+    await waitFor(() => {
+      expect(pickAndGrantOrganizeFolder).toHaveBeenCalled();
+    });
+    expect(pickAndGrantAttachFolder).not.toHaveBeenCalled();
   });
 
   it("note ordinary text does not trigger organize grant", async () => {

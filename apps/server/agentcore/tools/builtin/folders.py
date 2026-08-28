@@ -606,7 +606,6 @@ class CreateFolderTool:
             name=CREATE_FOLDER_TOOL_NAME,
             description=(
                 "仅用户明确新建云文件夹或显式多线先建时用；mode=cloud 可派工容器≠mkdir。"
-                "禁止为过写盘闸而建（裸聊写盘缺桌由运行时自动建云文件夹）。"
                 "≠open_local_project（会新会话）。"
                 "HOW→consult(team_cross_folder)。"
             ),

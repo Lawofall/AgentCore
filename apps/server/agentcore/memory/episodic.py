@@ -356,8 +356,7 @@ Preference / habit rule (strict):
 # The background tier (free Flash) measured 35–37s on real memory windows, so the old
 # 20s ceiling timed out every single pass. Nothing waits on this call — it runs after
 # the turn settled — so the cost of waiting is a slower sweep, while the cost of
-# clipping it is a lost session summary. Kept above the semantic pass's 45s for the
-# same reason: episodic is the layer whose failure is user-visible.
+# clipping it is a fallback of the user's own wording instead of a real digest.
 _EPISODIC_TIMEOUT_SECONDS = 90.0
 
 
@@ -427,8 +426,7 @@ def fallback_episode_summary(
     """Deterministic fallback when the LLM summary is empty: first user turns, clamped.
 
     This is the user's raw wording, not a summary, so it is only ever stored as episode
-    material for the semantic pass to read — the caller suppresses the episodic
-    card when it lands here (see ``consolidation._EpisodicDigest``).
+    material for the semantic pass to read — never a card, never the conversation stream.
     """
     bits: list[str] = []
     for m in messages:

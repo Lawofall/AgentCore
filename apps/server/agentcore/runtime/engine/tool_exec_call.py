@@ -13,6 +13,7 @@ from typing import Any
 from agentcore.core.error_codes import ErrorCode
 from agentcore.core.errors import AgentCoreError
 from agentcore.core.logging import get_logger
+from agentcore.core.task_cancel import task_is_cancelling
 from agentcore.core.types import ToolEffect
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall
 from agentcore.runtime.approvals import ApprovalGate
@@ -539,6 +540,47 @@ async def run_one_tool(
                         **cross_turn_retry_meta(CrossTurnRetry.NOT_FUTILE),
                     },
                 ),
+            ),
+            [],
+        )
+    except asyncio.CancelledError:
+        # Real Stop: this task is cancelling → propagate so the turn salvages.
+        # Leaked child cancel (httpx timeout's internal scope, etc.): isolate like
+        # a crash so gather cannot abort the sibling tools or the turn.
+        if task_is_cancelling():
+            raise
+        if budget_reserved and budget_state is not None:
+            await budget_state.refund(name)
+        duration_ms = int((time.monotonic() - started) * 1000)
+        error_msg = (
+            f"工具 '{name}' 执行被中止。请换来源或缩小范围继续，不要原样重试。"
+        )
+        sink.emit(
+            tool_use_end(
+                tc.id,
+                name,
+                success=False,
+                output=error_msg,
+                failure=tool_failure_fields(code=ErrorCode.TOOL_ERROR),
+                run_id=event_run_id,
+            )
+        )
+        logger.warning(
+            "tool.execute_end",
+            tool=name,
+            status="isolated_cancel",
+            duration_ms=duration_ms,
+            **_shell_observe_log_fields(name, args),
+        )
+        return (
+            _failed_tool_message(tc.id, error_msg),
+            None,
+            ToolAttempt(
+                fingerprint,
+                name,
+                success=False,
+                error_summary=error_msg,
+                meta=_attempt_meta_with_landing_path(name, args),
             ),
             [],
         )

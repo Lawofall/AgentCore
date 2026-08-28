@@ -1,4 +1,5 @@
 import { IconButton } from "@/components/ui";
+import { handlePlainPaste } from "@/lib/clipboardPlain";
 import {
   type InlineSpan,
   dropInlineIndex,
@@ -206,6 +207,9 @@ export const UserInlineDraft = forwardRef<
       data-testid="user-inline-draft"
       className="max-h-[240px] overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-2 py-1 text-sm text-foreground"
       onKeyDown={onKeyDown}
+      onPaste={(e) => {
+        handlePlainPaste(e);
+      }}
     >
       {spans.map((span, i) => {
         const key = `${span.kind}-${i}`;

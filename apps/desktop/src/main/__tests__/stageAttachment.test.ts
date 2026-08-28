@@ -154,6 +154,51 @@ describe("stageAttachment", () => {
     }
   });
 
+  it("cites a file already inside dest instead of copying to attachments/", async () => {
+    const docs = join(dir, "docs");
+    await mkdir(docs);
+    const src = join(docs, "guide.md");
+    await writeFile(src, "# guide\n", "utf-8");
+    const res = await stageFromAbsPath(src, { rootId: "stage-root" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.workspacePath).toBe("docs/guide.md");
+    expect(res.data.citedRootId).toBe("stage-root");
+    expect(res.data.citedRelPath).toBe("docs/guide.md");
+    expect(res.data.stagingId).toBeUndefined();
+    expect(res.data.text).toContain("guide");
+    await expect(readdir(join(dir, "attachments"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("strips dest subpath when citing", async () => {
+    const nested = join(dir, "work", "pkg", "docs");
+    await mkdir(nested, { recursive: true });
+    const src = join(nested, "guide.md");
+    await writeFile(src, "# nested\n", "utf-8");
+    const res = await stageFromAbsPath(src, {
+      rootId: "stage-root",
+      subpath: "work/pkg",
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.workspacePath).toBe("docs/guide.md");
+    expect(res.data.citedRelPath).toBe("work/pkg/docs/guide.md");
+  });
+
+  it("draft stage records citedRootId when the file sits in a registered root", async () => {
+    const src = join(dir, "notes.md");
+    await writeFile(src, "# hello\n", "utf-8");
+    const res = await stageFromAbsPath(src);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.stagingId).toBeTruthy();
+    expect(res.data.workspacePath).toBeUndefined();
+    expect(res.data.citedRootId).toBe("stage-root");
+    expect(res.data.citedRelPath).toBe("notes.md");
+  });
+
   it("stages binary xlsx-like bytes without text preview", async () => {
     const src = join(dir, "report.xlsx");
     const bytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00]);

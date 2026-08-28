@@ -48,7 +48,7 @@ describe("ManualCollaboration", () => {
     expect(screen.queryByText(/后续规划/)).toBeNull();
     expect(screen.getByText(/角色由 CEO 临时分配/)).toBeTruthy();
     expect(screen.getAllByText(/带现场续派/).length).toBeGreaterThan(0);
-    expect(screen.getByText("少打断（推荐）")).toBeTruthy();
+    expect(screen.getByText("全放行（推荐）")).toBeTruthy();
     expect(screen.getByText(/设为新会话默认/)).toBeTruthy();
     expect(screen.getByText("中途插手")).toBeTruthy();
     expect(screen.getByText("记忆与偏好")).toBeTruthy();

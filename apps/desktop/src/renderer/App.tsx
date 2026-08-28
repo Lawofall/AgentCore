@@ -4,10 +4,12 @@ import { AuthGate } from "./components/auth/AuthGate";
 import { PushBridge } from "./components/layout/PushBridge";
 import { Toaster } from "./components/ui/Toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { usePlainCopyListener } from "./hooks/usePlainCopyListener";
 import { queryClient } from "./lib/queryClient";
 import { router } from "./router";
 
 export function App() {
+  usePlainCopyListener();
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={300}>

@@ -785,6 +785,33 @@ describe("streamConversationViaSidecar", () => {
     expect(flushTurnMock).toHaveBeenCalledWith({ userMessageId: "u-opt" });
   });
 
+  it("forwards attachments on startTurn", async () => {
+    const attachments = [
+      {
+        name: "guide.md",
+        path: "docs/guide.md",
+        text: "# hi",
+        truncated: false,
+        workspace_path: "docs/guide.md",
+      },
+    ];
+    seedOriginalUserBubble("c1", "u-opt", "看这个");
+    startTurnMock.mockResolvedValue(turnResult());
+
+    await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "看这个",
+      optimisticUserId: "u-opt",
+      history: [],
+      attachments,
+    });
+
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({ attachments }),
+    );
+  });
+
   it("reports turnCommit after a successful outbox flush", async () => {
     const turnCommit = { committed: false };
     seedOriginalUserBubble("c1", "u-opt", "你好");
@@ -863,6 +890,32 @@ describe("streamConversationViaSidecar", () => {
     );
   });
 
+  it("omits cookie history on regenerate so sidecar fetches after occupy truncate", async () => {
+    fetchChatContextMock.mockResolvedValue([
+      { role: "user", content: "先前问" },
+      { role: "assistant", content: "将被截断的答" },
+    ]);
+    seedOriginalUserBubble("c1", "u-opt", "你好");
+    startTurnMock.mockResolvedValue(turnResult());
+
+    await streamConversationViaSidecar({
+      conversationId: "c1",
+      rootId: "r1",
+      content: "你好",
+      optimisticUserId: "u-opt",
+      regenerate: true,
+    });
+
+    expect(fetchChatContextMock).not.toHaveBeenCalled();
+    expect(startTurnMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        regenerate: true,
+        userMessageId: "u-opt",
+      }),
+    );
+    expect(startTurnMock.mock.calls[0]?.[0]).not.toHaveProperty("history");
+  });
+
   it("treats caller-confirmed empty history as the window and does not refetch", async () => {
     seedOriginalUserBubble("c1", "u-opt", "你好");
     startTurnMock.mockResolvedValue(turnResult());
@@ -925,9 +978,9 @@ describe("streamConversationViaSidecar", () => {
           baseUrl: "https://api.test.example/v1/account",
           apiKey: "account-jwt",
         },
-        history: undefined,
       }),
     );
+    expect(startTurnMock.mock.calls[0]?.[0]).not.toHaveProperty("history");
   });
 
   it("surfaces sidecar chat-context failure as a non-recoverable banner", async () => {

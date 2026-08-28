@@ -19,8 +19,8 @@ export interface FsRoot {
   absPath?: string;
   /** W3 session grant alias under ``external/<alias>/`` (omit for permanent roots). */
   alias?: string;
-  /** Session access mode (readonly | organize); omit for permanent roots. */
-  mode?: "readonly" | "organize";
+  /** Session access mode (readonly | organize | attach_rw); omit for permanent roots. */
+  mode?: "readonly" | "organize" | "attach_rw";
   sessionOnly?: boolean;
 }
 
@@ -300,7 +300,7 @@ export const FS_CHANNELS = {
   listWorkspaceVersions: "fs:listWorkspaceVersions",
   /** 删除一个用户命名版本（命名版本永不自动清理，只有显式删）。 */
   deleteWorkspaceVersion: "fs:deleteWorkspaceVersion",
-  /** 引用即驻留：系统文件选择器 → 写入工作区 attachments/ 或暂存。 */
+  /** 附加文件：区内引用原路径；区外才写入 attachments/ 或暂存。 */
   pickAndStageAttachment: "fs:pickAndStageAttachment",
   /** 从已授权根相对路径驻留。 */
   stageFromRoot: "fs:stageFromRoot",
@@ -311,7 +311,7 @@ export const FS_CHANNELS = {
    * Electron ``webUtils.getPathForFile`` 对非盘文件返回空串时走此通道。
    */
   stageFromBytes: "fs:stageFromBytes",
-  /** 草稿暂存 → 本地工作区 attachments/。 */
+  /** 草稿暂存 → 本地工作区（区内引用则跳过复制）。 */
   finalizeStagedAttachment: "fs:finalizeStagedAttachment",
   /** 云端：取出暂存字节后清除。 */
   consumeStagedBytes: "fs:consumeStagedBytes",
@@ -408,7 +408,7 @@ export type GrantSessionWellKnown = "desktop" | "downloads" | "documents";
  */
 export interface GrantSessionReadonlyRootParams {
   conversationId: string;
-  mode?: "readonly" | "organize";
+  mode?: "readonly" | "organize" | "attach_rw";
   /** Absolute local directory path (C1-wide). Preferred over wellKnown when set. */
   path?: string;
   wellKnown?: GrantSessionWellKnown;
@@ -431,15 +431,15 @@ export type GrantSessionReadonlyRootResult =
   | { ok: true; root: FsRoot; displayLabel?: string }
   | { ok: false; reason: GrantSessionReadonlyRootFailReason; message?: string };
 
-/** 引用即驻留：落盘到对话工作区 attachments/ 的目标。 */
+/** 附加文件落盘目标（区内引用原路径；区外才进 attachments/）。 */
 export interface StageAttachmentDest {
   rootId: string;
   subpath?: string;
 }
 
 /**
- * 引用即驻留结果。``workspacePath`` 已写入对话工作区；``stagingId`` 仍在主进程暂存
- * （草稿尚无会话 / 云端待上传）。绝对路径永不出现在此结构中。
+ * 引用即驻留结果。区内文件 ``workspacePath`` 是原路径；区外才写入 ``attachments/``。
+ * ``stagingId`` 仍在主进程暂存（草稿尚无会话 / 云端待上传）。绝对路径永不出现在此结构中。
  */
 export interface StagedAttachment {
   name: string;
@@ -449,6 +449,12 @@ export interface StagedAttachment {
   text: string;
   truncated: boolean;
   sizeBytes: number;
+  /**
+   * 文件已在某授权根内：相对该根的 POSIX 路径（绝对路径永不下发）。
+   * 草稿尚无 dest 时与 ``stagingId`` 并存，发送时若家仍是该根则引用、否则复制。
+   */
+  citedRootId?: string;
+  citedRelPath?: string;
 }
 
 /**
@@ -501,14 +507,14 @@ export interface FsApi {
   listRoots(): Promise<FsRoot[]>;
   removeRoot(rootId: string): Promise<void>;
   /**
-   * W3/P1: session root (readonly | organize) bound to conversation.
+   * W3/P1: session root (readonly | organize | attach_rw) bound to conversation.
    * Accepts legacy `(conversationId, mode?)` or a params object with optional
    * `path` / `wellKnown` / `targetName` (resolve only — never opens a folder picker).
    * Failure reasons distinguish not_found / permission_denied / not_directory / ambiguous (≠ cancelled).
    */
   grantSessionReadonlyRoot(
     conversationIdOrParams: string | GrantSessionReadonlyRootParams,
-    mode?: "readonly" | "organize",
+    mode?: "readonly" | "organize" | "attach_rw",
   ): Promise<GrantSessionReadonlyRootResult>;
   listSessionReadonlyRoots(conversationId: string): Promise<FsRoot[]>;
   revokeSessionReadonlyRoot(
@@ -651,7 +657,7 @@ export interface FsApi {
     versionId: string,
   ): Promise<FsResult>;
   /**
-   * 引用即驻留：打开系统文件选择器，复制进对话工作区 ``attachments/``（有 dest）
+   * 附加文件：区内引用原路径；区外才复制进 ``attachments/``（有 dest）
    * 或主进程暂存（无 dest）。取消选择返回 ``null``。
    */
   pickAndStageAttachment(

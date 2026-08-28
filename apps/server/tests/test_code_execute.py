@@ -53,6 +53,12 @@ async def test_code_execute_display_carries_stdout_and_exit():
     }
 
 
+def test_code_execute_schema_advertises_env():
+    props = CodeExecuteTool().schema.parameters["properties"]
+    assert "env" in props
+    assert props["env"]["additionalProperties"]["type"] == "string"
+
+
 async def test_code_execute_emits_executing_phase():
     # 工具执行阶段进度 (联网前端展示优化): code_execute signals 「正在执行」before the (slow,
     # blocking) sandbox run so the waiting row is live instead of a dead spinner.
@@ -452,3 +458,57 @@ async def test_code_execute_sandbox_network_unsupported_is_permanent_retire():
     assert result.metadata.get("code") == "sandbox_network_unsupported"
     assert result.metadata.get("retire_tools") == ["code_execute"]
     assert "沙箱网络" in (result.metadata.get("retire_message") or "")
+
+
+async def test_code_execute_forwards_env_to_backend():
+    backend = _FakeBackend(
+        ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=5)
+    )
+    result = await CodeExecuteTool().execute(
+        {
+            "code": "print('ok')",
+            "language": "python",
+            "env": {"AGNES_API_KEY": "opaque-secret-value-here"},
+        },
+        _ctx(backend),
+    )
+    assert result.success is True
+    assert backend.requests[0].env == {"AGNES_API_KEY": "opaque-secret-value-here"}
+
+
+async def test_code_execute_rejects_path_env():
+    backend = _FakeBackend(
+        ExecutionResult(success=True, stdout="ok\n", stderr="", exit_code=0, duration_ms=5)
+    )
+    result = await CodeExecuteTool().execute(
+        {"code": "print(1)", "language": "python", "env": {"PATH": "/evil"}},
+        _ctx(backend),
+    )
+    assert result.success is False
+    assert result.contract_failure is True
+    assert result.metadata.get("code") == "env_invalid"
+    assert backend.requests == []
+
+
+async def test_code_execute_scrubs_env_from_stdout():
+    secret = "opaque-secret-value-here"
+    backend = _FakeBackend(
+        ExecutionResult(
+            success=True,
+            stdout=f"token={secret}\n",
+            stderr="",
+            exit_code=0,
+            duration_ms=5,
+        )
+    )
+    result = await CodeExecuteTool().execute(
+        {
+            "code": "print(1)",
+            "language": "python",
+            "env": {"TOKEN": secret},
+        },
+        _ctx(backend),
+    )
+    assert secret not in (result.output or "")
+    assert secret not in (result.display or {}).get("stdout", "")
+    assert "[REDACTED]" in (result.display or {}).get("stdout", "")

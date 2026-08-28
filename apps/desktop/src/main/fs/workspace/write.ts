@@ -22,12 +22,34 @@ import { opErr, opOk } from "./result";
 import { isSessionGrantRoot } from "./sessionRoot";
 import { applyTextReplace } from "./textReplace";
 
-/** 原子写：同目录临时文件 + rename，避免进程中断在用户真实磁盘上留下半截文件。 */
+const REPLACE_RETRY_DELAYS_MS = [0, 50, 150, 350, 750] as const;
+
+function isTransientReplaceError(e: unknown): boolean {
+  const err = e as NodeJS.ErrnoException;
+  const code = err?.code;
+  return code === "EACCES" || code === "EPERM" || code === "EBUSY";
+}
+
+async function sleepMs(ms: number): Promise<void> {
+  if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 原子写：同目录临时文件 + rename；Windows 锁占用时重试，耗尽后降级原地写。 */
 export async function atomicWrite(abs: string, data: Buffer): Promise<void> {
   const tmp = join(dirname(abs), `.tmp_ws_${randomUUID()}`);
   try {
     await fs.writeFile(tmp, data);
-    await fs.rename(tmp, abs);
+    for (const delay of REPLACE_RETRY_DELAYS_MS) {
+      await sleepMs(delay);
+      try {
+        await fs.rename(tmp, abs);
+        return;
+      } catch (e) {
+        if (!isTransientReplaceError(e)) throw e;
+      }
+    }
+    await fs.writeFile(abs, data);
+    await fs.rm(tmp, { force: true }).catch(() => {});
   } catch (e) {
     await fs.rm(tmp, { force: true }).catch(() => {});
     throw e;

@@ -388,9 +388,9 @@ class ConversationShare(Base):
 
 
 # --- Memory updates (记忆更新对话内可见: Agent记忆与知识系统 §1.6 实时提示) ---
-# One offline consolidation pass's applied result, anchored to the conversation that
-# triggered it, so the thread can show a「记忆已更新」card at its tail — what the AI
-# remembered FROM this conversation (读可见、写也可见). Consolidation runs OFF the turn
+# One semantic/quota write notice, anchored to the conversation that triggered it,
+# so the thread can show a「记忆已更新」card — what the AI remembered FROM this
+# conversation. Session digests are not cards. Consolidation runs OFF the turn
 # path (memory/consolidation.py), AFTER the turn + its turn_journal are already persisted,
 # and is conversation-level (it folds a window of turns), so it is its OWN record — not a
 # per-turn ``turn_journal`` fact: a dedicated row keyed by conversation_id (never a message
@@ -399,14 +399,13 @@ class ConversationShare(Base):
 
 
 class MemoryUpdateRow(Base):
-    """One memory write notice anchored to a conversation (two-layer memory).
+    """One memory write notice anchored to a conversation.
 
-    Written when an episodic session summary is stored, a semantic consolidation lands, or
-    the CEO ``remember`` tool writes an explicit fact — never silent. ``kind`` selects the
-    UI card: ``episodic`` (light tip + ``summary``), ``semantic`` (diff ``items``), or
-    ``quota`` (always-pool / billing skip). ``items`` is a list of
-    ``{action, file, section, scope, content, target}`` for semantic diffs and quota rows
-    (empty for episodic tips).
+    Written when a semantic consolidation lands with add/update/remove items, or
+    the always-pool / billing skip needs a ``quota`` card — never for a session digest
+    (those stay in ``memory_episodes``). ``kind`` selects the UI card: ``semantic``
+    (diff ``items``) or ``quota`` (always-pool / billing skip). ``items`` is a list of
+    ``{action, file, section, scope, content, target}``.
 
     **Lifecycle** (no DB FK — app-level cascade, per repo convention): dropped with its
     conversation on hard-delete (``ConversationRepository.hard_delete``). NOT tied to any
@@ -429,20 +428,20 @@ class MemoryUpdateRow(Base):
     id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False), primary_key=True, default=_new_uuid)
     conversation_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
     user_id: Mapped[str] = mapped_column(PG_UUID(as_uuid=False))
-    # "episodic" | "semantic" | "quota" — card shape for the conversation-tail / feed.
+    # "semantic" | "quota" — card shape for the conversation-tail / feed.
     kind: Mapped[str] = mapped_column(String(32), nullable=False, server_default=text("'semantic'"))
-    # Episodic: ≤200-char session summary shown in the light tip. Semantic: usually null.
+    # Semantic: usually null. Quota: why the write was skipped.
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Semantic applied changes: list of {action, file, section, scope, content, target}.
-    # Empty for episodic tips. Shape owned by memory/maintenance.py MemoryUpdateItem.
+    # Shape owned by memory/maintenance.py MemoryUpdateItem.
     items: Mapped[list] = mapped_column(
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
     # created_at of the LAST message this pass consolidated — where the card belongs in
-    # the thread. ``created_at`` alone cannot answer that: an episodic pass fires on an
-    # idle debounce, so the card is written minutes after the window it covers, and by
+    # the thread. ``created_at`` alone cannot answer that: consolidation fires on an
+    # idle debounce, so the card is written after the window it covers, and by
     # then newer turns may already sit below it. NULL for rows written before this
-    # column existed and for writes with no message window (semantic sweeps, quota).
+    # column existed and for writes with no message window (leak-scan, quota).
     anchor_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -530,7 +529,7 @@ class ConversationExternalGrant(Base):
     # registration carried no device (pre-binding rows, non-desktop callers).
     device_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     label: Mapped[str] = mapped_column(String(500), nullable=False, server_default=text("''"))
-    # "readonly" | "organize"
+    # "readonly" | "organize" | "attach_rw"
     mode: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'readonly'")
     )

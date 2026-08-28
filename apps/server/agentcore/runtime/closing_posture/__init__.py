@@ -10,8 +10,9 @@
 探测用**闭集**正则，仅作「是否在说 A」的薄信号；**禁止**靠案面加完成话术词修案。
 文献证据降档时用正向「草稿/缺口承认」闭集（``requires_draft_ack``），不靠把「综述已完成」加进黑名单。
 ``requires_draft_ack`` 亦闩 ``thin_review``（已声明复核落盘未对齐）、``verify_failed``
-（丙轴验证失败）、以及 ``node_failed`` / ``artifact_rejected``（契约硬失败·节点 FAILED·
-拒收产物）——仍不扩姿势 A 词表。
+（丙轴验证失败）、以及 ``node_failed`` / ``artifact_rejected`` / ``path_mismatch``
+（契约硬失败·节点 FAILED·拒收产物·声明路径未落盘）——仍不扩姿势 A 词表。
+写盘形态下 blocking 的 ``files_not_landed`` 同样闩（全员 ``form=prose`` 的 soft 行不闩）。
 无对账卡 / ``no_batch``：不拦正文（团队状态走结构面，禁止完成话术拦截）。
 
 resume / plan_review：派工过程 kickoff（方向：派团队…）不进用户可见续写基底与 G6 重灌，

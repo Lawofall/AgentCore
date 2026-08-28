@@ -10,7 +10,7 @@ _RULES_ROUTING_FENCE = (
 # AI-soft subsections. Body is already frontmatter/chrome-stripped at load time.
 _RULES_TEMPLATE = """
 <rules>
-以下条目请一并遵循；与本回合用户直接指令冲突时，以本回合指令为准。
+以下条目请一并遵循。
 {routing_fence}
 
 {body}

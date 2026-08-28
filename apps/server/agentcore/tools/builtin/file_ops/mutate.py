@@ -39,6 +39,7 @@ from .errors import (
     _maybe_channel_dead_error,
     _outside_workspace_error,
     _path_missing_error,
+    _write_io_error,
 )
 from .integrity import (
     _SUBSTANTIAL_FILE_CHARS,
@@ -529,7 +530,7 @@ class FileWriteTool:
             dead = _maybe_channel_dead_error(e, start)
             if dead is not None:
                 return dead
-            return _error(f"写入文件失败：{e}", start, user_face=False)
+            return _write_io_error(e, start)
         except OSError as e:
             if coordinator is not None and release_on_fail:
                 coordinator.release(rel_path, context.run_id)
@@ -539,7 +540,7 @@ class FileWriteTool:
                     "请改用更短的文件名（建议 ≤80 个汉字或英文词组）后重试。",
                     start,
                 )
-            return _error(f"写入文件失败：{e}", start, user_face=False)
+            return _write_io_error(e, start)
 
         _promote_research_landed_refs(rel_path, write_content)
 
@@ -724,7 +725,7 @@ class FileAppendTool:
             dead = _maybe_channel_dead_error(e, start)
             if dead is not None:
                 return dead
-            return _error(f"追加文件失败：{e}", start, user_face=False)
+            return _write_io_error(e, start, action="追加")
 
         try:
             merged = await context.backend.read(rel_path)
@@ -916,7 +917,7 @@ class StrReplaceTool:
             dead = _maybe_channel_dead_error(e, start)
             if dead is not None:
                 return dead
-            return _error(f"写入文件失败：{e}", start, user_face=False)
+            return _write_io_error(e, start)
 
         loc = "" if outcome.first_line is None else f"（约第 {outcome.first_line} 行）"
         # 回显改动落点的上下文（所改即所见），免得 worker 为「确认替换落对没」再花一轮 read 回读
@@ -1174,7 +1175,7 @@ class WriteSectionTool:
             dead = _maybe_channel_dead_error(e, start)
             if dead is not None:
                 return dead
-            return _error(f"写入文件失败：{e}", start, user_face=False)
+            return _write_io_error(e, start)
 
         _mark_landed_files(context, rel_path)
         src = f"（来自 `{from_file}`）" if from_file else ""

@@ -226,14 +226,17 @@ def test_schema_exposes_form_enum():
     assert "【存文档】" not in DELEGATE_DESCRIPTION
     assert "【改工程】" not in DELEGATE_DESCRIPTION
     assert "才用本工具" not in DELEGATE_DESCRIPTION
-    assert "用：" in DELEGATE_DESCRIPTION and "不用：" in DELEGATE_DESCRIPTION
-    assert "跨模块" in DELEGATE_DESCRIPTION
-    assert "点名对比" in DELEGATE_DESCRIPTION
-    assert "改产物" in DELEGATE_DESCRIPTION
-    assert "成规模取证" in DELEGATE_DESCRIPTION
+    # 用/不用路由清单在 CEO 核，schema 不复述。
+    assert "用：" not in DELEGATE_DESCRIPTION
+    assert "不用：" not in DELEGATE_DESCRIPTION
+    assert "跨模块" not in DELEGATE_DESCRIPTION
+    assert "点名对比" not in DELEGATE_DESCRIPTION
+    assert "改产物" not in DELEGATE_DESCRIPTION
+    assert "成规模取证" not in DELEGATE_DESCRIPTION
     assert "盘点" not in DELEGATE_DESCRIPTION
-    assert "讨论" in DELEGATE_DESCRIPTION and "判断" in DELEGATE_DESCRIPTION
-    assert "闲聊" in DELEGATE_DESCRIPTION
+    assert "讨论" not in DELEGATE_DESCRIPTION
+    assert "判断" not in DELEGATE_DESCRIPTION
+    assert "闲聊" not in DELEGATE_DESCRIPTION
     assert "编制自选" not in DELEGATE_DESCRIPTION
     assert "结局分层" not in DELEGATE_DESCRIPTION
     # 绿场常驻路径勿先 consult：schema 必须带 playbook_args.app，否则缺 slot 全失败。
@@ -293,8 +296,10 @@ def test_schema_exposes_form_enum():
     assert "已确认约束" in str(TASK_DELIVERABLE_SCHEMA.get("description") or "")
     brief = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
     assert "已确认约束" in brief
+    assert "同一行" in brief
     assert "附件" in brief or "优先" in brief
     assert "便签墙" in brief
+    assert "换行" in brief
 
     assert "coordinate" not in DELEGATE_PARAMETERS["properties"]
     assert "coordination" not in DELEGATE_PARAMETERS["properties"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -344,6 +345,72 @@ async def test_host_shell_forwards_with_timeout():
     assert call.args[1]["command"] == "echo ok"
     assert call.args[1]["timeout_seconds"] == 15
     assert call.kwargs["timeout"] == 30.0  # 15 + 15 slack
+    assert call.args[1]["conversation_id"] == ""
+    assert "cwd" not in call.args[1]
+
+
+@pytest.mark.asyncio
+async def test_host_shell_injects_local_cwd_and_ignores_model_cwd():
+    channel = MagicMock()
+    channel.request_host = AsyncMock(
+        return_value={
+            "timed_out": False,
+            "exit_code": 0,
+            "stdout": "ok",
+            "stderr": "",
+            "cwd": "/tmp/ws",
+        }
+    )
+    backend = MagicMock(location="local")
+    backend.root = Path("/tmp/ws")
+    backend._channel = MagicMock(root_id="root-1")
+    ctx = ToolContext.create(
+        execution_id="e1",
+        run_id="r1",
+        agent_id="ceo",
+        backend=backend,
+        user_id="u1",
+        desktop_channel=channel,
+        conversation_id="conv-1",
+    )
+    result = await HostTool().execute(
+        {
+            "action": "shell",
+            "command": "echo ok",
+            "cwd": "/etc",
+            "timeout_seconds": 15,
+        },
+        ctx,
+    )
+    assert result.success
+    payload = channel.request_host.await_args.args[1]
+    assert payload["cwd"] == str(Path("/tmp/ws"))
+    assert payload["root_id"] == "root-1"
+    assert payload["conversation_id"] == "conv-1"
+    assert payload["command"] == "echo ok"
+
+
+@pytest.mark.asyncio
+async def test_host_shell_cloud_does_not_forward_model_cwd():
+    channel = MagicMock()
+    channel.request_host = AsyncMock(
+        return_value={
+            "timed_out": False,
+            "exit_code": 0,
+            "stdout": "ok",
+            "stderr": "",
+            "cwd": "/home/u",
+        }
+    )
+    result = await HostTool().execute(
+        {"action": "shell", "command": "echo ok", "cwd": "/etc"},
+        _ctx(channel=channel, location="server"),
+    )
+    assert result.success
+    payload = channel.request_host.await_args.args[1]
+    assert "cwd" not in payload
+    assert "root_id" not in payload
+    assert payload["command"] == "echo ok"
 
 
 def test_host_dynamic_timeout_aligns_today_tiers():

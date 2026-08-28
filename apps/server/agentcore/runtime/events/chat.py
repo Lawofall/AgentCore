@@ -115,10 +115,12 @@ def tool_use_start(
     *,
     run_id: str = "",
 ) -> SSEEvent:
+    from agentcore.core.ephemeral_env import redact_tool_arguments_for_wire
+
     payload: dict[str, Any] = {
         "tool_call_id": tool_call_id,
         "tool_name": tool_name,
-        "arguments": arguments,
+        "arguments": redact_tool_arguments_for_wire(arguments),
     }
     if run_id:
         payload["run_id"] = run_id

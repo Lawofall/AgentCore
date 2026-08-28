@@ -1,7 +1,8 @@
 ﻿import type { DescribedError } from "@/lib/errors";
 import {
-  OUR_SERVICE_UNAVAILABLE_MESSAGE,
-  StreamError,
+    OUR_SERVICE_UNAVAILABLE_MESSAGE,
+    SELECTED_MODEL_UNAVAILABLE_MESSAGE,
+    StreamError,
   connectivityEscalationSuffix,
   describeError,
   errorActionForCode,
@@ -10,6 +11,7 @@ import {
   isConnectivityErrorCode,
   isOurServiceErrorCode,
   isUnstartedSendRefusal,
+  isRetriableStreamError,
   resetSessionConnectivityFailures,
   resolveAssistantFailureFace,
   syntheticErrorForEmptyFailure,
@@ -543,6 +545,32 @@ describe("our-cloud DATABASE_UNAVAILABLE face", () => {
     expect(described?.action).toBeNull();
   });
 
+  it("vendor 530 mislabelled INTERNAL_ERROR is the selected model, not AgentCore", () => {
+    const face = resolveAssistantFailureFace({
+      content: "",
+      finishReason: "error",
+      error: {
+        code: "INTERNAL_ERROR",
+        message: OUR_SERVICE_UNAVAILABLE_MESSAGE,
+        context: { upstream_status: 530 },
+      },
+    });
+    expect(face).toEqual({
+      code: "LLM_ERROR",
+      message: SELECTED_MODEL_UNAVAILABLE_MESSAGE,
+    });
+    expect(face?.message).not.toContain("AgentCore");
+
+    const described = describeError(
+      new StreamError("http", 530, {
+        code: "INTERNAL_ERROR",
+        serverMessage: OUR_SERVICE_UNAVAILABLE_MESSAGE,
+      }),
+    );
+    expect(described?.message).toBe(SELECTED_MODEL_UNAVAILABLE_MESSAGE);
+    expect(described?.message).not.toContain("AgentCore");
+  });
+
   it("true upstream LLM_ERROR still escalates connectivity from the 2nd failure", () => {
     expect(isConnectivityErrorCode("LLM_ERROR")).toBe(true);
     expect(connectivityEscalationSuffix("LLM_ERROR", "u1")).toBeNull();
@@ -641,5 +669,16 @@ describe("isUnstartedSendRefusal", () => {
         new StreamError("http", 503, { code: "INTERNAL_ERROR" }),
       ),
     ).toBe(false);
+  });
+
+  it("CONTEXT_OVERFLOW is not connectivity, not retriable, and rolls back the send", () => {
+    const err = new StreamError("http", 413, {
+      code: "CONTEXT_OVERFLOW",
+      serverMessage:
+        "这条对话对当前模型太长了。请开新对话，或换一个更能装长对话的模型。",
+    });
+    expect(isConnectivityErrorCode("CONTEXT_OVERFLOW")).toBe(false);
+    expect(isUnstartedSendRefusal(err)).toBe(true);
+    expect(isRetriableStreamError(err)).toBe(false);
   });
 });

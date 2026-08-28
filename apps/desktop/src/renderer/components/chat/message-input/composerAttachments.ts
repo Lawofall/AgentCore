@@ -28,10 +28,13 @@ export interface PendingAttachment {
   kind: EntryKind;
   /** 仅 kind=conversation：被引用对话的 id。 */
   conversationId?: string;
-  /** 引用即驻留：已写入对话工作区时的相对路径。 */
+  /** 已在对话工作区时的相对路径（区内原路径，或 ``attachments/…``）。 */
   workspacePath?: string;
   /** 主进程暂存 id（草稿 / 待云端上传）；发送前 finalize / consume。 */
   stagingId?: string;
+  /** 文件已在某授权根内：发送时若家仍是该根则引用、否则复制。 */
+  citedRootId?: string;
+  citedRelPath?: string;
   /** 二进制驻留：无 UTF-8 正文内联。 */
   binary?: boolean;
   /**

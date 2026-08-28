@@ -44,14 +44,15 @@ class GrantExternalReadonlyRequest(BaseModel):
     """Register a session-scoped desktop root for this conversation.
 
     Does **not** change workspace binding. ``root_id`` is the desktop-minted handle;
-    absolute paths never appear on the wire. ``mode`` is ``readonly`` (W3) or
-    ``organize`` (P1: move/copy/mkdir/trash-delete).
+    absolute paths never appear on the wire. ``mode`` is ``readonly`` (W3),
+    ``organize`` (move/copy/mkdir/trash-delete), or ``attach_rw`` (本机传统附加可写；
+    云协作拒绝该 mode).
     """
 
     root_id: str = Field(..., min_length=1, max_length=200)
     label: str = Field(..., min_length=1, max_length=200)
     alias_hint: str | None = Field(None, max_length=64)
-    mode: Literal["readonly", "organize"] = "readonly"
+    mode: Literal["readonly", "organize", "attach_rw"] = "readonly"
 
 
 class ExternalGrantItem(BaseModel):
@@ -59,7 +60,7 @@ class ExternalGrantItem(BaseModel):
     root_id: str
     label: str
     namespace: str  # ``external/<alias>``
-    mode: Literal["readonly", "organize"] = "readonly"
+    mode: Literal["readonly", "organize", "attach_rw"] = "readonly"
 
 
 class ExternalGrantListResponse(BaseModel):

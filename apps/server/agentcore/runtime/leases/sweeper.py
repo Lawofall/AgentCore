@@ -25,7 +25,12 @@ from agentcore.db.errors import is_schema_error
 from agentcore.db.repositories import PausedTurnRepository, TurnJournalRepository
 from agentcore.runtime.journal.entries import KIND_TURN_END
 from agentcore.runtime.leases.repo import TurnLeaseRepository
-from agentcore.runtime.leases.service import lease_owner_id, orphan_turn_lease, release_turn_lease
+from agentcore.runtime.leases.service import (
+    is_local_turn_lease,
+    lease_owner_id,
+    orphan_turn_lease,
+    release_turn_lease,
+)
 from agentcore.runtime.turn.interrupt import TurnInterruptReason, close_turn_interrupted
 from agentcore.runtime.turn.state import TurnState
 
@@ -115,6 +120,17 @@ async def run_turn_lease_sweep() -> int:
         expired = list(await repo.list_expired(before=before, limit=limit))
 
     for row in expired:
+        if is_local_turn_lease(row):
+            # Desktop owns salvage / settle. Cloud redrive would run against the
+            # server workspace; interrupting the message races a still-live sidecar.
+            async with async_session_factory() as session:
+                await TurnLeaseRepository(session).release(row.message_id)
+            logger.info(
+                "turn_lease.sweep_skip_local",
+                message_id=row.message_id,
+                conversation_id=row.conversation_id,
+            )
+            continue
         async with async_session_factory() as session:
             claimed = await TurnLeaseRepository(session).claim_expired(
                 row.message_id,

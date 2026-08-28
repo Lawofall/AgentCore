@@ -2,12 +2,12 @@
  * W3 会话授权根（模型侧 `external/<别名>/`）的桌面侧门。
  *
  * 判据都在这里收口，`dispatch` / `write` 共用同一份：
- * - **模式白名单**：readonly / organize 各自允许哪些 op —— 与服务端
+ * - **模式白名单**：readonly / organize / attach_rw 各自允许哪些 op —— 与服务端
  *   `agentcore/workspace/external_mounts.py` **同结构**（两端都是白名单：新增
  *   `WorkspaceOpName` 默认拒绝，不会在某一端静默放行）。对齐由
  *   `apps/server/tests/test_external_op_parity.py` 穷尽断言。
  * - **可逆性**：区外目录一律软删（见 `write.ts` 的 `opDelete`）。
- * - **分根 copy**：工作区 → organize 时源/目标各走同一套 pathGuard（见
+ * - **分根 copy**：工作区 → organize / attach_rw 时源/目标各走同一套 pathGuard（见
  *   `splitRootCopyError`）；不是放宽守卫。反向 copy 与跨根 move 仍拒。
  *
  * **归属不在这里**：授权根登记时就绑到了 (conversation, device)，路由据此选机
@@ -20,8 +20,8 @@ import type { WorkspaceOpName, WorkspaceOpResult } from "@shared/ipc-contract";
 import type { StoredRoot } from "../roots";
 import { opErr } from "./result";
 
-/** Session-root access mode (W3 readonly / organize). Permanent roots have neither. */
-export type SessionRootMode = "readonly" | "organize";
+/** Session-root access mode (W3 readonly / organize / attach_rw). Permanent roots have neither. */
+export type SessionRootMode = "readonly" | "organize" | "attach_rw";
 
 /** readonly 允许的 op（↔ 服务端 `ORGANIZE_ALLOWED_OPS - ORGANIZE_MUTATION_OPS`）。 */
 export const READONLY_ALLOWED_OPS = new Set<WorkspaceOpName>([
@@ -83,7 +83,12 @@ const CROSS_MOUNT_MOVE_MSG = "不能跨会话授权目录移动文件";
 
 /** Resolve session-root mode (missing mode on sessionOnly → readonly). */
 export function resolveSessionMode(root: StoredRoot): SessionRootMode | null {
-  if (root.mode === "organize" || root.mode === "readonly") return root.mode;
+  if (
+    root.mode === "organize" ||
+    root.mode === "readonly" ||
+    root.mode === "attach_rw"
+  )
+    return root.mode;
   if (root.sessionOnly) return "readonly";
   return null;
 }
@@ -111,9 +116,15 @@ export function sessionRootAccessError(
       : opErr("OutsideWorkspace", READONLY_MSG);
   }
 
-  // organize
   if (op === "delete" && Boolean(args.permanent)) {
     return opErr("OutsideWorkspace", PERMANENT_EXTERNAL_MSG);
+  }
+  if (mode === "attach_rw") {
+    const known =
+      READONLY_ALLOWED_OPS.has(op) ||
+      ORGANIZE_MUTATION_OPS.has(op) ||
+      ORGANIZE_DENIED_OPS.has(op);
+    return known ? null : opErr("OutsideWorkspace", ORGANIZE_DENY_MSG);
   }
   return ORGANIZE_ALLOWED_OPS.has(op)
     ? null
@@ -159,9 +170,10 @@ export function crossRootMoveError(
 }
 
 /**
- * Split-root copy gate: same-root, or workspace → organize. Roots that differ
- * but share a null alias (two workspace ids) still deny — matching server
- * ``src_root != dst_root`` after ``cross_root_copy_error`` returns None.
+ * Split-root copy gate: same-root, or workspace → organize / attach_rw.
+ * Roots that differ but share a null alias (two workspace ids) still deny —
+ * matching server ``src_root != dst_root`` after ``cross_root_copy_error``
+ * returns None. Dest mode still gates readonly (copy op denied there first).
  */
 export function splitRootCopyError(
   srcRoot: StoredRoot,
@@ -170,9 +182,10 @@ export function splitRootCopyError(
   if (srcRoot.id === dstRoot.id) return null;
   const err = crossRootCopyError(srcRoot, dstRoot);
   if (err) return err;
+  const dstMode = resolveSessionMode(dstRoot);
   if (
     !isSessionGrantRoot(srcRoot) &&
-    resolveSessionMode(dstRoot) === "organize"
+    (dstMode === "organize" || dstMode === "attach_rw")
   ) {
     return null;
   }

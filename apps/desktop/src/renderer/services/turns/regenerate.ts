@@ -1,9 +1,11 @@
 import { bumpConversationCache } from "@/hooks/useConversations";
+import { hasLocalEngine } from "@/lib/capabilities";
 import {
   StreamError,
   describeStreamError,
   streamErrorAction,
 } from "@/lib/errors";
+import { logEvent } from "@/lib/log";
 import type { PlanReviewUserDecision } from "@/services/planReview";
 import {
   conversationHasColdPending,
@@ -11,11 +13,17 @@ import {
   resolveResumeMessageId,
   resolveResumeOrigin,
 } from "@/services/resume";
-import { clearSidecarHealth, probeSidecar } from "@/services/sidecarHealth";
+import {
+  clearSidecarHealth,
+  markSidecarUnhealthy,
+  probeSidecar,
+} from "@/services/sidecarHealth";
 import {
   type SidecarTarget,
   getActiveSidecarTarget,
+  isSidecarEnabled,
   resolveConversationLocalTarget,
+  resolveSidecarRoot,
 } from "@/services/sidecarRouting";
 import {
   type OutgoingAgentMention,
@@ -23,14 +31,21 @@ import {
   regenerateConversation,
   resumeConversation,
 } from "@/services/streamConversation";
-import { resumeConversationViaSidecar } from "@/services/streamConversationViaSidecar";
+import {
+  resumeConversationViaSidecar,
+  streamConversationViaSidecar,
+} from "@/services/streamConversationViaSidecar";
 import {
   type AgentMentionMeta,
   type MessageAttachmentMeta,
   getRuntime,
   useConversationStore,
 } from "@/stores/conversation";
-import { beginTurnPreflight } from "@/stores/conversation/turnPhaseActions";
+import {
+  beginTurnPreflight,
+  enterTurnStreaming,
+  throwIfCannotOpenStream,
+} from "@/stores/conversation/turnPhaseActions";
 import { clearInteractionPrompts } from "@/stores/interactionPrompts";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import {
@@ -137,6 +152,9 @@ export type RegenerateMaterials = {
  * reply; the backend truncates the same range so persisted history stays
  * consistent. On a transport failure it raises an error banner (no one-click
  * regenerate from the banner — bubble regenerate remains).
+ *
+ * 本机会话与 ``sendTurn`` 同形：探活通过走 sidecar（占用时截断），探活失败 /
+ * 启动期 recoverable 降级云端 regenerate；中途失败不降级。续跑帧仍永不降级。
  */
 export async function runRegenerate(
   userMessageId: string,
@@ -149,17 +167,32 @@ export async function runRegenerate(
 
   cancelRejoinLiveTurn(conversationId);
   // Route every turn write to this conversation's slice by id, not the active
-  // key — the user may switch away mid-stream and the turn keeps running in the
-  // background (switchConversation no longer aborts it).
+  // key — the user may switch away mid-stream and the turn keeps running in
+  // the background (switchConversation no longer aborts it).
   store.clearError(conversationId);
   bumpConversationCache(conversationId);
   store.truncateAfter(userMessageId, conversationId);
   store.createAssistantMessage(conversationId);
 
+  const userRow = getRuntime(conversationId).messages.find(
+    (m) => m.id === userMessageId && m.role === "user",
+  );
+  const text = content ?? userRow?.content ?? "";
+  const replaceMaterials = materials !== undefined;
+  const outgoingAttachments = toOutgoingAttachments(
+    materials?.attachments ?? userRow?.attachments ?? [],
+  );
+  const outgoingMentions = toOutgoingMentions(
+    materials?.agentMentions ?? userRow?.agentMentions ?? [],
+  );
+
   const ac = new AbortController();
   store.setAbort(ac, conversationId);
   beginTurnPreflight(conversationId);
-  try {
+
+  const runCloud = async () => {
+    throwIfCannotOpenStream(conversationId, ac.signal);
+    enterTurnStreaming(conversationId);
     await regenerateConversation({
       conversationId,
       messageId: userMessageId,
@@ -170,9 +203,91 @@ export async function runRegenerate(
       agentMentions: materials
         ? toOutgoingMentions(materials.agentMentions)
         : undefined,
-      replaceMaterials: materials !== undefined,
+      replaceMaterials,
       signal: ac.signal,
     });
+  };
+
+  try {
+    const sidecarTarget = await resolveSidecarRoot(conversationId);
+    throwIfCannotOpenStream(conversationId, ac.signal);
+    const probe = sidecarTarget ? await probeSidecar(sidecarTarget) : null;
+    throwIfCannotOpenStream(conversationId, ac.signal);
+    if (sidecarTarget && probe?.healthy) {
+      store.setExecutionVia("sidecar", conversationId);
+      logEvent("info", "turn.stream_path", {
+        conversation_id: conversationId,
+        via: "sidecar",
+        reason: "probe_ok",
+        regenerate: true,
+        root_id: sidecarTarget.rootId,
+        subpath: sidecarTarget.subpath,
+      });
+      try {
+        throwIfCannotOpenStream(conversationId, ac.signal);
+        enterTurnStreaming(conversationId);
+        await streamConversationViaSidecar({
+          conversationId,
+          rootId: sidecarTarget.rootId,
+          subpath: sidecarTarget.subpath,
+          content: text,
+          optimisticUserId: userMessageId,
+          attachments: outgoingAttachments,
+          agentMentions: outgoingMentions,
+          regenerate: true,
+          replaceMaterials,
+          signal: ac.signal,
+        });
+      } catch (sidecarErr) {
+        if (
+          !(sidecarErr instanceof StreamError) ||
+          sidecarErr.kind !== "sidecar" ||
+          !sidecarErr.recoverable
+        ) {
+          throw sidecarErr;
+        }
+        const fallbackDetail =
+          sidecarErr.serverMessage?.trim() || "本地引擎未能启动";
+        markSidecarUnhealthy(sidecarTarget, fallbackDetail);
+        store.setExecutionVia("cloud_bridge", conversationId);
+        store.truncateAfter(userMessageId, conversationId);
+        store.createAssistantMessage(conversationId);
+        beginTurnPreflight(conversationId);
+        logEvent("info", "turn.stream_path", {
+          conversation_id: conversationId,
+          via: "cloud",
+          reason: "sidecar_fallback",
+          regenerate: true,
+          root_id: sidecarTarget.rootId,
+          detail: fallbackDetail,
+        });
+        await runCloud();
+      }
+    } else {
+      const bridging =
+        sidecarTarget !== null ||
+        (await resolveConversationLocalTarget(conversationId)) !== null;
+      store.setExecutionVia(bridging ? "cloud_bridge" : null, conversationId);
+      const reason = !hasLocalEngine()
+        ? "no_local_engine"
+        : !isSidecarEnabled()
+          ? "switch_off"
+          : sidecarTarget && probe?.healthy === false
+            ? probe.probed
+              ? "probe_unhealthy"
+              : "probe_cache_bad"
+            : "no_local_target";
+      logEvent("info", "turn.stream_path", {
+        conversation_id: conversationId,
+        via: "cloud",
+        reason,
+        regenerate: true,
+        bridging,
+        root_id: sidecarTarget?.rootId ?? null,
+        probe_detail: probe?.detail ?? null,
+      });
+      await runCloud();
+    }
   } catch (err) {
     if (isAbort(err)) {
       finalizeHonestStopAbort(conversationId);

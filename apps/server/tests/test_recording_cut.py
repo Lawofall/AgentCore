@@ -369,7 +369,7 @@ def test_cut_sanitizes_run_context_memory_and_passes_scan():
 
     memory = (
         "<rules>\n"
-        "以下条目请一并遵循；与本回合用户直接指令冲突时，以本回合指令为准。\n"
+        "以下条目请一并遵循。\n"
         "硬约束：题材/领域偏好与历史任务不得改变本回合路由"
         "（直答/委派/调研/辩论以用户当前话为准）。\n\n"
         "## 沟通偏好\n"

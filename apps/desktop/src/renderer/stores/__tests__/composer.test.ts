@@ -158,6 +158,27 @@ describe("composer draft store", () => {
     ).toBe("attachments/x.ts");
   });
 
+  it("persists citedRootId so draft citations survive reload", () => {
+    vi.useFakeTimers();
+    const cited = {
+      ...attachment,
+      id: "a3",
+      citedRootId: "root-1",
+      citedRelPath: "docs/guide.md",
+    };
+    useComposerDraftStore.getState().setValue("c1", "引用");
+    useComposerDraftStore.getState().setAttachments("c1", [cited]);
+    vi.advanceTimersByTime(400);
+
+    __reloadComposerDraftsForTests();
+    expect(
+      useComposerDraftStore.getState().drafts.c1?.attachments[0],
+    ).toMatchObject({
+      citedRootId: "root-1",
+      citedRelPath: "docs/guide.md",
+    });
+  });
+
   it("truncates oversized attachment preview text when persisting", () => {
     vi.useFakeTimers();
     const huge = {

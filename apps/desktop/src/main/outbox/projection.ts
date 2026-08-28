@@ -8,6 +8,7 @@ import { type FSWatcher, watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { bearerPostJson } from "../auth-client";
 import { logDesktop } from "../log-service";
+import type { SidecarQueuedAttachment } from "@shared/sidecar-contract";
 import {
   type OutboxRecord,
   PHASE_OPEN,
@@ -27,6 +28,8 @@ export interface LocalTurnOccupyArgs {
   messageId: string;
   traceId: string;
   agentMentions?: Array<{ agent_id: string; role: string }>;
+  regenerate?: boolean;
+  attachments?: SidecarQueuedAttachment[];
 }
 
 export interface LocalTurnAbortArgs {
@@ -80,11 +83,13 @@ export function noteOccupiedLocalTurn(
 ): void {
   occupied.set(userMessageId, meta);
   settled.delete(userMessageId);
+  syncLocalTurnLeaseHeartbeatLoop();
 }
 
 export function markLocalTurnSettled(userMessageId: string): void {
   settled.add(userMessageId);
   occupied.delete(userMessageId);
+  syncLocalTurnLeaseHeartbeatLoop();
 }
 
 export function isLocalTurnOccupied(userMessageId: string): boolean {
@@ -93,6 +98,63 @@ export function isLocalTurnOccupied(userMessageId: string): boolean {
 
 function localTurnsPath(conversationId: string, suffix: string): string {
   return `/v1/conversations/${encodeURIComponent(conversationId)}/local-turns${suffix}`;
+}
+
+/** Matches server ``turn_lease_heartbeat_seconds``. TTL is 90s. */
+export const LOCAL_TURN_LEASE_HEARTBEAT_MS = 20_000;
+
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopLocalTurnLeaseHeartbeatLoop(): void {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
+
+function syncLocalTurnLeaseHeartbeatLoop(): void {
+  if (occupied.size === 0) {
+    stopLocalTurnLeaseHeartbeatLoop();
+    return;
+  }
+  if (heartbeatTimer) return;
+  heartbeatTimer = setInterval(() => {
+    void heartbeatOccupiedLocalTurns();
+  }, LOCAL_TURN_LEASE_HEARTBEAT_MS);
+}
+
+async function heartbeatOccupiedLocalTurns(): Promise<void> {
+  const snapshots = [...occupied.entries()];
+  for (const [userMessageId, meta] of snapshots) {
+    if (!occupied.has(userMessageId)) continue;
+    try {
+      const result = await bearerPostJson(
+        localTurnsPath(meta.conversationId, "/heartbeat"),
+        { message_id: meta.messageId },
+      );
+      if (!result.ok) {
+        logDesktop({
+          level: "warn",
+          event: "outbox.local_turn_heartbeat_failed",
+          fields: {
+            conversation_id: meta.conversationId,
+            user_message_id: userMessageId,
+            status: result.status,
+          },
+        });
+      }
+    } catch (err) {
+      logDesktop({
+        level: "warn",
+        event: "outbox.local_turn_heartbeat_failed",
+        fields: {
+          conversation_id: meta.conversationId,
+          user_message_id: userMessageId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+    }
+  }
 }
 
 /**
@@ -122,6 +184,7 @@ export async function occupyLocalTurnBegin(
     });
     return false;
   }
+  const mentionsDefined = args.agentMentions !== undefined;
   const mentions = (args.agentMentions || []).filter(
     (m) =>
       m &&
@@ -136,7 +199,13 @@ export async function occupyLocalTurnBegin(
     message_id: messageId,
     trace_id: traceId,
   };
-  if (mentions.length > 0) body.agent_mentions = mentions;
+  if (args.regenerate) body.regenerate = true;
+  if (mentions.length > 0 || (args.regenerate && mentionsDefined)) {
+    body.agent_mentions = mentions;
+  }
+  if (args.attachments !== undefined) {
+    body.attachments = args.attachments;
+  }
   let result: { ok: boolean; status: number; body: unknown };
   try {
     result = await bearerPostJson(
@@ -200,6 +269,7 @@ export async function abortLocalTurnPlaceholder(
     return;
   }
   occupied.delete(userMessageId);
+  syncLocalTurnLeaseHeartbeatLoop();
 }
 
 async function postOpenCheckpoint(record: OutboxRecord): Promise<void> {
@@ -340,5 +410,6 @@ export function stopOutboxProjectionWatch(): void {
 export function resetLocalTurnProjectionForTests(): void {
   occupied.clear();
   settled.clear();
+  stopLocalTurnLeaseHeartbeatLoop();
   stopOutboxProjectionWatch();
 }

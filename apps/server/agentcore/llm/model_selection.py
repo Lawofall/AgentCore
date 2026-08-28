@@ -224,14 +224,15 @@ async def select_model_config(
     (``preflight_llm_credentials`` / ``resolve_and_gate_background`` /
     ``run_background_llm``) is the authorization choke point.
 
-    Background purposes (title/memory/compaction) are **platform-first**
+Background purposes (title/memory/workflow.slots) are **platform-first**
     product chrome when :func:`platform_catalog_visible` — *unless* the user pointed
     the combo's background slot at their own key, which outranks the platform default:
     「平台优先」 exists to stop BYOK accounts freeloading platform quota, and an account
     spending its own key has nothing to freeload. Otherwise BYOK is the fallback when
     the platform gate is off **or** upstream auth rejection via ``run_background_llm``.
-    Chat purpose stays user-key-first unless the account default is an explicit
-    platform pointer.
+    Compaction is continuity, not chrome: do **not** resolve fold credentials here;
+    ``run_compaction_llm`` follows the conversation's chat payer. Chat purpose stays
+    user-key-first unless the account default is an explicit platform pointer.
 
     Credential decrypt / platform key wiring stay in :mod:`resolve`; this function
     only decides *which* binding to use.

@@ -54,6 +54,16 @@ _TEAM_CLOSE_LINE = {
 }
 
 
+def _wave_expects_landing(session: CoordinationSession) -> bool:
+    """True when this wave's live plan has a writable (non-prose) worker."""
+    live = session.live_plan
+    if live is None:
+        return False
+    from agentcore.runtime.delegate.completion import plan_has_writable_worker
+
+    return plan_has_writable_worker(live)
+
+
 def _user_facts_dict(session: CoordinationSession, payload: dict) -> dict:
     raw = payload.get("user_facts")
     if isinstance(raw, dict):
@@ -269,6 +279,20 @@ def format_coordination_events(
             close_line = cancel_close_line(cancel_kind)
         else:
             close_line = _TEAM_CLOSE_LINE[terminal_kind]
+        all_done = next(
+            (ev for ev in events if ev.kind is CoordinationEventKind.ALL_COMPLETED),
+            None,
+        )
+        if (
+            terminal_kind == "success"
+            and all_done is not None
+            and _wave_expects_landing(session)
+            and not _accepted_landing_paths(session, all_done.payload or {})
+        ):
+            close_line = (
+                "按终稿纪律向用户交代：写盘形态未见已接受文件，不得宣称已交付；"
+                "说明缺口或续派，不要把队员回合结束当成用户交付。"
+            )
     else:
         close_line = "全部完成后做最终合成（走 content_delta），然后退出协调。"
     discipline = (
@@ -440,6 +464,18 @@ def _format_one(
             lines.append(
                 f"已接受落盘：{listed}。"
                 "概览须点名这些工作区相对路径；禁止整段粘贴本清单当产物卡。"
+            )
+        elif (
+            not cancel_kind
+            and not p.get("cancelled")
+            and not p.get("error")
+            and p.get("criteria_met") is not False
+            and not session.soft_stop
+            and _wave_expects_landing(session)
+        ):
+            lines.append(
+                "本波是写盘形态，工作区未见已接受文件。"
+                "队员回合结束不是用户交付；不得向用户宣称完成。"
             )
         if (
             not cancel_kind

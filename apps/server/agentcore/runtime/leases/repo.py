@@ -64,19 +64,27 @@ class TurnLeaseRepository:
         await self._session.execute(stmt)
         await self._session.commit()
 
-    async def heartbeat(self, message_id: str, *, owner_id: str, phase: str | None = None) -> bool:
+    async def heartbeat(
+        self,
+        message_id: str,
+        *,
+        owner_id: str,
+        phase: str | None = None,
+        conversation_id: str | None = None,
+    ) -> bool:
         """Bump heartbeat when ``owner_id`` still owns the row. Returns False if lost."""
         now = datetime.now(UTC)
         values: dict[str, Any] = {"heartbeat_at": now, "updated_at": now}
         if phase is not None:
             values["phase"] = phase
+        cond = [
+            TurnLeaseRow.message_id == message_id,
+            TurnLeaseRow.owner_id == owner_id,
+        ]
+        if conversation_id is not None:
+            cond.append(TurnLeaseRow.conversation_id == conversation_id)
         result = await self._session.execute(
-            update(TurnLeaseRow)
-            .where(
-                TurnLeaseRow.message_id == message_id,
-                TurnLeaseRow.owner_id == owner_id,
-            )
-            .values(**values)
+            update(TurnLeaseRow).where(*cond).values(**values)
         )
         await self._session.commit()
         return (result.rowcount or 0) > 0

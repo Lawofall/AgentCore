@@ -99,7 +99,7 @@ export function forgetAttachmentUpload(attachmentId: string): void {
 /**
  * 暂存件（回形针选择 / @ 本机文件）的云端上传：这条路渲染进程没有 File，只能让主
  * 进程把字节交出来。仍然前移到附加时跑，用户点发送时至多是在等它收尾。
- * 本机工作区下 `stageRootFileAttachment` 已经直接写进 ``attachments/``，无需再来一趟。
+ * 本机工作区下区内引用已有 workspacePath，区外 stage 才写进 ``attachments/``，无需再来一趟。
  */
 export function startStagedAttachmentUpload(
   conversationId: string,

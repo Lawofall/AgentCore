@@ -64,16 +64,16 @@ describe("PermissionAxesBadge", () => {
   it("sets user default when current axes match a built-in recipe", async () => {
     renderBadge();
     await waitFor(() => {
-      expect(screen.getByLabelText("权限：少打断")).toBeTruthy();
+      expect(screen.getByLabelText("权限：全放行")).toBeTruthy();
     });
-    fireEvent.click(screen.getByLabelText("权限：少打断"));
+    fireEvent.click(screen.getByLabelText("权限：全放行"));
     const btn = screen.getByRole("button", { name: "设为新会话默认" });
     expect((btn as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(btn);
     await waitFor(() => {
       expect(setUserDefaultMock).toHaveBeenCalledWith("less_interrupt");
       expect(notifySuccess).toHaveBeenCalledWith(
-        expect.stringContaining("少打断"),
+        expect.stringContaining("全放行"),
       );
     });
   });

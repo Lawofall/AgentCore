@@ -135,3 +135,10 @@ def test_organize_mutation_gate_still_denies_non_mutations():
     for op in em.ORGANIZE_DENIED_OPS | em.READONLY_ALLOWED_OPS:
         assert em.external_mutation_allowed(mount, op) is not None
     assert em.external_mutation_allowed(mount, "delete", permanent=True) is not None
+
+
+def test_attach_rw_allows_writes_but_not_permanent_delete():
+    mount = em.ExternalMount(alias="desk", root_id="r", label="桌面", mode="attach_rw")
+    for op in ("write", "replace", "append", "execute", "copy", "mkdir", "delete"):
+        assert em.external_mutation_allowed(mount, op) is None
+    assert em.external_mutation_allowed(mount, "delete", permanent=True) is not None

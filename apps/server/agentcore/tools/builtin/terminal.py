@@ -148,8 +148,6 @@ def terminal_description(location: Literal["server", "local"] | None = None) -> 
         where
         + "永不退出的长驻进程用本工具，禁止改走 code_execute / host(action=shell)。"
         "短命令：装包/build/test → test_run（worker）；极短 CLI → code_execute（worker）。"
-        "CEO 可只启服/重启/看是否活着；改代码、装依赖、修报错须 delegate。"
-        "start 须 wait_for。"
         "HOW→consult(terminal)。"
     )
 

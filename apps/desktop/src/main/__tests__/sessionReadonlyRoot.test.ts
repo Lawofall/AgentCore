@@ -35,6 +35,7 @@ import {
   buildExternalEnvFromRoots,
   buildWorkspacePythonpathEnv,
   pickRegistryEnv,
+  pickUserExecEnv,
 } from "../fs/workspace/exec";
 import {
   ORGANIZE_ALLOWED_OPS,
@@ -221,6 +222,18 @@ describe("session root op whitelist is exhaustive over WorkspaceOpName", () => {
         sessionRootAccessError(organizeOnly, op, {}) === null,
       ]).toEqual([policy === "readonly", policy !== "denied"]);
     }
+  });
+
+  it("attach_rw allows write/replace/execute; permanent delete still denied", () => {
+    const attach: StoredRoot = { ...readonlyOnly, id: "s-rw", mode: "attach_rw" };
+    for (const op of ops) {
+      expect(sessionRootAccessError(attach, op, {})).toBeNull();
+    }
+    expect(
+      sessionRootAccessError(attach, "delete", { permanent: true })?.ok,
+    ).toBe(false);
+    const future = "teleport" as WorkspaceOpName;
+    expect(sessionRootAccessError(attach, future, {})?.ok).toBe(false);
   });
 
   it("denies an unclassified op instead of falling through (whitelist, not blacklist)", () => {
@@ -436,5 +449,27 @@ describe("pickRegistryEnv", () => {
     expect(pickRegistryEnv(null)).toEqual({});
     expect(pickRegistryEnv("x")).toEqual({});
     expect(pickRegistryEnv(["NPM_CONFIG_REGISTRY"])).toEqual({});
+  });
+});
+
+describe("pickUserExecEnv", () => {
+  it("keeps API keys and drops PATH / linker hijacks", () => {
+    expect(
+      pickUserExecEnv({
+        AGNES_API_KEY: "sk-test-key-value",
+        PATH: "/evil",
+        LD_PRELOAD: "x",
+        AGENTCORE_EXTERNAL_X: "/tmp",
+        NPM_CONFIG_REGISTRY: "https://example.invalid/",
+      }),
+    ).toEqual({
+      AGNES_API_KEY: "sk-test-key-value",
+      NPM_CONFIG_REGISTRY: "https://example.invalid/",
+    });
+  });
+
+  it("returns empty for non-objects", () => {
+    expect(pickUserExecEnv(null)).toEqual({});
+    expect(pickUserExecEnv("x")).toEqual({});
   });
 });

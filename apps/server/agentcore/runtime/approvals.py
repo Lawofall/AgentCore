@@ -140,8 +140,10 @@ _is_git_push = is_git_remote_publish
 
 def _preview_arguments(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Bound large string values so the approval SSE event stays small."""
+    from agentcore.core.ephemeral_env import redact_tool_arguments_for_wire
+
     preview: dict[str, Any] = {}
-    for key, value in arguments.items():
+    for key, value in redact_tool_arguments_for_wire(arguments).items():
         if isinstance(value, str):
             limit = _preview_value_max(tool_name, key)
             if len(value) > limit:

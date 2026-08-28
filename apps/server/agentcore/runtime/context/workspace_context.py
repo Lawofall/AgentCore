@@ -424,7 +424,8 @@ def build_workspace_context(
         grant_line = (
             "区外目录：桌面在线，本机区外目录可授权——"
             "只读工具 `external_mount_readonly`，"
-            "整理工具 `grant_organize_folder`；"
+            "整理工具 `grant_organize_folder`，"
+            "本机附加可写 `grant_attach_folder`；"
             "授权后以 `external/<别名>/…` 访问（经桌面通道、仅本次对话、可撤销），"
             "与工作区绑定正交。"
         )
@@ -451,7 +452,11 @@ def build_workspace_context(
             mode = getattr(m, "mode", None) or (
                 "readonly" if getattr(m, "readonly", True) else "organize"
             )
-            mode_zh = "只读" if mode == "readonly" else "整理"
+            mode_zh = (
+                "只读"
+                if mode == "readonly"
+                else ("可读写" if mode == "attach_rw" else "整理")
+            )
             parts.append(
                 f"`external/{a}/`（{getattr(m, 'label', a)}，{mode_zh}）"
             )
@@ -591,7 +596,6 @@ def build_workspace_context(
     elif mcp_on:
         mcp_guide_line = (
             "本机 MCP 事实：mcp=已装配（经桌面 stdio 回填，非云进程直连本机）；"
-            "仅 worker 持 MCP 工具（一律需审批），CEO 不直持；"
             "工具名形如 mcp_<server>_<tool>。"
         )
     else:
@@ -607,9 +611,7 @@ def build_workspace_context(
         )
     elif host_on:
         host_guide_line = (
-            "本机 Host 事实：host=已装配（经桌面回填通道，非云进程直探本机）——"
-            "CEO 可 host(action=status/os_log/shell)；"
-            "L2/L3（open_settings/set_audio/restart_service/install_package）仅 worker。"
+            "本机 Host 事实：host=已装配（经桌面回填通道，非云进程直探本机）。"
         )
     else:
         host_guide_line = (
@@ -635,9 +637,7 @@ def build_workspace_context(
                 "本会话 HTML 相对路径**打不开**。"
             )
         browser_guide_line = (
-            "浏览器事实：本回合已装配 browser"
-            "（action=navigate/click/type/scroll/snapshot/console 由 CEO 可直持；"
-            "screenshot 仅 worker；右坞会直播）。" + path_capability
+            "浏览器事实：本回合已装配 browser（右坞会直播）。" + path_capability
         )
     else:
         if is_local:

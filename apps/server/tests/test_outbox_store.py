@@ -518,7 +518,9 @@ def test_write_retries_transient_replace_lock(tmp_path, monkeypatch):
         trace_id="r" * 32,
     )
     calls = {"n": 0}
-    real_replace = outbox_mod.os.replace
+    import agentcore.workspace.fs_replace as fs_replace_mod
+
+    real_replace = fs_replace_mod.os.replace
 
     def flaky(src, dst):  # noqa: ANN001
         calls["n"] += 1
@@ -528,7 +530,7 @@ def test_write_retries_transient_replace_lock(tmp_path, monkeypatch):
             raise err
         real_replace(src, dst)
 
-    monkeypatch.setattr(outbox_mod.os, "replace", flaky)
+    monkeypatch.setattr(fs_replace_mod.os, "replace", flaky)
     monkeypatch.setattr(outbox_mod, "_REPLACE_RETRY_DELAYS_S", (0.0, 0.0, 0.0, 0.0, 0.0))
 
     async def run() -> None:
@@ -568,7 +570,9 @@ def test_write_logs_failure_after_exhausted_replace_retries(tmp_path, monkeypatc
         def warning(self, event, **kwargs):  # noqa: ANN001
             pass
 
-    monkeypatch.setattr(outbox_mod.os, "replace", always_locked)
+    import agentcore.workspace.fs_replace as fs_replace_mod
+
+    monkeypatch.setattr(fs_replace_mod.os, "replace", always_locked)
     monkeypatch.setattr(outbox_mod, "_REPLACE_RETRY_DELAYS_S", (0.0, 0.0))
     monkeypatch.setattr(outbox_mod, "logger", _Spy())
 

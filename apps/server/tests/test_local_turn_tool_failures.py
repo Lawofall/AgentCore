@@ -88,6 +88,19 @@ _TRACE = "0123456789abcdef0123456789abcdef"
         ("anything", "source_grep_redirect", "source_grep_redirect"),
         ("缺少参数", "schema", "schema"),
         ("这份文件太大", "too_large", "too_large"),
+        ("[WinError 5] 拒绝访问", "other", "access_denied"),
+        (
+            "写入被占用（杀毒/索引/其他程序正打开该文件），不是没授权",
+            None,
+            "access_denied",
+        ),
+        ("anything", "access_denied", "access_denied"),
+        (
+            "路径 '../escaped.md' 超出了工作区范围。请使用工作区相对路径",
+            "other",
+            "outside_workspace",
+        ),
+        ("anything", "outside_workspace", "outside_workspace"),
     ],
 )
 def test_normalize_local_turn_tool_failure_code(message, code, expected):

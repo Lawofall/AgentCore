@@ -137,7 +137,7 @@ def test_hint_wording_requires_nonempty_tasks_and_is_user_text_agnostic():
     hint = render_redispatch_hint()
     assert "<prior_delegate_retry>" in hint
     assert "tasks" in hint
-    assert HANDWRITTEN_TASKS_SKELETON in hint
+    assert HANDWRITTEN_TASKS_SKELETON not in hint
     assert "delegate" in hint
     # Soft: one-shot / ignorable framing; no user-utterance triggers in the copy.
     assert "一次性" in hint

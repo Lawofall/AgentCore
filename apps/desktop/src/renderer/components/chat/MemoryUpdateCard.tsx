@@ -8,7 +8,6 @@ import { Card } from "@/components/ui";
 import { countPillMuted, statusCardChrome } from "@/components/ui/tone-presets";
 import { getConversations } from "@/hooks/useConversations";
 import { queryClient } from "@/lib/queryClient";
-import { cn } from "@/lib/utils";
 import {
   MEMORY_DISPUTED_LINES_KEY,
   MEMORY_UPDATES_KEY,
@@ -17,26 +16,18 @@ import {
   memoryLeafTabName,
   parseProjectMemoryFolderId,
 } from "@/services/sources/memorySource";
-import type { MemoryUpdate } from "@/stores/conversation";
-import { useConversationStore } from "@/stores/conversation";
+import { useConversationStore, type MemoryUpdate } from "@/stores/conversation";
 import { usePersistentDisclosure } from "@/stores/disclosure";
-import { Brain, ChevronDown, ChevronRight, NotebookPen } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { memoryAnchorTime } from "./messageTimeline";
 
-/** 本场摘要超过此长度（或含换行）默认两行截断，可展开全文（对齐 ConclusionHero）。 */
-export const EPISODIC_SUMMARY_CLAMP_CHARS = 60;
-
-/** 情景层是巩固素材，不是已经生效的现行记忆。 */
-export const EPISODIC_CARD_HEADING = "本场摘记";
-
 /**
- * Memory-write notice on the conversation timeline (two-layer memory).
+ * Memory-write notice on the conversation timeline.
  *
- * Bordered muted Card shell (摘要 / 记忆 only) — other timeline metadata stays ghost.
+ * Bordered muted Card shell (记忆 only) — other timeline metadata stays ghost.
  * Expand / navigate behavior unchanged.
  *
- * - ``episodic``: light tip — session digest was filed for later consolidation.
  * - ``semantic``: expandable diff — what changed in 偏好 / 画像 / 主题.
  * - ``quota``: the always pool is full — the summary says so and the rows name every
  *   entry that could not be written plus the ones holding the pool (审计 CTX-A2).
@@ -50,72 +41,6 @@ export function MemoryUpdateCard({ update }: { update: MemoryUpdate }) {
     getConversations().find((c) => c.id === conversationId)?.folderId ?? null;
   // 与卡片在时间线上的落点同一个时刻，否则卡片会显示得比它下方的消息还晚。
   const timeLabel = formatMemoryTime(memoryAnchorTime(update));
-
-  const isEpisodic = update.kind === "episodic";
-  if (isEpisodic) {
-    const tip = (update.summary ?? "").trim();
-    if (!tip) return null;
-    const long =
-      tip.length > EPISODIC_SUMMARY_CLAMP_CHARS || tip.includes("\n");
-    return (
-      <Card
-        className={`animate-task-card-enter ${chrome.border} ${chrome.surface}`}
-      >
-        <div className="flex w-full items-start gap-2 px-3 py-2 text-left">
-          <NotebookPen
-            size={16}
-            className={`mt-0.5 shrink-0 ${chrome.accent}`}
-          />
-          <div className="min-w-0 flex-1">
-            {long ? (
-              <button
-                type="button"
-                onClick={() => setOpen((v) => !v)}
-                aria-expanded={open}
-                className="flex w-full items-center gap-2 text-left"
-                data-testid="episodic-summary-toggle"
-              >
-                <span className={`text-xs font-medium ${chrome.accent}`}>
-                  {EPISODIC_CARD_HEADING}
-                </span>
-                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                  {timeLabel}
-                </span>
-                {open ? (
-                  <ChevronDown
-                    size={14}
-                    className="shrink-0 text-muted-foreground"
-                  />
-                ) : (
-                  <ChevronRight
-                    size={14}
-                    className="shrink-0 text-muted-foreground"
-                  />
-                )}
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-medium ${chrome.accent}`}>
-                  {EPISODIC_CARD_HEADING}
-                </span>
-                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                  {timeLabel}
-                </span>
-              </div>
-            )}
-            <p
-              className={cn(
-                "mt-0.5 text-xs text-muted-foreground",
-                !open && long && "line-clamp-2",
-              )}
-            >
-              {tip}
-            </p>
-          </div>
-        </div>
-      </Card>
-    );
-  }
 
   const items = visibleMemoryUpdateItems(update.items);
   if (items.length === 0 && !(update.summary ?? "").trim()) return null;

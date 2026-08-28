@@ -111,6 +111,16 @@ export interface SidecarStartTurnRequest {
   /** 用户本轮消息正文。 */
   userMessage: string;
   /**
+   * 编辑后重发 / 重新生成：占用时先截断该用户消息之后的云端历史，再开本机回合。
+   * 缺省 = 新发。禁止用「userMessageId 已存在」启发式代替此旗。
+   */
+  regenerate?: boolean;
+  /**
+   * 与云端 ``RegenerateMessageRequest`` 同形：占用时用本请求的附件 / 点名覆盖用户行。
+   * 缺省 = 保留已落库材料。仅 ``regenerate`` 时有意义。
+   */
+  replaceMaterials?: boolean;
+  /**
    * Soft @Agent mentions (optional). Forwarded to ``run_chat_pipeline.agent_mentions``.
    * Omitted / empty = no prompt injection. Soft hint only — not a hard route.
    * Inner shape matches REST ``AgentMention`` (``agent_id`` / ``role``).
@@ -120,7 +130,8 @@ export interface SidecarStartTurnRequest {
    * 先前对话历史（`{role, content}` 列表）。已提供（含空窗 = 新会话）= 桌面
    * 已用会话 cookie 拉过同一 ``chat-context`` 窗口，sidecar **不再**打云。
    * 缺省 = 窗口未知：sidecar 用 account 窄票拉；拉不到 → 回合明确失败，
-   * 禁止空窗开跑。主进程不得把缺省收成 ``[]``。禁止再从本地 store 拼全量原文。
+   * 禁止空窗开跑。``regenerate`` 必须缺省（占用截断之后才拉），禁止带截断前的 cookie 窗。
+   * 主进程不得把缺省收成 ``[]``。禁止再从本地 store 拼全量原文。
    */
   history?: SidecarHistoryEntry[];
   /**
@@ -143,7 +154,7 @@ export interface SidecarStartTurnRequest {
    * 避免 spawn-env 过期 / 未注入导致 browser 永久未装配。
    */
   browserBridge?: SidecarBrowserBridge;
-  /** 本会话当前权限轴。缺省 = sidecar 沿用当前值（初始默认少打断）。 */
+  /** 本会话当前权限轴。缺省 = sidecar 沿用当前值（初始默认全放行）。 */
   permissionAxes?: SidecarPermissionAxes;
   /**
    * 当前对话所属项目 folderId（与列表 / grouped 的 `conversation.folderId` 同形）。

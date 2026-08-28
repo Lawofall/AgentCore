@@ -18,6 +18,11 @@ vi.mock("../resideAttachment", async (importOriginal) => {
   };
 });
 
+vi.mock("@/hooks/useFolders", () => ({
+  getFolders: vi.fn(() => []),
+}));
+
+import { getFolders } from "@/hooks/useFolders";
 import {
   collectClipboardFiles,
   normalizeClipboardFileName,
@@ -54,6 +59,7 @@ function deferred() {
 function useDropHarness(
   conversationId: string | null,
   onAttached?: (index: number) => void,
+  onAttachmentFolderHint?: (hint: { folderId: string; folderName: string }) => void,
 ) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const drop = useComposerDrop(
@@ -61,6 +67,7 @@ function useDropHarness(
     setAttachments,
     conversationId,
     onAttached,
+    onAttachmentFolderHint,
   );
   return { attachments, drop };
 }
@@ -84,6 +91,7 @@ beforeEach(() => {
   __clearAttachmentUploadsForTests();
   describeMock.mockReset();
   residentMock.mockReset();
+  vi.mocked(getFolders).mockReturnValue([]);
   describeMock.mockImplementation(async (file: File) => ({
     name: file.name,
     text: "x",
@@ -304,6 +312,44 @@ describe("useComposerDrop dropError lifecycle", () => {
       result.current.drop.clearDropError();
     });
     expect(result.current.drop.dropError).toBeNull();
+  });
+
+  it("草稿拖入已登记本机根内的文件 → 提示跟来源文件夹", async () => {
+    vi.mocked(getFolders).mockReturnValue([
+      {
+        id: "f-docs",
+        name: "文档",
+        mode: "local",
+        localRootId: "root-1",
+        localSubpath: null,
+      },
+    ]);
+    residentMock.mockResolvedValue({
+      ok: true,
+      name: "guide.md",
+      path: "guide.md",
+      text: "# hi",
+      truncated: false,
+      binary: false,
+      stagingId: "stg-1",
+      citedRootId: "root-1",
+      citedRelPath: "docs/guide.md",
+    });
+    const onHint = vi.fn();
+    const { result } = renderHook(() => useDropHarness(null, undefined, onHint));
+
+    await act(async () => {
+      await result.current.drop.attachDroppedFile(fileNamed("guide.md"));
+    });
+
+    expect(result.current.attachments[0]).toMatchObject({
+      citedRootId: "root-1",
+      citedRelPath: "docs/guide.md",
+    });
+    expect(onHint).toHaveBeenCalledWith({
+      folderId: "f-docs",
+      folderName: "文档",
+    });
   });
 });
 

@@ -21,6 +21,7 @@ _ALLOWED_OPTION_ACTIONS = frozenset(
         "register_local_project",
         "bind_local_folder",
         "grant_organize_folder",
+        "grant_attach_folder",
     }
 )
 _MAX_ASSUMPTIONS = 10
@@ -184,9 +185,9 @@ def normalize_options(
             action = str(it.get("action") or "").strip()
             if action in _ALLOWED_OPTION_ACTIONS:
                 opt["action"] = action
-            # grant_organize_folder hints for desktop one-click / resolve-then-grant
+            # grant_* folder hints for desktop one-click / resolve-then-grant
             # (drop otherwise; unknown actions already omitted above).
-            if action == "grant_organize_folder":
+            if action in {"grant_organize_folder", "grant_attach_folder"}:
                 well_known = str(it.get("well_known") or "").strip().lower()
                 if well_known in _WELL_KNOWN_DIRS:
                     opt["well_known"] = well_known

@@ -136,6 +136,109 @@ describe("ensureAttachmentResident", () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
+  it("cites an in-tree file instead of finalize into attachments/", async () => {
+    getBinding.mockResolvedValue({
+      mode: "local",
+      scope: "conversation",
+      rootId: "root-1",
+      source: "explicit",
+    });
+    resolveTarget.mockResolvedValue({ rootId: "root-1", subpath: "" });
+    const finalize = vi.fn();
+    (window as unknown as { fsApi: Record<string, unknown> }).fsApi = {
+      finalizeStagedAttachment: finalize,
+    };
+
+    const res = await ensureAttachmentResident("c1", {
+      name: "guide.md",
+      stagingId: "stg-cite",
+      citedRootId: "root-1",
+      citedRelPath: "docs/guide.md",
+      text: "# hi",
+      truncated: false,
+    });
+
+    expect(res).toEqual({
+      ok: true,
+      workspacePath: "docs/guide.md",
+      name: "guide.md",
+      binary: false,
+      text: "# hi",
+      truncated: false,
+    });
+    expect(finalize).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("strips dest subpath when citing", async () => {
+    getBinding.mockResolvedValue({
+      mode: "local",
+      scope: "conversation",
+      rootId: "root-1",
+      source: "explicit",
+    });
+    resolveTarget.mockResolvedValue({ rootId: "root-1", subpath: "work/pkg" });
+    const finalize = vi.fn();
+    (window as unknown as { fsApi: Record<string, unknown> }).fsApi = {
+      finalizeStagedAttachment: finalize,
+    };
+
+    const res = await ensureAttachmentResident("c1", {
+      name: "guide.md",
+      stagingId: "stg-cite",
+      citedRootId: "root-1",
+      citedRelPath: "work/pkg/docs/guide.md",
+      text: "# hi",
+      truncated: false,
+    });
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.workspacePath).toBe("docs/guide.md");
+    expect(finalize).not.toHaveBeenCalled();
+  });
+
+  it("finalizes when the cited file sits outside dest", async () => {
+    getBinding.mockResolvedValue({
+      mode: "local",
+      scope: "conversation",
+      rootId: "root-1",
+      source: "explicit",
+    });
+    resolveTarget.mockResolvedValue({ rootId: "root-1", subpath: "work/pkg" });
+    const finalize = vi.fn().mockResolvedValue({
+      ok: true,
+      data: {
+        name: "guide.md",
+        workspacePath: "attachments/guide.md",
+        binary: false,
+        text: "# hi",
+        truncated: false,
+        sizeBytes: 4,
+      },
+    });
+    (window as unknown as { fsApi: Record<string, unknown> }).fsApi = {
+      finalizeStagedAttachment: finalize,
+    };
+
+    const res = await ensureAttachmentResident("c1", {
+      name: "guide.md",
+      stagingId: "stg-out",
+      citedRootId: "root-1",
+      citedRelPath: "other/guide.md",
+      text: "# hi",
+      truncated: false,
+    });
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.workspacePath).toBe("attachments/guide.md");
+    expect(finalize).toHaveBeenCalledWith("stg-out", {
+      rootId: "root-1",
+      subpath: "work/pkg",
+    });
+  });
+
   it("local mode without usable root refuses cloud PUT", async () => {
     getBinding.mockResolvedValue({
       mode: "local",

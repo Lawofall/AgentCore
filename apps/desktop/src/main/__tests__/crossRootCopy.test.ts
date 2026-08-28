@@ -1,5 +1,5 @@
 /**
- * Workspace → organize-mount copy (split-root). Reverse / move stay denied.
+ * Workspace → organize / attach_rw copy (split-root). Reverse / move stay denied.
  * @vitest-environment node
  */
 import {
@@ -61,6 +61,16 @@ const orgRoot = (absPath: string): StoredRoot => ({
   alias: "out",
 });
 
+const attachRoot = (absPath: string): StoredRoot => ({
+  id: "ext-rw",
+  name: "rw",
+  absPath,
+  sessionOnly: true,
+  conversationId: "c1",
+  mode: "attach_rw",
+  alias: "rw",
+});
+
 const roRoot = (absPath: string): StoredRoot => ({
   id: "ext-ro",
   name: "ro",
@@ -92,9 +102,10 @@ describe("cross-root copy / move policy", () => {
     expect(crossRootMoveError(org, other)).toContain("授权目录移动");
   });
 
-  it("split-root copy is workspace → organize only", () => {
+  it("split-root copy is workspace → organize or attach_rw", () => {
     expect(splitRootCopyError(ws, ws)).toBeNull();
     expect(splitRootCopyError(ws, org)).toBeNull();
+    expect(splitRootCopyError(ws, attachRoot("C:\\rw"))).toBeNull();
     expect(splitRootCopyError(org, ws)).toContain("工作区");
     expect(splitRootCopyError(ws, roRoot("C:\\ro"))).toContain("工作区");
     const otherWs: StoredRoot = { id: "other-ws", name: "b", absPath: "C:\\b" };
@@ -113,6 +124,7 @@ describe("executeWorkspaceOp split-root copy", () => {
   let extDir: string;
   let ws: StoredRoot;
   let org: StoredRoot;
+  let attach: StoredRoot;
   let ro: StoredRoot;
 
   beforeEach(async () => {
@@ -123,11 +135,13 @@ describe("executeWorkspaceOp split-root copy", () => {
     await mkdir(extDir);
     ws = wsRoot(wsDir);
     org = orgRoot(extDir);
+    attach = attachRoot(extDir);
     ro = roRoot(extDir);
     rootsTest.reset(
       new Map<string, StoredRoot>([
         [ws.id, ws],
         [org.id, org],
+        [attach.id, attach],
         [ro.id, ro],
       ]),
     );
@@ -141,6 +155,18 @@ describe("executeWorkspaceOp split-root copy", () => {
   it("copies workspace → organize without removing the source", async () => {
     await writeFile(join(wsDir, "report.md"), "hello");
     const r = await executeWorkspaceOp(org, "copy", {
+      src: "report.md",
+      dst: "report.md",
+      src_root_id: ws.id,
+    });
+    expect(r.ok).toBe(true);
+    expect(await readFile(join(wsDir, "report.md"), "utf-8")).toBe("hello");
+    expect(await readFile(join(extDir, "report.md"), "utf-8")).toBe("hello");
+  });
+
+  it("copies workspace → attach_rw without removing the source", async () => {
+    await writeFile(join(wsDir, "report.md"), "hello");
+    const r = await executeWorkspaceOp(attach, "copy", {
       src: "report.md",
       dst: "report.md",
       src_root_id: ws.id,

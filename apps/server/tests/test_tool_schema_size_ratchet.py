@@ -33,6 +33,10 @@ from agentcore.tools.builtin.browser import (
     BROWSER_TOOL_CLASSES,
     BrowserTool,
 )
+from agentcore.tools.builtin.debate.schema import (
+    DEBATE_DESCRIPTION,
+    DEBATE_PARAMETERS,
+)
 from agentcore.tools.builtin.delegate.schema import (
     DELEGATE_DESCRIPTION,
     DELEGATE_PARAMETERS,
@@ -50,31 +54,26 @@ from agentcore.tools.builtin.terminal import TerminalTool
 from agentcore.tools.protocol import ToolSchema
 
 # 桌面 CEO 回合会同时挂上的那一份（ask_user 取桌面态——它比 web 态更胖）。
-# host / terminal / browser 按需进表后仍每轮重发，钉住第 6 步短触发。
-# 2026-08-27 第 6 步：browser 1750→1670、terminal 1460→1420；host 新入棘轮 2840。
-# 同树 git `clone` 入描述（非本步）：2400→2530。
-# 2026-08-27 第 9 步：delegate 3320→2980（实测 2978）；list/resolve/create_folder
-# 短触发新入棘轮 240/380/550（实测 235/376/544）。
-# 2026-08-27 第二轮：ask_user 桌面尾巴收分流一句 2750→2710（实测 2704）；
-# web 1940→1930（实测 1929）；file_write 硬拒收一句 910→610（实测 604）。
-# 2026-08-27 第 26 步：default 预填从核迁入 ask_user schema；delegate 用/不用对齐③④。
-# ask_user 桌面实测 2696 cap 2700；web 1921 cap 1930。
-# 2026-08-27 删 compare_options / build_feature：delegate 2980→2890（实测 2888）。
+# host / terminal / browser 按需进表后仍每轮重发，钉住短触发 + HOW→consult。
+# 2026-08-28 debate 形态：删 schema 复述（用/不用、过闸禁令、挂号、启服手册、action 表）。
+# debate 实测 1640 作短触发锚；ask_user 桌面 2588→2590、web 1892→1900。
+# 2026-08-28 grant_attach_folder：本机传统附加可写根（新路由脊柱，ask_user 桌面 2655）。
 _CAPS: dict[str, int] = {
-    "browser": 1670,
+    "browser": 1590,
     "git": 2530,
-    "host": 2840,
-    "terminal": 1420,
-    "delegate": 2890,
-    "ask_user": 2700,
+    "host": 2800,
+    "terminal": 1360,
+    "delegate": 2850,
+    "debate": 1640,
+    "ask_user": 2660,
     "list_folders": 240,
-    "resolve_folder": 380,
-    "create_folder": 550,
+    "resolve_folder": 370,
+    "create_folder": 510,
 }
 _TOTAL_CAP = sum(_CAPS.values())
 
 # 非桌面（web）态 ask_user：桌面独有的 action / well_known 等选项不装配。
-_ASK_USER_WEB_CAP = 1930
+_ASK_USER_WEB_CAP = 1900
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
 _WORKER_CAPS: dict[str, int] = {
@@ -92,6 +91,17 @@ def _delegate_schema() -> ToolSchema:
         name="delegate",
         description=DELEGATE_DESCRIPTION,
         parameters=DELEGATE_PARAMETERS,
+        category=ToolCategory.ORCHESTRATION,
+        approval=ToolApproval.NEVER,
+    )
+
+
+def _debate_schema() -> ToolSchema:
+    """DebateTool.schema 的等价体（真工具要 LLM / sink / registry 才构得出来）。"""
+    return ToolSchema(
+        name="debate",
+        description=DEBATE_DESCRIPTION,
+        parameters=DEBATE_PARAMETERS,
         category=ToolCategory.ORCHESTRATION,
         approval=ToolApproval.NEVER,
     )
@@ -115,6 +125,7 @@ def _measured() -> dict[str, int]:
     sizes["host"] = measure_openai_tool_chars(HostTool().schema)
     sizes["terminal"] = measure_openai_tool_chars(TerminalTool().schema)
     sizes["delegate"] = measure_openai_tool_chars(_delegate_schema())
+    sizes["debate"] = measure_openai_tool_chars(_debate_schema())
     sizes["ask_user"] = measure_openai_tool_chars(_ask_user_schema(desktop=True))
     sizes["list_folders"] = measure_openai_tool_chars(ListFoldersTool().schema)
     sizes["resolve_folder"] = measure_openai_tool_chars(ResolveFolderTool().schema)
@@ -236,6 +247,8 @@ def test_on_demand_faces_point_how_to_consult():
     assert "HOW→consult(host)" in HostTool().schema.description
     assert "HOW→consult(terminal)" in TerminalTool().schema.description
     assert "HOW→consult(browser)" in BrowserTool().schema.description
+    assert "HOW→consult(debate_and_review)" in DEBATE_DESCRIPTION
+    assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
     host_action = HostTool().schema.parameters["properties"]["action"]["description"]
     assert "Get-WinEvent" in host_action
     assert "password_blocked" not in BrowserTool().schema.description
@@ -247,6 +260,10 @@ def test_on_demand_faces_point_how_to_consult():
     from agentcore.tools.builtin.terminal import TERMINAL_TOOL_PARAMETERS
 
     assert "uvicorn --reload" in TERMINAL_TOOL_PARAMETERS["properties"]["wait_for"]["description"]
+    # description 不复述 action 表（取值语义留在 action 参数）。
+    assert "navigate/click/type" not in BrowserTool().schema.description
+    assert "status/os_log/shell：CEO" not in HostTool().schema.description
+    assert "CEO 可只启服" not in TerminalTool().schema.description
 
 
 def test_worker_tool_schema_chars_within_cap():

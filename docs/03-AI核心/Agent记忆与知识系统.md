@@ -98,9 +98,9 @@ description: 一行摘要    # 可空；空不是错误
 - **卡片报「没写进来」，不报「已淘汰」**：一条都没被删。这与「引擎不替用户挤」是同一条定案的两面——卡片措辞若暗示系统替他清理过，用户就会停止去整理，而实际上没人整理。
 - **读侧全量的诚实边界**：上下文窗口是物理硬限制，写侧闸也管不到用户在本机直接改盘上文件，故必然存在「常驻撑爆窗口」的状态。既承诺不静默截断，唯一诚实做法是**让它失败、且错误说清是常驻内容超窗**，而非偷丢几条让用户以为规则仍生效。属 `intercept-discipline` 能力缺失类。
 
-**治理靠可见性**：AI 每次写条目仍推记忆卡片（`memory_updates`）供查看撤销——这是取代「权威分档」的机制。AI 无法自我提权，因为已无权威可提。卡片有两类：`semantic` / `episodic` 讲**写进去了什么**，`quota` 讲**什么没写进去、谁占着池子**；两类共用同一套行组件（`MemoryUpdateItemRow`），故对话内卡片与文件页「最近更新」永远同一读法。可见性也是纠错通道的前提——用户先在卡片里看见 AI 记了什么，才谈得上说哪条不对。
+**治理靠可见性**：AI 每次把条目写进长期记忆仍推记忆卡片（`memory_updates`）供查看撤销——这是取代「权威分档」的机制。AI 无法自我提权，因为已无权威可提。卡片有两类：`semantic` 讲**写进去了什么**，`quota` 讲**什么没写进去、谁占着池子**；两类共用同一套行组件（`MemoryUpdateItemRow`），故对话内卡片与文件页「最近更新」永远同一读法。情景沉淀只落 `memory_episodes`，**不出卡**。可见性也是纠错通道的前提——用户先在卡片里看见 AI 记了什么，才谈得上说哪条不对。
 
-**`memory_updates` 闭集 · 上线前生产库查询**：读接口 `kind` / `items[].action` 是闭集（`MemoryUpdateKind` / `MemoryUpdateAction`），未知值硬失败。写侧只有 consolidation（`episodic` / `semantic` + `add`/`update`/`remove`）和 always-quota / billing skip（`kind=quota`；`quota` / `quota_denied` / `quota_holder`）。`logs/prod-export` 不含这张表的载荷，本地库也几乎没有 `quota` 行——**不能拿本地 25 行当生产值域证明**。发含闭集收紧的后端之前，在生产机用与 `deploy/scripts/backup.sh` 同一套 compose 跑：
+**`memory_updates` 闭集 · 上线前生产库查询**：读接口 `kind` / `items[].action` 是闭集（`MemoryUpdateKind` / `MemoryUpdateAction`），未知值硬失败。写侧只有 consolidation（`semantic` + `add`/`update`/`remove`）和 always-quota / billing skip（`kind=quota`；`quota` / `quota_denied` / `quota_holder`）。存量 `kind='episodic'` 行由迁移删除，读侧不过滤当兼容。`logs/prod-export` 不含这张表的载荷，本地库也几乎没有 `quota` 行——**不能拿本地 25 行当生产值域证明**。发含闭集收紧的后端之前，在生产机用与 `deploy/scripts/backup.sh` 同一套 compose 跑：
 
 ```bash
 # 生产机；DEPLOY_DIR 默认 $AGENTCORE_HOME/repo/deploy
@@ -112,14 +112,13 @@ dc exec -T postgres psql -U "${PG_USER:-agentcore}" -d "${PG_DB:-agentcore}"
 ```
 
 ```sql
--- kind 实际值域（期望仅 episodic / semantic / quota）
+-- kind 实际值域（期望仅 semantic / quota）
 SELECT kind, count(*) AS n
 FROM memory_updates
 GROUP BY kind
 ORDER BY n DESC;
 
 -- items[].action 实际值域（期望仅 add / update / remove / quota / quota_denied / quota_holder）
--- 空 items（episodic 卡）会得到 action NULL，属正常
 SELECT item->>'action' AS action, count(*) AS n
 FROM memory_updates
 LEFT JOIN LATERAL jsonb_array_elements(COALESCE(items, '[]'::jsonb)) AS item ON true
@@ -129,7 +128,7 @@ ORDER BY n DESC NULLS LAST;
 -- 枚举外：两行都应 0 行。非空 → 停、人工决定 backfill，不得把读侧放宽成 warning
 SELECT kind, count(*) AS n
 FROM memory_updates
-WHERE kind NOT IN ('episodic', 'semantic', 'quota')
+WHERE kind NOT IN ('semantic', 'quota')
 GROUP BY 1;
 
 SELECT item->>'action' AS action, count(*) AS n
@@ -233,13 +232,13 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 
 | 层 | 触发 | 行为 | 前端 |
 |---|---|---|---|
-| **情景沉淀** | 每场收尾 | ≤200 字摘要 + 可选「本场证实的项目事实」；输入**只取水位之后的新增消息**（上限 40 条）+ turn_journal 动作清单（路径/命令/搜索，命令先脱敏）；**不注入 prompt** | 对话内卡片 + 记忆动态；**不 toast**（LLM 摘要成功才出卡） |
-| **语义巩固** | ≥3 场未消化 **或** ≥24h | 整文件重写偏好/画像；**文件夹导航增量合并**（一行一条路由；路径/命令须本批动作清单实证，超硬上限合并）；主题保留 ops；**逐条写、常驻配额只拒它挡下的那条**（其余照常落地，被拒的攒成一张 `quota` 卡） | diff 卡片；不在当前对话时 toast |
+| **情景沉淀** | 每场收尾（闲置防抖 / turn-cap） | ≤200 字摘要 + 可选「本场证实的项目事实」；输入**只取水位之后的新增消息**（上限 40 条）+ turn_journal 动作清单（路径/命令/搜索，命令先脱敏）；**不注入 prompt** | **不出卡、不 toast**。超时/空摘要仍落 episode、推进水位、**不**立刻巩固；拼接用户前 3 条原文的 fallback 只当语义素材，**永不进会话流** |
+| **语义巩固** | 本场 LLM **真写出摘要**后立刻（eager，绕过 3/24h）；未消化扫漏仍 ≥3 场 **或** ≥24h | 整文件重写偏好/画像；**文件夹导航增量合并**（一行一条路由；路径/命令须本批动作清单实证，超硬上限合并）；主题保留 ops；**逐条写、常驻配额只拒它挡下的那条**（其余照常落地，被拒的攒成一张 `quota` 卡）。无增删改 → 不出卡、仍标记已消化；parse/超时/异常 → 不消化 | 有 items 才出 diff 卡（live 带 `anchor_at`）；不在当前对话时 toast |
 
-- 异常回合（cancelled / interrupted / error）跳过沉淀仍推进 watermark。
-- **窗口按水位裁剪，不回看固定条数**：固定回看最近 40 条会让相邻 episode 输入重叠，第二张卡把第一张整段重讲。水位既 gate 又裁剪后卡片互不包含；动作清单同轨裁剪，否则「本场证实的项目事实」照样逐条重复。
-- **摘要 LLM 超时 / 空返回 → 不出卡**（`memory.episodic_card_suppressed`）：episode 仍落库供语义层消费、watermark 照常推进（不制造重试风暴），但「拼接用户前 3 条原文」的 fallback 只当 episode 素材，**永不进会话流**——卡片必须是 AI 真记下的东西，不得把用户原文再贴一遍。超时阈值按实测延迟留足余量（后台任务不阻塞用户），卡太紧曾让这条链路常态全失败而无人察觉。
-- **卡片位置锚点 `anchor_at`**（= 本次固化窗口最后一条消息的 `created_at`）：落库时刻比被总结那一轮晚一个防抖周期，用它排序时用户往往已发出下一条消息，卡片就错过所属回合堆到对话末尾。**故意不用 message_id**——消息删除 / 重生成后 id 失效，而这是纯展示锚点，不得跟着失效，也不改「记忆不绑消息生命周期」这条既有定案。两端各自实现锚定（禁共享逻辑），缺省回落 `created_at`。
+- 异常回合（cancelled / interrupted / error）跳过沉淀仍推进 watermark。开回合（新鲜 TurnLease / `paused_turns` / 最新助手 `usage.paused`）推迟且不推水位。本机 occupy 占云 lease 并心跳；挂起只打 `usage.paused`、不写 `paused_turns`。无 lease 且非 paused 的 RUNNING 仍当僵尸推水位。
+- **窗口按水位裁剪，不回看固定条数**：固定回看最近 40 条会让相邻 episode 输入重叠。水位既 gate 又裁剪后摘要互不包含；动作清单同轨裁剪，否则「本场证实的项目事实」照样逐条重复。
+- **摘要 LLM 超时 / 空返回**：episode 仍落库、watermark 照常推进（不制造重试风暴）；**不** eager 巩固。fallback 只当语义素材，**永不进会话流**。超时阈值按实测延迟留足余量（后台任务不阻塞用户），卡太紧曾让这条链路常态全失败而无人察觉。
+- **卡片位置锚点 `anchor_at`**（= 本次固化窗口最后一条消息的 `created_at`）：live 语义卡必须带，避免用落库时刻把卡堆到对话尾。**故意不用 message_id**——消息删除 / 重生成后 id 失效，而这是纯展示锚点，不得跟着失效，也不改「记忆不绑消息生命周期」这条既有定案。两端各自实现锚定（禁共享逻辑），缺省回落 `created_at`。
 - 偏好只能来自用户**明示或纠正**，禁止从任务题材推断。
 - 空重写 / 保留率 <50% → 拒落盘；巩固失败不标记已消化。
 - 导航写入判据：一条有用 ⟺ 下次能省掉一个动作；闲聊/纯偏好场导航零变化；探索幕仍是导航首建者，巩固只做增量。
@@ -343,6 +342,8 @@ Worker 经 `search_conversations` / `read_conversation` 按需检索本账号历
 | 系统 Skill 搬进 DB（每用户复制 / 新增 `user_id=NULL` 系统作用域） | 两条路都造第二个可写副本：复制则每次发布要批量改写全部用户的行、用户改过的那份覆不覆盖成谜；系统作用域则「代码随版本更新」与「DB 里用户可改」两个真源打架。系统 Skill 的真源本就是代码 |
 | `文档/项目/` 迁移后原件留在盘上原地 | 立刻变成两个可写副本，且比一般双写更坏——用户看得见文件、改得动，却毫无效果。原件归档进 `文档/已迁入记忆/` |
 | 「仅手动」第三档生效方式 | 省下的只是目录里一行 token；`@` 已能把按需条目临时提升 |
+| 对话内「本场摘记」（情景层出卡） | 情景是巩固素材、不注入；出卡会让用户把原料回执当成已生效记忆。新对话也不复制旧摘记 |
+| 等满 3 场 / 24h 才首次写入长期记忆 | 「记」要让下一轮「说」更短；一场有料收尾就应尝试巩固。3/24h 只扫 live 失败后的未消化 |
 | 条目正文指向盘上路径（挂牌用户仓库 md） | 第一版不做：模型本就能 `file_read`，增量收益仅一行 `description`；疼了再加 |
 
 查看/编辑：对话内 `remember`（增改删列）与文件页「全局设定」+ 各文件夹 ``.agentcore``、右坞工作区同一 ``.agentcore`` 扁平条目 + CAS 双轨；semantic diff 可搬层纠错。→ 见代码：`fileWorkbench/AgentCoreSection.tsx` · `EntriesSection.tsx` · `workspace/WorkspacePanel.tsx`

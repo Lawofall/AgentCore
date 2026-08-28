@@ -52,6 +52,7 @@ import {
   noteOccupiedLocalTurn,
   outboxDir,
   resetLocalTurnProjectionForTests,
+  LOCAL_TURN_LEASE_HEARTBEAT_MS,
   shouldDeleteOutboxAfterAck,
   toRecordTurnBody,
   toolFailuresFromJournal,
@@ -726,6 +727,20 @@ describe("drainOutbox", () => {
       normalizeToolFailureCode("不是目录：apps/server/src", "schema"),
     ).toBe("not_found");
     expect(normalizeToolFailureCode("x", "not_found")).toBe("not_found");
+    expect(normalizeToolFailureCode("[WinError 5] 拒绝访问", "other")).toBe(
+      "access_denied",
+    );
+    expect(
+      normalizeToolFailureCode(
+        "写入被占用（杀毒/索引/其他程序正打开该文件），不是没授权",
+      ),
+    ).toBe("access_denied");
+    expect(
+      normalizeToolFailureCode(
+        "路径 '../escaped.md' 超出了工作区范围。请使用工作区相对路径",
+        "other",
+      ),
+    ).toBe("outside_workspace");
     expect(
       normalizeToolFailureCode(
         "禁止用 code_execute 跑项目级慢验证（检测到：pytest）。",
@@ -1347,5 +1362,40 @@ describe("isSafeOutboxId (F3)", () => {
     expect(isSafeOutboxId("a/b")).toBe(false);
     expect(isSafeOutboxId("a\\b")).toBe(false);
     expect(isSafeOutboxId("a\0b")).toBe(false);
+  });
+});
+
+describe("local-turn lease heartbeat", () => {
+  beforeEach(() => {
+    h.bearerPostJson.mockReset();
+    resetLocalTurnProjectionForTests();
+  });
+
+  it("POSTs heartbeat while occupied and stops after settle", async () => {
+    vi.useFakeTimers();
+    try {
+      h.bearerPostJson.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { ok: true },
+      });
+      noteOccupiedLocalTurn("u-hb", {
+        conversationId: "c1",
+        messageId: "22222222-2222-4222-8222-222222222222",
+      });
+      expect(h.bearerPostJson).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(LOCAL_TURN_LEASE_HEARTBEAT_MS);
+      expect(h.bearerPostJson).toHaveBeenCalledWith(
+        "/v1/conversations/c1/local-turns/heartbeat",
+        { message_id: "22222222-2222-4222-8222-222222222222" },
+      );
+      resetLocalTurnProjectionForTests();
+      h.bearerPostJson.mockClear();
+      await vi.advanceTimersByTimeAsync(LOCAL_TURN_LEASE_HEARTBEAT_MS);
+      expect(h.bearerPostJson).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      resetLocalTurnProjectionForTests();
+    }
   });
 });
