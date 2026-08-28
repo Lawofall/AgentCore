@@ -1,5 +1,5 @@
-import { posixRel, workspaceRelFromCite } from "../citeWorkspacePath";
 import { describe, expect, it } from "vitest";
+import { posixRel, workspaceRelFromCite } from "../citeWorkspacePath";
 
 describe("workspaceRelFromCite", () => {
   it("returns the container-relative path when dest has no subpath", () => {
@@ -31,10 +31,7 @@ describe("workspaceRelFromCite", () => {
 
   it("returns null across roots", () => {
     expect(
-      workspaceRelFromCite(
-        { rootId: "a" },
-        { rootId: "b", relPath: "a.md" },
-      ),
+      workspaceRelFromCite({ rootId: "a" }, { rootId: "b", relPath: "a.md" }),
     ).toBeNull();
   });
 

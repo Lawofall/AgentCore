@@ -8,10 +8,7 @@ import {
 } from "../host-shell-obs";
 import { logDesktop } from "../log-service";
 import { killProcessTree, treeSpawnOptions } from "../proc-tree";
-import {
-  type HostShellCwdHint,
-  resolveHostShellCwd,
-} from "./cwd";
+import { type HostShellCwdHint, resolveHostShellCwd } from "./cwd";
 import { err, ok } from "./result";
 
 /** P3 host_shell timeout clamp (seconds). */

@@ -11,7 +11,7 @@ vi.mock("electron", () => ({
   app: { getPath: () => tmpdir() },
 }));
 
-import { __test, type StoredRoot } from "../fs/roots";
+import { type StoredRoot, __test } from "../fs/roots";
 import {
   HOST_SHELL_CWD_DENIED,
   isAbsInsideRoot,
@@ -46,9 +46,9 @@ describe("isAbsInsideRoot", () => {
   });
 
   it("rejects a sibling", () => {
-    expect(
-      isAbsInsideRoot(resolve("/tmp/other"), resolve("/tmp/ws")),
-    ).toBe(false);
+    expect(isAbsInsideRoot(resolve("/tmp/other"), resolve("/tmp/ws"))).toBe(
+      false,
+    );
   });
 });
 
@@ -95,7 +95,12 @@ describe("resolveHostShellCwd", () => {
   });
 
   it("does not enlarge the authorized set from an ungranted rootId", async () => {
-    __test.reset(new Map([[workspace.id, workspace], [attach.id, attach]]));
+    __test.reset(
+      new Map([
+        [workspace.id, workspace],
+        [attach.id, attach],
+      ]),
+    );
     const got = await resolveHostShellCwd({
       rootId: attach.id,
       cwd: attach.absPath,

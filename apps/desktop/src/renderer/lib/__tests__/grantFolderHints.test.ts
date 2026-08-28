@@ -141,12 +141,7 @@ describe("isOrganizeOralConsent", () => {
 
 describe("isAttachOralConsent", () => {
   it("hits attach-specific phrases only (not 可以/允许)", () => {
-    for (const phrase of [
-      "可以改",
-      "允许改",
-      "可以覆盖",
-      ATTACH_CONFIRM_CTA,
-    ]) {
+    for (const phrase of ["可以改", "允许改", "可以覆盖", ATTACH_CONFIRM_CTA]) {
       expect(isAttachOralConsent(phrase)).toBe(true);
     }
     expect(isAttachOralConsent("可以")).toBe(false);

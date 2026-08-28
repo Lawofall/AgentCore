@@ -121,11 +121,7 @@ export function MemoryUpdatesView({
                         });
                       }}
                       onOpenLeaf={(target, projectId) =>
-                        onOpenLeaf(
-                          target,
-                          memoryLeafTabName(target),
-                          projectId,
-                        )
+                        onOpenLeaf(target, memoryLeafTabName(target), projectId)
                       }
                     />
                   ))}

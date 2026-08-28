@@ -235,7 +235,10 @@ export function AskQuestionFields({
       }
       return;
     }
-    if (opt.action === "grant_organize_folder" || opt.action === "grant_attach_folder") {
+    if (
+      opt.action === "grant_organize_folder" ||
+      opt.action === "grant_attach_folder"
+    ) {
       const hints = grantHintsFromAskOption(opt);
       const result =
         opt.action === "grant_attach_folder"

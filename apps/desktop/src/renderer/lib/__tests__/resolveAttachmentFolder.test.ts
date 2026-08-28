@@ -111,9 +111,10 @@ describe("resolveFolderFromIndexedEntry", () => {
         localSubpath: "docs",
       }),
     ]);
-    expect(
-      resolveFolderFromCitedRoot("root-9", "docs/guide.md"),
-    ).toEqual({ folderId: "f-docs", folderName: "文档" });
+    expect(resolveFolderFromCitedRoot("root-9", "docs/guide.md")).toEqual({
+      folderId: "f-docs",
+      folderName: "文档",
+    });
     expect(resolveFolderFromCitedRoot("root-9", "src/a.ts")).toEqual({
       folderId: "f-root",
       folderName: "整仓",

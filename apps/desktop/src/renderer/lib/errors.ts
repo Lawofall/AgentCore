@@ -515,9 +515,11 @@ export function resolveAssistantFailureFace(input: {
   return null;
 }
 
-function coalesceStructured(
-  err: StructuredErr,
-): { code: string; message: string; context?: { upstream_status?: number } } | null {
+function coalesceStructured(err: StructuredErr): {
+  code: string;
+  message: string;
+  context?: { upstream_status?: number };
+} | null {
   if (!err) return null;
   const code = (err.code ?? "").trim();
   const message = (err.message ?? "").trim();
@@ -526,7 +528,9 @@ function coalesceStructured(
   return {
     code: code || "LLM_ERROR",
     message,
-    ...(typeof status === "number" ? { context: { upstream_status: status } } : {}),
+    ...(typeof status === "number"
+      ? { context: { upstream_status: status } }
+      : {}),
   };
 }
 

@@ -25,7 +25,8 @@ export function resolveFolderFromCitedRoot(
     if (f.mode !== "local" || f.localRootId !== rootId) continue;
     const sub = posixRel(f.localSubpath ?? "");
     if (!sub) {
-      if (!best) best = { hint: { folderId: f.id, folderName: f.name }, score: 0 };
+      if (!best)
+        best = { hint: { folderId: f.id, folderName: f.name }, score: 0 };
       continue;
     }
     if (rel !== sub && !rel.startsWith(`${sub}/`)) continue;

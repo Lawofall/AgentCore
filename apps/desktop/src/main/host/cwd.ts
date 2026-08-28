@@ -1,3 +1,5 @@
+import { realpath } from "node:fs/promises";
+import os from "node:os";
 /**
  * host(action=shell) cwd — runtime-injected, never a model-filled abs path.
  *
@@ -7,8 +9,6 @@
  * A raw rootId is a default-cwd hint, not a way to enlarge the authorized set.
  */
 import { isAbsolute, relative, resolve } from "node:path";
-import { realpath } from "node:fs/promises";
-import os from "node:os";
 import {
   ensureReady,
   getAllRoots,

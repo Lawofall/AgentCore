@@ -59,7 +59,10 @@ function deferred() {
 function useDropHarness(
   conversationId: string | null,
   onAttached?: (index: number) => void,
-  onAttachmentFolderHint?: (hint: { folderId: string; folderName: string }) => void,
+  onAttachmentFolderHint?: (hint: {
+    folderId: string;
+    folderName: string;
+  }) => void,
 ) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const drop = useComposerDrop(
@@ -336,7 +339,9 @@ describe("useComposerDrop dropError lifecycle", () => {
       citedRelPath: "docs/guide.md",
     });
     const onHint = vi.fn();
-    const { result } = renderHook(() => useDropHarness(null, undefined, onHint));
+    const { result } = renderHook(() =>
+      useDropHarness(null, undefined, onHint),
+    );
 
     await act(async () => {
       await result.current.drop.attachDroppedFile(fileNamed("guide.md"));

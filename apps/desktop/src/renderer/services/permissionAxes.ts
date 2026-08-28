@@ -53,7 +53,8 @@ export const RECIPE_LABELS: Record<
   },
   managed: {
     short: "托管",
-    description: "授权根内免审（全放行边界：未授权目录仍不能改；装软件/私钥/危险删除仍拦）",
+    description:
+      "授权根内免审（全放行边界：未授权目录仍不能改；装软件/私钥/危险删除仍拦）",
   },
 };
 
@@ -270,9 +271,9 @@ export function needsAutoCommandConfirm(
 }
 
 const AUTO_CONFIRM =
-  "切换到全放行/托管后，已授权目录里改文件和跑命令不再每次问你。"
-  + "没加入本对话的目录仍然改不了。"
-  + "删盘、读私钥、装软件仍会拦住。确定继续？";
+  "切换到全放行/托管后，已授权目录里改文件和跑命令不再每次问你。" +
+  "没加入本对话的目录仍然改不了。" +
+  "删盘、读私钥、装软件仍会拦住。确定继续？";
 
 export function confirmAutoCommandIfNeeded(
   current: PermissionAxes,

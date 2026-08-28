@@ -557,9 +557,7 @@ export class SidecarManager {
         agentMentions: req.replaceMaterials
           ? (req.agentMentions ?? [])
           : req.agentMentions,
-        attachments: req.replaceMaterials
-          ? (req.attachments ?? [])
-          : undefined,
+        attachments: req.replaceMaterials ? (req.attachments ?? []) : undefined,
       });
       if (!occupied) {
         throw new Error("云端占位失败，本地回合未启动");

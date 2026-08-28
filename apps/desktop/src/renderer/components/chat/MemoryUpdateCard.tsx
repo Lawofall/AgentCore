@@ -16,7 +16,7 @@ import {
   memoryLeafTabName,
   parseProjectMemoryFolderId,
 } from "@/services/sources/memorySource";
-import { useConversationStore, type MemoryUpdate } from "@/stores/conversation";
+import { type MemoryUpdate, useConversationStore } from "@/stores/conversation";
 import { usePersistentDisclosure } from "@/stores/disclosure";
 import { Brain, ChevronDown, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";

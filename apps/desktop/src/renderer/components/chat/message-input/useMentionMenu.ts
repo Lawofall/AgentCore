@@ -389,11 +389,11 @@ export function useMentionMenu({
     mentionRangeRef.current = null;
   }, []);
 
-    /**
-     * 回形针 / @ 本机文件在云端会话下的上传也前移到附加时——主进程已经把字节暂存好了，
-     * 没道理等用户点发送才开始「读回字节 → PUT」。已有 workspacePath（区内引用或
-     * 已写入 ``attachments/``）不必再来一趟。
-     */
+  /**
+   * 回形针 / @ 本机文件在云端会话下的上传也前移到附加时——主进程已经把字节暂存好了，
+   * 没道理等用户点发送才开始「读回字节 → PUT」。已有 workspacePath（区内引用或
+   * 已写入 ``attachments/``）不必再来一趟。
+   */
   const startCloudUpload = useCallback(
     (attachment: PendingAttachment) => {
       if (!conversationId) return;

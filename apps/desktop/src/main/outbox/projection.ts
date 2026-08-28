@@ -6,9 +6,9 @@
  */
 import { type FSWatcher, watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import type { SidecarQueuedAttachment } from "@shared/sidecar-contract";
 import { bearerPostJson } from "../auth-client";
 import { logDesktop } from "../log-service";
-import type { SidecarQueuedAttachment } from "@shared/sidecar-contract";
 import {
   type OutboxRecord,
   PHASE_OPEN,

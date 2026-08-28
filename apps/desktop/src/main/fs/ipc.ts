@@ -400,9 +400,7 @@ export function registerFsIpc(): void {
         name: r.name,
         alias: r.alias,
         mode:
-          r.mode === "organize" || r.mode === "attach_rw"
-            ? r.mode
-            : "readonly",
+          r.mode === "organize" || r.mode === "attach_rw" ? r.mode : "readonly",
         sessionOnly: true,
       }));
     },

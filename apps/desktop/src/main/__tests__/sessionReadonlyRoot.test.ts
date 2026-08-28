@@ -225,7 +225,11 @@ describe("session root op whitelist is exhaustive over WorkspaceOpName", () => {
   });
 
   it("attach_rw allows write/replace/execute; permanent delete still denied", () => {
-    const attach: StoredRoot = { ...readonlyOnly, id: "s-rw", mode: "attach_rw" };
+    const attach: StoredRoot = {
+      ...readonlyOnly,
+      id: "s-rw",
+      mode: "attach_rw",
+    };
     for (const op of ops) {
       expect(sessionRootAccessError(attach, op, {})).toBeNull();
     }

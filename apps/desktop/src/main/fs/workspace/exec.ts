@@ -181,7 +181,8 @@ export function pickUserExecEnv(raw: unknown): Record<string, string> {
     if (Object.keys(out).length >= USER_ENV_MAX_KEYS) break;
     if (!USER_ENV_KEY.test(key) || key.length > 128) continue;
     if (userEnvDenied(key)) continue;
-    if (typeof value !== "string" || value.length > USER_ENV_MAX_VALUE) continue;
+    if (typeof value !== "string" || value.length > USER_ENV_MAX_VALUE)
+      continue;
     out[key] = value;
   }
   return out;

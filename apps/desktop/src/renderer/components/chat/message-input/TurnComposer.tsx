@@ -247,7 +247,10 @@ export function TurnComposer({
   const handleAttachmentFolderHint = useCallback(
     (hint: AttachmentFolderHint) => {
       const store = useFoldersStore.getState();
-      const decision = decideDraftFolderAssign(hint, store.draftWorkspaceIntent);
+      const decision = decideDraftFolderAssign(
+        hint,
+        store.draftWorkspaceIntent,
+      );
       if (decision.action === "none") return;
       if (decision.action === "auto") {
         store.setDraftWorkspaceIntent({

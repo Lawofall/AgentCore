@@ -39,9 +39,7 @@ export function isDesktopFolderAction(
 export function isGrantFolderAction(
   action: string | undefined,
 ): action is "grant_organize_folder" | "grant_attach_folder" {
-  return (
-    action === "grant_organize_folder" || action === "grant_attach_folder"
-  );
+  return action === "grant_organize_folder" || action === "grant_attach_folder";
 }
 
 /** Web / 无本地文件：展示引导并打开下载页；不写入答案、不 toggleChoice。 */

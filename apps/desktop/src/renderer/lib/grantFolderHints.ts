@@ -185,7 +185,9 @@ export function organizeConfirmDetail(opt: {
     return undefined;
   const label = previewOrganizeTargetLabel(opt);
   if (opt.action === "grant_attach_folder") {
-    return label ? `将可读写加入：${label}` : "将本机目录加入本对话（可改可覆盖）";
+    return label
+      ? `将可读写加入：${label}`
+      : "将本机目录加入本对话（可改可覆盖）";
   }
   return label ? `将整理：${label}` : "将整理本机目录";
 }

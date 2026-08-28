@@ -614,7 +614,11 @@ async function annotateDraftCite(
   if (!found) return staged;
   return {
     ok: true,
-    data: { ...staged.data, citedRootId: found.rootId, citedRelPath: found.relPath },
+    data: {
+      ...staged.data,
+      citedRootId: found.rootId,
+      citedRelPath: found.relPath,
+    },
   };
 }
 

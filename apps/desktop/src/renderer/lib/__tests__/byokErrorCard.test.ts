@@ -1,8 +1,8 @@
 ﻿import type { DescribedError } from "@/lib/errors";
 import {
-    OUR_SERVICE_UNAVAILABLE_MESSAGE,
-    SELECTED_MODEL_UNAVAILABLE_MESSAGE,
-    StreamError,
+  OUR_SERVICE_UNAVAILABLE_MESSAGE,
+  SELECTED_MODEL_UNAVAILABLE_MESSAGE,
+  StreamError,
   connectivityEscalationSuffix,
   describeError,
   errorActionForCode,
@@ -10,8 +10,8 @@ import {
   isClientSideLlmRejection,
   isConnectivityErrorCode,
   isOurServiceErrorCode,
-  isUnstartedSendRefusal,
   isRetriableStreamError,
+  isUnstartedSendRefusal,
   resetSessionConnectivityFailures,
   resolveAssistantFailureFace,
   syntheticErrorForEmptyFailure,

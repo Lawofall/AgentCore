@@ -41,6 +41,7 @@ vi.mock("../log-service", () => ({
 
 import {
   EMPTY_USER_MESSAGE_PLACEHOLDER,
+  LOCAL_TURN_LEASE_HEARTBEAT_MS,
   computeBackoffDelayMs,
   deadLetterDir,
   drainOutbox,
@@ -52,7 +53,6 @@ import {
   noteOccupiedLocalTurn,
   outboxDir,
   resetLocalTurnProjectionForTests,
-  LOCAL_TURN_LEASE_HEARTBEAT_MS,
   shouldDeleteOutboxAfterAck,
   toRecordTurnBody,
   toolFailuresFromJournal,
