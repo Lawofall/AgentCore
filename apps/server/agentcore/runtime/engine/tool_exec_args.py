@@ -167,7 +167,7 @@ def _leaked_cancel_quad(
     args: dict[str, Any],
     fingerprint: str,
     started: float,
-    event_run_id: str | None,
+    event_run_id: str,
     sink: EventSink,
     error_msg: str,
 ) -> tuple[LLMMessage, None, ToolAttempt, list[Any]]:
