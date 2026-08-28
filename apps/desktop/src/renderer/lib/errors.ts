@@ -427,7 +427,15 @@ type StructuredErr =
   | {
       code?: string | null;
       message?: string | null;
-      context?: { upstream_status?: number } | null;
+      /** Input face may carry usage/rate-limit fields; only `upstream_status` is read here. */
+      context?: {
+        upstream_status?: number;
+        retry_after?: number | null;
+        empty_diagnosis?: string;
+        recovery_at?: string | null;
+        reset_at?: string | null;
+        credential_source?: "user" | "platform" | string | null;
+      } | null;
     }
   | null
   | undefined;
