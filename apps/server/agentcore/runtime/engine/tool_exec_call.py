@@ -44,6 +44,7 @@ from .tool_exec_args import (
     _attempt_meta_with_landing_path,
     _failed_tool_message,
     _format_args_parse_error,
+    _leaked_cancel_quad,
     _missing_tool_feedback,
     _shell_observe_log_fields,
     _short_tool_error_reason,
@@ -545,44 +546,22 @@ async def run_one_tool(
         )
     except asyncio.CancelledError:
         # Real Stop: this task is cancelling → propagate so the turn salvages.
-        # Leaked child cancel (httpx timeout's internal scope, etc.): isolate like
-        # a crash so gather cannot abort the sibling tools or the turn.
+        # Leaked child cancel (httpx timeout wrap): isolate like a crash.
         if task_is_cancelling():
             raise
         if budget_reserved and budget_state is not None:
             await budget_state.refund(name)
-        duration_ms = int((time.monotonic() - started) * 1000)
-        error_msg = (
-            f"工具 '{name}' 执行被中止。请换来源或缩小范围继续，不要原样重试。"
-        )
-        sink.emit(
-            tool_use_end(
-                tc.id,
-                name,
-                success=False,
-                output=error_msg,
-                failure=tool_failure_fields(code=ErrorCode.TOOL_ERROR),
-                run_id=event_run_id,
-            )
-        )
-        logger.warning(
-            "tool.execute_end",
-            tool=name,
-            status="isolated_cancel",
-            duration_ms=duration_ms,
-            **_shell_observe_log_fields(name, args),
-        )
-        return (
-            _failed_tool_message(tc.id, error_msg),
-            None,
-            ToolAttempt(
-                fingerprint,
-                name,
-                success=False,
-                error_summary=error_msg,
-                meta=_attempt_meta_with_landing_path(name, args),
+        return _leaked_cancel_quad(
+            tool_call_id=tc.id,
+            name=name,
+            args=args,
+            fingerprint=fingerprint,
+            started=started,
+            event_run_id=event_run_id,
+            sink=sink,
+            error_msg=(
+                f"工具 '{name}' 执行被中止。请换来源或缩小范围继续，不要原样重试。"
             ),
-            [],
         )
     except Exception as e:
         # Per-tool exception firewall (audit/05 P2-1): a crash in one parallel call

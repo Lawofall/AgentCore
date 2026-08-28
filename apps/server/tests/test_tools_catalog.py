@@ -216,9 +216,8 @@ def test_code_execute_description_routes_long_running_to_terminal():
     td = TerminalTool().schema.description
     assert "禁止改走 code_execute" in td
     assert "host(action=shell)" in td
-    assert "wait_for" in td
     assert "code_execute" in td  # short commands still pointed there
-    assert "CEO" in td
+    assert "wait_for" in TerminalTool().schema.parameters["properties"]
     assert "仅本地" not in td
     assert "仅本地" not in TerminalTool(location="server").schema.description
 

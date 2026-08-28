@@ -3,17 +3,26 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Literal
 
+from agentcore.core.error_codes import ErrorCode
+from agentcore.core.logging import get_logger
 from agentcore.core.secrets import redact_secrets
 from agentcore.core.text import clip_preview
 from agentcore.llm.provider.protocol import LLMMessage
+from agentcore.runtime.events import EventSink, tool_use_end
 from agentcore.runtime.loop_controller import (
     ERROR_CLASS_PERMANENT,
+    ToolAttempt,
     classify_segmented_write_reject,
 )
 from agentcore.tools.file_products import LANDING_TOOLS
 from agentcore.tools.registry import ToolRegistry
+
+from .tool_failure_face import tool_failure_fields
+
+logger = get_logger(__name__)
 
 # Marker in tool_use_start.arguments when JSON parse failed — must not look like a
 # successfully parsed empty object ``{}`` (journal / UI 假象).
@@ -148,6 +157,50 @@ def with_tool_failed_marker(content: str) -> str:
 def _failed_tool_message(tool_call_id: str, content: str) -> LLMMessage:
     return LLMMessage(
         role="tool", content=with_tool_failed_marker(content), tool_call_id=tool_call_id
+    )
+
+
+def _leaked_cancel_quad(
+    *,
+    tool_call_id: str,
+    name: str,
+    args: dict[str, Any],
+    fingerprint: str,
+    started: float,
+    event_run_id: str | None,
+    sink: EventSink,
+    error_msg: str,
+) -> tuple[LLMMessage, None, ToolAttempt, list[Any]]:
+    """Isolate a leaked child CancelledError (not a real Stop) as a failed tool."""
+    duration_ms = int((time.monotonic() - started) * 1000)
+    sink.emit(
+        tool_use_end(
+            tool_call_id,
+            name,
+            success=False,
+            output=error_msg,
+            failure=tool_failure_fields(code=ErrorCode.TOOL_ERROR),
+            run_id=event_run_id,
+        )
+    )
+    logger.warning(
+        "tool.execute_end",
+        tool=name,
+        status="isolated_cancel",
+        duration_ms=duration_ms,
+        **_shell_observe_log_fields(name, args),
+    )
+    return (
+        _failed_tool_message(tool_call_id, error_msg),
+        None,
+        ToolAttempt(
+            fingerprint,
+            name,
+            success=False,
+            error_summary=error_msg,
+            meta=_attempt_meta_with_landing_path(name, args),
+        ),
+        [],
     )
 
 
