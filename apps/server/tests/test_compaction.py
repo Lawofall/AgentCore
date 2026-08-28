@@ -1731,8 +1731,8 @@ async def test_shutdown_compaction_noop_without_tasks():
 
 
 async def test_compact_before_turn_refuses_when_near_and_unfolded(monkeypatch):
-    from agentcore.core.errors import ContextOverflowError
     from agentcore.core.error_codes import ErrorCode
+    from agentcore.core.errors import ContextOverflowError
     from agentcore.llm.errors import CONTEXT_OVERFLOW_PRODUCT
 
     monkeypatch.setattr(compaction.settings, "compaction_enabled", True, raising=True)

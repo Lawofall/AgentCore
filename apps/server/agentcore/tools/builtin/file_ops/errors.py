@@ -13,6 +13,7 @@ from agentcore.runtime.facts import (
 from agentcore.tools.protocol import ToolResult
 from agentcore.workspace import external_mounts as _external_mounts
 from agentcore.workspace import shared_mounts as _shared_mounts
+from agentcore.workspace._paths import is_access_denied_oserror
 from agentcore.workspace.limits import (
     FILE_TOO_LARGE_DETAIL,
     WORKSPACE_READ_MAX_BYTES,
@@ -23,7 +24,6 @@ from agentcore.workspace.limits import (
     is_liveness_timeout_detail,
     op_liveness_timeout_metadata,
 )
-from agentcore.workspace._paths import is_access_denied_oserror
 from agentcore.workspace.protocol import WorkspaceError
 
 

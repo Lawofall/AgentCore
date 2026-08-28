@@ -33,6 +33,8 @@ from agentcore.core.logging import get_logger
 from agentcore.db.repositories.stream_state import resolve_stream_upsert
 from agentcore.workspace.fs_replace import (
     REPLACE_RETRY_DELAYS_S as _REPLACE_RETRY_DELAYS_S,
+)
+from agentcore.workspace.fs_replace import (
     replace_with_retry as _shared_replace_with_retry,
 )
 

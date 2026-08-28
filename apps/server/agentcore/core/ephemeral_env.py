@@ -58,11 +58,9 @@ class EnvParseError(ValueError):
 
 def _denied(key: str) -> bool:
     upper = key.upper()
-    if upper in _DENIED_KEYS:
-        return True
-    if upper.startswith(("LD_", "DYLD_", "AGENTCORE_")):
-        return True
-    return False
+    return upper in _DENIED_KEYS or upper.startswith(
+        ("LD_", "DYLD_", "AGENTCORE_")
+    )
 
 
 def parse_ephemeral_env(raw: Any) -> dict[str, str] | None:
