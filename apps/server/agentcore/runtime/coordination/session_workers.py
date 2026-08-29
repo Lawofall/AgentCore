@@ -169,16 +169,18 @@ class SessionWorkersMixin:
         rounds_limit: int | None = None,
         tokens_spent: int | None = None,
     ) -> None:
-        """Stamp that ``run_id`` is inside an LLM stream, tool call, or verify.
+        """Stamp that ``run_id`` is inside an LLM stream, tool call, verify, or CEO arbitration.
 
         Optional spend kwargs piggyback engine-already-tracked numbers onto the
         same busy channel (once per LLM/tool/round — not per token). Omit a
         kwarg to leave that field unchanged. Spend survives ``clear_worker_busy``.
+        Unknown ``kind`` falls back to ``llm`` so a typo cannot silently drop
+        the inflight bit; ``arbitrate`` is an allowed kind (not that fallback).
         """
         rid = (run_id or "").strip()
         if not rid or rid not in self._running_workers:
             return
-        label = kind if kind in ("llm", "tool", "verify") else "llm"
+        label = kind if kind in ("llm", "tool", "verify", "arbitrate") else "llm"
         self._busy_workers[rid] = label
         self._merge_worker_spend(
             rid,
@@ -217,7 +219,7 @@ class SessionWorkersMixin:
         self._busy_workers.pop((run_id or "").strip(), None)
 
     def has_inflight_work(self: CoordinationSession) -> bool:
-        """True when any worker holds a short LLM/tool call (not long verify)."""
+        """True when any worker holds a short LLM/tool call (not verify / arbitrate)."""
         return any(kind in ("llm", "tool") for kind in self._busy_workers.values())
 
     def has_verify_busy(self: CoordinationSession) -> bool:
@@ -278,6 +280,7 @@ class SessionWorkersMixin:
             "llm": "LLM 调用中",
             "tool": "工具执行中",
             "verify": "有界验证中（可用 cancel_worker 打断）",
+            "arbitrate": "等待主管仲裁",
         }
         for run_id, role in self.running_workers():
             started = self._worker_started_at.get(run_id)

@@ -43,13 +43,13 @@ import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
  * Shared 结构化问答内核 — the choice/text question UI + answer-state + answer composition
  * reused by BOTH asking surfaces: the CEO's `ask_user` ({@link AskUserCard}) and a worker's
  * blocking `escalate` ({@link EscalationCard}). Extracted here because it is the drift-prone
- * core (listed options + persistent free-text note, multi-select toggle, 答复模型 α
+ * core (listed options + per-question free-text note, multi-select toggle, 答复模型 α
  * composition); the two cards only differ in their framing + footer (ask_user: 提交/取消;
  * escalate: 提交/按假设继续), which each owns. 设计: docs/03-AI核心/Agent协作模式.md（向用户发问）.
  */
 
-/** 常驻人话框 — 选项 + 一句补充，前端不再注入「其他…」。 */
-export const ASK_NOTE_PLACEHOLDER = "选项都不对，或有补充，写在这里";
+/** 常驻人话框 — choice 选项下本题一句，前端不再注入「其他…」。 */
+export const ASK_NOTE_PLACEHOLDER = "没有合适的，写在这里";
 
 /** The minimal ask content the shared fields render. A {@link CheckpointDisplay}
  * (live/replay), a paused-turn frame, and a worker escalation all satisfy it. */
@@ -64,11 +64,13 @@ export type AskTone =
 
 /**
  * The answer-state engine for a structured ask: per-question picks (choice → option(s),
- * text → typed value) plus one persistent free-text note. Seeds each question from its
- * `default` so a 想省事 user can one-click submit an opening as-is. `compose(intent)`
- * flattens it all into ONE readable answer (答复模型 α — the only reader is the CEO /
- * worker, an LLM). Shared so both cards manage answers identically; each card decides
- * what to do with `compose()` in its own footer.
+ * text → typed value) plus per-question free-text notes (choice only; keyed by
+ * `question.id`). Cards with no questions keep a card-level `note`. Does not seed
+ * `default` — the generic card opens with nothing checked (认同推荐项须再点一下).
+ * `seedAllMultiple` still selects every option on organize / daily-review walls.
+ * `compose(intent)` flattens it all into ONE readable answer (答复模型 α — the only
+ * reader is the CEO / worker, an LLM). Empty picks + no note still emit「按你的默认」
+ * for protocol compatibility; the desktop card must not send that path.
  */
 export function useAskAnswer(
   content: AskUserContent,
@@ -80,12 +82,16 @@ export function useAskAnswer(
       if (opts?.seedAllMultiple && q.multiple && q.options.length > 0) {
         init[q.id] = q.options.map((o) => o.label);
       } else {
-        init[q.id] = q.default ? [q.default] : [];
+        init[q.id] = [];
       }
     }
     return init;
   });
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
+  const setQuestionNote = (id: string, value: string) => {
+    setNotes((cur) => ({ ...cur, [id]: value }));
+  };
 
   const toggleChoice = (q: AskQuestion, opt: string) => {
     setAnswers((cur) => {
@@ -106,26 +112,28 @@ export function useAskAnswer(
     setAnswers((cur) => ({ ...cur, [q.id]: value ? [value] : [] }));
   };
 
-  // How many decisions already carry a value — surfaced on the opening CTA so a
-  // 想省事 user sees the card is ready to ship as-is.
+  // How many decisions already carry a value (retired kickoff preview chrome).
   const presetCount = content.questions.filter(
     (q) => (answers[q.id] ?? []).length > 0,
   ).length;
 
   const compose = (_intent: CheckpointIntent) =>
-    composeAnswer(content, answers, note);
+    composeAnswer(content, answers, notes, note);
 
   /** Compose with one question forced to `value` (bind_local_folder resolve path). */
   const composeWithAnswer = (
     _intent: CheckpointIntent,
     questionId: string,
     value: string,
-  ) => composeAnswer(content, { ...answers, [questionId]: [value] }, note);
+  ) =>
+    composeAnswer(content, { ...answers, [questionId]: [value] }, notes, note);
 
   return {
     answers,
     note,
+    notes,
     setNote,
+    setQuestionNote,
     toggleChoice,
     setText,
     presetCount,
@@ -135,10 +143,10 @@ export function useAskAnswer(
 }
 
 /**
- * The structured pickers — optional 起步计划 (read-only) + askable questions + 风格 —
+ * The structured pickers — optional 起步计划 (read-only) + askable questions —
  * driven by a {@link useAskAnswer} instance. Renders nothing it has no content for, so a
  * bare one-question escalate shows just that question and the CEO opening shows the full
- * set. The headline, note textarea, and footer live in the consuming card.
+ * set. Choice questions carry 本题人话; the headline and footer live in the consuming card.
  */
 export function AskQuestionFields({
   content,
@@ -314,8 +322,10 @@ export function AskQuestionFields({
           tone={tone}
           conversationId={conversationId}
           bindBusyLabel={bindBusyLabel}
+          note={answer.notes[q.id] ?? ""}
           onToggleChoice={(opt) => answer.toggleChoice(q, opt)}
           onSetText={(v) => answer.setText(q, v)}
+          onSetNote={(v) => answer.setQuestionNote(q.id, v)}
           onBindOption={(opt) => void handleBindOption(q, opt)}
           onFolderUnavailable={(msg) => {
             setPickerFailure(null);
@@ -391,23 +401,32 @@ function AssumptionsDisclosure({
   );
 }
 
-/** A shared note textarea bound to a {@link useAskAnswer} instance, so a card's free-form
- * 补充 box stays consistent. `placeholder` differs per surface (opening / fork / escalate). */
+/** A shared note textarea bound to a {@link useAskAnswer} instance.
+ * Pass `questionId` for 本题人话；omit it for 无题卡整卡 note.
+ * `placeholder` differs per surface (opening / fork / escalate). */
 export function AskNoteField({
   answer,
+  questionId,
   tone,
   disabled,
   placeholder,
 }: {
   answer: ReturnType<typeof useAskAnswer>;
+  questionId?: string;
   tone: AskTone;
   disabled: boolean;
   placeholder: string;
 }) {
+  const value =
+    questionId != null ? (answer.notes[questionId] ?? "") : answer.note;
   return (
     <Textarea
-      value={answer.note}
-      onChange={(e) => answer.setNote(e.target.value)}
+      value={value}
+      onChange={(e) =>
+        questionId != null
+          ? answer.setQuestionNote(questionId, e.target.value)
+          : answer.setNote(e.target.value)
+      }
       disabled={disabled}
       rows={2}
       placeholder={placeholder || ASK_NOTE_PLACEHOLDER}
@@ -428,8 +447,10 @@ function QuestionField({
   tone,
   conversationId,
   bindBusyLabel,
+  note,
   onToggleChoice,
   onSetText,
+  onSetNote,
   onBindOption,
   onFolderUnavailable,
   onLocalFsUnavailable,
@@ -438,12 +459,14 @@ function QuestionField({
   numbered: boolean;
   question: AskQuestion;
   answer: string[];
+  note: string;
   disabled: boolean;
   tone: AskTone;
   conversationId?: string | null;
   bindBusyLabel?: string | null;
   onToggleChoice: (opt: string) => void;
   onSetText: (value: string) => void;
+  onSetNote: (value: string) => void;
   onBindOption?: (opt: AskOption) => void;
   /** 本机目录 action 不可履约时展示文案（Web 会附带打开下载页）；禁止 toggleChoice。 */
   onFolderUnavailable?: (message: string) => void;
@@ -549,11 +572,6 @@ function QuestionField({
                       }
                     >
                       <span className="whitespace-pre-wrap">{opt.label}</span>
-                      {opt.recommended && (
-                        <span className="ml-1 shrink-0 text-muted-foreground">
-                          ·推荐
-                        </span>
-                      )}
                       {isDefault && (
                         <span className="ml-1 shrink-0 text-muted-foreground">
                           ·默认
@@ -569,6 +587,14 @@ function QuestionField({
                 );
               })}
             </div>
+            <Textarea
+              value={note}
+              onChange={(e) => onSetNote(e.target.value)}
+              disabled={disabled}
+              rows={2}
+              placeholder={ASK_NOTE_PLACEHOLDER}
+              className={`w-full border-border bg-card placeholder:text-muted-foreground/70 ${tone.focus}`}
+            />
           </div>
         )}
       </div>
@@ -576,25 +602,73 @@ function QuestionField({
   );
 }
 
-/** Compose the user's picks + free note into ONE readable answer the CEO / worker
- * can act on (答复模型 α). Exported for unit tests (bind_local_folder answer composition). */
+/** 本题是否已答：choice = 勾选或本题人话；text = 输入框有字（不叠第二格）。 */
+export function questionHasExplicitReply(
+  question: AskQuestion,
+  answers: Record<string, string[]>,
+  notes: Record<string, string>,
+): boolean {
+  if ((answers[question.id] ?? []).some((s) => s.trim().length > 0)) {
+    return true;
+  }
+  if (question.kind === "text") return false;
+  return (notes[question.id] ?? "").trim().length > 0;
+}
+
+/** Explicit user input: every question has a pick/text or（choice）本题人话.
+ * Card `default` does not count (打开不预选). Empty question list uses
+ * `cardNote`（无题澄清可交；纯人话升级看整卡 note）. 整卡有字不得放行未答的其他题. */
+export function hasExplicitAskReply(
+  content: AskUserContent,
+  answers: Record<string, string[]>,
+  notes: Record<string, string>,
+  cardNote = "",
+): boolean {
+  if (content.questions.length === 0) return cardNote.trim().length > 0;
+  return content.questions.every((q) =>
+    questionHasExplicitReply(q, answers, notes),
+  );
+}
+
+/** Flatten per-question notes (or 整卡 note when there are no questions).
+ * Specialized-card resume `note` and 取消 still send free text, not compose. */
+export function flattenAskNotes(
+  content: AskUserContent,
+  notes: Record<string, string>,
+  cardNote = "",
+): string {
+  if (content.questions.length === 0) return cardNote.trim();
+  return content.questions
+    .map((q) => (notes[q.id] ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Compose the user's picks + per-question notes into ONE readable answer the
+ * CEO / worker can act on (答复模型 α). Exported for unit tests. */
 export function composeAnswer(
   content: AskUserContent,
   answers: Record<string, string[]>,
-  note: string,
+  notes: Record<string, string>,
+  cardNote = "",
 ): string {
-  const trimmed = note.trim();
+  const cardTrimmed = cardNote.trim();
   if (content.questions.length === 0) {
-    return trimmed;
+    return cardTrimmed;
   }
   const lines: string[] = [];
   for (const q of content.questions) {
     const picked = (answers[q.id] ?? []).map((s) => s.trim()).filter(Boolean);
-    if (picked.length) lines.push(`· ${q.prompt}：${picked.join("、")}`);
-    // 无勾选 + 有人话：不叠「按你的默认」；空提交仍按 default 走省事路径。
-    else if (q.default && !trimmed) lines.push(`· ${q.prompt}：（按你的默认）`);
+    const qNote = (notes[q.id] ?? "").trim();
+    if (picked.length) {
+      const head = `· ${q.prompt}：${picked.join("、")}`;
+      lines.push(qNote ? `${head} · 补充：${qNote}` : head);
+    } else if (qNote) {
+      lines.push(`· ${q.prompt}：${qNote}`);
+    } else if (q.default) {
+      lines.push(`· ${q.prompt}：（按你的默认）`);
+    }
   }
-  if (trimmed) lines.push(`· 补充：${trimmed}`);
-  if (lines.length === 0) return trimmed;
+  if (lines.length === 0) return cardTrimmed;
   return ["我的答复：", ...lines].join("\n");
 }

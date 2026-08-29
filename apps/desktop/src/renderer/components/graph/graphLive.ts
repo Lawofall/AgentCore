@@ -163,7 +163,6 @@ function agentFaceSig(agent: AgentState | undefined): string {
     toolProgressSig(agent.toolProgress),
     toolExecLiveSig(agent.toolExecutionLive),
     toolCallsSig(agent.toolCalls),
-    agent.didRework ? "1" : "0",
   ].join("|");
 }
 
@@ -466,7 +465,6 @@ export function deriveAgentNodeLive(
       : null,
     revised: run.revised,
     replacesRunId: run.replacesRunId,
-    didRework: (hostAgent ?? agent)?.didRework === true,
     stance: run.stance,
     checkpoint: run.checkpoint,
     escalationPending: roundRuns.reduce(

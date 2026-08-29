@@ -811,10 +811,10 @@ def test_unwrap_nested_delegate_arguments_success_and_no_false_positive():
     assert out is not None
     assert out["tasks"] == inner_tasks
 
-    as_dict = {"arguments": {"playbook": "build_app", "playbook_args": {"app": "X"}}}
+    as_dict = {"arguments": {"playbook": "cite_write_review", "playbook_args": {"topic": "X"}}}
     out2 = unwrap_nested_delegate_arguments(as_dict)
     assert out2 is not None
-    assert out2["playbook"] == "build_app"
+    assert out2["playbook"] == "cite_write_review"
 
     # Narrow wrappers: parameters / input sole payload key (same salvage family).
     via_params = {"parameters": {"tasks": inner_tasks}}

@@ -97,7 +97,7 @@ class TurnOutcome:
     # 过滤 captain/CEO 后的计划图节点：id / role / task / depends_on / parent_run_id。
     plan_runs: list[dict[str, Any]] = field(default_factory=list)
     plan_type: str | None = None
-    # 协作互动事件计数（便签 / 升级 / replan / 续派 …），键为短标签、值为次数。
+    # 协作互动事件计数（升级 / replan / 续派 …），键为短标签、值为次数。
     collab_interactions: dict[str, int] = field(default_factory=dict)
     # 终版成品：path → 该 path 末次 file_write 的 content（空 dict = 无落盘 / 旧 outcome）。
     artifacts: dict[str, str] = field(default_factory=dict)

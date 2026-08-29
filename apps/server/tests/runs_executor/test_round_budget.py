@@ -119,19 +119,15 @@ def test_sync_round_budget_awareness_replaces_stale_copy():
     assert sync_round_budget_awareness(messages, limit=0) is None
 
 
-def test_bind_round_budget_on_begin_increments_and_keeps_notes():
-    messages = [LLMMessage(role="user", content="open")]
-    notes = [LLMMessage(role="user", content="note")]
+def test_bind_round_budget_on_begin_increments():
     used_box = [0]
     limit_box = [8]
-    hook = bind_round_budget_on_begin(lambda: list(notes), used_box, limit_box)
+    hook = bind_round_budget_on_begin(used_box, limit_box)
     returned = hook()
     assert used_box[0] == 1
-    assert returned == notes
-    assert [m.content for m in messages] == ["open"]
+    assert returned == []
     hook()
     assert used_box[0] == 2
-    assert not any(_is_fact(m) for m in messages)
 
 
 def test_bind_round_budget_stamps_coord_spend_on_same_channel():
@@ -150,7 +146,6 @@ def test_bind_round_budget_stamps_coord_spend_on_same_channel():
     set_active_coordination(session)
     try:
         hook = bind_round_budget_on_begin(
-            lambda: [],
             used_box,
             limit_box,
             run_id="w1",

@@ -26,6 +26,7 @@ import {
   assistantHasTeamStrip,
   turnOutcomeForAssistant,
 } from "@/lib/turnOutcome";
+import { selectVisibleColdResumes } from "@/services/resume";
 import { draftKeyFor, useComposerDraftStore } from "@/stores/composer";
 import {
   assistantProjectionId,
@@ -37,7 +38,10 @@ import {
 } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
 import { useFoldersStore } from "@/stores/folders";
-import { isColdResumeKind, usePendingApprovals } from "@/stores/interactions";
+import {
+  useInteractionStore,
+  usePendingApprovals,
+} from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
 import { useServerHealthStore } from "@/stores/serverHealth";
 import { AtSign, Copy, ListPlus, Loader2, Send, Square, X } from "lucide-react";
@@ -78,6 +82,8 @@ import { useVoiceInput } from "./useVoiceInput";
 
 const EMPTY_ATTACHMENTS: PendingAttachment[] = [];
 const EMPTY_AGENT_MENTIONS: PendingAgentMention[] = [];
+/** Zustand getSnapshot must return a cached empty — a fresh `[]` loops React. */
+const EMPTY_MESSAGES: { id: string; role: string }[] = [];
 
 // 输入框自增高边界：card 空/单行草稿保底 ~2 行（text-sm 20px 行高 + pt-3/pb-1 = 56px）；
 // bar 默认一行高（20px 行高 + py-2 = 36px）。上限 200px 后转内部滚动。
@@ -141,14 +147,26 @@ export function TurnComposer({
     conversationId &&
       conversations.find((c) => c.id === conversationId)?.contextCompacted,
   );
-  const hasPausedDecision = usePausedTurnStore((s) =>
+  const byId = useInteractionStore((s) => s.byId);
+  const pausedPending = usePausedTurnStore((s) => s.pending);
+  const recoveryState = usePausedTurnStore((s) =>
     conversationId
-      ? s.pending.some(
-          (p) =>
-            p.conversationId === conversationId && isColdResumeKind(p.kind),
-        )
-      : false,
+      ? (s.openRecovery?.[conversationId] ?? "unresolved")
+      : "unresolved",
   );
+  const composerMessages = useConversationStore((s) => {
+    if (!conversationId) return EMPTY_MESSAGES;
+    return s.byId?.[conversationId]?.messages ?? EMPTY_MESSAGES;
+  });
+  const hasVisibleColdResume =
+    !!conversationId &&
+    selectVisibleColdResumes({
+      conversationId,
+      byId,
+      pausedPending,
+      messages: composerMessages,
+      recoveryState,
+    }).length > 0;
   const pendingApprovals = usePendingApprovals(conversationId);
   const lastMessage = useConversationStore((s) => {
     const id = s.currentConversationId;
@@ -158,7 +176,7 @@ export function TurnComposer({
   const showPendingHint =
     !!conversationId &&
     !isGenerating &&
-    (hasPausedDecision || pendingApprovals.length > 0);
+    (hasVisibleColdResume || pendingApprovals.length > 0);
   const lastSlot = useExecutionStore((s) => {
     if (!lastMessage || lastMessage.role !== "assistant") return undefined;
     return s.byId[assistantProjectionId(lastMessage)];

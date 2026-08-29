@@ -136,7 +136,6 @@ async def run_contract_loop(
     tighten_verify_exec_thrash = prepared.tighten_verify_exec_thrash
     deliverable_form = prepared.deliverable_form
     token_ceiling = prepared.token_ceiling
-    pull_notes = prepared.pull_notes
     attempts = prepared.attempts
     two_phase = prepared.two_phase
 
@@ -153,7 +152,6 @@ async def run_contract_loop(
         return run_usage_box[0].total_tokens + extra
 
     on_round_begin = bind_round_budget_on_begin(
-        pull_notes,
         pass_round_used,
         pass_round_limit,
         run_id=spec.run_id,

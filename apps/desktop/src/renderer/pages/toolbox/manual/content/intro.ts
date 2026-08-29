@@ -75,7 +75,7 @@ export const introChapter: ManualChapterContent = {
             },
             {
               title: "收结果",
-              desc: "CEO 汇总团队产出交给你。文件落在工作区——打开的是本机文件夹就在你电脑上，否则在「我的文件」里。",
+              desc: "CEO 汇总团队产出交给你。文件落在你的文件夹里——打开的是本机文件夹就在你电脑上，否则在「我的文件」里。",
             },
           ],
         },

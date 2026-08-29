@@ -28,8 +28,8 @@ _MAX_ASSUMPTIONS = 10
 _MAX_ASSUMPTION_LABEL = 8  # 短项名原样保留；更长并入 value，项名改「假设」
 _FALLBACK_ASSUMPTION_LABEL = "假设"
 
-# Presentation metadata belongs in ``recommended``, not the answer-valued label.
-# Reject bracketed markers only — bare「推荐」in a product name (e.g. 推荐算法) stays valid.
+# Claude Code-style tendency: the advised option is first, name ends with
+# 「（推荐）」or (recommended). Bare「推荐」in a product name stays unmarked.
 _LABEL_RECOMMENDATION_MARK = re.compile(
     r"[（(【\[]\s*推荐\s*[）)】\]]|[（(【\[]\s*recommended\s*[）)】\]]",
     re.IGNORECASE,
@@ -38,10 +38,6 @@ _LABEL_RECOMMENDATION_MARK = re.compile(
 
 class ListArgError(ValueError):
     """Non-list tool arg that cannot be coerced to a JSON array (e.g. double-encoded junk)."""
-
-
-class OptionLabelError(ValueError):
-    """Choice label embeds recommendation markup that belongs in ``recommended`` only."""
 
 
 # Markdown bullet / numbered list line → capture the item body.
@@ -114,28 +110,21 @@ def coerce_list_arg(
 def option_label(opt: Any) -> str:
     """The canonical label of a choice option, tolerant of both shapes.
 
-    Options normalize to ``{label, detail?, recommended?}`` dicts (``detail`` only for
-    dedicated cards), but a durable frame persisted before that change (or a hand-built
+    Options normalize to ``{label, detail?}`` dicts (``detail`` only for dedicated
+    cards), but a durable frame persisted before that change (or a hand-built
     test) may still carry a bare string — both the live tool and a resume read labels
     through here so an old paused turn still settles. The label is the answer value
-    (答复模型 α): no separate wire value exists.
+    (答复模型 α): no separate wire value exists. Tendency lives in the name
+    (``（推荐）`` / ``(recommended)``), not a separate flag.
     """
     if isinstance(opt, dict):
         return str(opt.get("label") or "").strip()
     return str(opt).strip()
 
 
-def assert_clean_option_label(label: str) -> None:
-    """Fail closed when label duplicates the UI「推荐」channel.
-
-    Does not rewrite the string — the tool rejects so the model retries with a clean
-    label + ``recommended=true``.
-    """
-    if _LABEL_RECOMMENDATION_MARK.search(label):
-        raise OptionLabelError(
-            f"options.label 禁止写入推荐标记（收到 {label!r}）；"
-            "倾向只设 recommended=true，label 保持干净选项名。"
-        )
+def option_label_is_recommended(label: str) -> bool:
+    """True when the option name carries Claude Code-style recommendation markup."""
+    return bool(_LABEL_RECOMMENDATION_MARK.search(label))
 
 
 def normalize_options(
@@ -146,42 +135,34 @@ def normalize_options(
 ) -> list[dict[str, Any]]:
     """Cap choice options, accepting either bare strings or rich objects.
 
-    Default cap is 6 (ordinary choice). ``card=risk_ack`` may raise the cap to 10.
-    A bare ``"Postgres"`` becomes ``{"label": "Postgres"}``; an object may add
-    ``recommended`` (the asker's advised option — advisory only, never a pre-selection)
-    and ``action`` (a desktop client action such as ``open_local_project`` /
-    ``register_local_project`` / ``bind_local_folder`` — unknown values drop so a
-    hallucinated action never reaches the wire). ``detail`` (the one-line trade-off
-    under the label) is kept only when ``keep_detail`` is true — dedicated cards
-    ``proposal_pick`` / ``risk_ack`` / ``organize_plan`` / ``daily_review``. Ordinary
-    short asks and escalate drop it even if the model filled it; put the trade-off
-    in ``label``. For ``grant_organize_folder`` only,
+    Default cap is 6 (ordinary choice). ``card=organize_plan`` / ``daily_review``
+    raise the cap to their list hats. A bare ``"Postgres"`` becomes
+    ``{"label": "Postgres"}``; an object may add ``action`` (a desktop client action
+    such as ``open_local_project`` / ``register_local_project`` / ``bind_local_folder``
+    — unknown values drop so a hallucinated action never reaches the wire).
+    ``detail`` (the one-line trade-off under the label) is kept only when
+    ``keep_detail`` is true — dedicated cards ``organize_plan`` / ``daily_review``.
+    Ordinary short asks and escalate drop it even if the model filled it; put the
+    trade-off in ``label``. For ``grant_organize_folder`` only,
     ``well_known`` (``desktop`` / ``downloads`` / ``documents``), ``target_name``
     (basename fuzzy token; path separators rejected; truncated ≤120), and absolute
     ``path`` (C1 mount transport; non-absolute dropped) pass through — dropping
-    ``detail`` must not strip these. Empty-label entries drop, and only the FIRST
-    ``recommended`` survives (至多一个推荐项), so the card shows one clear「推荐」without
-    a wall of badges. Labels that embed recommendation markup (e.g. ``（推荐）``) raise
-    :class:`OptionLabelError` — no silent strip.
+    ``detail`` must not strip these. Empty-label entries drop. Names may carry
+    ``（推荐）`` / ``(recommended)``.
     """
     cap = max(1, int(max_options))
     items = coerce_list_arg(raw, field="options")
     out: list[dict[str, Any]] = []
-    recommended_taken = False
     for it in items:
         label = option_label(it)
         if not label:
             continue
-        assert_clean_option_label(label)
         opt: dict[str, Any] = {"label": label}
         if isinstance(it, dict):
             if keep_detail:
                 detail = str(it.get("detail") or "").strip()
                 if detail:
                     opt["detail"] = detail[:_MAX_OPTION_DETAIL]
-            if bool(it.get("recommended")) and not recommended_taken:
-                opt["recommended"] = True
-                recommended_taken = True
             action = str(it.get("action") or "").strip()
             if action in _ALLOWED_OPTION_ACTIONS:
                 opt["action"] = action
@@ -270,9 +251,9 @@ def normalize_questions(
 
     ``default`` is optional here (unlike the old kickoff): an opening question should
     pre-fill one, but a mid-task fork usually wants the user to actively choose, so it
-    is left empty when the CEO omits it. ``max_options`` / ``keep_detail`` forward to
-    :func:`normalize_options` (cap raised for ``card=risk_ack``; ``keep_detail`` only
-    for the four dedicated cards).
+    is left empty when the CEO omits it.     ``max_options`` / ``keep_detail`` forward to
+    :func:`normalize_options` (cap raised for ``organize_plan`` / ``daily_review``;
+    ``keep_detail`` only for those dedicated cards).
     """
     items = coerce_list_arg(raw, field="questions")
     out: list[dict[str, Any]] = []
@@ -301,13 +282,7 @@ def normalize_questions(
                         for opt in options
                         if opt.get("label") == default and "action" not in opt
                     ]
-                if not targets:
-                    targets = [
-                        opt
-                        for opt in options
-                        if opt.get("recommended") and "action" not in opt
-                    ]
-                if not targets and len(options) == 1 and "action" not in options[0]:
+                if not targets and options and "action" not in options[0]:
                     targets = [options[0]]
                 for opt in targets:
                     opt["action"] = q_action

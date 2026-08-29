@@ -352,14 +352,11 @@ def _admit_replan_adds_against_coordination(
     """Seat/artifact admit for replan.adds; ``None`` when no session or admitted."""
     from agentcore.core.logging import get_logger
     from agentcore.runtime.coordination.append_guard import admit_added_nodes
-    from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
     from agentcore.runtime.runs.plan import RunPlan as Plan
 
     session = _replan_coordination_session(tool, plan)
     if session is None:
         return None
-    # replan 在入口重解析自己的 force（见 DelegateTool.replan）——不继承上一次 delegate。
-    force = force_allows(tool, GATE_SEAT_OVERLAP)
     ownership = session.ensure_file_ownership()
     staging = Plan(nodes=list(new_specs))
     reject = admit_added_nodes(
@@ -368,7 +365,6 @@ def _admit_replan_adds_against_coordination(
         completed_run_ids=session.completed_run_ids,
         vacated_run_ids=session.vacated_run_ids,
         ownership=ownership,
-        force=force,
         total_workers=session.total_workers,
         birth_desk_id=getattr(tool, "_folder_id", None),
     )
@@ -391,7 +387,6 @@ def _declare_replan_adds_on_coordination(
 ) -> None:
     """Dispatch ownership for admitted replan.adds (replaces → transfer_all_from)."""
     from agentcore.runtime.coordination.append_guard import declare_plan_artifacts
-    from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
     from agentcore.runtime.runs.executor.context import _ancestors_by_id
 
     session = _replan_coordination_session(tool, plan)
@@ -402,11 +397,9 @@ def _declare_replan_adds_on_coordination(
     session.total_workers = len(plan.nodes)
     if not new_specs:
         return
-    force = force_allows(tool, GATE_SEAT_OVERLAP)
     declare_plan_artifacts(
         plan,
         session.ensure_file_ownership(),
-        force=force,
         only_run_ids={n.run_id for n in new_specs},
         ancestor_map=_ancestors_by_id(plan),
         completed_run_ids=session.completed_run_ids,

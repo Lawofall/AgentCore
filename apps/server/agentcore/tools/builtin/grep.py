@@ -67,11 +67,10 @@ class GrepTool:
                 "返回 `path:line: text`，命中后单文件默认 file_read 整读；"
                 "仅页脚已截断或已有行号时开窗，禁止整目录通读。"
                 "概念/意图定位请用 code_search——两工具并存。"
-                "按【文件名】找文件用 `glob`（勿先猜目录）。"
+                "按文件名或路径找文件用 `glob`（勿先猜目录）。"
                 "不确定位置时省略 path（默认整仓）；禁止猜测 src/、@scope、app/。"
                 "仅本回合已证实存在的目录或文件才填 path。"
                 "跳过二进制与噪音目录。"
-                "禁止用 code_execute 打开源码再正则扫描——搜符号/计数是本工具的工作。"
             ),
             parameters={
                 "type": "object",

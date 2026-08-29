@@ -70,7 +70,6 @@ const execution = (over: Partial<Execution>): Execution => ({
   crossExamEnabled: false,
   debateOpening: null,
   debatePretrial: null,
-  teamNotes: [],
   ...over,
 });
 

@@ -22,13 +22,22 @@ from enum import StrEnum
 from typing import Literal
 
 AskCheckpointIntent = Literal[
-    "kickoff",
     "decision",
-    "proposal_pick",
-    "risk_ack",
     "organize_plan",
     "daily_review",
 ]
+
+_ASK_CHECKPOINT_INTENTS: frozenset[str] = frozenset(
+    {"decision", "organize_plan", "daily_review"}
+)
+
+
+def coerce_ask_checkpoint_intent(raw: object) -> AskCheckpointIntent:
+    """Read-side: known intents pass through; anything else is ``decision``."""
+    text = str(raw or "").strip()
+    if text in _ASK_CHECKPOINT_INTENTS:
+        return text  # type: ignore[return-value]
+    return "decision"
 
 
 class CheckpointDecision(StrEnum):

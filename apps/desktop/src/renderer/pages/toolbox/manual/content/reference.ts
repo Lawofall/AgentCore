@@ -85,7 +85,7 @@ export const referenceChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "团队做出来的东西，都落在工作区——你和 AI 共享的文件空间。文件夹即工作区：容器只有文件夹，在「我的文件」里新建（云端），或打开本机文件夹（本地）。",
+          text: "团队做出来的东西，都落在你的文件夹里。文件夹即工作区：容器只有文件夹，在「我的文件」里新建（云端），或打开本机文件夹（本地）。右坞「工作区」是本对话的文件树，不是另一种容器。",
         },
         {
           type: "bullets",
@@ -101,6 +101,10 @@ export const referenceChapter: ManualChapterContent = {
             {
               title: "我的文件",
               desc: "在「我的文件」里新建文件夹，可任意嵌套；文件在服务端，手机、网页看到同一份。随手裸聊则用对话临时空间。",
+            },
+            {
+              title: "共享空间",
+              desc: "多人一起用的云端文件盘，不是第三种文件夹。对话里挂载后团队才能读写；入口在文件页第三区。",
             },
             {
               title: "模式条",
@@ -294,7 +298,7 @@ export const referenceChapter: ManualChapterContent = {
                 {
                   type: "text",
                   text: [
-                    "会——任务跑在云端，所以只能绑云工作区，本机文件夹选不了。跑完的摘要与待你拍板的挂起项都留在 ",
+                    "会——任务跑在云端，所以只能绑云端文件夹，本机文件夹选不了。跑完的摘要与待你拍板的挂起项都留在 ",
                     {
                       text: "自动化 · 收件箱",
                       link: {
@@ -343,7 +347,7 @@ export const referenceChapter: ManualChapterContent = {
                       text: "设置 · 反馈",
                       link: { kind: "go", to: APP_PATHS.more.feedback },
                     },
-                    "，选分类、写标题和描述即可。我们会附带当前页面路由（方便定位你在哪），不含工作区里的文件内容。",
+                    "，选分类、写标题和描述即可。我们会附带当前页面路由（方便定位你在哪），不含文件夹里的文件内容。",
                   ],
                 },
               ],
@@ -397,7 +401,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "文件在工作区（本地文件夹或云端空间）；对话记录在后端，用于续聊与记忆。文件页随时看、随时导出。",
+                  text: "文件在你的文件夹里（本机文件夹或「我的文件」；共享空间是另挂的多人盘）；对话记录在后端，用于续聊与记忆。文件页随时看、随时导出。",
                 },
               ],
             },
@@ -491,7 +495,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "先打开文件页看工作区——Agent 创建、修改的文件都落在那里。「我的文件」换设备也能看到同一份；本机文件夹请确认打开的是你以为的那个目录。",
+                  text: "先打开文件页——Agent 创建、修改的文件都落在你的文件夹里。「我的文件」换设备也能看到同一份；本机文件夹请确认打开的是你以为的那个目录。",
                 },
               ],
             },
@@ -533,7 +537,7 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               title: "生成的文件",
-              desc: "都在工作区，你可在文件页随时查看、编辑、导出。",
+              desc: "都在你的文件夹里，可在文件页随时查看、编辑、导出。",
             },
             {
               title: "对话记录",
@@ -545,7 +549,7 @@ export const referenceChapter: ManualChapterContent = {
             },
             {
               title: "反馈附带的上下文",
-              desc: "提交反馈时会自动带上当前页面路由（如所在对话），便于复现问题；不含工作区文件内容。",
+              desc: "提交反馈时会自动带上当前页面路由（如所在对话），便于复现问题；不含文件夹里的文件内容。",
             },
           ],
         },
@@ -561,7 +565,7 @@ export const referenceChapter: ManualChapterContent = {
                 to: MANUAL_SECTION_IDS.collaboration.memory,
               },
             },
-            "。想带走数据？文件页可导出工作区里的产物。",
+            "。想带走数据？文件页可导出文件夹里的产物。",
           ],
         },
       ],
@@ -737,7 +741,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "你和团队共享的文件空间；文件夹即工作区，产物都落在这里。",
+                  text: "右坞「工作区」是本对话的文件树（寻址铬条），不是另一种容器。产物落在文件夹里——「我的文件」或本机文件夹。",
                 },
               ],
             },
@@ -746,7 +750,7 @@ export const referenceChapter: ManualChapterContent = {
               a: [
                 {
                   type: "text",
-                  text: "在工具箱里设计的团队拆法——谁做什么、先后怎么排。可新建空白图，或从官方模板复制一份再改；开跑时再选工作区。官方模板只读，「使用」= 复制一份成你自己的。",
+                  text: "在工具箱里设计的团队拆法——谁做什么、先后怎么排。可新建空白图，或从官方模板复制一份再改；开跑时再选文件夹。官方模板只读，「使用」= 复制一份成你自己的。",
                 },
               ],
             },

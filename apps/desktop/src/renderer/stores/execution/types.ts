@@ -106,6 +106,7 @@ export const TOOL_LABELS: Record<string, string> = {
   md_to_docx: "Export Word",
   md_to_pdf: "Export PDF",
   archive_extract: "Extract archive",
+  archive_create: "Create archive",
   download_url: "Download file",
   read_image: "Read image",
   code_diagnostics: "Check types",
@@ -131,10 +132,7 @@ export const TOOL_LABELS: Record<string, string> = {
   resolve_escalation: "Resolve escalate",
   queue_user_message: "Queue message",
   wait: "Wait",
-  // 团队便签墙 / 交接 / 白板 / 桌面通知 — keep in sync with TOOL_META English chrome.
-  post_note: "Post note",
-  read_notes: "Read notes",
-  amend_note: "Amend note",
+  // 交接 / 白板 / 桌面通知 — keep in sync with TOOL_META English chrome.
   handoff: "Handoff",
   board_ops: "Edit board",
   board_read: "Read board",
@@ -225,9 +223,6 @@ export interface AgentState {
    * {@link ExecutionRuntime.workerToolPhases} keyed by {@link currentRunId}. Cleared when
    * the tool ends. Drives the node/detail honest waiting line (Queued/Searching/…). */
   toolExecutionLive: { toolName: string; phase: string } | null;
-  /** 交付前核验回炉：本 worker 曾发过 reason=finish_guard 的 `run_output_reset`
-   * （节点轻 chip「引用/格式核验后已重写」）。retry / narration 等 reset 不置位。 */
-  didRework?: boolean;
 }
 
 /** Live-only worker tool EXECUTION phase keyed by `run_id` (transport-only sibling of CEO
@@ -310,30 +305,6 @@ export interface RunEscalation {
    * Desktop-local — 不进 conformance ProjectedTurn（与 browserLogin 同类）。
    */
   timeoutSeconds?: number;
-}
-
-/** 团队便签墙 (§2.2 通): one note a worker broadcast to its CONCURRENT siblings via `post_note`
- * (`team_note_posted`), folded TURN-LEVEL onto {@link Execution.teamNotes} (not onto a graph
- * node) for the「团队便签」panel. `kind` is `decision` (我定了 — others depend on it: an interface /
- * field name / format / naming) or `heads_up` (提个醒 — a pitfall / discovery); `runId`/`agentId`/
- * `role` are the author (谁贴的); `ts` is epoch seconds. `noteId` is the stable key (dedup). In
- * post order. Mirrors the conformance ProjectedTeamNote (golden-pinned).
- *
- * 便签会过期 → supersession (§2.2): `status` is the lifecycle (`active` / `superseded` 改写 /
- * `voided` 作废); `supersedes` is the `noteId` an amendment note 改写/作废s (else `null`), so the
- * panel can strike a stale note and link an amendment to its origin. */
-export interface TeamNote {
-  noteId: string;
-  runId: string;
-  agentId: string;
-  role: string;
-  kind: string;
-  text: string;
-  ts: number | null;
-  status: "active" | "superseded" | "voided";
-  supersedes: string | null;
-  /** `ceo` = host seed_notes; otherwise worker post_note. */
-  source?: "ceo" | "worker" | "inherited";
 }
 
 export interface RunNode {
@@ -491,7 +462,7 @@ export interface Execution {
   taskSummary: string;
   status: ExecutionStatus;
   /**
-   * 上一张协作图（`run_plan.prev_execution_id`）。驱动内联图「续自」锚点；
+   * 上一张协作图（`run_plan.prev_execution_id`）。协议链仍在、用户面不画回链；
    * 不进 ProjectedTurn。
    */
   prevExecutionId?: string | null;
@@ -525,16 +496,6 @@ export interface Execution {
    * 权威覆盖）：辩论徽章 `#eN` 溯源。桌面 UI 态——不进 conformance ProjectedTurn（oracle 经
    * `debate.evidence_ledger` 承载收场权威；live delta 同路径累积）。非辩论 / 旧 fixture 可缺省。 */
   evidenceLedger?: EvidenceLedgerEntry[];
-  /** 团队便签墙 (§2.2 通): the notes workers broadcast to their concurrent siblings this turn
-   * (`team_note_posted`), in post order, deduped by noteId — folded from the frame stream by
-   * {@link projectExecution}. Journaled, so it replays on reload (hydrateFromJournal). Empty for
-   * a single-agent turn or a multi-agent turn with no notes. */
-  teamNotes: TeamNote[];
-  /**
-   * 墙已升（`run_plan.note_wall`）。缺省 / 旧 journal = 无墙。空 `teamNotes` 时据此画空态，
-   * 避免把「墙已升还没字」画成没开。
-   */
-  noteWall?: boolean;
 }
 
 /** Mid-flight user interjection (`user_interjection` · 经典 steer + 协调共用).
@@ -581,7 +542,7 @@ export interface ExecutionPlan {
   taskSummary: string;
   /**
    * 上一张协作图的 execution_id（`run_plan.prev_execution_id`）。
-   * 新回合开新图时的「续自」前向链接；同 execution merge 时保留首值。
+   * 新回合开新图时的协议前向链（用户面不画回链）；同 execution merge 时保留首值。
    * 旧 journal 无此字段 → null。
    */
   prevExecutionId?: string | null;
@@ -625,11 +586,6 @@ export interface ExecutionPlan {
      */
     delegateBatch?: number;
   }[];
-  /**
-   * 便签墙已升（`run_plan.note_wall`）。缺省 / 旧 journal = 无墙。
-   * 同回合后批 sticky-OR：一旦升墙，后续 merge 不降。
-   */
-  noteWall?: boolean;
 }
 
 /**

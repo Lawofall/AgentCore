@@ -11,7 +11,6 @@ import {
   resolveToolWireStatus,
 } from "@/lib/channelRedirect";
 import { visibleMessageText } from "@/lib/errors";
-import { reworkChipLabel } from "@/lib/processTimeline";
 import type { ProcessStep } from "@/types/events";
 import {
   MESSAGE_EXPORT_DELIVERABLE_HEADING,
@@ -61,6 +60,7 @@ const TOOL_LABEL: Record<string, string> = {
   md_to_docx: "Export Word",
   md_to_pdf: "Export PDF",
   archive_extract: "Extract archive",
+  archive_create: "Create archive",
   download_url: "Download file",
   read_image: "Read image",
   code_diagnostics: "Check types",
@@ -83,9 +83,6 @@ const TOOL_LABEL: Record<string, string> = {
   resolve_escalation: "Resolve escalate",
   queue_user_message: "Queue message",
   wait: "Wait",
-  post_note: "Post note",
-  read_notes: "Read notes",
-  amend_note: "Amend note",
   handoff: "Handoff",
   board_ops: "Edit board",
   board_read: "Read board",
@@ -268,12 +265,11 @@ function formatToolLine(step: Extract<ProcessStep, { kind: "tool" }>): string {
 /** Format the turn's process timeline into plain readable text (旁白 + 关键工具). */
 export function formatProcessExport(
   process: ProcessStep[] | undefined,
-  isStreaming = false,
+  _isStreaming = false,
 ): string {
   if (!process?.length) return "";
   const lines: string[] = [];
-  for (let i = 0; i < process.length; i++) {
-    const step = process[i];
+  for (const step of process) {
     switch (step.kind) {
       case "reasoning": {
         const t = step.text.trim();
@@ -288,13 +284,6 @@ export function formatProcessExport(
       case "tool":
         lines.push(formatToolLine(step));
         break;
-      case "rework": {
-        const hasContentAfter = process
-          .slice(i + 1)
-          .some((s) => s.kind === "content");
-        lines.push(`· （${reworkChipLabel(isStreaming, hasContentAfter)}）`);
-        break;
-      }
       case "team":
         lines.push(MESSAGE_EXPORT_STEP_CHROME.team);
         break;

@@ -27,7 +27,12 @@ from agentcore.tools.builtin.file_ops import (
     StrReplaceTool,
     expand_brace_globs,
 )
-from agentcore.tools.builtin.file_ops.listing import glob_name_filters
+from agentcore.tools.builtin.file_ops.listing import (
+    GLOB_DEPTH,
+    GlobPlan,
+    compile_glob_pattern,
+    compile_glob_patterns,
+)
 from agentcore.tools.protocol import ToolContext, isolate_file_read_ceiling
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
@@ -2035,14 +2040,23 @@ def test_expand_brace_globs_basic():
     assert expand_brace_globs("*") == ["*"]
 
 
-def test_glob_name_filters_strips_recursive_prefix():
-    assert glob_name_filters("*.py") == ["*.py"]
-    assert glob_name_filters("**/*.py") == ["*.py"]
-    assert glob_name_filters("*.{ts,tsx}") == ["*.ts", "*.tsx"]
-    assert glob_name_filters("*") is None
-    assert glob_name_filters("**/*") is None
-    assert glob_name_filters("src/*.py") is None
-    assert glob_name_filters("") is None
+def test_compile_glob_pattern_globstar():
+    assert compile_glob_pattern("") is None
+    assert compile_glob_pattern("*.py") == GlobPlan(None, ".", "*.py", GLOB_DEPTH)
+    assert compile_glob_pattern("**/*.py") == GlobPlan(None, ".", "*.py", GLOB_DEPTH)
+    assert compile_glob_pattern("*") == GlobPlan(None, ".", "*", GLOB_DEPTH)
+    assert compile_glob_pattern("**/*") == GlobPlan(None, ".", "*", GLOB_DEPTH)
+    assert compile_glob_pattern("src/*.py") == GlobPlan(None, "src", "*.py", 1)
+    assert compile_glob_pattern("src/**/*.py") == GlobPlan(
+        None, "src", "*.py", GLOB_DEPTH
+    )
+    assert compile_glob_pattern("**/observability/**") == GlobPlan(
+        "observability", ".", "*", GLOB_DEPTH
+    )
+    assert compile_glob_patterns("*.{ts,tsx}") == [
+        GlobPlan(None, ".", "*.ts", GLOB_DEPTH),
+        GlobPlan(None, ".", "*.tsx", GLOB_DEPTH),
+    ]
 
 
 def test_file_list_schema_is_one_layer_ls():
@@ -2091,27 +2105,93 @@ async def test_file_list_leftover_fails_to_glob(tmp_path: Path, extra: dict):
         assert key in (result.error or "")
 
 
-async def test_glob_star_rejected(tmp_path: Path):
-    result = await GlobTool().execute({"pattern": "*"}, _ctx(tmp_path))
-    assert result.success is False
-    assert result.contract_failure is True
-    assert "file_list" in (result.error or "")
+async def test_glob_star_lists_nested_files(tmp_path: Path):
+    nested = tmp_path / "apps" / "server"
+    nested.mkdir(parents=True)
+    (nested / "main.py").write_text("x", encoding="utf-8")
+    (tmp_path / "README.md").write_text("desk\n", encoding="utf-8")
+
+    result = await GlobTool().execute({"pattern": "**/*"}, _ctx(tmp_path))
+    assert result.success is True
+    assert "apps/server/main.py" in (result.output or "")
+    assert "README.md" in (result.output or "")
 
 
-async def test_glob_pathy_pattern_rejected(tmp_path: Path):
+async def test_glob_src_star_py_is_one_level(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("x", encoding="utf-8")
+    (src / "nested").mkdir()
+    (src / "nested" / "b.py").write_text("x", encoding="utf-8")
+
     result = await GlobTool().execute({"pattern": "src/*.py"}, _ctx(tmp_path))
-    assert result.success is False
-    assert result.contract_failure is True
-    assert "path" in (result.error or "")
+    assert result.success is True
+    assert "src/a.py" in (result.output or "")
+    assert "nested/b.py" not in (result.output or "")
 
 
-async def test_glob_leftover_directory_rejected(tmp_path: Path):
+async def test_glob_src_recursive_py(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("x", encoding="utf-8")
+    (src / "nested").mkdir()
+    (src / "nested" / "b.py").write_text("x", encoding="utf-8")
+
+    result = await GlobTool().execute({"pattern": "src/**/*.py"}, _ctx(tmp_path))
+    assert result.success is True
+    assert "src/a.py" in (result.output or "")
+    assert "src/nested/b.py" in (result.output or "")
+
+
+async def test_glob_any_named_dir_contents(tmp_path: Path):
+    d = tmp_path / "apps" / "server" / "observability"
+    d.mkdir(parents=True)
+    (d / "catalog.py").write_text("x", encoding="utf-8")
+
+    result = await GlobTool().execute(
+        {"pattern": "**/observability/**"}, _ctx(tmp_path)
+    )
+    assert result.success is True
+    assert "catalog.py" in (result.output or "")
+
+
+async def test_glob_missing_path_finds_named_dir(tmp_path: Path):
+    d = tmp_path / "apps" / "server" / "observability"
+    d.mkdir(parents=True)
+    (d / "a.md").write_text("x", encoding="utf-8")
+
+    result = await GlobTool().execute(
+        {"path": "observability", "pattern": "*.md"}, _ctx(tmp_path)
+    )
+    assert result.success is True
+    assert "a.md" in (result.output or "")
+    assert "不存在" in (result.output or "")
+
+
+async def test_glob_directory_alias(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.py").write_text("x", encoding="utf-8")
     result = await GlobTool().execute(
         {"pattern": "*.py", "directory": "src"}, _ctx(tmp_path)
     )
+    assert result.success is True
+    assert "src/a.py" in (result.output or "")
+
+
+async def test_glob_empty_pattern_rejected(tmp_path: Path):
+    result = await GlobTool().execute({"pattern": "  "}, _ctx(tmp_path))
     assert result.success is False
     assert result.contract_failure is True
-    assert "directory" in (result.error or "")
+
+
+async def test_glob_leftover_recursive_rejected(tmp_path: Path):
+    result = await GlobTool().execute(
+        {"pattern": "*.py", "recursive": True}, _ctx(tmp_path)
+    )
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "recursive" in (result.error or "")
 
 
 async def test_file_list_star_stays_one_layer(tmp_path: Path):

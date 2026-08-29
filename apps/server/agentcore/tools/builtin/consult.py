@@ -17,7 +17,11 @@ from typing import Any
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.context.consultable import Consultable
-from agentcore.runtime.memory_consult_cache import lookup_consult, remember_consult
+from agentcore.runtime.memory_consult_cache import (
+    lookup_consult,
+    lookup_consult_origin,
+    remember_consult,
+)
 from agentcore.tools.on_demand import is_on_demand_tool
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registration import (
@@ -30,6 +34,18 @@ from agentcore.tools.registration import (
 logger = get_logger(__name__)
 
 _CONSULT_OUTPUT_LIMIT = 8000
+_VALID_ORIGIN = frozenset({"system", "user"})
+
+
+def _consult_display(
+    name: str, *, reused: bool = False, origin: str | None = None
+) -> dict[str, Any]:
+    display: dict[str, Any] = {"name": name}
+    if reused:
+        display["reused"] = True
+    if origin in _VALID_ORIGIN:
+        display["origin"] = origin
+    return display
 
 
 @dataclass
@@ -74,6 +90,18 @@ class ConsultTool:
     async def _available_names(self, user_id: str) -> list[str]:
         return [e.name for e in await self.source.list_directory(user_id)]
 
+    async def _fetch_body_and_origin(
+        self, user_id: str, name: str
+    ) -> tuple[str | None, str | None]:
+        fetch_hit = getattr(self.source, "fetch_hit", None)
+        if fetch_hit is not None:
+            hit = await fetch_hit(user_id, name)
+            if hit is None:
+                return None, None
+            return hit.body, hit.origin
+        body = await self.source.fetch_by_name(user_id, name)
+        return body, None
+
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         raw = str(arguments.get("name") or "").strip()
         if raw and not is_on_demand_tool(raw):
@@ -85,7 +113,9 @@ class ConsultTool:
                     success=True,
                     output=cached,
                     output_limit=_CONSULT_OUTPUT_LIMIT,
-                    display={"name": raw, "reused": True},
+                    display=_consult_display(
+                        raw, reused=True, origin=lookup_consult_origin(raw)
+                    ),
                 )
 
         if not raw:
@@ -98,7 +128,7 @@ class ConsultTool:
             logger.info("consult.miss", name=raw)
             return ToolResult(tool_call_id="", success=True, output=msg)
 
-        body = await self.source.fetch_by_name(context.user_id, raw)
+        body, origin = await self._fetch_body_and_origin(context.user_id, raw)
         if body is None:
             available = "、".join(await self._available_names(context.user_id))
             head = f"没有名为 '{raw}' 的条目。"
@@ -107,11 +137,11 @@ class ConsultTool:
             return ToolResult(tool_call_id="", success=True, output=head + tail)
 
         if not is_on_demand_tool(raw):
-            remember_consult(raw, body)
+            remember_consult(raw, body, origin=origin)
         return ToolResult(
             tool_call_id="",
             success=True,
             output=body,
             output_limit=_CONSULT_OUTPUT_LIMIT,
-            display={"name": raw},
+            display=_consult_display(raw, origin=origin),
         )

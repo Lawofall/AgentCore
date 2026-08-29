@@ -30,12 +30,11 @@
             "prompt": "选哪种 HTML 呈现？",
             "kind": "choice",
             "multiple": false,
-            "default": "可折叠树 HTML",
+            "default": "可折叠树 HTML（推荐）",
             "options": [
               {
-                "label": "可折叠树 HTML",
-                "detail": "保留层级，默认收拢便于看全",
-                "recommended": true
+                "label": "可折叠树 HTML（推荐）",
+                "detail": "保留层级，默认收拢便于看全"
               },
               {
                 "label": "按部门分区多页 HTML",
@@ -129,7 +128,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

@@ -1,13 +1,12 @@
 """Delegate tool schema and constants.
 
 Schema layer (工具面瘦身): short trigger + 拆任务合同 + playbook/tasks 互斥.
-用/不用路由与编制自选 / 结局分层 live in the CEO core; advanced HOW lives in
+何时用写在本 description；编制自选 / 结局分层 HOW lives in
 ``consult(team_orchestration_advanced)``.
 """
 
 from __future__ import annotations
 
-from agentcore.runtime.delegate.force_scopes import FORCE_GATES
 from agentcore.runtime.delegate.playbook_declaration import HANDWRITTEN_TASKS_SKELETON
 from agentcore.runtime.delegate.task_models import TASK_MODEL_SCHEMA_PROPS
 from agentcore.runtime.runs.constants import MAX_DELEGATION_TASKS, MAX_GAP_FILL_ADDS
@@ -42,8 +41,8 @@ TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
 # Trigger + 拆任务合同 + playbook/tasks 互斥. HOW → consult(team_orchestration_advanced).
 DELEGATE_DESCRIPTION = (
     f"拆任务给临时团队（默认手写顶层 tasks：role+task，≤{MAX_DELEGATION_TASKS}；非终结）。"
-    "playbook 与 tasks 二选一（具名 playbook 仅固化流水线快捷进阶）："
-    "禁止二者同时有内容（反例：既填 code_audit 又传 tasks）；绿场必填 playbook_args.app。"
+    "改产物、成规模查证、实质讨论、对照多方案时用；探路够了（能写目标·约束·验收）再派；闲聊和窗口里已有的短答不必派。"
+    "playbook 与 tasks 二选一（具名 playbook 仅固化流水线快捷进阶）。"
     "HOW→consult(team_orchestration_advanced)。"
 )
 
@@ -66,7 +65,8 @@ DELEGATE_PARAMETERS = {
                         "type": "string",
                         "description": (
                             "自包含=目标+边界+验收（worker 看不到完整历史）。"
-                            "细则进 artifacts/team_brief。已拍板写入「已确认约束」。"
+                            "本回合已给凭据写入 task 供队员填 env。"
+                            "开局口径走顶层 team_brief。已拍板写入「已确认约束」。"
                         ),
                     },
                     "deliverable": TASK_DELIVERABLE_SCHEMA,
@@ -116,18 +116,10 @@ DELEGATE_PARAMETERS = {
                 "同回合再调一般不必传。"
             ),
         },
-        "force": {
-            "type": "array",
-            "items": {"type": "string", "enum": list(FORCE_GATES)},
-            "description": (
-                "逐闸点名放行（只开列出的那道，无「全开」）：见各闸拒绝正文里的 scope 名。"
-                "同团队用 continue_from_run_id/replaces_run_id。"
-            ),
-        },
         "playbook": {
             "type": "string",
             "enum": sorted(PLAYBOOKS),
-            "description": "固化流水线名（非默认）；填了就不要传 tasks。绿场→build_app。",
+            "description": "固化流水线名（非默认）；填了就不要传 tasks。",
         },
         "playbook_args": {
             "type": "object",
@@ -137,7 +129,7 @@ DELEGATE_PARAMETERS = {
             "type": "string",
             "description": (
                 "全队共识（含「已确认约束」同一行）；各 worker 开局可见；"
-                "约束块优先于附件旧角色表。非空会建便签墙；换行=一张便签。"
+                "约束块优先于附件旧角色表。"
             ),
         },
     },

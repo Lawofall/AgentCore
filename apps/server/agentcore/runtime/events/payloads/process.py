@@ -1,8 +1,8 @@
 """ProcessStep — one step in a turn's 思考·正文·工具·协作 inline timeline (统一团队时间线).
 
 Not an event payload itself: the shared wire-shaped leaf carried verbatim inside
-`ProjectedTurn.messages[*].process` and the REST `RunsPayload.process`. The first three
-kinds are the CEO bubble's own narrative; the remaining kinds are POSITIONAL MARKERS —
+`ProjectedTurn.messages[*].process` and the REST `RunsPayload.process`. reasoning /
+content + tool are the CEO bubble's own narrative; the remaining kinds are POSITIONAL MARKERS —
 zero-width anchors fixing WHERE a non-text turn element renders (payload looked up from
 the turn's side channels by id). Emitted to TS as one inline discriminated union.
 """
@@ -24,12 +24,6 @@ class ProcessReasoningStep(WirePayload):
 class ProcessContentStep(WirePayload):
     kind: Literal["content"]
     text: str
-
-
-class ProcessReworkStep(WirePayload):
-    """交付前核验回炉轻痕迹：`content_reset` 折入时间线的 chip，不堆被弃全文。"""
-
-    kind: Literal["rework"]
 
 
 class ProcessToolStep(WirePayload):
@@ -118,7 +112,6 @@ class ProcessUserInterjectionStep(WirePayload):
 PROCESS_STEP_MEMBERS: tuple[type[WirePayload], ...] = (
     ProcessReasoningStep,
     ProcessContentStep,
-    ProcessReworkStep,
     ProcessToolStep,
     ProcessTeamStep,
     ProcessGraphAppendStep,

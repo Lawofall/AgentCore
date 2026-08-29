@@ -8,11 +8,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agentcore.runtime.delegate.force_scopes import (
-    EMPTY_FORCE_SCOPES,
-    GATE_POST_CLOSE,
-    ForceScopes,
-)
 from agentcore.runtime.delegate.post_close_gate import (
     EXECUTION_HARVEST_ORIGIN,
     POST_CLOSE_REJECT_COLD_OPEN,
@@ -25,12 +20,9 @@ from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunSpec
 
 
-def _tool(*, origin: str = "", force: bool = False, depth: int = 0) -> MagicMock:
+def _tool(*, origin: str = "", depth: int = 0) -> MagicMock:
     t = MagicMock()
     t._user_message_origin = origin
-    t._force_scopes = (
-        ForceScopes(frozenset({GATE_POST_CLOSE})) if force else EMPTY_FORCE_SCOPES
-    )
     t._depth = depth
     t._conversation_id = "conv-post-close"
     t._base_tool_context = SimpleNamespace(execution_id="exec-post-close")
@@ -69,9 +61,9 @@ def test_post_close_rejects_unnamed_substantial_fanout():
     assert reject.kind == POST_CLOSE_REJECT_COLD_OPEN
     err = reject.message
     assert "收口后拒绝整团重派" in err
-    # 拒绝正文指向真实可用的续派入口 + 本闸自己的 scope（不再是一键全开）。
+    # 拒绝正文指向真实可用的续派入口；无跳闸旁路，不得再教 force。
     assert "continue_from_run_id" in err
-    assert 'force=["post_close"]' in err
+    assert 'force=["post_close"]' not in err
     assert "force=true" not in err
 
 
@@ -131,34 +123,6 @@ def test_post_close_rejects_named_over_cap(monkeypatch):
         assert str(MAX_GAP_FILL_ADDS) in err
     finally:
         clear_active_coordination("exec-post-close")
-
-
-def test_post_close_force_scope_escapes():
-    """点名放行本闸（force=["post_close"]）：收口后大扇出仍放行。"""
-    err = post_close_cold_open_error(
-        _tool(origin=EXECUTION_HARVEST_ORIGIN, force=True),
-        _substantial_unnamed(n=4),
-    )
-    assert err is None
-
-
-def test_post_close_other_gate_scope_does_not_escape():
-    """逐闸：放行同构/换马甲闸不顺手打开收口闸。"""
-    t = _tool(origin=EXECUTION_HARVEST_ORIGIN)
-    t._force_scopes = ForceScopes(frozenset({"isomorphic", "thrash", "seat_overlap"}))
-    err = post_close_cold_open_error(t, _substantial_unnamed(n=4))
-    assert err is not None
-    assert "收口后拒绝整团重派" in err
-
-
-def test_post_close_legacy_bool_force_no_longer_escapes():
-    """历史一键全开退役：force=true 解析成空集，收口闸照拒。"""
-    from agentcore.runtime.delegate.force_scopes import parse_force_scopes
-
-    t = _tool(origin=EXECUTION_HARVEST_ORIGIN)
-    t._force_scopes = parse_force_scopes(True)
-    err = post_close_cold_open_error(t, _substantial_unnamed(n=4))
-    assert err is not None
 
 
 def test_non_harvest_human_first_delegate_not_blocked():
@@ -264,8 +228,8 @@ async def test_drive_post_close_unnamed_substantial_contract_reject():
 
 
 @pytest.mark.asyncio
-async def test_drive_post_close_force_allows_substantial():
-    """drive：点名放行收口闸后，收口后大扇出通过。"""
+async def test_drive_post_close_force_arg_still_rejects():
+    """drive：入参多带 force 无兼容层，收口后大扇出仍拒。"""
     from agentcore.runtime.coordination.session import clear_active_coordination
     from agentcore.runtime.events import EventSink
     from tests.delegate.conftest import ctx, tool
@@ -288,7 +252,10 @@ async def test_drive_post_close_force_allows_substantial():
         },
         ctx(),
     )
-    assert result.success is True
+    assert result.success is False
+    assert result.contract_failure is True
+    assert "收口后拒绝整团重派" in (result.error or "")
+    assert 'force=["post_close"]' not in (result.error or "")
     clear_active_coordination()
 
 
@@ -414,9 +381,7 @@ async def test_drive_coordinated_skips_post_close_reentry_on_empty_roster():
                 plan,
                 execution_id="e",
                 seed_completed=None,
-                seed_notes=None,
                 complexity_hint="standard",
-                coordination="none",
                 call_idx=0,
                 session=session,
             )

@@ -15,6 +15,7 @@ import {
   copyWorkspaceFile,
   createWorkspaceDir,
   deleteWorkspaceFile,
+  downloadWorkspaceArchive,
   downloadWorkspaceFile,
   exportWorkspaceMdToDocx,
   fetchWorkspaceFileBlob,
@@ -39,6 +40,7 @@ import {
   wsCopyFile,
   wsCreateDir,
   wsDeleteFile,
+  wsDownloadArchive,
   wsDownloadFile,
   wsExportMdToDocx,
   wsFetchFileBlob,
@@ -173,7 +175,11 @@ interface CloudFileClient {
   move(src: string, dst: string): Promise<void>;
   copy(src: string, dst: string): Promise<void>;
   delete(path: string): Promise<void>;
-  download(path: string, filename: string): Promise<void>;
+  download(
+    path: string,
+    filename: string,
+    opts?: { isDir?: boolean },
+  ): Promise<void>;
   /** Raw bytes (no save dialog) — backs 「用本机默认应用打开」's temp copy. */
   fetchBytes(path: string): Promise<Blob>;
   exportMdToDocx(path: string): Promise<{ path: string; warnings: string[] }>;
@@ -296,7 +302,7 @@ function makeCloudSource(
     move: (src, dst) => client.move(src, dst),
     delete: (path) => client.delete(path),
     writeBytes: (path, body) => client.upload(path, body),
-    download: (path, filename) => client.download(path, filename),
+    download: (path, filename, opts) => client.download(path, filename, opts),
     // 桌面专属「用本机默认应用打开」：条件挂载同 previewArchive —— web 运行时不实现
     // `openTempFile`，入口便整个不出现。谓词收白名单：云端字节是 AI 产出的，名单外类型
     // 连入口都不给（主进程另有硬拒的强制面），与本地源「名单外仍可开 + 确认」刻意不同。
@@ -337,8 +343,10 @@ export function createWorkspaceSource(
     move: (src, dst) => moveWorkspaceFile(conversationId, src, dst),
     copy: (src, dst) => copyWorkspaceFile(conversationId, src, dst),
     delete: (path) => deleteWorkspaceFile(conversationId, path),
-    download: (path, filename) =>
-      downloadWorkspaceFile(conversationId, path, filename),
+    download: (path, filename, opts) =>
+      opts?.isDir
+        ? downloadWorkspaceArchive(conversationId, path, filename)
+        : downloadWorkspaceFile(conversationId, path, filename),
     fetchBytes: (path) => fetchWorkspaceFileBlob(conversationId, path),
     exportMdToDocx: (path) => exportWorkspaceMdToDocx(conversationId, path),
   });
@@ -375,7 +383,10 @@ export function createCloudWorkspaceSource(
       move: (src, dst) => wsMoveFile(wsId, src, dst),
       copy: (src, dst) => wsCopyFile(wsId, src, dst),
       delete: (path) => wsDeleteFile(wsId, path),
-      download: (path, filename) => wsDownloadFile(wsId, path, filename),
+      download: (path, filename, opts) =>
+        opts?.isDir
+          ? wsDownloadArchive(wsId, path, filename)
+          : wsDownloadFile(wsId, path, filename),
       fetchBytes: (path) => wsFetchFileBlob(wsId, path),
       exportMdToDocx: (path) => wsExportMdToDocx(wsId, path),
       listFileIndex: () => wsListFileIndex(wsId),

@@ -306,8 +306,7 @@ describe("toMessage (reload hydrate)", () => {
     expect(useExecutionStore.getState().byId["m-team"]).toBeUndefined();
   });
 
-  it("surfaces pausedTurns when paused + journal cold interaction (hydrate gap)", () => {
-    // Offline repro: hydrateInteractionsFromJournal alone left ResumePrompt empty.
+  it("does not mint pausedTurns from journal hydrate (still-waiting is recovery)", () => {
     toMessage(
       row({
         id: "m-paused",
@@ -337,24 +336,10 @@ describe("toMessage (reload hydrate)", () => {
       }),
     );
 
-    const pending = usePausedTurnStore.getState().pending;
-    expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({
-      messageId: "m-paused",
-      conversationId: "c1",
-      checkpointId: "pr-hydrate",
-      kind: "plan_review",
-      origin: "server",
-    });
-    expect(pending[0].steps).toEqual([
-      { run_id: "r1", role: "调研", summary: "方案就绪" },
-    ]);
-    // journal 冷加载同样带出把关摘要（拍板中心冷启动可见）。
-    expect(pending[0].ceoReview).toEqual({
-      conclusion: "方案可行，建议放行。",
-      risks: ["回滚预案缺失"],
-      suggestions: ["先灰度"],
-    });
+    expect(usePausedTurnStore.getState().pending).toHaveLength(0);
+    const entry = useInteractionStore.getState().get("pr-hydrate");
+    expect(entry?.status).toBe("pending");
+    expect(entry?.origin).toBeUndefined();
   });
 
   it("surface 画卡后清会话 isGenerating（冷挂起不变量）", () => {
@@ -410,8 +395,7 @@ describe("toMessage (reload hydrate)", () => {
       }),
     );
 
-    expect(usePausedTurnStore.getState().pending).toHaveLength(1);
-    expect(usePausedTurnStore.getState().pending[0]?.kind).toBe("ask_user");
+    expect(usePausedTurnStore.getState().pending).toHaveLength(0);
     expect(useConversationStore.getState().byId.c1?.isGenerating).toBe(false);
     expect(
       useConversationStore
@@ -445,9 +429,10 @@ describe("toMessage (reload hydrate)", () => {
       }),
     );
 
-    const pending = usePausedTurnStore.getState().pending;
-    expect(pending).toHaveLength(1);
-    expect(pending[0].ceoReview).toBeUndefined();
+    expect(usePausedTurnStore.getState().pending).toHaveLength(0);
+    expect(useInteractionStore.getState().get("pr-no-cr")?.status).toBe(
+      "pending",
+    );
   });
 
   it("does not surface pausedTurns when paused without journal interactions", () => {

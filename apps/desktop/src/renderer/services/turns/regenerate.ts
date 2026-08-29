@@ -129,6 +129,7 @@ function toOutgoingAttachments(
     truncated: a.truncated,
     kind: a.kind ?? "file",
     conversation_id: a.conversationId,
+    document_id: a.documentId,
     workspace_path: a.workspacePath,
   }));
 }

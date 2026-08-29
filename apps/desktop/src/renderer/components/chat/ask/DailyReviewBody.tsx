@@ -1,6 +1,6 @@
 /**
- * daily_review — 复盘提案清单：行式多选（与 organize_plan 同壳）。
- * 默认全选（seedAllMultiple）；取消勾选即跳过。detail = review_kind 中文 + 摘要。
+ * daily_review — 清单确认体：行式多选、默认全选（seedAllMultiple）。
+ * 取消勾选即跳过。detail = review_kind 中文 + 摘要。铬条 caption 与普通澄清相同。
  */
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
@@ -31,7 +31,7 @@ function summarizeKinds(options: AskOption[]): string {
     counts[label] = (counts[label] ?? 0) + 1;
   }
   const parts = Object.entries(counts).map(([k, n]) => `${k} ${n}`);
-  return parts.length ? parts.join("、") : `${options.length} 项复盘提案`;
+  return parts.length ? parts.join("、") : `${options.length} 项待确认`;
 }
 
 function optionDetail(option: AskOption): string | undefined {
@@ -115,7 +115,14 @@ export function DailyReviewBody({
         )}
 
         <div className="px-2">
-          <CommenceNote answer={answer} disabled={busy} compact />
+          {(q == null || q.kind === "choice") && (
+            <CommenceNote
+              answer={answer}
+              questionId={q?.id}
+              disabled={busy}
+              compact
+            />
+          )}
         </div>
       </div>
     </AskCardShell>

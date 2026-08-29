@@ -404,18 +404,20 @@ describe("ToolLine · 过程工具默认折叠", () => {
   });
 
   it("suppresses the peek for unified consult — same as consult_memory", () => {
-    render(
+    const { container } = render(
       <ToolLine
         step={step({
           tool_name: "consult",
           arguments: { name: "部署流程" },
           result: "用 pnpm dev 起前端",
-          display: { name: "部署流程", kind: "memory" },
+          display: { name: "部署流程", origin: "user" },
           status: "success",
         })}
       />,
     );
     expect(screen.getByText("Consult")).toBeTruthy();
+    expect(container.querySelector(".lucide-brain")).toBeNull();
+    expect(container.querySelector(".lucide-book-open")).toBeTruthy();
     expect(screen.queryByText(/用 pnpm dev 起前端/)).toBeNull();
     expect(screen.getAllByText("部署流程")).toHaveLength(1);
   });
@@ -1183,20 +1185,6 @@ describe("ToolLine · ack 族成功无 peek", () => {
       detail: null,
     },
     {
-      tool: "post_note",
-      label: "Post note",
-      args: {},
-      ack: "已发布便签。",
-      detail: null,
-    },
-    {
-      tool: "amend_note",
-      label: "Amend note",
-      args: {},
-      ack: "已修订便签。",
-      detail: null,
-    },
-    {
       tool: "desktop_notify",
       label: "Notify",
       args: {},
@@ -1227,7 +1215,6 @@ describe("ToolLine · ack 族成功无 peek", () => {
     ["file_delete", "Delete file"],
     ["host", "Host status"],
     ["host_storage", "Host storage"],
-    ["post_note", "Post note"],
     ["desktop_notify", "Notify"],
   ] as const)("keeps collapsed %s error to one line", (tool, label) => {
     const { container } = render(

@@ -156,4 +156,20 @@ describe("ProcessLane", () => {
     expect(screen.getByText(/想用脚本打开源码再搜索/)).toBeTruthy();
     expect(screen.queryByText(/禁止用/)).toBeNull();
   });
+
+  it("does not paint graph_append continuation chrome", () => {
+    render(
+      <ProcessLane
+        steps={[
+          {
+            kind: "graph_append",
+            execution_id: "exec1",
+            host_message_id: "m1",
+            added_count: 3,
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText(/续图/)).toBeNull();
+  });
 });

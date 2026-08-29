@@ -1,9 +1,9 @@
 /**
  * 生产通用澄清卡 —— AskCardShell + 行式选项（{@link AskRowGroup}）。
- * Wire `intent=kickoff` 与 `decision` 均挂此体；无开场仪式主 CTA。
- * 彩色「推荐 / 默认」徽章已删：`default` 由 {@link useAskAnswer} 预选，选中态即其表达。
- * `questions.length ≥ 2`：体内一次一题，头右侧 {@link AskQuestionPager} 乱序跳；
- * 底栏仍一次提交整张卡（未看过的题走已有 default）。不是 Wizard。
+ * 无开场仪式主 CTA。打开不预选 `default`；AI 倾向写在选项 label 原文。`default` 走行右灰字「默认」。
+ * `questions.length ≥ 2`：体内一次一题，头右侧 {@link AskQuestionPager} 可点切换各题
+ * （没写补充也能切）；非末题主 CTA「下一题」（只推进），末题才「提交」才 resume。
+ * 不是问卷 Wizard。提交仍须每题有勾选或人话。
  */
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import {
@@ -40,14 +40,19 @@ import {
 } from "@/lib/registerLocalFolder";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { AskOption, AskQuestion } from "@/types/events";
-import { FolderOpen, FolderTree, Loader2 } from "lucide-react";
+import { ArrowRight, FolderOpen, FolderTree, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AskCardFooter, AskCardShell, AskSectionLabel } from "./AskCardShell";
 import { CommenceNote } from "./AskCommenceParts";
 import { type AskRow, AskRowGroup } from "./AskOptionRow";
-import { AskQuestionPager } from "./AskQuestionPager";
-import type { AskUserContent, useAskAnswer } from "./AskUserFields";
+import { AskQuestionPager, resolveAskPrimaryAction } from "./AskQuestionPager";
+import {
+  type AskUserContent,
+  hasExplicitAskReply,
+  questionHasExplicitReply,
+  type useAskAnswer,
+} from "./AskUserFields";
 import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
 
 const META = ASK_INTENT_META.decision;
@@ -86,10 +91,14 @@ export function AskDecisionBody({
   );
   const questionSig = content.questions.map((q) => q.id).join("\0");
   const [step, setStep] = useState(0);
+  const [visited, setVisited] = useState<ReadonlySet<number>>(
+    () => new Set([0]),
+  );
   const [seenQuestionSig, setSeenQuestionSig] = useState(questionSig);
   if (seenQuestionSig !== questionSig) {
     setSeenQuestionSig(questionSig);
     setStep(0);
+    setVisited(new Set([0]));
   }
   const canLocalFs = hasLocalFiles() && !!window.fsApi;
   const canBindAction = !!conversationId && !!onBindResolve && canLocalFs;
@@ -115,7 +124,8 @@ export function AskDecisionBody({
     setBindError(message ?? "本机目录操作失败");
   };
 
-  /** 当前选中（含 default 预选）落在须本机履约的 option 上时返回之；Continue 不得退化成口头「已授权」。 */
+  /** 当前选中落在须本机履约的 option 上时返回之；Continue 不得退化成口头「已授权」。
+   * 打开不再因 default 预选而出现「允许整理」——点授权行履约；人话短同意仍可交。 */
   const findPendingFolderOption = (): {
     q: AskQuestion;
     opt: AskOption;
@@ -133,7 +143,7 @@ export function AskDecisionBody({
   };
 
   /**
-   * 人话框短允许表口头同意 → 同题 pending grant_*（hints 取自该选项）。
+   * 本题人话短允许表口头同意 → 同题 pending grant_*（hints 取自该选项）。
    * 仅当该题 listed 未勾选；已勾选 grant 仍走 {@link findPendingFolderOption}。
    * 禁对长文意图分类；未命中返回 null，Continue 走原 compose。
    */
@@ -144,7 +154,7 @@ export function AskDecisionBody({
     for (const q of content.questions) {
       if (q.kind === "text") continue;
       if ((answer.answers[q.id] ?? []).length > 0) continue;
-      const opt = pickOralGrantOption(q.options, answer.note);
+      const opt = pickOralGrantOption(q.options, answer.notes[q.id] ?? "");
       if (opt) return { q, opt };
     }
     return null;
@@ -275,7 +285,7 @@ export function AskDecisionBody({
    * 继续：普通选项 → 原 onContinue；选中 grant_organize / bind_* / open_local_project /
    * register_local_project → 一键履约（对齐点选项行）。未知已删 action 当普通选项。
    * grant_organize 无系统选文件夹；找不到则卡面失败。同 root 只读已挂仍须点允许走
-   * organize 履约（禁止静默升写）。人话框命中整理短允许表且 listed 未勾选 → 同真
+   * organize 履约（禁止静默升写）。本题人话命中整理短允许表且 listed 未勾选 → 同真
    * grant（非纯文本冒充已授权）。register 履约后 resume 本对话；open 开新会话不 resume。
    */
   const handleContinue = () => {
@@ -300,6 +310,16 @@ export function AskDecisionBody({
     void handleBindOption(q, opt);
   };
 
+  const goToQuestion = (index: number) => {
+    setStep(index);
+    setVisited((prev) => {
+      if (prev.has(index)) return prev;
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
+  };
+
   const grantPending = findPendingFolderOption()?.opt.action;
   const hasFolderGrant = hasOrganizeGrantOption || hasAttachGrantOption;
   const shellCaption =
@@ -310,17 +330,6 @@ export function AskDecisionBody({
         ? ORGANIZE_CONFIRM_CAPTION
         : (caption ?? META.activeCaption);
   const shellIcon = hasFolderGrant ? FolderTree : META.icon;
-  const shellCta =
-    grantPending === "grant_attach_folder"
-      ? ATTACH_CONFIRM_CTA
-      : grantPending === "grant_organize_folder"
-        ? ORGANIZE_CONFIRM_CTA
-        : META.cta;
-  const shellCtaIcon =
-    grantPending === "grant_organize_folder" ||
-    grantPending === "grant_attach_folder"
-      ? FolderTree
-      : META.ctaIcon;
   const hasQuestions = content.questions.length > 0;
   /** 无题：message 当唯一题干进壳标题。有题：不画总标题，题干在体内。 */
   const shellTitle = hasQuestions ? undefined : content.question;
@@ -329,6 +338,50 @@ export function AskDecisionBody({
   const visibleQuestions = paged
     ? content.questions.slice(safeStep, safeStep + 1)
     : content.questions;
+  const primaryAction = resolveAskPrimaryAction(
+    content.questions.length,
+    safeStep,
+    visited,
+  );
+  const advancing = primaryAction.type === "advance";
+  const shellCta = advancing
+    ? "下一题"
+    : grantPending === "grant_attach_folder"
+      ? ATTACH_CONFIRM_CTA
+      : grantPending === "grant_organize_folder"
+        ? ORGANIZE_CONFIRM_CTA
+        : META.cta;
+  const shellCtaIcon = advancing
+    ? ArrowRight
+    : grantPending === "grant_organize_folder" ||
+        grantPending === "grant_attach_folder"
+      ? FolderTree
+      : META.ctaIcon;
+  const currentQuestion = hasQuestions
+    ? content.questions[paged ? safeStep : 0]
+    : undefined;
+  const currentHasInput =
+    !hasQuestions ||
+    (currentQuestion != null &&
+      questionHasExplicitReply(currentQuestion, answer.answers, answer.notes));
+  const allReady = hasExplicitAskReply(
+    content,
+    answer.answers,
+    answer.notes,
+    answer.note,
+  );
+  const ctaDisabled =
+    hasQuestions &&
+    (primaryAction.type === "submit" ? !allReady : !currentHasInput);
+
+  const handlePrimary = () => {
+    if (busy || bindBusyLabel || ctaDisabled) return;
+    if (primaryAction.type === "advance" || primaryAction.type === "jump") {
+      goToQuestion(primaryAction.index);
+      return;
+    }
+    handleContinue();
+  };
 
   const questionRows = (q: AskQuestion): AskRow[] => {
     const picked = answer.answers[q.id] ?? [];
@@ -344,7 +397,7 @@ export function AskDecisionBody({
         label: opt.label,
         // 通用卡一行；整理授权只留结构化「将整理：…」（helper 不透传模型副标题）。
         detail: organizeConfirmDetail(opt),
-        hint: opt.recommended && q.default !== opt.label ? "推荐" : undefined,
+        hint: q.default && opt.label === q.default ? "默认" : undefined,
         icon: desktopFolder ? (
           bindBusy ? (
             <Loader2 size={12} className="animate-spin" />
@@ -394,7 +447,8 @@ export function AskDecisionBody({
             total={content.questions.length}
             index={safeStep}
             disabled={busy || !!bindBusyLabel}
-            onChange={setStep}
+            visited={visited}
+            onChange={goToQuestion}
           />
         ) : undefined
       }
@@ -404,8 +458,9 @@ export function AskDecisionBody({
           ctaIcon={shellCtaIcon}
           busy={busy || !!bindBusyLabel}
           submitting={submitting}
-          onContinue={handleContinue}
+          onContinue={handlePrimary}
           onStop={onStop}
+          ctaDisabled={ctaDisabled}
         />
       }
     >
@@ -456,11 +511,21 @@ export function AskDecisionBody({
                   className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-foreground/25 focus:outline-none disabled:opacity-40"
                 />
               ) : (
-                <AskRowGroup
-                  className="mt-1"
-                  rows={questionRows(q)}
-                  multiple={q.multiple}
-                />
+                <>
+                  <AskRowGroup
+                    className="mt-1"
+                    rows={questionRows(q)}
+                    multiple={q.multiple}
+                  />
+                  <div className="mt-2 px-2">
+                    <CommenceNote
+                      answer={answer}
+                      questionId={q.id}
+                      disabled={busy}
+                      compact
+                    />
+                  </div>
+                </>
               )}
             </div>
           );
@@ -478,9 +543,11 @@ export function AskDecisionBody({
           <p className="px-2 text-xs text-muted-foreground">{bindError}</p>
         )}
 
-        <div className="px-2">
-          <CommenceNote answer={answer} disabled={busy} compact />
-        </div>
+        {!hasQuestions && (
+          <div className="px-2">
+            <CommenceNote answer={answer} disabled={busy} compact />
+          </div>
+        )}
       </div>
     </AskCardShell>
   );

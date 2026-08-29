@@ -156,8 +156,8 @@ async def settle_successful_turn(
     merge_citations(citations, delegate_tool.citations)
     merge_citations(citations, debate_tool.citations)
 
-    # 引用出口自洽：回炉耗尽后正文仍可能带悬空 [n] / 非法 #rN。先记 warning
-    #（观测），再双轨剥离，保证进入 conversation store 的终稿与 citations 自洽。
+    # 引用出口：正文不剥号。来源卡 = 已登记非 blocked（含 search-only）；
+    # 未登记 #rN / 悬空 [n] 留白字，只记观测。
     led = None
     citable_ids = None
     try:
@@ -167,7 +167,7 @@ async def settle_successful_turn(
         if led is not None:
             # settle：正文实际引用且已 deep_read → 持久 selected（跨回合 hydrate 保留）。
             led.mark_selected_from_content(final_content)
-            citable_ids = led.draft_citable_ids()
+            citable_ids = led.citable_ids()
     except Exception:
         logger.warning("citations.ledger_lookup_failed", message_id=message_id, exc_info=True)
     final_content, citations, stray_n, stray_r = reconcile_citations(

@@ -90,8 +90,6 @@ export interface AgentNodeData {
   revised?: PlanRevisionKind | null;
   /** 回落换人：接手的原 run id。 */
   replacesRunId?: string | null;
-  /** worker 核验回炉轻痕迹。 */
-  didRework?: boolean;
   stance?: Stance | null;
   checkpoint?: RunCheckpoint | null;
   escalationPending?: number;

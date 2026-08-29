@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 /**
- * ask_user intent variants: proposal_pick (方案墙) / risk_ack (风险清单).
+ * ask_user list-confirm chrome: organize_plan / daily_review keep the checklist
+ * body (second line, seed-all, side-effect CTA). Caption is the shared 需要你拍板.
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { AskUiIntent } from "@/lib/checkpointIntent";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,60 +18,32 @@ vi.mock("@/lib/toast", () => ({
 
 afterEach(cleanup);
 
-const proposalContent: AskUserContent = {
-  question: "选哪条方案推进？\n三条路线成本与风险不同。",
+const organizeContent: AskUserContent = {
+  question: "确认要执行的整理项？",
   assumptions: [],
   questions: [
     {
       id: "q0",
-      prompt: "选哪条方案？",
-      kind: "choice",
-      multiple: false,
-      default: "",
-      options: [
-        { label: "方案 A：快速原型", detail: "一周内可验证" },
-        { label: "方案 B：稳妥重构", detail: "两周，债务更少" },
-        { label: "方案 C：外包试点", recommended: true },
-      ],
-    },
-  ],
-};
-
-const riskContent: AskUserContent = {
-  question: "哪些风险要在本轮处理？\n未勾选的项将记入后续 backlog。",
-  assumptions: [],
-  questions: [
-    {
-      id: "q0",
-      prompt: "勾选要处理的风险",
+      prompt: "勾选要执行的项",
       kind: "choice",
       multiple: true,
       default: "",
       options: [
-        { label: "[高] 密钥轮换", detail: "生产密钥仍是默认值" },
-        { label: "备份校验" },
-        { label: "[中] 回滚演练", recommended: true },
+        { label: "新建 Archive", op: "mkdir", path: "Archive" },
+        {
+          label: "移动报告",
+          op: "move",
+          source: "a.pdf",
+          destination: "Archive/a.pdf",
+        },
+        { label: "删除草稿", op: "delete", path: "draft.md" },
       ],
     },
   ],
 };
 
-function renderCard(
-  intent: "proposal_pick" | "risk_ack" | "daily_review",
-  content: AskUserContent,
-  onSubmit = vi.fn(),
-) {
-  return render(
-    <MemoryRouter>
-      <TooltipProvider>
-        <AskUserCard content={content} intent={intent} onSubmit={onSubmit} />
-      </TooltipProvider>
-    </MemoryRouter>,
-  );
-}
-
 const dailyReviewContent: AskUserContent = {
-  question: "确认要落盘的复盘提案？\n来自今日对话摘要。",
+  question: "确认要落盘的项？\n来自今日对话摘要。",
   assumptions: [],
   questions: [
     {
@@ -99,62 +73,61 @@ const dailyReviewContent: AskUserContent = {
   ],
 };
 
+function renderCard(
+  intent: AskUiIntent,
+  content: AskUserContent,
+  onSubmit = vi.fn(),
+) {
+  return render(
+    <MemoryRouter>
+      <TooltipProvider>
+        <AskUserCard content={content} intent={intent} onSubmit={onSubmit} />
+      </TooltipProvider>
+    </MemoryRouter>,
+  );
+}
+
 describe("AskUserCard intent variants", () => {
-  it("proposal_pick 行式单选，推荐灰字；提交带 selected", async () => {
+  it("organize_plan 默认全选、第二行总览、副作用 CTA；caption 为需要你拍板", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    renderCard("proposal_pick", proposalContent, onSubmit);
+    renderCard("organize_plan", organizeContent, onSubmit);
 
     expect(
-      document.querySelector('[data-ask-intent="proposal_pick"]'),
+      document.querySelector('[data-ask-intent="organize_plan"]'),
     ).toBeTruthy();
     expect(
-      document.querySelector('[data-ask-card="proposal_pick"]'),
+      document.querySelector('[data-ask-card="organize_plan"]'),
     ).toBeTruthy();
-    expect(screen.getByText("方案 A：快速原型")).toBeTruthy();
-    expect(screen.getByText("一周内可验证")).toBeTruthy();
-    expect(screen.getByText("推荐")).toBeTruthy();
+    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.queryByText(/整理方案/)).toBeNull();
+    expect(
+      screen.getByText(
+        "总览：新建 1 个文件夹、移动 1 个文件、删除 1 项（进回收站）",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/确认后按方案批量执行，不再二次弹审批/),
+    ).toBeTruthy();
 
-    const adopt = screen.getByRole("button", { name: "采用此方案" });
-    expect((adopt as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText("删除草稿"));
+    fireEvent.click(screen.getByRole("button", { name: /确认并整理/ }));
 
-    fireEvent.click(screen.getByText("方案 C：外包试点"));
-    expect((adopt as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(adopt);
-    expect(onSubmit).toHaveBeenCalledWith("continue", "", ["方案 C：外包试点"]);
+    expect(onSubmit).toHaveBeenCalledWith("continue", "", [
+      "新建 Archive",
+      "移动报告",
+    ]);
   });
 
   it("次要 CTA 文案为取消，点击仍发 decision=stop", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
-    renderCard("proposal_pick", proposalContent, onSubmit);
+    renderCard("organize_plan", organizeContent, onSubmit);
 
     expect(screen.queryByText("停止")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     expect(onSubmit).toHaveBeenCalledWith("stop", "", []);
   });
 
-  it("risk_ack 行式多选，严重度与建议处理灰字；提交带 selected", async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-    renderCard("risk_ack", riskContent, onSubmit);
-
-    expect(document.querySelector('[data-ask-intent="risk_ack"]')).toBeTruthy();
-    expect(document.querySelector('[data-ask-card="risk_ack"]')).toBeTruthy();
-    expect(screen.getByText("密钥轮换")).toBeTruthy();
-    expect(screen.getByText("高")).toBeTruthy();
-    expect(screen.getByText(/建议处理/)).toBeTruthy();
-    expect(screen.getByText("备份校验")).toBeTruthy();
-
-    fireEvent.click(screen.getByText("密钥轮换"));
-    fireEvent.click(screen.getByText("回滚演练"));
-    fireEvent.click(screen.getByRole("button", { name: "确认并继续" }));
-
-    expect(onSubmit).toHaveBeenCalledWith("continue", "", [
-      "[高] 密钥轮换",
-      "[中] 回滚演练",
-    ]);
-  });
-
-  it("daily_review 默认全选，取消勾选后提交带 selected", async () => {
+  it("daily_review 默认全选，取消勾选后提交带 selected；caption 为需要你拍板", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     renderCard("daily_review", dailyReviewContent, onSubmit);
 
@@ -164,13 +137,14 @@ describe("AskUserCard intent variants", () => {
     expect(
       document.querySelector('[data-ask-card="daily_review"]'),
     ).toBeTruthy();
+    expect(screen.getByText("需要你拍板")).toBeTruthy();
+    expect(screen.queryByText(/复盘提案/)).toBeNull();
     expect(screen.getByText("偏好简洁回复")).toBeTruthy();
     expect(screen.getByText(/偏好 · 用户偏好短句答复/)).toBeTruthy();
     expect(
       screen.getByText(/确认后服务端直接写入记忆\/规则\/文档/),
     ).toBeTruthy();
 
-    // Seed all three; uncheck one.
     fireEvent.click(screen.getByText("主题：周报节奏"));
     fireEvent.click(screen.getByRole("button", { name: /确认落盘/ }));
 
@@ -182,7 +156,7 @@ describe("AskUserCard intent variants", () => {
 
   it("collectAskSelected 扁平化多题 picks", () => {
     expect(
-      collectAskSelected(proposalContent, { q0: ["方案 A：快速原型"] }),
-    ).toEqual(["方案 A：快速原型"]);
+      collectAskSelected(organizeContent, { q0: ["新建 Archive"] }),
+    ).toEqual(["新建 Archive"]);
   });
 });

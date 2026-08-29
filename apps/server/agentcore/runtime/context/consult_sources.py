@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from agentcore.core.logging import get_logger
 from agentcore.db.base import async_session_factory
@@ -31,6 +31,21 @@ logger = get_logger(__name__)
 
 # Fixed resolve order (winner first). Do not reorder without a product decision.
 _SOURCE_PRIORITY: tuple[str, ...] = ("skill", "tool", "rule", "memory")
+ConsultOrigin = Literal["system", "user"]
+_ORIGIN_BY_KIND: dict[str, ConsultOrigin] = {
+    "skill": "system",
+    "tool": "system",
+    "rule": "user",
+    "memory": "user",
+}
+
+
+@dataclass(frozen=True)
+class ConsultHit:
+    """Merged fetch for ConsultTool: model-facing body + two-bucket display origin."""
+
+    body: str
+    origin: ConsultOrigin
 
 
 @dataclass
@@ -50,7 +65,7 @@ class SkillConsultSource:
         del user_id  # skills are code-defined, not per-user
         names = set(self.tool_names)
         return [
-            ConsultDirectoryEntry(name=s.name, summary=s.summary)
+            ConsultDirectoryEntry(name=s.name, summary=s.summary, section="skill")
             for s in self.registry.available(names, audience=self.audience)
         ]
 
@@ -80,7 +95,12 @@ class ToolConsultSource:
 
     async def list_directory(self, user_id: str) -> Sequence[ConsultDirectoryEntry]:
         del user_id
-        from agentcore.tools.on_demand import is_on_demand_tool, on_demand_summary
+        from agentcore.tools.on_demand import (
+            family_catalog_meta,
+            is_mcp_tool_name,
+            is_on_demand_tool,
+            on_demand_summary,
+        )
 
         entries: list[ConsultDirectoryEntry] = []
         for name in self.registry.names:
@@ -88,10 +108,18 @@ class ToolConsultSource:
                 continue
             tool = self.registry.get_optional(name)
             description = tool.schema.description if tool is not None else ""
+            family, family_label = family_catalog_meta(name)
+            if is_mcp_tool_name(name) and tool is not None:
+                family = str(getattr(tool, "mcp_server_id", "") or "")
+                server_label = str(getattr(tool, "mcp_server_name", "") or "").strip()
+                family_label = f"MCP · {server_label}" if server_label else family
             entries.append(
                 ConsultDirectoryEntry(
                     name=name,
                     summary=on_demand_summary(name, description=description),
+                    section="tool",
+                    family=family,
+                    family_label=family_label,
                 )
             )
         return entries
@@ -102,13 +130,18 @@ class ToolConsultSource:
             family_of,
             is_on_demand_tool,
             render_tool_consult_body,
+            resolve_on_demand_name,
         )
 
         key = name.strip()
-        if not key or not is_on_demand_tool(key):
+        if not key:
             return None
-        if self.registry.get_optional(key) is None:
+        resolved = resolve_on_demand_name(self.registry, key)
+        if resolved is None or not is_on_demand_tool(resolved):
             return None
+        if self.registry.get_optional(resolved) is None:
+            return None
+        key = resolved
         self.registry.offer(key)
         enabled = [
             n
@@ -141,7 +174,10 @@ class MemoryConsultSource:
         topics = await load_memory_topics(
             self.store, user_id, folder_id=self.folder_id, enabled=True
         )
-        return [ConsultDirectoryEntry(name=t.name, summary=t.summary) for t in topics]
+        return [
+            ConsultDirectoryEntry(name=t.name, summary=t.summary, section="memory")
+            for t in topics
+        ]
 
     async def fetch_by_name(self, user_id: str, name: str) -> str | None:
         """Current folder → ancestors innermost-first → global (§5.4 近的覆盖远的)."""
@@ -176,7 +212,10 @@ class RuleConsultSource:
         from agentcore.memory.rules_injection import load_on_demand_user_rules
 
         rules = await load_on_demand_user_rules(user_id, folder_id=self.folder_id)
-        return [ConsultDirectoryEntry(name=r.name, summary=r.summary) for r in rules]
+        return [
+            ConsultDirectoryEntry(name=r.name, summary=r.summary, section="rule")
+            for r in rules
+        ]
 
     async def fetch_by_name(self, user_id: str, name: str) -> str | None:
         key = rule_consult_name(name)
@@ -257,21 +296,34 @@ class MergedConsultSource:
                     )
                     continue
                 winners[entry.name] = kind
-                ordered.append(entry)
+                ordered.append(
+                    ConsultDirectoryEntry(
+                        name=entry.name,
+                        summary=entry.summary,
+                        section=kind,
+                        family=entry.family,
+                        family_label=entry.family_label,
+                    )
+                )
         return ordered
 
     async def fetch_by_name(self, user_id: str, name: str) -> str | None:
+        hit = await self.fetch_hit(user_id, name)
+        return None if hit is None else hit.body
+
+    async def fetch_hit(self, user_id: str, name: str) -> ConsultHit | None:
+        """Resolve name → body + two-bucket origin. Fine ``kind`` stays log-only."""
         raw = name.strip()
         if not raw:
             return None
-        # Try each source with its own normalization; first hit wins (priority order).
-        # ``kind`` is logged here because this is the only place it is known — it must not
-        # reach the model or the UI: the three-way split lives in storage, not in reading.
+        # First hit wins (priority order). Fine kind (skill/tool/rule/memory) is
+        # logged here — it must not reach the model or ``display``. Display only
+        # gets two-bucket ``origin`` (system | user), computed at this same site.
         for kind, src in self._iters():
             body = await src.fetch_by_name(user_id, raw)
             if body is not None:
                 logger.info("consult.hit", name=raw, kind=kind)
-                return body
+                return ConsultHit(body=body, origin=_ORIGIN_BY_KIND[kind])
         return None
 
 

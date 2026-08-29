@@ -114,6 +114,7 @@ describe("loadRecovery cold start (no React Query / no resolveSidecarRoot)", () 
     expect(r.cloudKnown).toBe(true);
     expect(r.turnId).toBe("turn-1");
     expect(shouldHydrateLocalRecovery(r)).toBe(true);
+    expect(usePausedTurnStore.getState().openRecovery[CID]).toBe("ready");
   });
 
   it("hydrate writes sidecar queuedTurns via replaceConversation", async () => {
@@ -341,6 +342,15 @@ describe("loadRecovery cold start (no React Query / no resolveSidecarRoot)", () 
     expect(r.cloudLive).toBe(true);
     expect(r.cloudKnown).toBe(true);
     expect(shouldHydrateLocalRecovery(r)).toBe(false);
+    expect(usePausedTurnStore.getState().openRecovery[CID]).toBe("ready");
+  });
+
+  it("web GET failure marks openRecovery failed (unknown ≠ idle)", async () => {
+    apiGet.mockRejectedValue(new Error("network down"));
+    vi.stubGlobal("window", { __WEB__: true });
+
+    await loadRecovery(CID);
+    expect(usePausedTurnStore.getState().openRecovery[CID]).toBe("failed");
   });
 
   it("recovery snapshot carrying ceo_review hydrates it onto the resume frame", async () => {

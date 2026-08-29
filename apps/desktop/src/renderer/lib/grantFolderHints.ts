@@ -31,6 +31,7 @@ export const ATTACH_CONFIRM_CTA = "允许改这个目录";
  * 人话框口头同意短允许表（精确匹配，非意图分类 / 不扫长文）。
  * 命中且该题 listed 未勾选 → 与点确认 CTA 同一次真 grant；未命中保持原 compose。
  * 两表禁共用「可以/允许」等泛词：同题两选项时泛词不得授 attach_rw。
+ * 认本题人话（按 question.id），不是整卡一句。
  * → 双模式工作区 §六口头同意闭环
  */
 const ORGANIZE_ORAL_CONSENT = new Set([

@@ -1,6 +1,6 @@
 /**
- * organize_plan — 整理方案清单：行式多选（与 kickoff 同壳）。
- * 默认全选（seedAllMultiple）；取消勾选即剔除。原路径→新路径进 detail。
+ * organize_plan — 清单确认体：行式多选、默认全选（seedAllMultiple）。
+ * 取消勾选即剔除。原路径→新路径进 detail。铬条 caption 与普通澄清相同。
  */
 import { ASK_INTENT_META } from "@/components/chat/decision";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
@@ -118,7 +118,14 @@ export function OrganizePlanBody({
         )}
 
         <div className="px-2">
-          <CommenceNote answer={answer} disabled={busy} compact />
+          {(q == null || q.kind === "choice") && (
+            <CommenceNote
+              answer={answer}
+              questionId={q?.id}
+              disabled={busy}
+              compact
+            />
+          )}
         </div>
       </div>
     </AskCardShell>

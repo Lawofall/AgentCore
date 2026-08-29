@@ -3,6 +3,7 @@ import {
   askResolvedDisplay,
 } from "@/components/chat/decision";
 import { DecisionCard } from "@/components/ui";
+import { parseCheckpointIntent } from "@/lib/checkpointIntent";
 import { notifyError } from "@/lib/toast";
 import type { CheckpointUserDecision } from "@/services/checkpoint";
 import type { CheckpointDisplay } from "@/stores/conversation";
@@ -10,18 +11,17 @@ import { timelineIntentionalEmpty } from "@/stores/interactions/timelineCardSlot
 import type { CheckpointIntent } from "@/types/events";
 import { useState } from "react";
 import { AskDecisionBody } from "./ask/AskDecisionBody";
-import { type AskUserContent, useAskAnswer } from "./ask/AskUserFields";
+import {
+  type AskUserContent,
+  flattenAskNotes,
+  useAskAnswer,
+} from "./ask/AskUserFields";
 import { DailyReviewBody } from "./ask/DailyReviewBody";
 import { OrganizePlanBody } from "./ask/OrganizePlanBody";
-import { ProposalPickBody } from "./ask/ProposalPickBody";
-import { RiskAckBody } from "./ask/RiskAckBody";
-import { RISK_SEVERITY_META, parseRiskLabel } from "./ask/parseRiskLabel";
 
 /**
  * Inline ask_user card — the CEO paused the turn to ask the user. This is the ONE
- * asking surface: a **generic clarification** card (questions / options / note). Wire may
- * still send `intent=kickoff` or empty style/format arrays; the UI no longer mounts a
- * separate 开工提案 ceremony shell — kickoff falls through to the same body as decision.
+ * asking surface: a **generic clarification** card (questions / options / note).
  *
  * The interactive body lives in {@link AskUserCard}, reused by the durable 待恢复 resume
  * card (ResumePrompt) — one card, one answer model.
@@ -66,9 +66,8 @@ export function collectAskSelected(
  * (ResumePrompt). Settled by 提交 (→ continue) or 取消 (→ stop 硬停). Picks compose into ONE readable
  * note (答复模型 α), handed to `onSubmit`.
  *
- * `kickoff` 与 `decision` 共用 {@link AskDecisionBody}；`proposal_pick` / `risk_ack` /
- * `organize_plan` / `daily_review` 仍各有体插槽。icon + caption + CTA 由 ASK_INTENT_META 查表。真·风险审批由
- * ApprovalPrompt 承载（蓝）。
+ * 清单确认（`organize_plan` / `daily_review`）走清单体；其余一律 {@link AskDecisionBody}。
+ * 铬条 caption 都是「需要你拍板」。真·风险审批由 ApprovalPrompt 承载（蓝）。
  */
 export function AskUserCard({
   content,
@@ -90,18 +89,16 @@ export function AskUserCard({
   /** Enables bind_local_folder action options on desktop. */
   conversationId?: string | null;
 }) {
+  const chrome = parseCheckpointIntent(intent);
   const ans = useAskAnswer(content, {
-    seedAllMultiple: intent === "organize_plan" || intent === "daily_review",
+    seedAllMultiple: chrome === "organize_plan" || chrome === "daily_review",
   });
   const [submitting, setSubmitting] = useState<CheckpointUserDecision | null>(
     null,
   );
   const busy = submitting !== null;
   const carriesSelected =
-    intent === "proposal_pick" ||
-    intent === "risk_ack" ||
-    intent === "organize_plan" ||
-    intent === "daily_review";
+    chrome === "organize_plan" || chrome === "daily_review";
 
   const send = (decision: CheckpointUserDecision, noteOverride?: string) => {
     if (busy) return;
@@ -111,14 +108,13 @@ export function AskUserCard({
         ? collectAskSelected(content, ans.answers)
         : [];
     const selected = baseSelected;
+    const freeNote = flattenAskNotes(content, ans.notes, ans.note);
     const composed =
       noteOverride !== undefined
         ? noteOverride
-        : decision === "stop"
-          ? ans.note.trim()
-          : carriesSelected
-            ? ans.note.trim()
-            : ans.compose(intent);
+        : decision === "stop" || carriesSelected
+          ? freeNote
+          : ans.compose(chrome);
     Promise.resolve(onSubmit(decision, composed, selected)).catch((err) => {
       notifyError(err, "提交失败");
       setSubmitting(null);
@@ -137,33 +133,7 @@ export function AskUserCard({
     onStop: () => send("stop"),
   };
 
-  if (intent === "proposal_pick") {
-    return (
-      <DecisionCard
-        tone="neutral"
-        animate
-        className="flex max-h-[min(50vh,28rem)] flex-col overflow-hidden p-0"
-        data-ask-intent="proposal_pick"
-      >
-        <ProposalPickBody {...shared} caption={caption} />
-      </DecisionCard>
-    );
-  }
-
-  if (intent === "risk_ack") {
-    return (
-      <DecisionCard
-        tone="neutral"
-        animate
-        className="flex max-h-[min(50vh,28rem)] flex-col overflow-hidden p-0"
-        data-ask-intent="risk_ack"
-      >
-        <RiskAckBody {...shared} caption={caption} />
-      </DecisionCard>
-    );
-  }
-
-  if (intent === "organize_plan") {
+  if (chrome === "organize_plan") {
     return (
       <DecisionCard
         tone="neutral"
@@ -176,7 +146,7 @@ export function AskUserCard({
     );
   }
 
-  if (intent === "daily_review") {
+  if (chrome === "daily_review") {
     return (
       <DecisionCard
         tone="neutral"
@@ -221,7 +191,6 @@ function resolvedCollapsedSummary(checkpoint: CheckpointDisplay): string {
  * 取消 / 确认 / 超时都占时间线存根；缺 decision 不猜超时。 */
 function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
   const resolved = askResolvedDisplay(checkpoint.intent, checkpoint.decision);
-  const showRiskChips = checkpoint.intent === "risk_ack";
 
   return (
     <ResolvedDecisionRecord
@@ -239,18 +208,14 @@ function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
         </p>
         {checkpoint.selected.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {checkpoint.selected.map((s) =>
-              showRiskChips ? (
-                <ResolvedRiskChip key={s} label={s} />
-              ) : (
-                <span
-                  key={s}
-                  className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
-                >
-                  {s}
-                </span>
-              ),
-            )}
+            {checkpoint.selected.map((s) => (
+              <span
+                key={s}
+                className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
+              >
+                {s}
+              </span>
+            ))}
           </div>
         )}
         {checkpoint.note && (
@@ -260,20 +225,5 @@ function ResolvedCheckpoint({ checkpoint }: { checkpoint: CheckpointDisplay }) {
         )}
       </div>
     </ResolvedDecisionRecord>
-  );
-}
-
-function ResolvedRiskChip({ label }: { label: string }) {
-  const { severity, text } = parseRiskLabel(label);
-  const meta = severity ? RISK_SEVERITY_META[severity] : null;
-  return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
-      {meta && (
-        <span className={`rounded px-1 py-px text-xs font-medium ${meta.chip}`}>
-          {meta.tag}
-        </span>
-      )}
-      <span className="min-w-0 truncate">{text}</span>
-    </span>
   );
 }

@@ -21,7 +21,6 @@ from agentcore.runtime.runs.contract import (
     handoff_expectation_met,
     has_salvageable_half_product,
     node_has_dependents,
-    strip_invalid_ledger_refs_from_debrief,
     synthesize_debrief,
     worker_expects_handoff,
 )
@@ -151,39 +150,8 @@ def build_terminal_run_state(
             run_id=spec.run_id,
             had_author_brief=author_brief is not None,
         )
-    # 收口剥离：handoff 简报 / 升格正文也可能带非法 #rN（与 artifacts 闸同口径）。
-    citable_ids = (
-        env.turn_evidence_ledger.draft_citable_ids()
-        if env.turn_evidence_ledger is not None
-        else None
-    )
-    debrief, stripped_debrief = strip_invalid_ledger_refs_from_debrief(
-        debrief, citable_ids
-    )
-    if stripped_debrief:
-        logger.warning(
-            "citations.invalid_ledger_ref",
-            run_id=spec.run_id,
-            markers=stripped_debrief,
-            surface="handoff_debrief",
-            citable_count=len(citable_ids or ()),
-        )
-    if content and citable_ids is not None:
-        from agentcore.runtime.citations import (
-            invalid_ledger_ref_ids,
-            strip_invalid_ledger_refs,
-        )
-
-        bad_body = invalid_ledger_ref_ids(content, citable_ids)
-        if bad_body:
-            content = strip_invalid_ledger_refs(content, set(bad_body))
-            logger.warning(
-                "citations.invalid_ledger_ref",
-                run_id=spec.run_id,
-                markers=bad_body,
-                surface="worker_body",
-                citable_count=len(citable_ids or ()),
-            )
+    # 队员卡片/简报跟对话成稿同一口径：不剥 search-only / 未登记号。
+    # 落盘成文仍走文件合同 ``citation_quality_reworks``。
     # Soft web-quality (anti-slop): at most one rework (already spent in the loop).
     # Remaining soft-only hits demote to warnings — never hard-fail the run.
     # P1c visual critic: remaining visual_failures after max reworks → partial.
@@ -362,24 +330,6 @@ def build_terminal_run_state(
             ):
                 content = candidate
                 body_chars = len(candidate)
-    # 升格后正文再剥一次（简报字段已剥；升格可能把 key_points 拼回正文）。
-    if content and citable_ids is not None:
-        from agentcore.runtime.citations import (
-            invalid_ledger_ref_ids,
-            strip_invalid_ledger_refs,
-        )
-
-        bad_promoted = invalid_ledger_ref_ids(content, citable_ids)
-        if bad_promoted:
-            content = strip_invalid_ledger_refs(content, set(bad_promoted))
-            body_chars = len((content or "").strip())
-            logger.warning(
-                "citations.invalid_ledger_ref",
-                run_id=spec.run_id,
-                markers=bad_promoted,
-                surface="promoted_brief",
-                citable_count=len(citable_ids or ()),
-            )
     # 空交 / 未落盘不再把节点打成 FAILED。
     # The worker's terminal RunState is journaled at the ``execute`` choke point
     # below (run_final_fact — covers COMPLETED *and* FAILED in one place), so resume

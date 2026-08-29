@@ -44,29 +44,6 @@ def _drive_exhausted(session: CoordinationSession) -> bool:
     return task is None or task.done()
 
 
-def _wall_zero_still_pending(session: CoordinationSession) -> bool:
-    """wall + 0 完成：主回合须继续等首个真实完成，勿 idle_timeout / idle_yield。
-
-    Busy-stamp 只在 LLM/tool 进入后才有；调度间隙（drive 已活、尚未
-    ``mark_worker_busy``）或轮间 clear_busy→完成投递之间也会短暂无 inflight。
-    这些窗口下发 TIMEOUT / 空转让出，会让 CEO 在 ``completed_run_ids`` 仍空时
-    写合成草稿并 soft-stop，xdist 负载下尤为偶发。
-
-    例外：仅有界 verify 在跑时仍允许 idle 巡查（CEO 可 cancel_worker），
-    与 ``has_inflight_work`` 不含 verify 的既有语义对齐。
-    """
-    if session.coordination != "wall":
-        return False
-    if len(session.completed_run_ids) != 0:
-        return False
-    if session.has_verify_busy() and not session.has_inflight_work():
-        return False
-    if session.running_workers():
-        return True
-    task = session.drive_task
-    return task is not None and not task.done()
-
-
 def _synthetic_all_completed(session: CoordinationSession) -> CoordinationEvent:
     """Race fallback when the bag is full and drive is gone but no terminal posted.
 
@@ -221,12 +198,15 @@ async def await_coordination_injection(
     append (possibly empty when not coordinating).
 
     唤醒降噪（协调层记账开销治理）：
-    - 例行成功 worker_completed / note / skip / cancel **不叫醒** CEO，暂存后挂在
+    - 例行成功 worker_completed / skip / cancel **不叫醒** CEO，暂存后挂在
       下一次必要决策（失败 / 升级 / 插话 / 超时 / 边界 / 全员完成 / 整队取消）。
     - 失败立刻叫醒，并短暂收口级联跳过/取消，合成一条注入。
     - 空转退避（:func:`_idle_wait_timeout`）：无事件的 idle 巡查按 ``2**idle_streak``
       拉长；忙等（队员仍有 in-flight LLM/工具）**不叫醒** CEO，只退避再等。无人
-      in-flight 的卡死仍发周期性 patrol nudge。wall+0 继续等不 bump。
+      in-flight 的卡死仍发周期性 patrol nudge。
+    - 阻塞 escalate 已登记 ``pending_arbitrations`` 且队列已空：立刻返回空列表，
+      让本轮 ReAct 去 ``resolve_escalation``，勿 idle-wait 挂起队员。队列里已有
+      ESCALATION 时仍走必要决策注入（禁止用 pending 短路首次升级注入）。
     - 两池预算（进度池 / 决策池，见 session.py）：纯遥测计数，不闸唤醒。
     """
     session = active_coordination()
@@ -256,6 +236,26 @@ async def await_coordination_injection(
         if events:
             # Real team activity already queued — clear any idle-patrol backoff.
             session.reset_idle_backoff()
+        elif session.pending_arbitrations:
+            # 升级事件已注入（或本轮将由 ReAct 兑现）；挂起队员的 channel.request
+            # 仍像 tool in-flight。空等它只会让用户面假进度空转十几分钟。
+            wait_reason = "pending_arbitration"
+            waited_ms = int((time.perf_counter() - t0) * 1000)
+            logger.info(
+                "coordination.wait_end",
+                execution_id=session.execution_id,
+                waited_ms=waited_ms,
+                wait_reason=wait_reason,
+                events=[],
+                merged=merged,
+                idle_streak=session.idle_streak,
+                completed=len(session.completed_run_ids),
+                total=session.total_workers,
+                progress_budget=session.progress_budget_remaining,
+                decision_budget=session.decision_budget_remaining,
+                pending=len(session.pending_arbitrations),
+            )
+            return []
         elif _drive_exhausted(session):
             # 竞态兜底（非主保障）：主保障见终态对账（附着注入 / harvest）。
             wait_reason = "team_done_shortcircuit"
@@ -305,17 +305,6 @@ async def await_coordination_injection(
                         session.reset_idle_backoff()
                         wait_reason = "waited"
                     else:
-                        # wall + 0 完成：禁止 idle_yield（主回合先收摊 / turn_detached）。
-                        # 可继续等真实团队事件；非 wall 或已有完成保持原 detach 语义。
-                        if _wall_zero_still_pending(session):
-                            logger.info(
-                                "coordination.idle_yield_held_wall_zero",
-                                execution_id=session.execution_id,
-                                completed=0,
-                                total=session.total_workers,
-                                busy=len(session._busy_workers),
-                            )
-                            continue
                         session.bump_idle_backoff()
                         logger.info(
                             "coordination.idle_yield_held_inflight",
@@ -325,31 +314,6 @@ async def await_coordination_injection(
                             busy=len(session._busy_workers),
                             idle_streak=session.idle_streak,
                         )
-                        continue
-                elif _wall_zero_still_pending(session):
-                    # No busy stamp yet (dispatch→LLM 间隙) or between clear_busy and
-                    # completion post — still not a true stall under wall+0.
-                    wait_reason = "idle_held_wall_zero"
-                    logger.info(
-                        "coordination.idle_yield_held_wall_zero",
-                        execution_id=session.execution_id,
-                        completed=0,
-                        total=session.total_workers,
-                        busy=len(session._busy_workers),
-                        running=len(session.running_workers()),
-                        drive_live=(
-                            session.drive_task is not None
-                            and not session.drive_task.done()
-                        ),
-                    )
-                    more = await _wait_events_with_ux(
-                        session, timeout=min(1.0, _WAIT_HEARTBEAT_S)
-                    )
-                    if more:
-                        events = more
-                        session.reset_idle_backoff()
-                        wait_reason = "waited"
-                    else:
                         continue
                 else:
                     session.bump_idle_backoff()

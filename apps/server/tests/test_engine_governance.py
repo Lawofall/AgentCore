@@ -440,18 +440,18 @@ async def test_deliverable_only_drops_steer_acknowledgement_after_rework():
     provider = _ScriptedProvider(
         [
             [_content_chunk("我先查一下。"), _tool_chunk("search", '{"q": "a"}', call_id="c0")],
-            [_content_chunk("结论见 [1]。")],  # 0 来源 → 越界角标 → finish_guard 回炉
+            [_content_chunk("见下：\n```python\nprint(1)")],  # 未闭合围栏 → finish_guard 回炉
             [
                 _content_chunk("谢谢指正，我重新整理。"),
                 _tool_chunk("search", '{"q": "b"}', call_id="c1"),
             ],
-            [_content_chunk("修正后的最终结论，无来源角标。")],
+            [_content_chunk("修正后的最终结论，无代码块。")],
         ]
     )
     (content, *_), messages = await _run(
         provider, _StubTool(), max_rounds=20, citation_sink=[], deliverable_only=True
     )
-    assert content == "修正后的最终结论，无来源角标。"
+    assert content == "修正后的最终结论，无代码块。"
     assert "谢谢指正" not in content
     assert "我先查一下" not in content
     # 证明确实走了回炉路径（注入过一条 finish_guard 纠错 steer）。
@@ -478,7 +478,7 @@ async def test_worker_deliverable_only_resets_card_on_narration_rollback():
     )
     assert content == "最终结论：一二三。"
     assert "我先查一下" not in content
-    # 恰好清一次卡片（那一轮旁白），reason=narration（正常流程，不折 rework chip）。
+    # 恰好清一次卡片（那一轮旁白），reason=narration（正常流程，只清草稿）。
     assert resets == ["narration"]
 
 

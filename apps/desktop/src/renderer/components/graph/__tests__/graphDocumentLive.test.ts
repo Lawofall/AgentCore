@@ -28,7 +28,6 @@ function minimalExec(output = ""): Execution {
         toolCalls: [],
         toolProgress: null,
         toolExecutionLive: null,
-        didRework: false,
         currentRunId: "w1",
       },
     ],
@@ -104,7 +103,6 @@ function minimalExec(output = ""): Execution {
     crossExamEnabled: false,
     debateOpening: null,
     debatePretrial: null,
-    teamNotes: [],
   };
 }
 

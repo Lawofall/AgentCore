@@ -169,8 +169,15 @@ export interface FileSource {
 
   /** 写原始字节到 `path`（建/覆盖）。仅当 `caps.edit || caps.transfer`。 */
   writeBytes?(path: string, body: Blob): Promise<void>;
-  /** 经浏览器把 `path` 存到用户磁盘。仅当 `caps.transfer`。 */
-  download?(path: string, filename: string): Promise<void>;
+  /**
+   * 经浏览器把 `path` 存到用户磁盘。文件走单项下载；目录打成以该目录为根的 zip
+   *（传 `opts.isDir`）。仅当 `caps.transfer`。本机源不实现——文件已在盘上，用资源管理器。
+   */
+  download?(
+    path: string,
+    filename: string,
+    opts?: { isDir?: boolean },
+  ): Promise<void>;
   /** 订阅 `dir` 下变更；返回退订函数。仅当 `caps.watch`。 */
   watch?(dir: string, onChange: FileChangeHandler): () => void;
 
@@ -257,6 +264,12 @@ export function isMarkdownPath(path: string): boolean {
 export function baseName(path: string): string {
   const i = path.lastIndexOf("/");
   return i >= 0 ? path.slice(i + 1) : path;
+}
+
+/** Save-as name for {@link FileSource.download}. Directories become `{name}.zip`. */
+export function downloadSaveName(path: string, isDir: boolean): string {
+  const name = baseName(path) || "download";
+  return isDir ? `${name}.zip` : name;
 }
 
 /** POSIX 源路径的父目录（顶层条目为 ""）。 */

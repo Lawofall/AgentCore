@@ -11,12 +11,12 @@ import { CheckpointCard } from "../CheckpointCard";
 
 afterEach(cleanup);
 
-const resolvedKickoff: CheckpointDisplay = {
+const resolvedDecision: CheckpointDisplay = {
   id: "cp-1",
   question: "关于论文有几个方向想先跟你对齐",
   assumptions: [],
   questions: [],
-  intent: "kickoff",
+  intent: "decision",
   status: "resolved",
   decision: "continue",
   note: "就按这个方案开做：\n· 定位？：综述型\n· 读者？：公开发表\n· 篇幅？：精简干货",
@@ -25,31 +25,30 @@ const resolvedKickoff: CheckpointDisplay = {
 
 describe("ResolvedCheckpoint 单行折叠", () => {
   it("默认收起单行：普通澄清确认不画套话，答复摘要常驻；点击展开见全文", () => {
-    render(<CheckpointCard checkpoint={resolvedKickoff} />);
+    render(<CheckpointCard checkpoint={resolvedDecision} />);
 
     expect(screen.queryByText("已按你的决定继续")).toBeNull();
     // 收起摘要是 note（截断展示），不是 CEO 问题。
     expect(document.body.textContent).toContain("就按这个方案开做：");
-    expect(document.body.textContent).not.toContain(resolvedKickoff.question);
+    expect(document.body.textContent).not.toContain(resolvedDecision.question);
 
     fireEvent.click(screen.getByText(/就按这个方案开做/));
-    expect(document.body.textContent).toContain(resolvedKickoff.question);
+    expect(document.body.textContent).toContain(resolvedDecision.question);
     expect(document.body.textContent).toContain("· 定位？：综述型");
     expect(document.body.textContent).toContain("· 篇幅？：精简干货");
   });
 
-  it("无 note 时折叠摘要用 selected；专用卡无答复则只留结论标签", () => {
+  it("无 note 时折叠摘要用 selected；无答复则只留拍板存根", () => {
     const withSelected: CheckpointDisplay = {
-      ...resolvedKickoff,
+      ...resolvedDecision,
       id: "cp-2",
-      intent: "proposal_pick",
       question: "选哪条方案推进？",
       selected: ["方案 C：外包试点"],
       note: "",
     };
     render(<CheckpointCard checkpoint={withSelected} />);
 
-    expect(screen.getByText("已选定方案")).toBeTruthy();
+    expect(screen.queryByText("已选定方案")).toBeNull();
     expect(document.body.textContent).toContain("方案 C：外包试点");
     expect(document.body.textContent).not.toContain("选哪条方案推进？");
 
@@ -62,27 +61,25 @@ describe("ResolvedCheckpoint 单行折叠", () => {
       note: "",
     };
     render(<CheckpointCard checkpoint={labelOnly} />);
-    expect(screen.getByText("已选定方案")).toBeTruthy();
+    expect(screen.getByLabelText("拍板记录")).toBeTruthy();
     expect(document.body.textContent).not.toContain("选哪条方案推进？");
   });
 
-  it("proposal_pick：选项 chips 收起时随卡隐藏、展开后显示", () => {
-    const resolvedProposal: CheckpointDisplay = {
-      ...resolvedKickoff,
+  it("选项 chips 收起时随卡隐藏、展开后显示", () => {
+    const resolvedPicks: CheckpointDisplay = {
+      ...resolvedDecision,
       id: "cp-2",
-      intent: "proposal_pick",
       question: "选哪条方案推进？",
       selected: ["方案 C：外包试点"],
       note: "",
     };
-    render(<CheckpointCard checkpoint={resolvedProposal} />);
+    render(<CheckpointCard checkpoint={resolvedPicks} />);
 
-    // 收起：结论 + selected 摘要（truncate 行），展开区 chips 尚未挂载。
-    expect(screen.getByText("已选定方案")).toBeTruthy();
-    const stub = screen.getByText("已选定方案").closest("button");
+    expect(screen.queryByText("已选定方案")).toBeNull();
+    const stub = screen.getByText("方案 C：外包试点").closest("button");
     expect(stub?.textContent).toContain("方案 C：外包试点");
 
-    fireEvent.click(screen.getByText("已选定方案"));
+    fireEvent.click(screen.getByText("方案 C：外包试点"));
     expect(screen.getByText("方案 C：外包试点")).toBeTruthy();
     expect(document.body.textContent).toContain("选哪条方案推进？");
   });
@@ -92,7 +89,7 @@ describe("ResolvedCheckpoint 单行折叠", () => {
       render(
         <CheckpointCard
           checkpoint={{
-            ...resolvedKickoff,
+            ...resolvedDecision,
             id: `cp-${decision}`,
             decision,
             note: "",
@@ -100,9 +97,11 @@ describe("ResolvedCheckpoint 单行折叠", () => {
         />,
       );
       expect(screen.getByText("已取消本回合")).toBeTruthy();
-      expect(document.body.textContent).not.toContain(resolvedKickoff.question);
+      expect(document.body.textContent).not.toContain(
+        resolvedDecision.question,
+      );
       fireEvent.click(screen.getByText("已取消本回合"));
-      expect(document.body.textContent).toContain(resolvedKickoff.question);
+      expect(document.body.textContent).toContain(resolvedDecision.question);
       cleanup();
     }
   });
@@ -111,7 +110,7 @@ describe("ResolvedCheckpoint 单行折叠", () => {
     render(
       <CheckpointCard
         checkpoint={{
-          ...resolvedKickoff,
+          ...resolvedDecision,
           id: "cp-unknown",
           decision: null,
           note: "",

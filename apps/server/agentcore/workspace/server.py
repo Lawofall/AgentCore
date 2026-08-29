@@ -793,6 +793,23 @@ class ServerWorkspace:
             raise WorkspaceIOError(FILE_TOO_LARGE_DETAIL)
         return target
 
+    async def resolve_dir_for_download(self, path: str) -> Path:
+        """Resolve a directory for HTTP subtree-zip download (selected dir as zip root).
+
+        Same traversal / shared-mount gates as :meth:`resolve_for_download`. Does
+        not apply a byte ceiling here — ``zip_dir`` gates uncompressed source
+        bytes at the panel upload cap. GET ``.../files/{path}`` stays file-only.
+        """
+        if self._external_needs_channel(path):
+            raise WorkspaceIOError("会话授权目录在本机引擎外不可直读")
+        await self._gate_shared(path, write=False)
+        target = self._safe(path)
+        if not target.exists():
+            raise PathNotFound(path)
+        if not target.is_dir():
+            raise NotADirectory(path)
+        return target
+
     async def read_bytes(self, path: str, *, max_bytes: int | None = None) -> bytes:
         if self._external_needs_channel(path):
             return await self._require_external_bridge().read_bytes(

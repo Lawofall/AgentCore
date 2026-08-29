@@ -22,6 +22,18 @@ from agentcore.workspace.server import ServerWorkspace
 from tests.conftest import LogSpy
 
 
+def test_escalate_schema_has_no_recommended_field():
+    props = (
+        EscalateTool()
+        .schema.parameters["properties"]["questions"]["items"]["properties"]["options"]["items"][
+            "properties"
+        ]
+    )
+    assert "recommended" not in props
+    assert "（推荐）" in props["label"]["description"]
+    assert "放第一" in props["label"]["description"]
+
+
 def _ctx() -> ToolContext:
     # No escalation channel / on_escalate callback → the non-blocking escalate path, which
     # still emits worker.escalate before returning the "proceed on your assumption" ack.
@@ -171,6 +183,10 @@ def test_escalate_schema_teaches_blocking_choice():
     blocking = schema.parameters["properties"]["blocking"]["description"]
     assert "默认 false" in blocking
     assert "报一声继续" in blocking or "原地等" in blocking
+    assert "已拒凭据" in blocking and "false" in blocking
+    # 身份段整句不进按钮
+    assert "挂起等密钥" not in blocking
+    assert "已明确拒绝已有凭据" not in blocking
     # default philosophy unchanged: missing blocking stays non-blocking
     assert schema.parameters["properties"]["blocking"].get("default") in (None, False)
 
@@ -329,22 +345,13 @@ async def test_browser_login_skips_ceo_arbitration_when_coordination_active(monk
 
 
 @pytest.mark.asyncio
-async def test_bracketed_recommendation_label_is_rejected_not_crashed(monkeypatch):
-    """A bad label must cost the model one retry, not the user their escalation.
-
-    ``normalize_questions`` is shared with ask_user, which catches this rejection;
-    escalate used to catch only ``ListArgError``, so the same input escaped as a
-    crash — server traceback into the event stream, card never opened, human never
-    asked. Online 0.6.0 hit exactly that.
-    """
-    spy = LogSpy()
-    monkeypatch.setattr(escalate_mod, "logger", spy)
-    called = False
+async def test_bracketed_recommendation_label_reaches_the_escalation_card():
+    """Tendency markup in the option name is accepted; the card still opens."""
+    seen: dict = {}
 
     async def _request(q, a, questions, kind, awaiting="user", **kwargs):
-        nonlocal called
-        called = True
-        return EscalationOutcome(status="resolved", answer="never reached")
+        seen["questions"] = questions
+        return EscalationOutcome(status="resolved", answer="选方案A（推荐）")
 
     ctx = ToolContext.create(
         execution_id="e",
@@ -374,15 +381,14 @@ async def test_bracketed_recommendation_label_is_rejected_not_crashed(monkeypatc
         ctx,
     )
 
-    assert result.success is False
-    assert "recommended" in result.error
-    assert called is False  # rejected before delivery — no half-open card
-    assert spy.get("worker.escalate_option_label_rejected")["run_id"] == "w1"
+    assert result.success is True
+    assert seen["questions"][0]["options"][0]["label"] == "方案A（推荐）"
+    assert "recommended" not in seen["questions"][0]["options"][0]
 
 
 @pytest.mark.asyncio
 async def test_clean_labels_still_reach_the_escalation_card():
-    """Guard the rejection above against over-reach: bare「推荐」in a name is fine."""
+    """Bare「推荐」in a product name is not tendency markup; the card still opens."""
     seen: dict = {}
 
     async def _request(q, a, questions, kind, awaiting="user", **kwargs):
@@ -408,7 +414,7 @@ async def test_clean_labels_still_reach_the_escalation_card():
                     "id": "plan",
                     "prompt": "选一个方案",
                     "options": [
-                        {"id": "a", "label": "推荐算法重写", "recommended": True},
+                        {"id": "a", "label": "推荐算法重写"},
                         {"id": "b", "label": "方案B"},
                     ],
                 }

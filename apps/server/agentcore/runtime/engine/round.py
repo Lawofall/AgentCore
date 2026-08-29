@@ -15,22 +15,11 @@ from agentcore.llm.profiles import ProfileParams
 from agentcore.llm.provider.openai_compatible import OpenAICompatibleProvider
 from agentcore.llm.provider.protocol import LLMMessage, TokenUsage
 from agentcore.llm.tools_gate import TOOLS_UNAVAILABLE_RUNTIME_MESSAGE
-from agentcore.runtime.citations import (
-    invalid_ledger_ref_ids,
-    strip_invalid_ledger_refs,
-)
 from agentcore.runtime.events import FinishReason
 from agentcore.runtime.evidence_ledger import EvidenceLedgerCore
 from agentcore.runtime.facts import LlmCallFact, NoteFact, RoundBoundaryFact, record_turn_fact
-from agentcore.runtime.ledger_channel import emit_ledger_delta
 from agentcore.runtime.loop_controller import Intervention, LoopController
-from agentcore.runtime.verify import (
-    finish_guard,
-    format_guard_steer,
-    uncitable_ledger_refs_only,
-)
-from agentcore.tools.protocol import ToolContext
-from agentcore.tools.registry import ToolRegistry
+from agentcore.runtime.verify import finish_guard, format_guard_steer
 
 from .browser_snapshot_clear import project_omitted_browser_snapshots
 from .directive import Continue, LoopDirective, Return, Rework
@@ -41,9 +30,6 @@ from .tool_clear import EXEC_OUTPUT_CLEAR_TOOLS, project_cleared_window
 from .write_args_clear import project_cleared_write_args
 
 logger = get_logger(__name__)
-
-# 成稿闸「仅 search-only #rN」：每次 finish 尝试最多自动深读的 URL 数。
-AUTO_DEEP_READ_PER_FINISH = 5
 
 
 def record_round_start(*, round_idx: int, run_id: str, role: str) -> None:
@@ -334,149 +320,15 @@ def _provider_base_url(llm: object) -> str | None:
     return str(url) if url else None
 
 
-def _citable_ids(
-    turn_evidence_ledger: EvidenceLedgerCore | None,
-) -> frozenset[str] | None:
-    """成稿闸可引用集：``None`` = 未接通；空 frozenset = 台账空 / 无可成稿引用。
-
-    使用 ``draft_citable_ids``（``deep_read ∪ selected``），非登记宽 ``citable_ids``。
-    """
-    if turn_evidence_ledger is None:
-        return None
-    return turn_evidence_ledger.draft_citable_ids()
-
-
-def _ledger_entries(
-    turn_evidence_ledger: EvidenceLedgerCore | None,
-) -> list[dict] | None:
-    if turn_evidence_ledger is None:
-        return None
-    return turn_evidence_ledger.all_entries()
-
-
 def finish_guard_max_reworks(
     *,
     annotate_citations: bool,
     turn_evidence_ledger: EvidenceLedgerCore | None,
 ) -> int:
-    """分路径回炉上限：调研 worker（有台账且不开 [n] 查）对齐辩论 O2 = 1；CEO 跟配置。"""
+    """分路径回炉上限：调研 worker（有台账且不开 CEO 交付闸）对齐辩论 O2 = 1；CEO 跟配置。"""
     if turn_evidence_ledger is not None and not annotate_citations:
         return 1
     return settings.engine_finish_guard_max_reworks
-
-
-def search_only_deep_read_targets(
-    bad_ids: list[str],
-    ledger: EvidenceLedgerCore,
-    *,
-    limit: int = AUTO_DEEP_READ_PER_FINISH,
-) -> list[tuple[str, str]]:
-    """正文非法 ``#rN`` 中：台账有 URL、尚未 deep_read/selected 的 (id, url)，上限 ``limit``。"""
-    out: list[tuple[str, str]] = []
-    for eid in bad_ids:
-        entry = ledger.get(eid)
-        if entry is None:
-            continue
-        if entry.get("deep_read") or entry.get("selected"):
-            continue
-        url = str(entry.get("url") or "").strip()
-        if not url:
-            continue
-        out.append((eid, url))
-        if len(out) >= limit:
-            break
-    return out
-
-
-async def maybe_auto_deep_read_search_only_refs(
-    content: str,
-    *,
-    annotate_citations: bool,
-    citation_sink: list[dict[str, Any]] | None,
-    turn_evidence_ledger: EvidenceLedgerCore | None,
-    tools: ToolRegistry,
-    tool_context: ToolContext,
-    ledger_registrant: str,
-    sink: Any,
-    run_id: str = "",
-) -> None:
-    """finish_guard 前：若**仅**因 search-only ``#rN`` 不过闸，引擎代 ``read_url`` 升级台账。
-
-    复用工具 ``citations`` → ``register_citation``（``deep_read=True``）路径；读失败不假装
-    升级。书目形态等其它闸问题不走此捷径。每次 finish 尝试最多
-    :data:`AUTO_DEEP_READ_PER_FINISH` 个 URL。
-    """
-    if not content or turn_evidence_ledger is None:
-        return
-    from agentcore.runtime.closing_posture import (
-        downgrade_verdict_for_unresolved_write_ownership,
-    )
-    from agentcore.runtime.delegate.delivery_status import read_delivery_verdict
-
-    ledger = tool_context.promotion_ledger
-    downgrade_verdict_for_unresolved_write_ownership(promotion_ledger=ledger)
-    bad_only = uncitable_ledger_refs_only(
-        content,
-        citation_count=len(citation_sink or []),
-        check_citations=annotate_citations,
-        citable_ids=_citable_ids(turn_evidence_ledger),
-        ledger_entries=_ledger_entries(turn_evidence_ledger),
-        delivery_verdict=read_delivery_verdict(promotion_ledger=ledger),
-    )
-    if bad_only is None or not bad_only:
-        return
-    targets = search_only_deep_read_targets(bad_only, turn_evidence_ledger)
-    if not targets:
-        return
-    read_tool = tools.get_optional("read_url")
-    if read_tool is None:
-        logger.info(
-            "engine.finish_guard_auto_deep_read",
-            run_id=run_id or None,
-            attempted=0,
-            upgraded=0,
-            skipped_no_tool=True,
-            ids=[eid for eid, _ in targets],
-        )
-        return
-
-    upgraded: list[str] = []
-    failed: list[str] = []
-    for eid, url in targets:
-        try:
-            result = await read_tool.execute({"url": url}, tool_context)
-        except Exception as exc:  # noqa: BLE001 — 单 URL 失败不阻断其余
-            logger.warning(
-                "engine.finish_guard_auto_deep_read",
-                run_id=run_id or None,
-                id=eid,
-                url=url,
-                error=str(exc)[:200],
-                success=False,
-            )
-            failed.append(eid)
-            continue
-        cites = list(result.citations or []) if result.success else []
-        if not result.success or not cites:
-            failed.append(eid)
-            continue
-        registrant = ledger_registrant or "engine:auto_deep_read"
-        await turn_evidence_ledger.register_citations(cites, registrant=registrant)
-        # 仅当真升入成稿可引用集才记 upgraded（禁假装 deep_read）。
-        if eid in turn_evidence_ledger.draft_citable_ids():
-            upgraded.append(eid)
-        else:
-            failed.append(eid)
-
-    if upgraded or failed:
-        emit_ledger_delta(sink, turn_evidence_ledger)
-    logger.info(
-        "engine.finish_guard_auto_deep_read",
-        run_id=run_id or None,
-        attempted=len(targets),
-        upgraded=upgraded,
-        failed=failed,
-    )
 
 
 def decide_no_tool_round(
@@ -500,8 +352,7 @@ def decide_no_tool_round(
     (``Return`` + DEGRADED) or retry on the same model (``Continue``). Upstream
     ``finish_reason=length`` with empty body skips the one-shot Continue.
 
-    **仅非法 ``#rN``**（search-only / 伪造 / 越界，且无书目等其它闸）：不回炉——
-    调用方已尝试自动深读；出口由 :func:`apply_exit_ledger_ref_strip` 剥号放行。
+    对话气泡不因 ``#rN`` / 悬空 ``[n]`` / 书目回炉；结构围栏与 CEO 交付结构闸仍可 Rework。
     """
     if outcome.content:
         from agentcore.runtime.closing_posture import (
@@ -514,28 +365,10 @@ def decide_no_tool_round(
             promotion_ledger=promotion_ledger,
         )
         verdict = read_delivery_verdict(promotion_ledger=promotion_ledger)
-        citable = _citable_ids(turn_evidence_ledger)
-        entries = _ledger_entries(turn_evidence_ledger)
-        cite_count = len(citation_sink or [])
-        # 仅 #rN 成稿闸问题：禁止 content_reset + 整篇 Rework（深读已在 decide 前尝试）。
-        if (
-            uncitable_ledger_refs_only(
-                final_content,
-                citation_count=cite_count,
-                check_citations=annotate_citations,
-                citable_ids=citable,
-                ledger_entries=entries,
-                delivery_verdict=verdict,
-            )
-            is not None
-        ):
-            return Return()
         reworks = finish_guard(
             final_content,
-            citation_count=cite_count,
+            citation_count=len(citation_sink or []),
             check_citations=annotate_citations,
-            citable_ids=citable,
-            ledger_entries=entries,
             delivery_verdict=verdict,
         )
         max_reworks = finish_guard_max_reworks(
@@ -573,7 +406,6 @@ def apply_finish_guard_rework(
     annotate_citations: bool,
     citation_sink: list[dict[str, Any]] | None,
     finish_guard_reworks: int,
-    turn_evidence_ledger: EvidenceLedgerCore | None = None,
     promotion_ledger: Any = None,
 ) -> tuple[str, int]:
     """Discard rejected content, inject steer, return updated content and rework count.
@@ -581,7 +413,8 @@ def apply_finish_guard_rework(
     ``emit_reset`` clears the producer's already-streamed draft on the right surface —
     ``content_reset`` for the CEO bubble, ``run_output_reset`` for a worker card — so the
     rewrite presents as a clean「违规版 → 修正版」replacement, not an append (统一底线).
-    reason=``finish_guard`` is the ONLY reset that folds into the「已按交付规范重写」chip."""
+    All ``reason`` values (including ``finish_guard``) only clear the body; they do not
+    fold a process trace."""
     from agentcore.runtime.closing_posture import (
         downgrade_verdict_for_unresolved_write_ownership,
     )
@@ -594,8 +427,6 @@ def apply_finish_guard_rework(
         final_content,
         citation_count=len(citation_sink or []),
         check_citations=annotate_citations,
-        citable_ids=_citable_ids(turn_evidence_ledger),
-        ledger_entries=_ledger_entries(turn_evidence_ledger),
         delivery_verdict=read_delivery_verdict(promotion_ledger=promotion_ledger),
     )
     steer = format_guard_steer(reworks)
@@ -617,33 +448,3 @@ def apply_finish_guard_rework(
         ).to_fact()
     )
     return content_before_round, finish_guard_reworks + 1
-
-
-def apply_exit_ledger_ref_strip(
-    content: str,
-    *,
-    turn_evidence_ledger: EvidenceLedgerCore | None,
-    emit_reset: Callable[[str], None],
-    emit_content: Callable[[str], None],
-    run_id: str = "",
-) -> str:
-    """回炉耗尽后剥离非法 ``#rN``（Q3：放行 + 必发观测，禁止静默）。
-
-    若正文被改写：``finish_guard`` reset 清空已流式草稿，再把剥离后正文作为新 delta
-    推上对应表面（对齐辩论 evidence demote）。
-    """
-    citable = _citable_ids(turn_evidence_ledger)
-    bad = invalid_ledger_ref_ids(content, citable)
-    if not bad:
-        return content
-    cleaned = strip_invalid_ledger_refs(content, set(bad))
-    logger.warning(
-        "citations.invalid_ledger_ref",
-        run_id=run_id or None,
-        markers=bad,
-        citable_count=len(citable or ()),
-    )
-    if cleaned != content:
-        emit_reset("finish_guard")
-        emit_content(cleaned)
-    return cleaned

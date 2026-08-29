@@ -132,17 +132,42 @@ from agentcore.runtime.resolve.prompt import (
 # 2026-08-28 先取证再开口进核（新路由脊柱）：删讨论免探场面账
 # （讨论不必查 / 讨论读文档不是摸底 / 本产品机制禁止摸底开组）；
 # FAQ vs 工作区课题分写。当次实测 8450。cap 提到 8450（抬顶，非回潮）。
-_RESIDENT_CAP = 8450
+# 2026-08-29 禁止句补集瘦身：核删正向反面复述（发卡/包办/打折/编制话术）；
+# 甲留挂载底线。当次实测 8330。cap 降到 8330。
+# 2026-08-29 补集第二刀：核折路由推演/凑确认/工种凑人；编排去重作者口吻。
+# 当次实测 8264。cap 降到 8270。
+# 2026-08-29 对话引用改检索产物：基座 delivery_baseline 删 search-only 禁令 / 引擎因引用回炉。
+# 当次实测 8182。cap 降到 8190。
+# 2026-08-29 路由脊柱极性：应答闭集 / 干活默认拉人（删 Cursor 主程序员默认）。
+# 当次实测 8190。cap 保持 8190。
+# 2026-08-29 C：常驻核从编号判决树收到身份 + 工具边界 + 对照结构面。
+# 何时用工具写在 description。当次实测 4503。cap 降到 4510。
+# 2026-08-29 基座 C：删 problem_solving；检索收敛下沉 web_search description；
+# delivery_baseline+claim_evidence 并成 delivery_honesty；能力诚实收成双条件。
+# 当次实测 2820。cap 降到 2820。
+# 2026-08-29 删常驻 <visualization>；基座文风句点名 mermaid（与 LaTeX 同句）。
+# 可视化段本不进本棘轮；基座文风句 +9 码点。当次实测 2829。cap 2830。
+# 2026-08-29 基座 C 补集：文风质量启发式 / 系统反馈补集 / 注入近义词表 / consult 时序出基座；
+# role 删不必先查阅。当次实测 2541。cap 降到 2550。
+# 2026-08-29 装配侧收短：凭据卫生短 A；核删挡路才问；consult HOW 压成原则+A≠B。
+# 当次实测 2306。cap 降到 2310。
+# 2026-08-29 核删「有稳妥默认就标假设继续」（何时问归 ask_user description）。
+# 当次实测 2294。cap 降到 2300。
+# 2026-08-29 核 how_you_work 只留身份边界；WHEN 归 delegate / consult description。
+# 当次实测 2219。cap 降到 2220。
+# 2026-08-29 官网 URL 出 <role>，走 product_help。当次实测 2149。cap 降到 2150。
+_RESIDENT_CAP = 2150
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 _GATED_MANUALS: tuple[tuple[str, str], ...] = (
     ("terminal", "wait_for"),
     ("terminal", "报 URL"),
-    ("host", "通识长文当交付"),
-    ("host", "【三分日志】"),
+    ("host", "通识 FAQ"),
+    ("host", "Get-WinEvent"),
     ("browser", "ask_user(browser_login=true)"),
-    ("external_mount_readonly", "【授权后发现】"),
+    ("browser", "永不代填密码"),
     ("external_mount_readonly", "先写工作区"),
+    ("external_mount_readonly", "只读已挂"),
 )
 
 
@@ -212,17 +237,17 @@ def test_gated_manuals_do_not_ride_the_resident_core(gate_tool: str, signature: 
 
 
 def test_honesty_floors_stay_resident():
-    """诚实底线不跟门走——缺失回合与已装配-未进表回合都要，按可用性下线就是删错。"""
+    """诚实底线不跟门走：核留对照结构面元规则；装包/格式细则在 skill，已装配反向在基座。"""
+    from agentcore.runtime.skills.building_software import _BUILDING_SOFTWARE
+    from agentcore.runtime.skills.team_delivery_env import _TEAM_DELIVERY_ENV
+
     hint = _CEO_CORE_HINT
     base = assemble_system_prompt()
-    # 装包/验绿：未装配时才需要。探针用核里已有的原则切片，不钉事故禁语原话。
-    assert "结构自检" in hint
-    assert "全绿" in hint
-    # 格式：标不可产时才需要。
-    assert "不可产" in hint and "等效替代" in hint
-    assert "已落盘可直接使用" in hint
-    # 区外授权：通道不在时才需要（手册本体已挂门，底线留下）。
-    assert "host=未装配" in hint
-    assert "勿挂载" in hint and "勿发卡" in hint
-    # 已装配反向诚实住共享基座（全员），不跟 host/browser 门走。
-    assert "【能力已装配·禁止否决论文】" in base
+    assert "对照本回合结构面" in hint
+    assert "未对照则不得声称" in hint
+    assert "已落盘" in hint
+    assert "结构自检" in _BUILDING_SOFTWARE
+    assert "export_to_local" in _BUILDING_SOFTWARE
+    assert "不可产" in _TEAM_DELIVERY_ENV and "等效替代" in _TEAM_DELIVERY_ENV
+    assert "已装配" in base and "通道在" in base
+    assert "邻格" in base

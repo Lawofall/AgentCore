@@ -67,8 +67,7 @@
             "task": "撰写文档",
             "depends_on": []
           }
-        ],
-        "note_wall": true
+        ]
       },
       "timestamp": "2026-01-01T00:00:00.004Z"
     },
@@ -103,31 +102,17 @@
       "timestamp": "2026-01-01T00:00:00.007Z"
     },
     {
-      "type": "team_note_posted",
-      "payload": {
-        "execution_id": "exec1",
-        "note_id": "n1",
-        "run_id": "r1",
-        "agent_id": "w1",
-        "role": "研究员",
-        "kind": "decision",
-        "text": "接口定了：GET /items 返回 {items:[], next_cursor}",
-        "ts": 1700000000.0
-      },
-      "timestamp": "2026-01-01T00:00:00.008Z"
-    },
-    {
       "type": "team_synthesis_preview",
       "payload": {
         "execution_id": "exec1",
         "completed": 0,
         "total": 2,
         "headline": "合成草稿更新 · 已完成 0/2",
-        "text": "两边刚起步；接口方向按研究员便签对齐。",
+        "text": "两边刚起步；接口方向按开局共识对齐。",
         "workers": [],
         "in_progress": true
       },
-      "timestamp": "2026-01-01T00:00:00.009Z"
+      "timestamp": "2026-01-01T00:00:00.008Z"
     },
     {
       "type": "run_output_delta",
@@ -136,7 +121,7 @@
         "agent_id": "w1",
         "delta": "调研结论"
       },
-      "timestamp": "2026-01-01T00:00:00.010Z"
+      "timestamp": "2026-01-01T00:00:00.009Z"
     },
     {
       "type": "run_completed",
@@ -471,20 +456,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [
-      {
-        "noteId": "n1",
-        "runId": "r1",
-        "agentId": "w1",
-        "role": "研究员",
-        "kind": "decision",
-        "text": "接口定了：GET /items 返回 {items:[], next_cursor}",
-        "ts": 1700000000.0,
-        "status": "active",
-        "supersedes": null
-      }
-    ],
-    "noteWall": true,
     "userInterjections": []
   }
 }

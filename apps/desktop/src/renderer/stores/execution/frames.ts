@@ -27,7 +27,6 @@ import type {
   RunToolProgressPayload,
   SSEEvent,
   Stance,
-  TeamNotePostedPayload,
   ToolDisplay,
   ToolUseEndPayload,
   ToolUseStartPayload,
@@ -80,8 +79,7 @@ export type RunFrame =
       replace?: boolean;
     }
   // 草稿丢弃的 worker 对偶（content_reset 之于 CEO）：清这个 worker 已累积的草稿产出，
-  // 重写版从干净态重累积（reasoning 保留）。reason 决定是否留痕：仅 finish_guard
-  // （交付前核验回炉）折 rework chip / didRework，retry / narration 等不留痕。
+  // 重写版从干净态重累积（reasoning 保留）。所有 reason 只清正文、不折过程痕迹。
   | {
       t: number;
       kind: "run_output_reset";
@@ -267,26 +265,6 @@ export type RunFrame =
       t: number;
       kind: "plan_revised";
       revisions: { runId: string; revisionKind: PlanRevisionKind }[];
-    }
-  | {
-      // 团队便签墙 (§2.2 通): a worker broadcast a one-line decision / heads-up to its
-      // CONCURRENT siblings via post_note. Turn-level (NOT run-scoped onto a node) — folds
-      // onto Execution.teamNotes. Journaled, so it replays on reload like any frame.
-      // `noteKind` (not `kind`) because `kind` is this union's discriminant; it carries the
-      // wire note kind (decision / heads_up / claim). 便签会过期 → supersession (§2.2): an amendment
-      // carries `supersedes` (the noteId it 改写/作废s) + `supersedeMode` (update / void).
-      t: number;
-      kind: "team_note_posted";
-      noteId: string;
-      runId: string;
-      agentId: string;
-      role: string;
-      noteKind: string;
-      text: string;
-      ts: number | null;
-      supersedes: string | null;
-      supersedeMode: "update" | "void" | null;
-      source?: "ceo" | "worker" | "inherited";
     };
 
 /** Wall-clock time of a wire event (ms), used to label timeline frames. The
@@ -605,23 +583,6 @@ export function frameFromEvent(event: SSEEvent): RunFrame | null {
           runId: r.run_id,
           revisionKind: r.kind,
         })),
-      };
-    }
-    case "team_note_posted": {
-      const p = event.payload as TeamNotePostedPayload;
-      return {
-        t,
-        kind: "team_note_posted",
-        noteId: p.note_id,
-        runId: p.run_id,
-        agentId: p.agent_id,
-        role: p.role,
-        noteKind: p.kind,
-        text: p.text,
-        ts: p.ts,
-        supersedes: p.supersedes ?? null,
-        supersedeMode: p.supersede_mode ?? null,
-        source: p.source,
       };
     }
     default:

@@ -69,6 +69,27 @@ async def test_emit_ledger_delta_and_settle_cited_subset() -> None:
     assert settle.payload["cited_ids"] == ["#r1", "#r3"]
 
 
+async def test_emit_turn_projects_search_only_skips_unregistered() -> None:
+    led = EvidenceLedgerCore(id_prefix="#r")
+    await led.register(
+        url="https://docs.example.com/a",
+        title="A",
+        registrant="ceo",
+        query="q1",
+        deep_read=False,
+    )
+    sink = _ListSink()
+    cited_cards, _entries, cited = emit_turn_evidence_ledger(
+        sink,
+        ledger=led,
+        content="见 #r1 与幽灵 #r9。",
+        citations=[],
+    )
+    assert cited == ["#r1"]
+    assert [c["id"] for c in cited_cards] == ["#r1"]
+    assert cited_cards[0]["deep_read"] is False
+
+
 def test_project_cited_citations_no_hard_cap() -> None:
     entries = [
         {

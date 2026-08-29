@@ -1,4 +1,4 @@
-"""Thrash rebrand admission: cold similar task rejected; continue_from / force pass."""
+"""Thrash rebrand admission: cold similar task rejected; continue_from 续派放行。"""
 
 from __future__ import annotations
 
@@ -63,7 +63,9 @@ def test_find_thrash_collision_on_similar_task_and_artifacts():
     hit = find_thrash_collision(cold, recent_thrash_records("conv-1"))
     assert hit is not None
     assert hit[1].run_id == "w1"
-    assert "continue_from_run_id=`w1`" in thrash_reject_message(hit[1])
+    msg = thrash_reject_message(hit[1])
+    assert "continue_from_run_id=`w1`" in msg
+    assert 'force=["' not in msg
 
 
 def test_continue_from_thrash_run_skips_collision():

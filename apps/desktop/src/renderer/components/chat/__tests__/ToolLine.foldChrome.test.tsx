@@ -164,6 +164,12 @@ const FOLD_FAMILY: {
     result: "已解压 12 个文件",
   },
   {
+    tool: "archive_create",
+    label: "Create archive",
+    args: { sources: ["src"], dest: "pkg.zip" },
+    result: "已打包 pkg.zip",
+  },
+  {
     tool: "download_url",
     label: "Download file",
     args: { url: "https://example.com/a.pdf", path: "a.pdf" },
@@ -174,12 +180,6 @@ const FOLD_FAMILY: {
     label: "Read image",
     args: { path: "shot.png", prompt: "描述" },
     result: "图里是一块白板",
-  },
-  {
-    tool: "read_notes",
-    label: "Read notes",
-    args: {},
-    result: "- 便签 A\n- 便签 B",
   },
   {
     tool: "board_ops",
@@ -421,6 +421,7 @@ describe("ToolLine · 过程工具折叠一行", () => {
       expect(collapsedSubline(container)).toBeNull();
       fireEvent.click(screen.getByText(over.label));
       expect(screen.queryByText("查阅记忆：")).toBeNull();
+      expect(screen.queryByText("查阅记忆")).toBeNull();
       expect(screen.getByText(over.result)).toBeTruthy();
       unmount();
     }

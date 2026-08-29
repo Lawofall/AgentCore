@@ -1,10 +1,6 @@
-"""同队续派一等入口 + 逐闸 force（审计 D3 / ORCH-A2）。
+"""同队续派一等入口：收口后走续派 / 补缺口不再被冷开闸拒。
 
-两条验收：
-1. 批次收口后走续派 / 补缺口入口不再被冷开闸拒（此前 N>3 人的纯续派必被限流打回，
-   模型只剩 force 可选）。
-2. force 收敛为逐闸开关：点名一道不顺手开另一道；历史布尔一键全开退役；
-   上一次 delegate 的 force 不再泄漏进 replan。
+此前 N>3 人的纯续派必被限流打回。补跑上限是为了拦「整团重开」，续派不是重开。
 """
 
 from __future__ import annotations
@@ -12,19 +8,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
-from agentcore.runtime.delegate.force_scopes import (
-    EMPTY_FORCE_SCOPES,
-    FORCE_GATES,
-    GATE_ISOMORPHIC,
-    GATE_POST_CLOSE,
-    GATE_SEAT_OVERLAP,
-    GATE_THRASH,
-    ForceScopes,
-    force_allows,
-    parse_force_scopes,
-)
 from agentcore.runtime.delegate.post_close_gate import (
     EXECUTION_HARVEST_ORIGIN,
     post_close_cold_open_error,
@@ -38,10 +21,9 @@ _EXEC = "exec-continue"
 _CONV = "conv-continue"
 
 
-def _tool(*, scopes: ForceScopes = EMPTY_FORCE_SCOPES) -> MagicMock:
+def _tool() -> MagicMock:
     t = MagicMock()
     t._user_message_origin = EXECUTION_HARVEST_ORIGIN
-    t._force_scopes = scopes
     t._depth = 0
     t._conversation_id = _CONV
     t._base_tool_context = SimpleNamespace(execution_id=_EXEC)
@@ -89,7 +71,7 @@ def test_post_close_same_person_continuation_beyond_gap_cap_admitted():
     """核心回归：收口后续派 5 名已完成队员不再被补跑上限打回。
 
     补跑上限是为了拦「整团重开」，续派不是重开——旧实现把所有点名节点一起限流，
-    于是超过 MAX_GAP_FILL_ADDS 人的团队根本无法整体续派，模型只剩 force 可用。
+    于是超过 MAX_GAP_FILL_ADDS 人的团队根本无法整体续派。
     """
     from agentcore.runtime.coordination.session import clear_active_coordination
 
@@ -199,78 +181,3 @@ def test_classify_batch_splits_by_structure_only():
     assert [n.run_id for n in shape.gap_fill] == ["b", "c"]
     assert [n.run_id for n in shape.cold] == ["d"]
     assert shape.is_pure_continuation is False
-
-
-# ── 逐闸 force ───────────────────────────────────────────────────────────────
-
-
-def test_parse_force_scopes_named_gates():
-    scopes = parse_force_scopes([GATE_THRASH, GATE_POST_CLOSE])
-    assert scopes.allows(GATE_THRASH)
-    assert scopes.allows(GATE_POST_CLOSE)
-    assert not scopes.allows(GATE_ISOMORPHIC)
-    assert not scopes.allows(GATE_SEAT_OVERLAP)
-
-
-def test_parse_force_scopes_ignores_unknown_and_empty():
-    assert not bool(parse_force_scopes(["all", "", "nope"]))
-    assert not bool(parse_force_scopes(None))
-    assert not bool(parse_force_scopes({"gate": "thrash"}))
-    # 单个闸名字符串也认（模型少写一层数组不至于变成全不放行）。
-    assert parse_force_scopes(GATE_THRASH).allows(GATE_THRASH)
-
-
-@pytest.mark.asyncio
-async def test_delegate_force_scope_does_not_leak_into_replan():
-    """ORCH-A2：上一次 delegate 的 force 不得被后续 replan 读到。"""
-    from agentcore.runtime.coordination.session import clear_active_coordination
-    from agentcore.runtime.events import EventSink
-    from tests.delegate.conftest import ctx, tool
-    from tests.delegate.test_coordination_secondary_delegate import _SlowWorkers
-
-    clear_active_coordination()
-    t = tool(_SlowWorkers(["ok"], delay=0.01), sink=EventSink())
-
-    await t.execute(
-        {
-            "tasks": [{"role": "A", "task": "一件事"}],
-            "coordinate": False,
-            "force": [GATE_SEAT_OVERLAP],
-        },
-        ctx(),
-    )
-    assert force_allows(t, GATE_SEAT_OVERLAP)
-
-    # replan 不带 force → 入口重解析成空集，拿不到上一次的放行。
-    await t.replan({"stop": True})
-    assert not force_allows(t, GATE_SEAT_OVERLAP)
-    assert not any(force_allows(t, g) for g in FORCE_GATES)
-    clear_active_coordination()
-
-
-@pytest.mark.asyncio
-async def test_delegate_force_scope_reset_per_call():
-    """同一实例连续两次 delegate：第二次不带 force 就没有任何放行。"""
-    from agentcore.runtime.coordination.session import clear_active_coordination
-    from agentcore.runtime.events import EventSink
-    from tests.delegate.conftest import ctx, tool
-    from tests.delegate.test_coordination_secondary_delegate import _SlowWorkers
-
-    clear_active_coordination()
-    t = tool(_SlowWorkers(["ok", "ok"], delay=0.01), sink=EventSink())
-
-    await t.execute(
-        {
-            "tasks": [{"role": "A", "task": "一件事"}],
-            "coordinate": False,
-            "force": [GATE_ISOMORPHIC],
-        },
-        ctx(),
-    )
-    assert force_allows(t, GATE_ISOMORPHIC)
-
-    # 前奏硬拒（空 tasks）也必须先清掉上一次的 scope。
-    rejected = await t.execute({"tasks": []}, ctx())
-    assert rejected.success is False
-    assert not force_allows(t, GATE_ISOMORPHIC)
-    clear_active_coordination()

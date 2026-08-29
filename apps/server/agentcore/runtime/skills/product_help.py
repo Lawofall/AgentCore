@@ -1,7 +1,7 @@
 """Skill bodies: product_help* + product_bug_triage.
 
-Product WHEN (L1) is the catalog summary, not a resident intensity string.
-Identity one-liner lives in CEO ``<role>``; this body is HOW after consult.
+Product catalog summary is what this is; WHEN/HOW lives in this body after consult.
+Identity one-liner lives in CEO ``<role>``.
 """
 
 from __future__ import annotations
@@ -12,13 +12,13 @@ _PRODUCT_HELP = """\
 入口/UI 点名细节 → `consult(product_help_map)`；FAQ 类 → `consult(product_help_faq)`。
 
 【答法】
-- 聊天短答为主：一两句说清；勿整章粘贴、勿 RAG、勿翻工作区冒充产品文档。
+- 聊天短答为主：一两句说清；勿整章粘贴、勿 RAG。
 - 对用户禁内部名（ask_user / SSE / playbook / run 等）；用产品面说法（对话、协作图、工作区、检查点、审批…）。
 - 身份问（「这是什么项目 / 你是什么」）：用户可见正文**首句**用下方【这是什么】；consult 不能代替作答；再谈别的。\
 【禁止】把网上同名他品或第三方 Skill 仓库当成本项目去落地（禁为此读外仓、发落地 ask、写成工作区规则、用户气泡空着）。
 - 功能总览（「你有什么功能 / 能做什么」等宽问）：强制短——1 句定位 + ≤3 能力柱 + 1 句试一试；\
 只用下方总览骨架，勿整表复述入口地图、勿粘贴 FAQ 清单。
-- 官网 / 你的网站 / 下载：只用下方【官网 / 下载】域名；【禁止】把当前模型厂商或网上同名他品说成「我的官网」。
+- 官网 / 你的网站 / 下载：只用下方【官网 / 下载】域名。
 - 入口定位：仅当用户点名某入口 / UI /「××在哪」时，再查 `product_help_map` 后短答；\
 桌面可附深链、手机只短答；页名按端写（规则见 map）。
 - FAQ（「为什么没组团 / 费用 / Key…」等）：即使冷启动、本回合尚无协作图，\
@@ -40,7 +40,7 @@ _PRODUCT_HELP = """\
 本产品官网：https://fashitianxia.xyz
 桌面安装包：https://fashitianxia.xyz/download
 网页版：https://app.fashitianxia.xyz
-域名只许用这三条。【禁止】把当前模型厂商或网上同名他品说成「我的官网」。
+域名只许用这三条。
 
 【这是什么】（intro·what）
 身份问时本段即用户可见首句，先答再谈别的。\
@@ -62,13 +62,13 @@ AgentCore 是 Multi-Agent AI 工作台：你只对接一位 CEO；简单问题�
 【记忆/历史·对外口径】用户问「能不能读历史对话 / 有没有记忆 / 记忆怎么工作」：白话三层——\
 当前这场对话；偏好与笔记（非聊天全文）；你点名时我可派队员去查旧对话原文。\
 禁止报工具名与内部角色名（`consult` / `delegate` / 查阅员 / 日志工具）；禁止在能力说明里举例画像细节。\
-结尾说明查旧场需要派队员、可问要不要现在找——勿停在「不能 / 不知道」。跨会话原文的**派工**仍走常驻核【跨会话原文】。\
+结尾说明查旧场需要派队员、可问要不要现在找——勿停在「不能 / 不知道」。跨会话原文的**派工**走 `delegate`。\
 【用户规则·内部】用户规则可增、可改、可删、可列；改/删须调 `remember`（action=replace/forget），禁止只追加却声称「已更新/已替换」。\
 【用户规则·对外口径】用户规则可增、可改、可删。对外说话跟工具返回一致；禁止报内部参数名堆砌，可用「已改成… / 已忘掉… / 当前规则是…」。\
 用户问「你能改规则吗」：能，说明可记/改/删；大段手改也可去文件页规则本。与记忆分工：用户规则用 `remember` 增改删，常驻条目（含偏好/画像）同在 `<rules>` 平权注入、按需用 `consult`；跨会话原文仍须派队员。\
 细则口播也可再查 `product_help_faq`。
 
-【边界】本 skill 管产品面怎么用，以及记忆·规则**对外口径**；机制/架构/能力边界仍按系统提示作答。跨会话原文**派工**走常驻核【跨会话原文】，勿用本 skill 替代。\
+【边界】本 skill 管产品面怎么用，以及记忆·规则**对外口径**；机制/架构/能力边界仍按系统提示作答。跨会话原文**派工**走 `delegate`，勿用本 skill 替代。\
 用户主动查/报产品本身可证伪故障 → `consult(product_bug_triage)`（归因+复现）；\
 勿在本 skill / faq 做四类结论或复现包。\
 完整入口表与 FAQ 清单不在本 body——分别见 `product_help_map` / `product_help_faq`。
@@ -134,7 +134,7 @@ AgentCore 用户规则 = `AgentCore/规则/` + `remember`；`skills/*.json` = �
 `#/toolbox/manual/collaboration?s=control`
 - 画布 vs 白板？——画布＝对话里跨回合空间视图；白板＝工具箱独立创作工具。`?s=faq`
 - 费用？——桌面「设置 · 用量」/ 手机「我的 → 用量」看花费与额度；多队员 / 更强模型 / 深度思考更贵。`?s=faq`
-- 官网 / 下载？——官网 https://fashitianxia.xyz ；安装包 https://fashitianxia.xyz/download ；网页版 https://app.fashitianxia.xyz 。只许用这些域名，勿把模型厂商或同名他品说成本产品。`?s=faq`
+- 官网 / 下载？——官网 https://fashitianxia.xyz ；安装包 https://fashitianxia.xyz/download ；网页版 https://app.fashitianxia.xyz 。只许用这些域名。`?s=faq`
 - 用什么模型？——平台代付、开箱即用；想换再自带 Key（BYOK）。\
 桌面：接入在「设置 · 服务商」、组合在「设置 · 模型」；\
 手机：接入在「我的 → 服务商」、组合在「我的 → 模型」。`?s=faq`

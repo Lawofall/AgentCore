@@ -40,7 +40,6 @@ function executionWith(agents: Partial<AgentState>[]): Execution {
     frames: [],
     debate: null,
     debateRounds: [],
-    teamNotes: [],
   } as unknown as Execution;
 }
 

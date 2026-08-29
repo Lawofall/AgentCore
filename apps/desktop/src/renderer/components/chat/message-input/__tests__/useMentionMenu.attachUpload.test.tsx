@@ -11,6 +11,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/hooks/useConversations", () => ({ getConversations: () => [] }));
 vi.mock("@/hooks/useFolders", () => ({ getFolders: vi.fn(() => []) }));
 vi.mock("@/services/messages", () => ({ fetchMessageWindow: vi.fn() }));
+vi.mock("@/services/documents", () => ({
+  listScopeEntries: vi.fn(async () => []),
+}));
 vi.mock("@/services/workspaceBinding", () => ({
   getWorkspaceBinding: vi.fn(),
 }));

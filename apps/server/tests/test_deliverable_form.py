@@ -149,6 +149,9 @@ def test_identity_form_prose_has_no_file_write_guidance():
     assert "consult(data_file_landing)" in files
     assert "consult(data_file_landing)" in omitted
     assert "consult(data_file_landing)" not in prose
+    assert "consult(verify_and_fix)" in files
+    assert "consult(verify_and_fix)" in omitted
+    assert "consult(verify_and_fix)" not in prose
 
     # omit = files（无双向自判）
     assert "form=files" in omitted
@@ -165,6 +168,7 @@ def test_identity_form_prose_has_no_file_write_guidance():
     assert "AgentCore/文档" in workspace
     assert "file_write" in workspace
     assert "consult(long_form_landing)" in workspace
+    assert "consult(verify_and_fix)" in workspace
 
 def test_artifacts_inject_files_form_identity_block():
     """非空 artifacts 且 form 省略 ⇒ 强制 files 形态提示，非 legacy。"""
@@ -226,25 +230,22 @@ def test_schema_exposes_form_enum():
     assert "【存文档】" not in DELEGATE_DESCRIPTION
     assert "【改工程】" not in DELEGATE_DESCRIPTION
     assert "才用本工具" not in DELEGATE_DESCRIPTION
-    # 用/不用路由清单在 CEO 核，schema 不复述。
+    # 何时用写在 description（行业：when-to-use 在工具面）；编制闭集不进按钮。
+    assert "改产物" in DELEGATE_DESCRIPTION
+    assert "成规模查证" in DELEGATE_DESCRIPTION
+    assert "闲聊" in DELEGATE_DESCRIPTION
     assert "用：" not in DELEGATE_DESCRIPTION
     assert "不用：" not in DELEGATE_DESCRIPTION
     assert "跨模块" not in DELEGATE_DESCRIPTION
     assert "点名对比" not in DELEGATE_DESCRIPTION
-    assert "改产物" not in DELEGATE_DESCRIPTION
-    assert "成规模取证" not in DELEGATE_DESCRIPTION
-    assert "盘点" not in DELEGATE_DESCRIPTION
-    assert "讨论" not in DELEGATE_DESCRIPTION
-    assert "判断" not in DELEGATE_DESCRIPTION
-    assert "闲聊" not in DELEGATE_DESCRIPTION
     assert "编制自选" not in DELEGATE_DESCRIPTION
     assert "结局分层" not in DELEGATE_DESCRIPTION
-    # 绿场常驻路径勿先 consult：schema 必须带 playbook_args.app，否则缺 slot 全失败。
-    assert "playbook_args.app" in DELEGATE_DESCRIPTION
+    assert "playbook_args.app" not in DELEGATE_DESCRIPTION
+    assert "build_app" not in DELEGATE_DESCRIPTION
     assert "建站→build_website" not in DELEGATE_DESCRIPTION
     assert "建站→build_website" not in DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
-    assert "禁止二者同时有内容" in DELEGATE_DESCRIPTION
-    assert "既填 code_audit 又传 tasks" in DELEGATE_DESCRIPTION
+    assert "二选一" in DELEGATE_DESCRIPTION
+    assert "既填 code_audit 又传 tasks" not in DELEGATE_DESCRIPTION
     assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
     # 协调 / 一张图 / 续派 HOW 的唯一所有者是 skill，不在工具 description。
     from agentcore.runtime.skills import build_system_skill_registry
@@ -272,13 +273,14 @@ def test_schema_exposes_form_enum():
     playbook_desc = DELEGATE_PARAMETERS["properties"]["playbook"]["description"]
     assert "不要传 tasks" in playbook_desc
     assert "非默认" in playbook_desc or "进阶" in playbook_desc or "快捷" in playbook_desc
+    assert "build_app" not in playbook_desc
     assert "playbook_id" not in DELEGATE_PARAMETERS["properties"]
     assert "parallelism" not in DELEGATE_PARAMETERS["properties"]
     pa = DELEGATE_PARAMETERS["properties"]["playbook_args"]["description"]
-    assert "build_app" in pa and "app" in pa
-    assert "绿场必填 app" in pa
+    assert "build_app" not in pa
+    assert "绿场必填 app" not in pa
+    assert "build_app→app" not in pa
     assert "建站→build_website" not in pa
-    assert "勿空对象" in pa
     assert "快捷" in pa or "手写" in pa
     # code_audit.modules 必须出现在 CEO 工具面（扇出靠填槽，不从 scope 推断）
     assert "code_audit" in pa and "modules" in pa
@@ -298,8 +300,8 @@ def test_schema_exposes_form_enum():
     assert "已确认约束" in brief
     assert "同一行" in brief
     assert "附件" in brief or "优先" in brief
-    assert "便签墙" in brief
-    assert "换行" in brief
+    assert "便签墙" not in brief
+    assert "换行" not in brief
 
     assert "coordinate" not in DELEGATE_PARAMETERS["properties"]
     assert "coordination" not in DELEGATE_PARAMETERS["properties"]

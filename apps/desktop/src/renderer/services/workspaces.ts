@@ -192,6 +192,21 @@ export async function wsDownloadFile(
 }
 
 /**
+ * Download a workspace directory as zip (selected dir as archive root).
+ *
+ * Independent of {@link wsDownloadFile}. Not {@link wsExportZip} (that still
+ * snapshots the whole desk then downloads the snapshot).
+ */
+export async function wsDownloadArchive(
+  wsId: string,
+  path: string,
+  filename: string,
+): Promise<void> {
+  const res = await authedFetch(`${wsUrl(wsId)}/archive/${encodePath(path)}`);
+  await saveBlob(await res.blob(), filename);
+}
+
+/**
  * Fetch a workspace file as a Blob — the raw-bytes twin of {@link wsDownloadFile}
  * (which routes the same bytes into a save dialog). Mirrors
  * `fetchWorkspaceFileBlob` on the conversation-keyed client; only addressing differs.

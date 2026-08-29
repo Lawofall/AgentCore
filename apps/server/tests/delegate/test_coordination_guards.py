@@ -21,7 +21,6 @@ from agentcore.runtime.coordination.session import (
     set_active_coordination,
 )
 from agentcore.runtime.coordination.wait import await_coordination_injection
-from agentcore.runtime.delegate.force_scopes import EMPTY_FORCE_SCOPES
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPolicy, RunSpec
 from agentcore.runtime.turn.interrupt import TurnInterruptReason, compose_interrupt_body
@@ -61,6 +60,12 @@ def test_has_inflight_work_and_progress_summary():
     assert "cancel_worker" in s.worker_progress_summary()
     s.clear_worker_busy("w1")
     assert s.has_verify_busy() is False
+    # Blocking escalate awaiting CEO: not short in-flight (same as verify).
+    s.mark_worker_busy("w1", "arbitrate")
+    assert s.has_inflight_work() is False
+    assert s._busy_workers["w1"] == "arbitrate"
+    assert "等待主管仲裁" in s.worker_progress_summary()
+    s.clear_worker_busy("w1")
 
 
 def test_worker_budget_facts_only_lists_stamped_numbers():
@@ -211,7 +216,6 @@ async def test_idle_patrols_when_only_verify_busy(monkeypatch):
     session = CoordinationSession(
         execution_id="e-verify-patrol",
         total_workers=1,
-        coordination="wall",
     )
     session._running_workers["w1"] = "渲染链路审查员"
     session._worker_started_at["w1"] = __import__("time").monotonic()
@@ -315,6 +319,7 @@ async def test_secondary_isomorphic_delegate_rejected():
     )
     assert second.success is False
     assert "同构" in (second.error or "")
+    assert 'force=["' not in (second.error or "")
     assert "wait" not in (second.error or "")
     assert "update_synthesis" not in (second.error or "")
     assert second.contract_failure is True
@@ -339,19 +344,17 @@ async def test_secondary_isomorphic_delegate_rejected():
         )
         assert not breaker.tool_circuit_breaker()
 
-    # 点名放行同构闸允许并入（不触碰其它三道闸）。
-    forced = await t.execute(
+    # 审查是净新角色：同构闸不拦，并入当前图。
+    added = await t.execute(
         {
             "tasks": [
                 {"role": "审查", "task": "做C审查"},
             ],
             "coordinate": True,
-            "force": ["isomorphic"],
         },
         ctx(),
     )
-    # Non-isomorphic + force still merges; isomorphic+force also merges.
-    assert forced.success is True
+    assert added.success is True
     assert session.total_workers >= 3
 
     drive.cancel()
@@ -363,8 +366,8 @@ async def test_secondary_isomorphic_delegate_rejected():
 # --- B1b: thrash rebrand cold-delegate ---------------------------------------
 
 
-async def test_thrash_rebrand_cold_delegate_rejected_continue_and_force():
-    """Cold similar task after thrash → reject; continue_from / force pass."""
+async def test_thrash_rebrand_cold_delegate_rejected_continue():
+    """Cold similar task after thrash → reject; continue_from 续派不走换马甲闸。"""
     from agentcore.runtime.coordination.thrash import (
         ThrashRecord,
         clear_thrash_registry,
@@ -410,7 +413,30 @@ async def test_thrash_rebrand_cold_delegate_rejected_continue_and_force():
     assert cold.success is False
     assert "触顶换马甲" in (cold.error or "")
     assert "continue_from_run_id=`prior-thrash`" in (cold.error or "")
+    assert 'force=["' not in (cold.error or "")
     assert cold.contract_failure is True
+
+    forced = await t.execute(
+        {
+            "tasks": [
+                {
+                    "role": "修码员",
+                    "task": "修复 TopBar named export 缺失",
+                    "deliverable": {
+                        "form": "files",
+                        "requires_files": True,
+                        "artifacts": ["src/TopBar.tsx"],
+                    },
+                }
+            ],
+            "coordinate": False,
+            "force": ["thrash"],
+        },
+        ctx(),
+    )
+    assert forced.success is False
+    assert "触顶换马甲" in (forced.error or "")
+    assert 'force=["' not in (forced.error or "")
 
     cont = await t.execute(
         {
@@ -432,26 +458,6 @@ async def test_thrash_rebrand_cold_delegate_rejected_continue_and_force():
     )
     # continue_from may still fail session lookup; admission must not thrash-reject.
     assert "触顶换马甲" not in (cont.error or "")
-
-    forced = await t.execute(
-        {
-            "tasks": [
-                {
-                    "role": "新人",
-                    "task": "修复 TopBar named export 缺失",
-                    "deliverable": {
-                        "form": "files",
-                        "requires_files": True,
-                        "artifacts": ["src/TopBar.tsx"],
-                    },
-                }
-            ],
-            "coordinate": False,
-            "force": ["thrash"],
-        },
-        ctx(),
-    )
-    assert forced.success is True
     clear_thrash_registry("thrash-conv")
     clear_active_coordination()
 
@@ -459,16 +465,11 @@ async def test_thrash_rebrand_cold_delegate_rejected_continue_and_force():
 # --- B2: merge run_id collision receipts ------------------------------------
 
 
-def _fake_merge_tool(*, force: bool = False) -> MagicMock:
-    from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, ForceScopes
-
+def _fake_merge_tool() -> MagicMock:
     tool = MagicMock()
     tool._sink = MagicMock()
-    # MagicMock would otherwise make getattr(_force_scopes) / _folder_id truthy
-    # and bypass guards or invent a fake birth desk for ownership keys.
-    tool._force_scopes = (
-        ForceScopes(frozenset({GATE_SEAT_OVERLAP})) if force else EMPTY_FORCE_SCOPES
-    )
+    # MagicMock would otherwise make getattr(_folder_id) truthy and invent a
+    # fake birth desk for ownership keys.
     tool._folder_id = None
     return tool
 
@@ -847,10 +848,8 @@ async def test_merge_auto_replaces_vacated_seat_and_rewrites_deps():
             session,
             execution_id="e-seat",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="",
             call_idx=2,
-            coordination="none",
         )
         assert result.success is True
         pain2 = next(n for n in live.nodes if n.run_id == "pain2")
@@ -909,10 +908,8 @@ async def test_merge_rejects_overlapping_append_with_explanation():
             session,
             execution_id="e-overlap",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="",
             call_idx=2,
-            coordination="none",
         )
         assert result.success is False
         err = result.error or ""
@@ -971,10 +968,8 @@ async def test_merge_allows_non_overlapping_append():
             session,
             execution_id="e-ok-append",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="",
             call_idx=2,
-            coordination="none",
         )
         assert result.success is True
         assert session.total_workers == 3
@@ -1203,135 +1198,6 @@ async def test_idle_yield_held_while_inflight(monkeypatch):
         clear_active_coordination("e-idle-yield")
 
 
-async def test_wall_zero_completed_does_not_idle_yield(monkeypatch):
-    """coordination=wall 且 completed==0：有 inflight 也不 idle_yield（主回合继续等）。"""
-    import contextlib
-
-    monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 0.05)
-    monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_MAX_S", 1.0)
-    clear_active_coordination()
-    live = _plan(
-        RunSpec(run_id="a", role="研究员", task="调研", depends_on=[]),
-        RunSpec(run_id="b", role="写手", task="撰写", depends_on=[]),
-    )
-    session = CoordinationSession(
-        execution_id="e-wall-hold",
-        total_workers=2,
-        coordination="wall",
-    )
-    session.live_plan = live
-    session._running_workers["a"] = "研究员"
-    session._worker_started_at["a"] = __import__("time").monotonic()
-    session.mark_worker_busy("a", "llm")
-    session.drive_task = asyncio.create_task(asyncio.sleep(30))
-    set_active_coordination(session)
-
-    async def _complete_later() -> None:
-        await asyncio.sleep(0.25)
-        from agentcore.runtime.coordination.session import (
-            CoordinationEvent,
-            CoordinationEventKind,
-        )
-
-        session.mark_worker_completed("a")
-        session.clear_worker_busy("a")
-        session.post(
-            CoordinationEvent(
-                kind=CoordinationEventKind.WORKER_COMPLETED,
-                payload={
-                    "run_id": "a",
-                    "role": "研究员",
-                    "status": "completed",
-                    "summary": "ok",
-                },
-            )
-        )
-        session.post(
-            CoordinationEvent(
-                kind=CoordinationEventKind.ALL_COMPLETED,
-                payload={"completed": 1, "total": 2},
-            )
-        )
-
-    poster = asyncio.create_task(_complete_later())
-    try:
-        msgs = await asyncio.wait_for(await_coordination_injection([]), timeout=3.0)
-        assert len(msgs) >= 1
-        text = "\n".join(m.content or "" for m in msgs)
-        # Must have woken on real completion — not the idle_yield「无需追加」brief alone.
-        assert "worker_completed" in text or "研究员" in text
-        assert "无需追加" not in text
-    finally:
-        poster.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await poster
-        session.drive_task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await session.drive_task
-        clear_active_coordination("e-wall-hold")
-
-
-async def test_wall_zero_holds_without_busy_stamp(monkeypatch):
-    """wall+0：drive 已活但尚未 mark_worker_busy 时不得 idle_timeout 巡查。"""
-    import contextlib
-
-    monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 0.05)
-    monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_MAX_S", 1.0)
-    clear_active_coordination()
-    session = CoordinationSession(
-        execution_id="e-wall-prebusy",
-        total_workers=2,
-        coordination="wall",
-    )
-    # Dispatch registered, busy stamp not yet set (scheduling / LLM-entry gap).
-    session._running_workers["a"] = "研究员"
-    session._worker_started_at["a"] = __import__("time").monotonic()
-    session.drive_task = asyncio.create_task(asyncio.sleep(30))
-    set_active_coordination(session)
-
-    async def _complete_later() -> None:
-        await asyncio.sleep(0.25)
-        from agentcore.runtime.coordination.session import (
-            CoordinationEvent,
-            CoordinationEventKind,
-        )
-
-        session.mark_worker_completed("a")
-        session.post(
-            CoordinationEvent(
-                kind=CoordinationEventKind.WORKER_COMPLETED,
-                payload={
-                    "run_id": "a",
-                    "role": "研究员",
-                    "status": "completed",
-                    "summary": "ok",
-                },
-            )
-        )
-        session.post(
-            CoordinationEvent(
-                kind=CoordinationEventKind.ALL_COMPLETED,
-                payload={"completed": 1, "total": 2},
-            )
-        )
-
-    poster = asyncio.create_task(_complete_later())
-    try:
-        msgs = await asyncio.wait_for(await_coordination_injection([]), timeout=3.0)
-        text = "\n".join(m.content or "" for m in msgs)
-        assert "worker_completed" in text
-        assert "等待团队事件超时" not in text
-        assert "无需追加" not in text
-    finally:
-        poster.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await poster
-        session.drive_task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await session.drive_task
-        clear_active_coordination("e-wall-prebusy")
-
-
 async def test_merge_all_skipped_returns_structured_failure():
     """整批 run_id 撞车 → success=False，结构化回执列出跳过明细，不改 live 图。"""
     from agentcore.runtime.coordination.host import _merge_into_active_coordination
@@ -1354,10 +1220,8 @@ async def test_merge_all_skipped_returns_structured_failure():
             session,
             execution_id="e-skip-all",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="",
             call_idx=2,
-            coordination="none",
         )
         assert result.success is False
         err = result.error or ""
@@ -1399,10 +1263,8 @@ async def test_merge_partial_skip_lists_merged_and_skipped():
             session,
             execution_id="e-skip-part",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="",
             call_idx=2,
-            coordination="none",
         )
         assert result.success is True
         out = result.output or ""
@@ -1844,10 +1706,8 @@ async def test_merge_admits_after_completed_owner_and_handoffs():
             session,
             execution_id="e-done-own",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="",
             call_idx=2,
-            coordination="none",
         )
         assert result.success is True
         assert session.ensure_file_ownership().owner_of("App.tsx") == "fe_dup"
@@ -1878,38 +1738,54 @@ def test_session_ownership_snapshot_roundtrip():
 # --- C3: reject before durable run_plan emit (零图副作用) ---
 
 
-async def test_sibling_artifact_reject_emits_no_run_plan():
-    """同批交付物交叉 → 拒在 emit 前，sink/journal 无该批 run_plan。"""
+async def test_sibling_artifact_reject_emits_no_run_plan(monkeypatch):
+    """同批交付物交叉 → 拒在 emit 前，sink/journal 无该批 run_plan，无 delegate.started。"""
+    import agentcore.tools.builtin.delegate.tool as delegate_tool_mod
     from agentcore.runtime.events import EventSink, EventType
+    from agentcore.runtime.facts import FactKind, TurnFactLog, current_fact_log
+    from agentcore.runtime.journal.fold import plan_from_journal
+    from tests.conftest import LogSpy
     from tests.delegate.conftest import ctx, tool
 
     clear_active_coordination()
+    log = TurnFactLog()
+    token = current_fact_log.set(log)
+    spy = LogSpy()
+    monkeypatch.setattr(delegate_tool_mod, "logger", spy)
     sink = EventSink()
     t = tool(MagicMock(), sink=sink)
-    result = await t.execute(
-        {
-            "tasks": [
-                {
-                    "role": "前端",
-                    "task": "写 App",
-                    "deliverable": {"artifacts": ["src/App.tsx"]},
-                },
-                {
-                    "role": "整合",
-                    "task": "也写 App",
-                    "deliverable": {"artifacts": ["src/App.tsx"]},
-                },
-            ],
-            "coordinate": False,
-        },
-        ctx(),
-    )
-    assert result.success is False
-    assert result.contract_failure is True
-    assert "同批交付物交叉" in (result.error or "") or "交叉" in (result.error or "")
-    run_plans = [e for e in sink._history if e.type is EventType.RUN_PLAN]
-    assert run_plans == []
-    assert active_coordination("e") is None
+    try:
+        result = await t.execute(
+            {
+                "tasks": [
+                    {
+                        "role": "前端",
+                        "task": "写 App",
+                        "deliverable": {"artifacts": ["src/App.tsx"]},
+                    },
+                    {
+                        "role": "整合",
+                        "task": "也写 App",
+                        "deliverable": {"artifacts": ["src/App.tsx"]},
+                    },
+                ],
+                "coordinate": False,
+            },
+            ctx(),
+        )
+        assert result.success is False
+        assert result.contract_failure is True
+        assert "同批交付物交叉" in (result.error or "") or "交叉" in (result.error or "")
+        run_plans = [e for e in sink._history if e.type is EventType.RUN_PLAN]
+        assert run_plans == []
+        assert active_coordination("e") is None
+        assert all(
+            e.get("kind") != FactKind.PLAN_SNAPSHOT.value for e in log.entries()
+        )
+        assert plan_from_journal(log.entries()) is None
+        assert not any(name == "delegate.started" for name, _ in spy.events)
+    finally:
+        current_fact_log.reset(token)
 
 
 async def test_sibling_reject_then_reassign_single_swimlane():
@@ -2058,7 +1934,6 @@ def test_try_start_sibling_reject_creates_no_session():
         plan,
         execution_id="e-sib-pre",
         seed_completed=None,
-        seed_notes=None,
         complexity_hint="standard",
         call_idx=1,
         coordinate=True,
@@ -2119,7 +1994,6 @@ def test_nested_declare_transfers_paths_from_parent_not_all():
     )
     tool = MagicMock()
     tool._depth = 1
-    tool._force_scopes = EMPTY_FORCE_SCOPES
 
     original = wc.resolve_write_coordinator
     wc.resolve_write_coordinator = lambda **_kwargs: ownership  # type: ignore[assignment]
@@ -2156,7 +2030,6 @@ def test_nested_declare_skipped_at_depth_zero():
     )
     tool = MagicMock()
     tool._depth = 0
-    tool._force_scopes = EMPTY_FORCE_SCOPES
 
     original = wc.resolve_write_coordinator
     wc.resolve_write_coordinator = lambda **_kwargs: ownership  # type: ignore[assignment]
@@ -2188,7 +2061,6 @@ def _fake_replan_tool(*, execution_id: str, plan, completed: dict | None = None)
     tool._tools = _FakeReplanTools()
     tool._captain_run_id = "cap"
     tool._depth = 0
-    tool._force_scopes = EMPTY_FORCE_SCOPES
     tool._topology_lock = False
     tool._folder_id = "test_birth"
     tool._supervised = SupervisedRun(
@@ -2317,3 +2189,345 @@ async def test_replan_adds_rejects_incomplete_seat_with_append_family_message():
         assert {n.run_id for n in live.nodes} == before_ids
     finally:
         clear_active_coordination("e-replan-rej")
+
+
+def test_never_started_seats_excluded_from_isomorphic_denominator():
+    """从未 run_started 的空座位不得进 isomorphic「还在跑」分母。"""
+    live = _plan(
+        RunSpec(run_id="a", role="前端", task="写 App"),
+        RunSpec(run_id="b", role="整合", task="也写 App"),
+    )
+    twin = _plan(
+        RunSpec(run_id="a2", role="前端", task="写 App 页面"),
+        RunSpec(run_id="b2", role="整合", task="也写 App 汇总"),
+    )
+    assert is_isomorphic_redelegation(twin, live, completed_run_ids=set()) is True
+    assert (
+        is_isomorphic_redelegation(
+            twin, live, completed_run_ids=set(), started_run_ids=set()
+        )
+        is False
+    )
+    assert (
+        is_isomorphic_redelegation(
+            twin, live, completed_run_ids=set(), started_run_ids={"a", "b"}
+        )
+        is True
+    )
+
+
+def test_same_batch_plan_excludes_host_terminals_from_sibling():
+    """host∪new 含已完成同路径节点 → 不是同批 sibling；只扫新批次。"""
+    from agentcore.runtime.coordination.append_guard import (
+        find_sibling_artifact_crosses,
+        same_batch_plan,
+    )
+    from agentcore.runtime.runs.types import Deliverable
+
+    host = RunSpec(
+        run_id="h1",
+        role="前端",
+        task="写完了",
+        deliverable=Deliverable(artifacts=["src/App.tsx"]),
+    )
+    newbie = RunSpec(
+        run_id="n1",
+        role="前端",
+        task="续写",
+        deliverable=Deliverable(artifacts=["src/App.tsx"]),
+    )
+    merged = _plan(host, newbie)
+    assert find_sibling_artifact_crosses(merged)
+    batch = same_batch_plan(merged, exclude_run_ids={"h1"})
+    assert [n.run_id for n in batch.nodes] == ["n1"]
+    assert find_sibling_artifact_crosses(batch) == []
+
+
+@pytest.mark.asyncio
+async def test_try_start_late_sibling_wipes_empty_seats_and_unlocks_isomorphic(
+    monkeypatch,
+):
+    """admit 漏过 → try_start 才拒：不得留下 1/2 空座位；随后同构再派不得连拒。"""
+    from agentcore.runtime.events import EventSink, EventType
+    from agentcore.runtime.facts import TurnFactLog, current_fact_log
+    from agentcore.runtime.journal.fold import plan_from_journal
+    from tests.delegate.conftest import Provider, ctx, tool
+
+    clear_active_coordination()
+    log = TurnFactLog()
+    token = current_fact_log.set(log)
+    monkeypatch.setattr(
+        "agentcore.runtime.coordination.host.admit_before_run_plan_emit",
+        lambda *_a, **_k: None,
+    )
+    sink = EventSink()
+    t = tool(Provider(["AOUT", "BOUT"]), sink=sink)
+    try:
+        rejected = await t.execute(
+            {
+                "tasks": [
+                    {
+                        "role": "前端",
+                        "task": "写 App",
+                        "deliverable": {"artifacts": ["src/App.tsx"]},
+                    },
+                    {
+                        "role": "整合",
+                        "task": "也写 App",
+                        "deliverable": {"artifacts": ["src/App.tsx"]},
+                    },
+                ],
+                "coordinate": True,
+            },
+            ctx(),
+        )
+        assert rejected.success is False
+        assert rejected.contract_failure is True
+        assert "交叉" in (rejected.error or "") or "重叠" in (rejected.error or "")
+        assert active_coordination("e") is None
+        folded = plan_from_journal(log.entries())
+        leftover_ids = {n.run_id for n in folded.nodes} if folded is not None else set()
+        assert leftover_ids == set()
+        run_plans = [e for e in sink._history if e.type is EventType.RUN_PLAN]
+        assert run_plans == []
+
+        ok = await t.execute(
+            {
+                "tasks": [
+                    {
+                        "role": "前端",
+                        "task": "写 App",
+                        "deliverable": {"artifacts": ["src/App.tsx"]},
+                    },
+                    {
+                        "role": "整合",
+                        "task": "写汇总",
+                        "deliverable": {"artifacts": ["src/summary.md"]},
+                    },
+                ],
+                "coordinate": True,
+            },
+            ctx(),
+        )
+        assert ok.success is True
+        assert "同构" not in (ok.error or "")
+        session = active_coordination("e")
+        assert session is not None
+        drive = session.drive_task
+        if drive is not None and not drive.done():
+            drive.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await drive
+    finally:
+        current_fact_log.reset(token)
+        clear_active_coordination("e")
+
+
+@pytest.mark.asyncio
+async def test_try_start_retracts_already_written_empty_seats():
+    """万一已写下 run_plan / snapshot，try_start 拒后必须擦掉从未开工座位。"""
+    from agentcore.runtime.coordination.host import try_start_coordination
+    from agentcore.runtime.delegate.steer import record_plan_snapshot
+    from agentcore.runtime.events import EventSink, EventType, run_plan
+    from agentcore.runtime.facts import TurnFactLog, current_fact_log
+    from agentcore.runtime.journal.fold import plan_from_journal
+    from agentcore.runtime.runs.types import Deliverable
+
+    clear_active_coordination()
+    log = TurnFactLog()
+    token = current_fact_log.set(log)
+    sink = EventSink()
+    plan = _plan(
+        RunSpec(
+            run_id="a",
+            role="前端",
+            task="写",
+            deliverable=Deliverable(artifacts=["App.tsx"]),
+        ),
+        RunSpec(
+            run_id="b",
+            role="整合",
+            task="也写",
+            deliverable=Deliverable(artifacts=["App.tsx"]),
+        ),
+    )
+    record_plan_snapshot(plan)
+    sink.emit(
+        run_plan(
+            execution_id="e-late-wipe",
+            plan_type="multi_agent",
+            task_summary="2",
+            agents=[{"id": "a", "role": "前端"}, {"id": "b", "role": "整合"}],
+            runs=[{"id": "a"}, {"id": "b"}],
+        )
+    )
+    tool = _fake_merge_tool()
+    tool._sink = sink
+    tool._depth = 0
+    tool._checkpoint_enabled = False
+    try:
+        started = try_start_coordination(
+            tool,
+            plan,
+            execution_id="e-late-wipe",
+            seed_completed=None,
+            complexity_hint="standard",
+            call_idx=1,
+            coordinate=True,
+        )
+        assert started is not None
+        assert started.success is False
+        assert active_coordination("e-late-wipe") is None
+        folded = plan_from_journal(log.entries())
+        assert folded is None or [n.run_id for n in folded.nodes] == []
+        skipped = [e for e in sink._history if e.type is EventType.RUN_SKIPPED]
+        assert {e.payload.get("run_id") for e in skipped} == {"a", "b"}
+        leftover = folded if folded is not None else _plan()
+        twin = _plan(
+            RunSpec(run_id="a2", role="前端", task="写"),
+            RunSpec(run_id="b2", role="整合", task="也写"),
+        )
+        assert (
+            is_isomorphic_redelegation(
+                twin, leftover, completed_run_ids=set(), started_run_ids=set()
+            )
+            is False
+        )
+    finally:
+        current_fact_log.reset(token)
+        clear_active_coordination("e-late-wipe")
+
+
+@pytest.mark.asyncio
+async def test_try_start_sibling_ignores_completed_host_same_path():
+    """已完成同座+同路径续派：try_start 不得把 host∪new 当同批 sibling。"""
+    from agentcore.runtime.coordination.host import try_start_coordination
+    from agentcore.runtime.runs.types import Deliverable, RunPhase, RunState
+
+    clear_active_coordination()
+    plan = _plan(
+        RunSpec(
+            run_id="h1",
+            role="前端",
+            task="已完成",
+            deliverable=Deliverable(artifacts=["src/App.tsx"]),
+        ),
+        RunSpec(
+            run_id="n1",
+            role="前端",
+            task="续写",
+            deliverable=Deliverable(artifacts=["src/App.tsx"]),
+        ),
+    )
+    seed = {"h1": RunState(phase=RunPhase.COMPLETED)}
+    tool = _fake_merge_tool()
+    tool._depth = 0
+    tool._checkpoint_enabled = False
+    tool._conversation_id = "c-host-union"
+    started = try_start_coordination(
+        tool,
+        plan,
+        execution_id="e-host-union",
+        seed_completed=seed,
+        complexity_hint="standard",
+        call_idx=1,
+        coordinate=True,
+    )
+    try:
+        assert started is not None
+        assert started.success is True
+        session = active_coordination("e-host-union")
+        assert session is not None
+        drive = session.drive_task
+        if drive is not None and not drive.done():
+            drive.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await drive
+    finally:
+        clear_active_coordination("e-host-union")
+
+
+@pytest.mark.asyncio
+async def test_cancel_worker_vacates_unstarted_when_session_inactive():
+    """无 active session 时仍能划掉从未开工座位，划完能再派。"""
+    from agentcore.runtime.coordination.tools import CancelWorkerTool
+    from tests.delegate.conftest import Provider, ctx
+    from tests.delegate.conftest import tool as make_tool
+
+    clear_active_coordination()
+    live = _plan(
+        RunSpec(run_id="empty1", role="前端", task="写 App"),
+        RunSpec(run_id="empty2", role="整合", task="写汇总"),
+    )
+    session = CoordinationSession(execution_id="e", total_workers=2)
+    session.live_plan = live
+    session.active = False
+    set_active_coordination(session)
+    try:
+        cancel = CancelWorkerTool()
+        result = await cancel.execute({"run_id": "empty1", "reason": "空座位"}, ctx())
+        assert result.success is True
+        assert "已从队列撤出" in (result.output or "")
+        assert "empty1" in session.vacated_run_ids
+        assert "协调模式" not in (result.error or "")
+
+        again = await cancel.execute({"run_id": "empty2"}, ctx())
+        assert again.success is True
+        assert "empty2" in session.vacated_run_ids
+
+        t = make_tool(Provider(["AOUT", "BOUT"]))
+        ok = await t.execute(
+            {
+                "tasks": [
+                    {"role": "前端", "task": "写 App"},
+                    {"role": "整合", "task": "写汇总"},
+                ],
+                "coordinate": True,
+            },
+            ctx(),
+        )
+        assert ok.success is True
+        assert "同构" not in (ok.error or "")
+        live_session = active_coordination("e")
+        drive = getattr(live_session, "drive_task", None) if live_session else None
+        if drive is not None and not drive.done():
+            drive.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await drive
+    finally:
+        clear_active_coordination("e")
+
+
+@pytest.mark.asyncio
+async def test_cancel_worker_vacates_journal_unstarted_without_session():
+    """没有协调 session 时，journal 上从未开工的座位仍可划掉。"""
+    from agentcore.runtime.coordination.tools import CancelWorkerTool
+    from agentcore.runtime.delegate.steer import record_plan_snapshot
+    from agentcore.runtime.facts import TurnFactLog, current_fact_log
+    from agentcore.runtime.journal.fold import plan_from_journal
+    from tests.delegate.conftest import ctx
+
+    clear_active_coordination()
+    log = TurnFactLog()
+    token = current_fact_log.set(log)
+    plan = _plan(
+        RunSpec(run_id="ghost_a", role="前端", task="写"),
+        RunSpec(run_id="ghost_b", role="整合", task="也写"),
+    )
+    record_plan_snapshot(plan)
+    try:
+        cancel = CancelWorkerTool()
+        result = await cancel.execute({"run_id": "ghost_a"}, ctx())
+        assert result.success is True
+        assert "已从队列撤出" in (result.output or "")
+        assert "协调模式" not in (result.error or "")
+        folded = plan_from_journal(log.entries())
+        assert folded is not None
+        assert [n.run_id for n in folded.nodes] == ["ghost_b"]
+        second = await cancel.execute({"run_id": "ghost_b"}, ctx())
+        assert second.success is True
+        folded2 = plan_from_journal(log.entries())
+        assert folded2 is None or [n.run_id for n in folded2.nodes] == []
+    finally:
+        current_fact_log.reset(token)
+        clear_active_coordination()

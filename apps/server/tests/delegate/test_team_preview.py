@@ -335,8 +335,8 @@ async def test_team_preview_continue_then_arms_coordination():
     clear_active_coordination("e")
 
 
-async def test_leftover_kickoff_frame_refuses_hydrate_resume_plan_still_restores_wall():
-    """存量开工卡 from_json 410；resume_plan 仍可按 kwargs 回灌 wall。"""
+async def test_leftover_kickoff_frame_refuses_hydrate_resume_plan_restores_brief():
+    """存量开工卡 from_json 410；resume_plan 仍可按 kwargs 回灌 team_brief。"""
     from agentcore.core.errors import GoneError
     from agentcore.runtime.kickoff.retired import TEAM_PREVIEW_UNRECOVERABLE
     from agentcore.runtime.runs import build_run_plan
@@ -380,7 +380,7 @@ async def test_leftover_kickoff_frame_refuses_hydrate_resume_plan_still_restores
 
     sink2 = EventSink()
     t2 = tool_durable(Provider(["AOUT", "BOUT"]), sink2, InteractionRegistry(), _save, _drop)
-    assert t2._coordination == "none"
+    assert not hasattr(t2, "_coordination")
     resumed = await t2.resume_plan(
         plan,
         {},
@@ -390,18 +390,9 @@ async def test_leftover_kickoff_frame_refuses_hydrate_resume_plan_still_restores
         execution_id="e",
         coordinate=False,
         apply_kickoff_grant=True,
-        coordination="wall",
         team_brief="统一用中文交付",
-        seed_notes=[{"kind": "heads_up", "text": "接口用 REST"}],
     )
     assert resumed.success is True
-    assert t2._coordination == "wall"
     assert t2._team_brief == "统一用中文交付"
-    seeded = [
-        e
-        for e in sink2._history
-        if e.type is EventType.TEAM_NOTE_POSTED and e.payload.get("source") == "ceo"
-    ]
-    assert len(seeded) == 1
-    assert "接口用 REST" in seeded[0].payload.get("text", "")
+    assert not any(str(e.type) == "team_note_posted" for e in sink2._history)  # noqa: SLF001
     clear_active_coordination()

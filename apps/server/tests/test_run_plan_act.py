@@ -90,52 +90,20 @@ def test_run_plan_payload_accepts_prev_execution_id():
     assert model.prev_execution_id == "e1"
 
 
-def test_run_plan_payload_accepts_note_wall():
+def test_run_plan_payload_omits_note_wall():
     ev = run_plan(
         execution_id="e1",
         plan_type="multi_agent",
         task_summary="t",
         agents=[],
         runs=[],
-        note_wall=True,
     )
     model = RunPlanPayload.model_validate(ev.payload)
-    assert model.note_wall is True
-
-
-def test_run_plan_omits_note_wall_when_false():
-    ev = run_plan(
-        execution_id="e1",
-        plan_type="multi_agent",
-        task_summary="t",
-        agents=[],
-        runs=[],
-        note_wall=False,
-    )
     assert "note_wall" not in ev.payload
+    assert not hasattr(model, "note_wall")
 
 
-class _WallDelegate:
-    _depth = 0
-    _captain_run_id = "cap-1"
-    _coordination = "wall"
-
-
-def test_delegate_plan_event_emits_note_wall_for_parallel_wall_batch():
-    plan = RunPlan(
-        nodes=[
-            RunSpec(run_id="r1", task="接口", role="后端"),
-            RunSpec(run_id="r2", task="页面", role="前端"),
-        ]
-    )
-    ev = plan_event(_WallDelegate(), "e1", plan)
-    assert ev.payload.get("note_wall") is True
-
-
-def test_delegate_plan_event_omits_note_wall_for_solo_or_none():
-    solo = RunPlan(nodes=[RunSpec(run_id="r1", task="调研", role="研究员")])
-    ev = plan_event(_WallDelegate(), "e1", solo)
-    assert "note_wall" not in ev.payload
+def test_delegate_plan_event_omits_note_wall():
     parallel = RunPlan(
         nodes=[
             RunSpec(run_id="r1", task="接口", role="后端"),
@@ -146,7 +114,8 @@ def test_delegate_plan_event_omits_note_wall_for_solo_or_none():
     assert "note_wall" not in ev.payload
 
 
-def test_project_turn_note_wall_without_notes():
+def test_project_turn_ignores_legacy_note_wall_payload():
+    """旧 journal 若仍带 note_wall，投影不双读、不展示。"""
     projected = project_turn(
         [
             {
@@ -168,8 +137,8 @@ def test_project_turn_note_wall_without_notes():
             }
         ]
     )
-    assert projected["teamNotes"] == []
-    assert projected.get("noteWall") is True
+    assert "teamNotes" not in projected
+    assert "noteWall" not in projected
 
 
 def test_debate_moderator_plan_event_emits_act_1_debate():

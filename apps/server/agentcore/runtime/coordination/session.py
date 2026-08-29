@@ -75,7 +75,7 @@ class CoordinationSession(
     execution_id: str
     total_workers: int
     # 两池遥测计数（同一总额切成两本账，不扩容、不闸唤醒）：
-    # - 进度池：例行进展（worker 完成 / note）唤醒计数。
+    # - 进度池：例行进展（worker 完成）唤醒计数。
     # - 决策池：必要决策（终局 / 升级 / 冲突 / 插话 / 单员超时 / 边界 / 派批）唤醒计数。
     progress_budget_remaining: int = DEFAULT_PROGRESS_BUDGET
     decision_budget_remaining: int = DEFAULT_DECISION_BUDGET
@@ -174,11 +174,13 @@ class CoordinationSession(
     # disarm / completion. NOT snapshotted: resume re-dispatches unfinished workers,
     # which re-arm and re-register — so a completed worker is never resolvable.
     _running_workers: dict[str, str] = field(default_factory=dict, repr=False)
-    # Worker busy stamps (run_id → "llm" | "tool" | "verify"):
+    # Worker busy stamps (run_id → "llm" | "tool" | "verify" | "arbitrate"):
     # - llm/tool: short in-flight work; idle-patrol defers (勿误唤醒).
     # - verify: minute-level bounded verify (test_run); still shown in progress
     #   summary, but does NOT count as has_inflight_work — CEO may patrol /
     #   cancel_worker instead of parking behind wall+0. 不快照。
+    # - arbitrate: blocking escalate awaiting CEO; same as verify for inflight
+    #   (wait 不得空等该队员). 不快照。
     _busy_workers: dict[str, str] = field(default_factory=dict, repr=False)
     # Live used/limit/tokens last stamped via ``note_coord_worker_busy``.
     # Survives clear_busy (轮间 / verify still need the last known spend);
@@ -208,9 +210,6 @@ class CoordinationSession(
     exec_env_dead_reason: str | None = None
     # One-shot host content_delta for EXEC_ENV_DEAD_USER_VISIBLE already emitted.
     exec_env_dead_user_notice_emitted: bool = False
-    # Note-wall coordination mode for this batch (``wall`` | ``none``). Used by idle
-    # wait to keep the main turn open when wall + 0 completions (要等齐).
-    coordination: str = "none"
     _timeout_notified: set[str] = field(default_factory=set, repr=False)
     # B·超时预警：先于 CEO TIMEOUT 通知，供 worker react_loop 消费进入收尾窗口。
     _timeout_warned: set[str] = field(default_factory=set, repr=False)
@@ -1038,7 +1037,7 @@ def note_coord_worker_busy(
     rounds_limit: int | None = None,
     tokens_spent: int | None = None,
 ) -> None:
-    """Best-effort stamp: worker ``run_id`` is inside LLM / tool / verify.
+    """Best-effort stamp: worker ``run_id`` is inside LLM / tool / verify / arbitrate.
 
     Optional spend kwargs are the same channel — not a second reporter.
     """

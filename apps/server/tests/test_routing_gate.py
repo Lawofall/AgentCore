@@ -69,9 +69,6 @@ def test_corpus_and_coordination_tools_stay_silent():
         "web_search",
         "read_url",
         "escalate",
-        "post_note",
-        "read_notes",
-        "amend_note",
         "handoff",
         "delegate",
     ):

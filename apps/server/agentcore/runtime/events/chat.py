@@ -60,8 +60,8 @@ def content_delta(delta: str, *, replace: bool = False) -> SSEEvent:
 
 
 def content_reset(reason: ResetReason) -> SSEEvent:
-    """清空 CEO 气泡已流式正文。``reason`` 必填（见 payloads.chat.ResetReason）：客户端仅对
-    ``finish_guard`` 折出「已按交付规范重写」痕迹，其余 reason 只清正文、不留 chip。"""
+    """清空 CEO 气泡已流式正文。``reason`` 必填（见 payloads.chat.ResetReason）：
+    所有 reason 都只清正文、不折过程痕迹。"""
     return SSEEvent(type=EventType.CONTENT_RESET, payload={"reason": reason})
 
 

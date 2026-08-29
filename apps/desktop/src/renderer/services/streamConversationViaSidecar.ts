@@ -140,6 +140,7 @@ function toSidecarAttachments(
     truncated: a.truncated,
     ...(a.kind ? { kind: a.kind } : {}),
     ...(a.conversation_id ? { conversation_id: a.conversation_id } : {}),
+    ...(a.document_id ? { document_id: a.document_id } : {}),
     ...(a.binary ? { binary: a.binary } : {}),
     ...(a.workspace_path ? { workspace_path: a.workspace_path } : {}),
   }));

@@ -100,7 +100,7 @@ export function StandingTasksPanel() {
           (rows) => ({ ok: true as const, rows }),
           (e: unknown) => ({
             ok: false as const,
-            message: errMsg(e, "工作区列表加载失败"),
+            message: errMsg(e, "文件夹列表加载失败"),
           }),
         ),
         listStandingTaskTemplates().catch(() => [] as StandingTaskTemplate[]),
@@ -214,8 +214,8 @@ export function StandingTasksPanel() {
     if (!folderId) {
       notifyError(
         foldersError
-          ? `读不到工作区列表（${foldersError}），暂时无法确定报告落点，请重试`
-          : "请先创建一个云工作区，再开启系统任务",
+          ? `读不到文件夹列表（${foldersError}），暂时无法确定报告落点，请重试`
+          : "请先在「我的文件」里新建一个文件夹，再开启系统任务",
       );
       return;
     }
@@ -296,8 +296,8 @@ export function StandingTasksPanel() {
           )}
         >
           <p className="min-w-0 flex-1 text-xs">
-            读不到工作区列表（{foldersError}
-            ），任务落点与作用域暂时无法选择。这不代表你没有云工作区。
+            读不到文件夹列表（{foldersError}
+            ），任务落点与作用域暂时无法选择。这不代表你没有云端文件夹。
           </p>
           <Button
             variant="neutral"
@@ -475,7 +475,7 @@ export function StandingTasksPanel() {
                           </p>
                         )}
                         <p className="mt-1 text-xs text-muted-foreground">
-                          工作区：{folderNames[task.folderId] ?? task.folderId}
+                          文件夹：{folderNames[task.folderId] ?? task.folderId}
                           {task.triggerKind === "schedule" && (
                             <>
                               {" · "}下次：{formatNextRun(task.nextRunAt)}

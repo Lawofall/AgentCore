@@ -10,6 +10,7 @@ const KIND_LABEL: Record<StoredAttachment["kind"], string> = {
   file: "文件",
   dir: "文件夹",
   conversation: "会话",
+  document: "文档",
 };
 
 const TOKEN_RE = /\uFFFC([AM])(\d+)\uFFFC/g;

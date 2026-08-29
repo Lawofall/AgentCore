@@ -3,7 +3,7 @@
 import mimetypes
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agentcore.api.dependencies import (
@@ -34,22 +34,27 @@ from agentcore.db.models import Conversation
 from agentcore.db.repositories import ConversationRepository
 from agentcore.docs_export.workspace_export import ExportMarkdownError, export_markdown_path
 from agentcore.folders.placement import resolve_folder_placement
+from agentcore.storage._archive import ArchiveLimitError
 from agentcore.workspace.files import (
+    archive_filename,
     copy_file,
     create_dir,
     delete_file,
     list_files,
     move_file,
+    raise_http_for_archive_limit,
     raise_http_for_download_io,
     read_file_for_edit,
     resolve_download_file,
     upload_file,
     write_file_text,
+    zip_subtree_for_download,
 )
 from agentcore.workspace.git import CloneError, clone_repo
 from agentcore.workspace.locate import WorkspaceCoords, build_server_workspace
 from agentcore.workspace.protocol import (
     AlreadyExists,
+    NotADirectory,
     NotAFile,
     NotUTF8,
     OutsideWorkspace,
@@ -281,6 +286,44 @@ async def download_workspace_file(
         file_path,
         media_type=media_type,
         headers=download_headers(filename),
+    )
+
+
+@router.get("/{conversation_id}/workspace/archive/{path:path}")
+async def download_workspace_archive(
+    conversation_id: str,
+    path: str,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+    session: AsyncSession = Depends(get_db),
+):
+    """Download a directory subtree as zip (selected dir as archive root).
+
+    Independent of GET ``.../workspace/files/{path}`` (preview / single file).
+    Capacity is the panel upload ceiling, not snapshot retention.
+    """
+    conv = await _get_owned_conversation(conversation_id, user.user_id, conv_repo)
+    try:
+        data = await zip_subtree_for_download(
+            **await _workspace_coords(user.user_id, conv, session),
+            path=path,
+            max_bytes=settings.workspace_upload_max_bytes,
+        )
+    except OutsideWorkspace as e:
+        raise ValidationError("路径非法：超出工作区范围") from e
+    except PathNotFound as e:
+        raise NotFoundError("文件夹不存在") from e
+    except NotADirectory as e:
+        raise ValidationError("目标不是文件夹") from e
+    except ArchiveLimitError as e:
+        raise_http_for_archive_limit(e)
+    except WorkspaceIOError as e:
+        raise_http_for_download_io(e)
+
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers=download_headers(archive_filename(path)),
     )
 
 

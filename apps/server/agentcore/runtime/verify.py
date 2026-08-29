@@ -9,40 +9,30 @@
 落点同时盖住两条路）。本模块只产出结论与注入文案，保持纯函数、可独立单测，处置（回炉 /
 放行 / 计数）在 react_loop 里。
 
-轻层现覆盖三类**纯机械、近零误报**的校验：
+对话气泡 **不因引用回炉**：``#rN``、悬空 ``[n]``、书目形态不是 ``finish_guard`` 的命中项
+（来源卡 = 已登记非 blocked，含 search-only；未登记号留白字）。落盘成文走
+:func:`citation_quality_reworks`。轻层覆盖两类**纯机械、近零误报**的校验：
 
-1. **造引用拦截**——双轨：
-   - 池序角标 ``[n]`` 指向不存在的来源卡（编号 < 1 或 > 来源数）；仅 CEO 路径开
-     （``check_citations``）。
-   - 台账 id ``#rN`` 必须 ∈ 本回合成稿可引用集（``deep_read ∪ selected``）；仅当正文出现约定
-     ``#rN`` 标记时启用（Q5）；CEO / 调研 worker 在接通 ``citable_ids``（实为 draft 子集）时均查。
-     另：书目著录形态绑定 ``#rN`` 时须 deep_read，且不得把开题/答辩/公告类元数据当学位论文；
-     GB/T ``[D]/[J]`` 等类型标若同段无任何 ``#rN`` 亦回炉（拦编造著录）。
-2. **结构完整性**——代码围栏未闭合（``` 开了没收尾、后文整片被当代码渲染）、或声明了语言却
+1. **结构完整性**——代码围栏未闭合（``` 开了没收尾、后文整片被当代码渲染）、或声明了语言却
    空体（标了 ``python`` 却没有任何内容，等于「答应给代码却没给」）。都是「交付不完整」的
    机械信号，最终交付里几乎不会有意为之，故误报率近零。
-    3. **交付验收对照**（仅 CEO：``check_citations`` + 本回合已发射的 ``delivery_verdict``）——
-       **真源 = 对账档位**（见 ``closing_posture``）：``delivered``=正式完成；
-       ``partial``/``notes``≈草稿·部分；``blocked``=阻塞。档位非正式完成时不得姿势 A
-       （完整交付 / 收卷收齐 / 完整可用 / 修好验绿闭集；**禁止**案面加完成话术词修案）。
-       无对账卡 / 本轮 ``no_batch`` 不拦正文。另：**产物结构**窄闸——``blocked``
-       且无落盘时不得「已生成 / 请下载」；有落盘但无 ``.pptx`` 时不得宣称 PPT
-       可打开；正文点名声明/自报但磁盘没有的路径且夹「已生成/已落盘」同类宣称时回炉
-       （队员 COMPLETED ≠ 用户交付）。有交付卡时终稿超 ``engine_ceo_overview_max_chars`` → 只打
-       ``engine.finish_guard_honesty_shadow``（``hit=overview_length``），
-       不回炉、不改写终稿。
-
-处置（回炉 / 放行 / 计数）在 react_loop：``#rN`` **仅**成稿可引用集失败且无其它闸时，
-引擎可先自动 ``read_url`` 升级台账再验；仍不过则剥号放行（见 ``engine/round.py``），
-不因此整篇 Rework。书目形态等仍走原回炉。
+2. **交付验收对照**（仅 CEO：``check_citations`` + 本回合已发射的 ``delivery_verdict``）——
+   **真源 = 对账档位**（见 ``closing_posture``）：``delivered``=正式完成；
+   ``partial``/``notes``≈草稿·部分；``blocked``=阻塞。档位非正式完成时不得姿势 A
+   （完整交付 / 收卷收齐 / 完整可用 / 修好验绿闭集；**禁止**案面加完成话术词修案）。
+   无对账卡 / 本轮 ``no_batch`` 不拦正文。另：**产物结构**窄闸——``blocked``
+   且无落盘时不得「已生成 / 请下载」；有落盘但无 ``.pptx`` 时不得宣称 PPT
+   可打开；正文点名声明/自报但磁盘没有的路径且夹「已生成/已落盘」同类宣称时回炉
+   （队员 COMPLETED ≠ 用户交付）。有交付卡时终稿超 ``engine_ceo_overview_max_chars`` → 只打
+   ``engine.finish_guard_honesty_shadow``（``hit=overview_length``），
+   不回炉、不改写终稿。
 
 刻意**不**纳入「残留 TODO / 填空占位」之类：法律垂直会正当地在合同模板留空待填、worker 也会
 如实写「该资料待客户提供」，机械判会误伤——轻层的立身之本是近零误报，宁缺毋滥。后续轻层（如
 受限的 JSON 可解析）与重层（要跑 / 要重算 / 换眼睛找漏 / 回源对照）在此扩展。
 
 **统一底线**：结构完整性两查对 CEO 与 worker 同样成立，二者收尾都过这道关（worker 回炉经
-``run_output_reset`` 干净重写其卡片）；``[n]`` 造引用查仅 CEO 路径开；``#rN`` id 存在闸按
-Q5 条件启用（见上）；交付验收对照（含概览篇幅）仅 CEO 路径开。
+``run_output_reset`` 干净重写其卡片）；交付验收对照（含概览篇幅）仅 CEO 路径开。
 
 → 见设计: docs/03-AI核心/执行引擎架构设计.md（ReAct 循环 · 交付前核验）
 """
@@ -52,11 +42,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from agentcore.runtime.citations import (
-    extract_ledger_ref_ids,
-    invalid_ledger_ref_ids,
-    out_of_range_markers,
-)
+from agentcore.runtime.citations import extract_ledger_ref_ids, invalid_ledger_ref_ids
 from agentcore.runtime.evidence_ledger import is_announcement_doc_kind
 
 if TYPE_CHECKING:
@@ -97,10 +83,8 @@ _GAP_NEGATION_PREFIXES = ("尚未", "没有", "并未", "未", "没", "无")
 def finish_guard(
     content: str,
     *,
-    citation_count: int,
+    citation_count: int = 0,
     check_citations: bool = True,
-    citable_ids: frozenset[str] | set[str] | None = None,
-    ledger_entries: list[dict] | None = None,
     delivery_verdict: DeliveryVerdict | None = None,
     overview_max_chars: int | None = None,
 ) -> list[str]:
@@ -111,38 +95,17 @@ def finish_guard(
     提示注入、回炉一轮。纯函数、不经 LLM、不靠 CEO 自觉，可独立单测。
 
     这是**所有 react_loop 收尾共过的统一底线**——CEO captain 与 worker 都在 done 点过此关。
-    现查三类，适用面不同：
+    对话气泡不扫 ``[n]`` / ``#rN`` / 书目（``citation_count`` 已不参与判定）。现查两类：
 
-    1. **造引用**：
-       - ``[n]``（仅 ``check_citations``）：越界角标 → 编造引用。
-       - ``#rN``（``citable_ids`` 非 None 且正文出现标记）：id ∉ 成稿可引用集
-         （``deep_read ∪ selected``）→ 回炉项。
-       - 书目形态 + 公告启发式（有 ``ledger_entries`` 时）：见 :func:`_bibliography_reworks`
-         （含无 #rN 绑定的 GB/T ``[D]/[J]`` 著录）。
-    2. **结构完整性**（始终查）：:func:`_code_fence_reworks`。
-    3. **交付验收对照**（仅 ``check_citations``）：
+    1. **结构完整性**（始终查）：:func:`_code_fence_reworks`。
+    2. **交付验收对照**（仅 ``check_citations``）：
        - 收口诚实性（``closing_honesty_rework``）：真源=``delivery_verdict`` 档位；
          非正式完成不得姿势 A；无卡 / ``no_batch`` 不拦正文；
        - 产物结构窄闸（空盘下载宣称 / 无 pptx 说 PPT）——直接回炉；
        - 有交付卡时的概览篇幅（``overview_max_chars``，默认读设置）——只影子观测。
     """
+    _ = citation_count  # 对话不再因角标回炉；调用面仍可传。
     reworks: list[str] = []
-    if check_citations:
-        stray = out_of_range_markers(content, citation_count)
-        if stray:
-            marks = "、".join(f"[{n}]" for n in stray)
-            reworks.append(
-                f"正文用了 {marks} 这些来源角标，但本回合实际只有 {citation_count} 条来源——"
-                "它们指向不存在的来源卡，属于编造引用（违反「绝不编造引用」）。请删除这些角标、"
-                "改成真实存在的来源编号，或为该论断补上可检索到的来源；没有依据就直接去掉这处引用。"
-            )
-    reworks.extend(
-        citation_quality_reworks(
-            content,
-            citable_ids=citable_ids,
-            ledger_entries=ledger_entries,
-        )
-    )
     reworks.extend(_code_fence_reworks(content))
     if check_citations:
         from agentcore.runtime.closing_posture import closing_honesty_rework
@@ -167,10 +130,10 @@ def citation_quality_reworks(
     citable_ids: frozenset[str] | set[str] | None = None,
     ledger_entries: list[dict] | None = None,
 ) -> list[str]:
-    """``#rN`` 合法性 + 书目形态闸（chat ``finish_guard`` 与文件合同闸共用）。
+    """落盘成文 ``#rN`` 合法性 + 书目形态闸（文件合同 / ``two_phase`` B）。
 
-    ``ledger_entries is None`` → 书目闸关闭；空列表仍开通 unbound ``[D]/[J]`` 检查。
-    ``citable_ids is None`` → 跳过非法 ``#rN`` 检查。
+    对话气泡 ``finish_guard`` **不**走本函数。``ledger_entries is None`` → 书目闸关闭；
+    空列表仍开通 unbound ``[D]/[J]`` 检查。``citable_ids is None`` → 跳过非法 ``#rN`` 检查。
     """
     reworks: list[str] = []
     bad_refs = invalid_ledger_ref_ids(content, citable_ids)
@@ -184,51 +147,6 @@ def citation_quality_reworks(
         )
     reworks.extend(_bibliography_reworks(content, ledger_entries))
     return reworks
-
-
-def uncitable_ledger_refs_only(
-    content: str,
-    *,
-    citation_count: int,
-    check_citations: bool = True,
-    citable_ids: frozenset[str] | set[str] | None = None,
-    ledger_entries: list[dict] | None = None,
-    delivery_verdict: DeliveryVerdict | None = None,
-    overview_max_chars: int | None = None,
-) -> list[str] | None:
-    """若 ``finish_guard`` **仅**因非法 ``#rN`` 失败，返回那些 id；否则 ``None``。
-
-    空列表 = 本会放行（无非法 ``#rN`` 且无其它闸问题）。书目形态 / ``[n]`` /
-    围栏 / 交付诚实等任一并存 → ``None``（走原回炉，不走帮读/剥号捷径）。
-
-    供引擎在 decide→回炉前判断是否可自动 ``read_url`` 升级台账，或剥号放行。
-    """
-    bad_refs = invalid_ledger_ref_ids(content, citable_ids)
-    other: list[str] = []
-    if check_citations:
-        stray = out_of_range_markers(content, citation_count)
-        if stray:
-            other.append("bracket")
-    if ledger_entries is not None:
-        other.extend(_bibliography_reworks(content, ledger_entries))
-    other.extend(_code_fence_reworks(content))
-    if check_citations:
-        from agentcore.runtime.closing_posture import closing_honesty_rework
-
-        honesty = closing_honesty_rework(content, delivery_verdict)
-        if honesty:
-            other.append(honesty)
-        other.extend(_delivery_structure_reworks(content, delivery_verdict))
-        other.extend(
-            _overview_length_reworks(
-                content,
-                delivery_verdict,
-                overview_max_chars=overview_max_chars,
-            )
-        )
-    if other:
-        return None
-    return list(bad_refs)
 
 
 def _bibliography_bound_ref_ids(content: str) -> list[str]:

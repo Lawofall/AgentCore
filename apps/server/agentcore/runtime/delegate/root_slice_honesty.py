@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentcore.workflows.playbook_templates import is_workflow_playbook
+from agentcore.runtime.runs.playbooks import PLAYBOOKS
 
 
 def _deliverable(task: dict[str, Any]) -> dict[str, Any]:
@@ -62,7 +62,7 @@ def check_root_slice_honesty(
     """根侧无边界整锅风险时返回软告警文案；否则 None."""
     if depth != 0:
         return None
-    if is_workflow_playbook(playbook):
+    if isinstance(playbook, str) and playbook.strip() in PLAYBOOKS:
         return None
     if not isinstance(tasks, list) or not tasks:
         return None

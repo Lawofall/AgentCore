@@ -142,7 +142,6 @@ def gap_fill_admission_error(
 
 def cold_open_reject_message(shape: ContinuationShape) -> str:
     """收口后冷开整团重派的拒绝正文——指向真实可用的续派入口。"""
-    from agentcore.runtime.delegate.force_scopes import GATE_POST_CLOSE, force_hint
     from agentcore.runtime.runs.constants import MAX_GAP_FILL_ADDS
 
     return (
@@ -150,6 +149,5 @@ def cold_open_reject_message(shape: ContinuationShape) -> str:
         "要动同一支团队请走续派入口——让原作者接着干用 "
         "`continue_from_run_id`（条数不限，run_id 见 `<recent_team_graph>`）；"
         f"补失败/跳过缺口用 `replaces_run_id`（单次≤{MAX_GAP_FILL_ADDS}）。"
-        "已有产出够交代就直接向老板交代；确系另起新任务再点名放行本闸"
-        f"（{force_hint(GATE_POST_CLOSE)}）。"
+        "已有产出够交代就直接向老板交代。"
     )

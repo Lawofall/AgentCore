@@ -83,7 +83,6 @@ function minimalExec(): Execution {
     crossExamEnabled: false,
     debateOpening: null,
     debatePretrial: null,
-    teamNotes: [],
   };
 }
 

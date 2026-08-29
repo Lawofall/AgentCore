@@ -1,6 +1,6 @@
 {
   "name": "single_agent_retry_reset",
-  "description": "单聊：LLM 流式透明重试 (reason=retry) content_reset 丢弃临时正文、不留 rework 痕迹",
+  "description": "单聊：LLM 流式透明重试 (reason=retry) content_reset 丢弃临时正文、不折过程痕迹",
   "events": [
     {
       "type": "message_start",
@@ -108,7 +108,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

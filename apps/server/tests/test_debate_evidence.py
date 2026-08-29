@@ -122,21 +122,22 @@ def test_evidence_rule_constant_is_the_single_source():
 
 
 def test_side_system_carries_search_query_rule():
-    """查询取证原则进【系统提示】：当事方/案由、禁抽象文化词、空结果删词重搜。
+    """辩论查询对照进系统提示：当事方/案由 vs 抽象文化词；空结果 ≠ 不存在。
 
-    词数不在辩论常驻复述（唯一所有者 = web_search schema）；个案 query 不出常驻。
+    词数不在辩论常驻复述（唯一所有者 = web_search schema）；个案 query / 检索轮次树不出常驻。
     """
     text = side_system(_config(), _two_sides()[0])
-    assert SEARCH_QUERY_RULE in text  # 来自共享常量、口径单一
+    assert SEARCH_QUERY_RULE in text
     assert "schema" not in SEARCH_QUERY_RULE
     assert "见 web_search" not in SEARCH_QUERY_RULE
     assert "2–4 个核心词" not in text
     assert "2–4 核心词" not in SEARCH_QUERY_RULE
     assert "2–3 个核心词" not in SEARCH_QUERY_RULE
     assert "茉莉奶白" not in SEARCH_QUERY_RULE
+    assert "连搜两次" not in SEARCH_QUERY_RULE
     assert "当事方" in text or "案由" in text
     assert "抽象文化词" in text
-    assert "空结果" in text and "再搜一次" in text  # 空→删词重搜，别当「不存在」
+    assert "空结果" in text and "≠" in SEARCH_QUERY_RULE
     schema = WebSearchTool().schema
     blob = schema.description + schema.parameters["properties"]["query"]["description"]
     assert "2–3" in blob  # 词数唯一所有者 = 工具 schema
@@ -354,6 +355,10 @@ def test_assess_system_carries_source_tier():
     assert "弱源" in _ASSESS_SYSTEM
     assert "本轮引用证据台账" in _ASSESS_SYSTEM
     assert "勿臆造等级" in _ASSESS_SYSTEM
+    # 裁判身份 + JSON 合同，不是编号庭审菜单
+    assert "①" not in _ASSESS_SYSTEM
+    assert "②" not in _ASSESS_SYSTEM
+    assert "③" not in _ASSESS_SYSTEM
 
 
 def test_judge_prompt_injects_ledger_tiers():

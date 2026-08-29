@@ -1,7 +1,7 @@
 """Delegate playbook declaration gate（结构校验）.
 
 默认主路：手写顶层 ``tasks``（可省略 playbook）。
-具名 playbook = 固化流水线快捷进阶（如绿场 ``build_app``）；与 tasks XOR。
+具名 playbook = 固化流水线快捷进阶；与 tasks XOR。
 软引导见 skill / schema；省略 playbook / 手写不再因意图硬拒。
 
 场面账（automation delivery / website style / presentation format）已拆除：
@@ -20,8 +20,19 @@ DeclarationRejectGate = Literal[
     "xor",
 ]
 
-# 建站具名套餐已撤：未知名走通用 catalog 拒文；这两名额外给「手写一人一页」指引。
-_WEBSITE_RETIRED_SHORTCUTS = frozenset({"build_website", "build_website_verify"})
+# 已撤具名套餐：未知名走通用 catalog 拒文；下列额外给手写指引（不要再传该名）。
+_WEBSITE_HANDWRITE_HINT = (
+    "建站请手写 `tasks`：一人一页完整 HTML（导航和页脚写进同一页）；"
+    "不要找内部模板；不要再传该 playbook 名。"
+)
+_RETIRED_SHORTCUT_HINTS: dict[str, str] = {
+    "build_website": _WEBSITE_HANDWRITE_HINT,
+    "build_website_verify": _WEBSITE_HANDWRITE_HINT,
+    "build_app": (
+        "做软件请手写 `tasks`；HOW → consult(building_software)。"
+        "不要再传该 playbook 名。"
+    ),
+}
 
 PLAYBOOK_TASKS_XOR_MSG = (
     "playbook 与 tasks 二选一，不可同时传。"
@@ -102,19 +113,14 @@ def resolve_playbook_declaration(
         if has_tasks:
             # playbook XOR tasks — reject before expand / fanout (避免半跑).
             return None, PLAYBOOK_TASKS_XOR_MSG
-        if named in _WEBSITE_RETIRED_SHORTCUTS:
-            return None, (
-                f"未知 playbook『{named}』。"
-                "建站请手写 `tasks`：一人一页完整 HTML（导航和页脚写进同一页）；"
-                "不要找内部模板；不要再传该 playbook 名。"
-            )
+        hint = _RETIRED_SHORTCUT_HINTS.get(named)
+        if hint is not None:
+            return None, f"未知 playbook『{named}』。{hint}"
         if named not in PLAYBOOKS:
             return None, (
                 f"未知 playbook『{named}』；可用：{available_playbooks()}。"
-                "或手写 `tasks`（可不声明 playbook）；"
-                "绿场软件推荐具名 `build_app`。"
+                "或手写 `tasks`（可不声明 playbook）。"
             )
-        # 具名 build_app 等直接放行。
         return named, None
 
     # Hand-written path: omit playbook, pass non-empty tasks.

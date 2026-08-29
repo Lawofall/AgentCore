@@ -72,7 +72,7 @@ describe("composerPendingHint", () => {
       question: "",
       assumptions: [],
       questions: [],
-      intent: "kickoff",
+      intent: "decision",
       origin: "server",
     });
     expect(conversationHasPendingDecision(CID)).toBe(false);
@@ -234,7 +234,7 @@ describe("composerPendingHint", () => {
       question: "",
       assumptions: [],
       questions: [],
-      intent: "kickoff",
+      intent: "decision",
       origin: "server",
     });
 

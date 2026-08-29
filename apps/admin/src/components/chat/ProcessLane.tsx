@@ -280,18 +280,6 @@ function LaneRowView({
   );
 }
 
-function stepCount(step: ProcessStep, ...keys: string[]): number {
-  const rec = step as unknown as Record<string, unknown>;
-  for (const key of keys) {
-    const value = rec[key];
-    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-      return value;
-    }
-    if (typeof value === "string" && Number(value) > 0) return Number(value);
-  }
-  return 0;
-}
-
 function SlotRow({
   step,
   interactions,
@@ -317,17 +305,9 @@ function SlotRow({
     if (!ask) return null;
     return <AskReadCard ask={ask} />;
   }
-  if (step.kind === "rework") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground">
-        已重写
-      </span>
-    );
-  }
   if (step.kind === "graph_append") {
-    const added = stepCount(step, "added_count", "addedCount");
-    if (!added) return null;
-    return <p className="text-muted-foreground text-xs">续图 · +{added}</p>;
+    // 旧 journal 槽位标记：产品聊天不画回链铬条（协作图 UX §六）。
+    return null;
   }
   return null;
 }

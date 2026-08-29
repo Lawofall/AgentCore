@@ -195,9 +195,6 @@
         "checkpoint_id": "cp1"
       },
       {
-        "kind": "rework"
-      },
-      {
         "kind": "content",
         "text": "阶段成果如下。\n\n重写后的交付正文。"
       }
@@ -347,7 +344,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

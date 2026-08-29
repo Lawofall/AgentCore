@@ -162,3 +162,20 @@ describe("setForConversation 的快照判据", () => {
     expect(messageIds()).toEqual([]);
   });
 });
+
+describe("openRecovery", () => {
+  it("markOpenRecovery then full clear", () => {
+    usePausedTurnStore.getState().markOpenRecovery(CID, "ready");
+    expect(usePausedTurnStore.getState().openRecovery[CID]).toBe("ready");
+    usePausedTurnStore.getState().clear();
+    expect(usePausedTurnStore.getState().openRecovery).toEqual({});
+  });
+
+  it("per-conversation clear drops only that key", () => {
+    usePausedTurnStore.getState().markOpenRecovery(CID, "ready");
+    usePausedTurnStore.getState().markOpenRecovery("other", "failed");
+    usePausedTurnStore.getState().clear(CID);
+    expect(usePausedTurnStore.getState().openRecovery[CID]).toBeUndefined();
+    expect(usePausedTurnStore.getState().openRecovery.other).toBe("failed");
+  });
+});

@@ -1,8 +1,11 @@
-"""ask_user checkpoint intent resolution（开工提案壳已拆除 → 默认 decision）。"""
+"""ask_user checkpoint intent resolution（普通 ask 恒为 decision）。"""
 
 import json
+from typing import get_args
 
 from agentcore.llm.provider.protocol import LLMMessage, ToolCall, ToolCallFunction
+from agentcore.runtime.checkpoints import AskCheckpointIntent, coerce_ask_checkpoint_intent
+from agentcore.tools.builtin.ask_user.card import AskUserCard
 from agentcore.tools.builtin.ask_user.intent import resolve_ask_checkpoint_intent
 
 
@@ -22,6 +25,27 @@ def _assistant_tool(name: str, args: dict | None = None, *, call_id: str = "c1")
 def test_empty_transcript_is_decision():
     assert resolve_ask_checkpoint_intent(None) == "decision"
     assert resolve_ask_checkpoint_intent([]) == "decision"
+
+
+def test_checkpoint_intent_and_card_literals():
+    assert set(get_args(AskCheckpointIntent)) == {
+        "decision",
+        "organize_plan",
+        "daily_review",
+    }
+    assert set(get_args(AskUserCard)) == {"organize_plan", "daily_review"}
+
+
+def test_coerce_unknown_intent_is_decision():
+    assert coerce_ask_checkpoint_intent("decision") == "decision"
+    assert coerce_ask_checkpoint_intent("organize_plan") == "organize_plan"
+    assert coerce_ask_checkpoint_intent("daily_review") == "daily_review"
+    assert coerce_ask_checkpoint_intent(None) == "decision"
+    assert coerce_ask_checkpoint_intent("") == "decision"
+    assert coerce_ask_checkpoint_intent("not_a_known_intent") == "decision"
+    assert coerce_ask_checkpoint_intent("kickoff") == "decision"
+    assert coerce_ask_checkpoint_intent("proposal_pick") == "decision"
+    assert coerce_ask_checkpoint_intent("risk_ack") == "decision"
 
 
 def test_opening_turn_without_execution_is_decision():

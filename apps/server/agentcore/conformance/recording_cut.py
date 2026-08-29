@@ -68,8 +68,8 @@ RECORDED_FIXTURE_PREFIX = "recorded_"
 # 本身不新增分类。
 CUT_KEEP_EPHEMERAL: frozenset[EventType] = frozenset(
     {
-        # oracle 清正文标量并弹掉尾部 content 步（finish_guard 另折 rework chip）——丢弃会把
-        # 「违规版+修正版」拼在一起，fold 出错误正文（projection.py content_reset 分支）。
+        # oracle 清正文标量并弹掉尾部 content 步——丢弃会把「违规版+修正版」拼在一起，
+        # fold 出错误正文（projection.py content_reset 分支）。所有 reason 都不折过程痕迹。
         EventType.CONTENT_RESET,
         # content_reset 的 worker 对偶：oracle 清 run 卡片已流式产出（run_output_reset 分支）。
         EventType.RUN_OUTPUT_RESET,

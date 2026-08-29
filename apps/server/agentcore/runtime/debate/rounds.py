@@ -307,9 +307,6 @@ async def first_round(
         user_message=tool._user_message,
         execution_id=execution_id,
         approval_gate=worker_gate,
-        # 辩手是对手不是协作团队：不配团队便签墙（否则正反方会经便签互读对方立论、面板还冒出
-        # 莫名的「团队便签」）。跨方信息由主持人按轮喂 round_feedback，才是辩论正当的跨方通道。
-        collaboration=False,
         evidence_ledger=tool._evidence_ledger,
     )
     scheduler = WaveScheduler(tool._max_parallel or resolve_max_parallel())

@@ -32,7 +32,7 @@
         "question": "先做 A 还是 B？\n两条路线各有取舍。",
         "assumptions": [],
         "questions": [],
-        "intent": "kickoff"
+        "intent": "decision"
       },
       "timestamp": "2026-01-01T00:00:00.004Z"
     },
@@ -145,7 +145,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

@@ -3215,6 +3215,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/workspace/archive/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Workspace Archive
+         * @description Download a directory subtree as zip (selected dir as archive root).
+         *
+         *     Independent of GET ``.../workspace/files/{path}`` (preview / single file).
+         *     Capacity is the panel upload ceiling, not snapshot retention.
+         */
+        get: operations["download_workspace_archive_v1_conversations__conversation_id__workspace_archive__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/workspace/binding": {
         parameters: {
             query?: never;
@@ -5914,6 +5937,30 @@ export interface paths {
          *     Does not touch a workspace. Auth required so the surface is not a public converter.
          */
         post: operations["convert_md_to_pdf_v1_workspaces_convert_md_to_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workspaces/{ws_id}/archive/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Workspace Archive
+         * @description Download a directory subtree as zip (selected dir as archive root).
+         *
+         *     Independent of GET ``/{ws_id}/files/{path}`` (preview / single file). Capacity
+         *     is the panel upload ceiling, not snapshot retention. Shared spaces that can
+         *     download a file can download a folder zip — this is not the snapshot 409.
+         */
+        get: operations["download_workspace_archive_v1_workspaces__ws_id__archive__path__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -10772,7 +10819,8 @@ export interface components {
          *     stay path-only so workers can ``code_execute``. ``kind="conversation"`` references
          *     another of the user's conversations: recent messages are materialized into
          *     ``text`` client-side, and ``conversation_id`` records which one (for the chip +
-         *     later jump).
+         *     later jump). ``kind="document"`` pins an on-demand setting/note for this turn
+         *     (``document_id``); the server loads the body — not an uploaded file.
          */
         MessageAttachment: {
             /**
@@ -10782,12 +10830,14 @@ export interface components {
             binary: boolean;
             /** Conversation Id */
             conversation_id?: string | null;
+            /** Document Id */
+            document_id?: string | null;
             /**
              * Kind
              * @default file
              * @enum {string}
              */
-            kind: "file" | "dir" | "conversation";
+            kind: "file" | "dir" | "conversation" | "document";
             /** Name */
             name: string;
             /** Path */
@@ -11268,7 +11318,7 @@ export interface components {
             /** Checkpoint Id */
             checkpoint_id: string;
             /** Intent */
-            intent?: ("kickoff" | "decision" | "proposal_pick" | "risk_ack" | "organize_plan" | "daily_review") | null;
+            intent?: ("decision" | "organize_plan" | "daily_review") | null;
             kind: components["schemas"]["SuspensionKind"];
             /** Message Id */
             message_id: string;
@@ -12649,7 +12699,7 @@ export interface components {
          *     ``workspace_path`` is set when the attachment was written into the durable
          *     project space (附件驻留 / 引用即驻留): a workspace-relative path under
          *     ``attachments/`` that the file-download API can serve. ``None`` for directory /
-         *     conversation chips (nothing is written as a workspace file).
+         *     conversation / document chips (nothing is written as a workspace file).
          */
         StoredAttachment: {
             /**
@@ -12659,12 +12709,14 @@ export interface components {
             binary: boolean;
             /** Conversation Id */
             conversation_id?: string | null;
+            /** Document Id */
+            document_id?: string | null;
             /**
              * Kind
              * @default file
              * @enum {string}
              */
-            kind: "file" | "dir" | "conversation";
+            kind: "file" | "dir" | "conversation" | "document";
             /** Name */
             name: string;
             /** Path */
@@ -19501,6 +19553,42 @@ export interface operations {
             };
         };
     };
+    download_workspace_archive_v1_conversations__conversation_id__workspace_archive__path__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                conversation_id: string;
+                path: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_workspace_binding_v1_conversations__conversation_id__workspace_binding_get: {
         parameters: {
             query?: never;
@@ -25460,6 +25548,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConvertMdToPdfResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_workspace_archive_v1_workspaces__ws_id__archive__path__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                ws_id: string;
+                path: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

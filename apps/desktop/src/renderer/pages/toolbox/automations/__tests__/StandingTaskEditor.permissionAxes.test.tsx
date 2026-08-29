@@ -188,12 +188,12 @@ describe("StandingTaskEditorDrawer permission axes", () => {
 
 describe("StandingTaskEditorDrawer folder loading", () => {
   it("says the workspace list failed instead of claiming there is no cloud workspace", () => {
-    renderEditor(makeTask(), "工作区列表加载失败");
+    renderEditor(makeTask(), "文件夹列表加载失败");
 
-    const note = screen.getByText(/读不到工作区列表/);
+    const note = screen.getByText(/读不到文件夹列表/);
     expect(note.className).toContain("text-muted-foreground");
     expect(note.className).not.toContain("destructive");
-    expect(screen.queryByText(/没有可用的云工作区/)).toBeNull();
+    expect(screen.queryByText(/没有可用的云端文件夹/)).toBeNull();
   });
 
   it("keeps the empty-cloud-workspace prompt primary (needs you)", async () => {
@@ -212,7 +212,7 @@ describe("StandingTaskEditorDrawer folder loading", () => {
       </MemoryRouter>,
     );
 
-    const note = await screen.findByText(/没有可用的云工作区/);
+    const note = await screen.findByText(/没有可用的云端文件夹/);
     expect(note.className).toContain("text-primary");
     expect(note.className).not.toContain("destructive");
   });

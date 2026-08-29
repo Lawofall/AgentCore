@@ -1,6 +1,7 @@
 import {
   type AskUserContent,
   composeAnswer,
+  hasExplicitAskReply,
 } from "@/components/chat/ask/AskUserFields";
 import type { WorkspaceBinding } from "@/services/workspaceBinding";
 import type { FsRoot } from "@shared/ipc-contract";
@@ -93,7 +94,7 @@ describe("composeAnswer with bind_local_folder pick", () => {
           formatBindLocalFolderAnswer("绑定本机执行环境", "AgentCore-desktop"),
         ],
       },
-      "",
+      {},
     );
     expect(text).toContain("绑定本机执行环境（AgentCore-desktop）");
     expect(text).toMatch(/^我的答复：/);
@@ -105,7 +106,7 @@ describe("composeAnswer with bind_local_folder pick", () => {
       {
         q0: [formatOpenLocalFolderAnswer("打开本机文件夹", "AgentCore")],
       },
-      "",
+      {},
     );
     expect(text).toContain(
       "打开本机文件夹（AgentCore · 已打开为本机文件夹，新会话）",
@@ -118,7 +119,7 @@ describe("composeAnswer with bind_local_folder pick", () => {
       {
         q0: [formatRegisterLocalFolderAnswer("登记本机文件夹", "AgentCore")],
       },
-      "",
+      {},
     );
     expect(text).toContain(
       "登记本机文件夹（AgentCore · 已登记为本机文件夹，仍在本对话）",
@@ -126,14 +127,92 @@ describe("composeAnswer with bind_local_folder pick", () => {
     expect(text).not.toContain("新会话");
   });
 
-  it("empty picks + note does not stack 按你的默认", () => {
+  it("empty picks + note does not stack 按你的默认 or a global 补充 line", () => {
     const withDefault: AskUserContent = {
       ...content,
       questions: [{ ...content.questions[0], default: "继续用云端" }],
     };
-    const text = composeAnswer(withDefault, { q0: [] }, "我想自己定");
-    expect(text).toContain("· 补充：我想自己定");
+    const text = composeAnswer(withDefault, { q0: [] }, { q0: "我想自己定" });
+    expect(text).toContain("· 工作区：我想自己定");
     expect(text).not.toContain("按你的默认");
+    expect(text.split("\n").some((l) => l.startsWith("· 补充："))).toBe(false);
+  });
+
+  it("picked option plus note appends 补充 on the same line", () => {
+    const text = composeAnswer(
+      content,
+      { q0: ["继续用云端"] },
+      { q0: "再加一句" },
+    );
+    expect(text).toContain("· 工作区：继续用云端 · 补充：再加一句");
+    expect(text.split("\n").some((l) => l.startsWith("· 补充："))).toBe(false);
+  });
+});
+
+describe("hasExplicitAskReply", () => {
+  const q: AskUserContent = {
+    question: "x",
+    assumptions: [],
+    questions: [
+      {
+        id: "q0",
+        prompt: "p",
+        kind: "choice",
+        options: [{ label: "甲" }],
+        multiple: false,
+        default: "甲",
+      },
+    ],
+  };
+
+  it("ignores card default until the user picks or writes a per-question note", () => {
+    expect(hasExplicitAskReply(q, { q0: [] }, {})).toBe(false);
+    expect(hasExplicitAskReply(q, { q0: ["甲"] }, {})).toBe(true);
+    expect(hasExplicitAskReply(q, { q0: [] }, { q0: "补充" })).toBe(true);
+  });
+
+  it("does not let one question's note satisfy another", () => {
+    const two: AskUserContent = {
+      question: "x",
+      assumptions: [],
+      questions: [
+        q.questions[0],
+        {
+          id: "q1",
+          prompt: "p2",
+          kind: "choice",
+          options: [{ label: "乙" }],
+          multiple: false,
+          default: "乙",
+        },
+      ],
+    };
+    expect(hasExplicitAskReply(two, { q0: [], q1: [] }, { q0: "补充" })).toBe(
+      false,
+    );
+    expect(hasExplicitAskReply(two, { q0: ["甲"], q1: [] }, {})).toBe(false);
+    expect(
+      hasExplicitAskReply(two, { q0: [], q1: [] }, { q0: "a", q1: "b" }),
+    ).toBe(true);
+  });
+
+  it("does not count a note on a text question", () => {
+    const textQ: AskUserContent = {
+      question: "x",
+      assumptions: [],
+      questions: [
+        {
+          id: "q0",
+          prompt: "p",
+          kind: "text",
+          options: [],
+          multiple: false,
+          default: "",
+        },
+      ],
+    };
+    expect(hasExplicitAskReply(textQ, { q0: [] }, { q0: "补充" })).toBe(false);
+    expect(hasExplicitAskReply(textQ, { q0: ["手写"] }, {})).toBe(true);
   });
 });
 

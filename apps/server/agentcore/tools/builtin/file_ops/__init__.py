@@ -11,7 +11,7 @@ Split axes (implementation modules):
 - ``integrity`` — integrity & write-scope policy
 - ``errors`` — error / result mapping
 - ``read`` — file_read / file_list (one-layer LS; FileListTool still in read.py)
-- ``listing`` / ``glob`` — listing helpers + glob (basename search)
+- ``listing`` / ``glob`` — listing helpers + globstar search
 - ``mutate`` — write / append / str_replace / write_section
 - ``meta`` — delete / move / copy / mkdir
 - ``batch`` — file_batch

@@ -9,7 +9,8 @@ raw ``Path``.
 
 Panel download is **decoupled** from AI ``read_bytes``: it uses
 :meth:`ServerWorkspace.resolve_for_download` with the upload-aligned ceiling, not
-``WORKSPACE_READ_MAX_BYTES``.
+``WORKSPACE_READ_MAX_BYTES``. Folder zip uses the same ceiling via ``zip_dir``
+(not snapshot retention).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from typing import Literal, NoReturn
 
 from agentcore.config import settings
 from agentcore.core.errors import PayloadTooLargeError, ValidationError
+from agentcore.storage._archive import ArchiveLimitError, zip_dir
 from agentcore.workspace.limits import (
     WORKSPACE_BROWSE_LIST_MAX,
     is_file_too_large_detail,
@@ -133,6 +135,26 @@ def raise_http_for_download_io(exc: WorkspaceIOError) -> NoReturn:
     raise ValidationError(str(exc) or "读取文件失败") from exc
 
 
+def raise_http_for_archive_limit(exc: ArchiveLimitError) -> NoReturn:
+    """Map a subtree-zip capacity miss to 413 (same ceiling as panel upload)."""
+    max_bytes = settings.workspace_upload_max_bytes
+    raise PayloadTooLargeError(f"文件夹超出 {max_bytes} 字节的下载上限") from exc
+
+
+def archive_filename(path: str) -> str:
+    """Save-as name for a folder zip (selected directory as archive root)."""
+    name = path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    if name in ("", ".", ".."):
+        name = "folder"
+    return name if name.endswith(".zip") else f"{name}.zip"
+
+
+async def zip_resolved_dir(target: Path, *, max_bytes: int | None = None) -> bytes:
+    """Zip ``target`` (already a workspace directory) with the panel upload ceiling."""
+    ceiling = settings.workspace_upload_max_bytes if max_bytes is None else max_bytes
+    return await asyncio.to_thread(zip_dir, target, max_bytes=ceiling)
+
+
 async def resolve_download_file(
     *,
     user_id: str,
@@ -154,6 +176,31 @@ async def resolve_download_file(
     )
     ceiling = settings.workspace_upload_max_bytes if max_bytes is None else max_bytes
     return await backend.resolve_for_download(path, max_bytes=ceiling)
+
+
+async def zip_subtree_for_download(
+    *,
+    user_id: str,
+    folder_id: str | None,
+    folder_rel_path: str | None,
+    conversation_id: str,
+    path: str,
+    max_bytes: int | None = None,
+) -> bytes:
+    """Zip the directory at ``path`` for HTTP download (that directory as zip root).
+
+    Capacity is the panel upload ceiling, not snapshot retention. Callers must
+    not reuse GET ``.../files/{path}`` — that URL is file preview / single-file.
+    """
+    backend = _backend(
+        user_id=user_id,
+        folder_id=folder_id,
+        folder_rel_path=folder_rel_path,
+        conversation_id=conversation_id,
+    )
+    ceiling = settings.workspace_upload_max_bytes if max_bytes is None else max_bytes
+    target = await backend.resolve_dir_for_download(path)
+    return await zip_resolved_dir(target, max_bytes=ceiling)
 
 
 async def download_file(

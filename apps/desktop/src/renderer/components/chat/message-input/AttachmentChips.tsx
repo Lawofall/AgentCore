@@ -2,7 +2,14 @@ import { DirTypeIcon, FileTypeIcon } from "@/components/files/FileTypeIcon";
 import { IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Loader2, MessageSquare, Users, X } from "lucide-react";
+import {
+  AlertCircle,
+  Bookmark,
+  Loader2,
+  MessageSquare,
+  Users,
+  X,
+} from "lucide-react";
 import type {
   PendingAgentMention,
   PendingAttachment,
@@ -70,6 +77,8 @@ export function AttachmentChips({
               <DirTypeIcon name={a.name} path={a.path} size={12} />
             ) : a.kind === "conversation" ? (
               <MessageSquare size={12} className="shrink-0" />
+            ) : a.kind === "document" ? (
+              <Bookmark size={12} className="shrink-0" />
             ) : (
               <FileTypeIcon name={a.name} path={a.path} size={12} />
             )}
@@ -84,7 +93,9 @@ export function AttachmentChips({
                   ? (a.uploadError ?? "上传失败，发送时会重试")
                   : a.kind === "conversation"
                     ? "引用对话"
-                    : a.path
+                    : a.kind === "document"
+                      ? "本句点名设定"
+                      : a.path
               }
             >
               <span className="truncate">

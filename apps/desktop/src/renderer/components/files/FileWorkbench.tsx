@@ -101,7 +101,7 @@ const RULES_WS = "__rules__";
  *   (`hideRootDirs`) because their directories physically live inside it and
  *   would otherwise appear twice.
  * - **本机文件夹** — disk folders, most recently active first (VS Code 语义).
- * - **共享空间** — member-based cloud spaces, a parallel container (§八).
+ * - **共享空间** — member-based cloud file disk, not a third container (§八).
  *
  * `conv:` scratch is conversation-panel addressing, not a hub zone: 裸聊写盘
  * 自动建桌，产物进「我的文件」。

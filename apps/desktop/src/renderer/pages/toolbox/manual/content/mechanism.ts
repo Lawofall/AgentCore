@@ -119,7 +119,7 @@ export const mechanismChapter: ManualChapterContent = {
         },
         {
           type: "paragraph",
-          text: "关键岔路弹出拍板卡；写文件、跑代码等敏感操作要你点「允许」才放行——下面就是对话里同一套组件。",
+          text: "需求没说清、或关键岔路，会弹出拍板卡；写文件、跑代码等敏感操作要你点「允许」才放行——下面就是对话里同一套组件。",
         },
         { type: "embed", key: "ManualCheckpointCardPreview" },
         { type: "embed", key: "ManualApprovalCardPreview" },

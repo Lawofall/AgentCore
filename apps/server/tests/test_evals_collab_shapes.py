@@ -13,7 +13,6 @@ from agentcore.runtime.events import (
     plan_revised,
     run_plan,
     run_started,
-    team_note_posted,
 )
 
 
@@ -133,18 +132,6 @@ def test_recording_sink_merges_nested_plan_and_counts_interactions():
         )
     )
     sink.emit(
-        team_note_posted(
-            execution_id="e",
-            note_id="n1",
-            run_id="w1",
-            agent_id="w1",
-            role="维度A",
-            kind="decision",
-            text="口径：美元",
-            ts=1.0,
-        )
-    )
-    sink.emit(
         escalation_raised(
             "w2", "w2", question="缺数据", assumption="跳过", blocking=False, kind="dep"
         )
@@ -155,7 +142,6 @@ def test_recording_sink_merges_nested_plan_and_counts_interactions():
     assert {r["id"] for r in sink.plan_runs} == {"lead", "cmp", "w1", "w2"}
     assert any(r.get("parent_run_id") == "lead" for r in sink.plan_runs)
     assert sink.collab_interactions == {
-        "note": 1,
         "escalate": 1,
         "replan": 1,
         "continue": 1,
@@ -166,7 +152,7 @@ def test_team_outcome_carries_plan_and_interactions():
     sink = RecordingSink()
     sink.plan_runs = [{"id": "r1", "role": "调研", "task": "x", "depends_on": [], "parent_run_id": None}]
     sink.plan_type = "multi_agent"
-    sink.collab_interactions = {"note": 2}
+    sink.collab_interactions = {"escalate": 2}
     sink.roster = ["调研"]
     oc = team_outcome(
         {"content": "ok", "finish_reason": "end_turn", "rounds": 1},
@@ -175,7 +161,7 @@ def test_team_outcome_carries_plan_and_interactions():
     )
     assert oc.plan_runs == sink.plan_runs
     assert oc.plan_type == "multi_agent"
-    assert oc.collab_interactions == {"note": 2}
+    assert oc.collab_interactions == {"escalate": 2}
 
 
 # --- shape_score -----------------------------------------------------------------

@@ -99,6 +99,7 @@ export function insertQueuedTurnUserBubble(
               truncated: a.truncated,
               kind: a.kind,
               conversationId: a.conversation_id,
+              documentId: a.document_id,
               workspacePath: a.workspace_path,
             }))
           : undefined,

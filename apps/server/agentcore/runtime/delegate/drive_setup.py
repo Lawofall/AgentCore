@@ -1,4 +1,4 @@
-"""Drive-loop setup: note wall, executor, boundary hook, delegation grant."""
+"""Drive-loop setup: executor, boundary hook, delegation grant."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from agentcore.core.logging import get_logger
 from agentcore.runtime.delegate.boundary import boundary_hook, checkpoint_active
-from agentcore.runtime.events import team_note_posted
 from agentcore.runtime.runs.types import RunSpec, RunState
 
 if TYPE_CHECKING:
@@ -16,76 +15,6 @@ if TYPE_CHECKING:
 type DelegateTool = Any
 
 logger = get_logger(__name__)
-
-
-def setup_note_wall(
-    tool: DelegateTool,
-    plan: RunPlan,
-    *,
-    execution_id: str,
-    coordination: str,
-    seed_completed: dict[str, RunState] | None,
-    seed_notes: list[dict[str, str]] | None,
-) -> tuple[Any, bool]:
-    """Create / inherit this batch's NoteWall; stash on tool for CEO finalize paths.
-
-    Returns ``(note_wall | None, collaboration)``.
-    """
-    from agentcore.runtime.delegate.seed_notes import is_note_wall_batch, seed_note_wall
-    from agentcore.runtime.runs.notewall import NoteWall
-
-    # 团队便签墙 (§2.2 通 / §2.3 合·对账): own this batch's wall here so the CEO finalize can fold
-    # its outstanding 决定 / 认领 into 语义边界对账. Passed into the executor (workers post / read /
-    # amend on it) AND stashed on the tool so format_for_ceo reaches it on BOTH finalize paths
-    # (normal 终态 below + replan(stop) finalize_stopped). One wall per drive call = per fan-out
-    # batch, matching the wall's existing per-batch visibility scope.
-    # 存在性由 CEO 的 coordination 声明（缺省 none）；light 隐含 none。collaboration 仍走既有开关。
-    collaboration = is_note_wall_batch(len(plan.nodes), coordination)
-    if not collaboration:
-        tool._note_wall = None
-        return None, False
-
-    prev_wall = tool._note_wall
-    note_wall = NoteWall()
-    # 继承与 seed 无关：一个 replan 续跑 / 同回合追加批【必然】带 seed_completed，而那恰恰
-    # 是最需要旧墙的批——续跑的 worker 要看见队友已广播的决定与认领，CEO 收尾也要拿这些
-    # 便签做对账。此前把「有 seed」当成「新批」而换成空墙，等于每次续跑都把团队共识清零。
-    # 存在 prev_wall 本身就意味着同一 CEO 回合的上一批（跨回合 / 耐久恢复走全新实例，
-    # prev_wall 为 None，自然不继承）。
-    if prev_wall is not None:
-        inherited = note_wall.inherit(prev_wall.active_notes())
-        for note in inherited:
-            tool._sink.emit(
-                team_note_posted(
-                    execution_id=execution_id,
-                    note_id=note.note_id,
-                    run_id=note.run_id,
-                    agent_id=note.agent_id,
-                    role=note.role,
-                    kind=note.kind,
-                    text=note.text,
-                    ts=note.ts,
-                    source="inherited",
-                )
-            )
-        if inherited:
-            logger.info(
-                "delegate.inherit_notes",
-                count=len(inherited),
-                execution_id=execution_id,
-            )
-    tool._note_wall = note_wall
-    # 空 seed（None=全新批 / {}=开工卡耐久恢复，尚无 worker 完成、墙从未活过）才补种：
-    # 开工卡挂起发生在本函数之前，CEO 预贴便签从未上墙，恢复必须补贴；非空 seed
-    # （checkpoint 复核 / 跨回合追加 / retry）意味着原批已跑过，种子沿旧口径不重贴。
-    if seed_notes and not seed_completed:
-        seed_note_wall(
-            note_wall,
-            seed_notes,
-            sink=tool._sink,
-            execution_id=execution_id,
-        )
-    return note_wall, True
 
 
 def resolve_worker_gate(tool: DelegateTool) -> Any:
@@ -111,8 +40,6 @@ def build_drive_executor(
     *,
     execution_id: str,
     worker_gate: Any,
-    note_wall: Any,
-    collaboration: bool,
     session: Any,
 ) -> Callable[[RunSpec, dict], Awaitable[RunState]]:
     """Cold agent executor wrapped with continuation + optional coordination timeouts."""
@@ -147,8 +74,6 @@ def build_drive_executor(
         interaction_bridge=tool._registry,
         escalation_timeout=tool._checkpoint_timeout_seconds,
         escalation_armed=checkpoint_active(tool),
-        note_wall=note_wall,
-        collaboration=collaboration,
         team_brief=tool._team_brief,
         captain_recon=captain_recon or None,
         # 回合入口绑定的共享台账（与 CEO 同一对象）；辩论 executor 不经此路径。

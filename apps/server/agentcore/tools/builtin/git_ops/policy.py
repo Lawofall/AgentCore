@@ -458,6 +458,5 @@ def _is_ceo_context(context: Any) -> bool:
     """CEO turns carry no worker-only coordination channels."""
     return (
         context.write_coordinator is None
-        and context.note_wall is None
         and context.escalation is None
     )

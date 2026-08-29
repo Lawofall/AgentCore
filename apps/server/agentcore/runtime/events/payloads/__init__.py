@@ -45,11 +45,11 @@ TS_EXPORTS: tuple[TsExport, ...] = (
         "ResetReason",
         chat.ResetReason,
         doc=(
-            "Why a `content_reset` / `run_output_reset` fired. Folds render the\n"
-            "「已按交付规范重写」rework chip ONLY for `finish_guard`（交付前核验回炉）；\n"
-            "every other reason still clears the streamed draft but leaves no trace:\n"
-            "`retry`（LLM 流式透明重试）· `soft_gate`（captain 软门控打回）·\n"
-            "`narration`（worker 旁白回滚）· `ask_user`（blocking ask_user 吸收）."
+            "Why a `content_reset` / `run_output_reset` fired. Every reason clears\n"
+            "the streamed draft and leaves no process trace:\n"
+            "`finish_guard`（交付前结构核验回炉）· `retry`（LLM 流式透明重试）·\n"
+            "`soft_gate`（captain 软门控打回）· `narration`（worker 旁白回滚）·\n"
+            "`ask_user`（blocking ask_user 吸收）."
         ),
     ),
     TsInterface(chat.ContentResetPayload),
@@ -92,7 +92,7 @@ TS_EXPORTS: tuple[TsExport, ...] = (
         process.PROCESS_STEP_MEMBERS,
         doc=(
             "One step in a turn's 思考·正文·工具·协作 inline timeline (统一团队时间线).\n"
-            "reasoning/content/rework + tool are the CEO bubble's own narrative; the rest\n"
+            "reasoning/content + tool are the CEO bubble's own narrative; the rest\n"
             "are POSITIONAL MARKERS — zero-width anchors fixing WHERE a non-text element\n"
             "renders (payload looked up from the turn's side channels by id)."
         ),
@@ -152,7 +152,6 @@ TS_EXPORTS: tuple[TsExport, ...] = (
     TsInterface(interaction.EscalationRequiredPayload),
     TsInterface(interaction.EscalationResolvedPayload),
     TsInterface(interaction.InteractionOrphanedPayload),
-    TsInterface(run.TeamNotePostedPayload),
     TsInterface(run.TeamSynthesisWorkerPreview),
     TsInterface(run.TeamSynthesisPreviewPayload),
     TsInterface(run.CoordinationWaitPayload),
@@ -326,7 +325,6 @@ EVENT_PAYLOAD_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.ESCALATION_REQUIRED: interaction.EscalationRequiredPayload,
     EventType.ESCALATION_RESOLVED: interaction.EscalationResolvedPayload,
     EventType.INTERACTION_ORPHANED: interaction.InteractionOrphanedPayload,
-    EventType.TEAM_NOTE_POSTED: run.TeamNotePostedPayload,
     EventType.TEAM_SYNTHESIS_PREVIEW: run.TeamSynthesisPreviewPayload,
     EventType.COORDINATION_WAIT: run.CoordinationWaitPayload,
     EventType.WORKSPACE_LOCK_WAIT: run.WorkspaceLockWaitPayload,

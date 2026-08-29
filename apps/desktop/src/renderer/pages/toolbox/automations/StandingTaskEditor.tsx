@@ -316,8 +316,8 @@ export function StandingTaskEditorDrawer({
     if (noCloud) {
       setError(
         foldersError
-          ? `读不到工作区列表（${foldersError}），暂时无法确认可用的云工作区，请重试后再保存。`
-          : "请先创建一个云工作区（本地工作区无法在关机时代跑）",
+          ? `读不到文件夹列表（${foldersError}），暂时无法确认可用的云端文件夹，请重试后再保存。`
+          : "请先在「我的文件」里新建一个文件夹（本机文件夹无法在关机时代跑）",
       );
       return;
     }
@@ -425,7 +425,7 @@ export function StandingTaskEditorDrawer({
             <DialogDescription className="mt-1 text-xs text-muted-foreground">
               {isTemplate
                 ? "系统任务：目标由系统托管，可配置时间、作用域与落点。"
-                : "定时或 Webhook 触发后自动开一轮协作。仅支持云工作区。"}
+                : "定时或 Webhook 触发后自动开一轮协作。仅支持云端文件夹。"}
             </DialogDescription>
           </div>
           <IconButton
@@ -440,13 +440,13 @@ export function StandingTaskEditorDrawer({
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {foldersError ? (
             <p className="text-xs text-muted-foreground">
-              读不到工作区列表（{foldersError}
-              ），暂时无法确认可用的云工作区。请关闭抽屉重试。
+              读不到文件夹列表（{foldersError}
+              ），暂时无法确认可用的云端文件夹。请关闭抽屉重试。
             </p>
           ) : (
             noCloud && (
               <p className="text-xs text-primary">
-                没有可用的云工作区。请先在「文件」页的「我的文件」里新建一个，任务不能绑定本机工作区。
+                没有可用的云端文件夹。请先在「文件」页的「我的文件」里新建一个，任务不能绑定本机文件夹。
               </p>
             )
           )}
@@ -584,7 +584,7 @@ export function StandingTaskEditorDrawer({
 
           <label className="block">
             <span className="mb-1 block text-xs text-muted-foreground">
-              {isTemplate ? "报告落点工作区" : "云工作区"}
+              {isTemplate ? "报告落点文件夹" : "云端文件夹"}
             </span>
             <select
               className={SELECT_CLASS}
@@ -602,7 +602,7 @@ export function StandingTaskEditorDrawer({
             </select>
             {isTemplate && (
               <p className="mt-1 text-xs text-muted-foreground">
-                复盘报告与文档草稿写入此工作区。
+                复盘报告与文档草稿写入此文件夹。
               </p>
             )}
           </label>
@@ -636,11 +636,11 @@ export function StandingTaskEditorDrawer({
                 </label>
                 <div className="space-y-1.5">
                   <p className="text-xs text-muted-foreground">
-                    一并复盘的云工作区
+                    一并复盘的云端文件夹
                   </p>
                   {cloudFolders.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
-                      {foldersError ? "工作区列表未加载成功" : "暂无云工作区"}
+                      {foldersError ? "文件夹列表未加载成功" : "暂无云端文件夹"}
                     </p>
                   ) : (
                     <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
@@ -662,7 +662,7 @@ export function StandingTaskEditorDrawer({
                 </div>
                 {!form.includeGlobal && form.scopeFolderIds.length === 0 && (
                   <p className="text-xs text-muted-foreground">
-                    请至少勾选「全局裸聊」或一个云工作区。
+                    请至少勾选「全局裸聊」或一个云端文件夹。
                   </p>
                 )}
               </fieldset>

@@ -147,7 +147,7 @@ def _single_agent_checkpoint() -> list[SSEEvent]:
             checkpoint_id="cp1",
             conversation_id=_CONV,
             question="先做 A 还是 B？\n两条路线各有取舍。",
-            intent="kickoff",
+            intent="decision",
         ),
     ]
 
@@ -187,16 +187,15 @@ def _plan_review_finalized() -> list[SSEEvent]:
         message_end(FinishReason.PAUSED, input_tokens=3000, output_tokens=400, cost=_COST),
     ]
 
-def _proposal_pick_checkpoint() -> list[SSEEvent]:
-    """单聊·方案挑选卡 (ask_user card=proposal_pick)：阻塞挂起，intent=proposal_pick，
-    恰好 1 个 choice 单选 + options 2–6。"""
+def _proposal_choice_checkpoint() -> list[SSEEvent]:
+    """单聊·方案挑选走普通 ask_user（intent=decision）：单选 choice，权衡写进 label。"""
     return [
         message_start("m1", conversation_id=_CONV),
         content_delta("有三条可行路线，请挑一条："),
         checkpoint_required(
             checkpoint_id="cp_pick",
             conversation_id=_CONV,
-            question="选哪条方案推进？\n三条路线成本与风险不同。",
+            question="选哪条方案推进？",
             questions=[
                 {
                     "id": "q0",
@@ -205,83 +204,27 @@ def _proposal_pick_checkpoint() -> list[SSEEvent]:
                     "multiple": False,
                     "default": "",
                     "options": [
-                        {"label": "方案 A：快速原型", "detail": "一周内可验证"},
-                        {"label": "方案 B：稳妥重构", "detail": "两周，债务更少"},
-                        {"label": "方案 C：外包试点", "recommended": True},
+                        {"label": "方案 A：快速原型（一周可验证）"},
+                        {"label": "方案 B：稳妥重构（两周，债务更少）"},
+                        {"label": "方案 C：外包试点（推荐）"},
                     ],
                 }
             ],
-            intent="proposal_pick",
+            intent="decision",
         ),
         message_end(FinishReason.PAUSED, input_tokens=1800, output_tokens=120, cost=_COST),
     ]
 
 
-def _ask_user_shape_reject_then_pick() -> list[SSEEvent]:
-    """单聊·方案挑选卡先被结构校验拒绝、模型自纠正后改对：ask_user(card=proposal_pick) 误塞
-    多题 → 结构校验拒绝（tool_use_start + tool_use_end status=error）→ 自纠正后重发单题单选挂起。
-
-    棘轮：ask_user 是交互原语，由 checkpoint/ask 标记代言（MARKER_STANDIN_TOOLS），其
-    tool_use_start/end 都【不落 captain 工具步】——所以这条「可自纠正的结构校验失败」既不
-    残留 open 工具行、也不外泄红色工具错误给用户；golden.process 仅有 checkpoint 标记。"""
-    return [
-        message_start("m1", conversation_id=_CONV),
-        # 误用：card=proposal_pick 却塞了 2 个 question — 结构校验拒绝（模型可自纠正）。
-        tool_use_start(
-            "ask_reject",
-            "ask_user",
-            {
-                "card": "proposal_pick",
-                "message": "做官网前先定几件事",
-                "questions": [{"prompt": "选整体风格?"}, {"prompt": "选配色?"}],
-            },
-        ),
-        tool_use_end(
-            "ask_reject",
-            "ask_user",
-            success=False,
-            output=(
-                "card=proposal_pick 要求恰好 1 个 question（kind=choice、multiple=false、"
-                "options 2–6 个候选方案）。两条出路：要问多个【不同】问题 → 去掉 card；"
-                "同一决策的候选方案 → 合并成 1 个 question 的多个 options。"
-            ),
-        ),
-        # 自纠正后重发单题单选 → 正常挂起（模型自写了 question，引导句留在气泡）。
-        content_delta("有三条可行路线，请挑一条："),
-        checkpoint_required(
-            checkpoint_id="cp_pick",
-            conversation_id=_CONV,
-            question="选哪条方案推进？\n三条路线成本与风险不同。",
-            questions=[
-                {
-                    "id": "q0",
-                    "prompt": "选哪条方案？",
-                    "kind": "choice",
-                    "multiple": False,
-                    "default": "",
-                    "options": [
-                        {"label": "方案 A：快速原型", "detail": "一周内可验证"},
-                        {"label": "方案 B：稳妥重构", "detail": "两周，债务更少"},
-                        {"label": "方案 C：外包试点", "recommended": True},
-                    ],
-                }
-            ],
-            intent="proposal_pick",
-        ),
-        message_end(FinishReason.PAUSED, input_tokens=1900, output_tokens=140, cost=_COST),
-    ]
-
-
-def _risk_ack_checkpoint() -> list[SSEEvent]:
-    """单聊·风险确认卡 (ask_user card=risk_ack)：阻塞挂起，intent=risk_ack，
-    恰好 1 个 choice 多选 + options 1–10。"""
+def _risk_choice_checkpoint() -> list[SSEEvent]:
+    """单聊·风险勾选走普通 ask_user（intent=decision）：多选 choice，权衡写进 label。"""
     return [
         message_start("m1", conversation_id=_CONV),
         content_delta("落地前请勾选要一并处理的风险："),
         checkpoint_required(
             checkpoint_id="cp_risk",
             conversation_id=_CONV,
-            question="哪些风险要在本轮处理？\n未勾选的项将记入后续 backlog。",
+            question="哪些风险要在本轮处理？",
             questions=[
                 {
                     "id": "q0",
@@ -290,17 +233,13 @@ def _risk_ack_checkpoint() -> list[SSEEvent]:
                     "multiple": True,
                     "default": "",
                     "options": [
-                        {
-                            "label": "[高] 密钥轮换",
-                            "detail": "生产密钥仍是默认值，泄露即全库失守",
-                            "recommended": True,
-                        },
-                        {"label": "[中] 备份校验", "detail": "近 30 天备份未做恢复演练"},
+                        {"label": "[高] 密钥轮换（推荐）：生产密钥仍是默认值"},
+                        {"label": "[中] 备份校验：近 30 天备份未做恢复演练"},
                         {"label": "回滚演练"},
                     ],
                 }
             ],
-            intent="risk_ack",
+            intent="decision",
         ),
         message_end(FinishReason.PAUSED, input_tokens=1900, output_tokens=140, cost=_COST),
     ]
@@ -331,7 +270,7 @@ def _carrier_means_consult_smartart_boundary() -> list[SSEEvent]:
     """载体/手段顾问·能力边界前置（种子 A）：用户要 Word 图形 SmartArt 组织图 → 先诚实说做不到
     图形 SmartArt，再短 ask 推荐可交替代（交互 HTML / PPT / Word 文本层级）并保留「仍要 Word
     文字版」；禁先答笼统「可以」再缩水。对照 ``presentation_kickoff_format_options``（普通短澄清）
-    与 ``proposal_pick_checkpoint``（recommended 选项卡）。"""
+    与 ``proposal_choice_checkpoint``（选项名带「（推荐）」）。"""
     return [
         message_start("m1", conversation_id=_CONV),
         content_delta(
@@ -352,12 +291,11 @@ def _carrier_means_consult_smartart_boundary() -> list[SSEEvent]:
                     "prompt": "选哪种可交形态？",
                     "kind": "choice",
                     "multiple": False,
-                    "default": "交互 HTML 组织图（可折叠）",
+                    "default": "交互 HTML 组织图（可折叠）（推荐）",
                     "options": [
                         {
-                            "label": "交互 HTML 组织图（可折叠）",
+                            "label": "交互 HTML 组织图（可折叠）（推荐）",
                             "detail": "宽树也能看全",
-                            "recommended": True,
                         },
                         {
                             "label": "PPT 带框连线版",
@@ -379,7 +317,7 @@ def _carrier_means_consult_smartart_boundary() -> list[SSEEvent]:
 def _carrier_means_consult_html_org_tree() -> list[SSEEvent]:
     """载体/手段顾问·次优载体/框架锁定（种子 B）：用户要极宽组织树「只翻译、框架不变、存 HTML」
     → 短对齐提示静态 1:1 难看全，推荐折叠/分区等更好呈现，并保留「仍按原样 HTML」；非盲跟开做。
-    对照 ``carrier_means_consult_smartart_boundary``（能力边界）与 ``proposal_pick_checkpoint``。"""
+    对照 ``carrier_means_consult_smartart_boundary``（能力边界）与 ``proposal_choice_checkpoint``。"""
     return [
         message_start("m1", conversation_id=_CONV),
         content_delta(
@@ -399,12 +337,11 @@ def _carrier_means_consult_html_org_tree() -> list[SSEEvent]:
                     "prompt": "选哪种 HTML 呈现？",
                     "kind": "choice",
                     "multiple": False,
-                    "default": "可折叠树 HTML",
+                    "default": "可折叠树 HTML（推荐）",
                     "options": [
                         {
-                            "label": "可折叠树 HTML",
+                            "label": "可折叠树 HTML（推荐）",
                             "detail": "保留层级，默认收拢便于看全",
-                            "recommended": True,
                         },
                         {
                             "label": "按部门分区多页 HTML",
@@ -1107,19 +1044,21 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
     "single_agent_checkpoint": ("单聊：检查点 ask_user(blocking) 在时间线原位落 checkpoint 标记 + 暂停", _single_agent_checkpoint),
     "single_agent_checkpoint_finalized": ("单聊：检查点收口即终止（②，checkpoint_required→message_end(paused)，单一冷路 resume）", _single_agent_checkpoint_finalized),
     "single_agent_checkpoint_resolved": ("单聊：检查点 ask_user(blocking) 经 resume 续跑（checkpoint_resolved 清挂起→跑到 end_turn）", _single_agent_checkpoint_resolved),
-    "proposal_pick_checkpoint": ("单聊：方案挑选卡 ask_user(card=proposal_pick) 挂起（intent=proposal_pick）", _proposal_pick_checkpoint),
-    "ask_user_shape_reject_then_pick": (
-        "单聊：方案挑选卡误塞多题被结构校验拒绝→自纠正改对（校验失败不落工具步、不外泄红错）",
-        _ask_user_shape_reject_then_pick,
+    "proposal_choice_checkpoint": (
+        "单聊：方案挑选走普通 ask_user 挂起（intent=decision）",
+        _proposal_choice_checkpoint,
     ),
-    "risk_ack_checkpoint": ("单聊：风险确认卡 ask_user(card=risk_ack) 挂起（intent=risk_ack）", _risk_ack_checkpoint),
+    "risk_choice_checkpoint": (
+        "单聊：风险勾选走普通 ask_user 挂起（intent=decision）",
+        _risk_choice_checkpoint,
+    ),
     "organize_plan_checkpoint": ("单聊：整理方案卡 ask_user(card=organize_plan) 挂起（intent=organize_plan）", _organize_plan_checkpoint),
     "presentation_kickoff_format_options": (
         "退役棘轮：场面 format_options 已拆除；普通短澄清挂起",
         _presentation_kickoff_format_options,
     ),
     "carrier_means_consult_smartart_boundary": (
-        "载体/手段顾问：Word SmartArt 能力边界前置 → 诚实做不到 + recommended 可交替代 ask（含仍要 Word 文字版）",
+        "载体/手段顾问：Word SmartArt 能力边界前置 → 诚实做不到 + 选项名带「（推荐）」的可交替代 ask（含仍要 Word 文字版）",
         _carrier_means_consult_smartart_boundary,
     ),
     "carrier_means_consult_html_org_tree": (

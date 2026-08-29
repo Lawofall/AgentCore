@@ -1,8 +1,8 @@
 /**
- * 统一 ask 卡壳 —— ask intent（decision/kickoff 同壳 · proposal_pick / risk_ack /
- * organize_plan / daily_review）共用的三段结构，差异只剩「体」里的插槽。
+ * 统一 ask 卡壳 —— decision 与清单确认（organize_plan / daily_review）共用三段结构，
+ * 差异只剩「体」里的插槽。铬条 caption 一律「需要你拍板」。
  *
- * 相对旧 kickoff 开场仪式刻意砍掉的三处硬分区：头部不再铺 `bg-muted/10`、不再压 `border-b`（标题与
+ * 相对旧开场仪式刻意砍掉的三处硬分区：头部不再铺 `bg-muted/10`、不再压 `border-b`（标题与
  * 首行之间靠留白分段），底栏不再 `backdrop-blur`。卡内不出现品牌色，唯一的彩色出口是底栏主 CTA。
  *
  * 排版契约：头/底 `px-4`，体 `px-2`——{@link AskRowGroup} 的行自带 `px-2`，两者相加后行内文字
@@ -82,7 +82,7 @@ export function AskSectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-/** 底栏：主 CTA + 安静的取消（wire 仍 decision=stop 硬停）+ 右侧提示。五种 intent 同一形。 */
+/** 底栏：主 CTA + 安静的取消（wire 仍 decision=stop 硬停）+ 右侧提示。各 chrome 同一形。 */
 export function AskCardFooter({
   cta,
   ctaIcon: CtaIcon,
@@ -101,7 +101,7 @@ export function AskCardFooter({
   /** 次要 CTA「取消」；调用方仍发 resume decision=stop（硬停收口）。 */
   onStop: () => void;
   hint?: string;
-  /** 额外禁用主 CTA（如 proposal_pick 尚未选中任一项）。busy 时仍会禁用。 */
+  /** 额外禁用主 CTA（如清单体尚未勾选任一项）。busy 时仍会禁用。 */
   ctaDisabled?: boolean;
 }) {
   return (

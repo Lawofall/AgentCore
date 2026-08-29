@@ -17,6 +17,7 @@ import {
 import type { InteractionEntry } from "@/stores/interactions";
 import { registerColdJournalReader } from "@/stores/interactions/coldSettlement";
 import {
+  type ColdOpenRecoveryState,
   type PausedTurnEntry,
   type PendingResume,
   type ResumeOrigin,
@@ -100,6 +101,7 @@ function hydrateSidecarQueuedTurns(
               ...(a.conversation_id
                 ? { conversation_id: a.conversation_id }
                 : {}),
+              ...(a.document_id ? { document_id: a.document_id } : {}),
               ...(a.binary ? { binary: true } : {}),
               ...(a.workspace_path ? { workspace_path: a.workspace_path } : {}),
             }))
@@ -240,6 +242,7 @@ export async function loadRecovery(
       if (cloud.paused.length > 0) {
         finalizeGeneratingForPausedConversation(conversationId);
       }
+      usePausedTurnStore.getState().markOpenRecovery(conversationId, "ready");
       return {
         sidecarLive: false,
         cloudLive: cloud.cloudLive,
@@ -249,6 +252,7 @@ export async function loadRecovery(
       };
     } catch {
       // Failure ≠ confirmed idle — leave stores untouched.
+      usePausedTurnStore.getState().markOpenRecovery(conversationId, "failed");
       return {
         sidecarLive: false,
         cloudLive: false,
@@ -326,6 +330,12 @@ export async function loadRecovery(
   if (merged.length > 0) {
     finalizeGeneratingForPausedConversation(conversationId);
   }
+  usePausedTurnStore
+    .getState()
+    .markOpenRecovery(
+      conversationId,
+      confirmed.length === 0 ? "failed" : "ready",
+    );
 
   // Hot cards survive when a live turn will be attached (D6); only clear when
   // cloud is *known* idle and sidecar is idle — request failure must not orphan.
@@ -378,8 +388,9 @@ export function resolveResumeMessageId(
  * Surface one durable resume card from InteractionStore pending cold kinds.
  *
  * Live operable authority is InteractionStore — ResumePrompt paints cold pending
- * directly. This helper remains a non-unique path for recovery/`toMessage` shell
- * (pausedTurns) + finalizeGenerating; live cards no longer require message_end.
+ * directly when the entry has a live `origin`. Recovery `pausedTurns` is the
+ * still-waiting list on cold open. `toMessage` journal hydrate must not mint a
+ * clickable shell from `usage.paused` (claim 后闩仍真会把已答卡闪回来).
  *
  * Resume key is the stamped `serverMessageId` only — without it, skip painting
  * so the UI never shows a clickable card that would 404 / trip the client-only
@@ -522,9 +533,24 @@ registerColdJournalReader((conversationId) =>
 );
 
 /**
- * Pure paint selector: InteractionStore cold pending is live authority;
- * pausedTurns covers recovery/`setForConversation` shells not covered by IX.
- * Clickability uses {@link isColdCheckpointSettled} — the only terminal gate.
+ * Journal `*_required` is history ("was asked"). Still-waiting is a live origin
+ * this session, a recovery pause frame, or recovery-failed fallback.
+ */
+function coldRequiredStillWaiting(
+  entry: { id: string; origin?: ResumeOrigin },
+  pausedForConv: PendingResume[],
+  recoveryState: ColdOpenRecoveryState,
+): boolean {
+  if (entry.origin) return true;
+  if (pausedForConv.some((p) => p.checkpointId === entry.id)) return true;
+  return recoveryState === "failed";
+}
+
+/**
+ * Pure paint selector: live IX cold pending (`origin`) is in-session authority;
+ * pausedTurns is the still-waiting list after recovery. Journal required without
+ * a pause frame is not clickable once recovery is ready (or still unresolved).
+ * Clickability also uses {@link isColdCheckpointSettled} — already-decided veto.
  */
 export function selectVisibleColdResumes(args: {
   conversationId: string;
@@ -537,8 +563,10 @@ export function selectVisibleColdResumes(args: {
     serverMessageId?: string;
     runs?: { events?: ReadonlyArray<{ type?: string; payload?: unknown }> };
   }>;
+  recoveryState?: ColdOpenRecoveryState;
 }): PendingResume[] {
   const { conversationId, byId, pausedPending, messages } = args;
+  const recoveryState = args.recoveryState ?? "unresolved";
   const journalSettledIds = settledColdIdsFromEvents(
     collectMessageJournalEvents(messages),
   );
@@ -564,6 +592,9 @@ export function selectVisibleColdResumes(args: {
         journalSettledIds,
       })
     ) {
+      continue;
+    }
+    if (!coldRequiredStillWaiting(entry, pausedForConv, recoveryState)) {
       continue;
     }
     const resumeKey = resolveColdResumeKeyFromMessages(
@@ -619,6 +650,9 @@ export function listVisibleColdResumes(
     byId: useInteractionStore.getState().byId,
     pausedPending: usePausedTurnStore.getState().pending,
     messages: getRuntime(conversationId).messages,
+    recoveryState:
+      usePausedTurnStore.getState().openRecovery[conversationId] ??
+      "unresolved",
   });
 }
 

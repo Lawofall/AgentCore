@@ -5,7 +5,7 @@
  */
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { CheckpointIntent } from "@/types/events";
+import type { AskUiIntent } from "@/lib/checkpointIntent";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,13 +17,7 @@ vi.mock("@/lib/toast", () => ({
 
 afterEach(cleanup);
 
-const INTENTS: CheckpointIntent[] = [
-  "decision",
-  "proposal_pick",
-  "risk_ack",
-  "organize_plan",
-  "daily_review",
-];
+const INTENTS: AskUiIntent[] = ["decision", "organize_plan", "daily_review"];
 
 describe("AskUserCard manual help", () => {
   it.each(INTENTS)("%s 拍板卡不挂「看手册说明」", (intent) => {

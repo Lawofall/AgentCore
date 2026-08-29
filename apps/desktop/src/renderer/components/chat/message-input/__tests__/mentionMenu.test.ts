@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseMentionFilter,
+  pickOnDemandSettings,
   pickRecentConversations,
 } from "../composerAttachments";
 import {
@@ -36,6 +37,10 @@ describe("parseMentionFilter", () => {
       section: "file",
       filter: "a.ts",
     });
+    expect(parseMentionFilter("设定 简短")).toEqual({
+      section: "setting",
+      filter: "简短",
+    });
   });
 
   it("strips English prefixes case-insensitively", () => {
@@ -54,6 +59,10 @@ describe("parseMentionFilter", () => {
     expect(parseMentionFilter("file x")).toEqual({
       section: "file",
       filter: "x",
+    });
+    expect(parseMentionFilter("note foo")).toEqual({
+      section: "setting",
+      filter: "foo",
     });
   });
 
@@ -131,7 +140,7 @@ describe("showMentionCategoryLevel", () => {
 describe("buildMentionCategoryRows", () => {
   it("附件置顶，文件/文件夹前移，空团队整档隐藏", () => {
     const rows = buildMentionCategoryRows({
-      counts: { team: 0, conversation: 3, folder: 0, file: 12 },
+      counts: { team: 0, conversation: 3, folder: 0, file: 12, setting: 0 },
     });
     expect(rows.map((r) => r.id)).toEqual([
       "attach",
@@ -157,7 +166,7 @@ describe("buildMentionCategoryRows", () => {
 
   it("有团队时沉到最后，不置灰", () => {
     const rows = buildMentionCategoryRows({
-      counts: { team: 2, conversation: 1, folder: 4, file: 8 },
+      counts: { team: 2, conversation: 1, folder: 4, file: 8, setting: 0 },
     });
     expect(rows.map((r) => r.id)).toEqual([
       "attach",
@@ -169,14 +178,71 @@ describe("buildMentionCategoryRows", () => {
     expect(rows[4]).toMatchObject({ id: "team", count: 2, disabled: false });
   });
 
+  it("有按需设定时插在对话和团队之间", () => {
+    const rows = buildMentionCategoryRows({
+      counts: { team: 1, conversation: 1, folder: 0, file: 0, setting: 2 },
+    });
+    expect(rows.map((r) => r.id)).toEqual([
+      "attach",
+      "file",
+      "folder",
+      "conversation",
+      "setting",
+      "team",
+    ]);
+  });
+
   it("marks file/folder loading when index is still empty", () => {
     const rows = buildMentionCategoryRows({
-      counts: { team: 1, conversation: 0, folder: 0, file: 0 },
+      counts: { team: 1, conversation: 0, folder: 0, file: 0, setting: 0 },
       loadingFiles: true,
     });
     expect(rows[1]).toMatchObject({ id: "file", loading: true });
     expect(rows[2]).toMatchObject({ id: "folder", loading: true });
     expect(rows[4]).toMatchObject({ id: "team", disabled: false });
+  });
+});
+
+describe("pickOnDemandSettings", () => {
+  const list = [
+    {
+      id: "d1",
+      name: "说话简短",
+      description: "回复短句",
+      applyMode: "on_demand",
+      disputedAt: null,
+      frontmatterError: null,
+      kind: "document",
+    },
+    {
+      id: "d2",
+      name: "常驻偏好",
+      description: "",
+      applyMode: "always",
+      disputedAt: null,
+      frontmatterError: null,
+      kind: "document",
+    },
+    {
+      id: "d3",
+      name: "已停用",
+      description: "旧规则",
+      applyMode: "on_demand",
+      disputedAt: "2026-01-01",
+      frontmatterError: null,
+      kind: "document",
+    },
+  ];
+
+  it("只列出可点名的按需条目", () => {
+    const items = pickOnDemandSettings(list, "", 10);
+    expect(items.map((i) => i.relPath)).toEqual(["d1"]);
+    expect(items[0]?.kind).toBe("document");
+  });
+
+  it("按名字或摘要过滤", () => {
+    const items = pickOnDemandSettings(list, "短句");
+    expect(items.map((i) => i.relPath)).toEqual(["d1"]);
   });
 });
 

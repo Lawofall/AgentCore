@@ -562,7 +562,7 @@ function pendingFrame(messageId: string, conversationId = "c1"): PendingResume {
     question: "",
     assumptions: [],
     questions: [],
-    intent: "kickoff",
+    intent: "decision",
     origin: "sidecar",
   };
 }

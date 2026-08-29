@@ -741,8 +741,9 @@ export interface SidecarQueuedAttachment {
   path: string;
   text?: string;
   truncated?: boolean;
-  kind?: "file" | "dir" | "conversation";
+  kind?: "file" | "dir" | "conversation" | "document";
   conversation_id?: string;
+  document_id?: string;
   binary?: boolean;
   workspace_path?: string;
 }

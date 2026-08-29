@@ -7,6 +7,7 @@ import type { FileNode, FileSource } from "@/lib/fileSource";
 import {
   baseName,
   canOpenPathWithOsDefaultApp,
+  downloadSaveName,
   isMarkdownPath,
   parentDir,
 } from "@/lib/fileSource";
@@ -49,7 +50,7 @@ function BatchMenu({
           <ContextMenuItem onSelect={batch.onDownload}>
             <Download size={14} className="shrink-0" />
             <span className="flex-1 truncate">
-              下载 {batch.downloadableCount} 个文件
+              下载 {batch.downloadableCount} 项
             </span>
           </ContextMenuItem>
         )}
@@ -143,41 +144,50 @@ export function FileTreeRowMenu({
 
   // Groups separated systematically (a leading separator only when both sides are
   // non-empty) so no group ever yields a double rule. The primary group (dir →
-  // 新建; file → 打开/下载) is always present, so 系统集成 / 编辑 just prefix a rule.
-  // `caps.edit === false` (e.g. shared-space viewer) hides mutate actions; download
-  // still rides on `caps.transfer`.
+  // 下载/新建; file → 下载/打开) is always present when transfer or mutate is on,
+  // so 系统集成 / 编辑 just prefix a rule. `caps.edit === false` (e.g. shared-space
+  // viewer) hides mutate actions; download still rides on `caps.transfer`.
   const canMutate = source.caps.edit;
+  const canDownload = source.caps.transfer && !!source.download;
+  const downloadItem = canDownload ? (
+    <ContextMenuItem
+      onSelect={() =>
+        void source
+          .download?.(node.path, downloadSaveName(node.path, node.isDir), {
+            isDir: node.isDir,
+          })
+          .catch((e) => notifyActionError("下载失败", e))
+      }
+    >
+      <Download size={14} className="shrink-0" />
+      <span className="flex-1 truncate">下载</span>
+    </ContextMenuItem>
+  ) : null;
   return (
     <ContextMenuContent className="min-w-36">
       {node.isDir ? (
-        canMutate ? (
-          <>
-            <ContextMenuItem
-              onSelect={() => onContextCreate(node.path, "file")}
-            >
-              <FilePlus size={14} className="shrink-0" />
-              <span className="flex-1 truncate">新建文件</span>
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={() => onContextCreate(node.path, "dir")}>
-              <FolderPlus size={14} className="shrink-0" />
-              <span className="flex-1 truncate">新建文件夹</span>
-            </ContextMenuItem>
-          </>
-        ) : null
+        <>
+          {downloadItem}
+          {canMutate ? (
+            <>
+              <ContextMenuItem
+                onSelect={() => onContextCreate(node.path, "file")}
+              >
+                <FilePlus size={14} className="shrink-0" />
+                <span className="flex-1 truncate">新建文件</span>
+              </ContextMenuItem>
+              <ContextMenuItem
+                onSelect={() => onContextCreate(node.path, "dir")}
+              >
+                <FolderPlus size={14} className="shrink-0" />
+                <span className="flex-1 truncate">新建文件夹</span>
+              </ContextMenuItem>
+            </>
+          ) : null}
+        </>
       ) : (
         <>
-          {source.caps.transfer && source.download && (
-            <ContextMenuItem
-              onSelect={() =>
-                void source
-                  .download?.(node.path, node.name)
-                  .catch((e) => notifyActionError("下载失败", e))
-              }
-            >
-              <Download size={14} className="shrink-0" />
-              <span className="flex-1 truncate">下载</span>
-            </ContextMenuItem>
-          )}
+          {downloadItem}
           <ContextMenuItem onSelect={() => onOpenFile(node.path, node.name)}>
             <FileText size={14} className="shrink-0" />
             <span className="flex-1 truncate">打开</span>

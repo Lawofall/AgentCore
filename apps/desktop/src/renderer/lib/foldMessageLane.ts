@@ -25,7 +25,6 @@ import {
   appendGraphAppendStep,
   appendPlanReviewStep,
   appendReasoningStep,
-  appendReworkStep,
   appendStageCardStep,
   appendTeamStep,
   appendToolStep,
@@ -92,19 +91,18 @@ export function foldContentDelta(
   };
 }
 
-/** 草稿丢弃（`content_reset`）：清正文标量 + 弹掉尾部 content 步。仅
- * `reason === "finish_guard"`（交付前核验回炉）折出「引用/格式核验后已重写」rework chip；
- * 其余 reason（retry / soft_gate / ask_user / …）只清正文、不留痕——LLM 网络重试、
- * 软门控打回等基础设施信号不是核验重写（误报根治，镜像后端 oracle）。 */
+/** 草稿丢弃（`content_reset`）：清正文标量 + 弹掉尾部 content 步。
+ * 所有 reason（finish_guard / retry / soft_gate / ask_user / …）只清正文、
+ * 不折过程痕迹——镜像后端 oracle。 */
 export function foldContentReset(
   state: MessageLaneState,
-  reason: ResetReason,
+  _reason: ResetReason,
 ): MessageLaneState {
   const cleared = dropTrailingContentSteps(state.process);
   return {
     ...state,
     content: "",
-    process: reason === "finish_guard" ? appendReworkStep(cleared) : cleared,
+    process: cleared,
   };
 }
 
@@ -186,7 +184,7 @@ export function foldTeamMarker(
   return { ...state, process };
 }
 
-/** Fold a `graph_append` event into the appending turn's timeline as an anchor chip. */
+/** Fold a `graph_append` event into the appending turn's timeline as a slot marker. */
 export function foldGraphAppendMarker(
   state: MessageLaneState,
   executionId: string,
@@ -286,10 +284,7 @@ export function foldUserInterjectionMarker(
 /** Process steps that mirror journal content/reasoning/tool lanes (not markers). */
 function isSettledProcessStep(step: ProcessStep): boolean {
   return (
-    step.kind === "content" ||
-    step.kind === "reasoning" ||
-    step.kind === "tool" ||
-    step.kind === "rework"
+    step.kind === "content" || step.kind === "reasoning" || step.kind === "tool"
   );
 }
 
@@ -328,11 +323,7 @@ function foldSettledPrefix(
       }
       case "content_reset": {
         sawSettledEvent = true;
-        const cleared = dropTrailingContentSteps(steps);
-        steps =
-          payload.reason === "finish_guard"
-            ? appendReworkStep(cleared)
-            : cleared;
+        steps = dropTrailingContentSteps(steps);
         break;
       }
       case "tool_use_start": {

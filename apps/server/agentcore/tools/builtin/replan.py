@@ -37,7 +37,6 @@ from typing import TYPE_CHECKING, Any
 
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
-from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP
 from agentcore.runtime.delegate.task_models import TASK_MODEL_SCHEMA_PROPS
 from agentcore.tools.builtin.delegate.schema import TASK_DELIVERABLE_SCHEMA
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -142,14 +141,6 @@ _REPLAN_PARAMETERS = {
         "stop": {
             "type": "boolean",
             "description": "可选：true=跳过未跑步并收口（binds 可省略）。",
-        },
-        "force": {
-            "type": "array",
-            "items": {"type": "string", "enum": [GATE_SEAT_OVERLAP]},
-            "description": (
-                "逐闸点名放行：本工具只可能撞座位/交付物重叠闸。"
-                "只对本次调用生效，不沿用上一次 delegate。"
-            ),
         },
     },
     "required": [],

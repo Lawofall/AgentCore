@@ -52,7 +52,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from agentcore.runtime.checkpoints import AskCheckpointIntent
+from agentcore.runtime.checkpoints import AskCheckpointIntent, coerce_ask_checkpoint_intent
 from agentcore.runtime.interaction import (
     DURABLE_INTERACTION_KINDS as DURABLE_INTERACTION_KINDS,
 )
@@ -320,9 +320,6 @@ class PlanReviewSuspension(TurnSuspension):
     # and a peek at the gated downstream nodes ({run_id, role}) — re-emitted on resume.
     steps: list[dict[str, Any]] = field(default_factory=list)
     pending: list[dict[str, Any]] = field(default_factory=list)
-    # 批次协作参数（便签墙模式 + 团队简报）：只活在 DelegateTool 实例上，耐久恢复换新工具
-    # 实例后若不随帧回灌，后续波次的 worker 会被剥掉便签三件套（collaboration=False）。
-    coordination: str = "none"
     team_brief: str | None = None
     # CEO 评审前置把关摘要（随帧持久化；CONTINUE 时 llm 压缩注入下游 gate_notes）。
     # 旧帧缺省 None → 行为与今日相同。
@@ -393,9 +390,6 @@ def _plan_review_frame_extras(s: TurnSuspension) -> dict[str, Any]:
     assert isinstance(s, PlanReviewSuspension)
     # NOTE: NEITHER ``plan`` NOR ``completed`` is serialized (执行级事件溯源 Phase 2).
     extras: dict[str, Any] = {"steps": list(s.steps), "pending": list(s.pending)}
-    # 非缺省才落帧（帧保持紧凑；旧帧读回走缺省，行为等价）。
-    if s.coordination != "none":
-        extras["coordination"] = s.coordination
     if s.team_brief:
         extras["team_brief"] = s.team_brief
     if s.ceo_review:
@@ -412,7 +406,6 @@ def _plan_review_from_extras(data: dict[str, Any]) -> dict[str, Any]:
         "plan": plan_from_json({}),
         "steps": list(data.get("steps") or []),
         "pending": list(data.get("pending") or []),
-        "coordination": str(data.get("coordination") or "none"),
         "team_brief": data.get("team_brief") or None,
         "ceo_review": dict(raw_review) if isinstance(raw_review, dict) else None,
     }
@@ -448,7 +441,7 @@ def _ask_user_from_extras(data: dict[str, Any]) -> dict[str, Any]:
         "question": data.get("question", "") or "",
         "assumptions": list(data.get("assumptions") or []),
         "questions": list(data.get("questions") or []),
-        "intent": data.get("intent") or "decision",
+        "intent": coerce_ask_checkpoint_intent(data.get("intent")),
         "browser_login": data.get("browser_login") is True,
     }
 

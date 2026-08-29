@@ -37,14 +37,14 @@ def test_drive_signature_unchanged():
     assert {
         "execution_id",
         "seed_completed",
-        "seed_notes",
         "complexity_hint",
-        "coordination",
         "call_idx",
         "coordinate",
         "session",
     }.issubset(sig.parameters)
     assert "completion_criteria" not in sig.parameters
+    assert "seed_notes" not in sig.parameters
+    assert "coordination" not in sig.parameters
 
 
 def test_cold_fallback_mints_unique_redir_ids():

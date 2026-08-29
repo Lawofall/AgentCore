@@ -2,8 +2,8 @@
 
 When a recent worker finished thrashing (DEGRADED + ``source=ceiling_backstop``)
 and a new cold task matches the old topic / artifacts fingerprint, refuse silent
-rebrand — take ``continue_from_run_id`` (同队续派入口) or this gate's own
-``force=["thrash"]`` scope. Sibling gates keep their own scopes.
+rebrand — take ``continue_from_run_id`` (同队续派入口), or change the role /
+write a task that is not like the old topic.
 
 Sibling to :mod:`isomorphic` (same drive admission layer). Does **not** auto-replan,
 does not track completion-gap streaks (retired with S3 kind), and does not expand
@@ -221,16 +221,14 @@ def find_thrash_collision(
 
 
 def thrash_reject_message(record: ThrashRecord) -> str:
-    """Structured rejection body forcing continue_from / this gate's own force scope."""
-    from agentcore.runtime.delegate.force_scopes import GATE_THRASH, force_hint
-
+    """Structured rejection body pointing to continue_from_run_id."""
     role = record.role or record.run_id
     return (
         "【再委派已拒绝·触顶换马甲】近期队员"
         f"（【{role}】`{record.run_id}`）因打转收口（DEGRADED / ceiling_backstop），"
         "本次冷派任务与旧题或同 artifacts 高度相似，禁止换马甲从零再读。"
         f"请对该 task 设 continue_from_run_id=`{record.run_id}` 带现场续派；"
-        f"确需冷开新人只放行本闸（{force_hint(GATE_THRASH)}，不开其它闸）。"
+        "确需另开请换角色或把任务写得不像旧题。"
     )
 
 

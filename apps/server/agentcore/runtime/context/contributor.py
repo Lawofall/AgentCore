@@ -2,7 +2,7 @@
 
 上下文注入统一 Step 2（常驻源插件化）. Step 1 centralized the *assembly* (ContextAssembler);
 this gives every always-on source — base prompt, runtime context, memory ``<rules>``, CEO
-core, skill directory, citation hint, workspace overview, per-turn attachment — ONE shape:
+core, skill directory, workspace overview, per-turn attachment — ONE shape:
 a named fragment + its render ``order`` + an optional ``budget``. So:
 
 - ordering is DECLARATIVE in one place (:class:`SectionOrder`), not implicit in the
@@ -63,7 +63,11 @@ class SectionOrder(IntEnum):
     # Derived cross-folder roster (Folder path + 画像.md first line). CEO-only;
     # rendered outside ``<rules>`` so it stays separate from the always-on entry block.
     FOLDER_CATALOG = 570
+    # Retired 2026-08-29: resident <citing_sources> HOW removed (#rN lives in
+    # shared delivery_honesty). Slot kept so billed prefix keys are not reshuffled.
     CITATION = 600
+    # Retired 2026-08-29: resident <visualization> HOW removed (mermaid lives in
+    # the shared GFM sentence). Slot kept so billed prefix keys are not reshuffled.
     CEO_VISUALIZATION = 700
     # Per-turn environment facts (location / desktop / capabilities). Volatile with
     # binding changes. Was 250 (in front of the ~19k CEO core); moved 2026-08-19 —

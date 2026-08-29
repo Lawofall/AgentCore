@@ -220,11 +220,9 @@ async def test_drive_cancelled_not_posted_while_hot_pending(monkeypatch):
             plan,
             execution_id="e-hold-drive",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="standard",
             call_idx=0,
             session=session,
-            coordination="wall",
         )
     )
     await asyncio.sleep(0.05)

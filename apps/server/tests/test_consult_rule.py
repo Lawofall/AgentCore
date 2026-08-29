@@ -91,13 +91,15 @@ async def test_consult_rule_hit_soft_miss():
 
     hit = await tool.execute({"name": "演练暗号"}, _ctx())
     assert hit.success and "ALPHA" in hit.output
-    # 来源分类只进日志，不进 display：读侧不向用户暴露 skill/rule/memory 三分。
+    assert hit.display["origin"] == "user"
+    # 细 kind 只进日志；display 只带两桶 origin。
     assert "kind" not in hit.display
 
     miss = await tool.execute({"name": "不存在"}, _ctx())
     assert miss.success and miss.error is None
     assert "没有名为" in miss.output
     assert "演练暗号" in miss.output
+    assert miss.display is None or "origin" not in miss.display
 
 
 def test_compose_ceo_rule_entries_with_consult():

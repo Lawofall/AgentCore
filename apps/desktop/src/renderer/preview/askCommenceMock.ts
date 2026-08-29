@@ -25,26 +25,25 @@ export const ASK_COMMENCE_MOCK: AskUserContent = {
       kind: "choice",
       options: [
         {
-          label: "潜在客户",
+          label: "潜在客户（推荐）",
           detail: "偏转化：卖点清晰、CTA 突出",
-          recommended: true,
         },
         { label: "投资人", detail: "偏叙事：愿景与里程碑优先" },
         { label: "内部评审", detail: "偏完整：信息密度更高" },
       ],
       multiple: false,
-      default: "潜在客户",
+      default: "潜在客户（推荐）",
     },
     {
       id: "q1",
       prompt: "首版要不要双语？",
       kind: "choice",
       options: [
-        { label: "只要中文", recommended: true },
+        { label: "只要中文（推荐）" },
         { label: "中英双语", detail: "文案量约翻倍，首版会慢半拍" },
       ],
       multiple: false,
-      default: "只要中文",
+      default: "只要中文（推荐）",
     },
   ],
 };

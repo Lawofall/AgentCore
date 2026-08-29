@@ -48,7 +48,7 @@ describe("foldMessageLane", () => {
     expect(next.process).toEqual([{ kind: "content", text: " there" }]);
   });
 
-  it("foldContentReset(finish_guard) clears content and leaves the rework chip", () => {
+  it("foldContentReset(finish_guard) clears content without a process trace", () => {
     const base = messageLaneFromMessage({
       content: "bad draft",
       process: [
@@ -58,14 +58,11 @@ describe("foldMessageLane", () => {
     });
     const next = foldContentReset(base, "finish_guard");
     expect(next.content).toBe("");
-    expect(next.process).toEqual([
-      { kind: "reasoning", text: "think" },
-      { kind: "rework" },
-    ]);
+    expect(next.process).toEqual([{ kind: "reasoning", text: "think" }]);
   });
 
-  // 非 finish_guard（LLM 透明重试等）：清正文照旧、不折 rework chip（误报根治）。
-  it("foldContentReset(retry) clears content without a rework chip", () => {
+  // 所有 reason（含 finish_guard）只清正文、不折过程痕迹。
+  it("foldContentReset(retry) clears content without a process trace", () => {
     const base = messageLaneFromMessage({
       content: "transient",
       process: [

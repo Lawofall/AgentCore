@@ -30,7 +30,7 @@ from .governance import (
     resolve_openai_tool_defs,
 )
 from .outcome import RoundOutcome
-from .round import apply_exit_ledger_ref_strip, apply_finish_guard_rework
+from .round import apply_finish_guard_rework
 from .segments import join_segments
 from .tool_exec import execute_tools
 
@@ -158,15 +158,6 @@ async def apply_loop_directive(
             if fr is not None and finish_override_sink is not None:
                 finish_override_sink.append(fr)
             content = join_segments(final_content, extra) if extra else final_content
-            # Q3：回炉耗尽后仍非法的 #rN —— 剥离放行 + 观测（禁止静默）。
-            if content and turn_evidence_ledger is not None:
-                content = apply_exit_ledger_ref_strip(
-                    content,
-                    turn_evidence_ledger=turn_evidence_ledger,
-                    emit_reset=emit_reset,
-                    emit_content=emit_content,
-                    run_id=run_id,
-                )
             # CEO soft banners：软Ⅱ′零写盘假改 + 云端装包拒仍称验绿 → 仅加横幅，不丢稿不拒发。
             if role == "captain" and content:
                 content = _captain_closing_honesty(
@@ -327,8 +318,6 @@ async def apply_loop_directive(
                 )
                 if breaker.refresh_tool_defs:
                     tool_defs = resolve_openai_tool_defs(tools, finalize_allowed, disabled_tools)
-                from agentcore.runtime.runs.cutoff import worker_keeps_notes_in_wind_down
-
                 _ = govern_after_tools(
                     outcome=RoundOutcome(
                         content=coordination.content,
@@ -346,10 +335,6 @@ async def apply_loop_directive(
                     role=role,
                     disabled_tools=disabled_tools,
                     investigation_tools=controller.investigation_tool_names,
-                    keep_notes=worker_keeps_notes_in_wind_down(
-                        available=set(tools.names),
-                        allowed=(list(finalize_allowed) if finalize_allowed is not None else None),
-                    ),
                 )
                 return DirectiveApplyResult(
                     action="continue",
@@ -386,7 +371,6 @@ async def apply_loop_directive(
                 annotate_citations=annotate_citations,
                 citation_sink=citation_sink,
                 finish_guard_reworks=finish_guard_reworks,
-                turn_evidence_ledger=turn_evidence_ledger,
                 promotion_ledger=tool_context.promotion_ledger,
             )
             return DirectiveApplyResult(

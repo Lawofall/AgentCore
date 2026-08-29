@@ -27,6 +27,7 @@ from agentcore.runtime.runs.serialize import (
 )
 from agentcore.runtime.runs.types import RunPhase
 from agentcore.tools.builtin import archive_extract as archive_mod
+from agentcore.tools.builtin.archive_create import ArchiveCreateTool
 from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
 from agentcore.tools.builtin.file_ops import FileBatchTool
 from agentcore.tools.builtin.web import download_url as download_mod
@@ -274,6 +275,45 @@ async def test_archive_extract_failed_call_reports_no_product(tmp_path: Path):
     )
     assert result.success is False
     assert result.file_products == []
+
+
+async def test_archive_create_reports_the_zip_it_wrote(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.md").write_text("# hi", encoding="utf-8")
+
+    result = await ArchiveCreateTool().execute(
+        {"sources": ["src"], "dest": "pkg.zip"}, _ctx(tmp_path)
+    )
+
+    assert result.success is True
+    assert _ledger(result) == ["pkg.zip"]
+    products = file_products_from_transcript(
+        [
+            LLMMessage(
+                role="tool",
+                content=with_file_products_marker(result.output, result.file_products),
+                tool_call_id="c1",
+            )
+        ]
+    )
+    acceptance = build_file_acceptance(
+        _ledger(result), phase=RunPhase.COMPLETED, products=products
+    )
+    assert acceptance == [
+        {"path": "pkg.zip", "kind": "archive", "status": "accepted"},
+    ]
+    assert all(p.derived_from is None for p in products)
+    assert (tmp_path / "pkg.zip").is_file()
+
+
+async def test_archive_create_failed_call_reports_no_product(tmp_path: Path):
+    result = await ArchiveCreateTool().execute(
+        {"sources": ["missing"], "dest": "out.zip"}, _ctx(tmp_path)
+    )
+    assert result.success is False
+    assert result.file_products == []
+    assert _ledger(result) == []
 
 
 async def test_download_url_reports_the_path_it_actually_wrote(

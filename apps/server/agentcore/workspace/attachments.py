@@ -177,9 +177,10 @@ async def persist_attachments(
     ``attachment.resident_missing`` so prompt assembly stays honest.
     Office pre-parse (sibling ``*.md``) runs only for transfer copies under
     ``attachments/`` — citations must not mutate the user's tree.
-    Only ``kind="file"`` is persisted; directory listings, conversation references
-    and empty-text non-binary files are passed through untouched. A per-file write
-    failure is logged and skipped — a bad attachment must never break the turn.
+    Only ``kind="file"`` is persisted; directory listings, conversation references,
+    pinned documents, and empty-text non-binary files are passed through untouched.
+    A per-file write failure is logged and skipped — a bad attachment must never
+    break the turn.
 
     Binary residents in the text-document bucket may also gain ``text``,
     ``parsed_workspace_path``, and ``parse_status`` from pre-parse. Spreadsheet
@@ -266,6 +267,7 @@ def to_stored_metadata(attachments: list[dict]) -> list[dict]:
             "kind": a.get("kind") or "file",
             "workspace_path": a.get("workspace_path"),
             "conversation_id": a.get("conversation_id"),
+            "document_id": a.get("document_id"),
             "binary": bool(a.get("binary")),
         }
         for a in attachments

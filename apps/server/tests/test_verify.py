@@ -1,14 +1,14 @@
 """Unit tests for the finish_guard delivery-verification light layer (交付前核验·轻层).
 
 Mirrors the check_contract / out_of_range_markers test posture: finish_guard is a
-pure function over ``(content, citation_count)`` returning concrete rework items, and
-format_guard_steer renders them into one injected ``[系统提示]``. Coverage spans the
-two light-layer checks: fabricated citations and structural completeness (unclosed /
-empty-bodied code fences).
+pure function over content returning concrete rework items, and format_guard_steer
+renders them into one injected ``[系统提示]``. Chat finish_guard covers structural
+completeness and CEO delivery structure — not ``#rN`` / ``[n]`` / bibliography
+(those stay on :func:`citation_quality_reworks` for file contracts).
 """
 
 from agentcore.runtime.closing_posture import closing_honesty_verdict_hit
-from agentcore.runtime.verify import finish_guard, format_guard_steer
+from agentcore.runtime.verify import citation_quality_reworks, finish_guard, format_guard_steer
 
 
 def test_in_range_citations_pass():
@@ -19,30 +19,14 @@ def test_no_marker_content_passes():
     assert finish_guard("一段没有任何角标的正文。", citation_count=0) == []
 
 
-def test_out_of_range_marker_flagged():
-    reworks = finish_guard("依据 [3] 可知……", citation_count=2)
-    assert len(reworks) == 1
-    assert "[3]" in reworks[0]
-    assert "编造引用" in reworks[0]
-
-
-def test_no_citations_flags_any_marker():
-    # 0 来源时正文出现 [n] = 编造（与客户端「越界角标降级为纯文本」同义）。
-    reworks = finish_guard("据来源 [1] 表明……", citation_count=0)
-    assert reworks
-    assert "[1]" in reworks[0]
-
-
-def test_multiple_stray_markers_listed_in_one_item():
-    # 镜像真实事故：24 源却写了 [25][27] —— 一条修正项里点名所有越界角标。
-    reworks = finish_guard("见 [25] 和 [27]。", citation_count=24)
-    assert len(reworks) == 1
-    assert "[25]" in reworks[0]
-    assert "[27]" in reworks[0]
+def test_out_of_range_marker_does_not_rework_chat():
+    """对话气泡不因悬空 [n] 回炉。"""
+    assert finish_guard("依据 [3] 可知……", citation_count=2) == []
+    assert finish_guard("据来源 [1] 表明……", citation_count=0) == []
+    assert finish_guard("见 [25] 和 [27]。", citation_count=24) == []
 
 
 def test_code_fence_markers_ignored():
-    # 复用 out_of_range_markers 的抠除：代码块里的数组下标不是引用角标。
     content = "正文 [1]。\n```python\nfoo = arr[9]\n```\n"
     assert finish_guard(content, citation_count=1) == []
 
@@ -82,13 +66,13 @@ def test_indented_empty_fence_flagged():
     assert "json" in reworks[0]
 
 
-def test_citation_and_structure_combine():
-    # 造引用 + 空代码块 = 两条独立修正项。
+def test_stray_citation_does_not_combine_with_structure():
+    """悬空 [n] 不进 chat 回炉；空代码块仍回炉。"""
     content = "见 [5]。\n```python\n```\n"
     reworks = finish_guard(content, citation_count=2)
-    assert len(reworks) == 2
-    assert any("编造引用" in r for r in reworks)
+    assert len(reworks) == 1
     assert any("空" in r for r in reworks)
+    assert not any("编造引用" in r for r in reworks)
 
 
 def test_format_steer_renders_problems():
@@ -97,6 +81,7 @@ def test_format_steer_renders_problems():
     assert "问题甲" in steer
     assert "问题乙" in steer
     assert "核验未通过" in steer
+    assert "引用核验" not in steer
 
 
 def test_format_steer_empty_when_clean():
@@ -114,38 +99,28 @@ def test_format_steer_marks_automated_and_suppresses_acknowledgement():
 
 def test_guard_to_steer_roundtrip():
     # finish_guard 命中 → format_guard_steer 出一条非空提示；干净 → 空串。
-    assert format_guard_steer(finish_guard("坏引用 [9]", citation_count=1)).startswith("[系统提示]")
+    assert format_guard_steer(
+        finish_guard("步骤如下：\n```python\nprint(1)", citation_count=0)
+    ).startswith("[系统提示]")
     assert format_guard_steer(finish_guard("好引用 [1]", citation_count=1)) == ""
 
 
-def test_ledger_ref_gate_dual_track():
-    # #rN 轨：合法放行；伪造回炉项；无标记不启用（Q5）。
-    assert (
-        finish_guard(
-            "见 #r1。",
-            citation_count=0,
-            check_citations=False,
-            citable_ids=frozenset({"#r1"}),
-        )
-        == []
-    )
-    bad = finish_guard(
-        "见 #r9。",
-        citation_count=0,
-        check_citations=False,
-        citable_ids=frozenset({"#r1"}),
-    )
+def test_chat_finish_guard_allows_search_only_and_forged_rn():
+    """search-only / 伪造 #rN 不进对话气泡回炉。"""
+    assert finish_guard("见 #r1。", check_citations=False) == []
+    assert finish_guard("见 #r9。", check_citations=False) == []
+    assert finish_guard("无标记正文", check_citations=False) == []
+    assert finish_guard("李四. 某某研究[J]. #r1", check_citations=False) == []
+
+
+def test_citation_quality_search_only_and_forgery_still_fail():
+    """落盘成文闸仍拒 search-only / 伪造。"""
+    reworks = citation_quality_reworks("见 #r1。", citable_ids=frozenset())
+    assert reworks and "#r1" in reworks[0]
+    assert "search-only" in reworks[0]
+    bad = citation_quality_reworks("见 #r9。", citable_ids=frozenset({"#r1"}))
     assert bad and "#r9" in bad[0]
-    assert "弱源不可引用" not in bad[0]
-    assert (
-        finish_guard(
-            "无标记正文",
-            citation_count=0,
-            check_citations=False,
-            citable_ids=frozenset(),
-        )
-        == []
-    )
+    assert citation_quality_reworks("无标记正文", citable_ids=frozenset()) == []
 
 
 def test_bibliography_announcement_rework():
@@ -159,14 +134,13 @@ def test_bibliography_announcement_rework():
             "doc_kind": "announcement",
         }
     ]
-    reworks = finish_guard(
+    reworks = citation_quality_reworks(
         "参见张三. 某问题研究[D]. #r1",
-        citation_count=0,
-        check_citations=False,
         citable_ids=frozenset({"#r1"}),
         ledger_entries=entries,
     )
     assert reworks and any("开题" in r or "公告" in r for r in reworks)
+    assert finish_guard("参见张三. 某问题研究[D]. #r1", check_citations=False) == []
 
 
 def test_bibliography_requires_deep_read():
@@ -180,10 +154,8 @@ def test_bibliography_requires_deep_read():
             "doc_kind": "",
         }
     ]
-    reworks = finish_guard(
+    reworks = citation_quality_reworks(
         "李四. 某某研究[J]. #r1",
-        citation_count=0,
-        check_citations=False,
         citable_ids=frozenset(),  # search-only 也不在 draft
         ledger_entries=entries,
     )
@@ -192,11 +164,9 @@ def test_bibliography_requires_deep_read():
 
 
 def test_bibliography_unbound_type_marker_rework():
-    """GB/T [D] without any #rN must rework (fabricated thesis-style cite)."""
-    reworks = finish_guard(
+    """GB/T [D] without any #rN must rework on the file contract (fabricated thesis-style cite)."""
+    reworks = citation_quality_reworks(
         "郝万鑫. 某问题研究[D]. 长江大学, 2026.",
-        citation_count=0,
-        check_citations=False,
         citable_ids=frozenset(),
         ledger_entries=[],  # ledger connected (empty ok)
     )
@@ -216,10 +186,8 @@ def test_bibliography_bound_type_marker_skips_unbound_gate():
         }
     ]
     assert (
-        finish_guard(
+        citation_quality_reworks(
             "张三. 某问题研究[D]. #r1",
-            citation_count=0,
-            check_citations=False,
             citable_ids=frozenset({"#r1"}),
             ledger_entries=entries,
         )

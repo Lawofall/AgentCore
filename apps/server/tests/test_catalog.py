@@ -28,8 +28,8 @@ _CEO_ORCHESTRATION = {
     "ask_user",
 }
 # Mutation / execution built-ins the coordinator must NOT hold (they belong to workers),
-# plus the worker-only collaboration channels (escalate upward + post_note/read_notes
-# 便签墙). test_run is here too: it runs project code through the same sandbox chain as
+# plus the worker-only collaboration channel (escalate upward).
+# test_run is here too: it runs project code through the same sandbox chain as
 # code_execute, so it is a worker-only execution tool (not a CEO read tool).
 _WORKER_ONLY_BUILTINS = {
     "file_write",
@@ -42,11 +42,10 @@ _WORKER_ONLY_BUILTINS = {
     "md_to_docx",
     "md_to_pdf",
     "archive_extract",
+    "archive_create",
     "code_execute",
     "test_run",
     "escalate",
-    "post_note",
-    "read_notes",
 }
 
 

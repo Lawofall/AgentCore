@@ -34,7 +34,6 @@ export const RUN_FRAME_EVENT_TYPES: ReadonlySet<string> = new Set([
   "plan_review_required",
   "plan_review_resolved",
   "plan_revised",
-  "team_note_posted",
 ]);
 
 /** 该 wire 事件是否属于协作事实流（见 {@link RUN_FRAME_EVENT_TYPES}）。 */

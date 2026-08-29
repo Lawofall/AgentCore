@@ -65,7 +65,6 @@ function baseExecution(overrides: Partial<Execution> = {}): Execution {
     crossExamEnabled: false,
     debateOpening: null,
     debatePretrial: null,
-    teamNotes: [],
     ...overrides,
     acts: overrides.acts ?? [],
   };

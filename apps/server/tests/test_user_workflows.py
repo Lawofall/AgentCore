@@ -259,11 +259,13 @@ def test_playbook_template_catalog():
     items = list_playbook_templates()
     ids = [i.id for i in items]
     assert ids == list(WORKFLOW_PLAYBOOK_IDS)
-    assert ids == ["map_fanout", "cite_write_review", "build_app"]
+    assert ids == ["map_fanout", "cite_write_review"]
     assert set(ids) <= set(PLAYBOOKS)
+    assert "build_app" not in ids
     assert "build_website" not in ids
     assert "compare_options" not in ids
     assert "build_feature" not in ids
+    assert is_workflow_playbook("build_app") is False
     assert is_workflow_playbook("build_website") is False
     for item in items:
         assert item.title
@@ -279,13 +281,16 @@ def test_playbook_template_catalog():
 
 def test_playbook_template_slots_are_required_text():
     by_id = {i.id: i for i in list_playbook_templates()}
+    assert "build_app" not in by_id
     assert "build_website" not in by_id
     assert "compare_options" not in by_id
     assert "build_feature" not in by_id
-    assert set(by_id) == {"map_fanout", "cite_write_review", "build_app"}
+    assert set(by_id) == {"map_fanout", "cite_write_review"}
 
-    app = by_id["build_app"]
-    assert [s.key for s in app.slots] == ["app"]
+    fanout = by_id["map_fanout"]
+    assert [s.key for s in fanout.slots] == ["topic", "angles"]
+    review = by_id["cite_write_review"]
+    assert [s.key for s in review.slots] == ["topic"]
     assert all(not s.choices for item in by_id.values() for s in item.slots)
 
 
@@ -349,6 +354,7 @@ def test_from_playbook_rejects_not_in_catalog():
     for pid, slots in (
         ("compare_options", {"question": "选哪个", "options": ["A", "B"]}),
         ("build_feature", {"feature": "x"}),
+        ("build_app", {"app": "待办"}),
     ):
         with pytest.raises(PlaybookTemplateError) as ei3:
             merge_playbook_slots(pid, slots)

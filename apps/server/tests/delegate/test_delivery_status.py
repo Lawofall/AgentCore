@@ -2019,7 +2019,9 @@ def test_two_phase_predicate_and_playbook_stamp():
     write = next(t for t in tasks if t.get("id") == "write")
     assert write["deliverable"].get("citation_mode") == "two_phase"
 
-    ml_tasks, ml_errs = PLAYBOOKS["lens_crosscheck"].build({"topic": "测试事件"})
+    ml_tasks, ml_errs = PLAYBOOKS["lens_crosscheck"].build(
+        {"topic": "测试事件", "lenses": ["法律", "品牌商业"]}
+    )
     assert not ml_errs
     for t in ml_tasks:
         assert t["deliverable"].get("citation_mode") == "two_phase"

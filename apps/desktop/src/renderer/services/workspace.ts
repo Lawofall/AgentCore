@@ -36,6 +36,8 @@ type Schemas = components["schemas"];
 
 const filesBase = (conversationId: string): string =>
   `${BASE_URL}/v1/conversations/${conversationId}/workspace/files`;
+const archiveBase = (conversationId: string): string =>
+  `${BASE_URL}/v1/conversations/${conversationId}/workspace/archive`;
 
 // --- Files (bring files in / take results out: 文件进出) ---
 
@@ -143,6 +145,23 @@ export async function downloadWorkspaceFile(
 ): Promise<void> {
   const res = await authedFetch(
     `${filesBase(conversationId)}/${encodePath(workspacePath)}`,
+  );
+  await saveBlob(await res.blob(), filename);
+}
+
+/**
+ * Download a conversation-workspace directory as zip (selected dir as archive root).
+ *
+ * Independent of {@link downloadWorkspaceFile} — GET `.../files/{path}` stays
+ * preview / single-file. Root「导出 ZIP」is still snapshot create+download.
+ */
+export async function downloadWorkspaceArchive(
+  conversationId: string,
+  workspacePath: string,
+  filename: string,
+): Promise<void> {
+  const res = await authedFetch(
+    `${archiveBase(conversationId)}/${encodePath(workspacePath)}`,
   );
   await saveBlob(await res.blob(), filename);
 }

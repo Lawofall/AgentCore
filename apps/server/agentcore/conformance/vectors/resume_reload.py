@@ -123,7 +123,7 @@ def _resume_ask_user_absorb() -> list[SSEEvent]:
             checkpoint_id="cp_absorb",
             conversation_id=_CONV,
             question=_ABSORB_PROSE + "\n请确认后继续。",
-            intent="kickoff",
+            intent="decision",
         ),
         checkpoint_resolved(checkpoint_id="cp_absorb", decision="continue", note="继续"),
         content_delta(_ABSORB_CONTINUE),

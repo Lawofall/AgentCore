@@ -33,7 +33,7 @@ carries the promoted brief so downstream still gets a readable product.
 Wired into the delegated worker toolset (``build_worker_registry``) and NOT into
 ``build_builtin_registry`` — so it never reaches the CEO's own toolset (``build_ceo_tool_registry``
 derives the CEO subset from the builtins) or the read-only ``GET /tools`` capability catalog,
-mirroring how ``escalate`` / ``post_note`` are wired in only where they belong.
+mirroring how ``escalate`` is wired in only where it belongs.
 """
 
 from __future__ import annotations
@@ -124,8 +124,8 @@ class HandoffTool:
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer (工具面瘦身): topology one-liners + field cues. Field
-        # checklist / escalate-vs-next_steps live in identity; maxLength on schema.
+        # Schema layer: topology one-liners + field cues. Identity only says
+        # must-vs-may-skip; field meanings stay here.
         return ToolSchema(
             name=HANDOFF_TOOL_NAME,
             description=(

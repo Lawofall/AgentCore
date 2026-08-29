@@ -316,6 +316,30 @@ describe("settleAttachments", () => {
     });
     expect(ensure).not.toHaveBeenCalled();
   });
+
+  it("点名设定原样透传，不碰驻留", async () => {
+    const pin: PendingAttachment = {
+      id: "d-1",
+      key: "document:setting:doc-1",
+      name: "说话简短",
+      path: "设定",
+      text: "",
+      truncated: false,
+      kind: "document",
+      documentId: "doc-1",
+    };
+
+    const res = await settleAttachments("c1", [pin]);
+
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.outgoing[0]).toMatchObject({
+      kind: "document",
+      document_id: "doc-1",
+      path: "设定",
+    });
+    expect(ensure).not.toHaveBeenCalled();
+  });
 });
 
 /**

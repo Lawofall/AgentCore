@@ -55,6 +55,7 @@ import httpx
 import pytest
 
 from agentcore.core.types import ToolApproval, ToolCategory
+from agentcore.tools.builtin.archive_create import ArchiveCreateTool
 from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
 from agentcore.tools.builtin.code_execute import CodeExecuteTool
 from agentcore.tools.builtin.file_ops import (
@@ -244,6 +245,18 @@ async def _run_archive_extract(root: Path, _mp: pytest.MonkeyPatch) -> ToolResul
     return await ArchiveExtractTool().execute({"archive": "pkg.zip", "dest": "out"}, _ctx(root))
 
 
+def _seed_pack_tree(root: Path) -> None:
+    src = root / "src"
+    src.mkdir()
+    (src / "a.txt").write_text("alpha", encoding="utf-8")
+
+
+async def _run_archive_create(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
+    return await ArchiveCreateTool().execute(
+        {"sources": ["src"], "dest": "out/pkg.zip"}, _ctx(root)
+    )
+
+
 async def _run_download_url(root: Path, monkeypatch: pytest.MonkeyPatch) -> ToolResult:
     async def _fake_request(_client, _method, url, **_kwargs):
         return httpx.Response(
@@ -334,6 +347,12 @@ _CASES: tuple[_Case, ...] = (
         _run_archive_extract,
         (("out/readme.md", "md", None), ("out/docs/note.txt", "txt", None)),
         _seed_zip,
+    ),
+    _Case(
+        "archive_create",
+        _run_archive_create,
+        (("out/pkg.zip", "archive", None),),
+        _seed_pack_tree,
     ),
     _Case("download_url", _run_download_url, (("uploads/file.bin", "file", None),)),
     # 间接落盘（沙箱 copy-out）：报的是 copy-out 的 EXACT 路径，含中文顿号也不会被散文切错。

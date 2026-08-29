@@ -87,10 +87,6 @@ def fold_fanout_slots(
 # Not a CEO-facing playbook slot — CEO must not be required to re-state the user line in topic.
 USER_MESSAGE_MECH_KEY = "__user_message__"
 
-# 调研员便签协作提示（map_fanout / cite_write_review / lens_crosscheck 共用）。
-# 何时贴墙归队员身份；此处只留开工前读墙。
-RESEARCHER_NOTE_GUIDANCE = "开始本子方向前先 read_notes 检查队友是否已覆盖。"
-
 # 成文综述学术检索加句（仅 cite_write_review 调研员；map_fanout 不盖）。
 # 与 search_policy=academic_literature 配套：先论文库、搜废报缺口、禁脑补全面综述。
 RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE = (

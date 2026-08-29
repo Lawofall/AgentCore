@@ -16,10 +16,10 @@ import {
   baseName,
 } from "@/lib/fileSource";
 
-// "file" / "dir" come from FileSource indexing below; "conversation" entries are
-// not indexed here — they are produced on demand from /v1/search results
-// (MessageInput) and reuse IndexedEntry so they flow through the same @ menu.
-export type EntryKind = "file" | "dir" | "conversation";
+// "file" / "dir" come from FileSource indexing below; "conversation" / "document"
+// entries are not indexed here — they are produced on demand (recent chats /
+// on-demand settings) and reuse IndexedEntry so they flow through the same @ menu.
+export type EntryKind = "file" | "dir" | "conversation" | "document";
 
 export interface IndexedEntry {
   /** 来源标识（FileSource.id）：本地根 `local:<rootId>`、云端工作区 `workspace:<wsId>`。 */

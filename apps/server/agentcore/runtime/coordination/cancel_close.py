@@ -89,6 +89,48 @@ def worker_was_started(session: Any, run_id: str) -> bool:
     return rid in completed and rid not in cancel_ids and rid not in vacated
 
 
+def resolve_unstarted_plan_node(
+    plan: Any,
+    raw: str,
+    *,
+    started_run_ids: set[str] | frozenset[str] | None = None,
+    ended_run_ids: set[str] | frozenset[str] | None = None,
+) -> tuple[str | None, str, tuple[str, ...]]:
+    """Resolve ``raw`` to a plan node that has never dispatched.
+
+    Matching mirrors session ``resolve_pending_worker`` (exact / unique suffix /
+    unique role). Returns ``(run_id, reason, candidates)``. ``reason`` is
+    ``exact`` / ``suffix`` / ``role`` on a hit, else ``not_found`` / ``ambiguous``.
+    """
+    target = (raw or "").strip()
+    if not target or plan is None:
+        return None, "not_found", ()
+    nodes = list(getattr(plan, "nodes", ()) or ())
+    if not nodes:
+        return None, "not_found", ()
+    started = {str(x).strip() for x in (started_run_ids or ()) if str(x).strip()}
+    ended = {str(x).strip() for x in (ended_run_ids or ()) if str(x).strip()}
+    pending: dict[str, str] = {}
+    for node in nodes:
+        rid = (getattr(node, "run_id", "") or "").strip()
+        if not rid or rid in ended or rid in started:
+            continue
+        pending[rid] = (getattr(node, "role", None) or rid).strip() or rid
+    if not pending:
+        return None, "not_found", ()
+    if target in pending:
+        return target, "exact", ()
+    suffix = f"_{target}"
+    suffix_hits = sorted(rid for rid in pending if rid.endswith(suffix))
+    if len(suffix_hits) == 1:
+        return suffix_hits[0], "suffix", ()
+    role_hits = sorted(rid for rid, role in pending.items() if role == target)
+    if len(role_hits) == 1:
+        return role_hits[0], "role", ()
+    candidates = tuple(sorted(set(suffix_hits) | set(role_hits)))
+    return None, ("ambiguous" if candidates else "not_found"), candidates
+
+
 def member_had_started(
     session: Any,
     events: list[CoordinationEvent] | None = None,

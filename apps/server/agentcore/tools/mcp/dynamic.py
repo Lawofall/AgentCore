@@ -85,6 +85,11 @@ class McpDynamicTool:
         """Stable Server key for on-demand family promote (not the FC name)."""
         return self._server_id
 
+    @property
+    def mcp_server_name(self) -> str:
+        """Human Server label for the compact on-demand directory line."""
+        return self._server_name
+
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         channel = context.desktop_channel
         if channel is None:

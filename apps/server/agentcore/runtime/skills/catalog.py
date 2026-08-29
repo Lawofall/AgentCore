@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Collection
 
 from agentcore.runtime.skills.ask_user import _ASK_USER_KICKOFF, _ASK_USER_MIDTASK
-from agentcore.runtime.skills.build import _BUILD_APP
+from agentcore.runtime.skills.building_software import _BUILDING_SOFTWARE
 from agentcore.runtime.skills.data_file_landing import _DATA_FILE_LANDING
 from agentcore.runtime.skills.debate_and_review import _DEBATE_AND_REVIEW
 from agentcore.runtime.skills.deep_multi_lens_research import _DEEP_MULTI_LENS_RESEARCH
@@ -36,92 +36,85 @@ from agentcore.runtime.skills.verify_and_fix import _VERIFY_AND_FIX
 from agentcore.runtime.skills.work_discipline import _WORK_DISCIPLINE
 
 # --- The system skills (single source of truth) -----------------------------
-# Catalog summaries (always-on one-line WHEN triggers) per the design (§4.4):
-# sharp enough to know when to pull each; Python len ≤80; HOW lives in the body.
+# Catalog summaries: name-like (what this is), not a 19-way scene classifier.
+# Python len ≤80; HOW lives in the body.
 _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     SystemSkill(
         name="team_orchestration_advanced",
-        summary="拿不准怎么拆 / 绿场切片 / 成文编制 → 本条",
+        summary="团队拆法 / 成文编制",
         body=_TEAM_ORCHESTRATION_ADVANCED,
         # 派单 / 协调 / 跨路复核：队员开场目录与 consult 共用此滤，避免叶子与嵌套 lead 两套前缀。
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="team_cross_folder",
-        summary="跨文件夹摸底/推进 → 本条",
+        summary="跨文件夹",
         body=_TEAM_CROSS_FOLDER,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="team_delivery_env",
-        summary="Office / 空桌 / 产物路径 → 本条",
+        summary="Office / 空桌 / 产物路径",
         body=_TEAM_DELIVERY_ENV,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="work_discipline",
-        summary="新产品 / 大改 / 反复补丁 / 写 Windows .bat → 本条",
+        summary="工程纪律 / Windows .bat",
         body=_WORK_DISCIPLINE,
     ),
     SystemSkill(
         name="product_help",
-        summary=(
-            "用法/官网/下载→本条；点名入口→product_help_map；"
-            "FAQ/.mdc/Cursor规则→product_help_faq"
-        ),
+        summary="本产品用法 / 官网 / 下载",
         body=_PRODUCT_HELP,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="product_help_map",
-        summary="点名某入口 / UI /「××在哪」→ 入口地图",
+        summary="界面入口地图",
         body=_PRODUCT_HELP_MAP,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="product_help_faq",
-        summary="产品面 FAQ（官网 / Cursor）→ 本条",
+        summary="产品 FAQ（官网 / Cursor）",
         body=_PRODUCT_HELP_FAQ,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="product_bug_triage",
-        summary=(
-            "用户主动查/报产品故障（像不像 Bug）→ 本条；FAQ 自助走 product_help*"
-        ),
+        summary="用户报产品故障",
         body=_PRODUCT_BUG_TRIAGE,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
-        name="build_app",
-        summary="绿场 SPA / 做软件（手写可用）→ 本条",
-        body=_BUILD_APP,
+        name="building_software",
+        summary="做软件",
+        body=_BUILDING_SOFTWARE,
         requires_tools=("delegate",),
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="debate_and_review",
-        summary=(
-            "对抗性思考 / 点名开辩用 debate；调研 / 研究 → deep_multi_lens_research"
-        ),
+        summary="对抗性多视角辩论",
         body=_DEBATE_AND_REVIEW,
         requires_tools=("debate",),
     ),
     SystemSkill(
         name="revising_a_product",
-        summary="唤回原作者改稿 / 接强相关续派 → 本条",
+        summary="续派改稿",
         body=_REVISING_A_PRODUCT,
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="ask_user_kickoff",
-        summary="开场挡路短澄清 / 载体顾问 → 本条",
+        summary="向用户提问 / 载体顾问",
         body=_ASK_USER_KICKOFF,
         requires_tools=("ask_user",),
     ),
     SystemSkill(
         name="ask_user_midtask",
-        summary="途中高代价岔路拍板 / 落盘前对齐 → 本条",
+        summary="途中拍板 / 落盘前对齐",
         body=_ASK_USER_MIDTASK,
         requires_tools=("ask_user",),
     ),
@@ -130,13 +123,13 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     # other ask_* skills) so it never advertises on the autonomous path.
     SystemSkill(
         name="delegate_checkpoint",
-        summary="用户明文要看提纲再继续 → 本条",
+        summary="提纲过目",
         body=_DELEGATE_CHECKPOINT,
         requires_tools=("ask_user",),
     ),
     SystemSkill(
         name="verify_and_fix",
-        summary="改完代码后验测并修失败 → 本条",
+        summary="改完验测并修失败",
         body=_VERIFY_AND_FIX,
         # Consult is CEO+worker. Body is the worker loop; CEO still consults to brief.
         # Do not gate on ``delegate`` (would hide it from workers) or ``test_run``
@@ -144,22 +137,20 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="long_form_writing",
-        summary="超长单文档成篇 / 多源合并成一篇 → 本 skill",
+        summary="超长成篇 / 多源合并",
         body=_LONG_FORM_WRITING,
         requires_tools=("delegate",),
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
         name="long_form_landing",
-        summary="超长单文档落盘（队员写文件）",
+        summary="超长落盘（队员写文件）",
         body=_LONG_FORM_LANDING,
         audience=AUDIENCE_WORKER_ONLY,
     ),
     SystemSkill(
         name="data_file_landing",
-        summary=(
-            "账单 / 报表 / 导出 / 凭证：丢数据文件 + 要可打开表或汇总 → 本 skill"
-        ),
+        summary="账单/报表 → 可打开表",
         body=_DATA_FILE_LANDING,
         # Consult is CEO+worker. Body is the worker loop; CEO still consults to brief.
         # Do not gate on ``code_execute`` (CEO has none → skill would vanish from
@@ -167,7 +158,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="deep_multi_lens_research",
-        summary="多维公共事件调研 → 本条",
+        summary="多维公共事件调研",
         body=_DEEP_MULTI_LENS_RESEARCH,
         requires_tools=("delegate",),
         audience=AUDIENCE_CEO_ONLY,
@@ -221,6 +212,7 @@ def render_skill_directory(registry: SkillRegistry, tool_names: set[str]) -> str
     if not skills:
         return ""
     entries = [
-        ConsultDirectoryEntry(name=skill.name, summary=skill.summary) for skill in skills
+        ConsultDirectoryEntry(name=skill.name, summary=skill.summary, section="skill")
+        for skill in skills
     ]
     return render_on_demand_directory(entries, with_summaries=True)

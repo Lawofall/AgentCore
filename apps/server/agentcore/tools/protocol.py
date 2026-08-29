@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from agentcore.board.channel import BoardChannel
     from agentcore.desktop.channel import DesktopClientChannel
     from agentcore.runtime.costing import RunCost
-    from agentcore.runtime.runs.notewall import NoteWall, TeamNote
     from agentcore.vision.protocol import VisionReader
     from agentcore.workspace.channel import WorkspaceChannel
     from agentcore.workspace.protocol import WorkspaceBackend
@@ -401,22 +400,7 @@ class ToolContext:
     # ``None`` → ledger uses legacy sentinel (unit tests / bare stubs). Must match
     # declare-time desk so claim and dispatch reserve the same composite key.
     ownership_desk_id: str | None = None
-    # 团队便签墙 (§2.2 通): the per-batch sticky-note wall the worker-only ``post_note`` tool
-    # broadcasts onto and that the engine pushes fresh sibling notes from before each step.
-    # Set per delegated-worker node by ``build_agent_executor`` (one wall shared by the batch);
-    # ``None`` for the CEO / solo worker / tests (no concurrent siblings) — then ``post_note``
-    # returns a clean「无并行队友」result and no notes are injected. ``agent_role`` is this
-    # worker's display role, stamped onto its notes for sibling-facing attribution (谁贴的).
-    note_wall: NoteWall | None = None
     agent_role: str = ""
-    # 团队便签墙 实时可见: a narrow callback the ``post_note`` tool fires the INSTANT a note is
-    # pinned, so the team-notes panel lights up live (the durable record rides the journaled
-    # ``team_note_posted`` event this callback emits). Set per delegated-worker node by
-    # ``build_agent_executor`` (it closes over the run's EventSink + execution_id); ``None``
-    # for the CEO / tests — the tool still records onto the wall, only the live banner is
-    # skipped. A narrow callback (not the EventSink itself) keeps tools off the event
-    # vocabulary — the executor owns event shape (引擎纯化), exactly like ``on_escalate``.
-    on_note: Callable[[TeamNote], None] | None = None
     # 升级实时可见 (escalation 实时 SSE): a run-scoped live channel for the worker-only
     # ``escalate`` tool to surface its escalation the INSTANT it is raised, called with
     # ``(question, assumption, blocking, kind)`` — kind is normal/scope/dep. Set per
@@ -476,7 +460,7 @@ class ToolContext:
     # with the phase token ONLY; the executor (``execute_tools``) owns event shape — it closes over
     # this call's tool_call_id / tool_name / run_id and emits the
     # transport-only ``tool_use_progress``
-    # (引擎纯化, exactly like ``on_note`` / ``on_escalate``). ``None`` for call sites without a live
+    # (引擎纯化, exactly like ``on_escalate``). ``None`` for call sites without a live
     # sink (tests / evals) — the tool simply skips the ping.
     on_phase: Callable[[str], None] | None = None
     # 工具执行流式进度 (code_execute 前端展示优化): a narrow callback a long-running tool fires

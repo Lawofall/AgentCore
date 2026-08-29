@@ -39,6 +39,7 @@ from agentcore.tools.sandbox.protocol import (
     SandboxCapabilities,
 )
 from agentcore.tools.sandbox.sandboxd import (
+    SandboxdClient,
     SandboxdError,
     SandboxdUnavailableError,
     build_runsc_cmd,
@@ -66,6 +67,14 @@ _FILE_EXTENSIONS: dict[str, str] = {
 }
 
 _HOST_BIND_PATHS = ("/usr", "/lib", "/lib64", "/bin", "/etc")
+
+_DESK_START_FAILED = "代码执行环境启动失败"
+_STALE_DESK_MARKERS = ("already exists", "cannot lock container metadata")
+
+
+def _is_stale_desk_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _STALE_DESK_MARKERS)
 
 _desks: dict[str, _DeskSession] = {}
 _desk_locks: dict[str, asyncio.Lock] = {}
@@ -434,6 +443,12 @@ class GVisorSandbox:
                 workspace, cache_bucket=request.cache_bucket, pin=True
             )
             pinned = True
+        except SandboxError:
+            raise
+        except (TimeoutError, SandboxTimeoutError, SandboxdError, OSError) as exc:
+            raise SandboxError(_DESK_START_FAILED) from exc
+
+        try:
             script_name = f"exec-{uuid.uuid4().hex[:12]}{_FILE_EXTENSIONS[request.language]}"
             (desk.scratch_dir / script_name).write_text(request.code, encoding="utf-8")
             argv = _LANGUAGE_COMMANDS[request.language] + [f"/scratch/{script_name}"]
@@ -566,7 +581,14 @@ class GVisorSandbox:
             return busy.exit_code, busy.stdout, busy.stderr
         pinned = False
         try:
-            desk = await self._ensure_desk(workspace, cache_bucket=cache_bucket, pin=True)
+            try:
+                desk = await self._ensure_desk(
+                    workspace, cache_bucket=cache_bucket, pin=True
+                )
+            except SandboxError:
+                raise
+            except (TimeoutError, SandboxTimeoutError, SandboxdError, OSError) as exc:
+                raise SandboxError(_DESK_START_FAILED) from exc
             pinned = True
             argv = ["bash", guest_script]
             env_pairs = self._desk_env_pairs(desk)
@@ -637,11 +659,17 @@ class GVisorSandbox:
                 json.dumps(config), encoding="utf-8"
             )
             client = get_sandboxd_client()
-            await client.start_detach(
-                bundle_dir=str(bundle_dir),
-                container_id=container_id,
-                netns_path=egress.netns_path,
-            )
+            try:
+                await self._run_start_detach(
+                    client,
+                    bundle_dir=str(bundle_dir),
+                    container_id=container_id,
+                    netns_path=egress.netns_path,
+                )
+            except SandboxError:
+                raise
+            except Exception as exc:
+                raise SandboxError(_DESK_START_FAILED) from exc
         except Exception:
             with contextlib.suppress(Exception):
                 await egress.close()
@@ -660,6 +688,34 @@ class GVisorSandbox:
             workspace=workspace,
             egress=egress,
             last_used=_now(),
+        )
+
+    async def _run_start_detach(
+        self,
+        client: SandboxdClient,
+        *,
+        bundle_dir: str,
+        container_id: str,
+        netns_path: str,
+    ) -> None:
+        """start_detach; stale leftover guest gets one delete --force + create."""
+        start = client.start_detach
+        try:
+            await start(
+                bundle_dir=bundle_dir,
+                container_id=container_id,
+                netns_path=netns_path,
+            )
+            return
+        except Exception as first:
+            if not _is_stale_desk_error(first):
+                raise
+        with contextlib.suppress(Exception):
+            await client.delete(container_id, force=True)
+        await start(
+            bundle_dir=bundle_dir,
+            container_id=container_id,
+            netns_path=netns_path,
         )
 
     def _host_bind_mounts(self) -> list[dict]:

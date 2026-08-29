@@ -189,7 +189,7 @@ async def test_default_worker_is_captain_within_depth_cap():
     sys = provider.system_messages[0]
     # Captain-only markers — the leaf intro carries neither.
     assert "再向下委派一层子团队" in sys
-    assert "不要为委派而委派" in sys
+    assert "薄切片" in sys and "自己干" in sys
 
 
 async def test_depth_two_captain_children_are_leaves():
@@ -212,42 +212,21 @@ async def test_captain_identity_carries_when_to_split_guidance():
     await executor(plan.by_id("t_1"), {})
     sys = provider.system_messages[0]
     assert "再向下委派一层子团队" in sys
-    assert "不要为委派而委派" in sys
     assert "consult(team_orchestration_advanced)" not in sys
+    assert "薄切片" in sys and "自己干" in sys
     assert "先招人再整合" in sys
-    assert "未钉成单切片" in sys
-    assert "不是先深读再招" in sys
-    assert "【开局】" in sys
+    assert "≠ 两段" in sys
+    assert "【开局】" not in sys
+    assert "摸底一页地图" not in sys
+    assert "已经做了很久" not in sys
+    assert "不要为委派而委派" not in sys
     assert "第一件事用 delegate" not in sys
-    assert "优先把能独立的块交出去" in sys
-    assert "不要先通读长文档" in sys
-    assert "代替招人" in sys
-    assert "不是必须第一下就招人" in sys
-    assert "你去把整座做完" in sys
-    assert "禁止为显得主动而再招人" in sys
-    assert "薄切片" in sys and "整座仓" in sys
-    assert "escalate（范围）" in sys
-    assert "禁止默默扩编" in sys
-    assert "有 delegate 就可以招" in sys
-    assert "先组队" in sys
-    assert "本来就小" in sys
-    assert "不授权一个人扛里程碑" in sys
     assert "你的子成员仍可再向下委派一层" in sys
-    # 嵌套 lead 编排 HOW 住 identity（已有 captain 分叉），不进共享目录。
-    assert "怎么拆" in sys
-    assert "假两段" in sys
-    assert "何时不该拆" not in sys
-    assert "摸底一页地图" in sys
-    assert sys.count("摸底一页地图") == 1
-    assert "已经做了很久" in sys
-    assert sys.count("已经做了很久") == 1
-    assert "禁止开局先招人" in sys
-    assert "已覆盖" in sys
-    assert "再整仓" in sys
-    assert "会改变还在跑的队友" in sys
-    assert "入口与关键结论" in sys
-    assert "计划已让出" in sys
-    assert "replan" in sys
+    assert "会改变还在跑的队友" not in sys
+    assert "计划已让出" not in sys
+    from agentcore.tools.builtin.replan import _REPLAN_DESCRIPTION
+
+    assert "计划已让出" in _REPLAN_DESCRIPTION
     # Path-B encyclopedia 仍不进 identity。
     from agentcore.runtime.runs.executor.identities import build_worker_identity
 
@@ -256,14 +235,12 @@ async def test_captain_identity_carries_when_to_split_guidance():
     assert "未嵌套禁写" not in identity
     assert "凡大活" not in identity
     assert "共写同一目标文件" not in identity
-    assert "豁免" not in identity
     assert "4 个 sub-worker" not in identity
     leaf = build_worker_identity(has_dependents=False, captain=False)
-    assert "怎么拆" not in leaf
-    assert "计划已让出" not in leaf
+    assert "先招人再整合" not in leaf
+    assert "≠ 两段" not in leaf
     assert "【开局】" not in leaf
-    assert "第一件事用 delegate" not in leaf
-    assert "优先把能独立的块交出去" not in leaf
+    assert "再向下委派一层子团队" not in leaf
 
 
 async def test_depth_three_subworker_keeps_leaf_identity():
@@ -330,53 +307,53 @@ async def test_handoff_prompt_splits_by_topology():
     prose_up = build_worker_identity(
         has_dependents=True, captain=False, form="prose"
     )
-    assert "结论与根因写在回复正文更清楚" in prose_up
+    assert "结论与根因写在正文" in prose_up
     assert "交接勿回灌" in prose_up
     files_leaf = build_worker_identity(
         has_dependents=False, captain=False, form="files"
     )
     assert "交接勿回灌" in files_leaf
-    assert "落盘产物是给人读的完整说明" in files_leaf
-    # files 叶子走 pointer：简报是 CEO 唯一信息源，必须保留结论性。
-    assert "summary（结论）" in files_leaf
-    assert "一句话说清你这次做出了什么" in files_leaf
-    assert "正文里已经写过的结论" not in files_leaf
+    assert "自包含可读" in files_leaf
+    assert "直接以产出本身开头" in files_leaf
+    assert "我来为你生成" not in files_leaf
+    assert "粘在回复正文" not in files_leaf
+    assert "聊天粘贴" not in files_leaf
+    # files 叶子：简报是 CEO 唯一信息源。
+    assert "主管唯一信息源" in files_leaf
+    assert "须写清这次做出了什么" in files_leaf
+    assert "summary（结论）" not in files_leaf
     assert "一行标题" not in files_leaf
     artifacts_leaf = build_worker_identity(
         has_dependents=False, artifacts=["report.md"]
     )
     assert "form=files" in artifacts_leaf
-    assert "summary（结论）" in artifacts_leaf
+    assert "须写清这次做出了什么" in artifacts_leaf
     assert "正文里已经写过的结论" not in artifacts_leaf
 
     prose_leaf = build_worker_identity(
         has_dependents=False, captain=False, form="prose"
     )
-    assert "给人读的说明" in prose_leaf
     assert "结论、根因、关键取舍" in prose_leaf
     assert "一行标题" in prose_leaf
     assert "接力状态" in prose_leaf
     assert "正文里已经写过的结论" in prose_leaf
-    assert "summary（结论）" not in prose_leaf
-    assert "一句话说清你这次做出了什么" not in prose_leaf
+    assert "主管唯一信息源" not in prose_leaf
 
     assert "不必为交而交" in leaf
     assert "接力契约 + 增量交代" in leaf
     assert "必须调用 handoff" not in leaf
     # 省略 form = files：叶子走 pointer，简报保留结论性。
     assert "form=files" in leaf
-    assert "落盘产物是给人读的完整说明" in leaf
+    assert "自包含可读" in leaf
     assert "结论、根因、关键取舍" in leaf
-    assert "summary（结论）" in leaf
-    assert "一句话说清你这次做出了什么" in leaf
+    assert "须写清这次做出了什么" in leaf
     assert "正文里已经写过的结论" not in leaf
     assert "一行标题" not in leaf
     assert "正文里已经写过的结论" not in upstream
-    assert "summary（结论）" in upstream
-    assert "一句话说清你这次做出了什么" in upstream
+    assert "须写清这次做出了什么" in upstream
     assert "一行标题" not in upstream
-    assert leaf.count("它与 escalate 不同") == 1
-    assert upstream.count("它与 escalate 不同") == 1
+    assert "它与 escalate 不同" not in leaf
+    assert "它与 escalate 不同" not in upstream
     # 队员合同：原则标题 + 结构真相；不守卫完成话术近义词必须在场
     assert "交接勿回灌" in leaf and "交接勿回灌" in upstream
     assert "改文件" in leaf and "症状消失" in leaf
@@ -385,26 +362,16 @@ async def test_handoff_prompt_splits_by_topology():
     assert "修复完成" not in leaf
     assert "现象已消除" not in leaf and "已全部落地" not in leaf
     assert "有工具活动或较长交付" in leaf
-    assert "汇报不完整" in leaf
     assert "权威文档冲突" not in leaf
     assert "静默改权威稿" not in leaf
-    # 开局找路径轻 nudge：已有前置路径直接读；含糊「根」才 glob/grep；已知目录一层 file_list
+    # 找路径：已给相对路径直接读 ≠ 全仓 glob
     assert "找路径" in leaf
     assert "前置结果" in leaf
-    assert "含糊" in leaf and "根" in leaf
-    assert "已覆盖" in leaf
-    assert "再整仓" in leaf
     assert "glob" in leaf
-    assert "已知目录" in leaf
-    assert "file_list" in leaf
-    assert "file_list(pattern)" not in leaf
-    assert "整仓按名" not in leaf
-    assert "code_execute print" in leaf
-    assert "整文件 dump" in leaf
-    assert "正则扫描" in leaf
-    assert "含约定文档出口" not in leaf
-    assert "写入落点" in leaf
-    assert "勿按话题拼接" in leaf
+    assert "file_list" not in leaf
+    assert "再整仓" not in leaf
+    assert "勿按话题拼接" not in leaf
+    assert "workspace_context" in leaf
 
     # Executor wires topology into the live system prompt (not just the helper).
     plan, _ = build_run_plan(
@@ -449,41 +416,45 @@ def test_worker_identity_states_no_execution_capability():
 
     no_exec = build_worker_identity(has_dependents=False, can_execute=False)
     assert "本回合执行环境未装配" in no_exec
-    assert "能】用写文件工具" in no_exec
-    assert "不能】运行" in no_exec
-    assert "二进制" in no_exec
+    assert "【能】写文件" in no_exec
+    assert "【不能】运行" in no_exec
     assert "已运行 / 已验证 / 已生成" not in no_exec
     assert "谎称" not in no_exec
-    assert "未运行验证" in no_exec
-    assert "手抄" in no_exec
-    assert "表格" in no_exec
-    assert "结构报告" in no_exec
-    assert "待跑" in no_exec
-    assert "暂时不可用" in no_exec
-    assert "不是缺口" in no_exec
+    assert "未运行" in no_exec
+    assert "手抄" not in no_exec
+    assert "结构报告" not in no_exec
+    assert "consult(data_file_landing)" in no_exec
     assert "无法可靠完成" not in no_exec
-    assert "不可靠" not in no_exec
 
     with_exec = build_worker_identity(has_dependents=False, can_execute=True)
     assert "本回合执行环境未装配" not in with_exec
     assert "手抄" not in with_exec
     assert "刚落盘的表格" in with_exec
-    assert "file_read 回读自检" in with_exec
+    assert "file_read" in with_exec
     assert "consult(data_file_landing)" in with_exec
     # 默认参数与显式 True 字节一致（不惊扰既有路径）。
     assert with_exec == build_worker_identity(has_dependents=False)
 
 
 def test_worker_identity_teaches_escalate_blocking_choice():
-    """Worker 按题自选：有把握报一声继续；猜错作废就停。不再钉 blocking= 字面。"""
+    """何时 escalate 写在工具 description；身份不写小中大三档、不抄凭据卫生。"""
     from agentcore.runtime.runs.executor.identities import build_worker_identity
+    from agentcore.tools.builtin.escalate import EscalateTool
 
     body = build_worker_identity(has_dependents=False)
-    assert "报一声" in body and "继续" in body
-    assert "猜错" in body and "作废" in body and "停" in body
+    assert "小问题（路径拼写" not in body
     assert "blocking=false" not in body
     assert "blocking=true" not in body
     assert "escalate 不会打断你" not in body
+    assert "再向用户索要" not in body
+    assert "已明确拒绝" not in body
+    desc = EscalateTool().schema.description
+    assert "报一声" in desc
+    assert "猜错作废" in desc
+    blocking = EscalateTool().schema.parameters["properties"]["blocking"]["description"]
+    assert "已拒凭据" in blocking
+    captain = build_worker_identity(has_dependents=False, captain=True)
+    assert "小问题（路径拼写" not in captain
 
 
 async def test_executor_never_wires_direct_to_user_register():

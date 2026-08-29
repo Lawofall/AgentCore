@@ -21,13 +21,6 @@ def test_registry_has_baseline_as_identity() -> None:
     assert resolve_prompt_profile(None) is None
 
 
-def test_resolve_known_ablation_profile() -> None:
-    p = resolve_prompt_profile("ablate_visualization")
-    assert p is not None
-    assert p.name == "ablate_visualization"
-    assert p.overrides  # 非空覆盖（消融）
-
-
 def test_resolve_unknown_profile_raises() -> None:
     with pytest.raises(EvalConfigError):
         resolve_prompt_profile("does_not_exist")
@@ -50,7 +43,7 @@ def test_lint_accepts_known_profile() -> None:
         "id": "c",
         "category": "qa",
         "user_message": "u",
-        "prompt_profile": "ablate_citation",
+        "prompt_profile": "baseline",
         "rubric": "r",
     }
     assert lint_case(raw) == []

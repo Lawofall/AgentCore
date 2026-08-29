@@ -72,15 +72,15 @@ class EscalateTool:
 
     @property
     def schema(self) -> ToolSchema:
-        # Schema layer (工具面瘦身): short trigger + field cues. When-to-stop
-        # lives in identity; engine internals stay off the button.
+        # Schema layer: short trigger + field cues. When-to-stop lives here,
+        # not in the worker identity.
         return ToolSchema(
             name=ESCALATE_TOOL_NAME,
             description=(
                 "向上通道：必须由上级/用户拍板或职责偏离才报。小事勿升级。"
                 "blocking 默认 false（报一声继续）；"
                 "猜错作废 / 只有上级能定 → true（须 assumption）。"
-                "kind：normal / scope 偏离 / dep 缺输入（先 read_notes）。"
+                "kind：normal / scope 偏离 / dep 缺输入。"
                 "browser_login=true 强制 blocking。"
             ),
             parameters={
@@ -99,7 +99,10 @@ class EscalateTool:
                     },
                     "blocking": {
                         "type": "boolean",
-                        "description": "默认 false=报一声继续；true=原地等（须 assumption）。",
+                        "description": (
+                            "默认 false=报一声继续；true=原地等（须 assumption）。"
+                            "已拒凭据→false。"
+                        ),
                     },
                     "browser_login": {
                         "type": "boolean",
@@ -113,7 +116,7 @@ class EscalateTool:
                         "enum": ["normal", "scope", "dep"],
                         "description": (
                             "可选，默认 normal。scope=职责偏离；dep=缺还不存在的输入"
-                            "（先 read_notes，别硬猜）。scope/dep 不停工。"
+                            "（别硬猜）。scope/dep 不停工。"
                         ),
                     },
                     "questions": {
@@ -149,14 +152,7 @@ class EscalateTool:
                                                 "type": "string",
                                                 "description": (
                                                     "选项文字（即选它时回传的答案）。"
-                                                    "权衡写进此项，勿另写第二句。"
-                                                ),
-                                            },
-                                            "recommended": {
-                                                "type": "boolean",
-                                                "description": (
-                                                    "可选：标记倾向的那一项（至多一个，仅高亮"
-                                                    "不预选；要预选用 default）。"
+                                                    "权衡写进此项。有倾向时该项放第一、名末加「（推荐）」。"
                                                 ),
                                             },
                                         },
@@ -250,7 +246,6 @@ class EscalateTool:
         # Local import 避免经 ask_user 包 __init__ 触发 runtime 依赖环。
         from agentcore.tools.builtin.ask_user.schema import (
             ListArgError,
-            OptionLabelError,
             normalize_questions,
         )
 
@@ -267,21 +262,6 @@ class EscalateTool:
                     error=(
                         f"{exc} 请直接传 JSON 数组，不要把数组再序列化成字符串。"
                     ),
-                )
-            # Same normalizer as ask_user, so it raises the same label rejection here.
-            # Unhandled it escapes as a crash whose traceback reaches the event stream
-            # and the escalation card never opens — the human is simply never asked.
-            except OptionLabelError as exc:
-                logger.info(
-                    "worker.escalate_option_label_rejected",
-                    run_id=context.run_id,
-                    error=str(exc),
-                )
-                return ToolResult(
-                    tool_call_id="",
-                    success=False,
-                    output="",
-                    error=str(exc),
                 )
             # browser_login / 写权冲突 must reach the human (password never touches AI;
             # 「移交」自然语言不会自动转锁). Skip coordination CEO arbitration.
@@ -313,6 +293,12 @@ class EscalateTool:
                         awaiting = "ceo"
                 except Exception:  # noqa: BLE001
                     awaiting = "user"
+            if awaiting == "ceo":
+                from agentcore.runtime.coordination.session import (
+                    note_coord_worker_busy,
+                )
+
+                note_coord_worker_busy(context.run_id, "arbitrate")
             outcome = await channel.request(
                 question,
                 assumption,

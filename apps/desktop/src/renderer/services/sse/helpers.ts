@@ -55,7 +55,8 @@ export function findHostSlotForExecution(
  * `execution_id` host lookup (same-turn merge) → latest assistant.
  *
  * Cross-turn divert (sticky growth → previous bubble) was removed: new turns open
- * their own graph; `prev_execution_id` is a UI back-link only.
+ * their own graph; `prev_execution_id` remains a protocol chain, not a user-facing
+ * back-link.
  */
 export function execMessageId(
   conversationId: string,

@@ -1,6 +1,6 @@
 {
   "name": "multi_agent_multi_lens_research",
-  "description": "多 Agent·多视角深度调研幕1：team_preview(delegate) → 4 透镜并行流式 → 汇总分析师 debrief.motion_card → CEO 呈报建议开辩（开辩入口 stage_card）",
+  "description": "多 Agent·多视角深度调研幕1：delegate → 4 透镜并行流式 → 汇总分析师 debrief.motion_card → CEO 呈报建议开辩（开辩入口 stage_card）",
   "events": [
     {
       "type": "message_start",
@@ -981,7 +981,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

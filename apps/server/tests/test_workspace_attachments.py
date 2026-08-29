@@ -305,6 +305,25 @@ async def test_persist_skips_conversation_reference(tmp_path: Path):
     assert ws.dirty is False
 
 
+async def test_persist_skips_document_pin(tmp_path: Path):
+    ws = _ws(tmp_path)
+    out = await persist_attachments(
+        ws,
+        [
+            {
+                "name": "说话简短",
+                "path": "设定",
+                "text": "ignored",
+                "kind": "document",
+                "document_id": "doc-1",
+            }
+        ],
+    )
+    assert "workspace_path" not in out[0]
+    assert not (tmp_path / ATTACHMENTS_DIR).exists()
+    assert ws.dirty is False
+
+
 async def test_persist_dedups_same_name(tmp_path: Path):
     ws = _ws(tmp_path)
     out = await persist_attachments(
@@ -372,6 +391,7 @@ def test_to_stored_metadata_drops_text_keeps_path():
             "kind": "file",
             "workspace_path": "attachments/a.py",
             "conversation_id": None,
+            "document_id": None,
             "binary": False,
         }
     ]
@@ -400,7 +420,26 @@ def test_to_stored_metadata_keeps_conversation_id():
     assert stored[0]["conversation_id"] == "conv-1"
     # A conversation reference is never written to disk → no workspace_path.
     assert stored[0]["workspace_path"] is None
+    assert stored[0]["document_id"] is None
     # The one-shot text is still dropped from stored metadata.
+    assert "text" not in stored[0]
+
+
+def test_to_stored_metadata_keeps_document_id():
+    stored = to_stored_metadata(
+        [
+            {
+                "name": "说话简短",
+                "path": "设定",
+                "text": "ignored",
+                "kind": "document",
+                "document_id": "doc-1",
+            }
+        ]
+    )
+    assert stored[0]["kind"] == "document"
+    assert stored[0]["document_id"] == "doc-1"
+    assert stored[0]["workspace_path"] is None
     assert "text" not in stored[0]
 
 

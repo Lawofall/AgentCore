@@ -54,17 +54,30 @@ def should_defer_run_plan_emit_to_merge(
     tool: DelegateTool,
     *,
     execution_id: str,
+    coordinate: bool = True,
+    worker_count: int = 0,
+    has_checkpoint: bool = False,
 ) -> bool:
-    """True when an active coordination session will emit the commit ``run_plan``.
+    """True when durable ``run_plan`` / ``plan_snapshot`` must wait for arm success.
 
     Secondary same-turn ``delegate`` merges into the live graph; the merge path
-    emits the grown plan after admission. Emitting earlier would leave a durable
-    skeleton even when admission later rejects.
+    emits the grown plan after admission. A **fresh** coordination arm runs the
+    try_start sibling defense before commit — emitting earlier would leave a
+    durable skeleton even when admission later rejects.
     """
     if int(getattr(tool, "_depth", 0) or 0) != 0:
         return False
     existing = active_coordination(execution_id)
-    return existing is not None and existing.active
+    if existing is not None and existing.active:
+        return True
+    checkpoint_enabled = bool(getattr(tool, "_checkpoint_enabled", False))
+    return should_enter_coordination(
+        coordinate=coordinate,
+        worker_count=worker_count,
+        depth=int(getattr(tool, "_depth", 0) or 0),
+        has_checkpoint=has_checkpoint,
+        checkpoint_enabled=checkpoint_enabled,
+    )
 
 
 def _seed_terminal_sets(
@@ -87,6 +100,107 @@ def _seed_terminal_sets(
         if phase in hard:
             vacated.add(rid_s)
     return completed, vacated
+
+
+def _admit_started_run_ids() -> set[str] | None:
+    """Journal ``run_started`` ids, or ``None`` when no fact log is bound.
+
+    ``None`` keeps unit tests on the historical「all incomplete occupy」rule.
+    An empty set means the log exists and nobody dispatched — empty seats do
+    not isomorphic-lock the next batch.
+    """
+    from agentcore.runtime.coordination.isomorphic import started_run_ids_from_entries
+    from agentcore.runtime.facts import current_fact_log
+
+    log = current_fact_log.get()
+    if log is None:
+        return None
+    return started_run_ids_from_entries(log.entries())
+
+
+def commit_admitted_run_plan(
+    tool: DelegateTool,
+    plan: RunPlan,
+    *,
+    execution_id: str,
+) -> None:
+    """Durable graph commit after sibling / append admit (snapshot + ``run_plan``)."""
+    from agentcore.runtime.delegate.plan_events import plan_event
+    from agentcore.runtime.delegate.steer import record_plan_snapshot
+
+    record_plan_snapshot(plan)
+    sink = getattr(tool, "_sink", None)
+    if sink is None:
+        return
+    prev = getattr(tool, "_prev_graph_execution_id", None)
+    prev_s = prev.strip() if isinstance(prev, str) and prev.strip() else None
+    sink.emit(plan_event(tool, execution_id, plan, prev_execution_id=prev_s))
+
+
+def retract_unstarted_batch(
+    tool: DelegateTool,
+    plan: RunPlan,
+    *,
+    drop_run_ids: set[str] | frozenset[str],
+) -> None:
+    """Erase never-started new-batch seats from the durable graph after a late reject.
+
+    Mutates ``plan`` (undo leaked host∪new merge). Rewrites journal snapshot only
+    when one already exists. Emits ``run_skipped`` only when those ids already
+    rode a ``run_plan`` (do not grow ghost skipped nodes that were never shown).
+    """
+    drop = {str(x).strip() for x in drop_run_ids if str(x).strip()}
+    if not drop:
+        return
+    dropped_nodes = [n for n in plan.nodes if (n.run_id or "") in drop]
+    if not dropped_nodes:
+        return
+    plan.nodes[:] = [n for n in plan.nodes if (n.run_id or "") not in drop]
+    from agentcore.runtime.facts import FactKind, current_fact_log
+
+    log = current_fact_log.get()
+    had_snapshot = False
+    if log is not None:
+        had_snapshot = any(
+            e.get("kind") == FactKind.PLAN_SNAPSHOT.value for e in log.entries()
+        )
+    if had_snapshot:
+        from agentcore.runtime.delegate.steer import record_plan_snapshot
+
+        record_plan_snapshot(plan)
+    on_board = False
+    sink = getattr(tool, "_sink", None)
+    history = getattr(sink, "_history", None) if sink is not None else None
+    if isinstance(history, (list, tuple)):
+        from agentcore.runtime.events import EventType
+
+        for event in history:
+            if getattr(event, "type", None) is not EventType.RUN_PLAN:
+                continue
+            payload = getattr(event, "payload", None) or {}
+            for raw in payload.get("runs") or []:
+                if not isinstance(raw, dict):
+                    continue
+                if str(raw.get("kind") or "") == "captain":
+                    continue
+                rid = str(raw.get("id") or "").strip()
+                if rid in drop:
+                    on_board = True
+                    break
+            if on_board:
+                break
+    if on_board and sink is not None:
+        from agentcore.runtime.events import run_skipped
+
+        for node in dropped_nodes:
+            rid = (node.run_id or "").strip()
+            if not rid:
+                continue
+            agent_id = (getattr(node, "agent_id", None) or rid).strip() or rid
+            sink.emit(run_skipped(rid, agent_id, reason="abort"))
+    last = getattr(tool, "_last_graph_plan", None)
+    if last is not None and last is not plan:
+        last.nodes[:] = [n for n in last.nodes if (n.run_id or "") not in drop]
 
 
 def admit_before_run_plan_emit(
@@ -115,9 +229,6 @@ def admit_before_run_plan_emit(
         find_sibling_artifact_crosses,
     )
     from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
-    from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
-
-    force = force_allows(tool, GATE_SEAT_OVERLAP)
 
     existing = active_coordination(execution_id)
     merging = (
@@ -134,10 +245,6 @@ def admit_before_run_plan_emit(
             vacated_run_ids=existing.vacated_run_ids,
         )
 
-    if force:
-        return None
-
-    if merging and existing is not None:
         from agentcore.runtime.coordination.isomorphic import (
             is_isomorphic_redelegation,
             isomorphic_reject_message,
@@ -229,10 +336,12 @@ def admit_before_run_plan_emit(
         )
 
         completed_ids, vacated_ids = _seed_terminal_sets(seed_completed)
+        started_ids = _admit_started_run_ids()
         if is_isomorphic_redelegation(
             plan,
             host_plan,
             completed_run_ids=completed_ids,
+            started_run_ids=started_ids,
         ):
             logger.info(
                 "delegate.isomorphic_rejected",
@@ -266,8 +375,8 @@ def admit_before_run_plan_emit(
             host_plan,
             completed_run_ids=completed_ids,
             vacated_run_ids=vacated_ids,
+            started_run_ids=started_ids,
             ownership=None,
-            force=False,
             total_workers=len(host_plan.nodes),
             birth_desk_id=getattr(tool, "_folder_id", None),
         )
@@ -493,10 +602,8 @@ def _merge_into_active_coordination(
     *,
     execution_id: str,
     seed_completed: dict[str, RunState] | None,
-    seed_notes: list[dict[str, str]] | None,
     complexity_hint: str,
     call_idx: int,
-    coordination: str,
 ) -> ToolResult:
     """Append ``plan`` workers onto the live session (budget / cancel / arbitration kept)."""
     from agentcore.runtime.coordination.append_guard import (
@@ -511,19 +618,11 @@ def _merge_into_active_coordination(
     from agentcore.runtime.delegate.plan_events import plan_event
     from agentcore.runtime.runs.plan import RunPlan, RunPlanError
 
-    if coordination == "wall":
-        session.coordination = "wall"
-    elif coordination == "none" and session.coordination != "wall":
-        session.coordination = "none"
-
     live = session.live_plan
     drive_running = session.drive_task is not None and not session.drive_task.done()
 
     # Seat reclaim + overlap: same admit as replan.adds (vacated/completed
     # auto-replaces, then reject incomplete seat / still-running file holders).
-    from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
-
-    force = force_allows(tool, GATE_SEAT_OVERLAP)
     ownership = session.ensure_file_ownership()
     _folder = getattr(tool, "_folder_id", None)
     birth_desk = session.birth_desk_id or (
@@ -537,7 +636,6 @@ def _merge_into_active_coordination(
         completed_run_ids=session.completed_run_ids,
         vacated_run_ids=session.vacated_run_ids,
         ownership=ownership,
-        force=force,
         total_workers=session.total_workers,
         birth_desk_id=birth_desk,
     )
@@ -648,7 +746,6 @@ def _merge_into_active_coordination(
         declare_plan_artifacts(
             live,
             session.ensure_file_ownership(),
-            force=force,
             only_run_ids={n.run_id for n in added_nodes},
             ancestor_map=_ancestors_by_id(live),
             completed_run_ids=session.completed_run_ids,
@@ -675,6 +772,9 @@ def _merge_into_active_coordination(
     # cancel_ids / pending_arbitrations / resolved_arbitrations / draft retained.
 
     tool._sink.emit(plan_event(tool, execution_id, live))
+    from agentcore.runtime.delegate.steer import record_plan_snapshot
+
+    record_plan_snapshot(live)
     record_coordination_snapshot(session)
 
     if drive_running:
@@ -705,9 +805,7 @@ def _merge_into_active_coordination(
                 added_plan,
                 execution_id=execution_id,
                 seed_completed=seed_completed,
-                seed_notes=seed_notes,
                 complexity_hint=complexity_hint,
-                coordination=coordination,
                 call_idx=call_idx,
                 session=session,
             ),
@@ -759,11 +857,9 @@ def try_start_coordination(
     *,
     execution_id: str,
     seed_completed: dict[str, RunState] | None,
-    seed_notes: list[dict[str, str]] | None,
     complexity_hint: str,
     call_idx: int,
     coordinate: bool,
-    coordination: str = "none",
     session: CoordinationSession | None = None,
 ) -> ToolResult | None:
     """If the coordinate gate passes, arm a background drive and return the start result.
@@ -789,10 +885,8 @@ def try_start_coordination(
                 existing,
                 execution_id=execution_id,
                 seed_completed=seed_completed,
-                seed_notes=seed_notes,
                 complexity_hint=complexity_hint,
                 call_idx=call_idx,
-                coordination=coordination,
             )
 
     has_checkpoint = any(bool(n.checkpoint_after) for n in plan.nodes)
@@ -815,25 +909,35 @@ def try_start_coordination(
         return None
 
     # C3 sibling gate before session create (defense if caller skipped pre-emit admit).
-    from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
-
-    force = force_allows(tool, GATE_SEAT_OVERLAP)
+    # Same rule as pre_emit: scan the **new batch only** (host terminals in a merged
+    # plan are 续派, not sibling).
     creating_fresh = session is None
-    if creating_fresh and not force:
+    if creating_fresh:
         from agentcore.runtime.coordination.append_guard import (
             append_overlap_reject_message,
             find_sibling_artifact_crosses,
+            same_batch_plan,
         )
         from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
 
+        exclude = {
+            str(rid).strip()
+            for rid in (seed_completed or {})
+            if str(rid).strip()
+        }
+        batch = same_batch_plan(plan, exclude_run_ids=exclude)
         sibling_hits = find_sibling_artifact_crosses(
-            plan, birth_desk_id=getattr(tool, "_folder_id", None)
+            batch, birth_desk_id=getattr(tool, "_folder_id", None)
         )
         if sibling_hits:
+            drop_ids = {n.run_id for n in batch.nodes if n.run_id}
+            node_count = len(batch.nodes)
+            has_deps = any(n.depends_on for n in batch.nodes)
+            retract_unstarted_batch(tool, plan, drop_run_ids=drop_ids)
             msg = append_overlap_reject_message(
                 sibling_hits,
                 completed=0,
-                total=len(plan.nodes),
+                total=node_count or len(plan.nodes),
             )
             logger.info(
                 "coordination.sibling_artifact_rejected",
@@ -852,8 +956,8 @@ def try_start_coordination(
                     effect=ToolEffect.CONTINUE,
                     contract_failure=True,
                 ),
-                node_count=len(plan.nodes),
-                has_deps=any(n.depends_on for n in plan.nodes),
+                node_count=node_count,
+                has_deps=has_deps,
             )
 
     fresh_session = False
@@ -867,7 +971,6 @@ def try_start_coordination(
             progress_budget_remaining=init_progress,
             decision_budget_remaining=init_decision,
             conversation_id=str(getattr(tool, "_conversation_id", None) or ""),
-            coordination=coordination if coordination in ("wall", "none") else "none",
         )
         _folder = getattr(tool, "_folder_id", None)
         session.birth_desk_id = (
@@ -894,8 +997,6 @@ def try_start_coordination(
             )
         # Resume / re-arm: re-attach live sink (not snapshotted).
         session.event_sink = getattr(tool, "_sink", None) or session.event_sink
-        if coordination in ("wall", "none"):
-            session.coordination = coordination
         _seed_session_completed(session, seed_completed)
         if session.host_journal_writer is None:
             _bind_session_host_journal(session)
@@ -914,11 +1015,11 @@ def try_start_coordination(
         declare_plan_artifacts(
             plan,
             session.ensure_file_ownership(),
-            force=force,
             completed_run_ids=session.completed_run_ids,
             birth_desk_id=getattr(tool, "_folder_id", None),
         )
         record_coordination_snapshot(session)
+        commit_admitted_run_plan(tool, plan, execution_id=execution_id)
 
     # 疑似缺依赖提示搭车协调注入通道：随首个团队事件简报一并呈现给 CEO，不新增独立唤醒。
     if plan.advisories:
@@ -930,9 +1031,7 @@ def try_start_coordination(
             plan,
             execution_id=execution_id,
             seed_completed=seed_completed,
-            seed_notes=seed_notes,
             complexity_hint=complexity_hint,
-            coordination=coordination,
             call_idx=call_idx,
             session=session,
         ),
@@ -981,11 +1080,9 @@ async def _background_drive(
     *,
     execution_id: str,
     seed_completed: dict[str, RunState] | None,
-    seed_notes: list[dict[str, str]] | None,
     complexity_hint: str,
     call_idx: int,
     session: CoordinationSession,
-    coordination: str = "none",
 ) -> None:
     """Run blocking drive semantics, posting coordination events along the way.
 
@@ -1004,9 +1101,7 @@ async def _background_drive(
             plan,
             execution_id=execution_id,
             seed_completed=seed_completed,
-            seed_notes=seed_notes,
             complexity_hint=complexity_hint,
-            coordination=coordination,
             call_idx=call_idx,
             session=session,
         )

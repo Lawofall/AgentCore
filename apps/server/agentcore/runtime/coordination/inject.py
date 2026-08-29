@@ -375,11 +375,6 @@ def _format_one(
         done = len(session.completed_run_ids)
         total = session.total_workers
         return f"- worker_completed（{done}/{total}）【{role}】{status}：{summary}"
-    if ev.kind is CoordinationEventKind.NOTE_POSTED:
-        return (
-            f"- note_posted【{p.get('role') or p.get('run_id') or '?'}】"
-            f"{p.get('kind') or 'note'}：{p.get('text') or ''}"
-        )
     if ev.kind is CoordinationEventKind.ESCALATION:
         role = p.get("role") or p.get("run_id") or "?"
         run_id = p.get("run_id") or "?"
@@ -405,7 +400,7 @@ def _format_one(
             f"- escalation【{role}】{esc_kind}（via {src}）：{question}"
             f"{ownership_bit}"
             " ——可 update_synthesis 记分歧、cancel_worker、"
-            "ask_user 请用户裁决、或 post_note 给指导；"
+            "ask_user 请用户裁决；"
             "文件归属冲突可 resolve_escalation(..., transfer_ownership=true) 路径级移交。"
         )
     if ev.kind is CoordinationEventKind.TIMEOUT:

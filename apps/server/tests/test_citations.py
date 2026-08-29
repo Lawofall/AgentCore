@@ -3,7 +3,7 @@
 Mirrors the desktop renderer's marker semantics (remarkCitations.ts): only
 ``1..count`` are real chips; anything else is a marker pointing at a source card
 that does not exist. ``out_of_range_markers`` observes; ``reconcile_citations``
-strips dangling markers so the persisted body stays self-consistent.
+reports stray markers without stripping so the chat body stays intact.
 """
 
 from agentcore.runtime.citations import (
@@ -85,16 +85,15 @@ def test_strip_preserves_code_and_links():
     assert out_of_range_markers(cleaned, 0) == []
 
 
-def test_reconcile_strips_and_reports_stray():
+def test_reconcile_reports_stray_without_stripping():
     citations = [{"url": "https://a.example"}, {"url": "https://b.example"}]
     cleaned, out_citations, stray_n, stray_r = reconcile_citations(
         "Claim [1] then [5].", citations
     )
     assert stray_n == [5]
     assert stray_r == []
-    assert cleaned == "Claim [1] then."
+    assert cleaned == "Claim [1] then [5]."
     assert out_citations is citations  # list identity preserved (cards stay)
-    assert out_of_range_markers(cleaned, len(out_citations)) == []
 
 
 def test_reconcile_noop_when_clean():
@@ -132,7 +131,7 @@ def test_strip_invalid_ledger_refs():
     assert invalid_ledger_ref_ids(cleaned, frozenset({"#r1"})) == []
 
 
-def test_reconcile_dual_track():
+def test_reconcile_dual_track_observes_without_stripping():
     citations = [{"url": "https://a.example"}]
     cleaned, _, stray_n, stray_r = reconcile_citations(
         "池序 [1] 与 [3]；台账 #r1 与 #r9。",
@@ -141,7 +140,4 @@ def test_reconcile_dual_track():
     )
     assert stray_n == [3]
     assert stray_r == ["#r9"]
-    assert "[3]" not in cleaned
-    assert "#r9" not in cleaned
-    assert "[1]" in cleaned
-    assert "#r1" in cleaned
+    assert cleaned == "池序 [1] 与 [3]；台账 #r1 与 #r9。"

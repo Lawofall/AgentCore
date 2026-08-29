@@ -15,7 +15,7 @@ task 正文写清续干指令（改哪里 / 新任务是什么）；可与 depen
 【调查/审查批 → 用户确认按结论修·默认乙】多角调查或审查已收口、用户确认「按结论修」时：\
 【默认】对手头各调查/审查 run 手写 tasks，并设 `continue_from_run_id`（可并行多角；task \
 正文改成改码/落实指令即可）。换 title / 马甲文案（如「审查员」→「修复员」）【不算】换职能，\
-【禁止】因此冷开新人。【禁止】此时再套 `playbook=diagnose_fix_verify` 冷开诊断→修补→验证新三角色——\
+【禁止】因此冷开新人。【禁止】此时再套 `playbook=diagnose_fix_verify` 冷开修补→验证两波——\
 `diagnose_fix_verify` 仅覆盖【无先验调查批】的单症状修码。\
 队员默认坐本任务桌相关工具面（含写盘 / 执行类；跨桌 list_folder_dir / read_folder_file 仅 CEO）。\
 续派同人带现场即可；验码靠 task 正文点名 `test_run` 等，或甲冷开验证员。环境未装配\

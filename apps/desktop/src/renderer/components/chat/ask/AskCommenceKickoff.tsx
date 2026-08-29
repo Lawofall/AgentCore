@@ -89,7 +89,7 @@ export function AskCommenceKickoffBody({
         result.folder.name,
       );
       try {
-        await onBindResolve(answer.composeWithAnswer("kickoff", q.id, value));
+        await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
       } catch {
         setBindBusyLabel(null);
       }
@@ -131,7 +131,7 @@ export function AskCommenceKickoffBody({
               result.namespace,
             );
       try {
-        await onBindResolve(answer.composeWithAnswer("kickoff", q.id, value));
+        await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
       } catch {
         setBindBusyLabel(null);
       }
@@ -146,7 +146,7 @@ export function AskCommenceKickoffBody({
     }
     const value = formatBindLocalFolderAnswer(opt.label, result.root.name);
     try {
-      await onBindResolve(answer.composeWithAnswer("kickoff", q.id, value));
+      await onBindResolve(answer.composeWithAnswer("decision", q.id, value));
     } catch {
       setBindBusyLabel(null);
     }
@@ -218,13 +218,16 @@ export function AskCommenceKickoffBody({
             bindBusyLabel={bindBusyLabel}
             onBindOption={(opt) => void handleBindOption(q, opt)}
             onFolderUnavailable={(msg) => setBindError(msg)}
+            askAnswer={answer}
           />
         ))}
         {bindError && (
           <p className="text-xs text-muted-foreground">{bindError}</p>
         )}
 
-        <CommenceNote answer={answer} disabled={busy} compact />
+        {content.questions.length === 0 && (
+          <CommenceNote answer={answer} disabled={busy} compact />
+        )}
       </div>
 
       {/* Footer — CTA + 预填提示同一行 */}

@@ -222,7 +222,7 @@ def test_ask_user_suspension_round_trips():
                 "default": "",
             }
         ],
-        intent="kickoff",
+        intent="decision",
         journal_entries=[{"kind": "checkpoint_required", "payload": {}, "ts": "t"}],
         trace_id="trace456",
     )
@@ -240,7 +240,7 @@ def test_ask_user_suspension_round_trips():
     assert restored.questions[0]["prompt"] == "A 还是 B?"
     assert restored.questions[0]["options"] == [{"label": "A"}, {"label": "B"}]
     assert restored.questions[0]["multiple"] is True
-    assert restored.intent == "kickoff"
+    assert restored.intent == "decision"
     # transcript / history are NOT serialized (Phase 2 ⑤): resume echoes the call via the
     # serialized tool_call_id (asserted above) and rebuilds the window from turn_journal.
     assert "transcript" not in frame.to_json()
@@ -249,6 +249,28 @@ def test_ask_user_suspension_round_trips():
     # the journal is not in the frame — turn_journal owns it (§18.3).
     assert "journal" not in frame.to_json()
     assert restored.journal == []
+
+
+def test_ask_user_unknown_intent_coerces_to_decision():
+    restored = suspension_from_json(
+        {
+            "kind": "ask_user",
+            "message_id": "m2",
+            "conversation_id": "c2",
+            "user_id": "u2",
+            "captain_run_id": "cap2",
+            "checkpoint_id": "ck2",
+            "tool_call_id": "call_ask_1",
+            "base_system_prompt": "base sys",
+            "user_message": "帮我选",
+            "question": "A 还是 B？",
+            "assumptions": [],
+            "questions": [],
+            "intent": "not_a_known_intent",
+        }
+    )
+    assert isinstance(restored, AskUserSuspension)
+    assert restored.intent == "decision"
 
 
 def test_leftover_team_preview_from_json_is_gone():
@@ -274,7 +296,7 @@ def test_leftover_team_preview_from_json_is_gone():
         )
 
 
-def test_plan_review_frame_round_trips_batch_coordination():
+def test_plan_review_frame_round_trips_team_brief():
     frame = PlanReviewSuspension(
         message_id="m1",
         conversation_id="c1",
@@ -286,14 +308,13 @@ def test_plan_review_frame_round_trips_batch_coordination():
         user_message="带检查点的团队",
         plan=RunPlan(),
         steps=[{"run_id": "w1", "role": "研究员", "summary": "…"}],
-        coordination="wall",
         team_brief="口径按 v2 契约",
     )
     restored = suspension_from_json(frame.to_json())
     assert isinstance(restored, PlanReviewSuspension)
-    assert restored.coordination == "wall"
     assert restored.team_brief == "口径按 v2 契约"
-    # 缺省批不写键 + 旧帧读回缺省。
+    assert not hasattr(restored, "coordination")
+    # 缺省批不写键；旧帧 coordination 键忽略。
     plain = PlanReviewSuspension(
         message_id="m2",
         conversation_id="c1",
@@ -310,8 +331,11 @@ def test_plan_review_frame_round_trips_batch_coordination():
     assert "team_brief" not in data
     restored_plain = suspension_from_json(data)
     assert isinstance(restored_plain, PlanReviewSuspension)
-    assert restored_plain.coordination == "none"
     assert restored_plain.team_brief is None
+    leftover = suspension_from_json({**data, "coordination": "wall"})
+    assert isinstance(leftover, PlanReviewSuspension)
+    assert leftover.team_brief is None
+    assert not hasattr(leftover, "coordination")
 
 
 def test_suspension_from_json_requires_kind():

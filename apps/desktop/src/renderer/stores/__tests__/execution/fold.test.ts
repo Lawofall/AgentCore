@@ -886,14 +886,13 @@ describe("projectExecution (fold)", () => {
             kind: "choice",
             options: [
               {
-                label: "Postgres",
+                label: "Postgres（推荐）",
                 detail: "团队最熟，生态全",
-                recommended: true,
               },
               { label: "MySQL" },
             ],
             multiple: false,
-            default: "Postgres",
+            default: "Postgres（推荐）",
           },
         ],
       },
@@ -907,11 +906,11 @@ describe("projectExecution (fold)", () => {
         prompt: "用哪个数据库？",
         kind: "choice",
         options: [
-          { label: "Postgres", detail: "团队最熟，生态全", recommended: true },
+          { label: "Postgres（推荐）", detail: "团队最熟，生态全" },
           { label: "MySQL" },
         ],
         multiple: false,
-        default: "Postgres",
+        default: "Postgres（推荐）",
       },
     ]);
   });

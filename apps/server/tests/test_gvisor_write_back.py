@@ -474,3 +474,55 @@ def test_desk_oci_memory_override_still_wins(tmp_path: Path):
     cfg = _desk_oci(sandbox, tmp_path, memory_limit_mb=256)
     assert cfg["linux"]["resources"]["memory"]["limit"] == 256 * 1024 * 1024
     assert cfg["process"]["user"]["uid"] != 65534
+
+
+def test_start_detach_rpc_budget_is_minutes_not_exec_cap():
+    from agentcore.tools.sandbox.sandboxd.client import (
+        _RPC_TIMEOUT,
+        _START_DETACH_RPC_TIMEOUT,
+    )
+
+    assert _RPC_TIMEOUT == 30.0
+    assert _START_DETACH_RPC_TIMEOUT > 60.0
+    assert _START_DETACH_RPC_TIMEOUT < 1200.0
+
+
+async def test_start_detach_timeout_is_not_exec_forced_stop(tmp_path: Path):
+    from agentcore.core.errors import SandboxError
+
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
+
+    class _BootTimeout(LoopbackRunscClient):
+        async def start_detach(self, **kwargs):  # noqa: ANN003, ARG002
+            raise TimeoutError()
+
+        async def exec_wait(self, **kwargs):  # noqa: ANN003, ARG002
+            raise AssertionError("exec_wait must not run before desk is ready")
+
+        async def kill(self, container_id: str, signal: str = "SIGKILL") -> None:
+            return None
+
+        async def delete(self, container_id: str, *, force: bool = True) -> None:
+            return None
+
+    set_sandboxd_client_for_tests(
+        _BootTimeout(
+            runsc_path=sandbox._runsc,  # noqa: SLF001
+            runtime_root=sandbox._runtime_root,  # noqa: SLF001
+        )
+    )
+
+    with pytest.raises(SandboxError, match="执行环境启动失败") as failed:
+        await sandbox._execute_in_slot(  # noqa: SLF001
+            ExecutionRequest(
+                code="x", language="python", cwd=str(ws), timeout_seconds=15
+            ),
+            time.monotonic(),
+        )
+    msg = str(failed.value)
+    assert "forced stop after" not in msg
+    assert "Timeout: forced stop after 15s" not in msg
+    assert "forced stop after 30s" not in msg
+    assert "forced stop after 60s" not in msg

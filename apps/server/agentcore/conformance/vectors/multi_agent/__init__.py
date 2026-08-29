@@ -23,6 +23,10 @@ from .batch4_hardening import (
 )
 from .browser import _multi_agent_browser_login_pending, _multi_agent_browser_session
 from .context import _multi_agent_captain_context, _multi_agent_received_context
+from .coordinate import (
+    _multi_agent_coordinate,
+    _multi_agent_coordination_wait,
+)
 from .cross_turn_append import (
     _multi_agent_cross_turn_append,
     _multi_agent_cross_turn_live_prev,
@@ -88,14 +92,6 @@ from .same_turn_mlr_debate import _multi_agent_same_turn_mlr_debate
 from .stage_card import (
     _multi_agent_stage_card_orphaned,
     _multi_agent_stage_card_start_debate,
-)
-from .team_notes import (
-    _multi_agent_coordinate,
-    _multi_agent_coordination_wait,
-    _multi_agent_team_notes,
-    _multi_agent_team_notes_amended,
-    _multi_agent_team_notes_ceo_seed,
-    _multi_agent_team_notes_empty_wall,
 )
 from .two_act_lv import _multi_agent_two_act_lv
 
@@ -186,7 +182,7 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         _multi_agent_cross_turn_live_prev,
     ),
     "multi_agent_multi_lens_research": (
-        "多 Agent·多视角深度调研幕1：team_preview(delegate) → 4 透镜并行流式 → "
+        "多 Agent·多视角深度调研幕1：delegate → 4 透镜并行流式 → "
         "汇总分析师 debrief.motion_card → CEO 呈报建议开辩（开辩入口 stage_card）",
         _multi_agent_multi_lens_research,
     ),
@@ -258,23 +254,6 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         "委派·限流暂停：worker 一帧 run_failed（LLM_RATE_LIMIT/retryable）；delegate 已闭合；"
         "CEO 429 → message_end(finish=paused, outcome=paused)；无 *_required、无系统收口用户行",
         _multi_agent_ceo_rate_limit_paused,
-    ),
-    "multi_agent_team_notes": (
-        "多 Agent·通·便签墙：并行队员贴 decision/heads_up/claim 便签，折到 teamNotes（按序去重，与图节点正交）",
-        _multi_agent_team_notes,
-    ),
-    "multi_agent_team_notes_amended": (
-        "多 Agent·通·便签墙·改写/作废：队员 改写(update)/作废(void) 自己贴过的便签，目标便签标 superseded/voided",
-        _multi_agent_team_notes_amended,
-    ),
-    "multi_agent_team_notes_ceo_seed": (
-        "多 Agent·通·便签墙 Phase 2：CEO seed_notes（source=ceo）+ team_brief 注入 worker run_context",
-        _multi_agent_team_notes_ceo_seed,
-    ),
-    "multi_agent_team_notes_empty_wall": (
-        "多 Agent·通·便签墙已升、尚无便签：run_plan.note_wall 折到 noteWall，"
-        "teamNotes 空数组（看面空态；缺字段旧 journal 仍当无墙）",
-        _multi_agent_team_notes_empty_wall,
     ),
     "multi_agent_worker_failed_debrief": (
         "多 Agent：worker 未过契约（run_failed）但调 handoff 交了交接简报——失败节点也 surface debrief",

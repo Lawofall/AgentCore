@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
- * Continue 不得把预选 grant_* 退化成口头「已授权」。
+ * Continue 不得把 listed grant_* 退化成口头「已授权」。
  * 已删的只读 Ask action 当普通选项（不履约、也不停提交）。
- * `grant_organize_folder` 仍须先解析履约（无 picker）；找不到 → 卡面失败（≠ cancelled 静默）。
+ * `grant_organize_folder` 须点授权行履约（打开不预选，底栏不会因 default 出现「允许整理」）。
+ * 找不到 → 卡面失败（≠ cancelled 静默）。人话短同意仍可交。
  */
 import { AskDecisionBody } from "@/components/chat/ask/AskDecisionBody";
 import {
@@ -112,11 +113,12 @@ describe("AskDecisionBody Continue + unknown deleted folder action", () => {
     delete (window as { fsApi?: unknown }).fsApi;
   });
 
-  it("preselected stale action + Continue is ordinary submit", () => {
+  it("stale action click then 提交 is ordinary submit", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
 
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
+    fireEvent.click(screen.getByRole("button", { name: /授权访问本机目录/ }));
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
     expect(window.fsApi?.grantSessionReadonlyRoot).not.toHaveBeenCalled();
@@ -197,16 +199,20 @@ describe("AskDecisionBody organize confirm card", () => {
     ],
   };
 
-  it("shows 将整理 target and 允许整理 shell before allow", () => {
+  it("shows 将整理 target; footer is 提交 not 允许整理 until the grant row is used", () => {
     render(<Harness content={organizeContent} />);
     expect(screen.getByText("将整理：桌面 › 咨询")).toBeTruthy();
     expect(screen.getByText(/整理确认/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^允许整理$/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^允许整理$/ })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: /^提交$/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     // No picker framing
     expect(screen.queryByText(/选文件夹/)).toBeNull();
   });
 
-  it("Continue fulfills organize via helper — no silent upgrade, no picker", async () => {
+  it("grant option row fulfills organize via helper — no silent upgrade, no picker", async () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async (_answer: string) => {});
     pickAndGrantOrganizeFolder.mockResolvedValue({
@@ -224,7 +230,7 @@ describe("AskDecisionBody organize confirm card", () => {
         onBindResolve={onBindResolve}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /^允许整理$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /授权整理该目录/ }));
 
     await waitFor(() => {
       expect(pickAndGrantOrganizeFolder).toHaveBeenCalledWith("conv-1", {
@@ -248,10 +254,8 @@ describe("AskDecisionBody organize confirm card", () => {
     expect(screen.getByText("将整理：桌面 › 咨询")).toBeTruthy();
   });
 
-  /** 预选 grant 行点下去会履约；先点「先不整理」再点一次清空 listed，才算未勾选。 */
-  function clearListedThenTypeNote(value: string) {
-    fireEvent.click(screen.getByRole("button", { name: /先不整理/ }));
-    fireEvent.click(screen.getByRole("button", { name: /先不整理/ }));
+  /** 打开不预选；人话短同意在 listed 未勾选时可交。 */
+  function typeNote(value: string) {
     fireEvent.change(screen.getByPlaceholderText(ASK_NOTE_PLACEHOLDER), {
       target: { value },
     });
@@ -275,7 +279,7 @@ describe("AskDecisionBody organize confirm card", () => {
         onBindResolve={onBindResolve}
       />,
     );
-    clearListedThenTypeNote("可以");
+    typeNote("可以");
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
     await waitFor(() => {
@@ -329,7 +333,7 @@ describe("AskDecisionBody organize confirm card", () => {
       displayLabel: "桌面 › 咨询",
     });
     render(<Harness content={mixed} />);
-    clearListedThenTypeNote("可以");
+    typeNote("可以");
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
     await waitFor(() => {
       expect(pickAndGrantOrganizeFolder).toHaveBeenCalled();
@@ -348,7 +352,7 @@ describe("AskDecisionBody organize confirm card", () => {
         onBindResolve={onBindResolve}
       />,
     );
-    clearListedThenTypeNote("先放一放，下周再说");
+    typeNote("先放一放，下周再说");
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
     expect(pickAndGrantOrganizeFolder).not.toHaveBeenCalled();
@@ -372,7 +376,7 @@ describe("AskDecisionBody organize confirm card", () => {
         onBindResolve={onBindResolve}
       />,
     );
-    clearListedThenTypeNote("允许整理");
+    typeNote("允许整理");
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
     await waitFor(() => {
@@ -504,7 +508,15 @@ describe("AskDecisionBody question stems", () => {
     expect(screen.queryByText("总标题不要画")).toBeNull();
     expect(screen.getByText("第一题")).toBeTruthy();
     expect(screen.queryByText("第二题")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "第 2 题，共 2 题" }));
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "第 2 题，共 2 题",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByText("A1"));
+    fireEvent.click(screen.getByRole("button", { name: /^下一题$/ }));
     expect(screen.getByText("第二题")).toBeTruthy();
     expect(screen.queryByText("第一题")).toBeNull();
   });
@@ -545,10 +557,11 @@ describe("AskDecisionBody Continue + deleted action on Web", () => {
     window.__WEB__ = undefined;
   });
 
-  it("Continue with stale action default is ordinary submit — no download", () => {
+  it("Continue with stale action after picking is ordinary submit — no download", () => {
     const onContinue = vi.fn();
     const onBindResolve = vi.fn(async () => {});
     render(<Harness onContinue={onContinue} onBindResolve={onBindResolve} />);
+    fireEvent.click(screen.getByRole("button", { name: /授权访问本机目录/ }));
     fireEvent.click(screen.getByRole("button", { name: /^提交$/ }));
 
     expect(onContinue).toHaveBeenCalledTimes(1);

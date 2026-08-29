@@ -161,12 +161,10 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
             "type": "string",
             "enum": sorted(_ALLOWED_ACTIONS),
             "description": (
-                "status/os_log/shell：CEO+worker；"
-                "open_settings/set_audio/restart_service/"
-                "install_package：仅 worker（CEO 须 delegate）。"
-                "status=有界探测（OS/磁盘/电源/网卡/音频/应用抽样），不做全盘枚举/扫端口。"
-                "os_log=有界 OS 事件摘要（Win=Get-WinEvent / Linux=journalctl；"
-                "禁整机倾倒；禁用 shell 倒 Event Log/journalctl）。"
+                "status=有界探测（OS/磁盘/电源/网卡/音频/应用抽样）。"
+                "os_log=有界 OS 事件摘要。"
+                "shell=本机短时命令。"
+                "open_settings / set_audio / restart_service / install_package 仅 worker。"
                 "审批见工具说明。"
             ),
         },
@@ -222,8 +220,6 @@ HOST_TOOL_PARAMETERS: dict[str, Any] = {
                 "shell 本机短时命令（非空）；cwd 由运行时设为已授权根（默认工作区根）。"
                 "Windows 写 PowerShell（$env:APPDATA、'; if；禁 %VAR%/||/&&）；"
                 "Unix 写 POSIX（$SHELL -lc）。"
-                "长驻改 terminal；装软件改 install_package；"
-                "毁灭性+静默安装启发式硬拒（非完整边界）。"
             ),
         },
         "timeout_seconds": {
@@ -496,7 +492,6 @@ def _is_ceo_context(context: Any) -> bool:
     """CEO turns carry no worker-only coordination channels (same as git)."""
     return (
         context.write_coordinator is None
-        and context.note_wall is None
         and context.escalation is None
     )
 

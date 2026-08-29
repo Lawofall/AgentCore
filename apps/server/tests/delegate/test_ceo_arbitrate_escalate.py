@@ -144,11 +144,14 @@ async def test_blocking_escalate_routes_to_ceo_when_coordination_active():
     clear_active_coordination()
     session = CoordinationSession(execution_id="e-d1", total_workers=2)
     set_active_coordination(session)
+    session._running_workers["r1"] = "研究员"
+    session.mark_worker_busy("r1", "tool")
     seen: list[str] = []
 
     async def _request(q, a, questions, kind, awaiting="user", **_kwargs):
         seen.append(awaiting)
         assert awaiting == "ceo"
+        assert session._busy_workers.get("r1") == "arbitrate"
         return EscalationOutcome(status="resolved", answer="用 Postgres")
 
     channel = EscalationChannel(armed=True, request=_request)
@@ -164,6 +167,8 @@ async def test_blocking_escalate_routes_to_ceo_when_coordination_active():
         assert result.success is True
         assert "主管就你的升级问题裁决" in result.output
         assert seen == ["ceo"]
+        assert session._busy_workers.get("r1") == "arbitrate"
+        assert session.has_inflight_work() is False
     finally:
         clear_active_coordination("e-d1")
         clear_active_coordination()
@@ -206,10 +211,13 @@ async def test_ownership_conflict_escalate_stays_user_under_coordination():
     ledger = session.ensure_file_ownership()
     ledger.declare("site/index.html", "assemble", frozenset())
     session._running_workers["assemble"] = "组装"
+    session._running_workers["skeleton"] = "骨架"
+    session.mark_worker_busy("skeleton", "tool")
     seen: list[tuple[str, object]] = []
 
     async def _request(q, a, questions, kind, awaiting="user", **kwargs):
         seen.append((awaiting, kwargs.get("ownership_paths")))
+        assert session._busy_workers.get("skeleton") == "tool"
         return EscalationOutcome(status="resolved", answer="已移交写权")
 
     channel = EscalationChannel(armed=True, request=_request)

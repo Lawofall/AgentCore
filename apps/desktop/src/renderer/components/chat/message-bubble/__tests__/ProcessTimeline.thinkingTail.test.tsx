@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * In-stream Thinking… tail: `shouldShowThinkingTail` is the exported gate.
- * Live chrome (running/wait tool, streaming reasoning/content, in-progress rework,
+ * Live chrome (running/wait tool, streaming reasoning/content,
  * composing tool, visible graph at tail, pending user gate) suppresses the tail.
  * `graph_append` shares the team marker gate — it is not live by itself.
  */
@@ -113,7 +113,7 @@ describe("shouldShowThinkingTail", () => {
     ).toBe(false);
   });
 
-  it("suppresses a running tool, wait (running or settled), and streaming reasoning/content/rework", () => {
+  it("suppresses a running tool, wait (running or settled), and streaming reasoning/content", () => {
     expect(shouldShowThinkingTail({ ...live, last: toolRunning })).toBe(false);
     expect(shouldShowThinkingTail({ ...live, last: waitDone })).toBe(false);
     expect(shouldShowThinkingTail({ ...live, last: waitRunning })).toBe(false);
@@ -129,9 +129,6 @@ describe("shouldShowThinkingTail", () => {
         last: { kind: "content", text: "答" },
       }),
     ).toBe(false);
-    expect(shouldShowThinkingTail({ ...live, last: { kind: "rework" } })).toBe(
-      false,
-    );
   });
 
   it("shows after a settled non-wait tool, an empty tail, and other markers", () => {

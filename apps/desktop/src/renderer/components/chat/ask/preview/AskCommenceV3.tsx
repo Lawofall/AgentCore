@@ -92,6 +92,7 @@ export function AskCommenceV3({ content }: { content: AskUserContent }) {
                 optionLayout="card"
                 emphasizePrompt
                 optionSize="lg"
+                askAnswer={answer}
               />
             </div>
           )}
@@ -125,7 +126,9 @@ export function AskCommenceV3({ content }: { content: AskUserContent }) {
           <div className="space-y-2 border-t border-border/50 pt-3">
             <p className="text-xs text-muted-foreground">起步计划</p>
             <PlanChips assumptions={content.assumptions} quiet />
-            {isLast && <CommenceNote answer={answer} disabled={busy} compact />}
+            {total === 0 && (
+              <CommenceNote answer={answer} disabled={busy} compact />
+            )}
           </div>
         </div>
 

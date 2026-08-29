@@ -1037,7 +1037,7 @@ def test_debater_task_injects_kickoff_interjection():
 
 
 def test_debater_task_injects_background_block():
-    """有底料：首轮 task 注入「主持人整理的案件底料·双方共享」+ 事实正文 + 约定文档优先取证口径。"""
+    """有底料：首轮 task 注入「主持人整理的案件底料·双方共享」+ 事实正文；取证 HOW 不住底料块。"""
     sides = [DebateSide("pro", "正方", "支持"), DebateSide("con", "反方", "反对")]
     facts = "- 主体：甲公司 vs 乙公司\n- 时间线：2023 起诉，2024 一审判赔 80 万"
     cfg = DebateConfig(
@@ -1047,12 +1047,11 @@ def test_debater_task_injects_background_block():
         task = debater_task(cfg, side, i, round_no=1, focus="风险")["task"]
         assert "【主持人整理的案件底料·双方共享】" in task
         assert facts in task
-        assert "先读约定文档" in task
-        assert "独立检索仅补约定文档没有的缺口" in task
-        assert "标注文件来源" in task
         assert "不得把本底料本身包装成新的【已核实】来源" in task
+        assert "独立检索" in task and "缺口" in task
         # 旧教法不得回潮
         assert "仍需独立检索取证" not in task
+        assert "先读约定文档" not in task
 
 
 def test_debater_task_omits_system_readonly_toolbox():
@@ -1127,12 +1126,9 @@ def test_debater_task_injects_research_dossier_index():
     for text in (task, brief):
         assert "【工作区约定文档索引·AgentCore/文档/research/】" in text
         assert "AgentCore/文档/research/法律透镜报告.md" in text
-        assert "file_read" in text
         assert "【已核实·#eN】" in text
-        assert "约定文档预登记" in text or "预登记进场级台账" in text
-    assert "约定文档优先" in task
-    assert "file_read" in task
-    assert "选读" in task or "勿全量" in task
+        assert "选读" in text
+    assert "勿无差别" in task or "勿全量" in task
     assert payload.get("retrieval_budget") == DEFAULT_RETRIEVAL_BUDGET_DEBATER_WITH_DOSSIER
     assert DEFAULT_RETRIEVAL_BUDGET_DEBATER_WITH_DOSSIER == 2  # 2026-07-22 复测校准
     # 真纯丙·H4：不再注入系统只读 tools 名单

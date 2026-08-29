@@ -2,7 +2,6 @@ import { channelRedirectFace } from "@/lib/channelRedirect";
 import {
   appendContentStep,
   appendReasoningStep,
-  appendReworkStep,
   dropTrailingContentSteps,
   hasClosedBlockWithText,
   openBlockText,
@@ -18,7 +17,6 @@ import {
   type ExecutionPlan,
   type ExecutionStatus,
   type RunNode,
-  type TeamNote,
   toolLabel,
 } from "./types";
 
@@ -35,7 +33,7 @@ import {
  * `agentIndex` / `runIndex` map id → the SAME object held in `agents` / `runs` (not a
  * copy), so an in-place mutation through the index is visible in the array — replacing
  * the old O(n) `.find` per lookup with O(1). Only `agents` / `runs` are rendered;
- * `checkpointSteps` / `batches` / `teamNotes` are fold bookkeeping + turn-level output.
+ * `checkpointSteps` / `batches` are fold bookkeeping + turn-level output.
  */
 export interface FoldState {
   plan: ExecutionPlan;
@@ -49,8 +47,6 @@ export interface FoldState {
   // 调度埋点量化 (深层诊断指标): WaveScheduler snapshots fold here in fire order, one per
   // delegate segment (a checkpoint / scope yield + resume appends another).
   batches: BatchMetricsSnapshot[];
-  // 团队便签墙 (§2.2 通): notes workers broadcast to siblings, in post order (deduped by noteId).
-  teamNotes: TeamNote[];
 }
 
 function agentFromPlan(plan: ExecutionPlan, id: string): AgentState | null {
@@ -161,7 +157,6 @@ export function initFold(plan: ExecutionPlan): FoldState {
     runIndex: new Map(),
     checkpointSteps: new Map(),
     batches: [],
-    teamNotes: [],
   };
 }
 
@@ -318,21 +313,16 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
     }
     case "run_output_reset": {
       // 草稿丢弃的 worker 对偶（content_reset 之于 CEO）：引擎丢弃卡片已流式的草稿。清这个
-      // agent 已累积的产出（重写版从干净态重累积），reasoning 是真实过程、保留。仅
-      // reason=finish_guard（交付前核验回炉）折 rework chip + didRework；retry / narration
-      // 等基础设施/正常流程信号不留痕（误报根治）——镜像后端 oracle 与 mobile fold
-      // （conformance pins them equal）。
+      // agent 已累积的产出（重写版从干净态重累积），reasoning 是真实过程、保留。所有
+      // reason 只清正文、不折过程痕迹——镜像后端 oracle。
       const agent = s.agentIndex.get(f.agentId);
-      const isFinishGuard = f.reason === "finish_guard";
       if (agent) {
         agent.outputChunks = [];
-        if (isFinishGuard) agent.didRework = true;
       }
       const runId = f.runId || agent?.currentRunId;
       const run = runId ? s.runIndex.get(runId) : undefined;
       if (run) {
-        const cleared = dropTrailingContentSteps(run.process);
-        run.process = isFinishGuard ? appendReworkStep(cleared) : cleared;
+        run.process = dropTrailingContentSteps(run.process);
       }
       break;
     }
@@ -514,35 +504,6 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
       s.batches.push(f.metrics);
       break;
     }
-    case "team_note_posted": {
-      // 团队便签墙 (§2.2 通): a worker broadcast a one-line decision / heads-up to its
-      // concurrent siblings — accrue TURN-LEVEL (not onto a node), in post order, deduped
-      // by noteId for replay safety. Mirrors the backend oracle + mobile fold.
-      if (!s.teamNotes.some((n) => n.noteId === f.noteId)) {
-        s.teamNotes.push({
-          noteId: f.noteId,
-          runId: f.runId,
-          agentId: f.agentId,
-          role: f.role,
-          kind: f.noteKind,
-          text: f.text,
-          ts: f.ts,
-          status: "active",
-          supersedes: f.supersedes,
-          source: f.source,
-        });
-      }
-      // 便签会过期 → supersession (§2.2): an amendment (carries `supersedes`) marks its TARGET
-      // superseded (改写) / voided (作废) — `supersedeMode` is the shared discriminator. The
-      // target was posted earlier so it is already in the list (frames replay in order).
-      if (f.supersedes) {
-        const target = s.teamNotes.find((n) => n.noteId === f.supersedes);
-        if (target) {
-          target.status = f.supersedeMode === "void" ? "voided" : "superseded";
-        }
-      }
-      break;
-    }
     case "run_escalation": {
       // 升级实时可见 (非阻塞): a worker flagged a decision/blocker for the CEO — append it
       // to its run so the node shows a ⚠️ badge and the card raises a live notice the
@@ -693,7 +654,7 @@ export function applyFrame(s: FoldState, f: RunFrame): void {
  * Materialize the accumulator into a full {@link Execution} snapshot — the
  * post-loop finalization: surface plan-declared-but-untouched nodes, freeze a
  * stopped turn's in-flight nodes, derive progress, and attach the turn-level
- * debate / notes payloads.
+ * debate payloads.
  *
  * Pure w.r.t. `s`: it never mutates the accumulator's arrays or node objects (it
  * builds fresh output arrays and copies only the nodes it must freeze), so the
@@ -801,8 +762,6 @@ export function finalizeFold(
     evidenceLedger: Array.isArray(debate?.evidence_ledger)
       ? debate.evidence_ledger
       : [],
-    teamNotes: s.teamNotes,
-    noteWall: s.plan.noteWall === true,
   };
 }
 
@@ -933,8 +892,6 @@ export function describeFrame(frame: RunFrame, plan: ExecutionPlan): string {
       if (steered) parts.push(`方向已校准 ${steered}`);
       return parts.length > 0 ? parts.join(" · ") : "计划已调整";
     }
-    case "team_note_posted":
-      return `${frame.role || role(frame.agentId)} 贴便签`;
   }
 }
 

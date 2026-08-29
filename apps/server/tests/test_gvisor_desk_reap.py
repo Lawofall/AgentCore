@@ -12,6 +12,7 @@ import agentcore.runtime.browser.registry as breg
 import agentcore.tools.sandbox.desk_process as desk_process_mod
 import agentcore.tools.sandbox.gvisor as gvisor_mod
 from agentcore.config import settings
+from agentcore.core.errors import SandboxError
 from agentcore.runtime.browser.registry import BrowserSessionRegistry, _Entry
 from agentcore.tools.sandbox.desk_process import (
     PROCESS_NOT_REGISTERED,
@@ -26,7 +27,8 @@ from agentcore.tools.sandbox.gvisor import (
     reset_desk_sessions_for_tests,
 )
 from agentcore.tools.sandbox.limits import reset_execution_slots
-from agentcore.tools.sandbox.sandboxd import set_sandboxd_client_for_tests
+from agentcore.tools.sandbox.protocol import ExecutionRequest
+from agentcore.tools.sandbox.sandboxd import SandboxdError, set_sandboxd_client_for_tests
 
 
 class _TrackingClient:
@@ -34,6 +36,8 @@ class _TrackingClient:
         self.start_calls: list[dict[str, str]] = []
         self.kills: list[str] = []
         self.deletes: list[str] = []
+        self.delete_forced: list[bool] = []
+        self.exec_timeouts: list[float] = []
 
     async def ping(self) -> None:
         return None
@@ -42,7 +46,7 @@ class _TrackingClient:
         return True, ""
 
     async def start_detach(
-        self, *, bundle_dir: str, container_id: str, netns_path: str
+        self, *, bundle_dir: str, container_id: str, netns_path: str, **_kwargs: object
     ) -> None:
         self.start_calls.append(
             {
@@ -57,8 +61,12 @@ class _TrackingClient:
 
     async def delete(self, container_id: str, *, force: bool = True) -> None:
         self.deletes.append(container_id)
+        self.delete_forced.append(force)
 
-    async def exec_wait(self, **_kwargs: object) -> tuple[int, str, str]:
+    async def exec_wait(self, **kwargs: object) -> tuple[int, str, str]:
+        timeout = kwargs.get("timeout_seconds")
+        if timeout is not None:
+            self.exec_timeouts.append(float(timeout))
         return 0, "", ""
 
 
@@ -280,3 +288,93 @@ async def test_empty_desk_map_is_noop_for_bridge(_desk_env):
     assert client.kills == []
     assert client.deletes == []
     assert client.start_calls == []
+
+
+class _StaleThenOk(_TrackingClient):
+    def __init__(self, stderr: str) -> None:
+        super().__init__()
+        self._stderr = stderr
+
+    async def start_detach(
+        self, *, bundle_dir: str, container_id: str, netns_path: str, **_kwargs: object
+    ) -> None:
+        await super().start_detach(
+            bundle_dir=bundle_dir, container_id=container_id, netns_path=netns_path
+        )
+        if len(self.start_calls) == 1:
+            raise SandboxdError(self._stderr)
+
+
+class _AlwaysStale(_TrackingClient):
+    async def start_detach(
+        self, *, bundle_dir: str, container_id: str, netns_path: str, **_kwargs: object
+    ) -> None:
+        await super().start_detach(
+            bundle_dir=bundle_dir, container_id=container_id, netns_path=netns_path
+        )
+        raise SandboxdError("container already exists")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "container already exists",
+        "cannot lock container metadata",
+    ],
+)
+async def test_stale_desk_delete_force_retries_start_once(_desk_env, stderr: str):
+    _clock, _old, sandbox, ws = _desk_env
+    client = _StaleThenOk(stderr)
+    set_sandboxd_client_for_tests(client)  # type: ignore[arg-type]
+    result = await sandbox.execute(
+        ExecutionRequest(
+            code="print(1)",
+            language="python",
+            cwd=str(ws),
+            timeout_seconds=9,
+        )
+    )
+    assert result.success is True
+    assert len(client.start_calls) == 2
+    assert len(client.deletes) == 1
+    assert client.delete_forced == [True]
+    assert client.start_calls[0]["container_id"] == client.deletes[0]
+    assert client.exec_timeouts == [9.0]
+    assert sandbox.host_scratch_dir(str(ws)) is not None
+
+
+@pytest.mark.asyncio
+async def test_stale_desk_retry_still_fails_is_start_failure_and_stops(_desk_env):
+    _clock, _old, sandbox, ws = _desk_env
+    client = _AlwaysStale()
+    set_sandboxd_client_for_tests(client)  # type: ignore[arg-type]
+    with pytest.raises(SandboxError, match="执行环境启动失败") as failed:
+        await sandbox.execute(
+            ExecutionRequest(
+                code="print(1)",
+                language="python",
+                cwd=str(ws),
+                timeout_seconds=15,
+            )
+        )
+    assert "forced stop after" not in str(failed.value)
+    assert len(client.start_calls) == 2
+    assert len(client.deletes) == 1
+    assert client.exec_timeouts == []
+
+
+@pytest.mark.asyncio
+async def test_exec_wait_uses_request_timeout_not_boot_rpc(_desk_env):
+    _clock, client, sandbox, ws = _desk_env
+    result = await sandbox.execute(
+        ExecutionRequest(
+            code="print(1)",
+            language="python",
+            cwd=str(ws),
+            timeout_seconds=12,
+        )
+    )
+    assert result.success is True
+    assert client.exec_timeouts == [12.0]
+    assert len(client.start_calls) == 1

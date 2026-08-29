@@ -12,7 +12,6 @@ from agentcore.runtime.delegate.channel_dead_gate import (
     channel_dead_write_desk_error,
     channel_dead_write_tasks_error,
 )
-from agentcore.runtime.delegate.force_scopes import EMPTY_FORCE_SCOPES
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import Deliverable, RunSpec
 
@@ -23,8 +22,6 @@ def _tool(*, execution_id: str = "exec-cd", conversation_id: str = "conv-cd") ->
     t._base_tool_context = SimpleNamespace(execution_id=execution_id, backend=None)
     t._folder_id = "test_birth"
     t._depth = 0
-    # 通道死是能力缺失：任何 force scope 都不放行——名册留空即为「没点名任何闸」。
-    t._force_scopes = EMPTY_FORCE_SCOPES
     return t
 
 

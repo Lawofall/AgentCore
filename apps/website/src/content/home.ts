@@ -137,8 +137,8 @@ export const GRAPH = {
       wave: "②",
       tool: "Read files",
       note: {
-        zh: "read_notes: 限塑令/禁塑政策 时间线梳理",
-        en: "read_notes: plastic-ban policy timeline",
+        zh: "读工作区：限塑令/禁塑政策 时间线.md",
+        en: "read workspace: plastic-ban policy timeline.md",
       },
     },
     {

@@ -28,8 +28,8 @@ function slot(over: Partial<WorkflowTemplateSlot> = {}): WorkflowTemplateSlot {
 
 function renderDialog(slots: WorkflowTemplateSlot[]) {
   const template: WorkflowTemplate = {
-    id: "build_app",
-    title: "从零搭应用",
+    id: "cite_write_review",
+    title: "调研报告成文",
     summary: "",
     slots,
   };

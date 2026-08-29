@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 import agentcore.runtime.delegate.prelude as prelude_mod
 from agentcore.core.errors import LLMAuthError
 from agentcore.llm.turn_auth_dead import (
@@ -75,7 +73,7 @@ def test_turn_token_ceiling_rejects_before_anything_else(monkeypatch):
     finally:
         reset_turn_token_meter(token)
     assert out.result.contract_failure is True
-    # 硬顶发生在读 playbook / force 之前 → 实例上的 per-call 标记保持原样。
+    # 硬顶发生在读 playbook 之前 → 实例上的 per-call 标记保持原样。
     assert out.flags is None
     assert spy.get("delegate.turn_token_ceiling_rejected")["ceiling"] == (
         resolve_turn_token_ceiling()
@@ -150,7 +148,7 @@ def test_empty_tasks_rejected_and_clears_playbook_marks():
     out = rejected({"tasks": []})
     assert "缺 tasks/playbook" in (out.result.error or "")
     assert out.result.contract_failure is True
-    # 声明闸 empty：flags 尚未写入（execute 仍会清掉上一轮 force）。
+    # 声明闸 empty：flags 尚未写入。
     assert out.flags is None
 
 
@@ -159,7 +157,7 @@ def test_sub_fanout_cap_rejected_at_depth(monkeypatch):
     monkeypatch.setattr(prelude_mod, "logger", spy)
     tasks = [{"role": f"r{i}", "task": f"t{i}"} for i in range(MAX_WORKER_SUBDELEGATIONS)]
     out = rejected(
-        {"tasks": tasks, "force": ["post_close"]},
+        {"tasks": tasks},
         depth=1,
         sub_workers_spawned=1,
     )
@@ -183,7 +181,7 @@ def test_sub_fanout_within_cap_passes():
 
 def test_handwritten_tasks_normalized():
     tools = ToolRegistry()
-    out = accepted({"tasks": _ONE_TASK, "force": ["isomorphic"]}, tools=tools)
+    out = accepted({"tasks": _ONE_TASK}, tools=tools)
     assert out.tasks_raw == _ONE_TASK
     assert out.playbook is None
     assert out.playbook_notes == []
@@ -334,13 +332,3 @@ def test_no_soft_warnings_on_a_clean_batch():
     assert out.consumer_deps_warn is None
     assert out.design_impl_warn is None
     assert out.root_slice_warn is None
-
-
-@pytest.mark.parametrize("force_arg", [None, False, 0, "", True, "yes", ["thrash"]])
-def test_prelude_does_not_touch_force(force_arg):
-    """force 已移出前奏：execute / replan 各自在入口解析（见 force_scopes）。"""
-    args: dict = {"tasks": _ONE_TASK}
-    if force_arg is not None:
-        args["force"] = force_arg
-    out = accepted(args)
-    assert not hasattr(out.flags, "force")

@@ -63,7 +63,6 @@ export type SSEEventType =
   | "run_tool_progress"
   | "stage_card_required"
   | "stage_card_resolved"
-  | "team_note_posted"
   | "team_synthesis_preview"
   | "title_generated"
   | "tool_progress"

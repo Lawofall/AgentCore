@@ -2670,9 +2670,11 @@ def test_web_search_schema_documents_query_contract():
     assert "引号" in blob  # 引号短语豁免
     assert "书名号" in blob  # 中文专名豁免
     assert "摘要优先" in blob  # 默认摘要优先基调
-    assert "搜到" in blob and "可挂来源号" in blob  # 搜到 ≠ 可挂 #rN
-    assert "read_url" in blob  # 成稿挂号须先深读
+    assert "搜到 ≠ 可挂来源号" not in blob
+    assert "read_url" in blob  # 核对原文
     assert "2–3" in blob  # 建议一次 2–3 个核心词
+    assert "聚焦查询" in schema.description
+    assert "补搜" in schema.description
     assert "规范化" in blob or "截断" in blob
     assert "明示" in blob
     assert "不会自动改写" not in blob
@@ -3515,7 +3517,7 @@ def test_url_cache_registry_reaps_idle_conversation(monkeypatch: pytest.MonkeyPa
 
 
 def test_stop_read_hint_aligns_closing_with_howto_path_honesty():
-    """howto A′：读失败收口 ≠ 可伪精确逐步菜单（与 prompt claim_evidence 对齐）。"""
+    """howto A′：读失败收口 ≠ 可伪精确逐步菜单（与基座 delivery_honesty / 读失败回执对齐）。"""
     from agentcore.tools.builtin.web.read_url import _STOP_READ_HINT
 
     assert "收口" in _STOP_READ_HINT

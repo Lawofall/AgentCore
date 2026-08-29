@@ -883,3 +883,93 @@ def test_build_multimodal_user_content_and_llm_content_text():
     )
     assert isinstance(empty_parts, list)
     assert "图片" in empty_parts[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_document_pin_is_not_uploaded_material():
+    from agentcore.runtime.resolve.prompt.ceo_core import attachment_material_scene
+
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "说话简短",
+                "path": "设定",
+                "kind": "document",
+                "text": "回复保持短句。",
+            }
+        ]
+    )
+    assert out is not None
+    assert "<pinned_entries>" in out
+    assert "回复保持短句。" in out
+    assert "<attached_files>" not in out
+    assert attachment_material_scene(out) is False
+
+
+@pytest.mark.asyncio
+async def test_document_pin_keeps_inline_slot_without_file_body():
+    from agentcore.runtime.resolve.attachment_context import _build_attachment_prompt
+
+    prompt = await _build_attachment_prompt(
+        [
+            {"name": "a.txt", "path": "a.txt", "text": "hello", "kind": "file"},
+            {
+                "name": "说话简短",
+                "path": "设定",
+                "kind": "document",
+                "text": "短句",
+            },
+        ]
+    )
+    assert prompt.envelope is not None
+    assert "<pinned_entries>" in prompt.envelope
+    assert "<attached_files>" in prompt.envelope
+    assert "短句" in prompt.envelope
+    assert prompt.file_blocks[0].startswith("--- File: a.txt")
+    assert prompt.file_blocks[1] == ""
+
+
+@pytest.mark.asyncio
+async def test_document_pin_prefers_server_body_over_client_text(monkeypatch):
+    from agentcore.runtime.resolve import attachment_context as ac
+
+    async def _load(*, document_id: str, user_id: str | None) -> str | None:
+        assert document_id == "doc-1"
+        assert user_id == "u1"
+        return "真正正文"
+
+    monkeypatch.setattr(ac, "_load_pinned_document_body", _load)
+
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "说话简短",
+                "path": "设定",
+                "kind": "document",
+                "document_id": "doc-1",
+                "text": "客户端伪造",
+            }
+        ],
+        user_id="u1",
+    )
+    assert out is not None
+    assert "真正正文" in out
+    assert "客户端伪造" not in out
+
+
+@pytest.mark.asyncio
+async def test_document_pin_ignores_client_text_when_id_unloadable():
+    out = await _build_attachment_context(
+        [
+            {
+                "name": "说话简短",
+                "path": "设定",
+                "kind": "document",
+                "document_id": "doc-1",
+                "text": "客户端伪造",
+            }
+        ]
+    )
+    assert out is not None
+    assert "客户端伪造" not in out
+    assert "未能加载" in out

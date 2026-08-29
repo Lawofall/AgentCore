@@ -29,6 +29,7 @@ import {
   Brain,
   FileCode2,
   FileText,
+  type LucideIcon,
   MessagesSquare,
   Terminal,
 } from "lucide-react";
@@ -97,10 +98,10 @@ function isRuleConsultDisplay(d: unknown): d is RuleConsultDisplay {
   return !!d && typeof (d as { rule?: unknown }).rule === "string";
 }
 
-/** Unified `consult` display: `{name}` (+ optional `reused` / source `kind`).
+/** Unified `consult` display: `{name}` (+ optional `reused` / `origin`).
  * Folder-command displays also carry `name` (resolve/create/delete_folder) —
- * only genuine consult keys may match. */
-const CONSULT_DISPLAY_KEYS = new Set(["name", "reused", "kind"]);
+ * only genuine consult keys may match. `kind` is not a consult key. */
+const CONSULT_DISPLAY_KEYS = new Set(["name", "reused", "origin"]);
 
 function isUnifiedConsultDisplay(d: unknown): d is UnifiedConsultDisplay {
   if (!d || typeof d !== "object") return false;
@@ -109,12 +110,16 @@ function isUnifiedConsultDisplay(d: unknown): d is UnifiedConsultDisplay {
   for (const k of Object.keys(x)) {
     if (!CONSULT_DISPLAY_KEYS.has(k)) return false;
   }
-  if (typeof x.kind === "string") {
-    if (x.kind !== "memory" && x.kind !== "skill" && x.kind !== "rule") {
-      return false;
-    }
+  if (x.origin !== undefined && x.origin !== "system" && x.origin !== "user") {
+    return false;
   }
   return true;
+}
+
+function unifiedConsultBadge(origin: UnifiedConsultDisplay["origin"]): string {
+  if (origin === "system") return "能力指引";
+  if (origin === "user") return "设定";
+  return "查阅";
 }
 
 function isListFoldersCountDisplay(d: unknown): d is { count: number } {
@@ -441,59 +446,33 @@ function CodeExecResult({ display }: { display: CodeExecDisplay }) {
   );
 }
 
-/** Pulled system-skill card (渐进披露 可视化): the catalog name + one-line summary as
- * a header, with the full guidance body the CEO consulted shown verbatim below — so
- * the user sees exactly which capability the AI reached for and what it read. */
-function SkillConsultResult({
-  display,
+/** Shared consult expand card: entry name + right-side origin badge + body.
+ * Historical consult_skill may also show a one-line summary under the header. */
+function ConsultEntryCard({
+  name,
+  badge,
+  Icon,
   result,
+  summary,
 }: {
-  display: SkillConsultDisplay;
+  name: string;
+  badge: string;
+  Icon: LucideIcon;
   result: string;
+  summary?: string;
 }) {
   return (
     <div className="mt-1 overflow-hidden rounded-lg border border-border">
       <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-        <BookOpen size={12} className="shrink-0 text-muted-foreground" />
-        <span className="truncate font-mono text-foreground">
-          {display.skill_name}
-        </span>
-        <span className="ml-auto shrink-0 text-muted-foreground">能力指引</span>
+        <Icon size={12} className="shrink-0 text-muted-foreground" />
+        <span className="truncate font-mono text-foreground">{name}</span>
+        <span className="ml-auto shrink-0 text-muted-foreground">{badge}</span>
       </div>
-      {display.summary && (
+      {summary ? (
         <div className="border-border/60 border-b px-2.5 py-1.5 text-xs text-muted-foreground">
-          {display.summary}
+          {summary}
         </div>
-      )}
-      {result.trim() && (
-        <div className="px-1 pb-1">
-          <PromptDocument text={result} maxHeightClass="max-h-72" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Pulled memory-topic card (记忆文件夹化 §六 · 渐进披露 可视化): the topic name as a
- * header, with the full note body the CEO consulted shown verbatim below — so the user
- * sees exactly which memory the AI reached for and what it read. Mirrors
- * {@link SkillConsultResult}, the sibling on-demand consult. */
-function MemoryConsultResult({
-  display,
-  result,
-}: {
-  display: MemoryConsultDisplay;
-  result: string;
-}) {
-  return (
-    <div className="mt-1 overflow-hidden rounded-lg border border-border">
-      <div className="flex items-center gap-2 border-border/60 border-b bg-muted/40 px-2.5 py-1 text-xs">
-        <Brain size={12} className="shrink-0 text-muted-foreground" />
-        <span className="text-muted-foreground">查阅记忆：</span>
-        <span className="truncate font-mono text-foreground">
-          {display.topic}
-        </span>
-      </div>
+      ) : null}
       {result.trim() && (
         <div className="px-1 pb-1">
           <PromptDocument text={result} maxHeightClass="max-h-72" />
@@ -510,7 +489,7 @@ const CONVERSATION_LOG_PREVIEW_CHARS = 6000;
 
 /** Worker conversation-log card (`search_conversations` / `read_conversation`):
  * display carries title / id / truncated / result_count; body from `result`.
- * Mirrors {@link MemoryConsultResult}. */
+ * Mirrors {@link ConsultEntryCard}. */
 function ConversationLogResult({
   display,
   result,
@@ -777,28 +756,41 @@ function ToolResultBody({ data }: { data: ToolResultData }) {
   }
   if (isSkillConsultDisplay(data.display)) {
     return (
-      <SkillConsultResult display={data.display} result={data.result ?? ""} />
+      <ConsultEntryCard
+        name={data.display.skill_name}
+        badge="能力指引"
+        Icon={BookOpen}
+        summary={data.display.summary}
+        result={data.result ?? ""}
+      />
     );
   }
   if (isMemoryConsultDisplay(data.display)) {
     return (
-      <MemoryConsultResult display={data.display} result={data.result ?? ""} />
+      <ConsultEntryCard
+        name={data.display.topic}
+        badge="查阅记忆"
+        Icon={Brain}
+        result={data.result ?? ""}
+      />
     );
   }
   if (isRuleConsultDisplay(data.display)) {
-    // Historical consult_rule: same card as consult_memory / unified consult.
     return (
-      <MemoryConsultResult
-        display={{ topic: data.display.rule }}
+      <ConsultEntryCard
+        name={data.display.rule}
+        badge="设定"
+        Icon={BookOpen}
         result={data.result ?? ""}
       />
     );
   }
   if (data.toolName === "consult" && isUnifiedConsultDisplay(data.display)) {
-    // Unified consult: same card as consult_memory (条目名 + 正文).
     return (
-      <MemoryConsultResult
-        display={{ topic: data.display.name }}
+      <ConsultEntryCard
+        name={data.display.name}
+        badge={unifiedConsultBadge(data.display.origin)}
+        Icon={BookOpen}
         result={data.result ?? ""}
       />
     );

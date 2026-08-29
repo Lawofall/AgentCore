@@ -718,11 +718,11 @@ describe("hydrateInteractionsFromJournal (history replay)", () => {
           prompt: "主要给谁看？",
           kind: "choice",
           options: [
-            { label: "潜在客户", detail: "偏转化导向", recommended: true },
+            { label: "潜在客户（推荐）", detail: "偏转化导向" },
             { label: "投资人" },
           ],
           multiple: false,
-          default: "潜在客户",
+          default: "潜在客户（推荐）",
         },
       ],
     };
@@ -742,7 +742,7 @@ describe("hydrateInteractionsFromJournal (history replay)", () => {
         decision: null,
         assumptions: [{ id: "a0", label: "部署", value: "纯静态" }],
       });
-      expect(cards[0].questions[0].default).toBe("潜在客户");
+      expect(cards[0].questions[0].default).toBe("潜在客户（推荐）");
     });
 
     it("folds a required→resolved pair into one settled card", () => {
@@ -754,7 +754,7 @@ describe("hydrateInteractionsFromJournal (history replay)", () => {
             checkpoint_id: "c1",
             decision: "continue",
             note: "就按这个开做",
-            selected: ["潜在客户"],
+            selected: ["潜在客户（推荐）"],
           },
         },
       ]);
@@ -765,7 +765,7 @@ describe("hydrateInteractionsFromJournal (history replay)", () => {
         status: "resolved",
         decision: "continue",
         note: "就按这个开做",
-        selected: ["潜在客户"],
+        selected: ["潜在客户（推荐）"],
       });
     });
 

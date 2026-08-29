@@ -23,10 +23,10 @@ import {
 import { useState } from "react";
 import { BrowserLoginDecisionCard } from "./BrowserLoginDecisionCard";
 import {
-  ASK_NOTE_PLACEHOLDER,
   AskNoteField,
   AskQuestionFields,
   type AskUserContent,
+  hasExplicitAskReply,
   useAskAnswer,
 } from "./ask/AskUserFields";
 import { ResolvedDecisionRecord } from "./decision";
@@ -318,10 +318,13 @@ function PendingEscalation({
     escalation.id,
   );
   const hasStructured = escalation.questions.length > 0;
-  // composeAnswer flattens picks + note into one readable string (a worker reads it like the
-  // CEO does); for a free-text escalate it is just the note. 提交 needs a non-empty answer.
+  // composeAnswer flattens picks + per-question notes into one readable string
+  // (a worker reads it like the CEO does); for a free-text escalate it is just
+  // the card note. 提交 needs an explicit pick or 本题人话 — card default 不算.
   const composed = ans.compose("decision");
-  const canSubmit = composed.trim().length > 0;
+  const canSubmit = hasStructured
+    ? hasExplicitAskReply(content, ans.answers, ans.notes, ans.note)
+    : composed.trim().length > 0;
 
   return (
     <DecisionCard tone="primary" animate>
@@ -358,16 +361,14 @@ function PendingEscalation({
                 disclosureKey={escalation.id}
               />
             )}
-            <AskNoteField
-              answer={ans}
-              tone={tone}
-              disabled={busy}
-              placeholder={
-                hasStructured
-                  ? ASK_NOTE_PLACEHOLDER
-                  : "输入你的决定（留空则点「按假设继续」）"
-              }
-            />
+            {!hasStructured && (
+              <AskNoteField
+                answer={ans}
+                tone={tone}
+                disabled={busy}
+                placeholder="输入你的决定（留空则点「按假设继续」）"
+              />
+            )}
           </div>
         </div>
       </div>

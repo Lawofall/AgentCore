@@ -61,7 +61,6 @@ from .outcome import RoundOutcome
 from .round import (
     LlmRoundFailure,
     decide_no_tool_round,
-    maybe_auto_deep_read_search_only_refs,
     record_round_start,
     run_llm_round,
 )
@@ -158,13 +157,13 @@ async def react_loop(
     to clear its run card (``run_output_reset``) instead — so the rewrite replaces
     the discarded draft cleanly on whichever surface streamed it (统一底线). It takes
     the ``ResetReason`` (finish_guard / retry / soft_gate / narration / ask_user) —
-    each emit site states WHY, and folds render the rework chip only for finish_guard.
+    each emit site states WHY; folds always clear the draft and leave no process trace.
     ``on_round_begin`` (when provided) is called at the top of every round AFTER the
     first; the messages it returns are appended to the window before that round's LLM
-    call. A generic「inject context that accrued while the run was working」hook — a
-    delegated worker wires it to pull teammates' freshly-posted 便签 (§2.2 通·便签墙)
-    so the team builds on each other's evolving work; ``None`` (CEO / solo / tests) is a
-    no-op. The engine only appends what it returns — the caller owns the semantics.
+    call. A generic「inject context that accrued while the run was working」hook —
+    workers stamp round-budget on the CEO idle brief and currently return no extra
+    messages; ``None`` (CEO / solo / tests) is a no-op. The engine only appends what
+    it returns — the caller owns the semantics.
     ``allowed_tool_names`` filters which tools the model may call and execute
     (schema offer + ``execute_tools`` enforce; ``None`` = all,
     ``[]`` = none). Tool execution events always go to the sink.
@@ -530,13 +529,7 @@ async def react_loop(
                     content_before_round=content_before_round,
                     final_content=final_content,
                 )
-            # 团队便签墙 推增量 (§2.2 通): before each step AFTER the first, inject context that
-            # accrued WHILE this run was working — e.g. teammates' freshly-posted notes — so the
-            # team builds on each other's evolving work instead of each guessing in isolation.
-            # The opening round already carries the run's assembled context, so the hook starts at
-            # round 1 (which also avoids two back-to-back user messages on the very first request).
-            # Generic by design: the engine only appends what the hook returns; the caller owns the
-            # semantics (引擎纯化), mirroring on_content / on_reasoning.
+            # on_round_begin: before each step AFTER the first (generic hook).
             if round_idx and on_round_begin is not None:
                 messages.extend(on_round_begin())
 
@@ -774,19 +767,6 @@ async def react_loop(
                 controller.note_empty_round(counts_as_empty)
 
                 if not outcome.has_tool_calls:
-                    # 仅 search-only #rN：decide 前回炉前先自动深读升级台账（能过则免 Rework）。
-                    if outcome.content and turn_evidence_ledger is not None:
-                        await maybe_auto_deep_read_search_only_refs(
-                            final_content,
-                            annotate_citations=annotate_citations,
-                            citation_sink=citation_sink,
-                            turn_evidence_ledger=turn_evidence_ledger,
-                            tools=tools,
-                            tool_context=tool_context,
-                            ledger_registrant=ledger_registrant,
-                            sink=sink,
-                            run_id=run_id,
-                        )
                     directive = decide_no_tool_round(
                         outcome,
                         final_content=final_content,

@@ -124,7 +124,7 @@ describe("toolResultPeek", () => {
       toolResultPeek(
         data({
           toolName: "consult",
-          display: { name: "部署流程" },
+          display: { name: "部署流程", origin: "user" },
           result: "## 笔记\n- x",
         }),
       ),

@@ -41,7 +41,7 @@ def _checkpoint_resolved_reload() -> list[SSEEvent]:
             checkpoint_id="cp1",
             conversation_id=_CONV,
             question="先做 A 还是 B？\n两条路线各有取舍。",
-            intent="kickoff",
+            intent="decision",
         ),
         checkpoint_resolved(checkpoint_id="cp1", decision="continue", note="选 A"),
         content_delta("好，按 A 推进。"),

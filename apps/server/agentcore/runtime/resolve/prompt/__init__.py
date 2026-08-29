@@ -1,11 +1,11 @@
 """System prompt assembly for CEO chat and shared worker base.
 
 Composes shared base + optional memory/rules + CEO-only sections
-(core routing, citation, visualization hook, on-demand directory). Skill HOW
-bodies live in ``runtime.skills`` and are pulled via ``consult``.
+(core, on-demand directory). Skill HOW bodies live in
+``runtime.skills`` and are pulled via ``consult``.
 
-Package layout (fragment seams): ``base`` / ``ceo_core`` / ``citation`` /
-``visualization`` / ``memory_rules`` / ``cold_start`` + ``compose`` entry.
+Package layout (fragment seams): ``base`` / ``ceo_core`` /
+``memory_rules`` / ``cold_start`` + ``compose`` entry.
 Public import path stays ``agentcore.runtime.resolve.prompt``.
 """
 
@@ -22,7 +22,6 @@ from agentcore.runtime.resolve.prompt.ceo_core import (
     attachment_material_scene,
     capability_how_suffix,
 )
-from agentcore.runtime.resolve.prompt.citation import CHAT_CITATION_HINT
 from agentcore.runtime.resolve.prompt.cold_start import (
     _COLD_START_EXPLORE_HINT_EMPTY,
     _COLD_START_EXPLORE_HINT_REBIND,
@@ -44,14 +43,11 @@ from agentcore.runtime.resolve.prompt.memory_rules import (
     _RULES_TEMPLATE,
     _format_rules,
 )
-from agentcore.runtime.resolve.prompt.visualization import _CEO_VISUALIZATION_HINT
 
 __all__ = [
-    "CHAT_CITATION_HINT",
     "_ATTACHMENT_MATERIAL_HINT",
     "_CEO_CORE_HINT",
     "_CEO_CORE_HINT_TEMPLATE",
-    "_CEO_VISUALIZATION_HINT",
     "_COLD_START_EXPLORE_HINT_EMPTY",
     "_COLD_START_EXPLORE_HINT_REBIND",
     "_COLD_START_EXPLORE_HINT_REFRESH",

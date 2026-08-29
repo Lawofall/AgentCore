@@ -15,10 +15,19 @@ from typing import Protocol, runtime_checkable
 
 @dataclass(frozen=True)
 class ConsultDirectoryEntry:
-    """One catalog row: consult ``name`` plus optional one-line summary."""
+    """One catalog row: consult ``name`` plus optional one-line summary.
+
+    ``section`` is the merge kind (skill / tool / rule / memory) used only to
+    group the prompt directory — not shown as an internal type name.
+    ``family`` / ``family_label`` collapse sibling tools (MCP Server, export pair)
+    into one directory line; consult still uses a member name (or the family key).
+    """
 
     name: str
     summary: str = ""
+    section: str = ""
+    family: str = ""
+    family_label: str = ""
 
 
 @runtime_checkable

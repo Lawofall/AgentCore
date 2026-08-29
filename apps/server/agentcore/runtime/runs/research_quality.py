@@ -78,7 +78,7 @@ INDEPENDENT_REVIEW_REPORT_DISCIPLINE = (
     "禁止仅用十余字 handoff 冒充过闸；handoff 只作速览+路径。"
 )
 
-# Playbook 显式声明上游 prose 地板时的默认值（如 diagnose_fix_verify 诊断员）。
+# Playbook 显式声明上游 prose 地板时的默认值。
 # 不再作为「有下游 → 一律抬 min」的拓扑常量；运行时交接地板固定非空。
 MIN_UPSTREAM_BODY_CHARS = 80
 

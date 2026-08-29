@@ -90,11 +90,6 @@ _SLOT_DEFS: dict[str, tuple[PlaybookTemplateSlot, ...]] = {
             key="topic", label="主题", required=True, hint="调研 / 报告主题"
         ),
     ),
-    "build_app": (
-        PlaybookTemplateSlot(
-            key="app", label="应用", required=True, hint="要搭建的应用 / SPA 简述"
-        ),
-    ),
 }
 
 WORKFLOW_PLAYBOOK_IDS: tuple[str, ...] = tuple(_SLOT_DEFS)
@@ -115,7 +110,6 @@ _DEFAULT_OPTIONAL_SLOTS: dict[str, dict[str, Any]] = {
 _TITLE: dict[str, str] = {
     "map_fanout": "多角摸底",
     "cite_write_review": "调研报告成文",
-    "build_app": "从零搭应用",
 }
 
 # User-facing blurbs (not raw CEO/runtime summaries).
@@ -127,9 +121,6 @@ _SUMMARY: dict[str, str] = {
     "cite_write_review": (
         "调研→提纲→写作→审校；仅当你明确要落盘成文或交报告时用。"
         "只想弄懂议题请用「多角摸底」。"
-    ),
-    "build_app": (
-        "从零搭一个小应用：脚手架→模块→联调→冒烟；默认瘦启动。"
     ),
 }
 

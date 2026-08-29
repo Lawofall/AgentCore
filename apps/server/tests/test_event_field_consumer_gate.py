@@ -59,8 +59,8 @@ def test_field_consumer_gate_clean_tree():
     assert result.new_orphans == [], format_field_orphan_reports(result)
     assert result.ok
     assert result.coverage is not None
-    assert result.coverage.events == 78
-    assert result.coverage.top_level_slots == 427
+    assert result.coverage.events == 77
+    assert result.coverage.top_level_slots == 415
     assert result.coverage.scan_files > 0
     assert (result.coverage.repo_root.replace("\\", "/")).endswith("AgentCore") or (
         "AgentCore" in result.coverage.repo_root

@@ -6,8 +6,6 @@ the CEO names one + fills slots; the builder emits the same ``tasks`` dict-list
 Not a template engine; not a boss-facing menu.
 
 Deliberately SMALL. A name is a frozen pipeline shape, not a scene label.
-``build_app.intensity=lean|full`` is the one allowed greenfield structural slot
-(this round: do not split into two names); other forks stay handwritten.
 """
 
 from __future__ import annotations
@@ -25,10 +23,7 @@ from agentcore.runtime.runs.playbooks._common import (
     clean_str,
 )
 from agentcore.runtime.runs.playbooks.audit import code_audit
-from agentcore.runtime.runs.playbooks.build_soft import (
-    build_app,
-    diagnose_fix_verify,
-)
+from agentcore.runtime.runs.playbooks.build_soft import diagnose_fix_verify
 from agentcore.runtime.runs.playbooks.research import (
     cite_write_review,
     lens_crosscheck,
@@ -105,9 +100,10 @@ PLAYBOOKS: dict[str, Playbook] = {
     "diagnose_fix_verify": Playbook(
         name="diagnose_fix_verify",
         summary=(
-            "【无先验调查批】诊断(短)→修补→验证的单症状修码（runtime 错 / 缺 export / "
+            "【无先验调查批】修补(含短诊断)→独立验证的单症状修码（runtime 错 / 缺 export / "
             "白屏挂载；短轮次；禁触顶后换马甲；playbook_args 须 verify="
-            "CLI 或 UI 复现说明；已有调查批确认修→手写+continue_from，勿套本 playbook）"
+            "CLI 或 UI 复现说明；已定位文件 / 已有调查批 → 勿套本，手写"
+            "（可 1 人，verify 写进 task））"
         ),
         slots=(
             "problem(必填,错误症状/缺 export/白屏挂载等) / "
@@ -119,36 +115,17 @@ PLAYBOOKS: dict[str, Playbook] = {
         ),
         build=diagnose_fix_verify,
     ),
-    "build_app": Playbook(
-        name="build_app",
-        summary=(
-            "绿场软件/SPA：intensity 编制档——"
-            "默认 lean=scaffold→单实现(公共层+主流程)→smoke；"
-            "full=scaffold→shared→N×module→integrate→smoke"
-            "（full 五阶段不可跳；modules 扇出仅 full；禁扫用户原文猜档）"
-        ),
-        slots=(
-            "app(必填,要搭建的应用/SPA简述——"
-            "例:app=\"面向运营的 Vue3 数据看板\") / "
-            "intensity(可选,编制档:lean 默认三节点立刻派;"
-            "full=五阶段满档含 shared/多 module/integrate) / "
-            "modules(可选,功能模块名数组;"
-            "lean=覆盖清单不扇出;full=各派一名实现,默认仅总览页,超过 3 个折叠到末槽) / "
-            "stack(可选,技术栈,默认 Vue3+Vite+TS) / "
-            "root(可选,工程目录名,默认固定 app/；禁止从 app 简述派生 slug)"
-        ),
-        build=build_app,
-    ),
     "lens_crosscheck": Playbook(
         name="lens_crosscheck",
         summary=(
             "异质透镜并行调研→汇总交叉验证（可产 motion_card 建议开辩；"
-            "调研报告落盘 AgentCore/文档/research/；默认法律/品牌商业/舆情公关/文化社会）"
+            "仅公共事件 / 品牌危机等须分开查的异质透镜；"
+            "lenses 必填 ≥2 个异质透镜名；"
+            "调研报告落盘 AgentCore/文档/research/）"
         ),
         slots=(
-            "topic(必填,主题/事件) / lenses(可选,透镜名数组；"
-            "超过扇出上限时末尾自动折叠到最后一节点并标注、不丢弃；"
-            "默认法律·品牌商业·舆情公关·文化社会)"
+            "topic(必填,主题/事件) / lenses(必填,≥2 个异质透镜名;"
+            "超过扇出上限时末尾自动折叠到最后一节点并标注、不丢弃)"
         ),
         build=lens_crosscheck,
     ),
@@ -176,7 +153,6 @@ def playbook_args_schema_description() -> str:
     required_cues = "；".join(cues)
     return (
         "具名 playbook 快捷槽位对象（与 playbook 联用；默认手写 tasks 时勿传）。"
-        "绿场必填 app——勿空对象。"
         f"必填槽：{required_cues}。"
         "code_audit modules：整仓按产品缝扇出（先 2–3，不从 scope 自动拆；勿按目录填满上限）。"
         "其余可选槽→consult(team_orchestration_advanced)。"

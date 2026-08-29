@@ -4,7 +4,6 @@ import type { WorkflowTemplate } from "@/services/workflows";
 const PICK_WHEN: Record<string, string> = {
   map_fanout: "只想弄懂议题、先摸清几个方向",
   cite_write_review: "要一份能落盘交付的长文报告",
-  build_app: "从零搭一个能跑的应用",
 };
 
 /**

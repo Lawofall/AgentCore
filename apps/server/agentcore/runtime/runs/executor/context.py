@@ -508,7 +508,7 @@ def _team_position_block(plan: RunPlan, spec: RunSpec) -> str:
             "交给你，你的职责是据此整合、产出团队交给老板的【最终交付物】。"
             "「前置结果」若已列出工作区路径：先 file_read 这些路径再写总稿；"
             "【禁止】把开工做成全仓 glob / grep / 再调研一遍。"
-            "路径含糊或列表缺文件时才按【找路径】补钉。"
+            "路径含糊或列表缺文件时才 glob / file_list 补钉（见身份【找路径】）。"
         )
     if not parts:
         return ""

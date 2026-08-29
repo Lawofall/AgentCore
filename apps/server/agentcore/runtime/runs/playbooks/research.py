@@ -6,15 +6,12 @@ from typing import Any
 
 from agentcore.runtime.runs.playbooks._common import (
     RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE,
-    RESEARCHER_NOTE_GUIDANCE,
     USER_MESSAGE_MECH_KEY,
     clean_str,
     clean_str_list,
     fold_fanout_slots,
 )
 from agentcore.workspace.stage_dirs import RESEARCH_DIR, REVIEWS_DIR
-
-_DEFAULT_MULTI_LENSES = ("法律", "品牌商业", "舆情公关", "文化社会")
 
 # 幕 1 约定文档目录：各透镜报告 + 汇总与命题卡（多幕共享；辩论阶段将读这些文件）。
 _MULTI_LENS_RESEARCH_DIR = RESEARCH_DIR
@@ -174,7 +171,6 @@ def map_fanout(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
                 f"一页地图须用 file_write 落盘到 `{artifact}`"
                 "（内容=入口 / 边界 / 开放问题 + 来源路径，不是 handoff 摘要的复制）；"
                 "handoff 结构化简报照旧。"
-                f"{RESEARCHER_NOTE_GUIDANCE}"
                 f"{fold_hint}"
             ),
             "deliverable": {
@@ -247,7 +243,6 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
                     "（内容=本子方向完整要点 + 来源，不是 handoff 摘要的复制）；"
                     "handoff 结构化简报照旧，落盘是叠加、不得替代 handoff。"
                     f"{RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE}"
-                    f"{RESEARCHER_NOTE_GUIDANCE}"
                     f"{fold_hint}"
                 ),
                 "deliverable": {
@@ -275,7 +270,6 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
                     "（内容=本主题完整要点 + 来源，不是 handoff 摘要的复制）；"
                     "handoff 结构化简报照旧，落盘是叠加、不得替代 handoff。"
                     f"{RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE}"
-                    f"{RESEARCHER_NOTE_GUIDANCE}"
                 ),
                 "deliverable": {
                     "form": "files",
@@ -372,17 +366,21 @@ def lens_crosscheck(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[st
 
     幕 1 产物以 ``form=files`` + ``artifacts`` 落盘 ``AgentCore/文档/research/``（各透镜自写报告 +
     汇总员写「汇总与命题卡」）。开工授权（delegation grant）覆盖整次委派的
-    file_mutation 工具面，四路并行写文件不会额外弹授权卡；handoff / motion_card
+    file_mutation 工具面，各透镜并行写文件不会额外弹授权卡；handoff / motion_card
     链路照旧，落盘是叠加。
 
-    lenses 超过扇出上限时折叠进末节点（合并不丢弃），首透镜仍独占公共底料分工。
+    lenses 须 ≥2（与 map_fanout.angles 同形）；超过扇出上限时折叠进末节点（合并不丢弃），
+    首透镜仍独占公共底料分工。
     """
     topic = clean_str(args.get("topic"))
     if not topic:
         return [], ["lens_crosscheck 需要 slot『topic』（要多视角调研的主题 / 事件）"]
     lenses_raw = clean_str_list(args.get("lenses"), cap=None)
-    if not lenses_raw:
-        lenses_raw = list(_DEFAULT_MULTI_LENSES)
+    if len(lenses_raw) < 2:
+        return [], [
+            "lens_crosscheck 需要 slot『lenses』且 ≥2 个异质透镜名"
+            "（单透镜请手写 1 人 task）"
+        ]
     lens_slots, lens_fold_note = fold_fanout_slots(lenses_raw, label="透镜")
     fold_hint = f" {lens_fold_note}" if lens_fold_note else ""
     raw_um = args.get(USER_MESSAGE_MECH_KEY)
@@ -416,7 +414,6 @@ def lens_crosscheck(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[st
                 f"完整调研报告须用 file_write 落盘到 `{artifact}`"
                 "（内容=本透镜完整报告正文，不是 handoff 摘要的复制；勿只写提纲）。"
                 "handoff 结构化简报照旧（精炼结论 + 证据指针），落盘是叠加、不得替代 handoff。"
-                f"{RESEARCHER_NOTE_GUIDANCE}"
                 f"{fold_hint}"
             ),
             "deliverable": {

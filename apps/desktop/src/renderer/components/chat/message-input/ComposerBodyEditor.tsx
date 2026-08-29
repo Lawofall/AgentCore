@@ -10,7 +10,14 @@ import {
   serializeInlineBody,
 } from "@/lib/inlineBody";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Loader2, MessageSquare, Users, X } from "lucide-react";
+import {
+  AlertCircle,
+  Bookmark,
+  Loader2,
+  MessageSquare,
+  Users,
+  X,
+} from "lucide-react";
 import {
   type ClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -432,6 +439,8 @@ function EditorAttachmentPill({
         <DirTypeIcon name={att.name} path={att.path} size={12} />
       ) : att.kind === "conversation" ? (
         <MessageSquare size={12} className="shrink-0" />
+      ) : att.kind === "document" ? (
+        <Bookmark size={12} className="shrink-0" />
       ) : (
         <FileTypeIcon name={att.name} path={att.path} size={12} />
       )}

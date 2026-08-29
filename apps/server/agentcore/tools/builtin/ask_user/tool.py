@@ -22,7 +22,6 @@ from agentcore.tools.builtin.ask_user.card import (
 from agentcore.tools.builtin.ask_user.intent import resolve_ask_checkpoint_intent
 from agentcore.tools.builtin.ask_user.schema import (
     ListArgError,
-    OptionLabelError,
     normalize_assumptions,
     normalize_questions,
 )
@@ -93,29 +92,23 @@ class AskUserTool:
             "label": {
                 "type": "string",
                 "description": (
-                    "选项名（即用户选它时回传的答案）。禁止写入「（推荐）」等推荐标记；"
-                    "倾向只设 recommended。"
+                    "选项名（即用户选它时回传的答案）。"
+                    "有倾向时该项放第一、名末加「（推荐）」。"
                 ),
             },
             "detail": {
                 "type": "string",
-                "description": "仅专用 card 填一行取舍/影响/操作说明。普通短问勿填。",
-            },
-            "recommended": {
-                "type": "boolean",
-                "description": (
-                    "可选：建议项（至多一个）。灰字「推荐」、不预选；预选用 default。"
-                    "勿把「（推荐）」写入 label。"
-                ),
+                "description": "仅 organize_plan / daily_review 填一行说明。普通短问勿填。",
             },
         }
         # Schema: short trigger. HOW → ask_user_kickoff / ask_user_midtask skills.
         questions_desc = (
-            "可选：问句写 prompt（最多 5）。须预填可确认 default。"
-            "choice 可配 recommended。detail 仅专用 card。"
+            "可选：问句写 prompt（最多 5）。卡面不预选。"
+            "detail 仅 organize_plan / daily_review。"
         )
         tool_desc = (
             "向用户发问（唯一问用户原语）。暂停回合等人答复。"
+            "挡路才问：桌上结果未钉、猜错会做错 → 先短问；仅可逆低杠杆才标假设。"
             "登录拦截：browser_login=true。"
             "问句写 questions[].prompt。"
             "HOW→consult(ask_user_kickoff / ask_user_midtask)。"
@@ -227,7 +220,7 @@ class AskUserTool:
                                 },
                                 "default": {
                                     "type": "string",
-                                    "description": "可确认默认；空 continue=确认。",
+                                    "description": "可选；空 continue=确认。",
                                 },
                             },
                             "required": ["prompt"],
@@ -242,11 +235,10 @@ class AskUserTool:
                     },
                     "card": {
                         "type": "string",
-                        "enum": ["proposal_pick", "risk_ack", "organize_plan", "daily_review"],
+                        "enum": ["organize_plan", "daily_review"],
                         "description": (
-                            "可选卡型（恰好 1 题）：proposal_pick 单选方案；"
-                            "risk_ack/organize_plan/daily_review 多选。"
-                            "多问题勿用 card（普通 ask_user，questions≤5）。"
+                            "可选。整理清单 organize_plan / 每日复盘 daily_review"
+                            "（恰好 1 题多选）。多问题用普通 ask_user（questions≤5）。"
                         ),
                     },
                 },
@@ -308,18 +300,6 @@ class AskUserTool:
                     f"{CARD_RETRY_HINT}"
                 ),
             )
-        except OptionLabelError as exc:
-            logger.info(
-                "ask_user.option_label_rejected",
-                conversation_id=self.conversation_id,
-                error=str(exc),
-            )
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=f"{exc}{CARD_RETRY_HINT}",
-            )
         if not self.advertise_bind_local_folder:
             for q in questions:
                 for opt in q.get("options") or []:
@@ -334,8 +314,7 @@ class AskUserTool:
         if card is not None:
             card_err = validate_card_shape(card, questions=questions)
             if card_err:
-                # Observability for the recurring model fumble (e.g. kickoff-style
-                # multi-question asks tagged card=proposal_pick): count + shape details.
+                # Observability for card-shape rejects: count + shape details.
                 logger.info(
                     "ask_user.card_rejected",
                     conversation_id=self.conversation_id,

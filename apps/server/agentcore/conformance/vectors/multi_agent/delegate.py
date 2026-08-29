@@ -345,8 +345,8 @@ def _multi_agent_worker_deliverable_reset() -> list[SSEEvent]:
     ``run_output_reset`` 清掉卡片已流式的旁白 → 工具后重累积【最终交付】。
 
     与 ``worker_output_reset``（finish_guard 结构缺陷回炉）同用 ``run_output_reset`` 机制，但
-    reason=``narration``（非 finish_guard）：三端 fold + oracle 必须一致地【不】折 rework 步——
-    旁白归档是正常流程，不该给节点打「已按交付规范重写」痕迹。清 agent output 标量（重累积最终
+    reason=``narration``（非 finish_guard）：三端 fold + oracle 必须一致地只清卡片草稿、
+    不折过程痕迹。清 agent output 标量（重累积最终
     交付），reasoning 是真实过程、保留；旁白只活在 journal 的 llm_call fact 里，不进
     message_final / 卡片重载 / CEO 综述输入。故 r1 的 ``output`` 末态只剩「结论：应采用方案 A。」。"""
     agents = [
@@ -374,7 +374,7 @@ def _multi_agent_worker_deliverable_reset() -> list[SSEEvent]:
         tool_use_start("tc1", "grep", {"pattern": "x"}, run_id="r1"),
         tool_use_end("tc1", "grep", success=True, output="命中 3 处", run_id="r1"),
         # 引擎回退交付正文、发 run_output_reset 清卡片旁白（直播==重载==最终交付）。
-        # reason=narration：正常旁白归档，fold 不折 rework 步（无「已按交付规范重写」痕迹）。
+        # reason=narration：正常旁白归档，fold 只清草稿、不折过程痕迹。
         run_output_reset("r1", "w1", "narration"),
         run_output_delta("r1", "w1", "结论：应采用方案 A。"),  # 最终交付
         run_completed(

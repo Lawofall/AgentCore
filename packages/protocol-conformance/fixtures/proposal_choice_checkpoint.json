@@ -1,6 +1,6 @@
 {
-  "name": "risk_ack_checkpoint",
-  "description": "单聊：风险确认卡 ask_user(card=risk_ack) 挂起（intent=risk_ack）",
+  "name": "proposal_choice_checkpoint",
+  "description": "单聊：方案挑选走普通 ask_user 挂起（intent=decision）",
   "events": [
     {
       "type": "message_start",
@@ -13,41 +13,38 @@
     {
       "type": "content_delta",
       "payload": {
-        "delta": "落地前请勾选要一并处理的风险："
+        "delta": "有三条可行路线，请挑一条："
       },
       "timestamp": "2026-01-01T00:00:00.002Z"
     },
     {
       "type": "checkpoint_required",
       "payload": {
-        "checkpoint_id": "cp_risk",
+        "checkpoint_id": "cp_pick",
         "conversation_id": "conv_demo",
-        "question": "哪些风险要在本轮处理？\n未勾选的项将记入后续 backlog。",
+        "question": "选哪条方案推进？",
         "assumptions": [],
         "questions": [
           {
             "id": "q0",
-            "prompt": "勾选要处理的风险",
+            "prompt": "选哪条方案？",
             "kind": "choice",
-            "multiple": true,
+            "multiple": false,
             "default": "",
             "options": [
               {
-                "label": "[高] 密钥轮换",
-                "detail": "生产密钥仍是默认值，泄露即全库失守",
-                "recommended": true
+                "label": "方案 A：快速原型（一周可验证）"
               },
               {
-                "label": "[中] 备份校验",
-                "detail": "近 30 天备份未做恢复演练"
+                "label": "方案 B：稳妥重构（两周，债务更少）"
               },
               {
-                "label": "回滚演练"
+                "label": "方案 C：外包试点（推荐）"
               }
             ]
           }
         ],
-        "intent": "risk_ack"
+        "intent": "decision"
       },
       "timestamp": "2026-01-01T00:00:00.003Z"
     },
@@ -56,8 +53,8 @@
       "payload": {
         "finish_reason": "paused",
         "usage": {
-          "input_tokens": 1900,
-          "output_tokens": 140,
+          "input_tokens": 1800,
+          "output_tokens": 120,
           "reasoning_tokens": 0,
           "cache_hit_tokens": 0,
           "cache_miss_tokens": 0
@@ -80,17 +77,17 @@
     "finishReason": "paused",
     "outcome": null,
     "error": null,
-    "content": "落地前请勾选要一并处理的风险：",
+    "content": "有三条可行路线，请挑一条：",
     "reasoning": "",
     "captainContext": [],
     "process": [
       {
         "kind": "content",
-        "text": "落地前请勾选要一并处理的风险："
+        "text": "有三条可行路线，请挑一条："
       },
       {
         "kind": "checkpoint",
-        "checkpoint_id": "cp_risk"
+        "checkpoint_id": "cp_pick"
       }
     ],
     "citations": [],
@@ -106,9 +103,9 @@
     "interactions": [
       {
         "kind": "ask_user",
-        "id": "cp_risk",
+        "id": "cp_pick",
         "status": "pending",
-        "question": "哪些风险要在本轮处理？\n未勾选的项将记入后续 backlog。"
+        "question": "选哪条方案推进？"
       }
     ],
     "cost": {
@@ -128,7 +125,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

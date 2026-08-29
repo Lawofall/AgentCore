@@ -117,7 +117,7 @@ def _kickoff_ask_user_args(*, default: str = "辩论（正反攻防）") -> str:
                     "prompt": "辩论环节采用哪种形式？",
                     "kind": "choice",
                     "options": [
-                        {"label": "辩论（正反攻防）", "recommended": True},
+                        {"label": "辩论（正反攻防）"},
                         {"label": "红队压测"},
                         {"label": "圆桌讨论"},
                         {"label": "不需要辩论环节"},
@@ -191,6 +191,45 @@ def test_user_declined_debate_form():
 
 def test_user_confirm_honors_ask_user_default():
     args = _kickoff_ask_user_args(default="辩论（正反攻防）")
+    messages = [
+        LLMMessage(
+            role="assistant",
+            content="",
+            tool_calls=[
+                ToolCall(
+                    id="au1",
+                    function=ToolCallFunction(name="ask_user", arguments=args),
+                )
+            ],
+        ),
+        LLMMessage(
+            role="tool",
+            tool_call_id="au1",
+            content="用户确认：按你提出的方向继续。",
+        ),
+    ]
+    assert user_selected_debate_form(messages) is True
+
+
+def test_user_confirm_honors_recommendation_mark_without_default():
+    args = json.dumps(
+        {
+            "message": "开工提案",
+            "questions": [
+                {
+                    "prompt": "辩论环节采用哪种形式？",
+                    "kind": "choice",
+                    "options": [
+                        {"label": "辩论（正反攻防）（推荐）"},
+                        {"label": "红队压测"},
+                        {"label": "不需要辩论环节"},
+                    ],
+                    "default": "",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
     messages = [
         LLMMessage(
             role="assistant",

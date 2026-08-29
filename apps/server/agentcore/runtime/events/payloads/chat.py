@@ -50,9 +50,9 @@ class ContentDeltaPayload(WirePayload):
     replace: bool | None = absent(_REPLACE_DOC)
 
 
-# 为什么发这次 reset——客户端按它决定「清正文之外还留不留痕迹」：
-# - finish_guard：交付前核验回炉，唯一折出「已按交付规范重写」chip（didRework）的 reason；
-# - retry：LLM 流式传输透明重试，丢弃上次尝试的临时输出（基础设施噪音，不留痕）；
+# 为什么发这次 reset（诊断/引擎语义；fold 一律只清正文、不留 process 痕迹）：
+# - finish_guard：交付前结构核验回炉（围栏未闭合 / 产物结构窄闸等）；
+# - retry：LLM 流式传输透明重试，丢弃上次尝试的临时输出（基础设施噪音）；
 # - soft_gate：captain 收尾草稿被软门控（组队/审计）打回重来（后续组队/审计动作自带痕迹）；
 # - narration：worker 调非终止工具前的旁白回滚（正常流程，旁白只进 journal）；
 # - ask_user：blocking ask_user 暂停时同轮正文被吸收进提问卡片。
@@ -61,8 +61,8 @@ ResetReason = Literal["finish_guard", "retry", "soft_gate", "narration", "ask_us
 
 class ContentResetPayload(WirePayload):
     """清空当前流式气泡已累积正文的信号——客户端清正文后再接收重写版 `content_delta`。
-    ``reason`` 表明本次 reset 的语义（见 `ResetReason`）；仅 ``finish_guard``（交付前核验
-    回炉）折出「已按交付规范重写」痕迹，其余 reason 只清正文、不留 chip。Transport-only。"""
+    ``reason`` 表明本次 reset 的语义（见 `ResetReason`）；所有 reason 都只清正文、
+    不折过程痕迹。Transport-only。"""
 
     reason: ResetReason = Field(json_schema_extra={"ts_type": "ResetReason"})
 

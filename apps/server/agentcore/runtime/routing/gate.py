@@ -39,7 +39,7 @@ _EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
 
 # 协调类工具失败不走 Gate（它们有自己的通道）
 _SKIP_TOOLS = frozenset(
-    {"escalate", "post_note", "read_notes", "amend_note", "handoff", "delegate"}
+    {"escalate", "handoff", "delegate"}
 )
 
 

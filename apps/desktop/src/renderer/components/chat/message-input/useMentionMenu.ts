@@ -14,6 +14,7 @@ import {
 import type { FileSource } from "@/lib/fileSource";
 import { insertInlineToken } from "@/lib/inlineBody";
 import { logEvent } from "@/lib/log";
+import { listScopeEntries } from "@/services/documents";
 import { fetchMessageWindow } from "@/services/messages";
 import { useConversationStore } from "@/stores/conversation";
 import { useExecutionStore } from "@/stores/execution";
@@ -41,6 +42,7 @@ import {
   detectMention,
   formatConversationContext,
   parseMentionFilter,
+  pickOnDemandSettings,
   pickRecentConversations,
 } from "./composerAttachments";
 import {
@@ -129,6 +131,9 @@ export function useMentionMenu({
   const [indexTruncated, setIndexTruncated] = useState(false);
   const [indexLoading, setIndexLoading] = useState(false);
   const [convTick, setConvTick] = useState(0);
+  const [settingPool, setSettingPool] = useState<
+    Awaited<ReturnType<typeof listScopeEntries>>
+  >([]);
   const indexLoadedRef = useRef(false);
   const sourcesRef = useRef<Map<string, FileSource>>(new Map());
   const mentionRangeRef = useRef<{ start: number; end: number } | null>(null);
@@ -165,6 +170,31 @@ export function useMentionMenu({
     setConvTick((n) => n + 1);
   }, [menuMode, conversationId]);
 
+  useEffect(() => {
+    if (!menuMode) return;
+    let cancelled = false;
+    const folderId = conversationId
+      ? (getConversations().find((c) => c.id === conversationId)?.folderId ??
+        null)
+      : null;
+    void Promise.all([
+      listScopeEntries(null),
+      folderId ? listScopeEntries(folderId) : Promise.resolve([]),
+    ])
+      .then(([global, project]) => {
+        if (cancelled) return;
+        const byId = new Map<string, (typeof global)[number]>();
+        for (const n of [...global, ...project]) byId.set(n.id, n);
+        setSettingPool([...byId.values()]);
+      })
+      .catch(() => {
+        if (!cancelled) setSettingPool([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [menuMode, conversationId]);
+
   const emptyLimit =
     focusedSection !== null
       ? MENTION_DRILL_INDEX_LIMIT
@@ -196,6 +226,17 @@ export function useMentionMenu({
     conversationId,
     emptyLimit,
   ]);
+
+  const settingItems = useMemo(
+    () => pickOnDemandSettings(settingPool, filterText, emptyLimit),
+    [settingPool, filterText, emptyLimit],
+  );
+  const settingCount = useMemo(
+    () =>
+      pickOnDemandSettings(settingPool, filterText, Number.MAX_SAFE_INTEGER)
+        .length,
+    [settingPool, filterText],
+  );
 
   const convCount = useMemo(() => {
     void convTick;
@@ -257,10 +298,18 @@ export function useMentionMenu({
           conversation: convCount,
           folder: folderCount,
           file: fileCount,
+          setting: settingCount,
         },
         loadingFiles: indexLoading,
       }),
-    [agentItems.length, convCount, folderCount, fileCount, indexLoading],
+    [
+      agentItems.length,
+      convCount,
+      folderCount,
+      fileCount,
+      settingCount,
+      indexLoading,
+    ],
   );
 
   const sections = useMemo((): MentionMenuSection[] => {
@@ -290,6 +339,21 @@ export function useMentionMenu({
         items: convItems,
         truncated: convItems.length > 0 && convItems.length < convCount,
         emptyHint: convItems.length === 0 ? "暂无其他对话" : undefined,
+      });
+    }
+
+    if (
+      show("setting") &&
+      (settingItems.length > 0 || focusedSection === "setting")
+    ) {
+      out.push({
+        id: "setting",
+        label: "设定",
+        items: settingItems,
+        truncated:
+          settingItems.length > 0 && settingItems.length < settingCount,
+        emptyHint:
+          settingItems.length === 0 ? "没有可点名的按需设定" : undefined,
       });
     }
 
@@ -325,6 +389,8 @@ export function useMentionMenu({
     agentItems,
     convItems,
     convCount,
+    settingItems,
+    settingCount,
     folderItems,
     fileItems,
     folderTruncated,
@@ -630,6 +696,17 @@ export function useMentionMenu({
           kind: "conversation",
           conversationId: entry.relPath,
         };
+      } else if (entry.kind === "document") {
+        next = {
+          id: crypto.randomUUID(),
+          key,
+          name: entry.name,
+          path: "设定",
+          text: "",
+          truncated: false,
+          kind: "document",
+          documentId: entry.relPath,
+        };
       } else if (entry.kind === "dir") {
         const listing = buildDirListing(fileIndex, entry);
         if (listing.fileCount === 0) {
@@ -719,7 +796,9 @@ export function useMentionMenu({
           ? "folder"
           : entry.kind === "conversation"
             ? "conversation"
-            : "file";
+            : entry.kind === "document"
+              ? "setting"
+              : "file";
       logEvent("info", "mention.select", { category });
       const index = attachments.length;
       setAttachments((prev) => [...prev, attachment]);

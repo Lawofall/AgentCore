@@ -84,18 +84,23 @@ from agentcore.docs_export.workspace_export import (
 from agentcore.shared_spaces.service import SharedSpaceService
 from agentcore.shared_spaces.types import can_write
 from agentcore.storage import SnapshotNotFound
+from agentcore.storage._archive import ArchiveLimitError
 from agentcore.workspace.files import (
+    archive_filename,
     copy_file,
     create_dir,
     delete_file,
     list_file_index,
     list_files,
     move_file,
+    raise_http_for_archive_limit,
     raise_http_for_download_io,
     read_file_for_edit,
     resolve_download_file,
     upload_file,
     write_file_text,
+    zip_resolved_dir,
+    zip_subtree_for_download,
 )
 from agentcore.workspace.git import CloneError, clone_repo
 from agentcore.workspace.limits import WORKSPACE_BROWSE_LIST_MAX
@@ -113,6 +118,7 @@ from agentcore.workspace.locate import (
 from agentcore.workspace.locks import workspace_lock
 from agentcore.workspace.protocol import (
     AlreadyExists,
+    NotADirectory,
     NotAFile,
     NotUTF8,
     OutsideWorkspace,
@@ -296,6 +302,13 @@ async def _shared_upload(space_id: str, path: str, data: bytes) -> int:
 async def _shared_resolve_download(space_id: str, path: str, *, max_bytes: int) -> Path:
     backend = build_shared_workspace(space_id)
     return await backend.resolve_for_download(path, max_bytes=max_bytes)
+
+
+async def _shared_zip_archive(space_id: str, path: str, *, max_bytes: int) -> bytes:
+    """Subtree zip for a shared space — same file-download path, not snapshots."""
+    backend = build_shared_workspace(space_id)
+    target = await backend.resolve_dir_for_download(path)
+    return await zip_resolved_dir(target, max_bytes=max_bytes)
 
 
 async def _shared_read_edit(space_id: str, path: str):
@@ -807,6 +820,55 @@ async def download_workspace_file(
         file_path,
         media_type=media_type,
         headers=download_headers(filename),
+    )
+
+
+@router.get("/{ws_id}/archive/{path:path}")
+async def download_workspace_archive(
+    ws_id: str,
+    path: str,
+    user: AuthUser,
+    conv_repo: ConversationRepository = Depends(get_conversation_repo),
+    folder_repo: FolderRepository = Depends(get_folder_repo),
+    shared_svc: SharedSpaceService = Depends(get_shared_space_service),
+):
+    """Download a directory subtree as zip (selected dir as archive root).
+
+    Independent of GET ``/{ws_id}/files/{path}`` (preview / single file). Capacity
+    is the panel upload ceiling, not snapshot retention. Shared spaces that can
+    download a file can download a folder zip — this is not the snapshot 409.
+    """
+    target = await _resolve_owned_workspace(
+        ws_id, user.user_id, conv_repo, folder_repo, shared_svc
+    )
+    _require_cloud(target)
+    max_bytes = settings.workspace_upload_max_bytes
+    try:
+        if target.space_id:
+            data = await _shared_zip_archive(
+                target.space_id, path, max_bytes=max_bytes
+            )
+        else:
+            data = await zip_subtree_for_download(
+                **_workspace_coords(user.user_id, target),
+                path=path,
+                max_bytes=max_bytes,
+            )
+    except OutsideWorkspace as e:
+        raise ValidationError("路径非法：超出工作区范围") from e
+    except PathNotFound as e:
+        raise NotFoundError("文件夹不存在") from e
+    except NotADirectory as e:
+        raise ValidationError("目标不是文件夹") from e
+    except ArchiveLimitError as e:
+        raise_http_for_archive_limit(e)
+    except WorkspaceIOError as e:
+        raise_http_for_download_io(e)
+
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers=download_headers(archive_filename(path)),
     )
 
 

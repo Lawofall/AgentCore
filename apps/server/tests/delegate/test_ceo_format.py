@@ -8,7 +8,6 @@ from agentcore.runtime.delegate.ceo_format import (
     worker_products,
 )
 from agentcore.runtime.runs.file_acceptance import build_file_acceptance
-from agentcore.runtime.runs.notewall import NOTE_KIND_CLAIM, NOTE_KIND_DECISION, NoteWall
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
 from agentcore.tools.builtin.delegate import DELEGATE_OUTPUT_LIMIT
@@ -194,45 +193,8 @@ def test_format_for_ceo_includes_semantic_boundary_reconciliation():
     assert "语义边界对账" in out
     assert "冲突" in out and "缺口" in out and "重复" in out
     assert out.index("语义边界对账") < out.index("完工核验")
-
-
-def test_format_for_ceo_surfaces_team_notes_for_reconciliation():
-    # 合·对账 (docs/03-AI核心/编排器与CEO主Agent.md §收尾即验收「便签墙本身又是对账的现成输入」): the batch's
-    # outstanding ACTIVE notes (decisions / claims workers broadcast while working) are folded into
-    # the synthesis input as a checklist, and the 4b reconciliation step points the CEO at them.
-    t = tool(Provider([]))
-    wall = NoteWall()
-    wall.post(run_id="w1", agent_id="a1", role="后端", kind=NOTE_KIND_DECISION, text="接口 /login")
-    wall.post(run_id="w2", agent_id="a2", role="前端", kind=NOTE_KIND_CLAIM, text="登录页我来写")
-    t._note_wall = wall
-    plan = RunPlan(
-        nodes=[
-            RunSpec(run_id="w1", task="建登录接口", role="后端"),
-            RunSpec(run_id="w2", task="建登录页面", role="前端", depends_on=["w1"]),
-        ]
-    )
-    results = {
-        "w1": RunState(phase=RunPhase.COMPLETED, content="接口已完成"),
-        "w2": RunState(phase=RunPhase.COMPLETED, content="页面已完成"),
-    }
-    out = format_for_ceo(t, plan, results)
-    assert "队员过程中广播的【当前有效】" in out  # the synthesis notes-block header
-    assert "接口 /login" in out and "登录页我来写" in out
-    assert "便签" in out  # footer points at notes during seam reconcile
-    # the checklist precedes the per-worker products (read it before reconciling the bodies).
-    assert out.index("队员过程中广播的【当前有效】") < out.index("run_id: `w1`")
-
-
-def test_format_for_ceo_omits_team_notes_when_no_wall_or_empty():
-    # A CEO that never delegated (no wall) or a wall nobody posted to ⇒ no notes block (零行为变化).
-    t = tool(Provider([]))
-    plan = RunPlan(nodes=[RunSpec(run_id="w1", task="查资料", role="研究员")])
-    results = {"w1": RunState(phase=RunPhase.COMPLETED, content="一段综述")}
-    assert "队员过程中广播的【当前有效】" not in format_for_ceo(
-        t, plan, results
-    )  # default: no wall
-    t._note_wall = NoteWall()  # on a team but nothing posted / all retracted
-    assert "队员过程中广播的【当前有效】" not in format_for_ceo(t, plan, results)
+    assert "队员过程中广播的【当前有效】" not in out
+    assert "便签" not in out
 
 
 def test_format_for_ceo_surfaces_escalations_blockers_first():

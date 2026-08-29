@@ -57,7 +57,7 @@ describe("RunWorkflowDialog workspace list", () => {
     const err = await screen.findByText("工作区服务开小差");
     expect(err.className).toContain("text-muted-foreground");
     expect(err.className).not.toContain("destructive");
-    expect(screen.queryByText(/还没有可用工作区/)).toBeNull();
+    expect(screen.queryByText(/还没有可用的文件夹/)).toBeNull();
     expect(
       screen.getByRole("button", { name: "开跑" }).hasAttribute("disabled"),
     ).toBe(true);
@@ -96,7 +96,7 @@ describe("RunWorkflowDialog workspace list", () => {
     folders.mockResolvedValue([]);
     renderDialog();
 
-    expect(await screen.findByText(/还没有可用工作区/)).toBeTruthy();
+    expect(await screen.findByText(/还没有可用的文件夹/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
   });
 });

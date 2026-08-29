@@ -214,29 +214,31 @@ describe("workflow templates / from-playbook (§10.8)", () => {
 
   it("keeps optional slots optional and carries their allowed values", () => {
     const t = toWorkflowTemplate({
-      id: "build_app",
-      title: "从零搭应用",
-      summary: "脚手架→模块→联调",
-      primary_slots: "app（必填，应用简述）；intensity（可选，编制档）",
+      id: "cite_write_review",
+      title: "调研报告成文",
+      summary: "成文专线",
+      primary_slots: "topic（必填，调研主题）；checkpoint（可选，提纲关卡）",
       slots: [
-        { key: "app", label: "应用", required: true, hint: "应用简述" },
         {
-          key: "intensity",
-          label: "编制",
+          key: "topic",
+          label: "主题",
+          required: true,
+          hint: "调研 / 报告主题",
+        },
+        {
+          key: "checkpoint",
+          label: "提纲关卡",
           required: false,
-          hint: "不填按 lean",
+          hint: "不填按开",
           choices: [
-            { value: "lean", label: "瘦启动" },
-            { value: "standard", label: "标准" },
+            { value: "on", label: "开" },
+            { value: "off", label: "关" },
           ],
         },
       ],
     });
     expect(t.slots.map((s) => s.required)).toEqual([true, false]);
-    expect(t.slots[1]?.choices.map((c) => c.value)).toEqual([
-      "lean",
-      "standard",
-    ]);
+    expect(t.slots[1]?.choices.map((c) => c.value)).toEqual(["on", "off"]);
   });
 
   it("has no local slot replica: prose-only payload yields no slots", () => {
@@ -267,22 +269,22 @@ describe("workflow templates / from-playbook (§10.8)", () => {
         ],
       },
       {
-        id: "build_app",
-        title: "从零搭应用",
-        summary: "脚手架→模块→联调",
-        slots: [{ key: "app", label: "应用", required: true }],
+        id: "cite_write_review",
+        title: "调研报告成文",
+        summary: "成文专线",
+        slots: [{ key: "topic", label: "主题", required: true }],
       },
     ]);
     const list = await listWorkflowTemplates();
-    expect(list.map((t) => t.id)).toEqual(["map_fanout", "build_app"]);
+    expect(list.map((t) => t.id)).toEqual(["map_fanout", "cite_write_review"]);
     expect(list[0]?.slots.map((s) => s.key)).toEqual(["topic", "angles"]);
-    expect(list[1]?.slots.map((s) => s.key)).toEqual(["app"]);
+    expect(list[1]?.slots.map((s) => s.key)).toEqual(["topic"]);
   });
 
   it("createWorkflowFromPlaybook posts playbook + slots", async () => {
     apiPost.mockResolvedValueOnce({
       id: "wf-from-pb",
-      name: "我的应用",
+      name: "我的报告",
       description: null,
       definition: { nodes: [], edges: [] },
       version: 1,
@@ -290,15 +292,15 @@ describe("workflow templates / from-playbook (§10.8)", () => {
       updated_at: "2026-07-31T00:00:00Z",
     });
     const created = await createWorkflowFromPlaybook({
-      playbook: "build_app",
-      name: "我的应用",
-      slots: { app: "记账 SPA" },
+      playbook: "cite_write_review",
+      name: "我的报告",
+      slots: { topic: "AI 监管" },
     });
     expect(created.id).toBe("wf-from-pb");
     expect(apiPost).toHaveBeenCalledWith("/v1/workflows/from-playbook", {
-      playbook: "build_app",
-      name: "我的应用",
-      slots: { app: "记账 SPA" },
+      playbook: "cite_write_review",
+      name: "我的报告",
+      slots: { topic: "AI 监管" },
     });
   });
 

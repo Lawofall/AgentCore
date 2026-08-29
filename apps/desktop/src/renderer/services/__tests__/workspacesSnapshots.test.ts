@@ -18,6 +18,7 @@ import { api } from "@/services/api";
 import { authedFetch, saveBlob } from "@/services/workspaceHttp";
 import {
   wsCreateSnapshot,
+  wsDownloadArchive,
   wsExportZip,
   wsListSnapshots,
   wsListTrash,
@@ -132,6 +133,20 @@ describe("ws-id 版快照 / 软删区 / 导出", () => {
       "http://test/v1/workspaces/folder%3Af1/snapshots/snap-9/download",
     );
     expect(saveMock.mock.calls[0][1]).toBe("workspace-snap-9.zip");
+  });
+
+  it("文件树下载文件夹走 archive，不是 snapshots", async () => {
+    fetchMock.mockResolvedValue({
+      blob: async () => new Blob([new Uint8Array([1, 2])]),
+    } as unknown as Response);
+
+    await wsDownloadArchive("folder:f1", "docs/out", "out.zip");
+
+    expect(apiPost).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/v1/workspaces/folder%3Af1/archive/docs/out",
+    );
+    expect(saveMock.mock.calls[0][1]).toBe("out.zip");
   });
 
   it("列软删区：带出服务端的保留天数（文案要照实说）", async () => {

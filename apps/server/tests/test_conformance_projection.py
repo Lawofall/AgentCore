@@ -967,74 +967,11 @@ def test_multi_agent_ceo_arbitrate_escalate_via_user(projected):
     assert "用户确认" in esc["answer"]
 
 
-def test_multi_agent_team_notes_kinds(projected):
-    # 三类便签 kind (§2.2 通): decision 我定了 / heads_up 提个醒 / claim 我领了 (claim = WriteCoordinator
-    # 的台面化). Hand-verified so the oracle's kind passthrough can't silently drop / coerce the claim
-    # kind, and notes stay orthogonal to the run graph (post order, all active, not in runs/process).
-    p = projected["multi_agent_team_notes"]
-    assert p["status"] == "completed"
-    by_id = {n["noteId"]: n for n in p["teamNotes"]}
-    assert by_id["n1"]["kind"] == "decision"
-    assert by_id["n2"]["kind"] == "heads_up"
-    assert by_id["n3"]["kind"] == "claim"
-    assert by_id["n3"]["text"] == "示例文档这部分我来写，别人不用重复"
-    assert [n["noteId"] for n in p["teamNotes"]] == ["n1", "n2", "n3"]
-    assert all(n["status"] == "active" for n in p["teamNotes"])
-
-
-def test_multi_agent_team_notes_amended_supersession(projected):
-    # 便签会过期 → supersession (§2.2): an AMENDMENT note (carries `supersedes` + `supersede_mode`)
-    # marks its TARGET superseded (改写) / voided (作废), while staying active itself. Hand-verified
-    # here so the oracle's status-flip can't pass by matching a fold that makes the same mistake.
-    p = projected["multi_agent_team_notes_amended"]
-    assert p["status"] == "completed"
-    by_id = {n["noteId"]: n for n in p["teamNotes"]}
-    # n3 改写 n1 → n1 superseded; the amendment is active and points back at its origin.
-    assert by_id["n1"]["status"] == "superseded"
-    assert by_id["n1"]["supersedes"] is None
-    assert by_id["n3"]["status"] == "active"
-    assert by_id["n3"]["supersedes"] == "n1"
-    assert by_id["n3"]["text"] == "登录字段改用 pwd（替代 password）"
-    # n4 作废 n2 → n2 voided; the retraction note is active and links to its origin.
-    assert by_id["n2"]["status"] == "voided"
-    assert by_id["n4"]["status"] == "active"
-    assert by_id["n4"]["supersedes"] == "n2"
-    # All four notes are kept in post order (stale ones stay visible, just tagged).
-    assert [n["noteId"] for n in p["teamNotes"]] == ["n1", "n3", "n2", "n4"]
-
-
-def test_multi_agent_team_notes_ceo_seed_and_brief(projected):
-    # Phase 2 共享便签：CEO 播种便签带 source=ceo；worker run_context 含 team_brief 块。
-    p = projected["multi_agent_team_notes_ceo_seed"]
-    assert p["status"] == "completed"
-    by_id = {n["noteId"]: n for n in p["teamNotes"]}
-    assert by_id["n0"]["source"] == "ceo"
-    assert by_id["n0"]["role"] == "主协调"
-    assert by_id["n1"]["source"] == "ceo"
-    assert by_id["n2"]["kind"] == "heads_up"
-    assert "source" not in by_id["n2"] or by_id["n2"].get("source") != "ceo"
-    assert [n["noteId"] for n in p["teamNotes"]] == ["n0", "n1", "n2"]
-    brief_blocks = [
-        b
-        for r in p["runs"]
-        for b in (r.get("receivedContext") or [])
-        if b.get("channel") == "team_brief"
-    ]
-    assert len(brief_blocks) == 2
-    assert "初学者" in brief_blocks[0]["body"]
-
-
-def test_multi_agent_team_notes_empty_wall(projected):
-    p = projected["multi_agent_team_notes_empty_wall"]
-    assert p["status"] == "completed"
-    assert p["teamNotes"] == []
-    assert p.get("noteWall") is True
-
-
-def test_multi_agent_team_notes_kinds_carry_note_wall(projected):
-    p = projected["multi_agent_team_notes"]
-    assert p.get("noteWall") is True
-    assert p["teamNotes"]
+def test_projected_turns_omit_team_notes_and_note_wall(projected):
+    """便签墙已删：投影不再产出 teamNotes / noteWall（旧 journal 事件跳过）。"""
+    for name, p in projected.items():
+        assert "teamNotes" not in p, name
+        assert "noteWall" not in p, name
 
 
 def test_process_tool_result_cap_matches_sink():
@@ -1129,17 +1066,16 @@ def test_multi_agent_mlr_debate_acts(projected):
     assert by_id["debate_mod_act2"]["parentRunId"] == "c2"
 
 
-def test_single_agent_content_reset_finish_guard_leaves_rework_chip(projected):
-    """finish_guard 回炉：弃稿弹掉尾部 content 步 + 折出 rework chip（唯一留痕的 reason）。"""
+def test_single_agent_content_reset_finish_guard_clears_body_only(projected):
+    """finish_guard 结构回炉：弃稿弹掉尾部 content 步，不折过程痕迹（与 retry 同形）。"""
     p = projected["single_agent_content_reset"]
     assert p["content"] == "依据 [1] 可知……"
-    assert [s["kind"] for s in p["process"]] == ["reasoning", "tool", "rework", "content"]
+    assert [s["kind"] for s in p["process"]] == ["reasoning", "tool", "content"]
     assert p["process"][-1]["text"] == "依据 [1] 可知……"
 
 
 def test_single_agent_retry_reset_leaves_no_trace(projected):
-    """reason=retry（LLM 流式透明重试）：清正文照旧，但【不】折 rework chip——
-    基础设施重试不是「按交付规范重写」（误报根治）。"""
+    """reason=retry（LLM 流式透明重试）：清正文照旧，不折过程痕迹。"""
     p = projected["single_agent_retry_reset"]
     assert p["content"] == "答案：42。"
     assert p["process"] == [
@@ -1149,17 +1085,26 @@ def test_single_agent_retry_reset_leaves_no_trace(projected):
 
 
 def test_worker_deliverable_reset_narration_leaves_no_trace(projected):
-    """worker 旁白回滚（reason=narration）：清卡片草稿照旧，但节点时间线【无】rework 步。"""
+    """worker 旁白回滚（reason=narration）：清卡片草稿照旧，节点时间线无核验痕迹。"""
     p = projected["multi_agent_worker_deliverable_reset"]
     run = p["runs"][0]
-    assert "rework" not in [s["kind"] for s in run["process"]]
+    assert [s["kind"] for s in run["process"]] == [
+        "reasoning",
+        "content",
+        "tool",
+        "content",
+    ]
 
 
-def test_worker_output_reset_finish_guard_keeps_rework_chip(projected):
-    """worker finish_guard 回炉（统一底线）：节点时间线保留 rework 步。"""
+def test_worker_output_reset_finish_guard_clears_body_only(projected):
+    """worker finish_guard 结构回炉：节点时间线只清草稿、不折过程痕迹。"""
     p = projected["multi_agent_worker_output_reset"]
     run = p["runs"][0]
-    assert "rework" in [s["kind"] for s in run["process"]]
+    assert [s["kind"] for s in run["process"]] == [
+        "reasoning",
+        "content",
+    ]
+    assert run["process"][-1]["text"] == '修正后的产出：{"status":"ok"}'
 
 
 def test_resume_content_reset_reinject(projected):
@@ -1172,9 +1117,8 @@ def test_resume_content_reset_reinject(projected):
     assert p["interactions"][0]["kind"] == "plan_review"
     assert p["interactions"][0]["status"] == "resolved"
     kinds = [s["kind"] for s in p["process"]]
-    assert "rework" in kinds
-    assert kinds.index("plan_review") < kinds.index("rework")
-    # Trailing content after rework is reinject ⊕ rewrite (ordinary deltas).
+    assert kinds == ["content", "team", "plan_review", "content"]
+    # Trailing content after reset is reinject ⊕ rewrite (ordinary deltas).
     assert p["process"][-1] == {
         "kind": "content",
         "text": "阶段成果如下。\n\n重写后的交付正文。",
@@ -1247,7 +1191,7 @@ def test_carrier_means_consult_smartart_boundary(projected):
     cp = next(e for e in events if e.type == event_type.CHECKPOINT_REQUIRED)
     opts = cp.payload["questions"][0]["options"]
     labels = [o["label"] for o in opts]
-    assert any(o.get("recommended") for o in opts)
+    assert any("（推荐）" in o.get("label", "") for o in opts)
     assert any("HTML" in label for label in labels)
     assert any("Word" in label and "仍要" in label for label in labels)
     assert not any("SmartArt" in label and "已" in label for label in labels)
@@ -1295,7 +1239,7 @@ def test_carrier_means_consult_html_org_tree(projected):
     cp = next(e for e in events if e.type == event_type.CHECKPOINT_REQUIRED)
     opts = cp.payload["questions"][0]["options"]
     labels = [o["label"] for o in opts]
-    assert any(o.get("recommended") for o in opts)
+    assert any("（推荐）" in o.get("label", "") for o in opts)
     assert any("折叠" in label for label in labels)
     assert any("原样" in label and "HTML" in label for label in labels)
 
@@ -1428,7 +1372,7 @@ def test_multi_agent_same_turn_mlr_debate_single_execution(projected):
 # Vectors with no hand-verified assertion in any sentinel module. Ratchet: only down.
 # Raising it means a new vector shipped judged solely by "both folds agree with the
 # golden the oracle wrote" — legal, but it has to be an explicit line in the diff.
-_SENTINEL_UNCOVERED_BASELINE = 67
+_SENTINEL_UNCOVERED_BASELINE = 66
 
 
 def _sentinel_sources() -> str:

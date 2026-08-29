@@ -183,11 +183,8 @@ def _registry_with(base: ToolRegistry, *extra: Tool) -> ToolRegistry:
 def _registry_without(base: ToolRegistry, *names: str) -> ToolRegistry:
     """A per-worker registry = the team tools MINUS ``names`` (absent names ignored).
 
-    The inverse of :func:`_registry_with`: a NON-collaborative batch (``collaboration=
-    False`` — an adversarial / independent fan-out such as a debate, where 正方 vs 反方
-    are opponents rather than teammates) strips the 团队便签 tools (post/read/amend_note)
-    so even an UNRESTRICTED worker ("offer all team tools") is never handed a
-    collaboration channel. Returns a fresh registry; the shared ``base`` is never
+    Used when a node withholds a tool family (e.g. retrieval_budget==0 strips
+    web_search / read_url). Returns a fresh registry; the shared ``base`` is never
     mutated."""
     drop = set(names)
     registry = ToolRegistry()

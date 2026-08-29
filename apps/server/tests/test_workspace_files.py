@@ -5,21 +5,33 @@ End-to-end over the cloud-mode backend: resolves a conversation's workspace via
 to ``tmp_path`` so nothing touches the real ./data tree.
 """
 
+import io
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from agentcore.config import settings
 from agentcore.core.errors import PayloadTooLargeError, ValidationError
+from agentcore.storage._archive import ArchiveLimitError
 from agentcore.workspace.files import (
+    archive_filename,
     download_file,
     list_files,
+    raise_http_for_archive_limit,
     raise_http_for_download_io,
     resolve_download_file,
     upload_file,
+    zip_subtree_for_download,
 )
 from agentcore.workspace.limits import FILE_TOO_LARGE_DETAIL, WORKSPACE_READ_MAX_BYTES
-from agentcore.workspace.protocol import NotAFile, OutsideWorkspace, PathNotFound, WorkspaceIOError
+from agentcore.workspace.protocol import (
+    NotADirectory,
+    NotAFile,
+    OutsideWorkspace,
+    PathNotFound,
+    WorkspaceIOError,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -148,6 +160,94 @@ async def test_download_directory_raises_not_a_file():
     )
     with pytest.raises(NotAFile):
         await download_file(user_id="u1", folder_id="f1", folder_rel_path="f1", conversation_id="c1", path="d")
+
+
+def _zip_names(data: bytes) -> set[str]:
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        return set(zf.namelist())
+
+
+async def test_zip_subtree_uses_selected_dir_as_root():
+    await upload_file(
+        user_id="u1",
+        folder_id="f1",
+        folder_rel_path="f1",
+        conversation_id="c1",
+        path="pack/a.txt",
+        data=b"A",
+    )
+    await upload_file(
+        user_id="u1",
+        folder_id="f1",
+        folder_rel_path="f1",
+        conversation_id="c1",
+        path="pack/sub/b.txt",
+        data=b"B",
+    )
+    await upload_file(
+        user_id="u1",
+        folder_id="f1",
+        folder_rel_path="f1",
+        conversation_id="c1",
+        path="sibling.txt",
+        data=b"S",
+    )
+    data = await zip_subtree_for_download(
+        user_id="u1", folder_id="f1", folder_rel_path="f1", conversation_id="c1", path="pack"
+    )
+    names = _zip_names(data)
+    assert names == {"a.txt", "sub/b.txt"}
+    assert "sibling.txt" not in names
+    assert "pack/a.txt" not in names
+
+
+async def test_zip_subtree_file_raises_not_a_directory():
+    await upload_file(
+        user_id="u1", folder_id="f1", folder_rel_path="f1", conversation_id="c1", path="only.txt", data=b"x"
+    )
+    with pytest.raises(NotADirectory):
+        await zip_subtree_for_download(
+            user_id="u1", folder_id="f1", folder_rel_path="f1", conversation_id="c1", path="only.txt"
+        )
+
+
+async def test_zip_subtree_missing_raises():
+    with pytest.raises(PathNotFound):
+        await zip_subtree_for_download(
+            user_id="u1", folder_id="f1", folder_rel_path="f1", conversation_id="c1", path="ghost"
+        )
+
+
+async def test_zip_subtree_rejects_over_upload_ceiling(monkeypatch):
+    monkeypatch.setattr(settings, "workspace_upload_max_bytes", 64)
+    await upload_file(
+        user_id="u1",
+        folder_id="f1",
+        folder_rel_path="f1",
+        conversation_id="c1",
+        path="d/huge.bin",
+        data=b"H" * 65,
+    )
+    with pytest.raises(ArchiveLimitError):
+        await zip_subtree_for_download(
+            user_id="u1", folder_id="f1", folder_rel_path="f1", conversation_id="c1", path="d"
+        )
+
+
+def test_raise_http_for_archive_limit_maps_to_413():
+    with pytest.raises(PayloadTooLargeError) as ei:
+        raise_http_for_archive_limit(
+            ArchiveLimitError(reason="max_bytes", file_count=1, total_bytes=99)
+        )
+    assert ei.value.status_code == 413
+    assert str(settings.workspace_upload_max_bytes) in ei.value.message
+    assert "文件夹" in ei.value.message
+
+
+def test_archive_filename_uses_dir_name():
+    assert archive_filename("docs") == "docs.zip"
+    assert archive_filename("a/b/notes") == "notes.zip"
+    assert archive_filename(".") == "folder.zip"
 
 
 async def test_upload_traversal_is_blocked():

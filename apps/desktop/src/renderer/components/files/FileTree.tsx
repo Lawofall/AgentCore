@@ -746,7 +746,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
       </div>
     );
 
-    // 多选（≥2 项）才把行菜单换成批量菜单；源既不能改、也没有可下载的文件时不挂（空菜单）。
+    // 多选（≥2 项）才把行菜单换成批量菜单；源既不能改、也没有可下载项时不挂（空菜单）。
     const canDownloadBatch = source.caps.transfer && !!source.download;
     const multiSelected = batch.count >= 2;
     const batchMenu =

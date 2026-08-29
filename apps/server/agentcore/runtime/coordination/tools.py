@@ -9,6 +9,7 @@ from typing import Any
 from agentcore.core.logging import get_logger
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.coordination.session import resolve_coordination_session
+from agentcore.runtime.coordination.vacate import vacate_never_started_seat
 from agentcore.runtime.events import team_synthesis_preview
 from agentcore.runtime.interaction import default_interaction_registry
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
@@ -224,32 +225,7 @@ class UpdateSynthesisTool:
                 output="",
                 error="update_synthesis 需要非空的 draft。",
             )
-        # 合成预览用户可见：非法 #rN 先剥（与 settle / handoff 收口同口径；非意图分类）。
-        try:
-            from agentcore.runtime.citations import (
-                invalid_ledger_ref_ids,
-                strip_invalid_ledger_refs,
-            )
-            from agentcore.runtime.suspension import turn_evidence_ledger
-
-            led = turn_evidence_ledger.get()
-            if led is not None:
-                citable = led.draft_citable_ids()
-                bad = invalid_ledger_ref_ids(draft, citable)
-                if bad:
-                    draft = strip_invalid_ledger_refs(draft, set(bad))
-                    logger.warning(
-                        "citations.invalid_ledger_ref",
-                        markers=bad,
-                        surface="update_synthesis",
-                        citable_count=len(citable or ()),
-                    )
-        except Exception:
-            logger.warning(
-                "citations.ledger_lookup_failed",
-                surface="update_synthesis",
-                exc_info=True,
-            )
+        # 合成预览跟对话成稿同一口径：已登记号（含 search-only）保留；不剥正文。
         session.update_draft(draft)
         done = len(session.completed_run_ids)
         total = session.total_workers
@@ -325,14 +301,6 @@ class CancelWorkerTool:
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         session = _session_for_control(context)
-        if session is None or not session.active:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error="当前不在协调模式——仅在协调模式启动团队后可用（≥1 worker 默认；"
-                "显式 coordinate=false 为阻塞路径）。",
-            )
         raw = str(arguments.get("run_id") or "").strip()
         if not raw:
             return ToolResult(
@@ -342,6 +310,20 @@ class CancelWorkerTool:
                 error="cancel_worker 需要非空的 run_id。",
             )
         reason = str(arguments.get("reason") or "").strip()
+
+        if session is None or not session.active:
+            vacated = vacate_never_started_seat(
+                session, context, raw=raw, reason=reason
+            )
+            if vacated is not None:
+                return vacated
+            return ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error="当前不在协调模式——仅在协调模式启动团队后可用（≥1 worker 默认；"
+                "显式 coordinate=false 为阻塞路径）。",
+            )
 
         # Resolve the CEO-supplied name (often a role / short name) to a live
         # worker's full run_id — the scheduler cancels by exact run_id, so an

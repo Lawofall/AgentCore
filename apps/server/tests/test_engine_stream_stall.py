@@ -144,7 +144,7 @@ async def test_uncommitted_stall_retries_then_raises(monkeypatch):
     assert provider.calls == MAX_RETRIES
     # First attempt emits reasoning; each retry resets live view then re-emits.
     assert seen == ["…"] * MAX_RETRIES
-    # Stream-layer resets carry reason=retry — the fold must NOT leave a rework chip.
+    # Stream-layer resets carry reason=retry — fold only clears the draft.
     assert resets == ["retry"] * (MAX_RETRIES - 1)
 
 

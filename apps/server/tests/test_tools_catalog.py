@@ -35,6 +35,7 @@ _EXPECTED_NAMES = {
     "md_to_docx",
     "md_to_pdf",
     "archive_extract",
+    "archive_create",
     "grep",
     "code_search",
     "code_diagnostics",
@@ -73,6 +74,7 @@ _DELEGATED_MUTATION_NAMES = {
     "md_to_docx",
     "md_to_pdf",
     "archive_extract",
+    "archive_create",
     "download_url",
     "code_execute",
 }
@@ -90,16 +92,11 @@ def test_registry_excludes_ceo_only_delegate():
 
 # Worker-only orchestration primitives: present in the worker toolset, but NOT in the
 # builtin catalog (GET /tools) nor the CEO's own toolset. `escalate` is the upward
-# channel (worker → CEO); `post_note` / `read_notes` / `amend_note` are the sideways
-# broadcast / read / 改写·作废 channels to 并行队友 (worker ↔ 团队便签墙, §2.2 通 + §2.4
-# 变·worker 的「拉」); `handoff` is the terminal 完工交接简报 submission (结论 / 关键要点 /
+# channel (worker → CEO); `handoff` is the terminal 完工交接简报 submission (结论 / 关键要点 /
 # 关键假设 / 建议下一步, read off the call args — never parsed out of prose). All stay
 # where they belong instead of leaking platform-wide.
 _WORKER_ONLY_NAMES = {
     "escalate",
-    "post_note",
-    "read_notes",
-    "amend_note",
     "handoff",
     "desktop_notify",
 }
@@ -134,6 +131,7 @@ def test_write_and_exec_tools_are_grantable():
     assert approvals["md_to_docx"] is ToolApproval.GRANTABLE
     assert approvals["md_to_pdf"] is ToolApproval.GRANTABLE
     assert approvals["archive_extract"] is ToolApproval.GRANTABLE
+    assert approvals["archive_create"] is ToolApproval.GRANTABLE
     # Read-only tools auto-run (no approval prompt).
     assert approvals["file_read"] is ToolApproval.NEVER
     assert approvals["file_list"] is ToolApproval.NEVER
@@ -159,6 +157,7 @@ def test_file_mutation_class_is_grantable_filesystem_without_code_execute():
         "md_to_docx",
         "md_to_pdf",
         "archive_extract",
+        "archive_create",
         "download_url",
     }
     assert "code_execute" not in names
@@ -187,11 +186,8 @@ def test_code_execute_description_routes_source_dump_to_file_read():
 
     ce = code_execute_description("local")
     assert "file_read" in ce
-    assert "dump" in ce
-    assert "禁止" in ce
     assert "grep" in ce
-    assert "正则扫描" in ce
-    # Positive path lives on file_read so the skipped tool still names itself.
+    # dump 纠偏在 source_inspect 回执；file_read 留一句短触发
     fr = FileReadTool().schema.description
     assert "code_execute" in fr
     assert "dump" in fr
@@ -203,7 +199,6 @@ def test_code_execute_description_routes_long_running_to_terminal():
     from agentcore.tools.builtin.terminal import TerminalTool
 
     ce = code_execute_description("local")
-    assert "禁止" in ce
     assert "terminal" in ce
     assert "npm run dev" in ce
     # Bounded verify is the home for slow project checks — not code_execute.
@@ -258,7 +253,7 @@ def test_read_url_description_does_not_overclaim_completeness():
     desc = schemas["read_url"].description
     assert "max_chars" in desc  # truncation is disclosed
     assert "完整正文" not in desc  # no blanket "complete body" claim
-    # 挂号纪律在基座 delivery_baseline，schema 不复述 #rN。
+    # 挂号纪律在基座 delivery_honesty，schema 不复述 #rN。
     assert "#rN" not in desc
     assert "深读" in desc
     assert "search" in desc

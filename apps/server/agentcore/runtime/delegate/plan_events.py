@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from agentcore.runtime.delegate.seed_notes import is_note_wall_batch
 from agentcore.runtime.events import run_context, run_plan
 
 if TYPE_CHECKING:
@@ -84,8 +83,6 @@ def plan_event(
     if tool._depth == 0 and tool._captain_run_id:
         agents.insert(0, captain_card(tool._captain_run_id))
         runs.insert(0, captain_run(tool._captain_run_id))
-    coordination = getattr(tool, "_coordination", None) or "none"
-    wall = is_note_wall_batch(len(plan.nodes), coordination)
     return run_plan(
         execution_id=execution_id,
         plan_type="multi_agent",
@@ -94,7 +91,6 @@ def plan_event(
         runs=runs,
         prev_execution_id=prev_execution_id,
         act={"act_id": act_id, "kind": "multi_agent"},
-        note_wall=True if wall else None,
     )
 
 

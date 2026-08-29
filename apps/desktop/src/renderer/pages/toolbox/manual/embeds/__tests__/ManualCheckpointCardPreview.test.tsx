@@ -20,7 +20,7 @@ describe("ManualCheckpointCardPreview", () => {
     expect(screen.getByText("需要你拍板")).toBeTruthy();
     expect(screen.queryByText(/试点范围定多大？/)).toBeNull();
     expect(screen.getByText("第一批放行范围")).toBeTruthy();
-    expect(screen.getByText("先做一个试点")).toBeTruthy();
+    expect(screen.getByText("先做一个试点（推荐）")).toBeTruthy();
     expect(screen.getByText("提交")).toBeTruthy();
     expect(screen.getByText("取消")).toBeTruthy();
   });

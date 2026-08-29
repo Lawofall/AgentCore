@@ -10,6 +10,7 @@ Tools stay registered (catalog / execute / skill gates / capability lines); only
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 
 # ---------------------------------------------------------------------------
@@ -20,7 +21,7 @@ from collections.abc import Sequence
 #
 # Defer = optional capability face (consult first is an extra round, not a
 # missing channel). Do NOT defer a mode primitive the runtime already
-# always-grants when assembled: 便签墙三件套 (collab batch), escalate/handoff
+# always-grants when assembled: escalate/handoff
 # (already resident). If registered ⇔ the mode is on, opening offer must include it.
 # ---------------------------------------------------------------------------
 
@@ -38,6 +39,7 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
         "md_to_docx",
         "md_to_pdf",
         "archive_extract",
+        "archive_create",
         "download_url",
         # Site HTML SECTION inject (not the daily write loop; MD uses str_replace).
         "write_section",
@@ -60,6 +62,7 @@ ON_DEMAND_SUMMARIES: dict[str, str] = {
     "md_to_docx": "工作区 .md 导出为同名 .docx",
     "md_to_pdf": "工作区 .md 导出为同名 .pdf",
     "archive_extract": "工作区 zip 解压到指定目录",
+    "archive_create": "工作区文件/目录打成 zip",
     "download_url": "HTTP(S) URL 落盘到工作区相对路径",
     "write_section": "建站 HTML 分区注入",
     "search_conversations": "检索用户历史对话目录",
@@ -73,7 +76,19 @@ ON_DEMAND_SUMMARIES: dict[str, str] = {
 _FAMILIES: tuple[frozenset[str], ...] = (
     frozenset({"search_conversations", "read_conversation"}),
     frozenset({"md_to_docx", "md_to_pdf"}),
+    frozenset({"archive_extract", "archive_create"}),
     frozenset({"create_folder", "delete_folder"}),
+)
+
+_FAMILY_LABELS: dict[frozenset[str], str] = {
+    frozenset({"search_conversations", "read_conversation"}): "历史对话",
+    frozenset({"md_to_docx", "md_to_pdf"}): "导出 Word/PDF",
+    frozenset({"archive_extract", "archive_create"}): "压缩包",
+    frozenset({"create_folder", "delete_folder"}): "文件夹增删",
+}
+
+_CONSULT_TOOL_NAMES = frozenset(
+    {"consult", "consult_memory", "consult_skill", "consult_rule"}
 )
 
 
@@ -112,6 +127,114 @@ def family_of(name: str, *, registry: object | None = None) -> frozenset[str]:
                 if siblings:
                     return frozenset(siblings)
     return frozenset({name})
+
+
+def family_catalog_meta(name: str) -> tuple[str, str]:
+    """Catalog group key + label for builtin families. Empty when the tool is solo."""
+    for family in _FAMILIES:
+        if name in family:
+            return "+".join(sorted(family)), _FAMILY_LABELS.get(family, "")
+    return "", ""
+
+
+def resolve_on_demand_name(registry: object | None, name: str) -> str | None:
+    """Map a catalog / consult name onto a registered on-demand tool.
+
+    Accepts an exact tool name, or an MCP Server id / display name (consult the
+    Server → offer the whole assembled family).
+    """
+    key = (name or "").strip()
+    if not key or registry is None:
+        return None
+    get = getattr(registry, "get_optional", None)
+    names = getattr(registry, "names", None)
+    if get is not None and callable(get) and get(key) is not None:
+        return key
+    if not callable(get) or names is None:
+        return None
+    needle = key.lower()
+    for candidate in names:
+        if not is_mcp_tool_name(candidate):
+            continue
+        tool = get(candidate)
+        if tool is None:
+            continue
+        sid = str(getattr(tool, "mcp_server_id", "") or "").strip().lower()
+        sname = str(getattr(tool, "mcp_server_name", "") or "").strip().lower()
+        if needle in (sid, sname):
+            return candidate
+    return None
+
+
+def offer_tools_from_window(registry: object, messages: Sequence[object]) -> int:
+    """Re-offer on-demand tools already used or consulted in this conversation window.
+
+    Same-turn resume and the next user message both rebuild the deferred set;
+    without this, a tool already enabled in the bubble is missing from the table.
+    Returns how many ``offer`` calls changed the deferred set.
+    """
+    offer = getattr(registry, "offer", None)
+    if not callable(offer):
+        return 0
+    recalled: list[str] = []
+    seen: set[str] = set()
+    for message in messages or ():
+        for fname, arguments in _tool_calls_from_message(message):
+            raw = fname.strip()
+            if raw in _CONSULT_TOOL_NAMES:
+                raw = _consult_name_arg(arguments)
+            if not raw or raw in seen:
+                continue
+            seen.add(raw)
+            recalled.append(raw)
+    changed = 0
+    for name in recalled:
+        target = resolve_on_demand_name(registry, name)
+        if target and offer(target):
+            changed += 1
+    return changed
+
+
+def _tool_calls_from_message(message: object) -> list[tuple[str, str]]:
+    if message is None:
+        return []
+    role = getattr(message, "role", None)
+    if role is None and isinstance(message, dict):
+        role = message.get("role")
+        tcs = message.get("tool_calls") or []
+    else:
+        if role != "assistant":
+            return []
+        tcs = getattr(message, "tool_calls", None) or []
+    if role != "assistant":
+        return []
+    out: list[tuple[str, str]] = []
+    for tc in tcs:
+        fn = getattr(tc, "function", None)
+        if fn is not None:
+            out.append(
+                (str(getattr(fn, "name", "") or ""), str(getattr(fn, "arguments", "") or ""))
+            )
+            continue
+        if isinstance(tc, dict):
+            nested = tc.get("function")
+            if isinstance(nested, dict):
+                out.append(
+                    (str(nested.get("name") or ""), str(nested.get("arguments") or ""))
+                )
+            else:
+                out.append((str(tc.get("name") or ""), str(tc.get("arguments") or "")))
+    return out
+
+
+def _consult_name_arg(arguments: str) -> str:
+    try:
+        data = json.loads(arguments or "")
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return ""
+    if isinstance(data, dict):
+        return str(data.get("name") or "").strip()
+    return ""
 
 
 def on_demand_summary(name: str, *, description: str = "") -> str:

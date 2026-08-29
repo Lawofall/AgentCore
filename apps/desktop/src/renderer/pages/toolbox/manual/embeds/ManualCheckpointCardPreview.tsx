@@ -22,9 +22,8 @@ const DEMO_ASK: AskUserContent = {
       default: "single",
       options: [
         {
-          label: "先做一个试点",
+          label: "先做一个试点（推荐）",
           detail: "风险最低，两周可复盘",
-          recommended: true,
         },
         {
           label: "同业务线 3 个试点",

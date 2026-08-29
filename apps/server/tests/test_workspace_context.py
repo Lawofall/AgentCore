@@ -210,7 +210,8 @@ def test_cloud_scratch_facts():
     delivery = _TEAM_DELIVERY_ENV
     assert "【空桌落盘】" not in hint
     assert "工程壳" in delivery
-    assert "要不要再套一层" in delivery
+    assert "同名" in delivery and ("顶层" in delivery or "再套" in delivery)
+    assert "要不要再套一层" not in delivery
     cross = _TEAM_CROSS_FOLDER
     assert "list_folders" in cross and "resolve_folder" in cross
     assert "按路径" in cross and "rel_path" in cross
@@ -237,18 +238,12 @@ def test_cloud_scratch_facts():
     assert "选择器兜底" not in out
     assert "口头同意闭环" not in out
     assert "失败分型" not in out
-    # 口头同意闭环 + 歧义 2～3 候选 + 失败分型 + 授权后发现：各一份，归 consult 手册——
-    # 这套 HOW 只有桌面回填通道在线才履行得了；事实块自己不抄。
+    # 口头同意 / 只读≠整理 / 授权后先写工作区：归 consult 手册；事实块自己不抄。
     granted = capability_how_suffix({"external_mount_readonly"})
-    assert granted.count("【口头同意闭环】") == 1
-    assert "等待确认" in granted
-    assert "2～3" in granted
-    assert granted.count("【失败分型】") == 1
-    assert "没找着" in granted
+    assert granted.count("口头同意") == 1
+    assert "只读已挂" in granted
     assert "grant_readonly_folder" not in granted
-    assert granted.count("【授权后发现】") == 1
     assert "well_known" in granted
-    assert "首轮文本题要文件名/绝对路径" in granted
     assert "先写工作区" in granted and "file_copy" in granted
     assert "well_known" not in out
     assert "在哪工作" not in out
@@ -309,18 +304,19 @@ def test_cloud_scratch_facts():
     assert "三分日志" not in out
     assert "【三分日志】" not in hint
     host_how = capability_how_suffix({"host"})
-    assert host_how.count("【三分日志】") == 1
+    assert host_how.count("三分日志") == 1
     assert "host(action=os_log)" in host_how
+    assert "Get-WinEvent" in host_how
     assert "host_os_log_summary" not in hint
     # 案 20260803-image-gen-byok-egress-boundary A：云沙箱无任意 HTTPS 出口事实行
     assert "出站网络" in out
     assert "包装源" in out or "allowlist" in out
     assert "无任意 HTTPS" in out
     assert "无原生生图工具" in out
-    # 「禁代调出图」归核；「Key 不落明文」归共享基座，事实层都不写
+    # 出图对照事实行；Key 不落明文归共享基座
     assert "代调" not in out
     assert "API Key" not in out and "明文" not in out
-    assert "代调" in hint and "生图" in hint
+    assert "出站网络" in hint
     # 旧「云端临时空间」短标签已换成诚实草稿口径
     assert "工作区身份：云端临时空间" not in out
     # 约定文档布局（始终可见）：四行出口 + 边界
@@ -454,17 +450,14 @@ def test_browser_capability_override():
     assert "ask_user(browser_login=true)" not in out
     assert "browser_open" not in out
     hint = _CEO_CORE_HINT
-    assert "consult(browser)" in hint
-    assert "验收" in hint and "截图" in hint
+    assert "consult(browser)" not in hint
+    assert "验收" not in hint
     how = capability_how_suffix({"browser"})
-    assert "无 browser_open，禁编造未列出的工具名" in how
     assert "ask_user(browser_login=true)" in how
     assert "escalate(browser_login=true)" not in how
-    assert "接管" in how
-    assert "**你自己**" in how
-    assert "只用 `read_url` / `web_search` 交差冒充已开页" in how
-    assert "navigate 成功或短操作完成即可" in how
-    assert "「跑起来 / 打开看一下」≠本条" in how
+    assert "自己" in how
+    assert "read_url" in how and "已开页" in how
+    assert "跑起来" in how
 
 
 def test_local_browser_guide_mentions_workspace_relative_path():
@@ -480,9 +473,9 @@ def test_local_browser_guide_mentions_workspace_relative_path():
     assert "site/index.html" in out or "相对" in out
     assert "完整预览" in out or "workspace://" in out
     assert "file://" in out  # 明示不支持
-    # 「异常先取 JS 错误」是 HOW，随 browser consult 注入；事实层不列 action
+    # 「页异常先 console」已出 consult 场面剧本；事实层不列 action
     assert "console" not in out
-    assert "browser(action=console)" in capability_how_suffix({"browser"})
+    assert "ask_user(browser_login=true)" in capability_how_suffix({"browser"})
 
 
 def test_bridge_session_sandbox_browser_guide_no_relative_html(monkeypatch):
@@ -527,25 +520,26 @@ def test_browser_unassembled_guide_mentions_bind_or_gvisor():
     assert "bind_local_folder" in mid or "open_local_project" in mid
     # 禁误导：未装配时勿暗示「本机未装就可随手启用云端沙箱」旧句
     assert "或启用云端沙箱浏览器" not in out
-    # 缺能力怎么办只写一遍：共享基座【能力未装配·统一姿势】管所有能力，事实层不逐条复述
+    # 缺能力怎么办只写一遍：共享基座 <capability_honesty> 管所有能力，事实层不逐条复述
     assert "同轮可开工" not in out
     hint = _CEO_CORE_HINT
     base = _DEFAULT_SYSTEM_PROMPT
-    assert base.count("【能力未装配·统一姿势】") == 1
+    assert base.count("<capability_honesty>") == 1
     assert "【能力未装配·统一姿势】" not in hint
-    assert "假开页" in hint
-    assert "consult(browser)" in hint
+    assert "假开页" not in hint
+    assert "consult(browser)" not in hint
     assert "ask_user(browser_login=true)" not in hint  # 登录接管随 browser 装配注入
     how = capability_how_suffix({"browser"})
     assert "ask_user(browser_login=true)" in how
     assert "escalate(browser_login=true)" not in how
-    assert "已登录，继续" in how
-    assert "Cookie" in how  # 明确否决扫 Cookie 冒充路径
-    assert "非右坞浏览器" in base
-    assert "同轮可开工" in base
-    assert "手脑" in base
-    assert "一等" in base or "非补救" in base
-    assert "多轮复读" in base
+    assert "永不代填密码" in how
+    from agentcore.tools.builtin.browser import BrowserTool
+
+    assert "非右坞" in BrowserTool().schema.description
+    assert "非右坞" not in base
+    assert "同轮可开工" not in base
+    assert "手脑" not in base
+    assert "多轮复读" not in base
     assert "补救，但不是" not in hint
     assert "不是接管流程" not in hint
 
@@ -583,12 +577,10 @@ def test_host_mcp_unassembled_states_facts_and_defers_posture_to_core():
     assert "同轮可开工" not in out
     hint = _CEO_CORE_HINT
     base = _DEFAULT_SYSTEM_PROMPT
-    assert "browser / host / mcp / terminal" in base  # 统一姿势覆盖各能力
-    assert "同轮可开工" in base
-    assert "手脑" in base
-    assert "多轮复读" in base
-    assert "不得声称本回合已经用过" in base  # 未装配禁称已用
-    assert "把该能力的动作写进给队员的任务" in hint  # 未装配禁派空跑
+    assert "<capability_honesty>" in base
+    assert "不得声称" in base
+    assert "已装配" in base and "通道在" in base
+    assert "未装配能力" in hint  # 未装配禁派空跑
 
 
 def test_mcp_assembled_states_channel_not_who_holds():
@@ -723,7 +715,8 @@ def test_cloud_desktop_online_allows_external_grant_without_bind():
     # 怎么定位目录（禁手填绝对路径 / 禁探家目录 / 只读禁再发卡）归 consult——桌面在线这一回合
     # `external_mount_readonly` 已装配，HOW 在 consult 正文；事实块自己不抄。
     granted = capability_how_suffix({"external_mount_readonly"})
-    assert "手填绝对路径" in granted and "探主机家目录" in granted
+    assert "探家目录" in granted
+    assert "host(action=shell)" in granted
     assert "grant_readonly_folder" not in granted
     assert "grant_readonly_folder" not in out
 
@@ -886,7 +879,7 @@ def test_no_execution_states_table_structure_facts():
     assert "列名" in off
     assert "自产表格可回读" in off
     assert "不可靠" not in off
-    assert "手抄" not in off  # HOW 归 worker identity，事实层不写禁令
+    assert "手抄" not in off  # HOW 归 data_file_landing，事实层不写禁令
 
     on = build_workspace_context(
         _FakeBackend("server"),
@@ -1006,7 +999,7 @@ def test_no_exec_engineering_keeps_local_remediation():
     assert "export_to_local" not in fact
     assert "本机传统" not in fact
     assert "bind_local" not in out
-    assert "export_to_local" in _CEO_CORE_HINT
+    assert "export_to_local" not in _CEO_CORE_HINT
     assert "export_to_local" in _TEAM_DELIVERY_ENV
 
 

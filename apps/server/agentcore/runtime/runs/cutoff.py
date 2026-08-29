@@ -59,8 +59,6 @@ DEFAULT_TOKEN_WIND_DOWN_RESERVE = 30_000
 # md_to_docx / md_to_pdf：把已成篇 .md 确定性导出为同目录同名交付件——用户要
 # PDF / Word / 可分享文件时的成文主路径末步（见 research_quality.MD_EXPORT_DISCIPLINE），
 # 属收口落盘而非新战线：不检索、不出网、回执只有一行 manifest。
-# 便签三件套亦不在基础集：仅 collaboration/wall（工具面已授 post_note）经
-# :func:`wind_down_allowed_tools` 叠加——收尾可贴/读/改便签，仍禁检索/外网。
 WIND_DOWN_ALLOWED_TOOLS = frozenset(
     {
         "handoff",
@@ -81,22 +79,11 @@ WIND_DOWN_ALLOWED_TOOLS = frozenset(
 
 WIND_DOWN_FILE_READ = "file_read"
 
-# collaboration=wall 时收窄后仍保留的便签三件套（非协作工具面无此三件 → 不会出现）。
-WIND_DOWN_NOTE_TOOLS = frozenset({"post_note", "read_notes", "amend_note"})
 
-
-def _notes_surface_clause(*, keep_notes: bool) -> str:
-    """Brief allowlist mention when collaboration notes stay on the wind-down surface."""
-    if not keep_notes:
-        return ""
-    return "、便签（可贴/读/改 post_note/read_notes/amend_note）"
-
-
-def wind_down_instruction_token(*, keep_notes: bool = False) -> str:
-    notes = _notes_surface_clause(keep_notes=keep_notes)
+def wind_down_instruction_token() -> str:
     return (
         "[系统提示] 累计 token 已接近预算硬顶。本轮起进入收尾窗口：仅允许落盘"
-        f"（file_write / str_replace / file_append 等）、内环 code_diagnostics{notes} 与 handoff；"
+        "（file_write / str_replace / file_append 等）、内环 code_diagnostics 与 handoff；"
         "交付类可 file_read 回读已写文件核对契约。"
         "长文/成篇：若正在按章写作，请停在完整章边界落盘并 handoff——"
         "标明已完成章节与待续章节；禁止章中部硬截、禁止删稿重写。"
@@ -104,34 +91,32 @@ def wind_down_instruction_token(*, keep_notes: bool = False) -> str:
     )
 
 
-def wind_down_instruction_timeout(*, keep_notes: bool = False) -> str:
-    notes = _notes_surface_clause(keep_notes=keep_notes)
+def wind_down_instruction_timeout() -> str:
     return (
         "[系统提示] 墙钟已触及超时阈值。本轮为宽限交卷轮：仅允许落盘、内环诊断"
-        f"{notes}与 handoff"
+        "与 handoff"
         "（交付类可 file_read 回读已写文件）；请立即提交合格 handoff。"
         "宽限结束后将强制取消本队员，禁止继续调查或开新战线。"
     )
 
 
-def wind_down_breach_nudge(*, keep_landing: bool = False, keep_notes: bool = False) -> str:
-    """Post-breach steer. Notes only mentioned when keep_landing keeps the write surface."""
+def wind_down_breach_nudge(*, keep_landing: bool = False) -> str:
+    """Post-breach steer."""
     if not keep_landing:
         return (
             "[系统提示] 收尾窗口违约：你调用了非落盘/诊断/handoff 工具。"
             "工具面已收缩为仅 handoff。请立刻用已有产出调用 handoff 提交交接简报；"
             "禁止再调查、读文件或开新战线。再次违约将本地合成交付并强制收口。"
         )
-    notes = _notes_surface_clause(keep_notes=keep_notes)
     return (
         "[系统提示] 收尾窗口违约：你调用了检索/外网类工具。"
-        f"工具面已禁止继续调查，但仍保留落盘、内环诊断{notes}与 handoff（本 run 仍负有落盘义务）。"
+        "工具面已禁止继续调查，但仍保留落盘、内环诊断与 handoff（本 run 仍负有落盘义务）。"
         "请立刻把已有产出落盘并调用 handoff；禁止再检索或开新战线。"
         "再次违约将本地合成交付并强制收口。"
     )
 
 
-# Backward-compat aliases (non-collaboration / no-notes wording).
+# Backward-compat aliases.
 WIND_DOWN_INSTRUCTION_TOKEN = wind_down_instruction_token()
 WIND_DOWN_INSTRUCTION_TIMEOUT = wind_down_instruction_timeout()
 WIND_DOWN_BREACH_NUDGE = wind_down_breach_nudge()
@@ -179,32 +164,11 @@ def worker_keeps_file_read_in_wind_down(
     return "file_write" in allowed and WIND_DOWN_FILE_READ in allowed
 
 
-def worker_keeps_notes_in_wind_down(
-    *,
-    available: set[str],
-    allowed: list[str] | None,
-) -> bool:
-    """True when collaboration note tools are on the live surface (wall / env.collaboration).
-
-    ``post_note`` is the grant sentinel — executor hands the trio together when
-    ``env.collaboration`` is true; non-collab surfaces never register it.
-    """
-    if "post_note" not in available:
-        return False
-    if allowed is None:
-        return True
-    return "post_note" in allowed
-
-
-def wind_down_allowed_tools(
-    *, keep_file_read: bool = False, keep_notes: bool = False
-) -> frozenset[str]:
-    """Effective wind-down whitelist (optional file_read / collaboration notes)."""
+def wind_down_allowed_tools(*, keep_file_read: bool = False) -> frozenset[str]:
+    """Effective wind-down whitelist (optional file_read)."""
     base: frozenset[str] = WIND_DOWN_ALLOWED_TOOLS
     if keep_file_read:
         base = base | {WIND_DOWN_FILE_READ}
-    if keep_notes:
-        base = base | WIND_DOWN_NOTE_TOOLS
     return base
 
 
@@ -213,23 +177,18 @@ def narrow_tools_for_wind_down(
     *,
     allowed: list[str] | None,
     keep_file_read: bool | None = None,
-    keep_notes: bool | None = None,
 ) -> list[str]:
     """Intersect caller's allow-list with the wind-down persist/handoff whitelist.
 
-    When ``keep_file_read`` / ``keep_notes`` is None, infer from the live tool surface
-    (files deliverable / collaboration). Retrieval tools (web_search / read_url / …)
+    When ``keep_file_read`` is None, infer from the live tool surface
+    (files deliverable). Retrieval tools (web_search / read_url / …)
     stay excluded.
     """
     if keep_file_read is None:
         keep_file_read = worker_keeps_file_read_in_wind_down(
             available=available, allowed=allowed
         )
-    if keep_notes is None:
-        keep_notes = worker_keeps_notes_in_wind_down(available=available, allowed=allowed)
-    whitelist = wind_down_allowed_tools(
-        keep_file_read=keep_file_read, keep_notes=keep_notes
-    )
+    whitelist = wind_down_allowed_tools(keep_file_read=keep_file_read)
     base = set(allowed) if allowed is not None else set(available)
     narrowed = sorted(base & whitelist)
     if "handoff" in available and "handoff" not in narrowed:
@@ -247,7 +206,6 @@ def narrow_tools_for_wind_down_breach(
     *,
     keep_landing: bool = False,
     keep_file_read: bool = False,
-    keep_notes: bool = False,
     allowed: list[str] | None = None,
 ) -> list[str]:
     """Post-breach surface after a wind-down whitelist violation.
@@ -255,14 +213,12 @@ def narrow_tools_for_wind_down_breach(
     Default = handoff-only (strip retrieval thrash). When the run still owes
     workspace landing (``keep_landing``), keep the wind_down write whitelist so
     ``file_write`` / append / replace are not allowlist-denied mid-obligation.
-    Collaboration notes stay only with ``keep_landing`` (same overlay as enter).
     """
     if keep_landing:
         return narrow_tools_for_wind_down(
             available,
             allowed=allowed,
             keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
         )
     return narrow_tools_for_handoff_only(available)
 
@@ -271,14 +227,13 @@ def wind_down_breach_tool_names(
     tool_names: list[str] | tuple[str, ...] | set[str],
     *,
     keep_file_read: bool = False,
-    keep_notes: bool = False,
     allowed: frozenset[str] | set[str] | None = None,
 ) -> list[str]:
     """Return tool names that violate the wind-down whitelist (stable order, deduped)."""
     whitelist = (
         frozenset(allowed)
         if allowed is not None
-        else wind_down_allowed_tools(keep_file_read=keep_file_read, keep_notes=keep_notes)
+        else wind_down_allowed_tools(keep_file_read=keep_file_read)
     )
     seen: set[str] = set()
     breached: list[str] = []

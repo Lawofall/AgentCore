@@ -1,11 +1,14 @@
 /**
  * Shared decision-card meta for ask_user presentation.
  *
- * One table per family variant (intent) — replaces the former parallel
- * INTENT_CONFIG (CheckpointCard). Kind / wire
- * contracts stay untouched; this is display copy + icons only.
+ * One table per chrome intent — kind / wire contracts stay untouched;
+ * this is display copy + icons only.
  */
 import type { resolvedCheckpointTone } from "@/components/ui/tone-presets";
+import {
+  type AskUiIntent,
+  parseCheckpointIntent,
+} from "@/lib/checkpointIntent";
 import type { CheckpointDecision, CheckpointIntent } from "@/types/events";
 import {
   Ban,
@@ -14,11 +17,9 @@ import {
   CircleHelp,
   Clock,
   FolderTree,
-  Layers,
   type LucideIcon,
   OctagonX,
   Pencil,
-  ShieldAlert,
 } from "lucide-react";
 
 export type ResolvedToneKey = keyof typeof resolvedCheckpointTone;
@@ -45,7 +46,7 @@ export const ASK_RESOLVED_DECISION_ICON = {
   orphaned: Ban,
 } as const satisfies Record<CheckpointDecision, LucideIcon>;
 
-/** Shared ask clarification copy — wire `kickoff` reuses the same shell as `decision`. */
+/** Shared ask chrome — one caption for every live card. */
 const ASK_CLARIFY_META = {
   icon: CircleHelp,
   activeCaption: "需要你拍板",
@@ -68,82 +69,20 @@ const ASK_CLARIFY_META = {
 } as const satisfies AskIntentMeta;
 
 export const ASK_INTENT_META = {
-  /** Wire may still emit kickoff; UX = generic clarification (same as decision). */
-  kickoff: ASK_CLARIFY_META,
   decision: ASK_CLARIFY_META,
-  proposal_pick: {
-    icon: Layers,
-    activeCaption: "方案挑选 · 选一条推进",
-    cta: "采用此方案",
-    ctaIcon: Layers,
-    showFooterHint: false,
-    resolved: {
-      continue: { label: "已选定方案", tone: "success" },
-      adjust: { label: "已按你的调整继续", tone: "success" },
-      stop: { label: "已取消本回合", tone: "muted" },
-      research_first: { label: "已取消本回合", tone: "muted" },
-      timeout: { label: "未及时回应，已自行收尾", tone: "muted" },
-      orphaned: {
-        label: "已失效（回合已结束或服务已重启）",
-        tone: "muted",
-      },
-    },
-  },
-  risk_ack: {
-    icon: ShieldAlert,
-    activeCaption: "风险确认 · 勾选本轮处理项",
-    cta: "确认并继续",
-    ctaIcon: ShieldAlert,
-    showFooterHint: false,
-    resolved: {
-      continue: { label: "已确认风险处理项", tone: "success" },
-      adjust: { label: "已按你的调整继续", tone: "success" },
-      stop: { label: "已取消本回合", tone: "muted" },
-      research_first: { label: "已取消本回合", tone: "muted" },
-      timeout: { label: "未及时回应，已自行收尾", tone: "muted" },
-      orphaned: {
-        label: "已失效（回合已结束或服务已重启）",
-        tone: "muted",
-      },
-    },
-  },
   organize_plan: {
+    ...ASK_CLARIFY_META,
     icon: FolderTree,
-    activeCaption: "整理方案 · 确认要执行的项",
     cta: "确认并整理",
     ctaIcon: FolderTree,
-    showFooterHint: false,
-    resolved: {
-      continue: { label: "已确认整理方案", tone: "success" },
-      adjust: { label: "已按你的调整继续", tone: "success" },
-      stop: { label: "已取消本回合", tone: "muted" },
-      research_first: { label: "已取消本回合", tone: "muted" },
-      timeout: { label: "未及时回应，已自行收尾", tone: "muted" },
-      orphaned: {
-        label: "已失效（回合已结束或服务已重启）",
-        tone: "muted",
-      },
-    },
   },
   daily_review: {
+    ...ASK_CLARIFY_META,
     icon: BookOpenCheck,
-    activeCaption: "复盘提案 · 确认要落盘的项",
     cta: "确认落盘",
     ctaIcon: BookOpenCheck,
-    showFooterHint: false,
-    resolved: {
-      continue: { label: "已确认复盘提案", tone: "success" },
-      adjust: { label: "已按你的调整继续", tone: "success" },
-      stop: { label: "已取消本回合", tone: "muted" },
-      research_first: { label: "已取消本回合", tone: "muted" },
-      timeout: { label: "未及时回应，已自行收尾", tone: "muted" },
-      orphaned: {
-        label: "已失效（回合已结束或服务已重启）",
-        tone: "muted",
-      },
-    },
   },
-} as const satisfies Record<CheckpointIntent, AskIntentMeta>;
+} as const satisfies Record<AskUiIntent, AskIntentMeta>;
 
 export type AskResolvedOutcome = {
   label: string;
@@ -152,10 +91,11 @@ export type AskResolvedOutcome = {
 };
 
 export function askResolvedOutcome(
-  intent: CheckpointIntent,
+  intent: CheckpointIntent | AskUiIntent,
   decision: CheckpointDecision,
 ): AskResolvedOutcome {
-  const resolved = ASK_INTENT_META[intent].resolved[decision];
+  const resolved =
+    ASK_INTENT_META[parseCheckpointIntent(intent)].resolved[decision];
   return {
     label: resolved.label,
     tone: resolved.tone,
@@ -177,7 +117,7 @@ const SETTLED_UNKNOWN: AskResolvedOutcome = {
  * 取消（stop / 误用 research_first）与确认、超时同形占时间线存根。
  */
 export function askResolvedDisplay(
-  intent: CheckpointIntent,
+  intent: CheckpointIntent | AskUiIntent,
   decision: CheckpointDecision | null | undefined,
 ): AskResolvedOutcome {
   if (decision && decision in ASK_RESOLVED_DECISION_ICON) {

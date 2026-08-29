@@ -132,10 +132,11 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="greenfield_spa_build_app",
         phrasing="textbook",
         category="greenfield_app",
-        expect_playbook="build_app",
+        expect_playbook="",
         user_message="帮我从零做一个完整可跑的 SPA 待办应用，模块流水线一次做完。",
         workspace="empty",
         code_execute=True,
+        expect_action="DELEGATE",
     ),
     RoutingScenario(
         key="research_mit_vs_gpl_chat",
@@ -185,24 +186,26 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         key="app_todo_website_usable",
         phrasing="colloquial",
         category="greenfield_app",
-        expect_playbook="build_app",
+        expect_playbook="",
         user_message="我想从零做一个待办清单网站，打开就能用，能加任务、勾掉、删除。",
         workspace="empty",
         code_execute=True,
+        expect_action="DELEGATE",
     ),
     RoutingScenario(
         key="app_todo_web_must_run",
         phrasing="colloquial",
         category="greenfield_app",
-        expect_playbook="build_app",
+        expect_playbook="",
         user_message=(
             "帮我做一个全新的网页待办应用，登录、列表、勾选完成都要有，"
             "做完我要能真的跑起来用，别只给个静态页。"
         ),
         workspace="empty",
         code_execute=True,
+        expect_action="DELEGATE",
     ),
-    # 讨论未声明免文档：允许 DIRECT / ASK 桌上结果 / map_fanout；禁止双人 files 成文。
+    # 讨论未声明免文档：实质对照仍派；闲聊/身份才允许 DIRECT（见 identity_who_are_you）。
     RoutingScenario(
         key="discuss_license_no_doc_waiver",
         phrasing="colloquial",
@@ -213,7 +216,7 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
             "你帮我把各自限制和风险讲清楚就行。"
         ),
         workspace="empty",
-        expect_action="DIRECT|ASK",
+        expect_action="DELEGATE|ASK",
     ),
     RoutingScenario(
         key="discuss_license_round2_short_answers",
@@ -222,7 +225,7 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         expect_playbook="map_fanout",
         user_message="1. 给社区贡献\n2. 没有\n3. 更在意传染性",
         workspace="empty",
-        expect_action="DIRECT|ASK",
+        expect_action="DELEGATE|ASK",
         prior_turns=(
             RoutingTurn(
                 role="user",
@@ -254,7 +257,7 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         expect_form="files",
     ),
     # 绑大仓「讨论+盘点/对照行业」：必须派（一人算过）；摸底 form=prose；禁老板多轮自搜。
-    # 空桌许可证讨论仍允许 DIRECT|ASK（见 discuss_license_*）。
+    # 空桌许可证对照见 discuss_license_*（DELEGATE|ASK）；身份闲聊才允许 DIRECT。
     RoutingScenario(
         key="discuss_worker_params_industry",
         phrasing="colloquial",
@@ -269,7 +272,8 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
         expect_form="prose",
         expect_max_recon_rounds=1,
     ),
-    # 第 19 步：同一讨论的多个切面 ≠ N 个对比对象；本产品架构/查错/维护默认自己做。
+    # 同一讨论的多个切面 ≠ N 个对比对象；先不成文仍派，人数跟缝走（不钉死恰好 1 人）。
+    # max=2 只打「三切面三人」；点名对比三对象走 compare_three_js_frameworks（≥3）。
     RoutingScenario(
         key="discuss_arch_bug_maintain_facets",
         phrasing="colloquial",
@@ -280,8 +284,19 @@ SCENARIOS: tuple[RoutingScenario, ...] = (
             "这三块你一起帮我想想，先不用写成文档。"
         ),
         workspace="empty",
+        expect_action="DELEGATE|ASK",
+        expect_min_workers=1,
+        expect_max_workers=2,
+        expect_form="prose",
+    ),
+    RoutingScenario(
+        key="identity_who_are_you",
+        phrasing="colloquial",
+        category="chat",
+        expect_playbook="",
+        user_message="你是谁？这是什么产品？",
+        workspace="empty",
         expect_action="DIRECT|ASK",
-        expect_max_workers=1,
     ),
     # 第 19 步：点名对比 N 个对象 → tasks 至少 N 人。
     RoutingScenario(
@@ -736,7 +751,7 @@ def lint_scenarios(scenarios: Sequence[RoutingScenario] = SCENARIOS) -> None:
     if not any(s.expect_form == "files" and s.expect_max_workers == 1 for s in scenarios):
         raise EvalConfigError("至少一条场景须 expect_form=files 且 expect_max_workers=1")
     if not any("DIRECT" in split_expect_action(s.expect_action) for s in scenarios):
-        raise EvalConfigError("至少一条场景须允许 DIRECT（讨论未声明免文档）")
+        raise EvalConfigError("至少一条场景须允许 DIRECT（身份闲聊 / 窗口短答）")
     if not any(s.expect_max_recon_rounds is not None for s in scenarios):
         raise EvalConfigError("至少一条场景须声明 expect_max_recon_rounds（绑仓讨论摸底禁连搜）")
     for s in scenarios:

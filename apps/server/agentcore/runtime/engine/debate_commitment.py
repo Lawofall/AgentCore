@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from agentcore.llm.provider.protocol import LLMMessage
+from agentcore.tools.builtin.ask_user.schema import option_label_is_recommended
 
 # Affirmative form labels seen on kickoff cards (ask_user option labels + FORM_LABELS).
 _FORM_AFFIRM = (
@@ -97,7 +98,7 @@ def _debate_question_default(args: dict[str, Any]) -> bool | None:
             continue
         default = str(q.get("default") or "").strip()
         if not default:
-            # No default — look at options' recommended flag only when user确认.
+            # No default — look at option-name recommendation markup only when user确认.
             options = q.get("options") if isinstance(q.get("options"), list) else []
             for opt in options:
                 label = (
@@ -108,10 +109,8 @@ def _debate_question_default(args: dict[str, Any]) -> bool | None:
                 if label in _FORM_DECLINE or any(d in label for d in _FORM_DECLINE):
                     continue
                 if (
-                    (label in _FORM_AFFIRM or any(a in label for a in _FORM_AFFIRM))
-                    and isinstance(opt, dict)
-                    and opt.get("recommended")
-                ):
+                    label in _FORM_AFFIRM or any(a in label for a in _FORM_AFFIRM)
+                ) and option_label_is_recommended(label):
                     return True
             return None
         if any(d in default for d in _FORM_DECLINE):

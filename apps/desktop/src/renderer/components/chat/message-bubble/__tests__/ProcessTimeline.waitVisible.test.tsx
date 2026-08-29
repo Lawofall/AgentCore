@@ -130,7 +130,7 @@ describe("shouldShowThinkingTail", () => {
     expect(shouldShowThinkingTail({ ...live, last: planReview })).toBe(true);
   });
 
-  it("does not stack on live reasoning/content/rework or composing", () => {
+  it("does not stack on live reasoning/content or composing", () => {
     expect(
       shouldShowThinkingTail({
         ...live,
@@ -143,9 +143,6 @@ describe("shouldShowThinkingTail", () => {
         last: { kind: "content", text: "答" },
       }),
     ).toBe(false);
-    expect(shouldShowThinkingTail({ ...live, last: { kind: "rework" } })).toBe(
-      false,
-    );
     expect(
       shouldShowThinkingTail({ ...live, last: toolDone, composingTool: true }),
     ).toBe(false);

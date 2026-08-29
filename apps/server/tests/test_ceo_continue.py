@@ -544,7 +544,6 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
     from agentcore.runtime.pipeline import continue_ceo as continue_mod
     from agentcore.runtime.pipeline.continue_ceo import continue_ceo_pipeline
     from agentcore.runtime.resolve.prompt import (
-        CHAT_CITATION_HINT,
         assemble_system_prompt,
         compose_ceo_chat_prompt,
     )
@@ -555,7 +554,7 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
         assemble_system_prompt(),
         ceo_tool_names={"consult", "delegate"},
     )
-    assert CHAT_CITATION_HINT in ceo_chat_prompt
+    assert "<how_you_work>" in ceo_chat_prompt
 
     captured: dict[str, str] = {}
     wired = SimpleNamespace(
@@ -677,6 +676,6 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
 
     prompt = captured["base_system_prompt"]
     assert prompt != ceo_chat_prompt
-    assert CHAT_CITATION_HINT not in prompt
+    assert "<how_you_work>" not in prompt
     assert "<按需目录>" in prompt
     assert "- work_discipline" in prompt

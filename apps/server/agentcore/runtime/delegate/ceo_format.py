@@ -406,25 +406,6 @@ def _cap_synthesis_output(output: str, raw_chars: int) -> tuple[str, bool]:
     return truncate_head_tail(output, limit), True
 
 
-def team_notes_block(tool: DelegateTool) -> str:
-    """The CEO-facing【团队便签】section feeding 合·对账 (§2.3), or "" when the wall is empty / absent.
-
-    The batch's NoteWall (owned by ``drive``, stashed on the tool) holds the 决定 / 认领 / 提醒 the
-    team broadcast while working — its outstanding ACTIVE notes are the ready-made input to the
-    semantic-boundary reconciliation in the closing instruction (便签墙本身又是对账的现成输入).
-    Absent (a CEO that never delegated) or empty (nothing posted / all retracted) ⇒ "" so nothing
-    is added — 零行为变化 for a team that didn't use the wall."""
-    wall = tool._note_wall
-    if wall is None:
-        return ""
-    notes = wall.active_notes()
-    if not notes:
-        return ""
-    from agentcore.runtime.runs.notewall import format_notes_for_synthesis
-
-    return "\n" + format_notes_for_synthesis(notes)
-
-
 def _roster_facts(
     plan: RunPlan, results: dict, products: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -659,12 +640,6 @@ def build_ceo_synthesis(
             "用户的概览里自然带出『团队建议接下来可以…』即可；无价值的忽略，不要逐条复述。\n"
             + "\n".join(f"- {role}：{ns}" for role, ns in suggestions)
         )
-    # 团队便签 → 合·对账 (§2.3): surface the team's outstanding broadcast 决定 / 认领 so the CEO
-    # reconciles the assembled result against them in the closing instruction (the wall is 对账 的
-    # 现成输入). Empty wall / a CEO that never delegated ⇒ "" → nothing added.
-    notes_block = team_notes_block(tool)
-    if notes_block:
-        lines.append(notes_block)
     for wp in products:
         lines.append(
             f"\n### {wp['role']}（{wp['status']}） · run_id: `{wp['run_id']}`\n{wp['body']}"
@@ -684,7 +659,7 @@ def build_ceo_synthesis(
         "正文声称写了却无此行 = 未真正落盘【未达成】，用 continue_from_run_id 续派或冷委派；"
         "「路径未核」不得当已交付；纯文本无文件属正常。"
         "路径已核 ≠ 脚本已跑通 / 内容已校验。\n"
-        "相互依赖时【语义边界对账】（冲突/缺口/重复；有便签一并对照）；"
+        "相互依赖时【语义边界对账】（冲突/缺口/重复）；"
         "【完工核验】对照用户请求：未达成就补，已达成则短概览收口。\n"
         + debate_tail
         + "【终稿纪律】交付物在前、过程简述从简；对照【队员终态名册】"

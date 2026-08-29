@@ -12,7 +12,6 @@ from agentcore.runtime.approvals import ApprovalGate
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.ports import ClientRequestBridge
 from agentcore.runtime.runs.executor.identities import DelegateFactory
-from agentcore.runtime.runs.notewall import NoteWall
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.registry import ToolRegistry
@@ -41,8 +40,6 @@ class AgentExecutorEnv:
     interaction_bridge: ClientRequestBridge | None
     escalation_timeout: float | None
     escalation_armed: bool
-    note_wall: NoteWall | None
-    collaboration: bool
     team_brief: str | None
     # B2: CEO 本回合探路短摘要（根委派注入 worker 开局；嵌套为空）。
     captain_recon: str | None

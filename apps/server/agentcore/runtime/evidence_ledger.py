@@ -101,12 +101,12 @@ class EvidenceLedgerCore:
     def citable_ids(self) -> frozenset[str]:
         """登记宽：``citable=true`` 的全量 id（含 search-only）。
 
-        成稿 / ``finish_guard`` / settle reconcile 须用 :meth:`draft_citable_ids`。
+        对话成稿 / 来源卡用本集。落盘成文闸用 :meth:`draft_citable_ids`。
         """
         return frozenset(e["id"] for e in self._entries if e.get("citable"))
 
     def draft_citable_ids(self) -> frozenset[str]:
-        """成稿 ``#rN`` 闸：``deep_read ∪ selected``（search-only 不得进）。"""
+        """落盘成文 ``#rN`` 闸：``deep_read ∪ selected``（search-only 不得进）。"""
         return frozenset(
             e["id"]
             for e in self._entries
@@ -545,17 +545,16 @@ def format_registered_sources_prompt(ledger: EvidenceLedgerCore | None) -> str:
         registrant = (e.get("registrant") or "").strip() or "—"
         deep = "是" if e.get("deep_read") else "否"
         selected = "是" if e.get("selected") else "否"
-        draft_ok = "是" if (e.get("deep_read") or e.get("selected")) else "否"
         lines.append(
             f"- {eid} · url={url} · query={query} · registrant={registrant} · "
-            f"deep_read={deep} · selected={selected} · 成稿可引={draft_ok}"
+            f"deep_read={deep} · selected={selected}"
         )
     body = "\n".join(lines)
     return (
         "<registered_sources>\n"
-        "【已登记来源】本会话台账（引擎核，跨回合 hydrate 后可见）。"
+        "【已登记来源】本会话台账（跨回合 hydrate 后可见）。"
         "回答某 #rN 出处必须对照下列字段，禁止占位/巧合叙事；"
-        "成稿闸仅允许 deep_read 或 selected 的 id。\n"
+        "对话成稿可挂下列已登记可引用 id（含仅检索未深读）。\n"
         f"{body}\n"
         "</registered_sources>"
     )

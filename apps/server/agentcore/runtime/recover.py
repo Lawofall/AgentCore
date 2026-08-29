@@ -97,9 +97,7 @@ async def recover_turn(
         raise ValueError("recover_turn crash redrive requires a plan projection")
     eid = state.execution_id or execution_id
     seed = dict(state.completed)
-    # Crash mid-flight teams were typically wall-coordinated (≥1 worker default). Align the
-    # redrive with that product default — resume_plan's coordinate default is False
-    # (classic / plan_review), which would silently strip note-wall semantics.
+    # Crash mid-flight teams redrive with coordinate=True (resume_plan default is False).
     logger.info(
         "recover.crash_redrive",
         execution_id=eid,
@@ -107,7 +105,6 @@ async def recover_turn(
         unfinished=len(state.unfinished_run_ids),
         decision=decision.value,
         coordinate=True,
-        coordination="wall",
     )
     delegate_result = await delegate_tool.resume_plan(
         plan,
@@ -117,7 +114,6 @@ async def recover_turn(
         checkpoint_run_ids=set(),
         execution_id=eid,
         coordinate=True,
-        coordination="wall",
     )
     bind_recovered_turn(eid, sink)
     return SettledSuspension(delegate_result.output, None, delegate_result.effect)
@@ -269,11 +265,7 @@ async def _settle_resume(
                         plan,
                         execution_id=snap.execution_id,
                         seed_completed=seed,
-                        seed_notes=None,
                         complexity_hint="standard",
-                        # Prefer the in-process mode from the live tool; missing (process
-                        # restart) → wall so mid-flight teams keep the prior default.
-                        coordination=getattr(delegate_tool, "_coordination", None) or "wall",
                         call_idx=0,
                         coordinate=True,
                         session=session,
@@ -340,9 +332,6 @@ async def _settle_resume(
             note=note,
             checkpoint_run_ids=suspension.checkpoint_run_ids,
             execution_id=eid,
-            # 帧回灌批次协作参数：恢复用全新 DelegateTool（_coordination 缺省 none），
-            # 不回灌则复核后续波次的 worker 被剥便签三件套。
-            coordination=suspension.coordination,
             team_brief=suspension.team_brief,
             # CONTINUE 时读帧上 ceo_review → llm 压缩注入 gate_notes（deterministic 不下发）。
             ceo_review=suspension.ceo_review,

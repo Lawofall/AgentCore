@@ -44,6 +44,7 @@ _BUILTIN_ORDER = [
     "md_to_docx",
     "md_to_pdf",
     "archive_extract",
+    "archive_create",
     "download_url",
     "grep",
     "code_search",
@@ -71,9 +72,6 @@ _BROWSER_CEO_ORDER = [
 
 _WORKER_ONLY_ORDER = [
     "escalate",
-    "post_note",
-    "read_notes",
-    "amend_note",
     "handoff",
     "desktop_notify",
 ]
@@ -141,6 +139,7 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "md_to_docx": (AVAILABLE_TO_WORKER,),
     "md_to_pdf": (AVAILABLE_TO_WORKER,),
     "archive_extract": (AVAILABLE_TO_WORKER,),
+    "archive_create": (AVAILABLE_TO_WORKER,),
     "download_url": (AVAILABLE_TO_WORKER,),
     "test_run": (AVAILABLE_TO_WORKER,),
     "code_execute": (AVAILABLE_TO_WORKER,),
@@ -148,9 +147,6 @@ _CATALOG_AVAILABLE_TO: dict[str, tuple[str, ...]] = {
     "host": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "external_mount_readonly": (AVAILABLE_TO_CEO, AVAILABLE_TO_WORKER),
     "escalate": (AVAILABLE_TO_WORKER,),
-    "post_note": (AVAILABLE_TO_WORKER,),
-    "read_notes": (AVAILABLE_TO_WORKER,),
-    "amend_note": (AVAILABLE_TO_WORKER,),
     "handoff": (AVAILABLE_TO_WORKER,),
     "desktop_notify": (AVAILABLE_TO_WORKER,),
     "search_conversations": (AVAILABLE_TO_WORKER,),
@@ -256,6 +252,7 @@ def test_tool_registry_grant_sets_snapshot():
             "md_to_docx",
             "md_to_pdf",
             "archive_extract",
+            "archive_create",
             "download_url",
         }
     )

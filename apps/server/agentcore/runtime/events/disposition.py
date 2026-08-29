@@ -87,7 +87,6 @@ EVENT_DISPOSITION: dict[EventType, tuple[Disposition, str]] = {
         Disposition.DURABLE,
         "热路交互失效——reload 翻「已失效」不可点态（提问确认交互统一 P1）",
     ),
-    EventType.TEAM_NOTE_POSTED: (Disposition.DURABLE, "团队便签墙——team-notes 面板重放"),
     EventType.DEBATE_ROUND_STARTED: (
         Disposition.DURABLE,
         "辩论轮次开场——hydrateFromJournal / fold 重建辩论室进行态（P2 处置重对账）",

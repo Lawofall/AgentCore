@@ -32,8 +32,6 @@ def _env(plan) -> AgentExecutorEnv:
         interaction_bridge=None,
         escalation_timeout=None,
         escalation_armed=False,
-        note_wall=None,
-        collaboration=True,
         team_brief=None,
         captain_recon=None,
         write_coordinator=WriteCoordinator(),

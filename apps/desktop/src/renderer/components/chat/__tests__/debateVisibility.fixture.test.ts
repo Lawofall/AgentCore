@@ -97,7 +97,6 @@ function toExecution(name: string): Execution {
     crossExamEnabled: p.crossExamEnabled,
     debateOpening: p.debateOpening,
     debatePretrial: null,
-    teamNotes: [],
   };
 }
 

@@ -1,12 +1,14 @@
 import { toCeoReview } from "@/lib/ceoReview";
-import { parseCheckpointIntent } from "@/lib/checkpointIntent";
+import {
+  type AskUiIntent,
+  parseCheckpointIntent,
+} from "@/lib/checkpointIntent";
 import type { components } from "@/types/api.generated";
 import type {
   AskAssumption,
   AskOption,
   AskQuestion,
   CeoReviewSummary,
-  CheckpointIntent,
   PlanReviewPending,
   PlanReviewStep,
 } from "@/types/events";
@@ -17,6 +19,13 @@ type SuspensionKind = components["schemas"]["SuspensionKind"];
 
 /** Where the durable paused frame lives — drives resume routing in {@link runResume}. */
 export type ResumeOrigin = "sidecar" | "server";
+
+/**
+ * 这次打开对话，挂起帧 recovery 问到了哪一步。
+ * `unresolved` = 还没落地（硬刷新默认）；`ready` = 问到了（空列表也算）；
+ * `failed` = 请求失败，unknown ≠ idle。
+ */
+export type ColdOpenRecoveryState = "unresolved" | "ready" | "failed";
 
 const ALL_ORIGINS: readonly ResumeOrigin[] = ["sidecar", "server"];
 
@@ -82,8 +91,8 @@ export interface PendingResume {
   assumptions: AskAssumption[];
   /** ask_user: the askable items (途中岔路通常一个；开场可多个). */
   questions: AskQuestion[];
-  /** ask_user: wire may still send kickoff; UI treats as generic clarification. */
-  intent: CheckpointIntent;
+  /** ask_user chrome intent after {@link parseCheckpointIntent}. */
+  intent: AskUiIntent;
   /** ask_user browser_login=true → login card；点「打开浏览器」才 reveal 右坞. */
   browserLogin?: boolean;
   /** Where the durable frame lives — drives {@link runResume} sidecar vs server routing. */
@@ -120,7 +129,7 @@ const toAssumptions = (
     value: String(a.value ?? ""),
   }));
 
-/** Options rehydrate as `{label, detail?, recommended?, action?, well_known?, target_name?}` from the backend. */
+/** Options rehydrate as `{label, detail?, action?, well_known?, target_name?}` from the backend. */
 const toOptions = (raw: unknown): AskOption[] =>
   Array.isArray(raw)
     ? raw.map((o) => {
@@ -138,7 +147,6 @@ const toOptions = (raw: unknown): AskOption[] =>
         return {
           label: String(obj.label ?? ""),
           ...(obj.detail ? { detail: String(obj.detail) } : {}),
-          ...(obj.recommended ? { recommended: true } : {}),
           ...(obj.action === "open_local_project" ||
           obj.action === "register_local_project" ||
           obj.action === "bind_local_folder" ||
@@ -169,7 +177,7 @@ const toQuestions = (raw: PausedTurnSummary["questions"]): AskQuestion[] =>
     default: String(q.default ?? ""),
   }));
 
-const toIntent = (raw: unknown): CheckpointIntent => parseCheckpointIntent(raw);
+const toIntent = (raw: unknown): AskUiIntent => parseCheckpointIntent(raw);
 
 /** One recovery-frame summary tagged with where its durable frame lives. */
 export type PausedTurnEntry = {
@@ -179,6 +187,12 @@ export type PausedTurnEntry = {
 
 interface PausedTurnState {
   pending: PendingResume[];
+  /** Per-conversation recovery probe for cold-open paint (missing key = unresolved). */
+  openRecovery: Record<string, ColdOpenRecoveryState>;
+  markOpenRecovery: (
+    conversationId: string,
+    state: ColdOpenRecoveryState,
+  ) => void;
   /**
    * Replace one conversation's pending resumes (from the recovery snapshot on reopen),
    * leaving other conversations' entries untouched. Each entry carries its own
@@ -250,6 +264,12 @@ function entryFromSummary(
 
 export const usePausedTurnStore = create<PausedTurnState>((set) => ({
   pending: [],
+  openRecovery: {},
+
+  markOpenRecovery: (conversationId, state) =>
+    set((prev) => ({
+      openRecovery: { ...prev.openRecovery, [conversationId]: state },
+    })),
 
   setForConversation: (conversationId, entries, opts) => {
     const since = opts?.since ?? observationSeq;
@@ -296,15 +316,19 @@ export const usePausedTurnStore = create<PausedTurnState>((set) => ({
     }),
 
   clear: (conversationId) =>
-    set((state) =>
-      conversationId === undefined
-        ? { pending: [] }
-        : {
-            pending: state.pending.filter(
-              (p) => p.conversationId !== conversationId,
-            ),
-          },
-    ),
+    set((state) => {
+      if (conversationId === undefined) {
+        return { pending: [], openRecovery: {} };
+      }
+      const openRecovery = { ...state.openRecovery };
+      delete openRecovery[conversationId];
+      return {
+        pending: state.pending.filter(
+          (p) => p.conversationId !== conversationId,
+        ),
+        openRecovery,
+      };
+    }),
 
   rekeyMessageId: (fromMessageId, toMessageId) =>
     set((state) => {

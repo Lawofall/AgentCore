@@ -72,7 +72,12 @@ function sanitizeAttachment(raw: unknown): PendingAttachment | null {
   if (typeof a.path !== "string") return null;
   if (typeof a.text !== "string") return null;
   if (typeof a.truncated !== "boolean") return null;
-  if (a.kind !== "file" && a.kind !== "dir" && a.kind !== "conversation") {
+  if (
+    a.kind !== "file" &&
+    a.kind !== "dir" &&
+    a.kind !== "conversation" &&
+    a.kind !== "document"
+  ) {
     return null;
   }
   const out: PendingAttachment = {
@@ -86,6 +91,7 @@ function sanitizeAttachment(raw: unknown): PendingAttachment | null {
   };
   if (typeof a.conversationId === "string")
     out.conversationId = a.conversationId;
+  if (typeof a.documentId === "string") out.documentId = a.documentId;
   if (typeof a.workspacePath === "string") out.workspacePath = a.workspacePath;
   if (typeof a.stagingId === "string") out.stagingId = a.stagingId;
   if (typeof a.citedRootId === "string") out.citedRootId = a.citedRootId;
@@ -125,6 +131,7 @@ function serializeAttachments(
         kind: a.kind,
       };
       if (a.conversationId) out.conversationId = a.conversationId;
+      if (a.documentId) out.documentId = a.documentId;
       if (a.workspacePath) out.workspacePath = a.workspacePath;
       if (a.stagingId) out.stagingId = a.stagingId;
       if (a.citedRootId) out.citedRootId = a.citedRootId;

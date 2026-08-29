@@ -21,7 +21,7 @@ export function FileTreeSelectionBar({
   onClear,
 }: {
   count: number;
-  /** 选区里能下载的文件数（目录没有单项下载端点）。 */
+  /** 选区里能下载的项数（文件另存；文件夹整夹 zip）。 */
   downloadableCount: number;
   canDownload: boolean;
   canMutate: boolean;
@@ -32,7 +32,6 @@ export function FileTreeSelectionBar({
   onDelete: () => void;
   onClear: () => void;
 }) {
-  const dirCount = count - downloadableCount;
   return (
     <div
       className="flex items-center gap-1 rounded-lg bg-accent/60 py-1 pr-1 text-xs"
@@ -43,13 +42,7 @@ export function FileTreeSelectionBar({
       </span>
       <div className="flex-1" />
       {canDownload && downloadableCount > 0 && (
-        <SimpleTooltip
-          label={
-            dirCount > 0
-              ? `下载其中 ${downloadableCount} 个文件（文件夹需展开后逐个选）`
-              : "逐个保存到本机"
-          }
-        >
+        <SimpleTooltip label="文件另存；文件夹下载为 zip">
           <Button
             variant="ghost"
             disabled={busy}

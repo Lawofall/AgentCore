@@ -255,9 +255,6 @@
             "text": "先起草 JSON 结构。"
           },
           {
-            "kind": "rework"
-          },
-          {
             "kind": "content",
             "text": "修正后的产出：{\"status\":\"ok\"}"
           }
@@ -295,7 +292,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

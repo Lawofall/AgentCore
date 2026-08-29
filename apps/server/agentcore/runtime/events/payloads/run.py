@@ -86,9 +86,6 @@ class RunPlanPayload(WirePayload):
     prev_execution_id: str | None = absent()
     # 幕声明（additive）：旧客户端 / 旧 journal 忽略；缺省时前端 fold 合成 act-1。
     act: RunPlanAct | None = absent()
-    # 便签墙已升（additive）：与 ``setup_note_wall`` 同谓词（≥2 worker 且 coordination=wall）。
-    # 真才上线；假 / 旧 journal 缺省 = 无墙。看面据此画空态，避免把「墙已升还没字」当成没开。
-    note_wall: bool | None = absent()
 
 
 class GraphAppendPayload(WirePayload):
@@ -183,7 +180,7 @@ class RunOutputDeltaPayload(WirePayload):
 class RunOutputResetPayload(WirePayload):
     run_id: str
     agent_id: str
-    # 与 ContentResetPayload.reason 同一枚举：仅 finish_guard 折出 rework 痕迹（didRework）。
+    # 与 ContentResetPayload.reason 同一枚举：所有 reason 只清正文、不折过程痕迹。
     reason: ResetReason = Field(json_schema_extra={"ts_type": "ResetReason"})
 
 
@@ -247,20 +244,6 @@ class RunEscalationGatePayload(WirePayload):
     layer: Literal["execution", "scheme"]
     action: Literal["continue", "escalate"]
     signals: list[dict[str, Any]]
-
-
-class TeamNotePostedPayload(WirePayload):
-    execution_id: str
-    note_id: str
-    run_id: str
-    agent_id: str
-    role: str
-    kind: Literal["decision", "heads_up", "claim"]
-    text: str
-    ts: float
-    supersedes: str | None = absent()
-    supersede_mode: Literal["update", "void"] | None = absent()
-    source: Literal["ceo", "worker", "inherited"] | None = absent()
 
 
 class TeamSynthesisWorkerPreview(WirePayload):
@@ -489,8 +472,9 @@ class MessageAttachment(WirePayload):
     path: str
     text: str = ""
     truncated: bool = False
-    kind: Literal["file", "dir", "conversation"] = "file"
+    kind: Literal["file", "dir", "conversation", "document"] = "file"
     conversation_id: str | None = None
+    document_id: str | None = None
     binary: bool = False
     workspace_path: str | None = None
 

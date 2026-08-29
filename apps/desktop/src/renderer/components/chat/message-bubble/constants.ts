@@ -40,7 +40,6 @@ import {
   ScrollText,
   Search,
   Settings2,
-  StickyNote,
   Terminal,
   TestTube2,
   Trash2,
@@ -82,6 +81,7 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   md_to_docx: { Icon: FileText, label: "Export Word" },
   md_to_pdf: { Icon: FileText, label: "Export PDF" },
   archive_extract: { Icon: Package, label: "Extract archive" },
+  archive_create: { Icon: Package, label: "Create archive" },
   download_url: { Icon: Globe, label: "Download file" },
   read_image: { Icon: ScanText, label: "Read image" },
   code_diagnostics: { Icon: Code2, label: "Check types" },
@@ -95,7 +95,7 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   consult_memory: { Icon: Brain, label: "Consult memory" },
   consult_rule: { Icon: BookOpen, label: "Consult rule" },
   // 按需三合一：新会话走单一 consult；旧三名上表仍保留供历史回放。
-  consult: { Icon: Brain, label: "Consult" },
+  consult: { Icon: BookOpen, label: "Consult" },
   remember: { Icon: BookOpen, label: "Remember" },
   update_folder_profile: { Icon: NotebookPen, label: "Update folder profile" },
   // Worker-only 跨会话对话日志（CEO 经 delegate 派查阅员）。
@@ -120,9 +120,6 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   browser_screenshot: { Icon: Camera, label: "Screenshot" },
   browser_console: { Icon: ScrollText, label: "Console" },
   // Worker / board channels that also render on the process timeline.
-  post_note: { Icon: StickyNote, label: "Post note" },
-  read_notes: { Icon: StickyNote, label: "Read notes" },
-  amend_note: { Icon: StickyNote, label: "Amend note" },
   handoff: { Icon: Forward, label: "Handoff" },
   board_ops: { Icon: Presentation, label: "Edit board" },
   board_read: { Icon: Presentation, label: "Read board" },

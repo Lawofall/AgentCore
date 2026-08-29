@@ -1,4 +1,4 @@
-"""AGENT-node setup: registry / identity / opening messages / note pull.
+"""AGENT-node setup: registry / identity / opening messages.
 
 Split from ``.node`` — pure move; consumed only by the node facade.
 """
@@ -6,7 +6,7 @@ Split from ``.node`` — pure move; consumed only by the node facade.
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable, Iterator, Mapping
+from collections.abc import Awaitable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import Any
@@ -18,18 +18,14 @@ from agentcore.llm.provider.protocol import LLMMessage
 from agentcore.runtime.events import (
     escalation_raised,
     run_context,
-    team_note_posted,
 )
 from agentcore.runtime.facts import RunHeadFact, record_turn_fact
 from agentcore.runtime.runs.constants import (
-    AMEND_NOTE_TOOL_NAME,
     DEFAULT_CONTRACT_RETRIES,
     ESCALATE_TOOL_NAME,
     HANDOFF_TOOL_NAME,
     MAX_CONTRACT_RETRIES,
     MAX_DELEGATION_DEPTH,
-    POST_NOTE_TOOL_NAME,
-    READ_NOTES_TOOL_NAME,
 )
 from agentcore.runtime.runs.contract import node_has_dependents
 from agentcore.runtime.runs.executor.context import (
@@ -41,7 +37,6 @@ from agentcore.runtime.runs.executor.context import (
 from agentcore.runtime.runs.executor.env import AgentExecutorEnv
 from agentcore.runtime.runs.executor.escalation import build_escalation_channel
 from agentcore.runtime.runs.executor.identities import (
-    _WORKER_TEAM_NOTE_POLICY,
     LeadSubteam,
     build_worker_identity,
 )
@@ -50,11 +45,6 @@ from agentcore.runtime.runs.executor.shared import (
     _continuation_message,
     _registry_with,
     _registry_without,
-)
-from agentcore.runtime.runs.notewall import (
-    NOTE_NUDGE_TEXT,
-    SYSTEM_RUN_ID,
-    format_notes_for_injection,
 )
 from agentcore.runtime.runs.retrieval_budget import RETRIEVAL_TOOL_NAMES
 from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunSpec, RunState
@@ -116,7 +106,6 @@ class AgentNodePrepared:
     tighten_verify_exec_thrash: bool
     received_blocks: list[ContextBlock]
     token_ceiling: int
-    pull_notes: Callable[[], list[LLMMessage]]
     attempts: int
     two_phase: bool
 
@@ -231,31 +220,7 @@ async def _prepare_agent_node(
         # 阻塞式求决策: the suspend-for-the-user channel for escalate(blocking=true).
         # None when no bridge (CEO / tests) → escalate stays non-blocking.
         escalation=build_escalation_channel(env, spec.run_id, agent_id, resolutions),
-        # 团队便签墙 (§2.2 通): the batch wall this worker's post_note broadcasts onto,
-        # its display role stamped on its notes (谁贴的), and a live emit so the
-        # team-notes panel lights up the instant a note is pinned. The executor owns
-        # event shape (引擎纯化) — post_note just hands it the TeamNote; run/agent come
-        # off the note so the UI attributes it to the right sibling. The durable record
-        # rides the journaled team_note_posted event emitted here.
-        note_wall=env.note_wall,
         agent_role=spec.role or "",
-        on_note=lambda note: env.sink.emit(
-            team_note_posted(
-                execution_id=env.execution_id,
-                note_id=note.note_id,
-                run_id=note.run_id,
-                agent_id=note.agent_id,
-                role=note.role,
-                kind=note.kind,
-                text=note.text,
-                ts=note.ts,
-                # 改写/作废 (§2.2 supersession): an amendment note carries the target it
-                # 改写/作废s + the mode; a fresh post leaves both None (omitted from the
-                # payload). The same on_note path serves post_note AND amend_note.
-                supersedes=note.supersedes,
-                supersede_mode=note.supersede_mode,
-            )
-        ),
         # 检索预算 (提案 A1): per-run counter for tool_exec; None = no enforce.
         retrieval_budget=(
             RetrievalBudgetState(limit=spec.retrieval_budget)
@@ -323,8 +288,6 @@ async def _prepare_agent_node(
         # then this flag — identity must not claim it can run after the family is gone.
         can_execute=registry_can_execute(worker_tools),
     )
-    if not env.collaboration:
-        identity = identity.replace(_WORKER_TEAM_NOTE_POLICY, "").replace("\n\n\n", "\n\n")
     if worker_write_scope == "none" and not (
         spec.target_folder_id or env.session_folder_id
     ):
@@ -359,18 +322,6 @@ async def _prepare_agent_node(
         worker_tools = _registry_without(worker_tools, *RETRIEVAL_TOOL_NAMES)
         if allowed_tools is not None:
             allowed_tools = [t for t in allowed_tools if t not in RETRIEVAL_TOOL_NAMES]
-    # 非协作批次 (env.collaboration=False, e.g. debate): strip the 团队便签 tools from the
-    # offered registry so even an UNRESTRICTED worker (allowed_tools=None → "offer all
-    # team tools") is never handed post/read/amend — "no env.collaboration" means no channel
-    # at all, not "no channel only for a least-privilege worker". Restricted workers are
-    # covered by skipping the grants below; this closes the unrestricted path too.
-    if not env.collaboration:
-        worker_tools = _registry_without(
-            worker_tools,
-            POST_NOTE_TOOL_NAME,
-            READ_NOTES_TOOL_NAME,
-            AMEND_NOTE_TOOL_NAME,
-        )
     # escalate is a worker's always-available upward channel — a safety primitive,
     # not a capability the CEO restricts away. An unrestricted worker (None) is
     # already offered it; a least-privilege worker (non-empty allow-list) must
@@ -382,24 +333,6 @@ async def _prepare_agent_node(
     # Leaf nodes need not *call* it, but the tool must stay on the surface.
     if allowed_tools is not None and HANDOFF_TOOL_NAME not in allowed_tools:
         allowed_tools = [*allowed_tools, HANDOFF_TOOL_NAME]
-    # 团队便签三件套 (post/read/amend_note) 仅协作批次授予 (便签墙 broadcast, §2.2 通): a
-    # collaborating team keeps them always-available even for a least-privilege worker so
-    # siblings align mid-flight; a non-collaborative batch (env.collaboration=False, e.g.
-    # debate) skips them entirely — they are also stripped from worker_tools above, so an
-    # unrestricted worker in such a batch isn't offered them either (opponents get no
-    # 便签 channel).
-    if env.collaboration:
-        if allowed_tools is not None and POST_NOTE_TOOL_NAME not in allowed_tools:
-            allowed_tools = [*allowed_tools, POST_NOTE_TOOL_NAME]
-        # read_notes is post_note's pull dual (§2.4 变·worker 的「拉」): even a
-        # least-privilege worker can look up what a sibling already decided.
-        if allowed_tools is not None and READ_NOTES_TOOL_NAME not in allowed_tools:
-            allowed_tools = [*allowed_tools, READ_NOTES_TOOL_NAME]
-        # amend_note completes the trio (便签会过期 → 改写/作废, §2.2 supersession): a
-        # worker must be able to correct its OWN stale note so a sibling never builds on
-        # a dead decision.
-        if allowed_tools is not None and AMEND_NOTE_TOOL_NAME not in allowed_tools:
-            allowed_tools = [*allowed_tools, AMEND_NOTE_TOOL_NAME]
     _emit_prepare_phase("tool_trim", _trim_started)
     from agentcore.runtime.audit.hooks import on_permission_effective
 
@@ -440,9 +373,7 @@ async def _prepare_agent_node(
     # of cold ``_build_messages`` — same run_id, consume the hung transcript.
     received_blocks: list[ContextBlock] = []
     prior_attempt = completed.get(spec.run_id)
-    # Cold-open only: seed/inherited notes are already on the wall before react, but
-    # ``on_round_begin`` skips round 0 — preload once after assembly so round-1-only
-    # workers still see them. Continuation keeps the hung transcript as-is (no re-seed).
+    # Cold-open vs infra-retry continuation: hung FAILED+transcript resumes in place.
     cold_open = not (
         prior_attempt is not None
         and prior_attempt.phase is RunPhase.FAILED
@@ -514,49 +445,6 @@ async def _prepare_agent_node(
     else:
         token_ceiling = settings.engine_worker_token_ceiling
 
-    # 团队便签墙 推增量 (§2.2 通): pull the notes siblings posted since this worker last
-    # looked and hand them to react_loop as one user message before each of its NEXT
-    # steps — so it builds on the team's evolving decisions / heads-ups, not a snapshot
-    # frozen at its opening. new_for already excludes self-posted, caps the burst, and
-    # advances this run's cursor (each note delivered at most once). Empty (solo / no
-    # fresh notes) → [] → a no-op round, identical to today's behaviour.
-    #
-    # Cold-open preload: sibling / inherited notes sit on the wall before round 0, but
-    # the loop only calls this hook from round≥1 — extend once here. CEO-materialized
-    # brief seeds are skipped when ``team_brief`` is already an opening block (避免双份);
-    # explicit seed_notes without a brief still push. Cursor advances either way.
-    from agentcore.runtime.delegate.seed_notes import CEO_SEED_RUN_ID
-
-    _note_nudged: list[bool] = [False]
-    _skip_seed_push = (
-        frozenset({CEO_SEED_RUN_ID}) if env.team_brief else frozenset()
-    )
-    _nudge_exclude = frozenset({CEO_SEED_RUN_ID, SYSTEM_RUN_ID})
-
-    def _pull_notes(_rid: str = spec.run_id) -> list[LLMMessage]:
-        if env.note_wall is None:  # non-collaborative batch: no wall to push
-            return []
-        injected: list[LLMMessage] = []
-        fresh = env.note_wall.new_for(_rid, exclude_run_ids=_skip_seed_push)
-        if fresh:
-            injected.append(
-                LLMMessage(role="user", content=format_notes_for_injection(fresh))
-            )
-        if (
-            not _note_nudged[0]
-            and not env.note_wall.own_active(_rid)
-            and env.note_wall.teammate_active_count(
-                _rid, exclude_run_ids=_nudge_exclude
-            )
-            >= 1
-        ):
-            _note_nudged[0] = True
-            injected.append(LLMMessage(role="user", content=NOTE_NUDGE_TEXT))
-        return injected
-
-    if cold_open:
-        messages.extend(_pull_notes())
-
     attempts = 1 + min(DEFAULT_CONTRACT_RETRIES, MAX_CONTRACT_RETRIES)
     if deliverable and deliverable.visual_critic:
         # P1c: up to 2 visual rework rounds on top of the initial pass.
@@ -586,7 +474,6 @@ async def _prepare_agent_node(
         tighten_verify_exec_thrash=tighten_verify_exec_thrash,
         received_blocks=received_blocks,
         token_ceiling=token_ceiling,
-        pull_notes=_pull_notes,
         attempts=attempts,
         two_phase=two_phase,
     )

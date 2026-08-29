@@ -113,11 +113,6 @@ class EventType(StrEnum):
     RUN_ESCALATION_GATE = "run_escalation_gate"
     ESCALATION_REQUIRED = "escalation_required"
     ESCALATION_RESOLVED = "escalation_resolved"
-    # 团队便签墙 (§2.2 通): a worker pinned a short note (我定了 X / 提个醒 Y) to the batch
-    # note wall for its concurrent siblings. Journaled (it rides a delegate turn alongside
-    # RUN_PLAN, a surface type), so the team-notes panel replays on reload; folded onto the
-    # ProjectedTurn so both ends render it (conformance-visible, unlike transport-only board ops).
-    TEAM_NOTE_POSTED = "team_note_posted"
     # CEO 协调模式 Phase 1：多 worker 委派期间的确定性团队进展摘要（模板拼接，不调 LLM）。
     # DURABLE（P2）——落 journal；前端 fold 同 key 保最新，刷新后重建 StatusStrip 预览条。
     # → 见 docs/03-AI核心/编排器与CEO主Agent.md §协调模式（合成通道）
@@ -192,6 +187,7 @@ RETIRED_EVENT_TYPE_VALUES: frozenset[str] = frozenset(
         "delegation_authorization_resolved",
         "team_preview_required",
         "team_preview_resolved",
+        "team_note_posted",
     }
 )
 

@@ -1,6 +1,6 @@
 {
   "name": "carrier_means_consult_smartart_boundary",
-  "description": "载体/手段顾问：Word SmartArt 能力边界前置 → 诚实做不到 + recommended 可交替代 ask（含仍要 Word 文字版）",
+  "description": "载体/手段顾问：Word SmartArt 能力边界前置 → 诚实做不到 + 选项名带「（推荐）」的可交替代 ask（含仍要 Word 文字版）",
   "events": [
     {
       "type": "message_start",
@@ -30,12 +30,11 @@
             "prompt": "选哪种可交形态？",
             "kind": "choice",
             "multiple": false,
-            "default": "交互 HTML 组织图（可折叠）",
+            "default": "交互 HTML 组织图（可折叠）（推荐）",
             "options": [
               {
-                "label": "交互 HTML 组织图（可折叠）",
-                "detail": "宽树也能看全",
-                "recommended": true
+                "label": "交互 HTML 组织图（可折叠）（推荐）",
+                "detail": "宽树也能看全"
               },
               {
                 "label": "PPT 带框连线版",
@@ -129,7 +128,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

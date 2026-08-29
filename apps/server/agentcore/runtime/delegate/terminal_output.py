@@ -276,7 +276,7 @@ def _omit_workers_line(n: int) -> str:
 
 
 def _omit_others_line(n: int) -> str:
-    return f"{_ELISION_TAG} 已省略 {n} 节队员建议/便签/命题卡"
+    return f"{_ELISION_TAG} 已省略 {n} 节队员建议/命题卡"
 
 
 def _split_sections(text: str) -> list[str]:

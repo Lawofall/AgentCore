@@ -1,4 +1,3 @@
-import { GraphAppendAnchor } from "@/components/chat/GraphAppendAnchor";
 import { InlineTeamGraph } from "@/components/chat/InlineTeamGraph";
 import { InterjectionTimeline } from "@/components/chat/InterjectionTimeline";
 import { Markdown } from "@/components/chat/Markdown";
@@ -12,7 +11,6 @@ import { executionGraphCapabilities } from "@/components/graph/planCapabilities"
 import {
   type TimelineNode,
   groupToolRuns,
-  reworkChipLabel,
   timelineNodeKeys,
 } from "@/lib/processTimeline";
 import type {
@@ -108,7 +106,6 @@ function InlineReasoning({
 function ProcessRow({
   step,
   streaming,
-  reworkLabel,
   citations,
   citationToDisplay,
   knownLedgerIds,
@@ -120,8 +117,6 @@ function ProcessRow({
 }: {
   step: ProcessStep;
   streaming: boolean;
-  /** Presentational copy for `kind===rework` (in-progress vs done). */
-  reworkLabel?: string;
   citations: Citation[];
   citationToDisplay?: ReadonlyMap<number, number>;
   knownLedgerIds?: ReadonlySet<string> | null;
@@ -160,13 +155,6 @@ function ProcessRow({
       </div>
     );
   }
-  if (step.kind === "rework") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground">
-        {reworkLabel ?? reworkChipLabel(false, true)}
-      </span>
-    );
-  }
   // Positional markers (team/checkpoint/ask/plan_review) are resolved in the timeline
   // map, never routed here — only a `tool` step reaches this tail.
   if (step.kind === "tool")
@@ -178,13 +166,14 @@ function ProcessRow({
 
 /**
  * In-stream fallback: generic Thinking… when the tail has no live node.
- * Live chrome = running/wait tool, streaming reasoning/content, in-progress rework,
+ * Live chrome = running/wait tool, streaming reasoning/content,
  * composing tool, visible collaboration graph (StatusStrip) at the tail, or a
  * pending user gate. Markers are not live by themselves — delegate/debate omit
  * tool steps (isMarkerStandinTool) and stand in as `team` / interaction markers.
  */
-/** Markers that anchor the collaboration graph slot. `graph_append` only paints an
- * anchor label, so its liveness is the graph it belongs to — same gate as `team`. */
+/** Markers that anchor the collaboration graph slot. `graph_append` is a
+ * slot marker only (no user chrome) — its liveness is the graph it belongs to,
+ * same gate as `team`. */
 export function graphSlotExecutionId(
   step: ProcessStep | undefined,
 ): string | null {
@@ -205,7 +194,6 @@ export function shouldShowThinkingTail(args: {
   const last = args.last;
   if (!last) return true;
   if (last.kind === "reasoning" || last.kind === "content") return false;
-  if (last.kind === "rework") return false;
   if (last.kind === "tool") {
     if (last.tool_name === "wait") return false;
     return last.status !== "running";
@@ -333,18 +321,8 @@ export function ProcessTimeline({
       ) : null;
     }
     if (node.kind === "graph_append") {
-      const append = node as typeof node & {
-        act_kind?: string;
-        authorized_by?: string;
-      };
-      return (
-        <GraphAppendAnchor
-          key={nodeKey}
-          hostMessageId={node.host_message_id}
-          actKind={append.act_kind}
-          authorizedBy={append.authorized_by}
-        />
-      );
+      // 旧 journal 槽位标记：思考尾仍认它；产品聊天不画回链铬条。
+      return null;
     }
     if (node.kind === "user_interjection") {
       return messageId ? (
@@ -391,19 +369,11 @@ export function ProcessTimeline({
       );
     }
     const step: ProcessStep = node.kind === "tool" ? node.step : node;
-    const hasContentAfter =
-      step.kind === "rework" &&
-      nodes.slice(i + 1).some((n) => n.kind === "content");
     return (
       <ProcessRow
         key={nodeKey}
         step={step}
         streaming={live}
-        reworkLabel={
-          step.kind === "rework"
-            ? reworkChipLabel(isStreaming, hasContentAfter)
-            : undefined
-        }
         citations={citations}
         citationToDisplay={citationToDisplay}
         knownLedgerIds={knownLedgerIds}

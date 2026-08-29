@@ -316,6 +316,9 @@ async def resume_chat_pipeline(
             dict(getattr(suspension, "consulted_memory", None) or {})
         )
         seeded = seed_consult_cache_from_window(messages)
+        from agentcore.tools.on_demand import offer_tools_from_window
+
+        offer_tools_from_window(wired.chat_tools, messages)
         if seeded or get_consult_cache():
             logger.info(
                 "consult.cache_seeded",

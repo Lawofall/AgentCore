@@ -553,9 +553,9 @@ def _single_agent_content_reset() -> list[SSEEvent]:
 
 def _single_agent_retry_reset() -> list[SSEEvent]:
     """单聊·LLM 流式透明重试 (reason=retry)：上游故障丢弃已流出的临时正文、重试重写。与
-    finish_guard 回炉同用 ``content_reset`` 机制，但三端 fold + oracle 必须一致地【不】折
-    rework 步——基础设施重试不是「按交付规范重写」，不该留痕（误报根治的棘轮向量）。清正文
-    标量 + 弹掉尾部 content 步照旧，故最终 content/process 只含重写版、无 rework chip。"""
+    finish_guard 结构回炉同用 ``content_reset`` 机制：三端 fold + oracle 必须一致地只清
+    正文、不折过程痕迹。清正文标量 + 弹掉尾部 content 步照旧，故最终 content/process 只含
+    重写版。"""
     return [
         message_start("m1", conversation_id=_CONV),
         reasoning_delta("直接作答。"),
@@ -858,7 +858,7 @@ VECTORS: dict[str, tuple[str, Callable[[], list[SSEEvent]]]] = {
         _single_agent_web_read,
     ),
     "single_agent_content_reset": ("单聊：交付前核验回炉 (finish_guard) content_reset 丢弃违规版正文、重写修正版", _single_agent_content_reset),
-    "single_agent_retry_reset": ("单聊：LLM 流式透明重试 (reason=retry) content_reset 丢弃临时正文、不留 rework 痕迹", _single_agent_retry_reset),
+    "single_agent_retry_reset": ("单聊：LLM 流式透明重试 (reason=retry) content_reset 丢弃临时正文、不折过程痕迹", _single_agent_retry_reset),
     "single_agent_captain_context": ("单聊：CEO 收到的上下文（run_context kind=captain → 回合级 captainContext，system/history/request）", _single_agent_captain_context),
     "reload_turn_warning": (
         "刷新重建（P2）：turn_warning DURABLE → ProjectedTurn.turnWarning 横幅",

@@ -21,7 +21,9 @@ export const COMMENCE_TONE = interactiveCheckpointTone.primary;
 export type AskAnswerState = {
   answers: Record<string, string[]>;
   note: string;
+  notes: Record<string, string>;
   setNote: (v: string) => void;
+  setQuestionNote: (id: string, value: string) => void;
   toggleChoice: (q: AskQuestion, opt: string) => void;
   setText: (q: AskQuestion, value: string) => void;
   presetCount: number;
@@ -82,21 +84,33 @@ export function PlanChips({
 
 export function CommenceNote({
   answer,
+  questionId,
   disabled,
   compact = false,
   placeholder = ASK_NOTE_PLACEHOLDER,
   tone = COMMENCE_TONE,
 }: {
-  answer: Pick<AskAnswerState, "note" | "setNote">;
+  answer: Pick<
+    AskAnswerState,
+    "note" | "setNote" | "notes" | "setQuestionNote"
+  >;
+  /** 按题绑定；缺省 = 整卡人话（无题卡）。 */
+  questionId?: string;
   disabled: boolean;
   compact?: boolean;
   placeholder?: string;
   tone?: AskTone;
 }) {
+  const value =
+    questionId != null ? (answer.notes[questionId] ?? "") : answer.note;
   return (
     <Textarea
-      value={answer.note}
-      onChange={(e) => answer.setNote(e.target.value)}
+      value={value}
+      onChange={(e) =>
+        questionId != null
+          ? answer.setQuestionNote(questionId, e.target.value)
+          : answer.setNote(e.target.value)
+      }
       disabled={disabled}
       rows={compact ? 1 : 2}
       placeholder={placeholder}
@@ -108,7 +122,6 @@ export function CommenceNote({
 export function OptionButton({
   label,
   detail,
-  recommended,
   isDefault,
   active,
   disabled,
@@ -120,7 +133,6 @@ export function OptionButton({
 }: {
   label: string;
   detail?: string;
-  recommended?: boolean;
   isDefault?: boolean;
   active: boolean;
   disabled: boolean;
@@ -131,20 +143,11 @@ export function OptionButton({
   tone?: AskTone;
   leadingIcon?: React.ReactNode;
 }) {
-  const badges = (
-    <>
-      {recommended && (
-        <span className="shrink-0 rounded-lg bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-          推荐
-        </span>
-      )}
-      {isDefault && !recommended && (
-        <span className="shrink-0 rounded-lg bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground/70">
-          默认
-        </span>
-      )}
-    </>
-  );
+  const badges = isDefault ? (
+    <span className="shrink-0 rounded-lg bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground/70">
+      默认
+    </span>
+  ) : null;
 
   if (layout === "compact") {
     return (
@@ -240,10 +243,7 @@ export function OptionButton({
         icon={leadingIcon}
       >
         <span className="whitespace-pre-wrap">{label}</span>
-        {recommended && (
-          <span className="ml-1.5 shrink-0 text-muted-foreground">推荐</span>
-        )}
-        {isDefault && !recommended && (
+        {isDefault && (
           <span className="ml-1.5 shrink-0 text-muted-foreground/70">默认</span>
         )}
       </Button>
@@ -273,6 +273,7 @@ export function ChoiceQuestion({
   bindBusyLabel,
   onBindOption,
   onFolderUnavailable,
+  askAnswer,
 }: {
   question: AskQuestion;
   index: number;
@@ -292,6 +293,11 @@ export function ChoiceQuestion({
   onBindOption?: (opt: AskOption) => void;
   /** 本机目录 action 不可履约（Web 会附带打开下载页）；禁止 onToggle 假确认。 */
   onFolderUnavailable?: (message: string) => void;
+  /** 按题人话；choice 选项下常驻一格。 */
+  askAnswer?: Pick<
+    AskAnswerState,
+    "note" | "setNote" | "notes" | "setQuestionNote"
+  >;
 }) {
   const canLocalFs = hasLocalFiles() && !!window.fsApi;
   const canBindAction = !!conversationId && !!onBindOption && canLocalFs;
@@ -367,7 +373,6 @@ export function ChoiceQuestion({
                     key={opt.label}
                     label={opt.label}
                     detail={organizeConfirmDetail(opt)}
-                    recommended={opt.recommended}
                     isDefault={
                       !!question.default && opt.label === question.default
                     }
@@ -421,6 +426,17 @@ export function ChoiceQuestion({
                 );
               })}
             </div>
+          </div>
+        )}
+        {question.kind === "choice" && askAnswer && (
+          <div className={compact ? "mt-1" : "mt-1.5"}>
+            <CommenceNote
+              answer={askAnswer}
+              questionId={question.id}
+              disabled={disabled}
+              compact
+              tone={tone}
+            />
           </div>
         )}
       </div>

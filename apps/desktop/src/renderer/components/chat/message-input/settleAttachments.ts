@@ -98,6 +98,7 @@ function passthrough(a: PendingAttachment): OutgoingAttachment {
     truncated: a.truncated,
     kind: a.kind,
     conversation_id: a.conversationId,
+    document_id: a.documentId,
     binary: a.binary,
     workspace_path: a.workspacePath,
   };

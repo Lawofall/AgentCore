@@ -76,7 +76,6 @@ function turn(partial: Partial<ProjectedTurn> = {}): ProjectedTurn {
     deliveryStatus: null,
     turnWarning: null,
     autoFolder: null,
-    teamNotes: [],
     userInterjections: [],
     ...partial,
   };

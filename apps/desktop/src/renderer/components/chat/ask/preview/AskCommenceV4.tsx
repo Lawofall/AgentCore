@@ -63,9 +63,12 @@ export function AskCommenceV4({ content }: { content: AskUserContent }) {
             answer={answer.answers[q.id] ?? []}
             disabled={busy}
             onToggle={(opt) => answer.toggleChoice(q, opt)}
+            askAnswer={answer}
           />
         ))}
-        <CommenceNote answer={answer} disabled={busy} compact />
+        {content.questions.length === 0 && (
+          <CommenceNote answer={answer} disabled={busy} compact />
+        )}
       </div>
 
       <CommenceFooter

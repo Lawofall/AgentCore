@@ -17,7 +17,7 @@ export type ClipboardEntry = {
  */
 export interface BatchMenuActions {
   count: number;
-  /** 选区里能下载的文件数（目录没有单项下载端点）。 */
+  /** 选区里能下载的项数（文件另存；文件夹整夹 zip）。 */
   downloadableCount: number;
   onDownload: () => void;
   onCut: () => void;

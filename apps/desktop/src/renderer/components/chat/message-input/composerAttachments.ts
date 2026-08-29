@@ -28,6 +28,8 @@ export interface PendingAttachment {
   kind: EntryKind;
   /** 仅 kind=conversation：被引用对话的 id。 */
   conversationId?: string;
+  /** 仅 kind=document：本句点名的按需设定 id。 */
+  documentId?: string;
   /** 已在对话工作区时的相对路径（区内原路径，或 ``attachments/…``）。 */
   workspacePath?: string;
   /** 主进程暂存 id（草稿 / 待云端上传）；发送前 finalize / consume。 */
@@ -62,7 +64,12 @@ export interface PendingAgentMention {
   role: string;
 }
 
-export type MentionSectionId = "team" | "conversation" | "folder" | "file";
+export type MentionSectionId =
+  | "team"
+  | "conversation"
+  | "folder"
+  | "file"
+  | "setting";
 
 export const TEXT_PREVIEW_CAP = 256 * 1024;
 
@@ -127,7 +134,7 @@ export function detectMention(
 }
 
 /**
- * `@` 类型前缀：以「团队/对话/文件/文件夹」或英文 agent/file/dir/folder/conv 开头时
+ * `@` 类型前缀：以「团队/对话/文件/文件夹/设定」或英文 agent/file/dir/folder/conv/setting 开头时
  * 只保留对应分区；前缀后的剩余串作过滤词。
  */
 export function parseMentionFilter(rawQuery: string): {
@@ -140,6 +147,7 @@ export function parseMentionFilter(rawQuery: string): {
     { re: /^(文件夹|folder|dir)\s*/i, section: "folder" },
     { re: /^(文件|file)\s*/i, section: "file" },
     { re: /^(对话|conv(?:ersation)?)\s*/i, section: "conversation" },
+    { re: /^(设定|setting|笔记|note)\s*/i, section: "setting" },
     { re: /^(团队|agent)\s*/i, section: "team" },
   ];
   for (const { re, section } of rules) {
@@ -168,6 +176,45 @@ export function pickRecentConversations(
     name: c.title || "未命名对话",
     display: c.title || "未命名对话",
     kind: "conversation" as const,
+  }));
+}
+
+/** 按需设定（已停用 / 解析失败 / 常驻条目不进菜单）。 */
+export function pickOnDemandSettings(
+  list: ReadonlyArray<{
+    id: string;
+    name: string;
+    description: string;
+    applyMode: string;
+    disputedAt: string | null;
+    frontmatterError: string | null;
+    kind: string;
+  }>,
+  filter: string,
+  limit = EMPTY_MENTION_INDEX_LIMIT,
+): IndexedEntry[] {
+  const q = filter.trim().toLowerCase();
+  let rows = list.filter(
+    (e) =>
+      e.kind === "document" &&
+      e.applyMode === "on_demand" &&
+      !e.disputedAt &&
+      !e.frontmatterError,
+  );
+  if (q) {
+    rows = rows.filter(
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        e.description.toLowerCase().includes(q),
+    );
+  }
+  return rows.slice(0, limit).map((e) => ({
+    sourceId: "setting",
+    sourceLabel: "设定",
+    relPath: e.id,
+    name: e.name,
+    display: e.description || "设定",
+    kind: "document" as const,
   }));
 }
 

@@ -94,6 +94,8 @@ def test_research_first_tool_result_fills_motion_topic():
     assert "请勿再次调用 debate" in text
     assert 'playbook="lens_crosscheck"' in text
     assert '"topic": "该不该上四天工作制？"' in text
+    assert '"lenses"' in text
+    assert "法律" in text
     assert "忽略我" not in text
 
 

@@ -1,18 +1,17 @@
-"""软件交付类 playbook：diagnose_fix_verify / build_app."""
+"""软件交付类 playbook：diagnose_fix_verify."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from agentcore.runtime.runs.build_app import _build_app
 from agentcore.runtime.runs.playbooks._common import clean_str, clean_str_list
 
 
 def diagnose_fix_verify(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    """diagnose(短) → patch → verify：【无先验调查批】的单症状修码协议。
+    """patch（短诊断后就地改）→ verify：【无先验调查批】的单症状修码协议。
 
     已有多角调查/审查批且用户确认按结论修 → 勿套本 playbook；手写 tasks +
-    continue_from_run_id。硬形状禁止「单人包圆触顶后再换马甲从零读」——三角色分波，
+    continue_from_run_id。硬形状禁止「单人包圆触顶后再换马甲从零读」——两波分职，
     验证失败应 escalate / 同人续派，勿新开巡读 worker。须在 playbook_args 写清 verify
     （CLI 命令或页面/UI 复现说明）；白屏/挂载类优先 browser 证据，勿用慢 typecheck 冒充。
     """
@@ -42,37 +41,26 @@ def diagnose_fix_verify(args: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
 
     tasks: list[dict[str, Any]] = [
         {
-            "id": "diagnose",
-            "role": "诊断员",
-            "task": (
-                f"短诊断【{problem}】。{target_hint}"
-                "运行时空白/挂载/渲染复现：先 browser 证据（browser(action=navigate) + "
-                "browser(action=console) + snapshot），再 ≤少数目标文件；无栈时可组件二分，"
-                "勿空等用户 F12。"
-                "最多读少数相关文件 / grep；输出：可消费短文——根因一句话 + 拟改路径与改法"
-                "（勿空话一两句交差）；"
-                "handoff：key_points 写根因与拟改路径（给修补员接力）；"
-                "next_steps 须写清拟改是压住表面还是根因在结构上"
-                "（要动契约/数据模型、同一根因改多层、或靠新增兜底/对账/自愈才能过）——"
-                "没有就写「小修即可」；有则写清缺口。"
-                "本批照修，不挡修补、不 escalate、不问用户。"
-                "禁止全仓 list、禁止大范围通读、禁止在本步改文件。"
-            ),
-            "max_rounds": 4,
-            "deliverable": {"form": "prose"},
-        },
-        {
             "id": "patch",
             "role": "修补员",
             "task": (
-                f"按诊断结果修补【{problem}】。{target_hint}"
-                "用 str_replace 就地改（已有非空代码禁骨架整文件重写）；"
+                f"短诊断后就地修补【{problem}】。{target_hint}"
+                "运行时空白/挂载/渲染复现：先 browser 证据（browser(action=navigate) + "
+                "browser(action=console) + snapshot），再 ≤少数目标文件；无栈时可组件二分，"
+                "勿空等用户 F12。"
+                "最多读少数相关文件 / grep；先写出可消费短文——根因一句话 + 拟改路径与改法"
+                "（勿空话一两句交差）；"
+                "handoff：key_points 写根因与拟改路径；"
+                "next_steps 须写清拟改是压住表面还是根因在结构上"
+                "（要动契约/数据模型、同一根因改多层、或靠新增兜底/对账/自愈才能过）——"
+                "没有就写「小修即可」；有则写清缺口。"
+                "本批照修，不 escalate、不问用户。"
+                "然后用 str_replace 就地改（已有非空代码禁骨架整文件重写）；"
                 "改完用内环 code_diagnostics / 写盘回执中的诊断自检；"
                 "禁止全量 typecheck/`test_run`（本批无 test_run）；"
                 "禁止重新从零巡仓。"
                 "交付：已修补的代码文件须落盘。"
             ),
-            "depends_on": ["diagnose"],
             "max_rounds": 6,
             "deliverable": patch_deliverable,
         },
@@ -101,7 +89,3 @@ def diagnose_fix_verify(args: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
         },
     ]
     return tasks, []
-
-
-# Re-export build_app builder under the soft-delivery module (lives in build_app.py).
-build_app = _build_app

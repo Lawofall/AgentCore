@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Render test for the consult_memory tool-result card (记忆文件夹化 §六 · 渐进披露 可视化):
- * the CEO's pulled 记忆主题笔记 shows as a「查阅记忆：<主题>」header with the note body
- * verbatim below. The block comment here detaches the @vitest-environment directive from
+ * Render test for consult expand cards: historical consult_memory / consult_rule
+ * plus unified `consult` origin badges (能力指引 / 设定 / 查阅).
+ * The block comment here detaches the @vitest-environment directive from
  * the import block so organizeImports keeps it file-leading.
  */
 
@@ -42,7 +42,7 @@ function data(p: Partial<ToolResultData>): ToolResultData {
 }
 
 describe("ToolResultView · consult_memory", () => {
-  it("renders the pulled memory note as a「查阅记忆：<主题>」card with its body", () => {
+  it("renders the pulled memory note as a name +「查阅记忆」badge card", () => {
     render(
       <ToolResultView
         data={data({
@@ -52,9 +52,9 @@ describe("ToolResultView · consult_memory", () => {
         })}
       />,
     );
-    expect(screen.getByText("查阅记忆：")).toBeTruthy();
+    expect(screen.getByText("查阅记忆")).toBeTruthy();
+    expect(screen.queryByText("查阅记忆：")).toBeNull();
     expect(screen.getByText("部署流程")).toBeTruthy();
-    // The full note body the CEO consulted is shown verbatim, expandable below.
     expect(screen.getByText(/用 pnpm dev 起前端/)).toBeTruthy();
   });
 
@@ -68,13 +68,13 @@ describe("ToolResultView · consult_memory", () => {
         })}
       />,
     );
-    expect(screen.getByText("查阅记忆：")).toBeTruthy();
+    expect(screen.getByText("查阅记忆")).toBeTruthy();
     expect(screen.getByText("项目背景")).toBeTruthy();
   });
 });
 
 describe("ToolResultView · consult (unified)", () => {
-  it("reuses the consult_memory card for display.name + body", () => {
+  it("paints missing origin as「查阅」, never「查阅记忆」", () => {
     render(
       <ToolResultView
         data={data({
@@ -84,12 +84,44 @@ describe("ToolResultView · consult (unified)", () => {
         })}
       />,
     );
-    expect(screen.getByText("查阅记忆：")).toBeTruthy();
+    expect(screen.getByText("查阅")).toBeTruthy();
+    expect(screen.queryByText("查阅记忆")).toBeNull();
+    expect(screen.queryByText("查阅记忆：")).toBeNull();
     expect(screen.getByText("部署流程")).toBeTruthy();
     expect(screen.getByText(/用 pnpm dev 起前端/)).toBeTruthy();
   });
 
-  it("does not paint resolve_folder display.name as a consult memory card", () => {
+  it("paints origin=system as「能力指引」", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "consult",
+          display: { name: "debate_and_review", origin: "system" },
+          result: "对需对抗性多视角思考的问题用 debate。",
+        })}
+      />,
+    );
+    expect(screen.getByText("能力指引")).toBeTruthy();
+    expect(screen.getByText("debate_and_review")).toBeTruthy();
+    expect(screen.queryByText("查阅记忆")).toBeNull();
+  });
+
+  it("paints origin=user as「设定」", () => {
+    render(
+      <ToolResultView
+        data={data({
+          toolName: "consult",
+          display: { name: "合规附录", origin: "user" },
+          result: "不得外泄客户数据",
+        })}
+      />,
+    );
+    expect(screen.getByText("设定")).toBeTruthy();
+    expect(screen.getByText("合规附录")).toBeTruthy();
+    expect(screen.queryByText("查阅记忆")).toBeNull();
+  });
+
+  it("does not paint resolve_folder display.name as a consult card", () => {
     render(
       <ToolResultView
         data={data({
@@ -104,13 +136,17 @@ describe("ToolResultView · consult (unified)", () => {
         })}
       />,
     );
+    expect(screen.queryByText("查阅记忆")).toBeNull();
     expect(screen.queryByText("查阅记忆：")).toBeNull();
+    expect(screen.queryByText("查阅")).toBeNull();
+    expect(screen.queryByText("能力指引")).toBeNull();
+    expect(screen.queryByText("设定")).toBeNull();
     expect(screen.getByText(/唯一命中，可直接用于后续派工/)).toBeTruthy();
   });
 });
 
 describe("ToolResultView · consult_rule (historical)", () => {
-  it("maps display.rule onto the same memory-style card", () => {
+  it("maps display.rule onto the consult card with「设定」", () => {
     render(
       <ToolResultView
         data={data({
@@ -120,7 +156,9 @@ describe("ToolResultView · consult_rule (historical)", () => {
         })}
       />,
     );
-    expect(screen.getByText("查阅记忆：")).toBeTruthy();
+    expect(screen.getByText("设定")).toBeTruthy();
+    expect(screen.queryByText("查阅记忆")).toBeNull();
+    expect(screen.queryByText("查阅记忆：")).toBeNull();
     expect(screen.getByText("合规附录")).toBeTruthy();
     expect(screen.getByText(/不得外泄客户数据/)).toBeTruthy();
   });

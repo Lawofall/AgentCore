@@ -213,11 +213,6 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
     turn_warning: str | None = None
     # 裸聊写盘自动建文件夹（auto_folder_created，§5.4 裸聊行）：DURABLE；对话内不再渲染。
     auto_folder: dict[str, Any] | None = None
-    # 团队便签墙 (§2.2 通): the batch's posted notes in chronological order. Journaled, so it
-    # replays on reload (unlike transport-only board ops). Deduped by noteId for replay safety.
-    team_notes: list[dict[str, Any]] = []
-    # 墙已升（run_plan.note_wall）：缺省 / 旧 journal = 无墙。Sticky-OR 同 execution；换图重置。
-    note_wall = False
     # 运行中用户插话（user_interjection，经典+协调共用）：同 interjection_id 保最新 status
     # （含 injected）。DURABLE。
     user_interjections: list[dict[str, Any]] = []
@@ -295,10 +290,6 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
             content = ""
             while process and process[-1].get("kind") == "content":
                 process.pop()
-            # 仅交付前核验回炉 (reason=finish_guard) 折出「已按交付规范重写」轻 chip；
-            # 其余 reason（retry / soft_gate / ask_user / …）只清正文、不留痕。
-            if p.get("reason") == "finish_guard":
-                process.append({"kind": "rework"})
 
         elif etype == "reasoning_delta":
             delta = p.get("delta") or ""
@@ -435,11 +426,6 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                 and not has_marker("team", "execution_id", ip)
             ):
                 process.append({"kind": "team", "execution_id": ip})
-            if plan_id is not None and plan_id != ip:
-                # A different execution id is a fresh plan (desktop resets the slot).
-                note_wall = False
-            if p.get("note_wall") is True:
-                note_wall = True
             if plan_id is None or plan_id == ip:
                 plan_id = ip
                 _upsert_act(acts, act)
@@ -587,9 +573,6 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                 steps = run["process"]
                 while steps and steps[-1].get("kind") == "content":
                     steps.pop()
-                # 仅 finish_guard（交付前核验回炉）留「已按交付规范重写」痕迹。
-                if p.get("reason") == "finish_guard":
-                    steps.append({"kind": "rework"})
 
         elif etype == "run_reasoning_delta":
             ag = agent_by_id(p.get("agent_id", ""))
@@ -875,41 +858,9 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                     "external_evidence_reason"
                 )
 
-        elif etype == "team_note_posted":
-            # 团队便签墙 (§2.2 通): a worker broadcast a one-line decision / heads-up to its
-            # concurrent siblings. Fold it onto the turn's teamNotes (chronological), deduped by
-            # noteId for replay safety (mirrors the desktop/mobile folds; conformance pins them
-            # equal). The wall is engine-scoped; the panel just lists the turn's notes.
-            note_id = p.get("note_id", "")
-            supersedes = p.get("supersedes")
-            if not any(n.get("noteId") == note_id for n in team_notes):
-                team_notes.append(
-                    {
-                        "noteId": note_id,
-                        "runId": p.get("run_id", ""),
-                        "agentId": p.get("agent_id", ""),
-                        "role": p.get("role", ""),
-                        "kind": p.get("kind", ""),
-                        "text": p.get("text", ""),
-                        "ts": p.get("ts"),
-                        # 便签会过期 → supersession (§2.2): a fresh note is active; this fold marks
-                        # the TARGET stale below. `supersedes` is the note this one 改写/作废s (None
-                        # for a fresh post) — kept so the panel can link an amendment to its origin.
-                        "status": "active",
-                        "supersedes": supersedes,
-                    }
-                )
-                if p.get("source"):
-                    team_notes[-1]["source"] = p["source"]
-            # An amendment (carries `supersedes`) marks its TARGET superseded (改写) / voided
-            # (作废) — `supersede_mode` is the single discriminator every fold shares. The target
-            # was posted earlier, so it is already in the list (events replay in order).
-            if supersedes:
-                target = next((n for n in team_notes if n.get("noteId") == supersedes), None)
-                if target is not None:
-                    target["status"] = (
-                        "voided" if p.get("supersede_mode") == "void" else "superseded"
-                    )
+        elif etype in ("team_preview_required", "team_preview_resolved", "team_note_posted"):
+            # Retired kickoff pair / team note wall — skip (old journal may still carry them).
+            pass
 
         elif etype == "approval_required":
             # 统一时间线二期 D3/D5: positional `approval` marker at required 时刻；行渲染由
@@ -954,10 +905,6 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
                         "status": "resolved",
                         "decision": p.get("decision"),
                     }
-
-        elif etype in ("team_preview_required", "team_preview_resolved"):
-            # Retired kickoff pair — skip (old journal segment may be absent).
-            pass
 
         elif etype == "stage_card_required":
             # 阶段推进卡时间线落点：required 时刻锚点；生命周期仍由 fold_interactions 承载。
@@ -1158,10 +1105,6 @@ def project_turn(events: list[dict[str, Any]]) -> dict[str, Any]:
         "turnWarning": turn_warning,
         # 裸聊自动建文件夹（auto_folder_created）：{folderId, name}，null 当本回合没建。
         "autoFolder": auto_folder,
-        # 团队便签墙 (§2.2 通): the turn's posted notes (chronological), [] when none.
-        "teamNotes": team_notes,
-        # 墙已升：仅真上线（旧 journal / 无墙批次缺省）。
-        **({"noteWall": True} if note_wall else {}),
         # 协调中用户插话：同 interjectionId 保最新，[] when none.
         "userInterjections": user_interjections,
     }

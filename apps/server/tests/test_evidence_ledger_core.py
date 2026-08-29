@@ -318,3 +318,6 @@ def test_merge_history_ledgers_and_doc_kind():
     assert "<registered_sources>" in prompt
     assert "#r1" in prompt
     assert "deep_read=是" in prompt
+    assert "成稿闸仅允许" not in prompt
+    assert "成稿可引=" not in prompt
+    assert "对话成稿可挂" in prompt

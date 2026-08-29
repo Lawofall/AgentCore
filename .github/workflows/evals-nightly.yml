@@ -148,7 +148,7 @@ jobs:
           --baseline "eval-out/$SUITE-latest.json"
           --out eval-reports/functional.json
 
-      # MAST 失败标签套件（学·度量 §2.5 / §五 ①）：这是「拆·lead B / 通·便签墙 / 合·验证」
+      # MAST 失败标签套件（学·度量 §2.5 / §五 ①）：协作形状铺开的**数据闸门**
       # 默认铺开的**数据闸门**——按 MAST 14 类 / 三组聚合通过率（report 的 summary.by_mast），
       # 看「哪一类失败被压下去了」。team 路径 + milestone 裁判（layer 2 默认），故必须真模型。
       - name: MAST failure-label suite (collab rollout + observe, soft)

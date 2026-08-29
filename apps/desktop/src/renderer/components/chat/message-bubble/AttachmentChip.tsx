@@ -3,7 +3,7 @@ import { Button } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { downloadWorkspaceFile } from "@/services/workspace";
 import type { MessageAttachmentMeta } from "@/stores/conversation";
-import { Download, MessageSquare } from "lucide-react";
+import { Bookmark, Download, MessageSquare } from "lucide-react";
 import { useState } from "react";
 
 export function AttachmentChip({
@@ -15,7 +15,7 @@ export function AttachmentChip({
 }) {
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const downloadable =
-    att.kind !== "dir" && !!att.workspacePath && !!conversationId;
+    att.kind === "file" && !!att.workspacePath && !!conversationId;
 
   const base =
     "inline-flex max-w-[220px] items-center gap-1.5 rounded-lg bg-accent px-2 py-1 text-xs text-accent-foreground";
@@ -24,6 +24,8 @@ export function AttachmentChip({
       <DirTypeIcon name={att.name} path={att.path} size={12} />
     ) : att.kind === "conversation" ? (
       <MessageSquare size={12} className="shrink-0" />
+    ) : att.kind === "document" ? (
+      <Bookmark size={12} className="shrink-0" />
     ) : (
       <FileTypeIcon name={att.name} path={att.path} size={12} />
     );
@@ -48,7 +50,13 @@ export function AttachmentChip({
   if (!downloadable) {
     return (
       <SimpleTooltip
-        label={att.kind === "conversation" ? "引用对话" : att.path}
+        label={
+          att.kind === "conversation"
+            ? "引用对话"
+            : att.kind === "document"
+              ? "本句点名设定"
+              : att.path
+        }
       >
         <span className={base}>
           {icon}

@@ -11,13 +11,12 @@ import {
 } from "@/lib/turnOutcome";
 import { api } from "@/services/api";
 import { persistOpenedCache } from "@/services/offlineCache";
-import { surfaceResumeFromAssistant } from "@/services/resume";
 import { clearLastEventId } from "@/services/streamConversation";
+import { finalizeGeneratingForPausedConversation } from "@/services/turns/helpers";
 import { hasLocalConversationStream } from "@/services/turns/streamOwnership";
 import {
   type MemoryUpdate,
   type Message,
-  getRuntime,
   isMessageWindowResident,
   isMessageWindowStrictlyRicher,
   overlayIncomingWithRicherExisting,
@@ -57,9 +56,10 @@ export interface BackendMessage {
     name: string;
     path: string;
     truncated: boolean;
-    kind?: "file" | "dir" | "conversation";
+    kind?: "file" | "dir" | "conversation" | "document";
     workspace_path?: string | null;
     conversation_id?: string | null;
+    document_id?: string | null;
   }[];
   /** Conversation-page ``@`` role chips (soft mention; not attachment kind). */
   agent_mentions?: { agent_id: string; role: string }[];
@@ -239,21 +239,15 @@ export function toMessage(m: BackendMessage): Message {
   if (events.length > 0) {
     hydrateInteractionsFromJournal(m.conversation_id, m.id, events);
   }
-  // Cold-path pause latch: InteractionStore is the live ResumePrompt authority.
-  // Mirror recovery shell into pausedTurns when the persisted row is still paused
-  // so reopen / offline hydrate keeps origin routing + shell fallback even if
-  // /recovery raced empty. Live cards no longer require message_end → surface.
+  // Cold-path pause latch: generating chrome off. Clickable ResumePrompt on
+  // reopen comes from recovery.paused (still-waiting), not this journal replay.
+  // `force`: hydrate no longer mints a pausedTurns shell, so the helper's
+  // "has a pause frame" latch would otherwise no-op and leave the spinner on.
   const paused = Boolean(m.paused);
-  if (paused && m.role === "assistant" && events.length > 0) {
-    const priorUser = [...getRuntime(m.conversation_id).messages]
-      .reverse()
-      .find((msg) => msg.role === "user");
-    surfaceResumeFromAssistant(
-      m.conversation_id,
-      { id: m.id, serverMessageId: m.id },
-      "server",
-      { content: priorUser?.content, id: priorUser?.id },
-    );
+  if (paused && m.role === "assistant") {
+    finalizeGeneratingForPausedConversation(m.conversation_id, {
+      force: true,
+    });
   }
   // steps — now for single-agent AND multi-agent turns (统一团队时间线). Single-agent
   // tool-less turns synthesize one reasoning step from reasoning_content.
@@ -382,6 +376,7 @@ export function toMessage(m: BackendMessage): Message {
           kind: a.kind ?? "file",
           workspacePath: a.workspace_path ?? undefined,
           conversationId: a.conversation_id ?? undefined,
+          documentId: a.document_id ?? undefined,
         }))
       : undefined,
     citations: m.citations?.length

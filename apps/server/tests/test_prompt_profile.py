@@ -10,8 +10,6 @@ from __future__ import annotations
 from agentcore.runtime.resolve.profile import (
     FRAGMENT_BASE,
     FRAGMENT_CEO_CORE,
-    FRAGMENT_CEO_VISUALIZATION,
-    FRAGMENT_CITATION,
     OVERRIDABLE_KEYS,
     PromptProfile,
     active_profile,
@@ -72,13 +70,8 @@ def test_use_profile_resets_on_exception() -> None:
     assert active_profile() is None
 
 
-def test_overridable_keys_are_the_four_static_fragments() -> None:
-    assert {
-        FRAGMENT_BASE,
-        FRAGMENT_CEO_CORE,
-        FRAGMENT_CITATION,
-        FRAGMENT_CEO_VISUALIZATION,
-    } == OVERRIDABLE_KEYS
+def test_overridable_keys_are_the_static_fragments() -> None:
+    assert {FRAGMENT_BASE, FRAGMENT_CEO_CORE} == OVERRIDABLE_KEYS
 
 
 # --- 逐字节守恒（前缀缓存安全的命脉） ---
@@ -124,14 +117,13 @@ def test_ceo_core_override_only_swaps_ceo_core() -> None:
 
 def test_empty_override_ablates_fragment_cleanly() -> None:
     # 消融：空串覆盖 → assembler 跳过 falsy → 整段移除、不留空行。
-    with use_profile(PromptProfile("ablate", {FRAGMENT_CEO_VISUALIZATION: ""})):
+    with use_profile(PromptProfile("ablate", {FRAGMENT_CEO_CORE: ""})):
         ceo = _ceo()
-    assert "<visualization>" not in ceo
+    assert "<how_you_work>" not in ceo
     assert "\n\n\n" not in ceo  # 没有因移除留下连续空行
-    assert "<how_you_work>" in ceo  # 其余 CEO 片段完好
+    assert "<output_style>" in ceo  # 其余片段完好
 
 
-def test_citation_ablation_removes_citation_block() -> None:
-    with use_profile(PromptProfile("ablate", {FRAGMENT_CITATION: ""})):
-        ceo = _ceo()
+def test_citation_block_is_absent_from_production_ceo() -> None:
+    ceo = _ceo()
     assert "<citing_sources>" not in ceo

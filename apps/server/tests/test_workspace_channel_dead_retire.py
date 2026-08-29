@@ -202,6 +202,7 @@ def test_backend_write_tools_retire_with_the_file_family():
         "md_to_docx",
         "md_to_pdf",
         "archive_extract",
+        "archive_create",
         "download_url",
         "read_image",
     ):

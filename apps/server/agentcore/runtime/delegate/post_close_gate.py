@@ -8,7 +8,8 @@
 - 补缺口（``replaces_run_id``）按 ``MAX_GAP_FILL_ADDS`` 限流；
 - 只有真冷开的那堆才判 substantial 大扇出并拒。
 
-``force=["post_close"]`` / 非 harvest / 嵌套 / append·同图 merge（由调用方排除）放行。
+非 harvest / 嵌套 / append·同图 merge（由调用方排除）放行。
+续派走 ``continue_from_run_id``，补缺口走 ``replaces_run_id``。
 """
 
 from __future__ import annotations
@@ -110,7 +111,6 @@ class PostCloseReject:
 def post_close_reject(tool: DelegateTool, plan: RunPlan) -> PostCloseReject | None:
     """Same admission as :func:`post_close_cold_open_error`, plus a kind tag."""
     from agentcore.runtime.delegate.batch_shape import is_substantial_batch
-    from agentcore.runtime.delegate.force_scopes import GATE_POST_CLOSE, force_allows
     from agentcore.runtime.delegate.team_continuation import (
         classify_batch,
         cold_open_reject_message,
@@ -118,8 +118,6 @@ def post_close_reject(tool: DelegateTool, plan: RunPlan) -> PostCloseReject | No
     )
 
     if not is_post_close_turn(tool):
-        return None
-    if force_allows(tool, GATE_POST_CLOSE):
         return None
     if int(getattr(tool, "_depth", 0) or 0) != 0:
         return None

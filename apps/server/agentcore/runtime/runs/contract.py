@@ -22,9 +22,9 @@ A worker's product is accepted only if it satisfies its node's delivery spec
 ``warnings``（不阻断验收、不占满 ``contract.retry``）。已删字数/必含词字段不再被运行时消费。
 代码文件豁免 TODO/XXX 习惯。建站链 ``web_quality`` / ``web_seam`` 硬闸与引用/书目硬闸不变。
 
-引用 / 书目质量（台账接通时）：对内容类 ``artifact_contents`` 复用
-:func:`~agentcore.runtime.verify.citation_quality_reworks`（与 chat ``finish_guard`` 同源）——
-非法 ``#rN``、无绑定 GB/T ``[DCOP[J]`` 著录等 → fail → 合同返工。
+引用 / 书目质量（台账接通时）：对内容类 ``artifact_contents`` 走
+:func:`~agentcore.runtime.verify.citation_quality_reworks`（落盘成文闸，**不是**
+chat ``finish_guard``）——非法 ``#rN``、无绑定 GB/T 著录等 → fail → 合同返工。
 
 判「写得好不好」的语义裁判（额外一次 LLM 调用）留作后续增强。
 
@@ -378,8 +378,9 @@ def check_contract(
     markers and soft self-notes as ``warnings`` (定案乙：不再 hard-fail). When
     ``ledger_entries`` is not ``None`` (turn evidence ledger connected; empty list
     still counts), content surfaces are also checked with
-    :func:`~agentcore.runtime.verify.citation_quality_reworks` (same rules as chat
-    ``finish_guard``) — unless ``enforce_citations=False`` (调研阶段 A：检索草案跳过
+    :func:`~agentcore.runtime.verify.citation_quality_reworks` (file-contract
+    citation gate, not chat ``finish_guard``) — unless ``enforce_citations=False``
+    （调研阶段 A：检索草案跳过
     成稿引用闸). Callers that cannot supply contents still get existence checks
     via ``artifacts``; parseability / seam / placeholder / citation checks are
     enforced when contents are given.
@@ -525,7 +526,7 @@ def check_contract(
         hard_exempt_paths=exempt_paths,
     )
     failures.extend(ph.failures)
-    # 引用 / 书目：与 chat finish_guard 同源；仅台账接通时扫内容类落盘。
+    # 引用 / 书目：落盘成文闸（citation_quality_reworks）；仅台账接通时扫内容类落盘。
     # 调研阶段 A（enforce_citations=False）跳过成稿引用闸。
     if enforce_citations:
         failures.extend(
@@ -653,7 +654,7 @@ def _artifact_citation_failures(
     ledger_entries: list[dict[str, Any]] | None,
     citable_ids: frozenset[str] | set[str] | None,
 ) -> list[str]:
-    """Scan content-surface files with chat-side citation / bibliography rules.
+    """Scan content-surface files with the file-contract citation / bibliography gate.
 
     No-op when the turn evidence ledger is not connected (``ledger_entries is None``)
     and ``citable_ids is None``. Code / binary paths are skipped.

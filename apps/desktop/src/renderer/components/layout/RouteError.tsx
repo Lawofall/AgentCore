@@ -52,9 +52,7 @@ export function RouteError() {
   }, [error, is404]);
 
   const title = is404 ? "页面不存在" : "出了点问题";
-  const detail = is404
-    ? "这个地址没有对应的页面。"
-    : "应用遇到了意外错误，可以重试或返回对话。";
+  const detail = is404 ? "这个地址没有对应的页面。" : null;
   const devDetail =
     import.meta.env.DEV && !is404 ? describeRouteError(error) : null;
 
@@ -65,7 +63,9 @@ export function RouteError() {
       </div>
       <div className="space-y-1">
         <h1 className="text-xl font-semibold text-foreground">{title}</h1>
-        <p className="max-w-sm text-sm text-muted-foreground">{detail}</p>
+        {detail && (
+          <p className="max-w-sm text-sm text-muted-foreground">{detail}</p>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <Button

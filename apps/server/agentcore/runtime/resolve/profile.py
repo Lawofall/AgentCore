@@ -27,15 +27,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 # 可被变体覆盖的静态片段 key（值 = 装配点的 key，单一真相）。覆盖 BASE 同时作用于 worker
-# 基底与 CEO 基底（CEO base_prompt 即 assemble 结果）；其余三个仅在 CEO 装配里出现。
+# 基底与 CEO 基底（CEO base_prompt 即 assemble 结果）；其余仅在 CEO 装配里出现。
 FRAGMENT_BASE = "base"
 FRAGMENT_CEO_CORE = "ceo_core"
-FRAGMENT_CITATION = "citation"
-FRAGMENT_CEO_VISUALIZATION = "ceo_visualization"
 
-OVERRIDABLE_KEYS: frozenset[str] = frozenset(
-    {FRAGMENT_BASE, FRAGMENT_CEO_CORE, FRAGMENT_CITATION, FRAGMENT_CEO_VISUALIZATION}
-)
+OVERRIDABLE_KEYS: frozenset[str] = frozenset({FRAGMENT_BASE, FRAGMENT_CEO_CORE})
 
 
 @dataclass(frozen=True)

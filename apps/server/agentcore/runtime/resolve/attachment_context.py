@@ -47,6 +47,13 @@ _ATTACH_THIS_MESSAGE_FRAME = (
     "工作区索引里其它 attachments/ 条目属历史轮。"
 )
 
+# @ 点名按需设定：本回合当常驻。单独成段，不进 <attached_files>，以免触发附件收窄场面。
+_PINNED_ENTRIES_FRAME = (
+    "用户本条点名了下列按需设定，本回合当作常驻遵守。"
+    "不是本条上传的附件，不必落盘。"
+)
+_PINNED_MISS = "（点名的设定未能加载，本回合不按该条执行。）"
+
 _INLINE_ORDER_FACT = (
     "Materials are inlined in the user message in the order the user placed them."
 )
@@ -174,6 +181,66 @@ def _attached_files_envelope(
     )
 
 
+def _pinned_entries_envelope(body: str) -> str:
+    return f"<pinned_entries>\n{_PINNED_ENTRIES_FRAME}\n\n{body}\n</pinned_entries>"
+
+
+async def _load_pinned_document_body(
+    *, document_id: str, user_id: str | None
+) -> str | None:
+    """Owner-scoped load; disputed / unreadable / missing → None (soft miss)."""
+    if not user_id:
+        return None
+    try:
+        from agentcore.db.base import async_session_factory
+        from agentcore.db.repositories import DocumentRepository
+        from agentcore.documents.frontmatter import (
+            frontmatter_error_message,
+            strip_entry_frontmatter,
+        )
+
+        async with async_session_factory() as session:
+            repo = DocumentRepository(session)
+            doc = await repo.get(document_id, user_id=user_id)
+            if doc is None or doc.kind != "document":
+                return None
+            if doc.disputed_at is not None:
+                return None
+            raw = doc.content or ""
+            if frontmatter_error_message(raw):
+                return None
+            stripped = strip_entry_frontmatter(raw)
+            if stripped is None:
+                return None
+            body = stripped.strip()
+            return body or None
+    except Exception:  # noqa: BLE001 — pin miss must not break prepare
+        logger.warning(
+            "attachment.pinned_entry_failed",
+            document_id=document_id,
+            exc_info=True,
+        )
+        return None
+
+
+async def _render_pinned_document(
+    att: dict, *, user_id: str | None, name: str
+) -> str:
+    """Body from the documents tree when ``document_id`` is set; else client ``text`` (tests)."""
+    doc_id = str(att.get("document_id") or "").strip()
+    raw_text = (att.get("text") or "").strip()
+    body: str | None = None
+    if doc_id:
+        body = await _load_pinned_document_body(document_id=doc_id, user_id=user_id)
+    elif raw_text:
+        body = raw_text
+    if not body:
+        return f"--- 设定: {name} ---\n{_PINNED_MISS}"
+    clipped_body, clipped = truncate_for_prompt(body)
+    note = " (truncated)" if clipped or att.get("truncated") else ""
+    return f"--- 设定: {name}{note} ---\n{clipped_body}"
+
+
 async def _build_attachment_prompt(
     attachments: list[dict] | None,
     *,
@@ -203,7 +270,9 @@ async def _build_attachment_prompt(
     path-only, never「用 code_execute 开图」as primary).
     Directories carry a recursive file listing (paths only);
     ``kind=conversation`` is **server deep-read** via ``log_export``
-    (client shallow ``text`` is ignored). A file with a ``workspace_path``
+    (client shallow ``text`` is ignored). ``kind=document`` pins an on-demand
+    setting for this turn in ``<pinned_entries>`` (not ``<attached_files>``).
+    A file with a ``workspace_path``
     was persisted into the workspace, so the header points the agent at that
     durable path. Empty prompt when there is nothing to inject so the base
     prompt stays unchanged.
@@ -212,6 +281,13 @@ async def _build_attachment_prompt(
         return AttachmentPrompt(None, (), None)
 
     blocks: list[str] = []
+    slots: list[str] = []
+    pinned_blocks: list[str] = []
+
+    def add_block(block: str) -> None:
+        blocks.append(block)
+        slots.append(block)
+
     resident = False
     has_binary = False
     has_table = False
@@ -241,7 +317,7 @@ async def _build_attachment_prompt(
                 or att.get("path")
                 or name
             )
-            blocks.append(
+            add_block(
                 f"--- File: {name} ({claimed}) [resident missing] ---\n"
                 "Attachment metadata lists this path, but the bytes are NOT in "
                 "the workspace (upload/residency failed or incomplete). "
@@ -250,18 +326,25 @@ async def _build_attachment_prompt(
             )
             continue
 
+        if kind == "document":
+            pinned_blocks.append(
+                await _render_pinned_document(att, user_id=user_id, name=name)
+            )
+            slots.append("")
+            continue
+
         if kind == "dir":
             if not text:
                 continue
             path = att.get("path") or name
             note = " (partial listing)" if att.get("truncated") else ""
-            blocks.append(
+            add_block(
                 f"--- Directory: {name} ({path}){note} ---\n"
                 f"File paths (contents not included):\n{text}"
             )
         elif kind == "conversation":
             has_conversation = True
-            blocks.append(
+            add_block(
                 await _deep_read_conversation_attachment(
                     att,
                     name=name,
@@ -275,7 +358,7 @@ async def _build_attachment_prompt(
                 resident = True
             has_preparsed = True
             copy_note = f" [扫描说明 → {parsed_path}]" if parsed_path else ""
-            blocks.append(
+            add_block(
                 f"--- File: {name} ({path}) [扫描件 / 无文本层]{copy_note} ---\n{text}"
             )
         elif kind == "file" and ext in TABLE_EXTENSIONS:
@@ -291,14 +374,14 @@ async def _build_attachment_prompt(
             )
             if preview is not None:
                 structure = format_table_preview(preview)
-                blocks.append(
+                add_block(
                     f"--- File: {name} ({path}) [表格 / 结构面] ---\n"
                     f"{structure}\n\n"
                     "This is a structure preview only — the full table stays in "
                     f"the workspace file. {steer}"
                 )
             else:
-                blocks.append(
+                add_block(
                     f"--- File: {name} ({path}) [表格 / 仅路径] ---\n"
                     "Could not build a structure preview. "
                     f"{steer} Do NOT treat file_list emptiness as missing."
@@ -326,7 +409,7 @@ async def _build_attachment_prompt(
             if ext in MARKITDOWN_EXTENSIONS:
                 has_office_inline = True
                 block += f"\n\n{_office_lossy_steer(has_code_execute=has_code_execute)}"
-            blocks.append(block)
+            add_block(block)
         elif binary or (ws_path and not text):
             # Binary (or empty-body resident / preparse failed): path only —
             # except resident images → native multimodal or VisionReader eye→text.
@@ -351,19 +434,19 @@ async def _build_attachment_prompt(
                     )
                     if part is not None:
                         native_image_parts.append(part)
-                        blocks.append(
+                        add_block(
                             f"--- File: {name} ({path}) [image / multimodal] ---\n"
                             f"{_IMAGE_NATIVE_INDEX}"
                         )
                     else:
-                        blocks.append(
+                        add_block(
                             f"--- File: {name} ({path}) [image / multimodal failed] ---\n"
                             "无法读取驻留图片字节，本回合未把该图发给主模型。"
                         )
                     continue
                 if vision_reader is None or backend is None:
                     has_image_unconfigured = True
-                blocks.append(
+                add_block(
                     await _read_image_attachment_block(
                         name=name,
                         path=path,
@@ -377,7 +460,7 @@ async def _build_attachment_prompt(
                 continue
             if ext in MARKITDOWN_EXTENSIONS:
                 has_office_unparsed = True
-                blocks.append(
+                add_block(
                     f"--- File: {name} ({path}) [binary / office-pdf] ---\n"
                     "No inline text for this office/PDF attachment (pre-parse missed or "
                     "failed). Use file_read on the workspace-relative path above — "
@@ -389,7 +472,7 @@ async def _build_attachment_prompt(
                 steer = _code_execute_steer(
                     has_code_execute=has_code_execute, spreadsheet=False
                 )
-                blocks.append(
+                add_block(
                     f"--- File: {name} ({path}) [binary] ---\n"
                     "This is a binary file saved in the workspace (no text inline). "
                     f"{steer} Do NOT treat file_list emptiness as missing."
@@ -399,9 +482,12 @@ async def _build_attachment_prompt(
             if ws_path:
                 resident = True
             note = " (truncated)" if att.get("truncated") else ""
-            blocks.append(f"--- File: {name} ({path}){note} ---\n{text}")
+            add_block(f"--- File: {name} ({path}){note} ---\n{text}")
 
-    if not blocks:
+    pinned_xml = (
+        _pinned_entries_envelope("\n\n".join(pinned_blocks)) if pinned_blocks else ""
+    )
+    if not blocks and not pinned_xml:
         return AttachmentPrompt(None, (), None)
 
     notes = dict(
@@ -470,10 +556,19 @@ async def _build_attachment_prompt(
             else ""
         ),
     )
-    body = "\n\n".join(blocks)
-    envelope = _attached_files_envelope(body, inline_in_user_message=False, **notes)
-    slim = _attached_files_envelope("", inline_in_user_message=True, **notes)
-    return AttachmentPrompt(envelope, tuple(blocks), slim)
+    attached_full = None
+    attached_slim = None
+    if blocks:
+        body = "\n\n".join(blocks)
+        attached_full = _attached_files_envelope(
+            body, inline_in_user_message=False, **notes
+        )
+        attached_slim = _attached_files_envelope("", inline_in_user_message=True, **notes)
+    parts_full = [p for p in (pinned_xml, attached_full) if p]
+    parts_slim = [p for p in (pinned_xml, attached_slim) if p]
+    envelope = "\n\n".join(parts_full) if parts_full else None
+    slim = "\n\n".join(parts_slim) if parts_slim else None
+    return AttachmentPrompt(envelope, tuple(slots), slim)
 
 
 async def _build_attachment_context(

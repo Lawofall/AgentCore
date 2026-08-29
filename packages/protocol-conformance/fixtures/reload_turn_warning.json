@@ -90,7 +90,6 @@
     "deliveryStatus": null,
     "turnWarning": "当前模型可能不支持工具调用，复杂任务效果可能受限。",
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

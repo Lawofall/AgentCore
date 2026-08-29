@@ -81,10 +81,14 @@ EVENTS: list[EventSpec] = [
         },
     ),
     EventSpec(name='approval.turn_grant_refused'),
+    EventSpec(name='archive_create.done'),
     EventSpec(name='archive_extract.done'),
     EventSpec(name='ask_user.card_rejected'),
     EventSpec(name='ask_user.list_arg_rejected'),
-    EventSpec(name='ask_user.option_label_rejected'),
+    EventSpec(
+        name='ask_user.option_label_rejected',
+        description='历史兼容：曾拒选项名含「（推荐）」等倾向标记；现倾向写入名末，不再发此事件',
+    ),
     EventSpec(name='attach.cursor_replay'),
     EventSpec(name='attachment.binary_missing_workspace_path'),
     EventSpec(name='attachment.conversation_cloud_failed'),
@@ -95,6 +99,7 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='attachment.native_image_read_failed'),
     EventSpec(name='attachment.pdfminer_failed'),
     EventSpec(name='attachment.persist_failed'),
+    EventSpec(name='attachment.pinned_entry_failed'),
     EventSpec(name='attachment.preparse_copy_write_failed'),
     EventSpec(name='attachment.preparse_failed'),
     EventSpec(name='attachment.preparse_ok'),
@@ -609,7 +614,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='coordination.file_ownership_snapshot_failed'),
     EventSpec(name='coordination.idle_patrol_deferred'),
     EventSpec(name='coordination.idle_yield_held_inflight'),
-    EventSpec(name='coordination.idle_yield_held_wall_zero'),
     EventSpec(
         name='coordination.idle_yield_to_captain',
         description='历史兼容：曾在有在飞工作时 idle-yield 回 CEO；现改为 held_inflight',
@@ -929,7 +933,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.coordinate_failed'),
     EventSpec(name='delegate.coordinate_merged'),
     EventSpec(name='delegate.coordinate_started'),
-    EventSpec(name='delegate.coordination_upgraded'),
     EventSpec(
         name='delegate.delivery_status_emitted',
         description='交付卡已发射（state + artifacts/accepted/rejected/gaps 计数）',
@@ -955,12 +958,22 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.delivery_status_failed'),
     EventSpec(name='delegate.design_impl_same_grant_soft_warn'),
     EventSpec(name='delegate.folder_display_name_failed'),
-    EventSpec(name='delegate.force_unknown_gate'),
-    EventSpec(name='delegate.force_unparsable'),
+    EventSpec(
+        name='delegate.force_unknown_gate',
+        description=(
+            '历史兼容：曾解析 delegate/replan force 闸名数组时忽略未知闸；force 跳闸已撤，不再发此'
+            '事件'
+        ),
+    ),
+    EventSpec(
+        name='delegate.force_unparsable',
+        description=(
+            '历史兼容：曾解析 delegate/replan force 入参失败时发出；force 跳闸已撤，不再发此事件'
+        ),
+    ),
     EventSpec(name='delegate.graph_append_latest'),
     EventSpec(name='delegate.graph_append_skip_node'),
     EventSpec(name='delegate.graph_prev'),
-    EventSpec(name='delegate.inherit_notes'),
     EventSpec(name='delegate.isomorphic_rejected'),
     EventSpec(name='delegate.nested_code_audit_discipline'),
     EventSpec(name='delegate.nested_turn_token_envelope'),
@@ -994,7 +1007,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='delegate.run_redirect_ignored'),
     EventSpec(name='delegate.run_stop_accepted'),
     EventSpec(name='delegate.same_turn_memory_append'),
-    EventSpec(name='delegate.seed_notes'),
     EventSpec(
         name='delegate.started',
         description='编排委派开始（agents/plan/waves；task_chars=完整 task 长度）',
@@ -1193,7 +1205,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='engine.delivery_idle_narrow'),
     EventSpec(name='engine.delivery_idle_narrow_apply'),
     EventSpec(name='engine.delivery_idle_nudge'),
-    EventSpec(name='engine.finish_guard_auto_deep_read'),
     EventSpec(
         name='engine.finish_guard_honesty_shadow',
         description=(
@@ -2706,8 +2717,6 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='website.visual_critic_capture_failed'),
     EventSpec(name='website.visual_critic_preview_write_failed'),
     EventSpec(name='website.visual_critic_vision_failed'),
-    EventSpec(name='worker.amend_note'),
-    EventSpec(name='worker.amend_note.emit_failed'),
     EventSpec(
         name='worker.escalate',
         description='worker 升级求决策',
@@ -2722,7 +2731,10 @@ EVENTS: list[EventSpec] = [
     EventSpec(name='worker.escalate.coordination_route_failed'),
     EventSpec(name='worker.escalate.emit_failed'),
     EventSpec(name='worker.escalate.settled'),
-    EventSpec(name='worker.escalate_option_label_rejected'),
+    EventSpec(
+        name='worker.escalate_option_label_rejected',
+        description='历史兼容：曾因同一选项名规则拒升级卡；现接受名末「（推荐）」，不再发此事件',
+    ),
     EventSpec(
         name='worker.handoff',
         description='worker 交接（chars=summary 长；body_chars=交付正文长）',
@@ -2734,10 +2746,6 @@ EVENTS: list[EventSpec] = [
             'run_id': FieldType('str'),
         },
     ),
-    EventSpec(name='worker.post_note'),
-    EventSpec(name='worker.post_note.conflict_detected'),
-    EventSpec(name='worker.post_note.coordination_route_failed'),
-    EventSpec(name='worker.post_note.emit_failed'),
     EventSpec(
         name='worker.prepare_phase',
         description='worker 冷开分段耗时（phase + ms；每 phase 一行）',
@@ -2746,7 +2754,6 @@ EVENTS: list[EventSpec] = [
             'phase': FieldType('str'),
         },
     ),
-    EventSpec(name='worker.read_notes'),
     EventSpec(name='worker.timeout_force_cancel'),
     EventSpec(name='worker.timeout_grace_begin'),
     EventSpec(name='worker.timeout_grace_end'),

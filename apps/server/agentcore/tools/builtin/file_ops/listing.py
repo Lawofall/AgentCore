@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from agentcore.tools.protocol import ToolContext, ToolResult
@@ -42,9 +43,13 @@ LIST_TRUNCATED_NOTE = (
 )
 
 LS_REMOVED_FIELDS: tuple[str, ...] = ("pattern", "recursive", "max_depth")
-GLOB_REMOVED_FIELDS: tuple[str, ...] = ("directory", "recursive", "max_depth")
+GLOB_REMOVED_FIELDS: tuple[str, ...] = ("recursive", "max_depth")
 _STAR_CLASS_PATTERNS: frozenset[str] = frozenset({"*", "**", "**/*"})
 _BRACE_GLOB_RE = re.compile(r"\{([^{}]+)\}")
+_ANY_DIR_RECURSIVE_RE = re.compile(r"^\*\*/([^*/]+)/\*\*/([^/]+)$")
+_ANY_DIR_CONTENTS_RE = re.compile(r"^(?:\*\*/)?([^*/]+)/\*\*(?:/\*)?$")
+_ANY_DIR_CHILD_RE = re.compile(r"^\*\*/([^*/]+)/([^/]+)$")
+_RECURSIVE_UNDER_RE = re.compile(r"^(.+)/\*\*/([^/]+)$")
 
 GLOB_DEPTH = 8
 GLOB_DEFAULT_MAX_ENTRIES = 50
@@ -61,16 +66,11 @@ _FOLDER_DIR_LEFTOVER_MSG = (
     "跨文件夹按名查找请 delegate 到该 folder_id；不要用 glob（glob 只搜本会话出生桌）。"
 )
 _GLOB_LEFTOVER_MSG = (
-    "glob 永远递归，用 path（可省=整仓根）而不是 directory；"
+    "glob 永远递归，搜索根用 path（可省=整仓根；directory 与 path 同义）。"
     "勿传 {fields}。一层列举请用 file_list。"
 )
-_GLOB_STAR_MSG = (
-    "glob 不接受 pattern={pattern!r}（`*` / `**` / `**/*` / 空是一层列举）。"
-    "请改用 file_list。"
-)
-_GLOB_PATHY_MSG = (
-    "glob 只按文件名（basename）匹配；剥 `**/` 后 pattern 仍含 `/`："
-    "把目录放到 path，pattern 只留文件名（如 path=src, pattern=*.py）。"
+_GLOB_EMPTY_MSG = (
+    "glob 需要非空 pattern（例如 `*.py`、`**/*.ts`、`**/name/**`）。"
     "一层列举请用 file_list。"
 )
 
@@ -181,39 +181,104 @@ def glob_leftover_error(arguments: dict[str, Any], start: float) -> ToolResult |
     )
 
 
-def _strip_glob_recursive_prefix(pat: str) -> str:
-    p = (pat or "").strip().replace("\\", "/")
-    while p.startswith("**/"):
-        p = p[3:]
-    return p
+@dataclass(frozen=True, slots=True)
+class GlobPlan:
+    """One ``list_tree`` shape compiled from a globstar pattern.
 
-
-def glob_name_filters(pattern: str) -> list[str] | None:
-    """Basename filters to feed ``list_tree``, or ``None`` when the pattern is invalid.
-
-    Strips leading ``**/``. After stripping, ``*`` / ``**`` / ``**/*`` / empty
-    or a remaining ``/`` is invalid — caller fails (star-class → ``file_list``).
+    ``locate_dir``: find directories with this basename anywhere under the search
+    root, then apply ``name_filter`` under each (``**/name/**`` / ``**/name/*.py``).
     """
+
+    locate_dir: str | None
+    directory: str
+    name_filter: str
+    max_depth: int
+
+
+def join_glob_directory(*parts: str) -> str:
+    """Join workspace-relative POSIX segments; empty / ``.`` drop out."""
+    segs: list[str] = []
+    for part in parts:
+        raw = (part or "").replace("\\", "/").strip()
+        if not raw or raw == ".":
+            continue
+        for seg in raw.strip("/").split("/"):
+            if seg and seg != ".":
+                segs.append(seg)
+    return "/".join(segs) if segs else "."
+
+
+def _star_or_all(name: str) -> str:
+    return "*" if name in _STAR_CLASS_PATTERNS else name
+
+
+def compile_glob_pattern(pattern: str) -> GlobPlan | None:
+    """Compile one globstar pattern onto ``list_tree`` (None if empty)."""
+    raw = (pattern or "").strip().replace("\\", "/").strip("/")
+    if not raw:
+        return None
+    if raw in _STAR_CLASS_PATTERNS:
+        return GlobPlan(None, ".", "*", GLOB_DEPTH)
+
+    leading_any = raw.startswith("**/")
+    body = raw[3:] if leading_any else raw
+    if "/" not in body:
+        if not body or body in _STAR_CLASS_PATTERNS:
+            return GlobPlan(None, ".", "*", GLOB_DEPTH)
+        return GlobPlan(None, ".", body, GLOB_DEPTH)
+
+    match = _ANY_DIR_RECURSIVE_RE.fullmatch(raw)
+    if match is not None:
+        return GlobPlan(match.group(1), ".", _star_or_all(match.group(2)), GLOB_DEPTH)
+
+    match = _ANY_DIR_CONTENTS_RE.fullmatch(raw)
+    if match is not None:
+        name = match.group(1)
+        if leading_any:
+            return GlobPlan(name, ".", "*", GLOB_DEPTH)
+        return GlobPlan(None, name, "*", GLOB_DEPTH)
+
+    match = _ANY_DIR_CHILD_RE.fullmatch(raw)
+    if match is not None:
+        last = match.group(2)
+        depth = GLOB_DEPTH if last in _STAR_CLASS_PATTERNS else 1
+        return GlobPlan(match.group(1), ".", _star_or_all(last), depth)
+
+    match = _RECURSIVE_UNDER_RE.fullmatch(raw)
+    if match is not None:
+        return GlobPlan(None, match.group(1), _star_or_all(match.group(2)), GLOB_DEPTH)
+
+    if "**" not in raw and "/" in raw:
+        prefix, last = raw.rsplit("/", 1)
+        return GlobPlan(None, prefix, _star_or_all(last), 1)
+
+    prefix, last = raw.rsplit("/", 1)
+    prefix = prefix.replace("**", "").replace("//", "/").strip("/") or "."
+    return GlobPlan(None, prefix, _star_or_all(last), GLOB_DEPTH)
+
+
+def compile_glob_patterns(pattern: str) -> list[GlobPlan] | None:
+    """Brace-expand then compile. ``None`` only when the whole pattern is empty."""
     raw = (pattern or "").strip()
     if not raw:
         return None
-    filters: list[str] = []
+    plans: list[GlobPlan] = []
+    seen: set[tuple[str | None, str, str, int]] = set()
     for item in expand_brace_globs(raw):
-        name = _strip_glob_recursive_prefix(item)
-        if not name or name in _STAR_CLASS_PATTERNS or "/" in name:
+        plan = compile_glob_pattern(item)
+        if plan is None:
             return None
-        if name not in filters:
-            filters.append(name)
-    return filters or None
+        key = (plan.locate_dir, plan.directory, plan.name_filter, plan.max_depth)
+        if key not in seen:
+            seen.add(key)
+            plans.append(plan)
+    return plans or None
 
 
 def glob_pattern_reject(pattern: str, start: float) -> ToolResult:
-    """``contract_failure`` for star-class or path-qualified glob patterns."""
-    raw = (pattern or "").strip()
-    stripped = _strip_glob_recursive_prefix(raw)
-    if (not raw) or stripped in _STAR_CLASS_PATTERNS or not stripped:
-        return _error(_GLOB_STAR_MSG.format(pattern=raw or ""), start, contract_failure=True)
-    return _error(_GLOB_PATHY_MSG, start, contract_failure=True)
+    """``contract_failure`` for an empty glob pattern."""
+    del pattern
+    return _error(_GLOB_EMPTY_MSG, start, contract_failure=True)
 
 
 def format_ls_lines(entries: list[DirEntry]) -> str:

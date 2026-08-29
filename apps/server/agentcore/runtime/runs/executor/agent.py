@@ -20,7 +20,6 @@ from agentcore.runtime.runs.executor.context import _ancestors_by_id, _safe_inde
 from agentcore.runtime.runs.executor.env import AgentExecutorEnv
 from agentcore.runtime.runs.executor.identities import DelegateFactory
 from agentcore.runtime.runs.executor.node import execute_agent_node
-from agentcore.runtime.runs.notewall import NoteWall
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.scheduler import RunExecutor
 from agentcore.runtime.runs.serialize import run_final_fact
@@ -45,8 +44,6 @@ def build_agent_executor(
     interaction_bridge: ClientRequestBridge | None = None,
     escalation_timeout: float | None = None,
     escalation_armed: bool = False,
-    note_wall: NoteWall | None = None,
-    collaboration: bool = True,
     team_brief: str | None = None,
     captain_recon: str | None = None,
     evidence_ledger: object | None = None,
@@ -63,7 +60,7 @@ def build_agent_executor(
     ``completed`` states per call.
 
     See module history / design docs on ``profile_set``, ``approval_gate``,
-    ``delegate_factory``, escalation wiring, and ``collaboration``.
+    ``delegate_factory``, and escalation wiring.
     """
     profiles = profile_set or default_profile_set()
     # C3: prefer coordination-session ledger (shared with nested via current_execution_id);
@@ -72,7 +69,6 @@ def build_agent_executor(
 
     write_coordinator = resolve_write_coordinator(execution_id=execution_id)
     ancestors_by_id = _ancestors_by_id(plan)
-    note_wall = (note_wall or NoteWall()) if collaboration else None
 
     _ambient_snapshot: dict[str, list[str]] = {}
     _ambient_lock = asyncio.Lock()
@@ -100,8 +96,6 @@ def build_agent_executor(
         interaction_bridge=interaction_bridge,
         escalation_timeout=escalation_timeout,
         escalation_armed=escalation_armed,
-        note_wall=note_wall,
-        collaboration=collaboration,
         team_brief=team_brief,
         captain_recon=captain_recon,
         write_coordinator=write_coordinator,

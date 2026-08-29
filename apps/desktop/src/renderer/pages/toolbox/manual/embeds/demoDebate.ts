@@ -176,5 +176,4 @@ export const DEMO_DEBATE_EXECUTION: Execution = {
   frames: [],
   debate: null,
   debateRounds: [],
-  teamNotes: [],
 } as unknown as Execution;

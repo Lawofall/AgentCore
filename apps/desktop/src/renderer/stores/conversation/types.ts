@@ -1,3 +1,4 @@
+import type { AskUiIntent } from "@/lib/checkpointIntent";
 import type { ErrorAction } from "@/lib/errors";
 import type { ExecutionJournal } from "@/stores/execution";
 import type { components } from "@/types/api.generated";
@@ -6,7 +7,6 @@ import type {
   AskQuestion,
   CeoReviewSummary,
   CheckpointDecision,
-  CheckpointIntent,
   Citation,
   ContextBlockWire,
   CostBreakdown,
@@ -22,7 +22,7 @@ export interface CheckpointDisplay {
   question: string;
   assumptions: AskAssumption[];
   questions: AskQuestion[];
-  intent: CheckpointIntent;
+  intent: AskUiIntent;
   status: "pending" | "resolved";
   decision: CheckpointDecision | null;
   note: string;
@@ -100,9 +100,10 @@ export interface MessageAttachmentMeta {
   name: string;
   path: string;
   truncated: boolean;
-  kind?: "file" | "dir" | "conversation";
+  kind?: "file" | "dir" | "conversation" | "document";
   workspacePath?: string;
   conversationId?: string;
+  documentId?: string;
 }
 
 /** Conversation-page ``@`` role chip (soft mention; not an attachment kind). */

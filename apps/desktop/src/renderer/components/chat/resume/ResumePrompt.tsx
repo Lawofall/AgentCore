@@ -6,21 +6,32 @@ import type { ComponentType } from "react";
 import { AskUserResumeCard } from "./AskUserResumeCard";
 import { PlanReviewResumeCard } from "./PlanReviewResumeCard";
 
+/** Zustand getSnapshot must return a cached empty — a fresh `[]` loops React. */
+const EMPTY_MESSAGES: { id: string; role: string }[] = [];
+
 /** Cold-path pending cards only (`pausesTurn && !hot` / COLD_RESUME_KINDS). */
 export function ResumePrompt() {
   const conversationId = useConversationStore((s) => s.currentConversationId);
-  // Live authority = InteractionStore cold pending; pausedTurns = recovery shell.
+  // Live authority = InteractionStore cold pending with origin; pausedTurns =
+  // still-waiting recovery frames. Journal required is not enough to paint.
   const byId = useInteractionStore((s) => s.byId);
   const pausedPending = usePausedTurnStore((s) => s.pending);
-  const messages = useConversationStore((s) =>
-    conversationId ? (s.byId?.[conversationId]?.messages ?? []) : [],
+  const recoveryState = usePausedTurnStore((s) =>
+    conversationId
+      ? (s.openRecovery?.[conversationId] ?? "unresolved")
+      : "unresolved",
   );
+  const messages = useConversationStore((s) => {
+    if (!conversationId) return EMPTY_MESSAGES;
+    return s.byId?.[conversationId]?.messages ?? EMPTY_MESSAGES;
+  });
   const visible = conversationId
     ? selectVisibleColdResumes({
         conversationId,
         byId,
         pausedPending,
         messages,
+        recoveryState,
       })
     : [];
   if (visible.length === 0) return null;

@@ -23,19 +23,22 @@ class MessageAttachment(BaseModel):
     stay path-only so workers can ``code_execute``. ``kind="conversation"`` references
     another of the user's conversations: recent messages are materialized into
     ``text`` client-side, and ``conversation_id`` records which one (for the chip +
-    later jump).
+    later jump). ``kind="document"`` pins an on-demand setting/note for this turn
+    (``document_id``); the server loads the body — not an uploaded file.
     """
 
     name: str = Field(..., min_length=1, max_length=500)
     path: str = Field(..., max_length=4000)
     # File: extracted text (empty when ``binary`` and not yet pre-parsed). Directory:
-    # recursive listing. Conversation: recent messages. Optional so binary residents
-    # need not invent a placeholder body (backward compatible).
+    # recursive listing. Conversation: recent messages. Document: unused (server loads).
+    # Optional so binary residents need not invent a placeholder body (backward compatible).
     text: str = Field(default="", max_length=300_000)
     truncated: bool = False
-    kind: Literal["file", "dir", "conversation"] = "file"
+    kind: Literal["file", "dir", "conversation", "document"] = "file"
     # Set only for kind="conversation": the referenced conversation's id.
     conversation_id: str | None = None
+    # Set only for kind="document": the documents-tree entry to pin this turn.
+    document_id: str | None = None
     # True when the attachment is a non-UTF-8 blob already (or about to be) resident
     # under ``workspace_path``. Text-like binaries may still gain server-side
     # ``text`` after分流预解析; spreadsheets remain path-only for ``code_execute``.
@@ -62,17 +65,19 @@ class StoredAttachment(BaseModel):
     ``workspace_path`` is set when the attachment was written into the durable
     project space (附件驻留 / 引用即驻留): a workspace-relative path under
     ``attachments/`` that the file-download API can serve. ``None`` for directory /
-    conversation chips (nothing is written as a workspace file).
+    conversation / document chips (nothing is written as a workspace file).
     """
 
     name: str
     path: str
     truncated: bool = False
-    kind: Literal["file", "dir", "conversation"] = "file"
+    kind: Literal["file", "dir", "conversation", "document"] = "file"
     workspace_path: str | None = None
     # Set only for kind="conversation": the referenced conversation's id, so the
     # stored chip can label it and (later) jump back to that conversation.
     conversation_id: str | None = None
+    # Set only for kind="document": the pinned setting/note id (chip replay).
+    document_id: str | None = None
     # Byte size of the stored file, surfaced for IM file chips (Stage 4 富消息).
     # None for directory / conversation chips (no single stored blob).
     size_bytes: int | None = None

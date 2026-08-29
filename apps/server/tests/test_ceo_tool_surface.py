@@ -369,6 +369,7 @@ def test_coordination_period_hint_allows_append_forbids_isomorphic():
     assert "delegate" in COORDINATION_PERIOD_HINT
     assert "全新" in COORDINATION_PERIOD_HINT or "追加" in COORDINATION_PERIOD_HINT
     assert "同构" in COORDINATION_PERIOD_HINT
+    assert "force" not in COORDINATION_PERIOD_HINT
     assert "移除" not in COORDINATION_PERIOD_HINT
     assert "不可用" not in COORDINATION_PERIOD_HINT
     assert "ceiling" in COORDINATION_PERIOD_HINT or "max_rounds" in COORDINATION_PERIOD_HINT

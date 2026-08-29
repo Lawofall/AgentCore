@@ -1,4 +1,4 @@
-"""glob — recursive filename search (CEO + worker, NEVER, READ_ONLY)."""
+"""glob — globstar recursive search (CEO + worker, NEVER, READ_ONLY)."""
 
 from __future__ import annotations
 
@@ -13,21 +13,29 @@ from agentcore.tools.registration import (
     ToolRegistration,
     ToolSurface,
 )
-from agentcore.workspace.protocol import TreeEntry, WorkspaceError
+from agentcore.workspace.protocol import (
+    NotADirectory,
+    PathNotFound,
+    TreeEntry,
+    TreeResult,
+    WorkspaceError,
+)
 
 from .listing import (
     GLOB_DEFAULT_MAX_ENTRIES,
     GLOB_DEPTH,
     GLOB_MAX_ENTRIES_CAP,
+    GlobPlan,
     bare_external_error,
     clamp_glob_max_entries,
+    compile_glob_patterns,
     format_glob_lines,
     glob_leftover_error,
-    glob_name_filters,
     glob_no_match_hint,
     glob_pattern_reject,
     glob_truncated_footer,
     is_bare_external_directory,
+    join_glob_directory,
     map_listing_failure,
     pattern_targets_archives,
     visible_list_entries,
@@ -35,7 +43,7 @@ from .listing import (
 
 
 class GlobTool:
-    """Recursively find files/dirs by basename glob. Never one-layer LS."""
+    """Recursively find files/dirs by globstar. Never one-layer LS."""
 
     registration = ToolRegistration(
         surface=ToolSurface.BUILTIN,
@@ -48,8 +56,9 @@ class GlobTool:
         return ToolSchema(
             name="glob",
             description=(
-                "按【文件名】递归查找（永远递归）。pattern 必填：`*.py`、`*.{ts,tsx}`、"
-                "`**/*.py`。`*` / 一层列举用 file_list。省略 path=整仓根。"
+                "按 globstar 递归查找。pattern 必填：`*.py`、`*.{ts,tsx}`、`**/*.ts`、"
+                "`src/**/*.py`、`**/name/**`。省略 path=整仓根。"
+                "`*` / `**/*` 在条数顶内递归列举。一层列举用 file_list。"
                 "回执一行一条相对路径，目录尾 `/`。"
             ),
             parameters={
@@ -58,16 +67,16 @@ class GlobTool:
                     "pattern": {
                         "type": "string",
                         "description": (
-                            "文件名 glob（basename）。可写 `*.py`、`*.{ts,tsx}`、"
-                            "`**/*.py`。禁止 `*` / `**` / `**/*` / 空（改 file_list）。"
-                            "剥 `**/` 后禁止仍含 `/`（目录放到 path）。"
+                            "globstar。无斜杠=任意深度文件名（`*.py`、`*sidecar*`）；"
+                            "有斜杠=相对路径（`src/*.py` 一层，`src/**/*.py` 递归，"
+                            "`**/name/**` 任意深度该目录下）。"
                         ),
                     },
                     "path": {
                         "type": "string",
                         "description": (
                             "搜索根，工作区相对 POSIX 目录（默认 `.`=整仓）。"
-                            "仅填本回合已证实存在的目录；禁止猜测 src/、@scope、app/。"
+                            "`directory` 与 path 同义。不存在时从根按目录名/同一 pattern 续找。"
                             "`/<根标签>/…` 与裸 `/`、`\\` 视为根；区外用 "
                             "`external/<别名>/`，禁止裸 `external`；其它绝对路径拒绝。"
                         ),
@@ -95,11 +104,13 @@ class GlobTool:
             return leftover
 
         pattern = str(arguments.get("pattern") or "").strip()
-        filters = glob_name_filters(pattern)
-        if filters is None:
+        plans = compile_glob_patterns(pattern)
+        if plans is None:
             return glob_pattern_reject(pattern, start)
 
-        directory = str(arguments.get("path") or ".").strip() or "."
+        directory = str(
+            arguments.get("path") or arguments.get("directory") or "."
+        ).strip() or "."
         max_entries = clamp_glob_max_entries(arguments.get("max_entries"))
         reveal_archives = pattern_targets_archives(pattern)
 
@@ -117,23 +128,26 @@ class GlobTool:
         prev_reveal = getattr(context.backend, "ai_list_reveal_archives", False)
         if reveal_archives:
             context.backend.ai_list_reveal_archives = True
+        notes: list[str] = []
         try:
             merged: dict[str, TreeEntry] = {}
             truncated = False
             elided_count = 0
             warnings: list[str] = []
-            for name_filter in filters:
-                tree = await context.backend.list_tree(
-                    directory,
-                    pattern=name_filter,
-                    max_depth=GLOB_DEPTH,
+            for plan in plans:
+                entries, plan_trunc, plan_elided, plan_warnings, note = await _run_plan(
+                    backend=context.backend,
+                    search_root=directory,
+                    plan=plan,
                     max_entries=max_entries,
                 )
-                for entry in tree.entries:
+                if note:
+                    notes.append(note)
+                for entry in entries:
                     merged[entry.path] = entry
-                truncated = truncated or tree.truncated
-                elided_count += tree.elided_count
-                warnings.extend(tree.warnings)
+                truncated = truncated or plan_trunc
+                elided_count += plan_elided
+                warnings.extend(plan_warnings)
             ordered = sorted(
                 merged.values(),
                 key=lambda e: e.path.replace("\\", "/").lower(),
@@ -142,20 +156,18 @@ class GlobTool:
                 truncated = True
                 elided_count += len(ordered) - max_entries
                 ordered = ordered[:max_entries]
-            entries = ordered
-            if entries:
-                output = format_glob_lines(entries)
+            prefix = "\n".join(dict.fromkeys(notes))
+            if ordered:
+                output = format_glob_lines(ordered)
+                if prefix:
+                    output = f"{prefix}\n{output}"
             else:
-                listing = await context.backend.list(directory, "*")
-                bare = visible_list_entries(
-                    list(listing.entries),
-                    materials=context.material_paths,
-                    reveal_archives=reveal_archives,
-                )
-                output = glob_no_match_hint(
+                output = await _no_match_output(
+                    context,
                     pattern=pattern,
                     directory=directory,
-                    bare_entries=bare,
+                    reveal_archives=reveal_archives,
+                    prefix=prefix,
                 )
             if truncated:
                 output = output + "\n\n" + glob_truncated_footer(
@@ -182,4 +194,158 @@ class GlobTool:
             success=True,
             output=output,
             duration_ms=int((time.monotonic() - start) * 1000),
+        )
+
+
+async def _no_match_output(
+    context: ToolContext,
+    *,
+    pattern: str,
+    directory: str,
+    reveal_archives: bool,
+    prefix: str,
+) -> str:
+    sample_dir = directory
+    try:
+        listing = await context.backend.list(sample_dir, "*")
+    except WorkspaceError:
+        sample_dir = "."
+        listing = await context.backend.list(sample_dir, "*")
+    bare = visible_list_entries(
+        list(listing.entries),
+        materials=context.material_paths,
+        reveal_archives=reveal_archives,
+    )
+    hint = glob_no_match_hint(
+        pattern=pattern,
+        directory=sample_dir,
+        bare_entries=bare,
+    )
+    return f"{prefix}\n{hint}" if prefix else hint
+
+
+async def _run_plan(
+    *,
+    backend: Any,
+    search_root: str,
+    plan: GlobPlan,
+    max_entries: int,
+) -> tuple[list[TreeEntry], bool, int, list[str], str | None]:
+    if plan.locate_dir:
+        located, note = await _list_tree_maybe_fallback(
+            backend,
+            search_root,
+            name_filter=plan.locate_dir,
+            max_depth=GLOB_DEPTH,
+            max_entries=max_entries,
+        )
+        dirs = [entry.path for entry in located.entries if entry.is_dir]
+        files = [entry for entry in located.entries if not entry.is_dir]
+        if not dirs:
+            return (
+                files,
+                located.truncated,
+                located.elided_count,
+                list(located.warnings),
+                note,
+            )
+        merged: dict[str, TreeEntry] = {entry.path: entry for entry in files}
+        truncated = located.truncated
+        elided = located.elided_count
+        warnings = list(located.warnings)
+        for root in dirs:
+            tree, sub_note = await _list_tree_maybe_fallback(
+                backend,
+                root,
+                name_filter=plan.name_filter,
+                max_depth=plan.max_depth,
+                max_entries=max_entries,
+            )
+            note = note or sub_note
+            for entry in tree.entries:
+                merged[entry.path] = entry
+            truncated = truncated or tree.truncated
+            elided += tree.elided_count
+            warnings.extend(tree.warnings)
+        return list(merged.values()), truncated, elided, warnings, note
+
+    target = join_glob_directory(search_root, plan.directory)
+    tree, note = await _list_tree_maybe_fallback(
+        backend,
+        target,
+        name_filter=plan.name_filter,
+        max_depth=plan.max_depth,
+        max_entries=max_entries,
+    )
+    return list(tree.entries), tree.truncated, tree.elided_count, list(tree.warnings), note
+
+
+async def _list_tree_maybe_fallback(
+    backend: Any,
+    directory: str,
+    *,
+    name_filter: str,
+    max_depth: int,
+    max_entries: int,
+) -> tuple[TreeResult, str | None]:
+    try:
+        tree = await backend.list_tree(
+            directory,
+            pattern=name_filter,
+            max_depth=max_depth,
+            max_entries=max_entries,
+        )
+        return tree, None
+    except (PathNotFound, NotADirectory):
+        if directory in (".", ""):
+            raise
+        needle = directory.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+        if not needle or needle in {"*", "**", "**/*"}:
+            raise
+        located = await backend.list_tree(
+            ".",
+            pattern=needle,
+            max_depth=GLOB_DEPTH,
+            max_entries=max_entries,
+        )
+        dirs = [entry.path for entry in located.entries if entry.is_dir]
+        files = [entry for entry in located.entries if not entry.is_dir]
+        if dirs:
+            merged: dict[str, TreeEntry] = {entry.path: entry for entry in files}
+            truncated = located.truncated
+            elided = located.elided_count
+            warnings = list(located.warnings)
+            for root in dirs:
+                sub = await backend.list_tree(
+                    root,
+                    pattern=name_filter,
+                    max_depth=max_depth,
+                    max_entries=max_entries,
+                )
+                for entry in sub.entries:
+                    merged[entry.path] = entry
+                truncated = truncated or sub.truncated
+                elided += sub.elided_count
+                warnings.extend(sub.warnings)
+            return (
+                TreeResult(
+                    entries=list(merged.values()),
+                    truncated=truncated,
+                    elided_count=elided,
+                    warnings=warnings,
+                ),
+                f"（path={directory!r} 不存在，已按目录名 {needle!r} 从工作区根查找。）",
+            )
+        tree = await backend.list_tree(
+            ".",
+            pattern=name_filter,
+            max_depth=max_depth,
+            max_entries=max_entries,
+        )
+        return (
+            tree,
+            (
+                f"（path={directory!r} 不存在，已从工作区根用同一 pattern 查找。"
+                f"工作区根下也没有名为 {needle!r} 的目录。）"
+            ),
         )

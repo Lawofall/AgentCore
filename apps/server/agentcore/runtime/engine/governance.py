@@ -90,7 +90,6 @@ def maybe_inject_delivery_idle(
     run_id: str,
     round_idx: int,
     role: str,
-    keep_notes: bool = False,
 ) -> Literal["none", "nudge", "narrow"]:
     """Inject read-idle steer when the controller bars are armed.
 
@@ -99,7 +98,6 @@ def maybe_inject_delivery_idle(
     bar. Orthogonal to token/timeout wind_down.
     Narrow allowlist apply is consumed by the react loop via
     :meth:`LoopController.take_delivery_idle_narrow_apply`.
-    ``keep_notes``: collaboration/wall — narrow prompt mentions note tools stay.
 
     When ``controller.workspace_channel_dead``: never narrow (write-surface copy),
     and files/report nudge drops file_write pressure (handoff/escalate only).
@@ -111,7 +109,7 @@ def maybe_inject_delivery_idle(
     rounds = controller.delivery_idle_rounds
     if controller.delivery_idle_narrow_due() and not channel_dead:
         controller.mark_delivery_idle_narrowed()
-        prompt = delivery_idle_narrow_prompt(rounds=rounds, keep_notes=keep_notes)
+        prompt = delivery_idle_narrow_prompt(rounds=rounds)
         assert prompt is not None
         logger.info(
             "engine.delivery_idle_narrow",
@@ -119,7 +117,6 @@ def maybe_inject_delivery_idle(
             idle_rounds=rounds,
             nudge_bar=controller.delivery_idle_nudge_rounds,
             narrow_bar=controller.delivery_idle_narrow_rounds,
-            keep_notes=keep_notes,
         )
         messages.append(LLMMessage(role="user", content=prompt))
         record_turn_fact(
@@ -819,7 +816,6 @@ def govern_after_tools(
     role: str = "",
     disabled_tools: set[str] | None = None,
     investigation_tools: frozenset[str] | None = None,
-    keep_notes: bool = False,
 ) -> LoopDirective:
     """Run post-tool convergence governance and return the next directive.
 
@@ -893,7 +889,6 @@ def govern_after_tools(
             run_id=run_id,
             round_idx=round_idx,
             role=role,
-            keep_notes=keep_notes,
         )
         return Continue()
 
@@ -937,6 +932,5 @@ def govern_after_tools(
         run_id=run_id,
         round_idx=round_idx,
         role=role,
-        keep_notes=keep_notes,
     )
     return Continue()

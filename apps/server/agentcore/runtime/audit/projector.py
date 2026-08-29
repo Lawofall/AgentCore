@@ -182,23 +182,6 @@ def project_journal_entry(recorder: AuditRecorder, entry: dict[str, Any]) -> Aud
             },
         )
 
-    if kind == "team_note_posted":
-        return AuditDraft(
-            category="comm",
-            action="note.amended" if payload.get("supersedes") else "note.posted",
-            actor_kind="member",
-            outcome="ok",
-            execution_id=str(payload.get("execution_id") or "") or None,
-            run_id=str(payload.get("run_id") or "") or None,
-            target_type="note",
-            target_ref=str(payload.get("note_id") or "") or None,
-            detail={
-                "role": payload.get("role"),
-                "kind": payload.get("kind"),
-                "text": str(payload.get("text") or "")[:200],
-            },
-        )
-
     if kind == "plan_revised":
         return AuditDraft(
             category="orchestration",

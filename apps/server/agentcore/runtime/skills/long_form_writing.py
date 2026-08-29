@@ -12,12 +12,9 @@ _LONG_FORM_WRITING = """\
 【可选】防截断 / 超大风险时，可先短骨架再按节 `file_append` / `str_replace` 填空——非硬教条。\
 短笔记 / 小配置 / 小片段仍一次写完。
 
-【与多角协作划界】先看结局：一起弄懂/多路摸清（未明示成文）→ 编制自选（1 人 / 真并行才 `map_fanout`），\
-**不要**本 skill 单写手、也**不要**直接套 `cite_write_review`。仅提「论文/开源」当资料 ≠ 成文。\
-用户**明示**要落盘成文且尚需广度取证、可拆 ≥2 独立角 → 先走 `cite_write_review`（或同构 N 角\
-笔记→提纲→撰稿；各角与主笔均 `form=files`+`artifacts`，【禁止】角 prose、仅主笔落盘），\
-**不要**用本 skill 单写手一人包办自搜+成文。本 skill 单写手留给：材料已齐只扩写、用户已给大纲、\
-改稿续写、短中篇无多角取证。
+【与多角协作划界】编制选档（未明示成文 / 档 1–3 / 谁写谁审）→ \
+`consult(team_orchestration_advanced)`【成文后梯度】。\
+本 skill 单写手留给：材料已齐只扩写、用户已给大纲、改稿续写、短中篇无多角取证。
 
 【多源合并·成篇优先】「多源材料合并→单一长交付」（开发计划/总纲/合并终稿等）：\
 材料已齐可【一名带写权写手】（超长分波 / continue_from 见下）。\
@@ -45,24 +42,20 @@ task 里只要求写正文本身；核对提醒、假设、待补项、格式说
 `replaces_run_id` **仅**冷接手 / 替换失败节点（现场已淘汰、真换职能等，见 \
 `revising_a_product`）——同交付物续写勿默认 replaces。
 
-推荐编排：
-1. 确认大纲（章节标题 + 每节要点）：用户明文要求把关 → `playbook=cite_write_review`（套餐提纲步引擎会停）\
-或先只派提纲、收回后 `ask_user`、再派撰稿，走结构化把关，勿纯聊天代卡；\
-自主确认场景（用户未明文 / 任务轻量）才可对话式或自确认，必要时 ask_user。
-2. 单写手：【主路径】一次 `file_write` 落【主文件】**完整正文**；成篇后只用 `str_replace` \
+落盘形状（提纲过目 / 套餐把关 → `consult(team_orchestration_advanced)`）：
+单写手：【主路径】一次 `file_write` 落【主文件】**完整正文**；成篇后只用 `str_replace` \
 修订。【可选】防截断/超大：先短骨架（标题/锚点，或 `<!-- FILL:… -->` / \
 `<!-- OUTLINE -->` / 章节小标题占位），再按节用 **str_replace 或 file_append** 填空。\
 【禁止】对 Markdown / FILL / 大纲占位调用 `write_section`\
 （那是建站 HTML 的 `<!-- SECTION:sN -->` 分区工具，与成篇 `.md` 无关）。
-3. 多 worker 并行拆章（论文/综述/长报告允许）：各章可写到临时路径以免并发冲突，\
+并行拆章 ≠ 各写各的就交（论文/综述/长报告允许）：各章可写到临时路径以免并发冲突，\
 但【必须】在同一次 delegate 里写死——① 最终主文件同一路径（各章 brief + \
 `deliverable.artifacts` 均指向它）；② 合并责任（末尾 merge worker `depends_on` 各章，\
-或你 CEO 收口合并进主文件）。验收只认合并后的那一篇；禁止「各写各的章节文件就交」。\
-（与上条「单写手分波」二选一形状：要么一人分波串写，要么多章并行+合并——勿混成并行同角色抢锁。）
-4. 写/append 成功回执即 artifact manifest（path / chars / lines / hash / 标题树 / 末段预览）\
-——以此验真，禁止为质检再 code_execute / file_read 回读正文；下一步仅 str_replace \
-（局部改）或同轮 handoff；成篇后勿再用 file_append，整文件覆盖须完整正文。用户要 PDF / Word \
-→ `consult(team_delivery_env)`。\
+或你 CEO 收口合并进主文件）。验收只认合并后的那一篇。\
+与「单写手分波」二选一：要么一人分波串写，要么多章并行+合并——勿混成并行同角色抢锁。
+验真：写/append 成功回执即 artifact manifest（path / chars / lines / hash / 标题树 / 末段预览）\
+——禁止为质检再 code_execute / file_read 回读正文；下一步仅 str_replace \
+（局部改）或同轮 handoff；成篇后勿再用 file_append，整文件覆盖须完整正文。\
 【例外】≠ 为验真空转回读（仍认 artifact manifest）；清参后改稿才可先 `file_read`——\
 写参被收成已落盘短状态后须先读盘上真文，再 `str_replace`（优先）或按真文写，\
 【禁止】把短状态当正文重发。

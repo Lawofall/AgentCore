@@ -70,6 +70,8 @@ export function decideDraftFolderAssign(
 export function resolveFolderFromIndexedEntry(
   entry: IndexedEntry,
 ): AttachmentFolderHint | null {
+  if (entry.kind === "document") return null;
+
   if (entry.kind === "conversation") {
     const conv = getConversations().find((c) => c.id === entry.relPath);
     if (!conv?.folderId) return null;

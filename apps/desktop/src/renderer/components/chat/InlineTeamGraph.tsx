@@ -1,9 +1,6 @@
 import { DebateProgressLine } from "@/components/chat/DebateProgressLine";
-import { GraphAppendAnchor } from "@/components/chat/GraphAppendAnchor";
 import { StatusStrip } from "@/components/chat/StatusStrip";
-import { TeamNotesPanel } from "@/components/chat/TeamNotesPanel";
 import { teamGraphVisible } from "@/components/chat/debatePreviewPlacement";
-import { teamNotesDefaultExpanded } from "@/components/chat/teamNotesDefaults";
 import { GraphView } from "@/components/graph/GraphView";
 import {
   journalHydrateIdentity,
@@ -124,17 +121,6 @@ export function InlineTeamGraph({
     { liveDefault: true, settledDefault: caps.inlineDefaultExpanded },
   );
 
-  // 便签墙：运行中默认展开、结束默认折叠；用户选择跨卸载/刷新保留。
-  const notesLive = teamNotesDefaultExpanded(
-    execution?.status,
-    execution?.teamNotes ?? [],
-    execution?.noteWall === true,
-  );
-  const [notesExpanded, , setNotesExpanded] = useStreamAwareDisclosure(
-    `${messageId}:team-notes`,
-    notesLive,
-  );
-
   if (
     !execution ||
     execution.id !== executionId ||
@@ -158,16 +144,8 @@ export function InlineTeamGraph({
         <div className="animate-task-card-enter mb-3 overflow-hidden rounded-xl border border-border bg-card">
           {/* 辩论全过程 / 版本对比等「过程产物」不再内联聊天——它们归全屏放大态（统一辩论室 /
               统一「对比」视图），聊天正文状态条只留战绩 + 入口 CTA
-              （协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大）。 */}
-          {execution.prevExecutionId ? (
-            <div className="border-b border-border/60 px-3 py-2">
-              <GraphAppendAnchor
-                prevExecutionId={execution.prevExecutionId}
-                actKind={execution.acts[0]?.kind}
-                authorizedBy={execution.acts[0]?.authorizedBy}
-              />
-            </div>
-          ) : null}
+              （协作图与双视图UX.md §六 两个入口：聊天内嵌 ⇄ 全屏放大）。
+              prev_execution_id 协议链仍在，用户面不画回链铬条。 */}
           <StatusStrip
             execution={execution}
             expanded={expanded}
@@ -197,14 +175,6 @@ export function InlineTeamGraph({
               disclosureKey={`${messageId}:debate-progress`}
             />
           )}
-          {/* 团队便签墙 (§2.2 通): collapsible; stays available when the graph is folded.
-              Raised empty walls show an empty state; unraised walls render nothing. */}
-          <TeamNotesPanel
-            notes={execution.teamNotes}
-            noteWall={execution.noteWall === true}
-            expanded={notesExpanded}
-            onExpandedChange={setNotesExpanded}
-          />
         </div>
       </ContextualTip>
     </ExecutionScopeContext.Provider>

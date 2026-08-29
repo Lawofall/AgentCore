@@ -957,101 +957,11 @@ async def test_debater_path_offers_file_write_without_readonly_box():
         user_message="原始请求",
         execution_id="e",
         approval_gate=None,
-        collaboration=False,
     )
     res = await WaveScheduler().run(plan, executor)
     state = next(iter(res.values()))
     assert state.phase is RunPhase.COMPLETED
     assert fw.calls == 1
-
-
-async def test_collaboration_off_denies_note_tools_to_unrestricted_debater():
-    # 真纯丙下辩手亦为 unrestricted；collaboration=False 仍从 registry 卸便签。
-    plan, _ = build_run_plan(
-        [{"role": "正方", "task": "立论", "tools": ["web_search"]}],
-        id_prefix="t",
-        valid_tools={"web_search"},
-    )
-    assert plan.nodes[0].tools is None
-    reg = ToolRegistry()
-    reg.register(_GrantableTool("web_search"))
-    reg.register(_GrantableTool("post_note"))
-    reg.register(_GrantableTool("read_notes"))
-    reg.register(_GrantableTool("amend_note"))
-    provider = _OfferRecorder()
-    executor = build_agent_executor(
-        plan=plan,
-        llm=provider,
-        tools=reg,
-        sink=EventSink(),
-        base_tool_context=_ctx(),
-        system_prompt="SYS",
-        user_message="原始请求",
-        execution_id="e",
-        approval_gate=None,
-        collaboration=False,
-    )
-    await WaveScheduler().run(plan, executor)
-    offered = set(provider.offered[0])
-    assert "web_search" in offered
-    assert "post_note" not in offered
-    assert "read_notes" not in offered
-    assert "amend_note" not in offered
-
-
-async def test_collaboration_off_denies_note_tools_to_unrestricted_worker():
-    # The switch means "no collaboration", not "no collaboration only if least-privilege": even
-    # an UNRESTRICTED worker (tools omitted → "offer all team tools") is not handed the 团队便签
-    # tools when collaboration=False — they are stripped from the offered registry.
-    plan, _ = build_run_plan([{"role": "A", "task": "做A"}], id_prefix="t")
-    assert plan.nodes[0].tools is None
-    reg = ToolRegistry()
-    reg.register(_GrantableTool("code_execute"))
-    reg.register(_GrantableTool("post_note"))
-    provider = _OfferRecorder()
-    executor = build_agent_executor(
-        plan=plan,
-        llm=provider,
-        tools=reg,
-        sink=EventSink(),
-        base_tool_context=_ctx(),
-        system_prompt="SYS",
-        user_message="原始请求",
-        execution_id="e",
-        approval_gate=None,
-        collaboration=False,
-    )
-    await WaveScheduler().run(plan, executor)
-    assert "post_note" not in provider.offered[0]
-    assert "code_execute" in provider.offered[0]
-
-
-async def test_collaboration_on_grants_note_tools_when_tools_declared():
-    # 真纯丙：声明 tools 无效；协作批仍 offer 便签（全开面）。
-    plan, _ = build_run_plan(
-        [{"role": "A", "task": "做A", "tools": ["web_search"]}],
-        id_prefix="t",
-        valid_tools={"web_search"},
-    )
-    assert plan.nodes[0].tools is None
-    reg = ToolRegistry()
-    reg.register(_GrantableTool("web_search"))
-    reg.register(_GrantableTool("post_note"))
-    provider = _OfferRecorder()
-    executor = build_agent_executor(
-        plan=plan,
-        llm=provider,
-        tools=reg,
-        sink=EventSink(),
-        base_tool_context=_ctx(),
-        system_prompt="SYS",
-        user_message="原始请求",
-        execution_id="e",
-        approval_gate=None,
-    )
-    await WaveScheduler().run(plan, executor)
-    assert "post_note" in provider.offered[0]
-    assert "web_search" in provider.offered[0]
 
 
 async def test_worker_always_granted_handoff_even_if_tools_declared_without_it():

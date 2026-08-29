@@ -170,24 +170,6 @@ WORKSPACE_MANIFEST_CHAR_BUDGET = 1800
 # serialize's transcript harvest (escalations_from_transcript). 见 docs/03-AI核心/Agent协作模式.md.
 ESCALATE_TOOL_NAME = "escalate"
 
-# Canonical name of the worker-only「贴便签」tool (worker → 并行队友 broadcast channel,
-# §2.2 通·便签墙). Same single-source posture as ESCALATE_TOOL_NAME: the PostNoteTool's
-# schema name + the executor's allow-list guard (post_note stays offered even to a
-# least-privilege worker, so it can always broadcast to siblings).
-POST_NOTE_TOOL_NAME = "post_note"
-
-# Canonical name of the worker-only「翻便签墙」tool (worker → 团队便签墙 on-demand read,
-# §2.4 变·worker 的「拉」). The pull dual of POST_NOTE_TOOL_NAME's push: same single-source
-# posture (the ReadNotesTool's schema name + the executor's allow-list guard), so a
-# least-privilege worker can always look up what a sibling already decided.
-READ_NOTES_TOOL_NAME = "read_notes"
-
-# Canonical name of the worker-only「改写 / 作废便签」tool (便签会过期 → supersession, §2.2). Lets a
-# worker correct its OWN stale note (改写 with new text / 作废 by omitting it) so a sibling never
-# builds on a dead decision. Same single-source posture as post_note / read_notes (the
-# AmendNoteTool's schema name + the executor's allow-list guard).
-AMEND_NOTE_TOOL_NAME = "amend_note"
-
 # Canonical name of the worker-only「交接简报 + 收尾」tool (完工交接简报单一源). A delegated worker
 # ends its run by calling this terminal tool ONCE, in the same turn as its finished deliverable,
 # to submit a STRUCTURED brief (summary / key_points / assumptions / next_steps) — so the brief

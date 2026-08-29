@@ -149,7 +149,6 @@ const mockExecution: Execution = {
   crossExamEnabled: false,
   debateOpening: null,
   debatePretrial: null,
-  teamNotes: [],
 };
 
 const HANDOFF_RECEIPT = "已收尾并提交交接简报。";

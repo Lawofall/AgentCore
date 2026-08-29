@@ -93,7 +93,6 @@ class LoopWindDown:
             wind_down_instruction_timeout,
             wind_down_instruction_token,
             worker_keeps_file_read_in_wind_down,
-            worker_keeps_notes_in_wind_down,
         )
 
         self.wind_down_active = True
@@ -102,29 +101,24 @@ class LoopWindDown:
         keep_file_read = worker_keeps_file_read_in_wind_down(
             available=available, allowed=self.live_allowed
         )
-        keep_notes = worker_keeps_notes_in_wind_down(available=available, allowed=self.live_allowed)
-        self.wind_down_whitelist = wind_down_allowed_tools(
-            keep_file_read=keep_file_read, keep_notes=keep_notes
-        )
+        self.wind_down_whitelist = wind_down_allowed_tools(keep_file_read=keep_file_read)
         narrowed = narrow_tools_for_wind_down(
             available,
             allowed=self.live_allowed,
             keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
         )
         self.wind_down_effective_allowed = narrowed
         self.refresh_tool_defs()
         if instruction is None:
             if reason == "token_budget":
-                instruction = wind_down_instruction_token(keep_notes=keep_notes)
+                instruction = wind_down_instruction_token()
             elif reason == "worker_timeout":
-                instruction = wind_down_instruction_timeout(keep_notes=keep_notes)
+                instruction = wind_down_instruction_timeout()
             else:
                 # retrieval_budget / other: keep caller-supplied or build a short default.
-                notes = "、便签（可贴/读/改）" if keep_notes else ""
                 instruction = (
                     "[系统提示] 检索预算已用尽。本轮起进入收尾窗口：仅允许落盘"
-                    f"{notes}与 handoff，请基于已有证据交卷；禁止继续 web_search / read_url。"
+                    "与 handoff，请基于已有证据交卷；禁止继续 web_search / read_url。"
                 )
         self.messages.append(LLMMessage(role="user", content=instruction))
         from agentcore.runtime.tool_failures import sync_tool_failure_constraint_in_system
@@ -148,7 +142,6 @@ class LoopWindDown:
             ),
             allowed_tools=narrowed,
             keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
         )
         from agentcore.runtime.runs.run_phase_emit import emit_run_phase
 
@@ -175,19 +168,16 @@ class LoopWindDown:
         from agentcore.runtime.runs.cutoff import (
             narrow_tools_for_wind_down,
             worker_keeps_file_read_in_wind_down,
-            worker_keeps_notes_in_wind_down,
         )
 
         available = set(self.tools.names)
         keep_file_read = worker_keeps_file_read_in_wind_down(
             available=available, allowed=self.live_allowed
         )
-        keep_notes = worker_keeps_notes_in_wind_down(available=available, allowed=self.live_allowed)
         narrowed = narrow_tools_for_wind_down(
             available,
             allowed=self.live_allowed,
             keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
         )
         self.live_allowed = narrowed
         self.refresh_tool_defs()
@@ -197,7 +187,6 @@ class LoopWindDown:
             role=self.role,
             allowed_tools=narrowed,
             keep_file_read=keep_file_read,
-            keep_notes=keep_notes,
         )
 
     def consume_timeout_wind_down_pending(self) -> bool:
@@ -294,7 +283,6 @@ class LoopWindDown:
                 wind_down_breach_nudge,
                 wind_down_breach_tool_names,
                 worker_keeps_file_read_in_wind_down,
-                worker_keeps_notes_in_wind_down,
             )
 
             effective_whitelist = self.wind_down_whitelist or WIND_DOWN_ALLOWED_TOOLS
@@ -319,10 +307,6 @@ class LoopWindDown:
                     available=set(self.tools.names),
                     allowed=list(effective_whitelist),
                 )
-                keep_notes = keep_landing and worker_keeps_notes_in_wind_down(
-                    available=set(self.tools.names),
-                    allowed=list(effective_whitelist),
-                )
                 logger.warning(
                     "engine.wind_down_breach",
                     run_id=self.run_id,
@@ -330,7 +314,6 @@ class LoopWindDown:
                     prior_breaches=self.wind_down_breach_count,
                     force_local=force_local,
                     keep_landing=keep_landing,
-                    keep_notes=keep_notes,
                     tokens=tokens,
                     token_budget=self.token_budget,
                 )
@@ -407,13 +390,9 @@ class LoopWindDown:
                         set(self.tools.names),
                         keep_landing=keep_landing,
                         keep_file_read=keep_file_read,
-                        keep_notes=keep_notes,
                         allowed=list(effective_whitelist),
                     )
-                    breach_nudge = wind_down_breach_nudge(
-                        keep_landing=keep_landing,
-                        keep_notes=keep_notes,
-                    )
+                    breach_nudge = wind_down_breach_nudge(keep_landing=keep_landing)
                     self.refresh_tool_defs()
                     if not kept:
                         self.messages.append(

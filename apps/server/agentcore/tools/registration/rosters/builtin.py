@@ -8,6 +8,7 @@ from __future__ import annotations
 
 
 def load_roster() -> tuple[type, ...]:
+    from agentcore.tools.builtin.archive_create import ArchiveCreateTool
     from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
     from agentcore.tools.builtin.browser import BrowserTool
     from agentcore.tools.builtin.code_diagnostics import CodeDiagnosticsTool
@@ -58,6 +59,7 @@ def load_roster() -> tuple[type, ...]:
         MdToDocxTool,
         MdToPdfTool,
         ArchiveExtractTool,
+        ArchiveCreateTool,
         DownloadUrlTool,
         GrepTool,
         CodeSearchTool,

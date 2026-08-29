@@ -419,7 +419,7 @@ describe("ResumePrompt · live InteractionStore authority", () => {
       question: "",
       assumptions: [],
       questions: [],
-      intent: "kickoff",
+      intent: "decision",
       origin: "server",
     });
     handleInteractionEvent(leftoverPreviewRequired("tp-old-ix"), {
@@ -634,7 +634,7 @@ describe("ResumePrompt · ask continue → leftover team_preview SSE skip", () =
     expect(screen.queryByText("继续")).toBeNull();
   });
 
-  it("resolved IX suppresses recovery shell (align mobile coldResume)", () => {
+  it("resolved IX suppresses recovery shell", () => {
     useInteractionStore.getState().upsertRequired({
       kind: "ask_user",
       conversationId: CID,

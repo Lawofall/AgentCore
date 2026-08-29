@@ -135,9 +135,6 @@
         "status": "success"
       },
       {
-        "kind": "rework"
-      },
-      {
         "kind": "content",
         "text": "依据 [1] 可知……"
       }
@@ -177,7 +174,6 @@
     "deliveryStatus": null,
     "turnWarning": null,
     "autoFolder": null,
-    "teamNotes": [],
     "userInterjections": []
   }
 }

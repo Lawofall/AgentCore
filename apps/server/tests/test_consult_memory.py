@@ -62,7 +62,8 @@ async def test_consult_memory_returns_body_on_hit(tmp_path):
     assert result.success
     assert result.output == body
     assert result.display["name"] == "部署流程"
-    # 来源分类只进日志，不进 display：读侧不向用户暴露 skill/rule/memory 三分。
+    assert result.display["origin"] == "user"
+    # 细 kind 只进日志；display 只带两桶 origin。
     assert "kind" not in result.display
 
 
@@ -85,12 +86,14 @@ async def test_consult_memory_soft_miss_on_unknown(tmp_path):
     assert result.error is None
     assert "没有名为" in result.output
     assert "部署流程" in result.output
+    assert result.display is None or "origin" not in result.display
 
 
 async def test_consult_memory_soft_miss_on_empty_name(tmp_path):
     result = await _memory_tool(FileMemoryStore(tmp_path)).execute({"name": ""}, _ctx())
     assert result.success
     assert "缺少 name" in result.output
+    assert result.display is None or "origin" not in result.display
 
 
 async def test_consult_memory_skips_core_file(tmp_path):

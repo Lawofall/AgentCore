@@ -6,7 +6,12 @@ import type {
 function isAttachmentKind(
   value: unknown,
 ): value is NonNullable<OutgoingAttachment["kind"]> {
-  return value === "file" || value === "dir" || value === "conversation";
+  return (
+    value === "file" ||
+    value === "dir" ||
+    value === "conversation" ||
+    value === "document"
+  );
 }
 
 /** 快照 / 出队帧附件 → 发送载荷。原样保留 ``path`` / ``workspace_path``，禁止另造路径。 */
@@ -30,6 +35,9 @@ export function mapQueuedAttachments(
     if (isAttachmentKind(a.kind)) mapped.kind = a.kind;
     if (typeof a.conversation_id === "string" && a.conversation_id) {
       mapped.conversation_id = a.conversation_id;
+    }
+    if (typeof a.document_id === "string" && a.document_id) {
+      mapped.document_id = a.document_id;
     }
     if (a.binary === true) mapped.binary = true;
     if (typeof a.workspace_path === "string" && a.workspace_path) {

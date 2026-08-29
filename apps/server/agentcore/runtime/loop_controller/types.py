@@ -231,27 +231,21 @@ def delivery_idle_nudge_prompt(
 
 
 def delivery_idle_narrow_prompt(
-    *, rounds: int, keep_notes: bool = False, channel_dead: bool = False
+    *, rounds: int, channel_dead: bool = False
 ) -> str | None:
     """After soft nudge: tools narrowed — still not FINALIZE.
 
     Factory never arms this for files_expected. Explicit construction may still
-    set ``narrow_rounds``. Collaboration (wall) keeps note tools; mention briefly
-    when ``keep_notes``.
+    set ``narrow_rounds``.
 
     ``channel_dead`` → ``None`` (caller must skip): narrow copy keeps write tools
     and would push落盘 after the channel is already sticky-dead.
     """
     if channel_dead:
         return None
-    notes = (
-        " / 便签（可贴/读/改）"
-        if keep_notes
-        else ""
-    )
     return (
         f"[系统提示] 交文件空转收窄（已连续 {rounds} 轮仅调查、零落盘）："
-        f"大范围调查类工具已收回；仅保留写盘 / 内环诊断{notes} / handoff / 必要 file_read。"
+        "大范围调查类工具已收回；仅保留写盘 / 内环诊断 / handoff / 必要 file_read。"
         "请立即改文件或交接，勿再展开新调研。"
     )
 

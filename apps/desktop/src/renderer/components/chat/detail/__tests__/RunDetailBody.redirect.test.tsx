@@ -152,7 +152,6 @@ const mockExecution: Execution = {
   crossExamEnabled: false,
   debateOpening: null,
   debatePretrial: null,
-  teamNotes: [],
 };
 
 function wrap(ui: ReactElement) {

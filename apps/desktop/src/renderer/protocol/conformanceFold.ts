@@ -167,7 +167,8 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
     const leftoverType = ev.type as string;
     if (
       leftoverType === "team_preview_required" ||
-      leftoverType === "team_preview_resolved"
+      leftoverType === "team_preview_resolved" ||
+      leftoverType === "team_note_posted"
     ) {
       continue;
     }
@@ -333,14 +334,6 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
         break;
       }
       case "escalation_resolved": {
-        const frame = frameFromEvent(ev);
-        if (frame) frames.push(frame);
-        break;
-      }
-      // 团队便签墙 (§2.2 通): a worker broadcast a one-line decision / heads-up to its concurrent
-      // siblings — folds turn-level onto Execution.teamNotes via the same frame path (post order,
-      // deduped by noteId). Mirrors the backend oracle + mobile fold (conformance pins them equal).
-      case "team_note_posted": {
         const frame = frameFromEvent(ev);
         if (frame) frames.push(frame);
         break;
@@ -702,21 +695,6 @@ export function foldToProjectedTurn(events: SSEEvent[]): ProjectedTurn {
     deliveryStatus,
     turnWarning,
     autoFolder,
-    // 团队便签墙 (§2.2 通): single source = projectExecution's frame fold (above), mapped to the
-    // golden's ProjectedTeamNote shape — the same single-source pattern as `escalations`.
-    teamNotes: (execution?.teamNotes ?? []).map((n) => ({
-      noteId: n.noteId,
-      runId: n.runId,
-      agentId: n.agentId,
-      role: n.role,
-      kind: n.kind,
-      text: n.text,
-      ts: n.ts,
-      status: n.status,
-      supersedes: n.supersedes,
-      ...(n.source ? { source: n.source } : {}),
-    })),
-    ...(execution?.noteWall ? { noteWall: true } : {}),
     userInterjections,
   };
 }

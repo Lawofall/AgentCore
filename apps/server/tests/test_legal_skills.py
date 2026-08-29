@@ -76,6 +76,8 @@ async def test_consult_resolves_legal_skill_when_enabled():
     result = await tool.execute({"name": "legal_answer_brief"}, _ctx())
     assert result.success
     assert result.output == reg.get("legal_answer_brief").body
+    assert result.display["origin"] == "system"
+    assert "kind" not in result.display
 
 
 # --- body teaches the mechanism ---------------------------------------------
@@ -146,6 +148,8 @@ async def test_consult_resolves_case_analysis_when_enabled():
     result = await tool.execute({"name": "legal_case_analysis"}, _ctx())
     assert result.success
     assert result.output == reg.get("legal_case_analysis").body
+    assert result.display["origin"] == "system"
+    assert "kind" not in result.display
 
 
 def _case_body() -> str:

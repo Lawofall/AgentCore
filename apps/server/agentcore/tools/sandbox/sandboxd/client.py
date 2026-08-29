@@ -30,7 +30,11 @@ from agentcore.tools.sandbox.sandboxd.protocol import (
 )
 
 _CONNECT_TIMEOUT = 2.0
+# ping / health / exec header / delete / kill. Desk boot is not this budget.
 _RPC_TIMEOUT = 30.0
+# runsc run -d can sit in "creating container"; 30s here left metadata and the
+# next create hit already exists. Minutes-scale, not the 60s exec cap / 20min wall.
+_START_DETACH_RPC_TIMEOUT = 180.0
 
 _injected: SandboxdClient | None = None
 _req_id = 0
@@ -184,7 +188,13 @@ class UnixSandboxdClient(SandboxdClient):
                 f"无法连接 sandboxd（{self.socket_path}）"
             ) from exc
 
-    async def _rpc(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def _rpc(
+        self,
+        method: str,
+        params: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         reader, writer = await self._connect()
         try:
             payload = json.dumps(
@@ -194,7 +204,8 @@ class UnixSandboxdClient(SandboxdClient):
             )
             writer.write(payload.encode("utf-8") + b"\n")
             await writer.drain()
-            raw = await asyncio.wait_for(reader.readline(), timeout=_RPC_TIMEOUT)
+            rpc_timeout = _RPC_TIMEOUT if timeout is None else timeout
+            raw = await asyncio.wait_for(reader.readline(), timeout=rpc_timeout)
             if not raw:
                 raise SandboxdUnavailableError("sandboxd 关闭了控制连接")
             try:
@@ -249,16 +260,23 @@ class UnixSandboxdClient(SandboxdClient):
         container_id: str,
         netns_path: str,
     ) -> None:
-        await self._rpc(
-            METHOD_RUN,
-            {
-                "shape": "net",
-                "mode": "detach",
-                "bundle_dir": bundle_dir,
-                "container_id": container_id,
-                "netns_path": netns_path,
-            },
-        )
+        try:
+            await self._rpc(
+                METHOD_RUN,
+                {
+                    "shape": "net",
+                    "mode": "detach",
+                    "bundle_dir": bundle_dir,
+                    "container_id": container_id,
+                    "netns_path": netns_path,
+                },
+                timeout=_START_DETACH_RPC_TIMEOUT,
+            )
+        except TimeoutError as exc:
+            raise SandboxdError(
+                "sandboxd start-detach 等待超时",
+                code="sandboxd_start_timeout",
+            ) from exc
 
     async def exec_wait(
         self,

@@ -161,7 +161,6 @@ let mockExecution: Execution = {
   crossExamEnabled: false,
   debateOpening: null,
   debatePretrial: null,
-  teamNotes: [],
 };
 
 function seed(opts: {

@@ -1,8 +1,8 @@
-"""Bridge worker escalate / note-wall signals into the CEO coordination queue.
+"""Bridge worker escalate signals into the CEO coordination queue.
 
-Phase 3: when a :class:`CoordinationSession` is active, escalations and note-wall
-conflicts post into the event queue so the living CEO can arbitrate — they do
-**not** force a supervised SCOPE wave-boundary YIELD.
+Phase 3: when a :class:`CoordinationSession` is active, escalations post into
+the event queue so the living CEO can arbitrate — they do **not** force a
+supervised SCOPE wave-boundary YIELD.
 
 Timeout wrapping (warn → hard TIMEOUT → grace → force cancel) also lives here so
 coordination drives and nested blocking drives share one executor surface.
@@ -97,42 +97,6 @@ def post_escalation_to_coordination(
             escalator_is_nested=escalator_is_lock_owner_nested_child,
         )
     return posted
-
-
-def post_note_to_coordination(
-    *,
-    run_id: str,
-    role: str = "",
-    kind: str = "note",
-    text: str = "",
-    conflict: str | None = None,
-    execution_id: str | None = None,
-) -> None:
-    """Post a note_posted event; conflicts also raise an escalation for CEO arbitration."""
-    session = active_coordination(execution_id)
-    if session is None or not session.active:
-        return
-    session.post(
-        CoordinationEvent(
-            kind=CoordinationEventKind.NOTE_POSTED,
-            payload={
-                "run_id": run_id,
-                "role": role or run_id,
-                "kind": kind,
-                "text": text,
-            },
-        )
-    )
-    if conflict:
-        post_escalation_to_coordination(
-            run_id=run_id,
-            role=role,
-            kind="note_conflict",
-            question=conflict,
-            summary=text,
-            source="note_wall",
-            execution_id=execution_id,
-        )
 
 
 def post_completed_escalations(

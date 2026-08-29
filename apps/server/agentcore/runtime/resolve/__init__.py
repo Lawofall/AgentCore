@@ -5,11 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 __all__ = [
-    "CHAT_CITATION_HINT",
     "FRAGMENT_BASE",
     "FRAGMENT_CEO_CORE",
-    "FRAGMENT_CEO_VISUALIZATION",
-    "FRAGMENT_CITATION",
     "OVERRIDABLE_KEYS",
     "PromptProfile",
     "_assemble_ceo_toolset",
@@ -36,8 +33,6 @@ def __getattr__(name: str) -> Any:
     if name in (
         "FRAGMENT_BASE",
         "FRAGMENT_CEO_CORE",
-        "FRAGMENT_CEO_VISUALIZATION",
-        "FRAGMENT_CITATION",
         "OVERRIDABLE_KEYS",
         "PromptProfile",
         "active_profile",
@@ -48,7 +43,6 @@ def __getattr__(name: str) -> Any:
 
         return getattr(_profile, name)
     if name in (
-        "CHAT_CITATION_HINT",
         "assemble_system_prompt",
         "compose_ceo_chat_prompt",
     ):

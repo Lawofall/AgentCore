@@ -99,9 +99,9 @@ const PEEK_SUPPRESSED = new Set([
   "md_to_docx",
   "md_to_pdf",
   "archive_extract",
+  "archive_create",
   "download_url",
   "read_image",
-  "read_notes",
   "board_ops",
   "board_read",
   "code_search",
@@ -129,8 +129,6 @@ const PEEK_SUPPRESSED = new Set([
   "wait",
   // grep 计数走标题 inlineMeta；未知结果形状不得再起一行贴正则/命中原文。
   "grep",
-  "post_note",
-  "amend_note",
   "desktop_notify",
   // 本机 Host：标题已自解释；正文是 untrusted JSON，勿 peek 刷屏。
   "host",

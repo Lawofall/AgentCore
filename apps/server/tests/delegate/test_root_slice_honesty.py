@@ -72,7 +72,7 @@ def test_ok_named_playbook():
     warn = check_root_slice_honesty(
         [_workspace_task()],
         depth=0,
-        playbook="build_app",
+        playbook="cite_write_review",
     )
     assert warn is None
 

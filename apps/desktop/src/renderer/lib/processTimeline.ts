@@ -36,7 +36,6 @@ export {
 export const PROCESS_STEP_KIND: Record<ProcessStep["kind"], true> = {
   reasoning: true,
   content: true,
-  rework: true,
   tool: true,
   team: true,
   graph_append: true,
@@ -166,12 +165,12 @@ export function replaceTrailingReasoningStep(
 }
 
 /**
- * Drop the trailing content step(s) from the timeline (交付前核验回炉 content_reset):
- * the model's done-round draft failed the light verification (e.g. fabricated
- * citations), so its just-streamed reply text is discarded and rewritten. Mirrors the
- * backend `EventSink._accumulate_process` reset branch — pop ONLY trailing `content`
- * steps, keeping the preceding reasoning / tool steps (they really happened). Returns
- * the same reference when there is nothing to drop so callers can no-op.
+ * Drop the trailing content step(s) from the timeline (`content_reset` /
+ * `run_output_reset`): the just-streamed reply text is discarded and rewritten.
+ * Mirrors the backend `EventSink._accumulate_process` reset branch — pop ONLY
+ * trailing `content` steps, keeping the preceding reasoning / tool steps (they
+ * really happened). Returns the same reference when there is nothing to drop so
+ * callers can no-op. All reset reasons leave no process trace.
  */
 export function dropTrailingContentSteps(
   process: ProcessStep[] | undefined,
@@ -183,33 +182,6 @@ export function dropTrailingContentSteps(
     steps.pop();
   }
   return steps;
-}
-
-/** Append the 核验回炉轻 chip after dropping discarded draft content. */
-export function appendReworkStep(
-  process: ProcessStep[] | undefined,
-): ProcessStep[] {
-  const steps = process ? [...process] : [];
-  steps.push({ kind: "rework" });
-  return steps;
-}
-
-/** Settled / rewritten chip copy (also used when streaming has already emitted content after rework). */
-export const REWORK_LABEL_DONE = "引用/格式核验后已重写";
-/** In-progress chip while finish_guard rework is still streaming with empty body. */
-export const REWORK_LABEL_IN_PROGRESS = "正在按规则修订…";
-
-/**
- * Presentational label for a `rework` chip / export line.
- * Streaming + no content step after this rework → in-progress; otherwise past-tense done.
- */
-export function reworkChipLabel(
-  isStreaming: boolean,
-  hasContentAfter: boolean,
-): string {
-  return isStreaming && !hasContentAfter
-    ? REWORK_LABEL_IN_PROGRESS
-    : REWORK_LABEL_DONE;
 }
 
 /** Append a started tool call as a `running` step to the timeline.
@@ -373,12 +345,12 @@ export function appendTeamStep(
   return insertStepAt(steps, marker, at);
 }
 
-/** Drop a `graph_append` anchor on the **appending** turn (旧 journal 兼容).
- * Dedupes by `execution_id` — one anchor per host graph per append turn.
- * `actId`/`actKind`/`authorizedBy` 为桌面呈现扩展（开新幕文案 / 授权角标）；
- * conformance 导出时剥离。
+/** Drop a `graph_append` slot marker on the **appending** turn (旧 journal 兼容).
+ * Dedupes by `execution_id` — one marker per host graph per append turn.
+ * `actId`/`actKind`/`authorizedBy` 随 fold 保留（conformance 导出时剥离）；
+ * 产品聊天不渲染此步。
  *
- * 新路径改用 `run_plan.prev_execution_id`，由 InlineTeamGraph 渲染「续自」链接，
+ * 新路径改用 `run_plan.prev_execution_id`（协议链仍在，用户面不画回链），
  * 不再发 `graph_append`。
  *
  * Optional `at` mirrors {@link appendTeamStep}: hydrate journal-slot insert. */
@@ -624,12 +596,12 @@ export function omitCoordinationIdleSteps(
  * → every later node's index shifts → React unmounts/remounts
  * them (flicker,
  * lost disclosure state). Identity-bearing nodes key by their own id; text nodes
- * (`reasoning`/`content`/`rework`) key by same-kind ordinal — marker insertion never
+ * (`reasoning`/`content`) key by same-kind ordinal — marker insertion never
  * disturbs the relative order of same-kind text steps, so ordinals stay stable.
  */
 export function timelineNodeKeys(nodes: TimelineNode[]): string[] {
   const ordinals = new Map<string, number>();
-  const ordinalKey = (kind: "reasoning" | "content" | "rework") => {
+  const ordinalKey = (kind: "reasoning" | "content") => {
     const n = (ordinals.get(kind) ?? 0) + 1;
     ordinals.set(kind, n);
     return `${kind}-${n}`;
@@ -660,7 +632,6 @@ export function timelineNodeKeys(nodes: TimelineNode[]): string[] {
         return `tgrp-${node.tools[0]?.id ?? "empty"}`;
       case "reasoning":
       case "content":
-      case "rework":
         return ordinalKey(node.kind);
       default:
         return assertNever(node);

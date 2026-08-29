@@ -59,7 +59,6 @@ function exec(partial: {
     crossExamEnabled: false,
     debateOpening: null,
     debatePretrial: null,
-    teamNotes: [],
   };
 }
 

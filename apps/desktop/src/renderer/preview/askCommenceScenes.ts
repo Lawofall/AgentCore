@@ -34,7 +34,7 @@ export const ASK_COMMENCE_SCENES: AskCommenceScene[] = [
     id: "ask-commence-v5",
     title: "Generic Clarify",
     intent:
-      "【现生产】通用澄清卡 AskDecisionBody：无开工提案仪式；多题编号跳转、一次提交；wire 空 style/format 不渲染场面区。",
+      "【现生产】通用澄清卡 AskDecisionBody：无开工提案仪式；多题一次一面、已访编号回看、非末题「下一题」末题提交；打开不预选 default；不是 Wizard；wire 空 style/format 不渲染场面区。",
     paradigm: "通用 ask_user",
   },
 ];

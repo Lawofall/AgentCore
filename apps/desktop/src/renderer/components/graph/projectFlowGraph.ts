@@ -460,7 +460,6 @@ export function projectFlowNodes({
         : null,
       revised: run.revised,
       replacesRunId: run.replacesRunId,
-      didRework: (hostAgent ?? agent)?.didRework === true,
       stance: run.stance,
       checkpoint: run.checkpoint,
       escalationPending: roundRuns.reduce(

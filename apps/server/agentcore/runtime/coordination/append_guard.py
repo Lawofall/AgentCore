@@ -28,11 +28,18 @@ keep the seat; overlap still rejects.
 overlap still requires incomplete live nodes (plus same-batch peers above).
 
 Same-batch sibling role / artifact crosses are rejected at dispatch (name the
-pair), **before** durable ``run_plan`` emit (admit → commit → execute).
+pair), **before** durable ``run_plan`` emit (admit → commit → execute). The
+try_start sibling defense uses the same rule: scan the **new batch only**
+(:func:`same_batch_plan` drops host terminals). Completed same-seat + same
+path 续派 is not a sibling cross.
 
 Cross-turn ``append_to_execution_id`` admits the **new batch only** against the
 host plan + journal completed seed (auto-``replaces`` on free seats) — never
 sibling-scan host∪new as one batch.
+
+Never-started seats (no ``run_started``) do not occupy the live graph: they are
+not incomplete holders for append / isomorphic, and a failed arm must drop them
+from the durable snapshot rather than leave empty chairs.
 
 ``replan.adds`` on an active coordination live plan reuses the same admit
 (``admit_added_nodes``) + ``declare_plan_artifacts`` path as append merge.
@@ -85,19 +92,56 @@ __all__ = [
     "node_file_targets",
     "node_ownership_desk",
     "roles_overlap",
+    "same_batch_plan",
 ]
+
+
+def same_batch_plan(
+    plan: RunPlan,
+    *,
+    exclude_run_ids: set[str] | frozenset[str] | None = None,
+) -> RunPlan:
+    """Return a plan view of nodes that participate in same-batch sibling.
+
+    Host terminals (journal / session seed) must not sit in the sibling scan:
+    completed same-seat + same artifact is legitimate 续派, not a same-batch
+    cross. Does not copy node objects; ``depends_on`` edges into excluded host
+    ids stay on the remaining nodes (ancestor lookup skips missing ids).
+    """
+    from agentcore.runtime.runs.plan import RunPlan as RunPlanCls
+
+    skip = {str(x).strip() for x in (exclude_run_ids or ()) if str(x).strip()}
+    if not skip:
+        return plan
+    return RunPlanCls(
+        nodes=[n for n in plan.nodes if (n.run_id or "") not in skip],
+        origin=plan.origin,
+        advisories=list(plan.advisories),
+        topology_lock=plan.topology_lock,
+        workflow_id=plan.workflow_id,
+        workflow_version=plan.workflow_version,
+    )
 
 
 def has_incomplete_nodes(
     live_plan: RunPlan | None,
     *,
     completed_run_ids: set[str] | frozenset[str] | None = None,
+    started_run_ids: set[str] | frozenset[str] | None = None,
 ) -> bool:
-    """True when the live graph still has nodes not yet terminal."""
+    """True when the live graph still has nodes not yet terminal.
+
+    When ``started_run_ids`` is set, nodes that never ``run_started`` are empty
+    seats — they do not count as「还有人在跑」.
+    """
     if live_plan is None or not live_plan.nodes:
         return False
     done = set(completed_run_ids or ())
-    return any(n.run_id not in done for n in live_plan.nodes)
+    started = None if started_run_ids is None else set(started_run_ids)
+    return any(
+        n.run_id not in done and (started is None or n.run_id in started)
+        for n in live_plan.nodes
+    )
 
 
 def apply_vacated_seat_replaces(
@@ -106,6 +150,7 @@ def apply_vacated_seat_replaces(
     *,
     completed_run_ids: set[str] | frozenset[str] | None = None,
     vacated_run_ids: set[str] | frozenset[str] | None = None,
+    started_run_ids: set[str] | frozenset[str] | None = None,
 ) -> list[tuple[str, str]]:
     """Auto-fill ``replaces_run_id`` when a new node reclaims a free seat.
 
@@ -133,6 +178,9 @@ def apply_vacated_seat_replaces(
         if not rid:
             continue
         if rid not in done:
+            if started_run_ids is not None and rid not in started_run_ids:
+                # Never-started empty seat does not occupy the chair.
+                continue
             incomplete_seats.add(seat)
         elif rid in vacated:
             vacated_by_seat.setdefault(seat, []).append(live)
@@ -169,6 +217,7 @@ def find_append_overlaps(
     live_plan: RunPlan | None,
     *,
     completed_run_ids: set[str] | frozenset[str] | None = None,
+    started_run_ids: set[str] | frozenset[str] | None = None,
     ownership: WriteCoordinator | None = None,
     birth_desk_id: str | None = None,
 ) -> list[AppendOverlap]:
@@ -185,6 +234,9 @@ def find_append_overlaps(
 
     done = set(completed_run_ids or ())
     incomplete = [n for n in live_plan.nodes if n.run_id not in done]
+    if started_run_ids is not None:
+        started = set(started_run_ids)
+        incomplete = [n for n in incomplete if n.run_id in started]
     live_by_id = {n.run_id: n for n in live_plan.nodes}
 
     combined_ancestors = _ancestors_for_plan(live_plan)
@@ -306,8 +358,8 @@ def admit_added_nodes(
     *,
     completed_run_ids: set[str] | frozenset[str] | None = None,
     vacated_run_ids: set[str] | frozenset[str] | None = None,
+    started_run_ids: set[str] | frozenset[str] | None = None,
     ownership: WriteCoordinator | None = None,
-    force: bool = False,
     total_workers: int | None = None,
     birth_desk_id: str | None = None,
 ) -> str | None:
@@ -315,20 +367,19 @@ def admit_added_nodes(
 
     Mutates ``new_plan`` nodes (auto-fills ``replaces_run_id`` for free seats).
     Returns the append-family reject message, or ``None`` when admitted.
-    ``force`` still applies vacated-seat replaces but skips overlap rejection.
     """
     apply_vacated_seat_replaces(
         new_plan,
         live_plan,
         completed_run_ids=completed_run_ids,
         vacated_run_ids=vacated_run_ids,
+        started_run_ids=started_run_ids,
     )
-    if force:
-        return None
     overlaps = find_append_overlaps(
         new_plan,
         live_plan,
         completed_run_ids=completed_run_ids,
+        started_run_ids=started_run_ids,
         ownership=ownership,
         birth_desk_id=birth_desk_id,
     )
@@ -441,7 +492,6 @@ def declare_plan_artifacts(
     plan: RunPlan,
     ownership: WriteCoordinator,
     *,
-    force: bool = False,
     only_run_ids: set[str] | frozenset[str] | None = None,
     ancestor_map: dict[str, frozenset[str]] | None = None,
     ancestor_handoff_at_declare: bool = False,
@@ -461,7 +511,7 @@ def declare_plan_artifacts(
     treated the same. Still-running lock owners keep blocking.
 
     Returns list of ``(new_run_id, path, conflicting_owner)`` for hard conflicts
-    when not force/transfer-eligible (caller should have rejected via overlaps first).
+    when not transfer-eligible (caller should have rejected via overlaps first).
     ``path`` in the tuple is the bare ``rel_path``.
     """
     ancestors = ancestor_map if ancestor_map is not None else _ancestors_for_plan(plan)
@@ -493,7 +543,7 @@ def declare_plan_artifacts(
         desk = node_ownership_desk(node, birth_desk_id=birth_desk_id)
 
         for path in node_artifact_paths(node):
-            if force or replaces or continue_from:
+            if replaces or continue_from:
                 ownership.transfer(path, rid, desk_id=desk)
                 continue
             owner = ownership.declare(
@@ -597,14 +647,12 @@ def declare_nested_drive_artifacts(
     artifacts transfers only those paths from the lead (not ``transfer_all_from``).
     Root depth-0 coordination already declares in ``host`` — skipped here.
     """
-    from agentcore.runtime.delegate.force_scopes import GATE_SEAT_OVERLAP, force_allows
     from agentcore.workspace.write_claims import resolve_write_coordinator
 
     if int(getattr(tool, "_depth", 0) or 0) < 1:
         return []
 
     ownership = resolve_write_coordinator(execution_id=execution_id)
-    force = force_allows(tool, GATE_SEAT_OVERLAP)
     completed: set[str] | frozenset[str] | None = None
     try:
         from agentcore.runtime.coordination.session import resolve_coordination_session
@@ -618,7 +666,6 @@ def declare_nested_drive_artifacts(
     conflicts = declare_plan_artifacts(
         plan,
         ownership,
-        force=force,
         ancestor_map=_ancestors_for_plan(plan),
         ancestor_handoff_at_declare=True,
         completed_run_ids=completed,

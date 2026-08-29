@@ -29,14 +29,17 @@ from agentcore.evals.types import EvalConfigError
 _LEGACY_EXPECT = {
     "research_brief_parallel": "map_fanout",
     "code_audit_report": "code_audit",
-    "greenfield_spa_build_app": "build_app",
     "research_mit_vs_gpl_chat": "map_fanout",
     "research_knowledge_base_chat": "map_fanout",
     "audit_check_bugs_save_file": "code_audit",
     "audit_find_issues_workspace_doc": "code_audit",
-    "app_todo_website_usable": "build_app",
-    "app_todo_web_must_run": "build_app",
 }
+
+_GREENFIELD_HANDWRITTEN = (
+    "greenfield_spa_build_app",
+    "app_todo_website_usable",
+    "app_todo_web_must_run",
+)
 
 
 def test_scenarios_lint_ok():
@@ -46,11 +49,13 @@ def test_scenarios_lint_ok():
     assert any(s.workspace == "codebase" for s in SCENARIOS)
     keys = {s.key for s in SCENARIOS}
     assert set(_LEGACY_EXPECT) <= keys
+    assert set(_GREENFIELD_HANDWRITTEN) <= keys
     assert "discuss_license_no_doc_waiver" in keys
     assert "discuss_license_round2_short_answers" in keys
     assert "write_prd_save_file" in keys
     assert "discuss_worker_params_industry" in keys
     assert "discuss_arch_bug_maintain_facets" in keys
+    assert "identity_who_are_you" in keys
     assert "compare_three_js_frameworks" in keys
 
 
@@ -69,13 +74,27 @@ def test_legacy_named_playbook_scenarios_unchanged():
     assert "落盘" not in by_key["write_prd_save_file"].user_message
 
 
+def test_greenfield_expects_handwritten_delegate():
+    by_key = {s.key: s for s in SCENARIOS}
+    for key in _GREENFIELD_HANDWRITTEN:
+        sc = by_key[key]
+        assert sc.expect_playbook == ""
+        assert sc.expect_action == "DELEGATE"
+        assert sc.expect_form is None
+        assert sc.category == "greenfield_app"
+    assert "完整可跑" in by_key["greenfield_spa_build_app"].user_message
+    assert "SPA" in by_key["greenfield_spa_build_app"].user_message
+
+
 def test_discuss_and_prd_fixture_fields():
     by_key = {s.key: s for s in SCENARIOS}
     discuss = by_key["discuss_license_no_doc_waiver"]
     assert discuss.expect_playbook == "map_fanout"
-    assert "DIRECT" in discuss.expect_action and "ASK" in discuss.expect_action
+    assert "DELEGATE" in discuss.expect_action and "ASK" in discuss.expect_action
+    assert "DIRECT" not in discuss.expect_action
     round2 = by_key["discuss_license_round2_short_answers"]
     assert round2.prior_turns
+    assert "DELEGATE" in round2.expect_action and "ASK" in round2.expect_action
     assert round2.user_message.startswith("1.")
     assert history_messages(round2.prior_turns)[0][0] == "user"
     prd = by_key["write_prd_save_file"]
@@ -93,9 +112,15 @@ def test_discuss_and_prd_fixture_fields():
     facets = by_key["discuss_arch_bug_maintain_facets"]
     assert facets.workspace == "empty"
     assert facets.expect_playbook == ""
-    assert "DIRECT" in facets.expect_action and "ASK" in facets.expect_action
-    assert facets.expect_max_workers == 1
+    assert "DELEGATE" in facets.expect_action and "ASK" in facets.expect_action
+    assert "DIRECT" not in facets.expect_action
+    assert facets.expect_max_workers == 2
+    assert facets.expect_min_workers == 1
+    assert facets.expect_form == "prose"
     assert "写成文档" in facets.user_message
+    identity = by_key["identity_who_are_you"]
+    assert identity.expect_playbook == ""
+    assert "DIRECT" in identity.expect_action and "ASK" in identity.expect_action
     compare = by_key["compare_three_js_frameworks"]
     assert compare.expect_playbook == ""
     assert compare.expect_action == "DELEGATE"
@@ -166,7 +191,7 @@ def test_lint_rejects_min_workers_above_max():
 
 
 def test_named_playbook_strips_none():
-    assert named_playbook("build_app") == "build_app"
+    assert named_playbook("cite_write_review") == "cite_write_review"
     assert named_playbook("none") is None
     assert named_playbook("") is None
     assert named_playbook(None) is None
@@ -174,9 +199,9 @@ def test_named_playbook_strips_none():
 
 def test_parse_delegate_reads_intensity():
     raw = parse_delegate_rich(
-        '{"playbook":"build_app","playbook_args":{"app":"待办","intensity":"lean"}}'
+        '{"playbook":"cite_write_review","playbook_args":{"topic":"待办","intensity":"lean"}}'
     )
-    assert raw["playbook"] == "build_app"
+    assert raw["playbook"] == "cite_write_review"
     assert raw["intensity"] == "lean"
     assert raw["task_count"] == 0
     assert raw["forms"] == []
@@ -203,7 +228,7 @@ def test_classify_landing_variants():
     )
     assert expected["landing"] == "selected_expected"
     other = classify_landing(
-        action="DELEGATE", playbook="cite_write_review", expect="build_app", offered=offered, task_count=0
+        action="DELEGATE", playbook="cite_write_review", expect="map_fanout", offered=offered, task_count=0
     )
     assert other["landing"] == "selected_other"
     hand = classify_landing(
@@ -211,7 +236,7 @@ def test_classify_landing_variants():
     )
     assert hand["landing"] == "handwritten_tasks"
     ask = classify_landing(
-        action="ASK", playbook=None, expect="build_app", offered=offered, task_count=0
+        action="ASK", playbook=None, expect="map_fanout", offered=offered, task_count=0
     )
     assert ask["landing"] == "no_delegate"
 
@@ -300,6 +325,20 @@ def test_classify_landing_extended_observation():
         expect_max_recon_rounds=1,
     )
     assert under["landing"] == "workers_under"
+    facet_over = classify_landing(
+        action="DELEGATE",
+        playbook=None,
+        expect="",
+        offered=offered,
+        task_count=3,
+        form="prose",
+        expect_action="DELEGATE|ASK",
+        expect_form="prose",
+        expect_min_workers=1,
+        expect_max_workers=2,
+    )
+    assert facet_over["landing"] == "workers_over"
+    assert facet_over["workers"] == 3
     brief_hand = classify_landing(
         action="DELEGATE",
         playbook=None,
@@ -329,34 +368,36 @@ def test_classify_landing_extended_observation():
     assert brief_named["landing"] == "selected_expected"
 
 
-def test_think_act_catches_build_app_then_ask_user():
+def test_think_act_catches_named_playbook_then_ask_user():
     reasoning = (
-        "这是绿场 SPA，推荐 playbook=\"build_app\"。\n"
-        "我认为应该用 playbook=\"build_app\"，intensity=lean。\n"
-        "我直接 delegate build_app。\n"
+        "这是成文专线，推荐 playbook=\"cite_write_review\"。\n"
+        "我认为应该用 playbook=\"cite_write_review\"，intensity=lean。\n"
+        "我直接 delegate cite_write_review。\n"
         "让我派工。"
     )
     mentions = extract_think_mentions(reasoning)
-    assert "build_app" in mentions["playbooks"]
+    assert "cite_write_review" in mentions["playbooks"]
     assert "lean" in mentions["intensities"]
     div = think_act_divergences(
         mentions, action="ASK", playbook=None, intensity=None
     )
     kinds = {(d["kind"], d["mentioned"]) for d in div}
-    assert ("playbook", "build_app") in kinds
+    assert ("playbook", "cite_write_review") in kinds
 
 
 def test_think_act_on_recorded_colloquial_excerpt():
-    """手搓口语跑里抓到的形状：思考写 build_app，实际发卡。"""
+    """手搓口语跑里抓到的形状：思考写具名 playbook，实际发卡。"""
     reasoning = (
-        "这是一个绿场 SPA 应用。根据规则，真 SPA / 用户明示完整可跑 → "
-        "推荐 playbook=\"build_app\"。\n"
-        "我直接 delegate build_app。"
+        "用户要落盘成文。根据规则，明示成文 → "
+        "推荐 playbook=\"cite_write_review\"。\n"
+        "我直接 delegate cite_write_review。"
     )
     mentions = extract_think_mentions(reasoning)
     div = think_act_divergences(mentions, action="ASK", playbook=None, intensity=None)
-    assert "build_app" in mentions["playbooks"]
-    assert any(d["kind"] == "playbook" and d["mentioned"] == "build_app" for d in div)
+    assert "cite_write_review" in mentions["playbooks"]
+    assert any(
+        d["kind"] == "playbook" and d["mentioned"] == "cite_write_review" for d in div
+    )
 
 
 def test_think_act_ignores_negated_playbook():
@@ -399,7 +440,7 @@ def test_diff_fingerprints_reports_changed_scenario():
             {
                 "ok": True,
                 "action": "DELEGATE" if i < delegated_n else "ASK",
-                "playbook": "build_app" if i < delegated_n else None,
+                "playbook": "cite_write_review" if i < delegated_n else None,
                 "intensity": "lean" if i < delegated_n else None,
                 "delegated": i < delegated_n,
                 "card_issued": i >= delegated_n,
@@ -426,7 +467,7 @@ def test_slim_baseline_drops_reasoning():
             {
                 "key": "x",
                 "phrasing": "colloquial",
-                "expect_playbook": "build_app",
+                "expect_playbook": "",
                 "fingerprint": {"n": 1, "delegated_n": 0},
                 "aggregate": {"n": 1, "delegated": "0/1"},
                 "samples": [{"reasoning": {"full": "secret"}}],
@@ -479,7 +520,7 @@ def test_cli_report_only_does_not_red_on_miss(monkeypatch, tmp_path):
                 {
                     "key": "app_todo_web_must_run",
                     "phrasing": "colloquial",
-                    "expect_playbook": "build_app",
+                    "expect_playbook": "",
                     "aggregate": agg,
                     "fingerprint": agg["fingerprint"],
                 }
@@ -548,7 +589,7 @@ def test_execution_entry_assembles_surface_and_parses_delegate():
             assert "delegate" in names
             return LLMResponse(
                 content="先派团队。",
-                reasoning_content='决定 playbook="build_app" intensity=lean',
+                reasoning_content="手写 tasks 从零搭可跑待办。",
                 tool_calls=[
                     ToolCall(
                         id="call_1",
@@ -556,11 +597,12 @@ def test_execution_entry_assembles_surface_and_parses_delegate():
                             name="delegate",
                             arguments=json.dumps(
                                 {
-                                    "playbook": "build_app",
-                                    "playbook_args": {
-                                        "app": "待办清单",
-                                        "intensity": "lean",
-                                    },
+                                    "tasks": [
+                                        {
+                                            "role": "实现",
+                                            "task": "从零搭待办 SPA，打开就能用",
+                                        }
+                                    ],
                                 },
                                 ensure_ascii=False,
                             ),
@@ -586,11 +628,14 @@ def test_execution_entry_assembles_surface_and_parses_delegate():
     assert packed["ok"] is True, packed.get("error")
     assert stub.requests, "provider.complete must be called"
     assert packed["action"] == "DELEGATE"
-    assert packed["playbook"] == "build_app"
-    assert packed["intensity"] == "lean"
+    assert packed["playbook"] is None
+    assert packed["task_count"] == 1
     assert packed["delegated"] is True
     assert packed["tool_surface"]["offered"] is True
-    assert "build_app" in (packed["tool_surface"].get("playbook_enum") or [])
+    enum = packed["tool_surface"].get("playbook_enum") or []
+    assert "cite_write_review" in enum
+    assert "map_fanout" in enum
+    assert "build_app" not in enum
     assert packed["think_act_divergences"] == []
 
 

@@ -78,23 +78,16 @@ def _permission_allows_restricted_network(raw: str | None) -> bool:
 
 
 _USAGE_TAIL = (
-    "\n用法要点：① 只跑【会很快自行退出】的短命令或内联代码（如小段 python/node、"
-    "一次性计算）。【禁止】用本工具跑项目级慢验证或装包（npm/pnpm/yarn install|ci、"
-    "全量 tsc / typecheck / npm run build / 整仓 pytest·vitest）——请改用 test_run"
-    "（有界项目验证，分钟级预算；装包 check=install）。【禁止】启动永不退出的进程"
-    "（npm run dev / vite / next dev / watch / 开发服务器等）——会卡满超时；"
-    "请改用 terminal（subcommand=start，建议带 wait_for 等 ready 信号）。② 优先用 "
-    "language=python 或 javascript 直接运行内联代码，少用 bash 外壳——bash 在"
-    "部分主机（如 Windows）可能不可用。③ 代码的工作目录就是工作区根目录，访问"
-    "工作区文件请用相对路径（如 fib.py），不要假设 /workspace 之类的绝对路径。"
-    "会话授权的区外目录以 `external/<别名>/…` 走文件工具；若代码需真实 OS 路径，"
-    "读环境变量 `AGENTCORE_EXTERNAL_<别名大写>`（由执行环境注入，勿把绝对路径"
-    "写进回复）。④ 公开网页摘录用 read_url / web_search；勿把爬虫写进本工具。"
-    "⑤ 大 zip 持久解压到工作区请用 archive_extract；"
-    "勿只靠本工具解压后假定内容已在 canonical 工作区树可见。⑥ 看已有源码 / 翻文件请用 "
-    "file_read（可分页）；在源码里搜符号、计数请用 grep / code_search。"
-    "【禁止】为看正文写脚本 print / 整文件 dump 到 stdout，也【禁止】open 源码再正则扫描当检索。"
-    "解析表格、改文件、跑计算仍用本工具。"
+    "\n短跑会自行退出的内联代码或短命令。"
+    "本工具 ≠ test_run（装包 / 项目级 typecheck·build·整仓测，如 npm run build）"
+    "≠ terminal（长驻如 npm run dev）"
+    "≠ terminal（会退出+wait）或 host(action=shell)（异步 HTTP 轮询超约 60s；本工具硬顶 60s）。"
+    "优先 python / javascript 内联（bash 在 Windows 等主机可能不可用）。"
+    "工作区相对路径；区外真实 OS 路径读 `AGENTCORE_EXTERNAL_<别名>`。"
+    "公开网页摘录 → read_url / web_search；"
+    "大 zip → archive_extract / archive_create；"
+    "看源码 / 搜符号 → file_read / grep / code_search。"
+    "解析表、改文件、跑计算仍用本工具。"
 )
 
 # Local-only: when a short CLI truly belongs on code_execute, don't default to bash —
@@ -242,8 +235,8 @@ class CodeExecuteTool:
                         "type": "object",
                         "additionalProperties": {"type": "string"},
                         "description": (
-                            "当次进程环境变量。凭据走这里，勿写入 code / 工作区；"
-                            "值不落盘。禁覆盖 PATH 等。"
+                            "当次进程环境变量。本回合已给的凭据填此代跑"
+                            "（不落盘、不进 code / 工作区明文）。禁覆盖 PATH 等。"
                         ),
                     },
                 },

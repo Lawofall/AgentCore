@@ -88,6 +88,7 @@ function upsertAsk(messageId = "client-uuid"): void {
     kind: "ask_user",
     conversationId: CID,
     messageId,
+    origin: "server",
     payload: cpPayload() as unknown as Record<string, unknown>,
   });
 }
@@ -97,6 +98,7 @@ function upsertPlanReview(messageId = "client-uuid"): void {
     kind: "plan_review",
     conversationId: CID,
     messageId,
+    origin: "server",
     payload: prPayload() as unknown as Record<string, unknown>,
   });
 }
@@ -149,6 +151,7 @@ describe("surfaceResumeFromLiveTurn", () => {
       kind: "plan_review",
       conversationId: CID,
       messageId: "client-uuid",
+      origin: "server",
       payload: prPayload({
         ceo_review: {
           conclusion: "可放行",
@@ -246,7 +249,12 @@ describe("surfaceResumeFromLiveTurn", () => {
 
   it("tags origin=sidecar when caller passes sidecar", () => {
     seedTurn("m-server-1");
-    upsertAsk();
+    ix().upsertRequired({
+      kind: "ask_user",
+      conversationId: CID,
+      messageId: "client-uuid",
+      payload: cpPayload() as unknown as Record<string, unknown>,
+    });
 
     surfaceResumeFromLiveTurn(CID, "sidecar");
 
@@ -264,7 +272,12 @@ describe("surfaceResumeFromLiveTurn", () => {
 
   it("does not clobber existing sidecar origin when caller passes server", () => {
     seedTurn("m-server-1");
-    upsertAsk();
+    ix().upsertRequired({
+      kind: "ask_user",
+      conversationId: CID,
+      messageId: "client-uuid",
+      payload: cpPayload() as unknown as Record<string, unknown>,
+    });
     surfaceResumeFromLiveTurn(CID, "sidecar");
     expect(paused().pending[0]?.origin).toBe("sidecar");
 
@@ -352,6 +365,7 @@ describe("listVisibleColdResumes (InteractionStore authority)", () => {
       kind: "ask_user",
       conversationId: CID,
       messageId: "m-server-2",
+      origin: "server",
       payload: cpPayload({
         checkpoint_id: "cp2",
         question: "第二轮？",

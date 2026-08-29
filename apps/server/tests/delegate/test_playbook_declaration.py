@@ -90,10 +90,10 @@ def test_resolve_none_with_legacy_reason_ignored():
 
 def test_resolve_named_playbook_ok():
     name, err = resolve_playbook_declaration(
-        {"playbook": "build_app", "playbook_args": {"app": "X"}}
+        {"playbook": "cite_write_review", "playbook_args": {"topic": "X"}}
     )
     assert err is None
-    assert name == "build_app"
+    assert name == "cite_write_review"
 
 
 def test_named_build_website_is_unknown():
@@ -244,30 +244,31 @@ def test_legacy_build_toolshed_playbook_unknown():
     assert "未知" in err
     assert "build_toolshed" in err
     assert "可用：" in err
-    assert "build_app" in err
+    assert "绿场推荐" not in err
+    assert "绿场软件推荐" not in err
 
 
 def test_automation_delivery_ignored_named_playbooks_still_ok():
     """场面账拆除：具名 playbook 不再因交付形态拒。"""
     name, err = resolve_playbook_declaration(
         {
-            "playbook": "build_app",
-            "playbook_args": {"app": "Ops"},
+            "playbook": "cite_write_review",
+            "playbook_args": {"topic": "Ops"},
         },
     )
     assert err is None
-    assert name == "build_app"
+    assert name == "cite_write_review"
 
 
 def test_automation_console_allows_named_remaining_playbook():
     name, err = resolve_playbook_declaration(
         {
-            "playbook": "build_app",
-            "playbook_args": {"app": "Ops"},
+            "playbook": "lens_crosscheck",
+            "playbook_args": {"topic": "Ops"},
         },
     )
     assert err is None
-    assert name == "build_app"
+    assert name == "lens_crosscheck"
 
 
 def test_automation_plan_allows_website():
@@ -340,6 +341,8 @@ def test_legacy_playbook_ids_are_unknown():
         assert err is not None
         assert "未知" in err
         assert "暂未列入" not in err
+        assert "绿场推荐" not in err
+        assert "绿场软件推荐" not in err
         assert declaration_reject_gate(err) == "unknown"
 
 
@@ -471,7 +474,7 @@ def test_software_intent_none_thin_html_allowed():
 
 
 def test_software_greenfield_none_allowed():
-    """绿场 SPA / 数据看板 + none → 放行（推荐 build_app，不再硬拒）。"""
+    """绿场 SPA / 数据看板 + none → 放行（手写可用，不再硬拒）。"""
     name, err = resolve_playbook_declaration(
         {
             "playbook_none_reason": "手写前后端两节点",
@@ -521,15 +524,24 @@ def test_software_greenfield_vue_spa_from_scratch_none_allowed():
     assert name is None
 
 
-def test_software_greenfield_named_build_app_ok():
+def test_software_greenfield_named_build_app_unknown():
+    """具名工厂图纸已撤：走未知闸，拒文教手写 + consult(building_software)。"""
     name, err = resolve_playbook_declaration(
         {
             "playbook": "build_app",
             "playbook_args": {"app": "运营数据看板", "stack": "Vue3+Vite+TS"},
         },
     )
-    assert err is None
-    assert name == "build_app"
+    assert name is None
+    assert err is not None
+    assert "未知" in err
+    assert "手写" in err
+    assert "consult(building_software)" in err
+    assert "不要再传" in err
+    assert "绿场推荐" not in err
+    assert "绿场软件推荐" not in err
+    assert "可用：" not in err
+    assert declaration_reject_gate(err) == "unknown"
 
 
 def test_non_greenfield_free_teaming_still_ok():

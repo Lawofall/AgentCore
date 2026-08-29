@@ -706,15 +706,6 @@ const WORKFLOW_TEMPLATES = [
       { key: "audience", label: "读者", required: false, hint: "写给谁看" },
     ],
   },
-  {
-    id: "build_app",
-    title: "从零搭应用",
-    summary: "从零搭一个小应用：脚手架→模块→联调→冒烟。",
-    primary_slots: "app",
-    slots: [
-      { key: "app", label: "应用", required: true, hint: "要搭建的应用 / SPA 简述" },
-    ],
-  },
 ];
 
 /** `McpServerListItem[]` — installed into `window.mcpApi` (see addInitScript). */

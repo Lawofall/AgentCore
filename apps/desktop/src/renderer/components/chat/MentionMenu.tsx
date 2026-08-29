@@ -3,6 +3,7 @@ import { Button, SearchField } from "@/components/ui";
 import { hasLocalFiles } from "@/lib/capabilities";
 import type { IndexedEntry } from "@/lib/fileIndex";
 import {
+  Bookmark,
   ChevronLeft,
   ChevronRight,
   File,
@@ -90,6 +91,8 @@ function categoryIcon(id: MentionCategoryId) {
       return (
         <MessageSquare size={14} className="shrink-0 text-muted-foreground" />
       );
+    case "setting":
+      return <Bookmark size={14} className="shrink-0 text-muted-foreground" />;
     case "folder":
       return <Folder size={14} className="shrink-0 text-muted-foreground" />;
     case "file":
@@ -335,6 +338,11 @@ export function MentionMenu({
                               size={14}
                               className="shrink-0 text-muted-foreground"
                             />
+                          ) : item.kind === "document" ? (
+                            <Bookmark
+                              size={14}
+                              className="shrink-0 text-muted-foreground"
+                            />
                           ) : (
                             <FileTypeIcon
                               name={item.name}
@@ -352,7 +360,9 @@ export function MentionMenu({
                               ? "点名"
                               : item.kind === "conversation"
                                 ? "对话"
-                                : item.display}
+                                : item.kind === "document"
+                                  ? "设定"
+                                  : item.display}
                           </span>
                         </span>
                       </Button>

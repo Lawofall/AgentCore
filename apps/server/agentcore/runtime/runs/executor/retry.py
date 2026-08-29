@@ -146,19 +146,18 @@ def stamp_coord_round_budget(
 
 
 def bind_round_budget_on_begin(
-    pull_notes: Callable[[], list[LLMMessage]],
     used_box: list[int],
     limit_box: list[int],
     *,
     run_id: str = "",
     tokens_spent_of: Callable[[], int] | None = None,
 ) -> Callable[[], list[LLMMessage]]:
-    """``on_round_begin`` wrapper: stamp CEO live spend, then teammate notes.
+    """``on_round_begin`` wrapper: stamp CEO live spend.
 
     Does **not** inject a rounds ticker into the worker window. The engine
     calls the hook at the start of every round after the first; each
     invocation means ``used`` completed rounds (including the round about to
-    start). Returns only the notes list for the engine to extend.
+    start). Returns an empty list (no extra user messages).
 
     When ``run_id`` is set, used/limit (and optional run-level tokens) are
     stamped onto the coordination busy channel for the CEO idle brief.
@@ -175,7 +174,7 @@ def bind_round_budget_on_begin(
             limit=limit_box[0],
             tokens_spent=spent,
         )
-        return pull_notes()
+        return []
 
     return _on_round_begin
 

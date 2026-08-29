@@ -12,7 +12,7 @@ durable frame (``ToolEffect.SUSPEND``), and the answer returns via the cold
 ``POST .../resume`` path into the CEO's ReAct loop as this tool's result. 挂起+恢复
 preserves any in-flight context — delegate results, read files — and subsumes the
 opening 引导 at negligible cost, so the runtime — not the model — owns「该结束还是该挂起」.
-若答案不要紧，不要发卡，在回复里写明假设即可。对比与决策见
+可逆低杠杆不要发卡，在回复里写明假设即可。对比与决策见
 docs/03-AI核心/Agent协作模式.md（向用户发问）.
 
 The card's content is one adaptive shape (rich when opening, compact mid-task).

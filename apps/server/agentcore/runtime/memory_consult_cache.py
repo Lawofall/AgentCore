@@ -17,7 +17,19 @@ from agentcore.llm.provider.protocol import LLMMessage, llm_content_text
 # Unified ``consult`` plus the pre-split names still present in older frames.
 _CONSULT_TOOL_NAMES = ("consult", "consult_memory", "consult_skill", "consult_rule")
 
-# slug → full note body (same turn)
+_VALID_ORIGIN = frozenset({"system", "user"})
+
+
+class _ConsultCache(dict[str, str]):
+    """slug → body (pause-serializable) plus in-process origin sidecar."""
+
+    def __init__(self, mapping: dict[str, str] | None = None) -> None:
+        super().__init__(mapping if mapping is not None else ())
+        self.origins: dict[str, str] = {}
+
+
+# slug → full note body (same turn). Pause frames copy ``dict(cache)`` so origin
+# stays process-local and is dropped on resume-from-frame.
 consulted_memory_cache: ContextVar[dict[str, str] | None] = ContextVar(
     "consulted_memory_cache", default=None
 )
@@ -32,10 +44,17 @@ def get_consult_cache() -> dict[str, str]:
     return cache
 
 
-def remember_consult(slug: str, body: str) -> None:
+def remember_consult(slug: str, body: str, origin: str | None = None) -> None:
     if not slug or not body:
         return
-    get_consult_cache()[slug] = body
+    cache = get_consult_cache()
+    cache[slug] = body
+    if origin in _VALID_ORIGIN:
+        if not isinstance(cache, _ConsultCache):
+            wrapped = _ConsultCache(cache)
+            consulted_memory_cache.set(wrapped)
+            cache = wrapped
+        cache.origins[slug] = origin
 
 
 def lookup_consult(slug: str) -> str | None:
@@ -43,6 +62,15 @@ def lookup_consult(slug: str) -> str | None:
     if not cache:
         return None
     return cache.get(slug)
+
+
+def lookup_consult_origin(slug: str) -> str | None:
+    """In-process origin for same-turn reuse; None after frame restore (body only)."""
+    cache = consulted_memory_cache.get()
+    if not isinstance(cache, _ConsultCache):
+        return None
+    origin = cache.origins.get(slug)
+    return origin if origin in _VALID_ORIGIN else None
 
 
 def seed_consult_cache_from_window(messages: list[LLMMessage]) -> int:

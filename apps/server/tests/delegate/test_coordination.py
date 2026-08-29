@@ -1090,30 +1090,6 @@ async def test_escalate_ignored_outside_coordination():
     )
 
 
-async def test_note_conflict_posts_escalation():
-    clear_active_coordination()
-    from agentcore.runtime.coordination.bridge import post_note_to_coordination
-    from agentcore.runtime.coordination.session import set_active_coordination
-
-    session = CoordinationSession(execution_id="exec-note", total_workers=2)
-    set_active_coordination(session)
-    post_note_to_coordination(
-        run_id="r2",
-        role="写手",
-        kind="decision",
-        text="POST /auth 用 password",
-        conflict="⚠️ 与 研究员 的决定可能冲突",
-    )
-    events = session.drain_nowait()
-    kinds = [e.kind for e in events]
-    assert CoordinationEventKind.NOTE_POSTED in kinds
-    assert CoordinationEventKind.ESCALATION in kinds
-    esc = next(e for e in events if e.kind is CoordinationEventKind.ESCALATION)
-    assert esc.payload["kind"] == "note_conflict"
-    assert esc.payload["source"] == "note_wall"
-    clear_active_coordination()
-
-
 async def test_coordination_scope_boundary_proceeds():
     """SCOPE under coordination → PROCEED (no YIELD) + escalation event."""
     clear_active_coordination()
@@ -1432,8 +1408,8 @@ async def test_concurrent_sessions_isolated_by_execution_id():
     )
     b.post(
         CoordinationEvent(
-            kind=CoordinationEventKind.NOTE_POSTED,
-            payload={"run_id": "wb", "text": "note-b"},
+            kind=CoordinationEventKind.TIMEOUT,
+            payload={"run_id": "wb"},
         )
     )
 
@@ -1445,7 +1421,7 @@ async def test_concurrent_sessions_isolated_by_execution_id():
     ev_a = a.drain_nowait()
     ev_b = b.drain_nowait()
     assert len(ev_a) == 1 and ev_a[0].kind is CoordinationEventKind.WORKER_COMPLETED
-    assert len(ev_b) == 1 and ev_b[0].kind is CoordinationEventKind.NOTE_POSTED
+    assert len(ev_b) == 1 and ev_b[0].kind is CoordinationEventKind.TIMEOUT
     assert a.drain_nowait() == []
     assert b.drain_nowait() == []
 
@@ -1542,7 +1518,6 @@ async def test_coordination_mid_checkpoint_still_boundary_yields():
         plan,
         execution_id="e",
         seed_completed=None,
-        seed_notes=None,
         complexity_hint="standard",
         call_idx=1,
         coordinate=True,
@@ -2239,6 +2214,104 @@ async def test_wait_shortcircuit_failed_bag_does_not_claim_all_done(monkeypatch)
     assert "团队已全部结束" not in text
     assert "失败" in text
     assert session.active is False
+
+
+async def test_wait_returns_empty_when_pending_arbitration_queue_empty(monkeypatch):
+    """队列空 + pending_arbitration + worker 仍 running/tool busy → 立刻返回，无巡查。"""
+    import agentcore.runtime.coordination.wait as coord_wait
+    from agentcore.runtime.coordination.session import (
+        current_execution_id,
+        set_active_coordination,
+    )
+    from agentcore.runtime.coordination.wait import await_coordination_injection
+
+    monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 30.0)
+    clear_active_coordination()
+    session = CoordinationSession(
+        execution_id="exec-arb-wait",
+        total_workers=2,
+    )
+    session._running_workers["w1"] = "研究员"
+    session._worker_started_at["w1"] = __import__("time").monotonic()
+    session.mark_worker_busy("w1", "tool")
+    session.register_arbitration(
+        "w1",
+        escalation_id="esc-1",
+        conversation_id="c-arb",
+        question="选库？",
+        assumption="暂按 Postgres",
+    )
+    session.drive_task = asyncio.get_running_loop().create_future()
+    set_active_coordination(session)
+    token = current_execution_id.set("exec-arb-wait")
+    try:
+        t0 = asyncio.get_running_loop().time()
+        msgs = await asyncio.wait_for(await_coordination_injection([]), timeout=2.0)
+        elapsed = asyncio.get_running_loop().time() - t0
+    finally:
+        current_execution_id.reset(token)
+        clear_active_coordination()
+
+    assert elapsed < 0.5, f"must not idle-wait parked worker; elapsed={elapsed:.3f}s"
+    assert msgs == []
+    text = "\n".join(m.content or "" for m in msgs)
+    assert "等待团队事件超时" not in text
+    assert "疑似卡死" not in text
+
+
+async def test_wait_still_injects_queued_escalation_despite_pending_arbitration(
+    monkeypatch,
+):
+    """队列先有 ESCALATION 时不得用 pending_arbitrations 短路首次升级注入。"""
+    import agentcore.runtime.coordination.wait as coord_wait
+    from agentcore.runtime.coordination.session import (
+        current_execution_id,
+        set_active_coordination,
+    )
+    from agentcore.runtime.coordination.wait import await_coordination_injection
+
+    monkeypatch.setattr(coord_wait, "_COORD_WAIT_TIMEOUT_S", 30.0)
+    clear_active_coordination()
+    session = CoordinationSession(execution_id="exec-arb-inject", total_workers=2)
+    session._running_workers["w1"] = "研究员"
+    session._worker_started_at["w1"] = __import__("time").monotonic()
+    session.mark_worker_busy("w1", "tool")
+    session.register_arbitration(
+        "w1",
+        escalation_id="esc-2",
+        conversation_id="c-arb",
+        question="选 Postgres 还是 MySQL？",
+        assumption="暂按 Postgres",
+    )
+    session.post(
+        CoordinationEvent(
+            kind=CoordinationEventKind.ESCALATION,
+            payload={
+                "run_id": "w1",
+                "role": "研究员",
+                "kind": "normal",
+                "question": "选 Postgres 还是 MySQL？",
+                "assumption": "暂按 Postgres",
+                "blocking": True,
+                "source": "blocking_arbitrate",
+            },
+        )
+    )
+    session.drive_task = asyncio.get_running_loop().create_future()
+    set_active_coordination(session)
+    token = current_execution_id.set("exec-arb-inject")
+    try:
+        msgs = await asyncio.wait_for(await_coordination_injection([]), timeout=2.0)
+    finally:
+        current_execution_id.reset(token)
+        clear_active_coordination()
+
+    assert len(msgs) == 1
+    text = msgs[0].content or ""
+    assert "阻塞仲裁" in text
+    assert "resolve_escalation" in text
+    assert "选 Postgres 还是 MySQL？" in text
+    assert "等待团队事件超时" not in text
 
 
 async def test_retired_criteria_kind_still_posts_all_completed_without_host_backfill(

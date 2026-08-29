@@ -58,14 +58,21 @@ from agentcore.tools.protocol import ToolSchema
 # 2026-08-28 debate 形态：删 schema 复述（用/不用、过闸禁令、挂号、启服手册、action 表）。
 # debate 实测 1640 作短触发锚；ask_user 桌面 2588→2590、web 1892→1900。
 # 2026-08-28 grant_attach_folder：本机传统附加可写根（新路由脊柱，ask_user 桌面 2655）。
+# 2026-08-29 C：何时用 ask_user 从核下沉 description（挡路才问）。桌面 2668、web 1905。
+# 2026-08-29 delegate 删事故反例（引擎已拒 playbook+tasks 同传）。实测 2779。
+# 2026-08-29 工作流：description 加「探路够了再派」（停手 when-to-use）。实测 2798。
+# 2026-08-29 装配侧：host action 去 OS 命令名/政策复述（Get-WinEvent 归 consult）；
+# git 硬拒收成「禁项见失败回执」；delegate task 下沉凭据填 env（实测仍 2600，不抬）。
+# host 2800→2630（实测 2622）；git 2530→2430（实测 2425）。
+# 同日主审查：补回 pull/push 合同句（ff-only / 恒确认），非新语义抬顶。git 2430→2490。
 _CAPS: dict[str, int] = {
     "browser": 1590,
-    "git": 2530,
-    "host": 2800,
+    "git": 2490,
+    "host": 2630,
     "terminal": 1360,
-    "delegate": 2850,
+    "delegate": 2600,
     "debate": 1640,
-    "ask_user": 2660,
+    "ask_user": 2670,
     "list_folders": 240,
     "resolve_folder": 370,
     "create_folder": 510,
@@ -73,11 +80,12 @@ _CAPS: dict[str, int] = {
 _TOTAL_CAP = sum(_CAPS.values())
 
 # 非桌面（web）态 ask_user：桌面独有的 action / well_known 等选项不装配。
-_ASK_USER_WEB_CAP = 1900
+_ASK_USER_WEB_CAP = 1910
 
 # Worker-only：escalate / handoff / 写盘三件套曾把身份段或 consult HOW 再抄一遍到按钮上。
+# 2026-08-29 escalate blocking：已拒凭据→false 短触发（身份段不进按钮）。当次实测 1698。cap 1690→1700。
 _WORKER_CAPS: dict[str, int] = {
-    "escalate": 1690,
+    "escalate": 1700,
     "handoff": 1660,
     "file_write": 610,
     "file_append": 510,
@@ -186,6 +194,7 @@ def test_deleted_delegate_fields_have_no_negative_list():
         "parallelism",
         "seed_notes",
         "force_continue",
+        "force",
         "coordination",
         "checkpoint_after",
         "bind_after_deps",
@@ -250,7 +259,10 @@ def test_on_demand_faces_point_how_to_consult():
     assert "HOW→consult(debate_and_review)" in DEBATE_DESCRIPTION
     assert "HOW→consult(team_orchestration_advanced)" in DELEGATE_DESCRIPTION
     host_action = HostTool().schema.parameters["properties"]["action"]["description"]
-    assert "Get-WinEvent" in host_action
+    assert "Get-WinEvent" not in host_action
+    from agentcore.runtime.resolve.prompt import capability_how_suffix
+
+    assert "Get-WinEvent" in capability_how_suffix({"host"})
     assert "password_blocked" not in BrowserTool().schema.description
     assert (
         "password_blocked"

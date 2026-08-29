@@ -184,9 +184,9 @@ class GitTool:
                 "无仓：只读→success+no_repo（勿当干净仓）；写硬错；"
                 "init_baseline=无仓则 init+首提交，脏仓→dirty_skip；"
                 "clone=无仓可浅克隆。"
-                "pull=--ff-only；冲突诚实失败；"
-                "push/create_pr 恒确认（create_pr 仅 GitHub API）；"
-                "force/保护分支/reset|clean 硬拒，其余禁项见 action。"
+                "pull=--ff-only；冲突诚实停。"
+                "push/create_pr 恒确认（create_pr 仅 GitHub）。"
+                "禁项见失败回执。"
             ),
             parameters=GIT_TOOL_PARAMETERS,
             category=ToolCategory.FILESYSTEM,

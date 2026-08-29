@@ -5,8 +5,7 @@
 要么产出一份「规范化后的委派请求」，要么产出一条硬拒。
 
 `_active_playbook` / `_active_playbook_args` 两个 per-call 标记原来在这里直接写 `self`，
-现在改由 :class:`DelegateCallFlags` 带回、`execute` 赋值。逐闸 `force` 不走这里——
-`execute` / `replan` 各自在入口解析（见 `force_scopes`），前奏硬拒也不留残值。
+现在改由 :class:`DelegateCallFlags` 带回、`execute` 赋值。
 """
 
 from __future__ import annotations

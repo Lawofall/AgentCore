@@ -94,29 +94,6 @@ describe("formatProcessExport", () => {
     expect(git).not.toContain("feat: fold process tools");
     expect(git).not.toContain("list_folders");
   });
-
-  it("rework chip: in-progress while streaming with empty body after reset", () => {
-    const reworking: ProcessStep[] = [
-      { kind: "reasoning", text: "核验未过" },
-      { kind: "rework" },
-    ];
-    expect(formatProcessExport(reworking, true)).toContain(
-      "· （正在按规则修订…）",
-    );
-  });
-
-  it("rework chip: done after rewrite content or when settled", () => {
-    const rewritten: ProcessStep[] = [
-      { kind: "rework" },
-      { kind: "content", text: "重写后的正文" },
-    ];
-    expect(formatProcessExport(rewritten, true)).toContain(
-      "· （引用/格式核验后已重写）",
-    );
-    expect(formatProcessExport([{ kind: "rework" }], false)).toContain(
-      "· （引用/格式核验后已重写）",
-    );
-  });
 });
 
 describe("formatMessageExport", () => {

@@ -209,14 +209,6 @@ export function handleExecutionEvent(
       recordFrameNow(event, conversationId);
       return true;
     }
-    // 团队便签墙 (§2.2 通): a worker broadcast a one-line decision / heads-up to its
-    // concurrent siblings. Turn-level (folds onto Execution.teamNotes via the same frame
-    // path, not onto a node); journaled, so it replays on reload. Fire-and-forget — it never
-    // pauses the turn (no conversation-store card), just the journaled frame.
-    case "team_note_posted": {
-      recordFrameNow(event, conversationId);
-      return true;
-    }
     // CEO 协调模式：多 worker 团队进展摘要。P2 DURABLE——入 journal；live 另 stamp 到
     // execution runtime（同 key 保最新），hydrateFromJournal 取最后一条重建，供 StatusStrip
     // 「团队进展」预览行。

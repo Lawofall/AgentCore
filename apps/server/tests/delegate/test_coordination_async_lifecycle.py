@@ -194,11 +194,9 @@ async def test_coordinate_cancelled_posts_terminal_to_wake_host(monkeypatch):
             plan,
             execution_id="e-cancel",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="standard",
             call_idx=0,
                         session=session,
-            coordination="wall",
         )
     )
     await asyncio.sleep(0.05)
@@ -246,11 +244,9 @@ async def test_soft_stop_cancel_skips_all_completed_wake(monkeypatch):
             plan,
             execution_id="e-soft",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="standard",
             call_idx=0,
                         session=session,
-            coordination="wall",
         )
     )
     await asyncio.sleep(0.05)
@@ -296,11 +292,9 @@ async def test_background_drive_exception_posts_drive_cancelled(monkeypatch):
         plan,
         execution_id="e-boom",
         seed_completed=None,
-        seed_notes=None,
         complexity_hint="standard",
         call_idx=0,
                 session=session,
-        coordination="wall",
     )
 
     events = session.drain_nowait()
@@ -353,11 +347,9 @@ async def test_background_drive_logs_contract_failure(monkeypatch):
             plan,
             execution_id="e-contract",
             seed_completed=None,
-            seed_notes=None,
             complexity_hint="standard",
             call_idx=0,
             session=session,
-            coordination="wall",
         )
 
     events_logged = [e.get("event") for e in logs]
@@ -395,7 +387,6 @@ async def test_coordination_start_echo_counts_and_seeds_completed():
         plan,
         execution_id="e",
         seed_completed=seed,
-        seed_notes=None,
         complexity_hint="standard",
         call_idx=1,
                 coordinate=True,

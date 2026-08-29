@@ -42,6 +42,7 @@ def test_catalog_covers_key_runtime_events():
         "event_sink.backpressure_drop",
     ):
         assert required in names, required
+    assert "engine.finish_guard_auto_deep_read" not in names
     assert len(names) >= 100
 
 

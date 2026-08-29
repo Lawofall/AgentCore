@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from agentcore.llm.provider.protocol import LLMMessage
-from agentcore.runtime.checkpoints import CheckpointDecision
+from agentcore.runtime.checkpoints import CheckpointDecision, coerce_ask_checkpoint_intent
 from agentcore.runtime.events import EventSink, tool_use_end
 from agentcore.runtime.facts import ToolCallFact, record_turn_fact
 from agentcore.runtime.recover import SettledSuspension
@@ -172,7 +172,7 @@ def next_pending_ask_user_suspension(
         question=str(payload.get("question") or ""),
         assumptions=list(payload.get("assumptions") or []),
         questions=list(payload.get("questions") or []),
-        intent=payload.get("intent") or "decision",
+        intent=coerce_ask_checkpoint_intent(payload.get("intent")),
         browser_login=payload.get("browser_login") is True,
     )
 

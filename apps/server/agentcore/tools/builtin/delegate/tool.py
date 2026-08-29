@@ -50,7 +50,6 @@ if TYPE_CHECKING:
     from agentcore.runtime.approvals import ApprovalGate
     from agentcore.runtime.costing import RunCost
     from agentcore.runtime.ports import ClientRequestBridge
-    from agentcore.runtime.runs.notewall import NoteWall
     from agentcore.runtime.runs.plan import RunPlan
     from agentcore.runtime.runs.scheduler import BoundaryReason
     from agentcore.runtime.runs.types import RunSpec, RunState
@@ -180,29 +179,14 @@ class DelegateTool:
         # plan_review pause (frame saved) — ``drive`` reads it after the scheduler soft-pauses
         # and returns a SUSPEND ToolResult. False on every ordinary drive.
         self._pending_pause: bool = False
-        # 团队便签墙 (§2.2 通 / §2.3 合·对账): the most recent batch's wall,
-        # set by ``drive`` when it
-        # builds the executor so the CEO finalize (``format_for_ceo``, both the normal-终态 and the
-        # ``replan(stop)`` finalize_stopped paths) can fold the team's outstanding 决定 / 认领 into
-        # 语义边界对账. None until a batch runs (a CEO that never delegated has no wall).
-        self._note_wall: NoteWall | None = None
         # Turn-level team consensus (team_brief): survives across delegate calls in one CEO turn.
         self._team_brief: str | None = None
-        # Last resolved note-wall coordination mode (wall|none); resume/replan reuse it.
-        self._coordination: str = "none"
-        # 本批 CEO 预贴便签（execute 解析后暂存），供同回合续派 / 挂起帧回灌。
-        self._seed_notes: list[dict[str, str]] = []
         # 当前 execute 展开的 playbook 名（team_preview pre-auth 判定用）。
         self._active_playbook: str | None = None
         # 当前 playbook_args（kickoff headline 只读 intensity；手写 tasks 为 None）。
         self._active_playbook_args: dict[str, Any] | None = None
         # 父 worker 带 code_audit_gate 时：嵌套手写 tasks 继承收工纪律（见 audit.apply_*）。
         self._inherit_code_audit_discipline: bool = False
-        # 本次调用点名放行的闸（execute / replan 各自在入口无条件重解析——旧的单个
-        # `_delegate_force` 既一键全开四道闸，又会被后续 replan 读到残值）。
-        from agentcore.runtime.delegate.force_scopes import EMPTY_FORCE_SCOPES
-
-        self._force_scopes = EMPTY_FORCE_SCOPES
         # Turn user-message provenance (historical ``execution_harvest`` origin).
         from agentcore.runtime.delegate.post_close_gate import current_user_message_origin
 
@@ -315,12 +299,7 @@ class DelegateTool:
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
         from agentcore.llm.turn_auth_dead import credential_source_from_llm
-        from agentcore.runtime.delegate.force_scopes import parse_force_scopes
         from agentcore.runtime.runs import build_run_plan
-
-        # 逐闸 force 的唯一写入点：每次调用（含随后被前奏硬拒的调用）都重解析，
-        # 实例上不留残值，后续 delegate / replan 拿不到上一次的放行。
-        self._force_scopes = parse_force_scopes(arguments.get("force"))
 
         prelude = resolve_delegate_prelude(
             arguments,
@@ -565,25 +544,8 @@ class DelegateTool:
         if self._depth >= 1:
             self._sub_workers_spawned += len(plan.nodes)
 
-        from agentcore.runtime.delegate.seed_notes import (
-            materialize_brief_as_seed_notes,
-            parse_seed_notes,
-            parse_team_brief,
-            resolve_coordination,
-        )
+        from agentcore.runtime.delegate.team_brief import parse_team_brief
 
-        seed_notes, seed_err = parse_seed_notes(
-            arguments.get("seed_notes"),
-            execution_id=kickoff_execution_id,
-        )
-        if seed_err:
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=seed_err,
-                contract_failure=True,
-            )
         brief_raw = arguments.get("team_brief")
         if brief_raw is not None:
             brief, brief_err = parse_team_brief(
@@ -600,24 +562,6 @@ class DelegateTool:
             self._team_brief = brief
 
         playbook_name = playbook.strip() if isinstance(playbook, str) and playbook.strip() else None
-        coordination = resolve_coordination(
-            raw=arguments.get("coordination") if "coordination" in arguments else None,
-            complexity_hint=complexity_hint,
-            seed_notes=seed_notes,
-            team_brief=self._team_brief,
-            playbook=playbook_name,
-        )
-        self._coordination = coordination
-        # 升墙 ⇒ 墙上有字：非空 brief 且经理未另给内部 seed 时，按行物化开局便签。
-        # 不写回 CEO 可见 schema；light→none 不建墙，不必播种。
-        if coordination == "wall" and not seed_notes and self._team_brief:
-            seed_notes = materialize_brief_as_seed_notes(
-                self._team_brief,
-                execution_id=kickoff_execution_id,
-            )
-        self._seed_notes = seed_notes
-
-        # 同回合 / 热图合入：先对「仅新批次」入闸，再合并进旧图。
         # 禁止先 merge 再 sibling 整图——会把已完成同座+同路径误判成同批交叉。
         added_nodes_for_anchor: list = list(plan.nodes)
 
@@ -690,7 +634,18 @@ class DelegateTool:
             if admitted_reject is not None:
                 return admitted_reject
 
-        record_plan_snapshot(plan)
+        self._prev_graph_execution_id = prev_execution_id
+        coordinate_flag = (
+            bool(arguments["coordinate"]) if "coordinate" in arguments else True
+        )
+        has_checkpoint = any(bool(n.checkpoint_after) for n in plan.nodes)
+        defer_graph = should_defer_run_plan_emit_to_merge(
+            self,
+            execution_id=execution_id,
+            coordinate=coordinate_flag,
+            worker_count=len(plan.nodes),
+            has_checkpoint=has_checkpoint,
+        )
 
         from agentcore.runtime.audit.hooks import on_delegate_plan
 
@@ -699,10 +654,10 @@ class DelegateTool:
             plan=plan,
             captain_run_id=self._captain_run_id,
         )
-        # 同回合合入活跃协调时由 merge 在准入后发出成长后的 run_plan（提交点）。
-        if not should_defer_run_plan_emit_to_merge(
-            self, execution_id=execution_id
-        ):
+        # 阻塞 drive / 非协调：此处提交图。协调臂（含活跃合入）在 try_start / merge
+        # 准入通过后再 snapshot + emit，避免拒收留下空座位。
+        if not defer_graph:
+            record_plan_snapshot(plan)
             self._sink.emit(
                 plan_event(
                     self,
@@ -720,7 +675,6 @@ class DelegateTool:
             call=call_idx,
             parallel=sum(1 for n in plan.nodes if not n.depends_on),
             complexity_hint=complexity_hint,
-            coordination=coordination,
             append_to=append_to,
             plan=[
                 {"id": n.run_id, "role": n.role, "depends_on": n.depends_on}
@@ -746,6 +700,16 @@ class DelegateTool:
 
         if is_plan_only():
             # S3: no acceptance_echo (completion_criteria retired).
+            if defer_graph:
+                record_plan_snapshot(plan)
+                self._sink.emit(
+                    plan_event(
+                        self,
+                        execution_id,
+                        plan,
+                        prev_execution_id=prev_execution_id,
+                    )
+                )
             summary = f"[plan-only] 已记录计划（{len(plan.nodes)} 节点），跳过执行。"
             if playbook_notes:
                 summary = summary + "\n\n" + "\n\n".join(playbook_notes)
@@ -776,17 +740,11 @@ class DelegateTool:
             plan,
             execution_id=execution_id,
             seed_completed=seed_completed,
-            seed_notes=seed_notes,
             complexity_hint=complexity_hint,
-            coordination=coordination,
             call_idx=call_idx,
             # Omit → True（默认协调）；显式 false → 经典阻塞。勿用 bool(get())，
             # 否则缺省会落成 False，与 schema default 不一致。
-            coordinate=(
-                bool(arguments["coordinate"])
-                if "coordinate" in arguments
-                else True
-            ),
+            coordinate=coordinate_flag,
         )
 
         # Soft warnings：挂在委派结果尾部，CEO 当轮可见。
@@ -809,7 +767,6 @@ class DelegateTool:
                 tails.append(
                     "【协作图·续接】本回合新开一队、接续上一张图；"
                     "进度与节点仅计本图，不混入上一张已完成节点。"
-                    "向用户汇报请用「新开一队、接续上一张图」口径；不要说成同图追加。"
                 )
             elif append_to:
                 tails.append(
@@ -863,7 +820,6 @@ class DelegateTool:
         *,
         execution_id: str,
         seed_completed: dict[str, RunState] | None,
-        seed_notes: list[dict[str, str]] | None = None,
         complexity_hint: str = "standard",
     ) -> ToolResult:
         return await drive(
@@ -871,9 +827,7 @@ class DelegateTool:
             plan,
             execution_id=execution_id,
             seed_completed=seed_completed,
-            seed_notes=seed_notes or [],
             complexity_hint=complexity_hint,
-            coordination=self._coordination,
         )
 
     async def resume_plan(
@@ -887,21 +841,11 @@ class DelegateTool:
         execution_id: str,
         coordinate: bool = False,
         apply_kickoff_grant: bool = False,
-        coordination: str | None = None,
         team_brief: str | None = None,
-        seed_notes: list[dict[str, str]] | None = None,
         ceo_review: dict | None = None,
     ) -> ToolResult:
-        # 耐久恢复的批次协作参数回灌：挂起帧带回 coordination / team_brief / seed_notes
-        # （挂起点在 setup_note_wall 之前，这批参数只活在工具实例上；恢复走全新实例，
-        # 不回灌则 wall 批降级 none → worker 被剥便签三件套）。缺省 None = 在进程内
-        # 热续跑，沿用实例现值。
-        if coordination in ("wall", "none"):
-            self._coordination = coordination
         if team_brief:
             self._team_brief = team_brief
-        if seed_notes:
-            self._seed_notes = list(seed_notes)
         if decision is CheckpointDecision.STOP:
             # team_preview STOP → soft guidance; plan_review STOP keeps format_for_ceo.
             return await finalize_stopped(
@@ -983,9 +927,6 @@ class DelegateTool:
             plan,
             execution_id=execution_id,
             seed_completed=seed_completed,
-            # 开工卡恢复补种 CEO 预贴便签（挂起时尚未上墙）；plan_review 恢复不带（已上墙）。
-            seed_notes=list(seed_notes or []),
-            coordination=self._coordination,
             coordinate=coordinate,
         )
         return annotate_batch_meta(
@@ -995,12 +936,7 @@ class DelegateTool:
         )
 
     async def replan(self, arguments: dict[str, Any]) -> ToolResult:
-        from agentcore.runtime.delegate.force_scopes import parse_force_scopes
         from agentcore.runtime.runs import BoundaryReason
-
-        # 与 execute 对称：replan 只吃自己这次的 force，绝不沿用上一次 delegate 的
-        # 放行（旧实现读实例上的 `_delegate_force`，一次冷派的 force 会一路漏到这里）。
-        self._force_scopes = parse_force_scopes(arguments.get("force"))
 
         sup = self._supervised
         if sup is None:
@@ -1115,7 +1051,6 @@ class DelegateTool:
             sup.plan,
             execution_id=sup.execution_id,
             seed_completed=sup.completed,
-            coordination=self._coordination,
             coordinate=False,
         )
 

@@ -7,10 +7,10 @@ import pytest
 from agentcore.runtime.events import EventSink
 from agentcore.tools.builtin.ask_user.schema import (
     ListArgError,
-    OptionLabelError,
     normalize_assumptions,
     normalize_options,
     normalize_questions,
+    option_label_is_recommended,
 )
 from agentcore.tools.builtin.ask_user.tool import AskUserTool
 
@@ -18,7 +18,7 @@ from agentcore.tools.builtin.ask_user.tool import AskUserTool
 def test_normalize_options_preserves_bind_local_folder_action():
     out = normalize_options(
         [
-            {"label": "打开本地项目", "action": "open_local_project", "recommended": True},
+            {"label": "打开本地项目", "action": "open_local_project"},
             {"label": "登记本地项目", "action": "register_local_project"},
             {"label": "绑定本机执行环境", "action": "bind_local_folder"},
             {"label": "继续用云端", "detail": "无法打开本机应用"},
@@ -30,7 +30,7 @@ def test_normalize_options_preserves_bind_local_folder_action():
         max_options=10,
     )
     assert out[0]["action"] == "open_local_project"
-    assert out[0]["recommended"] is True
+    assert "recommended" not in out[0]
     assert out[1]["action"] == "register_local_project"
     assert out[2]["action"] == "bind_local_folder"
     assert "action" not in out[3]
@@ -199,7 +199,7 @@ def test_normalize_questions_promotes_question_level_action_to_default_option_on
     assert "action" not in qs[0]
 
 
-def test_normalize_questions_promotes_question_level_action_to_recommended_without_default():
+def test_normalize_questions_promotes_question_level_action_to_first_without_default():
     qs = normalize_questions(
         [
             {
@@ -207,7 +207,7 @@ def test_normalize_questions_promotes_question_level_action_to_recommended_witho
                 "kind": "choice",
                 "action": "register_local_project",
                 "options": [
-                    {"label": "登记并打开", "recommended": True},
+                    {"label": "登记并打开（推荐）"},
                     {"label": "不落盘，只在对话里汇报"},
                 ],
             }
@@ -231,7 +231,7 @@ def test_normalize_questions_promotes_question_level_action_to_sole_option():
     assert qs[0]["options"][0]["action"] == "register_local_project"
 
 
-def test_normalize_questions_does_not_blanket_promote_ambiguous_multi_option():
+def test_normalize_questions_promotes_question_level_action_to_first_of_ambiguous_multi_option():
     qs = normalize_questions(
         [
             {
@@ -245,7 +245,7 @@ def test_normalize_questions_does_not_blanket_promote_ambiguous_multi_option():
             }
         ]
     )
-    assert "action" not in qs[0]["options"][0]
+    assert qs[0]["options"][0]["action"] == "register_local_project"
     assert "action" not in qs[0]["options"][1]
 
 
@@ -364,27 +364,33 @@ async def test_ask_user_rejects_unparseable_questions_string():
     assert "数组" in (res.error or "")
 
 
-def test_normalize_options_rejects_recommendation_in_label():
-    """棘轮：label 内嵌「（推荐）」必须拒，禁止静默洗掉。"""
-    with pytest.raises(OptionLabelError, match="推荐标记"):
-        normalize_options(
-            [
-                {"label": "方案一：同风格精修（推荐）", "recommended": True},
-                {"label": "方案二：风格重塑"},
-            ]
-        )
+def test_normalize_options_accepts_recommendation_in_label():
+    out = normalize_options(
+        [
+            {"label": "方案一：同风格精修（推荐）", "recommended": True},
+            {"label": "方案二：风格重塑"},
+        ]
+    )
+    assert out[0]["label"] == "方案一：同风格精修（推荐）"
+    assert "recommended" not in out[0]
+    assert "recommended" not in out[1]
+    assert option_label_is_recommended(out[0]["label"])
+    assert not option_label_is_recommended(out[1]["label"])
 
 
 def test_normalize_options_allows_tuijian_substring_in_product_name():
-    """「推荐」作为产品名子串（非「（推荐）」标记）应保留。"""
+    """「推荐」作为产品名子串（非「（推荐）」标记）不是倾向标记。"""
     out = normalize_options([{"label": "推荐算法选型", "recommended": True}])
     assert out[0]["label"] == "推荐算法选型"
-    assert out[0]["recommended"] is True
+    assert "recommended" not in out[0]
+    assert not option_label_is_recommended(out[0]["label"])
 
 
-def test_normalize_options_rejects_english_recommended_mark():
-    with pytest.raises(OptionLabelError, match="推荐标记"):
-        normalize_options([{"label": "Option A (recommended)"}])
+def test_normalize_options_accepts_english_recommended_mark():
+    out = normalize_options([{"label": "Option A (recommended)"}])
+    assert out[0]["label"] == "Option A (recommended)"
+    assert "recommended" not in out[0]
+    assert option_label_is_recommended(out[0]["label"])
 
 
 def test_normalize_assumptions_keeps_short_label():
@@ -434,7 +440,7 @@ def test_normalize_assumptions_merges_inventory_label():
     ]
 
 
-async def test_ask_user_rejects_recommendation_in_label():
+async def test_ask_user_accepts_recommendation_in_label():
     tool = AskUserTool(
         sink=EventSink(),
         conversation_id="c1",
@@ -462,7 +468,7 @@ async def test_ask_user_rejects_recommendation_in_label():
                     "prompt": "采用哪个方案？",
                     "kind": "choice",
                     "options": [
-                        {"label": "同风格精修（推荐）", "recommended": True},
+                        {"label": "同风格精修（推荐）"},
                         {"label": "风格重塑"},
                     ],
                 }
@@ -470,11 +476,12 @@ async def test_ask_user_rejects_recommendation_in_label():
         },
         ctx,
     )
-    assert res.success is False
-    assert res.error and "推荐标记" in res.error
+    # This fixture has no durable frame; persist fails after normalize succeeds.
+    assert "推荐标记" not in (res.error or "")
+    assert "推荐标记" not in (res.output or "")
 
 
-def test_ask_user_schema_forbids_recommendation_in_label_desc():
+def test_ask_user_schema_points_at_recommendation_in_label():
     tool = AskUserTool(
         sink=EventSink(),
         conversation_id="c1",
@@ -483,9 +490,12 @@ def test_ask_user_schema_forbids_recommendation_in_label_desc():
     props = tool.schema.parameters["properties"]["questions"]["items"]["properties"]["options"][
         "items"
     ]["properties"]
-    assert "禁止" in props["label"]["description"]
-    assert "label" in props["recommended"]["description"]
-    assert "专用" in props["detail"]["description"]
+    assert "recommended" not in props
+    assert "（推荐）" in props["label"]["description"]
+    assert "放第一" in props["label"]["description"]
+    assert "禁止" not in props["label"]["description"]
+    assert "organize_plan" in props["detail"]["description"]
+    assert "daily_review" in props["detail"]["description"]
     assert "普通" in props["detail"]["description"]
 
 
@@ -557,7 +567,7 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     )
     assert len(adv_blob) < 3600, f"desktop ask_user schema too fat: {len(adv_blob)}"
     assert len(plain_blob) < len(adv_blob)
-    assert abs(len(plain_blob) - 1845) < 80  # non-desktop path must not inflate
+    assert abs(len(plain_blob) - 1661) < 80  # non-desktop path must not inflate
 
 
 def test_ask_user_organize_how_lives_in_skill():
@@ -573,6 +583,6 @@ def test_ask_user_organize_how_lives_in_skill():
 
     granted = capability_how_suffix({"external_mount_readonly"})
     assert "口头同意" in granted
-    assert "2～3" in granted or "2-3" in granted
+    assert "grant_organize_folder" in granted
     assert "grant_organize_folder" in mid.body
     assert "consult(external_mount_readonly)" in mid.body

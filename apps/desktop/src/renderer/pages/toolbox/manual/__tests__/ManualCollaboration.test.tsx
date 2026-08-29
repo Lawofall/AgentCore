@@ -97,7 +97,7 @@ describe("ManualCollaboration", () => {
     expect(text).toMatch(/收件箱/);
     expect(text).toMatch(/系统任务/);
     expect(text).toMatch(/立即触发/);
-    expect(text).toMatch(/云工作区/);
+    expect(text).toMatch(/云端文件夹/);
     expect(text).toMatch(/绑一张工作流（可选）/);
     expect(text).toMatch(/在工具箱里设计好再绑上/);
     expect(text).not.toMatch(/存为工作流/);

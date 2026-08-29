@@ -28,11 +28,11 @@ export interface ContentDeltaPayload {
   replace?: boolean;
 }
 
-/** Why a `content_reset` / `run_output_reset` fired. Folds render the
- * 「已按交付规范重写」rework chip ONLY for `finish_guard`（交付前核验回炉）；
- * every other reason still clears the streamed draft but leaves no trace:
- * `retry`（LLM 流式透明重试）· `soft_gate`（captain 软门控打回）·
- * `narration`（worker 旁白回滚）· `ask_user`（blocking ask_user 吸收）. */
+/** Why a `content_reset` / `run_output_reset` fired. Every reason clears
+ * the streamed draft and leaves no process trace:
+ * `finish_guard`（交付前结构核验回炉）· `retry`（LLM 流式透明重试）·
+ * `soft_gate`（captain 软门控打回）· `narration`（worker 旁白回滚）·
+ * `ask_user`（blocking ask_user 吸收）. */
 export type ResetReason =
   | "finish_guard"
   | "retry"
@@ -41,8 +41,8 @@ export type ResetReason =
   | "ask_user";
 
 /** 清空当前流式气泡已累积正文的信号——客户端清正文后再接收重写版 `content_delta`。
- * ``reason`` 表明本次 reset 的语义（见 `ResetReason`）；仅 ``finish_guard``（交付前核验
- * 回炉）折出「已按交付规范重写」痕迹，其余 reason 只清正文、不留 chip。Transport-only。 */
+ * ``reason`` 表明本次 reset 的语义（见 `ResetReason`）；所有 reason 都只清正文、
+ * 不折过程痕迹。Transport-only。 */
 export interface ContentResetPayload {
   reason: ResetReason;
 }
@@ -129,13 +129,12 @@ export interface ToolUseEndPayload {
 }
 
 /** One step in a turn's 思考·正文·工具·协作 inline timeline (统一团队时间线).
- * reasoning/content/rework + tool are the CEO bubble's own narrative; the rest
+ * reasoning/content + tool are the CEO bubble's own narrative; the rest
  * are POSITIONAL MARKERS — zero-width anchors fixing WHERE a non-text element
  * renders (payload looked up from the turn's side channels by id). */
 export type ProcessStep =
   | { kind: "reasoning"; text: string }
   | { kind: "content"; text: string }
-  | { kind: "rework" }
   | { kind: "tool"; id: string; tool_name: string; arguments: Record<string, unknown>; result: string | null; status: "running" | "success" | "error" | "redirect"; display?: ToolDisplay | null; failure?: ToolFailure; phase?: ToolPhase }
   | { kind: "team"; execution_id: string }
   | { kind: "graph_append"; execution_id: string; host_message_id: string; added_count: number }
@@ -185,8 +184,9 @@ export interface AskAssumption {
 }
 
 /** One selectable answer to a choice AskQuestion. `label` is both the displayed text
- * and the value composed back into the answer; `recommended` is advisory highlight only
- * (NOT a pre-selection). `action` marks an option that the desktop client fulfils with a
+ * and the value composed back into the answer. Tendency lives in the name
+ * (``（推荐）`` / ``(recommended)``), not a separate flag; the card does not pre-select.
+ * `action` marks an option that the desktop client fulfils with a
  * native client action instead of a plain text answer (unknown/absent → plain option):
  * `open_local_project` / `register_local_project` / `bind_local_folder` are
  * **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云」；远程仓「从 Git 克隆」；≠离线；
@@ -207,7 +207,6 @@ export interface AskAssumption {
 export interface AskOption {
   label: string;
   detail?: string;
-  recommended?: boolean;
   action?: "open_local_project" | "register_local_project" | "bind_local_folder" | "grant_organize_folder" | "grant_attach_folder";
   /** 仅 grant_*：常见目录提示；桌面解析直授，失败明确报错（无 picker 兜底）。 */
   well_known?: "desktop" | "downloads" | "documents";
@@ -232,13 +231,7 @@ export interface AskQuestion {
   default: string;
 }
 
-export type CheckpointIntent =
-  | "kickoff"
-  | "decision"
-  | "proposal_pick"
-  | "risk_ack"
-  | "organize_plan"
-  | "daily_review";
+export type CheckpointIntent = "decision" | "organize_plan" | "daily_review";
 
 /** The CEO paused the turn on an ask_user checkpoint (blocking). */
 export interface CheckpointRequiredPayload {
@@ -381,7 +374,6 @@ export interface RunPlanPayload {
   host_message_id?: string;
   prev_execution_id?: string;
   act?: RunPlanAct;
-  note_wall?: boolean;
 }
 
 /** 已停发：旧跨回合同图追加锚点（兼容旧 journal 回放）。新路径用 prev_execution_id。 */
@@ -567,20 +559,6 @@ export interface InteractionOrphanedPayload {
   kind: "approval" | "escalation" | "debate_round" | "stage_card";
   /** 可选失效原因（如 stage_card superseded）；缺省不传，旧客户端忽略。 */
   reason?: string;
-}
-
-export interface TeamNotePostedPayload {
-  execution_id: string;
-  note_id: string;
-  run_id: string;
-  agent_id: string;
-  role: string;
-  kind: "decision" | "heads_up" | "claim";
-  text: string;
-  ts: number;
-  supersedes?: string;
-  supersede_mode?: "update" | "void";
-  source?: "ceo" | "worker" | "inherited";
 }
 
 export interface TeamSynthesisWorkerPreview {
@@ -798,8 +776,9 @@ export interface MessageAttachment {
   path: string;
   text?: string;
   truncated?: boolean;
-  kind?: "file" | "dir" | "conversation";
+  kind?: "file" | "dir" | "conversation" | "document";
   conversation_id?: string | null;
+  document_id?: string | null;
   binary?: boolean;
   workspace_path?: string | null;
 }
@@ -1685,7 +1664,6 @@ export type SSEPayloadMap = {
   escalation_required: EscalationRequiredPayload;
   escalation_resolved: EscalationResolvedPayload;
   interaction_orphaned: InteractionOrphanedPayload;
-  team_note_posted: TeamNotePostedPayload;
   team_synthesis_preview: TeamSynthesisPreviewPayload;
   coordination_wait: CoordinationWaitPayload;
   workspace_lock_wait: WorkspaceLockWaitPayload;

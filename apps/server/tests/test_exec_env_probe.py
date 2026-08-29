@@ -26,6 +26,7 @@ from agentcore.tools.sandbox.exec_env import (
     classify_probe_failure,
     exec_env_probe_failure_code,
     exec_env_probe_failure_language,
+    is_disaster_timeout_text,
     is_exec_env_probe_failure,
     looks_like_exec_timeout_text,
     probe_failure_result,
@@ -302,6 +303,12 @@ def test_annotate_real_exec_failure_timeout_passes_through():
     annotated, verdict = annotate_real_exec_failure(raw, language="python")
     assert annotated is raw
     assert verdict is None
+
+
+def test_desk_start_failure_is_not_exec_forced_stop():
+    msg = "代码执行环境启动失败"
+    assert not is_disaster_timeout_text(msg)
+    assert not looks_like_exec_timeout_text(msg)
 
 
 def test_annotate_real_exec_failure_exit_127_wraps():

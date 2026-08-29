@@ -77,7 +77,6 @@ async def test_recover_turn_crash_redrives_with_seed_completed():
         seen["decision"] = kwargs.get("decision")
         seen["execution_id"] = kwargs.get("execution_id")
         seen["coordinate"] = kwargs.get("coordinate")
-        seen["coordination"] = kwargs.get("coordination")
         return ToolResult(tool_call_id="t1", success=True, output="redriven")
 
     delegate = MagicMock()
@@ -96,7 +95,6 @@ async def test_recover_turn_crash_redrives_with_seed_completed():
     assert seen["decision"] is CheckpointDecision.CONTINUE
     assert seen["execution_id"] == "exec-crash-1"
     assert seen["coordinate"] is True
-    assert seen["coordination"] == "wall"
 
 
 async def test_recover_turn_resume_plan_review_routes_through_same_primitive():
@@ -153,9 +151,8 @@ async def test_recover_turn_resume_plan_review_routes_through_same_primitive():
     assert seen["ceo_review"] == review
 
 
-async def test_recover_turn_plan_review_forwards_batch_coordination():
-    """plan_review 帧回灌批次协作参数：恢复用全新 DelegateTool（_coordination 缺省
-    none），不转发则复核后续波次的 worker 被剥便签三件套。"""
+async def test_recover_turn_plan_review_forwards_team_brief():
+    """plan_review 帧回灌 team_brief：恢复用全新 DelegateTool，须把开局共识带给 resume_plan。"""
     from agentcore.runtime.suspension import PlanReviewSuspension
 
     state = TurnState.from_journal(_partial_journal())
@@ -163,8 +160,8 @@ async def test_recover_turn_plan_review_forwards_batch_coordination():
     seen: dict = {}
 
     async def _resume_plan(plan, seed_completed, **kwargs):
-        seen["coordination"] = kwargs.get("coordination")
         seen["team_brief"] = kwargs.get("team_brief")
+        assert "coordination" not in kwargs
         return ToolResult(tool_call_id="t1", success=True, output="resumed")
 
     delegate = MagicMock()
@@ -183,7 +180,6 @@ async def test_recover_turn_plan_review_forwards_batch_coordination():
         plan=state.plan or _plan_two_nodes(),
         completed=dict(state.completed),
         steps=[{"run_id": "w1", "role": "研究员", "summary": "…"}],
-        coordination="wall",
         team_brief="口径按 v2",
     )
     await recover_turn(
@@ -195,7 +191,6 @@ async def test_recover_turn_plan_review_forwards_batch_coordination():
         decision=CheckpointDecision.CONTINUE,
         note="",
     )
-    assert seen["coordination"] == "wall"
     assert seen["team_brief"] == "口径按 v2"
 
 
@@ -622,7 +617,6 @@ async def test_recover_expired_lease_redrives_when_factory_wired(monkeypatch):
                 "seed": set(seed_completed),
                 "execution_id": kwargs.get("execution_id"),
                 "coordinate": kwargs.get("coordinate"),
-                "coordination": kwargs.get("coordination"),
             }
         )
         return ToolResult(tool_call_id="t1", success=True, output="redriven")
@@ -664,7 +658,6 @@ async def test_recover_expired_lease_redrives_when_factory_wired(monkeypatch):
     assert resume_calls[0]["plan_ids"] == ["w1", "w2"]
     assert resume_calls[0]["execution_id"] == "exec-crash-1"
     assert resume_calls[0]["coordinate"] is True
-    assert resume_calls[0]["coordination"] == "wall"
     assert salvage_calls == []
     assert released == [message_id]
 

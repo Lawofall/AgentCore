@@ -73,9 +73,6 @@ async def persist_suspension(
             journal_entries=capture.journal_entries,
             steps=steps,
             pending=pending,
-            # 批次协作参数随帧走：耐久恢复换新工具实例（_coordination 缺省 none），
-            # 不回灌则复核后续跑的波次 worker 被剥便签三件套。
-            coordination=tool._coordination,
             team_brief=tool._team_brief,
             ceo_review=review,
             citations=capture.citations,

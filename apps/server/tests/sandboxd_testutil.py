@@ -58,6 +58,7 @@ class LoopbackRunscClient(SandboxdClient):
         bundle_dir: str,
         container_id: str,
         netns_path: str,
+        **_kwargs: object,
     ) -> None:
         self._bundles[container_id] = bundle_dir
         cmd = build_runsc_cmd(

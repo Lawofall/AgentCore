@@ -194,6 +194,34 @@ def test_long_running_command_match_catches_dev_servers():
     assert long_running_command_match("import { defineConfig } from 'vite'") is None
 
 
+def test_code_execute_description_routes_async_http_poll_away():
+    """邻格分流仍在 description：异步 HTTP 轮询超 60s → terminal/host；不扩 long_running 正则。"""
+    from agentcore.tools.builtin.code_execute import (
+        code_execute_description,
+        long_running_command_match,
+    )
+
+    ce = code_execute_description()
+    assert "异步" in ce and "轮询" in ce
+    assert "60s" in ce
+    assert "terminal" in ce
+    assert "host(action=shell)" in ce
+    assert "test_run" in ce
+    # Finite poll loops will exit, but they are not never-exit servers — do not
+    # grow this regex into a sleep/requests script scanner.
+    assert long_running_command_match("time.sleep(5)") is None
+    assert long_running_command_match("requests.get(status_url)") is None
+    poll = (
+        "import time, requests\n"
+        "while True:\n"
+        "    r = requests.get('https://api.example/jobs/1')\n"
+        "    if r.json().get('done'):\n"
+        "        break\n"
+        "    time.sleep(2)\n"
+    )
+    assert long_running_command_match(poll) is None
+
+
 def test_project_verify_command_match_routes_to_test_run():
     from agentcore.tools.builtin.code_execute import project_verify_command_match
 

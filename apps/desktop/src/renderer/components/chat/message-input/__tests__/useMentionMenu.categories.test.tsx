@@ -13,6 +13,9 @@ vi.mock("@/hooks/useConversations", () => ({
 }));
 vi.mock("@/hooks/useFolders", () => ({ getFolders: () => [] }));
 vi.mock("@/services/messages", () => ({ fetchMessageWindow: vi.fn() }));
+vi.mock("@/services/documents", () => ({
+  listScopeEntries: vi.fn(async () => []),
+}));
 vi.mock("@/services/workspaceBinding", () => ({
   getWorkspaceBinding: vi.fn(),
 }));

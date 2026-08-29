@@ -251,3 +251,24 @@ def test_cancel_worker_stamp_roundtrips_snapshot_and_old_key_missing():
     assert old.ceo_cancel_worker_ids == set()
     assert old.ceo_cancel_started_ids == set()
     assert classify_cancel_close(old) is None
+
+
+def test_resolve_unstarted_plan_node_skips_started_and_matches_role():
+    from agentcore.runtime.coordination.cancel_close import resolve_unstarted_plan_node
+    from agentcore.runtime.runs.plan import RunPlan
+    from agentcore.runtime.runs.types import RunSpec
+
+    plan = RunPlan(
+        nodes=[
+            RunSpec(run_id="del_a_fe", role="前端", task="写"),
+            RunSpec(run_id="del_b_qa", role="QA", task="测"),
+        ]
+    )
+    rid, reason, _ = resolve_unstarted_plan_node(plan, "前端")
+    assert rid == "del_a_fe"
+    assert reason == "role"
+    rid2, reason2, _ = resolve_unstarted_plan_node(
+        plan, "前端", started_run_ids={"del_a_fe"}
+    )
+    assert rid2 is None
+    assert reason2 == "not_found"

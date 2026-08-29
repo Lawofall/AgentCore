@@ -914,6 +914,12 @@ HISTORICAL_COMPAT: dict[str, str] = {
     "team_preview.orphaned": (
         "历史兼容：曾在发新开工卡前结算旧 pending 时发出；开工卡产品位已拆，不再发此事件"
     ),
+    "ask_user.option_label_rejected": (
+        "历史兼容：曾拒选项名含「（推荐）」等倾向标记；现倾向写入名末，不再发此事件"
+    ),
+    "worker.escalate_option_label_rejected": (
+        "历史兼容：曾因同一选项名规则拒升级卡；现接受名末「（推荐）」，不再发此事件"
+    ),
     "sandbox.write_back": (
         "历史兼容：曾为 copy-out 写回计数；云桌 bind 落盘后不再发此事件"
     ),
@@ -925,6 +931,14 @@ HISTORICAL_COMPAT: dict[str, str] = {
     ),
     "browser.netns_setup": (
         "历史兼容：曾为 family=browser 会话 netns；现 Chromium exec 进桌，不再发此事件"
+    ),
+    "delegate.force_unknown_gate": (
+        "历史兼容：曾解析 delegate/replan force 闸名数组时忽略未知闸；"
+        "force 跳闸已撤，不再发此事件"
+    ),
+    "delegate.force_unparsable": (
+        "历史兼容：曾解析 delegate/replan force 入参失败时发出；"
+        "force 跳闸已撤，不再发此事件"
     ),
 }
 

@@ -40,7 +40,13 @@ def emit_turn_evidence_ledger(
         logger.warning("citations.ledger_snapshot_failed", exc_info=True)
         return citations, [], []
 
-    cited_ids = extract_ledger_ref_ids(content)
+    cited_all = extract_ledger_ref_ids(content)
+    citable = {
+        str(e.get("id") or "")
+        for e in entries
+        if e.get("id") and e.get("citable", True)
+    }
+    cited_ids = [eid for eid in cited_all if eid in citable]
     if entries:
         cited_cards = project_cited_citations(entries, cited_ids)
     else:

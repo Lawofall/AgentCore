@@ -209,6 +209,7 @@ async def assemble_ceo_turn(
         desktop_online=channel.desktop_online,
     )
     from agentcore.tools.ceo_toolset import wire_ceo_consult
+    from agentcore.tools.on_demand import offer_tools_from_window
 
     await wire_ceo_consult(
         chat_tools,
@@ -216,6 +217,8 @@ async def assemble_ceo_turn(
         folder_id=folder_id,
         user_id=prepared.base_tool_context.user_id,
     )
+    offer_tools_from_window(chat_tools, history)
+    offer_tools_from_window(prepared.worker_tools, history)
 
     # AI 协作白板: in a 白板会话, hand the CEO the board tools so it can draw on
     # (``board_ops``, §六 M2) and read (``board_read``, §九) the user's open canvas.

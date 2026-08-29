@@ -94,7 +94,6 @@ def _durable_terminal_run_ids(entries: list[dict[str, Any]] | None) -> set[str]:
 
 class CoordinationEventKind(StrEnum):
     WORKER_COMPLETED = "worker_completed"
-    NOTE_POSTED = "note_posted"
     ESCALATION = "escalation"
     TIMEOUT = "timeout"
     ALL_COMPLETED = "all_completed"

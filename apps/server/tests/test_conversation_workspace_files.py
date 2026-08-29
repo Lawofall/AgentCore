@@ -107,6 +107,27 @@ async def test_download_uses_auto_desk_not_scratch(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_archive_download_uses_auto_desk_not_scratch():
+    user = SimpleNamespace(user_id="u1")
+    conv = SimpleNamespace(id="c1", folder_id=None, auto_desk_folder_id="desk-1")
+    conv_repo = SimpleNamespace(get_by_id=AsyncMock(return_value=conv))
+
+    with patch.object(
+        files_mod, "zip_subtree_for_download", new=AsyncMock(return_value=b"PK")
+    ) as zipped:
+        await files_mod.download_workspace_archive(
+            conversation_id="c1",
+            path="docs",
+            user=user,
+            conv_repo=conv_repo,
+        )
+
+    zipped.assert_awaited_once()
+    assert zipped.await_args.kwargs["folder_id"] == "desk-1"
+    assert zipped.await_args.kwargs["path"] == "docs"
+
+
+@pytest.mark.asyncio
 async def test_list_birth_folder_unchanged():
     user = SimpleNamespace(user_id="u1")
     conv = SimpleNamespace(id="c1", folder_id="birth-f", auto_desk_folder_id="desk-ignored")

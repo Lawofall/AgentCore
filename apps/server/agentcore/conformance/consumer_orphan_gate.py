@@ -106,7 +106,6 @@ _EVENT_FACTORY_NAMES: frozenset[str] = frozenset(
         "escalation_resolved",
         "interaction_orphaned",
         "run_escalation_gate",
-        "team_note_posted",
         "team_synthesis_preview",
         "coordination_wait",
         "workspace_lock_wait",

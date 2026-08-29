@@ -1,4 +1,4 @@
-"""引用即出处 P1 §十第 3 步：#rN id 存在闸 + 分路径回炉 + pause 台账再水化。"""
+"""引用即出处：对话成稿可挂已登记号（含 search-only）；落盘成文仍走 citation_quality。"""
 
 from __future__ import annotations
 
@@ -92,208 +92,27 @@ def _seed_ledger(
     return led
 
 
-def test_finish_guard_search_only_blocked():
-    """search-only（无 deep_read / selected）不得进成稿闸。"""
-    reworks = finish_guard(
-        "见 #r1。",
-        citation_count=0,
-        check_citations=False,
-        citable_ids=frozenset(),  # draft 空 = search-only 被排除后
-    )
-    assert reworks and "#r1" in reworks[0]
-
-
-def test_uncitable_ledger_refs_only_isolates_rn_gate():
-    from agentcore.runtime.verify import uncitable_ledger_refs_only
-
-    assert uncitable_ledger_refs_only(
-        "见 #r1。",
-        citation_count=0,
-        check_citations=False,
-        citable_ids=frozenset(),
-    ) == ["#r1"]
+def test_finish_guard_search_only_passes_chat():
+    """search-only 可挂对话成稿；chat finish_guard 不回炉。"""
     assert (
-        uncitable_ledger_refs_only(
-            "干净正文。",
+        finish_guard(
+            "见 #r1。",
             citation_count=0,
             check_citations=False,
-            citable_ids=frozenset({"#r1"}),
         )
         == []
     )
-    # 书目形态并存 → 非「仅 #rN」
-    assert (
-        uncitable_ledger_refs_only(
-            "李四. 某某研究[J]. #r1",
-            citation_count=0,
-            check_citations=False,
-            citable_ids=frozenset(),
-            ledger_entries=[
-                {
-                    "id": "#r1",
-                    "url": "https://example.com/p",
-                    "title": "正式论文",
-                    "deep_read": False,
-                }
-            ],
-        )
-        is None
-    )
-    # 围栏缺陷并存 → None
-    assert (
-        uncitable_ledger_refs_only(
-            "见 #r1。\n```python\n",
-            citation_count=0,
-            check_citations=False,
-            citable_ids=frozenset(),
-        )
-        is None
-    )
 
 
-def test_search_only_deep_read_targets_limit_and_filters():
-    from agentcore.runtime.engine.round import (
-        AUTO_DEEP_READ_PER_FINISH,
-        search_only_deep_read_targets,
-    )
+def test_citation_quality_search_only_blocked():
+    from agentcore.runtime.verify import citation_quality_reworks
 
-    led = EvidenceLedgerCore(id_prefix="#r")
-    for i in range(7):
-        led.register_sync(
-            url=f"https://example.com/{i}",
-            title=f"t{i}",
-            registrant="w",
-            deep_read=False,
-        )
-    led.register_sync(
-        url="",
-        title="no-url",
-        registrant="w",
-        deep_read=False,
-    )
-    bad = [f"#r{i}" for i in range(1, 9)] + ["#r99"]
-    targets = search_only_deep_read_targets(bad, led)
-    assert len(targets) == AUTO_DEEP_READ_PER_FINISH
-    assert all(url.startswith("https://") for _, url in targets)
-    assert "#r99" not in {eid for eid, _ in targets}
+    reworks = citation_quality_reworks("见 #r1。", citable_ids=frozenset())
+    assert reworks and "#r1" in reworks[0]
 
 
-async def test_worker_search_only_rn_auto_deep_read_passes_without_reset():
-    """仅 search-only 引用：自动深读升级台账后保留 #rN，无 content_reset / Rework。"""
-    from agentcore.core.types import ToolCategory
-    from agentcore.tools.protocol import ToolResult, ToolSchema
-
-    class _FakeReadUrl:
-        @property
-        def schema(self) -> ToolSchema:
-            return ToolSchema(
-                name="read_url",
-                description="fake",
-                parameters={"type": "object", "properties": {}},
-                category=ToolCategory.RESEARCH,
-            )
-
-        async def execute(self, arguments, context):  # noqa: ANN001, ARG002
-            url = str(arguments.get("url") or "")
-            return ToolResult(
-                tool_call_id="",
-                success=True,
-                output="{}",
-                citations=[
-                    {
-                        "url": url,
-                        "title": "Deep",
-                        "snippet": "body",
-                        "site": "example.com",
-                        "deep_read": True,
-                    }
-                ],
-            )
-
-    led = _seed_ledger("https://example.com/a", deep_read=False)
-    assert led.draft_citable_ids() == frozenset()
-    registry = ToolRegistry()
-    registry.register(_FakeReadUrl())
-    provider = _ScriptedProvider([[_content_chunk("结论见 #r1。")]])
-    messages: list[LLMMessage] = [LLMMessage(role="user", content="go")]
-    sink = EventSink()
-    resets: list[str] = []
-    content, _r, _u, rounds = await react_loop(
-        messages=messages,
-        llm=provider,
-        tools=registry,
-        sink=sink,
-        tool_context=_context(),
-        profile=make_profile_params(max_rounds=10),
-        turn_model="m",
-        out=ReactLoopOut(citations=[]),
-        annotate_citations=False,
-        turn_evidence_ledger=led,
-        on_reset=resets.append,
-        ledger_registrant="worker:w1",
-        approval_gate=None,
-    )
-    assert content == "结论见 #r1。"
-    assert rounds == 1
-    assert resets == []
-    assert "#r1" in led.draft_citable_ids()
-    assert led.get("#r1")["deep_read"] is True
-
-
-async def test_worker_search_only_rn_deep_read_fail_strips_without_rework():
-    """深读失败：剥掉非法 #rN 放行，不整篇 Rework。"""
-    from agentcore.core.types import ToolCategory
-    from agentcore.tools.protocol import ToolResult, ToolSchema
-
-    class _FailReadUrl:
-        @property
-        def schema(self) -> ToolSchema:
-            return ToolSchema(
-                name="read_url",
-                description="fake",
-                parameters={"type": "object", "properties": {}},
-                category=ToolCategory.RESEARCH,
-            )
-
-        async def execute(self, arguments, context):  # noqa: ANN001, ARG002
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error="fetch failed",
-            )
-
-    led = _seed_ledger("https://example.com/a", deep_read=False)
-    registry = ToolRegistry()
-    registry.register(_FailReadUrl())
-    provider = _ScriptedProvider([[_content_chunk("结论见 #r1。")]])
-    messages: list[LLMMessage] = [LLMMessage(role="user", content="go")]
-    sink = EventSink()
-    resets: list[str] = []
-    content, _r, _u, rounds = await react_loop(
-        messages=messages,
-        llm=provider,
-        tools=registry,
-        sink=sink,
-        tool_context=_context(),
-        profile=make_profile_params(max_rounds=10),
-        turn_model="m",
-        out=ReactLoopOut(citations=[]),
-        annotate_citations=False,
-        turn_evidence_ledger=led,
-        on_reset=resets.append,
-        ledger_registrant="worker:w1",
-        approval_gate=None,
-    )
-    assert rounds == 1
-    assert "#r1" not in content
-    assert "结论见" in content
-    assert led.get("#r1")["deep_read"] is False  # 不假装
-    assert resets.count("finish_guard") >= 1  # 剥号更新气泡
-
-
-async def test_worker_search_only_rn_no_tool_strips_without_rework():
-    """无 read_url 工具：剥号放行（不回炉）。"""
+async def test_worker_search_only_rn_passes_without_reset():
+    """仅 search-only 引用：保留 #rN，无 content_reset / Rework / 自动深读。"""
     led = _seed_ledger("https://example.com/a", deep_read=False)
     assert led.draft_citable_ids() == frozenset()
     assert led.citable_ids() == frozenset({"#r1"})
@@ -301,10 +120,29 @@ async def test_worker_search_only_rn_no_tool_strips_without_rework():
     (content, _r, _u, rounds), _messages, _sink, resets = await _run_worker(
         provider, ledger=led
     )
+    assert content == "结论见 #r1。"
     assert rounds == 1
-    assert "#r1" not in content
-    assert "结论见" in content
-    assert resets.count("finish_guard") >= 1
+    assert resets == []
+    assert led.draft_citable_ids() == frozenset()
+    assert led.get("#r1")["deep_read"] is False
+
+
+async def test_worker_forged_rn_keeps_body_without_reset():
+    """伪造 #rN 留白字，不剥号、不 finish_guard reset。"""
+    led = _seed_ledger("https://example.com/a")
+    provider = _ScriptedProvider([[_content_chunk("伪造 #r9。")]])
+    (content, _r, _u, rounds), messages, _sink, resets = await _run_worker(
+        provider, ledger=led
+    )
+    assert rounds == 1
+    assert content == "伪造 #r9。"
+    assert resets == []
+    steers = [
+        m
+        for m in messages
+        if m.role == "user" and m.content and "核验未通过" in m.content
+    ]
+    assert steers == []
 
 
 # --- finish_guard 纯函数 -------------------------------------------------------
@@ -316,32 +154,31 @@ def test_finish_guard_valid_ledger_ref_passes():
             "结论见 #r1。",
             citation_count=0,
             check_citations=False,
-            citable_ids=frozenset({"#r1"}),
         )
         == []
     )
 
 
-def test_finish_guard_forged_ledger_ref_flagged():
-    reworks = finish_guard(
-        "伪造 #r9。",
-        citation_count=0,
-        check_citations=False,
-        citable_ids=frozenset({"#r1"}),
+def test_finish_guard_forged_ledger_ref_not_flagged():
+    assert (
+        finish_guard(
+            "伪造 #r9。",
+            citation_count=0,
+            check_citations=False,
+        )
+        == []
     )
-    assert len(reworks) == 1
-    assert "#r9" in reworks[0]
 
 
-def test_finish_guard_uncitable_flagged():
-    # 未登记 / 不在 citable 集的 id → 不可引用（P2：weak 本身可引用）
-    reworks = finish_guard(
-        "幽灵 #r2。",
-        citation_count=0,
-        check_citations=False,
-        citable_ids=frozenset({"#r1"}),  # #r2 不在可引用集
+def test_finish_guard_uncitable_not_flagged():
+    assert (
+        finish_guard(
+            "幽灵 #r2。",
+            citation_count=0,
+            check_citations=False,
+        )
+        == []
     )
-    assert reworks and "#r2" in reworks[0]
 
 
 def test_finish_guard_weak_citable_passes():
@@ -350,28 +187,24 @@ def test_finish_guard_weak_citable_passes():
             "弱源亦可引 #r2。",
             citation_count=0,
             check_citations=False,
-            citable_ids=frozenset({"#r1", "#r2"}),
         )
         == []
     )
 
 
 def test_finish_guard_q5_no_marker_skips_ledger_gate():
-    # 无 #rN → 不回炉（即便台账为空）
     assert (
         finish_guard(
             "普通调研结论，无约定引用标记。",
             citation_count=0,
             check_citations=False,
-            citable_ids=frozenset(),
         )
         == []
     )
 
 
-def test_finish_guard_legacy_bracket_track_unchanged():
-    reworks = finish_guard("见 [9]。", citation_count=1, check_citations=True)
-    assert reworks and "[9]" in reworks[0]
+def test_finish_guard_legacy_bracket_not_reworked():
+    assert finish_guard("见 [9]。", citation_count=1, check_citations=True) == []
 
 
 # --- react_loop 集成：worker 分路径 --------------------------------------------
@@ -388,69 +221,24 @@ async def test_worker_valid_rn_finishes_without_rework():
     assert resets == []
 
 
-async def test_worker_forged_rn_strips_without_rework():
-    """仅伪造 #rN：不回炉，出口剥号放行。"""
-    led = _seed_ledger("https://example.com/a")
-    provider = _ScriptedProvider([[_content_chunk("伪造 #r9。")]])
+async def test_worker_bibliography_does_not_rework_chat():
+    """书目形态不再清空气泡；search-only 可挂、无 reset。"""
+    led = _seed_ledger("https://example.com/paper", deep_read=False)
+    provider = _ScriptedProvider(
+        [[_content_chunk("李四. 某某研究[J]. #r1")]]
+    )
     (content, _r, _u, rounds), messages, _sink, resets = await _run_worker(
         provider, ledger=led
     )
+    assert content == "李四. 某某研究[J]. #r1"
     assert rounds == 1
-    assert "#r9" not in content
-    assert "伪造" in content
-    assert resets.count("finish_guard") >= 1
+    assert resets == []
     steers = [
         m
         for m in messages
         if m.role == "user" and m.content and "核验未通过" in m.content
     ]
     assert steers == []
-
-
-async def test_worker_second_violation_strips_with_observation(monkeypatch):
-    """回炉耗尽路径观测：书目形态闸仍走 Rework，二次仍非法则剥号。"""
-    import agentcore.runtime.engine.round as round_mod
-    from tests.conftest import LogSpy
-
-    spy = LogSpy()
-    monkeypatch.setattr(round_mod, "logger", spy)
-
-    led = _seed_ledger("https://example.com/a", deep_read=False)
-    # 书目形态 + search-only → 非「仅 #rN」→ 仍回炉一次
-    bad = [_content_chunk("李四. 某某研究[J]. #r1")]
-    provider = _ScriptedProvider([bad, bad])
-    (content, _r, _u, rounds), _messages, _sink, resets = await _run_worker(
-        provider, ledger=led
-    )
-    assert rounds == 2  # 回炉 1 次后放行
-    assert "#r1" not in content  # 出口剥离（仍不可成稿引用）
-    assert resets.count("finish_guard") >= 1
-    obs = spy.get("citations.invalid_ledger_ref")
-    assert obs["markers"] == ["#r1"]
-
-
-async def test_worker_bibliography_still_reworks():
-    """书目形态闸不走帮读捷径，仍 content_reset + Rework。"""
-    led = _seed_ledger("https://example.com/paper", deep_read=False)
-    provider = _ScriptedProvider(
-        [
-            [_content_chunk("李四. 某某研究[J]. #r1")],
-            [_content_chunk("无书目式表述的干净结论。")],
-        ]
-    )
-    (content, _r, _u, rounds), messages, _sink, resets = await _run_worker(
-        provider, ledger=led
-    )
-    assert content == "无书目式表述的干净结论。"
-    assert rounds == 2
-    assert resets == ["finish_guard"]
-    steers = [
-        m
-        for m in messages
-        if m.role == "user" and m.content and "核验未通过" in m.content
-    ]
-    assert len(steers) == 1
-    assert "deep_read" in steers[0].content or "著录" in steers[0].content
 
 
 async def test_worker_no_marker_does_not_rework():
@@ -465,7 +253,6 @@ async def test_worker_no_marker_does_not_rework():
 
 
 async def test_worker_legacy_bracket_still_skipped():
-    # annotate_citations=False：[n] 旧轨仍不回炉（Q5 / 不回归）
     led = _seed_ledger("https://example.com/a")
     provider = _ScriptedProvider([[_content_chunk("worker 产出 [1]。")]])
     (content, _r, _u, rounds), _messages, _sink, resets = await _run_worker(
@@ -476,8 +263,7 @@ async def test_worker_legacy_bracket_still_skipped():
     assert resets == []
 
 
-async def test_ceo_forged_ledger_ref_strips_without_rework():
-    # CEO annotate=True：仅非法 #rN → 剥号放行（不占 max_reworks 回炉）
+async def test_ceo_forged_ledger_ref_keeps_body_without_reset():
     led = _seed_ledger("https://example.com/a")
     provider = _ScriptedProvider([[_content_chunk("见 #r9。")]])
     messages: list[LLMMessage] = [LLMMessage(role="user", content="go")]
@@ -496,16 +282,13 @@ async def test_ceo_forged_ledger_ref_strips_without_rework():
         approval_gate=None,
     )
     assert rounds == 1
-    assert "#r9" not in content
+    assert content == "见 #r9。"
     resets = [e for e in sink._history if e.type == EventType.CONTENT_RESET]
-    assert len(resets) >= 1
+    assert resets == []
 
 
-async def test_ceo_bracket_still_uses_config_max_reworks():
-    # CEO [n] 越界仍走原回炉（非仅 #rN 捷径）
-    bad = [_content_chunk("见 [9]。")]
-    clean = [_content_chunk("见正文无角标。")]
-    provider = _ScriptedProvider([bad, bad, clean])
+async def test_ceo_bracket_does_not_rework():
+    provider = _ScriptedProvider([[_content_chunk("见 [9]。")]])
     messages: list[LLMMessage] = [LLMMessage(role="user", content="go")]
     sink = EventSink()
     content, _r, _u, rounds = await react_loop(
@@ -521,10 +304,66 @@ async def test_ceo_bracket_still_uses_config_max_reworks():
         turn_evidence_ledger=None,
         approval_gate=None,
     )
-    assert content == "见正文无角标。"
-    assert rounds == 3  # 回炉 2 次后干净收口
+    assert content == "见 [9]。"
+    assert rounds == 1
     resets = [e for e in sink._history if e.type == EventType.CONTENT_RESET]
-    assert len(resets) >= 2
+    assert resets == []
+
+
+async def test_settle_keeps_search_only_and_unregistered_body():
+    """settle 不剥正文；search-only 可挂来源卡；假 #rN 不进 cited_ids。"""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from agentcore.llm.provider.protocol import TokenUsage
+    from agentcore.runtime.events import FinishReason
+    from agentcore.runtime.pipeline.settle import settle_successful_turn
+    from agentcore.runtime.suspension import turn_evidence_ledger
+
+    led = _seed_ledger("https://example.com/a", deep_read=False)
+    token = turn_evidence_ledger.set(led)
+    sink = EventSink()
+    try:
+        result = await settle_successful_turn(
+            message_id="m-cite",
+            captain_run_id="cap",
+            captain_state=SimpleNamespace(
+                content="见 #r1 与幽灵 #r9。",
+                reasoning="",
+                rounds=1,
+                usage=TokenUsage().as_dict(),
+                cost={"total": 0, "currency": "USD"},
+                model="m",
+                duration_ms=0,
+                finish_override=FinishReason.END_TURN,
+            ),
+            delegate_tool=SimpleNamespace(
+                usage={},
+                run_ledger=[],
+                citations=[],
+                collab={"boundary_yields": 0, "scope_signals": 0, "escalations": 0},
+                continuation_count=0,
+                user_continuation_count=0,
+                dispose_open_supervised=AsyncMock(),
+            ),
+            debate_tool=SimpleNamespace(usage={}, run_ledger=[], citations=[]),
+            profile=SimpleNamespace(max_rounds=20),
+            citations=[],
+            vision_cost_sink=[],
+            sink=sink,
+            fact_log=None,
+            audit_recorder=SimpleNamespace(drops=0, flush=AsyncMock()),
+            roster_writer=None,
+            journal_writer=SimpleNamespace(flush=AsyncMock()),
+        )
+    finally:
+        turn_evidence_ledger.reset(token)
+
+    assert result["content"] == "见 #r1 与幽灵 #r9。"
+    assert result["cited_ids"] == ["#r1"]
+    assert [c["id"] for c in result["citations"]] == ["#r1"]
+    resets = [e for e in sink._history if e.type == EventType.CONTENT_RESET]
+    assert resets == []
 
 
 # --- pause / resume 台账快照 ---------------------------------------------------
@@ -562,7 +401,6 @@ def test_turn_paused_captures_and_rehydrates_ledger():
             "挂起前已引用 #r1。",
             citation_count=0,
             check_citations=False,
-            citable_ids=restored.draft_citable_ids(),
         )
         == []
     )

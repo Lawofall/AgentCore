@@ -110,17 +110,17 @@ describe("StandingTasksPanel", () => {
     );
     renderPanel();
 
-    const note = await screen.findByText(/读不到工作区列表/);
+    const note = await screen.findByText(/读不到文件夹列表/);
     expect(note.parentElement?.className).toContain("bg-muted/40");
     expect(note.parentElement?.className).not.toContain("destructive");
-    expect(screen.getByText(/这不代表你没有云工作区/)).toBeTruthy();
+    expect(screen.getByText(/这不代表你没有云端文件夹/)).toBeTruthy();
     // The task list itself still loaded.
     expect(screen.getByText("竞品简报")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
 
     await waitFor(() =>
-      expect(screen.queryByText(/读不到工作区列表/)).toBeNull(),
+      expect(screen.queryByText(/读不到文件夹列表/)).toBeNull(),
     );
     expect(folders).toHaveBeenCalledTimes(2);
   });
@@ -167,7 +167,7 @@ describe("StandingTasksPanel 设为定时 deep link", () => {
     // Bound = the goal is an optional per-run supplement, so 创建 is reachable
     // right away: land → pick a schedule → done.
     const folderSelect = screen.getByLabelText(
-      /^云工作区/,
+      /^云端文件夹/,
     ) as HTMLSelectElement;
     await waitFor(() => expect(folderSelect.value).toBe("folder-1"));
     expect(

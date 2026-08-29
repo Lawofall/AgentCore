@@ -40,8 +40,9 @@ class AskAssumption(WirePayload):
 
 class AskOption(WirePayload):
     """One selectable answer to a choice AskQuestion. `label` is both the displayed text
-    and the value composed back into the answer; `recommended` is advisory highlight only
-    (NOT a pre-selection). `action` marks an option that the desktop client fulfils with a
+    and the value composed back into the answer. Tendency lives in the name
+    (``（推荐）`` / ``(recommended)``), not a separate flag; the card does not pre-select.
+    `action` marks an option that the desktop client fulfils with a
     native client action instead of a plain text answer (unknown/absent → plain option):
     `open_local_project` / `register_local_project` / `bind_local_folder` are
     **本机传统** wire enums（合法非默认；云协作仍推荐「导入到云」；远程仓「从 Git 克隆」；≠离线；
@@ -62,7 +63,6 @@ class AskOption(WirePayload):
 
     label: str
     detail: str | None = absent()
-    recommended: bool | None = absent()
     action: (
         Literal[
             "open_local_project",

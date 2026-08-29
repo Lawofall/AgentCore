@@ -8,7 +8,6 @@ from agentcore.runtime.events import EventSink, EventType, SSEEvent
 
 # 协作互动辅指标：SSE 事件类型 → 短标签。只计「事件流里确实有的」协作信号，不做剧场奖励设计。
 _COLLAB_EVENT_KEYS: dict[EventType, str] = {
-    EventType.TEAM_NOTE_POSTED: "note",
     EventType.RUN_ESCALATION: "escalate",
     EventType.ESCALATION_REQUIRED: "escalate",
     EventType.PLAN_REVISED: "replan",
@@ -24,7 +23,7 @@ class RecordingSink(EventSink):
       ``run_started``（其载荷无 role）。
     - ``plan_runs``：从 ``run_plan.runs`` 保留完整计划图（过滤 captain/CEO），供形状匹配度；
     - ``plan_type``：最近一次 ``run_plan`` 的类型（``multi_agent`` / ``debate`` / …）；
-    - ``collab_interactions``：便签 / 升级 / replan / 续派等协作事件计数。
+    - ``collab_interactions``：升级 / replan / 续派等协作事件计数。
     """
 
     def __init__(self) -> None:

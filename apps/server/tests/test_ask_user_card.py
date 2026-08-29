@@ -1,4 +1,4 @@
-"""ask_user card=proposal_pick / risk_ack validation + intent override."""
+"""ask_user card=organize_plan / daily_review validation + retired-name reject."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from agentcore.runtime.events import EventSink, EventType
 from agentcore.runtime.suspension import captain_transcript
 from agentcore.tools.builtin.ask_user import AskUserTool
 from agentcore.tools.builtin.ask_user.card import (
+    CARD_KINDS,
     parse_card,
     validate_card_shape,
 )
@@ -45,28 +46,6 @@ def _tool(*, saver=None) -> AskUserTool:
     )
 
 
-def _proposal_questions(*, n: int = 3, multiple: bool = False, kind: str = "choice"):
-    return [
-        {
-            "prompt": "选哪条？",
-            "kind": kind,
-            "multiple": multiple,
-            "options": [f"方案 {i}" for i in range(n)],
-        }
-    ]
-
-
-def _risk_questions(*, n: int = 3, multiple: bool = True, kind: str = "choice"):
-    return [
-        {
-            "prompt": "勾选风险",
-            "kind": kind,
-            "multiple": multiple,
-            "options": [f"风险 {i}" for i in range(n)],
-        }
-    ]
-
-
 def test_ask_user_schema_does_not_expose_blocking():
     tool = AskUserTool(
         sink=EventSink(),
@@ -79,6 +58,9 @@ def test_ask_user_schema_does_not_expose_blocking():
     blob = tool.schema.description + json.dumps(tool.schema.parameters, ensure_ascii=False)
     assert "blocking" not in blob
     assert '"context"' not in json.dumps(tool.schema.parameters, ensure_ascii=False)
+    card_enum = props["card"]["enum"]
+    assert card_enum == ["organize_plan", "daily_review"]
+    assert frozenset(card_enum) == CARD_KINDS
 
 
 async def test_ask_user_drops_extra_context_key():
@@ -107,60 +89,60 @@ async def test_ask_user_drops_extra_context_key():
 
 def test_parse_card_unknown():
     err = parse_card("foo")
-    assert isinstance(err, str) and "proposal_pick" in err
+    assert isinstance(err, str) and "organize_plan" in err and "daily_review" in err
 
 
-def test_validate_proposal_pick_matrix():
-    ok_q = [
+@pytest.mark.parametrize("card", ["proposal_pick", "risk_ack", "kickoff"])
+async def test_schema_rejects_retired_card_names(card):
+    """Write path rejects retired names; does not rewrite to decision."""
+    tool = _tool()
+    res = await tool.execute(
         {
-            "id": "q0",
-            "prompt": "选",
-            "kind": "choice",
-            "multiple": False,
-            "options": [{"label": "A"}, {"label": "B"}],
-            "default": "",
-        }
-    ]
-    assert validate_card_shape("proposal_pick", questions=ok_q) is None
-    assert validate_card_shape("proposal_pick", questions=[])
-    bad_multi = [{**ok_q[0], "multiple": True}]
-    err_multi = validate_card_shape("proposal_pick", questions=bad_multi) or ""
-    assert "multiple=false" in err_multi
-    one_opt = [{**ok_q[0], "options": [{"label": "A"}]}]
-    err_opts = validate_card_shape("proposal_pick", questions=one_opt) or ""
-    assert "2" in err_opts and "6" in err_opts
+            "message": "挑方案",
+            "card": card,
+            "questions": [
+                {
+                    "prompt": "选哪条？",
+                    "kind": "choice",
+                    "multiple": False,
+                    "options": ["A", "B"],
+                }
+            ],
+        },
+        _ctx(),
+    )
+    assert res.success is False
+    assert res.error and "未知 card" in res.error
+    assert not any(e.type is EventType.CHECKPOINT_REQUIRED for e in tool.sink._history)
 
 
-def test_validate_risk_ack_matrix():
+def test_validate_organize_plan_matrix():
     ok_q = [
         {
             "id": "q0",
             "prompt": "勾选",
             "kind": "choice",
             "multiple": True,
-            "options": [{"label": "R1"}],
+            "options": [{"label": "a → b", "op": "move", "source": "a", "destination": "b"}],
             "default": "",
         }
     ]
-    assert validate_card_shape("risk_ack", questions=ok_q) is None
+    assert validate_card_shape("organize_plan", questions=ok_q) is None
+    assert validate_card_shape("organize_plan", questions=[])
     single = [{**ok_q[0], "multiple": False}]
-    err_single = validate_card_shape("risk_ack", questions=single) or ""
+    err_single = validate_card_shape("organize_plan", questions=single) or ""
     assert "multiple=true" in err_single
-    too_many = [{**ok_q[0], "options": [{"label": f"r{i}"} for i in range(11)]}]
-    err_many = validate_card_shape("risk_ack", questions=too_many) or ""
-    assert "1" in err_many and "10" in err_many
 
 
-async def test_proposal_pick_overrides_transcript_intent():
+async def test_organize_plan_overrides_transcript_intent():
     saved: list = []
 
     async def _save(frame):
         saved.append(frame)
 
     tool = _tool(saver=_save)
-    # Transcript would derive kickoff; card must override to proposal_pick.
     transcript = [
-        LLMMessage(role="user", content="做网站"),
+        LLMMessage(role="user", content="整理桌面"),
         LLMMessage(
             role="assistant",
             content="",
@@ -169,7 +151,7 @@ async def test_proposal_pick_overrides_transcript_intent():
                     id="ask",
                     function=ToolCallFunction(
                         name="ask_user",
-                        arguments=json.dumps({"message": "挑方案", "card": "proposal_pick"}),
+                        arguments=json.dumps({"message": "保留哪些", "card": "organize_plan"}),
                     ),
                 )
             ],
@@ -179,9 +161,23 @@ async def test_proposal_pick_overrides_transcript_intent():
     try:
         res = await tool.execute(
             {
-                "message": "挑方案",
-                "card": "proposal_pick",
-                "questions": _proposal_questions(),
+                "message": "保留哪些",
+                "card": "organize_plan",
+                "questions": [
+                    {
+                        "prompt": "保留哪些操作？",
+                        "kind": "choice",
+                        "multiple": True,
+                        "options": [
+                            {
+                                "label": "a → b",
+                                "op": "move",
+                                "source": "a",
+                                "destination": "b",
+                            }
+                        ],
+                    }
+                ],
             },
             _ctx(),
         )
@@ -190,71 +186,73 @@ async def test_proposal_pick_overrides_transcript_intent():
 
     assert res.success is True
     assert res.effect is ToolEffect.SUSPEND
-    assert saved[0].intent == "proposal_pick"
+    assert saved[0].intent == "organize_plan"
     required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
-    assert required.payload["intent"] == "proposal_pick"
-    assert "context" not in required.payload
-    assert required.payload["questions"][0]["multiple"] is False
-    assert 2 <= len(required.payload["questions"][0]["options"]) <= 6
-
-
-async def test_risk_ack_accepts_up_to_ten_options():
-    saved: list = []
-
-    async def _save(frame):
-        saved.append(frame)
-
-    tool = _tool(saver=_save)
-    transcript = [
-        LLMMessage(role="user", content="上线"),
-        LLMMessage(
-            role="assistant",
-            content="",
-            tool_calls=[
-                ToolCall(
-                    id="ask",
-                    function=ToolCallFunction(
-                        name="ask_user",
-                        arguments=json.dumps({"message": "勾选风险", "card": "risk_ack"}),
-                    ),
-                )
-            ],
-        ),
-    ]
-    token = captain_transcript.set(transcript)
-    try:
-        res = await tool.execute(
-            {
-                "message": "勾选风险",
-                "card": "risk_ack",
-                "questions": _risk_questions(n=10),
-            },
-            _ctx(),
-        )
-    finally:
-        captain_transcript.reset(token)
-
-    assert res.success is True
-    assert res.effect is ToolEffect.SUSPEND
-    assert saved[0].intent == "risk_ack"
-    required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
-    assert required.payload["intent"] == "risk_ack"
+    assert required.payload["intent"] == "organize_plan"
     assert required.payload["questions"][0]["multiple"] is True
-    assert len(required.payload["questions"][0]["options"]) == 10
 
 
-async def test_proposal_pick_rejects_bad_shape():
-    tool = _tool()
-    res = await tool.execute(
-        {
-            "message": "挑方案",
-            "card": "proposal_pick",
-            "questions": _proposal_questions(n=1),
-        },
-        _ctx(),
-    )
-    assert res.success is False
-    assert res.error and "proposal_pick" in res.error
+async def test_ordinary_choice_ask_is_decision():
+    saved: list = []
+
+    async def _save(frame):
+        saved.append(frame)
+
+    tool = _tool(saver=_save)
+    token = captain_transcript.set([LLMMessage(role="user", content="选方案")])
+    try:
+        res = await tool.execute(
+            {
+                "message": "挑一条推进",
+                "questions": [
+                    {
+                        "prompt": "选哪条方案？",
+                        "kind": "choice",
+                        "multiple": False,
+                        "options": ["方案 A：快速原型", "方案 B：稳妥重构（推荐）"],
+                    }
+                ],
+            },
+            _ctx(),
+        )
+    finally:
+        captain_transcript.reset(token)
+
+    assert res.success is True
+    assert saved[0].intent == "decision"
+    required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
+    assert required.payload["intent"] == "decision"
+    assert required.payload["questions"][0]["multiple"] is False
+
+
+async def test_ordinary_ask_caps_choice_options_at_six():
+    saved: list = []
+
+    async def _save(frame):
+        saved.append(frame)
+
+    tool = _tool(saver=_save)
+    token = captain_transcript.set([LLMMessage(role="user", content="勾选")])
+    try:
+        res = await tool.execute(
+            {
+                "message": "勾选要处理的风险",
+                "questions": [
+                    {
+                        "prompt": "勾选要处理的风险",
+                        "kind": "choice",
+                        "multiple": True,
+                        "options": [f"风险 {i}" for i in range(8)],
+                    }
+                ],
+            },
+            _ctx(),
+        )
+    finally:
+        captain_transcript.reset(token)
+    assert res.success is True
+    required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
+    assert len(required.payload["questions"][0]["options"]) == 6
 
 
 def _detailed_choice(*, n: int, multiple: bool, detail: str = "一行取舍"):
@@ -321,8 +319,6 @@ async def test_ordinary_ask_drops_option_detail_even_if_model_filled():
 @pytest.mark.parametrize(
     "card,n,multiple",
     [
-        ("proposal_pick", 2, False),
-        ("risk_ack", 2, True),
         ("organize_plan", 1, True),
         ("daily_review", 1, True),
     ],
@@ -336,11 +332,20 @@ async def test_dedicated_card_keeps_option_detail(card, n, multiple):
     tool = _tool(saver=_save)
     token = _with_ask_transcript(message="专用卡", card=card)
     try:
+        questions = _detailed_choice(n=n, multiple=multiple)
+        if card == "daily_review":
+            for opt in questions[0]["options"]:
+                opt["review_kind"] = "preference"
+                opt["body"] = "x"
+        elif card == "organize_plan":
+            for i, opt in enumerate(questions[0]["options"]):
+                opt["op"] = "mkdir"
+                opt["path"] = f"p{i}"
         res = await tool.execute(
             {
                 "message": "专用卡",
                 "card": card,
-                "questions": _detailed_choice(n=n, multiple=multiple),
+                "questions": questions,
             },
             _ctx(),
         )
@@ -351,3 +356,4 @@ async def test_dedicated_card_keeps_option_detail(card, n, multiple):
     required = next(e for e in tool.sink._history if e.type is EventType.CHECKPOINT_REQUIRED)
     opts = required.payload["questions"][0]["options"]
     assert all(o.get("detail") == "一行取舍" for o in opts)
+    assert saved[0].intent == card

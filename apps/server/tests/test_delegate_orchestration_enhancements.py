@@ -599,10 +599,33 @@ async def test_consult_reuses_turn_cache(tmp_path):
     try:
         first = await tool.execute({"name": "设计审美"}, _ctx())
         assert first.success and first.output == body
+        assert first.display["origin"] == "user"
+        assert "kind" not in first.display
         assert "设计审美" in get_consult_cache()
         second = await tool.execute({"name": "设计审美"}, _ctx())
         assert second.success and second.output == body
         assert (second.display or {}).get("reused") is True
+        assert (second.display or {}).get("origin") == "user"
+        assert "kind" not in (second.display or {})
+        # Pause 帧仍是 slug→正文；origin 不进 consulted_memory。
+        assert dict(get_consult_cache()) == {"设计审美": body}
+    finally:
+        consulted_memory_cache.reset(token)
+
+
+async def test_consult_reuse_from_frame_omits_origin(tmp_path):
+    """Resume-from-frame only restores bodies; display must not invent origin."""
+    store = FileMemoryStore(tmp_path)
+    body = "## 审美\n- 简约商务\n"
+    await store.save("u", topic_path("设计审美"), body)
+    tool = ConsultTool(source=MergedConsultSource(memory=MemoryConsultSource(store=store)))
+    token = consulted_memory_cache.set({"设计审美": body})
+    try:
+        result = await tool.execute({"name": "设计审美"}, _ctx())
+        assert result.success and result.output == body
+        assert (result.display or {}).get("reused") is True
+        assert "origin" not in (result.display or {})
+        assert "kind" not in (result.display or {})
     finally:
         consulted_memory_cache.reset(token)
 

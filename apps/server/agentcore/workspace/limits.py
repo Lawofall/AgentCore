@@ -102,6 +102,7 @@ WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS: tuple[str, ...] = (
     "md_to_docx",
     "md_to_pdf",
     "archive_extract",
+    "archive_create",
     "download_url",
     # Same shape: every call unconditionally reads workspace bytes through the dead
     # backend (``read_bytes`` → base64 → vision), so it can only fail — and leaving it

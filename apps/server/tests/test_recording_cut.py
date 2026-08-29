@@ -168,6 +168,7 @@ def test_retired_question_posted_event_types_are_dropped():
                 "type": "team_preview_resolved",
                 "payload": {"checkpoint_id": "tp1", "decision": "continue"},
             },
+            {"type": "team_note_posted", "payload": {"note_id": "n1"}},
             {"type": "message_start", "payload": {"message_id": "m"}},
         ]
     )
@@ -180,6 +181,7 @@ def test_retired_question_posted_event_types_are_dropped():
             "delegation_authorization_resolved",
             "team_preview_required",
             "team_preview_resolved",
+            "team_note_posted",
         }
     ) == RETIRED_EVENT_TYPE_VALUES
 

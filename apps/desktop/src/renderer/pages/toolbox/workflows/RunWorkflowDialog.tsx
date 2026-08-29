@@ -126,7 +126,7 @@ export function RunWorkflowDialog({
       if (seq !== loadSeq.current) return;
       setFoldersState({
         status: "error",
-        message: errMsg(e, "工作区列表加载失败"),
+        message: errMsg(e, "文件夹列表加载失败"),
       });
       setFolderId("");
     }
@@ -188,14 +188,14 @@ export function RunWorkflowDialog({
         <DialogDescription>
           {slotList.length > 0
             ? "参数已按上次的值预填：直接开跑就是原样重跑，改了哪个就是换那个再跑。"
-            : "选择工作区后按保存的图直起；可选填本轮补充说明（不改图）。"}
+            : "选择文件夹后按保存的图直起；可选填本轮补充说明（不改图）。"}
         </DialogDescription>
 
         <div className="mt-4 space-y-3">
           <div>
             <label className="block">
               <span className="mb-1 block text-xs text-muted-foreground">
-                工作区
+                文件夹
               </span>
               <select
                 className={SELECT_CLASS}
@@ -207,10 +207,10 @@ export function RunWorkflowDialog({
                   <option value="">
                     {foldersState.status === "loading"
                       ? "加载中…"
-                      : "工作区列表加载失败"}
+                      : "文件夹列表加载失败"}
                   </option>
                 ) : noFolders ? (
-                  <option value="">还没有工作区</option>
+                  <option value="">还没有文件夹</option>
                 ) : (
                   ready.items.map((f) => (
                     <option key={f.id} value={f.id}>
@@ -238,7 +238,7 @@ export function RunWorkflowDialog({
             )}
             {noFolders && (
               <p className="mt-1.5 text-xs text-muted-foreground">
-                还没有可用工作区：先到「文件」里新建一个再回来跑。
+                还没有可用的文件夹：先到「文件」里新建一个再回来跑。
               </p>
             )}
           </div>

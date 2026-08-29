@@ -175,7 +175,6 @@ function teamExecution(runs: Execution["runs"]): Execution {
     debateOpening: null,
     debatePretrial: null,
     evidenceLedger: [],
-    teamNotes: [],
   };
 }
 

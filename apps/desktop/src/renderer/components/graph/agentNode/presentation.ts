@@ -155,7 +155,6 @@ export function buildAgentNodePresentation(
   }
   if (d.revised) peekTags.push(revisedBadge(d.revised).label);
   if (d.replacesRunId) peekTags.push("接手");
-  if (d.didRework) peekTags.push("引用/格式核验后已重写");
   if (d.checkpoint) peekTags.push(checkpointBadge(d.checkpoint).label);
   if (d.reviewConcern === "critical") peekTags.push("方向风险");
   else if (d.reviewConcern === "warning") peekTags.push("待关注");

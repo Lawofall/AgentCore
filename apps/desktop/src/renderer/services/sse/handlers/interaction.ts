@@ -45,7 +45,7 @@ function wireIntoInteractionStore(
     (event.payload ?? {}) as Record<string, unknown>,
     conversationId,
     messageId,
-    origin,
+    live ? origin : undefined,
     { live },
   );
 }

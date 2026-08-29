@@ -82,7 +82,7 @@ description: 一行摘要    # 可空；空不是错误
 
 - **常驻** → 目标：全部条目拼成**一个块**，无「用户规则硬 / AI 记忆软」分节。⏳ 现状仍两层拼接（`rules_injection.py`）
 - **按需** → **一个**目录（名字 + `description`）+ **一个** `consult`
-- **`@` 提及** = 运行时把一条按需条目临时当常驻用；不是 frontmatter 的第三个取值。@ 工作区文件 / 图片 / 对话仍走附件体系，按被 @ 的东西分流
+- **`@` 提及** = ✅ 运行时把一条按需条目临时当常驻用；不是 frontmatter 的第三个取值。对话页 `@` 点名设定走 `kind=document`（`document_id`），注入 `<pinned_entries>`，**不**进附件块、不落盘。@ 工作区文件 / 图片 / 对话仍走附件体系，按被 @ 的东西分流。→ 见代码: `runtime/resolve/attachment_context.py` · 桌面 `useMentionMenu.ts`
 
 **合并 consult 的两处定案**：单工具 audience = **CEO + worker**（Skill 对 worker 同样露出 HOW；代价是 worker 常驻目录多几行）。门控为单一 `has_entries`。拉不到统一为**软 miss**（`success=True` + 「没有这条」，名字拼错不该炸回合）；playbook 入口靠 `delegate` 工具 schema 自身可见。观测事件合一为 `consult.{hit,miss}`。
 
@@ -144,7 +144,7 @@ GROUP BY 1;
 
 **「画像 / 偏好默认常驻」不需要运行时守卫**：生效档是条目自身的属性，而 AI 巩固的主要动作是**把新事实归并进已有条目**——**归并不改目标的生效档**。`偏好.md` / `画像.md` / `导航.md` 是常驻，`主题/*.md` 是按需；没有路径能让画像悄悄滑成按需（除非用户自己改）。真正要判生效档的只有**新建**条目那一刻，且判错的代价是「新事实进错了地方」而非「核心画像失效」（旧条目仍在、仍常驻），这个量级交提示词判据即可（关于用户本人是谁 / 怎么工作的事实 → 常驻；某领域厚知识 → 按需），符合 `intercept-discipline` 阶梯 1，不上闸。否决表「偏好/画像改 on_demand」仍成立。
 
-按需目录含两类来源：代码内置系统 Skill（随产品发布、用户不拥有）+ DB 条目（用户 / AI 拥有）。读侧无差别——同一 `<按需目录>`、同一 `consult`。存储位置是唯一有正当理由不统一的地方。
+按需目录含两类来源：代码内置系统 Skill（随产品发布、用户不拥有）+ DB 条目（用户 / AI 拥有）。对模型读侧无差别——同一 `<按需目录>`、同一 `consult`。对人只在过程卡标两桶 `origin`（能力指引 vs 设定），不暴露 skill / rule / memory。存储位置仍是条目真源不统一的地方。
 
 ### 文档/项目 归位
 
@@ -152,7 +152,7 @@ GROUP BY 1;
 
 ⏳ **余项**：取消 `role` 三分（常驻拼成单块随它）；市场 Skill 入基座（系统 Skill 真源留代码）；巩固按 `description` 归位（现状仍整文件重写偏好/画像；**不得预置空条目**）。
 
-**回归**：`evals/cases/rules_memory/` 用 `documents_fixture` 预置 `documents` 行，覆盖该拉不拉 / 拉错 / 明示约束；harness 对固定 `_EVAL_USER_ID` **每例前后硬清**。须 `path=team` 才装 `<rules>`（`single` 不装 system prompt）。`product_rules` 测产品知识落点，不是规则遵守。历史会话仍渲染旧 `consult_*` 工具名（删了旧对话就烂）；新 `consult` 尚无自己的 conformance 向量。`consult.hit` 的 `kind` 只进日志、不进工具结果。
+**回归**：`evals/cases/rules_memory/` 用 `documents_fixture` 预置 `documents` 行，覆盖该拉不拉 / 拉错 / 明示约束；harness 对固定 `_EVAL_USER_ID` **每例前后硬清**。须 `path=team` 才装 `<rules>`（`single` 不装 system prompt）。`product_rules` 测产品知识落点，不是规则遵守。历史会话仍渲染旧 `consult_*` 工具名（删了旧对话就烂）；新 `consult` 尚无自己的 conformance 向量。`consult.hit` 的细 `kind` 只进日志；`display` 只带两桶 `origin`（`system` | `user`）；模型看不见。
 
 → [上下文工程 · 按需与写侧配额](/docs/03-AI核心/上下文工程.md#按需与写侧配额)
 

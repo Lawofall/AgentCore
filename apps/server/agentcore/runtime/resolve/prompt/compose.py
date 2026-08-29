@@ -13,8 +13,6 @@ from agentcore.runtime.context.folder_catalog import (
 from agentcore.runtime.resolve.profile import (
     FRAGMENT_BASE,
     FRAGMENT_CEO_CORE,
-    FRAGMENT_CEO_VISUALIZATION,
-    FRAGMENT_CITATION,
     resolve,
 )
 from agentcore.runtime.resolve.prompt.base import (
@@ -25,14 +23,12 @@ from agentcore.runtime.resolve.prompt.ceo_core import (
     _CEO_CORE_HINT,
     _attachment_material_block,
 )
-from agentcore.runtime.resolve.prompt.citation import CHAT_CITATION_HINT
 from agentcore.runtime.resolve.prompt.cold_start import (
     _FOLDER_NAV_STALE_HINT,
     _FOLDER_PROFILE_EMPTY_SOFT_HINT,
     _explore_act_block,
 )
 from agentcore.runtime.resolve.prompt.memory_rules import _format_rules
-from agentcore.runtime.resolve.prompt.visualization import _CEO_VISUALIZATION_HINT
 
 
 def assemble_system_prompt(
@@ -87,21 +83,54 @@ def assemble_system_prompt(
 def _on_demand_preamble(*, with_summaries: bool) -> list[str]:
     """Shared intro lines for ``<按需目录>`` (CEO and worker both get name＋摘要).
 
-    The preamble states ONLY what the directory is and how to pull from it.
-    Product and orch scene WHEN are catalog summaries (L1). Must-not-consult
-    on common paths stays in the resident core (④). Restating either here
-    made the same rule land three times (核 + 前言 + 条目摘要).
+    The preamble states ONLY that this is the on-demand catalog and how to pull
+    full text. WHEN / four kinds / deferred-tool promotion live in the consult
+    tool description.
     """
     detail = "name＋一行摘要" if with_summaries else "name"
     return [
         "<按需目录>",
-        f"下列按需条目（仅列{detail}、全文未常驻）可用 `consult(name)` 拉取："
-        "系统能力指引、按需用户规则、记忆主题笔记、以及本回合未进工具表的低频工具。"
-        "低频工具：能力行已装配仍可能未进开场表；"
-        "常驻内容已在 ``<rules>``，常驻工具已在工具表，无需查阅。"
-        "何时该拉哪条，按条目自身说明判断；"
-        "常见路不必先查的口径以常驻正文为准，本目录不另立一套：",
+        f"这是按需目录（仅列{detail}、全文未常驻）。用 `consult(name)` 拉全文。",
     ]
+
+
+_SECTION_HEADINGS: tuple[tuple[str, str], ...] = (
+    ("skill", "能力指引"),
+    ("tool", "低频工具"),
+    ("rule", "设定"),
+    ("memory", "主题"),
+)
+
+
+def _catalog_row(entry: ConsultDirectoryEntry, *, with_summaries: bool) -> str:
+    if with_summaries and entry.summary:
+        return f"- {entry.name}：{entry.summary}"
+    return f"- {entry.name}"
+
+
+def _grouped_tool_rows(
+    entries: Sequence[ConsultDirectoryEntry], *, with_summaries: bool
+) -> list[str]:
+    buckets: list[list[ConsultDirectoryEntry]] = []
+    index: dict[str, int] = {}
+    for entry in entries:
+        key = entry.family.strip() or f"#{id(entry)}:{entry.name}"
+        slot = index.get(key)
+        if slot is None:
+            index[key] = len(buckets)
+            buckets.append([entry])
+        else:
+            buckets[slot].append(entry)
+    lines: list[str] = []
+    for members in buckets:
+        lead = members[0]
+        if len(members) == 1 or not lead.family:
+            lines.append(_catalog_row(lead, with_summaries=with_summaries))
+            continue
+        label = lead.family_label.strip() or lead.name
+        names = "、".join(m.name for m in members)
+        lines.append(f"- {label}（查阅任一即整组启用）：{names}")
+    return lines
 
 
 def render_on_demand_directory(
@@ -115,16 +144,38 @@ def render_on_demand_directory(
     ``consult`` is wired this turn). Entries must come from the same
     :class:`~agentcore.runtime.context.consult_sources.MergedConsultSource` the tool holds.
     ``with_summaries=False`` remains a test/compat switch — workers no longer use it.
+    Grouped headings appear only when entries carry ``section``; unsectioned
+    lists stay a flat bullet list (tests / catalog bridges).
     """
     if not entries:
         return ""
     lines = _on_demand_preamble(with_summaries=with_summaries)
-    if with_summaries:
-        lines.extend(
-            f"- {e.name}：{e.summary}" if e.summary else f"- {e.name}" for e in entries
-        )
-    else:
-        lines.extend(f"- {e.name}" for e in entries)
+    if not any(e.section for e in entries):
+        if with_summaries:
+            lines.extend(_catalog_row(e, with_summaries=True) for e in entries)
+        else:
+            lines.extend(_catalog_row(e, with_summaries=False) for e in entries)
+        lines.append("</按需目录>")
+        return "\n".join(lines)
+
+    by_section: dict[str, list[ConsultDirectoryEntry]] = {}
+    leftover: list[ConsultDirectoryEntry] = []
+    for entry in entries:
+        if entry.section:
+            by_section.setdefault(entry.section, []).append(entry)
+        else:
+            leftover.append(entry)
+    if leftover:
+        lines.extend(_catalog_row(e, with_summaries=with_summaries) for e in leftover)
+    for key, heading in _SECTION_HEADINGS:
+        group = by_section.get(key)
+        if not group:
+            continue
+        lines.append(f"{heading}：")
+        if key == "tool":
+            lines.extend(_grouped_tool_rows(group, with_summaries=with_summaries))
+        else:
+            lines.extend(_catalog_row(e, with_summaries=with_summaries) for e in group)
     lines.append("</按需目录>")
     return "\n".join(lines)
 
@@ -155,6 +206,7 @@ def compose_worker_base_prompt(
             ConsultDirectoryEntry(
                 name=getattr(t, "name", str(t)),
                 summary=getattr(t, "summary", "") or "",
+                section="memory" if t in memory_topics else "rule",
             )
             for t in (*memory_topics, *on_demand_rules)
         ]
@@ -194,7 +246,7 @@ def compose_ceo_chat_prompt(
 
     Layers the entry coordinator's hint stack onto the shared base: the SLIM CEO core
     + unified ``<按需目录>`` (only when ``consult`` is wired) + derived ``<文件夹清单>`` +
-    citation + visualization + per-turn workspace facts (same
+    per-turn workspace facts (same
     :data:`SectionOrder.WORKSPACE_FACTS` workers use, after the core). ``on_demand_entries``
     must match the tool's merged source.
     ``ceo_offered_names`` is the OpenAI table this turn (on-demand tools omitted until
@@ -230,6 +282,7 @@ def compose_ceo_chat_prompt(
             ConsultDirectoryEntry(
                 name=getattr(t, "name", str(t)),
                 summary=getattr(t, "summary", "") or "",
+                section="memory" if t in memory_topics else "rule",
             )
             for t in (*memory_topics, *on_demand_rules)
         ]
@@ -237,7 +290,9 @@ def compose_ceo_chat_prompt(
         if skill_registry is not None and hasattr(skill_registry, "available"):
             for skill in skill_registry.available(ceo_tool_names):  # type: ignore[union-attr]
                 entries.append(
-                    ConsultDirectoryEntry(name=skill.name, summary=skill.summary)
+                    ConsultDirectoryEntry(
+                        name=skill.name, summary=skill.summary, section="skill"
+                    )
                 )
     on_demand_block = (
         render_on_demand_directory(entries, with_summaries=True)
@@ -259,12 +314,6 @@ def compose_ceo_chat_prompt(
                 folder_catalog, current_folder_id=current_folder_id
             ),
             SectionOrder.FOLDER_CATALOG,
-        )
-        .add("citation", resolve(FRAGMENT_CITATION, CHAT_CITATION_HINT), SectionOrder.CITATION)
-        .add(
-            "ceo_visualization",
-            resolve(FRAGMENT_CEO_VISUALIZATION, _CEO_VISUALIZATION_HINT),
-            SectionOrder.CEO_VISUALIZATION,
         )
         .add("workspace_facts", workspace_context, SectionOrder.WORKSPACE_FACTS)
         # D4: 见 assemble_system_prompt —— 本层带来 folder_catalog（项目清单，按最近活跃排序、

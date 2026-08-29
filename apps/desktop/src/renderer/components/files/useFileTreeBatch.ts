@@ -1,5 +1,5 @@
 import type { FileNode, FileSource } from "@/lib/fileSource";
-import { baseName, parentDir } from "@/lib/fileSource";
+import { downloadSaveName, parentDir } from "@/lib/fileSource";
 import { notifySuccess } from "@/lib/toast";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -7,12 +7,10 @@ import type {
   BatchFailureState,
 } from "./FileTreeBatchDialogs";
 import {
-  type BatchFailure,
   type BatchOutcome,
   batchResultTitle,
   deleteRestoreHint,
   runBatch,
-  withSkipped,
 } from "./fileTreeBatch";
 import { subscribeFileTreeChanged } from "./fileTreeBus";
 import {
@@ -32,9 +30,9 @@ import type { FileTreeData } from "./useFileTreeData";
  * 文件树的多选与批量动作。
  *
  * 后端没有批量端点，批量删除 / 下载 / 移动都是**客户端逐项调既有单项端点**：删除仍走既有软删
- * （云端落 `AgentCore/trash`，逐项一条记录，故回收站里能逐项还原），下载仍是逐个文件另存，
- * 移动仍是「剪切 → 粘贴到目标文件夹」（不新造目标选择面）。因此这里的核心职责不是"更快"，
- * 而是把**逐项成败**如实带出来交给 {@link FileTreeBatchDialogs}。
+ * （云端落 `AgentCore/trash`，逐项一条记录，故回收站里能逐项还原），下载仍是逐项另存（文件
+ * 原样、文件夹为该子树 zip），移动仍是「剪切 → 粘贴到目标文件夹」（不新造目标选择面）。因此
+ * 这里的核心职责不是"更快"，而是把**逐项成败**如实带出来交给 {@link FileTreeBatchDialogs}。
  */
 export interface FileTreeBatch {
   selection: TreeSelection;
@@ -46,7 +44,7 @@ export interface FileTreeBatch {
   count: number;
   /** 同一批的路径（拖拽载荷用：拖选区内的行就是搬这一批）。 */
   topLevelPaths: readonly string[];
-  /** 选区里能下载的文件数（目录没有单项下载端点）。 */
+  /** 选区里能下载的项数（文件另存；文件夹整夹 zip）。无 `download` 的源为 0。 */
   downloadableCount: number;
   /** 行点击（含修饰键意图）后更新选区。 */
   selectRowAt: (node: FileNode, intent: RowClickIntent) => void;
@@ -191,34 +189,26 @@ export function useFileTreeBatch(opts: {
     })();
   }, [confirm, source, reloadDirs, clear, report]);
 
-  const downloadable = useMemo(
-    () => selection.items.filter((i) => !i.isDir),
-    [selection],
-  );
+  const downloadableCount = source.download ? topLevel.length : 0;
 
   const runDownload = useCallback(() => {
     const download = source.download;
     if (!download) return;
-    const items = selection.items;
-    if (items.length === 0) return;
+    if (topLevel.length === 0) return;
     void (async () => {
       setBusy(true);
-      // 目录没有单项下载端点：说清楚而不是让它撞成一条「文件不存在」，也不是悄悄跳过。
-      const skipped: BatchFailure[] = items
-        .filter((i) => i.isDir)
-        .map((i) => ({
-          path: i.path,
-          name: baseName(i.path),
-          reason: "文件夹不能整个下载，请展开后选择其中的文件",
-        }));
       const outcome = await runBatch(
-        items.filter((i) => !i.isDir).map((i) => i.path),
-        (path) => download(path, baseName(path)),
+        topLevel.map((i) => i.path),
+        (path) => {
+          const item = topLevel.find((i) => i.path === path);
+          const isDir = item?.isDir ?? false;
+          return download(path, downloadSaveName(path, isDir), { isDir });
+        },
       );
       setBusy(false);
-      report("下载", withSkipped(skipped, outcome));
+      report("下载", outcome);
     })();
-  }, [source, selection, report]);
+  }, [source, topLevel, report]);
 
   const runCut = useCallback(() => {
     if (topLevelPaths.length === 0) return;
@@ -230,7 +220,7 @@ export function useFileTreeBatch(opts: {
     selectedPaths,
     count: topLevel.length,
     topLevelPaths,
-    downloadableCount: downloadable.length,
+    downloadableCount,
     selectRowAt,
     selectForContextMenu,
     selectAllVisible,

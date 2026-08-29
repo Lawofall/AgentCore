@@ -154,7 +154,7 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "开场澄清",
-              desc: "需求能做但还不够明确时，CEO 先给起步计划 + 重点问题，让你补齐再开工。",
+              desc: "需求能做但还没钉死、猜错会做错时，先短问一两道再开工，不猜着开干。",
             },
             {
               title: "关键岔路",
@@ -501,7 +501,7 @@ export const collaborationChapter: ManualChapterContent = {
             },
             {
               title: "在画布上设计，再跑一次或交给定时",
-              desc: "画好后点「跑一次」选个工作区就能直起；也可以让自动化里的任务绑着它按时跑。",
+              desc: "画好后点「跑一次」选个文件夹就能直起；也可以让自动化里的任务绑着它按时跑。",
             },
           ],
         },
@@ -538,7 +538,7 @@ export const collaborationChapter: ManualChapterContent = {
         },
         {
           type: "paragraph",
-          text: "工作流页顶部列着官方模板（多角摸底、调研报告成文、从零搭应用等），先看目标再挑。点「使用」是复制一份成你自己的工作流，再改名字和步骤；原模板只读，改坏了随时重新复制一份。",
+          text: "工作流页顶部列着官方模板（多角摸底、调研报告成文），先看目标再挑。点「使用」是复制一份成你自己的工作流，再改名字和步骤；原模板只读，改坏了随时重新复制一份。",
         },
         {
           type: "callout",
@@ -583,8 +583,8 @@ export const collaborationChapter: ManualChapterContent = {
               desc: "到点要完成什么，写法与在对话里下任务一样——目标、约束、期望产出。",
             },
             {
-              title: "工作区",
-              desc: "产物落在哪个云工作区。任务只能绑云工作区：你关机的时候，本机文件夹跑不了。",
+              title: "云端文件夹",
+              desc: "产物落在哪个云端文件夹。任务只能绑云端文件夹：你关机的时候，本机文件夹跑不了。",
             },
             {
               title: "自主度",

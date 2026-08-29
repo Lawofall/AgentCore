@@ -103,17 +103,6 @@ def _process_step_to_sse(
                 timestamp=ts,
                 seq=seq,
             )
-        if suffix == "rework":
-            if not run_id:
-                return None
-            # Journaled rework steps exist ONLY for 交付前核验回炉 (sink persists the
-            # trace solely on reason=finish_guard), so the replayed reset says so.
-            return SSEEvent(
-                type=EventType.RUN_OUTPUT_RESET,
-                payload={"run_id": run_id, "agent_id": agent_id, "reason": "finish_guard"},
-                timestamp=ts,
-                seq=seq,
-            )
         return None
 
     if kind.startswith(_PROCESS_PREFIX):
@@ -137,13 +126,6 @@ def _process_step_to_sse(
             return SSEEvent(
                 type=EventType.CONTENT_DELTA,
                 payload={"delta": text},
-                timestamp=ts,
-                seq=seq,
-            )
-        if suffix == "rework":
-            return SSEEvent(
-                type=EventType.CONTENT_RESET,
-                payload={"reason": "finish_guard"},
                 timestamp=ts,
                 seq=seq,
             )

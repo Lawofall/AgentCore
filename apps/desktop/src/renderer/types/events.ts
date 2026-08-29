@@ -68,17 +68,18 @@ export interface MemoryConsultDisplay {
 }
 
 /** `consult_rule` rich result (historical journal): on-demand user-rule name.
- * Rendered with the same memory-style card (条目名 + 正文). */
+ * Same consult card shell as unified `origin=user` (条目名 + 右侧徽章「设定」). */
 export interface RuleConsultDisplay {
   rule: string;
 }
 
-/** Unified `consult` rich result (按需三合一): entry `name` only.
- * 条目来源（skill / rule / memory）只进服务端日志，不进 display——读侧不向用户暴露三分。
- * UI reuses the consult_memory card (条目名 + 正文) — do not invent a separate card. */
+/** Unified `consult` rich result (按需三合一): entry `name` + optional two-bucket
+ * `origin` (`system` manuals vs `user` 设定). Skill / rule / memory 三分不进 display。
+ * Same card shell as historical consult_* (条目名 + 右侧徽章 + 正文). */
 export interface UnifiedConsultDisplay {
   name: string;
   reused?: boolean;
+  origin?: "system" | "user";
 }
 
 /**

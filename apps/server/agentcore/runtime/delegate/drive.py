@@ -16,7 +16,6 @@ from agentcore.runtime.delegate.drive_setup import (
     build_drive_executor,
     resolve_on_boundary,
     resolve_worker_gate,
-    setup_note_wall,
 )
 from agentcore.runtime.delegate.drive_terminal import post_session_all_completed
 from agentcore.runtime.events import run_skipped
@@ -143,9 +142,7 @@ async def drive(
     *,
     execution_id: str,
     seed_completed: dict[str, RunState] | None,
-    seed_notes: list[dict[str, str]] | None = None,
     complexity_hint: str = "standard",
-    coordination: str = "none",
     call_idx: int | None = None,
     coordinate: bool = True,
     session: Any = None,
@@ -277,9 +274,7 @@ async def drive(
                     plan,
                     execution_id=execution_id,
                     seed_completed=seed_completed,
-                    seed_notes=seed_notes,
                     complexity_hint=complexity_hint,
-                    coordination=coordination,
                     call_idx=call_idx,
                     coordinate=coordinate,
                     session=session,
@@ -313,9 +308,7 @@ async def _drive_body(
     *,
     execution_id: str,
     seed_completed: dict[str, RunState] | None,
-    seed_notes: list[dict[str, str]] | None,
     complexity_hint: str,
-    coordination: str,
     call_idx: int,
     coordinate: bool,
     session: Any,
@@ -375,7 +368,7 @@ async def _drive_body(
     # 后台 drive_coordinated 带 session：前台 try_start 已过本闸，跳过（同 team_preview）。
     # session 路径 merging_into_active 恒 False、seed_completed 常为 None，且此时
     # active session 是刚建的空名册，重入会把已准入的 replaces/continue 误拒。
-    # 逐闸 force：本闸只认 force=["post_close"]，判定在闸内（同队续派另有入口）。
+    # 同队续派走 continue_from_run_id，判定在闸内。
     if session is None and not merging_into_active and seed_completed is None:
         from agentcore.core.logging import get_logger
         from agentcore.core.types import ToolEffect
@@ -420,8 +413,7 @@ async def _drive_body(
             )
 
     # Sticky channel-dead + write-desk 硬拒（与 post_close 同层；并入/续跑未完成写盘节点也拒）。
-    # prose / 无写盘需求批次放行；不扫 task 自由文。
-    # 本闸不设 force scope：通道死是能力缺失，不是收口策略，点名哪道闸都不逃生。
+    # prose / 无写盘需求批次放行；不扫 task 自由文。通道死是能力缺失，不是收口策略。
     from agentcore.core.logging import get_logger
     from agentcore.core.types import ToolEffect
     from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
@@ -467,52 +459,45 @@ async def _drive_body(
         if preview_early is not None:
             return preview_early
 
-    # 同构再委派护栏：活跃协调上角色+任务高度同构 → 结构化拒绝（除非点名放行本闸）。
-    # 触顶换马甲护栏：近期 thrashing worker + 相似 task/artifacts → 拒冷派（除非点名放行
-    # 本闸 / continue_from）。与 isomorphic 同层；不挪用已退役的 completion-gap streak。
-    # 两道闸各认各的 scope——一次 force 不再顺手把另一道也打开。
-    from agentcore.runtime.delegate.force_scopes import (
-        GATE_ISOMORPHIC,
-        GATE_THRASH,
-        force_allows,
+    # 同构再委派护栏：活跃协调上角色+任务高度同构 → 结构化拒绝。
+    # 触顶换马甲护栏：近期 thrashing worker + 相似 task/artifacts → 拒冷派
+    # （continue_from 不是冷派，闸内跳过）。与 isomorphic 同层；不挪用已退役的
+    # completion-gap streak。
+    from agentcore.core.logging import get_logger
+    from agentcore.core.types import ToolEffect
+    from agentcore.runtime.coordination.thrash import (
+        find_thrash_collision,
+        recent_thrash_records,
+        thrash_reject_message,
     )
+    from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
+    from agentcore.tools.protocol import ToolResult
 
-    if not force_allows(tool, GATE_THRASH):
-        from agentcore.core.logging import get_logger
-        from agentcore.core.types import ToolEffect
-        from agentcore.runtime.coordination.thrash import (
-            find_thrash_collision,
-            recent_thrash_records,
-            thrash_reject_message,
+    cid = str(getattr(tool, "_conversation_id", None) or "")
+    thrash_hit = find_thrash_collision(plan, recent_thrash_records(cid))
+    if thrash_hit is not None:
+        _node, rec = thrash_hit
+        get_logger(__name__).info(
+            "delegate.thrash_rebrand_rejected",
+            execution_id=execution_id,
+            thrash_run_id=rec.run_id,
+            nodes=len(plan.nodes),
+            call=call_idx,
         )
-        from agentcore.runtime.delegate.batch_shape import annotate_batch_meta
-        from agentcore.tools.protocol import ToolResult
+        return annotate_batch_meta(
+            ToolResult(
+                tool_call_id="",
+                success=False,
+                output="",
+                error=thrash_reject_message(rec),
+                effect=ToolEffect.CONTINUE,
+                contract_failure=True,
+            ),
+            node_count=0,
+            has_deps=False,
+        )
 
-        cid = str(getattr(tool, "_conversation_id", None) or "")
-        thrash_hit = find_thrash_collision(plan, recent_thrash_records(cid))
-        if thrash_hit is not None:
-            _node, rec = thrash_hit
-            get_logger(__name__).info(
-                "delegate.thrash_rebrand_rejected",
-                execution_id=execution_id,
-                thrash_run_id=rec.run_id,
-                nodes=len(plan.nodes),
-                call=call_idx,
-            )
-            return annotate_batch_meta(
-                ToolResult(
-                    tool_call_id="",
-                    success=False,
-                    output="",
-                    error=thrash_reject_message(rec),
-                    effect=ToolEffect.CONTINUE,
-                    contract_failure=True,
-                ),
-                node_count=0,
-                has_deps=False,
-            )
-
-    if merging_into_active and not force_allows(tool, GATE_ISOMORPHIC):
+    if merging_into_active:
         from agentcore.core.types import ToolEffect
         from agentcore.runtime.coordination.isomorphic import (
             is_isomorphic_redelegation,
@@ -567,9 +552,7 @@ async def _drive_body(
             plan,
             execution_id=execution_id,
             seed_completed=seed_completed,
-            seed_notes=seed_notes,
             complexity_hint=complexity_hint,
-            coordination=coordination,
             call_idx=call_idx,
             coordinate=coordinate,
         )
@@ -583,14 +566,6 @@ async def _drive_body(
 
     declare_nested_drive_artifacts(tool, plan, execution_id=execution_id)
 
-    note_wall, collaboration = setup_note_wall(
-        tool,
-        plan,
-        execution_id=execution_id,
-        coordination=coordination,
-        seed_completed=seed_completed,
-        seed_notes=seed_notes,
-    )
     # 跨文件夹 · 多 local 认领簿（C0 允许多根；仅登记，不拒第二本地根）。
     if getattr(tool, "_local_root_claims", None) is None:
         from agentcore.runtime.delegate.target_desktop import LocalRootClaimBook
@@ -607,8 +582,6 @@ async def _drive_body(
         plan,
         execution_id=execution_id,
         worker_gate=worker_gate,
-        note_wall=note_wall,
-        collaboration=collaboration,
         session=session,
     )
 
@@ -715,9 +688,7 @@ async def drive_coordinated(
     *,
     execution_id: str,
     seed_completed: dict[str, RunState] | None,
-    seed_notes: list[dict[str, str]] | None = None,
     complexity_hint: str = "standard",
-    coordination: str = "none",
     call_idx: int | None = None,
     session: Any,
 ) -> ToolResult:
@@ -727,9 +698,7 @@ async def drive_coordinated(
         plan,
         execution_id=execution_id,
         seed_completed=seed_completed,
-        seed_notes=seed_notes,
         complexity_hint=complexity_hint,
-        coordination=coordination,
         call_idx=call_idx,
         coordinate=False,
         session=session,

@@ -318,8 +318,10 @@ def test_playbook_args_schema_surfaces_code_audit_modules():
     # 上限 / 单缝 / 折叠 HOW 在 slots（校验报错）+ 编排 skill，不占每轮 schema
     assert str(CODE_AUDIT_FANOUT) in slots
     assert "单缝省略" in slots
-    # 必填抽取仍在（绿场常驻路径勿先 consult）
-    assert "build_app→app" in desc
+    # 必填抽取仍在（常驻路径勿先 consult）
+    assert "code_audit→scope" in desc
+    assert "diagnose_fix_verify→problem" in desc
+    assert "lens_crosscheck→topic/lenses" in desc
     assert "build_website" not in desc
 
 
@@ -359,7 +361,7 @@ def test_map_fanout_fans_out_notes_without_write_pipeline():
         assert "给用户看的回复" in t["task"]
         assert "法条" not in t["task"]
         assert "完整要点须用" not in t["task"]
-        assert "read_notes" in t["task"]
+        assert "read_notes" not in t["task"]
         assert "重复通读" not in t["task"]
         assert "web_search" not in t["task"]
         assert "权威出处" not in t["task"]
@@ -487,7 +489,7 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     assert "file_read" in write_task
     # each angle is named into its researcher's task so the fan-out doesn't run blind/overlapping.
     assert "选型" in by_id["research_1"]["task"]
-    assert "read_notes" in by_id["research_1"]["task"]
+    assert "read_notes" not in by_id["research_1"]["task"]
     assert "post_note" not in by_id["research_1"]["task"]
     assert "#rN" not in by_id["research_1"]["task"]
     assert "待核实" not in by_id["research_1"]["task"]
@@ -601,203 +603,26 @@ def test_cite_write_review_folds_angle_fanout_with_note():
     assert f"a{MAX_PLAYBOOK_FANOUT}" in notes[0]
 
 
-# ── build_app ─────────────────────────────────────────────────────────────────
+# ── build_app（已撤：工厂图纸，expand 未知）────────────────────────────────────
 
 
-def test_build_app_lean_three_nodes_default():
-    """默认 intensity=lean：scaffold → implement → smoke（≤3 节点）。"""
-    tasks, errors = expand_playbook(
-        "build_app", {"app": "面向运营的 Vue3 数据看板", "stack": "Vue3+Vite+TS"}
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"scaffold", "implement", "smoke"}
-    assert len(tasks) == 3
-    assert by_id["implement"]["depends_on"] == ["scaffold"]
-    assert by_id["smoke"]["depends_on"] == ["implement"]
-    assert by_id["implement"]["role"] == "应用实现"
-    assert "shared" not in by_id
-    assert "integrate" not in by_id
-    assert "module_0" not in by_id
-    assert by_id["scaffold"]["deliverable"]["strict"] is True
-    assert by_id["scaffold"]["deliverable"]["form"] == "workspace"
-    assert by_id["implement"]["deliverable"]["form"] == "workspace"
-    assert by_id["smoke"]["deliverable"]["form"] == "files"
-    assert all("workspace_native" not in t["deliverable"] for t in tasks)
-    assert "铁律" in by_id["scaffold"]["task"]
-    assert "悬空" in by_id["scaffold"]["task"]
-    assert "npm" in by_id["smoke"]["task"].lower() or "build" in by_id["smoke"]["task"]
-    assert "test_run" in by_id["smoke"]["task"]
-    assert "code_execute" not in by_id["smoke"]["task"] or "勿" in by_id["smoke"]["task"]
-    assert "自检全过" in by_id["smoke"]["task"] or "跑绿" in by_id["smoke"]["task"]
-    assert "单测已绿" in by_id["smoke"]["task"] or "跑绿" in by_id["smoke"]["task"]
-    scaffold_arts = by_id["scaffold"]["deliverable"]["artifacts"]
-    assert scaffold_arts
-    assert all(a.startswith("app/") for a in scaffold_arts)
-    assert "vue3/" not in " ".join(scaffold_arts)
-    stub_arts = [a for a in scaffold_arts if "/src/views/" in a and a.endswith(".vue")]
-    assert len(stub_arts) == 1  # 默认仅总览页 stub
-    impl_arts = by_id["implement"]["deliverable"]["artifacts"]
-    assert stub_arts[0] in impl_arts
-    assert all(a.startswith("app/") for a in impl_arts)
-    assert any(a.endswith("tokens.css") for a in impl_arts)
-    assert by_id["smoke"]["deliverable"]["artifacts"] == ["app/QA.md"]
-    assert "总览页" in by_id["implement"]["task"]
-
-
-def test_build_app_lean_modules_coverage_no_fanout():
-    """lean：modules 只作文案/覆盖清单，不扇出 module_*。"""
-    tasks, errors = expand_playbook(
-        "build_app",
-        {
-            "app": "看板",
-            "modules": ["仪表盘", "告警"],
-            "root": "ops-board",
-        },
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"scaffold", "implement", "smoke"}
-    assert "ops-board/" in by_id["scaffold"]["task"]
-    arts = by_id["scaffold"]["deliverable"]["artifacts"]
-    assert any(a.startswith("ops-board/") for a in arts)
-    assert "ops-board/src/views/" in " ".join(arts)
-    assert "ops-board/src/router/index.ts" in arts
-    assert "仪表盘" in by_id["implement"]["task"]
-    assert "告警" in by_id["implement"]["task"]
-    stub_arts = [a for a in arts if "/src/views/" in a and a.endswith(".vue")]
-    assert len(stub_arts) == 2
-
-
-def test_build_app_full_five_waves_default_modules():
-    tasks, errors = expand_playbook(
-        "build_app",
-        {
-            "app": "面向运营的 Vue3 数据看板",
-            "stack": "Vue3+Vite+TS",
-            "intensity": "full",
-        },
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert "scaffold" in by_id
-    assert "shared" in by_id
-    assert "module_0" in by_id
-    assert "module_1" not in by_id  # 默认仅 1 模块
-    assert "integrate" in by_id
-    assert "smoke" in by_id
-    assert len(tasks) == 5
-    assert by_id["shared"]["depends_on"] == ["scaffold"]
-    assert by_id["module_0"]["depends_on"] == ["shared"]
-    assert set(by_id["integrate"]["depends_on"]) == {"module_0"}
-    assert by_id["smoke"]["depends_on"] == ["integrate"]
-    for nid in ("scaffold", "shared", "module_0", "integrate"):
-        assert by_id[nid]["deliverable"]["form"] == "workspace"
-    assert by_id["smoke"]["deliverable"]["form"] == "files"
-    assert all("workspace_native" not in t["deliverable"] for t in tasks)
-    scaffold_arts = by_id["scaffold"]["deliverable"]["artifacts"]
-    assert scaffold_arts
-    assert all(a.startswith("app/") for a in scaffold_arts)
-    assert "vue3/" not in " ".join(scaffold_arts)
-    stub_arts = [a for a in scaffold_arts if "/src/views/" in a and a.endswith(".vue")]
-    assert len(stub_arts) == 1
-    assert by_id["module_0"]["deliverable"]["artifacts"][0] in scaffold_arts
-
-
-def test_build_app_full_custom_modules_and_root():
-    tasks, errors = expand_playbook(
-        "build_app",
-        {
-            "app": "看板",
-            "modules": ["仪表盘", "告警"],
-            "root": "ops-board",
-            "intensity": "full",
-        },
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {
-        "scaffold",
-        "shared",
-        "module_0",
-        "module_1",
-        "integrate",
-        "smoke",
-    }
-    assert "ops-board/" in by_id["scaffold"]["task"]
-    arts = by_id["scaffold"]["deliverable"]["artifacts"]
-    assert any(a.startswith("ops-board/") for a in arts)
-    assert "ops-board/src/views/" in " ".join(arts)
-    assert "ops-board/src/router/index.ts" in arts
-
-
-def test_build_app_modules_fold_over_cap():
-    """full：显式 modules 超过扇出上限 → 折叠到末槽，不丢弃。"""
-    from agentcore.runtime.runs.build_app import _MAX_MODULE_FANOUT
-    from agentcore.runtime.runs.playbooks import collect_playbook_notes
-
-    mods = [f"模{i}" for i in range(_MAX_MODULE_FANOUT + 2)]
-    tasks, errors = expand_playbook(
-        "build_app", {"app": "大盘", "modules": mods, "intensity": "full"}
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    module_nodes = [t for t in tasks if str(t["id"]).startswith("module_")]
-    assert len(module_nodes) == _MAX_MODULE_FANOUT
-    assert "module_0" in by_id and f"module_{_MAX_MODULE_FANOUT - 1}" in by_id
-    assert f"module_{_MAX_MODULE_FANOUT}" not in by_id
-    last = by_id[f"module_{_MAX_MODULE_FANOUT - 1}"]
-    for name in mods[_MAX_MODULE_FANOUT - 1 :]:
-        assert name in last["task"]
-    notes = collect_playbook_notes(tasks)
-    assert notes and "扇出折叠" in notes[0]
-    scaffold_arts = by_id["scaffold"]["deliverable"]["artifacts"]
-    assert scaffold_arts
-    assert all(a.startswith("app/") for a in scaffold_arts)
-    assert not any(a.startswith("大盘/") for a in scaffold_arts)
-    stub_arts = [a for a in scaffold_arts if "/src/views/" in a and a.endswith(".vue")]
-    assert len(stub_arts) == len(mods)
-
-
-def test_build_app_rejects_unknown_intensity():
-    tasks, errors = expand_playbook(
-        "build_app", {"app": "看板", "intensity": "mega"}
-    )
+def test_build_app_playbook_is_unknown():
+    """具名工厂图纸已撤：expand 未知；登记表与 schema 不再出现该槽。"""
+    listing = available_playbooks()
+    desc = playbook_args_schema_description()
+    tasks, errors = expand_playbook("build_app", {"app": "面向运营的 Vue3 数据看板"})
     assert tasks == []
-    assert errors and "intensity" in errors[0]
-    assert "mega" in errors[0]
-
-
-def test_build_app_requires_app():
-    tasks, errors = expand_playbook("build_app", {})
-    assert tasks == []
-    assert errors and "app" in errors[0]
-
-
-def test_build_app_default_root_is_app_not_name_slug():
-    """无显式 root 时工程根固定 app/，不从应用名派生 slug。"""
-    assert "默认从 app 简述派生" not in PLAYBOOKS["build_app"].slots
-    assert "默认固定 app/" in PLAYBOOKS["build_app"].slots
-    tasks, errors = expand_playbook(
-        "build_app", {"app": "Ops board", "modules": ["overview", "list"]}
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    arts = by_id["scaffold"]["deliverable"]["artifacts"]
-    assert arts
-    assert all(a.startswith("app/") for a in arts)
-    joined = " ".join(arts)
-    assert "ops-board/" not in joined
-    assert "ops_board/" not in joined
-    impl_arts = by_id["implement"]["deliverable"]["artifacts"]
-    assert all(a.startswith("app/") for a in impl_arts)
-    assert by_id["smoke"]["deliverable"]["artifacts"] == ["app/QA.md"]
+    assert errors and "未知" in errors[0]
+    assert "build_app" in errors[0]
+    assert "build_app" not in PLAYBOOKS
+    assert "build_app" not in listing
+    assert "build_app→app" not in desc
 
 
 # ── diagnose_fix_verify ───────────────────────────────────────────────────────────────
 
 
-def test_diagnose_fix_verify_diagnose_patch_verify_shape():
+def test_diagnose_fix_verify_patch_then_verify_shape():
     tasks, errors = expand_playbook(
         "diagnose_fix_verify",
         {
@@ -808,49 +633,41 @@ def test_diagnose_fix_verify_diagnose_patch_verify_shape():
     )
     assert errors == []
     by_id = _by_id(tasks)
-    assert set(by_id) == {"diagnose", "patch", "verify"}
-    assert by_id["patch"]["depends_on"] == ["diagnose"]
+    assert set(by_id) == {"patch", "verify"}
     assert by_id["verify"]["depends_on"] == ["patch"]
-    assert by_id["diagnose"]["max_rounds"] == 4
     assert by_id["patch"]["max_rounds"] == 6
+    assert by_id["verify"]["max_rounds"] == 4
     assert by_id["patch"]["deliverable"]["form"] == "workspace"
     # 就地改工作区源码 → form=workspace，无约定落点（不套 AI 工作间）。
     assert "workspace_native" not in by_id["patch"]["deliverable"]
     assert "requires_files" not in by_id["patch"]["deliverable"]
     assert "name" not in by_id["patch"]["deliverable"]
     assert "src/app.ts" in by_id["patch"]["deliverable"]["artifacts"]
-    # 真纯丙：repair_* 不再靠显式 tools 名单收窄；纪律写在 task 正文。
-    assert "tools" not in by_id["diagnose"]
     assert "tools" not in by_id["patch"]
     assert "tools" not in by_id["verify"]
     assert "code_diagnostics" in by_id["patch"]["task"]
     assert "test_run" in by_id["verify"]["task"]
     assert "npx tsc -b" in by_id["verify"]["task"]
     assert "纯 prose" in by_id["verify"]["task"]
-    assert "禁止在本步改文件" in by_id["diagnose"]["task"]
+    assert "禁止在本步改文件" not in by_id["patch"]["task"]
     assert "str_replace" in by_id["patch"]["task"]
-    # 白屏/UI 分流：诊断先 browser；验证 CLI vs UI；禁 typecheck 冒充白屏。
-    assert "browser(action=navigate)" in by_id["diagnose"]["task"]
-    assert "snapshot" in by_id["diagnose"]["task"]
-    assert "勿空等用户 F12" in by_id["diagnose"]["task"]
+    # 白屏/UI 分流：修补员先短诊断（browser）再改；验证 CLI vs UI；禁 typecheck 冒充白屏。
+    assert "browser(action=navigate)" in by_id["patch"]["task"]
+    assert "snapshot" in by_id["patch"]["task"]
+    assert "勿空等用户 F12" in by_id["patch"]["task"]
     assert "CLI" in by_id["verify"]["task"]
     assert "browser(action=navigate)" in by_id["verify"]["task"]
     assert "冒充白屏" in by_id["verify"]["task"]
     assert "verify_policy=inner" not in by_id["verify"]["task"]
     assert "verify_policy" not in by_id["verify"]
-    # 原 min_length 迁出：可消费短文 / 通过或失败证据写在 task，勿填已删键。
-    assert "可消费短文" in by_id["diagnose"]["task"]
-    # 拟改幅度走 next_steps 活到 CEO 收口；本批照修，不加卡 / 不加闸。
-    assert "next_steps" in by_id["diagnose"]["task"]
-    assert "小修即可" in by_id["diagnose"]["task"]
-    assert "不挡修补" in by_id["diagnose"]["task"]
-    assert "不 escalate" in by_id["diagnose"]["task"]
+    assert "可消费短文" in by_id["patch"]["task"]
+    assert "next_steps" in by_id["patch"]["task"]
+    assert "小修即可" in by_id["patch"]["task"]
+    assert "不 escalate" in by_id["patch"]["task"]
     assert "通过或失败证据" in by_id["verify"]["task"]
-    assert "勿套 diagnose_fix_verify" not in by_id["diagnose"]["task"]
-    assert "continue_from_run_id" not in by_id["diagnose"]["task"]
-    assert "min_length" not in by_id["diagnose"]["deliverable"]
+    assert "勿套 diagnose_fix_verify" not in by_id["patch"]["task"]
+    assert "continue_from_run_id" not in by_id["patch"]["task"]
     assert "min_length" not in by_id["verify"]["deliverable"]
-    assert by_id["diagnose"]["deliverable"]["form"] == "prose"
     assert by_id["verify"]["deliverable"]["form"] == "prose"
 
 
@@ -884,6 +701,9 @@ def test_diagnose_fix_verify_ui_verify_slot_flows_into_verify_task():
     assert "白屏消失" in pb.slots or "snapshot 可见主内容" in pb.slots
     assert "CLI" in pb.summary or "UI" in pb.summary
     assert "白屏" in pb.summary
+    assert "已定位" in pb.summary
+    assert "调查批" in pb.summary
+    assert "勿套" in pb.summary
 
 
 def test_diagnose_fix_verify_requires_problem():
@@ -965,9 +785,13 @@ def test_renamed_playbook_ids_are_unknown():
 # ── lens_crosscheck ───────────────────────────────────────────────────────
 
 
-def test_lens_crosscheck_default_four_lenses_plus_synthesizer():
+_CLASSIC_LENSES = ["法律", "品牌商业", "舆情公关", "文化社会"]
+
+
+def test_lens_crosscheck_explicit_four_lenses_plus_synthesizer():
     tasks, errors = expand_playbook(
-        "lens_crosscheck", {"topic": "LV 诉茉莉奶白商标案"}
+        "lens_crosscheck",
+        {"topic": "LV 诉茉莉奶白商标案", "lenses": _CLASSIC_LENSES},
     )
     assert errors == []
     by_id = _by_id(tasks)
@@ -975,7 +799,7 @@ def test_lens_crosscheck_default_four_lenses_plus_synthesizer():
     assert set(by_id) == {*lens_ids, "synthesizer"}
     assert set(by_id["synthesizer"]["depends_on"]) == set(lens_ids)
     assert by_id["synthesizer"]["role"] == "汇总分析师"
-    # 默认四异质透镜角色名嵌入 role
+    # 显式四异质透镜角色名嵌入 role
     roles = {by_id[lid]["role"] for lid in lens_ids}
     assert roles == {"法律视角", "品牌商业视角", "舆情公关视角", "文化社会视角"}
     # 幕 1 约定文档：各透镜自写 research/{透镜}透镜报告.md（form=files + artifacts）
@@ -1027,7 +851,7 @@ def test_lens_crosscheck_injects_user_message_into_synthesizer():
     user_line = "茉莉奶白使用四叶花卉图形是否侵犯 LV 商标权，进行模拟法庭"
     tasks, errors = expand_playbook(
         "lens_crosscheck",
-        {"topic": "LV 诉茉莉奶白"},  # 故意丢「模拟法庭」——任务书仍须含原话
+        {"topic": "LV 诉茉莉奶白", "lenses": _CLASSIC_LENSES},  # 故意丢「模拟法庭」——任务书仍须含原话
         user_message=user_line,
     )
     assert errors == []
@@ -1039,7 +863,9 @@ def test_lens_crosscheck_injects_user_message_into_synthesizer():
 
 
 def test_lens_crosscheck_without_user_message_omits_anchor_block():
-    tasks, errors = expand_playbook("lens_crosscheck", {"topic": "X"})
+    tasks, errors = expand_playbook(
+        "lens_crosscheck", {"topic": "X", "lenses": ["法律", "品牌商业"]}
+    )
     assert errors == []
     synth_task = _by_id(tasks)["synthesizer"]["task"]
     assert "机制注入" not in synth_task
@@ -1090,7 +916,7 @@ def test_lens_crosscheck_folds_lenses_with_note_keeps_base_owner():
 def test_lens_crosscheck_lens_retrieval_division():
     """教法：首透镜查全公共底料；其余透镜简要确认、预算盯独有缺口；并行无运行时依赖。"""
     tasks, errors = expand_playbook(
-        "lens_crosscheck", {"topic": "LV 诉茉莉奶白商标案"}
+        "lens_crosscheck", {"topic": "LV 诉茉莉奶白商标案", "lenses": _CLASSIC_LENSES}
     )
     assert errors == []
     by_id = _by_id(tasks)
@@ -1155,6 +981,17 @@ def test_lens_crosscheck_requires_topic():
     assert errors and "topic" in errors[0]
 
 
+def test_lens_crosscheck_requires_lenses_at_least_two():
+    tasks, errors = expand_playbook("lens_crosscheck", {"topic": "T"})
+    assert tasks == []
+    assert errors and "lenses" in errors[0]
+    tasks_one, errors_one = expand_playbook(
+        "lens_crosscheck", {"topic": "T", "lenses": ["法律"]}
+    )
+    assert tasks_one == []
+    assert errors_one and "lenses" in errors_one[0]
+
+
 # ── registry reject paths ─────────────────────────────────────────────────────
 
 
@@ -1203,24 +1040,15 @@ def test_available_playbooks_lists_all_registered():
         "map_fanout",
         "cite_write_review",
         "diagnose_fix_verify",
-        "build_app",
         "lens_crosscheck",
     }
     for name in PLAYBOOKS:
         assert name in listing
-    assert "build_toolshed" not in PLAYBOOKS
-    assert "build_website" not in PLAYBOOKS
-    assert "build_website_verify" not in PLAYBOOKS
-    assert "build_feature" not in PLAYBOOKS
-    assert "compare_options" not in PLAYBOOKS
-    for retired in (
-        "parallel_brief",
-        "research_report",
-        "multi_lens_research",
-        "repair_code",
-    ):
-        assert retired not in PLAYBOOKS
-        assert retired not in listing
+    lens = PLAYBOOKS["lens_crosscheck"].summary
+    assert "公共事件" in lens
+    assert "品牌危机" in lens
+    assert "凡大事" not in lens
+    assert "lenses(必填" in PLAYBOOKS["lens_crosscheck"].slots
 
 
 # ── every expansion is a runnable plan (the real builder, not a mock) ──────────
@@ -1236,16 +1064,14 @@ def test_every_playbook_expansion_builds_a_valid_run_plan():
             "verify": "pytest -q",
             "target": "app.ts",
         },
-        "build_app": {"app": "Ops board", "modules": ["overview", "list"]},
-        "lens_crosscheck": {"topic": "T"},
+        "lens_crosscheck": {"topic": "T", "lenses": ["法律", "品牌商业"]},
     }
     expected_nodes = {
         "code_audit": 2,  # 2 auditors, no synth
         "map_fanout": 3,
         "cite_write_review": 5,
-        "diagnose_fix_verify": 3,
-        "build_app": 3,  # lean 默认：scaffold + implement + smoke
-        "lens_crosscheck": 5,  # 4 lenses + synthesizer
+        "diagnose_fix_verify": 2,
+        "lens_crosscheck": 3,  # 2 lenses + synthesizer
     }
     assert set(samples) == set(PLAYBOOKS)  # 名副其实的 every：新增 playbook 必须补样本
     for name, args in samples.items():

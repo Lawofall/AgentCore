@@ -439,6 +439,7 @@ export function useComposerSend({
                 truncated: a.truncated,
                 kind: a.kind,
                 conversationId: a.conversationId,
+                documentId: a.documentId,
                 workspacePath: a.workspacePath,
               }))
             : undefined,
@@ -499,6 +500,7 @@ export function useComposerSend({
                 truncated: a.truncated,
                 kind: a.kind,
                 conversationId: a.conversationId,
+                documentId: a.documentId,
                 workspacePath: settled.outgoing[i]?.workspace_path,
               })),
             },

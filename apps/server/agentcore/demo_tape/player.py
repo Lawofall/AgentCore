@@ -34,7 +34,11 @@ from agentcore.replay import (
     prepare_replay_source,
 )
 from agentcore.runtime.approvals import ApprovalDecision
-from agentcore.runtime.checkpoints import CheckpointDecision, CheckpointResponse
+from agentcore.runtime.checkpoints import (
+    CheckpointDecision,
+    CheckpointResponse,
+    coerce_ask_checkpoint_intent,
+)
 from agentcore.runtime.citations import extract_ledger_ref_ids, project_cited_citations
 from agentcore.runtime.engine.segments import join_segments
 from agentcore.runtime.events import (
@@ -296,7 +300,7 @@ def _build_required_event(
             question=str(payload.get("question") or ""),
             assumptions=list(payload.get("assumptions") or []),
             questions=list(payload.get("questions") or []),
-            intent=intent if isinstance(intent, str) else None,
+            intent=coerce_ask_checkpoint_intent(intent) if intent else None,
         )
     elif et_name == "plan_review_required":
         required = plan_review_required(
@@ -547,14 +551,13 @@ def _build_tape_frame(
         trace_id=capture.trace_id,
     )
     if kind == "ask_user":
-        intent = payload.get("intent") or "decision"
         return AskUserSuspension(
             **common,
             tool_call_id=f"tape_ask_user_{checkpoint_id[:8]}",
             question=str(payload.get("question") or ""),
             assumptions=list(payload.get("assumptions") or []),
             questions=list(payload.get("questions") or []),
-            intent=intent if isinstance(intent, str) else "decision",
+            intent=coerce_ask_checkpoint_intent(payload.get("intent")),
         )
     if kind == "plan_review":
         raw_review = payload.get("ceo_review")

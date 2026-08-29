@@ -63,7 +63,7 @@ def project_cited_citations(
     """P2：按成稿 ``cited_ids``（首次出现序）从台账投影来源卡——**无硬帽**。
 
     未出现在 ``cited_ids`` 的台账条目是检索痕迹，不进 ``citations_event``。
-    非法 / 未知 id 跳过（出口 reconcile 应已剥离）。
+    未知 id 与 ``citable=false``（blocked）跳过——未登记号留白字，不剥正文。
     """
     by_id: dict[str, dict[str, Any]] = {}
     for e in ledger_entries:
@@ -79,7 +79,7 @@ def project_cited_citations(
             continue
         seen.add(eid)
         entry = by_id.get(eid)
-        if entry is None:
+        if entry is None or not entry.get("citable", True):
             continue
         out.append(ledger_entry_to_citation(entry))
     return out
@@ -176,11 +176,11 @@ def annotate_ledger_ids(
 
 # 客户端把正文里的 [n] 渲染成可点的来源角标，但只解析 1..来源数；越界的 [n]（模型
 # 引用了一个没有对应卡片的编号——多半是数错或想指上一轮的号）会被原样留成纯文本。
-# 服务端在 message_end 前用下面这支度量这种「引用了不存在来源」的发生率；finish_guard
-# 回炉耗尽后，出口再用 :func:`reconcile_citations` 剥离悬空角标，保证落库正文自洽。
+# 服务端在 message_end 前用下面这支度量这种「引用了不存在来源」的发生率；对话出口
+# :func:`reconcile_citations` 只观测、不剥正文。落盘成文剥号走文件合同。
 #
 # P1 双轨：``[n]``（池序）与 ``#rN``（回合台账 id）并存——历史消息按 Q10 双轨解析；
-# 新 run 真理层为 ``#rN``。出口剥离对两轨都生效。
+# 新 run 真理层为 ``#rN``。
 _MARKER_RE = re.compile(r"\[(\d+)\]")
 _LEDGER_REF_RE = re.compile(r"#r(\d+)\b")
 # 扫描前先抠掉代码块 / 行内代码 / Markdown 链接：里头的 [5]、[label](url) 是数组
@@ -209,7 +209,7 @@ def out_of_range_markers(content: str, citation_count: int) -> list[int]:
 
     合法编号是 ``1..citation_count``（= 来源卡数）。返回 ``n < 1`` 或 ``n > 上限``
     的那些——客户端只把 ``1..上限`` 渲染成可点角标、越界的留成纯文本，即模型引用了
-    一个没有卡片的编号。仅用于可观测度量；落库前由 :func:`reconcile_citations` 剥离。
+    一个没有卡片的编号。仅用于可观测度量；对话出口不剥正文。
 
     扫描前抠掉代码块 / 行内代码 / Markdown 链接，镜像客户端 remark 插件的跳过规则，
     避免把 ``arr[5]`` 这类下标误判成越界引用。裸正文里的 ``[5]`` 与客户端同样无法
@@ -324,22 +324,14 @@ def reconcile_citations(
     *,
     citable_ids: frozenset[str] | set[str] | None = None,
 ) -> tuple[str, list[dict[str, Any]], list[int], list[str]]:
-    """Runtime 出口自洽：双轨剥离悬空 ``[n]`` / 非法 ``#rN``。
+    """对话出口观测：报告悬空 ``[n]`` / 非登记 ``#rN``，**不剥正文**。
 
-    返回 ``(cleaned_content, citations, stray_n, stray_r)``。``citations`` 列表本身不动。
-    ``stray_n`` / ``stray_r`` 供调用方分别记 ``citations.out_of_range`` /
-    ``citations.invalid_ledger_ref`` 观测；无悬空时正文原样返回。
+    来源卡由 :func:`project_cited_citations` 按已登记 ``citable`` id 投影；
+    未登记号留白字。落盘成文剥号走合同闸，不走本函数。
     """
     stray_n = out_of_range_markers(content, len(citations))
     stray_r = invalid_ledger_ref_ids(content, citable_ids)
-    if not stray_n and not stray_r:
-        return content, citations, [], []
-    cleaned = content
-    if stray_n:
-        cleaned = strip_out_of_range_markers(cleaned, len(citations))
-    if stray_r:
-        cleaned = strip_invalid_ledger_refs(cleaned, set(stray_r))
-    return cleaned, citations, stray_n, stray_r
+    return content, citations, stray_n, stray_r
 
 
 def stamp_citations_from_ledger(

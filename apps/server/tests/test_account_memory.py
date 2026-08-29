@@ -676,7 +676,8 @@ async def test_consult_ticketed_hit_uses_snapshot(
     assert result.success
     assert result.output == body
     assert result.display.get("name") == "合规附录"
-    # 来源分类只进日志，不进 display：读侧不向用户暴露 skill/rule/memory 三分。
+    assert result.display.get("origin") == "user"
+    # 细 kind 只进日志；display 只带两桶 origin。
     assert "kind" not in result.display
 
 
