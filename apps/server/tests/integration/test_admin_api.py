@@ -1453,6 +1453,7 @@ async def test_admin_conversation_replay_surfaces_user_attachments_and_mentions(
             "kind": "file",
             "workspace_path": "attachments/brief.pdf",
             "conversation_id": None,
+            "document_id": None,
             "size_bytes": 2048,
             "thumb_path": None,
             "binary": True,
