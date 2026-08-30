@@ -21,7 +21,6 @@ import {
   type InteractionEntry,
   isAwaitingUserEntry,
   isColdResumeKind,
-  isStageInteractionKind,
   useInteractionStore,
 } from "@/stores/interactions";
 import { usePausedTurnStore } from "@/stores/pausedTurns";
@@ -42,8 +41,7 @@ import { usePausedTurnStore } from "@/stores/pausedTurns";
  * ——挂起时回合仍在 streaming，「已完成」通道不会触发，后端也默认无限期等，这里不提醒
  * 就只剩侧栏一颗小圆点。
  *
- * 幕终推进卡（stage_card pending，非冷挂起）：不阻塞执行，所以不在「等你」判定里，但
- * 完成通道同样跳过「已完成」，感知也走 InteractionStore 订阅（「需要你确认推进」）。
+ * 阶段推进卡已不是开辩入口，不弹「需要你确认推进」。
  *
  * 以上三条通道只看得见**本端流过**的对话。第四条 `ai_attention`（云对话多端同权 B2 · L1）
  * 补上另一端起的回合：账号级 firehose 送「哪个对话在等你」，因此从没在这台机器上打开过的
@@ -117,18 +115,6 @@ function notifyAwaitingDecision(conversationId: string): void {
   void showNativeNotification("AgentCore", message, { conversationId });
 }
 
-/** 幕终阶段推进卡：对齐 approval / kickoff 通道。 */
-function notifyStageAdvance(conversationId: string): void {
-  if (!shouldNotify(conversationId)) return;
-  const title = titleOf(conversationId);
-  if (!title) return;
-  const message = `「${title}」需要你确认推进`;
-  notifyInfo(message, {
-    action: { label: "去处理", onClick: () => jumpTo(conversationId) },
-  });
-  void showNativeNotification("AgentCore", message, { conversationId });
-}
-
 /**
  * firehose「某个对话在等你」：卡在另一端起的回合上，本端可能连这个对话都没加载过。
  *
@@ -158,13 +144,9 @@ function notifyAttention(entry: AiAttentionEntry): void {
 /**
  * 这张卡该不该由交互通道提醒——订阅端与去重表 seed 共用同一判定，避免两边漏配。
  *
- * 热阻塞卡走「等你」语义（{@link isAwaitingUserEntry}）；stage_card 不阻塞执行，
- * 单列一支。其余（冷挂起 / 非阻塞提问）另有通道。
+ * 热阻塞卡走「等你」语义（{@link isAwaitingUserEntry}）。其余（冷挂起 / 非阻塞提问）另有通道。
  */
 function isNotifiableInteraction(e: InteractionEntry): boolean {
-  if (isStageInteractionKind(e.kind)) {
-    return e.status === "pending" || e.status === "submitting";
-  }
   return isAwaitingUserEntry(e);
 }
 
@@ -212,19 +194,6 @@ function conversationHasPausedTurn(conversationId: string): boolean {
     );
 }
 
-function conversationHasPendingStageCard(conversationId: string): boolean {
-  for (const e of useInteractionStore.getState().byId.values()) {
-    if (
-      e.conversationId === conversationId &&
-      isStageInteractionKind(e.kind) &&
-      (e.status === "pending" || e.status === "submitting")
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /**
  * Start the ambient cross-conversation notifier. Returns an unsubscribe fn (AppShell
  * calls it on unmount). Idempotent per call — each invocation owns its own subscriptions.
@@ -263,8 +232,6 @@ export function startTeamActivityNotifications(): () => void {
         // finalizeLastMessage; by this microtask the frame is already there.
         // Skip「已完成」— pause perception is the pausedTurns channel only.
         if (conversationHasPausedTurn(id)) return;
-        // 幕终推进卡：turn 正常收口但仍待用户确认推进——勿误报「已完成」。
-        if (conversationHasPendingStageCard(id)) return;
         const latest = useConversationStore.getState().byId[id];
         const failed = latest ? runtimeHasError(latest) : failedAtBoundary;
         notifyTurnEnd(id, failed);
@@ -286,11 +253,7 @@ export function startTeamActivityNotifications(): () => void {
     for (const e of state.byId.values()) {
       if (!isNotifiableInteraction(e)) continue;
       if (!claim(e.id)) continue;
-      if (isStageInteractionKind(e.kind)) {
-        notifyStageAdvance(e.conversationId);
-      } else {
-        notifyHotBlocking(e);
-      }
+      notifyHotBlocking(e);
     }
     prune();
   });

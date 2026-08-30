@@ -368,6 +368,18 @@ class TerminalTool:
             except DeskProcessError as exc:
                 return _desk_process_failure(exc, start)
             except SandboxError as exc:
+                from agentcore.tools.sandbox.exec_env import (
+                    EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+                    EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+                    is_sandbox_unavailable_error,
+                )
+
+                if is_sandbox_unavailable_error(exc):
+                    return _error(
+                        EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+                        start,
+                        code=EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+                    )
                 msg = exc.message or str(exc)
                 launcher = "代码执行环境启动失败" in msg or "云桌短执行超时" in msg
                 return _error(

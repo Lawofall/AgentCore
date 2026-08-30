@@ -463,7 +463,7 @@ def host_tool_timeout_seconds(arguments: dict[str, Any] | None = None) -> float:
 def _untrusted(payload: dict[str, Any]) -> str:
     """Frame Host probe results as untrusted OS-reported facts (禁催密码)."""
     body = json.dumps(payload, ensure_ascii=False, indent=2)
-    return f"<untrusted_content>\n{body}\n</untrusted_content>"
+    return f"<不可信内容>\n{body}\n</不可信内容>"
 
 
 def _no_channel_error() -> ToolResult:

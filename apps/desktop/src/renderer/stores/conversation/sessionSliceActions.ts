@@ -13,6 +13,7 @@ type SessionSliceActions = Pick<
   | "setCurrentConversation"
   | "dropConversationRuntime"
   | "switchConversation"
+  | "adoptDraftRuntime"
   | "releaseBackgroundSlice"
 >;
 
@@ -62,6 +63,28 @@ export function createSessionSliceActions(
         );
         return {
           currentConversationId: id,
+          byId: pruned.byId,
+          sliceLruOrder: pruned.sliceLruOrder,
+        };
+      });
+    },
+
+    adoptDraftRuntime: (newId) => {
+      const prevKey = get().currentConversationId ?? DRAFT_KEY;
+      void detachLocalBrowserHost();
+      set((state) => {
+        const draft = state.byId[DRAFT_KEY] ?? EMPTY_RUNTIME;
+        const byId = { ...state.byId };
+        byId[newId] = { ...draft, messageFocus: null };
+        byId[DRAFT_KEY] = { ...EMPTY_RUNTIME };
+        const pruned = pruneConversationSlices(
+          byId,
+          state.sliceLruOrder ?? [],
+          newId,
+          prevKey,
+        );
+        return {
+          currentConversationId: newId,
           byId: pruned.byId,
           sliceLruOrder: pruned.sliceLruOrder,
         };

@@ -47,7 +47,7 @@ describe("StageCardTrace", () => {
     );
   });
 
-  it("hides pending (Dock owns the card)", () => {
+  it("hides pending leftover (not a debate entry)", () => {
     useInteractionStore.getState().upsertRequired({
       kind: "stage_card",
       conversationId: "c1",

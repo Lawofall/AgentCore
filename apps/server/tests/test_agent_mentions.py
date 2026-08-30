@@ -66,11 +66,11 @@ def test_build_agent_mention_context_renders_soft_hint():
     assert "用户点名关注以下 Agent（软提示，非强制派单/非硬路由）" in out
     assert "- 研究员 (id=agent_research)" in out
     assert "- 写手 (id=agent_writer)" in out
-    assert "<agent_mentions>" in out
+    assert "<队员点名>" in out
 
 
 def test_merge_empty_mentions_keeps_attachment_only():
-    att = "<attached_files>\nbody\n</attached_files>"
+    att = "<附件>\nbody\n</附件>"
     assert merge_attachment_and_mention_context(att, None) == att
     assert merge_attachment_and_mention_context(att, []) == att
     assert merge_attachment_and_mention_context(None, None) is None
@@ -81,9 +81,9 @@ def test_merge_mentions_only_and_with_attachments():
     only = merge_attachment_and_mention_context(None, mentions)
     assert only is not None
     assert "法务 (id=a1)" in only
-    assert "<attached_files>" not in only
+    assert "<附件>" not in only
 
-    att = "<attached_files>\nfile\n</attached_files>"
+    att = "<附件>\nfile\n</附件>"
     both = merge_attachment_and_mention_context(att, mentions)
     assert both is not None
     assert both.startswith(att)

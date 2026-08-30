@@ -134,12 +134,6 @@ const FOLD_FAMILY: {
     result: "已写入文件夹画像。",
   },
   {
-    tool: "write_section",
-    label: "Write section",
-    args: { path: "site/index.html", section: "s1" },
-    result: "已写入分区 s1",
-  },
-  {
     tool: "file_batch",
     label: "Batch files",
     args: {},

@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 _TEAM_CROSS_FOLDER = """\
-<team_cross_folder>
+<跨文件夹>
 【跨文件夹并行指挥】多文件夹同时摸底/推进（例：「摸底这五个文件夹」「同时开发 A 和 B」）。
 
 坐哪张桌：通用 `file_*` **只绑出生桌**（无换桌参数）。云端草稿身份 ≠「读不到已有文件夹」。\
@@ -26,7 +26,7 @@ _TEAM_CROSS_FOLDER = """\
 用户说清层级就传完整路径）；唯一命中→用返回 id；0 命中或多命中→\
 `ask_user`（kind=choice；选项须带完整 `rel_path`，只写末段名分不清同名的两层）；禁猜最近。
 
-空壳/近空先问：认到文件夹后，若 `<workspace_file_index>` 空或一眼近空 → **立刻** `ask_user`\
+空壳/近空先问：认到文件夹后，若 `<工作区文件>` 空或一眼近空 → **立刻** `ask_user`\
 钉各自目标 / 本轮交付 / 是否两线同开；【禁止】为确认空而连续 `file_list` 烧探路轮\
 （索引已空不必再付调查轮）。关键缺口未齐也可先短问，再动手翻仓。确认后 **同一次** `delegate` 扇出，各填 `target_folder_id`；\
 【禁止】CEO 串行翻多空目录代替派工。
@@ -41,7 +41,7 @@ _TEAM_CROSS_FOLDER = """\
 
 先建后派 ≠ 过闸催建（仅用户明确要求新建云文件夹 / 显式多线先建）：云→`create_folder`\
 （同指挥面；只建云；要建在某层下面填 `parent_path`）；本机目录进桌 / 本机传统 → \
-`consult(ask_user_midtask)`，进桌后再 `resolve` 点名 `target_folder_id`。\
+`consult(team_delivery_env)`，进桌后再 `resolve` 点名 `target_folder_id`。\
 `open_local_project` / `register_local_project` / `bind_local_folder` / mount **不是**跨仓开发捷径。\
 【禁止】为过写盘闸或裸聊缺桌而 create——裸聊写盘缺桌由运行时自动建云文件夹。\
 【勿混】`create_folder` 建的是可派工的容器；在**当前工作区里**建普通子目录是队员的 `mkdir`。\
@@ -61,4 +61,4 @@ _TEAM_CROSS_FOLDER = """\
 `target_folder_id` 派工换桌（CEO 只读跨文件夹仅轻量认桌）；\
 【禁止】用 `external_mount_readonly` 乱挂文档/桌面/下载冒充跨文件夹开发桌\
 （挂载仅区外只读看目录，与工作文件夹正交；看一眼再挂，勿当开工默认步）。
-</team_cross_folder>"""
+</跨文件夹>"""

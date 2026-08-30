@@ -14,7 +14,7 @@ import { folderAccentVar } from "./folderAccent";
  * opened while it sits in the bin, so the row is inert apart from 恢复.
  *
  * A chat whose project was deleted too says so, because restoring it alone puts it in
- * 未分组 rather than back under that project — the one case where「回到原来的位置」
+ * 快速对话 rather than back under that project — the one case where「回到原来的位置」
  * would otherwise read as a broken promise.
  */
 export function DeletedConversationManageRow({
@@ -57,7 +57,7 @@ export function DeletedConversationManageRow({
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
           删除于 {timeAgo(conversation.deletedAt)} · {conversation.messageCount}{" "}
           条消息
-          {orphanedByFolder && " · 恢复后先回到未分组"}
+          {orphanedByFolder && " · 恢复后先回到快速对话"}
         </p>
       </div>
 

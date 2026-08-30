@@ -257,14 +257,6 @@ async def resume_chat_pipeline(
         if hydrated.evidence_ledger:
             resume_ledger.load_entries(hydrated.evidence_ledger)
         ledger_token = turn_evidence_ledger.set(resume_ledger)
-        # P1a：建站风格确认从 turn_paused / journal 再水化进 conversation ledger。
-        from agentcore.runtime.runs.website_style import rehydrate_style_confirmation
-
-        rehydrate_style_confirmation(
-            conversation_id,
-            entries=list(suspension.journal_entries or []),
-            turn_paused_style=hydrated.website_style,
-        )
         # 演讲/PPT 交付形态确认从 turn_paused / journal 再水化。
         from agentcore.runtime.runs.presentation_format import (
             rehydrate_format_confirmation,

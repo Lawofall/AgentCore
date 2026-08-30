@@ -4,7 +4,7 @@ When the previous turn ended with structured failure (``finish_reason=unproducti
 or a failed ``delegate`` whose declaration gate is ``empty``), the next fresh CEO
 turn gets a single ignorable nudge to re-issue top-level non-empty ``tasks`` —
 history replays no tool I/O, so the fingerprint must ride the volatile prompt
-tail (same pattern as ``<recent_team_graph>``).
+tail (same pattern as ``<近期团队图>``).
 
 Hard rules (intercept-discipline):
 - Structured signals only — never scan user「继续」/ long free text for intent.
@@ -24,13 +24,13 @@ from agentcore.runtime.facts import FactKind
 from agentcore.runtime.journal.entries import KIND_TURN_END
 
 _REDISPATCH_HINT = (
-    "<prior_delegate_retry>\n"
+    "<上轮重派>\n"
     "【上轮委派未落地】上轮出现空委派或无产出收口（结构化指纹）。"
     "本提示一次性、可忽略，不挡原请求。\n"
     "若用户仍要团队推进：再发一次顶层非空 `tasks` 的 `delegate`；"
     "固化流水线时次选具名 `playbook`。"
     "【禁止】只复盘参数错误或只道歉收口。\n"
-    "</prior_delegate_retry>"
+    "</上轮重派>"
 )
 
 
@@ -119,7 +119,7 @@ async def build_prior_failure_redispatch_hint(
     conversation_id: str,
     exclude_message_id: str | None = None,
 ) -> str:
-    """``<prior_delegate_retry>`` block when the prior turn fingerprints, else ``\"\"``.
+    """``<上轮重派>`` block when the prior turn fingerprints, else ``\"\"``.
 
     ``exclude_message_id`` drops the in-flight assistant turn (same as recent-graph /
     delivery reinject). Does not read or branch on the current user message.

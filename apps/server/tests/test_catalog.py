@@ -116,7 +116,7 @@ def test_mutation_and_escalate_are_worker_only():
 
 def test_ceo_prompt_lists_skill_directory_when_ask_user_wired():
     """compose_ceo_chat_prompt is the single source for runtime + 能力图鉴; its 按需目录
-    must gate the ask_user_* skills on ask_user being wired (the live-user invariant)."""
+    must gate asking_the_user on ask_user being wired (the live-user invariant)."""
     registry = build_system_skill_registry()
     base = assemble_system_prompt()
 
@@ -128,7 +128,7 @@ def test_ceo_prompt_lists_skill_directory_when_ask_user_wired():
         ceo_tool_names={"delegate", "consult", "ask_user"},
     )
     assert "按需目录" in with_ask
-    assert "- ask_user_kickoff：" in with_ask
+    assert "- asking_the_user：" in with_ask
     assert "- team_orchestration_advanced：" in with_ask
 
     without_ask = compose_ceo_chat_prompt(
@@ -136,7 +136,8 @@ def test_ceo_prompt_lists_skill_directory_when_ask_user_wired():
         skill_registry=registry,
         ceo_tool_names={"delegate", "consult"},
     )
-    # ask_user_kickoff requires the ask_user tool — its directory line is gated out…
+    # asking_the_user requires the ask_user tool — its directory line is gated out…
+    assert "- asking_the_user：" not in without_ask
     assert "- ask_user_kickoff：" not in without_ask
     # …but the un-gated advanced skills still list.
     assert "- team_orchestration_advanced：" in without_ask

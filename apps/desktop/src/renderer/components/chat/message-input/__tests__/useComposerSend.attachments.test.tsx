@@ -137,11 +137,15 @@ describe("useComposerSend 附件收尾", () => {
       sending = result.current.send.handleSend();
     });
 
-    // 附件还没收尾，但用户已经看到气泡、输入框已清空、发送键在转。
-    expect(messages()).toHaveLength(1);
+    // 附件还没收尾，但用户已经看到气泡 + Thinking、输入框已清空、发送键在转。
+    expect(messages()).toHaveLength(2);
     expect(messages()[0]).toMatchObject({
       role: "user",
       content: "看看这张图",
+    });
+    expect(messages()[1]).toMatchObject({
+      role: "assistant",
+      isStreaming: true,
     });
     expect(result.current.value).toBe("");
     expect(result.current.attachments).toHaveLength(0);

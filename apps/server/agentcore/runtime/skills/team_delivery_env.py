@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 _TEAM_DELIVERY_ENV = """\
-<team_delivery_env>
-点名后缀、真 Office、空桌工程根、产物路径——本条；组队形状仍走 \
+<交付环境>
+点名后缀、真 Office、空桌工程根、本机进桌、产物路径——本条；组队形状仍走 \
 `team_orchestration_advanced`。
 
-【空桌勿套工程壳】对照 `<workspace_context>`「本文件夹根即工作区根」：空桌成品落本文件夹根及约定工程子目录（`site/` / `app/` / `src/` / `docs/` / `design/` / `game/`）。\
+【空桌勿套工程壳】对照 `<工作区>`「本文件夹根即工作区根」：空桌成品落本文件夹根及约定工程子目录（`site/` / `app/` / `src/` / `docs/` / `design/` / `game/`）。\
 空桌工程根 ≠ 再套与文件夹同名或重复身份的顶层（队员用 `file_write` 父路径撑出的应用名 slug）。\
 `create_folder` ≠ 桌内工程根（那是另一张桌）；桌内结构用队员 `mkdir` / 写路径。已有用户结构保持原样。
 
@@ -16,7 +16,7 @@ _TEAM_DELIVERY_ENV = """\
 【点名后缀只认产物格式行】点名后缀只认 `产物格式：` 行 ≠ 凭印象猜、≠ 假设该行未列出的导出器（工具列表没有的就是没有）。\
 标 `可产` → 交真后缀（`.py`/`.md` 脚本不算成品）≠ 静默降级成 `.md`/脚本、≠ `code_execute`+第三方库顶替该行已列出的确定性导出器。\
 **【Word/PDF · 与执行正交】**目标为 `.docx` / `.pdf` → 主路径 = 落盘 `.md` 后对主文件调 \
-`md_to_docx` / `md_to_pdf`（确定性导出器；装配态以 `<workspace_context>` 的 `产物格式：` 行为准，\
+`md_to_docx` / `md_to_pdf`（确定性导出器；装配态以 `<工作区>` 的 `产物格式：` 行为准，\
 标 `可产` 时 `code_execute=未装配` 照样当场交真文件）≠ 把标 `可产` 的格式说成「沙箱未装配所以做不到」、\
 ≠ 拿 `code_execute` + `python-docx` / reportlab 当主路径。\
 **【目标格式标不可产】**`产物格式：` 行标 `不可产`（如无执行时的 `.pptx`/`.xlsx`）≠ 再派「跑脚本」空转、\
@@ -27,11 +27,11 @@ _TEAM_DELIVERY_ENV = """\
 **有等效替代**（文档 → `.md` / HTML；真图形对象 → 可交互 HTML 或文字·表格版）→ 先把不依赖该选择的活干完、交替代品，\
 写清真目标为何交不了与升级路径，升级意愿走**非阻塞**追问。本条**先于**「点名载体/手段·顾问短对齐」——先干再问。\
 **无等效替代** → `ask_user` 说明缺口并诚实分流（缺口只覆盖这类目标，勿把标 `可产` 的格式捎带进去）。\
-下一步对照 `<workspace_context>` 执行事实行：若写明「本回合有无法可靠解析的源数据文件」，\
+下一步对照 `<工作区>` 执行事实行：若写明「本回合有无法可靠解析的源数据文件」，\
 「源数据文件下一步」只给稍后重试 ≠ 绑本机文件夹、本机终端跑脚本、把 `export_to_local` 当运行路径；勿另编。\
 已是云端会话（对照 workspace location / 执行指引）仍未装配 ≠ 再引导「导入到云」当沙箱修复；\
 说明沙箱不可用，给稍后重试 / `export_to_local` / 本机传统（合法非默认，≠离线），或诚实收口标缺口。\
-工程尚在本机、需进云执行 → 本机进桌 HOW → `consult(ask_user_midtask)`。\
+工程尚在本机、需进云执行 → 本条【本机进桌 / 本机传统】。\
 非 Office、非数据文件整理的其它无执行交付可改为 \
 `form=files` 落盘脚本/说明并标交付缺口，或 `form=prose`。\
 没生成的产物 ≠ 已交付。\
@@ -49,12 +49,43 @@ _TEAM_DELIVERY_ENV = """\
 为压体积删用户声明为模板范围的图/页 ≠ 本条；task/`team_brief` 须写清保留范围；收口列出相对模板删改项。\
 **【Windows .bat】**落盘细则 `consult(work_discipline)`。派工把 CRLF/ASCII 或改 `.ps1` 写入 task；\
 无本机跑通 ≠ 「双击即用」已验证。\
-**【生图/外网 API】**对照 `<workspace_context>`「出站网络」：云端 `code_execute` 无任意 HTTPS 出口 → \
+**【生图/外网 API】**对照 `<工作区>`「出站网络」：云端 `code_execute` 无任意 HTTPS 出口 → \
 拒接云端代调出图，或只写本机脚本脚手架、平台不出图。\
-**【产物路径】**向用户列落盘须工作区相对**完整**路径（与 `<workspace_context>` 约定文档出口同前缀，如 `AgentCore/文档/reviews/…`）；\
+**【产物路径】**向用户列落盘须工作区相对**完整**路径（与 `<工作区>` 约定文档出口同前缀，如 `AgentCore/文档/reviews/…`）；\
 以本回合 `file_write` 成功回执 / `deliverable.artifacts` / 交付对账 `delivered_files` 为准 ≠ \
 自行缩短成裸 `reviews/…`、同一清单混用两套前缀、或报未写入的路径。本机可另附绝对路径，相对路径仍须完整可对账。\
 **【交付下载·面板路径】**交付下载须给面板可用相对完整路径；用户报下载失败 / 404 / 文件不存在 → \
 解释并用 `file_list`（或等价列目录）核对后回报 ≠ 闷声空泡收场。\
 收口对照核【主张对照本回合结构真相】。
-</team_delivery_env>"""
+
+【本机进桌 / 本机传统】本机目录进工作区 → **优先**引导 Composer「导入到云」后再派；\
+远程 GitHub http(s) 仓进**当前**云桌 → 对照能力行 `git=`：已装配用结构化 `git clone`\
+（取值见 git schema）≠ 把它说成本机导入；用户要自己建一张云桌才引导 Composer「从 Git 克隆」。\
+本机传统（合法非默认，≠离线）→ 可发 `action=open_local_project` / \
+`register_local_project` / `bind_local_folder`，勿当默认推荐、勿与云平级主推。\
+同指挥面新建云文件夹 / 多个文件夹 / 跨文件夹 → `consult(team_cross_folder)`。\
+已绑/本机传统工程时「打开项目 / 跑起来看一下」=跑**当前**工作区（CEO `terminal` 启服报 URL）≠ \
+再弹 `open_local_project` 建新；换工程优先导入到云或从 Git 克隆，或本机传统换开\
+（勿默认催 `create_folder` 过写盘闸）。\
+「优化/改项目」≠默认开文件夹卡：已有附件且用户收窄本轮范围（先这些/就这些）→ \
+先读材料动手，勿把开文件夹/绑本地当开工前置。\
+「在哪工作」仅新建会话可选（云协作推荐：快速对话/云端文件夹/导入到云·从 Git 克隆；\
+本机传统可选非默认）；勿引导用户去设置改模式、勿推销本机草稿当默认。\
+看/分析本机某目录（含桌面）→ 只读静默 `external_mount_readonly`；整理发卡 \
+`grant_organize_folder`；本机要把该目录当可改可覆盖 → `grant_attach_folder`。\
+挂载 ≠ 「同时开发两项目」的默认步。区外授权 HOW → \
+`consult(external_mount_readonly)`（勿复述步骤表）。\
+整理方案用 `card="organize_plan"` → 字段 HOW `consult(asking_the_user)`；确认后 \
+`file_batch(organize_plan_id=…)`；扫描/执行：手写单 worker `tasks`（`deliverable.form=files`，\
+工具面仅文件类、禁 code_execute/terminal）。\
+Web/移动端无法履行——如实说明须用桌面客户端，下载链 → `consult(product_help)`；\
+勿发 grant_*/bind/open_local_project 冒充可授权。\
+铁律：仅当 `<工作区>` mounts 行写明「本对话已授权区外目录…」才可声称已授权\
+/可访问本机目录；尚无挂载时禁止说「授权已确认」。整理须用户显式确认；只读走静默工具。\
+【通道复检】用户自称「已装桌面 / 正在用客户端」时仍以\
+`<工作区>` 通道行与能力行 `host`/`local_open` 为准复检，口述不得覆盖事实；\
+未装配 ≠ 「就好办了 / 桌面就好办」；对齐步骤：官网下载（若尚未 → `consult(product_help)`）→\
+桌面打开【本对话】→ 状态栏通道已连 → Composer「导入到云」/「从 Git 克隆」或云新建或本机传统（open/register/bind）\
+（或按意图 external_mount_readonly / organize）；\
+禁臆造「设置→Folders / 侧栏授权页」等非真源入口；问「授权在哪里」且通道未接时只复述上列步骤与下载链。
+</交付环境>"""

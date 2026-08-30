@@ -41,8 +41,6 @@ ON_DEMAND_TOOL_NAMES: frozenset[str] = frozenset(
         "archive_extract",
         "archive_create",
         "download_url",
-        # Site HTML SECTION inject (not the daily write loop; MD uses str_replace).
-        "write_section",
         # Cross-conversation logs (product-always-on; still on-demand when wired).
         "search_conversations",
         "read_conversation",
@@ -64,7 +62,6 @@ ON_DEMAND_SUMMARIES: dict[str, str] = {
     "archive_extract": "工作区 zip 解压到指定目录",
     "archive_create": "工作区文件/目录打成 zip",
     "download_url": "HTTP(S) URL 落盘到工作区相对路径",
-    "write_section": "建站 HTML 分区注入",
     "search_conversations": "检索用户历史对话目录",
     "read_conversation": "深读一条历史对话全文",
     "create_folder": "新建云文件夹",

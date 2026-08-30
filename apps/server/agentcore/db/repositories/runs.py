@@ -1001,39 +1001,6 @@ class TurnJournalRepository:
         row = result.first()
         return str(row[0]) if row and row[0] else None
 
-    async def find_latest_website_style(
-        self, *, conversation_id: str
-    ) -> dict | None:
-        """Newest ``website_style_confirmed`` payload for ``conversation_id`` (P1a style ledger).
-
-        Cold rehydrate for site style after process restart / new turn when the
-        hot cache is empty. Returns the raw journal payload dict or ``None``.
-        """
-        from sqlalchemy import text
-
-        cid = (conversation_id or "").strip()
-        if not cid:
-            return None
-        result = await self._session.execute(
-            text(
-                """
-                SELECT payload
-                FROM turn_journal
-                WHERE conversation_id = :cid
-                  AND kind = 'website_style_confirmed'
-                  AND COALESCE(payload->>'style_id', '') != ''
-                ORDER BY created_at DESC, seq DESC
-                LIMIT 1
-                """
-            ),
-            {"cid": cid},
-        )
-        row = result.first()
-        if not row or row[0] is None:
-            return None
-        payload = row[0]
-        return dict(payload) if isinstance(payload, dict) else None
-
     async def find_latest_delivery_status(
         self, *, conversation_id: str, exclude_turn_id: str | None = None
     ) -> dict | None:
@@ -1139,7 +1106,7 @@ class TurnJournalRepository:
     async def find_latest_mlr_execution(self, *, conversation_id: str) -> str | None:
         """Newest MLR-shaped team graph: ``multi_agent`` ``run_plan`` containing a synthesizer run.
 
-        批 A2 辩论进宿主图：playbook ``lens_crosscheck`` 汇总员 raw id ``synthesizer``，
+        批 A2 辩论进宿主图：汇总员 raw id ``synthesizer``，
         经 DAG 铸造后为 ``{del_<uuid>|add_<uuid>}_synthesizer``——须同时匹配二者。
         Does **not** exclude the current turn (same-turn MLR → debate must resolve the host).
         """

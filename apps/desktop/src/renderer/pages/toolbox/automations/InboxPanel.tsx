@@ -1,4 +1,4 @@
-import { Button, Card } from "@/components/ui";
+import { Button, Card, EmptyHint } from "@/components/ui";
 import { notifyError, notifySuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { ApiError } from "@/services/api";
@@ -188,13 +188,15 @@ export function InboxPanel() {
         ) : listError ? (
           <p className="text-sm text-muted-foreground">{listError}</p>
         ) : visible.length === 0 ? (
-          <Card className="px-4 py-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              {filter === "actionable"
-                ? "没有待拍板或未读失败。"
-                : "收件箱是空的。任务跑完后会出现在这里。"}
-            </p>
-          </Card>
+          <EmptyHint
+            className="py-10"
+            title={
+              filter === "actionable" ? "没有待拍板或未读失败" : "收件箱是空的"
+            }
+            hint={
+              filter === "actionable" ? undefined : "任务跑完后会出现在这里。"
+            }
+          />
         ) : (
           <ul className="space-y-3">
             {visible.map((run) => {

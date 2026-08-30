@@ -29,6 +29,7 @@ from agentcore.runtime.loop_controller import (
     ERROR_CLASS_PERMANENT,
     ERROR_CLASS_PERMISSION,
     ERROR_CLASS_VALIDATION,
+    EXEC_ENV_TIMEOUT_FAMILY,
     ToolAttempt,
     fingerprint_tool_call,
 )
@@ -37,7 +38,7 @@ from agentcore.tools.file_products import LANDING_TOOLS, with_file_products_mark
 from agentcore.tools.protocol import TOOL_AUDIENCE_CEO, ToolContext, ToolResult
 from agentcore.tools.registry import ToolRegistry
 
-from .timeout import resolve_tool_timeout
+from .timeout import outer_liveness_timeout_meta, resolve_tool_timeout
 from .tool_channel_redirect import tool_wire_status
 from .tool_exec_args import (
     _ARGS_PARSE_FAILED_MARKER,
@@ -495,10 +496,13 @@ async def run_one_tool(
             await budget_state.refund(name)
         duration_ms = int((time.monotonic() - started) * 1000)
         ceiling = timeout if timeout is not None else 0.0
-        timeout_msg = (
+        hang_msg = (
             f"工具 '{name}' 活性挂起：超过 {ceiling:.0f}s 仍无响应，已中止。"
             "这不是字节/行数触顶——请缩小处理范围、换路径策略或换工具；"
             "禁止原样重试同一次调用。"
+        )
+        timeout_msg, failure_code, attempt_extra = outer_liveness_timeout_meta(
+            name, ctx, hang_msg
         )
         # The 活性挂起 / 触顶 distinction and the no-identical-retry ban exist to steer
         # the model; they stay on ``result``. User face is curated by code only.
@@ -508,7 +512,7 @@ async def run_one_tool(
                 name,
                 success=False,
                 output=timeout_msg,
-                failure=tool_failure_fields(code="liveness_timeout"),
+                failure=tool_failure_fields(code=failure_code),
                 run_id=event_run_id,
             )
         )
@@ -534,12 +538,7 @@ async def run_one_tool(
                 meta=_attempt_meta_with_landing_path(
                     name,
                     args,
-                    {
-                        "liveness_timeout": True,
-                        "timeout_layer": "outer",
-                        "error_class": ERROR_CLASS_PERMANENT,
-                        **cross_turn_retry_meta(CrossTurnRetry.NOT_FUTILE),
-                    },
+                    attempt_extra,
                 ),
             ),
             [],
@@ -760,8 +759,11 @@ async def run_one_tool(
     result_meta = dict(result.metadata) if result.metadata else {}
     if (
         not result.success
-        and result_meta.get("workspace_channel_dead")
         and getattr(context, "execution_id", None)
+        and (
+            result_meta.get("workspace_channel_dead")
+            or name in EXEC_ENV_TIMEOUT_FAMILY
+        )
     ):
         # So loop_controller can stamp the coordination session (workers often
         # lack current_execution_id ContextVar).

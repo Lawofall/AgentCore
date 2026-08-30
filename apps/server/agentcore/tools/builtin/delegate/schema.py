@@ -42,6 +42,7 @@ TASK_DELIVERABLE_SCHEMA: dict[str, object] = {
 DELEGATE_DESCRIPTION = (
     f"拆任务给临时团队（默认手写顶层 tasks：role+task，≤{MAX_DELEGATION_TASKS}；非终结）。"
     "改产物、成规模查证、实质讨论、对照多方案时用；探路够了（能写目标·约束·验收）再派；闲聊和窗口里已有的短答不必派。"
+    "派前给用户一句可见打算。"
     "playbook 与 tasks 二选一（具名 playbook 仅固化流水线快捷进阶）。"
     "HOW→consult(team_orchestration_advanced)。"
 )
@@ -66,7 +67,8 @@ DELEGATE_PARAMETERS = {
                         "description": (
                             "自包含=目标+边界+验收（worker 看不到完整历史）。"
                             "本回合已给凭据写入 task 供队员填 env。"
-                            "开局口径走顶层 team_brief。已拍板写入「已确认约束」。"
+                            "已拍板写入「已确认约束」。"
+                            "未装配能力 ≠ 写进 task。"
                         ),
                     },
                     "deliverable": TASK_DELIVERABLE_SCHEMA,
@@ -128,8 +130,7 @@ DELEGATE_PARAMETERS = {
         "team_brief": {
             "type": "string",
             "description": (
-                "全队共识（含「已确认约束」同一行）；各 worker 开局可见；"
-                "约束块优先于附件旧角色表。"
+                "有共享口径才写（一行一条）；各 worker 开局可见。省略即可。"
             ),
         },
     },

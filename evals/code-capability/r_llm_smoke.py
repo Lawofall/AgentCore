@@ -52,10 +52,10 @@ _DEFAULT_CARD_STEMS = (
 # 可用 --no-prefix 关掉。禁幽灵工具名；不平行造 worker 直装。
 _FIX_PROMPT_PREFIX = (
     "[eval smoke] Product path: CEO coordinates then delegate "
-    "(light for single-file one-shot; diagnose_fix_verify when symptoms/verify needed). "
+    "(handwritten 1-person repair is the default). "
     "Worker mutates with str_replace (not CEO). Prefer file_read / grep; "
     "verify once with the card's pytest command, then stop. "
-    "Avoid repeated code_execute or terminal loops; forbid handwritten (omit playbook) as repair default."
+    "Avoid repeated code_execute or terminal loops."
 )
 
 # 墙钟 timeout 时：tool 数 ≥ 此阈值 → 模型弱（空转烧预算），非接缝死锁

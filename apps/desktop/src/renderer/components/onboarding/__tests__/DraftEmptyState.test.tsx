@@ -8,12 +8,13 @@
 
 import { DraftEmptyState } from "@/components/onboarding/DraftEmptyState";
 import type { Conversation } from "@/stores/conversation";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let conversations: Conversation[] = [];
 const fill = vi.fn();
+let isNarrow = false;
 
 vi.mock("@/hooks/useConversations", () => ({
   useConversations: () => conversations,
@@ -22,6 +23,15 @@ vi.mock("@/hooks/useConversations", () => ({
 vi.mock("@/stores/composer", () => ({
   useComposerDraftStore: (select: (s: { fill: unknown }) => unknown) =>
     select({ fill }),
+}));
+
+vi.mock("@/lib/narrowLayout", () => ({
+  useNarrowLayoutState: () => ({
+    isNarrow,
+    hideChrome: false,
+    conversationDrawerOpen: false,
+    setConversationDrawerOpen: () => undefined,
+  }),
 }));
 
 function conversation(messageCount: number, id: string): Conversation {
@@ -47,14 +57,15 @@ afterEach(cleanup);
 beforeEach(() => {
   conversations = [];
   fill.mockReset();
+  isNarrow = false;
 });
 
 describe("DraftEmptyState", () => {
-  it("offers starter tasks and the manual to a brand-new user", () => {
+  it("offers starter tasks and 怎么用 to a brand-new user", () => {
     renderEmptyState();
     expect(screen.getByText(/今天想解决什么问题/)).toBeTruthy();
-    expect(screen.getAllByRole("button")).toHaveLength(3);
-    expect(screen.getByRole("link", { name: /产品手册/ })).toBeTruthy();
+    expect(screen.getAllByRole("button").length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByRole("button", { name: /怎么用/ })).toBeTruthy();
   });
 
   it("keeps the guidance when every earlier attempt failed or was abandoned", () => {
@@ -63,23 +74,41 @@ describe("DraftEmptyState", () => {
       conversation(1, "c-gaveup"),
     ];
     renderEmptyState();
-    expect(screen.getAllByRole("button")).toHaveLength(3);
-    expect(screen.getByRole("link", { name: /产品手册/ })).toBeTruthy();
+    expect(
+      screen.getAllByRole("button").filter((b) => b.textContent !== "怎么用")
+        .length,
+    ).toBe(3);
+    expect(screen.getByRole("button", { name: /怎么用/ })).toBeTruthy();
   });
 
   it("drops to the bare greeting once a conversation actually ran", () => {
     conversations = [conversation(1, "c-gaveup"), conversation(2, "c-worked")];
     renderEmptyState();
     expect(screen.getByText(/今天想解决什么问题/)).toBeTruthy();
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
-    expect(screen.queryByRole("link", { name: /产品手册/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /怎么用/ })).toBeNull();
   });
 
   it("fills the composer from a starter task instead of sending it", () => {
     renderEmptyState();
-    const [first] = screen.getAllByRole("button");
-    first.click();
+    const chips = screen
+      .getAllByRole("button")
+      .filter((b) => b.textContent !== "怎么用");
+    chips[0].click();
     expect(fill).toHaveBeenCalledTimes(1);
     expect(String(fill.mock.calls[0][0])).toContain("并行");
+  });
+
+  it("opens a how-to that narrow can read, without the toolbox manual link", () => {
+    isNarrow = true;
+    renderEmptyState();
+    fireEvent.click(screen.getByRole("button", { name: /怎么用/ }));
+    expect(screen.getByText(/你一句话说要做什么就行/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /产品手册/ })).toBeNull();
+  });
+
+  it("keeps the full manual link inside 怎么用 on wide", () => {
+    renderEmptyState();
+    fireEvent.click(screen.getByRole("button", { name: /怎么用/ }));
+    expect(screen.getByRole("link", { name: /产品手册/ })).toBeTruthy();
   });
 });

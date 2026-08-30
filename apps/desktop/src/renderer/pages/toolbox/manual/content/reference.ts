@@ -655,15 +655,6 @@ export const referenceChapter: ManualChapterContent = {
               ],
             },
             {
-              q: "站队",
-              a: [
-                {
-                  type: "text",
-                  text: "辩论记分牌上点选你的倾向——仅你可见，绝不改写 AI 裁决；对话内态，重载即重置。",
-                },
-              ],
-            },
-            {
               q: "用户检查点",
               a: [
                 {

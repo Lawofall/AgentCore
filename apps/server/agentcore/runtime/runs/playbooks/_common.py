@@ -83,10 +83,6 @@ def fold_fanout_slots(
     return slots, note
 
 
-# Mechanism-only key: inject turn ``user_message`` via ``expand_playbook(..., user_message=)``.
-# Not a CEO-facing playbook slot — CEO must not be required to re-state the user line in topic.
-USER_MESSAGE_MECH_KEY = "__user_message__"
-
 # 成文综述学术检索加句（仅 cite_write_review 调研员；map_fanout 不盖）。
 # 与 search_policy=academic_literature 配套：先论文库、搜废报缺口、禁脑补全面综述。
 RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE = (

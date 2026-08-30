@@ -230,25 +230,14 @@ export function AskCommenceKickoffBody({
         )}
       </div>
 
-      {/* Footer — CTA + 预填提示同一行 */}
+      {/* Footer — 提示占左，取消 → 主 CTA 贴右 */}
       <div className="shrink-0 border-t border-border bg-card/95 px-3 py-2.5 backdrop-blur-sm">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button
-            size="md"
-            variant="primary"
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-            disabled={busy}
-            onClick={onContinue}
-            icon={
-              submitting === "continue" ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Rocket size={14} />
-              )
-            }
-          >
-            就这样开做
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+            {answer.presetCount > 0
+              ? `已预填 ${answer.presetCount} 项，直接开做或按需调整`
+              : "也可直接在下方对话框回复"}
+          </span>
           <Button
             size="md"
             variant="ghost"
@@ -265,11 +254,22 @@ export function AskCommenceKickoffBody({
           >
             取消
           </Button>
-          <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-            {answer.presetCount > 0
-              ? `已预填 ${answer.presetCount} 项，直接开做或按需调整`
-              : "也可直接在下方对话框回复"}
-          </span>
+          <Button
+            size="md"
+            variant="primary"
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            disabled={busy}
+            onClick={onContinue}
+            icon={
+              submitting === "continue" ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Rocket size={14} />
+              )
+            }
+          >
+            就这样开做
+          </Button>
         </div>
       </div>
     </div>

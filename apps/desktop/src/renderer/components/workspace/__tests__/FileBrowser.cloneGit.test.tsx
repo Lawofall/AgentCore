@@ -40,6 +40,7 @@ describe("FileBrowser · 工具条顺序", () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
+    expect(screen.queryByRole("button", { name: "刷新" })).toBeNull();
   });
 });
 

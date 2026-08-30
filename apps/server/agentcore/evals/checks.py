@@ -281,7 +281,7 @@ class StyleCleanCheck:
 
     跑 ``style_lint.style_violations`` 检测套话开场 / 客套收尾 / 未授权 emoji（纯文本、零
     LLM，详见 ``style_lint.py``）。``args.allow`` 可豁免规则——典型是用户自己用了 emoji 时
-    放行 ``"emoji"``，与 ``<output_style>`` 的 emoji soft carve-out 对齐。
+    放行 ``"emoji"``，与 ``<输出>`` 的 emoji soft carve-out 对齐。
     """
 
     allow: list[str] = field(default_factory=list)

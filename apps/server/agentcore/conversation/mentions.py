@@ -31,10 +31,10 @@ def format_agent_mention_prompt(agent_mentions: list[dict] | None) -> str | None
     if not lines:
         return None
     return (
-        "<agent_mentions>\n"
+        "<队员点名>\n"
         "用户点名关注以下 Agent（软提示，非强制派单/非硬路由）：\n"
         + "\n".join(lines)
-        + "\n</agent_mentions>"
+        + "\n</队员点名>"
     )
 
 

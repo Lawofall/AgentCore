@@ -46,10 +46,6 @@ def test_landing_tool_path_from_args():
         landing_tool_path_from_args("file_write", {"path": "a.py"}) == "a.py"
     )
     assert (
-        landing_tool_path_from_args("write_section", {"path": "sec.md"})
-        == "sec.md"
-    )
-    assert (
         landing_tool_path_from_args(
             "file_move", {"source": "a.py", "destination": "b.py"}
         )
@@ -117,7 +113,6 @@ async def test_every_landing_tool_self_reports_its_product(tmp_path):
         FileMoveTool,
         FileWriteTool,
         StrReplaceTool,
-        WriteSectionTool,
     )
     from agentcore.tools.file_products import LANDING_TOOLS
     from agentcore.tools.protocol import ToolContext
@@ -134,9 +129,6 @@ async def test_every_landing_tool_self_reports_its_product(tmp_path):
         )
 
     (tmp_path / "src.txt").write_text("alpha\n", encoding="utf-8")
-    (tmp_path / "page.html").write_text(
-        "<!-- SECTION:s0 START -->\n<!-- SECTION:s0 END -->\n", encoding="utf-8"
-    )
     cases: list[tuple[str, object, dict, str, str]] = [
         ("file_write", FileWriteTool(), {"path": "报告.md", "content": "# 标题"}, "报告.md", "md"),
         (
@@ -152,13 +144,6 @@ async def test_every_landing_tool_self_reports_its_product(tmp_path):
             {"path": "src.txt", "old_string": "alpha", "new_string": "beta"},
             "src.txt",
             "txt",
-        ),
-        (
-            "write_section",
-            WriteSectionTool(),
-            {"path": "page.html", "section": "s0", "content": "<p>x</p>"},
-            "page.html",
-            "html",
         ),
         (
             "file_copy",

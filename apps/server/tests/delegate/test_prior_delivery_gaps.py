@@ -119,8 +119,8 @@ def test_partial_with_blocking_gaps_injects():
     payload = extract_prior_turn_delivery_status(entries)
     assert payload is not None
     text = render_prior_delivery_gaps(payload)
-    assert "<prior_delivery_gaps>" in text
-    assert "</prior_delivery_gaps>" in text
+    assert "<上轮交付缺口>" in text
+    assert "</上轮交付缺口>" in text
     assert "state=partial" in text
     assert "execution_id=" not in text
     assert "exec-abc" not in text
@@ -173,8 +173,8 @@ def test_one_shot_fingerprint_uses_latest_delivery_in_prior_journal():
 
 
 def test_gaps_vs_redispatch_mutex():
-    gaps = "<prior_delivery_gaps>\nx\n</prior_delivery_gaps>"
-    retry = "<prior_delegate_retry>\ny\n</prior_delegate_retry>"
+    gaps = "<上轮交付缺口>\nx\n</上轮交付缺口>"
+    retry = "<上轮重派>\ny\n</上轮重派>"
     g, r = apply_gaps_vs_redispatch_mutex(gaps, retry)
     assert g == gaps
     assert r == ""
@@ -216,7 +216,7 @@ async def test_build_hint_injects_once_only_on_fingerprint(monkeypatch):
         conversation_id="c1",
         exclude_message_id="msg-current",
     )
-    assert "<prior_delivery_gaps>" in text
-    assert text.count("<prior_delivery_gaps>") == 1
+    assert "<上轮交付缺口>" in text
+    assert text.count("<上轮交付缺口>") == 1
     assert "execution_id=" not in text
     assert "e1" not in text

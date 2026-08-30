@@ -82,7 +82,7 @@ export function AskSectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-/** 底栏：主 CTA + 安静的取消（wire 仍 decision=stop 硬停）+ 右侧提示。各 chrome 同一形。 */
+/** 底栏：提示占左，动作组贴右（取消 → 主 CTA）。取消 wire 仍 decision=stop 硬停。 */
 export function AskCardFooter({
   cta,
   ctaIcon: CtaIcon,
@@ -105,23 +105,12 @@ export function AskCardFooter({
   ctaDisabled?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
-      <Button
-        size="md"
-        variant="primary"
-        className="bg-primary text-primary-foreground hover:bg-primary/90"
-        disabled={busy || ctaDisabled}
-        onClick={onContinue}
-        icon={
-          submitting === "continue" ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <CtaIcon size={14} />
-          )
-        }
-      >
-        {cta}
-      </Button>
+    <div className="flex flex-wrap items-center justify-end gap-2.5">
+      {hint && (
+        <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+          {hint}
+        </span>
+      )}
       <Button
         size="md"
         variant="ghost"
@@ -138,11 +127,22 @@ export function AskCardFooter({
       >
         取消
       </Button>
-      {hint && (
-        <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-          {hint}
-        </span>
-      )}
+      <Button
+        size="md"
+        variant="primary"
+        className="bg-primary text-primary-foreground hover:bg-primary/90"
+        disabled={busy || ctaDisabled}
+        onClick={onContinue}
+        icon={
+          submitting === "continue" ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <CtaIcon size={14} />
+          )
+        }
+      >
+        {cta}
+      </Button>
     </div>
   );
 }

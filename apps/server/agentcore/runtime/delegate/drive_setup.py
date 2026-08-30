@@ -43,19 +43,8 @@ def build_drive_executor(
     session: Any,
 ) -> Callable[[RunSpec, dict], Awaitable[RunState]]:
     """Cold agent executor wrapped with continuation + optional coordination timeouts."""
-    from agentcore.runtime.delegate.captain_recon import resolve_captain_recon_for_delegate
     from agentcore.runtime.runs import build_agent_executor
     from agentcore.runtime.suspension import turn_evidence_ledger as _turn_ledger_var
-
-    captain_recon = resolve_captain_recon_for_delegate(depth=int(getattr(tool, "_depth", 0) or 0))
-    if captain_recon:
-        from agentcore.core.logging import get_logger
-
-        get_logger(__name__).info(
-            "delegate.captain_recon_injected",
-            chars=len(captain_recon),
-            depth=int(getattr(tool, "_depth", 0) or 0),
-        )
 
     cold_executor = build_agent_executor(
         plan=plan,
@@ -75,7 +64,6 @@ def build_drive_executor(
         escalation_timeout=tool._checkpoint_timeout_seconds,
         escalation_armed=checkpoint_active(tool),
         team_brief=tool._team_brief,
-        captain_recon=captain_recon or None,
         # 回合入口绑定的共享台账（与 CEO 同一对象）；辩论 executor 不经此路径。
         turn_evidence_ledger=_turn_ledger_var.get(),
         session_folder_id=getattr(tool, "_folder_id", None),

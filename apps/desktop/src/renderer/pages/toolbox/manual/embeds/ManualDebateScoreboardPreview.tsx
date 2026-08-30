@@ -1,22 +1,17 @@
 import { Scoreboard } from "@/components/chat/debate/arena/Scoreboard";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { DEMO_DEBATE_MESSAGE_ID, DEMO_DEBATE_MODEL } from "./demoDebate";
+import { DEMO_DEBATE_MODEL } from "./demoDebate";
 
 /**
  * 手册「真组件预览」：辩论室记分牌。
- * 复用 {@link Scoreboard} + 手造已收场 DebateModel；站队态走默认 store（未站队）。
- * 自带 TooltipProvider（动量图 / 手册入口 tooltip）；手册深链需外层 Router（产品手册页已有）。
+ * 复用 {@link Scoreboard} + 手造已收场 DebateModel。
+ * 自带 TooltipProvider（手册入口 tooltip）；手册深链需外层 Router（产品手册页已有）。
  */
 export function ManualDebateScoreboardPreview() {
   return (
     <TooltipProvider>
       <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-border bg-card">
-        <Scoreboard
-          model={DEMO_DEBATE_MODEL}
-          messageId={DEMO_DEBATE_MESSAGE_ID}
-          hasPendingSteering={false}
-          onScrollTo={() => {}}
-        />
+        <Scoreboard model={DEMO_DEBATE_MODEL} onScrollTo={() => {}} />
       </div>
     </TooltipProvider>
   );

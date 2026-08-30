@@ -157,13 +157,7 @@ CEO_SYNTHESIS_MAX_CHARS = 4000
 # keep natural length under MAX; whole-doc chop only at MAX_CHARS).
 CEO_SYNTHESIS_MAX_RATIO = 4.0
 
-# 工作区产物清单: peer products (role-attributed) + sparse pre-existing paths
-# (attachments / 裸聊 scratch; project shared trees → 「另有 N 个」summary). See
-# ``workspace.sparse_listing`` + ``executor.context._workspace_manifest``.
-WORKSPACE_MANIFEST_MAX_FILES = 40
-WORKSPACE_MANIFEST_CHAR_BUDGET = 1800
-
-# Canonical name of the worker-only「向上升级」tool (worker → CEO clarification
+# Canonical name of the worker-only「向上升级」tool (worker → CEO clarification)
 # channel). One source of truth shared by three sites that must agree without coupling
 # ``runs`` to the ``tools`` package: the EscalateTool's schema name, the executor's
 # allow-list guard (escalate is always offered even to a least-privilege worker), and

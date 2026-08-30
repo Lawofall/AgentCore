@@ -1,4 +1,4 @@
-import { IconButton, SearchField } from "@/components/ui";
+import { EmptyHint, IconButton, SearchField } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
@@ -101,16 +101,13 @@ export function ChatList({
             加载中…
           </p>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-1 px-4 py-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              {chats.length === 0 ? "还没有会话" : "没有匹配的会话"}
-            </p>
-            {chats.length === 0 && (
-              <p className="text-xs text-muted-foreground/70">
-                点击右上角查找用户或打开通讯录
-              </p>
-            )}
-          </div>
+          <EmptyHint
+            className="py-10"
+            title={chats.length === 0 ? "还没有会话" : "没有匹配的会话"}
+            hint={
+              chats.length === 0 ? "点击右上角查找用户或打开通讯录" : undefined
+            }
+          />
         ) : (
           <div className="space-y-0.5">
             {filtered.map((c) => (

@@ -122,7 +122,7 @@ async def test_context_blocks_channel_sequence_and_single_source():
         gate_notes="把关要点文",
         steer="按新方向调整",
     )
-    blocks = _build_context_blocks(plan, spec, {}, "原始请求", None, [])
+    blocks = _build_context_blocks(plan, spec, {}, "原始请求", None)
     assert [b.channel for b in blocks] == [
         "request",
         "task",
@@ -157,7 +157,7 @@ async def test_context_blocks_dependency_carries_provenance():
             phase=RunPhase.COMPLETED, content="改了配置", files_touched=["out/config.json"]
         ),
     }
-    blocks = _build_context_blocks(plan, plan.by_id("t_c"), completed, "原始请求", None, [])
+    blocks = _build_context_blocks(plan, plan.by_id("t_c"), completed, "原始请求", None)
     deps = {b.source_role: b for b in blocks if b.channel == "dependency"}
     assert set(deps) == {"研究员", "工程师"}
     assert deps["研究员"].source_run_id == "t_a"
@@ -176,7 +176,7 @@ def test_team_brief_block_injected_before_task():
     assert errs == []
     spec = plan.nodes[0]
     blocks = _build_context_blocks(
-        plan, spec, {}, "原始请求", None, [], team_brief="受众：初学者；篇幅约 1500 字"
+        plan, spec, {}, "原始请求", None, team_brief="受众：初学者；篇幅约 1500 字"
     )
     brief = next(b for b in blocks if b.channel == "team_brief")
     assert "团队共识" in brief.heading
@@ -279,7 +279,8 @@ def test_worker_turn_observe_covers_identity(monkeypatch):
     spec = RunSpec(run_id="x", agent_id="x", role="汇报员", task="t")
     msgs = _build_messages(_plan(spec), spec, {}, "SYS", "原始请求")
     system = msgs[0].content or ""
-    assert system.startswith("SYS\n\n")
+    assert system.startswith("<身份>")
+    assert "SYS" in system
     assert "你的角色：汇报员" in system
     rows = [r for r in captured if r.get("event") == "cost.prompt_assembled"]
     assert len(rows) == 1
@@ -288,18 +289,3 @@ def test_worker_turn_observe_covers_identity(monkeypatch):
     assert row["sections"]["worker_base"] == 3
     assert row["sections"]["identity"] > 0
     assert row["sections"]["role"] == len("你的角色：汇报员")
-
-
-def test_web_quality_scan_injects_design_prompt():
-    spec = RunSpec(
-        run_id="x",
-        agent_id="x",
-        role="页面",
-        task="做落地页",
-        deliverable=Deliverable(form="files", web_quality_scan=True),
-    )
-    msgs = _build_messages(_plan(spec), spec, {}, "SYS", "原始请求")
-    system = msgs[0].content or ""
-    assert "site/DESIGN.md" in system
-    assert "s_default" in system
-    assert "正向配方" in system

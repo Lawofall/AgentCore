@@ -2005,7 +2005,7 @@ async def test_resume_folds_checkpoint_into_resolved(monkeypatch, tmp_path: Path
 # ── 入库脱敏双防线 + 导出门禁 + 客户端工具断言 ─────────────────────────────
 
 
-_REAL_MEMORY_RULES = """<rules>
+_REAL_MEMORY_RULES = """<设定>
 以下条目请一并遵循。
 硬约束：题材/领域偏好与历史任务不得改变本回合路由（直答/委派/调研/辩论以用户当前话为准）。
 
@@ -2014,17 +2014,17 @@ _REAL_MEMORY_RULES = """<rules>
 
 ## 关于用户的事实
 - 正在测试秘密功能 <!-- ts:2026-07-16 -->
-</rules>"""
+</设定>"""
 
 
 def test_sanitize_memory_keeps_rules_block_structure():
-    prompt = f"前置\n{_REAL_MEMORY_RULES}\n<role>\n你是 CEO\n</role>"
+    prompt = f"前置\n{_REAL_MEMORY_RULES}\n<身份>\n你是 CEO\n</身份>"
     out = sanitize_memory_in_text(prompt)
     assert DEMO_MEMORY_PLACEHOLDER in out
     assert "<!-- ts:" not in out
     assert "正在测试秘密功能" not in out
     assert out.startswith("前置\n")
-    assert "<role>\n你是 CEO\n</role>" in out
+    assert "<身份>\n你是 CEO\n</身份>" in out
     assert SYNTHETIC_MEMORY_RULES in out
 
 

@@ -103,11 +103,6 @@ class Deliverable:
     # not pull a workspace node into ``工作稿/``. Direct constructions may still
     # set this; ``is_workspace_landing`` treats it as workspace.
     workspace_native: bool = False
-    # When set (e.g. ``site/``), the contract gate cross-checks HTML↔CSS↔JS seams
-    # across ALL web files under this workspace prefix — not only this run's batch.
-    # Used by whole-page QA to catch integrated orphan selectors after parallel
-    # section workers each patch a subset of files.
-    web_seam_scope: str = ""
     # Placeholder hard-signal exemption (internal coordination docs): when True, every
     # content artifact in this run's contract check skips hard placeholder failures
     # (soft warnings remain). ``placeholder_hard_exempt_artifacts`` narrows exemption
@@ -115,19 +110,11 @@ class Deliverable:
     # hardcode paths in placeholder_scan.
     placeholder_hard_exempt: bool = False
     placeholder_hard_exempt_artifacts: list[str] = field(default_factory=list)
-    # DESIGN.md contract for static web quality (style id / tokens). Landed
-    # HTML/CSS/JS/SVG always runs syntax / fake-contact / anti-slop; this flag
-    # only gates the DESIGN.md hard checks and DESIGN prompt injection.
-    # Separate from placeholder_scan / web_seam. ``visual_critic`` stays opt-in.
-    web_quality_scan: bool = False
     # Skip soft anti-slop only (hard syntax / fake contacts still apply).
+    # Landed HTML/CSS/JS/SVG always run syntax / fake-contact / anti-slop.
     web_quality_soft_exempt: bool = False
     # Skip named soft rules when the user explicitly asked for that style.
     web_quality_soft_exempt_labels: list[str] = field(default_factory=list)
-    # P1c visual critic (screenshot → VisionReader): opt-in via deliverable ``visual_critic``.
-    # Runs after web_quality hard; missing browser/vision ⇒ 未目验 (never fake pass).
-    # Critical findings → up to 2 contract reworks, then partial warnings.
-    visual_critic: bool = False
     strict: bool = False
     # 调研类两阶段引用验收（块 2）：``two_phase`` = 广搜落盘为 draft（A，不跑成稿
     # 引用闸 / 不因 cite 重试）→ 同 worker 自动升级 B（deep_read 或无编号综述）后再跑
@@ -359,8 +346,8 @@ class RunSpec:
     # 回落 ``settings.engine_worker_token_ceiling``）；经 ``apply_worker_budgets`` 后为
     # 显式回填值。辩论 ``research_then_draft`` 与普通 worker 共用此顶。
     token_ceiling: int | None = None
-    # Optional per-node ReAct round cap (repair / light posture). ``None`` = use
-    # the agent profile default (80). Stamped by builder for light / diagnose_fix_verify.
+    # Optional per-node ReAct round cap. ``None`` = use the agent profile
+    # default (80). CEO may still stamp this.
     max_rounds: int | None = None
     policy: RunPolicy = field(default_factory=RunPolicy)
     # Fan-out awareness: a concise list of the *other* nodes that fanned out from

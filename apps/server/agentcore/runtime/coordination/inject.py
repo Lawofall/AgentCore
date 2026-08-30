@@ -225,6 +225,7 @@ def _capability_dead_inject_lines(session: CoordinationSession) -> list[str]:
     return capability_dead_inject_lines(
         workspace_channel_dead=bool(getattr(session, "workspace_channel_dead", False)),
         exec_env_dead=bool(getattr(session, "exec_env_dead", False)),
+        exec_env_dead_reason=getattr(session, "exec_env_dead_reason", None),
     )
 
 

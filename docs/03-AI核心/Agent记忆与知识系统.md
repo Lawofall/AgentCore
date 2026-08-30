@@ -82,7 +82,7 @@ description: 一行摘要    # 可空；空不是错误
 
 - **常驻** → 目标：全部条目拼成**一个块**，无「用户规则硬 / AI 记忆软」分节。⏳ 现状仍两层拼接（`rules_injection.py`）
 - **按需** → **一个**目录（名字 + `description`）+ **一个** `consult`
-- **`@` 提及** = ✅ 运行时把一条按需条目临时当常驻用；不是 frontmatter 的第三个取值。对话页 `@` 点名设定走 `kind=document`（`document_id`），注入 `<pinned_entries>`，**不**进附件块、不落盘。@ 工作区文件 / 图片 / 对话仍走附件体系，按被 @ 的东西分流。→ 见代码: `runtime/resolve/attachment_context.py` · 桌面 `useMentionMenu.ts`
+- **`@` 提及** = ✅ 运行时把一条按需条目临时当常驻用；不是 frontmatter 的第三个取值。对话页 `@` 点名设定走 `kind=document`（`document_id`），注入 `<钉住条目>`，**不**进附件块、不落盘。@ 工作区文件 / 图片 / 对话仍走附件体系，按被 @ 的东西分流。→ 见代码: `runtime/resolve/attachment_context.py` · 桌面 `useMentionMenu.ts`
 
 **合并 consult 的两处定案**：单工具 audience = **CEO + worker**（Skill 对 worker 同样露出 HOW；代价是 worker 常驻目录多几行）。门控为单一 `has_entries`。拉不到统一为**软 miss**（`success=True` + 「没有这条」，名字拼错不该炸回合）；playbook 入口靠 `delegate` 工具 schema 自身可见。观测事件合一为 `consult.{hit,miss}`。
 
@@ -152,7 +152,7 @@ GROUP BY 1;
 
 ⏳ **余项**：取消 `role` 三分（常驻拼成单块随它）；市场 Skill 入基座（系统 Skill 真源留代码）；巩固按 `description` 归位（现状仍整文件重写偏好/画像；**不得预置空条目**）。
 
-**回归**：`evals/cases/rules_memory/` 用 `documents_fixture` 预置 `documents` 行，覆盖该拉不拉 / 拉错 / 明示约束；harness 对固定 `_EVAL_USER_ID` **每例前后硬清**。须 `path=team` 才装 `<rules>`（`single` 不装 system prompt）。`product_rules` 测产品知识落点，不是规则遵守。历史会话仍渲染旧 `consult_*` 工具名（删了旧对话就烂）；新 `consult` 尚无自己的 conformance 向量。`consult.hit` 的细 `kind` 只进日志；`display` 只带两桶 `origin`（`system` | `user`）；模型看不见。
+**回归**：`evals/cases/rules_memory/` 用 `documents_fixture` 预置 `documents` 行，覆盖该拉不拉 / 拉错 / 明示约束；harness 对固定 `_EVAL_USER_ID` **每例前后硬清**。须 `path=team` 才装 `<设定>`（`single` 不装 system prompt）。`product_rules` 测产品知识落点，不是规则遵守。历史会话仍渲染旧 `consult_*` 工具名（删了旧对话就烂）；新 `consult` 尚无自己的 conformance 向量。`consult.hit` 的细 `kind` 只进日志；`display` 只带两桶 `origin`（`system` | `user`）；模型看不见。
 
 → [上下文工程 · 按需与写侧配额](/docs/03-AI核心/上下文工程.md#按需与写侧配额)
 
@@ -163,7 +163,7 @@ GROUP BY 1;
 | 记忆与规则靠 `ai_maintained` 区分注入措辞 | 读侧目标平权（⏳ 常驻仍两层拼接）；该字段只剩写侧与 UI |
 | 用户硬规则恒胜（prompt 分权） | 治理在记忆卡片可见可撤销，不靠措辞分权 |
 | 规则按需 ≠ 记忆主题（两个目录两个工具） | 同一按需目录；约束 vs 事实由 `description` 承载 |
-| `文档/` 永不进 `<rules>` | `文档/项目/` 已迁为按需 `主题/`；运行产物仍走盘 + `file_read` |
+| `文档/` 永不进 `<设定>` | `文档/项目/` 已迁为按需 `主题/`；运行产物仍走盘 + `file_read` |
 | `AgentCore/` 下三类子目录分置 | 文件页取消三分夹；可见约定根保留（隐藏点目录仍否决） |
 | 全部 Skill 搬进 DB | 只搬**市场** Skill；系统 Skill 留代码——随发布走、用户不拥有，再造 DB 真源是双写 |
 
@@ -184,14 +184,14 @@ GROUP BY 1;
 ```
 AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打开入口是终稿路径可点与工作区树）
 ├── 规则/                 用户硬规则（ai_maintained=false）
-│   └── *.md              always（默认）→ 共享 <rules>；或 on_demand → <按需目录> + consult ✅
+│   └── *.md              always（默认）→ 共享 <设定>；或 on_demand → <按需目录> + consult ✅
 │                         （生效仅 `always | on_demand` 两档）
 ├── 记忆/                 AI 维护（ai_maintained=true）
 │   ├── 偏好.md           always · 仅全局 · 沟通/习惯
 │   ├── 画像.md           always · 技术栈/事实（可全局可文件夹）
 │   ├── 导航.md           always · 仅文件夹层 · 短入口（一句话定位 + 任务路由）✅
 │   └── 主题/<slug>.md    on_demand · <按需目录> + consult（单次软顶 5；总数≤memory_max_topic_files）✅
-└── 文档/                 工作区盘 · 永不进 <rules> · 按需 file_read
+└── 文档/                 工作区盘 · 永不进 <设定> · 按需 file_read
     ├── 工作稿/…          ✅ 无显式路径产物的默认落点（取代旧「兜底进 research」）
     └── research/ debate/ reviews/  运行产物（无 `项目/`）
 ```
@@ -215,9 +215,9 @@ AgentCore/                ✅ UI `.agentcore`（用户平时不必打开；打�
 > 按需侧「单目录 + 单工具」；写侧常驻配额闸 → `memory/always_quota.py` + `GET /v1/documents/always-quota`（`remember` / `mutate_user_rule` 与文件页同一闸）；读侧全量不截断。⏳ 常驻拼成单块、取消 `role` 三分 → 目标形态余项。
 
 1. 工作记忆经 `load_recent_history` 进窗口（CEO / worker 共用）。
-2. 长期记忆折叠进共享 `<rules>` 基座：用户规则在前（权威）、AI 记忆在后（软措辞）；无用户规则时与旧 memory-only 块逐字节一致（护前缀缓存）。桌面 sidecar **有 account 票**时：prepare/resume 对 always 规则 / AI 记忆正文 / on_demand 规则目录 / memory topics **只读进程快照缓存**（miss → 空注入、不 await 云 HTTP）；`consult` 取规则正文与目录**同一份快照**（不另打 `/rules/list`）。assemble 的 explore/画像/scope-state 经 `prepare_reads_cache_only` 同样只读快照（warm 含每作用域 scope-state）；非回合 `warmAccountRulesMemory` 并行拉取并 seed（`/rules/list` 一次供 always+on_demand，并回传云算好的 `folder_chain` 与祖先层规则；warm 据此把**祖先各层的画像 / 主题 / scope-state 一并拉进同一快照**——本机没有 folders 表，链只能由云给）。快照有 **300s TTL**（他机改动 / 漏刷的兜底），故 warm 回传 `ttlSeconds`、桌面按 account+folder 记到期时点并在下次用前**提前续期**；**本机文件页写入**（规则 / 记忆叶子）与 sidecar 上 `remember` 成功后立刻对**活着的** sidecar 强制重暖（忽略 TTL）。**detached execution 存活期**（`execution_detached` → `execution_completed`）桌面按同一 TTL **周期续暖**——CEO 回合 `startTurn` 已返回、团队仍跑时必须续，后台团队跑完只通知、不另开回合。只 warm 一次的话，TTL 到期后 miss 即空注入——用户规则与 AI 记忆会**静默**全失，故续期握手属契约而非优化。空注入仍打 `account.rules_memory_cache_miss`。**无票**仍走本地 DB。
-3. always 序：**全局偏好 → 全局画像 →（祖先各层画像，外→内）→ 当前层画像 → 当前层导航**（缺文件跳过；导航不继承）；用户 always 规则同序进共享 `<rules>` 前半（全局 → 祖先外→内 → 当前，祖先层带「其下所有文件夹一并适用、以更近的为准」标签）。on_demand 侧（记忆主题 / 用户规则 / 系统 Skill）合并为单一 `<按需目录>` → `consult`（沿链取并集，正文按**最近层优先**解析、全局兜底；目录非空才 wire，单一 `has_entries` 门控）；目录每项只有**名字 + `description`**，不回退取正文首行。两侧都跳过用户标了「这条不对」的条目（`disputed_at`，见「纠错通道」），云侧同轨——`/v1/account/memory` 与 `/rules/list` 的载荷带 `description` / `disputed`，故 sidecar 快照与本地 DB 的目录内容一致。
-4. **文件夹清单**（派生，**非记忆**）：CEO prompt 独立 `<文件夹清单>` 段，回合准备时由 Folder 列表 + 各文件夹 `画像.md` 首句实时拼装（一行一项：**完整路径** + **id** + 一句话；当前出生桌钉在名单前并在行内标出）。嵌套后同名末段可存在于多层，只给末段会把每次 `resolve_folder` 逼进歧义回合。按最近活跃排序、`folder_catalog_max_entries` 截断、无文件夹则不注入。派生而非落盘，故无需巩固、不会过期、改名即时反映。**不进** `<rules>`、不得挤掉 always 记忆。已知降级：account 票 + `prepare_reads_cache_only` 时 warm 快照只含当前 folder 及其祖先链画像，旁支文件夹可能只有名称。
+2. 长期记忆折叠进共享 `<设定>` 基座：用户规则在前（权威）、AI 记忆在后（软措辞）；无用户规则时与旧 memory-only 块逐字节一致（护前缀缓存）。桌面 sidecar **有 account 票**时：prepare/resume 对 always 规则 / AI 记忆正文 / on_demand 规则目录 / memory topics **只读进程快照缓存**（miss → 空注入、不 await 云 HTTP）；`consult` 取规则正文与目录**同一份快照**（不另打 `/rules/list`）。assemble 的 explore/画像/scope-state 经 `prepare_reads_cache_only` 同样只读快照（warm 含每作用域 scope-state）；非回合 `warmAccountRulesMemory` 并行拉取并 seed（`/rules/list` 一次供 always+on_demand，并回传云算好的 `folder_chain` 与祖先层规则；warm 据此把**祖先各层的画像 / 主题 / scope-state 一并拉进同一快照**——本机没有 folders 表，链只能由云给）。快照有 **300s TTL**（他机改动 / 漏刷的兜底），故 warm 回传 `ttlSeconds`、桌面按 account+folder 记到期时点并在下次用前**提前续期**；**本机文件页写入**（规则 / 记忆叶子）与 sidecar 上 `remember` 成功后立刻对**活着的** sidecar 强制重暖（忽略 TTL）。**detached execution 存活期**（`execution_detached` → `execution_completed`）桌面按同一 TTL **周期续暖**——CEO 回合 `startTurn` 已返回、团队仍跑时必须续，后台团队跑完只通知、不另开回合。只 warm 一次的话，TTL 到期后 miss 即空注入——用户规则与 AI 记忆会**静默**全失，故续期握手属契约而非优化。空注入仍打 `account.rules_memory_cache_miss`。**无票**仍走本地 DB。
+3. always 序：**全局偏好 → 全局画像 →（祖先各层画像，外→内）→ 当前层画像 → 当前层导航**（缺文件跳过；导航不继承）；用户 always 规则同序进共享 `<设定>` 前半（全局 → 祖先外→内 → 当前，祖先层带「其下所有文件夹一并适用、以更近的为准」标签）。on_demand 侧（记忆主题 / 用户规则 / 系统 Skill）合并为单一 `<按需目录>` → `consult`（沿链取并集，正文按**最近层优先**解析、全局兜底；目录非空才 wire，单一 `has_entries` 门控）；目录每项只有**名字 + `description`**，不回退取正文首行。两侧都跳过用户标了「这条不对」的条目（`disputed_at`，见「纠错通道」），云侧同轨——`/v1/account/memory` 与 `/rules/list` 的载荷带 `description` / `disputed`，故 sidecar 快照与本地 DB 的目录内容一致。
+4. **文件夹清单**（派生，**非记忆**）：CEO prompt 独立 `<文件夹清单>` 段，回合准备时由 Folder 列表 + 各文件夹 `画像.md` 首句实时拼装（一行一项：**完整路径** + **id** + 一句话；当前出生桌钉在名单前并在行内标出）。嵌套后同名末段可存在于多层，只给末段会把每次 `resolve_folder` 逼进歧义回合。按最近活跃排序、`folder_catalog_max_entries` 截断、无文件夹则不注入。派生而非落盘，故无需巩固、不会过期、改名即时反映。**不进** `<设定>`、不得挤掉 always 记忆。已知降级：account 票 + `prepare_reads_cache_only` 时 warm 快照只含当前 folder 及其祖先链画像，旁支文件夹可能只有名称。
 5. **当前课题认定**：「继续做项目 / 汇报现状」且用户未点名时，**工作区（及已绑工程）近况 ＞ 全局画像「正在做 X」**——全局仅软参考，不得压过工作区，也不得把旧文件夹名写进默认提问套用户。偏好/文风等仍可用全局记忆。
 6. 注入剥存量人面 chrome（旧文件里的 H1 /「本文件由 AI 自动维护」引用块）。正文从小节/列表起笔；空文件的「可编辑」说明在编辑器空状态，不进 md。
 7. 装配顺序权威 → [执行引擎 §七](/docs/03-AI核心/执行引擎架构设计.md) / `runtime/context/`（`SectionOrder`）。

@@ -77,7 +77,8 @@ class EscalateTool:
         return ToolSchema(
             name=ESCALATE_TOOL_NAME,
             description=(
-                "向上通道：必须由上级/用户拍板或职责偏离才报。小事勿升级。"
+                "向上通道：必须由上级/用户拍板或职责偏离才报（权威稿冲突、扩范围）。"
+                "小事勿升级。勿自己改、勿只标假设。"
                 "blocking 默认 false（报一声继续）；"
                 "猜错作废 / 只有上级能定 → true（须 assumption）。"
                 "kind：normal / scope 偏离 / dep 缺输入。"

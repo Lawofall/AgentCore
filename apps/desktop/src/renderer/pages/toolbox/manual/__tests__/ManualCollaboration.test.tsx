@@ -36,6 +36,11 @@ describe("ManualCollaboration", () => {
       expect(document.getElementById(id)).toBeTruthy();
     }
     expect(document.getElementById("debate")?.textContent).toMatch(/辩论室/);
+    expect(sectionText("debate")).toMatch(/点了名就开跑/);
+    expect(sectionText("debate")).not.toMatch(/CEO 会开一场辩论/);
+    expect(sectionText("debate")).not.toMatch(/三种形态/);
+    expect(sectionText("debate")).not.toMatch(/站队/);
+    expect(sectionText("debate")).not.toMatch(/掌舵/);
     expect(document.getElementById("autonomy")?.textContent).toMatch(/自主度/);
     expect(document.getElementById("control")?.textContent).toMatch(/中途插手/);
     expect(document.getElementById("checkpoint")?.textContent).toMatch(

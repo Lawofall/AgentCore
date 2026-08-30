@@ -349,7 +349,7 @@ async def test_stale_desk_retry_still_fails_is_start_failure_and_stops(_desk_env
     _clock, _old, sandbox, ws = _desk_env
     client = _AlwaysStale()
     set_sandboxd_client_for_tests(client)  # type: ignore[arg-type]
-    with pytest.raises(SandboxError, match="执行环境启动失败") as failed:
+    with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用") as failed:
         await sandbox.execute(
             ExecutionRequest(
                 code="print(1)",

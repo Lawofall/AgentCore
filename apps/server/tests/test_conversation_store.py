@@ -1648,6 +1648,91 @@ async def test_finalize_local_does_not_mint_followups(monkeypatch):
     assert result["followups"] is None
 
 
+async def test_finalize_local_end_turn_does_not_emit_stage_card(monkeypatch):
+    """新调研 end_turn 不再因命题卡登记推进卡。"""
+    stage = AsyncMock(return_value="sc_1")
+
+    class MsgRepo:
+        def __init__(self, _s):
+            pass
+
+        async def get_by_id(self, *_a, **_k):
+            return None
+
+        async def create(self, **kw):
+            return SimpleNamespace(id=kw["message_id"])
+
+        async def upsert_assistant(self, **kw):
+            return SimpleNamespace(id=kw["message_id"])
+
+        async def user_message_for_assistant(self, **_k):
+            return None
+
+        async def set_followups(self, *_a, **_k):
+            raise AssertionError("set_followups must not run")
+
+    class ConvRepo:
+        def __init__(self, _s):
+            pass
+
+        async def get_by_id_unscoped(self, _cid):
+            return SimpleNamespace(title="already")
+
+    class CM:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *_a):
+            return False
+
+    monkeypatch.setattr(cloud_mod, "async_session_factory", lambda: CM())
+    monkeypatch.setattr(cloud_mod, "MessageRepository", MsgRepo)
+    monkeypatch.setattr(cloud_mod, "ConversationRepository", ConvRepo)
+    monkeypatch.setattr(cloud_mod, "persist_turn_journal", AsyncMock())
+    monkeypatch.setattr(cloud_mod, "TurnMetricsRepository", _NoopMetricsRepo)
+    monkeypatch.setattr(cloud_mod, "schedule_consolidation", lambda _c: None)
+    monkeypatch.setattr(cloud_mod, "schedule_compaction_if_due", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        "agentcore.runtime.kickoff.stage_card.emit_stage_card_for_motion", stage
+    )
+
+    result = await CloudStore().finalize(
+        mode="local",
+        conversation_id="c1",
+        user_id="u1",
+        user_message="hi",
+        assistant_content="四路综述已落盘",
+        runs={
+            "events": [
+                {
+                    "type": "run_completed",
+                    "payload": {
+                        "debrief": {
+                            "summary": "有对立",
+                            "motion_card": {
+                                "motion": "是否过重",
+                                "sides": [
+                                    {"key": "pro", "name": "正", "stance": "支持"},
+                                    {"key": "con", "name": "反", "stance": "反对"},
+                                ],
+                                "fact_pointers": [],
+                                "rationale": "价值对立",
+                            },
+                        }
+                    },
+                }
+            ],
+            "finish_reason": "end_turn",
+        },
+        user_message_id="u1m",
+        message_id="m1",
+        trace_id="t" * 32,
+        finish_reason=FinishReason.END_TURN.value,
+    )
+    assert result is not None
+    stage.assert_not_awaited()
+
+
 async def test_finalize_local_skips_stage_when_not_end_turn(monkeypatch):
     """Stage card (and former followups) only on end_turn + non-empty body."""
     stage = AsyncMock(return_value="sc_1")

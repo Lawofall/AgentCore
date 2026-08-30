@@ -1540,7 +1540,6 @@ def test_progress_tools_reset_investigation_spin():
         "file_write",
         "file_append",
         "str_replace",
-        "write_section",
         "handoff",
         "delegate",
         "ask_user",

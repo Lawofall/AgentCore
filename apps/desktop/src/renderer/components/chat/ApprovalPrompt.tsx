@@ -17,7 +17,6 @@ import { notifyError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
   decideApproval,
-  isExecutionTool,
   isFileOpTool,
   supportsTurnGrant,
 } from "@/services/approvals";
@@ -459,7 +458,6 @@ export function ApprovalCard({
 
   const isCodeExecute = approval.toolName === "code_execute";
   const isFileBatch = approval.toolName === "file_batch";
-  const isExecution = isExecutionTool(approval.toolName);
   const busy = approval.resolving;
   const isFileOp = isFileOpTool(approval.toolName);
   const {
@@ -469,8 +467,6 @@ export function ApprovalCard({
   } = approvalEscalationTrack(approval.arguments);
   /** True fuse: no turn-scope grants (approve_always / approve_always_files). */
   const showTurnGrantButtons = !forceOneShot;
-  const preferTurnGrant =
-    showTurnGrantButtons && isExecution && supportsTurnGrant(approval.toolName);
   /** 有「本轮内…」按钮才说范围；熔断一次性卡没有轮内授权，不该出现「本轮」字样。 */
   const showScopeNotice =
     showTurnGrantButtons && (supportsTurnGrant(approval.toolName) || isFileOp);
@@ -582,7 +578,7 @@ export function ApprovalCard({
 
   const onceButton = (
     <Button
-      variant={preferTurnGrant ? "neutral" : "primary"}
+      variant="primary"
       icon={spinnerOr("approve", <Check size={13} />)}
       disabled={busy}
       onClick={() => onDecide("approve")}
@@ -593,7 +589,7 @@ export function ApprovalCard({
   const turnGrantButton =
     showTurnGrantButtons && supportsTurnGrant(approval.toolName) ? (
       <Button
-        variant={preferTurnGrant ? "primary" : "neutral"}
+        variant="neutral"
         icon={spinnerOr("approve_always", <CheckCheck size={13} />)}
         disabled={busy}
         onClick={() => onDecide("approve_always")}
@@ -739,21 +735,12 @@ export function ApprovalCard({
       )}
       <div
         className={cn(
-          "flex flex-wrap items-center gap-1.5 pl-6",
+          "flex flex-wrap items-center justify-end gap-1.5 pl-6",
           showScopeNotice ? "mt-1.5" : "mt-2.5",
         )}
       >
-        {preferTurnGrant ? (
-          <>
-            {turnGrantButton}
-            {onceButton}
-          </>
-        ) : (
-          <>
-            {onceButton}
-            {turnGrantButton}
-          </>
-        )}
+        {onceButton}
+        {turnGrantButton}
         {isFileOp && showTurnGrantButtons && (
           <Button
             variant="neutral"

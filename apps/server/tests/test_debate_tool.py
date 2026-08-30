@@ -226,7 +226,7 @@ async def test_quick_debate_returns_dual_products_non_terminal(tmp_path: Path):
     # 双产物都折进 CEO 文本
     assert "决策简报" in result.output
     assert "交锋叙事线" in result.output
-    assert "先小步验证再决定" in result.output  # brief.recommendation
+    assert "你更看重速度还是稳妥" in result.output  # 交接进 CEO 文本；有交接则不写建议
     # 收口机制性落盘 + CEO 尾部路径可引用
     assert "【工作区落盘】" in result.output
     debate_files = list((tmp_path / "AgentCore" / "文档" / "debate").glob("*.md"))
@@ -269,7 +269,8 @@ async def test_emits_debate_result_event_for_frontend_view():
     assert len(p["rounds"][0]["sides"]) == 2
     assert all(s["run_id"] for s in p["rounds"][0]["sides"])
     # 决策简报：结论产物齐全
-    assert p["brief"]["recommendation"] == "先小步验证再决定"
+    assert p["brief"]["recommendation"] == ""
+    assert p["brief"]["handoffs"]
     assert p["brief"]["strongest_points"]
 
 
@@ -395,20 +396,19 @@ async def test_multi_round_cross_round_memory():
         {"motion": "该不该做 X", "form": "debate", "sides": _sides()}, _ctx()
     )
     assert result.success is True
-    # 3 轮 × 2 辩手 = 6 次立论 stream + 结辩 2 → 8（庭前取证员热路径已撤，不再计 4）。
-    assert llm.stream_calls == 8
+    # 3 轮 × 2 辩手 = 6 次立论 stream（新场不跑结辩）。
+    assert llm.stream_calls == 6
     # 后续轮经 continue_run 注入「本轮焦点 + 对方上轮论点」→ 辩手跨轮带记忆
     msgs = [m.content for req in llm.stream_requests for m in req.messages]
     assert any("第 2 轮" in c for c in msgs)
     assert any("辩手发言#" in c for c in msgs)
-    # 结辩 beat 的 feedback 注入「结辩陈词 / 只讲胜负手」→ 辩手在自己 transcript 上收尾。
-    assert any("结辩" in c for c in msgs)
-    # ledger 含后续轮续写行（run_id 形如 *_r2_pro / *_r3_con）+ 收场结辩行（*_closing_pro/con）。
+    assert not any("结辩陈词" in c or "只讲胜负手" in c for c in msgs)
+    # ledger 含后续轮续写行（run_id 形如 *_r2_pro / *_r3_con）；新场无收场结辩行。
     ledger_ids = [r.run_id for r in tool.run_ledger]
     assert any("_r2_pro" in rid for rid in ledger_ids)
     assert any("_r3_con" in rid for rid in ledger_ids)
-    assert any("_closing_pro" in rid for rid in ledger_ids)
-    assert any("_closing_con" in rid for rid in ledger_ids)
+    assert not any("_closing_pro" in rid for rid in ledger_ids)
+    assert not any("_closing_con" in rid for rid in ledger_ids)
 
 
 async def test_cross_exam_real_runner_lands_exchanges():
@@ -422,8 +422,8 @@ async def test_cross_exam_real_runner_lands_exchanges():
     )
     assert result.success is True
     assert llm.cross_exam_calls == 1
-    # 1 轮 × 2 立论 + 2 质询作答 + 2 结辩 = 6（庭前取证员热路径已撤）
-    assert llm.stream_calls == 6
+    # 1 轮 × 2 立论 + 2 质询作答（新场不跑结辩）= 4
+    assert llm.stream_calls == 4
     msgs = [m.content for req in llm.stream_requests for m in req.messages]
     assert any("质询环节" in c for c in msgs)
 
@@ -819,7 +819,7 @@ def test_round_feedback_injects_targeted_user_followup():
 
 
 async def test_steer_window_closes_at_last_boundary_not_after_the_brief():
-    """末轮边界一过就关窗——那之后的结辩 + 简报可达数十秒，期间收下的掌舵永不生效。
+    """末轮边界一过就关窗——那之后的简报可达数十秒，期间收下的掌舵永不生效。
 
     回归：旧实现队列只随进程活着，收场后点「立即结论」照样入队、路由照回「已发送·下一轮
     生效」，条目还常驻内存。现在窗口在最后一个边界即关，之后 :func:`enqueue_steer` 返回
@@ -833,17 +833,16 @@ async def test_steer_window_closes_at_last_boundary_not_after_the_brief():
 
     seen: list[bool] = []
 
-    class _ClosingWatchLLM(_DebateLLM):
-        """结辩那几次 LLM 调用时窗口是否还开着（收场慢动作里的真实提交时机）。"""
+    class _BriefWatchLLM(_DebateLLM):
+        """简报那次 LLM 调用时窗口是否还开着（收场慢动作里的真实提交时机）。"""
 
-        async def stream(self, request):  # noqa: ANN001
-            joined = "\n".join(getattr(m, "content", "") or "" for m in request.messages)
-            if "结辩" in joined:
+        async def complete(self, request):  # noqa: ANN001
+            step = (request.scenario or "").rsplit(".", 1)[-1]
+            if step == "brief":
                 seen.append(steer_window_open("e"))
-            async for chunk in super().stream(request):
-                yield chunk
+            return await super().complete(request)
 
-    llm = _ClosingWatchLLM(converge_at=1)
+    llm = _BriefWatchLLM(converge_at=1)
     tool = DebateTool(
         llm=llm,
         sink=EventSink(),
@@ -861,7 +860,7 @@ async def test_steer_window_closes_at_last_boundary_not_after_the_brief():
             {"motion": "该不该做 X", "form": "debate", "sides": _sides()}, _ctx()
         )
         assert result.success is True
-        assert seen and not any(seen)  # 结辩期已关窗
+        assert seen and not any(seen)  # 简报期已关窗
         assert steer_window_open("e") is False
         assert (
             enqueue_steer(execution_id="e", conversation_id="c1", decision="conclude")

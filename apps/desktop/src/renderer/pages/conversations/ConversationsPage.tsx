@@ -2,6 +2,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyHint,
   IconButton,
   SearchField,
   SectionLabel,
@@ -118,7 +119,7 @@ export function ConversationsPage() {
                   />
                   <FilterRow
                     icon={<Inbox size={16} />}
-                    label="未分组"
+                    label="快速对话"
                     count={counts.ungrouped}
                     selected={selected === UNGROUPED_KEY}
                     onSelect={() => setSelected(UNGROUPED_KEY)}
@@ -269,13 +270,16 @@ export function ConversationsPage() {
                   retentionDays={retentionDays}
                 />
               ) : list.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-                  <MessageSquare
-                    size={28}
-                    className="text-muted-foreground/40"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {query.trim()
+                <EmptyHint
+                  className="py-16"
+                  icon={
+                    <MessageSquare
+                      size={28}
+                      className="text-muted-foreground/40"
+                    />
+                  }
+                  title={
+                    query.trim()
                       ? "未找到匹配的对话"
                       : staleOnly
                         ? `暂无超过 ${STALE_DAYS} 天未活跃的对话`
@@ -283,9 +287,9 @@ export function ConversationsPage() {
                           ? "暂无已归档对话"
                           : conversations.length === 0
                             ? "暂无对话"
-                            : "此文件夹暂无对话"}
-                  </p>
-                </div>
+                            : "此文件夹暂无对话"
+                  }
+                />
               ) : (
                 <div className="space-y-4 pb-4">
                   {groups.map((group) => (

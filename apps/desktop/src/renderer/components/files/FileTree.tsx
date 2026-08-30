@@ -82,7 +82,7 @@ interface FileTreeProps {
    */
   hideToolbar?: boolean;
   /**
-   * 工具栏相关状态变更回调（外置工具栏据此响应式渲染上传/折叠/刷新态）。
+   * 工具栏相关状态变更回调（外置工具栏据此响应式渲染上传/折叠态）。
    * 调用方应传**稳定引用**（如 useState 的 setter），否则会按渲染抖动。
    */
   onChromeState?: (state: FileTreeChromeState) => void;

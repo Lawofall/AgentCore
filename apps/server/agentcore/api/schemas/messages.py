@@ -221,10 +221,10 @@ class ResolveEscalationInteraction(BaseModel):
 
 
 class ResolveStageCardInteraction(BaseModel):
-    """Settle a stage progression card（批 B · 阶段推进卡）.
+    """Leftover 阶段推进卡：kind 仍在 journal，已不是开辩入口。
 
-    ``start_debate``：机制直起辩论（可带 ``motion_override`` / ``note`` 嘱咐）。
-    ``research_first``：留痕并回灌 CEO 追加调研。改写 motion 检定失败 → 422，卡保持 pending。
+    热路 ``POST …/interactions/{id}`` 一律 410。开辩须用户在对话里点名。
+    字段仍接受 ``start_debate`` / ``research_first``（旧客户端），服务端不执行。
     """
 
     kind: Literal["stage_card"] = "stage_card"

@@ -72,10 +72,9 @@ def test_helper_flag_only_no_recipe_implication():
     assert deep_research_auto_active(permission_axes=cautious) is False
 
 
-def test_helper_may_auto_debate_respects_session_cap():
-    assert (
-        may_auto_debate(deep_research_auto=True, auto_debate_count=0) is True
-    )
+def test_helper_may_auto_debate_never_opens():
+    """调研旗标不代开辩论。"""
+    assert may_auto_debate(deep_research_auto=True, auto_debate_count=0) is False
     assert (
         may_auto_debate(
             deep_research_auto=True,
@@ -90,20 +89,12 @@ def test_helper_may_auto_debate_respects_session_cap():
         )
         is False
     )
-    assert (
-        may_auto_debate(
-            deep_research_auto=True,
-            permission_axes=recipe_to_axes(AutonomyPolicy.MANAGED),
-            auto_debate_count=0,
-        )
-        is True
-    )
 
 
 # ── ceo_format 消费指引两态 ───────────────────────────────────────
 
 
-def test_motion_cards_block_default_vs_auto_guidance():
+def test_motion_cards_block_does_not_push_debate():
     products = [
         {
             "role": "汇总",
@@ -112,22 +103,22 @@ def test_motion_cards_block_default_vs_auto_guidance():
         }
     ]
     default = motion_cards_block(products, auto_adopt=False)
-    assert "消费指引·默认模式" in default
-    assert "不要】直接调用 debate" in default or "不要直接调用 debate" in default
+    assert "非开辩入口" in default
+    assert "不要调 debate" in default
     assert "深度研究自治" not in default
+    assert "可直接调 debate" not in default
 
     auto = motion_cards_block(products, auto_adopt=True)
-    assert "消费指引·深度研究自治" in auto
-    assert "可直接调 debate" in auto
-    assert "不得装观点" in auto
-    assert "不要】直接调用 debate" not in auto
+    assert "非开辩入口" in auto
+    assert "可直接调 debate" not in auto
+    assert "不要调 debate" in auto
 
 
-def test_format_for_ceo_auto_adopt_guidance_when_flag_under_cap():
+def test_format_for_ceo_never_auto_adopts_debate():
     t = tool(Provider([]))
     t._base_tool_context.deep_research_auto = True
     t._base_tool_context.deep_research_auto_debate_count = 0
-    assert tool_may_auto_debate(t) is True
+    assert tool_may_auto_debate(t) is False
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="汇总", role="汇总")])
     results = {
         "w1": RunState(
@@ -137,12 +128,12 @@ def test_format_for_ceo_auto_adopt_guidance_when_flag_under_cap():
         )
     }
     out = format_for_ceo(t, plan, results)
-    assert "消费指引·深度研究自治" in out
-    assert "可直接调 debate" in out
-    assert "本回合不要直接调用 debate" not in out
+    assert "可直接调 debate" not in out
+    assert "不要调 debate" in out
+    assert "非开辩入口" in out
 
 
-def test_format_for_ceo_falls_back_when_over_cap():
+def test_format_for_ceo_flag_over_cap_still_does_not_push_debate():
     t = tool(Provider([]))
     t._base_tool_context.deep_research_auto = True
     t._base_tool_context.deep_research_auto_debate_count = 1
@@ -156,8 +147,8 @@ def test_format_for_ceo_falls_back_when_over_cap():
         )
     }
     out = format_for_ceo(t, plan, results)
-    assert "消费指引·默认模式" in out
-    assert "不要直接调用 debate" in out or "不要】直接调用 debate" in out
+    assert "不要调 debate" in out
+    assert "可直接调 debate" not in out
 
 
 def test_format_for_ceo_managed_axes_do_not_imply_auto_guidance():
@@ -174,8 +165,9 @@ def test_format_for_ceo_managed_axes_do_not_imply_auto_guidance():
         )
     }
     out = format_for_ceo(t, plan, results)
-    assert "消费指引·默认模式" in out
+    assert "不要调 debate" in out
     assert "消费指引·深度研究自治" not in out
+    assert "可直接调 debate" not in out
 
 
 # ── 开赛卡放行域 ─────────────────────────────────────────────────
@@ -271,8 +263,7 @@ async def test_debate_flag_skips_kickoff_under_cap():
     assert result.effect is not ToolEffect.SUSPEND
     assert saved == []
     assert not any(str(e.type) == "team_preview_required" for e in sink._history)
-    # in-memory count bumped (DB may be unavailable in unit tests)
-    assert tool._base_tool_context.deep_research_auto_debate_count >= 1
+    assert tool._base_tool_context.deep_research_auto_debate_count == 0
 
 
 async def test_debate_flag_restores_kickoff_over_cap():

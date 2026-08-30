@@ -399,7 +399,7 @@ export interface paths {
         put?: never;
         /**
          * List Account User Rules
-         * @description User rules for turn assembly: always → ``<rules>``; on_demand → catalog + consult.
+         * @description User rules for turn assembly: always → ``<设定>``; on_demand → catalog + consult.
          */
         post: operations["list_account_user_rules_v1_account_rules_list_post"];
         delete?: never;
@@ -2340,7 +2340,7 @@ export interface paths {
          * Resolve Interaction
          * @description Settle any paused hot-path interaction over the unified bridge (§8.2).
          *
-         *     ``stage_card``：跨回合耐久卡 → 校验后起新回合 SSE（机制直起辩论或回灌调研）。
+         *     ``stage_card``：leftover 推进卡 resolve 为 410；开辩须用户在对话里点名。
          *     其它 kind（approval / delegation / client_tool / escalation）：Settlement 预写 (D8)
          *     后 settle Future；journal 有 required、无 Future → 410。
          *     Cold-path ``ask_user`` / ``plan_review`` 不在此 endpoint。
@@ -6575,7 +6575,7 @@ export interface components {
         };
         /**
          * AccountRulesListResponse
-         * @description Always rules for ``<rules>`` plus on_demand bodies for 规则目录 / ``consult``.
+         * @description Always rules for ``<设定>`` plus on_demand bodies for 规则目录 / ``consult``.
          *
          *     ``ancestor_*`` carry the enclosing folders' layers, outermost-first, and
          *     ``folder_chain`` is that same chain by id with the current folder last: the engine may
@@ -8271,8 +8271,8 @@ export interface components {
          *
          *     ``CONTINUE`` / ``ADJUST`` / ``STOP`` are shared by ask_user / plan_review.
          *     ``ADJUST`` on plan_review steers then continues. ask_user rejects ``ADJUST``.
-         *     ``RESEARCH_FIRST`` is debate stage_card only: 不开赛，回灌固定文案令 CEO 立即挂
-         *     ``lens_crosscheck``（与 STOP 同构的恢复分支）。
+         *     ``RESEARCH_FIRST`` is debate stage_card only: 不开赛，回灌固定文案令 CEO 立即
+         *     手写多视角调研（与 STOP 同构的恢复分支）。
          * @enum {string}
          */
         CheckpointDecision: "continue" | "adjust" | "stop" | "research_first" | "timeout" | "orphaned";
@@ -11987,10 +11987,10 @@ export interface components {
         };
         /**
          * ResolveStageCardInteraction
-         * @description Settle a stage progression card（批 B · 阶段推进卡）.
+         * @description Leftover 阶段推进卡：kind 仍在 journal，已不是开辩入口。
          *
-         *     ``start_debate``：机制直起辩论（可带 ``motion_override`` / ``note`` 嘱咐）。
-         *     ``research_first``：留痕并回灌 CEO 追加调研。改写 motion 检定失败 → 422，卡保持 pending。
+         *     热路 ``POST …/interactions/{id}`` 一律 410。开辩须用户在对话里点名。
+         *     字段仍接受 ``start_debate`` / ``research_first``（旧客户端），服务端不执行。
          */
         ResolveStageCardInteraction: {
             /**

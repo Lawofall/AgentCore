@@ -1,7 +1,7 @@
 """PromptContributor — the uniform "plugin" shape every always-on prompt source takes.
 
 上下文注入统一 Step 2（常驻源插件化）. Step 1 centralized the *assembly* (ContextAssembler);
-this gives every always-on source — base prompt, runtime context, memory ``<rules>``, CEO
+this gives every always-on source — base prompt, runtime context, memory ``<设定>``, CEO
 core, skill directory, workspace overview, per-turn attachment — ONE shape:
 a named fragment + its render ``order`` + an optional ``budget``. So:
 
@@ -61,7 +61,7 @@ class SectionOrder(IntEnum):
     # Same live-tool gate: render only when ``consult`` is wired this turn.
     RULE_DIRECTORY = 560
     # Derived cross-folder roster (Folder path + 画像.md first line). CEO-only;
-    # rendered outside ``<rules>`` so it stays separate from the always-on entry block.
+    # rendered outside ``<设定>`` so it stays separate from the always-on entry block.
     FOLDER_CATALOG = 570
     # Retired 2026-08-29: resident <citing_sources> HOW removed (#rN lives in
     # shared delivery_honesty). Slot kept so billed prefix keys are not reshuffled.

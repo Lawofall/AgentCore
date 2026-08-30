@@ -112,7 +112,7 @@ async def test_apply_user_rules_always_and_ondemand(session_factory):
         rules_md = await assemble_injected_rules(
             store, repo, _EVAL_USER_ID, folder_id=None, enabled=True
         )
-        assert "MARKER_RULE_Q4K" not in rules_md  # on_demand 不进 always <rules>
+        assert "MARKER_RULE_Q4K" not in rules_md  # on_demand 不进 always <设定>
         listed = await repo.list_on_demand_user_rules(_EVAL_USER_ID, None)
         assert {d.name for d in listed} == {"演练暗号.md"}
         assert "MARKER_RULE_Q4K" in (listed[0].content or "")

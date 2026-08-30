@@ -387,7 +387,6 @@ export default function CollabGraph() {
             </span>
             <div className="min-w-0">
               <p className="cg-title">{tr(GRAPH.task.title)}</p>
-              <p className="cg-sub">{tr(GRAPH.task.sub)}</p>
             </div>
           </div>
         </div>

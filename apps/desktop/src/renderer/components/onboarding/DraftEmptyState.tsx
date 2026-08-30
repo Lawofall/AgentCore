@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui";
 import { useConversations } from "@/hooks/useConversations";
+import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { STARTER_TASK_CHIPS, resolveDraftEmptyKind } from "@/lib/onboarding";
 import { useComposerDraftStore } from "@/stores/composer";
 import { BookOpen } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 /**
@@ -18,6 +20,8 @@ export function DraftEmptyState({
   const conversations = useConversations();
   const kind = previewKind ?? resolveDraftEmptyKind({ conversations });
   const fill = useComposerDraftStore((s) => s.fill);
+  const { isNarrow } = useNarrowLayoutState();
+  const [howToOpen, setHowToOpen] = useState(false);
 
   if (kind === "starter_chips") {
     return (
@@ -43,13 +47,16 @@ export function DraftEmptyState({
             </Button>
           ))}
         </div>
-        <Link
-          to="/toolbox/manual"
+        <button
+          type="button"
           className="mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setHowToOpen((open) => !open)}
+          aria-expanded={howToOpen}
         >
           <BookOpen size={12} />
-          产品手册
-        </Link>
+          怎么用
+        </button>
+        {howToOpen && <HowToPanel showManual={!isNarrow} />}
       </div>
     );
   }
@@ -59,6 +66,24 @@ export function DraftEmptyState({
       <p className="text-2xl font-medium text-foreground">
         今天想解决什么问题？
       </p>
+    </div>
+  );
+}
+
+function HowToPanel({ showManual }: { showManual: boolean }) {
+  return (
+    <div className="mx-auto mt-3 max-w-sm text-left text-sm text-muted-foreground">
+      <p>
+        你一句话说要做什么就行。简单的直接回答；比较大的事会自己找人一起做。做到一半需要你决定时，会停下来问你。做完的东西会放到文件里。
+      </p>
+      {showManual && (
+        <Link
+          to="/toolbox/manual"
+          className="mt-2 inline-block text-xs hover:text-foreground"
+        >
+          产品手册
+        </Link>
+      )}
     </div>
   );
 }

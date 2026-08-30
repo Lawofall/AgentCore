@@ -1719,7 +1719,7 @@ async def test_ceo_str_replace_miss_still_audience_deny():
     assert "form=prose" not in content
 
 
-@pytest.mark.parametrize("name", ["str_replace", "write_section", "file_copy"])
+@pytest.mark.parametrize("name", ["str_replace", "file_copy"])
 async def test_write_allowlist_deny_no_handoff_as_write(name: str):
     """写盘工具不在 allowlist 时说明缺授权，勿劝 handoff 正文冒充落盘。"""
     reg = ToolRegistry()
@@ -2071,3 +2071,89 @@ async def test_grantable_without_gate_denied_on_cloud_captain_path():
     assert attempts[0].success is False
     ends = [e for e in logs if e.get("event") == "tool.execute_end"]
     assert [e["status"] for e in ends] == ["grantable_no_gate"]
+
+
+async def test_cloud_code_execute_outer_timeout_is_sandbox_unavailable():
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+    )
+
+    class _HangExec:
+        @property
+        def schema(self) -> ToolSchema:
+            return ToolSchema(
+                name="code_execute",
+                description="stub",
+                parameters={"type": "object", "properties": {}},
+                category=ToolCategory.EXECUTION,
+                timeout_seconds=0.05,
+            )
+
+        async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+            await asyncio.sleep(5)
+            return ToolResult(tool_call_id="", success=True, output="never")
+
+    reg = ToolRegistry()
+    reg.register(_HangExec())
+    sink = EventSink()
+    messages, _terminal, attempts = await execute_tools(
+        [_call("c1", "code_execute")],
+        reg,
+        _ctx(),
+        sink,
+        approval_gate=None,
+        run_id="r1",
+    )
+    assert attempts[0].success is False
+    assert attempts[0].meta.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+    assert "code_execute" in attempts[0].meta.get("retire_tools", [])
+    assert "test_run" in attempts[0].meta.get("retire_tools", [])
+    assert attempts[0].meta.get("execution_id") == "e"
+    assert EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE in (messages[0].content or "")
+    assert "本机" not in (messages[0].content or "")
+    ends = [e for e in sink._history if e.type == EventType.TOOL_USE_END]  # noqa: SLF001
+    assert ends[0].payload.get("failure", {}).get("code") == "exec_env_sandbox_unavailable"
+
+
+async def test_local_code_execute_outer_timeout_stays_liveness():
+    class _HangExec:
+        @property
+        def schema(self) -> ToolSchema:
+            return ToolSchema(
+                name="code_execute",
+                description="stub",
+                parameters={"type": "object", "properties": {}},
+                category=ToolCategory.EXECUTION,
+                timeout_seconds=0.05,
+            )
+
+        async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
+            await asyncio.sleep(5)
+            return ToolResult(tool_call_id="", success=True, output="never")
+
+    reg = ToolRegistry()
+    reg.register(_HangExec())
+    sink = EventSink()
+    ctx = ToolContext.create(
+        execution_id="e",
+        run_id="s",
+        agent_id="a",
+        backend=ServerWorkspace(
+            root=Path("."), sandbox=SubprocessSandbox(), location="local"
+        ),
+        user_id="u",
+    )
+    messages, _terminal, attempts = await execute_tools(
+        [_call("c1", "code_execute")],
+        reg,
+        ctx,
+        sink,
+        approval_gate=None,
+        run_id="r1",
+    )
+    assert attempts[0].success is False
+    assert attempts[0].meta.get("code") != "exec_env_sandbox_unavailable"
+    assert "活性挂起" in (messages[0].content or "")
+    ends = [e for e in sink._history if e.type == EventType.TOOL_USE_END]  # noqa: SLF001
+    assert ends[0].payload.get("failure", {}).get("code") == "liveness_timeout"

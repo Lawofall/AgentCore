@@ -209,14 +209,9 @@ class Moderator:
         证人答问（批 D1）：注入 ``run_witness_exam`` 且 ``witness_roster`` 非空、质询档开启时，
         质询 beat 后追加主持人点名判定——仅事实性问题；无可用透镜 session 时不注入，零行为变化。
 
-        结辩收束（P4·阶段化发言角色，辩论编排设计.md §4-2.4）：注入 ``run_closing`` 且【认真辩透 +
-        对抗形态】（:meth:`_closing_enabled`）且本场确有有效发言时，收场（循环结束）后与决策简报
-        ``asyncio.gather`` 并行——二者互不依赖（简报只读 rounds，不读结辩），结果语义与事件顺序不变
-        （简报仍随 :class:`DebateResult` 在两者完成后返回）。各方经 runner 用 ``continue_run`` 在自己
-        transcript 上做一段收尾陈词（只讲胜负手、不引入新论据、长度收紧），随 :class:`ClosingStatement`
-        进 ``DebateResult.closings``。这是辩手自己的 advocacy 收尾，与裁判中立的 ``brief`` 正交并存
-        （真人辩论：结辩 + 裁决并存）。未注入 / 快速对碰 / 圆桌 / 全员失败时跳过，收场后逐字回退到
-        「直接出简报」，零行为变化。
+        结辩收束（P4）：新场 :meth:`_closing_enabled` 恒假，收场后直接出简报。结辩 runner /
+        ``closing_task`` 留旧场回放与单测；注入 ``run_closing`` 且闸开时仍与简报 ``asyncio.gather``
+        并行（互不依赖）。未注入 / 闸关 / 全员失败时跳过。
 
         下轮焦点优先级：用户掌舵 ``focus_override`` > 上轮 ``verdict.next_focus`` > :meth:`_frame` 兜底。
         ``_frame`` 保留首轮（开场白 + 首焦点）与 ``next_focus`` 缺失 / 空串时的零风险降级路径。
@@ -469,7 +464,7 @@ class Moderator:
         if pending_interjections and rounds:
             rounds[-1].user_interjections.extend(pending_interjections)
 
-        # 结辩 beat（P4）：仅 DEBATE profile（O1：红队 closings 恒空）。
+        # 结辩 beat（P4）：新场闸关；runner 留旧场回放。
         closings: list[ClosingStatement] = []
         do_closing = (
             profile.closing

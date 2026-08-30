@@ -660,7 +660,6 @@ def test_task_description_matches_what_worker_actually_receives():
     assert "目标" in task_desc and "边界" in task_desc and "验收" in task_desc
     assert "must_contain" not in task_desc
     assert "细则进 deliverable.must_contain" not in task_desc
-    assert "team_brief" in task_desc
 
 async def test_playbook_instantiates_whole_team_and_runs():
     # 拆·playbook 固化 (§2.1): naming a固化形状 + slots expands to a full team and flows through the

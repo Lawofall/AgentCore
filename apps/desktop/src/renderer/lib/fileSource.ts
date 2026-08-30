@@ -68,7 +68,7 @@ export type WriteTextResult =
  * 核心之外的可选能力。共用 UI 读这些决定挂哪些操作面（组件内不按源分支）。
  */
 export interface FileSourceCaps {
-  /** 推送目录变更事件（本地 FS watch）；否则 UI 走手动刷新。 */
+  /** 推送目录变更事件（本地 FS watch）；否则窗口 focus 静默补丁。对话工作区不挂人手刷新。 */
   watch: boolean;
   /** 字节跨边界传输，故上传/下载有意义（云端工作区）。 */
   transfer: boolean;

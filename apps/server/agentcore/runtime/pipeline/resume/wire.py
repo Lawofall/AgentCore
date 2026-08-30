@@ -48,23 +48,23 @@ if TYPE_CHECKING:
 # ``test_resume_autonomy`` can monkeypatch ``resume_pipeline_mod.ApprovalGate``.
 
 _WORKSPACE_CONTEXT_RE = re.compile(
-    r"<workspace_context>.*?</workspace_context>\n?",
+    r"<工作区>.*?</工作区>\n?",
     re.DOTALL,
 )
 
 
 def restamp_workspace_facts(prompt: str, facts: str) -> str:
-    """Replace/append ``<workspace_context>`` for post-bind resume workers.
+    """Replace/append ``<工作区>`` for post-bind resume workers.
 
     Insertion matches :data:`~agentcore.runtime.context.contributor.SectionOrder.WORKSPACE_FACTS`
     (750): immediately before the attachment volatile tail, not after
-    ``</runtime_context>`` (that was the pre-2026-08-19 slot in front of the core).
+    ``</运行时>`` (that was the pre-2026-08-19 slot in front of the core).
     """
     stripped = _WORKSPACE_CONTEXT_RE.sub("", prompt or "").rstrip()
     if not facts:
         return stripped
     insert_at = -1
-    for marker in ("<attached_files>", "<agent_mentions>"):
+    for marker in ("<附件>", "<队员点名>"):
         idx = stripped.find(marker)
         if idx >= 0 and (insert_at < 0 or idx < insert_at):
             insert_at = idx
@@ -282,7 +282,7 @@ async def _wire_continuation_toolset(
     checkpoint_enabled = settings.checkpoint_gate_enabled
     # Re-stamp environment facts onto the worker base: continuation rebuilds the
     # backend from the CURRENT binding, so workers must not inherit a stale cloud
-    # ``<workspace_context>``.
+    # ``<工作区>``.
     git_fact = await detect_workspace_git(backend)
     raise_if_backend_channel_dead(backend)
     refreshed_base = restamp_workspace_facts(

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 _DATA_FILE_LANDING = """\
-<data_file_landing>
+<数据落盘>
 ## 数据文件 → 可打开产物
 
 用户丢账单 / 报表 / 导出记录 / 凭证等数据文件（PDF、CSV、xlsx、HTML 表、文本导出）+ 一句话，\
 要一份能直接打开的整理产物时走本页：【单 worker 线性】一人做完。套多角色 DAG / 为拆表另开流水线 ≠ 本页。
 
-【有执行】对照 `<workspace_context>`。`code_execute=已装配`：CEO 派 `form=files`，\
+【有执行】对照 `<工作区>`。`code_execute=已装配`：CEO 派 `form=files`，\
 `artifacts` 写死产物路径，task 点源文件。
 
 **原件为真源**：看原件——读工作区原文件。PDF/Office 预解析 `.md` / `file_read` 抽出文本只是线索 ≠ 表结构真源。\
@@ -59,4 +59,4 @@ PDF/抽出文本只写抽出里能看见的形态（分页、拆行、列对不�
 3. **一句人话下一步**（正文与 handoff.next_steps）：运算环境暂时不可用，稍后再试即可。\
 让用户绑本机文件夹、改工作区形态、导入到云、在本机终端跑脚本 ≠ 本条。
 `.xlsx=不可产` 时不要改手抄 csv 顶替表格。谎称已生成 / 已校验 ≠ 本条。
-</data_file_landing>"""
+</数据落盘>"""

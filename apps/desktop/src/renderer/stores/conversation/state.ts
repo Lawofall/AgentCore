@@ -228,6 +228,12 @@ export interface ConversationState {
   /** 真正换 id 时清掉即将显示切片的残留 messageFocus；pendingFocus 不动。 */
   switchConversation: (id: string | null) => void;
   /**
+   * 草稿首发：把 draft slice（乐观用户泡 + Thinking）整块接到新 id，并切过去。
+   * 与 {@link ConversationState.switchConversation} 分开——从首页点开已有对话
+   * 不得把草稿残留消息倒进目标会话。
+   */
+  adoptDraftRuntime: (newId: string) => void;
+  /**
    * Explicit idle-slice drop (tests / diagnostics). Production terminal SSE
    * (`message_end` / `error`) no longer calls this — idle eviction is LRU-only
    * on {@link ConversationState.switchConversation}.

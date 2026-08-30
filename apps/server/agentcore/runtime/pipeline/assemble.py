@@ -342,8 +342,7 @@ async def assemble_ceo_turn(
     # the files already on disk in this conversation's workspace, so the CEO can
     # triage / delegate without spending a blind file_list round. Generated fresh
     # each turn from the live backend (never indexed → never stale); "" when empty /
-    # unavailable. Workers don't get this — they already receive the richer per-run
-    # manifest (runs/executor/context._workspace_manifest).
+    # unavailable. Workers do not receive this listing.
     workspace_overview = await _timed_phase(
         "workspace_overview",
         build_workspace_overview(backend, shared_workspace=folder_id is not None),
@@ -361,7 +360,7 @@ async def assemble_ceo_turn(
         ),
     )
     # 跨回合交付账本 one-shot：上轮 journal delivery_status partial/blocked + blocking
-    # gaps → 易变尾 `<prior_delivery_gaps>`（不 emit / 不 stamp verdict；不扫用户原文）。
+    # gaps → 易变尾 `<上轮交付缺口>`（不 emit / 不 stamp verdict；不扫用户原文）。
     from agentcore.runtime.delegate.prior_delivery_gaps import (
         apply_gaps_vs_redispatch_mutex,
         build_prior_delivery_gaps_hint,
@@ -389,7 +388,7 @@ async def assemble_ceo_turn(
         prior_delegate_retry_raw,
     )
     # 跨回合同一动作徒劳 one-shot：上轮其它回合 journal 的 tool_call.cross_turn_retry=futile
-    # → 易变尾 `<prior_futile_retries>`（提示信息、不拦截；空串丢段以保住 prefix cache）。
+    # → 易变尾 `<上轮徒劳重试>`（提示信息、不拦截；空串丢段以保住 prefix cache）。
     from agentcore.runtime.delegate.prior_futile_retries import (
         build_prior_futile_retries_hint,
     )

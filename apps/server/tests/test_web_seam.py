@@ -6,7 +6,6 @@ from agentcore.runtime.runs.contract import check_contract, needs_file_contents
 from agentcore.runtime.runs.types import Deliverable
 from agentcore.runtime.runs.web_seam import (
     WEB_SEAM_MISS_THRESHOLD,
-    check_integrated_web_seam_failures,
     check_web_seam_failures,
     extract_css_selectors,
     extract_html_tokens,
@@ -225,8 +224,7 @@ def test_external_stylesheet_or_script_skips_gate_and_logs():
     assert check_web_seam_failures({"index.html": local_html, "style.css": local_css}) != []
 
 
-def test_integrated_web_seam_fails_over_threshold_for_site_scope():
-    """终态整站复查：多 worker 各改单文件时，QA 节点须看到 HTML+CSS+JS 全集。"""
+def test_web_seam_fails_over_threshold_for_same_batch():
     html = (
         '<div class="a b c d e f g h i j k l m n o p q r s t u v w x y z'
         ' aa ab ac ad ae af ag ah ai aj ak al am an ao ap aq ar as at au av aw ax ay az'
@@ -245,19 +243,12 @@ def test_integrated_web_seam_fails_over_threshold_for_site_scope():
         "site/styles.css": css,
         "site/main.js": "// no selectors",
     }
-    workspace = list(contents.keys())
-    with patch("agentcore.runtime.runs.web_seam.logger") as mock_log:
-        failures = check_integrated_web_seam_failures(
-            "site/", contents, workspace_paths=workspace
-        )
-        assert failures
-        assert any("未通过率" in f or "未命中率" in f for f in failures)
-        mock_log.info.assert_called_once()
-        assert mock_log.info.call_args.args[0] == "web_seam.final_check"
-        assert mock_log.info.call_args.kwargs["passed"] is False
+    failures = check_web_seam_failures(contents)
+    assert failures
+    assert any("未通过率" in f or "未命中率" in f for f in failures)
 
 
-def test_integrated_web_seam_passes_aligned_site():
+def test_web_seam_passes_aligned_batch():
     html = '<div class="hero card" id="app"></div>'
     css = ".hero {} .card {} #app {}"
     js = "document.querySelector('.hero');"
@@ -266,11 +257,4 @@ def test_integrated_web_seam_passes_aligned_site():
         "site/styles.css": css,
         "site/main.js": js,
     }
-    with patch("agentcore.runtime.runs.web_seam.logger") as mock_log:
-        assert (
-            check_integrated_web_seam_failures(
-                "site/", contents, workspace_paths=list(contents)
-            )
-            == []
-        )
-        assert mock_log.info.call_args.kwargs["passed"] is True
+    assert check_web_seam_failures(contents) == []

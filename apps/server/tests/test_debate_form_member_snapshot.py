@@ -35,23 +35,6 @@ _DESKTOP_FORM_LABEL_FILES = (
     / "renderer"
     / "components"
     / "chat"
-    / "debate"
-    / "debateEntryCopy.ts",
-    _REPO_ROOT
-    / "apps"
-    / "desktop"
-    / "src"
-    / "renderer"
-    / "components"
-    / "chat"
-    / "StageCard.tsx",
-    _REPO_ROOT
-    / "apps"
-    / "desktop"
-    / "src"
-    / "renderer"
-    / "components"
-    / "chat"
     / "detail"
     / "sections"
     / "RunDebrief.tsx",

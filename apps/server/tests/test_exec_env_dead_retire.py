@@ -16,6 +16,7 @@ from agentcore.llm.provider.protocol import LLMChunk, LLMMessage, ToolCallDelta
 from agentcore.runtime.coordination.session import (
     CoordinationSession,
     clear_active_coordination,
+    current_execution_id,
     set_active_coordination,
 )
 from agentcore.runtime.engine import react_loop
@@ -30,7 +31,10 @@ from agentcore.runtime.loop_controller.types import EXEC_ENV_TIMEOUT_FAMILY
 from agentcore.tools.protocol import ToolContext, ToolResult, ToolSchema
 from agentcore.tools.registry import ToolRegistry
 from agentcore.tools.sandbox.subprocess import SubprocessSandbox
-from agentcore.workspace.limits import EXEC_ENV_DEAD_CEO_INJECT
+from agentcore.workspace.limits import (
+    EXEC_ENV_DEAD_CEO_INJECT,
+    EXEC_ENV_DEAD_CEO_INJECT_CLOUD,
+)
 from agentcore.workspace.server import ServerWorkspace
 from tests.llm_helpers import make_profile_params
 
@@ -355,3 +359,57 @@ def test_ceo_inject_user_stop_unchanged_when_exec_env_dead():
     assert USER_STOPPED_MARK in text
     assert EXEC_ENV_DEAD_CEO_INJECT in text
     assert "调度中断" not in text
+
+
+def test_sticky_dead_falls_back_to_conversation_registry():
+    """Nested child execution_id with no session still inherits the host latch."""
+    clear_active_coordination()
+    session = CoordinationSession(
+        execution_id="exec-parent",
+        total_workers=1,
+        conversation_id="conv-fb",
+    )
+    session.exec_env_dead = True
+    set_active_coordination(session)
+    token = current_execution_id.set("nested-child")
+    try:
+        assert is_exec_env_sticky_dead() is False
+        ctx = ToolContext.create(
+            execution_id="nested-child",
+            run_id="s",
+            agent_id="a",
+            backend=ServerWorkspace(root=Path("."), sandbox=SubprocessSandbox()),
+            user_id="u",
+            conversation_id="conv-fb",
+        )
+        assert is_exec_env_sticky_dead(ctx) is True
+        disabled: set[str] = set()
+        assert apply_exec_env_dead_retire(disabled_tools=disabled, tool_context=ctx) is True
+        assert "code_execute" in disabled
+        reg = ToolRegistry()
+        reg.register(_StubTool("code_execute"))
+        assert registry_can_execute(reg, ctx) is False
+    finally:
+        current_execution_id.reset(token)
+        clear_active_coordination()
+
+
+def test_ceo_inject_cloud_sandbox_unavailable():
+    from agentcore.runtime.coordination.inject import format_coordination_events
+    from agentcore.runtime.coordination.session import CoordinationEvent, CoordinationEventKind
+
+    session = CoordinationSession(execution_id="exec-inj-cloud", total_workers=1)
+    session.exec_env_dead = True
+    session.exec_env_dead_reason = "exec_env_sandbox_unavailable"
+    text = format_coordination_events(
+        session,
+        [
+            CoordinationEvent(
+                kind=CoordinationEventKind.WORKER_COMPLETED,
+                payload={"run_id": "w1", "role": "写手", "status": "completed", "summary": "ok"},
+            )
+        ],
+    )
+    assert EXEC_ENV_DEAD_CEO_INJECT_CLOUD in text
+    assert EXEC_ENV_DEAD_CEO_INJECT not in text
+    assert "这台电脑此刻跑不了命令" not in text

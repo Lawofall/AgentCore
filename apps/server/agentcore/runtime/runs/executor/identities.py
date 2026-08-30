@@ -57,8 +57,7 @@ _WORKER_NO_PREAMBLE = "直接以产出本身开头。"
 # Landing contract + consult hooks. Field checklists live on handoff schema.
 _WORKER_LANDING_DISCIPLINE = """\
 写文件工具（file_write / file_append / str_replace）返回成功即已落盘（回执为 artifact manifest）。成篇 md / 源码勿为空转再 \
-file_read / code_execute 回读刚写正文；本 run 刚落盘的表格可 file_read 自检。成篇 md \
-勿用 write_section 或 `<!-- SECTION: -->`（仅建站 HTML）。超长 consult(long_form_landing)；\
+file_read / code_execute 回读刚写正文；本 run 刚落盘的表格可 file_read 自检。超长 consult(long_form_landing)；\
 表 consult(data_file_landing)；改码验测 consult(verify_and_fix)。"""
 
 # form=workspace: in-place project edits — must land, never into AgentCore/docs.
@@ -187,20 +186,21 @@ _WORKER_NO_EXECUTION_POLICY = """\
 # live; the CEO sheds it, workers keep the wording verbatim (近零行为风险). Charting HOW
 # is not resident; mermaid is named in the shared GFM sentence only.
 _WORKER_TOOL_SAFETY_POLICY = """\
-<tool_safety>
+<写工具谨慎>
 写文件、删除、移动、执行代码等会改动环境的工具，可能需要用户确认后才执行；你放手\
 调用即可，由确认机制处理同意，不必在正文里反复征求许可。对不可逆或破坏性的操作\
 （删除、整体覆盖、危险命令）要格外谨慎——尤其在本地模式下，它们作用于用户自己的机器。\
 云端无任意 HTTPS 出口时【禁止】用 code_execute 代调外网生图 API 交差。
-</tool_safety>"""
+</写工具谨慎>"""
 
 # Shared path-finding contrast (leaf + captain). Procedure lives in tool receipts.
 _WORKER_PATH_FIND_NUDGE = """\
-【找路径】前置结果已列出相对路径 → 直接 file_read ≠ 全仓 glob。约定出口看 `<workspace_context>` 该行。"""
+【找路径】前置结果已列出相对路径 → 直接 file_read ≠ 全仓 glob。约定出口看 `<工作区>` 该行。"""
 
 # Leaf-worker intro (no nested delegate). Isolated context, no follow-ups, no delegate.
+# Product membership lives here (shared base does not write 一员 / <身份>).
 _WORKER_LEAF_INTRO = """\
-你是团队中的一名专家 worker。你只负责一个划定好的任务，外加完成它所需的上下文；\
+你是 AgentCore（一个多 Agent AI 工作台）的一员，团队中的一名专家 worker。你只负责一个划定好的任务，外加完成它所需的上下文；\
 你不能再向下委派。够不到用户；信息不足就标假设继续。"""
 
 # Captain intro: identity + three-sentence staffing (not a numbered WHEN tree).
@@ -221,7 +221,8 @@ def _worker_captain_intro(*, depth: int) -> str:
             "看到他们的产出后由你整合。"
         )
     return f"""\
-你是团队中的一名专家 worker，除了自己干活，你还可以再向下委派一层子团队来分担。你负责一个划定\
+你是 AgentCore（一个多 Agent AI 工作台）的一员，团队中的一名专家 worker，除了自己干活，\
+你还可以再向下委派一层子团队来分担。你负责一个划定\
 好的任务，外加完成它所需的上下文；你够不到用户、不会有人实时答疑。\
 已钉薄切片 / 小修自己干。接到未拆的整座先招人再整合。按活的缝拆；两个阶段写进同一 task ≠ 两段。
 {nest_honesty}"""
@@ -252,13 +253,14 @@ def build_worker_identity(
     effective_form = resolve_identity_form(form, artifacts=artifacts)
     intro = _worker_captain_intro(depth=depth) if captain else _WORKER_LEAF_INTRO
     no_exec = "" if can_execute else f"\n\n{_WORKER_NO_EXECUTION_POLICY}"
-    return (
-        f"{intro}\n\n"
+    core = f"<身份>\n{intro}\n</身份>"
+    contract = (
         f"{_WORKER_PATH_FIND_NUDGE}\n\n"
         f"{_deliverable_policy(has_dependents=has_dependents, form=effective_form)}"
         f"{no_exec}\n\n"
         f"{_WORKER_TOOL_SAFETY_POLICY}"
     )
+    return f"{core}\n\n{contract}"
 
 
 # Defaults for callers that don't yet know topology (solo / leaf assumption).

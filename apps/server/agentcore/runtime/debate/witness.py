@@ -1,7 +1,8 @@
-"""批 D1 · 证人模式：幕1 透镜调研员以证人身份进入幕2 辩论。
+"""证人模式机制（产品路径开辩不探测、不把调研员拉进场）。
 
 机制要点：
-- 开赛探测本会话 roster 中的幕1 透镜 ``RunSession``；无则整场无证人、零行为变化。
+- helper 可探测本会话 roster 中的幕1 透镜 ``RunSession``；产品开辩不调用。
+- 无席位则整场无证人、零行为变化。
 - 图锚：在辩论幕内声明证人席位节点；答问用席位 session（fork 自透镜 transcript），
   ``continues_run_id`` 指席位根（辩论幕内），避免把辩论拍挂到幕1 透镜节点。
 - 点名：主持人质询 beat 内 LLM 判定（只问事实性问题）；失败/超时不阻塞主流程。
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# 透镜 run_id：playbook ``lens_crosscheck`` 铸 ``lens_0``…``lens_N``。
+# 透镜 run_id：历史 MLR 图铸 ``lens_0``…``lens_N``；手写路认角色名启发式。
 _LENS_RUN_ID_RE = re.compile(r"^lens_\d+$")
 # 角色名启发式（兼容非标准 id 的透镜）：``法律视角`` / ``品牌商业视角``。
 _LENS_ROLE_RE = re.compile(r".+视角$")

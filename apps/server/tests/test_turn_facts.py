@@ -208,7 +208,7 @@ def test_execution_only_kinds_match_enum():
         # distinct from the display ``run_plan`` event so the display gate is untouched.
         "plan_snapshot",
         "coordination_snapshot",
-        # P1a 建站风格双闸：结构化 style_id 确认（resume / full_auto）。
+        # Journals written before the style ledger was removed.
         "website_style_confirmed",
         # 演讲/PPT 交付形态双闸：结构化 format_id 确认（resume / full_auto）。
         "presentation_format_confirmed",
@@ -217,7 +217,9 @@ def test_execution_only_kinds_match_enum():
         # 回合态挂起归宿: resumable turn-state snapshot (process / controller / content).
         "turn_paused",
     } == EXECUTION_ONLY_KINDS
-    assert frozenset(k.value for k in FactKind) == EXECUTION_ONLY_KINDS
+    assert frozenset(k.value for k in FactKind) | {"website_style_confirmed"} == (
+        EXECUTION_ONLY_KINDS
+    )
 
 
 def test_turn_paused_fact_round_trip():

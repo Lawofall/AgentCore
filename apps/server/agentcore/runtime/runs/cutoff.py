@@ -65,7 +65,6 @@ WIND_DOWN_ALLOWED_TOOLS = frozenset(
         "file_write",
         "file_append",
         "str_replace",
-        "write_section",
         "file_move",
         "file_copy",
         "mkdir",

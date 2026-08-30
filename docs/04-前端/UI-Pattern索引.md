@@ -27,7 +27,7 @@ skip_if:
 | Pattern | 场景 | 指针 |
 |---|---|---|
 | DecisionCard | ask_user / plan_review / approval / escalation | `DecisionCard` + 各 *Card |
-| 推进卡 StageCard | 阶段推进（三键） | `StageCard.tsx`；**不**并 DecisionCard |
+| 推进卡 StageCard | leftover 墓碑，不是开辩入口 | `StageCard.tsx`；**不**并 DecisionCard |
 | StatusStrip | 协作图状态条 | `StatusStrip.tsx` |
 | PatternCardHeader | 后台任务卡头 | `BackgroundTaskCard.tsx` |
 | SurfaceRow | 侧栏/文件树/对话管理/设置导航 | `SurfaceRow*` |
@@ -35,8 +35,20 @@ skip_if:
 | PanelShell | 右坞；Web 应用内浮窗；桌面真 OS 窗 | `SidePanel` / `FloatingPanelShell` + `SidePanelFloatHost`；真窗 `DesktopFloatWindowBridge` + `FloatWindowPage`（`#/float?cid&tab`） |
 | SearchField / *SearchTrigger | 筛选 / 全局入口 | → CommandPalette |
 | BrandMark | 登录/TitleBar/侧栏/关于 | `brand/BrandMark.tsx`（仅 Latin `font-brand`） |
+| EmptyHint | 列表 / 网格页空态 | `EmptyHint`；**对话草稿**仍走 `DraftEmptyState` |
 
 新卡优先 DecisionCard+Button。
+
+## 裁决 / 表单底栏
+
+动作组贴右下（`justify-end`），与 `DialogFooter` 同一锚点。提示 / hint 占左侧剩余。
+
+| 类型 | 顺序 | 例子 |
+|---|---|---|
+| 两键（主 + 取消） | 取消 → 主 | 澄清 / 开工 / 计划复核（取消 · 调整 · 继续） |
+| 多选项 | **只搬家、不换序** | 审批（允许… → 拒绝）、升级、终端确认、登录继续 |
+
+**不**扫输入框发送、工具条、协作图干预。铬条（`border-t` vs `pl-6`）正交，触达再收。窄屏长按钮折行难看时跟对话框：竖排、主按钮在上。
 
 ## 搜索 / 筛选 / 查找
 
@@ -67,18 +79,27 @@ node scripts/check-ui-tokens.mjs --src apps/desktop/src/renderer
 | 辩论赛事页 / 白板工具条 | 长期域例外，另一 IA/密度 |
 | StageCard | 推进 ≠ 裁决，独立 L3 |
 | 文件类型图标（Material） | SVG 内嵌扩展名品牌色；入口 `FileTypeIcon` / `DirTypeIcon` |
+| `DraftEmptyState` | 对话草稿空态（starter chips / 协作提示），不并 EmptyHint |
+| 侧栏 / 抽屉一行空态 | 导航密度，不套居中 EmptyHint |
 
 ## 桌面 UI 统一
 
 产品页跟桌面 renderer；配色单源仍是 design-tokens。权威 → [前端技术 §五](/docs/04-前端/前端技术与架构.md)。
 
+跨页手感：人在聊天里学会的认路方式，走到文件 / 消息 / 设置仍管用。不是每页同一套格子。
+
 | 不变量 | 说明 |
 |---|---|
 | 推进卡 ⊥ 裁决卡 | 禁硬并 |
+| 两套行，禁止第三套 | 导航 / 树 = `SurfaceRow`；设置内容 = `SettingRow`。后者已收设置子页四种行，不并进 SurfaceRow |
+| 页头不抽大一统 | 工具箱子页 = `ToolboxPageHeader`；设置 = More 壳；对话 / 文件 / IM 走各自两栏壳 |
+| 列表空态同一骨架 | 标题 + 可选一句说明 + 可选主操作 = `EmptyHint`。`DraftEmptyState` 仍是对话草稿特例 |
+| 动作底栏 | Decision / Dialog 右下锚点；不扫输入框、工具条、协作图干预 |
+| 新面先点名 L3 | 新页 / 新交付物须先说用哪套 Primitive / Pattern，禁止第三套壳。工具箱网格 / 白板工具条 / 辩论室保持登记例外 |
 | 品牌字体 | 仅 BrandMark Latin；正文系统栈 |
 | 品牌文案 | 权威 → [产品定位与品牌](/docs/01-产品/产品定位与品牌.md) |
 
-**否决**：为窄屏另写主回复/文件/IM/设置；全仓一次收编工具箱/白板；缺规范前大改色。
+**否决**：为窄屏另写主回复/文件/IM/设置；全仓一次收编工具箱/白板；缺规范前大改色。触达即收编：不专项清扫其余「暂无…」行内提示 / 选择器空项。
 
 ## 配色要点（细节权威 = color-tokens）
 

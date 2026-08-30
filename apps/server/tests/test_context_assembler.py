@@ -184,18 +184,18 @@ def test_ceo_turn_renders_the_source_ledger_after_the_volatile_tail():
     # position (last, after attachments) now that it is a section.
     out = _ceo_turn(
         attachment_context="<attachments/>",
-        registered_sources="<registered_sources/>",
+        registered_sources="<已登记来源/>",
     )
-    assert out == "CEO\n<attachments/>\n<registered_sources/>"
+    assert out == "CEO\n<attachments/>\n<已登记来源/>"
 
 
 def test_ceo_turn_prior_futile_retries_slot_between_retry_and_attachments():
     out = _ceo_turn(
-        prior_delegate_retry="<prior_delegate_retry/>",
-        prior_futile_retries="<prior_futile_retries/>",
+        prior_delegate_retry="<上轮重派/>",
+        prior_futile_retries="<上轮徒劳重试/>",
     )
     assert out == (
-        "CEO\n<prior_delegate_retry/>\n<prior_futile_retries/>"
+        "CEO\n<上轮重派/>\n<上轮徒劳重试/>"
     )
 
 
@@ -206,7 +206,7 @@ def test_ceo_turn_observation_covers_the_source_ledger(monkeypatch):
     from agentcore.observability.prefix_cache import digest_text
 
     captured = _spy_on_observe(monkeypatch)
-    ledger = "<registered_sources>\n- #r1 · url=https://example.com\n</registered_sources>"
+    ledger = "<已登记来源>\n- #r1 · url=https://example.com\n</已登记来源>"
     out = _ceo_turn(registered_sources=ledger)
 
     row = captured[0]

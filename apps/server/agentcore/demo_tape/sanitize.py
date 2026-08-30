@@ -3,7 +3,7 @@
 Two defenses shared by tape export and recording_cut:
 
 1. **Sanitize** — strip real long-term user memory from ``run_context`` system-channel
-   bodies (the ``<rules>`` block), replacing it with a synthetic placeholder that keeps
+   bodies (the ``<设定>`` block), replacing it with a synthetic placeholder that keeps
    the block structure so the frontend「收到的上下文」dialog still renders cleanly.
 2. **Scan** — pattern-scan the finished artifact; hit ⇒ refuse commit (catches sanitize
    misses plus emails / phone shapes).
@@ -26,7 +26,7 @@ DEMO_MEMORY_PLACEHOLDER = "（演示占位 · 非真实用户记忆）"
 # Keep the real preamble so the UI still reads as a system「常驻约定」block; only the
 # body bullets are synthetic. Shape mirrors ``runtime/resolve/prompt._RULES_TEMPLATE``.
 SYNTHETIC_MEMORY_RULES = (
-    "<rules>\n"
+    "<设定>\n"
     "以下条目请一并遵循。\n"
     "硬约束：题材/领域偏好与历史任务不得改变本回合路由"
     "（直答/委派/调研/辩论以用户当前话为准）。\n"
@@ -36,14 +36,14 @@ SYNTHETIC_MEMORY_RULES = (
     "\n"
     "## 关于用户的事实\n"
     f"- {DEMO_MEMORY_PLACEHOLDER}\n"
-    "</rules>"
+    "</设定>"
 )
 
-# Real injection preamble (memory_rules.py); used to locate the always-on <rules> block.
+# Real injection preamble (memory_rules.py); used to locate the always-on <设定> block.
 _MEMORY_PREAMBLE = "以下条目请一并遵循"
 
 _RULES_BLOCK_RE = re.compile(
-    r"<rules>\s*" + re.escape(_MEMORY_PREAMBLE) + r".*?</rules>",
+    r"<设定>\s*" + re.escape(_MEMORY_PREAMBLE) + r".*?</设定>",
     re.DOTALL,
 )
 
@@ -77,9 +77,9 @@ class IngestScanError(ValueError):
 
 
 def sanitize_memory_in_text(text: str) -> str:
-    """Replace long-term-memory ``<rules>`` blocks with the synthetic placeholder.
+    """Replace long-term-memory ``<设定>`` blocks with the synthetic placeholder.
 
-    Non-memory ``<rules>`` (if any) and all other prompt sections are left intact.
+    Non-memory ``<设定>`` (if any) and all other prompt sections are left intact.
     """
     if not text or _MEMORY_PREAMBLE not in text:
         return text

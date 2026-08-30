@@ -18,6 +18,7 @@ import pytest
 
 import agentcore.tools.sandbox.gvisor as gvisor_mod
 from agentcore.config import settings
+from agentcore.core.errors import SandboxError
 from agentcore.tools.sandbox.gvisor import GVisorSandbox, reset_desk_sessions_for_tests
 from agentcore.tools.sandbox.limits import reset_execution_slots
 from agentcore.tools.sandbox.protocol import ExecutionRequest
@@ -488,8 +489,6 @@ def test_start_detach_rpc_budget_is_minutes_not_exec_cap():
 
 
 async def test_start_detach_timeout_is_not_exec_forced_stop(tmp_path: Path):
-    from agentcore.core.errors import SandboxError
-
     ws = tmp_path / "workspace"
     ws.mkdir()
     sandbox = GVisorSandbox(runtime_root=str(tmp_path / "rt"))
@@ -514,7 +513,7 @@ async def test_start_detach_timeout_is_not_exec_forced_stop(tmp_path: Path):
         )
     )
 
-    with pytest.raises(SandboxError, match="执行环境启动失败") as failed:
+    with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用") as failed:
         await sandbox._execute_in_slot(  # noqa: SLF001
             ExecutionRequest(
                 code="x", language="python", cwd=str(ws), timeout_seconds=15
@@ -526,3 +525,80 @@ async def test_start_detach_timeout_is_not_exec_forced_stop(tmp_path: Path):
     assert "Timeout: forced stop after 15s" not in msg
     assert "forced stop after 30s" not in msg
     assert "forced stop after 60s" not in msg
+    assert failed.value.details.get("code") == "exec_env_sandbox_unavailable"
+
+
+async def test_exec_sandboxd_error_is_not_desk_start_failure(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    sandbox = GVisorSandbox(
+        runsc_path=_install_fake_runsc(tmp_path, write_artifact=False),
+        runtime_root=str(tmp_path / "rt"),
+    )
+    inner = _bind_loopback(sandbox)
+
+    async def _boom(**kwargs):  # noqa: ANN003
+        raise SandboxdError("exec blew up")
+
+    inner.exec_wait = _boom  # type: ignore[method-assign]
+    with pytest.raises(SandboxError, match="云桌执行失败") as failed:
+        await sandbox.execute(
+            ExecutionRequest(
+                code="x", language="python", cwd=str(ws), timeout_seconds=10
+            )
+        )
+    assert "启动失败" not in str(failed.value)
+    assert failed.value.details.get("code") != "exec_env_sandbox_unavailable"
+
+
+async def test_dead_guest_is_dropped_and_exec_retries(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    sandbox = GVisorSandbox(
+        runsc_path=_install_fake_runsc(tmp_path, write_artifact=False),
+        runtime_root=str(tmp_path / "rt"),
+    )
+    inner = _bind_loopback(sandbox)
+    calls = {"n": 0}
+    orig = inner.exec_wait
+
+    async def _dead_then_ok(**kwargs):  # noqa: ANN003
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise SandboxdError("container not found")
+        return await orig(**kwargs)
+
+    inner.exec_wait = _dead_then_ok  # type: ignore[method-assign]
+    result = await sandbox.execute(
+        ExecutionRequest(
+            code="print(1)", language="python", cwd=str(ws), timeout_seconds=10
+        )
+    )
+    assert calls["n"] == 2
+    assert result.success is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_desk_fails_fast_when_cloud_health_false(tmp_path: Path):
+    from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
+    from agentcore.tools.sandbox.exec_env import EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    sandbox = GVisorSandbox(
+        runsc_path=_install_fake_runsc(tmp_path, write_artifact=False),
+        runtime_root=str(tmp_path / "rt"),
+    )
+    set_cloud_sandbox_health_for_tests(False)
+    starts: list[int] = []
+
+    class _NoStart:
+        async def start_detach(self, **kwargs):  # noqa: ANN003, ARG002
+            starts.append(1)
+            raise AssertionError("must not start_detach when host is known unhealthy")
+
+    set_sandboxd_client_for_tests(_NoStart())  # type: ignore[arg-type]
+    with pytest.raises(SandboxError, match="云端隔离执行环境当前不可用") as failed:
+        await sandbox.ensure_workspace_desk(str(ws))
+    assert starts == []
+    assert failed.value.details.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE

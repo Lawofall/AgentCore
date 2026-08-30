@@ -15,8 +15,6 @@ from agentcore.workspace.stage_dirs import REVIEWS_DIR, REVIEWS_PREFIX
 
 # 与规划定案一致：每工人模块 Phase B 最多定案条数。
 _DEFAULT_K = 8
-# 主管只做跨模块速览；2 路交 CEO 收口（与 map_fanout 对称），≥3 路才占座位。
-_SYNTH_MIN_SLOTS = 3
 
 # 引擎按小标题字面验收；playbook / 继承函数 / CEO·skill 必须抄同一列表。
 CODE_AUDIT_REQUIRED_SECTIONS: tuple[str, ...] = (
@@ -247,11 +245,10 @@ def _formatted_audit_discipline(k: int) -> str:
 
 
 # 产物路径权威（约定文档命名公约）：``code-audit-{slot}-{slug}.md``；
-# slot = 0/1/2…（勿把 run id ``audit_0`` 叠进文件名）；汇总 ``code-audit-summary.md``。
+# slot = 0/1/2…（勿把 run id ``audit_0`` 叠进文件名）。跨模块表由引擎在 CEO 收口注入。
 # 长模块作文只进 task【module】正文；禁止把整段描述当文件名再硬截断（易截断扩展名/括弧）。
 _SLUG_MAX = 40
 _SLUG_HEAD_SEPS = ("：", ":", "（", "(", "—", "–", " - ", " — ")
-_CODE_AUDIT_SUMMARY_ARTIFACT = f"{REVIEWS_DIR}/code-audit-summary.md"
 
 
 def _strip_module_file_suffix(hint: str) -> str:
@@ -342,10 +339,10 @@ def _auditor_deliverable(artifact: str) -> dict[str, Any]:
 
 
 def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    """代码审计：1 人两阶段 A→B；2 路并行审计员（CEO 收口）；≥3 路再加主管跨模块速览。
+    """代码审计：1 人两阶段 A→B；多路并行审计员（CEO 收口，引擎合并台账）。
 
-    与 ``map_fanout``（摸底对齐）、``cite_write_review``（成文+学术审校）、
-    ``diagnose_fix_verify``（按症状修）划界：本形状专产纪律化审计报告。
+    与 ``map_fanout``（摸底对齐）、``cite_write_review``（成文+学术审校）划界：
+    本形状专产纪律化审计报告。
     """
     scope = clean_str(args.get("scope") or args.get("topic") or args.get("target"))
     if not scope:
@@ -394,11 +391,9 @@ def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
     )
     fold_hint = f" {fold_note}" if fold_note else ""
     tasks: list[dict[str, Any]] = []
-    audit_ids: list[str] = []
 
     for i, parts in enumerate(slots):
         merged = len(parts) > 1
-        label = " + ".join(parts)
         tid = f"audit_{i}"
         # 路径用短 slug；完整 modules 文案只进 module_desc / task。
         path_hint = parts[0] if not merged else f"merged-{i}"
@@ -408,7 +403,6 @@ def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
             if merged
             else parts[0]
         )
-        audit_ids.append(tid)
         body: dict[str, Any] = {
             "id": tid,
             "role": "代码审计员",
@@ -424,38 +418,4 @@ def code_audit(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
             body["playbook_note"] = fold_note
         tasks.append(body)
 
-    if len(slots) < _SYNTH_MIN_SLOTS:
-        return tasks, []
-
-    synth_path = _landed_artifact_path(out_override or _CODE_AUDIT_SUMMARY_ARTIFACT)
-    tasks.append(
-        {
-            "id": "audit_synth",
-            "role": "审计主管",
-            "depends_on": list(audit_ids),
-            "task": (
-                f"汇总主题【{scope}】下各路代码审计报告，产出**跨模块人审速览**（一页内）："
-                "仍成立的中+（去重）/ 设计如此 / 已撤销 / 待核实与未覆盖缺口；"
-                f"N 只计各路「{CODE_AUDIT_SECTION_DEFECTS}」合并去重后的条数；"
-                "设计如此栏不得升格进属实中+/N。"
-                "速览须显著短于交接/合成上限，细节只进落盘文件、勿把分册全文塞进汇总或 handoff。"
-                "【合并硬规则】同模块多份报告必须去重；条目冲突标「冲突·未定案」且不得进 N；"
-                "某路称「模块/目录未检出」时，主管须对照 apps/* 核实后再写缺口。"
-                f"先 file_read 各审计员落盘报告，再 file_write 到 `{synth_path}`。"
-                "【一次交接】汇总定稿后再 handoff 一次；禁先交再改再交。"
-                "handoff 人审速览同审计员：key_points 覆盖属实（`缺陷id|严重度|一句话`）"
-                f"+ 汇总路径 `{synth_path}`；summary 须含结论+路径；"
-                "空话不够；不得以 handoff 代落盘。"
-                "【收口口径】写「汇总已落盘、未改业务源码」。"
-                "不要重做全量审计。"
-                "正向确认默认不写。"
-            ),
-            "deliverable": {
-                "form": "files",
-                "artifacts": [synth_path],
-                # 原 must_contain（属实/撤销）主题约束已在 task + required_sections。
-                "required_sections": ["人审速览", "属实中+", "设计如此", "缺口"],
-            },
-        }
-    )
     return tasks, []

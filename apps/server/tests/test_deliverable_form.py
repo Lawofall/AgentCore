@@ -140,7 +140,6 @@ def test_identity_form_prose_has_no_file_write_guidance():
     # 压缩后的落盘纪律（identity，不只 CEO skill）。
     assert "artifact manifest" in files
     assert "禁止" in files and "file_read" in files
-    assert "write_section" in files or "SECTION" in files
     assert "Artifact-first" not in files
     assert "落盘与修订" not in files
     assert "consult(long_form_landing)" in files
@@ -159,7 +158,6 @@ def test_identity_form_prose_has_no_file_write_guidance():
     assert "file_write" in omitted
     assert "artifact manifest" in omitted
     assert "禁止" in omitted and "file_read" in omitted
-    assert "write_section" in omitted or "SECTION" in omitted
     assert "Artifact-first" not in omitted
     assert "落盘与修订" not in omitted
 
@@ -293,13 +291,12 @@ def test_schema_exposes_form_enum():
     props_task = DELEGATE_PARAMETERS["properties"]["tasks"]["items"]["properties"]
     assert "require_upstream" not in props_task
     assert "retrieval_budget" not in props_task  # CEO 不可配置；额度走结构化默认
-    # 定稿漂移 A′：task / deliverable / team_brief schema 钉「已确认约束」
+    # 已确认约束钉在 task / deliverable；team_brief 只填共享口径，可省略。
     assert "已确认约束" in props_task["task"]["description"]
     assert "已确认约束" in str(TASK_DELIVERABLE_SCHEMA.get("description") or "")
     brief = DELEGATE_PARAMETERS["properties"]["team_brief"]["description"]
-    assert "已确认约束" in brief
-    assert "同一行" in brief
-    assert "附件" in brief or "优先" in brief
+    assert "共享口径" in brief
+    assert "省略" in brief
     assert "便签墙" not in brief
     assert "换行" not in brief
 

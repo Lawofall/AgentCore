@@ -1,4 +1,4 @@
-import { Button, IconButton } from "@/components/ui";
+import { Button, EmptyHint, IconButton } from "@/components/ui";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   IM_SESSION_COLUMN_CLASS,
@@ -397,16 +397,16 @@ export function ChatThread({ chatId }: Props) {
                       );
                     })}
                   </div>
-                ) : (
+                ) : loading ? (
                   <div className="flex flex-1 items-center justify-center">
-                    <p className="text-sm text-muted-foreground">
-                      {loading
-                        ? "加载中…"
-                        : isOfficial
-                          ? "暂无公告"
-                          : "还没有消息，发送第一条消息吧"}
-                    </p>
+                    <p className="text-sm text-muted-foreground">加载中…</p>
                   </div>
+                ) : (
+                  <EmptyHint
+                    inline
+                    title={isOfficial ? "暂无公告" : "还没有消息"}
+                    hint={isOfficial ? undefined : "发送第一条消息吧"}
+                  />
                 )}
               </div>
             </div>

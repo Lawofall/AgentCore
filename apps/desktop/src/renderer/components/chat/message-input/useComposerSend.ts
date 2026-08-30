@@ -23,6 +23,7 @@ import {
   provisionalConversationTitle,
   requestAutoTitle,
 } from "@/services/conversations";
+import { submitDebateSteer } from "@/services/debate";
 import { loadLatestWindow } from "@/services/messages";
 import { getLastUsedProfileId } from "@/services/models";
 import {
@@ -50,6 +51,7 @@ import {
   setComposerSendError,
 } from "@/stores/composerSendError";
 import {
+  DRAFT_KEY,
   getActiveRuntime,
   getRuntime,
   useConversationStore,
@@ -70,7 +72,14 @@ import {
   composerHasSendableDraft,
 } from "./composerAttachments";
 import { dispatchBackgroundTask } from "./dispatchBackgroundTask";
+import { liveDebateSteerTarget } from "./liveDebateSteer";
 import { settleAttachments } from "./settleAttachments";
+
+export type ComposerSendOpts = {
+  delivery?: MessageDelivery;
+  /** 辩论进行中主框：continue=对这场说话；conclude=出结论。勿走 sendTurn。 */
+  debateSteer?: "continue" | "conclude";
+};
 
 /**
  * Local-first parallel title mint after the first user message.
@@ -109,6 +118,21 @@ function attachmentsForUnstartedRetry(
     workspacePath: undefined,
     fileBlob: a.fileBlob ?? peekAttachmentRecoverBlob(a.id),
   }));
+}
+
+/**
+ * 撤回乐观用户泡 + Thinking，生成态回 idle（建会话失败 / 附件驻留失败）。
+ * ``conversationId`` 必须钉切片 key（草稿 = {@link DRAFT_KEY}）：省略会落成
+ * ``currentConversationId``，POST 窗口内切走后会漏撤草稿泡、误停当前会话。
+ */
+function rollbackOptimisticSend(
+  userMsgId: string,
+  conversationId: string,
+): void {
+  const s = useConversationStore.getState();
+  s.truncateAfter(userMsgId, conversationId);
+  s.removeMessage(userMsgId, conversationId);
+  s.setGenerating(false, conversationId);
 }
 
 /**
@@ -233,10 +257,26 @@ export function useComposerSend({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: closeMenu/setValue/setAgentMentions kept for stable identity when clearComposer path is not taken
   const handleSend = useCallback(
-    async (opts?: { delivery?: MessageDelivery }) => {
+    async (opts?: ComposerSendOpts) => {
       const content = value.trim();
       const preview = plainText(value).trim();
-      if (!composerHasSendableDraft(value, attachments, agentMentions)) return;
+      const activeConvId =
+        useConversationStore.getState().currentConversationId;
+      const liveDebate = liveDebateSteerTarget(activeConvId);
+      const debateKind =
+        opts?.debateSteer === "conclude"
+          ? "conclude"
+          : liveDebate
+            ? "continue"
+            : null;
+
+      if (debateKind === "conclude" && !liveDebate) return;
+      if (
+        debateKind !== "conclude" &&
+        !composerHasSendableDraft(value, attachments, agentMentions)
+      ) {
+        return;
+      }
 
       // N4-A：只读离线硬禁用（按钮已 disabled；此处兜底防键盘/程序化触发）。
       if (isReadOnlyOffline()) {
@@ -244,9 +284,43 @@ export function useComposerSend({
         return;
       }
 
-      const activeConvId =
-        useConversationStore.getState().currentConversationId;
       const draftKey = draftKeyFor(activeConvId);
+
+      // 辩论进行中：主框对这场说话，走 debate-steer（轮边界非阻塞）。
+      // 禁止 sendTurn / mid-flight——那会进 CEO 插话或排队，主持人捞不到。
+      if (liveDebate && debateKind) {
+        if (attachments.length > 0) {
+          notifyError("辩论进行中不能带附件，请去掉后再对这场说话");
+          return;
+        }
+        if (debateKind === "continue" && !preview) return;
+        if (!acquireComposerSendLatch(draftKey, "sending")) return;
+        clearComposerSendError(draftKey);
+        try {
+          const accepted = await submitDebateSteer(liveDebate.conversationId, {
+            executionId: liveDebate.executionId,
+            decision:
+              debateKind === "continue"
+                ? {
+                    kind: "continue",
+                    focus: "",
+                    ask: preview,
+                    askTarget: "",
+                  }
+                : { kind: "conclude", ask: preview, askTarget: "" },
+          });
+          if (accepted) {
+            clearComposer();
+          } else {
+            notifyError("未生效，辩论已停止接收");
+          }
+        } catch (err) {
+          notifyError(err, "提交失败");
+        } finally {
+          releaseComposerSendLatch(draftKey);
+        }
+        return;
+      }
 
       // 挂起弱提示：有待确认卡时先二次确认（同会话确认一次后不再弹）；正规续跑/
       // 提交卡不受影响。生成中再发走 mid-flight，不套本确认。
@@ -329,6 +403,39 @@ export function useComposerSend({
         const pending = attachments;
         const store = useConversationStore.getState();
         const isFirstMessage = getActiveRuntime().messages.length === 0;
+        const userMsgId = crypto.randomUUID();
+        const paintOptimisticSend = () => {
+          addMessage({
+            id: userMsgId,
+            role: "user",
+            content,
+            createdAt: new Date().toISOString(),
+            executionId: null,
+            isStreaming: false,
+            attachments: pending.length
+              ? pending.map((a) => ({
+                  id: a.id,
+                  name: a.name,
+                  path: a.path,
+                  truncated: a.truncated,
+                  kind: a.kind,
+                  conversationId: a.conversationId,
+                  documentId: a.documentId,
+                  workspacePath: a.workspacePath,
+                }))
+              : undefined,
+            agentMentions: agentMentions.length
+              ? agentMentions.map((a) => ({
+                  agentId: a.agentId,
+                  role: a.role,
+                }))
+              : undefined,
+          });
+          // Thinking 与用户泡同帧：已有会话覆盖附件收尾；草稿首发覆盖建会话 POST。
+          // sendTurn 会 truncateAfter(乐观用户) 再 createAssistant，不会双泡。
+          useConversationStore.getState().createAssistantMessage();
+          clearComposer();
+        };
 
         let conversationId = store.currentConversationId;
         let createdNew = false;
@@ -352,11 +459,12 @@ export function useComposerSend({
           // 幂等键跟草稿走：同一份草稿重复发送复用同一个键，服务端命中同键返回已建好的
           // 那条会话，「以为没发出去又按一次」不会再建出第二条。
           const clientRequestId = resolveDraftRequestId(draftKey);
-          // 清空输入框排在创建 POST 之前：按下发送到 POST 返回之间界面若毫无变化（文字
-          // 还在、没气泡、没跳转），用户就会再按一次——线上重复建会话的 3.7s / 5.6s 两例
-          // 正是这个形状。等待期间的进行中态见发送键 in-flight；创建失败时下面把
-          // 整份草稿（正文 + 附件 + 点名）原样还回。
-          clearComposer();
+          // 按下发送立刻出用户泡 + Thinking 并清空输入框：建会话 POST 常要数秒
+          // （线上 3.7s / 5.6s 两例），空屏会诱使用户再按一次。失败撤回气泡并
+          // 把整份草稿（正文 + 附件 + 点名）原样还回。
+          paintOptimisticSend();
+          // hasMessages 翻转的那一帧武装 dock-flip（居中→底栏），不必等 POST。
+          useComposerDraftStore.getState().armDockFlip();
           try {
             const permissionAxes = await resolveDefaultPermissionAxes();
             const conv = await api.post<{
@@ -387,12 +495,9 @@ export function useComposerSend({
               modelProfileId:
                 conv.model_profile_id ?? inheritedProfileId ?? null,
             });
-            // 首发落地动画：仅在草稿 promote 成新对话时武装 dock-flip（中间→底栏）。切换到
-            // 已有对话不走这里，故不会误触发动画——这正是修掉「输入框跳动」的关键。必须在
-            // switchConversation 前武装，让 conversationId 翻转的那一帧就带上信号；
-            // navigate 也必须留在两者之后（见下），三者的先后顺序不要改。
-            useComposerDraftStore.getState().armDockFlip();
-            useConversationStore.getState().switchConversation(conv.id);
+            // 把草稿上的乐观气泡接到新 id（同一 write，避免空窗一帧）。
+            // 不得用 switchConversation——从首页点开已有对话不能倒进草稿残留。
+            useConversationStore.getState().adoptDraftRuntime(conv.id);
             createdNew = true;
             createdFolderId = targetFolderId;
             useFoldersStore.getState().resetDraftWorkspaceIntent();
@@ -400,8 +505,10 @@ export function useComposerSend({
             latchKey = draftKeyFor(conv.id);
             moveComposerSendLatch(draftKey, latchKey, "sending");
           } catch (err) {
-            // 建会话失败：仍是草稿态，把先前清掉的草稿原样还给用户（参照下面附件驻留
-            // 失败的回滚），并把这次的幂等键钉回草稿——重试要复用它才命中服务端幂等。
+            // 建会话失败：撤乐观泡必须钉草稿切片（POST 前画在 DRAFT_KEY 上），
+            // 不得省略 key 落到 currentConversationId——人已点进另一条时会漏撤
+            // 草稿泡，且 setGenerating(false) 会误停当前会话。
+            rollbackOptimisticSend(userMsgId, DRAFT_KEY);
             restoreComposerDraft(null, {
               value: content,
               attachments: pending,
@@ -411,46 +518,17 @@ export function useComposerSend({
             notifyError(err, "新建对话失败");
             return;
           }
-        }
-
-        if (!isFirstMessage && getActiveRuntime().hasMoreAfter) {
-          try {
-            await loadLatestWindow(conversationId);
-          } catch {
-            /* best-effort */
+        } else {
+          if (!isFirstMessage && getActiveRuntime().hasMoreAfter) {
+            try {
+              await loadLatestWindow(conversationId);
+            } catch {
+              /* best-effort */
+            }
           }
+          // 乐观气泡排在等待附件之前：附件在附加时就开始上传了，点发送只是等它收尾。
+          paintOptimisticSend();
         }
-
-        // 乐观气泡与清空输入框排在等待附件之前：附件在附加时就开始上传了，点发送
-        // 只是等它收尾——没有理由让用户对着还留着文字和 chip 的输入框干等。
-        const userMsgId = crypto.randomUUID();
-        addMessage({
-          id: userMsgId,
-          role: "user",
-          content,
-          createdAt: new Date().toISOString(),
-          executionId: null,
-          isStreaming: false,
-          attachments: pending.length
-            ? pending.map((a) => ({
-                id: a.id,
-                name: a.name,
-                path: a.path,
-                truncated: a.truncated,
-                kind: a.kind,
-                conversationId: a.conversationId,
-                documentId: a.documentId,
-                workspacePath: a.workspacePath,
-              }))
-            : undefined,
-          agentMentions: agentMentions.length
-            ? agentMentions.map((a) => ({
-                agentId: a.agentId,
-                role: a.role,
-              }))
-            : undefined,
-        });
-        clearComposer();
 
         if (isFirstMessage) {
           patchConversationCache(conversationId, {
@@ -473,9 +551,7 @@ export function useComposerSend({
         if (!settled.ok) {
           // 不留假气泡：撤掉乐观气泡，把草稿（正文 + 附件 + 点名）还给用户重试，
           // 只摘掉主进程暂存已失效、留着也发不出去的那几条。
-          useConversationStore
-            .getState()
-            .removeMessage(userMsgId, conversationId);
+          rollbackOptimisticSend(userMsgId, conversationId);
           restoreComposerDraft(conversationId, {
             value: content,
             attachments: pending.filter(

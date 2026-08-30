@@ -28,7 +28,6 @@ _LIGHT_REPAIR_TOOL_NAMES: frozenset[str] = frozenset(
         "file_write",
         "file_append",
         "str_replace",
-        "write_section",
         "file_read",
     }
 )

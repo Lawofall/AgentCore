@@ -8,6 +8,7 @@ non-zero exit must still produce a display (so a failed run surfaces its stderr)
 
 import pytest
 
+from agentcore.core.errors import SandboxError
 from agentcore.tools.builtin.code_execute import CodeExecuteTool
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.protocol import ExecutionRequest, ExecutionResult
@@ -540,3 +541,59 @@ async def test_code_execute_scrubs_env_from_stdout():
     assert secret not in (result.output or "")
     assert secret not in (result.display or {}).get("stdout", "")
     assert "[REDACTED]" in (result.display or {}).get("stdout", "")
+
+
+def test_code_execute_server_schema_covers_desk_boot():
+    from agentcore.config import settings
+    from agentcore.runtime.engine.timeout import resolve_tool_timeout
+
+    server = CodeExecuteTool(location="server").schema
+    assert server.timeout_seconds == (
+        settings.gvisor_desk_start_timeout_seconds
+        + settings.tool_execution_timeout_seconds
+    )
+    assert resolve_tool_timeout(server) == server.timeout_seconds
+    local = CodeExecuteTool(location="local").schema
+    assert local.timeout_seconds is None
+    assert resolve_tool_timeout(local) == settings.tool_execution_timeout_seconds
+
+
+async def test_code_execute_cloud_desk_down_is_not_contract_failure():
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+    )
+
+    class _Down(_FakeBackend):
+        def __init__(self) -> None:
+            super().__init__(
+                ExecutionResult(success=True, stdout="", stderr="", exit_code=0, duration_ms=1)
+            )
+            self.ensure_calls = 0
+            self.execute_calls = 0
+
+        async def ensure_workspace_desk(self) -> None:
+            self.ensure_calls += 1
+            raise SandboxError(
+                "代码执行环境启动失败",
+                code=EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+            )
+
+        async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+            self.execute_calls += 1
+            return await super().execute(request)
+
+    backend = _Down()
+    result = await CodeExecuteTool(location="server").execute(
+        {"code": "print(1)", "language": "python"},
+        _ctx(backend),
+    )
+    assert result.success is False
+    assert result.contract_failure is False
+    assert result.metadata.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+    assert "code_execute" in result.metadata.get("retire_tools", [])
+    assert "test_run" in result.metadata.get("retire_tools", [])
+    assert result.error == EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
+    assert "本机" not in (result.error or "")
+    assert backend.ensure_calls == 1
+    assert backend.execute_calls == 0

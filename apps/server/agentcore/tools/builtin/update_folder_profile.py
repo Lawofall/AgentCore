@@ -39,8 +39,8 @@ UPDATE_FOLDER_PROFILE_TOOL_NAME = "update_folder_profile"
 
 _OUTPUT_LIMIT = 12000
 
-_PROFILE_UPDATED_OPEN = "<folder_profile_updated>"
-_PROFILE_UPDATED_CLOSE = "</folder_profile_updated>"
+_PROFILE_UPDATED_OPEN = "<文件夹画像已更新>"
+_PROFILE_UPDATED_CLOSE = "</文件夹画像已更新>"
 
 
 @dataclass

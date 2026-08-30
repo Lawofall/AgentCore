@@ -17,7 +17,6 @@ from agentcore.runtime.runs.automation_delivery import (
     clear_delivery_confirmation,
     record_delivery_confirmation,
 )
-from agentcore.runtime.runs.website_style import clear_style_confirmation
 from agentcore.tools.builtin.delegate import DelegateTool
 from agentcore.tools.registry import ToolRegistry
 from tests.delegate.conftest import Provider, local_ctx
@@ -80,7 +79,6 @@ async def test_execute_allows_toolshed_shaped_handwrite_without_style_ledger():
     """无视觉风格账 + 非 full_auto 亦可手写控制台形 tasks（场面账硬闸已拆）。"""
     cid = "auto-gate-toolshed-no-style"
     clear_delivery_confirmation(cid)
-    clear_style_confirmation(cid)
     t = _delegate(
         user_message="随便聊聊",
         conversation_id=cid,
@@ -95,13 +93,10 @@ async def test_execute_allows_toolshed_shaped_handwrite_without_style_ledger():
     )
     assert result.success is True
     clear_delivery_confirmation(cid)
-    clear_style_confirmation(cid)
-
 
 @pytest.mark.asyncio
 async def test_execute_allows_site_handwrite_without_style_ledger():
     cid = "auto-gate-website-no-style"
-    clear_style_confirmation(cid)
     t = _delegate(
         user_message="做个落地页",
         conversation_id=cid,
@@ -115,15 +110,12 @@ async def test_execute_allows_site_handwrite_without_style_ledger():
         local_ctx(),
     )
     assert result.success is True
-    clear_style_confirmation(cid)
-
 
 @pytest.mark.asyncio
 async def test_execute_runnable_ledger_no_longer_rejects_website_toolshed_style():
     """即便残留 delivery 账，也不再硬拒控制台形手写 tasks。"""
     cid = "auto-gate-runnable-toolshed"
     clear_delivery_confirmation(cid)
-    clear_style_confirmation(cid)
     record_delivery_confirmation(
         cid, format_id="f0", label="可运行自动化", source="ask_user"
     )
@@ -141,14 +133,11 @@ async def test_execute_runnable_ledger_no_longer_rejects_website_toolshed_style(
     )
     assert result.success is True
     clear_delivery_confirmation(cid)
-    clear_style_confirmation(cid)
-
 
 @pytest.mark.asyncio
 async def test_execute_plan_ledger_no_longer_rejects_website():
     cid = "auto-gate-plan-only"
     clear_delivery_confirmation(cid)
-    clear_style_confirmation(cid)
     record_delivery_confirmation(
         cid, format_id="f2", label="仅方案", source="ask_user"
     )
@@ -175,4 +164,3 @@ async def test_execute_plan_ledger_no_longer_rejects_website():
     )
     assert r2.success is True
     clear_delivery_confirmation(cid)
-    clear_style_confirmation(cid)

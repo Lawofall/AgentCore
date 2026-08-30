@@ -47,6 +47,13 @@ export function ProductNoticeModal() {
           </DialogDescription>
 
           <DialogFooter>
+            <Button
+              variant="neutral"
+              size="md"
+              onClick={() => void dismiss(modal.id)}
+            >
+              知道了
+            </Button>
             {modal.cta_label && modal.cta_url ? (
               <Button
                 variant="primary"
@@ -59,13 +66,6 @@ export function ProductNoticeModal() {
                 {modal.cta_label}
               </Button>
             ) : null}
-            <Button
-              variant="neutral"
-              size="md"
-              onClick={() => void dismiss(modal.id)}
-            >
-              知道了
-            </Button>
           </DialogFooter>
         </DialogContent>
       ) : null}

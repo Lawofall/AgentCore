@@ -5,7 +5,6 @@ Node execution and escalate channel live in ``.node`` / ``.escalation``.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Mapping
 
 from agentcore.core.log_context import log_context
@@ -16,7 +15,7 @@ from agentcore.runtime.approvals import ApprovalGate
 from agentcore.runtime.events import EventSink
 from agentcore.runtime.facts import record_turn_fact
 from agentcore.runtime.ports import ClientRequestBridge
-from agentcore.runtime.runs.executor.context import _ancestors_by_id, _safe_index_files
+from agentcore.runtime.runs.executor.context import _ancestors_by_id
 from agentcore.runtime.runs.executor.env import AgentExecutorEnv
 from agentcore.runtime.runs.executor.identities import DelegateFactory
 from agentcore.runtime.runs.executor.node import execute_agent_node
@@ -45,7 +44,6 @@ def build_agent_executor(
     escalation_timeout: float | None = None,
     escalation_armed: bool = False,
     team_brief: str | None = None,
-    captain_recon: str | None = None,
     evidence_ledger: object | None = None,
     turn_evidence_ledger: object | None = None,
     cost_role: str = "member",
@@ -70,17 +68,6 @@ def build_agent_executor(
     write_coordinator = resolve_write_coordinator(execution_id=execution_id)
     ancestors_by_id = _ancestors_by_id(plan)
 
-    _ambient_snapshot: dict[str, list[str]] = {}
-    _ambient_lock = asyncio.Lock()
-
-    async def _preexisting_files() -> list[str]:
-        if "paths" in _ambient_snapshot:
-            return _ambient_snapshot["paths"]
-        async with _ambient_lock:
-            if "paths" not in _ambient_snapshot:
-                _ambient_snapshot["paths"] = await _safe_index_files(base_tool_context.backend)
-            return _ambient_snapshot["paths"]
-
     env = AgentExecutorEnv(
         plan=plan,
         llm=llm,
@@ -97,12 +84,9 @@ def build_agent_executor(
         escalation_timeout=escalation_timeout,
         escalation_armed=escalation_armed,
         team_brief=team_brief,
-        captain_recon=captain_recon,
         write_coordinator=write_coordinator,
         ancestors_by_id=ancestors_by_id,
         conversation_id=base_tool_context.conversation_id,
-        preexisting_files=_preexisting_files,
-        shared_workspace=bool(base_tool_context.shared_workspace),
         evidence_ledger=evidence_ledger,
         turn_evidence_ledger=turn_evidence_ledger,
         cost_role=cost_role,

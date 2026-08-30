@@ -14,15 +14,20 @@ from agentcore.runtime.context.consultable import ConsultDirectoryEntry
 from agentcore.runtime.memory_consult_cache import consulted_memory_cache, remember_consult
 from agentcore.runtime.resolve.prompt.base import _DEFAULT_SYSTEM_PROMPT
 from agentcore.runtime.resolve.prompt.ceo_core import _CEO_CORE_HINT
-from agentcore.runtime.resolve.prompt.compose import _on_demand_preamble, render_on_demand_directory
+from agentcore.runtime.resolve.prompt.compose import (
+    _on_demand_preamble,
+    assemble_system_prompt,
+    compose_ceo_chat_prompt,
+    render_on_demand_directory,
+)
 from agentcore.runtime.runs.executor.shared import _registry_without
+from agentcore.runtime.skills import build_system_skill_registry
 from agentcore.tools.builtin import build_builtin_registry
 from agentcore.tools.builtin.archive_create import ArchiveCreateTool
 from agentcore.tools.builtin.archive_extract import ArchiveExtractTool
 from agentcore.tools.builtin.browser import BrowserTool
 from agentcore.tools.builtin.consult import ConsultTool
 from agentcore.tools.builtin.external_mount_readonly import ExternalMountReadonlyTool
-from agentcore.tools.builtin.file_ops.mutate import WriteSectionTool
 from agentcore.tools.builtin.file_ops.read import FileReadTool
 from agentcore.tools.builtin.host import HostTool
 from agentcore.tools.builtin.md_to_docx import MdToDocxTool
@@ -316,7 +321,14 @@ def test_preamble_and_core_make_consult_discoverable():
     assert "系统能力指引" in desc
     assert "consult(terminal)" not in _CEO_CORE_HINT
     assert "consult(browser)" not in _CEO_CORE_HINT
-    assert "consult(name)" in _CEO_CORE_HINT
+    # consult 钩在按需目录 / 装配后的 CEO 串，不进 <身份> 核。
+    assert "consult(name)" not in _CEO_CORE_HINT
+    ceo = compose_ceo_chat_prompt(
+        assemble_system_prompt(),
+        skill_registry=build_system_skill_registry(),
+        ceo_tool_names={"delegate", "consult", "ask_user", "debate"},
+    )
+    assert "consult(name)" in ceo
 
 
 def test_family_of_covers_browser_and_solo_tools():
@@ -325,7 +337,6 @@ def test_family_of_covers_browser_and_solo_tools():
     assert family_of("terminal") == frozenset({"terminal"})
     assert family_of("host") == frozenset({"host"})
     assert family_of("desktop_notify") == frozenset({"desktop_notify"})
-    assert family_of("write_section") == frozenset({"write_section"})
     # Without a live registry the Server siblings are unknown — name stands alone.
     assert family_of("mcp_playwright_browser_navigate") == frozenset(
         {"mcp_playwright_browser_navigate"}
@@ -364,22 +375,6 @@ async def test_browser_and_grant_consult_how_without_schema_reprint():
     assert "先写工作区" in grant
     assert "只读已挂" in grant
     assert "not_found/not_directory/ambiguous" not in grant
-
-
-async def test_write_section_consult_promotes_onto_table():
-    """建站 HTML 笔仍注册；consult 后才进 FC 表（少一轮也不能写不出 SECTION）。"""
-    reg = ToolRegistry()
-    tool = WriteSectionTool()
-    reg.register(tool)
-    assert "write_section" in reg.names
-    assert "write_section" not in _def_names(reg)
-    src = ToolConsultSource(registry=reg)
-    entries = await src.list_directory("u")
-    assert [e.name for e in entries] == ["write_section"]
-    body = await src.fetch_by_name("u", "write_section")
-    assert body is not None
-    assert "已启用工具 `write_section`" in body
-    assert _def_names(reg) == {"write_section"}
 
 
 _STUFFED_WORKER_RESIDENT = frozenset(
@@ -428,9 +423,9 @@ def _stuffed_worker() -> ToolRegistry:
 
 
 def test_stuffed_worker_opening_table_omits_on_demand_tools():
-    """Locks the opening FC win: 32 registered; consult 另 wire，不在此表."""
+    """Locks the opening FC win: 31 registered; consult 另 wire，不在此表."""
     registry = _stuffed_worker()
-    assert registry.count == 32
+    assert registry.count == 31
     offered = _def_names(registry)
     assert offered == _STUFFED_WORKER_RESIDENT
     chars = sum(
@@ -443,7 +438,6 @@ def test_stuffed_worker_opening_table_omits_on_demand_tools():
     assert "terminal" in deferred and "browser" in deferred
     assert "host" in deferred
     assert "md_to_docx" in deferred
-    assert "write_section" in deferred
 
 
 def _playwright_mcp_result(*, tool_count: int = 24) -> McpDiscoverResult:
@@ -471,12 +465,12 @@ async def test_stuffed_worker_opening_table_omits_mcp_tools():
     registry = _stuffed_worker()
     opening_before = _def_names(registry)
     count_before = registry.count
-    assert count_before == 32
+    assert count_before == 31
     assert opening_before == _STUFFED_WORKER_RESIDENT
 
     registered = register_mcp_tools(registry, _playwright_mcp_result(tool_count=24))
     assert registered == 24
-    assert registry.count == 56
+    assert registry.count == 55
     offered = _def_names(registry)
     assert offered == opening_before
     mcp_names = {n for n in registry.names if n.startswith("mcp_")}

@@ -32,9 +32,20 @@ from agentcore.tools.sandbox.sandboxd.protocol import (
 _CONNECT_TIMEOUT = 2.0
 # ping / health / exec header / delete / kill. Desk boot is not this budget.
 _RPC_TIMEOUT = 30.0
-# runsc run -d can sit in "creating container"; 30s here left metadata and the
-# next create hit already exists. Minutes-scale, not the 60s exec cap / 20min wall.
+# Fallback when settings are unavailable (tests / partial imports). Live knob:
+# ``settings.gvisor_desk_start_timeout_seconds``. Minutes-scale, not the 60s
+# exec cap / 20min wall. 30s here left metadata and the next create hit
+# already exists.
 _START_DETACH_RPC_TIMEOUT = 180.0
+
+
+def _start_detach_rpc_timeout() -> float:
+    try:
+        from agentcore.config import settings
+
+        return float(settings.gvisor_desk_start_timeout_seconds)
+    except Exception:  # noqa: BLE001 — import/settings must not break boot RPC
+        return _START_DETACH_RPC_TIMEOUT
 
 _injected: SandboxdClient | None = None
 _req_id = 0
@@ -270,7 +281,7 @@ class UnixSandboxdClient(SandboxdClient):
                     "container_id": container_id,
                     "netns_path": netns_path,
                 },
-                timeout=_START_DETACH_RPC_TIMEOUT,
+                timeout=_start_detach_rpc_timeout(),
             )
         except TimeoutError as exc:
             raise SandboxdError(

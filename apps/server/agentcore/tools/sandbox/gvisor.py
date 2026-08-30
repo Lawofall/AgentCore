@@ -68,13 +68,62 @@ _FILE_EXTENSIONS: dict[str, str] = {
 
 _HOST_BIND_PATHS = ("/usr", "/lib", "/lib64", "/bin", "/etc")
 
-_DESK_START_FAILED = "代码执行环境启动失败"
 _STALE_DESK_MARKERS = ("already exists", "cannot lock container metadata")
+_DEAD_DESK_MARKERS = (
+    "not found",
+    "no such",
+    "does not exist",
+    "unknown container",
+    "not running",
+)
 
 
 def _is_stale_desk_error(exc: BaseException) -> bool:
     text = str(exc).lower()
     return any(marker in text for marker in _STALE_DESK_MARKERS)
+
+
+def _is_dead_desk_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _DEAD_DESK_MARKERS)
+
+
+def _desk_start_error(
+    exc: BaseException, *, host_unhealthy: bool | None = None
+) -> SandboxError:
+    """Cloud guest failed to start — not a missing local interpreter.
+
+    ``host_unhealthy``: stamp process-level cloud health only for sandboxd down /
+    start-detach timeout. A single dead guest must recycle, not close the gate.
+    """
+    from agentcore.tools.sandbox.cloud_health import note_cloud_sandbox_unhealthy
+
+    code = getattr(exc, "code", None)
+    if host_unhealthy is None:
+        host_unhealthy = isinstance(
+            exc, (SandboxdUnavailableError, TimeoutError, SandboxTimeoutError)
+        ) or code in (
+            "sandboxd_unavailable",
+            "sandboxd_start_timeout",
+        )
+    if host_unhealthy:
+        note_cloud_sandbox_unhealthy(
+            str(code or type(exc).__name__),
+            str(exc)[:200],
+        )
+    return _cloud_desk_unavailable_error()
+
+
+def _cloud_desk_unavailable_error() -> SandboxError:
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+    )
+
+    return SandboxError(
+        EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+        code=EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+    )
 
 _desks: dict[str, _DeskSession] = {}
 _desk_locks: dict[str, asyncio.Lock] = {}
@@ -263,6 +312,17 @@ async def reap_idle_desks() -> int:
     return reaped
 
 
+async def _drop_desk_session(workspace: str) -> None:
+    """Forget an in-process desk whose guest is gone; next ensure creates again."""
+    key = _desk_key(workspace)
+    async with _registry_lock:
+        lock = _desk_locks.setdefault(key, asyncio.Lock())
+    async with lock:
+        session = _desks.pop(key, None)
+    if session is not None:
+        await session.close()
+
+
 async def _unpin_desk(workspace: str) -> None:
     key = _desk_key(workspace)
     async with _registry_lock:
@@ -420,7 +480,7 @@ class GVisorSandbox:
         return min(int(request.timeout_seconds), int(settings.gvisor_timeout_max_seconds))
 
     async def _execute_in_slot(
-        self, request: ExecutionRequest, start: float
+        self, request: ExecutionRequest, start: float, *, _desk_retry: bool = False
     ) -> ExecutionResult:
         workspace_root = request.cwd or self._workspace_root
         if not workspace_root:
@@ -446,7 +506,7 @@ class GVisorSandbox:
         except SandboxError:
             raise
         except (TimeoutError, SandboxTimeoutError, SandboxdError, OSError) as exc:
-            raise SandboxError(_DESK_START_FAILED) from exc
+            raise _desk_start_error(exc) from exc
 
         try:
             script_name = f"exec-{uuid.uuid4().hex[:12]}{_FILE_EXTENSIONS[request.language]}"
@@ -492,9 +552,17 @@ class GVisorSandbox:
                     exit_code=-1,
                     duration_ms=duration_ms,
                 )
-            raise SandboxError(f"代码执行环境启动失败：{exc}") from exc
+            if not _desk_retry and _is_dead_desk_error(exc):
+                pinned = False
+                await _drop_desk_session(workspace)
+                return await self._execute_in_slot(
+                    request, start, _desk_retry=True
+                )
+            if _is_dead_desk_error(exc):
+                raise _desk_start_error(exc, host_unhealthy=False) from exc
+            raise SandboxError(f"云桌执行失败：{exc}") from exc
         except OSError as e:
-            raise SandboxError(f"代码执行环境启动失败：{e}") from e
+            raise SandboxError(f"云桌执行失败：{e}") from e
         finally:
             if pinned:
                 await _unpin_desk(workspace)
@@ -550,6 +618,8 @@ class GVisorSandbox:
         self, workspace: str, *, cache_bucket: str | None = None
     ) -> None:
         """Start (or reuse) the long-lived desk guest for this workspace root."""
+        if not _IS_LINUX:
+            raise SandboxError("GVisor sandbox is only available on Linux")
         await self._ensure_desk(workspace, cache_bucket=cache_bucket)
 
     def host_scratch_dir(self, workspace: str) -> Path | None:
@@ -588,7 +658,7 @@ class GVisorSandbox:
             except SandboxError:
                 raise
             except (TimeoutError, SandboxTimeoutError, SandboxdError, OSError) as exc:
-                raise SandboxError(_DESK_START_FAILED) from exc
+                raise _desk_start_error(exc) from exc
             pinned = True
             argv = ["bash", guest_script]
             env_pairs = self._desk_env_pairs(desk)
@@ -605,9 +675,11 @@ class GVisorSandbox:
         except SandboxdError as exc:
             if exc.code == "sandboxd_timeout":
                 raise SandboxError("云桌短执行超时") from exc
-            raise SandboxError(f"代码执行环境启动失败：{exc}") from exc
+            if _is_dead_desk_error(exc):
+                raise _desk_start_error(exc, host_unhealthy=False) from exc
+            raise SandboxError(f"云桌执行失败：{exc}") from exc
         except OSError as exc:
-            raise SandboxError(f"代码执行环境启动失败：{exc}") from exc
+            raise SandboxError(f"云桌执行失败：{exc}") from exc
         finally:
             if pinned:
                 await _unpin_desk(workspace)
@@ -626,6 +698,12 @@ class GVisorSandbox:
                 if pin:
                     existing.inflight += 1
                 return existing
+            from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health
+
+            # Known-unhealthy host: do not hang on start_detach. Recovery is the
+            # health probe, not a user click retrying attach.
+            if cloud_sandbox_health() is False:
+                raise _cloud_desk_unavailable_error()
             session = await self._start_desk(key, workspace, cache_bucket=cache_bucket)
             session.last_used = _now()
             if pin:
@@ -669,7 +747,7 @@ class GVisorSandbox:
             except SandboxError:
                 raise
             except Exception as exc:
-                raise SandboxError(_DESK_START_FAILED) from exc
+                raise _desk_start_error(exc) from exc
         except Exception:
             with contextlib.suppress(Exception):
                 await egress.close()

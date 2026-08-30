@@ -1,4 +1,4 @@
-"""Outlet directory inventory for ``<workspace_context>`` fact lines."""
+"""Outlet directory inventory for ``<工作区>`` fact lines."""
 
 from __future__ import annotations
 

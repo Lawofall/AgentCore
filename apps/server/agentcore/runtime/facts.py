@@ -105,8 +105,6 @@ class FactKind(StrEnum):
     PLAN_SNAPSHOT = "plan_snapshot"
     # CEO 协调模式 Phase 2: draft / completed / budget for ask_user resume.
     COORDINATION_SNAPSHOT = "coordination_snapshot"
-    # P1a 建站风格双闸：ask_user resume / full_auto 默认确认后的结构化 style_id。
-    WEBSITE_STYLE_CONFIRMED = "website_style_confirmed"
     # 演讲/PPT 交付形态双闸：ask_user resume / full_auto 默认确认后的结构化 format_id。
     PRESENTATION_FORMAT_CONFIRMED = "presentation_format_confirmed"
     # Agent/自动化开工形态双闸：ask_user resume / full_auto 默认确认后的结构化 format_id。
@@ -121,7 +119,10 @@ class FactKind(StrEnum):
 # so they must not leak into the projected ``runs.events`` (the client fold would
 # choke on an unknown event type). The frozen string values match the table's stored
 # ``kind`` column.
-EXECUTION_ONLY_KINDS: frozenset[str] = frozenset(k.value for k in FactKind)
+# Old journals may still carry ``website_style_confirmed``; skip display fold.
+EXECUTION_ONLY_KINDS: frozenset[str] = frozenset(
+    {k.value for k in FactKind} | {"website_style_confirmed"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -439,8 +440,6 @@ class TurnPausedFact:
     # 回合共享调研台账快照（引用即出处 P1 §七 / §十第 3 步提前）：resume 再水化同一内容。
     evidence_ledger: list[dict[str, Any]] | None = None
     controller: dict[str, Any] | None = None
-    # P1a 建站风格确认快照（style_id/label/source）；resume 再水化进 conversation ledger。
-    website_style: dict[str, Any] | None = None
     # 演讲/PPT 交付形态确认快照（format_id/label/source）；resume 再水化进 conversation ledger。
     presentation_format: dict[str, Any] | None = None
     # Agent/自动化开工形态确认快照（format_id/label/source）；resume 再水化进 conversation ledger。
@@ -464,8 +463,6 @@ class TurnPausedFact:
             "evidence_ledger": list(self.evidence_ledger) if self.evidence_ledger else [],
             "controller": dict(self.controller) if self.controller else {},
         }
-        if self.website_style:
-            payload["website_style"] = dict(self.website_style)
         if self.presentation_format:
             payload["presentation_format"] = dict(self.presentation_format)
         if self.automation_delivery:
@@ -486,7 +483,6 @@ class TurnPausedFact:
         citations = payload.get("citations")
         evidence_ledger = payload.get("evidence_ledger")
         controller = payload.get("controller")
-        website_style = payload.get("website_style")
         presentation_format = payload.get("presentation_format")
         automation_delivery = payload.get("automation_delivery")
         extras = payload.get("extras")
@@ -506,9 +502,6 @@ class TurnPausedFact:
                 list(evidence_ledger) if isinstance(evidence_ledger, list) else []
             ),
             controller=dict(controller) if isinstance(controller, dict) else {},
-            website_style=(
-                dict(website_style) if isinstance(website_style, dict) else None
-            ),
             presentation_format=(
                 dict(presentation_format)
                 if isinstance(presentation_format, dict)

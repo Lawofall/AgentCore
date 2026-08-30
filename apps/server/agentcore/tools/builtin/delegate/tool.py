@@ -495,29 +495,7 @@ class DelegateTool:
         batch_audit_hard = playbook == "cite_write_review"
         from agentcore.runtime.delegate.completion import (
             execution_capability_warning,
-            validate_repair_how_fixed,
         )
-
-        playbook_name_early = (
-            playbook.strip() if isinstance(playbook, str) and playbook.strip() else None
-        )
-        how_fixed_err = validate_repair_how_fixed(
-            playbook=playbook_name_early,
-            playbook_args=arguments.get("playbook_args"),
-        )
-        if how_fixed_err:
-            logger.info(
-                "delegate.rejected",
-                errors=[how_fixed_err],
-                reason="repair_how_fixed",
-            )
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=how_fixed_err,
-                contract_failure=True,
-            )
 
         capability_warning = execution_capability_warning(
             plan,

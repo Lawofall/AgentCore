@@ -266,7 +266,7 @@ def format_recent_graph_worker_facts(
     plan: Any,
     completed: dict[str, Any] | None,
 ) -> str:
-    """Minimal worker fact lines (role / status / task) for ``<recent_team_graph>``.
+    """Minimal worker fact lines (role / status / task) for ``<近期团队图>``.
 
     ``plan`` is a :class:`~agentcore.runtime.runs.plan.RunPlan` (or None).
     Returns ``""`` when there are no worker nodes to list.
@@ -303,19 +303,19 @@ def render_recent_graph_context(
     execution_id: str,
     worker_facts: str = "",
 ) -> str:
-    """Assemble the ``<recent_team_graph>`` block (facts + append channel note)."""
+    """Assemble the ``<近期团队图>`` block (facts + append channel note)."""
     eid = (execution_id or "").strip()
     if not eid:
         return ""
     parts = [
-        "<recent_team_graph>",
+        "<近期团队图>",
         "本对话最近一张协作图（团队执行）。",
     ]
     facts = (worker_facts or "").strip()
     if facts:
         parts.append(facts)
     parts.append(_RECENT_GRAPH_APPEND_NOTE)
-    parts.append("</recent_team_graph>")
+    parts.append("</近期团队图>")
     return "\n".join(parts)
 
 
@@ -324,7 +324,7 @@ async def build_recent_graph_context(
     conversation_id: str,
     exclude_message_id: str | None = None,
 ) -> str:
-    """The ``<recent_team_graph>`` prompt note, or ``""`` when the conversation has no graph.
+    """The ``<近期团队图>`` prompt note, or ``""`` when the conversation has no graph.
 
     Resolves the newest appendable execution, then loads its host journal for a
     compact worker roster (count / role / status / task brief). Missing journal

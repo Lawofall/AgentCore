@@ -1,17 +1,12 @@
 import { MANUAL_HELP, ManualHelpLink } from "@/components/ManualHelpLink";
-import { Button } from "@/components/ui";
-import { useDebateTake, useDebateUserTake } from "@/stores/debateUserTake";
-import { Hand } from "lucide-react";
 import { ModelBadge } from "../ModelBadge";
 import { FINDING_STATUS, findingStatusCounts, gateLabel } from "../findings";
 import {
   type DebateModel,
-  type DebateScoreView,
   debateRoster,
   debateSideColorVar,
   modelVendorLabel,
   stopLabel,
-  tallyScores,
 } from "../model";
 import {
   RISK_LEVELS,
@@ -20,14 +15,7 @@ import {
   riskCounts,
 } from "../severity";
 import { HowToReadPopover } from "./HowToReadPopover";
-import { MomentumChart } from "./MomentumChart";
-import { ScoreTotalPortal, formatNetTotal } from "./ScoreBreakdown";
-import {
-  closingAnchorId,
-  finaleAnchorId,
-  roundAnchorId,
-  steeringAnchorId,
-} from "./anchors";
+import { closingAnchorId, finaleAnchorId, roundAnchorId } from "./anchors";
 import {
   DEBATE_ARENA_PAGE_MAX,
   type DebateArenaLayout,
@@ -35,25 +23,18 @@ import {
 
 export function Scoreboard({
   model,
-  messageId,
-  hasPendingSteering,
   onScrollTo,
   canSplit,
   layoutMode,
   onLayoutChange,
 }: {
   model: DebateModel;
-  messageId: string;
-  hasPendingSteering: boolean;
   onScrollTo: (anchorId: string) => void;
   canSplit?: boolean;
   layoutMode?: DebateArenaLayout;
   onLayoutChange?: (mode: DebateArenaLayout) => void;
 }) {
   const motion = model.motion ?? model.rounds[0]?.focus ?? "辩论";
-  const tally = model.form === "roundtable" ? [] : tallyScores(model.rounds);
-  const roster = debateRoster(model.rounds);
-  const isVersus = model.form === "debate" && roster.length === 2;
   const liveRound = model.rounds.find((r) => r.inFlight);
   const currentRoundNo = liveRound?.roundNo ?? model.rounds.length;
   const totalRounds = model.rounds.length;
@@ -80,16 +61,6 @@ export function Scoreboard({
             {motion}
           </p>
           <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-            {hasPendingSteering && (
-              <Button
-                variant="neutral"
-                size="sm"
-                onClick={() => onScrollTo(steeringAnchorId())}
-                icon={<Hand size={13} />}
-              >
-                掌舵
-              </Button>
-            )}
             <StatusLine
               model={model}
               liveRound={liveRound}
@@ -102,32 +73,13 @@ export function Scoreboard({
         </div>
 
         <div className="mt-2">
-          <ScoreboardRow2
-            model={model}
-            tally={tally}
-            roster={roster}
-            isVersus={isVersus}
-            messageId={messageId}
-          />
+          <ScoreboardRow2 model={model} />
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {canSplit && layoutMode && onLayoutChange && (
             <LayoutToggle mode={layoutMode} onChange={onLayoutChange} />
           )}
-          <MomentumChart
-            rounds={model.rounds}
-            sideKeys={roster.map((r) => r.sideKey)}
-            colorByKey={Object.fromEntries(
-              roster.map((r) => [
-                r.sideKey,
-                debateSideColorVar(r.sideKey, r.name),
-              ]),
-            )}
-            nameByKey={Object.fromEntries(
-              roster.map((r) => [r.sideKey, r.name]),
-            )}
-          />
           <div className="flex flex-1 flex-wrap gap-1">
             {chapters.map((c) => (
               <button
@@ -180,19 +132,10 @@ function StatusLine({
   );
 }
 
-function ScoreboardRow2({
-  model,
-  tally,
-  roster,
-  isVersus,
-  messageId,
-}: {
-  model: DebateModel;
-  tally: DebateScoreView[];
-  roster: ReturnType<typeof debateRoster>;
-  isVersus: boolean;
-  messageId: string;
-}) {
+function ScoreboardRow2({ model }: { model: DebateModel }) {
+  const roster = debateRoster(model.rounds);
+  const isVersus = model.form === "debate" && roster.length === 2;
+
   if (model.form === "roundtable" && model.sides) {
     return (
       <div className="flex flex-wrap items-center gap-3">
@@ -281,92 +224,59 @@ function ScoreboardRow2({
     );
   }
 
-  if (isVersus && tally.length >= 2 && model.sides) {
-    const proSide = model.sides.find((s) => s.stance === "pro");
-    const conSide = model.sides.find((s) => s.stance === "con");
+  if (isVersus) {
+    const proSide = model.sides?.find((s) => s.stance === "pro");
+    const conSide = model.sides?.find((s) => s.stance === "con");
     const proRoster = proSide
       ? roster.find((r) => r.sideKey === proSide.key)
       : roster[0];
     const conRoster = conSide
       ? roster.find((r) => r.sideKey === conSide.key)
       : roster[1];
-    const proKey = proSide?.key ?? proRoster?.sideKey ?? tally[0].sideKey;
-    const conKey = conSide?.key ?? conRoster?.sideKey ?? tally[1].sideKey;
-    const proScore = tally.find((s) => s.sideKey === proKey) ?? tally[0];
-    const conScore = tally.find((s) => s.sideKey === conKey) ?? tally[1];
-    const proModel = sideRunModel(model, proKey);
-    const conModel = sideRunModel(model, conKey);
+    if (!proRoster || !conRoster) return null;
+    const proModel = sideRunModel(model, proRoster.sideKey);
+    const conModel = sideRunModel(model, conRoster.sideKey);
     return (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <VersusSide
-          name={proRoster?.name ?? proScore.name}
+          name={proRoster.name}
           model={proModel}
-          colorVar={debateSideColorVar(
-            proRoster?.sideKey ?? proScore.sideKey,
-            proRoster?.name ?? proScore.name,
-          )}
+          colorVar={debateSideColorVar(proRoster.sideKey, proRoster.name)}
           align="left"
         />
-        <span className="inline-flex items-baseline gap-1 text-xl font-semibold tabular-nums text-foreground">
-          <ScoreTotalPortal score={proScore}>
-            <button
-              type="button"
-              className="rounded-lg px-1 hover:bg-muted/50"
-              aria-label={`${proScore.name}净分构成`}
-            >
-              {proScore.total}
-            </button>
-          </ScoreTotalPortal>
-          <span className="text-muted-foreground">：</span>
-          <ScoreTotalPortal score={conScore}>
-            <button
-              type="button"
-              className="rounded-lg px-1 hover:bg-muted/50"
-              aria-label={`${conScore.name}净分构成`}
-            >
-              {conScore.total}
-            </button>
-          </ScoreTotalPortal>
-        </span>
         <VersusSide
-          name={conRoster?.name ?? conScore.name}
+          name={conRoster.name}
           model={conModel}
-          colorVar={debateSideColorVar(
-            conRoster?.sideKey ?? conScore.sideKey,
-            conRoster?.name ?? conScore.name,
-          )}
+          colorVar={debateSideColorVar(conRoster.sideKey, conRoster.name)}
           align="right"
         />
-        <StanceControl turnId={messageId} model={model} />
       </div>
     );
   }
 
-  // 3+ 方 debate：紧凑 chip 累计分（唯一顶栏累计出口；1v1 走上方对阵式）
-  if (model.form === "debate" && tally.length > 0) {
+  if (model.form === "debate" && roster.length > 0) {
     return (
       <div className="flex flex-wrap items-center gap-1.5">
-        {tally.map((s) => (
-          <ScoreTotalPortal key={s.sideKey} score={s}>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted/40"
-              aria-label={`${s.name}净分构成`}
+        {roster.map((r) => {
+          const runModel = sideRunModel(model, r.sideKey);
+          return (
+            <span
+              key={r.sideKey}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-xs text-foreground"
             >
               <span
                 className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: s.colorVar }}
+                style={{
+                  backgroundColor: debateSideColorVar(r.sideKey, r.name),
+                }}
               />
-              <span className="font-medium">{s.name}</span>
-              <span className="font-semibold tabular-nums">
-                {formatNetTotal(s.total)}
-              </span>
-              {s.penalties.length > 0 && (
-                <span className="text-muted-foreground">·罚</span>
+              <span className="font-medium">{r.name}</span>
+              {modelVendorLabel(runModel) && (
+                <ModelBadge model={runModel ?? ""} />
               )}
-            </button>
-          </ScoreTotalPortal>
-        ))}
+            </span>
+          );
+        })}
       </div>
     );
   }
@@ -433,49 +343,6 @@ function LayoutToggle({
               type="button"
               aria-pressed={active}
               onClick={() => onChange(key)}
-              className={`rounded-lg px-2 py-0.5 text-xs font-medium transition-colors ${
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function StanceControl({
-  turnId,
-  model,
-}: {
-  turnId: string;
-  model: DebateModel;
-}) {
-  const stance = useDebateTake(turnId).stance;
-  const setStance = useDebateUserTake((s) => s.setStance);
-  const proSideInfo = model.sides?.find((s) => s.stance === "pro");
-  const conSideInfo = model.sides?.find((s) => s.stance === "con");
-  if (!proSideInfo || !conSideInfo) return null;
-
-  return (
-    <div className="flex w-full items-center gap-1 sm:ml-auto sm:w-auto">
-      <span className="text-xs text-muted-foreground">你站</span>
-      <div className="flex rounded-lg border border-border p-0.5">
-        {[
-          { key: proSideInfo.key, label: "正方" },
-          { key: conSideInfo.key, label: "反方" },
-        ].map(({ key, label }) => {
-          const active = stance === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setStance(turnId, active ? null : key)}
               className={`rounded-lg px-2 py-0.5 text-xs font-medium transition-colors ${
                 active
                   ? "bg-primary/10 text-primary"

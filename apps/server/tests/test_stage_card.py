@@ -18,13 +18,9 @@ from agentcore.runtime.kickoff.stage_card import (
     apply_motion_override,
     build_stage_card_payload,
     clear_turn_keeps_stage_card,
-    consume_mlr_preauth,
     debate_arguments_from_card,
-    discard_mlr_preauth,
-    grant_mlr_preauth,
     host_triple_from_journal,
     mark_turn_keeps_stage_card,
-    peek_mlr_preauth,
     research_first_user_message,
     reset_stage_card_turn_flags,
     turn_advanced_stage_from_entries,
@@ -274,16 +270,6 @@ def test_host_triple_from_journal_dag_namespaced_synthesizer():
     }
 
 
-def test_mlr_preauth_is_one_shot():
-    reset_stage_card_turn_flags()
-    assert peek_mlr_preauth() is False
-    grant_mlr_preauth()
-    assert peek_mlr_preauth() is True
-    assert consume_mlr_preauth() is True
-    assert consume_mlr_preauth() is False
-    assert peek_mlr_preauth() is False
-
-
 def test_turn_keeps_stage_card_flag():
     reset_stage_card_turn_flags()
     assert turn_keeps_stage_card() is False
@@ -296,15 +282,7 @@ def test_turn_keeps_stage_card_flag():
     assert turn_keeps_stage_card() is False
 
 
-def test_discard_mlr_preauth_clears_unused_grant():
-    grant_mlr_preauth()
-    assert peek_mlr_preauth() is True
-    discard_mlr_preauth()
-    assert peek_mlr_preauth() is False
-    assert consume_mlr_preauth() is False
-
-
-def test_turn_advanced_stage_from_entries_detects_debate_and_mlr():
+def test_turn_advanced_stage_from_entries_detects_debate_and_delegate():
     assert turn_advanced_stage_from_entries(
         [{"type": "tool_use_start", "payload": {"tool_name": "debate", "arguments": {}}}]
     )
@@ -314,7 +292,7 @@ def test_turn_advanced_stage_from_entries_detects_debate_and_mlr():
                 "type": "tool_use_start",
                 "payload": {
                     "tool_name": "delegate",
-                    "arguments": {"playbook": "lens_crosscheck"},
+                    "arguments": {"tasks": [{"role": "法律视角", "task": "查"}]},
                 },
             }
         ]
@@ -323,18 +301,28 @@ def test_turn_advanced_stage_from_entries_detects_debate_and_mlr():
         [
             {
                 "type": "tool_use_start",
-                "payload": {
-                    "tool_name": "delegate",
-                    "arguments": {"playbook": "other"},
-                },
+                "payload": {"tool_name": "web_search", "arguments": {}},
             }
         ]
     )
 
 
 @pytest.mark.asyncio
+async def test_refuse_stage_card_resolve_is_gone():
+    from agentcore.core.errors import GoneError
+    from agentcore.runtime.kickoff.retired import (
+        STAGE_CARD_UNRECOVERABLE,
+        refuse_stage_card_resolve,
+    )
+
+    with pytest.raises(GoneError, match="开辩请直接") as ei:
+        refuse_stage_card_resolve()
+    assert ei.value.message == STAGE_CARD_UNRECOVERABLE
+
+
+@pytest.mark.asyncio
 async def test_consume_pending_stage_card_for_debate_prepares_without_resolve(monkeypatch):
-    """口头开赛：合并参数 + keep，``debate.started`` 前不 resolve（启动失败可重试）。"""
+    """口头开赛 helper：合并参数 + keep，``debate.started`` 前不 resolve。"""
     from agentcore.conversation import stage_card_resolve as mod
 
     payload = build_stage_card_payload(
@@ -489,8 +477,8 @@ async def test_orphan_writes_journal_fact(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_drive_mlr_preauth_skips_team_preview(monkeypatch):
-    """MLR 顶层也不再挂 team_preview；preauth 不再承担跳卡。"""
+async def test_drive_top_level_no_longer_hangs_team_preview(monkeypatch):
+    """顶层也不再挂 team_preview。"""
     from agentcore.core.types import AutonomyPolicy
     from agentcore.runtime.delegate.drive import _team_preview_before_workers
     from agentcore.runtime.runs.plan import RunPlan
@@ -503,32 +491,28 @@ async def test_drive_mlr_preauth_skips_team_preview(monkeypatch):
     class _Tool:
         _depth = 0
         _permission_axes = AutonomyPolicy.LESS_INTERRUPT
-        _active_playbook = "lens_crosscheck"
+        _active_playbook = None
         _pending_pause = False
         _base_tool_context = type("C", (), {"backend": None})()
         _approval_gate = None
 
-    grant_mlr_preauth()
-    try:
-        plan = RunPlan(nodes=[RunSpec(run_id="a", agent_id="a", role="r", task="t")])
-        result = await _team_preview_before_workers(
-            _Tool(),
-            plan,
-            complexity_hint="standard",
-            seed_completed=None,
-            call_idx=0,
-        )
-        assert result is None
-        result2 = await _team_preview_before_workers(
-            _Tool(),
-            plan,
-            complexity_hint="standard",
-            seed_completed=None,
-            call_idx=1,
-        )
-        assert result2 is None
-    finally:
-        discard_mlr_preauth()
+    plan = RunPlan(nodes=[RunSpec(run_id="a", agent_id="a", role="r", task="t")])
+    result = await _team_preview_before_workers(
+        _Tool(),
+        plan,
+        complexity_hint="standard",
+        seed_completed=None,
+        call_idx=0,
+    )
+    assert result is None
+    result2 = await _team_preview_before_workers(
+        _Tool(),
+        plan,
+        complexity_hint="standard",
+        seed_completed=None,
+        call_idx=1,
+    )
+    assert result2 is None
 
 
 @pytest.mark.asyncio
@@ -669,7 +653,7 @@ async def test_mlr_stop_clears_keep_flag(monkeypatch):
     class _Tool:
         _depth = 0
         _permission_axes = AutonomyPolicy.LESS_INTERRUPT
-        _active_playbook = "lens_crosscheck"
+        _active_playbook = None
         _pending_pause = False
         _base_tool_context = type("C", (), {"backend": None})()
         _approval_gate = None
@@ -852,43 +836,18 @@ def _debate_tool_for_stage_card_finalize(sink=None):
 
 
 @pytest.mark.asyncio
-async def test_oral_wires_finalize_ctx_before_moderator(monkeypatch):
-    """口头消费：进入 moderator 前已备好 finalize 上下文；execute 自身不在返回后 finalize。"""
+async def test_oral_debate_does_not_consume_stage_card(monkeypatch):
+    """口头开辩是独立重活：不消费推进卡、不走 stage_card 授权。"""
     from agentcore.tools.builtin.debate.tool import DebateTool
     from agentcore.tools.protocol import ToolEffect, ToolResult
 
-    payload = build_stage_card_payload(
-        _valid_card(),
-        conversation_id="conv_sc",
-        stage_card_id="sc_oral",
-        host_execution_id="exec_h",
-        synthesizer_run_id="syn",
-        host_message_id="m_host",
-    )
-    assert payload is not None
+    consume_calls: list = []
 
-    async def _fake_consume(*, conversation_id, ceo_motion, sink=None):
-        return (
-            {
-                **payload,
-                "_host_turn_id": "turn_host",
-                "_motion_override": None,
-                "stage_card_id": "sc_oral",
-            },
-            None,
-            "",
-        )
-
-    finalize_calls: list[dict] = []
-
-    async def _fake_finalize(**kwargs):
-        finalize_calls.append(kwargs)
-
-    seen_ctx: dict = {}
+    async def _fake_consume(**kwargs):
+        consume_calls.append(kwargs)
+        raise AssertionError("must not consume leftover stage_card")
 
     async def _fake_run(self, config, usage_metadata):
-        seen_ctx["finalize"] = dict(self._stage_card_finalize or {})
-        seen_ctx["authorized"] = self._debate_authorized_by
         return ToolResult(
             tool_call_id="",
             success=True,
@@ -899,10 +858,6 @@ async def test_oral_wires_finalize_ctx_before_moderator(monkeypatch):
     monkeypatch.setattr(
         "agentcore.conversation.stage_card_resolve.consume_pending_stage_card_for_debate",
         _fake_consume,
-    )
-    monkeypatch.setattr(
-        "agentcore.conversation.stage_card_resolve.finalize_stage_card_start_debate",
-        _fake_finalize,
     )
     monkeypatch.setattr(DebateTool, "_run_moderator", _fake_run)
 
@@ -918,11 +873,9 @@ async def test_oral_wires_finalize_ctx_before_moderator(monkeypatch):
         tool._base_tool_context,
     )
     assert result.success is True
-    assert seen_ctx["authorized"] == "stage_card"
-    assert seen_ctx["finalize"]["stage_card_id"] == "sc_oral"
-    assert seen_ctx["finalize"]["host_turn_id"] == "turn_host"
-    # execute 不再于 moderator 返回后 finalize（改由 _run_moderator 在 started 边界做）
-    assert finalize_calls == []
+    assert consume_calls == []
+    assert tool._debate_authorized_by in (None, "auto")
+    assert tool._stage_card_finalize is None
 
 
 @pytest.mark.asyncio
@@ -1006,56 +959,17 @@ async def test_finalize_at_debate_started_before_moderator_run(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_kickoff_failure_does_not_finalize(monkeypatch):
-    """启动失败（未到 debate.started）：不 finalize，卡保持 pending 可重试。"""
+    """口头开辩失败：不消费推进卡、不 finalize。"""
     from agentcore.tools.builtin.debate.tool import DebateTool
     from agentcore.tools.protocol import ToolEffect, ToolResult
-
-    payload = build_stage_card_payload(
-        _valid_card(), conversation_id="c", stage_card_id="sc_kick"
-    )
-    assert payload is not None
-
-    async def _fake_consume(*, conversation_id, ceo_motion, sink=None):
-        return (
-            {
-                **payload,
-                "_host_turn_id": "turn_host",
-                "stage_card_id": "sc_kick",
-            },
-            None,
-            "",
-        )
 
     finalize_calls: list = []
 
     async def _fake_finalize(**kwargs):
         finalize_calls.append(kwargs)
 
-    async def _early_kickoff(self, config, arguments):
-        return ToolResult(
-            tool_call_id="",
-            success=True,
-            output="用户取消了辩论，未开赛。\n宜先问用户方案或分工哪里要调，再行动；勿未问清就重派同一套 / 再调 debate。",
-            effect=ToolEffect.CONTINUE,
-        )
-
-    monkeypatch.setattr(
-        "agentcore.conversation.stage_card_resolve.consume_pending_stage_card_for_debate",
-        _fake_consume,
-    )
-    monkeypatch.setattr(
-        "agentcore.conversation.stage_card_resolve.finalize_stage_card_start_debate",
-        _fake_finalize,
-    )
-    # 口头消费会 skip_kickoff=True，故用按钮同构：已授权 + skip_kickoff，但启动前失败
-    # 这里改为：consume 后强制走 kickoff 早退——改 patch _run_moderator 永不调用 +
-    # 在 skip_kickoff 路径模拟启动失败：直接让 _run_moderator 不被调用。
-    # 更贴近：kickoff STOP 发生在 consume 之前的冷开辩；对 stage_card 路径，
-    # 启动失败 = _run_moderator 返回失败且未设 finalized。
     async def _fail_before_started(self, config, usage_metadata):
-        # 模拟未到 debate.started（不调用 finalize）
-        assert self._stage_card_finalize is not None
-        assert self._stage_card_finalized_at_start is False
+        assert self._stage_card_finalize is None
         return ToolResult(
             tool_call_id="",
             success=False,
@@ -1063,6 +977,10 @@ async def test_kickoff_failure_does_not_finalize(monkeypatch):
             effect=ToolEffect.CONTINUE,
         )
 
+    monkeypatch.setattr(
+        "agentcore.conversation.stage_card_resolve.finalize_stage_card_start_debate",
+        _fake_finalize,
+    )
     monkeypatch.setattr(DebateTool, "_run_moderator", _fail_before_started)
 
     tool = _debate_tool_for_stage_card_finalize()

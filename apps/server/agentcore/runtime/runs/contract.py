@@ -57,7 +57,6 @@ from agentcore.runtime.runs.web_quality_scan import (
     scan_web_quality,
 )
 from agentcore.runtime.runs.web_seam import (
-    check_integrated_web_seam_failures,
     check_web_seam_failures,
     is_web_artifact_batch,
 )
@@ -132,10 +131,6 @@ def needs_file_contents(
         return True
     if deliverable is None:
         return False
-    if deliverable.web_seam_scope:
-        return True
-    if deliverable.web_quality_scan:
-        return True
     if deliverable.output_format == "json" and deliverable.artifacts:
         return True
     if deliverable.code_audit_gate:
@@ -318,8 +313,7 @@ def zero_files_gap_message(*, landing_failure_kind: str | None = None) -> str:
         )
     from agentcore.runtime.runs.serialize import format_file_landing_tools_slash
 
-    # 落盘工具清单一律由 serialize 的格式化函数生成——手写子集正是 write_section 从这段
-    # 文案里漏掉一整个版本的原因。
+    # 落盘工具清单一律由 serialize 的格式化函数生成——手写子集会漏笔。
     tools = format_file_landing_tools_slash()
     if landing_failure_kind == "write_failed":
         return (
@@ -424,7 +418,7 @@ def check_contract(
         landed_web = needs_web_quality_scan(list(artifact_contents or {}))
         wq_soft: list[str] = []
         if landed_web:
-            wq = scan_web_quality(artifact_contents, design_contract=False)
+            wq = scan_web_quality(artifact_contents)
             failures.extend(wq.failures)
             wq_soft.extend(wq.soft_failures)
         table_gap = _no_exec_table_gap(
@@ -508,17 +502,8 @@ def check_contract(
             path_mismatch_warnings.append(
                 f"产物未写入约定文档目录 `{dir_pat}`（建议落在此目录下，勿写到工作区根）"
             )
-    # 网页接缝：同批 HTML+CSS/JS，或 ``web_seam_scope`` 终态整站复查。
-    if deliverable.web_seam_scope:
-        failures.extend(
-            check_integrated_web_seam_failures(
-                deliverable.web_seam_scope,
-                artifact_contents,
-                workspace_paths=workspace_paths,
-            )
-        )
-    else:
-        failures.extend(check_web_seam_failures(artifact_contents))
+    # 网页接缝：同批 HTML+CSS/JS（外链表跳过，不瞎拦）。
+    failures.extend(check_web_seam_failures(artifact_contents))
     # 占位符 / 未核实：内容类文件骨架标记 + 自注一律 warnings（定案乙：不硬拦）。
     # Internal coordination paths may declare skeleton exemption on the deliverable.
     ph = _scan_placeholders_for_contract(
@@ -587,19 +572,18 @@ def check_contract(
         else:
             failures.extend(gate_fails)
     soft_failures: list[str] = []
-    # 前端质量：落盘含 web 扩展名即跑静态扫描；DESIGN.md 硬闸仅当 ``web_quality_scan``。
+    # 前端质量：落盘含 web 扩展名即跑静态扫描（语法 / 假联系方式 / anti-slop）。
     landed_web = needs_web_quality_scan(
         list(artifact_contents or {})
         or list(workspace_paths or [])
     )
-    if landed_web or (deliverable is not None and deliverable.web_quality_scan):
+    if landed_web:
         wq = scan_web_quality(
             artifact_contents,
             soft_exempt=bool(deliverable and deliverable.web_quality_soft_exempt),
             soft_exempt_labels=(
                 deliverable.web_quality_soft_exempt_labels if deliverable else None
             ),
-            design_contract=bool(deliverable and deliverable.web_quality_scan),
         )
         failures.extend(wq.failures)
         soft_failures.extend(wq.soft_failures)

@@ -554,7 +554,7 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
         assemble_system_prompt(),
         ceo_tool_names={"consult", "delegate"},
     )
-    assert "<how_you_work>" in ceo_chat_prompt
+    assert "对整段对话负责到底" in ceo_chat_prompt
 
     captured: dict[str, str] = {}
     wired = SimpleNamespace(
@@ -676,6 +676,7 @@ async def test_continue_ceo_rebuilds_worker_base_not_chat_prompt(monkeypatch):
 
     prompt = captured["base_system_prompt"]
     assert prompt != ceo_chat_prompt
-    assert "<how_you_work>" not in prompt
+    assert "对整段对话负责到底" not in prompt
+    assert "<怎么对人>" not in prompt
     assert "<按需目录>" in prompt
     assert "- work_discipline" in prompt

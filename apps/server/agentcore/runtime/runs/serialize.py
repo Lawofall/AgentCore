@@ -100,7 +100,7 @@ def file_landing_tool_names() -> tuple[str, ...]:
     """Ordered tool names to NAME in files-not-landed gap copy (prose only).
 
     Single source for every such list — callers must not hand-write a subset (that is
-    how ``write_section`` went missing from the contract copy for a whole release).
+    how a landing pen went missing from the contract copy for a whole release).
     """
     return (*LANDING_TOOL_NAMES, _INDIRECT_LANDING_TOOL_NAME)
 

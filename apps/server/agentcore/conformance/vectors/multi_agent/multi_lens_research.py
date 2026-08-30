@@ -1,6 +1,6 @@
 """多视角深度调研（幕 1）端到端合成向量。
 
-对齐 playbook ``lens_crosscheck``：CEO delegate →
+对齐历史多维调研图（录制时具名 ``lens_crosscheck``）：CEO delegate →
 4 异质透镜并行 → 汇总分析师 depends_on 四路（handoff 携 ``motion_card``）→
 CEO 收尾呈报「建议开辩」（开辩入口是 stage_card，不是 followups chips）。
 

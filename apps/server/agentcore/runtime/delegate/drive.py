@@ -41,9 +41,7 @@ def _materialise_turn_token_budget_skips(
 ) -> None:
     """After turn-ceiling / nested-envelope soft-stop: mark un-run tail SKIPPED.
 
-    Not a resume substrate. Page-QA skips stash ids on
-    ``tool._pending_light_website_qa_ids`` so :func:`_attach_light_website_gaps`
-    can append B3 shell gaps (missing critical files / residual ``{{…}}``).
+    Not a resume substrate. Un-run nodes become SKIPPED with a budget warning.
     """
     from agentcore.core.logging import get_logger
     from agentcore.llm.turn_auth_dead import (
@@ -56,8 +54,6 @@ def _materialise_turn_token_budget_skips(
         budget_skip_warning_for_active_scope,
         current_nested_envelope,
         current_turn_tokens,
-        honesty_gaps_for_skipped_delivery_node,
-        is_page_qa_delivery_node,
         resolve_turn_token_ceiling,
     )
 
@@ -68,7 +64,6 @@ def _materialise_turn_token_budget_skips(
         REASON_TURN_AUTH_DEAD if is_turn_auth_dead(payer) else REASON_TURN_TOKEN_BUDGET
     )
     skipped_ids: list[str] = []
-    page_qa_ids: list[str] = []
     for node in plan.nodes:
         if node.run_id in results:
             continue
@@ -77,7 +72,6 @@ def _materialise_turn_token_budget_skips(
                 "description": warning,
                 "reason": skip_reason,
             },
-            *honesty_gaps_for_skipped_delivery_node(node),
         ]
         results[node.run_id] = RunState(
             phase=RunPhase.SKIPPED,
@@ -87,8 +81,6 @@ def _materialise_turn_token_budget_skips(
         agent_id = (node.agent_id if node.agent_id else "") or node.run_id
         tool._sink.emit(run_skipped(node.run_id, agent_id, reason=skip_reason))
         skipped_ids.append(node.run_id)
-        if is_page_qa_delivery_node(node):
-            page_qa_ids.append(node.run_id)
     if skipped_ids:
         nested = current_nested_envelope()
         # 事件名必须是字面量：`scripts/sync_log_event_registry.py` 静态扫参数，条件表达式
@@ -105,35 +97,6 @@ def _materialise_turn_token_budget_skips(
             logger.info("delegate.turn_token_ceiling_skip", **fields)
         else:
             logger.info("delegate.turn_auth_dead_skip", **fields)
-    tool._pending_light_website_qa_ids = page_qa_ids
-
-
-async def _attach_light_website_gaps(
-    tool: DelegateTool,
-    results: dict[str, RunState],
-) -> None:
-    """B3: when page QA was ceiling-skipped, still run light shell acceptance."""
-    qa_ids = getattr(tool, "_pending_light_website_qa_ids", None) or []
-    if not qa_ids:
-        return
-    tool._pending_light_website_qa_ids = []
-    backend = getattr(getattr(tool, "_base_tool_context", None), "backend", None)
-    if backend is None:
-        return
-    from agentcore.runtime.runs.website_section import (
-        collect_light_website_acceptance_gaps,
-    )
-
-    light = await collect_light_website_acceptance_gaps(backend)
-    if not light:
-        return
-    for rid in qa_ids:
-        state = results.get(rid)
-        if state is None:
-            continue
-        existing = list(state.delivery_gaps or [])
-        existing.extend(light)
-        state.delivery_gaps = existing
 
 
 async def drive(
@@ -215,7 +178,6 @@ async def drive(
             if seed_completed:
                 results = dict(seed_completed)
                 _materialise_turn_token_budget_skips(tool, plan, results)
-                await _attach_light_website_gaps(tool, results)
                 return await finalize_drive(
                     tool,
                     plan,
@@ -247,7 +209,6 @@ async def drive(
             if seed_completed:
                 results = dict(seed_completed)
                 _materialise_turn_token_budget_skips(tool, plan, results)
-                await _attach_light_website_gaps(tool, results)
                 return await finalize_drive(
                     tool,
                     plan,
@@ -647,7 +608,6 @@ async def _drive_body(
         # soft should_stop 默认把未跑尾留给 resume；turn 顶 / 信封是硬停，物化为 SKIPPED。
         if should_materialise_turn_token_budget_skips(credential_source=payer):
             _materialise_turn_token_budget_skips(tool, plan, results)
-            await _attach_light_website_gaps(tool, results)
 
         results = await redirects.drain_post_wave(
             results,

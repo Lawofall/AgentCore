@@ -72,16 +72,16 @@ describe("DeletedConversationManageRow", () => {
     expect(restore).toHaveBeenCalledWith("c1");
   });
 
-  it("admits it lands in 未分组 when the project was deleted too", () => {
+  it("admits it lands in 快速对话 when the project was deleted too", () => {
     // Restoring the chat alone leaves folder_id pointing at a soft-deleted project,
-    // which reads as 未分组 — saying「回到原来的位置」here would be the lie all over
+    // which reads as 快速对话 — saying「回到原来的位置」here would be the lie all over
     // again, just one level up.
     folders = [];
 
     renderRow();
 
     expect(screen.getByText("原文件夹也已删除")).toBeTruthy();
-    expect(screen.getByText(/恢复后先回到未分组/)).toBeTruthy();
+    expect(screen.getByText(/恢复后先回到快速对话/)).toBeTruthy();
   });
 
   it("says nothing about projects for a 裸聊", () => {

@@ -72,8 +72,8 @@ def test_futile_renders_bounded_identifiers_not_full_json():
     rows = extract_prior_futile_retries([_tool_call(arguments=args)])
     assert rows == [{"name": "file_write", "identifier": "path=src/a.py"}]
     text = render_prior_futile_retries(rows)
-    assert text.startswith("<prior_futile_retries>\n")
-    assert text.endswith("</prior_futile_retries>")
+    assert text.startswith("<上轮徒劳重试>\n")
+    assert text.endswith("</上轮徒劳重试>")
     assert "path=src/a.py" in text
     assert "file_write" in text
     assert "一次性" in text and "可忽略" in text
@@ -170,6 +170,6 @@ async def test_build_hint_excludes_current_turn_id(monkeypatch):
     )
     assert captured["conversation_id"] == "c1"
     assert captured["exclude_turn_id"] == "turn-now"
-    assert "<prior_futile_retries>" in text
-    assert text.count("<prior_futile_retries>") == 1
+    assert "<上轮徒劳重试>" in text
+    assert text.count("<上轮徒劳重试>") == 1
     assert "path=src/wall.py" in text

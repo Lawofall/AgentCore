@@ -80,7 +80,6 @@ def build_terminal_run_state(
     cutoff_reasons: list[str],
     tool_failures: list[dict],
     write_pass_used: bool,
-    visual_rework_used: int,
     received_blocks: list[ContextBlock],
     tool_ctx: Any,
     runtime_file_products: list[FileProduct] | None = None,
@@ -154,28 +153,18 @@ def build_terminal_run_state(
     # 落盘成文仍走文件合同 ``citation_quality_reworks``。
     # Soft web-quality (anti-slop): at most one rework (already spent in the loop).
     # Remaining soft-only hits demote to warnings — never hard-fail the run.
-    # P1c visual critic: remaining visual_failures after max reworks → partial.
-    if (verdict.soft_failures or verdict.visual_failures) and not verdict.failures:
-        if verdict.soft_failures:
-            logger.info(
-                "contract.web_quality_soft_accept",
-                run_id=spec.run_id,
-                soft_failures=verdict.soft_failures,
-            )
-        if verdict.visual_failures:
-            logger.info(
-                "contract.visual_critic_partial",
-                run_id=spec.run_id,
-                visual_failures=verdict.visual_failures,
-                rework_used=visual_rework_used,
-            )
+    if verdict.soft_failures and not verdict.failures:
+        logger.info(
+            "contract.web_quality_soft_accept",
+            run_id=spec.run_id,
+            soft_failures=verdict.soft_failures,
+        )
         verdict = ContractVerdict(
             ok=True,
             failures=[],
             warnings=[
                 *verdict.warnings,
                 *verdict.soft_failures,
-                *verdict.visual_failures,
             ],
             warning_rows=list(verdict.warning_rows),
             soft_failures=[],

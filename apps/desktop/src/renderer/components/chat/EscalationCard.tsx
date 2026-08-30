@@ -246,7 +246,7 @@ function PendingOwnershipEscalation({
         </div>
       </div>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pl-6">
+      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-1.5 pl-6">
         <Button
           variant="primary"
           disabled={busy}
@@ -373,7 +373,7 @@ function PendingEscalation({
         </div>
       </div>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pl-6">
+      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-1.5 pl-6">
         <Button
           variant="primary"
           disabled={busy || !canSubmit}
@@ -593,10 +593,13 @@ export function EscalationCards({
   messageId,
   conversationId,
   interactive,
+  pendingOnly = false,
 }: {
   messageId: string;
   conversationId: string | null;
   interactive: boolean;
+  /** 决策区只要待拍板；过程时间线 / 右坞仍画全套。 */
+  pendingOnly?: boolean;
 }) {
   const execution = useMessageExecution(messageId);
   const [raisedOpen, setRaisedOpen] = useState(false);
@@ -626,6 +629,29 @@ export function EscalationCards({
   const raised = ordered.filter((i) => i.esc.status === "raised");
   const collapseRaised = shouldCollapseRaised(raised.length, pending.length);
   const showRaisedCards = !collapseRaised || raisedOpen;
+
+  if (pendingOnly) {
+    if (pending.length === 0) return null;
+    // 决策区铬条与 ResumePrompt / ApprovalPrompt / RunConfirmPrompt 同（mx-4 mb-2）。
+    return (
+      <div className="mx-4 mb-2 space-y-2">
+        {pending.length > 1 && (
+          <p className="text-xs font-medium text-primary">
+            团队有 {pending.length} 项待你拍板
+          </p>
+        )}
+        {pending.map((i) => (
+          <EscalationCard
+            key={i.key}
+            escalation={i.esc}
+            role={i.role}
+            conversationId={conversationId}
+            interactive={interactive}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="mt-2 space-y-2">

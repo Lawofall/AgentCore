@@ -12,7 +12,7 @@ Split axes (implementation modules):
 - ``errors`` — error / result mapping
 - ``read`` — file_read / file_list (one-layer LS; FileListTool still in read.py)
 - ``listing`` / ``glob`` — listing helpers + globstar search
-- ``mutate`` — write / append / str_replace / write_section
+- ``mutate`` — write / append / str_replace
 - ``meta`` — delete / move / copy / mkdir
 - ``batch`` — file_batch
 
@@ -54,7 +54,6 @@ from agentcore.tools.builtin.file_ops.mutate import (
     FileAppendTool,
     FileWriteTool,
     StrReplaceTool,
-    WriteSectionTool,
 )
 from agentcore.tools.builtin.file_ops.read import (
     _DEFAULT_READ_LINES,
@@ -76,7 +75,6 @@ __all__ = [
     "GlobTool",
     "MkdirTool",
     "StrReplaceTool",
-    "WriteSectionTool",
     "FILE_READ_SAFETY_CHAR_CAP",
     "FILE_READ_SAFETY_LINE_CAP",
     "_DEFAULT_READ_LINES",

@@ -304,8 +304,8 @@ async def _settle_resume(
                 questions=list(suspension.questions or []),
                 assumptions=list(suspension.assumptions or []),
             )
-            # 场面账（style / presentation_format / automation_delivery）已拆除：
-            # resume 不再 record_*。web_quality_scan 工人开场由 design_prompt_block 软注入 DESIGN。
+            # 场面账（presentation_format / automation_delivery）已拆除风格账：
+            # resume 不再 record_*。
         terminal = result.final_text if result.effect is ToolEffect.INTERACT else None
         return _after_settle(SettledSuspension(result.output, terminal, result.effect))
 

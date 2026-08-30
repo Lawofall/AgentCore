@@ -1,7 +1,7 @@
 """云端 + gVisor 的整条能力链自洽（默认开；紧急关 / 探测失败钉住）。
 
 链条（单一真相源 ``code_execution_enabled_for`` 贯穿）：
-``GVISOR_ENABLED``（代码默认 true）→ 工具类注册 → ``<workspace_context>`` 能力
+``GVISOR_ENABLED``（代码默认 true）→ 工具类注册 → ``<工作区>`` 能力
 自述「已装配」→ 委派能力闸 → 沙箱→审批姿态 ``AUTO_PASS``。
 显式关或健康探测失败时整条链反向成立（不注册 / 未装配 / 硬拒 / ``UNAVAILABLE``）。
 单测 conftest 强制 ``gvisor_enabled=False``，故「关」路径用本模块显式断言。

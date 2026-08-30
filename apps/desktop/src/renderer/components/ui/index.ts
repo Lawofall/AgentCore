@@ -63,6 +63,7 @@ export {
 } from "./search-field";
 export { SearchTrigger } from "./search-trigger";
 export { PatternCardHeader } from "./pattern-card-header";
+export { EmptyHint, type EmptyHintProps } from "./empty-hint";
 export { SectionLabel } from "./section-label";
 export {
   SegmentedNav,

@@ -77,7 +77,6 @@ export const TOOL_META: Record<string, { Icon: LucideIcon; label: string }> = {
   file_copy: { Icon: FileText, label: "Copy file" },
   mkdir: { Icon: FileText, label: "Make dir" },
   file_batch: { Icon: FileText, label: "Batch files" },
-  write_section: { Icon: Pencil, label: "Write section" },
   md_to_docx: { Icon: FileText, label: "Export Word" },
   md_to_pdf: { Icon: FileText, label: "Export PDF" },
   archive_extract: { Icon: Package, label: "Extract archive" },

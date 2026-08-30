@@ -979,7 +979,7 @@ async def test_length_empty_not_exempted_for_captain_coordination(monkeypatch):
     )
     monkeypatch.setattr(
         "agentcore.runtime.coordination.session.active_coordination",
-        lambda: SimpleNamespace(active=True, execution_id="e-len"),
+        lambda execution_id=None: SimpleNamespace(active=True, execution_id="e-len"),
     )
     provider = _ModelRecordingProvider([[LLMChunk(finish_reason="length")]])
     profile = make_profile_params(max_rounds=20)

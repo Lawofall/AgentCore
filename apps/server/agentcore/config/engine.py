@@ -90,7 +90,7 @@ class EngineSettings(BaseModel):
     # 默认 8M：单路嵌套略放宽；三路同时预占仍依赖父 turn 顶（约 24M+ 父已耗）。
     engine_nested_turn_token_ceiling: int = 8_000_000
     # Turn 交付预留（对齐 worker wind_down）：spent ≥ ceiling − reserve 时只放行
-    # ``ceiling_priority`` 节点（如整页 QA），未开跑的次要节点软跳过以便依赖汇合。
+    # ``ceiling_priority`` 节点，未开跑的次要节点软跳过以便依赖汇合。
     # 默认 400k（够一次 QA/目验；不随 worker 顶同步抬）；≤0 或
     # reserve ≥ ceiling 关闭预留软闸（硬顶仍在）。
     engine_turn_token_delivery_reserve: int = 400_000

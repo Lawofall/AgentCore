@@ -1,7 +1,7 @@
 """AGENT-node react+capture loop body + contract decision ladder orchestration.
 
 Split from ``.node`` — pure move; consumed only by the node facade.
-Domain hooks (visual/cite) and retry predicates live in sibling modules.
+Domain hooks (cite) and retry predicates live in sibling modules.
 """
 
 from __future__ import annotations
@@ -35,8 +35,6 @@ from agentcore.runtime.runs.contract import (
 from agentcore.runtime.runs.executor.context import (
     _load_artifact_contents,
     _safe_index_files,
-    ensure_design_md_for_web_quality,
-    load_web_seam_scope_contents,
 )
 from agentcore.runtime.runs.executor.env import AgentExecutorEnv
 from agentcore.runtime.runs.executor.hooks import _grant_citation_rework_reread
@@ -63,13 +61,6 @@ from agentcore.runtime.runs.serialize import (
     landing_write_failure_kind,
 )
 from agentcore.runtime.runs.types import RunSpec
-from agentcore.runtime.runs.website_visual_critic import (
-    MAX_VISUAL_REWORK,
-    apply_visual_critic_to_verdict,
-    browser_tool_available,
-    make_vision_bill,
-    resolve_screenshot_port,
-)
 
 logger = get_logger(__name__)
 
@@ -89,7 +80,6 @@ class ContractLoopResult:
     cutoff_reasons: list[str]
     tool_failures: list[dict]
     write_pass_used: bool
-    visual_rework_used: int
     two_phase: bool
     cite_upgrade_used: bool
     artifact_contents: dict[str, str] | None
@@ -127,7 +117,7 @@ async def run_contract_loop(
     worker_tools = prepared.worker_tools
     from agentcore.runtime.engine.governance import registry_can_execute
 
-    can_execute = registry_can_execute(worker_tools)
+    can_execute = registry_can_execute(worker_tools, tool_ctx)
     allowed_tools = prepared.allowed_tools
     files_expected = prepared.files_expected
     report_delivery = prepared.report_delivery
@@ -201,7 +191,6 @@ async def run_contract_loop(
     write_pass_used = False
     cite_upgrade_used = False
     light_mode = False
-    visual_rework_used = 0
     runtime_file_products: list[Any] = []
     artifact_contents: dict[str, str] | None = None
     workspace_paths: list[str] | None = None
@@ -367,8 +356,7 @@ async def run_contract_loop(
         landing_fail_kind = landing_write_failure_kind(messages)
         debrief_now = debrief_from_transcript(messages)
         # Re-index the live workspace only when reconciling declarative
-        # artifacts — otherwise keep the once-per-turn opening snapshot
-        # (peer/preexisting manifest) and this run's own writes.
+        # artifacts — otherwise this run's own writes are enough.
         # 交付形态对齐: for a FILE deliverable, load the landed files' text so the
         # contract's content checks (length / keyword / section) read the product on
         # disk, not just chat prose — artifacts declared → matching paths; else this
@@ -403,19 +391,6 @@ async def run_contract_loop(
                     touched_now,
                     workspace_paths,
                 )
-        if deliverable and deliverable.web_seam_scope:
-            artifact_contents = await load_web_seam_scope_contents(
-                tool_ctx.backend,
-                deliverable.web_seam_scope,
-                workspace_paths or [],
-                artifact_contents or {},
-            )
-        if deliverable and deliverable.web_quality_scan:
-            artifact_contents = await ensure_design_md_for_web_quality(
-                tool_ctx.backend,
-                artifact_contents,
-                web_quality_scan=True,
-            )
         source_data_paths = collect_opaque_source_data_paths(
             material_paths=getattr(tool_ctx, "material_paths", None),
             workspace_paths=workspace_paths,
@@ -443,71 +418,6 @@ async def run_contract_loop(
             can_execute=can_execute,
             source_data_paths=source_data_paths,
         )
-        # P1c visual critic: only after web_quality / contract **hard** gates pass.
-        if (
-            deliverable
-            and deliverable.visual_critic
-            and not verdict.failures
-        ):
-            root = getattr(tool_ctx.backend, "root", None)
-            shot_port = resolve_screenshot_port(
-                conversation_id=tool_ctx.conversation_id or "",
-                browser_tool_available=browser_tool_available(worker_tools),
-                workspace_root=str(root) if root is not None else None,
-            )
-
-            async def _persist_visual(path: str, text: str) -> None:
-                try:
-                    await tool_ctx.backend.write(path, text)
-                except Exception:  # noqa: BLE001
-                    logger.warning(
-                        "website.visual_critic_artifact_write_failed",
-                        path=path,
-                        exc_info=True,
-                    )
-
-            async def _persist_visual_preview(path: str, data: bytes) -> None:
-                write_bytes = getattr(tool_ctx.backend, "write_bytes", None)
-                if not callable(write_bytes):
-                    return
-                try:
-                    await write_bytes(path, data)
-                except Exception:  # noqa: BLE001
-                    logger.warning(
-                        "website.visual_critic_preview_write_failed",
-                        path=path,
-                        exc_info=True,
-                    )
-
-            async def _read_workspace_bytes(path: str) -> bytes:
-                read_bytes = getattr(tool_ctx.backend, "read_bytes", None)
-                if not callable(read_bytes):
-                    raise OSError("read_bytes unavailable")
-                return await read_bytes(path)
-
-            verdict, visual_result, visual_rework_used = await apply_visual_critic_to_verdict(
-                verdict,
-                vision_reader=tool_ctx.vision_reader,
-                screenshot=shot_port,
-                artifact_contents=artifact_contents or {},
-                visual_rework_used=visual_rework_used,
-                bill=make_vision_bill(
-                    cost_sink=tool_ctx.cost_sink,
-                    parent_run_id=spec.run_id,
-                ),
-                persist_artifact=_persist_visual,
-                persist_preview_shot=_persist_visual_preview,
-                read_bytes=_read_workspace_bytes,
-            )
-            if visual_result.preview_products:
-                runtime_file_products.extend(visual_result.preview_products)
-            if visual_result.critical_findings and verdict.visual_failures:
-                logger.info(
-                    "contract.visual_critic_findings",
-                    run_id=spec.run_id,
-                    round=visual_rework_used,
-                    count=len(visual_result.critical_findings),
-                )
         # Handoff gate only forces a correction shot when the tool is actually
         # offered (production worker registry). Empty-registry unit tests still
         # get a degraded synth below without burning an extra LLM round.
@@ -808,12 +718,6 @@ async def run_contract_loop(
             parts.append(format_interrupted_pass_note())
         if not verdict.ok:
             parts.append(format_feedback(verdict, checked_files=checked_files))
-            if verdict.visual_failures:
-                parts.append(
-                    f"视觉 critic 第 {max(1, visual_rework_used)}/{MAX_VISUAL_REWORK} 轮回炉："
-                    "请用 str_replace / file_append **定向修补** site/ 下既有文件，"
-                    "禁止整站重写；修完更新 site/QA.md 与 site/VISUAL_CRITIC.json。"
-                )
         if needs_handoff and handoff_offered and not handoff_expectation_met(debrief_now, for_dependents=has_dependents):
             parts.append(
                 format_handoff_feedback(
@@ -933,7 +837,6 @@ async def run_contract_loop(
         cutoff_reasons=cutoff_reasons,
         tool_failures=tool_failures,
         write_pass_used=write_pass_used,
-        visual_rework_used=visual_rework_used,
         two_phase=two_phase,
         cite_upgrade_used=cite_upgrade_used,
         artifact_contents=artifact_contents,

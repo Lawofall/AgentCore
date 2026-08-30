@@ -453,7 +453,7 @@ def format_guard_steer(reworks: list[str]) -> str:
     因这条以 ``role="user"`` 进窗口（reasoner 靠一条 user 轮可靠触发下一步动作），模型易把它
     当成用户在纠错并回致谢/复述寒暄——那句会随正常旁白通道漏进可见交付。故文案显式自证
     「系统自动核验、非用户反馈」并禁止致谢/复述/寒暄；共享基座提示词
-    的 ``<system_feedback>`` 段对所有 ``[系统提示]`` 注入做同一约束（见 resolve/prompt.py）。
+    的 ``<输入>`` 段对所有 ``[系统提示]`` 注入做同一约束（见 resolve/prompt.py）。
     """
     if not reworks:
         return ""

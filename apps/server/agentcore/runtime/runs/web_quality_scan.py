@@ -1,24 +1,19 @@
-"""Deterministic frontend quality gate for website / marketing file deliverables.
+"""Deterministic frontend quality gate for landed HTML/CSS/JS/SVG.
 
 Pure static scan — no browser, no new deps. Mounted from :mod:`contract` when
-landed files include web extensions (HTML/CSS/JS/SVG). DESIGN.md contract
-(style id / tokens) is opt-in via ``design_contract`` / deliverable
-``web_quality_scan``. Do **not** fold into placeholder_scan or web_seam.
+landed files include web extensions. Do **not** fold into placeholder_scan or
+web_seam.
 
 **Hard** (always fail → contract.retry): shallow syntax damage (unclosed tags /
 broken CSS declarations) + fabricated contact fingerprints (fake 400 phones /
-fake ICP / placeholder emails). P1a DESIGN contract (missing DESIGN.md /
-missing selected style id / scattered hex colors ⊈ DESIGN tokens) only when
-``design_contract`` is true.
+fake ICP / placeholder emails).
 
-**Fill-phase hard** (when ``soft_exempt`` is false): unreplaced catalog mustache
-slots ``{{…}}`` in HTML — skeleton keeps soft_exempt so empty shells may land;
-section / QA workers must not ship them.
+**Fill-phase hard** (when ``soft_exempt`` is false): unreplaced ``{{…}}`` slots
+in HTML.
 
 **Soft** (anti-slop visual fingerprints): at most one rework; demoted to warnings
 after that shot. Skipped when ``web_quality_soft_exempt`` or the user-exempted
-label set covers the hit. Blacklist wording shares
-:mod:`web_quality_rules` with playbook injection. Soft semantics unchanged by P1a.
+label set covers the hit. Blacklist wording shares :mod:`web_quality_rules`.
 """
 
 from __future__ import annotations
@@ -28,13 +23,6 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 from agentcore.runtime.runs.web_quality_rules import soft_rule_labels
-from agentcore.runtime.runs.website_style import (
-    DESIGN_MD_PATH,
-    STYLE_ID_HEADING,
-    extract_design_tokens,
-    extract_style_id_from_design,
-    find_scattered_colors,
-)
 
 _MAX_HITS_LISTED = 12
 _SNIPPET_CHARS = 56
@@ -344,7 +332,7 @@ def _scan_broken_css(path: str, text: str) -> list[WebQualityHit]:
 
 
 def _scan_unreplaced_mustache(path: str, text: str) -> list[WebQualityHit]:
-    """Hard-fail unreplaced ``{{slot}}`` in HTML (catalog shells left empty)."""
+    """Hard-fail unreplaced ``{{slot}}`` in HTML."""
     ext = "." + path.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[-1].casefold()
     if ext not in _HTML_EXTS:
         return []
@@ -395,112 +383,20 @@ def _format_failure_lines(
     return lines
 
 
-def _norm_path(path: str) -> str:
-    return path.replace("\\", "/").lstrip("./")
-
-
-def _is_site_web_batch(artifact_contents: Mapping[str, str]) -> bool:
-    """True when this batch touches static web files under ``site/``."""
-    for path in artifact_contents:
-        if not path:
-            continue
-        np = _norm_path(path)
-        if np.startswith("site/") and _is_web_path(np):
-            return True
-    return False
-
-
-def _design_text(artifact_contents: Mapping[str, str]) -> str | None:
-    for path, text in artifact_contents.items():
-        if _norm_path(path) == DESIGN_MD_PATH:
-            return text or ""
-    return None
-
-
-def _scan_design_contract(
-    artifact_contents: Mapping[str, str],
-) -> list[WebQualityHit]:
-    """Hard DESIGN.md / token reconciliation for ``site/`` web batches (P1a)."""
-    if not _is_site_web_batch(artifact_contents):
-        return []
-    hits: list[WebQualityHit] = []
-    design = _design_text(artifact_contents)
-    if design is None:
-        hits.append(
-            WebQualityHit(
-                path=DESIGN_MD_PATH,
-                kind="hard",
-                label="缺DESIGN.md",
-                snippet="site/ 实现批缺少设计契约文件",
-            )
-        )
-        return hits
-    if not design.strip():
-        hits.append(
-            WebQualityHit(
-                path=DESIGN_MD_PATH,
-                kind="hard",
-                label="缺DESIGN.md",
-                snippet="DESIGN.md 为空",
-            )
-        )
-        return hits
-    style_id = extract_style_id_from_design(design)
-    if not style_id:
-        hits.append(
-            WebQualityHit(
-                path=DESIGN_MD_PATH,
-                kind="hard",
-                label="缺选定风格id",
-                snippet=f"未找到「{STYLE_ID_HEADING}」",
-            )
-        )
-    tokens = extract_design_tokens(design)
-    for path, text in artifact_contents.items():
-        if not path or not text:
-            continue
-        np = _norm_path(path)
-        if np == DESIGN_MD_PATH or not _is_web_path(np):
-            continue
-        if not np.startswith("site/"):
-            continue
-        scattered = find_scattered_colors(text, tokens)
-        if scattered:
-            sample = "、".join(scattered[:4])
-            hits.append(
-                WebQualityHit(
-                    path=np,
-                    kind="hard",
-                    label="实现散色",
-                    snippet=f"未在 DESIGN tokens 声明：{sample}",
-                )
-            )
-    return hits
-
-
 def scan_web_quality(
     artifact_contents: Mapping[str, str] | None,
     *,
     soft_exempt: bool = False,
     soft_exempt_labels: Iterable[str] | None = None,
-    design_contract: bool = False,
 ) -> WebQualityScanResult:
-    """Scan landed web artifacts; return hard failures + soft anti-slop hits.
-
-    ``design_contract`` (deliverable ``web_quality_scan``) gates DESIGN.md /
-    style-id / scattered-color hard checks. Syntax / fake contacts / anti-slop
-    run whenever landed files include web extensions.
-    """
+    """Scan landed web artifacts; return hard failures + soft anti-slop hits."""
     result = WebQualityScanResult()
     if not artifact_contents:
         return result
     exempt = {s.strip() for s in (soft_exempt_labels or []) if isinstance(s, str) and s.strip()}
-    # Sanity: soft labels used here must stay registered in the shared catalog.
     known_soft = soft_rule_labels()
     hard_hits: list[WebQualityHit] = []
     soft_hits: list[WebQualityHit] = []
-    if design_contract:
-        hard_hits.extend(_scan_design_contract(artifact_contents))
     for path, text in artifact_contents.items():
         if not path or not text or not _is_web_path(path):
             continue

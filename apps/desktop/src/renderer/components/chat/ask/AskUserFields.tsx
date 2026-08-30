@@ -44,7 +44,7 @@ import { LocalPickerFailureCard } from "./LocalPickerFailureCard";
  * reused by BOTH asking surfaces: the CEO's `ask_user` ({@link AskUserCard}) and a worker's
  * blocking `escalate` ({@link EscalationCard}). Extracted here because it is the drift-prone
  * core (listed options + per-question free-text note, multi-select toggle, 答复模型 α
- * composition); the two cards only differ in their framing + footer (ask_user: 提交/取消;
+ * composition); the two cards only differ in their framing + footer (ask_user: 取消→提交;
  * escalate: 提交/按假设继续), which each owns. 设计: docs/03-AI核心/Agent协作模式.md（向用户发问）.
  */
 

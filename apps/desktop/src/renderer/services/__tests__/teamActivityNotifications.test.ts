@@ -263,7 +263,7 @@ describe("startTeamActivityNotifications", () => {
     expect(notifyInfoMock).not.toHaveBeenCalled();
   });
 
-  it("幕终 pending stage_card 不弹已完成，弹需要你确认推进", async () => {
+  it("幕终 leftover stage_card 不弹确认推进", async () => {
     seedTitle(CID, "调研收口");
     setGenerating(CID, true);
     useInteractionStore.getState().upsertRequired({
@@ -282,8 +282,7 @@ describe("startTeamActivityNotifications", () => {
     await Promise.resolve();
 
     const messages = notifyInfoMock.mock.calls.map((c) => String(c[0]));
-    expect(messages).toContain("「调研收口」需要你确认推进");
-    expect(messages.some((m) => m.includes("已完成"))).toBe(false);
+    expect(messages.some((m) => m.includes("确认推进"))).toBe(false);
   });
 
   it("escalation 挂起弹需要你的决定（回合仍 streaming，完成通道不会触发）", () => {

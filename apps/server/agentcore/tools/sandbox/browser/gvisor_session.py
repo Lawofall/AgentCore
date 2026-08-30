@@ -259,9 +259,37 @@ def _log_session_open_failed(*, conversation_id: str, exc: BaseException) -> Non
     )
 
 
+def _cloud_browser_unavailable_error() -> BrowserSessionError:
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_SANDBOX_UNAVAILABLE_BROWSER_MESSAGE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+    )
+
+    return BrowserSessionError(
+        EXEC_ENV_SANDBOX_UNAVAILABLE_BROWSER_MESSAGE,
+        code=EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+    )
+
+
+def _cloud_browser_host_blocked() -> BrowserSessionError | None:
+    """Fail-fast when gVisor is off or the desk host is already known unhealthy.
+
+    ``None`` (never probed) keeps config-only semantics — same as assembly.
+    """
+    from agentcore.tools.sandbox.cloud_health import cloud_sandbox_health
+
+    if not settings.gvisor_enabled or cloud_sandbox_health() is False:
+        return _cloud_browser_unavailable_error()
+    return None
+
+
 def _as_browser_launch_error(exc: BaseException) -> BrowserSessionError:
     if isinstance(exc, BrowserSessionError):
         return exc
+    from agentcore.tools.sandbox.exec_env import is_sandbox_unavailable_error
+
+    if is_sandbox_unavailable_error(exc):
+        return _cloud_browser_unavailable_error()
     details = getattr(exc, "details", None)
     detail_code = details.get("code") if isinstance(details, dict) else None
     code = detail_code or getattr(exc, "code", None)
@@ -298,6 +326,10 @@ async def open_gvisor_browser_session(
     del runsc_path
     if not _IS_LINUX:
         raise BrowserSessionError("云端浏览器仅在 Linux + gVisor 环境可用")
+    blocked = _cloud_browser_host_blocked()
+    if blocked is not None:
+        _log_session_open_failed(conversation_id=request.conversation_id, exc=blocked)
+        raise blocked
 
     root = (request.workspace_root or "").strip()
     if not root:
@@ -353,6 +385,8 @@ async def open_gvisor_browser_session(
 
         channel = StdioRpcChannel(write=stdio.write, readline=stdio.readline)
         channel.start()
+        # Driver handshake after the desk is up — not the guest boot budget
+        # (``gvisor_desk_start_timeout_seconds`` on ``start_detach``).
         ready = await channel.wait_ready(timeout=90)
         if not ready.get("ok", True):
             raise BrowserSessionError("浏览器启动失败：" + str(ready.get("error") or "unknown"))

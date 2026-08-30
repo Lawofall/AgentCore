@@ -18,7 +18,7 @@ from agentcore.runtime.runs.serialize import (
 )
 from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
 from agentcore.tools.builtin.debate.schema import STANCE_MAX_CHARS
-from agentcore.tools.builtin.handoff import HandoffTool, claims_debate_suggestion
+from agentcore.tools.builtin.handoff import HandoffTool
 from agentcore.tools.builtin.motion_card import parse_motion_card
 from agentcore.tools.protocol import ToolContext
 from tests.delegate.conftest import Provider, tool
@@ -171,44 +171,20 @@ async def test_handoff_logs_body_chars_distinct_from_summary_chars():
     assert handoffs[0]["chars"] != handoffs[0]["body_chars"]
 
 
-def test_claims_debate_suggestion_intent_not_mere_mention():
-    """建议开辩才拦；仅提及辩论事实（如一审辩论过程）不拦。"""
-    assert claims_debate_suggestion({"summary": "建议开辩以检验对立"}) is True
-    assert claims_debate_suggestion(
-        {"summary": "调研完成", "next_steps": "建议发起正反辩论"}
-    ) is True
-    assert claims_debate_suggestion(
-        {"summary": "完成", "key_points": ["推荐开辩", "附争议轴"]}
-    ) is True
-    assert claims_debate_suggestion({"summary": "should debate this conflict"}) is True
-    # 误拦边界：事实叙述 / 过程提及
-    assert claims_debate_suggestion({"summary": "报告梳理了一审辩论过程与质证要点"}) is False
-    assert claims_debate_suggestion(
-        {"summary": "各方在法庭辩论中交锋激烈", "key_points": ["庭审记录完整"]}
-    ) is False
-    assert claims_debate_suggestion({"summary": "本轮不做辩论，仅综述四路"}) is False
-
-
 @pytest.mark.asyncio
-async def test_handoff_rejects_debate_suggest_without_motion_card():
+async def test_handoff_allows_debate_suggest_without_motion_card():
+    """开辩不再靠命题卡催场：建议开辩而无卡仍可交接。"""
     t = HandoffTool()
     res = await t.execute(
         {
             "summary": "四路交叉后核心对立难消，建议开辩",
             "key_points": ["法律与商业结论冲突"],
-            "next_steps": "用户同意后启动辩论",
+            "next_steps": "用户若要对抗可自己说开辩",
         },
         _ctx(),
     )
-    assert res.success is False
-    assert res.effect is not ToolEffect.HANDOFF
-    err = res.error or ""
-    assert "motion_card" in err
-    assert "建议开辩" in err or "结构化" in err
-    assert "最小示例" in err
-    # 与卡字段校验错误可区分：无 `motion_card.` 字段路径 / 薄立场提示
-    assert "motion_card.motion" not in err
-    assert "薄立场" not in err
+    assert res.success is True
+    assert res.effect is ToolEffect.HANDOFF
 
 
 @pytest.mark.asyncio
@@ -238,8 +214,8 @@ async def test_handoff_mere_debate_mention_without_card_ok():
 
 
 @pytest.mark.asyncio
-async def test_handoff_invalid_card_error_distinct_from_missing_card_gate():
-    """卡校验失败 vs 建议开辩无卡：错误信息可区分。"""
+async def test_handoff_invalid_card_rejected_missing_card_ok():
+    """填了坏卡仍拒；建议开辩而无卡可交接。"""
     t = HandoffTool()
     bad = await t.execute(
         {
@@ -252,24 +228,20 @@ async def test_handoff_invalid_card_error_distinct_from_missing_card_gate():
     assert "`motion_card.rationale`" in (bad.error or "") or "motion_card.rationale" in (
         bad.error or ""
     )
-    assert "最小示例" not in (bad.error or "")
-    assert "已建议开辩" not in (bad.error or "")
 
     missing = await t.execute({"summary": "建议开辩"}, _ctx())
-    assert missing.success is False
-    assert "最小示例" in (missing.error or "")
-    assert "已建议开辩" in (missing.error or "")
-    assert "`motion_card.rationale`" not in (missing.error or "")
+    assert missing.success is True
+    assert missing.effect is ToolEffect.HANDOFF
 
 
-def test_handoff_schema_teaches_motion_card_is_sole_structured_carrier():
-    """Tool description must make the structured field the only debate-suggest channel."""
+def test_handoff_schema_motion_card_is_leftover_not_debate_gate():
+    """调研默认不填命题卡；开辩由用户点名。"""
     desc = HandoffTool().schema.description
     assert "motion_card" in desc
-    assert "唯一" in desc or "一律不算" in desc or "不能代替" in desc
+    assert "调研默认不填" in desc
+    assert "用户点名" in desc
     card_desc = HandoffTool().schema.parameters["properties"]["motion_card"]["description"]
-    assert "对象" in card_desc or "结构化" in card_desc
-    assert "必填" in card_desc or "省略" in card_desc
+    assert "遗留" in card_desc or "默认不填" in card_desc
 
 
 # ── serialize ─────────────────────────────────────────────────────
@@ -330,9 +302,6 @@ def test_state_json_round_trips_motion_card():
 
 
 def test_format_for_ceo_surfaces_motion_card_section():
-    # Default-mode guidance (阶段推进卡 / 勿口头征求). Pin CAUTIOUS so
-    # managed axes (implies_deep_research_auto) do not flip this fixture onto
-    # the auto-adopt guidance branch.
     t = tool(Provider([]))
     t._permission_axes = recipe_to_axes(AutonomyPolicy.CAUTIOUS)
     plan = RunPlan(nodes=[RunSpec(run_id="w1", task="汇总分析", role="汇总分析师")])
@@ -344,15 +313,15 @@ def test_format_for_ceo_surfaces_motion_card_section():
         )
     }
     out = format_for_ceo(t, plan, results)
-    assert "建议开辩" in out
+    assert "非开辩入口" in out
     assert "命题卡" in out
     assert "一审判决是否过重" in out
     assert "支持一审判决正确" in out
     assert "认为判赔过重" in out
     assert "为何必须对抗" in out
-    assert "阶段推进卡" in out or "推进卡" in out
-    assert "勿口头征求" in out
-    assert "不要直接调用 debate" in out or "不要】直接调用 debate" in out
+    assert "不要调 debate" in out
+    assert "可直接调 debate" not in out
+    assert "勿口头征求" not in out
     assert "汇总分析师" in out
 
 
@@ -385,7 +354,7 @@ def test_format_for_ceo_lists_all_motion_cards():
     out = format_for_ceo(t, plan, results)
     assert "命题甲" in out and "命题乙" in out
     assert "分析师甲" in out and "分析师乙" in out
-    assert "择优" in out
+    assert "当材料" in out
 
 
 def test_format_for_ceo_no_motion_card_section_when_absent():

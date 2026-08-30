@@ -14,9 +14,6 @@ from tests.runs_executor.conftest import _ContentProvider, _ctx, _plan
 
 
 def _env(plan) -> AgentExecutorEnv:
-    async def _files() -> list[str]:
-        return ["ambient.txt"]
-
     return AgentExecutorEnv(
         plan=plan,
         llm=_ContentProvider(["x"]),
@@ -33,11 +30,9 @@ def _env(plan) -> AgentExecutorEnv:
         escalation_timeout=None,
         escalation_armed=False,
         team_brief=None,
-        captain_recon=None,
         write_coordinator=WriteCoordinator(),
         ancestors_by_id={},
         conversation_id="c",
-        preexisting_files=_files,
     )
 
 
@@ -66,7 +61,7 @@ async def test_cold_open_emits_required_prepare_phases(monkeypatch):
     )
     rows = _phase_rows(spy)
     phases = [row["phase"] for row in rows]
-    assert set(phases) >= {"tool_trim", "workspace_index", "build_messages", "total"}
+    assert set(phases) >= {"tool_trim", "build_messages", "total"}
     assert "target_desktop" not in phases
     assert phases[-1] == "total"
 
@@ -111,7 +106,6 @@ async def test_target_desktop_phase_emitted_when_folder_set(monkeypatch):
     assert set(phases) >= {
         "target_desktop",
         "tool_trim",
-        "workspace_index",
         "build_messages",
         "total",
     }
@@ -141,4 +135,4 @@ async def test_continuation_skips_build_messages_phase(monkeypatch):
     )
     phases = [row["phase"] for row in _phase_rows(spy)]
     assert "build_messages" not in phases
-    assert set(phases) >= {"tool_trim", "workspace_index", "total"}
+    assert set(phases) >= {"tool_trim", "total"}

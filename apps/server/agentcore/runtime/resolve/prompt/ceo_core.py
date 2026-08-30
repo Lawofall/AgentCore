@@ -1,37 +1,30 @@
 """CEO routing core fragment (FRAGMENT_CEO_CORE).
 
-Resident core = 身份 + 薄 ``<how_you_work>``（持只读；写与超规模交给团队）
-+ ``<how_you_act>``（结构面诚实、对用户怎么说）+ ``consult`` 钩。
+Resident core = ``<身份>`` only（你是谁 / 对谁负责；持只读；对用户怎么开口与哪些面不能瞎声称）。
+共享诚实元规则在基座 ``<诚实>``；输出物理在基座 ``<输出>``；派前打算在
+``delegate`` description；consult 钩在 ``<按需目录>`` / consult description。
 何时用 ``delegate`` / ``ask_user`` / ``debate`` 写在各工具 description；场面 HOW 的
 唯一所有者是 skill / consult 正文（``capability_how_suffix`` 只给 consult 拼）。
-``<workspace_context>`` 只陈述本回合事实；``<按需目录>`` 只列这是什么。
-全员纪律（未装配不许假装用过）在 ``prompt/base.py``；本核只留「禁止把未装配动作写进队员任务」。
+``<工作区>`` 只陈述本回合事实；``<按需目录>`` 只列这是什么。
+全员纪律（未装配不许假装用过）在 ``prompt/base.py``；未装配 ≠ 写进队员任务 在 ``delegate`` 的 task 参数。
 不写编号判决树。每条纪律在装配后的提示串里只应出现一次。
 """
 
 # Appended ONLY to the entry CEO chat agent's prompt (not to delegated workers,
 # who do not hold the delegate tool). Identity, not a per-turn classifier:
-# ``<how_you_work>`` = you hold read tools; writes and oversized work go to the team;
-# ``<how_you_act>`` = honesty against this turn's facts, and what the user sees.
+# ``<身份>`` includes the tool-holding boundary (read tools; writes and
+# oversized work go to the team).
 # HOW (depends_on / form / append / playbook / task writing / 拍板卡
 # / 区外授权手册…) lives in skills — one owner per piece of knowledge.
 _CEO_CORE_HINT = """
-<role>
+<身份>
 你是 AgentCore（面向大众的 Multi-Agent AI 工作台）的 CEO：用户是老板，只跟你说话；你带队执行，对整段对话负责到底。\
 团队归你调度，但你之上是用户：关键岔路请示、收尾汇报，一切以用户的决定为准。\
-问身份或这是什么项目 → 自己用本段定位作答；【禁止】把同名他品或第三方 Skill 仓库当成本项目去落地。
-</role>
-
-<how_you_work>
-你主要持只读 / 检索。写与超规模交给团队。
-</how_you_work>
-
-<how_you_act>
-用户可见主张须对照本回合结构面：能力行、产物格式、交付状态、文件面板、工具回执、出站网络。未对照则不得声称已做 / 已可用 / 已落盘。\
-【禁止】把未装配能力的动作写进给队员的任务。对人说话用大白话；内部工具名留在思考和参数里。\
-决定派队后先给用户一句可见打算，再调 `delegate`。【禁止】本轮只有工具调用、用户面前空白。\
-进阶手册见按需目录，`consult(name)` 按需拉取。
-</how_you_act>"""
+你主要持只读 / 检索。写与超规模交给团队。\
+问身份或这是什么项目 → 自己用本段定位作答。\
+对人说话用大白话；内部工具名留在思考和参数里。\
+用户可见主张还须对照产物格式、交付状态、文件面板、出站网络（已做 / 已可用 / 已落盘）。
+</身份>"""
 
 # 何时用工具写在各工具 description。目录只写这是什么。无第二处会对打。
 _CEO_CORE_HINT_TEMPLATE = _CEO_CORE_HINT
@@ -98,10 +91,10 @@ def assemble_ceo_core(ceo_tool_names: set[str]) -> str:
 # Scene-gated (同构 ``cold_start._explore_act_block``)：仅本回合有附件块或结构化
 # ``[resident missing]`` 时注入。不进 ``assemble_ceo_core`` / 常驻核。
 _ATTACHMENT_MATERIAL_HINT = """
-<attachment_material>
+<本轮材料>
 【本轮材料收窄】本回合有附件块或结构化驻留缺件。
 姿势：先读已给材料再产出（缺口分析或改一版）；真缺件只认 `[resident missing]`。[binary] ≠ 缺件。
-</attachment_material>
+</本轮材料>
 """
 
 
@@ -110,7 +103,7 @@ def attachment_material_scene(attachment_context: str | None) -> bool:
     if not attachment_context:
         return False
     return (
-        "<attached_files>" in attachment_context or "[resident missing]" in attachment_context
+        "<附件>" in attachment_context or "[resident missing]" in attachment_context
     )
 
 

@@ -42,7 +42,7 @@ def test_has_research_chain_evidence_preserves_old_offer_sources():
         }
     ]
     assert has_research_chain_evidence(entries_card) is True
-    entries_mlr = [
+    entries_playbook = [
         {
             "kind": "tool_call",
             "payload": {
@@ -57,51 +57,25 @@ def test_has_research_chain_evidence_preserves_old_offer_sources():
             },
         }
     ]
-    assert has_research_chain_evidence(entries_mlr) is True
-    failed = [
-        {
-            "kind": "tool_call",
-            "payload": {
-                "name": "delegate",
-                "arguments": '{"playbook": "lens_crosscheck"}',
-                "success": False,
-                "result": "err",
-                "tool_call_id": "dc1",
-                "run_id": "captain",
-            },
-        }
-    ]
-    assert has_research_chain_evidence(failed) is False
-    old_id = [
-        {
-            "kind": "tool_call",
-            "payload": {
-                "name": "delegate",
-                "arguments": '{"playbook": "multi_lens_research"}',
-                "success": True,
-                "result": "done",
-                "tool_call_id": "dc-old",
-                "run_id": "captain",
-            },
-        }
-    ]
-    assert has_research_chain_evidence(old_id) is False
+    assert has_research_chain_evidence(entries_playbook) is False
 
 
 def test_research_first_tool_result_fills_motion_topic():
     text = research_first_tool_result(motion="该不该上四天工作制？", user_message="忽略我")
     assert "先多视角调研再辩" in text
     assert "请勿再次调用 debate" in text
-    assert 'playbook="lens_crosscheck"' in text
-    assert '"topic": "该不该上四天工作制？"' in text
-    assert '"lenses"' in text
+    assert "consult(deep_multi_lens_research)" in text
+    assert "手写" in text
+    assert "lens_crosscheck" not in text
+    assert "playbook=" not in text
+    assert "该不该上四天工作制？" in text
     assert "法律" in text
     assert "忽略我" not in text
 
 
 def test_research_first_tool_result_falls_back_to_user_message():
     text = research_first_tool_result(motion="", user_message="帮我分析 LV 案")
-    assert '"topic": "帮我分析 LV 案"' in text
+    assert "帮我分析 LV 案" in text
 
 
 def test_leftover_team_preview_frame_refuses_hydrate():

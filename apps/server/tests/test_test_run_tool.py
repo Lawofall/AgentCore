@@ -12,11 +12,14 @@ from typing import Any
 
 import pytest
 
+from agentcore.config import settings
+from agentcore.core.errors import SandboxError
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.context.workspace_profile import WorkspaceProfile
 from agentcore.tools.builtin.package_install import is_install_shaped_argv
 from agentcore.tools.builtin.test_run import (
     _ALLOWED_PREFIXES,
+    _ENGINE_TIMEOUT_SLACK_SECONDS,
     _VERIFY_BUDGET_HEAVY_SECONDS,
     _VERIFY_BUDGET_SECONDS,
     _VERIFY_BUDGET_STANDARD_SECONDS,
@@ -34,6 +37,8 @@ from agentcore.tools.builtin.test_run import (
 from agentcore.tools.protocol import ToolContext
 from agentcore.tools.sandbox.exec_env import (
     EXEC_DISASTER_TIMEOUT_S,
+    EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+    EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
     EXEC_IDLE_TIMEOUT_DEFAULT_S,
     EXEC_IDLE_TIMEOUT_INSTALL_S,
 )
@@ -110,9 +115,14 @@ def test_test_run_schema_stays_grantable_execution():
     assert schema.category is ToolCategory.EXECUTION
     assert "有界项目验证" in schema.description
     assert "code_execute" in schema.description
-    # Engine ceiling must outlive heavy sandbox budget so Timeout returns as contract_failure.
+    # Engine ceiling must outlive heavy sandbox budget + desk boot so Timeout
+    # returns as contract_failure rather than the engine outer wait_for.
     assert schema.timeout_seconds is not None
-    assert schema.timeout_seconds > _VERIFY_BUDGET_HEAVY_SECONDS
+    assert schema.timeout_seconds == (
+        _VERIFY_BUDGET_HEAVY_SECONDS
+        + _ENGINE_TIMEOUT_SLACK_SECONDS
+        + settings.gvisor_desk_start_timeout_seconds
+    )
 
 
 def test_verify_timeouts_idle_and_disaster():
@@ -1094,3 +1104,33 @@ async def test_sibling_verify_inflight_coalesce(monkeypatch: pytest.MonkeyPatch)
         assert (r4.metadata or {}).get("verify_shared") is None
     finally:
         clear_active_coordination("e-coalesce")
+
+
+async def test_test_run_cloud_desk_down_is_not_contract_failure(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _Down(_FakeBackend):
+        async def execute(self, request: ExecutionRequest) -> ExecutionResult:
+            self.requests.append(request)
+            raise SandboxError(
+                "代码执行环境启动失败",
+                code=EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+            )
+
+    async def _fake_profile(_backend):
+        return _make_profile()
+
+    monkeypatch.setattr(
+        "agentcore.tools.builtin.test_run.detect_workspace_profile",
+        _fake_profile,
+    )
+    result = await TestRunTool().execute(
+        {"check": "command", "command": "npx tsc --noEmit"},
+        _ctx(_Down()),
+    )
+    assert result.success is False
+    assert result.contract_failure is False
+    assert result.metadata.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+    assert "code_execute" in result.metadata.get("retire_tools", [])
+    assert result.error == EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
+    assert "本机" not in (result.error or "")

@@ -1,6 +1,6 @@
 """Always-on rule injection (read-side full injection · Agent记忆与知识系统).
 
-Pure, DB-free: compose + frontmatter strip + equal-authority ``<rules>`` wording
+Pure, DB-free: compose + frontmatter strip + equal-authority ``<设定>`` wording
 (``assemble_system_prompt``). The DB loader (``assemble_injected_rules``) is covered in
 ``tests/integration/test_documents.py``.
 """
@@ -77,7 +77,7 @@ def test_assemble_system_prompt_equal_authority_wording():
     out = assemble_system_prompt(
         rules_markdown="- 必须始终用中文\n\n- 倾向简洁回复",
     )
-    assert "<rules>" in out and "</rules>" in out
+    assert "<设定>" in out and "</设定>" in out
     # Both entries present; display order preserved; no hard/soft subsections.
     assert "必须始终用中文" in out and "倾向简洁回复" in out
     assert out.index("必须始终用中文") < out.index("倾向简洁回复")

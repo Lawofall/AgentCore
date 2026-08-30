@@ -1,4 +1,4 @@
-"""Per-turn ``<workspace_context>`` — structured environment facts for CEO and workers.
+"""Per-turn ``<工作区>`` — structured environment facts for CEO and workers.
 
 根治「模型环境盲」：每回合把执行位置、工作区身份、桌面通道、本回合可执行能力写成显式
 事实块注入 system prompt，避免 CEO 在云端 scratch 上规划「打开本机软件」并空跑委派。
@@ -38,7 +38,7 @@ ChannelSurface = Literal["desktop", "web", "mobile", "unknown"]
 
 @dataclass(frozen=True)
 class WorkspaceGitFact:
-    """Root-``.git`` fact for ``<workspace_context>`` (same rule as ``git`` tool).
+    """Root-``.git`` fact for ``<工作区>`` (same rule as ``git`` tool).
 
     ``present=None`` = could not probe (exists/root I/O failed).
     Only the workspace root is considered — no nested scan, no parent climb.
@@ -153,7 +153,7 @@ def _opaque_source_data_present(
 def format_workspace_git_line(
     fact: WorkspaceGitFact, *, tool_enabled: bool = True
 ) -> str:
-    """Single git fact line for ``<workspace_context>`` (never a kickoff gate).
+    """Single git fact line for ``<工作区>`` (never a kickoff gate).
 
     ``tool_enabled`` is the same verdict the registries use
     (``tools.builtin.git_execution_enabled_for``): when the tool is not assembled the
@@ -270,6 +270,36 @@ def _format_desk_line(
     return "工作台：默认工作区=本会话出生桌（通用 `file_*` 只绑出生桌）。"
 
 
+def _artifact_export_line(*, is_local: bool, desktop_online: bool) -> str:
+    """Where the user can actually see this turn's files / HTML (fact, not HOW).
+
+    In-app「完整预览」exists only on the desktop Electron shell. Web / mobile /
+    unknown fail closed to the file-panel download path.
+    """
+    if is_local:
+        if desktop_online:
+            return (
+                "产物出口：你写入工作区的文件位于用户本机目录，"
+                "用户可在「文件」面板查看；HTML 同样走「完整预览」进右坞「浏览器」标签"
+                "（或本机直接打开，按用户习惯）。"
+            )
+        return (
+            "产物出口：你写入工作区的文件位于用户本机目录，"
+            "用户可在「文件」面板查看与下载；本客户端无应用内「完整预览」。"
+        )
+    if desktop_online:
+        return (
+            "产物出口：你写入工作区的文件保存在云端工作区（不在用户本机），"
+            "用户可在桌面端「文件」面板查看与下载；"
+            "HTML 完整效果走终稿路径或文件横幅的「完整预览」"
+            "（打开右坞「浏览器」标签，应用内渲染，非系统浏览器）。"
+        )
+    return (
+        "产物出口：你写入工作区的文件保存在云端工作区（不在用户本机），"
+        "用户可在「文件」面板查看与下载；本客户端无应用内「完整预览」。"
+    )
+
+
 def desktop_client_can_bind(x_client_platform: str | None) -> bool:
     """Thin fail-closed wrapper: folder AskOption actions need a desktop client.
 
@@ -301,7 +331,7 @@ def build_workspace_context(
     desk_folder_label: str | None = None,
     desk_is_birth: bool = True,
 ) -> str:
-    """Render the ``<workspace_context>`` block for this turn's backend + client.
+    """Render the ``<工作区>`` block for this turn's backend + client.
 
     Always returns a non-empty block when ``backend`` is set (environment is a fact,
     even for an empty cloud scratch). ``backend is None`` → ``""`` (caller omits).
@@ -366,12 +396,10 @@ def build_workspace_context(
         )
         identity_line = f"工作区身份：本地目录（根标签 `{root_label}`）"
         reach_line = "本机应用、本机文件与本机终端均可按已装配工具触达。"
-        artifact_line = (
-            "产物出口：你写入工作区的文件位于用户本机目录，"
-            "用户可在「文件」面板查看；HTML 同样走「完整预览」进右坞「浏览器」标签"
-            "（或本机直接打开，按用户习惯）。"
+        artifact_line = _artifact_export_line(
+            is_local=True, desktop_online=desktop_online
         )
-        # 事实面：本机有出口 + 无原生生图。Key 明文禁令归共享基座 <credential_hygiene>。
+        # 事实面：本机有出口 + 无原生生图。Key 明文禁令归共享基座 <工作权威>。
         egress_line = (
             "出站网络：本机 code_execute / terminal 可走用户机器网络；无原生生图工具。"
         )
@@ -404,11 +432,8 @@ def build_workspace_context(
             "host=已装配时可经桌面回填通道调用 host；"
             + empty_tree_clause
         )
-        artifact_line = (
-            "产物出口：你写入工作区的文件保存在云端工作区（不在用户本机），"
-            "用户可在桌面端「文件」面板查看与下载；"
-            "HTML 完整效果走终稿路径或文件横幅的「完整预览」"
-            "（打开右坞「浏览器」标签，应用内渲染，非系统浏览器）。"
+        artifact_line = _artifact_export_line(
+            is_local=False, desktop_online=desktop_online
         )
         # 案 20260803-image-gen-byok-egress-boundary A：云桌 guest 出站经包装源
         # allowlist chokepoint，不是任意 HTTPS。事实面只陈述出口。
@@ -420,7 +445,7 @@ def build_workspace_context(
 
     if desktop_online:
         # 事实面：授权通道通不通 + 两种授权形态的工具名与访问路径。
-        # 何时用哪种、口头同意、失败分型、先写再 copy → consult / ask_user_midtask。
+        # 何时用哪种、口头同意、失败分型、先写再 copy → consult(external_mount_readonly)。
         grant_line = (
             "区外目录：桌面在线，本机区外目录可授权——"
             "只读工具 `external_mount_readonly`，"
@@ -436,7 +461,7 @@ def build_workspace_context(
     else:
         # desktop_online=False covers missing header, unknown surface, and true
         # non-desktop clients — never accuse a device form (Web/手机) by default.
-        # 通道复检 / 勿发卡冒充 / 禁臆造入口 → ask_user_midtask；此处只报通道事实。
+        # 通道复检 / 勿发卡冒充 / 禁臆造入口 → team_delivery_env；此处只报通道事实。
         desktop_line = (
             "客户端通道：桌面回填通道未连接——"
             "打开本机文件夹、本机文件夹绑定、区外目录授权均须官方桌面客户端且通道已连接，"
@@ -673,7 +698,7 @@ def build_workspace_context(
 
         interpreters_line = format_interpreters_line(tuple(langs))
 
-    # 约定文档布局（始终可见）：四行出口 + 一句边界。只陈述路径事实，不注入文档正文进 <rules>。
+    # 约定文档布局（始终可见）：四行出口 + 一句边界。只陈述路径事实，不注入文档正文进 <设定>。
     # 有 inventory 时附「现有 / 当前为空」——出口是写入落点，不是可直读的文件书目。
     dossier_drafts_line = format_outlet_line(
         "约定文档出口·默认落点（无专属出口的产物）：", DRAFTS_DIR, outlet_inventory
@@ -737,4 +762,4 @@ def build_workspace_context(
     if interpreters_line is not None:
         body_lines.append(interpreters_line)
     body = "\n".join(body_lines)
-    return f"<workspace_context>\n{body}\n</workspace_context>"
+    return f"<工作区>\n{body}\n</工作区>"

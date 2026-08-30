@@ -1062,19 +1062,14 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
             else ""
         )
         workspace_native = form == "workspace"
-    web_seam_scope = raw.get("web_seam_scope", "")
-    if not isinstance(web_seam_scope, str):
-        web_seam_scope = ""
     placeholder_hard_exempt = bool(raw.get("placeholder_hard_exempt", False))
     placeholder_hard_exempt_artifacts = _str_list(
         raw.get("placeholder_hard_exempt_artifacts")
     )
-    web_quality_scan = bool(raw.get("web_quality_scan", False))
     web_quality_soft_exempt = bool(raw.get("web_quality_soft_exempt", False))
     web_quality_soft_exempt_labels = _str_list(
         raw.get("web_quality_soft_exempt_labels")
     )
-    visual_critic = bool(raw.get("visual_critic", False))
     citation_mode_raw = raw.get("citation_mode")
     citation_mode = citation_mode_raw if citation_mode_raw == "two_phase" else None
     return Deliverable(
@@ -1084,13 +1079,10 @@ def _deliverable_from_dict(raw: dict[str, Any]) -> Deliverable:
         artifacts=artifacts,
         artifact_dir=artifact_dir,
         workspace_native=workspace_native,
-        web_seam_scope=web_seam_scope.strip(),
         placeholder_hard_exempt=placeholder_hard_exempt,
         placeholder_hard_exempt_artifacts=placeholder_hard_exempt_artifacts,
-        web_quality_scan=web_quality_scan,
         web_quality_soft_exempt=web_quality_soft_exempt,
         web_quality_soft_exempt_labels=web_quality_soft_exempt_labels,
-        visual_critic=visual_critic,
         strict=bool(raw.get("strict", False)),
         citation_mode=citation_mode,  # type: ignore[arg-type]
         code_audit_gate=bool(raw.get("code_audit_gate", False)),

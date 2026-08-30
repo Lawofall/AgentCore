@@ -175,7 +175,7 @@ def test_inject_brief_lists_agent_mentions():
     assert "让研究员再核一遍" in brief
     assert "用户点名关注以下 Agent（软提示，非强制派单/非硬路由）" in brief
     assert "- 研究员 (id=agent_research)" in brief
-    assert "<agent_mentions>" in brief
+    assert "<队员点名>" in brief
 
 
 @pytest.mark.asyncio

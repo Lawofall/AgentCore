@@ -101,7 +101,7 @@ def test_base_override_reaches_both_workers_and_ceo() -> None:
         base = assemble_system_prompt()
         ceo = _ceo()
     assert sentinel in base
-    assert "<output_style>" not in base  # 原 base 文案被换掉
+    assert "<输出>" not in base  # 原 base 文案被换掉
     assert sentinel in ceo  # CEO 的 base_prompt 即 assemble 输出，故也变
 
 
@@ -111,17 +111,17 @@ def test_ceo_core_override_only_swaps_ceo_core() -> None:
         ceo = _ceo()
         base = assemble_system_prompt()
     assert sentinel in ceo
-    assert "<how_you_work>" not in ceo  # 原 ceo_core 被换掉
-    assert "<output_style>" in base  # base 片段未受影响（隔离）
+    assert "<身份>" not in ceo  # 原 ceo_core 被换掉
+    assert "<输出>" in base  # base 片段未受影响（隔离）
 
 
 def test_empty_override_ablates_fragment_cleanly() -> None:
     # 消融：空串覆盖 → assembler 跳过 falsy → 整段移除、不留空行。
     with use_profile(PromptProfile("ablate", {FRAGMENT_CEO_CORE: ""})):
         ceo = _ceo()
-    assert "<how_you_work>" not in ceo
+    assert "<身份>" not in ceo
     assert "\n\n\n" not in ceo  # 没有因移除留下连续空行
-    assert "<output_style>" in ceo  # 其余片段完好
+    assert "<输出>" in ceo  # 其余片段完好
 
 
 def test_citation_block_is_absent_from_production_ceo() -> None:

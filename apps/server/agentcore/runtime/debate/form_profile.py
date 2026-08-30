@@ -31,8 +31,8 @@ class FormProfile:
     """一场辩论的形态 profile（提案 §3.1）。
 
     ``unit`` 交互单元；``phases`` 轮内拓扑（phase 名序）；``cross_exam`` / ``closing`` 是否
-    走正反共用的主持人→各方质询 / 结辩原语；``has_rebuttal`` 红队 thorough 三拍的复攻拍
-    （快速档 O3 = 两拍攻→应，无复攻）。
+    走正反共用的主持人→各方质询 / 结辩原语。新场 ``closing`` 恒假（结辩 runner 留旧场回放）；
+    ``has_rebuttal`` 红队 thorough 三拍的复攻拍（快速档 O3 = 两拍攻→应，无复攻）。
     """
 
     form: DebateForm
@@ -70,7 +70,7 @@ def form_profile(config: DebateConfig) -> FormProfile:
             closing=False,
             has_rebuttal=False,
         )
-    # DEBATE：行为与 wire 零回归
+    # 正反：质询仍随 thorough；结辩新场恒关
     phases_d: tuple[PhaseName, ...] = (
         ("parallel_wave", "cross_exam") if thorough else ("parallel_wave",)
     )
@@ -79,6 +79,6 @@ def form_profile(config: DebateConfig) -> FormProfile:
         unit="side_turn",
         phases=phases_d,
         cross_exam=thorough,
-        closing=thorough,
+        closing=False,  # 新场不跑结辩；结辩 runner 留旧场回放
         has_rebuttal=False,
     )

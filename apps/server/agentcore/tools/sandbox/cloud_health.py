@@ -132,6 +132,40 @@ def age_cloud_sandbox_health_for_tests(seconds: float) -> None:
     )
 
 
+def note_cloud_sandbox_unhealthy(reason: str, detail: str | None = None) -> None:
+    """Stamp the host unhealthy from a live sandboxd failure (not a TTL probe).
+
+    Next ``code_execution_enabled_for`` read withholds execution tools. A
+    background refresh still recovers. Per-workspace stale desks must recycle
+    the guest instead of calling this.
+    """
+    global _verdict
+    if not cloud_execution_config_enabled():
+        return
+    now = time.monotonic()
+    previous = _verdict
+    trimmed = (detail or "").strip()[:200] or None
+    _verdict = _Verdict(
+        healthy=False,
+        at_monotonic=now,
+        failure=(reason, trimmed),
+        consecutive_failures=(
+            1 if previous is None or previous.healthy else previous.consecutive_failures + 1
+        ),
+    )
+    logger.warning(
+        "sandbox.cloud_health_failed",
+        reason=reason,
+        detail=trimmed,
+        phase="exec",
+        regressed=(previous is not None and previous.healthy) or None,
+        hint=(
+            "云端 code_execute/test_run/package_install/browser 将不装配，直到 desk/net "
+            "guest 可用"
+        ),
+    )
+
+
 def pending_cloud_sandbox_refresh_for_tests() -> asyncio.Task[None] | None:
     """The background refresh task a stale read scheduled, if any."""
     return _refresh_task

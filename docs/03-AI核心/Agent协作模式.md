@@ -71,8 +71,6 @@ worker 唯一向上通道。`blocking=false`（默认）= 已有合理默认、�
 
 后两档的「正文 ↔ 简报重复」是**功能性冗余**（两个读者各需一份），不是缺陷，别再当重复去修。写侧只能按 `form` 代理判断（prose 禁落盘 → 必然 pass_through），故 `files` / 省略 `form` 一律按「保留结论」处理：宁留重复，不造「简报去了结论、CEO 又读不到正文」的静默空洞。→ 见代码: `runtime/runs/executor/identities.py` · `runtime/delegate/ceo_format.py`
 
-`diagnose_fix_verify` 修补员（含短诊断、有下游验证员、`form=workspace`）：根因与拟改路径走 `key_points`；**拟改幅度**（压住表面 / 根因在结构上）走 `next_steps`，活到 CEO 收口「队员建议的下一步」，本批照修。人不点开队员详情也能在收口看见「这是不是结构问题」。**否决**新卡、档位枚举、开局扫用户原文判大小、以及默认给 `patch` 加 `bind_after_deps`（多一轮 CEO，等真实使用再定）。「同一接缝反复补」产品 AI 无修补史，不要求修补员判。→ 见代码: `runtime/runs/playbooks/build_soft.py`
-
 被否决：`key_points` 换成纯接力状态（它是计划复核卡 / CEO 确定性评审 / 审计 playbook 的事实载荷，换血同时饿死三方）；门禁改「必须 ≥2 条 key_points」（数条数挡不住结论复述，却误伤只写长 summary 的合规上游 → [拦截纪律](/.cursor/rules/intercept-discipline.mdc)）。`summary` 长度只作 schema 提示，不做运行时拒收（harvest 不 enforce `maxLength`）。
 
 约束边界：`degraded` 不是 `RunDebrief` wire 字段，两端读 dict 额外键（降级 debrief = 正文切片，展示必然与正文重复，故只留提示）——payload 若加严格校验或剔未声明键会静默失效。8 员全平行 prose 叶子经协调态 `ALL_COMPLETED` 二次裁后每员只剩残片，未提预算。

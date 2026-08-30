@@ -7,7 +7,7 @@ The memory system splits how durable knowledge is written (Agent记忆与知识�
   都要…」「别再…」「改为…」「忘掉…」, the CEO records / mutates a ``role='rule',
   ai_maintained=false`` document — the user OWNS it, so the offline consolidation never rewrites
   it, and it injects with authoritative wording ahead of AI memory (§二 两档措辞). Effect is
-  immediate: next turn's ``<rules>``.
+  immediate: next turn's ``<设定>``.
 - **inferred preference → offline consolidation** (NOT this tool): preferences merely observed in
   conversation stay with the two-layer consolidation pass, which writes ``ai_maintained=true``
   memory. The tool description steers the model to that split.

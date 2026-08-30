@@ -218,8 +218,6 @@ class DebateTool:
         from agentcore.runtime.costing import usage_metadata
         from agentcore.runtime.kickoff.stage_card import (
             clear_turn_keeps_stage_card,
-            debate_arguments_from_card,
-            mark_turn_keeps_stage_card,
         )
         from agentcore.runtime.turn.token_budget import (
             current_turn_tokens,
@@ -244,12 +242,9 @@ class DebateTool:
             logger.info("debate.turn_auth_dead_rejected")
             return err(turn_auth_dead_reject_message(payer))
 
-        # 本回合调了 debate（含闸失败）→ 收尾不 orphan pending 推进卡。
-        # 开辩失败 / STOP 会 clear；仅真正开跑成功才保持 keep + finalize resolve。
-        mark_turn_keeps_stage_card()
+        # 开辩是独立重活：不消费推进卡。遗留 pending 卡由回合收尾 orphan。
         motion = str(arguments.get("motion") or "").strip()
         if not motion:
-            clear_turn_keeps_stage_card()
             return err("debate 需要 motion（辩论命题 / 要解决的问题）。")
 
         consume_host_turn_id = ""
@@ -258,66 +253,6 @@ class DebateTool:
         consume_note = ""
         self._stage_card_finalize = None
         self._stage_card_finalized_at_start = False
-
-        # 口头开赛 = 消费推进卡（有 pending 时一律走 stage_card 授权路径）。
-        if (
-            not skip_kickoff
-            and self._depth == 0
-            and self._debate_authorized_by != "stage_card"
-            and (self._conversation_id or "").strip()
-        ):
-            from agentcore.conversation.stage_card_resolve import (
-                consume_pending_stage_card_for_debate,
-                list_pending_stage_cards,
-            )
-
-            try:
-                merged, _override, consume_err = (
-                    await consume_pending_stage_card_for_debate(
-                        conversation_id=self._conversation_id or "",
-                        ceo_motion=motion,
-                        sink=self._sink,
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001 — 查卡失败不得阻断冷开辩
-                logger.warning(
-                    "stage_card.consume_lookup_failed",
-                    conversation_id=self._conversation_id,
-                    error=str(exc),
-                )
-                merged, consume_err = None, ""
-            if consume_err and merged is None:
-                # 有 pending 但 motion 闸失败 → 卡保持 pending（keep 保留，防收尾误 orphan）。
-                try:
-                    pending = await list_pending_stage_cards(
-                        self._conversation_id or ""
-                    )
-                except Exception:  # noqa: BLE001
-                    pending = []
-                if pending:
-                    return err(consume_err)
-                clear_turn_keeps_stage_card()
-            elif merged is not None:
-                consume_host_turn_id = str(merged.pop("_host_turn_id", "") or "")
-                consume_card_id = str(
-                    merged.get("stage_card_id") or merged.pop("_card_id", "") or ""
-                )
-                raw_override = merged.pop("_motion_override", _override)
-                consume_override = (
-                    str(raw_override) if raw_override is not None else None
-                )
-                consume_note = str(merged.pop("_resolve_note", "") or "")
-                card_args = debate_arguments_from_card(merged)
-                # CEO motion（可能为 override）已写入 merged；保留 background / kickoff_ask。
-                if arguments.get("background"):
-                    card_args["background"] = arguments.get("background")
-                if arguments.get("_kickoff_ask"):
-                    card_args["_kickoff_ask"] = arguments.get("_kickoff_ask")
-                arguments = card_args
-                motion = str(arguments.get("motion") or "").strip()
-                self._debate_authorized_by = "stage_card"
-                self._debate_stage_card = dict(merged)
-                skip_kickoff = True
 
         # 按钮 / 机制直起：卡上已带 host 回合 id（成功边界同为 debate.started）。
         if (
@@ -503,49 +438,9 @@ class DebateTool:
         return None
 
     async def _resolve_host_attach(self, config: DebateConfig):
-        """开工决议后：尝试把辩论新幕链到幕 1 MLR；失败则保持独立图。
-
-        推进卡路径优先用卡上直传三元组（host_execution_id / synthesizer_run_id /
-        host_message_id），找不到再回落 resolve_debate_host_attach。
-        命中后由 mint 点按 ``same_turn`` 决定：同回合复用宿主 execution 加一幕；
-        跨回合 mint 新图 + prev_execution_id（不 divert 宿主）。
-        """
-        from agentcore.runtime.debate.constants import FORM_LABELS
-        from agentcore.runtime.debate.research_dossier import workspace_has_research_artifacts
-        from agentcore.runtime.facts import snapshot_fact_log
-        from agentcore.runtime.kickoff.debate_host import resolve_debate_host_attach
-        from agentcore.runtime.kickoff.stage_card import resolve_host_attach_from_card
-
-        attach = await resolve_host_attach_from_card(
-            self._debate_stage_card,
-            append_message_id=self._message_id,
-        )
-        if attach is None:
-            has_research = False
-            try:
-                has_research = await workspace_has_research_artifacts(
-                    self._base_tool_context.backend
-                )
-            except Exception:
-                logger.exception("debate.research_dossier_probe_failed")
-                has_research = False
-            attach = await resolve_debate_host_attach(
-                conversation_id=self._conversation_id or "",
-                append_message_id=self._message_id,
-                journal_entries=snapshot_fact_log(),
-                has_research_artifacts=has_research,
-            )
-        if attach is None:
-            return None
-        label = FORM_LABELS.get(config.form, "辩论")
-        self._debate_act_id = attach.act_id
-        self._debate_act_title = f"{label}对抗"
-        self._debate_anchor_run_id = attach.anchor_run_id
-        self._debate_host_message_id = attach.host_message_id
-        # prev / execution_id 由 mint 点按 same_turn 写入；此处只钉幕元数据。
-        # parent 用本回合 captain；幕因果靠 act.anchor（跨回合另加 prev）。
-        self._debate_graph_parent_run_id = None
-        return attach
+        """开辩独立成图，不链调研宿主。"""
+        _ = config
+        return None
 
     async def _run_moderator(self, config: DebateConfig, usage_metadata) -> ToolResult:
         if self._debate_authorized_by is None:
@@ -600,7 +495,6 @@ class DebateTool:
                 logger.exception("debate.research_dossier_probe_failed")
                 config.research_dossier_index = ""
 
-        # 批 A2：命中宿主 → 同回合复用 eid 加一幕；跨回合新图 + prev；找不到则独立成图。
         from agentcore.runtime.kickoff.debate_host import host_graph_binding
 
         host_attach = await self._resolve_host_attach(config)
@@ -651,15 +545,7 @@ class DebateTool:
                 "host_attach": bool(host_attach),
                 "prev_execution_id": self._debate_prev_execution_id,
             }
-            if host_attach is not None:
-                logger.info("debate.started", **started_fields)
-            else:
-                # 独立图 = 未链到 MLR；warning 级可观测（禁止静默降级）。
-                logger.warning(
-                    "debate.started",
-                    **started_fields,
-                    host_attach_miss="independent_graph",
-                )
+            logger.info("debate.started", **started_fields)
 
             # 推进卡成功边界 = debate.started（主持人/计划落地、真正开跑）。
             # 口头消费与按钮直起同构；中途失败不回 pending。
@@ -708,38 +594,10 @@ class DebateTool:
                 self, execution_id, moderator_run_id, config
             )
 
-            # 批 D1：开赛探测幕1 透镜 session → 辩论幕内证人席位；无则零行为变化。
-            from agentcore.runtime.debate.witness import (
-                build_witness_seats,
-                make_witness_runner,
-                probe_witness_sessions,
-                seats_to_info,
-                witness_plan_event,
-            )
-
-            lens_sessions = probe_witness_sessions(self._session_store)
-            self._witness_seats = build_witness_seats(
-                lens_sessions,
-                moderator_run_id=moderator_run_id,
-                depth=self._depth + 2,
-            )
+            # 开辩不把调研员拉进场当证人；证人机制仍在，本路径不探测。
+            self._witness_seats = {}
             witness_runner = None
             witness_roster = ()
-            if self._witness_seats:
-                self._sink.emit(
-                    witness_plan_event(
-                        self, execution_id, moderator_run_id, self._witness_seats
-                    )
-                )
-                witness_runner = make_witness_runner(
-                    self, execution_id, moderator_run_id, self._witness_seats
-                )
-                witness_roster = tuple(seats_to_info(self._witness_seats))
-                logger.info(
-                    "debate.witness.probed",
-                    count=len(self._witness_seats),
-                    keys=list(self._witness_seats.keys()),
-                )
 
             from agentcore.runtime.debate.moderator_agenda import cross_exam_enabled
 
@@ -812,7 +670,7 @@ class DebateTool:
                     )
                 # 本边界之后还会不会再有一个边界来捞 steer —— 与 Moderator.run 的收场判定
                 # 同源（用户 conclude 凌驾裁判；否则裁判 converged；轮数上限是硬顶）。不会
-                # 再有 ⇒ 立刻关窗：其后的结辩 + 简报可达数十秒，那期间收下的掌舵永不生效。
+                # 再有 ⇒ 立刻关窗：其后的简报可达数十秒，那期间收下的掌舵永不生效。
                 last_boundary = round_no >= max_rounds or (
                     boundary.decision is RoundDecision.CONCLUDE
                     if boundary is not None

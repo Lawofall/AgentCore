@@ -1871,11 +1871,6 @@ html[lang="zh-CN"] .accent {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cg-sub {
-  margin: 0;
-  font-size: 0.8em;
-  color: var(--paper-faint);
-}
 
 .cg-status {
   margin: 0;

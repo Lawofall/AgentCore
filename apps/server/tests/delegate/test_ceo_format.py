@@ -9,7 +9,7 @@ from agentcore.runtime.delegate.ceo_format import (
 )
 from agentcore.runtime.runs.file_acceptance import build_file_acceptance
 from agentcore.runtime.runs.plan import RunPlan
-from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
+from agentcore.runtime.runs.types import Deliverable, RunPhase, RunSpec, RunState
 from agentcore.tools.builtin.delegate import DELEGATE_OUTPUT_LIMIT
 from tests.delegate.conftest import Provider, tool
 
@@ -592,3 +592,46 @@ def test_format_for_ceo_caps_short_raw_expansion_ratio():
     assert "交接结论" in out and "要点：" in out
     assert "队员终态名册" in out or "写手0" in out
     assert "文件产出" in out or "out/0.md" in out
+
+
+def test_build_ceo_synthesis_injects_audit_ledger_into_roster():
+    """Merged audit table rides the roster so harvest cannot budget-trim it."""
+    from agentcore.runtime.runs.audit_ledger import AUDIT_LEDGER_HEADING
+
+    t = tool(Provider([]))
+    json_path = "AgentCore/文档/reviews/code-audit-0-server.audit.json"
+    plan = RunPlan(
+        nodes=[
+            RunSpec(
+                run_id="audit_0",
+                task="审",
+                role="代码审计员",
+                deliverable=Deliverable(
+                    form="files",
+                    artifacts=[json_path],
+                    code_audit_gate=True,
+                ),
+            )
+        ]
+    )
+    results = {
+        "audit_0": RunState(
+            phase=RunPhase.COMPLETED,
+            files_touched=[json_path],
+            file_acceptance=_accepted(json_path),
+            debrief={"summary": "共 1 条属实", "key_points": ["H1|高|注入"]},
+        )
+    }
+    texts = {
+        json_path: (
+            '{"findings":[{"id":"H1","summary":"注入","severity":"高",'
+            '"verdict":"属实","verification":"全文精读","evidence":"a.py:1",'
+            '"trigger_path":"user→a"}]}'
+        )
+    }
+    synth = build_ceo_synthesis(t, plan, results, audit_json_by_path=texts)
+    assert AUDIT_LEDGER_HEADING in synth.roster_text
+    assert "属实中+ N=1" in synth.roster_text
+    assert "H1" in synth.roster_text
+    assert AUDIT_LEDGER_HEADING in synth.text
+    assert AUDIT_LEDGER_HEADING not in synth.prose

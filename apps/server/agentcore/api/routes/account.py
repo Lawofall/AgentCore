@@ -292,7 +292,7 @@ class AccountRuleDoc(BaseModel):
 
 
 class AccountRulesListResponse(BaseModel):
-    """Always rules for ``<rules>`` plus on_demand bodies for 规则目录 / ``consult``.
+    """Always rules for ``<设定>`` plus on_demand bodies for 规则目录 / ``consult``.
 
     ``ancestor_*`` carry the enclosing folders' layers, outermost-first, and
     ``folder_chain`` is that same chain by id with the current folder last: the engine may
@@ -324,7 +324,7 @@ async def list_account_user_rules(
     user: AccountApiUser,
     session: AsyncSession = Depends(get_db),
 ) -> AccountRulesListResponse:
-    """User rules for turn assembly: always → ``<rules>``; on_demand → catalog + consult."""
+    """User rules for turn assembly: always → ``<设定>``; on_demand → catalog + consult."""
     repo = DocumentRepository(session)
     folder_chain: list[str] = []
     if body.folder_id:

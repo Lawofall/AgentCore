@@ -123,7 +123,6 @@ describe("ManualReference", () => {
     expect(screen.getByText("带现场续派（同人接续）")).toBeTruthy();
     expect(screen.getByText("辩论室")).toBeTruthy();
     expect(screen.getByText("接续链")).toBeTruthy();
-    expect(screen.getByText("站队")).toBeTruthy();
     expect(screen.getAllByText("画布").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("白板").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("自主度").length).toBeGreaterThanOrEqual(1);

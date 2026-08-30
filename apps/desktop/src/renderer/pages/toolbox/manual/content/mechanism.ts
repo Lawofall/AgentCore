@@ -141,7 +141,7 @@ export const mechanismChapter: ManualChapterContent = {
         },
         {
           type: "paragraph",
-          text: "辩题、轮次、阵营比分——和辩论室顶栏同一套；终审简报也是真组件。",
+          text: "辩题、轮次、双方身份——和辩论室顶栏同一套；终审简报也是真组件。",
         },
         { type: "embed", key: "ManualDebateScoreboardPreview" },
         { type: "embed", key: "ManualDebateFinalePreview" },

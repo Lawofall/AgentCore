@@ -18,6 +18,7 @@ from agentcore.tools.sandbox.cloud_health import (
     age_cloud_sandbox_health_for_tests,
     cloud_sandbox_health,
     cloud_sandbox_health_failure,
+    note_cloud_sandbox_unhealthy,
     pending_cloud_sandbox_refresh_for_tests,
     probe_cloud_sandbox_at_startup,
     set_cloud_sandbox_health_for_tests,
@@ -370,5 +371,16 @@ def test_sidecar_withholds_cloud_execution_even_if_probe_says_healthy(
     )
     monkeypatch.setattr(settings, "gvisor_enabled", True)
     set_cloud_sandbox_health_for_tests(True)
+    assert code_execution_enabled_for(_CloudBackend()) is False
+    assert browser_execution_enabled_for(_CloudBackend()) is False
+
+
+def test_note_cloud_sandbox_unhealthy_closes_the_gate(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    set_cloud_sandbox_health_for_tests(True)
+    assert cloud_sandbox_health() is True
+    note_cloud_sandbox_unhealthy("sandboxd_start_timeout", "waited 180s")
+    assert cloud_sandbox_health() is False
+    assert cloud_sandbox_health_failure() == ("sandboxd_start_timeout", "waited 180s")
     assert code_execution_enabled_for(_CloudBackend()) is False
     assert browser_execution_enabled_for(_CloudBackend()) is False

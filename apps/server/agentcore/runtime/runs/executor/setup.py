@@ -31,7 +31,6 @@ from agentcore.runtime.runs.contract import node_has_dependents
 from agentcore.runtime.runs.executor.context import (
     _build_messages,
     _context_block_payloads,
-    _safe_index_files,
     load_context_inject_files,
 )
 from agentcore.runtime.runs.executor.env import AgentExecutorEnv
@@ -48,7 +47,6 @@ from agentcore.runtime.runs.executor.shared import (
 )
 from agentcore.runtime.runs.retrieval_budget import RETRIEVAL_TOOL_NAMES
 from agentcore.runtime.runs.types import ContextBlock, RunPhase, RunSpec, RunState
-from agentcore.runtime.runs.website_visual_critic import MAX_VISUAL_REWORK
 from agentcore.tools.protocol import (
     RetrievalBudgetState,
     ToolContext,
@@ -286,15 +284,15 @@ async def _prepare_agent_node(
         artifacts=list(deliverable.artifacts) if deliverable else None,
         # 能写≠能跑: retire EXEC_ENV_TIMEOUT_FAMILY first (session.exec_env_dead),
         # then this flag — identity must not claim it can run after the family is gone.
-        can_execute=registry_can_execute(worker_tools),
+        can_execute=registry_can_execute(worker_tools, tool_ctx),
     )
     if worker_write_scope == "none" and not (
         spec.target_folder_id or env.session_folder_id
     ):
         identity = f"{identity.rstrip()}\n\n{SCRATCH_NO_WRITE_IDENTITY_HINT}"
     # 真纯丙·H2：form=prose 不再硬卸写盘工具；形态靠 identity 提示自觉守岗。
-    # Short-round repair posture tool strip retired (no-op kept for compat).
-    # CEO / diagnose_fix_verify may still stamp max_rounds; tools stay full surface.
+    # Short-round repair posture tool strip retired.
+    # CEO may still stamp max_rounds; tools stay full surface.
     files_expected = _files_expected(deliverable)
     from agentcore.runtime.runs.research_quality import deliverable_is_report_delivery
 
@@ -345,16 +343,6 @@ async def _prepare_agent_node(
         depth=spec.depth,
     )
 
-    # Pre-existing workspace files (uploads / prior turns) for the worker's
-    # opening manifest — a per-turn snapshot walked once and shared by the whole
-    # batch (see ``env.preexisting_files``); peer products are layered on per worker
-    # from the completion map inside ``_build_messages``.
-    # Target-desktop workers list their own root (not the session default desk).
-    with _prepare_phase("workspace_index"):
-        if spec.target_folder_id and tool_ctx.backend is not env.base_tool_context.backend:
-            index_paths = await _safe_index_files(tool_ctx.backend)
-        else:
-            index_paths = await env.preexisting_files()
     # Wave3 B: force-inject skeleton/contract summaries before first file_read.
     context_inject = await load_context_inject_files(
         tool_ctx.backend,
@@ -404,12 +392,9 @@ async def _prepare_agent_node(
                 env.user_message,
                 deliverable,
                 identity=identity,
-                index_paths=index_paths,
                 blocks_sink=received_blocks,
                 team_brief=env.team_brief,
-                shared_workspace=bool(tool_ctx.shared_workspace),
                 context_inject=context_inject or None,
-                captain_recon=env.captain_recon,
                 conversation_id=str(getattr(tool_ctx, "conversation_id", "") or ""),
             )
         # Worker window head (§8.3): journal the opening task-prompt so
@@ -446,12 +431,6 @@ async def _prepare_agent_node(
         token_ceiling = settings.engine_worker_token_ceiling
 
     attempts = 1 + min(DEFAULT_CONTRACT_RETRIES, MAX_CONTRACT_RETRIES)
-    if deliverable and deliverable.visual_critic:
-        # P1c: up to 2 visual rework rounds on top of the initial pass.
-        attempts = 1 + min(
-            max(DEFAULT_CONTRACT_RETRIES, MAX_VISUAL_REWORK),
-            MAX_CONTRACT_RETRIES,
-        )
 
     from agentcore.runtime.runs.executor.hooks import _two_phase_citation
 

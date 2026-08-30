@@ -69,6 +69,44 @@ describe("conversation store", () => {
       expect(rt().isGenerating).toBe(false);
     });
 
+    it("switchConversation from draft does not dump leftover draft messages", () => {
+      store().addMessage({
+        id: "m-draft",
+        role: "user",
+        content: "hello",
+        createdAt: "",
+        executionId: null,
+        isStreaming: false,
+      });
+
+      store().switchConversation("conv-existing");
+
+      expect(store().currentConversationId).toBe("conv-existing");
+      expect(rt().messages).toEqual([]);
+    });
+
+    it("adoptDraftRuntime moves draft messages onto the new id in one write", () => {
+      store().addMessage({
+        id: "m-user",
+        role: "user",
+        content: "hello",
+        createdAt: "",
+        executionId: null,
+        isStreaming: false,
+      });
+      store().createAssistantMessage();
+
+      store().adoptDraftRuntime("conv-new");
+
+      expect(store().currentConversationId).toBe("conv-new");
+      expect(rt().messages).toHaveLength(2);
+      expect(rt().messages[0].id).toBe("m-user");
+      expect(rt().messages[1].role).toBe("assistant");
+      expect(rt().isGenerating).toBe(true);
+      expect(getRuntime("").messages).toEqual([]);
+      expect(getRuntime("").isGenerating).toBe(false);
+    });
+
     it("detaches Local browser host before switching", () => {
       store().switchConversation("conv-a");
       detachLocalBrowserHost.mockClear();

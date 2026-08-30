@@ -69,8 +69,8 @@ _STANCE_RETRY_TIP = (
 
 # Schema layer (工具面瘦身): short trigger + key param cues. HOW → debate_and_review skill.
 DEBATE_DESCRIPTION = (
-    "对抗性多视角思考：主持人驱动结构化辩论，交回【决策简报+交锋叙事线】（非终结）。"
-    "form：debate=正反；red_team=红队压测（被审方 is_subject）；roundtable=圆桌。"
+    "用户点名才开：主持人驱动结构化正反辩论，交回【决策简报+交锋叙事线】（非终结）。"
+    "form=debate 正反；挑刺/压测走 delegate 审校岗；多视角走 delegate。"
     "必填 motion+form+sides（≥2）；轮数/收敛主持人自调。"
     "独立并行调研用 delegate；无对立面/单点事实勿用。"
     "HOW→consult(debate_and_review)。"
@@ -87,23 +87,23 @@ DEBATE_PARAMETERS = {
             "type": "string",
             "enum": list(DEBATE_FORM_VALUES),
             "description": (
-                "debate=正反攻防；red_team=红队挑刺（被审方 is_subject）；"
-                "roundtable=多方圆桌。流程细节→debate_and_review。"
+                "正反攻防（debate）。挑刺/压测走 delegate 审校岗；"
+                "多视角走 delegate。流程细节→debate_and_review。"
             ),
         },
         "sides": {
             "type": "array",
-            "description": "参与方（≥2）：正反=2，圆桌≥3，红队=被审方+≥1 红队。",
+            "description": "参与方（≥2）：正反=2。",
             "items": {
                 "type": "object",
                 "properties": {
                     "key": {
                         "type": "string",
-                        "description": "唯一英文短词（如 pro/con/red1）。",
+                        "description": "唯一英文短词（如 pro/con）。",
                     },
                     "name": {
                         "type": "string",
-                        "description": "展示立场/视角名；勿塞模型名（走 model）。",
+                        "description": "展示立场名；勿塞模型名（走 model）。",
                     },
                     "stance": {
                         "type": "string",
@@ -114,7 +114,7 @@ DEBATE_PARAMETERS = {
                     },
                     "is_subject": {
                         "type": "boolean",
-                        "description": "仅红队：标记被审方案方。",
+                        "description": "可选。",
                     },
                     "model": {
                         "type": "string",

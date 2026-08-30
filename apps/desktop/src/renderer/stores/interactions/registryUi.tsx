@@ -167,6 +167,9 @@ function EscalationTimelineSlot({
     });
   }
 
+  // 待拍板收到输入框上方决策区；时间线只留已问过的痕迹。
+  if (found.esc.status === "pending") return timelineIntentionalEmpty();
+
   return (
     <EscalationCard
       escalation={found.esc}

@@ -258,8 +258,6 @@ async def test_materialise_turn_token_budget_skips():
             deliverable=Deliverable(
                 form="files",
                 artifacts=["site/QA.md"],
-                web_quality_scan=True,
-                visual_critic=True,
             ),
         )
     )
@@ -272,11 +270,8 @@ async def test_materialise_turn_token_budget_skips():
     assert results["pending"].delivery_gaps
     assert results["pending"].delivery_gaps[0]["reason"] == REASON_TURN_TOKEN_BUDGET
     assert results["qa"].phase is RunPhase.SKIPPED
-    qa_descs = [g["description"] for g in results["qa"].delivery_gaps]
-    assert any("验收" in d or "未目验" in d or "视觉" in d for d in qa_descs)
-    assert any("续派" in d or "下一回合" in d for d in qa_descs)
-    assert any(g.get("reason") == "qa_deferred_budget" for g in results["qa"].delivery_gaps)
-    assert not any("未跑 web_quality" in d for d in qa_descs)
+    assert results["qa"].delivery_gaps
+    assert results["qa"].delivery_gaps[0]["reason"] == REASON_TURN_TOKEN_BUDGET
     assert sink.emit.call_count == 2
 
 
@@ -309,11 +304,7 @@ async def test_priority_reserve_admits_qa_cuts_secondary(monkeypatch):
                 agent_id="qa",
                 depends_on=["s0", "s1"],
                 ceiling_priority=True,
-                deliverable=Deliverable(
-                    form="files",
-                    web_quality_scan=True,
-                    visual_critic=True,
-                ),
+                deliverable=Deliverable(form="files"),
             )
         )
         dispatched: list[str] = []
@@ -380,11 +371,7 @@ async def test_priority_reserve_admits_assemble_and_qa_cuts_secondary(monkeypatc
                 agent_id="qa",
                 depends_on=["assemble"],
                 ceiling_priority=True,
-                deliverable=Deliverable(
-                    form="files",
-                    web_quality_scan=True,
-                    visual_critic=True,
-                ),
+                deliverable=Deliverable(form="files"),
             )
         )
         dispatched: list[str] = []
@@ -441,8 +428,6 @@ async def test_skip_qa_delivery_status_partial_with_honesty_gaps():
             deliverable=Deliverable(
                 form="files",
                 artifacts=["site/QA.md"],
-                web_quality_scan=True,
-                visual_critic=True,
             ),
         )
     )
@@ -461,11 +446,7 @@ async def test_skip_qa_delivery_status_partial_with_honesty_gaps():
     payload = build_delivery_status(plan, results, execution_id="e1")
     assert payload is not None
     assert payload["state"] == "partial"
-    descs = " ".join(g["description"] for g in payload["gaps"])
-    assert "验收" in descs or "未目验" in descs or "视觉" in descs
-    assert "续派" in descs or "下一回合" in descs
-    assert "web_quality" not in descs  # section gates already ran; don't false-claim
-    assert any(g.get("reason") == "qa_deferred_budget" for g in payload["gaps"])
+    assert any(g.get("reason") == REASON_TURN_TOKEN_BUDGET for g in payload["gaps"])
     assert not any(a.get("kind") == "website_verify" for a in payload["actions"])
     kinds = {a.get("kind") for a in payload["actions"]}
     assert "continue_skipped_runs" in kinds
@@ -495,9 +476,8 @@ def test_wrap_prompt_is_explicit_close_not_fake_done(monkeypatch):
         assert "delegate" in text or "派" in text
         assert "假" in text or "伪装" in text
         assert REASON_TURN_TOKEN_BUDGET in text
-        assert "续派" in text or "验收" in text
-        assert "下一回合" in text and "续跑" in text
         assert "禁止假装" in text or "伪装" in text
+        assert "下一回合" in text and "续跑" in text
     finally:
         reset_turn_token_meter(token)
 
@@ -845,11 +825,7 @@ async def test_nested_disables_parent_priority_reserve_cut(monkeypatch):
                     agent_id="qa",
                     depends_on=["s0", "s1"],
                     ceiling_priority=True,
-                    deliverable=Deliverable(
-                        form="files",
-                        web_quality_scan=True,
-                        visual_critic=True,
-                    ),
+                    deliverable=Deliverable(form="files"),
                 )
             )
             dispatched: list[str] = []

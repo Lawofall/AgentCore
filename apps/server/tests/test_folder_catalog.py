@@ -118,10 +118,10 @@ def test_compose_ceo_includes_catalog_outside_rules():
     )
     assert "<文件夹清单>" in ceo
     assert "- 支付网关（id=`f1`，当前出生桌）：结算服务" in ceo
-    # Always memory stays in <rules>; catalog is a sibling section.
-    assert "<rules>" in ceo
+    # Always memory stays in <设定>; catalog is a sibling section.
+    assert "<设定>" in ceo
     assert "用中文" in ceo
-    rules_end = ceo.index("</rules>")
+    rules_end = ceo.index("</设定>")
     catalog_start = ceo.index("<文件夹清单>")
     assert rules_end < catalog_start
 

@@ -17,16 +17,12 @@ from typing import Any
 from agentcore.runtime.runs.playbooks._common import (
     CODE_AUDIT_FANOUT,
     MAX_PLAYBOOK_FANOUT,
-    USER_MESSAGE_MECH_KEY,
     Playbook,
     PlaybookBuilder,
-    clean_str,
 )
 from agentcore.runtime.runs.playbooks.audit import code_audit
-from agentcore.runtime.runs.playbooks.build_soft import diagnose_fix_verify
 from agentcore.runtime.runs.playbooks.research import (
     cite_write_review,
-    lens_crosscheck,
     map_fanout,
 )
 
@@ -38,13 +34,12 @@ PLAYBOOKS: dict[str, Playbook] = {
             "报告落 AgentCore/文档/reviews/；扇出靠 CEO 填 modules（不从 scope 自动拆；"
             f"先按产品缝 2–3、能少则少；目录细拆仅当探路证明真并行且单缝扛不住；"
             f"上限 {CODE_AUDIT_FANOUT}）；"
-            "2 路并行交 CEO 收口；≥3 路才加主管速览；"
-            "正交于 map_fanout（摸底）/ cite_write_review（成文审校）/"
-            " diagnose_fix_verify（按症状修）"
+            "多路并行交 CEO 收口（引擎合并台账）；"
+            "正交于 map_fanout（摸底）/ cite_write_review（成文审校）"
         ),
         slots=(
             "scope(必填,审计范围路径或子系统;亦接受 topic/target) / "
-            "modules(可选;探路后≥2 可独立并行产品缝则填短名/路径→2 路并行无主管、≥3 路才+主管速览,"
+            "modules(可选;探路后≥2 可独立并行产品缝则填短名/路径→多路并行交 CEO 收口,"
             f"先 2–3、能少则少;【禁】按目录树默认拆到上限;"
             "目录细拆仅当探路证明真并行且单缝扛不住;"
             f"上限 {CODE_AUDIT_FANOUT} 超限末槽折叠;"
@@ -52,7 +47,7 @@ PLAYBOOKS: dict[str, Playbook] = {
             "禁把多目录拼进 scope 冒充多模块;禁把长作文当模块名,侧重进 focus) / "
             "focus(可选,侧重如 security|eng|流式刷新) / "
             "k(可选,每模块 Phase B 定案上限,默认 8) / "
-            "output_path(可选,单模块报告或汇总 code-audit-summary 覆盖路径)"
+            "output_path(可选,单模块报告覆盖路径)"
         ),
         build=code_audit,
     ),
@@ -96,38 +91,6 @@ PLAYBOOKS: dict[str, Playbook] = {
             "output_path(可选,成篇主文件路径,默认 AgentCore/文档/research/报告.md；验收只认此路径)"
         ),
         build=cite_write_review,
-    ),
-    "diagnose_fix_verify": Playbook(
-        name="diagnose_fix_verify",
-        summary=(
-            "【无先验调查批】修补(含短诊断)→独立验证的单症状修码（runtime 错 / 缺 export / "
-            "白屏挂载；短轮次；禁触顶后换马甲；playbook_args 须 verify="
-            "CLI 或 UI 复现说明；已定位文件 / 已有调查批 → 勿套本，手写"
-            "（可 1 人，verify 写进 task））"
-        ),
-        slots=(
-            "problem(必填,错误症状/缺 export/白屏挂载等) / "
-            "verify(必填,怎么算修好:CLI 命令或页面/UI 复现说明;"
-            "例:verify=\"pytest tests/test_app.py -q\" 或 "
-            "verify=\"打开 /app 白屏消失+snapshot 可见主内容\";"
-            "亦接受 verify_command/acceptance) / "
-            "target(可选,优先文件路径) / artifacts(可选,落盘路径数组)"
-        ),
-        build=diagnose_fix_verify,
-    ),
-    "lens_crosscheck": Playbook(
-        name="lens_crosscheck",
-        summary=(
-            "异质透镜并行调研→汇总交叉验证（可产 motion_card 建议开辩；"
-            "仅公共事件 / 品牌危机等须分开查的异质透镜；"
-            "lenses 必填 ≥2 个异质透镜名；"
-            "调研报告落盘 AgentCore/文档/research/）"
-        ),
-        slots=(
-            "topic(必填,主题/事件) / lenses(必填,≥2 个异质透镜名;"
-            "超过扇出上限时末尾自动折叠到最后一节点并标注、不丢弃)"
-        ),
-        build=lens_crosscheck,
     ),
 }
 
@@ -178,17 +141,13 @@ def expand_playbook(
     name: str,
     args: dict[str, Any] | None,
     *,
-    user_message: str = "",
-    conversation_id: str = "",  # noqa: ARG001 — call-site compat; DESIGN inject is executor-side
+    user_message: str = "",  # noqa: ARG001 — call-site compat
+    conversation_id: str = "",  # noqa: ARG001 — call-site compat
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Expand a named playbook + slot args into a ``tasks`` dict-list for ``build_run_plan``.
 
-    ``user_message`` is the turn's raw user line (from DelegateTool), injected as a
-    mechanism-only key for playbooks that need proposition fidelity (e.g. lens_crosscheck
-    synthesizer). Not a CEO-facing slot.
-
-    ``conversation_id`` is accepted for call-site compatibility. Website DESIGN
-    inject is executor-side (``web_quality_scan`` workers), not playbook expansion.
+    ``user_message`` and ``conversation_id`` are accepted for call-site compatibility;
+    no current playbook consumes them.
 
     Returns ``(tasks, errors)``; a non-empty ``errors`` means the instantiation is rejected (unknown
     name, bad args type, missing required slot, or missing packaged internal resource) and the
@@ -201,9 +160,6 @@ def expand_playbook(
     if args is not None and not isinstance(args, dict):
         return [], [f"playbook_args 必须是对象；{pb.name} 槽位：{pb.slots}"]
     slot_args: dict[str, Any] = dict(args or {})
-    um = clean_str(user_message)
-    if um:
-        slot_args[USER_MESSAGE_MECH_KEY] = um
     try:
         return pb.build(slot_args)
     except FileNotFoundError:

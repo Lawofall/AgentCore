@@ -1,7 +1,7 @@
 """Attachment prompt block: structure preview + capability-aware steer.
 
 ``_build_attachment_context`` walks this-turn attachments and renders the
-``<attached_files>`` block. ``code_execute`` copy follows ``available_tools``
+``<附件>`` block. ``code_execute`` copy follows ``available_tools``
 (this turn's assembled table) — never invents the tool.
 """
 
@@ -47,7 +47,7 @@ _ATTACH_THIS_MESSAGE_FRAME = (
     "工作区索引里其它 attachments/ 条目属历史轮。"
 )
 
-# @ 点名按需设定：本回合当常驻。单独成段，不进 <attached_files>，以免触发附件收窄场面。
+# @ 点名按需设定：本回合当常驻。单独成段，不进 <附件>，以免触发附件收窄场面。
 _PINNED_ENTRIES_FRAME = (
     "用户本条点名了下列按需设定，本回合当作常驻遵守。"
     "不是本条上传的附件，不必落盘。"
@@ -163,7 +163,7 @@ def _attached_files_envelope(
     inline_note = f" {_INLINE_ORDER_FACT}" if inline_in_user_message else ""
     inner = f"{body}\n" if body else ""
     return (
-        "<attached_files>\n"
+        "<附件>\n"
         f"{_ATTACH_THIS_MESSAGE_FRAME} "
         "The user attached the following files, directories and past "
         "conversations as actionable inputs for this turn—not mere optional "
@@ -177,12 +177,12 @@ def _attached_files_envelope(
         f"{resident_note}{table_note}{binary_note}{office_note}{preparsed_note}"
         f"{missing_note}{image_note}\n\n"
         f"{inner}"
-        "</attached_files>"
+        "</附件>"
     )
 
 
 def _pinned_entries_envelope(body: str) -> str:
-    return f"<pinned_entries>\n{_PINNED_ENTRIES_FRAME}\n\n{body}\n</pinned_entries>"
+    return f"<钉住条目>\n{_PINNED_ENTRIES_FRAME}\n\n{body}\n</钉住条目>"
 
 
 async def _load_pinned_document_body(
@@ -271,7 +271,7 @@ async def _build_attachment_prompt(
     Directories carry a recursive file listing (paths only);
     ``kind=conversation`` is **server deep-read** via ``log_export``
     (client shallow ``text`` is ignored). ``kind=document`` pins an on-demand
-    setting for this turn in ``<pinned_entries>`` (not ``<attached_files>``).
+    setting for this turn in ``<钉住条目>`` (not ``<附件>``).
     A file with a ``workspace_path``
     was persisted into the workspace, so the header points the agent at that
     durable path. Empty prompt when there is nothing to inject so the base
@@ -584,7 +584,7 @@ async def _build_attachment_context(
     native_image_parts: list[dict] | None = None,
     available_tools: Collection[str] | None = None,
 ) -> str | None:
-    """Render user-referenced files into ``<attached_files>`` (tests / legacy seam)."""
+    """Render user-referenced files into ``<附件>`` (tests / legacy seam)."""
     prompt = await _build_attachment_prompt(
         attachments,
         user_id=user_id,

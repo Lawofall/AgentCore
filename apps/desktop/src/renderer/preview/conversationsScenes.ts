@@ -175,7 +175,7 @@ const MOCK_CONVERSATION_TRASH: ConversationTrash = {
       purgeAt: daysAhead(30),
     },
     {
-      // 原文件夹也在回收站里 → 行上要说清「恢复后先回到未分组」。
+      // 原文件夹也在回收站里 → 行上要说清「恢复后先回到快速对话」。
       id: "c-gone-2",
       title: "官网改版对齐",
       folderId: "folder-gone-cloud",

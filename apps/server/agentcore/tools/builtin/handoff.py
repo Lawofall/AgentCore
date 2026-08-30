@@ -6,7 +6,7 @@ Topology splits the brief's job (identity copy; this schema stays shared):
 - Nodes with dependents, or leaves that may land files: brief stays conclusion-bearing
   (CEO / 下游 may only see the brief).
 - ``form=prose`` leaves: brief is relay status only；结论在正文 (CEO reads the body).
-可选 ``motion_card``（发现核心争议命题时建议开辩的唯一契约载体）。
+可选 ``motion_card``（遗留字段；调研默认不填。开辩由用户点名，不靠此卡催场）。
 
 Topology (prompt + this description say the same thing; engine gate unchanged):
 - Nodes with downstream dependents **must** handoff — downstream relays on the brief
@@ -39,7 +39,6 @@ mirroring how ``escalate`` is wired in only where it belongs.
 from __future__ import annotations
 
 import contextlib
-import re
 from typing import Any
 
 from agentcore.core.logging import get_logger
@@ -56,57 +55,11 @@ from agentcore.tools.registration import (
 
 logger = get_logger(__name__)
 
-# 建议开辩意图：收窄在「建议/推荐开辩」短语，避免误拦仅提及辩论事实的正文
-# （如法律报告「一审辩论过程」）。只扫建议语境字段（summary / key_points / next_steps）。
-_DEBATE_SUGGEST_RE = re.compile(
-    r"(?:"
-    r"建议(?:发起)?(?:一场)?(?:正反)?(?:对抗)?辩论"
-    r"|建议开辩"
-    r"|推荐(?:发起)?(?:一场)?(?:正反)?(?:对抗)?辩论"
-    r"|推荐开辩"
-    r"|宜(?:发起)?(?:一场)?(?:正反)?辩论"
-    r"|宜开辩"
-    r"|should\s+(?:open\s+a\s+)?debate"
-    r"|recommend(?:s|ed)?\s+(?:a\s+)?debate"
-    r")",
-    re.IGNORECASE,
-)
-
-_MOTION_CARD_MISSING_TIP = (
-    "交接内容已建议开辩/发起辩论，但未携带合规 `motion_card`。"
-    "请把开辩建议写成 handoff 的结构化 `motion_card` 字段后重试"
-    "（正文 markdown 表、key_points 散文【不能】代替）。"
-    "最小示例："
-    '{"motion":"争议命题","sides":[{"key":"pro","name":"正方","stance":"支持该主张"},'
-    '{"key":"con","name":"反方","stance":"反对该主张"}],'
-    '"fact_pointers":[],"rationale":"继续调研无法消解对立，须对抗交锋"}。'
-)
-
 
 def _body_chars(context: ToolContext) -> int:
     """Deliverable prose length for this round (0 when unset / unknown)."""
     n = context.round_content_chars
     return int(n) if isinstance(n, int) and n >= 0 else 0
-
-
-def _suggestion_context(arguments: dict[str, Any]) -> str:
-    """拼接建议语境字段（不含交付正文 / assumptions 事实叙述）。"""
-    parts: list[str] = [str(arguments.get("summary") or "")]
-    key_points = arguments.get("key_points")
-    if isinstance(key_points, list):
-        parts.extend(str(p) for p in key_points)
-    elif key_points is not None:
-        parts.append(str(key_points))
-    parts.append(str(arguments.get("next_steps") or ""))
-    return "\n".join(parts)
-
-
-def claims_debate_suggestion(arguments: dict[str, Any]) -> bool:
-    """建议语境字段是否声称「建议/推荐开辩」。
-
-    仅扫 summary / key_points / next_steps；提及辩论事实（如「一审辩论过程」）不触发。
-    """
-    return bool(_DEBATE_SUGGEST_RE.search(_suggestion_context(arguments)))
 
 
 class HandoffTool:
@@ -132,7 +85,7 @@ class HandoffTool:
                 "提交交接简报并收尾。简报=【接力契约 + 增量交代】（给主管/下游，不是正文复述）。"
                 "有下游：完成后必须调用。无下游：有工具活动或较长交付须交短摘要；短答自明可省。"
                 "先写完交付再同一轮调用。form=files：summary 须含路径。"
-                "建议开辩时必须填 motion_card 对象（正文表不能代替）。"
+                "调研默认不填 motion_card；开辩由用户点名。"
             ),
             parameters={
                 "type": "object",
@@ -170,7 +123,7 @@ class HandoffTool:
                     },
                     "motion_card": {
                         "type": "object",
-                        "description": "建议开辩时必填的命题卡对象。省略=不开辩。",
+                        "description": "遗留命题卡。调研默认不填；开辩由用户点名。",
                         "properties": {
                             "motion": {
                                 "type": "string",
@@ -207,7 +160,7 @@ class HandoffTool:
                             "form": {
                                 "type": "string",
                                 "enum": ["debate", "red_team", "roundtable"],
-                                "description": "辩论形态；默认 debate。",
+                                "description": "正反辩论；默认 debate。",
                             },
                         },
                         "required": ["motion", "sides", "fact_pointers", "rationale"],
@@ -265,23 +218,6 @@ class HandoffTool:
                 success=False,
                 output="",
                 error=card_err,
-            )
-        # 建议开辩却无合规卡 → 拒收（success=False 不触发交接），与卡字段校验错误可区分。
-        if card is None and claims_debate_suggestion(arguments):
-            logger.info(
-                "worker.handoff",
-                run_id=context.run_id,
-                has_summary=bool(summary),
-                chars=len(summary),
-                body_chars=_body_chars(context),
-                has_motion_card=False,
-                rejected="debate_suggest_without_motion_card",
-            )
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output="",
-                error=_MOTION_CARD_MISSING_TIP,
             )
         # 空交不再硬拒（实测误伤多，行业也不拦「没写出东西」）。
         # 正文空时仍可把 summary 升格成下游可读正文，有真实正文则不覆盖。

@@ -56,7 +56,6 @@ const TOOL_LABEL: Record<string, string> = {
   file_copy: "Copy file",
   mkdir: "Make dir",
   file_batch: "Batch files",
-  write_section: "Write section",
   md_to_docx: "Export Word",
   md_to_pdf: "Export PDF",
   archive_extract: "Extract archive",

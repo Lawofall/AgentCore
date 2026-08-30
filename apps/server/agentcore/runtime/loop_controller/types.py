@@ -72,8 +72,8 @@ _LANDED_SUMMARY_ECHO_STOP_STEER = (
 # (no tool call at all → degraded ladder).
 DEFAULT_UNPRODUCTIVE_THRESHOLD = 3
 # Progress tools that reset same-target investigation spin when a recent round
-# succeeded (stage advance / delivery / handoff / ask). ``str_replace`` /
-# ``write_section`` count: coding repair lands via patch, not only whole-file write.
+# succeeded (stage advance / delivery / handoff / ask). ``str_replace``
+# counts: coding repair lands via patch, not only whole-file write.
 # (Periodic B2 进度复盘 inject was retired — soft cadence had little effect and
 # false-nagged interactive browser runs.)
 PROGRESS_TOOLS = frozenset(
@@ -82,7 +82,6 @@ PROGRESS_TOOLS = frozenset(
         "file_write",
         "file_append",
         "str_replace",
-        "write_section",
         "handoff",
         "ask_user",
     }
@@ -91,7 +90,7 @@ PROGRESS_TOOLS = frozenset(
 # delivery-idle thrashing; any attempt is "落盘意图" and exempts that round from the
 # delivery-idle clock.
 # Write tools that enter force_segmented when same-path reject streak trips
-# (keep str_replace / write_section as the preferred segmented pens).
+# (keep str_replace as the preferred segmented pen).
 PATH_SEGMENT_FORCE_TOOLS = frozenset({"file_write", "file_append"})
 # Dangerous landing action narrowed (disabled) once force_segmented latches —
 # keep file_write / str_replace; stop append thrashing on prose / broken bodies.
@@ -141,9 +140,6 @@ def _collapse_malformed_required_args(name: str, parsed: dict[str, object]) -> d
     Landed-summary / cleared-stub echo (same surface as
     ``is_cleared_write_stub_args``) collapses per path for write pens so different
     summary texts still trip validation path-stop.
-
-    ``write_section`` invalid ``section`` (e.g. ``ch5-s0``) collapses per path so
-    format thrash enters the same validation early-stop (08-08 定案①).
     """
     if name in {"file_write", "file_append", "str_replace"}:
         from agentcore.runtime.engine.write_args_clear import is_cleared_write_stub_args
@@ -171,16 +167,6 @@ def _collapse_malformed_required_args(name: str, parsed: dict[str, object]) -> d
         path = parsed.get("path")
         if path is None or (isinstance(path, str) and not path.strip()):
             return {"__malformed__": "path"}
-    if name == "write_section":
-        from agentcore.runtime.runs.website_section import is_valid_section_id
-
-        path = parsed.get("path")
-        path_key = path.strip().replace("\\", "/") if isinstance(path, str) else ""
-        section = parsed.get("section")
-        if section is None or (
-            isinstance(section, str) and not is_valid_section_id(section)
-        ):
-            return {"__malformed__": "section", "path": path_key}
     return parsed
 
 

@@ -5,9 +5,9 @@
 
 宿主判据（机械可判，全部满足才进图）：
 
-1. 调研推荐链证据——复用 ``research_first`` 判据源（journal 命题卡 / MLR 成功 /
-   工作区 ``research/`` 产物），**或**对话内可定位到 MLR 形宿主（跨回合 journal 不在
-   当前 snapshot 时，定位成功本身即 MLR 成功证据）。
+1. 调研推荐链证据——复用 ``research_first`` 判据源（journal 命题卡 /
+   工作区 ``research/`` 产物），**或**对话内可定位到含汇总员的宿主（跨回合 journal 不在
+   当前 snapshot 时，定位成功本身即调研成功证据）。
 2. 最近一张含汇总员（``synthesizer``）的 ``multi_agent`` execution。
 3. 宿主助手 ``message_id`` 可解析。
 4. 汇总员 ``run_completed`` 成功。

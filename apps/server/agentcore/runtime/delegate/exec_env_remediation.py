@@ -86,7 +86,7 @@ def exec_env_remediation_zh(
         docx_clause = (
             "【注意·别扩大缺口】`.docx` / `.pdf` **不在**本缺口内："
             "确定性导出器 `md_to_docx` / `md_to_pdf` 与执行沙箱无关"
-            "（装配态见 `<workspace_context>` 的 `产物格式：` 行），"
+            "（装配态见 `<工作区>` 的 `产物格式：` 行），"
             "落盘 `.md` 后导出即可当场交付真 Word / PDF；"
             "【禁止】把 Word/PDF 一并说成本回合做不到。"
         )

@@ -33,7 +33,7 @@ ExternalEvidencePath = Literal[
 
 # 与 ``_build_attachment_context`` 产出的块头对齐。
 _ATTACHED_RE = re.compile(
-    r"<attached_files>(.*?)</attached_files>",
+    r"<附件>(.*?)</附件>",
     re.DOTALL | re.IGNORECASE,
 )
 _BLOCK_RE = re.compile(
@@ -146,7 +146,7 @@ def _is_binary_stub(flags: str, body: str) -> bool:
 
 
 def parse_attached_file_sources(system_prompt: str) -> list[EvidenceSource]:
-    """从主持人/worker 系统提示中的 ``<attached_files>`` 抽出可用正文来源。"""
+    """从主持人/worker 系统提示中的 ``<附件>`` 抽出可用正文来源。"""
     if not isinstance(system_prompt, str):
         return []
     raw = system_prompt
@@ -236,7 +236,7 @@ def assemble_evidence_pack_from_host(
 ) -> EvidencePack | None:
     """若主持人上下文已有可用正文附件 → 组装 Evidence Pack；否则 ``None``。
 
-    判定：``<attached_files>`` 内至少一条 File/Conversation 带来源正文。
+    判定：``<附件>`` 内至少一条 File/Conversation 带来源正文。
     纯 binary / 空正文 / 仅 Directory → 不走本路径（回落 no_pack）。
     """
     sources = parse_attached_file_sources(system_prompt)

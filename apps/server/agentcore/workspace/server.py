@@ -1504,6 +1504,10 @@ class ServerWorkspace:
         }
 
     async def execute(self, req: ExecutionRequest) -> ExecutionResult:
+        # Boot the cloud desk without holding the file-mutation lock — guest
+        # create is not a workspace write. ``code_execute`` also calls this
+        # before its per-conversation lock so boot does not serialize siblings.
+        await self.ensure_workspace_desk()
         # Run code in the workspace root so relative file paths resolve against
         # the same files the file tools see.
         #
@@ -1571,6 +1575,13 @@ class ServerWorkspace:
                     )
                     return annotated
             return result
+
+    async def ensure_workspace_desk(self) -> None:
+        """Start the cloud desk guest without holding the file-mutation lock."""
+        ensure = getattr(self._sandbox, "ensure_workspace_desk", None)
+        if not callable(ensure):
+            return
+        await ensure(str(self._root.resolve()))
 
     async def _probe_exec_env(self, language: str | None) -> ExecEnvProbeVerdict:
         """gVisor / backend-wide runtime smoke (``language`` is always ``None``).

@@ -1,6 +1,6 @@
 """Live file names under the four 约定文档出口 directories.
 
-``<workspace_context>`` advertises those prefixes every turn. Without a disk
+``<工作区>`` advertises those prefixes every turn. Without a disk
 listing the model treats the prefix as a known *file* path and concatenates a
 topic name. This module lists what is actually there (or that the dir is empty).
 Bodies stay out — paths only.

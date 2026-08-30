@@ -101,7 +101,7 @@ class AskUserTool:
                 "description": "仅 organize_plan / daily_review 填一行说明。普通短问勿填。",
             },
         }
-        # Schema: short trigger. HOW → ask_user_kickoff / ask_user_midtask skills.
+        # Schema: short trigger. HOW → asking_the_user skill.
         questions_desc = (
             "可选：问句写 prompt（最多 5）。卡面不预选。"
             "detail 仅 organize_plan / daily_review。"
@@ -111,7 +111,7 @@ class AskUserTool:
             "挡路才问：桌上结果未钉、猜错会做错 → 先短问；仅可逆低杠杆才标假设。"
             "登录拦截：browser_login=true。"
             "问句写 questions[].prompt。"
-            "HOW→consult(ask_user_kickoff / ask_user_midtask)。"
+            "HOW→consult(asking_the_user)。"
         )
         if self.advertise_bind_local_folder:
             # Short discriminators only — HOW lives in ask_user_* skills.

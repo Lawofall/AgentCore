@@ -39,17 +39,17 @@ def assemble_system_prompt(
     """Build the shared system-prompt base for a conversation.
 
     ``rules_markdown`` is the always-on equal-authority join of user rules + AI memory
-    core (Agent记忆与知识系统 · 取消权威档). When non-empty it becomes ONE ``<rules>``
+    core (Agent记忆与知识系统 · 取消权威档). When non-empty it becomes ONE ``<设定>``
     block — no user-hard / AI-soft subsections. This base prompt is shared by the CEO
     chat agent and the delegated workers (runs/executor/), so both reach every agent.
 
-    Per-turn ``<workspace_context>`` environment facts are NOT in this base — they
+    Per-turn ``<工作区>`` environment facts are NOT in this base — they
     ride :data:`SectionOrder.WORKSPACE_FACTS` on both :func:`compose_ceo_chat_prompt`
     and :func:`compose_worker_base_prompt` so a location / capability restamp cannot
     sit in front of the resident core (see ``SectionOrder`` Exception 2026-08-19).
 
     Sections are stitched by :class:`ContextAssembler` (上下文注入统一): base →
-    runtime context → memory <rules> → attachment context, joined with "\n". Empty
+    runtime context → memory <设定> → attachment context, joined with "\n". Empty
     optional sections (memory, attachments) are skipped. Catalog / tests that omit
     facts stay byte-identical to this render — load-bearing for DeepSeek prefix-cache
     identity of the shared prefix.

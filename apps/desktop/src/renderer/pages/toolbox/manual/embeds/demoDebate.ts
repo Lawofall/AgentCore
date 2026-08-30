@@ -124,7 +124,7 @@ export const DEMO_DEBATE_MODEL: DebateModel = {
     confidence: "high",
     decisive: "分阶段试点能同时控成本与验证价值",
     crux: "试点范围与回滚门槛",
-    recommendation: "先放行小范围试点，设熔断后再扩面",
+    recommendation: "",
     strongest_points: {
       pro: "ROI 路径清晰，队员可两周交付",
       con: "运维与合规成本仍需写清",

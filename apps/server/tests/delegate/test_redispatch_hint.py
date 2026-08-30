@@ -135,7 +135,7 @@ def test_other_delegate_contract_failures_do_not_trip_empty_gate():
 
 def test_hint_wording_requires_nonempty_tasks_and_is_user_text_agnostic():
     hint = render_redispatch_hint()
-    assert "<prior_delegate_retry>" in hint
+    assert "<上轮重派>" in hint
     assert "tasks" in hint
     assert HANDWRITTEN_TASKS_SKELETON not in hint
     assert "delegate" in hint
@@ -193,4 +193,4 @@ async def test_build_hint_injects_once_only_on_fingerprint(monkeypatch):
         exclude_message_id="msg-current",
     )
     assert text == render_redispatch_hint()
-    assert text.count("<prior_delegate_retry>") == 1
+    assert text.count("<上轮重派>") == 1

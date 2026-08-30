@@ -54,7 +54,17 @@ export function CommenceFooter({
     <div
       className={`${sticky ? "shrink-0 border-t border-border bg-card/95 backdrop-blur-sm" : ""} space-y-1.5 px-3 py-3 ${className}`}
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button
+          size="md"
+          variant="ghost"
+          disabled={busy}
+          onClick={onStop}
+          className="text-muted-foreground hover:text-foreground"
+          icon={<OctagonX size={14} />}
+        >
+          取消
+        </Button>
         <Button
           size="md"
           variant="primary"
@@ -70,16 +80,6 @@ export function CommenceFooter({
           }
         >
           就这样开做
-        </Button>
-        <Button
-          size="md"
-          variant="ghost"
-          disabled={busy}
-          onClick={onStop}
-          className="text-muted-foreground hover:text-foreground"
-          icon={<OctagonX size={14} />}
-        >
-          取消
         </Button>
       </div>
       <span className="block text-xs text-muted-foreground">

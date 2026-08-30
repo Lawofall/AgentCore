@@ -106,7 +106,7 @@ def test_style_clean_check_passes_clean() -> None:
 
 
 def test_style_clean_allow_whitelists_emoji() -> None:
-    # 用户自己用了 emoji 时放行——对齐 <output_style> 的 emoji soft carve-out。
+    # 用户自己用了 emoji 时放行——对齐 <输出> 的 emoji soft carve-out。
     chk = build_check({"name": "StyleClean", "args": {"allow": ["emoji"]}})
     assert chk.run(_case(), _outcome("搞定 ✅")).passed is True
     # 但其他规则仍然守。

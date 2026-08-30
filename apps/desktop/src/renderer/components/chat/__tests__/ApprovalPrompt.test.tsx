@@ -373,7 +373,7 @@ describe("ApprovalCard delete_folder headline", () => {
 });
 
 describe("ApprovalCard CTA (工具审批 A+B)", () => {
-  it("execution tools put 本轮内都允许 as the primary button", () => {
+  it("execution tools put 允许一次 first, 本轮内都允许 second", () => {
     renderCard(card());
     const buttons = screen.getAllByRole("button");
     const labels = buttons.map((b) => b.textContent ?? "");
@@ -381,7 +381,9 @@ describe("ApprovalCard CTA (工具审批 A+B)", () => {
     const onceIdx = labels.findIndex((t) => t.includes("允许一次"));
     expect(turnIdx).toBeGreaterThanOrEqual(0);
     expect(onceIdx).toBeGreaterThanOrEqual(0);
-    expect(turnIdx).toBeLessThan(onceIdx);
+    expect(onceIdx).toBeLessThan(turnIdx);
+    const denyIdx = labels.findIndex((t) => t.includes("拒绝"));
+    expect(denyIdx).toBeGreaterThan(turnIdx);
   });
 
   it("file tools keep 允许一次 before 本轮内都允许", () => {
@@ -396,6 +398,8 @@ describe("ApprovalCard CTA (工具审批 A+B)", () => {
     const turnIdx = labels.findIndex((t) => t.includes("本轮内都允许"));
     const onceIdx = labels.findIndex((t) => t.includes("允许一次"));
     expect(onceIdx).toBeLessThan(turnIdx);
+    const denyIdx = labels.findIndex((t) => t.includes("拒绝"));
+    expect(denyIdx).toBeGreaterThan(turnIdx);
   });
 
   it("点之前先说清「本轮」有多大：同类、含队员、一个回合可能几十次", () => {

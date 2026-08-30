@@ -98,11 +98,11 @@ def is_deep_deliverable(deliverable: Deliverable | None) -> bool:
 
 
 def is_short_write_posture(*, max_rounds: int | None) -> bool:
-    """True when a short round budget is stamped (CEO explicit / diagnose_fix_verify).
+    """True when a short round budget is stamped (CEO explicit).
 
-    ``complexity_hint=light`` no longer stamps ``max_rounds``. ``diagnose_fix_verify``
-    playbook builders and CEO-declared caps still can. Standard workers leave
-    ``max_rounds=None`` (profile default) — not short-write posture.
+    ``complexity_hint=light`` no longer stamps ``max_rounds``. CEO-declared
+    caps still can. Standard workers leave ``max_rounds=None`` (profile default)
+    — not short-write posture.
     """
     return max_rounds is not None and max_rounds > 0
 
@@ -115,8 +115,8 @@ def should_tighten_verify_exec_thrash(
 ) -> bool:
     """Repair verify short posture: tighten unproductive / tool-failure ladders.
 
-    Applies when the worker is short-budget (CEO / diagnose_fix_verify stamped max_rounds),
-    holds execution tools, and is **not** a files-landing node (verify / diagnose
+    Applies when the worker is short-budget (CEO stamped max_rounds),
+    holds execution tools, and is **not** a files-landing node (verify /
     prose). Reuses LoopController repeated-failure / circuit-breaker / unproductive
     paths — does **not** add a parallel fuse. Files short-write nodes skip this
     verify tighten path (delivery pressure stays on round/token ceilings).

@@ -94,7 +94,6 @@ const PEEK_SUPPRESSED = new Set([
   "read_folder_file",
   "remember",
   "update_folder_profile",
-  "write_section",
   "file_batch",
   "md_to_docx",
   "md_to_pdf",

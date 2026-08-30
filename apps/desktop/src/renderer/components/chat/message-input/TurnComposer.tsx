@@ -73,6 +73,10 @@ import type {
   PendingAttachment,
 } from "./composerAttachments";
 import { composerHasSendableDraft } from "./composerAttachments";
+import {
+  COMPOSER_DEBATE_STEER_PLACEHOLDER,
+  useLiveDebateSteer,
+} from "./liveDebateSteer";
 import { decideDraftFolderAssign } from "./resolveAttachmentFolder";
 import { useComposerDrop } from "./useComposerDrop";
 import { useComposerSend } from "./useComposerSend";
@@ -139,6 +143,7 @@ export function TurnComposer({
     ? MIN_COMPOSER_HEIGHT_BAR
     : MIN_COMPOSER_HEIGHT_CARD;
   const isGenerating = useActiveGenerating();
+  const liveDebate = useLiveDebateSteer();
   const turnPhase = useActiveTurnPhase();
   const isStopping = turnPhase === "stopping";
   const conversationId = useConversationStore((s) => s.currentConversationId);
@@ -221,11 +226,12 @@ export function TurnComposer({
   const serverStatus = useServerHealthStore((s) => s.status);
   const serverUnhealthy = serverStatus === "offline";
   const resolvedPlaceholder = useMemo(() => {
+    if (liveDebate) return COMPOSER_DEBATE_STEER_PLACEHOLDER;
     if (!isGenerating && isContinuableAssistant(lastMessage)) {
       return COMPOSER_CONTINUE_PLACEHOLDER;
     }
     return placeholder;
-  }, [isGenerating, lastMessage, placeholder]);
+  }, [liveDebate, isGenerating, lastMessage, placeholder]);
   const draftKey = draftKeyFor(conversationId);
   const value = useComposerDraftStore((s) => s.drafts[draftKey]?.value ?? "");
   const attachments = useComposerDraftStore(
@@ -461,17 +467,20 @@ export function TurnComposer({
   const handleBodyChange = useCallback(
     (next: string) => {
       setValue(next);
-      mention.syncMention(next, bodyRef.current?.getCaret() ?? next.length);
+      if (!liveDebate) {
+        mention.syncMention(next, bodyRef.current?.getCaret() ?? next.length);
+      }
       if (drop.dropError) drop.clearDropError();
     },
-    [drop, mention, setValue],
+    [drop, liveDebate, mention, setValue],
   );
 
   const handleCaret = useCallback(
     (caret: number) => {
+      if (liveDebate) return;
       mention.syncMention(value, caret);
     },
-    [mention, value],
+    [liveDebate, mention, value],
   );
 
   const handleReconcile = useCallback(
@@ -549,13 +558,16 @@ export function TurnComposer({
       }
     }
 
-    if (mention.menuMode && mention.handleMenuNavKey(e)) return;
+    if (!liveDebate && mention.menuMode && mention.handleMenuNavKey(e)) return;
 
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      // 生成中强制 steer（插队）；空闲与 Enter 同路径（默认 steer），勿伪装传 queue。
+      // 辩论进行中一律 continue（不走插队 sendTurn）。其余：生成中强制 steer；
+      // 空闲与 Enter 同路径（默认 steer），勿伪装传 queue。
       if (serverUnhealthy) return;
-      if (isGenerating) {
+      if (liveDebate) {
+        void handleSend();
+      } else if (isGenerating) {
         void handleSend({ delivery: "steer" });
       } else {
         void handleSend();
@@ -567,7 +579,7 @@ export function TurnComposer({
       e.preventDefault();
       // N4-A：离线硬禁用（与发送按钮一致；handleSend 仍有兜底）。
       if (serverUnhealthy) return;
-      // 空闲默认 steer；生成中默认 queue（排队）。插队见 Ctrl/Cmd+Enter / 「插队」。
+      // 辩论进行中 continue。其余：空闲默认 steer；生成中默认 queue。插队见 Ctrl/Cmd+Enter / 「插队」。
       void handleSend();
     }
   };
@@ -591,6 +603,7 @@ export function TurnComposer({
   );
 
   // 生成中照常可开 @：插话 / 排队本就带附件走，禁用只会让人以为坏了。
+  // 辩论进行中不画：主框是对这场说话，不是定向掌舵。
   const mentionButton = (
     <ComposerMentionButton
       onToggle={mention.toggleAtMention}
@@ -601,15 +614,19 @@ export function TurnComposer({
   const leftCluster = (
     <>
       {sessionChrome}
-      {mentionButton}
+      {liveDebate ? null : mentionButton}
     </>
   );
 
-  // 生成中：停止常显（对齐手机 send+stop 并存）；有草稿时再加「插队」次级 +「排队」主键。
+  // 生成中：停止常显；有草稿时再加「插队」次级 +「排队」主键。辩论进行中改走掌舵
+  // （发送=continue，「出结论」=conclude），隐藏排队/插队。
   // 插队 = 显式 steer（下一步生效），不把主槽改成 Stop&send。
   // N4-A：只读离线硬禁用发送。
   const sendBlocked = serverUnhealthy;
-  const hasDraft = composerHasSendableDraft(value, attachments, agentMentions);
+  // 辩论进行中主框是「对这场说话」：发送只看正文。@ 入口已藏，mention 芯片不得单独点亮发送。
+  const hasDraft = liveDebate
+    ? Boolean(plainText(value).trim())
+    : composerHasSendableDraft(value, attachments, agentMentions);
   const queueDisabled = !hasDraft || sendBlocked || isSending;
   const midFlightLabel = "排队发送";
   const midFlightHint = "排队至本回合结束后发送（Enter）；Ctrl/Cmd+Enter 插队";
@@ -631,7 +648,46 @@ export function TurnComposer({
       )}
     </IconButton>
   );
-  const sendControls = isGenerating ? (
+  const primarySendButton = (
+    <IconButton
+      size="sm"
+      tone="primary"
+      onClick={() => void handleSend()}
+      disabled={!hasDraft || sendBlocked || isSending}
+      aria-label="发送"
+      aria-busy={isSending || undefined}
+      data-sending={isSending ? "true" : undefined}
+      title={sendBlocked ? "离线时无法发送" : isSending ? "发送中…" : undefined}
+    >
+      {isSending ? (
+        <Loader2 size={16} className="animate-spin" aria-hidden />
+      ) : (
+        <Send size={16} />
+      )}
+    </IconButton>
+  );
+  const debateConcludeButton = (
+    <Button
+      variant="neutral"
+      size="sm"
+      className="border-border text-foreground"
+      onClick={() => void handleSend({ debateSteer: "conclude" })}
+      disabled={sendBlocked || isSending}
+      aria-label="出结论"
+      title={sendBlocked ? "离线时无法发送" : "下一轮边界出结论"}
+      data-testid="composer-debate-conclude"
+    >
+      出结论
+    </Button>
+  );
+  // 辩论进行中：隐藏排队/插队；发送=continue，出结论=conclude。勿扫正文猜「够了收」。
+  const sendControls = liveDebate ? (
+    <div className="flex items-center gap-1.5">
+      {hasDraft ? primarySendButton : null}
+      {debateConcludeButton}
+      {isGenerating ? stopButton : null}
+    </div>
+  ) : isGenerating ? (
     hasDraft ? (
       <div className="flex items-center gap-1.5">
         <Button
@@ -667,22 +723,7 @@ export function TurnComposer({
       stopButton
     )
   ) : (
-    <IconButton
-      size="sm"
-      tone="primary"
-      onClick={() => void handleSend()}
-      disabled={!hasDraft || sendBlocked || isSending}
-      aria-label="发送"
-      aria-busy={isSending || undefined}
-      data-sending={isSending ? "true" : undefined}
-      title={sendBlocked ? "离线时无法发送" : isSending ? "发送中…" : undefined}
-    >
-      {isSending ? (
-        <Loader2 size={16} className="animate-spin" aria-hidden />
-      ) : (
-        <Send size={16} />
-      )}
-    </IconButton>
+    primarySendButton
   );
 
   const editorBlock = (
@@ -775,7 +816,7 @@ export function TurnComposer({
             : undefined
         }
       />
-      {menuOpen && (
+      {menuOpen && !liveDebate && (
         <MentionMenu
           placement={isBar ? "above" : "below"}
           sections={mention.sections}
@@ -860,7 +901,7 @@ export function TurnComposer({
           <div className="flex shrink-0 items-center pb-0.5">
             <ComposerPlusMenu>
               {sessionChrome}
-              {mentionButton}
+              {liveDebate ? null : mentionButton}
             </ComposerPlusMenu>
           </div>
           {editorBlock}

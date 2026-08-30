@@ -147,7 +147,7 @@ def cold_open_reject_message(shape: ContinuationShape) -> str:
     return (
         f"收口后拒绝整团重派：本批有 {len(shape.cold)} 个既不续派、也不补缺口的冷开节点。"
         "要动同一支团队请走续派入口——让原作者接着干用 "
-        "`continue_from_run_id`（条数不限，run_id 见 `<recent_team_graph>`）；"
+        "`continue_from_run_id`（条数不限，run_id 见 `<近期团队图>`）；"
         f"补失败/跳过缺口用 `replaces_run_id`（单次≤{MAX_GAP_FILL_ADDS}）。"
         "已有产出够交代就直接向老板交代。"
     )

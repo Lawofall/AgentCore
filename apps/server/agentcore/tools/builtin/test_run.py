@@ -29,6 +29,7 @@ import time
 from dataclasses import replace
 from typing import Any, Literal
 
+from agentcore.config import settings
 from agentcore.core.errors import SandboxError
 from agentcore.core.types import ToolApproval, ToolCategory
 from agentcore.runtime.context.workspace_profile import WorkspaceProfile, detect_workspace_profile
@@ -955,8 +956,12 @@ class TestRunTool:
             # Same sandbox chain + GRANTABLE posture as code_execute (P0): a project
             # check executes arbitrary project code, so governance must stay aligned.
             approval=ToolApproval.GRANTABLE,
-            # Engine wall covers disaster ceiling so sandbox Timeout wins first.
-            timeout_seconds=_VERIFY_DISASTER_SECONDS + _ENGINE_TIMEOUT_SLACK_SECONDS,
+            # Engine wall covers desk boot + disaster ceiling so sandbox Timeout wins first.
+            timeout_seconds=(
+                _VERIFY_DISASTER_SECONDS
+                + _ENGINE_TIMEOUT_SLACK_SECONDS
+                + float(settings.gvisor_desk_start_timeout_seconds)
+            ),
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -1169,6 +1174,24 @@ class TestRunTool:
                 exec_result = await context.backend.execute(request)
             except SandboxError as e:
                 duration_ms = int((time.monotonic() - start) * 1000)
+                from agentcore.tools.sandbox.exec_env import (
+                    EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+                    is_sandbox_unavailable_error,
+                    sandbox_unavailable_tool_meta,
+                )
+
+                if is_sandbox_unavailable_error(e):
+                    msg = EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
+                    meta = dict(sandbox_unavailable_tool_meta())
+                    meta["check"] = check
+                    return ToolResult(
+                        tool_call_id="",
+                        success=False,
+                        output=msg,
+                        error=msg,
+                        duration_ms=duration_ms,
+                        metadata=meta,
+                    )
                 msg = e.message or str(e)
                 details = getattr(e, "details", None) or {}
                 egress_code = details.get("code") if isinstance(details, dict) else None
@@ -1211,7 +1234,7 @@ class TestRunTool:
                 # so a dead python retires this tool — but it no longer drags
                 # ``code_execute`` down with it. Timeout never retires.
                 probe_language = exec_env_probe_failure_language(msg)
-                meta: dict[str, object] = {
+                meta = {
                     "check": check,
                     "code": probe_code,
                     "exec_env_timeout": True,

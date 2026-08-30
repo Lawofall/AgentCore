@@ -6,7 +6,6 @@ from agentcore.runtime.delegate.completion import (
     collect_worker_gaps,
     format_worker_gaps_block,
     plan_suggests_code_verification,
-    validate_repair_how_fixed,
 )
 from agentcore.runtime.runs.plan import RunPlan
 from agentcore.runtime.runs.types import RunPhase, RunSpec, RunState
@@ -100,29 +99,6 @@ async def test_cold_start_pending_allows_single_worker_delegate():
     err = result.error or ""
     assert "≥2" not in err
     assert "包办" not in err
-
-
-def test_repair_how_fixed_playbook_only():
-    assert validate_repair_how_fixed(playbook="diagnose_fix_verify", playbook_args={}) is not None
-    assert (
-        validate_repair_how_fixed(
-            playbook="diagnose_fix_verify", playbook_args={"verify": "pytest -q"}
-        )
-        is None
-    )
-    assert (
-        validate_repair_how_fixed(
-            playbook="diagnose_fix_verify",
-            playbook_args={"verify": "打开 /app 白屏消失+snapshot 可见主内容"},
-        )
-        is None
-    )
-    assert validate_repair_how_fixed(playbook=None, playbook_args={}) is None
-    assert validate_repair_how_fixed(playbook="repair_code", playbook_args={}) is None
-    missing = validate_repair_how_fixed(playbook="diagnose_fix_verify", playbook_args={})
-    assert missing is not None
-    assert "diagnose_fix_verify" in missing
-    assert "白屏" in missing or "snapshot" in missing
 
 
 def test_format_worker_gaps_block_empty():

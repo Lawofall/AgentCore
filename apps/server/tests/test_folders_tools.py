@@ -33,7 +33,7 @@ from agentcore.tools.sandbox.subprocess import SubprocessSandbox
 from agentcore.workspace.server import ServerWorkspace
 
 _FOLDER_HOW_CONSULT = "HOW→consult(team_cross_folder)"
-# 跨文件夹百科（先建后派、开发双仓、禁猜最近）钉在 skill；本机进桌「导入到云」HOW 在 ask_user_midtask。
+# 跨文件夹百科（先建后派、开发双仓、禁猜最近）钉在 skill；本机进桌「导入到云」HOW 在 team_delivery_env。
 # 存在性见 test_skills.test_team_cross_folder_skill_teaches_parallel_command。
 _SCHEMA_ENCYCLOPEDIA_FORBIDDEN = (
     "先建后派",

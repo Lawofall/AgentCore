@@ -135,39 +135,32 @@ def test_code_audit_two_modules_parallel_no_synth():
     assert len(plan.waves()) == 1
 
 
-def test_code_audit_multi_module_parallel_plus_synth():
+def test_code_audit_three_modules_parallel_no_synth():
+    """≥3 路仍只扩审计员；跨模块表由引擎在 CEO 收口注入，不派主管。"""
     tasks, errors = expand_playbook(
         "code_audit",
         {"scope": "AgentCore monorepo", "modules": ["server", "desktop", "admin"]},
     )
     assert errors == []
     by_id = _by_id(tasks)
-    assert set(by_id) == {"audit_0", "audit_1", "audit_2", "audit_synth"}
+    assert set(by_id) == {"audit_0", "audit_1", "audit_2"}
     assert all(by_id[i]["role"] == "代码审计员" for i in ("audit_0", "audit_1", "audit_2"))
+    assert "audit_synth" not in by_id
+    assert all(t["role"] != "审计主管" for t in tasks)
+    assert all(
+        "code-audit-summary.md" not in str(t.get("deliverable", {}).get("artifacts", []))
+        for t in tasks
+    )
     assert by_id["audit_0"]["deliverable"]["artifacts"][0] == (
         f"{REVIEWS_DIR}/code-audit-0-server.md"
     )
     assert by_id["audit_1"]["deliverable"]["artifacts"][0] == (
         f"{REVIEWS_DIR}/code-audit-1-desktop.md"
     )
-    synth = by_id["audit_synth"]
-    assert synth["role"] == "审计主管"
-    assert set(synth["depends_on"]) == {"audit_0", "audit_1", "audit_2"}
-    assert synth["deliverable"]["artifacts"] == [f"{REVIEWS_DIR}/code-audit-summary.md"]
-    assert "设计如此" in synth["deliverable"]["required_sections"]
-    assert "设计如此栏" in synth["task"]
-    assert "缺陷id|严重度|一句话" in synth["task"]
-    assert "不得以 handoff 代落盘" in synth["task"]
-    assert "一次交接" in synth["task"]
-    assert "显著短于" in synth["task"] or "细节只进落盘" in synth["task"]
-    assert "收口口径" in synth["task"]
-    assert "通过验收" not in synth["task"]
-    assert "全程只读" not in synth["task"]
-    assert "未改业务源码" in synth["task"]
-    assert "cite_write_review" not in synth["task"]
     plan, plan_errs = build_run_plan(tasks)
     assert plan_errs == []
-    assert len(plan.waves()) >= 2
+    assert len(plan.nodes) == 3
+    assert len(plan.waves()) == 1
 
 
 def test_code_audit_artifact_uses_task_id_slug_not_essay_filename():
@@ -270,7 +263,8 @@ def test_code_audit_fans_out_up_to_eight_modules_without_fold():
         assert f"audit_{i}" in {t["id"] for t in auditors}
         assert mod in _by_id(tasks)[f"audit_{i}"]["task"]
     assert collect_playbook_notes(tasks) == []
-    assert any(t["role"] == "审计主管" for t in tasks)
+    assert "audit_synth" not in {t["id"] for t in tasks}
+    assert all(t["role"] == "代码审计员" for t in tasks)
 
 
 def test_code_audit_folds_modules_beyond_eight_into_last_slot():
@@ -292,7 +286,8 @@ def test_code_audit_folds_modules_beyond_eight_into_last_slot():
     assert notes and "扇出折叠" in notes[0]
     assert f"m{CODE_AUDIT_FANOUT}" in notes[0]
     assert str(CODE_AUDIT_FANOUT) in notes[0]
-    assert any(t["role"] == "审计主管" for t in tasks)
+    assert "audit_synth" not in {t["id"] for t in tasks}
+    assert all(t["role"] == "代码审计员" for t in tasks)
 
 
 def test_available_playbooks_lists_code_audit():
@@ -320,8 +315,8 @@ def test_playbook_args_schema_surfaces_code_audit_modules():
     assert "单缝省略" in slots
     # 必填抽取仍在（常驻路径勿先 consult）
     assert "code_audit→scope" in desc
-    assert "diagnose_fix_verify→problem" in desc
-    assert "lens_crosscheck→topic/lenses" in desc
+    assert "diagnose_fix_verify" not in desc
+    assert "lens_crosscheck" not in desc
     assert "build_website" not in desc
 
 
@@ -476,13 +471,14 @@ def test_cite_write_review_fans_out_one_researcher_per_angle_then_outline_then_w
     assert outline_d["artifacts"] == ["AgentCore/文档/research/提纲.md"]
     assert "AgentCore/文档/research/提纲.md" in by_id["outline"]["task"]
     # Artifact-first writer brief：主路径一次完整 write；可选骨架；禁半章散文再 append。
-    # 定案对齐：分波范围 + continue_from 待续 + md 禁 write_section。
+    # 定案对齐：分波范围 + continue_from 待续；填空正向 file_append / str_replace（废工具不点名）。
     # （write_task 已在上方绑定；含 MD→PDF 纪律）
     assert "主路径" in write_task or "一次 file_write 完整" in write_task
     assert "短骨架" in write_task or "骨架" in write_task
     assert "禁止首写半章散文" in write_task
     assert "首写必须是短骨架" not in write_task
-    assert "write_section" in write_task
+    assert "file_append" in write_task and "str_replace" in write_task
+    assert "write_section" not in write_task
     assert "continue_from_run_id" in write_task
     assert "章节范围" in write_task or "前几章" in write_task
     assert "artifact manifest" in write_task or "禁止再对本文件" in write_task
@@ -619,111 +615,6 @@ def test_build_app_playbook_is_unknown():
     assert "build_app→app" not in desc
 
 
-# ── diagnose_fix_verify ───────────────────────────────────────────────────────────────
-
-
-def test_diagnose_fix_verify_patch_then_verify_shape():
-    tasks, errors = expand_playbook(
-        "diagnose_fix_verify",
-        {
-            "problem": "Module missing export foo",
-            "verify": "npx tsc -b",
-            "target": "src/app.ts",
-        },
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id) == {"patch", "verify"}
-    assert by_id["verify"]["depends_on"] == ["patch"]
-    assert by_id["patch"]["max_rounds"] == 6
-    assert by_id["verify"]["max_rounds"] == 4
-    assert by_id["patch"]["deliverable"]["form"] == "workspace"
-    # 就地改工作区源码 → form=workspace，无约定落点（不套 AI 工作间）。
-    assert "workspace_native" not in by_id["patch"]["deliverable"]
-    assert "requires_files" not in by_id["patch"]["deliverable"]
-    assert "name" not in by_id["patch"]["deliverable"]
-    assert "src/app.ts" in by_id["patch"]["deliverable"]["artifacts"]
-    assert "tools" not in by_id["patch"]
-    assert "tools" not in by_id["verify"]
-    assert "code_diagnostics" in by_id["patch"]["task"]
-    assert "test_run" in by_id["verify"]["task"]
-    assert "npx tsc -b" in by_id["verify"]["task"]
-    assert "纯 prose" in by_id["verify"]["task"]
-    assert "禁止在本步改文件" not in by_id["patch"]["task"]
-    assert "str_replace" in by_id["patch"]["task"]
-    # 白屏/UI 分流：修补员先短诊断（browser）再改；验证 CLI vs UI；禁 typecheck 冒充白屏。
-    assert "browser(action=navigate)" in by_id["patch"]["task"]
-    assert "snapshot" in by_id["patch"]["task"]
-    assert "勿空等用户 F12" in by_id["patch"]["task"]
-    assert "CLI" in by_id["verify"]["task"]
-    assert "browser(action=navigate)" in by_id["verify"]["task"]
-    assert "冒充白屏" in by_id["verify"]["task"]
-    assert "verify_policy=inner" not in by_id["verify"]["task"]
-    assert "verify_policy" not in by_id["verify"]
-    assert "可消费短文" in by_id["patch"]["task"]
-    assert "next_steps" in by_id["patch"]["task"]
-    assert "小修即可" in by_id["patch"]["task"]
-    assert "不 escalate" in by_id["patch"]["task"]
-    assert "通过或失败证据" in by_id["verify"]["task"]
-    assert "勿套 diagnose_fix_verify" not in by_id["patch"]["task"]
-    assert "continue_from_run_id" not in by_id["patch"]["task"]
-    assert "min_length" not in by_id["verify"]["deliverable"]
-    assert by_id["verify"]["deliverable"]["form"] == "prose"
-
-
-def test_diagnose_fix_verify_patch_without_target_still_lands_in_workspace():
-    """无 target/artifacts 的 patch 节点最易被默认落点误导——这里钉死 form=workspace。"""
-    tasks, errors = expand_playbook(
-        "diagnose_fix_verify", {"problem": "Dashboard 白屏", "verify": "pytest -q"}
-    )
-    assert errors == []
-    patch = _by_id(tasks)["patch"]
-    assert patch["deliverable"] == {"form": "workspace"}
-
-
-def test_diagnose_fix_verify_ui_verify_slot_flows_into_verify_task():
-    """UI 复现形 verify 原样注入验证员约定；slots 并列 CLI 与 UI 例示。"""
-    from agentcore.runtime.runs.playbooks import PLAYBOOKS
-
-    tasks, errors = expand_playbook(
-        "diagnose_fix_verify",
-        {
-            "problem": "Dashboard 白屏",
-            "verify": "打开 /app 白屏消失+snapshot 可见主内容",
-        },
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert "打开 /app 白屏消失+snapshot 可见主内容" in by_id["verify"]["task"]
-    assert "页面/UI 复现" in by_id["verify"]["task"]
-    pb = PLAYBOOKS["diagnose_fix_verify"]
-    assert "pytest tests/test_app.py -q" in pb.slots
-    assert "白屏消失" in pb.slots or "snapshot 可见主内容" in pb.slots
-    assert "CLI" in pb.summary or "UI" in pb.summary
-    assert "白屏" in pb.summary
-    assert "已定位" in pb.summary
-    assert "调查批" in pb.summary
-    assert "勿套" in pb.summary
-
-
-def test_diagnose_fix_verify_requires_problem():
-    tasks, errors = expand_playbook("diagnose_fix_verify", {})
-    assert tasks == []
-    assert errors and "problem" in errors[0]
-
-
-def test_diagnose_fix_verify_requires_verify_how_fixed():
-    tasks, errors = expand_playbook(
-        "diagnose_fix_verify",
-        {"problem": "Module missing export foo", "target": "src/app.ts"},
-    )
-    assert tasks == []
-    assert errors and "verify" in errors[0]
-    # 缺 verify 时错误文案并列 CLI 与 UI 例示
-    assert "pytest" in errors[0] or "CLI" in errors[0]
-    assert "白屏" in errors[0] or "snapshot" in errors[0]
-
-
 # ── 已撤登记：建站不再是具名 DAG ──────────────────────────────────────────────
 
 
@@ -771,7 +662,9 @@ def test_renamed_playbook_ids_are_unknown():
         "parallel_brief",
         "research_report",
         "multi_lens_research",
+        "lens_crosscheck",
         "repair_code",
+        "diagnose_fix_verify",
     ):
         tasks, errors = expand_playbook(name, {"topic": "X"})
         assert tasks == []
@@ -780,216 +673,6 @@ def test_renamed_playbook_ids_are_unknown():
         assert name not in PLAYBOOKS
         assert name not in listing
         assert name not in desc
-
-
-# ── lens_crosscheck ───────────────────────────────────────────────────────
-
-
-_CLASSIC_LENSES = ["法律", "品牌商业", "舆情公关", "文化社会"]
-
-
-def test_lens_crosscheck_explicit_four_lenses_plus_synthesizer():
-    tasks, errors = expand_playbook(
-        "lens_crosscheck",
-        {"topic": "LV 诉茉莉奶白商标案", "lenses": _CLASSIC_LENSES},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    lens_ids = [f"lens_{i}" for i in range(4)]
-    assert set(by_id) == {*lens_ids, "synthesizer"}
-    assert set(by_id["synthesizer"]["depends_on"]) == set(lens_ids)
-    assert by_id["synthesizer"]["role"] == "汇总分析师"
-    # 显式四异质透镜角色名嵌入 role
-    roles = {by_id[lid]["role"] for lid in lens_ids}
-    assert roles == {"法律视角", "品牌商业视角", "舆情公关视角", "文化社会视角"}
-    # 幕 1 约定文档：各透镜自写 research/{透镜}透镜报告.md（form=files + artifacts）
-    expected_lens_artifacts = {
-        "AgentCore/文档/research/法律透镜报告.md",
-        "AgentCore/文档/research/品牌商业透镜报告.md",
-        "AgentCore/文档/research/舆情公关透镜报告.md",
-        "AgentCore/文档/research/文化社会透镜报告.md",
-    }
-    for lid in lens_ids:
-        d = by_id[lid]["deliverable"]
-        assert d["form"] == "files"
-        assert d["artifacts"] and d["artifacts"][0] in expected_lens_artifacts
-        assert "file_write" in by_id[lid]["task"]
-        assert d["artifacts"][0] in by_id[lid]["task"]
-        assert "完整" in by_id[lid]["task"]  # 完整报告，非摘要复制
-        assert "handoff" in by_id[lid]["task"]  # 落盘叠加，不得替代 handoff
-        assert "#rN" not in by_id[lid]["task"] and "#r1" not in by_id[lid]["task"]
-        assert "待核实" not in by_id[lid]["task"]
-        assert "不强迫" not in by_id[lid]["task"]
-    # 汇总员落盘汇总与命题卡；motion_card 仍走 handoff
-    synth_d = by_id["synthesizer"]["deliverable"]
-    assert synth_d["form"] == "files"
-    assert synth_d["artifacts"] == ["AgentCore/文档/research/汇总与命题卡.md"]
-    synth_task = by_id["synthesizer"]["task"]
-    assert "AgentCore/文档/research/汇总与命题卡.md" in synth_task
-    assert "file_write" in synth_task
-    assert "motion_card" in synth_task
-    assert "handoff" in synth_task
-    assert "继续调研" in synth_task or "对抗" in synth_task
-    assert "见分歧" in synth_task
-    # 存在真对立轴则必须产卡（升格条款）
-    assert "真对立轴" in synth_task
-    assert "必须" in synth_task and "motion_card" in synth_task
-    # 结构化字段唯一载体：禁止正文表 / 散文 / 自写 Followups 冒充
-    assert "对象" in synth_task or "结构化" in synth_task
-    assert "Followups" in synth_task or "芯片" in synth_task
-    # 命题保真教法：锚定对象/形态；模拟法庭=本案对抗；禁抬制度层
-    assert "命题保真" in synth_task
-    assert "模拟法庭" in synth_task or "庭审" in synth_task
-    assert "制度" in synth_task
-    assert "替换命题对象" in synth_task or "抬成制度层" in synth_task
-    assert "待核实" not in synth_task
-    assert "#rN" not in synth_task
-
-
-def test_lens_crosscheck_injects_user_message_into_synthesizer():
-    """机制：expand 时注入用户原话全文到汇总员任务书（不依赖 CEO topic）。"""
-    user_line = "茉莉奶白使用四叶花卉图形是否侵犯 LV 商标权，进行模拟法庭"
-    tasks, errors = expand_playbook(
-        "lens_crosscheck",
-        {"topic": "LV 诉茉莉奶白", "lenses": _CLASSIC_LENSES},  # 故意丢「模拟法庭」——任务书仍须含原话
-        user_message=user_line,
-    )
-    assert errors == []
-    synth_task = _by_id(tasks)["synthesizer"]["task"]
-    assert user_line in synth_task
-    assert "用户原话" in synth_task or "机制注入" in synth_task
-    # 透镜任务书不强制塞全文（只汇总员需要保真锚）
-    assert user_line not in _by_id(tasks)["lens_0"]["task"]
-
-
-def test_lens_crosscheck_without_user_message_omits_anchor_block():
-    tasks, errors = expand_playbook(
-        "lens_crosscheck", {"topic": "X", "lenses": ["法律", "品牌商业"]}
-    )
-    assert errors == []
-    synth_task = _by_id(tasks)["synthesizer"]["task"]
-    assert "机制注入" not in synth_task
-    # 教法条款仍在（不依赖原话块）
-    assert "命题保真" in synth_task
-
-
-def test_lens_crosscheck_custom_lenses():
-    tasks, errors = expand_playbook(
-        "lens_crosscheck",
-        {"topic": "X", "lenses": ["技术", "伦理", "监管"]},
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    assert set(by_id["synthesizer"]["depends_on"]) == {"lens_0", "lens_1", "lens_2"}
-    assert by_id["lens_1"]["role"] == "伦理视角"
-    assert "伦理" in by_id["lens_1"]["task"]
-    assert by_id["lens_1"]["deliverable"]["artifacts"] == ["AgentCore/文档/research/伦理透镜报告.md"]
-
-
-def test_lens_crosscheck_folds_lenses_with_note_keeps_base_owner():
-    """lenses 超扇出：折叠进末节点带 note；首透镜仍独占公共底料分工。"""
-    from agentcore.runtime.runs.playbooks import MAX_PLAYBOOK_FANOUT, collect_playbook_notes
-
-    n = MAX_PLAYBOOK_FANOUT + 2
-    lenses = [f"透镜{i}" for i in range(n)]
-    tasks, errors = expand_playbook(
-        "lens_crosscheck", {"topic": "T", "lenses": lenses}
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    lens_nodes = [t for t in tasks if t["id"].startswith("lens_")]
-    assert len(lens_nodes) == MAX_PLAYBOOK_FANOUT
-    last = by_id[f"lens_{MAX_PLAYBOOK_FANOUT - 1}"]
-    for name in lenses[MAX_PLAYBOOK_FANOUT - 1 :]:
-        assert name in last["role"] or name in last["task"]
-    notes = collect_playbook_notes(tasks)
-    assert notes and "扇出折叠" in notes[0]
-    # First lens remains single primary base owner (fold only hits the last slot).
-    assert by_id["lens_0"]["role"] == "透镜0视角"
-    assert "负责人" in by_id["lens_0"]["task"] or "查全" in by_id["lens_0"]["task"]
-    # playbook 不再显式写 retrieval_budget；统一默认由 builder 填。
-    assert "retrieval_budget" not in by_id["lens_0"]
-    assert "retrieval_budget" not in by_id[f"lens_{MAX_PLAYBOOK_FANOUT - 1}"]
-    assert "负责人" not in last["task"]
-
-
-def test_lens_crosscheck_lens_retrieval_division():
-    """教法：首透镜查全公共底料；其余透镜简要确认、预算盯独有缺口；并行无运行时依赖。"""
-    tasks, errors = expand_playbook(
-        "lens_crosscheck", {"topic": "LV 诉茉莉奶白商标案", "lenses": _CLASSIC_LENSES}
-    )
-    assert errors == []
-    by_id = _by_id(tasks)
-    base = by_id["lens_0"]["task"]
-    assert "检索分工" in base
-    assert "公共基础事实" in base or "公共底料" in base
-    assert "时间线" in base and "主体" in base
-    assert "负责人" in base or "查全" in base
-    assert "并行" in base or "互不等待" in base
-    assert "retrieval_budget" not in by_id["lens_0"]
-    for lid in ("lens_1", "lens_2", "lens_3"):
-        task = by_id[lid]["task"]
-        assert "检索分工" in task
-        assert "简要确认" in task
-        assert "独有" in task
-        assert "负责人" not in task  # 非首透镜不背公共底料全责
-        assert "retrieval_budget" not in by_id[lid]
-    # 汇总员任务不动（命题保真已定案；本条只改透镜）
-    synth = by_id["synthesizer"]["task"]
-    assert "检索分工" not in synth
-    assert "命题保真" in synth
-    assert "retrieval_budget" not in by_id["synthesizer"]
-
-
-def test_lens_crosscheck_lens_budgets_survive_build_run_plan():
-    """透镜无显式预算时经 builder 得统一默认。"""
-    from agentcore.runtime.runs.retrieval_budget import DEFAULT_RETRIEVAL_BUDGET
-
-    tasks, errors = expand_playbook(
-        "lens_crosscheck", {"topic": "T", "lenses": ["法律", "品牌商业"]}
-    )
-    assert errors == []
-    plan, plan_errors = build_run_plan(tasks, id_prefix="pb_mlr_budget")
-    assert plan_errors == []
-    by_role = {n.role: n for n in plan.nodes}
-    assert by_role["法律视角"].retrieval_budget == DEFAULT_RETRIEVAL_BUDGET
-    assert by_role["品牌商业视角"].retrieval_budget == DEFAULT_RETRIEVAL_BUDGET
-
-
-def test_lens_crosscheck_files_form_builds_run_plan_with_artifacts():
-    """form=files + artifacts 经真实 builder 接通写盘验收。"""
-    tasks, errors = expand_playbook(
-        "lens_crosscheck", {"topic": "T", "lenses": ["法律", "品牌商业"]}
-    )
-    assert errors == []
-    plan, plan_errors = build_run_plan(tasks, id_prefix="pb_mlr_files")
-    assert plan_errors == []
-    by_role = {n.role: n for n in plan.nodes}
-    legal = by_role["法律视角"]
-    assert legal.deliverable is not None
-    assert legal.deliverable.form == "files"
-    assert legal.deliverable.artifacts == ["AgentCore/文档/research/法律透镜报告.md"]
-    synth = by_role["汇总分析师"]
-    assert synth.deliverable is not None
-    assert synth.deliverable.form == "files"
-    assert synth.deliverable.artifacts == ["AgentCore/文档/research/汇总与命题卡.md"]
-
-
-def test_lens_crosscheck_requires_topic():
-    tasks, errors = expand_playbook("lens_crosscheck", {})
-    assert tasks == []
-    assert errors and "topic" in errors[0]
-
-
-def test_lens_crosscheck_requires_lenses_at_least_two():
-    tasks, errors = expand_playbook("lens_crosscheck", {"topic": "T"})
-    assert tasks == []
-    assert errors and "lenses" in errors[0]
-    tasks_one, errors_one = expand_playbook(
-        "lens_crosscheck", {"topic": "T", "lenses": ["法律"]}
-    )
-    assert tasks_one == []
-    assert errors_one and "lenses" in errors_one[0]
 
 
 # ── registry reject paths ─────────────────────────────────────────────────────
@@ -1039,16 +722,11 @@ def test_available_playbooks_lists_all_registered():
         "code_audit",
         "map_fanout",
         "cite_write_review",
-        "diagnose_fix_verify",
-        "lens_crosscheck",
     }
     for name in PLAYBOOKS:
         assert name in listing
-    lens = PLAYBOOKS["lens_crosscheck"].summary
-    assert "公共事件" in lens
-    assert "品牌危机" in lens
-    assert "凡大事" not in lens
-    assert "lenses(必填" in PLAYBOOKS["lens_crosscheck"].slots
+    assert "lens_crosscheck" not in listing
+    assert "diagnose_fix_verify" not in listing
 
 
 # ── every expansion is a runnable plan (the real builder, not a mock) ──────────
@@ -1059,19 +737,11 @@ def test_every_playbook_expansion_builds_a_valid_run_plan():
         "code_audit": {"scope": "apps/server", "modules": ["auth", "storage"]},
         "map_fanout": {"topic": "T", "angles": ["a", "b", "c"]},
         "cite_write_review": {"topic": "T", "angles": ["a", "b"], "checkpoint": True},
-        "diagnose_fix_verify": {
-            "problem": "missing export",
-            "verify": "pytest -q",
-            "target": "app.ts",
-        },
-        "lens_crosscheck": {"topic": "T", "lenses": ["法律", "品牌商业"]},
     }
     expected_nodes = {
         "code_audit": 2,  # 2 auditors, no synth
         "map_fanout": 3,
         "cite_write_review": 5,
-        "diagnose_fix_verify": 2,
-        "lens_crosscheck": 3,  # 2 lenses + synthesizer
     }
     assert set(samples) == set(PLAYBOOKS)  # 名副其实的 every：新增 playbook 必须补样本
     for name, args in samples.items():
@@ -1085,7 +755,3 @@ def test_every_playbook_expansion_builds_a_valid_run_plan():
         assert all(
             "workspace_native" not in (t.get("deliverable") or {}) for t in tasks
         ), name
-        if name == "diagnose_fix_verify":
-            assert all(
-                (n.max_rounds or 0) > 0 and (n.max_rounds or 99) <= 6 for n in plan.nodes
-            )

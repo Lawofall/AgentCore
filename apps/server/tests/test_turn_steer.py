@@ -90,7 +90,7 @@ def test_drain_as_messages_surfaces_agent_mentions():
     assert "让写手收紧口径" in body
     assert "用户点名关注以下 Agent（软提示，非强制派单/非硬路由）" in body
     assert "- 写手 (id=agent_writer)" in body
-    assert "<agent_mentions>" in body
+    assert "<队员点名>" in body
     end_accepting("c-mention")
     _reset_for_tests()
 

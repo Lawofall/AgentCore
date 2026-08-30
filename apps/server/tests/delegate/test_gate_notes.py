@@ -83,7 +83,7 @@ def test_adjust_note_still_steers_and_outranks_gate_notes_in_blocks():
     node = plan.by_id("r2")
     assert "把关压缩文" in node.gate_notes
     assert "请更简洁" in node.steer
-    blocks = _build_context_blocks(plan, node, {}, "u", None, [])
+    blocks = _build_context_blocks(plan, node, {}, "u", None)
     channels = [b.channel for b in blocks]
     assert "gate_notes" in channels
     assert "steer" in channels

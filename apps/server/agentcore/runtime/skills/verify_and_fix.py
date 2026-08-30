@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 _VERIFY_AND_FIX = """\
-<verify_and_fix>
+<改完验测>
 ## 验证与修复工作流
 
 完成代码改动后，按以下步骤验证：
@@ -26,4 +26,4 @@ _VERIFY_AND_FIX = """\
 - 同一个错误连续出现 2 轮且修复方案相同 → 停止重试，如实报告
 - 编辑以磁盘为真源：用 str_replace 局部改；失败回执会附盘片段——对照重锚再改。\
 补丁失败或读不到原文 ≠ 用骨架 / 最小实现 file_write 整文件重写交差；仍对不上 → escalate
-</verify_and_fix>"""
+</改完验测>"""

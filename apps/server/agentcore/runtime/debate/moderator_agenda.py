@@ -105,10 +105,9 @@ def cross_exam_enabled(config: DebateConfig) -> bool:
 
 
 def closing_enabled(config: DebateConfig) -> bool:
-    """结辩收束（P4）仅在【认真辩透 + 正反 DEBATE】开启（提案 O1：红队 ``closings`` 恒空）。
-
-    快速对碰守延迟；红队复攻拍已含收束；圆桌无「对垒收束」语义。"""
-    return config.policy.thorough and config.form is DebateForm.DEBATE
+    """新场不跑结辩。结辩 runner / ``closing_task`` 留旧场回放与单测。"""
+    del config
+    return False
 
 
 async def frame_round(

@@ -25,11 +25,10 @@ async def team_preview_before_workers(
     Returns None to proceed (or None for nested). ``command=auto`` silent grant
     still marks ``_auto_grant_pending`` for :func:`apply_delegation_grant`.
     Leftover hung cards are not recovered. light / seed /
-    adjust / MLR preauth no longer decide whether to emit a card — top-level
-    also runs. ``stage_card`` keep is still marked when MLR actually starts.
+    adjust no longer decide whether to emit a card — top-level
+    also runs. ``stage_card`` keep is marked when any top-level delegate starts.
     """
     _ = (plan, complexity_hint, call_idx)
-    playbook_name = str(getattr(tool, "_active_playbook", None) or "").strip()
     if tool._depth != 0:
         return None
     # 续跑 / 同回合追加带 seed：不开新卡。grant 见 seed 即 no-op。
@@ -47,8 +46,7 @@ async def team_preview_before_workers(
         and axes.auto_executes
     ):
         tool._auto_grant_pending = True  # type: ignore[attr-defined]
-    if playbook_name == "lens_crosscheck":
-        from agentcore.runtime.kickoff.stage_card import mark_turn_keeps_stage_card
+    from agentcore.runtime.kickoff.stage_card import mark_turn_keeps_stage_card
 
-        mark_turn_keeps_stage_card()
+    mark_turn_keeps_stage_card()
     return None

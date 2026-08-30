@@ -73,7 +73,7 @@ export const collaborationChapter: ManualChapterContent = {
             },
             {
               title: "辩论",
-              desc: "「就这个方案开一场正反辩论，再给我决策简报。」或指定红队挑刺 / 多方圆桌。",
+              desc: "「就这个方案开一场正反辩论，再给我决策简报。」",
             },
           ],
         },
@@ -245,7 +245,7 @@ export const collaborationChapter: ManualChapterContent = {
         {
           type: "callout",
           variant: "tip",
-          text: "桌面：对话输入区权限徽章选三配方之一后，点「设为新会话默认」写入账户默认（只影响之后新建的对话；自定义权限轴不可设为默认）。手机仍可在设置改默认。已有会话请在徽章切配方或权限轴，下一回合生效。",
+          text: "桌面：对话输入区权限徽章选三配方之一后，点「设为新会话默认」写入账户默认（只影响之后新建的对话；自定义组合不可设为默认）。手机仍可在设置改默认。已有会话请在徽章切配方；要改某一条再展开轴，下一回合生效。",
         },
         {
           type: "callout",
@@ -271,48 +271,7 @@ export const collaborationChapter: ManualChapterContent = {
       blocks: [
         {
           type: "lead",
-          text: "需要互审、压力测试或铺开多方观点时，CEO 会开一场辩论——过程本身也是产物。",
-        },
-        {
-          type: "paragraph",
-          text: "三种形态",
-          emphasis: true,
-        },
-        {
-          type: "cards",
-          cols: 3,
-          items: [
-            {
-              title: "正反辩论",
-              desc: "正 / 反对称攻防，适合二选一决策。",
-            },
-            {
-              title: "红队挑刺",
-              desc: "红队单向找风险，方案方回应，产出风险清单。",
-            },
-            {
-              title: "多方圆桌",
-              desc: "3+ 视角碰撞，铺开观点光谱。",
-            },
-          ],
-        },
-        {
-          type: "paragraph",
-          text: "你能做什么",
-          emphasis: true,
-        },
-        {
-          type: "bullets",
-          items: [
-            {
-              title: "站队",
-              desc: "记分牌上点选倾向——仅你可见，绝不改写 AI 裁决。",
-            },
-            {
-              title: "掌舵",
-              desc: "轮间轻量引导（追问 / 加角度 / 够了收），下一轮生效，不硬停辩论。",
-            },
-          ],
+          text: "你要正反交锋时直接说——点了名就开跑，过程在辩论室里看。",
         },
         {
           type: "paragraph",
@@ -324,15 +283,15 @@ export const collaborationChapter: ManualChapterContent = {
           items: [
             {
               title: "记分牌",
-              desc: "辩题、形态、轮次与阵营比分。",
+              desc: "辩题、双方身份与轮次。",
             },
             {
               title: "剧本主列",
-              desc: "逐轮发言、主持人小结、质询与掌舵入口。",
+              desc: "逐轮发言、主持人小结与质询。",
             },
             {
               title: "终审舞台",
-              desc: "裁决倾向、战果对照、交接清单。",
+              desc: "裁决倾向与交接清单。",
             },
           ],
         },
@@ -379,6 +338,10 @@ export const collaborationChapter: ManualChapterContent = {
             {
               title: "带现场续派",
               desc: "产物大致对、只改局部：唤回原队员带完整现场接着改（口语也叫「同人接续」），协作图上挂「续 ×N」，可打开版本对比。不是从零重来。",
+            },
+            {
+              title: "辩论进行中说话",
+              desc: "辩论还在跑时，主输入框就是对这场说话（下一轮生效）；「出结论」提前收场。",
             },
             {
               title: "续聊或再发",

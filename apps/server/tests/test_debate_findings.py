@@ -58,11 +58,11 @@ def test_form_profile_red_team_quick_two_beats():
     assert p.phases == ("attack", "merge", "defense")
 
 
-def test_form_profile_debate_unchanged():
+def test_form_profile_debate_no_closing():
     p = form_profile(_config(policy=RoundPolicy(max_rounds=5)))
     assert p.unit == "side_turn"
     assert p.cross_exam is True
-    assert p.closing is True
+    assert p.closing is False
 
 
 def test_findings_from_bullet_and_fallback():

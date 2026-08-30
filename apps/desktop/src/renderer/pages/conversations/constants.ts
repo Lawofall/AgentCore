@@ -47,7 +47,7 @@ export function activeFilterName(
   folders: { id: string; name: string }[],
 ): string {
   if (selected === ALL_KEY) return "全部对话";
-  if (selected === UNGROUPED_KEY) return "未分组";
+  if (selected === UNGROUPED_KEY) return "快速对话";
   if (selected === ARCHIVED_KEY) return "已归档";
   if (selected === TRASH_KEY) return "最近删除";
   return folders.find((f) => f.id === selected)?.name ?? "全部对话";

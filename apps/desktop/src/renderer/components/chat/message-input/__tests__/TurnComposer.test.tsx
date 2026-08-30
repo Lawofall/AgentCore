@@ -239,10 +239,43 @@ import {
   useConversationStore,
 } from "@/stores/conversation";
 import { DRAFT_KEY, EMPTY_RUNTIME } from "@/stores/conversation/runtime";
+import { type ExecutionPlan, useExecutionStore } from "@/stores/execution";
 import { useServerHealthStore } from "@/stores/serverHealth";
 import { TurnComposer } from "../TurnComposer";
+import { COMPOSER_DEBATE_STEER_PLACEHOLDER } from "../liveDebateSteer";
 
 const OUTCOME_CID = "conv-composer-outcome";
+const DEBATE_MID = "a-debate-1";
+
+const LIVE_DEBATE_PLAN: ExecutionPlan = {
+  id: "exec-d",
+  planType: "debate",
+  taskSummary: "该不该上",
+  agents: [
+    { id: "a-pro", role: "正方" },
+    { id: "a-con", role: "反方" },
+  ],
+  runs: [
+    {
+      id: "r-pro",
+      agentId: "a-pro",
+      task: "立论",
+      dependsOn: [],
+      stance: "pro",
+      group: "debate:debate",
+      round: 1,
+    },
+    {
+      id: "r-con",
+      agentId: "a-con",
+      task: "反驳",
+      dependsOn: [],
+      stance: "con",
+      group: "debate:debate",
+      round: 1,
+    },
+  ],
+};
 
 function seedLastAssistant(
   partial: Partial<Message> & Pick<Message, "finishReason">,
@@ -270,6 +303,29 @@ function seedLastAssistant(
   });
 }
 
+function seedLiveDebate() {
+  useConversationStore.setState({
+    currentConversationId: OUTCOME_CID,
+    byId: {
+      [OUTCOME_CID]: {
+        ...EMPTY_RUNTIME,
+        isGenerating: true,
+        messages: [
+          {
+            id: DEBATE_MID,
+            role: "assistant",
+            content: "",
+            createdAt: new Date().toISOString(),
+            executionId: "exec-d",
+            isStreaming: true,
+          },
+        ],
+      },
+    },
+  });
+  useExecutionStore.getState().startExecution(LIVE_DEBATE_PLAN, DEBATE_MID);
+}
+
 function renderComposer(variant?: "card" | "bar") {
   return render(
     <MemoryRouter>
@@ -292,6 +348,7 @@ beforeEach(async () => {
     currentConversationId: null,
     byId: {},
   } as never);
+  useExecutionStore.setState({ byId: {} });
   useComposerSendErrorStore.setState({ byKey: {} });
   useServerHealthStore.setState({
     status: "online",
@@ -299,8 +356,11 @@ beforeEach(async () => {
     justRecovered: false,
   });
   const { useComposerDraftStore } = await import("@/stores/composer");
-  useComposerDraftStore.getState().setValue("__draft__", "");
-  useComposerDraftStore.getState().setAttachments("__draft__", []);
+  useComposerDraftStore.setState({
+    drafts: {},
+    fillToken: 0,
+    dockFlipToken: 0,
+  });
 });
 
 afterEach(cleanup);
@@ -529,6 +589,83 @@ describe("TurnComposer variants", () => {
     const body = screen.getByTestId("composer-body");
     fireEvent.keyDown(body, { key: "Enter", metaKey: true });
     expect(handleSendMock).toHaveBeenCalledWith();
+  });
+
+  it("live debate + generating: hides 排队/插队, shows 出结论", async () => {
+    genMock.value = true;
+    seedLiveDebate();
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue(OUTCOME_CID, "再问定价");
+    renderComposer("bar");
+    expect(screen.queryByRole("button", { name: "排队发送" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "插队" })).toBeNull();
+    expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "出结论" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: COMPOSER_DEBATE_STEER_PLACEHOLDER }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "出结论" }));
+    expect(handleSendMock).toHaveBeenCalledWith({ debateSteer: "conclude" });
+
+    handleSendMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    expect(handleSendMock).toHaveBeenCalledWith();
+  });
+
+  it("live debate + generating: Enter and Ctrl/Cmd+Enter both continue (not queue/steer)", async () => {
+    genMock.value = true;
+    seedLiveDebate();
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore.getState().setValue(OUTCOME_CID, "再问定价");
+    renderComposer("bar");
+    const body = screen.getByTestId("composer-body");
+    fireEvent.keyDown(body, { key: "Enter" });
+    expect(handleSendMock).toHaveBeenCalledWith();
+    handleSendMock.mockClear();
+    fireEvent.keyDown(body, { key: "Enter", ctrlKey: true });
+    expect(handleSendMock).toHaveBeenCalledWith();
+    expect(handleSendMock).not.toHaveBeenCalledWith({ delivery: "steer" });
+  });
+
+  it("live debate + empty draft: 出结论 still available, no 排队/插队", () => {
+    genMock.value = true;
+    seedLiveDebate();
+    renderComposer("bar");
+    expect(screen.queryByRole("button", { name: "排队发送" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "插队" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
+    expect(screen.getByRole("button", { name: "出结论" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
+  });
+
+  it("live debate: hides @ 入口 (card 常显 and bar ＋菜单)", () => {
+    genMock.value = true;
+    seedLiveDebate();
+    const { unmount } = renderComposer();
+    expect(screen.queryByLabelText("@ 引用")).toBeNull();
+    unmount();
+
+    renderComposer("bar");
+    expect(screen.queryByLabelText("@ 引用")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "更多选项" }));
+    expect(screen.queryByLabelText("@ 引用")).toBeNull();
+    expect(screen.queryByText("引用")).toBeNull();
+  });
+
+  it("live debate: mention 芯片不点亮发送", async () => {
+    genMock.value = true;
+    seedLiveDebate();
+    const { useComposerDraftStore } = await import("@/stores/composer");
+    useComposerDraftStore
+      .getState()
+      .setAgentMentions(OUTCOME_CID, [
+        { id: "m-1", agentId: "a-1", role: "研究员" },
+      ]);
+    renderComposer("bar");
+    expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
+    expect(screen.getByRole("button", { name: "出结论" })).toBeTruthy();
   });
 
   it("idle: single 发送, no mid-flight / 停止", () => {

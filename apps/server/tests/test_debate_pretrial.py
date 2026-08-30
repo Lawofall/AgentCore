@@ -37,22 +37,22 @@ def _config(*, thorough: bool = True) -> DebateConfig:
 
 _ATTACHED_TEXT_PROMPT = """
 系统前缀…
-<attached_files>
+<附件>
 The user attached the following files as actionable inputs.
 
 --- File: 合同.md (attachments/合同.md) ---
 第一条 甲方应在签署后 30 日内支付首期款项。
 第二条 争议提交仲裁委员会。
-</attached_files>
+</附件>
 """
 
 _ATTACHED_BINARY_ONLY_PROMPT = """
-<attached_files>
+<附件>
 --- File: report.xlsx (attachments/report.xlsx) [binary] ---
 This is a binary file saved in the workspace (no text inline).
 CEO has no code_execute — delegate a worker to open/parse it with code_execute
 on the workspace-relative path above.
-</attached_files>
+</附件>
 """
 
 
@@ -232,10 +232,10 @@ def test_assemble_evidence_pack_truncated_is_partial():
 
     long_body = "条款正文。" * 400
     prompt = f"""
-<attached_files>
+<附件>
 --- File: 长约.md (attachments/长约.md) [truncated] ---
 {long_body}
-</attached_files>
+</附件>
 """
     pack = assemble_evidence_pack_from_host(
         system_prompt=prompt,
@@ -332,10 +332,10 @@ async def test_pretrial_partial_pack_skips_fleet_with_bounded_budgets():
 
     long_body = "条款正文。" * 400
     prompt = f"""
-<attached_files>
+<附件>
 --- File: 长约.md (attachments/长约.md) [truncated] ---
 {long_body}
-</attached_files>
+</附件>
 """
     tool = MagicMock()
     tool._sink = MagicMock()

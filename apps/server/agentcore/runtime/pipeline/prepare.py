@@ -105,7 +105,7 @@ async def prepare_fresh_turn(
     """Build the stable base prompt, worker tools, channels, and tool context."""
     # 记忆作用域 (§5.2): the always-injected core spans global 偏好.md + 画像.md and — when
     # the conversation is in a project — that project's 画像.md, concatenated global-first
-    # (stable prefix) into one <rules> body. Long-term memory is product-always-on.
+    # (stable prefix) into one <设定> body. Long-term memory is product-always-on.
     # Look up via ``pipeline.run`` so governance tests can monkeypatch the seam
     # (``test_pipeline_governance._patch_pipeline``).
     from agentcore.runtime.pipeline import run as run_mod
@@ -124,7 +124,7 @@ async def prepare_fresh_turn(
         ),
     )
     # Derived cross-folder roster (跨文件夹找文件夹): Folder path + 画像.md first line,
-    # recent-activity ordered with a hard count cap. Outside ``<rules>`` so it never
+    # recent-activity ordered with a hard count cap. Outside ``<设定>`` so it never
     # evicts always memory. Empty when the user has no folders.
     folder_catalog = await _timed_phase(
         "folder_catalog",

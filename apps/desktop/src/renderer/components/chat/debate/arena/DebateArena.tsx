@@ -22,8 +22,6 @@ import {
 export function DebateArena({
   execution,
   messageId,
-  conversationId,
-  interactive,
 }: {
   execution: Execution;
   messageId: string;
@@ -56,7 +54,6 @@ export function DebateArena({
 
   const canSplit = canUseSplitLayout(model);
   const effectiveLayout = canSplit ? layoutMode : "stack";
-  const showSteerShortcut = interactive && !model.settled && !!conversationId;
 
   return (
     <EvidenceLedgerProvider ledger={ledgerMap}>
@@ -66,8 +63,6 @@ export function DebateArena({
       >
         <Scoreboard
           model={model}
-          messageId={messageId}
-          hasPendingSteering={showSteerShortcut}
           onScrollTo={scrollToAnchor}
           canSplit={canSplit}
           layoutMode={effectiveLayout}
@@ -80,8 +75,6 @@ export function DebateArena({
             model={model}
             execution={execution}
             messageId={messageId}
-            conversationId={conversationId}
-            interactive={interactive}
             layoutMode={effectiveLayout}
           />
           {model.settled && model.closings.length > 0 && (

@@ -10,10 +10,6 @@ export function finaleAnchorId(): string {
   return "debate-finale";
 }
 
-export function steeringAnchorId(): string {
-  return "debate-steering";
-}
-
 export function speakerAnchorId(roundNo: number, sideKey: string): string {
   return `debate-speech-r${roundNo}-${sideKey}`;
 }

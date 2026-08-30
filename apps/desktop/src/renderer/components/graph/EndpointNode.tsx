@@ -181,7 +181,7 @@ export function EndpointNodeFace({
   const highlighted = !!focused;
   const flashColor =
     status === "failed" ? "var(--destructive)" : "var(--success)";
-  const shortStatus = isInput ? "对话发起" : sinkLabel(status);
+  const shortStatus = isInput ? null : sinkLabel(status);
   const bodyText = endpointBodyText({ isInput, preview, statusCaption });
 
   const interactiveProps: React.HTMLAttributes<HTMLDivElement> = interactive
@@ -189,7 +189,7 @@ export function EndpointNodeFace({
         role: "button",
         tabIndex: 0,
         "aria-label": isInput
-          ? "你的任务，对话发起，查看完整提问"
+          ? "你的任务，查看完整提问"
           : `CEO 汇总，${statusCaption || shortStatus}，${actionLabel ?? "查看最终回答"}`,
         onKeyDown: (e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -233,17 +233,21 @@ export function EndpointNodeFace({
           {isInput ? "你的任务" : "CEO 汇总"}
         </p>
       </div>
-      <p
-        className={`mt-1 truncate text-xs ${
-          running ? "text-primary" : "text-muted-foreground"
-        }`}
-        data-testid={isInput ? undefined : "captain-sink-label"}
-      >
-        {shortStatus}
-      </p>
+      {shortStatus ? (
+        <p
+          className={`mt-1 truncate text-xs ${
+            running ? "text-primary" : "text-muted-foreground"
+          }`}
+          data-testid="captain-sink-label"
+        >
+          {shortStatus}
+        </p>
+      ) : null}
       {bodyText ? (
         <p
-          className={`mt-2 line-clamp-2 text-xs leading-snug ${
+          className={`line-clamp-2 text-xs leading-snug ${
+            isInput ? "mt-1" : "mt-2"
+          } ${
             isInput
               ? "text-muted-foreground/70"
               : running

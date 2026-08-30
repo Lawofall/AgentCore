@@ -17,7 +17,7 @@ from agentcore.core.secrets import redact_secrets
 
 # Tool names that contribute paths / commands / searches.
 _READ_TOOLS = frozenset({"file_read"})
-_WRITE_TOOLS = frozenset({"file_write", "file_append", "str_replace", "write_section"})
+_WRITE_TOOLS = frozenset({"file_write", "file_append", "str_replace"})
 _COMMAND_TOOLS = frozenset({"terminal", "host", "test_run"})
 _SEARCH_TOOLS = frozenset({"grep", "code_search"})
 

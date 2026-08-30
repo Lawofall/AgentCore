@@ -20,7 +20,7 @@ class SystemSkill:
     (tells the model WHEN to pull it); ``body`` is the full HOW guidance, returned
     only when ``consult(name)`` is called. ``requires_tools`` gates the
     catalog entry: the skill appears only when every named tool is wired this turn
-    (e.g. the ``ask_user_*`` skills need the ``ask_user`` tool, which is live-user
+    (e.g. ``asking_the_user`` needs the ``ask_user`` tool, which is live-user
     only), so the prompt never advertises a capability the CEO cannot act on.
     ``audience`` is who may *see* the entry (CEO vs worker). Default both.
     Directory listing and ``consult`` fetch share this filter — do not advertise

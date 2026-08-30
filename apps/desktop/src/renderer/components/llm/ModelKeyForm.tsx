@@ -362,17 +362,7 @@ export function ModelKeyForm({
           </div>
         </details>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button
-          size="md"
-          disabled={!canSave}
-          icon={
-            saving ? <Loader2 size={14} className="animate-spin" /> : undefined
-          }
-          onClick={() => void save()}
-        >
-          {saving ? savingLabel : cta}
-        </Button>
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
         {onCancel && (
           <Button
             variant="neutral"
@@ -383,6 +373,16 @@ export function ModelKeyForm({
             取消
           </Button>
         )}
+        <Button
+          size="md"
+          disabled={!canSave}
+          icon={
+            saving ? <Loader2 size={14} className="animate-spin" /> : undefined
+          }
+          onClick={() => void save()}
+        >
+          {saving ? savingLabel : cta}
+        </Button>
       </div>
       {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
       <a

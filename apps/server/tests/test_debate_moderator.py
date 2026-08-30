@@ -607,7 +607,8 @@ def test_dual_products_present():
     assert result.brief.strongest_points == {"pro": "正方最强论点", "con": "反方最强论点"}
     kinds = {h.kind for h in result.brief.handoffs}
     assert "fact" in kinds and "value" in kinds
-    assert result.brief.recommendation
+    assert result.brief.handoffs
+    assert result.brief.recommendation == ""
     # 过程产物（叙事线）
     assert all(r.summary for r in result.rounds)  # L1
     assert all(len(r.turns) == 2 for r in result.rounds)  # L2/L3
@@ -1249,18 +1250,16 @@ def test_run_without_cross_exam_runner_is_unchanged():
 # --- 结辩收束（P4·阶段化发言角色，辩论编排设计.md §4-2.4）--------------------
 
 
-def test_closing_enabled_only_for_thorough_debate():
-    """结辩收束仅在【认真辩透 + 正反 DEBATE】开启（O1：红队 closings 恒空）。"""
-    assert Moderator._closing_enabled(_config(policy=RoundPolicy(max_rounds=5))) is True
+def test_closing_enabled_skipped_for_new_debates():
+    """新场不跑结辩：认真正反 / 红队 / 快速 / 圆桌闸均关。"""
+    assert Moderator._closing_enabled(_config(policy=RoundPolicy(max_rounds=5))) is False
     assert (
         Moderator._closing_enabled(
             _config(form=DebateForm.RED_TEAM, sides=_red_team_sides(), policy=RoundPolicy(max_rounds=5))
         )
         is False
     )
-    # 快速对碰（thorough=False）→ 关
     assert Moderator._closing_enabled(_config(policy=RoundPolicy.quick())) is False
-    # 多方圆桌（即便 thorough）→ 关
     rt = [DebateSide(key=k, name=k, stance=k) for k in ("a", "b", "c")]
     assert (
         Moderator._closing_enabled(
@@ -1270,9 +1269,8 @@ def test_closing_enabled_only_for_thorough_debate():
     )
 
 
-def test_closing_beat_populates_closings_after_rounds():
-    """结辩 beat（thorough+正反）：辩论收场后主持人请各方结辩 → runner 每方一段 → 落进
-    DebateResult.closings（按 sides 声明序），且结辩 runner 恰调用 1 次（收场后一次性、非逐轮）。"""
+def test_closing_skipped_for_thorough_debate():
+    """认真正反：结辩 runner 不被调用，closings 空；简报仍落地。"""
     llm = _ScriptedLLM(judge_results=[_CONVERGE])
     closing = _RecordingClosing()
     result = asyncio.run(
@@ -1282,64 +1280,10 @@ def test_closing_beat_populates_closings_after_rounds():
             run_closing=closing,
         )
     )
-    assert len(closing.calls) == 1  # 收场后一次性 beat
-    assert closing.calls[0]["sides"] == ["pro", "con"]
-    assert [c.side_key for c in result.closings] == ["pro", "con"]
-    assert all(c.ok and c.content for c in result.closings)
-
-
-def test_closing_and_brief_run_in_parallel_both_complete():
-    """结辩与简报 asyncio.gather 并行：二者重叠执行，双产物（closings + brief）均完整返回。"""
-
-    class _OverlappingClosing:
-        def __init__(self) -> None:
-            self.started = asyncio.Event()
-            self.brief_entered = asyncio.Event()
-
-        async def __call__(self, *, sides, rounds):  # noqa: ANN001
-            self.started.set()
-            # 等 brief 侧进入（握手证明并行），再完成结辩。
-            await asyncio.wait_for(self.brief_entered.wait(), timeout=2.0)
-            return [
-                ClosingStatement(
-                    side_key=s.key,
-                    side_name=s.name,
-                    run_id=f"mod_closing_{s.key}",
-                    content=f"{s.name}的结辩陈词",
-                    ok=True,
-                )
-                for s in sides
-            ]
-
-    class _BriefAwareLLM(_ScriptedLLM):
-        def __init__(self, closing: _OverlappingClosing, **kwargs):  # noqa: ANN001
-            super().__init__(**kwargs)
-            self._closing = closing
-
-        async def complete(self, request):  # noqa: ANN001
-            step = request.scenario.rsplit(".", 1)[-1]
-            if step == "brief":
-                await asyncio.wait_for(self._closing.started.wait(), timeout=2.0)
-                self._closing.brief_entered.set()
-            return await super().complete(request)
-
-    closing = _OverlappingClosing()
-    llm = _BriefAwareLLM(closing, judge_results=[_CONVERGE])
-    mod = Moderator(provider=llm, model="m")
-    result = asyncio.run(
-        mod.run(
-            _config(policy=RoundPolicy(max_rounds=1)),
-            run_round=_RecordingRunner(),
-            run_closing=closing,
-        )
-    )
-    assert closing.started.is_set() and closing.brief_entered.is_set()
-    assert len(result.closings) == 2
-    assert all(c.ok and c.content for c in result.closings)
+    assert closing.calls == []
+    assert result.closings == []
     assert result.brief.crux == _DEFAULT_BRIEF["crux"]
     assert llm.brief_calls == 1
-    # 主持人用量累计：frame + assess + brief = 3（结辩走 runner 不经 Moderator LLM）。
-    assert mod.llm_rounds == 3
 
 
 def test_closing_skipped_for_quick_and_roundtable():
@@ -1387,8 +1331,7 @@ def test_run_without_closing_runner_is_unchanged():
 
 
 def test_closings_in_event_payload():
-    """收场 payload 携 closings（身份 + run_id + ok，全文不入 payload 走 run 事件）：前端据此渲染
-    「结辩陈词」区。未开启结辩（默认）→ 空列表，载荷形状统一。"""
+    """新场不跑结辩：payload.closings 空列表（形状统一）；旧场回放仍可带 closings。"""
     llm = _ScriptedLLM(judge_results=[_CONVERGE])
     result = asyncio.run(
         Moderator(provider=llm, model="m").run(
@@ -1398,13 +1341,7 @@ def test_closings_in_event_payload():
         )
     )
     payload = result.to_event_payload()
-    assert payload["closings"] == [
-        {"key": "pro", "name": "正方", "run_id": "mod_closing_pro", "ok": True},
-        {"key": "con", "name": "反方", "run_id": "mod_closing_con", "ok": True},
-    ]
-    # 全文不入 payload（走 run_id 的 run 事件），只带身份 + 指针 + ok。
-    assert all("content" not in c for c in payload["closings"])
-    # 默认不注入结辩 runner → 空列表（形状统一）。
+    assert payload["closings"] == []
     assert _run(llm, _RecordingRunner(), _config(policy=RoundPolicy(max_rounds=1))).to_event_payload()["closings"] == []
 
 

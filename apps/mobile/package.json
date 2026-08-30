@@ -1,6 +1,6 @@
 {
   "name": "agentcore-mobile",
-  "version": "0.4.16",
+  "version": "0.4.17",
   "private": true,
   "type": "module",
   "description": "AgentCore Capacitor 壳（产品页挂 desktop dist-web；前端技术与架构 §五）",

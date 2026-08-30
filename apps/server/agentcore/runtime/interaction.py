@@ -56,8 +56,8 @@ class InteractionKind(StrEnum):
     # Unlike the halting gates above, this does NOT pause the turn — siblings keep running
     # and a timeout degrades to the worker's stated assumption (设计: 06-规划/阻塞式求决策设计).
     ESCALATION = "escalation"
-    # 阶段推进卡（批 B）：幕 1 收尾后耐久登记；resolve 起新回合开辩 / 回灌调研；
-    # 不挂起幕 1，不占 bridge Future。用户绕过发消息 → orphaned。
+    # leftover 阶段推进卡：kind 仍在 journal / 时间线；热路 resolve 一律 410。
+    # 开辩须用户在对话里点名。不挂起幕 1，不占 bridge Future。
     STAGE_CARD = "stage_card"
 
 

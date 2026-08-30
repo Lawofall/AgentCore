@@ -5,7 +5,7 @@ Thin facade — implementation split by axis:
 * ``.setup`` — registry / identity / opening messages
 * ``.loop`` — react+capture + contract decision ladder body
 * ``.retry`` — light-repair / write-pass / budget skip predicates
-* ``.hooks`` — visual / retrieval / citation domain hooks
+* ``.hooks`` — retrieval / citation domain hooks
 * ``.terminal`` — salvage / cancel / terminal RunState
 
 Stable imports (``execute_agent_node``, ``should_skip_contract_retry_for_budget``,
@@ -188,7 +188,6 @@ async def execute_agent_node(
             cutoff_reasons=loop_result.cutoff_reasons,
             tool_failures=loop_result.tool_failures,
             write_pass_used=loop_result.write_pass_used,
-            visual_rework_used=loop_result.visual_rework_used,
             received_blocks=prepared.received_blocks,
             tool_ctx=loop_result.tool_ctx,
             runtime_file_products=loop_result.runtime_file_products,

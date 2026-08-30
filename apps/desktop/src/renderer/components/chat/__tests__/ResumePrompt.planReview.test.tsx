@@ -5,7 +5,7 @@
  * 不渲染摘要区（不留空壳）。
  *
  * 三区布局：决策头（眉题+标题+结论）→ 上下文默认收（风险/建议与「产出 → 下游」同行
- * 次要 meta）→ 操作区贴底（备注渐进披露 + 取消左 / 调整+继续右）；llm 下发提示
+ * 次要 meta）→ 操作区贴底（备注渐进披露 + 动作组右下：取消 · 调整 · 继续）；llm 下发提示
  * 收进继续按钮 tooltip。
  */
 
@@ -162,6 +162,15 @@ describe("ResumePrompt · plan_review CEO 把关意见", () => {
     expect(screen.queryByTestId("plan-review-gate-notes-hint")).toBeNull();
     expect(screen.getByText("计划复核")).toBeTruthy();
     expect(screen.getByText("继续")).toBeTruthy();
+    const cancel = screen.getByRole("button", { name: "取消" });
+    const adjust = screen.getByRole("button", { name: "调整" });
+    const cont = screen.getByRole("button", { name: "继续" });
+    expect(
+      cancel.compareDocumentPosition(adjust) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      adjust.compareDocumentPosition(cont) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("无下游时主标题保留完成态短句", () => {

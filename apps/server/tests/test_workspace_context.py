@@ -1,10 +1,10 @@
-"""Tests for ``<workspace_context>`` environment-facts injection.
+"""Tests for ``<工作区>`` environment-facts injection.
 
 去重定案（一条纪律只留一个权威位置）：本块**只陈述本回合事实**——位置、能力行、挂载、
 产物出口路径、某能力装没装配。「该怎么做 / 禁止什么」的 HOW：按需面（host / terminal /
-browser / 区外授权）归 consult（``capability_how_suffix``）；本机进桌 / 通道复检 /
-授权姿势归 ``ask_user_midtask``；跨文件夹百科归 ``team_cross_folder``；
-空桌 / Office / 路径 HOW 归 ``team_delivery_env``；
+browser / 区外授权）归 consult（``capability_how_suffix``）；
+本机进桌 / 通道复检 / 授权姿势 / 空桌 / Office / 路径 HOW 归 ``team_delivery_env``；
+跨文件夹百科归 ``team_cross_folder``；出卡 HOW 归 ``asking_the_user``；
 其余归 ``_CEO_CORE_HINT`` 或共享基座。
 因此这里的用例成对写：事实留在 ``out``，HOW 断言指向 consult / skill / 基座/核。
 """
@@ -40,8 +40,8 @@ def _exec_fact_line(ctx: str) -> str:
     raise AssertionError("missing 执行事实 line")
 
 
-def _midtask_body() -> str:
-    skill = build_system_skill_registry().get("ask_user_midtask")
+def _desk_how() -> str:
+    skill = build_system_skill_registry().get("team_delivery_env")
     assert skill is not None
     return skill.body
 
@@ -166,7 +166,7 @@ def test_cloud_scratch_facts():
         code_execute_enabled=False,
         terminal_enabled=False,
     )
-    assert out.startswith("<workspace_context>")
+    assert out.startswith("<工作区>")
     assert "执行位置：云端沙箱" in out
     assert "云端草稿/临时文件空间" in out
     assert "本文件夹根即工作区根" in out
@@ -181,11 +181,11 @@ def test_cloud_scratch_facts():
     # Host 面是短命令/系统状态/设置，不是「仅音响面板」——邻格 terminal=未装配不得否决本格。
     assert "短命令" in out
     assert "音响/系统信息" not in out
-    # 本机进桌 / 本机传统 HOW 在 ask_user_midtask，事实层不写意图分流
+    # 本机进桌 / 本机传统 HOW 在 team_delivery_env，事实层不写意图分流
     assert "bind_local_folder" not in out
     assert "open_local_project" not in out
     assert "register_local_project" not in out
-    mid = _midtask_body()
+    mid = _desk_how()
     assert "bind_local_folder" in mid
     assert "open_local_project" in mid
     assert "register_local_project" in mid
@@ -226,7 +226,7 @@ def test_cloud_scratch_facts():
     assert "云端读不到本地" in cross
     assert "file_list" in cross
     assert "开发双仓" in cross
-    # 区外授权：事实层留通道与工具名；姿势归 consult / ask_user_midtask
+    # 区外授权：事实层留通道与工具名；姿势归 consult / team_delivery_env
     assert "external_mount_readonly" in out
     assert "grant_organize_folder" in out
     assert "grant_attach_folder" in out
@@ -277,7 +277,7 @@ def test_cloud_scratch_facts():
     assert "连接 Git" not in out
     assert "沙箱不可用" in out or "已是云端会话" in out
     assert "host=已装配" in out
-    # 产物出口纠偏：文件在云端、「完整预览」进右坞浏览器；禁止本机「双击打开」
+    # 产物出口纠偏：云端文件不在本机；桌面才有「完整预览」。禁双击打开是 HOW。
     assert "产物出口" in out
     assert "不在用户本机" in out
     assert "完整预览" in out
@@ -390,6 +390,21 @@ def test_cloud_host_off_capability():
     assert "host=off" in out or "本机协助" in out
 
 
+def test_cloud_web_artifact_export_has_no_in_app_preview():
+    """Web / 非桌面：产物出口是下载，不把「完整预览」写成这台客户端有的按钮。"""
+    out = build_workspace_context(
+        _FakeBackend("server"),
+        desktop_online=False,
+        code_execute_enabled=False,
+        terminal_enabled=False,
+    )
+    assert "产物出口" in out
+    assert "不在用户本机" in out
+    assert "本客户端无应用内「完整预览」" in out
+    assert "下载" in out
+    assert "文件横幅的「完整预览」" not in out
+
+
 def test_no_desktop_host_unassembled():
     out = build_workspace_context(
         _FakeBackend("server"),
@@ -419,11 +434,11 @@ def test_local_remote_channel_facts():
     assert "browser=未装配" in out
     assert "local_open=已装配" in out
     assert "产物出口" in out  # 产物出口事实对本地会话同样注入
-    # 本机传统工程：通道在线是事实；跑当前 / 勿再弹 open 归 ask_user_midtask
+    # 本机传统工程：通道在线是事实；跑当前 / 勿再弹 open 归 team_delivery_env
     assert "客户端通道：桌面端在线" in out
     assert "open_local_project" not in out
     assert "跑**当前**" not in out
-    mid = _midtask_body()
+    mid = _desk_how()
     assert "open_local_project" in mid
     assert "当前" in mid and "跑" in mid
     # 桌面分流可教三件套，但不得写成 action= 履约广告句
@@ -511,20 +526,20 @@ def test_browser_unassembled_guide_mentions_bind_or_gvisor():
     )
     assert "浏览器事实" in out
     assert "gVisor" in out or "沙箱" in out or "云桌" in out
-    # 本机传统可教非默认；云协作仍推荐——HOW 在 ask_user_midtask，事实层只写装配启用
+    # 本机传统可教非默认；云协作仍推荐——HOW 在 team_delivery_env，事实层只写装配启用
     assert "本机传统" not in out or "装配启用" in out
     assert "bind_local_folder" not in out
     assert "open_local_project" not in out
     assert "open/bind" not in out
-    mid = _midtask_body()
+    mid = _desk_how()
     assert "bind_local_folder" in mid or "open_local_project" in mid
     # 禁误导：未装配时勿暗示「本机未装就可随手启用云端沙箱」旧句
     assert "或启用云端沙箱浏览器" not in out
-    # 缺能力怎么办只写一遍：共享基座 <capability_honesty> 管所有能力，事实层不逐条复述
+    # 缺能力怎么办只写一遍：共享基座 <诚实> 管所有能力，事实层不逐条复述
     assert "同轮可开工" not in out
     hint = _CEO_CORE_HINT
     base = _DEFAULT_SYSTEM_PROMPT
-    assert base.count("<capability_honesty>") == 1
+    assert base.count("<诚实>") == 1
     assert "【能力未装配·统一姿势】" not in hint
     assert "假开页" not in hint
     assert "consult(browser)" not in hint
@@ -563,7 +578,7 @@ def test_local_browser_unassembled_guide_splits_reason_no_sandbox_teaser():
 
 
 def test_host_mcp_unassembled_states_facts_and_defers_posture_to_core():
-    """host/mcp 未装配：事实层只写装没装配与为什么；同轮可开工姿势归共享基座，核只留禁派。"""
+    """host/mcp 未装配：事实层只写装没装配与为什么；同轮可开工姿势归共享基座。"""
     out = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=False,
@@ -577,10 +592,10 @@ def test_host_mcp_unassembled_states_facts_and_defers_posture_to_core():
     assert "同轮可开工" not in out
     hint = _CEO_CORE_HINT
     base = _DEFAULT_SYSTEM_PROMPT
-    assert "<capability_honesty>" in base
+    assert "<诚实>" in base
     assert "不得声称" in base
     assert "已装配" in base and "通道在" in base
-    assert "未装配能力" in hint  # 未装配禁派空跑
+    assert "未装配能力" not in hint
 
 
 def test_mcp_assembled_states_channel_not_who_holds():
@@ -635,11 +650,11 @@ def test_mobile_session_omits_bind_nudge():
     assert "本对话尚无会话级区外目录授权" in out
     assert "本对话已授权区外目录：" not in out  # 无挂载不得声称已授权状态行
     # 案 20260803-cloud-local-root-auth-where A：自称桌面须复检通道；禁「就好办了」/臆造路径
-    # ——HOW 在 ask_user_midtask，事实层只报通道未接 + 装配启用
+    # ——HOW 在 team_delivery_env，事实层只报通道未接 + 装配启用
     assert "通道复检铁律" not in out
     assert "口述不得覆盖" not in out
     assert "就好办了" not in out
-    mid = _midtask_body()
+    mid = _desk_how()
     assert "通道复检" in mid
     assert "口述不得覆盖" in mid
     assert "就好办了" in mid
@@ -652,7 +667,7 @@ def test_mobile_session_omits_bind_nudge():
 
 
 def test_channel_offline_self_claim_desktop_recheck_honesty():
-    """案 A：通道未接时 workspace_context 只报通道事实；复检 / 禁臆造入口在 ask_user_midtask。"""
+    """案 A：通道未接时 workspace_context 只报通道事实；复检 / 禁臆造入口在 team_delivery_env。"""
     out = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=False,
@@ -672,7 +687,7 @@ def test_channel_offline_self_claim_desktop_recheck_honesty():
     assert "设置→Folders" not in out
     assert "复述固定步骤" not in out
     assert "只指真源入口名" not in out
-    mid = _midtask_body()
+    mid = _desk_how()
     assert "通道复检" in mid
     assert "正在用客户端" in mid or "已装桌面" in mid
     assert "就好办了" in mid
@@ -683,7 +698,7 @@ def test_channel_offline_self_claim_desktop_recheck_honesty():
 
 
 def test_no_mounts_forbids_claiming_grant_confirmed():
-    """未见 external 挂载行时，事实只报尚无授权；「禁止声称已确认」在 ask_user_midtask。"""
+    """未见 external 挂载行时，事实只报尚无授权；「禁止声称已确认」在 team_delivery_env。"""
     out = build_workspace_context(
         _FakeBackend("server"),
         desktop_online=False,
@@ -693,7 +708,7 @@ def test_no_mounts_forbids_claiming_grant_confirmed():
     assert "本对话尚无会话级区外目录授权" in out
     assert "本对话已授权区外目录：" not in out
     assert "禁止声称授权已确认" not in out
-    mid = _midtask_body()
+    mid = _desk_how()
     assert "禁止" in mid and "授权已确认" in mid
     assert out.count("授权已确认") == 0
 
@@ -725,8 +740,8 @@ def test_assemble_system_prompt_omits_workspace_facts():
     """Facts are not in the shared base — they ride the compose layer after the core."""
     bare = assemble_system_prompt()
     # Shared HOW may mention the tag name; the injected block is the closing tag.
-    assert "</workspace_context>" not in bare
-    assert "<workspace_context>\n" not in bare
+    assert "</工作区>" not in bare
+    assert "<工作区>\n" not in bare
 
 
 def test_workspace_facts_follow_resident_core_for_ceo_and_worker():
@@ -743,12 +758,12 @@ def test_workspace_facts_follow_resident_core_for_ceo_and_worker():
         workspace_context=facts,
     )
     worker = compose_worker_base_prompt(base, workspace_context=facts)
-    assert "<workspace_context>\n" in ceo
-    assert "<workspace_context>\n" in worker
+    assert "<工作区>\n" in ceo
+    assert "<工作区>\n" in worker
     assert "云端沙箱" in ceo and "云端沙箱" in worker
     # Actual XML block (newline after the tag), not the core/base tag mention.
-    assert ceo.index("<role>") < ceo.index("<workspace_context>\n")
-    assert worker.index("</runtime_context>") < worker.index("<workspace_context>\n")
+    assert ceo.index("<身份>") < ceo.index("<工作区>\n")
+    assert worker.index("</运行时>") < worker.index("<工作区>\n")
 
 
 def test_git_fact_present_line_no_soft_init_tip(tmp_path):

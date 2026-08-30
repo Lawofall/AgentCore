@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 _LONG_FORM_WRITING = """\
-<long_form_writing>
+<超长成篇>
 ## 长文落盘（Artifact-first）
 
 用户要产出超长单文档（报告、论文、综述、长 README、多章节手册、出行/行程成文）时：\
@@ -45,9 +45,7 @@ task 里只要求写正文本身；核对提醒、假设、待补项、格式说
 落盘形状（提纲过目 / 套餐把关 → `consult(team_orchestration_advanced)`）：
 单写手：【主路径】一次 `file_write` 落【主文件】**完整正文**；成篇后只用 `str_replace` \
 修订。【可选】防截断/超大：先短骨架（标题/锚点，或 `<!-- FILL:… -->` / \
-`<!-- OUTLINE -->` / 章节小标题占位），再按节用 **str_replace 或 file_append** 填空。\
-【禁止】对 Markdown / FILL / 大纲占位调用 `write_section`\
-（那是建站 HTML 的 `<!-- SECTION:sN -->` 分区工具，与成篇 `.md` 无关）。
+`<!-- OUTLINE -->` / 章节小标题占位），再按节用 **str_replace 或 file_append** 填空。
 并行拆章 ≠ 各写各的就交（论文/综述/长报告允许）：各章可写到临时路径以免并发冲突，\
 但【必须】在同一次 delegate 里写死——① 最终主文件同一路径（各章 brief + \
 `deliverable.artifacts` 均指向它）；② 合并责任（末尾 merge worker `depends_on` 各章，\
@@ -66,12 +64,12 @@ task 里只要求写正文本身；核对提醒、假设、待补项、格式说
 - 连续写失败（含参数不是合法 JSON）→ 完整一次写入若仍失败则改可选骨架分段，勿停用写文件，\
 勿教用户修引号转义。
 - 本门禁仅约束「一篇成文」交付；调研透镜多报告、代码多文件、建站 site/ 多产物【不】套用。
-</long_form_writing>"""
+</超长成篇>"""
 
 # Worker-facing landing HOW (no 派工 / continue_from / 多角编排). CEO keeps
 # ``long_form_writing`` for when to delegate; workers consult this name.
 _LONG_FORM_LANDING = """\
-<long_form_landing>
+<超长落盘>
 ## 长文落盘（你来写文件）
 
 【主路径】一次 `file_write` 写入**完整正文**（含超长、无省略标记）；成篇后修订**只用** \
@@ -91,13 +89,10 @@ _LONG_FORM_LANDING = """\
 写参被收成已落盘短状态后须先读盘上真文，再 `str_replace`（优先）或按真文写，\
 【禁止】把短状态当正文重发。
 
-【禁止】对 Markdown / FILL / 大纲占位调用 `write_section`\
-（那是建站 HTML 的 `<!-- SECTION:sN -->` 分区工具，与成篇 `.md` 无关）。
-
 纪律：
 - 骨架路径追加前确认 path 与主文件一致；每节 content 自行带好段落分隔（如 leading `\\n\\n`）。
 - 单节仍过长时，再拆成多轮 file_append / str_replace，不要硬塞万行单次调用。
 - 连续写失败（含参数不是合法 JSON）→ 完整一次写入若仍失败则改可选骨架分段，勿停用写文件，\
 勿教用户修引号转义。
 - 本门禁仅约束「一篇成文」交付；调研透镜多报告、代码多文件、建站 site/ 多产物【不】套用。
-</long_form_landing>"""
+</超长落盘>"""

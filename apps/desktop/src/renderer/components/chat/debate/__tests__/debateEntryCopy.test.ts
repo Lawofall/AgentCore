@@ -157,4 +157,15 @@ describe("debatePreviewSubtitle", () => {
     expect(hook?.leaning).toBe("倾向暂缓上线");
     expect(hook?.confidenceLabel).toBe("高");
   });
+
+  it("settled without brief leaning says 辩完了", () => {
+    const execution = baseExecution({
+      debate: {
+        ...settledDebate,
+        brief: { ...settledDebate.brief, leaning: "" },
+      },
+    });
+    expect(debatePreviewSubtitle(execution)).toBe("辩完了");
+    expect(debatePreviewSubtitle(execution)).not.toMatch(/略占优/);
+  });
 });

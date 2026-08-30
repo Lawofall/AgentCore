@@ -5,6 +5,7 @@ import {
   isRealFolderFilter,
   retentionRemainingLabel,
 } from "@/pages/conversations/constants";
+import { UNGROUPED_KEY } from "@/stores/folders";
 import { describe, expect, it } from "vitest";
 
 const NOW = Date.parse("2026-08-13T00:00:00Z");
@@ -31,6 +32,7 @@ describe("最近删除 filter key", () => {
   it("names the view and is never mistaken for a folder id", () => {
     expect(activeFilterName(TRASH_KEY, [])).toBe("最近删除");
     expect(activeFilterName(ARCHIVED_KEY, [])).toBe("已归档");
+    expect(activeFilterName(UNGROUPED_KEY, [])).toBe("快速对话");
     expect(isRealFolderFilter(TRASH_KEY, new Set([TRASH_KEY]))).toBe(false);
     expect(isRealFolderFilter("f1", new Set(["f1"]))).toBe(true);
   });

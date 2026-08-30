@@ -256,7 +256,7 @@ def test_render_recent_graph_context_keeps_append_channel():
         execution_id="exec-1",
         worker_facts="workers=1：\n- run_id=w1; role=A; status=cancelled; task=x",
     )
-    assert "<recent_team_graph>" in block
+    assert "<近期团队图>" in block
     assert "exec-1" not in block
     assert "run_id=w1" in block
     assert "status=cancelled" in block

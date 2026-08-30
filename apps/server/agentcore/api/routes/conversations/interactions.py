@@ -3,7 +3,6 @@ stage_card."""
 
 from __future__ import annotations
 
-import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException
@@ -16,14 +15,11 @@ from agentcore.api.schemas import (
     StatusResponse,
     interaction_result_from_body,
 )
-from agentcore.api.sse import release_request_db_before_sse, sse_response
-from agentcore.conversation.rate_limit import enforce_user_message_rate_limit
 from agentcore.core.errors import NotFoundError
 from agentcore.core.logging import get_logger
 from agentcore.db.base import async_session_factory
 from agentcore.db.repositories import ConversationRepository, TurnJournalRepository
 from agentcore.runtime.events import (
-    EventSink,
     approval_resolved,
     escalation_resolved,
 )
@@ -33,11 +29,7 @@ from agentcore.runtime.journal.pending_interactions import fold_pending_interact
 from agentcore.runtime.settlement import already_settled_in_writer, prewrite_settlement
 from agentcore.runtime.turn.runs import turn_runs
 
-from ._helpers import (
-    _preflight_owned_chat_turn,
-    _require_owned_conversation,
-    emit_preflight_warnings,
-)
+from ._helpers import _require_owned_conversation
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -107,112 +99,11 @@ async def _resolve_stage_card(
     session: AsyncSession,
     x_client_platform: str | None,
 ):
-    """Validate stage_card, then stream follow-up.
+    """Leftover 推进卡 is not a debate entry — 410."""
+    from agentcore.runtime.kickoff.retired import refuse_stage_card_resolve
 
-    ``start_debate``：``debate.started``（真正开跑）后才 resolved；
-    仅启动失败保持 pending 可重试，开跑后中途失败不回 pending。
-    ``research_first``：决议即留痕 resolved，再回灌 CEO。
-    """
-    from agentcore.conversation.stage_card_resolve import (
-        load_stage_card_pending,
-        orphan_sibling_stage_cards,
-        prewrite_stage_card_resolved,
-        run_stage_card_research_first,
-        run_stage_card_start_debate,
-        validate_start_debate_card,
-    )
-
-    await enforce_user_message_rate_limit(user.user_id)
-    found = await load_stage_card_pending(conversation_id, interaction_id)
-    if found is None:
-        raise NotFoundError("推进卡不存在或已处理")
-    host_turn_id, payload = found
-
-    motion_override = body.motion_override
-    note = body.note or ""
-    card_for_debate = dict(payload)
-
-    if body.decision == "start_debate":
-        merged, err = validate_start_debate_card(payload, motion_override)
-        if err:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "motion_invalid", "message": err},
-            )
-        assert merged is not None
-        card_for_debate = merged
-        card_for_debate["stage_card_id"] = interaction_id
-
-    if not await turn_runs.drain(conversation_id):
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "turn_in_progress",
-                "message": "会话有正在进行的回合，先等它结束或显式停止",
-            },
-        )
-
-    preflight = await _preflight_owned_chat_turn(conversation_id, user, session)
-    await release_request_db_before_sse(session)
-
-    sink = EventSink()
-    emit_preflight_warnings(sink, preflight)
-
-    if body.decision == "start_debate":
-        # debate.started 才 resolved — 不在开辩前预写。
-        coro = run_stage_card_start_debate(
-            conversation_id=conversation_id,
-            user_id=user.user_id,
-            sink=sink,
-            card=card_for_debate,
-            note=note,
-            host_turn_id=host_turn_id,
-            stage_card_id=interaction_id,
-            motion_override=motion_override,
-            llm_credentials=preflight.credentials,
-            llm_supports_tools=preflight.supports_tools,
-            x_client_platform=x_client_platform,
-        )
-    else:
-        try:
-            await prewrite_stage_card_resolved(
-                turn_id=host_turn_id,
-                conversation_id=conversation_id,
-                stage_card_id=interaction_id,
-                decision=body.decision,
-                note=note,
-                motion_override=None,
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.warning(
-                "stage_card.settlement_prewrite_failed",
-                interaction_id=interaction_id,
-                error=str(e),
-            )
-            raise HTTPException(
-                status_code=500,
-                detail={"code": "settlement_write_failed"},
-            ) from e
-        await orphan_sibling_stage_cards(
-            conversation_id,
-            keep_id=interaction_id,
-            sink=sink,
-            reason="superseded",
-        )
-        coro = run_stage_card_research_first(
-            conversation_id=conversation_id,
-            user_id=user.user_id,
-            sink=sink,
-            card=dict(payload),
-            llm_credentials=preflight.credentials,
-            llm_supports_tools=preflight.supports_tools,
-            x_client_platform=x_client_platform,
-        )
-    task = asyncio.create_task(coro)
-    turn_runs.register(
-        conversation_id=conversation_id, task=task, sink=sink, user_id=user.user_id
-    )
-    return sse_response(sink, detach_on_disconnect=True)
+    _ = (conversation_id, interaction_id, body, user, session, x_client_platform)
+    refuse_stage_card_resolve()
 
 
 @router.post("/{conversation_id}/interactions/{interaction_id}")
@@ -227,7 +118,7 @@ async def resolve_interaction(
 ):
     """Settle any paused hot-path interaction over the unified bridge (§8.2).
 
-    ``stage_card``：跨回合耐久卡 → 校验后起新回合 SSE（机制直起辩论或回灌调研）。
+    ``stage_card``：leftover 推进卡 resolve 为 410；开辩须用户在对话里点名。
     其它 kind（approval / delegation / client_tool / escalation）：Settlement 预写 (D8)
     后 settle Future；journal 有 required、无 Future → 410。
     Cold-path ``ask_user`` / ``plan_review`` 不在此 endpoint。

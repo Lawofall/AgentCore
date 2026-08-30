@@ -35,7 +35,7 @@ def language_labels(languages: Sequence[str]) -> str:
 
 
 def format_interpreters_line(languages: Sequence[str]) -> str:
-    """One-line fact for ``<workspace_context>`` about probed interpreters."""
+    """One-line fact for ``<工作区>`` about probed interpreters."""
     available = [lang for lang in ALL_EXEC_LANGUAGES if lang in languages]
     missing = [lang for lang in ALL_EXEC_LANGUAGES if lang not in languages]
     if not missing:

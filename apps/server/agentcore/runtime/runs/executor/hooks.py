@@ -1,4 +1,4 @@
-"""Domain hooks for AGENT-node execution: visual / retrieval / citation.
+"""Domain hooks for AGENT-node execution: retrieval / citation.
 
 Split from ``.node`` — pure move; call only via the node facade or
 sibling ``executor.*`` modules (do not grow new external ``_`` importers).

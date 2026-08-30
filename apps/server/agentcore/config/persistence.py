@@ -61,7 +61,7 @@ class PersistenceSettings(BaseModel):
     memory_always_max_chars: int = 24_000
 
     # CEO-only derived folder catalog (跨文件夹找文件夹): max Folder rows injected as
-    # path＋画像首句. Orthogonal to always-on ``<rules>`` (read side injects all always
+    # path＋画像首句. Orthogonal to always-on ``<设定>`` (read side injects all always
     # entries; write-side quota owns 常驻满了). 0 = disable catalog injection.
     folder_catalog_max_entries: int = 12
 

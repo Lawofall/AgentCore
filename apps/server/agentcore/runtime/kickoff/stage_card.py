@@ -1,6 +1,6 @@
-"""阶段推进卡（批 B）：命题卡升级为可操作交互。
+"""阶段推进卡（批 B）：点卡起幕仍可用；新调研不再因 motion_card 自动登记。
 
-幕 1 收尾后耐久登记（不挂起）；resolve 起新回合开辩或回灌 research_first。
+旧卡 resolve 起新回合开辩或回灌 research_first。
 失效语义（2026-07-19 修订）：用户发新消息不立即 orphan；回合收尾时若 CEO
 既未调 debate 也未起 MLR，才落 ``interaction_orphaned``。pending 卡存在时
 CEO 调 debate = 口头开赛消费该卡（同点卡授权路径）。
@@ -26,39 +26,14 @@ STAGE_CARD_DECISIONS = frozenset({"start_debate", "research_first"})
 
 _HOST_TRIPLE_KEYS = ("host_execution_id", "synthesizer_run_id", "host_message_id")
 
-# 一次性 pre-auth：stage_card research_first 决议回灌后，当次 MLR 免 team_preview。
-_mlr_preauth: ContextVar[bool] = ContextVar("stage_card_mlr_preauth", default=False)
-
-# 本回合是否已调 debate / 起 MLR（收尾 orphan 判定）。
+# 本回合是否已调 debate / 起调研组队（收尾 orphan 判定）。
 _turn_keeps_stage_card: ContextVar[bool] = ContextVar(
     "stage_card_turn_keeps", default=False
 )
 
 
-def grant_mlr_preauth() -> None:
-    """Mark this turn's next ``lens_crosscheck`` delegate as pre-authorized."""
-    _mlr_preauth.set(True)
-
-
-def consume_mlr_preauth() -> bool:
-    """One-shot: True once per grant, then cleared. Strictly for MLR playbook."""
-    if not _mlr_preauth.get():
-        return False
-    _mlr_preauth.set(False)
-    return True
-
-
-def peek_mlr_preauth() -> bool:
-    return bool(_mlr_preauth.get())
-
-
-def discard_mlr_preauth() -> None:
-    """Turn-exit cleanup: drop unused MLR pre-auth (do not rely on ContextVar death)."""
-    _mlr_preauth.set(False)
-
-
 def mark_turn_keeps_stage_card() -> None:
-    """CEO called debate or started MLR this turn — do not orphan pending cards."""
+    """CEO called debate or started a team this turn — do not orphan pending cards."""
     _turn_keeps_stage_card.set(True)
 
 
@@ -74,9 +49,6 @@ def turn_keeps_stage_card() -> bool:
 def reset_stage_card_turn_flags() -> None:
     """Call at turn entry so prior-turn flags never leak."""
     _turn_keeps_stage_card.set(False)
-    # preauth is granted explicitly by research_first *before* run_and_persist
-    # (which calls this reset) — must not clear here. Unused preauth is discarded
-    # at turn exit via ``discard_mlr_preauth``.
 
 
 def default_rounds_for_form(form: str, *, thorough: bool = True) -> tuple[bool, int]:
@@ -439,7 +411,7 @@ def select_pending_stage_cards(
 def turn_advanced_stage_from_entries(
     entries: Sequence[Mapping[str, Any]] | None,
 ) -> bool:
-    """True when journal/SSE shows debate call or MLR delegate this turn."""
+    """True when journal/SSE shows debate call or any delegate this turn."""
     if not entries:
         return False
     for entry in entries:
@@ -452,11 +424,7 @@ def turn_advanced_stage_from_entries(
             if name == "debate":
                 return True
             if name == "delegate":
-                args = payload.get("arguments")
-                if isinstance(args, Mapping) and str(args.get("playbook") or "") == (
-                    "lens_crosscheck"
-                ):
-                    return True
+                return True
         if kind == "stage_card_resolved" and str(payload.get("decision") or "") == (
             "start_debate"
         ):

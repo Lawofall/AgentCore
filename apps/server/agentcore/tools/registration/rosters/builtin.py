@@ -27,7 +27,6 @@ def load_roster() -> tuple[type, ...]:
         GlobTool,
         MkdirTool,
         StrReplaceTool,
-        WriteSectionTool,
     )
     from agentcore.tools.builtin.git_ops import GitTool
     from agentcore.tools.builtin.grep import GrepTool
@@ -48,7 +47,6 @@ def load_roster() -> tuple[type, ...]:
         FileWriteTool,
         FileAppendTool,
         StrReplaceTool,
-        WriteSectionTool,
         FileListTool,
         GlobTool,
         FileDeleteTool,

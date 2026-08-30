@@ -111,7 +111,7 @@ async def run_chat_pipeline(
 
     ``x_client_platform`` is the raw ``X-Client-Platform`` header (desktop / mobile-web /
     …). Gates ``ask_user``'s ``action=bind_local_folder`` advertisement and the
-    ``<workspace_context>`` desktop-online line — cloud web/mobile must not see the bind
+    ``<工作区>`` desktop-online line — cloud web/mobile must not see the bind
     action. ``None`` / absent / unknown → fail-closed via ``resolve_channel_profile``
     (``desktop_online=False``). Auth ``parse_client_platform`` likewise fail-closes
     (raises) on missing / unknown — it does not invent a desktop JWT aud.
@@ -399,11 +399,6 @@ async def run_chat_pipeline(
             maybe_orphan_stage_cards_at_turn_end(conversation_id, sink=sink),
             step="orphan_stage_cards",
         )
-        # 未消费的 MLR 预授权在 turn 出口显式丢弃（不依赖 ContextVar 消亡）。
-        with contextlib.suppress(Exception):
-            from agentcore.runtime.kickoff.stage_card import discard_mlr_preauth
-
-            discard_mlr_preauth()
         current_fact_log.reset(fact_log_token)
         # Drain the append-on-emit journal BEFORE dropping the writer: an abandoned in-flight
         # write leaves a checked-out DB connection for the GC to terminate (asyncpg
@@ -448,10 +443,10 @@ async def run_chat_pipeline(
                     )
             current_execution_id.reset(execution_id_token)
         # Do NOT close the sink here. The pipeline is a *producer* on a sink it did not
-        # create; closing it would silently drop the post-turn tail (title_generated /
-        # stage_card_required), which persist_turn_result emits AFTER this returns —
-        # emit() is a no-op once closed (sink.py). The sink's OWNER (the coordinator that
-        # created it: stream_chat / regenerate_chat / resume_chat / handoff / sidecar)
+        # create; closing it would silently drop the post-turn tail (title_generated),
+        # which persist_turn_result emits AFTER this returns — emit() is a no-op once
+        # closed (sink.py). The sink's OWNER (the coordinator that created it:
+        # stream_chat / regenerate_chat / resume_chat / handoff / sidecar)
         # closes it, so the tail reaches the client. (Title survived the old early-close
         # via its DB write; transport-only events vanished without that ownership.)
         if llm is not None:

@@ -57,7 +57,7 @@ PREFERENCES_MEMORY_FILE = "偏好.md"
 NAVIGATION_MEMORY_FILE = "导航.md"
 
 # The two always-injected GLOBAL core files, in stable injection order (preferences then profile):
-# both ride every prompt's <rules>; order here is content-layer determinism (assembly places
+# both ride every prompt's <设定>; order here is content-layer determinism (assembly places
 # the block at SectionOrder.MEMORY — see runtime/context).
 ALWAYS_MEMORY_FILES = (PREFERENCES_MEMORY_FILE, CORE_MEMORY_FILE)
 

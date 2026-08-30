@@ -30,7 +30,10 @@ from agentcore.runtime.debate.moderator import (
     _BRIEF_SYSTEM,
     _CROSS_EXAM_SYSTEM,
 )
-from agentcore.runtime.debate.moderator_brief import _as_handoffs
+from agentcore.runtime.debate.moderator_brief import (
+    _as_handoffs,
+    _normalize_confidence,
+)
 from agentcore.runtime.debate.prompt import (
     ARGUMENT_SKELETON_RULE,
     EVIDENCE_NOTES_SPEC,
@@ -526,16 +529,69 @@ def test_brief_prompt_handoffs_questionify_value_and_length_discipline():
 
 
 def test_brief_prompt_field_mutex_and_length_discipline():
-    """简报字段互斥 + 对抗形态字数纪律：禁互相复述 / 禁抄记分 / 单句上限。"""
+    """正反简报：倾向/胜负手/置信档各写一件事；反转在 leaning；禁抄记分。"""
     user = _brief_user_prompt()
-    assert "字段互斥" in user and "互不复述" in user
+    assert "正反简报" in user and "各司其职" in user
     assert "单句≤50字" in user
     assert "≤60字" in user and "禁分号堆叠" in user
-    assert "禁复述记分数字" in user or "禁】把记分数字" in user
-    assert "下一步动作单句" in user and "不复述判断理由" in user
-    assert "方向" in user  # 与累计记分仅方向一致，不是抄数字
-    # crux 生成要求仍在场（其他消费方仍用）。
-    assert '"crux"' in user and "争议焦点" in user
+    assert "禁复述记分数字" in user
+    assert "high" in user and "medium" in user and "low" in user
+    assert "不写散文" in user
+    assert "反转条件" in user and "leaning" in user
+    assert "方向" in user
+    assert '"crux"' in user and "正反留空" in user
+
+
+def test_normalize_confidence_maps_prose_to_enum():
+    assert _normalize_confidence("high") == "high"
+    assert _normalize_confidence("MEDIUM") == "medium"
+    assert _normalize_confidence("中等，若成本核实则翻") == "medium"
+    assert _normalize_confidence("低（证据弱）") == "low"
+    assert _normalize_confidence("") == ""
+
+
+def test_debate_brief_strips_recommendation_when_handoffs_present():
+    """正反：有交接则丢掉建议复述；confidence 散文归一成档。"""
+
+    class _BriefLLM:
+        async def complete(self, request):  # noqa: ANN001, ARG002
+            return LLMResponse(
+                content=json.dumps(
+                    {
+                        "leaning": "偏正方",
+                        "decisive": "成本被证伪",
+                        "confidence": "中等，若成本核实则翻",
+                        "recommendation": "先试点",
+                        "value_disputes": ["要不要牺牲速度"],
+                        "strongest_points": {"pro": "a", "con": "b"},
+                    }
+                )
+            )
+
+    brief = asyncio.run(Moderator(provider=_BriefLLM(), model="m")._brief(_config(), [_last_round()]))
+    assert brief.confidence == "medium"
+    assert brief.recommendation == ""
+    assert brief.handoffs[0].text == "要不要牺牲速度"
+
+
+def test_debate_brief_keeps_recommendation_when_handoffs_empty():
+    class _BriefLLM:
+        async def complete(self, request):  # noqa: ANN001, ARG002
+            return LLMResponse(
+                content=json.dumps(
+                    {
+                        "leaning": "偏反方",
+                        "confidence": "low",
+                        "recommendation": "先试点",
+                        "strongest_points": {"pro": "a", "con": "b"},
+                    }
+                )
+            )
+
+    brief = asyncio.run(Moderator(provider=_BriefLLM(), model="m")._brief(_config(), [_last_round()]))
+    assert brief.confidence == "low"
+    assert brief.recommendation == "先试点"
+    assert brief.handoffs == []
 
 
 def test_brief_system_carries_grounding_principle():

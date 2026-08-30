@@ -1,4 +1,4 @@
-"""Presentation delivery-format confirmation ledger (dual-gate · mirror website_style).
+"""Presentation delivery-format confirmation ledger (dual-gate).
 
 Unique source for the user-selected ``format_id`` after ask_user resume (or a
 future full_auto default). Resume wire priority: explicit ``format_id`` →

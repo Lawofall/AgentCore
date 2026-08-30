@@ -65,13 +65,17 @@ from agentcore.tools.protocol import ToolSchema
 # git 硬拒收成「禁项见失败回执」；delegate task 下沉凭据填 env（实测仍 2600，不抬）。
 # host 2800→2630（实测 2622）；git 2530→2430（实测 2425）。
 # 同日主审查：补回 pull/push 合同句（ff-only / 恒确认），非新语义抬顶。git 2430→2490。
+# 2026-08-30 delegate：brief 改为有共享口径才写；task 不再把开局口径赶进 brief。实测 2547。
+# 2026-08-30 debate：产品入口只认正反，schema 不再广告三种形态。实测 1584。
+# 2026-08-30 delegate.task 收未装配 ≠ 切口（从核搬家）。当次实测 2457。cap 降到 2460。
+# 2026-08-30 派前可见打算从 CEO 核搬进 description。当次实测 2469。cap 2470。
 _CAPS: dict[str, int] = {
     "browser": 1590,
     "git": 2490,
     "host": 2630,
     "terminal": 1360,
-    "delegate": 2600,
-    "debate": 1640,
+    "delegate": 2470,
+    "debate": 1590,
     "ask_user": 2670,
     "list_folders": 240,
     "resolve_folder": 370,
@@ -86,7 +90,7 @@ _ASK_USER_WEB_CAP = 1910
 # 2026-08-29 escalate blocking：已拒凭据→false 短触发（身份段不进按钮）。当次实测 1698。cap 1690→1700。
 _WORKER_CAPS: dict[str, int] = {
     "escalate": 1700,
-    "handoff": 1660,
+    "handoff": 1650,
     "file_write": 610,
     "file_append": 510,
     "str_replace": 840,

@@ -247,6 +247,9 @@ class _OpenFakeClient:
 
 
 def _install_open_mocks(monkeypatch, tmp_path: Path, *, stdio):
+    from agentcore.config import settings
+
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
     monkeypatch.setattr(gs, "_IS_LINUX", True)
     scratch = tmp_path / "scratch"
     scratch.mkdir()
@@ -312,6 +315,9 @@ async def test_open_without_workspace_root_fails_honestly(monkeypatch, tmp_path)
         called.append(1)
         raise AssertionError("must not attach without a disk")
 
+    from agentcore.config import settings
+
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
     monkeypatch.setattr(gs, "_IS_LINUX", True)
     monkeypatch.setattr("agentcore.tools.sandbox.gvisor.attach_workspace_desk", _attach)
     with pytest.raises(BrowserSessionError, match="工作区盘"):
@@ -331,6 +337,9 @@ async def test_open_non_directory_workspace_fails_honestly(monkeypatch, tmp_path
         called.append(1)
         raise AssertionError("must not attach a missing disk")
 
+    from agentcore.config import settings
+
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
     monkeypatch.setattr(gs, "_IS_LINUX", True)
     monkeypatch.setattr("agentcore.tools.sandbox.gvisor.attach_workspace_desk", _attach)
     missing = tmp_path / "no-such-ws"
@@ -372,3 +381,78 @@ async def test_open_session_stdio_eof_logs_and_cleans_driver_only(monkeypatch, t
     failed = events["browser.session_open_failed"]
     assert failed["conversation_id"] == "c-eof"
     assert failed["error_type"] == "RpcChannelClosedError"
+
+
+@pytest.mark.asyncio
+async def test_open_fails_fast_when_cloud_health_false(monkeypatch, tmp_path):
+    called: list[int] = []
+
+    async def _attach(*_a, **_k):
+        called.append(1)
+        raise AssertionError("must not attach when host is known unhealthy")
+
+    from agentcore.config import settings
+    from agentcore.tools.sandbox.cloud_health import set_cloud_sandbox_health_for_tests
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_SANDBOX_UNAVAILABLE_BROWSER_MESSAGE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+    )
+
+    monkeypatch.setattr(settings, "gvisor_enabled", True)
+    monkeypatch.setattr(gs, "_IS_LINUX", True)
+    monkeypatch.setattr("agentcore.tools.sandbox.gvisor.attach_workspace_desk", _attach)
+    set_cloud_sandbox_health_for_tests(False)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    with pytest.raises(BrowserSessionError, match="云端隔离浏览器") as failed:
+        await gs.open_gvisor_browser_session(
+            BrowserSessionRequest(conversation_id="c-unhealthy", workspace_root=str(ws)),
+            runsc_path="runsc",
+            runtime_root=str(tmp_path / "rt"),
+        )
+    assert called == []
+    assert failed.value.code == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+    assert str(failed.value) == EXEC_ENV_SANDBOX_UNAVAILABLE_BROWSER_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_open_fails_fast_when_gvisor_disabled(monkeypatch, tmp_path):
+    called: list[int] = []
+
+    async def _attach(*_a, **_k):
+        called.append(1)
+        raise AssertionError("must not attach when gVisor is off")
+
+    from agentcore.config import settings
+
+    monkeypatch.setattr(gs, "_IS_LINUX", True)
+    monkeypatch.setattr("agentcore.tools.sandbox.gvisor.attach_workspace_desk", _attach)
+    monkeypatch.setattr(settings, "gvisor_enabled", False)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    with pytest.raises(BrowserSessionError, match="云端隔离浏览器"):
+        await gs.open_gvisor_browser_session(
+            BrowserSessionRequest(conversation_id="c-off", workspace_root=str(ws)),
+            runsc_path="runsc",
+            runtime_root=str(tmp_path / "rt"),
+        )
+    assert called == []
+
+
+def test_launch_error_maps_desk_unavailable_to_browser_copy():
+    from agentcore.core.errors import SandboxError
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_SANDBOX_UNAVAILABLE_BROWSER_MESSAGE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+    )
+
+    wrapped = gs._as_browser_launch_error(
+        SandboxError(
+            EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+            code=EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+        )
+    )
+    assert isinstance(wrapped, BrowserSessionError)
+    assert wrapped.code == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
+    assert str(wrapped) == EXEC_ENV_SANDBOX_UNAVAILABLE_BROWSER_MESSAGE

@@ -88,8 +88,8 @@ describe("工作流卡片 · 设为定时", () => {
     workflows.mockResolvedValue([]);
     renderPage();
 
-    const empty = await screen.findByText(/还没有工作流/);
-    expect(empty.textContent).toContain("设为定时");
-    expect(empty.textContent).not.toContain("站立任务");
+    expect(await screen.findByText("还没有工作流")).toBeTruthy();
+    expect(screen.getByText(/设为定时/)).toBeTruthy();
+    expect(screen.queryByText(/站立任务/)).toBeNull();
   });
 });

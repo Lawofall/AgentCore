@@ -252,7 +252,12 @@ async def handle_partial_failure(
         backend=backend,
         promotion_ledger=tool._base_tool_context.promotion_ledger,
     )
-    synthesis = build_ceo_synthesis(tool, plan, results, call_idx=call_idx)
+    from agentcore.runtime.runs.audit_ledger import load_audit_json_by_path
+
+    audit_json = await load_audit_json_by_path(plan, results, backend)
+    synthesis = build_ceo_synthesis(
+        tool, plan, results, call_idx=call_idx, audit_json_by_path=audit_json
+    )
     partial_output = synthesis.text
     # Coordination terminal: workers are all marked done; without ALL_COMPLETED the
     # CEO idle-waits the full coordination timeout (same class of bug as criteria gap).
@@ -356,7 +361,12 @@ async def finalize_successful_drive(
         promotion_ledger=tool._base_tool_context.promotion_ledger,
     )
 
-    synthesis = build_ceo_synthesis(tool, plan, results, call_idx=call_idx)
+    from agentcore.runtime.runs.audit_ledger import load_audit_json_by_path
+
+    audit_json = await load_audit_json_by_path(plan, results, backend)
+    synthesis = build_ceo_synthesis(
+        tool, plan, results, call_idx=call_idx, audit_json_by_path=audit_json
+    )
     output = synthesis.text
     if session is not None:
         post_session_all_completed(

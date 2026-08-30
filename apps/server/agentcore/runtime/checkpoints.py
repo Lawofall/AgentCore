@@ -45,8 +45,8 @@ class CheckpointDecision(StrEnum):
 
     ``CONTINUE`` / ``ADJUST`` / ``STOP`` are shared by ask_user / plan_review.
     ``ADJUST`` on plan_review steers then continues. ask_user rejects ``ADJUST``.
-    ``RESEARCH_FIRST`` is debate stage_card only: 不开赛，回灌固定文案令 CEO 立即挂
-    ``lens_crosscheck``（与 STOP 同构的恢复分支）。
+    ``RESEARCH_FIRST`` is debate stage_card only: 不开赛，回灌固定文案令 CEO 立即
+    手写多视角调研（与 STOP 同构的恢复分支）。
     """
 
     CONTINUE = "continue"  # proceed (plan_review: run gated downstream)

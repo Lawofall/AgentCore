@@ -46,3 +46,48 @@ def resolve_tool_timeout(
     if schema.category is ToolCategory.EXECUTION:
         return settings.tool_execution_timeout_seconds
     return settings.tool_default_timeout_seconds
+
+
+def outer_liveness_timeout_meta(
+    name: str,
+    ctx: object,
+    hang_msg: str,
+) -> tuple[str, str, dict[str, Any]]:
+    """Outer hang face: message, failure code, ToolAttempt meta.
+
+    Cloud exec-env tools that hang share the dead-sandbox face, not a generic
+    liveness string.
+    """
+    from agentcore.runtime.facts import CrossTurnRetry, cross_turn_retry_meta
+    from agentcore.runtime.loop_controller import (
+        ERROR_CLASS_PERMANENT,
+        EXEC_ENV_TIMEOUT_FAMILY,
+    )
+
+    failure_code = "liveness_timeout"
+    attempt_extra: dict[str, Any] = {
+        "liveness_timeout": True,
+        "timeout_layer": "outer",
+        "error_class": ERROR_CLASS_PERMANENT,
+        **cross_turn_retry_meta(CrossTurnRetry.NOT_FUTILE),
+    }
+    timeout_msg = hang_msg
+    backend = getattr(ctx, "backend", None)
+    if (
+        name in EXEC_ENV_TIMEOUT_FAMILY
+        and getattr(backend, "location", None) == "server"
+    ):
+        from agentcore.tools.sandbox.exec_env import (
+            EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+            sandbox_unavailable_tool_meta,
+        )
+
+        timeout_msg = EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
+        failure_code = "exec_env_sandbox_unavailable"
+        attempt_extra.update(sandbox_unavailable_tool_meta())
+        attempt_extra["timeout_layer"] = "outer"
+        attempt_extra["liveness_timeout"] = True
+    execution_id = getattr(ctx, "execution_id", None)
+    if execution_id:
+        attempt_extra.setdefault("execution_id", execution_id)
+    return timeout_msg, failure_code, attempt_extra

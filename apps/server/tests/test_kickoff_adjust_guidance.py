@@ -284,22 +284,17 @@ async def test_drive_preview_seed_completed_skips_when_adjust_fulfilled():
 
 
 @pytest.mark.asyncio
-async def test_drive_preview_mlr_preauth_still_hangs_on_unfulfilled_adjust():
-    """MLR preauth / 未兑现 adjust 都不再决定是否挂新卡。"""
+async def test_drive_preview_unfulfilled_adjust_no_longer_hangs_card():
+    """未兑现 adjust 不再决定是否挂新卡。"""
     from agentcore.core.types import AutonomyPolicy, recipe_to_axes
     from agentcore.runtime.delegate.drive_preview import team_preview_before_workers
     from agentcore.runtime.facts import TurnFactLog, current_fact_log
-    from agentcore.runtime.kickoff.stage_card import (
-        discard_mlr_preauth,
-        grant_mlr_preauth,
-        peek_mlr_preauth,
-    )
     from tests.delegate.conftest import Provider, tool
 
     real = tool(Provider([]))
     real._depth = 0
     real._pending_pause = False
-    real._active_playbook = "lens_crosscheck"
+    real._active_playbook = None
     real._permission_axes = recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT)
 
     plan = RunPlan(
@@ -308,7 +303,6 @@ async def test_drive_preview_mlr_preauth_still_hangs_on_unfulfilled_adjust():
             RunSpec(run_id="b", agent_id="b", role="写手", task="t2"),
         ]
     )
-    grant_mlr_preauth()
     token = current_fact_log.set(TurnFactLog(inherited_entries=_unfulfilled_adjust_facts()))
     try:
         result = await team_preview_before_workers(
@@ -319,29 +313,22 @@ async def test_drive_preview_mlr_preauth_still_hangs_on_unfulfilled_adjust():
             call_idx=0,
         )
         assert result is None
-        assert peek_mlr_preauth() is True
     finally:
         current_fact_log.reset(token)
-        discard_mlr_preauth()
 
 
 @pytest.mark.asyncio
-async def test_drive_preview_mlr_preauth_skips_when_adjust_fulfilled():
-    """新 required 已兑现 → 同样不挂新卡（preauth 不再承担跳卡）。"""
+async def test_drive_preview_fulfilled_adjust_still_skips_card():
+    """新 required 已兑现 → 同样不挂新卡。"""
     from agentcore.core.types import AutonomyPolicy, recipe_to_axes
     from agentcore.runtime.delegate.drive_preview import team_preview_before_workers
     from agentcore.runtime.facts import TurnFactLog, current_fact_log
-    from agentcore.runtime.kickoff.stage_card import (
-        discard_mlr_preauth,
-        grant_mlr_preauth,
-        peek_mlr_preauth,
-    )
     from tests.delegate.conftest import Provider, tool
 
     real = tool(Provider([]))
     real._depth = 0
     real._pending_pause = False
-    real._active_playbook = "lens_crosscheck"
+    real._active_playbook = None
     real._permission_axes = recipe_to_axes(AutonomyPolicy.LESS_INTERRUPT)
 
     plan = RunPlan(
@@ -350,7 +337,6 @@ async def test_drive_preview_mlr_preauth_skips_when_adjust_fulfilled():
             RunSpec(run_id="b", agent_id="b", role="写手", task="t2"),
         ]
     )
-    grant_mlr_preauth()
     token = current_fact_log.set(TurnFactLog(inherited_entries=_fulfilled_adjust_facts()))
     try:
         result = await team_preview_before_workers(
@@ -361,8 +347,5 @@ async def test_drive_preview_mlr_preauth_skips_when_adjust_fulfilled():
             call_idx=0,
         )
         assert result is None
-        # skip-card consume 已空操作；旗标仍在，回合出口 discard。
-        assert peek_mlr_preauth() is True
     finally:
         current_fact_log.reset(token)
-        discard_mlr_preauth()

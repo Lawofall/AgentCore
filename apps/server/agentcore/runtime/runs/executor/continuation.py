@@ -36,8 +36,6 @@ from agentcore.runtime.runs.executor.context import (
     _context_block_payloads,
     _load_artifact_contents,
     _safe_index_files,
-    ensure_design_md_for_web_quality,
-    load_web_seam_scope_contents,
 )
 from agentcore.runtime.runs.executor.shared import (
     _apply_cutoff_reasons,
@@ -308,7 +306,7 @@ async def _continue_run_scoped(
                 allowed_tools = [t for t in allowed_tools if t not in RETRIEVAL_TOOL_NAMES]
         from agentcore.runtime.engine.governance import registry_can_execute
 
-        can_execute = registry_can_execute(worker_tools)
+        can_execute = registry_can_execute(worker_tools, tool_ctx)
         # Same as executor.node: restricted allow-list must still keep handoff.
         if allowed_tools is not None and HANDOFF_TOOL_NAME not in allowed_tools:
             allowed_tools = [*allowed_tools, HANDOFF_TOOL_NAME]
@@ -424,19 +422,6 @@ async def _continue_run_scoped(
                 tool_ctx.backend,
                 touched_for_gate,
                 workspace_paths,
-            )
-        if deliverable and deliverable.web_seam_scope:
-            artifact_contents = await load_web_seam_scope_contents(
-                tool_ctx.backend,
-                deliverable.web_seam_scope,
-                workspace_paths or [],
-                artifact_contents or {},
-            )
-        if deliverable and deliverable.web_quality_scan:
-            artifact_contents = await ensure_design_md_for_web_quality(
-                tool_ctx.backend,
-                artifact_contents,
-                web_quality_scan=True,
             )
         source_data_paths = collect_opaque_source_data_paths(
             material_paths=getattr(tool_ctx, "material_paths", None),

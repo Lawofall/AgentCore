@@ -1,4 +1,4 @@
-"""批 A2：辩论进宿主图 — 判据 / 幕序号 / 回落独立图 / 进宿主图接线。"""
+"""辩论图绑定：helper 仍可解析调研宿主；产品路径开辩独立成图。"""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from agentcore.runtime.kickoff.debate_host import (
 def test_research_chain_evidence_mirrors_research_first_inverse():
     assert research_chain_evidence([]) is False
     assert research_chain_evidence([], has_research_artifacts=True) is True
-    entries = [
+    playbook_only = [
         {
             "kind": "tool_call",
             "payload": {
@@ -34,18 +34,7 @@ def test_research_chain_evidence_mirrors_research_first_inverse():
             },
         }
     ]
-    assert research_chain_evidence(entries) is True
-    old_id = [
-        {
-            "kind": "tool_call",
-            "payload": {
-                "name": "delegate",
-                "arguments": '{"playbook": "multi_lens_research"}',
-                "success": True,
-            },
-        }
-    ]
-    assert research_chain_evidence(old_id) is False
+    assert research_chain_evidence(playbook_only) is False
 
 
 def test_next_act_id_defaults_and_increments():
@@ -557,23 +546,17 @@ async def _first_plan_after_attach(monkeypatch, *, same_turn: bool):
 
 
 @pytest.mark.asyncio
-async def test_run_moderator_same_turn_reuses_host_eid(monkeypatch):
-    tool, plan = await _first_plan_after_attach(monkeypatch, same_turn=True)
-    assert plan.payload["execution_id"] == "exec_host"
-    assert "prev_execution_id" not in plan.payload
-    assert tool._base_tool_context.execution_id == "exec_host"
-    assert tool._debate_prev_execution_id is None
-    assert plan.payload["act"]["act_id"] == "act-2"
+async def test_run_moderator_opens_independent_graph(monkeypatch):
+    """开辩不链调研宿主，同回合 / 跨回合都是独立图。"""
+    for same_turn in (True, False):
+        tool, plan = await _first_plan_after_attach(monkeypatch, same_turn=same_turn)
+        assert plan.payload["execution_id"] == "e-context"
+        assert not plan.payload.get("prev_execution_id")
+        assert tool._debate_prev_execution_id is None
+        assert plan.payload["act"]["act_id"] == "act-1"
 
 
-@pytest.mark.asyncio
-async def test_run_moderator_cross_turn_mints_prev(monkeypatch):
-    tool, plan = await _first_plan_after_attach(monkeypatch, same_turn=False)
-    assert plan.payload["execution_id"] != "exec_host"
-    assert plan.payload["execution_id"] != "e-context"
-    assert plan.payload.get("prev_execution_id") == "exec_host"
-    assert tool._debate_prev_execution_id == "exec_host"
-    assert plan.payload["act"]["act_id"] == "act-2"
+def test_debate_act_payload_defaults_to_act_1():
     tool = SimpleNamespace()
     assert debate_act_payload(tool) == {"act_id": "act-1", "kind": "debate"}
 

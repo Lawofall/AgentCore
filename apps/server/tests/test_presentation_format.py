@@ -1,4 +1,4 @@
-"""Presentation delivery-format dual-gate + structured resume wire (mirror website_style)."""
+"""Presentation delivery-format dual-gate + structured resume wire."""
 
 from pathlib import Path
 

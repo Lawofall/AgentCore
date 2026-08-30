@@ -1,7 +1,6 @@
 """Shared anti-slop / web-quality rule catalog (prompt text ↔ scan fingerprints).
 
-Single source for ``web_quality`` deliverable injection and
-:mod:`agentcore.runtime.runs.web_quality_scan` pattern labels — keep the blacklist
+Single source for :mod:`agentcore.runtime.runs.web_quality_scan` pattern labels — keep the blacklist
 wording and the detector vocabulary in lockstep.
 """
 
@@ -75,25 +74,6 @@ SOFT_ANTI_SLOP_RULES: tuple[WebQualityRule, ...] = (
         kind="soft",
     ),
 )
-
-
-def anti_slop_prompt_block(*, domain: str = "marketing") -> str:
-    """Worker-facing blacklist block for playbook task injection.
-
-    ``domain``: ``marketing`` (官网/落地页) vs ``tool`` (产品/控制台工具页) — shared
-    blacklist, with a one-line domain hint for aesthetic hard rules.
-    """
-    domain_line = (
-        "【审美域·营销页】视觉 thesis 先行：鲜明品牌气质、少而准的动效、拒绝模板皮。"
-        if domain == "marketing"
-        else "【审美域·工具页】清晰信息架构与可读性优先；装饰克制，勿套营销着陆页皮。"
-    )
-    lines = "；".join(r.prompt_line for r in SOFT_ANTI_SLOP_RULES)
-    return (
-        f"{domain_line}"
-        f"【anti-slop 黑名单】{lines}。"
-        "用户明示要求某条黑名单风格时，可在该条上豁免并在交接说明。"
-    )
 
 
 def soft_rule_labels() -> frozenset[str]:

@@ -4,8 +4,9 @@ CEO→user「下一步」quick-reply chips are fully offline: no LLM mint, no
 ``followups_generated`` / ``followups_unavailable`` emit, no ``set_followups`` on
 new turns. ``messages.followups`` column remains for historical rows.
 
-``select_motion_card_from_journal`` stays — stage_card emit and research-chain
-detection still need the last compliant worker ``motion_card``.
+``select_motion_card_from_journal`` stays — leftover cards / research-chain
+detection still need the last compliant worker ``motion_card``. Persist no longer
+auto-emits a stage card from it.
 """
 
 from __future__ import annotations
@@ -21,8 +22,9 @@ def select_motion_card_from_journal(
 
     Walks ``run_completed`` / ``run_failed`` entries in order; **last compliant card
     wins** (later workers — typically the synthesis / 汇总分析师 — override earlier
-    research hands). Re-validates via ``parse_motion_card`` so only contract-clean
-    cards become stage cards. Returns ``None`` when none present.
+    research hands). Re-validates via ``parse_motion_card``. Used by leftover-card
+    / research_first detection — persist no longer auto-emits a stage card.
+    Returns ``None`` when none present.
     """
     if not entries:
         return None

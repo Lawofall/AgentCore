@@ -125,51 +125,6 @@ def test_identical_edit_fingerprint_collapses_per_path():
     assert c.tool_failure_count("str_replace") == 0
 
 
-def test_write_section_invalid_section_fingerprint_collapses_and_thrashes():
-    """不同非法 section（chN-sM）同 path 塌缩 → validation thrash 早停。"""
-    from agentcore.runtime.loop_controller import (
-        LoopController,
-        ToolAttempt,
-        fingerprint_tool_call,
-    )
-
-    fp_a = fingerprint_tool_call(
-        "write_section",
-        '{"path": "site/index.html", "section": "ch5-s0", "content": "<p>a</p>"}',
-    )
-    fp_b = fingerprint_tool_call(
-        "write_section",
-        '{"path": "site/index.html", "section": "ch1-s2", "content": "<p>b</p>"}',
-    )
-    fp_ok = fingerprint_tool_call(
-        "write_section",
-        '{"path": "site/index.html", "section": "s0", "content": "<p>a</p>"}',
-    )
-    fp_other_path = fingerprint_tool_call(
-        "write_section",
-        '{"path": "site/other.html", "section": "ch5-s0", "content": "<p>a</p>"}',
-    )
-    assert fp_a == fp_b
-    assert fp_a != fp_ok
-    assert fp_a != fp_other_path
-
-    c = LoopController(tool_failure_warn=2, tool_failure_disable=3)
-    rej = ToolAttempt(
-        fp_a,
-        "write_section",
-        success=False,
-        contract_failure=True,
-        meta={"error_class": "validation"},
-    )
-    c.record([rej])
-    c.record([rej])
-    assert c.tool_circuit_breaker().validation_stop is not None
-    c.record([rej])
-    assert c.is_thrashing()
-    assert c.take_validation_hard_stop()
-    assert c.tool_failure_count("write_section") == 0
-
-
 async def test_rejects_path_outside_workspace(tmp_path: Path):
     ws = tmp_path / "ws"
     ws.mkdir()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Collection
 
-from agentcore.runtime.skills.ask_user import _ASK_USER_KICKOFF, _ASK_USER_MIDTASK
+from agentcore.runtime.skills.ask_user import _ASKING_THE_USER
 from agentcore.runtime.skills.building_software import _BUILDING_SOFTWARE
 from agentcore.runtime.skills.data_file_landing import _DATA_FILE_LANDING
 from agentcore.runtime.skills.debate_and_review import _DEBATE_AND_REVIEW
@@ -54,7 +54,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="team_delivery_env",
-        summary="Office / 空桌 / 产物路径",
+        summary="Office / 空桌 / 本机进桌",
         body=_TEAM_DELIVERY_ENV,
         audience=AUDIENCE_CEO_ONLY,
     ),
@@ -96,7 +96,7 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
     ),
     SystemSkill(
         name="debate_and_review",
-        summary="对抗性多视角辩论",
+        summary="正反辩论",
         body=_DEBATE_AND_REVIEW,
         requires_tools=("debate",),
     ),
@@ -107,20 +107,14 @@ _SYSTEM_SKILLS: tuple[SystemSkill, ...] = (
         audience=AUDIENCE_CEO_ONLY,
     ),
     SystemSkill(
-        name="ask_user_kickoff",
-        summary="向用户提问 / 载体顾问",
-        body=_ASK_USER_KICKOFF,
-        requires_tools=("ask_user",),
-    ),
-    SystemSkill(
-        name="ask_user_midtask",
-        summary="途中拍板 / 落盘前对齐",
-        body=_ASK_USER_MIDTASK,
+        name="asking_the_user",
+        summary="向用户提问",
+        body=_ASKING_THE_USER,
         requires_tools=("ask_user",),
     ),
     # Outline / mid-pipeline user gate: pauses for USER review — only meaningful
-    # with a live user. Gate on ``ask_user`` (the live-user proxy, same as the
-    # other ask_* skills) so it never advertises on the autonomous path.
+    # with a live user. Gate on ``ask_user`` (the live-user proxy, same as
+    # asking_the_user) so it never advertises on the autonomous path.
     SystemSkill(
         name="delegate_checkpoint",
         summary="提纲过目",

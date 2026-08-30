@@ -1,6 +1,6 @@
 """Tests for the CEO workspace overview (``runtime.context.workspace_overview``).
 
-Pins the ``<workspace_file_index>`` contract: best-effort (no backend / failing /
+Pins the ``<工作区文件>`` contract: best-effort (no backend / failing /
 index-less → "" so the caller omits the block), empty workspace → guidance hint,
 sparse listing (attachments + scratch; project shared trees summarized), and
 bounded by BOTH a file count and a char budget.
@@ -33,14 +33,14 @@ async def test_none_backend_yields_empty():
 
 async def test_empty_workspace_yields_guidance_hint():
     out = await build_workspace_overview(_FakeBackend([]))
-    assert out.startswith("<workspace_file_index>")
+    assert out.startswith("<工作区文件>")
     assert "工作区当前为空" in out
     assert "会话云端草稿" in out
     assert "不是本机或已打开的仓库工程" in out
     assert "file_list" in out
-    # Environment mismatch guidance moved to ``<workspace_context>`` — no guessing prose.
+    # Environment mismatch guidance moved to ``<工作区>`` — no guessing prose.
     assert "云端/本地工作区未对齐" not in out
-    assert "workspace_context" in out
+    assert "<工作区>" in out
 
 
 async def test_listing_failure_degrades_to_empty():
@@ -54,8 +54,8 @@ async def test_backend_without_index_support_yields_empty():
 async def test_lists_files_in_backend_order_under_caps():
     paths = ["报告.md", "data/input.csv", "src/main.py"]
     out = await build_workspace_overview(_FakeBackend(paths))
-    assert out.startswith("<workspace_file_index>")
-    assert out.rstrip().endswith("</workspace_file_index>")
+    assert out.startswith("<工作区文件>")
+    assert out.rstrip().endswith("</工作区文件>")
     for p in paths:
         assert f"- {p}" in out
         assert "工作区已有" in out

@@ -51,25 +51,17 @@ def _format_motion_card_block(role: str, card: dict[str, Any], *, run_id: str = 
     )
 
 
-def _motion_card_guidance(*, auto_adopt: bool) -> str:
-    """Consumption guidance for the「建议开辩」section (prompt-layer fork)."""
-    if auto_adopt:
-        return (
-            "【消费指引·深度研究自治】可直接调 debate 开赛："
-            "motion 原样或磨锋利；sides 薄立场直传；"
-            "background 由你据 fact_pointers 与四路产物汇编客观事实——不得装观点。"
-            "同回合协调态/批收口后再调 debate 是合法路径。多张卡时择优开一场。"
-        )
+def _motion_card_guidance() -> str:
+    """How CEO should treat leftover worker motion_cards (not an open-debate gate)."""
     return (
-        "【消费指引·默认模式】在收尾正文向用户呈报命题 + 各方薄立场 + 为何必须对抗；"
-        "系统已/将登记阶段推进卡，【勿口头征求开辩同意】。"
-        "本回合【不要】直接调用 debate——是否开辩由用户点推进卡定夺。"
-        "多张卡时全部列出，由你择优呈报。"
+        "【消费指引】系统不再据此登记推进卡。不要调 debate、不要催开辩。"
+        "冲突写进综述即可；用户要正反检验会自己说开辩。多张卡时当材料列出。"
     )
 
 
 def motion_cards_block(products: list[dict[str, Any]], *, auto_adopt: bool = False) -> str:
-    """CEO-facing「建议开辩」section, or "" when no worker submitted a motion_card."""
+    """CEO-facing leftover 命题卡 section, or "" when no worker submitted a motion_card."""
+    _ = auto_adopt
     cards = [
         (wp["role"], wp["run_id"], wp["motion_card"])
         for wp in products
@@ -81,9 +73,9 @@ def motion_cards_block(products: list[dict[str, Any]], *, auto_adopt: bool = Fal
         _format_motion_card_block(role, card, run_id=rid) for role, rid, card in cards
     )
     return (
-        "\n### 建议开辩（队员提交的命题卡）\n"
-        "以下是队员在完工交接中提交的结构化命题卡（发现【必须对抗交锋】的核心争议时才会出现）。"
-        f"{_motion_card_guidance(auto_adopt=auto_adopt)}\n\n" + body
+        "\n### 队员提交的命题卡（非开辩入口）\n"
+        "以下是队员交接里误带或遗留的结构化命题卡。"
+        f"{_motion_card_guidance()}\n\n" + body
     )
 
 
@@ -574,7 +566,12 @@ class CeoSynthesis:
 
 
 def build_ceo_synthesis(
-    tool: DelegateTool, plan: RunPlan, results: dict, *, call_idx: int | None = None
+    tool: DelegateTool,
+    plan: RunPlan,
+    results: dict,
+    *,
+    call_idx: int | None = None,
+    audit_json_by_path: dict[str, str] | None = None,
 ) -> CeoSynthesis:
     """Render the workers' products as the CEO's overview input, split by loss policy."""
     lines = ["## 团队执行结果（据此写一段简短概览交给用户；完整详情用户自行查看）"]
@@ -619,14 +616,15 @@ def build_ceo_synthesis(
         lines.append(tool_failures_block)
     roster_facts = _roster_facts(plan, results, products)
     roster_text = render_roster_block(roster_facts)
+    from agentcore.runtime.runs.audit_ledger import render_audit_ledger
+
+    ledger = render_audit_ledger(audit_json_by_path or {})
+    if ledger:
+        roster_text = f"{roster_text.rstrip()}\n\n{ledger}"
     head_lines = list(lines)
     lines = []
     emit_captain_readback(tool, products)
-    # 命题卡 → 建议开辩：显著专节；自治生效且未超限时指引可直接调 debate。
-    from agentcore.runtime.deep_research_auto import tool_may_auto_debate
-
-    auto_adopt = tool_may_auto_debate(tool)
-    cards_block = motion_cards_block(products, auto_adopt=auto_adopt)
+    cards_block = motion_cards_block(products)
     if cards_block:
         lines.append(cards_block)
     # 完工交接简报: surface each worker's 建议下一步 (proactive, non-blocking — distinct from the
@@ -648,11 +646,7 @@ def build_ceo_synthesis(
     # copy when no cards, compress PPT + work-log rhetoric.
     debate_tail = ""
     if cards_block:
-        debate_tail = (
-            "有【建议开辩】卡：择优后可直接调 debate（background 只汇编事实）。\n"
-            if auto_adopt
-            else "有【建议开辩】卡：概览呈报命题+各方；勿口头征求、本回合勿直接 debate。\n"
-        )
+        debate_tail = "有队员命题卡：当材料看，勿调 debate、勿催开辩。\n"
     closing_text = (
         "\n---\n以上为团队产出。「文件产出（路径已核）」= 落盘且路径核对通过的地面真相。\n"
         "⚠️ 防幻觉铁律：是否真交付文件只看「文件产出（路径已核）」行——"

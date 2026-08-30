@@ -8,7 +8,6 @@ import { resolveModeratorModel } from "./ModeratorIdentity";
 import { OpeningNote } from "./OpeningNote";
 import { SectionHeader } from "./SectionHeader";
 import { SpeakerBlock, speechStageLabel } from "./SpeakerBlock";
-import { SteeringPanel } from "./SteeringPanel";
 import { ThreadTurns } from "./ThreadTurns";
 import { UserInterjection } from "./UserInterjection";
 import { WitnessExamSection } from "./WitnessExamSection";
@@ -24,15 +23,11 @@ export function Transcript({
   model,
   execution,
   messageId,
-  conversationId,
-  interactive,
   layoutMode = "stack",
 }: {
   model: DebateModel;
   execution: Execution;
   messageId: string;
-  conversationId: string | null;
-  interactive: boolean;
   layoutMode?: DebateArenaLayout;
 }) {
   const topicMotion = model.motion ?? model.rounds[0]?.focus ?? "";
@@ -232,13 +227,6 @@ export function Transcript({
           </div>
         );
       })}
-
-      <SteeringPanel
-        model={model}
-        execution={execution}
-        conversationId={conversationId}
-        interactive={interactive}
-      />
     </div>
   );
 }

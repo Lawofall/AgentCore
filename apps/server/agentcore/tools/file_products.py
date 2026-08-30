@@ -204,7 +204,6 @@ LANDING_TOOL_NAMES: tuple[str, ...] = (
     "file_write",
     "file_append",
     "str_replace",
-    "write_section",
     "file_move",
     "file_copy",
 )

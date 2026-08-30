@@ -27,7 +27,7 @@ from agentcore.memory.store import (
 
 logger = get_logger(__name__)
 
-# Labels the folder layer inside the shared <rules> block so the model reads those bullets
+# Labels the folder layer inside the shared <设定> block so the model reads those bullets
 # as "current folder only" (a global vs folder conflict resolves by wording + proximity,
 # §3.2 — no hard-override structure; the user's explicit instruction still wins).
 _FOLDER_MEMORY_LABEL = "（以下为「当前文件夹」专属记忆，仅在本文件夹内适用）"

@@ -161,6 +161,7 @@ async def test_captain_worker_gets_captain_identity_and_delegate_tool():
     executor = _nesting_executor(plan, provider, lambda rid, d: _stub_subteam())
     await executor(plan.by_id("d1"), {})
     # A within-cap worker is told it may lead a nested sub-team (on by default).
+    assert provider.system_messages[0].lstrip().startswith("<身份>")
     assert "再向下委派一层子团队" in provider.system_messages[0]
     # depth-1 children may still nest — honesty must not claim they cannot.
     assert "你的子成员仍可再向下委派一层" in provider.system_messages[0]
@@ -231,12 +232,15 @@ async def test_captain_identity_carries_when_to_split_guidance():
     from agentcore.runtime.runs.executor.identities import build_worker_identity
 
     identity = build_worker_identity(has_dependents=False, captain=True)
+    assert "<身份>" in identity and "一员" in identity
     assert "优先先嵌套" not in identity
     assert "未嵌套禁写" not in identity
     assert "凡大活" not in identity
     assert "共写同一目标文件" not in identity
     assert "4 个 sub-worker" not in identity
     leaf = build_worker_identity(has_dependents=False, captain=False)
+    assert "<身份>" in leaf and "</身份>" in leaf
+    assert "一员" in leaf.split("<身份>", 1)[1].split("</身份>", 1)[0]
     assert "先招人再整合" not in leaf
     assert "≠ 两段" not in leaf
     assert "【开局】" not in leaf
@@ -259,7 +263,7 @@ async def test_depth_three_subworker_keeps_leaf_identity():
 
 
 async def test_worker_identities_carry_tool_safety_caution():
-    # 按角色 right-size (反向): the environment-mutation caution (<tool_safety>) moved OUT of
+    # 按角色 right-size (反向): the environment-mutation caution (<写工具谨慎>) moved OUT of
     # the shared base (where the read-only coordinator CEO carried it inertly) INTO the worker
     # identities — workers hold the mutating tools (file_write / code_execute / file_delete…),
     # so the caution rides them now. Pin it on BOTH the leaf and the captain identity so a
@@ -275,7 +279,7 @@ async def test_worker_identities_carry_tool_safety_caution():
     leaf_exec = _nesting_executor(leaf_plan, leaf_provider, lambda rid, d: _stub_subteam())
     await leaf_exec(leaf_plan.by_id("t_1"), {})
     leaf_sys = leaf_provider.system_messages[0]
-    assert "<tool_safety>" in leaf_sys
+    assert "<写工具谨慎>" in leaf_sys
     assert "本地模式" in leaf_sys
 
     captain_provider = _ContentProvider(["Y"])
@@ -285,7 +289,7 @@ async def test_worker_identities_carry_tool_safety_caution():
     await captain_exec(captain_plan.by_id("d1"), {})
     captain_sys = captain_provider.system_messages[0]
     assert "再向下委派一层子团队" in captain_sys  # captain identity in play
-    assert "<tool_safety>" in captain_sys
+    assert "<写工具谨慎>" in captain_sys
 
 
 async def test_handoff_prompt_splits_by_topology():
@@ -371,7 +375,7 @@ async def test_handoff_prompt_splits_by_topology():
     assert "file_list" not in leaf
     assert "再整仓" not in leaf
     assert "勿按话题拼接" not in leaf
-    assert "workspace_context" in leaf
+    assert "<工作区>" in leaf
 
     # Executor wires topology into the live system prompt (not just the helper).
     plan, _ = build_run_plan(
@@ -451,6 +455,8 @@ def test_worker_identity_teaches_escalate_blocking_choice():
     desc = EscalateTool().schema.description
     assert "报一声" in desc
     assert "猜错作废" in desc
+    assert "权威稿" in desc
+    assert "扩范围" in desc
     blocking = EscalateTool().schema.parameters["properties"]["blocking"]["description"]
     assert "已拒凭据" in blocking
     captain = build_worker_identity(has_dependents=False, captain=True)

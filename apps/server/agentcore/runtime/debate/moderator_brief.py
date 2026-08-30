@@ -60,8 +60,8 @@ def _brief_form_hint(form: DebateForm) -> str:
             "（标注 crux：事实/价值/假设），而非强行裁谁对谁错；末尾点出开放问题。"
         )
     return (
-        "这是【正反辩论】：简报要为用户的【决策】负责到底——给出带置信度与反转条件的倾向判断 + "
-        "具体建议，而非把正反并排甩给用户让他自己选。"
+        "这是【正反辩论】：一句倾向（可带「若…则翻」）、一个胜负手、置信档 high|medium|low、"
+        "按路径分流的交接。不要并排甩观点，不要另写建议复述倾向。"
     )
 
 
@@ -115,6 +115,23 @@ def _scores_block(config: DebateConfig, tally: dict[str, RoundScore]) -> str:
         "各方【累计记分】（裁判逐轮打分之和；你的 decisive / leaning 须与它一致——净分更高 / 罚分"
         f"更少的一方更站得住，相悖须说明为何）：\n{body}\n\n"
     )
+
+
+def _normalize_confidence(raw: str) -> str:
+    """收成 high|medium|low；旧场散文按含词归一，认不出则原样（前端 pill 回落 medium）。"""
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    low = text.lower()
+    if low in ("high", "medium", "low"):
+        return low
+    if "high" in low or "高" in text:
+        return "high"
+    if "low" in low or "低" in text:
+        return "low"
+    if "medium" in low or "中" in text:
+        return "medium"
+    return text
 
 
 def _as_str_dict(value: Any) -> dict[str, str]:
@@ -252,6 +269,7 @@ async def build_brief(
     last_turns = _turns_block(rounds[-1].ok_turns, clip=_TURN_CLIP)
     sides_keys = ", ".join(s.key for s in config.sides)
     is_roundtable = config.form is DebateForm.ROUNDTABLE
+    is_debate = config.form is DebateForm.DEBATE
     if is_roundtable:
         score_align_note = (
             "若上方给了【累计记分】，仅作 momentum 参考、【不】驱动 leaning / decisive、"
@@ -260,33 +278,61 @@ async def build_brief(
         )
         decisive_field = '  "decisive": "圆桌无胜负手：可留空或写「无胜负手（圆桌）」",\n'
         leaning_field = '  "leaning": "观点光谱小结（各视角成立前提与张力，非裁出赢家；可稍长）",\n'
-    else:
+        confidence_field = (
+            '  "confidence": "置信度及其成立条件（说明在什么前提下倾向会反转）",\n'
+        )
+        recommendation_field = (
+            '  "recommendation": "给用户的下一步动作单句，不复述判断理由",\n'
+        )
+        field_mutex = (
+            "【字段互斥·各司其职、互不复述】："
+            "crux = 争议焦点；strongest_points = 各方命门单句；"
+            "leaning = 观点光谱小结（不裁赢家）；confidence = 置信与前提；"
+            "recommendation = 下一步动作单句。"
+        )
+    elif is_debate:
         score_align_note = (
-            "若上方给了【累计记分】，你的 decisive / leaning 必须与它【方向】一致"
-            "（净分更高 / 罚分更少的一方更站得住；「一致」= 倾向方向对齐，【禁】把记分数字 / "
-            "罚分明细抄进正文——记分表由 UI 单独展示；若倾向与记分相悖须在 confidence 里说明为何）；"
+            "若上方给了【累计记分】，decisive / leaning 须与它【方向】一致"
+            "（净分更高 / 罚分更少的一方更站得住）；禁把记分数字 / 罚分明细抄进正文；"
+            "相悖在 leaning 里说明为何。"
         )
         decisive_field = (
-            '  "decisive": "胜负手：单句≤50字，只点名定胜负的那一个交锋点'
-            "（谁的哪个论点被 drop / 证伪 / 无据，或质询中答非所问 / 打太极回避命门；"
-            '诚实认输不算回避）；禁铺双方立场全貌、禁抄记分",\n'
+            '  "decisive": "定局的那一个交锋点（单句≤50字：谁的哪点被证伪 / 无据 / 回避；'
+            '诚实认输不算回避）；不重讲倾向、禁抄记分",\n'
         )
         leaning_field = (
-            '  "leaning": "一句话写倾向 + 核心理由；禁复述记分数字与罚分明细'
-            '（与累计记分仅方向一致）",\n'
+            '  "leaning": "倾向 + 可选「若…则翻」一句；禁复述记分数字",\n'
         )
-    # 字段互斥总纲：终审 UI 分区各司其职，消除 leaning/decisive/strongest/recommendation 互相复述。
-    field_mutex = (
-        "【字段互斥·各司其职、互不复述】："
-        "crux = 争议焦点（本场真正吵什么）；"
-        "strongest_points = 各方命门单句（每方≤60字、禁分号堆叠），只留最强一点、不写倾向/建议；"
-        "decisive = 对抗形态：定胜负的那一个交锋点（单句≤50字），禁铺双方立场全貌、禁抄记分；"
-        "圆桌无胜负手；"
-        "leaning = 对抗形态：倾向 + 核心理由一句话，禁复述记分数字与罚分明细；"
-        "圆桌：观点光谱小结（可稍长、不裁赢家）；"
-        "confidence = 置信度与反转条件，不复述 leaning / decisive；"
-        "recommendation = 给用户的下一步动作单句，不复述判断理由。"
-    )
+        confidence_field = '  "confidence": "high 或 medium 或 low，只填档、不写散文",\n'
+        recommendation_field = (
+            '  "recommendation": "仅当交接三键都空时写一句下一步，否则空串",\n'
+        )
+        field_mutex = (
+            "【正反简报·各司其职】："
+            "leaning = 倾向 + 可选反转条件，一句；"
+            "decisive = 一个交锋点，不重讲倾向；"
+            "confidence = 只填 high|medium|low；"
+            "交接三键 = 该你拍 / 去查证 / 只能等；"
+            "recommendation = 仅三键都空时写一句，否则空；"
+            "crux 正反留空；strongest_points 可写各方命门单句供存档。"
+        )
+    else:
+        score_align_note = (
+            "若上方给了【累计记分】，decisive / leaning 须与它【方向】一致；禁抄记分数字。"
+        )
+        decisive_field = (
+            '  "decisive": "定门决的那一个 finding / 交锋点（单句≤50字）",\n'
+        )
+        leaning_field = '  "leaning": "门决倾向一句话",\n'
+        confidence_field = (
+            '  "confidence": "置信度及其成立条件（说明在什么前提下倾向会反转）",\n'
+        )
+        recommendation_field = (
+            '  "recommendation": "加固建议单句，不复述判断理由",\n'
+        )
+        field_mutex = (
+            "【字段互斥】：leaning / decisive / recommendation 各写一件事，互不复述。"
+        )
     # 交接清单三键：键名即分类指令（解析层规整为 handoffs）。判别铁律单一来源，消除旧
     # open_questions「仅剩需用户拍板」与 value_disputes 的重叠。条目写法：value 问句化；
     # 三键均对齐 strongest_points「去水压成单句、只留命门」。
@@ -309,26 +355,38 @@ async def build_brief(
         f"{_brief_form_hint(config.form)}\n"
         "请据此产出简报，为用户负责到底（不要只把各方观点并排甩给他）："
         f"{field_mutex}"
-        "各方最强论点要【去水压成单句≤60字、只留命门、禁分号堆叠】；"
         f"{score_align_note}"
-        "leaning / confidence 还要写清【反转条件】（在什么前提下倾向会翻）。"
-        "【关键事实的证据状态必须继承到结论、不得在收尾抹平】：若 decisive / leaning 依赖的某个"
+        + (
+            "【反转条件】写在 leaning（「若…则翻」），不要写进 confidence。"
+            if is_debate
+            else "leaning / confidence 还要写清【反转条件】（在什么前提下倾向会翻）。"
+        )
+        + "【关键事实的证据状态必须继承到结论、不得在收尾抹平】：若 decisive / leaning 依赖的某个"
         "关键事实在辩论里是【待核实】、仅【单一二手来源】、或台账 tier=weak，不得把它当既定事实"
-        "来定倾向——要么在 confidence 里显式降级并标【需一手核实】，要么把它移进交接清单"
-        "（factual_disputes 或 open_questions，证据状态语与 tier 人话内联在条目文本）；"
+        "来定倾向——"
+        + (
+            "要么在 leaning 的「若…则翻」里标【需一手核实】，要么移进交接清单"
+            if is_debate
+            else "要么在 confidence 里显式降级并标【需一手核实】，要么把它移进交接清单"
+        )
+        + "（factual_disputes 或 open_questions，证据状态语与 tier 人话内联在条目文本）；"
         "结论文字里引用这类事实时【保留证据状态词与 tier】（如「若 X 属实——目前仅二手报道 / "
         "弱源、待一手核实——则…」）、别写成板上钉钉。"
         f"{handoff_taxonomy}只输出 JSON：\n"
         "{\n"
-        '  "crux": "双方真正的争议焦点在哪",\n'
-        f'  "strongest_points": {{"<side_key∈[{sides_keys}]>": '
+        + (
+            '  "crux": "",\n'
+            if is_debate
+            else '  "crux": "双方真正的争议焦点在哪",\n'
+        )
+        + f'  "strongest_points": {{"<side_key∈[{sides_keys}]>": '
         '"该方命门单句≤60字，禁分号堆叠"}},\n'
         '  "value_disputes": ["问句？ 你选 A→结论偏 X；选 B→结论偏 Y"],\n'
         '  "factual_disputes": ["可查证的事实分歧单句（证据状态语内联、勿抹平）"],\n'
         f"{decisive_field}"
         f"{leaning_field}"
-        '  "confidence": "置信度及其成立条件（说明在什么前提下倾向会反转）",\n'
-        '  "recommendation": "给用户的下一步动作单句，不复述判断理由",\n'
+        f"{confidence_field}"
+        f"{recommendation_field}"
         '  "open_questions": ["等外部事件/预测验证/后续观察的单句命门"]\n'
         "}"
     )
@@ -340,12 +398,16 @@ async def build_brief(
             crux=rounds[0].focus or config.motion,
             recommendation=rounds[-1].summary or "简报生成失败，请查看逐轮交锋。",
         )
+    handoffs = _as_handoffs(data)
+    recommendation = _as_str(data.get("recommendation"))
+    if is_debate and handoffs:
+        recommendation = ""
     return DebateBrief(
         crux=_as_str(data.get("crux")) or config.motion,
         strongest_points=_as_str_dict(data.get("strongest_points")),
-        handoffs=_as_handoffs(data),
+        handoffs=handoffs,
         decisive=_as_str(data.get("decisive")),
         leaning=_as_str(data.get("leaning")),
-        confidence=_as_str(data.get("confidence")),
-        recommendation=_as_str(data.get("recommendation")),
+        confidence=_normalize_confidence(_as_str(data.get("confidence"))),
+        recommendation=recommendation,
     )

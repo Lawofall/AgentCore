@@ -859,27 +859,8 @@ class CloudStore:
             with contextlib.suppress(Exception):
                 await self.clear_stream_segments(turn_id=message_id)
 
-        # END_TURN + reply → last compliant motion_card becomes 阶段推进卡.
-        # CEO→user followups chips are offline (no mint / emit / set_followups).
-        wants_stage_card = (
-            finish_value == FinishReason.END_TURN.value and bool(assistant_reply.strip())
-        )
-        if wants_stage_card and message_id:
-            from agentcore.memory.followups import select_motion_card_from_journal
-            from agentcore.runtime.kickoff.stage_card import emit_stage_card_for_motion
-
-            journal_entries = result.get("journal_entries")
-            motion_card = select_motion_card_from_journal(journal_entries)
-            if isinstance(motion_card, dict):
-                await emit_stage_card_for_motion(
-                    sink,
-                    conversation_id=conversation_id,
-                    motion_card=motion_card,
-                    turn_id=str(message_id),
-                    journal_entries=(
-                        journal_entries if isinstance(journal_entries, list) else None
-                    ),
-                )
+        # END_TURN 不再因 motion_card 登记阶段推进卡（开辩须用户点名）。
+        # emit_stage_card_for_motion 仍留给旧卡 / 显式测试。CEO→user followups 仍下线。
 
         schedule_consolidation(conversation_id)
         await schedule_compaction_if_due(conversation_id, result.get("input_tokens", 0))
@@ -1474,30 +1455,7 @@ class CloudStore:
                 needs_title = False
 
         title: str | None = existing_title
-        wants_stage_card = (
-            finish_value == FinishReason.END_TURN.value
-            and bool((assistant_content or "").strip())
-            and bool(assistant_message_id)
-        )
-        if wants_stage_card:
-            from agentcore.memory.followups import select_motion_card_from_journal
-            from agentcore.runtime.kickoff.stage_card import emit_stage_card_for_motion
-
-            journal_src = journal
-            if journal_src is None and isinstance(runs, dict):
-                events = runs.get("events")
-                journal_src = events if isinstance(events, list) else None
-            motion_card = select_motion_card_from_journal(journal_src)
-            if isinstance(motion_card, dict) and assistant_message_id:
-                # Local write-back has no live SSE sink; journal via
-                # prewrite_settlement_direct still lands the durable card.
-                await emit_stage_card_for_motion(
-                    None,
-                    conversation_id=conversation_id,
-                    motion_card=motion_card,
-                    turn_id=str(assistant_message_id),
-                    journal_entries=(journal_src if isinstance(journal_src, list) else None),
-                )
+        # 本地收尾同样不因 motion_card 登记推进卡。
 
         if needs_title:
             from agentcore.llm.background_failure import classify_background_llm_failure

@@ -40,8 +40,11 @@ from agentcore.workspace.channel import WorkspaceOp
 from agentcore.workspace.limits import (
     EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER,
     EXEC_ENV_DEAD_BODY_MARKER,
+    EXEC_ENV_DEAD_CEO_INJECT,
+    EXEC_ENV_DEAD_CEO_INJECT_CLOUD,
     EXEC_ENV_DEAD_USER_VISIBLE,
     EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE,
+    exec_env_dead_ceo_inject,
     exec_env_dead_user_visible,
 )
 from agentcore.workspace.local import LocalWorkspace
@@ -1292,6 +1295,12 @@ def test_exec_env_dead_lines_fork_per_reason_and_drop_unbacked_advice():
     assert "本机暂时跑不了命令" not in not_linux
     sandbox_down = EXEC_ENV_DEAD_USER_VISIBLE_BY_CODE[EXEC_ENV_SANDBOX_UNAVAILABLE_CODE]
     assert EXEC_ENV_CLOUD_SANDBOX_DEAD_BODY_MARKER in sandbox_down
+    assert exec_env_dead_ceo_inject(None) == EXEC_ENV_DEAD_CEO_INJECT
+    assert (
+        exec_env_dead_ceo_inject(EXEC_ENV_SANDBOX_UNAVAILABLE_CODE)
+        == EXEC_ENV_DEAD_CEO_INJECT_CLOUD
+    )
+    assert exec_env_dead_ceo_inject(EXEC_ENV_NOT_LINUX_CODE) == EXEC_ENV_DEAD_CEO_INJECT_CLOUD
 
 
 def test_probe_retire_steer_cloud_isolation_does_not_blame_the_laptop():

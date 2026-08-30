@@ -2,7 +2,7 @@
 
 When the previous turn's journal carries ``tool_call`` facts stamped
 ``cross_turn_retry=futile``, the next fresh CEO turn gets a short ignorable
-``<prior_futile_retries>`` list on the volatile prompt tail — same one-shot
+``<上轮徒劳重试>`` list on the volatile prompt tail — same one-shot
 journal shape as ``prior_delivery_gaps`` (newest *other* turn only).
 
 Hard rules (intercept-discipline):
@@ -25,7 +25,7 @@ from agentcore.runtime.facts import (
     normalize_cross_turn_retry,
 )
 
-# Align volume with ``<prior_delivery_gaps>``.
+# Align volume with ``<上轮交付缺口>``.
 _MAX_ITEMS = 12
 _MAX_LINE_CHARS = 80
 
@@ -96,7 +96,7 @@ def extract_prior_futile_retries(
 
 
 def render_prior_futile_retries(rows: list[dict[str, str]]) -> str:
-    """Format the soft ``<prior_futile_retries>`` block; empty rows → ``\"\"``."""
+    """Format the soft ``<上轮徒劳重试>`` block; empty rows → ``\"\"``."""
     if not rows:
         return ""
     lines: list[str] = []
@@ -106,13 +106,13 @@ def render_prior_futile_retries(rows: list[dict[str, str]]) -> str:
         body = f"- {name} {ident}".rstrip() if ident else f"- {name}"
         lines.append(_clip_line(body))
     return (
-        "<prior_futile_retries>\n"
+        "<上轮徒劳重试>\n"
         "【上轮原样重试徒劳】上一回合下列工具调用被判定「同一动作再试也不会成功」。"
         "本提示一次性、可忽略；本轮用户新目标优先。"
         "不得据此拒绝本轮其它路径。"
         "若本轮授权或环境已变，按当前实际情况判断。\n"
         + "\n".join(lines)
-        + "\n</prior_futile_retries>"
+        + "\n</上轮徒劳重试>"
     )
 
 
@@ -121,7 +121,7 @@ async def build_prior_futile_retries_hint(
     conversation_id: str,
     exclude_message_id: str | None = None,
 ) -> str:
-    """``<prior_futile_retries>`` when the prior other turn fingerprints, else ``\"\"``.
+    """``<上轮徒劳重试>`` when the prior other turn fingerprints, else ``\"\"``.
 
     ``exclude_message_id`` drops the in-flight assistant turn (same as redispatch /
     gaps / recent-graph). Does not read or branch on the current user message.

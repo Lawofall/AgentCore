@@ -5,10 +5,8 @@ Gate: when ``spent >= engine_turn_token_ceiling`` (>0), reject new ``delegate`` 
 ``debate`` and soft-stop WaveScheduler admission (in-flight drain only).
 
 Delivery reserve: when ``spent >= ceiling − delivery_reserve``, prefer
-``ceiling_priority`` tails — **not** the primary product fix for whole-page QA.
-Website quality bottom line = section-level mechanical gates; whole-page / visual
-verify may defer to a follow-up turn (``qa_deferred_budget``) rather than raising
-reserve dials.
+``ceiling_priority`` tails so a marked wrap-up node can still start while
+secondary nodes are soft-skipped.
 
 Nested envelope (B1): ``depth ≥ 1`` drives may reserve a sub-team envelope from
 parent remaining (``engine_nested_turn_token_ceiling``). Wave ``should_stop`` then
@@ -31,14 +29,10 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from agentcore.runtime.runs.types import RunSpec
-
-# delivery_status.gaps.reason — budget skip / deferred verify (not a soft-accept path)
+# delivery_status.gaps.reason — budget skip (not a soft-accept path)
 REASON_TURN_TOKEN_BUDGET = "turn_token_budget"
-REASON_QA_DEFERRED = "qa_deferred_budget"
 
 TURN_TOKEN_CEILING_WARNING = "本回合累计 token 已触顶，未派发节点已跳过；请基于已完成产出收口"
 
@@ -337,63 +331,6 @@ def budget_skip_warning_for_active_scope(*, credential_source: str) -> str:
     return TURN_TOKEN_CEILING_WARNING
 
 
-def is_page_qa_delivery_node(spec: RunSpec) -> bool:
-    """True for whole-page / visual QA tails (``ceiling_priority`` + scan, or visual_critic)."""
-    deliverable = getattr(spec, "deliverable", None)
-    if deliverable is None:
-        return False
-    if bool(getattr(deliverable, "visual_critic", False)):
-        return True
-    return bool(getattr(spec, "ceiling_priority", False)) and bool(
-        getattr(deliverable, "web_quality_scan", False)
-    )
-
-
-def honesty_gaps_for_skipped_delivery_node(spec: RunSpec) -> list[dict[str, str]]:
-    """Gaps when a delivery/QA node never ran (诚实收口 · 建站验收可第二段).
-
-    Same-turn quality bottom line is **section-level** mechanical gates
-    (``web_quality`` / ``{{}}`` on fill workers). Skipping the whole-page QA
-    worker must **not** claim those never ran — it defers page-level / visual
-    verify to a follow-up turn (方案 3 底 + 方案 2 第二段).
-
-    B3: callers also attach :func:`website_section.collect_light_website_acceptance_gaps`
-    so empty shells cannot pass on deferred-QA honesty alone.
-    """
-    deliverable = getattr(spec, "deliverable", None)
-    if deliverable is None:
-        return []
-    gaps: list[dict[str, str]] = []
-    if is_page_qa_delivery_node(spec):
-        gaps.append(
-            {
-                "description": (
-                    "整页验收波未跑（本回合预算用尽）——"
-                    "区块自动检查仍以各分区落盘为准；"
-                    "轻量壳检（关键文件 / 残留 {{…}}）仍会跑；"
-                    "请下一回合续派页面验收（总检/视觉），勿假装已质检通过"
-                ),
-                "reason": REASON_QA_DEFERRED,
-            }
-        )
-        if bool(getattr(deliverable, "visual_critic", False)):
-            gaps.append(
-                {
-                    "description": "视觉总检未目验（验收波未跑）",
-                    "reason": REASON_QA_DEFERRED,
-                }
-            )
-        return gaps
-    if bool(getattr(deliverable, "web_quality_scan", False)):
-        gaps.append(
-            {
-                "description": "未跑 web_quality 验收",
-                "reason": REASON_TURN_TOKEN_BUDGET,
-            }
-        )
-    return gaps
-
-
 def turn_token_budget_wrap_prompt() -> str:
     """CEO one-shot ``[系统提示]``：触顶后基于已有产出收口（禁假完成 / 禁再派）。"""
     ceiling = resolve_turn_token_ceiling()
@@ -402,11 +339,9 @@ def turn_token_budget_wrap_prompt() -> str:
         f"[系统提示] 本回合累计 token 已触顶（已用 {spent} / 上限 {ceiling}）。"
         "本回合禁止乱开新派单与新辩论；在飞任务结束后请立即基于已完成产出向用户收口——"
         "汇总已有结论与落盘文件，并显式标出未完成缺口"
-        f"（gap 原因可用 `{REASON_TURN_TOKEN_BUDGET}` / `{REASON_QA_DEFERRED}`）。"
+        f"（gap 原因可用 `{REASON_TURN_TOKEN_BUDGET}`）。"
         "**下一回合可续跑本图因额度未跑的节点**（append 同图 / replan 点名角色）；"
         "禁止假装本回合已全部完成。"
-        "若建站「页面 QA」未跑：说明区块自动检查已覆盖落盘文件，"
-        "**整页/视觉验收可下一回合续派**，禁止伪装成已质检完毕。"
         "禁止再尝试无关的新 delegate/debate；禁止空转探路；禁止把部分完成伪装成全部交付。"
     )
 

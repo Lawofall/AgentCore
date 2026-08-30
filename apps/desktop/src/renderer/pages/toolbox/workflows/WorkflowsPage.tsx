@@ -1,6 +1,6 @@
 import { PageContainer } from "@/components/layout/PageContainer";
 import { ToolboxPageHeader } from "@/components/toolbox/ToolboxPageHeader";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, EmptyHint } from "@/components/ui";
 import { notifyError } from "@/lib/toast";
 import { scheduleFromWorkflowPath } from "@/pages/toolbox/automations/scheduleFromWorkflow";
 import { APP_PATHS } from "@/pages/toolbox/manual/paths";
@@ -229,9 +229,11 @@ export function WorkflowsPage() {
               加载中…
             </div>
           ) : items.length === 0 ? (
-            <Card className="p-6 text-sm text-muted-foreground">
-              还没有工作流。可从上方官方模板「使用」复制一份，或新建空白图；保存后可手动跑一次，也可用卡片上的「设为定时」变成到点自动跑的任务。
-            </Card>
+            <EmptyHint
+              className="py-10"
+              title="还没有工作流"
+              hint="可从上方官方模板「使用」复制一份，或新建空白图；保存后可手动跑一次，也可用卡片上的「设为定时」变成到点自动跑的任务。"
+            />
           ) : (
             items.map((w) => {
               const stepCount = w.definition.nodes.filter(

@@ -4,10 +4,12 @@ import type { FileNode } from "@/lib/fileSource";
 import { formatMessageTime } from "@/lib/format";
 import { Loader2 } from "lucide-react";
 
+export { EmptyHint } from "@/components/ui";
+
 /**
  * Shared presentational primitives for the file UIs (文件中枢统一) — the tree /
  * preview / snapshot surfaces of both the Files page and the conversation
- * workspace panel. Kept intentionally file-scoped (not generic app UI).
+ * workspace panel. `EmptyHint` 是 L2，此处转出。
  */
 
 export function IconButton({
@@ -101,29 +103,5 @@ export function FileRowMeta({ node }: { node: FileNode }) {
     <span className="shrink-0 tabular-nums text-xs text-muted-foreground/70">
       {label}
     </span>
-  );
-}
-
-export function EmptyHint({
-  icon,
-  title,
-  hint,
-  inline,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-  inline?: boolean;
-}) {
-  return (
-    <div
-      className={`flex flex-col items-center justify-center gap-2 px-6 text-center ${
-        inline ? "h-full" : "flex-1"
-      }`}
-    >
-      {icon}
-      <p className="text-sm text-muted-foreground">{title}</p>
-      <p className="text-xs text-muted-foreground">{hint}</p>
-    </div>
   );
 }

@@ -101,7 +101,7 @@ async def test_documents_require_auth(client):
 
 
 async def test_on_demand_user_rule_excluded_from_injected_rules(session_factory):
-    """on_demand user rules never enter the always ``<rules>`` budget/compose path."""
+    """on_demand user rules never enter the always ``<设定>`` budget/compose path."""
     uid = str(uuid.uuid4())
     async with session_factory() as session:
         repo = DocumentRepository(session)

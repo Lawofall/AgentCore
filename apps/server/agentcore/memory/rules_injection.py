@@ -1,6 +1,6 @@
 """Always-on rule injection (Agent记忆与知识系统 · 目标形态「读侧全量注入」).
 
-The ``<rules>`` block carries BOTH the user's own rules (``ai_maintained=false``) and the
+The ``<设定>`` block carries BOTH the user's own rules (``ai_maintained=false``) and the
 AI-maintained long-term memory core (``ai_maintained=true``) — same carrier. Read side injects
 **every** always-on entry in display order as one equal-authority join (no greedy pack /
 keep-rank / silent drop / user-vs-AI wording split); the write-side quota gate owns
@@ -349,7 +349,7 @@ def _injectable_body(raw: str, *, chrome: bool) -> str | None:
 
 @dataclass(frozen=True)
 class RuleFragment:
-    """One always-injected rule doc, ready to place in ``<rules>``.
+    """One always-injected rule doc, ready to place in ``<设定>``.
 
     ``body`` is fully rendered (frontmatter/chrome stripped, folder-labeled when
     folder-scoped). Fragments are equal on the read side — no authority tier.
@@ -359,7 +359,7 @@ class RuleFragment:
 
 
 def compose_injected_rules(fragments: Sequence[RuleFragment]) -> str:
-    """Join all always-on fragments in display order into one ``<rules>`` body.
+    """Join all always-on fragments in display order into one ``<设定>`` body.
 
     No doc/char budget, no keep-rank, no silent drop, no user/AI split — write side
     owns the quota gate; prompt wording is a single equal-authority block.
@@ -495,7 +495,7 @@ async def assemble_injected_rules(
     enabled: bool,
     scope_chain: Sequence[str] | None = None,
 ) -> str:
-    """Load + compose this turn's ``<rules>`` body (read-side full injection).
+    """Load + compose this turn's ``<设定>`` body (read-side full injection).
 
     Returns one equal-authority markdown string for ``assemble_system_prompt``. AI memory
     is gated by the caller-supplied ``enabled`` flag (product resolve always on / 定案 A;

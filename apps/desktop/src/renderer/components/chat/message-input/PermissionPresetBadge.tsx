@@ -37,7 +37,8 @@ import { useEffect, useState } from "react";
 import { ComposerPlusBackHeader, useComposerPlusRow } from "./ComposerPlusMenu";
 
 /**
- * Composer permission badge — recipes first; three-axis custom folded.
+ * Composer permission badge — 默认只出三配方；「改某一条」才展开轴。
+ * 已是自定义时轴直接摊开，避免选不中配方还看不见自己的组合。
  * New chats: draft axes (seeded from 新会话默认配方); existing: read/write
  * ``conversation.permissionAxes``（下一回合生效）.
  */
@@ -219,30 +220,15 @@ export function PermissionAxesBadge({
         </SimpleTooltip>
       </div>
 
-      <div className="mt-2 border-t border-border/60 pt-2">
-        <button
-          type="button"
-          aria-expanded={customOpen}
-          onClick={() => setCustomOpen((v) => !v)}
-          className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left hover:bg-accent/50"
-        >
-          <span className="text-xs font-medium text-muted-foreground">
-            自定义权限轴
+      {customOpen || isCustom ? (
+        <div className="mt-2 border-t border-border/60 pt-2">
+          <p className="px-2.5 pb-1.5 text-xs font-medium text-muted-foreground">
+            改某一条
             {isCustom ? (
               <span className="ml-1.5 text-foreground">· 当前</span>
             ) : null}
-          </span>
-          <ChevronDown
-            size={12}
-            className={cn(
-              "shrink-0 text-muted-foreground opacity-60 transition-transform",
-              customOpen && "rotate-180",
-            )}
-          />
-        </button>
-
-        {customOpen && (
-          <div className="mt-1 space-y-2 px-0.5 pb-1">
+          </p>
+          <div className="space-y-2 px-0.5 pb-1">
             <AxisSegment
               title="改文件"
               options={FILE_WRITE_OPTIONS}
@@ -275,8 +261,18 @@ export function PermissionAxesBadge({
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-2 border-t border-border/60 px-1 pt-2">
+          <button
+            type="button"
+            onClick={() => setCustomOpen(true)}
+            className="w-full rounded-lg px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+          >
+            改某一条
+          </button>
+        </div>
+      )}
     </>
   );
 

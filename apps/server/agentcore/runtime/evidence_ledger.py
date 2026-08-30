@@ -551,10 +551,10 @@ def format_registered_sources_prompt(ledger: EvidenceLedgerCore | None) -> str:
         )
     body = "\n".join(lines)
     return (
-        "<registered_sources>\n"
+        "<已登记来源>\n"
         "【已登记来源】本会话台账（跨回合 hydrate 后可见）。"
         "回答某 #rN 出处必须对照下列字段，禁止占位/巧合叙事；"
         "对话成稿可挂下列已登记可引用 id（含仅检索未深读）。\n"
         f"{body}\n"
-        "</registered_sources>"
+        "</已登记来源>"
     )

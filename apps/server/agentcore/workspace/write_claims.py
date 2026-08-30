@@ -21,7 +21,7 @@ authority, snapshotted). **交接式写权**：
   - Write-time ``claim`` refusals are remembered per refused run so escalate can
     attach ``ownership_paths`` even when the model paraphrases the conflict.
 
-  Write tools consult the same book (``str_replace`` / ``write_section`` /
+  Write tools consult the same book (``str_replace`` /
   delete / move included). Write ancestors = plan ``depends_on`` closure ∪
   nested ``parent_run_id``. Non-coordination batches still get a batch-local
   ledger for intra-batch mutual exclusion.

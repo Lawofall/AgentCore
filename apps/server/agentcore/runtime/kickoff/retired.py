@@ -21,6 +21,14 @@ def refuse_team_preview_resume() -> None:
     raise GoneError(TEAM_PREVIEW_UNRECOVERABLE)
 
 
+STAGE_CARD_UNRECOVERABLE = "开辩请直接在对话里说，此入口已下线"
+
+
+def refuse_stage_card_resolve() -> None:
+    """Raise :class:`GoneError` — leftover 阶段推进卡 is not a debate entry."""
+    raise GoneError(STAGE_CARD_UNRECOVERABLE)
+
+
 def refuse_if_leftover_team_preview(frame: dict[str, Any] | object | None) -> None:
     """410 when ``frame`` is a leftover开工卡; no-op otherwise."""
     if is_leftover_team_preview_frame(frame):

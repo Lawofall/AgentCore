@@ -73,7 +73,7 @@ export function RunConfirmPrompt() {
           </div>
         </div>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pl-6">
+        <div className="mt-2.5 flex flex-wrap items-center justify-end gap-1.5 pl-6">
           <Button
             variant="danger"
             icon={<X size={13} />}

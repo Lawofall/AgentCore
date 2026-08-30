@@ -5,7 +5,7 @@
  * 线上 7 天 8 起「同一条任务建出两条内容相同的会话、各自跑完整轮双倍计费」，成因是
  * 组件实例级的防连点 ref（重挂载即归零）+ 创建 POST 返回前界面毫无变化（用户自然再按
  * 一次）。这里守三件事：创建窗口内重复触发只发一个 POST（含重挂载后再点）、按下发送
- * 立刻清空并进入建会话中态、创建失败草稿原样还回且重试复用同一个幂等键。
+ * 立刻清空并画出用户泡 + Thinking、创建失败撤回气泡且草稿原样还回、重试复用同一个幂等键。
  */
 
 import { act, renderHook } from "@testing-library/react";
@@ -68,7 +68,10 @@ import {
   useComposerSendErrorStore,
 } from "@/stores/composerSendError";
 import { useConversationStore } from "@/stores/conversation";
-import { EMPTY_RUNTIME } from "@/stores/conversation/runtime";
+import {
+  DRAFT_KEY as CONV_DRAFT_KEY,
+  EMPTY_RUNTIME,
+} from "@/stores/conversation/runtime";
 import { useFoldersStore } from "@/stores/folders";
 import {
   __clearAttachmentUploadsForTests,
@@ -161,9 +164,10 @@ function mockUnstartedRefusal(): void {
     const conversationId = args.conversationId;
     const optimisticUserId = args.optimisticUserId;
     if (optimisticUserId) {
-      useConversationStore
-        .getState()
-        .removeMessage(optimisticUserId, conversationId);
+      const s = useConversationStore.getState();
+      s.truncateAfter(optimisticUserId, conversationId);
+      s.removeMessage(optimisticUserId, conversationId);
+      s.setGenerating(false, conversationId);
     }
     useConversationStore
       .getState()
@@ -302,16 +306,27 @@ describe("useComposerSend 草稿首发建会话", () => {
     expect(
       useComposerSendErrorStore.getState().byKey[DRAFT_KEY],
     ).toBeUndefined();
+    const draftRt = useConversationStore.getState().byId[CONV_DRAFT_KEY];
+    expect(draftRt?.messages).toHaveLength(2);
+    expect(draftRt?.messages[0]).toMatchObject({ role: "user", content: TEXT });
+    expect(draftRt?.messages[1]).toMatchObject({
+      role: "assistant",
+      isStreaming: true,
+    });
+    expect(draftRt?.isGenerating).toBe(true);
 
     await act(async () => {
       release({ id: NEW_CONV });
       await sending;
     });
-    // 建完就不再是「建会话中」，气泡已落在新会话上。
+    // 建完就不再是「建会话中」，气泡已接到新会话上。
     expect(result.current.send.isCreatingConversation).toBe(false);
     expect(
       useConversationStore.getState().byId[NEW_CONV]?.messages,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
+    expect(
+      useConversationStore.getState().byId[CONV_DRAFT_KEY]?.messages ?? [],
+    ).toHaveLength(0);
     expect(useConversationStore.getState().currentConversationId).toBe(
       NEW_CONV,
     );
@@ -527,6 +542,91 @@ describe("useComposerSend 草稿首发建会话", () => {
     );
   });
 
+  it("POST 窗口内切走再失败：撤回钉草稿切片，不停当前会话", async () => {
+    let rejectPost!: (err: Error) => void;
+    post.mockReturnValue(
+      new Promise((_, rej) => {
+        rejectPost = rej;
+      }),
+    );
+    seedDraft();
+    const { result } = renderHook(() => useSendHarness());
+
+    let sending!: Promise<void>;
+    await act(async () => {
+      sending = result.current.send.handleSend();
+    });
+    expect(
+      useConversationStore.getState().byId[CONV_DRAFT_KEY]?.messages,
+    ).toHaveLength(2);
+    expect(
+      useConversationStore.getState().byId[CONV_DRAFT_KEY]?.isGenerating,
+    ).toBe(true);
+
+    const OTHER = "conv-other";
+    await act(async () => {
+      useConversationStore.setState((s) => ({
+        byId: {
+          ...s.byId,
+          [OTHER]: {
+            ...EMPTY_RUNTIME,
+            isGenerating: true,
+            messages: [
+              {
+                id: "other-user",
+                role: "user",
+                content: "另一条",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                executionId: null,
+                isStreaming: false,
+              },
+              {
+                id: "other-asst",
+                role: "assistant",
+                content: "",
+                createdAt: "2026-01-01T00:00:00.000Z",
+                executionId: "exec-other",
+                isStreaming: true,
+              },
+            ],
+          },
+        },
+      }));
+      useConversationStore.getState().switchConversation(OTHER);
+    });
+    expect(useConversationStore.getState().currentConversationId).toBe(OTHER);
+
+    await act(async () => {
+      rejectPost(new Error("网络不可达"));
+      await sending;
+    });
+
+    expect(
+      useConversationStore.getState().byId[CONV_DRAFT_KEY]?.messages ?? [],
+    ).toHaveLength(0);
+    expect(
+      useConversationStore.getState().byId[CONV_DRAFT_KEY]?.isGenerating ??
+        false,
+    ).toBe(false);
+    expect(useConversationStore.getState().currentConversationId).toBe(OTHER);
+    expect(useConversationStore.getState().byId[OTHER]?.isGenerating).toBe(
+      true,
+    );
+    expect(useConversationStore.getState().byId[OTHER]?.messages).toHaveLength(
+      2,
+    );
+    expect(draft()?.value).toBe(TEXT);
+    expect(draft()?.attachments).toEqual([shot]);
+    expect(draft()?.agentMentions).toEqual([mention]);
+    expect(
+      useComposerDraftStore.getState().drafts[draftKeyFor(OTHER)],
+    ).toBeUndefined();
+    expect(toastError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "网络不可达" }),
+      "新建对话失败",
+    );
+  });
+
   it("创建失败：草稿（正文 + 附件 + 点名）原样还回并给中文提示", async () => {
     post.mockRejectedValue(new Error("网络不可达"));
     seedDraft();
@@ -545,6 +645,13 @@ describe("useComposerSend 草稿首发建会话", () => {
     );
     expect(result.current.send.isSending).toBe(false);
     expect(useConversationStore.getState().currentConversationId).toBeNull();
+    expect(
+      useConversationStore.getState().byId[CONV_DRAFT_KEY]?.messages ?? [],
+    ).toHaveLength(0);
+    expect(
+      useConversationStore.getState().byId[CONV_DRAFT_KEY]?.isGenerating ??
+        false,
+    ).toBe(false);
   });
 
   it("失败后重试复用同一个 client_request_id（服务端幂等挡住第二条会话）", async () => {

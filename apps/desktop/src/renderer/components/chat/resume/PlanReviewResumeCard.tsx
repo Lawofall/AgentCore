@@ -103,7 +103,7 @@ export function PlanReviewResumeCard({ turn }: { turn: PendingResume }) {
               data-testid="plan-review-note"
             />
           )}
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             {!settlementLocked ? (
               <Button
                 variant="ghost"
@@ -115,40 +115,38 @@ export function PlanReviewResumeCard({ turn }: { turn: PendingResume }) {
                 取消
               </Button>
             ) : null}
-            <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              {!settlementLocked ? (
-                <Button
-                  variant="neutral"
-                  icon={spinnerOr("adjust", <Pencil size={13} />)}
-                  disabled={busy}
-                  onClick={() => {
-                    if (!note.trim()) {
-                      if (noteOpen) {
-                        noteRef.current?.focus();
-                      } else {
-                        setNoteOpen(true);
-                      }
-                      return;
+            {!settlementLocked ? (
+              <Button
+                variant="neutral"
+                icon={spinnerOr("adjust", <Pencil size={13} />)}
+                disabled={busy}
+                onClick={() => {
+                  if (!note.trim()) {
+                    if (noteOpen) {
+                      noteRef.current?.focus();
+                    } else {
+                      setNoteOpen(true);
                     }
-                    send("adjust", [], note.trim());
-                  }}
+                    return;
+                  }
+                  send("adjust", [], note.trim());
+                }}
+              >
+                调整
+              </Button>
+            ) : null}
+            {gateHint && !settlementLocked ? (
+              <SimpleTooltip label="继续后，把关要点将发给下游">
+                <span
+                  className="inline-flex"
+                  data-testid="plan-review-gate-notes-hint"
                 >
-                  调整
-                </Button>
-              ) : null}
-              {gateHint && !settlementLocked ? (
-                <SimpleTooltip label="继续后，把关要点将发给下游">
-                  <span
-                    className="inline-flex"
-                    data-testid="plan-review-gate-notes-hint"
-                  >
-                    {continueBtn}
-                  </span>
-                </SimpleTooltip>
-              ) : (
-                continueBtn
-              )}
-            </div>
+                  {continueBtn}
+                </span>
+              </SimpleTooltip>
+            ) : (
+              continueBtn
+            )}
           </div>
         </div>
       </div>

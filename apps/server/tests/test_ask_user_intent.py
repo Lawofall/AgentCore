@@ -51,7 +51,7 @@ def test_coerce_unknown_intent_is_decision():
 def test_opening_turn_without_execution_is_decision():
     transcript = [
         LLMMessage(role="user", content="做个网站"),
-        _assistant_tool("consult", {"name": "ask_user_kickoff"}, call_id="cs"),
+        _assistant_tool("consult", {"name": "asking_the_user"}, call_id="cs"),
         LLMMessage(role="tool", content="skill body", tool_call_id="cs"),
         _assistant_tool("ask_user", {"message": "短澄清"}, call_id="ask"),
     ]
@@ -61,7 +61,7 @@ def test_opening_turn_without_execution_is_decision():
 def test_midtask_skill_consult_is_decision():
     transcript = [
         LLMMessage(role="user", content="继续"),
-        _assistant_tool("consult", {"name": "ask_user_midtask"}, call_id="cs"),
+        _assistant_tool("consult", {"name": "asking_the_user"}, call_id="cs"),
         LLMMessage(role="tool", content="skill body", tool_call_id="cs"),
         _assistant_tool("ask_user", {"message": "选 A 还是 B"}, call_id="ask"),
     ]

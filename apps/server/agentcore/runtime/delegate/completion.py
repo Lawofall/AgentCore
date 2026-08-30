@@ -88,50 +88,6 @@ _EXEC_OFFICE_HINTS = re.compile(
     re.IGNORECASE,
 )
 
-def _clean_how_fixed(*parts: Any) -> str:
-    """First non-empty how-fixed string (verify_command / description / playbook slot)."""
-    for part in parts:
-        if part is None:
-            continue
-        text = str(part).strip()
-        if text:
-            return text
-    return ""
-
-def extract_playbook_how_fixed(playbook_args: Any) -> str:
-    """``verify`` / ``verify_command`` / ``acceptance`` slot from playbook_args."""
-    if not isinstance(playbook_args, dict):
-        return ""
-    return _clean_how_fixed(
-        playbook_args.get("verify_command"),
-        playbook_args.get("verify"),
-        playbook_args.get("acceptance"),
-    )
-
-def validate_repair_how_fixed(
-    *,
-    playbook: str | None = None,
-    playbook_args: Any = None,
-) -> str | None:
-    """Reject ``diagnose_fix_verify`` playbooks that omit structured「怎么算修好」.
-
-    S3: no longer tied to ``completion_criteria`` / ``code_verified`` kind.
-    How-fixed comes from ``playbook_args.verify`` / ``verify_command`` / ``acceptance``.
-    """
-    pb = (playbook or "").strip()
-    if pb != "diagnose_fix_verify":
-        return None
-    how = extract_playbook_how_fixed(playbook_args)
-    if how:
-        return None
-    return (
-        "修码收口契约：playbook=diagnose_fix_verify 须写清「怎么算修好」。"
-        "在 playbook_args 填 verify（或 verify_command / acceptance），"
-        '例如 verify="pytest tests/test_foo.py -q"、'
-        "verify=\"python -c 'from app import foo; assert foo()'\"、或 "
-        'verify="打开 /app 白屏消失+snapshot 可见主内容"。'
-    )
-
 def plan_suggests_code_verification(plan: RunPlan) -> bool:
     """True when any worker task reads like run/open/install acceptance."""
     for node in plan.nodes:

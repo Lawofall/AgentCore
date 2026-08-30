@@ -213,7 +213,7 @@ async def test_no_coordinator_means_no_guard(tmp_path: Path):
     assert (tmp_path / "report.md").read_text(encoding="utf-8") == "two"
 
 
-# --- C3: str_replace / write_section / declare / transfer ---
+# --- C3: str_replace / declare / transfer ---
 
 
 async def test_str_replace_respects_ownership(tmp_path: Path):

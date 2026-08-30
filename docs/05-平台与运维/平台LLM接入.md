@@ -28,7 +28,7 @@ skip_if:
 
 **识图槽 `vision`（可选）**：与 main **独立**，空 **不** follow main。有槽 → 用该槽凭据建独立 `VisionReader`（BYOK 填槽即可，不因 `billing_mode=byok` 关死）。槽空 → 仅当 `billing_mode=platform` 且 `VISION_API_KEY`/`VISION_BASE_URL` 齐全时走运维兜底（默认 `kimi-k2.5`，不上架 `PLATFORM_MODELS`）。
 
-**对话贴图路由**：回合 **main** 仅当 curated 元数据表（及 family 前缀）标了 `vision` 时走原生 multimodal（`image_url` data URL 挂当前 user，跳过眼睛轨）——**禁止**用目录关键词推断的 `vision` 开原生（防误标 400）。否则 → 上述 `VisionReader` 眼→文注入 system 附件块。同一图禁止双路径。无 reader 且本回合有图 → 诚实提示「未配置识图」，不静默丢像素。白板 `board_read` / 网站 visual critic 仍只用 `VisionReader`（与 main 是否 multimodal 无关）。CEO 可按需调 `read_image` 带着问题再读工作区图。
+**对话贴图路由**：回合 **main** 仅当 curated 元数据表（及 family 前缀）标了 `vision` 时走原生 multimodal（`image_url` data URL 挂当前 user，跳过眼睛轨）——**禁止**用目录关键词推断的 `vision` 开原生（防误标 400）。否则 → 上述 `VisionReader` 眼→文注入 system 附件块。同一图禁止双路径。无 reader 且本回合有图 → 诚实提示「未配置识图」，不静默丢像素。visual critic **已退役**，不再走本轨。白板 `board_read` 仍只用 `VisionReader`（与 main 是否 multimodal 无关）。CEO 可按需调 `read_image` 带着问题再读工作区图。
 
 `llm/resolve.py` 单点：
 

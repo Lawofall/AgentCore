@@ -432,7 +432,7 @@ async def finalize_stopped(
         collect_ledger,
         register_sessions,
     )
-    from agentcore.runtime.delegate.ceo_format import format_for_ceo
+    from agentcore.runtime.delegate.ceo_format import build_ceo_synthesis
     from agentcore.runtime.delegate.nesting import absorb_children
     from agentcore.runtime.events import run_skipped
     from agentcore.runtime.runs import RunPhase, RunState
@@ -485,7 +485,14 @@ async def finalize_stopped(
 
         output = format_kickoff_cancel_result(primitive="delegate", note=note)
     else:
-        output = format_for_ceo(tool, plan, results)
+        from agentcore.runtime.runs.audit_ledger import load_audit_json_by_path
+
+        audit_json = await load_audit_json_by_path(
+            plan, results, tool._base_tool_context.backend
+        )
+        output = build_ceo_synthesis(
+            tool, plan, results, audit_json_by_path=audit_json
+        ).text
     return ToolResult(
         tool_call_id="",
         success=True,

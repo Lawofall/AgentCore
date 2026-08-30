@@ -535,7 +535,7 @@ def test_ask_user_schema_advertises_action_only_when_flagged():
     assert "grant_readonly_folder" not in advertised.schema.description
     assert "grant_organize_folder" in advertised.schema.description
     assert "external_mount_readonly" in advertised.schema.description
-    assert "HOW→consult(ask_user_kickoff" in advertised.schema.description
+    assert "HOW→consult(asking_the_user" in advertised.schema.description
     assert "grant_attach_folder" in advertised.schema.description
     assert "只读用" in advertised.schema.description
     assert "改导" not in advertised.schema.description
@@ -575,14 +575,15 @@ def test_ask_user_organize_how_lives_in_skill():
     from agentcore.runtime.skills import build_system_skill_registry
 
     registry = build_system_skill_registry()
-    kickoff = registry.get("ask_user_kickoff")
-    mid = registry.get("ask_user_midtask")
-    assert kickoff is not None
-    assert mid is not None
+    ask = registry.get("asking_the_user")
+    desk = registry.get("team_delivery_env")
+    assert ask is not None
+    assert desk is not None
     from agentcore.runtime.resolve.prompt import capability_how_suffix
 
     granted = capability_how_suffix({"external_mount_readonly"})
     assert "口头同意" in granted
     assert "grant_organize_folder" in granted
-    assert "grant_organize_folder" in mid.body
-    assert "consult(external_mount_readonly)" in mid.body
+    assert "grant_organize_folder" in desk.body
+    assert "consult(external_mount_readonly)" in desk.body
+    assert "consult(external_mount_readonly)" in ask.body

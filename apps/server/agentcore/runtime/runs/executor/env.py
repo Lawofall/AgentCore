@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -41,13 +41,9 @@ class AgentExecutorEnv:
     escalation_timeout: float | None
     escalation_armed: bool
     team_brief: str | None
-    # B2: CEO 本回合探路短摘要（根委派注入 worker 开局；嵌套为空）。
-    captain_recon: str | None
     write_coordinator: WriteCoordinator
     ancestors_by_id: Mapping[str, frozenset[str]]
     conversation_id: str
-    preexisting_files: Callable[[], Awaitable[list[str]]]
-    shared_workspace: bool = False
     # 辩论场级证据台账（可选）；opening 辩手经此登记检索来源并过 id 闸。
     evidence_ledger: EvidenceLedger | Any | None = None
     # 回合共享调研台账（``#r``）；与辩论 ``evidence_ledger``（``#e``）分前缀、分路径。

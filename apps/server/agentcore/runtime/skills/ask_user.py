@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 _ASK_USER_KICKOFF = """\
-<ask_user_kickoff>
+<开场提问>
 字段 HOW：拿不准 `ask_user` 字段时查阅本条。
 
 【短改稿 ≠ 任务卡开工】本条用户气泡是短句原文释义 / 改词 / 改句，且**本条**未带结构化\
@@ -18,12 +18,12 @@ _ASK_USER_KICKOFF = """\
 【继续·承接确认项】用户说「继续」且上轮已给出确认选项 / 缺口清单 → 正文【必须】至少复述\
 那些选项（或卡上 default）。\
 【短确认·只补缺口】用户短答复（如「同意 / 继续 / 可以 / 好 / 派吧」）且上轮已部分交付并\
-**明示**未闭合缺口 / 下一步补跑项（含易变尾 `<prior_delivery_gaps>` 结构化账本）→ 【必须】只续跑那些未闭合项（例：只派验证补跑测试）≠ \
+**明示**未闭合缺口 / 下一步补跑项（含易变尾 `<上轮交付缺口>` 结构化账本）→ 【必须】只续跑那些未闭合项（例：只派验证补跑测试）≠ \
 把短确认当成整锅重派、从零再开多人组重写已落盘文件。上轮无明示缺口清单 → 本条不适用。\
 新建仓库 / 本地目录类短问 → `questions`【必须】预填可确认默认路径（`default`）。\
 【缺主体短问】三路/多路调研未点名主体（产品/市场/事件/对象）→ **必须** `ask_user` 短问 ≠ \
-静默自拟市场或产品占位后直接 `map_fanout`（含 `cite_write_review` / \
-`lens_crosscheck` 的 topic——须来自用户已给或 ask 确认）。\
+静默自拟市场或产品占位后直接 `map_fanout`（含 `cite_write_review` \
+的 topic——须来自用户已给或 ask 确认）。\
 `questions` 建议填 `default`（空 continue 回灌用）；有倾向时按【字段】；\
 派工跟用户勾选/人话走；回执写「按确认默认」才用该 default。无勾选且无回灌不得把自拟主体当已确认。\
 方向 / 方案 choice 的 `label` / `message` 写清**本轮交付边界**（如「先出设计契约」/\
@@ -32,7 +32,7 @@ _ASK_USER_KICKOFF = """\
 
 【交付档·桌上结果】绿场 / 改一处类短问：`label` **只写桌上结果**（几人几步 / 流水线角色等内部编制不进选项）。建议档（用 `label` 即可，不必改 schema 加 id）：\
 先一条主路径；一次做完再拆；只改一处。不映射编制套餐。\
-只改一处 → 手写 / `diagnose_fix_verify`。\
+只改一处 → 手写。\
 已确认「先一条主路径」/ 「先…以后再说」≠ 默认整仓满编。\
 糊说「做个网站」≠ 已钉形态（展示页 / 工具壳 / 业务应用）；\
 建站用手写 `tasks`。单页一人 / 营销皮 / 自动静态质检 → `consult(team_orchestration_advanced)`。
@@ -59,14 +59,14 @@ Word / Office 真图形盖不住 → `consult(team_delivery_env)` 取替代口�
 - `questions`：可选，最多 5；**问句写 `prompt`**；高杠杆才问（要什么 / 给谁 / 做到哪一档）；可填 `default`；有倾向时把该项放第一、名末加「（推荐）」或 (recommended)；卡面不预选。\
 权衡写进 `label`，普通短问勿填 `detail`（`detail` 仅整理 / 复盘 card）。\
 choice 只服务下一步动作 ≠ 把正文已摆出的候选菜单再投进卡里催收敛。
-- 专用 `card`：仅 `organize_plan`（恰好 1 题多选）——见 ask_user_midtask。
+- 专用 `card`：仅 `organize_plan`（恰好 1 题多选）。
 
 【软件 / 应用】交付形态不清时短问或写明默认 ≠ 静默默认单 HTML → `consult(building_software)`。\
 方向已定但本轮边界未钉 / 绿场切片 → `consult(team_orchestration_advanced)`。
-</ask_user_kickoff>"""
+</开场提问>"""
 
 _ASK_USER_MIDTASK = """\
-<ask_user_midtask>
+<途中提问>
 执行途中拍板：当你在执行中途遇到一个【自己无法独自定夺、且选错代价高】的关键岔路时，用 ask_user 暂停\
 并请用户拍板：典型如方案 A/B 抉择、执行不可逆操作（大量删除 / 覆盖）前确认、任务范围明显超出最初预期\
 需用户重新授权。**问句写 `questions[].prompt`**（通常一题，kind=choice + options；\
@@ -75,7 +75,7 @@ _ASK_USER_MIDTASK = """\
 途中的关键岔路通常【不预填 default】——就是要 ta 来选；权衡写进选项 `label`（一行名），\
 勿填 `detail`。有倾向时按 kickoff【字段】。用户「提交」会带上 ta 勾选的选项与可选补充，回到\
 你的循环；「取消」结束本回合。同样：正文在发问前留空（避免落库铺垫与恢复后\
-的话粘连，详见 ask_user_kickoff / 通用短澄清）。
+的话粘连，详见通用短澄清）。
 
 【落盘前对齐】你已承诺落盘前对齐，或用户点名「确认后再存 / 先对齐再写」→ 阻塞短问，\
 `default`=「按当前设计落盘」（仅认本回合明示）。\
@@ -105,9 +105,9 @@ _ASK_USER_MIDTASK = """\
 【方案挑选 / 风险勾选】走普通 `ask_user`；问句写 `questions[].prompt`，权衡写进 `label`\
 （有倾向时按 kickoff【字段】）。
 - 发散挑选：N 风格 / N 方案并行产出完成后，单选 choice 把候选摊开；`label` 写方案名与一行取舍（落盘产物写明文件名）。\
-用户挑中后用 `continue_from_run_id` 唤回原作者定向深化；未选中的不再推进。
+用户挑中后用 `continue_from_run_id` 唤回原作者定向深化 → `consult(revising_a_product)`；未选中的不再推进。
 - 审查 / 诊断汇总出问题清单后，多选 choice 让用户勾选要处理哪些；`label` 以严重度开头（如「[高] 退款条款缺违约金上限」）并写一行影响与修法。\
-勾选后转成定向修订委派（唤回原作者，衔接有界返工环；task 写明按勾选项用 `str_replace` 逐条改（优先）、扩写用 `file_append`，\
+勾选后定向修订 → `consult(revising_a_product)`（唤回原作者，衔接有界返工环；task 写明按勾选项用 `str_replace` 逐条改（优先）、扩写用 `file_append`，\
 整盖允许但须完整正文——防惰性「中间省略」残缺交付）；未勾选项在收尾注明「已知、按用户决定未处理」。清单过长则拆成多题。
 两类都是主拍板：每任务恰好一次（短澄清或提纲把关），勿叠多张仪式卡。
 
@@ -135,12 +135,15 @@ _ASK_USER_MIDTASK = """\
   code_execute/terminal）。\
 Web/移动端无法履行——如实说明须用桌面客户端，并引导官网下载 \
 https://fashitianxia.xyz/download ；勿发 grant_*/bind/open_local_project 冒充可授权。\
-铁律：仅当 `<workspace_context>` mounts 行写明「本对话已授权区外目录…」才可声称已授权\
+铁律：仅当 `<工作区>` mounts 行写明「本对话已授权区外目录…」才可声称已授权\
 /可访问本机目录；尚无挂载时禁止说「授权已确认」。整理须用户显式确认；只读走静默工具。\
 【通道复检】用户自称「已装桌面 / 正在用客户端」时仍以\
-`<workspace_context>` 通道行与能力行 `host`/`local_open` 为准复检，口述不得覆盖事实；\
+`<工作区>` 通道行与能力行 `host`/`local_open` 为准复检，口述不得覆盖事实；\
 未装配 ≠ 「就好办了 / 桌面就好办」；对齐步骤：官网下载（若尚未）→ 桌面打开【本对话】→\
 状态栏通道已连 → Composer「导入到云」/「从 Git 克隆」或云新建或本机传统（open/register/bind）\
 （或按意图 external_mount_readonly / organize）；\
 禁臆造「设置→Folders / 侧栏授权页」等非真源入口；问「授权在哪里」且通道未接时只复述上列步骤与下载链。
-</ask_user_midtask>"""
+</途中提问>"""
+
+# Catalog still registers a single asking_the_user skill.
+_ASKING_THE_USER = _ASK_USER_KICKOFF + _ASK_USER_MIDTASK

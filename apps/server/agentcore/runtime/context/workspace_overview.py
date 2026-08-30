@@ -1,4 +1,4 @@
-"""Workspace overview — the CEO's live ``<workspace_file_index>`` orientation block.
+"""Workspace overview — the CEO's live ``<工作区文件>`` orientation block.
 
 工作区文件索引（取代「向量 RAG」的轻量方案）。Instead of a pre-built embedding index (which
 goes stale the moment a file changes and needs an embedder + pgvector), this gives the
@@ -9,9 +9,7 @@ agent must call ``file_read`` / ``grep`` for content (agentic retrieval, the主�
 
 清单稀疏化 (双模式工作区): default injection is attachments + 裸聊 scratch files;
 project shared trees collapse non-attachment noise into one「另有 N 个文件」line (with a
-small newest-first supplement). Workers receive the richer per-run manifest
-(``runs/executor/context._workspace_manifest``: teammate products + the same sparse
-policy).
+small newest-first supplement). CEO-only; workers do not receive this listing.
 
 Best-effort by contract: no backend, no indexing support, an empty workspace, or a
 listing failure all yield ``""`` (the caller omits the block) — workspace awareness is
@@ -38,8 +36,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # Bounds so a large workspace can't bloat the CEO's per-turn prompt: a file-count cap
-# AND a char budget (whichever binds first). Mirrors the worker manifest's posture
-# (runs/constants.WORKSPACE_MANIFEST_*); kept local to avoid a context→runs import.
+# AND a char budget (whichever binds first). Kept local to this module.
 OVERVIEW_MAX_FILES = 40
 OVERVIEW_CHAR_BUDGET = 1800
 
@@ -65,7 +62,7 @@ async def build_workspace_overview(
     *,
     shared_workspace: bool = False,
 ) -> str:
-    """Build the CEO's ``<workspace_file_index>`` block, or ``""`` when nothing to show.
+    """Build the CEO's ``<工作区文件>`` block, or ``""`` when nothing to show.
 
     ``shared_workspace`` is True for project (folder) chats — sparse listing applies.
     Returns ``""`` for a missing backend, an empty / unindexable workspace with no
@@ -81,14 +78,14 @@ async def build_workspace_overview(
         if not profile_text:
             return ""
     elif not paths and not profile_text:
-        # Environment mismatch guidance lives in ``<workspace_context>`` (explicit facts);
+        # Environment mismatch guidance lives in ``<工作区>`` (explicit facts);
         # this block only states the file-index emptiness so the model does not re-guess.
         return (
-            "<workspace_file_index>\n"
+            "<工作区文件>\n"
             "工作区当前为空（无文件路径可列）——若本回合为云端会话，这只是会话云端草稿尚无文件，"
             "不是本机或已打开的仓库工程。若对话历史显示曾委派产出，仍须先 "
-            "file_list 核实后再回答；环境与绑定以本回合 `<workspace_context>` 为准。\n"
-            "</workspace_file_index>"
+            "file_list 核实后再回答；环境与绑定以本回合 `<工作区>` 为准。\n"
+            "</工作区文件>"
         )
 
     sections: list[str] = []
@@ -124,5 +121,5 @@ async def build_workspace_overview(
             sections.append(f"{file_intro}\n" + "\n".join(lines))
 
     body = "\n\n".join(sections)
-    return f"<workspace_file_index>\n{body}\n</workspace_file_index>"
+    return f"<工作区文件>\n{body}\n</工作区文件>"
 

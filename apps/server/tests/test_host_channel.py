@@ -90,7 +90,7 @@ async def test_host_status_fanout_all_facets():
     channel.request_host = AsyncMock(side_effect=_reply)
     result = await HostTool().execute({"action": "status"}, _ctx(channel=channel))
     assert result.success
-    assert "<untrusted_content>" in result.output
+    assert "<不可信内容>" in result.output
     ops = [c.args[0] for c in channel.request_host.await_args_list]
     assert ops == [
         HostOp.INFO,

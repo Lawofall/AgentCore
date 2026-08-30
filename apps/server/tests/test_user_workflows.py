@@ -318,27 +318,22 @@ def test_from_playbook_success_cite_write_review():
 def test_from_playbook_rejects_not_in_catalog():
     # Non-catalog CEO books stay 暂未列入 (in PLAYBOOKS, not toolbox templates).
     with pytest.raises(PlaybookTemplateError) as ei:
-        merge_playbook_slots("diagnose_fix_verify", {"problem": "x", "verify": "pytest"})
+        merge_playbook_slots("code_audit", {"scope": "x"})
     assert "暂未列入" in str(ei.value)
-    assert "diagnose_fix_verify" in PLAYBOOKS
+    assert "code_audit" in PLAYBOOKS
 
     with pytest.raises(PlaybookTemplateError) as ei2:
-        instantiate_from_playbook(
-            "diagnose_fix_verify", {"problem": "x", "verify": "pytest"}
-        )
+        instantiate_from_playbook("code_audit", {"scope": "x"})
     assert "暂未列入" in str(ei2.value)
 
-    with pytest.raises(PlaybookTemplateError) as ei_ml:
-        merge_playbook_slots("lens_crosscheck", {"topic": "x"})
-    assert "暂未列入" in str(ei_ml.value)
-    assert "lens_crosscheck" in PLAYBOOKS
-
-    # Old four names: unknown (not 暂未列入) — no aliases.
+    # Old names (incl. retired CEO books): unknown (not 暂未列入) — no aliases.
     for pid, slots in (
         ("parallel_brief", {"topic": "T", "angles": ["甲", "乙"]}),
         ("research_report", {"topic": "x"}),
         ("multi_lens_research", {"topic": "x"}),
+        ("lens_crosscheck", {"topic": "x"}),
         ("repair_code", {"problem": "x", "verify": "pytest"}),
+        ("diagnose_fix_verify", {"problem": "x", "verify": "pytest"}),
     ):
         with pytest.raises(PlaybookTemplateError) as ei_old:
             merge_playbook_slots(pid, slots)

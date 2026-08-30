@@ -763,14 +763,14 @@ def test_navigate_schema_mentions_workspace_relative_path():
 
 @pytest.mark.asyncio
 async def test_sandbox_relative_path_fails_honestly_no_fake_success(tmp_path):
-    """乙：云端沙箱相对路径 → ToolResult 失败，引导完整预览；不派发 driver。"""
+    """乙：云端沙箱相对路径 → ToolResult 失败；对照产物出口，不派发 driver。"""
     session = _FakeSession(
         BrowserCommandResult(ok=True, data={"final_url": "https://x/", "title": "T"})
     )
     tool = BrowserNavigateTool(registry=_FakeRegistry(session=session))
     result = await tool.execute({"url": "site/index.html"}, _ctx(tmp_path))
     assert result.success is False
-    assert "完整预览" in _fail_text(result)
+    assert "产物出口" in _fail_text(result)
     assert session.sent == []
 
 
@@ -782,7 +782,7 @@ async def test_sandbox_workspace_url_fails_honestly(tmp_path):
     tool = BrowserNavigateTool(registry=_FakeRegistry(session=session))
     result = await tool.execute({"url": "workspace://c1/site/index.html"}, _ctx(tmp_path))
     assert result.success is False
-    assert "完整预览" in _fail_text(result)
+    assert "产物出口" in _fail_text(result)
     assert session.sent == []
 
 
@@ -867,7 +867,7 @@ async def test_bridge_session_sandbox_relative_path_fails_honestly(tmp_path, mon
     )
     result = await tool.execute({"url": "site/index.html"}, ctx)
     assert result.success is False
-    assert "完整预览" in _fail_text(result)
+    assert "产物出口" in _fail_text(result)
     assert session.sent == []
     # https still acquires sandbox (not open_local_bridge_session)
     result_ok = await tool.execute({"url": "https://example.com/"}, ctx)

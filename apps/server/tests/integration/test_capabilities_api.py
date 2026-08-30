@@ -47,7 +47,8 @@ async def test_capabilities_lists_system_skills_with_body(client):
     body = (await client.get("/v1/capabilities")).json()
     skills = {s["name"]: s for s in body["skills"]}
     assert "team_orchestration_advanced" in skills
-    assert "ask_user_kickoff" in skills
+    assert "asking_the_user" in skills
+    assert "ask_user_kickoff" not in skills
     assert "verify_and_fix" in skills
     assert "long_form_writing" in skills
     assert "long_form_landing" in skills

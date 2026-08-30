@@ -1,6 +1,6 @@
 """产物格式能力行 — derived from tool registration + this-turn assembly gates.
 
-``<workspace_context>`` 只陈述事实：目标后缀能不能产、由谁产、经哪把工具、什么前置。
+``<工作区>`` 只陈述事实：目标后缀能不能产、由谁产、经哪把工具、什么前置。
 格式清单来自各工具 ``ToolRegistration.produces_formats``，装没装配走与
 ``build_worker_registry`` 同一套闸（execution / browser / host / git / desktop /
 local_only / manual_wire）。禁止在本模块再写一份格式白名单。

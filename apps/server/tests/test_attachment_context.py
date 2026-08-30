@@ -900,9 +900,9 @@ async def test_document_pin_is_not_uploaded_material():
         ]
     )
     assert out is not None
-    assert "<pinned_entries>" in out
+    assert "<钉住条目>" in out
     assert "回复保持短句。" in out
-    assert "<attached_files>" not in out
+    assert "<附件>" not in out
     assert attachment_material_scene(out) is False
 
 
@@ -922,8 +922,8 @@ async def test_document_pin_keeps_inline_slot_without_file_body():
         ]
     )
     assert prompt.envelope is not None
-    assert "<pinned_entries>" in prompt.envelope
-    assert "<attached_files>" in prompt.envelope
+    assert "<钉住条目>" in prompt.envelope
+    assert "<附件>" in prompt.envelope
     assert "短句" in prompt.envelope
     assert prompt.file_blocks[0].startswith("--- File: a.txt")
     assert prompt.file_blocks[1] == ""

@@ -76,7 +76,7 @@ export function BrowserLoginDecisionCard({
         </div>
       </div>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pl-6">
+      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-1.5 pl-6">
         {conversationId && (
           <Button
             variant="neutral"

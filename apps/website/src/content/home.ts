@@ -92,7 +92,6 @@ export const GRAPH = {
 
   task: {
     title: { zh: "你的任务", en: "Your task" },
-    sub: { zh: "对话发起", en: "From chat" },
   },
 
   thinking: { zh: "思考中", en: "Thinking" },

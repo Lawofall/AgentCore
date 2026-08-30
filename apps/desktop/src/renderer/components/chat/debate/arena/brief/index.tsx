@@ -3,7 +3,6 @@ import {
   brandPanelPrimary,
   confidenceLabel,
   confidencePill,
-  statusAccentText,
   statusPillInline,
   surfaceSubtle,
 } from "@/components/ui/tone-presets";
@@ -14,8 +13,6 @@ import type {
   DebateSideInfo,
 } from "@/types/events";
 import {
-  Check,
-  GitCompare,
   Lightbulb,
   MessagesSquare,
   Scale,
@@ -36,11 +33,7 @@ import {
   gateLabel,
   sortFindings,
 } from "../../findings";
-import {
-  type DebateForm,
-  type DebateScoreView,
-  debateSideColorVar,
-} from "../../model";
+import { type DebateForm, debateSideColorVar } from "../../model";
 import {
   RISK_LEVELS,
   RISK_SEVERITY,
@@ -51,7 +44,6 @@ import {
   riskCounts,
 } from "../../severity";
 import { ConsensusMap } from "../ConsensusMap";
-import { ScoreBreakdown, formatNetTotal } from "../ScoreBreakdown";
 
 /** 交接清单 kind；坏 kind 容错归 question（契约不变）。 */
 type HandoffKind = "value" | "fact" | "question";
@@ -83,54 +75,24 @@ export function BriefCard({
   brief,
   sides,
   form,
-  scores,
-  stanceAgree,
 }: {
   brief: DebateBriefInfo;
   sides: DebateSideInfo[];
   form: DebateForm;
-  scores?: DebateScoreView[];
-  /** 你的站队与 AI 累计净分最高方是否一致；null = 未站队 / 平分。 */
-  stanceAgree?: boolean | null;
 }) {
   if (form === "red_team") return <RedTeamBrief brief={brief} sides={sides} />;
   if (form === "roundtable") return <RoundtableBrief brief={brief} />;
-  return (
-    <DebateBrief
-      brief={brief}
-      sides={sides}
-      scores={scores}
-      stanceAgree={stanceAgree}
-    />
-  );
+  return <DebateBrief brief={brief} />;
 }
 
-/** 正反：① 裁决 → ② 战果对照 → ③ 留给你的 */
-function DebateBrief({
-  brief,
-  sides,
-  scores,
-  stanceAgree,
-}: {
-  brief: DebateBriefInfo;
-  sides: DebateSideInfo[];
-  scores?: DebateScoreView[];
-  stanceAgree?: boolean | null;
-}) {
+/** 正反：① 裁决卡 → ② 留给你的（有交接则不展建议） */
+function DebateBrief({ brief }: { brief: DebateBriefInfo }) {
+  const handoffs = briefHandoffs(brief);
+  const rec = handoffs.length === 0 ? brief.recommendation : undefined;
   return (
     <div className="space-y-4">
       <VerdictCard brief={brief} form="debate" />
-      <SideOutcomeCompare
-        sides={sides}
-        points={brief.strongest_points}
-        scores={scores}
-        stanceAgree={stanceAgree}
-      />
-      <YourCallZone
-        handoffs={briefHandoffs(brief)}
-        recommendation={brief.recommendation}
-        form="debate"
-      />
+      <YourCallZone handoffs={handoffs} recommendation={rec} form="debate" />
     </div>
   );
 }
@@ -325,124 +287,6 @@ function ReasonRow({
       </span>
     </p>
   );
-}
-
-/**
- * ② 战果对照（开放区）：每方 = 身份 + 净分 + 比分条 + 三维构成（常驻）+ 罚分可展开 + 最强论点；
- * 累计净分最高方标「AI 倾向」；站队软对照收进标题行。
- */
-function SideOutcomeCompare({
-  sides,
-  points,
-  scores,
-  stanceAgree,
-}: {
-  sides: DebateSideInfo[];
-  points: Record<string, string>;
-  scores?: DebateScoreView[];
-  stanceAgree?: boolean | null;
-}) {
-  const scoreByKey = new Map((scores ?? []).map((s) => [s.sideKey, s]));
-  const leanKey = aiLeanSideKey(sides, scores);
-  const maxAbs = Math.max(
-    1,
-    ...sides.map((s) => Math.abs(scoreByKey.get(s.key)?.total ?? 0)),
-  );
-
-  return (
-    <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <h3 className="text-sm font-semibold text-foreground">战果对照</h3>
-        {stanceAgree !== null && stanceAgree !== undefined && (
-          <StanceSoftCompare agree={stanceAgree} />
-        )}
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {sides.map((s) => {
-          const colorVar = debateSideColorVar(s.key, s.name);
-          const score = scoreByKey.get(s.key);
-          const isLean = leanKey === s.key;
-          const barPct =
-            score === undefined
-              ? 0
-              : Math.round((Math.abs(score.total) / maxAbs) * 100);
-          return (
-            <div key={s.key} className="min-w-0 space-y-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-1.5">
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <SideIdentity name={s.name} colorVar={colorVar} />
-                  {isLean && (
-                    <span className={statusPillInline.primary}>AI 倾向</span>
-                  )}
-                </div>
-                {score !== undefined && (
-                  <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums text-foreground">
-                    净 {formatNetTotal(score.total)}
-                  </span>
-                )}
-              </div>
-              {score !== undefined && (
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full transition-[width]"
-                    style={{
-                      width: `${barPct}%`,
-                      backgroundColor: colorVar,
-                    }}
-                  />
-                </div>
-              )}
-              {score !== undefined && (
-                <ScoreBreakdown
-                  score={score}
-                  density="comfortable"
-                  penalties="expandable"
-                />
-              )}
-              <div className="border-l-2 border-border pl-2.5">
-                <span className="text-xs font-medium text-muted-foreground">
-                  最强论点
-                </span>
-                <p className="mt-1 text-sm text-foreground">
-                  {points[s.key] ?? "—"}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function StanceSoftCompare({ agree }: { agree: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-xs ${agree ? statusAccentText.success : statusAccentText.muted}`}
-    >
-      {agree ? <Check size={12} /> : <GitCompare size={12} />}
-      {agree ? "你的倾向与 AI 一致" : "你的倾向与 AI 不同"}
-    </span>
-  );
-}
-
-/** 累计净分唯一最高方；平分或无数则无倾向 chip。 */
-function aiLeanSideKey(
-  sides: DebateSideInfo[],
-  scores?: DebateScoreView[],
-): string | null {
-  if (!scores || scores.length === 0) return null;
-  const byKey = new Map(scores.map((s) => [s.sideKey, s.total]));
-  const ranked = sides
-    .map((s) => ({
-      key: s.key,
-      total: byKey.get(s.key) ?? Number.NEGATIVE_INFINITY,
-    }))
-    .sort((a, b) => b.total - a.total);
-  if (ranked.length < 2) return ranked[0]?.key ?? null;
-  if (ranked[0].total === ranked[1].total) return null;
-  if (!Number.isFinite(ranked[0].total)) return null;
-  return ranked[0].key;
 }
 
 function RiskBoard({ risks }: { risks: RiskItem[] }) {

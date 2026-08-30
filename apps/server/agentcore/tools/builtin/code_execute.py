@@ -58,7 +58,7 @@ __all__ = [
 # 不必解析那行中文散文（脆弱：文件名可能含分隔符「、」、措辞会变、被截断）。
 #
 # C3 边界：code_execute 写回本期明确不走 WriteCoordinator 硬拦（可观测即可）；
-# file_write / append / str_replace / write_section / delete / move 才是互斥闭包。
+# file_write / append / str_replace / delete / move 才是互斥闭包。
 
 
 def _permission_allows_restricted_network(raw: str | None) -> bool:
@@ -137,7 +137,7 @@ def code_execute_description(
         where = (
             f"在当前对话工作区目录中执行代码（{support}），"
             "可访问工作区内的文件。具体是云端沙箱还是用户本机，取决于本回合工作区绑定"
-            "（见 `<workspace_context>`）。"
+            "（见 `<工作区>`）。"
         )
     tail = _USAGE_TAIL
     if location == "local" and "bash" in langs:
@@ -162,6 +162,53 @@ def _make_output_callback(
         )
 
     return callback
+
+
+def _code_execute_engine_wall(
+    location: Literal["server", "local"] | None,
+) -> float | None:
+    """Engine wait_for: cloud must cover desk boot + exec; local keeps category 90s."""
+    if location != "server":
+        return None
+    from agentcore.config import settings
+
+    return (
+        float(settings.gvisor_desk_start_timeout_seconds)
+        + float(settings.tool_execution_timeout_seconds)
+    )
+
+
+def _sandbox_error_result(exc: SandboxError, start: float) -> ToolResult:
+    duration_ms = int((time.monotonic() - start) * 1000)
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE,
+        is_sandbox_unavailable_error,
+        sandbox_unavailable_tool_meta,
+    )
+
+    if is_sandbox_unavailable_error(exc):
+        msg = EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE
+        return ToolResult(
+            tool_call_id="",
+            success=False,
+            output=msg,
+            error=msg,
+            duration_ms=duration_ms,
+            metadata=sandbox_unavailable_tool_meta(),
+        )
+    msg = exc.message or str(exc)
+    # Local launcher / env start failures are self-correctable (switch language) —
+    # mark contract_failure so the circuit breaker does not burn on them.
+    launcher_fail = "代码执行环境启动失败" in msg
+    return ToolResult(
+        tool_call_id="",
+        success=False,
+        output=msg,
+        error=msg,
+        duration_ms=duration_ms,
+        metadata={"code": "launcher_unavailable"} if launcher_fail else {},
+        contract_failure=launcher_fail,
+    )
 
 
 class CodeExecuteTool:
@@ -244,6 +291,7 @@ class CodeExecuteTool:
             },
             category=ToolCategory.EXECUTION,
             approval=ToolApproval.GRANTABLE,
+            timeout_seconds=_code_execute_engine_wall(self._location),
         )
 
     async def execute(self, arguments: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -265,7 +313,7 @@ class CodeExecuteTool:
             avail = "、".join(self._languages) if self._languages else "无"
             msg = (
                 f"本机未装配 language={language}；可用：{avail}"
-                "（见 `<workspace_context>` 可用解释器）。"
+                "（见 `<工作区>` 可用解释器）。"
             )
             return ToolResult(
                 tool_call_id="",
@@ -367,25 +415,18 @@ class CodeExecuteTool:
         if context.on_phase:
             context.on_phase("executing")
         try:
+            # Boot the cloud desk before the per-conversation exec lock so a
+            # minutes-scale start_detach does not queue sibling workers.
+            if self._location == "server":
+                ensure = getattr(context.backend, "ensure_workspace_desk", None)
+                if callable(ensure):
+                    await ensure()
             # Per-conversation serial: same-session workers queue on code_execute only
             # (empty conversation_id → no lock; test_run / terminal bypass this).
             async with code_execute_lock(context.conversation_id):
                 result = await context.backend.execute(request)
         except SandboxError as e:
-            duration_ms = int((time.monotonic() - start) * 1000)
-            msg = e.message or str(e)
-            # Launcher / env start failures are self-correctable (switch language) —
-            # mark contract_failure so the circuit breaker does not burn on them.
-            launcher_fail = "代码执行环境启动失败" in msg
-            return ToolResult(
-                tool_call_id="",
-                success=False,
-                output=msg,
-                error=msg,
-                duration_ms=duration_ms,
-                metadata={"code": "launcher_unavailable"} if launcher_fail else {},
-                contract_failure=launcher_fail,
-            )
+            return _sandbox_error_result(e, start)
         duration_ms = int((time.monotonic() - start) * 1000)
 
         from agentcore.core.ephemeral_env import scrub_env_values

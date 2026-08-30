@@ -705,12 +705,12 @@ def test_the_real_ceo_layers_splice_into_leaf_sections():
     ceo_prompt = compose_ceo_chat_prompt(
         shared_base,
         ceo_tool_names=set(),
-        workspace_context="<workspace_context>本地桌面</workspace_context>",
+        workspace_context="<工作区>本地桌面</工作区>",
     )
     (
         ContextAssembler()
         .add("ceo_prompt", ceo_prompt, SectionOrder.BASE)
-        .add("workspace_context", "<workspace_file_index/>", SectionOrder.WORKSPACE_OVERVIEW)
+        .add("workspace_context", "<工作区文件/>", SectionOrder.WORKSPACE_OVERVIEW)
         .observe(scope="ceo_turn", soft_cap=None)
     )
     from agentcore.observability.prefix_cache import _conversation_sections
@@ -733,7 +733,7 @@ def test_a_growing_source_ledger_is_attributable_to_its_own_section():
     def _turn(sources: str) -> None:
         build_chat_system_prompt(
             ceo_prompt="CEO",
-            workspace_overview="<workspace_file_index/>",
+            workspace_overview="<工作区文件/>",
             recent_team_graph="",
             prior_delivery_gaps="",
             prior_delegate_retry="",
@@ -744,9 +744,9 @@ def test_a_growing_source_ledger_is_attributable_to_its_own_section():
         )
 
     bind_log_context(conversation_id="conv-ledger", trace_id="t1")
-    _turn("<registered_sources>\n- #r1\n</registered_sources>")
+    _turn("<已登记来源>\n- #r1\n</已登记来源>")
     bind_log_context(trace_id="t2")
-    _turn("<registered_sources>\n- #r1\n- #r2\n</registered_sources>")
+    _turn("<已登记来源>\n- #r1\n- #r2\n</已登记来源>")
 
     delta = prompt_section_delta("conv-ledger")
     assert delta.comparable is True

@@ -44,7 +44,7 @@ export function DecisionCardFooter({
   return (
     <div
       className={cn(
-        "mt-3 flex flex-wrap items-center gap-2.5 border-t px-3 py-2.5",
+        "mt-3 flex flex-wrap items-center justify-end gap-2.5 border-t px-3 py-2.5",
         decisionCtaBarAll[tone],
         className,
       )}

@@ -191,7 +191,7 @@ def _moderator_ledger_row(tool: DebateTool):
 
 
 async def test_brief_crash_at_closing_keeps_rounds_and_settles_moderator(tmp_path):
-    """收场简报抛异常（结辩 ∥ 简报 gather 一半崩）→ 已跑轮次 + 结辩照常交付，简报诚实降级。
+    """收场简报抛异常（新场无结辩拍）→ 已跑轮次照常交付，简报诚实降级。
 
     这是「一次 LLM 抖动吞掉整场双产物」的正面回归：此前 gather 未设 return_exceptions，
     异常一路冲出 Moderator.run，整场作废、debate_result 永不发射。
@@ -217,16 +217,15 @@ async def test_brief_crash_at_closing_keeps_rounds_and_settles_moderator(tmp_pat
     assert len(payload["rounds"]) == 1
     assert payload["rounds"][0]["sides"]
 
-    # 降级产物 = 有已跑轮次 + 缺结辩/简报，且诚实说明缺了什么、不编结论。
+    # 降级产物 = 有已跑轮次 + 缺简报，且诚实说明缺了什么、不编结论。
     brief = payload["brief"]
     assert "【收场简报缺失】" in brief["recommendation"]
     assert "完整保留" in brief["recommendation"]
     assert brief["leaning"] == ""
     assert brief["confidence"] == ""
     assert brief["handoffs"] == []
-    # 结辩那一半没崩，照常落地（不因简报失败连坐）。
-    assert [c["key"] for c in payload["closings"]] == ["pro", "con"]
-    assert all(c["ok"] for c in payload["closings"])
+    # 新场不跑结辩；简报失败不连坐已跑轮次。
+    assert payload["closings"] == []
 
     # 主持人节点落终态（正常收场：run_completed），且只有一帧。
     mod_run_id = payload["moderator_run_id"]
@@ -260,7 +259,7 @@ async def test_brief_crash_without_closing_beat_still_lands_result(tmp_path):
 
 
 async def test_closing_crash_keeps_brief_and_rounds(tmp_path, monkeypatch):
-    """结辩整拍崩（gather 的另一半）→ 结辩区留空，但简报与叙事线照常交付。"""
+    """新场不调结辩 runner：boom 注入不触发，简报与叙事线照常交付，closings 空。"""
     from agentcore.tools.builtin.debate import tool as tool_mod
 
     def _boom_closing_runner(*_a, **_k):  # noqa: ANN002, ANN003

@@ -112,8 +112,14 @@ class WorkspaceSettings(BaseModel):
     gvisor_max_concurrent_executions: int = 2
     # Bounded grace queue: how long one call may wait for a free slot before it
     # fails fast with an explainable "busy" result. code_execute stays ≤60s at the
-    # tool layer; test_run (bounded verify) may use up to gvisor_timeout_max.
+    # tool layer *after* the desk is up; test_run (bounded verify) may use up to
+    # gvisor_timeout_max. Desk boot is a separate clock (see
+    # ``gvisor_desk_start_timeout_seconds``).
     gvisor_slot_wait_seconds: float = 15.0
+    # Lazy guest create (sandboxd ``start_detach``). Minutes-scale, not the 60s
+    # exec cap / 90s engine EXECUTION default. Engine wait_for for cloud
+    # ``code_execute`` / ``test_run`` must cover this + the exec ceiling.
+    gvisor_desk_start_timeout_seconds: float = 180.0
     # Per-execution hard resource caps enforced by the OCI spec. Authoritative for
     # cloud runs: an ExecutionRequest cannot exceed them. Memory default sized for
     # document/data workloads (pandas + matplotlib comfortably above 256MB).

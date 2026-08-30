@@ -1,4 +1,4 @@
-"""调研类 playbook：map_fanout / cite_write_review / lens_crosscheck."""
+"""调研类 playbook：map_fanout / cite_write_review."""
 
 from __future__ import annotations
 
@@ -6,39 +6,17 @@ from typing import Any
 
 from agentcore.runtime.runs.playbooks._common import (
     RESEARCHER_ACADEMIC_SEARCH_DISCIPLINE,
-    USER_MESSAGE_MECH_KEY,
     clean_str,
     clean_str_list,
     fold_fanout_slots,
 )
 from agentcore.workspace.stage_dirs import RESEARCH_DIR, REVIEWS_DIR
 
-# 幕 1 约定文档目录：各透镜报告 + 汇总与命题卡（多幕共享；辩论阶段将读这些文件）。
-_MULTI_LENS_RESEARCH_DIR = RESEARCH_DIR
-_SYNTHESIZER_ARTIFACT = f"{_MULTI_LENS_RESEARCH_DIR}/汇总与命题卡.md"
-
 _RESEARCH_REPORT_OUTLINE_ARTIFACT = f"{RESEARCH_DIR}/提纲.md"
 # 单角调研中间产物（≠ 成篇主文件 ``报告.md``；见 research_quality.DEFAULT_*）。
 _RESEARCH_REPORT_DEFAULT_ANGLE_ARTIFACT = f"{RESEARCH_DIR}/调研要点.md"
 # 审校落盘契约写死在 playbook（不靠运行时扫角色名抬 files）；本轮保持中文名。
 _RESEARCH_REPORT_REVIEW_ARTIFACT = f"{REVIEWS_DIR}/审校报告.md"
-
-_SYNTHESIZER_MOTION_CARD_GUIDANCE = (
-    "交叉验证时标清共识 / 冲突 / 分歧。"
-    "若存在【真对立轴】（价值对立或主张相互否证、继续取证消解不了）——"
-    "收尾调用 handoff【必须】填写结构化参数 `motion_card` 对象（主管呈报与开辩芯片只认此字段）："
-    "motion；sides≥2（每方 key/name/stance，stance 薄立场一句话立场倾向）；"
-    "fact_pointers（可 []）；rationale（论证为何须对抗而非继续取证）；form 默认 debate。"
-    "存在真对立轴则必须产卡；【禁止】用交付正文 markdown 表、或 key_points 散文写"
-    "『命题卡 / Motion=…』代替该对象；也勿写 Followups 芯片文案（系统据卡自动注入）。"
-    "见分歧或仅事实缺口、无真对立轴【不要】产卡。"
-    "【命题保真】motion 必须锚定用户原始问题的【对象】与【形态】："
-    "对象=用户点名的主体 / 案由 / 标的；形态=用户点名的对抗形式。"
-    "用户点名【模拟法庭 / 庭审 / 对簿公堂】等=原被告对抗【本案】时，"
-    "motion 应是本案争议（如一审认定应否维持 / 是否构成侵权），"
-    "制度 / 价值 / 政策分歧写入双方 stance 与 rationale 作论据，"
-    "【禁止】把命题抬成制度层政策辩、替换命题对象。"
-)
 
 
 def _research_angle_artifact(label: str) -> str:
@@ -53,60 +31,6 @@ def _brief_angle_artifact(label: str) -> str:
     from agentcore.workspace._paths import truncate_filename_utf8
 
     return f"{RESEARCH_DIR}/{truncate_filename_utf8(f'{label}方向笔记.md')}"
-
-
-def _lens_report_artifact(lens: str) -> str:
-    """Workspace-relative Chinese-readable path for one lens report."""
-    from agentcore.workspace._paths import truncate_filename_utf8
-
-    return f"{_MULTI_LENS_RESEARCH_DIR}/{truncate_filename_utf8(f'{lens}透镜报告.md')}"
-
-
-def _lens_report_artifact_for_parts(parts: list[str]) -> str:
-    """Artifact path for a (possibly folded) lens slot — joined names when merged."""
-    return _lens_report_artifact(" + ".join(parts))
-
-
-def _lens_retrieval_division(lens: str, *, is_base_owner: bool) -> str:
-    """Static retrieval-division pedagogy for one parallel lens task (no runtime deps).
-
-    Lenses run in parallel and must not assume peer reports exist yet. Division is
-    task-text only（职责分工）；检索额度走统一默认，playbook **不**再显式写入
-    base/gap 两档 ``retrieval_budget``。
-
-    Folded overflow always lands in the *last* slot (see ``fold_fanout_slots``), so
-    ``is_base_owner`` remains index-0 only — first slot stays a single primary lens
-    owning the shared factual base; merged last-slot workers stay gap lenses.
-    """
-    shared = (
-        "【检索分工】多路并行、互不等待彼此产物——分工写在任务书里，勿假定可先读其它透镜报告；"
-        f"本路报告落盘 `{_MULTI_LENS_RESEARCH_DIR}/` 供汇总与后续幕消费。"
-    )
-    if is_base_owner:
-        return (
-            f"{shared}"
-            f"【本路·{lens}·公共基础事实负责人】时间线 / 双方主体 / 事件概况等公共底料由本路查全"
-            "并写入报告；同时深挖本透镜独有角度与证据。其余透镜只做底料简要确认——"
-            "勿指望他们补全公共底料。用尽检索预算后基于已有证据交付。"
-        )
-    return (
-        f"{shared}"
-        f"【本路·{lens}·独有缺口】公共基础事实（时间线 / 主体 / 事件概况）以简要确认为限，"
-        "勿重复深挖全案底料；检索预算集中在本透镜独有角度、主张、证据与来源缺口——"
-        "禁止把预算耗在重复搜公共底料上。"
-    )
-
-
-def _user_request_anchor_block(user_message: str) -> str:
-    """Mechanism block: full user line for synthesizer fidelity (empty → omit)."""
-    um = clean_str(user_message)
-    if not um:
-        return ""
-    return (
-        f"【用户原话·全文·机制注入】「{um}」——"
-        "产卡时以这段原话为命题保真锚（不依赖上方 topic 摘要）；"
-        "topic 仅为调研主题标签，不得覆盖原话中的对象与形态约束。"
-    )
 
 
 # A 档摸底验收：写进 map_fanout task（提示词纪律，非完成硬闸）。
@@ -191,8 +115,8 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
     普通构想勿默认学术审校。一起弄懂/多路摸清/仅提论文开源当资料默认 ``map_fanout``。
 
     中间环（各路调研 + 提纲）与终稿同走约定文档契约：``form=files`` + 钉死
-    ``AgentCore/文档/research/`` 下路径（角度名入文件名，对齐 MLR ``{透镜}透镜报告.md``；
-    提纲钉 ``提纲.md``）。成篇验收钉死单一主文件（``output_path`` / 默认 ``报告.md``）；
+    ``AgentCore/文档/research/`` 下路径（角度名入文件名；提纲钉 ``提纲.md``）。
+    成篇验收钉死单一主文件（``output_path`` / 默认 ``报告.md``）；
     主交付 `.md`；用户要 PDF/Word/可分享时 brief 钉 ``md → md_to_pdf | md_to_docx → handoff``
     （禁 HTML 顶替、禁 reportlab / python-docx 主路径）。若 CEO 手写并行拆章，须另加 merge 步
     并把各章 brief 写死同一路径——见 ``PAPER_PARALLEL_MERGE_DISCIPLINE``。
@@ -314,8 +238,7 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
                 "【成篇落盘纪律·Artifact-first】① 【主路径】一次 file_write 完整正文；"
                 "或先短骨架（标题+各章小标题/FILL 占位）再按节填空——"
                 "禁止首写半章散文再 append；"
-                "Markdown 填空只用 file_append / str_replace，【禁止】write_section"
-                "（及 `<!-- SECTION: -->`，二者仅建站 HTML）；"
+                "Markdown 填空只用 file_append / str_replace；"
                 "② 骨架路径按章填空，一章写完再下一章；多章超长时本波只填写死的章节范围"
                 "（或前几章），勿默认一人一次写完全文；③ 中等篇幅一次 "
                 "file_write 写完全文（与①主路径一致）；④ 预算/token 不够写完下一章时，"
@@ -353,99 +276,6 @@ def cite_write_review(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
             # 审校为依赖写作的收尾节点：通读长稿 + 核对出处。墙钟显式 300s（优先于统一
             # backstop）；token 顶走 worker_budget 统一回填。
             "timeout_ms": 300_000,
-        }
-    )
-    return tasks, []
-
-
-def lens_crosscheck(args: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
-    """N×异质透镜并行调研 → 汇总分析师 depends_on 全部透镜做交叉验证（可产 motion_card）.
-
-    Companion shape for ``deep_multi_lens_research`` skill: parallel heterogeneous lenses
-    then a synthesizer that cross-checks and may suggest a debate motion — not a compare table.
-
-    幕 1 产物以 ``form=files`` + ``artifacts`` 落盘 ``AgentCore/文档/research/``（各透镜自写报告 +
-    汇总员写「汇总与命题卡」）。开工授权（delegation grant）覆盖整次委派的
-    file_mutation 工具面，各透镜并行写文件不会额外弹授权卡；handoff / motion_card
-    链路照旧，落盘是叠加。
-
-    lenses 须 ≥2（与 map_fanout.angles 同形）；超过扇出上限时折叠进末节点（合并不丢弃），
-    首透镜仍独占公共底料分工。
-    """
-    topic = clean_str(args.get("topic"))
-    if not topic:
-        return [], ["lens_crosscheck 需要 slot『topic』（要多视角调研的主题 / 事件）"]
-    lenses_raw = clean_str_list(args.get("lenses"), cap=None)
-    if len(lenses_raw) < 2:
-        return [], [
-            "lens_crosscheck 需要 slot『lenses』且 ≥2 个异质透镜名"
-            "（单透镜请手写 1 人 task）"
-        ]
-    lens_slots, lens_fold_note = fold_fanout_slots(lenses_raw, label="透镜")
-    fold_hint = f" {lens_fold_note}" if lens_fold_note else ""
-    raw_um = args.get(USER_MESSAGE_MECH_KEY)
-    user_anchor = _user_request_anchor_block(raw_um if isinstance(raw_um, str) else "")
-
-    lens_ids = [f"lens_{i}" for i in range(len(lens_slots))]
-    tasks: list[dict[str, Any]] = []
-
-    for i, (lid, parts) in enumerate(zip(lens_ids, lens_slots, strict=True)):
-        merged = len(parts) > 1
-        label = " + ".join(parts)
-        # Division pedagogy keys off the first name in the slot; fold always puts
-        # overflow in the last slot so index-0 stays a single primary base owner.
-        primary = parts[0]
-        artifact = _lens_report_artifact_for_parts(parts)
-        is_base = i == 0
-        division = _lens_retrieval_division(primary, is_base_owner=is_base)
-        scope = (
-            f"从以下合并透镜深入调研：{'、'.join(f'【{p}】' for p in parts)}。"
-            f"本节点职责涵盖上述全部 {len(parts)} 个透镜；须全部覆盖，勿只做第一项。"
-            if merged
-            else f"只从【{primary}】透镜深入调研："
-        )
-        task_body: dict[str, Any] = {
-            "id": lid,
-            "role": f"{label}视角",
-            "task": (
-                f"围绕主题 / 事件【{topic}】，{scope}"
-                "关键事实、证据、各方主张与来源；聚焦本节点透镜、勿铺开到其它维度。"
-                f"{division}"
-                f"完整调研报告须用 file_write 落盘到 `{artifact}`"
-                "（内容=本透镜完整报告正文，不是 handoff 摘要的复制；勿只写提纲）。"
-                "handoff 结构化简报照旧（精炼结论 + 证据指针），落盘是叠加、不得替代 handoff。"
-                f"{fold_hint}"
-            ),
-            "deliverable": {
-                "form": "files",
-                "artifacts": [artifact],
-                "citation_mode": "two_phase",
-            },
-        }
-        if lens_fold_note and merged:
-            task_body["playbook_note"] = lens_fold_note
-        tasks.append(task_body)
-    tasks.append(
-        {
-            "id": "synthesizer",
-            "role": "汇总分析师",
-            "task": (
-                f"综合上游各透镜对【{topic}】的调研，做交叉验证："
-                "列出共识、事实冲突、价值分歧与证据缺口；给出跨维度综述（非简单并列粘贴）。"
-                f"可先 file_read `{_MULTI_LENS_RESEARCH_DIR}/` 下各透镜报告取完整正文。"
-                f"完整综述须用 file_write 落盘到 `{_SYNTHESIZER_ARTIFACT}`"
-                "（含交叉验证全文；若产命题卡则把命题 / 双方薄立场 / rationale 一并写入该文件；"
-                "内容是完整约定文档，不是 handoff 摘要复制）。"
-                "handoff 结构化简报与 motion_card 对象照旧，落盘是叠加、不得替代。"
-                f"{user_anchor}"
-                f"{_SYNTHESIZER_MOTION_CARD_GUIDANCE}"
-            ),
-            "depends_on": lens_ids,
-            "deliverable": {
-                "form": "files",
-                "artifacts": [_SYNTHESIZER_ARTIFACT],
-                "citation_mode": "two_phase",
-            },
         }
     )
     return tasks, []

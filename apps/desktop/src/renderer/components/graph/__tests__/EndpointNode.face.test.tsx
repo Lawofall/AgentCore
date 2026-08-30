@@ -68,7 +68,7 @@ describe("EndpointNodeFace · whiteboard slot", () => {
     const card = screen.getByTestId("endpoint-node-card");
     expect(card.style.height).toBe(`${NODE_HEIGHT}px`);
     expect(card.textContent).toContain("你的任务");
-    expect(card.textContent).toContain("对话发起");
+    expect(card.textContent).not.toContain("对话发起");
     expect(card.textContent).toContain("协作图渲染链路审计员");
   });
 });

@@ -31,8 +31,8 @@ def test_resolve_playbook_xor_tasks_rejected():
 
     name, err = resolve_playbook_declaration(
         {
-            "playbook": "lens_crosscheck",
-            "playbook_args": {"topic": "X"},
+            "playbook": "map_fanout",
+            "playbook_args": {"topic": "X", "angles": ["甲", "乙"]},
             "tasks": [{"role": "a", "task": "b"}],
         }
     )
@@ -263,12 +263,12 @@ def test_automation_delivery_ignored_named_playbooks_still_ok():
 def test_automation_console_allows_named_remaining_playbook():
     name, err = resolve_playbook_declaration(
         {
-            "playbook": "lens_crosscheck",
-            "playbook_args": {"topic": "Ops"},
+            "playbook": "map_fanout",
+            "playbook_args": {"topic": "Ops", "angles": ["甲", "乙"]},
         },
     )
     assert err is None
-    assert name == "lens_crosscheck"
+    assert name == "map_fanout"
 
 
 def test_automation_plan_allows_website():

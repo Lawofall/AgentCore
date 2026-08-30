@@ -374,6 +374,7 @@ async def react_loop(
         if apply_exec_env_dead_retire(
             disabled_tools=disabled_tools,
             controller=controller,
+            tool_context=tool_context,
         ):
             tool_defs = _resolve_tool_defs()
 

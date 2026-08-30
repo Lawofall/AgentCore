@@ -77,7 +77,7 @@ def _classify(path: str) -> tuple[str, str]:
 
     The always-injected core (偏好.md / 画像.md) and on-demand topics (主题/*.md) are ``rule``
     docs so they are the injectable / consultable memory (§5.2); topics are ``on_demand`` (name
-    rides the directory, not ``<rules>``). Episodic digests and the meta sidecar no longer
+    rides the directory, not ``<设定>``). Episodic digests and the meta sidecar no longer
     live in the documents tree — they have dedicated tables.
     """
     if is_topic_path(path):

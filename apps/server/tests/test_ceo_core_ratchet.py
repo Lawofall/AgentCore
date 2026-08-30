@@ -9,7 +9,7 @@
 
 比体积更要紧的是**权威归属**：同一件事只能有一处权威。
 
-- 环境能不能做某事 = **算出来的事实**，住 ``<workspace_context>``（``本回合执行能力`` /
+- 环境能不能做某事 = **算出来的事实**，住 ``<工作区>``（``本回合执行能力`` /
   ``产物格式`` / ``装包事实`` / ``出站网络`` …）。核里复述一份就会漂——案 0a71 就是核里
   散文断言「``md_to_docx`` / ``md_to_pdf`` 无条件装配」，而 CEO 并不持这两把工具、在自己的
   工具列表里看不见它们，模型于是花了整段思考链猜「队员到底有没有」，最后把用户的三个选项
@@ -56,7 +56,7 @@ from agentcore.runtime.resolve.prompt import (
 # 2026-08-25 本波：开工卡退役文案 / 工具失败脸 / rebuild 提示进入常驻前缀。
 # 当次实测 24465。cap 提到 24470（向上取整到十位）。
 # 2026-08-26 ask_user 核/Skill 去重第一刀：常驻百科压成开火短卡，HOW 真源进
-# ask_user_kickoff。当次实测 23556。cap 降到 23560。
+# asking_the_user。当次实测 23556。cap 降到 23560。
 # 2026-08-26 第二刀：结局分层/拆人手册下沉 team_orchestration_advanced。
 # 当次实测 22439。cap 降到 22440。
 # 2026-08-26 第三刀：立刻派≠全量 / 绿场切片 HOW 下沉编排·build_app，核留开火短卡。
@@ -81,7 +81,7 @@ from agentcore.runtime.resolve.prompt import (
 # cap 18920。
 # 2026-08-27 第二轮 1–3 步：核从场面汇编收到宪法；场面 HOW 一句 consult 钩；
 # 诚实禁语表收成一条元规则。当次实测 15019。cap 降到 15020。
-# 短改稿开工模板出核（HOW 只在 ask_user_kickoff）。当次实测 14911。cap 降到 14920。
+# 短改稿开工模板出核（HOW 只在 asking_the_user）。当次实测 14911。cap 降到 14920。
 # 2026-08-27 第三轮：编制自选吞拆几个人；已确认约束/明示确认收成钩；
 # 勿推销并进主张对照。当次实测 14752。cap 降到 14760。
 # 明示确认钩补回「落盘前须 ask_user」（常见路勿先 consult）。当次实测 14791。cap 14800。
@@ -156,7 +156,19 @@ from agentcore.runtime.resolve.prompt import (
 # 2026-08-29 核 how_you_work 只留身份边界；WHEN 归 delegate / consult description。
 # 当次实测 2219。cap 降到 2220。
 # 2026-08-29 官网 URL 出 <role>，走 product_help。当次实测 2149。cap 降到 2150。
-_RESIDENT_CAP = 2150
+# 2026-08-30 核出两条补集禁止（空白 / 未装配写进任务）；切口在 delegate.task。
+# 当次实测 1824。cap 降到 1830。
+# 2026-08-30 持械边界并进 <身份>，删独立 <怎么干活> 标签。当次实测 1807。cap 降到 1810。
+# 2026-08-30 全员基座并段：开场收口、输入合并、诚实并标签、凭据进工作权威。
+# 当次实测 1635。cap 降到 1640。
+# 2026-08-30 「能查就别猜」并进 <诚实> 首句（用过之后不编造覆盖不了用之前凭空答）。
+# 当次实测 1652。cap 提到 1660（抬顶，非回潮）。
+# 2026-08-30 五时刻脊柱：身份并进角色层、拆 <怎么对人>、文风改 <输出>。
+# 当次实测 1517。cap 降到 1520。
+# 2026-08-30 工种叠层：CEO 专属（大白话 / 用户可见面）从基座搬回 <身份>；
+# 扩范围按角色分叉。当次实测 1569。cap 1570（抬顶=身份语义归位，非回潮）。
+# 2026-08-30 基座权威去通道分叉（问谁归工具 description）。当次实测 1498。cap 1500。
+_RESIDENT_CAP = 1500
 
 # (门工具, 该手册的签名字面) —— 手册只在门开的回合出现，不许常驻。
 _GATED_MANUALS: tuple[tuple[str, str], ...] = (
@@ -190,7 +202,7 @@ def test_resident_core_chars_within_cap():
 
 
 def test_core_states_no_tool_assembly_claims():
-    """案 0a71 回归守卫：装配态只能由 `<workspace_context>` 算，核里不许用散文断言。"""
+    """案 0a71 回归守卫：装配态只能由 `<工作区>` 算，核里不许用散文断言。"""
     hint = _CEO_CORE_HINT
     assert "无条件装配" not in hint
     # 专用导出器的名字出现在核里，几乎总是为了断言「它一定在」——装没装配看产物格式行。
@@ -199,7 +211,8 @@ def test_core_states_no_tool_assembly_claims():
     # 后缀枚举同理：能产什么由注册表 + 本回合闸算出来，核只教怎么读那行。
     for suffix in ("pptx", "xlsx", "docx"):
         assert suffix not in hint.lower(), f"核不枚举 .{suffix}；对照 `产物格式：` 行"
-    assert "产物格式" in hint  # 但必须教模型去读那行
+    assert "产物格式" in hint
+    assert "产物格式" not in assemble_system_prompt()
 
 
 def test_core_does_not_restate_computed_workspace_facts():
@@ -208,6 +221,7 @@ def test_core_does_not_restate_computed_workspace_facts():
     # 「无原生生图工具」两条 egress 分支都已陈述；核只留「对照出站网络行」+ 出图路由。
     assert "无原生生图工具" not in hint
     assert "出站网络" in hint
+    assert "出站网络" not in assemble_system_prompt()
 
 
 @pytest.mark.parametrize(("gate_tool", "signature"), _GATED_MANUALS)
@@ -243,8 +257,10 @@ def test_honesty_floors_stay_resident():
 
     hint = _CEO_CORE_HINT
     base = assemble_system_prompt()
-    assert "对照本回合结构面" in hint
-    assert "未对照则不得声称" in hint
+    assert "对照本回合结构面" in base
+    assert "未对照则不得声称" in base
+    assert "未对照则不得声称" not in hint
+    assert "已落盘" not in base
     assert "已落盘" in hint
     assert "结构自检" in _BUILDING_SOFTWARE
     assert "export_to_local" in _BUILDING_SOFTWARE

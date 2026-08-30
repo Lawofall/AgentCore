@@ -96,8 +96,6 @@ describe("Transcript moderator pending", () => {
         })}
         execution={emptyExec}
         messageId="m1"
-        conversationId={null}
-        interactive={false}
       />,
     );
     expect(screen.getByText("主持人正在拟质询…")).toBeTruthy();
@@ -124,8 +122,6 @@ describe("Transcript moderator pending", () => {
         })}
         execution={emptyExec}
         messageId="m1"
-        conversationId={null}
-        interactive={false}
       />,
     );
     expect(screen.getByText("正在小结…")).toBeTruthy();
@@ -141,8 +137,6 @@ describe("Transcript moderator pending", () => {
         })}
         execution={emptyExec}
         messageId="m1"
-        conversationId={null}
-        interactive={false}
       />,
     );
     expect(screen.getByText("正在小结…")).toBeTruthy();

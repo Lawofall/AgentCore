@@ -368,7 +368,7 @@ async def test_update_folder_profile_writes_and_hot_refreshes(tmp_path, ep_store
     store = FileMemoryStore(tmp_path)
     uid = str(uuid4())
     folder = str(uuid4())
-    holder = _PromptHolder(_system_prompt="worker base\n<rules>\nold\n</rules>")
+    holder = _PromptHolder(_system_prompt="worker base\n<设定>\nold\n</设定>")
     tool = UpdateFolderProfileTool(
         folder_id=folder,
         store=store,
@@ -382,7 +382,7 @@ async def test_update_folder_profile_writes_and_hot_refreshes(tmp_path, ep_store
     assert res.success
     assert res.display["kind"] == "folder_profile"
     assert "TypeScript" in res.output
-    assert "<folder_profile_updated>" in holder._system_prompt
+    assert "<文件夹画像已更新>" in holder._system_prompt
     assert "TypeScript" in holder._system_prompt
     loaded = await store.load(uid, CORE_MEMORY_FILE, scope=folder)
     assert "TypeScript" in loaded
@@ -452,7 +452,7 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
     )
     assert "当前文件夹约定记忆「画像.md」为空" not in without
     assert "当前文件夹约定记忆「画像.md」为空" in with_flag
-    assert "<cold_start_explore>" in with_flag
+    assert "<冷启动探索>" in with_flag
     assert "闲聊" in with_flag or "问候" in with_flag
     assert "假画像" in with_flag
     assert "update_folder_profile" in with_flag
@@ -463,7 +463,7 @@ def test_compose_prompt_cold_start_block_only_when_flagged():
     assert "摸完整仓" in with_flag
     assert "与巩固侧「冷启动」无关" in with_flag
     block = with_flag[
-        with_flag.find("<cold_start_explore>") : with_flag.find("</cold_start_explore>")
+        with_flag.find("<冷启动探索>") : with_flag.find("</冷启动探索>")
     ]
     assert "team_preview" not in block
 
@@ -493,7 +493,7 @@ def test_compose_prompt_rebind_gate():
     assert "绑定已变" in text
     assert "轻探" in text
     assert "合并更新" in text
-    assert "<cold_start_explore>" in text
+    assert "<冷启动探索>" in text
     assert "画像.md」为空" not in text
 
 
@@ -506,7 +506,7 @@ def test_compose_prompt_refresh_gate():
         cold_start_explore="refresh",
     )
     assert "用户点名刷新" in text
-    assert "<cold_start_explore>" in text
+    assert "<冷启动探索>" in text
     assert "合并" in text
     assert "画像.md」为空" not in text
     assert "【冷启动探索幕 · 绑定已变】" not in text
@@ -750,10 +750,10 @@ def test_compose_prompt_folder_profile_empty_soft_hint():
         cold_start_explore=False,
         folder_profile_empty_soft=True,
     )
-    assert "<folder_profile_empty>" in soft
+    assert "<文件夹画像空>" in soft
     assert "【文件夹画像提示】" in soft
     assert "不挡" in soft
-    assert "</cold_start_explore>" not in soft
+    assert "</冷启动探索>" not in soft
     assert "写盘不得出 AgentCore/" not in soft
     assert "不可当跳过" in soft
     # Hard empty wins over soft empty.
@@ -764,8 +764,8 @@ def test_compose_prompt_folder_profile_empty_soft_hint():
         cold_start_explore="empty",
         folder_profile_empty_soft=True,
     )
-    assert "</cold_start_explore>" in hard
-    assert "</folder_profile_empty>" not in hard
+    assert "</冷启动探索>" in hard
+    assert "</文件夹画像空>" not in hard
     assert "写盘不得出 AgentCore/" in hard
     assert "不可跳过" in hard
 

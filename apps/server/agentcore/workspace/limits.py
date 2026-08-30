@@ -84,7 +84,6 @@ WORKSPACE_CHANNEL_DEAD_RETIRE_TOOLS: tuple[str, ...] = (
     "file_write",
     "file_append",
     "str_replace",
-    "write_section",
     "file_delete",
     "file_move",
     "file_copy",
@@ -131,6 +130,10 @@ CHANNEL_DEAD_CEO_INJECT = (
 # "this task needs code_execute").
 EXEC_ENV_DEAD_CEO_INJECT = (
     "这台电脑此刻跑不了命令，基于已有材料收口；"
+    "禁止再派需要 code_execute/test_run 的队员；只读/只写文档可以。"
+)
+EXEC_ENV_DEAD_CEO_INJECT_CLOUD = (
+    "云端隔离执行当前不可用，基于已有材料收口；"
     "禁止再派需要 code_execute/test_run 的队员；只读/只写文档可以。"
 )
 
@@ -204,6 +207,21 @@ WORKSPACE_CHANNEL_DEAD_RETIRE_STEER = (
 )
 
 
+def exec_env_dead_ceo_inject(code: str | None = None) -> str:
+    """CEO inject line for sticky exec-env-dead (cloud vs local machine)."""
+    from agentcore.tools.sandbox.exec_env import (
+        EXEC_ENV_NOT_LINUX_CODE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+    )
+
+    if (code or "").strip() in (
+        EXEC_ENV_NOT_LINUX_CODE,
+        EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+    ):
+        return EXEC_ENV_DEAD_CEO_INJECT_CLOUD
+    return EXEC_ENV_DEAD_CEO_INJECT
+
+
 def exec_env_dead_user_visible(code: str | None = None) -> str:
     """User-visible exec-env-dead line for a classified probe reason code.
 
@@ -219,13 +237,14 @@ def capability_dead_inject_lines(
     *,
     workspace_channel_dead: bool = False,
     exec_env_dead: bool = False,
+    exec_env_dead_reason: str | None = None,
 ) -> list[str]:
     """CEO inject nails for sticky capability-missing flags (soft steer only)."""
     lines: list[str] = []
     if workspace_channel_dead:
         lines.append(CHANNEL_DEAD_CEO_INJECT)
     if exec_env_dead:
-        lines.append(EXEC_ENV_DEAD_CEO_INJECT)
+        lines.append(exec_env_dead_ceo_inject(exec_env_dead_reason))
     return lines
 
 

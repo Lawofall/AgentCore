@@ -357,7 +357,7 @@ async def test_tool_off_this_surface_keeps_role_steer_off_the_user_face():
     assert model == (
         "工具 'code_execute' 当前工具面不可用。"
         "若你是 CEO：写盘/跑代码/跑测试须 `delegate` 派给 worker，勿亲自调用。"
-        "若你是 worker：本回合未装配执行类工具（见 `<workspace_context>` 的"
+        "若你是 worker：本回合未装配执行类工具（见 `<工作区>` 的"
         "「本回合执行能力」），勿空转重试。"
     )
     assert_user_face_clean(user)

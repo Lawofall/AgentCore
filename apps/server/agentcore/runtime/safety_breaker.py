@@ -406,7 +406,7 @@ def _command_text_for_tool(tool_name: str, arguments: dict[str, Any]) -> str:
 def _path_args_for_tool(tool_name: str, arguments: dict[str, Any]) -> list[str]:
     if tool_name == "file_read":
         return [str(arguments.get("path") or "")]
-    if tool_name in {"file_write", "file_append", "str_replace", "write_section"}:
+    if tool_name in {"file_write", "file_append", "str_replace"}:
         return [str(arguments.get("path") or "")]
     if tool_name == "grep":
         paths = [str(arguments.get("path") or "")]
@@ -421,7 +421,7 @@ def _path_args_for_tool(tool_name: str, arguments: dict[str, Any]) -> list[str]:
 
 def _write_content_for_secret_scan(tool_name: str, arguments: dict[str, Any]) -> str:
     """Body about to land on disk (heuristic secret gate; 案 image-gen B)."""
-    if tool_name in {"file_write", "file_append", "write_section"}:
+    if tool_name in {"file_write", "file_append"}:
         return str(arguments.get("content") or "")
     if tool_name == "str_replace":
         return str(arguments.get("new_string") or "")
@@ -501,7 +501,7 @@ def evaluate_tool_call(tool_name: str, arguments: dict[str, Any] | None) -> Brea
                 )
 
     # Sensitive writes + pasted-key content (案 20260803-image-gen-byok-egress-boundary B).
-    if name in {"file_write", "file_append", "str_replace", "write_section"}:
+    if name in {"file_write", "file_append", "str_replace"}:
         for path in _path_args_for_tool(name, args):
             if classify_sensitive_path(path) is not SensitivePathClass.NONE:
                 return BreakerHit(

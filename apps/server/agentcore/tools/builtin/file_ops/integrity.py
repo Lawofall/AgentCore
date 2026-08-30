@@ -472,8 +472,6 @@ def _log_write_collision(
         logger.info("file_append.collision", path=path, run_id=run_id, owner=owner)
     elif event == "str_replace.collision":
         logger.info("str_replace.collision", path=path, run_id=run_id, owner=owner)
-    elif event == "write_section.collision":
-        logger.info("write_section.collision", path=path, run_id=run_id, owner=owner)
     elif event == "file_delete.collision":
         logger.info("file_delete.collision", path=path, run_id=run_id, owner=owner)
     elif event == "file_move.collision":

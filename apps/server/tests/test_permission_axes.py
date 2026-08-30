@@ -32,7 +32,7 @@ class _ServerBackend:
 
 
 _FILE_OP_CLASS = frozenset(
-    {"file_write", "file_append", "str_replace", "write_section", "git"}
+    {"file_write", "file_append", "str_replace", "git"}
 )
 
 
@@ -266,15 +266,6 @@ def test_cloud_worker_honors_file_write_ask():
         cloud_worker_skips_per_call_gate(
             cloud,
             "file_write",
-            permission_axes=cautious,
-            file_op_tools=_FILE_OP_CLASS,
-        )
-        is False
-    )
-    assert (
-        cloud_worker_skips_per_call_gate(
-            cloud,
-            "write_section",
             permission_axes=cautious,
             file_op_tools=_FILE_OP_CLASS,
         )

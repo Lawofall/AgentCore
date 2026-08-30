@@ -6,7 +6,7 @@
  * - 「裁决过程」文字链接已删（文字链接只留给就地展开）；
  * - moderatorRun 缺席（进行中 / 旧产物）时标题退回纯文本。
  *
- * 三区布局（BLUF）：裁决卡 → 战果对照 → 留给你的。
+ * 正反终审：裁决卡 + 留给你的（有交接则不展建议；不展最强论点）。
  */
 
 import type { Execution, RunNode } from "@/stores/execution";
@@ -175,52 +175,11 @@ describe("FinaleStage 钻取惯例", () => {
   });
 });
 
-describe("FinaleStage 三区布局", () => {
-  it("正反：裁决卡纯判断（无争点/建议）+ 战果对照最强论点 +「留给你的」含建议与交接", () => {
+describe("FinaleStage 终审布局", () => {
+  it("正反：裁决卡 + 交接；有交接不展建议与最强论点", () => {
     render(
       <FinaleStage
-        model={settledBriefModel({
-          rounds: [
-            {
-              roundNo: 1,
-              focus: "成本",
-              summary: "首轮交锋",
-              verdict: null,
-              sides: [],
-              clashes: [],
-              crossExam: [],
-              witnessExam: [],
-              userInterjections: [],
-              inFlight: false,
-              findings: [],
-              threadTurns: [],
-              scores: [
-                {
-                  sideKey: "pro",
-                  name: "正方",
-                  colorVar: "var(--debate-side-pro)",
-                  argument: 4,
-                  engagement: 3,
-                  evidence: 3,
-                  penalties: [],
-                  note: "",
-                  total: 10,
-                },
-                {
-                  sideKey: "con",
-                  name: "反方",
-                  colorVar: "var(--debate-side-con)",
-                  argument: 3,
-                  engagement: 4,
-                  evidence: 2,
-                  penalties: ["以未证实的尾部风险当既定事实"],
-                  note: "",
-                  total: 8,
-                },
-              ],
-            },
-          ],
-        })}
+        model={settledBriefModel()}
         execution={executionWith([moderatorRun()])}
         messageId="m1"
       />,
@@ -228,19 +187,17 @@ describe("FinaleStage 三区布局", () => {
 
     expect(screen.getByText("倾向正方")).toBeTruthy();
     expect(screen.getByText("胜负手")).toBeTruthy();
-    // 正反裁决卡不渲染争点；建议迁至「留给你的」
     expect(screen.queryByText("争点")).toBeNull();
-    expect(screen.getByText(/建议：/)).toBeTruthy();
-    expect(screen.getByText("先做试点")).toBeTruthy();
-    expect(screen.getByText("战果对照")).toBeTruthy();
-    expect(screen.getAllByText("最强论点").length).toBe(2);
-    expect(screen.getByText("ROI 清晰")).toBeTruthy();
-    expect(screen.getByText("风险未清")).toBeTruthy();
-    // 三维常驻 + 罚分可展开
-    expect(screen.getAllByText("论点").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("回应").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("证据").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/罚分 · 1/)).toBeTruthy();
+    expect(screen.queryByText(/建议：/)).toBeNull();
+    expect(screen.queryByText("先做试点")).toBeNull();
+    expect(screen.queryByText("战果对照")).toBeNull();
+    expect(screen.queryByText("最强论点")).toBeNull();
+    expect(screen.queryByText("ROI 清晰")).toBeNull();
+    expect(screen.queryByText("风险未清")).toBeNull();
+    expect(screen.queryByText("本轮记分")).toBeNull();
+    expect(screen.queryByText(/净 /)).toBeNull();
+    expect(screen.queryByText("你的倾向与 AI 一致")).toBeNull();
+    expect(screen.queryByText("你的倾向与 AI 不同")).toBeNull();
     expect(screen.getByText("留给你的")).toBeTruthy();
     expect(screen.getByText(/要不要牺牲速度/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "回复拍板" })).toBeTruthy();
@@ -250,6 +207,30 @@ describe("FinaleStage 三区布局", () => {
     expect(screen.queryByText(/需你定夺/)).toBeNull();
     expect(screen.queryByText("事实分歧")).toBeNull();
     expect(screen.queryByText("待解问题")).toBeNull();
+  });
+
+  it("正反：无交接时降级展示建议，仍不展最强论点", () => {
+    render(
+      <FinaleStage
+        model={settledBriefModel({
+          brief: {
+            leaning: "倾向正方",
+            confidence: "high",
+            decisive: "证据更扎实",
+            crux: "成本可否接受",
+            recommendation: "先做试点",
+            strongest_points: { pro: "ROI 清晰", con: "风险未清" },
+            handoffs: [],
+          },
+        })}
+        execution={executionWith([moderatorRun()])}
+        messageId="m1"
+      />,
+    );
+    expect(screen.getByText(/建议：/)).toBeTruthy();
+    expect(screen.getByText("先做试点")).toBeTruthy();
+    expect(screen.queryByText("最强论点")).toBeNull();
+    expect(screen.queryByText("ROI 清晰")).toBeNull();
   });
 
   it("回复拍板 / 派查证 预填主输入框 draft", async () => {

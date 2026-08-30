@@ -172,8 +172,8 @@ def _message_end(events):
 
 async def test_pipeline_leaves_sink_open_for_post_turn_tail(monkeypatch):
     """The pipeline must NOT close the sink — its owner (the coordinator) does — so the
-    post-turn tail (title_generated / stage_card_required, emitted by persist_turn_result
-    AFTER the pipeline returns) still reaches the client.
+    post-turn tail (title_generated, emitted by persist_turn_result AFTER the pipeline
+    returns) still reaches the client.
 
     Regression for dropped post-turn SSE: run_chat_pipeline used to close the sink in
     its finally, so the tail hit an already-closed sink and was silently dropped (emit is a

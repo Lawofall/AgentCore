@@ -4,6 +4,7 @@ import { ContactsDialog } from "@/components/messages/ContactsDialog";
 import { NewChatDialog } from "@/components/messages/NewChatDialog";
 import { ProductNoticeDetail } from "@/components/messages/ProductNoticeDetail";
 import { UserProfileDialog } from "@/components/messages/UserProfileDialog";
+import { EmptyHint } from "@/components/ui";
 import { useNarrowLayoutState } from "@/lib/narrowLayout";
 import { useMessagingStore } from "@/stores/messaging";
 import { Mail } from "lucide-react";
@@ -73,12 +74,11 @@ export function MessagesPage() {
           ) : chatId ? (
             <ChatThread chatId={chatId} />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-              <Mail size={28} className="text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
-                选择一个会话，或发起新会话
-              </p>
-            </div>
+            <EmptyHint
+              inline
+              icon={<Mail size={28} className="text-muted-foreground/40" />}
+              title="选择一个会话，或发起新会话"
+            />
           )}
         </section>
       )}

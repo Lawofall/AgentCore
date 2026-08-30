@@ -1,4 +1,4 @@
-"""Worker / captain context blocks, messages, and workspace manifest."""
+"""Worker / captain context blocks and opening messages."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ from agentcore.runtime.runs.constants import (
     CONTEXT_INJECT_CHARS,
     DEP_CONTEXT_BUDGET,
     DEP_SUMMARY_CHARS,
-    WORKSPACE_MANIFEST_CHAR_BUDGET,
-    WORKSPACE_MANIFEST_MAX_FILES,
 )
 from agentcore.runtime.runs.contract import describe_deliverable
 from agentcore.runtime.runs.executor.identities import (
@@ -28,10 +26,6 @@ from agentcore.runtime.runs.types import (
     RunState,
 )
 from agentcore.workspace.channel import index_io_mode
-from agentcore.workspace.sparse_listing import (
-    format_remaining_summary,
-    partition_sparse_paths,
-)
 from agentcore.workspace.stage_dirs import DRAFTS_DIR
 
 logger = get_logger(__name__)
@@ -132,12 +126,9 @@ def _build_messages(
     user_message: str,
     deliverable: Deliverable | None = None,
     identity: str = _WORKER_IDENTITY,
-    index_paths: list[str] | None = None,
     blocks_sink: list[ContextBlock] | None = None,
     team_brief: str | None = None,
-    shared_workspace: bool = False,
     context_inject: Mapping[str, str] | None = None,
-    captain_recon: str | None = None,
     conversation_id: str = "",
 ) -> list[LLMMessage]:
     """Assemble the worker's OPENING (system, user) messages from its inline role,
@@ -155,21 +146,19 @@ def _build_messages(
     list :func:`_build_context_blocks` assembles; when ``blocks_sink`` is given, that exact
     list is handed back so the caller can ship it as the ``run_context`` event — what the
     user sees == what the LLM eats, one assembly, no second「展示」path to drift."""
-    sys_parts = [system_prompt, identity]
+    # Stable ``<身份>`` sits in front of the shared base so leaf workers share a
+    # cacheable prefix; node contract (form / handoff) stays after the base.
+    core, sep, rest = identity.partition("</身份>")
+    if sep:
+        sys_parts = [f"{core}{sep}", system_prompt]
+        if rest.strip():
+            sys_parts.append(rest.strip())
+    else:
+        sys_parts = [system_prompt, identity]
     if spec.role:
         sys_parts.append(f"你的角色：{spec.role}")
     if spec.system_prompt_supplement:
         sys_parts.append(spec.system_prompt_supplement)
-    design_gate = deliverable or spec.deliverable
-    if design_gate is not None and design_gate.web_quality_scan:
-        from agentcore.runtime.runs.website_style import (
-            design_prompt_block,
-            get_style_confirmation,
-        )
-
-        cid = (conversation_id or "").strip()
-        style = get_style_confirmation(cid) if cid else None
-        sys_parts.append(design_prompt_block(style=style))
     system_content = "\n\n".join(p for p in sys_parts if p)
     _observe_worker_opening(
         worker_base=system_prompt,
@@ -184,11 +173,8 @@ def _build_messages(
         completed,
         user_message,
         deliverable,
-        index_paths or [],
         team_brief,
-        shared_workspace=shared_workspace,
         context_inject=context_inject,
-        captain_recon=captain_recon,
     )
     if blocks_sink is not None:
         blocks_sink.extend(blocks)
@@ -205,12 +191,9 @@ def _build_context_blocks(
     completed: Mapping[str, RunState],
     user_message: str,
     deliverable: Deliverable | None,
-    index_paths: list[str],
     team_brief: str | None = None,
     *,
-    shared_workspace: bool = False,
     context_inject: Mapping[str, str] | None = None,
-    captain_recon: str | None = None,
 ) -> list[ContextBlock]:
     """The ordered :class:`ContextBlock` list a worker's opening user message is rendered
     FROM — the structured single source behind both the prompt and the ``run_context``
@@ -250,36 +233,6 @@ def _build_context_blocks(
                 channel="team_brief",
                 heading="团队共识（主协调为本回合设定，全员遵循）",
                 body=team_brief,
-            )
-        )
-    recon = (captain_recon or "").strip()
-    if recon:
-        from agentcore.runtime.delegate.captain_recon import captain_recon_heading
-
-        blocks.append(
-            ContextBlock(
-                channel="workspace",
-                heading=captain_recon_heading(),
-                body=recon,
-                fidelity="inject",
-                truncated=True,
-            )
-        )
-    # 工作区产物清单: peer products (role-attributed) + sparse pre-existing paths
-    # (attachments / 裸聊 scratch; project shared trees summarized). Omitted when empty.
-    manifest = _workspace_manifest(
-        plan,
-        completed,
-        index_paths,
-        set(spec.depends_on),
-        shared_workspace=shared_workspace,
-    )
-    if manifest:
-        blocks.append(
-            ContextBlock(
-                channel="workspace",
-                heading="工作区现有文件（就在共享工作区，可直接 file_read 取用，避免重复劳动）",
-                body=manifest,
             )
         )
     blocks.append(ContextBlock(channel="task", heading="你的任务", body=spec.task))
@@ -764,29 +717,6 @@ async def _safe_index_files(backend: object) -> list[str]:
         return []
 
 
-async def load_web_seam_scope_contents(
-    backend: object,
-    scope: str,
-    workspace_paths: list[str],
-    base: dict[str, str] | None = None,
-) -> dict[str, str]:
-    """Read all web files under ``scope`` for integrated seam / QA contract checks."""
-    from agentcore.runtime.runs.web_seam import web_paths_under_scope
-
-    read = getattr(backend, "read", None)
-    if read is None:
-        return dict(base or {})
-    out = dict(base or {})
-    for path in web_paths_under_scope(scope, workspace_paths):
-        if path in out:
-            continue
-        try:
-            out[path] = await read(path)
-        except Exception as e:  # noqa: BLE001 — best-effort load for seam gate
-            logger.debug("workspace.artifact_read_failed", path=path, error=str(e))
-    return out
-
-
 async def _load_artifact_contents(
     backend: object,
     patterns: list[str],
@@ -813,107 +743,3 @@ async def _load_artifact_contents(
             except Exception as e:  # noqa: BLE001 — contents are best-effort
                 logger.debug("workspace.artifact_read_failed", path=path, error=str(e))
     return out
-
-
-async def ensure_design_md_for_web_quality(
-    backend: object,
-    artifact_contents: dict[str, str] | None,
-    *,
-    web_quality_scan: bool,
-) -> dict[str, str] | None:
-    """Best-effort attach ``site/DESIGN.md`` when web_quality hard DESIGN checks need it."""
-    if not web_quality_scan:
-        return artifact_contents
-    from agentcore.runtime.runs.website_style import DESIGN_MD_PATH
-
-    out = dict(artifact_contents or {})
-    key = DESIGN_MD_PATH
-    if any(p.replace("\\", "/").lstrip("./") == key for p in out):
-        return out
-    read = getattr(backend, "read", None)
-    if read is None:
-        return out or artifact_contents
-    try:
-        out[key] = await read(key)
-    except Exception as e:  # noqa: BLE001 — missing DESIGN → hard fail in scan
-        logger.debug("workspace.design_md_read_failed", path=key, error=str(e))
-    return out
-
-
-def _workspace_manifest(
-    plan: RunPlan,
-    completed: Mapping[str, RunState],
-    index_paths: list[str],
-    exclude_runs: set[str],
-    *,
-    shared_workspace: bool = False,
-) -> str:
-    """A compact manifest of files in the shared workspace this worker can ``file_read``.
-
-    Sources, de-duped by path (most specific label wins):
-
-    1. **Peer products** — COMPLETED teammates' ``files_touched`` (role-attributed),
-       minus this worker's own deps (``exclude_runs``). Listed first.
-    2. **Sparse pre-existing** — attachments + 裸聊 scratch (or a few project
-       「最近触达」); project shared remainder collapses to one summary line
-       (:func:`~agentcore.workspace.sparse_listing.partition_sparse_paths`).
-
-    Bounded by BOTH a file count (``WORKSPACE_MANIFEST_MAX_FILES``) and a char budget
-    (``WORKSPACE_MANIFEST_CHAR_BUDGET``). Returns "" when nothing qualifies.
-    """
-    # Deps' own files are surfaced in their dep block — keep them out of the manifest.
-    dep_files = {
-        p
-        for run_id in exclude_runs
-        if (st := completed.get(run_id)) is not None
-        for p in st.files_touched
-    }
-    lines: list[str] = []
-    listed: set[str] = set(dep_files)
-    used = 0  # running char count, so a long-path tail can't blow the prompt budget
-    truncated = False
-
-    def _add(path: str, label: str) -> bool:
-        """Add one entry; return False (and flag truncation) when a cap would be hit."""
-        nonlocal used, truncated
-        if path in listed:
-            return True
-        line = f"- {path}（{label}）"
-        if len(lines) >= WORKSPACE_MANIFEST_MAX_FILES or (
-            used + len(line) + 1 > WORKSPACE_MANIFEST_CHAR_BUDGET
-        ):
-            truncated = True
-            return False
-        lines.append(line)
-        listed.add(path)
-        used += len(line) + 1
-        return True
-
-    stop = False
-    for run_id, state in completed.items():
-        if stop:
-            break
-        if run_id in exclude_runs or not state.files_touched:
-            continue
-        spec = plan.by_id(run_id)
-        label = f"来自 {spec.role}" if spec and spec.role else f"来自 {run_id}"
-        for path in state.files_touched:
-            if not _add(path, label):
-                stop = True
-                break
-
-    sparse_rows, remaining = partition_sparse_paths(
-        index_paths, shared_workspace=shared_workspace
-    )
-    if not stop:
-        for path, label in sparse_rows:
-            if not _add(path, label):
-                # Cap hit — fold unlisted sparse rows into the remaining summary.
-                remaining += sum(1 for p, _ in sparse_rows if p not in listed)
-                break
-
-    if remaining > 0:
-        lines.append(format_remaining_summary(remaining))
-    elif truncated and lines:
-        lines.append("……（工作区还有更多文件，需要时用 file_list / grep）")
-    return "\n".join(lines)

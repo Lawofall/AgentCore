@@ -95,6 +95,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ModelKeyForm", () => {
+  it("puts 取消 before the primary CTA when cancel is offered", () => {
+    const onCancel = vi.fn();
+    renderForm({ onCancel });
+    const cancel = screen.getByRole("button", { name: "取消" });
+    const add = screen.getByRole("button", { name: "添加" });
+    expect(
+      cancel.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("keeps default model off the main path; advanced holds 连接测试用模型", () => {
     renderForm();
 

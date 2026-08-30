@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 _WORK_DISCIPLINE = """\
-<work_discipline>
-进阶工作纪律（HOW）。常驻红线见共享基座 `<work_authority>`；本 skill 只补何时深想、何时停手。
+<工程纪律>
+进阶工作纪律（HOW）。常驻红线见共享基座 `<工作权威>`；本 skill 只补何时深想、何时停手。
 
 何时拉：新产品 / 大改前过设计三问；修多次仍堆兜底；要沉淀可复用约定；同场既要对齐方案又要查证；\
 大文件是否按职责拆拿不准；写给 Windows `cmd` 双击的 `.bat`。
@@ -36,4 +36,4 @@ blocking 由工人按题自选（默认 false 边干边报；猜错作废 / 须�
 【Windows .bat】写给 Windows `cmd` 双击的 `.bat`：换行须 CRLF；`echo`/注释/提示文案 \
 ASCII-only（禁 UTF-8 中文——默认 ANSI/GBK 会拆成乱码「命令」）；或改交 `.ps1`（建议 UTF-8 BOM）\
 并写清启动方式。引擎**不**自动转码/改换行——落盘时自行按上约束写对。
-</work_discipline>"""
+</工程纪律>"""

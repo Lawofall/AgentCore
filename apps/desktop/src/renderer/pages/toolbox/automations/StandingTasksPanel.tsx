@@ -1,4 +1,4 @@
-import { Button, Card } from "@/components/ui";
+import { Button, Card, EmptyHint } from "@/components/ui";
 import { Switch } from "@/components/ui/Switch";
 import { noticeChipNeutral } from "@/components/ui/tone-presets";
 import { notifyError, notifySuccess } from "@/lib/toast";
@@ -403,19 +403,20 @@ export function StandingTasksPanel() {
         ) : listError ? (
           <p className="text-sm text-muted-foreground">{listError}</p>
         ) : tasks.length === 0 ? (
-          <Card className="px-4 py-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              还没有任务。可开启上方系统任务，或新建周期简报 / Webhook 入口。
-            </p>
-            <Button
-              className="mt-3"
-              size="md"
-              icon={<Plus size={14} />}
-              onClick={() => setEditor("create")}
-            >
-              新建任务
-            </Button>
-          </Card>
+          <EmptyHint
+            className="py-10"
+            title="还没有任务"
+            hint="可开启上方系统任务，或新建周期简报 / Webhook 入口。"
+            action={
+              <Button
+                size="md"
+                icon={<Plus size={14} />}
+                onClick={() => setEditor("create")}
+              >
+                新建任务
+              </Button>
+            }
+          />
         ) : (
           <ul className="space-y-3">
             {tasks.map((task) => {

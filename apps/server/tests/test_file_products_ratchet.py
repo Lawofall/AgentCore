@@ -65,7 +65,6 @@ from agentcore.tools.builtin.file_ops import (
     FileMoveTool,
     FileWriteTool,
     StrReplaceTool,
-    WriteSectionTool,
 )
 from agentcore.tools.builtin.git_ops import GitTool
 from agentcore.tools.builtin.md_to_docx import MdToDocxTool
@@ -177,18 +176,6 @@ def _seed_src_txt(root: Path) -> None:
 async def _run_str_replace(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
     return await StrReplaceTool().execute(
         {"path": "src.txt", "old_string": "alpha", "new_string": "beta"}, _ctx(root)
-    )
-
-
-def _seed_page_html(root: Path) -> None:
-    (root / "page.html").write_text(
-        "<!-- SECTION:s0 START -->\n<!-- SECTION:s0 END -->\n", encoding="utf-8"
-    )
-
-
-async def _run_write_section(root: Path, _mp: pytest.MonkeyPatch) -> ToolResult:
-    return await WriteSectionTool().execute(
-        {"path": "page.html", "section": "s0", "content": "<p>x</p>"}, _ctx(root)
     )
 
 
@@ -323,12 +310,6 @@ _CASES: tuple[_Case, ...] = (
     _Case("file_write", _run_file_write, (("报告.md", "md", None),)),
     _Case("file_append", _run_file_append, (("报告.md", "md", None),), _seed_report),
     _Case("str_replace", _run_str_replace, (("src.txt", "txt", None),), _seed_src_txt),
-    _Case(
-        "write_section",
-        _run_write_section,
-        (("page.html", "html", None),),
-        _seed_page_html,
-    ),
     _Case("file_copy", _run_file_copy, (("out/copy.py", "code", None),), _seed_src_txt),
     _Case(
         "file_move", _run_file_move, (("out/moved.docx", "docx", None),), _seed_src_txt

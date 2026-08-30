@@ -635,22 +635,40 @@ def is_workspace_channel_sticky_dead(tool_context: Any | None = None) -> bool:
     return isinstance(wc, WorkspaceChannel) and wc.is_dead
 
 
-def is_exec_env_sticky_dead() -> bool:
+def is_exec_env_sticky_dead(tool_context: Any | None = None) -> bool:
     """True when the coordination session has latched ``exec_env_dead``.
 
-    Session flag covers teammates that never hit an exec-env retire envelope
-    themselves. No backend-channel twin (unlike workspace channel-dead).
+    Nested workers often bind a child ``execution_id`` with no session of its
+    own. Fall back to the conversation's registered session so teammates still
+    inherit the latch. No backend-channel twin (unlike workspace channel-dead).
     """
-    from agentcore.runtime.coordination.session import active_coordination
+    from agentcore.runtime.coordination.session import (
+        registered_coordination_for_conversation,
+        resolve_coordination_session,
+    )
 
-    session = active_coordination()
-    return session is not None and bool(getattr(session, "exec_env_dead", False))
+    eid = None
+    cid = None
+    if tool_context is not None:
+        raw_eid = getattr(tool_context, "execution_id", None)
+        eid = str(raw_eid).strip() if raw_eid else None
+        raw_cid = getattr(tool_context, "conversation_id", None)
+        cid = str(raw_cid).strip() if raw_cid else None
+    session = resolve_coordination_session(eid)
+    if session is not None and bool(getattr(session, "exec_env_dead", False)):
+        return True
+    if cid:
+        registered = registered_coordination_for_conversation(cid)
+        if registered is not None and bool(getattr(registered, "exec_env_dead", False)):
+            return True
+    return False
 
 
 def apply_exec_env_dead_retire(
     *,
     disabled_tools: set[str],
     controller: LoopController | None = None,
+    tool_context: Any | None = None,
 ) -> bool:
     """Seed ``EXEC_ENV_TIMEOUT_FAMILY`` into ``disabled_tools`` when sticky-dead.
 
@@ -661,7 +679,7 @@ def apply_exec_env_dead_retire(
     :func:`apply_workspace_channel_dead_retire` (no extra latch).
     """
     _ = controller
-    if not is_exec_env_sticky_dead():
+    if not is_exec_env_sticky_dead(tool_context):
         return False
 
     from agentcore.runtime.loop_controller.types import EXEC_ENV_TIMEOUT_FAMILY
@@ -671,15 +689,18 @@ def apply_exec_env_dead_retire(
     return len(disabled_tools) > before
 
 
-def registry_can_execute(tools: ToolRegistry) -> bool:
+def registry_can_execute(
+    tools: ToolRegistry, tool_context: Any | None = None
+) -> bool:
     """Whether this worker may claim / use ``code_execute``.
 
     Must run **after** :func:`apply_exec_env_dead_retire` would seed the family:
     sticky ``session.exec_env_dead`` makes this False even when the tool is
     still registered. Cloud-without-sandbox (tool absent) is the other False.
+    Nested workers pass ``tool_context`` so conversation-registry fallback applies.
     """
     retired: set[str] = set()
-    apply_exec_env_dead_retire(disabled_tools=retired)
+    apply_exec_env_dead_retire(disabled_tools=retired, tool_context=tool_context)
     if "code_execute" in retired:
         return False
     return tools.get_optional("code_execute") is not None

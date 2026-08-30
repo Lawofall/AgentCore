@@ -9,7 +9,7 @@ share the same rows:
   ``(user, path, scope)`` seam onto these rows (Agent记忆与知识系统 §5.0 / §5.7).
 - **Rule injection**: both user rules (``ai_maintained=false``) and the always-injected memory
   core (``ai_maintained=true``) are ``role='rule', apply_mode='always'`` nodes, gathered per
-  scope by ``list_injectable_rules`` for the two-tier ``<rules>`` block (§二). Collection
+  scope by ``list_injectable_rules`` for the two-tier ``<设定>`` block (§二). Collection
   stays role + folder_id + apply_mode (not parent-tree walk); when the convention dirs exist,
   results are further restricted to ``AgentCore/规则/`` / ``AgentCore/记忆/`` (bare ``记忆/``
   still accepted for memory during transition). Writes land under ``AgentCore/{规则,记忆}/``.
@@ -487,7 +487,7 @@ class DocumentRepository:
         ``ai_maintained=True`` → the memory core (偏好.md / 画像.md); ``False`` → the user's own
         rule documents; ``None`` → both (one query; user rules first, then AI — same order as
         two sequential calls). ``apply_mode='on_demand'`` topics are excluded (they ride the
-        directory, not ``<rules>``). Ordered by ``name`` for a stable prefix (and by
+        directory, not ``<设定>``). Ordered by ``name`` for a stable prefix (and by
         ``ai_maintained`` when both). When convention dirs exist, only nodes under those
         parents are returned (see ``_injectable_parent_filter``).
 
@@ -537,7 +537,7 @@ class DocumentRepository:
     ) -> list[Document]:
         """On-demand user-rule docs of one scope (``ai_maintained=false``, not memory topics).
 
-        These ride the「规则目录」+ ``consult_rule`` — never the always ``<rules>`` budget.
+        These ride the「规则目录」+ ``consult_rule`` — never the always ``<设定>`` budget.
         Same convention-parent filter as :meth:`list_injectable_rules` for user rules,
         and the same user-disputed exclusion (a disputed entry leaves the catalog too).
         """

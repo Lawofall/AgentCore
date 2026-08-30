@@ -1,14 +1,11 @@
 import { Button } from "@/components/ui";
-import { useDebateTake } from "@/stores/debateUserTake";
 import type { Execution } from "@/stores/execution";
 import { useSidePanelStore } from "@/stores/sidePanel";
 import { ModelBadge } from "../ModelBadge";
 import {
   type DebateModel,
-  debateRoster,
   formatCrossModelRosterLine,
   stopLabel,
-  tallyScores,
 } from "../model";
 import { finaleAnchorId } from "./anchors";
 import { BriefCard, RoundtableSpectrum } from "./brief";
@@ -69,18 +66,7 @@ export function FinaleStage({
   const brief = model.brief;
   const sides = model.sides;
   const hasBrief = !!(brief && sides);
-  const tally = model.form === "roundtable" ? [] : tallyScores(model.rounds);
   const rosterLine = finaleRosterLine(model, execution);
-
-  const take = useDebateTake(messageId);
-  const stanceSide =
-    debateRoster(model.rounds).find((r) => r.sideKey === take.stance) ?? null;
-  const stanceAgree = (() => {
-    if (!stanceSide || tally.length < 2) return null;
-    const sorted = [...tally].sort((a, b) => b.total - a.total);
-    if (sorted[0].total === sorted[1].total) return null;
-    return sorted[0].sideKey === stanceSide.sideKey;
-  })();
 
   return (
     <div
@@ -131,13 +117,7 @@ export function FinaleStage({
                 subtopics={model.subtopics}
               />
             )}
-            <BriefCard
-              brief={brief}
-              sides={sides}
-              form={model.form}
-              scores={tally.length > 0 ? tally : undefined}
-              stanceAgree={stanceAgree}
-            />
+            <BriefCard brief={brief} sides={sides} form={model.form} />
           </div>
         ) : (
           <p className="mt-4 text-sm text-muted-foreground">结论简报生成中…</p>

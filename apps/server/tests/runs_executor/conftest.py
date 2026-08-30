@@ -304,22 +304,6 @@ class _MeteredRoundThenBoom:
         yield  # pragma: no cover - makes this an async generator
 
 
-class _CountingIndexBackend:
-    """Wraps a real backend but counts ``index_files`` calls (delegates everything
-    else), to prove the pre-existing-files walk is snapshotted once per batch."""
-
-    def __init__(self, inner: object) -> None:
-        self._inner = inner
-        self.index_calls = 0
-
-    async def index_files(self, cap: int | None = None, *, order: str = "path"):
-        self.index_calls += 1
-        return await self._inner.index_files(cap, order=order)
-
-    def __getattr__(self, name: str):
-        return getattr(self._inner, name)
-
-
 def _state(
     content: str = "",
     *,

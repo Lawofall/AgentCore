@@ -43,17 +43,12 @@ def may_auto_debate(
     auto_debate_count: int = 0,
     limit: int = AUTO_DEBATE_SESSION_LIMIT,
 ) -> bool:
-    """True when the session flag is on **and** under the per-session auto-debate cap.
+    """Always False：调研旗标不代开辩论；开辩须用户点名。
 
-    Used by ceo_format consumption guidance. Over the limit ⇒ False (guidance
-    falls back to present-to-user). Axes are ignored.
+    保留签名供既有调用；``deep_research_auto`` 只表示调研可自行往下做。
     """
-    if int(auto_debate_count or 0) >= limit:
-        return False
-    return deep_research_auto_active(
-        deep_research_auto=deep_research_auto,
-        permission_axes=permission_axes,
-    )
+    _ = (deep_research_auto, permission_axes, auto_debate_count, limit)
+    return False
 
 
 def tool_may_auto_debate(tool: Any) -> bool:

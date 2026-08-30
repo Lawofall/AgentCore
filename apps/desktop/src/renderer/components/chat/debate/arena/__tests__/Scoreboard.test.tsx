@@ -5,6 +5,7 @@
 
 import { MANUAL_HELP } from "@/components/ManualHelpLink";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { DEMO_DEBATE_MODEL } from "@/pages/toolbox/manual/embeds/demoDebate";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -39,16 +40,27 @@ describe("Scoreboard manual help", () => {
     render(
       <MemoryRouter>
         <TooltipProvider>
-          <Scoreboard
-            model={makeModel()}
-            messageId="m1"
-            hasPendingSteering={false}
-            onScrollTo={() => {}}
-          />
+          <Scoreboard model={makeModel()} onScrollTo={() => {}} />
         </TooltipProvider>
       </MemoryRouter>,
     );
     const btn = screen.getByRole("button", { name: "看手册说明" });
     expect(btn.getAttribute("data-manual-help")).toBe(MANUAL_HELP.debate);
+  });
+
+  it("正反行只留双方身份，不展示比分、站队、掌舵、动量图", () => {
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <Scoreboard model={DEMO_DEBATE_MODEL} onScrollTo={() => {}} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByText("加速派").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("审慎派").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "掌舵" })).toBeNull();
+    expect(screen.queryByText("你站")).toBeNull();
+    expect(screen.queryByLabelText("动量图例")).toBeNull();
+    expect(screen.queryByRole("button", { name: /净分构成/ })).toBeNull();
   });
 });

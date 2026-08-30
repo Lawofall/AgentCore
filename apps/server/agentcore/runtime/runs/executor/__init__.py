@@ -5,9 +5,9 @@ Thin facade — implementation split by lifecycle under ``runtime/runs/executor/
 * ``.setup`` — registry / identity / opening messages
 * ``.loop`` — react+capture + contract decision ladder body
 * ``.retry`` — light-repair / write-pass / budget skip predicates
-* ``.hooks`` — visual / retrieval / citation domain hooks
+* ``.hooks`` — retrieval / citation domain hooks
 * ``.terminal`` — salvage / cancel / terminal RunState
-* ``.context`` — worker context blocks / workspace manifest
+* ``.context`` — worker context blocks / opening messages
 * ``.shared`` — react capture / priced failure / finish override
 * ``.agent`` / ``.captain`` / ``.continuation`` — entry builders
 * ``.node`` / ``.env`` / ``.identities`` / ``.escalation`` — node wiring

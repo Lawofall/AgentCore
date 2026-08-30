@@ -320,12 +320,7 @@ async def run_stage_card_research_first(
     llm_supports_tools: bool | None = None,
     x_client_platform: str | None = None,
 ) -> None:
-    """Start a CEO turn with research_first imperative bootstrap (v1 不机制直起 MLR).
-
-    决议即授权：当次 ``lens_crosscheck`` 派单免二次 team_preview（一次性 pre-auth）。
-    """
-    from agentcore.runtime.kickoff.stage_card import discard_mlr_preauth, grant_mlr_preauth
-
+    """Start a CEO turn with research_first imperative bootstrap."""
     motion = str(card.get("motion") or "").strip()
     user_text = research_first_user_message(motion=motion)
     bootstrap = research_first_bootstrap(motion=motion, user_message=user_text)
@@ -367,27 +362,22 @@ async def run_stage_card_research_first(
         sink=sink,
         local_binding=local_binding,
     )
-    # 紧挨 CEO 回合授予，避免前置失败泄漏到下一请求。
-    grant_mlr_preauth()
-    try:
-        await run_and_persist(
-            conversation_id=conversation_id,
-            user_message=composed,
-            user_id=user_id,
-            folder_id=folder_id,
-            sink=sink,
-            history=history[:-1] if history else [],
-            attachments=None,
-            backend=backend,
-            llm_credentials=llm_credentials,
-            profile_set=profile_set,
-            permission_axes=permission_axes,
-            board_id=board_id,
-            llm_supports_tools=llm_supports_tools,
-            x_client_platform=x_client_platform,
-        )
-    finally:
-        discard_mlr_preauth()
+    await run_and_persist(
+        conversation_id=conversation_id,
+        user_message=composed,
+        user_id=user_id,
+        folder_id=folder_id,
+        sink=sink,
+        history=history[:-1] if history else [],
+        attachments=None,
+        backend=backend,
+        llm_credentials=llm_credentials,
+        profile_set=profile_set,
+        permission_axes=permission_axes,
+        board_id=board_id,
+        llm_supports_tools=llm_supports_tools,
+        x_client_platform=x_client_platform,
+    )
 
 def validate_start_debate_card(
     payload: dict[str, Any], motion_override: str | None

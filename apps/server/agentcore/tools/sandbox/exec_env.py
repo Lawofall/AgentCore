@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from agentcore.tools.sandbox.protocol import ExecutionResult
 
@@ -36,6 +37,9 @@ EXEC_ENV_NOT_LINUX_USER_MESSAGE = (
 )
 EXEC_ENV_SANDBOX_UNAVAILABLE_USER_MESSAGE = (
     "云端隔离执行环境当前不可用，代码没有运行。我会换个方式继续。"
+)
+EXEC_ENV_SANDBOX_UNAVAILABLE_BROWSER_MESSAGE = (
+    "云端隔离浏览器当前不可用，没有打开页面。"
 )
 # Stable wire code for probe fail (distinct from idle ``exec_timeout``).
 EXEC_ENV_PROBE_FAIL_CODE = "exec_env_probe_failed"
@@ -249,6 +253,28 @@ def probe_failure_retire_tools(language: str | None) -> tuple[str, ...]:
     if not lang:
         return _PROBE_FAIL_RETIRE_ALL
     return _PROBE_FAIL_RETIRE_TOOLS.get(lang, ())
+
+
+def sandbox_unavailable_tool_meta() -> dict[str, Any]:
+    """``ToolResult.metadata`` / attempt meta for a dead cloud desk (not 本机).
+
+    First hit retires ``code_execute``/``test_run``. Not a contract_failure —
+    switching language will not start a guest that is down.
+    """
+    return {
+        "code": EXEC_ENV_SANDBOX_UNAVAILABLE_CODE,
+        "error_class": "permanent",
+        "retire_tools": list(probe_failure_retire_tools(None)),
+        "retire_message": probe_failure_retire_steer(EXEC_ENV_SANDBOX_UNAVAILABLE_CODE),
+    }
+
+
+def is_sandbox_unavailable_error(exc: BaseException) -> bool:
+    """True when ``SandboxError.details['code']`` is cloud-desk death."""
+    details = getattr(exc, "details", None)
+    if not isinstance(details, dict):
+        return False
+    return details.get("code") == EXEC_ENV_SANDBOX_UNAVAILABLE_CODE
 
 
 def _probe_fail_scope_sentence(language: str | None) -> str:

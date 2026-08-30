@@ -7,7 +7,7 @@ TIMEOUT 盖章、检索预算补发与耗尽提前收尾、宽度重算、slot_s
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -355,10 +355,6 @@ async def test_nested_drive_pauses_on_turn_ceiling_seed_finalize():
         ),
         patch(
             "agentcore.runtime.delegate.drive._materialise_turn_token_budget_skips",
-        ),
-        patch(
-            "agentcore.runtime.delegate.drive._attach_light_website_gaps",
-            new_callable=AsyncMock,
         ),
         patch(
             "agentcore.runtime.delegate.drive.finalize_drive",

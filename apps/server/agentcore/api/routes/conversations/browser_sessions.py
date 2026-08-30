@@ -21,12 +21,16 @@ from agentcore.api.schemas import (
 )
 from agentcore.config import settings
 from agentcore.conversation.common import resolve_turn_file_workspace
-from agentcore.core.errors import NotFoundError, ValidationError
+from agentcore.core.errors import NotFoundError, SandboxError, ValidationError
 from agentcore.db.models import Conversation
 from agentcore.db.repositories import ConversationRepository
 from agentcore.folders.placement import resolve_folder_placement
 from agentcore.runtime.browser import default_browser_session_registry
-from agentcore.tools.sandbox.browser.protocol import BrowserCommand, BrowserSessionRequest
+from agentcore.tools.sandbox.browser.protocol import (
+    BrowserCommand,
+    BrowserSessionError,
+    BrowserSessionRequest,
+)
 from agentcore.workspace.locate import workspace_root_path
 
 from ._helpers import _get_owned_conversation, _require_owned_conversation
@@ -115,11 +119,15 @@ async def create_browser_session(
         jpeg_quality=int(settings.browser_keyframe_jpeg_quality),
         host_kind=body.host_kind,
     )
-    _browser, _kf, session_id = await reg.create(
-        request,
-        host_kind=body.host_kind,
-        activate=body.activate,
-    )
+    try:
+        _browser, _kf, session_id = await reg.create(
+            request,
+            host_kind=body.host_kind,
+            activate=body.activate,
+        )
+    except BrowserSessionError as exc:
+        # Honest product sentence (cloud isolation), not a bare 500 / CORS miss.
+        raise SandboxError(str(exc)) from exc
     infos = [i for i in reg.list_by_conversation(conversation_id) if i.session_id == session_id]
     return _view_from_info(infos[0])
 

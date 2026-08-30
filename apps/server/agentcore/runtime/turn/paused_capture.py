@@ -125,22 +125,6 @@ def build_turn_paused_fact(
             exc_info=True,
         )
 
-    website_style: dict[str, Any] | None = None
-    try:
-        from agentcore.core.log_context import get_log_value
-        from agentcore.runtime.runs.website_style import snapshot_website_style_for_pause
-
-        website_style = snapshot_website_style_for_pause(
-            journal_entries_before_trailing,
-            conversation_id=str(get_log_value("conversation_id") or "") or None,
-        )
-    except Exception:
-        logger.warning(
-            "turn_paused.website_style_failed",
-            checkpoint_id=checkpoint_id,
-            exc_info=True,
-        )
-
     presentation_format: dict[str, Any] | None = None
     try:
         from agentcore.core.log_context import get_log_value
@@ -189,7 +173,6 @@ def build_turn_paused_fact(
         citations=citations,
         evidence_ledger=evidence_ledger,
         controller=controller,
-        website_style=website_style,
         presentation_format=presentation_format,
         automation_delivery=automation_delivery,
         extras=dict(extras) if extras else None,

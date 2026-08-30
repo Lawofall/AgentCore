@@ -15,8 +15,6 @@ import {
   FolderPlus,
   GitBranch,
   HardDrive,
-  Loader2,
-  RefreshCw,
 } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 
@@ -26,7 +24,7 @@ import { type ReactNode, useRef, useState } from "react";
  * 不再 swap 掉树。文件中枢页仍用 {@link FileWorkbench} 左右分栏。
  *
  * 单行面板头：左侧 `leading`（文件夹·本地/云端 chip）、中段先新建再装入（上传/克隆）、
- * 右侧看树（折叠/刷新）+ `trailing`（导出 / 软删）。
+ * 右侧看树（折叠）+ `trailing`（导出 / 软删）。树跟 SSE / watch / focus 静默补丁，不挂人手刷新。
  */
 export function FileBrowser({
   source,
@@ -118,21 +116,6 @@ export function FileBrowser({
               aria-label="全部折叠"
             >
               <ChevronsDownUp size={14} />
-            </IconButton>
-          </SimpleTooltip>
-        )}
-        {source && (
-          <SimpleTooltip label="刷新">
-            <IconButton
-              disabled={chrome.loading}
-              onClick={() => treeRef.current?.refresh()}
-              aria-label="刷新"
-            >
-              {chrome.loading ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <RefreshCw size={14} />
-              )}
             </IconButton>
           </SimpleTooltip>
         )}

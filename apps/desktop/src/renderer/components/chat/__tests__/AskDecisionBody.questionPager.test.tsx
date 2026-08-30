@@ -248,6 +248,10 @@ describe("AskDecisionBody question pager", () => {
     expect(next.disabled).toBe(true);
     expect(screen.queryByRole("button", { name: /下一步/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^提交$/ })).toBeNull();
+    const cancel = primaryButton(/^取消$/);
+    expect(
+      cancel.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByText("方案 B"));
     expect(next.disabled).toBe(false);

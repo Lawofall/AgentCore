@@ -2,7 +2,7 @@
 
 When the previous turn's journal carries a ``delivery_status`` with
 ``state ∈ {partial, blocked}`` and non-empty blocking gaps (``severity != warning``),
-the next fresh CEO turn gets a short ignorable ``<prior_delivery_gaps>`` ledger on the
+the next fresh CEO turn gets a short ignorable ``<上轮交付缺口>`` ledger on the
 volatile prompt tail — same one-shot journal shape as ``redispatch_hint`` (newest *other*
 turn only; never conversation-global latest sticky gaps).
 
@@ -69,11 +69,11 @@ def prior_turn_has_blocking_delivery_gaps(
 
 
 def render_prior_delivery_gaps(payload: dict[str, Any]) -> str:
-    """Format the soft ``<prior_delivery_gaps>`` block from a delivery_status payload."""
+    """Format the soft ``<上轮交付缺口>`` block from a delivery_status payload."""
     state = str(payload.get("state") or "").strip()
     # 不打印 payload.execution_id：CEO 可见提示里出现真实图 id，且参数名正好是
     # append_to_execution_id，模型会把账本上的 UUID 填进去。补缺口用
-    # continue_from_run_id，接续图填 "latest"；与 <recent_team_graph> 故意不打印图
+    # continue_from_run_id，接续图填 "latest"；与 <近期团队图> 故意不打印图
     # id 同一产品意图。
     raw_files = payload.get("delivered_files") or []
     files: list[str] = []
@@ -99,7 +99,7 @@ def render_prior_delivery_gaps(payload: dict[str, Any]) -> str:
     gaps_body = "\n".join(gap_lines) if gap_lines else "- （无）"
 
     return (
-        "<prior_delivery_gaps>\n"
+        "<上轮交付缺口>\n"
         "【上轮交付缺口】上一回合 durable delivery 仍有阻塞缺口。"
         "一次性、可忽略；本轮用户新目标优先。"
         "只补缺口则续跑下列未闭合项（可 `continue_from_run_id`），勿整锅重派或重写路径已核文件。\n"
@@ -107,7 +107,7 @@ def render_prior_delivery_gaps(payload: dict[str, Any]) -> str:
         f"accepted/delivered_files: {file_line}\n"
         "blocking gaps:\n"
         f"{gaps_body}\n"
-        "</prior_delivery_gaps>"
+        "</上轮交付缺口>"
     )
 
 
@@ -127,7 +127,7 @@ async def build_prior_delivery_gaps_hint(
     conversation_id: str,
     exclude_message_id: str | None = None,
 ) -> str:
-    """``<prior_delivery_gaps>`` when the prior turn fingerprints, else ``\"\"``.
+    """``<上轮交付缺口>`` when the prior turn fingerprints, else ``\"\"``.
 
     ``exclude_message_id`` drops the in-flight assistant turn (same as redispatch /
     recent-graph). Does not read or branch on the current user message. Does not
